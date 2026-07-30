@@ -29,6 +29,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/LogicalResult.h"
 
 #define DEBUG_TYPE "infer-resets"
 
@@ -464,33 +465,6 @@ struct InferResetsPass
   LogicalResult updateReset(ResetNetwork net, ResetKind kind);
   bool updateReset(FieldRef field, FIRRTLBaseType resetType);
 
-  //===--------------------------------------------------------------------===//
-  // Full reset implementation
-
-  LogicalResult collectAnnos(CircuitOp circuit);
-  // Collect reset annotations in the module and return a reset signal.
-  // Return `failure()` if there was an error in the annotation processing.
-  // Return `std::nullopt` if there was no reset annotation.
-  // Return `nullptr` if there was `ignore` annotation.
-  // Return a non-null Value if the reset was actually provided.
-  FailureOr<std::optional<Value>> collectAnnos(FModuleOp module);
-
-  LogicalResult buildDomains(CircuitOp circuit);
-  void buildDomains(FModuleOp module, const InstancePath &instPath,
-                    Value parentReset, InstanceGraph &instGraph,
-                    unsigned indent = 0);
-
-  LogicalResult determineImpl();
-  LogicalResult determineImpl(FModuleOp module, ResetDomain &domain);
-
-  LogicalResult implementFullReset();
-  LogicalResult implementFullReset(FModuleOp module, ResetDomain &domain);
-  void implementFullReset(Operation *op, FModuleOp module, Value actualReset);
-
-  // Helper to implement full reset for instance-like operations
-  void implementFullReset(FInstanceLike inst, StringAttr moduleName,
-                          Value actualReset);
-
   LogicalResult verifyNoAbstractReset();
 
   //===--------------------------------------------------------------------===//
@@ -523,21 +497,8 @@ struct InferResetsPass
   /// A map of all connects to and from a reset.
   DenseMap<ResetSignal, ResetDrives> resetDrives;
 
-  /// The annotated reset for a module. A null value indicates that the module
-  /// is explicitly annotated with `ignore`. Otherwise the port/wire/node
-  /// annotated as reset within the module is stored.
-  DenseMap<Operation *, Value> annotatedResets;
-
-  /// The reset domain for a module. In case of conflicting domain membership,
-  /// the vector for a module contains multiple elements.
-  MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePath>, 1>>
-      domains;
-
   /// Cache of modules symbols
-  InstanceGraph *instanceGraph;
-
-  /// Cache of instance paths.
-  std::unique_ptr<InstancePathCache> instancePathCache;
+  InstanceGraph *instanceGraph = nullptr;
 };
 } // namespace
 
@@ -545,15 +506,11 @@ void InferResetsPass::runOnOperation() {
   runOnOperationInner();
   resetClasses = llvm::EquivalenceClasses<ResetSignal>();
   resetDrives.clear();
-  annotatedResets.clear();
-  domains.clear();
-  instancePathCache.reset(nullptr);
   markAnalysesPreserved<InstanceGraph>();
 }
 
 void InferResetsPass::runOnOperationInner() {
   instanceGraph = &getAnalysis<InstanceGraph>();
-  instancePathCache = std::make_unique<InstancePathCache>(*instanceGraph);
 
   // Trace the uninferred reset networks throughout the design.
   traceResets(getOperation());
@@ -562,20 +519,7 @@ void InferResetsPass::runOnOperationInner() {
   if (failed(inferAndUpdateResets()))
     return signalPassFailure();
 
-  // Gather the reset annotations throughout the modules.
-  if (failed(collectAnnos(getOperation())))
-    return signalPassFailure();
-
-  // Build the reset domains in the design.
-  if (failed(buildDomains(getOperation())))
-    return signalPassFailure();
-
-  // Determine how each reset shall be implemented.
-  if (failed(determineImpl()))
-    return signalPassFailure();
-
-  // Implement the full resets.
-  if (failed(implementFullReset()))
+  if (failed(runFullReset(getOperation(), *instanceGraph)))
     return signalPassFailure();
 
   // Require that no Abstract Resets exist on ports in the design.
@@ -1306,11 +1250,86 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
   return true;
 }
 
+namespace {
+struct FullResetRunner {
+  FullResetRunner(CircuitOp circuit, InstanceGraph &ig,
+                  InstancePathCache &instancePathCache)
+      : circuit(circuit), instanceGraph(&ig),
+        instancePathCache(&instancePathCache) {}
+
+  LogicalResult run();
+
+  //===--------------------------------------------------------------------===//
+  // Full reset implementation
+
+  LogicalResult collectAnnos();
+  // Collect reset annotations in the module and return a reset signal.
+  // Return `failure()` if there was an error in the annotation processing.
+  // Return `std::nullopt` if there was no reset annotation.
+  // Return `nullptr` if there was `ignore` annotation.
+  // Return a non-null Value if the reset was actually provided.
+  FailureOr<std::optional<Value>> collectAnnos(FModuleOp module);
+
+  LogicalResult buildDomains();
+  void buildDomains(FModuleOp module, const InstancePath &instPath,
+                    Value parentReset, InstanceGraph &instGraph,
+                    unsigned indent = 0);
+
+  LogicalResult determineImpl();
+  LogicalResult determineImpl(FModuleOp module, ResetDomain &domain);
+
+  LogicalResult implementFullReset();
+  LogicalResult implementFullReset(FModuleOp module, ResetDomain &domain);
+  LogicalResult implementFullReset(Operation *op, FModuleOp module,
+                                   Value actualReset);
+
+  // Helper to implement full reset for instance-like operations
+  LogicalResult implementFullReset(FInstanceLike inst, StringAttr moduleName,
+                                   Value actualReset);
+
+  CircuitOp circuit;
+
+  /// The annotated reset for a module. A null value indicates that the module
+  /// is explicitly annotated with `ignore`. Otherwise the port/wire/node
+  /// annotated as reset within the module is stored.
+  DenseMap<Operation *, Value> annotatedResets;
+
+  /// The reset domain for a module. In case of conflicting domain membership,
+  /// the vector for a module contains multiple elements.
+  MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePath>, 1>>
+      domains;
+
+  /// Cache of modules symbols
+  InstanceGraph *instanceGraph = nullptr;
+
+  /// Cache of instance paths.
+  InstancePathCache *instancePathCache = nullptr;
+};
+} // namespace
+
+LogicalResult FullResetRunner::run() {
+  if (failed(collectAnnos()))
+    return failure();
+  if (failed(buildDomains()))
+    return failure();
+  if (failed(determineImpl()))
+    return failure();
+  if (failed(implementFullReset()))
+    return failure();
+  return success();
+}
+
+LogicalResult circt::firrtl::runFullReset(CircuitOp circuit,
+                                          InstanceGraph &ig) {
+  InstancePathCache instancePathCache(ig);
+  return FullResetRunner(circuit, ig, instancePathCache).run();
+}
+
 //===----------------------------------------------------------------------===//
 // Reset Annotations
 //===----------------------------------------------------------------------===//
 
-LogicalResult InferResetsPass::collectAnnos(CircuitOp circuit) {
+LogicalResult FullResetRunner::collectAnnos() {
   LLVM_DEBUG({
     llvm::dbgs() << "\n";
     debugHeader("Gather reset annotations") << "\n\n";
@@ -1336,7 +1355,7 @@ LogicalResult InferResetsPass::collectAnnos(CircuitOp circuit) {
 }
 
 FailureOr<std::optional<Value>>
-InferResetsPass::collectAnnos(FModuleOp module) {
+FullResetRunner::collectAnnos(FModuleOp module) {
   bool anyFailed = false;
   SmallSetVector<std::pair<Annotation, Location>, 4> conflictingAnnos;
 
@@ -1494,14 +1513,14 @@ InferResetsPass::collectAnnos(FModuleOp module) {
 /// domain if so annotated, or inherit their parent's domain. This can go
 /// wrong in some cases, mainly when a module is instantiated multiple times
 /// within different reset domains.
-LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
+LogicalResult FullResetRunner::buildDomains() {
   LLVM_DEBUG({
     llvm::dbgs() << "\n";
     debugHeader("Build full reset domains") << "\n\n";
   });
 
   // Gather the domains.
-  auto &instGraph = getAnalysis<InstanceGraph>();
+  auto &instGraph = *instanceGraph;
   // Walk all top-level modules.
   instGraph.walkPostOrder([&](igraph::InstanceGraphNode &node) {
     if (!node.noUses())
@@ -1564,7 +1583,7 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
   return failure(anyFailed);
 }
 
-void InferResetsPass::buildDomains(FModuleOp module,
+void FullResetRunner::buildDomains(FModuleOp module,
                                    const InstancePath &instPath,
                                    Value parentReset, InstanceGraph &instGraph,
                                    unsigned indent) {
@@ -1613,7 +1632,7 @@ void InferResetsPass::buildDomains(FModuleOp module,
 }
 
 /// Determine how the reset for each module shall be implemented.
-LogicalResult InferResetsPass::determineImpl() {
+LogicalResult FullResetRunner::determineImpl() {
   auto anyFailed = false;
   LLVM_DEBUG({
     llvm::dbgs() << "\n";
@@ -1647,7 +1666,7 @@ LogicalResult InferResetsPass::determineImpl() {
 ///   - Otherwise errors out.
 /// - Otherwise indicates that a port with the reset's name should be created.
 ///
-LogicalResult InferResetsPass::determineImpl(FModuleOp module,
+LogicalResult FullResetRunner::determineImpl(FModuleOp module,
                                              ResetDomain &domain) {
   // Nothing to do if the module needs no reset.
   if (!domain)
@@ -1706,7 +1725,7 @@ LogicalResult InferResetsPass::determineImpl(FModuleOp module,
 //===----------------------------------------------------------------------===//
 
 /// Implement the annotated resets gathered in the pass' `domains` map.
-LogicalResult InferResetsPass::implementFullReset() {
+LogicalResult FullResetRunner::implementFullReset() {
   LLVM_DEBUG({
     llvm::dbgs() << "\n";
     debugHeader("Implement full resets") << "\n\n";
@@ -1730,7 +1749,7 @@ LogicalResult InferResetsPass::implementFullReset() {
 /// This will add ports to the module as appropriate, update the register ops
 /// in the module, and update any instantiated submodules with their
 /// corresponding reset implementation details.
-LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
+LogicalResult FullResetRunner::implementFullReset(FModuleOp module,
                                                   ResetDomain &domain) {
   // For modules in no-domain contexts, we skip local transformations (adding
   // reset ports, converting registers) but still process instances to tie off
@@ -1743,7 +1762,8 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
         llvm::dbgs() << "Tie off instances in " << module.getName() << "\n";
     });
     for (auto instOp : instances)
-      implementFullReset(instOp, module, Value());
+      if (failed(implementFullReset(instOp, module, Value())))
+        return failure();
     return success();
   }
 
@@ -1866,26 +1886,27 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
 
   // Update the operations.
   for (auto *op : opsToUpdate)
-    implementFullReset(op, module, actualReset);
+    if (failed(implementFullReset(op, module, actualReset)))
+      return failure();
 
   return success();
 }
 
 /// Helper to implement full reset for instance-like operations.
 /// This handles the common logic of adding reset ports and connecting them.
-void InferResetsPass::implementFullReset(FInstanceLike inst,
-                                         StringAttr moduleName,
-                                         Value actualReset) {
+LogicalResult FullResetRunner::implementFullReset(FInstanceLike inst,
+                                                  StringAttr moduleName,
+                                                  Value actualReset) {
   // Lookup the reset domain of the default target module. If there is no
   // reset domain associated with that module, as indicated by an empty list
   // of domains, simply skip it.
   auto *node = instanceGraph->lookup(moduleName);
   auto refModule = dyn_cast<FModuleOp>(*node->getModule());
   if (!refModule)
-    return;
+    return success();
   auto *domainIt = domains.find(refModule);
   if (domainIt == domains.end() || domainIt->second.empty())
-    return;
+    return success();
   auto &domain = domainIt->second.back().first;
   assert(domain && "null domains should not be listed");
 
@@ -1916,7 +1937,7 @@ void InferResetsPass::implementFullReset(FInstanceLike inst,
   // can happen if the instantiated module has a reset domain, but that
   // domain is e.g. rooted at an internal wire.
   if (!instReset)
-    return;
+    return success();
 
   builder.setInsertionPointAfter(inst);
 
@@ -1936,13 +1957,15 @@ void InferResetsPass::implementFullReset(FInstanceLike inst,
   // Connect the instance's reset to the actual reset or tie-off.
   assert(instReset && actualReset);
   emitConnect(builder, instReset, actualReset);
+  return success();
 }
 
 /// Modify an operation in a module to implement an full reset for that
 /// module. If actualReset is null and op is an `InstanceOp`, creates a tie-off
 /// constant for added reset ports. If the op is not an instance, aborts.
-void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
-                                         Value actualReset) {
+LogicalResult FullResetRunner::implementFullReset(Operation *op,
+                                                  FModuleOp module,
+                                                  Value actualReset) {
   ImplicitLocOpBuilder builder(op->getLoc(), op);
 
   // Handle instances.
@@ -1968,7 +1991,7 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
     if (regOp.getForceable())
       regOp.getRef().replaceAllUsesWith(newRegOp.getRef());
     regOp->erase();
-    return;
+    return success();
   }
 
   // Handle registers with reset.
@@ -1981,8 +2004,8 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
       // The following performs the logic of `CheckResets` in the original
       // Scala source code.
       if (failed(regOp.verifyInvariants()))
-        signalPassFailure();
-      return;
+        return failure();
+      return success();
     }
     LLVM_DEBUG(llvm::dbgs() << "- Updating reset of " << regOp << "\n");
 
@@ -2003,6 +2026,7 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
     regOp.getResetSignalMutable().assign(actualReset);
     regOp.getResetValueMutable().assign(zero);
   }
+  return success();
 }
 
 LogicalResult InferResetsPass::verifyNoAbstractReset() {
