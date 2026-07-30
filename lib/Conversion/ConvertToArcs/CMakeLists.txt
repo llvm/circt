@@ -13,5 +13,6 @@ add_circt_conversion_library(CIRCTConvertToArcs
   CIRCTLLHD
   CIRCTSeq
   CIRCTSim
+  CIRCTVerif
   MLIRTransforms
 )
