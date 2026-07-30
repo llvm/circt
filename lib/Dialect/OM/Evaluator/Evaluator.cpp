@@ -31,9 +31,6 @@ using namespace circt::om;
 
 namespace {
 
-constexpr StringLiteral skipElaborationTransformAttr =
-    "om.skip_elaboration_transform";
-
 LogicalResult verifyActualParameters(ClassLike classLike,
                                      ArrayRef<EvaluatorValuePtr> actualParams) {
   auto formalParamNames =
@@ -612,13 +609,6 @@ circt::om::Evaluator::instantiate(
     for (auto &param : actualParams)
       dbgs() << "- " << param << "\n";
   });
-
-  // Skip the elaboration transform and directly instantiate the class if the
-  // caller explicitly requests so.
-  // TODO: Remove this after fully migrating to the new evaluator-based
-  // implementation.
-  if (getModule()->hasAttr(skipElaborationTransformAttr))
-    return instantiateImpl(className, actualParams);
 
   auto rootClass = symbolTable.lookup<ClassLike>(className);
   if (!rootClass)
