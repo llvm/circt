@@ -115,15 +115,17 @@ ltl.past %c0_i8, 5 clk %true : i8
 // CHECK: ltl.clock {{%.+}}, edge {{%.+}} : i1
 // CHECK: ltl.clock {{%.+}}, edge {{%.+}} : !ltl.sequence
 // CHECK: ltl.clock {{%.+}}, edge {{%.+}} : !ltl.property
+// CHECK: ltl.clocked_atom {{%.+}}, posedge {{%.+}} : i1
 ltl.clock %s, posedge %true : !ltl.sequence
 ltl.clock %s, negedge %true : !ltl.sequence
 %clk0 = ltl.clock %true, edge %true : i1
 %clk1 = ltl.clock %s, edge %true : !ltl.sequence
 %clk2 = ltl.clock %p, edge %true : !ltl.property
+%atom = ltl.clocked_atom %true, posedge %true : i1
 
 // Type inference. `unrealized_conversion_cast` used to detect unexpected return
 // types on `ltl.and`.
 unrealized_conversion_cast %clk0 : !ltl.sequence to index
 unrealized_conversion_cast %clk1 : !ltl.sequence to index
 unrealized_conversion_cast %clk2 : !ltl.property to index
-
+unrealized_conversion_cast %atom : !ltl.sequence to index
