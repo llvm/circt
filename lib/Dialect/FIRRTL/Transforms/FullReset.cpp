@@ -26,7 +26,7 @@
 #include "llvm/Support/LogicalResult.h"
 #include <atomic>
 
-#define DEBUG_TYPE "mem-to-reg-of-vec"
+#define DEBUG_TYPE "firrtl-full-reset"
 
 namespace circt {
 namespace firrtl {
