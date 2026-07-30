@@ -13,12 +13,12 @@
 #include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Support/Debug.h"
-#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
@@ -46,7 +46,6 @@ using llvm::MapVector;
 using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
 using mlir::FailureOr;
-
 
 /// Return the name and parent module of a reset. The reset value must either be
 /// a module port or a wire/node operation.
@@ -1480,7 +1479,6 @@ LogicalResult FullResetRunner::implementFullReset(Operation *op,
   }
   return success();
 }
-
 
 namespace {
 struct FullResetPass
