@@ -274,6 +274,10 @@ def CirctLTLClock : FIRRTLIntrinsic {
     Associates a clock with a boolean or sequence. This is used to indicate the
     clock domain in which a property is evaluated.
 
+    | Parameter | Type   | Description                                  |
+    | --------- | ------ | -------------------------------------------- |
+    | edge      | string | clock edge: `posedge`, `negedge`, or `edge` |
+
     | Argument | Type    | Description               |
     | -------- | ------- | ------------------------- |
     | in       | UInt<1> | input boolean or sequence |
