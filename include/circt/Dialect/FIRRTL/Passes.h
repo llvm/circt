@@ -26,6 +26,7 @@ class Pass;
 namespace circt {
 namespace firrtl {
 class InstanceGraph;
+class InstanceInfo;
 
 /// Configure which aggregate values will be preserved by the LowerTypes pass.
 namespace PreserveAggregate {
@@ -87,7 +88,9 @@ enum class InferDomainsMode {
 
 void runCombMemsToRegOfVec(FModuleOp mod, bool ignoreReadEnable,
                            unsigned &numConverted);
-LogicalResult runFullReset(CircuitOp circuit, InstanceGraph &ig);
+LogicalResult runFullReset(CircuitOp circuit, InstanceGraph &ig,
+                           InstanceInfo &instanceInfo,
+                           bool convertAsyncDomainMems = false);
 
 #define GEN_PASS_DECL
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
