@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
@@ -519,7 +520,8 @@ void InferResetsPass::runOnOperationInner() {
   if (failed(inferAndUpdateResets()))
     return signalPassFailure();
 
-  if (failed(runFullReset(getOperation(), *instanceGraph)))
+  if (failed(runFullReset(getOperation(), *instanceGraph,
+                          getAnalysis<InstanceInfo>())))
     return signalPassFailure();
 
   // Require that no Abstract Resets exist on ports in the design.
@@ -1253,9 +1255,11 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
 namespace {
 struct FullResetRunner {
   FullResetRunner(CircuitOp circuit, InstanceGraph &ig,
-                  InstancePathCache &instancePathCache)
+                  InstancePathCache &instancePathCache,
+                  InstanceInfo &instanceInfo, bool convertAsyncDomainMems)
       : circuit(circuit), instanceGraph(&ig),
-        instancePathCache(&instancePathCache) {}
+        instancePathCache(&instancePathCache), instanceInfo(&instanceInfo),
+        convertAsyncDomainMems(convertAsyncDomainMems) {}
 
   LogicalResult run();
 
@@ -1274,6 +1278,8 @@ struct FullResetRunner {
   void buildDomains(FModuleOp module, const InstancePath &instPath,
                     Value parentReset, InstanceGraph &instGraph,
                     unsigned indent = 0);
+
+  void convertMemsInAsyncDomains();
 
   LogicalResult determineImpl();
   LogicalResult determineImpl(FModuleOp module, ResetDomain &domain);
@@ -1304,6 +1310,10 @@ struct FullResetRunner {
 
   /// Cache of instance paths.
   InstancePathCache *instancePathCache = nullptr;
+
+  InstanceInfo *instanceInfo = nullptr;
+
+  bool convertAsyncDomainMems = false;
 };
 } // namespace
 
@@ -1312,6 +1322,8 @@ LogicalResult FullResetRunner::run() {
     return failure();
   if (failed(buildDomains()))
     return failure();
+  if (convertAsyncDomainMems)
+    convertMemsInAsyncDomains();
   if (failed(determineImpl()))
     return failure();
   if (failed(implementFullReset()))
@@ -1319,10 +1331,45 @@ LogicalResult FullResetRunner::run() {
   return success();
 }
 
-LogicalResult circt::firrtl::runFullReset(CircuitOp circuit,
-                                          InstanceGraph &ig) {
+void FullResetRunner::convertMemsInAsyncDomains() {
+  SmallVector<FModuleOp> asyncDomainMods;
+  for (auto &[mod, entries] : domains) {
+    if (entries.empty())
+      continue;
+    auto &domain = entries.back().first;
+    if (!domain.rootReset)
+      continue;
+    if (!type_isa<AsyncResetType>(domain.resetType))
+      continue;
+    if (!instanceInfo->anyInstanceInEffectiveDesign(mod))
+      continue;
+    asyncDomainMods.push_back(mod);
+  }
+  if (asyncDomainMods.empty())
+    return;
+
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Convert comb mems in async full-reset domains") << "\n\n";
+    for (auto mod : asyncDomainMods)
+      llvm::dbgs() << "- " << mod.getName() << "\n";
+  });
+
+  mlir::parallelForEach(circuit.getContext(), asyncDomainMods,
+                        [&](FModuleOp mod) {
+                          unsigned converted = 0;
+                          runCombMemsToRegOfVec(mod, /*ignoreReadEnable=*/false,
+                                               converted);
+                        });
+}
+
+LogicalResult circt::firrtl::runFullReset(CircuitOp circuit, InstanceGraph &ig,
+                                          InstanceInfo &instanceInfo,
+                                          bool convertAsyncDomainMems) {
   InstancePathCache instancePathCache(ig);
-  return FullResetRunner(circuit, ig, instancePathCache).run();
+  return FullResetRunner(circuit, ig, instancePathCache, instanceInfo,
+                         convertAsyncDomainMems)
+      .run();
 }
 
 //===----------------------------------------------------------------------===//

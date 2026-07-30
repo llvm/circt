@@ -46,3 +46,45 @@ firrtl.circuit "Nested" {
     firrtl.matchingconnect %child_clock, %clock : !firrtl.clock
   }
 }
+
+// -----
+// Comb mems in async full-reset domains become resettable registers.
+// CHECK-LABEL: firrtl.module @AsyncDomainMem
+// CHECK-NOT: firrtl.mem
+// CHECK: firrtl.regreset
+firrtl.circuit "AsyncDomainMem" {
+  firrtl.module @AsyncDomainMem(
+      in %clock: !firrtl.clock,
+      in %reset: !firrtl.asyncreset
+          [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    %mem_read, %mem_write = firrtl.mem Undefined {
+      depth = 4 : i64,
+      name = "mem",
+      portNames = ["read", "write"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>,
+        !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+  }
+}
+
+// -----
+// Sync full-reset domains keep comb mems.
+// CHECK-LABEL: firrtl.module @SyncDomainMem
+// CHECK: firrtl.mem
+// CHECK-NOT: firrtl.reg
+firrtl.circuit "SyncDomainMem" {
+  firrtl.module @SyncDomainMem(
+      in %clock: !firrtl.clock,
+      in %reset: !firrtl.uint<1>
+          [{class = "circt.FullResetAnnotation", resetType = "sync"}]) {
+    %mem_read, %mem_write = firrtl.mem Undefined {
+      depth = 4 : i64,
+      name = "mem",
+      portNames = ["read", "write"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>,
+        !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+  }
+}
