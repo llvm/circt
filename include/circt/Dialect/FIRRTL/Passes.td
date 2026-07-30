@@ -360,6 +360,14 @@ def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
   }];
 }
 
+def FullReset : Pass<"firrtl-full-reset", "firrtl::CircuitOp"> {
+  let summary = "Run full reset transform";
+  let description = [{
+    Consumes `circt.FullResetAnnotation` / `circt.ExcludeFromFullResetAnnotation`
+    Builds reset domains and implements full reset on registers.
+  }];
+}
+
 def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
   let summary = "Load source files for black boxes into the IR";
   let description = [{
