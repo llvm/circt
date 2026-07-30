@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/Pass/Pass.h"
@@ -31,9 +32,11 @@ struct FullResetPass
 
   void runOnOperation() override {
     auto &ig = getAnalysis<InstanceGraph>();
-    if (failed(runFullReset(getOperation(), ig)))
+    auto &instanceInfo = getAnalysis<InstanceInfo>();
+    if (failed(runFullReset(getOperation(), ig, instanceInfo,
+                            /*convertAsyncDomainMems=*/true)))
       return signalPassFailure();
-    markAnalysesPreserved<InstanceGraph>();
+    markAnalysesPreserved<InstanceGraph, InstanceInfo>();
   }
 };
 } // namespace
