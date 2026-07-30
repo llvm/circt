@@ -225,7 +225,7 @@ bool Loop::match() {
     return failMatch("unsupported increment");
   }
 
-  std::optional<unsigned> range = 0;
+  std::optional<unsigned> range;
   // Determine the trip count and loop behavior.
   // for (unsigned i = N; i < M; i += S) with N <= M and S > 0
   if (predicate == comb::ICmpPredicate::ult && beginBound.ule(endBound) &&
