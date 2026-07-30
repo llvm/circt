@@ -436,6 +436,36 @@ hw.module @SkipLoopWithUnsupportedIncrement() {
   }
 }
 
+// CHECK-LABEL: @SkipLoopWithUnsupportedLoopBound
+hw.module @SkipLoopWithUnsupportedLoopBound() {
+  %c_loop_start = hw.constant  3 : i42
+  %c_loop_end   = hw.constant -2 : i42
+  %c_loop_inc   = hw.constant -1 : i42
+  // Loop of the form:
+  //   for (i = 3; i > -2; i--)
+  //     func()
+  // CHECK: llhd.combinational
+  llhd.combinational {
+    // CHECK: cf.br
+    // CHECK: cf.cond_br
+    // CHECK: func.call @marker() : () -> ()
+    // CHECK-NOT: func.call @marker() : () -> ()
+    // CHECK: cf.br
+    // CHECK: llhd.yield
+    cf.br ^header(%c_loop_start: i42)
+  ^header(%i: i42):  // 2 preds: ^bb0, ^bb2
+    %1 = comb.icmp sgt %i, %c_loop_end : i42
+    cf.cond_br %1, ^body, ^exit
+  ^body:  // pred: ^header
+    func.call @marker() : () -> ()
+    %iInc = comb.add %i, %c_loop_inc : i42
+    cf.br ^header(%iInc: i42)
+  ^exit:  // pred: ^header
+    llhd.yield
+  }
+  hw.output
+}
+
 // CHECK-LABEL: @DontCrashOnSingleBlocks
 hw.module @DontCrashOnSingleBlocks() {
   llhd.combinational {
