@@ -516,19 +516,16 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
 struct VerifAssertLowering : public OpConversionPattern<verif::AssertOp> {
   using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(verif::AssertOp op,
-                                OpAdaptor adaptor,
-                                ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     SmallVector<NamedAttribute> attrs;
     if (auto label = op.getLabelAttr())
       attrs.push_back(rewriter.getNamedAttr("msg", label));
 
     ImplicitLocOpBuilder builder(op.getLoc(), rewriter);
-    builder.create<arc::AssertOp>(
-        TypeRange{},
-        ValueRange{op.getProperty()},
-        ArrayRef<NamedAttribute>{attrs}
-    );
+    builder.create<arc::AssertOp>(TypeRange{}, ValueRange{op.getProperty()},
+                                  ArrayRef<NamedAttribute>{attrs});
 
     rewriter.eraseOp(op);
     return success();
@@ -581,8 +578,8 @@ static LogicalResult convert(verif::AssertOp op,
                              ConversionPatternRewriter &rewriter) {
   SmallVector<NamedAttribute> attrs;
   if (auto label = op.getLabelAttr())
-    attrs.push_back(NamedAttribute(
-        StringAttr::get(op.getContext(), "msg"), label));
+    attrs.push_back(
+        NamedAttribute(StringAttr::get(op.getContext(), "msg"), label));
 
   ImplicitLocOpBuilder builder(op.getLoc(), rewriter);
   builder.create<arc::AssertOp>(TypeRange{}, ValueRange{op.getProperty()},
@@ -626,9 +623,8 @@ void ConvertToArcsPass::runOnOperation() {
   ConversionTarget target(getContext());
   target.addIllegalOp<llhd::CombinationalOp, llhd::YieldOp>();
   target.addIllegalDialect<VerifDialect>();
-  target.markUnknownOpDynamicallyLegal([](Operation *op) {
-    return !isa<VerifDialect>(op->getDialect());
-  });
+  target.markUnknownOpDynamicallyLegal(
+      [](Operation *op) { return !isa<VerifDialect>(op->getDialect()); });
 
   // Disable pattern rollback to use the faster one-shot dialect conversion.
   ConversionConfig config;
