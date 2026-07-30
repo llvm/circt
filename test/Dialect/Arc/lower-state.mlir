@@ -44,8 +44,9 @@ arc.define @RandomI42AndI19Arc() -> (i42, i19) {
 
 // CHECK-LABEL: arc.model @Empty
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage):
+// CHECK-NEXT:    [[CTX:%.+]] = arc.as_context %arg0 : !arc.storage
 // CHECK-NEXT:    [[NWK:%.+]] = hw.constant -1 : i64
-// CHECK-NEXT:    arc.set_next_wakeup %arg0, [[NWK]] : !arc.storage
+// CHECK-NEXT:    arc.set_next_wakeup [[CTX]], [[NWK]]
 // CHECK-NEXT:  }
 hw.module @Empty() {}
 
@@ -634,6 +635,7 @@ hw.module @Triggered(in %clock: i1, in %a: i42) {
 
 // CHECK-LABEL: arc.model @TriggeredCurrentTime
 hw.module @TriggeredCurrentTime(in %clock: i1) {
+  // CHECK: [[CTX:%.+]] = arc.as_context %arg0 : !arc.storage
   // CHECK: [[IN_CLOCK:%.+]] = arc.root_input "clock"
   // CHECK: [[CLOCK:%.+]] = arc.state_read [[IN_CLOCK]]
   // CHECK: [[OLD_CLOCK:%.+]] = arc.state_read
@@ -641,7 +643,7 @@ hw.module @TriggeredCurrentTime(in %clock: i1) {
   // CHECK: [[EDGE:%.+]] = comb.xor [[OLD_CLOCK]], [[CLOCK]]
   // CHECK: [[POSEDGE:%.+]] = comb.and [[EDGE]], [[CLOCK]]
   // CHECK: scf.if [[POSEDGE]] {
-  // CHECK:   [[TIME_INT:%.+]] = arc.current_time %arg0
+  // CHECK:   [[TIME_INT:%.+]] = arc.current_time [[CTX]]
   // CHECK:   [[TIME:%.+]] = llhd.int_to_time [[TIME_INT]]
   // CHECK:   [[TIME_AS_INT:%.+]] = llhd.time_to_int [[TIME]]
   // CHECK:   func.call @ConsumeI64([[TIME_AS_INT]])
@@ -697,6 +699,7 @@ hw.module @LLHDTimeOps(in %clock: !seq.clock, out t: i64) {
   // values cannot be directly used inside. We only test this for llhd.final.
   %external_time = llhd.current_time
 
+  // CHECK: [[CTX:%.+]] = arc.as_context %arg0 : !arc.storage
   // Phase::Initial - llhd.current_time used inside seq.initial.
   // During initialization, time is always 0.
   // CHECK: arc.initial {
@@ -719,9 +722,9 @@ hw.module @LLHDTimeOps(in %clock: !seq.clock, out t: i64) {
   //    have IsolatedFromAbove, so external values can be used directly)
   // All llhd.current_time ops are pre-lowered before cloning other ops.
   // CHECK: arc.final {
-  // CHECK:   [[OUT_INT1:%.+]] = arc.current_time %arg0
+  // CHECK:   [[OUT_INT1:%.+]] = arc.current_time [[CTX]]
   // CHECK:   [[OUT_TIME:%.+]] = llhd.int_to_time [[OUT_INT1]]
-  // CHECK:   [[IN_INT1:%.+]] = arc.current_time %arg0
+  // CHECK:   [[IN_INT1:%.+]] = arc.current_time [[CTX]]
   // CHECK:   [[IN_TIME:%.+]] = llhd.int_to_time [[IN_INT1]]
   // CHECK:   [[OUT_INT2:%.+]] = llhd.time_to_int [[OUT_TIME]]
   // CHECK:   func.call @ConsumeI64([[OUT_INT2]]) {out}
@@ -740,13 +743,13 @@ hw.module @LLHDTimeOps(in %clock: !seq.clock, out t: i64) {
   }
 
   // Phase::New - llhd.current_time used directly in module body.
-  // CHECK: [[TIME_INT_NEW:%.+]] = arc.current_time %arg0
+  // CHECK: [[TIME_INT_NEW:%.+]] = arc.current_time [[CTX]]
   // CHECK: [[TIME_NEW:%.+]] = llhd.int_to_time [[TIME_INT_NEW]]
   %0 = llhd.current_time
   %1 = llhd.time_to_int %0
 
   // Phase::Old - llhd.current_time used as data input to a state.
-  // CHECK: [[TIME_INT_OLD:%.+]] = arc.current_time %arg0
+  // CHECK: [[TIME_INT_OLD:%.+]] = arc.current_time [[CTX]]
   // CHECK: [[TIME_OLD:%.+]] = llhd.int_to_time [[TIME_INT_OLD]]
   // CHECK: [[TIME_OLD_INT:%.+]] = llhd.time_to_int [[TIME_OLD]]
   // CHECK: arc.call @IdI64Arc([[TIME_OLD_INT]])
@@ -764,6 +767,7 @@ hw.module @LLHDTimeOps(in %clock: !seq.clock, out t: i64) {
 // CHECK-LABEL: arc.model @TestSimToArcTerminateSuccess
 // CHECK-SAME: io !hw.modty<input clock : !seq.clock, input cond : i1>
 hw.module @TestSimToArcTerminateSuccess(in %clock: !seq.clock, in %cond: i1) {
+  // CHECK: %[[CTX:.+]] = arc.as_context %arg0 : !arc.storage
   // CHECK: %[[IN_CLK:.*]] = arc.root_input "clock"
   // CHECK: %[[IN_COND:.*]] = arc.root_input "cond"
   // CHECK: %[[LAST_CLK_PTR:.*]] = arc.alloc_state %arg0
@@ -780,7 +784,7 @@ hw.module @TestSimToArcTerminateSuccess(in %clock: !seq.clock, in %cond: i1) {
   // CHECK: scf.if %[[POSEDGE]] {
   // CHECK:   %[[COND_VAL:.*]] = arc.state_read %[[IN_COND]] : <i1>
   // CHECK:   scf.if %[[COND_VAL]] {
-  // CHECK:     arc.terminate %arg0, true : !arc.storage
+  // CHECK:     arc.terminate %[[CTX]], true
   // CHECK:   }
   // CHECK: }
   
@@ -790,6 +794,7 @@ hw.module @TestSimToArcTerminateSuccess(in %clock: !seq.clock, in %cond: i1) {
 // CHECK-LABEL: arc.model @TestSimToArcTerminateFailure
 // CHECK-SAME: io !hw.modty<input clock : !seq.clock, input cond : i1>
 hw.module @TestSimToArcTerminateFailure(in %clock: !seq.clock, in %cond: i1) {
+  // CHECK: [[CTX:%.+]] = arc.as_context %arg0 : !arc.storage
   // CHECK: %[[IN_CLK:.*]] = arc.root_input "clock"
   // CHECK: %[[IN_COND:.*]] = arc.root_input "cond"
   // CHECK: %[[LAST_CLK_PTR:.*]] = arc.alloc_state %arg0
@@ -806,7 +811,7 @@ hw.module @TestSimToArcTerminateFailure(in %clock: !seq.clock, in %cond: i1) {
   // CHECK: scf.if %[[POSEDGE]] {
   // CHECK:   %[[COND_VAL:.*]] = arc.state_read %[[IN_COND]] : <i1>
   // CHECK:   scf.if %[[COND_VAL]] {
-  // CHECK:     arc.terminate %arg0, false : !arc.storage
+  // CHECK:     arc.terminate [[CTX]], false
   // CHECK:   }
   // CHECK: }
   
@@ -815,6 +820,7 @@ hw.module @TestSimToArcTerminateFailure(in %clock: !seq.clock, in %cond: i1) {
 
 // CHECK-LABEL: arc.model @CoroutineSensitiveInstance
 hw.module @CoroutineSensitiveInstance(in %in: i42, out o: i42) {
+  // CHECK: [[CTX:%.+]] = arc.as_context %arg0 : !arc.storage
   // CHECK-DAG: [[PC:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!arc.coroutine_pc<@DummyCoroutine>>
   // CHECK-DAG: [[STATE:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!arc.coroutine_state<@DummyCoroutine>>
   // CHECK-DAG: [[WAKEUP:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i64>
@@ -830,7 +836,7 @@ hw.module @CoroutineSensitiveInstance(in %in: i42, out o: i42) {
   // CHECK: [[BIT:%.+]] = comb.extract [[MASKVAL]] from 0 : (i1) -> i1
   // CHECK: [[MASKED:%.+]] = comb.and [[CHANGED]], [[BIT]] : i1
   // CHECK: [[ANYCHANGE:%.+]] = comb.or {{%.+}}, [[MASKED]] : i1
-  // CHECK: [[NOW:%.+]] = arc.current_time %arg0 : !arc.storage
+  // CHECK: [[NOW:%.+]] = arc.current_time [[CTX]]
   // CHECK: [[WK:%.+]] = arc.state_read [[WAKEUP]] : <i64>
   // CHECK: [[TIMEREADY:%.+]] = comb.icmp uge [[NOW]], [[WK]] : i64
   // CHECK: [[READY:%.+]] = comb.or [[TIMEREADY]], [[ANYCHANGE]] : i1
@@ -851,9 +857,9 @@ hw.module @CoroutineSensitiveInstance(in %in: i42, out o: i42) {
   // CHECK: }
 
   // CHECK: [[CUR:%.+]] = arc.state_read [[WAKEUP]] : <i64>
-  // CHECK: [[NEXT:%.+]] = arc.get_next_wakeup %arg0 : !arc.storage
+  // CHECK: [[NEXT:%.+]] = arc.get_next_wakeup [[CTX]]
   // CHECK: [[MIN:%.+]] = arith.minui [[CUR]], [[NEXT]] : i64
-  // CHECK: arc.set_next_wakeup %arg0, [[MIN]] : !arc.storage
+  // CHECK: arc.set_next_wakeup [[CTX]], [[MIN]]
   %0 = arc.coroutine.instance @DummyCoroutine(%in) sensitive [true] : (i42) -> i42
 
   // CHECK: [[OUT:%.+]] = arc.state_read [[RESULT]] : <i42>

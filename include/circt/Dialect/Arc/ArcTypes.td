@@ -51,6 +51,16 @@ def StorageType : ArcTypeDef<"Storage"> {
   let mnemonic = "storage";
 }
 
+def ContextType : ArcTypeDef<"Context"> {
+  let summary = "Generic model instance context";
+  let description = [{
+    A handle to the runtime context of a model instance.
+    At compile-time it is not tied to a specific model and may be used to
+    refer to an instance within a function shared between models.
+  }];
+  let mnemonic = "context";
+}
+
 def SimModelInstance : ArcTypeDef<"SimModelInstance"> {
   let mnemonic = "sim.instance";
   let parameters = (ins "mlir::FlatSymbolRefAttr":$model);

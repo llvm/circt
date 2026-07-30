@@ -75,12 +75,13 @@ void GenerateDriverPass::generateDriver(ModelOp modelOp,
   func::ReturnOp::create(builder, loc);
   auto *instanceBlock = builder.createBlock(&instanceOp.getBody());
   auto instance = instanceBlock->addArgument(instanceType, loc);
+  auto arcContext = AsContextOp::create(builder, loc, instance);
 
   // Loop until no further wakeup is scheduled. The next wakeup slot uses
   // `UINT64_MAX` to signal that the model has gone quiescent.
   auto never = arith::ConstantOp::create(builder, loc,
                                          builder.getIntegerAttr(i64Type, -1));
-  auto firstWakeup = SimGetNextWakeupOp::create(builder, loc, instance);
+  auto firstWakeup = GetNextWakeupOp::create(builder, loc, arcContext);
 
   auto whileOp =
       scf::WhileOp::create(builder, loc, i64Type, ValueRange{firstWakeup});
@@ -99,6 +100,6 @@ void GenerateDriverPass::generateDriver(ModelOp modelOp,
   auto resumeTime = afterBlock->addArgument(i64Type, loc);
   SimSetTimeOp::create(builder, loc, instance, resumeTime);
   SimStepOp::create(builder, loc, instance);
-  auto nextWakeup = SimGetNextWakeupOp::create(builder, loc, instance);
+  auto nextWakeup = GetNextWakeupOp::create(builder, loc, arcContext);
   scf::YieldOp::create(builder, loc, ValueRange{nextWakeup});
 }

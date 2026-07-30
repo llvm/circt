@@ -692,45 +692,11 @@ LogicalResult SimStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// SimGetTimeOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult
-SimGetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  Operation *moduleOp = getSupportedModuleOp(
-      symbolTable, getOperation(),
-      llvm::cast<SimModelInstanceType>(getInstance().getType())
-          .getModel()
-          .getAttr());
-  if (!moduleOp)
-    return failure();
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // SimSetTimeOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult
 SimSetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  Operation *moduleOp = getSupportedModuleOp(
-      symbolTable, getOperation(),
-      llvm::cast<SimModelInstanceType>(getInstance().getType())
-          .getModel()
-          .getAttr());
-  if (!moduleOp)
-    return failure();
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// SimGetNextWakeupOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult
-SimGetNextWakeupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Operation *moduleOp = getSupportedModuleOp(
       symbolTable, getOperation(),
       llvm::cast<SimModelInstanceType>(getInstance().getType())
