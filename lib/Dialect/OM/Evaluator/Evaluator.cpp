@@ -32,7 +32,8 @@ using namespace circt::om;
 namespace {
 
 bool requiresCompleteEvaluation(const evaluator::EvaluatorValuePtr &value) {
-  return !value->isFullyEvaluated() && !isa<evaluator::ObjectValue>(value.get());
+  return !value->isFullyEvaluated() &&
+         !isa<evaluator::ObjectValue>(value.get());
 }
 
 LogicalResult verifyActualParameters(ClassLike classLike,
@@ -201,8 +202,6 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
     return emitError(loc, "cannot materialize null OM evaluator value");
 
   loc = value->getLoc();
-  if (isa<evaluator::ReferenceValue>(value.get()))
-    return emitError(loc, "cannot import OM reference value");
   if (!expectedType)
     return emitError(loc, "cannot import OM evaluator value without an "
                           "expected type");
@@ -337,25 +336,11 @@ circt::om::getEvaluatorValuesFromAttributes(MLIRContext *context,
   return values;
 }
 
-LogicalResult circt::om::evaluator::EvaluatorValue::finalize() {
-  using namespace evaluator;
-  // Early return if already finalized.
-  if (finalized)
-    return success();
-  // Enable the flag to avoid infinite recursions.
-  finalized = true;
-  assert(isFullyEvaluated());
-  return llvm::TypeSwitch<EvaluatorValue *, LogicalResult>(this)
-      .Case<AttributeValue, ObjectValue, ListValue, ReferenceValue,
-            BasePathValue, PathValue>([](auto v) { return v->finalizeImpl(); });
-}
-
 Type circt::om::evaluator::EvaluatorValue::getType() const {
   return llvm::TypeSwitch<const EvaluatorValue *, Type>(this)
       .Case<AttributeValue>([](auto *attr) -> Type { return attr->getType(); })
       .Case<ObjectValue>([](auto *object) { return object->getObjectType(); })
       .Case<ListValue>([](auto *list) { return list->getListType(); })
-      .Case<ReferenceValue>([](auto *ref) { return ref->getValueType(); })
       .Case<BasePathValue>(
           [this](auto *tuple) { return FrozenBasePathType::get(ctx); })
       .Case<PathValue>(
@@ -781,15 +766,12 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
   SmallVector<evaluator::EvaluatorValuePtr> values;
   auto list = getOrCreateValue(op, actualParams, loc);
 
-  // Extract the ListValue, either directly or through an object reference.
+  // Extract the ListValue.
   auto extractList = [](evaluator::EvaluatorValue *value) {
     return std::move(
         llvm::TypeSwitch<evaluator::EvaluatorValue *, evaluator::ListValue *>(
             value)
-            .Case([](evaluator::ListValue *val) { return val; })
-            .Case([](evaluator::ReferenceValue *val) {
-              return cast<evaluator::ListValue>(val->getStrippedValue()->get());
-            }));
+            .Case([](evaluator::ListValue *val) { return val; }));
   };
 
   bool hasUnknown = false;
@@ -958,42 +940,6 @@ ArrayAttr circt::om::Object::getFieldNames() {
   return ArrayAttr::get(cls.getContext(), fieldNames);
 }
 
-LogicalResult circt::om::evaluator::ObjectValue::finalizeImpl() {
-  for (auto &&[e, value] : fields)
-    if (failed(finalizeEvaluatorValue(value)))
-      return failure();
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// ReferenceValue
-//===----------------------------------------------------------------------===//
-
-LogicalResult circt::om::evaluator::ReferenceValue::finalizeImpl() {
-  auto result = getStrippedValue();
-  if (failed(result))
-    return result;
-  value = std::move(result.value());
-  // the stripped value also needs to be finalized
-  if (failed(finalizeEvaluatorValue(value)))
-    return failure();
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// ListValue
-//===----------------------------------------------------------------------===//
-
-LogicalResult circt::om::evaluator::ListValue::finalizeImpl() {
-  for (auto &value : elements) {
-    if (failed(finalizeEvaluatorValue(value)))
-      return failure();
-  }
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // BasePathValue
 //===----------------------------------------------------------------------===//
@@ -1105,13 +1051,6 @@ LogicalResult circt::om::evaluator::AttributeValue::setAttr(Attribute attr) {
         "cannot set AttributeValue that has already been fully evaluated");
   this->attr = attr;
   markFullyEvaluated();
-  return success();
-}
-
-LogicalResult circt::om::evaluator::AttributeValue::finalizeImpl() {
-  if (!isFullyEvaluated())
-    return mlir::emitError(
-        getLoc(), "cannot finalize AttributeValue that is not fully evaluated");
   return success();
 }
 
