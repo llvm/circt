@@ -426,9 +426,6 @@ private:
 
   FailureOr<EvaluatorValuePtr>
   getOrCreateValue(Value value, ActualParameters actualParams, Location loc);
-  FailureOr<EvaluatorValuePtr>
-  allocateObjectInstance(StringAttr clasName, ActualParameters actualParams);
-
   /// Evaluate a Value in a Class body according to the small expression grammar
   /// described in the rationale document. The actual parameters are the values
   /// supplied at the current instantiation of the Class being evaluated.
@@ -447,8 +444,6 @@ private:
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
                          Location loc, ObjectKey instanceKey = {});
-  FailureOr<EvaluatorValuePtr>
-  evaluateObjectInstance(ObjectOp op, ActualParameters actualParams);
   FailureOr<EvaluatorValuePtr>
   evaluateElaboratedObject(ElaboratedObjectOp op, ActualParameters actualParams,
                            Location loc);
@@ -472,10 +467,6 @@ private:
 
   FailureOr<evaluator::EvaluatorValuePtr> createUnknownValue(Type type,
                                                              Location loc);
-
-  FailureOr<ActualParameters>
-  createParametersFromOperands(ValueRange range, ActualParameters actualParams,
-                               Location loc);
 
   /// The symbol table for the IR module the Evaluator was constructed with.
   /// Used to look up class definitions.
