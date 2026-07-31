@@ -21,7 +21,6 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LogicalResult.h"
-#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Debug.h"
 
@@ -48,7 +47,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 class EvaluatorValue : public std::enable_shared_from_this<EvaluatorValue> {
 public:
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Reference, BasePath, Path };
+  enum class Kind { Attr, Object, List, BasePath, Path };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
       : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
@@ -83,9 +82,6 @@ public:
   // Return a MLIR type which the value represents.
   Type getType() const;
 
-  // Finalize the evaluator value. Strip intermidiate reference values.
-  LogicalResult finalize();
-
   // Return the Location associated with the Value.
   Location getLoc() const { return loc; }
   // Set the Location associated with the Value.
@@ -101,50 +97,7 @@ private:
   MLIRContext *ctx;
   Location loc;
   bool fullyEvaluated = false;
-  bool finalized = false;
   bool unknown = false;
-};
-
-/// Values which can be used as pointers to different values.
-/// ReferenceValue is replaced with its element and erased at the end of
-/// evaluation.
-class ReferenceValue : public EvaluatorValue {
-public:
-  ReferenceValue(Type type, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Reference, loc), value(nullptr),
-        type(type) {}
-
-  // Implement LLVM RTTI.
-  static bool classof(const EvaluatorValue *e) {
-    return e->getKind() == Kind::Reference;
-  }
-
-  Type getValueType() const { return type; }
-  EvaluatorValuePtr getValue() const { return value; }
-  void setValue(EvaluatorValuePtr newValue) {
-    value = std::move(newValue);
-    markFullyEvaluated();
-  }
-
-  // Finalize the value.
-  LogicalResult finalizeImpl();
-
-  // Return the first non-reference value that is reachable from the reference.
-  FailureOr<EvaluatorValuePtr> getStrippedValue() const {
-    llvm::SmallPtrSet<ReferenceValue *, 4> visited;
-    auto currentValue = value;
-    while (auto *v = dyn_cast<ReferenceValue>(currentValue.get())) {
-      // Detect a cycle.
-      if (!visited.insert(v).second)
-        return failure();
-      currentValue = v->getValue();
-    }
-    return success(currentValue);
-  }
-
-private:
-  EvaluatorValuePtr value;
-  Type type;
 };
 
 /// Values which can be directly representable by MLIR attributes.
@@ -161,9 +114,6 @@ public:
 
   // Set Attribute for partially evaluated case.
   LogicalResult setAttr(Attribute attr);
-
-  // Finalize the value.
-  LogicalResult finalizeImpl();
 
   Type getType() const { return type; }
 
@@ -195,19 +145,6 @@ private:
   friend std::shared_ptr<EvaluatorValue> get(Type type, LocationAttr loc);
 };
 
-// This perform finalization to `value`.
-static inline LogicalResult finalizeEvaluatorValue(EvaluatorValuePtr &value) {
-  if (failed(value->finalize()))
-    return failure();
-  if (auto *ref = llvm::dyn_cast<ReferenceValue>(value.get())) {
-    auto v = ref->getStrippedValue();
-    if (failed(v))
-      return v;
-    value = v.value();
-  }
-  return success();
-}
-
 /// A List which contains variadic length of elements with the same type.
 class ListValue : public EvaluatorValue {
 public:
@@ -222,9 +159,6 @@ public:
     elements = std::move(newElements);
     markFullyEvaluated();
   }
-
-  // Finalize the value.
-  LogicalResult finalizeImpl();
 
   // Partially evaluated value.
   ListValue(om::ListType type, Location loc)
@@ -289,9 +223,6 @@ public:
   /// Get all the field names of the Object.
   ArrayAttr getFieldNames();
 
-  // Finalize the evaluator value.
-  LogicalResult finalizeImpl();
-
 private:
   om::ClassLike cls;
   llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> fields;
@@ -309,9 +240,6 @@ public:
 
   /// Set the basepath which this path is relative to.
   void setBasepath(const BasePathValue &basepath);
-
-  /// Finalize the evaluator value.
-  LogicalResult finalizeImpl() { return success(); }
 
   /// Implement LLVM RTTI.
   static bool classof(const EvaluatorValue *e) {
@@ -344,9 +272,6 @@ public:
   StringAttr getAsString() const;
 
   void setBasepath(const BasePathValue &basepath);
-
-  // Finalize the evaluator value.
-  LogicalResult finalizeImpl() { return success(); }
 
   /// Implement LLVM RTTI.
   static bool classof(const EvaluatorValue *e) {
@@ -477,9 +402,6 @@ operator<<(mlir::Diagnostic &diag,
     diag << "Object(" << object->getType() << ")";
   else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
     diag << "List(" << list->getType() << ")";
-  else if (auto *ref =
-               llvm::dyn_cast<evaluator::ReferenceValue>(&evaluatorValue))
-    diag << "Reference(" << ref->getValueType() << ")";
   else if (llvm::isa<evaluator::BasePathValue>(&evaluatorValue))
     diag << "BasePath()";
   else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))
