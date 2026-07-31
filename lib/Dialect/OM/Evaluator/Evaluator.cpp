@@ -400,7 +400,7 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
     Value value, ActualParameters actualParams, Location loc) {
   LLVM_DEBUG(dbgs() << "- get: " << value << "\n");
 
-  auto it = objects.find({value, actualParams});
+  auto it = objects.find(value);
   if (it != objects.end()) {
     auto evalVal = it->second;
     evalVal->setLocIfUnknown(loc);
@@ -410,9 +410,7 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
   FailureOr<evaluator::EvaluatorValuePtr> result =
       TypeSwitch<Value, FailureOr<evaluator::EvaluatorValuePtr>>(value)
           .Case([&](BlockArgument arg) {
-            auto val = (*actualParams)[arg.getArgNumber()];
-            val->setLoc(loc);
-            return val;
+            return evaluateParameter(arg, actualParams, loc);
           })
           .Case([&](OpResult result) {
             return TypeSwitch<Operation *,
@@ -463,15 +461,14 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
 
   // Attach listener to newly created values
   attachCounter(result.value());
-  objects[{value, actualParams}] = result.value();
+  objects[value] = result.value();
   return result;
 }
 
 FailureOr<evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
                                              ActualParameters actualParams,
-                                             Location loc,
-                                             ObjectKey instanceKey) {
+                                             Location loc) {
 #ifndef NDEBUG
   DebugNesting nestOne(debugNesting);
 #endif
@@ -498,7 +495,7 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
   // Otherwise, it's a regular class, proceed normally
   ClassOp cls = cast<ClassOp>(classDef);
 
-  if (failed(verifyActualParameters(cls, *actualParams)))
+  if (failed(verifyActualParameters(cls, actualParams)))
     return failure();
 
   // Instantiate the fields.
@@ -518,7 +515,7 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
                                     UnknownLoc::get(context))))
           return failure();
         // Add to the worklist.
-        worklist.push_back({result, actualParams});
+        worklist.push_back(result);
       }
   }
 
@@ -541,16 +538,6 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
 
     LLVM_DEBUG(dbgs() << "value: " << result.value() << "\n");
     fields[cast<StringAttr>(name)] = result.value();
-  }
-
-  // If the there is an instance, we must update the object value.
-  LLVM_DEBUG(dbgs() << "object value:\n");
-  if (instanceKey.first) {
-    auto result =
-        getOrCreateValue(instanceKey.first, instanceKey.second, loc).value();
-    auto *object = llvm::cast<evaluator::ObjectValue>(result.get());
-    object->setFields(std::move(fields));
-    return result;
   }
 
   // If it's external call, just allocate new ObjectValue.
@@ -620,16 +607,9 @@ circt::om::Evaluator::instantiateImpl(
   // Otherwise, it's a regular class, proceed normally
   ClassOp cls = cast<ClassOp>(classDef);
 
-  auto parameters =
-      std::make_unique<SmallVector<std::shared_ptr<evaluator::EvaluatorValue>>>(
-          actualParams);
-
-  actualParametersBuffers.push_back(std::move(parameters));
-
   auto loc = cls.getLoc();
   LLVM_DEBUG(dbgs() << "evaluate object:\n");
-  auto result = evaluateObjectInstance(
-      className, actualParametersBuffers.back().get(), loc);
+  auto result = evaluateObjectInstance(className, actualParams, loc);
 
   if (failed(result))
     return failure();
@@ -649,16 +629,16 @@ circt::om::Evaluator::instantiateImpl(
 
     // Process all items in the current worklist.
     while (!worklist.empty()) {
-      auto [value, args] = worklist.back();
+      auto value = worklist.back();
       worklist.pop_back();
-      auto result = evaluateValue(value, args, loc);
+      auto result = evaluateValue(value, actualParams, loc);
 
       if (failed(result))
         return failure();
 
       // If not fully evaluated, add to next worklist for retry.
       if (!result.value()->isFullyEvaluated())
-        nextWorklist.push_back({value, args});
+        nextWorklist.push_back(value);
     }
 
     // Check if we made progress.
@@ -797,7 +777,7 @@ circt::om::Evaluator::evaluateElaboratedObject(ElaboratedObjectOp op,
       return failure();
 
     if (!fieldResult.value()->isFullyEvaluated())
-      worklist.push_back({fieldValue, actualParams});
+      worklist.push_back(fieldValue);
 
     fields[cast<StringAttr>(fieldName)] = fieldResult.value();
   }
