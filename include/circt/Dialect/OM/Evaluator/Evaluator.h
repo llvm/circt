@@ -396,24 +396,12 @@ public:
   FailureOr<evaluator::EvaluatorValuePtr>
   getPartiallyEvaluatedValue(Type type, Location loc);
 
-  using ActualParameters =
-      SmallVectorImpl<std::shared_ptr<evaluator::EvaluatorValue>> *;
-
-  using ObjectKey = std::pair<Value, ActualParameters>;
+  using ActualParameters = ArrayRef<EvaluatorValuePtr>;
 
   /// Get the number of fully evaluated nodes tracked by this evaluator.
   uint64_t getFullyEvaluatedCount() const { return fullyEvaluatedCount; }
 
 private:
-  bool isFullyEvaluated(Value value, ActualParameters key) {
-    return isFullyEvaluated({value, key});
-  }
-
-  bool isFullyEvaluated(ObjectKey key) {
-    auto val = objects.lookup(key);
-    return val && val->isFullyEvaluated();
-  }
-
   /// Attach the evaluation counter to a newly created value.
   void attachCounter(evaluator::EvaluatorValuePtr &value) {
     if (value && !value->isFullyEvaluated())
@@ -443,7 +431,7 @@ private:
   /// Instantiate an Object with its class name and actual parameters.
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
-                         Location loc, ObjectKey instanceKey = {});
+                         Location loc);
   FailureOr<EvaluatorValuePtr>
   evaluateElaboratedObject(ElaboratedObjectOp op, ActualParameters actualParams,
                            Location loc);
@@ -472,20 +460,14 @@ private:
   /// Used to look up class definitions.
   SymbolTable symbolTable;
 
-  /// This uniquely stores vectors that represent parameters.
-  SmallVector<
-      std::unique_ptr<SmallVector<std::shared_ptr<evaluator::EvaluatorValue>>>>
-      actualParametersBuffers;
-
   /// Worklists that track values which need to be fully evaluated.
   /// We use two worklists to detect cycles: process all items from one,
   /// and if any become fully evaluated, swap and continue.
-  std::vector<ObjectKey> worklist;
-  std::vector<ObjectKey> nextWorklist;
+  std::vector<Value> worklist;
+  std::vector<Value> nextWorklist;
 
-  /// Evaluator value storage. Return an evaluator value for the given
-  /// instantiation context (a pair of Value and parameters).
-  DenseMap<ObjectKey, std::shared_ptr<evaluator::EvaluatorValue>> objects;
+  /// Evaluator value storage for the current instantiation.
+  DenseMap<Value, std::shared_ptr<evaluator::EvaluatorValue>> objects;
 
   /// Counter for fully evaluated nodes.
   uint64_t fullyEvaluatedCount = 0;
