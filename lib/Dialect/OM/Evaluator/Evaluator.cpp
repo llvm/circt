@@ -447,9 +447,6 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                 .Case<ListCreateOp, ListConcatOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
                 })
-                .Case<ObjectOp>([&](auto op) {
-                  return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
-                })
                 .Case<ElaboratedObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
                 })
@@ -716,9 +713,6 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](ConstantOp op) {
               return evaluateConstant(op, actualParams, loc);
             })
-            .Case([&](ObjectOp op) {
-              return evaluateObjectInstance(op, actualParams);
-            })
             .Case([&](ElaboratedObjectOp op) {
               return evaluateElaboratedObject(op, actualParams, loc);
             })
@@ -766,42 +760,6 @@ circt::om::Evaluator::evaluateConstant(ConstantOp op,
                                        Location loc) {
   // For list constants, create ListValue.
   return success(om::evaluator::AttributeValue::get(op.getValue(), loc));
-}
-
-/// Evaluator dispatch function for Object instances.
-FailureOr<circt::om::Evaluator::ActualParameters>
-circt::om::Evaluator::createParametersFromOperands(
-    ValueRange range, ActualParameters actualParams, Location loc) {
-  // Create an unique storage to store parameters.
-  auto parameters = std::make_unique<
-      SmallVector<std::shared_ptr<evaluator::EvaluatorValue>>>();
-
-  // Collect operands' evaluator values in the current instantiation context.
-  for (auto input : range) {
-    auto inputResult = getOrCreateValue(input, actualParams, loc);
-    if (failed(inputResult))
-      return failure();
-    parameters->push_back(inputResult.value());
-  }
-
-  actualParametersBuffers.push_back(std::move(parameters));
-  return actualParametersBuffers.back().get();
-}
-
-/// Evaluator dispatch function for Object instances.
-FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateObjectInstance(ObjectOp op,
-                                             ActualParameters actualParams) {
-  auto loc = op.getLoc();
-  if (isFullyEvaluated({op, actualParams}))
-    return getOrCreateValue(op, actualParams, loc);
-
-  auto params =
-      createParametersFromOperands(op.getOperands(), actualParams, loc);
-  if (failed(params))
-    return failure();
-  return evaluateObjectInstance(op.getClassNameAttr().getAttr(), params.value(),
-                                loc, {op, actualParams});
 }
 
 FailureOr<evaluator::EvaluatorValuePtr>
