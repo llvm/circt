@@ -421,14 +421,6 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                 .Case([&](ConstantOp op) {
                   return evaluateConstant(op, actualParams, loc);
                 })
-                .Case([&](IntegerBinaryOp op) {
-                  // Create a partially evaluated AttributeValue in case we need
-                  // to delay evaluation.
-                  evaluator::EvaluatorValuePtr result =
-                      evaluator::AttributeValue::get(op.getResult().getType(),
-                                                     loc);
-                  return success(result);
-                })
                 .Case<ObjectFieldOp>([&](auto op) {
                   // Create a reference value since the value pointed by object
                   // field op is not created yet.
@@ -569,14 +561,6 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     fields[cast<StringAttr>(name)] = result.value();
   }
 
-  // Defer property assertions until after the worklist is drained, so that
-  // all ReferenceValues are fully resolved before we try to inspect them.
-  LLVM_DEBUG(dbgs() << "queuing asserts:\n");
-  for (auto assertOp : cls.getOps<PropertyAssertOp>()) {
-    LLVM_DEBUG(dbgs(1) << "- " << assertOp << "\n");
-    pendingAsserts.push({assertOp, actualParams});
-  }
-
   // If the there is an instance, we must update the object value.
   LLVM_DEBUG(dbgs() << "object value:\n");
   if (instanceKey.first) {
@@ -713,18 +697,6 @@ circt::om::Evaluator::instantiateImpl(
     nextWorklist.clear();
   }
 
-  // Now that all values are fully resolved, evaluate the deferred property
-  // assertions.
-  LLVM_DEBUG(dbgs() << "asserts:\n");
-  bool assertFailed = false;
-  while (!pendingAsserts.empty()) {
-    auto [assertOp, assertParams] = pendingAsserts.front();
-    pendingAsserts.pop();
-    assertFailed |= failed(evaluatePropertyAssert(assertOp, assertParams));
-  }
-  if (assertFailed)
-    return failure();
-
   auto &object = result.value();
   // Finalize the value. This will eliminate intermidiate ReferenceValue used as
   // a placeholder in the initialization.
@@ -758,9 +730,6 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
                    result.getDefiningOp())
             .Case([&](ConstantOp op) {
               return evaluateConstant(op, actualParams, loc);
-            })
-            .Case([&](IntegerBinaryOp op) {
-              return evaluateIntegerBinary(op, actualParams, loc);
             })
             .Case([&](ObjectOp op) {
               return evaluateObjectInstance(op, actualParams);
@@ -821,137 +790,6 @@ circt::om::Evaluator::evaluateConstant(ConstantOp op,
                                        Location loc) {
   // For list constants, create ListValue.
   return success(om::evaluator::AttributeValue::get(op.getValue(), loc));
-}
-
-// Evaluator dispatch function for integer binary operations.
-FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateIntegerBinary(
-    IntegerBinaryOp op, ActualParameters actualParams, Location loc) {
-  // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
-  auto handle = getOrCreateValue(op.getResult(), actualParams, loc);
-
-  // If it's fully evaluated, we can return it.
-  if (handle.value()->isFullyEvaluated())
-    return handle;
-
-  // Evaluate operands if necessary, and return the partially evaluated value if
-  // they aren't ready.
-  auto lhsResult = evaluateValue(op.getLhs(), actualParams, loc);
-  if (failed(lhsResult))
-    return lhsResult;
-  if (!lhsResult.value()->isFullyEvaluated())
-    return handle;
-
-  auto rhsResult = evaluateValue(op.getRhs(), actualParams, loc);
-  if (failed(rhsResult))
-    return rhsResult;
-  if (!rhsResult.value()->isFullyEvaluated())
-    return handle;
-
-  // Check if any operand is unknown and propagate the unknown flag.
-  if (lhsResult.value()->isUnknown() || rhsResult.value()->isUnknown()) {
-    handle.value()->markUnknown();
-    return handle;
-  }
-
-  // Extract the attribute from an EvaluatorValue (handles both om::IntegerAttr
-  // and mlir::IntegerAttr).
-  auto extractAttr = [](evaluator::EvaluatorValue *value) -> Attribute {
-    return llvm::TypeSwitch<evaluator::EvaluatorValue *, Attribute>(value)
-        .Case([](evaluator::AttributeValue *val) { return val->getAttr(); })
-        .Case([](evaluator::ReferenceValue *val) {
-          return cast<evaluator::AttributeValue>(val->getStrippedValue()->get())
-              ->getAttr();
-        });
-  };
-
-  mlir::Attribute lhsAttr = extractAttr(lhsResult.value().get());
-  mlir::Attribute rhsAttr = extractAttr(rhsResult.value().get());
-  assert(lhsAttr && rhsAttr &&
-         "expected attribute for IntegerBinaryOp operands");
-
-  std::array<Attribute, 2> operandAttrs = {lhsAttr, rhsAttr};
-  SmallVector<mlir::OpFoldResult, 1> results;
-  mlir::Attribute resultAttr;
-  // Even with fully constant operands, folders may decline to fold or may
-  // produce a non-attribute result.
-  if (failed(op->fold(operandAttrs, results)) || results.size() != 1 ||
-      !(resultAttr = results[0].dyn_cast<Attribute>()))
-    return op->emitError("failed to evaluate integer operation");
-
-  // Finalize the op result value.
-  auto *handleValue = cast<evaluator::AttributeValue>(handle.value().get());
-  auto resultStatus = handleValue->setAttr(resultAttr);
-  if (failed(resultStatus))
-    return resultStatus;
-
-  auto finalizeStatus = handleValue->finalize();
-  if (failed(finalizeStatus))
-    return finalizeStatus;
-
-  return handle;
-}
-
-/// Evaluator dispatch function for property assertions.
-LogicalResult
-circt::om::Evaluator::evaluatePropertyAssert(PropertyAssertOp op,
-                                             ActualParameters actualParams) {
-#ifndef NDEBUG
-  DebugNesting nest(debugNesting);
-#endif
-
-  auto loc = op.getLoc();
-
-  // Evaluate the condition, returning early if it isn't ready yet.
-  LLVM_DEBUG(dbgs() << "op: " << op << "\n"
-                    << indent() << "evaluate condition: \n");
-  auto condResult = evaluateValue(op.getCondition(), actualParams, loc);
-  if (failed(condResult))
-    return failure();
-  if (!condResult.value()->isFullyEvaluated()) {
-    LLVM_DEBUG(dbgs() << "evaluate condition: <not fully evaluated>\n");
-    return success();
-  }
-
-  // If the condition is unknown, skip silently (best-effort).
-  if (condResult.value()->isUnknown())
-    return success();
-
-  LLVM_DEBUG(dbgs() << "condition: " << condResult.value() << "\n");
-
-  // Extract the attribute from the condition value, handling the case where
-  // the condition resolves through a ReferenceValue (e.g. an ObjectFieldOp or
-  // a parameter that participates in cycle resolution).
-  auto extractAttr = [](evaluator::EvaluatorValue *value) -> mlir::Attribute {
-    return llvm::TypeSwitch<evaluator::EvaluatorValue *, mlir::Attribute>(value)
-        .Case([](evaluator::AttributeValue *val) { return val->getAttr(); })
-        .Case([](evaluator::ReferenceValue *val) -> mlir::Attribute {
-          auto stripped = val->getStrippedValue();
-          if (failed(stripped))
-            return {};
-          if (auto *attr =
-                  dyn_cast<evaluator::AttributeValue>(stripped.value().get()))
-            return attr->getAttr();
-          return {};
-        })
-        .Default([](auto *) -> mlir::Attribute { return {}; });
-  };
-
-  auto condAttr = extractAttr(condResult.value().get());
-  if (!condAttr)
-    return success();
-
-  bool isFalse = false;
-  if (auto boolAttr = dyn_cast<BoolAttr>(condAttr))
-    isFalse = !boolAttr.getValue();
-  else if (auto intAttr = dyn_cast<mlir::IntegerAttr>(condAttr))
-    isFalse = intAttr.getValue().isZero();
-  else
-    return op.emitError("expected BoolAttr or mlir::IntegerAttr");
-
-  if (isFalse)
-    return op.emitError("OM property assertion failed: ") << op.getMessage();
-
-  return success();
 }
 
 /// Evaluator dispatch function for Object instances.
