@@ -25,7 +25,6 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Debug.h"
 
-#include <queue>
 #include <utility>
 
 namespace circt {
@@ -463,9 +462,6 @@ private:
                                                   ActualParameters actualParams,
                                                   Location loc);
   FailureOr<EvaluatorValuePtr>
-  evaluateIntegerBinary(IntegerBinaryOp op, ActualParameters actualParams,
-                        Location loc);
-  FailureOr<EvaluatorValuePtr>
   evaluateStringConcat(StringConcatOp op, ActualParameters actualParams,
                        Location loc);
   FailureOr<EvaluatorValuePtr>
@@ -482,9 +478,6 @@ private:
                     Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateUnknownValue(UnknownValueOp op, Location loc);
-
-  LogicalResult evaluatePropertyAssert(PropertyAssertOp op,
-                                       ActualParameters actualParams);
 
   FailureOr<evaluator::EvaluatorValuePtr> createUnknownValue(Type type,
                                                              Location loc);
@@ -507,13 +500,6 @@ private:
   /// and if any become fully evaluated, swap and continue.
   std::vector<ObjectKey> worklist;
   std::vector<ObjectKey> nextWorklist;
-
-  /// A queue of pending property assertions to be evaluated after the worklist
-  /// is fully drained. Each entry is a (PropertyAssertOp, ActualParameters)
-  /// pair. Property assertions are deferred because their operands may be
-  /// ReferenceValues that are not yet resolved when the class body is first
-  /// processed.
-  std::queue<std::pair<PropertyAssertOp, ActualParameters>> pendingAsserts;
 
   /// Evaluator value storage. Return an evaluator value for the given
   /// instantiation context (a pair of Value and parameters).
