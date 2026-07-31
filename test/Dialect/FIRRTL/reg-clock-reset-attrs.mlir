@@ -1,5 +1,5 @@
 // Round-trip and lowering tests for explicit FIRRTL register clock edges.
-// RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt --verify-roundtrip %s | FileCheck %s
 // RUN: circt-opt %s --pass-pipeline="builtin.module(lower-firrtl-to-hw)" \
 // RUN:   | FileCheck %s --check-prefix=LOWER
 
