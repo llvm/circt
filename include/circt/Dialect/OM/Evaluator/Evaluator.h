@@ -60,14 +60,6 @@ public:
   void markFullyEvaluated() {
     assert(!fullyEvaluated && "should not mark twice");
     fullyEvaluated = true;
-    // Increment the counter if one is set.
-    if (fullyEvaluatedCounter)
-      ++(*fullyEvaluatedCounter);
-  }
-
-  /// Set a counter to increment when this value becomes fully evaluated.
-  void setFullyEvaluatedCounter(uint64_t *counter) {
-    fullyEvaluatedCounter = counter;
   }
 
   /// Return true if the value is unknown (has unknown in its fan-in).
@@ -111,7 +103,6 @@ private:
   bool fullyEvaluated = false;
   bool finalized = false;
   bool unknown = false;
-  uint64_t *fullyEvaluatedCounter = nullptr;
 };
 
 /// Values which can be used as pointers to different values.
@@ -398,16 +389,7 @@ public:
 
   using ActualParameters = ArrayRef<EvaluatorValuePtr>;
 
-  /// Get the number of fully evaluated nodes tracked by this evaluator.
-  uint64_t getFullyEvaluatedCount() const { return fullyEvaluatedCount; }
-
 private:
-  /// Attach the evaluation counter to a newly created value.
-  void attachCounter(evaluator::EvaluatorValuePtr &value) {
-    if (value && !value->isFullyEvaluated())
-      value->setFullyEvaluatedCounter(&fullyEvaluatedCount);
-  }
-
   FailureOr<evaluator::EvaluatorValuePtr>
   instantiateImpl(StringAttr className,
                   ArrayRef<EvaluatorValuePtr> actualParams);
@@ -460,17 +442,8 @@ private:
   /// Used to look up class definitions.
   SymbolTable symbolTable;
 
-  /// Worklists that track values which need to be fully evaluated.
-  /// We use two worklists to detect cycles: process all items from one,
-  /// and if any become fully evaluated, swap and continue.
-  std::vector<Value> worklist;
-  std::vector<Value> nextWorklist;
-
   /// Evaluator value storage for the current instantiation.
   DenseMap<Value, std::shared_ptr<evaluator::EvaluatorValue>> objects;
-
-  /// Counter for fully evaluated nodes.
-  uint64_t fullyEvaluatedCount = 0;
 
 #ifndef NDEBUG
   /// Current nesting depth for debug output indentation.
