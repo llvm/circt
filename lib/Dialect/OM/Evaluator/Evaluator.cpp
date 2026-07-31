@@ -728,7 +728,7 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
 /// Evaluator dispatch function for parameters.
 FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateParameter(
     BlockArgument formalParam, ActualParameters actualParams, Location loc) {
-  auto val = (*actualParams)[formalParam.getArgNumber()];
+  auto val = actualParams[formalParam.getArgNumber()];
   val->setLoc(loc);
   return success(val);
 }
