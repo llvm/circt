@@ -421,14 +421,6 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                 .Case([&](ConstantOp op) {
                   return evaluateConstant(op, actualParams, loc);
                 })
-                .Case<ObjectFieldOp>([&](auto op) {
-                  // Create a reference value since the value pointed by object
-                  // field op is not created yet.
-                  evaluator::EvaluatorValuePtr result =
-                      std::make_shared<evaluator::ReferenceValue>(
-                          value.getType(), loc);
-                  return success(result);
-                })
                 .Case<AnyCastOp>([&](AnyCastOp op) {
                   return getOrCreateValue(op.getInput(), actualParams, loc);
                 })
@@ -452,14 +444,7 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case([&](BinaryEqualityOp op) {
-                  evaluator::EvaluatorValuePtr result =
-                      evaluator::AttributeValue::get(op.getResult().getType(),
-                                                     loc);
-                  return success(result);
-                })
-                .Case<ListCreateOp, ListConcatOp, StringConcatOp,
-                      ObjectFieldOp>([&](auto op) {
+                .Case<ListCreateOp, ListConcatOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
                 })
                 .Case<ObjectOp>([&](auto op) {
@@ -737,20 +722,11 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](ElaboratedObjectOp op) {
               return evaluateElaboratedObject(op, actualParams, loc);
             })
-            .Case([&](ObjectFieldOp op) {
-              return evaluateObjectField(op, actualParams, loc);
-            })
             .Case([&](ListCreateOp op) {
               return evaluateListCreate(op, actualParams, loc);
             })
             .Case([&](ListConcatOp op) {
               return evaluateListConcat(op, actualParams, loc);
-            })
-            .Case([&](StringConcatOp op) {
-              return evaluateStringConcat(op, actualParams, loc);
-            })
-            .Case([&](BinaryEqualityOp op) {
-              return evaluateBinaryEquality(op, actualParams, loc);
             })
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams, loc);
@@ -872,66 +848,6 @@ circt::om::Evaluator::evaluateElaboratedObject(ElaboratedObjectOp op,
   return objectValue;
 }
 
-/// Evaluator dispatch function for Object fields.
-FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
-                                          ActualParameters actualParams,
-                                          Location loc) {
-  // Evaluate the Object itself, in case it hasn't been evaluated yet.
-  FailureOr<evaluator::EvaluatorValuePtr> currentObjectResult =
-      evaluateValue(op.getObject(), actualParams, loc);
-  if (failed(currentObjectResult))
-    return currentObjectResult;
-
-  auto result = currentObjectResult.value();
-
-  auto objectFieldValue = getOrCreateValue(op, actualParams, loc).value();
-
-  if (result->isUnknown()) {
-    // If objectFieldValue is a ReferenceValue, set its value to a unknown value
-    // of the proper type
-    if (auto *ref =
-            llvm::dyn_cast<evaluator::ReferenceValue>(objectFieldValue.get())) {
-      auto unknownField = createUnknownValue(op.getResult().getType(), loc);
-      if (failed(unknownField))
-        return unknownField;
-      ref->setValue(unknownField.value());
-    }
-    // markUnknown() also marks the value as fully evaluated
-    objectFieldValue->markUnknown();
-    return objectFieldValue;
-  }
-
-  // If the result is a ReferenceValue, dereference it to get the actual object.
-  if (auto *ref = llvm::dyn_cast<evaluator::ReferenceValue>(result.get())) {
-    auto stripped = ref->getStrippedValue();
-    if (failed(stripped))
-      return failure();
-    result = stripped.value();
-  }
-
-  auto *currentObject = llvm::cast<evaluator::ObjectValue>(result.get());
-
-  auto field = op.getFieldAttr();
-
-  // `currentObject` might not be fully evaluated.
-  if (!currentObject->getFields().contains(field))
-    return objectFieldValue;
-
-  auto currentField = currentObject->getField(field);
-  auto finalField = currentField.value();
-
-  if (!finalField->isFullyEvaluated())
-    return objectFieldValue;
-
-  // Update the reference.
-  llvm::cast<evaluator::ReferenceValue>(objectFieldValue.get())
-      ->setValue(finalField);
-
-  // Return the field being accessed.
-  return objectFieldValue;
-}
-
 /// Evaluator dispatch function for List creation.
 FailureOr<evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::evaluateListCreate(ListCreateOp op,
@@ -1018,130 +934,6 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
     list.value()->markUnknown();
 
   return list;
-}
-
-/// Evaluator dispatch function for String concatenation.
-FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateStringConcat(StringConcatOp op,
-                                           ActualParameters actualParams,
-                                           Location loc) {
-  // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
-  auto handle = getOrCreateValue(op.getResult(), actualParams, loc);
-  if (failed(handle))
-    return handle;
-
-  // If it's fully evaluated, we can return it.
-  if (handle.value()->isFullyEvaluated())
-    return handle;
-
-  // Extract the string attributes, handling both AttributeValue and
-  // ReferenceValue cases.
-  auto extractAttr = [](evaluator::EvaluatorValue *value) -> StringAttr {
-    return llvm::TypeSwitch<evaluator::EvaluatorValue *, StringAttr>(value)
-        .Case([](evaluator::AttributeValue *val) {
-          return val->getAs<StringAttr>();
-        })
-        .Case([](evaluator::ReferenceValue *val) {
-          return cast<evaluator::AttributeValue>(val->getStrippedValue()->get())
-              ->getAs<StringAttr>();
-        });
-  };
-
-  // Evaluate all operands and concatenate them.
-  std::string result;
-  for (auto operand : op.getOperands()) {
-    auto operandResult = evaluateValue(operand, actualParams, loc);
-    if (failed(operandResult))
-      return operandResult;
-    if (!operandResult.value()->isFullyEvaluated())
-      return handle;
-
-    StringAttr str = extractAttr(operandResult.value().get());
-    assert(str && "expected StringAttr for StringConcatOp operand");
-    result += str.getValue().str();
-  }
-
-  // Create the concatenated string attribute.
-  auto resultStr = StringAttr::get(result, op.getResult().getType());
-
-  // Finalize the op result value.
-  auto *handleValue = cast<evaluator::AttributeValue>(handle.value().get());
-  auto resultStatus = handleValue->setAttr(resultStr);
-  if (failed(resultStatus))
-    return resultStatus;
-
-  auto finalizeStatus = handleValue->finalize();
-  if (failed(finalizeStatus))
-    return finalizeStatus;
-
-  return handle;
-}
-
-// Evaluator dispatch function for binary property equality operations.
-FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateBinaryEquality(BinaryEqualityOp op,
-                                             ActualParameters actualParams,
-                                             Location loc) {
-  // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
-  auto handle = getOrCreateValue(op.getResult(), actualParams, loc);
-  if (failed(handle))
-    return handle;
-
-  // If it's fully evaluated, we can return it.
-  if (handle.value()->isFullyEvaluated())
-    return handle;
-
-  // Evaluate both operands, returning the partially evaluated handle if either
-  // isn't ready yet.
-  auto lhsResult = evaluateValue(op.getLhs(), actualParams, loc);
-  if (failed(lhsResult))
-    return lhsResult;
-  if (!lhsResult.value()->isFullyEvaluated())
-    return handle;
-
-  auto rhsResult = evaluateValue(op.getRhs(), actualParams, loc);
-  if (failed(rhsResult))
-    return rhsResult;
-  if (!rhsResult.value()->isFullyEvaluated())
-    return handle;
-
-  // Check if any operand is unknown and propagate the unknown flag.
-  if (lhsResult.value()->isUnknown() || rhsResult.value()->isUnknown()) {
-    handle.value()->markUnknown();
-    return handle;
-  }
-
-  // Extract the underlying attribute, handling both AttributeValue and
-  // ReferenceValue cases.
-  auto extractAttr = [](evaluator::EvaluatorValue *value) -> mlir::Attribute {
-    return llvm::TypeSwitch<evaluator::EvaluatorValue *, mlir::Attribute>(value)
-        .Case([](evaluator::AttributeValue *val) { return val->getAttr(); })
-        .Case([](evaluator::ReferenceValue *val) -> mlir::Attribute {
-          return cast<evaluator::AttributeValue>(val->getStrippedValue()->get())
-              ->getAttr();
-        });
-  };
-
-  mlir::Attribute lhs = extractAttr(lhsResult.value().get());
-  mlir::Attribute rhs = extractAttr(rhsResult.value().get());
-  assert(lhs && rhs && "expected attribute for BinaryEqualityOp operands");
-
-  // Perform the binary equality operation.
-  FailureOr<mlir::Attribute> result = op.evaluateBinaryEquality(lhs, rhs);
-  if (failed(result))
-    return op->emitError("failed to evaluate binary equality operation");
-
-  // Finalize the op result value.
-  auto *handleValue = cast<evaluator::AttributeValue>(handle.value().get());
-  auto resultStatus = handleValue->setAttr(*result);
-  if (failed(resultStatus))
-    return resultStatus;
-
-  auto finalizeStatus = handleValue->finalize();
-  if (failed(finalizeStatus))
-    return finalizeStatus;
-
-  return handle;
 }
 
 FailureOr<evaluator::EvaluatorValuePtr>
