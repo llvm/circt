@@ -400,15 +400,55 @@ public:
   }
 };
 
-class CirctLTLClockConverter
-    : public IntrinsicOpConverter<LTLClockIntrinsicOp> {
+class CirctLTLClockConverter : public IntrinsicConverter {
 public:
-  using IntrinsicOpConverter::IntrinsicOpConverter;
+  using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
-           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
-           gi.hasNParam(0);
+    if (gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+        gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+        gi.hasNParam(0, 1))
+      return true;
+
+    auto params = gi.op.getParameters();
+    if (!params || params.empty())
+      return false;
+
+    auto param = cast<ParamDeclAttr>(*params.begin());
+    if (param.getName().getValue() != "edge") {
+      gi.emitError() << " has unexpected parameter '" << param.getName()
+                     << "', expected 'edge'";
+      return true;
+    }
+    if (!isa<StringAttr>(param.getValue())) {
+      gi.emitError() << " has parameter '" << param.getName()
+                     << "' which should be a string but is not";
+      return true;
+    }
+    return false;
+  }
+
+  LogicalResult checkAndConvert(GenericIntrinsic gi,
+                                GenericIntrinsicOpAdaptor adaptor,
+                                PatternRewriter &rewriter) override {
+    if (check(gi))
+      return failure();
+
+    auto edge = EventControl::AtPosEdge;
+    if (auto edgeAttr = gi.getParamValue<StringAttr>("edge")) {
+      auto parsedEdge = symbolizeEventControl(edgeAttr.getValue());
+      if (!parsedEdge)
+        return gi.emitError()
+               << " has invalid edge parameter '" << edgeAttr.getValue()
+               << "', expected one of [posedge, negedge, edge]";
+      edge = *parsedEdge;
+    }
+
+    auto operands = adaptor.getOperands();
+    rewriter.replaceOpWithNewOp<LTLClockIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0],
+        EventControlAttr::get(rewriter.getContext(), edge), operands[1]);
+    return success();
   }
 };
 

@@ -32,7 +32,7 @@ unsigned circt::llhd::getLLHDTypeWidth(Type type) {
     type = sig.getNestedType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getNumElements();
-  if (auto tup = dyn_cast<hw::StructType>(type))
+  if (auto tup = hw::type_dyn_cast<hw::StructType>(type))
     return tup.getElements().size();
   return type.getIntOrFloatBitWidth();
 }
@@ -480,7 +480,7 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
   Type fieldType;
 
   // Support both StructType and UnionType
-  if (auto structType = dyn_cast<hw::StructType>(nestedType)) {
+  if (auto structType = hw::type_dyn_cast<hw::StructType>(nestedType)) {
     fieldType = structType.getFieldType(adaptor.getField());
   } else if (auto unionType = dyn_cast<hw::UnionType>(nestedType)) {
     fieldType = unionType.getFieldType(adaptor.getField());
@@ -513,7 +513,7 @@ bool SigStructExtractOp::canRewire(
   std::optional<uint32_t> index;
 
   // Support both StructType and UnionType
-  if (auto structType = dyn_cast<hw::StructType>(nestedType))
+  if (auto structType = hw::type_dyn_cast<hw::StructType>(nestedType))
     index = structType.getFieldIndex(getFieldAttr());
   else if (auto unionType = dyn_cast<hw::UnionType>(nestedType))
     index = unionType.getFieldIndex(getFieldAttr());
@@ -537,7 +537,7 @@ SigStructExtractOp::rewire(const DestructurableMemorySlot &slot,
                            OpBuilder &builder, const DataLayout &dataLayout) {
   auto nestedType = cast<RefType>(getInput().getType()).getNestedType();
   std::optional<unsigned> index;
-  if (auto structTy = dyn_cast<hw::StructType>(nestedType))
+  if (auto structTy = hw::type_dyn_cast<hw::StructType>(nestedType))
     index = structTy.getFieldIndex(getFieldAttr());
   else if (auto unionTy = dyn_cast<hw::UnionType>(nestedType))
     index = unionTy.getFieldIndex(getFieldAttr());

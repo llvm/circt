@@ -13,15 +13,20 @@
 #ifndef CIRCT_DIALECT_FIRRTL_PASSES_H
 #define CIRCT_DIALECT_FIRRTL_PASSES_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
+#include "llvm/ADT/ArrayRef.h"
 
 namespace mlir {
+class MLIRContext;
 class Pass;
 } // namespace mlir
 
 namespace circt {
 namespace firrtl {
+class InstanceGraph;
+class InstanceInfo;
 
 /// Configure which aggregate values will be preserved by the LowerTypes pass.
 namespace PreserveAggregate {
@@ -80,6 +85,12 @@ enum class InferDomainsMode {
   /// Check domains with inference for both public and private modules.
   InferAll,
 };
+
+void runCombMemsToRegOfVec(FModuleOp mod, bool ignoreReadEnable,
+                           unsigned &numConverted);
+LogicalResult runFullReset(CircuitOp circuit, InstanceGraph &ig,
+                           InstanceInfo &instanceInfo,
+                           bool convertAsyncDomainMems = false);
 
 #define GEN_PASS_DECL
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

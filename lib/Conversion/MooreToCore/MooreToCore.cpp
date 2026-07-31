@@ -1895,6 +1895,36 @@ struct BinaryRealOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+struct HypotBIOpConversion : public OpConversionPattern<HypotBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(HypotBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value lhs = adaptor.getLhs();
+    Value rhs = adaptor.getRhs();
+    ImplicitLocOpBuilder b(op->getLoc(), rewriter);
+    auto left = arith::MulFOp::create(b, lhs, lhs);
+    auto right = arith::MulFOp::create(b, rhs, rhs);
+    auto sum = arith::AddFOp::create(b, left, right);
+    auto out = math::SqrtOp::create(b, sum);
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
+template <typename SourceOp, typename TargetOp>
+struct RealMathFunc : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getValue());
+    return success();
+  }
+};
+
 template <typename SourceOp, ICmpPredicate pred>
 struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -1908,6 +1938,34 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
 
     rewriter.replaceOpWithNewOp<comb::ICmpOp>(
         op, resultType, pred, adaptor.getLhs(), adaptor.getRhs());
+    return success();
+  }
+};
+
+struct NullOpConversion : public OpConversionPattern<NullOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NullOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type ptrTy = getTypeConverter()->convertType(op.getResult().getType());
+    if (!ptrTy)
+      return rewriter.notifyMatchFailure(op, "failed to convert null type");
+    rewriter.replaceOpWithNewOp<LLVM::ZeroOp>(op, ptrTy);
+    return success();
+  }
+};
+
+template <typename SourceOp, LLVM::ICmpPredicate pred>
+struct HandleCmpOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(op, pred, adaptor.getLhs(),
+                                              adaptor.getRhs());
     return success();
   }
 };
@@ -2182,6 +2240,22 @@ struct ConvertRealOpConversion : public OpConversionPattern<ConvertRealOp> {
               op, typeConverter->convertType(op.getType()), adaptor.getInput())
         : rewriter.replaceOpWithNewOp<arith::TruncFOp>(
               op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
+template <typename SourceOp>
+struct RealBitcastOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultTy =
+        ConversionPattern::typeConverter->convertType(op.getResult().getType());
+    rewriter.replaceOpWithNewOp<arith::BitcastOp>(op, resultTy,
+                                                  adaptor.getValue());
     return success();
   }
 };
@@ -3829,6 +3903,11 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
 
+  // NullType -> !llvm.ptr
+  typeConverter.addConversion([&](NullType type) -> std::optional<Type> {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     if (isa<OpenArrayType, OpenUnpackedArrayType>(type.getNestedType()))
       return LLVM::LLVMPointerType::get(type.getContext());
@@ -3923,6 +4002,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   // clang-format off
   patterns.add<
     ClassUpcastOpConversion,
+    NullOpConversion,
     // Patterns of declaration operations.
     VariableOpConversion,
     NetOpConversion,
@@ -3945,6 +4025,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatStringToStringOpConversion,
     RealToIntOpConversion,
     ConvertRealOpConversion,
+    RealBitcastOpConversion<RealtobitsBIOp>,
+    RealBitcastOpConversion<BitstorealBIOp>,
+    RealBitcastOpConversion<ShortrealtobitsBIOp>,
+    RealBitcastOpConversion<BitstoshortrealBIOp>,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,
@@ -4000,6 +4084,31 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     BinaryRealOpConversion<MulRealOp, arith::MulFOp>,
     BinaryRealOpConversion<PowRealOp, math::PowFOp>,
 
+    // Pattern for Verilog standard mathematical functions
+    RealMathFunc<LnBIOp, math::LogOp>,
+    RealMathFunc<Log10BIOp, math::Log10Op>,
+    RealMathFunc<ExpBIOp, math::ExpOp>,
+    RealMathFunc<SqrtBIOp, math::SqrtOp>,
+    BinaryRealOpConversion<MinBIOp, arith::MinimumFOp>,
+    BinaryRealOpConversion<MaxBIOp, arith::MaximumFOp>,
+    RealMathFunc<AbsBIOp, math::AbsFOp>,
+    RealMathFunc<FloorBIOp, math::FloorOp>,
+    RealMathFunc<CeilBIOp, math::CeilOp>,
+    RealMathFunc<SinBIOp, math::SinOp>,
+    RealMathFunc<CosBIOp, math::CosOp>,
+    RealMathFunc<TanBIOp, math::TanOp>,
+    RealMathFunc<AsinBIOp, math::AsinOp>,
+    RealMathFunc<AcosBIOp, math::AcosOp>,
+    RealMathFunc<AtanBIOp, math::AtanOp>,
+    BinaryRealOpConversion<Atan2BIOp, math::Atan2Op>,
+    HypotBIOpConversion,
+    RealMathFunc<SinhBIOp, math::SinhOp>,
+    RealMathFunc<CoshBIOp, math::CoshOp>,
+    RealMathFunc<TanhBIOp, math::TanhOp>,
+    RealMathFunc<AsinhBIOp, math::AsinhOp>,
+    RealMathFunc<AcoshBIOp, math::AcoshOp>,
+    RealMathFunc<AtanhBIOp, math::AtanhOp>,
+
     // Patterns of power operations.
     PowUOpConversion, PowSOpConversion,
     Clog2BIOpConversion,
@@ -4027,6 +4136,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FCmpOpConversion<EqRealOp, arith::CmpFPredicate::OEQ>,
     CaseXZEqOpConversion<CaseZEqOp, true>,
     CaseXZEqOpConversion<CaseXZEqOp, false>,
+    HandleCmpOpConversion<HandleEqOp, LLVM::ICmpPredicate::eq>,
+    HandleCmpOpConversion<HandleNeOp, LLVM::ICmpPredicate::ne>,
 
     // Patterns of structural operations.
     SVModuleOpConversion,

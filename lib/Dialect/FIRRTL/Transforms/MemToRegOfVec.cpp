@@ -19,6 +19,8 @@
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/LogicalResult.h"
+#include <atomic>
 
 #define DEBUG_TYPE "mem-to-reg-of-vec"
 
@@ -33,29 +35,9 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct MemToRegOfVecPass
-    : public circt::firrtl::impl::MemToRegOfVecBase<MemToRegOfVecPass> {
-  using Base::Base;
-
-  void runOnOperation() override {
-    auto circtOp = getOperation();
-    auto &instanceInfo = getAnalysis<InstanceInfo>();
-
-    if (!AnnotationSet::removeAnnotations(circtOp,
-                                          convertMemToRegOfVecAnnoClass))
-      return markAllAnalysesPreserved();
-
-    DenseSet<Operation *> dutModuleSet;
-    for (auto moduleOp : circtOp.getOps<FModuleOp>())
-      if (instanceInfo.anyInstanceInEffectiveDesign(moduleOp))
-        dutModuleSet.insert(moduleOp);
-
-    mlir::parallelForEach(circtOp.getContext(), dutModuleSet,
-                          [&](Operation *op) {
-                            if (auto mod = dyn_cast<FModuleOp>(op))
-                              runOnModule(mod);
-                          });
-  }
+struct MemToRegOfVecConverter {
+  explicit MemToRegOfVecConverter(bool ignoreReadEnable)
+      : ignoreReadEnable(ignoreReadEnable) {}
 
   void runOnModule(FModuleOp mod) {
 
@@ -73,7 +55,7 @@ struct MemToRegOfVecPass
         return;
 
       generateMemory(memOp, firMem);
-      ++numConvertedMems;
+      ++numConverted;
       memOp.erase();
     });
   }
@@ -397,6 +379,45 @@ struct MemToRegOfVecPass
     if (regOfVec)
       for (auto r : debugPorts)
         r.replaceAllUsesWith(RefSendOp::create(builder, regOfVec.getResult()));
+  }
+
+  bool ignoreReadEnable = false;
+  unsigned numConverted = 0;
+};
+} // end anonymous namespace
+
+void circt::firrtl::runCombMemsToRegOfVec(FModuleOp mod, bool ignoreReadEnable,
+                                          unsigned &numConverted) {
+  MemToRegOfVecConverter converter(ignoreReadEnable);
+  converter.runOnModule(mod);
+  numConverted += converter.numConverted;
+}
+
+namespace {
+struct MemToRegOfVecPass
+    : public circt::firrtl::impl::MemToRegOfVecBase<MemToRegOfVecPass> {
+  using Base::Base;
+
+  void runOnOperation() override {
+    auto circtOp = getOperation();
+    auto &instanceInfo = getAnalysis<InstanceInfo>();
+
+    if (!AnnotationSet::removeAnnotations(circtOp,
+                                          convertMemToRegOfVecAnnoClass))
+      return markAllAnalysesPreserved();
+
+    SmallVector<FModuleOp> modules;
+    for (auto moduleOp : circtOp.getOps<FModuleOp>())
+      if (instanceInfo.anyInstanceInEffectiveDesign(moduleOp))
+        modules.push_back(moduleOp);
+
+    std::atomic<unsigned> totalConverted{0};
+    mlir::parallelForEach(&getContext(), modules, [&](FModuleOp mod) {
+      unsigned numConverted = 0;
+      runCombMemsToRegOfVec(mod, ignoreReadEnable, numConverted);
+      totalConverted += numConverted;
+    });
+    numConvertedMems += totalConverted.load();
   }
 };
 } // end anonymous namespace

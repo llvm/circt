@@ -129,9 +129,9 @@ hw.module @partial_product_square_zext(in %a : i3, out pp0 : i6, out pp1 : i6, o
 // CHECK-LABEL: @partial_product_booth
 // FORCE-BOOTH-LABEL: @partial_product_booth
 // Constants
+// FORCE-BOOTH-NEXT: %c0_i3 = hw.constant 0 : i3
 // FORCE-BOOTH-NEXT: %true = hw.constant true
 // FORCE-BOOTH-NEXT: %false = hw.constant false
-// FORCE-BOOTH-NEXT: %c0_i3 = hw.constant 0 : i3
 // 2*a
 // FORCE-BOOTH-NEXT: %0 = comb.extract %a from 0 : (i3) -> i2
 // FORCE-BOOTH-NEXT: %[[TWOA:.+]] = comb.concat %0, %false : i2, i1

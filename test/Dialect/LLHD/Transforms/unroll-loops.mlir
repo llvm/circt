@@ -36,6 +36,118 @@ hw.module @SimpleLoop(out x : i42) {
   hw.output %0 : i42
 }
 
+// CHECK-LABEL: @SimpleDescendingLoop
+hw.module @SimpleDescendingLoop(out x : i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %c_min1_i42 = hw.constant -1 : i42
+  %c3_i42 = hw.constant 3 : i42
+  %c42_i42 = hw.constant 42 : i42
+  // Loop of the form:
+  //   x = 0
+  //   for (i = 3; i >= 0; i--)
+  //     x += 42
+  // CHECK: llhd.combinational
+  %0 = llhd.combinational -> i42 {
+    // CHECK-NEXT:   cf.br [[ENTRY:\^.+]](%c0_i42 : i42)
+    cf.br ^header(%c3_i42, %c0_i42 : i42, i42)
+  ^header(%i: i42, %x: i42):  // 2 preds: ^bb0, ^body
+    %1 = comb.icmp sgt %i, %c_min1_i42 : i42
+    cf.cond_br %1, ^body, ^exit
+  ^body:  // pred: ^header
+    // CHECK-NEXT: [[ENTRY]]([[X0:%.+]]: i42):
+    // CHECK-NEXT:   [[X1:%.+]] = comb.add [[X0]], %c42_i42
+    // CHECK-NEXT:   [[X2:%.+]] = comb.add [[X1]], %c42_i42
+    // CHECK-NEXT:   [[X3:%.+]] = comb.add [[X2]], %c42_i42
+    // CHECK-NEXT:   [[X4:%.+]] = comb.add [[X3]], %c42_i42
+    // CHECK-NEXT:   cf.br [[EXIT:\^.+]]
+    %2 = comb.add %x, %c42_i42 : i42
+    %ip = comb.add %i, %c_min1_i42 : i42
+    cf.br ^header(%ip, %2 : i42, i42)
+  ^exit:  // pred: ^header
+    // CHECK-NEXT: [[EXIT]]:
+    // CHECK-NEXT:   llhd.yield [[X4]]
+    llhd.yield %x : i42
+  }
+  hw.output %0 : i42
+}
+
+// CHECK-LABEL: @StridedLoopWithOffset
+hw.module @StridedLoopWithOffset(out x : i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %c3_i42 = hw.constant 3 : i42
+  %c13_i42 = hw.constant 13 : i42
+  // Loop of the form:
+  //   x = 0
+  //   for (i = 3; i < 13; i += 3)
+  //     x += i
+  // CHECK: llhd.combinational
+  %0 = llhd.combinational -> i42 {
+    // CHECK-NEXT:   cf.br [[ENTRY:\^.+]](%c0_i42 : i42)
+    cf.br ^header(%c3_i42, %c0_i42 : i42, i42)
+  ^header(%i: i42, %x: i42):  // 2 preds: ^bb0, ^body
+    %1 = comb.icmp slt %i, %c13_i42 : i42
+    cf.cond_br %1, ^body, ^exit
+  ^body:  // pred: ^header
+    // CHECK-NEXT: [[ENTRY]]([[X0:%.+]]: i42):
+    // CHECK-NEXT:   [[C3:%.+]] = hw.constant 3
+    // CHECK-NEXT:   [[X1:%.+]] = comb.add [[X0]], [[C3]]
+    // CHECK-NEXT:   [[C6:%.+]] = hw.constant 6
+    // CHECK-NEXT:   [[X2:%.+]] = comb.add [[X1]], [[C6]]
+    // CHECK-NEXT:   [[C9:%.+]] = hw.constant 9
+    // CHECK-NEXT:   [[X3:%.+]] = comb.add [[X2]], [[C9]]
+    // CHECK-NEXT:   [[C12:%.+]] = hw.constant 12
+    // CHECK-NEXT:   [[X4:%.+]] = comb.add [[X3]], [[C12]]
+    // CHECK-NEXT:   cf.br [[EXIT:\^.+]]
+    %2 = comb.add %x, %i : i42
+    %ip = comb.add %i, %c3_i42 : i42
+    cf.br ^header(%ip, %2 : i42, i42)
+  ^exit:  // pred: ^header
+    // CHECK-NEXT: [[EXIT]]:
+    // CHECK-NEXT:   llhd.yield [[X4]]
+    llhd.yield %x : i42
+  }
+  hw.output %0 : i42
+}
+
+// CHECK-LABEL: @StridedDescendingLoopWithOffset
+hw.module @StridedDescendingLoopWithOffset(out x : i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %c3_i42 = hw.constant 3 : i42
+  %c13_i42 = hw.constant 13 : i42
+  %c_min3_i42 = hw.constant -3 : i42
+  // Loop of the form:
+  //   x = 0
+  //   for (i = 13; i > 3; i -= 3)
+  //     x += i
+  // CHECK: llhd.combinational
+  %0 = llhd.combinational -> i42 {
+    // CHECK-NEXT:   cf.br [[ENTRY:\^.+]](%c0_i42 : i42)
+    cf.br ^header(%c13_i42, %c0_i42 : i42, i42)
+  ^header(%i: i42, %x: i42):  // 2 preds: ^bb0, ^body
+    %1 = comb.icmp sgt %i, %c3_i42 : i42
+    cf.cond_br %1, ^body, ^exit
+  ^body:  // pred: ^header
+    // CHECK-NEXT: [[ENTRY]]([[X0:%.+]]: i42):
+    // CHECK-NEXT:   [[C3:%.+]] = hw.constant 13
+    // CHECK-NEXT:   [[X1:%.+]] = comb.add [[X0]], [[C3]]
+    // CHECK-NEXT:   [[C6:%.+]] = hw.constant 10
+    // CHECK-NEXT:   [[X2:%.+]] = comb.add [[X1]], [[C6]]
+    // CHECK-NEXT:   [[C9:%.+]] = hw.constant 7
+    // CHECK-NEXT:   [[X3:%.+]] = comb.add [[X2]], [[C9]]
+    // CHECK-NEXT:   [[C12:%.+]] = hw.constant 4
+    // CHECK-NEXT:   [[X4:%.+]] = comb.add [[X3]], [[C12]]
+    // CHECK-NEXT:   cf.br [[EXIT:\^.+]]
+    %2 = comb.add %x, %i : i42
+    %ip = comb.add %i, %c_min3_i42 : i42
+    cf.br ^header(%ip, %2 : i42, i42)
+  ^exit:  // pred: ^header
+    // CHECK-NEXT: [[EXIT]]:
+    // CHECK-NEXT:   llhd.yield [[X4]]
+    llhd.yield %x : i42
+  }
+  hw.output %0 : i42
+}
+
 // CHECK-LABEL: @TwoNestedLoops
 hw.module @TwoNestedLoops(out x : i42) {
   %c0_i42 = hw.constant 0 : i42
@@ -324,26 +436,34 @@ hw.module @SkipLoopWithUnsupportedIncrement() {
   }
 }
 
-// CHECK-LABEL: @SkipLoopWithUnsupportedBounds
-hw.module @SkipLoopWithUnsupportedBounds() {
-  %c1_i42 = hw.constant 1 : i42
-  %c2_i42 = hw.constant 2 : i42
-  %c3_i42 = hw.constant 3 : i42
+// CHECK-LABEL: @SkipLoopWithUnsupportedLoopBound
+hw.module @SkipLoopWithUnsupportedLoopBound() {
+  %c_loop_start = hw.constant  3 : i42
+  %c_loop_end   = hw.constant -2 : i42
+  %c_loop_inc   = hw.constant -1 : i42
+  // Loop of the form:
+  //   for (i = 3; i > -2; i--)
+  //     func()
+  // CHECK: llhd.combinational
   llhd.combinational {
     // CHECK: cf.br
     // CHECK: cf.cond_br
+    // CHECK: func.call @marker() : () -> ()
+    // CHECK-NOT: func.call @marker() : () -> ()
     // CHECK: cf.br
     // CHECK: llhd.yield
-    cf.br ^header(%c1_i42 : i42)
-  ^header(%0: i42):
-    %1 = comb.icmp slt %0, %c3_i42 : i42
+    cf.br ^header(%c_loop_start: i42)
+  ^header(%i: i42):  // 2 preds: ^bb0, ^bb2
+    %1 = comb.icmp sgt %i, %c_loop_end : i42
     cf.cond_br %1, ^body, ^exit
-  ^body:
-    %2 = comb.add %0, %c2_i42 : i42
-    cf.br ^header(%2 : i42)
-  ^exit:
+  ^body:  // pred: ^header
+    func.call @marker() : () -> ()
+    %iInc = comb.add %i, %c_loop_inc : i42
+    cf.br ^header(%iInc: i42)
+  ^exit:  // pred: ^header
     llhd.yield
   }
+  hw.output
 }
 
 // CHECK-LABEL: @DontCrashOnSingleBlocks

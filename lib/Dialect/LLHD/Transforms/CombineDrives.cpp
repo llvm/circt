@@ -252,7 +252,7 @@ SignalSlice ModuleContext::traceProjectionImpl(Value value) {
   }
 
   if (auto op = value.getDefiningOp<SigStructExtractOp>()) {
-    auto structType = cast<hw::StructType>(
+    auto structType = hw::type_cast<hw::StructType>(
         cast<RefType>(op.getInput().getType()).getNestedType());
     auto input = traceProjection(op.getInput());
     if (!input)
@@ -467,7 +467,7 @@ void ModuleContext::addDefaultDriveSlices(Signal &signal,
     }
 
     // Handle structs.
-    if (auto structType = dyn_cast<hw::StructType>(type)) {
+    if (auto structType = hw::type_dyn_cast<hw::StructType>(type)) {
       assert(slice.length == 0);
       slice.value = hw::StructExtractOp::create(
           builder, defaultValue, structType.getElements()[slice.offset]);
@@ -555,7 +555,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
   }
 
   // Handle structs.
-  if (auto structType = dyn_cast<hw::StructType>(type)) {
+  if (auto structType = hw::type_dyn_cast<hw::StructType>(type)) {
     // Structs are trivial, since there are no struct slices. Everything is an
     // individual field that we can use directly to create the struct.
     SmallVector<Value> operands;

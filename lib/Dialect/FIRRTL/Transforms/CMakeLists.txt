@@ -16,6 +16,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ExtractInstances.cpp
   FinalizeIR.cpp
   FlattenMemory.cpp
+  FullReset.cpp
   GrandCentral.cpp
   IMConstProp.cpp
   IMDeadCodeElim.cpp

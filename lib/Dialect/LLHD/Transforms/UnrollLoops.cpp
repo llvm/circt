@@ -225,18 +225,26 @@ bool Loop::match() {
     return failMatch("unsupported increment");
   }
 
-  // Determine the trip count and loop behavior. We're very picky for now.
-  // for (unsigned i = 0; i < N; i += 1) with N < 1024
-  if (predicate == comb::ICmpPredicate::ult && indVarIncrement == 1 &&
-      beginBound == 0 && endBound.ult(1024)) {
-    tripCount = endBound.getZExtValue();
-    return true;
+  std::optional<unsigned> range;
+  // Determine the trip count and loop behavior.
+  // for (unsigned i = N; i < M; i += S) with N <= M and S > 0
+  if (predicate == comb::ICmpPredicate::ult && beginBound.ule(endBound) &&
+      indVarIncrement.sgt(0)) {
+    range = endBound.getZExtValue() - beginBound.getZExtValue();
   }
-  // for (signed i = 0; i < N; i += 1) with 0 <= N < 1024
-  if (predicate == comb::ICmpPredicate::slt && indVarIncrement == 1 &&
-      beginBound == 0 && !endBound.isNegative() && endBound.slt(1024)) {
-    tripCount = endBound.getZExtValue();
-    return true;
+  // for (signed i = N; i < M; i += S) with M > 0, N <= M and S > 0
+  if (predicate == comb::ICmpPredicate::slt && !endBound.isNegative() &&
+      beginBound.sle(endBound) && indVarIncrement.sgt(0)) {
+    range = endBound.getZExtValue() - beginBound.getZExtValue();
+  }
+  // for (signed i = N; i >= M; i += S) for N > 0, M >= 0, S < 0
+  if (predicate == comb::ICmpPredicate::sgt && !beginBound.isNegative() &&
+      endBound.sle(beginBound) && indVarIncrement.isNegative()) {
+    if (!endBound.isNegative())
+      range = beginBound.getZExtValue() - endBound.getZExtValue();
+    // Expressions like >= 0 are converted into > -1, so we handle this case.
+    else if (endBound.isAllOnes())
+      range = beginBound.getZExtValue() + 1;
   }
   // for (signless i = N; i == N; i += S) with S != 0
   if (predicate == comb::ICmpPredicate::eq && indVarIncrement != 0 &&
@@ -244,13 +252,23 @@ bool Loop::match() {
     tripCount = 1;
     return true;
   }
-  return failMatch("unsupported loop bounds");
+
+  if (!range.has_value())
+    return failMatch("unsupported loop bounds");
+
+  // Calculate the trip count as ceil(range/stride)
+  unsigned stride = indVarIncrement.abs().getZExtValue();
+  tripCount = (*range + stride - 1) / stride;
+  // For now don't expand more than 1k iterations.
+  if (tripCount >= 1024)
+    return failMatch("unsupported loop bounds");
+
+  return true;
 }
 
 /// Unroll the loop by cloning its body blocks and replacing the induction
 /// variable with constant iteration indices.
 void Loop::unroll(CFGLoopInfo &cfgLoopInfo) {
-  assert(beginBound == 0 && !endBound.isNegative() && indVarIncrement == 1);
   LLVM_DEBUG(llvm::dbgs() << "- Unrolling loop " << *this << "\n");
   UnusedOpPruner pruner;
 

@@ -155,8 +155,8 @@ hw.module @pos_partial_product(in %a : i4, in %b : i4, in %c : i4, out pp0 : i4,
   hw.output %1#0, %1#1, %1#2, %1#3 : i4, i4, i4, i4
 }
 
-// CHECK-LABEL: @pos_partial_product_reduce
-hw.module @pos_partial_product_reduce(in %a : i4, in %b : i3, in %c : i4, out pp0 : i8, out pp1 : i8, out pp2 : i8, out pp3 : i8, out pp4 : i8) {
+// CHECK-LABEL: @pos_partial_product_zext
+hw.module @pos_partial_product_zext(in %a : i4, in %b : i3, in %c : i4, out pp0 : i8, out pp1 : i8, out pp2 : i8, out pp3 : i8, out pp4 : i8) {
   // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4
   // CHECK-NEXT: %c0_i5 = hw.constant 0 : i5
   // CHECK-NEXT: %[[AEXT:.+]] = comb.concat %c0_i4, %a : i4, i4
@@ -170,6 +170,23 @@ hw.module @pos_partial_product_reduce(in %a : i4, in %b : i3, in %c : i4, out pp
   %2 = comb.concat %c0_i4, %c : i4, i4
   %3:8 = datapath.pos_partial_product %0, %1, %2 : (i8, i8, i8) -> (i8, i8, i8, i8, i8, i8, i8, i8)
   hw.output %3#0, %3#1, %3#2, %3#3, %3#4 : i8, i8, i8, i8, i8
+}
+
+// CHECK-LABEL: @pos_partial_product_sext
+hw.module @pos_partial_product_sext(in %a : i4, in %b : i4, in %c : i4, out pp0 : i8, out pp1 : i8, out pp2 : i8, out pp3 : i8, out pp4 : i8) {
+  %0 = comb.extract %a from 3 : (i4) -> i1
+  %1 = comb.replicate %0 : (i1) -> i4
+  %2 = comb.concat %1, %a : i4, i4
+  %3 = comb.extract %b from 3 : (i4) -> i1
+  %4 = comb.replicate %3 : (i1) -> i4
+  %5 = comb.concat %4, %b : i4, i4
+  %7 = comb.extract %c from 3 : (i4) -> i1
+  %8 = comb.replicate %7 : (i1) -> i4
+  %9 = comb.concat %8, %c : i4, i4
+  // Make sure that the pos_partial_product returns 3 results
+  // CHECK-DAG: %[[PP:.+]]:3 = datapath.pos_partial_product
+  %10:8 = datapath.pos_partial_product %2, %5, %9 : (i8, i8, i8) -> (i8, i8, i8, i8, i8, i8, i8, i8)
+  hw.output %10#0, %10#1, %10#2, %10#3, %10#4 : i8, i8, i8, i8, i8
 }
 
 // CHECK-LABEL: @pos_partial_product_do_nothing
