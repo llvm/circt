@@ -316,6 +316,8 @@ struct IMConstPropPass
 
   void markInvalidValueOp(InvalidValueOp invalid);
   void markAggregateConstantOp(AggregateConstantOp constant);
+  void markInstanceLike(FInstanceLike instance);
+  void markInstanceTarget(FInstanceLike instance, Operation *op);
   void markInstanceOp(InstanceOp instance);
   void markInstanceChoiceOp(InstanceChoiceOp instance);
   void markObjectOp(ObjectOp object);
@@ -615,19 +617,24 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
   markOverdefined(invalid.getResult());
 }
 
-/// Instances have no operands, so they are visited exactly once when their
-/// enclosing block is marked live.  This sets up the def-use edges for ports.
-void IMConstPropPass::markInstanceOp(InstanceOp instance) {
-  // Get the module being reference or a null pointer if this is an extmodule.
-  Operation *op = instance.getReferencedModule(*instanceGraph);
+void IMConstPropPass::markInstanceLike(FInstanceLike instance) {
+  for (auto moduleName :
+       instance.getReferencedModuleNamesAttr().getAsRange<StringAttr>()) {
+    auto *node = instanceGraph->lookup(moduleName);
+    Operation *op = node->getModule().getOperation();
+    markInstanceTarget(instance, op);
+  }
+}
 
+void IMConstPropPass::markInstanceTarget(FInstanceLike instance,
+                                         Operation *op) {
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
   if (!isa<FModuleOp>(op)) {
     auto module = dyn_cast<FModuleLike>(op);
-    for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
+    for (size_t resultNo = 0, e = instance.getNumPorts(); resultNo != e;
          ++resultNo) {
-      auto portVal = instance.getResult(resultNo);
+      auto portVal = instance->getResult(resultNo);
       // If this is an input to the extmodule, we can ignore it.
       if (module.getPortDirection(resultNo) == Direction::In)
         continue;
@@ -637,22 +644,21 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     }
     return;
   }
-
   // Otherwise this is a defined module.
   auto fModule = cast<FModuleOp>(op);
   markBlockExecutable(fModule.getBodyBlock());
 
   // Ok, it is a normal internal module reference.  Populate
   // resultPortToInstanceResultMapping, and forward any already-computed values.
-  for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
+  for (size_t resultNo = 0, e = instance.getNumPorts(); resultNo != e;
        ++resultNo) {
-    auto instancePortVal = instance.getResult(resultNo);
+    auto instancePortVal = instance->getResult(resultNo);
     // If this is an input to the instance, it will
     // get handled when any connects to it are processed.
     if (fModule.getPortDirection(resultNo) == Direction::In)
       continue;
 
-    // Otherwise we have a result from the instance.  We need to forward results
+    // Otherwise we have a result from the instance. We need to forward results
     // from the body to this instance result's SSA value, so remember it.
     BlockArgument modulePortVal = fModule.getArgument(resultNo);
 
@@ -664,32 +670,19 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   }
 }
 
+/// Instances have no operands, so they are visited exactly once when their
+/// enclosing block is marked live.  This sets up the def-use edges for ports.
+void IMConstPropPass::markInstanceOp(InstanceOp instance) {
+  markInstanceLike(instance);
+}
+
 void IMConstPropPass::markObjectOp(ObjectOp obj) {
   // Mark overdefined for now, not supported.
   markOverdefined(obj);
 }
 
 void IMConstPropPass::markInstanceChoiceOp(InstanceChoiceOp instance) {
-  // Mark all results as overdefined.
-  // TODO: Handle instance choice ops by merging lattice values of all possible
-  //       choices.
-  for (auto result : instance.getResults())
-    markOverdefined(result);
-
-  // Mark all referenced modules as executable and mark all ports as
-  // overdefined.
-  for (auto moduleName : instance.getModuleNamesAttr()) {
-    Operation *op =
-        instanceGraph->lookup(cast<FlatSymbolRefAttr>(moduleName).getAttr())
-            ->getModule();
-
-    if (auto fModule = dyn_cast<FModuleOp>(op)) {
-      markBlockExecutable(fModule.getBodyBlock());
-      // Mark all ports overdefined.
-      for (auto port : fModule.getBodyBlock()->getArguments())
-        markOverdefined(port);
-    }
-  }
+  markInstanceLike(instance);
 }
 
 static std::optional<uint64_t>
@@ -795,24 +788,24 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
 
     // Driving an instance argument port drives the corresponding argument
     // of the referenced module.
-    if (auto instance = dest.getDefiningOp<InstanceOp>()) {
+    if (auto instance = dest.getDefiningOp<FInstanceLike>()) {
       // Update the dest, when its an instance op.
       mergeLatticeValue(fieldRefDestConnected, srcValue);
-      auto mod = instance.getReferencedModule<FModuleOp>(*instanceGraph);
-      if (!mod)
-        return;
 
-      BlockArgument modulePortVal = mod.getArgument(dest.getResultNumber());
+      for (auto moduleName :
+           instance.getReferencedModuleNamesAttr().getAsRange<StringAttr>()) {
+        auto *node = instanceGraph->lookup(moduleName);
+        auto mod = dyn_cast<FModuleOp>(node->getModule().getOperation());
+        if (!mod)
+          continue;
 
-      return mergeLatticeValue(
-          FieldRef(modulePortVal, fieldRefDestConnected.getFieldID()),
-          srcValue);
-    }
-
-    // Skip unsupported ops that are already marked as overdefined.
-    if (isa_and_nonnull<InstanceChoiceOp, MemOp, ObjectSubfieldOp>(
-            dest.getDefiningOp()))
+        BlockArgument modulePortVal = mod.getArgument(dest.getResultNumber());
+        mergeLatticeValue(
+            FieldRef(modulePortVal, fieldRefDestConnected.getFieldID()),
+            srcValue);
+      }
       return;
+    }
 
     connect.emitError("connectlike operation unhandled by IMConstProp")
             .attachNote(connect.getDest().getLoc())
@@ -1082,8 +1075,9 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         auto dropIfDead = [&](Operation *op, const Twine &debugPrefix) {
           if (op->use_empty() &&
               (wouldOpBeTriviallyDead(op) || isDeletableWireOrRegOrNode(op))) {
-            LLVM_DEBUG(
-                { logger.getOStream() << debugPrefix << " : " << *op << "\n"; });
+            LLVM_DEBUG({
+              logger.getOStream() << debugPrefix << " : " << *op << "\n";
+            });
             ++numErasedOp;
             op->erase();
             return true;
