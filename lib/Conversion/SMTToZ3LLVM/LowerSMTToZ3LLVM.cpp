@@ -125,6 +125,23 @@ private:
   }
 
 protected:
+  LLVM::LLVMFuncOp getOrCreateFunction(OpBuilder &builder, StringRef name,
+                                       LLVM::LLVMFunctionType funcType) const {
+    auto &funcOp = globals.funcMap[builder.getStringAttr(name)];
+    if (funcOp)
+      return funcOp;
+
+    OpBuilder::InsertionGuard guard(builder);
+    auto module = builder.getBlock()->getParent()->getParentOfType<ModuleOp>();
+    builder.setInsertionPointToEnd(module.getBody());
+    auto funcOpResult =
+        LLVM::lookupOrCreateFn(builder, module, name, funcType.getParams(),
+                               funcType.getReturnType(), funcType.getVarArg());
+    assert(succeeded(funcOpResult) &&
+           "expected to create function declaration");
+    return funcOp = funcOpResult.value();
+  }
+
   /// A convenience function to get the pointer to the context from the 'global'
   /// operation. The result is cached for each basic block, i.e., it is assumed
   /// that this function is never called in the same basic block again at a
@@ -150,18 +167,7 @@ protected:
   LLVM::CallOp buildCall(OpBuilder &builder, Location loc, StringRef name,
                          LLVM::LLVMFunctionType funcType,
                          ValueRange args) const {
-    auto &funcOp = globals.funcMap[builder.getStringAttr(name)];
-    if (!funcOp) {
-      OpBuilder::InsertionGuard guard(builder);
-      auto module =
-          builder.getBlock()->getParent()->getParentOfType<ModuleOp>();
-      builder.setInsertionPointToEnd(module.getBody());
-      auto funcOpResult = LLVM::lookupOrCreateFn(
-          builder, module, name, funcType.getParams(), funcType.getReturnType(),
-          funcType.getVarArg());
-      assert(succeeded(funcOpResult) && "expected to lookup or create printf");
-      funcOp = funcOpResult.value();
-    }
+    auto funcOp = getOrCreateFunction(builder, name, funcType);
     return LLVM::CallOp::create(builder, loc, funcOp, args);
   }
 
@@ -671,6 +677,8 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
       funcOp = func::FuncOp::create(
           rewriter, loc, globals.names.newName("solver"),
           rewriter.getFunctionType(inputTypes, convertedTypes));
+      if (containsBMCTrace)
+        globals.traceFunctionNames.insert(funcOp.getSymNameAttr());
       rewriter.inlineRegionBefore(op.getBodyRegion(), funcOp.getBody(),
                                   funcOp.end());
     }
@@ -868,6 +876,46 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
     rewriter.inlineRegionBefore(op.getSatRegion(), satIfOp.getThenRegion(),
                                 satIfOp.getThenRegion().end());
 
+    // Materialize a counterexample while the satisfying model and all recorded
+    // ASTs still belong to a live Z3 context. The Z3 function addresses are
+    // supplied by the JITed module so the BMC runtime remains independent of a
+    // particular Z3 library at link time.
+    auto parentFunction = op->getParentOfType<FunctionOpInterface>();
+    auto functionName = parentFunction
+                            ? parentFunction->getAttrOfType<StringAttr>(
+                                  SymbolTable::getSymbolAttrName())
+                            : StringAttr{};
+    Value traceModel;
+    if (functionName && globals.traceFunctionNames.contains(functionName)) {
+      rewriter.setInsertionPointToStart(satIfOp.thenBlock());
+      traceModel =
+          buildPtrAPICall(rewriter, loc, "Z3_solver_get_model", {solver});
+      Value context = buildContextPtr(rewriter, loc);
+      Value traceContext =
+          parentFunction.getArgument(parentFunction.getNumArguments() - 1);
+
+      auto modelEvalType = LLVM::LLVMFunctionType::get(
+          rewriter.getI1Type(),
+          {ptrTy, ptrTy, ptrTy, rewriter.getI1Type(), ptrTy});
+      auto modelEval =
+          getOrCreateFunction(rewriter, "Z3_model_eval", modelEvalType);
+      Value modelEvalAddress =
+          LLVM::AddressOfOp::create(rewriter, loc, modelEval);
+
+      auto getNumeralType = LLVM::LLVMFunctionType::get(ptrTy, {ptrTy, ptrTy});
+      auto getNumeral = getOrCreateFunction(
+          rewriter, "Z3_get_numeral_binary_string", getNumeralType);
+      Value getNumeralAddress =
+          LLVM::AddressOfOp::create(rewriter, loc, getNumeral);
+
+      auto voidTy = LLVM::LLVMVoidType::get(rewriter.getContext());
+      buildCall(rewriter, loc, "circt_bmc_print_trace",
+                LLVM::LLVMFunctionType::get(
+                    voidTy, {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy}),
+                {traceContext, context, traceModel, modelEvalAddress,
+                 getNumeralAddress});
+    }
+
     // Otherwise, the 'else' block checks if the assertions are unsatisfiable or
     // unknown. The corresponding regions can also be simply inlined into the
     // two branches of this nested if-statement as well.
@@ -902,9 +950,13 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
 
       // In debug mode, if the assertions are satisfiable we can print the model
       // (effectively a counter-example).
-      rewriter.setInsertionPointToStart(satIfOp.thenBlock());
-      auto model = buildPtrAPICall(rewriter, op.getLoc(), "Z3_solver_get_model",
-                                   {solver});
+      // Insert before the SAT terminator so any context value already cached
+      // by BMC trace emission dominates this debug-only use.
+      rewriter.setInsertionPoint(satIfOp.thenBlock()->getTerminator());
+      auto model = traceModel
+                       ? traceModel
+                       : buildPtrAPICall(rewriter, op.getLoc(),
+                                         "Z3_solver_get_model", {solver});
       auto modelStringPtr =
           buildPtrAPICall(rewriter, op.getLoc(), "Z3_model_to_string", {model});
       auto modelFormatString =
@@ -1716,6 +1768,10 @@ void LowerSMTToZ3LLVMPass::runOnOperation() {
   // lowering patterns.
   OpBuilder builder(&getContext());
   auto globals = SMTGlobalsHandler::create(builder, getOperation());
+  for (Operation *operation : traceFunctions)
+    globals.traceFunctionNames.insert(
+        cast<FunctionOpInterface>(operation)->getAttrOfType<StringAttr>(
+            SymbolTable::getSymbolAttrName()));
   populateSMTToZ3LLVMConversionPatterns(patterns, converter, globals, options);
 
   // Do a full conversion. This assumes that all other dialects have been

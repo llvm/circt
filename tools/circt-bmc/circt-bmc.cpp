@@ -376,6 +376,9 @@ static LogicalResult executeBMC(MLIRContext &context) {
     symbolMap[interner("circt_bmc_record_trace")] = {
         llvm::orc::ExecutorAddr::fromPtr(&bmc::circt_bmc_record_trace),
         llvm::JITSymbolFlags::Exported};
+    symbolMap[interner("circt_bmc_print_trace")] = {
+        llvm::orc::ExecutorAddr::fromPtr(&bmc::circt_bmc_print_trace),
+        llvm::JITSymbolFlags::Exported};
     return symbolMap;
   });
 

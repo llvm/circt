@@ -100,4 +100,9 @@ if config.slang_frontend_enabled:
 if config.libfst_enabled:
   config.available_features.add('libfst')
 
+if (config.bmc_jit_enabled and os.path.isfile(config.z3_shared_library) and
+    not config.z3_shared_library.endswith(('.a', '.lib'))):
+  config.available_features.add('z3-jit')
+  config.substitutions.append(('%z3lib', config.z3_shared_library))
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)

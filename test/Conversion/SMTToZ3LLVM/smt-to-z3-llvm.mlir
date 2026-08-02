@@ -186,6 +186,12 @@ func.func @test(%arg0: i32) {
     // CHECK:   [[IS_SAT:%.+]] = llvm.icmp "eq" [[CHECK]], [[C1]] : i32
     // CHECK:   llvm.cond_br [[IS_SAT]], ^[[BB1:.+]], ^[[BB2:.+]]
     // CHECK: ^[[BB1]]:
+    // CHECK: [[SAT_CTX_ADDR:%.+]] = llvm.mlir.addressof @ctx_0 : !llvm.ptr
+    // CHECK: [[SAT_CTX:%.+]] = llvm.load [[SAT_CTX_ADDR]] : !llvm.ptr -> !llvm.ptr
+    // CHECK: [[MODEL:%.+]] = llvm.call @Z3_solver_get_model([[SAT_CTX]], [[S]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    // CHECK: [[MODEL_EVAL:%.+]] = llvm.mlir.addressof @Z3_model_eval : !llvm.ptr
+    // CHECK: [[GET_NUMERAL:%.+]] = llvm.mlir.addressof @Z3_get_numeral_binary_string : !llvm.ptr
+    // CHECK: llvm.call @circt_bmc_print_trace([[TRACE_CONTEXT]], [[SAT_CTX]], [[MODEL]], [[MODEL_EVAL]], [[GET_NUMERAL]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr) -> ()
     // CHECK-DEBUG: [[CTX_ADDR:%.+]] = llvm.mlir.addressof @ctx_0 : !llvm.ptr
     // CHECK-DEBUG: [[CTX0:%.+]] = llvm.load [[CTX_ADDR]] : !llvm.ptr -> !llvm.ptr
     // CHECK-DEBUG: [[MODEL:%.+]] = llvm.call @Z3_solver_get_model([[CTX0]], {{.*}}) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr

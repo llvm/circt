@@ -12,6 +12,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringRef.h"
 #include <memory>
 
@@ -63,6 +64,9 @@ struct SMTGlobalsHandler {
   DenseMap<Block *, Value> ctxCache;
   DenseMap<Block *, Value> solverCache;
   DenseMap<StringAttr, mlir::LLVM::GlobalOp> stringCache;
+  /// Names of functions whose final argument is the opaque BMC trace context.
+  /// Names remain stable when func.func operations are converted to llvm.func.
+  llvm::DenseSet<StringAttr> traceFunctionNames;
 };
 
 /// Populate the given type converter with the SMT to LLVM type conversions.
