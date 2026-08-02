@@ -2297,7 +2297,6 @@ struct RvalueExprVisitor : public ExprVisitor {
 
       assert(intType.getWidth() == elements->size());
       ensureDescendingOrder(*elements, *expr.type);
-      std::reverse(elements->begin(), elements->end());
       return moore::ConcatOp::create(builder, loc, intType, *elements);
     }
 
