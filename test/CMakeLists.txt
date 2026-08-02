@@ -1,39 +1,6 @@
 add_subdirectory(lib)
 add_subdirectory(CAPI)
 
-# Find the concrete Z3 shared library for circt-bmc JIT tests. FindZ3 exposes
-# an absolute path, while a Z3 package configuration generally exposes an
-# imported target whose location is configuration-specific.
-set(CIRCT_Z3_SHARED_LIBRARY "")
-if(Z3_FOUND)
-  if(TARGET z3::libz3)
-    get_target_property(z3_imported_location z3::libz3 IMPORTED_LOCATION)
-    if(z3_imported_location)
-      set(CIRCT_Z3_SHARED_LIBRARY "${z3_imported_location}")
-    else()
-      get_target_property(z3_imported_configurations z3::libz3
-                          IMPORTED_CONFIGURATIONS)
-      foreach(z3_configuration IN LISTS z3_imported_configurations)
-        string(TOUPPER "${z3_configuration}" z3_configuration_upper)
-        get_target_property(z3_imported_location z3::libz3
-                            "IMPORTED_LOCATION_${z3_configuration_upper}")
-        if(z3_imported_location)
-          set(CIRCT_Z3_SHARED_LIBRARY "${z3_imported_location}")
-          break()
-        endif()
-      endforeach()
-    endif()
-  elseif(Z3_LIBRARIES)
-    list(GET Z3_LIBRARIES 0 CIRCT_Z3_SHARED_LIBRARY)
-  endif()
-endif()
-
-if(MLIR_ENABLE_EXECUTION_ENGINE)
-  set(CIRCT_BMC_JIT_ENABLED 1)
-else()
-  set(CIRCT_BMC_JIT_ENABLED 0)
-endif()
-
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py

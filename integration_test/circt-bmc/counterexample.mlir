@@ -1,5 +1,6 @@
-// REQUIRES: z3-jit
-// RUN: circt-bmc %s -b 3 --module FormalTop --shared-libs="%z3lib" | FileCheck %s
+// REQUIRES: libz3
+// REQUIRES: circt-bmc-jit
+// RUN: circt-bmc %s -b 3 --module FormalTop --shared-libs=%libz3 | FileCheck %s
 
 // CHECK: counterexample for FormalTop:
 // CHECK-NEXT: cycle 0:
