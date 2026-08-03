@@ -25,7 +25,6 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Debug.h"
 
-#include <queue>
 #include <utility>
 
 namespace circt {
@@ -427,9 +426,6 @@ private:
 
   FailureOr<EvaluatorValuePtr>
   getOrCreateValue(Value value, ActualParameters actualParams, Location loc);
-  FailureOr<EvaluatorValuePtr>
-  allocateObjectInstance(StringAttr clasName, ActualParameters actualParams);
-
   /// Evaluate a Value in a Class body according to the small expression grammar
   /// described in the rationale document. The actual parameters are the values
   /// supplied at the current instantiation of the Class being evaluated.
@@ -449,28 +445,14 @@ private:
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
                          Location loc, ObjectKey instanceKey = {});
   FailureOr<EvaluatorValuePtr>
-  evaluateObjectInstance(ObjectOp op, ActualParameters actualParams);
-  FailureOr<EvaluatorValuePtr>
   evaluateElaboratedObject(ElaboratedObjectOp op, ActualParameters actualParams,
                            Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateObjectField(ObjectFieldOp op, ActualParameters actualParams,
-                      Location loc);
   FailureOr<EvaluatorValuePtr> evaluateListCreate(ListCreateOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
   FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateIntegerBinary(IntegerBinaryOp op, ActualParameters actualParams,
-                        Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateStringConcat(StringConcatOp op, ActualParameters actualParams,
-                       Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateBinaryEquality(BinaryEqualityOp op, ActualParameters actualParams,
-                         Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateBasePathCreate(FrozenBasePathCreateOp op,
                          ActualParameters actualParams, Location loc);
@@ -483,15 +465,8 @@ private:
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateUnknownValue(UnknownValueOp op, Location loc);
 
-  LogicalResult evaluatePropertyAssert(PropertyAssertOp op,
-                                       ActualParameters actualParams);
-
   FailureOr<evaluator::EvaluatorValuePtr> createUnknownValue(Type type,
                                                              Location loc);
-
-  FailureOr<ActualParameters>
-  createParametersFromOperands(ValueRange range, ActualParameters actualParams,
-                               Location loc);
 
   /// The symbol table for the IR module the Evaluator was constructed with.
   /// Used to look up class definitions.
@@ -507,13 +482,6 @@ private:
   /// and if any become fully evaluated, swap and continue.
   std::vector<ObjectKey> worklist;
   std::vector<ObjectKey> nextWorklist;
-
-  /// A queue of pending property assertions to be evaluated after the worklist
-  /// is fully drained. Each entry is a (PropertyAssertOp, ActualParameters)
-  /// pair. Property assertions are deferred because their operands may be
-  /// ReferenceValues that are not yet resolved when the class body is first
-  /// processed.
-  std::queue<std::pair<PropertyAssertOp, ActualParameters>> pendingAsserts;
 
   /// Evaluator value storage. Return an evaluator value for the given
   /// instantiation context (a pair of Value and parameters).
