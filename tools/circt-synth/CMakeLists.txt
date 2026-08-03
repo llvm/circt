@@ -1,3 +1,5 @@
+set(LLVM_LINK_COMPONENTS Support)
+
 add_circt_tool(circt-synth circt-synth.cpp)
 target_link_libraries(circt-synth
   PRIVATE
@@ -26,7 +28,6 @@ target_link_libraries(circt-synth
   MLIRIR
   MLIRTransformDialect
   MLIRTransformDialectTransforms
-  LLVMSupport
 )
 
 llvm_update_compile_flags(circt-synth)

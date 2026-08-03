@@ -1,14 +1,17 @@
 if(ARCILATOR_JIT_ENABLED)
   add_compile_definitions(ARCILATOR_ENABLE_JIT)
-  set(ARCILATOR_JIT_LLVM_COMPONENTS native)
+  set(ARCILATOR_JIT_LLVM_COMPONENTS native OrcJIT)
   set(ARCILATOR_JIT_DEPS
     CIRCTArcJITRuntime
-    LLVMOrcJIT
     MLIRExecutionEngine
   )
 endif()
 
-set(LLVM_LINK_COMPONENTS Support ${ARCILATOR_JIT_LLVM_COMPONENTS})
+set(LLVM_LINK_COMPONENTS
+  Support
+  TargetParser
+  ${ARCILATOR_JIT_LLVM_COMPONENTS}
+)
 
 set(libs
   CIRCTArc
@@ -28,7 +31,6 @@ set(libs
   CIRCTSupport
   CIRCTTransforms
   CIRCTVerif
-  LLVMTargetParser
   MLIRArithDialect
   MLIRBuiltinToLLVMIRTranslation
   MLIRControlFlowDialect
