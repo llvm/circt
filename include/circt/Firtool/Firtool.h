@@ -147,6 +147,7 @@ public:
   bool shouldDedupClasses() const { return dedupClasses; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
+  bool shouldUseNewFullResetFlow() const { return useNewFullResetFlow; }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
   bool shouldStripDebugInfo() const { return stripDebugInfo; }
   bool shouldStripFirDebugInfo() const { return stripFirDebugInfo; }
@@ -297,6 +298,11 @@ public:
 
   FirtoolOptions &setIgnoreReadEnableMem(bool value) {
     ignoreReadEnableMem = value;
+    return *this;
+  }
+
+  FirtoolOptions &setUseNewFullResetFlow(bool value) {
+    useNewFullResetFlow = value;
     return *this;
   }
 
@@ -452,6 +458,7 @@ private:
   bool replSeqMem;
   std::string replSeqMemFile;
   bool ignoreReadEnableMem;
+  bool useNewFullResetFlow;
   RandomKind disableRandom;
   std::string outputAnnotationFilename;
   bool enableAnnotationWarning;
