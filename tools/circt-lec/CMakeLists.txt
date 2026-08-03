@@ -28,7 +28,6 @@ target_link_libraries(circt-lec
   CIRCTSupport
   CIRCTVerif
   CIRCTVerifToSMT
-  LLVMSupport
   MLIRArithDialect
   MLIRBuiltinToLLVMIRTranslation
   MLIRFuncDialect
