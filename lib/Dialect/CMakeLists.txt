@@ -10,6 +10,7 @@
 ##===----------------------------------------------------------------------===//
 
 add_subdirectory(Arc)
+add_subdirectory(AXI4)
 add_subdirectory(Calyx)
 add_subdirectory(Comb)
 add_subdirectory(Datapath)
