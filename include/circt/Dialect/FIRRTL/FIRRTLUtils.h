@@ -111,15 +111,66 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
   return isa<A, B...>(op);
 }
 
-/// Walk all the drivers of a value, passing in the connect operations drive the
-/// value. If the value is an aggregate it will find connects to subfields. If
-/// the callback returns false, this function will stop walking.  Returns false
-/// if walking was broken, and true otherwise.
-using WalkDriverCallback =
+/// Callback invoked by `walkDrivers` when a "terminal" driver is reached.
+/// Return `true` to continue the walk and `false` to end it.
+using WalkDriverTerminalCallback =
     llvm::function_ref<bool(const FieldRef &dst, const FieldRef &src)>;
-bool walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
-                 bool lookThroughNodes, bool lookThroughCasts,
-                 WalkDriverCallback callback);
+
+/// Outcome returned by `WalkDriverLookThroughCallback` to steer `walkDrivers`
+/// when it reaches a non-terminal operation driver.
+enum class WalkDriverLookThrough {
+  /// This operation is a terminal, analogous to a module input port or instance
+  /// output port.  Leave it for the terminal callback to handle.
+  Terminal,
+  /// Keep going "past" this operation.  Continue walking some drivers of this
+  /// op.
+  LookThrough,
+  /// Ignore the op and don't handle it as a terminal.
+  Skip,
+};
+
+/// Callback invoked by `walkDrivers` when a non-terminal operation driver is
+/// reached.  It decides how the walk proceeds through the driver referenced by
+/// `ref` (whose value always has a defining op here) by returning one of the
+/// `WalkDriverLookThrough` outcomes: (1) this is a terminal and yield
+/// processing to the terminal callback, (2) look through this operation by
+/// processing its chosen drivers, or (3) ignore the operation, but do not treat
+/// it as a terminal, e.g., because we have visited it before.
+///
+/// To explore beyond this operation, update the mutable `drivers` reference by
+/// adding operands to it before returning `LookThrough`.
+///
+/// `ref` carries the field being traced, not just the defining op, so callers
+/// that key visited sets for cycle/reconvergence handling remain correct for
+/// distinct subfields of the same aggregate value.  Recover the op with
+/// `ref.getValue().getDefiningOp()`.
+///
+/// This is intended to be used to selectively add operands of the op to walk.
+using WalkDriverLookThroughCallback = llvm::function_ref<WalkDriverLookThrough(
+    const FieldRef &ref, SmallVectorImpl<Value> &drivers)>;
+
+/// Walk the drivers of a given value.
+///
+/// The walk can be customized through the use of the two callbacks that control
+/// what is explored and if the walk is terminated when reaching a "terminal"
+/// fieldref.  The walk ends at module inputs, instance outputs, or if the
+/// `onTerminal` callback ends it by returning `false`.
+///
+/// The `lookThrough` callback is called when driver operations are discovered.
+/// Normal dataflow operations (wires, nodes, and subfield/subindex operations)
+/// are handled automatically and not passed to `lookThrough`.  This callback is
+/// used to decide what to visit _after_ this operation, e.g., what primop
+/// operands to visit.  It returns a `WalkDriverLookThrough` outcome: treat the
+/// op as a terminal, look through it (fanning out to the pushed driver
+/// operands, or scanning connections if none are pushed), or skip it.
+///
+/// The `onTerminal` callback is called when a terminal fieldref is reached.
+///
+/// No automatic memoization occurs.  It is the responsibility of the user to
+/// handle this if they desire it.
+bool walkDrivers(FIRRTLBaseValue value,
+                 WalkDriverLookThroughCallback lookThrough,
+                 WalkDriverTerminalCallback onTerminal);
 
 /// Get the FieldRef from a value.  This will travel backwards to through the
 /// IR, following Subfield and Subindex to find the op which declares the
