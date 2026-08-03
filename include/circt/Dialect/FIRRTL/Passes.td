@@ -366,6 +366,10 @@ def FullReset : Pass<"firrtl-full-reset", "firrtl::CircuitOp"> {
     Consumes `circt.FullResetAnnotation` / `circt.ExcludeFromFullResetAnnotation`
     Builds reset domains and implements full reset on registers.
   }];
+  let options = [
+    Option<"convertAsyncDomainMems", "convert-async-domain-mems", "bool",
+      "true", "Convert combinational memories in asynchronous full-reset domains.">
+  ];
 }
 
 def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
