@@ -771,8 +771,7 @@ TEST(PrettyPrinterTest, NoWrap) {
 
   auto test = [&](bool noWrap) {
     out = "";
-    PrettyPrinter pp(os, 7, 0, 0, PrettyPrinter::kInfinity / 4, nullptr,
-                     noWrap);
+    PrettyPrinter pp(os, noWrap ? 0 : 7);
     TokenBuilder<> b(pp);
     b.ibox();
     b.literal("test");
@@ -789,6 +788,52 @@ TEST(PrettyPrinterTest, NoWrap) {
 
   test(true);
   EXPECT_EQ(out.str(), StringRef("test test\ntest"));
+}
+
+TEST(PrettyPrinterTest, MarginValues) {
+  SmallString<0> out;
+  unsigned constexpr outCap = 1U << 15;
+  out.reserve(outCap);
+  raw_svector_ostream os(out);
+
+  auto test = [&](unsigned margin) {
+    out = "";
+    ASSERT_EQ(out.size(), 0);
+    PrettyPrinter pp(os, margin);
+    TokenBuilder<> b(pp);
+    b.ibox();
+    for (unsigned i = 0; i < (1 << 13U); ++i) {
+      if (i != 0)
+        b.space();
+      b.literal("foo");
+    }
+    b.end();
+    pp.eof();
+    ASSERT_EQ(outCap, out.capacity());
+    ASSERT_EQ(out.size(), outCap - 1);
+  };
+
+  test(16383);
+  auto save = out;
+  auto saveNewlines = save.count('\n');
+  ASSERT_NE(saveNewlines, 0);
+
+  auto saturates = {16384U, 20000U, UINT32_MAX};
+  auto different = {16382U, 0U, 1U};
+
+  for (auto m : saturates) {
+    test(m);
+    EXPECT_EQ(save.str(), out.str());
+  }
+
+  for (auto m : different) {
+    test(m);
+    auto outNewlines = out.count('\n');
+    EXPECT_NE(saveNewlines, outNewlines);
+    // Special check for no-wrap sentinel value.
+    if (m == 0)
+      EXPECT_EQ(outNewlines, 0U);
+  }
 }
 
 TEST(PrettyPrinterTest, NeverBreakGroup) {

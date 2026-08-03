@@ -92,9 +92,17 @@ struct LoweringOptions {
   unsigned maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
 
   /// This is the target width of lines in an emitted Verilog source file in
-  /// columns.
-  enum { DEFAULT_LINE_LENGTH = 90 };
+  /// columns.  Zero indicates no wrapping.  Must be < 2^14.
+  enum { DEFAULT_LINE_LENGTH = 90, MAX_LINE_LENGTH = (1 << 14) - 1 };
   unsigned emittedLineLength = DEFAULT_LINE_LENGTH;
+
+  /// Return std::nullopt if not wrapping, else the target emission line length.
+  std::optional<unsigned> getEmittedLineLength() const {
+    if (emittedLineLength == 0)
+      return std::nullopt;
+    // This should be rejected in parsing, but in case set directly, saturate.
+    return std::min<unsigned>(MAX_LINE_LENGTH, emittedLineLength);
+  }
 
   /// Add an explicit bitcast for avoiding bitwidth mismatch LINT errors.
   bool explicitBitcast = false;

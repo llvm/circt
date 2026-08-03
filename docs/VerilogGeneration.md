@@ -98,7 +98,8 @@ The current set of "tool capability" Lowering Options is:
 The current set of "style" Lowering Options is:
 
  * `emittedLineLength` (default=`90`).  This is the target width of lines in an
-   emitted Verilog source file in columns.
+   emitted Verilog source file in columns.  Zero indicates no wrapping.
+   Lengths greater than or equal to 16384 (2^14) are not supported.
  * `locationInfoStyle` (default=`plain`).  This option controls emitted location
    information style.  The available styles are:
    * `plain`: `// perf/regress/AndNot.fir:3:10, :7:{10,17}`

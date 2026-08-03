@@ -1,8 +1,12 @@
 // RUN: circt-opt --test-apply-lowering-options='options=emittedLineLength=40' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,SHORT
 // RUN: circt-opt --export-verilog %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
 // RUN: circt-opt --test-apply-lowering-options='options=emittedLineLength=180' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LONG
+// RUN: circt-opt --test-apply-lowering-options='options=emittedLineLength=0' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,NOWRAP
 // RUN: circt-opt --test-apply-lowering-options='options=emittedLineLength=40,maximumNumberOfTermsPerExpression=16' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LIMIT_SHORT
 // RUN: circt-opt --test-apply-lowering-options='options=maximumNumberOfTermsPerExpression=32' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LIMIT_LONG
+//
+// RUN: circt-opt --test-apply-lowering-options='options=emittedLineLength=16384' --export-verilog %s --verify-diagnostics
+// expected-error @-9 {{line length '16384' exceeds maximum of 16383}}
 
 hw.module @longvariadic(in %a: i8, out b: i8) {
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
@@ -31,6 +35,9 @@ hw.module @longvariadic(in %a: i8, out b: i8) {
 // LONG:       assign b =
 // LONG-NEXT:    a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
 // LONG-NEXT:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+
+//         -- no wrapping ---
+// NOWRAP:  assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
 //                  ---------------------------------------v
 // LIMIT_SHORT:       wire [7:0] _GEN =

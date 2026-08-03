@@ -184,22 +184,21 @@ public:
   };
 
   /// PrettyPrinter for specified stream.
-  /// - margin: line width.
+  /// - margin: line width: 0 is no wrapping, saturates to kMaxMargin.
   /// - baseIndent: always indent at least this much (starting 'indent' value).
   /// - currentColumn: current column, used to calculate space remaining.
   /// - maxStartingIndent: max column indentation starts at, must be >= margin.
-  /// - noWrap: disable line wrapping; only explicit newlines break.
   PrettyPrinter(llvm::raw_ostream &os, uint32_t margin, uint32_t baseIndent = 0,
                 uint32_t currentColumn = 0,
-                uint32_t maxStartingIndent = kInfinity / 4,
-                Listener *listener = nullptr, bool noWrap = false)
-      : space(margin - std::max(currentColumn, baseIndent)),
-        defaultFrame{baseIndent, PrintBreaks::Inconsistent}, indent(baseIndent),
-        margin(margin), maxStartingIndent(std::max(maxStartingIndent, margin)),
-        os(os), listener(listener), noWrap(noWrap) {
-    assert(maxStartingIndent < kInfinity / 2);
-    assert(maxStartingIndent > baseIndent);
-    assert(margin > currentColumn);
+                uint32_t maxStartingIndent = kMaxMargin / 2,
+                Listener *listener = nullptr)
+      : defaultFrame{baseIndent, PrintBreaks::Inconsistent}, indent(baseIndent),
+        margin(std::min(kMaxMargin, margin)),
+        maxStartingIndent(std::max(maxStartingIndent, this->margin)), os(os),
+        listener(listener), noWrap(this->margin == 0) {
+    // Compute space left using computed margin.
+    space = this->margin - std::max(currentColumn, baseIndent);
+
     // Ensure first print advances to at least baseIndent.
     pendingIndentation =
         baseIndent > currentColumn ? baseIndent - currentColumn : 0;
@@ -229,6 +228,9 @@ public:
   auto *getListener() const { return listener; }
 
   static constexpr uint32_t kInfinity = (1U << 15) - 1;
+
+  /// Largest supported target line length.
+  static constexpr uint32_t kMaxMargin = kInfinity / 2;
 
 private:
   /// Format token with tracked size.
