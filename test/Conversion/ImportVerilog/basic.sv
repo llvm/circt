@@ -1778,7 +1778,7 @@ module Expressions;
     // CHECK: [[TMP1:%.+]] = moore.constant 1 :
     // CHECK: [[TMP2:%.+]] = moore.constant 0 :
     // CHECK: [[TMP3:%.+]] = moore.constant 0 :
-    // CHECK: moore.concat [[TMP3]], [[TMP2]], [[TMP1]], [[TMP0]] : (!moore.l1, !moore.l1, !moore.l1, !moore.l1) -> l4
+    // CHECK: moore.concat [[TMP0]], [[TMP1]], [[TMP2]], [[TMP3]] : (!moore.l1, !moore.l1, !moore.l1, !moore.l1) -> l4
     m = '{default: '0, 2: '1};
 
     //===------------------------------------------------------------------===//

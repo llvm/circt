@@ -204,6 +204,28 @@ static Value visitClassProperty(Context &context,
   return fieldRef;
 }
 
+/// Ensures that the given range is in "descending" order.
+///
+/// `type` must have a fixed range. If the range is defined such that
+/// left < right, the range is reversed.
+///
+/// For example:
+///   [3:0] => do not reverse
+///   [0:3] => reverse
+///
+/// The resulting range is suitable for passing to ops like ConcatOp and
+/// packed ArrayCreateOp which expect operands to be in descending order
+/// of bit significance. Do not call on unpacked arrays, whose element
+/// indexing logic (getSelectIndex / translateIndex) already maps ascending
+/// indices to descending storage order.
+template <typename RangeT>
+static void ensureDescendingOrder(RangeT &range, const slang::ast::Type &type) {
+  assert(type.hasFixedRange());
+  const slang::ConstantRange &cstRange = type.getFixedRange();
+  if (cstRange.left < cstRange.right)
+    std::reverse(std::begin(range), std::end(range));
+}
+
 namespace {
 /// A visitor handling expressions that can be lowered as lvalue and rvalue.
 struct ExprVisitor {
@@ -2274,7 +2296,7 @@ struct RvalueExprVisitor : public ExprVisitor {
         return {};
 
       assert(intType.getWidth() == elements->size());
-      std::reverse(elements->begin(), elements->end());
+      ensureDescendingOrder(*elements, *expr.type);
       return moore::ConcatOp::create(builder, loc, intType, *elements);
     }
 
@@ -2328,6 +2350,7 @@ struct RvalueExprVisitor : public ExprVisitor {
         return {};
 
       assert(arrayType.getSize() == elements->size());
+      ensureDescendingOrder(*elements, *expr.type);
       return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
     }
 
