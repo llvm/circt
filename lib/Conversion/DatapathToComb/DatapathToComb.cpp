@@ -113,7 +113,7 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
     // Compressor tree reduction
     auto width = inputs[0].getType().getIntOrFloatBitWidth();
     auto targetAddends = op.getNumResults();
-    datapath::CompressorTree comp(width, addends, loc);
+    datapath::CompressorTree comp(width, addends, loc, rewriter);
 
     if (analysis) {
       // Update delay information with arrival times
@@ -182,6 +182,7 @@ private:
     Location loc = op.getLoc();
     // Keep a as a bitvector - multiply by each digit of b
     SmallVector<Value> bBits = extractBits(rewriter, b);
+    auto knownBitsB = comb::computeKnownBits(b);
 
     auto rowWidth = width;
     auto knownBitsA = comb::computeKnownBits(a);
@@ -200,9 +201,24 @@ private:
            "Cannot return more results than the operator width");
 
     for (unsigned i = 0; i < op.getNumResults(); ++i) {
-      auto repl =
-          rewriter.createOrFold<comb::ReplicateOp>(loc, bBits[i], rowWidth);
-      auto ppRow = rewriter.createOrFold<comb::AndOp>(loc, repl, a);
+      // Constuct partial product row for bit i of b.
+      Value ppRow;
+
+      // Skip generation of zero rows.
+      if (knownBitsB.Zero[i]) {
+        partialProducts.push_back(
+            hw::ConstantOp::create(rewriter, loc, APInt(width, 0)));
+        continue;
+      }
+
+      // If the bit is known to be one, just use `a` as the partial product row.
+      if (knownBitsB.One[i]) {
+        ppRow = a;
+      } else {
+        auto repl =
+            rewriter.createOrFold<comb::ReplicateOp>(loc, bBits[i], rowWidth);
+        ppRow = rewriter.createOrFold<comb::AndOp>(loc, repl, a);
+      }
       if (rowWidth < width) {
         auto padding = width - rowWidth;
         auto zeroPad = hw::ConstantOp::create(rewriter, loc, APInt(padding, 0));

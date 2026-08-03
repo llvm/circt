@@ -25,6 +25,15 @@ hw.module @partial_product_zext(in %a : i3, in %b : i3, out sum : i6) {
   hw.output %3 : i6
 }
 
+// RUN: circt-lec.sh %t.mlir %s -c1=partial_product_known_bits -c2=partial_product_known_bits
+hw.module @partial_product_known_bits(in %a : i3, in %b : i1, out sum : i3) {
+  %c2_i2 = hw.constant 2 : i2
+  %0 = comb.concat %b, %c2_i2 : i1, i2
+  %1:3 = datapath.partial_product %a, %0 : (i3, i3) -> (i3, i3, i3)
+  %2 = comb.add %1#0, %1#1, %1#2 : i3
+  hw.output %2 : i3
+}
+
 // RUN: circt-lec.sh %t.mlir %s -c1=partial_product_square -c2=partial_product_square
 hw.module @partial_product_square(in %a : i4, out sum : i4) {
   %0:4 = datapath.partial_product %a, %a : (i4, i4) -> (i4, i4, i4, i4)
@@ -113,6 +122,14 @@ hw.module @compress_3(in %a : i4, in %b : i4, in %c : i4, out sum : i4) {
 hw.module @compress_6(in %a : i4, in %b : i4, in %c : i4, in %d : i4, in %e : i4, in %f : i4, out sum : i4) {
   %0:3 = datapath.compress %a, %b, %c, %d, %e, %f : i4 [6 -> 3]
   %1 = comb.add bin %0#0, %0#1, %0#2 : i4
+  hw.output %1 : i4
+}
+
+// RUN: circt-lec.sh %t.mlir %s -c1=compress_known_ones -c2=compress_known_ones
+hw.module @compress_known_ones(in %a : i4, out sum : i4) {
+  %c15_i4 = hw.constant 15 : i4
+  %0:2 = datapath.compress %a, %c15_i4, %c15_i4 : i4 [3 -> 2]
+  %1 = comb.add bin %0#0, %0#1 : i4
   hw.output %1 : i4
 }
 
