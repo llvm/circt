@@ -974,7 +974,7 @@ firrtl.circuit "DomainPreservation" {
 
 // -----
 
-// Test that InstanceChoiceOp is conservatively handled
+// Test that InstanceChoiceOp merges matching constant outputs
 firrtl.circuit "InstanceChoiceOutputPort" {
   firrtl.option @ChoiceOption {
     firrtl.option_case @A
@@ -989,18 +989,19 @@ firrtl.circuit "InstanceChoiceOutputPort" {
 
   // CHECK-LABEL: firrtl.module @InstanceChoiceOutputPort
   firrtl.module @InstanceChoiceOutputPort(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-    // CHECK: %inst_out = firrtl.instance_choice inst @ModuleA alternatives @ChoiceOption
+    // CHECK-NOT: firrtl.instance_choice
+    // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %inst_out = firrtl.instance_choice inst @ModuleA alternatives @ChoiceOption { @A -> @ModuleA } (out out: !firrtl.uint<1>)
 
-    // CHECK: firrtl.matchingconnect %out, %inst_out
+    // CHECK: firrtl.matchingconnect %out, %c1_ui1
     firrtl.matchingconnect %out, %inst_out : !firrtl.uint<1>
   }
 }
 
 // -----
 
-// Test that InstanceChoiceOp is conservatively handled even when a module is connected
-// to a normal instance as well.
+// Test that InstanceChoiceOp does not prevent normal instances of the same 
+// module from propagating constants.
 firrtl.circuit "InstanceChoiceAndNormalInstance" {
   firrtl.option @Platform {
     firrtl.option_case @ASIC
@@ -1008,7 +1009,7 @@ firrtl.circuit "InstanceChoiceAndNormalInstance" {
 
   // CHECK-LABEL: firrtl.module private @ASICImpl
   firrtl.module private @ASICImpl(in %data: !firrtl.uint<8>, out %result: !firrtl.uint<8>) {
-    // Make sure constant is not propagated from instances.
+    // Make sure conflicting instance inputs are not propagated
     // CHECK: firrtl.matchingconnect %result, %data
     firrtl.matchingconnect %result, %data : !firrtl.uint<8>
   }
@@ -1031,4 +1032,36 @@ firrtl.circuit "InstanceChoiceAndNormalInstance" {
     // CHECK: firrtl.matchingconnect %out, %inst1_result
     firrtl.matchingconnect %out, %inst1_result : !firrtl.uint<8>
   }
+}
+
+// -----
+
+// Test that InstanceChoiceOp does not propogate an output unless all choices 
+// agree on the same constant
+
+firrtl.circuit "InstanceChoiceMixedOutput" {
+  firrtl.option @ChoiceOption {
+    firrtl.option_case @B
+  }
+
+  firrtl.module private @ModuleA(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.matchingconnect %out, %c1_ui1 : !firrtl.uint<1>
+  }
+
+  firrtl.module private @ModuleB(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    firrtl.matchingconnect %out, %in : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceMixedOutput
+  firrtl.module @InstanceChoiceMixedOutput(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>){
+    // CHECK: %inst_in, %inst_out = firrtl.instance_choice inst @ModuleA alternatives @ChoiceOption { @B -> @ModuleB }
+    %inst_in, %inst_out = firrtl.instance_choice inst @ModuleA alternatives @ChoiceOption { @B -> @ModuleB } (in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+
+    // CHECK: firrtl.matchingconnect %inst_in, %in
+    firrtl.matchingconnect %inst_in, %in : !firrtl.uint<1>
+
+    // CHECK: firrtl.matchingconnect %out, %inst_out
+    firrtl.matchingconnect %out, %inst_out : !firrtl.uint<1>
+  } 
 }
