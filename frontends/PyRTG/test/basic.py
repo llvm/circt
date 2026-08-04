@@ -505,6 +505,74 @@ def test93_immediate_ops(config):
   immediate_consumer(slice)
 
 
+# MLIR-LABEL: rtg.test @test98_immediate_arith_ops
+# MLIR: arith.addi %imm1, %imm2 : i8
+# MLIR: arith.subi %imm1, %imm2 : i8
+# MLIR: arith.muli %imm1, %imm2 : i8
+# MLIR: arith.shli %imm1, %imm2 : i8
+# MLIR: arith.shrui %imm1, %imm2 : i8
+# MLIR: arith.andi %imm1, %imm2 : i8
+# MLIR: arith.ori %imm1, %imm2 : i8
+# MLIR: arith.xori %imm1, %imm2 : i8
+# MLIR: arith.cmpi eq, %imm1, %imm2 : i8
+# MLIR: arith.cmpi ne, %imm1, %imm2 : i8
+# MLIR: arith.cmpi ult, %imm1, %imm2 : i8
+# MLIR: arith.cmpi ule, %imm1, %imm2 : i8
+# MLIR: arith.cmpi ugt, %imm1, %imm2 : i8
+# MLIR: arith.cmpi uge, %imm1, %imm2 : i8
+# MLIR: arith.cmpi slt, %imm1, %imm2 : i8
+# MLIR: arith.cmpi sle, %imm1, %imm2 : i8
+# MLIR: arith.cmpi sgt, %imm1, %imm2 : i8
+# MLIR: arith.cmpi sge, %imm1, %imm2 : i8
+# MLIR: arith.maxui %imm1, %imm2 : i8
+# MLIR: arith.minui %imm1, %imm2 : i8
+# MLIR: arith.maxsi %imm1, %imm2 : i8
+# MLIR: arith.minsi %imm1, %imm2 : i8
+# MLIR: arith.extui %imm1 : i8 to i16
+# MLIR: arith.extsi %imm1 : i8 to i16
+
+
+@config
+class ImmediateArithOpsConfig(Config):
+  imm1 = Param(loader=lambda: Immediate(8, 8))
+  imm2 = Param(loader=lambda: Immediate(8, 4))
+
+
+@test(ImmediateArithOpsConfig)
+def test98_immediate_arith_ops(config):
+  imm1 = config.imm1
+  imm2 = config.imm2
+  # Arithmetic operations
+  embed_comment((imm1 + imm2).to_string())
+  embed_comment((imm1 - imm2).to_string())
+  embed_comment((imm1 * imm2).to_string())
+  # Bitwise operations
+  embed_comment((imm1 << imm2).to_string())
+  embed_comment((imm1 >> imm2).to_string())
+  embed_comment((imm1 & imm2).to_string())
+  embed_comment((imm1 | imm2).to_string())
+  embed_comment((imm1 ^ imm2).to_string())
+  # Comparison operations
+  embed_comment((imm1 == imm2).to_string())
+  embed_comment((imm1 != imm2).to_string())
+  embed_comment(imm1.ult(imm2).to_string())
+  embed_comment(imm1.ule(imm2).to_string())
+  embed_comment(imm1.ugt(imm2).to_string())
+  embed_comment(imm1.uge(imm2).to_string())
+  embed_comment(imm1.slt(imm2).to_string())
+  embed_comment(imm1.sle(imm2).to_string())
+  embed_comment(imm1.sgt(imm2).to_string())
+  embed_comment(imm1.sge(imm2).to_string())
+  # Min/Max operations
+  embed_comment(imm1.umax_of(imm2).to_string())
+  embed_comment(imm1.umin_of(imm2).to_string())
+  embed_comment(imm1.smax_of(imm2).to_string())
+  embed_comment(imm1.smin_of(imm2).to_string())
+  # Extension operations
+  embed_comment(imm1.zext(16).to_string())
+  embed_comment(imm1.sext(16).to_string())
+
+
 # MLIR-LABEL: rtg.sequence @seq0
 # MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>{{.*}})
 # MLIR-NEXT: [[LABEL:%.+]] = rtg.set_select_random [[SET]]
@@ -586,3 +654,33 @@ def test97_string_to_ascii_array(config):
   arr = String("hi").to_ascii_array()
   embed_comment(String("byte0=") + arr[0].to_string())
   embed_comment(String("byte1=") + arr[1].to_string())
+
+
+# ASM-LABEL: Begin of test 'test98_immediate_boundaries
+# ASM-NEXT: # 0x8{{$}}
+# ASM-NEXT: # 0xF{{$}}
+# ASM: End of test 'test98_immediate_boundaries
+
+
+@test(Singleton)
+def test98_immediate_boundaries(config):
+  embed_comment(Immediate(4, -8).to_string())
+  embed_comment(Immediate(4, 15).to_string())
+
+  try:
+    Immediate(-1, 0)
+    assert False
+  except ValueError as e:
+    assert "width must be non-negative, got -1" in str(e)
+  try:
+    Immediate(4, -9)
+    assert False
+  except ValueError as e:
+    assert "Value -9 does not fit in 4-bit representation (valid range: [-8, 15])" in str(
+        e)
+  try:
+    Immediate(4, 16)
+    assert False
+  except ValueError as e:
+    assert "Value 16 does not fit in 4-bit representation (valid range: [-8, 15])" in str(
+        e)

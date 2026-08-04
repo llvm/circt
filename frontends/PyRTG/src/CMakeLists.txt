@@ -25,6 +25,7 @@ declare_mlir_python_sources(PyRTGSources.Core
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/pyrtg"
   ADD_TO_PARENT PyRTGSources
   SOURCES
+    arith.py
     arrays.py
     bags.py
     configs.py

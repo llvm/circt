@@ -11,6 +11,7 @@ from .rtg import rtg
 from .rtgtest import rtgtest
 from .scf import scf
 from .index import index
+from .arith import arith
 from .sets import Set, SetType
 from .strings import String, StringType
 from .integers import Integer, IntegerType
