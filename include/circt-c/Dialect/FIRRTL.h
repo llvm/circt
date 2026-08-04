@@ -341,6 +341,29 @@ MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetIntegerFromString(
 MLIR_CAPI_EXPORTED FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value,
                                                        FIRRTLValueFlow flow);
 
+/// Returns true if this is a passive type: a base type that contains no flips.
+/// Returns false for non-base types (probes, properties, open aggregates).
+MLIR_CAPI_EXPORTED bool firrtlTypeIsPassive(MlirType type);
+
+/// Returns whether `destType` can be the destination of a connect whose source
+/// has `srcType`, per the FIRRTL specification's definition of type
+/// equivalence.  Outer flips encoding module port directions must be stripped
+/// by the caller.  When `requireSameWidths` is true, ground-type widths must
+/// match exactly instead of permitting implicit source extension.
+MLIR_CAPI_EXPORTED bool firrtlTypesAreEquivalent(MlirType destType,
+                                                 MlirType srcType,
+                                                 bool requireSameWidths);
+
+/// Emits the IR equivalent of the FIRRTL `is invalid` statement on `value`:
+/// connects an `invalidvalue` to every sink- or duplex-flow leaf reachable
+/// from it, recursing through aggregates and swapping flow across flipped
+/// fields.  A maximal passive non-analog subtree is invalidated with a single
+/// connect; source-flow leaves, analog leaves, and non-base values are left
+/// untouched, with no residual operations.  New operations are appended at
+/// the end of `block` with location `loc`.
+MLIR_CAPI_EXPORTED void firrtlEmitInvalidate(MlirBlock block, MlirLocation loc,
+                                             MlirValue value);
+
 /// Deserializes a JSON value into FIRRTL Annotations.  Annotations are
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,

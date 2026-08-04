@@ -370,6 +370,173 @@ void testTypeGetMaskType(MlirContext ctx) {
       firrtlTypeGetBundle(ctx, ARRAY_SIZE(rhsFields), rhsFields)));
 }
 
+void testEmitInvalidatePort(MlirContext ctx) {
+  // clang-format off
+  const char *testFIR =
+    "firrtl.circuit \"InvalidatePortTest\" {\n"
+    "  firrtl.module @InvalidatePortTest(\n"
+    "      out %out: !firrtl.bundle<a: uint<8>, b flip: uint<8>>) {\n"
+    "  }\n"
+    "}\n";
+  // clang-format on
+  MlirModule module =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testFIR));
+  MlirBlock mlirModule = mlirModuleGetBody(module);
+  MlirBlock firCircuit = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(mlirModule), 0));
+  MlirBlock firModule = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(firCircuit), 0));
+
+  firrtlEmitInvalidate(firModule, mlirLocationUnknownGet(ctx),
+                       mlirBlockGetArgument(firModule, 0));
+
+  mlirOperationPrint(mlirModuleGetOperation(module), dumpCallback, NULL);
+
+  // Only the sink-flow field `a` is connected; the subfield created for the
+  // source-flow field `b` is erased again, leaving no residual operations.
+  // clang-format off
+  // CHECK-LABEL: firrtl.module @InvalidatePortTest
+  // CHECK-NEXT:    %[[SUB:.+]] = firrtl.subfield %out[a]
+  // CHECK-NEXT:    %[[INV:.+]] = firrtl.invalidvalue
+  // CHECK-NEXT:    firrtl.matchingconnect %[[SUB]], %[[INV]]
+  // CHECK-NEXT:  }
+  // clang-format on
+}
+
+void testEmitInvalidateWire(MlirContext ctx) {
+  // clang-format off
+  const char *testFIR =
+    "firrtl.circuit \"InvalidateWireTest\" {\n"
+    "  firrtl.module @InvalidateWireTest() {\n"
+    "    %w = firrtl.wire : !firrtl.bundle<a: uint<8>, b: uint<8>>\n"
+    "  }\n"
+    "}\n";
+  // clang-format on
+  MlirModule module =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testFIR));
+  MlirBlock mlirModule = mlirModuleGetBody(module);
+  MlirBlock firCircuit = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(mlirModule), 0));
+  MlirBlock firModule = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(firCircuit), 0));
+  MlirOperation wire = mlirBlockGetFirstOperation(firModule);
+
+  firrtlEmitInvalidate(firModule, mlirLocationUnknownGet(ctx),
+                       mlirOperationGetResult(wire, 0));
+
+  mlirOperationPrint(mlirModuleGetOperation(module), dumpCallback, NULL);
+
+  // A passive aggregate is invalidated with a single connect.
+  // clang-format off
+  // CHECK-LABEL: firrtl.module @InvalidateWireTest
+  // CHECK-NEXT:    %[[W:.+]] = firrtl.wire
+  // CHECK-NEXT:    %[[INV:.+]] = firrtl.invalidvalue
+  // CHECK-NEXT:    firrtl.matchingconnect %[[W]], %[[INV]]
+  // CHECK-NEXT:  }
+  // clang-format on
+}
+
+void testEmitInvalidateVector(MlirContext ctx) {
+  // clang-format off
+  const char *testFIR =
+    "firrtl.circuit \"InvalidateVectorTest\" {\n"
+    "  firrtl.module @InvalidateVectorTest(\n"
+    "      out %out: !firrtl.vector<bundle<a: uint<8>, b flip: uint<8>>, 2>) {\n"
+    "  }\n"
+    "}\n";
+  // clang-format on
+  MlirModule module =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testFIR));
+  MlirBlock mlirModule = mlirModuleGetBody(module);
+  MlirBlock firCircuit = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(mlirModule), 0));
+  MlirBlock firModule = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(firCircuit), 0));
+
+  firrtlEmitInvalidate(firModule, mlirLocationUnknownGet(ctx),
+                       mlirBlockGetArgument(firModule, 0));
+
+  mlirOperationPrint(mlirModuleGetOperation(module), dumpCallback, NULL);
+
+  // Each vector element is reached through a subindex; within each element
+  // only the sink-flow field `a` is connected and the subfield created for
+  // the source-flow field `b` is erased again.
+  // clang-format off
+  // CHECK-LABEL: firrtl.module @InvalidateVectorTest
+  // CHECK-NEXT:    %[[SI0:.+]] = firrtl.subindex %out[0]
+  // CHECK-NEXT:    %[[SF0:.+]] = firrtl.subfield %[[SI0]][a]
+  // CHECK-NEXT:    %[[INV0:.+]] = firrtl.invalidvalue
+  // CHECK-NEXT:    firrtl.matchingconnect %[[SF0]], %[[INV0]]
+  // CHECK-NEXT:    %[[SI1:.+]] = firrtl.subindex %out[1]
+  // CHECK-NEXT:    %[[SF1:.+]] = firrtl.subfield %[[SI1]][a]
+  // CHECK-NEXT:    %[[INV1:.+]] = firrtl.invalidvalue
+  // CHECK-NEXT:    firrtl.matchingconnect %[[SF1]], %[[INV1]]
+  // CHECK-NEXT:  }
+  // clang-format on
+}
+
+void testEmitInvalidateProbe(MlirContext ctx) {
+  // clang-format off
+  const char *testFIR =
+    "firrtl.circuit \"InvalidateProbeTest\" {\n"
+    "  firrtl.module @InvalidateProbeTest(\n"
+    "      out %p: !firrtl.probe<uint<8>>) {\n"
+    "  }\n"
+    "}\n";
+  // clang-format on
+  MlirModule module =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testFIR));
+  MlirBlock mlirModule = mlirModuleGetBody(module);
+  MlirBlock firCircuit = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(mlirModule), 0));
+  MlirBlock firModule = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(firCircuit), 0));
+
+  firrtlEmitInvalidate(firModule, mlirLocationUnknownGet(ctx),
+                       mlirBlockGetArgument(firModule, 0));
+
+  mlirOperationPrint(mlirModuleGetOperation(module), dumpCallback, NULL);
+
+  // Invalidation is a no-op for non-base types: the block stays empty.
+  // clang-format off
+  // CHECK-LABEL: firrtl.module @InvalidateProbeTest
+  // CHECK-NEXT:  }
+  // clang-format on
+}
+
+void testTypesAreEquivalent(MlirContext ctx) {
+  MlirType u8 = firrtlTypeGetUInt(ctx, 8);
+  MlirType u4 = firrtlTypeGetUInt(ctx, 4);
+
+  assert(firrtlTypesAreEquivalent(u8, u8, true));
+  assert(!firrtlTypesAreEquivalent(u8, u4, true));
+  assert(firrtlTypesAreEquivalent(u8, u4, false));
+  assert(firrtlTypesAreEquivalent(firrtlTypeGetReset(ctx),
+                                  firrtlTypeGetAsyncReset(ctx), false));
+}
+
+void testTypeIsPassive(MlirContext ctx) {
+  FIRRTLBundleField fields[] = {
+      {
+          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("a")),
+          .isFlip = false,
+          .type = firrtlTypeGetUInt(ctx, 8),
+      },
+      {
+          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("b")),
+          .isFlip = true,
+          .type = firrtlTypeGetUInt(ctx, 8),
+      },
+  };
+  MlirType bundleWithFlip =
+      firrtlTypeGetBundle(ctx, ARRAY_SIZE(fields), fields);
+
+  assert(firrtlTypeIsPassive(firrtlTypeGetUInt(ctx, 8)));
+  assert(!firrtlTypeIsPassive(bundleWithFlip));
+  assert(
+      !firrtlTypeIsPassive(firrtlTypeGetRef(firrtlTypeGetUInt(ctx, 8), false)));
+}
+
 int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__firrtl__(), ctx);
@@ -379,5 +546,11 @@ int main(void) {
   testAttrGetIntegerFromString(ctx);
   testTypeDiscriminantsAndQueries(ctx);
   testTypeGetMaskType(ctx);
+  testEmitInvalidatePort(ctx);
+  testEmitInvalidateWire(ctx);
+  testEmitInvalidateVector(ctx);
+  testEmitInvalidateProbe(ctx);
+  testTypesAreEquivalent(ctx);
+  testTypeIsPassive(ctx);
   return 0;
 }

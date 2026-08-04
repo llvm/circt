@@ -44,12 +44,14 @@ void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs,
 
 /// Emit the IR equivalent of the FIRRTL `is invalid` statement: connect an
 /// invalid value to every sink- or duplex-flow leaf reachable from `val`.
-/// `getSubaccess` returns the subfield/subindex value for (parent, index);
-/// it may create the operation or reuse an existing one.
+/// Subaccess values are obtained from `getSubaccess`, which may create or
+/// reuse operations and retains ownership of them; without one they are
+/// created at the insertion point.  Operations this function itself creates
+/// that end up unused are erased.
 void emitInvalidate(
     ImplicitLocOpBuilder &builder, Value val,
     llvm::function_ref<Value(ImplicitLocOpBuilder &, Value, unsigned)>
-        getSubaccess,
+        getSubaccess = {},
     bool warnOnTruncation = false);
 
 /// Utiility for generating a constant attribute.
