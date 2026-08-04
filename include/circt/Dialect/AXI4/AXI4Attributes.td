@@ -38,6 +38,14 @@ def BurstKind : I32EnumAttr<"BurstKind", "AXI4 burst kind",
 class AXI4AttrDef<string name, list<Trait> traits = []> :
     AttrDef<AXI4Dialect, name, traits>;
 
+// An address, printed in hex. Hex is already accepted when parsing.
+class AddressParameter<string desc = ""> :
+    AttrOrTypeParameter<"uint64_t", desc> {
+  let printer = [{
+    $_printer << "0x" << ::llvm::utohexstr($_self, /*LowerCase=*/true)
+  }];
+}
+
 def BurstSpecAttr : AXI4AttrDef<"BurstSpec"> {
   let mnemonic = "burst_spec";
   let summary = "Describes the burst capabilities of an endpoint";
@@ -94,6 +102,27 @@ def BurstSetAttr : AXI4AttrDef<"BurstSet"> {
       return $_get($_ctxt, sorted);
     }]>
   ];
+}
+
+def WindowAttr : AXI4AttrDef<"Window"> {
+  let mnemonic = "window";
+  let summary = "Describes an access window supported by an endpoint";
+  let description = [{
+    Consists of a base address, an inclusive last address, and the burst specs
+    supported within the window, e.g.
+    `#axi4.window<base = 0x4000, last = 0x40ff, burst_specs = <<fixed, len = 4>>>`.
+  }];
+
+  let parameters = (ins AddressParameter<>:$base,
+                        AddressParameter<>:$last,
+                        "::circt::axi4::BurstSetAttr":$burstSpecs);
+
+  let assemblyFormat = [{
+    `<` `base` `=` $base `,` `last` `=` $last
+        `,` `burst_specs` `=` $burstSpecs `>`
+  }];
+
+  let genVerifyDecl = 1;
 }
 
 #endif // CIRCT_DIALECT_AXI4_AXI4ATTRIBUTES_TD
