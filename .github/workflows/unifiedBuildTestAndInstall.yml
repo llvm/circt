@@ -329,7 +329,7 @@ jobs:
           # other dynamically-linked C++ code: the duplicated libstdc++
           # symbols get interposed process-wide and corrupt the heap. So
           # disable it whenever the Python bindings are enabled.
-          echo cmake="-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON -DCIRCT_ENABLE_FRONTENDS=PyRTG -DLLVM_STATIC_LINK_CXX_STDLIB=OFF -DPython3_EXECUTABLE=\"$PYTHON_EXECUTABLE\" -DPython_EXECUTABLE=\"$PYTHON_EXECUTABLE\"" >> "$GITHUB_OUTPUT"
+          echo cmake="-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON -DCIRCT_ENABLE_FRONTENDS=PyRTG -DLLVM_STATIC_LINK_CXX_STDLIB=OFF -DMLIR_PYTHON_STUBGEN_ENABLED=OFF -DPython3_EXECUTABLE=\"$PYTHON_EXECUTABLE\" -DPython_EXECUTABLE=\"$PYTHON_EXECUTABLE\"" >> "$GITHUB_OUTPUT"
       - name: Integration Test Setup (Generic)
         if: inputs.run_integration_tests
         run: |
