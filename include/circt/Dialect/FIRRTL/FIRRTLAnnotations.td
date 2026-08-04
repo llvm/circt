@@ -1649,21 +1649,6 @@ def TestHarnessPathAnnotation : NoTargetAnnotation {
   }];
 }
 
-def ConvertMemToRegOfVecAnnotation : NoTargetAnnotation {
-  let className = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$";
-  let description = [{
-    Circuit-level annotation that converts all memories in the design to register vectors.
-    This annotation does not target specific memories - it applies to the entire circuit.
-
-    Example:
-    ```json
-    {
-      "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
-    }
-    ```
-  }];
-}
-
 //===----------------------------------------------------------------------===//
 // RocketChip Annotations
 //===----------------------------------------------------------------------===//
