@@ -10,7 +10,6 @@ circuit Top : %[[
     "class":"sifive.enterprise.firrtl.FullAsyncResetAnnotation",
     "target":"~Top|DUTModule>reset"
   },
-  {"class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"},
   {
     "class":"sifive.enterprise.grandcentral.MemTapAnnotation",
     "source":"~Top|DUTModule>rf",
