@@ -34,3 +34,31 @@
 // Check a window may cover the whole address space
 // CHECK: #axi4.window<base = 0x0, last = 0xffffffffffffffff, burst_specs = <<fixed, len = 4>>>
 "test.attrs"() {a = #axi4.window<base = 0x0, last = 0xffffffffffffffff, burst_specs = <<fixed, len = 4>>>} : () -> ()
+
+// CHECK: #axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>>
+"test.attrs"() {a = #axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>>} : () -> ()
+
+// Check window_sets are correctly normalized after parsing
+// CHECK: #axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>, <base = 0x1000, last = 0x10ff, burst_specs = <<incr, len = 8>>>>
+"test.attrs"() {a = #axi4.window_set<<base = 0x1000, last = 0x10ff, burst_specs = <<incr, len = 8>>>, <base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>>} : () -> ()
+// CHECK: #axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>>
+"test.attrs"() {a = #axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>, <base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>>} : () -> ()
+
+// Check overlapping windows are split into disjoint windows unioning their
+// capabilities
+// CHECK: #axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>, <incr, len = 8>>>, <base = 0x100, last = 0xfff, burst_specs = <<fixed, len = 4>>>>
+"test.attrs"() {a = #axi4.window_set<<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>, <base = 0x0, last = 0xff, burst_specs = <<incr, len = 8>>>>} : () -> ()
+
+// Check contiguous windows are merged only if their capabilities match
+// CHECK: #axi4.window_set<<base = 0x0, last = 0x1ff, burst_specs = <<fixed, len = 4>>>>
+"test.attrs"() {a = #axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>, <base = 0x100, last = 0x1ff, burst_specs = <<fixed, len = 4>>>>} : () -> ()
+// CHECK: #axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>, <base = 0x100, last = 0x1ff, burst_specs = <<incr, len = 8>>>>
+"test.attrs"() {a = #axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>, <base = 0x100, last = 0x1ff, burst_specs = <<incr, len = 8>>>>} : () -> ()
+
+// Check a window at the top of the address space is normalized correctly
+// CHECK: #axi4.window_set<<base = 0xfffffffffffff000, last = 0xffffffffffffffff, burst_specs = <<fixed, len = 4>>>>
+"test.attrs"() {a = #axi4.window_set<<base = 0xfffffffffffff000, last = 0xffffffffffffffff, burst_specs = <<fixed, len = 4>>>>} : () -> ()
+
+// Check windows covering the whole address space are merged
+// CHECK: #axi4.window_set<<base = 0x0, last = 0xffffffffffffffff, burst_specs = <<fixed, len = 4>>>>
+"test.attrs"() {a = #axi4.window_set<<base = 0x0, last = 0x7fffffffffffffff, burst_specs = <<fixed, len = 4>>>, <base = 0x8000000000000000, last = 0xffffffffffffffff, burst_specs = <<fixed, len = 4>>>>} : () -> ()
