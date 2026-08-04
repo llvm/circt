@@ -1940,14 +1940,11 @@ struct FIRStmtParser : public FIRParser {
 private:
   ParseResult parseSimpleStmtImpl(unsigned stmtIndent);
 
-  /// Attach invalid values to every element of the value.
-  void emitInvalidate(Value val, Flow flow);
-
   // The FIRRTL specification describes Invalidates as a statement with
   // implicit connect semantics.  The FIRRTL dialect models it as a primitive
   // that returns an "Invalid Value", followed by an explicit connect to make
   // the representation simpler and more consistent.
-  void emitInvalidate(Value val) { emitInvalidate(val, foldFlow(val)); }
+  void emitInvalidate(Value val);
 
   /// Parse an @info marker if present and inform locationProcessor about it.
   ParseResult parseOptionalInfo() {
@@ -2139,54 +2136,23 @@ private:
 } // end anonymous namespace
 
 /// Attach invalid values to every element of the value.
-// NOLINTNEXTLINE(misc-no-recursion)
-void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
-  auto tpe = type_dyn_cast<FIRRTLBaseType>(val.getType());
-  // Invalidate does nothing for non-base types.
-  // When aggregates-of-refs are supported, instead check 'containsReference'
-  // below.
-  if (!tpe)
-    return;
-
-  auto props = tpe.getRecursiveTypeProperties();
-  if (props.isPassive && !props.containsAnalog) {
-    if (flow == Flow::Source)
-      return;
-    emitConnect(builder, val, InvalidValueOp::create(builder, tpe));
-    return;
-  }
-
-  // Recurse until we hit passive leaves.  Connect any leaves which have sink or
-  // duplex flow.
-  //
-  // TODO: This is very similar to connect expansion in the LowerTypes pass
-  // works.  Find a way to unify this with methods common to LowerTypes or to
-  // have LowerTypes to the actual work here, e.g., emitting a partial connect
-  // to only the leaf sources.
-  TypeSwitch<FIRRTLType>(tpe)
-      .Case<BundleType>([&](auto tpe) {
-        for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
-          auto &subfield = moduleContext.getCachedSubaccess(val, i);
-          if (!subfield) {
-            OpBuilder::InsertionGuard guard(builder);
-            builder.setInsertionPointAfterValue(val);
-            subfield = SubfieldOp::create(builder, val, i);
-          }
-          emitInvalidate(subfield,
-                         tpe.getElement(i).isFlip ? swapFlow(flow) : flow);
+void FIRStmtParser::emitInvalidate(Value val) {
+  firrtl::emitInvalidate(
+      builder, val,
+      [&](ImplicitLocOpBuilder &builder, Value parent, unsigned i) -> Value {
+        auto &subaccess = moduleContext.getCachedSubaccess(parent, i);
+        if (!subaccess) {
+          OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPointAfterValue(parent);
+          if (type_isa<BundleType>(parent.getType()))
+            subaccess = SubfieldOp::create(builder, parent, i);
+          else
+            subaccess = SubindexOp::create(
+                builder,
+                type_cast<FVectorType>(parent.getType()).getElementType(),
+                parent, i);
         }
-      })
-      .Case<FVectorType>([&](auto tpe) {
-        auto tpex = tpe.getElementType();
-        for (size_t i = 0, e = tpe.getNumElements(); i != e; ++i) {
-          auto &subindex = moduleContext.getCachedSubaccess(val, i);
-          if (!subindex) {
-            OpBuilder::InsertionGuard guard(builder);
-            builder.setInsertionPointAfterValue(val);
-            subindex = SubindexOp::create(builder, tpex, val, i);
-          }
-          emitInvalidate(subindex, flow);
-        }
+        return subaccess;
       });
 }
 
