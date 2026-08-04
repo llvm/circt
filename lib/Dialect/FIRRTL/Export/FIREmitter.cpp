@@ -45,12 +45,7 @@ constexpr size_t defaultTargetLineLength = 80;
 struct Emitter {
   Emitter(llvm::raw_ostream &os, FIRVersion version,
           size_t targetLineLength = defaultTargetLineLength)
-      // A target line length of 0 disables line wrapping so drop to default in
-      // that case to avoid triggering an assertion
-      : pp(os, targetLineLength ? targetLineLength : defaultTargetLineLength, 0,
-           0, PrettyPrinter::kInfinity / 4, nullptr,
-           /*noWrap=*/targetLineLength == 0),
-        ps(pp, saver), version(version) {
+      : pp(os, targetLineLength), ps(pp, saver), version(version) {
     pp.setListener(&saver);
   }
   LogicalResult finalize();

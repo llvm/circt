@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/PrettyPrinter.h"
 #include "mlir/IR/BuiltinOps.h"
 
 using namespace circt;
@@ -73,6 +74,10 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       if (option.getAsInteger(10, emittedLineLength)) {
         errorHandler("expected integer source width");
         emittedLineLength = DEFAULT_LINE_LENGTH;
+      } else if (emittedLineLength > MAX_LINE_LENGTH) {
+        errorHandler("line length '" + Twine(emittedLineLength) +
+                     "' exceeds maximum of " + Twine(MAX_LINE_LENGTH));
+        emittedLineLength = MAX_LINE_LENGTH;
       }
     } else if (option == "explicitBitcast") {
       explicitBitcast = true;
@@ -218,3 +223,8 @@ void LoweringOptions::parseFromAttribute(ModuleOp module) {
   if (auto styleAttr = getAttributeFrom(module))
     parse(styleAttr.getValue(), [&](Twine error) { module.emitError(error); });
 }
+
+static_assert((LoweringOptions::MAX_LINE_LENGTH ==
+               pretty::PrettyPrinter::kMaxMargin) &&
+              "Exported limits for emitted line length not aligned with "
+              "underlying maximum supported");

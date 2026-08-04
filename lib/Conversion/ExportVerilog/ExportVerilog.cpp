@@ -1021,7 +1021,7 @@ public:
       : designOp(designOp), shared(shared), options(options),
         symbolCache(symbolCache), globalNames(globalNames),
         fileMapping(fileMapping), os(os), verilogLocMap(verilogLocMap),
-        pp(os, options.emittedLineLength), fileName(fileName) {
+        pp(os, options.getEmittedLineLength().value_or(0)), fileName(fileName) {
     pp.setListener(&saver);
   }
   /// This is the root mlir::ModuleOp that holds the whole design being emitted.
@@ -1319,7 +1319,9 @@ void EmitterBase::emitComment(StringAttr comment) {
   // Set a line length for the comment.  Subtract off the leading comment and
   // space ("// ") as well as the current indent level to simplify later
   // arithmetic.  Ensure that this line length doesn't go below zero.
-  auto lineLength = std::max<size_t>(state.options.emittedLineLength, 3) - 3;
+  std::optional<size_t> lineLength = state.options.getEmittedLineLength();
+  if (lineLength)
+    lineLength = std::max<size_t>(*lineLength, 3) - 3;
 
   // Process the comment in line chunks extracted from manually specified line
   // breaks.  This is done to preserve user-specified line breaking if used.
@@ -1333,7 +1335,7 @@ void EmitterBase::emitComment(StringAttr comment) {
       ps << "// ";
 
       // Base case 1: the entire comment fits on one line.
-      if (line.size() <= lineLength) {
+      if (!lineLength || line.size() <= lineLength) {
         ps << PPExtString(line);
         setPendingNewline();
         break;
@@ -1346,10 +1348,10 @@ void EmitterBase::emitComment(StringAttr comment) {
       //      and break there.
       // This algorithm violates the emittedLineLength if (2) ever occurrs,
       // but it's dead simple.
-      auto breakPos = line.rfind(' ', lineLength);
+      auto breakPos = line.rfind(' ', *lineLength);
       // No whitespace exists looking backwards.
       if (breakPos == StringRef::npos) {
-        breakPos = line.find(' ', lineLength);
+        breakPos = line.find(' ', *lineLength);
         // No whitespace exists looking forward (you hit the end of the
         // string).
         if (breakPos == StringRef::npos)
@@ -5768,9 +5770,10 @@ void StmtEmitter::emitInstancePortList(Operation *op,
   // Get the max port name length so we can align the '('.
   // Exclude outlier names that span the whole line from the alignment column.
   size_t maxNameLength = 0;
+  auto lineLength = state.options.getEmittedLineLength();
   for (auto &elt : modPortInfo) {
     size_t nameLength = elt.getVerilogName().size();
-    if (nameLength <= state.options.emittedLineLength / 3)
+    if (!lineLength || nameLength <= *lineLength / 3)
       maxNameLength = std::max(maxNameLength, nameLength);
   }
 
@@ -6394,11 +6397,12 @@ void ModuleEmitter::emitBind(BindOp op) {
     // Get the max port name length so we can align the '('.
     // Exclude outlier names longer than the line.
     size_t maxNameLength = 0;
+    auto lineLength = state.options.getEmittedLineLength();
     for (auto &elt : childPortInfo) {
       auto portName = elt.getVerilogName();
       elt.name = Builder(inst.getContext()).getStringAttr(portName);
       size_t nameLength = elt.getName().size();
-      if (nameLength <= state.options.emittedLineLength / 3)
+      if (!lineLength || nameLength <= *lineLength / 3)
         maxNameLength = std::max(maxNameLength, nameLength);
     }
 
