@@ -1006,10 +1006,10 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
       nextHasFlatten = info.hasFlatten;
       nextIsRegular = isa<FModuleOp>(modOp);
     }
-    // - A hop evaporates only when a plain regular-module instance is absorbed.
+    // - A hop 'evaporates' only when an instance is inlined.
     // - Terminal hops never evaporate (I8).
-    // - Non-regular modules are never absorbed; their instances relocate.
-    // - Neither are instance_choice hops; they relocate with the choice op.
+    // - Non-regular modules are never inlined; their instances relocate.
+    // - Neither are opaque instantiations; they relocate with their operation.
     bool isEvaporating = nextModName && nextIsRegular && !isOpaqueInstanceHop &&
                          (isTransitiveFlatten || nextHasInline);
 
