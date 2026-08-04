@@ -176,7 +176,7 @@ firrtl.circuit "Issue10908" {
     // expected-note @below {{hierpath targets this inlined instance}}
     firrtl.instance j sym @j {annotations = [{circt.nonlocal = @nla, class = "test"}]} @X()
   }
-  // expected-note @below {{flattening this module absorbs the instance}}
+  // expected-note @below {{flattening this module inlines the instance}}
   firrtl.module @Issue10908() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
     firrtl.instance m sym @m @Mid()
   }
@@ -205,7 +205,7 @@ firrtl.circuit "Issue10908Inline" {
 
 // The named flatten culprit is scope-aware: a flatten above a choice hop is
 // not a cause (the choice began a fresh scope).  The note must point at the
-// most recent flatten in the scope that absorbed the terminal.
+// most recent flatten in the scope that inlined the terminal.
 
 firrtl.circuit "Issue10908ChoiceScopedCause" {
   firrtl.option @Platform {
@@ -214,7 +214,7 @@ firrtl.circuit "Issue10908ChoiceScopedCause" {
   // expected-error @below {{hierpath points to inlined instance, cannot proceed}}
   hw.hierpath private @nla [@Issue10908ChoiceScopedCause::@c, @Mid::@i]
   firrtl.module private @Inner() {}
-  // expected-note @below {{flattening this module absorbs the instance}}
+  // expected-note @below {{flattening this module inlines the instance}}
   firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
     // expected-note @below {{hierpath targets this inlined instance}}
     firrtl.instance i sym @i {annotations = [{circt.nonlocal = @nla, class = "test"}]} @Inner()
@@ -229,7 +229,7 @@ firrtl.circuit "Issue10908ChoiceScopedCause" {
 
 // -----
 
-// The terminal may be absorbed in only some of a hierpath's contexts!
+// The terminal may be inlined in only some of a hierpath's contexts!
 // Here, @Mid is flattened into one parent and kept under the other.
 // Diagnosed conservatively (any broken context rejects); future work will
 // instead demote only the broken context.
@@ -242,7 +242,7 @@ firrtl.circuit "Issue10908MixedContexts" {
     // expected-note @below {{hierpath targets this inlined instance}}
     firrtl.instance j sym @j {annotations = [{circt.nonlocal = @nla, class = "test"}]} @X()
   }
-  // expected-note @below {{flattening this module absorbs the instance}}
+  // expected-note @below {{flattening this module inlines the instance}}
   firrtl.module private @FlatParent() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
     firrtl.instance m sym @m @Mid()
   }

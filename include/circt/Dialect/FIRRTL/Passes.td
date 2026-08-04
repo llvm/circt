@@ -147,14 +147,13 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let summary = "Performs inlining, flattening, and dead module elimination";
   let description = [{
     Inline the body of every instance whose target module is annotated inline,
-    and recursively absorb every plain instance under a module annotated
+    and recursively inline every plain instance under a module annotated
     flatten.  Inlined entities keep their names, prefixed with the instance
     name.
 
-    Modules with no remaining use, whether arriving unused or fully absorbed
-    by inlining, are erased.  Modules referenced by symbol, or instantiated
-    by an operation the pass cannot inline through (e.g.,
-    `firrtl.instance_choice`), are retained.
+    Modules with no remaining use, whether arriving unused or inlined away, are
+    erased.  Modules referenced by symbol, or instantiated by an operation the
+    pass cannot inline through (e.g., `firrtl.instance_choice`), are retained.
 
     Hierarchical paths remain valid across inlining.  A surviving path keeps
     its symbol, retargeted to one surviving context.  Its other contexts get
@@ -176,7 +175,7 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
     Statistic<"numInstancesInlined", "num-instances-inlined",
       "Number of instances inlined into their parent">,
     Statistic<"numInstancesFlattened", "num-instances-flattened",
-      "Number of instances absorbed by flattening">,
+      "Number of instances inlined by flattening">,
     Statistic<"numDeadModules", "num-dead-modules",
       "Number of unreachable modules erased">,
     Statistic<"numHierPathsUpdated", "num-hierpaths-updated",

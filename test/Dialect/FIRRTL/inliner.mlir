@@ -1649,14 +1649,14 @@ firrtl.circuit "InstanceChoiceWithFlattening" {
 // -----
 
 // A choice target begins a fresh flatten scope: its own flatten annotation
-// absorbs the path below it, even though no flatten reaches through the
+// inlines the path below it, even though no flatten reaches through the
 // choice from above.
 // CHECK-LABEL: firrtl.circuit "ChoiceTargetFlattens"
 firrtl.circuit "ChoiceTargetFlattens" {
   firrtl.option @Platform {
     firrtl.option_case @FPGA
   }
-  // The @Impl::@leaf hop is absorbed by @Impl's own flatten.
+  // The @Impl::@leaf hop is inlined by @Impl's own flatten.
   // CHECK: hw.hierpath private @nla [@ChoiceTargetFlattens::@c, @Impl::@w]
   hw.hierpath private @nla [@ChoiceTargetFlattens::@c, @Impl::@leaf, @Leaf::@w]
   firrtl.module private @Leaf() {
@@ -2123,7 +2123,7 @@ firrtl.circuit "AnnoSplit" {
 // -----
 //===--- Flatten: non-regular terminals
 //
-// Flatten only absorbs regular-module subtrees: an instance of a non-regular
+// Flatten only inlines regular-module subtrees: an instance of a non-regular
 // module (extmodule here) survives, relocated into the flattening module, and a
 // hierpath terminating at that module must relocate with it, not be treated as
 // fully collapsed (which silently dropped the extmodule's annotation and the
@@ -2206,11 +2206,11 @@ firrtl.circuit "Top" {
 // A module carrying both inline and flatten annotations.
 //
 // The two compose: the module is inlined into its parent (inline), and its
-// whole subtree is absorbed as it goes (flatten). @M is inline+flatten, so @M,
+// whole subtree is inlined as it goes (flatten). @M is inline+flatten, so @M,
 // and everything below it (@A, @B), collapses into @Top.
 //
 // This differs from either alone: pure inline would leave @A/@B as instances in
-// @Top; pure flatten would keep @M as a module with its subtree absorbed into
+// @Top; pure flatten would keep @M as a module with its subtree inlined into
 // it.
 
 // CHECK-LABEL:  firrtl.circuit "InlineFlattenCombo"
@@ -2351,7 +2351,7 @@ firrtl.circuit "ChoiceHopInlineTarget" {
 
 // The module holding the choice hop is itself inlined: the choice op relocates
 // into the parent and the hop is retargeted with it; an instance_choice is
-// never absorbed, so the hop never evaporates.
+// never inlined, so the hop never evaporates.
 // CHECK-LABEL:  firrtl.circuit "ChoiceHopParentInlined"
 firrtl.circuit "ChoiceHopParentInlined" {
   firrtl.option @Opt {
@@ -2383,7 +2383,7 @@ firrtl.circuit "ChoiceHopParentInlined" {
 // still references it), and each plain-instance copy forks its own context.
 //
 // No context is enumerated "through" the choice; that instantiation is never
-// absorbed.
+// inlined.
 // CHECK-LABEL:  firrtl.circuit "ChoiceRootRetained"
 firrtl.circuit "ChoiceRootRetained" {
   firrtl.option @Opt {
@@ -2414,7 +2414,7 @@ firrtl.circuit "ChoiceRootRetained" {
 // -----
 
 // Flatten must stop at an instance_choice: the choice target is retained
-// (never absorbed), so a subtree reached through a choice is not localized by
+// (never inlined), so a subtree reached through a choice is not localized by
 // an ancestor's flatten, and a hierpath routing through the choice survives
 // verbatim.
 // CHECK-LABEL:  firrtl.circuit "FlattenChoiceHopRetained"
@@ -2443,11 +2443,11 @@ firrtl.circuit "FlattenChoiceHopRetained" {
 // -----
 
 // A hierpath terminating at instance_choice survives inlining around it:
-// these hops relocate rather than absorb, so the terminal stays valid.
+// these hops relocate rather than inline, so the terminal stays valid.
 //
 // The path re-roots to the relocated op and the annotation localizes.
 //
-// (Contrast issue #10908: a terminal at a plain absorbed instance diagnoses.)
+// (Contrast issue #10908: a terminal at a plain inlined instance diagnoses.)
 
 // CHECK-LABEL:  firrtl.circuit "ChoiceTerminalSurvives"
 firrtl.circuit "ChoiceTerminalSurvives" {
@@ -2469,14 +2469,14 @@ firrtl.circuit "ChoiceTerminalSurvives" {
 
 // -----
 
-// The #10908 diagnostic is specific to the pointed-at instance: absorbing a
+// The #10908 diagnostic is specific to the pointed-at instance: inlining a
 // /different/ instance of the same module (here under a flatten root) must not
 // reject a hierpath whose own terminal instance survives.
 
-// CHECK-LABEL:  firrtl.circuit "TerminalOtherInstanceAbsorbed"
-firrtl.circuit "TerminalOtherInstanceAbsorbed" {
-  // CHECK:          hw.hierpath private @nla [@TerminalOtherInstanceAbsorbed::@p, @Keep::@j]
-  hw.hierpath private @nla [@TerminalOtherInstanceAbsorbed::@p, @Keep::@j]
+// CHECK-LABEL:  firrtl.circuit "TerminalOtherInstanceInlined"
+firrtl.circuit "TerminalOtherInstanceInlined" {
+  // CHECK:          hw.hierpath private @nla [@TerminalOtherInstanceInlined::@p, @Keep::@j]
+  hw.hierpath private @nla [@TerminalOtherInstanceInlined::@p, @Keep::@j]
   firrtl.module private @X() {
     %w = firrtl.wire : !firrtl.uint<1>
   }
@@ -2487,7 +2487,7 @@ firrtl.circuit "TerminalOtherInstanceAbsorbed" {
   firrtl.module private @FlatParent() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
     firrtl.instance x @X()
   }
-  firrtl.module @TerminalOtherInstanceAbsorbed() {
+  firrtl.module @TerminalOtherInstanceInlined() {
     firrtl.instance p sym @p @Keep()
     firrtl.instance f @FlatParent()
   }

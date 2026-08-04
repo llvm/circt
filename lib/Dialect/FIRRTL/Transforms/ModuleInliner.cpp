@@ -61,7 +61,7 @@
 //          refines to the actual root.  This and InliningFacts (P1) leave the
 //          IR untouched in all cases.
 //  * P3  Clone (Inliner):
-//          Top-down walk absorbing marked bodies into parents: patching
+//          Top-down walk inlining marked bodies into parents: patching
 //          inner-symbol users, filling hops' final symbols, recording
 //          nonlocal-annotation ownership.  Writes no annotation.
 //  * P4  Write back:
@@ -199,29 +199,19 @@ using InnerRefToNewNameMap = DenseMap<hw::InnerRefAttr, StringAttr>;
 
 namespace {
 
-/// Answer the operation-kind part of absorbability: is this a construct the
-/// pass can splice a body through at all?
+/// Return the instance if the pass can splice a body through this operation.
+/// Today that is exactly a plain InstanceOp.
 ///
-/// Centralize this for use throughout.
+/// Non-null answers the operation kind and nothing more.
+/// Whether the instance is inlined also depends on its target being a regular
+/// firrtl.module, and on the inline/flatten marks.
+/// Null is definitive: the pass never splices through anything else.
 ///
-/// Today that is exactly whether the operation is a plain InstanceOp.
-///
-/// Absorbing an instance takes three checks (AND'd):
-/// 1. this one (operation kind)
-/// 2. the target (a regular firrtl.module)
-/// 3. policy (inline/flatten marks)
-///
-/// Accordingly if this predicate returns null, that is definitive.
-///
-/// Note: This doesn't have to be tied to the operation kind: more precisely
-/// this is the meet over the operation's possible targets in the instance
-/// graph.  This framing would allow inlining through instance choice where all
-/// alternatives name the same module.  This is unlikely to matter in practice
-/// but is mentioned here to help a potential future instantiation kind slot in.
-/// Similarly exploring changes to 2 or 3 above fits into same framing neatly.
-///
-/// This implementation is the conservative approximation of that meet.
-static InstanceOp getAbsorbableInstance(Operation *op) {
+/// The operation kind is a conservative stand-in for the precise question,
+/// the meet over the operation's possible targets in the instance graph.
+/// Under that framing an instance_choice naming one module throughout would be
+/// inlinable, and a new instantiation kind slots in by answering that meet.
+static InstanceOp getInlinableInstance(Operation *op) {
   return dyn_cast_or_null<InstanceOp>(op);
 }
 
@@ -397,10 +387,10 @@ InliningFacts::compute(CircuitOp circuit, InstanceGraph &instanceGraph,
         return emitError(module.getLoc()) << "inline/flatten annotations are "
                                              "only valid on a 'firrtl.module'";
 
-      // Does anything opaque (see getAbsorbableInstance) instantiate this?
+      // Does anything opaque (see getInlinableInstance) instantiate this?
       auto instantiators = instanceGraph.lookup(module)->uses();
       auto opaqueRecIt = llvm::find_if(instantiators, [](InstanceRecord *rec) {
-        return !getAbsorbableInstance(rec->getInstance());
+        return !getInlinableInstance(rec->getInstance());
       });
       bool hasOpaqueUse = opaqueRecIt != instantiators.end();
 
@@ -904,11 +894,11 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
     ++frame.currentEdge;
 
     auto *instOp = edge->getInstance().getOperation();
-    // Only climb through absorbable instances (see getAbsorbableInstance).
+    // Only climb through inlinable instances (see getInlinableInstance).
     // Opaque instantiations keep their targets alive and are handled above.
     //
     // There is no copy in this parent to enumerate -> don't climb!
-    if (!getAbsorbableInstance(instOp))
+    if (!getInlinableInstance(instOp))
       continue;
     auto parentName = edge->getParent()->getModule().getModuleNameAttr();
     currentPath.push_back({parentName, instOp, getInnerSymName(instOp)});
@@ -928,7 +918,7 @@ size_t NLAPlanner::minimalRootIndex(ArrayRef<PathHop> upperPath,
   // The namepath itself is the user's spec and is never trimmed.
   //
   // This rooting is coupled to inline/flatten knowledge.
-  // A new way for a module to be absorbed or relocated must re-derive it,
+  // A new way for a module to be inlined away or relocated must re-derive it,
   // or a surviving root is misidentified (misrouted annotation; I9 churn).
   //
   // Inline and flatten act differently, deciding how deep to root:
@@ -994,9 +984,9 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
     bool isTerminal = it == end;
     bool nextIsRegular = false;
 
-    // A hop's operation is null, absorbable, or opaque
-    // (see getAbsorbableInstance).
-    auto hopInst = getAbsorbableInstance(hop.inst);
+    // A hop's operation is null, inlinable, or opaque
+    // (see getInlinableInstance).
+    auto hopInst = getInlinableInstance(hop.inst);
     bool isOpaqueInstanceHop = hop.inst && !hopInst;
 
     // Interior hops read the recorded next module; a terminal names one only
@@ -1045,7 +1035,7 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
         // cause; the choice began a fresh scope.
         assert(flattenCause && "flatten-caused absorption without a cause");
         diag.attachNote(symbolTable.lookup(flattenCause)->getLoc())
-            << "flattening this module absorbs the instance";
+            << "flattening this module inlines the instance";
       }
       return failure();
     }
@@ -1228,7 +1218,7 @@ static hw::InnerSymAttr uniqueInNamespace(hw::InnerSymAttr old,
 /// Inlines, flattens, and removes dead modules in a circuit.
 ///
 /// The inliner works top-down, in parents-before-children order.
-/// Only live modules (I1) are visited; every marked instance is absorbed.
+/// Only live modules (I1) are visited; every marked instance is inlined.
 /// Each operation clones directly to its final location.
 /// Dead modules are erased at the end.
 ///
@@ -1248,8 +1238,8 @@ public:
 
   /// Work counters, copied into the pass statistics after run().
   struct Statistics {
-    size_t instancesInlined = 0;   ///< Instances absorbed via inline.
-    size_t instancesFlattened = 0; ///< Instances absorbed via flatten.
+    size_t instancesInlined = 0;   ///< Inlined via an inline mark.
+    size_t instancesFlattened = 0; ///< Inlined via flatten.
     size_t deadModules = 0;        ///< Modules erased after inlining.
     size_t hierPathsUpdated = 0;   ///< HierPaths retargeted in place.
     size_t hierPathsForked = 0;    ///< Fork contexts emitted as new hierpaths.
@@ -1377,17 +1367,17 @@ private:
 
   /// Clone a target module's body into the insertion point of the builder,
   /// renaming all operations using the prefix, and recurse into the instances
-  /// the pass absorbs.
+  /// the pass inlines.
   ///
-  /// Under `flatten` every regular-module child is absorbed,
-  /// otherwise this absorbs only the children marked for inlining.
+  /// Under `flatten` every regular-module child is inlined,
+  /// otherwise only the children marked for it.
   /// (A flatten-marked child switches its subtree into flatten mode.)
   ///
   /// Does not trigger inlining on the target itself.
   LogicalResult processInto(StringRef prefix, InliningLevel &il,
                             IRMapping &mapper, bool flatten);
 
-  /// Replace with its body every instance in `module` the pass absorbs:
+  /// Replace with its body every instance in `module` the pass inlines:
   /// every regular-module instance when `flatten` is set, otherwise the ones
   /// marked for inlining.
   LogicalResult processInstances(FModuleOp module, bool flatten);
@@ -1908,8 +1898,8 @@ LogicalResult Inliner::processInto(StringRef prefix, InliningLevel &il,
                           << il.mic.module.getModuleName() << "\n");
 
   auto visit = [&](Operation *op) {
-    // If the pass can't absorb through it, clone it and continue.
-    auto instance = getAbsorbableInstance(op);
+    // If the pass can't inline through it, clone it and continue.
+    auto instance = getInlinableInstance(op);
     if (!instance) {
       cloneAndRename(prefix, il, mapper, *op);
       return success();
@@ -1925,7 +1915,7 @@ LogicalResult Inliner::processInto(StringRef prefix, InliningLevel &il,
       return success();
     }
 
-    // Flatten absorbs every child; inlining only those marked for it.
+    // Flatten inlines every child; otherwise only those marked for it.
     // A child the pass keeps is cloned as a live instance.
     if (!flatten && !shouldInline(childModule)) {
       assert(inliningFacts.isLive(childModule) &&
@@ -1965,7 +1955,7 @@ LogicalResult Inliner::processInstances(FModuleOp module, bool flatten) {
   LLVM_DEBUG(llvm::dbgs() << "inlining instances within " << moduleName
                           << "...\n");
   auto visit = [&](FInstanceLike instanceLike) {
-    auto instance = getAbsorbableInstance(instanceLike.getOperation());
+    auto instance = getInlinableInstance(instanceLike.getOperation());
     if (!instance)
       return WalkResult::advance();
     // Not a regular module: uninlinable; the analysis marked it live.
@@ -1977,7 +1967,7 @@ LogicalResult Inliner::processInstances(FModuleOp module, bool flatten) {
       return WalkResult::advance();
     }
 
-    // Flatten absorbs every child; inlining only those marked for it.
+    // Flatten inlines every child; otherwise only those marked for it.
     if (!flatten && !shouldInline(target))
       return WalkResult::advance();
 
