@@ -42,6 +42,16 @@ void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs,
                  llvm::function_ref<Location()> getDiagLoc,
                  bool warnOnTruncation = false);
 
+/// Emit the IR equivalent of the FIRRTL `is invalid` statement: connect an
+/// invalid value to every sink- or duplex-flow leaf reachable from `val`.
+/// `getSubaccess` returns the subfield/subindex value for (parent, index);
+/// it may create the operation or reuse an existing one.
+void emitInvalidate(
+    ImplicitLocOpBuilder &builder, Value val,
+    llvm::function_ref<Value(ImplicitLocOpBuilder &, Value, unsigned)>
+        getSubaccess,
+    bool warnOnTruncation = false);
+
 /// Utiility for generating a constant attribute.
 IntegerAttr getIntAttr(Type type, const APInt &value);
 

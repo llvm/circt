@@ -225,6 +225,66 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     ConnectOp::create(builder, dst, src);
 }
 
+//===----------------------------------------------------------------------===//
+// emitInvalidate
+//===----------------------------------------------------------------------===//
+
+// NOLINTNEXTLINE(misc-no-recursion)
+static void emitInvalidateImpl(
+    ImplicitLocOpBuilder &builder, Value val, Flow flow,
+    llvm::function_ref<Value(ImplicitLocOpBuilder &, Value, unsigned)>
+        getSubaccess,
+    bool warnOnTruncation) {
+  auto tpe = type_dyn_cast<FIRRTLBaseType>(val.getType());
+  // Invalidate does nothing for non-base types.
+  // When aggregates-of-refs are supported, instead check 'containsReference'
+  // below.
+  if (!tpe)
+    return;
+
+  auto props = tpe.getRecursiveTypeProperties();
+  if (props.isPassive && !props.containsAnalog) {
+    if (flow == Flow::Source)
+      return;
+    emitConnect(builder, val, InvalidValueOp::create(builder, tpe),
+                warnOnTruncation);
+    return;
+  }
+
+  // Recurse until we hit passive leaves.  Connect any leaves which have sink or
+  // duplex flow.
+  //
+  // TODO: This is very similar to connect expansion in the LowerTypes pass
+  // works.  Find a way to unify this with methods common to LowerTypes or to
+  // have LowerTypes to the actual work here, e.g., emitting a partial connect
+  // to only the leaf sources.
+  TypeSwitch<FIRRTLType>(tpe)
+      .Case<BundleType>([&](auto tpe) {
+        for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
+          auto subfield = getSubaccess(builder, val, i);
+          emitInvalidateImpl(builder, subfield,
+                             tpe.getElement(i).isFlip ? swapFlow(flow) : flow,
+                             getSubaccess, warnOnTruncation);
+        }
+      })
+      .Case<FVectorType>([&](auto tpe) {
+        for (size_t i = 0, e = tpe.getNumElements(); i != e; ++i) {
+          auto subindex = getSubaccess(builder, val, i);
+          emitInvalidateImpl(builder, subindex, flow, getSubaccess,
+                             warnOnTruncation);
+        }
+      });
+}
+
+void circt::firrtl::emitInvalidate(
+    ImplicitLocOpBuilder &builder, Value val,
+    llvm::function_ref<Value(ImplicitLocOpBuilder &, Value, unsigned)>
+        getSubaccess,
+    bool warnOnTruncation) {
+  emitInvalidateImpl(builder, val, foldFlow(val), getSubaccess,
+                     warnOnTruncation);
+}
+
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
   auto intType = type_cast<IntType>(type);
   assert((!intType.hasWidth() ||
