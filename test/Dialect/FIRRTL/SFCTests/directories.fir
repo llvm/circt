@@ -10,6 +10,7 @@ FIRRTL version 4.0.0
 circuit TestHarness:
   ; Foo* are instantiated only by the TestHarness
   module Foo:
+    input reset : AsyncReset
 
     mem foo_m :
       data-type => UInt<8>
@@ -37,6 +38,7 @@ circuit TestHarness:
 
   ; Bar* are instantiated only by the DUT
   module Bar:
+    input reset : AsyncReset
 
     mem bar_m :
       data-type => UInt<8>
@@ -64,6 +66,7 @@ circuit TestHarness:
 
   ; Baz* are instantiated by both the TestHarness and the DUT
   module Baz:
+    input reset : AsyncReset
 
     mem baz_m :
       data-type => UInt<8>
@@ -92,33 +95,40 @@ circuit TestHarness:
   ; This is the design-under-test.  This is marked as such by a separate,
   ; optional annotation file.
   module DUT:
+    input reset : AsyncReset
 
     inst bar of Bar
+    connect bar.reset, reset
     inst bar_bbox of Bar_BlackBox
     inst baz of Baz
+    connect baz.reset, reset
     inst baz_bbox of Baz_BlackBox
 
   ; This is the Test Harness, i.e., the top of the design.
   public module TestHarness:
+    input reset : AsyncReset
 
     inst foo of Foo
+    connect foo.reset, reset
     inst foo_bbox of Foo_BlackBox
     inst dut of DUT
+    connect dut.reset, reset
     inst baz of Baz
+    connect baz.reset, reset
     inst baz_bbox of Baz_BlackBox
 
 
-; CHECK:            module Foo()
+; CHECK:            module Foo(
 ; MEMTOREG_DUT-NOT:   reg [7:0] foo_combmem
 ; MEMTOREG_NODUT:     reg [7:0] foo_combmem
 ; CHECK:            endmodule
 
-; CHECK:            module Bar()
+; CHECK:            module Bar(
 ; MEMTOREG_DUT:       reg [7:0] bar_combmem
 ; MEMTOREG_NODUT:     reg [7:0] bar_combmem
 ; CHECK:            endmodule
 
-; CHECK:            module Baz()
+; CHECK:            module Baz(
 ; MEMTOREG_DUT:       reg [7:0] baz_combmem
 ; MEMTOREG_NODUT:     reg [7:0] baz_combmem
 ; CHECK:            endmodule

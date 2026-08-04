@@ -6,6 +6,10 @@ circuit Top : %[[
     "class":"firrtl.transforms.DontTouchAnnotation",
     "target":"~Top|Top>memTap"
   },
+  {
+    "class":"sifive.enterprise.firrtl.FullAsyncResetAnnotation",
+    "target":"~Top|DUTModule>reset"
+  },
   {"class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"},
   {
     "class":"sifive.enterprise.grandcentral.MemTapAnnotation",
@@ -24,7 +28,7 @@ circuit Top : %[[
 ]]
   module DUTModule :
     input clock : Clock
-    input reset : Reset
+    input reset : AsyncReset
     output io : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}
 
     cmem rf : UInt<8> [8]
@@ -36,7 +40,7 @@ circuit Top : %[[
 
   public module Top :
     input clock : Clock
-    input reset : UInt<1>
+    input reset : AsyncReset
     output io : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}
 
     inst dut of DUTModule
