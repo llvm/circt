@@ -632,6 +632,8 @@ private:
                         SmallVectorImpl<SmallVector<PathHop>> &discoveredPaths);
 
   /// Create a VirtualNLA for one concrete path context.
+  /// The new context lands in `allVNLAs` and in `pathRoutingTable`.
+  /// The result carries only whether planning this context succeeded.
   LogicalResult
   processSinglePathContext(StringAttr origSym,
                            const SmallVectorImpl<PathHop> &absPath,
