@@ -327,7 +327,8 @@ Type WindowType::getLoweredType() const {
 
           if (!isBulkTransferData) {
             // Streaming mode: add _size and last fields.
-            // _size is clog2(numItems) in width.
+            // _size holds (number of valid items - 1); the count is never zero,
+            // so a full frame is numItems - 1 and clog2(numItems) bits suffice.
             fields.push_back(
                 {StringAttr::get(
                      getContext(),

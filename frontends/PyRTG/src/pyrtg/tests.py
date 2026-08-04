@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .base import ir
-from .core import CodeGenRoot, CodeGenObject
+from .core import CodeGenContext, CodeGenRoot, CodeGenObject
 from .rtg import rtg
 from .support import _FromCirctValue
 from .configs import PythonParam
@@ -30,7 +30,9 @@ class Test(CodeGenRoot):
   def name(self) -> str:
     return self.test_func.__name__
 
-  def _codegen(self):
+  def _codegen(self, context: CodeGenContext):
+    self.context = context
+
     # Sort arguments by name
     params_sorted = self.config.get_params()
     params_sorted.sort(key=lambda param: param.get_name())

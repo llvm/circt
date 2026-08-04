@@ -402,6 +402,56 @@ class HostMemReq(Module):
     _ = HostMem.write(appid=AppID("host_mem_write_req"), req=write_req)
 
 
+# Exercises the HostMem burst/list interface: read_req_burst_type(),
+# write_window(), read_list() (-> read_window()/read_list_from_bundle()) and
+# write() with a list (-> write_from_bundle()). The list windows are the
+# 'parallel' (default) framing: a single frame carrying 'num_items' items.
+# CHECK-LABEL:  hw.module @HostMemListReq()
+# read_list: {address, tag, length} request, parallel windowed list response.
+# CHECK:          esi.service.req <@_HostMem::@read_list>(#esi.appid<"host_mem_read_list">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui64>> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<ui256>>, [<"", [<"tag">, <"data", 4>]>]>> to "resp"]>
+# write with a list: wrap a parallel write window and send it on the 'write' port.
+# CHECK:          esi.window.wrap %{{.+}} : !esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<ui256>>, [<"", [<"address">, <"tag">, <"data", 4>]>]>
+# CHECK:          esi.service.req <@_HostMem::@write>(#esi.appid<"host_mem_write_list">) : !esi.bundle<[!esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<ui256>>, [<"", [<"address">, <"tag">, <"data", 4>]>]>> from "req", !esi.channel<ui8> to "ackTag"]>
+# CHECK:        esi.service.std.hostmem @_HostMem
+@unittestmodule(esi_sys=True)
+class HostMemListReq(Module):
+
+  @generator
+  def build(ports):
+    u64 = UInt(64)(0)
+    c1 = Bits(1)(0)
+
+    # Burst (list) read: exercises read_req_burst_type(), read_window() and
+    # read_list() (-> read_list_from_bundle()).
+    burst_req, _ = Channel(esi.HostMem.read_req_burst_type()).wrap(
+        esi.HostMem.read_req_burst_type()({
+            "address": u64,
+            "tag": UInt(8)(0),
+            "length": UInt(64)(0),
+        }), c1)
+    _ = HostMem.read_list(appid=AppID("host_mem_read_list"),
+                          req=burst_req,
+                          element_type=UInt(256),
+                          num_items=4)
+
+    # Windowed (list) write: exercises write_window() and write() with a list
+    # (-> write_from_bundle()).
+    write_win = esi.HostMem.write_window(UInt(256), 4)
+    lowered = write_win.lowered_type
+    frame_val = lowered({
+        "address": u64,
+        "tag": UInt(8)(0),
+        "data": [UInt(256)(0),
+                 UInt(256)(0),
+                 UInt(256)(0),
+                 UInt(256)(0)],
+        "data_size": Bits(2)(0),
+        "last": c1,
+    })
+    write_frame, _ = Channel(write_win).wrap(write_win.wrap(frame_val), c1)
+    _ = HostMem.write(appid=AppID("host_mem_write_list"), req=write_frame)
+
+
 def Writer(type):
 
   class Writer(Module):

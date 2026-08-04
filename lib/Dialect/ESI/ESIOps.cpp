@@ -565,8 +565,13 @@ RequestConnectionOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
   if (failed(svcPort))
     return failure();
-  return checkBundleTypeMatch(*this, svcPort->type, getToClient().getType(),
-                              false);
+  if (failed(checkBundleTypeMatch(*this, svcPort->type, getToClient().getType(),
+                                  false)))
+    return failure();
+  auto svcDecl = getServiceDecl(*this, symbolTable, getServicePortAttr());
+  if (failed(svcDecl))
+    return failure();
+  return svcDecl->verifyRequest(*svcPort, getToClient().getType(), *this);
 }
 
 LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
@@ -574,8 +579,13 @@ LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
   auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
   if (failed(svcPort))
     return failure();
-  return checkBundleTypeMatch(*this, svcPort->type, getToClient().getType(),
-                              true);
+  if (failed(checkBundleTypeMatch(*this, svcPort->type, getToClient().getType(),
+                                  true)))
+    return failure();
+  auto svcDecl = getServiceDecl(*this, symbolTable, getServicePortAttr());
+  if (failed(svcDecl))
+    return failure();
+  return svcDecl->verifyRequest(*svcPort, getToClient().getType(), *this);
 }
 
 void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {

@@ -1,4 +1,4 @@
-// REQUIRES: z3
+// REQUIRES: z3-integration
 // and2 exact synthesis.
 // RUN: circt-opt %s --pass-pipeline='builtin.module(synth-exact-synthesis{allowed-ops=synth.aig.and_inv:2 sat-solver=z3})' -o %t.mlir
 // RUN: FileCheck %s --input-file=%t.mlir --check-prefixes=CHECK,AND2

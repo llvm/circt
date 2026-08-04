@@ -41,8 +41,8 @@ hw.module @partial_product_square_zext(in %a : i3, out sum : i6) {
   hw.output %2 : i6
 }
 
-// RUN: circt-lec.sh %t.mlir %s -c1=partial_product_sext -c2=partial_product_sext
-hw.module @partial_product_sext(in %a : i3, in %b : i3, out sum : i6) {
+// RUN: circt-lec.sh %t.mlir %s -c1=partial_product_sext_3 -c2=partial_product_sext_3
+hw.module @partial_product_sext_3(in %a : i3, in %b : i3, out sum : i6) {
   %0 = comb.extract %a from 2 : (i3) -> i1
   %1 = comb.extract %b from 2 : (i3) -> i1
   %2 = comb.replicate %0 : (i1) -> i3
@@ -53,6 +53,19 @@ hw.module @partial_product_sext(in %a : i3, in %b : i3, out sum : i6) {
   %7 = comb.add %6#0, %6#1, %6#2, %6#3, %6#4, %6#5 : i6
   hw.output %7 : i6
 }
+
+// RUN: circt-lec.sh %t.mlir %s -c1=partial_product_sext_4 -c2=partial_product_sext_4
+hw.module @partial_product_sext_4(in %a : i4, in %b : i4, out sum : i8) {
+  %0 = comb.extract %a from 3 : (i4) -> i1
+  %1 = comb.replicate %0 : (i1) -> i4
+  %2 = comb.concat %1, %a : i4, i4
+  %3 = comb.extract %b from 3 : (i4) -> i1
+  %4 = comb.replicate %3 : (i1) -> i4
+  %5 = comb.concat %4, %b : i4, i4
+  %6:8 = datapath.partial_product %2, %5 : (i8, i8) -> (i8, i8, i8, i8, i8, i8, i8, i8)
+  %7 = comb.add %6#0, %6#1, %6#2, %6#3, %6#4, %6#5, %6#6, %6#7 : i8
+  hw.output %7 : i8
+}   
 
 // RUN: circt-lec.sh %t.mlir %s -c1=pos_partial_product_4 -c2=pos_partial_product_4
 hw.module @pos_partial_product_4(in %a : i4, in %b : i4, in %c : i4, out sum : i4) {
@@ -72,6 +85,22 @@ hw.module @pos_partial_product_zext(in %a : i4, in %b : i3, in %c : i4, out sum 
   %4 = comb.add %3#0, %3#1, %3#2, %3#3, %3#4, %3#5, %3#6, %3#7 : i8 
   hw.output %4 : i8
 }
+
+// RUN: circt-lec.sh %t.mlir %s -c1=pos_partial_product_sext -c2=pos_partial_product_sext
+hw.module @pos_partial_product_sext(in %a : i4, in %b : i4, in %c : i4, out sum : i8) {
+    %0 = comb.extract %a from 3 : (i4) -> i1
+    %1 = comb.replicate %0 : (i1) -> i4
+    %2 = comb.concat %1, %a : i4, i4
+    %3 = comb.extract %b from 3 : (i4) -> i1
+    %4 = comb.replicate %3 : (i1) -> i4
+    %5 = comb.concat %4, %b : i4, i4
+    %7 = comb.extract %c from 3 : (i4) -> i1
+    %8 = comb.replicate %7 : (i1) -> i4
+    %9 = comb.concat %8, %c : i4, i4
+    %10:8 = datapath.pos_partial_product %2, %5, %9 : (i8, i8, i8) -> (i8, i8, i8, i8, i8, i8, i8, i8)
+    %11 = comb.add %10#0, %10#1, %10#2, %10#3, %10#4, %10#5, %10#6, %10#7 : i8
+    hw.output %11 : i8
+  }
 
 // RUN: circt-lec.sh %t.mlir %s -c1=compress_3 -c2=compress_3
 hw.module @compress_3(in %a : i4, in %b : i4, in %c : i4, out sum : i4) {
@@ -94,7 +123,9 @@ hw.module @compress_6(in %a : i4, in %b : i4, in %c : i4, in %d : i4, in %e : i4
 
 // RUN: circt-lec.sh %t.mlir %s -c1=partial_product_zext -c2=partial_product_zext
 
-// RUN: circt-lec.sh %t.mlir %s -c1=partial_product_sext -c2=partial_product_sext
+// RUN: circt-lec.sh %t.mlir %s -c1=partial_product_sext_3 -c2=partial_product_sext_3
+
+// RUN: circt-lec.sh %t.mlir %s -c1=partial_product_sext_4 -c2=partial_product_sext_4
 
 // RUN: circt-lec.sh %t.mlir %s -c1=compress_3 -c2=compress_3
 

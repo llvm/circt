@@ -16,6 +16,8 @@ from pycde.system import System
 from pycde.types import (Array, Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, StructType, Type, UInt, Window)
 
+from ..components.flow import MaxOutstandingLimiter
+
 from typing import Callable, Dict, List, Tuple
 import typing
 
@@ -429,8 +431,11 @@ class ChannelMMIO(esi.ServiceImplementation):
   and manifest do not support unaligned accesses and throw away the lower three
   bits.
 
-  Only allows for one outstanding request at a time. If a client doesn't return
-  a response, the MMIO service will hang. TODO: add some kind of timeout.
+  Only allows one outstanding request at a time. This is enforced in hardware
+  by a `MaxOutstandingLimiter` on the command channel, which stalls incoming
+  commands until the previous response has been consumed. If a client fails to
+  return a response, the MMIO service will hang. TODO: add some kind of
+  timeout.
 
   Implementation-defined MMIO layout:
     - 0x0: 0 constant
@@ -462,9 +467,6 @@ class ChannelMMIO(esi.ServiceImplementation):
   # be replaced by parameterizable services.
   # TODO: make the amount of register space each client gets a parameter.
   # Supporting this will require more address decode logic.
-  #
-  # TODO: only supports one outstanding transaction at a time. This is NOT
-  # enforced or checked! Enforce this.
 
   RegisterSpace = 0x400
   RegisterSpaceBits = RegisterSpace.bit_length() - 1
@@ -528,6 +530,21 @@ class ChannelMMIO(esi.ServiceImplementation):
     counted_output = Wire(Channel(esi.MMIODataType))
     cmd_channel = ports.cmd.unpack(data=counted_output)["cmd"]
     counted_output.assign(data_resp_channel)
+
+    # Enforce the single-outstanding-transaction invariant in hardware: hold
+    # off accepting a new command until the response to the previous command
+    # has been consumed by the host. Snoop the response wire for the
+    # completion pulse.
+    resp_xact, _ = counted_output.snoop_xact()
+    cmd_limiter = MaxOutstandingLimiter(cmd_channel.type.inner_type,
+                                        max_outstanding=1)(
+                                            clk=ports.clk,
+                                            rst=ports.rst,
+                                            in_=cmd_channel,
+                                            complete=resp_xact,
+                                            instance_name="cmd_rate_limiter",
+                                        )
+    cmd_channel = cmd_limiter.out
 
     # Get the selection index and the address to hand off to the clients.
     sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(
@@ -1297,13 +1314,59 @@ def DummyFromHostEngine(client_type: Type) -> type['DummyFromHostEngineImpl']:
   return DummyFromHostEngineImpl
 
 
+def _resolve_engine_pair(path: str) -> Tuple[Callable, Callable]:
+  """Resolve a dotted Python import path to a
+  `(to_host_engine_gen, from_host_engine_gen)` tuple, used to override the
+  default engine pair for a specific service request.
+
+  The path may point at either:
+    - a module-level 2-tuple attribute, e.g.
+      `"mypkg.mymod.MyEnginePair"` where `MyEnginePair` is
+      `(MyToHost, MyFromHost)`; or
+    - a zero-arg factory callable returning such a tuple.
+  """
+  import importlib
+  if not isinstance(path, str):
+    raise TypeError(
+        "Engine override path must be a dotted 'pkg.mod.attr' string; "
+        f"got {type(path).__name__}")
+  module_path, _, attr_path = path.rpartition(".")
+  if not module_path or not attr_path:
+    raise ValueError(
+        "Engine override path must be a dotted 'pkg.mod.attr' string; "
+        f"got {path!r}")
+  obj = importlib.import_module(module_path)
+  for part in attr_path.split("."):
+    obj = getattr(obj, part)
+  if callable(obj):
+    obj = obj()
+  if not (isinstance(obj, tuple) and len(obj) == 2):
+    raise TypeError(
+        f"Engine override {path!r} must resolve to a 2-tuple "
+        f"(to_host_engine_gen, from_host_engine_gen); got {type(obj).__name__}")
+  if not (callable(obj[0]) and callable(obj[1])):
+    raise TypeError(
+        f"Engine override {path!r} must resolve to a 2-tuple of callables; got "
+        f"({type(obj[0]).__name__}, {type(obj[1]).__name__})")
+  return obj
+
+
 def ChannelEngineService(
     to_host_engine_gen: Callable,
     from_host_engine_gen: Callable) -> type['ChannelEngineService']:
   """Returns a channel service implementation which calls
   to_host_engine_gen(<client_type>) or from_host_engine_gen(<client_type>) to
   generate the to_host and from_host engines for each channel. Does not support
-  engines which can service multiple clients at once."""
+  engines which can service multiple clients at once.
+
+  Individual service requests may override the default engine pair by passing
+  `options={"engine": "pkg.mod.attr"}` at the service-request call site (e.g.
+  `HostComms.some_bundle(AppID(...), options={"engine": "..."})`). The path
+  is resolved by `_resolve_engine_pair` and must yield a
+  `(to_host_engine_gen, from_host_engine_gen)` tuple with the same call shape
+  as the defaults; the override applies to every channel of that request's
+  bundle.
+  """
 
   class ChannelEngineService(esi.ServiceImplementation):
     """Service implementation which services the clients via a per-channel DMA
@@ -1322,7 +1385,10 @@ def ChannelEngineService(
         appid_strings = [str(appid) for appid in client_appid]
         return f"{'_'.join(appid_strings)}.{channel_name}"
 
-      def build_engine(bc: BundledChannel, input_channel=None) -> Type:
+      def build_engine(bc: BundledChannel,
+                       bundle_to_host_gen: Callable,
+                       bundle_from_host_gen: Callable,
+                       input_channel=None) -> Type:
         idbase = build_engine_appid(bundle.client_name, bc.name)
         eng_appid = esi.AppID(idbase)
         # DMA engines require at least 1 byte of data; substitute Bits(8)
@@ -1333,9 +1399,9 @@ def ChannelEngineService(
         if is_void:
           engine_client_type = Bits(8)
         if bc.direction == ChannelDirection.FROM:
-          engine_mod = to_host_engine_gen(engine_client_type)
+          engine_mod = bundle_to_host_gen(engine_client_type)
         else:
-          engine_mod = from_host_engine_gen(engine_client_type)
+          engine_mod = bundle_from_host_gen(engine_client_type)
         eng_inputs = {
             "clk": ports.clk,
             "rst": ports.rst,
@@ -1371,12 +1437,24 @@ def ChannelEngineService(
         return engine
 
       for bundle in bundles.to_client_reqs:
+        # Per-request engine override: if the client's service request carries
+        # an `"engine"` option, use that engine pair instead of the defaults
+        # for every channel of this bundle. This is purely a hardware-side
+        # substitution.
+        engine_override = bundle.options.get("engine")
+        if engine_override is None:
+          bundle_to_host_gen = to_host_engine_gen
+          bundle_from_host_gen = from_host_engine_gen
+        else:
+          bundle_to_host_gen, bundle_from_host_gen = _resolve_engine_pair(
+              engine_override)
+
         bundle_type = bundle.type
         to_channels = {}
         # Create a DMA engine for each channel headed TO the client (from the host).
         for bc in bundle_type.channels:
           if bc.direction == ChannelDirection.TO:
-            engine = build_engine(bc)
+            engine = build_engine(bc, bundle_to_host_gen, bundle_from_host_gen)
             out_chan = engine.output_channel
             # For void channels, narrow the 8-bit placeholder back to 0-bit.
             if bc.channel.inner_type.bitwidth == 0:
@@ -1389,6 +1467,7 @@ def ChannelEngineService(
         # Create a DMA engine for each channel headed FROM the client (to the host).
         for bc in bundle_type.channels:
           if bc.direction == ChannelDirection.FROM:
-            build_engine(bc, froms[bc.name])
+            build_engine(bc, bundle_to_host_gen, bundle_from_host_gen,
+                         froms[bc.name])
 
   return ChannelEngineService

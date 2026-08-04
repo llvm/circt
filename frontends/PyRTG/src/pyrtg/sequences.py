@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .core import CodeGenObject, Value, Type
+from .core import CodeGenContext, CodeGenObject, Value, Type
 from .support import _FromCirctValue, _FromCirctType
 from .base import ir
 from .rtg import rtg
@@ -67,7 +67,9 @@ class SequenceDeclaration(CodeGenObject):
 
     self.get()(*args)
 
-  def _codegen(self) -> None:
+  def _codegen(self, context: CodeGenContext) -> None:
+    self.context = context
+
     mlir_arg_types = [arg._codegen() for arg in self.arg_types]
     seq = rtg.SequenceOp(self.name,
                          ir.TypeAttr.get(rtg.SequenceType.get(mlir_arg_types)))

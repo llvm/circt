@@ -211,6 +211,21 @@ MlirType rtgStringTypeGet(MlirContext ctxt) {
   return wrap(StringType::get(unwrap(ctxt)));
 }
 
+// ContinuationType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsAContinuation(MlirType type) {
+  return isa<ContinuationType>(unwrap(type));
+}
+
+MlirType rtgContinuationTypeGet(MlirType resumeType) {
+  return wrap(ContinuationType::get(unwrap(resumeType)));
+}
+
+MlirType rtgContinuationTypeGetResumeType(MlirType type) {
+  return wrap(cast<ContinuationType>(unwrap(type)).getResumeType());
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//

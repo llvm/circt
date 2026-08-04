@@ -371,3 +371,63 @@ rtg.test @randomScope() {
   // CHECK-NEXT: }
   rtg.random_scope {}
 }
+
+// CHECK-LABEL: rtg.effect @log_value
+rtg.effect @log_value : (index) -> ()
+
+// CHECK-LABEL: rtg.effect @choose
+rtg.effect @choose : (!rtg.set<index>) -> index
+
+// CHECK-LABEL: rtg.effect @yield_coro
+rtg.effect @yield_coro : () -> index
+
+// CHECK-LABEL: @handle_simple
+rtg.test @handle_simple() {
+  // CHECK: rtg.with_handlers {
+  // CHECK: handle @choose([[S:%.+]]: !rtg.set<index>, [[K:%.+]]: !rtg.continuation<index>) {
+  // CHECK: rtg.set_select_random
+  // The continuation type is abbreviated to <index> in the op context.
+  // CHECK: rtg.resume [[K]], [[SEL:%.+]] : <index>, index
+  // CHECK: do {
+  // CHECK: rtg.perform @choose({{.+}}) : (!rtg.set<index>) -> index
+  rtg.with_handlers {
+    handle @choose(%s: !rtg.set<index>, %k: !rtg.continuation<index>) {
+      %sel = rtg.set_select_random %s : !rtg.set<index>
+      rtg.resume %k, %sel : !rtg.continuation<index>, index
+      rtg.yield
+    }
+    do {
+      %set = rtg.set_create : index
+      %result = rtg.perform @choose(%set) : (!rtg.set<index>) -> index
+      rtg.yield
+    }
+  }
+}
+
+// CHECK-LABEL: @handle_void
+rtg.test @handle_void() {
+  // CHECK: rtg.with_handlers {
+  // CHECK: handle @log_value([[N:%.+]]: index, [[K2:%.+]]: !rtg.continuation<none>) {
+  // CHECK: rtg.resume [[K2]] : <none>
+  // CHECK: do {
+  // CHECK: rtg.perform @log_value({{.+}}) : (index) -> none
+  rtg.with_handlers {
+    handle @log_value(%n: index, %k: !rtg.continuation<none>) {
+      rtg.resume %k : !rtg.continuation<none>
+      rtg.yield
+    }
+    do {
+      %idx = index.constant 42
+      rtg.perform @log_value(%idx) : (index) -> none
+      rtg.yield
+    }
+  }
+}
+
+// CHECK-LABEL: @continuation_in_set
+rtg.test @continuation_in_set() {
+  // rtg.set_create prints only the element type after `:`.
+  // CHECK: rtg.set_create : !rtg.continuation<index>
+  %set = rtg.set_create : !rtg.continuation<index>
+}
+

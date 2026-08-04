@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .core import CodeGenRoot, Type, Value
+from .core import CodeGenContext, CodeGenRoot, Type, Value
 from .base import ir
 from .rtg import rtg
 from .tuples import Tuple, TupleType
@@ -177,7 +177,7 @@ class Config(CodeGenRoot):
 
     return params
 
-  def _codegen(self) -> None:
+  def _codegen(self, context: CodeGenContext) -> None:
     self._already_generated = True
 
     # Construct the target operation.

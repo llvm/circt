@@ -376,92 +376,69 @@ AcceleratorConnection *Context::connect(std::string backend,
   return connPtr;
 }
 
-struct AcceleratorServiceThread::Impl {
-  Impl() {}
-  void start() { me = std::thread(&Impl::loop, this); }
-  void stop() {
-    shutdown = true;
+AcceleratorServiceThread::AcceleratorServiceThread() { start(); }
+AcceleratorServiceThread::AcceleratorServiceThread(DeferStart) {}
+AcceleratorServiceThread::~AcceleratorServiceThread() { stop(); }
+
+void AcceleratorServiceThread::start() {
+  me = std::thread(&AcceleratorServiceThread::loop, this);
+}
+
+void AcceleratorServiceThread::stop() {
+  shutdown = true;
+  if (me.joinable())
     me.join();
-  }
-  /// When there's data on any of the listenPorts, call the callback. This
-  /// method can be called from any thread.
-  void
-  addListener(std::initializer_list<ReadChannelPort *> listenPorts,
-              std::function<void(ReadChannelPort *, MessageData)> callback);
+}
 
-  void addTask(std::function<void(void)> task) {
-    std::lock_guard<std::mutex> g(m);
-    taskList.push_back(task);
-  }
-
-private:
-  void loop();
-  volatile bool shutdown = false;
-  std::thread me;
-
-  // Protect the shared data structures.
-  std::mutex m;
-
-  // Map of read ports to callbacks.
-  std::map<ReadChannelPort *,
-           std::pair<std::function<void(ReadChannelPort *, MessageData)>,
-                     std::future<MessageData>>>
-      listeners;
-
-  /// Tasks which should be called on every loop iteration.
-  std::vector<std::function<void(void)>> taskList;
-};
-
-void AcceleratorServiceThread::Impl::loop() {
-  // These two variables should logically be in the loop, but this avoids
-  // reconstructing them on each iteration.
-  std::vector<std::tuple<ReadChannelPort *,
-                         std::function<void(ReadChannelPort *, MessageData)>,
-                         MessageData>>
-      portUnlockWorkList;
-  std::vector<std::function<void(void)>> taskListCopy;
-  MessageData data;
-
+void AcceleratorServiceThread::loop() {
   while (!shutdown) {
     // Ideally we'd have some wake notification here, but this sufficies for
     // now.
     // TODO: investigate better ways to do this. For now, just play nice with
     // the other processes but don't waste time in between polling intervals.
     std::this_thread::yield();
-
-    // Check and gather data from all the read ports we are monitoring. Put the
-    // callbacks to be called later so we can release the lock.
-    {
-      std::lock_guard<std::mutex> g(m);
-      for (auto &[channel, cbfPair] : listeners) {
-        assert(channel && "Null channel in listener list");
-        std::future<MessageData> &f = cbfPair.second;
-        if (f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-          portUnlockWorkList.emplace_back(channel, cbfPair.first, f.get());
-          f = channel->readAsync();
-        }
-      }
-    }
-
-    // Call the callbacks outside the lock.
-    for (auto [channel, cb, data] : portUnlockWorkList)
-      cb(channel, std::move(data));
-
-    // Clear the worklist for the next iteration.
-    portUnlockWorkList.clear();
-
-    // Call any tasks that have been added. Copy it first so we can release the
-    // lock ASAP.
-    {
-      std::lock_guard<std::mutex> g(m);
-      taskListCopy = taskList;
-    }
-    for (auto &task : taskListCopy)
-      task();
+    poll();
   }
 }
 
-void AcceleratorServiceThread::Impl::addListener(
+void AcceleratorServiceThread::poll() {
+  // Check and gather data from all the read ports we are monitoring. Put the
+  // callbacks to be called later so we can release the lock.
+  std::vector<std::tuple<ReadChannelPort *,
+                         std::function<void(ReadChannelPort *, MessageData)>,
+                         MessageData>>
+      portUnlockWorkList;
+  {
+    std::lock_guard<std::mutex> g(m);
+    for (auto &[channel, cbfPair] : listeners) {
+      assert(channel && "Null channel in listener list");
+      std::future<MessageData> &f = cbfPair.second;
+      if (f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        portUnlockWorkList.emplace_back(channel, cbfPair.first, f.get());
+        f = channel->readAsync();
+      }
+    }
+  }
+
+  // Call the callbacks outside the lock.
+  for (auto &[channel, cb, data] : portUnlockWorkList)
+    cb(channel, std::move(data));
+
+  // Call any tasks that have been added. Copy it first so we can release the
+  // lock ASAP.
+  std::vector<std::function<void(void)>> taskListCopy;
+  {
+    std::lock_guard<std::mutex> g(m);
+    taskListCopy = taskList;
+  }
+  for (auto &task : taskListCopy)
+    task();
+}
+
+// When there's data on any of the listenPorts, call the callback. This is
+// kinda silly now that we have callback port support, especially given the
+// polling loop. Keep the functionality for now.
+void AcceleratorServiceThread::addListener(
     std::initializer_list<ReadChannelPort *> listenPorts,
     std::function<void(ReadChannelPort *, MessageData)> callback) {
   std::lock_guard<std::mutex> g(m);
@@ -472,32 +449,13 @@ void AcceleratorServiceThread::Impl::addListener(
   }
 }
 
-AcceleratorServiceThread::AcceleratorServiceThread()
-    : impl(std::make_unique<Impl>()) {
-  impl->start();
-}
-AcceleratorServiceThread::~AcceleratorServiceThread() { stop(); }
-
-void AcceleratorServiceThread::stop() {
-  if (impl) {
-    impl->stop();
-    impl.reset();
-  }
-}
-
-// When there's data on any of the listenPorts, call the callback. This is
-// kinda silly now that we have callback port support, especially given the
-// polling loop. Keep the functionality for now.
-void AcceleratorServiceThread::addListener(
-    std::initializer_list<ReadChannelPort *> listenPorts,
-    std::function<void(ReadChannelPort *, MessageData)> callback) {
-  assert(impl && "Service thread not running");
-  impl->addListener(listenPorts, callback);
+void AcceleratorServiceThread::addTask(std::function<void(void)> task) {
+  std::lock_guard<std::mutex> g(m);
+  taskList.push_back(std::move(task));
 }
 
 void AcceleratorServiceThread::addPoll(HWModule &module) {
-  assert(impl && "Service thread not running");
-  impl->addTask([&module]() { module.poll(); });
+  addTask([&module]() { module.poll(); });
 }
 
 void AcceleratorConnection::disconnect() {

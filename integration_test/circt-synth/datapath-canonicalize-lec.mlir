@@ -47,3 +47,19 @@ hw.module @sext_compress(in %a : i8, in %b : i8, in %c : i4,
   
   hw.output %4, %7 : i8, i8
 }
+
+// RUN: circt-lec.sh %t.mlir %s -c1=pos_partial_product_sext -c2=pos_partial_product_sext
+hw.module @pos_partial_product_sext(in %a : i5, in %b : i5, in %c : i5, out P : i10) {
+  %0 = comb.extract %a from 4 : (i5) -> i1
+  %1 = comb.replicate %0 : (i1) -> i5
+  %2 = comb.concat %1, %a : i5, i5
+  %3 = comb.extract %b from 4 : (i5) -> i1
+  %4 = comb.replicate %3 : (i1) -> i5
+  %5 = comb.concat %4, %b : i5, i5
+  %6 = comb.extract %c from 4 : (i5) -> i1
+  %7 = comb.replicate %6 : (i1) -> i5
+  %8 = comb.concat %7, %c : i5, i5
+  %9:10 = datapath.pos_partial_product %2, %5, %8 : (i10, i10, i10) -> (i10, i10, i10, i10, i10, i10, i10, i10, i10, i10)
+  %10 = comb.add %9#0, %9#1, %9#2, %9#3, %9#4, %9#5, %9#6, %9#7, %9#8, %9#9 : i10
+  hw.output %10 : i10
+}

@@ -1253,3 +1253,30 @@ hw.module @ClockExtractedFromStructArrayGetThenExtractPosEdge(in %st: !hw.struct
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
+
+// CHECK-LABEL: @ClockExtractedFromAliasedStructExtractPosEdge(
+hw.module @ClockExtractedFromAliasedStructExtractPosEdge(in %st: !hw.typealias<@symbols::@my_struct, !hw.struct<a: i1, b: i1>>, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK_BIT:%.+]] = hw.struct_extract %st["a"] : !hw.typealias<@symbols::@my_struct, !hw.struct<a: i1, b: i1>>
+  // CHECK: [[CLK:%.+]] = seq.to_clock [[CLK_BIT]]
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %clkBit = hw.struct_extract %st["a"] : !hw.typealias<@symbols::@my_struct, !hw.struct<a: i1, b: i1>>
+    llhd.wait yield (%a, %b : i4, i1), (%st : !hw.typealias<@symbols::@my_struct, !hw.struct<a: i1, b: i1>>), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %presentClk = hw.struct_extract %st["a"] : !hw.typealias<@symbols::@my_struct, !hw.struct<a: i1, b: i1>>
+    %notPast = comb.xor bin %pastClk, %true : i1
+    %posedge = comb.and bin %notPast, %presentClk : i1
+    cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}
+

@@ -25,7 +25,6 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Debug.h"
 
-#include <queue>
 #include <utility>
 
 namespace circt {
@@ -397,24 +396,12 @@ public:
   FailureOr<evaluator::EvaluatorValuePtr>
   getPartiallyEvaluatedValue(Type type, Location loc);
 
-  using ActualParameters =
-      SmallVectorImpl<std::shared_ptr<evaluator::EvaluatorValue>> *;
-
-  using ObjectKey = std::pair<Value, ActualParameters>;
+  using ActualParameters = ArrayRef<EvaluatorValuePtr>;
 
   /// Get the number of fully evaluated nodes tracked by this evaluator.
   uint64_t getFullyEvaluatedCount() const { return fullyEvaluatedCount; }
 
 private:
-  bool isFullyEvaluated(Value value, ActualParameters key) {
-    return isFullyEvaluated({value, key});
-  }
-
-  bool isFullyEvaluated(ObjectKey key) {
-    auto val = objects.lookup(key);
-    return val && val->isFullyEvaluated();
-  }
-
   /// Attach the evaluation counter to a newly created value.
   void attachCounter(evaluator::EvaluatorValuePtr &value) {
     if (value && !value->isFullyEvaluated())
@@ -427,9 +414,6 @@ private:
 
   FailureOr<EvaluatorValuePtr>
   getOrCreateValue(Value value, ActualParameters actualParams, Location loc);
-  FailureOr<EvaluatorValuePtr>
-  allocateObjectInstance(StringAttr clasName, ActualParameters actualParams);
-
   /// Evaluate a Value in a Class body according to the small expression grammar
   /// described in the rationale document. The actual parameters are the values
   /// supplied at the current instantiation of the Class being evaluated.
@@ -447,30 +431,16 @@ private:
   /// Instantiate an Object with its class name and actual parameters.
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
-                         Location loc, ObjectKey instanceKey = {});
-  FailureOr<EvaluatorValuePtr>
-  evaluateObjectInstance(ObjectOp op, ActualParameters actualParams);
+                         Location loc);
   FailureOr<EvaluatorValuePtr>
   evaluateElaboratedObject(ElaboratedObjectOp op, ActualParameters actualParams,
                            Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateObjectField(ObjectFieldOp op, ActualParameters actualParams,
-                      Location loc);
   FailureOr<EvaluatorValuePtr> evaluateListCreate(ListCreateOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
   FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateIntegerBinary(IntegerBinaryOp op, ActualParameters actualParams,
-                        Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateStringConcat(StringConcatOp op, ActualParameters actualParams,
-                       Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateBinaryEquality(BinaryEqualityOp op, ActualParameters actualParams,
-                         Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateBasePathCreate(FrozenBasePathCreateOp op,
                          ActualParameters actualParams, Location loc);
@@ -483,41 +453,21 @@ private:
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateUnknownValue(UnknownValueOp op, Location loc);
 
-  LogicalResult evaluatePropertyAssert(PropertyAssertOp op,
-                                       ActualParameters actualParams);
-
   FailureOr<evaluator::EvaluatorValuePtr> createUnknownValue(Type type,
                                                              Location loc);
-
-  FailureOr<ActualParameters>
-  createParametersFromOperands(ValueRange range, ActualParameters actualParams,
-                               Location loc);
 
   /// The symbol table for the IR module the Evaluator was constructed with.
   /// Used to look up class definitions.
   SymbolTable symbolTable;
 
-  /// This uniquely stores vectors that represent parameters.
-  SmallVector<
-      std::unique_ptr<SmallVector<std::shared_ptr<evaluator::EvaluatorValue>>>>
-      actualParametersBuffers;
-
   /// Worklists that track values which need to be fully evaluated.
   /// We use two worklists to detect cycles: process all items from one,
   /// and if any become fully evaluated, swap and continue.
-  std::vector<ObjectKey> worklist;
-  std::vector<ObjectKey> nextWorklist;
+  std::vector<Value> worklist;
+  std::vector<Value> nextWorklist;
 
-  /// A queue of pending property assertions to be evaluated after the worklist
-  /// is fully drained. Each entry is a (PropertyAssertOp, ActualParameters)
-  /// pair. Property assertions are deferred because their operands may be
-  /// ReferenceValues that are not yet resolved when the class body is first
-  /// processed.
-  std::queue<std::pair<PropertyAssertOp, ActualParameters>> pendingAsserts;
-
-  /// Evaluator value storage. Return an evaluator value for the given
-  /// instantiation context (a pair of Value and parameters).
-  DenseMap<ObjectKey, std::shared_ptr<evaluator::EvaluatorValue>> objects;
+  /// Evaluator value storage for the current instantiation.
+  DenseMap<Value, std::shared_ptr<evaluator::EvaluatorValue>> objects;
 
   /// Counter for fully evaluated nodes.
   uint64_t fullyEvaluatedCount = 0;

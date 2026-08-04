@@ -271,4 +271,22 @@ class ISAMemoryWithAddressWidth<int width> : AnyTypeOf<[
   I<width>,
   LabelType]>;
 
+
+def ContinuationType : RTGTypeDef<"Continuation"> {
+  let mnemonic = "continuation";
+  let summary = "first-class continuation value";
+  let description = [{
+    A first-class continuation value.  `T` is the type the performer receives
+    back (i.e., what `rtg.resume` provides).  Use `NoneType` for void effects.
+  }];
+
+  let parameters = (ins "::mlir::Type":$resumeType);
+  let assemblyFormat = "`<` $resumeType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Type":$resumeType),
+      "return $_get(resumeType.getContext(), resumeType);">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

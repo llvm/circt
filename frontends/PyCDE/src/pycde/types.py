@@ -1079,7 +1079,9 @@ class Window(Type):
   In the case of lists, a 'last' field is added to the frame struct to indicate
   that this is the last frame of the list. If 'numItems' is specified, a field
   named `<list_name>_size` is added to indicate how many valid items are in this
-  frame.
+  frame, encoded as `(number of valid items - 1)`. The number of valid items is
+  always at least one, so a full frame has `<list_name>_size == numItems - 1`;
+  this lets the field be only `clog2(numItems)` bits wide.
 
   The 'lowered type' of a Window is a union of structs, where each struct
   corresponds to a frame and contains the fields specified in that frame. To

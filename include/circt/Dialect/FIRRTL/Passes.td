@@ -360,6 +360,14 @@ def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
   }];
 }
 
+def FullReset : Pass<"firrtl-full-reset", "firrtl::CircuitOp"> {
+  let summary = "Run full reset transform";
+  let description = [{
+    Consumes `circt.FullResetAnnotation` / `circt.ExcludeFromFullResetAnnotation`
+    Builds reset domains and implements full reset on registers.
+  }];
+}
+
 def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
   let summary = "Load source files for black boxes into the IR";
   let description = [{
@@ -930,7 +938,9 @@ def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
                    clEnumValN(InferDomainsMode::InferAll, "infer-all",
                      "Check domains with inference for both public and private "
                      "modules"))
-      }]>];
+      }]>,
+                 ListOption<"skippedDomains", "skip-domain", "std::string",
+                            "List of domain names to skip checking for">];
 }
 
 def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {

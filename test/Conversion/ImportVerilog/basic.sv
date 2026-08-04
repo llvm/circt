@@ -1778,9 +1778,32 @@ module Expressions;
     // CHECK: [[TMP1:%.+]] = moore.constant 1 :
     // CHECK: [[TMP2:%.+]] = moore.constant 0 :
     // CHECK: [[TMP3:%.+]] = moore.constant 0 :
-    // CHECK: moore.concat [[TMP3]], [[TMP2]], [[TMP1]], [[TMP0]] : (!moore.l1, !moore.l1, !moore.l1, !moore.l1) -> l4
+    // CHECK: moore.concat [[TMP0]], [[TMP1]], [[TMP2]], [[TMP3]] : (!moore.l1, !moore.l1, !moore.l1, !moore.l1) -> l4
     m = '{default: '0, 2: '1};
- 
+
+    //===------------------------------------------------------------------===//
+    // Struct extraction as RHS of assignments
+
+    // CHECK: [[LHS:%.+]] = moore.extract_ref %a from 0
+    // CHECK: [[TMP0:%.+]] = moore.read %struct1 : <struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
+    // CHECK: [[TMP1:%.+]] = moore.packed_to_sbv [[TMP0]] : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>
+    // CHECK: [[RHS:%.+]] = moore.extract [[TMP1]] from 4 : i128 -> i1
+    // CHECK:  moore.blocking_assign [[LHS]], [[RHS]]
+    a[0] = struct1[4];
+    // CHECK: [[LHS:%.+]] = moore.extract_ref %b from 0
+    // CHECK: [[TMP0:%.+]] = moore.read %struct1 : <struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
+    // CHECK: [[TMP1:%.+]] = moore.packed_to_sbv [[TMP0]] : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>
+    // CHECK: [[TMP2:%.+]] = moore.read %j
+    // CHECK: [[RHS:%.+]] = moore.dyn_extract [[TMP1]] from [[TMP2]]
+    // CHECK:  moore.blocking_assign [[LHS]], [[RHS]] : i1
+    b[0] = struct1[j];
+    // CHECK: [[LHS:%.+]] = moore.extract_ref %a from 2
+    // CHECK: [[TMP0:%.+]] = moore.read %struct1 : <struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
+    // CHECK: [[TMP1:%.+]] = moore.packed_to_sbv [[TMP0]] : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>
+    // CHECK: [[RHS:%.+]] = moore.extract [[TMP1]] from 30 : i128 -> i3
+    // CHECK: moore.blocking_assign [[LHS]], [[RHS]] : i3
+    a[4:2] = struct1[32:30];
+
     //===------------------------------------------------------------------===//
     // Builtin Functions
 
@@ -2697,6 +2720,15 @@ module ImmediateAssertiWithActionBlock;
   always_comb begin
     assert (x) c = 1; else c = 0;
   end
+
+  // Assert in function block
+  // CHECK:func.func private @check([[ARG:%.*]]: !moore.l32) {
+  // CHECK:  [[C0:%.+]] = moore.constant 0 : l32
+  // CHECK:  [[COND:%.+]] = moore.ugt [[ARG]], [[C0]] : l32 -> l1
+  // CHECK:  moore.assert immediate [[COND]] : l1
+  function automatic void check(logic[31:0] w);
+    assert (w > 0);
+  endfunction
 endmodule
 
 // CHECK-LABEL: moore.module @AssertNoActionBlock

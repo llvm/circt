@@ -17,6 +17,7 @@
 #include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"

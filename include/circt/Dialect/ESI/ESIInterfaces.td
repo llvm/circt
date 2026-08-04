@@ -140,6 +140,24 @@ def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
         if (f != ports.end()) return *f;
         return failure();
       }]
+    >,
+    InterfaceMethod<
+      [{Verify a connection request against one of this service's ports. Called
+        during op verification, after the generic bundle-type compatibility
+        check has already passed. `portInfo` is the resolved service port,
+        `reqBundleType` is the requested bundle type, and `reqOp` is the
+        requesting op (use it to emit diagnostics). Services may override this
+        to impose additional, service-specific constraints on requests which
+        the generic `!esi.any`-based type matching cannot express. The default
+        performs no additional checks.}],
+      "LogicalResult", "verifyRequest",
+      (ins "const ServicePortInfo &":$portInfo,
+           "ChannelBundleType":$reqBundleType,
+           "Operation *":$reqOp),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return success();
+      }]
     >
   ];
 }

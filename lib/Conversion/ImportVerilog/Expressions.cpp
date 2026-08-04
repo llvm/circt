@@ -204,6 +204,28 @@ static Value visitClassProperty(Context &context,
   return fieldRef;
 }
 
+/// Ensures that the given range is in "descending" order.
+///
+/// `type` must have a fixed range. If the range is defined such that
+/// left < right, the range is reversed.
+///
+/// For example:
+///   [3:0] => do not reverse
+///   [0:3] => reverse
+///
+/// The resulting range is suitable for passing to ops like ConcatOp and
+/// packed ArrayCreateOp which expect operands to be in descending order
+/// of bit significance. Do not call on unpacked arrays, whose element
+/// indexing logic (getSelectIndex / translateIndex) already maps ascending
+/// indices to descending storage order.
+template <typename RangeT>
+static void ensureDescendingOrder(RangeT &range, const slang::ast::Type &type) {
+  assert(type.hasFixedRange());
+  const slang::ConstantRange &cstRange = type.getFixedRange();
+  if (cstRange.left < cstRange.right)
+    std::reverse(std::begin(range), std::end(range));
+}
+
 namespace {
 /// A visitor handling expressions that can be lowered as lvalue and rvalue.
 struct ExprVisitor {
@@ -291,10 +313,18 @@ struct ExprVisitor {
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
              moore::QueueType, moore::AssocArrayType, moore::StringType,
-             moore::OpenUnpackedArrayType>(derefType)) {
+             moore::OpenUnpackedArrayType, moore::StructType, moore::UnionType>(
+            derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
+    }
+
+    if (!isLvalue && isa<moore::StructType, moore::UnionType>(derefType)) {
+      value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
+      derefType = value.getType();
     }
 
     // Associative Arrays are a special case so handle them separately.
@@ -439,6 +469,12 @@ struct ExprVisitor {
     if (isa<moore::QueueType>(derefType)) {
       return handleQueueRangeSelectExpressions(expr, type, value);
     }
+    if (!isLvalue && isa<moore::StructType, moore::UnionType>(derefType)) {
+      value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
+    }
+
     return handleArrayRangeSelectExpressions(expr, type, value);
   }
 
@@ -2260,7 +2296,7 @@ struct RvalueExprVisitor : public ExprVisitor {
         return {};
 
       assert(intType.getWidth() == elements->size());
-      std::reverse(elements->begin(), elements->end());
+      ensureDescendingOrder(*elements, *expr.type);
       return moore::ConcatOp::create(builder, loc, intType, *elements);
     }
 
@@ -2314,6 +2350,7 @@ struct RvalueExprVisitor : public ExprVisitor {
         return {};
 
       assert(arrayType.getSize() == elements->size());
+      ensureDescendingOrder(*elements, *expr.type);
       return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
     }
 
@@ -3279,6 +3316,23 @@ convertRealMathBI(Context &context, Location loc, StringRef name,
   return OpTy::create(context.builder, loc, value);
 }
 
+/// Helper function to convert real math builtin functions that take exactly
+/// two arguments.
+template <typename OpTy>
+static Value
+convertRealMathTwoBI(Context &context, Location loc, StringRef name,
+                     std::span<const slang::ast::Expression *const> args) {
+  // Slang already checks the arity of real math builtins.
+  assert(args.size() == 2 && "real math builtin expects 2 arguments");
+  auto realType =
+      moore::RealType::get(context.getContext(), moore::RealWidth::f64);
+  auto lhs = context.convertRvalueExpression(*args[0], realType);
+  auto rhs = context.convertRvalueExpression(*args[1], realType);
+  if (!lhs || !rhs)
+    return {};
+  return OpTy::create(context.builder, loc, lhs, rhs);
+}
+
 static LogicalResult
 emitScanAssignments(Context &context, const Context::ScanStringResult &result,
                     Location loc) {
@@ -3551,16 +3605,13 @@ Value Context::convertSystemCall(
     return convertRealMathBI<moore::AcoshBIOp>(*this, loc, name, args);
   if (nameId == ksn::Atanh)
     return convertRealMathBI<moore::AtanhBIOp>(*this, loc, name, args);
-
-  if (nameId == ksn::Pow) {
-    assert(numArgs == 2 && "`$pow` takes 2 arguments");
-    auto realType = moore::RealType::get(getContext(), moore::RealWidth::f64);
-    auto lhs = convertRvalueExpression(*args[0], realType);
-    auto rhs = convertRvalueExpression(*args[1], realType);
-    if (!lhs || !rhs)
-      return {};
-    return moore::PowRealOp::create(builder, loc, lhs, rhs);
-  }
+  // Real math functions (all take 2 real arguments)
+  if (nameId == ksn::Pow)
+    return convertRealMathTwoBI<moore::PowRealOp>(*this, loc, name, args);
+  if (nameId == ksn::Atan2)
+    return convertRealMathTwoBI<moore::Atan2BIOp>(*this, loc, name, args);
+  if (nameId == ksn::Hypot)
+    return convertRealMathTwoBI<moore::HypotBIOp>(*this, loc, name, args);
 
   //===--------------------------------------------------------------------===//
   // Type Conversion System Functions

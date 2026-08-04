@@ -4,7 +4,32 @@
 
 from __future__ import annotations
 
+from enum import Enum
+
 from .base import ir
+
+
+class MemoryUsage(Enum):
+  """
+  How constrained a test's generated program may be with memory usage, i.e.,
+  how much memory it may use for the program binary itself as well as global
+  data (e.g., static strings).
+  """
+
+  SUPER_STRICT = "super-strict"
+  STRICT = "strict"
+  NORMAL = "normal"
+  RELAXED = "relaxed"
+  UNCONSTRAINED = "unconstrained"
+
+
+class CodeGenContext:
+  """
+  Command-line provided settings that influence codegen.
+  """
+
+  def __init__(self, memory_usage: MemoryUsage = MemoryUsage.NORMAL):
+    self.memory_usage = memory_usage
 
 
 class CodeGenObject:
@@ -23,7 +48,7 @@ class CodeGenObject:
     return []
 
   @classmethod
-  def _codegen_all_instances(cls) -> None:
+  def _codegen_all_instances(cls, context: CodeGenContext) -> None:
     processed: set[CodeGenObject] = set()
 
     def do_codegen(obj):
@@ -33,13 +58,13 @@ class CodeGenObject:
           processed.add(dependent)
 
       if obj not in processed:
-        obj._codegen()
+        obj._codegen(context)
         processed.add(obj)
 
     for obj in cls._registry:
       do_codegen(obj)
 
-  def _codegen(self):
+  def _codegen(self, context: CodeGenContext):
     assert False, "must be implemented by the subclass"
 
 
