@@ -318,8 +318,6 @@ struct IMConstPropPass
   void markAggregateConstantOp(AggregateConstantOp constant);
   void markInstanceLike(FInstanceLike instance);
   void markInstanceTarget(FInstanceLike instance, Operation *op);
-  void markInstanceOp(InstanceOp instance);
-  void markInstanceChoiceOp(InstanceChoiceOp instance);
   void markObjectOp(ObjectOp object);
   template <typename OpTy>
   void markConstantValueOp(OpTy op);
@@ -515,9 +513,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
             [&](auto aggConstOp) { markAggregateConstantOp(aggConstOp); })
         .Case<InvalidValueOp>(
             [&](auto invalid) { markInvalidValueOp(invalid); })
-        .Case<InstanceOp>([&](auto instance) { markInstanceOp(instance); })
-        .Case<InstanceChoiceOp>(
-            [&](auto instance) { markInstanceChoiceOp(instance); })
+        .Case<FInstanceLike>([&](auto instance) { markInstanceLike(instance); })
         .Case<ObjectOp>([&](auto obj) { markObjectOp(obj); })
         .Case<MemOp>([&](auto mem) { markMemOp(mem); })
         .Case<LayerBlockOp>(
@@ -617,6 +613,8 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
   markOverdefined(invalid.getResult());
 }
 
+/// Instance-like ops have no operands, so they are visited exactly once their
+/// enclosing block is marked live. This sets up the def-use edge for ports.
 void IMConstPropPass::markInstanceLike(FInstanceLike instance) {
   for (auto moduleName :
        instance.getReferencedModuleNamesAttr().getAsRange<StringAttr>()) {
@@ -626,6 +624,8 @@ void IMConstPropPass::markInstanceLike(FInstanceLike instance) {
   }
 }
 
+/// Set up propagation between instance-like op and once possible target
+/// module.
 void IMConstPropPass::markInstanceTarget(FInstanceLike instance,
                                          Operation *op) {
   // If this is an extmodule, just remember that any results and inouts are
@@ -670,19 +670,9 @@ void IMConstPropPass::markInstanceTarget(FInstanceLike instance,
   }
 }
 
-/// Instances have no operands, so they are visited exactly once when their
-/// enclosing block is marked live.  This sets up the def-use edges for ports.
-void IMConstPropPass::markInstanceOp(InstanceOp instance) {
-  markInstanceLike(instance);
-}
-
 void IMConstPropPass::markObjectOp(ObjectOp obj) {
   // Mark overdefined for now, not supported.
   markOverdefined(obj);
-}
-
-void IMConstPropPass::markInstanceChoiceOp(InstanceChoiceOp instance) {
-  markInstanceLike(instance);
 }
 
 static std::optional<uint64_t>
@@ -806,6 +796,10 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
       }
       return;
     }
+
+    // Skip unsupported ops that are already marked as overdefined.
+    if (isa_and_nonnull<MemOp, ObjectSubfieldOp>(dest.getDefiningOp()))
+      return;
 
     connect.emitError("connectlike operation unhandled by IMConstProp")
             .attachNote(connect.getDest().getLoc())
