@@ -1217,7 +1217,7 @@ circuit LeadingList:
 FIRRTL version 4.0.0
 circuit LeadingPath:
   public module LeadingPath:
-    ; expected-error @below {{unexpected path() as start of statement}}
+    ; expected-error @below {{unexpected path expression as start of statement}}
     path("")
 
 ;// -----
@@ -1964,3 +1964,66 @@ circuit OOBFormatString:
     input clk : Clock
     ; expected-error @below {{not enough operands for format string}}
     printf(clk, UInt<1>(0h1), "oops: %d")
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryOnPort:
+  public module RegistryOnPort:
+    ; expected-error @below {{Registry types are only valid as domain fields}}
+    input a: Registry<Path>
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryOnWire:
+  public module RegistryOnWire:
+    ; expected-error @below {{Registry types are only valid as domain fields}}
+    wire a: Registry<Path>
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryAssign:
+  domain ClockDomain:
+    clockGates: Registry<Path>
+  public module RegistryAssign:
+    input A: Domain of ClockDomain
+    ; expected-error @below {{cannot assign registry types; use 'register' instead}}
+    propassign A.clockGates, path("OMReferenceTarget:~RegistryAssign|RegistryAssign>x")
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryNotField:
+  domain ClockDomain:
+    name: String
+  public module RegistryNotField:
+    input A: Domain of ClockDomain
+    ; expected-error @below {{domain field 'name' is not a Registry type}}
+    register A[name], path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RefOnInstance:
+  domain ClockDomain:
+    clockGates: Registry<Path>
+  extmodule ClockGate:
+  public module RefOnInstance:
+    input A: Domain of ClockDomain
+    inst clockGate of ClockGate
+    ; expected-error @below {{ref target 'clockGate' is an instance; use ref_instance(clockGate)}}
+    register A[clockGates], ref(clockGate)
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RefInstanceOnWire:
+  domain ClockDomain:
+    clockGates: Registry<Path>
+  public module RefInstanceOnWire:
+    input A: Domain of ClockDomain
+    wire cg: UInt<1>
+    ; expected-error @below {{ref_instance target 'cg' is not an instance}}
+    register A[clockGates], ref_instance(cg)
