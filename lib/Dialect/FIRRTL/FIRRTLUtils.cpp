@@ -263,7 +263,24 @@ void circt::firrtl::emitInvalidate(
     ImplicitLocOpBuilder &builder, Value val,
     llvm::function_ref<Value(ImplicitLocOpBuilder &, Value, unsigned)>
         getSubaccess) {
-  emitInvalidateImpl(builder, val, foldFlow(val), getSubaccess);
+  if (getSubaccess)
+    return emitInvalidateImpl(builder, val, foldFlow(val), getSubaccess);
+
+  SmallVector<Operation *> subaccesses;
+  emitInvalidateImpl(
+      builder, val, foldFlow(val),
+      [&](ImplicitLocOpBuilder &builder, Value parent, unsigned i) -> Value {
+        Value subaccess;
+        if (type_isa<BundleType>(parent.getType()))
+          subaccess = SubfieldOp::create(builder, parent, i);
+        else
+          subaccess = SubindexOp::create(builder, parent, i);
+        subaccesses.push_back(subaccess.getDefiningOp());
+        return subaccess;
+      });
+  for (Operation *op : llvm::reverse(subaccesses))
+    if (op->use_empty())
+      op->erase();
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
