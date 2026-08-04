@@ -156,9 +156,9 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
     by an operation the pass cannot inline through (e.g.,
     `firrtl.instance_choice`), are retained.
 
-    Hierarchical paths remain valid across inlining.  Their symbols are not
-    stable: a path split across surviving contexts continues under fresh
-    symbols, and paths left with no surviving use are removed.
+    Hierarchical paths remain valid across inlining.  A surviving path keeps
+    its symbol, retargeted to one surviving context.  Its other contexts get
+    fresh private symbols.  A path with no surviving context is removed.
 
     Operations whose symbol uses cannot be analyzed are diagnosed rather than
     silently kept, as are paths terminating at an instance directed to be

@@ -636,6 +636,7 @@ private:
 
   /// Trace upward from a root module until reaching surviving modules,
   /// discovering all contexts where the root appears after inlining.
+  /// Depth-first over the instance graph's uses, with an explicit stack.
   LogicalResult
   traceUpUntilSurviving(StringAttr rootModName, hw::HierPathOp diagAnchor,
                         SmallVectorImpl<SmallVector<PathHop>> &discoveredPaths);
@@ -716,7 +717,7 @@ LogicalResult NLAPlanner::run() {
   //
   // VNLA creation is contiguous per origSym (I4), grouped by root.
   llvm::MapVector<StringAttr, SmallVector<hw::HierPathOp>> byRoot;
-  for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>()) {
+  for (auto nla : circuit.getOps<hw::HierPathOp>()) {
     byRoot[nla.root()].push_back(nla);
     hierPathOps[nla.getSymNameAttr()] = nla;
   }
@@ -920,15 +921,14 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
 
 size_t NLAPlanner::minimalRootIndex(ArrayRef<PathHop> upperPath,
                                     StringAttr rootMod) {
-  // The BU trace upwards uses the over-approximation to ensure coverage, here
-  // we TD precisely to find the minimal root point.
+  // The bottom-up trace over-approximates to ensure coverage.
+  // Here we walk top-down to find the minimal root point precisely.
   //
   // Returns its index in `upperPath`; `upperPath.size()` roots at `rootMod`.
   // The namepath itself is the user's spec and is never trimmed.
   //
-  // This logic is of course coupled to inline/flatten knowledge.
-  //   -->
-  // A new way a module is absorbed or relocated must re-derive this rooting,
+  // This rooting is coupled to inline/flatten knowledge.
+  // A new way for a module to be absorbed or relocated must re-derive it,
   // or a surviving root is misidentified (misrouted annotation; I9 churn).
   //
   // Inline and flatten act differently, deciding how deep to root:
@@ -940,12 +940,12 @@ size_t NLAPlanner::minimalRootIndex(ArrayRef<PathHop> upperPath,
   // `root` never stays unset: we traced upwards until this was certain.
   size_t root = 0;
   for (size_t i = 0, e = upperPath.size(); i <= e; ++i) {
-    StringAttr mod = i < e ? upperPath[i].mod : rootMod;
-    const auto &info =
-        facts.getModuleInfo(symbolTable.lookup<FModuleLike>(mod));
     // Flatten means we're done searching, use the deepest we've found.
     if (isTransitiveFlatten)
       break;
+    StringAttr mod = i < e ? upperPath[i].mod : rootMod;
+    const auto &info =
+        facts.getModuleInfo(symbolTable.lookup<FModuleLike>(mod));
     // Inline modules don't survive as a root; can still root below them.
     if (!info.hasInline)
       root = i;
@@ -2060,8 +2060,7 @@ LogicalResult Inliner::inlineModules() {
 }
 
 void Inliner::eraseDeadModules() {
-  for (auto mod : llvm::make_early_inc_range(
-           circuit.getBodyBlock()->getOps<FModuleLike>())) {
+  for (auto mod : llvm::make_early_inc_range(circuit.getOps<FModuleLike>())) {
     if (inliningFacts.isKnownLive(mod))
       continue;
     mod.erase();
@@ -2269,7 +2268,7 @@ void Inliner::rewriteAnnotations() {
   // Other module-likes are each a trivial walk done serially, handled inline
   // (the same split as verifyInnerRefNamespace).
   SmallVector<FModuleOp> bodyModules;
-  for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleLike>()) {
+  for (auto fmodule : circuit.getOps<FModuleLike>()) {
     if (auto regular = dyn_cast<FModuleOp>(*fmodule))
       bodyModules.push_back(regular);
     else
