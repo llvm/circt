@@ -466,14 +466,19 @@ static void hostmemWriteTest(Accelerator *acc,
         "hostmem write test failed. No writemem child found");
   auto &writeMemPorts = writeMemChildIter->second->getPorts();
 
-  auto cmdPortIter = writeMemPorts.find(AppID("cmd", width));
-  if (cmdPortIter == writeMemPorts.end())
+  // The MMIO command surface lives in a nested 'mmio[width]' submodule
+  // (BurstCommand -> MmioRegistry), exposing its 'cmd' port at
+  // writemem[width]/mmio[width]/cmd.
+  AppIDPath cmdPath;
+  BundlePort *cmdPortBundle = acc->resolvePort(
+      {AppID("writemem", width), AppID("mmio", width), AppID("cmd")}, cmdPath);
+  if (!cmdPortBundle)
     throw std::runtime_error(
-        "hostmem write test failed. No (cmd,width) MMIO port");
-  auto *cmdMMIO = cmdPortIter->second.getAs<services::MMIO::MMIORegion>();
+        "hostmem write test failed. No mmio[width]/cmd MMIO port");
+  auto *cmdMMIO = cmdPortBundle->getAs<services::MMIO::MMIORegion>();
   if (!cmdMMIO)
     throw std::runtime_error(
-        "hostmem write test failed. (cmd,width) port not MMIO");
+        "hostmem write test failed. mmio[width]/cmd port not MMIO");
 
   auto issuedPortIter = writeMemPorts.find(AppID("addrCmdIssued"));
   if (issuedPortIter == writeMemPorts.end())
@@ -533,15 +538,20 @@ static void hostmemReadTest(Accelerator *acc,
         "hostmem read test failed. No readmem child found");
 
   auto &readMemPorts = readMemChildIter->second->getPorts();
-  auto addrCmdPortIter = readMemPorts.find(AppID("cmd", width));
-  if (addrCmdPortIter == readMemPorts.end())
+  // The MMIO command surface lives in a nested 'mmio[width]' submodule
+  // (BurstCommand -> MmioRegistry), exposing its 'cmd' port at
+  // readmem[width]/mmio[width]/cmd.
+  AppIDPath addrCmdPath;
+  BundlePort *addrCmdPortBundle = acc->resolvePort(
+      {AppID("readmem", width), AppID("mmio", width), AppID("cmd")},
+      addrCmdPath);
+  if (!addrCmdPortBundle)
     throw std::runtime_error(
-        "hostmem read test failed. No AddressCommand MMIO port");
-  auto *addrCmdMMIO =
-      addrCmdPortIter->second.getAs<services::MMIO::MMIORegion>();
+        "hostmem read test failed. No mmio[width]/cmd MMIO port");
+  auto *addrCmdMMIO = addrCmdPortBundle->getAs<services::MMIO::MMIORegion>();
   if (!addrCmdMMIO)
     throw std::runtime_error(
-        "hostmem read test failed. AddressCommand port not MMIO");
+        "hostmem read test failed. mmio[width]/cmd port not MMIO");
 
   auto lastReadPortIter = readMemPorts.find(AppID("lastReadLSB"));
   if (lastReadPortIter == readMemPorts.end())
@@ -889,24 +899,32 @@ hostmemWriteBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
     throw std::runtime_error("hostmem write bandwidth: writemem child missing");
   auto &writeMemPorts = writeMemChildIter->second->getPorts();
 
-  auto cmdPortIter = writeMemPorts.find(AppID("cmd", width));
-  if (cmdPortIter == writeMemPorts.end())
+  // MMIO command surface and cycle telemetry live in nested BurstCommand
+  // submodules: MMIO at writemem[width]/mmio[width]/cmd and the active-cycle
+  // metric at writemem[width]/addrCmdResp/cycles.
+  AppIDPath cmdPath;
+  BundlePort *cmdPortBundle = acc->resolvePort(
+      {AppID("writemem", width), AppID("mmio", width), AppID("cmd")}, cmdPath);
+  if (!cmdPortBundle)
     throw std::runtime_error("hostmem write bandwidth: cmd MMIO missing");
-  auto *cmdMMIO = cmdPortIter->second.getAs<services::MMIO::MMIORegion>();
+  auto *cmdMMIO = cmdPortBundle->getAs<services::MMIO::MMIORegion>();
   if (!cmdMMIO)
     throw std::runtime_error("hostmem write bandwidth: cmd not MMIO");
 
+  AppIDPath cyclePath;
+  BundlePort *cyclePortBundle = acc->resolvePort(
+      {AppID("writemem", width), AppID("addrCmdResp"), AppID("cycles")},
+      cyclePath);
   auto issuedIter = writeMemPorts.find(AppID("addrCmdIssued"));
   auto respIter = writeMemPorts.find(AppID("addrCmdResponses"));
-  auto cycleCount = writeMemPorts.find(AppID("addrCmdCycles"));
   if (issuedIter == writeMemPorts.end() || respIter == writeMemPorts.end() ||
-      cycleCount == writeMemPorts.end())
+      !cyclePortBundle)
     throw std::runtime_error("hostmem write bandwidth: telemetry missing");
   auto *issuedPort =
       issuedIter->second.getAs<services::TelemetryService::Metric>();
   auto *respPort = respIter->second.getAs<services::TelemetryService::Metric>();
   auto *cyclePort =
-      cycleCount->second.getAs<services::TelemetryService::Metric>();
+      cyclePortBundle->getAs<services::TelemetryService::Metric>();
   if (!issuedPort || !respPort || !cyclePort)
     throw std::runtime_error(
         "hostmem write bandwidth: telemetry type mismatch");
@@ -969,24 +987,31 @@ hostmemReadBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
     throw std::runtime_error("hostmem read bandwidth: readmem child missing");
   auto &readMemPorts = readMemChildIter->second->getPorts();
 
-  auto cmdPortIter = readMemPorts.find(AppID("cmd", width));
-  if (cmdPortIter == readMemPorts.end())
+  // MMIO at readmem[width]/mmio[width]/cmd; active-cycle metric at
+  // readmem[width]/addrCmdResp/cycles (nested BurstCommand submodules).
+  AppIDPath cmdPath;
+  BundlePort *cmdPortBundle = acc->resolvePort(
+      {AppID("readmem", width), AppID("mmio", width), AppID("cmd")}, cmdPath);
+  if (!cmdPortBundle)
     throw std::runtime_error("hostmem read bandwidth: cmd MMIO missing");
-  auto *cmdMMIO = cmdPortIter->second.getAs<services::MMIO::MMIORegion>();
+  auto *cmdMMIO = cmdPortBundle->getAs<services::MMIO::MMIORegion>();
   if (!cmdMMIO)
     throw std::runtime_error("hostmem read bandwidth: cmd not MMIO");
 
+  AppIDPath cyclePath;
+  BundlePort *cyclePortBundle = acc->resolvePort(
+      {AppID("readmem", width), AppID("addrCmdResp"), AppID("cycles")},
+      cyclePath);
   auto issuedIter = readMemPorts.find(AppID("addrCmdIssued"));
   auto respIter = readMemPorts.find(AppID("addrCmdResponses"));
-  auto cyclePort = readMemPorts.find(AppID("addrCmdCycles"));
   if (issuedIter == readMemPorts.end() || respIter == readMemPorts.end() ||
-      cyclePort == readMemPorts.end())
+      !cyclePortBundle)
     throw std::runtime_error("hostmem read bandwidth: telemetry missing");
   auto *issuedPort =
       issuedIter->second.getAs<services::TelemetryService::Metric>();
   auto *respPort = respIter->second.getAs<services::TelemetryService::Metric>();
   auto *cycleCntPort =
-      cyclePort->second.getAs<services::TelemetryService::Metric>();
+      cyclePortBundle->getAs<services::TelemetryService::Metric>();
   if (!issuedPort || !respPort || !cycleCntPort)
     throw std::runtime_error("hostmem read bandwidth: telemetry type mismatch");
   issuedPort->connect();
@@ -1249,6 +1274,12 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,
   const std::vector<std::string> writePrefixes = {"writemem", "writemem_0",
                                                   "writemem_1", "writemem_2"};
 
+  // Size each unit's region to the actual transfer (min 1 MiB) rather than a
+  // fixed 1 GiB, so aggregating many units stays memory-bounded.
+  size_t strideBytes = ((width + 31) / 32) * 4;
+  size_t neededBytes = static_cast<size_t>(xferCount) * strideBytes;
+  size_t regionBytes = neededBytes < (1u << 20) ? (1u << 20) : neededBytes;
+
   auto addUnits = [&](const std::vector<std::string> &pref, bool doRead,
                       bool doWrite) {
     for (auto &p : pref) {
@@ -1257,14 +1288,19 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,
       if (childIt == acc->getChildren().end())
         continue; // silently skip missing variants
       auto &ports = childIt->second->getPorts();
-      auto cmdIt = ports.find(AppID("cmd", width));
       auto respIt = ports.find(AppID("addrCmdResponses"));
-      auto cycIt = ports.find(AppID("addrCmdCycles"));
-      if (cmdIt == ports.end() || respIt == ports.end() || cycIt == ports.end())
+      // MMIO ('cmd') and the cycle metric are nested inside BurstCommand
+      // submodules: <unit>/mmio[width]/cmd and <unit>/addrCmdResp/cycles.
+      AppIDPath cmdPath, cycPath;
+      BundlePort *cmdBundle =
+          acc->resolvePort({id, AppID("mmio", width), AppID("cmd")}, cmdPath);
+      BundlePort *cycBundle = acc->resolvePort(
+          {id, AppID("addrCmdResp"), AppID("cycles")}, cycPath);
+      if (respIt == ports.end() || !cmdBundle || !cycBundle)
         continue;
-      auto *cmd = cmdIt->second.getAs<services::MMIO::MMIORegion>();
+      auto *cmd = cmdBundle->getAs<services::MMIO::MMIORegion>();
       auto *resp = respIt->second.getAs<services::TelemetryService::Metric>();
-      auto *cyc = cycIt->second.getAs<services::TelemetryService::Metric>();
+      auto *cyc = cycBundle->getAs<services::TelemetryService::Metric>();
       if (!cmd || !resp || !cyc)
         continue;
       resp->connect();
@@ -1273,7 +1309,7 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,
       u.prefix = p;
       u.isRead = doRead;
       u.isWrite = doWrite;
-      u.region = hostmemSvc->allocate(1024 * 1024 * 1024, {.writeable = true});
+      u.region = hostmemSvc->allocate(regionBytes, {.writeable = true});
       // Init pattern.
       uint64_t *ptr = static_cast<uint64_t *>(u.region->getPtr());
       size_t words = u.region->getSize() / 8;

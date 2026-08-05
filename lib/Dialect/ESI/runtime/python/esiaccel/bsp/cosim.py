@@ -159,6 +159,7 @@ def CosimBSP(
           StructType([
               ("tag", UInt(8)),
               ("data", Bits(ESI_Cosim_UserTopWrapper.HostMemWidth)),
+              ("last", Bits(1)),
           ]))
       req = wrapper.hostmem_read.unpack(
           resp=drop_while_resetting(resp_channel))['req']
