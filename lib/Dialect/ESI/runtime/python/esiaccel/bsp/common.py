@@ -989,10 +989,11 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   return HostMemReadReqSplitterImpl
 
 
-def HostmemReadProcessor(read_width: int,
-                         hostmem_module,
-                         reqs: List[esi._OutputBundleSetter],
-                         max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES):
+def HostmemReadProcessor(
+    read_width: int,
+    hostmem_module,
+    reqs: List[esi._OutputBundleSetter],
+    max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES):
   """Construct a host memory read request module to orchestrate the the read
   connections. Responsible for both gearboxing the data, multiplexing the
   requests, reassembling out-of-order responses and routing the responses to the
