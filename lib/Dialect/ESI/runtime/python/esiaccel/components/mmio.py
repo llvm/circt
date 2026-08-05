@@ -18,6 +18,7 @@ from pycde import AppID, Clock, Input, Module, Output, Reset, generator
 from pycde.constructs import ControlReg, Mux, Wire
 from pycde.module import modparams
 from pycde.types import Array, Bits, Channel, StructType, UInt
+from pycde.support import clog2
 
 # A presented MMIO write command. Unlike ``esi.MMIOReadWriteCmdType`` there is
 # no redundant ``write`` field -- every command on this surface is a write.
@@ -133,13 +134,17 @@ def MmioRegistry(num_ro: int, num_rw: int, num_wo: int):
                 ce=reg_ce,
                 name=f"read_reg_{i}",
             ))
-      ports.read_reg_value = Array(Bits(64), num_read)(read_values)
+      read_values_arr = Array(Bits(64), num_read)(read_values)
+      ports.read_reg_value = read_values_arr
 
       # Read / write-response value: the selected read register, or -1 for a
       # WO register or an out-of-bounds offset.
-      resp_sel = Bits(64)(2**64 - 1)
-      for i in range(num_read):
-        resp_sel = Mux(is_index(i), resp_sel, read_values[i])
+      sel_read_value = read_values_arr[idx.as_bits(clog2(num_read))]
+      resp_sel = Mux(
+          idx < UInt(idx_w)(num_read),
+          sel_read_value,
+          Bits(64)(2**64 - 1),
+      )
       resp_data_r.assign(
           resp_sel.reg(
               clk=clk,
