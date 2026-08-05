@@ -1817,8 +1817,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             os << " struct packed {";
             if (element.offset) {
               os << (emitAsTwoStateType ? "bit" : "logic") << " ["
-                 << element.offset - 1 << ":0] "
-                 << "__pre_padding_" << element.name.getValue() << "; ";
+                 << element.offset - 1 << ":0] " << "__pre_padding_"
+                 << element.name.getValue() << "; ";
             }
           }
 
@@ -2320,8 +2320,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -3997,7 +3996,8 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
 }
 
 // Weak and strong are emitted identically
-EmittedProperty PropertyEmitter::emitWeakStrongOp(std::string mnemonic, Value input) {
+EmittedProperty PropertyEmitter::emitWeakStrongOp(std::string mnemonic,
+                                                  Value input) {
   ps << mnemonic << PP::space << "(";
   ps.scopedBox(PP::ibox2, [&] {
     emitNestedProperty(input, PropertyPrecedence::Unary);
