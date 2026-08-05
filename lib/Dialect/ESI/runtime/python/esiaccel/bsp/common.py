@@ -828,30 +828,30 @@ def TaggedReadGearbox(input_bitwidth: int,
   return TaggedReadGearboxImpl
 
 
-# Maximum PCIe read request size in bytes. PCIe's Max_Read_Request_Size tops out
-# at 4096 bytes, but root ports often negotiate a smaller limit, so use a
-# conservative 64-double-word (256-byte) cap. Reads larger than this must be
-# split by the requester into multiple requests. Mirrors kPcieMaxReadRequestBytes
-# in the Cosim backend (cpp/lib/backends/Cosim.cpp).
-PCIE_MAX_READ_REQUEST_BYTES = 64 * 4  # 64 double words
+# Maximum size, in bytes, of a single upstream read request. Reads larger than
+# this are split by the requester into multiple requests. The default is a
+# conservative PCIe-derived cap (Max_Read_Request_Size tops out at 4096 bytes,
+# but root ports often negotiate less); it mirrors kPcieMaxReadRequestBytes in
+# the Cosim backend (cpp/lib/backends/Cosim.cpp).
+MAX_READ_REQUEST_BYTES = 64 * 4  # 64 double words
 
-# Maximum PCIe write payload size in bytes (Max Payload Size analog). A single
-# upstream write transaction must not exceed this; an element whose write
-# payload is wider is split into multiple <= this-size transactions.
-PCIE_MAX_WRITE_PAYLOAD_BYTES = 256
+# Maximum size, in bytes, of a single upstream write transaction; an element
+# whose write payload is wider is split into multiple <= this-size transactions.
+# The default is a conservative PCIe-derived Max-Payload-Size cap.
+MAX_WRITE_PAYLOAD_BYTES = 256
 
 
 @modparams
 def HostMemReadReqSplitter(req_channel_type: Channel,
                            resp_channel_type: Channel, max_chunk_bytes: int):
-  """Split oversized host memory read requests into PCIe-compliant chunks before
+  """Split oversized host memory read requests into request-sized chunks before
   arbitration and reassemble the per-chunk responses into a single logical
   burst.
 
-  A burst read (`read_list`) can request many more bytes than the PCIe maximum
-  read request size allows in a single request. This module breaks such a
-  request into `max_chunk_bytes`-sized (element-aligned, MRRS-compliant) chunks
-  addressed sequentially from the base. Splitting here -- *before* the requests
+  A burst read (`read_list`) can request many more bytes than a single upstream
+  read request can carry. This module breaks such a request into
+  `max_chunk_bytes`-sized (word-aligned) chunks addressed sequentially from the
+  base. Splitting here -- *before* the requests
   are arbitrated onto the shared upstream read channel -- lets each client's
   chunks interleave with other clients' requests, so one large burst does not
   monopolize host memory bandwidth.
@@ -859,21 +859,21 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   On the response path the per-chunk end-of-list markers are dropped and a
   single burst-final `last` is re-derived from the total transfer length, so the
   gearbox and client see one contiguous response stream identical to an unsplit
-  read. This will be a performance limiter.
-  TODO: make this able to issue >1 one read at a time.
+  read.
 
   Only one logical request is in flight at a time (matching the read processor's
   one-outstanding-transaction-per-client model): a new request is not accepted
   until the current burst's chunks have all been issued and its responses have
-  fully drained.
+  fully drained. This will be a performance limiter.
+  TODO: make this able to issue >1 one read at a time.
 
   req_channel_type:  channel of the upstream read request {address, length
     (bytes), tag}.
   resp_channel_type: channel of the upstream response {tag, data, last}.
   max_chunk_bytes:   largest per-chunk byte count; must be > 0, a multiple of the
-    element stride, and <= PCIE_MAX_READ_REQUEST_BYTES.
+    response word size, and <= MAX_READ_REQUEST_BYTES.
   """
-  assert 0 < max_chunk_bytes <= PCIE_MAX_READ_REQUEST_BYTES
+  assert 0 < max_chunk_bytes <= MAX_READ_REQUEST_BYTES
 
   req_struct = req_channel_type.inner_type
   resp_struct = resp_channel_type.inner_type
@@ -1083,20 +1083,15 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
           words_per_elem = (element_bits + read_width - 1) // read_width
           elem_stride_bytes = words_per_elem * word_bytes
 
-          # A burst can request far more than the PCIe maximum read request
-          # size, so split it into MRRS-compliant, element-aligned chunks before
+          # A burst can request far more than a single upstream read request can
+          # carry, so split it into request-sized, word-aligned chunks before
           # arbitration and reassemble the responses afterwards; the gearbox
-          # then sees one contiguous response stream. 'splitter_resp' breaks the
-          # request/response construction cycle (the client request is derived
-          # from the packed response bundle).
-          if elem_stride_bytes > PCIE_MAX_READ_REQUEST_BYTES:
-            raise ValueError(
-                f"read_list element stride ({elem_stride_bytes} bytes) exceeds "
-                f"the PCIe maximum read request size "
-                f"({PCIE_MAX_READ_REQUEST_BYTES} bytes); a single element must "
-                f"fit in one read request.")
-          max_chunk_bytes = (PCIE_MAX_READ_REQUEST_BYTES //
-                             elem_stride_bytes) * elem_stride_bytes
+          # sees one contiguous response stream. Elements may span chunks -- the
+          # splitter re-derives a single burst-final 'last' from the total
+          # length. 'splitter_resp' breaks the request/response construction
+          # cycle (the client request is derived from the packed response
+          # bundle).
+          max_chunk_bytes = (MAX_READ_REQUEST_BYTES // word_bytes) * word_bytes
           splitter_resp = Wire(demuxed_upstream_channel.type)
           gearbox = TaggedReadGearbox(read_width,
                                       element_bits)(clk=ports.clk,
@@ -1185,7 +1180,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
   Assumes a struct {address, tag, data} and only gearboxes the data. Tag is
   stored separately and the struct is re-assembled later on.
 
-  'max_burst_bytes' caps a single contiguous upstream write transaction (PCIe
+  'max_burst_bytes' caps a single contiguous upstream write transaction (a
   max-payload-size analog): when an element spans more than 'max_burst_bytes',
   its engine words are split into multiple <= 'max_burst_bytes' transactions by
   emitting the framing 'last' at each boundary. 0 disables the cap."""
@@ -1306,7 +1301,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
                           Bits(8)(output_bitwidth_bytes),
                           Bits(8)((output_bitwidth - padding_numbits) // 8))
         if max_burst_words and num_chunks > max_burst_words:
-          # PCIe max-payload-size cap: end the upstream write transaction at the
+          # Max-payload-size cap: end the upstream write transaction at the
           # element end OR every max_burst_words engine words, whichever comes
           # first, so a wide element's write is split into <= max_burst_bytes
           # transactions. Each word keeps its own sequential address; only the
@@ -1472,7 +1467,7 @@ def HostMemWriteProcessor(
           elem_stride = words_per_elem * word_bytes
 
           gearbox_mod = TaggedWriteGearbox(element_bits, write_width,
-                                           PCIE_MAX_WRITE_PAYLOAD_BYTES)
+                                           MAX_WRITE_PAYLOAD_BYTES)
           gearbox_in_type = gearbox_mod.in_.type.inner_type
 
           # Unwrap the window frames; compute a base+offset address from a
@@ -1505,8 +1500,7 @@ def HostMemWriteProcessor(
               client_type.data)
           bundle_sig, sfroms = write_req_bundle_type.pack(ackTag=input_flit_ack)
           gearbox_mod = TaggedWriteGearbox(client_type.data.bitwidth,
-                                           write_width,
-                                           PCIE_MAX_WRITE_PAYLOAD_BYTES)
+                                           write_width, MAX_WRITE_PAYLOAD_BYTES)
           gearbox_in_type = gearbox_mod.in_.type.inner_type
           bitcast_client_req = sfroms["req"].transform(
               lambda m, git=gearbox_in_type: git({
