@@ -6,19 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_AXI4_AXI4TYPES_H
+#define CIRCT_DIALECT_AXI4_AXI4TYPES_H
+
+#include "circt/Dialect/AXI4/AXI4Attributes.h"
 #include "circt/Dialect/AXI4/AXI4Dialect.h"
-#include "circt/Dialect/AXI4/AXI4Ops.h"
+#include "mlir/IR/Types.h"
 
-using namespace circt;
-using namespace axi4;
+#define GET_TYPEDEF_CLASSES
+#include "circt/Dialect/AXI4/AXI4Types.h.inc"
 
-void AXI4Dialect::initialize() {
-  registerAttributes();
-  registerTypes();
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/AXI4/AXI4.cpp.inc"
-      >();
-}
-
-#include "circt/Dialect/AXI4/AXI4Dialect.cpp.inc"
+#endif // CIRCT_DIALECT_AXI4_AXI4TYPES_H
