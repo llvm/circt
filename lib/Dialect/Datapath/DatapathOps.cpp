@@ -127,10 +127,10 @@ CompressorTree::CompressorTree(size_t width,
     // Compressors will be formed of uniform bitwidth addends
     assert(row.size() == width);
     for (size_t i = 0; i < width; ++i) {
-      auto knownBits = comb::computeKnownBits(row[i]);
-      if (knownBits.isZero())
+      auto knownBit = comb::computeKnownBits(row[i]);
+      if (knownBit.isZero())
         continue;
-      if (knownBits.isAllOnes()) {
+      if (knownBit.isAllOnes()) {
         ++constantOnes[i];
         continue;
       }

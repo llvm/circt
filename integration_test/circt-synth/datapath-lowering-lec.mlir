@@ -125,10 +125,12 @@ hw.module @compress_6(in %a : i4, in %b : i4, in %c : i4, in %d : i4, in %e : i4
   hw.output %1 : i4
 }
 
+// Keep the constants separated by non-constant operands so canonicalization
+// cannot fold the compressor to an adder before conversion.
 // RUN: circt-lec.sh %t.mlir %s -c1=compress_known_ones -c2=compress_known_ones
-hw.module @compress_known_ones(in %a : i4, out sum : i4) {
+hw.module @compress_known_ones(in %a : i4, in %b : i4, out sum : i4) {
   %c15_i4 = hw.constant 15 : i4
-  %0:2 = datapath.compress %a, %c15_i4, %c15_i4 : i4 [3 -> 2]
+  %0:2 = datapath.compress %a, %c15_i4, %b, %c15_i4 : i4 [4 -> 2]
   %1 = comb.add bin %0#0, %0#1 : i4
   hw.output %1 : i4
 }
