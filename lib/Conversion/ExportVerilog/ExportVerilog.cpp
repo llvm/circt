@@ -3640,7 +3640,10 @@ private:
   EmittedProperty visitLTL(ltl::UntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
   EmittedProperty visitLTL(ltl::ClockOp op);
+  EmittedProperty visitLTL(ltl::WeakOp op);
+  EmittedProperty visitLTL(ltl::StrongOp op);
 
+  EmittedProperty emitWeakStrongOp(std::string mnemonic, Value input);
   void emitLTLDelay(int64_t delay, std::optional<int64_t> length);
   void emitLTLClockingEvent(ltl::ClockEdge edge, Value clock);
   void emitLTLConcat(ValueRange inputs);
@@ -3991,6 +3994,24 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
   ps << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
   return {PropertyPrecedence::Clocking};
+}
+
+// Weak and strong are emitted identically
+EmittedProperty PropertyEmitter::emitWeakStrongOp(std::string mnemonic, Value input) {
+  ps << mnemonic << PP::space << "(";
+  ps.scopedBox(PP::ibox2, [&] {
+    emitNestedProperty(input, PropertyPrecedence::Unary);
+    ps << ")";
+  });
+  return {PropertyPrecedence::Unary};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::WeakOp op) {
+  return emitWeakStrongOp("weak", op.getInput());
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::StrongOp op) {
+  return emitWeakStrongOp("strong", op.getInput());
 }
 
 // NOLINTEND(misc-no-recursion)

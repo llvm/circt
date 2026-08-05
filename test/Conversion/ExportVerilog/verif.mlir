@@ -302,6 +302,24 @@ hw.module @Precedence(in %a: i1, in %b: i1) {
   sv.assert_property %ag11 : !ltl.property
 }
 
+// CHECK-LABEL: module WeakAndStrongSequences
+hw.module @WeakAndStrongSequences(in %clk: i1, in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1) {
+  // CHECK: assert property (weak (a ##1 b ##0 c ##1 d));
+  %a0 = ltl.delay %b, 1, 0 : i1
+  %a1 = ltl.delay %d, 1, 0 : i1
+  %a2 = ltl.concat %a, %a0 : i1, !ltl.sequence
+  %a3 = ltl.concat %c, %a1 : i1, !ltl.sequence
+  %a4 = ltl.concat %a2, %a3 : !ltl.sequence, !ltl.sequence
+  %ws = ltl.weak %a4 : !ltl.sequence
+  sv.assert_property %ws : !ltl.property
+
+  // CHECK: assert property (strong (b ##1 c ##1 d));
+  %b0 = ltl.delay %c, 1, 0 : i1
+  %b1 = ltl.concat %b, %b0, %a1 : i1, !ltl.sequence, !ltl.sequence
+  %ss = ltl.strong %b1 : !ltl.sequence
+  sv.assert_property %ss : !ltl.property
+}
+
 // CHECK-LABEL: module SystemVerilogSpecExamples
 hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1) {
   // Section 16.7 "Sequences"
