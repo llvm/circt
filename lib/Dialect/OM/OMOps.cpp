@@ -12,7 +12,6 @@
 
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/OM/OMOpInterfaces.h"
 #include "circt/Dialect/OM/OMUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -759,7 +758,32 @@ static APSInt getAPSIntForOMIntegerAttr(circt::om::IntegerAttr attr) {
   return APSInt(value.getValue(), /*isUnsigned=*/false);
 }
 
-static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryOp op,
+static FailureOr<APSInt>
+evaluateIntegerOperation(Operation *op, const APSInt &lhs, const APSInt &rhs) {
+  if (isa<IntegerAddOp>(op))
+    return success(lhs + rhs);
+  if (isa<IntegerMulOp>(op))
+    return success(lhs * rhs);
+  if (isa<IntegerShrOp, IntegerShlOp>(op)) {
+    if (!rhs.isNonNegative())
+      return op->emitOpError("shift amount must be non-negative");
+    if (!rhs.isRepresentableByInt64())
+      return op->emitOpError("shift amount must be representable in 64 bits");
+    int64_t shiftAmount = rhs.getExtValue();
+    if (isa<IntegerShrOp>(op))
+      return success(lhs >> shiftAmount);
+    return success(lhs.extend(lhs.getBitWidth() + shiftAmount) << shiftAmount);
+  }
+  if (isa<IntegerAndOp>(op))
+    return success(APSInt(lhs & rhs, false));
+  if (isa<IntegerOrOp>(op))
+    return success(APSInt(lhs | rhs, false));
+  if (isa<IntegerXorOp>(op))
+    return success(APSInt(lhs ^ rhs, false));
+  llvm_unreachable("unknown OM integer binary operation");
+}
+
+static OpFoldResult foldIntegerBinaryArithmetic(Operation *op,
                                                 Attribute lhsAttr,
                                                 Attribute rhsAttr) {
   auto lhs = dyn_cast_or_null<circt::om::IntegerAttr>(lhsAttr);
@@ -778,11 +802,11 @@ static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryOp op,
     lhsVal = lhsVal.extend(rhsVal.getBitWidth());
 
   // Perform arbitrary precision signed integer binary arithmetic.
-  auto result = op.evaluateIntegerOperation(lhsVal, rhsVal);
+  auto result = evaluateIntegerOperation(op, lhsVal, rhsVal);
   if (failed(result))
     return {};
 
-  auto *ctx = op.getContext();
+  auto *ctx = op->getContext();
   // Return the result as a new om::IntegerAttr.
   return circt::om::IntegerAttr::get(
       ctx, mlir::IntegerAttr::get(ctx, result.value()));
@@ -792,71 +816,36 @@ static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryOp op,
 // IntegerAddOp
 //===----------------------------------------------------------------------===//
 
-FailureOr<llvm::APSInt>
-IntegerAddOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
-                                       const llvm::APSInt &rhs) {
-  return success(lhs + rhs);
-}
-
 OpFoldResult IntegerAddOp::fold(FoldAdaptor adaptor) {
-  return foldIntegerBinaryArithmetic(*this, adaptor.getLhs(), adaptor.getRhs());
+  return foldIntegerBinaryArithmetic(getOperation(), adaptor.getLhs(),
+                                     adaptor.getRhs());
 }
 
 //===----------------------------------------------------------------------===//
 // IntegerMulOp
 //===----------------------------------------------------------------------===//
 
-FailureOr<llvm::APSInt>
-IntegerMulOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
-                                       const llvm::APSInt &rhs) {
-  return success(lhs * rhs);
-}
-
 OpFoldResult IntegerMulOp::fold(FoldAdaptor adaptor) {
-  return foldIntegerBinaryArithmetic(*this, adaptor.getLhs(), adaptor.getRhs());
+  return foldIntegerBinaryArithmetic(getOperation(), adaptor.getLhs(),
+                                     adaptor.getRhs());
 }
 
 //===----------------------------------------------------------------------===//
 // IntegerShrOp
 //===----------------------------------------------------------------------===//
 
-FailureOr<llvm::APSInt>
-IntegerShrOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
-                                       const llvm::APSInt &rhs) {
-  // Check non-negative constraint from operation semantics.
-  if (!rhs.isNonNegative())
-    return emitOpError("shift amount must be non-negative");
-  // Check size constraint from implementation detail of using getExtValue.
-  if (!rhs.isRepresentableByInt64())
-    return emitOpError("shift amount must be representable in 64 bits");
-  return success(lhs >> rhs.getExtValue());
-}
-
 OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
-  return foldIntegerBinaryArithmetic(*this, adaptor.getLhs(), adaptor.getRhs());
+  return foldIntegerBinaryArithmetic(getOperation(), adaptor.getLhs(),
+                                     adaptor.getRhs());
 }
 
 //===----------------------------------------------------------------------===//
 // IntegerShlOp
 //===----------------------------------------------------------------------===//
 
-FailureOr<llvm::APSInt>
-IntegerShlOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
-                                       const llvm::APSInt &rhs) {
-  // Check non-negative constraint from operation semantics.
-  if (!rhs.isNonNegative())
-    return emitOpError("shift amount must be non-negative");
-  // Check size constraint from implementation detail of using getExtValue.
-  if (!rhs.isRepresentableByInt64())
-    return emitOpError("shift amount must be representable in 64 bits");
-
-  int64_t shiftAmt = rhs.getExtValue();
-  // Extend lhs to lhsWidth + shiftAmt bits so no bits are truncated.
-  return success(lhs.extend(lhs.getBitWidth() + shiftAmt) << shiftAmt);
-}
-
 OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
-  return foldIntegerBinaryArithmetic(*this, adaptor.getLhs(), adaptor.getRhs());
+  return foldIntegerBinaryArithmetic(getOperation(), adaptor.getLhs(),
+                                     adaptor.getRhs());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1007,10 +996,9 @@ void StringConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
 // PropEqOp
 //===----------------------------------------------------------------------===//
 
-FailureOr<mlir::Attribute>
-PropEqOp::evaluateBinaryEquality(mlir::Attribute lhsAttr,
-                                 mlir::Attribute rhsAttr) {
-  auto resultType = mlir::IntegerType::get(getContext(), 1);
+static FailureOr<mlir::Attribute>
+evaluateBinaryEquality(mlir::Attribute lhsAttr, mlir::Attribute rhsAttr) {
+  auto resultType = mlir::IntegerType::get(lhsAttr.getContext(), 1);
 
   // String equality.
   if (auto lhs = dyn_cast<mlir::StringAttr>(lhsAttr))
@@ -1019,8 +1007,8 @@ PropEqOp::evaluateBinaryEquality(mlir::Attribute lhsAttr,
           mlir::IntegerAttr::get(resultType, lhs == rhs ? 1 : 0));
 
   // OM integer equality (arbitrary precision).
-  if (auto lhs = dyn_cast<om::IntegerAttr>(lhsAttr))
-    if (auto rhs = dyn_cast<om::IntegerAttr>(rhsAttr)) {
+  if (auto lhs = dyn_cast<circt::om::IntegerAttr>(lhsAttr))
+    if (auto rhs = dyn_cast<circt::om::IntegerAttr>(rhsAttr)) {
       APSInt lhsVal = getAPSIntForOMIntegerAttr(lhs);
       APSInt rhsVal = getAPSIntForOMIntegerAttr(rhs);
       if (lhsVal.getBitWidth() > rhsVal.getBitWidth())
@@ -1057,7 +1045,7 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
 // IntegerAndOp / IntegerOrOp / IntegerXorOp
 //===----------------------------------------------------------------------===//
 
-static OpFoldResult foldIntegerBitwise(IntegerBinaryOp op, Attribute lhsAttr,
+static OpFoldResult foldIntegerBitwise(Operation *op, Attribute lhsAttr,
                                        Attribute rhsAttr) {
   auto lhsInt = dyn_cast_or_null<mlir::IntegerAttr>(lhsAttr);
   auto rhsInt = dyn_cast_or_null<mlir::IntegerAttr>(rhsAttr);
@@ -1065,7 +1053,7 @@ static OpFoldResult foldIntegerBitwise(IntegerBinaryOp op, Attribute lhsAttr,
     return {};
   APSInt lhsVal(lhsInt.getValue());
   APSInt rhsVal(rhsInt.getValue());
-  auto result = op.evaluateIntegerOperation(lhsVal, rhsVal);
+  auto result = evaluateIntegerOperation(op, lhsVal, rhsVal);
   if (failed(result))
     return {};
   return mlir::IntegerAttr::get(
@@ -1084,14 +1072,9 @@ static bool isAllOnesInt(Attribute a) {
   return i && i.getValue().isAllOnes();
 }
 
-FailureOr<APSInt> IntegerAndOp::evaluateIntegerOperation(const APSInt &lhs,
-                                                         const APSInt &rhs) {
-  return success(APSInt(lhs & rhs, /*isUnsigned=*/false));
-}
-
 OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
-  if (auto result =
-          foldIntegerBitwise(*this, adaptor.getLhs(), adaptor.getRhs()))
+  if (auto result = foldIntegerBitwise(getOperation(), adaptor.getLhs(),
+                                       adaptor.getRhs()))
     return result;
   // AND with all-zeros is always zero.
   if (isZeroInt(adaptor.getLhs()) || isZeroInt(adaptor.getRhs()))
@@ -1105,14 +1088,9 @@ OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
-FailureOr<APSInt> IntegerOrOp::evaluateIntegerOperation(const APSInt &lhs,
-                                                        const APSInt &rhs) {
-  return success(APSInt(lhs | rhs, /*isUnsigned=*/false));
-}
-
 OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
-  if (auto result =
-          foldIntegerBitwise(*this, adaptor.getLhs(), adaptor.getRhs()))
+  if (auto result = foldIntegerBitwise(getOperation(), adaptor.getLhs(),
+                                       adaptor.getRhs()))
     return result;
   // OR with all-ones is always all-ones.
   if (isAllOnesInt(adaptor.getLhs()) || isAllOnesInt(adaptor.getRhs()))
@@ -1126,14 +1104,9 @@ OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
-FailureOr<APSInt> IntegerXorOp::evaluateIntegerOperation(const APSInt &lhs,
-                                                         const APSInt &rhs) {
-  return success(APSInt(lhs ^ rhs, /*isUnsigned=*/false));
-}
-
 OpFoldResult IntegerXorOp::fold(FoldAdaptor adaptor) {
-  if (auto result =
-          foldIntegerBitwise(*this, adaptor.getLhs(), adaptor.getRhs()))
+  if (auto result = foldIntegerBitwise(getOperation(), adaptor.getLhs(),
+                                       adaptor.getRhs()))
     return result;
   // XOR with all-zeros is identity.
   if (isZeroInt(adaptor.getLhs()))
