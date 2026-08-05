@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTAXI4
+  AXI4Attributes.cpp
   AXI4Dialect.cpp
   AXI4Ops.cpp
 

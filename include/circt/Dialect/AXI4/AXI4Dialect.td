@@ -25,6 +25,12 @@ def AXI4Dialect : Dialect {
   }];
 
   let cppNamespace = "::circt::axi4";
+
+  let useDefaultAttributePrinterParser = 1;
+
+  let extraClassDeclaration = [{
+    void registerAttributes();
+  }];
 }
 
 #endif // CIRCT_DIALECT_AXI4_AXI4DIALECT_TD

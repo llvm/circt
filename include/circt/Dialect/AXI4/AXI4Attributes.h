@@ -6,18 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_AXI4_AXI4ATTRIBUTES_H
+#define CIRCT_DIALECT_AXI4_AXI4ATTRIBUTES_H
+
 #include "circt/Dialect/AXI4/AXI4Dialect.h"
-#include "circt/Dialect/AXI4/AXI4Ops.h"
+#include "mlir/IR/BuiltinAttributes.h"
 
-using namespace circt;
-using namespace axi4;
+// Pull in the enum definitions.
+#include "circt/Dialect/AXI4/AXI4Enums.h.inc"
 
-void AXI4Dialect::initialize() {
-  registerAttributes();
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/AXI4/AXI4.cpp.inc"
-      >();
-}
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/AXI4/AXI4Attributes.h.inc"
 
-#include "circt/Dialect/AXI4/AXI4Dialect.cpp.inc"
+#endif // CIRCT_DIALECT_AXI4_AXI4ATTRIBUTES_H
