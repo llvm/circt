@@ -22,11 +22,12 @@ from typing import Type
 import pycde.esi as esi
 from pycde import Clock, Module, Reset, System, generator, modparams
 from esiaccel.bsp import get_bsp
+from esiaccel.components.mmio import MmioRegistry, mmio_write_we
 from pycde.common import AppID, Constant, Input, InputChannel, Output, OutputChannel
 from pycde.constructs import ControlReg, Counter, Mux, NamedWire, Reg, Wire
 from pycde.module import Metadata
 from pycde.testing import print_info
-from pycde.types import Bits, Channel, ChannelSignaling, UInt
+from pycde.types import Array, Bits, Channel, ChannelSignaling, UInt
 
 # ---------------------------------------------------------------------------
 # Reusable building blocks for timing-friendly MMIO-controlled test modules.
@@ -37,7 +38,7 @@ from pycde.types import Bits, Channel, ChannelSignaling, UInt
 #   * `MmioRegistry` drives the MMIO bundle's `cmd_ready` and response `valid`
 #     from a single `resp_pending` ControlReg. The BSP MMIO mux therefore
 #     only sees FF outputs, and the user module's internal write-enable
-#     strobes are 1-cycle-late registered pulses gated by `cmd_xact_r`.
+#     strobes are 1-cycle-late registered pulses gated by `write_cmd_xact_r`.
 #
 #   * `IterationGate` exposes a counter+limit "run for N iterations" widget
 #     whose `active` output is a ControlReg (FF) and whose only consumer-
@@ -50,103 +51,6 @@ from pycde.types import Bits, Channel, ChannelSignaling, UInt
 # iterations under MMIO control without exposing the BSP arbitration mux to
 # wide internal combinational logic.
 # ---------------------------------------------------------------------------
-
-
-class MmioRegistry(Module):
-  """PyCDE submodule that owns an `esi.MMIO.read_write` request and
-    exposes a FF-bounded command/response surface.
-
-    The MMIO bundle is created inside this submodule's `@generator`, so
-    the service request's AppID is anchored at this instance's
-    hierarchical position. Callers should set `instance_name="mmio"` and
-    `appid=AppID("mmio", ...)` so the leaf MMIO AppID is always
-    `<parent>/.../mmio/cmd`.
-
-    The submodule drives the MMIO bundle's `cmd_ready` and response
-    `valid` from a single `resp_pending` ControlReg, so the BSP MMIO mux
-    only sees this submodule's outputs through a FF. Per-offset write-
-    enable strobes (computed by the caller via the `mmio_write_we`
-    helper) are derived from `cmd_xact_r` -- a 1-cycle-late registered
-    accept pulse -- so the caller's decoded write-enables never depend
-    combinationally on the BSP MMIO `cmd_valid`.
-
-    Ports:
-        resp_data  : Input  Bits(64)
-            64-bit MMIO read response value. Latched internally on
-            cmd_xact and presented to MMIO the cycle resp_pending
-            asserts.
-        cmd_r      : Output StructType (esi.MMIOReadWriteCmdType)
-            Registered MMIO command (the most recently accepted one).
-        cmd_xact_r : Output Bits(1)
-            One-cycle pulse one cycle after a command is accepted.
-            Combine with `cmd_r` to derive per-offset write-enable
-            strobes; see `mmio_write_we`.
-    """
-
-  clk = Clock()
-  rst = Reset()
-
-  resp_data = Input(Bits(64))
-
-  cmd_r = Output(esi.MMIOReadWriteCmdType)
-  cmd_xact_r = Output(Bits(1))
-
-  @generator
-  def construct(ports):
-    clk = ports.clk
-    rst = ports.rst
-
-    mmio_bundle = esi.MMIO.read_write(appid=AppID("cmd"))
-
-    cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
-    cmd_ready_wire = Wire(Bits(1))
-    cmd, cmd_valid = cmd_chan_wire.unwrap(cmd_ready_wire)
-
-    resp_pending_wire = Wire(Bits(1))
-    resp_data_r = Wire(Bits(64))
-    resp_chan, resp_ready = Channel(Bits(64)).wrap(resp_data_r,
-                                                   resp_pending_wire)
-    resp_xact = resp_pending_wire & resp_ready
-    cmd_xact = cmd_valid & ~resp_pending_wire
-    cmd_ready_wire.assign(~resp_pending_wire)
-    resp_pending_wire.assign(
-        ControlReg(
-            clk=clk,
-            rst=rst,
-            asserts=[cmd_xact],
-            resets=[resp_xact],
-            name="resp_pending",
-        ))
-
-    ports.cmd_r = cmd.reg(clk=clk, rst=rst, ce=cmd_xact, name="cmd_r")
-    ports.cmd_xact_r = cmd_xact.reg(
-        clk=clk,
-        rst=rst,
-        rst_value=Bits(1)(0),
-        name="cmd_xact_r",
-    )
-
-    resp_data_r.assign(
-        ports.resp_data.reg(
-            clk=clk,
-            rst=rst,
-            rst_value=Bits(64)(0),
-            ce=cmd_xact,
-            name="resp_data_r",
-        ))
-
-    mmio_rw_cmd_chan = mmio_bundle.unpack(data=resp_chan)["cmd"]
-    cmd_chan_wire.assign(mmio_rw_cmd_chan)
-
-
-def mmio_write_we(mmio, offset: int):
-  """Registered 1-cycle write-enable strobe for writes to `offset`.
-
-    Asserts for one cycle the cycle AFTER the MMIO command is accepted.
-    Use as the `ce` of registers that latch `mmio.cmd_r.data`.
-    """
-  return (mmio.cmd_xact_r & mmio.cmd_r.write &
-          (mmio.cmd_r.offset == UInt(32)(offset)))
 
 
 @modparams
@@ -781,7 +685,11 @@ def BurstCommand(width: int):
     per command -- for a ``read_list`` or a windowed (list) write -- and tracks
     completion.
 
-    MMIO offsets: 0x10 base address, 0x18 list length (flits), 0x20 start.
+    MMIO register map (8-byte stride):
+      0x00 Read : flits_left (elements remaining in the active command).
+      0x08 Write: base address.
+      0x10 Write: list length (flits).
+      0x18 Write: start.
     """
 
   class BurstCommand(Module):
@@ -801,30 +709,29 @@ def BurstCommand(width: int):
       clk = ports.clk
       rst = ports.rst
 
-      resp_data_wire = Wire(Bits(64))
-      mmio = MmioRegistry(
+      # Register map (RO < RW < WO, 8-byte stride):
+      #   0x00  flits_left   (RO, client-updated read-back)
+      #   0x08  start_addr   (RW, host-written base address)
+      #   0x10  flits_total  (RW, host-written list length)
+      #   0x18  start        (WO, host write triggers the operation)
+      flits_left_data = Wire(Bits(64))
+      mmio = MmioRegistry(num_ro=1, num_rw=2, num_wo=1)(
           clk=clk,
           rst=rst,
-          resp_data=resp_data_wire,
+          read_reg_ce=Array(Bits(1), 3)([Bits(1)(1),
+                                         Bits(1)(0),
+                                         Bits(1)(0)]),
+          read_reg_data=Array(Bits(64),
+                              3)([flits_left_data,
+                                  Bits(64)(0),
+                                  Bits(64)(0)]),
           instance_name="mmio",
           appid=AppID("mmio", width),
       )
 
-      start_addr = mmio.cmd_r.data.as_uint().reg(
-          clk=clk,
-          rst=rst,
-          rst_value=0,
-          ce=mmio_write_we(mmio, 0x10),
-          name="start_addr",
-      )
-      flits_total = mmio.cmd_r.data.as_uint().reg(
-          clk=clk,
-          rst=rst,
-          rst_value=0,
-          ce=mmio_write_we(mmio, 0x18),
-          name="flits_total",
-      )
-      start_op_we = mmio_write_we(mmio, 0x20)
+      start_addr = mmio.read_reg_value[1].as_uint()
+      flits_total = mmio.read_reg_value[2].as_uint()
+      start_op_we = mmio_write_we(mmio, 0x18)
 
       # Response side: count completed elements; auto-reports cycles.
       _, done_valid = ports.hostmem_cmd_done.unwrap(Bits(1)(1))
@@ -838,7 +745,8 @@ def BurstCommand(width: int):
           appid=AppID("addrCmdResp"),
       )
       ports.flits_left = resp_gate.iters_left
-      resp_data_wire.assign(resp_gate.iters_left.as_bits(64))
+      # The RO flits_left register mirrors the live remaining count.
+      flits_left_data.assign(resp_gate.iters_left.as_bits(64))
 
       # Single burst request, held valid from start until accepted.
       burst_accepted = Wire(Bits(1))
@@ -889,10 +797,10 @@ def ReadMem(width: int):
         bits of the most recent element are exported as telemetry (lastReadLSB).
 
         MMIO command interface (via BurstCommand):
-          0x10  Write: base address for the read.
-          0x18  Write: number of list elements (flits) to read.
-          0x20  Write: start the operation.
-          Reads return the remaining element count.
+          0x00  Read : remaining element count (flits_left).
+          0x08  Write: base address for the read.
+          0x10  Write: number of list elements (flits) to read.
+          0x18  Write: start the operation.
 
         Telemetry (AppID -> signal):
           addrCmdIssued     Count of burst commands issued (1 per command).
@@ -961,10 +869,10 @@ def WriteMem(width: int) -> Type[Module]:
         frame, 'last' on the final); each element's payload is its frame index.
 
         MMIO command interface (via BurstCommand):
-          0x10  Write: base address for the write.
-          0x18  Write: number of list elements (flits) to write.
-          0x20  Write: start the operation.
-          Reads return the remaining element count.
+          0x00  Read : remaining element count (flits_left).
+          0x08  Write: base address for the write.
+          0x10  Write: number of list elements (flits) to write.
+          0x18  Write: start the operation.
 
         Telemetry (AppID -> signal):
           addrCmdIssued     Count of burst commands issued (1 per command).

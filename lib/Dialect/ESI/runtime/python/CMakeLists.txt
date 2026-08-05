@@ -17,6 +17,7 @@ set(ESIPythonRuntimeSources
   esiaccel/components/__init__.py
   esiaccel/components/channel_arbiter.py
   esiaccel/components/flow.py
+  esiaccel/components/mmio.py
 
   esiaccel/cosim/questa.py
   esiaccel/cosim/pytest.py
