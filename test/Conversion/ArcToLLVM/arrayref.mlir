@@ -164,3 +164,25 @@ func.func @ArrayRefFromArray(%arg0: !arc.arrayref<2xi32>, %arg1: !hw.array<2xi32
   return %0 : !arc.arrayref<2xi32>
 }
 
+// CHECK-LABEL: @ArrayRefInitZeroStruct
+// CHECK-NEXT: %[[C4:.*]] = llvm.mlir.constant(4 : i64)
+// CHECK-NEXT: %[[A:.*]] = llvm.alloca %[[C4]] x i8 {alignment = 4 : i64}
+// CHECK-NEXT: %[[ZERO:.*]] = llvm.mlir.constant(0 : i8)
+// CHECK-NEXT: "llvm.intr.memset"(%[[A]], %[[ZERO]], %[[C4]])
+// CHECK-NEXT: return %[[A]]
+func.func @ArrayRefInitZeroStruct() -> !arc.arrayref<2x!hw.struct<foo: i1, bar: i8>> {
+  %0 = arc.arrayref.alloc init([[false, 0 : i8], [false, 0 : i8]]) : !arc.arrayref<2x!hw.struct<foo: i1, bar: i8>>
+  return %0 : !arc.arrayref<2x!hw.struct<foo: i1, bar: i8>>
+}
+
+// CHECK-LABEL: @ArrayRefInitZeroArray
+// CHECK-NEXT: %[[C8:.*]] = llvm.mlir.constant(8 : i64)
+// CHECK-NEXT: %[[A:.*]] = llvm.alloca %[[C8]] x i8 {alignment = 4 : i64}
+// CHECK-NEXT: %[[ZERO:.*]] = llvm.mlir.constant(0 : i8)
+// CHECK-NEXT: "llvm.intr.memset"(%[[A]], %[[ZERO]], %[[C8]])
+// CHECK-NEXT: return %[[A]]
+func.func @ArrayRefInitZeroArray() -> !arc.arrayref<2x!hw.array<1xi32>> {
+  %0 = arc.arrayref.alloc init([[0 : i32], [0 : i32]]) : !arc.arrayref<2x!hw.array<1xi32>>
+  return %0 : !arc.arrayref<2x!hw.array<1xi32>>
+}
+
