@@ -16,6 +16,7 @@
 include "mlir/IR/OpBase.td"
 
 include "circt/Dialect/AXI4/AXI4Dialect.td"
+include "circt/Dialect/AXI4/AXI4Attributes.td"
 include "circt/Dialect/AXI4/AXI4Ops.td"
 
 #endif // CIRCT_DIALECT_AXI4_AXI4_TD

@@ -1,2 +1,15 @@
 add_circt_dialect(AXI4 axi4)
 add_circt_doc(AXI4Ops Dialects/AXI4Ops -gen-op-doc -dialect axi4)
+add_circt_doc(AXI4Attributes Dialects/AXI4Attributes -gen-attrdef-doc -dialect axi4)
+add_circt_doc(AXI4 Dialects/AXI4Enums -gen-enum-doc -dialect axi4)
+
+set(LLVM_TARGET_DEFINITIONS AXI4.td)
+mlir_tablegen(AXI4Enums.h.inc -gen-enum-decls)
+mlir_tablegen(AXI4Enums.cpp.inc -gen-enum-defs)
+add_public_tablegen_target(MLIRAXI4EnumsIncGen)
+add_dependencies(circt-headers MLIRAXI4EnumsIncGen)
+
+mlir_tablegen(AXI4Attributes.h.inc -gen-attrdef-decls -attrdefs-dialect=axi4)
+mlir_tablegen(AXI4Attributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect=axi4)
+add_public_tablegen_target(MLIRAXI4AttributesIncGen)
+add_dependencies(circt-headers MLIRAXI4AttributesIncGen)
