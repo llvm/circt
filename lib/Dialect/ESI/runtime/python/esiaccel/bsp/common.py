@@ -833,12 +833,12 @@ def TaggedReadGearbox(input_bitwidth: int,
 # conservative PCIe-derived cap (Max_Read_Request_Size tops out at 4096 bytes,
 # but root ports often negotiate less); it mirrors kPcieMaxReadRequestBytes in
 # the Cosim backend (cpp/lib/backends/Cosim.cpp).
-MAX_READ_REQUEST_BYTES = 64 * 4  # 64 double words
+DEFAULT_MAX_READ_REQUEST_BYTES = 64 * 4  # 64 double words
 
 # Maximum size, in bytes, of a single upstream write transaction; an element
 # whose write payload is wider is split into multiple <= this-size transactions.
 # The default is a conservative PCIe-derived Max-Payload-Size cap.
-MAX_WRITE_PAYLOAD_BYTES = 256
+DEFAULT_MAX_WRITE_PAYLOAD_BYTES = 256
 
 
 @modparams
@@ -870,10 +870,10 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   req_channel_type:  channel of the upstream read request {address, length
     (bytes), tag}.
   resp_channel_type: channel of the upstream response {tag, data, last}.
-  max_chunk_bytes:   largest per-chunk byte count; must be > 0, a multiple of the
-    response word size, and <= MAX_READ_REQUEST_BYTES.
+  max_chunk_bytes:   largest per-chunk byte count; must be > 0 and a multiple of
+    the response word size.
   """
-  assert 0 < max_chunk_bytes <= MAX_READ_REQUEST_BYTES
+  assert max_chunk_bytes > 0
 
   req_struct = req_channel_type.inner_type
   resp_struct = resp_channel_type.inner_type
@@ -989,8 +989,10 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   return HostMemReadReqSplitterImpl
 
 
-def HostmemReadProcessor(read_width: int, hostmem_module,
-                         reqs: List[esi._OutputBundleSetter]):
+def HostmemReadProcessor(read_width: int,
+                         hostmem_module,
+                         reqs: List[esi._OutputBundleSetter],
+                         max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES):
   """Construct a host memory read request module to orchestrate the the read
   connections. Responsible for both gearboxing the data, multiplexing the
   requests, reassembling out-of-order responses and routing the responses to the
@@ -1091,7 +1093,7 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
           # length. 'splitter_resp' breaks the request/response construction
           # cycle (the client request is derived from the packed response
           # bundle).
-          max_chunk_bytes = (MAX_READ_REQUEST_BYTES // word_bytes) * word_bytes
+          max_chunk_bytes = (max_read_request_bytes // word_bytes) * word_bytes
           splitter_resp = Wire(demuxed_upstream_channel.type)
           gearbox = TaggedReadGearbox(read_width,
                                       element_bits)(clk=ports.clk,
@@ -1380,8 +1382,11 @@ def EmitEveryN(message_type: Type, N: int) -> type['EmitEveryNImpl']:
 
 
 def HostMemWriteProcessor(
-    write_width: int, hostmem_module,
-    reqs: List[esi._OutputBundleSetter]) -> type["HostMemWriteProcessorImpl"]:
+    write_width: int,
+    hostmem_module,
+    reqs: List[esi._OutputBundleSetter],
+    max_write_payload_bytes: int = DEFAULT_MAX_WRITE_PAYLOAD_BYTES
+) -> type["HostMemWriteProcessorImpl"]:
   """Construct a host memory write request module to orchestrate the the write
   connections. Responsible for both gearboxing the data, multiplexing the
   requests, reassembling out-of-order responses and routing the responses to the
@@ -1467,7 +1472,7 @@ def HostMemWriteProcessor(
           elem_stride = words_per_elem * word_bytes
 
           gearbox_mod = TaggedWriteGearbox(element_bits, write_width,
-                                           MAX_WRITE_PAYLOAD_BYTES)
+                                           max_write_payload_bytes)
           gearbox_in_type = gearbox_mod.in_.type.inner_type
 
           # Unwrap the window frames; compute a base+offset address from a
@@ -1500,7 +1505,7 @@ def HostMemWriteProcessor(
               client_type.data)
           bundle_sig, sfroms = write_req_bundle_type.pack(ackTag=input_flit_ack)
           gearbox_mod = TaggedWriteGearbox(client_type.data.bitwidth,
-                                           write_width, MAX_WRITE_PAYLOAD_BYTES)
+                                           write_width, max_write_payload_bytes)
           gearbox_in_type = gearbox_mod.in_.type.inner_type
           bitcast_client_req = sfroms["req"].transform(
               lambda m, git=gearbox_in_type: git({
@@ -1552,8 +1557,12 @@ def HostMemWriteProcessor(
 
 
 @modparams
-def ChannelHostMem(read_width: int,
-                   write_width: int) -> typing.Type['ChannelHostMemImpl']:
+def ChannelHostMem(
+    read_width: int,
+    write_width: int,
+    max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES,
+    max_write_payload_bytes: int = DEFAULT_MAX_WRITE_PAYLOAD_BYTES
+) -> typing.Type['ChannelHostMemImpl']:
 
   class ChannelHostMemImpl(esi.ServiceImplementation):
     """Builds a HostMem service which multiplexes multiple HostMem clients into
@@ -1604,7 +1613,7 @@ def ChannelHostMem(read_width: int,
           if req.port in ('read', 'read_list')
       ]
       read_proc_module = HostmemReadProcessor(read_width, ChannelHostMemImpl,
-                                              read_reqs)
+                                              read_reqs, max_read_request_bytes)
       read_proc = read_proc_module(clk=ports.clk, rst=ports.rst)
       ports.read = read_proc.upstream
       for req in read_reqs:
@@ -1615,7 +1624,8 @@ def ChannelHostMem(read_width: int,
           req for req in bundles.to_client_reqs if req.port == 'write'
       ]
       write_proc_module = HostMemWriteProcessor(write_width, ChannelHostMemImpl,
-                                                write_reqs)
+                                                write_reqs,
+                                                max_write_payload_bytes)
       write_proc = write_proc_module(clk=ports.clk, rst=ports.rst)
       ports.write = write_proc.upstream
       for req in write_reqs:
