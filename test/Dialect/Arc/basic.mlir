@@ -455,3 +455,17 @@ arc.coroutine.define @CoroutineInstanceB(%arg0: i42) -> (i9001, i1, i64) {
   %c0_i64 = hw.constant 0 : i64
   arc.coroutine.halt %c0_i9001, %c0_i1, %c0_i64 : i9001, i1, i64
 }
+
+// CHECK-LABEL: func.func @ArrayRefAllocAggregate
+// CHECK: arc.arrayref.alloc init([123 : i32, 456 : i32]) : <2x!hw.array<1xi32>>
+func.func @ArrayRefAllocAggregate() -> !arc.arrayref<2x!hw.array<1xi32>> {
+  %0 = arc.arrayref.alloc init([123 : i32, 456 : i32]) : !arc.arrayref<2x!hw.array<1xi32>>
+  return %0 : !arc.arrayref<2x!hw.array<1xi32>>
+}
+
+// CHECK-LABEL: func.func @ArrayRefAllocStruct
+// CHECK: arc.arrayref.alloc init([false, true]) : <2x!hw.struct<foo: i1>>
+func.func @ArrayRefAllocStruct() -> !arc.arrayref<2x!hw.struct<foo: i1>> {
+  %0 = arc.arrayref.alloc init([false, true]) : !arc.arrayref<2x!hw.struct<foo: i1>>
+  return %0 : !arc.arrayref<2x!hw.struct<foo: i1>>
+}

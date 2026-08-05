@@ -1524,9 +1524,12 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
     return alignment;
   }
 
-  bool isZero(ArrayAttr arrayAttr) const {
-    return llvm::all_of(arrayAttr.getAsValueRange<IntegerAttr>(),
-                        [](APInt i) { return i.isZero(); });
+  static bool isZero(Attribute attr) {
+    if (auto intAttr = dyn_cast<IntegerAttr>(attr))
+      return intAttr.getValue().isZero();
+    if (auto arrayAttr = dyn_cast<ArrayAttr>(attr))
+      return llvm::all_of(arrayAttr, [](Attribute a) { return isZero(a); });
+    return false;
   }
 
   void initializeArray(ConversionPatternRewriter &rewriter, Location loc,

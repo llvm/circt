@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
@@ -924,11 +925,14 @@ LogicalResult ArrayRefAllocOp::verify() {
              << getType().getNumElements();
     }
 
-    unsigned elemBitwidth = getType().getElementType().getIntOrFloatBitWidth();
-    for (APInt value : init->getAsValueRange<IntegerAttr>()) {
-      if (value.getBitWidth() != elemBitwidth) {
-        return emitOpError("expected element to be of type ")
-               << getType().getElementType();
+    if (auto intTy = dyn_cast<IntegerType>(getType().getElementType())) {
+      unsigned elemBitwidth = intTy.getWidth();
+      for (Attribute attr : *init) {
+        auto intAttr = dyn_cast<IntegerAttr>(attr);
+        if (!intAttr || intAttr.getValue().getBitWidth() != elemBitwidth) {
+          return emitOpError("expected element to be of type ")
+                 << getType().getElementType();
+        }
       }
     }
   }
