@@ -303,7 +303,7 @@ hw.module @Precedence(in %a: i1, in %b: i1) {
 }
 
 // CHECK-LABEL: module WeakAndStrongSequences
-hw.module @WeakAndStrongSequences(in %clk: i1, in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1) {
+hw.module @WeakAndStrongSequences(in %a: i1, in %b: i1, in %c: i1, in %d: i1) {
   // CHECK: assert property (weak (a ##1 b ##0 c ##1 d));
   %a0 = ltl.delay %b, 1, 0 : i1
   %a1 = ltl.delay %d, 1, 0 : i1
