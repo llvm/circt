@@ -146,7 +146,7 @@ print("field:", obj.get_field_loc("field"))
 
 # CHECK: child.foo: 14
 print("child.foo: ", obj.child.foo)
-# CHECK: child.foo.loc loc("-":{{.*}}:{{.*}})
+# CHECK: child.foo.loc loc(fused
 print("child.foo.loc", obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
@@ -160,7 +160,7 @@ for (name, field) in obj:
   # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
   # location from om.class.field "reference"
   # CHECK: name: reference, field: ('Root', 'x')
-  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
+  # CHECK-SAME: loc: loc(fused
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
