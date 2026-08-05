@@ -416,7 +416,8 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
                      Value clk, StringAttr name, Value reset, Value resetValue,
-                     hw::InnerSymAttr innerSym, bool isAsync) {
+                     hw::InnerSymAttr innerSym, bool isAsync,
+                     Attribute preset) {
 
   OpBuilder::InsertionGuard guard(builder);
 
@@ -431,6 +432,9 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
 
   if (innerSym)
     result.addAttribute(getInnerSymAttrName(result.name), innerSym);
+
+  if (preset)
+    result.addAttribute(getPresetAttrName(result.name), preset);
 
   result.addTypes(input.getType());
 }
