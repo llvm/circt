@@ -257,7 +257,8 @@ def FirRegOp : SeqOp<"firreg",
                    "StringAttr":$name,
                    "Value":$reset, "Value":$resetValue,
                    CArg<"hw::InnerSymAttr", "{}">:$innerSym,
-                   CArg<"bool", "false">:$isAsync)>
+                   CArg<"bool", "false">:$isAsync,
+                   CArg<"Attribute","{}">:$preset)>
   ];
 
   let hasCustomAssemblyFormat = 1;

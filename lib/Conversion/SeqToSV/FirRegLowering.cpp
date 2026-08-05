@@ -237,10 +237,12 @@ FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
                                hw::HWModuleOp module,
                                const PathTable &pathTable,
                                bool disableRegRandomization,
-                               bool emitSeparateAlwaysBlocks)
+                               bool emitSeparateAlwaysBlocks,
+                               bool emitPresetAsInlineInit)
     : pathTable(pathTable), typeConverter(typeConverter), module(module),
       disableRegRandomization(disableRegRandomization),
-      emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
+      emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks),
+      emitPresetAsInlineInit(emitPresetAsInlineInit) {
   reachableMuxes = std::make_unique<ReachableMuxes>(module);
 }
 
@@ -697,7 +699,24 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   ImplicitLocOpBuilder builder(reg.getLoc(), reg);
   RegLowerInfo svReg{nullptr, path, reg.getPresetAttr(), nullptr, nullptr,
                      -1,      0};
-  svReg.reg = sv::RegOp::create(builder, loc, regTy, reg.getNameAttr());
+
+  // Decide whether the preset value should be emitted as an inline `sv.reg`
+  // initializer rather than through the guarded `initial` block.
+  bool inlinePreset = svReg.preset && emitPresetAsInlineInit;
+
+  Value initValue;
+  if (inlinePreset) {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPoint(reg);
+    auto cst = getOrCreateConstant(loc, svReg.preset.getValue());
+    if (cst.getType() == regTy)
+      initValue = cst;
+    else
+      initValue = hw::BitcastOp::create(builder, loc, regTy, cst);
+  }
+
+  svReg.reg = sv::RegOp::create(builder, loc, regTy, reg.getNameAttr(),
+                                hw::InnerSymAttr(), initValue);
   svReg.width = hw::getBitWidth(regTy);
 
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
@@ -743,9 +762,9 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   // Record information required later on to build the initialization code for
   // this register. All initialization is grouped together in a single initial
   // block at the back of the module.
-  if (svReg.preset)
+  if (svReg.preset && !inlinePreset)
     presetInitRegs.push_back(svReg);
-  else if (!disableRegRandomization)
+  else if (!svReg.preset && !disableRegRandomization)
     randomInitRegs.push_back(svReg);
 
   if (svReg.asyncResetSignal)
@@ -904,8 +923,7 @@ void FirRegLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, []() {}, []() {});
+        insideIfOp = sv::IfOp::create(builder, reset, []() {}, []() {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
