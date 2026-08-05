@@ -859,8 +859,7 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   On the response path the per-chunk end-of-list markers are dropped and a
   single burst-final `last` is re-derived from the total transfer length, so the
   gearbox and client see one contiguous response stream identical to an unsplit
-  read. This will be a performance limiter.
-  TODO: make this able to issue >1 one read at a time.
+  read.
 
   Only one logical request is in flight at a time (matching the read processor's
   one-outstanding-transaction-per-client model): a new request is not accepted
