@@ -131,6 +131,36 @@ def ClockedAtomOp : LTLOp<"clocked_atom", [Pure]> {
 // Sequences
 //===----------------------------------------------------------------------===//
 
+// Defines the general form of the weak and strong operations
+class TerminationTypeOp<string mnemonic, list<Trait> traits = []> :
+  LTLOp<mnemonic, traits # [Pure]> {
+  let arguments = (ins LTLSequenceType:$input);
+  let results = (outs LTLPropertyType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+def WeakOp : TerminationTypeOp<"weak"> {
+  let summary = "Defines a 'weak' sequence";
+  let description = [{
+    Defines a property from a 'weak' sequence, which is a sequence which does not 
+    define any requirements on the termination of a given sequence observation. 
+    This means that a weak sequence is considered to hold as long as a violation of 
+    the sequence is never observed within a finite trace.
+  }];
+}
+
+def StrongOp : TerminationTypeOp<"strong"> {
+  let summary = "Defines a 'strong' sequence";
+  let description = [{
+    Defines a property from a 'strong' sequence, which is a sequence whose observations 
+    must always be complete in order to hold. This is a complement behavior to a weak 
+    sequence, in that a partial observation of a strong sequence, i.e. the trace 
+    terminates before the sequence can be fully observed, is considered a violation.
+  }];
+}
+
 def DelayOp : LTLOp<"delay", [Pure]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
