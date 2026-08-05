@@ -7,6 +7,7 @@
 // DIALECT-SAME: affine
 // DIALECT-SAME: arc
 // DIALECT-SAME: arith
+// DIALECT-SAME: axi4
 // DIALECT-SAME: builtin
 // DIALECT-SAME: calyx
 // DIALECT-SAME: cf
