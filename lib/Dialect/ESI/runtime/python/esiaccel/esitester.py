@@ -137,8 +137,11 @@ def IterationGate(count_width: int):
       ports.active = active_r
       ports.count_reached = count_reached_sig
       ports.iter_count = counter.out.as_uint()
-      ports.iters_left = (ports.limit -
-                          counter.out.as_uint()).as_uint(count_width)
+      # Elements remaining in the *active* window: 0 when no run is in flight
+      # (after `limit` is set but before `start_pulse`, or after completion),
+      # else `limit - iter_count`.
+      remaining = (ports.limit - counter.out.as_uint()).as_uint(count_width)
+      ports.iters_left = Mux(active_r, UInt(count_width)(0), remaining)
 
       cycles_cnt = Counter(64)(
           clk=clk,
