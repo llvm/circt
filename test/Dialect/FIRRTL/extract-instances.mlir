@@ -673,6 +673,69 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
 }
 
 //===----------------------------------------------------------------------===//
+// ExtractSeqMems ModuleLocalPrefixes
+//===----------------------------------------------------------------------===//
+
+// The `<prefix>_<N>` numbering must be local to the module that the instance is
+// extracted out of.  Otherwise, the ports created in a module would depend on
+// what else is in the circuit, i.e., `Bar` and `Baz` below would compile
+// differently depending on whether they are compiled together with `DUTModule`
+// or on their own.
+//
+// CHECK: firrtl.circuit "ExtractSeqMemsModuleLocalPrefixes"
+firrtl.circuit "ExtractSeqMemsModuleLocalPrefixes" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation", filename = "SeqMems.txt"}]} {
+  firrtl.memmodule @mem_ext(in W0_clk: !firrtl.clock) attributes {dataWidth = 8 : ui32, depth = 8 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+  // Both `Bar` and `Baz` get a `mem_wiring_0` prefix, since each of them only
+  // has a single memory extracted out of them.
+  //
+  // CHECK:      firrtl.module private @Bar
+  // CHECK-SAME:   out %mem_wiring_0_W0_clk: !firrtl.clock
+  firrtl.module private @Bar(in %clock: !firrtl.clock) {
+    %mem_W0_clk = firrtl.instance mem_ext @mem_ext(in W0_clk: !firrtl.clock)
+    firrtl.matchingconnect %mem_W0_clk, %clock : !firrtl.clock
+  }
+  // CHECK:      firrtl.module private @Baz
+  // CHECK-SAME:   out %mem_wiring_0_W0_clk: !firrtl.clock
+  firrtl.module private @Baz(in %clock: !firrtl.clock) {
+    %mem_W0_clk = firrtl.instance mem_ext @mem_ext(in W0_clk: !firrtl.clock)
+    firrtl.matchingconnect %mem_W0_clk, %clock : !firrtl.clock
+  }
+  // Only the DUT, which has two memories extracted through it, sees the
+  // `mem_wiring_0` and `mem_wiring_1` prefixes.
+  //
+  // CHECK:      firrtl.module private @DUTModule
+  // CHECK-SAME:   out %mem_wiring_0_W0_clk: !firrtl.clock
+  // CHECK-SAME:   out %mem_wiring_1_W0_clk: !firrtl.clock
+  firrtl.module private @DUTModule(in %clock: !firrtl.clock) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    // CHECK: firrtl.instance bar sym [[BAR_SYM:@.+]] @Bar
+    %bar_clock = firrtl.instance bar @Bar(in clock: !firrtl.clock)
+    firrtl.matchingconnect %bar_clock, %clock : !firrtl.clock
+    // CHECK: firrtl.instance baz sym [[BAZ_SYM:@.+]] @Baz
+    %baz_clock = firrtl.instance baz @Baz(in clock: !firrtl.clock)
+    firrtl.matchingconnect %baz_clock, %clock : !firrtl.clock
+  }
+  // CHECK:        firrtl.module @ExtractSeqMemsModuleLocalPrefixes
+  firrtl.module @ExtractSeqMemsModuleLocalPrefixes(in %clock: !firrtl.clock) {
+    // CHECK-NEXT:   firrtl.instance dut sym {{@.+}} @DUTModule
+    // CHECK-NEXT:   %[[baz_mem:.+]] = firrtl.instance mem_ext {{.*}}@mem_ext
+    // CHECK-NEXT:   firrtl.matchingconnect %[[baz_mem]], %dut_mem_wiring_1_W0_clk
+    // CHECK-NEXT:   %[[bar_mem:.+]] = firrtl.instance mem_ext {{.*}}@mem_ext
+    // CHECK-NEXT:   firrtl.matchingconnect %[[bar_mem]], %dut_mem_wiring_0_W0_clk
+    %dut_clock = firrtl.instance dut @DUTModule(in clock: !firrtl.clock)
+    firrtl.matchingconnect %dut_clock, %clock : !firrtl.clock
+  }
+  // CHECK:               emit.file "SeqMems.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     mem_wiring_0 -> {{0}}.{{1}}.mem_ext\0A
+  // CHECK-SAME{LITERAL}:     mem_wiring_1 -> {{0}}.{{2}}.mem_ext\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:                @DUTModule::[[BAR_SYM]]
+  // CHECK-SAME:                @DUTModule::[[BAZ_SYM]]
+  // CHECK-SAME:              ]
+}
+
+//===----------------------------------------------------------------------===//
 // ExtractSeqMems NoExtraction
 //===----------------------------------------------------------------------===//
 
@@ -729,8 +792,8 @@ firrtl.circuit "InstSymConflict" {
   }
   // CHECK:               emit.file "BlackBoxes.txt" {
   // CHECK-NEXT:            sv.verbatim "
-  // CHECK-SAME{LITERAL}:     bb_1 -> {{0}}.{{1}}.bb\0A
-  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{2}}.bb\0A
+  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{1}}.bb\0A
+  // CHECK-SAME{LITERAL}:     bb_1 -> {{0}}.{{2}}.bb\0A
   // CHECK-SAME:              symbols = [
   // CHECK-SAME:                @DUTModule
   // CHECK-SAME:                #hw.innerNameRef<@DUTModule::@mod1>
