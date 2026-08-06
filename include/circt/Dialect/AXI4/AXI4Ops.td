@@ -157,4 +157,31 @@ def PortToChannelStructsOp : AXI4ChannelStructOp<"port_to_channel_structs"> {
   }];
 }
 
+def XbarOp : AXI4Op<"xbar", [PortResultsAtMostOneUse]> {
+  let summary = "An AXI4 crossbar interconnect";
+  let description = [{
+    Routes the requests of a set of upstream managers onto a set of downstream
+    subordinates. Every address a manager can issue to must be covered by
+    exactly one downstream port, which must support at least the bursts the
+    manager issues there.
+
+    Example:
+    ```mlir
+    %mem, %periph = axi4.xbar %clk, %rst_ni mgrs %core, %debug
+      : (!core_mgr, !debug_mgr) -> (!mem_sub, !periph_sub)
+    ```
+  }];
+
+  let arguments = (ins ClockType:$clock, I1:$reset,
+                       Variadic<PortType>:$upstream);
+  let results = (outs Variadic<PortType>:$downstream);
+
+  let assemblyFormat = [{
+    $clock `,` $reset `mgrs` $upstream attr-dict `:`
+      functional-type($upstream, $downstream)
+  }];
+
+  let hasVerifier = 1;
+}
+
 #endif // CIRCT_DIALECT_AXI4_AXI4OPS_TD
