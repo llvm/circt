@@ -798,6 +798,10 @@ static bool isExpressionUnableToInline(Operation *op,
               // LTL Clock op's clock operand must be a name.
               return clockOp.getClock() == use.get();
             })
+            .Case<ltl::ClockedAtomOp>([&](auto atomOp) {
+              // LTL ClockedAtom op's clock operand must be a name.
+              return atomOp.getClock() == use.get();
+            })
             .Case<sv::AssertConcurrentOp, sv::AssumeConcurrentOp,
                   sv::CoverConcurrentOp>(
                 [&](auto op) { return op.getClock() == use.get(); })
@@ -3640,6 +3644,7 @@ private:
   EmittedProperty visitLTL(ltl::UntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
   EmittedProperty visitLTL(ltl::ClockOp op);
+  EmittedProperty visitLTL(ltl::ClockedAtomOp op);
 
   void emitLTLDelay(int64_t delay, std::optional<int64_t> length);
   void emitLTLClockingEvent(ltl::ClockEdge edge, Value clock);
@@ -3987,6 +3992,13 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
+  emitLTLClockingEvent(op.getEdge(), op.getClock());
+  ps << PP::space;
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
+  return {PropertyPrecedence::Clocking};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedAtomOp op) {
   emitLTLClockingEvent(op.getEdge(), op.getClock());
   ps << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
