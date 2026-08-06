@@ -4566,7 +4566,7 @@ ParseResult FIRStmtParser::parseConnect() {
            << rhsType << " to " << lhsType;
 
   locationProcessor.setLoc(loc);
-  emitConnect(builder, lhs, rhs);
+  emitConnect(builder, translateLocation(loc), lhs, rhs);
   return success();
 }
 

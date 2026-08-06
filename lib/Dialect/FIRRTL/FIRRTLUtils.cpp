@@ -40,8 +40,9 @@ Value TieOffCache::getUnknown(PropertyType type) {
 
 void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
                                 Value src) {
-  ImplicitLocOpBuilder locBuilder(loc, builder.getInsertionBlock(),
-                                  builder.getInsertionPoint());
+  // Call the copy-constructor, which copies the insertion point and listener
+  // from the other builder object:
+  ImplicitLocOpBuilder locBuilder(loc, builder);
   emitConnect(locBuilder, dst, src);
   builder.restoreInsertionPoint(locBuilder.saveInsertionPoint());
 }
