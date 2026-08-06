@@ -761,8 +761,7 @@ static APSInt getAPSIntForOMIntegerAttr(circt::om::IntegerAttr attr) {
 using IntegerBinaryFn =
     llvm::function_ref<FailureOr<APSInt>(const APSInt &, const APSInt &)>;
 
-static OpFoldResult foldIntegerBinaryArithmetic(MLIRContext *ctx,
-                                                Attribute lhsAttr,
+static OpFoldResult foldIntegerBinaryArithmetic(Attribute lhsAttr,
                                                 Attribute rhsAttr,
                                                 IntegerBinaryFn evaluate) {
   auto lhs = dyn_cast_or_null<circt::om::IntegerAttr>(lhsAttr);
@@ -786,6 +785,7 @@ static OpFoldResult foldIntegerBinaryArithmetic(MLIRContext *ctx,
     return {};
 
   // Return the result as a new om::IntegerAttr.
+  auto *ctx = lhsAttr.getContext();
   return circt::om::IntegerAttr::get(
       ctx, mlir::IntegerAttr::get(ctx, result.value()));
 }
@@ -796,7 +796,7 @@ static OpFoldResult foldIntegerBinaryArithmetic(MLIRContext *ctx,
 
 OpFoldResult IntegerAddOp::fold(FoldAdaptor adaptor) {
   return foldIntegerBinaryArithmetic(
-      getContext(), adaptor.getLhs(), adaptor.getRhs(),
+      adaptor.getLhs(), adaptor.getRhs(),
       [](const APSInt &lhs, const APSInt &rhs) { return success(lhs + rhs); });
 }
 
@@ -806,7 +806,7 @@ OpFoldResult IntegerAddOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult IntegerMulOp::fold(FoldAdaptor adaptor) {
   return foldIntegerBinaryArithmetic(
-      getContext(), adaptor.getLhs(), adaptor.getRhs(),
+      adaptor.getLhs(), adaptor.getRhs(),
       [](const APSInt &lhs, const APSInt &rhs) { return success(lhs * rhs); });
 }
 
@@ -816,7 +816,7 @@ OpFoldResult IntegerMulOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
   return foldIntegerBinaryArithmetic(
-      getContext(), adaptor.getLhs(), adaptor.getRhs(),
+      adaptor.getLhs(), adaptor.getRhs(),
       [&](const APSInt &lhs, const APSInt &rhs) -> FailureOr<APSInt> {
         // Check non-negative constraint from operation semantics.
         if (!rhs.isNonNegative())
@@ -836,7 +836,7 @@ OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
   return foldIntegerBinaryArithmetic(
-      getContext(), adaptor.getLhs(), adaptor.getRhs(),
+      adaptor.getLhs(), adaptor.getRhs(),
       [&](const APSInt &lhs, const APSInt &rhs) -> FailureOr<APSInt> {
         // Check non-negative constraint from operation semantics.
         if (!rhs.isNonNegative())
