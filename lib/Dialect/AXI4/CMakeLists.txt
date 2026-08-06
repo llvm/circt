@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTAXI4
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTHW
   CIRCTSeq
   MLIRIR
 )
