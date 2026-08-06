@@ -489,8 +489,7 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
 
 class IntegerBinaryOp<string mnemonic, list<Trait> traits = []> :
     OMOp<mnemonic, [
-      Pure,
-      DeclareOpInterfaceMethods<IntegerBinaryInterface>
+      Pure
     ] # traits> {
   let arguments = (ins OMIntegerType:$lhs, OMIntegerType:$rhs);
 
@@ -577,8 +576,7 @@ def StringConcatOp : OMOp<"string.concat", [Pure, SameOperandsAndResultType]> {
 class BinaryEqualityOpBase<string mnemonic, list<Trait> traits = []> :
     OMOp<mnemonic, [
       Pure,
-      AllTypesMatch<["lhs", "rhs"]>,
-      DeclareOpInterfaceMethods<BinaryEqualityInterface>
+      AllTypesMatch<["lhs", "rhs"]>
     ] # traits> {
   let arguments = (ins AnyTypeOf<[StringType, OMIntegerType, I1]>:$lhs,
                        AnyTypeOf<[StringType, OMIntegerType, I1]>:$rhs);
@@ -608,8 +606,7 @@ def PropEqOp : BinaryEqualityOpBase<"prop.eq"> {
 class IntegerBitwiseOpBase<string mnemonic, list<Trait> traits = []> :
     OMOp<mnemonic, [
       Pure,
-      SameOperandsAndResultType,
-      DeclareOpInterfaceMethods<IntegerBinaryInterface>
+      SameOperandsAndResultType
     ] # traits> {
   let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
   let results = (outs AnyInteger:$result);
