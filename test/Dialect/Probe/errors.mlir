@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --verify-diagnostics --split-input-file
 
-// expected-error @below {{probe element type must be a non-inout type containing only HW value types or seq.clock leaves}}
+// expected-error @below {{failed to verify 'elementType': non-inout type containing only HW value types or seq.clock leaves}}
 hw.module @BadInOut(in %p: !probe.ref<!hw.inout<i1>>) {
 }
 

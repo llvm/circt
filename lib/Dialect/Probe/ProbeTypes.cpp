@@ -49,16 +49,6 @@ bool probe::isProbeElementType(Type type) {
   return hw::isHWValueType(type);
 }
 
-LogicalResult RefType::verify(function_ref<InFlightDiagnostic()> emitError,
-                              Type elementType) {
-  if (!isProbeElementType(elementType))
-    return emitError()
-           << "probe element type must be a non-inout type containing only HW "
-              "value types or seq.clock leaves, got "
-           << elementType;
-  return success();
-}
-
 void ProbeDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

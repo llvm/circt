@@ -17,6 +17,10 @@ include "mlir/IR/OpBase.td"
 
 class ProbeTypeDef<string name> : TypeDef<ProbeDialect, name> { }
 
+def ProbeElementType : Type<CPred<
+    "::circt::probe::isProbeElementType($_self)">,
+    "non-inout type containing only HW value types or seq.clock leaves">;
+
 def RefType : ProbeTypeDef<"Ref"> {
   let mnemonic = "ref";
   let summary = "read-only hardware probe handle";
@@ -28,8 +32,7 @@ def RefType : ProbeTypeDef<"Ref"> {
     release. Its payload type is a non-inout HW value type.
   }];
 
-  let parameters = (ins "::mlir::Type":$elementType);
-  let genVerifyDecl = 1;
+  let parameters = (ins ProbeElementType:$elementType);
 
   let assemblyFormat = "`<` $elementType `>`";
   let builders = [
@@ -42,9 +45,5 @@ def RefType : ProbeTypeDef<"Ref"> {
 def RefTypeConstraint : DialectType<ProbeDialect,
     CPred<"::llvm::isa<::circt::probe::RefType>($_self)">,
     "probe ref type", "::circt::probe::RefType">;
-
-def ProbeElementType : Type<CPred<
-    "::circt::probe::isProbeElementType($_self)">,
-    "probe element type">;
 
 #endif // CIRCT_DIALECT_PROBE_PROBETYPES_TD
