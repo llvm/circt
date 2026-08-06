@@ -167,7 +167,6 @@ LogicalResult circt::hw::apIntToAggregateAttr(Type aggregateType,
                                               ArrayAttr &result) {
   auto *ctx = aggregateType.getContext();
   SmallVector<AggregateAttrFrame> stack;
-  auto bitWidth = intVal.getBitWidth();
   unsigned nextExtraction = 0;
 
   auto pushToStack = [&](Type type) -> bool {
@@ -218,7 +217,8 @@ LogicalResult circt::hw::apIntToAggregateAttr(Type aggregateType,
     }
   }
 
-  assert(nextExtraction == bitWidth && "constant wasn't fully processed");
+  assert(nextExtraction == intVal.getBitWidth() &&
+         "constant wasn't fully processed");
   return success();
 }
 
