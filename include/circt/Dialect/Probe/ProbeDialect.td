@@ -10,7 +10,6 @@
 #define CIRCT_DIALECT_PROBE_PROBEDIALECT_TD
 
 include "mlir/IR/DialectBase.td"
-include "mlir/IR/OpBase.td"
 
 def ProbeDialect : Dialect {
   let name = "probe";
