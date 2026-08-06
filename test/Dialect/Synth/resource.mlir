@@ -133,6 +133,22 @@ hw.module private @nested(in %a : i1, in %b : i1, in %c : i1, out x : i1) {
   hw.output %or : i1
 }
 
+// Test memory operations. Memory storage is counted in bits and memory ports
+// are not reported as unknown operations.
+// CHECK:      Resource Usage Analysis for module: memory
+// CHECK-NEXT: ========================================
+// CHECK-NEXT: Total:
+// CHECK-NEXT:   seq.firmem: 128
+
+hw.module private @memory(in %clk : !seq.clock, in %addr : i2, in %data : i32,
+                          in %mode : i1, out result : i32) {
+  %mem = seq.firmem 0, 1, undefined, port_order : <4 x 32>
+  %read = seq.firmem.read_port %mem[%addr], clock %clk : <4 x 32>
+  seq.firmem.write_port %mem[%addr] = %data, clock %clk : <4 x 32>
+  %readWrite = seq.firmem.read_write_port %mem[%addr] = %data if %mode, clock %clk : <4 x 32>
+  hw.output %readWrite : i32
+}
+
 // Test truth table operations
 // CHECK:      Resource Usage Analysis for module: lut_test
 // CHECK-NEXT: ========================================
