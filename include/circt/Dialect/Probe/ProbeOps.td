@@ -18,11 +18,6 @@ include "mlir/IR/OpBase.td"
 class ProbeOp<string mnemonic, list<Trait> traits = []> :
     Op<ProbeDialect, mnemonic, traits>;
 
-class ProbeInferTypeOp<string mnemonic, list<Trait> traits = []> :
-    ProbeOp<mnemonic, traits # [
-      Pure, DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
-    ]>;
-
 def SendOp : ProbeOp<"send", [
   TypesMatchWith<"input and forwarded types match",
     "input", "forwarded", "$_self">,
@@ -47,10 +42,12 @@ def SendOp : ProbeOp<"send", [
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
-def ReadOp : ProbeInferTypeOp<"read", [
+def ReadOp : ProbeOp<"read", [
   TypesMatchWith<"input and result types match",
     "input", "result",
-    "cast<::circt::probe::RefType>($_self).getElementType()">
+    "cast<::circt::probe::RefType>($_self).getElementType()">,
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
 ]> {
   let summary = "read the value observed by a probe handle";
   let description = [{
