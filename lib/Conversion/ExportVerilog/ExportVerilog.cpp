@@ -4004,7 +4004,7 @@ EmittedProperty PropertyEmitter::emitWeakStrongOp(std::string mnemonic,
     emitNestedProperty(input, PropertyPrecedence::Unary);
     ps << ")";
   });
-  return {PropertyPrecedence::Unary};
+  return {PropertyPrecedence::Lowest};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::WeakOp op) {
