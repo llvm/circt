@@ -181,7 +181,7 @@ EOF
 configMacOsRunner=$(cat <<EOF
 [
   {
-    "runner": "macos-15-intel",
+    "runner": "macos-15-large",
     "cmake_c_compiler": "clang"
   },
   {
