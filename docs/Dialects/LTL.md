@@ -485,8 +485,15 @@ ltl.not %s1 : !ltl.sequence
 %res = ltl.not %impl : !ltl.property  
 ```
 
-- **`strong(s)`**: default for coverpoints, not supported in other cases.
-- **`weak(s)`**: default for assert and assume, not supported for cover.  
+- **`strong(s)`**: 
+```mlir
+ltl.strong %s : !ltl.sequence  
+```  
+
+- **`weak(s)`**:
+```mlir
+ltl.weak %s : !ltl.sequence  
+```  
 
 - **`nexttime p`**:   
 ```mlir

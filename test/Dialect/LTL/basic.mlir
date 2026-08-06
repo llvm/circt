@@ -75,6 +75,11 @@ ltl.repeat %s, 0 : !ltl.sequence
 ltl.repeat %s, 42 : !ltl.sequence
 ltl.repeat %s, 42, 1337 : !ltl.sequence
 
+// CHECK: ltl.weak {{%.+}} : !ltl.sequence
+// CHECK: ltl.strong {{%.+}} : !ltl.sequence
+ltl.weak %s : !ltl.sequence
+ltl.strong %s : !ltl.sequence
+
 //===----------------------------------------------------------------------===//
 // Properties
 //===----------------------------------------------------------------------===//
