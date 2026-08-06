@@ -1,12 +1,16 @@
 // REQUIRES: libz3
 // REQUIRES: circt-bmc-jit
-// RUN: circt-bmc %s -b 3 --module FormalTop --shared-libs=%libz3 | FileCheck %s
+// RUN: circt-bmc %s -b 3 --module FormalTop --shared-libs=%libz3 | FileCheck %s --check-prefix=MULTI
+// RUN: circt-bmc %s -b 3 --module FormalTop --shared-libs=%libz3 --print-only-first-counterexample | FileCheck %s --check-prefix=ONE
 
-// CHECK: counterexample for FormalTop:
-// CHECK-NEXT: cycle 0:
-// CHECK-NEXT:   count = 0x2
-// CHECK-NEXT: Assertion can be violated!
-// CHECK-NOT: counterexample for FormalTop:
+// MULTI: counterexample for FormalTop:
+// MULTI: counterexample for FormalTop:
+
+// ONE: counterexample for FormalTop:
+// ONE-NEXT: cycle 0:
+// ONE-NEXT:   count = 0x2
+// ONE-NEXT: Assertion can be violated!
+// ONE-NOT: counterexample for FormalTop:
 
 hw.module @FormalTop(in %count : i2) {
   %two = hw.constant 2 : i2

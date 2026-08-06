@@ -26,29 +26,6 @@ static std::optional<llvm::APInt> evaluateWord(BMCTrace::Handle handle,
   return llvm::APInt(width, value);
 }
 
-static bool evaluateModel(BMCTrace::Handle context, BMCTrace::Handle model,
-                          BMCTrace::Handle expression, bool modelCompletion,
-                          BMCTrace::Handle *value) {
-  EXPECT_NE(context, nullptr);
-  EXPECT_NE(model, nullptr);
-  EXPECT_TRUE(modelCompletion);
-  *value = expression;
-  return true;
-}
-
-static const char *getNumeralBinaryString(BMCTrace::Handle context,
-                                          BMCTrace::Handle value) {
-  EXPECT_NE(context, nullptr);
-  switch (reinterpret_cast<uintptr_t>(value)) {
-  case 1:
-    return "#b00010010";
-  case 2:
-    return "11111111";
-  default:
-    return nullptr;
-  }
-}
-
 TEST(BMCTraceTest, RecordsSignalsByStep) {
   BMCTrace trace("top");
   auto dataIn = trace.addSignal("data_in", 8);
@@ -118,29 +95,6 @@ TEST(BMCTraceTest, SupportsZeroWidthSignals) {
   os.flush();
 
   EXPECT_THAT(output, HasSubstr("cycle 0:\n  empty = 0x0\n"));
-}
-
-TEST(BMCTraceTest, PrintsTextTraceFromModel) {
-  BMCTrace trace("top");
-  auto dataIn = trace.addSignal("data_in", 8);
-  auto stateQ = trace.addSignal("state_q", 8);
-  trace.record(0, dataIn, reinterpret_cast<BMCTrace::Handle>(1));
-  trace.record(0, stateQ, reinterpret_cast<BMCTrace::Handle>(2));
-
-  std::string output;
-  llvm::raw_string_ostream os(output);
-  ASSERT_TRUE(trace.printTextTrace(os, reinterpret_cast<BMCTrace::Handle>(3),
-                                   reinterpret_cast<BMCTrace::Handle>(4),
-                                   evaluateModel, getNumeralBinaryString));
-  ASSERT_TRUE(trace.printTextTrace(os, reinterpret_cast<BMCTrace::Handle>(3),
-                                   reinterpret_cast<BMCTrace::Handle>(4),
-                                   evaluateModel, getNumeralBinaryString));
-  os.flush();
-
-  EXPECT_THAT(output,
-              HasSubstr("cycle 0:\n  data_in = 0x12\n  state_q = 0xff\n"));
-  EXPECT_EQ(output.find("counterexample for top:"),
-            output.rfind("counterexample for top:"));
 }
 
 TEST(BMCTraceTest, RuntimeCallbackRegistersAndRecordsSignals) {

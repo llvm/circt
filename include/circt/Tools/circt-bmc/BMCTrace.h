@@ -74,7 +74,7 @@ public:
   /// model. This must run before the owning Z3 context is destroyed.
   bool printTextTrace(llvm::raw_ostream &os, Handle context, Handle model,
                       ModelEval modelEval,
-                      GetNumeralBinaryString getNumeralBinaryString);
+                      GetNumeralBinaryString getNumeralBinaryString) const;
 
 private:
   /// Per-cycle storage for all tracked signals.
@@ -86,7 +86,6 @@ private:
   std::vector<Signal> signals;
   llvm::StringMap<size_t> signalIndices;
   std::vector<Step> recorded;
-  bool counterexampleEmitted = false;
 };
 
 /// Runtime entry point called by JIT-compiled BMC code.
@@ -96,7 +95,7 @@ extern "C" void circt_bmc_record_trace(BMCTrace *trace, uint32_t step,
 
 /// Runtime entry point called on the SAT path while the Z3 context and model
 /// are still alive.
-extern "C" void
+extern "C" bool
 circt_bmc_print_trace(BMCTrace *trace, BMCTrace::Handle context,
                       BMCTrace::Handle model, BMCTrace::ModelEval modelEval,
                       BMCTrace::GetNumeralBinaryString getNumeralBinaryString);
