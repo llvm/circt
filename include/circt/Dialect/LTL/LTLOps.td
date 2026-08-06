@@ -134,7 +134,7 @@ def ClockedAtomOp : LTLOp<"clocked_atom", [Pure]> {
 // Defines the general form of the weak and strong operations
 class TerminationTypeOp<string mnemonic, list<Trait> traits = []> :
   LTLOp<mnemonic, traits # [Pure]> {
-  let arguments = (ins LTLSequenceType:$input);
+  let arguments = (ins LTLAnySequenceType:$input);
   let results = (outs LTLPropertyType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input)

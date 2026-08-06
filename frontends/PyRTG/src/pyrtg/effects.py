@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional
 
 from .base import ir
 from .rtg import rtg
-from .core import CodeGenObject, Value, Type
+from .core import CodeGenContext, CodeGenObject, Value, Type
 from .support import _FromCirctValue, _FromCirctType
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ class EffectDeclaration(CodeGenObject):
     self.inputs = inputs  # list of Type
     self.result = result  # Type (VoidType if void)
 
-  def _codegen(self) -> None:
+  def _codegen(self, context: CodeGenContext) -> None:
     input_types = [t._codegen() for t in self.inputs]
     result_types = ([] if isinstance(self.result, VoidType) else
                     [self.result._codegen()])

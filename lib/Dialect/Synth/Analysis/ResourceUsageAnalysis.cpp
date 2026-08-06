@@ -46,6 +46,15 @@ using namespace synth;
 /// Returns true if the operation was tracked, false otherwise.
 static bool accumulateResourceCounts(Operation *op,
                                      llvm::StringMap<uint64_t> &counts) {
+  // Memory declarations do not produce integer values, and memory ports are
+  // already accounted for by their declaration.
+  if (auto memory = dyn_cast<seq::FirMemOp>(op)) {
+    auto type = memory.getMemory().getType();
+    counts[op->getName().getStringRef()] += type.getDepth() * type.getWidth();
+    return true;
+  }
+  if (isa<seq::FirMemReadOp, seq::FirMemWriteOp, seq::FirMemReadWriteOp>(op))
+    return true;
   if (op->getNumResults() != 1 || !op->getResult(0).getType().isInteger())
     return false;
   return TypeSwitch<Operation *, bool>(op)

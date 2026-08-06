@@ -1817,8 +1817,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             os << " struct packed {";
             if (element.offset) {
               os << (emitAsTwoStateType ? "bit" : "logic") << " ["
-                 << element.offset - 1 << ":0] "
-                 << "__pre_padding_" << element.name.getValue() << "; ";
+                 << element.offset - 1 << ":0] " << "__pre_padding_"
+                 << element.name.getValue() << "; ";
             }
           }
 
@@ -2320,8 +2320,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -3643,7 +3642,7 @@ private:
   EmittedProperty visitLTL(ltl::WeakOp op);
   EmittedProperty visitLTL(ltl::StrongOp op);
 
-  EmittedProperty emitWeakStrongOp(std::string mnemonic, Value input);
+  EmittedProperty emitWeakStrongOp(StringRef mnemonic, Value input);
   void emitLTLDelay(int64_t delay, std::optional<int64_t> length);
   void emitLTLClockingEvent(ltl::ClockEdge edge, Value clock);
   void emitLTLConcat(ValueRange inputs);
@@ -3997,14 +3996,14 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
 }
 
 // Weak and strong are emitted identically
-EmittedProperty PropertyEmitter::emitWeakStrongOp(std::string mnemonic,
+EmittedProperty PropertyEmitter::emitWeakStrongOp(StringRef mnemonic,
                                                   Value input) {
   ps << mnemonic << PP::space << "(";
   ps.scopedBox(PP::ibox2, [&] {
     emitNestedProperty(input, PropertyPrecedence::Unary);
     ps << ")";
   });
-  return {PropertyPrecedence::Unary};
+  return {PropertyPrecedence::Lowest};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::WeakOp op) {
