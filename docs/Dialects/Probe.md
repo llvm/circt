@@ -18,12 +18,10 @@ read-only handle to a value of type `T`, created by `probe.send` and observed
 by `probe.read`. A read does not require the compiler to materialize ordinary
 hardware dataflow from the probe origin to the read site.
 
-A probe reference provides access to the value of observed hardware, not
-writable access to the hardware object itself. It cannot be driven or used for
-assignment, force, or release. Its payload must be a non-inout HW value type,
-or an aggregate containing HW value types and `!seq.clock` leaves. This permits
-probes of clocks and aggregates while excluding writable or bidirectional
-hardware references.
+A probe reference provides read-only access to the value of observed hardware.
+Its payload must be a non-inout HW value type, or an aggregate containing HW
+value types and `!seq.clock` leaves. This permits probes of clocks and aggregates
+while excluding writable or bidirectional hardware references.
 
 Probe references may be exposed through HW module output ports. They must not
 appear, directly or nested in an aggregate, on input or inout ports. Frontends
@@ -51,9 +49,9 @@ hw.module @Consumer(in %in: i8, out out: i8) {
 }
 ```
 
-`probe.send` accepts any SSA value with a valid probe element type, including
-the result of an expression. Its forwarded result represents an explicit tap
-in ordinary dataflow:
+`probe.send` accepts any SSA value whose type is valid as the payload of a probe
+reference, including the result of an expression. Its forwarded result has the
+same value as its input:
 
 ```mlir
 %value = comb.xor %a, %b : i8
@@ -61,14 +59,16 @@ in ordinary dataflow:
 %next = comb.xor %forwarded, %c : i8
 ```
 
-Optimizations must not replace uses of `%forwarded` with `%value` or otherwise
-bypass the tap. A backend that requires the observed value to have a name may
-materialize an anchor for `probe.send`.
+A probe observes the value passed to `probe.send`, not a particular SSA
+definition or expression representation. Optimizations may rewrite the producer,
+propagate values through `probe.send`, or retarget the probe as long as
+`probe.read` observes the same value. A backend that requires the observed
+value to have a name may materialize an anchor for an otherwise unnamed value.
 
-The Probe dialect intentionally models only read-only observation handles. It
-does not prescribe a physical implementation, a hierarchical path encoding, or
-writable probe semantics. External-module probe ABIs and bind-layer capture
-legalization are also outside the scope of this dialect definition.
+The Probe dialect currently models only read-only observation handles. It does
+not prescribe a physical implementation, a hierarchical path encoding, or
+writable probe semantics. External-module probe ABIs are presently outside the
+scope of this dialect definition.
 
 ## Types
 
