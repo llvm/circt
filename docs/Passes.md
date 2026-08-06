@@ -16,6 +16,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "ArcPasses.md"]
 
+## AXI4 Dialect Passes
+
+[include "AXI4Passes.md"]
+
 ## Calyx Dialect Passes
 
 [include "CalyxPasses.md"]
