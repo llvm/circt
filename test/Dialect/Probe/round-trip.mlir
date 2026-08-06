@@ -1,4 +1,4 @@
-// RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt --verify-roundtrip %s | circt-opt | FileCheck %s
 // RUN: circt-opt %s --canonicalize --cse | FileCheck %s --check-prefix=OPT
 
 // CHECK-LABEL: hw.module @Basic
