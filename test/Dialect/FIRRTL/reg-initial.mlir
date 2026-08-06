@@ -1,4 +1,4 @@
-// RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt %s --verify-roundtrip | FileCheck %s
 
 // Round-trip test for the `initial` time-zero simulation value attribute on
 // `firrtl.reg` and `firrtl.regreset`.

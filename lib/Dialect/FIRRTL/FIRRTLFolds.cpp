@@ -2736,8 +2736,8 @@ namespace {
 // has no `initial` value, or `initial == foldedValue`. If `foldedValue` is
 // absent (the replacement value is not a known constant), only returns true
 // when the register has no `initial` value.
-static bool preservesInitial(Operation *reg,
-                             std::optional<APInt> foldedValue = std::nullopt) {
+bool preservesInitial(Operation *reg,
+                      std::optional<APInt> foldedValue = std::nullopt) {
   IntegerAttr initial;
   if (auto r = dyn_cast<RegOp>(reg))
     initial = r.getInitialAttr();
