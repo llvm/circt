@@ -13,4 +13,4 @@ circuit TruncWarn:
         connect out, in
       B:
         connect out, UInt<4>(0h0)
-        
+
