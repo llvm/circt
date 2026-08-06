@@ -139,7 +139,7 @@ TEST(BMCTraceTest, PrintsTextTraceFromModel) {
 
   EXPECT_THAT(output,
               HasSubstr("cycle 0:\n  data_in = 0x12\n  state_q = 0xff\n"));
-  EXPECT_EQ(output.find("counterexample for top:"),
+  EXPECT_NE(output.find("counterexample for top:"),
             output.rfind("counterexample for top:"));
 }
 

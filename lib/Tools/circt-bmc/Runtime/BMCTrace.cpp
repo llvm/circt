@@ -78,16 +78,11 @@ bool circt::bmc::BMCTrace::printTextTrace(llvm::raw_ostream &os,
 
 bool circt::bmc::BMCTrace::printTextTrace(
     llvm::raw_ostream &os, Handle context, Handle model, ModelEval modelEval,
-    GetNumeralBinaryString getNumeralBinaryString) {
-  // circt-bmc checks incrementally at several bounds. Only the first SAT model
-  // is the shortest failure-inducing prefix and should become the user-facing
-  // counterexample.
-  if (counterexampleEmitted)
-    return true;
+    GetNumeralBinaryString getNumeralBinaryString) const {
   if (!context || !model || !modelEval || !getNumeralBinaryString)
     return false;
 
-  bool succeeded = printTextTrace(
+  return printTextTrace(
       os, [&](Handle expression, unsigned width) -> std::optional<llvm::APInt> {
         // Z3 does not represent zero-width bit-vectors. Preserve the runtime's
         // i0 behavior without asking Z3 to evaluate such a value.
@@ -112,9 +107,6 @@ bool circt::bmc::BMCTrace::printTextTrace(
           return std::nullopt;
         return llvm::APInt(width, digits, 2);
       });
-  if (succeeded)
-    counterexampleEmitted = true;
-  return succeeded;
 }
 
 extern "C" void circt::bmc::circt_bmc_record_trace(BMCTrace *trace,
@@ -127,13 +119,16 @@ extern "C" void circt::bmc::circt_bmc_record_trace(BMCTrace *trace,
   trace->record(step, name, width, handle);
 }
 
-extern "C" void circt::bmc::circt_bmc_print_trace(
+extern "C" bool circt::bmc::circt_bmc_print_trace(
     BMCTrace *trace, BMCTrace::Handle context, BMCTrace::Handle model,
     BMCTrace::ModelEval modelEval,
     BMCTrace::GetNumeralBinaryString getNumeralBinaryString) {
   if (!trace)
-    return;
+    return false;
   if (!trace->printTextTrace(llvm::outs(), context, model, modelEval,
-                             getNumeralBinaryString))
+                             getNumeralBinaryString)) {
     llvm::errs() << "failed to evaluate BMC counterexample trace\n";
+    return false;
+  }
+  return true;
 }

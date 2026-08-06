@@ -64,9 +64,13 @@ struct SMTGlobalsHandler {
   DenseMap<Block *, Value> ctxCache;
   DenseMap<Block *, Value> solverCache;
   DenseMap<StringAttr, mlir::LLVM::GlobalOp> stringCache;
-  /// Names of functions whose final argument is the opaque BMC trace context.
+  /// Names of outlined solver functions that emit BMC counterexamples.
   /// Names remain stable when func.func operations are converted to llvm.func.
   llvm::DenseSet<StringAttr> traceFunctionNames;
+  /// Names of outlined solver functions whose final argument points to the
+  /// generated flag tracking whether a counterexample was already emitted.
+  /// This is a subset of traceFunctionNames.
+  llvm::DenseSet<StringAttr> traceEmissionFunctionNames;
 };
 
 /// Populate the given type converter with the SMT to LLVM type conversions.
