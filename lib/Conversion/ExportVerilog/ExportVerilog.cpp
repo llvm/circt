@@ -3643,7 +3643,7 @@ private:
   EmittedProperty visitLTL(ltl::WeakOp op);
   EmittedProperty visitLTL(ltl::StrongOp op);
 
-  EmittedProperty emitWeakStrongOp(std::string mnemonic, Value input);
+  EmittedProperty emitWeakStrongOp(StringRef mnemonic, Value input);
   void emitLTLDelay(int64_t delay, std::optional<int64_t> length);
   void emitLTLClockingEvent(ltl::ClockEdge edge, Value clock);
   void emitLTLConcat(ValueRange inputs);
