@@ -37,3 +37,8 @@
 
 // expected-error @below {{'wrap' burst 'len' must be 2, 4, 8, or 16, got 32}}
 "test.attrs"() {a = #axi4.burst_spec<wrap, len = 32>} : () -> ()
+
+// -----
+
+// expected-error @below {{'burst_set' must be non-empty}}
+"test.attrs"() {a = #axi4.burst_set<>} : () -> ()

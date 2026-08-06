@@ -55,6 +55,45 @@ def BurstSpecAttr : AXI4AttrDef<"BurstSpec"> {
   let assemblyFormat = "`<` $kind `,` `len` `=` $len `>`";
 
   let genVerifyDecl = 1;
+
+  let extraClassDeclaration = [{
+    /// Ordering over burst_specs for canonical typing
+    static bool compareCanonical(BurstSpecAttr lhs, BurstSpecAttr rhs);
+  }];
+}
+
+def BurstSetAttr : AXI4AttrDef<"BurstSet"> {
+  let mnemonic = "burst_set";
+  let summary = "Describes a non-empty set of burst specs supported by an endpoint";
+  let description = [{
+    A non-empty set of burst specs, e.g. `#axi4.burst_set<<fixed, len = 4>>` or
+    `#axi4.burst_set<<fixed, len = 4>, <incr, len = 8>>`.
+
+    To avoid functionally equivalent types (e.g. types containing burst_sets with
+    the same specs in different orders) being structurally inequivalent, this is
+    sorted and de-duplicated on construction.
+  }];
+
+  let parameters = (ins
+      OptionalArrayRefParameter<"::circt::axi4::BurstSpecAttr">:$burstSpecs);
+
+  // Parse empty sets - catch them in the verifier to avoid a very opaque error
+  let assemblyFormat = "`<` (`>`) : ($burstSpecs^ `>`)?";
+
+  // Force all clients through the canonicalizing builder below.
+  let skipDefaultBuilders = 1;
+  let genVerifyDecl = 1;
+
+  let builders = [
+    AttrOrTypeBuilder<(ins
+        "::llvm::ArrayRef<::circt::axi4::BurstSpecAttr>":$burstSpecs), [{
+      ::llvm::SmallVector<::circt::axi4::BurstSpecAttr> sorted(
+          burstSpecs.begin(), burstSpecs.end());
+      ::llvm::sort(sorted, BurstSpecAttr::compareCanonical);
+      sorted.erase(::llvm::unique(sorted), sorted.end());
+      return $_get($_ctxt, sorted);
+    }]>
+  ];
 }
 
 #endif // CIRCT_DIALECT_AXI4_AXI4ATTRIBUTES_TD
