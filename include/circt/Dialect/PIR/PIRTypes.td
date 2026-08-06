@@ -68,4 +68,27 @@ def PIRClockedSequenceType : PIRTypeDef<"Clocked Sequence", "clocked_sequence"> 
   }];
 }
 
+//===----------------------------------------------------------------------===//
+// Group Types
+//===----------------------------------------------------------------------===//
+
+// Accept any sequence, simple or clocked
+def PIRAnySequenceType : AnyTypeOf<[PIRSequenceType, PIRClockedSequenceType]>;
+
+// Accept any property, simple or clocked
+def PIRAnyPropertyType : AnyTypeOf<[PIRPropertyType, PIRClockedPropertyType]>;
+
+// Accept any clocked type, this includes booleans
+def PIRAnyClockedType : AnyTypeOf<[PIRClockedPropertyType, PIRClockedSequenceType, I1]>;
+
+// Accept any simple type, this also includes booleans
+def PIRAnySimpleType : AnyTypeOf<[PIRPropertyType, PIRSequenceType, I1]>;
+
+// Accept anything that looks like a valid property
+def PIRAnyType : AnyTypeOf<[
+  PIRPropertyType, PIRSequenceType, 
+  PIRClockedPropertyType, PIRClockedSequenceType,
+  I1
+]>;
+
 #endif // CIRCT_DIALECT_PIR_PIRTYPES_TD
