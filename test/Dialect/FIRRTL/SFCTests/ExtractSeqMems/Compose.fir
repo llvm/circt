@@ -111,8 +111,8 @@ circuit TestHarness : %[[
   ; SOMEMODULE: mem mem
 
   ; SEQMEMSGROUP: module SeqMemsGroup
-  ; SEQMEMSGROUP:   mem_wiring_1_R0_addr
   ; SEQMEMSGROUP:   mem_wiring_0_R0_addr
+  ; SEQMEMSGROUP:   mem_wiring_1_R0_addr
   ; SEQMEMSGROUP: mem_ext mem_ext
   ; SEQMEMSGROUP: mem_ext mem_ext
 
@@ -121,5 +121,5 @@ circuit TestHarness : %[[
   ; MEM-NOT: mem_ext mem_ext
 
   ; MEMS-CONF: name mem_ext depth 8 width 8 ports write,read
-  ; SEQMEMS-TXT: mem_wiring_1 -> DUTModule.InjectedSubmodule.inst0.mem
-  ; SEQMEMS-TXT: mem_wiring_0 -> DUTModule.InjectedSubmodule.inst1.mem
+  ; SEQMEMS-TXT: mem_wiring_0 -> DUTModule.InjectedSubmodule.inst0.mem
+  ; SEQMEMS-TXT: mem_wiring_1 -> DUTModule.InjectedSubmodule.inst1.mem
