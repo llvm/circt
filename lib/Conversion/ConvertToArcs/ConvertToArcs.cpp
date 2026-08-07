@@ -35,7 +35,7 @@ static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, MemoryReadPortOp,
              ClockedOpInterface, seq::InitialOp, seq::ClockGateOp,
-             sim::DPICallOp>(op) ||
+             sim::DPICallOp, llhd::ProbeOp>(op) ||
          op->getNumResults() > 1 || op->getNumRegions() > 0 ||
          !mlir::isMemoryEffectFree(op);
 }
