@@ -72,3 +72,15 @@ module {
   }
 }
 
+// -----
+
+module {
+  func.func private @external_func()
+
+  // expected-error @+1 {{'calyx.component' op The component currently does nothing}}
+  func.func @main() {
+    // expected-error @+1 {{'func.call' op cannot lower call to external function 'external_func'. SCFToCalyx only supports calls to functions defined within the same module}}
+    func.call @external_func() : () -> ()
+    return
+  }
+}
