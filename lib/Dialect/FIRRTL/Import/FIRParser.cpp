@@ -1815,7 +1815,7 @@ struct LazyLocationListener : public OpBuilder::Listener {
   void endStatement(FIRParser &parser) {
     assert(isActive && "Not parsing a statement");
 
-    // Apply a location to each subp, following user preference to use the
+    // Apply a location to each subop, following user preference to use the
     // @info location, a fused location, or the location in the .fir file.
     for (auto opAndSMLoc : subOps)
       opAndSMLoc.first->setLoc(getLoc(parser, opAndSMLoc.second));
