@@ -8,6 +8,7 @@
 
 #include "circt/Tools/circt-bmc/BMCTrace.h"
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include <cassert>
 
@@ -75,6 +76,39 @@ bool circt::bmc::BMCTrace::printTextTrace(llvm::raw_ostream &os,
   return true;
 }
 
+bool circt::bmc::BMCTrace::printTextTrace(
+    llvm::raw_ostream &os, Handle context, Handle model, ModelEval modelEval,
+    GetNumeralBinaryString getNumeralBinaryString) const {
+  if (!context || !model || !modelEval || !getNumeralBinaryString)
+    return false;
+
+  return printTextTrace(
+      os, [&](Handle expression, unsigned width) -> std::optional<llvm::APInt> {
+        // Z3 does not represent zero-width bit-vectors. Preserve the runtime's
+        // i0 behavior without asking Z3 to evaluate such a value.
+        if (width == 0)
+          return llvm::APInt(0, uint64_t{0});
+
+        Handle value = nullptr;
+        if (!modelEval(context, model, expression, /*modelCompletion=*/true,
+                       &value) ||
+            !value)
+          return std::nullopt;
+
+        const char *binaryString = getNumeralBinaryString(context, value);
+        if (!binaryString)
+          return std::nullopt;
+        llvm::StringRef digits(binaryString);
+        digits.consume_front("#b");
+        if (digits.empty() || digits.size() > width ||
+            llvm::any_of(digits, [](char digit) {
+              return digit != '0' && digit != '1';
+            }))
+          return std::nullopt;
+        return llvm::APInt(width, digits, 2);
+      });
+}
+
 extern "C" void circt::bmc::circt_bmc_record_trace(BMCTrace *trace,
                                                    uint32_t step,
                                                    const char *name,
@@ -83,4 +117,18 @@ extern "C" void circt::bmc::circt_bmc_record_trace(BMCTrace *trace,
   if (!trace)
     return;
   trace->record(step, name, width, handle);
+}
+
+extern "C" bool circt::bmc::circt_bmc_print_trace(
+    BMCTrace *trace, BMCTrace::Handle context, BMCTrace::Handle model,
+    BMCTrace::ModelEval modelEval,
+    BMCTrace::GetNumeralBinaryString getNumeralBinaryString) {
+  if (!trace)
+    return false;
+  if (!trace->printTextTrace(llvm::outs(), context, model, modelEval,
+                             getNumeralBinaryString)) {
+    llvm::errs() << "failed to evaluate BMC counterexample trace\n";
+    return false;
+  }
+  return true;
 }
