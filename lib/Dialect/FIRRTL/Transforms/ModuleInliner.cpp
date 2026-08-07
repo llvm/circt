@@ -1967,6 +1967,7 @@ LogicalResult Inliner::processInstances(FModuleOp module, bool flatten) {
       return WalkResult::advance();
     // Not a regular module: uninlinable; the analysis marked it live.
     auto moduleOp = symbolTable.lookup<FModuleLike>(instance.getModuleName());
+    assert(moduleOp && "instance target missing -- ran unverified?");
     auto target = dyn_cast<FModuleOp>(*moduleOp);
     if (!target) {
       assert(inliningFacts.isLive(moduleOp) &&
