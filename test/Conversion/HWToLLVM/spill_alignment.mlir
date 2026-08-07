@@ -22,8 +22,8 @@ module attributes {dlti.dl_spec = #dlti.dl_spec<
   // CHECK-LABEL: func.func @wideArrayInject
   // CHECK-SAME: (%arg0: !llvm.array<2 x i65>, %arg1: i1, %arg2: i65) -> !llvm.array<2 x i65>
   func.func @wideArrayInject(%arr: !hw.array<2xi65>, %idx: i1, %elt: i65) -> !hw.array<2xi65> {
-    // CHECK: [[ONE:%.+]] = llvm.mlir.constant(1 : i32) : i32
     // CHECK: [[ZEXT:%.+]] = llvm.zext %arg1 : i1 to i2
+    // CHECK: [[ONE:%.+]] = llvm.mlir.constant(1 : i32) : i32
     // CHECK: [[ALLOCA:%.+]] = llvm.alloca [[ONE]] x !llvm.array<2 x i65> {alignment = 16 : i64} : (i32) -> !llvm.ptr
     // CHECK: llvm.store %arg0, [[ALLOCA]] : !llvm.array<2 x i65>, !llvm.ptr
     // CHECK: [[GEP:%.+]] = llvm.getelementptr [[ALLOCA]][0, [[ZEXT]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i65>
