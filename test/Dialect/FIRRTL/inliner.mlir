@@ -1715,3 +1715,36 @@ firrtl.circuit "Issue10682" {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Inline layers into layers.
+firrtl.circuit "InlineLayerIntoLayer" {
+  firrtl.layer @I  inline {
+    firrtl.layer @J  inline {
+    }
+  }
+  firrtl.module private @MatchAgain(in %i: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.layerblock @I {
+      firrtl.layerblock @I::@J {
+        %n = firrtl.node interesting_name %i : !firrtl.uint<8>
+      }
+    }
+  }
+
+  firrtl.module @InlineLayerIntoLayer(in %i: !firrtl.uint<8>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: firrtl.layerblock @I {
+    // CHECK:   %c_i = firrtl.wire : !firrtl.uint<8>
+    // CHECK:   firrtl.layerblock @I {
+    // CHECK:     firrtl.layerblock @I::@J {
+    // CHECK:       %c_n = firrtl.node interesting_name %c_i : !firrtl.uint<8>
+    // CHECK:     }
+    // CHECK:   }
+    // CHECK:   firrtl.matchingconnect %c_i, %i : !firrtl.uint<8>
+    // CHECK: }
+    firrtl.layerblock @I {
+      %c_i = firrtl.instance c interesting_name @MatchAgain(in i: !firrtl.uint<8>)
+      firrtl.matchingconnect %c_i, %i : !firrtl.uint<8>
+    }
+  }
+}
