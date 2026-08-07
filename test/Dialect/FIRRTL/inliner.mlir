@@ -2651,12 +2651,12 @@ firrtl.circuit "PublicFork" {
 //   - @P2's instance has no inner sym (the trimmed upper hop needs none).
 firrtl.circuit "TrimEqualCollapse" {
   // CHECK-LABEL:  firrtl.circuit "TrimEqualCollapse"
-  // CHECK:          hw.hierpath private @[[NLA:[a-zA-Z0-9_]+]] [@Mid::@ci, @Child::@w]
+  // CHECK:          hw.hierpath private @nla [@Mid::@ci, @Child::@w]
   // CHECK-NOT:      hw.hierpath
   hw.hierpath private @nla [@Mid::@ci, @Child::@w]
   // Exactly one surviving nonlocal annotation, referencing the sole hierpath.
   // CHECK:          firrtl.module private @Child
-  // CHECK-NEXT:       firrtl.wire sym @w {annotations = [{circt.nonlocal = @[[NLA]], class = "test"}]}
+  // CHECK-NEXT:       firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]}
   // CHECK-NOT:        circt.nonlocal
   firrtl.module private @Child() {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
@@ -2707,7 +2707,7 @@ firrtl.circuit "TrimEqualCollapse" {
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "RootSurvives"
 firrtl.circuit "RootSurvives" {
-  // CHECK:          hw.hierpath private @[[NLA:[a-zA-Z0-9_]+]] [@R::@ci, @Child::@w]
+  // CHECK:          hw.hierpath private @nla [@R::@ci, @Child::@w]
   // CHECK-NOT:      hw.hierpath
   hw.hierpath private @nla [@R::@ci, @Child::@w]
   firrtl.module @RootSurvives() {
@@ -2736,7 +2736,7 @@ firrtl.circuit "RootSurvives" {
     firrtl.instance c sym @ci @Child()
   }
   // CHECK:          firrtl.module private @Child
-  // CHECK-NEXT:       firrtl.wire sym @w {annotations = [{circt.nonlocal = @[[NLA]], class = "test"}]}
+  // CHECK-NEXT:       firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]}
   // CHECK-NOT:        circt.nonlocal
   firrtl.module private @Child() {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
@@ -2809,7 +2809,7 @@ firrtl.circuit "InlineRootNotTrimmed" {
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "InlineOnUpperPath"
 firrtl.circuit "InlineOnUpperPath" {
-  // CHECK:          hw.hierpath private @[[NLA:[a-zA-Z0-9_]+]] [@R::@ci, @Child::@w]
+  // CHECK:          hw.hierpath private @nla [@R::@ci, @Child::@w]
   // CHECK-NOT:      hw.hierpath
   hw.hierpath private @nla [@R::@ci, @Child::@w]
   firrtl.module @InlineOnUpperPath() {
@@ -2836,7 +2836,7 @@ firrtl.circuit "InlineOnUpperPath" {
     firrtl.instance c sym @ci @Child()
   }
   // CHECK:          firrtl.module private @Child
-  // CHECK-NEXT:       firrtl.wire sym @w {annotations = [{circt.nonlocal = @[[NLA]], class = "test"}]}
+  // CHECK-NEXT:       firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]}
   // CHECK-NOT:        circt.nonlocal
   firrtl.module private @Child() {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
@@ -3514,7 +3514,7 @@ firrtl.circuit "SharedWrapperTwoParents" {
 // stamped on @P2's instance).
 // CHECK-LABEL:  "FlattenFromAbove"
 firrtl.circuit "FlattenFromAbove" {
-  // CHECK-NEXT:     hw.hierpath private @[[NLA:[a-zA-Z0-9_]+]] [@Mid::@ci, @Child::@w]
+  // CHECK-NEXT:     hw.hierpath private @nla [@Mid::@ci, @Child::@w]
   // CHECK-NOT:      hw.hierpath
   hw.hierpath private @nla [@Mid::@ci, @Child::@w]
   firrtl.module @FlattenFromAbove() {
@@ -3539,7 +3539,7 @@ firrtl.circuit "FlattenFromAbove" {
   }
   // CHECK:          firrtl.module private @Child
   // CHECK-NEXT:       firrtl.wire sym @w
-  // CHECK-SAME:         {annotations = [{circt.nonlocal = @[[NLA]], class = "test"}]}
+  // CHECK-SAME:         {annotations = [{circt.nonlocal = @nla, class = "test"}]}
   // CHECK-NOT:        circt.nonlocal
   firrtl.module private @Child() {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
