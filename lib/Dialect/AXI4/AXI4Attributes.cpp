@@ -10,6 +10,8 @@
 #include "circt/Dialect/AXI4/AXI4Dialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -44,6 +46,20 @@ BurstSpecAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                          << len;
     break;
   }
+  return success();
+}
+
+/// Ordering for burst_set construction
+bool BurstSpecAttr::compareCanonical(BurstSpecAttr lhs, BurstSpecAttr rhs) {
+  if (lhs.getKind() != rhs.getKind())
+    return lhs.getKind() < rhs.getKind();
+  return lhs.getLen() < rhs.getLen();
+}
+
+LogicalResult BurstSetAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                                   ArrayRef<BurstSpecAttr> burstSpecs) {
+  if (burstSpecs.empty())
+    return emitError() << "'burst_set' must be non-empty";
   return success();
 }
 
