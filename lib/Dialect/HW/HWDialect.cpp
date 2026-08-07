@@ -111,7 +111,11 @@ Operation *hw::materializeConstant(OpBuilder &builder, Attribute value,
   auto curModule = dyn_cast<HWModuleOp>(parentOp);
   if (!curModule)
     curModule = parentOp->getParentOfType<HWModuleOp>();
-  if (curModule && isValidParameterExpression(value, curModule))
+  // `hw.param.value` results are restricted to HW value types; folds that
+  // produce other constants (e.g. an f64 from a real-valued conditional,
+  // ivtest pr2453002.v) must not materialize an op the verifier rejects.
+  if (curModule && isHWValueType(type) &&
+      isValidParameterExpression(value, curModule))
     return ParamValueOp::create(builder, loc, type, value);
   return nullptr;
 }
