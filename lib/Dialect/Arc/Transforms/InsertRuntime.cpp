@@ -16,6 +16,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/MapVector.h"
 
 #include <filesystem>
 
@@ -201,8 +202,13 @@ struct GlobalRuntimeContext {
       &allocInstanceFn, &deleteInstanceFn, &onEvalFn, &onInitializedFn,
       &swapTraceBufferFn};
 
-  // Maps model symbol name to model context
-  SmallDenseMap<StringAttr, std::unique_ptr<RuntimeModelContext>> models;
+  // Maps model symbol name to model context. MapVector: the map is iterated
+  // to CREATE the per-model runtime ops (buildRuntimeModelOps) and to lower
+  // the models, so its iteration order reaches emitted op order - a
+  // pointer-keyed map here made the arcRuntimeModel_* globals' order (and
+  // everything the per-model lowering appends) vary run to run under ASLR
+  // on identical multi-model input.
+  llvm::MapVector<StringAttr, std::unique_ptr<RuntimeModelContext>> models;
 
 private:
   static ImplicitLocOpBuilder createBuilder(ModuleOp &moduleOp) {
