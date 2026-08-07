@@ -44,3 +44,25 @@ hw.module @Clocks(in %clk: !seq.clock) {
   // CHECK-NEXT: [[CAST:%.+]] = seq.from_clock %clk
   // CHECK-NEXT: arc.tap [[CAST]] {names = ["clk"]} : i1
 }
+
+// Self-referential wires (from degenerate `assign w = w;` sources, e.g.
+// ivtest pr509.v) must not RAUW their result with itself — that never drains
+// the use list and hangs the pass. Users get a zero constant instead.
+// CHECK-LABEL: hw.module @SelfWire
+hw.module @SelfWire(out o: i4) {
+  // CHECK-DAG: [[C0:%c0_i4.*]] = hw.constant 0 : i4
+  // CHECK-DAG: arc.tap [[C0]] {names = ["w"]} : i4
+  // CHECK-NOT: hw.wire
+  // CHECK: hw.output [[C0]]
+  %w = hw.wire %w : i4
+  hw.output %w : i4
+}
+
+// Unused unnamed self-wire: erased without hanging.
+// CHECK-LABEL: hw.module @SelfWireUnused
+hw.module @SelfWireUnused() {
+  // CHECK-NOT: hw.wire
+  %0 = hw.wire %0 : i1
+  // CHECK: hw.output
+  hw.output
+}
