@@ -40,17 +40,22 @@ Value TieOffCache::getUnknown(PropertyType type) {
 
 void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
                                 Value src) {
-  // Call the copy-constructor, which copies the insertion point and listener
-  // from the other builder object:
-  ImplicitLocOpBuilder locBuilder(loc, builder);
+  ImplicitLocOpBuilder locBuilder(loc, builder.getInsertionBlock(),
+                                  builder.getInsertionPoint());
   emitConnect(locBuilder, dst, src);
   builder.restoreInsertionPoint(locBuilder.saveInsertionPoint());
 }
 
+void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
+                                Value src) {
+  emitConnect(builder, dst, src, [&] { return builder.getLoc(); });
+}
+
 template <typename ATy, typename IndexOp, bool isBundle /* check flip? */>
-static LogicalResult connectIfAggregates(ImplicitLocOpBuilder &builder,
-                                         Value dst, FIRRTLType dstFType,
-                                         Value src, FIRRTLType srcFType) {
+static LogicalResult
+connectIfAggregates(ImplicitLocOpBuilder &builder, Value dst,
+                    FIRRTLType dstFType, Value src, FIRRTLType srcFType,
+                    llvm::function_ref<Location()> getDiagLoc) {
   auto dstAggTy = type_dyn_cast<ATy>(dstFType);
   if (!dstAggTy)
     return failure();
@@ -74,7 +79,7 @@ static LogicalResult connectIfAggregates(ImplicitLocOpBuilder &builder,
       if (dstAggTy.getElement(i).isFlip)
         std::swap(dstField, srcField);
     }
-    emitConnect(builder, dstField, srcField);
+    emitConnect(builder, dstField, srcField, getDiagLoc);
   }
 
   return success();
@@ -82,7 +87,8 @@ static LogicalResult connectIfAggregates(ImplicitLocOpBuilder &builder,
 
 /// Emit a connect between two values.
 void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
-                                Value src) {
+                                Value src,
+                                llvm::function_ref<Location()> getDiagLoc) {
   auto dstFType = type_cast<FIRRTLType>(dst.getType());
   auto srcFType = type_cast<FIRRTLType>(src.getType());
   auto dstType = type_dyn_cast<FIRRTLBaseType>(dstFType);
@@ -102,10 +108,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
                type_isa<DomainType>(srcFType)) {
       DomainDefineOp::create(builder, dst, src);
     } else if (failed(connectIfAggregates<OpenBundleType, OpenSubfieldOp, true>(
-                   builder, dst, dstFType, src, srcFType)) &&
+                   builder, dst, dstFType, src, srcFType, getDiagLoc)) &&
                failed(
                    connectIfAggregates<OpenVectorType, OpenSubindexOp, false>(
-                       builder, dst, dstFType, src, srcFType))) {
+                       builder, dst, dstFType, src, srcFType, getDiagLoc))) {
       // Other types, give up and leave a connect
       ConnectOp::create(builder, dst, src);
     }
@@ -126,9 +132,9 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   }
 
   if (succeeded(connectIfAggregates<BundleType, SubfieldOp, true>(
-          builder, dst, dstFType, src, srcFType)) ||
+          builder, dst, dstFType, src, srcFType, getDiagLoc)) ||
       succeeded(connectIfAggregates<FVectorType, SubindexOp, false>(
-          builder, dst, dstFType, src, srcFType)))
+          builder, dst, dstFType, src, srcFType, getDiagLoc)))
     return;
 
   if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
@@ -158,7 +164,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // The source must be extended or truncated.
   if (dstWidth < srcWidth) {
-    mlir::emitWarning(builder.getLoc())
+    mlir::emitWarning(getDiagLoc())
         << "RHS width " << srcWidth << " exceeds LHS width " << dstWidth
         << ", inserting implicit truncation";
 
