@@ -5,10 +5,10 @@
 
 ; CHECK-LABEL: firrtl.module @Issue794
 ; CHECK-SAME: (in %clock: !firrtl.clock,
-; CHECK:       %[[memory_0:.+]] = firrtl.reg %clock {{.*}}: !firrtl.clock, !firrtl.uint<8>
-; CHECK:       firrtl.mux(%[[v14:.+]], %wData_0, %[[memory_0]])
-; CHECK:       firrtl.mux(%[[v19:.+]], %wData_1, %[[v5:.+]])
-; CHECK:       firrtl.matchingconnect %[[memory_0]], %[[v22:.+]]
+; CHECK:       %[[memory_0:.+]] = firrtl.regreset %clock, %reset, {{.*}}: !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+; CHECK:       firrtl.mux({{.*}}, %wData_0, %[[memory_0]])
+; CHECK:       firrtl.mux({{.*}}, %wData_1, {{.*}})
+; CHECK:       firrtl.matchingconnect %[[memory_0]], {{.*}}
 FIRRTL version 4.0.0
 circuit Issue794: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
@@ -16,9 +16,14 @@ circuit Issue794: %[[{
   },
   {
     "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
+  },
+  {
+    "class": "sifive.enterprise.firrtl.FullAsyncResetAnnotation",
+    "target": "~Issue794|Issue794>reset"
   }]]
   public module Issue794:
     input clock: Clock
+    input reset: AsyncReset
     input rAddr: UInt<2>
     input rEn: UInt<1>
     output rData: UInt<8>

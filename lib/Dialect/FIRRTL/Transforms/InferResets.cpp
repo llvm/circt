@@ -304,10 +304,6 @@ void InferResetsPass::runOnOperationInner() {
   if (failed(inferAndUpdateResets()))
     return signalPassFailure();
 
-  if (failed(runFullReset(getOperation(), *instanceGraph,
-                          getAnalysis<InstanceInfo>())))
-    return signalPassFailure();
-
   // Require that no Abstract Resets exist on ports in the design.
   if (failed(verifyNoAbstractReset()))
     return signalPassFailure();
