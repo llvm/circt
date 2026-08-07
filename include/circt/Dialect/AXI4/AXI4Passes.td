@@ -22,6 +22,9 @@ def VerifyAXI4Networks : Pass<"verify-axi4-networks", "mlir::ModuleOp"> {
     - Ensures every `!axi4.port` value has at most one consumer, and that ports
       do not connect endpoints in different clock or reset domains.
     - Ensures a network occupies a single clock and reset domain.
+    - Warns where an endpoint can handle fewer requests than the port reaching
+      it can have concurrently outstanding. This isn't a correctness condition,
+      but flags bottlenecks that might limit throughput.
   }];
 
   let dependentDialects = ["circt::axi4::AXI4Dialect"];
