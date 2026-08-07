@@ -1,8 +1,5 @@
 [
   {
-    "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
-  },
-  {
     "class": "sifive.enterprise.firrtl.FullAsyncResetAnnotation",
     "target": "~TestHarness|Foo>reset"
   },
