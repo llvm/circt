@@ -137,6 +137,14 @@ void ExternalizeRegistersPass::runOnOperation() {
           Twine regName = regOp.getName().empty() ? "reg_" + Twine(numRegs)
                                                   : regOp.getName();
 
+          // externalizeReg models a posedge-clocked register. Reject a
+          // non-default clock edge rather than silently miscompile it.
+          if (regOp.getClockEdge() != seq::ClockEdge::Pos) {
+            regOp.emitError("non-posedge clock edges are not supported by "
+                            "externalize-registers");
+            return signalPassFailure();
+          }
+
           if (failed(externalizeReg(module, op, regName, regOp.getClk(),
                                     initState, regOp.getReset(),
                                     regOp.getIsAsync(), regOp.getResetValue(),

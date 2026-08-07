@@ -6445,6 +6445,29 @@ static void printNameKind(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// RegClockEdge Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseRegClockEdge(OpAsmParser &parser,
+                                     EventControlAttr &result) {
+  StringRef keyword;
+  if (!parser.parseOptionalKeyword(&keyword, {"posedge", "negedge", "edge"})) {
+    result = EventControlAttr::get(parser.getContext(),
+                                   *symbolizeEventControl(keyword));
+    return success();
+  }
+
+  result = EventControlAttr::get(parser.getContext(), EventControl::AtPosEdge);
+  return success();
+}
+
+static void printRegClockEdge(OpAsmPrinter &p, Operation *op,
+                              EventControlAttr attr) {
+  if (attr.getValue() != EventControl::AtPosEdge)
+    p << " " << stringifyEventControl(attr.getValue());
+}
+
+//===----------------------------------------------------------------------===//
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
 
@@ -6461,6 +6484,21 @@ static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
   SmallVector<StringRef, 4> elides;
   elides.push_back(hw::InnerSymbolTable::getInnerSymbolAttrName());
   elides.push_back(Forceable::getForceableAttrName());
+  elideImplicitSSAName(p, op, attrs, elides);
+  printElideAnnotations(p, op, attrs, elides);
+}
+
+static ParseResult parseFIRRTLRegImplicitSSAName(OpAsmParser &parser,
+                                                 NamedAttrList &resultAttrs) {
+  return parseFIRRTLImplicitSSAName(parser, resultAttrs);
+}
+
+static void printFIRRTLRegImplicitSSAName(OpAsmPrinter &p, Operation *op,
+                                          DictionaryAttr attrs) {
+  SmallVector<StringRef, 4> elides;
+  elides.push_back(hw::InnerSymbolTable::getInnerSymbolAttrName());
+  elides.push_back(Forceable::getForceableAttrName());
+  elides.push_back("clockEdge");
   elideImplicitSSAName(p, op, attrs, elides);
   printElideAnnotations(p, op, attrs, elides);
 }

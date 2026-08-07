@@ -685,6 +685,20 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   }
 }
 
+/// Map a seq.firreg clock edge onto the SystemVerilog event control used for
+/// the register's clocked always block.
+static sv::EventControl lowerSeqClockEdge(seq::ClockEdge edge) {
+  switch (edge) {
+  case seq::ClockEdge::Pos:
+    return sv::EventControl::AtPosEdge;
+  case seq::ClockEdge::Neg:
+    return sv::EventControl::AtNegEdge;
+  case seq::ClockEdge::Both:
+    return sv::EventControl::AtEdge;
+  }
+  llvm_unreachable("unknown seq.firreg clock edge");
+}
+
 void FirRegLowering::lowerReg(FirRegOp reg) {
   Location loc = reg.getLoc();
   Type regTy = typeConverter.convertType(reg.getType());
@@ -714,9 +728,11 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
 
   auto regVal = sv::ReadInOutOp::create(builder, loc, svReg.reg);
 
+  auto clockEdge = lowerSeqClockEdge(reg.getClockEdge());
+
   if (reg.hasReset()) {
     addToAlwaysBlock(
-        reg->getBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
+        reg->getBlock(), clockEdge, reg.getClk(),
         [&](OpBuilder &b) {
           // If this is an AsyncReset, ensure that we emit a self connect to
           // avoid erroneously creating a latch construct.
@@ -736,7 +752,7 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
     }
   } else {
     addToAlwaysBlock(
-        reg->getBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
+        reg->getBlock(), clockEdge, reg.getClk(),
         [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); });
   }
 

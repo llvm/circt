@@ -96,3 +96,17 @@ hw.module @shared_reg_test(in %clk: i1, in %addr: i2, in %data: i8, in %we: i1, 
   // Register used elsewhere - should prevent transformation
   hw.output %mem, %read : !hw.array<4xi8>, i8
 }
+
+// Test that transformation is skipped for register behavior that FirMem cannot
+// represent.
+// CHECK-LABEL: hw.module @negedge_mem(
+hw.module @negedge_mem(in %clk: i1, in %addr: i2, in %data: i8, in %we: i1, out out: i8) {
+  %clock = seq.to_clock %clk
+  %read = hw.array_get %mem[%addr] : !hw.array<4xi8>, i2
+  %write = hw.array_inject %mem[%addr], %data : !hw.array<4xi8>, i2
+  %next = comb.mux %we, %write, %mem : !hw.array<4xi8>
+  // CHECK: %mem = seq.firreg %{{.*}} clock %{{.*}} {clockEdge = 1 : i32} : !hw.array<4xi8>
+  // CHECK-NOT: seq.firmem
+  %mem = seq.firreg %next clock %clock {clockEdge = 1 : i32} : !hw.array<4xi8>
+  hw.output %read : i8
+}
