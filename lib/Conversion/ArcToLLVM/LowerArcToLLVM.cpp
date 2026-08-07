@@ -41,6 +41,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Interfaces/AlignmentAttrInterface.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -420,6 +421,118 @@ struct ReplaceOpWithInputPattern : public OpConversionPattern<OpTy> {
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
+  }
+};
+
+struct AssertOpLowering : public OpConversionPattern<arc::AssertOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::AssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto opLoc = op.getLoc();
+    auto rhs =
+        arith::ConstantOp::create(rewriter, opLoc, rewriter.getBoolAttr(true));
+    Value negateCondition =
+        arith::XOrIOp::create(rewriter, opLoc, adaptor.getProperty(), rhs);
+
+    rewriter.replaceOpWithNewOp<scf::IfOp>(
+        op, negateCondition, [&](OpBuilder &builder, Location loc) {
+          std::string fileName = "unknown";
+          unsigned lineNumber = 0;
+          if (auto fileLoc = dyn_cast<FileLineColLoc>(loc)) {
+            fileName = fileLoc.getFilename().str();
+            lineNumber = fileLoc.getLine();
+          }
+
+          std::string functionName = "unknown";
+          if (auto funcOp = op->getParentOfType<FunctionOpInterface>()) {
+            functionName = funcOp.getName().str();
+          }
+
+          auto *context = rewriter.getContext();
+          auto module = op->getParentOfType<ModuleOp>();
+          auto ptrType = LLVM::LLVMPointerType::get(context);
+          auto voidType = LLVM::LLVMVoidType::get(context);
+          auto assertFailFuncOr =
+              lookupOrCreateFn(rewriter, module, "__assert_fail",
+                               ArrayRef<Type>{
+                                   ptrType,               // assertion
+                                   ptrType,               // file
+                                   rewriter.getI32Type(), // line
+                                   ptrType                // function
+                               },
+                               voidType, false);
+
+          if (failed(assertFailFuncOr))
+            return;
+
+          LLVM::GlobalOp messageGlob, fileGlob, functionGlob;
+
+          {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(module.getBody());
+
+            Type int8Type = rewriter.getI8Type();
+
+            // Use the message stored in the op's optional 'msg' attribute;
+            // fall back to "assertion failed" when it is absent or empty.
+            std::string assertionMsg = "assertion failed";
+            if (auto msgAttr = op.getMsgAttr())
+              if (!msgAttr.getValue().empty())
+                assertionMsg = msgAttr.getValue().str();
+
+            const auto msgVal = rewriter.getStringAttr(assertionMsg + '\0');
+            const auto typeForMsg =
+                LLVM::LLVMArrayType::get(int8Type, msgVal.size());
+            messageGlob = LLVM::GlobalOp::create(
+                rewriter, loc, typeForMsg, /*isConstant=*/true,
+                LLVM::Linkage::Internal, getUniqueMsgName(), msgVal);
+
+            const auto fileNameVal = rewriter.getStringAttr(fileName + '\0');
+            const auto typeForFileName =
+                LLVM::LLVMArrayType::get(int8Type, fileNameVal.size());
+            fileGlob = LLVM::GlobalOp::create(
+                rewriter, loc, typeForFileName, /*isConstant=*/true,
+                LLVM::Linkage::Internal, getUniqueFileName(), fileNameVal);
+
+            const auto funcNameVal =
+                rewriter.getStringAttr(functionName + '\0');
+            const auto typeForFuncName =
+                LLVM::LLVMArrayType::get(int8Type, funcNameVal.size());
+            functionGlob = LLVM::GlobalOp::create(
+                rewriter, loc, typeForFuncName, /*isConstant=*/true,
+                LLVM::Linkage::Internal, getUniqueFuncName(), funcNameVal);
+          }
+
+          Value assertionStr =
+              LLVM::AddressOfOp::create(rewriter, loc, messageGlob);
+          Value fileStr = LLVM::AddressOfOp::create(rewriter, loc, fileGlob);
+          Value functionStr =
+              LLVM::AddressOfOp::create(rewriter, loc, functionGlob);
+          Value lineNum =
+              arith::ConstantIntOp::create(rewriter, loc, lineNumber, 32);
+
+          LLVM::CallOp call = LLVM::CallOp::create(
+              builder, loc, *assertFailFuncOr,
+              ValueRange{assertionStr, fileStr, lineNum, functionStr});
+
+          scf::YieldOp::create(builder, loc);
+        });
+
+    return success();
+  }
+
+  static std::string getUniqueMsgName() {
+    static int stringCount = 0;
+    return "_arc_assert_msg_" + std::to_string(stringCount++);
+  }
+  static std::string getUniqueFileName() {
+    static int stringCount = 0;
+    return "_arc_assert_file_name_" + std::to_string(stringCount++);
+  }
+  static std::string getUniqueFuncName() {
+    static int stringCount = 0;
+    return "_arc_assert_func_name_" + std::to_string(stringCount++);
   }
 };
 
@@ -1952,7 +2065,8 @@ void LowerArcToLLVMPass::runOnOperation() {
     ArrayRefCopyOpLowering,
     ArrayRefToLLVMArrayOpLowering,
     ArrayRefToArrayOpLowering,
-    ArrayRefFromArrayOpLowering
+    ArrayRefFromArrayOpLowering,
+    AssertOpLowering
   >(converter, &getContext());
   // clang-format on
   patterns.add<ExecuteOp>(convert);

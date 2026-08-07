@@ -1441,6 +1441,48 @@ def RuntimeModelOp : ArcOp<"runtime.model", [
   }];
 }
 
+def AssertOp : ArcOp<"assert"> {
+  let summary = "immediate assertion that a property holds";
+  let description = [{
+    Asserts that a boolean condition holds immediately at runtime. This is an
+    immediate (non-temporal) assertion that evaluates the condition in the current
+    simulation cycle without any temporal aspects.
+
+    The operation takes a single boolean condition and an optional error message.
+    If the condition evaluates to true, the assertion passes silently. If the
+    condition evaluates to false, the simulation aborts with the provided error message.
+
+    Example:
+    ```mlir
+    // Simple assertion without message
+    arc.assert %condition
+
+    // Assertion with custom error message
+    arc.assert %condition, "Value must be greater than zero"
+
+    // Used in procedural context
+    %result = arc.some_operation(%input)
+    arc.assert %result, "Operation failed to compute valid result"
+    ```
+
+    This corresponds to immediate assertions in SystemVerilog:
+    ```systemverilog
+    assert (condition) else $error("message");
+    ```
+  }];
+  let arguments = (ins
+    I1:$property,
+    OptionalAttr<StrAttr>:$msg
+  );
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $property (`,` $msg^)? attr-dict
+  }];
+
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // ArrayRef ops
 //===----------------------------------------------------------------------===//
