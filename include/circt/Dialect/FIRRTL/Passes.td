@@ -159,6 +159,17 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
     its symbol, retargeted to one surviving context.  Its other contexts get
     fresh private symbols.  A path with no surviving context is removed.
 
+    Inlining reshapes a path according to where the inlined instance sits
+    on it:
+
+    - A path rooted at the inlined module moves its root up, into the
+      instantiating parent.
+    - If the inlined root is multiply instantiated, the path forks: one copy
+      per inlined-into instantiating context.
+    - An inlined interior hop collapses; the path shortens.
+    - An inlined leaf hop moves up: the leaf's operations land in the parent,
+      and the path follows them there.
+
     Operations whose symbol uses cannot be analyzed are diagnosed rather than
     silently kept, as are paths terminating at an instance directed to be
     inlined away.
