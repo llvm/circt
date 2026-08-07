@@ -46,7 +46,11 @@
 //   Other:
 //   - activeNLAs    the active set of contexts at a given inlining level:
 //                   narrowed by the recursive walk's path down to the leaf
+//   - dangling      a reference or handle kept past the point its target
+//                   is erased or renamed
 //   - dead-rooted   a hierpath left with no surviving context at all
+//   - foreign       an inner-ref in a cloned body naming any module other
+//                   than the child being inlined; no update is defined
 //
 // The pass runs as four phases.  Outputs freeze before the next phase reads
 // them; analysis only flows forward.
@@ -977,14 +981,9 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
   // The module whose flatten most recently set `isTransitiveFlatten`;
   // non-null exactly when the flag is set.  Names the culprit in diagnostics.
   StringAttr flattenCause = isTransitiveFlatten ? currentDest : StringAttr{};
-  for (auto it = absPath.begin(), end = absPath.end(); it != end;) {
-    const auto &hop = *it++;
-    bool nextHasInline = false;
-    bool nextHasFlatten = false;
-    StringAttr nextModName;
-
-    bool isTerminal = it == end;
-    bool nextIsRegular = false;
+  for (auto it = absPath.begin(), end = absPath.end(); it != end; ++it) {
+    const auto &hop = *it;
+    bool isTerminal = std::next(it) == end;
 
     // A hop's operation is null, inlinable, or opaque
     // (see getInlinableInstance).
@@ -993,13 +992,19 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
 
     // Interior hops read the recorded next module; a terminal names one only
     // through a plain instance.
+    StringAttr nextModName;
     if (!isTerminal)
-      nextModName = it->mod;
+      nextModName = std::next(it)->mod;
     else if (hopInst)
       nextModName = hopInst.getReferencedModuleNameAttr();
+
+    // The next module's facts, defaulted for the end of the path.
+    bool nextHasInline = false;
+    bool nextHasFlatten = false;
+    bool nextIsRegular = false;
     if (nextModName) {
       assert((isTerminal || !hopInst ||
-              it->mod == hopInst.getReferencedModuleNameAttr()) &&
+              std::next(it)->mod == hopInst.getReferencedModuleNameAttr()) &&
              "recorded next module disagrees with the instance");
       auto modOp = symbolTable.lookup<FModuleLike>(nextModName);
       assert(modOp && "interior namepath module missing -- ran unverified?");
@@ -2105,9 +2110,8 @@ void Inliner::appendContextAnno(Annotation anno, StringAttr origSym,
                                 VirtualNLA *matched,
                                 SmallVectorImpl<Attribute> &out) {
   if (matched->isLocal()) {
-    Annotation copy(anno);
-    copy.removeMember("circt.nonlocal");
-    out.push_back(copy.getAttr());
+    anno.removeMember("circt.nonlocal");
+    out.push_back(anno.getAttr());
     return;
   }
   matched->wasUsed = true;
@@ -2117,9 +2121,8 @@ void Inliner::appendContextAnno(Annotation anno, StringAttr origSym,
     out.push_back(anno.getAttr());
     return;
   }
-  Annotation copy(anno);
-  copy.setMember("circt.nonlocal", FlatSymbolRefAttr::get(canonSym));
-  out.push_back(copy.getAttr());
+  anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(canonSym));
+  out.push_back(anno.getAttr());
 }
 
 void Inliner::canonicalizeContexts() {
@@ -2134,7 +2137,7 @@ void Inliner::canonicalizeContexts() {
   // `primary` context and emitted unconditionally by writeback.
   //
   // Only fork symbols stay usedness-gated, since we created them.
-  // GC of genuinely dead paths is not this the job of this pass.
+  // GC of genuinely dead paths is not the job of this pass.
   //
   // Process one origSym group at a time (contiguous per I4).
   for (size_t i = 0, e = nlaPlanner.allVNLAs.size(); i < e;) {
@@ -2174,9 +2177,7 @@ void Inliner::canonicalizeContexts() {
     // A local fork is skipped:
     // an annotation on a local context simply drops the path.
     for (auto *v : group) {
-      if (v == primary)
-        continue;
-      if (v->isLocal())
+      if (v == primary || v->isLocal())
         continue;
       canonicalize(v);
     }
@@ -2381,7 +2382,7 @@ namespace {
 ///
 /// Runs InliningFacts (P1), NLAPlanner (P2), and Inliner (P3/P4) in sequence.
 class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
-  using InlinerBase::InlinerBase;
+  using Base::Base;
 
   void runOnOperation() override {
     CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
