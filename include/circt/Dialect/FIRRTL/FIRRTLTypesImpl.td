@@ -578,6 +578,21 @@ def ListImpl : PropImplType<"List"> {
   let typeName = "firrtl.propList";
 }
 
+def RegistryImpl : PropImplType<"Registry"> {
+  let summary = [{
+    An unordered mutable collection of property values for domain asset tracking.
+
+    Registry types may only appear as fields of domain definitions. Values are
+    accumulated with `firrtl.domain.register` rather than normal property
+    assignment. Downstream consumers must treat registry contents as
+    order-independent.
+  }];
+  let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "element type">:$elementType);
+  let genStorageClass = true;
+  let genAccessors = true;
+  let typeName = "firrtl.propRegistry";
+}
+
 def PathImpl : PropImplType<"Path"> {
   let summary = "A path to a hardware entity.  Not representable in hardware.";
   let parameters = (ins);

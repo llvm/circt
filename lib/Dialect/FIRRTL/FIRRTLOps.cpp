@@ -4401,6 +4401,11 @@ LogicalResult RefDefineOp::verify() {
 }
 
 LogicalResult PropAssignOp::verify() {
+  if (isa<RegistryType>(getDest().getType()) ||
+      isa<RegistryType>(getSrc().getType()))
+    return emitOpError(
+        "cannot assign registry types; use firrtl.domain.register");
+
   if (failed(checkConnectFlow(*this)))
     return failure();
 
@@ -4467,6 +4472,29 @@ LogicalResult DomainDefineOp::verify() {
                 << " does not match destination domain type " << dstDomain;
     return diag;
   }
+
+  return success();
+}
+
+LogicalResult DomainRegisterOp::verify() {
+  auto registryType = dyn_cast<RegistryType>(getDest().getType());
+  if (!registryType)
+    return emitOpError("destination must be a registry type");
+
+  auto elementType = registryType.getElementType();
+  auto srcType = getSrc().getType();
+  if (elementType != srcType)
+    return emitOpError() << "source type " << srcType
+                         << " does not match registry element type "
+                         << elementType;
+
+  // Registry destinations should come from domain field extraction so that
+  // mutations target an actual domain registry field.
+  auto *defOp = getDest().getDefiningOp();
+  if (!defOp || !isa<DomainSubfieldOp>(defOp))
+    return emitOpError(
+        "destination must be a domain registry field accessed via "
+        "firrtl.domain.subfield");
 
   return success();
 }
@@ -6482,21 +6510,25 @@ static ParseResult parseFieldsFromDomain(
     return parser.emitError(parser.getCurrentLocation(),
                             "expected domain type");
 
-  // Extract the field types from the domain type.
-  auto fields = domainType.getFields();
+  // Extract non-registry field types from the domain type. Registry fields are
+  // accumulated with firrtl.domain.register and are not constructor operands.
+  SmallVector<Type> nonRegistryFieldTypes;
+  for (auto field : domainType.getFields()) {
+    auto fieldType = cast<DomainFieldAttr>(field).getType();
+    if (!isa<RegistryType>(fieldType))
+      nonRegistryFieldTypes.push_back(fieldType);
+  }
 
-  // Validate that the number of field values matches the domain.
-  if (fieldValues.size() != fields.size())
-    return parser.emitError(parser.getCurrentLocation(),
-                            "number of field values (" +
-                                Twine(fieldValues.size()) +
-                                ") does not match domain field count (" +
-                                Twine(fields.size()) + ")");
+  // Validate that the number of field values matches the non-registry fields.
+  if (fieldValues.size() != nonRegistryFieldTypes.size())
+    return parser.emitError(
+        parser.getCurrentLocation(),
+        "number of field values (" + Twine(fieldValues.size()) +
+            ") does not match non-registry domain field count (" +
+            Twine(nonRegistryFieldTypes.size()) + ")");
 
   // Populate the field types from the domain definition.
-  fieldTypes.reserve(fields.size());
-  for (auto field : fields)
-    fieldTypes.push_back(cast<DomainFieldAttr>(field).getType());
+  fieldTypes.append(nonRegistryFieldTypes.begin(), nonRegistryFieldTypes.end());
 
   return success();
 }
@@ -7358,16 +7390,28 @@ LogicalResult DomainCreateOp::verify() {
   auto fields = domainType.getFields();
   auto fieldValues = getFieldValues();
 
-  // Check that the number of field values matches the number of fields
-  if (fieldValues.size() != fields.size())
+  // Registry fields are accumulated with firrtl.domain.register and are not
+  // provided as constructor arguments.  Only non-registry fields are expected
+  // here, and they must appear in declaration order among non-registry fields.
+  SmallVector<DomainFieldAttr> nonRegistryFields;
+  for (auto field : fields) {
+    auto fieldAttr = cast<DomainFieldAttr>(field);
+    if (!isa<RegistryType>(fieldAttr.getType()))
+      nonRegistryFields.push_back(fieldAttr);
+  }
+
+  // Check that the number of field values matches the number of non-registry
+  // fields.
+  if (fieldValues.size() != nonRegistryFields.size())
     return emitOpError() << "has " << fieldValues.size()
                          << " field value(s) but domain '"
                          << domainType.getName() << "' expects "
-                         << fields.size() << " field(s)";
+                         << nonRegistryFields.size()
+                         << " non-registry field(s)";
 
   // Check that each field value type matches the corresponding field type
-  for (size_t i = 0; i < fields.size(); ++i) {
-    auto fieldAttr = cast<DomainFieldAttr>(fields[i]);
+  for (size_t i = 0; i < nonRegistryFields.size(); ++i) {
+    auto fieldAttr = nonRegistryFields[i];
     auto expectedType = fieldAttr.getType();
     auto actualType = fieldValues[i].getType();
 
