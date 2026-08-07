@@ -1086,6 +1086,7 @@ firrtl.circuit "DidNotContainSymbol" {
 
 // Issue #4915, the NLAs should be updated with renamed extern module instance.
 
+// CHECK-LABEL:  firrtl.circuit "SimTop"
 firrtl.circuit "SimTop" {
   hw.hierpath private @nla_61 [@Rob::@difftest_3, @DifftestLoadEvent]
   // CHECK: hw.hierpath private @nla_61 [@SimTop::@difftest_3_0, @DifftestLoadEvent]
@@ -1193,6 +1194,7 @@ firrtl.circuit "CollidingSymbolsFields" {
 // -----
 // Test that unused classes are NOT deleted.
 
+// CHECK-LABEL:  firrtl.circuit "Top"
 firrtl.circuit "Top" {
   firrtl.module @Top () {}
   // CHECK: firrtl.class private @MyClass()
@@ -1381,6 +1383,7 @@ firrtl.circuit "MatchInline" attributes {enable_layers = [@I]} {
 // and using results to check inlining actually does work here and the
 // management of the insertion points throughout.
 
+// CHECK-LABEL:  firrtl.circuit "InlineBlocks"
 firrtl.circuit "InlineBlocks" {
   firrtl.layer @I inline {
     firrtl.layer @J inline { }
@@ -1437,6 +1440,7 @@ firrtl.circuit "InlineBlocks" {
 // -----
 
 // The inliner must not delete modules which are still referenced, even in unknown ops.
+// CHECK-LABEL:  firrtl.circuit "FormalMarkerIsUse"
 firrtl.circuit "FormalMarkerIsUse" {
   firrtl.extmodule @FormalMarkerIsUse()
   firrtl.formal @Test, @Foo {}
@@ -1451,6 +1455,7 @@ firrtl.circuit "FormalMarkerIsUse" {
 
 // Liveness resolves symbol uses through their root reference: a nested or
 // inner reference on a circuit-level op keeps the referenced module alive.
+// CHECK-LABEL:  firrtl.circuit "RefRootIsUse"
 firrtl.circuit "RefRootIsUse" {
   firrtl.module @RefRootIsUse() {}
   "some_unknown_dialect.op"() { magic = @KeptByNestedRef::@x } : () -> ()
@@ -1471,6 +1476,7 @@ firrtl.circuit "RefRootIsUse" {
 // inlines in place under the layer block, the hop evaporates, and the
 // annotation localizes onto the relocated leaf.
 // Retention keeps the hierpath pinned through its one-element path.
+// CHECK-LABEL:  firrtl.circuit "NLAThroughLayer"
 firrtl.circuit "NLAThroughLayer" {
   firrtl.layer @L bind {}
   // CHECK: hw.hierpath private @nla [@NLAThroughLayer::@leafsym]
@@ -1492,6 +1498,7 @@ firrtl.circuit "NLAThroughLayer" {
 
 // The circuit op's own attributes resolve inside it (enable_layers,
 // select_inst_choice); a module reference there is a use.
+// CHECK-LABEL:  firrtl.circuit "CircuitAttrIsUse"
 firrtl.circuit "CircuitAttrIsUse" attributes {test.ref = @KeptByCircuitAttr} {
   firrtl.module @CircuitAttrIsUse() {}
   // CHECK: firrtl.module private @KeptByCircuitAttr
@@ -1826,7 +1833,6 @@ firrtl.circuit "RetainedBySymbolUse" {
 // Annotations are rewritten against each context's final namepath, exactly
 // once.  These pin bugs in that contract.
 
-// -----
 
 //===----------------------------------------------------------------------===//
 // @B's wire @w is inlined into @A, colliding with @A's own @w and renamed
@@ -2050,7 +2056,6 @@ firrtl.circuit "ConvergeDupKeepsAlive" {
 // assigns each relocated instance its final sym, so the merge keys on that,
 // never on the pre-inlining hop identity.
 
-// -----
 
 //===----------------------------------------------------------------------===//
 // Same inline module instantiated twice in one parent. @M is inlined into @Two
@@ -2129,7 +2134,6 @@ firrtl.circuit "AnnoSplit" {
 // fully collapsed (which silently dropped the extmodule's annotation and the
 // path).
 
-// -----
 
 // CHECK-LABEL:  firrtl.circuit "FlattenExtTerminal"
 firrtl.circuit "FlattenExtTerminal" {
@@ -2289,6 +2293,7 @@ firrtl.circuit "ChoiceAndInstance" {
   // CHECK:          firrtl.module @ChoiceAndInstance()
   // CHECK-NEXT:       firrtl.instance_choice inst @Default alternatives @Opt { @A -> @Impl }
   // CHECK-NEXT:       %direct_w = firrtl.wire
+  // CHECK-NOT:        firrtl.instance
   firrtl.module @ChoiceAndInstance() {
     // expected-note @below {{instantiated here}}
     firrtl.instance_choice inst @Default alternatives @Opt { @A -> @Impl }()
@@ -2533,7 +2538,6 @@ firrtl.circuit "FlattenInlineChoiceDeep" {
 //
 // The hazard: erasing the hierpath as unused while a port annotation names it.
 
-// -----
 
 // CHECK-LABEL:  firrtl.circuit "MemPortAnnoUntouched"
 firrtl.circuit "MemPortAnnoUntouched" {
@@ -2541,8 +2545,12 @@ firrtl.circuit "MemPortAnnoUntouched" {
   hw.hierpath private @nla [@MemPortAnnoUntouched::@c, @Child::@mem]
   firrtl.module private @Child() {
     // CHECK:            portAnnotations = {{\[\[}}{circt.nonlocal = @nla, class = "test"}]]
-    %mem_r = firrtl.mem sym @mem Undefined {depth = 8 : i64, name = "mem",
-        portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32,
+    %mem_r = firrtl.mem sym @mem Undefined {
+        depth = 8 : i64,
+        name = "mem",
+        portNames = ["r"],
+        readLatency = 0 : i32,
+        writeLatency = 1 : i32,
         portAnnotations = [[{circt.nonlocal = @nla, class = "test"}]]} :
       !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
@@ -2563,8 +2571,12 @@ firrtl.circuit "MemPortAnnoLocalized" {
   hw.hierpath private @nla [@MemPortAnnoLocalized::@m, @M::@mem]
   firrtl.module private @M() attributes {annotations = [
       {class = "firrtl.passes.InlineAnnotation"}]} {
-    %mem_r = firrtl.mem sym @mem Undefined {depth = 8 : i64, name = "mem",
-        portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32,
+    %mem_r = firrtl.mem sym @mem Undefined {
+        depth = 8 : i64,
+        name = "mem",
+        portNames = ["r"],
+        readLatency = 0 : i32,
+        writeLatency = 1 : i32,
         portAnnotations = [[{circt.nonlocal = @nla, class = "test"}]]} :
       !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
@@ -2642,9 +2654,15 @@ firrtl.circuit "TrimEqualCollapse" {
   // CHECK:          hw.hierpath private @[[NLA:[a-zA-Z0-9_]+]] [@Mid::@ci, @Child::@w]
   // CHECK-NOT:      hw.hierpath
   hw.hierpath private @nla [@Mid::@ci, @Child::@w]
-  firrtl.module @TrimEqualCollapse() {
-    firrtl.instance p1 @P1()
-    firrtl.instance p2 @P2()
+  // Exactly one surviving nonlocal annotation, referencing the sole hierpath.
+  // CHECK:          firrtl.module private @Child
+  // CHECK-NEXT:       firrtl.wire sym @w {annotations = [{circt.nonlocal = @[[NLA]], class = "test"}]}
+  // CHECK-NOT:        circt.nonlocal
+  firrtl.module private @Child() {
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
+  }
+  firrtl.module private @Mid() {
+    firrtl.instance c sym @ci @Child()
   }
   // @P1 flattens @Mid in; the annotation becomes local here.
   // CHECK:          firrtl.module private @P1
@@ -2658,15 +2676,9 @@ firrtl.circuit "TrimEqualCollapse" {
   firrtl.module private @P2() {
     firrtl.instance mid @Mid()
   }
-  firrtl.module private @Mid() {
-    firrtl.instance c sym @ci @Child()
-  }
-  // Exactly one surviving nonlocal annotation, referencing the sole hierpath.
-  // CHECK:          firrtl.module private @Child
-  // CHECK-NEXT:       firrtl.wire sym @w {annotations = [{circt.nonlocal = @[[NLA]], class = "test"}]}
-  // CHECK-NOT:        circt.nonlocal
-  firrtl.module private @Child() {
-    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
+  firrtl.module @TrimEqualCollapse() {
+    firrtl.instance p1 @P1()
+    firrtl.instance p2 @P2()
   }
 }
 
@@ -2782,7 +2794,6 @@ firrtl.circuit "InlineRootNotTrimmed" {
 // So an inline module on the upper path is transparent to the trim, while a
 // flatten pins the root.
 
-// -----
 
 //===----------------------------------------------------------------------===//
 // Inline module between the root and solid ground: trim through it.
@@ -2806,6 +2817,9 @@ firrtl.circuit "InlineOnUpperPath" {
     firrtl.instance s @S()
   }
   // Over-approximation source: flattens @P/@R, marking them as under a flatten.
+  // The flattened copy of the leaf localizes: annotation kept, path dropped.
+  // CHECK:          firrtl.module private @Flat()
+  // CHECK-NEXT:       %p_r_c_w = firrtl.wire sym @w {annotations = [{class = "test"}]}
   firrtl.module private @Flat() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
     firrtl.instance p @P()
   }
@@ -2966,7 +2980,6 @@ firrtl.circuit "DeadRootedHierPath" {
 //
 // Colliding inner symbols are disambiguated with the same suffix scheme.
 
-// -----
 // https://github.com/llvm/circt/issues/3373
 //
 // The issue's own reproducer.  @Bar0 (private+inline, root of the module-leaf
@@ -2976,13 +2989,13 @@ firrtl.circuit "DeadRootedHierPath" {
 // Previously asserted "Module already renamed".
 // CHECK-LABEL:  "Inliner"
 firrtl.circuit "Inliner"  {
-  // CHECK-NEXT:     hw.hierpath @nla_3 [@Inliner::@w_1, @Bar1]
-  // CHECK-NEXT:     hw.hierpath private @nla_3_0 [@Inliner::@w_0, @Bar1]
+  // CHECK-NEXT:     hw.hierpath @nla_3 [@Inliner::@[[SYM1:[a-zA-Z0-9_]+]], @Bar1]
+  // CHECK-NEXT:     hw.hierpath private @[[NLA:[a-zA-Z0-9_]+]] [@Inliner::@[[SYM0:[a-zA-Z0-9_]+]], @Bar1]
   hw.hierpath @nla_3 [@Bar0::@w, @Bar1]
   // CHECK:          firrtl.module private @Bar1
   firrtl.module private @Bar1() {
     // CHECK-NEXT:       firrtl.wire sym @a
-    // CHECK-SAME:         {annotations = [{circt.nonlocal = @nla_3, class = "test2"}, {circt.nonlocal = @nla_3_0, class = "test2"}]}
+    // CHECK-SAME:         {annotations = [{circt.nonlocal = @nla_3, class = "test2"}, {circt.nonlocal = @[[NLA]], class = "test2"}]}
     %w = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla_3, class = "test2"}]}: !firrtl.uint<8>
   }
   firrtl.module private @Bar0() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
@@ -2990,8 +3003,8 @@ firrtl.circuit "Inliner"  {
   }
   // CHECK:          firrtl.module @Inliner
   firrtl.module @Inliner() {
-    // CHECK-NEXT:       firrtl.instance bar0_w sym @w_0 @Bar1()
-    // CHECK-NEXT:       firrtl.instance bar1_w sym @w_1 @Bar1()
+    // CHECK-NEXT:       firrtl.instance bar0_w sym @[[SYM0]] @Bar1()
+    // CHECK-NEXT:       firrtl.instance bar1_w sym @[[SYM1]] @Bar1()
     firrtl.instance bar0 @Bar0()
     firrtl.instance bar1 @Bar0()
     %w = firrtl.wire sym @w : !firrtl.uint<8>
@@ -3022,10 +3035,11 @@ firrtl.circuit "Unreachable" {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla_5561, class = "test0"}]} : !firrtl.uint<8>
   }
   // Everything inlines into @Unreachable and the annotations become local.
+  // The inlining-prefixed wire names say which copy carries each annotation.
   // CHECK:          firrtl.module @Unreachable
-  // CHECK-NEXT:       firrtl.wire sym @w_0 {annotations = [{class = "test0"}]}
-  // CHECK-NEXT:       firrtl.wire sym @x {annotations = [{class = "test0"}]}
-  // CHECK-NEXT:       firrtl.wire sym @w_1 {annotations = [{class = "test0"}]}
+  // CHECK-NEXT:       %no_bar3_w = firrtl.wire sym @w_0 {annotations = [{class = "test0"}]}
+  // CHECK-NEXT:       %bar2_x = firrtl.wire sym @x {annotations = [{class = "test0"}]}
+  // CHECK-NEXT:       %bar2_no_bar3_w = firrtl.wire sym @w_1 {annotations = [{class = "test0"}]}
   // CHECK-NOT:        circt.nonlocal
   firrtl.module @Unreachable() {
     firrtl.instance no sym @no @Bar1()
@@ -3320,6 +3334,7 @@ firrtl.circuit "Top10750" {
   firrtl.module private @Baz(in %port: !firrtl.uint<1> [{circt.nonlocal = @nla, class = "test"}]) { }
 }
 
+// -----
 //===----------------------------------------------------------------------===//
 // Re-rooting + inner-symbol-conflict characterization (diamond bug class,
 // #10588/#10589).
@@ -3331,7 +3346,6 @@ firrtl.circuit "Top10750" {
 // at the new sym.
 //===----------------------------------------------------------------------===//
 
-// -----
 // Inlining an NLA-root module into a parent that already owns a different
 // instance with the same inner sym forces a rename; the (single-context) NLA
 // must be rewritten to reference the renamed sym, not the original.
@@ -3477,6 +3491,7 @@ firrtl.circuit "SharedWrapperTwoParents" {
   }
 }
 
+// -----
 //===----------------------------------------------------------------------===//
 // Context-enumeration shape tests.
 //
@@ -3486,7 +3501,6 @@ firrtl.circuit "SharedWrapperTwoParents" {
 // These lock the collapsed outputs.
 //===----------------------------------------------------------------------===//
 
-// -----
 // Single flatten-from-above the NLA root, partial across contexts.  @Mid (NLA
 // root's parent) is reached by a flattened parent (@P1, localizes) and a plain
 // parent (@P2, stays non-local).
@@ -3546,6 +3560,7 @@ firrtl.circuit "FlattenFromAbove" {
 firrtl.circuit "TransitAndContextSameRef" {
   // CHECK:          hw.hierpath private @nla1 [@TransitAndContextSameRef::@leaf_sym, @Leaf]
   // CHECK-NEXT:     hw.hierpath private @nla2 [@TransitAndContextSameRef::@leaf_sym, @Leaf]
+  // CHECK-NOT:      hw.hierpath
   hw.hierpath private @nla1 [@TransitAndContextSameRef::@y_sym, @Y::@leaf_sym, @Leaf]
   hw.hierpath private @nla2 [@Y::@leaf_sym, @Leaf]
   // CHECK:          firrtl.extmodule private @Leaf()
@@ -3564,6 +3579,7 @@ firrtl.circuit "TransitAndContextSameRef" {
   }
 }
 
+// -----
 //===----------------------------------------------------------------------===//
 // Per-field inner symbols as NLA leaves.
 //
@@ -3574,15 +3590,15 @@ firrtl.circuit "TransitAndContextSameRef" {
 // These pin the per-field leaf path for both wires and ports.
 //===----------------------------------------------------------------------===//
 
-// -----
 // Per-field port sym as NLA leaf, module inlined with a collision on the field
 // sym (the port-lowering path).  @nla targets field b (sym @pf) of @Child's
 // bundle port; inlining lands the port as a wire, @pf collides with an existing
 // @pf so it renames to @pf_0, and the localized annotation stays on fieldID 2.
 // CHECK-LABEL:  "PerFieldPort"
 firrtl.circuit "PerFieldPort" {
-  // Retention keeps the collapsed path; the per-field leaf renamed to @pf_0.
-  // CHECK:          hw.hierpath private @nla [@PerFieldPort::@pf_0]
+  // Retention keeps the collapsed path; the per-field leaf renamed on the
+  // collision with the existing @pf.
+  // CHECK:          hw.hierpath private @nla [@PerFieldPort::@[[PF:[a-zA-Z0-9_]+]]]
   hw.hierpath private @nla [@PerFieldPort::@i, @Child::@pf]
   firrtl.module private @Child(
       in %x : !firrtl.bundle<a: uint<1>, b: uint<1>> sym [<@pg,1,public>,<@pf,2,public>]
@@ -3592,7 +3608,7 @@ firrtl.circuit "PerFieldPort" {
   // CHECK:          firrtl.module @PerFieldPort
   firrtl.module @PerFieldPort() {
     // CHECK-NEXT:       firrtl.wire sym @pf : !firrtl.uint<1>
-    // CHECK-NEXT:       firrtl.wire sym [<@pg,1,public>, <@pf_0,2,public>] {annotations = [{circt.fieldID = 2 : i64, class = "test"}]}
+    // CHECK-NEXT:       firrtl.wire sym [<@pg,1,public>, <@[[PF]],2,public>] {annotations = [{circt.fieldID = 2 : i64, class = "test"}]}
     // CHECK-NOT:        circt.nonlocal
     %pf = firrtl.wire sym @pf : !firrtl.uint<1>
     %c_x = firrtl.instance i sym @i @Child(in x : !firrtl.bundle<a: uint<1>, b: uint<1>>)
@@ -3627,6 +3643,7 @@ firrtl.circuit "PerFieldPortRetop" {
   }
 }
 
+// -----
 //===----------------------------------------------------------------------===//
 // Determinism / multi-root.
 //
@@ -3640,7 +3657,6 @@ firrtl.circuit "PerFieldPortRetop" {
 // The full CHECK-NEXT chains below pin both orders.
 //===----------------------------------------------------------------------===//
 
-// -----
 // @nlaA/@nlaB are rooted at inline @Mid (instantiated 3x) -> three contexts
 // each; @nlaD is rooted at inline @Mid2 (instantiated 2x) -> two contexts;
 // @nlaT is a plain transit NLA -> one context.
