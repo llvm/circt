@@ -59,9 +59,9 @@ def ConstantOp
 }
 
 def WireOp : HWOp<"wire", [
-    SameOperandsAndResultType,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-    DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
+    DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+    HWForceable]> {
   let summary = "Assign a name or symbol to an SSA edge";
   let description = [{
     An `hw.wire` is used to assign a human-readable name or a symbol for remote
@@ -82,22 +82,32 @@ def WireOp : HWOp<"wire", [
       Verilog force statement, the forced value will affect all users of the
       wire in the output.
 
+    When the 'forceable' attribute is present, the wire produces an additional
+    read-write probe result (!sim.ref<T, true>) that can be used with force and
+    release operations.
+
     Example:
     ```
     %1 = hw.wire %0 : i42
     %2 = hw.wire %0 sym @mySym : i42
     %3 = hw.wire %0 name "myWire" : i42
     %myWire = hw.wire %0 : i42
+
+    // Forceable wire
+    %4, %4_ref = hw.wire forceable %0 : i42, !sim.ref<i42, true>
     ```
   }];
 
   let arguments = (ins AnyType:$input,
                        OptionalAttr<StrAttr>:$name,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs AnyType:$result);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       UnitAttr:$forceable);
+  let results = (outs AnyType:$result,
+                      Optional<HWRefType>:$ref);
 
   let hasFolder = true;
   let hasCanonicalizeMethod = 1;
+  let hasVerifier = 0;
   let builders = [
     OpBuilder<(ins "mlir::Value":$input,
                    CArg<"const StringAttrOrRef &", "{}">:$name,
@@ -112,10 +122,7 @@ def WireOp : HWOp<"wire", [
     }]>
   ];
 
-  let assemblyFormat = [{
-    $input (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) attr-dict
-    `:` qualified(type($input))
-  }];
+  let hasCustomAssemblyFormat = 1;
 }
 
 def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
