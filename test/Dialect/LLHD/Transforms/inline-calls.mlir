@@ -95,3 +95,37 @@ func.func private @maybeUnreachable(%arg0: i1) -> i42 {
   %0 = hw.constant 42 : i42
   return %0 : i42
 }
+
+// Recursive calls to functions that never suspend execution are left in place
+// instead of being reported as an error.
+// CHECK-LABEL: @Recursion
+hw.module @Recursion(in %a: i42, out u: i42) {
+  // CHECK: llhd.combinational
+  %0 = llhd.combinational -> i42 {
+    // CHECK-NEXT:   [[EXT:%.+]] = comb.extract %a from 41 :
+    // CHECK-NEXT:   cf.cond_br [[EXT]], [[BB1:\^.+]], [[BB2:\^.+]](%a : i42)
+    // CHECK-NEXT: [[BB1]]:
+    // CHECK-NEXT:   [[TMP1:%.+]] = hw.constant 1 :
+    // CHECK-NEXT:   [[TMP2:%.+]] = comb.sub %a, [[TMP1]] :
+    // CHECK-NEXT:   [[TMP3:%.+]] = func.call @recurse([[TMP2]])
+    // CHECK-NEXT:   cf.br [[BB2]]([[TMP3]] : i42)
+    // CHECK-NEXT: [[BB2]]([[TMP4:%.+]]: i42):
+    %1 = func.call @recurse(%a) : (i42) -> i42
+    llhd.yield %1 : i42
+  }
+  hw.output %0 : i42
+}
+
+// The un-inlined recursive call keeps the function alive.
+// CHECK-DCE: func.func private @recurse
+func.func private @recurse(%arg0: i42) -> i42 {
+  %0 = comb.extract %arg0 from 41 : (i42) -> i1
+  cf.cond_br %0, ^bb1, ^bb2(%arg0 : i42)
+^bb1:
+  %1 = hw.constant 1 : i42
+  %2 = comb.sub %arg0, %1 : i42
+  %3 = call @recurse(%2) : (i42) -> i42
+  cf.br ^bb2(%3 : i42)
+^bb2(%4: i42):
+  return %4 : i42
+}
