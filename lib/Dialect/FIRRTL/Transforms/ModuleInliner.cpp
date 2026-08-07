@@ -2395,7 +2395,8 @@ class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
     if (failed(facts))
       return signalPassFailure();
     LLVM_DEBUG({
-      llvm::dbgs() << "\n=== InliningFacts Results ===\n";
+      llvm::dbgs() << "\n";
+      debugHeader("InliningFacts results", 40) << "\n";
       facts->dump();
     });
 
@@ -2404,7 +2405,8 @@ class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
     if (failed(nlaPlanner.run()))
       return signalPassFailure();
     LLVM_DEBUG({
-      llvm::dbgs() << "\n=== NLA Planner Results ===\n";
+      llvm::dbgs() << "\n";
+      debugHeader("NLA planner results", 40) << "\n";
       nlaPlanner.dump();
     });
     numHierPathsEndInnerSym += nlaPlanner.stats.endInnerSym;
