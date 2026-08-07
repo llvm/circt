@@ -49,8 +49,23 @@ endmodule
 // -----
 module Foo;
   int x;
+  bit y;
+  // expected-error @below {{unsupported non-blocking assignment timing control: RepeatedEvent}}
+  initial x <= repeat (2) @(posedge y) x;
+endmodule
+
+// -----
+module Foo;
+  int x;
   // expected-error @below {{implicit events cannot be used here}}
   initial x = @* x;
+endmodule
+
+// -----
+module Foo;
+  int x;
+  // expected-error @below {{implicit events cannot be used here}}
+  initial x = repeat (2) @* x;
 endmodule
 
 // -----
