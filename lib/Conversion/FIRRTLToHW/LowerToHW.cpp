@@ -3807,11 +3807,21 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   if (!clockVal)
     return failure();
 
+  // Lower an optional `initial` time-zero value into a `seq.firreg` preset.
+  Attribute presetAttr;
+  if (auto initial = op.getInitialAttr()) {
+    auto intTy = dyn_cast<IntegerType>(resultType);
+    if (!intTy)
+      return op.emitError("'initial' value on non-integer register type");
+    presetAttr = builder.getIntegerAttr(
+        intTy, initial.getValue().zextOrTrunc(intTy.getWidth()));
+  }
+
   // Create a reg op, wiring itself to its input.
   auto innerSym = lowerInnerSymbol(op);
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg = seq::FirRegOp::create(builder, inputEdge, clockVal,
-                                   op.getNameAttr(), innerSym);
+                                   op.getNameAttr(), innerSym, presetAttr);
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
@@ -3846,13 +3856,24 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
+  // Lower an optional `initial` time-zero value into a `seq.firreg` preset.
+  Attribute presetAttr;
+  if (auto initial = op.getInitialAttr()) {
+    auto intTy = dyn_cast<IntegerType>(resultType);
+    if (!intTy)
+      return op.emitError("'initial' value on non-integer register type");
+    presetAttr = builder.getIntegerAttr(
+        builder.getIntegerType(intTy.getWidth()),
+        initial.getValue().zextOrTrunc(intTy.getWidth()));
+  }
+
   // Create a reg op, wiring itself to its input.
   auto innerSym = lowerInnerSymbol(op);
   bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
   Backedge inputEdge = backedgeBuilder.get(resultType);
-  auto reg =
-      seq::FirRegOp::create(builder, inputEdge, clockVal, op.getNameAttr(),
-                            resetSignal, resetValue, innerSym, isAsync);
+  auto reg = seq::FirRegOp::create(builder, inputEdge, clockVal,
+                                   op.getNameAttr(), resetSignal, resetValue,
+                                   innerSym, isAsync, presetAttr);
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
