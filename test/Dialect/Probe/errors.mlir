@@ -19,21 +19,14 @@ hw.module @AggregateInputRef(in %p: !hw.struct<ref: !probe.ref<i8>>) {
 // -----
 
 hw.module @BadRead(in %in: i8) {
-  %forwarded, %p = probe.send %in : i8
+  %p = probe.send %in : i8
   // expected-error @below {{failed to verify that input and result types match}}
   %v = "probe.read"(%p) : (!probe.ref<i8>) -> i7
 }
 
 // -----
 
-hw.module @BadForwarded(in %in: i8) {
-  // expected-error @below {{failed to verify that input and forwarded types match}}
-  %forwarded, %p = "probe.send"(%in) : (i8) -> (i7, !probe.ref<i8>)
-}
-
-// -----
-
 hw.module @BadRef(in %in: i8) {
   // expected-error @below {{failed to verify that input and ref types match}}
-  %forwarded, %p = "probe.send"(%in) : (i8) -> (i8, !probe.ref<i7>)
+  %p = "probe.send"(%in) : (i8) -> !probe.ref<i7>
 }

@@ -19,26 +19,24 @@ class ProbeOp<string mnemonic, list<Trait> traits = []> :
     Op<ProbeDialect, mnemonic, traits>;
 
 def SendOp : ProbeOp<"send", [
-  TypesMatchWith<"input and forwarded types match",
-    "input", "forwarded", "$_self">,
+  Pure,
   TypesMatchWith<"input and ref types match",
     "input", "ref", "::circt::probe::RefType::get($_self)">
 ]> {
   let summary = "create a read-only probe handle for a hardware value";
   let description = [{
     `probe.send` creates a read-only probe handle for an arbitrary SSA hardware
-    value. The `forwarded` result carries the input value through an explicit
-    tap, while the `ref` result identifies the value for by-name observation.
+    value. The `ref` result identifies the value for by-name observation and
+    does not carry ordinary hardware dataflow. Users that also consume the
+    input value should use the original SSA value directly.
 
-    Users of `forwarded` must continue to observe the value through this
-    operation; optimizations must not bypass the tap and replace those uses with
-    the input. Leaving `forwarded` unused expresses a probe-only tap. A backend
-    that requires the observed value to be nameable may materialize an anchor
-    for this operation.
+    This operation is not an optimization barrier. Optimizations may rewrite
+    its input or remove an unused probe handle as long as reads through the
+    handle observe the same value. A backend that requires the observed value
+    to be nameable may materialize an anchor for this operation.
   }];
   let arguments = (ins ProbeElementType:$input);
-  let results = (outs ProbeElementType:$forwarded,
-                      RefTypeConstraint:$ref);
+  let results = (outs RefTypeConstraint:$ref);
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
