@@ -61,9 +61,10 @@ reference; ordinary dataflow consumers continue to use the original SSA value:
 A probe observes the value passed to `probe.send`, not a particular SSA
 definition or expression representation. Optimizations may rewrite the
 producer, retarget the probe, or remove an unused probe handle as long as
-`probe.read` observes the same value. `probe.send` is not an optimization
-barrier. A backend that requires the observed value to have a name may
-materialize an anchor for an otherwise unnamed value.
+`probe.read` observes the same value. The observed value does not need to have
+an explicit name in the IR. A backend may generate a name when required, but
+automatically generated names are implementation details and are not
+guaranteed to remain stable across compiler runs or IR transformations.
 
 The Probe dialect currently models only read-only observation handles. It does
 not prescribe a physical implementation, a hierarchical path encoding, or

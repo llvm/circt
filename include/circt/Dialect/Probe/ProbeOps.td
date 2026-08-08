@@ -29,10 +29,10 @@ def SendOp : ProbeOp<"send", [
     does not carry ordinary hardware dataflow. Users that also consume the
     input value should use the original SSA value directly.
 
-    This operation is not an optimization barrier. Optimizations may rewrite
-    its input or remove an unused probe handle as long as reads through the
-    handle observe the same value. A backend that requires the observed value
-    to be nameable may materialize an anchor for this operation.
+    The observed value does not need to have an explicit name in the IR. A
+    backend may generate a name when required. Automatically generated names
+    are implementation details and are not guaranteed to remain stable across
+    compiler runs or IR transformations.
   }];
   let arguments = (ins ProbeElementType:$input);
   let results = (outs RefTypeConstraint:$ref);
