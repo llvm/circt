@@ -108,7 +108,7 @@ struct LTLImplicationConversion
     if (!isa<IntegerType>(op.getAntecedent().getType()) ||
         !isa<IntegerType>(op.getConsequent().getType()))
       return failure();
-    /// A -> B = !A || B
+    // A -> B = !A || B
     auto loc = op.getLoc();
     auto notA = comb::createOrFoldNot(rewriter, loc, adaptor.getAntecedent());
     auto orOp =
@@ -210,8 +210,6 @@ struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
   }
 };
 
-/// A timing path records the explicit clock events between the start and end of
-/// a sequence. Adjacent steps always use different clock events.
 struct TimingStep {
   Value clock;
   ltl::ClockEdge edge;
@@ -222,23 +220,35 @@ struct TimingStep {
   }
 };
 
+// A timing path records the ordered clock events between the start and end of
+// a sequence. For example:
+//   [(clockA, posedge, 2), (clockB, negedge, 1)]
+// represents:
+//   clockA.posedge -> clockA.posedge -> clockB.negedge
+// Adjacent steps always use different clock events; repeated adjacent events
+// are coalesced into the step's cycle count.
 using TimingPath = SmallVector<TimingStep>;
+
+// Validity lists the clock histories required before a lowered value can be
+// trusted. Each path is materialized by delaying a constant one, and all paths
+// must be ready:
+//   valid = AND(createPast(1, path) for path in validity)
+// The lowered property is checked as `!valid || property`.
 using Validity = SmallVector<TimingPath>;
 
-/// A lowered sequence is evaluated at its end point. Each match records the
-/// clock events from the sequence start to that end point and the i1 signal
-/// which indicates a match there.
 struct SequenceMatch {
   TimingPath timing;
   Value value;
   Validity validity;
 };
 
-struct LoweredSequence {
-  SmallVector<SequenceMatch> matches;
-};
+// A lowered sequence is evaluated at its end point. Each match records the
+// clock events from the sequence start to that end point and the i1 signal
+// which indicates a match there. The validity requirements track the sampled
+// history needed by that signal.
+using LoweredSequence = SmallVector<SequenceMatch>;
 
-/// A lowered property is evaluated after its timing path has elapsed.
+// A lowered property is evaluated after its timing path has elapsed.
 struct LoweredProperty {
   TimingPath timing;
   Value value;
@@ -251,8 +261,12 @@ struct SampledAtom {
 };
 
 using SampledAtoms = DenseMap<Value, SampledAtom>;
+
+// Cache one-cycle registers keyed by input and clock event so independently
+// lowered timing paths share the same history registers.
 using PastValues = DenseMap<std::tuple<Value, Value, unsigned>, Value>;
 
+// Sample `input` on the requested clock edge with an initial value of false.
 static Value createRegister(Value input, Value clock, ltl::ClockEdge edge,
                             OpBuilder &builder, Operation *contextOp) {
   assert(edge != ltl::ClockEdge::Both && "both-edge clock not supported");
@@ -272,29 +286,26 @@ static Value createRegister(Value input, Value clock, ltl::ClockEdge edge,
       .getResult();
 }
 
-static Value createPast(PastValues &pastValues, Value input, uint64_t cycles,
-                        Value clock, ltl::ClockEdge edge, OpBuilder &builder,
-                        Operation *contextOp) {
-  Value current = input;
-  for (uint64_t i = 0; i < cycles; ++i) {
-    auto [it, inserted] = pastValues.try_emplace(
-        std::make_tuple(current, clock, static_cast<unsigned>(edge)));
-    if (inserted)
-      it->second = createRegister(current, clock, edge, builder, contextOp);
-    current = it->second;
-  }
-  return current;
-}
-
+// Delay `input` along a timing path by inserting one register per elapsed
+// clock event.
 static Value createPast(PastValues &pastValues, Value input,
                         ArrayRef<TimingStep> timing, OpBuilder &builder,
                         Operation *contextOp) {
-  for (auto step : timing)
-    input = createPast(pastValues, input, step.cycles, step.clock, step.edge,
-                       builder, contextOp);
+  for (auto step : timing) {
+    for (uint64_t i = 0; i < step.cycles; ++i) {
+      auto [it, inserted] = pastValues.try_emplace(
+          std::make_tuple(input, step.clock, static_cast<unsigned>(step.edge)));
+      if (inserted)
+        it->second =
+            createRegister(input, step.clock, step.edge, builder, contextOp);
+      input = it->second;
+    }
+  }
   return input;
 }
 
+// Append clock events to a timing path, coalescing adjacent events on the same
+// clock edge.
 static LogicalResult appendTiming(TimingPath &timing, Value clock,
                                   ltl::ClockEdge edge, uint64_t cycles) {
   if (cycles == 0)
@@ -312,6 +323,7 @@ static LogicalResult appendTiming(TimingPath &timing, Value clock,
   return success();
 }
 
+// Append a timing suffix, preserving the coalesced timing path form.
 static LogicalResult appendTiming(TimingPath &timing,
                                   ArrayRef<TimingStep> suffix) {
   for (auto step : suffix)
@@ -320,6 +332,11 @@ static LogicalResult appendTiming(TimingPath &timing,
   return success();
 }
 
+// Return `suffix` such that:
+//   prefix + suffix == timing
+// where `+` denotes normalized timing-path concatenation. Return std::nullopt
+// if `prefix` is not a prefix of `timing`. A prefix may end in the middle of
+// the next timing step, but not after it.
 static std::optional<TimingPath> getTimingSuffix(ArrayRef<TimingStep> prefix,
                                                  ArrayRef<TimingStep> timing) {
   if (prefix.empty())
@@ -353,6 +370,8 @@ static std::optional<TimingPath> getTimingSuffix(ArrayRef<TimingStep> prefix,
   return TimingPath(timing.drop_front(timingIndex));
 }
 
+// Move every validity requirement forward by the same timing suffix. If a
+// match moves by `suffix`, each requirement `path` becomes `path + suffix`.
 static LogicalResult appendTiming(Validity &validity,
                                   ArrayRef<TimingStep> suffix) {
   for (auto &timing : validity)
@@ -361,6 +380,9 @@ static LogicalResult appendTiming(Validity &validity,
   return success();
 }
 
+// Add a validity requirement, dropping requirements implied by stronger ones.
+// If P is a prefix of Q, `valid(Q)` implies `valid(P)`, so only Q is kept.
+// Requirements on incomparable paths are both kept.
 static void addValidity(Validity &validity, TimingPath requirement) {
   for (size_t i = 0; i < validity.size();) {
     if (getTimingSuffix(requirement, validity[i]))
@@ -374,11 +396,10 @@ static void addValidity(Validity &validity, TimingPath requirement) {
   validity.push_back(std::move(requirement));
 }
 
-static void appendValidity(Validity &validity, const Validity &suffix) {
-  for (auto requirement : suffix)
-    addValidity(validity, std::move(requirement));
-}
-
+// Find a common endpoint T such that every match timing M has a suffix S with:
+//   M + S == T
+// Each match value and its validity requirements are delayed by S before the
+// final property is built.
 static FailureOr<TimingPath> findCommonTiming(ArrayRef<SequenceMatch> matches) {
   if (matches.empty())
     return TimingPath{};
@@ -391,25 +412,8 @@ static FailureOr<TimingPath> findCommonTiming(ArrayRef<SequenceMatch> matches) {
   return failure();
 }
 
-static Value alignValue(PastValues &pastValues, Value value,
-                        ArrayRef<TimingStep> from, ArrayRef<TimingStep> to,
-                        OpBuilder &builder, Operation *contextOp) {
-  auto suffix = getTimingSuffix(from, to);
-  assert(suffix && "timing compatibility checked before alignment");
-  return createPast(pastValues, value, *suffix, builder, contextOp);
-}
-
-static FailureOr<Validity> alignValidity(const Validity &validity,
-                                         ArrayRef<TimingStep> from,
-                                         ArrayRef<TimingStep> to) {
-  auto suffix = getTimingSuffix(from, to);
-  assert(suffix && "timing compatibility checked before alignment");
-  Validity result = validity;
-  if (failed(appendTiming(result, *suffix)))
-    return failure();
-  return result;
-}
-
+// Materialize the validity guard used to suppress assertions until all
+// registers introduced for explicit-clock sampling contain real history.
 static Value materializeValidity(PastValues &pastValues, Value &validStart,
                                  const Validity &validity, OpBuilder &builder,
                                  Operation *contextOp) {
@@ -428,6 +432,9 @@ static Value materializeValidity(PastValues &pastValues, Value &validStart,
                              /*twoState=*/false);
 }
 
+// Lower an LTL sequence to one or more possible matches. Currently this only
+// handles a single explicitly clocked atom; the match is visible immediately
+// after sampling the atom.
 static FailureOr<LoweredSequence>
 lowerSequence( // NOLINT(misc-no-recursion): Walks an acyclic LTL expression.
     SampledAtoms &sampledAtoms, PastValues &pastValues, Value sequence,
@@ -441,7 +448,8 @@ lowerSequence( // NOLINT(misc-no-recursion): Walks an acyclic LTL expression.
                                         atom.getEdge(), builder, atom);
       it->second.validity = {{{atom.getClock(), atom.getEdge(), 1}}};
     }
-    return LoweredSequence{{{{}, it->second.value, it->second.validity}}};
+    return LoweredSequence{
+        SequenceMatch{{}, it->second.value, it->second.validity}};
   }
 
   return failure();
@@ -455,19 +463,24 @@ lowerSequenceAsProperty(SampledAtoms &sampledAtoms, PastValues &pastValues,
   if (failed(lowered))
     return failure();
 
-  auto timing = findCommonTiming(lowered->matches);
+  auto timing = findCommonTiming(*lowered);
   if (failed(timing))
     return failure();
 
   SmallVector<Value> matches;
   Validity validity;
-  for (const auto &match : lowered->matches) {
-    matches.push_back(alignValue(pastValues, match.value, match.timing, *timing,
-                                 builder, contextOp));
-    auto aligned = alignValidity(match.validity, match.timing, *timing);
-    if (failed(aligned))
+  for (const auto &match : *lowered) {
+    auto suffix = getTimingSuffix(match.timing, *timing);
+    assert(suffix && "common timing is compatible with every match");
+
+    matches.push_back(
+        createPast(pastValues, match.value, *suffix, builder, contextOp));
+
+    Validity alignedValidity = match.validity;
+    if (failed(appendTiming(alignedValidity, *suffix)))
       return failure();
-    appendValidity(validity, *aligned);
+    for (auto requirement : alignedValidity)
+      addValidity(validity, std::move(requirement));
   }
   if (!timing->empty()) {
     TimingPath timingValid = *timing;
@@ -500,6 +513,9 @@ static Value getAssertLikeProperty(Operation *op) {
   return {};
 }
 
+// Erase the LTL expression tree after replacing the assert-like property. This
+// pass keeps LTL legal and does not run DCE, so the now-dead temporal ops
+// would otherwise remain in the module.
 // NOLINTNEXTLINE(misc-no-recursion): Walks an acyclic LTL expression.
 static void eraseDeadLTLTree(Value value) {
   auto *op = value.getDefiningOp();
