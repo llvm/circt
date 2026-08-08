@@ -11,7 +11,6 @@
 
 include "circt/Dialect/Probe/ProbeDialect.td"
 include "circt/Dialect/Probe/ProbeTypes.td"
-include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpBase.td"
 
@@ -44,8 +43,7 @@ def ReadOp : ProbeOp<"read", [
   TypesMatchWith<"input and result types match",
     "input", "result",
     "cast<::circt::probe::RefType>($_self).getElementType()">,
-  Pure,
-  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+  Pure
 ]> {
   let summary = "read the value observed by a probe handle";
   let description = [{

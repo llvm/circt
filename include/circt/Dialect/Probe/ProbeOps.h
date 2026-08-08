@@ -11,7 +11,6 @@
 
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpImplementation.h"
-#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "circt/Dialect/Probe/ProbeDialect.h"
