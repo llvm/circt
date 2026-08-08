@@ -46,14 +46,37 @@ private:
   llvm::json::Value json(Operation *errorOp, Attribute, bool elideType = false);
 
   // Output a node in the appid hierarchy.
-  void emitNode(llvm::json::OStream &, AppIDHierNodeOp nodeOp);
-  // Output the manifest data of a node in the appid hierarchy.
-  void emitBlock(llvm::json::OStream &, Block &block, StringRef manifestClass);
+  void emitNode(llvm::json::OStream &, AppIDHierNodeOp nodeOp,
+                ArrayRef<Attribute> parentPath);
+  // Output the manifest data of a node in the appid hierarchy. 'nodePath' is
+  // the absolute appID path of the node which owns 'block'.
+  void emitBlock(llvm::json::OStream &, Block &block, StringRef manifestClass,
+                 ArrayRef<Attribute> nodePath);
 
   AppIDHierRootOp appidRoot;
 
   /// Get a JSON representation of the manifest.
   std::string json();
+
+  /// Walk the appID hierarchy to populate 'servedPortPaths' (absolute appID
+  /// paths of user-accessible client ports, i.e. those appearing in a service
+  /// implementation's client record) and 'instantiatedModules' (every module
+  /// instantiated in the unpruned hierarchy, whose metadata must be retained).
+  void collectAccessibilityInfo(Block &block);
+
+  /// Walk the appID hierarchy and populate 'keepNodes' with the hierarchy nodes
+  /// which contain (or have a descendant which contains) a user-accessible
+  /// client port.
+  void computeKeepNodes(Block &block);
+
+  /// Is the client port with appID 'portID' under the node at 'nodePath' user
+  /// accessible?
+  bool isPortAccessible(ArrayRef<Attribute> nodePath, Attribute portID) const {
+    SmallVector<Attribute> portPath(nodePath.begin(), nodePath.end());
+    portPath.push_back(portID);
+    return servedPortPaths.contains(
+        ArrayAttr::get(portID.getContext(), portPath));
+  }
 
   // Type table.
   std::string useType(Type type) {
@@ -73,6 +96,18 @@ private:
   DenseSet<SymbolRefAttr> symbols;
   DenseSet<SymbolRefAttr> modules;
 
+  // Modules instantiated anywhere in the (full, unpruned) AppID design
+  // hierarchy. Their metadata is always retained so that 'module_infos' stays
+  // complete even when an instance's subtree is pruned from the design tree.
+  DenseSet<SymbolRefAttr> instantiatedModules;
+
+  // Absolute appID paths of user-accessible client ports (those served by a
+  // service or engine via a client record).
+  DenseSet<ArrayAttr> servedPortPaths;
+  // AppID hierarchy nodes to retain (those whose subtree contains a
+  // user-accessible client port).
+  DenseSet<Operation *> keepNodes;
+
   hw::HWSymbolCache symCache;
 };
 } // anonymous namespace
@@ -89,6 +124,11 @@ void ESIBuildManifestPass::runOnOperation() {
       appidRoot = root;
   if (!appidRoot)
     return;
+
+  // Determine which client ports are user-accessible and which hierarchy nodes
+  // need to be retained as a result.
+  collectAccessibilityInfo(appidRoot.getChildren().front());
+  computeKeepNodes(appidRoot.getChildren().front());
 
   // JSONify the manifest.
   std::string jsonManifest = json();
@@ -131,8 +171,87 @@ void ESIBuildManifestPass::runOnOperation() {
   }
 }
 
+void ESIBuildManifestPass::collectAccessibilityInfo(Block &rootBlock) {
+  // Record every module instantiated in the (full, unpruned) AppID design
+  // hierarchy so that its metadata (module_infos) is always retained.
+  rootBlock.getParentOp()->walk([&](AppIDHierNodeOp node) {
+    instantiatedModules.insert(node.getModuleRefAttr());
+  });
+
+  // Iterative pre-order walk over the appID hierarchy to collect served port
+  // paths. Each work item pairs a block with the absolute appID path of the
+  // node which owns it.
+  SmallVector<std::pair<Block *, SmallVector<Attribute>>> worklist;
+  worklist.emplace_back(&rootBlock, SmallVector<Attribute>{});
+  while (!worklist.empty()) {
+    auto [block, path] = worklist.pop_back_val();
+    for (auto svc : block->getOps<ServiceImplRecordOp>())
+      for (auto client :
+           svc.getReqDetails().front().getOps<ServiceImplClientRecordOp>()) {
+        // Any client port with a service implementation record is served by
+        // that service/engine and is therefore user-accessible. Note that the
+        // channel assignments may be empty (e.g. for MMIO ports, which are
+        // described by 'offset'/'size' options rather than channel
+        // assignments).
+        SmallVector<Attribute> portPath(path.begin(), path.end());
+        for (auto id : client.getRelAppIDPath().getAsRange<AppIDAttr>())
+          portPath.push_back(id);
+        servedPortPaths.insert(ArrayAttr::get(&getContext(), portPath));
+      }
+    for (auto node : block->getOps<AppIDHierNodeOp>()) {
+      SmallVector<Attribute> childPath(path.begin(), path.end());
+      childPath.push_back(node.getAppIDAttr());
+      worklist.emplace_back(&node.getChildren().front(), std::move(childPath));
+    }
+  }
+}
+
+void ESIBuildManifestPass::computeKeepNodes(Block &rootBlock) {
+  // A node is kept if its child block has a user-accessible request port or any
+  // descendant node is kept. Compute this bottom-up without recursion: first
+  // collect every block in pre-order (so each block precedes its descendants),
+  // then process the list in reverse (so every descendant is visited before its
+  // ancestor).
+  struct WorkItem {
+    Block *block;
+    SmallVector<Attribute> path;
+    AppIDHierNodeOp owner; // Node owning 'block' (null for the root block).
+  };
+  SmallVector<WorkItem> worklist;
+  SmallVector<WorkItem> order;
+  worklist.push_back({&rootBlock, {}, {}});
+  while (!worklist.empty()) {
+    WorkItem item = worklist.pop_back_val();
+    for (auto node : item.block->getOps<AppIDHierNodeOp>()) {
+      SmallVector<Attribute> childPath(item.path.begin(), item.path.end());
+      childPath.push_back(node.getAppIDAttr());
+      worklist.push_back(
+          {&node.getChildren().front(), std::move(childPath), node});
+    }
+    order.push_back(std::move(item));
+  }
+
+  // Maps a block to whether it (or a descendant) is to be kept.
+  DenseMap<Block *, bool> blockKeeps;
+  for (WorkItem &item : llvm::reverse(order)) {
+    bool keep = false;
+    for (auto req : item.block->getOps<ServiceRequestRecordOp>())
+      if (isPortAccessible(item.path, req.getRequestorAttr()))
+        keep = true;
+    for (auto node : item.block->getOps<AppIDHierNodeOp>())
+      if (blockKeeps.lookup(&node.getChildren().front()))
+        keep = true;
+    blockKeeps[item.block] = keep;
+    if (keep && item.owner)
+      keepNodes.insert(item.owner);
+  }
+}
+
 void ESIBuildManifestPass::emitNode(llvm::json::OStream &j,
-                                    AppIDHierNodeOp nodeOp) {
+                                    AppIDHierNodeOp nodeOp,
+                                    ArrayRef<Attribute> parentPath) {
+  SmallVector<Attribute> nodePath(parentPath.begin(), parentPath.end());
+  nodePath.push_back(nodeOp.getAppIDAttr());
   std::set<StringRef> classesToEmit;
   for (auto manifestData : nodeOp.getOps<IsManifestData>())
     classesToEmit.insert(manifestData.getManifestClass());
@@ -141,20 +260,30 @@ void ESIBuildManifestPass::emitNode(llvm::json::OStream &j,
     j.attribute("instanceOf", json(nodeOp, nodeOp.getModuleRefAttr()));
     for (StringRef manifestClass : classesToEmit)
       j.attributeArray(manifestClass.str() + "s", [&]() {
-        emitBlock(j, nodeOp.getChildren().front(), manifestClass);
+        emitBlock(j, nodeOp.getChildren().front(), manifestClass, nodePath);
       });
     j.attributeArray("children", [&]() {
-      for (auto nodeOp : nodeOp.getChildren().front().getOps<AppIDHierNodeOp>())
-        emitNode(j, nodeOp);
+      for (auto childOp :
+           nodeOp.getChildren().front().getOps<AppIDHierNodeOp>())
+        if (keepNodes.contains(childOp))
+          emitNode(j, childOp, nodePath);
     });
   });
 }
 
 void ESIBuildManifestPass::emitBlock(llvm::json::OStream &j, Block &block,
-                                     StringRef manifestClass) {
+                                     StringRef manifestClass,
+                                     ArrayRef<Attribute> nodePath) {
   for (auto manifestData : block.getOps<IsManifestData>()) {
     if (manifestData.getManifestClass() != manifestClass)
       continue;
+    // Prune client ports which are not user-accessible (i.e. whose channels are
+    // not bound to a host-reachable engine). Such ports never appear in the
+    // runtime's Accelerator design tree, so they (and their types) are omitted.
+    if (auto req =
+            dyn_cast<ServiceRequestRecordOp>(manifestData.getOperation()))
+      if (!isPortAccessible(nodePath, req.getRequestorAttr()))
+        continue;
     j.object([&] {
       SmallVector<NamedAttribute, 4> attrs;
       manifestData.getDetails(attrs);
@@ -183,12 +312,13 @@ std::string ESIBuildManifestPass::json() {
     modules.insert(appidRoot.getTopModuleRefAttr());
     for (StringRef manifestClass : classesToEmit)
       j.attributeArray(manifestClass.str() + "s", [&]() {
-        emitBlock(j, appidRoot.getChildren().front(), manifestClass);
+        emitBlock(j, appidRoot.getChildren().front(), manifestClass, {});
       });
     j.attributeArray("children", [&]() {
       for (auto nodeOp :
            appidRoot.getChildren().front().getOps<AppIDHierNodeOp>())
-        emitNode(j, nodeOp);
+        if (keepNodes.contains(nodeOp))
+          emitNode(j, nodeOp, {});
     });
   });
 
@@ -208,7 +338,12 @@ std::string ESIBuildManifestPass::json() {
           for (auto port : ports) {
             j.object([&] {
               j.attribute("name", port.port.getName().getValue());
-              j.attribute("typeID", useType(port.type));
+              // Emit the port type as a plain string rather than registering it
+              // in the type table: the runtime never resolves service
+              // declaration port types, so they would only bloat the manifest.
+              std::string typeID;
+              llvm::raw_string_ostream(typeID) << port.type;
+              j.attribute("typeID", typeID);
             });
           }
         });
@@ -227,7 +362,16 @@ std::string ESIBuildManifestPass::json() {
     // Gather all manifest data for each symbol.
     for (auto symInfo : mod.getBody()->getOps<IsManifestData>()) {
       FlatSymbolRefAttr sym = symInfo.getSymbolRefAttr();
-      if (!sym || !symbols.contains(sym))
+      if (!sym)
+        continue;
+      // Keep a module's metadata if it is instantiated anywhere in the design
+      // hierarchy ('instantiatedModules', collected from the full unpruned
+      // hierarchy) or is otherwise referenced ('symbols'). Additionally, always
+      // keep module constants: they are semantically significant (e.g. for
+      // codegen) even when the module itself is not user-accessible.
+      bool isConstants = symInfo.getManifestClass() == "symConsts";
+      if (!symbols.contains(sym) && !instantiatedModules.contains(sym) &&
+          !isConstants)
         continue;
       symbolInfoLookup[sym].push_back(symInfo);
     }
