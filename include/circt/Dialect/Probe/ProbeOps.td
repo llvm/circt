@@ -51,8 +51,8 @@ def ReadOp : ProbeOp<"read", [
     to by its input. It does not require the compiler to materialize ordinary
     hardware dataflow between the origin of the probe and the read site.
 
-    The result is the value of the observed hardware, not writable access to the
-    hardware object itself. It cannot be used for assignment, force, or release.
+    The result is the hardware value observed through the read-only probe
+    handle.
   }];
   let arguments = (ins RefTypeConstraint:$input);
   let results = (outs ProbeElementType:$result);
