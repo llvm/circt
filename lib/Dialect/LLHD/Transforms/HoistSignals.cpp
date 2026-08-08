@@ -140,9 +140,11 @@ void ProbeHoister::hoistProbes() {
 
       // We can only hoist probes that have no side-effecting ops between
       // themselves and the beginning of a block. If we see a side-effecting op,
-      // give up on this block.
+      // give up on this block. `llhd.resample` markers are exempt: their read
+      // effect only pins an SSA value sample to its block (a CSE barrier);
+      // as reads they commute with probes and must not block hoisting.
       if (!probeOp) {
-        if (isMemoryEffectFree(&op))
+        if (isMemoryEffectFree(&op) || isa<ResampleOp>(op))
           continue;
         else
           break;

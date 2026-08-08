@@ -57,6 +57,7 @@
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -529,6 +530,19 @@ void LowerCoroutinesPass::runOnOperation() {
   for (auto defineOp : defineOps) {
     if (failed(captureValuesAcrossSuspension(defineOp)))
       return signalPassFailure();
+
+    // The `llhd.resample` markers protecting live event-trigger samples from
+    // cross-check-block CSE have done their job: values live across
+    // suspension points are now threaded as explicit resume block arguments,
+    // so every derived chain is rooted in a block-local binding and CSE can
+    // no longer merge samples across check blocks. Fold the markers to their
+    // operand. (Process-derived coroutines arrive here already folded by
+    // arc-lower-processes.)
+    defineOp.getBody().walk([](llhd::ResampleOp resampleOp) {
+      resampleOp.getResult().replaceAllUsesWith(resampleOp.getInput());
+      resampleOp.erase();
+    });
+
     lowerings.insert({defineOp.getSymNameAttr(), analyzeDefinition(defineOp)});
   }
 
