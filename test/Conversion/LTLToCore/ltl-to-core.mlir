@@ -1,4 +1,8 @@
 // RUN: circt-opt %s --lower-ltl-to-core | FileCheck %s
+// RUN: circt-opt %s --lower-ltl-to-core | FileCheck %s --check-prefix=DCE
+
+// DCE-COUNT-1: ltl.clocked_atom
+// DCE-NOT: ltl.clocked_atom
 
 // CHECK: hw.module @Implication(in [[A:%.+]] : i1, in [[B:%.+]] : i1, in [[C:%.+]] : !ltl.property, in [[CLK:%.+]] : i1)
 // CHECK: [[TRUE:%.+]] = hw.constant true
@@ -8,6 +12,7 @@
 // CHECK: verif.clocked_assert [[OR]], posedge [[CLK:%.+]] : i1
 // CHECK: [[IMP2:%.+]] = ltl.implication [[A]], [[B]] : i1, i1
 // CHECK: [[NOT_IMP2:%.+]] = ltl.not [[IMP2]] : !ltl.property
+// CHECK: verif.assert [[NOT_IMP2]] : !ltl.property
 // CHECK: [[IMP3:%.+]] = ltl.implication [[B]], [[C]] : i1, !ltl.property
 // CHECK: verif.assert [[IMP3]] : !ltl.property
 
@@ -19,6 +24,7 @@ hw.module @Implication(in %a: i1, in %b: i1, in %c: !ltl.property, in %clk: i1) 
   // Don't convert if there are non-assert users
   %imp2 = ltl.implication %a, %b : i1, i1
   %user = ltl.not %imp2 : !ltl.property
+  verif.assert %user : !ltl.property
   // Or if there are non-i1 operands
   %imp3 = ltl.implication %b, %c : i1, !ltl.property
   verif.assert %imp3 : !ltl.property
@@ -31,6 +37,7 @@ hw.module @Implication(in %a: i1, in %b: i1, in %c: !ltl.property, in %clk: i1) 
 // CHECK: verif.clocked_assert [[NOT_A]], posedge [[CLK:%.+]] : i1
 // CHECK: [[NOT2:%.+]] = ltl.not [[A]] : i1
 // CHECK: [[AND:%.+]] = ltl.and
+// CHECK: verif.assert [[AND]] : !ltl.property
 // CHECK: [[NOT_B:%.+]] = ltl.not [[B]] : !ltl.property
 // CHECK: verif.assert [[NOT_B]] : !ltl.property
 
@@ -42,6 +49,7 @@ hw.module @Not(in %a: i1, in %b: !ltl.property, in %clk: i1) {
   // Don't convert if there are non-assert users
   %not2 = ltl.not %a : i1
   %user = ltl.and %not2, %not2 : !ltl.property, !ltl.property
+  verif.assert %user : !ltl.property
   // Or if there are non-i1 operands
   %not3 = ltl.not %b : !ltl.property
   verif.assert %not3 : !ltl.property
@@ -53,6 +61,7 @@ hw.module @Not(in %a: i1, in %b: !ltl.property, in %clk: i1) {
 // CHECK: verif.clocked_assert [[AND1]], posedge [[CLK]] : i1
 // CHECK: [[AND2:%.+]] = comb.and [[A]], [[B]] : i1
 // CHECK: [[USER:%.+]] = hw.wire [[AND2]] : i1
+// CHECK: verif.assert [[USER]] : i1
 // CHECK: [[AND3:%.+]] = ltl.and [[B]], [[C]] : i1, !ltl.property
 // CHECK: verif.assert [[AND3]] : !ltl.property
 
@@ -64,6 +73,7 @@ hw.module @And(in %a: i1, in %b: i1, in %c: !ltl.property, in %clk: i1) {
   // Convert if there are non-assert users but the result type is i1
   %and2 = ltl.and %a, %b : i1, i1
   %user = hw.wire %and2 : i1
+  verif.assert %user : i1
   // Don't convert if there are non-i1 operands (and therefore results)
   %and3 = ltl.and %b, %c : i1, !ltl.property
   verif.assert %and3 : !ltl.property
@@ -75,6 +85,7 @@ hw.module @And(in %a: i1, in %b: i1, in %c: !ltl.property, in %clk: i1) {
 // CHECK: verif.clocked_assert [[OR1]], posedge [[CLK]] : i1
 // CHECK: [[OR2:%.+]] = comb.or [[A]], [[B]] : i1
 // CHECK: [[USER:%.+]] = hw.wire [[OR2]] : i1
+// CHECK: verif.assert [[USER]] : i1
 // CHECK: [[OR3:%.+]] = ltl.or [[B]], [[C]] : i1, !ltl.property
 // CHECK: verif.assert [[OR3]] : !ltl.property
 
@@ -86,6 +97,7 @@ hw.module @Or(in %a: i1, in %b: i1, in %c: !ltl.property, in %clk: i1) {
   // Convert if there are non-assert users but the result type is i1
   %or2 = ltl.or %a, %b : i1, i1
   %user = hw.wire %or2 : i1
+  verif.assert %user : i1
   // Don't convert if there are non-i1 operands (and therefore results)
   %or3 = ltl.or %b, %c : i1, !ltl.property
   verif.assert %or3 : !ltl.property
@@ -97,6 +109,7 @@ hw.module @Or(in %a: i1, in %b: i1, in %c: !ltl.property, in %clk: i1) {
 // CHECK: verif.clocked_assert [[INT1]], posedge [[CLK]] : i1
 // CHECK: [[INT2:%.+]] = comb.and [[A]], [[B]] : i1
 // CHECK: [[USER:%.+]] = hw.wire [[INT2]] : i1
+// CHECK: verif.assert [[USER]] : i1
 // CHECK: [[INT3:%.+]] = ltl.intersect [[B]], [[C]] : i1, !ltl.sequence
 // CHECK: verif.assert [[INT3]] : !ltl.sequence
 
@@ -109,22 +122,25 @@ hw.module @Intersect(in %a: i1, in %b: i1, in %c: !ltl.sequence, in %clk: i1) {
   // Convert if there are non-assert users but the result type is i1
   %int2 = ltl.intersect %a, %b : i1, i1
   %user = hw.wire %int2 : i1
+  verif.assert %user : i1
   // Don't convert if there are non-i1 operands (and therefore results)
   %int3 = ltl.intersect %b, %c : i1, !ltl.sequence
   verif.assert %int3 : !ltl.sequence
 }
 
-// CHECK: hw.module @Past(in [[A:%.+]] : i32, in [[CLK:%.+]] : i1)
+// CHECK: hw.module @Past(in [[A:%.+]] : i32, in [[CLK:%.+]] : i1, out past1 : i32, out past5 : i32)
 // CHECK: [[TOCLK1:%.+]] = seq.to_clock [[CLK]]
 // CHECK: [[TRUE:%.+]] = hw.constant true
 // CHECK: [[REG1:%.+]] = seq.shiftreg[1] [[A]], [[TOCLK1]], [[TRUE]] : i32
 // CHECK: [[TOCLK2:%.+]] = seq.to_clock [[CLK]]
 // CHECK: [[TRUE1:%.+]] = hw.constant true
 // CHECK: [[REG2:%.+]] = seq.shiftreg[5] [[A]], [[TOCLK2]], [[TRUE1]] : i32
+// CHECK: hw.output [[REG1]], [[REG2]] : i32, i32
 
-hw.module @Past(in %a: i32, in %clk: i1) {
-  ltl.past %a, 1 clk %clk : i32
-  ltl.past %a, 5 clk %clk : i32
+hw.module @Past(in %a: i32, in %clk: i1, out past1: i32, out past5: i32) {
+  %past1 = ltl.past %a, 1 clk %clk : i32
+  %past5 = ltl.past %a, 5 clk %clk : i32
+  hw.output %past1, %past5 : i32, i32
 }
 
 // CHECK-LABEL: hw.module @ClockedAtom(

@@ -26,8 +26,10 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/Support/LogicalResult.h"
 
 namespace circt {
@@ -225,23 +227,6 @@ static Value createRegister(Value input, Value clock, ltl::ClockEdge edge,
       .getResult();
 }
 
-// Erase the LTL expression tree after replacing the assert-like property. This
-// pass keeps LTL legal and does not run DCE, so the now-dead temporal ops
-// would otherwise remain in the module.
-// NOLINTNEXTLINE(misc-no-recursion): Walks an acyclic LTL expression.
-static void eraseDeadLTLTree(Value value) {
-  auto *op = value.getDefiningOp();
-  if (!op || !op->use_empty() ||
-      op->getDialect()->getNamespace() !=
-          ltl::LTLDialect::getDialectNamespace())
-    return;
-
-  SmallVector<Value> operands(op->getOperands());
-  op->erase();
-  for (auto operand : operands)
-    eraseDeadLTLTree(operand);
-}
-
 static void lowerTemporalLTLToCore(hw::HWModuleOp module) {
   SmallVector<Operation *> assertLikes;
   module->walk([&](Operation *op) {
@@ -275,7 +260,6 @@ static void lowerTemporalLTLToCore(hw::HWModuleOp module) {
         comb::createOrFoldNot(builder, op->getLoc(), sampleValid), sampled,
         /*twoState=*/false);
     op->setOperand(0, guardedProperty);
-    eraseDeadLTLTree(property);
   }
 }
 
@@ -389,6 +373,12 @@ void LowerLTLToCorePass::runOnOperation() {
         op->setOperand(0, cast.getInputs()[0]);
     }
   });
+
+  // Conversion may leave dead temporal expressions and materializations.
+  // Run MLIR's standard trivial operation DCE after all rewrites are complete.
+  IRRewriter rewriter(&getContext());
+  for (auto &region : getOperation()->getRegions())
+    eliminateTriviallyDeadOps(rewriter, region);
 }
 
 // Basic default constructor
