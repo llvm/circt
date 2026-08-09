@@ -207,9 +207,10 @@ struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
   }
 };
 
-// Sample `input` on the requested clock edge with an initial value of false.
+// Sample `input` on the requested clock edge.
 static Value createRegister(Value input, Value clock, ltl::ClockEdge edge,
-                            OpBuilder &builder, Operation *contextOp) {
+                            bool initialValue, OpBuilder &builder,
+                            Operation *contextOp) {
   assert(edge != ltl::ClockEdge::Both && "both-edge clock not supported");
   auto clockSignal = clock;
   if (edge == ltl::ClockEdge::Neg)
@@ -220,7 +221,7 @@ static Value createRegister(Value input, Value clock, ltl::ClockEdge edge,
 
   auto loc = contextOp->getLoc();
   auto initial = seq::createConstantInitialValue(
-      builder, loc, builder.getIntegerAttr(builder.getI1Type(), 0));
+      builder, loc, builder.getIntegerAttr(builder.getI1Type(), initialValue));
   return seq::CompRegOp::create(builder, loc, input, seqClock,
                                 /*reset=*/Value{},
                                 /*rstValue=*/Value{}, initial)
@@ -246,19 +247,19 @@ static void lowerTemporalLTLToCore(hw::HWModuleOp module) {
       continue;
 
     OpBuilder builder(op);
-    auto sampled = createRegister(atom.getInput(), atom.getClock(),
-                                  atom.getEdge(), builder, atom);
+    auto sampled =
+        createRegister(atom.getInput(), atom.getClock(), atom.getEdge(),
+                       /*initialValue=*/false, builder, atom);
 
-    auto validStart =
-        hw::ConstantOp::create(builder, op->getLoc(), builder.getI1Type(), 1);
-    // `sampleValid` becomes true once `sampled` contains a value captured on a
-    // real clock edge instead of its initial value.
-    auto sampleValid = createRegister(validStart, atom.getClock(),
-                                      atom.getEdge(), builder, op);
-    auto guardedProperty = comb::OrOp::create(
-        builder, op->getLoc(),
-        comb::createOrFoldNot(builder, op->getLoc(), sampleValid), sampled,
-        /*twoState=*/false);
+    auto constFalse =
+        hw::ConstantOp::create(builder, op->getLoc(), builder.getI1Type(), 0);
+    // `dontCare` is true while `sampled` only contains its initial value. The
+    // first real clock edge clears it and makes the sampled value observable.
+    auto dontCare = createRegister(constFalse, atom.getClock(), atom.getEdge(),
+                                   /*initialValue=*/true, builder, op);
+    auto guardedProperty =
+        comb::OrOp::create(builder, op->getLoc(), dontCare, sampled,
+                           /*twoState=*/false);
     op->setOperand(0, guardedProperty);
   }
 }

@@ -147,9 +147,12 @@ hw.module @Past(in %a: i32, in %clk: i1, out past1: i32, out past5: i32) {
 // CHECK-SAME:    in %[[CLOCK:[^, ]+]] : !seq.clock
 // CHECK-SAME:    in %[[A:[^, ]+]] : i1
 // CHECK:         %[[SAMPLED_A:.+]] = seq.compreg %[[A]], %[[CLOCK]] initial
-// CHECK:         %[[VALID:.+]] = seq.compreg %{{.+}}, %[[CLOCK]] initial
-// CHECK:         %[[NOT_VALID:.+]] = comb.xor %[[VALID]], %{{.+}} : i1
-// CHECK:         %[[GUARDED:.+]] = comb.or %[[NOT_VALID]], %[[SAMPLED_A]] : i1
+// CHECK:         %[[FALSE:.+]] = hw.constant false
+// CHECK:         %[[DONT_CARE_INIT:.+]] = seq.initial()
+// CHECK:           %[[TRUE:.+]] = hw.constant true
+// CHECK:           seq.yield %[[TRUE]] : i1
+// CHECK:         %[[DONT_CARE:.+]] = seq.compreg %[[FALSE]], %[[CLOCK]] initial %[[DONT_CARE_INIT]]
+// CHECK:         %[[GUARDED:.+]] = comb.or %[[DONT_CARE]], %[[SAMPLED_A]] : i1
 // CHECK:         verif.assert %[[GUARDED]] label "clocked_atom" : i1
 hw.module @ClockedAtom(in %clock : !seq.clock, in %a : i1) {
   %0 = seq.from_clock %clock
@@ -165,11 +168,14 @@ hw.module @ClockedAtom(in %clock : !seq.clock, in %a : i1) {
 // CHECK:         %[[NOT_CLOCK:.+]] = comb.xor %[[CLOCK_I1]], %{{.+}} : i1
 // CHECK:         %[[NEGEDGE_CLOCK:.+]] = seq.to_clock %[[NOT_CLOCK]]
 // CHECK:         %[[SAMPLED_A:.+]] = seq.compreg %[[A]], %[[NEGEDGE_CLOCK]] initial
-// CHECK:         %[[VALID_NOT_CLOCK:.+]] = comb.xor %[[CLOCK_I1]], %{{.+}} : i1
-// CHECK:         %[[VALID_CLOCK:.+]] = seq.to_clock %[[VALID_NOT_CLOCK]]
-// CHECK:         %[[VALID:.+]] = seq.compreg %{{.+}}, %[[VALID_CLOCK]] initial
-// CHECK:         %[[NOT_VALID:.+]] = comb.xor %[[VALID]], %{{.+}} : i1
-// CHECK:         %[[GUARDED:.+]] = comb.or %[[NOT_VALID]], %[[SAMPLED_A]] : i1
+// CHECK:         %[[FALSE:.+]] = hw.constant false
+// CHECK:         %[[DONT_CARE_NOT_CLOCK:.+]] = comb.xor %[[CLOCK_I1]], %{{.+}} : i1
+// CHECK:         %[[DONT_CARE_CLOCK:.+]] = seq.to_clock %[[DONT_CARE_NOT_CLOCK]]
+// CHECK:         %[[DONT_CARE_INIT:.+]] = seq.initial()
+// CHECK:           %[[TRUE:.+]] = hw.constant true
+// CHECK:           seq.yield %[[TRUE]] : i1
+// CHECK:         %[[DONT_CARE:.+]] = seq.compreg %[[FALSE]], %[[DONT_CARE_CLOCK]] initial %[[DONT_CARE_INIT]]
+// CHECK:         %[[GUARDED:.+]] = comb.or %[[DONT_CARE]], %[[SAMPLED_A]] : i1
 // CHECK:         verif.assert %[[GUARDED]] label "negedge" : i1
 hw.module @NegedgeClock(in %clock : !seq.clock, in %a : i1) {
   %0 = seq.from_clock %clock
