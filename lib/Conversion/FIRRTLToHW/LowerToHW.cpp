@@ -1975,9 +1975,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLNotIntrinsicOp op);
   LogicalResult visitExpr(LTLImplicationIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedUntilIntrinsicOp op);
-  LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedEventuallyIntrinsicOp op);
-  LogicalResult visitExpr(LTLPastIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedPastIntrinsicOp op);
 
   template <typename TargetOp, typename IntrinsicOp>
   LogicalResult lowerVerifIntrinsicOp(IntrinsicOp op);
@@ -4894,11 +4893,6 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockedUntilIntrinsicOp op) {
       getLoweredValue(op.getCondition()));
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
-  return setLoweringToLTL<ltl::EventuallyOp>(op,
-                                             getLoweredValue(op.getInput()));
-}
-
 LogicalResult FIRRTLLowering::visitExpr(LTLClockedEventuallyIntrinsicOp op) {
   auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
                                       firrtlToLTLClockEdge(op.getEdge()));
@@ -4907,10 +4901,10 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockedEventuallyIntrinsicOp op) {
       getLoweredNonClockValue(op.getClock()));
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLPastIntrinsicOp op) {
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedPastIntrinsicOp op) {
   Value clk = getLoweredNonClockValue(op.getClock());
-  return setLoweringToLTL<ltl::PastOp>(op, getLoweredValue(op.getInput()),
-                                       op.getDelayAttr(), clk);
+  return setLoweringToLTL<ltl::ClockedPastOp>(
+      op, getLoweredValue(op.getInput()), op.getDelayAttr(), clk);
 }
 
 template <typename TargetOp, typename IntrinsicOp>

@@ -266,8 +266,8 @@ def CirctLTLClockedNonConsecutiveRepeat : FIRRTLIntrinsic {
   }];
 }
 
-def CirctLTLPast : FIRRTLIntrinsic {
-  let mnemonic = "circt.ltl.past";
+def CirctLTLClockedPast : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.clocked_past";
   let description = [{
     Observes a boolean value from a specified number of cycles in the past.
     Corresponds to the SystemVerilog `$past(a, n)` function.
@@ -393,22 +393,6 @@ def CirctLTLNot : FIRRTLIntrinsic {
     | Result | Type    | Description      |
     | ------ | ------- | ---------------- |
     | out    | UInt<1> | negated property |
-  }];
-}
-
-def CirctLTLEventually : FIRRTLIntrinsic {
-  let mnemonic = "circt.ltl.eventually";
-  let converter = "CirctLTLUnaryConverter<LTLEventuallyIntrinsicOp>";
-  let description = [{
-    Asserts that a property will eventually hold at some point in the future.
-
-    | Argument | Type    | Description       |
-    | -------- | ------- | ----------------- |
-    | in       | UInt<1> | property to check |
-
-    | Result | Type    | Description         |
-    | ------ | ------- | ------------------- |
-    | out    | UInt<1> | eventually property |
   }];
 }
 

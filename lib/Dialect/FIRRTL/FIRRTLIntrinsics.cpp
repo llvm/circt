@@ -457,7 +457,7 @@ public:
   }
 };
 
-class CirctLTLPastConverter : public IntrinsicConverter {
+class CirctLTLClockedPastConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
@@ -477,7 +477,7 @@ public:
         gi.getParamValue<IntegerAttr>("delay").getValue().getZExtValue());
     auto operands = adaptor.getOperands();
     Value clock = operands[1];
-    rewriter.replaceOpWithNewOp<LTLPastIntrinsicOp>(
+    rewriter.replaceOpWithNewOp<LTLClockedPastIntrinsicOp>(
         gi.op, gi.op.getResultTypes(), operands[0], delay, clock);
   }
 };

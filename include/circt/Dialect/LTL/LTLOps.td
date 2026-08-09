@@ -137,7 +137,7 @@ def ClockedDelayOp : LTLOp<"clocked_delay", [Pure]> {
   }];
 }
 
-def PastOp : LTLOp<"past", [TypesMatchWith<"input and result types must match",
+def ClockedPastOp : LTLOp<"clocked_past", [TypesMatchWith<"input and result types must match",
     "input", "result", "$_self">,
     Pure]> {
   let arguments = (ins
@@ -149,7 +149,7 @@ def PastOp : LTLOp<"past", [TypesMatchWith<"input and result types must match",
     $input `,` $delay `clk` $clk attr-dict `:` type($input)
   }];
 
-  let summary = "Observe the sequence $delay cycles earlier.";
+  let summary = "Observe a value $delay cycles earlier on an explicit clock.";
   let description = [{
       Observes the input `$delay` cycles before the current cycle, sampled by
       the `$clk` operand.
@@ -259,7 +259,8 @@ def ClockedGoToRepeatOp : LTLOp<"clocked_goto_repeat", [Pure]> {
   let description = [{
     Non-consecutively repeats `$input` between `$base` and `$base + $more`
     times, sampled at the explicit `$edge` of `$clock`. The final evaluation
-    in the sequence must match.
+    in the sequence must match. The number of evaluations between matches is
+    unbounded.
   }];
 }
 
@@ -274,7 +275,8 @@ def ClockedNonConsecutiveRepeatOp : LTLOp<"clocked_non_consecutive_repeat", [Pur
   let description = [{
     Non-consecutively repeats `$input` between `$base` and `$base + $more`
     times, sampled at `$edge` of `$clock`. The final evaluation in the sequence
-    does not have to match.
+    does not have to match. The number of evaluations between matches is
+    unbounded.
   }];
 }
 
@@ -359,32 +361,16 @@ def ClockedUntilOp : LTLOp<"clocked_until", [Pure]> {
   }];
 }
 
-def EventuallyOp : LTLOp<"eventually", [Pure]> {
-  let arguments = (ins LTLAnyPropertyType:$input);
-  let results = (outs LTLPropertyType:$result);
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input)
-  }];
-
-  let summary = "Ensure that a property will hold at some time in the future.";
-  let description = [{
-    Checks that the `$input` property will hold at a future time. This operator
-    is strong: it requires that the `$input` holds after a *finite* number of
-    cycles. The operator does *not* hold if the `$input` can't hold in the
-    future.
-  }];
-}
-
 def ClockedEventuallyOp : LTLOp<"clocked_eventually", [Pure]> {
   let arguments = (ins LTLAnyPropertyType:$input, ClockEdgeAttr:$edge, I1:$clock);
   let results = (outs LTLPropertyType:$result);
   let assemblyFormat = [{
     $input `,` $edge $clock attr-dict `:` type($input)
   }];
-  let summary = "`ltl.eventually` on an explicit clock.";
+  let summary = "Clocked strong-eventually property.";
   let description = [{
-    Like `ltl.eventually`, but records the explicit `$edge` of `$clock`. Strong:
-    `$input` must hold after a finite number of cycles of `$clock`.
+    Checks that `$input` holds after a finite number of cycles, sampled at the
+    explicit `$edge` of `$clock`. This operator is strong.
   }];
 }
 

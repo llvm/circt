@@ -200,13 +200,16 @@ operation itself:
 - `ltl.clocked_atom` — clocked form of a boolean atom (see [Atomic clocking](#atomic-clocking) above).
 - `ltl.clocked_delay` — cycle delay on an explicit clock (see [Delay clocking](#delay-clocking) above).
 - `ltl.clocked_until` — weak-until evaluated on an explicit clock.
-- `ltl.clocked_eventually` — clocked form of `ltl.eventually`.
+- `ltl.clocked_eventually` — strong eventually on an explicit clock.
+- `ltl.clocked_past` — observes a value a fixed number of cycles earlier.
 - `ltl.clocked_repeat` — consecutive repetition on an explicit clock.
 - `ltl.clocked_goto_repeat` — go-to repetition on an explicit clock.
 - `ltl.clocked_non_consecutive_repeat` — non-consecutive repetition on an explicit clock.
 
-Each clocked temporal op has a `ClockEdgeAttr:$edge` and an `i1:$clock` operand
-recording the clocking event under which it is evaluated.
+Clocked sequence and property ops have a `ClockEdgeAttr:$edge` and an
+`i1:$clock` operand recording the clocking event under which they are
+evaluated. `ltl.clocked_past` carries an `i1` clock operand and uses positive
+edge sampling.
 
 The purely logical combinators — `ltl.and`, `ltl.or`, `ltl.not`, `ltl.intersect`, `ltl.concat`, and `ltl.implication` — remain clockless. They do not carry a clock operand of their own; instead they simply combine already-clocked (or clockless) operands, inheriting whatever clock(s) those operands carry.
 
@@ -296,9 +299,7 @@ where the `logic_to_int` conversion is only necessary if `%cond` is 4-valued.
 
 - **`$past(a, n)`**: 
 ```mlir
-%zero = hw.constant 0 : i1
-%true = hw.constant 1 : i1
-%1 = seq.shiftreg n, %a, %clk, %true, powerOn %zero : i1
+%past = ltl.clocked_past %a, n clk %clock : i1
 ``` 
 
 - **`$isunknown(a)`**:
@@ -552,7 +553,7 @@ ltl.clocked_repeat %p, posedge %clk, n, m : !ltl.sequence
 
 - **`s_eventually p`**:   
 ```mlir
-ltl.eventually %p : !ltl.property  
+ltl.clocked_eventually %p, posedge %clk : !ltl.property
 ```
 
 - **`eventually[n:m] p`**: not yet encodable in CIRCT.
@@ -603,7 +604,7 @@ The `ltl.clocked_delay` sequence operation represents various shorthands for the
 
 ### Until and Eventually
 
-`ltl.clocked_until` is *weak*, meaning the property will hold even if the trace does not contain enough clock cycles to evaluate the property. `ltl.eventually` is *strong*, where `ltl.eventually %p` means `p` must hold at some point in the trace.
+`ltl.clocked_until` is *weak*, meaning the property will hold even if the trace does not contain enough clock cycles to evaluate the property. `ltl.clocked_eventually` is *strong*, meaning its input must hold after a finite number of cycles of its explicit clock.
 
 
 ### Concatenation and Repetition

@@ -186,7 +186,9 @@ struct AssertionExprVisitor {
         return ltl::ClockedEventuallyOp::create(builder, loc, value, edge,
                                                 clock);
       }
-      return ltl::EventuallyOp::create(builder, loc, value);
+      mlir::emitError(loc,
+                      "`s_eventually` requires an explicit clocking event");
+      return {};
     case UnaryAssertionOperator::Always: {
       std::pair<mlir::IntegerAttr, mlir::IntegerAttr> attr = {
           builder.getI64IntegerAttr(0), mlir::IntegerAttr{}};
@@ -409,38 +411,39 @@ FailureOr<Value> Context::convertSampledValueCallArity1(
 
   // Translate $fell to ¬x[0] ∧ x[-1]
   case ksn::Fell: {
-    auto past =
-        ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
+    auto past = ltl::ClockedPastOp::create(builder, loc, value, 1, clockVal)
+                    .getResult();
     return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::ugt, past, value, false));
   }
 
   // Translate $rose to x[0] ∧ ¬x[-1]
   case ksn::Rose: {
-    auto past =
-        ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
+    auto past = ltl::ClockedPastOp::create(builder, loc, value, 1, clockVal)
+                    .getResult();
     return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::ult, past, value, false));
   }
 
   // Translate $changed to x[0] ≠ x[-1]
   case ksn::Changed: {
-    auto past =
-        ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
+    auto past = ltl::ClockedPastOp::create(builder, loc, value, 1, clockVal)
+                    .getResult();
     return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::ne, past, value, false));
   }
 
   // Translate $stable to x[0] = x[-1]
   case ksn::Stable: {
-    auto past =
-        ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
+    auto past = ltl::ClockedPastOp::create(builder, loc, value, 1, clockVal)
+                    .getResult();
     return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::eq, past, value, false));
   }
 
   case ksn::Past:
-    return castToMoore(ltl::PastOp::create(builder, loc, value, 1, clockVal));
+    return castToMoore(
+        ltl::ClockedPastOp::create(builder, loc, value, 1, clockVal));
 
   default:
     return Value{};

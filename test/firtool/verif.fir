@@ -10,7 +10,7 @@ circuit Foo:
     node delay = intrinsic(circt_ltl_clocked_delay<delay=1, length=0> : UInt<1>, b, clk)
     node concat = intrinsic(circt_ltl_concat : UInt<1>, a, delay)
     node implication = intrinsic(circt_ltl_implication : UInt<1>, a, concat)
-    node eventually = intrinsic(circt_ltl_eventually : UInt<1>, implication)
+    node eventually = intrinsic(circt_ltl_clocked_eventually<edge="posedge"> : UInt<1>, implication, clk)
 
-    ; CHECK: hello: assert property (s_eventually a |-> a ##0 (@(posedge clk) ##1 b));
+    ; CHECK: hello: assert property (@(posedge clk) s_eventually a |-> a ##1 b);
     intrinsic(circt_verif_assert<label="hello">, eventually)
