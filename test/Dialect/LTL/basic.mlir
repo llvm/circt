@@ -94,15 +94,8 @@ ltl.implication %s, %p : !ltl.sequence, !ltl.property
 // CHECK: ltl.clocked_until {{%.+}}, posedge {{%.+}}, {{%.+}} : !ltl.property, !ltl.property
 %cu = ltl.clocked_until %p, posedge %true, %p : !ltl.property, !ltl.property
 
-// CHECK: ltl.eventually {{%.+}} : i1
-// CHECK: ltl.eventually {{%.+}} : !ltl.sequence
-// CHECK: ltl.eventually {{%.+}} : !ltl.property
-ltl.eventually %true : i1
-ltl.eventually %s : !ltl.sequence
-ltl.eventually %p : !ltl.property
-
 // CHECK: ltl.clocked_eventually {{%.+}}, posedge {{%.+}} : !ltl.property
 %ce = ltl.clocked_eventually %p, posedge %true : !ltl.property
 
-// CHECK: ltl.past {{%.+}}, 5 clk {{%.+}} : i8
-ltl.past %c0_i8, 5 clk %true : i8
+// CHECK: ltl.clocked_past {{%.+}}, 5 clk {{%.+}} : i8
+ltl.clocked_past %c0_i8, 5 clk %true : i8

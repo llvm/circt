@@ -1823,7 +1823,6 @@ def LTLClockedUntilIntrinsicOp : LTLIntrinsicOp<"clocked_until"> {
     functional-type(operands, results)
   }];
 }
-def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
 def LTLClockedEventuallyIntrinsicOp : LTLIntrinsicOp<"clocked_eventually"> {
   let arguments = (ins NonConstUInt1Type:$input, EventControlAttr:$edge,
                        ClockType:$clock);
@@ -1832,7 +1831,7 @@ def LTLClockedEventuallyIntrinsicOp : LTLIntrinsicOp<"clocked_eventually"> {
 }
 
 // Past
-def LTLPastIntrinsicOp : LTLIntrinsicOp<"past"> {
+def LTLClockedPastIntrinsicOp : LTLIntrinsicOp<"clocked_past"> {
   let arguments = (ins NonConstUInt1Type:$input,
                        I64Attr:$delay,
                        ClockType:$clock);

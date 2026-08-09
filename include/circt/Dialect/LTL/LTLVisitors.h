@@ -22,7 +22,7 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AndOp, OrOp, ClockedDelayOp, ConcatOp, ClockedRepeatOp,
-                       NotOp, ImplicationOp, ClockedUntilOp, EventuallyOp,
+                       NotOp, ImplicationOp, ClockedUntilOp,
                        ClockedEventuallyOp, ClockedAtomOp, IntersectOp,
                        ClockedNonConsecutiveRepeatOp, ClockedGoToRepeatOp,
                        BooleanConstantOp>([&](auto op) -> ResultType {
@@ -58,7 +58,6 @@ public:
   HANDLE(NotOp, Unhandled);
   HANDLE(ImplicationOp, Unhandled);
   HANDLE(ClockedUntilOp, Unhandled);
-  HANDLE(EventuallyOp, Unhandled);
   HANDLE(ClockedEventuallyOp, Unhandled);
   HANDLE(ClockedAtomOp, Unhandled);
   HANDLE(IntersectOp, Unhandled);

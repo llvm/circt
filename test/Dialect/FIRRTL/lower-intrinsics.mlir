@@ -76,15 +76,13 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_ltl_clocked_until" %in0, %clk, %in1 : (!firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_until %in0, negedge %clk, %in1 :
     firrtl.int.generic "circt_ltl_clocked_until" <edge: none = "negedge"> %in0, %clk, %in1 : (!firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.int.ltl.eventually %in0 :
-    firrtl.int.generic "circt_ltl_eventually"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_eventually %in0, posedge %clk :
     firrtl.int.generic "circt_ltl_clocked_eventually" %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_eventually %in0, negedge %clk :
     firrtl.int.generic "circt_ltl_clocked_eventually" <edge: none = "negedge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: firrtl.int.ltl.past %in0, 42, %clk :
-    firrtl.int.generic "circt_ltl_past" <delay: i64 = 42> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.clocked_past %in0, 42, %clk :
+    firrtl.int.generic "circt_ltl_clocked_past" <delay: i64 = 42> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
   }
 

@@ -23,7 +23,7 @@ hw.module @PastIntegration(in %clk: !seq.clock, in %rst: i1) {
   %reg = seq.compreg.ce %next, %clk, %ce reset %rst, %c0_i32 initial %init : i32
   %next = comb.add %reg, %c1_i32 : i32
 
-  %pa = ltl.past %reg, 5 clk %clk_0 : i32
+  %pa = ltl.clocked_past %reg, 5 clk %clk_0 : i32
   %m5 = comb.sub %reg, %c5_i32 : i32
 
   %pred = comb.icmp bin eq %m5, %pa : i32

@@ -668,7 +668,9 @@ def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
   let summary = "Convert LTL and Verif to Core";
   let description = [{
     This pass converts LTL and Verif operations that can be expressed with Core
-    operations. Other LTL operations are left for downstream backends.
+    operations, including bounded-horizon temporal properties with explicit
+    clocking. Operators with an unbounded time horizon are left for downstream
+    LTL-aware backends.
   }];
   let constructor = "circt::createLowerLTLToCorePass()";
   let dependentDialects = [

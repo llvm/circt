@@ -65,12 +65,11 @@ def MaterializeDebugVariables : Pass<"materialize-debug-variables", "::mlir::Mod
 }
 
 def PrepareForBMC : Pass<"prepare-for-bmc", "::mlir::ModuleOp"> {
-  let summary = "Normalizes clock ports and clocked properties for BMC";
+  let summary = "Normalizes clock ports for BMC";
   let description = [{
     Converts `i1` module inputs used through `seq.to_clock` into native
-    `!seq.clock` inputs. It also converts clocked assertions and assumptions
-    into unclocked properties gated by an actual edge, tracked by comparing the
-    current clock value with a registered previous value.
+    `!seq.clock` inputs. Clocked LTL properties are lowered separately by
+    `lower-ltl-to-core` before this pass runs.
   }];
   let options = [
     Option<"topModule", "top-module", "std::string",
@@ -79,8 +78,7 @@ def PrepareForBMC : Pass<"prepare-for-bmc", "::mlir::ModuleOp"> {
   ];
 
   let dependentDialects = [
-    "circt::comb::CombDialect", "circt::hw::HWDialect",
-    "circt::seq::SeqDialect", "circt::verif::VerifDialect"
+    "circt::hw::HWDialect", "circt::seq::SeqDialect"
   ];
 }
 
