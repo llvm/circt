@@ -1786,38 +1786,39 @@ struct LazyLocationListener : public OpBuilder::Listener {
     isActive = true;
   }
 
+  /// Compute the location an operation created at `loc` should be given,
+  /// or that a diagnostic about it should be emitted on, honoring the
+  /// the @info handling policy. This will only translate the SMLoc when the
+  /// policy actually needs it, since that will intern a location into the
+  /// context permanently.
+  Location getLoc(FIRParser &parser, SMLoc loc) {
+    using ILH = FIRParserOptions::InfoLocHandling;
+    switch (parser.getConstants().options.infoLocatorHandling) {
+    case ILH::IgnoreInfo:
+      // Shouldn't have an infoLoc, but if we do ignore it.
+      break;
+    case ILH::PreferInfo:
+      if (infoLoc)
+        return infoLoc;
+      break;
+    case ILH::FusedInfo:
+      if (infoLoc)
+        return FusedLoc::get(infoLoc.getContext(),
+                             {infoLoc, parser.translateLocation(loc)});
+      break;
+    }
+    return parser.translateLocation(loc);
+  }
+
   /// This is called when done with each statement.  This applies the locations
   /// to each statement.
   void endStatement(FIRParser &parser) {
     assert(isActive && "Not parsing a statement");
 
-    // If we have a symbolic location, apply it to any subOps specified.
-    if (infoLoc) {
-      for (auto opAndSMLoc : subOps) {
-        // Follow user preference to either only use @info locations,
-        // or apply a fused location with @info and file loc.
-        using ILH = FIRParserOptions::InfoLocHandling;
-        switch (parser.getConstants().options.infoLocatorHandling) {
-        case ILH::IgnoreInfo:
-          // Shouldn't have an infoLoc, but if we do ignore it.
-          opAndSMLoc.first->setLoc(parser.translateLocation(opAndSMLoc.second));
-          break;
-        case ILH::PreferInfo:
-          opAndSMLoc.first->setLoc(infoLoc);
-          break;
-        case ILH::FusedInfo:
-          opAndSMLoc.first->setLoc(FusedLoc::get(
-              infoLoc.getContext(),
-              {infoLoc, parser.translateLocation(opAndSMLoc.second)}));
-          break;
-        }
-      }
-    } else {
-      // If we don't, translate all the individual SMLoc's to Location objects
-      // in the .fir file.
-      for (auto opAndSMLoc : subOps)
-        opAndSMLoc.first->setLoc(parser.translateLocation(opAndSMLoc.second));
-    }
+    // Apply a location to each subop, following user preference to use the
+    // @info location, a fused location, or the location in the .fir file.
+    for (auto opAndSMLoc : subOps)
+      opAndSMLoc.first->setLoc(getLoc(parser, opAndSMLoc.second));
 
     // Reset our state.
     isActive = false;
@@ -4556,17 +4557,21 @@ ParseResult FIRStmtParser::parseConnect() {
   auto lhsType = type_dyn_cast<FIRRTLBaseType>(lhs.getType());
   auto rhsType = type_dyn_cast<FIRRTLBaseType>(rhs.getType());
   if (!lhsType || !rhsType)
-    return emitError(loc, "cannot connect reference or property types");
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect reference or property types");
   // TODO: Once support lands for agg-of-ref, add test for this check!
   if (lhsType.containsReference() || rhsType.containsReference())
-    return emitError(loc, "cannot connect types containing references");
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect types containing references");
 
   if (!areTypesEquivalent(lhsType, rhsType))
-    return emitError(loc, "cannot connect non-equivalent type ")
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect non-equivalent type ")
            << rhsType << " to " << lhsType;
 
   locationProcessor.setLoc(loc);
-  emitConnect(builder, lhs, rhs);
+  emitConnect(builder, lhs, rhs,
+              [&] { return locationProcessor.getLoc(*this, loc); });
   return success();
 }
 
@@ -4755,15 +4760,19 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   auto lhsType = type_dyn_cast<FIRRTLBaseType>(lhs.getType());
   auto rhsType = type_dyn_cast<FIRRTLBaseType>(rhs.getType());
   if (!lhsType || !rhsType)
-    return emitError(loc, "cannot connect reference or property types");
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect reference or property types");
   // TODO: Once support lands for agg-of-ref, add test for this check!
   if (lhsType.containsReference() || rhsType.containsReference())
-    return emitError(loc, "cannot connect types containing references");
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect types containing references");
 
   if (!areTypesEquivalent(lhsType, rhsType))
-    return emitError(loc, "cannot connect non-equivalent type ")
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect non-equivalent type ")
            << rhsType << " to " << lhsType;
-  emitConnect(builder, lhs, rhs);
+  emitConnect(builder, lhs, rhs,
+              [&] { return locationProcessor.getLoc(*this, loc); });
   return success();
 }
 
