@@ -235,6 +235,9 @@ static void lowerTemporalLTLToCore(hw::HWModuleOp module) {
 
   for (auto *op : assertionsAndAssumptions) {
     Value property = op->getOperand(0);
+    // Only lower a clocked atom when it is the direct property of an assertion
+    // or assumption. The startup `dontCare` guard is property-level and cannot
+    // be composed correctly through nested LTL operations.
     auto atom = property.getDefiningOp<ltl::ClockedAtomOp>();
     if (!atom || atom.getEdge() == ltl::ClockEdge::Both)
       continue;
