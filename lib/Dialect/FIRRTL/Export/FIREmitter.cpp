@@ -1467,7 +1467,14 @@ void Emitter::emitStatement(LayerBlockOp op) {
   if (failed(requireVersion(FIRVersion(3, 3, 0), op, "layers")))
     return;
   startStatement();
-  ps << "layerblock " << op.getLayerName().getLeafReference() << " :";
+  ps << "layerblock ";
+
+  if (version < FIRVersion(7, 0, 0))
+    ps << op.getLayerName().getLeafReference();
+  else
+    emitSymbol(op.getLayerNameAttr());
+
+  ps << " :";
   emitLocationAndNewLine(op);
   auto *body = op.getBody();
   ps.scopedBox(PP::bbox2, [&]() { emitStatementsInBlock(*body); });

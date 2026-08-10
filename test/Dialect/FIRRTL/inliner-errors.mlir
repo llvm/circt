@@ -62,30 +62,3 @@ firrtl.circuit "InlineIfdef" {
     firrtl.instance c @Child()
   }
 }
-
-// -----
-
-// Cannot inline layers into layers.
-// Presently the issue is detected by the verifier.
-
-firrtl.circuit "InlineLayerIntoLayer" {
-  firrtl.layer @I  inline {
-    firrtl.layer @J  inline {
-    }
-  }
-  firrtl.module private @MatchAgain(in %i: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    // expected-error @below {{op has an un-nested layer symbol, but does not have a 'firrtl.module' op as a parent}}
-    firrtl.layerblock @I {
-      firrtl.layerblock @I::@J {
-        %n = firrtl.node interesting_name %i : !firrtl.uint<8>
-      }
-    }
-  }
-  firrtl.module @InlineLayerIntoLayer(in %i: !firrtl.uint<8>) attributes {convention = #firrtl<convention scalarized>} {
-    // expected-note @below {{illegal parent op defined here}}
-    firrtl.layerblock @I {
-      %c_i = firrtl.instance c interesting_name @MatchAgain(in i: !firrtl.uint<8>)
-      firrtl.matchingconnect %c_i, %i : !firrtl.uint<8>
-    }
-  }
-}

@@ -296,6 +296,8 @@ struct FIRParser {
   ParseResult parseParameterValue(Attribute &resultValue,
                                   bool allowAggregates = false);
 
+  ParseResult parseLayerName(SymbolRefAttr &result);
+
   /// The version of FIRRTL to use for this parser.
   FIRVersion version;
 
@@ -1450,6 +1452,25 @@ ParseResult FIRParser::parseParameterValue(Attribute &value,
   default:
     return emitError("expected parameter value");
   }
+}
+
+ParseResult FIRParser::parseLayerName(SymbolRefAttr &result) {
+  auto *context = getContext();
+  SmallVector<StringRef> strings;
+  do {
+    StringRef name;
+    if (parseId(name, "expected layer name"))
+      return failure();
+    strings.push_back(name);
+  } while (consumeIf(FIRToken::period));
+
+  SmallVector<FlatSymbolRefAttr> nested;
+  nested.reserve(strings.size() - 1);
+  for (unsigned i = 1, e = strings.size(); i < e; ++i)
+    nested.push_back(FlatSymbolRefAttr::get(context, strings[i]));
+
+  result = SymbolRefAttr::get(context, strings[0], nested);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -4689,33 +4710,42 @@ ParseResult FIRStmtParser::parseLayerBlockOrGroup(unsigned indent) {
          "consumed an unexpected token");
   auto loc = startTok.getLoc();
 
-  StringRef id;
-  if (parseId(id, "expected layer identifer") ||
-      parseToken(FIRToken::colon, "expected ':' at end of layer block") ||
+  SymbolRefAttr layerName;
+  if (version < FIRVersion(7, 0, 0)) {
+    // Interpret the layer name relative to any parent layer name.
+    StringRef id;
+    if (parseId(id, "expected layer identifier"))
+      return failure();
+
+    StringRef rootLayer;
+    SmallVector<FlatSymbolRefAttr> nestedLayers;
+    if (!layerSym) {
+      rootLayer = id;
+    } else {
+      rootLayer = layerSym.getRootReference();
+      auto nestedRefs = layerSym.getNestedReferences();
+      nestedLayers.append(nestedRefs.begin(), nestedRefs.end());
+      nestedLayers.push_back(FlatSymbolRefAttr::get(builder.getContext(), id));
+    }
+    layerName =
+        SymbolRefAttr::get(builder.getContext(), rootLayer, nestedLayers);
+  } else {
+    // Interpret the layer name as an absolute layer name.
+    if (parseLayerName(layerName))
+      return failure();
+  }
+
+  if (parseToken(FIRToken::colon, "expected ':' at end of layer block") ||
       parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(loc);
-
-  StringRef rootLayer;
-  SmallVector<FlatSymbolRefAttr> nestedLayers;
-  if (!layerSym) {
-    rootLayer = id;
-  } else {
-    rootLayer = layerSym.getRootReference();
-    auto nestedRefs = layerSym.getNestedReferences();
-    nestedLayers.append(nestedRefs.begin(), nestedRefs.end());
-    nestedLayers.push_back(FlatSymbolRefAttr::get(builder.getContext(), id));
-  }
-
-  auto layerBlockOp = LayerBlockOp::create(
-      builder,
-      SymbolRefAttr::get(builder.getContext(), rootLayer, nestedLayers));
-  layerBlockOp->getRegion(0).push_back(new Block());
+  auto layerBlockOp = LayerBlockOp::create(builder, layerName);
+  auto *body = new Block();
+  layerBlockOp->getRegion(0).push_back(body);
 
   if (getIndentation() > indent)
-    if (parseSubBlock(layerBlockOp.getRegion().front(), indent,
-                      layerBlockOp.getLayerName()))
+    if (parseSubBlock(*body, indent, layerName))
       return failure();
 
   return success();
@@ -5550,7 +5580,6 @@ private:
   template <class Op>
   ParseResult parseFormalLike(CircuitOp circuit, unsigned indent);
 
-  ParseResult parseLayerName(SymbolRefAttr &result);
   ParseResult parseLayerList(SmallVectorImpl<Attribute> &result);
   ParseResult parseEnableLayerSpec(SmallVectorImpl<Attribute> &result);
   ParseResult parseKnownLayerSpec(SmallVectorImpl<Attribute> &result);
@@ -5629,25 +5658,6 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef annotationsStr,
     return failure();
   }
 
-  return success();
-}
-
-ParseResult FIRCircuitParser::parseLayerName(SymbolRefAttr &result) {
-  auto *context = getContext();
-  SmallVector<StringRef> strings;
-  do {
-    StringRef name;
-    if (parseId(name, "expected layer name"))
-      return failure();
-    strings.push_back(name);
-  } while (consumeIf(FIRToken::period));
-
-  SmallVector<FlatSymbolRefAttr> nested;
-  nested.reserve(strings.size() - 1);
-  for (unsigned i = 1, e = strings.size(); i < e; ++i)
-    nested.push_back(FlatSymbolRefAttr::get(context, strings[i]));
-
-  result = SymbolRefAttr::get(context, strings[0], nested);
   return success();
 }
 

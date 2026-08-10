@@ -42,6 +42,43 @@ struct LayerSetCompare {
 
 using LayerSet = SmallSet<SymbolRefAttr, 4, LayerSetCompare>;
 
+//===----------------------------------------------------------------------===//
+// Layer Verification Utilities
+//===----------------------------------------------------------------------===//
+
+/// Get the ambient layers active at the given op.
+LayerSet getAmbientLayersAt(Operation *op);
+
+/// Get the ambient layer requirements at the definition site of the value.
+LayerSet getAmbientLayersFor(Value value);
+
+/// Get the effective layer requirements for the given value.
+/// The effective layers for a value is the union of
+///   - the ambient layers for the cannonical storage location.
+///   - any explicit layer annotations in the value's type.
+LayerSet getLayersFor(Value value);
+
+/// Check that the source layer is compatible with the destination layer.
+/// Either the source and destination are identical, or the source-layer
+/// is a parent of the destination. For example `A` is compatible with `A.B.C`,
+/// because any definition valid in `A` is also valid in `A.B.C`.
+bool isLayerCompatibleWith(mlir::SymbolRefAttr srcLayer,
+                           mlir::SymbolRefAttr dstLayer);
+
+/// Check that the source layer is present in the destination layers.
+bool isLayerCompatibleWith(SymbolRefAttr srcLayer, const LayerSet &dstLayers);
+
+/// Check that the source layers are all present in the destination layers.
+/// True if all source layers are present in the destination.
+/// Outputs the set of source layers that are missing in the destination.
+bool isLayerSetCompatibleWith(const LayerSet &src, const LayerSet &dst,
+                              SmallVectorImpl<SymbolRefAttr> &missing);
+
+LogicalResult checkLayerCompatibility(
+    Operation *op, const LayerSet &src, const LayerSet &dst,
+    const Twine &errorMsg,
+    const Twine &noteMsg = Twine("missing layer requirements"));
+
 } // namespace firrtl
 } // namespace circt
 

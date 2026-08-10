@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/LayerSet.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HierPathCache.h"
@@ -22,6 +23,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
 
@@ -243,6 +245,9 @@ class LowerLayersPass
   /// Lower an inline layerblock to an ifdef block.
   void lowerInlineLayerBlock(LayerOp layer, LayerBlockOp layerBlock);
 
+  /// Inline an enabled layerblock directly into its parent.
+  void inlineLayerBlock(LayerBlockOp layerBlock);
+
   /// Build macro declarations and cache information about the layers.
   void preprocessLayers(CircuitNamespace &ns, OpBuilder &b, LayerOp layer,
                         StringRef circuitName,
@@ -364,9 +369,11 @@ LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
   auto result =
       TypeSwitch<Operation *, LogicalResult>(moduleLike.getOperation())
           .Case<FModuleOp>([&](auto op) {
+            if (failed(runOnModuleBody(op, innerRefMap)))
+              return failure();
             op.setLayers({});
             removeLayersFromPorts(op);
-            return runOnModuleBody(op, innerRefMap);
+            return success();
           })
           .Case<FExtModuleOp>([&](auto op) {
             op.setKnownLayers({});
@@ -397,6 +404,12 @@ void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
     auto ifDef = sv::IfDefOp::create(builder, layerBlock.getLoc(), macroName);
     ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
   }
+  layerBlock.erase();
+}
+
+void LowerLayersPass::inlineLayerBlock(LayerBlockOp layerBlock) {
+  layerBlock->getBlock()->getOperations().splice(
+      Block::iterator(layerBlock), layerBlock.getBody()->getOperations());
   layerBlock.erase();
 }
 
@@ -693,6 +706,24 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     // After this point, we are dealing with a layer block.
     auto layer = symbolToLayer.lookup(layerBlock.getLayerName());
+
+    // If this layerblock would be enabled unconditionally by the ambient layer
+    // surrounding this block, just inline the layerblock. We do not need to
+    // construct a bound-in-module or sv.ifdef block.
+    auto ambientLayers = getAmbientLayersAt(layerBlock->getParentOp());
+    llvm::errs() << "ambient layers =";
+    for (auto layer : ambientLayers) {
+      llvm::errs() << " " << layer;
+    }
+    llvm::errs() << " (layer = " << layerBlock.getLayerName() << ")";
+    llvm::errs() << "\n";
+
+    if (isLayerCompatibleWith(layerBlock.getLayerName(), ambientLayers)) {
+      llvm::errs() << "ASDASDFASDFASDFASDF" << layerBlock << "\n";
+
+      inlineLayerBlock(layerBlock);
+      return WalkResult::advance();
+    }
 
     if (layer.getConvention() == LayerConvention::Inline) {
       lowerInlineLayerBlock(layer, layerBlock);

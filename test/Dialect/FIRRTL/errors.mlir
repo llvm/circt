@@ -1931,30 +1931,15 @@ firrtl.circuit "ClassCannotHavePortSymbols" {
 
 // -----
 
-// A layer block, "@A::@B", is missing an outer nesting of a layer block
-// definition with symbol "@A".
-firrtl.circuit "LayerBlockMissingNesting" {
-  firrtl.layer @A bind {
-    firrtl.layer @B bind {}
-  }
-  // expected-note @below {{illegal parent op defined here}}
-  firrtl.module @LayerBlockMissingNesting() {
-    // expected-error @below {{'firrtl.layerblock' op has a nested layer symbol, but does not have a 'firrtl.layerblock' op as a parent}}
-    firrtl.layerblock @A::@B {}
-  }
-}
-
-// -----
-
 // A layer block with a legal symbol, "@B", is illegaly nested under another
 // layer block with a legal symbol, "@B".
 firrtl.circuit "UnnestedLayerBlock" {
   firrtl.layer @A bind {}
   firrtl.layer @B bind {}
   firrtl.module @UnnestedLayerBlock() {
-    // expected-note @below {{illegal parent op defined here}}
+    // expected-note @below {{illegal parent layer block defined here}}
     firrtl.layerblock @A {
-      // expected-error @below {{'firrtl.layerblock' op has an un-nested layer symbol, but does not have a 'firrtl.module' op as a parent}}
+      // expected-error @below {{'firrtl.layerblock' op is nested under an illegal layer block}}
       firrtl.layerblock @B {}
     }
   }

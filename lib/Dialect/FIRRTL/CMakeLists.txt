@@ -19,6 +19,7 @@ set(CIRCT_FIRRTL_Sources
   FIRRTLOps.cpp
   FIRRTLTypes.cpp
   FIRRTLUtils.cpp
+  LayerSet.cpp
   NLATable.cpp
 )
 
