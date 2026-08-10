@@ -333,13 +333,13 @@ hw.module @TimeOpsPassthrough(in %a : i64, out t : i64) {
 }
 
 // comb.and uses a non-pure operation coming from llhd.prb
-// CHECK-LABEL: arc.define @OpWithNonPureOperation_arc
+// CHECK-LABEL: arc.define @ProbeIsNonPure_arc
 //   CHECK:   comb.and
 //   CHECK:   arc.output
-// CHECK-LABEL: hw.module @OpWithNonPureOperation
-//   CHECK:       [[RES:%.+]] = arc.call @OpWithNonPureOperation
+// CHECK-LABEL: hw.module @ProbeIsNonPure
+//   CHECK:       [[RES:%.+]] = arc.call @ProbeIsNonPure
 //   CHECK:   hw.output [[RES]]
-hw.module @OpWithNonPureOperation(in %in : i1, out out : i1) {
+hw.module @ProbeIsNonPure(in %in : i1, out out : i1) {
   %false = hw.constant false
   %r1 = llhd.sig %false : i1
   %1 = llhd.prb %r1 : i1
