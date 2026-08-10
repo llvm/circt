@@ -11,6 +11,10 @@
 firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt", group = "ClockGatesGroup"}, {class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "InjectedSubmodule"}]} {
   firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   // CHECK-LABEL: firrtl.module private @SomeModule
+  // Both instances of `SomeModule` see a `clock_gate_0` prefix, since the
+  // numbering is local to the module the clock gate is extracted out of.
+  //
+  // CHECK-SAME:    out %clock_gate_0_in: !firrtl.clock
   firrtl.module private @SomeModule(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
     // CHECK-NOT: firrtl.instance gate @EICG_wrapper
     %gate_in, %gate_en, %gate_out = firrtl.instance gate @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
@@ -47,8 +51,8 @@ firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{clas
   }
   // CHECK: emit.file "ClockGates.txt" {
   // CHECK-NEXT:          sv.verbatim
-  // CHECK-SAME{LITERAL}:   clock_gate_1 -> {{0}}.{{1}}.{{2}}.gate\0A
-  // CHECK-SAME{LITERAL}:   clock_gate_0 -> {{0}}.{{1}}.{{3}}.gate\0A
+  // CHECK-SAME{LITERAL}:   clock_gate_0 -> {{0}}.{{1}}.{{2}}.gate\0A
+  // CHECK-SAME{LITERAL}:   clock_gate_1 -> {{0}}.{{1}}.{{3}}.gate\0A
   // CHECK-SAME:            symbols = [
   // CHECK-SAME:              @DUTModule
   // CHECK-SAME:              #hw.innerNameRef<@DUTModule::[[INJMOD_SYM]]>

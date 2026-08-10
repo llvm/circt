@@ -1489,7 +1489,7 @@ struct FullResetPass
     auto &ig = getAnalysis<InstanceGraph>();
     auto &instanceInfo = getAnalysis<InstanceInfo>();
     if (failed(runFullReset(getOperation(), ig, instanceInfo,
-                            /*convertAsyncDomainMems=*/true)))
+                            convertAsyncDomainMems)))
       return signalPassFailure();
     markAnalysesPreserved<InstanceGraph, InstanceInfo>();
   }

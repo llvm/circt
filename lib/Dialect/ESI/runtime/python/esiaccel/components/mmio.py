@@ -142,8 +142,8 @@ def MmioRegistry(num_ro: int, num_rw: int, num_wo: int):
       sel_read_value = read_values_arr[idx.as_bits(clog2(num_read))]
       resp_sel = Mux(
           idx < UInt(idx_w)(num_read),
-          sel_read_value,
           Bits(64)(2**64 - 1),
+          sel_read_value,
       )
       resp_data_r.assign(
           resp_sel.reg(

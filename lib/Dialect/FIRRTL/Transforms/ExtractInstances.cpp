@@ -503,8 +503,10 @@ void ExtractInstancesPass::extractInstances() {
   // The list of ports to be added to an instance's parent module. Cleared and
   // reused across instances.
   SmallVector<std::pair<unsigned, PortInfo>> newPorts;
-  // The number of instances with the same prefix. Used to uniquify prefices.
-  DenseMap<StringRef, unsigned> prefixUniqueIDs;
+  // Track the index used to unique a given wiring prefix (e.g., "mem_wiring")
+  // in a given module.  This needs to be isolated per-module to avoid causing
+  // pollution of the namespace across the circuit.
+  DenseMap<std::pair<Operation *, StringRef>, unsigned> prefixUniqueIDs;
 
   SmallPtrSet<Operation *, 4> nlasToRemove;
 
@@ -525,18 +527,18 @@ void ExtractInstancesPass::extractInstances() {
     // Figure out the wiring prefix to use for this instance. If we are supposed
     // to use a wiring prefix (`info.prefix` is non-empty), we assemble a
     // `<prefix>_<N>` string, where `N` is an unsigned integer used to uniquifiy
-    // the prefix. This is very close to what the original Scala implementation
-    // of the pass does, which would group instances to be extracted by prefix
-    // and then iterate over them with the index in the group being used as `N`.
+    // the prefix. The prefix is recomputed at every level of the hierarchy the
+    // instance is bubbled up through, with `N` counting from zero within the
+    // module the instance is currently in. This keeps the names of the ports
+    // added to a module independent of the surrounding circuit.
     StringRef prefix;
     auto &instPrefixEntry = instPrefixNamesPair[inst];
     instPrefixEntry.second = inst.getInstanceNameAttr();
     if (!info.prefix.empty()) {
       auto &prefixSlot = instPrefixEntry.first;
-      if (prefixSlot.empty()) {
-        auto idx = prefixUniqueIDs[info.prefix]++;
-        (Twine(info.prefix) + "_" + Twine(idx)).toVector(prefixSlot);
-      }
+      prefixSlot.clear();
+      auto idx = prefixUniqueIDs[{parent, info.prefix}]++;
+      (Twine(info.prefix) + "_" + Twine(idx)).toVector(prefixSlot);
       prefix = prefixSlot;
     }
 
@@ -668,15 +670,14 @@ void ExtractInstancesPass::extractInstances() {
         MatchingConnectOp::create(builder, dst, src);
       }
 
-      // Move the wiring prefix from the old to the new instance. We just look
-      // up the prefix for the old instance and if it exists, we remove it and
-      // assign it to the new instance. This has the effect of making the first
-      // new instance we create inherit the wiring prefix, and all additional
-      // new instances (e.g. through multiple instantiation of the parent) will
-      // pick a new prefix.
+      // Move the wiring prefix bookkeeping from the old to the new instance.
+      // The prefix itself is recomputed once the new instance is popped off the
+      // worklist, since the numbering is local to the module the instance is
+      // being extracted out of. This mainly serves to keep the map from growing
+      // stale entries for instances that are about to be erased.
       auto oldPrefix = instPrefixNamesPair.find(inst);
       if (oldPrefix != instPrefixNamesPair.end()) {
-        LLVM_DEBUG(llvm::dbgs() << "  - Reusing prefix `"
+        LLVM_DEBUG(llvm::dbgs() << "  - Moving prefix `"
                                 << oldPrefix->second.first << "`\n");
         auto newPrefix = std::move(oldPrefix->second);
         instPrefixNamesPair.erase(oldPrefix);

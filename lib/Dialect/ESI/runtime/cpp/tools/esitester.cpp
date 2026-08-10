@@ -443,6 +443,27 @@ static void callbackTest(AcceleratorConnection *conn, Accelerator *accel,
   }
 }
 
+static void checkBurstCommandRegisters(services::MMIO::MMIORegion &mmio,
+                                       uint64_t address, uint64_t flits) {
+  struct RegisterExpectation {
+    uint32_t offset;
+    uint64_t expected;
+    const char *name;
+  };
+  const RegisterExpectation expectations[] = {
+      {0x00, 0, "flits_left"},
+      {0x08, address, "start_addr"},
+      {0x10, flits, "flits_total"},
+  };
+  for (const auto &[offset, expected, name] : expectations) {
+    uint64_t actual = mmio.read(offset);
+    if (actual != expected)
+      throw std::runtime_error("BurstCommand MMIO readback for " +
+                               std::string(name) + " failed: expected " +
+                               toHex(expected) + ", got " + toHex(actual));
+  }
+}
+
 /// Test the hostmem write functionality.
 static void hostmemWriteTest(Accelerator *acc,
                              esi::services::HostMem::HostMemRegion &region,
@@ -505,8 +526,10 @@ static void hostmemWriteTest(Accelerator *acc,
   for (size_t i = 0, e = 9; i < e; ++i)
     dataPtr[i] = 0xFFFFFFFFFFFFFFFFull;
   region.flush();
-  cmdMMIO->write(0x08, reinterpret_cast<uint64_t>(region.getDevicePtr()));
+  uint64_t devPtr = reinterpret_cast<uint64_t>(region.getDevicePtr());
+  cmdMMIO->write(0x08, devPtr);
   cmdMMIO->write(0x10, 1);
+  checkBurstCommandRegisters(*cmdMMIO, devPtr, 1);
   cmdMMIO->write(0x18, 1);
   bool done = false;
   for (int i = 0; i < 100; ++i) {
@@ -589,8 +612,10 @@ static void hostmemReadTest(Accelerator *acc,
     dataPtr[0] = 0x12345678ull << i;
     dataPtr[1] = 0xDEADBEEFull << i;
     region.flush();
-    addrCmdMMIO->write(0x08, reinterpret_cast<uint64_t>(region.getDevicePtr()));
+    uint64_t devPtr = reinterpret_cast<uint64_t>(region.getDevicePtr());
+    addrCmdMMIO->write(0x08, devPtr);
     addrCmdMMIO->write(0x10, 1);
+    checkBurstCommandRegisters(*addrCmdMMIO, devPtr, 1);
     addrCmdMMIO->write(0x18, 1);
     bool done = false;
     for (int waitLoop = 0; waitLoop < 100; ++waitLoop) {
