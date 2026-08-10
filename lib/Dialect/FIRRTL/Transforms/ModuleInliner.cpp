@@ -908,8 +908,8 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
       continue;
     auto parentName = edge->getParent()->getModule().getModuleNameAttr();
     currentPath.push_back({parentName, instOp, getInnerSymName(instOp)});
-    // Always resolves (see pushState's comment); nothing to check.
-    (void)pushState(parentName);
+    if (failed(pushState(parentName)))
+      return failure();
   }
 
   return success();
