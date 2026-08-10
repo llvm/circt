@@ -331,3 +331,18 @@ hw.module @TimeOpsPassthrough(in %a : i64, out t : i64) {
   %3 = llhd.time_to_int %0
   hw.output %3 : i64
 }
+
+// comb.and uses a non-pure operation coming from llhd.prb
+// CHECK-LABEL: arc.define @OpWithNonPureOperation_arc
+//   CHECK:   comb.and
+//   CHECK:   arc.output
+// CHECK-LABEL: hw.module @OpWithNonPureOperation
+//   CHECK:       [[RES:%.+]] = arc.call @OpWithNonPureOperation
+//   CHECK:   hw.output [[RES]]
+hw.module @OpWithNonPureOperation(in %in : i1, out out : i1) {
+  %false = hw.constant false
+  %r1 = llhd.sig %false : i1
+  %1 = llhd.prb %r1 : i1
+  %2 = comb.and %in, %1 : i1
+  hw.output %2 : i1
+}
