@@ -3,7 +3,7 @@
 // Empty coroutine with an immediate return. No resume blocks, so the state
 // degenerates to an empty struct and the PC is dispatched by an unconditional
 // branch.
-// CHECK-LABEL: func.func @Empty
+// CHECK-LABEL: func.func private @Empty
 // CHECK-SAME: (%arg0: !hw.struct<>, %arg1: i2) -> (!hw.struct<>, i2)
 arc.coroutine.define @Empty() {
   // CHECK: cf.br ^[[BB:.+]]
@@ -14,7 +14,7 @@ arc.coroutine.define @Empty() {
   arc.coroutine.return
 }
 
-// CHECK-LABEL: func.func @HaltOnly
+// CHECK-LABEL: func.func private @HaltOnly
 // CHECK-SAME: (%arg0: !hw.struct<>, %arg1: i2, %arg2: i42) -> (!hw.struct<>, i2)
 arc.coroutine.define @HaltOnly(%arg0: i42) {
   // CHECK: [[STATE:%.+]] = ub.poison : !hw.struct<>
@@ -23,7 +23,7 @@ arc.coroutine.define @HaltOnly(%arg0: i42) {
   arc.coroutine.halt
 }
 
-// CHECK-LABEL: func.func @ReturnOnly
+// CHECK-LABEL: func.func private @ReturnOnly
 // CHECK-SAME: (%arg0: !hw.struct<>, %arg1: i2, %arg2: i42) -> (!hw.struct<>, i2, i42)
 arc.coroutine.define @ReturnOnly(%arg0: i42) -> i42 {
   // CHECK: cf.br ^[[BB:.+]](%arg2 : i42)
@@ -37,7 +37,7 @@ arc.coroutine.define @ReturnOnly(%arg0: i42) -> i42 {
 // A single yield whose resume block persists no state. No union variant is
 // allocated; the yield returns a poison state and the trampoline passes only
 // the fresh caller-supplied arguments.
-// CHECK-LABEL: func.func @YieldStateless
+// CHECK-LABEL: func.func private @YieldStateless
 // CHECK-SAME: (%arg0: !hw.struct<>, %arg1: i2, %arg2: i42) -> (!hw.struct<>, i2, i42)
 arc.coroutine.define @YieldStateless(%arg0: i42) -> i42 {
   // CHECK: cf.switch %arg1 : i2, [
@@ -60,7 +60,7 @@ arc.coroutine.define @YieldStateless(%arg0: i42) -> i42 {
 
 // A yield with an explicit destination operand; the value is persisted in the
 // resume block's union variant.
-// CHECK-LABEL: func.func @YieldPersist
+// CHECK-LABEL: func.func private @YieldPersist
 // CHECK-SAME: (%arg0: !hw.union<r1: !hw.struct<f0: i42>>, %arg1: i2, %arg2: i42)
 // CHECK-SAME: -> (!hw.union<r1: !hw.struct<f0: i42>>, i2, i42)
 arc.coroutine.define @YieldPersist(%arg0: i42) -> i42 {
@@ -89,7 +89,7 @@ arc.coroutine.define @YieldPersist(%arg0: i42) -> i42 {
 // A value that is live across a yield without being a destination operand. It
 // must be captured as a trailing block argument of the resume block and
 // persisted.
-// CHECK-LABEL: func.func @LiveAcrossYield
+// CHECK-LABEL: func.func private @LiveAcrossYield
 // CHECK-SAME: (%arg0: !hw.union<r1: !hw.struct<f0: i42>>, %arg1: i2, %arg2: i42)
 arc.coroutine.define @LiveAcrossYield(%arg0: i42) -> i42 {
   // CHECK: ^[[ENTRY:.+]]([[ARG:%.+]]: i42):
@@ -110,7 +110,7 @@ arc.coroutine.define @LiveAcrossYield(%arg0: i42) -> i42 {
 
 // A constant that is live across a yield is rematerialized in the resume
 // block instead of being persisted; the coroutine ends up with no state.
-// CHECK-LABEL: func.func @ConstAcrossYield
+// CHECK-LABEL: func.func private @ConstAcrossYield
 // CHECK-SAME: (%arg0: !hw.struct<>, %arg1: i2) -> (!hw.struct<>, i2, i42)
 arc.coroutine.define @ConstAcrossYield() -> i42 {
   // CHECK: [[CONST:%.+]] = hw.constant 9001 : i42
@@ -123,10 +123,24 @@ arc.coroutine.define @ConstAcrossYield() -> i42 {
   arc.coroutine.return %0 : i42
 }
 
+// As above, but for the quasi constant inferred context.
+// CHECK-LABEL: func.func private @InferredContextAcrossYield
+// CHECK-SAME: (%arg0: !hw.struct<>, %arg1: i2) -> (!hw.struct<>, i2, !arc.context)
+arc.coroutine.define @InferredContextAcrossYield() -> !arc.context {
+  // CHECK: [[CTXT:%.+]] = arc.inferred_context
+  // CHECK: return {{%.+}}, {{%.+}}, [[CTXT]]
+  %0 = arc.inferred_context
+  arc.coroutine.yield (%0 : !arc.context), ^bb1
+  // CHECK: [[CTXT2:%.+]] = arc.inferred_context
+  // CHECK: return {{%.+}}, {{%.+}}, [[CTXT2]]
+^bb1:
+  arc.coroutine.return %0 : !arc.context
+}
+
 // A value used across an ordinary branch without crossing a suspension point
 // is not captured; the using block keeps referring to the dominating
 // definition instead of receiving a block argument.
-// CHECK-LABEL: func.func @DominatedUseAcrossBranch
+// CHECK-LABEL: func.func private @DominatedUseAcrossBranch
 // CHECK-SAME: (%arg0: !hw.struct<>, %arg1: i2, %arg2: i42)
 arc.coroutine.define @DominatedUseAcrossBranch(%arg0: i42) -> i42 {
   // CHECK: ^{{.+}}([[ARG:%.+]]: i42):
@@ -146,7 +160,7 @@ arc.coroutine.define @DominatedUseAcrossBranch(%arg0: i42) -> i42 {
 // A value live across a yield is captured as a trailing block argument of the
 // resume block only. Blocks downstream of the resume block use the captured
 // value through dominance and receive no arguments of their own.
-// CHECK-LABEL: func.func @CaptureOnlyAtResume
+// CHECK-LABEL: func.func private @CaptureOnlyAtResume
 // CHECK-SAME: (%arg0: !hw.union<r1: !hw.struct<f0: i42>>, %arg1: i2, %arg2: i42)
 arc.coroutine.define @CaptureOnlyAtResume(%arg0: i42) -> i42 {
   // CHECK: ^{{.+}}([[ARG:%.+]]: i42):
@@ -169,7 +183,7 @@ arc.coroutine.define @CaptureOnlyAtResume(%arg0: i42) -> i42 {
 // Where a path through a resume block rejoins a path carrying the original
 // definition, the join block receives a merging block argument. Only the
 // resume block and the join block are touched.
-// CHECK-LABEL: func.func @RejoinAfterResume
+// CHECK-LABEL: func.func private @RejoinAfterResume
 // CHECK-SAME: (%arg0: !hw.union<r1: !hw.struct<f0: i42>>, %arg1: i2, %arg2: i1, %arg3: i42)
 arc.coroutine.define @RejoinAfterResume(%arg0: i1, %arg1: i42) -> i42 {
   // CHECK: ^{{.+}}([[COND:%.+]]: i1, [[INIT:%.+]]: i42):
@@ -193,7 +207,7 @@ arc.coroutine.define @RejoinAfterResume(%arg0: i1, %arg1: i42) -> i42 {
 
 // A merge block whose predecessors all carry the original definition does not
 // receive a block argument; only the resume block captures the value.
-// CHECK-LABEL: func.func @MergeBeforeYield
+// CHECK-LABEL: func.func private @MergeBeforeYield
 // CHECK-SAME: (%arg0: !hw.union<r1: !hw.struct<f0: i42>>, %arg1: i2, %arg2: i1, %arg3: i42)
 arc.coroutine.define @MergeBeforeYield(%arg0: i1, %arg1: i42) -> i42 {
   // CHECK: ^{{.+}}([[COND:%.+]]: i1, [[INIT:%.+]]: i42):
@@ -220,7 +234,7 @@ arc.coroutine.define @MergeBeforeYield(%arg0: i1, %arg1: i42) -> i42 {
 }
 
 // All three terminators in one coroutine.
-// CHECK-LABEL: func.func @AllTerminators
+// CHECK-LABEL: func.func private @AllTerminators
 arc.coroutine.define @AllTerminators(%arg0: i1) -> i8 {
   %c0 = hw.constant 0 : i8
   cf.cond_br %arg0, ^suspend, ^stop
@@ -241,7 +255,7 @@ arc.coroutine.define @AllTerminators(%arg0: i1) -> i8 {
 
 // Two yields targeting the same resume block share the same PC and union
 // variant.
-// CHECK-LABEL: func.func @SharedResume
+// CHECK-LABEL: func.func private @SharedResume
 // CHECK-SAME: (%arg0: !hw.union<r1: !hw.struct<f0: i32>>, %arg1: i2, %arg2: i1)
 arc.coroutine.define @SharedResume(%arg0: i1) -> i32 {
   // CHECK: cf.switch %arg1 : i2, [
@@ -268,7 +282,7 @@ arc.coroutine.define @SharedResume(%arg0: i1) -> i32 {
 }
 
 // Child coroutine used by the nesting tests below.
-// CHECK-LABEL: func.func @Child
+// CHECK-LABEL: func.func private @Child
 // CHECK-SAME: (%arg0: !hw.union<r1: !hw.struct<f0: i8>>, %arg1: i2)
 // CHECK-SAME: -> (!hw.union<r1: !hw.struct<f0: i8>>, i2, i8)
 arc.coroutine.define @Child() -> i8 {
@@ -280,7 +294,7 @@ arc.coroutine.define @Child() -> i8 {
 
 // A nested coroutine call. The call lowers to a regular function call, and
 // the sentinel value ops lower to constants and comparisons.
-// CHECK-LABEL: func.func @NestedCall
+// CHECK-LABEL: func.func private @NestedCall
 arc.coroutine.define @NestedCall() -> i1 {
   // CHECK: [[STATE:%.+]] = ub.poison : !hw.union<r1: !hw.struct<f0: i8>>
   // CHECK: [[PC:%.+]] = hw.constant 0 : i2
@@ -298,7 +312,7 @@ arc.coroutine.define @NestedCall() -> i1 {
 
 // A nested coroutine call carried across a yield. The child's state and PC
 // are embedded in the parent's persisted state variant.
-// CHECK-LABEL: func.func @NestedCarried
+// CHECK-LABEL: func.func private @NestedCarried
 // CHECK-SAME: (%arg0: !hw.union<r1: !hw.struct<f0: !hw.union<r1: !hw.struct<f0: i8>>, f1: i2>>, %arg1: i2)
 arc.coroutine.define @NestedCarried() -> i8 {
   %state = arc.coroutine.undefined_state : !arc.coroutine_state<@Child>
@@ -327,8 +341,8 @@ arc.coroutine.define @NestedCarried() -> i8 {
 
 // A non-coroutine driver function polling a coroutine in a loop. The state
 // and PC flow through loop-carried block arguments, which must be retyped.
-// CHECK-LABEL: func.func @Driver
-func.func @Driver() -> i8 {
+// CHECK-LABEL: func.func private @Driver
+func.func private @Driver() -> i8 {
   // CHECK: [[STATE:%.+]] = ub.poison : !hw.union<r1: !hw.struct<f0: i8>>
   // CHECK: [[PC:%.+]] = hw.constant 0 : i2
   // CHECK: cf.br ^[[LOOP:.+]]([[STATE]], [[PC]] : !hw.union<r1: !hw.struct<f0: i8>>, i2)
@@ -354,9 +368,9 @@ func.func @Driver() -> i8 {
 // CHECK-LABEL: func.func private @Helper(!hw.union<r1: !hw.struct<f0: i8>>) -> i2
 func.func private @Helper(!arc.coroutine_state<@Child>) -> !arc.coroutine_pc<@Child>
 
-// CHECK-LABEL: func.func @CallsHelper
+// CHECK-LABEL: func.func private @CallsHelper
 // CHECK-SAME: (%arg0: !hw.union<r1: !hw.struct<f0: i8>>) -> i2
-func.func @CallsHelper(%arg0: !arc.coroutine_state<@Child>) -> !arc.coroutine_pc<@Child> {
+func.func private @CallsHelper(%arg0: !arc.coroutine_state<@Child>) -> !arc.coroutine_pc<@Child> {
   // CHECK: [[RESULT:%.+]] = call @Helper(%arg0) : (!hw.union<r1: !hw.struct<f0: i8>>) -> i2
   // CHECK: return [[RESULT]] : i2
   %0 = func.call @Helper(%arg0) : (!arc.coroutine_state<@Child>) -> !arc.coroutine_pc<@Child>
