@@ -89,6 +89,20 @@ def FindInitialVectors : Pass<"arc-find-initial-vectors", "mlir::ModuleOp"> {
   ];
 }
 
+def InferContext : Pass<"arc-infer-context", "mlir::ModuleOp"> {
+  let summary = "Resolve `arc.inferred_context` operations";
+  let description = [{
+    Replaces every `arc.inferred_context` with the concrete context of the
+    model instance it belongs to, taken from the closest enclosing provider:
+    The body of an `arc.model`, the body of an `arc.sim.instantiate` or a
+    function that already carries an `!arc.context` argument. A private function
+    that needs a context but does not provide one gains a `!arc.context`
+    argument that is threaded in at each call site.
+  }];
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
+
 def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let summary = "Convert `FIRRTL_Memory` instances to dedicated memory ops";
   let dependentDialects = [
