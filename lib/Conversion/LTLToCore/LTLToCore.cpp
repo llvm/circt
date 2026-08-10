@@ -26,10 +26,8 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/Support/LogicalResult.h"
 
 namespace circt {
@@ -105,7 +103,7 @@ struct LTLImplicationConversion
     if (!isa<IntegerType>(op.getAntecedent().getType()) ||
         !isa<IntegerType>(op.getConsequent().getType()))
       return failure();
-    // A -> B = !A || B
+    /// A -> B = !A || B
     auto loc = op.getLoc();
     auto notA = comb::createOrFoldNot(rewriter, loc, adaptor.getAntecedent());
     auto orOp =
@@ -229,19 +227,14 @@ static Value createRegister(Value input, Value clock, ltl::ClockEdge edge,
 }
 
 static void lowerTemporalLTLToCore(hw::HWModuleOp module) {
-  SmallVector<Operation *> assertLikes;
+  SmallVector<Operation *> assertionsAndAssumptions;
   module->walk([&](Operation *op) {
     if (isa<verif::AssertOp, verif::AssumeOp>(op))
-      assertLikes.push_back(op);
+      assertionsAndAssumptions.push_back(op);
   });
 
-  for (auto *op : assertLikes) {
-    Value property;
-    if (auto assertOp = dyn_cast<verif::AssertOp>(op))
-      property = assertOp.getProperty();
-    else
-      property = cast<verif::AssumeOp>(op).getProperty();
-
+  for (auto *op : assertionsAndAssumptions) {
+    Value property = op->getOperand(0);
     auto atom = property.getDefiningOp<ltl::ClockedAtomOp>();
     if (!atom || atom.getEdge() == ltl::ClockEdge::Both)
       continue;
@@ -374,12 +367,6 @@ void LowerLTLToCorePass::runOnOperation() {
         op->setOperand(0, cast.getInputs()[0]);
     }
   });
-
-  // Conversion may leave dead temporal expressions and materializations.
-  // Run MLIR's standard trivial operation DCE after all rewrites are complete.
-  IRRewriter rewriter(&getContext());
-  for (auto &region : getOperation()->getRegions())
-    eliminateTriviallyDeadOps(rewriter, region);
 }
 
 // Basic default constructor
