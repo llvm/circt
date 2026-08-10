@@ -831,8 +831,9 @@ TEST(PrettyPrinterTest, MarginValues) {
     auto outNewlines = out.count('\n');
     EXPECT_NE(saveNewlines, outNewlines);
     // Special check for no-wrap sentinel value.
-    if (m == 0)
+    if (m == 0) {
       EXPECT_EQ(outNewlines, 0U);
+    }
   }
 }
 
