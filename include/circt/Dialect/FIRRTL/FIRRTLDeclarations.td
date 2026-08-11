@@ -424,7 +424,7 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "::mlir::UnitAttr":$forceable,
-                   CArg<"::mlir::IntegerAttr", "{}">:$initial), [{
+                   "::mlir::IntegerAttr":$initial), [{
       $_state.addOperands(clockVal);
       $_state.addAttribute(getNameAttrName($_state.name), name);
       $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
@@ -449,7 +449,7 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "bool":$forceable,
-                   CArg<"::mlir::IntegerAttr", "{}">:$initial), [{
+                   "::mlir::IntegerAttr":$initial), [{
       return build($_builder, $_state, elementType, clockVal,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
@@ -527,7 +527,7 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "::mlir::UnitAttr":$forceable,
-                   CArg<"::mlir::IntegerAttr", "{}">:$initial), [{
+                   "::mlir::IntegerAttr":$initial), [{
       $_state.addOperands(clockVal);
       odsState.addOperands(resetSignal);
       odsState.addOperands(resetValue);

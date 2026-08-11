@@ -762,9 +762,10 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   // Record information required later on to build the initialization code for
   // this register. All initialization is grouped together in a single initial
   // block at the back of the module.
-  if (svReg.preset && !inlinePreset)
-    presetInitRegs.push_back(svReg);
-  else if (!svReg.preset && !disableRegRandomization)
+  if (svReg.preset) {
+    if (!inlinePreset)
+      presetInitRegs.push_back(svReg);
+  } else if (!disableRegRandomization)
     randomInitRegs.push_back(svReg);
 
   if (svReg.asyncResetSignal)

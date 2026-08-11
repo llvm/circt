@@ -2736,13 +2736,8 @@ namespace {
 // has no `initial` value, or `initial == foldedValue`. If `foldedValue` is
 // absent (the replacement value is not a known constant), only returns true
 // when the register has no `initial` value.
-bool preservesInitial(Operation *reg,
+bool preservesInitial(Operation *reg, IntegerAttr initial,
                       std::optional<APInt> foldedValue = std::nullopt) {
-  IntegerAttr initial;
-  if (auto r = dyn_cast<RegOp>(reg))
-    initial = r.getInitialAttr();
-  else if (auto r = dyn_cast<RegResetOp>(reg))
-    initial = r.getInitialAttr();
   if (!initial)
     return true;
   if (!foldedValue)
@@ -2793,7 +2788,7 @@ struct FoldResetMux : public mlir::OpRewritePattern<RegResetOp> {
 
     // Bail if replacing the register with the constant would change its
     // time-zero simulation value.
-    if (!preservesInitial(reg, constOp.getValue()))
+    if (!preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
       return failure();
 
     // Make sure the constant dominates all users.
@@ -2831,9 +2826,9 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
   // only when `initial` matches; otherwise be conservative and bail when an
   // `initial` value is present.
   if (auto constOp = dyn_cast_or_null<ConstantOp>(resetValue.getDefiningOp())) {
-    if (!preservesInitial(reg, constOp.getValue()))
+    if (!preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
       return failure();
-  } else if (!preservesInitial(reg)) {
+  } else if (!preservesInitial(reg, reg.getInitialAttr())) {
     return failure();
   }
 
@@ -3689,7 +3684,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 
   // If we would fold the register to a constant, ensure the time-zero
   // simulation value is preserved.
-  if (constReg && !preservesInitial(reg, constOp.getValue()))
+  if (constReg &&
+      !preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
     return failure();
 
   // Make sure the constant dominates all users.
