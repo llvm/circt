@@ -5,6 +5,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   Dedup.cpp
   FindInitialVectors.cpp
   GenerateDriver.cpp
+  InferContext.cpp
   InferMemories.cpp
   InferStateProperties.cpp
   InlineArcs.cpp

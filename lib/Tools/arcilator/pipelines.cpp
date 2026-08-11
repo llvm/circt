@@ -167,6 +167,7 @@ void circt::populateArcToLLVMPipeline(OpPassManager &pm,
   if (options.bufferizeArrays) {
     pm.addPass(createLowerArrays());
   }
+  pm.addPass(createInferContext());
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizer());

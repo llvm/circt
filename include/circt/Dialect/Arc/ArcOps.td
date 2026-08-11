@@ -655,6 +655,18 @@ def AsContextOp : ArcOp<"as_context", [Pure]> {
   let assemblyFormat = [{ $input attr-dict `:` qualified(type($input)) }];
 }
 
+def InferredContextOp : ArcOp<"inferred_context", [Pure]> {
+  let summary = "Get the inferred runtime context";
+  let description = [{
+    Retrieve a runtime handle to the context of the model instance currently
+    being executed. This can be used in situations where the concrete context
+    is not yet available or in the body of functions that are called by one or
+    several models.
+  }];
+  let results = (outs ContextType:$arcContext);
+  let assemblyFormat = [{ attr-dict }];
+}
+
 //===----------------------------------------------------------------------===//
 // Coroutines
 //===----------------------------------------------------------------------===//
