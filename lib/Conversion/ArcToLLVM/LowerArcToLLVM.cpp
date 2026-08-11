@@ -12,6 +12,7 @@
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Arc/ArcConstants.h"
 #include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcTypes.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/FmtDescriptor.h"
@@ -169,6 +170,17 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   }
 };
 
+struct AsContextOpLowering : public OpConversionPattern<arc::AsContextOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::AsContextOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Context, root storage and instances resolve to the same pointer
+    rewriter.replaceOp(op, adaptor.getInput());
+    return llvm::success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Time Operations Lowering
 //===----------------------------------------------------------------------===//
@@ -179,7 +191,7 @@ struct CurrentTimeOpLowering : public OpConversionPattern<arc::CurrentTimeOp> {
   matchAndRewrite(arc::CurrentTimeOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     // Time is stored at offset 0 in storage (no offset needed).
-    Value ptr = adaptor.getStorage();
+    Value ptr = adaptor.getArcContext();
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(), ptr);
     return success();
   }
@@ -668,8 +680,10 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
       // Increment time after step
       OpBuilder::InsertionGuard g(rewriter);
       rewriter.setInsertionPointAfter(op);
+      auto arcContext =
+          arc::AsContextOp::create(rewriter, op.getLoc(), op.getInstance());
       auto oldTime =
-          arc::SimGetTimeOp::create(rewriter, op.getLoc(), op.getInstance());
+          arc::CurrentTimeOp::create(rewriter, op.getLoc(), arcContext);
       auto newTime = LLVM::AddOp::create(rewriter, op.getLoc(), oldTime,
                                          adaptor.getTimePostIncrement());
       arc::SimSetTimeOp::create(rewriter, op.getLoc(), op.getInstance(),
@@ -685,21 +699,6 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
   }
 };
 
-// Loads the simulation time (i64 femtoseconds) from byte offset 0 in the
-// model instance's state storage.
-struct SimGetTimeOpLowering : public OpConversionPattern<arc::SimGetTimeOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(arc::SimGetTimeOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    // Time is stored at offset 0 in the instance storage.
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(),
-                                              adaptor.getInstance());
-    return success();
-  }
-};
-
 // Stores the simulation time (i64 femtoseconds) to byte offset 0 in the
 // model instance's state storage.
 struct SimSetTimeOpLowering : public OpConversionPattern<arc::SimSetTimeOp> {
@@ -711,26 +710,6 @@ struct SimSetTimeOpLowering : public OpConversionPattern<arc::SimSetTimeOp> {
     // Time is stored at offset 0 in the instance storage.
     rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getTime(),
                                                adaptor.getInstance());
-    return success();
-  }
-};
-
-// Loads the next wakeup time (i64 femtoseconds) from `kNextWakeupOffset` of
-// the model instance's state storage.
-struct SimGetNextWakeupOpLowering
-    : public OpConversionPattern<arc::SimGetNextWakeupOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(arc::SimGetNextWakeupOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto loc = op.getLoc();
-    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
-    Value slotPtr = LLVM::GEPOp::create(
-        rewriter, loc, ptrType, rewriter.getI8Type(), adaptor.getInstance(),
-        ArrayRef<LLVM::GEPArg>{arc::kNextWakeupOffset});
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(),
-                                              slotPtr);
     return success();
   }
 };
@@ -1117,7 +1096,7 @@ struct TerminateOpLowering : public OpConversionPattern<arc::TerminateOp> {
     auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
 
     Value flagPtr = LLVM::GEPOp::create(
-        rewriter, loc, ptrType, i8Type, adaptor.getStorage(),
+        rewriter, loc, ptrType, i8Type, adaptor.getArcContext(),
         ArrayRef<LLVM::GEPArg>{arc::kTerminateFlagOffset});
 
     uint8_t statusCode = op.getSuccess() ? 1 : 2;
@@ -1143,7 +1122,7 @@ struct GetNextWakeupOpLowering
     auto loc = op.getLoc();
     auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
     Value slotPtr = LLVM::GEPOp::create(
-        rewriter, loc, ptrType, rewriter.getI8Type(), adaptor.getStorage(),
+        rewriter, loc, ptrType, rewriter.getI8Type(), adaptor.getArcContext(),
         ArrayRef<LLVM::GEPArg>{arc::kNextWakeupOffset});
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(),
                                               slotPtr);
@@ -1163,7 +1142,7 @@ struct SetNextWakeupOpLowering
     auto loc = op.getLoc();
     auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
     Value slotPtr = LLVM::GEPOp::create(
-        rewriter, loc, ptrType, rewriter.getI8Type(), adaptor.getStorage(),
+        rewriter, loc, ptrType, rewriter.getI8Type(), adaptor.getArcContext(),
         ArrayRef<LLVM::GEPArg>{arc::kNextWakeupOffset});
     rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getTime(), slotPtr);
     return success();
@@ -1853,6 +1832,9 @@ void LowerArcToLLVMPass::runOnOperation() {
   converter.addConversion([&](StorageType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
+  converter.addConversion([&](ContextType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
   converter.addConversion([&](MemoryType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
@@ -1921,6 +1903,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     AllocStateLikeOpLowering<arc::RootInputOp>,
     AllocStateLikeOpLowering<arc::RootOutputOp>,
     AllocStorageOpLowering,
+    AsContextOpLowering,
     ClockGateOpLowering,
     ClockInvOpLowering,
     ConstantTimeOpLowering,
@@ -1935,8 +1918,6 @@ void LowerArcToLLVMPass::runOnOperation() {
     RuntimeModelOpLowering,
     SeqConstClockLowering,
     SetNextWakeupOpLowering,
-    SimGetNextWakeupOpLowering,
-    SimGetTimeOpLowering,
     SimSetTimeOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,

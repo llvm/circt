@@ -46,7 +46,8 @@ module {
 
       // CHECK-NEXT: %[[wkup_ptr:.*]] = llvm.getelementptr %[[state]][16] : (!llvm.ptr) -> !llvm.ptr, i8
       // CHECK-NEXT: %[[wkup:.*]] = llvm.load %[[wkup_ptr]] : !llvm.ptr -> i64
-      %wkup = arc.sim.get_next_wakeup %model : !arc.sim.instance<@id>
+      %ctxt = arc.as_context %model : !arc.sim.instance<@id>
+      %wkup = arc.get_next_wakeup %ctxt
       arc.sim.emit "next_wakeup", %wkup : i64
 
       // CHECK-DAG: %[[to_print:.*]] = llvm.zext %[[result]] : i8 to i64
