@@ -19,17 +19,17 @@ with Context() as ctx, Location.unknown():
       %1 = om.constant "Component.inst1.foo" : !om.string
       om.class.fields %1 : !om.string
     }
-    
+
     om.class @comp(
         %inst1_propOut_bore: !om.class.type<@node>,
         %inst2_propOut_bore: !om.class.type<@node>) -> (field2: !om.class.type<@node>, field3: !om.class.type<@node>) {
       om.class.fields %inst1_propOut_bore, %inst2_propOut_bore : !om.class.type<@node>, !om.class.type<@node>
     }
-    
+
     om.class  @Client() -> (client_omnode_0_OMIROut: !om.class.type<@comp>, node0_OMIROut : !om.class.type<@node>, node1_OMIROut : !om.class.type<@node>) {
       %0 = om.object @node() : () -> !om.class.type<@node>
       %2 = om.object @comp(%0, %0) : (!om.class.type<@node>, !om.class.type<@node>) -> !om.class.type<@comp>
-    
+
       om.class.fields %2, %0, %0 : !om.class.type<@comp>, !om.class.type<@node>, !om.class.type<@node>
     }
 
@@ -67,7 +67,7 @@ with Context() as ctx, Location.unknown():
     hw.module @Root(in %clock: i1) {
       %0 = sv.wire sym @x : !hw.inout<i1>
     }
-    
+
     om.class @Paths(%basepath: !om.frozenbasepath) -> (path: !om.frozenpath, deleted: !om.frozenpath) {
       %0 = om.frozenbasepath_create %basepath "Foo/bar"
       %1 = om.frozenpath_create reference %0 "Bar/baz:Baz>w"
