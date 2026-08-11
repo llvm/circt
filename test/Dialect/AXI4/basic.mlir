@@ -16,3 +16,14 @@
 "test.attrs"() {a = #axi4.burst_spec<wrap, len = 2>} : () -> ()
 // CHECK: #axi4.burst_spec<wrap, len = 16>
 "test.attrs"() {a = #axi4.burst_spec<wrap, len = 16>} : () -> ()
+
+// CHECK: #axi4.burst_set<<fixed, len = 4>>
+"test.attrs"() {a = #axi4.burst_set<<fixed, len = 4>>} : () -> ()
+
+// Check burst_sets are correctly canonicalized after parsing
+// CHECK: #axi4.burst_set<<fixed, len = 4>, <incr, len = 8>>
+"test.attrs"() {a = #axi4.burst_set<<incr, len = 8>, <fixed, len = 4>>} : () -> ()
+// CHECK: #axi4.burst_set<<incr, len = 8>>
+"test.attrs"() {a = #axi4.burst_set<<incr, len = 8>, <incr, len = 8>>} : () -> ()
+// CHECK: #axi4.burst_set<<fixed, len = 16>, <incr, len = 1>, <incr, len = 256>, <wrap, len = 2>>
+"test.attrs"() {a = #axi4.burst_set<<wrap, len = 2>, <incr, len = 256>, <incr, len = 1>, <fixed, len = 16>>} : () -> ()
