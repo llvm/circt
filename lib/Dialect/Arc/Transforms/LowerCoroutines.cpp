@@ -270,9 +270,12 @@ static LogicalResult captureValuesAcrossSuspension(CoroutineDefineOp defineOp) {
       continue;
 
     // Rematerialize constants in the resumed blocks instead of capturing
-    // them; capture all other values as trailing resume block arguments.
+    // them. The inferred Arc context is quasi constant since the coroutine will
+    // never be re-entered with a different context than before. Capture all
+    // other values as trailing resume block arguments.
     auto *defOp = value.getDefiningOp();
-    if (defOp && defOp->hasTrait<OpTrait::ConstantLike>()) {
+    if (defOp && (defOp->hasTrait<OpTrait::ConstantLike>() ||
+                  isa<InferredContextOp>(defOp))) {
       rematerializeConstant(value, region, captureBlocks, liveness);
       continue;
     }
@@ -393,6 +396,7 @@ static void lowerDefinition(CoroutineLowering &lowering) {
   auto funcOp =
       func::FuncOp::create(builder, loc, defineOp.getSymName(),
                            builder.getFunctionType(inputTypes, resultTypes));
+  funcOp.setPrivate();
 
   // Move the body over and create the dispatch block in front of it.
   funcOp.getBody().getBlocks().splice(funcOp.getBody().end(),
