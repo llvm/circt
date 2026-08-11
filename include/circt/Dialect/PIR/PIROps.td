@@ -60,7 +60,7 @@ def AssumePropertyOp : AssertPropertyLikeOp<"assume_property"> {
   }];
 }
 
-def RestrictPropertyOp : AssertPropertyLikeOp<"restric_property"> {
+def RestrictOp : AssertPropertyLikeOp<"restric"> {
   let summary = "Restricts the input space checked for a given property.";
   let description = [{
     Similarly to Assumptions, restrictions allow for a property's input space to be 
@@ -77,6 +77,84 @@ def CoverPropertyOp : AssertPropertyLikeOp<"cover_property"> {
     in the end. Mostly makes sense in the context of finite traces, e.g. simulation.
   }];
 }
+
+//===----------------------------------------------------------------------===//
+// Type Conversions
+//===----------------------------------------------------------------------===//
+
+class ConversionOp<string mnemonic, list<Trait> traits = [Pure]> :
+  PIROp<mnemonic, traits> {
+    let assemblyFormat = [{
+      $input attr-dict
+    }];
+
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
+def BoolToClockedSeqOp : ConversionOp<"bool_to_clocked_seq"> {
+  let summary = "Convert a Boolean expression to a clocked sequence of length 1.";
+  let description = [{
+    Converts a Boolean expression to a clocked sequence of length 1. 
+    In SystemVerilog, there exists no equivalent operator because this happens implicitly 
+    by using a Boolean expression in a sequence context. This uses the global clock.
+  }];
+
+  let arguments = (
+    ins I1:$input
+  );
+  let results = (
+    outs PIRClockedSequenceType:$output
+  );
+}
+
+def SeqToClockedSeqOp : ConversionOp<"seq_to_clocked_seq"> {
+  let summary = "Convert a simple sequence into a clocked sequence.";
+  let description = [{
+    Convert a simple sequence into a clocked sequence that uses the global clock. 
+    Then it can be used as a parameter for assertions. Note that it is not possible 
+    to change the clock that is used by the resulting clocked sequence.
+  }];
+
+  let arguments = (
+    ins PIRSequenceType:$input
+  );
+  let results = (
+    outs PIRClockedSequenceType:$output
+  );
+}
+
+def BoolToClockedPropOp : ConversionOp<"bool_to_clocked_prop"> {
+  let summary = "Convert a Boolean expression to a clocked property of length 1.";
+  let description = [{
+    Converts a Boolean expression directly to a sequence property.
+    Note that sequence properties must not admit empty matches.
+  }];
+
+  let arguments = (
+    ins I1:$input
+  );
+  let results = (
+    outs PIRClockedPropertyType:$output
+  );
+}
+
+def SeqToClockedPropOp : ConversionOp<"seq_to_clocked_prop"> {
+  let summary = "Convert a simple sequence into a clocked property.";
+  let description = [{
+    Convert a simple sequence into a clocked sequence that uses the global clock. 
+    Then it can be used as a parameter for assertions. Note that it is not possible 
+    to change the clock that is used by the resulting clocked sequence.
+  }];
+
+  let arguments = (
+    ins PIRSequenceType:$input
+  );
+  let results = (
+    outs PIRClockedSequenceType:$output
+  );
+}
+
 
 //===----------------------------------------------------------------------===//
 // Clocking
