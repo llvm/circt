@@ -36,6 +36,12 @@ public:
   /// signal, which may be zero for i0 values.
   using Evaluator =
       llvm::function_ref<std::optional<llvm::APInt>(Handle, unsigned width)>;
+  /// Z3 API callbacks passed in by JIT-compiled code. Keeping these as opaque
+  /// function pointers avoids making the runtime library depend on Z3 headers
+  /// or a particular Z3 shared library at link time.
+  using ModelEval = bool (*)(Handle context, Handle model, Handle expression,
+                             bool modelCompletion, Handle *value);
+  using GetNumeralBinaryString = const char *(*)(Handle context, Handle value);
 
   /// Metadata for a tracked signal in the trace.
   struct Signal {
@@ -64,6 +70,11 @@ public:
   /// Render the trace as cycle-by-cycle text using the provided evaluator to
   /// materialize values from recorded handles.
   bool printTextTrace(llvm::raw_ostream &os, Evaluator evaluate) const;
+  /// Render the trace by evaluating its recorded Z3 ASTs in a satisfying
+  /// model. This must run before the owning Z3 context is destroyed.
+  bool printTextTrace(llvm::raw_ostream &os, Handle context, Handle model,
+                      ModelEval modelEval,
+                      GetNumeralBinaryString getNumeralBinaryString) const;
 
 private:
   /// Per-cycle storage for all tracked signals.
@@ -81,6 +92,13 @@ private:
 extern "C" void circt_bmc_record_trace(BMCTrace *trace, uint32_t step,
                                        const char *name, uint32_t width,
                                        BMCTrace::Handle handle);
+
+/// Runtime entry point called on the SAT path while the Z3 context and model
+/// are still alive.
+extern "C" bool
+circt_bmc_print_trace(BMCTrace *trace, BMCTrace::Handle context,
+                      BMCTrace::Handle model, BMCTrace::ModelEval modelEval,
+                      BMCTrace::GetNumeralBinaryString getNumeralBinaryString);
 
 } // namespace circt::bmc
 

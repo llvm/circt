@@ -800,6 +800,10 @@ def LowerSMTToZ3LLVM : Pass<"lower-smt-to-z3-llvm", "mlir::ModuleOp"> {
     Option<"debug", "debug", "bool", "false",
            "Insert additional printf calls printing the solver's state to "
            "stdout (e.g. at check-sat operations) for debugging purposes">,
+    Option<"printOnlyFirstCounterexample", "print-only-first-counterexample",
+           "bool", "false",
+           "Suppress counterexample printing after the first successfully "
+           "printed model in each solver invocation">,
   ];
 }
 

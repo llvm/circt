@@ -1,5 +1,6 @@
-// RUN: circt-opt %s --lower-smt-to-z3-llvm | FileCheck %s
-// RUN: circt-opt %s --lower-smt-to-z3-llvm=debug=true | FileCheck %s --check-prefix=CHECK-DEBUG
+// RUN: circt-opt %s --lower-smt-to-z3-llvm="print-only-first-counterexample=true" | FileCheck %s
+// RUN: circt-opt %s --lower-smt-to-z3-llvm="debug=true print-only-first-counterexample=true" | FileCheck %s --check-prefix=CHECK-DEBUG
+// RUN: circt-opt %s --lower-smt-to-z3-llvm | FileCheck %s --check-prefix=CHECK-MULTI
 
 // CHECK-LABEL: llvm.mlir.global internal @ctx_0()
 // CHECK-NEXT:   llvm.mlir.zero : !llvm.ptr
@@ -59,7 +60,9 @@ llvm.mlir.global internal @solver() {alignment = 8 : i64} : !llvm.ptr {
 // CHECK:   llvm.return
 
 // CHECK-LABEL: llvm.func @solver
-// CHECK-SAME: ([[TRACE_STEP:%.+]]: i32, [[TRACE_CONTEXT:%.+]]: !llvm.ptr)
+// CHECK-SAME: ([[TRACE_STEP:%.+]]: i32, [[TRACE_CONTEXT:%.+]]: !llvm.ptr, [[TRACE_EMITTED_STORAGE:%.+]]: !llvm.ptr)
+// CHECK-MULTI-LABEL: llvm.func @solver
+// CHECK-MULTI-SAME: ([[MULTI_TRACE_STEP:%.+]]: i32, [[MULTI_TRACE_CONTEXT:%.+]]: !llvm.ptr)
 func.func @test(%arg0: i32) {
   %0 = smt.solver (%arg0) : (i32) -> (i32) {
   ^bb0(%arg1: i32):
@@ -186,12 +189,28 @@ func.func @test(%arg0: i32) {
     // CHECK:   [[IS_SAT:%.+]] = llvm.icmp "eq" [[CHECK]], [[C1]] : i32
     // CHECK:   llvm.cond_br [[IS_SAT]], ^[[BB1:.+]], ^[[BB2:.+]]
     // CHECK: ^[[BB1]]:
-    // CHECK-DEBUG: [[CTX_ADDR:%.+]] = llvm.mlir.addressof @ctx_0 : !llvm.ptr
-    // CHECK-DEBUG: [[CTX0:%.+]] = llvm.load [[CTX_ADDR]] : !llvm.ptr -> !llvm.ptr
-    // CHECK-DEBUG: [[MODEL:%.+]] = llvm.call @Z3_solver_get_model([[CTX0]], {{.*}}) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
-    // CHECK-DEBUG: [[MODEL_STR:%.+]] = llvm.call @Z3_model_to_string([[CTX0]], [[MODEL]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    // CHECK: [[TRACE_EMITTED:%.+]] = llvm.load [[TRACE_EMITTED_STORAGE]] : !llvm.ptr -> i1
+    // CHECK: [[NOT_EMITTED:%.+]] = llvm.mlir.constant(false) : i1
+    // CHECK: [[SHOULD_EMIT:%.+]] = llvm.icmp "eq" [[TRACE_EMITTED]], [[NOT_EMITTED]] : i1
+    // CHECK: llvm.cond_br [[SHOULD_EMIT]], ^[[TRACE_BB:.+]], ^[[SAT_BODY_BB:.+]]
+    // CHECK: ^[[TRACE_BB]]:
+    // CHECK: [[TRACE_CTX_ADDR:%.+]] = llvm.mlir.addressof @ctx_0 : !llvm.ptr
+    // CHECK: [[TRACE_CTX:%.+]] = llvm.load [[TRACE_CTX_ADDR]] : !llvm.ptr -> !llvm.ptr
+    // CHECK: [[MODEL:%.+]] = llvm.call @Z3_solver_get_model([[TRACE_CTX]], [[S]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    // CHECK: [[MODEL_EVAL:%.+]] = llvm.mlir.addressof @Z3_model_eval : !llvm.ptr
+    // CHECK: [[GET_NUMERAL:%.+]] = llvm.mlir.addressof @Z3_get_numeral_binary_string : !llvm.ptr
+    // CHECK: [[EMITTED:%.+]] = llvm.call @circt_bmc_print_trace([[TRACE_CONTEXT]], [[TRACE_CTX]], [[MODEL]], [[MODEL_EVAL]], [[GET_NUMERAL]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr) -> i1
+    // CHECK: llvm.store [[EMITTED]], [[TRACE_EMITTED_STORAGE]] : i1, !llvm.ptr
+    // CHECK: llvm.br ^[[SAT_BODY_BB]]
+    // CHECK-MULTI: llvm.call @Z3_solver_check
+    // CHECK-MULTI-NOT: llvm.load {{.*}} : !llvm.ptr -> i1
+    // CHECK-MULTI: llvm.call @circt_bmc_print_trace([[MULTI_TRACE_CONTEXT]], {{.*}}) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr) -> i1
+    // CHECK-DEBUG: llvm.call @circt_bmc_print_trace
+    // CHECK-DEBUG: [[DEBUG_MODEL:%.+]] = llvm.call @Z3_solver_get_model({{.*}}) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    // CHECK-DEBUG: [[MODEL_STR:%.+]] = llvm.call @Z3_model_to_string({{.*}}, [[DEBUG_MODEL]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
     // CHECK-DEBUG: [[FMT_STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
     // CHECK-DEBUG: llvm.call @printf([[FMT_STR]], [[MODEL_STR]]) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> ()
+    // CHECK-DEBUG: llvm.call @Z3_solver_push
     // CHECK:   [[C1:%.+]] = llvm.mlir.constant(1 : i32) : i32
     // CHECK:   llvm.br ^[[BB7:.+]]([[C1]] : i32)
     // CHECK: ^[[BB2]]:
@@ -217,6 +236,7 @@ func.func @test(%arg0: i32) {
     // CHECK: ^[[BB7]]({{.+}}: i32):
     // CHECK:   llvm.br
     %8 = smt.check sat {
+      smt.push 1
       %c1 = llvm.mlir.constant(1 : i32) : i32
       smt.yield %c1 : i32
     } unknown {
