@@ -195,3 +195,10 @@ hw.module @Cut(in %clk : !seq.clock, in %rst_ni : i1, in %upstream : !port) {
   // CHECK: axi4.cut %clk, %rst_ni, %upstream : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 5, read_id_width = 3, user_width = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
   %cut = axi4.cut %clk, %rst_ni, %upstream : !port
 }
+
+// CHECK-LABEL: hw.module @Cdc
+hw.module @Cdc(in %upstream_clk : !seq.clock, in %downstream_clk : !seq.clock,
+               in %rst_ni : i1, in %upstream : !port) {
+  // CHECK: axi4.cdc from %upstream_clk to %downstream_clk, %rst_ni, %upstream : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 5, read_id_width = 3, user_width = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+  %cdc = axi4.cdc from %upstream_clk to %downstream_clk, %rst_ni, %upstream : !port
+}
