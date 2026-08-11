@@ -25,9 +25,9 @@ def SendOp : ProbeOp<"send", [
   let summary = "create a read-only probe handle for a hardware value";
   let description = [{
     `probe.send` creates a read-only probe handle for an arbitrary SSA hardware
-    value. The `ref` result identifies the value for by-name observation and
-    does not carry ordinary hardware dataflow. Users that also consume the
-    input value should use the original SSA value directly.
+    value. The `ref` result represents an observation of that value and does not
+    represent ordinary hardware dataflow. Users that also consume the input
+    value should use the original SSA value directly.
 
     The observed value does not need to have an explicit name in the IR. A
     backend may generate a name when required. Automatically generated names
@@ -47,9 +47,9 @@ def ReadOp : ProbeOp<"read", [
 ]> {
   let summary = "read the value observed by a probe handle";
   let description = [{
-    `probe.read` provides a by-name, read-only observation of the value referred
-    to by its input. It does not require the compiler to materialize ordinary
-    hardware dataflow between the origin of the probe and the read site.
+    `probe.read` returns the value observed through its input probe handle. It
+    does not require the compiler to materialize ordinary hardware dataflow
+    between the origin of the probe and the read site.
 
     The result is the hardware value observed through the read-only probe
     handle.

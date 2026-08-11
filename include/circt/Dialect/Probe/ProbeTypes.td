@@ -25,8 +25,8 @@ def RefType : ProbeTypeDef<"Ref"> {
   let mnemonic = "ref";
   let summary = "read-only hardware probe handle";
   let description = [{
-    A `probe.ref` type is an SSA handle for by-name, read-only observation of a
-    hardware value without eagerly resolving the handle to a hierarchical path.
+    A `probe.ref` type is an SSA handle for read-only observation of a hardware
+    value. The handle does not encode or require a particular hierarchical path.
     Its payload type is a non-inout HW value type.
   }];
 

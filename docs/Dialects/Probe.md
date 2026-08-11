@@ -1,8 +1,8 @@
 # Probe Dialect
 
-The Probe dialect provides SSA handles for by-name observation of hardware
-values. A probe handle can be passed through module outputs and read where the
-observed value is needed, without representing that connection as ordinary
+The Probe dialect provides SSA handles for observation of hardware values. A
+probe handle can be passed through module outputs and used where access to the
+observed value is needed, without representing that relationship as ordinary
 hardware dataflow or committing to a particular hierarchical path
 representation.
 
@@ -27,13 +27,14 @@ Probe references may be exposed through HW module output ports. They must not
 appear, directly or nested in an aggregate, on input or inout ports. Frontends
 must legalize such cases to ordinary ports, XMRs, or another suitable
 representation before creating Probe dialect IR. This keeps the producer of an
-observation explicit in the module hierarchy.
+observation explicit in the module hierarchy. This restriction simplifies
+compilation for a wide range of backends.
 
 ## Example
 
 The producer creates a probe handle for `%in` and returns it through an output
-port. The consumer receives the handle from an instance and reads its payload
-by name.
+port. The consumer receives the handle from an instance and reads the observed
+value through it.
 
 ```mlir
 hw.module @Producer(in %in: i8, out p: !probe.ref<i8>) {
@@ -66,10 +67,8 @@ an explicit name in the IR. A backend may generate a name when required, but
 automatically generated names are implementation details and are not
 guaranteed to remain stable across compiler runs or IR transformations.
 
-The Probe dialect currently models only read-only observation handles. It does
-not prescribe a physical implementation, a hierarchical path encoding, or
-writable probe semantics. External-module probe ABIs are presently outside the
-scope of this dialect definition.
+External-module probe ABIs are presently outside the scope of this dialect
+definition.
 
 ## Types
 
