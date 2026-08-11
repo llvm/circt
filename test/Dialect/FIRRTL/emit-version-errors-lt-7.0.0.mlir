@@ -60,3 +60,18 @@ firrtl.circuit "SimulationTest" {
     out success: !firrtl.uint<1>
   )
 }
+
+// -----
+
+// Non-literal expressions cause an error in FIRRTL < 7.0.0.
+firrtl.circuit "CompoundPropertyMessage" {
+  firrtl.module @CompoundPropertyMessage() {
+    %cond = firrtl.bool true
+    %foo = firrtl.string "foo"
+    %bar = firrtl.string "bar"
+    // expected-note @below {{non-literal expression is here}}
+    %foobar = firrtl.string.concat %foo, %bar : !firrtl.string
+    // expected-error @below {{unable to emit non-literal string expressions when targeting FIRRTL version <= 7.0.0}}
+    firrtl.property_assert %cond, %foobar : !firrtl.bool
+  }
+}

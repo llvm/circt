@@ -1488,7 +1488,7 @@ circuit Layers:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 6.0.0
+FIRRTL version 7.0.0
 circuit BasicProps :
   public module BasicProps :
   ; CHECK-LABEL: module private @Integer
@@ -1516,10 +1516,12 @@ circuit BasicProps :
   module PropAssert :
     input cond : Bool
     ; CHECK: %[[TRUE:.+]] = firrtl.bool true
-    ; CHECK-NEXT: firrtl.property_assert %[[TRUE]], "always true" : !firrtl.bool
-    propassert Bool(true), "always true"
-    ; CHECK-NEXT: firrtl.property_assert %cond, "holds" : !firrtl.bool
-    propassert cond, "holds"
+    ; CHECK-NEXT: %[[MSG:.+]] = firrtl.string "always true"
+    ; CHECK-NEXT: firrtl.property_assert %[[TRUE]], %[[MSG]] : !firrtl.bool
+    propassert Bool(true), String("always true")
+    ; CHECK-NEXT: %[[MSG:.+]] = firrtl.string "holds"
+    ; CHECK-NEXT: firrtl.property_assert %cond, %[[MSG]] : !firrtl.bool
+    propassert cond, String("holds")
 
   ; CHECK-LABEL: module private @Double
   module Double :
@@ -1627,6 +1629,16 @@ circuit BasicProps :
     ; CHECK-NEXT: %[[NESTED:.+]] = firrtl.list.create %[[EMPTY1]], %[[TESTLIST]], %[[EMPTY2]] : !firrtl.list<list<string>>
     ; CHECK-NEXT: firrtl.propassign %nested, %[[NESTED]]
     propassign nested, List<List<String>>(List<String>(), List<String>(String("test")), List<String>())
+
+;// -----
+FIRRTL version 6.0.0
+; CHECK-LABEL: firrtl.circuit "PropAsserts_6"
+circuit PropAsserts_6:
+  public module PropAsserts_6:
+    ; CHECK:      %[[TRUE:.+]] = firrtl.bool true
+    ; CHECK-NEXT: %[[MSG:.+]] = firrtl.string "foo"
+    ; CHECK-NEXT: firrtl.property_assert %[[TRUE]], %[[MSG]]
+    propassert Bool(true), "foo"
 
 ;// -----
 FIRRTL version 4.0.0

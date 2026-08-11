@@ -380,13 +380,13 @@ def PropertyAssertOp : FIRRTLOp<"property_assert",
 
     Example:
     ```mlir
-    firrtl.property_assert %cond, "invariant must hold" : !firrtl.bool
+    firrtl.property_assert %cond, %message : !firrtl.bool
     ```
   }];
 
   let arguments = (ins
     BoolType:$condition,
-    StrAttr:$message
+    StringType:$message
   );
   let results = (outs);
 

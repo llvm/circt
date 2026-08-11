@@ -1964,3 +1964,10 @@ circuit OOBFormatString:
     input clk : Clock
     ; expected-error @below {{not enough operands for format string}}
     printf(clk, UInt<1>(0h1), "oops: %d")
+
+;// -----
+FIRRTL version 7.0.0
+circuit PropertyAssertNonStringMessage:
+  public module PropertyAssertNonStringMessage:
+    ; expected-error @below {{propassert message must be a string type}}
+    propassert Bool(true), Integer(42)
