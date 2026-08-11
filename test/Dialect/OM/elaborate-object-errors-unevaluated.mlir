@@ -1,0 +1,9 @@
+// RUN: circt-opt -om-elaborate-object='all-public-classes=true allow-unevaluated=true' %s -verify-diagnostics -split-input-file
+
+om.class @UnevaluatedMessage() {
+  %0 = om.unknown : !om.string
+  %1 = om.constant false
+  // expected-error @below {{OM property assertion failed: <unevaluated>}}
+  om.property_assert %1, %0 : i1
+  om.class.fields
+}

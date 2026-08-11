@@ -1413,21 +1413,24 @@ TEST_F(EvaluatorTests, PropertyAssertTests) {
 // Test 1: A true assert passes.
 om.class @True() -> () {
   %true = om.constant true
-  om.property_assert %true, "okay!" : i1
+  %message = om.constant "okay!" : !om.string
+  om.property_assert %true, %message : i1
   om.class.fields
 }
 
 // Test 2: A false assert fails.
 om.class @False() -> () {
   %false = om.constant false
-  om.property_assert %false, "fail!" : i1
+  %message = om.constant "fail!" : !om.string
+  om.property_assert %false, %message : i1
   om.class.fields
 }
 
 // Test 3: A true parameter passes.
 // Test 4: A false parameter fails.
 om.class @Parameter(%bool: i1) -> () {
-  om.property_assert %bool, "input must be true true" : i1
+  %message = om.constant "input must be true true" : !om.string
+  om.property_assert %bool, %message : i1
   om.class.fields
 }
 om.class @Parameter_True() -> () {
@@ -1487,7 +1490,8 @@ om.class @ReturnTrue() -> (out: i1) {
 om.class @SubfieldTrue() -> () {
   %obj = om.object @ReturnTrue() : () -> !om.class.type<@ReturnTrue>
   %true = om.object.field %obj["out"] : (!om.class.type<@ReturnTrue>) -> i1
-  om.property_assert %true, "input must be true true" : i1
+  %message = om.constant "input must be true true" : !om.string
+  om.property_assert %true, %message : i1
   om.class.fields
 }
 
@@ -1499,7 +1503,8 @@ om.class @ReturnFalse() -> (out: i1) {
 om.class @SubfieldFalse() -> () {
   %obj = om.object @ReturnFalse() : () -> !om.class.type<@ReturnFalse>
   %false = om.object.field %obj["out"] : (!om.class.type<@ReturnFalse>) -> i1
-  om.property_assert %false, "input must be true true" : i1
+  %message = om.constant "input must be true true" : !om.string
+  om.property_assert %false, %message : i1
   om.class.fields
 }
 
@@ -1518,7 +1523,8 @@ om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
   %4 = om.object.field %3["out"] : (!om.class.type<@Domain>) -> !om.string
   %5 = om.constant "B" : !om.string
   %6 = om.prop.eq %4, %5 : !om.string
-  om.property_assert %6, "hello" : i1
+  %message = om.constant "hello" : !om.string
+  om.property_assert %6, %message : i1
   om.class.fields
 }
 )MLIR";

@@ -16,7 +16,8 @@ func.func @ObjectsMustNotCSE() -> (!om.class.type<@Foo>, !om.class.type<@Foo>) {
 
 om.class @FooWithAssert() {
   %0 = om.constant false
-  om.property_assert %0, "foo" : i1
+  %1 = om.constant "foo" : !om.string
+  om.property_assert %0, %1 : i1
   om.class.fields
 }
 

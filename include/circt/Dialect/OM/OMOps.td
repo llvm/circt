@@ -666,13 +666,13 @@ def PropertyAssertOp : OMOp<"property_assert"> {
 
     Example:
     ```mlir
-    om.property_assert %cond, "invariant must hold" : i1
+    om.property_assert %cond, %message : i1
     ```
   }];
 
   let arguments = (ins
     I1:$condition,
-    StrAttr:$message
+    StringType:$message
   );
   let results = (outs);
 

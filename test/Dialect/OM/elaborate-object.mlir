@@ -130,7 +130,8 @@ om.class @IntegerArithTop() -> (result: !om.integer) {
 // CHECK-NOT:   om.property_assert
 om.class @AssertTrue() {
   %true = om.constant true
-  om.property_assert %true, "this should pass" : i1
+  %message = om.constant "this should pass" : !om.string
+  om.property_assert %true, %message : i1
   om.class.fields
 }
 
@@ -139,7 +140,8 @@ om.class @AssertTrue() {
 // CHECK-NOT:   om.property_assert
 om.class @AssertUnknown() {
   %unknown = om.unknown : i1
-  om.property_assert %unknown, "unknown condition" : i1
+  %message = om.constant "unknown condition" : !om.string
+  om.property_assert %unknown, %message : i1
   om.class.fields
 }
 
