@@ -269,6 +269,9 @@ static LogicalResult executeBMC(MLIRContext &context) {
         {verif::SymbolicValueLowering::HWInput}));
   }
   pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
+  PrepareForBMCOptions prepareForBMCOptions;
+  prepareForBMCOptions.topModule = moduleName;
+  pm.addPass(createPrepareForBMC(prepareForBMCOptions));
   pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
   pm.addPass(createMaterializeDebugVariables());
   pm.addPass(createExternalizeRegisters());
