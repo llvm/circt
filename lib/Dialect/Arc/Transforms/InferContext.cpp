@@ -1,4 +1,4 @@
-//===- InferContext.cpp ---------------------------------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -67,30 +67,34 @@ struct InferContextPass : public arc::impl::InferContextBase<InferContextPass> {
   void runOnOperation() override;
 
 private:
-  void propagateNeedsStorage();
-  void backPropagateNeedsContext();
+  /// Build the graph pointing from callees to their callers.
   void buildCallerGraph(ArrayRef<FunctionOpInterface> functions,
                         SymbolTableCollection &symbolTable);
+  /// Add functions to `needsContextSet` that can reach a function that is
+  /// already in the set.
+  void backPropagateNeedsContext();
+  /// Walk the region and wire-in the inferred context.
   void updateRegion(Region *region, SymbolTableCollection &symbolTable);
 
   /// Functions providing context.
   llvm::SmallDenseSet<FunctionOpInterface> hasContextSet;
   /// Functions needing a new context argument.
-  llvm::SmallDenseSet<FunctionOpInterface, 8> needsContextSet;
-  // Callee-to-caller graph.
-  // Must remain const after creation to not invalidate pointers.
+  llvm::SmallDenseSet<FunctionOpInterface> needsContextSet;
+  /// Callee-to-caller graph; must remain const after creation to not invalidate
+  /// pointers.
   DenseMap<FunctionOpInterface, CallerGraphNode> callerGraph;
 };
 
-// Walk the region and wire-in the inferred context.
 void InferContextPass::updateRegion(Region *region,
                                     SymbolTableCollection &symbolTable) {
   assert(!region->empty());
   IRRewriter rewriter(region->getContext());
   rewriter.setInsertionPointToStart(&region->front());
-  Value inferredContextVal = {};
   FunctionOpInterface containingFn =
       dyn_cast<FunctionOpInterface>(region->getParentOp());
+
+  // Obtain the inferred context value.
+  Value inferredContextVal = {};
   if (auto modelOp = llvm::dyn_cast<ModelOp>(region->getParentOp())) {
     // Arc model op body: Context derived from the storage argument.
     auto storageArg = region->getArgument(0);
@@ -129,6 +133,7 @@ void InferContextPass::updateRegion(Region *region,
                << "Traversing body of function \"" << fnName << "\"\n";);
   }
 
+  // Do the update walk.
   region->walk<WalkOrder::PreOrder>([&](Operation *op) -> WalkResult {
     if (op->getNumRegions() > 0) {
       // Recurse into instances
@@ -164,7 +169,6 @@ void InferContextPass::updateRegion(Region *region,
 
 } // namespace
 
-// Build the graph pointing from callees to their callers.
 void InferContextPass::buildCallerGraph(ArrayRef<FunctionOpInterface> functions,
                                         SymbolTableCollection &symbolTable) {
   // Allocate the nodes for the caller graph. Nodes point to each other, so
@@ -205,8 +209,6 @@ void InferContextPass::buildCallerGraph(ArrayRef<FunctionOpInterface> functions,
   }
 }
 
-// Add functions to `needsContextSet` that can reach a function that is already
-// in the set.
 void InferContextPass::backPropagateNeedsContext() {
 
   // Propagate "needsContext" to callers.
@@ -253,19 +255,22 @@ void InferContextPass::backPropagateNeedsContext() {
 
 void InferContextPass::runOnOperation() {
   SymbolTableCollection symbolTable;
+  ModuleOp moduleOp = getOperation();
+
+  // Functions containing instances.
+  llvm::SmallDenseSet<FunctionOpInterface> hasInstancesSet;
+
   hasContextSet.clear();
   needsContextSet.clear();
   callerGraph.clear();
-  ModuleOp moduleOp = getOperation();
+
+  // Guards hasContextSet, needsContextSet and hasInstancesSet.
   std::mutex setMutex;
 
   // Collect all interesting functions. A function is interesting if it
   // contains any instances or any InferredContextOps or provides a context.
   SmallVector<FunctionOpInterface> funcOps =
       llvm::to_vector(moduleOp.getOps<FunctionOpInterface>());
-
-  // Functions containing instances.
-  llvm::SmallDenseSet<FunctionOpInterface> hasInstancesSet;
 
   parallelForEach(
       moduleOp.getContext(), funcOps, [&](FunctionOpInterface funcOp) {
@@ -339,7 +344,7 @@ void InferContextPass::runOnOperation() {
   } else {
     // If there are none, we only have to replace InferredContextOps in
     // the body of context providers.
-    LLVM_DEBUG(llvm::dbgs() << "No function needs context arguments.\n");
+    LLVM_DEBUG(llvm::dbgs() << "No function needs a context argument.\n");
   }
 
   // Traverse the interesting regions to replace `arc.inferred_context` ops and
