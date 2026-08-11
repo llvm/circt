@@ -179,24 +179,66 @@ class TestCosimEsitesterDma:
 
   def test_dma(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
-    run_cmd(["esitester", "cosim", conn, "dma", "-w", "-r"])
+    result = subprocess.run(
+        ["esitester", "cosim", conn, "dma", "-w", "-r"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+  def test_bandwidth_data_integrity(self, host: str, port: int) -> None:
+    """Verify complete engine payloads in both transfer directions."""
+    conn = f"{host}:{port}"
+    result = subprocess.run(
+        [
+            "esitester",
+            "cosim",
+            conn,
+            "bandwidth",
+            "-w",
+            "-r",
+            "--check-data",
+            "--widths",
+            "24",
+            "64",
+            "534",
+            "--count",
+            "24",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
   def test_hostmembw(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
-    # A 1000-element read burst at 32 bits (8 bytes/element) is 8000 bytes,
-    # which exceeds the PCIe maximum read request size and so exercises the
-    # read-request splitter. Capture stderr too and assert the runtime never
-    # sees an oversized (unsplit) read request.
+    # Widths chosen to cover every element-vs-engine-word relationship the read
+    # gearbox must unpack from a contiguous, byte-packed layout: 24 (sub-word,
+    # does not divide the 64-bit engine word), 32 (sub-word divisor), 72
+    # (wider than the word, not a multiple -> straddles words), and 128 (a whole
+    # number of words). A 1000-element 24-bit read burst is 3000 bytes, which
+    # exceeds the PCIe maximum read request size and so exercises the
+    # read-request splitter. The -w/-r data-integrity checks verify each element
+    # landed at / was fetched from the right bytes.
     result = subprocess.run(
         [
-            "esitester", "cosim", conn, "hostmembw", "-w", "-r", "-c", "1000",
-            "--widths", "32", "128"
+            "esitester",
+            "cosim",
+            conn,
+            "hostmembw",
+            "-w",
+            "-r",
+            "-c",
+            "1000",
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
     combined = result.stdout + result.stderr
+    assert result.returncode == 0, combined
     assert "exceeds the PCIe maximum read request size" not in combined, \
         combined
 

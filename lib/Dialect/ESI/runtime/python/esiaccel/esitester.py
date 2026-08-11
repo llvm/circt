@@ -26,8 +26,16 @@ from esiaccel.components.mmio import MmioRegistry, mmio_write_we
 from pycde.common import AppID, Constant, Input, InputChannel, Output, OutputChannel
 from pycde.constructs import ControlReg, Counter, Mux, NamedWire, Reg, Wire
 from pycde.module import Metadata
+from pycde.signals import BitsSignal
 from pycde.testing import print_info
 from pycde.types import Array, Bits, Channel, ChannelSignaling, UInt
+
+# Fixed 64-bit seed for the hostmem burst data pattern. WriteMem fills every
+# byte of each element with (seed ^ index) tiled across bytes and XORed with a
+# distinct per-position mask, and ReadMem folds every received byte into a
+# checksum, so the host tests verify the full-width data landed at / was fetched
+# from the right bytes -- independent of the backend's engine word width.
+_ESITESTER_SEQ_SEED = 0x5A5A5A5A5A5A5A5A
 
 # ---------------------------------------------------------------------------
 # Reusable building blocks for timing-friendly MMIO-controlled test modules.
@@ -797,7 +805,9 @@ def ReadMem(width: int):
         Issues a single ``read_list`` burst of 'flits' elements starting at the
         base address (both configured via MMIO) and receives the elements back
         as a windowed list (num_items=1 -> one element per frame). The low 64
-        bits of the most recent element are exported as telemetry (lastReadLSB).
+        bits of the most recent element are exported as telemetry (lastReadLSB),
+        and every byte of every element is folded into a byte-position-sensitive
+        integrity checksum (readChecksum).
 
         MMIO command interface (via BurstCommand):
           0x00  Read : remaining element count (flits_left).
@@ -839,8 +849,10 @@ def ReadMem(width: int):
       )
       # Each received element -> one completion token to BurstCommand.
       done_wire.assign(read_responses.transform(lambda resp: Bits(0)(0)))
-      # Snoop the low 64 bits of each element without consuming it.
-      read_resp_valid_snoop, _, read_resp_data = read_responses.snoop()
+      # Snoop each received element without consuming it.
+      read_resp_valid_snoop, read_resp_data = read_responses.snoop_xact()
+      read_elem = read_resp_data.unwrap()["data"][0]
+      read_elem_lsb = read_elem.as_uint(64)
       last_read_lsb = Reg(
           UInt(64),
           clk=ports.clk,
@@ -849,12 +861,40 @@ def ReadMem(width: int):
           ce=read_resp_valid_snoop,
           name="last_read_lsb",
       )
-      last_read_lsb.assign(read_resp_data.unwrap()["data"][0].as_uint(64))
+      last_read_lsb.assign(read_elem_lsb)
       esi.Telemetry.report_signal(
           ports.clk,
           ports.rst,
           esi.AppID("lastReadLSB"),
           last_read_lsb,
+      )
+      # Byte-position-sensitive integrity checksum over all `width` bits: fold
+      # each 64-bit chunk of the element into 64 bits with a per-chunk rotate
+      # (so word/byte misplacement doesn't cancel), then XOR across elements.
+      num_chunks = (width + 63) // 64
+      elem_fold = Bits(64)(0)
+      for c in range(num_chunks):
+        hi = min(64 * c + 64, width)
+        chunk = read_elem[64 * c:hi]
+        if hi - 64 * c < 64:
+          chunk = chunk.as_uint().as_uint(64).as_bits()
+        r = (8 * c) % 64
+        if r != 0:
+          chunk = BitsSignal.concat([chunk[0:64 - r], chunk[64 - r:64]])
+        elem_fold = elem_fold ^ chunk
+      read_checksum = Wire(UInt(64))
+      read_checksum.assign((read_checksum.as_bits() ^ elem_fold).as_uint().reg(
+          ports.clk,
+          ports.rst,
+          rst_value=0,
+          ce=read_resp_valid_snoop,
+          name="read_checksum",
+      ))
+      esi.Telemetry.report_signal(
+          ports.clk,
+          ports.rst,
+          esi.AppID("readChecksum"),
+          read_checksum,
       )
 
   return ReadMem
@@ -869,7 +909,8 @@ def WriteMem(width: int) -> Type[Module]:
         Issues a single windowed (list) write of 'flits' elements to sequential
         addresses starting at the base address (both configured via MMIO). The
         elements are streamed as a windowed list (num_items=1 -> one element per
-        frame, 'last' on the final); each element's payload is its frame index.
+        frame, 'last' on the final); each element's payload is a byte-level
+        pattern derived from its frame index (see _ESITESTER_SEQ_SEED).
 
         MMIO command interface (via BurstCommand):
           0x00  Read : remaining element count (flits_left).
@@ -945,8 +986,17 @@ def WriteMem(width: int) -> Type[Module]:
               name="streaming",
           ))
 
-      # Data pattern: the frame index (non-0xFF), sized to the element.
-      element = frame_counter.out.as_uint(width).as_bits()
+      # Byte-level data pattern: tile (seed ^ frame index) across the element's
+      # bytes and XOR each byte with a distinct per-position mask so every byte
+      # is unique. A read that fetches the wrong bytes is then caught at byte
+      # granularity by the hostmembw data-integrity check.
+      seq64 = frame_counter.out.as_bits() ^ Bits(64)(_ESITESTER_SEQ_SEED)
+      num_bytes = (width + 7) // 8
+      elem_bytes = [
+          seq64[8 * (j % 8):8 * (j % 8) + 8] ^ Bits(8)((j * 0x9D) & 0xFF)
+          for j in range(num_bytes)
+      ]
+      element = BitsSignal.concat(list(reversed(elem_bytes)))[0:width]
       frame_val = lowered({
           "address": base_addr,
           "tag": UInt(8)(0),
@@ -974,34 +1024,13 @@ def ToHostDMATest(width: int):
     the specified number of times. Exercises any DMA engine."""
 
   class ToHostDMATest(Module):
-    """Transmit a 32-bit cycle counter value to the host a programmed number of times.
+    """Transmit patterned values to the host a programmed number of times.
 
-        Functionality:
-          A free-running 32-bit counter advances only on successful channel
-          handshakes. A write to MMIO offset 0x0 programs 'write_count' (number
-          of messages to send). Each message’s payload is the counter value
-          constrained to 'width':
-            width < 32  -> lower 'width' bits (truncated)
-            width >= 32 -> zero-extended to 'width' bits
-          One message is emitted per handshake until 'write_count' messages have
-          been transferred. A new write to 0x0 re-arms after completion.
-
-        Width:
-          Selects how the 32-bit counter is represented on the output channel
-          (truncate or zero-extend as above).
-
-        MMIO command interface:
-          0x0 Write: Set write_count (messages to transmit). Starts a new
-                    sequence if idle/completed.
-          0x0 Read: Returns constant 0.
-
-        Telemetry:
-          totalWrites (AppID "totalWrites"): Count of messages successfully sent.
-          toHostCycles (AppID "toHostCycles"): Cycle count from write_count programming
-            (start) through completion (inclusive of active cycles).
-
-        Notes:
-          Backpressure governs pacing. Completion when totalWrites == write_count.
+        A write to MMIO offset 0x0 programs `write_count`. Each message carries
+        a byte-level pattern derived from its per-command transfer index (see
+        ``_ESITESTER_SEQ_SEED``). The index advances on a successful channel
+        handshake and resets for every command. The payload's final byte is
+        truncated when `width` is not a multiple of eight.
         """
 
     clk = Clock()
@@ -1014,12 +1043,6 @@ def ToHostDMATest(width: int):
       count_reached = Wire(Bits(1))
       count_valid = Wire(Bits(1))
       out_xact = Wire(Bits(1))
-      cycle_counter = Counter(32)(
-          clk=ports.clk,
-          rst=ports.rst,
-          clear=Bits(1)(0),
-          increment=out_xact,
-      )
 
       write_cntr_incr = ~count_reached & count_valid & out_xact
       write_counter = Counter(32)(
@@ -1059,9 +1082,23 @@ def ToHostDMATest(width: int):
       mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)["cmd"]
       cmd_chan_wire.assign(mmio_rw_cmd_chan)
 
-      # Output channel.
+      # Output one byte-level pattern per command transfer. This lets the host
+      # verify the complete payload, including every byte of wide messages.
+      sequence_counter = Counter(64)(
+          clk=ports.clk,
+          rst=ports.rst,
+          clear=write_count_ce,
+          increment=out_xact,
+      )
+      seq64 = sequence_counter.out.as_bits() ^ Bits(64)(_ESITESTER_SEQ_SEED)
+      num_bytes = (width + 7) // 8
+      payload_bytes = [
+          seq64[8 * (j % 8):8 * (j % 8) + 8] ^ Bits(8)((j * 0x9D) & 0xFF)
+          for j in range(num_bytes)
+      ]
+      payload = BitsSignal.concat(list(reversed(payload_bytes)))[0:width]
       out_channel, out_channel_ready = Channel(UInt(width)).wrap(
-          cycle_counter.out.as_uint(width), count_valid)
+          payload.as_uint(width), count_valid)
       out_xact.assign(out_channel_ready & count_valid)
       esi.ChannelService.to_host(name=AppID("out"), chan=out_channel)
 
@@ -1134,6 +1171,8 @@ def FromHostDMATest(width: int):
         Telemetry:
           fromHostCycles (AppID "fromHostCycles"): Cycle count from read_count programming
             (start) through completion of the programmed receive sequence.
+                    fromHostChecksum (AppID "fromHostChecksum"): Byte-position-sensitive
+                        fold of all payloads accepted during the programmed receive sequence.
 
         Notes:
           Completion is when received messages == programmed read_count; another
@@ -1190,6 +1229,41 @@ def FromHostDMATest(width: int):
               ce=in_data_xact,
               name="last_read",
           ))
+
+      # Fold every received payload so the host can verify all transferred
+      # bytes, rather than only the low 64 bits of the final payload.
+      in_bits = in_data.as_bits()
+      num_chunks = (width + 63) // 64
+      item_fold = Bits(64)(0)
+      for c in range(num_chunks):
+        hi = min(64 * c + 64, width)
+        chunk = in_bits[64 * c:hi]
+        if hi - 64 * c < 64:
+          chunk = chunk.as_uint().as_uint(64).as_bits()
+        r = (8 * c) % 64
+        if r != 0:
+          chunk = BitsSignal.concat([chunk[0:64 - r], chunk[64 - r:64]])
+        item_fold = item_fold ^ chunk
+      from_host_checksum = Wire(UInt(64))
+      checksum_next = Mux(
+          read_count_ce,
+          (from_host_checksum.as_bits() ^ item_fold).as_uint(),
+          UInt(64)(0),
+      )
+      from_host_checksum.assign(
+          checksum_next.reg(
+              clk=ports.clk,
+              rst=ports.rst,
+              rst_value=0,
+              ce=read_count_ce | in_data_xact,
+              name="from_host_checksum",
+          ))
+      esi.Telemetry.report_signal(
+          ports.clk,
+          ports.rst,
+          esi.AppID("fromHostChecksum"),
+          from_host_checksum,
+      )
 
       # Cycle telemetry: detect completion and count active cycles.
       fromhost_count_reached = Wire(Bits(1))
@@ -1380,7 +1454,7 @@ class EsiTester(Module):
     for i in range(4, 18, 5):
       MMIOAdd(i)(instance_name=f"mmio_add_{i}", appid=AppID("mmio_add", i))
 
-    for width in [32, 64, 128, 256, 512, 534]:
+    for width in [24, 32, 64, 72, 128, 256, 512, 534]:
       ReadMem(width)(
           instance_name=f"readmem_{width}",
           appid=esi.AppID("readmem", width),
