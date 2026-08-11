@@ -204,8 +204,24 @@ LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
           return success();
         }
 
-        return op->emitError("OM property assertion failed: ")
-               << assertOp.getMessage();
+        // The message is supposed to be fully evaluated at this point, though
+        // it could be unknown.
+        auto messageOp =
+            dyn_cast<ConstantOp>(assertOp.getMessage().getDefiningOp());
+        if (!messageOp) {
+          if (allowUnevaluated)
+            return op->emitError("OM property assertion failed: <unevaluated>");
+
+          auto diag = emitError(op->getLoc(),
+                                "OM property assertion failed, but no message "
+                                "is available as the message is unevaluated");
+          diag.attachNote(assertOp.getMessage().getLoc())
+              << "unevaluated message operation is here";
+          return failure();
+        }
+
+        auto message = cast<StringAttr>(messageOp.getValue()).getValue();
+        return op->emitError("OM property assertion failed: ") << message;
       };
 
       // Condition is a constant integer/bool - check if it's true.
