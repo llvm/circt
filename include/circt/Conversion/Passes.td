@@ -643,8 +643,8 @@ def ConvertHWToBTOR2 : Pass<"convert-hw-to-btor2", "mlir::ModuleOp"> {
 def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
   let summary = "Convert LTL and Verif to Core";
   let description = [{
-    This pass converts ltl and verif operations to core ones. This can be done directly
-    without going through FSM if we're only working with overlapping properties (no delays).
+    This pass converts LTL and Verif operations that can be expressed with Core
+    operations. Other LTL operations are left for downstream backends.
   }];
   let constructor = "circt::createLowerLTLToCorePass()";
   let dependentDialects = [

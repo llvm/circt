@@ -28,7 +28,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/Support/MathExtras.h"
+#include "llvm/Support/LogicalResult.h"
 
 namespace circt {
 #define GEN_PASS_DEF_LOWERLTLTOCORE
@@ -205,6 +205,61 @@ struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
   }
 };
 
+// Sample `input` on the requested clock edge.
+static Value createRegister(Value input, Value clock, ltl::ClockEdge edge,
+                            bool initialValue, OpBuilder &builder,
+                            Operation *contextOp) {
+  assert(edge != ltl::ClockEdge::Both && "both-edge clock not supported");
+  auto clockSignal = clock;
+  if (edge == ltl::ClockEdge::Neg)
+    clockSignal =
+        comb::createOrFoldNot(builder, contextOp->getLoc(), clockSignal);
+  auto seqClock =
+      builder.createOrFold<seq::ToClockOp>(contextOp->getLoc(), clockSignal);
+
+  auto loc = contextOp->getLoc();
+  auto initial = seq::createConstantInitialValue(
+      builder, loc, builder.getIntegerAttr(builder.getI1Type(), initialValue));
+  return seq::CompRegOp::create(builder, loc, input, seqClock,
+                                /*reset=*/Value{},
+                                /*rstValue=*/Value{}, initial)
+      .getResult();
+}
+
+static void lowerTemporalLTLToCore(hw::HWModuleOp module) {
+  SmallVector<Operation *> assertionsAndAssumptions;
+  module->walk([&](Operation *op) {
+    if (isa<verif::AssertOp, verif::AssumeOp>(op))
+      assertionsAndAssumptions.push_back(op);
+  });
+
+  for (auto *op : assertionsAndAssumptions) {
+    Value property = op->getOperand(0);
+    // Only lower a clocked atom when it is the direct property of an assertion
+    // or assumption. The startup `dontCare` guard is property-level and cannot
+    // be composed correctly through nested LTL operations.
+    auto atom = property.getDefiningOp<ltl::ClockedAtomOp>();
+    if (!atom || atom.getEdge() == ltl::ClockEdge::Both)
+      continue;
+
+    OpBuilder builder(op);
+    auto sampled =
+        createRegister(atom.getInput(), atom.getClock(), atom.getEdge(),
+                       /*initialValue=*/false, builder, atom);
+
+    auto constFalse =
+        hw::ConstantOp::create(builder, op->getLoc(), builder.getI1Type(), 0);
+    // `dontCare` is true while `sampled` only contains its initial value. The
+    // first real clock edge clears it and makes the sampled value observable.
+    auto dontCare = createRegister(constFalse, atom.getClock(), atom.getEdge(),
+                                   /*initialValue=*/true, builder, op);
+    auto guardedProperty =
+        comb::OrOp::create(builder, op->getLoc(), dontCare, sampled,
+                           /*twoState=*/false);
+    op->setOperand(0, guardedProperty);
+  }
+}
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -221,8 +276,9 @@ struct LowerLTLToCorePass
 
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
-  // Set target dialects: We don't want to see any ltl or verif that might
-  // come from an AssertProperty left in the result
+  lowerTemporalLTLToCore(getOperation());
+
+  // Preserve operations that require an LTL-aware downstream backend.
   ConversionTarget target(getContext());
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<comb::CombDialect>();
