@@ -139,12 +139,10 @@ def BoolToClockedPropOp : ConversionOp<"bool_to_clocked_prop"> {
   );
 }
 
-def SeqToClockedPropOp : ConversionOp<"seq_to_clocked_prop"> {
-  let summary = "Convert a simple sequence into a clocked property.";
+def ClockedSeqToClockedPropOp : ConversionOp<"clocked_seq_to_clocked_prop"> {
+  let summary = "Converts a clocked sequence to sequence property.";
   let description = [{
-    Convert a simple sequence into a clocked sequence that uses the global clock. 
-    Then it can be used as a parameter for assertions. Note that it is not possible 
-    to change the clock that is used by the resulting clocked sequence.
+    Converts a clocked sequence to sequence property using the same clock. 
   }];
 
   let arguments = (
