@@ -320,16 +320,19 @@ with Context() as ctx, Location.unknown():
   module {
     om.class @AssertTrue() -> () {
       %true = om.constant true
-      om.property_assert %true, "should not fail" : i1
+      %message = om.constant "should not fail" : !om.string
+      om.property_assert %true, %message : i1
       om.class.fields
     }
     om.class @AssertFalse() -> () {
       %false = om.constant false
-      om.property_assert %false, "condition is false" : i1
+      %message = om.constant "condition is false" : !om.string
+      om.property_assert %false, %message : i1
       om.class.fields
     }
     om.class @AssertUnknown(%cond: i1) -> () {
-      om.property_assert %cond, "unknown condition" : i1
+      %message = om.constant "unknown condition" : !om.string
+      om.property_assert %cond, %message : i1
       om.class.fields
     }
   }
