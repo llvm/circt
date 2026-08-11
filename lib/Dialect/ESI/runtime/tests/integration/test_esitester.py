@@ -102,13 +102,22 @@ class TestCosimEsitester:
 
   def test_telemetry(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
-    stdout = run_cmd(["esiquery", "cosim", conn, "telemetry"])
+    result = subprocess.run(
+        ["esiquery", "cosim", conn, "telemetry"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    stdout = result.stdout
     check_lines(stdout, [
         "* Telemetry",
+        "fromhostdma[32].fromHostChecksum: 0",
         "fromhostdma[32].fromHostCycles: 0",
         "readmem[32].addrCmdIssued: 0",
         "readmem[32].addrCmdResponses: 0",
         "readmem[32].lastReadLSB: 0",
+        "readmem[32].readChecksum: 0",
         "tohostdma[32].toHostCycles: 0",
         "tohostdma[32].totalWrites: 0",
         "writemem[32].addrCmdIssued: 0",
@@ -247,16 +256,30 @@ class TestCosimEsitesterDma:
     # Aggregate bandwidth across the width-512 readmem*/writemem* units
     # (4 read + 4 write), exercising the multi-unit nested-AppID resolution
     # (mmio[width]/cmd and addrCmdResp/cycles) of the burst modules.
-    run_cmd([
-        "esitester", "cosim", conn, "aggbandwidth", "--width", "512", "-r",
-        "-w", "-c", "64"
-    ])
+    result = subprocess.run(
+        [
+            "esitester", "cosim", conn, "aggbandwidth", "--width", "512", "-r",
+            "-w", "-c", "64"
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
   def test_telemetry(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
-    stdout = run_cmd(["esiquery", "cosim", conn, "telemetry"])
+    result = subprocess.run(
+        ["esiquery", "cosim", conn, "telemetry"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    stdout = result.stdout
     check_lines(stdout, [
         "* Telemetry",
+        "fromhostdma[32].fromHostChecksum: 0",
         "fromhostdma[32].fromHostCycles: 0",
         "tohostdma[32].toHostCycles: 0",
     ])

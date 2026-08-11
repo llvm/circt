@@ -442,7 +442,7 @@ class ChannelMMIO(esi.ServiceImplementation):
     - 0x12: ESI version number (0)
     - 0x18: Location of the manifest ROM (absolute address)
 
-    - 0x400: Start of MMIO space for requests. Mapping is contained in the
+    - 0x800: Start of MMIO space for requests. Mapping is contained in the
              manifest so can be dynamically queried.
 
     - addr(Manifest ROM) + 0: Size of compressed manifest
@@ -467,9 +467,9 @@ class ChannelMMIO(esi.ServiceImplementation):
   # TODO: make the amount of register space each client gets a parameter.
   # Supporting this will require more address decode logic.
 
-  RegisterSpace = 0x400
+  RegisterSpace = 0x800
   RegisterSpaceBits = RegisterSpace.bit_length() - 1
-  AddressMask = 0x3FF
+  AddressMask = RegisterSpace - 1
 
   # Start at this address for assigning MMIO addresses to service requests.
   initial_offset: int = RegisterSpace
@@ -1058,6 +1058,22 @@ def ShiftReadGearbox(input_bitwidth: int,
       client_valid = (count >= UInt(cnt_width)(stride_bytes)).as_bits()
       client_xact = (client_valid & client_ready).as_bits()
 
+      # The burst's final word sets `saw_last`; the emit that drains the buffer
+      # to empty terminates the list. These never coincide: emitting needs a
+      # slot buffered by a prior cycle's accept, so `after_emit == 0` on an
+      # accept cycle is impossible.
+      added = Mux(up_xact,
+                  UInt(cnt_width)(0), (up.valid_bytes.as_uint(cnt_width) +
+                                       UInt(cnt_width)(1)).as_uint(cnt_width))
+      after_add = (count + added).as_uint(cnt_width)
+      after_emit = (after_add -
+                    UInt(cnt_width)(stride_bytes)).as_uint(cnt_width)
+      set_saw_last = (up_xact & up.last).as_bits()
+      is_final_slot = (after_emit == UInt(cnt_width)(0)).as_bits()
+      burst_ending = (saw_last | set_saw_last).as_bits()
+      client_last = (client_valid & burst_ending & is_final_slot).as_bits()
+      final_emit = (client_xact & client_last).as_bits()
+
       # Append the accepted word at bit offset count*8 (dynamic left shift);
       # then, if we emit this cycle, drop the consumed slot (constant right
       # shift by the stride). The append offset is <= stride_bytes when
@@ -1073,34 +1089,20 @@ def ShiftReadGearbox(input_bitwidth: int,
       appended = buffer | Mux(up_xact, Bits(buf_bits)(0), shifted_word)
       drained = appended[stride_bits:buf_bits].pad_or_truncate(buf_bits)
       buffer.assign(
-          Mux(client_xact, appended, drained).reg(ports.clk,
-                                                  ports.rst,
-                                                  rst_value=0,
-                                                  name="buffer_reg"))
+          Mux(final_emit, Mux(client_xact, appended, drained),
+              Bits(buf_bits)(0)).reg(ports.clk,
+                                     ports.rst,
+                                     rst_value=0,
+                                     name="buffer_reg"))
 
       # count += accepted real bytes (biased 'valid_bytes' + 1); -= stride on
       # emit.
-      added = Mux(up_xact,
-                  UInt(cnt_width)(0), (up.valid_bytes.as_uint(cnt_width) +
-                                       UInt(cnt_width)(1)).as_uint(cnt_width))
-      after_add = (count + added).as_uint(cnt_width)
-      after_emit = (after_add -
-                    UInt(cnt_width)(stride_bytes)).as_uint(cnt_width)
       count.assign(
           Mux(client_xact, after_add, after_emit).reg(ports.clk,
                                                       ports.rst,
                                                       rst_value=0,
                                                       name="count_reg"))
 
-      # The burst's final word sets `saw_last`; the emit that drains the buffer
-      # to empty terminates the list. These never coincide: emitting needs a
-      # slot buffered by a prior cycle's accept, so `after_emit == 0` on an
-      # accept cycle is impossible.
-      set_saw_last = (up_xact & up.last).as_bits()
-      is_final_slot = (after_emit == UInt(cnt_width)(0)).as_bits()
-      burst_ending = (saw_last | set_saw_last).as_bits()
-      client_last = (client_valid & burst_ending & is_final_slot).as_bits()
-      final_emit = (client_xact & client_last).as_bits()
       saw_last.assign(
           ControlReg(ports.clk, ports.rst, [set_saw_last], [final_emit]))
 

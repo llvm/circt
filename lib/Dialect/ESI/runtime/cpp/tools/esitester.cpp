@@ -1067,11 +1067,22 @@ static inline uint8_t esitesterDataByte(uint32_t i, size_t j) {
   return (uint8_t)(seq >> (8 * (j % 8))) ^ (uint8_t)(j * 0x9D);
 }
 
+static size_t hostmemWireBytes(uint32_t width) { return (width + 7) / 8; }
+
+static uint8_t esitesterHostmemByte(uint32_t index, size_t byte,
+                                    uint32_t width) {
+  uint8_t value = esitesterDataByte(index, byte);
+  const size_t tailBits = width % 8;
+  if (tailBits != 0 && byte + 1 == hostmemWireBytes(width))
+    value &= (uint8_t(1) << tailBits) - 1;
+  return value;
+}
+
 // Fold element i's `width` bits into its 64-bit readChecksum contribution:
 // XOR each 64-bit chunk with a per-chunk rotate so word/byte misplacement
 // doesn't cancel. Must match ReadMem's readChecksum in esiaccel/esitester.py.
 static inline uint64_t esitesterElemFold(uint32_t i, uint32_t width) {
-  size_t numBytes = width / 8;
+  size_t numBytes = hostmemWireBytes(width);
   size_t numChunks = (width + 63) / 64;
   uint64_t fold = 0;
   for (size_t c = 0; c < numChunks; ++c) {
@@ -1079,7 +1090,7 @@ static inline uint64_t esitesterElemFold(uint32_t i, uint32_t width) {
     for (size_t b = 0; b < 8; ++b) {
       size_t j = 8 * c + b;
       if (j < numBytes)
-        chunk |= (uint64_t)esitesterDataByte(i, j) << (8 * b);
+        chunk |= (uint64_t)esitesterHostmemByte(i, j, width) << (8 * b);
     }
     unsigned r = (8 * c) % 64;
     fold ^= r ? ((chunk << r) | (chunk >> (64 - r))) : chunk;
@@ -1180,17 +1191,17 @@ hostmemWriteBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
 
   // Data integrity: WriteMem wrote the byte-level pattern (esitesterDataByte)
   // into element i. The host-memory layout must be contiguous and backend-
-  // width-independent, so element i occupies width/8 bytes at that stride;
-  // verify every byte.
+  // width-independent, so element i occupies ceil(width/8) bytes at that
+  // stride; verify every byte.
   uint8_t *bytePtr = static_cast<uint8_t *>(region.getPtr());
-  size_t elemBytes = width / 8;
+  size_t elemBytes = hostmemWireBytes(width);
   size_t mismatches = 0;
   uint32_t firstMismatch = 0;
   size_t firstByte = 0;
   uint8_t firstExpected = 0, firstActual = 0;
   for (uint32_t i = 0; i < xferCount; ++i) {
     for (size_t j = 0; j < elemBytes; ++j) {
-      uint8_t expected = esitesterDataByte(i, j);
+      uint8_t expected = esitesterHostmemByte(i, j, width);
       uint8_t actual = bytePtr[(size_t)i * elemBytes + j];
       if (actual != expected) {
         if (mismatches == 0) {
@@ -1264,16 +1275,16 @@ hostmemReadBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
   checksumPort->connect();
   cycleCntPort->connect();
 
-  // Lay out the read data contiguously (natural width/8-byte stride) using
-  // the byte-level pattern (esitesterDataByte) for every byte; ReadMem folds
-  // each received element into readChecksum, which must match this host-side
-  // fold if the read fetched the right bytes.
+  // Lay out the read data contiguously (natural ceil(width/8)-byte stride)
+  // using the byte-level pattern for every byte; ReadMem folds each received
+  // element into readChecksum, which must match this host-side fold if the
+  // read fetched the right bytes.
   uint8_t *bytePtr = static_cast<uint8_t *>(region.getPtr());
-  size_t elemBytes = width / 8;
+  size_t elemBytes = hostmemWireBytes(width);
   uint64_t expectedChecksum = 0;
   for (uint32_t i = 0; i < xferCount; ++i) {
     for (size_t j = 0; j < elemBytes; ++j)
-      bytePtr[(size_t)i * elemBytes + j] = esitesterDataByte(i, j);
+      bytePtr[(size_t)i * elemBytes + j] = esitesterHostmemByte(i, j, width);
     expectedChecksum ^= esitesterElemFold(i, width);
   }
   region.flush();
