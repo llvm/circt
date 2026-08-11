@@ -3471,7 +3471,7 @@ firrtl.circuit "DomainCreateWrongFieldCountTooFew" {
   firrtl.module @DomainCreateWrongFieldCountTooFew() {
     %name = firrtl.string "MyClock"
     %my_domain = firrtl.domain.create(%name) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
-  // expected-error @+1 {{number of field values (1) does not match domain field count (2)}}
+  // expected-error @+1 {{number of field values (1) does not match non-registry domain field count (2)}}
   }
 }
 
@@ -3484,7 +3484,7 @@ firrtl.circuit "DomainCreateWrongFieldCountTooMany" {
     %name = firrtl.string "MyClock"
     %period = firrtl.integer 42
     %my_domain = firrtl.domain.create(%name, %period) : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
-  // expected-error @+1 {{number of field values (2) does not match domain field count (1)}}
+  // expected-error @+1 {{number of field values (2) does not match non-registry domain field count (1)}}
   }
 }
 
