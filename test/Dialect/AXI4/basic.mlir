@@ -202,3 +202,24 @@ hw.module @Cdc(in %upstream_clk : !seq.clock, in %downstream_clk : !seq.clock,
   // CHECK: axi4.cdc from %upstream_clk to %downstream_clk, %rst_ni, %upstream : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 5, read_id_width = 3, user_width = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
   %cdc = axi4.cdc from %upstream_clk to %downstream_clk, %rst_ni, %upstream : !port
 }
+
+!wide = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>, <incr, len = 16>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!thin = !axi4.port<addr_width = 32, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 8>, <incr, len = 32>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+// CHECK-LABEL: hw.module @DataWidthConverter
+hw.module @DataWidthConverter(in %clk : !seq.clock, in %rst_ni : i1,
+                              in %upstream : !wide) {
+  // CHECK: axi4.data_width_converter %clk, %rst_ni, %upstream : (!axi4.port<addr_width = 32, data_width = 64, {{.*}} burst_specs = <<fixed, len = 4>, <incr, len = 16>>>>, outstanding_writes = 4, outstanding_reads = 4>) -> !axi4.port<addr_width = 32, data_width = 32, {{.*}} burst_specs = <<fixed, len = 8>, <incr, len = 32>>>>, outstanding_writes = 4, outstanding_reads = 4>
+  %dwc = axi4.data_width_converter %clk, %rst_ni, %upstream : (!wide) -> !thin
+}
+
+!longer_thin = !axi4.port<addr_width = 32, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 16>, <incr, len = 64>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+// Check a 'len' is a maximum, so the downstream may take longer bursts than the
+// conversion produces
+// CHECK-LABEL: hw.module @LongerBurstConverter
+hw.module @LongerBurstConverter(in %clk : !seq.clock, in %rst_ni : i1,
+                                in %upstream : !wide) {
+  // CHECK: axi4.data_width_converter %clk, %rst_ni, %upstream :
+  %dwc = axi4.data_width_converter %clk, %rst_ni, %upstream : (!wide) -> !longer_thin
+}

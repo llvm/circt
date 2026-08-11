@@ -246,4 +246,27 @@ def CDCOp : AXI4Op<"cdc", [PortResultsAtMostOneUse,
   }];
 }
 
+def DWConverterOp : AXI4Op<"data_width_converter", [PortResultsAtMostOneUse]> {
+  let summary = "An AXI4 data width converter";
+  let description = [{
+    Changes the data width of an AXI4 connection.
+
+    Example:
+    ```mlir
+    %downstream = axi4.data_width_converter %clk, %rst_ni, %upstream
+      : (!axi4.port<...>) -> !axi4.port<...>
+    ```
+  }];
+
+  let arguments = (ins ClockType:$clock, I1:$reset, PortType:$upstream);
+  let results = (outs PortType:$downstream);
+
+  let assemblyFormat = [{
+    $clock `,` $reset `,` $upstream attr-dict `:`
+      functional-type($upstream, $downstream)
+  }];
+
+  let hasVerifier = 1;
+}
+
 #endif // CIRCT_DIALECT_AXI4_AXI4OPS_TD

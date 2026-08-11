@@ -254,3 +254,84 @@ hw.module @ConvertingCdc(in %upstream_clk : !seq.clock,
   // expected-error @below {{'axi4.cdc' op failed to verify that downstream port matches the upstream port}}
   %cdc = "axi4.cdc"(%upstream_clk, %downstream_clk, %rst_ni, %upstream) : (!seq.clock, !seq.clock, i1, !port) -> !narrow
 }
+
+// -----
+
+!wide = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!narrow_addr = !axi4.port<addr_width = 16, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 8>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+hw.module @ReaddressingConverter(in %clk : !seq.clock, in %rst_ni : i1,
+                                 in %upstream : !wide) {
+  // expected-error @below {{'axi4.data_width_converter' op downstream port's 'addr_width' (16) must match upstream port's (32)}}
+  %dwc = axi4.data_width_converter %clk, %rst_ni, %upstream : (!wide) -> !narrow_addr
+}
+
+// -----
+
+!wide = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!split = !axi4.port<addr_width = 32, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0x7ff, burst_specs = <<fixed, len = 8>>>, <base = 0x800, last = 0xfff, burst_specs = <<incr, len = 8>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+hw.module @SplittingConverter(in %clk : !seq.clock, in %rst_ni : i1,
+                              in %upstream : !wide) {
+  // expected-error @below {{'axi4.data_width_converter' op upstream and downstream windows must cover the same addresses}}
+  %dwc = axi4.data_width_converter %clk, %rst_ni, %upstream : (!wide) -> !split
+}
+
+// -----
+
+!wide = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!moved = !axi4.port<addr_width = 32, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x1000, last = 0x1fff, burst_specs = <<fixed, len = 8>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+hw.module @MovingConverter(in %clk : !seq.clock, in %rst_ni : i1,
+                           in %upstream : !wide) {
+  // expected-error @below {{'axi4.data_width_converter' op upstream and downstream windows must cover the same addresses}}
+  %dwc = axi4.data_width_converter %clk, %rst_ni, %upstream : (!wide) -> !moved
+}
+
+// -----
+
+// A single 32-bit beat cannot be carried in whole 64-bit beats
+!thin = !axi4.port<addr_width = 32, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 1>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!wide = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 1>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+hw.module @IndivisibleBurst(in %clk : !seq.clock, in %rst_ni : i1,
+                            in %upstream : !thin) {
+  // expected-error @below {{'axi4.data_width_converter' op upstream burst #axi4.burst_spec<fixed, len = 1> does not divide into whole 64-bit beats}}
+  %dwc = axi4.data_width_converter %clk, %rst_ni, %upstream : (!thin) -> !wide
+}
+
+// -----
+
+// A 16-beat wrap would need 32 beats at half the width, which AXI4 cannot express
+!wide = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<wrap, len = 16>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!thin = !axi4.port<addr_width = 32, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<wrap, len = 16>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+hw.module @UnrepresentableBurst(in %clk : !seq.clock, in %rst_ni : i1,
+                                in %upstream : !wide) {
+  // expected-error @below {{'axi4.data_width_converter' op upstream burst #axi4.burst_spec<wrap, len = 16> has no 32-bit equivalent: 'wrap' burst 'len' must be 2, 4, 8, or 16, got 32}}
+  %dwc = axi4.data_width_converter %clk, %rst_ni, %upstream : (!wide) -> !thin
+}
+
+// -----
+
+!wide = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<incr, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!unscaled = !axi4.port<addr_width = 32, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<incr, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+hw.module @UnscaledBurst(in %clk : !seq.clock, in %rst_ni : i1,
+                         in %upstream : !wide) {
+  // expected-error @below {{'axi4.data_width_converter' op downstream window must support at least #axi4.burst_set<<incr, len = 8>>, the upstream's bursts in beats of 32 bits, but supports #axi4.burst_set<<incr, len = 4>>}}
+  %dwc = axi4.data_width_converter %clk, %rst_ni, %upstream : (!wide) -> !unscaled
+}
+
+// -----
+
+// Re-widthing beats leaves each request one request
+!wide = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<incr, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!recounted = !axi4.port<addr_width = 32, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<incr, len = 8>>>>, outstanding_writes = 8, outstanding_reads = 4>
+
+hw.module @RecountingConverter(in %clk : !seq.clock, in %rst_ni : i1,
+                               in %upstream : !wide) {
+  // expected-error @below {{'axi4.data_width_converter' op downstream port's 'outstanding_writes' (8) must be the 4 writes the upstream port can issue}}
+  %dwc = axi4.data_width_converter %clk, %rst_ni, %upstream : (!wide) -> !recounted
+}
+

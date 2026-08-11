@@ -20,7 +20,7 @@ using namespace axi4;
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
-// XbarOp
+// Width helpers
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -43,7 +43,8 @@ static constexpr size_t kNumSharedWidths = 3;
 
 /// Verify that `port` agrees with `reference` on each of the widths in
 /// `fields`.
-static LogicalResult verifyWidthsMatch(XbarOp op, ArrayRef<WidthField> fields,
+static LogicalResult verifyWidthsMatch(Operation *op,
+                                       ArrayRef<WidthField> fields,
                                        PortType port, const Twine &portDesc,
                                        PortType reference,
                                        const Twine &referenceDesc) {
@@ -51,12 +52,16 @@ static LogicalResult verifyWidthsMatch(XbarOp op, ArrayRef<WidthField> fields,
     uint32_t width = (port.*field.get)();
     uint32_t expected = (reference.*field.get)();
     if (width != expected)
-      return op.emitOpError()
+      return op->emitOpError()
              << portDesc << "'s '" << field.name << "' (" << width
              << ") must match " << referenceDesc << "'s (" << expected << ")";
   }
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// XbarOp
+//===----------------------------------------------------------------------===//
 
 /// The downstream port and window covering `address`, or a null window if no
 /// downstream port covers it.
@@ -202,6 +207,82 @@ LogicalResult XbarOp::verify() {
             routingOutstandingBelow(upstream, downstreamTy),
             "the managers reaching it can issue")))
       return failure();
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DWConverterOp
+//===----------------------------------------------------------------------===//
+
+// The port width fields a data width converter leaves alone.
+static constexpr WidthField kPreservedWidths[] = {
+    {"addr_width", &PortType::getAddrWidth},
+    {"user_width", &PortType::getUserWidth},
+    {"write_id_width", &PortType::getWriteIdWidth},
+    {"read_id_width", &PortType::getReadIdWidth}};
+
+/// Calculates new burst length after a change in data width
+static std::optional<uint32_t> convertLen(uint32_t len, uint32_t from,
+                                          uint32_t to) {
+  uint64_t bits = uint64_t{len} * from;
+  if (bits % to != 0)
+    return std::nullopt;
+  return bits / to;
+}
+
+LogicalResult DWConverterOp::verify() {
+  auto upstream = cast<PortType>(getUpstream().getType());
+  auto downstream = cast<PortType>(getDownstream().getType());
+  uint32_t width = downstream.getDataWidth();
+
+  // A conversion changes the data width, and leaves every other width alone
+  if (failed(verifyWidthsMatch(*this, kPreservedWidths, downstream,
+                               "downstream port", upstream, "upstream port")))
+    return failure();
+
+  // Window addresses and outstanding requests are unchanged
+  if (failed(verifyOutstanding(
+          *this, "downstream port", downstream,
+          {upstream.getOutstandingWrites(), upstream.getOutstandingReads()},
+          "the upstream port can issue")))
+    return failure();
+  ArrayRef<WindowAttr> upWindows = upstream.getWindows().getWindows();
+  ArrayRef<WindowAttr> downWindows = downstream.getWindows().getWindows();
+  if (!llvm::equal(upWindows, downWindows, [](WindowAttr up, WindowAttr down) {
+        return up.getBase() == down.getBase() && up.getLast() == down.getLast();
+      }))
+    return emitOpError("upstream and downstream windows must cover the same "
+                       "addresses");
+
+  for (auto [upWindow, downWindow] : llvm::zip_equal(upWindows, downWindows)) {
+    SmallVector<BurstSpecAttr> converted;
+    for (BurstSpecAttr spec : upWindow.getBurstSpecs().getBurstSpecs()) {
+      std::optional<uint32_t> len =
+          convertLen(spec.getLen(), upstream.getDataWidth(), width);
+      if (!len)
+        return emitOpError()
+               << "upstream burst " << spec << " does not divide into whole "
+               << width << "-bit beats";
+
+      BurstSpecAttr beats = BurstSpecAttr::getChecked(
+          [&] {
+            return emitOpError() << "upstream burst " << spec << " has no "
+                                 << width << "-bit equivalent: ";
+          },
+          getContext(), spec.getKind(), *len);
+      if (!beats)
+        return failure();
+      converted.push_back(beats);
+    }
+
+    auto expected = BurstSetAttr::get(getContext(), converted);
+    if (!downWindow.getBurstSpecs().covers(expected))
+      return emitOpError() << "downstream window must support at least "
+                           << expected << ", the upstream's bursts in beats of "
+                           << width << " bits, but supports "
+                           << downWindow.getBurstSpecs();
   }
 
   return success();
