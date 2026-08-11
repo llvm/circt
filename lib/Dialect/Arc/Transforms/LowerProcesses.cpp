@@ -47,7 +47,6 @@
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/SymbolTable.h"
-#include "mlir/IR/TypeRange.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
@@ -189,8 +188,9 @@ void ProcessLowering::createCoroutine() {
   // added in a separate step.
   coroOp.getBody().takeBody(processOp.getBody());
 
+  // Retrieve the context value in the entry block.
   builder.setInsertionPointToStart(&coroOp.getBody().front());
-  inferredContext = InferredContextOp::create(builder, coroOp->getLoc());
+  inferredContext = InferredContextOp::create(builder, coroOp.getLoc());
 }
 
 /// Prepend the coroutine function-type prefix as leading block arguments to
@@ -217,7 +217,7 @@ void ProcessLowering::addEntryAndResumeBlockArguments() {
 
   // Assemble the initial resume block argument types that will be provided by
   // callers entering or re-entering the coroutine.
-  TypeRange prefixTypes(captures);
+  auto prefixTypes = TypeRange(captures);
 
   // Add arguments to the entry block, recording each one's coroutine argument
   // index so `rewriteTerminators` can map observed values to bitmask bits.
@@ -450,12 +450,10 @@ void ProcessLowering::buildInstance() {
   OpBuilder builder(processOp);
   auto loc = processOp.getLoc();
 
-  SmallVector<Value> args(captures.begin(), captures.end());
-
-  assert(args.size() == staticSensitivityMask.size());
+  assert(captures.size() == staticSensitivityMask.size());
   auto instanceOp = CoroutineInstanceOp::create(
       builder, loc, processOp.getResultTypes(),
-      FlatSymbolRefAttr::get(coroOp.getSymNameAttr()), args,
+      FlatSymbolRefAttr::get(coroOp.getSymNameAttr()), captures,
       builder.getDenseBoolArrayAttr(staticSensitivityMask));
 
   processOp.replaceAllUsesWith(instanceOp.getResults());
