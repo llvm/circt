@@ -356,7 +356,7 @@ void InnerSymAttr::print(AsmPrinter &odsPrinter) const {
   auto props = getProps();
   if (props.size() == 1 && props[0].getSymVisibility().getValue() == "public" &&
       props[0].getFieldID() == 0) {
-    odsPrinter << "@" << props[0].getName().getValue();
+    odsPrinter.printSymbolName(props[0].getName().getValue());
     return;
   }
   auto names = props.vec();
