@@ -1727,12 +1727,8 @@ struct PropertyAssertOpConversion
   LogicalResult
   matchAndRewrite(firrtl::PropertyAssertOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.setInsertionPoint(op);
-    auto stringType = om::StringType::get(op.getContext());
-    auto message = om::ConstantOp::create(
-        rewriter, op.getLoc(), StringAttr::get(op.getMessage(), stringType));
     rewriter.replaceOpWithNewOp<om::PropertyAssertOp>(
-        op, adaptor.getCondition(), message);
+        op, adaptor.getCondition(), adaptor.getMessage());
     return success();
   }
 };

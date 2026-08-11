@@ -1205,7 +1205,21 @@ void Emitter::emitStatement(PropertyAssertOp op) {
     ps << "propassert" << PP::space;
     emitExpression(op.getCondition());
     ps << "," << PP::space;
-    ps.writeQuotedEscaped(op.getMessage());
+    // For FIRRTL <= 7.0.0, do a best effort emission that will inline a single
+    // string expression.  If we see anything more complicated than this, just
+    // bail.
+    if (version <= FIRVersion(7, 0, 0)) {
+      auto expr = dyn_cast<StringConstantOp>(op.getMessage().getDefiningOp());
+      if (!expr) {
+        auto diag =
+            emitOpError(op, "unable to emit non-literal string expressions "
+                            "when targeting FIRRTL version <= 7.0.0");
+        diag.attachNote(op.getMessage().getLoc())
+            << "non-literal expression is here";
+      }
+    } else {
+      emitExpression(op.getMessage());
+    }
   });
   emitLocationAndNewLine(op);
 }

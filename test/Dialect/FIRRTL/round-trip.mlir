@@ -443,15 +443,19 @@ firrtl.module @WireDomainOperands(
 // In a class body.
 // CHECK-LABEL: firrtl.class @AssertInClass
 firrtl.class @AssertInClass(in %cond : !firrtl.bool) {
-  // CHECK: firrtl.property_assert %cond, "must be true" : !firrtl.bool
-  firrtl.property_assert %cond, "must be true" : !firrtl.bool
+  // CHECK-NEXT: %0 = firrtl.string "must be true"
+  // CHECK-NEXT: firrtl.property_assert %cond, %0 : !firrtl.bool
+  %0 = firrtl.string "must be true"
+  firrtl.property_assert %cond, %0 : !firrtl.bool
 }
 
 // In a module body.
 // CHECK-LABEL: firrtl.module @AssertInModule
 firrtl.module @AssertInModule(in %cond : !firrtl.bool) {
-  // CHECK: firrtl.property_assert %cond, "module invariant" : !firrtl.bool
-  firrtl.property_assert %cond, "module invariant" : !firrtl.bool
+  // CHECK-NEXT: %0 = firrtl.string "module invariant"
+  // CHECK-NEXT: firrtl.property_assert %cond, %0 : !firrtl.bool
+  %0 = firrtl.string "module invariant"
+  firrtl.property_assert %cond, %0 : !firrtl.bool
 }
 
 }

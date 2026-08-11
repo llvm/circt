@@ -757,16 +757,18 @@ firrtl.circuit "UnknownValue" {
   // CHECK-LABEL: om.class private @PropAssertClass
   firrtl.class private @PropAssertClass(in %cond: !firrtl.bool) {
     // CHECK-NEXT: %[[message:.+]] = om.constant "must hold" : !om.string
+    %0 = firrtl.string "must hold"
     // CHECK-NEXT: om.property_assert %cond, %[[message]] : i1
-    firrtl.property_assert %cond, "must hold" : !firrtl.bool
+    firrtl.property_assert %cond, %0 : !firrtl.bool
   }
 
   // property_assert in a module body: the op is moved into the generated class.
   // CHECK-LABEL: om.class @PropAssertModule_Class
   firrtl.module @PropAssertModule(in %cond: !firrtl.bool) {
     // CHECK-NEXT: %[[message:.+]] = om.constant "module invariant" : !om.string
+    %0 = firrtl.string "module invariant"
     // CHECK-NEXT: om.property_assert %cond, %[[message]] : i1
-    firrtl.property_assert %cond, "module invariant" : !firrtl.bool
+    firrtl.property_assert %cond, %0 : !firrtl.bool
   }
 }
 
@@ -786,8 +788,9 @@ firrtl.circuit "NoPropPorts" {
     // CHECK: %[[EQ:.+]] = om.prop.eq %[[U0]], %[[U1]] : !om.string
     %2 = firrtl.prop.eq %0, %1 : !firrtl.string
     // CHECK:      %[[message:.+]] = om.constant "srcs must match" : !om.string
+    %3 = firrtl.string "srcs must match"
     // CHECK-NEXT: om.property_assert %[[EQ]], %[[message]] : i1
-    firrtl.property_assert %2, "srcs must match" : !firrtl.bool
+    firrtl.property_assert %2, %3 : !firrtl.bool
   }
 }
 

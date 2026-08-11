@@ -4416,8 +4416,7 @@ LogicalResult PropertyAssertOp::verify() {
   if (auto *defOp = getCondition().getDefiningOp())
     if (auto boolConst = dyn_cast<BoolConstantOp>(defOp))
       if (!boolConst.getValue())
-        return emitOpError("property assertion is statically false: ")
-               << getMessage();
+        return emitOpError("property assertion is statically false");
   return success();
 }
 

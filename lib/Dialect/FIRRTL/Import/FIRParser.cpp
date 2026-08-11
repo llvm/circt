@@ -4575,29 +4575,47 @@ ParseResult FIRStmtParser::parseConnect() {
   return success();
 }
 
-/// propassert ::= 'propassert' expr ',' string_literal
+/// Before FIRRTL 7.0.0:
+///   propassert ::= 'propassert' expr ',' string_literal
+/// After FIRRTL 7.0.0:
+///   propassert ::= 'propassert' expr ',' expr
 ParseResult FIRStmtParser::parsePropAssert() {
   auto startTok = consumeToken(FIRToken::kw_propassert);
   auto loc = startTok.getLoc();
 
-  Value condition;
-  StringRef message;
+  llvm::SMLoc conditionLoc = getToken().getLoc(), messageLoc;
+  Value condition, message;
   if (parseExp(condition, "expected condition in 'propassert'") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(message) ||
-      parseToken(FIRToken::string, "expected message string in 'propassert'"))
+      parseToken(FIRToken::comma, "expected ','"))
     return failure();
+  if (version < FIRVersion(7, 0, 0)) {
+    StringRef messageStr;
+    messageLoc = getToken().getLoc();
+    if (parseGetSpelling(messageStr) ||
+        parseToken(FIRToken::string, "expected message string in 'propassert'"))
+      return failure();
+    auto attr = builder.getStringAttr(FIRToken::getStringValue(messageStr));
+    message = moduleContext.getCachedConstant<StringConstantOp>(
+        builder, attr, builder.getType<StringType>(), attr);
+  } else {
+    messageLoc = getToken().getLoc();
+    if (parseExp(message, "expected message in 'propassert'"))
+      return failure();
+  }
 
   if (!isa<BoolType>(condition.getType()))
-    return emitError(loc, "propassert condition must be of boolean type");
+    return emitError(conditionLoc,
+                     "propassert condition must be of boolean type");
+
+  // Note: This is a dead check for FIRRTL < 7.0.0.
+  if (!type_isa<StringType>(message.getType()))
+    return emitError(messageLoc, "propassert message must be a string type");
 
   if (parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(loc);
-  auto messageUnescaped = FIRToken::getStringValue(message);
-  PropertyAssertOp::create(builder, condition,
-                           builder.getStringAttr(messageUnescaped));
+  PropertyAssertOp::create(builder, condition, message);
   return success();
 }
 
