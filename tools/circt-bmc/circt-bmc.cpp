@@ -62,6 +62,16 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+#ifdef CIRCT_BMC_ENABLE_SLANG
+#include "circt/Conversion/ImportVerilog.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
+#include "circt/Dialect/Moore/MooreDialect.h"
+#include "circt/Dialect/Sim/SimDialect.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
+#endif
+
 #ifdef CIRCT_BMC_ENABLE_JIT
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
@@ -100,6 +110,15 @@ static cl::opt<int> ignoreAssertionsUntil(
 static cl::opt<std::string> inputFilename(cl::Positional, cl::Required,
                                           cl::desc("<input file>"),
                                           cl::cat(mainCategory));
+
+enum class InputFormat { SystemVerilog, MLIR };
+static cl::opt<InputFormat>
+    inputFormat("input-format", cl::desc("Specify the input format"),
+                cl::values(clEnumValN(InputFormat::SystemVerilog, "sv",
+                                      "Parse as SystemVerilog"),
+                           clEnumValN(InputFormat::MLIR, "mlir",
+                                      "Parse as MLIR or MLIR bytecode")),
+                cl::cat(mainCategory));
 
 static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
@@ -216,6 +235,72 @@ static void isolateFormalTest(ModuleOp module) {
       op.erase();
 }
 
+static std::optional<InputFormat> detectInputFormat() {
+  if (inputFormat.getNumOccurrences())
+    return inputFormat.getValue();
+
+  StringRef filename(inputFilename);
+  if (filename == "-")
+    return InputFormat::SystemVerilog;
+  if (filename.ends_with(".v") || filename.ends_with(".sv") ||
+      filename.ends_with(".vh") || filename.ends_with(".svh"))
+    return InputFormat::SystemVerilog;
+  if (filename.ends_with(".mlir") || filename.ends_with(".mlirbc"))
+    return InputFormat::MLIR;
+
+  llvm::errs() << "cannot auto-detect input format for '" << filename
+               << "'; use --input-format=sv or --input-format=mlir\n";
+  return std::nullopt;
+}
+
+static OwningOpRef<ModuleOp> parseInput(MLIRContext &context, TimingScope &ts) {
+  auto format = detectInputFormat();
+  if (!format)
+    return {};
+
+  if (*format == InputFormat::MLIR) {
+    auto parserTimer = ts.nest("Parse MLIR input");
+    return parseSourceFile<ModuleOp>(inputFilename, &context);
+  }
+
+#ifndef CIRCT_BMC_ENABLE_SLANG
+  llvm::errs() << "SystemVerilog input requires a build with "
+                  "CIRCT_SLANG_FRONTEND_ENABLED=ON\n";
+  return {};
+#else
+  llvm::SourceMgr sourceMgr;
+  std::string errorMessage;
+  auto inputFile = openInputFile(inputFilename, &errorMessage);
+  if (!inputFile) {
+    llvm::errs() << errorMessage << '\n';
+    return {};
+  }
+  sourceMgr.AddNewSourceBuffer(std::move(inputFile), llvm::SMLoc());
+  SourceMgrDiagnosticHandler diagnosticHandler(sourceMgr, &context);
+
+  auto module = ModuleOp::create(
+      FileLineColLoc::get(&context, inputFilename, /*line=*/0, /*column=*/0));
+  ImportVerilogOptions options;
+  if (!moduleName.empty())
+    options.topModules.push_back(moduleName);
+  if (failed(importVerilog(sourceMgr, &context, ts, module, &options)))
+    return {};
+
+  PassManager pm(&context);
+  pm.enableVerifier(verifyPasses);
+  pm.enableTiming(ts);
+  if (failed(applyPassManagerCLOptions(pm)))
+    return {};
+  populateVerilogToMoorePipeline(pm);
+  populateMooreToCorePipeline(pm);
+  LlhdToCorePipelineOptions loweringOptions;
+  populateLlhdToCorePipeline(pm, loweringOptions);
+  if (failed(pm.run(module)))
+    return {};
+  return module;
+#endif
+}
+
 /// This function initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult executeBMC(MLIRContext &context) {
@@ -224,12 +309,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
   applyDefaultTimingManagerCLOptions(tm);
   auto ts = tm.getRootScope();
 
-  OwningOpRef<ModuleOp> module;
-  {
-    auto parserTimer = ts.nest("Parse MLIR input");
-    // Parse the provided input files.
-    module = parseSourceFile<ModuleOp>(inputFilename, &context);
-  }
+  OwningOpRef<ModuleOp> module = parseInput(context, ts);
   if (!module)
     return failure();
 
@@ -269,6 +349,9 @@ static LogicalResult executeBMC(MLIRContext &context) {
         {verif::SymbolicValueLowering::HWInput}));
   }
   pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
+  PrepareForBMCOptions prepareForBMCOptions;
+  prepareForBMCOptions.topModule = moduleName;
+  pm.addPass(createPrepareForBMC(prepareForBMCOptions));
   pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
   pm.addPass(createMaterializeDebugVariables());
   pm.addPass(createExternalizeRegisters());
@@ -454,6 +537,16 @@ int main(int argc, char **argv) {
     mlir::func::FuncDialect,
     mlir::LLVM::LLVMDialect
   >();
+#ifdef CIRCT_BMC_ENABLE_SLANG
+  registry.insert<
+    circt::llhd::LLHDDialect,
+    circt::moore::MooreDialect,
+    circt::sim::SimDialect,
+    mlir::cf::ControlFlowDialect,
+    mlir::scf::SCFDialect,
+    mlir::ub::UBDialect
+  >();
+#endif
   // clang-format on
   mlir::func::registerInlinerExtension(registry);
   mlir::LLVM::registerInlinerInterface(registry);
