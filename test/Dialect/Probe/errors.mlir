@@ -1,7 +1,13 @@
 // RUN: circt-opt %s --verify-diagnostics --split-input-file
 
-// expected-error @below {{failed to verify 'elementType': non-inout type containing only HW value types or seq.clock leaves}}
+// expected-error @below {{failed to verify 'elementType': type supported for probe observation}}
 hw.module @BadInOut(in %p: !probe.ref<!hw.inout<i1>>) {
+}
+
+// -----
+
+// expected-error @below {{failed to verify 'elementType': type supported for probe observation}}
+hw.module @UnsupportedSeqType(in %p: !probe.ref<!seq.immutable<i8>>) {
 }
 
 // -----

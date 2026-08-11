@@ -9,17 +9,15 @@
 #ifndef CIRCT_DIALECT_PROBE_PROBETYPES_TD
 #define CIRCT_DIALECT_PROBE_PROBETYPES_TD
 
-include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Probe/ProbeDialect.td"
-include "circt/Dialect/Seq/SeqTypes.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 
 class ProbeTypeDef<string name> : TypeDef<ProbeDialect, name> { }
 
 def ProbeElementType : Type<CPred<
-    "::circt::probe::isProbeElementType($_self)">,
-    "non-inout type containing only HW value types or seq.clock leaves">;
+    "::circt::hw::isValidProbeElementType($_self)">,
+    "type supported for probe observation">;
 
 def RefType : ProbeTypeDef<"Ref"> {
   let mnemonic = "ref";
@@ -27,7 +25,7 @@ def RefType : ProbeTypeDef<"Ref"> {
   let description = [{
     A `probe.ref` type is an SSA handle for read-only observation of a hardware
     value. The handle does not encode or require a particular hierarchical path.
-    Its payload type is a non-inout HW value type.
+    Its payload type must support probe observation.
   }];
 
   let parameters = (ins ProbeElementType:$elementType);

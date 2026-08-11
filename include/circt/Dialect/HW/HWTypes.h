@@ -48,6 +48,18 @@ struct HWModulePortTypeInterface
   }
 };
 
+/// Interface for dialects to classify their types as valid probe payloads.
+struct ProbeTypeDialectInterface
+    : public mlir::DialectInterface::Base<ProbeTypeDialectInterface> {
+  ProbeTypeDialectInterface(mlir::Dialect *dialect) : Base(dialect) {}
+
+  virtual bool isValidProbeElementType(mlir::Type type) const = 0;
+};
+
+/// Return true if `type` is a valid probe payload. Builtin integer types are
+/// always valid; other types are classified by their owning dialect.
+bool isValidProbeElementType(mlir::Type type);
+
 static bool operator==(const ModulePort &a, const ModulePort &b) {
   return a.dir == b.dir && a.name == b.name && a.type == b.type;
 }

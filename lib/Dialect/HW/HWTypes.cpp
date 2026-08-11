@@ -102,6 +102,18 @@ bool circt::hw::isHWValueType(Type type) {
   return false;
 }
 
+bool circt::hw::isValidProbeElementType(Type type) {
+  if (!type)
+    return false;
+
+  if (isa<IntegerType>(type))
+    return true;
+
+  auto *interface =
+      type.getDialect().getRegisteredInterface<ProbeTypeDialectInterface>();
+  return interface && interface->isValidProbeElementType(type);
+}
+
 /// Return the hardware bit width of a type. Does not reflect any encoding,
 /// padding, or storage scheme, just the bit (and wire width) of a
 /// statically-size type. Reflects the number of wires needed to transmit a

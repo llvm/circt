@@ -66,6 +66,35 @@ struct HWInlinerInterface : public mlir::DialectInlinerInterface {
 };
 } // end anonymous namespace
 
+namespace {
+struct HWProbeTypeDialectInterface : public hw::ProbeTypeDialectInterface {
+  using ProbeTypeDialectInterface::ProbeTypeDialectInterface;
+
+  bool isValidProbeElementType(Type type) const override {
+    if (auto alias = dyn_cast<TypeAliasType>(type))
+      return hw::isValidProbeElementType(alias.getCanonicalType());
+
+    if (auto array = dyn_cast<ArrayType>(type))
+      return hw::isValidProbeElementType(array.getElementType());
+
+    if (auto array = dyn_cast<UnpackedArrayType>(type))
+      return hw::isValidProbeElementType(array.getElementType());
+
+    if (auto structType = dyn_cast<StructType>(type))
+      return llvm::all_of(structType.getElements(), [](auto field) {
+        return hw::isValidProbeElementType(field.type);
+      });
+
+    if (auto unionType = dyn_cast<UnionType>(type))
+      return llvm::all_of(unionType.getElements(), [](auto field) {
+        return hw::isValidProbeElementType(field.type);
+      });
+
+    return isa<IntType, EnumType>(type);
+  }
+};
+} // end anonymous namespace
+
 void HWDialect::initialize() {
   // Register types and attributes.
   registerTypes();
@@ -78,7 +107,8 @@ void HWDialect::initialize() {
       >();
 
   // Register interface implementations.
-  addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface>();
+  addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface,
+                HWProbeTypeDialectInterface>();
 }
 
 /// Registered hook to materialize a single constant operation from a given
