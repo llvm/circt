@@ -75,6 +75,59 @@ LogicalResult WindowAttr::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+SmallVector<WindowAttr> WindowSetAttr::normalize(MLIRContext *ctx,
+                                                 ArrayRef<WindowAttr> windows) {
+  // Split the address space at every point where the specs could change (i.e.
+  // the start and end points of the windows).
+  // Then, for each of those segments, accumulate all the specs that cover it,
+  // and create a window accordingly.
+
+  SmallVector<uint64_t> cuts;
+  for (WindowAttr window : windows) {
+    cuts.push_back(window.getBase());
+    if (window.getLast() != UINT64_MAX)
+      cuts.push_back(window.getLast() + 1);
+  }
+  llvm::sort(cuts);
+  cuts.erase(llvm::unique(cuts), cuts.end());
+
+  SmallVector<WindowAttr> normalized;
+  SmallVector<BurstSpecAttr> specs;
+  for (size_t i = 0; i < cuts.size(); ++i) {
+    uint64_t lo = cuts[i];
+    uint64_t hi = i + 1 < cuts.size() ? cuts[i + 1] - 1 : UINT64_MAX;
+
+    // Collect the set of specs that cover this segment
+    specs.clear();
+    for (WindowAttr window : windows)
+      if (window.getBase() <= lo && lo <= window.getLast())
+        llvm::append_range(specs, window.getBurstSpecs().getBurstSpecs());
+
+    // Nothing covers the segment - a gap between windows.
+    if (specs.empty())
+      continue;
+
+    // BurstSetAttr::get sorts and de-duplicates the union for us.
+    auto burstSpecs = BurstSetAttr::get(ctx, specs);
+
+    // Merge into the previous window where they are contiguous and share
+    // capabilities.
+    if (!normalized.empty() && normalized.back().getLast() + 1 == lo &&
+        normalized.back().getBurstSpecs() == burstSpecs)
+      lo = normalized.pop_back_val().getBase();
+    normalized.push_back(WindowAttr::get(ctx, lo, hi, burstSpecs));
+  }
+  return normalized;
+}
+
+LogicalResult
+WindowSetAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                      ArrayRef<WindowAttr> windows) {
+  if (windows.empty())
+    return emitError() << "'window_set' must be non-empty";
+  return success();
+}
+
 void AXI4Dialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST
