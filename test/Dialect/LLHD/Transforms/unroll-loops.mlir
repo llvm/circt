@@ -525,3 +525,39 @@ hw.module @LoopWithUlt() {
     llhd.yield
   }
 }
+
+// CHECK-LABEL: @NestedLoopWithNonConstantInnerBound
+hw.module @NestedLoopWithNonConstantInnerBound(in %a: i42, out x : i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %c1_i42 = hw.constant 1 : i42
+  %c2_i42 = hw.constant 2 : i42
+  // Loop of the form:
+  //   x = 0
+  //   for (i = 0; i < 2; ++i)
+  //     for (j = i; j < 2; ++j)
+  //       x += a
+  %0 = llhd.combinational -> i42 {
+    // CHECK: cf.br
+    // CHECK: cf.cond_br
+    // CHECK: cf.cond_br
+    // CHECK-NOT: cf.cond_br
+    // CHECK: llhd.yield
+    cf.br ^outerHeader(%c0_i42, %c0_i42, %a : i42, i42, i42)
+  ^outerHeader(%i: i42, %x1: i42, %a1: i42):
+    %1 = comb.icmp ult %i, %c2_i42 : i42
+    cf.cond_br %1, ^innerHeader(%i, %x1, %a1 : i42, i42, i42), ^outerExit
+  ^innerHeader(%j: i42, %x2: i42, %a2: i42):
+    %2 = comb.icmp ult %j, %c2_i42 : i42
+    cf.cond_br %2, ^innerBody, ^innerExit
+  ^innerBody:
+    %xp = comb.add %x2, %a2 : i42
+    %jp = comb.add %j, %c1_i42 : i42
+    cf.br ^innerHeader(%jp, %xp, %a2 : i42, i42, i42)
+  ^innerExit:
+    %ip = comb.add %i, %c1_i42 : i42
+    cf.br ^outerHeader(%ip, %x2, %a2 : i42, i42, i42)
+  ^outerExit:
+    llhd.yield %x1 : i42
+  }
+  hw.output %0 : i42
+}

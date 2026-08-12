@@ -363,19 +363,25 @@ void Loop::unroll(CFGLoopInfo &cfgLoopInfo) {
   exitEdge = nullptr;
 
   // Prune any body blocks that have become unreachable.
-  SmallPtrSet<Block *, 8> blocksToPrune;
-  for (auto *block : cfgLoop.getBlocks())
-    if (block->use_empty())
-      blocksToPrune.insert(block);
-  while (!blocksToPrune.empty()) {
-    auto *block = *blocksToPrune.begin();
-    blocksToPrune.erase(block);
-    if (!block->use_empty())
+  auto &region = *header->getParent();
+  SmallPtrSet<Block *, 8> reachable;
+  SmallVector<Block *> worklist;
+  reachable.insert(&region.front());
+  worklist.push_back(&region.front());
+  while (!worklist.empty())
+    for (auto *succ : worklist.pop_back_val()->getSuccessors())
+      if (reachable.insert(succ).second)
+        worklist.push_back(succ);
+
+  SmallVector<Block *> deadBlocks;
+  for (auto &block : region) {
+    if (reachable.contains(&block))
       continue;
-    for (auto *succ : block->getSuccessors())
-      if (cfgLoop.contains(succ))
-        blocksToPrune.insert(succ);
-    block->dropAllDefinedValueUses();
+    block.dropAllDefinedValueUses();
+    deadBlocks.push_back(&block);
+  }
+
+  for (auto *block : deadBlocks) {
     cfgLoopInfo.removeBlock(block);
     block->erase();
   }
