@@ -1390,13 +1390,13 @@ class EsiTester(Module):
       LoopbackInOutAdd        (single instance) – function service adding constant 11.
       ChannelTest             (single instance) – ChannelService to_host and from_host loopback.
       MMIOAdd(add_amt)        instances for add_amt in {4, 9, 14} – MMIO read returns offset + add_amt.
-      ReadMem(width)          for widths: 32, 64, 128, 256, 512, 534 – host memory read tests.
-      WriteMem(width)         for widths: 32, 64, 128, 256, 512, 534 – host memory write tests.
-      ToHostDMATest(width)    for widths: 32, 64, 128, 256, 512, 534 – DMA to host, cycle & count telemetry.
-      FromHostDMATest(width)  for widths: 32, 64, 128, 256, 512, 534 – DMA from host, cycle telemetry.
+      ReadMem(width)          for widths: 24, 32, 64, 72, 128, 256, 512, 534 – host memory read tests.
+      WriteMem(width)         for widths: 24, 32, 64, 72, 128, 256, 512, 534 – host memory write tests.
+      ToHostDMATest(width)    for widths: 24, 32, 64, 72, 128, 256, 512, 534 – DMA to host, cycle & count telemetry.
+      FromHostDMATest(width)  for widths: 24, 32, 64, 72, 128, 256, 512, 534 – DMA from host, cycle telemetry.
 
     Width set used across Read/Write/DMA tests:
-      widths = [32, 64, 128, 256, 512, 534]
+      widths = [24, 32, 64, 72, 128, 256, 512, 534]
 
     Purpose:
       Aggregates all functional, MMIO, host memory, and DMA tests into one image

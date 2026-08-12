@@ -7,7 +7,7 @@ from math import ceil
 
 from pycde.common import Clock, Input, InputChannel, Output, OutputChannel, Reset
 from pycde.constructs import (AssignableSignal, ControlReg, Counter, Mux,
-                              NamedWire, Wire)
+                              NamedWire, Reg, Wire)
 from pycde import esi
 from pycde.module import Module, generator, modparams
 from pycde.signals import BitsSignal, ChannelSignal, StructSignal
@@ -720,9 +720,9 @@ def SliceReadGearbox(input_bitwidth: int,
                      output_bitwidth: int) -> type["SliceReadGearboxImpl"]:
   """Narrow one engine word to a single-message client element no wider than the
   word (``OUT <= IN``). The element sits in the word's low bits, so the datapath
-  is a registered slice; ``valid_bytes`` is unused (a single element is never a
-  partial word). Wider single elements use `ConcatReadGearbox`; packed list
-  reads use `DepackReadGearbox`/`ShiftReadGearbox`."""
+  is a slice; ``valid_bytes`` is unused (a single element is never a partial
+  word). Wider single elements use `ConcatReadGearbox`; packed list reads use
+  `DepackReadGearbox`/`ShiftReadGearbox`."""
 
   if input_bitwidth <= 0 or input_bitwidth % 8 != 0:
     raise ValueError("engine word width must be a positive multiple of 8 bits")
@@ -752,8 +752,6 @@ def SliceReadGearbox(input_bitwidth: int,
     @generator
     def build(ports):
       up_ready = Wire(Bits(1), name="up_ready")
-      # Register the input for fmax; the ESI channel buffer keeps the handshake
-      # elastic.
       up, up_valid = ports.in_.unwrap(up_ready)
       client_channel, client_ready = SliceReadGearboxImpl.out.type.wrap(
           {
@@ -773,7 +771,7 @@ def ConcatReadGearbox(input_bitwidth: int,
   """Concatenate ``ceil(OUT/IN)`` consecutive engine words into one client
   element wider than the word (``OUT > IN``). Serves single-message reads (any
   ``OUT > IN``; the low ``OUT`` bits of the concatenation are the element) and
-  contiguous list reads whose element is a whole number of words
+  contiguous list reads whose element is a whole number of output_bitwidth
   (``OUT % IN == 0``, so elements never straddle). ``valid_bytes`` is unused:
   such lists have no partial words and a single element is one flit. Straddling
   lists use `ShiftReadGearbox`."""
@@ -829,34 +827,24 @@ def ConcatReadGearbox(input_bitwidth: int,
       client_data_bits = BitsSignal.concat(reversed(regs))[:output_bitwidth]
 
       # Pair-index counter: the word accepted this cycle is written to
-      # chunk_reg[counter]; it advances on each accepted word and resets after a
-      # client element is consumed. When a client consume (`client_xact`) and an
-      # upstream accept (`upstream_xact`) land on the same cycle, the accepted
-      # word is chunk 0 of the *next* element, so the next index must be 1 --
-      # not 0. A plain `Counter` mishandles this (its `clear` beats `increment`,
-      # dropping the accepted word and stalling the pairing, which loses words
-      # and can deadlock the read), so compute the next value explicitly.
-      # `Mux(sel, a, b)` selects `a` when sel==0, `b` when sel==1.
+      # chunk_reg[counter]. 'Counter' clears in preference to incrementing, so
+      # mask the clear with the accept -- a consume and an accept on the same
+      # cycle means the accepted word is chunk 0 of the *next* element, so the
+      # index must land on 1, not 0. 'chunks' need not be a power of two, so
+      # wrap explicitly rather than relying on the counter's natural rollover.
       counter = Wire(UInt(counter_width), name="chunk_counter")
       client_xact = Wire(Bits(1))
-      incremented = Mux(counter == UInt(counter_width)(chunks - 1),
-                        (counter + 1).as_uint(counter_width),
-                        UInt(counter_width)(0))
+      set_client_valid = counter == UInt(counter_width)(chunks - 1)
       counter.assign(
-          Mux(
-              client_xact, Mux(upstream_xact, counter, incremented),
-              Mux(upstream_xact,
-                  UInt(counter_width)(0),
-                  UInt(counter_width)(1))).reg(ports.clk,
-                                               ports.rst,
-                                               rst_value=0,
-                                               ce=upstream_xact | client_xact,
-                                               name="chunk_counter_reg"))
-      set_client_valid = counter == (chunks - 1)
+          Counter(counter_width)(clk=ports.clk,
+                                 rst=ports.rst,
+                                 clear=(upstream_xact & set_client_valid) |
+                                 (client_xact & ~upstream_xact),
+                                 increment=upstream_xact,
+                                 instance_name="chunk_counter").out)
       client_valid = ControlReg(ports.clk, ports.rst,
                                 [set_client_valid & upstream_xact],
                                 [client_xact])
-      client_xact.assign(client_valid & ready_for_upstream)
       for idx, reg_ce in enumerate(reg_ces):
         reg_ce.assign(upstream_xact & (counter == UInt(counter_width)(idx)))
       # 'last' of the final engine word that completes this client flit.
@@ -875,7 +863,8 @@ def ConcatReadGearbox(input_bitwidth: int,
               "data": client_data_bits,
               "last": client_last,
           }, client_valid)
-      ready_for_upstream.assign(client_ready)
+      client_xact.assign(client_valid & client_ready)
+      ready_for_upstream.assign(~client_valid | client_ready)
       ports.out = client_channel
 
   return ConcatReadGearboxImpl
@@ -931,7 +920,7 @@ def DepackReadGearbox(input_bitwidth: int,
       # elastic and decouples the ready path.
       in_reg = ports.in_.buffer(ports.clk, ports.rst, stages=1)
       up, up_valid = in_reg.unwrap(up_ready)
-      client_xact = (up_valid & client_ready).as_bits()
+      client_xact = up_valid & client_ready
 
       if parts == 1:
         # One element per word; nothing to select.
@@ -939,15 +928,19 @@ def DepackReadGearbox(input_bitwidth: int,
         client_data = up.data
       else:
         idx_width = clog2(parts)
-        idx = Wire(UInt(idx_width), name="idx")
+        idx = Reg(UInt(idx_width),
+                  clk=ports.clk,
+                  rst=ports.rst,
+                  rst_value=0,
+                  ce=client_xact,
+                  name="idx")
         # (idx + 1) * elem_bytes == real valid bytes marks the word's last
         # element (the final word may hold fewer than `parts`); add 1 back to
         # the biased 'valid_bytes' to recover the real count.
-        real_valid_bytes = (up.valid_bytes.as_uint(count_width) +
-                            UInt(count_width)(1)).as_uint(count_width)
-        consumed = ((idx.as_uint(count_width) + UInt(count_width)(1)) *
+        real_valid_bytes = (up.valid_bytes + UInt(1)(1)).as_uint(count_width)
+        consumed = ((idx + UInt(1)(1)) *
                     UInt(count_width)(elem_bytes)).as_uint(count_width)
-        last_in_word = (consumed == real_valid_bytes).as_bits()
+        last_in_word = consumed == real_valid_bytes
         # parts:1 element-select mux -- the entire datapath, no shifter.
         word_parts = Array(Bits(output_bitwidth), parts)([
             up.data[k * output_bitwidth:(k + 1) * output_bitwidth]
@@ -955,15 +948,11 @@ def DepackReadGearbox(input_bitwidth: int,
         ])
         client_data = word_parts[idx]
         idx.assign(
-            Mux(last_in_word, (idx + UInt(idx_width)(1)).as_uint(idx_width),
-                UInt(idx_width)(0)).reg(ports.clk,
-                                        ports.rst,
-                                        rst_value=0,
-                                        ce=client_xact,
-                                        name="idx_reg"))
+            Mux(last_in_word, (idx + UInt(1)(1)).as_uint(idx_width),
+                UInt(idx_width)(0)))
 
       # Consume the buffered word as its last element leaves.
-      up_ready.assign((client_xact & last_in_word).as_bits())
+      up_ready.assign(client_xact & last_in_word)
       client_channel, client_ready_sig = DepackReadGearboxImpl.out.type.wrap(
           {
               "tag": up.tag,
@@ -990,11 +979,14 @@ def ShiftReadGearbox(input_bitwidth: int,
   `DepackReadGearbox` are optimizations that avoid this barrel shifter for the
   regular (non-straddling) cases.
 
-  Each input word carries ``valid_bytes`` (how many of its bytes are real; only
-  the burst's final word is partial) and ``last`` (its final word). Because a
-  burst is always a whole number of elements, tracking real bytes lets the
-  gearbox emit exactly the right elements and place the list-terminating
-  ``last`` on the final one -- no padding element is ever emitted."""
+  Each input word carries ``valid_bytes`` (how many of its bytes are real) and
+  ``last``. Both are framed to one whole `read_list` request rather than to the
+  transport: `HostMemReadReqSplitter` drops the per-chunk framing of the reads
+  it issues and re-derives these from the request's total length, so only the
+  request's final word is ever partial. That length is ``num_elements *
+  stride``, so tracking real bytes lets the gearbox emit exactly the right
+  elements and place the list-terminating ``last`` on the final one -- no
+  padding element is ever emitted."""
 
   if input_bitwidth % 8 != 0:
     raise ValueError("engine word width must be a multiple of 8 bits")
@@ -1043,20 +1035,28 @@ def ShiftReadGearbox(input_bitwidth: int,
 
       # Byte-addressed accumulator: `buffer` holds `count` valid bytes packed
       # from bit 0 up; the element being emitted is buffer[0:OUT].
-      buffer = Wire(Bits(buf_bits), name="buffer")
-      count = Wire(UInt(cnt_width), name="count")
+      buffer = Reg(Bits(buf_bits),
+                   clk=ports.clk,
+                   rst=ports.rst,
+                   rst_value=0,
+                   name="buffer")
+      count = Reg(UInt(cnt_width),
+                  clk=ports.clk,
+                  rst=ports.rst,
+                  rst_value=0,
+                  name="count")
       saw_last = Wire(Bits(1), name="saw_last")
 
       # Accept a whole engine word only when there's room, and never while
       # draining a finished burst -- otherwise the next burst's bytes would mix
       # into this one's buffer.
-      has_room = (count <= UInt(cnt_width)(buf_bytes - in_bytes)).as_bits()
-      up_ready.assign((has_room & ~saw_last).as_bits())
-      up_xact = (up_ready & up_valid).as_bits()
+      has_room = count <= UInt(cnt_width)(buf_bytes - in_bytes)
+      up_ready.assign(has_room & ~saw_last)
+      up_xact = up_ready & up_valid
 
       # Emit an element once a full stride slot is buffered.
-      client_valid = (count >= UInt(cnt_width)(stride_bytes)).as_bits()
-      client_xact = (client_valid & client_ready).as_bits()
+      client_valid = count >= UInt(cnt_width)(stride_bytes)
+      client_xact = client_valid & client_ready
 
       # The burst's final word sets `saw_last`; the emit that drains the buffer
       # to empty terminates the list. These never coincide: emitting needs a
@@ -1064,15 +1064,15 @@ def ShiftReadGearbox(input_bitwidth: int,
       # accept cycle is impossible.
       added = Mux(up_xact,
                   UInt(cnt_width)(0), (up.valid_bytes.as_uint(cnt_width) +
-                                       UInt(cnt_width)(1)).as_uint(cnt_width))
+                                       UInt(1)(1)).as_uint(cnt_width))
       after_add = (count + added).as_uint(cnt_width)
       after_emit = (after_add -
                     UInt(cnt_width)(stride_bytes)).as_uint(cnt_width)
       set_saw_last = (up_xact & up.last).as_bits()
-      is_final_slot = (after_emit == UInt(cnt_width)(0)).as_bits()
-      burst_ending = (saw_last | set_saw_last).as_bits()
-      client_last = (client_valid & burst_ending & is_final_slot).as_bits()
-      final_emit = (client_xact & client_last).as_bits()
+      is_final_slot = (after_emit == UInt(cnt_width)(0))
+      burst_ending = saw_last | set_saw_last
+      client_last = client_valid & burst_ending & is_final_slot
+      final_emit = client_xact & client_last
 
       # Append the accepted word at bit offset count*8 (dynamic left shift);
       # then, if we emit this cycle, drop the consumed slot (constant right
@@ -1090,18 +1090,11 @@ def ShiftReadGearbox(input_bitwidth: int,
       drained = appended[stride_bits:buf_bits].pad_or_truncate(buf_bits)
       buffer.assign(
           Mux(final_emit, Mux(client_xact, appended, drained),
-              Bits(buf_bits)(0)).reg(ports.clk,
-                                     ports.rst,
-                                     rst_value=0,
-                                     name="buffer_reg"))
+              Bits(buf_bits)(0)))
 
       # count += accepted real bytes (biased 'valid_bytes' + 1); -= stride on
       # emit.
-      count.assign(
-          Mux(client_xact, after_add, after_emit).reg(ports.clk,
-                                                      ports.rst,
-                                                      rst_value=0,
-                                                      name="count_reg"))
+      count.assign(Mux(client_xact, after_add, after_emit))
 
       saw_last.assign(
           ControlReg(ports.clk, ports.rst, [set_saw_last], [final_emit]))
@@ -1319,8 +1312,8 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
               "data":
                   resp_payload.data,
               "valid_bytes":
-                  Mux(is_final_word, final_valid_bytes,
-                      UInt(vb_width)(word_bytes - 1)),
+                  Mux(is_final_word,
+                      UInt(vb_width)(word_bytes - 1), final_valid_bytes),
               "last":
                   is_final_word,
           }), resp_valid)
