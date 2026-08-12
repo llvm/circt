@@ -334,10 +334,11 @@ set_source_files_properties(
 )
 """
 
-    # zlib is only needed when FST tracing (debug builds) is enabled.
+    # Verilator's FST writer (debug builds) pulls in both zlib and lz4.
     if self.debug:
-      zlib_find = "find_package(ZLIB REQUIRED)"
-      zlib_link = "ZLIB::ZLIB"
+      zlib_find = ("find_package(ZLIB REQUIRED)\n"
+                   "find_library(LZ4_LIBRARY NAMES lz4 REQUIRED)")
+      zlib_link = "ZLIB::ZLIB\n  ${LZ4_LIBRARY}"
     else:
       zlib_find = ""
       zlib_link = ""
