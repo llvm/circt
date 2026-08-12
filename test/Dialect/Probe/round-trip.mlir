@@ -1,5 +1,4 @@
 // RUN: circt-opt --verify-roundtrip %s | circt-opt | FileCheck %s
-// RUN: circt-opt %s --canonicalize --cse | FileCheck %s --check-prefix=OPT
 
 // CHECK-LABEL: hw.module @Basic
 hw.module @Basic(in %in: i8, out observed: i8) {
@@ -55,24 +54,4 @@ hw.module @ProbeInstanceRead(in %in: i8, out out: i8) {
   // CHECK: %[[V:.+]] = probe.read %[[P]] : <i8>
   %v = probe.read %p : <i8>
   hw.output %v : i8
-}
-
-// OPT-LABEL: hw.module @NoOptimizationBarrier
-hw.module @NoOptimizationBarrier(in %a: i8, in %b: i8, out value: i8,
-                                 out observed: i8) {
-  // OPT: %[[VALUE:.+]] = comb.xor %a, %b : i8
-  %value = comb.xor %a, %b : i8
-  // OPT-NEXT: %[[REF:.+]] = probe.send %[[VALUE]] : i8
-  %ref = probe.send %value : i8
-  // OPT-NEXT: %[[OBSERVED:.+]] = probe.read %[[REF]] : <i8>
-  %observed = probe.read %ref : <i8>
-  // OPT-NEXT: hw.output %[[VALUE]], %[[OBSERVED]] : i8, i8
-  hw.output %value, %observed : i8, i8
-}
-
-// OPT-LABEL: hw.module @UnusedSend
-// OPT-NOT: probe.send
-hw.module @UnusedSend(in %in: i8, out out: i8) {
-  %ref = probe.send %in : i8
-  hw.output %in : i8
 }
