@@ -537,11 +537,13 @@ hw.module @NestedLoopWithNonConstantInnerBound(in %a: i42, out x : i42) {
   //     for (j = i; j < 2; ++j)
   //       x += a
   %0 = llhd.combinational -> i42 {
-    // CHECK: cf.br
-    // CHECK: cf.cond_br
-    // CHECK: cf.cond_br
     // CHECK-NOT: cf.cond_br
-    // CHECK: llhd.yield
+    // CHECK: [[X1:%.+]] = comb.add
+    // CHECK-NEXT: [[X2:%.+]] = comb.add [[X1]],
+    // CHECK-NOT: cf.cond_br
+    // CHECK: [[X3:%.+]] = comb.add
+    // CHECK-NOT: cf.cond_br
+    // CHECK: llhd.yield [[X3]]
     cf.br ^outerHeader(%c0_i42, %c0_i42, %a : i42, i42, i42)
   ^outerHeader(%i: i42, %x1: i42, %a1: i42):
     %1 = comb.icmp ult %i, %c2_i42 : i42

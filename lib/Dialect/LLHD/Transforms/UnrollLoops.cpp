@@ -422,6 +422,7 @@ struct UnrollLoopsPass
     : public llhd::impl::UnrollLoopsPassBase<UnrollLoopsPass> {
   void runOnOperation() override;
   void runOnOperation(CombinationalOp op);
+  bool unrollLoops(CombinationalOp op);
 };
 } // namespace
 
@@ -431,10 +432,17 @@ void UnrollLoopsPass::runOnOperation() {
 }
 
 void UnrollLoopsPass::runOnOperation(CombinationalOp op) {
+  // Unrolling a loop may open up opportunities to unroll its nested loops.
+  // Iterate until all possible loops are unrolled.
+  while (unrollLoops(op))
+    ;
+}
+
+bool UnrollLoopsPass::unrollLoops(CombinationalOp op) {
   // There's nothing to do if we only have a single block. MLIR even refuses to
   // compute a dominator tree in that case.
   if (op.getBody().hasOneBlock())
-    return;
+    return false;
 
   // Find the loops.
   LLVM_DEBUG(llvm::dbgs() << "Unrolling loops in " << op.getLoc() << "\n");
@@ -446,6 +454,7 @@ void UnrollLoopsPass::runOnOperation(CombinationalOp op) {
   // data structure for each loop we can potentially unroll. The loops are in
   // preorder, with outer loops appearing before their child loops.
   SmallVector<Loop> loops;
+  bool retry = false;
   for (auto *cfgLoop : cfgLoopInfo.getLoopsInPreorder()) {
     // To simplify unrolling we need a unique latch block branching back to the
     // header.
@@ -482,12 +491,19 @@ void UnrollLoopsPass::runOnOperation(CombinationalOp op) {
     }
 
     // Check if the loop body matches the pattern we can unroll.
-    if (loop.match())
+    if (loop.match()) {
       loops.push_back(std::move(loop));
+      continue;
+    }
+
+    // If an enclosing loop is unrolled, we retry the unrolling.
+    retry |= llvm::any_of(loops, [&](const Loop &other) {
+      return other.cfgLoop.contains(cfgLoop);
+    });
   }
 
   if (loops.empty())
-    return;
+    return false;
 
   // Dump some debugging information about the loops we've found.
   LLVM_DEBUG({
@@ -516,4 +532,6 @@ void UnrollLoopsPass::runOnOperation(CombinationalOp op) {
   // their parent loops.
   for (auto &loop : llvm::reverse(loops))
     loop.unroll(cfgLoopInfo);
+
+  return retry;
 }
