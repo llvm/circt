@@ -12,6 +12,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -60,6 +61,17 @@ LogicalResult BurstSetAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                                    ArrayRef<BurstSpecAttr> burstSpecs) {
   if (burstSpecs.empty())
     return emitError() << "'burst_set' must be non-empty";
+  return success();
+}
+
+LogicalResult WindowAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 uint64_t base, uint64_t last,
+                                 BurstSetAttr burstSpecs) {
+  if (last < base)
+    return emitError() << "window 'last' address 0x"
+                       << llvm::utohexstr(last, /*LowerCase=*/true)
+                       << " must not be less than 'base' address 0x"
+                       << llvm::utohexstr(base, /*LowerCase=*/true);
   return success();
 }
 

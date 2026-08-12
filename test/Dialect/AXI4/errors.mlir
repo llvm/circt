@@ -42,3 +42,8 @@
 
 // expected-error @below {{'burst_set' must be non-empty}}
 "test.attrs"() {a = #axi4.burst_set<>} : () -> ()
+
+// -----
+
+// expected-error @below {{window 'last' address 0x3fff must not be less than 'base' address 0x4000}}
+"test.attrs"() {a = #axi4.window<base = 0x4000, last = 0x3fff, burst_specs = <<fixed, len = 4>>>} : () -> ()
