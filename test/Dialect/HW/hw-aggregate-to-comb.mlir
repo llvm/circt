@@ -147,3 +147,24 @@ hw.module private @struct_create_extract_roundtrip(in %foo: i3, in %bar: i5, out
   %bar_out = hw.struct_extract %s["bar"] : !hw.struct<foo: i3, bar: i5>
   hw.output %foo_out, %bar_out : i3, i5
 }
+
+// CHECK-LABEL: @struct_inject(
+hw.module private @struct_inject(in %s: !hw.struct<foo: i3, bar: i5>, in %new_foo: i3, out out: !hw.struct<foo: i3, bar: i5>) {
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %s : (!hw.struct<foo: i3, bar: i5>) -> i8
+  // CHECK-NEXT: %[[BAR:.+]] = comb.extract %[[BITCAST]] from 0 : (i8) -> i5
+  // CHECK-NEXT: %[[CONCAT:.+]] = comb.concat %new_foo, %[[BAR]] : i3, i5
+  // CHECK-NEXT: %[[OUT:.+]] = hw.bitcast %[[CONCAT]] : (i8) -> !hw.struct<foo: i3, bar: i5>
+  // CHECK-NEXT: hw.output %[[OUT]]
+  %out = hw.struct_inject %s["foo"], %new_foo : !hw.struct<foo: i3, bar: i5>
+  hw.output %out : !hw.struct<foo: i3, bar: i5>
+}
+
+// CHECK-LABEL: @struct_explode(
+hw.module private @struct_explode(in %s: !hw.struct<foo: i3, bar: i5>, out foo: i3, out bar: i5) {
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %s : (!hw.struct<foo: i3, bar: i5>) -> i8
+  // CHECK-NEXT: %[[FOO:.+]] = comb.extract %[[BITCAST]] from 5 : (i8) -> i3
+  // CHECK-NEXT: %[[BAR:.+]] = comb.extract %[[BITCAST]] from 0 : (i8) -> i5
+  // CHECK-NEXT: hw.output %[[FOO]], %[[BAR]]
+  %foo, %bar = hw.struct_explode %s : !hw.struct<foo: i3, bar: i5>
+  hw.output %foo, %bar : i3, i5
+}

@@ -162,9 +162,17 @@ struct HWStructCreateOpConversion : OpConversionPattern<hw::StructCreateOp> {
   LogicalResult
   matchAndRewrite(hw::StructCreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Lower struct_create to comb.concat. The first field occupies the MSBs, so
-    // we concatenate fields in order (comb.concat places first operand at MSB).
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, adaptor.getInput());
+    // Lower struct_create to comb.concat (or replace with single operand if 1
+    // field). The first field occupies the MSBs, so we concatenate fields in
+    // order.
+    auto inputs = adaptor.getInput();
+    if (inputs.empty())
+      return rewriter.notifyMatchFailure(op.getLoc(), "empty struct create");
+    if (inputs.size() == 1) {
+      rewriter.replaceOp(op, inputs.front());
+      return success();
+    }
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, inputs);
     return success();
   }
 };
@@ -201,6 +209,82 @@ struct HWStructExtractOpConversion : OpConversionPattern<hw::StructExtractOp> {
     int64_t bitOffset = totalBitWidth - consumedBits - fieldWidth;
     rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, adaptor.getInput(),
                                                  bitOffset, fieldWidth);
+    return success();
+  }
+};
+
+struct HWStructInjectOpConversion : OpConversionPattern<hw::StructInjectOp> {
+  using OpConversionPattern<hw::StructInjectOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::StructInjectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    auto structType = cast<hw::StructType>(op.getInput().getType());
+    auto fieldIndex = op.getFieldIndex();
+    auto elements = structType.getElements();
+
+    int64_t totalBitWidth = hw::getBitWidth(structType);
+    if (totalBitWidth <= 0)
+      return rewriter.notifyMatchFailure(loc, "unknown struct width");
+
+    Value structInt = adaptor.getInput();
+    SmallVector<Value> newFields;
+    int64_t consumedBits = 0;
+    for (size_t i = 0, e = elements.size(); i < e; ++i) {
+      int64_t fieldWidth = hw::getBitWidth(elements[i].type);
+      if (fieldWidth <= 0)
+        return rewriter.notifyMatchFailure(loc, "unknown field width");
+
+      if (i == fieldIndex) {
+        newFields.push_back(adaptor.getNewValue());
+      } else {
+        int64_t bitOffset = totalBitWidth - consumedBits - fieldWidth;
+        newFields.push_back(rewriter.createOrFold<comb::ExtractOp>(
+            loc, structInt, bitOffset, fieldWidth));
+      }
+      consumedBits += fieldWidth;
+    }
+
+    if (newFields.size() == 1) {
+      rewriter.replaceOp(op, newFields.front());
+      return success();
+    }
+
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, newFields);
+    return success();
+  }
+};
+
+struct HWStructExplodeOpConversion : OpConversionPattern<hw::StructExplodeOp> {
+  using OpConversionPattern<hw::StructExplodeOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::StructExplodeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    auto structType = cast<hw::StructType>(op.getInput().getType());
+    auto elements = structType.getElements();
+
+    int64_t totalBitWidth = hw::getBitWidth(structType);
+    if (totalBitWidth <= 0)
+      return rewriter.notifyMatchFailure(loc, "unknown struct width");
+
+    Value structInt = adaptor.getInput();
+    SmallVector<Value> extractedResults;
+    int64_t consumedBits = 0;
+    for (size_t i = 0, e = elements.size(); i < e; ++i) {
+      int64_t fieldWidth = hw::getBitWidth(elements[i].type);
+      if (fieldWidth <= 0)
+        return rewriter.notifyMatchFailure(loc, "unknown element width");
+
+      int64_t bitOffset = totalBitWidth - consumedBits - fieldWidth;
+      extractedResults.push_back(rewriter.createOrFold<comb::ExtractOp>(
+          loc, structInt, bitOffset, fieldWidth));
+      consumedBits += fieldWidth;
+    }
+
+    rewriter.replaceOp(op, extractedResults);
     return success();
   }
 };
@@ -253,14 +337,21 @@ public:
 };
 } // namespace
 
-static void populateHWAggregateToCombOpConversionPatterns(
-    RewritePatternSet &patterns, AggregateTypeConverter &typeConverter) {
-  patterns.add<
-      HWArrayGetOpConversion, HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
-      HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
-      HWAggregateConstantOpConversion, HWArrayInjectOpConversion,
-      HWStructCreateOpConversion, HWStructExtractOpConversion, MuxOpConversion>(
+void circt::hw::populateHWStructToCombConversionPatterns(
+    RewritePatternSet &patterns, TypeConverter &typeConverter) {
+  patterns.add<HWStructCreateOpConversion, HWStructExtractOpConversion,
+               HWStructInjectOpConversion, HWStructExplodeOpConversion>(
       typeConverter, patterns.getContext());
+}
+
+void circt::hw::populateHWAggregateToCombOpConversionPatterns(
+    RewritePatternSet &patterns, TypeConverter &typeConverter) {
+  populateHWStructToCombConversionPatterns(patterns, typeConverter);
+  patterns.add<HWArrayGetOpConversion,
+               HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
+               HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
+               HWAggregateConstantOpConversion, HWArrayInjectOpConversion,
+               MuxOpConversion>(typeConverter, patterns.getContext());
 }
 
 namespace {
@@ -274,17 +365,19 @@ struct HWAggregateToCombPass
 void HWAggregateToCombPass::runOnOperation() {
   ConversionTarget target(getContext());
 
-  // TODO: Add ArraySliceOp and struct operatons as well.
+  // TODO: Add ArraySliceOp and struct operations as well.
   target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
                       hw::AggregateConstantOp, hw::ArrayInjectOp,
-                      hw::StructCreateOp, hw::StructExtractOp>();
+                      hw::StructCreateOp, hw::StructExtractOp,
+                      hw::StructInjectOp, hw::StructExplodeOp>();
   target.addDynamicallyLegalOp<comb::MuxOp>(
       [](comb::MuxOp op) { return hw::type_isa<IntegerType>(op.getType()); });
   target.addLegalDialect<hw::HWDialect, comb::CombDialect>();
 
   RewritePatternSet patterns(&getContext());
   AggregateTypeConverter typeConverter;
-  populateHWAggregateToCombOpConversionPatterns(patterns, typeConverter);
+  circt::hw::populateHWAggregateToCombOpConversionPatterns(patterns,
+                                                           typeConverter);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

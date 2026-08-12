@@ -16,6 +16,11 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 
+namespace mlir {
+class TypeConverter;
+class RewritePatternSet;
+} // namespace mlir
+
 namespace circt {
 namespace hw {
 
@@ -25,6 +30,11 @@ namespace hw {
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/HW/Passes.h.inc"
+
+void populateHWStructToCombConversionPatterns(
+    mlir::RewritePatternSet &patterns, mlir::TypeConverter &typeConverter);
+void populateHWAggregateToCombOpConversionPatterns(
+    mlir::RewritePatternSet &patterns, mlir::TypeConverter &typeConverter);
 
 } // namespace hw
 } // namespace circt

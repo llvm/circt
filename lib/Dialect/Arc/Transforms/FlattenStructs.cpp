@@ -12,6 +12,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -66,204 +67,6 @@ static Value castFromInteger(OpBuilder &builder, Location loc, Value intVal,
     return intVal;
   return hw::BitcastOp::create(builder, loc, targetType, intVal).getResult();
 }
-
-// Converts `hw.struct_create` into integer bit concatenation.
-struct HWStructCreateOpConversion
-    : public OpConversionPattern<hw::StructCreateOp> {
-  using OpConversionPattern<hw::StructCreateOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::StructCreateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Location loc = op.getLoc();
-    hw::StructType structType = op.getType();
-    auto elements = structType.getElements();
-
-    if (elements.empty())
-      return rewriter.notifyMatchFailure(
-          op, "cannot flatten struct with zero fields");
-
-    SmallVector<Value> intOperands;
-    for (auto [idx, input] : llvm::enumerate(adaptor.getInput())) {
-      int64_t fieldWidth = hw::getBitWidth(elements[idx].type);
-      if (fieldWidth <= 0)
-        return rewriter.notifyMatchFailure(
-            op, "expected positive bit width for struct element");
-      intOperands.push_back(
-          ensureIntegerType(rewriter, loc, input, fieldWidth));
-    }
-
-    if (intOperands.empty())
-      return rewriter.notifyMatchFailure(
-          op, "cannot create struct with zero elements");
-
-    if (intOperands.size() == 1) {
-      rewriter.replaceOp(op, intOperands.front());
-      return success();
-    }
-
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, intOperands);
-    return success();
-  }
-};
-
-// Converts `hw.struct_extract` by extracting the field's bit slice from the
-// flattened integer representation of the struct.
-struct HWStructExtractOpConversion
-    : public OpConversionPattern<hw::StructExtractOp> {
-  using OpConversionPattern<hw::StructExtractOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::StructExtractOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Location loc = op.getLoc();
-    auto structType = cast<hw::StructType>(op.getInput().getType());
-    auto fieldIndex = op.getFieldIndex();
-    auto elements = structType.getElements();
-
-    int64_t totalBitWidth = hw::getBitWidth(structType);
-    if (totalBitWidth <= 0)
-      return rewriter.notifyMatchFailure(
-          op, "expected positive bit width for struct type");
-
-    int64_t consumedBits = 0;
-    for (auto [i, element] : llvm::enumerate(elements.take_front(fieldIndex))) {
-      int64_t width = hw::getBitWidth(element.type);
-      if (width <= 0)
-        return rewriter.notifyMatchFailure(
-            op, "expected positive bit width for preceding struct field");
-      consumedBits += width;
-    }
-
-    int64_t fieldWidth = hw::getBitWidth(elements[fieldIndex].type);
-    if (fieldWidth <= 0)
-      return rewriter.notifyMatchFailure(
-          op, "expected positive bit width for target struct field");
-
-    int64_t bitOffset = totalBitWidth - consumedBits - fieldWidth;
-    Value structInt =
-        ensureIntegerType(rewriter, loc, adaptor.getInput(), totalBitWidth);
-
-    Value extracted = comb::ExtractOp::create(
-        rewriter, loc, rewriter.getIntegerType(fieldWidth), structInt,
-        bitOffset);
-
-    Type targetResultType = getTypeConverter()->convertType(op.getType());
-    if (!targetResultType)
-      return rewriter.notifyMatchFailure(
-          op, "failed to convert extract result type");
-
-    rewriter.replaceOp(
-        op, castFromInteger(rewriter, loc, extracted, targetResultType));
-    return success();
-  }
-};
-
-// Converts `hw.struct_inject` by reconstructing the flattened integer with the
-// updated field slice concatenated with unchanged surrounding slices.
-struct HWStructInjectOpConversion
-    : public OpConversionPattern<hw::StructInjectOp> {
-  using OpConversionPattern<hw::StructInjectOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::StructInjectOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Location loc = op.getLoc();
-    auto structType = cast<hw::StructType>(op.getInput().getType());
-    auto fieldIndex = op.getFieldIndex();
-    auto elements = structType.getElements();
-
-    int64_t totalBitWidth = hw::getBitWidth(structType);
-    if (totalBitWidth <= 0)
-      return rewriter.notifyMatchFailure(
-          op, "expected positive bit width for struct type");
-
-    Value structInt =
-        ensureIntegerType(rewriter, loc, adaptor.getInput(), totalBitWidth);
-
-    SmallVector<Value> newFields;
-    int64_t consumedBits = 0;
-    for (auto [i, element] : llvm::enumerate(elements)) {
-      int64_t fieldWidth = hw::getBitWidth(element.type);
-      if (fieldWidth <= 0)
-        return rewriter.notifyMatchFailure(
-            op, "expected positive bit width for struct field");
-
-      if (i == fieldIndex) {
-        newFields.push_back(ensureIntegerType(
-            rewriter, loc, adaptor.getNewValue(), fieldWidth));
-      } else {
-        int64_t bitOffset = totalBitWidth - consumedBits - fieldWidth;
-        Value extracted = comb::ExtractOp::create(
-            rewriter, loc, rewriter.getIntegerType(fieldWidth), structInt,
-            bitOffset);
-        newFields.push_back(extracted);
-      }
-      consumedBits += fieldWidth;
-    }
-
-    if (newFields.empty())
-      return rewriter.notifyMatchFailure(
-          op, "cannot inject into struct with zero elements");
-
-    if (newFields.size() == 1) {
-      rewriter.replaceOp(op, newFields.front());
-      return success();
-    }
-
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, newFields);
-    return success();
-  }
-};
-
-// Converts `hw.struct_explode` by extracting all individual field slices from
-// the flattened integer.
-struct HWStructExplodeOpConversion
-    : public OpConversionPattern<hw::StructExplodeOp> {
-  using OpConversionPattern<hw::StructExplodeOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::StructExplodeOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Location loc = op.getLoc();
-    auto structType = cast<hw::StructType>(op.getInput().getType());
-    auto elements = structType.getElements();
-
-    int64_t totalBitWidth = hw::getBitWidth(structType);
-    if (totalBitWidth <= 0)
-      return rewriter.notifyMatchFailure(
-          op, "expected positive bit width for struct type");
-
-    Value structInt =
-        ensureIntegerType(rewriter, loc, adaptor.getInput(), totalBitWidth);
-
-    SmallVector<Value> extractedResults;
-    int64_t consumedBits = 0;
-    for (auto [i, element] : llvm::enumerate(elements)) {
-      int64_t fieldWidth = hw::getBitWidth(element.type);
-      if (fieldWidth <= 0)
-        return rewriter.notifyMatchFailure(
-            op, "expected positive bit width for struct element");
-
-      int64_t bitOffset = totalBitWidth - consumedBits - fieldWidth;
-      Value extracted = comb::ExtractOp::create(
-          rewriter, loc, rewriter.getIntegerType(fieldWidth), structInt,
-          bitOffset);
-
-      Type targetType = getTypeConverter()->convertType(op.getResultTypes()[i]);
-      if (!targetType)
-        return rewriter.notifyMatchFailure(
-            op, "failed to convert explode result type");
-
-      extractedResults.push_back(
-          castFromInteger(rewriter, loc, extracted, targetType));
-      consumedBits += fieldWidth;
-    }
-
-    rewriter.replaceOp(op, extractedResults);
-    return success();
-  }
-};
 
 static Attribute convertAggregateAttr(Attribute attr, Type originalType,
                                       Type convertedType,
@@ -523,9 +326,9 @@ void FlattenStructsPass::runOnOperation() {
   populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
       patterns, converter);
 
-  patterns.add<HWStructCreateOpConversion, HWStructExtractOpConversion,
-               HWStructInjectOpConversion, HWStructExplodeOpConversion,
-               HWAggregateConstantOpConversion, HWBitcastOpConversion,
+  hw::populateHWStructToCombConversionPatterns(patterns, converter);
+
+  patterns.add<HWAggregateConstantOpConversion, HWBitcastOpConversion,
                GenericOpConversion>(converter, &getContext());
 
   ConversionConfig config;
