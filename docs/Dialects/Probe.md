@@ -30,14 +30,32 @@ representation before creating Probe dialect IR. This keeps the producer of an
 observation explicit in the module hierarchy. This restriction simplifies
 compilation for a wide range of backends.
 
-Probe operations are currently restricted to the non-procedural graph region
-that is the body of an `hw.module`. They cannot be placed in procedural regions
-such as `hw.triggered`, or in other nested regions. Probe handles must not be
-created or read inside those regions. The dialect does not define semantics for
-passing a probe reference across a region boundary; such uses should be
-legalized before creating Probe dialect IR. Procedural logic should consume an
-ordinary hardware value obtained by reading a probe in the enclosing module
-body.
+## Supported Placement and Propagation
+
+The initial Probe dialect supports the following narrow path: `probe.send` and
+`probe.read` appear directly in an `hw.module` body, a probe reference is
+returned through an output port, and the corresponding `hw.instance` result is
+consumed by `probe.read` in the enclosing module body. This is the only
+cross-module propagation path for which the dialect currently defines
+semantics.
+
+The Probe operations themselves cannot be placed in procedural regions such as
+`hw.triggered`, or in other nested regions. Probe handles must not be created or
+read inside those regions. Procedural logic should consume an ordinary hardware
+value obtained by reading a probe in the enclosing module body. The dialect
+does not define semantics for passing a probe reference across a region
+boundary; such uses should be legalized before creating Probe dialect IR.
+
+Probe references propagated through instance-choice operations are currently
+unsupported. The dialect does not define how a probe reference is associated
+with the selected module, so FIRRTL lowering must diagnose or reject such uses
+until the required semantics are specified.
+
+Probe references are not supported as HW inner-symbol targets. This applies
+both to a `!probe.ref<T>` value and to any field containing one. Other
+propagation paths through generic operations are similarly outside the current
+Probe dialect contract, even if those operations accept the type through a
+generic type constraint such as `AnyType`.
 
 ## Example
 

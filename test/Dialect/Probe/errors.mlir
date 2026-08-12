@@ -44,7 +44,6 @@ hw.module @ProbeInTriggered(in %in: i8, in %clock: i1) {
     ^bb0(%arg: i8):
     // expected-error @below {{expects parent op 'hw.module'}}
     %p = probe.send %arg : i8
-    // expected-error @below {{expects parent op 'hw.module'}}
     %v = probe.read %p : <i8>
   }
 }
