@@ -433,9 +433,10 @@ void UnrollLoopsPass::runOnOperation() {
 
 void UnrollLoopsPass::runOnOperation(CombinationalOp op) {
   // Unrolling a loop may open up opportunities to unroll its nested loops.
-  // Iterate until all possible loops are unrolled.
-  while (unrollLoops(op))
-    ;
+  // Iterate until all possible loops are unrolled or the limit is reached.
+  for (unsigned i = 0; i < 16; ++i)
+    if (!unrollLoops(op))
+      break;
 }
 
 bool UnrollLoopsPass::unrollLoops(CombinationalOp op) {
