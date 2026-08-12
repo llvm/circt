@@ -36,3 +36,24 @@ hw.module @BadRef(in %in: i8) {
   // expected-error @below {{failed to verify that input and ref types match}}
   %p = "probe.send"(%in) : (i8) -> !probe.ref<i7>
 }
+
+// -----
+
+hw.module @ProbeInTriggered(in %in: i8, in %clock: i1) {
+  hw.triggered posedge %clock(%in) : i8 {
+    ^bb0(%arg: i8):
+    // expected-error @below {{expects parent op 'hw.module'}}
+    %p = probe.send %arg : i8
+    // expected-error @below {{expects parent op 'hw.module'}}
+    %v = probe.read %p : <i8>
+  }
+}
+
+// -----
+
+hw.module @ProbeInNestedGraphRegion(in %in: i8) {
+  sv.ordered {
+    // expected-error @below {{expects parent op 'hw.module'}}
+    %p = probe.send %in : i8
+  }
+}

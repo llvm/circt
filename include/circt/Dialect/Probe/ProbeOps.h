@@ -13,6 +13,7 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Probe/ProbeDialect.h"
 #include "circt/Dialect/Probe/ProbeTypes.h"
 

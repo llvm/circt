@@ -19,6 +19,7 @@ class ProbeOp<string mnemonic, list<Trait> traits = []> :
 
 def SendOp : ProbeOp<"send", [
   Pure,
+  HasParent<"hw::HWModuleOp">,
   TypesMatchWith<"input and ref types match",
     "input", "ref", "::circt::probe::RefType::get($_self)">
 ]> {
@@ -43,7 +44,8 @@ def ReadOp : ProbeOp<"read", [
   TypesMatchWith<"input and result types match",
     "input", "result",
     "cast<::circt::probe::RefType>($_self).getElementType()">,
-  Pure
+  Pure,
+  HasParent<"hw::HWModuleOp">
 ]> {
   let summary = "read the value observed by a probe handle";
   let description = [{

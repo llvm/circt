@@ -30,6 +30,15 @@ representation before creating Probe dialect IR. This keeps the producer of an
 observation explicit in the module hierarchy. This restriction simplifies
 compilation for a wide range of backends.
 
+Probe operations are currently restricted to the non-procedural graph region
+that is the body of an `hw.module`. They cannot be placed in procedural regions
+such as `hw.triggered`, or in other nested regions. Probe handles must not be
+created or read inside those regions. The dialect does not define semantics for
+passing a probe reference across a region boundary; such uses should be
+legalized before creating Probe dialect IR. Procedural logic should consume an
+ordinary hardware value obtained by reading a probe in the enclosing module
+body.
+
 ## Example
 
 The producer creates a probe handle for `%in` and returns it through an output
