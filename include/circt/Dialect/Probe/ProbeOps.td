@@ -57,6 +57,7 @@ def ReadOp : ProbeOp<"read", [
   let arguments = (ins RefTypeConstraint:$input);
   let results = (outs ProbeElementType:$result);
   let assemblyFormat = "$input attr-dict `:` type($input)";
+  let hasFolder = true;
 }
 
 #endif // CIRCT_DIALECT_PROBE_PROBEOPS_TD

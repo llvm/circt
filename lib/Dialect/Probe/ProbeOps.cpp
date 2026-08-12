@@ -20,3 +20,10 @@ void ProbeDialect::registerOps() {
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Probe/Probe.cpp.inc"
+
+OpFoldResult ReadOp::fold(FoldAdaptor) {
+  auto send = getInput().getDefiningOp<SendOp>();
+  if (!send)
+    return {};
+  return send.getInput();
+}
