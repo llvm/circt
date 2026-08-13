@@ -56,7 +56,10 @@ static void dmaTest(AcceleratorConnection *, Accelerator *,
                     const std::vector<uint32_t> &widths, bool read, bool write);
 static void bandwidthTest(AcceleratorConnection *, Accelerator *,
                           const std::vector<uint32_t> &widths,
-                          uint32_t xferCount, bool read, bool write);
+                          uint32_t xferCount, bool read, bool write,
+                          bool checkData);
+static uint8_t esitesterDataByte(uint32_t index, size_t byte);
+static uint8_t enginePatternByte(uint32_t index, size_t byte, size_t bitWidth);
 static void loopbackAddTest(AcceleratorConnection *, Accelerator *,
                             uint32_t iterations, bool pipeline);
 static void aggregateHostmemBandwidthTest(AcceleratorConnection *,
@@ -81,7 +84,8 @@ static void channelTest(AcceleratorConnection *, Accelerator *,
 static void resetTest(AcceleratorConnection *, Accelerator *);
 
 // Default widths and default widths string for CLI help text.
-constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
+constexpr std::array<uint32_t, 8> defaultWidths = {24,  32,  64,  72,
+                                                   128, 256, 512, 534};
 static std::string defaultWidthsStr() {
   std::string s;
   for (size_t i = 0; i < defaultWidths.size(); ++i) {
@@ -214,6 +218,7 @@ int main(int argc, const char *argv[]) {
                            "Number of transfers to perform");
   bool bandwidthRead = false;
   bool bandwidthWrite = false;
+  bool bandwidthCheckData = false;
   std::vector<uint32_t> bandwidthWidths(defaultWidths.begin(),
                                         defaultWidths.end());
   bandwidthSub->add_option("--widths", bandwidthWidths,
@@ -222,6 +227,8 @@ int main(int argc, const char *argv[]) {
   bandwidthSub->add_flag("-w,--write", bandwidthWrite,
                          "Enable bandwidth write");
   bandwidthSub->add_flag("-r,--read", bandwidthRead, "Enable bandwidth read");
+  bandwidthSub->add_flag("--check-data", bandwidthCheckData,
+                         "Verify every transferred payload byte");
 
   CLI::App *hostmembwSub =
       cli.add_subcommand("hostmembw", "Run the host memory bandwidth test");
@@ -352,7 +359,7 @@ int main(int argc, const char *argv[]) {
       dmaTest(acc, accel, dmaWidths, dmaRead, dmaWrite);
     } else if (*bandwidthSub) {
       bandwidthTest(acc, accel, bandwidthWidths, xferCount, bandwidthRead,
-                    bandwidthWrite);
+                    bandwidthWrite, bandwidthCheckData);
     } else if (*hostmembwSub) {
       hostmemBandwidthTest(acc, accel, hmBwCount, hmBwWidths, hmBwRead,
                            hmBwWrite);
@@ -699,19 +706,27 @@ static void dmaReadTest(AcceleratorConnection *conn, Accelerator *acc,
   outPort.connect();
 
   size_t xferCount = 24;
-  uint64_t last = 0;
   MessageData data;
   toHostMMIO->write(0, xferCount);
-  for (size_t i = 0; i < xferCount; ++i) {
+  const size_t wireBytes = (width + 7) / 8;
+  for (size_t index = 0; index < xferCount; ++index) {
     outPort.read(data);
-    if (width == 64) {
-      uint64_t val = *data.as<uint64_t>();
-      if (val < last)
-        throw std::runtime_error("dma read test failed. Out of order data");
-      last = val;
+    if (data.getSize() != wireBytes)
+      throw std::runtime_error("dma read test failed. Expected " +
+                               std::to_string(wireBytes) + " bytes, got " +
+                               std::to_string(data.getSize()));
+    for (size_t byte = 0; byte < wireBytes; ++byte) {
+      uint8_t expected =
+          enginePatternByte(static_cast<uint32_t>(index), byte, width);
+      if (data.getBytes()[byte] != expected)
+        throw std::runtime_error(
+            "dma read test failed. Data mismatch at item " +
+            std::to_string(index) + " byte " + std::to_string(byte) +
+            ": expected " + toHex(expected) + ", got " +
+            toHex(data.getBytes()[byte]));
     }
     logger.debug("esitester",
-                 "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex());
+                 "Payload [" + std::to_string(index) + "] = 0x" + data.toHex());
   }
   outPort.disconnect();
   std::cout << "  DMA read test for " << width << " bits passed" << std::endl;
@@ -743,9 +758,7 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   writePort.connect();
 
   size_t xferCount = 24;
-  uint8_t *data = new uint8_t[width];
-  for (size_t i = 0; i < width / 8; ++i)
-    data[i] = 0;
+  std::vector<uint8_t> data((width + 7) / 8, 0);
   fromHostMMIO->read(8);
   fromHostMMIO->write(0, xferCount);
   for (size_t i = 1; i < xferCount + 1; ++i) {
@@ -753,7 +766,7 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
     bool successWrite;
     size_t attempts = 0;
     do {
-      successWrite = writePort.tryWrite(MessageData(data, width / 8));
+      successWrite = writePort.tryWrite(MessageData(data.data(), data.size()));
       if (!successWrite) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
@@ -773,7 +786,6 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
     }
   }
   writePort.disconnect();
-  delete[] data;
   std::cout << "  DMA write test for " << width << " bits passed" << std::endl;
 }
 
@@ -800,10 +812,44 @@ static void dmaTest(AcceleratorConnection *conn, Accelerator *acc,
 
 //
 // DMA bandwidth test
-//
+
+static size_t engineWireBytes(size_t bitWidth) { return (bitWidth + 7) / 8; }
+
+static uint8_t enginePatternByte(uint32_t index, size_t byte, size_t bitWidth) {
+  uint8_t value = esitesterDataByte(index, byte);
+  const size_t tailBits = bitWidth % 8;
+  if (tailBits != 0 && byte + 1 == engineWireBytes(bitWidth))
+    value &= (uint8_t(1) << tailBits) - 1;
+  return value;
+}
+
+static std::vector<uint8_t> enginePatternBytes(uint32_t index,
+                                               size_t bitWidth) {
+  std::vector<uint8_t> bytes(engineWireBytes(bitWidth));
+  for (size_t byte = 0; byte < bytes.size(); ++byte)
+    bytes[byte] = enginePatternByte(index, byte, bitWidth);
+  return bytes;
+}
+
+static uint64_t enginePayloadFold(uint32_t index, size_t bitWidth) {
+  const size_t numChunks = (bitWidth + 63) / 64;
+  uint64_t fold = 0;
+  for (size_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex) {
+    uint64_t chunk = 0;
+    for (size_t byteInChunk = 0; byteInChunk < 8; ++byteInChunk) {
+      const size_t byteIndex = chunkIndex * 8 + byteInChunk;
+      if (byteIndex < engineWireBytes(bitWidth))
+        chunk |= uint64_t(enginePatternByte(index, byteIndex, bitWidth))
+                 << (8 * byteInChunk);
+    }
+    const unsigned rotate = (8 * chunkIndex) % 64;
+    fold ^= rotate ? ((chunk << rotate) | (chunk >> (64 - rotate))) : chunk;
+  }
+  return fold;
+}
 
 static void bandwidthReadTest(AcceleratorConnection *conn, Accelerator *acc,
-                              size_t width, size_t xferCount) {
+                              size_t width, size_t xferCount, bool checkData) {
 
   AppIDPath lastPath;
   BundlePort *toHostMMIOPort =
@@ -825,19 +871,57 @@ static void bandwidthReadTest(AcceleratorConnection *conn, Accelerator *acc,
                                std::to_string(xferCount) + " x " +
                                std::to_string(width) + " bit transfers");
   MessageData data;
+  size_t sizeMismatches = 0;
+  size_t dataMismatches = 0;
+  size_t firstMismatchItem = 0;
+  size_t firstMismatchByte = 0;
+  uint8_t firstExpected = 0;
+  uint8_t firstActual = 0;
   auto start = std::chrono::high_resolution_clock::now();
   toHostMMIO->write(0, xferCount);
-  for (size_t i = 0; i < xferCount; ++i) {
+  for (size_t index = 0; index < xferCount; ++index) {
     outPort.read(data);
+    if (checkData) {
+      const size_t wireBytes = engineWireBytes(width);
+      if (data.getSize() != wireBytes) {
+        ++sizeMismatches;
+      } else {
+        for (size_t byte = 0; byte < wireBytes; ++byte) {
+          const uint8_t expected =
+              enginePatternByte(static_cast<uint32_t>(index), byte, width);
+          if (data.getBytes()[byte] != expected) {
+            if (dataMismatches == 0) {
+              firstMismatchItem = index;
+              firstMismatchByte = byte;
+              firstExpected = expected;
+              firstActual = data.getBytes()[byte];
+            }
+            ++dataMismatches;
+          }
+        }
+      }
+    }
     logger.debug(
-        [i, &data](std::string &subsystem, std::string &msg,
-                   std::unique_ptr<std::map<std::string, std::any>> &details) {
+        [index,
+         &data](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "esitester";
-          msg = "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex();
+          msg = "Payload [" + std::to_string(index) + "] = 0x" + data.toHex();
         });
   }
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - start);
+  outPort.disconnect();
+  if (checkData && sizeMismatches != 0)
+    throw std::runtime_error(
+        "bandwidth read data mismatch: " + std::to_string(sizeMismatches) +
+        " payload(s) had the wrong wire size");
+  if (checkData && dataMismatches != 0)
+    throw std::runtime_error(
+        "bandwidth read data mismatch: " + std::to_string(dataMismatches) +
+        " bytes wrong; first at item " + std::to_string(firstMismatchItem) +
+        " byte " + std::to_string(firstMismatchByte) + ": expected " +
+        toHex(firstExpected) + ", got " + toHex(firstActual));
   double bytesPerSec =
       (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
   logger.info("esitester",
@@ -845,10 +929,12 @@ static void bandwidthReadTest(AcceleratorConnection *conn, Accelerator *acc,
                   std::to_string(width) + " bit transfers in " +
                   std::to_string(duration.count()) + " microseconds");
   logger.info("esitester", "    bandwidth: " + formatBandwidth(bytesPerSec));
+  if (checkData)
+    logger.info("esitester", "    data integrity: passed");
 }
 
 static void bandwidthWriteTest(AcceleratorConnection *conn, Accelerator *acc,
-                               size_t width, size_t xferCount) {
+                               size_t width, size_t xferCount, bool checkData) {
 
   AppIDPath lastPath;
   BundlePort *fromHostMMIOPort =
@@ -859,6 +945,24 @@ static void bandwidthWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   auto *fromHostMMIO = fromHostMMIOPort->getAs<services::MMIO::MMIORegion>();
   if (!fromHostMMIO)
     throw std::runtime_error("bandwidth test failed. MMIO port is not MMIO");
+  services::TelemetryService::Metric *checksumPort = nullptr;
+  if (checkData) {
+    auto fromHostChild = acc->getChildren().find(AppID("fromhostdma", width));
+    if (fromHostChild == acc->getChildren().end())
+      throw std::runtime_error("bandwidth test failed. No fromhostdma[" +
+                               std::to_string(width) + "] found");
+    auto checksumIter =
+        fromHostChild->second->getPorts().find(AppID("fromHostChecksum"));
+    if (checksumIter == fromHostChild->second->getPorts().end())
+      throw std::runtime_error(
+          "bandwidth write data check failed. fromHostChecksum missing");
+    checksumPort =
+        checksumIter->second.getAs<services::TelemetryService::Metric>();
+    if (!checksumPort)
+      throw std::runtime_error("bandwidth write data check failed. "
+                               "fromHostChecksum not telemetry");
+    checksumPort->connect();
+  }
   lastPath.clear();
   BundlePort *inPortBundle =
       acc->resolvePort({AppID("fromhostdma", width), AppID("in")}, lastPath);
@@ -869,23 +973,64 @@ static void bandwidthWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   logger.info("esitester", "Starting write bandwidth test with " +
                                std::to_string(xferCount) + " x " +
                                std::to_string(width) + " bit transfers");
-  std::vector<uint8_t> dataVec(width / 8);
-  for (size_t i = 0; i < width / 8; ++i)
+  std::vector<uint8_t> dataVec(engineWireBytes(width));
+  for (size_t i = 0; i < dataVec.size(); ++i)
     dataVec[i] = i;
   MessageData data(dataVec);
+  uint64_t expectedChecksum = 0;
   auto start = std::chrono::high_resolution_clock::now();
+  fromHostMMIO->read(8);
   fromHostMMIO->write(0, xferCount);
-  for (size_t i = 0; i < xferCount; ++i) {
+  for (size_t index = 0; index < xferCount; ++index) {
+    if (checkData) {
+      data =
+          MessageData(enginePatternBytes(static_cast<uint32_t>(index), width));
+      expectedChecksum ^=
+          enginePayloadFold(static_cast<uint32_t>(index), width);
+    }
     outPort.write(data);
     logger.debug(
-        [i, &data](std::string &subsystem, std::string &msg,
-                   std::unique_ptr<std::map<std::string, std::any>> &details) {
+        [index,
+         &data](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "esitester";
-          msg = "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex();
+          msg = "Payload [" + std::to_string(index) + "] = 0x" + data.toHex();
         });
   }
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - start);
+  if (checkData) {
+    std::vector<uint8_t> expectedLast;
+    if (xferCount != 0)
+      expectedLast =
+          enginePatternBytes(static_cast<uint32_t>(xferCount - 1), width);
+    uint64_t expectedLastValue = 0;
+    if (!expectedLast.empty())
+      std::memcpy(&expectedLastValue, expectedLast.data(),
+                  std::min(expectedLast.size(), sizeof(expectedLastValue)));
+    bool complete = xferCount == 0;
+    uint64_t lastReadValue = 0;
+    for (size_t attempt = 0; !complete && attempt < 5000; ++attempt) {
+      lastReadValue = fromHostMMIO->read(8);
+      if (lastReadValue == expectedLastValue) {
+        complete = true;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    if (!complete)
+      throw std::runtime_error(
+          "bandwidth write data check timed out waiting for completion: "
+          "expected final payload " +
+          toHex(expectedLastValue) + ", got " + toHex(lastReadValue));
+    const uint64_t actualChecksum = checksumPort->readInt();
+    if (actualChecksum != expectedChecksum)
+      throw std::runtime_error(
+          "bandwidth write data mismatch: checksum expected " +
+          toHex(expectedChecksum) + ", got " + toHex(actualChecksum));
+  }
+  if (checkData)
+    outPort.disconnect();
   double bytesPerSec =
       (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
   logger.info("esitester",
@@ -893,17 +1038,64 @@ static void bandwidthWriteTest(AcceleratorConnection *conn, Accelerator *acc,
                   std::to_string(width) + " bit transfers in " +
                   std::to_string(duration.count()) + " microseconds");
   logger.info("esitester", "    bandwidth: " + formatBandwidth(bytesPerSec));
+  if (checkData)
+    logger.info("esitester", "    data integrity: passed");
 }
 
 static void bandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
                           const std::vector<uint32_t> &widths,
-                          uint32_t xferCount, bool read, bool write) {
+                          uint32_t xferCount, bool read, bool write,
+                          bool checkData) {
   if (read)
     for (uint32_t w : widths)
-      bandwidthReadTest(conn, acc, w, xferCount);
+      bandwidthReadTest(conn, acc, w, xferCount, checkData);
   if (write)
     for (uint32_t w : widths)
-      bandwidthWriteTest(conn, acc, w, xferCount);
+      bandwidthWriteTest(conn, acc, w, xferCount, checkData);
+}
+
+// Fixed 64-bit seed for the hostmem burst data pattern; must match
+// _ESITESTER_SEQ_SEED in esiaccel/esitester.py.
+static constexpr uint64_t kEsitesterSeqSeed = 0x5A5A5A5A5A5A5A5AULL;
+
+// Byte j of element i in the hostmem burst data pattern: tile (seed ^ i)
+// across the element's bytes and XOR each byte with a distinct per-position
+// mask so every byte is unique. Must match WriteMem/ReadMem in
+// esiaccel/esitester.py.
+static inline uint8_t esitesterDataByte(uint32_t i, size_t j) {
+  uint64_t seq = (uint64_t)i ^ kEsitesterSeqSeed;
+  return (uint8_t)(seq >> (8 * (j % 8))) ^ (uint8_t)(j * 0x9D);
+}
+
+static size_t hostmemWireBytes(uint32_t width) { return (width + 7) / 8; }
+
+static uint8_t esitesterHostmemByte(uint32_t index, size_t byte,
+                                    uint32_t width) {
+  uint8_t value = esitesterDataByte(index, byte);
+  const size_t tailBits = width % 8;
+  if (tailBits != 0 && byte + 1 == hostmemWireBytes(width))
+    value &= (uint8_t(1) << tailBits) - 1;
+  return value;
+}
+
+// Fold element i's `width` bits into its 64-bit readChecksum contribution:
+// XOR each 64-bit chunk with a per-chunk rotate so word/byte misplacement
+// doesn't cancel. Must match ReadMem's readChecksum in esiaccel/esitester.py.
+static inline uint64_t esitesterElemFold(uint32_t i, uint32_t width) {
+  size_t numBytes = hostmemWireBytes(width);
+  size_t numChunks = (width + 63) / 64;
+  uint64_t fold = 0;
+  for (size_t c = 0; c < numChunks; ++c) {
+    uint64_t chunk = 0;
+    for (size_t b = 0; b < 8; ++b) {
+      size_t j = 8 * c + b;
+      if (j < numBytes)
+        chunk |= (uint64_t)esitesterHostmemByte(i, j, width) << (8 * b);
+    }
+    unsigned r = (8 * c) % 64;
+    fold ^= r ? ((chunk << r) | (chunk >> (64 - r))) : chunk;
+  }
+  return fold;
 }
 
 //
@@ -996,6 +1188,42 @@ hostmemWriteBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
             << std::to_string(duration.count()) << " us, "
             << std::to_string(cycles) << " cycles, " << bytesPerCycle
             << " bytes/cycle" << std::endl;
+
+  // Data integrity: WriteMem wrote the byte-level pattern (esitesterDataByte)
+  // into element i. The host-memory layout must be contiguous and backend-
+  // width-independent, so element i occupies ceil(width/8) bytes at that
+  // stride; verify every byte.
+  uint8_t *bytePtr = static_cast<uint8_t *>(region.getPtr());
+  size_t elemBytes = hostmemWireBytes(width);
+  size_t mismatches = 0;
+  uint32_t firstMismatch = 0;
+  size_t firstByte = 0;
+  uint8_t firstExpected = 0, firstActual = 0;
+  for (uint32_t i = 0; i < xferCount; ++i) {
+    for (size_t j = 0; j < elemBytes; ++j) {
+      uint8_t expected = esitesterHostmemByte(i, j, width);
+      uint8_t actual = bytePtr[(size_t)i * elemBytes + j];
+      if (actual != expected) {
+        if (mismatches == 0) {
+          firstMismatch = i;
+          firstByte = j;
+          firstExpected = expected;
+          firstActual = actual;
+        }
+        ++mismatches;
+      }
+    }
+  }
+  if (mismatches != 0) {
+    char eb[8], gb[8];
+    std::snprintf(eb, sizeof(eb), "0x%02x", firstExpected);
+    std::snprintf(gb, sizeof(gb), "0x%02x", firstActual);
+    throw std::runtime_error(
+        "hostmem write bandwidth data mismatch: " + std::to_string(mismatches) +
+        " bytes wrong; first at element " + std::to_string(firstMismatch) +
+        " byte " + std::to_string(firstByte) + " expected=" + eb +
+        " got=" + gb);
+  }
 }
 
 static void
@@ -1029,25 +1257,36 @@ hostmemReadBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
       cyclePath);
   auto issuedIter = readMemPorts.find(AppID("addrCmdIssued"));
   auto respIter = readMemPorts.find(AppID("addrCmdResponses"));
+  auto checksumIter = readMemPorts.find(AppID("readChecksum"));
   if (issuedIter == readMemPorts.end() || respIter == readMemPorts.end() ||
-      !cyclePortBundle)
+      checksumIter == readMemPorts.end() || !cyclePortBundle)
     throw std::runtime_error("hostmem read bandwidth: telemetry missing");
   auto *issuedPort =
       issuedIter->second.getAs<services::TelemetryService::Metric>();
   auto *respPort = respIter->second.getAs<services::TelemetryService::Metric>();
+  auto *checksumPort =
+      checksumIter->second.getAs<services::TelemetryService::Metric>();
   auto *cycleCntPort =
       cyclePortBundle->getAs<services::TelemetryService::Metric>();
-  if (!issuedPort || !respPort || !cycleCntPort)
+  if (!issuedPort || !respPort || !checksumPort || !cycleCntPort)
     throw std::runtime_error("hostmem read bandwidth: telemetry type mismatch");
   issuedPort->connect();
   respPort->connect();
+  checksumPort->connect();
   cycleCntPort->connect();
 
-  // Prepare memory pattern (optional).
-  uint64_t *dataPtr = static_cast<uint64_t *>(region.getPtr());
-  size_t words64 = region.getSize() / 8;
-  for (size_t i = 0; i < words64; ++i)
-    dataPtr[i] = 0xCAFEBABE0000ull + i;
+  // Lay out the read data contiguously (natural ceil(width/8)-byte stride)
+  // using the byte-level pattern for every byte; ReadMem folds each received
+  // element into readChecksum, which must match this host-side fold if the
+  // read fetched the right bytes.
+  uint8_t *bytePtr = static_cast<uint8_t *>(region.getPtr());
+  size_t elemBytes = hostmemWireBytes(width);
+  uint64_t expectedChecksum = 0;
+  for (uint32_t i = 0; i < xferCount; ++i) {
+    for (size_t j = 0; j < elemBytes; ++j)
+      bytePtr[(size_t)i * elemBytes + j] = esitesterHostmemByte(i, j, width);
+    expectedChecksum ^= esitesterElemFold(i, width);
+  }
   region.flush();
   uint64_t devPtr = reinterpret_cast<uint64_t>(region.getDevicePtr());
   auto start = std::chrono::high_resolution_clock::now();
@@ -1077,6 +1316,18 @@ hostmemReadBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
             << "): " << formatBandwidth(bytesPerSec) << ", " << xferCount
             << " flits in " << duration.count() << " us, " << cycles
             << " cycles, " << bytesPerCycle << " bytes/cycle" << std::endl;
+
+  uint64_t gotChecksum = checksumPort->readInt();
+  if (gotChecksum != expectedChecksum) {
+    char eb[24], gb[24];
+    std::snprintf(eb, sizeof(eb), "0x%016llx",
+                  (unsigned long long)expectedChecksum);
+    std::snprintf(gb, sizeof(gb), "0x%016llx", (unsigned long long)gotChecksum);
+    throw std::runtime_error(
+        std::string(
+            "hostmem read bandwidth data mismatch: checksum expected ") +
+        eb + " got " + gb);
+  }
 }
 
 static void hostmemBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
@@ -1212,7 +1463,8 @@ static void resetTest(AcceleratorConnection *conn, Accelerator *accel) {
   // bumps the writemem module's 'addrCmdResponses' counter.
   hostmemTest(conn, accel, {width}, /*write=*/true, /*read=*/false);
 
-  // Grab the writemem module's response telemetry counter to observe the reset.
+  // Grab the writemem module's response telemetry counter to observe the
+  // reset.
   auto writeMemChildIter = accel->getChildren().find(AppID("writemem", width));
   if (writeMemChildIter == accel->getChildren().end())
     throw std::runtime_error("Reset test: no 'writemem' child");
@@ -1671,8 +1923,9 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
   argPort.connect();
   resultPort.connect();
 
-  // Allocate the argument struct with proper alignment for the struct members.
-  // We use aligned_alloc to ensure the buffer meets alignment requirements.
+  // Allocate the argument struct with proper alignment for the struct
+  // members. We use aligned_alloc to ensure the buffer meets alignment
+  // requirements.
   size_t argSize = StreamingAddTranslatedArg::allocSize(numItems);
   constexpr size_t alignment = alignof(StreamingAddTranslatedArg);
   // aligned_alloc requires size to be a multiple of alignment
@@ -1864,7 +2117,8 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
         "FuncService::Function");
   funcPort->connect();
 
-  // Allocate the argument struct with proper alignment for the struct members.
+  // Allocate the argument struct with proper alignment for the struct
+  // members.
   size_t argSize = CoordTranslateArg::allocSize(numCoords);
   constexpr size_t alignment = alignof(CoordTranslateArg);
   // aligned_alloc requires size to be a multiple of alignment
@@ -1961,8 +2215,8 @@ static_assert(sizeof(SerialCoordData) == sizeof(SerialCoordHeader),
 #pragma pack(pop)
 
 // Note: this application is intended to test hardware. As such, we need
-// to be able to send batches. So this is not the typical way one would define a
-// message struct. It's closer to a streaming style.
+// to be able to send batches. So this is not the typical way one would define
+// a message struct. It's closer to a streaming style.
 struct SerialCoordInput : SegmentedMessageData {
 private:
   SerialCoordHeader header;
@@ -2150,8 +2404,8 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
   auto &ports = child->second->getPorts();
   auto portIter = ports.find(AppID("translate_coords_serial"));
   if (portIter == ports.end())
-    throw std::runtime_error(
-        "Serial coord translate test: no 'translate_coords_serial' port found");
+    throw std::runtime_error("Serial coord translate test: no "
+                             "'translate_coords_serial' port found");
 
   TypedWritePort<SerialCoordBurst, /*SkipTypeCheck=*/true> argPort(
       portIter->second.getRawWrite("arg"));
@@ -2349,9 +2603,9 @@ static void autoSerialCoordTranslateTest(AcceleratorConnection *conn,
     if (burstCount == 0)
       break;
     if (results.size() + burstCount > numCoords)
-      throw std::runtime_error(
-          "Auto serial coord translate test: bursts overflow expected total " +
-          std::to_string(numCoords));
+      throw std::runtime_error("Auto serial coord translate test: bursts "
+                               "overflow expected total " +
+                               std::to_string(numCoords));
     for (uint32_t i = 0; i < burstCount; ++i) {
       SerialCoordOutputFrame frame{};
       readFrame(frame);
