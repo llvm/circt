@@ -114,9 +114,11 @@ CompressorTree::halfAdderWithDelay(OpBuilder &builder, CompressorBit a,
 // Map input rows to column representation
 CompressorTree::CompressorTree(size_t width,
                                const SmallVector<SmallVector<Value>> &addends,
-                               Location loc)
+                               Location loc, OpBuilder &builder)
     : columns(width), width(width), numStages(0), numFullAdders(0), loc(loc) {
   assert(!addends.empty());
+
+  SmallVector<size_t> constantOnes(width, 0);
 
   // Convert addends rows to columns
   // Known bits analysis constructs a minimal array - skipping zeros
@@ -125,14 +127,33 @@ CompressorTree::CompressorTree(size_t width,
     // Compressors will be formed of uniform bitwidth addends
     assert(row.size() == width);
     for (size_t i = 0; i < width; ++i) {
-      CompressorBit bit = {row[i], 0};
-      // TODO: Fold Constant 1s
-      auto knownBits = comb::computeKnownBits(bit.val);
-      if (knownBits.isZero())
+      auto knownBit = comb::computeKnownBits(row[i]);
+      if (knownBit.isZero())
         continue;
+      if (knownBit.isAllOnes()) {
+        ++constantOnes[i];
+        continue;
+      }
       // Add non-zero bit to the column
+      CompressorBit bit = {row[i], 0};
       columns[i].push_back(bit);
     }
+  }
+
+  // Fold constant one bits into a binary carry chain before tree reduction.
+  // Two ones in column i are equivalent to one carry into column i+1; `carry`
+  // tracks those propagated known-one bits from lower columns.
+  Value trueValue;
+  size_t carry = 0;
+  for (size_t i = 0; i < width; ++i) {
+    size_t ones = constantOnes[i] + carry;
+    if (ones % 2) {
+      if (!trueValue)
+        trueValue = hw::ConstantOp::create(builder, loc, APInt(1, 1));
+      columns[i].push_back(CompressorBit{trueValue, 0});
+    }
+    // Each pair of ones contributes a carry to the next column.
+    carry = ones / 2;
   }
 }
 

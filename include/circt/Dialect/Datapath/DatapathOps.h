@@ -32,7 +32,7 @@ class CompressorTree {
 public:
   // Constructor takes addends as input and converts to column representation
   CompressorTree(size_t width, const SmallVector<SmallVector<Value>> &addends,
-                 Location loc);
+                 Location loc, OpBuilder &builder);
 
   // Get the number of columns (bit positions)
   size_t getWidth() const { return columns.size(); }
