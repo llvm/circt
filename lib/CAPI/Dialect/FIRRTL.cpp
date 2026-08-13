@@ -15,10 +15,12 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/JSON.h"
 
 using namespace circt;
@@ -452,6 +454,28 @@ FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value, FIRRTLValueFlow flow) {
     return FIRRTL_VALUE_FLOW_DUPLEX;
   }
   llvm_unreachable("invalid flow");
+}
+
+bool firrtlTypeIsPassive(MlirType type) {
+  if (auto base = dyn_cast<FIRRTLBaseType>(unwrap(type)))
+    return base.isPassive();
+  return false;
+}
+
+bool firrtlTypesAreEquivalent(MlirType destType, MlirType srcType,
+                              bool requireSameWidths) {
+  auto dest = type_dyn_cast<FIRRTLType>(unwrap(destType));
+  auto src = type_dyn_cast<FIRRTLType>(unwrap(srcType));
+  if (!dest || !src)
+    return false;
+  return areTypesEquivalent(dest, src, /*destOuterTypeIsConst=*/false,
+                            /*srcOuterTypeIsConst=*/false, requireSameWidths);
+}
+
+void firrtlEmitInvalidate(MlirBlock block, MlirLocation loc, MlirValue value) {
+  Block *b = unwrap(block);
+  ImplicitLocOpBuilder builder(unwrap(loc), b, b->end());
+  emitInvalidate(builder, unwrap(value));
 }
 
 bool firrtlImportAnnotationsFromJSONRaw(
