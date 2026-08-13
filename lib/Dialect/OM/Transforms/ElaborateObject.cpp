@@ -220,8 +220,13 @@ LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
           return failure();
         }
 
-        auto message = cast<StringAttr>(messageOp.getValue()).getValue();
-        return op->emitError("OM property assertion failed: ") << message;
+        StringAttr message;
+        if (!matchPattern(assertOp.getMessage(), m_Constant(&message)))
+          return op->emitError()
+                 << "OM property assertion failed, but no message is available "
+                    "because the message is not a constant string";
+        return op->emitError("OM property assertion failed: ")
+               << message.getValue();
       };
 
       // Condition is a constant integer/bool - check if it's true.
