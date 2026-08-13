@@ -96,3 +96,31 @@ firrtl.circuit "attach_unsupported" {
     firrtl.attach %in, %out : !firrtl.analog<8>, !firrtl.analog<8>
   }
 }
+
+// -----
+
+firrtl.circuit "Top" {
+  sv.macro.decl @targets$Opt$FPGA
+  sv.macro.decl @targets$Opt$Top$inst
+  firrtl.option @Opt {
+    firrtl.option_case @FPGA { case_macro = @targets$Opt$FPGA }
+  }
+
+  firrtl.module private @Default(in %in: !firrtl.uint<8>, out %p: !firrtl.probe<uint<8>>) {
+    %ref = firrtl.ref.send %in : !firrtl.uint<8>
+    firrtl.ref.define %p, %ref : !firrtl.probe<uint<8>>
+  }
+
+  firrtl.module private @FPGA(in %in: !firrtl.uint<8>, out %p: !firrtl.probe<uint<8>>) {
+    %ref = firrtl.ref.send %in : !firrtl.uint<8>
+    firrtl.ref.define %p, %ref : !firrtl.probe<uint<8>>
+  }
+
+  firrtl.module @Top(in %in: !firrtl.uint<8>) {
+    // expected-error @+2 {{'firrtl.instance_choice' op lower-to-core does not support probe output port p on instance_choice}}
+    // expected-error @below {{'firrtl.instance_choice' op LowerToHW couldn't handle this operation}}
+    %inst_in, %p = firrtl.instance_choice inst {instance_macro = @targets$Opt$Top$inst} @Default alternatives @Opt
+                   { @FPGA -> @FPGA } (in in: !firrtl.uint<8>, out p: !firrtl.probe<uint<8>>)
+    firrtl.connect %inst_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}
