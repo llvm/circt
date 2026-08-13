@@ -7,3 +7,12 @@ om.class @UnevaluatedMessage() {
   om.property_assert %1, %0 : i1
   om.class.fields
 }
+
+// -----
+
+om.class @BlockArgMessage(%msg: !om.string) {
+  %false = om.constant false
+  // expected-error @below {{OM property assertion failed: <unevaluated>}}
+  om.property_assert %false, %msg : i1
+  om.class.fields
+}

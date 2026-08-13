@@ -207,7 +207,7 @@ LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
         // The message is supposed to be fully evaluated at this point, though
         // it could be unknown.
         auto messageOp =
-            dyn_cast<ConstantOp>(assertOp.getMessage().getDefiningOp());
+            dyn_cast_or_null<ConstantOp>(assertOp.getMessage().getDefiningOp());
         if (!messageOp) {
           if (allowUnevaluated)
             return op->emitError("OM property assertion failed: <unevaluated>");
