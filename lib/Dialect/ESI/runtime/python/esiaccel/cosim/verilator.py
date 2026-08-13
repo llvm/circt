@@ -121,6 +121,26 @@ class Verilator(Simulator):
     return shutil.which("cmake") is not None and \
         shutil.which("ninja") is not None
 
+  @staticmethod
+  def _raise_stack_limit() -> None:
+    """Lift the stack soft limit to the hard limit for the verilator process.
+
+    Verilator recurses over the design AST and segfaults on large designs with
+    the usual 8MB stack. Its ``verilator`` wrapper script normally runs
+    ``ulimit -s unlimited`` first; we invoke ``verilator_bin`` directly and so
+    have to do it ourselves. Subprocesses inherit the raised limit.
+    """
+    if os.name == "nt":
+      return
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_STACK)
+    if soft == hard:
+      return
+    try:
+      resource.setrlimit(resource.RLIMIT_STACK, (hard, hard))
+    except (ValueError, OSError):
+      pass
+
   def compile_commands(self) -> List[Simulator.CompileStep]:
     """Return the compile steps for the full compile flow.
 
@@ -142,6 +162,7 @@ class Verilator(Simulator):
     if verilator_root is None:
       raise RuntimeError(Verilator.VerilatorRootNotFound)
     os.environ["VERILATOR_ROOT"] = str(verilator_root)
+    self._raise_stack_limit()
 
     verilator_cmd: List[str] = [
         str(verilator_bin),
