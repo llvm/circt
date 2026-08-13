@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
+#include "mlir/IR/DialectInterface.h"
 #include "mlir/Interfaces/MemorySlotInterfaces.h"
 
 #include "circt/Support/LLVM.h"
@@ -32,6 +33,32 @@ struct ModulePort {
   mlir::Type type;
   Direction dir;
 };
+
+struct HWModulePortTypeInterface
+    : public mlir::DialectInterface::Base<HWModulePortTypeInterface> {
+  HWModulePortTypeInterface(mlir::Dialect *dialect) : Base(dialect) {}
+
+  /// Return failure if `type` is not valid for a module port with the given
+  /// direction. Dialects can implement this to restrict non-HW-value handle
+  /// types in HW module signatures.
+  virtual mlir::LogicalResult verifyHWModulePortType(
+      llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+      ModulePort::Direction direction, mlir::Type type) const {
+    return mlir::success();
+  }
+};
+
+/// Interface for dialects to classify their types as valid probe payloads.
+struct ProbeTypeDialectInterface
+    : public mlir::DialectInterface::Base<ProbeTypeDialectInterface> {
+  ProbeTypeDialectInterface(mlir::Dialect *dialect) : Base(dialect) {}
+
+  virtual bool isValidProbeElementType(mlir::Type type) const = 0;
+};
+
+/// Return true if `type` is a valid probe payload. Builtin integer types are
+/// always valid; other types are classified by their owning dialect.
+bool isValidProbeElementType(mlir::Type type);
 
 static bool operator==(const ModulePort &a, const ModulePort &b) {
   return a.dir == b.dir && a.name == b.name && a.type == b.type;
