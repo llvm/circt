@@ -18,10 +18,13 @@ read-only handle to a value of type `T`, created by `probe.send` and observed
 by `probe.read`. A read does not require the compiler to materialize ordinary
 hardware dataflow from the probe origin to the read site.
 
-A probe reference provides read-only access to the value of observed hardware.
-Its payload must be a non-inout HW value type, or an aggregate containing HW
-value types and `!seq.clock` leaves. This permits probes of clocks and aggregates
-while excluding writable or bidirectional hardware references.
+A probe reference provides read-only access to an observed hardware value.
+Its payload type must be accepted by the HW probe type classification. The
+current implementation supports integer and non-inout HW value types,
+`!seq.clock`, and HW aggregates recursively containing supported types.
+Dialects may extend the set of supported payload types through
+`hw::ProbeTypeDialectInterface`. Writable or bidirectional hardware references
+are not supported.
 
 Probe references may be exposed through HW module output ports. They must not
 appear, directly or nested in an aggregate, on input or inout ports. Frontends
