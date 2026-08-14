@@ -1437,24 +1437,30 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       Type elementType = arrTy.getElementType();
       int32_t idxWidth = llvm::Log2_64_Ceil(arrTy.getNumElements());
       int32_t inputWidth = arrTy.getNumElements();
-      if (hw::getBitWidth(elementType) < 0)
-        return failure();
 
-      auto createZeros = [&](Type type) {
-        Value constZero = hw::ConstantOp::create(
-            rewriter, loc, APInt(hw::getBitWidth(type), 0));
-        return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
+      // Builds a zeroed value of `type`, or null if it has no bit width.
+      // TODO: build the type's LRM Table 6-7 default instead.
+      auto createDefault = [&](Type type) -> Value {
+        int32_t width = hw::getBitWidth(type);
+        if (width < 0)
+          return {};
+        Value zero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+        return rewriter.createOrFold<hw::BitcastOp>(loc, type, zero);
       };
 
       // Array element
       if (resultType == elementType) {
-        if (low < 0 || low >= inputWidth)
-          rewriter.replaceOp(op, createZeros(resultType));
-        else
+        if (low < 0 || low >= inputWidth) {
+          auto dfl = createDefault(resultType);
+          if (!dfl)
+            return failure();
+          rewriter.replaceOp(op, dfl);
+        } else {
           rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(
               op, input,
               hw::ConstantOp::create(rewriter, loc,
                                      rewriter.getIntegerType(idxWidth), low));
+        }
         return success();
       }
 
@@ -1469,9 +1475,12 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
         int32_t extractWidth = resultWidth - lsbPad - msbPad;
 
         SmallVector<Value> toConcat;
-        if (msbPad > 0)
-          toConcat.push_back(
-              createZeros(hw::ArrayType::get(elementType, msbPad)));
+        if (msbPad > 0) {
+          auto dfl = createDefault(hw::ArrayType::get(elementType, msbPad));
+          if (!dfl)
+            return failure();
+          toConcat.push_back(dfl);
+        }
 
         if (extractWidth > 0)
           toConcat.push_back(rewriter.createOrFold<hw::ArraySliceOp>(
@@ -1480,9 +1489,12 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
                                      rewriter.getIntegerType(idxWidth),
                                      std::max(low, 0))));
 
-        if (lsbPad > 0)
-          toConcat.push_back(
-              createZeros(hw::ArrayType::get(elementType, lsbPad)));
+        if (lsbPad > 0) {
+          auto dfl = createDefault(hw::ArrayType::get(elementType, lsbPad));
+          if (!dfl)
+            return failure();
+          toConcat.push_back(dfl);
+        }
 
         rewriter.replaceOp(
             op, rewriter.createOrFold<hw::ArrayConcatOp>(loc, toConcat));
