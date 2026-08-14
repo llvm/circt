@@ -281,7 +281,7 @@ private:
       }
 
       for (unsigned j = i + 1; j < width; ++j) {
-        // Stop when we reach the required width 
+        // Stop when we reach the required width
         if (rowWidth == width)
           break;
 
