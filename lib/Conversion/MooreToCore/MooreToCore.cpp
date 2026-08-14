@@ -1398,37 +1398,37 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
     Value input = adaptor.getInput();
     Type inputType = input.getType();
     int32_t low = adaptor.getLowBit();
+    auto loc = op.getLoc();
 
+    // Bit-addressed extract out of an integer into any bitcastable result.
     if (isa<IntegerType>(inputType)) {
       int32_t inputWidth = inputType.getIntOrFloatBitWidth();
       int32_t resultWidth = hw::getBitWidth(resultType);
+      if (resultWidth < 0)
+        return failure();
+
       int32_t high = low + resultWidth;
+      int32_t lsbPad = std::clamp(-low, 0, resultWidth);
+      int32_t msbPad = std::clamp(high - inputWidth, 0, resultWidth - lsbPad);
+      int32_t extractWidth = resultWidth - lsbPad - msbPad;
 
-      SmallVector<Value> toConcat;
-      if (low < 0)
-        toConcat.push_back(hw::ConstantOp::create(
-            rewriter, op.getLoc(), APInt(std::min(-low, resultWidth), 0)));
+      SmallVector<Value> sbv;
+      if (msbPad > 0)
+        sbv.push_back(hw::ConstantOp::create(rewriter, loc, APInt(msbPad, 0)));
 
-      if (low < inputWidth && high > 0) {
-        int32_t lowIdx = std::max(low, 0);
-        Value middle = rewriter.createOrFold<comb::ExtractOp>(
-            op.getLoc(),
-            rewriter.getIntegerType(
-                std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
-            input, lowIdx);
-        toConcat.push_back(middle);
-      }
+      if (extractWidth > 0)
+        sbv.push_back(rewriter.createOrFold<comb::ExtractOp>(
+            loc, rewriter.getIntegerType(extractWidth), input,
+            std::max(low, 0)));
 
-      int32_t diff = high - inputWidth;
-      if (diff > 0) {
-        Value val =
-            hw::ConstantOp::create(rewriter, op.getLoc(), APInt(diff, 0));
-        toConcat.push_back(val);
-      }
+      if (lsbPad > 0)
+        sbv.push_back(hw::ConstantOp::create(rewriter, loc, APInt(lsbPad, 0)));
 
-      Value concat =
-          rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), toConcat);
-      rewriter.replaceOp(op, concat);
+      Value res = rewriter.createOrFold<comb::ConcatOp>(loc, sbv);
+      if (res.getType() != resultType)
+        res = rewriter.createOrFold<hw::BitcastOp>(loc, resultType, res);
+
+      rewriter.replaceOp(op, res);
       return success();
     }
 

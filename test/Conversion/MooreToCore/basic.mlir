@@ -115,14 +115,14 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: comb.concat [[C0]], %arg2, [[C1]] : i2, i6, i2
   moore.extract %arg2 from -2 : !moore.i6 -> !moore.i10
 
-  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 4 : (i6) -> i2
   // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i2
-  // CHECK-NEXT: comb.concat [[V0]], [[C0]] : i2, i2
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 4 : (i6) -> i2
+  // CHECK-NEXT: comb.concat [[C0]], [[V0]] : i2, i2
   moore.extract %arg2 from 4 : !moore.i6 -> !moore.i4
 
-  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i2
   // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 0 : (i6) -> i2
-  // CHECK-NEXT: comb.concat [[C0]], [[V0]] : i2, i2
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: comb.concat [[V0]], [[C0]] : i2, i2
   moore.extract %arg2 from -2 : !moore.i6 -> !moore.i4
 
   // CHECK-NEXT: hw.constant 0 : i4
