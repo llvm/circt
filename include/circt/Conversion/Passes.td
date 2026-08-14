@@ -845,6 +845,20 @@ def LowerFirMem : Pass<"lower-seq-firmem", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// ConvertProbeToSV
+//===----------------------------------------------------------------------===//
+
+def LowerProbeToSV : Pass<"lower-probe-to-sv", "mlir::ModuleOp"> {
+  let summary = "Lower read-only Probe handles to SV cross-module references";
+  let constructor = "circt::createLowerProbeToSVPass()";
+  let dependentDialects = [
+    "circt::hw::HWDialect",
+    "circt::probe::ProbeDialect",
+    "circt::sv::SVDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // ConvertSimToSV
 //===----------------------------------------------------------------------===//
 
