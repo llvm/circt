@@ -2153,7 +2153,8 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   if (props.isPassive && !props.containsAnalog) {
     if (flow == Flow::Source)
       return;
-    emitConnect(builder, val, InvalidValueOp::create(builder, tpe));
+    emitConnect(builder, val, InvalidValueOp::create(builder, tpe),
+                getConstants().options.warnOnTruncation);
     return;
   }
 
@@ -3976,9 +3977,11 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         // Connect to/from the result per flow.
         builder.setInsertionPointAfter(defining);
         if (foldFlow(instResult) == Flow::Source)
-          emitConnect(builder, bounceVal, instResult);
+          emitConnect(builder, bounceVal, instResult,
+                      getConstants().options.warnOnTruncation);
         else
-          emitConnect(builder, instResult, bounceVal);
+          emitConnect(builder, instResult, bounceVal,
+                      getConstants().options.warnOnTruncation);
         // Set the parse result AND update `instResult` which is a reference to
         // the unbundled entry for the instance result, so that future uses also
         // find this new wire.
@@ -4227,7 +4230,7 @@ ParseResult FIRStmtParser::parseDomainDefine() {
       parseDomainExp(src) || parseOptionalInfo())
     return failure();
 
-  emitConnect(builder, dest, src);
+  emitConnect(builder, dest, src, getConstants().options.warnOnTruncation);
   return success();
 }
 
@@ -4267,7 +4270,7 @@ ParseResult FIRStmtParser::parseRefDefine() {
            << target.getType() << " with incompatible reference of type "
            << src.getType();
 
-  emitConnect(builder, target, src);
+  emitConnect(builder, target, src, getConstants().options.warnOnTruncation);
 
   return success();
 }
@@ -4570,8 +4573,9 @@ ParseResult FIRStmtParser::parseConnect() {
            << rhsType << " to " << lhsType;
 
   locationProcessor.setLoc(loc);
-  emitConnect(builder, lhs, rhs,
-              [&] { return locationProcessor.getLoc(*this, loc); });
+  emitConnect(
+      builder, lhs, rhs, [&] { return locationProcessor.getLoc(*this, loc); },
+      getConstants().options.warnOnTruncation);
   return success();
 }
 
@@ -4800,8 +4804,9 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
     return mlir::emitError(locationProcessor.getLoc(*this, loc),
                            "cannot connect non-equivalent type ")
            << rhsType << " to " << lhsType;
-  emitConnect(builder, lhs, rhs,
-              [&] { return locationProcessor.getLoc(*this, loc); });
+  emitConnect(
+      builder, lhs, rhs, [&] { return locationProcessor.getLoc(*this, loc); },
+      getConstants().options.warnOnTruncation);
   return success();
 }
 
