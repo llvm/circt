@@ -151,7 +151,7 @@ static inline ZextByMatcher<SubType> m_ZextBy(const SubType &subExpr) {
 
 // Check if the operand has a replicated extension and return the extension
 // bits:
-// ext = comb.replicate(bit, width-baseWidth)
+// ext = comb.replicate(bit, width-baseWidth) or hw.constant -1
 // replExt = comb.concat(ext, baseValue_1, ...)
 template <typename SubType>
 struct ReplExtMatcher {
@@ -167,8 +167,12 @@ struct ReplExtMatcher {
       return false;
 
     auto replicateOp = operands[0].getDefiningOp<ReplicateOp>();
-    if (!replicateOp ||
-        replicateOp.getInput().getType().getIntOrFloatBitWidth() != 1)
+    auto constOp = operands[0].getDefiningOp<hw::ConstantOp>();
+    bool isBitReplicate =
+        replicateOp &&
+        replicateOp.getInput().getType().getIntOrFloatBitWidth() == 1;
+    bool isAllOnes = constOp && constOp.getValue().isAllOnes();
+    if (!isBitReplicate && !isAllOnes)
       return false;
 
     // Match the most significant argument of the concat.
