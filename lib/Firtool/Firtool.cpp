@@ -84,7 +84,10 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createLowerMatches());
 
   // Width inference creates canonicalization opportunities.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
+  firrtl::InferWidthsOptions inferWidthsOptions;
+  inferWidthsOptions.warnOnTruncation = opt.shouldWarnOnTruncation();
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createInferWidths(inferWidthsOptions));
 
   if (opt.shouldUseNewFullResetFlow()) {
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
@@ -699,6 +702,11 @@ public:
           "Warn about annotations that were not removed by lower-to-hw"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> warnOnTruncation{
+      "warn-on-truncation",
+      llvm::cl::desc("Warn when connects require implicit truncation"),
+      llvm::cl::init(false)};
+
   llvm::cl::opt<bool> lowerToCore{
       "lower-to-core",
       llvm::cl::desc("Prefer core dialects over direct SV lowering for FIRRTL "
@@ -871,7 +879,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
       replSeqMemFile(""), ignoreReadEnableMem(false), useNewFullResetFlow(true),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
-      enableAnnotationWarning(false), lowerToCore(false), addMuxPragmas(false),
+      enableAnnotationWarning(false), warnOnTruncation(false),
+      lowerToCore(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
@@ -913,6 +922,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableRandom = clOptions->disableRandomValue;
   outputAnnotationFilename = clOptions->outputAnnotationFilename;
   enableAnnotationWarning = clOptions->enableAnnotationWarning;
+  warnOnTruncation = clOptions->warnOnTruncation;
   lowerToCore = clOptions->lowerToCore;
   addMuxPragmas = clOptions->addMuxPragmas;
   verificationFlavor = clOptions->verificationFlavor;
