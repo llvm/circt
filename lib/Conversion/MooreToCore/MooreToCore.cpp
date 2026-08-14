@@ -1442,9 +1442,8 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
 
       auto createZeros = [&](Type type) {
         Value constZero = hw::ConstantOp::create(
-            rewriter, op.getLoc(), APInt(hw::getBitWidth(type), 0));
-        return rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), type,
-                                                    constZero);
+            rewriter, loc, APInt(hw::getBitWidth(type), 0));
+        return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
       };
 
       // Array element
@@ -1454,7 +1453,7 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
         else
           rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(
               op, input,
-              hw::ConstantOp::create(rewriter, op.getLoc(),
+              hw::ConstantOp::create(rewriter, loc,
                                      rewriter.getIntegerType(idxWidth), low));
         return success();
       }
@@ -1476,8 +1475,8 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
 
         if (extractWidth > 0)
           toConcat.push_back(rewriter.createOrFold<hw::ArraySliceOp>(
-              op.getLoc(), hw::ArrayType::get(elementType, extractWidth), input,
-              hw::ConstantOp::create(rewriter, op.getLoc(),
+              loc, hw::ArrayType::get(elementType, extractWidth), input,
+              hw::ConstantOp::create(rewriter, loc,
                                      rewriter.getIntegerType(idxWidth),
                                      std::max(low, 0))));
 
@@ -1485,8 +1484,8 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
           toConcat.push_back(
               createZeros(hw::ArrayType::get(elementType, lsbPad)));
 
-        rewriter.replaceOp(op, rewriter.createOrFold<hw::ArrayConcatOp>(
-                                   op.getLoc(), toConcat));
+        rewriter.replaceOp(
+            op, rewriter.createOrFold<hw::ArrayConcatOp>(loc, toConcat));
         return success();
       }
     }
