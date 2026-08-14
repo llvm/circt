@@ -1399,15 +1399,6 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
     Type inputType = input.getType();
     int32_t low = adaptor.getLowBit();
 
-    if (auto structTy = dyn_cast<hw::StructType>(inputType)) {
-      int32_t width = hw::getBitWidth(structTy);
-      if (width == -1)
-        return failure();
-      input = rewriter.createOrFold<hw::BitcastOp>(
-          op.getLoc(), rewriter.getIntegerType(width), input);
-      inputType = input.getType();
-    }
-
     if (isa<IntegerType>(inputType)) {
       int32_t inputWidth = inputType.getIntOrFloatBitWidth();
       int32_t resultWidth = hw::getBitWidth(resultType);
