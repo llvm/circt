@@ -4575,10 +4575,13 @@ ParseResult FIRStmtParser::parseConnect() {
   return success();
 }
 
-/// Before FIRRTL 7.0.0:
+/// FIRRTL 6.0.0 <= version < FIRRTL 8.0.0:
 ///   propassert ::= 'propassert' expr ',' string_literal
-/// After FIRRTL 7.0.0:
+/// FIRRTL 7.0.0 <= version:
 ///   propassert ::= 'propassert' expr ',' expr
+///
+/// Before calling, it has already been verified that the FIRRTL version is
+/// greater than 6.0.0.
 ParseResult FIRStmtParser::parsePropAssert() {
   auto startTok = consumeToken(FIRToken::kw_propassert);
   auto loc = startTok.getLoc();
@@ -4588,16 +4591,24 @@ ParseResult FIRStmtParser::parsePropAssert() {
   if (parseExp(condition, "expected condition in 'propassert'") ||
       parseToken(FIRToken::comma, "expected ','"))
     return failure();
-  if (version < FIRVersion(7, 0, 0)) {
+  // String message handling
+  if (getToken().is(FIRToken::string)) {
+    if (removedFeature({8, 0, 0}, "string messages in property asserts"))
+      return failure();
     StringRef messageStr;
     messageLoc = getToken().getLoc();
     if (parseGetSpelling(messageStr) ||
         parseToken(FIRToken::string, "expected message string in 'propassert'"))
       return failure();
+    locationProcessor.setLoc(messageLoc);
     auto attr = builder.getStringAttr(FIRToken::getStringValue(messageStr));
     message = moduleContext.getCachedConstant<StringConstantOp>(
         builder, attr, builder.getType<StringType>(), attr);
   } else {
+    if (requireFeature(
+            {7, 0, 0},
+            "string property expression message in property asserts"))
+      return failure();
     messageLoc = getToken().getLoc();
     if (parseExp(message, "expected message in 'propassert'"))
       return failure();
