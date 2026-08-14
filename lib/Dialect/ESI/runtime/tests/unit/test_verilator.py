@@ -391,10 +391,26 @@ class TestWriteCmake:
       assert "verilated_fst_c.cpp" in content
       assert "TRACE" in content
 
-  def test_enables_pch_when_generated_header_exists(self, tmp_path):
+  @pytest.mark.parametrize(
+      ("filename", "expected"),
+      [
+          ("VTestTop___024root__Slow.cpp", True),
+          ("VTestTop__Syms__Slow.cpp", True),
+          ("VTestTop__Syms__ctor__0__Slow.cpp", True),
+          ("VTestTop__ConstPool__0__Slow.cpp", True),
+          ("VTestTop.cpp", False),
+          ("VTestTop___024root.cpp", False),
+      ],
+  )
+  def test_classifies_slow_generated_sources(self, filename, expected):
+    assert Verilator._is_slow(Path(filename)) is expected
+
+  def test_enables_pch_for_generated_source_groups(self, tmp_path):
     obj_dir = tmp_path / "obj_dir"
     obj_dir.mkdir()
-    generated_sources = [obj_dir / "VTestTop.cpp"]
+    generated_sources = [
+        obj_dir / "VTestTop.cpp", obj_dir / "VTestTop__Slow.cpp"
+    ]
     pch_header = obj_dir / "VTestTop__pch.h"
     root = tmp_path / "verilator"
     (root / "include").mkdir(parents=True)
@@ -403,9 +419,11 @@ class TestWriteCmake:
       v = _make_verilator(tmp_path, dpi_so=[])
       build_dir = v._write_cmake(obj_dir, generated_sources, pch_header)
       content = (build_dir / "CMakeLists.txt").read_text()
-      assert "target_precompile_headers(VTestTop PRIVATE" in content
+      assert "target_precompile_headers(vl_fast PRIVATE" in content
+      assert "target_precompile_headers(vl_slow PRIVATE" in content
+      assert "target_precompile_headers(VTestTop PRIVATE" not in content
       assert "VTestTop__pch.h" in content
-      assert "SKIP_PRECOMPILE_HEADERS ON" in content
+      assert "SKIP_PRECOMPILE_HEADERS ON" not in content
       assert "verilated.cpp" in content
       assert "driver.cpp" in content
 
