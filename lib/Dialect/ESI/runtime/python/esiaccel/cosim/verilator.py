@@ -226,8 +226,10 @@ class Verilator(Simulator):
         "-sv",
         "--verilate-jobs",
         "0",
+        # Every generated .cpp re-parses the model headers, so file count sets
+        # the floor for the C++ build; 5000 balances that against parallelism.
         "--output-split",
-        "2500",
+        "5000",
     ]
     if self.debug:
       verilator_cmd += [
