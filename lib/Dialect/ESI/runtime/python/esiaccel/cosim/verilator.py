@@ -2,6 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import json
 import os
 import re
 import shutil
@@ -19,6 +20,15 @@ class Verilator(Simulator):
   Falls back to ``make`` when cmake/ninja are not available."""
 
   DefaultDriver = CosimCollateralDir / "driver.cpp"
+  _CMakeSignatureFilename = ".esi-cosim-cmake-config.json"
+  _CMakeSignatureEnv = (
+      "CMAKE_PREFIX_PATH",
+      "CMAKE_TOOLCHAIN_FILE",
+      "CXX",
+      "CXXFLAGS",
+      "LDFLAGS",
+      "PATH",
+  )
   VerilatorBinNotFound = (
       "Cannot find verilator_bin. Set VERILATOR_PATH to an absolute path "
       "or ensure verilator_bin is in PATH.")
@@ -56,6 +66,8 @@ class Verilator(Simulator):
         make_default_logs=make_default_logs,
         macro_definitions=macro_definitions,
     )
+    # Set by _write_cmake when the generated CMakeLists.txt actually changed.
+    self._cmake_dirty = True
 
   @property
   def verilator_bin(self) -> Path:
@@ -160,6 +172,17 @@ class Verilator(Simulator):
       args.append("-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld")
     return args
 
+  @staticmethod
+  def _cmake_signature(cmake_cmd: List[str]) -> str:
+    """Serialize inputs that can affect CMake configuration."""
+    signature = {
+        "command": cmake_cmd,
+        "environment": {
+            name: os.environ.get(name) for name in Verilator._CMakeSignatureEnv
+        },
+    }
+    return json.dumps(signature, indent=2, sort_keys=True) + "\n"
+
   def compile_commands(self) -> List[Simulator.CompileStep]:
     """Return the compile steps for the full compile flow.
 
@@ -167,7 +190,7 @@ class Verilator(Simulator):
     sequential steps:
       1. ``verilator_bin`` – generates C++ from RTL.
       2. Python callback – generates the CMakeLists.txt from the depfile.
-      3. ``cmake`` – configures the C++ build (Ninja generator).
+      3. Python callback – configures the C++ build when inputs changed.
       4. ``ninja`` – builds the simulation executable.
 
     Otherwise falls back to two commands:
@@ -216,14 +239,15 @@ class Verilator(Simulator):
 
     if self._use_cmake:
       verilator_cmd += [str(p) for p in self.sources.rtl_sources]
-      build_dir = str(Path.cwd() / "obj_dir" / "cmake_build")
+      build_dir = Path.cwd() / "obj_dir" / "cmake_build"
       # ``CMAKE_BUILD_TYPE=Release`` is important on Windows: the prebuilt
       # ``EsiCosimDpiServer.dll`` ships with the Release MSVC runtime, and
       # mixing it with a Debug-runtime executable causes silent failures
       # (e.g. transport/control connections come up but requests stall).
       cmake_cmd = [
-          "cmake", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-S", build_dir,
-          "-B", build_dir
+          "cmake", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-S",
+          str(build_dir), "-B",
+          str(build_dir)
       ]
       cmake_cmd += self._toolchain_args()
       # If vcpkg is available, use its toolchain file so that
@@ -236,9 +260,26 @@ class Verilator(Simulator):
             vcpkg_root) / "scripts" / "buildsystems" / "vcpkg.cmake"
         if toolchain.exists():
           cmake_cmd.append(f"-DCMAKE_TOOLCHAIN_FILE={toolchain}")
-      ninja_cmd = ["ninja", "-C", build_dir]
+      ninja_cmd = ["ninja", "-C", str(build_dir)]
+      cmake_signature = self._cmake_signature(cmake_cmd)
+      signature_file = build_dir / self._CMakeSignatureFilename
+
+      def configure(cmake_cmd=cmake_cmd,
+                    cmake_signature=cmake_signature,
+                    signature_file=signature_file) -> int:
+        # Ninja regenerates an existing build graph when CMakeLists.txt changes.
+        # Run CMake explicitly only for a new tree or changed configure inputs.
+        signature_matches = signature_file.exists() and \
+            signature_file.read_text() == cmake_signature
+        if (build_dir / "build.ninja").exists() and signature_matches:
+          return 0
+        result = self._run_compile_command(cmake_cmd)
+        if result == 0:
+          signature_file.write_text(cmake_signature)
+        return result
+
       return [
-          verilator_cmd, self._write_cmake_from_depfile, cmake_cmd, ninja_cmd
+          verilator_cmd, self._write_cmake_from_depfile, configure, ninja_cmd
       ]
 
     # -- make fallback --
@@ -457,7 +498,11 @@ target_link_libraries({exe_name} PRIVATE
 """
     build_dir = obj_dir / "cmake_build"
     build_dir.mkdir(parents=True, exist_ok=True)
-    (build_dir / "CMakeLists.txt").write_text(content)
+    cmake_file = build_dir / "CMakeLists.txt"
+    existing = cmake_file.read_text() if cmake_file.exists() else None
+    self._cmake_dirty = existing != content
+    if self._cmake_dirty:
+      cmake_file.write_text(content)
     return build_dir
 
   @property
