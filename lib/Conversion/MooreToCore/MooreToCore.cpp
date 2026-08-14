@@ -1438,23 +1438,13 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       int32_t idxWidth = llvm::Log2_64_Ceil(arrTy.getNumElements());
       int32_t inputWidth = arrTy.getNumElements();
 
-      // Builds a zeroed value of `type`, or null if it has no bit width.
-      // TODO: build the type's LRM Table 6-7 default instead.
-      auto createDefault = [&](Type type) -> Value {
-        int32_t width = hw::getBitWidth(type);
-        if (width < 0)
-          return {};
-        Value zero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
-        return rewriter.createOrFold<hw::BitcastOp>(loc, type, zero);
-      };
-
       // Array element
       if (resultType == elementType) {
         if (low < 0 || low >= inputWidth) {
-          auto dfl = createDefault(resultType);
-          if (!dfl)
+          auto zeros = createZeroValue(resultType, loc, rewriter);
+          if (!zeros)
             return failure();
-          rewriter.replaceOp(op, dfl);
+          rewriter.replaceOp(op, zeros);
         } else {
           rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(
               op, input,
@@ -1476,10 +1466,11 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
 
         SmallVector<Value> toConcat;
         if (msbPad > 0) {
-          auto dfl = createDefault(hw::ArrayType::get(elementType, msbPad));
-          if (!dfl)
+          auto zeros = createZeroValue(hw::ArrayType::get(elementType, msbPad),
+                                       loc, rewriter);
+          if (!zeros)
             return failure();
-          toConcat.push_back(dfl);
+          toConcat.push_back(zeros);
         }
 
         if (extractWidth > 0)
@@ -1490,10 +1481,11 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
                                      std::max(low, 0))));
 
         if (lsbPad > 0) {
-          auto dfl = createDefault(hw::ArrayType::get(elementType, lsbPad));
-          if (!dfl)
+          auto zeros = createZeroValue(hw::ArrayType::get(elementType, lsbPad),
+                                       loc, rewriter);
+          if (!zeros)
             return failure();
-          toConcat.push_back(dfl);
+          toConcat.push_back(zeros);
         }
 
         rewriter.replaceOp(
