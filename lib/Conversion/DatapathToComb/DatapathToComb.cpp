@@ -134,7 +134,7 @@ struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
   using OpRewritePattern<PartialProductOp>::OpRewritePattern;
 
   DatapathPartialProductOpConversion(MLIRContext *context, bool forceBooth)
-      : OpRewritePattern<PartialProductOp>(context), forceBooth(forceBooth) {};
+      : OpRewritePattern<PartialProductOp>(context), forceBooth(forceBooth){};
 
   const bool forceBooth;
 
@@ -498,7 +498,7 @@ struct DatapathPosPartialProductOpConversion
 
   DatapathPosPartialProductOpConversion(MLIRContext *context, bool forceBooth)
       : OpRewritePattern<PosPartialProductOp>(context),
-        forceBooth(forceBooth) {};
+        forceBooth(forceBooth){};
 
   const bool forceBooth;
 
