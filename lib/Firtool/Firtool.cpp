@@ -703,7 +703,7 @@ public:
       llvm::cl::init(false)};
 
   llvm::cl::opt<bool> warnOnTruncation{
-      "warn-on-truncation",
+      "warn-on-implicit-truncation",
       llvm::cl::desc("Warn when connects require implicit truncation"),
       llvm::cl::init(false)};
 

@@ -1,7 +1,7 @@
 ; RUN: firtool %s --format=fir --ir-fir 2>&1 | FileCheck %s
-; RUN: firtool %s --format=fir --ir-fir --warn-on-truncation=false | FileCheck %s
-; RUN: firtool %s --format=fir --ir-fir --warn-on-truncation --verify-diagnostics
-; RUN: firtool %s --format=fir --ir-fir --warn-on-truncation=true --verify-diagnostics
+; RUN: firtool %s --format=fir --ir-fir --warn-on-implicit-truncation=false 2>&1 | FileCheck %s
+; RUN: firtool %s --format=fir --ir-fir --warn-on-implicit-truncation --verify-diagnostics
+; RUN: firtool %s --format=fir --ir-fir --warn-on-implicit-truncation=true --verify-diagnostics
 
 FIRRTL version 4.0.0
 circuit TruncWarn :
@@ -12,3 +12,4 @@ circuit TruncWarn :
     connect out, in
 
 ; CHECK: firrtl.circuit
+; CHECK-NOT: RHS width 7 exceeds LHS width 4, inserting implicit truncation

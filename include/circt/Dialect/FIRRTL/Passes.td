@@ -386,7 +386,7 @@ def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
     This pass infers the widths of all types throughout a FIRRTL module, and
     emits diagnostics for types that could not be inferred.
   }];
-  let options = [Option<"warnOnTruncation", "warn-on-truncation", "bool",
+  let options = [Option<"warnOnTruncation", "warn-on-implicit-truncation", "bool",
                               "false",
                               "Warn when connects require implicit truncation">];
 }
