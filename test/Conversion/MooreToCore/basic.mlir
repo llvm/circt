@@ -131,6 +131,32 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: hw.constant 0 : i4
   moore.extract %arg2 from 6 : !moore.i6 -> !moore.i4
 
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 0 : (i6) -> i2
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[V1:%.+]] = comb.concat [[V0]], [[C0]] : i2, i2
+  // CHECK-NEXT: hw.bitcast [[V1]] : (i4) -> !hw.struct<a: i2, b: i2>
+  moore.extract %arg2 from -2 : !moore.i6 -> !moore.struct<{a: i2, b: i2}>
+
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 0 : (i6) -> i2
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[V1:%.+]] = comb.concat [[V0]], [[C0]] : i2, i2
+  // CHECK-NEXT: hw.bitcast [[V1]] : (i4) -> !hw.array<2xi2>
+  moore.extract %arg2 from -2 : !moore.i6 -> !moore.array<2 x i2>
+
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 0 : (i6) -> i4
+  // CHECK-NEXT: hw.bitcast [[V0]] : (i4) -> !hw.struct<a: i2, b: i2>
+  moore.extract %arg2 from 0 : !moore.i6 -> !moore.struct<{a: i2, b: i2}>
+
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 1 : (i6) -> i4
+  // CHECK-NEXT: hw.bitcast [[V0]] : (i4) -> !hw.struct<a: i2, b: i2>
+  moore.extract %arg2 from 1 : !moore.i6 -> !moore.struct<{a: i2, b: i2}>
+
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 4 : (i6) -> i2
+  // CHECK-NEXT: [[V1:%.+]] = comb.concat [[C0]], [[V0]] : i2, i2
+  // CHECK-NEXT: hw.bitcast [[V1]] : (i4) -> !hw.struct<a: i2, b: i2>
+  moore.extract %arg2 from 4 : !moore.i6 -> !moore.struct<{a: i2, b: i2}>
+
   // CHECK-NEXT: hw.constant 0 : i64
   // CHECK-NEXT: [[V0:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.array<2xi32>
   // CHECK-NEXT: hw.constant 0 : i3
