@@ -238,6 +238,9 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
 //           {       1,    1, ...,       1,      0, ...,    0} =
 //         = zext({~x[p-1], x[p-2], ..., x[0]}) + ((-1) << (width(x)-1))
 //
+// More generally, for an arbitrary replicated prefix:
+// {r, r, ..., r, x} = zext({~r, x}) + ((-1) << width(x))
+//
 // Note that we are adding arguments to the compressor, but we are reducing the
 // number of unknown bits in the compressor array
 struct SextCompress : public OpRewritePattern<CompressOp> {
@@ -249,45 +252,44 @@ struct SextCompress : public OpRewritePattern<CompressOp> {
     auto opSize = inputs[0].getType().getIntOrFloatBitWidth();
     auto size = inputs.size();
 
-    APInt value;
     SmallVector<Value> newInputs;
     for (auto input : inputs) {
       Value replBits;
-      // Check for sext of the inverted value
-      if (!matchPattern(input, comb::m_SextBy(m_Any(&replBits)))) {
+      bool isSext = matchPattern(input, comb::m_SextBy(m_Any(&replBits)));
+      if (!isSext && !matchPattern(input, comb::m_ReplExt(m_Any(&replBits)))) {
         newInputs.push_back(input);
         continue;
       }
       auto baseWidth = opSize - replBits.getType().getIntOrFloatBitWidth();
-      auto sextInput =
-          comb::ExtractOp::create(rewriter, op.getLoc(), input, 0, baseWidth);
 
-      // Need a separate sign-bit that gets extended by at least two bits to
-      // be beneficial
+      // The replicated prefix must contain at least two bits to be beneficial.
       if (baseWidth <= 1 || (opSize - baseWidth) <= 1) {
         newInputs.push_back(input);
         continue;
       }
 
-      // x[p-2:0]
-      auto base = comb::ExtractOp::create(rewriter, op.getLoc(), sextInput, 0,
-                                          baseWidth - 1);
-      // x[p-1]
-      auto signBit = comb::ExtractOp::create(rewriter, op.getLoc(), sextInput,
-                                             baseWidth - 1, 1);
-      auto invSign =
-          comb::createOrFoldNot(rewriter, op.getLoc(), signBit, true);
-      // {~x[p-1], x[p-2:0]}
+      // For a sign extension, the repeated bit is already the most significant
+      // bit of the base. For a general replicated extension, preserve the
+      // entire base and get the repeated bit from the replicate operation.
+      auto correctionBit = isSext ? baseWidth - 1 : baseWidth;
+      auto base = comb::ExtractOp::create(rewriter, op.getLoc(), input, 0,
+                                          correctionBit);
+      Value repeatedBit;
+      repeatedBit = comb::ExtractOp::create(rewriter, op.getLoc(), input,
+                                            correctionBit, 1);
+      auto invRepeatedBit =
+          comb::createOrFoldNot(rewriter, op.getLoc(), repeatedBit, true);
+      // Replace the repeated prefix zeros and a constant correction.
       auto newOp = comb::ConcatOp::create(rewriter, op.getLoc(),
-                                          ValueRange{invSign, base});
+                                          ValueRange{invRepeatedBit, base});
       auto newOpZExt = comb::createZExt(rewriter, op.getLoc(), newOp, opSize);
 
       newInputs.push_back(newOpZExt);
 
-      // (-1) << (width(x)-1)
+      // Constant correction (-1) << width (-1)
       auto ones = APInt::getAllOnes(opSize);
-      auto correction = hw::ConstantOp::create(rewriter, op.getLoc(),
-                                               ones << (baseWidth - 1));
+      auto correction =
+          hw::ConstantOp::create(rewriter, op.getLoc(), ones << correctionBit);
 
       newInputs.push_back(correction);
     }

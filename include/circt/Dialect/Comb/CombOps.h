@@ -149,6 +149,39 @@ static inline ZextByMatcher<SubType> m_ZextBy(const SubType &subExpr) {
   return ZextByMatcher<SubType>(subExpr);
 }
 
+// Check if the operand has a replicated extension and return the extension
+// bits:
+// ext = comb.replicate(bit, width-baseWidth)
+// replExt = comb.concat(ext, baseValue_1, ...)
+template <typename SubType>
+struct ReplExtMatcher {
+  SubType lhs;
+  ReplExtMatcher(SubType lhs) : lhs(std::move(lhs)) {}
+  bool match(Operation *op) {
+    auto concatOp = dyn_cast<ConcatOp>(op);
+    if (!concatOp)
+      return false;
+
+    auto operands = concatOp.getOperands();
+    if (operands.size() < 2)
+      return false;
+
+    auto replicateOp = operands[0].getDefiningOp<ReplicateOp>();
+    if (!replicateOp ||
+        replicateOp.getInput().getType().getIntOrFloatBitWidth() != 1)
+      return false;
+
+    // Match the most significant argument of the concat.
+    return mlir::detail::matchOperandOrValueAtIndex(op, 0, lhs);
+  }
+};
+
+/// Helper function to create a replicated extension matcher.
+template <typename SubType>
+static inline ReplExtMatcher<SubType> m_ReplExt(const SubType &subExpr) {
+  return ReplExtMatcher<SubType>(subExpr);
+}
+
 // Check if the operand is sext() and return the extension bits:
 // signBit = comb.extract(baseValue, width-1, 1)
 // ext = comb.replicate(signBit, width-baseWidth)
