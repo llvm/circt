@@ -22,6 +22,10 @@ This dialect is designed to target three primary use-cases:
 
 [include "Dialects/AXI4Enums.md"]
 
+## Types
+
+[include "Dialects/AXI4Types.md"]
+
 ## Operations
 
 [include "Dialects/AXI4Ops.md"]

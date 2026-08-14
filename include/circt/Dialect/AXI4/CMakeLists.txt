@@ -1,6 +1,7 @@
 add_circt_dialect(AXI4 axi4)
 add_circt_doc(AXI4Ops Dialects/AXI4Ops -gen-op-doc -dialect axi4)
 add_circt_doc(AXI4Attributes Dialects/AXI4Attributes -gen-attrdef-doc -dialect axi4)
+add_circt_doc(AXI4Types Dialects/AXI4Types -gen-typedef-doc -dialect axi4)
 add_circt_doc(AXI4 Dialects/AXI4Enums -gen-enum-doc -dialect axi4)
 
 set(LLVM_TARGET_DEFINITIONS AXI4.td)
