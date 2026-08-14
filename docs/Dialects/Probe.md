@@ -100,6 +100,26 @@ guaranteed to remain stable across compiler runs or IR transformations.
 External-module probe ABIs are presently outside the scope of this dialect
 definition.
 
+## SystemVerilog Lowering
+
+The `--lower-probe-to-sv` pass is the initial SystemVerilog consumer for this
+dialect. It replaces each supported `probe.read` with an `sv.xmr.ref` through
+an `hw.hierpath`, followed by `sv.read_inout`. Anonymous observed values are
+materialized as symbol-bearing `hw.wire` operations. Probe output ports and
+the corresponding instance results are removed after all reads are resolved.
+
+The initial lowering supports local reads and reads from a directly
+instantiated child module. A child module that exports a Probe ref must be
+private and its Probe output must be driven directly by `probe.send`.
+Forwarding a Probe ref through multiple module levels, exporting one from a
+public module, and Probe ports on external or generated modules require an ABI
+and are rejected.
+
+The payload must currently satisfy `hw::isHWValueType`. In particular,
+`!seq.clock` and aggregates containing clocks must be converted to HW value
+types before this pass. These are backend restrictions; the Probe dialect
+itself continues to permit all payloads described above.
+
 ## Types
 
 [include "Dialects/ProbeTypes.md"]
