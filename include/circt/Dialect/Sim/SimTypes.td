@@ -10,10 +10,11 @@
 #define CIRCT_DIALECT_SIM_SIMTYPES_TD
 
 include "circt/Dialect/Sim/SimDialect.td"
+include "circt/Dialect/HW/HWTypeInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 
-class SimTypeDef<string name> : TypeDef<SimDialect, name> { }
+class SimTypeDef<string name, list<Trait> traits = []> : TypeDef<SimDialect, name, traits> { }
 
 def FormatStringType : SimTypeDef<"FormatString"> {
   let mnemonic = "fstring";
@@ -27,7 +28,7 @@ def FormatStringType : SimTypeDef<"FormatString"> {
   }];
 }
 
-def DynamicStringType : SimTypeDef<"DynamicString"> {
+def DynamicStringType : SimTypeDef<"DynamicString", [SimulationVariableTypeInterface]> {
   let mnemonic = "dstring";
 
   let summary = "String type with variable length";
@@ -45,7 +46,7 @@ def DynamicStringType : SimTypeDef<"DynamicString"> {
   }];
 }
 
-def QueueType : SimTypeDef<"Queue"> {
+def QueueType : SimTypeDef<"Queue", [SimulationVariableTypeInterface]> {
   let mnemonic = "queue";
   let summary = "a queue type";
   let description = [{
@@ -73,7 +74,7 @@ def QueueType : SimTypeDef<"Queue"> {
   ];
 }
 
-def AssocArrayType : SimTypeDef<"AssocArray"> {
+def AssocArrayType : SimTypeDef<"AssocArray", [SimulationVariableTypeInterface]> {
   let mnemonic = "assoc_array";
   let summary = "an associative array type";
   let description = [{
