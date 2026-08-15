@@ -195,3 +195,9 @@ hw.module @FormatString(in %str: !sim.dstring) {
   // CHECK: sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
   %fmt1 = sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
 }
+
+// CHECK-LABEL: hw.module @assoc_array_clear
+hw.module @assoc_array_clear(in %array : !sim.assoc_array<i64, i32>) {
+  // CHECK: sim.assoc_array.clear %array : <i64, i32>
+  %0 = sim.assoc_array.clear %array : !sim.assoc_array<i64, i32>
+}
