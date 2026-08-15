@@ -141,6 +141,25 @@ class Verilator(Simulator):
     except (ValueError, OSError):
       pass
 
+  @staticmethod
+  def _toolchain_args() -> List[str]:
+    """Prefer clang and lld when they are available.
+
+    Verilated code compiles about twice as fast with clang as with gcc, and
+    the model is a throwaway simulation binary, so the toolchain only affects
+    build time. Setting ``CXX`` or ``LDFLAGS`` opts back out.
+    """
+    if os.name == "nt":
+      return []
+    args = []
+    if not os.environ.get("CXX"):
+      clangxx = shutil.which("clang++")
+      if clangxx is not None:
+        args.append(f"-DCMAKE_CXX_COMPILER={clangxx}")
+    if not os.environ.get("LDFLAGS") and shutil.which("ld.lld") is not None:
+      args.append("-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld")
+    return args
+
   def compile_commands(self) -> List[Simulator.CompileStep]:
     """Return the compile steps for the full compile flow.
 
@@ -206,6 +225,7 @@ class Verilator(Simulator):
           "cmake", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-S", build_dir,
           "-B", build_dir
       ]
+      cmake_cmd += self._toolchain_args()
       # If vcpkg is available, use its toolchain file so that
       # ``find_package(ZLIB)`` (and other transitive deps) can pick up vcpkg
       # installations. This is the standard story on Windows.
