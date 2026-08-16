@@ -30,9 +30,11 @@ on:
           - ubuntu-24.04
           - ubuntu-22.04
           - ubuntu-20.04
-          - macos-15-large
+          - xcode-27
+          - macos-26
+          - macos-26-intel
           - macos-15
-          - macos-14-large
+          - macos-15-intel
           - macos-14
           - macos-13
           - windows-2022
