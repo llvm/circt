@@ -29,7 +29,7 @@ OPT_GITHUB_EVENT_NAME=
 OPT_OS=()
 OPT_RUN_TESTS=false
 OPT_RUN_INTEGRATION_TESTS=false
-while getopts "ab:e:ho:t" option; do
+while getopts "ab:e:ho:tu" option; do
   case $option in
     a)
       OPT_ASSERTIONS=ON
@@ -181,7 +181,7 @@ EOF
 configMacOsRunner=$(cat <<EOF
 [
   {
-    "runner": "macos-15-large",
+    "runner": "macos-26-intel",
     "cmake_c_compiler": "clang"
   },
   {
