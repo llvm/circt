@@ -3796,6 +3796,20 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   return setLowering(op.getResult(), operand);
 }
 
+/// Map a FIRRTL register clock edge onto the equivalent seq.firreg attribute.
+static seq::ClockEdgeAttr lowerRegClockEdgeAttr(MLIRContext *context,
+                                                EventControl edge) {
+  switch (edge) {
+  case EventControl::AtPosEdge:
+    return seq::ClockEdgeAttr::get(context, seq::ClockEdge::Pos);
+  case EventControl::AtNegEdge:
+    return seq::ClockEdgeAttr::get(context, seq::ClockEdge::Neg);
+  case EventControl::AtEdge:
+    return seq::ClockEdgeAttr::get(context, seq::ClockEdge::Both);
+  }
+  llvm_unreachable("unknown FIRRTL register clock edge");
+}
+
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType = lowerType(op.getResult().getType());
   if (!resultType)
@@ -3810,8 +3824,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   // Create a reg op, wiring itself to its input.
   auto innerSym = lowerInnerSymbol(op);
   Backedge inputEdge = backedgeBuilder.get(resultType);
-  auto reg = seq::FirRegOp::create(builder, inputEdge, clockVal,
-                                   op.getNameAttr(), innerSym);
+  auto reg = seq::FirRegOp::create(
+      builder, inputEdge, clockVal, op.getNameAttr(), innerSym, Attribute{},
+      lowerRegClockEdgeAttr(builder.getContext(), op.getClockEdge()));
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
@@ -3850,9 +3865,10 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto innerSym = lowerInnerSymbol(op);
   bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
   Backedge inputEdge = backedgeBuilder.get(resultType);
-  auto reg =
-      seq::FirRegOp::create(builder, inputEdge, clockVal, op.getNameAttr(),
-                            resetSignal, resetValue, innerSym, isAsync);
+  auto reg = seq::FirRegOp::create(
+      builder, inputEdge, clockVal, op.getNameAttr(), resetSignal, resetValue,
+      innerSym, isAsync,
+      lowerRegClockEdgeAttr(builder.getContext(), op.getClockEdge()));
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))

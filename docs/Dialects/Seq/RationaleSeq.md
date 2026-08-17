@@ -107,7 +107,7 @@ register and lower it to SystemVerilog.
 
 `FirReg` has the following operands:
 
-- **input**: Value to set the register to on the positive edge of the clock
+- **input**: Value to set the register to on the configured edge of the clock
 signal.
 - **clk**: Clock signal driving the register.
 - **name**: A name for the register, passed directly to the `sv.reg`.
@@ -120,6 +120,8 @@ from the design.
 reset is asynchronous.
 - **isAsync**: Optional boolean flag indicating whether the reset is
 asynchronous.
+- **clockEdge**: Optional enum selecting positive, negative, or dual-edge clock
+behavior. The default is positive edge.
 - **preset**: Optional attribute specifying a preset value. If no preset
 attribute is present, the register is random-initialized.
 
