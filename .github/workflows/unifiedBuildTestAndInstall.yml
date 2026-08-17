@@ -317,6 +317,9 @@ jobs:
           echo setup=./utils/find-vs.ps1 >> "$GITHUB_OUTPUT"
       - name: Python Bindings Setup (Generic)
         id: python-bindings-setup-generic
+        # The Python bindings and PyRTG frontend are too expensive to build on
+        # macOS Intel runners.  Keep them enabled everywhere else.
+        if: runner.os != 'macOS' || runner.arch != 'X64'
         shell: bash
         run: |
           # Install Python dependencies needed for the MLIR/CIRCT Python
@@ -422,7 +425,7 @@ jobs:
           ${{ steps.setup-windows.outputs.setup }}
           ninja -C build check-circt-capi check-circt-integration
       - name: Test PyRTG
-        if: inputs.run_tests
+        if: inputs.run_tests && (runner.os != 'macOS' || runner.arch != 'X64')
         run: |
           ${{ steps.setup-windows.outputs.setup }}
           ninja -C build check-pyrtg
