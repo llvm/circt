@@ -85,6 +85,8 @@
 #define ARC_RUNTIME_JITBIND_FNDECL
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
+#include "llvm/InitializePasses.h"
+#include "llvm/PassRegistry.h"
 #endif
 
 #include <optional>
@@ -873,6 +875,7 @@ int main(int argc, char **argv) {
 #ifdef ARCILATOR_ENABLE_JIT
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
+    llvm::initializeCodeGen(*llvm::PassRegistry::getPassRegistry());
 #else
     llvm::errs() << "This arcilator binary was not built with JIT support.\n";
     llvm::errs() << "To enable JIT features, build arcilator with MLIR's "

@@ -65,6 +65,8 @@
 #ifdef CIRCT_BMC_ENABLE_JIT
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
+#include "llvm/InitializePasses.h"
+#include "llvm/PassRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #endif
 
@@ -354,6 +356,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
 
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
+    llvm::initializeCodeGen(*llvm::PassRegistry::getPassRegistry());
 
     SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
                                               sharedLibs.end());
