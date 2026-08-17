@@ -295,6 +295,12 @@ class Verilator(Simulator):
           f"No generated C++ sources found in depfile: {depfile}")
     return generated_sources
 
+  @staticmethod
+  def _is_slow(source: Path) -> bool:
+    """Verilator suffixes cold-path TUs, including Syms/ConstPool, with
+    ``__Slow``."""
+    return source.stem.endswith("__Slow")
+
   def _write_cmake(self,
                    obj_dir: Path,
                    generated_sources: List[Path],
@@ -309,6 +315,9 @@ class Verilator(Simulator):
     include_dir = verilator_root / "include"
     exe_name = "V" + self.sources.top
 
+    slow_sources = [s for s in generated_sources if self._is_slow(s)]
+    fast_sources = [s for s in generated_sources if not self._is_slow(s)]
+
     if os.name == "nt" and all(source.exists() for source in generated_sources):
       # Verilator can emit deeply descriptive source filenames. CMake uses the
       # source basename in MSVC's /Fo object path, which can overflow Windows'
@@ -319,12 +328,17 @@ class Verilator(Simulator):
       if short_source_dir.exists():
         shutil.rmtree(short_source_dir)
       short_source_dir.mkdir(parents=True)
-      shortened_sources = []
-      for index, source in enumerate(generated_sources):
-        shortened_source = short_source_dir / f"vsrc_{index}.cpp"
-        shutil.copy2(source, shortened_source)
-        shortened_sources.append(shortened_source)
-      generated_sources = shortened_sources
+
+      def shorten(sources: List[Path], prefix: str) -> List[Path]:
+        shortened = []
+        for index, source in enumerate(sources):
+          destination = short_source_dir / f"{prefix}{index}.cpp"
+          shutil.copy2(source, destination)
+          shortened.append(destination)
+        return shortened
+
+      fast_sources = shorten(fast_sources, "vfast_")
+      slow_sources = shorten(slow_sources, "vslow_")
 
     runtime_sources = [
         include_dir / "verilated.cpp",
@@ -340,10 +354,10 @@ class Verilator(Simulator):
     if random_cpp.exists():
       runtime_sources.append(random_cpp)
 
-    generated_src = "\n  ".join(
-        source.as_posix() for source in generated_sources)
     rt_src = "\n  ".join(s.as_posix() for s in runtime_sources)
     driver = Path(Verilator.DefaultDriver).as_posix()
+    rt_and_driver = "\n  ".join([s.as_posix() for s in runtime_sources] +
+                                [driver])
     inc = include_dir.as_posix()
     vltstd = (include_dir / "vltstd").as_posix()
 
@@ -360,20 +374,28 @@ class Verilator(Simulator):
       dpi_paths = self.sources.dpi_link_paths()
       dpi_link = "\n  ".join(p.as_posix() for p in dpi_paths)
 
-    pch_setup = ""
-    if pch_header is not None:
-      runtime_and_driver = "\n  ".join(
-          [source.as_posix() for source in runtime_sources] + [driver])
-      pch_setup = f"""
-target_precompile_headers({exe_name} PRIVATE
-  {pch_header.as_posix()}
+    # Separate object libraries so each optimization group gets its own
+    # precompiled header; one PCH cannot serve two different -O levels.
+    groups = []
+    obj_refs = []
+    for name, group_sources in (("vl_fast", fast_sources), ("vl_slow",
+                                                            slow_sources)):
+      if not group_sources:
+        continue
+      listing = "\n  ".join(s.as_posix() for s in group_sources)
+      opts = ("\ntarget_compile_options(vl_slow PRIVATE ${VL_OPT_SLOW})"
+              if name == "vl_slow" else "")
+      pch = ("" if pch_header is None else
+             f"\ntarget_precompile_headers({name} PRIVATE "
+             f"{pch_header.as_posix()})")
+      groups.append(f"""
+add_library({name} OBJECT
+  {listing}
 )
-
-set_source_files_properties(
-  {runtime_and_driver}
-  PROPERTIES SKIP_PRECOMPILE_HEADERS ON
-)
-"""
+target_link_libraries({name} PRIVATE vl_common){opts}{pch}""")
+      obj_refs.append(f"$<TARGET_OBJECTS:{name}>")
+    groups_str = "\n".join(groups)
+    obj_str = "\n  ".join(obj_refs)
 
     # Verilator's FST writer (debug builds) pulls in both zlib and lz4.
     if self.debug:
@@ -393,28 +415,41 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
   add_compile_options(/EHsc /bigobj)
+  set(VL_OPT_SLOW /Od)
+  set(VL_OPT_GLOBAL /O1)
+else()
+  set(VL_OPT_SLOW -O0)
+  set(VL_OPT_GLOBAL -Os)
 endif()
 
 find_package(Threads REQUIRED)
 {zlib_find}
-add_executable({exe_name}
-  {generated_src}
-  {rt_src}
-  {driver}
-)
+add_library(vl_common INTERFACE)
 
-target_include_directories({exe_name} PRIVATE
+target_include_directories(vl_common INTERFACE
   {inc}
   {vltstd}
   ${{CMAKE_CURRENT_SOURCE_DIR}}/..
 )
 
-target_compile_definitions({exe_name} PRIVATE
+target_compile_definitions(vl_common INTERFACE
   {defs_str}
 )
-{pch_setup}
+{groups_str}
+
+add_executable({exe_name}
+  {obj_str}
+  {rt_src}
+  {driver}
+)
+
+set_source_files_properties(
+  {rt_and_driver}
+  PROPERTIES COMPILE_OPTIONS "${{VL_OPT_GLOBAL}}"
+)
 
 target_link_libraries({exe_name} PRIVATE
+  vl_common
   Threads::Threads
   {zlib_link}
   {dpi_link}
