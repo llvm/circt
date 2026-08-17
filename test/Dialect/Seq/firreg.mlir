@@ -764,19 +764,18 @@ hw.module @with_preset(
   %preset_struct = seq.firreg %next_struct clock %clock preset 123 : !hw.struct<a: i16, b: i8>
   %preset_arr = seq.firreg %next_arr clock %clock preset 222 : !hw.array<5xi4>
 
-  // CHECK:      sv.ordered {
-  // CHECK:        sv.initial {
-  // CHECK-NEXT:     sv.bpassign %reg3, %c-1_i2 : i2
-  // CHECK-NEXT:     sv.bpassign %reg2, %c-2_i2 : i2
-  // CHECK-NEXT:     sv.bpassign %preset_0, %c0_i32 : i32
-  // CHECK-NEXT:     sv.bpassign %preset_42, %c42_i16 : i16
-  // CHECK-NEXT:     sv.bpassign %preset_512, %c429496729642949672964294967296_i512 : i512
-  // CHECK-NEXT:     [[STRUCT_CAST:%.+]] = hw.bitcast %c123_i24 : (i24) -> !hw.struct<a: i16, b: i8>
-  // CHECK-NEXT:     sv.bpassign %preset_struct, [[STRUCT_CAST]] : !hw.struct<a: i16, b: i8>
-  // CHECK-NEXT:     [[ARR_CAST:%.+]] = hw.bitcast %c222_i20 : (i20) -> !hw.array<5xi4>
-  // CHECK-NEXT:     sv.bpassign %preset_arr, [[ARR_CAST]] : !hw.array<5xi4>
-  // CHECK-NEXT:   }
-  // CHECK:      }
+  // Preset values are emitted as inline `sv.reg` initializers rather than in a
+  // guarded `initial` block.
+  // CHECK:      sv.reg init %c-1_i2 : !hw.inout<i2>
+  // CHECK:      sv.reg init %c-2_i2 : !hw.inout<i2>
+  // CHECK:      sv.reg init %c0_i32 : !hw.inout<i32>
+  // CHECK:      sv.reg init %c42_i16 : !hw.inout<i16>
+  // CHECK:      sv.reg init %c429496729642949672964294967296_i512 : !hw.inout<i512>
+  // CHECK:      [[STRUCT_CAST:%.+]] = hw.bitcast %c123_i24 : (i24) -> !hw.struct<a: i16, b: i8>
+  // CHECK:      sv.reg init [[STRUCT_CAST]] : !hw.inout<struct<a: i16, b: i8>>
+  // CHECK:      [[ARR_CAST:%.+]] = hw.bitcast %c222_i20 : (i20) -> !hw.array<5xi4>
+  // CHECK:      sv.reg init [[ARR_CAST]] : !hw.inout<array<5xi4>>
+  // CHECK-NOT:  sv.initial
 }
 
 // CHECK-LABEL: @reg_of_clock_type
@@ -1065,12 +1064,15 @@ hw.module @AsyncResetRegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %v
 
 // Test for registers with "preset".
 
-// CHECK:  hw.hierpath @[[reg_path:.+]] [@PresetRegUnderIfdef::@reg]
+// A preset register buried under an `sv.ifdef` (and guarded only by ifdefs) is
+// emitted with an inline `sv.reg init` initializer inside that same ifdef,
+// rather than via an XMR in the guarded `initial` block.
+// CHECK-LABEL: hw.module @PresetRegUnderIfdef
 hw.module @PresetRegUnderIfdef(in %clock : !seq.clock, in %value : i1) {
   %c = hw.constant 0 : i1
 
   // CHECK: sv.ifdef @MyMacro {
-  // CHECK:   %reg = sv.reg sym @reg : !hw.inout<i1>
+  // CHECK:   %reg = sv.reg init %false sym @reg : !hw.inout<i1>
   // CHECK:   %0 = sv.read_inout %reg : !hw.inout<i1>
   // CHECK:   sv.always posedge %clock {
   // CHECK:     sv.passign %reg, %value : i1
@@ -1080,11 +1082,7 @@ hw.module @PresetRegUnderIfdef(in %clock : !seq.clock, in %value : i1) {
     %reg = seq.firreg %value clock %clock preset 0: i1
   }
 
-  // CHECK: sv.initial {
-  // CHECK:   sv.ifdef.procedural @MyMacro {
-  // CHECK:     %0 = sv.xmr.ref @[[reg_path]] : !hw.inout<i1>
-  // CHECK:     sv.bpassign %0, %false : i1
-  // CHECK:   }
-  // CHECK: }
+  // No `initial` block / XMR is emitted for this register's preset.
+  // CHECK-NOT: sv.xmr.ref
   hw.output
 }
