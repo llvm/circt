@@ -617,6 +617,11 @@ struct SignedPosPartialProducts : public OpRewritePattern<PosPartialProductOp> {
     auto a = op.getAddend0();
     auto b = op.getAddend1();
     auto c = op.getMultiplicand();
+    
+    // Booth encoding will automatically handle signed multiplications
+    if (comb::shouldUseBoothEncoding(a, b))
+      return failure();
+      
     auto loc = op.getLoc();
     auto inputWidth = a.getType().getIntOrFloatBitWidth();
     Value aReplBits;
