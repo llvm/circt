@@ -257,7 +257,7 @@ struct LatticeNode;
 struct BlockExit;
 struct ProbeNode;
 struct DriveNode;
-struct SignalNode;
+struct SlotNode;
 
 /// Lattice state between two adjacent lattice nodes for a single slot.
 ///
@@ -283,7 +283,7 @@ struct LatticeValue {
 };
 
 struct LatticeNode {
-  enum class Kind { BlockEntry, BlockExit, Probe, Drive, Signal };
+  enum class Kind { BlockEntry, BlockExit, Probe, Drive, Slot };
   const Kind kind;
   /// Dirty flag to prevent duplicate pushes to worklist.
   bool dirty = false;
@@ -357,7 +357,7 @@ struct OpNode : public LatticeNode {
   }
 
   static bool classof(const LatticeNode *n) {
-    return isa<ProbeNode, DriveNode, SignalNode>(n);
+    return isa<ProbeNode, DriveNode, SlotNode>(n);
   }
 };
 
@@ -393,17 +393,17 @@ struct DriveNode : public OpNode {
   static bool classof(const LatticeNode *n) { return n->kind == Kind::Drive; }
 };
 
-struct SignalNode : public OpNode {
+struct SlotNode : public OpNode {
   Def *def;
 
-  SignalNode(SignalOp op, Def *def, LatticeValue *valueBefore,
-             LatticeValue *valueAfter)
-      : OpNode(Kind::Signal, op, valueBefore, valueAfter), def(def) {}
+  SlotNode(Operation *op, Def *def, LatticeValue *valueBefore,
+           LatticeValue *valueAfter)
+      : OpNode(Kind::Slot, op, valueBefore, valueAfter), def(def) {}
 
-  SignalOp getSignalOp() const { return cast<SignalOp>(op); }
-  DefSlot getSlot() const { return blockingSlot(getSignalOp()); }
+  bool hasInitValue() const { return isa<SignalOp>(op); }
+  DefSlot getSlot() const { return blockingSlot(op->getResult(0)); }
 
-  static bool classof(const LatticeNode *n) { return n->kind == Kind::Signal; }
+  static bool classof(const LatticeNode *n) { return n->kind == Kind::Slot; }
 };
 
 /// A lattice of block entry and exit nodes, nodes for relevant operations such
@@ -465,7 +465,7 @@ private:
   SpecificBumpPtrAllocator<BlockExit> blockExitAllocator;
   SpecificBumpPtrAllocator<ProbeNode> probeAllocator;
   SpecificBumpPtrAllocator<DriveNode> driveAllocator;
-  SpecificBumpPtrAllocator<SignalNode> signalAllocator;
+  SpecificBumpPtrAllocator<SlotNode> slotAllocator;
 
   // Helper function to get the correct allocator given a lattice node class.
   template <class T>
@@ -491,8 +491,8 @@ SpecificBumpPtrAllocator<DriveNode> &Lattice::getAllocator() {
   return driveAllocator;
 }
 template <>
-SpecificBumpPtrAllocator<SignalNode> &Lattice::getAllocator() {
-  return signalAllocator;
+SpecificBumpPtrAllocator<SlotNode> &Lattice::getAllocator() {
+  return slotAllocator;
 }
 
 } // namespace
@@ -574,8 +574,8 @@ void Lattice::dump(llvm::raw_ostream &os) {
         os << "    probe " << memName(blockingSlot(node->slot)) << "\n";
       else if (auto *node = dyn_cast<DriveNode>(value->nodeAfter))
         os << "    drive " << memName(node->slot) << "\n";
-      else if (auto *node = dyn_cast<SignalNode>(value->nodeAfter))
-        os << "    signal " << memName(node->getSlot()) << "\n";
+      else if (auto *node = dyn_cast<SlotNode>(value->nodeAfter))
+        os << "    slot " << memName(node->getSlot()) << "\n";
       else
         os << "    unknown\n";
 
@@ -1050,6 +1050,7 @@ struct Promoter {
   void insertProbeBlocks();
   void insertProbes();
   void insertProbes(BlockEntry *node);
+  void insertProbes(SlotNode *node);
 
   void insertDriveBlocks();
   void insertDrives();
@@ -1117,6 +1118,8 @@ struct Promoter {
   /// Maps slot values to all ops that refer to them. The operation list is
   /// laid out in the same order as a loop over blocks in the region.
   DenseMap<Value, SmallVector<Operation *>> slotOps;
+  /// Signals local to the current region.
+  SmallSetVector<Operation *, 4> localSignals;
 };
 } // namespace
 
@@ -1145,6 +1148,10 @@ LogicalResult Promoter::promote() {
     promoteSlot();
   }
   currentSlot = {};
+
+  // Drop region-local signal declarations that are no longer probed.
+  for (auto *signalOp : localSignals)
+    removeUnusedLocalSignal(cast<SignalOp>(signalOp));
 
   // Erase operations that have become unused.
   pruner.eraseNow();
@@ -1202,11 +1209,11 @@ void Promoter::promoteSlot() {
   // Insert the necessary block arguments.
   insertBlockArgs();
 
-  // If this slot is a region-local signal declaration, try to drop it when
-  // no probes remain.
-  if (auto signalOp = currentSlot.getDefiningOp<SignalOp>())
+  // If this slot come from a region-local signal, mark it as a candidate for
+  // later -- will be dropped if not needed.
+  if (auto *signalOp = getRootSignal(currentSlot.getDefiningOp()))
     if (signalOp->getParentRegion() == &region)
-      removeUnusedLocalSignal(signalOp);
+      localSignals.insert(signalOp);
 
   // Release the lattice so the bump allocators free their slabs before the
   // next slot runs.
@@ -1460,6 +1467,12 @@ void Promoter::populateSlotOps() {
                            return resolveSlot(op.getSignal());
                          return Value();
                        })
+                       .Case<SigExtractOp, SigArrayGetOp, SigStructExtractOp>(
+                           [&](Operation *op) -> Value {
+                             if (llvm::is_contained(slots, op->getResult(0)))
+                               return op->getResult(0);
+                             return Value();
+                           })
                        .Case([&](SignalOp op) { return op.getResult(); })
                        .Default([&](Operation *) { return Value(); });
       if (slot)
@@ -1537,13 +1550,15 @@ void Promoter::constructLattice() {
 
       // Handle local signals. Only the current slot's own SignalOp, if it
       // lives inside this region, contributes a SignalNode.
-      if (auto signalOp = dyn_cast<SignalOp>(op)) {
-        if (signalOp.getResult() != currentSlot)
+      if (isa<SignalOp, SigExtractOp, SigArrayGetOp, SigStructExtractOp>(op)) {
+        if (op->getResult(0) != currentSlot)
           continue;
-        auto *def =
-            lattice->createDef(signalOp.getInit(), DriveCondition::never());
-        auto *node = lattice->createNode<SignalNode>(signalOp, def, valueBefore,
-                                                     lattice->createValue());
+        Def *def = nullptr;
+        // Only signals have an initial value.
+        if (auto signalOp = dyn_cast<SignalOp>(op))
+          def = lattice->createDef(signalOp.getInit(), DriveCondition::never());
+        auto *node = lattice->createNode<SlotNode>(op, def, valueBefore,
+                                                   lattice->createValue());
         valueBefore = node->valueAfter;
         continue;
       }
@@ -1607,12 +1622,14 @@ void Promoter::propagateBackward(LatticeNode *node) {
     return;
   }
 
-  // Local signal declarations kill the need for a definition to be available,
-  // since the op is the first time a signal becomes available and the op
-  // provides an initial value as a definition.
-  if (isa<SignalNode>(node)) {
-    auto *signal = cast<SignalNode>(node);
-    update(signal->valueBefore, false);
+  // A slot's storage becomes available at its defining op: signal declarations
+  // allocate it, projections name it for the first time. Forward propagation
+  // overwrites the slot's value there in either case, so nothing from above
+  // ever flows through and no definition is ever needed above the op. This also
+  // keeps the need, and therefore any probe inserted to satisfy it, inside the
+  // part of the region that the slot dominates.
+  if (auto *slot = dyn_cast<SlotNode>(node)) {
+    update(slot->valueBefore, false);
     return;
   }
 
@@ -1731,8 +1748,9 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
 
   // Signals propagate their initial value as a reaching def. They also kill
   // any earlier delayed definition for the same slot.
-  if (auto *signal = dyn_cast<SignalNode>(node)) {
-    update(signal->valueAfter, signal->def, nullptr);
+  if (auto *signal = dyn_cast<SlotNode>(node)) {
+    update(signal->valueAfter, signal->def,
+           signal->hasInitValue() ? signal->def : nullptr);
     return;
   }
 
@@ -1898,7 +1916,21 @@ void Promoter::insertProbes() {
   for (auto *node : lattice->nodes) {
     if (auto *entry = dyn_cast<BlockEntry>(node))
       insertProbes(entry);
+    else if (auto *signal = dyn_cast<SlotNode>(node))
+      insertProbes(signal);
   }
+}
+
+/// Insert a probe directly after a SlotNode that is not a SignalOp.
+void Promoter::insertProbes(SlotNode *node) {
+  if (node->def || !node->valueAfter->needed)
+    return;
+  LLVM_DEBUG(llvm::dbgs() << "- Inserting probe for " << currentSlot
+                          << " after " << *node->op << "\n");
+  OpBuilder builder(node->op);
+  builder.setInsertionPointAfter(node->op);
+  auto value = ProbeOp::create(builder, currentSlot.getLoc(), currentSlot);
+  node->def = lattice->createDef(value, DriveCondition::never());
 }
 
 /// Insert a probe at the beginning of the block for the current slot, if it
