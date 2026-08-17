@@ -1398,121 +1398,100 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
     Value input = adaptor.getInput();
     Type inputType = input.getType();
     int32_t low = adaptor.getLowBit();
+    auto loc = op.getLoc();
 
-    if (auto structTy = dyn_cast<hw::StructType>(inputType)) {
-      int32_t width = hw::getBitWidth(structTy);
-      if (width == -1)
-        return failure();
-      input = rewriter.createOrFold<hw::BitcastOp>(
-          op.getLoc(), rewriter.getIntegerType(width), input);
-      inputType = input.getType();
-    }
-
+    // Bit-addressed extract out of an integer into any bitcastable result.
     if (isa<IntegerType>(inputType)) {
       int32_t inputWidth = inputType.getIntOrFloatBitWidth();
       int32_t resultWidth = hw::getBitWidth(resultType);
+      if (resultWidth < 0)
+        return failure();
+
       int32_t high = low + resultWidth;
+      int32_t lsbPad = std::clamp(-low, 0, resultWidth);
+      int32_t msbPad = std::clamp(high - inputWidth, 0, resultWidth - lsbPad);
+      int32_t extractWidth = resultWidth - lsbPad - msbPad;
 
-      SmallVector<Value> toConcat;
-      if (low < 0)
-        toConcat.push_back(hw::ConstantOp::create(
-            rewriter, op.getLoc(), APInt(std::min(-low, resultWidth), 0)));
+      SmallVector<Value> sbv;
+      if (msbPad > 0)
+        sbv.push_back(hw::ConstantOp::create(rewriter, loc, APInt(msbPad, 0)));
 
-      if (low < inputWidth && high > 0) {
-        int32_t lowIdx = std::max(low, 0);
-        Value middle = rewriter.createOrFold<comb::ExtractOp>(
-            op.getLoc(),
-            rewriter.getIntegerType(
-                std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
-            input, lowIdx);
-        toConcat.push_back(middle);
-      }
+      if (extractWidth > 0)
+        sbv.push_back(rewriter.createOrFold<comb::ExtractOp>(
+            loc, rewriter.getIntegerType(extractWidth), input,
+            std::max(low, 0)));
 
-      int32_t diff = high - inputWidth;
-      if (diff > 0) {
-        Value val =
-            hw::ConstantOp::create(rewriter, op.getLoc(), APInt(diff, 0));
-        toConcat.push_back(val);
-      }
+      if (lsbPad > 0)
+        sbv.push_back(hw::ConstantOp::create(rewriter, loc, APInt(lsbPad, 0)));
 
-      Value concat =
-          rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), toConcat);
-      rewriter.replaceOp(op, concat);
+      Value res = rewriter.createOrFold<comb::ConcatOp>(loc, sbv);
+      if (res.getType() != resultType)
+        res = rewriter.createOrFold<hw::BitcastOp>(loc, resultType, res);
+
+      rewriter.replaceOp(op, res);
       return success();
     }
 
+    // Element-addressed extract out of an array
     if (auto arrTy = dyn_cast<hw::ArrayType>(inputType)) {
-      int32_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
+      Type elementType = arrTy.getElementType();
+      int32_t idxWidth = llvm::Log2_64_Ceil(arrTy.getNumElements());
       int32_t inputWidth = arrTy.getNumElements();
 
-      if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType);
-          resArrTy && resArrTy != arrTy.getElementType()) {
-        int32_t elementWidth = hw::getBitWidth(arrTy.getElementType());
-        if (elementWidth < 0)
-          return failure();
+      // Array element
+      if (resultType == elementType) {
+        if (low < 0 || low >= inputWidth) {
+          auto zeros = createZeroValue(resultType, loc, rewriter);
+          if (!zeros)
+            return failure();
+          rewriter.replaceOp(op, zeros);
+        } else {
+          rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(
+              op, input,
+              hw::ConstantOp::create(rewriter, loc,
+                                     rewriter.getIntegerType(idxWidth), low));
+        }
+        return success();
+      }
 
-        int32_t high = low + resArrTy.getNumElements();
-        int32_t resWidth = resArrTy.getNumElements();
+      // Array slice
+      if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType);
+          resArrTy && resArrTy.getElementType() == elementType) {
+        int32_t resultWidth = resArrTy.getNumElements();
+        int32_t high = low + resultWidth;
+
+        int32_t lsbPad = std::clamp(-low, 0, resultWidth);
+        int32_t msbPad = std::clamp(high - inputWidth, 0, resultWidth - lsbPad);
+        int32_t extractWidth = resultWidth - lsbPad - msbPad;
 
         SmallVector<Value> toConcat;
-        if (low < 0) {
-          Value val = hw::ConstantOp::create(
-              rewriter, op.getLoc(),
-              APInt(std::min((-low) * elementWidth, resWidth * elementWidth),
-                    0));
-          Value res = rewriter.createOrFold<hw::BitcastOp>(
-              op.getLoc(), hw::ArrayType::get(arrTy.getElementType(), -low),
-              val);
-          toConcat.push_back(res);
+        if (msbPad > 0) {
+          auto zeros = createZeroValue(hw::ArrayType::get(elementType, msbPad),
+                                       loc, rewriter);
+          if (!zeros)
+            return failure();
+          toConcat.push_back(zeros);
         }
 
-        if (low < inputWidth && high > 0) {
-          int32_t lowIdx = std::max(0, low);
-          Value lowIdxVal = hw::ConstantOp::create(
-              rewriter, op.getLoc(), rewriter.getIntegerType(width), lowIdx);
-          Value middle = rewriter.createOrFold<hw::ArraySliceOp>(
-              op.getLoc(),
-              hw::ArrayType::get(
-                  arrTy.getElementType(),
-                  std::min(resWidth, std::min(inputWidth, high) - lowIdx)),
-              adaptor.getInput(), lowIdxVal);
-          toConcat.push_back(middle);
+        if (extractWidth > 0)
+          toConcat.push_back(rewriter.createOrFold<hw::ArraySliceOp>(
+              loc, hw::ArrayType::get(elementType, extractWidth), input,
+              hw::ConstantOp::create(rewriter, loc,
+                                     rewriter.getIntegerType(idxWidth),
+                                     std::max(low, 0))));
+
+        if (lsbPad > 0) {
+          auto zeros = createZeroValue(hw::ArrayType::get(elementType, lsbPad),
+                                       loc, rewriter);
+          if (!zeros)
+            return failure();
+          toConcat.push_back(zeros);
         }
 
-        int32_t diff = high - inputWidth;
-        if (diff > 0) {
-          Value constZero = hw::ConstantOp::create(
-              rewriter, op.getLoc(), APInt(diff * elementWidth, 0));
-          Value val = hw::BitcastOp::create(
-              rewriter, op.getLoc(),
-              hw::ArrayType::get(arrTy.getElementType(), diff), constZero);
-          toConcat.push_back(val);
-        }
-
-        Value concat =
-            rewriter.createOrFold<hw::ArrayConcatOp>(op.getLoc(), toConcat);
-        rewriter.replaceOp(op, concat);
+        rewriter.replaceOp(
+            op, rewriter.createOrFold<hw::ArrayConcatOp>(loc, toConcat));
         return success();
       }
-
-      // Otherwise, it has to be the array's element type
-      if (low < 0 || low >= inputWidth) {
-        int32_t bw = hw::getBitWidth(resultType);
-        if (bw < 0)
-          return failure();
-
-        Value val = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(bw, 0));
-        Value bitcast =
-            rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType, val);
-        rewriter.replaceOp(op, bitcast);
-        return success();
-      }
-
-      Value idx = hw::ConstantOp::create(rewriter, op.getLoc(),
-                                         rewriter.getIntegerType(width),
-                                         adaptor.getLowBit());
-      rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
-      return success();
     }
 
     return failure();
