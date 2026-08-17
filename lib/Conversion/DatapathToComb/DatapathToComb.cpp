@@ -546,7 +546,7 @@ private:
     // [-2, 2] but do not constitute a full-carry chain as c[i+1] is independent
     // of c[i].
 
-    // Handle zero-extended multiplicand c
+    // Handle sign/zero-extended multiplicand c
     auto [cSigned, cBase] = getBaseOfExt(rewriter, loc, c);
     unsigned cBaseWidth = cBase.getType().getIntOrFloatBitWidth();
     unsigned rowWidth = width;
@@ -573,11 +573,11 @@ private:
 
     SmallVector<Value> aBits = extractBits(rewriter, a);
     SmallVector<Value> bBits = extractBits(rewriter, b);
-    // Pad with two zeros - for unsigned case where there's no extensions
+    // First reduce to their base widths - clip leading zeros/sign-bits
     aBits.resize(encodeBaseWidth);
     bBits.resize(encodeBaseWidth);
 
-    // Retain/pad with three leading zeros
+    // For unsigned pad with three leading zeros 
     if (!encodeSigned) {
       aBits.append(3, zero);
       bBits.append(3, zero);
@@ -591,12 +591,12 @@ private:
     SmallVector<Value> partialProducts;
     SmallVector<Value> encNegs;
     partialProducts.reserve(op.getNumResults());
-    encNegs.reserve((aBits.size() + 1) / 2);
+    encNegs.reserve(aBits.size());
     Value encNegPrev;
     Value recoderCarry = zero;
 
     for (unsigned i = 0; i + 1 < aBits.size(); i += 2) {
-      // Select the Booth bits (first row will have b[-1] = a[i-1] = 0)
+      // Select the Booth bits (first row will have b[-1] = a[-1] = 0)
       Value aim1 = (i == 0) ? zero : aBits[i - 1];
       Value bim1 = (i == 0) ? zero : bBits[i - 1];
       Value ai = aBits[i];
@@ -604,8 +604,15 @@ private:
       Value aip1 = aBits[i + 1];
       Value bip1 = bBits[i + 1];
 
-      // First layer of logic
-      // Compute a majority function of a[i], b[i] and b[i-1]
+      // The implementation is entirely based on Figure 3 of 
+      // "Optimized Synthesis of Sum-of-Products"
+      // which provides little intuition behind the encoding circuit - but it is
+      // really just compact logical expressions to determine the value of
+      // -2*(a[i+1]+b[i+1]) + (a[i]+b[i]) + (a[i-1]+b[i-1])
+      //                    + carry[i] - 4*carry[i+1]
+
+      // Compute a majority function of a[i], b[i] and b[i-1] indicating
+      // a[i] + b[i] + b[i-1] >= 2
       Value aAndB = rewriter.createOrFold<comb::AndOp>(loc, ai, bi, true);
       Value aAndPrevB = rewriter.createOrFold<comb::AndOp>(loc, ai, bim1, true);
       Value bAndPrevB = rewriter.createOrFold<comb::AndOp>(loc, bi, bim1, true);
@@ -618,8 +625,10 @@ private:
       Value prevOr = rewriter.createOrFold<comb::OrOp>(loc, aim1, bim1, true);
 
       // Second layer of logic
+      // y1 = (a[i] ^ b[i]) ^ (a[i-1] | b[i-1])
       Value y1 = rewriter.createOrFold<comb::XorOp>(loc, aXorB, prevOr, true);
       Value y2 = rewriter.createOrFold<comb::OrOp>(loc, aXorB, aXorPrevA, true);
+      // z1 = (a[i+1] ^ b[i+1]) ^ ((a[i] ^ b[i]) | (a[i-1] ^ b[i-1]))
       Value z1 = rewriter.createOrFold<comb::XorOp>(loc, nextXor, y2, true);
 
       // Encoding signals
@@ -627,7 +636,7 @@ private:
       Value encNeg =
           rewriter.createOrFold<comb::XorOp>(loc, majority, nextXor, true);
       Value invNextXor = comb::createOrFoldNot(rewriter, loc, nextXor);
-      // Compute the carry for the next row
+      // Compute the carry for the next row - this is to keep the digits within the range [-2,2]
       Value recoderCarryNext =
           rewriter.createOrFold<comb::AndOp>(loc, invNextXor, majority, true);
 
@@ -673,6 +682,7 @@ private:
 
     // Add the final sign-correction row for signed multiplication
     // Not necessary for unsigned multiplication as the final row is positive
+    // The final recoderCarry will always be zero by construction
     if (encodeSigned) {
       auto numPP = partialProducts.size();
       Value shiftByFinal =
@@ -696,8 +706,7 @@ private:
         ppRow = rewriter.createOrFold<comb::ConcatOp>(
             loc, ValueRange{padding, ppRow});
       }
-      ppWidth = ppRow.getType().getIntOrFloatBitWidth();
-      if (ppWidth > width)
+      if (ppRow.getType().getIntOrFloatBitWidth() > width)
         ppRow = rewriter.createOrFold<comb::ExtractOp>(loc, ppRow, 0, width);
       partialProducts[index] = ppRow;
     }
