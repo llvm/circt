@@ -577,7 +577,7 @@ private:
     aBits.resize(encodeBaseWidth);
     bBits.resize(encodeBaseWidth);
 
-    // For unsigned pad with three leading zeros 
+    // For unsigned pad with three leading zeros
     if (!encodeSigned) {
       aBits.append(3, zero);
       bBits.append(3, zero);
@@ -604,7 +604,7 @@ private:
       Value aip1 = aBits[i + 1];
       Value bip1 = bBits[i + 1];
 
-      // The implementation is entirely based on Figure 3 of 
+      // The implementation is entirely based on Figure 3 of
       // "Optimized Synthesis of Sum-of-Products"
       // which provides little intuition behind the encoding circuit - but it is
       // really just compact logical expressions to determine the value of
@@ -636,7 +636,8 @@ private:
       Value encNeg =
           rewriter.createOrFold<comb::XorOp>(loc, majority, nextXor, true);
       Value invNextXor = comb::createOrFoldNot(rewriter, loc, nextXor);
-      // Compute the carry for the next row - this is to keep the digits within the range [-2,2]
+      // Compute the carry for the next row - this is to keep the digits within
+      // the range [-2,2]
       Value recoderCarryNext =
           rewriter.createOrFold<comb::AndOp>(loc, invNextXor, majority, true);
 
