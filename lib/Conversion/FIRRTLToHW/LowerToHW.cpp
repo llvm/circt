@@ -3859,11 +3859,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   Attribute presetAttr;
   if (auto initial = op.getInitialAttr()) {
     auto intTy = dyn_cast<IntegerType>(resultType);
-    if (!intTy)
-      return op.emitError("'initial' value on non-integer register type");
+    assert(intTy && "'initial' must be integer type");
     presetAttr = builder.getIntegerAttr(
-        builder.getIntegerType(intTy.getWidth()),
-        initial.getValue().zextOrTrunc(intTy.getWidth()));
+        intTy, initial.getValue().zextOrTrunc(intTy.getWidth()));
   }
 
   // Create a reg op, wiring itself to its input.

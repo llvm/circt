@@ -2731,11 +2731,8 @@ OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
 }
 
 namespace {
-// Returns true if replacing a register with a value equal to `foldedValue`
-// preserves the register's time-zero simulation semantics: either the register
-// has no `initial` value, or `initial == foldedValue`. If `foldedValue` is
-// absent (the replacement value is not a known constant), only returns true
-// when the register has no `initial` value.
+// Returns true if replacing a register that has an initial value with a
+// foldedValue does not change the initial behavior.
 bool preservesInitial(Operation *reg, IntegerAttr initial,
                       std::optional<APInt> foldedValue = std::nullopt) {
   if (!initial)
@@ -2821,10 +2818,8 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
   if (reg.getType(0) != resetValue.getType())
     return failure();
 
-  // Replacing the register with its reset value must preserve the time-zero
-  // simulation value. If the reset value is a known constant, allow the fold
-  // only when `initial` matches; otherwise be conservative and bail when an
-  // `initial` value is present.
+  // Bail if replacing the register with the constant would change its
+  // time-zero simulation value.
   if (auto constOp = dyn_cast_or_null<ConstantOp>(resetValue.getDefiningOp())) {
     if (!preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
       return failure();
