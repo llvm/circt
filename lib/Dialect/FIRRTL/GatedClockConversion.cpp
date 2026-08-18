@@ -816,6 +816,68 @@ void GatedClockConversion::eliminateTemporaryWires() {
 }
 
 //===----------------------------------------------------------------------===//
+// GatedClockConversion: the driver
+//===----------------------------------------------------------------------===//
+
+LogicalResult GatedClockConversion::run() {
+  LLVM_DEBUG(llvm::dbgs() << "===== GatedClockConversion::run() =====\n");
+
+  if (roots.empty())
+    return success();
+  context = roots[0].first->getContext();
+  clockType = ClockType::get(context);
+  u1Type = UIntType::get(context, 1);
+
+  // Phase 1: analysis. A failure here means invalid input; the IR is untouched,
+  // so returning early leaves it intact.
+  LLVM_DEBUG(llvm::dbgs() << "--- Phase 1: Analysis ---\n");
+  if (failed(analyzeFrom(llvm::to_vector(llvm::make_second_range(roots)))))
+    return failure();
+  LLVM_DEBUG(dump());
+
+  computeGatedClocks();
+
+  // Phase 2: plan the whole mutation. Still no IR mutation.
+  LLVM_DEBUG(llvm::dbgs() << "--- Phase 2: Planning ---\n");
+  plan();
+
+  // Record the root rewrites now, so that nothing reads `clockEnablePairs`
+  // after the IR has been mutated.
+  for (auto &[op, clk] : roots) {
+    auto it = clockEnablePairs.find(clk);
+    // An unplanned clock is one no base clock reaches, i.e. a clock feedback
+    // loop, which is invalid input. Skipping the rewrite is always safe.
+    if (it == clockEnablePairs.end()) {
+      mlir::emitWarning(clk.getLoc())
+          << "gated clock conversion: this clock is not reachable from any "
+             "free-running base clock (clock feedback loop?); leaving the op "
+             "unchanged";
+      continue;
+    }
+    rootRewrites.push_back({op, it->second.baseClk, it->second.enableId});
+  }
+  LLVM_DEBUG(dumpPlan());
+
+  // Phase 3: apply the plan. This is the only phase that mutates the IR.
+  LLVM_DEBUG(llvm::dbgs() << "--- Phase 3: Applying the plan ---\n");
+  if (failed(applyPlan()))
+    return failure();
+
+  // Phase 4: cleanup. Nothing reads the plan any more, so the instances that
+  // were replaced can be erased.
+  LLVM_DEBUG(llvm::dbgs() << "--- Phase 4: Cleanup (" << deadInstances.size()
+                          << " ops) ---\n");
+  eliminateTemporaryWires();
+  for (auto oldInst : deadInstances)
+    oldInst.erase();
+  deadInstances.clear();
+
+  roots.clear();
+  LLVM_DEBUG(llvm::dbgs() << "===== run() complete =====\n");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // GatedClockConversion: debug printing
 //===----------------------------------------------------------------------===//
 
