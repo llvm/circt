@@ -570,7 +570,7 @@ class TestBundleTransformBasic(Module):
 # are present.
 # CHECK:         %buf_item = seq.compreg.ce sym @buf_item %{{.+}}, %clk, %{{.+}} reset %rst, %{{.+}} : i8
 # CHECK:         comb.mux bin %{{.+}}, %buf_item, %{{.+}} {{.+}} : i8
-# CHECK:         hw.instance "Counter" sym @Counter @Counter_increment_on_clearFalse_width8
+# CHECK:         hw.instance "remaining" sym @remaining @DownCounter_decrement_on_loadFalse_width8
 # CHECK:         %state = seq.compreg sym @state %{{.+}}, %clk reset %rst, %{{.+}} : i2
 @unittestmodule()
 class TestListWindowToParallel(Module):
@@ -643,7 +643,7 @@ class TestListWindowToSerial(Module):
 # item is forwarded directly into the output struct.
 # CHECK-NOT:     @buf_item
 # CHECK:         hw.struct_create (%{{.+}}, %{{.+}}, %{{.+}}) : !hw.struct<header: i4, data: i0, last: i1>
-# CHECK:         hw.instance "Counter" sym @Counter @Counter_increment_on_clearFalse_width8
+# CHECK:         hw.instance "remaining" sym @remaining @DownCounter_decrement_on_loadFalse_width8
 # CHECK-NOT:     @buf_item
 # CHECK:         %state = seq.compreg sym @state %{{.+}}, %clk reset %rst, %{{.+}} : i2
 @unittestmodule()

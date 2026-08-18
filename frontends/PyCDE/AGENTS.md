@@ -102,11 +102,40 @@ elaboration-time bug; double assignment raises.
 
 ## Counters
 
-`pycde.constructs.Counter` increments on `increment` and clears on
-`clear`; **clear takes precedence over increment**. Use it instead of
-hand-rolled `(reg + 1).reg(ce=...)` patterns when there is a natural
-"reset to zero on event X" condition; it eliminates a class of
-off-by-one bugs around the boundary cycle.
+`pycde.seq.Counter(width)` increments on `increment` and clears on
+`clear`. Use it instead of hand-rolled `(reg + 1).reg(ce=...)` patterns
+when there is a natural "reset to zero on event X" condition; it
+eliminates a class of off-by-one bugs around the boundary cycle.
+
+By default **clear takes precedence over increment**: an `increment`
+which coincides with a `clear` is dropped and the count goes to 0. That
+is what you want when the clearing event *is* the boundary (the item in
+that cycle belongs to the run being closed). It is wrong -- and silently
+loses events -- when `clear` means "I have consumed the count so far",
+e.g. a telemetry counter cleared when it is read. For that case pass
+`Counter(width, increment_on_clear=True)`: the clear zeroes the
+accumulated count and that cycle's increment still counts, so the count
+becomes 1.
+
+`pycde.seq.DownCounter(width)` is the countdown/credit counterpart:
+`load` loads `load_value`, `decrement` counts down by one, the count
+saturates at zero rather than wrapping, and `is_zero` reports whether
+the current count is zero (combinationally off the register, so it adds
+no latency). It has the same priority knob: by default `load` wins over
+a coincident `decrement`, and `DownCounter(width,
+decrement_on_load=True)` applies the decrement to the newly loaded value
+instead of dropping it.
+
+Note that both parameters are part of the generated module name
+(e.g. `Counter_increment_on_clearFalse_width8`), so lit tests which
+match on module names need the full name.
+
+Counting *down* to a constant is also cheaper than counting up to a
+register when the comparison sits in a single-cycle handshake loop:
+`remaining == 1` is a register-vs-constant compare (no XNOR level, ~W/6
+LUTs on a 6-LUT device), while `emitted == count` is register-vs-register
+(~W/3 LUTs) and `emitted + 1 == count` additionally drags an adder into
+the loop.
 
 ## ESI channels and handshake
 
@@ -191,6 +220,9 @@ deadlocks and dropped beats.
 - Use `Counter` + a `MMIO`/`AppID`-tagged read register to surface
   invariant violations (e.g. "static field changed mid-list") to host software.
   Cheap on area and invaluable when a cosim test fails far from the bug.
+  If the counter is cleared when it is read, use
+  `Counter(width, increment_on_clear=True)` so an event landing on the
+  read cycle is not lost.
   Alternatively, 'esi.Telemetry' provides a more structured interface for this
   pattern. It can be automatically read via the esiaccel API and the esiquery
   tool.
