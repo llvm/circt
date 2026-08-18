@@ -7,12 +7,12 @@ from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel,
 from .constructs import AssignableSignal, Mux, Wire
 from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
-from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal,
+from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal, Or,
                       Signal, _FromCirctValue, UIntSignal)
 from .support import (clog2, optional_dict_to_optional_dict_attr, get_user_loc,
                       optional_dict_to_dict_attr)
 from .system import System
-from .types import (Any, Bits, Bundle, BundledChannel, Channel,
+from .types import (Any, Array, Bits, Bundle, BundledChannel, Channel,
                     ChannelDirection, ChannelSignaling, List as EsiListType,
                     StructType, Type, Window, UInt, _FromCirctType)
 
@@ -1091,7 +1091,25 @@ class TelemetryMMIO(ServiceImplementation):
   region. Each client request is assigned a register in the MMIO space. When a
   read request is received for the assigned address, it gets routed to the
   assigned client. When a write request is received, it is discarded. The
-  assignment table is stored in the manifest."""
+  assignment table is stored in the manifest.
+
+  **REQUIREMENTS.** Both are needed to make the response merge safe:
+
+  1. The `MMIO` service implementation this connects to must not issue a read
+     command while a previous read's response is still outstanding.
+  2. Every telemetry client must assert its `data` channel's `valid` only in
+     response to a `get`. `Telemetry.report_signal` does this; a client which
+     holds `valid` high permanently -- legal ESI, and the natural way to
+     express an always-available counter -- does not.
+
+  Given both, each command is demuxed to exactly one client and at most one
+  client is offering a response at a time, so the responses can be merged with
+  `ChannelMergeOneValid` instead of arbitrated -- which keeps the response path
+  from building a combinational cone across every telemetry client.
+
+  Nothing here enforces either, and violating either loses responses. Note (2)
+  is not specific to this merge: `ChannelMux2` is fixed-priority, so under an
+  arbiter a permanently-valid client starves every client behind it."""
 
   clk = Clock()
   rst = Reset()
@@ -1148,7 +1166,13 @@ class TelemetryMMIO(ServiceImplementation):
       bundle_wire.assign(bundle)
       client_data_channels.append(
           bundle_froms["data"].transform(lambda m: m.as_bits(64)))
-    resp_channel = ChannelMux(client_data_channels)
+    # The demux above routes each command to exactly one client, so -- given
+    # both requirements in this class' docs -- at most one client is offering a
+    # response at a time and no arbitration is needed to merge them.
+    resp_channel = ChannelMergeOneValid(client_data_channels,
+                                        ports.clk,
+                                        ports.rst,
+                                        instance_name="telemetry_resp_merge")
     data_resp_channel.assign(resp_channel)
     return True
 
@@ -1343,6 +1367,170 @@ def ChannelMux(input_channels: List[ChannelSignal]) -> ChannelSignal:
     return m.output_channel
 
   return build_tree(input_channels)
+
+
+@modparams
+def ChannelMergeOneValidMod(channel_type: Channel, num_inputs: int,
+                            register_output: bool):
+  """Build the N:1 one-valid channel merge module. See the
+  `ChannelMergeOneValid` convenience function for the user-facing entry point
+  and the precondition it requires."""
+
+  assert num_inputs >= 2, "ChannelMergeOneValidMod requires at least two inputs"
+  inner = channel_type.inner_type
+  width = inner.bitwidth
+  if width is None:
+    raise TypeError(
+        f"ChannelMergeOneValid requires a fixed-width payload; got {inner}")
+
+  class ChannelMergeOneValidImpl(Module):
+    clk = Clock()
+    rst = Reset()
+
+    inputs = Input(Array(channel_type, num_inputs))
+    output = Output(channel_type)
+
+    @generator
+    def build(ports) -> None:
+      # A single `ready`, broadcast to every input. This is the entire point of
+      # the module: no input's `ready` depends on any other input's `valid`, so
+      # there is no combinational coupling between the inputs at all.
+      in_ready = Wire(Bits(1), name="in_ready")
+
+      valids: List[BitsSignal] = []
+      datas: List[BitsSignal] = []
+      for i in range(num_inputs):
+        data_i, valid_i = ports.inputs[i].unwrap(in_ready)
+        valids.append(valid_i)
+        if width > 0:
+          datas.append(data_i.bitcast(Bits(width)))
+
+      merged_valid = Or(*valids)
+
+      if width > 0:
+        # The payload is read out of an array indexed by a binary encode of the
+        # one-hot `valid` vector. Left as a single array select so the synthesis
+        # tool can pick a structure for the target device. Selecting rather than
+        # OR-ing the payloads together also bounds the damage if the contract is
+        # broken: the output is always some input's payload, never a mixture.
+        def or_reduce(bits: List[BitsSignal]) -> BitsSignal:
+          return bits[0] if len(bits) == 1 else Or(*bits)
+
+        # Bit `k` of the index is set for exactly those inputs whose number has
+        # bit `k` set, so a one-hot `valid` encodes to the valid input's index.
+        sel_width = clog2(num_inputs)
+        sel_bits = [
+            or_reduce([valids[i]
+                       for i in range(num_inputs)
+                       if (i >> k) & 1])
+            for k in reversed(range(sel_width))
+        ]
+        sel = sel_bits[0]
+        if len(sel_bits) > 1:
+          sel = BitsSignal.concat(sel_bits)
+          sel.name = "merge_sel"
+        # The array is exactly `num_inputs` long: under the contract `sel` only
+        # ever resolves to a valid input's index, so it is always in range.
+        data_array = Array(Bits(width), num_inputs)(datas)
+        data_array.name = "merge_data"
+        merged_bits = data_array[sel]
+      else:
+        # Zero-width payload: there is nothing to select.
+        merged_bits = Bits(0)(0)
+
+      out_chan, out_ready = channel_type.wrap(merged_bits.bitcast(inner),
+                                              merged_valid)
+      if register_output:
+        # One skid buffer on the output. `ESI_PipelineStage` drives its
+        # `a_ready` from flops, so after this every input's `ready` is a flop
+        # output -- which is what takes the merge off the critical path.
+        out_chan = out_chan.buffer(ports.clk, ports.rst, stages=1)
+      ports.output = out_chan
+      in_ready.assign(out_ready)
+
+  return ChannelMergeOneValidImpl
+
+
+def ChannelMergeOneValid(input_channels: List[ChannelSignal],
+                         clk: ClockSignal,
+                         rst: Signal,
+                         *,
+                         register_output: bool = True,
+                         appid: Optional[AppID] = None,
+                         instance_name: Optional[str] = None) -> ChannelSignal:
+  """Merge N channels into one, given that at most one of them ever has a
+  message to offer at a time.
+
+  **Contract: at most one input may be valid in any given cycle.** The caller
+  must arrange this. In a request/response fabric it takes two things: at most
+  one request in flight (e.g. a `MaxOutstandingLimiter(1)`), *and* every client
+  asserting its reply's `valid` only in response to a request. The second is
+  easy to miss -- a channel may legally hold `valid` high forever, so an
+  always-available counter breaks the contract by itself.
+  `Telemetry.report_signal` drives its data `valid` from the `get` channel's;
+  hand-written clients must do likewise.
+
+  Given the contract, no arbitration is needed:
+
+  * `valid` = OR over the inputs' `valid`.
+  * `data`  = the valid input's payload, read out of an array indexed by a
+    binary encode of the `valid` vector.
+  * `ready` = the output's `ready`, broadcast unchanged to every input.
+
+  Broadcasting `ready` is the entire win: no input's `ready` depends on any
+  other input's `valid`, and with `register_output` it is a flop output.
+
+  Violating the contract is lossy but does not corrupt data: every valid input
+  completes its handshake, only one beat is emitted, and the rest are dropped.
+  The payload is selected rather than OR-ed, so the output is always some
+  input's payload, never a bitwise mixture of several.
+
+  TODO: flag the dropped-message case with an `sv.assert.concurrent`. Not
+  currently possible from PyCDE: the SV dialect's Python bindings do not expose
+  the `EventControl` enum needed to build the op's `event` attribute.
+
+  TODO: take the select as an optional *input*, driven from the request side
+  (for an MMIO processor, the same select that drives the command demux, one
+  cycle earlier and already registered). That would make both requirements
+  structural rather than documented -- an unselected input is never readied, so
+  holding `valid` high is harmless -- and is cheaper, since a registered select
+  deletes the encoder from the response path instead of adding to it.
+
+  Arguments:
+    input_channels: the channels to merge. All must share the same type.
+    clk, rst: clock and reset.
+    register_output: insert one skid buffer on the output (recommended; adds
+      one cycle of latency and makes every input's `ready` a flop output).
+    appid: optional `AppID` for the instance.
+    instance_name: optional instance name.
+  """
+
+  assert len(input_channels) > 0
+  if len(input_channels) == 1:
+    return input_channels[0]
+
+  channel_type = input_channels[0].type
+  for c in input_channels:
+    if c.type != channel_type:
+      raise TypeError("All ChannelMergeOneValid inputs must have the same "
+                      f"type; got {channel_type} and {c.type}")
+  # The merge is built directly out of `unwrap(ready)`/`wrap(data, valid)` and
+  # broadcasts a single `ready` to every input, which is only meaningful for
+  # ValidReady. Under FIFO signaling the broadcast signal is `rden`, so one
+  # output beat would pop *every* input FIFO and silently discard N-1
+  # messages. Reject it rather than elaborate wrong hardware.
+  if channel_type.signaling != ChannelSignaling.ValidReady:
+    raise TypeError("ChannelMergeOneValid requires ValidReady channels; got "
+                    f"{channel_type}")
+
+  mod = ChannelMergeOneValidMod(channel_type, len(input_channels),
+                                register_output)
+  inst = mod(clk=clk,
+             rst=rst,
+             inputs=Array(channel_type, len(input_channels))(input_channels),
+             appid=appid,
+             instance_name=instance_name)
+  return inst.output
 
 
 @modparams
