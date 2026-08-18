@@ -1033,6 +1033,7 @@ struct Promoter {
   Value resolveSlot(Value projectionOrSlot);
   void populateSlotOps();
 
+  void computeLiveOutWait();
   void captureAcrossWait();
   void captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
                          Liveness &liveness, DominanceInfo &dominance);
@@ -1075,6 +1076,14 @@ struct Promoter {
   /// The region we are promoting in.
   Region &region;
 
+  /// All wait operations in the region.
+  SmallVector<WaitOp> waitOps;
+  /// Values to capture across waits.
+  llvm::SetVector<Value> liveOutWait;
+  /// Region analyses shared by different stages of the pass.
+  std::unique_ptr<DominanceInfo> dominance;
+  std::unique_ptr<Liveness> liveness;
+
   /// The slots we are promoting. Mostly `llhd.sig` ops in practice. This
   /// establishes a deterministic order for slot allocations, such that
   /// everything else in the pass can operate using unordered maps and sets.
@@ -1115,6 +1124,7 @@ LogicalResult Promoter::promote() {
   if (region.empty())
     return success();
 
+  computeLiveOutWait();
   findPromotableSlots();
   captureAcrossWait();
 
@@ -1250,6 +1260,15 @@ void Promoter::findPromotableSlots() {
     if (!isPromotableSlotType(getStoredType(slotVal)))
       continue;
 
+    // Check if promoting this slot would fold in a projection whose parent
+    // value is captured across a wait boundary. Capturing rewrites uses of
+    // the parent value beyond the wait to a new block argument, which would
+    // sever the operand(0) chain the projection stacks are built from.
+    if (llvm::any_of(node->foldedProjections, [&](Operation *proj) {
+          return liveOutWait.contains(proj->getOperand(0));
+        }))
+      continue;
+
     slots.push_back(slotVal);
     for (auto *proj : node->foldedProjections)
       projections[proj->getResult(0)] = slotVal;
@@ -1275,23 +1294,22 @@ Value Promoter::resolveSlot(Value projectionOrSlot) {
   return projectionOrSlot;
 }
 
-/// Explicitly capture any probes that are live across an `llhd.wait` as block
-/// arguments and destination operand of that wait. This ensures that replacing
-/// the probe with a reaching definition later on will capture the value of the
-/// reaching definition before the wait.
-void Promoter::captureAcrossWait() {
+/// Collect any probes that are live across an `llhd.wait`.
+/// These will be later explicitly captured as block arguments by
+/// captureAcrossWait().
+void Promoter::computeLiveOutWait() {
   if (region.hasOneBlock())
     return;
 
-  SmallVector<WaitOp> waitOps;
   for (auto &block : region)
     if (auto waitOp = dyn_cast<WaitOp>(block.getTerminator()))
       waitOps.push_back(waitOp);
 
-  DominanceInfo dominance(region.getParentOp());
-  Liveness liveness(region.getParentOp());
+  if (waitOps.empty())
+    return;
 
-  llvm::DenseSet<Value> alreadyCaptured;
+  dominance = std::make_unique<DominanceInfo>(region.getParentOp());
+  liveness = std::make_unique<Liveness>(region.getParentOp());
 
   auto isDefinedInRegion = [&](Value v) {
     return v.getParentRegion() == &region;
@@ -1299,18 +1317,25 @@ void Promoter::captureAcrossWait() {
 
   for (auto waitOp : waitOps) {
     Block *waitBlock = waitOp->getBlock();
-    const auto &liveOutValues = liveness.getLiveOut(waitBlock);
+    const auto &liveOutValues = liveness->getLiveOut(waitBlock);
 
     for (Value v : liveOutValues) {
       if (!isDefinedInRegion(v))
         continue;
-
-      if (!alreadyCaptured.insert(v).second)
-        continue;
-
-      captureAcrossWait(v, waitOps, liveness, dominance);
+      liveOutWait.insert(v);
     }
   }
+}
+
+/// Explicitly capture any probes that are live across an `llhd.wait` as block
+/// arguments and destination operand of that wait. This ensures that replacing
+/// the probe with a reaching definition later on will capture the value of the
+/// reaching definition before the wait.
+void Promoter::captureAcrossWait() {
+  if (!dominance || !liveness)
+    return;
+  for (Value v : liveOutWait)
+    captureAcrossWait(v, waitOps, *liveness, *dominance);
 }
 
 /// Add a probe as block argument to a list of wait ops and update uses of the
