@@ -53,6 +53,8 @@ public:
 
   LogicalResult addRoot(Operation *op);
 
+  LogicalResult run();
+
   void dump() const;
 
 private:
