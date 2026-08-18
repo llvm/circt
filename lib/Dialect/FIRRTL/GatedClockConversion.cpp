@@ -44,6 +44,14 @@ StringRef edgeKindName(EdgeKind kind) {
   return "?";
 }
 
+/// The gate's effective enable, `enable | test_enable` or just `enable`.
+Value materializeGateEnable(ClockGateIntrinsicOp gate) {
+  if (!gate.getTestEnable())
+    return gate.getEnable();
+  ImplicitLocOpBuilder b(gate.getLoc(), gate);
+  return b.createOrFold<OrPrimOp>(gate.getEnable(), gate.getTestEnable());
+}
+
 /// The FModuleOp `value` lives in.
 FModuleOp getParentModule(Value value) {
   if (isa<BlockArgument>(value))
@@ -68,6 +76,109 @@ Value clockOperandOf(Operation *op) {
 }
 
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// GatedClockConversion: the plan's value model
+//===----------------------------------------------------------------------===//
+
+void GatedClockConversion::MatRef::print(llvm::raw_ostream &os) const {
+  switch (kind) {
+  case Kind::None:
+    os << "<none>";
+    return;
+  case Kind::Direct:
+    os << "direct(" << value << ")";
+    return;
+  case Kind::InstResult:
+    os << "instResult(" << cast<InstanceOp>(op).getName() << ", " << index
+       << ")";
+    return;
+  case Kind::ModuleArg:
+    os << "moduleArg(" << cast<FModuleOp>(op).getModuleName() << ", " << index
+       << ")";
+    return;
+  case Kind::PlannedWire:
+    os << "plannedWire(" << index << ")";
+    return;
+  case Kind::GateEnable:
+    os << "gateEnable(" << *op << ")";
+    return;
+  }
+}
+
+Value GatedClockConversion::resolve(MatRef ref) {
+  switch (ref.getKind()) {
+  case MatRef::Kind::None:
+    return Value();
+  case MatRef::Kind::Direct:
+    return ref.getValue();
+  case MatRef::Kind::InstResult:
+    return liveInstance(ref.getOp())->getResult(ref.getIndex());
+  case MatRef::Kind::ModuleArg:
+    return cast<FModuleOp>(ref.getOp())
+        .getBodyBlock()
+        ->getArgument(ref.getIndex());
+  case MatRef::Kind::PlannedWire:
+    return plannedWireValues[ref.getIndex()];
+  case MatRef::Kind::GateEnable:
+    return gateEnableOf(ref.gate());
+  }
+  llvm_unreachable("unhandled MatRef kind");
+}
+
+unsigned GatedClockConversion::newEnableNode(unsigned parent, MatRef term,
+                                             Location loc, MatRef anchor) {
+  enableNodes.push_back({parent, term, anchor, loc});
+  return enableNodes.size() - 1;
+}
+
+Value GatedClockConversion::lower(unsigned enableId) {
+  if (enableId == kNoEnable)
+    return Value();
+  loweredEnables.resize(enableNodes.size());
+  if (Value cached = loweredEnables[enableId])
+    return cached;
+
+  // Walk up to the first already-lowered node, then emit from there back down.
+  // Iterative so that a long gate cascade cannot overflow the stack.
+  SmallVector<unsigned> chain;
+  unsigned cur = enableId;
+  while (cur != kNoEnable && !loweredEnables[cur]) {
+    chain.push_back(cur);
+    cur = enableNodes[cur].parent;
+  }
+
+  Value upstream = cur == kNoEnable ? Value() : loweredEnables[cur];
+  for (unsigned id : llvm::reverse(chain)) {
+    const EnableNode &node = enableNodes[id];
+    Value result = resolve(node.term);
+    if (node.parent != kNoEnable) {
+      // AND with the upstream enable, so the register holds whenever any gate
+      // in the chain is closed. The anchor is the clock this enable
+      // accompanies, which dominates every consumer of the pair.
+      assert(upstream && "an upstream enable must lower to a value");
+      ImplicitLocOpBuilder builder(node.loc, context);
+      builder.setInsertionPointAfterValue(resolve(node.anchor));
+      result = builder.createOrFold<AndPrimOp>(upstream, result);
+    }
+    loweredEnables[id] = result;
+    upstream = result;
+  }
+  return upstream;
+}
+
+//===----------------------------------------------------------------------===//
+// GatedClockConversion: value materialization helpers
+//===----------------------------------------------------------------------===//
+
+Value GatedClockConversion::gateEnableOf(ClockGateIntrinsicOp gate) {
+  auto it = gateEnableCache.find(gate);
+  if (it != gateEnableCache.end())
+    return it->second;
+  Value v = materializeGateEnable(gate);
+  gateEnableCache[gate] = v;
+  return v;
+}
 
 //===----------------------------------------------------------------------===//
 // GatedClockConversion: worklist analysis (no IR mutation)
