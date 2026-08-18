@@ -316,6 +316,69 @@ LogicalResult GatedClockConversion::analyzeFrom(ArrayRef<Value> seeds) {
 }
 
 //===----------------------------------------------------------------------===//
+// GatedClockConversion: root rewriting
+//===----------------------------------------------------------------------===//
+
+LogicalResult GatedClockConversion::rewriteRoot(Operation *op, Value baseClk,
+                                                Value enable) {
+  if (!enable)
+    return success();
+
+  // RefForce/RefRelease: rebind the clock to the ungated base and fold the
+  // enable into the predicate.
+  if (auto fop = dyn_cast<RefForceOp>(op)) {
+    fop.getClockMutable().assign(baseClk);
+    ImplicitLocOpBuilder b(fop.getLoc(), fop);
+    fop.getPredicateMutable().assign(
+        b.createOrFold<AndPrimOp>(fop.getPredicate(), enable));
+    return success();
+  }
+  if (auto rop = dyn_cast<RefReleaseOp>(op)) {
+    rop.getClockMutable().assign(baseClk);
+    ImplicitLocOpBuilder b(rop.getLoc(), rop);
+    rop.getPredicateMutable().assign(
+        b.createOrFold<AndPrimOp>(rop.getPredicate(), enable));
+    return success();
+  }
+
+  Value regData;
+  if (auto reg = dyn_cast<RegOp>(op))
+    regData = reg.getData();
+  else if (auto regr = dyn_cast<RegResetOp>(op))
+    regData = regr.getData();
+  else
+    return op->emitError("unsupported for gated clock conversion");
+
+  // ExpandWhens leaves exactly one write per register. Rebinding the clock
+  // without sinking the enable would silently drop the gate, so bail out if
+  // that precondition does not hold.
+  FConnectLike dataWrite;
+  unsigned writers = 0;
+  for (auto &use : regData.getUses()) {
+    auto fconn = dyn_cast<FConnectLike>(use.getOwner());
+    if (fconn && fconn.getDest() == regData) {
+      ++writers;
+      dataWrite = fconn;
+    }
+  }
+  if (writers != 1) {
+    op->emitWarning() << "gated clock conversion: expected exactly one connect "
+                         "driving this register (run after "
+                         "firrtl-expand-whens); found "
+                      << writers << "; leaving the gated clock in place";
+    return success();
+  }
+
+  // Rebind to the ungated base and wrap the write with mux(enable, RHS,
+  // regData), so the register holds while the clock gate is closed.
+  op->setOperand(0, baseClk);
+  ImplicitLocOpBuilder b(dataWrite.getLoc(), dataWrite);
+  Value newRhs = b.createOrFold<MuxPrimOp>(enable, dataWrite.getSrc(), regData);
+  dataWrite->setOperand(1, newRhs);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // GatedClockConversion: planning (no IR mutation)
 //===----------------------------------------------------------------------===//
 

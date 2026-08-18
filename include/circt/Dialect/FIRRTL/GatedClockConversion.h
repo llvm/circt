@@ -232,6 +232,8 @@ private:
   // node emits at most one `and`. Null for `kNoEnable`.
   Value lower(unsigned enableId);
 
+  LogicalResult rewriteRoot(Operation *op, Value baseClk, Value enable);
+
   // -- Helpers ----------------------------------------------------------
 
   // Cached: returns `enable | test_enable` or just `enable`.
