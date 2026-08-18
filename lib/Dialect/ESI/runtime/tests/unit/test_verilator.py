@@ -48,6 +48,22 @@ def _make_verilator(run_dir,
   )
 
 
+def _make_cmake_verilator(tmp_path, monkeypatch):
+  root = tmp_path / "verilator"
+  fake_bin = root / "bin" / "verilator_bin"
+  fake_bin.parent.mkdir(parents=True)
+  fake_bin.touch()
+  (root / "include").mkdir()
+  (root / "include" / "verilated.h").touch()
+  monkeypatch.setenv("VERILATOR_PATH", str(fake_bin))
+  monkeypatch.setenv("VERILATOR_ROOT", str(root))
+  monkeypatch.chdir(tmp_path)
+  monkeypatch.setattr(Verilator, "_use_cmake", property(lambda self: True))
+  monkeypatch.setattr(Verilator, "_raise_stack_limit",
+                      staticmethod(lambda: None))
+  return _make_verilator(tmp_path)
+
+
 requires_verilator_bin = pytest.mark.skipif(
     not is_simulator_available("verilator"), reason="verilator not found")
 
@@ -129,17 +145,85 @@ class TestCompileCommands:
     assert Path(cmds[0][0]).stem == "verilator_bin"
     assert Path(cmds[0][0]) == v.verilator_bin
 
-  @requires_verilator_bin
-  def test_cmake_and_ninja_commands(self, tmp_path):
-    v = _make_verilator(tmp_path)
-    cmds = v.compile_commands()
-    # cmake+ninja present => 4 steps, including a Python callback.
-    if v._use_cmake:
+  def test_cmake_and_ninja_commands(self, tmp_path, monkeypatch):
+    v = _make_cmake_verilator(tmp_path, monkeypatch)
+    build_dir = tmp_path / "obj_dir" / "cmake_build"
+    build_dir.mkdir(parents=True)
+    with mock.patch.object(v, "_run_compile_command", return_value=0) as run:
+      cmds = v.compile_commands()
       assert len(cmds) == 4
       assert callable(cmds[1])
-      assert cmds[2][0] == "cmake"
-      assert "-G" in cmds[2] and "Ninja" in cmds[2]
+      assert callable(cmds[2])
+      assert cmds[2]() == 0
       assert cmds[3][0] == "ninja"
+    cmake_cmd = run.call_args.args[0]
+    assert cmake_cmd[0] == "cmake"
+    assert "-G" in cmake_cmd and "Ninja" in cmake_cmd
+
+  def test_configure_skips_when_inputs_unchanged(self, tmp_path, monkeypatch):
+    v = _make_cmake_verilator(tmp_path, monkeypatch)
+    build_dir = tmp_path / "obj_dir" / "cmake_build"
+    build_dir.mkdir(parents=True)
+    (build_dir / "build.ninja").touch()
+    v._cmake_dirty = False
+
+    with mock.patch.object(v, "_run_compile_command", return_value=0) as run:
+      configure = v.compile_commands()[2]
+      assert configure() == 0
+      assert configure() == 0
+
+    assert run.call_count == 1
+    assert (build_dir / Verilator._CMakeSignatureFilename).exists()
+
+  def test_configure_leaves_cmakelists_changes_to_ninja(self, tmp_path,
+                                                        monkeypatch):
+    v = _make_cmake_verilator(tmp_path, monkeypatch)
+    build_dir = tmp_path / "obj_dir" / "cmake_build"
+    build_dir.mkdir(parents=True)
+    (build_dir / "build.ninja").touch()
+
+    with mock.patch.object(v, "_run_compile_command", return_value=0) as run:
+      configure = v.compile_commands()[2]
+      assert configure() == 0
+      run.reset_mock()
+      v._cmake_dirty = True
+      assert configure() == 0
+
+    run.assert_not_called()
+
+  def test_configure_runs_when_environment_changes(self, tmp_path, monkeypatch):
+    v = _make_cmake_verilator(tmp_path, monkeypatch)
+    build_dir = tmp_path / "obj_dir" / "cmake_build"
+    build_dir.mkdir(parents=True)
+    (build_dir / "build.ninja").touch()
+    v._cmake_dirty = False
+
+    with mock.patch.object(v, "_run_compile_command", return_value=0) as run:
+      monkeypatch.setenv("CXX", "first-cxx")
+      assert v.compile_commands()[2]() == 0
+      monkeypatch.setenv("CXX", "second-cxx")
+      assert v.compile_commands()[2]() == 0
+
+    assert run.call_count == 2
+    assert run.call_args_list[0].args[0] == run.call_args_list[1].args[0]
+
+  def test_failed_configure_is_not_cached(self, tmp_path, monkeypatch):
+    v = _make_cmake_verilator(tmp_path, monkeypatch)
+    build_dir = tmp_path / "obj_dir" / "cmake_build"
+    build_dir.mkdir(parents=True)
+    (build_dir / "build.ninja").touch()
+    v._cmake_dirty = False
+    signature_file = build_dir / Verilator._CMakeSignatureFilename
+
+    with mock.patch.object(v, "_run_compile_command",
+                           side_effect=(1, 0)) as run:
+      configure = v.compile_commands()[2]
+      assert configure() == 1
+      assert not signature_file.exists()
+      assert configure() == 0
+
+    assert run.call_count == 2
+    assert signature_file.exists()
 
   @requires_verilator_bin
   def test_no_exe_or_build_flags_cmake(self, tmp_path):
