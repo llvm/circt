@@ -1522,7 +1522,8 @@ def ListWindowToParallel(serial_window_type: Window):
 
     @generator
     def build(ports):
-      from .constructs import Counter
+      from .seq import DownCounter
+
       # State machine for serial-to-parallel conversion. Per the ESI spec, the
       # serial encoding may transmit a list across multiple bursts, each of
       # which is a header (with a non-zero count of items) followed by `count`
@@ -1574,13 +1575,20 @@ def ListWindowToParallel(serial_window_type: Window):
 
       # ----- Counters -----
       zero = UInt(count_bitwidth)(0)
-      # `emitted` counts the number of items already emitted in the current
-      # burst. It is driven below by a constructs.Counter; we predeclare a
-      # Wire so it can be used in handshake/state expressions before the
-      # Counter is instantiated.
-      emitted_wire = Wire(UInt(count_bitwidth))
-      next_emitted = (emitted_wire +
-                      UInt(count_bitwidth)(1)).as_uint(count_bitwidth)
+      # `remaining` counts the items of the current burst not yet consumed: it
+      # is loaded with the burst's count when a header is accepted and
+      # decremented as items are emitted. The last item of a burst is therefore
+      # `remaining == 1`, a comparison against a *constant* on a registered
+      # value.
+      #
+      # Counting down is ~2x cheaper than the best up-counter formulation
+      # (`emitted == count_minus_1`), and much better than the naive one
+      # (`emitted + 1 == count`), and the decrement itself only ever feeds the
+      # register input, never the comparison.
+      #
+      # Predeclared as a Wire so it can be used in handshake/state expressions
+      # before its driver is built.
+      remaining_wire = Wire(UInt(count_bitwidth))
 
       # ----- Header acceptance -----
       # Headers are accepted whenever we are in S_WAIT or S_PEEK and serial_in
@@ -1613,8 +1621,8 @@ def ListWindowToParallel(serial_window_type: Window):
                                 rst_value=0,
                                 name="count")
       cur_count = count_reg.as_uint(count_bitwidth)
-      # In S_EMIT, the (emitted+1)-th item is the last of the burst.
-      is_last_of_burst = next_emitted == cur_count
+      # In S_EMIT, the item consumed when `remaining == 1` is the burst's last.
+      is_last_of_burst = remaining_wire == UInt(count_bitwidth)(1)
 
       # ----- Buffered item -----
       # Latch the last data item of a burst into a register before peeking
@@ -1677,18 +1685,23 @@ def ListWindowToParallel(serial_window_type: Window):
       emit_normal_xact = in_emit & serial_valid & ~is_last_of_burst & out_ready
       emit_buf_xact = in_emit_buf & out_ready
 
-      # ----- emitted counter -----
-      # Increment on each non-last emit; clear to 0 when accepting a new
-      # header (start of a new burst) or finishing the buffered emit.
-      # `increment` and `clear` are mutually exclusive (they require
-      # different states), and Counter.clear takes precedence over
-      # increment, matching the prior cascaded-Mux semantics.
-      reset_emitted = hdr_xact | emit_buf_xact
-      emitted_counter = Counter(count_bitwidth)(clk=ports.clk,
-                                                rst=ports.rst,
-                                                clear=reset_emitted,
-                                                increment=emit_normal_xact)
-      emitted_wire.assign(emitted_counter.out)
+      # ----- remaining counter -----
+      # Load the burst's item count when a header is accepted; decrement on
+      # each non-last emit. The two enables are mutually exclusive (they
+      # require different states), so `DownCounter`'s load-over-decrement
+      # priority never comes into play. The counter never *decrements* to 0:
+      # decrement is gated by `~is_last_of_burst`, i.e. `remaining != 1`.
+      # (`remaining` may still be loaded with 0 for count==0 terminators.)
+      # Not cleared on `emit_buf_xact`: by then the peeked header's `hdr_xact`
+      # has already loaded the next burst's count.
+      remaining_counter = DownCounter(count_bitwidth)(
+          clk=ports.clk,
+          rst=ports.rst,
+          load=hdr_xact,
+          load_value=new_count,
+          decrement=emit_normal_xact,
+          instance_name="remaining")
+      remaining_wire.assign(remaining_counter.out)
 
       # ----- State transitions -----
       # The conditions below are mutually exclusive (each requires a specific
@@ -1846,8 +1859,8 @@ def ListWindowToSerial(parallel_window_type: Window,
 
     @generator
     def build(ports):
-      from .seq import FIFO as SeqFIFO
-      from .constructs import ControlReg, Counter
+      from .seq import Counter, DownCounter, FIFO as SeqFIFO
+      from .constructs import ControlReg
 
       one_bc = UInt(bc_bitwidth)(1)
       depth_bc = UInt(bc_bitwidth)(fifo_depth)
@@ -1964,13 +1977,13 @@ def ListWindowToSerial(parallel_window_type: Window,
       meta_fifo.push(meta_entry_value, meta_push_xact)
 
       # Burst counter: increment on each par_xact, clear on meta_push_xact.
-      # Counter.clear takes precedence over .increment, so when both fire
-      # in the same cycle the counter resets to 0 (correct: that cycle's
-      # item is the last of the burst, and the next burst starts at 0).
-      burst_counter = Counter(bc_bitwidth)(clk=ports.clk,
-                                           rst=ports.rst,
-                                           clear=meta_push_xact,
-                                           increment=par_xact)
+      # That cycle's item is the last of the burst, and the next burst starts at
+      # 0 so clear needs to override increment.
+      burst_counter = Counter(bc_bitwidth,
+                              increment_on_clear=False)(clk=ports.clk,
+                                                        rst=ports.rst,
+                                                        clear=meta_push_xact,
+                                                        increment=par_xact)
       burst_count_wire.assign(burst_counter.out)
 
       # ===== Output side: drain meta + data FIFOs into serial frames. =====
@@ -2013,11 +2026,22 @@ def ListWindowToSerial(parallel_window_type: Window,
       footer_fields[count_field_name] = Bits(count_bitwidth)(0)
       footer_value = header_struct_type(footer_fields)
 
-      # Per-burst emitted-item counter, cleared at burst end.
-      emitted_wire = Wire(UInt(count_bitwidth))
-      next_emitted = (emitted_wire +
-                      UInt(count_bitwidth)(1)).as_uint(count_bitwidth)
-      last_item_in_burst = next_emitted == cur_count
+      # Per-burst counter. `remaining_wire` is driven by the `DownCounter`
+      # instantiated below -- it is predeclared here only because the handshake
+      # and state expressions between here and there need it. Counting down
+      # makes the "last item" test a comparison against a constant on a
+      # registered value, rather than `emitted + 1 == count` -- which would put
+      # a `count_bitwidth`-wide adder and equality inside a single-cycle loop
+      # (the result gates `out_ready`, the state transitions and the counter's
+      # own enables). See the matching comment in `ListWindowToParallel`.
+      #
+      # The test is `== 1` rather than the counter's `is_zero` because the
+      # counter is loaded with the burst's count as it appears in the header.
+      # Loading `count - 1` to use `is_zero` would buy nothing -- both are
+      # compares against a constant -- and would need a subtract on the load
+      # path plus a special case for the `count == 0` terminator.
+      remaining_wire = Wire(UInt(count_bitwidth))
+      last_item_in_burst = remaining_wire == UInt(count_bitwidth)(1)
 
       # Data FIFO pop. With no data FIFO (zero-width elements), there is
       # nothing to pop or wait on: data_value is a constant zero-width
@@ -2060,14 +2084,21 @@ def ListWindowToSerial(parallel_window_type: Window,
       if not data_is_zero:
         data_pop_rden.assign(data_xact)
 
-      # Emitted-counter: clear at burst_done, increment on every other
-      # data xact. Counter.clear takes precedence over .increment.
-      emitted_counter = Counter(count_bitwidth)(clk=ports.clk,
-                                                rst=ports.rst,
-                                                clear=burst_done,
-                                                increment=data_xact &
-                                                ~last_item_in_burst)
-      emitted_wire.assign(emitted_counter.out)
+      # Remaining-counter: load the burst's item count when the burst is armed
+      # (from the same combinational value `cur_meta` latches, so the load and
+      # `cur_hdr` stay in step), and decrement on every non-last data xact.
+      # `arm_burst` and `data_xact` require different states, so the load-over-
+      # decrement priority never comes into play, and the decrement is gated by
+      # `~last_item_in_burst` so the saturation at zero is never reached.
+      remaining_counter = DownCounter(count_bitwidth)(
+          clk=ports.clk,
+          rst=ports.rst,
+          load=arm_burst,
+          load_value=meta_value["hdr"][count_field_name].as_uint(
+              count_bitwidth),
+          decrement=data_xact & ~last_item_in_burst,
+          instance_name="remaining")
+      remaining_wire.assign(remaining_counter.out)
 
       # Per-state next-state expressions, selected by the current state.
       # Transitions:
