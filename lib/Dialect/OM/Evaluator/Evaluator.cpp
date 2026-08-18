@@ -31,6 +31,10 @@ using namespace circt::om;
 
 namespace {
 
+// Object values may be returned before their fields are populated. This is
+// necessary for object references: all class-body results are allocated before
+// evaluation, so an object can refer to itself or to another object currently
+// being evaluated. Other value kinds must be complete before they can be used.
 bool requiresCompleteEvaluation(const evaluator::EvaluatorValuePtr &value) {
   return !value->isFullyEvaluated() &&
          !isa<evaluator::ObjectValue>(value.get());
@@ -505,6 +509,8 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
         auto evaluated = evaluateValue(result, actualParams, op.getLoc());
         if (failed(evaluated))
           return failure();
+        // A partially evaluated non-object indicates a dataflow cycle (object
+        // placeholders are intentionally allowed; see above).
         if (requiresCompleteEvaluation(evaluated.value()))
           return op.emitError("failed to evaluate value");
       }
@@ -526,6 +532,8 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
         evaluateValue(value, actualParams, fieldLoc);
     if (failed(result))
       return result;
+    // A partially evaluated non-object indicates a dataflow cycle. A partial
+    // object is allowed because it may be the object currently being built.
     if (requiresCompleteEvaluation(result.value()))
       return emitError(fieldLoc, "failed to evaluate field ") << name;
 
@@ -766,14 +774,6 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
   SmallVector<evaluator::EvaluatorValuePtr> values;
   auto list = getOrCreateValue(op, actualParams, loc);
 
-  // Extract the ListValue.
-  auto extractList = [](evaluator::EvaluatorValue *value) {
-    return std::move(
-        llvm::TypeSwitch<evaluator::EvaluatorValue *, evaluator::ListValue *>(
-            value)
-            .Case([](evaluator::ListValue *val) { return val; }));
-  };
-
   bool hasUnknown = false;
   for (auto operand : op.getOperands()) {
     auto result = evaluateValue(operand, actualParams, loc);
@@ -785,10 +785,7 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
     if (result.value()->isUnknown())
       hasUnknown = true;
 
-    // Extract this sublist and ensure it's done evaluating.
-    evaluator::ListValue *subList = extractList(result.value().get());
-    if (!subList->isFullyEvaluated())
-      return list;
+    auto *subList = llvm::cast<evaluator::ListValue>(result.value().get());
 
     // Append each EvaluatorValue from the sublist.
     for (const auto &subValue : subList->getElements())
