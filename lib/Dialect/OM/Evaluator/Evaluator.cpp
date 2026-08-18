@@ -31,15 +31,6 @@ using namespace circt::om;
 
 namespace {
 
-// Object values may be returned before their fields are populated. This is
-// necessary for object references: all class-body results are allocated before
-// evaluation, so an object can refer to itself or to another object currently
-// being evaluated. Other value kinds must be complete before they can be used.
-bool requiresCompleteEvaluation(const evaluator::EvaluatorValuePtr &value) {
-  return !value->isFullyEvaluated() &&
-         !isa<evaluator::ObjectValue>(value.get());
-}
-
 LogicalResult verifyActualParameters(ClassLike classLike,
                                      ArrayRef<EvaluatorValuePtr> actualParams) {
   auto formalParamNames =
@@ -509,10 +500,6 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
         auto evaluated = evaluateValue(result, actualParams, op.getLoc());
         if (failed(evaluated))
           return failure();
-        // A partially evaluated non-object indicates a dataflow cycle (object
-        // placeholders are intentionally allowed; see above).
-        if (requiresCompleteEvaluation(evaluated.value()))
-          return op.emitError("failed to evaluate value");
       }
   }
 
@@ -532,10 +519,6 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
         evaluateValue(value, actualParams, fieldLoc);
     if (failed(result))
       return result;
-    // A partially evaluated non-object indicates a dataflow cycle. A partial
-    // object is allowed because it may be the object currently being built.
-    if (requiresCompleteEvaluation(result.value()))
-      return emitError(fieldLoc, "failed to evaluate field ") << name;
 
     LLVM_DEBUG(dbgs() << "value: " << result.value() << "\n");
     fields[cast<StringAttr>(name)] = result.value();
