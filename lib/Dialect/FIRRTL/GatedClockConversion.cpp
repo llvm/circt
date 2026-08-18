@@ -22,6 +22,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include <deque>
 
 #define DEBUG_TYPE "firrtl-gated-clock-conversion"
 
@@ -314,6 +315,150 @@ LogicalResult GatedClockConversion::analyzeFrom(ArrayRef<Value> seeds) {
   return result;
 }
 
+//===----------------------------------------------------------------------===//
+// GatedClockConversion: planning (no IR mutation)
+//===----------------------------------------------------------------------===//
+
+void GatedClockConversion::planAlias(Value dstClk, FModuleOp srcMod,
+                                     MatRef baseClk, unsigned enableId) {
+  if (enableId == kNoEnable) {
+    clockEnablePairs[dstClk] = {baseClk, kNoEnable};
+    return;
+  }
+  // A wire pair carries (base, enable) past the alias;
+  // eliminateTemporaryWires() forwards it away when safe.
+  unsigned wireId = 2 * wirePlans.size();
+  wirePlans.push_back({srcMod, baseClk, enableId, dstClk.getLoc()});
+  clockEnablePairs[dstClk] = {
+      MatRef::plannedWire(wireId),
+      newEnableLeaf(MatRef::plannedWire(wireId + 1), dstClk.getLoc())};
+}
+
+void GatedClockConversion::planGate(ClockGateIntrinsicOp gate, Value dstClk,
+                                    MatRef baseClk, unsigned enableId) {
+  // The base clock passes through unchanged, so cascaded gates all resolve to
+  // the same ungated base.
+  auto gateEn = newEnableNode(enableId, MatRef::gateEnable(gate), gate.getLoc(),
+                              /*anchor=*/MatRef::of(dstClk));
+  clockEnablePairs[dstClk] = {baseClk, gateEn};
+}
+
+void GatedClockConversion::recordInstanceDrive(InstanceOp inst,
+                                               const PortPairPlan &plan,
+                                               MatRef baseClk,
+                                               unsigned enableId) {
+  assert(plan.dir == Direction::In &&
+         "only input port pairs are driven at the caller");
+  // A clock loop closed through an instance (`inst.clk_in <- inst.clk_out`) is
+  // deliberately not diagnosed here: doing it precisely needs an
+  // instance-path-sensitive analysis, and `firrtl-check-comb-loops` already
+  // rejects such input.
+
+  // Keyed by (instance, port index), so a second edge reaching an already
+  // planned pair from the same caller is a no-op, not a duplicate connect.
+  instanceDrives.try_emplace(
+      {inst, plan.baseIdx},
+      InstanceDrive{inst, plan.baseIdx, plan.enIdx, baseClk, enableId});
+}
+
+std::pair<unsigned, unsigned>
+GatedClockConversion::planGatedPorts(InstanceOp inst, FModuleOp childMod,
+                                     unsigned gatedClkIndex, Direction dir,
+                                     MatRef baseClk, unsigned enableId) {
+  PortPlanKey key{childMod, gatedClkIndex};
+  auto *it = portPlans.find(key);
+  if (it == portPlans.end()) {
+    // The final indices are known already: `insertPlannedPorts()` only appends
+    // ports, so existing indices never shift (asserted when applying).
+    unsigned &nextIdx =
+        nextPortIdx.try_emplace(childMod, childMod.getNumPorts()).first->second;
+    PortPairPlan plan({childMod, gatedClkIndex, dir, nextIdx, nextIdx + 1});
+    nextIdx += 2;
+    if (dir == Direction::Out) {
+      assert(enableId != kNoEnable &&
+             "unless this is a gated clock, no need to add output enable port");
+      plan.outBaseClk = baseClk;
+      plan.outEnableId = enableId;
+    }
+    it = portPlans.insert({key, plan}).first;
+    plansPerModule[childMod].push_back(key);
+  }
+
+  const PortPairPlan &plan = it->second;
+  assert(plan.dir == dir && "a port cannot change direction");
+  // Every caller of the module must drive a planned input pair.
+  if (dir == Direction::In)
+    recordInstanceDrive(inst, plan, baseClk, enableId);
+  return {plan.baseIdx, plan.enIdx};
+}
+
+void GatedClockConversion::planInstancePort(Direction dir, InstanceOp inst,
+                                            Value dstClk, Value srcClk,
+                                            MatRef baseClk, unsigned enableId) {
+  auto childMod =
+      dyn_cast_or_null<FModuleOp>(inst.getReferencedModule(ig).getOperation());
+  auto gatedClkIndex = cast<OpResult>(srcClk).getResultNumber();
+  if (enableId == kNoEnable) {
+    if (dir == Direction::Out) {
+      // Symbolic, because a port pair for a *different* clock port of this
+      // module would clone all of its instances.
+      clockEnablePairs[dstClk] = {MatRef::of(dstClk), kNoEnable};
+      return;
+    }
+    // This instance drives an ungated clock input, but a sibling instance may
+    // drive a gated one, in which case the pair is added for *every* instance.
+    // `gatedClocks` answers that without blocking on the sibling's pair, which
+    // in a same-module cascade would depend on this very port.
+    if (!gatedClocks.contains(dstClk)) {
+      clockEnablePairs[dstClk] = {MatRef::of(dstClk), kNoEnable};
+      return;
+    }
+
+    // A sibling is gated: add the pair here too. `kNoEnable` on the resulting
+    // instance drive connects a constant 1.
+  }
+  assert((enableId == kNoEnable || dir == Direction::Out ||
+          gatedClocks.contains(dstClk)) &&
+         "a gated pair must imply a gated mark");
+  auto [baseClkIndex, enableIndex] =
+      planGatedPorts(inst, childMod, gatedClkIndex, dir, baseClk, enableId);
+
+  // An output pair is read on the instance result side, an input pair on the
+  // child's block-argument side. Neither exists yet, hence symbolic refs.
+  MatRef baseRef, enRef;
+  if (dir == Direction::Out) {
+    baseRef = MatRef::instResult(inst, baseClkIndex);
+    enRef = MatRef::instResult(inst, enableIndex);
+  } else {
+    baseRef = MatRef::moduleArg(childMod, baseClkIndex);
+    enRef = MatRef::moduleArg(childMod, enableIndex);
+  }
+  assert((dir == Direction::Out ? inst->getParentOfType<FModuleOp>()
+                                : childMod) == getParentModule(dstClk) &&
+         "parent modules must match");
+  clockEnablePairs[dstClk] = {baseRef, newEnableLeaf(enRef, dstClk.getLoc())};
+}
+
+void GatedClockConversion::planMultiplyInstantiatedInput(Value srcClk,
+                                                         MatRef baseClk,
+                                                         unsigned enableId) {
+  // `srcClk` is a result of the caller instance; drive the port pair that an
+  // earlier caller of this module already planned.
+  auto inst = srcClk.getDefiningOp<InstanceOp>();
+  assert(inst);
+  auto childMod =
+      dyn_cast_or_null<FModuleOp>(inst.getReferencedModule(ig).getOperation());
+  auto gatedClkIndex = cast<OpResult>(srcClk).getResultNumber();
+  auto *it = portPlans.find({childMod, gatedClkIndex});
+  // No plan means an output port, which the InstanceOut path handles.
+  if (it == portPlans.end()) {
+    LLVM_DEBUG(llvm::dbgs() << "  no plan for index " << gatedClkIndex
+                            << ", skipping drive (handled by InstanceOut)\n");
+    return;
+  }
+  recordInstanceDrive(inst, it->second, baseClk, enableId);
+}
+
 void GatedClockConversion::computeGatedClocks() {
   // Forward closure of every `Gate` edge over `srcToDstClocks`.
   SmallVector<Value> worklist;
@@ -334,6 +479,75 @@ void GatedClockConversion::computeGatedClocks() {
   }
   LLVM_DEBUG(llvm::dbgs() << "[computeGatedClocks] " << gatedClocks.size()
                           << " gated clock values\n");
+}
+
+Value GatedClockConversion::processEdge(const ClockEdge &edge, Value srcClk,
+                                        FModuleOp srcMod, MatRef baseClk,
+                                        unsigned enableId) {
+  LLVM_DEBUG(llvm::dbgs() << "  edge kind=" << edgeKindName(edge.kind) << "\n");
+
+  if (clockEnablePairs.count(edge.dst)) {
+    // For InstanceIn this is a multiply-instantiated module whose ports an
+    // earlier caller planned; this caller still has to drive them.
+    if (edge.kind == EdgeKind::InstanceIn)
+      planMultiplyInstantiatedInput(srcClk, baseClk, enableId);
+    return Value();
+  }
+
+  switch (edge.kind) {
+  case EdgeKind::Alias:
+    planAlias(edge.dst, srcMod, baseClk, enableId);
+    break;
+  case EdgeKind::Gate:
+    planGate(edge.gate(), edge.dst, baseClk, enableId);
+    break;
+  case EdgeKind::InstanceIn:
+    planInstancePort(Direction::In, edge.instance(), edge.dst, srcClk, baseClk,
+                     enableId);
+    break;
+  case EdgeKind::InstanceOut:
+    planInstancePort(Direction::Out, edge.instance(), edge.dst, edge.dst,
+                     baseClk, enableId);
+    break;
+  }
+  // `edge.dst` now has a pair, so it is safe to visit next.
+  assert(clockEnablePairs.count(edge.dst) && "the destination must be planned");
+  return edge.dst;
+}
+
+void GatedClockConversion::plan() {
+  LLVM_DEBUG(llvm::dbgs() << "[plan] " << baseClks.size() << " base clocks\n");
+  // Propagate (base, enable) pairs from the base clocks through the clock flow
+  // graph, planning ports as needed.
+  //
+  // This terminates on any graph, cyclic or not: a node is enqueued only once
+  // it has a pair and `processEdge` skips destinations that already have one.
+  // Clocks in a loop with no base clock are never planned; `run()` reports
+  // them.
+  //
+  // BFS rather than DFS purely to keep the emission order stable.
+  std::deque<Value> worklist(baseClks.begin(), baseClks.end());
+  for (auto baseClk : baseClks)
+    clockEnablePairs[baseClk] = {MatRef::of(baseClk), kNoEnable};
+
+  while (!worklist.empty()) {
+    auto srcClk = worklist.front();
+    worklist.pop_front();
+    FModuleOp srcMod = getParentModule(srcClk);
+
+    auto it = clockEnablePairs.find(srcClk);
+    assert(it != clockEnablePairs.end() &&
+           "a node is only enqueued once it has a pair");
+    // Copy the pair out: `processEdge` inserts into `clockEnablePairs` and
+    // invalidates `it`.
+    MatRef baseClk = it->second.baseClk;
+    unsigned enableId = it->second.enableId;
+
+    for (auto &edge : srcToDstClocks[srcClk])
+      if (Value next = processEdge(edge, srcClk, srcMod, baseClk, enableId))
+        worklist.push_back(next);
+  }
+  LLVM_DEBUG(llvm::dbgs() << "[plan] complete\n");
 }
 
 //===----------------------------------------------------------------------===//
@@ -366,4 +580,65 @@ void GatedClockConversion::dump() const {
     llvm::dbgs() << "\n";
   }
   llvm::dbgs() << "======================\n";
+}
+
+void GatedClockConversion::dumpPlan() const {
+  auto &os = llvm::dbgs();
+  auto printEnable = [&](unsigned id) {
+    if (id == kNoEnable) {
+      os << "<none>";
+      return;
+    }
+    // Print the accumulation chain leaf-to-root, i.e. as it will be ANDed.
+    for (unsigned cur = id; cur != kNoEnable; cur = enableNodes[cur].parent) {
+      if (cur != id)
+        os << " & ";
+      enableNodes[cur].term.print(os);
+    }
+  };
+
+  os << "=== Planned wire pairs ===\n";
+  for (auto [index, wirePlan] : llvm::enumerate(wirePlans)) {
+    FModuleOp mod = wirePlan.mod;
+    os << "  #" << 2 * index << "/" << 2 * index + 1 << " in "
+       << mod.getModuleName() << " <- ";
+    wirePlan.baseClk.print(os);
+    os << ", ";
+    printEnable(wirePlan.enableId);
+    os << "\n";
+  }
+  os << "=== Planned port pairs ===\n";
+  for (const auto &[key, portPlan] : portPlans) {
+    FModuleOp mod = portPlan.mod;
+    os << "  " << mod.getModuleName() << "."
+       << mod.getPortName(portPlan.gatedClkIndex) << ": "
+       << (portPlan.dir == Direction::In ? "in" : "out") << " @"
+       << portPlan.baseIdx << "/" << portPlan.enIdx;
+    if (portPlan.dir == Direction::Out) {
+      os << " <- ";
+      portPlan.outBaseClk.print(os);
+      os << ", ";
+      printEnable(portPlan.outEnableId);
+    }
+    os << "\n";
+  }
+  os << "=== Planned instance drives ===\n";
+  for (const auto &[key, drive] : instanceDrives) {
+    InstanceOp inst = drive.inst;
+    os << "  " << inst.getName() << " @" << drive.baseIdx << "/" << drive.enIdx
+       << " <- ";
+    drive.baseClk.print(os);
+    os << ", ";
+    printEnable(drive.enableId);
+    os << "\n";
+  }
+  os << "=== Planned root rewrites ===\n";
+  for (const auto &rewrite : rootRewrites) {
+    os << "  " << rewrite.op->getName() << " <- ";
+    rewrite.baseClk.print(os);
+    os << ", ";
+    printEnable(rewrite.enableId);
+    os << "\n";
+  }
+  os << "======================\n";
 }
