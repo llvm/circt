@@ -1517,6 +1517,23 @@ firrtl.circuit "NLAThroughLayer" {
 //
 // The forward version of this (the trimming mentioned above) is more intuitive
 // to reason about, and these assertions ensure the two are aligned.
+//
+// Visualization (courtesy of @seldridge):
+//
+// * @SmearedFanIn
+// |\
+// | |\
+// | | * f:@F  <-- Flatten
+// | * | w0:W0
+// * | | w1:W1
+// | |/
+// |/
+// * {f,i,i}:@L
+// |\
+// |/
+// x {i0,i1}:R <-- NLA start
+// v           <-- NLA end
+// 
 firrtl.circuit "SmearedFanIn" {
   // CHECK: hw.hierpath private @nla [@R::@w]
   // CHECK-NOT: hw.hierpath
