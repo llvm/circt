@@ -1689,9 +1689,9 @@ def ListWindowToParallel(serial_window_type: Window):
       # Load the burst's item count when a header is accepted; decrement on
       # each non-last emit. The two enables are mutually exclusive (they
       # require different states), so `DownCounter`'s load-over-decrement
-      # priority never comes into play. Its saturation at zero is likewise
-      # never reached: `remaining` is loaded with a non-zero count and the
+      # priority never comes into play. The counter never *decrements* to 0:
       # decrement is gated by `~is_last_of_burst`, i.e. `remaining != 1`.
+      # (`remaining` may still be loaded with 0 for count==0 terminators.)
       # Not cleared on `emit_buf_xact`: by then the peeked header's `hdr_xact`
       # has already loaded the next burst's count.
       remaining_counter = DownCounter(count_bitwidth)(
