@@ -207,6 +207,15 @@ private:
   // single sweep suffices and a cycle saturates instead of diverging.
   void computeGatedClocks();
 
+  // -- Planning (no IR mutation) ----------------------------------------
+
+  void plan();
+
+  // Plan one outgoing edge of `srcClk` and return the value to enqueue next:
+  // the destination, or null if it was already planned.
+  Value processEdge(const ClockEdge &edge, Value srcClk, FModuleOp srcMod,
+                    MatRef baseClk, unsigned enableId);
+
   // Append an accumulation node and return its id. A node with no parent is a
   // leaf: its value is `term` and the anchor is unused.
   unsigned newEnableNode(unsigned parent, MatRef term, Location loc,
@@ -235,6 +244,32 @@ private:
     auto *clone = instClones.lookup(inst);
     return clone ? clone : inst;
   }
+
+  void dumpPlan() const;
+
+  // -- plan() dispatched handlers ---------------------------------------
+
+  void planAlias(Value dstClk, FModuleOp srcMod, MatRef baseClk,
+                 unsigned enableId);
+
+  void planGate(ClockGateIntrinsicOp gate, Value dstClk, MatRef baseClk,
+                unsigned enableId);
+
+  void planInstancePort(Direction dir, InstanceOp inst, Value dstClk,
+                        Value srcClk, MatRef baseClk, unsigned enableId);
+
+  // Handle the 2nd-and-later callers of a multiply-instantiated module.
+  void planMultiplyInstantiatedInput(Value srcClk, MatRef baseClk,
+                                     unsigned enableId);
+
+  // Plan (or look up) the gated port pair of a child module, and record the
+  // drive of a planned input pair at `inst`.
+  std::pair<unsigned, unsigned>
+  planGatedPorts(InstanceOp inst, FModuleOp childMod, unsigned gatedClkIndex,
+                 Direction dir, MatRef baseClk, unsigned enableId);
+
+  void recordInstanceDrive(InstanceOp inst, const PortPairPlan &plan,
+                           MatRef baseClk, unsigned enableId);
 
   InstanceGraph &ig;
 
