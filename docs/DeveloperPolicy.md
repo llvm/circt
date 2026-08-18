@@ -19,6 +19,14 @@ CIRCT follows the standard LLVM process for obtaining commit access. See the [LL
 
 CIRCT follows the [LLVM AI Tool Use Policy](AIToolPolicy.md). Contributors using AI tools must ensure human review and accountability for all contributions.
 
+## Style Guide
+
+For any non-code (e.g., documentation or code comments) follow the style rules
+in:
+
+- Merriam--Webster's Collegiate Dictionary
+- The Chicago Manual of Style
+
 ## Additional Resources
 
 - [LLVM Developer Policy (full)](https://llvm.org/docs/DeveloperPolicy.html)
