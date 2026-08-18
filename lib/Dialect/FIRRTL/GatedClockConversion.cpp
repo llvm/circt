@@ -53,6 +53,16 @@ Value materializeGateEnable(ClockGateIntrinsicOp gate) {
   return b.createOrFold<OrPrimOp>(gate.getEnable(), gate.getTestEnable());
 }
 
+/// Build the (baseClock, gateEnable) PortInfo pair for the given direction.
+std::pair<PortInfo, PortInfo>
+makeGatedClockPortInfos(MLIRContext *ctx, StringRef tag, Direction dir,
+                        Location loc, Type clockType, Type u1Type) {
+  return {PortInfo(StringAttr::get(ctx, ("_gatedClock_baseClock_" + tag).str()),
+                   clockType, dir, /*symName=*/StringAttr(), loc),
+          PortInfo(StringAttr::get(ctx, ("_gatedClock_enable_" + tag).str()),
+                   u1Type, dir, /*symName=*/StringAttr(), loc)};
+}
+
 /// The FModuleOp `value` lives in.
 FModuleOp getParentModule(Value value) {
   if (isa<BlockArgument>(value))
@@ -179,6 +189,36 @@ Value GatedClockConversion::gateEnableOf(ClockGateIntrinsicOp gate) {
   Value v = materializeGateEnable(gate);
   gateEnableCache[gate] = v;
   return v;
+}
+
+Value GatedClockConversion::getOrCreateConstU1One(FModuleOp mod) {
+  auto it = constU1Cache.find(mod);
+  if (it != constU1Cache.end())
+    return it->second;
+
+  // At the top of the body, so it dominates every possible use.
+  ImplicitLocOpBuilder builder(mod.getLoc(), context);
+  builder.setInsertionPointToStart(mod.getBodyBlock());
+  Value constOne = builder.createOrFold<ConstantOp>(
+      APSInt(APInt(1, 1, /*isSigned=*/false), /*isUnsigned=*/true));
+  constU1Cache[mod] = constOne;
+  return constOne;
+}
+
+void GatedClockConversion::connectMaterializedToInstancePorts(
+    InstanceOp inst, unsigned clkPortIndex, unsigned enPortIndex,
+    Value materializedClk, Value materializedEn) {
+  ImplicitLocOpBuilder builder(inst.getLoc(), context);
+  // At the end of the block, so the materialized clock dominates the connect.
+  builder.setInsertionPointToEnd(inst->getBlock());
+
+  MatchingConnectOp::create(builder, inst->getResult(clkPortIndex),
+                            materializedClk);
+
+  if (!materializedEn)
+    materializedEn = getOrCreateConstU1One(inst->getParentOfType<FModuleOp>());
+  MatchingConnectOp::create(builder, inst->getResult(enPortIndex),
+                            materializedEn);
 }
 
 //===----------------------------------------------------------------------===//
@@ -611,6 +651,120 @@ void GatedClockConversion::plan() {
         worklist.push_back(next);
   }
   LLVM_DEBUG(llvm::dbgs() << "[plan] complete\n");
+}
+
+//===----------------------------------------------------------------------===//
+// GatedClockConversion: applyPlan (the only IR-mutating phase)
+//===----------------------------------------------------------------------===//
+
+void GatedClockConversion::createPlannedWires() {
+  auto createWire = [&](Type type, ImplicitLocOpBuilder &builder) {
+    auto w = WireOp::create(builder, type);
+    wireOps.push_back(w);
+    return w.getData();
+  };
+  plannedWireValues.reserve(2 * wirePlans.size());
+  for (auto &wirePlan : wirePlans) {
+    // Wires have no operands, so they can all be created up front.
+    auto builder = ImplicitLocOpBuilder::atBlockBegin(
+        wirePlan.loc, wirePlan.mod.getBodyBlock());
+    plannedWireValues.push_back(createWire(clockType, builder));
+    plannedWireValues.push_back(createWire(u1Type, builder));
+  }
+}
+
+void GatedClockConversion::insertPlannedPorts() {
+  for (auto &[mod, keys] : plansPerModule) {
+    // All pairs of a module are appended in one call, so every instance is
+    // re-created exactly once no matter how many pairs the module needs.
+    const unsigned origNumPorts = mod.getNumPorts();
+    SmallVector<std::pair<unsigned, PortInfo>> newPorts;
+    for (auto key : keys) {
+      const PortPairPlan &portPlan = portPlans.find(key)->second;
+      assert(portPlan.baseIdx == origNumPorts + newPorts.size() &&
+             "port index pre-assignment invalidated: ports were inserted "
+             "outside applyPlan()");
+      auto [baseInfo, enableInfo] = makeGatedClockPortInfos(
+          context, mod.getPortName(portPlan.gatedClkIndex), portPlan.dir,
+          mod.getLoc(), clockType, u1Type);
+      newPorts.emplace_back(origNumPorts, baseInfo);
+      newPorts.emplace_back(origNumPorts, enableInfo);
+    }
+    mod.insertPorts(newPorts);
+
+    // A result list cannot grow in place, so every instance has to be
+    // re-created. Collect them first: cloning updates the use list.
+    auto *node = ig.lookup(mod);
+    SmallVector<InstanceOp> oldInsts;
+    for (auto *use : node->uses())
+      if (auto i = dyn_cast<InstanceOp>(*use->getInstance()))
+        oldInsts.push_back(i);
+
+    for (auto oldInst : oldInsts) {
+      auto cloneIface = oldInst.cloneWithInsertedPortsAndReplaceUses(newPorts);
+      auto newInst = cast<InstanceOp>(cloneIface.getOperation());
+      ig.replaceInstance(oldInst, newInst);
+      assert(!instClones.count(oldInst) && "instance re-created twice");
+      instClones[oldInst] = newInst;
+      // Defer erasure until nothing reads the plan any more.
+      deadInstances.push_back(oldInst);
+    }
+  }
+}
+
+LogicalResult GatedClockConversion::emitPlannedIR() {
+  // Planned output port pairs: drive the new ports from inside the module.
+  for (auto &[key, portPlan] : portPlans) {
+    if (portPlan.dir != Direction::Out)
+      continue;
+    Value materializedClk = resolve(portPlan.outBaseClk);
+    Value materializedEn = lower(portPlan.outEnableId);
+    auto *body = portPlan.mod.getBodyBlock();
+    ImplicitLocOpBuilder builder(portPlan.mod.getLoc(), context);
+    builder.setInsertionPointToEnd(body);
+    MatchingConnectOp::create(builder, body->getArgument(portPlan.baseIdx),
+                              materializedClk);
+    MatchingConnectOp::create(builder, body->getArgument(portPlan.enIdx),
+                              materializedEn);
+  }
+
+  // Planned input port pairs: drive them at every caller instance.
+  for (auto &[key, drive] : instanceDrives) {
+    Value materializedClk = resolve(drive.baseClk);
+    Value materializedEn = lower(drive.enableId);
+    connectMaterializedToInstancePorts(
+        cast<InstanceOp>(liveInstance(drive.inst)), drive.baseIdx, drive.enIdx,
+        materializedClk, materializedEn);
+  }
+
+  // Planned carrier wires: connect them to their source pair.
+  for (auto [index, wirePlan] : llvm::enumerate(wirePlans)) {
+    Value clockWire = plannedWireValues[2 * index];
+    Value enWire = plannedWireValues[2 * index + 1];
+    Value materializedClk = resolve(wirePlan.baseClk);
+    Value materializedEn = lower(wirePlan.enableId);
+    ImplicitLocOpBuilder builder(wirePlan.loc, context);
+    builder.setInsertionPointAfter(enWire.getDefiningOp());
+    if (!isa<BlockArgument>(materializedClk))
+      builder.setInsertionPointAfterValue(materializedClk);
+    MatchingConnectOp::create(builder, clockWire, materializedClk);
+    if (!isa<BlockArgument>(materializedEn))
+      builder.setInsertionPointAfterValue(materializedEn);
+    MatchingConnectOp::create(builder, enWire, materializedEn);
+  }
+
+  // Root rewrites, last: they consume the fully materialized pairs.
+  for (const auto &rewrite : rootRewrites)
+    if (failed(rewriteRoot(rewrite.op, resolve(rewrite.baseClk),
+                           lower(rewrite.enableId))))
+      return failure();
+  return success();
+}
+
+LogicalResult GatedClockConversion::applyPlan() {
+  createPlannedWires();
+  insertPlannedPorts();
+  return emitPlannedIR();
 }
 
 //===----------------------------------------------------------------------===//

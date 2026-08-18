@@ -224,6 +224,19 @@ private:
     return newEnableNode(kNoEnable, term, loc, MatRef());
   }
 
+  // -- Plan application (the only IR-mutating phase) --------------------
+
+  LogicalResult applyPlan();
+
+  // Sweep A: create the planned carrier wires.
+  void createPlannedWires();
+
+  // Sweep B: append the planned ports and re-create every affected instance.
+  void insertPlannedPorts();
+
+  // Sweep C: emit the planned expressions, connects and root rewrites.
+  LogicalResult emitPlannedIR();
+
   // Resolve a reference to the live value it names. Only valid once the sweep
   // that creates the referenced value has run.
   Value resolve(MatRef ref);
@@ -238,6 +251,15 @@ private:
 
   // Cached: returns `enable | test_enable` or just `enable`.
   Value gateEnableOf(ClockGateIntrinsicOp gate);
+
+  // Cached: a constant 1 at the top of `mod`, so it dominates every use.
+  Value getOrCreateConstU1One(FModuleOp mod);
+
+  void connectMaterializedToInstancePorts(InstanceOp inst,
+                                          unsigned clkPortIndex,
+                                          unsigned enPortIndex,
+                                          Value materializedClk,
+                                          Value materializedEn);
 
   // The live instance for `inst`, which `insertPlannedPorts()` may have
   // re-created. A single lookup suffices: all of a module's port pairs are
@@ -322,10 +344,21 @@ private:
 
   DenseMap<ClockGateIntrinsicOp, Value> gateEnableCache;
 
+  // Cache of constant 1 values per module
+  DenseMap<FModuleOp, Value> constU1Cache;
+
   // Old instance -> the instance re-created with the planned ports.
   DenseMap<Operation *, Operation *> instClones;
 
+  // Replaced instances, erased once nothing reads the plan any more.
+  SmallVector<InstanceOp> deadInstances;
+
+  // Temporary carrier wires awaiting elimination.
+  SmallVector<WireOp> wireOps;
+
   MLIRContext *context;
+
+  Type clockType, u1Type;
 };
 
 } // namespace firrtl
