@@ -261,6 +261,9 @@ private:
                                           Value materializedClk,
                                           Value materializedEn);
 
+  // Forward wire to source when exactly one writer dominates one reader.
+  void eliminateTemporaryWires();
+
   // The live instance for `inst`, which `insertPlannedPorts()` may have
   // re-created. A single lookup suffices: all of a module's port pairs are
   // inserted in one call, so an instance is re-created at most once.

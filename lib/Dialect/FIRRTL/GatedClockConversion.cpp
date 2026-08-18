@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
@@ -765,6 +766,53 @@ LogicalResult GatedClockConversion::applyPlan() {
   createPlannedWires();
   insertPlannedPorts();
   return emitPlannedIR();
+}
+
+void GatedClockConversion::eliminateTemporaryWires() {
+  DenseMap<FModuleOp, mlir::DominanceInfo> dominanceInfo;
+  for (auto wire : wireOps) {
+    auto wireData = wire.getData();
+    FModuleOp mod = wire->getParentOfType<FModuleOp>();
+    if (!dominanceInfo.count(mod))
+      dominanceInfo.try_emplace(mod, mod);
+    auto &modDomInfo = dominanceInfo.find(mod)->second;
+
+    FConnectLike writeConnect = {}; // Connect writing to the wire.
+    bool cannotRemove = false;
+    SmallVector<Operation *> wireReaders;
+
+    for (auto *user : wireData.getUsers()) {
+      if (auto connect = dyn_cast<MatchingConnectOp>(user)) {
+        if (connect.getDest() == wireData) {
+          // A second write means we can't safely forward; bail out.
+          if (writeConnect) {
+            cannotRemove = true;
+            break;
+          }
+          writeConnect = connect;
+          continue;
+        }
+      } else if (!isa<RegOp, RegResetOp, RefForceOp, RefReleaseOp, MuxPrimOp>(
+                     user)) {
+        // Unhandled user; can't optimize.
+        cannotRemove = true;
+        break;
+      }
+      wireReaders.push_back(user);
+    }
+    if (cannotRemove || !writeConnect)
+      continue;
+
+    // Bypass the wire if the write dominates every read.
+    Value writeSource = writeConnect.getSrc();
+    if (llvm::all_of(wireReaders, [&](Operation *user) {
+          return modDomInfo.dominates(writeConnect, user);
+        })) {
+      wireData.replaceAllUsesWith(writeSource);
+      writeConnect.erase();
+      wire.erase();
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//
