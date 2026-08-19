@@ -577,6 +577,18 @@ struct ModuleVisitor : public BaseVisitor {
         if (auto *existingPort =
                 moduleLowering->portsBySyntaxNode.lookup(con->port.getSyntax()))
           port = existingPort;
+
+        // IEEE 1800-2017 §23.3.3 requires `inout` port connections to be direct
+        // connections, which does not allow for type conversion.
+        if (port->direction == ArgumentDirection::InOut) {
+          auto portType = moore::RefType::get(
+              cast<moore::UnpackedType>(context.convertType(port->getType())));
+          if (value.getType() != portType)
+            return mlir::emitError(loc)
+                   << "inout port `" << port->name << "` expects " << portType
+                   << " but is connected to " << value.getType();
+        }
+
         portValues.insert({port, value});
         continue;
       }
