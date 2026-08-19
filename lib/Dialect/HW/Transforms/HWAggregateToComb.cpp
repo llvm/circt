@@ -337,21 +337,15 @@ public:
 };
 } // namespace
 
-void circt::hw::populateHWStructToCombConversionPatterns(
-    RewritePatternSet &patterns, TypeConverter &typeConverter) {
-  patterns.add<HWStructCreateOpConversion, HWStructExtractOpConversion,
-               HWStructInjectOpConversion, HWStructExplodeOpConversion>(
+static void populateHWAggregateToCombOpConversionPatterns(
+    RewritePatternSet &patterns, AggregateTypeConverter &typeConverter) {
+  patterns.add<
+      HWArrayGetOpConversion, HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
+      HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
+      HWAggregateConstantOpConversion, HWArrayInjectOpConversion,
+      HWStructCreateOpConversion, HWStructExtractOpConversion,
+      HWStructInjectOpConversion, HWStructExplodeOpConversion, MuxOpConversion>(
       typeConverter, patterns.getContext());
-}
-
-void circt::hw::populateHWAggregateToCombOpConversionPatterns(
-    RewritePatternSet &patterns, TypeConverter &typeConverter) {
-  populateHWStructToCombConversionPatterns(patterns, typeConverter);
-  patterns.add<HWArrayGetOpConversion,
-               HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
-               HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
-               HWAggregateConstantOpConversion, HWArrayInjectOpConversion,
-               MuxOpConversion>(typeConverter, patterns.getContext());
 }
 
 namespace {
@@ -376,8 +370,7 @@ void HWAggregateToCombPass::runOnOperation() {
 
   RewritePatternSet patterns(&getContext());
   AggregateTypeConverter typeConverter;
-  circt::hw::populateHWAggregateToCombOpConversionPatterns(patterns,
-                                                           typeConverter);
+  populateHWAggregateToCombOpConversionPatterns(patterns, typeConverter);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

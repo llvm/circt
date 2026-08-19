@@ -449,9 +449,4 @@ def ResolveXMRRef : Pass<"arc-resolve-xmr", "mlir::ModuleOp"> {
   ];
 }
 
-def FlattenStructs : Pass<"arc-flatten-structs", "mlir::ModuleOp"> {
-  let summary = "Flatten all structs to integers respecting layout in Arcilator pipeline";
-  let dependentDialects = ["hw::HWDialect", "comb::CombDialect", "arc::ArcDialect"];
-}
-
 #endif // CIRCT_DIALECT_ARC_ARCPASSES_TD
