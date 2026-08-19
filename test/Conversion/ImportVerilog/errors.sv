@@ -392,3 +392,16 @@ module Bar;
   // expected-error @below {{inout port `p` expects '!moore.ref<struct<{x: l1, y: l1}>>' but is connected to '!moore.ref<l2>'}}
   Foo foo(y);
 endmodule
+
+// -----
+
+typedef struct packed { bit x; bit y; } Pair;
+
+function automatic void useRef(ref Pair p);
+endfunction
+
+module Foo;
+  bit [1:0] z;
+  // expected-error @below {{ref argument `p` expects '!moore.ref<struct<{x: i1, y: i1}>>' but call provides '!moore.ref<i2>'}}
+  initial useRef(z);
+endmodule

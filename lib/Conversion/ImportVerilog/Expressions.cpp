@@ -2066,9 +2066,19 @@ struct RvalueExprVisitor : public ExprVisitor {
     }
 
     // Convert the call arguments. Input arguments are converted to an rvalue.
-    // All other arguments are converted to lvalues and passed into the function
-    // by reference.
+    // All other arguments are converted to lvalues and passed into the
+    // function by reference. If a call argument's type doesn't match the
+    // declared argument's type, `output` and `inout` arguments are instead
+    // routed through a local temporary of the declared type, converting on
+    // copy-in and copy-out. See IEEE 1800-2017 §13.5 and §4.9.7.
+    struct Writeback {
+      Value temp;
+      Value lvalue;
+      bool declIsSigned;
+    };
+    SmallVector<Writeback> writebacks;
     SmallVector<Value> arguments;
+
     for (auto [callArg, declArg] :
          llvm::zip(expr.arguments(), subroutine->getArguments())) {
 
@@ -2084,12 +2094,39 @@ struct RvalueExprVisitor : public ExprVisitor {
         value = context.convertRvalueExpression(*expr, type);
       } else {
         Value lvalue = context.convertLvalueExpression(*expr);
+        if (!lvalue)
+          return {};
         auto unpackedType = dyn_cast<moore::UnpackedType>(type);
         if (!unpackedType)
           return {};
-        value =
-            context.materializeConversion(moore::RefType::get(unpackedType),
-                                          lvalue, expr->type->isSigned(), loc);
+        auto refType = moore::RefType::get(unpackedType);
+
+        if (declArg->direction == slang::ast::ArgumentDirection::Ref) {
+          // Since we can't really cast ref types, reject any ref argument
+          // whose call argument doesn't match the declared argument's type
+          // exactly.
+          if (lvalue.getType() != refType) {
+            mlir::emitError(loc)
+                << "ref argument `" << declArg->name << "` expects " << refType
+                << " but call provides " << lvalue.getType();
+            return {};
+          }
+          value = lvalue;
+        } else if (lvalue.getType() == refType) {
+          value = lvalue;
+        } else {
+          Value copyIn;
+          if (declArg->direction == slang::ast::ArgumentDirection::InOut) {
+            copyIn = moore::ReadOp::create(builder, loc, lvalue);
+            copyIn = context.materializeConversion(unpackedType, copyIn,
+                                                   expr->type->isSigned(), loc);
+            if (!copyIn)
+              return {};
+          }
+          value = moore::VariableOp::create(builder, loc, refType, StringAttr{},
+                                            copyIn);
+          writebacks.push_back({value, lvalue, declArg->getType().isSigned()});
+        }
       }
       if (!value)
         return {};
@@ -2131,6 +2168,19 @@ struct RvalueExprVisitor : public ExprVisitor {
       // Free function -> func.call
       auto funcOp = cast<mlir::func::FuncOp>(lowering->op.getOperation());
       callOp = mlir::func::CallOp::create(builder, loc, funcOp, arguments);
+    }
+
+    // Copy output/inout arguments that were routed through a temporary back
+    // to their call argument now that the call has returned.
+    for (auto &writeback : writebacks) {
+      Value rvalue = moore::ReadOp::create(builder, loc, writeback.temp);
+      auto dstType =
+          cast<moore::RefType>(writeback.lvalue.getType()).getNestedType();
+      rvalue = context.materializeConversion(dstType, rvalue,
+                                             writeback.declIsSigned, loc);
+      if (!rvalue)
+        return {};
+      moore::BlockingAssignOp::create(builder, loc, writeback.lvalue, rvalue);
     }
 
     auto result = resultTypes.size() > 0 ? callOp->getOpResult(0) : Value{};
