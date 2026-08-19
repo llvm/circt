@@ -368,3 +368,35 @@ module ReadMemIndexedSelect;
     $readmemh("mem.data", mem[i+:8]);
   end
 endmodule
+
+// -----
+
+module FormatPackEnum;
+  typedef enum { RED, GREEN } color_e;
+  color_e c;
+  initial begin
+    // expected-error @below {{%p format specifier does not yet support type}}
+    $display("%p", c);
+  end
+endmodule
+
+// -----
+
+module FormatPackUnion;
+  typedef union packed { int a; int b; } u_t;
+  u_t u;
+  initial begin
+    // expected-error @below {{%p format specifier does not yet support type}}
+    $display("%p", u);
+  end
+endmodule
+
+// -----
+
+module FormatPackAbbreviated;
+  int x;
+  initial begin
+    // expected-error @below {{%0p (abbreviated assignment pattern) is not yet supported}}
+    $display("%0p", x);
+  end
+endmodule
