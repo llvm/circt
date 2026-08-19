@@ -95,3 +95,43 @@ func.func private @maybeUnreachable(%arg0: i1) -> i42 {
   %0 = hw.constant 42 : i42
   return %0 : i42
 }
+
+// Mutually recursive calls cannot be fully inlined without expanding
+// infinitely in the IR. The call that closes the cycle is left in place
+// on a best-effort basis instead of failing the pass.
+// CHECK-LABEL: @Recursive
+hw.module @Recursive() {
+  // CHECK: llhd.combinational
+  llhd.combinational {
+    // CHECK-NOT: call @recBar
+    func.call @recFoo() : () -> ()
+    // CHECK: call @recFoo
+    llhd.yield
+  }
+}
+
+func.func private @recFoo() {
+  call @recBar() : () -> ()
+  return
+}
+
+func.func private @recBar() {
+  call @recFoo() : () -> ()
+  return
+}
+
+// A directly self-recursive function cannot be inlined into itself either.
+// CHECK-LABEL: @SelfRecursive
+hw.module @SelfRecursive() {
+  // CHECK: llhd.combinational
+  llhd.combinational {
+    // CHECK: call @recSelf
+    func.call @recSelf() : () -> ()
+    llhd.yield
+  }
+}
+
+func.func private @recSelf() {
+  call @recSelf() : () -> ()
+  return
+}
