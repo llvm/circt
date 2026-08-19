@@ -96,6 +96,50 @@ struct HWArrayGetOpConversion : OpConversionPattern<hw::ArrayGetOp> {
   }
 };
 
+struct HWArraySliceOpConversion : OpConversionPattern<hw::ArraySliceOp> {
+  using OpConversionPattern<hw::ArraySliceOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::ArraySliceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Value> results;
+    auto arrayType = cast<hw::ArrayType>(op.getInput().getType());
+    auto elemType = arrayType.getElementType();
+    auto numElements = arrayType.getNumElements();
+    auto elemWidth = hw::getBitWidth(elemType);
+    if (elemWidth < 0)
+      return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
+    auto resultArrayType = cast<hw::ArrayType>(op.getResult().getType());
+    auto resultNumElements = resultArrayType.getNumElements();
+
+    auto lowered = adaptor.getInput();
+    auto index = adaptor.getLowIndex();
+    APInt constantIndex;
+    if (matchPattern(index, m_ConstantInt(&constantIndex))) {
+      int64_t maxIndex = std::numeric_limits<int32_t>::max() / elemWidth;
+      if (constantIndex.isSingleWord() &&
+          constantIndex.getZExtValue() <= static_cast<uint64_t>(maxIndex)) {
+        rewriter.replaceOpWithNewOp<comb::ExtractOp>(
+            op, lowered, constantIndex.getZExtValue() * elemWidth,
+            resultNumElements * elemWidth);
+        return success();
+      }
+    }
+
+    for (size_t i = 0; i <= numElements - resultNumElements; ++i)
+      results.push_back(rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), lowered, i * elemWidth, resultNumElements * elemWidth));
+
+    SmallVector<Value> bits;
+    comb::extractBits(rewriter, index, bits);
+    auto result = comb::constructMuxTree(rewriter, op.getLoc(), bits, results,
+                                         results.back());
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
   using OpConversionPattern<hw::ArrayInjectOp>::OpConversionPattern;
 
@@ -255,11 +299,12 @@ public:
 
 static void populateHWAggregateToCombOpConversionPatterns(
     RewritePatternSet &patterns, AggregateTypeConverter &typeConverter) {
-  patterns.add<
-      HWArrayGetOpConversion, HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
-      HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
-      HWAggregateConstantOpConversion, HWArrayInjectOpConversion,
-      HWStructCreateOpConversion, HWStructExtractOpConversion, MuxOpConversion>(
+  patterns.add<HWArrayGetOpConversion,
+               HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
+               HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
+               HWAggregateConstantOpConversion, HWArraySliceOpConversion,
+               HWArrayInjectOpConversion, HWStructCreateOpConversion,
+               HWStructExtractOpConversion, MuxOpConversion>(
       typeConverter, patterns.getContext());
 }
 
@@ -274,10 +319,10 @@ struct HWAggregateToCombPass
 void HWAggregateToCombPass::runOnOperation() {
   ConversionTarget target(getContext());
 
-  // TODO: Add ArraySliceOp and struct operatons as well.
   target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
                       hw::AggregateConstantOp, hw::ArrayInjectOp,
-                      hw::StructCreateOp, hw::StructExtractOp>();
+                      hw::ArraySliceOp, hw::StructCreateOp,
+                      hw::StructExtractOp>();
   target.addDynamicallyLegalOp<comb::MuxOp>(
       [](comb::MuxOp op) { return hw::type_isa<IntegerType>(op.getType()); });
   target.addLegalDialect<hw::HWDialect, comb::CombDialect>();
