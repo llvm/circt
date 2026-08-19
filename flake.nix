@@ -153,8 +153,10 @@
       mkCore =
         system:
         let
-          pkgs = circt-nix.legacyPackages.${system};
-          basePkgs = import nixpkgs { inherit system; };
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ circt-nix.overlays.default ];
+          };
           python = mkPython system;
           upstreamLLVM = pkgs.circtFlakePkgs.llvmPackages_circt;
 
@@ -253,9 +255,9 @@
             ) (old.patches or [ ]);
             buildInputs = builtins.filter (dep: pkgs.lib.getName dep != "catch2") (old.buildInputs or [ ]);
             propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [
-              basePkgs.boost
-              basePkgs.fmt
-              basePkgs.tomlplusplus
+              pkgs.boost
+              pkgs.fmt
+              pkgs.tomlplusplus
             ];
             cmakeFlags = (old.cmakeFlags or [ ]) ++ [ "-DSLANG_INCLUDE_TESTS=OFF" ];
             postPatch = ''
@@ -335,10 +337,6 @@
                   # the imported archives directly creates a second copy of
                   # LLVM's process-global registries.
                   substituteInPlace tools/arcilator/CMakeLists.txt \
-                    --replace-fail \
-                    'set(ARCILATOR_JIT_LLVM_COMPONENTS native)' \
-                    'set(ARCILATOR_JIT_LLVM_COMPONENTS native OrcJIT)' \
-                    --replace-fail '    LLVMOrcJIT' "" \
                     --replace-fail \
                     'set(LLVM_LINK_COMPONENTS Support ''${ARCILATOR_JIT_LLVM_COMPONENTS})' \
                     'set(LLVM_LINK_COMPONENTS Support TargetParser ''${ARCILATOR_JIT_LLVM_COMPONENTS})' \
@@ -449,6 +447,9 @@
             ;
           ciPkgs = import nixpkgs { inherit system; };
           python = mkPython system;
+          # CI runners mount their machine-wide scratch object store here. The
+          # path is absent in ordinary local builds, which use the disk fallback.
+          sccacheObjectRoot = "/nix-sccache";
 
           # Espresso 2.4 carries a pre-ANSI declaration for srandom which is
           # incompatible with current glibc headers. Keep the upstream package
@@ -472,27 +473,6 @@
             pkgs.z3
           ];
 
-          # Publish compiler objects as soon as the build phase completes.  A
-          # separate host step promotes this staging directory and uploads it
-          # before any test starts, so a later timeout cannot discard hours of
-          # compilation.  Keep the cache itself build-owned inside the sandbox
-          # because sccache updates its local LRU metadata while reading.
-          sccacheCheckpoint = ''
-            ${ciPkgs.sccache}/bin/sccache --show-stats
-            ${ciPkgs.sccache}/bin/sccache --stop-server >/dev/null
-            if [[ -s "$SCCACHE_ERROR_LOG" ]]; then
-              echo "Last 200 lines from the sccache error log:" >&2
-              tail -n 200 "$SCCACHE_ERROR_LOG" >&2
-            fi
-            if [[ -d /var/cache/circt-sccache-publish \
-                  && -w /var/cache/circt-sccache-publish ]]; then
-              find /var/cache/circt-sccache-publish -mindepth 1 -delete
-              cp -R --no-preserve=ownership,mode,timestamps \
-                "$SCCACHE_DIR/." /var/cache/circt-sccache-publish/
-              touch /var/cache/circt-sccache-publish/.ready
-            fi
-          '';
-
           mkCirctCheck =
             {
               name,
@@ -506,7 +486,13 @@
               pname = "circt-${name}";
               # Simulator/tool discovery happens during CMake configuration,
               # so these must be build inputs rather than check-only inputs.
-              nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ ciInputs ++ [ ciPkgs.sccache ];
+              nativeBuildInputs =
+                (old.nativeBuildInputs or [ ])
+                ++ ciInputs
+                ++ [
+                  ciPkgs.rclone
+                  ciPkgs.sccache
+                ];
               nativeCheckInputs = (old.nativeCheckInputs or [ ]) ++ ciInputs;
               buildInputs = (old.buildInputs or [ ]) ++ [
                 ciPkgs.systemc
@@ -526,19 +512,57 @@
               preConfigure = (old.preConfigure or "") + ''
                 export CIRCT_SOURCE_ROOT="$PWD"
                 export PATH="${python}/bin:$PATH"
-                # sccache's local LRU updates entry mtimes. Each Nix sandbox
-                # uses a different nixbld UID, so import the shared staging
-                # cache into a build-owned directory before starting sccache.
-                export SCCACHE_DIR="$NIX_BUILD_TOP/.sccache"
-                mkdir -p "$SCCACHE_DIR"
-                if [[ -d /var/cache/circt-sccache \
-                      && -r /var/cache/circt-sccache ]]; then
-                  cp -R --no-preserve=ownership,mode,timestamps \
-                    /var/cache/circt-sccache/. "$SCCACHE_DIR/"
+                sccache_rclone_pid=
+                sccache_rclone_log="$NIX_BUILD_TOP/rclone-s3.log"
+                sccache_object_root=${ciPkgs.lib.escapeShellArg sccacheObjectRoot}
+                if [[ -d "$sccache_object_root" ]]; then
+                  test -w "$sccache_object_root"
+                  mkdir -p "$sccache_object_root/circt-sccache"
+
+                  # The S3 server and sccache both remain inside this build's
+                  # network/mount namespaces. Only the server's plain object
+                  # directory crosses the sandbox boundary.
+                  (
+                    umask 000
+                    exec ${ciPkgs.rclone}/bin/rclone serve s3 \
+                      --addr 127.0.0.1:19000 \
+                      :local:"$sccache_object_root"
+                  ) >"$sccache_rclone_log" 2>&1 &
+                  sccache_rclone_pid=$!
+
+                  rclone_ready=false
+                  for _ in $(seq 1 100); do
+                    if ! kill -0 "$sccache_rclone_pid" 2>/dev/null; then
+                      break
+                    fi
+                    if (exec 3<>/dev/tcp/127.0.0.1/19000) \
+                        2>/dev/null; then
+                      rclone_ready=true
+                      break
+                    fi
+                    sleep 0.1
+                  done
+                  if [[ "$rclone_ready" != true ]]; then
+                    echo "The sandbox-local S3 server failed to start:" >&2
+                    tail -n 200 "$sccache_rclone_log" >&2 || true
+                    exit 1
+                  fi
+
+                  export SCCACHE_BUCKET=circt-sccache
+                  export SCCACHE_ENDPOINT=http://127.0.0.1:19000
+                  export SCCACHE_REGION=us-east-1
+                  export SCCACHE_S3_ENABLE_VIRTUAL_HOST_STYLE=false
+                  export SCCACHE_S3_NO_CREDENTIALS=true
+                  export SCCACHE_S3_USE_SSL=false
+                  unset SCCACHE_DIR SCCACHE_S3_KEY_PREFIX
+                  unset AWS_ACCESS_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+                  unset AWS_SECRET_KEY AWS_SESSION_TOKEN
+                else
+                  # Local builds keep using an isolated on-disk cache.
+                  export SCCACHE_DIR="$NIX_BUILD_TOP/.sccache"
+                  mkdir -p "$SCCACHE_DIR"
                 fi
-                # Normalize both the sandbox root and derivation-specific
-                # output paths so the build-only and checked derivations hash
-                # otherwise identical compiler commands to the same keys.
+                export SCCACHE_SERVER_UDS="$NIX_BUILD_TOP/sccache.sock"
                 export SCCACHE_BASEDIRS="$NIX_BUILD_TOP:$out:$lib:$dev"
                 export SCCACHE_CACHE_SIZE=1G
                 export SCCACHE_ERROR_LOG="''${TMPDIR:-/build}/sccache-errors.log"
@@ -547,8 +571,35 @@
                 # The variables also cover nested CMake projects in postCheck.
                 export CMAKE_C_COMPILER_LAUNCHER="${ciPkgs.sccache}/bin/sccache"
                 export CMAKE_CXX_COMPILER_LAUNCHER="${ciPkgs.sccache}/bin/sccache"
+
+                sccache_cleanup() {
+                  local status=$?
+                  trap - EXIT
+                  ${ciPkgs.sccache}/bin/sccache --show-stats || true
+                  if [[ -s "$SCCACHE_ERROR_LOG" ]]; then
+                    echo "Last 200 lines from the sccache error log:" >&2
+                    tail -n 200 "$SCCACHE_ERROR_LOG" >&2
+                  fi
+                  ${ciPkgs.sccache}/bin/sccache --stop-server \
+                    >/dev/null || true
+                  if [[ -n "$sccache_rclone_pid" ]]; then
+                    rclone_was_running=true
+                    if ! kill -0 "$sccache_rclone_pid" 2>/dev/null; then
+                      rclone_was_running=false
+                      echo "The sandbox-local S3 server exited early:" >&2
+                    else
+                      kill "$sccache_rclone_pid" 2>/dev/null || true
+                    fi
+                    wait "$sccache_rclone_pid" 2>/dev/null || true
+                    if [[ "$status" -ne 0 \
+                          || "$rclone_was_running" != true ]]; then
+                      tail -n 200 "$sccache_rclone_log" >&2 || true
+                    fi
+                  fi
+                  exit "$status"
+                }
+                trap sccache_cleanup EXIT
               '';
-              postBuild = (old.postBuild or "") + sccacheCheckpoint;
               doCheck = true;
               checkTarget = pkgs.lib.concatStringsSep " " (
                 [
@@ -667,42 +718,10 @@
                     python3 -m pytest \
                       "$CIRCT_SOURCE_ROOT/lib/Dialect/ESI/runtime/tests/unit" \
                       -v --log-cli-level=INFO
-                ''
-                + sccacheCheckpoint;
+                '';
               passthru = (old.passthru or { }) // {
                 inherit libllvm mlir;
               };
-            });
-
-          # This derivation intentionally performs the exact same configure and
-          # build as its checked counterpart, but stops before the check phase.
-          # BUILD_TESTING must remain enabled because the CMake setup hook
-          # otherwise disables test binaries whenever doCheck is false.
-          mkCirctBuild =
-            name: checked:
-            checked.overrideAttrs (old: {
-              pname = "circt-${name}-build";
-              doCheck = false;
-              # Unit tests are deliberately excluded from Ninja's default all
-              # target.  Compile their aggregate here without invoking lit so
-              # no compiler work remains interleaved with the check phase.
-              preBuild = (old.preBuild or "") + ''
-                ninjaFlagsArray+=("all" "CIRCTUnitTests")
-              '';
-              postCheck = "";
-              # The compiler objects are the useful result of this warm-up.
-              # Avoid installing and uploading a second full CIRCT package to
-              # the repository Nix cache; the checked derivation below remains
-              # the sole package/artifact producer.
-              installPhase = ''
-                mkdir -p "$out" "$lib" "$dev"
-                touch "$out/.circt-ci-build-complete"
-              '';
-              postInstall = "";
-              # A substituted output would skip compilation and therefore
-              # produce no compiler-object cache for the following checks.
-              allowSubstitutes = false;
-              preferLocalBuild = true;
             });
 
           # Normal CI directly reuses these cached libllvm and mlir derivations.
@@ -768,9 +787,7 @@
         in
         {
           full = fullCheck;
-          full-build = mkCirctBuild "full" fullCheck;
           clang = clangCheck;
-          clang-build = mkCirctBuild "clang" clangCheck;
         }
       );
 

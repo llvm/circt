@@ -40,20 +40,6 @@ jobs:
             "$RUN_CONCLUSION" "$TOKEN_CONFIGURED" \
             > "$diagnostics/run-metadata.txt"
 
-      # Pull the small metadata artifact uploaded by buildAndTest.yml. It
-      # contains the PR number (when applicable). Treat it as untrusted until
-      # it has been matched against the workflow run's REST API association.
-      - name: Download dispatch metadata
-        if: >-
-          github.event.workflow_run.conclusion == 'success' &&
-          env.GH_TOKEN != ''
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: dispatch-metadata
-          path: ${{ runner.temp }}/circt-tests-dispatch/upstream-metadata
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-
       - name: Require dispatch token
         if: >-
           github.event.workflow_run.conclusion == 'success' &&
@@ -83,14 +69,11 @@ jobs:
             PR_NUMBER=""
           elif [ "$EVENT_NAME" = "pull_request" ]; then
             KIND="pr"
-            PR_NUMBER=$(cat "$DIAGNOSTICS/upstream-metadata/pr_number")
-            [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]
-
             associated_prs=$(GH_TOKEN="$API_TOKEN" gh api \
               "repos/$BASE_REPO/actions/runs/$RUN_ID/pull_requests")
             [[ "$(jq 'length' <<< "$associated_prs")" == "1" ]]
-            api_pr_number=$(jq -r '.[0].number' <<< "$associated_prs")
-            [[ "$PR_NUMBER" == "$api_pr_number" ]]
+            PR_NUMBER=$(jq -r '.[0].number' <<< "$associated_prs")
+            [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]
 
             # Bind the downstream run to the immutable workflow-run snapshot,
             # not to the PR's potentially force-pushed current head.

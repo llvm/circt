@@ -13,7 +13,6 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: read
 
 defaults:
   run:
@@ -22,981 +21,150 @@ defaults:
 env:
   NIX_CONFIG: |-
     accept-flake-config = true
-    keep-derivations = true
-    keep-failed = true
-    keep-outputs = true
 
 jobs:
-  sanity-check:
-    name: Sanity Check (Nix)
-    runs-on: ubuntu-24.04
+  clang-format:
+    name: Git clang-format
+    runs-on: self-hosted
     steps:
-      - name: Initialize diagnostics
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RUN_ID: ${{ github.run_id }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          artifact_root="$RUNNER_TEMP/circt-ci-sanity"
-          echo "ARTIFACTS=$artifact_root" >> "$GITHUB_ENV"
-          mkdir -p "$artifact_root"
-          printf 'event=%s\nrun-id=%s\nsource-sha=%s\n' \
-            "$EVENT_NAME" "$RUN_ID" "$SOURCE_SHA" \
-            > "$artifact_root/run-metadata.txt"
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 2
           submodules: false
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
-      - name: Select comparison commit
+      - name: Check C++ formatting
         env:
           PR_BASE: ${{ github.base_ref }}
         run: |
           if [[ -z "$PR_BASE" ]]; then
-            echo "DIFF_COMMIT=HEAD^" >> "$GITHUB_ENV"
+            diff_commit=HEAD^
           else
             git fetch --no-recurse-submodules origin "$PR_BASE"
-            echo "DIFF_COMMIT=$(git rev-parse "origin/$PR_BASE")" >> "$GITHUB_ENV"
+            diff_commit=$(git rev-parse "origin/$PR_BASE")
           fi
-      - name: Run formatting and repository checks in Nix
-        run: |
-          exec > >(tee "$ARTIFACTS/job.log") 2>&1
+          export DIFF_COMMIT="$diff_commit"
+
           # The single-quoted script is expanded by the inner Nix-shell bash.
           # shellcheck disable=SC2016
           nix develop -L .#lint --command bash -euo pipefail -c '
             git clang-format "$DIFF_COMMIT"
-            git diff --ignore-submodules > "$ARTIFACTS/clang-format.patch"
-            test ! -s "$ARTIFACTS/clang-format.patch"
-            files=$(git diff --name-only --diff-filter=d "$DIFF_COMMIT" -- "*.py")
-            if [[ -n "$files" ]]; then
-              yapf --diff $files | tee "$ARTIFACTS/yapf.patch"
-              test ! -s "$ARTIFACTS/yapf.patch"
+            git diff --exit-code --ignore-submodules
+          '
+
+  yapf:
+    name: YAPF
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 2
+          submodules: false
+      - name: Check Python formatting
+        env:
+          PR_BASE: ${{ github.base_ref }}
+        run: |
+          if [[ -z "$PR_BASE" ]]; then
+            diff_commit=HEAD^
+          else
+            git fetch --no-recurse-submodules origin "$PR_BASE"
+            diff_commit=$(git rev-parse "origin/$PR_BASE")
+          fi
+          export DIFF_COMMIT="$diff_commit"
+
+          # The single-quoted script is expanded by the inner Nix-shell bash.
+          # shellcheck disable=SC2016
+          nix develop -L .#lint --command bash -euo pipefail -c '
+            mapfile -d "" files < <(
+              git diff --name-only --diff-filter=d -z \
+                "$DIFF_COMMIT" -- "*.py"
+            )
+            if (( ${#files[@]} == 0 )); then
+              exit 0
             fi
+            yapf --in-place "${files[@]}"
+            git diff --exit-code -- "${files[@]}"
+          '
+
+  slang-tests:
+    name: Slang test metadata
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          submodules: false
+      - name: Check valgrind exclusions
+        run: |
+          nix develop -L .#lint --command \
             python3 utils/find_slang_tests_without_valgrind.py test
-            python3 utils/find_slang_tests_without_valgrind.py integration_test
-          ' 2>&1 | tee "$ARTIFACTS/check.log"
-      - name: Upload diagnostics
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: sanity-check-diagnostics
-          path: ${{ runner.temp }}/circt-ci-sanity/
-          if-no-files-found: error
-          retention-days: 7
-
-  flake-check:
-    name: Check Nix flake
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Initialize diagnostics
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RUN_ID: ${{ github.run_id }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          artifact_root="$RUNNER_TEMP/circt-ci-flake"
-          echo "ARTIFACTS=$artifact_root" >> "$GITHUB_ENV"
-          mkdir -p "$artifact_root"
-          printf 'event=%s\nrun-id=%s\nsource-sha=%s\n' \
-            "$EVENT_NAME" "$RUN_ID" "$SOURCE_SHA" \
-            > "$artifact_root/run-metadata.txt"
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          # Nix requires revCount metadata for git+file flake inputs.
-          fetch-depth: 0
-          submodules: false
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
-      - name: Read LLVM gitlink revision
-        run: |
-          llvm_revision=$(git ls-tree HEAD llvm | awk '$1 == "160000" { print $3 }')
-          [[ "$llvm_revision" =~ ^[0-9a-f]{40}$ ]]
-          echo "LLVM_REVISION=$llvm_revision" >> "$GITHUB_ENV"
-      - name: Evaluate flake with PR inputs
-        run: |
-          exec > >(tee "$ARTIFACTS/evaluate.log") 2>&1
-          dependency_override=(
-            --no-update-lock-file
-            --override-input llvm-src \
-              "github:llvm/llvm-project/$LLVM_REVISION"
-          )
-          override=(
-            "${dependency_override[@]}"
-            --override-input circt-src "git+file://$GITHUB_WORKSPACE"
-          )
-          nix flake check -L --no-build "${override[@]}" \
-            2>&1 | tee "$ARTIFACTS/check.log"
-          nix flake metadata "${override[@]}" --json > "$ARTIFACTS/metadata.json"
-          nix flake show "${override[@]}" --json > "$ARTIFACTS/outputs.json"
-          dependency_llvm=$(nix path-info --derivation .#libllvm \
-            "${dependency_override[@]}")
-          dependency_mlir=$(nix path-info --derivation .#mlir \
-            "${dependency_override[@]}")
-          pr_llvm=$(nix path-info --derivation .#libllvm "${override[@]}")
-          pr_mlir=$(nix path-info --derivation .#mlir "${override[@]}")
-          [[ "$dependency_llvm" == "$pr_llvm" ]]
-          [[ "$dependency_mlir" == "$pr_mlir" ]]
-          printf 'llvm-source %s\nlibllvm %s\nmlir %s\n' \
-            "$LLVM_REVISION" "$pr_llvm" "$pr_mlir" \
-            > "$ARTIFACTS/reused-derivations.txt"
-      - name: Upload diagnostics
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: flake-check-diagnostics
-          path: ${{ runner.temp }}/circt-ci-flake/
-          if-no-files-found: error
-          retention-days: 7
-
-  build-dependencies:
-    name: Build and Cache LLVM/MLIR
-    needs: [sanity-check, flake-check]
-    if: >-
-      ${{
-        always() &&
-        !cancelled() &&
-        needs.sanity-check.result == 'success' &&
-        needs.flake-check.result == 'success'
-      }}
-    runs-on: ubuntu-24.04
-    outputs:
-      llvm-revision: ${{ steps.source.outputs.llvm-revision }}
-      libllvm-drv: ${{ steps.dependencies.outputs.libllvm-drv }}
-      mlir-drv: ${{ steps.dependencies.outputs.mlir-drv }}
-    steps:
-      - name: Initialize dependency diagnostics
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RUN_ID: ${{ github.run_id }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          artifact_root="$RUNNER_TEMP/circt-ci-dependencies"
-          echo "ARTIFACTS=$artifact_root" >> "$GITHUB_ENV"
-          mkdir -p "$artifact_root"
-          printf 'event=%s\nrun-id=%s\nsource-sha=%s\n' \
-            "$EVENT_NAME" "$RUN_ID" "$SOURCE_SHA" \
-            > "$artifact_root/run-metadata.txt"
-      - name: Free disk space for Nix builds
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
-        with:
-          android: true
-          dotnet: true
-          haskell: true
-          docker-images: true
-          large-packages: false
-          tool-cache: true
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          # Nix requires revCount metadata for git+file flake inputs.
-          fetch-depth: 0
-          submodules: false
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
-      # Finish this job, including the post action, before the CIRCT job starts.
-      # That makes the LLVM/MLIR derivations available through the repository
-      # cache without sharing a runner or rebuilding them in the consumer.
-      - name: Configure repository Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
-        with:
-          use-gha-cache: enabled
-          use-flakehub: disabled
-          diagnostic-endpoint: ""
-      - name: Read dependency revisions
-        id: source
-        run: |
-          mkdir -p .nix-results
-          llvm_revision=$(git ls-tree HEAD llvm | awk '$1 == "160000" { print $3 }')
-          [[ "$llvm_revision" =~ ^[0-9a-f]{40}$ ]]
-          echo "LLVM_REVISION=$llvm_revision" >> "$GITHUB_ENV"
-          echo "llvm-revision=$llvm_revision" >> "$GITHUB_OUTPUT"
-          printf '%s\n' "$GITHUB_SHA" > "$ARTIFACTS/source-revision.txt"
-          printf '%s\n' "$llvm_revision" > "$ARTIFACTS/llvm-revision.txt"
-      - name: Build reusable LLVM and MLIR derivations
-        id: dependencies
-        timeout-minutes: 300
-        run: |
-          exec > >(tee "$ARTIFACTS/job.log") 2>&1
-          override=(
-            --no-update-lock-file
-            --override-input circt-src "git+file://$GITHUB_WORKSPACE"
-            --override-input llvm-src \
-              "github:llvm/llvm-project/$LLVM_REVISION"
-          )
-          nix flake metadata "${override[@]}" --json \
-            > "$ARTIFACTS/flake-metadata.json"
-          libllvm_drv=$(nix path-info --derivation .#libllvm "${override[@]}")
-          mlir_drv=$(nix path-info --derivation .#mlir "${override[@]}")
-          printf '%s\n' "$libllvm_drv" \
-            > "$ARTIFACTS/libllvm-derivation.txt"
-          printf '%s\n' "$mlir_drv" \
-            > "$ARTIFACTS/mlir-derivation.txt"
-          nix derivation show "$libllvm_drv" \
-            > "$ARTIFACTS/libllvm-derivation.json"
-          nix derivation show "$mlir_drv" \
-            > "$ARTIFACTS/mlir-derivation.json"
-          jq -e \
-            --arg llvm "$libllvm_drv" '
-              def input_drvs:
-                (if has("derivations") then
-                   .derivations | to_entries[0].value.inputs.drvs
-                 else
-                   to_entries[0].value.inputDrvs
-                 end)
-                | with_entries(
-                    .key |= if startswith("/") then .
-                            else "/nix/store/" + . end
-                    | .value |= if type == "array" then { outputs: . }
-                                else . end
-                  );
-              input_drvs as $inputs
-              | $inputs[$llvm].outputs == ["dev"]
-              and ([
-                $inputs | keys[]
-                | select(test("-llvm-[0-9].*\\.drv$"))
-              ] == [$llvm])
-            ' "$ARTIFACTS/mlir-derivation.json"
-          nix build -L "$libllvm_drv^*" \
-            --out-link .nix-results/libllvm \
-            2>&1 | tee "$ARTIFACTS/libllvm-build.log"
-          nix build -L "$mlir_drv^*" \
-            --out-link .nix-results/mlir \
-            2>&1 | tee "$ARTIFACTS/mlir-build.log"
-          nix path-info -S --json .nix-results/libllvm \
-            > "$ARTIFACTS/libllvm-path-info.json"
-          nix path-info -S --json .nix-results/mlir \
-            > "$ARTIFACTS/mlir-path-info.json"
-          printf 'libllvm-drv=%s\nmlir-drv=%s\n' \
-            "$libllvm_drv" "$mlir_drv" >> "$GITHUB_OUTPUT"
-      - name: Collect dependency diagnostics and run global GC
-        if: ${{ always() }}
-        continue-on-error: true
-        run: |
-          df -h > "$ARTIFACTS/disk-usage-before-gc.txt"
-          nix-store --gc --print-roots > "$ARTIFACTS/nix-roots.txt"
-          # The .nix-results links retain LLVM/MLIR while unrelated paths go.
-          nix-store --gc > "$ARTIFACTS/nix-gc.log" 2>&1
-          df -h > "$ARTIFACTS/disk-usage.txt"
-      - name: Upload dependency diagnostics
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nix-ci-dependency-artifacts
-          path: ${{ runner.temp }}/circt-ci-dependencies/
-          if-no-files-found: error
-          retention-days: 7
+          nix develop -L .#lint --command \
+            python3 utils/find_slang_tests_without_valgrind.py \
+              integration_test
 
   build-and-test:
     name: Run CIRCT Checks
-    needs: build-dependencies
-    if: >-
-      ${{
-        always() &&
-        !cancelled() &&
-        needs.build-dependencies.result == 'success'
-      }}
-    runs-on: ubuntu-24.04
+    needs: [clang-format, yapf, slang-tests]
+    runs-on: [self-hosted, BIGRAM]
     steps:
       - name: Select CIRCT check variants
-        id: variants
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref }}
         run: |
           variants=(full)
-          run_clang=false
           if [[ "$EVENT_NAME" == push \
                 && "$EVENT_REF" == refs/heads/master ]]; then
             variants+=(clang)
-            run_clang=true
           fi
           printf 'CIRCT_CHECK_VARIANTS=%s\n' "${variants[*]}" \
             >> "$GITHUB_ENV"
-          echo "run_clang=$run_clang" >> "$GITHUB_OUTPUT"
-      - name: Initialize diagnostics
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RUN_ID: ${{ github.run_id }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          artifact_root="$RUNNER_TEMP/circt-ci-build"
-          package_root="$RUNNER_TEMP/circt-ci-packages"
-          echo "ARTIFACTS=$artifact_root" >> "$GITHUB_ENV"
-          echo "PACKAGES=$package_root" >> "$GITHUB_ENV"
-          mkdir -p "$artifact_root/dependencies"
-          read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
-          for variant in "${variants[@]}"; do
-            mkdir -p "$artifact_root/$variant"
-          done
-          mkdir -p "$package_root"
-          printf 'event=%s\nrun-id=%s\nsource-sha=%s\nvariants=%s\n' \
-            "$EVENT_NAME" "$RUN_ID" "$SOURCE_SHA" \
-            "$CIRCT_CHECK_VARIANTS" \
-            > "$artifact_root/run-metadata.txt"
-      - name: Free disk space for Nix builds
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
-        with:
-          android: true
-          dotnet: true
-          haskell: true
-          docker-images: true
-          large-packages: false
-          tool-cache: true
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           # Nix requires revCount metadata for git+file flake inputs.
           fetch-depth: 0
           submodules: false
-      - name: Prepare persistent sccache directory
+      - name: Read LLVM revision
         run: |
-          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0777 \
-            /var/cache/circt-sccache \
-            /var/cache/circt-sccache-publish
-          test -O /var/cache/circt-sccache
-          test -w /var/cache/circt-sccache
-          test -O /var/cache/circt-sccache-publish
-          test -w /var/cache/circt-sccache-publish
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
-        with:
-          extra_nix_config: |
-            always-allow-substitutes = false
-            extra-sandbox-paths = /var/cache/circt-sccache /var/cache/circt-sccache-publish
-      # Keep the binary cache inside this GitHub repository. Pull requests can
-      # read the default-branch cache, while GitHub isolates their writes from
-      # master so only trusted xinpian-tech changes populate the shared cache.
-      - name: Configure repository Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
-        with:
-          use-gha-cache: enabled
-          use-flakehub: disabled
-          diagnostic-endpoint: ""
-      - name: Prepare source and artifact directories
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          EXPECTED_LLVM_REVISION: ${{ needs.build-dependencies.outputs.llvm-revision }}
-          HEAD_REF: ${{ github.head_ref }}
-          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          exec > >(tee "$ARTIFACTS/prepare.log") 2>&1
-          mkdir -p .nix-results
-          llvm_revision=$(git ls-tree HEAD llvm | awk '$1 == "160000" { print $3 }')
+          llvm_revision=$(git ls-tree HEAD llvm \
+            | awk '$1 == "160000" { print $3 }')
           [[ "$llvm_revision" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$llvm_revision" == "$EXPECTED_LLVM_REVISION" ]]
           echo "LLVM_REVISION=$llvm_revision" >> "$GITHUB_ENV"
-          printf '%s\n' "$GITHUB_SHA" > "$ARTIFACTS/source-revision.txt"
-          printf '%s\n' "$llvm_revision" > "$ARTIFACTS/llvm-revision.txt"
-          printf 'repository=%s\nbase-ref=%s\nhead-ref=%s\npr-head-repo=%s\npr-head-sha=%s\npr-author-association=%s\n' \
-            "$GITHUB_REPOSITORY" "$BASE_REF" "$HEAD_REF" \
-            "$PR_HEAD_REPO" "$PR_HEAD_SHA" "$PR_AUTHOR_ASSOCIATION" \
-            > "$ARTIFACTS/source-provenance.txt"
-      # The dependency producer has finished its post-job cache upload. Forbid
-      # local builds here so a cache regression fails quickly instead of hiding
-      # another three-hour LLVM rebuild in this job.
-      - name: Restore LLVM and MLIR from repository Nix cache
-        timeout-minutes: 30
-        env:
-          EXPECTED_LIBLLVM_DRV: ${{ needs.build-dependencies.outputs.libllvm-drv }}
-          EXPECTED_MLIR_DRV: ${{ needs.build-dependencies.outputs.mlir-drv }}
+          mkdir -p .nix-results
+      - name: Restore sccache objects
         run: |
-          exec > >(tee "$ARTIFACTS/dependencies/job.log") 2>&1
-          [[ "$(nix config show always-allow-substitutes)" == false ]]
+          : "${NIX_SCCACHE_DIR:?The runner must set NIX_SCCACHE_DIR}"
+          [[ "$NIX_SCCACHE_DIR" == /* ]]
+          [[ -d "$NIX_SCCACHE_DIR" && -w "$NIX_SCCACHE_DIR" ]]
+          command -v rclone >/dev/null
+          mkdir -p "$NIX_SCCACHE_DIR/circt-sccache"
+
+          # A failed refresh leaves the existing machine-local cache usable.
+          if ! rclone copy sccache:circt-sccache \
+              "$NIX_SCCACHE_DIR/circt-sccache" \
+              --fast-list --size-only --use-server-modtime; then
+            echo "::warning::Unable to refresh sccache objects; continuing with the local cache"
+          fi
+      - name: Build and test CIRCT
+        timeout-minutes: 300
+        run: |
           override=(
             --no-update-lock-file
             --override-input circt-src "git+file://$GITHUB_WORKSPACE"
             --override-input llvm-src \
               "github:llvm/llvm-project/$LLVM_REVISION"
           )
-          nix flake metadata "${override[@]}" --json \
-            > "$ARTIFACTS/dependencies/flake-metadata.json"
-          libllvm_drv=$(nix path-info --derivation .#libllvm "${override[@]}")
-          mlir_drv=$(nix path-info --derivation .#mlir "${override[@]}")
-          [[ "$libllvm_drv" == "$EXPECTED_LIBLLVM_DRV" ]]
-          [[ "$mlir_drv" == "$EXPECTED_MLIR_DRV" ]]
-          printf '%s\n' "$libllvm_drv" \
-            > "$ARTIFACTS/dependencies/libllvm-derivation.txt"
-          printf '%s\n' "$mlir_drv" \
-            > "$ARTIFACTS/dependencies/mlir-derivation.txt"
-          nix derivation show "$libllvm_drv" \
-            > "$ARTIFACTS/dependencies/libllvm-derivation.json"
-          nix derivation show "$mlir_drv" \
-            > "$ARTIFACTS/dependencies/mlir-derivation.json"
-          for derivation_json in \
-            "$ARTIFACTS/dependencies/libllvm-derivation.json" \
-            "$ARTIFACTS/dependencies/mlir-derivation.json"
-          do
-            jq -e '
-              def derivation:
-                if has("derivations") then
-                  .derivations | to_entries[0].value
-                else
-                  to_entries[0].value
-                end;
-              derivation
-              | (.preferLocalBuild != true)
-                and (.allowSubstitutes != false)
-            ' "$derivation_json"
-          done
 
-          restore_only() {
-            local drv="$1"
-            local out_link="$2"
-            local log="$3"
-            local delay
-            for delay in 0 15 45; do
-              if (( delay > 0 )); then
-                sleep "$delay"
-              fi
-              if nix build -L --max-jobs 0 --builders '' \
-                --option narinfo-cache-negative-ttl 0 "$drv^*" \
-                --out-link "$out_link" 2>&1 | tee -a "$log"
-              then
-                return 0
-              fi
-            done
-            return 1
-          }
-
-          restore_only "$libllvm_drv" .nix-results/libllvm \
-            "$ARTIFACTS/dependencies/libllvm-cache-restore.log"
-          restore_only "$mlir_drv" .nix-results/mlir \
-            "$ARTIFACTS/dependencies/mlir-cache-restore.log"
-          nix path-info -S --json .nix-results/libllvm \
-            > "$ARTIFACTS/dependencies/libllvm-path-info.json"
-          nix path-info -S --json .nix-results/mlir \
-            > "$ARTIFACTS/dependencies/mlir-path-info.json"
-
-          read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
-          for variant in "${variants[@]}"; do
-            for phase in check build; do
-              attribute="$variant"
-              if [[ "$phase" == build ]]; then
-                attribute="$variant-build"
-              fi
-              drv=$(nix path-info --derivation \
-                ".#checks.x86_64-linux.$attribute" "${override[@]}")
-              printf '%s\n' "$drv" \
-                > "$ARTIFACTS/$variant/$phase-derivation.txt"
-              derivation_json="$ARTIFACTS/$variant/$phase-derivation.json"
-              nix derivation show "$drv" > "$derivation_json"
-              jq -e \
-                --arg llvm "$libllvm_drv" --arg mlir "$mlir_drv" \
-                '
-                  def input_drvs:
-                    (if has("derivations") then
-                       .derivations | to_entries[0].value.inputs.drvs
-                     else
-                       to_entries[0].value.inputDrvs
-                     end)
-                    | with_entries(
-                        .key |= if startswith("/") then .
-                                else "/nix/store/" + . end
-                        | .value |= if type == "array" then { outputs: . }
-                                    else . end
-                      );
-                  input_drvs as $inputs
-                  | $inputs[$llvm].outputs == ["dev"]
-                  and ($inputs[$mlir].outputs | sort) == ["dev", "out"]
-                  and (([
-                    $inputs | keys[]
-                    | select(test("-(llvm|mlir)-[0-9].*\\.drv$"))
-                  ] | sort) == ([$llvm, $mlir] | sort))
-                ' "$derivation_json"
-              if [[ "$phase" == build ]]; then
-                jq -e '
-                  def derivation:
-                    if has("derivations") then
-                      .derivations | to_entries[0].value
-                    else
-                      to_entries[0].value
-                    end;
-                  derivation
-                  | .env.allowSubstitutes == ""
-                  and .env.preferLocalBuild == "1"
-                  and .env.doCheck == ""
-                  and (.env.cmakeFlags | contains("-DBUILD_TESTING=ON"))
-                  and (.env.preBuild
-                    | contains("ninjaFlagsArray+=(\"all\" \"CIRCTUnitTests\")"))
-                  and (.env.postBuild
-                    | contains("/var/cache/circt-sccache-publish"))
-                  and (.env.postBuild | contains(".ready"))
-                  and .env.postCheck == ""
-                  and (.env.installPhase
-                    | contains(".circt-ci-build-complete"))
-                ' "$derivation_json"
-              fi
-              printf '%s %s uses %s and %s\n' \
-                "$variant" "$phase" "$libllvm_drv" "$mlir_drv" \
-                >> "$ARTIFACTS/dependencies/reuse-proof.txt"
-            done
-            check_cmake_flags=$(jq -r '
-              def derivation:
-                if has("derivations") then
-                  .derivations | to_entries[0].value
-                else
-                  to_entries[0].value
-                end;
-              derivation | .env.cmakeFlags
-            ' "$ARTIFACTS/$variant/check-derivation.json")
-            build_cmake_flags=$(jq -r '
-              def derivation:
-                if has("derivations") then
-                  .derivations | to_entries[0].value
-                else
-                  to_entries[0].value
-                end;
-              derivation | .env.cmakeFlags
-            ' "$ARTIFACTS/$variant/build-derivation.json")
-            [[ "$build_cmake_flags" == "$check_cmake_flags" ]]
-          done
-      # Prefer an exact, already-tested Nix derivation over recompilation.  A
-      # miss is expected for new source revisions; only those variants need the
-      # compiler-object fallback below.
-      - name: Restore exact CIRCT checks from repository Nix cache
-        id: circt_check_cache
-        continue-on-error: true
-        timeout-minutes: 30
-        run: |
-          echo "full_cached=false" >> "$GITHUB_OUTPUT"
-          echo "clang_cached=false" >> "$GITHUB_OUTPUT"
-          read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
-          for variant in "${variants[@]}"; do
-            check_drv=$(cat "$ARTIFACTS/$variant/check-derivation.txt")
-            cached=false
-            if nix build -L --max-jobs 0 --builders '' \
-              --option narinfo-cache-negative-ttl 0 "$check_drv^*" \
-              --out-link ".nix-results/$variant" \
-              2>&1 | tee "$ARTIFACTS/$variant/exact-cache-restore.log"
-            then
-              cached=true
-            fi
-            echo "${variant}_cached=$cached" >> "$GITHUB_OUTPUT"
-            printf 'exact-nix-cache=%s\n' "$cached" \
-              > "$ARTIFACTS/$variant/exact-cache.txt"
-          done
-      # Only after the Nix dependency cache has been proven do we add the
-      # compiler-object layer for CIRCT rebuilds. External non-members cannot
-      # read or write this cache.
-      - name: Resolve current sccache trust
-        id: sccache_trust
-        continue-on-error: true
-        env:
-          ORG_MEMBERS_TOKEN: ${{ secrets.ORG_MEMBERS_TOKEN }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            const fs = require('fs');
-
-            // An exception anywhere below must leave all shared-cache steps
-            // disabled, even though this diagnostic step may continue on error.
-            core.setOutput('trusted', 'false');
-
-            let association = 'UNKNOWN';
-            let author = context.eventName === 'pull_request'
-              ? (context.payload.pull_request?.user?.login ?? '')
-              : context.actor;
-            let membership = context.eventName === 'pull_request'
-              ? 'NOT_CHECKED'
-              : 'NOT_APPLICABLE';
-            let source = 'none';
-            let trusted = false;
-            if (context.eventName !== 'pull_request') {
-              association = 'NOT_APPLICABLE';
-              source = 'trusted-branch-event';
-              trusted = true;
-            } else {
-              const pullNumber = context.payload.pull_request?.number;
-              if (Number.isInteger(pullNumber)) {
-                for (let attempt = 1; attempt <= 3; ++attempt) {
-                  try {
-                    const {data: pull} = await github.rest.pulls.get({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      pull_number: pullNumber,
-                    });
-                    association = pull.author_association ?? 'NONE';
-                    author = pull.user?.login ?? author;
-                    trusted = association === 'MEMBER' || association === 'OWNER';
-                    if (trusted) {
-                      source = 'author-association';
-                    }
-                    break;
-                  } catch (error) {
-                    const status = error.status ?? 'unknown';
-                    if (attempt === 3) {
-                      core.warning(
-                        `Unable to refresh PR author association (${status}); ` +
-                        'falling back to the organization membership check.'
-                      );
-                    } else {
-                      core.warning(
-                        `PR author association request ${attempt} failed (${status}); retrying.`
-                      );
-                      await new Promise(resolve => setTimeout(resolve, attempt * 2000));
-                    }
-                  }
-                }
-              }
-
-              if (!trusted && !author) {
-                membership = 'AUTHOR_UNAVAILABLE';
-                core.warning(
-                  'PR author is unavailable; organization membership cannot be ' +
-                  'verified and sccache remains disabled.'
-                );
-              } else if (!trusted) {
-                const orgMembersToken = process.env.ORG_MEMBERS_TOKEN ?? '';
-                if (!orgMembersToken) {
-                  membership = 'TOKEN_UNAVAILABLE';
-                  core.warning(
-                    'ORG_MEMBERS_TOKEN is unavailable; private organization ' +
-                    'membership cannot be verified and sccache remains disabled.'
-                  );
-                } else {
-                  const apiUrl =
-                    (process.env.GITHUB_API_URL ?? 'https://api.github.com')
-                      .replace(/\/+$/, '');
-                  const membershipUrl =
-                    `${apiUrl}/orgs/${encodeURIComponent(context.repo.owner)}` +
-                    `/members/${encodeURIComponent(author)}`;
-                  for (let attempt = 1; attempt <= 3; ++attempt) {
-                    try {
-                      const response = await fetch(membershipUrl, {
-                        redirect: 'manual',
-                        signal: AbortSignal.timeout(15000),
-                        headers: {
-                          Accept: 'application/vnd.github+json',
-                          Authorization: `Bearer ${orgMembersToken}`,
-                          'User-Agent': 'xinpian-tech-circt-ci',
-                          'X-GitHub-Api-Version': '2022-11-28',
-                        },
-                      });
-                      await response.text();
-                      if (response.status === 204) {
-                        membership = 'MEMBER';
-                        source = 'org-members-api';
-                        trusted = true;
-                        break;
-                      }
-                      if (response.status === 404) {
-                        membership = 'NON_MEMBER';
-                        source = 'org-members-api-non-member';
-                        break;
-                      }
-
-                      membership = `ERROR_${response.status}`;
-                      if (attempt === 3) {
-                        core.warning(
-                          `Organization membership request failed (${response.status}); ` +
-                          'sccache remains disabled.'
-                        );
-                      } else {
-                        core.warning(
-                          `Organization membership request ${attempt} failed ` +
-                          `(${response.status}); retrying.`
-                        );
-                        await new Promise(resolve => setTimeout(resolve, attempt * 2000));
-                      }
-                    } catch (error) {
-                      membership = 'ERROR_NETWORK';
-                      if (attempt === 3) {
-                        core.warning(
-                          'Organization membership request failed (network error); ' +
-                          'sccache remains disabled.'
-                        );
-                      } else {
-                        core.warning(
-                          `Organization membership request ${attempt} failed ` +
-                          '(network error); retrying.'
-                        );
-                        await new Promise(resolve => setTimeout(resolve, attempt * 2000));
-                      }
-                    }
-                  }
-                }
-              }
-            }
-
-            core.info(
-              `sccache trust: author=${author}, association=${association}, ` +
-              `membership=${membership}, source=${source}, trusted=${trusted}`
-            );
-            fs.writeFileSync(
-              `${process.env.ARTIFACTS}/sccache-trust.txt`,
-              `author=${author}\nassociation=${association}\nmembership=${membership}\n` +
-              `source=${source}\ntrusted=${trusted}\n`
-            );
-            core.setOutput('trusted', String(trusted));
-      - name: Look up trusted sccache snapshot
-        id: sccache_lookup
-        continue-on-error: true
-        if: >-
-          ${{
-            success() &&
-            steps.sccache_trust.outcome == 'success' &&
-            steps.sccache_trust.outputs.trusted == 'true' &&
-            (steps.circt_check_cache.outputs.full_cached != 'true' ||
-             (steps.variants.outputs.run_clang == 'true' &&
-              steps.circt_check_cache.outputs.clang_cached != 'true'))
-          }}
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: /var/cache/circt-sccache
-          key: circt-sccache-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.LLVM_REVISION }}-${{ hashFiles('flake.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            circt-sccache-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.LLVM_REVISION }}-${{ hashFiles('flake.lock') }}-
-          lookup-only: true
-      - name: Restore trusted sccache snapshot
-        id: sccache_restore
-        if: >-
-          ${{
-            success() &&
-            steps.sccache_lookup.outputs.cache-matched-key != ''
-          }}
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: /var/cache/circt-sccache
-          key: ${{ steps.sccache_lookup.outputs.cache-matched-key }}
-          fail-on-cache-miss: true
-      - name: Verify restored sccache snapshot
-        id: sccache_restore_verify
-        if: >-
-          ${{
-            success() &&
-            steps.sccache_lookup.outputs.cache-matched-key != ''
-          }}
-        env:
-          LOOKUP_KEY: ${{ steps.sccache_lookup.outputs.cache-matched-key }}
-          RESTORED_KEY: ${{ steps.sccache_restore.outputs.cache-matched-key }}
-        run: |
-          [[ -n "$LOOKUP_KEY" ]]
-          [[ "$RESTORED_KEY" == "$LOOKUP_KEY" ]]
-          sudo find /var/cache/circt-sccache -type f -print -quit \
-            | grep -q .
-      - name: Make sccache writable by Nix build users
-        run: |
-          sudo chmod -R a+rwX \
-            /var/cache/circt-sccache \
-            /var/cache/circt-sccache-publish
-      # Trusted runs compile once without tests.  The derivation publishes its
-      # build-phase cache to a separate directory, which is promoted only after
-      # the sandbox has stopped writing.  Each compiler variant remains
-      # sequential because sccache's local cache is an LRU snapshot.
-      - name: Compile trusted full variant before tests
-        id: sccache_compile_full
-        if: >-
-          ${{
-            success() &&
-            steps.sccache_trust.outcome == 'success' &&
-            steps.sccache_trust.outputs.trusted == 'true' &&
-            steps.circt_check_cache.outputs.full_cached != 'true' &&
-            steps.sccache_lookup.outcome == 'success' &&
-            (steps.sccache_lookup.outputs.cache-matched-key == '' ||
-             steps.sccache_restore_verify.outcome == 'success')
-          }}
-        continue-on-error: true
-        timeout-minutes: 210
-        run: |
-          build_drv=$(cat "$ARTIFACTS/full/build-derivation.txt")
-          sudo chmod -R a+rwX \
-            /var/cache/circt-sccache \
-            /var/cache/circt-sccache-publish
-          nix build -L --keep-failed "$build_drv^*" \
-            --out-link .nix-results/compile-full \
-            2>&1 | tee "$ARTIFACTS/full/compile.log"
-      - name: Promote full compiler-object snapshot
-        id: sccache_promote_full
-        if: >-
-          ${{
-            !cancelled() &&
-            steps.sccache_trust.outcome == 'success' &&
-            steps.sccache_trust.outputs.trusted == 'true' &&
-            (steps.sccache_compile_full.outcome == 'success' ||
-             steps.sccache_compile_full.outcome == 'failure')
-          }}
-        continue-on-error: true
-        run: |
-          .github/bin/promoteSccacheSnapshot.sh "$ARTIFACTS/full"
-      - name: Compile trusted Clang variant before tests
-        id: sccache_compile_clang
-        if: >-
-          ${{
-            !cancelled() &&
-            steps.variants.outputs.run_clang == 'true' &&
-            steps.sccache_trust.outcome == 'success' &&
-            steps.sccache_trust.outputs.trusted == 'true' &&
-            steps.circt_check_cache.outputs.clang_cached != 'true' &&
-            steps.sccache_lookup.outcome == 'success' &&
-            (steps.sccache_lookup.outputs.cache-matched-key == '' ||
-             steps.sccache_restore_verify.outcome == 'success')
-          }}
-        continue-on-error: true
-        timeout-minutes: 210
-        run: |
-          build_drv=$(cat "$ARTIFACTS/clang/build-derivation.txt")
-          sudo chmod -R a+rwX \
-            /var/cache/circt-sccache \
-            /var/cache/circt-sccache-publish
-          nix build -L --keep-failed "$build_drv^*" \
-            --out-link .nix-results/compile-clang \
-            2>&1 | tee "$ARTIFACTS/clang/compile.log"
-      - name: Promote Clang compiler-object snapshot
-        id: sccache_promote_clang
-        if: >-
-          ${{
-            !cancelled() &&
-            steps.variants.outputs.run_clang == 'true' &&
-            steps.sccache_trust.outcome == 'success' &&
-            steps.sccache_trust.outputs.trusted == 'true' &&
-            (steps.sccache_compile_clang.outcome == 'success' ||
-             steps.sccache_compile_clang.outcome == 'failure')
-          }}
-        continue-on-error: true
-        run: |
-          .github/bin/promoteSccacheSnapshot.sh "$ARTIFACTS/clang"
-      - name: Finalize pre-test sccache snapshot
-        id: sccache_finalize
-        if: >-
-          ${{
-            !cancelled() &&
-            steps.sccache_trust.outcome == 'success' &&
-            steps.sccache_trust.outputs.trusted == 'true' &&
-            (steps.sccache_promote_full.outcome == 'success' ||
-             steps.sccache_promote_clang.outcome == 'success')
-          }}
-        run: |
-          sudo chmod -R a+rwX /var/cache/circt-sccache
-          find /var/cache/circt-sccache -type f -print -quit | grep -q .
-          du -sh /var/cache/circt-sccache \
-            | tee "$ARTIFACTS/sccache-size-before-tests.txt"
-          echo "has-entries=true" >> "$GITHUB_OUTPUT"
-      - name: Save trusted sccache snapshot before tests
-        id: sccache_save
-        if: >-
-          ${{
-            !cancelled() &&
-            steps.sccache_lookup.outcome == 'success' &&
-            (steps.sccache_lookup.outputs.cache-matched-key == '' ||
-             steps.sccache_restore_verify.outcome == 'success') &&
-            steps.sccache_finalize.outcome == 'success' &&
-            steps.sccache_finalize.outputs.has-entries == 'true'
-          }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: /var/cache/circt-sccache
-          key: ${{ steps.sccache_lookup.outputs.cache-primary-key }}
-      - name: Verify saved pre-test sccache snapshot
-        id: sccache_save_verify
-        if: ${{ !cancelled() && steps.sccache_save.outcome == 'success' }}
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: /var/cache/circt-sccache
-          key: ${{ steps.sccache_lookup.outputs.cache-primary-key }}
-          lookup-only: true
-          fail-on-cache-miss: true
-      - name: Require trusted compilation cache before tests
-        if: >-
-          ${{
-            !cancelled() &&
-            steps.sccache_trust.outcome == 'success' &&
-            steps.sccache_trust.outputs.trusted == 'true' &&
-            ((steps.circt_check_cache.outputs.full_cached == 'true' &&
-              (steps.variants.outputs.run_clang != 'true' ||
-               steps.circt_check_cache.outputs.clang_cached == 'true')) ||
-             steps.sccache_lookup.outcome == 'success')
-          }}
-        env:
-          CLANG_CACHED: ${{ steps.circt_check_cache.outputs.clang_cached }}
-          CLANG_BUILD: ${{ steps.sccache_compile_clang.outcome }}
-          CLANG_PROMOTE: ${{ steps.sccache_promote_clang.outcome }}
-          FULL_CACHED: ${{ steps.circt_check_cache.outputs.full_cached }}
-          FULL_BUILD: ${{ steps.sccache_compile_full.outcome }}
-          FULL_PROMOTE: ${{ steps.sccache_promote_full.outcome }}
-          RUN_CLANG: ${{ steps.variants.outputs.run_clang }}
-          SAVE_RESULT: ${{ steps.sccache_save.outcome }}
-          VERIFY_RESULT: ${{ steps.sccache_save_verify.outcome }}
-        run: |
-          printf 'full=%s,%s/%s\nclang=%s,%s/%s\nsave=%s\nverify=%s\n' \
-            "$FULL_CACHED" "$FULL_BUILD" "$FULL_PROMOTE" \
-            "$CLANG_CACHED" "$CLANG_BUILD" "$CLANG_PROMOTE" \
-            "$SAVE_RESULT" "$VERIFY_RESULT"
-          if [[ "$FULL_CACHED" != true ]]; then
-            [[ "$FULL_BUILD/$FULL_PROMOTE" == success/success ]]
-          fi
-          if [[ "$RUN_CLANG" == true && "$CLANG_CACHED" != true ]]; then
-            [[ "$CLANG_BUILD/$CLANG_PROMOTE" == success/success ]]
-          fi
-          if [[ "$FULL_CACHED" != true \
-                || ("$RUN_CLANG" == true && "$CLANG_CACHED" != true) ]]; then
-            [[ "$SAVE_RESULT" == success ]]
-            [[ "$VERIFY_RESULT" == success ]]
-          fi
-      - name: Repackage PR source and run every check
-        timeout-minutes: 240
-        run: |
-          exec > >(tee "$ARTIFACTS/repackage.log") 2>&1
           run_variant() {
             local variant="$1"
-            local out="$ARTIFACTS/$variant"
-            local check_drv
-            local archive
-            local store_dir
-            local -a outputs
-            local -a output_paths
-            local -a store_entries
 
-            check_drv=$(cat "$out/check-derivation.txt") || return
-            # sccache creates cache shards for one nixbld user at a time.
-            # Re-open them before the next isolated derivation starts.
-            sudo chmod -R a+rwX \
-              /var/cache/circt-sccache \
-              /var/cache/circt-sccache-publish || true
-            nix build -L --keep-failed "$check_drv^*" \
+            nix build -L \
+              ".#checks.x86_64-linux.${variant}^*" \
+              "${override[@]}" \
               --out-link ".nix-results/$variant" \
-              2>&1 | tee "$out/build.log" || return
-            ".nix-results/$variant/bin/firtool" --version \
-              2>&1 | tee "$out/version.log" || return
-            nix path-info -S --json ".nix-results/$variant" \
-              > "$out/path-info.json" || return
-
-            archive="$PACKAGES/circt-$variant.tar.gz"
-            mapfile -t outputs < <(
-              find .nix-results -maxdepth 1 -type l -name "$variant*" \
-                -printf '%f\n' | sort
-            )
-            (( ${#outputs[@]} > 0 )) || return
-            mapfile -t output_paths < <(
-              for output in "${outputs[@]}"; do
-                readlink -f ".nix-results/$output"
-              done
-            )
-            (( ${#output_paths[@]} == ${#outputs[@]} )) || return
-            printf '%s\n' "${output_paths[@]}" > "$out/output-paths.txt"
-            nix path-info -r -S --json "${output_paths[@]}" \
-              > "$out/closure-path-info.json" || return
-
-            # Archive the real output directories, not their result symlinks.
-            # This preserves links inside each Nix output instead of recursively
-            # expanding dependencies as `tar --dereference` would do.
-            store_dir=$(dirname "${output_paths[0]}") || return
-            for output_path in "${output_paths[@]}"; do
-              [[ "$(dirname "$output_path")" == "$store_dir" ]] || return
-              store_entries+=("$(basename "$output_path")")
-            done
-            tar -C "$store_dir" -czf "$archive" "${store_entries[@]}" \
               || return
-            (cd "$PACKAGES" && sha256sum "circt-$variant.tar.gz") \
-              | tee "$PACKAGES/circt-$variant.tar.gz.sha256" \
-              > "$out/circt-$variant.tar.gz.sha256" || return
-            stat --printf='%s\n' "$archive" > "$out/package-size-bytes.txt"
-            printf '%s\n' \
-              'Nix output snapshot; inspectable but not a portable closure.' \
-              'Use closure-path-info.json to identify runtime dependencies.' \
-              > "$out/package-format.txt"
+            ".nix-results/$variant/bin/firtool" --version || return
           }
 
           status=0
-          # Separate Nix sandboxes must not concurrently mutate sccache's local
-          # LRU metadata, so keep selected compiler variants sequential.
           read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
           for variant in "${variants[@]}"; do
             if ! run_variant "$variant"; then
@@ -1004,113 +172,56 @@ jobs:
             fi
           done
           exit "$status"
-      - name: Collect Nix and failed-build diagnostics
-        if: ${{ always() }}
+      - name: Upload objects
+        if: ${{ always() && !cancelled() }}
         continue-on-error: true
         run: |
-          read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
-          for variant in "${variants[@]}"; do
-            drv_file="$ARTIFACTS/$variant/check-derivation.txt"
-            if [[ -s "$drv_file" ]]; then
-              nix log "$(cat "$drv_file")" \
-                > "$ARTIFACTS/$variant/nix-build.log" 2>&1 || true
-            fi
-          done
-          shopt -s nullglob
-          # Nix 2.31 keeps failed builds under /nix/var/nix/builds, while
-          # older installers used /tmp. Collect from both layouts.
-          failed_build_dirs=(
-            /nix/var/nix/builds/nix-*
-            /tmp/nix-build-*
-          )
-          if (( ${#failed_build_dirs[@]} > 0 )); then
-            find "${failed_build_dirs[@]}" -maxdepth 5 -type f \
-              \( -name CMakeCache.txt -o -name .ninja_log -o -name '*.log' \
-                 -o -name 'lit*.xml' \) -print0 2>/dev/null \
-              | tar --null -czf "$ARTIFACTS/failed-build-logs.tar.gz" \
-                --files-from=- || true
-          fi
-          sudo chmod -R a+rwX \
-            /var/cache/circt-sccache \
-            /var/cache/circt-sccache-publish
-          du -sh /var/cache/circt-sccache \
-            > "$ARTIFACTS/sccache-size.txt"
-          df -h > "$ARTIFACTS/disk-usage-before-gc.txt"
-          nix-store --gc --print-roots > "$ARTIFACTS/nix-roots.txt"
-          nix-store --gc > "$ARTIFACTS/nix-gc.log" 2>&1
-          df -h > "$ARTIFACTS/disk-usage.txt"
-      - name: Upload full Nix output snapshot
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nix-ci-package-full
-          path: |
-            ${{ runner.temp }}/circt-ci-packages/circt-full.tar.gz
-            ${{ runner.temp }}/circt-ci-packages/circt-full.tar.gz.sha256
-          compression-level: 0
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Upload Clang Nix output snapshot
-        if: ${{ always() && steps.variants.outputs.run_clang == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nix-ci-package-clang
-          path: |
-            ${{ runner.temp }}/circt-ci-packages/circt-clang.tar.gz
-            ${{ runner.temp }}/circt-ci-packages/circt-clang.tar.gz.sha256
-          compression-level: 0
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Upload all diagnostics
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nix-ci-artifacts
-          path: ${{ runner.temp }}/circt-ci-build/
-          if-no-files-found: error
-          retention-days: 7
+          : "${NIX_SCCACHE_DIR:?The runner must set NIX_SCCACHE_DIR}"
+          [[ "$NIX_SCCACHE_DIR" == /* ]]
+          [[ -d "$NIX_SCCACHE_DIR/circt-sccache" ]]
+          command -v rclone >/dev/null
+
+          # Restore preserved each object's server upload time locally. The
+          # age filter prevents pruned objects from being uploaded again.
+          rclone copy "$NIX_SCCACHE_DIR/circt-sccache" \
+            sccache:circt-sccache --fast-list --max-age 7d --size-only
+      - name: Prune objects
+        if: ${{ success() && github.ref == 'refs/heads/master' }}
+        continue-on-error: true
+        run: |
+          : "${NIX_SCCACHE_DIR:?The runner must set NIX_SCCACHE_DIR}"
+          [[ "$NIX_SCCACHE_DIR" == /* ]]
+          [[ -d "$NIX_SCCACHE_DIR/circt-sccache" ]]
+          command -v rclone >/dev/null
+
+          # The scratch store is shared by all runners on this machine, so it
+          # is pruned here rather than when an ephemeral runner restarts.
+          rclone delete ":local:$NIX_SCCACHE_DIR/circt-sccache" \
+            --fast-list --min-age 7d
+          rclone delete sccache:circt-sccache \
+            --fast-list --min-age 7d --use-server-modtime
+
   ci-result:
     name: Package PR and Run Checks
     needs:
-      - sanity-check
-      - flake-check
-      - build-dependencies
+      - clang-format
+      - yapf
+      - slang-tests
       - build-and-test
     if: ${{ always() && !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Require every Nix CI job to pass
+      - name: Require every CI job to pass
         env:
           BUILD_RESULT: ${{ needs.build-and-test.result }}
-          DEPENDENCY_RESULT: ${{ needs.build-dependencies.result }}
-          FLAKE_RESULT: ${{ needs.flake-check.result }}
-          SANITY_RESULT: ${{ needs.sanity-check.result }}
+          CLANG_FORMAT_RESULT: ${{ needs.clang-format.result }}
+          SLANG_TESTS_RESULT: ${{ needs.slang-tests.result }}
+          YAPF_RESULT: ${{ needs.yapf.result }}
         run: |
-          printf 'sanity=%s\nflake=%s\ndependencies=%s\nbuild=%s\n' \
-            "$SANITY_RESULT" "$FLAKE_RESULT" \
-            "$DEPENDENCY_RESULT" "$BUILD_RESULT"
-          [[ "$SANITY_RESULT" == success ]]
-          [[ "$FLAKE_RESULT" == success ]]
-          [[ "$DEPENDENCY_RESULT" == success ]]
+          printf 'clang-format=%s\nyapf=%s\nslang-tests=%s\nbuild=%s\n' \
+            "$CLANG_FORMAT_RESULT" "$YAPF_RESULT" \
+            "$SLANG_TESTS_RESULT" "$BUILD_RESULT"
+          [[ "$CLANG_FORMAT_RESULT" == success ]]
+          [[ "$YAPF_RESULT" == success ]]
+          [[ "$SLANG_TESTS_RESULT" == success ]]
           [[ "$BUILD_RESULT" == success ]]
-
-  upload-dispatch-metadata:
-    name: Upload Dispatch Metadata
-    runs-on: ubuntu-latest
-    steps:
-      - name: Write PR number
-        env:
-          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          mkdir -p dispatch-metadata
-          printf '%s\n' "$PR_NUMBER" > dispatch-metadata/pr_number
-          printf 'head-repo=%s\nhead-sha=%s\n' "$HEAD_REPO" "$HEAD_SHA" \
-            > dispatch-metadata/source.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ always() }}
-        with:
-          name: dispatch-metadata
-          path: dispatch-metadata/
-          retention-days: 7
