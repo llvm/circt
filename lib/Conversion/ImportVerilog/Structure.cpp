@@ -778,6 +778,8 @@ struct ModuleVisitor : public BaseVisitor {
       auto dstType = cast<moore::RefType>(lvalue.getType()).getNestedType();
       // TODO: This should honor signedness in the conversion.
       rvalue = context.materializeConversion(dstType, rvalue, false, loc);
+      if (!rvalue)
+        return failure();
       moore::ContinuousAssignOp::create(builder, loc, lvalue, rvalue);
     }
 

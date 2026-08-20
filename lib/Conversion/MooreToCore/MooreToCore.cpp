@@ -384,65 +384,6 @@ getModulePortInfo(const TypeConverter &typeConverter, SVModuleOp op) {
   return hw::ModulePortInfo(ports);
 }
 
-struct DpiArrayCastInfo {
-  bool isRef = false;
-  bool isOpen = false;
-  bool isPacked = false;
-  Type elementType;
-};
-
-static std::optional<DpiArrayCastInfo> getDpiArrayCastInfo(Type type) {
-  DpiArrayCastInfo info;
-  if (auto refType = dyn_cast<RefType>(type)) {
-    info.isRef = true;
-    type = refType.getNestedType();
-  }
-
-  if (auto arrayType = dyn_cast<ArrayType>(type)) {
-    info.isPacked = true;
-    info.elementType = arrayType.getElementType();
-    return info;
-  }
-  if (auto arrayType = dyn_cast<OpenArrayType>(type)) {
-    info.isOpen = true;
-    info.isPacked = true;
-    info.elementType = arrayType.getElementType();
-    return info;
-  }
-  if (auto arrayType = dyn_cast<UnpackedArrayType>(type)) {
-    info.elementType = arrayType.getElementType();
-    return info;
-  }
-  if (auto arrayType = dyn_cast<OpenUnpackedArrayType>(type)) {
-    info.isOpen = true;
-    info.elementType = arrayType.getElementType();
-    return info;
-  }
-  return std::nullopt;
-}
-
-static bool hasOpenArrayBoundaryType(Type type) {
-  if (isa<OpenArrayType, OpenUnpackedArrayType>(type))
-    return true;
-  if (auto refType = dyn_cast<RefType>(type))
-    return isa<OpenArrayType, OpenUnpackedArrayType>(refType.getNestedType());
-  return false;
-}
-
-static bool isSupportedDpiOpenArrayCast(Type source, Type target) {
-  auto sourceInfo = getDpiArrayCastInfo(source);
-  auto targetInfo = getDpiArrayCastInfo(target);
-  if (!sourceInfo || !targetInfo)
-    return false;
-  // note: We currently don't support converting from open array to non-open
-  // array, even if the element types match, because there is no size
-  // information for the open array.
-  return sourceInfo->isRef == targetInfo->isRef &&
-         sourceInfo->isPacked == targetInfo->isPacked &&
-         sourceInfo->elementType == targetInfo->elementType &&
-         (targetInfo->isOpen && !sourceInfo->isOpen);
-}
-
 //===----------------------------------------------------------------------===//
 // Structural Conversion
 //===----------------------------------------------------------------------===//
@@ -1921,11 +1862,14 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
-struct NullOpConversion : public OpConversionPattern<NullOp> {
-  using OpConversionPattern::OpConversionPattern;
+template <typename SourceOp>
+struct NullOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpConversionPattern<SourceOp>::getTypeConverter;
+  using OpAdaptor = typename SourceOp::Adaptor;
 
   LogicalResult
-  matchAndRewrite(NullOp op, OpAdaptor adaptor,
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type ptrTy = getTypeConverter()->convertType(op.getResult().getType());
     if (!ptrTy)
@@ -2013,47 +1957,6 @@ struct CaseXZEqOpConversion : public OpConversionPattern<SourceOp> {
 //===----------------------------------------------------------------------===//
 // Conversions
 //===----------------------------------------------------------------------===//
-
-struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ConversionOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Location loc = op.getLoc();
-    Type resultType = typeConverter->convertType(op.getResult().getType());
-    if (!resultType) {
-      op.emitError("conversion result type is not currently supported");
-      return failure();
-    }
-    int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
-    int64_t resultBw = hw::getBitWidth(resultType);
-    if (inputBw == -1 || resultBw == -1) {
-      if (isSupportedDpiOpenArrayCast(op.getInput().getType(),
-                                      op.getResult().getType())) {
-        rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
-            op, resultType, adaptor.getInput());
-        return success();
-      }
-      if (hasOpenArrayBoundaryType(op.getInput().getType()) ||
-          hasOpenArrayBoundaryType(op.getResult().getType())) {
-        op.emitError("unsupported DPI open-array conversion from ")
-            << op.getInput().getType() << " to " << op.getResult().getType();
-        return failure();
-      }
-      return failure();
-    }
-
-    Value input = rewriter.createOrFold<hw::BitcastOp>(
-        loc, rewriter.getIntegerType(inputBw), adaptor.getInput());
-    Value amount = adjustIntegerWidth(rewriter, input, resultBw, loc);
-
-    Value result =
-        rewriter.createOrFold<hw::BitcastOp>(loc, resultType, amount);
-    rewriter.replaceOp(op, result);
-    return success();
-  }
-};
 
 template <typename SourceOp>
 struct BitcastConversion : public OpConversionPattern<SourceOp> {
@@ -3981,13 +3884,14 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   // clang-format off
   patterns.add<
     ClassUpcastOpConversion,
-    NullOpConversion,
+    NullOpConversion<NullOp>,
+    NullOpConversion<NullChandleOp>,
+    NullOpConversion<NullClassOp>,
     // Patterns of declaration operations.
     VariableOpConversion,
     NetOpConversion,
 
     // Patterns for conversion operations.
-    ConversionOpConversion,
     BitcastConversion<PackedToSBVOp>,
     BitcastConversion<SBVToPackedOp>,
     NoOpConversion<LogicToIntOp>,

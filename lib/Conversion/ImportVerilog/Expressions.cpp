@@ -764,6 +764,8 @@ struct ExprVisitor {
                 elementType)) {
         value = context.materializeConversion(queueType, value, false,
                                               value.getLoc());
+        if (!value)
+          return {};
       }
 
       operands.push_back(value);
@@ -3122,6 +3124,18 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   if (type == value.getType())
     return value;
 
+  // A `null` literal has no bit-level representation to convert; materialize
+  // a null value of the destination handle type directly instead.
+  if (isa<moore::NullType>(value.getType())) {
+    if (isa<moore::ChandleType>(type))
+      return moore::NullChandleOp::create(builder, loc);
+    if (auto classType = dyn_cast<moore::ClassHandleType>(type))
+      return moore::NullClassOp::create(builder, loc, classType);
+    if (type == moore::IntType::getInt(value.getContext(), 1))
+      return moore::ConstantOp::create(builder, loc, cast<moore::IntType>(type),
+                                       0);
+  }
+
   // Handle packed types which can be converted to a simple bit vector. This
   // allows us to perform resizing and domain casting on that bit vector.
   auto dstPacked = dyn_cast<moore::PackedType>(type);
@@ -3294,12 +3308,10 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
       isa<moore::ClassHandleType>(value.getType()))
     return maybeUpcastHandle(*this, value, cast<moore::ClassHandleType>(type));
 
-  // TODO: Handle other conversions with dedicated ops.
-  if (fallible && value.getType() != type)
-    return {};
-  if (value.getType() != type)
-    value = moore::ConversionOp::create(builder, loc, type, value);
-  return value;
+  if (!fallible)
+    mlir::emitError(loc) << "unsupported conversion from " << value.getType()
+                         << " to " << type;
+  return {};
 }
 
 /// Helper function to convert real math builtin functions that take exactly

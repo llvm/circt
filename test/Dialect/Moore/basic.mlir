@@ -189,8 +189,6 @@ moore.module @Expressions(
   // CHECK: moore.constant b1010XZ : l8
   moore.constant b1010XZ : l8
 
-  // CHECK: moore.conversion [[A]] : !moore.i32 -> !moore.l32
-  moore.conversion %a : !moore.i32 -> !moore.l32
   // CHECK: moore.packed_to_sbv [[STRUCT1]] : struct<{a: i32, b: i32}>
   moore.packed_to_sbv %struct1 : struct<{a: i32, b: i32}>
   // CHECK: moore.sbv_to_packed [[C]] : struct<{u: l16, v: l16}>

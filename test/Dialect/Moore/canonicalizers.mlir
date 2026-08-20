@@ -1,13 +1,11 @@
 // RUN: circt-opt --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: func.func @Casts
-func.func @Casts(%arg0: !moore.i1) -> (!moore.i1, !moore.i1) {
-  // CHECK-NOT: moore.conversion
+func.func @Casts(%arg0: !moore.i1) -> !moore.i1 {
   // CHECK-NOT: moore.bool_cast
-  %0 = moore.conversion %arg0 : !moore.i1 -> !moore.i1
-  %1 = moore.bool_cast %arg0 : !moore.i1 -> !moore.i1
-  // CHECK: return %arg0, %arg0
-  return %0, %1 : !moore.i1, !moore.i1
+  %0 = moore.bool_cast %arg0 : !moore.i1 -> !moore.i1
+  // CHECK: return %arg0
+  return %0 : !moore.i1
 }
 
 // CHECK-LABEL: func.func @LogicToInt
@@ -423,26 +421,6 @@ func.func @StructInjectFold3(%arg0: !moore.struct<{a: i32, b: i32}>) -> (!moore.
   %2 = moore.struct_inject %arg0, "a", %0 : struct<{a: i32, b: i32}>, i32
   %3 = moore.struct_inject %2, "a", %1 : struct<{a: i32, b: i32}>, i32
   return %3 : !moore.struct<{a: i32, b: i32}>
-}
-
-// CHECK-LABEL: func.func @ConvertConstantTwoToFourValued
-func.func @ConvertConstantTwoToFourValued() -> (!moore.l42) {
-  // CHECK: [[TMP:%.+]] = moore.constant 9001 : l42
-  // CHECK-NOT: moore.conversion
-  // CHECK: return [[TMP]] :
-  %0 = moore.constant 9001 : i42
-  %1 = moore.conversion %0 : !moore.i42 -> !moore.l42
-  return %1 : !moore.l42
-}
-
-// CHECK-LABEL: func.func @ConvertConstantFourToTwoValued
-func.func @ConvertConstantFourToTwoValued() -> (!moore.i42) {
-  // CHECK: [[TMP:%.+]] = moore.constant 8 : i42
-  // CHECK-NOT: moore.conversion
-  // CHECK: return [[TMP]] :
-  %0 = moore.constant b1XZ0 : l42
-  %1 = moore.conversion %0 : !moore.l42 -> !moore.i42
-  return %1 : !moore.i42
 }
 
 // CHECK-LABEL: func @Pow
