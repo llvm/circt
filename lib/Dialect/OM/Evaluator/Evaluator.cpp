@@ -162,8 +162,16 @@ ScratchIRBuilder::run(ArrayRef<EvaluatorValuePtr> actualParams) {
            .getResult()},
       {builder.getStringAttr("root")});
 
+#ifdef NDEBUG
+  // Verifying the entire module is expensive, so verify only the wrapper in
+  // release builds.
+  if (failed(verify(wrapperClass)))
+    return failure();
+#else
+  // Verify the entire module in debug builds.
   if (failed(verify(module)))
     return failure();
+#endif
 
   PassManager pm(ctx);
   ElaborateObjectOptions options;
