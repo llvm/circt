@@ -100,4 +100,7 @@ if config.slang_frontend_enabled:
 if config.libfst_enabled:
   config.available_features.add('libfst')
 
+if config.mlir_expensive_pattern_api_checks:
+  config.available_features.add('mlir-expensive-checks')
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)

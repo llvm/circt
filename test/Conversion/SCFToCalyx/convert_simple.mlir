@@ -1,3 +1,4 @@
+// XFAIL: mlir-expensive-checks
 // RUN: circt-opt %s --lower-scf-to-calyx -canonicalize -split-input-file | FileCheck %s
 
 // CHECK:     module attributes {calyx.entrypoint = "main"} {

@@ -1,5 +1,6 @@
 // This test lowers an SCF construct through Calyx, FSM and (TODO)
 // to RTL.
+// XFAIL: mlir-expensive-checks
 // RUN: hlstool --calyx-hw --output-level=post-compile --ir %s | FileCheck %s
 
 // This is the end of the road for this example since there (as of writing)

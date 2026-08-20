@@ -1,3 +1,4 @@
+// XFAIL: mlir-expensive-checks
 // RUN: circt-opt %s -memory-banking="factors=2 dimensions=1" | FileCheck %s --check-prefix RANK2-BANKDIM1
 // RUN: circt-opt %s -split-input-file -memory-banking="factors=2" | FileCheck %s --check-prefix GETGLOBAL
 

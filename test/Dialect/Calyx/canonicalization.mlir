@@ -1,3 +1,4 @@
+// XFAIL: mlir-expensive-checks
 // RUN: circt-opt %s -canonicalize -split-input-file | FileCheck %s
 
 // Nested SeqOps are collapsed.

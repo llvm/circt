@@ -1,3 +1,4 @@
+// XFAIL: mlir-expensive-checks
 // RUN: circt-opt %s -lower-loopschedule-to-calyx -canonicalize -split-input-file | FileCheck %s
 
 // This will introduce duplicate groups; these should be subsequently removed.

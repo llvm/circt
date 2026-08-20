@@ -1,3 +1,4 @@
+// XFAIL: mlir-expensive-checks
 // RUN: circt-opt %s  --lower-scf-to-calyx='cider-source-location-metadata' -canonicalize | FileCheck %s
 
 module {

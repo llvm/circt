@@ -251,6 +251,9 @@ if config.libfst_enabled:
 if config.cadical_enabled:
   config.available_features.add('cadical')
 
+if config.mlir_expensive_pattern_api_checks:
+  config.available_features.add('mlir-expensive-checks')
+
 config.substitutions.append(('%driver', f'{config.driver}'))
 config.substitutions.append(('%circt-tools-dir', f'{config.circt_tools_dir}'))
 llvm_config.add_tool_substitutions(tools, tool_dirs)

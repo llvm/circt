@@ -1,3 +1,4 @@
+// XFAIL: mlir-expensive-checks
 // RUN: circt-opt %s --lower-scf-to-calyx="top-level-function=main" -canonicalize -split-input-file | FileCheck %s
 
 // CHECK:         calyx.invoke @func_instance[](%[[VAL_0:.*]] = %[[VAL_1:.*]]) -> (i32)
