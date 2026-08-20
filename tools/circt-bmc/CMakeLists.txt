@@ -1,6 +1,6 @@
 if(MLIR_ENABLE_EXECUTION_ENGINE)
   add_compile_definitions(CIRCT_BMC_ENABLE_JIT)
-  set(CIRCT_BMC_JIT_LLVM_COMPONENTS native OrcJIT)
+  set(CIRCT_BMC_JIT_LLVM_COMPONENTS native OrcJIT codegen)
   set(CIRCT_BMC_JIT_DEPS
     MLIRExecutionEngine
     MLIRExecutionEngineUtils
