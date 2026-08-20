@@ -99,6 +99,21 @@ hw.module @sext_compress(in %a : i8, in %b : i8, in %c : i4,
   hw.output %3#0, %3#1, %5#0, %5#1 : i8, i8, i8, i8
 }
 
+// CHECK-LABEL: @replext_compress
+hw.module @replext_compress(in %a : i8, in %b : i8, in %bit : i1,
+                            in %c : i4, out sum : i8, out carry : i8) {
+  // CHECK-NEXT: %c-16_i8 = hw.constant -16 : i8
+  // CHECK-NEXT: %c0_i3 = hw.constant 0 : i3
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: %[[NOTBIT:.+]] = comb.xor bin %bit, %true : i1
+  // CHECK-NEXT: %[[EXT:.+]] = comb.concat %c0_i3, %[[NOTBIT]], %c : i3, i1, i4
+  // CHECK-NEXT: %[[COMP:.+]]:2 = datapath.compress %a, %b, %[[EXT]], %c-16_i8 : i8 [4 -> 2]
+  %0 = comb.replicate %bit : (i1) -> i4
+  %1 = comb.concat %0, %c : i4, i4
+  %2:2 = datapath.compress %a, %b, %1 : i8 [3 -> 2]
+  hw.output %2#0, %2#1 : i8, i8
+}
+
 // CHECK-LABEL: @oneext_compress
 hw.module @oneext_compress(in %a : i8, in %b : i8, in %c : i4, 
                          out sum1 : i8, out carry1 : i8) {
