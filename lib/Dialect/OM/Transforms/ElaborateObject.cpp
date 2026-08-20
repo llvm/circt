@@ -84,9 +84,16 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
     // Propagate the class's per-field locations onto each field value, fused
     // with the value's existing location.
     if (auto classOp = dyn_cast<ClassOp>(classLike.getOperation()))
-      for (auto [i, v] : llvm::enumerate(fieldValues))
-        v.setLoc(
-            rewriter.getFusedLoc({classOp.getFieldLocByIndex(i), v.getLoc()}));
+      for (auto [i, v] : llvm::enumerate(fieldValues)) {
+        Location fieldLoc =
+            rewriter.getFusedLoc({classOp.getFieldLocByIndex(i), v.getLoc()});
+        if (auto *fieldOp = v.getDefiningOp())
+          rewriter.modifyOpInPlace(fieldOp, [&] { fieldOp->setLoc(fieldLoc); });
+        else
+          rewriter.modifyOpInPlace(
+              cast<BlockArgument>(v).getOwner()->getParentOp(),
+              [&] { v.setLoc(fieldLoc); });
+      }
 
     // Erase the terminator and inline the body at the object instantiation.
     rewriter.eraseOp(clonedFields);
