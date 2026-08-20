@@ -1,3 +1,5 @@
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: circt-opt --lower-scf-to-calyx %s -split-input-file -verify-diagnostics
 
 // expected-error @+1 {{Module contains multiple functions, but no top level function was set. Please see --top-level-function}}

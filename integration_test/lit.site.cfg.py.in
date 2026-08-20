@@ -17,6 +17,7 @@ config.gold_executable = "@GOLD_EXECUTABLE@"
 config.ld64_executable = "@LD64_EXECUTABLE@"
 config.enable_shared = @ENABLE_SHARED@
 config.enable_assertions = @ENABLE_ASSERTIONS@
+config.mlir_expensive_pattern_api_checks = @MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS@
 config.targets_to_build = "@TARGETS_TO_BUILD@"
 config.native_target = "@LLVM_NATIVE_ARCH@"
 config.llvm_bindings = "@LLVM_BINDINGS@".split(' ')
