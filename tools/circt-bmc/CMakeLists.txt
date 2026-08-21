@@ -10,6 +10,14 @@ endif()
 set(LLVM_LINK_COMPONENTS Support ${CIRCT_BMC_JIT_LLVM_COMPONENTS})
 
 add_circt_tool(circt-bmc circt-bmc.cpp)
+if(CIRCT_SLANG_FRONTEND_ENABLED)
+  target_compile_definitions(circt-bmc PRIVATE CIRCT_BMC_ENABLE_SLANG)
+  target_link_libraries(circt-bmc
+    PRIVATE
+    CIRCTImportVerilog
+    CIRCTMooreToCore
+  )
+endif()
 target_link_libraries(circt-bmc
   PRIVATE
   CIRCTBMCRuntime

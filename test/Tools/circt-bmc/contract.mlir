@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --lower-contracts | circt-bmc - -b 1 --module Caller_CheckContract_0 --emit-mlir -o - | FileCheck %s
+// RUN: circt-opt %s --lower-contracts | circt-bmc - --input-format=mlir -b 1 --module Caller_CheckContract_0 --emit-mlir -o - | FileCheck %s
 
 // CHECK-NOT:   verif.symbolic_value
 // CHECK-LABEL: func.func @Callee(
