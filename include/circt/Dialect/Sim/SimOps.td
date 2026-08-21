@@ -1299,6 +1299,16 @@ def AssocArrayPrevOp : SimOp<"assoc_array.prev", [Pure,
   let assemblyFormat = "$array `[` $index `]` attr-dict `:` type($array)";
 }
 
+def AssocArrayClearOp : SimOp<"assoc_array.clear", [Pure, AllTypesMatch<["array", "outArray"]>]> {
+  let summary = "Clears all entries from an associative array";
+  let description = [{
+  Returns an empty associative array of the exact same type as the input array.
+  }];
+  let arguments = (ins AssocArrayType:$array);
+  let results = (outs AssocArrayType:$outArray);
+  let assemblyFormat = "$array attr-dict `:` type($array)";
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
