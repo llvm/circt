@@ -92,3 +92,14 @@
 
 // expected-error @below {{port 'outstanding_reads' must be at most 4 for a 'read_id_width' of 2, got 5}}
 "test.port"() : () -> !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 2, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 5>
+
+// -----
+
+!port = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+hw.module @Fanout(in %clk : !seq.clock, in %rst_ni : i1) {
+  // expected-error @below {{'axi4.abstract_manager' op port result must have at most one use; route through an 'axi4.xbar' to fan out to multiple endpoints}}
+  %mgr = axi4.abstract_manager %clk, %rst_ni : !port
+  axi4.abstract_subordinate %clk, %rst_ni, %mgr : !port
+  axi4.abstract_subordinate %clk, %rst_ni, %mgr : !port
+}
