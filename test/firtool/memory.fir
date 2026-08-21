@@ -7,10 +7,8 @@ FIRRTL version 4.0.0
 circuit Qux: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~Qux|Qux"
-  },
-  {
-    "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
-  }]]
+  }
+]]
   public module Qux:
     input clock: Clock
     input rAddr: UInt<2>

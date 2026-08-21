@@ -584,22 +584,6 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
   ];
 }
 
-def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
-  let summary = "Convert combinational memories to a vector of registers";
-  let description = [{
-    This pass generates the logic to implement a memory using Registers.
-  }];
-  let options = [
-    Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool",
-                "false",
-    "ignore the read enable signal, instead of assigning X on read disable">
-   ];
-  let statistics = [
-    Statistic<"numConvertedMems", "num-converted-mems",
-      "Number of memories converted to registers">,
-  ];
-}
-
 def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
   let summary = "Drop interesting names";
   let description = [{
