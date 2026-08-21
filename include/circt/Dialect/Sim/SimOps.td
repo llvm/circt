@@ -1402,6 +1402,7 @@ def TriggeredOp : SimOp<"triggered", [
 
   let arguments = (ins ClockType:$clock, Optional<I1>:$condition);
   let regions = (region SizedRegion<1>:$body);
+  let hasCanonicalizeMethod = true;
   let assemblyFormat = [{
     $clock (`if` $condition^)? $body attr-dict
   }];

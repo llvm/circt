@@ -73,3 +73,55 @@ func.func @string_get_special_chars() -> i8 {
   // CHECK: return [[TMP]]
   return %char : i8
 }
+
+//===----------------------------------------------------------------------===//
+// TriggeredOp
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: hw.module @triggered_hoist_single_if(
+hw.module @triggered_hoist_single_if(in %clock: !seq.clock, in %enable: i1) {
+  %msg = sim.fmt.literal "hello"
+  // CHECK: [[MSG:%.+]] = sim.fmt.literal "hello"
+  // CHECK: sim.triggered %clock if %enable {
+  // CHECK-NEXT: sim.proc.print [[MSG]]
+  // CHECK-NEXT: }
+  sim.triggered %clock {
+    scf.if %enable {
+      sim.proc.print %msg
+    }
+  }
+  hw.output
+}
+
+// CHECK-LABEL: hw.module @triggered_keep_interleaved_ifs(
+hw.module @triggered_keep_interleaved_ifs(in %clock: !seq.clock, in %a: i1, in %b: i1) {
+  %a0 = sim.fmt.literal "a0"
+  %b0 = sim.fmt.literal "b0"
+  %a1 = sim.fmt.literal "a1"
+  // CHECK: [[A0:%.+]] = sim.fmt.literal "a0"
+  // CHECK: [[B0:%.+]] = sim.fmt.literal "b0"
+  // CHECK: [[A1:%.+]] = sim.fmt.literal "a1"
+  // CHECK: sim.triggered %clock {
+  // CHECK-NEXT: scf.if %a {
+  // CHECK-NEXT: sim.proc.print [[A0]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: scf.if %b {
+  // CHECK-NEXT: sim.proc.print [[B0]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: scf.if %a {
+  // CHECK-NEXT: sim.proc.print [[A1]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: }
+  sim.triggered %clock {
+    scf.if %a {
+      sim.proc.print %a0
+    }
+    scf.if %b {
+      sim.proc.print %b0
+    }
+    scf.if %a {
+      sim.proc.print %a1
+    }
+  }
+  hw.output
+}
