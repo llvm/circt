@@ -400,7 +400,8 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
   LogicalResult matchAndRewrite(PartialProductOp op,
                                 PatternRewriter &rewriter) const override {
     // Booth encoding will automatically handle signed multiplications
-    if (comb::shouldUseBoothEncoding(op.getLhs(), op.getRhs()))
+    auto isSquarer = op.getLhs() == op.getRhs();
+    if (comb::shouldUseBoothEncoding(op.getLhs(), op.getRhs()) && !isSquarer)
       return failure();
 
     auto inputWidth = op.getLhs().getType().getIntOrFloatBitWidth();
