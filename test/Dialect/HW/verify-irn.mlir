@@ -44,3 +44,16 @@ hw.module @VerbatimExprInnerRef() {
 hw.module @VerbatimExprSEInnerRef() {
   hw.output
 }
+
+// -----
+
+// expected-error @below {{references non-existent inner symbol '#hw.innerNameRef<@Foo::@a>'}}
+// expected-note @below {{no operation with symbol '@Foo' exists}}
+hw.donttouch <@Foo::@a>
+
+// -----
+
+// expected-error @below {{references non-existent inner symbol '#hw.innerNameRef<@Foo::@a>'}}
+hw.donttouch <@Foo::@a>
+// expected-note @below {{the inner symbol should exist in the body of this operation}}
+hw.module public @Foo() {}
