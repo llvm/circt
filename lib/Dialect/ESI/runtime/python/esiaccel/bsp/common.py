@@ -584,7 +584,14 @@ class ChannelMMIO(esi.ServiceImplementation):
         assert False, "Unrecognized bundle type."
       bundle_wire.assign(bundle)
       client_data_channels.append(bundle_froms["data"])
-    resp_channel = esi.ChannelMux(client_data_channels)
+    # `cmd_rate_limiter` above caps the design at one outstanding MMIO command,
+    # and `client_cmd_demux` routes that one command to exactly one client. So
+    # provided each client only asserts its response `valid` in reply to a
+    # command it was given -- see `ChannelMergeOneValid` for why that second
+    # half matters, and note it is required by `ChannelMux` too -- at most one
+    # client response is ever valid, and arbitration is unnecessary.
+    resp_channel = esi.ChannelMergeOneValid(client_data_channels, ports.clk,
+                                            ports.rst)
     data_resp_channel.assign(resp_channel)
 
     # The header surfaces a reset request when the host writes the reset magic
