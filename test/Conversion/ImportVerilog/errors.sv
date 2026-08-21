@@ -368,3 +368,27 @@ module ReadMemIndexedSelect;
     $readmemh("mem.data", mem[i+:8]);
   end
 endmodule
+
+// -----
+
+module Foo(inout [9000:0] x);
+endmodule
+
+module Bar;
+  wire [41:0] y;
+  // expected-error @below {{inout port `x` expects '!moore.ref<l9001>' but is connected to '!moore.ref<l42>'}}
+  Foo foo(y);
+endmodule
+
+// -----
+
+typedef struct packed { logic x; logic y; } Pair;
+
+module Foo(inout Pair p);
+endmodule
+
+module Bar;
+  wire [1:0] y;
+  // expected-error @below {{inout port `p` expects '!moore.ref<struct<{x: l1, y: l1}>>' but is connected to '!moore.ref<l2>'}}
+  Foo foo(y);
+endmodule

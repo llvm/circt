@@ -148,9 +148,14 @@ LogicalResult InlineCallsPass::runOnRegion(Region &region,
         continue;
 
       // Ensure that we are not recursively inlining a function, which would
-      // just expand infinitely in the IR.
-      if (!callStack.insert(funcOp))
-        return callOp.emitError("recursive function call cannot be inlined");
+      // just expand infinitely in the IR. Recursive functions can't be fully
+      // inlined, so leave this particular call as-is and keep inlining the
+      // rest of the module.
+      if (!callStack.insert(funcOp)) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Skipping recursive call " << callOp << "\n");
+        continue;
+      }
       inlineEndMarkers.push_back({op.getNextNode(), funcOp});
 
       // Inline the function body and remember the call for later removal. The

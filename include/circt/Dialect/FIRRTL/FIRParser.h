@@ -52,6 +52,7 @@ struct FIRParserOptions {
   bool scalarizePublicModules = false;
   bool scalarizeInternalModules = false;
   bool scalarizeExtModules = false;
+  bool warnOnTruncation = false;
   std::vector<std::string> enableLayers;
   std::vector<std::string> disableLayers;
   std::optional<LayerSpecialization> defaultLayerSpecialization;

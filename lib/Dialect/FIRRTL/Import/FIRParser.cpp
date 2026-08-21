@@ -2153,7 +2153,8 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   if (props.isPassive && !props.containsAnalog) {
     if (flow == Flow::Source)
       return;
-    emitConnect(builder, val, InvalidValueOp::create(builder, tpe));
+    emitConnect(builder, val, InvalidValueOp::create(builder, tpe),
+                getConstants().options.warnOnTruncation);
     return;
   }
 
@@ -3976,9 +3977,11 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         // Connect to/from the result per flow.
         builder.setInsertionPointAfter(defining);
         if (foldFlow(instResult) == Flow::Source)
-          emitConnect(builder, bounceVal, instResult);
+          emitConnect(builder, bounceVal, instResult,
+                      getConstants().options.warnOnTruncation);
         else
-          emitConnect(builder, instResult, bounceVal);
+          emitConnect(builder, instResult, bounceVal,
+                      getConstants().options.warnOnTruncation);
         // Set the parse result AND update `instResult` which is a reference to
         // the unbundled entry for the instance result, so that future uses also
         // find this new wire.
@@ -4227,7 +4230,7 @@ ParseResult FIRStmtParser::parseDomainDefine() {
       parseDomainExp(src) || parseOptionalInfo())
     return failure();
 
-  emitConnect(builder, dest, src);
+  emitConnect(builder, dest, src, getConstants().options.warnOnTruncation);
   return success();
 }
 
@@ -4267,7 +4270,7 @@ ParseResult FIRStmtParser::parseRefDefine() {
            << target.getType() << " with incompatible reference of type "
            << src.getType();
 
-  emitConnect(builder, target, src);
+  emitConnect(builder, target, src, getConstants().options.warnOnTruncation);
 
   return success();
 }
@@ -4570,15 +4573,19 @@ ParseResult FIRStmtParser::parseConnect() {
            << rhsType << " to " << lhsType;
 
   locationProcessor.setLoc(loc);
-  emitConnect(builder, lhs, rhs,
-              [&] { return locationProcessor.getLoc(*this, loc); });
+  emitConnect(
+      builder, lhs, rhs, [&] { return locationProcessor.getLoc(*this, loc); },
+      getConstants().options.warnOnTruncation);
   return success();
 }
 
-/// Before FIRRTL 7.0.0:
+/// FIRRTL 6.0.0 <= version < FIRRTL 8.0.0:
 ///   propassert ::= 'propassert' expr ',' string_literal
-/// After FIRRTL 7.0.0:
+/// FIRRTL 7.0.0 <= version:
 ///   propassert ::= 'propassert' expr ',' expr
+///
+/// Before calling, it has already been verified that the FIRRTL version is
+/// greater than 6.0.0.
 ParseResult FIRStmtParser::parsePropAssert() {
   auto startTok = consumeToken(FIRToken::kw_propassert);
   auto loc = startTok.getLoc();
@@ -4588,16 +4595,24 @@ ParseResult FIRStmtParser::parsePropAssert() {
   if (parseExp(condition, "expected condition in 'propassert'") ||
       parseToken(FIRToken::comma, "expected ','"))
     return failure();
-  if (version < FIRVersion(7, 0, 0)) {
+  // String message handling
+  if (getToken().is(FIRToken::string)) {
+    if (removedFeature({8, 0, 0}, "string messages in property asserts"))
+      return failure();
     StringRef messageStr;
     messageLoc = getToken().getLoc();
     if (parseGetSpelling(messageStr) ||
         parseToken(FIRToken::string, "expected message string in 'propassert'"))
       return failure();
+    locationProcessor.setLoc(messageLoc);
     auto attr = builder.getStringAttr(FIRToken::getStringValue(messageStr));
     message = moduleContext.getCachedConstant<StringConstantOp>(
         builder, attr, builder.getType<StringType>(), attr);
   } else {
+    if (requireFeature(
+            {7, 0, 0},
+            "string property expression message in property asserts"))
+      return failure();
     messageLoc = getToken().getLoc();
     if (parseExp(message, "expected message in 'propassert'"))
       return failure();
@@ -4789,8 +4804,9 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
     return mlir::emitError(locationProcessor.getLoc(*this, loc),
                            "cannot connect non-equivalent type ")
            << rhsType << " to " << lhsType;
-  emitConnect(builder, lhs, rhs,
-              [&] { return locationProcessor.getLoc(*this, loc); });
+  emitConnect(
+      builder, lhs, rhs, [&] { return locationProcessor.getLoc(*this, loc); },
+      getConstants().options.warnOnTruncation);
   return success();
 }
 

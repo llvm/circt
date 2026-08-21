@@ -59,6 +59,38 @@ hw.module @array(in %arg0: i2, in %arg1: i2, in %arg2: i2, in %arg3: i2, out out
   hw.output %0, %1 : !hw.array<4xi2>, i2
 }
 
+// CHECK-LABEL: @array_slice(
+hw.module @array_slice(in %arg0: i2, in %arg1: i2, in %arg2: i2, in %arg3: i2, out out: !hw.array<4xi2>, in %sel: i2, out out_slice: !hw.array<2xi2>) {
+  %0 = hw.array_create %arg0, %arg1, %arg2, %arg3 : i2
+  %1 = hw.array_slice %0[%sel] : (!hw.array<4xi2>) -> !hw.array<2xi2>
+  // CHECK-NEXT: %[[CONCAT:.+]] = comb.concat %arg0, %arg1, %arg2, %arg3 : i2, i2, i2, i2
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %[[CONCAT]] : (i8) -> !hw.array<4xi2>
+  // CHECK-NEXT: %[[EXTRACT_0:.+]] = comb.extract %[[CONCAT]] from 0 : (i8) -> i4
+  // CHECK-NEXT: %[[EXTRACT_2:.+]] = comb.extract %[[CONCAT]] from 2 : (i8) -> i4
+  // CHECK-NEXT: %[[EXTRACT_4:.+]] = comb.extract %[[CONCAT]] from 4 : (i8) -> i4
+  // CHECK-NEXT: %[[EXTRACT_SEL:.+]] = comb.extract %sel from 0
+  // CHECK-NEXT: %[[EXTRACT_SEL_1:.+]] = comb.extract %sel from 1
+  // CHECK-NEXT: %[[MUX_0:.+]] = comb.mux %[[EXTRACT_SEL]], %[[EXTRACT_2]], %[[EXTRACT_0]]
+  // CHECK-NEXT: %[[MUX_2:.+]] = comb.mux %[[EXTRACT_SEL_1]], %[[EXTRACT_4]], %[[MUX_0]]
+  // CHECK-NEXT: %[[BITCAST_SLICE:.+]] = hw.bitcast %[[MUX_2]] : (i4) -> !hw.array<2xi2>
+  // CHECK-NEXT: hw.output %[[BITCAST]], %[[BITCAST_SLICE]]
+  hw.output %0, %1 : !hw.array<4xi2>, !hw.array<2xi2>
+}
+
+// CHECK-LABEL: @array_slice_const(
+hw.module @array_slice_const(in %arg0: i2, in %arg1: i2, in %arg2: i2, in %arg3: i2, out out: !hw.array<4xi2>, out out_slice: !hw.array<2xi2>) {
+  %sel = hw.constant 1 : i2
+  %0 = hw.array_create %arg0, %arg1, %arg2, %arg3 : i2
+  %1 = hw.array_slice %0[%sel] : (!hw.array<4xi2>) -> !hw.array<2xi2>
+  // CHECK-NEXT: %[[SEL:.+]] = hw.constant 1 : i2
+  // CHECK-NEXT: %[[CONCAT:.+]] = comb.concat %arg0, %arg1, %arg2, %arg3 : i2, i2, i2, i2
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %[[CONCAT]] : (i8) -> !hw.array<4xi2>
+  // CHECK-NEXT: %[[EXTRACT_2:.+]] = comb.extract %[[CONCAT]] from 2 : (i8) -> i4
+  // CHECK-NEXT: %[[BITCAST_SLICE:.+]] = hw.bitcast %[[EXTRACT_2]] : (i4) -> !hw.array<2xi2>
+  // CHECK-NEXT: hw.output %[[BITCAST]], %[[BITCAST_SLICE]]
+  hw.output %0, %1 : !hw.array<4xi2>, !hw.array<2xi2>
+}
+
 // CHECK-LABEL: @array_inject(
 hw.module @array_inject(in %in: !hw.array<3xi2>, in %sel: i2, in %val: i2, out out_inject: !hw.array<3xi2>) {
   // CHECK-NEXT: %[[in_bitcast:.+]] = hw.bitcast %in

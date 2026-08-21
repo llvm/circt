@@ -1,6 +1,10 @@
 add_subdirectory(lib)
 add_subdirectory(CAPI)
 
+llvm_canonicalize_cmake_booleans(
+  MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS
+)
+
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py

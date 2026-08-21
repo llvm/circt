@@ -1,6 +1,6 @@
 if(ARCILATOR_JIT_ENABLED)
   add_compile_definitions(ARCILATOR_ENABLE_JIT)
-  set(ARCILATOR_JIT_LLVM_COMPONENTS native OrcJIT)
+  set(ARCILATOR_JIT_LLVM_COMPONENTS native OrcJIT codegen)
   set(ARCILATOR_JIT_DEPS
     CIRCTArcJITRuntime
     MLIRExecutionEngine

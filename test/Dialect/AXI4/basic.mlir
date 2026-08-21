@@ -62,3 +62,18 @@
 // Check windows covering the whole address space are merged
 // CHECK: #axi4.window_set<<base = 0x0, last = 0xffffffffffffffff, burst_specs = <<fixed, len = 4>>>>
 "test.attrs"() {a = #axi4.window_set<<base = 0x0, last = 0x7fffffffffffffff, burst_specs = <<fixed, len = 4>>>, <base = 0x8000000000000000, last = 0xffffffffffffffff, burst_specs = <<fixed, len = 4>>>>} : () -> ()
+
+//===----------------------------------------------------------------------===//
+// Types
+//===----------------------------------------------------------------------===//
+
+// CHECK: !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+"test.port"() : () -> !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+// Check with widest widths (and make sure ID width check doesn't overflow)
+// CHECK: !axi4.port<addr_width = 64, data_width = 1024, write_id_width = 32, read_id_width = 32, user_width = 8, windows = <<base = 0x0, last = 0xffffffffffffffff, burst_specs = <<incr, len = 256>>>>, outstanding_writes = 4294967295, outstanding_reads = 4294967295>
+"test.port"() : () -> !axi4.port<addr_width = 64, data_width = 1024, write_id_width = 32, read_id_width = 32, user_width = 8, windows = <<base = 0x0, last = 0xffffffffffffffff, burst_specs = <<incr, len = 256>>>>, outstanding_writes = 4294967295, outstanding_reads = 4294967295>
+
+// Check fields may be given in any order, and are printed in a canonical one
+// CHECK: !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+"test.port"() : () -> !axi4.port<outstanding_reads = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, data_width = 64, user_width = 0, addr_width = 32, outstanding_writes = 4, read_id_width = 4, write_id_width = 4>

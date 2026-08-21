@@ -1200,15 +1200,17 @@ void Emitter::emitStatement(MatchingConnectOp op) {
 }
 
 void Emitter::emitStatement(PropertyAssertOp op) {
+  if (failed(requireVersion(FIRVersion(6, 0, 0), op, "property assert")))
+    return;
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "propassert" << PP::space;
     emitExpression(op.getCondition());
     ps << "," << PP::space;
-    // For FIRRTL <= 7.0.0, do a best effort emission that will inline a single
+    // For FIRRTL < 7.0.0, do a best effort emission that will inline a single
     // string expression.  If we see anything more complicated than this, just
     // bail.
-    if (version <= FIRVersion(7, 0, 0)) {
+    if (version < FIRVersion(7, 0, 0)) {
       auto expr = dyn_cast<StringConstantOp>(op.getMessage().getDefiningOp());
       if (!expr) {
         auto diag =

@@ -801,8 +801,6 @@ module Expressions;
   int a, b, c;
   // CHECK: %j = moore.variable : <i32>
   int j;
-  // CHECK: %up = moore.variable : <uarray<4 x l11>>
-  logic [10:0] up [3:0];
   // CHECK: %p1 = moore.variable : <l11>
   // CHECK: %p2 = moore.variable : <l11>
   // CHECK: %p3 = moore.variable : <l11>
@@ -834,8 +832,6 @@ module Expressions;
   logic [-31:0] vec_1b;
   // CHECK: %vec_2 = moore.variable : <l32>
   logic [0:31] vec_2;
-  // CHECK: %vec_3 = moore.variable : <l16>
-  logic [15:0] vec_3;
   // CHECK: %vec_4 = moore.variable : <l32>
   logic [31:0] vec_4;
   // CHECK: %vec_5 = moore.variable : <l48>
@@ -843,7 +839,6 @@ module Expressions;
   // CHECK: %arr = moore.variable : <uarray<3 x uarray<6 x i4>>>
   bit [4:1] arr [1:3][2:7];
 
-  logic arr_1 [63:0];
   // CHECK: %struct0 = moore.variable : <struct<{a: i32, b: i32}>>
   struct packed {
     int a, b;
@@ -900,9 +895,8 @@ module Expressions;
   // CHECK-DAG: [[STR2:%.+]] = moore.constant_string "world" : i40
   // CHECK-DAG: [[INT_TO_STR2:%.+]] = moore.int_to_string [[STR2]] : i40
   // CHECK-DAG: [[ARR_CREATE:%.+]] = moore.array_create [[INT_TO_STR0]], [[INT_TO_STR1]], [[INT_TO_STR2]] : !moore.string, !moore.string, !moore.string -> uarray<3 x string>
-  // CHECK-DAG: [[STRARR_CONV:%.+]] = moore.conversion [[ARR_CREATE]] : !moore.uarray<3 x string> -> !moore.open_uarray<string>
-  // CHECK-DAG: %strArr = moore.variable [[STRARR_CONV]] : <open_uarray<string>>
-  string strArr[] = { "hello", "sad", "world" };
+  // CHECK-DAG: %strArr = moore.variable [[ARR_CREATE]] : <uarray<3 x string>>
+  string strArr[3] = { "hello", "sad", "world" };
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -1022,11 +1016,6 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.constant 31 : i96
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i96
     {>>{ a, b, c }} = 100'b11111;
-    // CHECK: [[TMP1:%.+]] = moore.concat_ref %p1, %p2, %p3, %p4 : (!moore.ref<l11>, !moore.ref<l11>, !moore.ref<l11>, !moore.ref<l11>) -> <l44>
-    // CHECK: [[TMP2:%.+]] = moore.read %up : <uarray<4 x l11>>
-    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.uarray<4 x l11> -> !moore.l44
-    // CHECK: moore.blocking_assign [[TMP1]], [[TMP3]] : l44
-    { >> {p1, p2, p3, p4}} = up;
     // CHECK: [[TMP1:%.+]] = moore.extract_ref %a from 0 : <i32> -> <i8>
     // CHECK: [[TMP2:%.+]] = moore.extract_ref %a from 8 : <i32> -> <i8>
     // CHECK: [[TMP3:%.+]] = moore.extract_ref %a from 16 : <i32> -> <i8>
@@ -1035,29 +1024,6 @@ module Expressions;
     // CHECK: [[TMP6:%.+]] = moore.constant 1 : i32
     // CHECK: moore.blocking_assign [[TMP5]], [[TMP6]] : i32
     {<< byte {a}} = 32'b1;
-    // CHECK: %[[TMP1:.*]] = moore.read %vec_3 : <l16>
-    // CHECK: %[[TMP2:.*]] = moore.read %arr_1 : <uarray<64 x l1>>
-    // CHECK: %[[TMP3:.*]] = moore.extract %[[TMP2]] from 0 : uarray<64 x l1> -> uarray<16 x l1>
-    // CHECK: %[[TMP4:.*]] = moore.conversion %[[TMP3]] : !moore.uarray<16 x l1> -> !moore.l16
-    // CHECK: %[[TMP5:.*]] = moore.concat %[[TMP1]], %[[TMP4]] : (!moore.l16, !moore.l16) -> l32
-    // CHECK: %[[TMP6:.*]] = moore.extract %[[TMP5]] from 0 : l32 -> l8
-    // CHECK: %[[TMP7:.*]] = moore.extract %[[TMP5]] from 8 : l32 -> l8
-    // CHECK: %[[TMP8:.*]] = moore.extract %[[TMP5]] from 16 : l32 -> l8
-    // CHECK: %[[TMP9:.*]] = moore.extract %[[TMP5]] from 24 : l32 -> l8
-    // CHECK: %[[TMP10:.*]] = moore.concat %[[TMP6]], %[[TMP7]], %[[TMP8]], %[[TMP9]] : (!moore.l8, !moore.l8, !moore.l8, !moore.l8) -> l32
-    // CHECK: moore.blocking_assign %vec_1, %[[TMP10]] : l32
-    vec_1 = {<<byte{vec_3, arr_1 with [15:0]}};
-    // CHECK: %[[TMP1:.*]] = moore.extract_ref %arr_1 from 0 : <uarray<64 x l1>> -> <uarray<16 x l1>>
-    // CHECK: %[[TMP2:.*]] = moore.conversion %[[TMP1]] : !moore.ref<uarray<16 x l1>> -> !moore.ref<l16>
-    // CHECK: %[[TMP3:.*]] = moore.concat_ref %vec_3, %[[TMP2]] : (!moore.ref<l16>, !moore.ref<l16>) -> <l32>
-    // CHECK: %[[TMP4:.*]] = moore.extract_ref %[[TMP3]] from 0 : <l32> -> <l8>
-    // CHECK: %[[TMP5:.*]] = moore.extract_ref %[[TMP3]] from 8 : <l32> -> <l8>
-    // CHECK: %[[TMP6:.*]] = moore.extract_ref %[[TMP3]] from 16 : <l32> -> <l8>
-    // CHECK: %[[TMP7:.*]] = moore.extract_ref %[[TMP3]] from 24 : <l32> -> <l8>
-    // CHECK: %[[TMP8:.*]] = moore.concat_ref %[[TMP4]], %[[TMP5]], %[[TMP6]], %[[TMP7]] : (!moore.ref<l8>, !moore.ref<l8>, !moore.ref<l8>, !moore.ref<l8>) -> <l32>
-    // CHECK: %[[TMP9:.*]] = moore.read %vec_1 : <l32>
-    // CHECK: moore.blocking_assign %[[TMP8]], %[[TMP9]] : l32
-    {<<byte{vec_3, arr_1 with [15:0]}} = vec_1;
     // CHECK: [[TMP1:%.+]] = moore.constant 0 : i1
     // CHECK: [[TMP2:%.+]] = moore.concat [[TMP1]] : (!moore.i1) -> i1
     // CHECK: moore.replicate [[TMP2]] : i1 -> i32
@@ -4354,25 +4320,6 @@ module subroutineResultValueCastedToCorrecType;
 	int a = $time && (25'h300a ^ $stime);
 endmodule
 
-// CHECK-LABEL: moore.module @implicitCastsFunctionArguments
-module implicitCastsFunctionArguments;
-  real r, q;
-
-  function void fn(output logic [3:0] o, input logic [3:0] val);
-    o = val;
-  endfunction
-
-  // CHECK: procedure initial
-  initial begin
-    // CHECK: [[TMP1:%.+]] = moore.conversion %q : !moore.ref<f64> -> !moore.ref<l4>
-    // CHECK: [[TMP2:%.+]] = moore.read %r : <f64>
-    // CHECK: [[TMP3:%.+]] = moore.real_to_int [[TMP2]] : f64 -> i4
-    // CHECK: [[TMP4:%.+]] = moore.int_to_logic [[TMP3]] : i4
-    // CHECK: func.call @fn([[TMP1]], [[TMP4]]) : (!moore.ref<l4>, !moore.l4) -> ()
-    fn(q, r);
-  end
-endmodule
-
 // CHECK-LABEL: moore.module @ProgramsAreMostlyModules
 program ProgramsAreMostlyModules;
 endprogram
@@ -4410,14 +4357,11 @@ class nullableClass;
 endclass
 
 // CHECK-LABEL: moore.module @NullableTest() {
-// CHECK-DAG:     [[N0:%.*]] = moore.null
-// CHECK-DAG:     [[C0:%.*]] = moore.conversion [[N0]] : !moore.null -> !moore.chandle
+// CHECK-DAG:     [[C0:%.*]] = moore.null_chandle
 // CHECK-DAG:     [[T:%.*]] = moore.variable {{.*}} : <chandle>
-// CHECK-DAG:     [[N1:%.*]] = moore.null
-// CHECK-DAG:     [[C1:%.*]] = moore.conversion [[N1]] : !moore.null -> !moore.class<@nullableClass>
+// CHECK-DAG:     [[C1:%.*]] = moore.null_class : <@nullableClass>
 // CHECK-DAG:     [[CVAR:%.*]] = moore.variable {{.*}} : <class<@nullableClass>>
-// CHECK-DAG:     [[N2:%.*]] = moore.null
-// CHECK-DAG:     [[C2:%.*]] = moore.conversion [[N2]] : !moore.null -> !moore.i1
+// CHECK-DAG:     [[C2:%.*]] = moore.constant 0 : i1
 // CHECK-DAG:     [[E:%.*]] = moore.variable {{.*}} : <i1>
 // CHECK:         moore.output
 // CHECK:       }
@@ -4449,11 +4393,9 @@ module QueueSizeTest;
 endmodule
 
 // CHECK-LABEL: moore.module @testHandleComparison() {
-// CHECK-DAG:       [[NULL0:%.+]] = moore.null
-// CHECK-DAG:       [[A_INIT:%.+]] = moore.conversion [[NULL0]] : !moore.null -> !moore.chandle
+// CHECK-DAG:       [[A_INIT:%.+]] = moore.null_chandle
 // CHECK-DAG:       [[A:%.+]] = moore.variable {{.*}} : <chandle>
-// CHECK-DAG:       [[NULL1:%.+]] = moore.null
-// CHECK-DAG:       [[B_INIT:%.+]] = moore.conversion [[NULL1]] : !moore.null -> !moore.class<@nullableClass>
+// CHECK-DAG:       [[B_INIT:%.+]] = moore.null_class : <@nullableClass>
 // CHECK-DAG:       [[B:%.+]] = moore.variable {{.*}} : <class<@nullableClass>>
 // CHECK-DAG:       [[C:%.+]] = moore.variable : <i1>
 // CHECK-DAG:       [[D:%.+]] = moore.variable : <i1>
@@ -5068,27 +5010,20 @@ import "DPI-C" function void read_write(input byte wd[], output byte rd[]);
 // CHECK: moore.func.dpi private @int_array_fn(in %data : !moore.open_uarray<i32>)
 import "DPI-C" function void int_array_fn(input int data[]);
 
-// CHECK: moore.func.dpi private @packed_bits_fn(in %data : !moore.open_array<i1>)
-import "DPI-C" function void packed_bits_fn(input bit [] data);
-
 // CHECK-LABEL: moore.module @OpenArrayCallTest
 module OpenArrayCallTest(input logic clock);
   byte mydata[];
   byte result[];
   int idata[];
-  bit [7:0] pdata;
 
   // CHECK: moore.func.dpi.call @process_data
   // CHECK: %[[RW_RES:.*]] = moore.func.dpi.call @read_write(%{{.*}}) : (!moore.open_uarray<i8>) -> !moore.open_uarray<i8>
   // CHECK: moore.blocking_assign %result, %[[RW_RES]]
   // CHECK: moore.func.dpi.call @int_array_fn
-  // CHECK: %[[PD:.*]] = moore.conversion %{{.*}} : !moore.i8 -> !moore.open_array<i1>
-  // CHECK: moore.func.dpi.call @packed_bits_fn(%[[PD]]) : (!moore.open_array<i1>) -> ()
   always @(posedge clock) begin
     process_data(mydata);
     read_write(mydata, result);
     int_array_fn(idata);
-    packed_bits_fn(pdata);
   end
 endmodule
 

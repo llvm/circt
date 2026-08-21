@@ -2731,6 +2731,17 @@ OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
 }
 
 namespace {
+// Returns true if replacing a register that has an initial value with a
+// foldedValue does not change the initial behavior.
+bool preservesInitial(Operation *reg, IntegerAttr initial,
+                      std::optional<APInt> foldedValue = std::nullopt) {
+  if (!initial)
+    return true;
+  if (!foldedValue)
+    return false;
+  return initial.getValue() == *foldedValue;
+}
+
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
 struct FoldResetMux : public mlir::OpRewritePattern<RegResetOp> {
@@ -2772,6 +2783,11 @@ struct FoldResetMux : public mlir::OpRewritePattern<RegResetOp> {
 
     // Ok, we know we are doing the transformation.
 
+    // Bail if replacing the register with the constant would change its
+    // time-zero simulation value.
+    if (!preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
+      return failure();
+
     // Make sure the constant dominates all users.
     if (constOp != &con->getBlock()->front())
       constOp->moveBefore(&con->getBlock()->front());
@@ -2801,6 +2817,15 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
   auto resetValue = reg.getResetValue();
   if (reg.getType(0) != resetValue.getType())
     return failure();
+
+  // Bail if replacing the register with the constant would change its
+  // time-zero simulation value.
+  if (auto constOp = dyn_cast_or_null<ConstantOp>(resetValue.getDefiningOp())) {
+    if (!preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
+      return failure();
+  } else if (!preservesInitial(reg, reg.getInitialAttr())) {
+    return failure();
+  }
 
   // Ignore 'passthrough'.
   (void)dropWrite(rewriter, reg->getResult(0), {});
@@ -3652,6 +3677,12 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 
   // Ok, we know we are doing the transformation.
 
+  // If we would fold the register to a constant, ensure the time-zero
+  // simulation value is preserved.
+  if (constReg &&
+      !preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
+    return failure();
+
   // Make sure the constant dominates all users.
   if (constOp != &con->getBlock()->front())
     constOp->moveBefore(&con->getBlock()->front());
@@ -3661,8 +3692,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
     auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
         rewriter, reg, reg.getResult().getType(), reg.getClockVal(),
         mux.getSel(), mux.getHigh(), reg.getNameAttr(), reg.getNameKindAttr(),
-        reg.getAnnotationsAttr(), reg.getInnerSymAttr(),
-        reg.getForceableAttr());
+        reg.getAnnotationsAttr(), reg.getInnerSymAttr(), reg.getForceableAttr(),
+        reg.getInitialAttr());
     newReg->setDialectAttrs(attrs);
   }
   auto pt = rewriter.saveInsertionPoint();

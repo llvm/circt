@@ -253,9 +253,8 @@ struct SextCompress : public OpRewritePattern<CompressOp> {
       auto correctionBit = isSext ? baseWidth - 1 : baseWidth;
       auto base = comb::ExtractOp::create(rewriter, op.getLoc(), input, 0,
                                           correctionBit);
-      Value repeatedBit;
-      repeatedBit = comb::ExtractOp::create(rewriter, op.getLoc(), input,
-                                            correctionBit, 1);
+      Value repeatedBit = comb::ExtractOp::create(rewriter, op.getLoc(), input,
+                                                  correctionBit, 1);
       auto invRepeatedBit =
           comb::createOrFoldNot(rewriter, op.getLoc(), repeatedBit, true);
       // Replace the repeated prefix zeros and a constant correction.

@@ -1,4 +1,6 @@
 // REQUIRES: verilator
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: rm -rf %t.dir && mkdir %t.dir
 // RUN: circt-opt --pass-pipeline="builtin.module(convert-fsm-to-sv,canonicalize,lower-seq-to-sv,export-split-verilog{dir-name=%t.dir})" %s -o /dev/null
 // RUN: circt-rtl-sim.py --compileargs="-I%t.dir/" %t.dir/top.sv %S/driver.cpp --no-default-driver | FileCheck %s

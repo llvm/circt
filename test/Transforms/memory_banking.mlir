@@ -1,3 +1,5 @@
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: circt-opt %s -split-input-file -memory-banking="factors=2" | FileCheck %s --check-prefix UNROLL-BY-2
 // RUN: circt-opt %s -split-input-file -memory-banking="factors=1" | FileCheck %s --check-prefix UNROLL-BY-1
 // RUN: circt-opt %s -split-input-file -memory-banking="factors=8" | FileCheck %s --check-prefix UNROLL-BY-8
