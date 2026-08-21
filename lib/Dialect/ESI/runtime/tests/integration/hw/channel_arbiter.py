@@ -41,6 +41,14 @@ ODD_NUM_INPUTS = 3  # non-power-of-two ("unbalanced") input count.
 PIPE_NUM_INPUTS = 6  # input count for the pipelined-mux-tree variant.
 TOKEN_NUM_INPUTS = 5  # input count for the zero-width (i0) token variant.
 TOKENS_PER_INPUT = 8  # tokens each producer emits in the token test.
+# A fan-in wide enough to exercise large-N arbitration. The BSP instantiates
+# arbiters with ~31 inputs (one per host-memory write client), a regime none of
+# the small counts above reach.
+WIDE_NUM_INPUTS = 13
+# Sustained-throughput probe: enough inputs to make a per-message turnaround
+# cycle clearly visible, while keeping simulation time short.
+THROUGHPUT_NUM_INPUTS = 4
+THROUGHPUT_WINDOW = 1000  # measurement window, in cycles.
 
 # A list-window payload: a struct with a `src` tag and a variable-length list.
 # `Window.default_of` adds a per-flit `last` field to the lowered frame struct,
@@ -266,6 +274,77 @@ class ChannelArbiterTokenTest(Module):
     esi.ChannelService.to_host(AppID("token_report"), chk.report)
 
 
+def AlwaysValidProducer(tag: int):
+  """Never idles: `valid` is tied high, so the only thing limiting the
+  arbiter's delivery rate is the arbiter itself."""
+
+  class AlwaysValidProducer(Module):
+    clk = Clock()
+    rst = Reset()
+    out = Output(Channel(UInt(32)))
+
+    @generator
+    def build(ports):
+      chan, _ready = Channel(UInt(32)).wrap(UInt(32)(tag), Bits(1)(1))
+      ports.out = chan
+
+  AlwaysValidProducer.__name__ = f"AlwaysValidProducer_{tag}"
+  return AlwaysValidProducer
+
+
+class ThroughputProbe(Module):
+  """Drains the arbiter at full rate (`ready` tied high, so the host can never
+  backpressure it) and counts delivered beats over a fixed cycle window. Holds
+  the tally on its report channel once the window closes.
+
+  Draining in hardware is the point: the host-driven tests are rate-limited by
+  the cosim DPI, so they cannot observe sustained throughput at all."""
+
+  clk = Clock()
+  rst = Reset()
+  in_ = Input(Channel(UInt(32)))
+  report = Output(Channel(UInt(32)))
+
+  @generator
+  def build(ports):
+    _data, valid = ports.in_.unwrap(Bits(1)(1))  # never backpressure.
+    cycles = Counter(32)(clk=ports.clk,
+                         rst=ports.rst,
+                         clear=Bits(1)(0),
+                         increment=Bits(1)(1))
+    running = cycles.out < UInt(32)(THROUGHPUT_WINDOW)
+    beats = Counter(32)(clk=ports.clk,
+                        rst=ports.rst,
+                        clear=Bits(1)(0),
+                        increment=valid & running)
+    # Report only once the window has closed; the value is then stable, so the
+    # host can read it whenever it gets around to it.
+    chan, _ready = Channel(UInt(32)).wrap(beats.out, ~running)
+    ports.report = chan
+
+
+class ChannelArbiterThroughputTest(Module):
+  """`THROUGHPUT_NUM_INPUTS` never-idle producers -> arbiter -> throughput
+  probe. Pins the arbiter's sustained delivery rate, which correctness tests
+  cannot observe."""
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def build(ports):
+    prods = [
+        AlwaysValidProducer(i)(clk=ports.clk, rst=ports.rst)
+        for i in range(THROUGHPUT_NUM_INPUTS)
+    ]
+    muxed = ChannelArbiter([p.out for p in prods],
+                           ports.clk,
+                           ports.rst,
+                           telemetry=False)
+    probe = ThroughputProbe(clk=ports.clk, rst=ports.rst, in_=muxed)
+    esi.ChannelService.to_host(AppID("throughput_report"), probe.report)
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
@@ -285,9 +364,15 @@ class Top(Module):
     ChannelArbiterListTest(clk=ports.clk,
                            rst=ports.rst,
                            appid=AppID("list_test"))
+    HostMux(WIDE_NUM_INPUTS)(clk=ports.clk,
+                             rst=ports.rst,
+                             appid=AppID("arbiter_test_wide"))
     ChannelArbiterTokenTest(clk=ports.clk,
                             rst=ports.rst,
                             appid=AppID("token_test"))
+    ChannelArbiterThroughputTest(clk=ports.clk,
+                                 rst=ports.rst,
+                                 appid=AppID("throughput_test"))
 
 
 if __name__ == "__main__":
