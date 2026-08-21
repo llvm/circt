@@ -40,6 +40,8 @@ def ChannelArbiter(
     output_fifo_depth: Optional[int] = None,  # default: pipe latency + _SLACK
     buffer_inputs: bool = True,               # optional per-input skid buffer
     mux_pipeline_levels: Optional[int] = None,  # pipeline the N:1 select mux tree
+    pipelined_scheduler: bool = False,        # decoupled grant-queue scheduler
+    grant_queue_depth: int = 4,               # depth of that grant queue (>= 2)
     telemetry: bool = True,
 ) -> ChannelSignal
 ```
@@ -49,6 +51,9 @@ be greater than the pipeline latency (one output register plus any
 selection-mux pipeline latency); it is validated and defaults to that plus a
 small internal slack (the private, class-scoped `ChannelArbiterImpl._SLACK`,
 currently 2). A single input is returned unchanged.
+
+`pipelined_scheduler` selects a different control implementation with a
+**different service order** — see §7.1. It is off by default.
 
 ## 5. Last-flit detection (auto from type)
 Helper `_flit_last`:
@@ -122,7 +127,10 @@ to the lower index) rather than an `O(N)` chain, so it scales to large `N`
 without dominating the arbitration path — and it is far narrower than the data
 mux regardless.
 
-## 7. Control — round-robin arbitration
+## 7. Control — round-robin arbitration (default)
+This is the default control implementation (`pipelined_scheduler=False`); §7.1
+describes the alternative.
+
 `round_robin(valids, start)` is **purely combinational** — it has no state of
 its own. It returns `(winner, any_valid)`: the lowest-index input that is *both*
 valid and at index `>= start`, or — if none qualifies — the lowest-index valid
@@ -181,6 +189,61 @@ dedicated register bit near each producer rather than a shared combinational
 decode of `grant`. With `buffer_inputs=True` a 1-deep skid buffer localizes it
 further.
 
+## 7.1 Control — decoupled grant queue (`pipelined_scheduler=True`)
+The scheme in §7 answers "who is granted next?" combinationally in the cycle the
+current message ends, which puts the whole round-robin tree inside a single-cycle
+`grant -> grant` loop. That loop is the FMax limiter at high fan-in, and it
+cannot be pipelined away, because the result is needed in the same cycle it is
+computed.
+
+`pipelined_scheduler=True` breaks the loop by decoupling decision from use:
+
+- A **grant queue** (`grant_queue_depth` entries, show-ahead) holds upcoming
+  winners. The datapath just pops it, so its next-grant path is a FIFO read, not
+  an arbitration tree.
+- A **sweep scheduler** refills the queue off the critical path: snapshot the
+  valid mask into `pending`, then emit its set bits one per cycle, lowest index
+  first, reloading the snapshot on the same cycle the last bit is queued.
+  (Reloading a cycle *later* would idle the scheduler for one cycle per sweep
+  and cap throughput at `n/(n+1)` for `n` active inputs, for **single-flit**
+  messages — multi-flit lists keep the datapath busy across the refill and hide
+  it. There is a regression test.) The only remaining single-cycle loop is
+  `pending -> lowest-set-bit -> sweep-exhausted -> pending`: one `x & -x` plus a
+  mask and a wide NOR — 5 6-LUT levels at N=32, against 7 for §7's
+  `grant -> grant` loop. It is not the arbiter's critical path: at N=32 with
+  `mux_pipeline_levels=2` the deepest path is the registered `grant_oh` decode
+  at 6 levels, so the sweep loop still has slack.
+
+**Why committing a decision early is safe.** Not because the decision stays
+accurate — ESI's ValidReady makes no stability guarantee, so a scheduled input
+may change its payload or drop `valid` before it is granted. It is safe because
+both outcomes are benign:
+
+- *Payload changed* — forward it. The arbiter chooses which input is served, not
+  which message; whatever that input offers when granted is a message it wants
+  sent.
+- *`valid` dropped* — costs at most a bubble. The grant is abandoned in one cycle
+  by the `stale` path, or the FSM parks on it if the queue has since emptied.
+
+A queued entry is therefore a hint about who to serve next, not a promise that a
+particular message is waiting.
+
+**Ordering differs from §7, deliberately.** Every input valid at snapshot time is
+*scheduled* exactly once per sweep, but that is a property of the sweep, not an
+end-to-end guarantee: the datapath may serve an input without consulting the
+queue (see `stale`/parked-grant handling in `_build_scheduler`). Service order is
+therefore best-effort. Do not enable this where exact ordering fairness is
+load-bearing.
+
+**`grant_queue_depth` is not a fairness knob.** It bounds only how many decisions
+are committed ahead of the datapath. A newly-valid input waits for the rest of
+the current sweep, then for queued grants and lower-index entries of the next
+sweep, so its latency also scales with the number of concurrently active inputs
+and can exceed `grant_queue_depth` messages when `num_inputs > grant_queue_depth`.
+
+Sustained throughput is ~1 beat/cycle, the same as §7 (and, for a single active
+input, better: §7 spends a turnaround cycle re-arbitrating at each message end).
+
 ## 8. Input buffering (optional)
 `buffer_inputs=True` (default, recommended for FMax) inserts a 1-deep skid buffer
 per input, localizing each producer's `ready`. Set it `False` when producers
@@ -198,7 +261,9 @@ their hierarchical appid path, so no per-instance name prefix is needed:
 - `maxListLen` — running max of per-message flit count.
 - `totalFlits`, `totalMessages` — host computes average list length =
   `totalFlits / totalMessages` (avoids a hardware divider).
-- `arbSwitches` — number of grant changes (contention indicator).
+- `arbSwitches` — number of grant changes (contention indicator). Under
+  `pipelined_scheduler` this counts grants loaded from the grant queue, the
+  equivalent event in that mode.
 - `inflightHighWater` — max output in-flight occupancy (`depth - credit`) to
   right-size `output_fifo_depth`.
 
