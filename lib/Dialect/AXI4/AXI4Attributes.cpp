@@ -64,6 +64,13 @@ LogicalResult BurstSetAttr::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+bool BurstSetAttr::contains(BurstSetAttr other) {
+  ArrayRef<BurstSpecAttr> specs = getBurstSpecs();
+  ArrayRef<BurstSpecAttr> subset = other.getBurstSpecs();
+  return std::includes(specs.begin(), specs.end(), subset.begin(), subset.end(),
+                       BurstSpecAttr::compareCanonical);
+}
+
 LogicalResult WindowAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                                  uint64_t base, uint64_t last,
                                  BurstSetAttr burstSpecs) {
@@ -73,6 +80,10 @@ LogicalResult WindowAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                        << " must not be less than 'base' address 0x"
                        << llvm::utohexstr(base, /*LowerCase=*/true);
   return success();
+}
+
+bool WindowAttr::overlaps(WindowAttr other) {
+  return getBase() <= other.getLast() && other.getBase() <= getLast();
 }
 
 SmallVector<WindowAttr> WindowSetAttr::normalize(MLIRContext *ctx,
@@ -126,6 +137,14 @@ WindowSetAttr::verify(function_ref<InFlightDiagnostic()> emitError,
   if (windows.empty())
     return emitError() << "'window_set' must be non-empty";
   return success();
+}
+
+bool WindowSetAttr::overlaps(WindowSetAttr other) {
+  return llvm::any_of(getWindows(), [&](WindowAttr window) {
+    return llvm::any_of(other.getWindows(), [&](WindowAttr otherWindow) {
+      return window.overlaps(otherWindow);
+    });
+  });
 }
 
 void AXI4Dialect::registerAttributes() {
