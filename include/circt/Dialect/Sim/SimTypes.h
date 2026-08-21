@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_SIM_SIMTYPES_H
 #define CIRCT_DIALECT_SIM_SIMTYPES_H
 
+#include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
