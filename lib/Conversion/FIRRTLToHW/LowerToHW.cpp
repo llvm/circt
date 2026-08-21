@@ -1971,6 +1971,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLPastIntrinsicOp op);
   LogicalResult visitExpr(LTLClockIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedAtomIntrinsicOp op);
 
   template <typename TargetOp, typename IntrinsicOp>
   LogicalResult lowerVerifIntrinsicOp(IntrinsicOp op);
@@ -4847,6 +4848,12 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
   return setLoweringToLTL<ltl::ClockOp>(op, getLoweredValue(op.getInput()),
                                         firrtlToLTLClockEdge(op.getEdge()),
                                         getLoweredNonClockValue(op.getClock()));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedAtomIntrinsicOp op) {
+  return setLoweringToLTL<ltl::ClockedAtomOp>(
+      op, getLoweredValue(op.getInput()), firrtlToLTLClockEdge(op.getEdge()),
+      getLoweredNonClockValue(op.getClock()));
 }
 
 template <typename TargetOp, typename IntrinsicOp>

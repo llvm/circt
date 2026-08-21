@@ -1839,6 +1839,14 @@ def LTLClockIntrinsicOp : LTLIntrinsicOp<"clock"> {
   }];
 }
 
+def LTLClockedAtomIntrinsicOp : LTLIntrinsicOp<"clocked_atom"> {
+  let arguments = (ins NonConstUInt1Type:$input, EventControlAttr:$edge,
+                       ClockType:$clock);
+  let assemblyFormat = [{
+    $input `,` $edge $clock attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Format String Expression operations
 //===----------------------------------------------------------------------===//
