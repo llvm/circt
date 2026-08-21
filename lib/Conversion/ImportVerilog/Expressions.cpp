@@ -3375,6 +3375,191 @@ emitScanAssignments(Context &context, const Context::ScanStringResult &result,
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// Enum Built-in Method Helpers
+//===----------------------------------------------------------------------===//
+
+/// The `next`, `prev`, and `name` built-in methods on enums have to locate the
+/// value they are called on in the list of enumerands at runtime. Slang folds
+/// these calls away wherever the value is constant, so what remains are the
+/// cases that require an actual computation. Instead of inlining that
+/// computation at every call site, we emit one helper function per enum type
+/// and method, and turn the calls into plain function calls.
+///
+/// All helpers start with a chain of blocks that compares the value against
+/// each enumerand in turn. A match branches to a common match block, carrying
+/// what the comparison found along as a block argument. Running off the end of
+/// the chain means the value is not a member of the enumeration, in which case
+/// `name` returns an empty string and `next`/`prev` return the enum's default
+/// value, as mandated by IEEE 1800-2023 § 6.19.5.
+///
+/// For `name` the block argument is the enumerand's name, which the match block
+/// simply returns. For `next` and `prev` it is the position of the value among
+/// the enumerands. The match block offsets that position by the step count,
+/// which is only known at runtime, wraps it around at both ends of the
+/// enumerand list, and uses it to index an array of all enumerand values.
+mlir::func::FuncOp
+Context::getOrCreateEnumHelper(const slang::ast::Type &type,
+                               slang::parsing::KnownSystemName method,
+                               Location loc) {
+  using ksn = slang::parsing::KnownSystemName;
+  const auto &enumType = type.getCanonicalType().as<slang::ast::EnumType>();
+  auto &slot = enumHelpers[{&enumType, method}];
+  if (slot)
+    return slot;
+  bool isName = method == ksn::Name;
+
+  // Determine the types involved before creating any IR, such that failures do
+  // not leave a half-built function behind.
+  auto valueType = dyn_cast_or_null<moore::PackedType>(convertType(enumType));
+  if (!valueType)
+    return {};
+  auto posType = moore::IntType::getInt(getContext(), 32);
+  auto resultType =
+      isName ? Type(moore::StringType::get(getContext())) : Type(valueType);
+
+  // Pick an insertion point for this helper according to the source file
+  // location of the enum declaration. Since the helper is shared between all
+  // call sites, use that location for the helper and the ops in its body rather
+  // than the location of any one of the calls.
+  OpBuilder::InsertionGuard guard(builder);
+  auto locationKey = LocationKey::get(enumType.location, sourceManager);
+  auto it = orderedRootOps.upper_bound(locationKey);
+  if (it == orderedRootOps.end())
+    builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  else
+    builder.setInsertionPoint(it->second);
+  auto helperLoc = convertLocation(enumType.location);
+
+  // Name the helper after the method and the name the enum was declared under,
+  // if any. The symbol table uniquifies the name when the function is inserted.
+  StringRef typeName = type.name;
+  auto helperName = StringAttr::get(
+      getContext(), Twine("enum.") + slang::parsing::toString(method) + "." +
+                        (typeName.empty() ? "anon" : typeName));
+
+  SmallVector<Type> argTypes{valueType};
+  if (!isName)
+    argTypes.push_back(posType);
+  auto funcOp =
+      mlir::func::FuncOp::create(builder, helperLoc, helperName,
+                                 builder.getFunctionType(argTypes, resultType));
+  SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
+
+  // The three helpers for one enum all share the enum's location key. Only the
+  // first one is recorded, which is enough to anchor the ones created after it
+  // and any root ops that sort after the enum declaration.
+  orderedRootOps.insert(it, {locationKey, funcOp});
+  symbolTable.insert(funcOp);
+  slot = funcOp;
+
+  // Materialize the enumerand values in the entry block, where they dominate
+  // both the comparison chain and the lookup table below.
+  auto &bodyRegion = funcOp.getBody();
+  auto *entryBlock = funcOp.addEntryBlock();
+  auto value = entryBlock->getArgument(0);
+  builder.setInsertionPointToEnd(entryBlock);
+  SmallVector<Value> enumerandValues;
+  for (const auto &enumerand : enumType.values()) {
+    auto constant = materializeSVInt(enumerand.getValue().integer(), enumType,
+                                     convertLocation(enumerand.location));
+    if (!constant)
+      return {};
+    enumerandValues.push_back(constant);
+  }
+
+  // Assemble the array that maps a position among the enumerands back to the
+  // corresponding value. Array elements are listed starting at the highest
+  // index, so the values go in reverse.
+  Value table;
+  if (!isName) {
+    auto tableType = moore::ArrayType::get(enumerandValues.size(), valueType);
+    table = moore::ArrayCreateOp::create(
+        builder, helperLoc, tableType,
+        SmallVector<Value>(llvm::reverse(enumerandValues)));
+  }
+
+  // Create the block that the comparison chain hands its findings to. For
+  // `name` this simply returns the name it is handed; for `next` and `prev` it
+  // receives the position of the value among the enumerands and computes the
+  // result from it.
+  auto *matchBlock = &bodyRegion.emplaceBlock();
+  matchBlock->addArgument(isName ? resultType : Type(posType), helperLoc);
+
+  // Compare the value against each enumerand in turn. A match hands over the
+  // enumerand's name for `name`, and its position for `next` and `prev`.
+  for (auto [position, enumerand] : llvm::enumerate(enumType.values())) {
+    auto enumerandLoc = convertLocation(enumerand.location);
+    auto matches = moore::CaseEqOp::create(builder, enumerandLoc, value,
+                                           enumerandValues[position]);
+    auto condition =
+        moore::ToBuiltinIntOp::create(builder, enumerandLoc, matches);
+
+    Value matchResult;
+    if (isName) {
+      auto intType =
+          moore::IntType::getInt(getContext(), enumerand.name.size() * 8);
+      auto bytes = moore::ConstantStringOp::create(builder, enumerandLoc,
+                                                   intType, enumerand.name);
+      matchResult = moore::IntToStringOp::create(builder, enumerandLoc, bytes);
+    } else {
+      matchResult = moore::ConstantOp::create(builder, enumerandLoc, posType,
+                                              static_cast<int64_t>(position));
+    }
+
+    auto *mismatchBlock = &bodyRegion.emplaceBlock();
+    mlir::cf::CondBranchOp::create(builder, enumerandLoc, condition, matchBlock,
+                                   ValueRange{matchResult}, mismatchBlock,
+                                   ValueRange{});
+    builder.setInsertionPointToEnd(mismatchBlock);
+  }
+
+  // Control reaches here if the value is not a member of the enumeration.
+  // `name` hands the empty string to the match block alongside the names from
+  // the comparison chain, while `next` and `prev` return the enum's default
+  // value directly.
+  if (isName) {
+    auto intType = moore::IntType::getInt(getContext(), 0);
+    auto bytes =
+        moore::ConstantStringOp::create(builder, helperLoc, intType, "");
+    Value empty = moore::IntToStringOp::create(builder, helperLoc, bytes);
+    mlir::cf::BranchOp::create(builder, helperLoc, matchBlock, empty);
+  } else {
+    auto fallback =
+        materializeConstant(enumType.getDefaultValue(), enumType, helperLoc);
+    if (!fallback)
+      return {};
+    mlir::func::ReturnOp::create(builder, helperLoc, fallback);
+  }
+
+  builder.setInsertionPointToEnd(matchBlock);
+  Value result = matchBlock->getArgument(0);
+  if (!isName) {
+    // Offset the position of the value by the step count, wrapping around at
+    // both ends of the enumerand list, and look the resulting position up in
+    // the table. The step count is reduced modulo the number of enumerands
+    // first, such that the offsetting cannot overflow.
+    Value numValues =
+        moore::ConstantOp::create(builder, helperLoc, posType,
+                                  static_cast<int64_t>(enumerandValues.size()));
+    Value step = moore::ModUOp::create(builder, helperLoc,
+                                       funcOp.getArgument(1), numValues);
+    if (method == ksn::Prev)
+      step = moore::SubOp::create(builder, helperLoc, numValues, step);
+    Value offset = moore::AddOp::create(builder, helperLoc, result, step);
+    Value position =
+        moore::ModUOp::create(builder, helperLoc, offset, numValues);
+    result = moore::DynExtractOp::create(builder, helperLoc, valueType, table,
+                                         position);
+  }
+  mlir::func::ReturnOp::create(builder, helperLoc, result);
+
+  // Move the match block past the comparison chain such that the blocks in the
+  // finished function appear in execution order.
+  matchBlock->moveBefore(&bodyRegion, bodyRegion.end());
+  return funcOp;
+}
+
 Value Context::convertSystemCall(
     const slang::ast::SystemSubroutine &subroutine, Location loc,
     std::span<const slang::ast::Expression *const> args) {
@@ -3892,30 +4077,23 @@ Value Context::convertSystemCall(
     return moore::AssocArrayExistsOp::create(builder, loc, array, key);
   }
 
-  // Associative array traversal methods (all take 2 arguments: array ref, key
-  // ref). These names are shared with enum built-in methods (next/prev/first/
-  // last), which take 1 or 2 arguments. Only handle the associative array case
-  // here; fall through to the unsupported diagnostic for other types.
-  if (nameId == ksn::First || nameId == ksn::Last || nameId == ksn::Next ||
-      nameId == ksn::Prev) {
-    if (args[0]->type->isAssociativeArray()) {
-      assert(numArgs == 2 && "traversal methods take 2 arguments");
-      auto array = convertLvalueExpression(*args[0]);
-      auto key = convertLvalueExpression(*args[1]);
-      if (!array || !key)
-        return {};
-      if (nameId == ksn::First)
-        return moore::AssocArrayFirstOp::create(builder, loc, array, key);
-      if (nameId == ksn::Last)
-        return moore::AssocArrayLastOp::create(builder, loc, array, key);
-      if (nameId == ksn::Next)
-        return moore::AssocArrayNextOp::create(builder, loc, array, key);
-      if (nameId == ksn::Prev)
-        return moore::AssocArrayPrevOp::create(builder, loc, array, key);
-      llvm_unreachable("all traversal cases handled above");
-    }
-    emitError(loc) << "unsupported system call `" << name << "`";
-    return {};
+  if ((nameId == ksn::First || nameId == ksn::Last || nameId == ksn::Next ||
+       nameId == ksn::Prev) &&
+      args[0]->type->isAssociativeArray()) {
+    assert(numArgs == 2 && "traversal methods take 2 arguments");
+    auto array = convertLvalueExpression(*args[0]);
+    auto key = convertLvalueExpression(*args[1]);
+    if (!array || !key)
+      return {};
+    if (nameId == ksn::First)
+      return moore::AssocArrayFirstOp::create(builder, loc, array, key);
+    if (nameId == ksn::Last)
+      return moore::AssocArrayLastOp::create(builder, loc, array, key);
+    if (nameId == ksn::Next)
+      return moore::AssocArrayNextOp::create(builder, loc, array, key);
+    if (nameId == ksn::Prev)
+      return moore::AssocArrayPrevOp::create(builder, loc, array, key);
+    llvm_unreachable("all traversal cases handled above");
   }
 
   //===--------------------------------------------------------------------===//
@@ -4048,6 +4226,48 @@ Value Context::convertSystemCall(
       return {};
     return moore::ScanEndOp::create(builder, loc, result->finalCursor)
         .getCount();
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Enum Methods
+  //===--------------------------------------------------------------------===//
+
+  // `first`, `last`, and `num` are already folded to a constant by Slang.
+
+  if (nameId == ksn::Name && args[0]->type->isEnum()) {
+    assert(numArgs == 1 && "`name` takes 1 argument");
+    auto value = convertRvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    auto helper = getOrCreateEnumHelper(*args[0]->type, nameId, loc);
+    if (!helper)
+      return {};
+    return mlir::func::CallOp::create(builder, loc, helper, ValueRange{value})
+        .getResult(0);
+  }
+
+  if ((nameId == ksn::Next || nameId == ksn::Prev) && args[0]->type->isEnum()) {
+    assert(numArgs >= 1 && numArgs <= 2 && "`next`/`prev` take 1 or 2 args");
+    auto value = convertRvalueExpression(*args[0]);
+    if (!value)
+      return {};
+
+    // The step count defaults to 1 if it is not given explicitly.
+    auto posType = moore::IntType::getInt(getContext(), 32);
+    Value count;
+    if (numArgs == 2)
+      count = convertRvalueExpression(*args[1], posType);
+    else
+      count = moore::ConstantOp::create(builder, loc, posType, 1);
+    if (!count)
+      return {};
+
+    auto helper = getOrCreateEnumHelper(*args[0]->type, nameId, loc);
+    if (!helper)
+      return {};
+    return mlir::func::CallOp::create(builder, loc, helper,
+                                      ValueRange{value, count})
+        .getResult(0);
   }
 
   // Unrecognized system call
