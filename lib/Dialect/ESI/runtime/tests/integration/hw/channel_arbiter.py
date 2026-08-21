@@ -40,15 +40,16 @@ NUM_INPUTS = 4  # power-of-two ("balanced") input count.
 ODD_NUM_INPUTS = 3  # non-power-of-two ("unbalanced") input count.
 PIPE_NUM_INPUTS = 6  # input count for the pipelined-mux-tree variant.
 TOKEN_NUM_INPUTS = 5  # input count for the zero-width (i0) token variant.
+# Sustained-throughput probe: enough inputs that a per-sweep scheduler bubble
+# would be clearly visible (it would cap throughput at n/(n+1) == 0.8) while
+# keeping simulation time short.
+THROUGHPUT_NUM_INPUTS = 4
+THROUGHPUT_WINDOW = 1000  # measurement window, in cycles.
 TOKENS_PER_INPUT = 8  # tokens each producer emits in the token test.
 # A fan-in wide enough to exercise large-N arbitration. The BSP instantiates
 # arbiters with ~31 inputs (one per host-memory write client), a regime none of
 # the small counts above reach.
 WIDE_NUM_INPUTS = 13
-# Sustained-throughput probe: enough inputs to make a per-message turnaround
-# cycle clearly visible, while keeping simulation time short.
-THROUGHPUT_NUM_INPUTS = 4
-THROUGHPUT_WINDOW = 1000  # measurement window, in cycles.
 
 # A list-window payload: a struct with a `src` tag and a variable-length list.
 # `Window.default_of` adds a per-flit `last` field to the lowered frame struct,
@@ -58,10 +59,13 @@ Flit = Window.default_of(ListInto)
 FlitLowered = Flit.lowered_type  # struct<src: ui8, items: ui16, last: i1>
 
 
-def HostMux(num_inputs: int, mux_pipeline_levels=None):
+def HostMux(num_inputs: int,
+            mux_pipeline_levels=None,
+            pipelined_scheduler=False):
   """A host-driven single-flit multiplexer: `num_inputs` `from_host` UInt(32)
   channels muxed into a single `to_host` channel. `mux_pipeline_levels` pipelines
-  the selection mux tree."""
+  the selection mux tree; `pipelined_scheduler` selects the decoupled
+  grant-queue arbitration."""
 
   class HostMux(Module):
     clk = Clock()
@@ -77,10 +81,12 @@ def HostMux(num_inputs: int, mux_pipeline_levels=None):
                            ports.clk,
                            ports.rst,
                            mux_pipeline_levels=mux_pipeline_levels,
+                           pipelined_scheduler=pipelined_scheduler,
                            telemetry=False)
       esi.ChannelService.to_host(AppID("out"), out)
 
-  HostMux.__name__ = f"HostMux_{num_inputs}_{mux_pipeline_levels}"
+  HostMux.__name__ = (
+      f"HostMux_{num_inputs}_{mux_pipeline_levels}_{pipelined_scheduler}")
   return HostMux
 
 
@@ -178,22 +184,37 @@ class ListChecker(Module):
     in_ready.assign(Mux(is_completing, Bits(1)(1), report_ready))
 
 
-class ChannelArbiterListTest(Module):
-  """Two contending list producers -> arbiter -> contiguity checker."""
+def ChannelArbiterListTestMod(pipelined_scheduler: bool):
+  """Contending list producers -> arbiter -> contiguity checker. Message
+  atomicity is the property most at risk from any arbitration change, so it is
+  covered for both arbitration modes."""
 
-  clk = Clock()
-  rst = Reset()
+  class ChannelArbiterListTest(Module):
+    clk = Clock()
+    rst = Reset()
 
-  @generator
-  def build(ports):
-    p0 = ListProducer(1, 3)(clk=ports.clk, rst=ports.rst)
-    p1 = ListProducer(2, 4)(clk=ports.clk, rst=ports.rst)
-    muxed = ChannelArbiter([p0.out, p1.out],
-                           ports.clk,
-                           ports.rst,
-                           telemetry=False)
-    chk = ListChecker(clk=ports.clk, rst=ports.rst, in_=muxed)
-    esi.ChannelService.to_host(AppID("report"), chk.report)
+    @generator
+    def build(ports):
+      # More producers than the grant-queue depth, so the scheduled variant
+      # exercises a queue that actually fills.
+      prods = [
+          ListProducer(src, 3 + (src % 3))(clk=ports.clk, rst=ports.rst)
+          for src in range(1, 7)
+      ] if pipelined_scheduler else [
+          ListProducer(1, 3)(clk=ports.clk, rst=ports.rst),
+          ListProducer(2, 4)(clk=ports.clk, rst=ports.rst),
+      ]
+      muxed = ChannelArbiter([p.out for p in prods],
+                             ports.clk,
+                             ports.rst,
+                             pipelined_scheduler=pipelined_scheduler,
+                             telemetry=False)
+      chk = ListChecker(clk=ports.clk, rst=ports.rst, in_=muxed)
+      esi.ChannelService.to_host(AppID("report"), chk.report)
+
+  ChannelArbiterListTest.__name__ = (
+      f"ChannelArbiterListTest_{pipelined_scheduler}")
+  return ChannelArbiterListTest
 
 
 def TokenProducer(count: int):
@@ -323,26 +344,33 @@ class ThroughputProbe(Module):
     ports.report = chan
 
 
-class ChannelArbiterThroughputTest(Module):
+def ChannelArbiterThroughputTestMod(pipelined_scheduler: bool):
   """`THROUGHPUT_NUM_INPUTS` never-idle producers -> arbiter -> throughput
-  probe. Pins the arbiter's sustained delivery rate, which correctness tests
-  cannot observe."""
+  probe. Pins the arbiter's sustained delivery rate: a scheduler which needs a
+  refill/turnaround cycle between grants shows up here as a throughput well
+  below one beat per cycle, while correctness tests stay green."""
 
-  clk = Clock()
-  rst = Reset()
+  class ChannelArbiterThroughputTest(Module):
+    clk = Clock()
+    rst = Reset()
 
-  @generator
-  def build(ports):
-    prods = [
-        AlwaysValidProducer(i)(clk=ports.clk, rst=ports.rst)
-        for i in range(THROUGHPUT_NUM_INPUTS)
-    ]
-    muxed = ChannelArbiter([p.out for p in prods],
-                           ports.clk,
-                           ports.rst,
-                           telemetry=False)
-    probe = ThroughputProbe(clk=ports.clk, rst=ports.rst, in_=muxed)
-    esi.ChannelService.to_host(AppID("throughput_report"), probe.report)
+    @generator
+    def build(ports):
+      prods = [
+          AlwaysValidProducer(i)(clk=ports.clk, rst=ports.rst)
+          for i in range(THROUGHPUT_NUM_INPUTS)
+      ]
+      muxed = ChannelArbiter([p.out for p in prods],
+                             ports.clk,
+                             ports.rst,
+                             pipelined_scheduler=pipelined_scheduler,
+                             telemetry=False)
+      probe = ThroughputProbe(clk=ports.clk, rst=ports.rst, in_=muxed)
+      esi.ChannelService.to_host(AppID("throughput_report"), probe.report)
+
+  ChannelArbiterThroughputTest.__name__ = (
+      f"ChannelArbiterThroughputTest_{pipelined_scheduler}")
+  return ChannelArbiterThroughputTest
 
 
 class Top(Module):
@@ -361,18 +389,32 @@ class Top(Module):
             mux_pipeline_levels=1)(clk=ports.clk,
                                    rst=ports.rst,
                                    appid=AppID("arbiter_test_pipe"))
-    ChannelArbiterListTest(clk=ports.clk,
-                           rst=ports.rst,
-                           appid=AppID("list_test"))
     HostMux(WIDE_NUM_INPUTS)(clk=ports.clk,
                              rst=ports.rst,
                              appid=AppID("arbiter_test_wide"))
+    HostMux(WIDE_NUM_INPUTS,
+            pipelined_scheduler=True)(clk=ports.clk,
+                                      rst=ports.rst,
+                                      appid=AppID("arbiter_test_sched"))
+    HostMux(ODD_NUM_INPUTS,
+            pipelined_scheduler=True)(clk=ports.clk,
+                                      rst=ports.rst,
+                                      appid=AppID("arbiter_test_sched_odd"))
+    ChannelArbiterListTestMod(False)(clk=ports.clk,
+                                     rst=ports.rst,
+                                     appid=AppID("list_test"))
+    ChannelArbiterListTestMod(True)(clk=ports.clk,
+                                    rst=ports.rst,
+                                    appid=AppID("list_test_sched"))
     ChannelArbiterTokenTest(clk=ports.clk,
                             rst=ports.rst,
                             appid=AppID("token_test"))
-    ChannelArbiterThroughputTest(clk=ports.clk,
-                                 rst=ports.rst,
-                                 appid=AppID("throughput_test"))
+    ChannelArbiterThroughputTestMod(False)(clk=ports.clk,
+                                           rst=ports.rst,
+                                           appid=AppID("throughput_test"))
+    ChannelArbiterThroughputTestMod(True)(clk=ports.clk,
+                                          rst=ports.rst,
+                                          appid=AppID("throughput_test_sched"))
 
 
 if __name__ == "__main__":

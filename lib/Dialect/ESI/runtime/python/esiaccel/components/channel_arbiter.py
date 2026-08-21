@@ -18,7 +18,7 @@ from pycde.constructs import Counter, Mux, Reg, Wire
 from pycde.esi import Telemetry
 from pycde.module import modparams
 from pycde.seq import FIFO as SeqFIFO
-from pycde.signals import BitsSignal, ChannelSignal, ClockSignal, Signal
+from pycde.signals import (BitsSignal, ChannelSignal, ClockSignal, Or, Signal)
 from pycde.support import clog2
 from pycde.types import (Array, Bits, Channel, ChannelSignaling, StructType,
                          UInt, Window)
@@ -79,6 +79,135 @@ def _select_mux(sel: BitsSignal, values: List[BitsSignal], clk: ClockSignal,
       cur = [c.reg(clk, rst) for c in cur]
       rem = rem.reg(clk, rst)
   return cur[0]
+
+
+def _onehot_to_index(onehot: BitsSignal, num_inputs: int,
+                     gw: int) -> BitsSignal:
+  """Encode a one-hot bit-vector to its binary index. Bit `b` of the result is
+  the OR of the one-hot bits whose index has bit `b` set."""
+  bits = []
+  for b in range(gw):
+    terms = [onehot[i] for i in range(num_inputs) if (i >> b) & 1]
+    bits.append(Or(*terms) if terms else Bits(1)(0))
+  return BitsSignal.concat(list(reversed(bits)))
+
+
+def _build_scheduler(
+    clk: ClockSignal, rst: Signal, num_inputs: int, gw: int,
+    valids: List[BitsSignal], grant: BitsSignal, busy: BitsSignal,
+    launch: BitsSignal, msg_end: BitsSignal,
+    queue_depth: int) -> Tuple[BitsSignal, BitsSignal, BitsSignal]:
+  """Decoupled, pipelinable grant scheduler. Returns `(next_grant, next_busy,
+  switch)`, where `switch` is high on cycles the grant is (re)loaded from the
+  queue -- the scheduler-mode analogue of the flat arbiter's re-arbitration,
+  used for telemetry.
+
+  The flat arbiter must answer "who is granted next?" combinationally in the
+  cycle the current message ends, which puts the whole round-robin tree inside a
+  single-cycle `grant -> grant` loop -- the dominant timing limiter at high
+  fan-in. Here the two are decoupled: a **grant queue** holds upcoming winners,
+  the datapath just pops it, and a **sweep scheduler** refills it off the
+  critical path.
+
+  Committing a decision ahead of use is safe not because the decision stays
+  accurate, but because both ways it can go stale are benign. ESI's ValidReady
+  makes no stability guarantee: an input may change its payload or drop `valid`
+  after being scheduled.
+
+  * Payload changed -- forward it. The arbiter selects *which* input is served,
+    not which message; whatever that input is offering when granted is a
+    message it wants sent.
+  * `valid` dropped -- costs at most a bubble, never correctness. The grant is
+    abandoned in one cycle by `stale` below, or, if the queue has since
+    emptied, the FSM parks on it until that input has something (see the
+    ordering note below).
+
+  So a queued decision is a hint about who to serve next, not a promise that a
+  particular message is waiting.
+
+  Scheduling policy (a "sweep"): snapshot the valid mask into `pending`, then
+  emit its set bits one per cycle, lowest index first, reloading the snapshot on
+  the same cycle the last bit is queued. Every input valid at snapshot time is
+  therefore *scheduled* exactly once per sweep. The only logic left in a
+  single-cycle loop is `pending -> lowest-set-bit -> sweep-exhausted -> pending`:
+  one `x & -x` (a carry chain), a mask, and a wide NOR. Mapped to 6-LUTs that is
+  5 levels at N=32, against 7 for the flat arbiter's `grant -> grant` loop, so
+  it is still the shallower of the two.
+
+  Note that this is a property of the sweep, not an end-to-end ordering
+  guarantee: the datapath can serve an input without consulting the queue. If a
+  grant is popped for an input that turns out to have nothing and the queue
+  then empties, `stale` (gated on `q_nonempty`) cannot fire and the FSM parks
+  on that grant with its `ready` still asserted, so the next message from that
+  input is served immediately, ahead of the queue. This is bounded -- `busy`
+  drops at that `msg_end` and any newly-valid input recovers via `stale` as
+  soon as the sweep pushes an entry -- but it does make the service order
+  best-effort rather than exact. Do not rely on it where ordering fairness is
+  load-bearing.
+
+  A backlogged input is re-snapshotted every sweep, so it keeps its grants
+  flowing back to back and a lone active input still runs at full rate.
+
+  Latency for a newly-valid input is *not* bounded by `queue_depth` alone. An
+  input which goes valid just after a snapshot waits for the rest of the
+  current sweep to be enqueued, then for any already-queued grants and for the
+  lower-index entries of the next sweep -- so the wait scales with the number
+  of concurrently active inputs as well, and with `num_inputs > queue_depth` it
+  can exceed `queue_depth` messages. `queue_depth` bounds only the number of
+  decisions committed ahead of the datapath, i.e. how stale the queue's view
+  can be; it is not a fairness knob.
+
+  An entry whose input has since gone idle (over-scheduled, or drained by
+  another route) is skipped in a single cycle rather than stalling the output:
+  see `stale` below. `started` distinguishes "this grant has not delivered a
+  flit yet" (safe to abandon) from "mid-message" (must not be abandoned, or the
+  message would be split)."""
+
+  # Grant queue. `rd_latency=0` makes it show-ahead, so `q_head` is a
+  # registered value available the same cycle -- popping introduces no bubble.
+  gq = SeqFIFO(Bits(gw), queue_depth, clk, rst)
+  q_pop = Wire(Bits(1), "gq_pop")
+  q_head = gq.pop(q_pop)
+  q_nonempty = ~gq.empty
+
+  # ---- Sweep scheduler (off the datapath's critical path). ----
+  pending = Reg(Bits(num_inputs), clk, rst, rst_value=0, name="sched_pending")
+  valids_vec = BitsSignal.concat(list(reversed(valids)))
+  pend_nonzero = pending != Bits(num_inputs)(0)
+  # Isolate the lowest set bit: x & (-x), with -x == ~x + 1.
+  neg_pending = ((~pending).as_uint(num_inputs) +
+                 UInt(num_inputs)(1)).as_bits(num_inputs)
+  low = pending & neg_pending
+  push = pend_nonzero & ~gq.full
+  gq.push(_onehot_to_index(low, num_inputs, gw), push)
+  # Clear the bit just scheduled (or hold if the queue is full), and reload the
+  # snapshot as soon as the sweep is exhausted. The reload has to happen on the
+  # *same* cycle the last bit is pushed: deferring it to the cycle after
+  # `pending` reads zero costs one idle cycle per sweep, capping throughput at
+  # `n/(n+1)` for `n` concurrently-active inputs. That only bites for
+  # single-flit messages; with multi-flit lists the datapath is still streaming
+  # the current message while the sweep refills, so the bubble is hidden.
+  cleared = pending & ~low
+  sweep_done = push & (cleared == Bits(num_inputs)(0))
+  pending.assign(
+      Mux(~pend_nonzero | sweep_done, Mux(push, pending, cleared), valids_vec))
+
+  # ---- Datapath grant FSM. ----
+  started = Reg(Bits(1), clk, rst, rst_value=0, name="grant_started")
+  sel_valid_now = Or(
+      *[valids[i] & (grant == Bits(gw)(i)) for i in range(num_inputs)])
+  # Abandon a grant that has not yet delivered a flit and whose input is not
+  # offering one, but only when there is someone else to serve.
+  stale = busy & ~started & ~sel_valid_now & q_nonempty
+  advance = msg_end | stale
+  take_next = ~busy | advance
+  q_pop.assign(take_next & q_nonempty)
+
+  next_grant = Mux(take_next & q_nonempty, grant, q_head)
+  next_busy = Mux(take_next, busy, q_nonempty)
+  started.assign(Mux(take_next, Mux(launch, started, Bits(1)(1)), Bits(1)(0)))
+  # The grant is replaced by a queued decision exactly when it is popped.
+  return next_grant, next_busy, q_pop
 
 
 @modparams
@@ -146,7 +275,8 @@ def RoundRobinArbiterMod(num_inputs: int):
 @modparams
 def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
                       output_fifo_depth: int, buffer_inputs: bool,
-                      telemetry: bool, mux_pipeline_levels: Optional[int]):
+                      telemetry: bool, mux_pipeline_levels: Optional[int],
+                      pipelined_scheduler: bool, grant_queue_depth: int):
   """Build a pipelined, list-aware N:1 channel multiplexer module. See the
   `ChannelArbiter` convenience function for the user-facing entry point and
   `docs/components/ChannelArbiter.md` for the design."""
@@ -239,7 +369,8 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
       # below). ----
       grant = Reg(Bits(gw), clk, rst, name="grant")
       busy = Reg(Bits(1), clk, rst, name="busy")
-      rr_ptr = Reg(Bits(gw), clk, rst, name="rr_ptr")
+      if not pipelined_scheduler:
+        rr_ptr = Reg(Bits(gw), clk, rst, name="rr_ptr")
       credit = Reg(UInt(cw), clk, rst, rst_value=depth, name="credit")
 
       credit_gt0 = credit > UInt(cw)(0)
@@ -317,43 +448,52 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
                      launch.as_uint(cw)).as_uint(cw)
       credit.assign(next_credit)
 
-      # ---- Round-robin arbitration (own module for waveform visibility). ----
-      rr_arbiter = RoundRobinArbiterMod(num_inputs)
+      # ---- Arbitration. ----
+      if pipelined_scheduler:
+        next_grant, next_busy, arb_switch = _build_scheduler(
+            clk, rst, num_inputs, gw, valids, grant, busy, launch, msg_end,
+            grant_queue_depth)
+        grant.assign(next_grant)
+        busy.assign(next_busy)
+      else:
+        # ---- Round-robin arbitration (own module for waveform visibility). --
+        rr_arbiter = RoundRobinArbiterMod(num_inputs)
 
-      def round_robin(valid_list: List[BitsSignal], start: BitsSignal,
-                      name: str) -> Tuple[BitsSignal, BitsSignal]:
-        """Instantiate a RoundRobinArbiter over `valid_list` (packed into a
-        bit-bus, bit `i` == input `i`) starting from `start`."""
-        valids_vec = BitsSignal.concat(list(reversed(valid_list)))
-        inst = rr_arbiter(valids=valids_vec, start=start, instance_name=name)
-        return inst.winner, inst.any_valid
+        def round_robin(valid_list: List[BitsSignal], start: BitsSignal,
+                        name: str) -> Tuple[BitsSignal, BitsSignal]:
+          """Instantiate a RoundRobinArbiter over `valid_list` (packed into a
+          bit-bus, bit `i` == input `i`) starting from `start`."""
+          valids_vec = BitsSignal.concat(list(reversed(valid_list)))
+          inst = rr_arbiter(valids=valids_vec, start=start, instance_name=name)
+          return inst.winner, inst.any_valid
 
-      grant_u = grant.as_uint(gw)
-      is_last_idx = grant == Bits(gw)(num_inputs - 1)
-      grant_p1 = Mux(is_last_idx, (grant_u + UInt(gw)(1)).as_bits(gw),
-                     Bits(gw)(0))
+        grant_u = grant.as_uint(gw)
+        is_last_idx = grant == Bits(gw)(num_inputs - 1)
+        grant_p1 = Mux(is_last_idx, (grant_u + UInt(gw)(1)).as_bits(gw),
+                       Bits(gw)(0))
 
-      winner_idle, any_idle = round_robin(valids, rr_ptr, "rr_idle")
-      # At a message end the just-consumed input still asserts `valid` this
-      # cycle (the flit is consumed on the clock edge), so mask it out of the
-      # re-arbitration. Otherwise the round-robin wrap-around would
-      # speculatively re-grant that stale valid and the FSM would get stuck
-      # `busy` on an input that goes empty next cycle. A genuinely backlogged
-      # input is re-selected on the following idle cycle instead.
-      valids_next = [valids[i] & ~grant_is[i] for i in range(num_inputs)]
-      winner_next, any_next = round_robin(valids_next, grant_p1, "rr_next")
+        winner_idle, any_idle = round_robin(valids, rr_ptr, "rr_idle")
+        # At a message end the just-consumed input still asserts `valid` this
+        # cycle (the flit is consumed on the clock edge), so mask it out of the
+        # re-arbitration. Otherwise the round-robin wrap-around would
+        # speculatively re-grant that stale valid and the FSM would get stuck
+        # `busy` on an input that goes empty next cycle. A genuinely backlogged
+        # input is re-selected on the following idle cycle instead.
+        valids_next = [valids[i] & ~grant_is[i] for i in range(num_inputs)]
+        winner_next, any_next = round_robin(valids_next, grant_p1, "rr_next")
 
-      pick = ~busy & any_idle
-      reend = busy & msg_end
-      grant_if_not_reend = Mux(pick, grant, winner_idle)
-      next_grant = Mux(reend, grant_if_not_reend, winner_next)
-      busy_if_not_reend = Mux(pick, busy, Bits(1)(1))
-      next_busy = Mux(reend, busy_if_not_reend, any_next)
-      next_rr = Mux(reend, rr_ptr, grant_p1)
+        pick = ~busy & any_idle
+        reend = busy & msg_end
+        grant_if_not_reend = Mux(pick, grant, winner_idle)
+        next_grant = Mux(reend, grant_if_not_reend, winner_next)
+        busy_if_not_reend = Mux(pick, busy, Bits(1)(1))
+        next_busy = Mux(reend, busy_if_not_reend, any_next)
+        next_rr = Mux(reend, rr_ptr, grant_p1)
 
-      grant.assign(next_grant)
-      busy.assign(next_busy)
-      rr_ptr.assign(next_rr)
+        grant.assign(next_grant)
+        busy.assign(next_busy)
+        rr_ptr.assign(next_rr)
+        arb_switch = pick | (reend & any_next)
 
       # Register the one-hot grant decode -- one register per input -- so each
       # (potentially high-fanout) per-input grant signal is driven by its own
@@ -389,7 +529,7 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
         arb_switches = Counter(64)(clk=clk,
                                    rst=rst,
                                    clear=Bits(1)(0),
-                                   increment=pick | (reend & any_next))
+                                   increment=arb_switch)
         Telemetry.report_signal(clk, rst, AppID("arbSwitches"),
                                 arb_switches.out)
 
@@ -420,6 +560,8 @@ def ChannelArbiter(input_channels: List[ChannelSignal],
                    output_fifo_depth: Optional[int] = None,
                    buffer_inputs: bool = True,
                    mux_pipeline_levels: Optional[int] = None,
+                   pipelined_scheduler: bool = False,
+                   grant_queue_depth: int = 4,
                    telemetry: bool = True) -> ChannelSignal:
   """Build a pipelined, list-aware N:1 channel multiplexer.
 
@@ -446,6 +588,17 @@ def ChannelArbiter(input_channels: List[ChannelSignal],
       levels (1 = register every level). This retimes the wide selection mux
       for very large fan-in; the added latency is absorbed by the output FIFO /
       credit counter. `None` (default) uses a flat combinational mux.
+    pipelined_scheduler: decouple grant selection from the datapath using a
+      grant queue fed by a sweep scheduler, instead of re-arbitrating
+      combinationally at each message end. This takes the round-robin tree out
+      of the single-cycle `grant -> grant` loop, which is the Fmax limiter at
+      high fan-in. Changes the service order (see `_build_scheduler`).
+    grant_queue_depth: depth of that grant queue -- how many grant decisions
+      may be committed ahead of the datapath. Must be >= 2: a single entry
+      cannot keep the datapath fed back to back, so every message would cost a
+      refill bubble. This is not a fairness knob; a newly-valid input's wait
+      also scales with the number of concurrently active inputs (see
+      `_build_scheduler`).
     telemetry: emit telemetry (selected channel, list-length stats, etc.).
 
   See `docs/components/ChannelArbiter.md`."""
@@ -468,8 +621,18 @@ def ChannelArbiter(input_channels: List[ChannelSignal],
     raise ValueError(
         f"mux_pipeline_levels must be >= 1, got {mux_pipeline_levels}")
 
+  # Validated here rather than left to the FIFO: a bad depth otherwise surfaces
+  # as a `seq.fifo` verifier error from deep inside the lowering, with no
+  # mention of the knob that caused it. Depth 1 is rejected too -- `push` is
+  # blocked whenever the queue is non-empty, so a single entry can never keep
+  # the datapath fed back to back and every message would cost a refill
+  # bubble, silently undoing the Fmax win the option exists for.
+  if pipelined_scheduler and grant_queue_depth < 2:
+    raise ValueError(f"grant_queue_depth must be >= 2, got {grant_queue_depth}")
+
   mod = ChannelArbiterMod(channel_type, num_inputs, output_fifo_depth,
-                          buffer_inputs, telemetry, mux_pipeline_levels)
+                          buffer_inputs, telemetry, mux_pipeline_levels,
+                          pipelined_scheduler, grant_queue_depth)
   inputs_array = Array(channel_type, num_inputs)(input_channels)
   inst = mod(clk=clk, rst=rst, inputs=inputs_array, appid=appid)
   return inst.output
