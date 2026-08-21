@@ -29,6 +29,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
+#include "circt/Dialect/ICE40/ICE40Dialect.h"
 #include "circt/Dialect/Interop/InteropDialect.h"
 #include "circt/Dialect/Kanagawa/KanagawaDialect.h"
 #include "circt/Dialect/LLHD/LLHDDialect.h"
@@ -74,6 +75,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     handshake::HandshakeDialect,
     hw::HWDialect,
     hwarith::HWArithDialect,
+    ice40::ICE40Dialect,
     interop::InteropDialect,
     kanagawa::KanagawaDialect,
     llhd::LLHDDialect,
