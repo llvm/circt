@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-circt:
-    name: "${{ matrix.compiler }}/${{ matrix.build-type }}/${{ matrix.build-shared == 'ON' && 'shared' || 'static' }}-libs/asserts-${{ matrix.build-assert == 'ON' && 'on' || 'off' }}${{ matrix.valgrind && '/valgrind' || '' }}"
+    name: "${{ matrix.compiler }}/${{ matrix.build-type }}/${{ matrix.build-shared == 'ON' && 'shared' || 'static' }}-libs/asserts-${{ matrix.build-assert == 'ON' && 'on' || 'off' }}${{ matrix.valgrind && '/valgrind' || '' }}${{ matrix.expensive-pattern-checks == 'ON' && '/expensive-pattern-checks' || '' }}"
     strategy:
       fail-fast: false
       matrix:
