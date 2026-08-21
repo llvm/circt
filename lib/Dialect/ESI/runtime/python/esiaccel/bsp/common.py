@@ -1515,11 +1515,15 @@ def HostmemReadProcessor(
       # list-aware, pipelined ChannelArbiter (vs. the combinational ChannelMux)
       # for a registered N:1 mux that closes timing at high client fan-in. Read
       # requests are single-flit, so list-awareness is a no-op here.
+      # `mux_pipeline_levels=2` retimes the wide payload selection mux, whose
+      # depth otherwise grows as log2(num_clients); the added latency is
+      # absorbed by the arbiter's output FIFO / credit counter.
       # TODO: Don't release a request until the client is ready to accept
       # the response otherwise the system could deadlock.
       muxed_client_reqs = ChannelArbiter(tagged_client_reqs,
                                          ports.clk,
                                          ports.rst,
+                                         mux_pipeline_levels=2,
                                          telemetry=False)
       upstream_req_channel.assign(muxed_client_reqs)
       HostmemReadProcessorImpl.reqPortMap.clear()
@@ -1899,9 +1903,13 @@ def HostMemWriteProcessor(
       # awareness -- via the frame's 'last' -- to keep a client's words
       # contiguous; single-word (<= engine width) clients emit one message per
       # word, for which single-flit arbitration is correct.
+      # `mux_pipeline_levels=2` retimes the (wide -- a full engine word plus
+      # address) payload selection mux; the added latency is absorbed by the
+      # arbiter's output FIFO / credit counter.
       muxed_write_channel = ChannelArbiter(write_channels,
                                            ports.clk,
                                            ports.rst,
+                                           mux_pipeline_levels=2,
                                            telemetry=False)
       upstream_req_channel.assign(muxed_write_channel)
 

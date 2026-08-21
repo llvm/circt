@@ -38,6 +38,9 @@ ODD_NUM_INPUTS = 3  # non-power-of-two ("unbalanced") input count.
 PIPE_NUM_INPUTS = 6  # input count for the pipelined-mux-tree variant.
 TOKEN_NUM_INPUTS = 5  # input count for the zero-width (i0) token variant.
 TOKENS_PER_INPUT = 8  # tokens each producer emits in the token test.
+WIDE_NUM_INPUTS = 13  # must match hw/channel_arbiter.py.
+THROUGHPUT_NUM_INPUTS = 4  # must match hw/channel_arbiter.py.
+THROUGHPUT_WINDOW = 1000  # measurement window in cycles; must match hw.
 
 
 def _check_mux(conn: AcceleratorConnection, dut_name: str,
@@ -140,3 +143,25 @@ class TestChannelArbiterCosim:
       value = report.read().result()
       assert value == expected, \
           f"token {expected} arrived as {value} (loss / duplication / reorder)"
+
+  def test_mux_correctness_wide(self, conn: AcceleratorConnection) -> None:
+    """Wide fan-in: the small counts above are far below what the BSP
+    instantiates, and the selection mux depth grows with the input count."""
+    _check_mux(conn, "arbiter_test_wide", WIDE_NUM_INPUTS)
+
+  def test_throughput(self, conn: AcceleratorConnection) -> None:
+    """The arbiter sustains ~one beat per cycle with every input backlogged.
+
+    Correctness tests cannot see this: they are rate-limited by the cosim DPI,
+    so a per-message turnaround bubble would pass them unnoticed. The probe
+    drains the arbiter in hardware instead."""
+    acc = conn.build_accelerator()
+    dut = acc.children[esiaccel.AppID("throughput_test")]
+    report = dut.ports[esiaccel.AppID("throughput_report")]
+    report.connect()
+
+    beats = report.read().result()
+    throughput = beats / THROUGHPUT_WINDOW
+    # Allow for pipeline fill at the start of the window.
+    assert throughput >= 0.95, (f"{beats} beats in {THROUGHPUT_WINDOW} cycles "
+                                f"({throughput:.3f}/cycle); expected >= 0.95")
