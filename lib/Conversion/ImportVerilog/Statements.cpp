@@ -932,15 +932,29 @@ struct StmtVisitor {
       else if (stmt.isDeferred)
         defer = moore::DeferAssert::Observed;
 
+      // Extract the source text of the assert/assume/cover condition.
+      StringAttr label{};
+      auto srcRange = stmt.cond.sourceRange;
+      if (srcRange.start().valid() && srcRange.end().valid() &&
+          srcRange.start().buffer() == srcRange.end().buffer()) {
+        auto srcText =
+            context.sourceManager.getSourceText(srcRange.start().buffer());
+        auto start = srcRange.start().offset();
+        auto end = srcRange.end().offset();
+        if (start < end && end <= srcText.size())
+          label = StringAttr::get(context.getContext(),
+                                  srcText.substr(start, end - start));
+      }
+
       switch (stmt.assertionKind) {
       case slang::ast::AssertionKind::Assert:
-        moore::AssertOp::create(builder, loc, defer, cond, StringAttr{});
+        moore::AssertOp::create(builder, loc, defer, cond, label);
         return success();
       case slang::ast::AssertionKind::Assume:
-        moore::AssumeOp::create(builder, loc, defer, cond, StringAttr{});
+        moore::AssumeOp::create(builder, loc, defer, cond, label);
         return success();
       case slang::ast::AssertionKind::CoverProperty:
-        moore::CoverOp::create(builder, loc, defer, cond, StringAttr{});
+        moore::CoverOp::create(builder, loc, defer, cond, label);
         return success();
       default:
         break;
