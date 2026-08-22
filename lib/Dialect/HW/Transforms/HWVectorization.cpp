@@ -177,6 +177,12 @@ public:
         }
       }
 
+      // 3. Fallback to Partial Vectorization
+      if (!transformed && canApplyPartialVectorization(oldOutputVal)) {
+        applyPartialVectorization(rewriter, oldOutputVal, bitWidth);
+        transformed = true;
+      }
+
       if (transformed)
         changed = true;
     }
@@ -516,6 +522,84 @@ private:
         rewriter, loc, rewriter.getIntegerType(bitWidth), chunks);
 
     oldOutputVal.replaceAllUsesWith(newVal);
+  }
+
+  /// Checks if all bits of the output have a valid, traceable source
+  /// to allow partial vectorization.
+  bool canApplyPartialVectorization(Value oldOutputVal) {
+    unsigned bitWidth = cast<IntegerType>(oldOutputVal.getType()).getWidth();
+    if (bitWidth <= 1)
+      return false;
+
+    for (unsigned i = 0; i < bitWidth; ++i) {
+      if (!findBitSource(oldOutputVal, i))
+        return false;
+    }
+    return true;
+  }
+
+  /// Applies partial vectorization by grouping adjacent bits from the same
+  /// source into wider ExtractOps, and combining everything with a ConcatOp.
+  void applyPartialVectorization(IRRewriter &rewriter, Value oldOutputVal,
+                                 unsigned bitWidth) {
+    rewriter.setInsertionPointAfterValue(oldOutputVal);
+    Location loc = oldOutputVal.getLoc();
+
+    SmallVector<Value> chunks;
+
+    for (int i = bitWidth - 1; i >= 0;) {
+      Value bitSource = findBitSource(oldOutputVal, i);
+      if (!bitSource)
+        return;
+
+      Operation *sourceOp = bitSource.getDefiningOp();
+      int len = 1;
+
+      if (auto extractOp = dyn_cast_or_null<comb::ExtractOp>(sourceOp)) {
+        // Try to group adjacent bits that come from the exact same input vector
+        while ((i - len) >= 0) {
+          Value nextBitSource = findBitSource(oldOutputVal, i - len);
+          auto nextExtractOp =
+              dyn_cast_or_null<comb::ExtractOp>(nextBitSource.getDefiningOp());
+
+          // Check if the next bit is consecutive
+          if (nextExtractOp &&
+              nextExtractOp.getInput() == extractOp.getInput() &&
+              nextExtractOp.getLowBit() == extractOp.getLowBit() - len) {
+            len++;
+          } else {
+            break;
+          }
+        }
+
+        // Create a single, wider ExtractOp for the grouped bits
+        Value sourceVec = extractOp.getInput();
+        unsigned extractLowBit = extractOp.getLowBit() - (len - 1);
+
+        Value extractedChunk =
+            comb::ExtractOp::create(rewriter, loc, rewriter.getIntegerType(len),
+                                    sourceVec, extractLowBit);
+        chunks.push_back(extractedChunk);
+      } else {
+        // Not an ExtractOp, just push the individual bit
+        chunks.push_back(bitSource);
+      }
+
+      // Move to the next index after the chunk just processed
+      i -= len;
+    }
+
+    // If everything was grouped into a single chunk matching the output width,
+    // a ConcatOp is unnecessary.
+    if (chunks.size() == 1 &&
+        cast<IntegerType>(chunks[0].getType()).getWidth() == bitWidth) {
+      oldOutputVal.replaceAllUsesWith(chunks[0]);
+      return;
+    }
+
+    Value newOutputVal = comb::ConcatOp::create(
+        rewriter, loc, rewriter.getIntegerType(bitWidth), chunks);
+    oldOutputVal.replaceAllUsesWith(newOutputVal);
   }
 
   /// Single walk that handles ExtractOp and ConcatOp using TypeSwitch.
