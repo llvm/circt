@@ -164,7 +164,7 @@ ssp.instance @mco_outgoing_delays of "ChainingProblem" {
   }
 }
 
-// CHECK: ssp.instance @multiple_oprs of "SharedOperatorsProblem" {
+// CHECK: ssp.instance @multiple_oprs of "SharedResourcesProblem" {
 // CHECK:   library {
 // CHECK:     operator_type @slowAdd [latency<3>]
 // CHECK:     operator_type @fastAdd [latency<1>]
@@ -185,7 +185,7 @@ ssp.instance @mco_outgoing_delays of "ChainingProblem" {
 // CHECK:     operation<@_1>() [t<10>]
 // CHECK:   }
 // CHECK: }
-ssp.instance @multiple_oprs of "SharedOperatorsProblem" {
+ssp.instance @multiple_oprs of "SharedResourcesProblem" {
   library {
     operator_type @slowAdd [latency<3>]
     operator_type @fastAdd [latency<1>]
