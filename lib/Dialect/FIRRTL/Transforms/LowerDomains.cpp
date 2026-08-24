@@ -20,7 +20,7 @@
 //
 // Intuitively, (1) is the information that a user must specify about a domain
 // and (2) is associations plus accumulated Registry assets.  Registry fields
-// are Lists on (2); local domain.register paths are concatenated with child
+// are Lists on (2); local domain.insert paths are concatenated with child
 // instance A_out.<registry>_registry_out contributions and driven into
 // A_object.
 //
@@ -675,11 +675,11 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
-      // Collect domain.register contributions. Registry destinations always
+      // Collect domain.insert contributions. Registry destinations always
       // come from domain.subfield; keep those ops alive until here.
-      if (auto registerOp = dyn_cast<DomainRegisterOp>(walkOp)) {
+      if (auto insertOp = dyn_cast<DomainInsertOp>(walkOp)) {
         auto subfieldOp =
-            cast<DomainSubfieldOp>(registerOp.getDest().getDefiningOp());
+            cast<DomainSubfieldOp>(insertOp.getDest().getDefiningOp());
         auto domainType =
             firrtl::type_cast<DomainType>(subfieldOp.getInput().getType());
         auto &domainClasses =
@@ -689,18 +689,18 @@ LogicalResult LowerModule::lowerModule() {
 
         auto portIt = domainValueToPort.find(subfieldOp.getInput());
         if (portIt == domainValueToPort.end()) {
-          registerOp.emitOpError(
-              "registers into a domain that is not a module domain port");
+          insertOp.emitOpError(
+              "inserts into a domain that is not a module domain port");
           return WalkResult::interrupt();
         }
 
         localRegistryPaths[portIt->second][fieldLowering.slot].push_back(
-            registerOp.getSrc());
-        // Drop the register immediately.  Multiple register ops may share the
+            insertOp.getSrc());
+        // Drop the insert immediately.  Multiple insert ops may share the
         // same domain.subfield destination, so only erase the subfield once it
         // has no remaining users.
         Value domainInput = subfieldOp.getInput();
-        registerOp.erase();
+        insertOp.erase();
         if (subfieldOp->use_empty()) {
           subfieldOp.erase();
           if (auto *inputOp = domainInput.getDefiningOp())
@@ -718,18 +718,18 @@ LogicalResult LowerModule::lowerModule() {
             domainToClasses.at(domainType.getName().getAttr());
         auto fieldLowering = domainClasses.fields[subfieldOp.getFieldIndex()];
 
-        // Registry fields are accumulated via domain.register.  If this
-        // subfield is only used by domain.register ops, leave it for that
+        // Registry fields are accumulated via domain.insert.  If this
+        // subfield is only used by domain.insert ops, leave it for that
         // handler.  Any other use is rejected.
         if (fieldLowering.kind == DomainFieldLowering::Kind::OutputRegistry) {
-          bool onlyRegisterUsers =
+          bool onlyInsertUsers =
               llvm::all_of(subfieldOp->getUsers(), [](Operation *user) {
-                return isa<DomainRegisterOp>(user);
+                return isa<DomainInsertOp>(user);
               });
-          if (onlyRegisterUsers)
+          if (onlyInsertUsers)
             return WalkResult::advance();
           subfieldOp.emitOpError(
-              "cannot read registry fields directly; use domain.register "
+              "cannot read registry fields directly; use domain.insert "
               "to accumulate and query the lowered domain output class");
           return WalkResult::interrupt();
         }

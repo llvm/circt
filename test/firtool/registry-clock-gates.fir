@@ -50,7 +50,7 @@ circuit Foo:
     input d: UInt<1> domains [A]
 
     inst gateA2 of ClockGate
-    register A[clockGates], ref_instance(gateA2)
+    insert A[clockGates], path("OMInstanceTarget:~Foo|LeafA/gateA2:ClockGate")
 
   ; Mid level on domain A: local gate + deeper leaf.
   public module MidA:
@@ -58,7 +58,7 @@ circuit Foo:
     input d: UInt<1> domains [A]
 
     inst gateA1 of ClockGate
-    register A[clockGates], ref_instance(gateA1)
+    insert A[clockGates], path("OMInstanceTarget:~Foo|MidA/gateA1:ClockGate")
 
     inst leafA of LeafA
     domain_define leafA.A = A
@@ -71,8 +71,8 @@ circuit Foo:
 
     inst gateB2a of ClockGate
     inst gateB2b of ClockGate
-    register B[clockGates], ref_instance(gateB2a)
-    register B[clockGates], ref_instance(gateB2b)
+    insert B[clockGates], path("OMInstanceTarget:~Foo|LeafB/gateB2a:ClockGate")
+    insert B[clockGates], path("OMInstanceTarget:~Foo|LeafB/gateB2b:ClockGate")
 
   ; Mid level on domain B: local gate + deeper leaf.
   public module MidB:
@@ -80,7 +80,7 @@ circuit Foo:
     input d: UInt<1> domains [B]
 
     inst gateB1 of ClockGate
-    register B[clockGates], ref_instance(gateB1)
+    insert B[clockGates], path("OMInstanceTarget:~Foo|MidB/gateB1:ClockGate")
 
     inst leafB of LeafB
     domain_define leafB.B = B
@@ -95,7 +95,7 @@ circuit Foo:
 
     ; Domain A local at the top (depth 0).
     inst gateA0 of ClockGate
-    register A[clockGates], ref_instance(gateA0)
+    insert A[clockGates], path("OMInstanceTarget:~Foo|Foo/gateA0:ClockGate")
 
     ; Domain A subtree: depth 1 and 2.
     inst midA of MidA

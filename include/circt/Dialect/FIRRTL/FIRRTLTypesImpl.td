@@ -583,7 +583,7 @@ def RegistryImpl : PropImplType<"Registry"> {
     An unordered mutable collection of property values for domain asset tracking.
 
     Registry types may only appear as fields of domain definitions. Values are
-    accumulated with `firrtl.domain.register` rather than normal property
+    accumulated with `firrtl.domain.insert` rather than normal property
     assignment. Downstream consumers must treat registry contents as
     order-independent.
   }];

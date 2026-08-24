@@ -1996,7 +1996,7 @@ circuit RegistryAssign:
     clockGates: Registry<Path>
   public module RegistryAssign:
     input A: Domain of ClockDomain
-    ; expected-error @below {{cannot assign registry types; use 'register' instead}}
+    ; expected-error @below {{cannot assign registry types; use 'insert' instead}}
     propassign A.clockGates, path("OMReferenceTarget:~RegistryAssign|RegistryAssign>x")
 
 ;// -----
@@ -2008,30 +2008,4 @@ circuit RegistryNotField:
   public module RegistryNotField:
     input A: Domain of ClockDomain
     ; expected-error @below {{domain field 'name' is not a Registry type}}
-    register A[name], path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")
-
-;// -----
-
-FIRRTL version 7.0.0
-circuit RefOnInstance:
-  domain ClockDomain:
-    clockGates: Registry<Path>
-  extmodule ClockGate:
-  public module RefOnInstance:
-    input A: Domain of ClockDomain
-    inst clockGate of ClockGate
-    ; expected-error @below {{ref target 'clockGate' is an instance; use ref_instance(clockGate)}}
-    register A[clockGates], ref(clockGate)
-
-;// -----
-
-FIRRTL version 7.0.0
-circuit RefInstanceOnWire:
-  domain ClockDomain:
-    clockGates: Registry<Path>
-  public module RefInstanceOnWire:
-    input A: Domain of ClockDomain
-    wire cg: UInt<1>
-    ; expected-error @below {{ref_instance target 'cg' is not an instance}}
-    register A[clockGates], ref_instance(cg)
->>>>>>> 6487cf930 ([FIRRTL] Add Registry type and domain register statement)
+    insert A[name], path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")

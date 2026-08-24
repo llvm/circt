@@ -105,7 +105,7 @@ struct Emitter {
   void emitStatement(MemoryDebugPortOp op);
   void emitStatement(MemoryPortAccessOp op);
   void emitStatement(DomainDefineOp op);
-  void emitStatement(DomainRegisterOp op);
+  void emitStatement(DomainInsertOp op);
   void emitStatement(RefDefineOp op);
   void emitStatement(RefForceOp op);
   void emitStatement(RefForceInitialOp op);
@@ -831,7 +831,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
               ConnectOp, MatchingConnectOp, PropertyAssertOp, PropAssignOp,
               InstanceOp, InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp,
               SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
-              MemoryPortAccessOp, DomainDefineOp, DomainRegisterOp, RefDefineOp,
+              MemoryPortAccessOp, DomainDefineOp, DomainInsertOp, RefDefineOp,
               RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
               LayerBlockOp, GenericIntrinsicOp, DomainCreateAnonOp,
               DomainCreateOp>([&](auto op) { emitStatement(op); })
@@ -1426,7 +1426,7 @@ void Emitter::emitStatement(DomainDefineOp op) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(DomainRegisterOp op) {
+void Emitter::emitStatement(DomainInsertOp op) {
   if (failed(requireVersion(missingSpecFIRVersion, op, "domain registries")))
     return;
 
@@ -1439,7 +1439,7 @@ void Emitter::emitStatement(DomainRegisterOp op) {
 
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "register" << PP::space;
+    ps << "insert" << PP::space;
     emitExpression(subfield.getInput());
     ps << "[" << PPExtString(subfield.getFieldName().getValue()) << "],"
        << PP::space;

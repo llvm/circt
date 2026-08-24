@@ -23,7 +23,7 @@ circuit Foo :
     input b : UInt<1> domains [A, B]
 
     inst clockGate of ClockGate
-    register A[clockGates], ref_instance(clockGate)
+    insert A[clockGates], path("OMInstanceTarget:~Foo|Foo/clockGate:ClockGate")
 
 ; CHECK-LABEL: om.class @Foo_Class
 ; DOMAIN:        om.elaborated_object @ClockDomain_out(%A,

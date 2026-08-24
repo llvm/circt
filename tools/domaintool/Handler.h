@@ -29,7 +29,7 @@ struct DomainLists {
   SmallVector<om::evaluator::EvaluatorValuePtr> associations;
 
   /// Accumulated registry assets keyed by field name, e.g. "clockGates".
-  /// Values are paths from domain.register lowering
+  /// Values are paths from domain.insert lowering
   /// (`<field>_registry_out` lists).
   llvm::MapVector<StringAttr, SmallVector<om::evaluator::EvaluatorValuePtr>>
       registries;

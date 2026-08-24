@@ -1621,19 +1621,6 @@ struct FIRModuleContext : public FIRParser {
     return unbundledValues[index];
   }
 
-  /// Record the module name referenced by a local instance declaration.  Used
-  /// by ref_instance(name) sugar, including empty-port instances that have no
-  /// unbundled port values to hang off of.
-  void addInstanceModule(StringRef instanceName, StringRef moduleName) {
-    instanceModules[instanceName] = moduleName;
-  }
-
-  /// Lookup a previously recorded instance module name, or null if unknown.
-  StringRef lookupInstanceModule(StringRef instanceName) const {
-    auto it = instanceModules.find(instanceName);
-    return it == instanceModules.end() ? StringRef() : it->second;
-  }
-
   /// This contains one entry for each value in FIRRTL that is represented as a
   /// bundle type in the FIRRTL spec but for which we represent as an exploded
   /// set of elements in the FIRRTL dialect.
@@ -1688,10 +1675,6 @@ private:
   /// This symbol table holds the names of ports, wires, and other local decls.
   /// This is scoped because conditional statements introduce subscopes.
   ModuleSymbolTable symbolTable;
-
-  /// Instance name -> referenced module name.  Populated by inst/inst_choice
-  /// and consulted by ref_instance() sugar.
-  llvm::StringMap<StringRef> instanceModules;
 
   /// This is a cache of subindex and subfield operations so we don't constantly
   /// recreate large chains of them.  This maps a bundle value + index to the
@@ -2025,9 +2008,6 @@ private:
   }
   ParseResult parseEnumExp(Value &result);
   ParseResult parsePathExp(Value &result);
-  /// Parse path("..."), ref(name), or ref_instance(name) into a path value.
-  ParseResult parsePathLikeExp(Value &result);
-  ParseResult parseRefPathExp(Value &result, bool isInstance);
   ParseResult parseDomainExp(Value &result);
   ParseResult parseRefExp(Value &result, const Twine &message);
   ParseResult parseStaticRefExp(Value &result, const Twine &message);
@@ -2147,7 +2127,7 @@ private:
   ParseResult parseMatch(unsigned matchIndent);
   ParseResult parseDomainInstantiation();
   ParseResult parseDomainDefine();
-  ParseResult parseDomainRegister();
+  ParseResult parseDomainInsert();
   ParseResult parseRefDefine();
   ParseResult parseRefForce();
   ParseResult parseRefForceInitial();
@@ -2441,11 +2421,9 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   }
 
   case FIRToken::lp_path:
-  case FIRToken::lp_ref:
-  case FIRToken::lp_ref_instance:
     if (isLeadingStmt)
       return emitError("unexpected path expression as start of statement");
-    if (parsePathLikeExp(result))
+    if (requireFeature({6, 0, 0}, "Paths") || parsePathExp(result))
       return failure();
     break;
 
@@ -3127,7 +3105,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 /// stmt ::= instance
 ///      ::= cmem | smem | mem
 ///      ::= node | wire
-///      ::= register
+///      ::= insert
 ///      ::= contract
 ///
 ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
@@ -3194,8 +3172,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseDomainInstantiation();
   case FIRToken::kw_domain_define:
     return parseDomainDefine();
-  case FIRToken::kw_register:
-    return parseDomainRegister();
+  case FIRToken::kw_insert:
+    return parseDomainInsert();
   case FIRToken::kw_define:
     return parseRefDefine();
   case FIRToken::lp_force:
@@ -4225,102 +4203,6 @@ ParseResult FIRStmtParser::parsePathExp(Value &result) {
   return success();
 }
 
-/// path_like ::= path_exp | ref_exp | ref_instance_exp
-ParseResult FIRStmtParser::parsePathLikeExp(Value &result) {
-  switch (getToken().getKind()) {
-  case FIRToken::lp_path:
-    if (requireFeature({6, 0, 0}, "Paths") || parsePathExp(result))
-      return failure();
-    return success();
-  case FIRToken::lp_ref:
-    return parseRefPathExp(result, /*isInstance=*/false);
-  case FIRToken::lp_ref_instance:
-    return parseRefPathExp(result, /*isInstance=*/true);
-  default:
-    return emitError("expected path, ref, or ref_instance expression");
-  }
-}
-
-/// ref ::= 'ref(' id ')'
-/// ref_instance ::= 'ref_instance(' id ')'
-///
-/// Sugar for a module-local OM path targeting a named declaration:
-///   ref(x)          -> OMReferenceTarget:~Circuit|Module>x
-///   ref_instance(i) -> OMInstanceTarget:~Circuit|Module/i:Child
-ParseResult FIRStmtParser::parseRefPathExp(Value &result, bool isInstance) {
-  auto startTok =
-      consumeToken(isInstance ? FIRToken::lp_ref_instance : FIRToken::lp_ref);
-  auto startLoc = startTok.getLoc();
-  locationProcessor.setLoc(startLoc);
-
-  if (requireFeature({6, 0, 0}, "Paths"))
-    return failure();
-
-  StringRef id;
-  if (parseId(id, isInstance ? "expected instance name in ref_instance"
-                             : "expected local name in ref") ||
-      parseToken(FIRToken::r_paren, isInstance ? "expected ')' in ref_instance"
-                                               : "expected ')' in ref"))
-    return failure();
-
-  // The named declaration must already exist in the module.
-  SymbolValueEntry entry;
-  if (moduleContext.lookupSymbolEntry(entry, id, startLoc))
-    return failure();
-
-  auto *parentOp = builder.getBlock()->getParentOp();
-  FModuleLike moduleOp = parentOp ? dyn_cast<FModuleLike>(parentOp) : nullptr;
-  if (!moduleOp && parentOp)
-    moduleOp = parentOp->getParentOfType<FModuleLike>();
-  auto circuitOp =
-      parentOp ? parentOp->getParentOfType<CircuitOp>() : CircuitOp{};
-  if (!moduleOp || !circuitOp)
-    return emitError(startLoc,
-                     "unable to determine owning module for path target");
-
-  SmallString<64> target;
-  if (isInstance) {
-    // Instances are unbundled symbol entries.  The referenced module name is
-    // recorded when the instance is declared.
-    if (isa<Value>(entry))
-      return emitError(startLoc)
-             << "ref_instance target '" << id << "' is not an instance";
-
-    StringRef childModule = moduleContext.lookupInstanceModule(id);
-    if (childModule.empty())
-      return emitError(startLoc)
-             << "ref_instance target '" << id << "' is not an instance";
-
-    // OMInstanceTarget:~Circuit|Parent/inst:Child
-    target += "OMInstanceTarget:~";
-    target += circuitOp.getName();
-    target += "|";
-    target += moduleOp.getModuleName();
-    target += "/";
-    target += id;
-    target += ":";
-    target += childModule;
-  } else {
-    // Wires/nodes/ports/etc. are normal SSA symbol entries.  Reject instances.
-    if (!isa<Value>(entry))
-      return emitError(startLoc)
-             << "ref target '" << id << "' is an instance; use ref_instance("
-             << id << ")";
-
-    // OMReferenceTarget:~Circuit|Module>name
-    target += "OMReferenceTarget:~";
-    target += circuitOp.getName();
-    target += "|";
-    target += moduleOp.getModuleName();
-    target += ">";
-    target += id;
-  }
-
-  result =
-      UnresolvedPathOp::create(builder, StringAttr::get(getContext(), target));
-  return success();
-}
-
 /// domain_instantiation ::= 'domain' id 'of' id ('(' exp (',' exp)* ')')? info?
 ParseResult FIRStmtParser::parseDomainInstantiation() {
   auto startTok = consumeToken(FIRToken::kw_domain);
@@ -4393,16 +4275,14 @@ ParseResult FIRStmtParser::parseDomainDefine() {
   return success();
 }
 
-/// register ::= 'register' domain_exp '[' id ']' ',' path_like info?
+/// insert ::= 'insert' domain_exp '[' id ']' ',' path_exp info?
 ///
 /// Unlike ordinary domain expressions, the registry field is written with
 /// square brackets (`A[clockGates]`) rather than a property subfield.
-/// Targets are path-like expressions:
+/// The target is an explicit path expression:
 ///   path("OMReferenceTarget:~Circuit|Module>name")
-///   ref(localName)
-///   ref_instance(instName)
-ParseResult FIRStmtParser::parseDomainRegister() {
-  auto startTok = consumeToken(FIRToken::kw_register);
+ParseResult FIRStmtParser::parseDomainInsert() {
+  auto startTok = consumeToken(FIRToken::kw_insert);
   auto startLoc = startTok.getLoc();
   locationProcessor.setLoc(startLoc);
 
@@ -4440,13 +4320,12 @@ ParseResult FIRStmtParser::parseDomainRegister() {
   StringRef fieldName;
   auto fieldLoc = getToken().getLoc();
   Value target;
-  if (parseToken(FIRToken::l_square,
-                 "expected '[' after domain in 'register'") ||
+  if (parseToken(FIRToken::l_square, "expected '[' after domain in 'insert'") ||
       parseFieldId(fieldName, "expected registry field name") ||
       parseToken(FIRToken::r_square,
                  "expected ']' after registry field name") ||
       parseToken(FIRToken::comma, "expected ',' after registry field") ||
-      parsePathLikeExp(target) || parseOptionalInfo())
+      parsePathExp(target) || parseOptionalInfo())
     return failure();
 
   auto domainType = type_cast<DomainType>(domain.getType());
@@ -4469,7 +4348,7 @@ ParseResult FIRStmtParser::parseDomainRegister() {
   locationProcessor.setLoc(startLoc);
   auto registry =
       DomainSubfieldOp::create(builder, registryType, domain, *fieldIndex);
-  DomainRegisterOp::create(builder, registry, target);
+  DomainInsertOp::create(builder, registry, target);
   return success();
 }
 
@@ -4889,8 +4768,7 @@ ParseResult FIRStmtParser::parsePropAssign() {
   if (!lhsType || !rhsType)
     return emitError(loc, "can only propassign property types");
   if (isa<RegistryType>(lhsType) || isa<RegistryType>(rhsType))
-    return emitError(loc,
-                     "cannot assign registry types; use 'register' instead");
+    return emitError(loc, "cannot assign registry types; use 'insert' instead");
   locationProcessor.setLoc(loc);
   if (lhsType != rhsType) {
     // If the lhs is anyref, and the rhs is a ClassType, insert a cast.
@@ -5100,7 +4978,6 @@ ParseResult FIRStmtParser::parseInstance() {
   // it.
   moduleContext.unbundledValues.push_back(std::move(unbundledValueEntry));
   auto entryId = UnbundledID(moduleContext.unbundledValues.size());
-  moduleContext.addInstanceModule(id, moduleName);
   return moduleContext.addSymbolEntry(id, entryId, startTok.getLoc());
 }
 
@@ -5197,7 +5074,6 @@ ParseResult FIRStmtParser::parseInstanceChoice() {
 
   moduleContext.unbundledValues.push_back(std::move(unbundledValueEntry));
   auto entryId = UnbundledID(moduleContext.unbundledValues.size());
-  moduleContext.addInstanceModule(id, defaultModuleName);
   return moduleContext.addSymbolEntry(id, entryId, startTok.getLoc());
 }
 

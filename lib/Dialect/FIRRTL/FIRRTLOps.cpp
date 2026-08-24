@@ -4437,7 +4437,7 @@ LogicalResult PropAssignOp::verify() {
   if (isa<RegistryType>(getDest().getType()) ||
       isa<RegistryType>(getSrc().getType()))
     return emitOpError(
-        "cannot assign registry types; use firrtl.domain.register");
+        "cannot assign registry types; use firrtl.domain.insert");
 
   if (failed(checkConnectFlow(*this)))
     return failure();
@@ -4508,7 +4508,7 @@ LogicalResult DomainDefineOp::verify() {
   return success();
 }
 
-LogicalResult DomainRegisterOp::verify() {
+LogicalResult DomainInsertOp::verify() {
   auto registryType = dyn_cast<RegistryType>(getDest().getType());
   if (!registryType)
     return emitOpError("destination must be a registry type");
@@ -6543,7 +6543,7 @@ static ParseResult parseFieldsFromDomain(
                             "expected domain type");
 
   // Extract non-registry field types from the domain type. Registry fields are
-  // accumulated with firrtl.domain.register and are not constructor operands.
+  // accumulated with firrtl.domain.insert and are not constructor operands.
   SmallVector<Type> nonRegistryFieldTypes;
   for (auto field : domainType.getFields()) {
     auto fieldType = cast<DomainFieldAttr>(field).getType();
@@ -7422,7 +7422,7 @@ LogicalResult DomainCreateOp::verify() {
   auto fields = domainType.getFields();
   auto fieldValues = getFieldValues();
 
-  // Registry fields are accumulated with firrtl.domain.register and are not
+  // Registry fields are accumulated with firrtl.domain.insert and are not
   // provided as constructor arguments.  Only non-registry fields are expected
   // here, and they must appear in declaration order among non-registry fields.
   SmallVector<DomainFieldAttr> nonRegistryFields;

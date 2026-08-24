@@ -753,7 +753,7 @@ firrtl.circuit "UnsafeDomainCastWithWire" {
 // -----
 
 // Registry fields live on the domain output class as List pairs and collect
-// local domain.register contributions.
+// local domain.insert contributions.
 firrtl.circuit "LocalRegistry" {
   // CHECK-LABEL: firrtl.class @ClockDomain()
   // CHECK-LABEL: firrtl.class @ClockDomain_out
@@ -779,7 +779,7 @@ firrtl.circuit "LocalRegistry" {
     // CHECK: firrtl.propassign %[[clockGates_in]], %[[list]]
     %path = firrtl.unresolved_path "OMReferenceTarget:~LocalRegistry|LocalRegistry>cg"
     %reg = firrtl.domain.subfield %A[clockGates] : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-    firrtl.domain.register %reg, %path : !firrtl.registry<path>, !firrtl.path
+    firrtl.domain.insert %reg, %path : !firrtl.registry<path>, !firrtl.path
   }
 }
 
@@ -802,7 +802,7 @@ firrtl.circuit "HierRegistry" {
     // CHECK: firrtl.propassign %[[clockGates_in]], %[[list]]
     %path = firrtl.unresolved_path "OMReferenceTarget:~HierRegistry|Bar>cg"
     %reg = firrtl.domain.subfield %A[clockGates] : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-    firrtl.domain.register %reg, %path : !firrtl.registry<path>, !firrtl.path
+    firrtl.domain.insert %reg, %path : !firrtl.registry<path>, !firrtl.path
   }
 
   // CHECK-LABEL: firrtl.module @HierRegistry(
@@ -831,7 +831,7 @@ firrtl.circuit "HierRegistry" {
 
 // -----
 
-// Multiple register ops into the same registry field (shared domain.subfield).
+// Multiple insert ops into the same registry field (shared domain.subfield).
 firrtl.circuit "MultiRegisterSameField" {
   firrtl.domain @ClockDomain [
     #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
@@ -849,7 +849,7 @@ firrtl.circuit "MultiRegisterSameField" {
     %p0 = firrtl.unresolved_path "OMInstanceTarget:~MultiRegisterSameField|MultiRegisterSameField/g0:G"
     %p1 = firrtl.unresolved_path "OMInstanceTarget:~MultiRegisterSameField|MultiRegisterSameField/g1:G"
     %reg = firrtl.domain.subfield %A[clockGates] : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-    firrtl.domain.register %reg, %p0 : !firrtl.registry<path>, !firrtl.path
-    firrtl.domain.register %reg, %p1 : !firrtl.registry<path>, !firrtl.path
+    firrtl.domain.insert %reg, %p0 : !firrtl.registry<path>, !firrtl.path
+    firrtl.domain.insert %reg, %p1 : !firrtl.registry<path>, !firrtl.path
   }
 }
