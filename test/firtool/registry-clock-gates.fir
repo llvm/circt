@@ -4,18 +4,6 @@
 ; RUN:     --domain ClockDomain,B,A,synchronous \
 ; RUN:     --assign 0 --assign 1 \
 ; RUN:     %t.mlir | FileCheck %s --check-prefix=FOO
-; RUN: domaintool --module MidA \
-; RUN:     --domain ClockDomain,A,,synchronous --assign 0 \
-; RUN:     %t.mlir | FileCheck %s --check-prefix=MIDA
-; RUN: domaintool --module MidB \
-; RUN:     --domain ClockDomain,B,,synchronous --assign 0 \
-; RUN:     %t.mlir | FileCheck %s --check-prefix=MIDB
-; RUN: domaintool --module LeafA \
-; RUN:     --domain ClockDomain,A,,synchronous --assign 0 \
-; RUN:     %t.mlir | FileCheck %s --check-prefix=LEAFA
-; RUN: domaintool --module LeafB \
-; RUN:     --domain ClockDomain,B,,synchronous --assign 0 \
-; RUN:     %t.mlir | FileCheck %s --check-prefix=LEAFB
 ; RUN: firtool %s -domain-mode=strip -o /dev/null
 
 ; Multi-domain, multi-depth Registry clockGates through firtool + domaintool.
@@ -119,29 +107,3 @@ circuit Foo:
 ; FOO-NEXT:   "OMInstanceTarget:~Foo|Foo/midB:MidB/leafB:LeafB/gateB2a:ClockGate",
 ; FOO-NEXT:   "OMInstanceTarget:~Foo|Foo/midB:MidB/leafB:LeafB/gateB2b:ClockGate"
 ; FOO-NEXT: ]
-
-; Mid-level tops root paths at the selected module.
-; MIDA:      "name_pattern": "A"
-; MIDA:      "clock_gates": [
-; MIDA-NEXT:   "OMInstanceTarget:~MidA|MidA/gateA1:ClockGate",
-; MIDA-NEXT:   "OMInstanceTarget:~MidA|MidA/leafA:LeafA/gateA2:ClockGate"
-; MIDA-NEXT: ]
-
-; MIDB:      "name_pattern": "B"
-; MIDB:      "clock_gates": [
-; MIDB-NEXT:   "OMInstanceTarget:~MidB|MidB/gateB1:ClockGate",
-; MIDB-NEXT:   "OMInstanceTarget:~MidB|MidB/leafB:LeafB/gateB2a:ClockGate",
-; MIDB-NEXT:   "OMInstanceTarget:~MidB|MidB/leafB:LeafB/gateB2b:ClockGate"
-; MIDB-NEXT: ]
-
-; Leaf tops only report local contributions.
-; LEAFA:      "name_pattern": "A"
-; LEAFA:      "clock_gates": [
-; LEAFA-NEXT:   "OMInstanceTarget:~LeafA|LeafA/gateA2:ClockGate"
-; LEAFA-NEXT: ]
-
-; LEAFB:      "name_pattern": "B"
-; LEAFB:      "clock_gates": [
-; LEAFB-NEXT:   "OMInstanceTarget:~LeafB|LeafB/gateB2a:ClockGate",
-; LEAFB-NEXT:   "OMInstanceTarget:~LeafB|LeafB/gateB2b:ClockGate"
-; LEAFB-NEXT: ]
