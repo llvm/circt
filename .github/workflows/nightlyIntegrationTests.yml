@@ -8,13 +8,13 @@ on:
 
 jobs:
   build-circt:
-    name: "${{ matrix.compiler }}/${{ matrix.build-type }}/${{ matrix.build-shared == 'ON' && 'shared' || 'static' }}-libs/asserts-${{ matrix.build-assert == 'ON' && 'on' || 'off' }}${{ matrix.valgrind && '/valgrind' || '' }}${{ matrix.expensive-pattern-checks == 'ON' && '/expensive-pattern-checks' || '' }}"
+    name: "${{ matrix.compiler }}/${{ matrix.build-type }}/${{ matrix.build-shared == 'ON' && 'shared' || 'static' }}-libs/asserts-${{ matrix.build-assert == 'ON' && 'on' || 'off' }}${{ matrix.valgrind && '/valgrind' || '' }}${{ matrix.extra-cmake-args != '' && format('/extra={0}', matrix.extra-cmake-args) || '' }}"
     strategy:
       fail-fast: false
       matrix:
         build-assert: [ON, OFF]
         build-shared: [ON, OFF]
-        expensive-pattern-checks: [OFF]
+        extra-cmake-args: [""]
         include:
           # Run the expensive pattern API checks in one Release configuration.
           - build-type: Release
@@ -22,7 +22,7 @@ jobs:
             build-shared: OFF
             compiler: clang
             valgrind: false
-            expensive-pattern-checks: ON
+            extra-cmake-args: "-DMLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS=ON"
         build-type: [Debug, Release]
         compiler:
           - clang
@@ -65,4 +65,4 @@ jobs:
       package_name_prefix: ""
       cmake_c_compiler: ${{ matrix.compiler }}
       valgrind: ${{ matrix.valgrind }}
-      extra_cmake_args: ${{ matrix.expensive-pattern-checks == 'ON' && '-DMLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS=ON' || '' }}
+      extra_cmake_args: ${{ matrix.extra-cmake-args }}
