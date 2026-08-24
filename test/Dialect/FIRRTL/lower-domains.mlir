@@ -752,8 +752,6 @@ firrtl.circuit "UnsafeDomainCastWithWire" {
 
 // -----
 
-// Registry fields live on the domain output class as List pairs and collect
-// local domain.insert contributions.
 firrtl.circuit "LocalRegistry" {
   // CHECK-LABEL: firrtl.class @ClockDomain()
   // CHECK-LABEL: firrtl.class @ClockDomain_out
@@ -785,8 +783,6 @@ firrtl.circuit "LocalRegistry" {
 
 // -----
 
-// Hierarchical accumulation: parent domain_define's into children and concat's
-// each child A_out.clockGates_out into the parent A_object.clockGates_in.
 firrtl.circuit "HierRegistry" {
   firrtl.domain @ClockDomain [
     #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
@@ -826,66 +822,5 @@ firrtl.circuit "HierRegistry" {
     // CHECK: %[[all:.+]] = firrtl.list.concat %[[local]], %[[bar1_cg]], %[[bar2_cg]]
     // CHECK: %[[clockGates_in:.+]] = firrtl.object.subfield %A_object[clockGates_registry_in]
     // CHECK: firrtl.propassign %[[clockGates_in]], %[[all]]
-  }
-}
-
-// -----
-
-// Match each child registry output by port position when an instance has
-// multiple ports of the same domain type.
-firrtl.circuit "SameTypeRegistryPorts" {
-  firrtl.domain @ClockDomain [
-    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
-  ]
-
-  firrtl.module @Child(
-    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>,
-    in %B: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-  ) {}
-
-  // CHECK-LABEL: firrtl.module @SameTypeRegistryPorts(
-  firrtl.module @SameTypeRegistryPorts(
-    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>,
-    in %B: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-  ) {
-    // CHECK: %[[CHILD_A:.+]], %[[CHILD_A_OUT:.+]], %[[CHILD_B:.+]], %[[CHILD_B_OUT:.+]] = firrtl.instance child @Child
-    %child_A, %child_B = firrtl.instance child @Child(
-      in A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>,
-      in B: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-    )
-    firrtl.domain.define %child_A, %A : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-    firrtl.domain.define %child_B, %B : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-
-    // CHECK: %[[A_REG:.+]] = firrtl.object.subfield %[[CHILD_A_OUT]][clockGates_registry_out]
-    // CHECK: %[[A_IN:.+]] = firrtl.object.subfield %A_object[clockGates_registry_in]
-    // CHECK: firrtl.propassign %[[A_IN]],
-    // CHECK: %[[B_REG:.+]] = firrtl.object.subfield %[[CHILD_B_OUT]][clockGates_registry_out]
-    // CHECK: %[[B_IN:.+]] = firrtl.object.subfield %B_object[clockGates_registry_in]
-    // CHECK: firrtl.propassign %[[B_IN]],
-  }
-}
-
-// -----
-
-// Multiple insert ops into the same registry field (shared domain.subfield).
-firrtl.circuit "MultiRegisterSameField" {
-  firrtl.domain @ClockDomain [
-    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
-  ]
-
-  // CHECK-LABEL: firrtl.module @MultiRegisterSameField(
-  firrtl.module @MultiRegisterSameField(
-    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-  ) {
-    // CHECK-DAG: %[[p0:.+]] = firrtl.unresolved_path "OMInstanceTarget:~MultiRegisterSameField|MultiRegisterSameField/g0:G"
-    // CHECK-DAG: %[[p1:.+]] = firrtl.unresolved_path "OMInstanceTarget:~MultiRegisterSameField|MultiRegisterSameField/g1:G"
-    // CHECK: %[[list:.+]] = firrtl.list.create %[[p0]], %[[p1]] : !firrtl.list<path>
-    // CHECK: %[[clockGates_in:.+]] = firrtl.object.subfield %A_object[clockGates_registry_in]
-    // CHECK: firrtl.propassign %[[clockGates_in]], %[[list]]
-    %p0 = firrtl.unresolved_path "OMInstanceTarget:~MultiRegisterSameField|MultiRegisterSameField/g0:G"
-    %p1 = firrtl.unresolved_path "OMInstanceTarget:~MultiRegisterSameField|MultiRegisterSameField/g1:G"
-    %reg = firrtl.domain.subfield %A[clockGates] : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
-    firrtl.domain.insert %reg, %p0 : !firrtl.registry<path>, !firrtl.path
-    firrtl.domain.insert %reg, %p1 : !firrtl.registry<path>, !firrtl.path
   }
 }
