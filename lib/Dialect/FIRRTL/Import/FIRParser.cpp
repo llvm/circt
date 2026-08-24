@@ -4296,8 +4296,8 @@ ParseResult FIRStmtParser::parseDomainInsert() {
 
   auto registryType = type_dyn_cast<RegistryType>(registry.getType());
   if (!registryType)
-    return emitError(registryLoc) << "expected Registry-typed field, got "
-                                  << registry.getType();
+    return emitError(registryLoc)
+           << "expected Registry-typed field, got " << registry.getType();
 
   if (target.getType() != registryType.getElementType())
     return emitError(startLoc) << "path target type " << target.getType()

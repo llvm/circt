@@ -91,10 +91,9 @@ public:
   /// Extract path refs from an evaluator path list, reporting type errors.
   /// Associations use getRef() (leaf names).  Registry assets use
   /// getAsString() so hierarchical basepaths are preserved.
-  static void collectPathRefs(
-      ArrayRef<om::evaluator::EvaluatorValuePtr> values,
-      SmallVectorImpl<StringAttr> &out, bool &failed,
-      bool hierarchical = false) {
+  static void collectPathRefs(ArrayRef<om::evaluator::EvaluatorValuePtr> values,
+                              SmallVectorImpl<StringAttr> &out, bool &failed,
+                              bool hierarchical = false) {
     for (auto &value : values) {
       if (auto *p = dyn_cast<om::evaluator::PathValue>(value.get())) {
         out.push_back(hierarchical ? p->getAsString() : p->getRef());
@@ -158,7 +157,7 @@ public:
       bool isAsync =
           llvm::any_of(options::sifiveClockDomainAsync, [&](auto asyncName) {
             return asyncName == name.getValue();
-      });
+          });
       if (isAsync) {
         collectPathRefs(associations, asyncPorts, failed);
         continue;
@@ -168,7 +167,7 @@ public:
       bool isStatic =
           llvm::any_of(options::sifiveClockDomainStatic, [&](auto staticName) {
             return staticName == name.getValue();
-      });
+          });
       if (isStatic) {
         collectPathRefs(associations, staticPorts, failed);
         continue;
