@@ -20,7 +20,7 @@ class PIRTypeDef<string name, string typeMnemonic> : TypeDef<PIRDialect, name> {
 // Properties
 //===----------------------------------------------------------------------===//
 
-def PIRPropertyType : PIRTypeDef<"Simple Property", "property"> {
+def PIRPropertyType : PIRTypeDef<"property", "Simple Property"> {
   let summary = "Simple Property IR Property";
   let description = [{
     Represents a property (in the SVA sense) that is *simple*.
@@ -32,7 +32,7 @@ def PIRPropertyType : PIRTypeDef<"Simple Property", "property"> {
   }];
 }
 
-def PIRClockedPropertyType : PIRTypeDef<"Clocked Property", "clocked_property"> {
+def PIRClockedPropertyType : PIRTypeDef<"clocked_property", "Clocked Property"> {
   let summary = "Clocked Property IR Property";
   let description = [{
     Represents a clocked property (in the SVA sense).
@@ -47,7 +47,7 @@ def PIRClockedPropertyType : PIRTypeDef<"Clocked Property", "clocked_property"> 
 // Sequences
 //===----------------------------------------------------------------------===//
 
-def PIRSequenceType : PIRTypeDef<"Simple Sequence", "sequence"> {
+def PIRSequenceType : PIRTypeDef<"sequence", "Simple Sequence"> {
   let summary = "Simple Property IR Sequence";
   let description = [{
     Represents a sequence (in the SVA sense) that is *simple*.
@@ -57,7 +57,7 @@ def PIRSequenceType : PIRTypeDef<"Simple Sequence", "sequence"> {
   }];
 }
 
-def PIRClockedSequenceType : PIRTypeDef<"Clocked Sequence", "clocked_sequence"> {
+def PIRClockedSequenceType : PIRTypeDef<"clocked_sequence", "Clocked Sequence"> {
   let summary = "Clocked Sequence IR Sequence";
   let description = [{
     Represents a clocked sequence (in the SVA sense).

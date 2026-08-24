@@ -12,8 +12,6 @@
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/PIR/PIRDialect.td"
 include "circt/Dialect/PIR/PIRTypes.td"
-include "mlir/IR/EnumAttr.td"
-include "mlir/IR/PatternBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -24,10 +22,10 @@ class PIROp<string mnemonic, list<Trait> traits = []> :
 // Assertions
 //===----------------------------------------------------------------------===//
 
-class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = []> :
+class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [SameVariadicOperandSize]> :
   PIROp<mnemonic, traits> {
-  let arguments = (
-    ins PIRClockedPropertyType:$property, 
+  let arguments = (ins 
+    PIRClockedPropertyType:$property, 
     Optional<I1>:$disable,
     Optional<I1>:$enable
   );
@@ -87,9 +85,6 @@ class ConversionOp<string mnemonic, list<Trait> traits = [Pure]> :
     let assemblyFormat = [{
       $input attr-dict
     }];
-
-  let hasFolder = 1;
-  let hasCanonicalizeMethod = 1;
 }
 
 def BoolToClockedSeqOp : ConversionOp<"bool_to_clocked_seq"> {
@@ -151,6 +146,8 @@ def ClockedSeqToClockedPropOp : ConversionOp<"clocked_seq_to_clocked_prop"> {
   let results = (
     outs PIRClockedSequenceType:$output
   );
+
+  let hasCanonicalizeMethod = 1;
 }
 
 
