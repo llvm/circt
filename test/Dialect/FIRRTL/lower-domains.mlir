@@ -831,6 +831,42 @@ firrtl.circuit "HierRegistry" {
 
 // -----
 
+// Match each child registry output by port position when an instance has
+// multiple ports of the same domain type.
+firrtl.circuit "SameTypeRegistryPorts" {
+  firrtl.domain @ClockDomain [
+    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+  ]
+
+  firrtl.module @Child(
+    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>,
+    in %B: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+  ) {}
+
+  // CHECK-LABEL: firrtl.module @SameTypeRegistryPorts(
+  firrtl.module @SameTypeRegistryPorts(
+    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>,
+    in %B: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+  ) {
+    // CHECK: %[[CHILD_A:.+]], %[[CHILD_A_OUT:.+]], %[[CHILD_B:.+]], %[[CHILD_B_OUT:.+]] = firrtl.instance child @Child
+    %child_A, %child_B = firrtl.instance child @Child(
+      in A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>,
+      in B: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+    )
+    firrtl.domain.define %child_A, %A : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+    firrtl.domain.define %child_B, %B : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+
+    // CHECK: %[[A_REG:.+]] = firrtl.object.subfield %[[CHILD_A_OUT]][clockGates_registry_out]
+    // CHECK: %[[A_IN:.+]] = firrtl.object.subfield %A_object[clockGates_registry_in]
+    // CHECK: firrtl.propassign %[[A_IN]],
+    // CHECK: %[[B_REG:.+]] = firrtl.object.subfield %[[CHILD_B_OUT]][clockGates_registry_out]
+    // CHECK: %[[B_IN:.+]] = firrtl.object.subfield %B_object[clockGates_registry_in]
+    // CHECK: firrtl.propassign %[[B_IN]],
+  }
+}
+
+// -----
+
 // Multiple insert ops into the same registry field (shared domain.subfield).
 firrtl.circuit "MultiRegisterSameField" {
   firrtl.domain @ClockDomain [

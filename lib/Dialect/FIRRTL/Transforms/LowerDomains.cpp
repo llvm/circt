@@ -116,9 +116,8 @@ struct Classes {
   /// Lowering info for each original domain field, in declaration order.
   SmallVector<DomainFieldLowering> fields;
 
-  /// Registry fields in declaration order among registries only.  Each entry
-  /// is (field name, list element type).
-  SmallVector<std::pair<StringAttr, PropertyType>> registryFields;
+  /// Registry element types in declaration order among registries only.
+  SmallVector<PropertyType> registryElementTypes;
 
   /// Port index of `<name>_registry_in` on the output class for registry slot.
   unsigned getRegistryInPort(unsigned registrySlot) const {
@@ -161,11 +160,13 @@ struct DomainInfo {
   SmallVector<AssociationInfo> associations{};
 
   /// Lowered classes for this domain port.  Used when wiring registry lists.
-  /// Not const because ClassOp helpers used here are non-const.
-  Classes *classes = nullptr;
+  const Classes *classes = nullptr;
 
-  /// Original port index before domain-port deletion.  Stable key for maps.
-  unsigned originalPortIndex = 0;
+  /// Local values inserted into each registry field.
+  SmallVector<SmallVector<Value>> localRegistryValues;
+
+  /// Child domain output objects whose registry lists feed this domain.
+  SmallVector<Value> childRegistryOutputs;
 
   /// Return a DomainInfo for an input domain port.  This will have both an
   /// input port at the current index and an output port at the next index.
@@ -416,9 +417,10 @@ LogicalResult LowerModule::lowerModule() {
       indexToDomain[i] = port.direction == Direction::In
                              ? DomainInfo::input(iIns)
                              : DomainInfo::output(iIns);
-      // Store a pointer to the lowered classes for registry wiring.
-      indexToDomain[i].classes = const_cast<Classes *>(&domainClasses);
-      indexToDomain[i].originalPortIndex = i;
+      // Store the lowered classes and allocate per-registry accumulation state.
+      indexToDomain[i].classes = &domainClasses;
+      indexToDomain[i].localRegistryValues.resize(
+          domainClasses.registryElementTypes.size());
 
       if (body) {
         // Insert objects in-order at the top of the module's body.  These
@@ -514,8 +516,8 @@ LogicalResult LowerModule::lowerModule() {
 
   if (body) {
     // Map domain-typed values (conversion casts wrapping lowered domain ports)
-    // back to the original domain port index.
-    DenseMap<Value, unsigned> domainValueToPort;
+    // back to their lowering state.
+    DenseMap<Value, DomainInfo *> domainValues;
 
     for (auto &[_, info] : indexToDomain) {
       auto object = info.op;
@@ -541,7 +543,7 @@ LogicalResult LowerModule::lowerModule() {
         info.temp = splice(temp, subDomainInfoIn);
       }
       if (info.temp)
-        domainValueToPort[info.temp.getResult(0)] = info.originalPortIndex;
+        domainValues[info.temp.getResult(0)] = &info;
 
       // Hook up the "association in" port.
       auto subAssociations =
@@ -563,13 +565,6 @@ LogicalResult LowerModule::lowerModule() {
                            body->getArgument(outputPort), object);
     }
 
-    // Local registry contributions: originalPort -> registrySlot -> paths.
-    DenseMap<unsigned, DenseMap<unsigned, SmallVector<Value>>>
-        localRegistryPaths;
-    // Child instance _out objects that feed a domain's registries when
-    // domain_define child.A = parentDomain.
-    DenseMap<unsigned, SmallVector<Value>> childRegistrySources;
-
     // Remove all domain users.  Delay deleting conversions until the module
     // body is walked as it is possible that conversions have multiple users.
     //
@@ -583,6 +578,41 @@ LogicalResult LowerModule::lowerModule() {
     // wrong, but it doesn't cost us anything to do it this way.)
     DenseSet<Operation *> conversionsToErase;
     DenseSet<Operation *> operationsToErase;
+
+    // Collect registry insertions before lowering domain subfields.  Inserts
+    // are restricted to the module body, so their operands dominate the list
+    // construction performed after the main lowering walk.
+    for (auto insertOp :
+         llvm::make_early_inc_range(body->getOps<DomainInsertOp>())) {
+      auto subfieldOp =
+          cast<DomainSubfieldOp>(insertOp.getDest().getDefiningOp());
+      auto domainType =
+          firrtl::type_cast<DomainType>(subfieldOp.getInput().getType());
+      auto &domainClasses =
+          domainToClasses.at(domainType.getName().getAttr());
+      auto fieldLowering = domainClasses.fields[subfieldOp.getFieldIndex()];
+      assert(fieldLowering.kind ==
+             DomainFieldLowering::Kind::OutputRegistry);
+
+      auto domainIt = domainValues.find(subfieldOp.getInput());
+      if (domainIt == domainValues.end()) {
+        insertOp.emitOpError(
+            "inserts into a domain that is not a module domain port");
+        return failure();
+      }
+
+      domainIt->second->localRegistryValues[fieldLowering.slot].push_back(
+          insertOp.getSrc());
+      Value domainInput = subfieldOp.getInput();
+      insertOp.erase();
+      if (subfieldOp->use_empty()) {
+        subfieldOp.erase();
+        if (auto *inputOp = domainInput.getDefiningOp())
+          if (inputOp->use_empty())
+            conversionsToErase.insert(inputOp);
+      }
+    }
+
     auto walkResult = op.walk([&](Operation *walkOp) {
       // This is an operation that we have previously determined can be deleted
       // when examining an earlier operation.  Delete it now as it is only safe
@@ -653,60 +683,20 @@ LogicalResult LowerModule::lowerModule() {
         instanceGraph.lookup(op)->addInstance(object,
                                               instanceGraph.lookup(classIn));
 
-        // DomainCreate operands are non-registry fields only, in declaration
-        // order among non-registry fields.  Each maps to input-class slot.
-        auto fieldValues = createDomain.getFieldValues();
-        unsigned nonRegistryIdx = 0;
-        for (auto fieldLowering : domainClasses.fields) {
-          if (fieldLowering.kind != DomainFieldLowering::Kind::InputClass)
-            continue;
-          assert(nonRegistryIdx < fieldValues.size());
-          auto inputPortIdx = fieldLowering.slot * 2;
+        // DomainCreate operands and input-class fields are both ordered among
+        // non-registry fields only.
+        for (auto [fieldIdx, fieldValue] :
+             llvm::enumerate(createDomain.getFieldValues())) {
           auto subfield = ObjectSubfieldOp::create(
-              builder, createDomain.getLoc(), object, inputPortIdx);
+              builder, createDomain.getLoc(), object, fieldIdx * 2);
           PropAssignOp::create(builder, createDomain.getLoc(), subfield,
-                               fieldValues[nonRegistryIdx++]);
+                               fieldValue);
         }
 
         createDomain.replaceAllUsesWith(UnrealizedConversionCastOp::create(
             builder, createDomain.getLoc(), {createDomain.getType()},
             {object.getResult()}));
         createDomain.erase();
-        return WalkResult::advance();
-      }
-
-      // Collect domain.insert contributions. Registry destinations always
-      // come from domain.subfield; keep those ops alive until here.
-      if (auto insertOp = dyn_cast<DomainInsertOp>(walkOp)) {
-        auto subfieldOp =
-            cast<DomainSubfieldOp>(insertOp.getDest().getDefiningOp());
-        auto domainType =
-            firrtl::type_cast<DomainType>(subfieldOp.getInput().getType());
-        auto &domainClasses =
-            domainToClasses.at(domainType.getName().getAttr());
-        auto fieldLowering = domainClasses.fields[subfieldOp.getFieldIndex()];
-        assert(fieldLowering.kind == DomainFieldLowering::Kind::OutputRegistry);
-
-        auto portIt = domainValueToPort.find(subfieldOp.getInput());
-        if (portIt == domainValueToPort.end()) {
-          insertOp.emitOpError(
-              "inserts into a domain that is not a module domain port");
-          return WalkResult::interrupt();
-        }
-
-        localRegistryPaths[portIt->second][fieldLowering.slot].push_back(
-            insertOp.getSrc());
-        // Drop the insert immediately.  Multiple insert ops may share the
-        // same domain.subfield destination, so only erase the subfield once it
-        // has no remaining users.
-        Value domainInput = subfieldOp.getInput();
-        insertOp.erase();
-        if (subfieldOp->use_empty()) {
-          subfieldOp.erase();
-          if (auto *inputOp = domainInput.getDefiningOp())
-            if (inputOp->use_empty())
-              conversionsToErase.insert(inputOp);
-        }
         return WalkResult::advance();
       }
 
@@ -718,16 +708,9 @@ LogicalResult LowerModule::lowerModule() {
             domainToClasses.at(domainType.getName().getAttr());
         auto fieldLowering = domainClasses.fields[subfieldOp.getFieldIndex()];
 
-        // Registry fields are accumulated via domain.insert.  If this
-        // subfield is only used by domain.insert ops, leave it for that
-        // handler.  Any other use is rejected.
+        // All domain.insert users were removed before this walk.  Any remaining
+        // registry field access is therefore an unsupported direct read.
         if (fieldLowering.kind == DomainFieldLowering::Kind::OutputRegistry) {
-          bool onlyInsertUsers =
-              llvm::all_of(subfieldOp->getUsers(), [](Operation *user) {
-                return isa<DomainInsertOp>(user);
-              });
-          if (onlyInsertUsers)
-            return WalkResult::advance();
           subfieldOp.emitOpError(
               "cannot read registry fields directly; use domain.insert "
               "to accumulate and query the lowered domain output class");
@@ -842,25 +825,19 @@ LogicalResult LowerModule::lowerModule() {
 
       // domain_define child.A = parentA routes domain identity downward.
       // Registry assets accumulate upward: parentA collects child.A_out lists.
-      auto srcPortIt = domainValueToPort.find(defineOp.getSrc());
-      if (srcPortIt != domainValueToPort.end()) {
-        DomainInfo &srcInfo = indexToDomain[srcPortIt->second];
-        // Destination should be a child instance domain input (conversion over
-        // the instance's class-in result).  Find the matching A_out result.
-        Value destVal = dest.getOperand(0);
-        InstanceOp inst = destVal.getDefiningOp<InstanceOp>();
-        if (!inst)
-          if (auto sub = destVal.getDefiningOp<ObjectSubfieldOp>())
-            inst = sub.getInput().getDefiningOp<InstanceOp>();
-        if (inst && srcInfo.classes) {
-          auto outType = srcInfo.classes->output.getInstanceType();
-          for (auto result : inst.getResults()) {
-            if (result.getType() == outType) {
-              childRegistrySources[srcPortIt->second].push_back(result);
-              break;
-            }
+      auto srcDomainIt = domainValues.find(defineOp.getSrc());
+      if (srcDomainIt != domainValues.end()) {
+        // Lowering places the output for an input domain port immediately
+        // after that input.  Use this correspondence instead of searching by
+        // type, which is ambiguous when an instance has multiple ports of the
+        // same domain type.
+        if (auto inputResult = dyn_cast<OpResult>(dest.getOperand(0)))
+          if (auto inst = dyn_cast<InstanceOp>(inputResult.getOwner())) {
+            unsigned outputIndex = inputResult.getResultNumber() + 1;
+            assert(outputIndex < inst.getNumResults());
+            srcDomainIt->second->childRegistryOutputs.push_back(
+                inst.getResult(outputIndex));
           }
-        }
       }
 
       if (auto srcCast = dyn_cast<UnrealizedConversionCastOp>(src)) {
@@ -901,28 +878,26 @@ LogicalResult LowerModule::lowerModule() {
     // Wire registry lists on each domain port object:
     //   registry_in = list_concat(local..., child.A_out.<reg>_registry_out...)
     for (auto &[_, info] : indexToDomain) {
-      if (!info.op || !info.classes || info.classes->registryFields.empty())
+      if (!info.op || !info.classes ||
+          info.classes->registryElementTypes.empty())
         continue;
 
       // Build lists at end of body so path operands dominate the create.
       OpBuilder builder(body, body->end());
 
       auto *classes = info.classes;
-      auto &locals = localRegistryPaths[info.originalPortIndex];
-      auto children = childRegistrySources.lookup(info.originalPortIndex);
 
-      for (auto [registrySlot, registryField] :
-           llvm::enumerate(classes->registryFields)) {
-        auto listType = ListType::get(context, registryField.second);
+      for (auto [registrySlot, elementType] :
+           llvm::enumerate(classes->registryElementTypes)) {
+        auto listType = ListType::get(context, elementType);
         SmallVector<Value> concatOperands;
 
-        auto localIt = locals.find(registrySlot);
-        SmallVector<Value> localPaths =
-            localIt == locals.end() ? SmallVector<Value>{} : localIt->second;
         concatOperands.push_back(ListCreateOp::create(builder, info.op.getLoc(),
-                                                      listType, localPaths));
+                                                      listType,
+                                                      info.localRegistryValues[
+                                                          registrySlot]));
 
-        for (Value childOutObj : children)
+        for (Value childOutObj : info.childRegistryOutputs)
           concatOperands.push_back(ObjectSubfieldOp::create(
               builder, info.op.getLoc(), childOutObj,
               classes->getRegistryOutPort(registrySlot)));
@@ -1052,7 +1027,7 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   SmallVector<PortInfo> classInPorts;
   SmallVector<PortInfo> classOutPorts;
   SmallVector<DomainFieldLowering> fieldLowerings;
-  SmallVector<std::pair<StringAttr, PropertyType>> registryFields;
+  SmallVector<PropertyType> registryElementTypes;
   unsigned inputSlot = 0;
   unsigned registrySlot = 0;
 
@@ -1068,8 +1043,7 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
             /*type=*/listType, /*dir=*/Direction::Out}});
       fieldLowerings.push_back(
           {DomainFieldLowering::Kind::OutputRegistry, registrySlot++});
-      registryFields.push_back(
-          {field.getName(), registryType.getElementType()});
+      registryElementTypes.push_back(registryType.getElementType());
       continue;
     }
 
@@ -1117,7 +1091,7 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
 
   classes.insert({name,
                   {classIn, classOut, std::move(fieldLowerings),
-                   std::move(registryFields)}});
+                   std::move(registryElementTypes)}});
   instanceGraph.addModule(classIn);
   instanceGraph.addModule(classOut);
   op.erase();
