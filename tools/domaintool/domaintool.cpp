@@ -292,6 +292,8 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   //
   //   - "domainInfo_out": a domain object
   //   - "associations_out": all the ports associated with the domain object
+  //   - optional "<registry>_registry_out": registry asset lists, e.g.
+  //     "clockGates_registry_out"
   //
   // The domain object we get back may be a parameter that we passed in or it
   // may have been created internal to the circuit.
@@ -299,11 +301,12 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   // The end result of this loop is that the `byType` map is created.  This
   // organizes the resulting objects into a map of:
   //
-  //     Domain Kind -> Domain -> Associations
+  //     Domain Kind -> Domain -> {Associations, Registries}
   //
   // The domain kind is "clock", "reset", or "power".  The domain is the actual
   // domain object with all its fields populated.  The associations are the
-  // ports associated with that domain.
+  // ports associated with that domain.  Registries are named unordered path
+  // lists accumulated via domain.register.
   //
   // Note: Care needs to be taken here to ensure the stability of the output.
   // This means that the iteration over the fields must be stable.  (Using
@@ -350,9 +353,28 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
     if (!associationsList)
       continue;
 
-    // Update the `byType` map.
-    byType[domainInfoObject->getType()][domainInfoObject].append(
-        associationsList->getElements());
+    // Update the `byType` map with associations and any registry lists.
+    DomainLists &lists = byType[domainInfoObject->getType()][domainInfoObject];
+    lists.associations.append(associationsList->getElements());
+
+    // Collect optional "<name>_registry_out" list fields as registries.
+    static constexpr StringRef registryOutSuffix = "_registry_out";
+    for (auto attr : domain->getFieldNames()) {
+      auto name = cast<StringAttr>(attr);
+      if (!name.getValue().ends_with(registryOutSuffix))
+        continue;
+
+      auto registryValue = domain->getField(name);
+      auto *registryList =
+          dyn_cast<om::evaluator::ListValue>(registryValue->get());
+      if (!registryList)
+        continue;
+
+      // Strip the trailing "_registry_out" to recover the domain field name.
+      auto registryName = StringAttr::get(
+          &context, name.getValue().drop_back(registryOutSuffix.size()));
+      lists.registries[registryName].append(registryList->getElements());
+    }
   }
 
   // Accumulate domain information into registered handlers.  Pass each object

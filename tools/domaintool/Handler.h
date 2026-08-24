@@ -23,12 +23,23 @@ namespace circt {
 using namespace llvm;
 using namespace om;
 
+/// Accumulated lists associated with one domain output object.
+struct DomainLists {
+  /// Port associations for this domain (`associations_out`).
+  SmallVector<om::evaluator::EvaluatorValuePtr> associations;
+
+  /// Accumulated registry assets keyed by field name, e.g. "clockGates".
+  /// Values are paths from domain.register lowering
+  /// (`<field>_registry_out` lists).
+  llvm::MapVector<StringAttr, SmallVector<om::evaluator::EvaluatorValuePtr>>
+      registries;
+};
+
 /// The type that will be passed to each handler.  This is a mapping of domain
-/// objects _of one type_ to the associations for that domain.  This is ordered
-/// based on the discovered order of output domains on the module of interest.
-using ObjectMap =
-    llvm::MapVector<om::evaluator::ObjectValue *,
-                    SmallVector<om::evaluator::EvaluatorValuePtr>>;
+/// objects _of one type_ to the associations and registry lists for that
+/// domain.  This is ordered based on the discovered order of output domains on
+/// the module of interest.
+using ObjectMap = llvm::MapVector<om::evaluator::ObjectValue *, DomainLists>;
 
 /// Base class of a domain handler.  A handler is used to process domains of one
 /// or more kinds.

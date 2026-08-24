@@ -53,6 +53,19 @@ stripModuleImpl(FModuleLike op,
                 op.erase();
               return WalkResult::advance();
             })
+            .Case<DomainRegisterOp>([&](DomainRegisterOp op) {
+              auto *defOp = op.getDest().getDefiningOp();
+              if (auto subfield = dyn_cast_or_null<DomainSubfieldOp>(defOp)) {
+                if (shouldStripType(subfield.getInput().getType()))
+                  op.erase();
+                return WalkResult::advance();
+              }
+              // A stripped DomainSubfield may have been replaced by an unknown
+              // value before this operation is visited.
+              if (isa<RegistryType>(op.getDest().getType()))
+                op.erase();
+              return WalkResult::advance();
+            })
             .Case<DomainCreateOp>([&](DomainCreateOp op) {
               if (shouldStripType(op.getType()))
                 op.erase();
