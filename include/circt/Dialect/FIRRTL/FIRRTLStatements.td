@@ -137,9 +137,7 @@ def DomainDefineOp
 
 def DomainInsertOp
     : FIRRTLOp<"domain.insert", [
-        ParentOneOf<["firrtl::FModuleOp", "firrtl::LayerBlockOp",
-                     "firrtl::WhenOp", "firrtl::MatchOp",
-                     "firrtl::ContractOp"]>
+        ParentOneOf<["firrtl::FModuleOp"]>
       ]> {
   let summary = "Insert a path into a domain registry field.";
   let description = [{

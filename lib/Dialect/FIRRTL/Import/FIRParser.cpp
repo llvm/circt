@@ -2008,7 +2008,7 @@ private:
   }
   ParseResult parseEnumExp(Value &result);
   ParseResult parsePathExp(Value &result);
-  ParseResult parseDomainExp(Value &result);
+  ParseResult parseDomainExp(Value &result, bool allowIndex = true);
   ParseResult parseRefExp(Value &result, const Twine &message);
   ParseResult parseStaticRefExp(Value &result, const Twine &message);
   ParseResult parseRWProbeStaticRefExp(FieldRef &refResult, Type &type,
@@ -3868,7 +3868,7 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
 /// domain_exp ::= id
 /// domain_exp ::= domain_exp '.' id
 /// domain_exp ::= domain_exp '[' int ']'
-ParseResult FIRStmtParser::parseDomainExp(Value &result) {
+ParseResult FIRStmtParser::parseDomainExp(Value &result, bool allowIndex) {
   auto loc = getToken().getLoc();
   SymbolValueEntry entry;
   StringRef id;
@@ -3884,8 +3884,14 @@ ParseResult FIRStmtParser::parseDomainExp(Value &result) {
       return failure();
   }
 
-  if (parseOptionalExpPostscript(result, /*allowDynamic=*/false))
-    return failure();
+  if (allowIndex) {
+    if (parseOptionalExpPostscript(result, /*allowDynamic=*/false))
+      return failure();
+  } else {
+    while (consumeIf(FIRToken::period))
+      if (parsePostFixFieldId(result))
+        return failure();
+  }
 
   auto type = result.getType();
   if (!type_isa<DomainType>(type))
@@ -4291,31 +4297,8 @@ ParseResult FIRStmtParser::parseDomainInsert() {
 
   // Parse the domain-typed base expression without consuming `[field]`.
   Value domain;
-  auto domainLoc = getToken().getLoc();
-  SymbolValueEntry entry;
-  StringRef id;
-  if (parseId(id, "expected domain expression") ||
-      moduleContext.lookupSymbolEntry(entry, id, domainLoc))
+  if (parseDomainExp(domain, /*allowIndex=*/false))
     return failure();
-
-  if (moduleContext.resolveSymbolEntry(domain, entry, domainLoc, false)) {
-    StringRef field;
-    if (parseToken(FIRToken::period, "expected '.' in field reference") ||
-        parseFieldId(field, "expected field name") ||
-        moduleContext.resolveSymbolEntry(domain, entry, field, domainLoc))
-      return failure();
-  }
-
-  // Allow static bundle/instance/field chaining, but stop before '[' so the
-  // registry field brackets remain part of this statement's syntax.
-  while (consumeIf(FIRToken::period)) {
-    if (parsePostFixFieldId(domain))
-      return failure();
-  }
-
-  if (!type_isa<DomainType>(domain.getType()))
-    return emitError(domainLoc)
-           << "expected domain-type expression, got " << domain.getType();
 
   StringRef fieldName;
   auto fieldLoc = getToken().getLoc();

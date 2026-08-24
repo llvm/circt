@@ -3538,6 +3538,25 @@ firrtl.circuit "WireDomainTypeWithAssociation" {
 
 // -----
 
+firrtl.circuit "DomainInsertInWhen" {
+  firrtl.domain @ClockDomain [
+    #firrtl.domain.field<"paths", !firrtl.registry<path>>
+  ]
+  firrtl.module @DomainInsertInWhen(
+    in %A: !firrtl.domain<@ClockDomain(paths: !firrtl.registry<path>)>,
+    in %cond: !firrtl.uint<1>
+  ) {
+    %registry = firrtl.domain.subfield %A[paths] : !firrtl.domain<@ClockDomain(paths: !firrtl.registry<path>)>
+    firrtl.when %cond : !firrtl.uint<1> {
+      %path = firrtl.unresolved_path "OMReferenceTarget:~DomainInsertInWhen|DomainInsertInWhen>value"
+      // expected-error @below {{'firrtl.domain.insert' op expects parent op 'firrtl.module'}}
+      firrtl.domain.insert %registry, %path : !firrtl.registry<path>, !firrtl.path
+    }
+  }
+}
+
+// -----
+
 // property_assert with statically-false condition reports error.
 firrtl.circuit "PropAssertFalseInClass" {
   firrtl.module @PropAssertFalseInClass() {}

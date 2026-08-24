@@ -2115,19 +2115,8 @@ stripModuleImpl(FModuleLike op,
               return WalkResult::advance();
             })
             .Case<DomainInsertOp>([&](DomainInsertOp op) {
-              // Domain inserts target registry fields on domains.  Drop them
-              // when that domain is stripped so DomainSubfield cleanup does not
-              // leave domain.insert ops pointing at unknown values.
-              auto *defOp = op.getDest().getDefiningOp();
-              if (auto subfield = dyn_cast_or_null<DomainSubfieldOp>(defOp)) {
-                if (shouldStripType(subfield.getInput().getType()))
-                  op.erase();
-                return WalkResult::advance();
-              }
-              // Defensive: if the dest is already detached from a domain
-              // subfield, the domain IR is being dismantled.
-              if (isa<RegistryType>(op.getDest().getType()))
-                op.erase();
+              // Domain inserts always target domains, which are being stripped.
+              op.erase();
               return WalkResult::advance();
             })
             .Case<DomainCreateOp>([&](DomainCreateOp op) {

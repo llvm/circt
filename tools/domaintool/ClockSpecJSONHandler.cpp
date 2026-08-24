@@ -91,10 +91,10 @@ public:
   /// Extract path refs from an evaluator path list, reporting type errors.
   /// Associations use getRef() (leaf names).  Registry assets use
   /// getAsString() so hierarchical basepaths are preserved.
-  static LogicalResult
-  collectPathRefs(ArrayRef<om::evaluator::EvaluatorValuePtr> values,
-                  SmallVectorImpl<StringAttr> &out, bool &failed,
-                  bool hierarchical = false) {
+  static void collectPathRefs(
+      ArrayRef<om::evaluator::EvaluatorValuePtr> values,
+      SmallVectorImpl<StringAttr> &out, bool &failed,
+      bool hierarchical = false) {
     for (auto &value : values) {
       if (auto *p = dyn_cast<om::evaluator::PathValue>(value.get())) {
         out.push_back(hierarchical ? p->getAsString() : p->getRef());
@@ -104,7 +104,6 @@ public:
           << "expected path, but got " << value->getType();
       failed = true;
     }
-    return success(failed == false);
   }
 
   LogicalResult handle(const ObjectMap &objectMap) override {
@@ -151,22 +150,17 @@ public:
       SmallVector<StringAttr> clockGatePaths;
       if (auto it = lists.registries.find(
               StringAttr::get(name.getContext(), "clockGates"));
-          it != lists.registries.end()) {
-        bool pathFailed = false;
-        (void)collectPathRefs(it->second, clockGatePaths, pathFailed,
-                              /*hierarchical=*/true);
-        failed |= pathFailed;
-      }
+          it != lists.registries.end())
+        collectPathRefs(it->second, clockGatePaths, failed,
+                        /*hierarchical=*/true);
 
       // Add to async ports if the name matches a provided option.
       bool isAsync =
           llvm::any_of(options::sifiveClockDomainAsync, [&](auto asyncName) {
             return asyncName == name.getValue();
-          });
+      });
       if (isAsync) {
-        bool pathFailed = false;
-        (void)collectPathRefs(associations, asyncPorts, pathFailed);
-        failed |= pathFailed;
+        collectPathRefs(associations, asyncPorts, failed);
         continue;
       }
 
@@ -174,11 +168,9 @@ public:
       bool isStatic =
           llvm::any_of(options::sifiveClockDomainStatic, [&](auto staticName) {
             return staticName == name.getValue();
-          });
+      });
       if (isStatic) {
-        bool pathFailed = false;
-        (void)collectPathRefs(associations, staticPorts, pathFailed);
-        failed |= pathFailed;
+        collectPathRefs(associations, staticPorts, failed);
         continue;
       }
 
