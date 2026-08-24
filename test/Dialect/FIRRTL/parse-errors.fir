@@ -2074,8 +2074,8 @@ circuit RegistryNotField:
     name: String
   public module RegistryNotField:
     input A: Domain of ClockDomain
-    ; expected-error @below {{domain field 'name' is not a Registry type}}
-    insert A[name], path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")
+    ; expected-error @below {{expected Registry-typed field, got '!firrtl.string'}}
+    insert A.name, path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")
 
 ;// -----
 
@@ -2088,7 +2088,7 @@ circuit RefOnInstance:
     input A: Domain of ClockDomain
     inst clockGate of ClockGate
     ; expected-error @below {{ref target 'clockGate' is an instance; use ref_instance(clockGate)}}
-    insert A[clockGates], ref(clockGate)
+    insert A.clockGates, ref(clockGate)
 
 ;// -----
 
@@ -2100,4 +2100,4 @@ circuit RefInstanceOnWire:
     input A: Domain of ClockDomain
     wire cg: UInt<1>
     ; expected-error @below {{ref_instance target 'cg' is not an instance}}
-    insert A[clockGates], ref_instance(cg)
+    insert A.clockGates, ref_instance(cg)
