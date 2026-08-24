@@ -2063,7 +2063,7 @@ circuit RegistryAssign:
     clockGates: Registry<Path>
   public module RegistryAssign:
     input A: Domain of ClockDomain
-    ; expected-error @below {{cannot assign registry types; use 'register' instead}}
+    ; expected-error @below {{cannot assign registry types; use 'insert' instead}}
     propassign A.clockGates, path("OMReferenceTarget:~RegistryAssign|RegistryAssign>x")
 
 ;// -----
@@ -2075,7 +2075,7 @@ circuit RegistryNotField:
   public module RegistryNotField:
     input A: Domain of ClockDomain
     ; expected-error @below {{domain field 'name' is not a Registry type}}
-    register A[name], path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")
+    insert A[name], path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")
 
 ;// -----
 
@@ -2088,7 +2088,7 @@ circuit RefOnInstance:
     input A: Domain of ClockDomain
     inst clockGate of ClockGate
     ; expected-error @below {{ref target 'clockGate' is an instance; use ref_instance(clockGate)}}
-    register A[clockGates], ref(clockGate)
+    insert A[clockGates], ref(clockGate)
 
 ;// -----
 
@@ -2100,4 +2100,4 @@ circuit RefInstanceOnWire:
     input A: Domain of ClockDomain
     wire cg: UInt<1>
     ; expected-error @below {{ref_instance target 'cg' is not an instance}}
-    register A[clockGates], ref_instance(cg)
+    insert A[clockGates], ref_instance(cg)

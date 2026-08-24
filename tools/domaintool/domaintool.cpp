@@ -306,7 +306,7 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   // The domain kind is "clock", "reset", or "power".  The domain is the actual
   // domain object with all its fields populated.  The associations are the
   // ports associated with that domain.  Registries are named unordered path
-  // lists accumulated via domain.register.
+  // lists accumulated via domain.insert.
   //
   // Note: Care needs to be taken here to ensure the stability of the output.
   // This means that the iteration over the fields must be stable.  (Using
