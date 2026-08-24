@@ -2399,6 +2399,58 @@ circuit DomainCreateWithFields:
 
 ;// -----
 FIRRTL version 7.0.0
+circuit DomainRegistry:
+  ; CHECK-LABEL: firrtl.domain @ClockDomain [
+  ; CHECK-SAME:    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+  ; CHECK-SAME:  ]
+  domain ClockDomain:
+    clockGates: Registry<Path>
+
+  extmodule ClockGate:
+
+  ; CHECK-LABEL: firrtl.module @Bar
+  ; CHECK-SAME:    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+  public module Bar:
+    input A: Domain of ClockDomain
+    wire cg: UInt<1>
+
+    ; CHECK: firrtl.instance clockGate interesting_name @ClockGate()
+    inst clockGate of ClockGate
+
+    ; Explicit path(...) still accepted.
+    ; CHECK: %[[PATH0:.+]] = firrtl.unresolved_path "OMReferenceTarget:~DomainRegistry|Bar>clockGate"
+    ; CHECK: %[[REG0:.+]] = firrtl.domain.subfield %A[clockGates] : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+    ; CHECK: firrtl.domain.register %[[REG0]], %[[PATH0]] : !firrtl.registry<path>, !firrtl.path
+    register A[clockGates], path("OMReferenceTarget:~DomainRegistry|Bar>clockGate")
+
+    ; ref(localName) sugar -> OMReferenceTarget:~Circuit|Module>name
+    ; CHECK: %[[PATH1:.+]] = firrtl.unresolved_path "OMReferenceTarget:~DomainRegistry|Bar>cg"
+    ; CHECK: %[[REG1:.+]] = firrtl.domain.subfield %A[clockGates]
+    ; CHECK: firrtl.domain.register %[[REG1]], %[[PATH1]]
+    register A[clockGates], ref(cg)
+
+    ; ref_instance(inst) sugar -> OMInstanceTarget:~Circuit|Module/inst:Child
+    ; CHECK: %[[PATH2:.+]] = firrtl.unresolved_path "OMInstanceTarget:~DomainRegistry|Bar/clockGate:ClockGate"
+    ; CHECK: %[[REG2:.+]] = firrtl.domain.subfield %A[clockGates]
+    ; CHECK: firrtl.domain.register %[[REG2]], %[[PATH2]]
+    register A[clockGates], ref_instance(clockGate)
+
+  ; CHECK-LABEL: firrtl.module @DomainRegistry
+  public module DomainRegistry:
+    input A: Domain of ClockDomain
+
+    ; CHECK: %bar1_A = firrtl.instance bar1 interesting_name @Bar
+    inst bar1 of Bar
+    ; CHECK: %bar2_A = firrtl.instance bar2 interesting_name @Bar
+    inst bar2 of Bar
+
+    ; CHECK: firrtl.domain.define %bar1_A, %A
+    domain_define bar1.A = A
+    ; CHECK: firrtl.domain.define %bar2_A, %A
+    domain_define bar2.A = A
+
+;// -----
+FIRRTL version 7.0.0
 circuit UnknownProperties:
   class Foo:
     skip
