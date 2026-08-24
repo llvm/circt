@@ -32,6 +32,8 @@ class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [SameVariadicOp
   let assemblyFormat = [{
     $property (`disable` `iff` $disable^)? (`on` $enable^)? attr-dict `:` type($property)
   }];
+
+  let hasCanonicalizer = true;
 }
 
 def AssertPropertyOp : AssertPropertyLikeOp<"assert_property"> {

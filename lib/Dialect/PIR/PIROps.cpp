@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/PIR/PIROps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/PIR/PIRTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
@@ -17,10 +18,129 @@ using namespace pir;
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
+// AssertLike Canonicalizations
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Remove enable if trivial, i.e. if enable == true
+template <typename Op>
+struct RemoveEnableTrue : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(Op op,
+                                PatternRewriter &rewriter) const override {
+    Value enable = op.getEnable();
+    if (!enable)
+      return failure();
+    auto enableConst = enable.getDefiningOp<hw::ConstantOp>();
+    if (!enableConst || !enableConst.getValue().isOne())
+      return failure();
+
+    rewriter.modifyOpInPlace(op, [&]() { op.getEnableMutable().clear(); });
+    return success();
+  }
+};
+
+/// Delete operation if enable is `false`.
+template <typename Op>
+struct EraseIfEnableFalse : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(Op op,
+                                PatternRewriter &rewriter) const override {
+    Value enable = op.getEnable();
+    if (!enable)
+      return failure();
+    auto enableConst = enable.getDefiningOp<hw::ConstantOp>();
+    if (!enableConst || !enableConst.getValue().isZero())
+      return failure();
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+/// Delete operation if property is trivial, i.e. property is either
+/// (bool-to-clk-prop true) or
+/// (clk-seq-to-clk-prop (bool-to-clk-seq true))
+template <typename Op>
+struct EraseIfPropertyTrivial : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(Op op,
+                                PatternRewriter &rewriter) const override {
+    Value property = op.getProperty();
+
+    // Check for pir.bool_to_clocked_prop true
+    if (auto boolToProp =
+            property.template getDefiningOp<BoolToClockedPropOp>()) {
+      if (auto constOp =
+              boolToProp.getInput().getDefiningOp<hw::ConstantOp>()) {
+        if (constOp.getValue().isOne()) {
+          rewriter.eraseOp(op);
+          return success();
+        }
+      }
+    }
+
+    // Check for pir.clocked_seq_to_clocked_prop pir.bool_to_clocked_seq true
+    if (auto clkSeqToClkProp =
+            property.template getDefiningOp<ClockedSeqToClockedPropOp>()) {
+      if (auto boolToClkSeq =
+              clkSeqToClkProp.getInput().getDefiningOp<BoolToClockedSeqOp>()) {
+        if (auto constOp =
+                boolToClkSeq.getInput().getDefiningOp<hw::ConstantOp>()) {
+          if (constOp.getValue().isOne()) {
+            rewriter.eraseOp(op);
+            return success();
+          }
+        }
+      }
+    }
+
+    return failure();
+  }
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Assertions
+//===----------------------------------------------------------------------===//
+
+void AssertPropertyOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                   MLIRContext *context) {
+  results.add<EraseIfEnableFalse<AssertPropertyOp>,
+              EraseIfPropertyTrivial<AssertPropertyOp>,
+              RemoveEnableTrue<AssertPropertyOp>>(context);
+}
+
+void AssumePropertyOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                   MLIRContext *context) {
+  results.add<EraseIfEnableFalse<AssumePropertyOp>,
+              EraseIfPropertyTrivial<AssumePropertyOp>,
+              RemoveEnableTrue<AssumePropertyOp>>(context);
+}
+
+void RestrictOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.add<EraseIfEnableFalse<RestrictOp>,
+              EraseIfPropertyTrivial<RestrictOp>, RemoveEnableTrue<RestrictOp>>(
+      context);
+}
+
+void CoverPropertyOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                  MLIRContext *context) {
+  results.add<EraseIfEnableFalse<CoverPropertyOp>,
+              EraseIfPropertyTrivial<CoverPropertyOp>,
+              RemoveEnableTrue<CoverPropertyOp>>(context);
+}
+
+//===----------------------------------------------------------------------===//
 // Type Conversion Ops
 //===----------------------------------------------------------------------===//
 
-// (clk-seq-to-clk-prop (bool-to-clk-seq b)) == (bool-to-clk-prop b)
+/// (clk-seq-to-clk-prop (bool-to-clk-seq b)) ==> (bool-to-clk-prop b)
 LogicalResult
 ClockedSeqToClockedPropOp::canonicalize(ClockedSeqToClockedPropOp op,
                                         PatternRewriter &rewriter) {
