@@ -4291,10 +4291,7 @@ ParseResult FIRStmtParser::parseDomainDefine() {
   return success();
 }
 
-/// insert ::= 'insert' registry_exp ',' path_exp info?
-///
-/// The target is an explicit path expression:
-///   path("OMReferenceTarget:~Circuit|Module>name")
+/// insert ::= 'insert' registry_exp ',' property_exp info?
 ParseResult FIRStmtParser::parseDomainInsert() {
   auto startTok = consumeToken(FIRToken::kw_insert);
   auto startLoc = startTok.getLoc();
@@ -4306,7 +4303,8 @@ ParseResult FIRStmtParser::parseDomainInsert() {
   Value registry, target;
   if (parseExp(registry, "expected registry field expression") ||
       parseToken(FIRToken::comma, "expected ',' after registry field") ||
-      parsePathExp(target) || parseOptionalInfo())
+      parseExp(target, "expected registry element expression") ||
+      parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startLoc);
