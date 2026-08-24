@@ -77,3 +77,17 @@
 // Check fields may be given in any order, and are printed in a canonical one
 // CHECK: !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
 "test.port"() : () -> !axi4.port<outstanding_reads = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, data_width = 64, user_width = 0, addr_width = 32, outstanding_writes = 4, read_id_width = 4, write_id_width = 4>
+
+//===----------------------------------------------------------------------===//
+// Operations
+//===----------------------------------------------------------------------===//
+
+!port = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+// CHECK-LABEL: hw.module @AbstractEndpoints
+hw.module @AbstractEndpoints(in %clk : !seq.clock, in %rst_ni : i1) {
+  // CHECK: %[[MGR:.+]] = axi4.abstract_manager %clk, %rst_ni {a} : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+  %mgr = axi4.abstract_manager %clk, %rst_ni {a} : !port
+  // CHECK: axi4.abstract_subordinate %clk, %rst_ni, %[[MGR]] {b} : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+  axi4.abstract_subordinate %clk, %rst_ni, %mgr {b} : !port
+}
