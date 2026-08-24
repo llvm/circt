@@ -340,8 +340,8 @@ void FirMemLowering::lowerMemoriesInModule(
     auto it = constOneOps.try_emplace(width, Value{});
     if (it.second) {
       auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
-      it.first->second = hw::ConstantOp::create(
-          builder, module.getLoc(), builder.getIntegerType(width), 1);
+      it.first->second = hw::ConstantOp::create(builder, module.getLoc(),
+                                                APInt::getAllOnes(width));
     }
     return it.first->second;
   };
