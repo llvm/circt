@@ -588,11 +588,9 @@ LogicalResult LowerModule::lowerModule() {
           cast<DomainSubfieldOp>(insertOp.getDest().getDefiningOp());
       auto domainType =
           firrtl::type_cast<DomainType>(subfieldOp.getInput().getType());
-      auto &domainClasses =
-          domainToClasses.at(domainType.getName().getAttr());
+      auto &domainClasses = domainToClasses.at(domainType.getName().getAttr());
       auto fieldLowering = domainClasses.fields[subfieldOp.getFieldIndex()];
-      assert(fieldLowering.kind ==
-             DomainFieldLowering::Kind::OutputRegistry);
+      assert(fieldLowering.kind == DomainFieldLowering::Kind::OutputRegistry);
 
       auto domainIt = domainValues.find(subfieldOp.getInput());
       if (domainIt == domainValues.end()) {
@@ -892,10 +890,9 @@ LogicalResult LowerModule::lowerModule() {
         auto listType = ListType::get(context, elementType);
         SmallVector<Value> concatOperands;
 
-        concatOperands.push_back(ListCreateOp::create(builder, info.op.getLoc(),
-                                                      listType,
-                                                      info.localRegistryValues[
-                                                          registrySlot]));
+        concatOperands.push_back(
+            ListCreateOp::create(builder, info.op.getLoc(), listType,
+                                 info.localRegistryValues[registrySlot]));
 
         for (Value childOutObj : info.childRegistryOutputs)
           concatOperands.push_back(ObjectSubfieldOp::create(
