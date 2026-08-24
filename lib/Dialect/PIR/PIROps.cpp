@@ -60,6 +60,44 @@ struct EraseIfEnableFalse : public OpRewritePattern<Op> {
   }
 };
 
+/// Remove disable if trivial, i.e. if disable == false
+template <typename Op>
+struct RemoveDisableFalse : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(Op op,
+                                PatternRewriter &rewriter) const override {
+    Value disable = op.getDisable();
+    if (!disable)
+      return failure();
+    auto disableConst = disable.getDefiningOp<hw::ConstantOp>();
+    if (!disableConst || !disableConst.getValue().isZero())
+      return failure();
+
+    rewriter.modifyOpInPlace(op, [&]() { op.getDisableMutable().clear(); });
+    return success();
+  }
+};
+
+/// Delete operation if disable is `true`.
+template <typename Op>
+struct EraseIfDisableTrue : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(Op op,
+                                PatternRewriter &rewriter) const override {
+    Value disable = op.getDisable();
+    if (!disable)
+      return failure();
+    auto disableConst = disable.getDefiningOp<hw::ConstantOp>();
+    if (!disableConst || !disableConst.getValue().isOne())
+      return failure();
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 /// Delete operation if property is trivial, i.e. property is either
 /// (bool-to-clk-prop true) or
 /// (clk-seq-to-clk-prop (bool-to-clk-seq true))
@@ -112,28 +150,35 @@ void AssertPropertyOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                    MLIRContext *context) {
   results.add<EraseIfEnableFalse<AssertPropertyOp>,
               EraseIfPropertyTrivial<AssertPropertyOp>,
-              RemoveEnableTrue<AssertPropertyOp>>(context);
+              EraseIfDisableTrue<AssertPropertyOp>,
+              RemoveEnableTrue<AssertPropertyOp>,
+              RemoveDisableFalse<AssertPropertyOp>>(context);
 }
 
 void AssumePropertyOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                    MLIRContext *context) {
   results.add<EraseIfEnableFalse<AssumePropertyOp>,
               EraseIfPropertyTrivial<AssumePropertyOp>,
-              RemoveEnableTrue<AssumePropertyOp>>(context);
+              EraseIfDisableTrue<AssumePropertyOp>,
+              RemoveEnableTrue<AssumePropertyOp>,
+              RemoveDisableFalse<AssumePropertyOp>>(context);
 }
 
 void RestrictOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.add<EraseIfEnableFalse<RestrictOp>,
-              EraseIfPropertyTrivial<RestrictOp>, RemoveEnableTrue<RestrictOp>>(
-      context);
+  results
+      .add<EraseIfEnableFalse<RestrictOp>, EraseIfPropertyTrivial<RestrictOp>,
+           EraseIfDisableTrue<RestrictOp>, RemoveEnableTrue<RestrictOp>,
+           RemoveDisableFalse<RestrictOp>>(context);
 }
 
 void CoverPropertyOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                   MLIRContext *context) {
   results.add<EraseIfEnableFalse<CoverPropertyOp>,
               EraseIfPropertyTrivial<CoverPropertyOp>,
-              RemoveEnableTrue<CoverPropertyOp>>(context);
+              EraseIfDisableTrue<CoverPropertyOp>,
+              RemoveEnableTrue<CoverPropertyOp>,
+              RemoveDisableFalse<CoverPropertyOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//
