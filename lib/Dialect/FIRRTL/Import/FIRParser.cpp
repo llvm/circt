@@ -4288,21 +4288,10 @@ ParseResult FIRStmtParser::parseDomainInsert() {
     return failure();
 
   Value registry, target;
-  auto registryLoc = getToken().getLoc();
   if (parseExp(registry, "expected registry field expression") ||
       parseToken(FIRToken::comma, "expected ',' after registry field") ||
       parsePathExp(target) || parseOptionalInfo())
     return failure();
-
-  auto registryType = type_dyn_cast<RegistryType>(registry.getType());
-  if (!registryType)
-    return emitError(registryLoc)
-           << "expected Registry-typed field, got " << registry.getType();
-
-  if (target.getType() != registryType.getElementType())
-    return emitError(startLoc) << "path target type " << target.getType()
-                               << " does not match registry element type "
-                               << registryType.getElementType();
 
   locationProcessor.setLoc(startLoc);
   DomainInsertOp::create(builder, registry, target);
@@ -4724,8 +4713,6 @@ ParseResult FIRStmtParser::parsePropAssign() {
   auto rhsType = type_dyn_cast<PropertyType>(rhs.getType());
   if (!lhsType || !rhsType)
     return emitError(loc, "can only propassign property types");
-  if (isa<RegistryType>(lhsType) || isa<RegistryType>(rhsType))
-    return emitError(loc, "cannot assign registry types; use 'insert' instead");
   locationProcessor.setLoc(loc);
   if (lhsType != rhsType) {
     // If the lhs is anyref, and the rhs is a ClassType, insert a cast.

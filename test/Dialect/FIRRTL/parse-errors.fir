@@ -1996,7 +1996,7 @@ circuit RegistryAssign:
     clockGates: Registry<Path>
   public module RegistryAssign:
     input A: Domain of ClockDomain
-    ; expected-error @below {{cannot assign registry types; use 'insert' instead}}
+    ; expected-error @below {{cannot propassign non-equivalent type '!firrtl.path' to '!firrtl.registry<path>'}}
     propassign A.clockGates, path("OMReferenceTarget:~RegistryAssign|RegistryAssign>x")
 
 ;// -----
@@ -2007,5 +2007,5 @@ circuit RegistryNotField:
     name: String
   public module RegistryNotField:
     input A: Domain of ClockDomain
-    ; expected-error @below {{expected Registry-typed field, got '!firrtl.string'}}
+    ; expected-error @below {{'firrtl.domain.insert' op operand #0 must be registry type, but got '!firrtl.string'}}
     insert A.name, path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")
