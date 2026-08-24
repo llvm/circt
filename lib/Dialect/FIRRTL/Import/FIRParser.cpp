@@ -2008,7 +2008,7 @@ private:
   }
   ParseResult parseEnumExp(Value &result);
   ParseResult parsePathExp(Value &result);
-  ParseResult parseDomainExp(Value &result, bool allowIndex = true);
+  ParseResult parseDomainExp(Value &result);
   ParseResult parseRefExp(Value &result, const Twine &message);
   ParseResult parseStaticRefExp(Value &result, const Twine &message);
   ParseResult parseRWProbeStaticRefExp(FieldRef &refResult, Type &type,
@@ -3868,7 +3868,7 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
 /// domain_exp ::= id
 /// domain_exp ::= domain_exp '.' id
 /// domain_exp ::= domain_exp '[' int ']'
-ParseResult FIRStmtParser::parseDomainExp(Value &result, bool allowIndex) {
+ParseResult FIRStmtParser::parseDomainExp(Value &result) {
   auto loc = getToken().getLoc();
   SymbolValueEntry entry;
   StringRef id;
@@ -3884,14 +3884,8 @@ ParseResult FIRStmtParser::parseDomainExp(Value &result, bool allowIndex) {
       return failure();
   }
 
-  if (allowIndex) {
-    if (parseOptionalExpPostscript(result, /*allowDynamic=*/false))
-      return failure();
-  } else {
-    while (consumeIf(FIRToken::period))
-      if (parsePostFixFieldId(result))
-        return failure();
-  }
+  if (parseOptionalExpPostscript(result, /*allowDynamic=*/false))
+    return failure();
 
   auto type = result.getType();
   if (!type_isa<DomainType>(type))
@@ -4281,10 +4275,8 @@ ParseResult FIRStmtParser::parseDomainDefine() {
   return success();
 }
 
-/// insert ::= 'insert' domain_exp '[' id ']' ',' path_exp info?
+/// insert ::= 'insert' registry_exp ',' path_exp info?
 ///
-/// Unlike ordinary domain expressions, the registry field is written with
-/// square brackets (`A[clockGates]`) rather than a property subfield.
 /// The target is an explicit path expression:
 ///   path("OMReferenceTarget:~Circuit|Module>name")
 ParseResult FIRStmtParser::parseDomainInsert() {
@@ -4295,33 +4287,17 @@ ParseResult FIRStmtParser::parseDomainInsert() {
   if (requireFeature(missingSpecFIRVersion, "domain registries", startLoc))
     return failure();
 
-  // Parse the domain-typed base expression without consuming `[field]`.
-  Value domain;
-  if (parseDomainExp(domain, /*allowIndex=*/false))
-    return failure();
-
-  StringRef fieldName;
-  auto fieldLoc = getToken().getLoc();
-  Value target;
-  if (parseToken(FIRToken::l_square, "expected '[' after domain in 'insert'") ||
-      parseFieldId(fieldName, "expected registry field name") ||
-      parseToken(FIRToken::r_square,
-                 "expected ']' after registry field name") ||
+  Value registry, target;
+  auto registryLoc = getToken().getLoc();
+  if (parseExp(registry, "expected registry field expression") ||
       parseToken(FIRToken::comma, "expected ',' after registry field") ||
       parsePathExp(target) || parseOptionalInfo())
     return failure();
 
-  auto domainType = type_cast<DomainType>(domain.getType());
-  auto fieldIndex = domainType.getFieldIndex(fieldName);
-  if (!fieldIndex)
-    return emitError(fieldLoc) << "unknown field '" << fieldName
-                               << "' in domain type " << domainType;
-
-  auto fieldType = domainType.getField(*fieldIndex).getType();
-  auto registryType = dyn_cast<RegistryType>(fieldType);
+  auto registryType = type_dyn_cast<RegistryType>(registry.getType());
   if (!registryType)
-    return emitError(fieldLoc) << "domain field '" << fieldName
-                               << "' is not a Registry type, got " << fieldType;
+    return emitError(registryLoc) << "expected Registry-typed field, got "
+                                  << registry.getType();
 
   if (target.getType() != registryType.getElementType())
     return emitError(startLoc) << "path target type " << target.getType()
@@ -4329,8 +4305,6 @@ ParseResult FIRStmtParser::parseDomainInsert() {
                                << registryType.getElementType();
 
   locationProcessor.setLoc(startLoc);
-  auto registry =
-      DomainSubfieldOp::create(builder, registryType, domain, *fieldIndex);
   DomainInsertOp::create(builder, registry, target);
   return success();
 }

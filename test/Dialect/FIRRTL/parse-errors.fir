@@ -2007,5 +2007,5 @@ circuit RegistryNotField:
     name: String
   public module RegistryNotField:
     input A: Domain of ClockDomain
-    ; expected-error @below {{domain field 'name' is not a Registry type}}
-    insert A[name], path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")
+    ; expected-error @below {{expected Registry-typed field, got '!firrtl.string'}}
+    insert A.name, path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")

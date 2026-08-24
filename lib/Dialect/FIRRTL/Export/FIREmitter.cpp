@@ -1440,9 +1440,8 @@ void Emitter::emitStatement(DomainInsertOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "insert" << PP::space;
-    emitExpression(subfield.getInput());
-    ps << "[" << PPExtString(subfield.getFieldName().getValue()) << "],"
-       << PP::space;
+    emitExpression(subfield);
+    ps << "," << PP::space;
     emitExpression(op.getSrc());
   });
   emitLocationAndNewLine(op);
