@@ -103,3 +103,27 @@ hw.module @Fanout(in %clk : !seq.clock, in %rst_ni : i1) {
   axi4.abstract_subordinate %clk, %rst_ni, %mgr : !port
   axi4.abstract_subordinate %clk, %rst_ni, %mgr : !port
 }
+
+// -----
+
+hw.module @NotAPort(in %clk : !seq.clock, in %rst_ni : i1,
+                    in %s : !hw.struct<a: i4>, in %v : i1) {
+  // expected-error @below {{'port' must be an AXI4 port interface, but got 'i32'}}
+  %port, %aw_ready, %w_ready, %b, %b_valid, %ar_ready, %r, %r_valid = axi4.channel_structs_to_port %clk, %rst_ni aw %s, %v w %s, %v b %v ar %s, %v r %v : i32
+  hw.output
+}
+
+// -----
+
+!port = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!bad_aw = !hw.struct<id: i4, addr: i16, len: i8, size: i3, burst: i2, lock: i1, cache: i4, prot: i3, qos: i4, region: i4, user: i0>
+!w = !hw.struct<data: i64, strb: i8, last: i1, user: i0>
+!b = !hw.struct<id: i4, resp: i2, user: i0>
+!r = !hw.struct<id: i4, data: i64, resp: i2, last: i1, user: i0>
+
+hw.module @BadPayload(in %clk : !seq.clock, in %rst_ni : i1,
+                      in %aw : !bad_aw, in %w : !w, in %v : i1) {
+  // expected-error @below {{'axi4.channel_structs_to_port' op failed to verify that AW payload matches the port type}}
+  %port, %aw_ready, %w_ready, %b, %b_valid, %ar_ready, %r, %r_valid = "axi4.channel_structs_to_port"(%clk, %rst_ni, %aw, %v, %w, %v, %v, %aw, %v, %v) : (!seq.clock, i1, !bad_aw, i1, !w, i1, i1, !bad_aw, i1, i1) -> (!port, i1, i1, !b, i1, i1, !r, i1)
+  hw.output
+}
