@@ -38,6 +38,14 @@ def BurstKind : I32EnumAttr<"BurstKind", "AXI4 burst kind",
 class AXI4AttrDef<string name, list<Trait> traits = []> :
     AttrDef<AXI4Dialect, name, traits>;
 
+// An address, printed in hex. Hex is already accepted when parsing.
+class AddressParameter<string desc = ""> :
+    AttrOrTypeParameter<"uint64_t", desc> {
+  let printer = [{
+    $_printer << "0x" << ::llvm::utohexstr($_self, /*LowerCase=*/true)
+  }];
+}
+
 def BurstSpecAttr : AXI4AttrDef<"BurstSpec"> {
   let mnemonic = "burst_spec";
   let summary = "Describes the burst capabilities of an endpoint";
@@ -55,6 +63,105 @@ def BurstSpecAttr : AXI4AttrDef<"BurstSpec"> {
   let assemblyFormat = "`<` $kind `,` `len` `=` $len `>`";
 
   let genVerifyDecl = 1;
+
+  let extraClassDeclaration = [{
+    /// Ordering over burst_specs for canonical typing
+    static bool compareCanonical(BurstSpecAttr lhs, BurstSpecAttr rhs);
+  }];
+}
+
+def BurstSetAttr : AXI4AttrDef<"BurstSet"> {
+  let mnemonic = "burst_set";
+  let summary = "Describes a non-empty set of burst specs supported by an endpoint";
+  let description = [{
+    A non-empty set of burst specs, e.g. `#axi4.burst_set<<fixed, len = 4>>` or
+    `#axi4.burst_set<<fixed, len = 4>, <incr, len = 8>>`.
+
+    To avoid functionally equivalent types (e.g. types containing burst_sets with
+    the same specs in different orders) being structurally inequivalent, this is
+    sorted and de-duplicated on construction.
+  }];
+
+  let parameters = (ins
+      OptionalArrayRefParameter<"::circt::axi4::BurstSpecAttr">:$burstSpecs);
+
+  // Parse empty sets - catch them in the verifier to avoid a very opaque error
+  let assemblyFormat = "`<` (`>`) : ($burstSpecs^ `>`)?";
+
+  // Force all clients through the canonicalizing builder below.
+  let skipDefaultBuilders = 1;
+  let genVerifyDecl = 1;
+
+  let builders = [
+    AttrOrTypeBuilder<(ins
+        "::llvm::ArrayRef<::circt::axi4::BurstSpecAttr>":$burstSpecs), [{
+      ::llvm::SmallVector<::circt::axi4::BurstSpecAttr> sorted(
+          burstSpecs.begin(), burstSpecs.end());
+      ::llvm::sort(sorted, BurstSpecAttr::compareCanonical);
+      sorted.erase(::llvm::unique(sorted), sorted.end());
+      return $_get($_ctxt, sorted);
+    }]>
+  ];
+}
+
+def WindowAttr : AXI4AttrDef<"Window"> {
+  let mnemonic = "window";
+  let summary = "Describes an access window supported by an endpoint";
+  let description = [{
+    Consists of a base address, an inclusive last address, and the burst specs
+    supported within the window, e.g.
+    `#axi4.window<base = 0x4000, last = 0x40ff, burst_specs = <<fixed, len = 4>>>`.
+  }];
+
+  let parameters = (ins AddressParameter<>:$base,
+                        AddressParameter<>:$last,
+                        "::circt::axi4::BurstSetAttr":$burstSpecs);
+
+  let assemblyFormat = [{
+    `<` `base` `=` $base `,` `last` `=` $last
+        `,` `burst_specs` `=` $burstSpecs `>`
+  }];
+
+  let genVerifyDecl = 1;
+}
+
+def WindowSetAttr : AXI4AttrDef<"WindowSet"> {
+  let mnemonic = "window_set";
+  let summary = "Describes a non-empty set of access windows supported by an endpoint";
+  let description = [{
+    A non-empty set of access windows, e.g.
+    `#axi4.window_set<<base = 0x0, last = 0xff, burst_specs = <<fixed, len = 4>>>>`.
+
+    The capabilities at an address are the union of those of every window
+    covering it, so windows may overlap. To avoid functionally equivalent types
+    being structurally unequal, the windows are normalized on construction into
+    the maximal disjoint windows describing the same capabilities, sorted by
+    base address. Gaps between windows are preserved.
+  }];
+
+  let parameters = (ins
+      OptionalArrayRefParameter<"::circt::axi4::WindowAttr">:$windows);
+
+  // Parse empty sets - catch them in the verifier to avoid a very opaque error
+  let assemblyFormat = "`<` (`>`) : ($windows^ `>`)?";
+
+  // Force all clients through the normalizing builder below.
+  let skipDefaultBuilders = 1;
+  let genVerifyDecl = 1;
+
+  let builders = [
+    AttrOrTypeBuilder<(ins
+        "::llvm::ArrayRef<::circt::axi4::WindowAttr>":$windows), [{
+      return $_get($_ctxt, WindowSetAttr::normalize($_ctxt, windows));
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Rewrites a set of possibly overlapping windows into an equivalent
+    /// ordered and uniqued set of disjoint windows
+    static ::llvm::SmallVector<WindowAttr>
+    normalize(::mlir::MLIRContext *ctx, ::llvm::ArrayRef<WindowAttr> windows);
+  }];
 }
 
 #endif // CIRCT_DIALECT_AXI4_AXI4ATTRIBUTES_TD

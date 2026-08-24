@@ -25,6 +25,7 @@ namespace circt {
 #define GEN_PASS_DECL_LOWERTOBMC
 #define GEN_PASS_DECL_EXTERNALIZEREGISTERS
 #define GEN_PASS_DECL_MATERIALIZEDEBUGVARIABLES
+#define GEN_PASS_DECL_PREPAREFORBMC
 #define GEN_PASS_REGISTRATION
 #include "circt/Tools/circt-bmc/Passes.h.inc"
 

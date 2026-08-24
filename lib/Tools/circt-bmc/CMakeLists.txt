@@ -2,6 +2,7 @@ add_circt_library(CIRCTBMCTransforms
   ExternalizeRegisters.cpp
   LowerToBMC.cpp
   MaterializeDebugVariables.cpp
+  PrepareForBMC.cpp
 
   DEPENDS
   CIRCTBMCTransformsIncGen

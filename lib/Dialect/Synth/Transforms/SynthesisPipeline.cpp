@@ -57,6 +57,7 @@ void circt::synth::buildCombLoweringPipeline(
       pm.addPass(createLowerVariadicPass<comb::MulOp>(options.timingAware));
       pm.addPass(createConvertCombToDatapath());
       pm.addPass(createSimpleCanonicalizerPass());
+      pm.addPass(createCSEPass());
       if (options.synthesisStrategy == OptimizationStrategyTiming)
         pm.addPass(datapath::createDatapathReduceDelay());
       circt::ConvertDatapathToCombOptions datapathOptions;

@@ -222,6 +222,11 @@ void circtFirtoolOptionsSetEnableAnnotationWarning(
   unwrap(options)->setEnableAnnotationWarning(value);
 }
 
+void circtFirtoolOptionsSetWarnOnTruncation(CirctFirtoolFirtoolOptions options,
+                                            bool value) {
+  unwrap(options)->setWarnOnTruncation(value);
+}
+
 void circtFirtoolOptionsSetLowerToCore(CirctFirtoolFirtoolOptions options,
                                        bool value) {
   unwrap(options)->setLowerToCore(value);

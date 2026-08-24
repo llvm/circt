@@ -146,11 +146,33 @@ def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "mlir::ModuleOp"> {
 def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let summary = "Performs inlining, flattening, and dead module elimination";
   let description = [{
-    This inliner pass will inline any instance of module marked as inline, and
-    recursively inline all instances inside of a module marked with flatten.
-    This pass performs renaming of every entity with a name that is inlined by
-    prefixing it with the instance name.  This pass also will remove any module
-    which is not reachable from the top level module.
+    Inline the body of every instance whose target module is annotated inline,
+    and recursively inline every plain instance under a module annotated
+    flatten.  Inlined entities keep their names, prefixed with the instance
+    name.
+
+    Modules with no remaining use, whether arriving unused or inlined away, are
+    erased.  Modules referenced by symbol, or instantiated by an operation the
+    pass cannot inline through (e.g., `firrtl.instance_choice`), are retained.
+
+    Hierarchical paths remain valid across inlining.  A surviving path keeps
+    its symbol, retargeted to one surviving context.  Its other contexts get
+    fresh private symbols.  A path with no surviving context is removed.
+
+    Inlining reshapes a path according to where the inlined instance sits
+    on it:
+
+    - A path rooted at the inlined module moves its root up, into the
+      instantiating parent.
+    - If the inlined root is multiply instantiated, the path forks: one copy
+      per inlined-into instantiating context.
+    - An inlined interior hop collapses; the path shortens.
+    - An inlined leaf hop moves up: the leaf's operations land in the parent,
+      and the path follows them there.
+
+    Operations whose symbol uses cannot be analyzed are diagnosed rather than
+    silently kept, as are paths terminating at an instance directed to be
+    inlined away.
 
     The inline and flatten annotation attributes are attached to module
     definitions, and they are:
@@ -160,6 +182,26 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
     ```
   }];
   let dependentDialects = ["debug::DebugDialect"];
+  let statistics = [
+    Statistic<"numInstancesInlined", "num-instances-inlined",
+      "Number of instances inlined into their parent">,
+    Statistic<"numInstancesFlattened", "num-instances-flattened",
+      "Number of instances inlined by flattening">,
+    Statistic<"numDeadModules", "num-dead-modules",
+      "Number of unreachable modules erased">,
+    Statistic<"numHierPathsUpdated", "num-hierpaths-updated",
+      "Number of hierarchical paths retargeted in place">,
+    Statistic<"numHierPathsForked", "num-hierpaths-forked",
+      "Number of fork contexts emitted as new hierpaths under fresh symbols">,
+    Statistic<"numHierPathsMerged", "num-hierpaths-merged",
+      "Number of non-primary path contexts merged onto a canonical path (primaries never merge)">,
+    Statistic<"numHierPathsErased", "num-hierpaths-erased",
+      "Number of source hierarchical paths erased for lack of a surviving target">,
+    Statistic<"numHierPathsEndInnerSym", "num-hierpaths-end-inner-sym",
+      "Number of source hierarchical paths ending at an inner symbol">,
+    Statistic<"numHierPathsEndModule", "num-hierpaths-end-module",
+      "Number of source hierarchical paths ending at a module">
+  ];
 }
 
 def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
@@ -344,6 +386,9 @@ def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
     This pass infers the widths of all types throughout a FIRRTL module, and
     emits diagnostics for types that could not be inferred.
   }];
+  let options = [Option<"warnOnTruncation", "warn-on-implicit-truncation", "bool",
+                              "false",
+                              "Warn when connects require implicit truncation">];
 }
 
 def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
@@ -536,22 +581,6 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
     "emit::EmitDialect",
     "circt::hw::HWDialect",
     "sv::SVDialect",
-  ];
-}
-
-def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
-  let summary = "Convert combinational memories to a vector of registers";
-  let description = [{
-    This pass generates the logic to implement a memory using Registers.
-  }];
-  let options = [
-    Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool",
-                "false",
-    "ignore the read enable signal, instead of assigning X on read disable">
-   ];
-  let statistics = [
-    Statistic<"numConvertedMems", "num-converted-mems",
-      "Number of memories converted to registers">,
   ];
 }
 

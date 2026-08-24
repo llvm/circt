@@ -39,17 +39,25 @@ Value TieOffCache::getUnknown(PropertyType type) {
 //===----------------------------------------------------------------------===//
 
 void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
-                                Value src) {
+                                Value src, bool warnOnTruncation) {
   ImplicitLocOpBuilder locBuilder(loc, builder.getInsertionBlock(),
                                   builder.getInsertionPoint());
-  emitConnect(locBuilder, dst, src);
+  emitConnect(locBuilder, dst, src, warnOnTruncation);
   builder.restoreInsertionPoint(locBuilder.saveInsertionPoint());
 }
 
+void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
+                                Value src, bool warnOnTruncation) {
+  emitConnect(
+      builder, dst, src, [&] { return builder.getLoc(); }, warnOnTruncation);
+}
+
 template <typename ATy, typename IndexOp, bool isBundle /* check flip? */>
-static LogicalResult connectIfAggregates(ImplicitLocOpBuilder &builder,
-                                         Value dst, FIRRTLType dstFType,
-                                         Value src, FIRRTLType srcFType) {
+static LogicalResult
+connectIfAggregates(ImplicitLocOpBuilder &builder, Value dst,
+                    FIRRTLType dstFType, Value src, FIRRTLType srcFType,
+                    llvm::function_ref<Location()> getDiagLoc,
+                    bool warnOnTruncation) {
   auto dstAggTy = type_dyn_cast<ATy>(dstFType);
   if (!dstAggTy)
     return failure();
@@ -73,7 +81,7 @@ static LogicalResult connectIfAggregates(ImplicitLocOpBuilder &builder,
       if (dstAggTy.getElement(i).isFlip)
         std::swap(dstField, srcField);
     }
-    emitConnect(builder, dstField, srcField);
+    emitConnect(builder, dstField, srcField, getDiagLoc, warnOnTruncation);
   }
 
   return success();
@@ -81,7 +89,9 @@ static LogicalResult connectIfAggregates(ImplicitLocOpBuilder &builder,
 
 /// Emit a connect between two values.
 void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
-                                Value src) {
+                                Value src,
+                                llvm::function_ref<Location()> getDiagLoc,
+                                bool warnOnTruncation) {
   auto dstFType = type_cast<FIRRTLType>(dst.getType());
   auto srcFType = type_cast<FIRRTLType>(src.getType());
   auto dstType = type_dyn_cast<FIRRTLBaseType>(dstFType);
@@ -101,10 +111,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
                type_isa<DomainType>(srcFType)) {
       DomainDefineOp::create(builder, dst, src);
     } else if (failed(connectIfAggregates<OpenBundleType, OpenSubfieldOp, true>(
-                   builder, dst, dstFType, src, srcFType)) &&
+                   builder, dst, dstFType, src, srcFType, getDiagLoc,
+                   warnOnTruncation)) &&
                failed(
                    connectIfAggregates<OpenVectorType, OpenSubindexOp, false>(
-                       builder, dst, dstFType, src, srcFType))) {
+                       builder, dst, dstFType, src, srcFType, getDiagLoc,
+                       warnOnTruncation))) {
       // Other types, give up and leave a connect
       ConnectOp::create(builder, dst, src);
     }
@@ -125,9 +137,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   }
 
   if (succeeded(connectIfAggregates<BundleType, SubfieldOp, true>(
-          builder, dst, dstFType, src, srcFType)) ||
+          builder, dst, dstFType, src, srcFType, getDiagLoc,
+          warnOnTruncation)) ||
       succeeded(connectIfAggregates<FVectorType, SubindexOp, false>(
-          builder, dst, dstFType, src, srcFType)))
+          builder, dst, dstFType, src, srcFType, getDiagLoc, warnOnTruncation)))
     return;
 
   if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
@@ -157,9 +170,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // The source must be extended or truncated.
   if (dstWidth < srcWidth) {
-    mlir::emitWarning(builder.getLoc())
-        << "RHS width " << srcWidth << " exceeds LHS width " << dstWidth
-        << ", inserting implicit truncation";
+    if (warnOnTruncation)
+      mlir::emitWarning(getDiagLoc())
+          << "RHS width " << srcWidth << " exceeds LHS width " << dstWidth
+          << ", inserting implicit truncation";
 
     // firrtl.tail always returns uint even for sint operands.
     IntType tmpType =

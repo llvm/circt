@@ -147,7 +147,6 @@ public:
   bool shouldDedupClasses() const { return dedupClasses; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
-  bool shouldUseNewFullResetFlow() const { return useNewFullResetFlow; }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
   bool shouldStripDebugInfo() const { return stripDebugInfo; }
   bool shouldStripFirDebugInfo() const { return stripFirDebugInfo; }
@@ -156,6 +155,7 @@ public:
     return disableAggressiveMergeConnections;
   }
   bool shouldEnableAnnotationWarning() const { return enableAnnotationWarning; }
+  bool shouldWarnOnTruncation() const { return warnOnTruncation; }
   bool shouldLowerToCore() const { return lowerToCore; }
   auto getVerificationFlavor() const { return verificationFlavor; }
   bool shouldEmitSeparateAlwaysBlocks() const {
@@ -301,11 +301,6 @@ public:
     return *this;
   }
 
-  FirtoolOptions &setUseNewFullResetFlow(bool value) {
-    useNewFullResetFlow = value;
-    return *this;
-  }
-
   FirtoolOptions &setOutputAnnotationFilename(StringRef value) {
     outputAnnotationFilename = value;
     return *this;
@@ -313,6 +308,11 @@ public:
 
   FirtoolOptions &setEnableAnnotationWarning(bool value) {
     enableAnnotationWarning = value;
+    return *this;
+  }
+
+  FirtoolOptions &setWarnOnTruncation(bool value) {
+    warnOnTruncation = value;
     return *this;
   }
 
@@ -458,10 +458,10 @@ private:
   bool replSeqMem;
   std::string replSeqMemFile;
   bool ignoreReadEnableMem;
-  bool useNewFullResetFlow;
   RandomKind disableRandom;
   std::string outputAnnotationFilename;
   bool enableAnnotationWarning;
+  bool warnOnTruncation;
   bool lowerToCore;
   bool addMuxPragmas;
   firrtl::VerificationFlavor verificationFlavor;

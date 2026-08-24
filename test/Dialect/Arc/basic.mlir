@@ -348,30 +348,26 @@ func.func @Execute(%arg0: i42) {
 }
 
 // CHECK-LABEL: func.func @CurrentTime
-func.func @CurrentTime(%arg0: !arc.storage) {
-  // CHECK-NEXT: arc.current_time %arg0 : !arc.storage
-  %0 = arc.current_time %arg0 : !arc.storage
+func.func @CurrentTime(%arg0: !arc.context) {
+  // CHECK-NEXT: arc.current_time %arg0
+  %0 = arc.current_time %arg0
   return
 }
 
 // CHECK-LABEL: func.func @NextWakeup
-func.func @NextWakeup(%arg0: !arc.storage, %arg1: i64) {
-  // CHECK-NEXT: arc.get_next_wakeup %arg0 : !arc.storage
-  %0 = arc.get_next_wakeup %arg0 : !arc.storage
-  // CHECK-NEXT: arc.set_next_wakeup %arg0, %arg1 : !arc.storage
-  arc.set_next_wakeup %arg0, %arg1 : !arc.storage
+func.func @NextWakeup(%arg0: !arc.context, %arg1: i64) {
+  // CHECK-NEXT: arc.get_next_wakeup %arg0
+  %0 = arc.get_next_wakeup %arg0
+  // CHECK-NEXT: arc.set_next_wakeup %arg0, %arg1
+  arc.set_next_wakeup %arg0, %arg1
   return
 }
 
 // CHECK-LABEL: func.func @SimGetSetTime
-func.func @SimGetSetTime() {
+func.func @SimGetSetTime(%time: i64) {
   arc.sim.instantiate @TimeTestModule as %model {
-    // CHECK: arc.sim.get_time %{{.*}} : !arc.sim.instance<@TimeTestModule>
-    %0 = arc.sim.get_time %model : !arc.sim.instance<@TimeTestModule>
     // CHECK: arc.sim.set_time %{{.*}}, %{{.*}} : !arc.sim.instance<@TimeTestModule>
-    arc.sim.set_time %model, %0 : !arc.sim.instance<@TimeTestModule>
-    // CHECK: arc.sim.get_next_wakeup %{{.*}} : !arc.sim.instance<@TimeTestModule>
-    %1 = arc.sim.get_next_wakeup %model : !arc.sim.instance<@TimeTestModule>
+    arc.sim.set_time %model, %time : !arc.sim.instance<@TimeTestModule>
     // CHECK: arc.sim.step %{{.*}} by %{{.*}} : !arc.sim.instance<@TimeTestModule>
     %tstep = arith.constant 123 : i64
     arc.sim.step %model by %tstep : !arc.sim.instance<@TimeTestModule>
@@ -468,4 +464,11 @@ func.func @ArrayRefAllocAggregate() -> !arc.arrayref<2x!hw.array<1xi32>> {
 func.func @ArrayRefAllocStruct() -> !arc.arrayref<2x!hw.struct<foo: i1>> {
   %0 = arc.arrayref.alloc init([false, true]) : !arc.arrayref<2x!hw.struct<foo: i1>>
   return %0 : !arc.arrayref<2x!hw.struct<foo: i1>>
+}
+
+// CHECK-LABEL: func.func @StorageAsContext
+func.func @StorageAsContext(%storage: !arc.storage) -> (!arc.context) {
+  // CHECK: arc.as_context %{{.+}} : !arc.storage
+  %ctxt  = arc.as_context %storage : !arc.storage
+  return %ctxt : !arc.context
 }

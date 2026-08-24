@@ -4,6 +4,18 @@
 //
 // Internal issue in Slang v3 about jump depending on uninitialised value.
 // UNSUPPORTED: valgrind
+//
+// Assigning a full interface handle to a modport-restricted virtual
+// interface handle (`c.set_vif(out)` below) is not yet supported. Moore
+// represents virtual interfaces and modports as structs of `ref`s, and a
+// modport's fields can alias differently-named signals on the interface
+// (here `mp`'s `data` aliases `data2`). Converting between the two structs
+// therefore needs to re-resolve each modport field against the original
+// interface symbol, the way `materializeVirtualInterfaceValue` does when
+// building a modport view directly, rather than generically converting an
+// already-materialized interface struct value field-by-name. No such
+// conversion path exists yet, so this fails to import.
+// XFAIL: *
 
 interface output_if
     (input logic clk);

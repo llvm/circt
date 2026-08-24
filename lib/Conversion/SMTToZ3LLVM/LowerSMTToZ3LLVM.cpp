@@ -125,6 +125,23 @@ private:
   }
 
 protected:
+  LLVM::LLVMFuncOp getOrCreateFunction(OpBuilder &builder, StringRef name,
+                                       LLVM::LLVMFunctionType funcType) const {
+    auto &funcOp = globals.funcMap[builder.getStringAttr(name)];
+    if (funcOp)
+      return funcOp;
+
+    OpBuilder::InsertionGuard guard(builder);
+    auto module = builder.getBlock()->getParent()->getParentOfType<ModuleOp>();
+    builder.setInsertionPointToEnd(module.getBody());
+    auto funcOpResult =
+        LLVM::lookupOrCreateFn(builder, module, name, funcType.getParams(),
+                               funcType.getReturnType(), funcType.getVarArg());
+    assert(succeeded(funcOpResult) &&
+           "expected to create function declaration");
+    return funcOp = funcOpResult.value();
+  }
+
   /// A convenience function to get the pointer to the context from the 'global'
   /// operation. The result is cached for each basic block, i.e., it is assumed
   /// that this function is never called in the same basic block again at a
@@ -150,18 +167,7 @@ protected:
   LLVM::CallOp buildCall(OpBuilder &builder, Location loc, StringRef name,
                          LLVM::LLVMFunctionType funcType,
                          ValueRange args) const {
-    auto &funcOp = globals.funcMap[builder.getStringAttr(name)];
-    if (!funcOp) {
-      OpBuilder::InsertionGuard guard(builder);
-      auto module =
-          builder.getBlock()->getParent()->getParentOfType<ModuleOp>();
-      builder.setInsertionPointToEnd(module.getBody());
-      auto funcOpResult = LLVM::lookupOrCreateFn(
-          builder, module, name, funcType.getParams(), funcType.getReturnType(),
-          funcType.getVarArg());
-      assert(succeeded(funcOpResult) && "expected to lookup or create printf");
-      funcOp = funcOpResult.value();
-    }
+    auto funcOp = getOrCreateFunction(builder, name, funcType);
     return LLVM::CallOp::create(builder, loc, funcOp, args);
   }
 
@@ -641,7 +647,7 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
 
     // Solver regions are outlined below. If one contains a trace marker,
     // forward the enclosing function's trace context through the outlined
-    // function as its final argument.
+    // function.
     bool containsBMCTrace = false;
     op.getBodyRegion().walk(
         [&](verif::BMCTraceOp) { containsBMCTrace = true; });
@@ -660,6 +666,22 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
       inputTypes.push_back(traceContext.getType());
       callOperands.push_back(traceContext);
       op.getBodyRegion().addArgument(traceContext.getType(), loc);
+
+      if (options.printOnlyFirstCounterexample) {
+        // Keep the optional one-shot printing policy in the generated code.
+        // This flag is local to one solver invocation and shared by every
+        // dynamic execution of an smt.check in the outlined solver body.
+        Value one =
+            LLVM::ConstantOp::create(rewriter, loc, rewriter.getI32Type(), 1);
+        Value traceEmittedStorage = LLVM::AllocaOp::create(
+            rewriter, loc, ptrTy, rewriter.getI1Type(), one);
+        Value notEmitted =
+            LLVM::ConstantOp::create(rewriter, loc, rewriter.getI1Type(), 0);
+        LLVM::StoreOp::create(rewriter, loc, notEmitted, traceEmittedStorage);
+        inputTypes.push_back(traceEmittedStorage.getType());
+        callOperands.push_back(traceEmittedStorage);
+        op.getBodyRegion().addArgument(traceEmittedStorage.getType(), loc);
+      }
     }
 
     func::FuncOp funcOp;
@@ -671,6 +693,11 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
       funcOp = func::FuncOp::create(
           rewriter, loc, globals.names.newName("solver"),
           rewriter.getFunctionType(inputTypes, convertedTypes));
+      if (containsBMCTrace) {
+        globals.traceFunctionNames.insert(funcOp.getSymNameAttr());
+        if (options.printOnlyFirstCounterexample)
+          globals.traceEmissionFunctionNames.insert(funcOp.getSymNameAttr());
+      }
       rewriter.inlineRegionBefore(op.getBodyRegion(), funcOp.getBody(),
                                   funcOp.end());
     }
@@ -868,6 +895,90 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
     rewriter.inlineRegionBefore(op.getSatRegion(), satIfOp.getThenRegion(),
                                 satIfOp.getThenRegion().end());
 
+    // Materialize a counterexample while the satisfying model and all recorded
+    // ASTs still belong to a live Z3 context. The Z3 function addresses are
+    // supplied by the JITed module so the BMC runtime remains independent of a
+    // particular Z3 library at link time.
+    auto parentFunction = op->getParentOfType<FunctionOpInterface>();
+    auto functionName = parentFunction
+                            ? parentFunction->getAttrOfType<StringAttr>(
+                                  SymbolTable::getSymbolAttrName())
+                            : StringAttr{};
+    Operation *traceEmissionOp = nullptr;
+    if (functionName && globals.traceFunctionNames.contains(functionName)) {
+      rewriter.setInsertionPointToStart(satIfOp.thenBlock());
+      bool printOnlyFirst =
+          globals.traceEmissionFunctionNames.contains(functionName);
+      Value traceContext = parentFunction.getArgument(
+          parentFunction.getNumArguments() - (printOnlyFirst ? 2 : 1));
+      Value traceEmittedStorage;
+      if (printOnlyFirst) {
+        traceEmittedStorage =
+            parentFunction.getArgument(parentFunction.getNumArguments() - 1);
+        Value traceEmitted = LLVM::LoadOp::create(
+            rewriter, loc, rewriter.getI1Type(), traceEmittedStorage);
+        Value notEmitted =
+            LLVM::ConstantOp::create(rewriter, loc, rewriter.getI1Type(), 0);
+        Value shouldEmit = LLVM::ICmpOp::create(
+            rewriter, loc, LLVM::ICmpPredicate::eq, traceEmitted, notEmitted);
+
+        auto traceIf = scf::IfOp::create(rewriter, loc, TypeRange{}, shouldEmit,
+                                         /*withThenRegion=*/true,
+                                         /*withElseRegion=*/false);
+        traceEmissionOp = traceIf.getOperation();
+        rewriter.setInsertionPointToStart(&traceIf.getThenRegion().front());
+      }
+      Value traceModel =
+          buildPtrAPICall(rewriter, loc, "Z3_solver_get_model", {solver});
+      Value context = buildContextPtr(rewriter, loc);
+
+      auto modelEvalType = LLVM::LLVMFunctionType::get(
+          rewriter.getI1Type(),
+          {ptrTy, ptrTy, ptrTy, rewriter.getI1Type(), ptrTy});
+      auto modelEval =
+          getOrCreateFunction(rewriter, "Z3_model_eval", modelEvalType);
+      Value modelEvalAddress =
+          LLVM::AddressOfOp::create(rewriter, loc, modelEval);
+
+      auto getNumeralType = LLVM::LLVMFunctionType::get(ptrTy, {ptrTy, ptrTy});
+      auto getNumeral = getOrCreateFunction(
+          rewriter, "Z3_get_numeral_binary_string", getNumeralType);
+      Value getNumeralAddress =
+          LLVM::AddressOfOp::create(rewriter, loc, getNumeral);
+
+      auto traceCall = buildCall(
+          rewriter, loc, "circt_bmc_print_trace",
+          LLVM::LLVMFunctionType::get(rewriter.getI1Type(),
+                                      {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy}),
+          {traceContext, context, traceModel, modelEvalAddress,
+           getNumeralAddress});
+      if (printOnlyFirst) {
+        LLVM::StoreOp::create(rewriter, loc, traceCall.getResult(),
+                              traceEmittedStorage);
+        scf::YieldOp::create(rewriter, loc);
+      } else {
+        traceEmissionOp = traceCall.getOperation();
+      }
+    }
+
+    // Print the model before the original SAT region, which may mutate the
+    // solver state. Keep this adjacent to trace materialization so both observe
+    // the model returned by the solver check above.
+    if (options.debug) {
+      if (traceEmissionOp)
+        rewriter.setInsertionPointAfter(traceEmissionOp);
+      else
+        rewriter.setInsertionPointToStart(satIfOp.thenBlock());
+      auto model = buildPtrAPICall(rewriter, op.getLoc(), "Z3_solver_get_model",
+                                   {solver});
+      auto modelStringPtr =
+          buildPtrAPICall(rewriter, op.getLoc(), "Z3_model_to_string", {model});
+      auto modelFormatString =
+          buildString(rewriter, op.getLoc(), getHeaderString("Model"));
+      buildCall(rewriter, op.getLoc(), "printf", printfType,
+                {modelFormatString, modelStringPtr});
+    }
+
     // Otherwise, the 'else' block checks if the assertions are unsatisfiable or
     // unknown. The corresponding regions can also be simply inlined into the
     // two branches of this nested if-statement as well.
@@ -899,18 +1010,6 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
           buildString(rewriter, op.getLoc(), getHeaderString("Proof"));
       buildCall(rewriter, op.getLoc(), "printf", printfType,
                 {formatString, stringPtr});
-
-      // In debug mode, if the assertions are satisfiable we can print the model
-      // (effectively a counter-example).
-      rewriter.setInsertionPointToStart(satIfOp.thenBlock());
-      auto model = buildPtrAPICall(rewriter, op.getLoc(), "Z3_solver_get_model",
-                                   {solver});
-      auto modelStringPtr =
-          buildPtrAPICall(rewriter, op.getLoc(), "Z3_model_to_string", {model});
-      auto modelFormatString =
-          buildString(rewriter, op.getLoc(), getHeaderString("Model"));
-      buildCall(rewriter, op.getLoc(), "printf", printfType,
-                {modelFormatString, modelStringPtr});
     }
 
     return success();
@@ -1329,7 +1428,17 @@ struct BMCTraceLowering : public SMTLoweringPattern<verif::BMCTraceOp> {
     auto function = op->getParentOfType<FunctionOpInterface>();
     if (!function || function.getNumArguments() == 0)
       return rewriter.notifyMatchFailure(op, "missing BMC trace context");
-    Value traceContext = function.getArgument(function.getNumArguments() - 1);
+    auto functionName =
+        function->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+    unsigned traceArgumentOffset =
+        functionName &&
+                globals.traceEmissionFunctionNames.contains(functionName)
+            ? 2
+            : 1;
+    if (function.getNumArguments() < traceArgumentOffset)
+      return rewriter.notifyMatchFailure(op, "missing BMC trace context");
+    Value traceContext =
+        function.getArgument(function.getNumArguments() - traceArgumentOffset);
     if (!isa<LLVM::LLVMPointerType>(traceContext.getType()))
       return rewriter.notifyMatchFailure(op, "invalid BMC trace context type");
     auto voidType = LLVM::LLVMVoidType::get(rewriter.getContext());
@@ -1617,6 +1726,7 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
 void LowerSMTToZ3LLVMPass::runOnOperation() {
   LowerSMTToZ3LLVMOptions options;
   options.debug = debug;
+  options.printOnlyFirstCounterexample = printOnlyFirstCounterexample;
 
   // Check that the lowering is possible
   // Specifically, check that the use of set-logic ops is valid for z3

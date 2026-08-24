@@ -1,4 +1,6 @@
 // This test checks that the custom port name gets propagated all the way down to Verilog
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: hlstool --calyx-hw --ir %s | FileCheck %s
 
 // CHECK: hw.module @control

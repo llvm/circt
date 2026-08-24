@@ -16,8 +16,7 @@
 //   Constant-like ops are cloned into the body; all other values are threaded
 //   as coroutine arguments.
 //
-// - Lifts the body into a new top-level `arc.coroutine.define` whose function
-//   type appends an `i64` "now" argument after the captures, and appends an
+// - Lifts the body into a new top-level `arc.coroutine.define` and appends an
 //   observe bitmask and an `i64` wakeup time result after the process results.
 //   The entry block and every block targeted by an `llhd.wait` receive the
 //   coroutine's argument types as leading block arguments, and a per-value SSA
@@ -28,14 +27,15 @@
 //   that can never resume, an `arc.coroutine.halt`) whose trailing yield
 //   operands are an observe bitmask and a wakeup time. The bitmask has one bit
 //   per coroutine argument, set for each observed value; the instance re-enters
-//   the coroutine when a set argument changes. The wakeup is `now + delay`
-//   (with the delay converted to `i64` via `llhd.time_to_int`, leaving the time
-//   unit opaque to this pass), or the unit-independent sentinel `-1` when the
-//   wait has no delay. Each `llhd.halt` becomes an `arc.coroutine.halt` with an
-//   empty mask and the `-1` wakeup.
+//   the coroutine when a set argument changes. The wakeup is `now + delay`,
+//   where `now` is the current simulation time the coroutine reads from the
+//   model context via `arc.inferred_context` (with the delay converted to `i64`
+//   via `llhd.time_to_int`, leaving the time unit opaque to this pass), or the
+//   unit-independent sentinel `-1` when the wait has no delay. Each `llhd.halt`
+//   becomes an `arc.coroutine.halt` with an empty mask and the `-1` wakeup.
 //
 // - Replaces the original process with an `arc.coroutine.instance` that
-//   reads the current simulation time and forwards the captured values.
+//   forwards the captured values.
 //
 //===----------------------------------------------------------------------===//
 
@@ -94,8 +94,7 @@ private:
   /// as coroutine arguments.
   SmallVector<Value> captures;
 
-  /// Block arguments of the coroutine entry block, in order: indices `0..N-1`
-  /// mirror `captures`, and the final index holds `%now`.
+  /// Block arguments of the coroutine entry block, mirroring `captures`.
   SmallVector<Value> entryArgs;
 
   /// Blocks targeted by an `llhd.wait`. Each receives a copy of the
@@ -114,6 +113,9 @@ private:
   /// Indicates which arguments are relevant for the sensitivity check. This
   /// matches the bit-wise OR of all dynamically returned sensitivity masks.
   SmallVector<bool> staticSensitivityMask;
+
+  /// The inferred `!arc.context` value.
+  Value inferredContext;
 };
 
 } // namespace
@@ -161,14 +163,13 @@ void ProcessLowering::createCoroutine() {
   OpBuilder builder(hwModule);
 
   // Build the function type:
-  // `(captureTypes..., i64) -> (procResults..., iN mask, i64 wakeup)`, where
+  // `(captureTypes...) -> (procResults..., iN mask, i64 wakeup)`, where
   // the observe bitmask `iN` carries one bit per coroutine argument and the
   // trailing `i64` is the next wakeup time.
   auto i64Type = builder.getIntegerType(64);
   SmallVector<Type> argTypes;
   for (auto cap : captures)
     argTypes.push_back(cap.getType());
-  argTypes.push_back(i64Type);
   auto maskType = builder.getIntegerType(argTypes.size());
   SmallVector<Type> resultTypes(processOp.getResultTypes());
   resultTypes.push_back(maskType);
@@ -186,6 +187,10 @@ void ProcessLowering::createCoroutine() {
   // Move the process body wholesale into the coroutine. Block arguments are
   // added in a separate step.
   coroOp.getBody().takeBody(processOp.getBody());
+
+  // Retrieve the context value in the entry block.
+  builder.setInsertionPointToStart(&coroOp.getBody().front());
+  inferredContext = InferredContextOp::create(builder, coroOp.getLoc());
 }
 
 /// Prepend the coroutine function-type prefix as leading block arguments to
@@ -212,10 +217,7 @@ void ProcessLowering::addEntryAndResumeBlockArguments() {
 
   // Assemble the initial resume block argument types that will be provided by
   // callers entering or re-entering the coroutine.
-  SmallVector<Type> prefixTypes;
-  for (auto capture : captures)
-    prefixTypes.push_back(capture.getType());
-  prefixTypes.push_back(IntegerType::get(coroOp.getContext(), 64));
+  auto prefixTypes = TypeRange(captures);
 
   // Add arguments to the entry block, recording each one's coroutine argument
   // index so `rewriteTerminators` can map observed values to bitmask bits.
@@ -273,12 +275,10 @@ void ProcessLowering::addEntryAndResumeBlockArguments() {
 }
 
 /// Convert `llhd.wait`/`llhd.halt` terminators to their `arc.coroutine`
-/// equivalents. The wakeup operand is computed against the entry block's
-/// `%now` argument; the per-argument SSA renaming step run afterwards
-/// rewrites that reference to the correct block-local definition. A `llhd.wait`
-/// with an `observed` clause yields an observe bitmask with the bit of each
-/// observed coroutine argument set; ops without a delay and without observed
-/// values can never resume and are treated as halts.
+/// equivalents. The wakeup operand is the inferred context's current time plus
+/// the wait's delay. A `llhd.wait` with an `observed` clause yields an observe
+/// bitmask with the bit of each observed coroutine argument set; ops without a
+/// delay and without observed values can never resume and are treated as halts.
 LogicalResult ProcessLowering::rewriteTerminators() {
   // The observe bitmask has one bit per coroutine argument. `argIndices` maps
   // the block arguments that stand in for coroutine arguments to their bit
@@ -323,7 +323,7 @@ LogicalResult ProcessLowering::rewriteTerminators() {
         continue;
       }
 
-      auto now = entryArgs.back();
+      auto now = CurrentTimeOp::create(builder, loc, inferredContext);
       auto delay = llhd::TimeToIntOp::create(builder, loc, wait.getDelay());
       auto wakeup = comb::AddOp::create(builder, loc, now, delay);
       SmallVector<Value> yieldOperands(wait.getYieldOperands());
@@ -449,16 +449,11 @@ void ProcessLowering::renameCoroutineArgument(unsigned argIdx,
 void ProcessLowering::buildInstance() {
   OpBuilder builder(processOp);
   auto loc = processOp.getLoc();
-  auto now = llhd::CurrentTimeOp::create(builder, loc);
-  auto nowI64 = llhd::TimeToIntOp::create(builder, loc, now);
 
-  SmallVector<Value> args(captures.begin(), captures.end());
-  args.push_back(nowI64);
-
-  assert(args.size() == staticSensitivityMask.size());
+  assert(captures.size() == staticSensitivityMask.size());
   auto instanceOp = CoroutineInstanceOp::create(
       builder, loc, processOp.getResultTypes(),
-      FlatSymbolRefAttr::get(coroOp.getSymNameAttr()), args,
+      FlatSymbolRefAttr::get(coroOp.getSymNameAttr()), captures,
       builder.getDenseBoolArrayAttr(staticSensitivityMask));
 
   processOp.replaceAllUsesWith(instanceOp.getResults());

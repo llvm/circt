@@ -3808,6 +3808,39 @@ RegOp::computeDataFlow() {
   return {};
 }
 
+/// Verify that an optional `initial` time-zero value attribute is a constant of
+/// the correct ground type. The attribute's bit width and signedness must match
+/// the register's declared ground type.
+static LogicalResult verifyInitialAttr(Operation *op, FIRRTLBaseType regType,
+                                       IntegerAttr initial) {
+  if (!initial)
+    return success();
+
+  // Aggregate register support is deferred; require a ground type.
+  auto intType = type_dyn_cast<IntType>(regType);
+  if (!intType)
+    return op->emitError(
+        "'initial' value is only supported on ground-type registers");
+
+  // The width of the attribute must match the register's declared width.
+  auto width = intType.getWidthOrSentinel();
+  if (width != -1 && (int)initial.getValue().getBitWidth() != width)
+    return op->emitError("'initial' value bitwidth (")
+           << initial.getValue().getBitWidth()
+           << ") doesn't match register type width (" << width << ")";
+
+  // The sign of the attribute's integer type must match the register type sign.
+  auto attrType = type_cast<IntegerType>(initial.getType());
+  if (attrType.isSignless() || attrType.isSigned() != intType.isSigned())
+    return op->emitError("'initial' value has wrong sign");
+
+  return success();
+}
+
+LogicalResult RegOp::verify() {
+  return verifyInitialAttr(*this, getResult().getType(), getInitialAttr());
+}
+
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
 
@@ -3819,7 +3852,7 @@ LogicalResult RegResetOp::verify() {
     return emitError("type mismatch between register ")
            << regType << " and reset value " << resetType;
 
-  return success();
+  return verifyInitialAttr(*this, regType, getInitialAttr());
 }
 
 std::optional<size_t> RegResetOp::getTargetResultIndex() { return 0; }
@@ -4416,8 +4449,7 @@ LogicalResult PropertyAssertOp::verify() {
   if (auto *defOp = getCondition().getDefiningOp())
     if (auto boolConst = dyn_cast<BoolConstantOp>(defOp))
       if (!boolConst.getValue())
-        return emitOpError("property assertion is statically false: ")
-               << getMessage();
+        return emitOpError("property assertion is statically false");
   return success();
 }
 

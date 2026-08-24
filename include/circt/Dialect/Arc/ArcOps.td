@@ -585,11 +585,9 @@ def CurrentTimeOp : ArcOp<"current_time", [
     Reads the current simulation time from the model's storage. The time is
     represented as an `i64` value in femtoseconds.
   }];
-  let arguments = (ins StorageType:$storage);
+  let arguments = (ins ContextType:$arcContext);
   let results = (outs I64:$time);
-  let assemblyFormat = [{
-    $storage attr-dict `:` qualified(type($storage))
-  }];
+  let assemblyFormat = [{ $arcContext attr-dict }];
 }
 
 def TerminateOp : ArcOp<"terminate", [
@@ -597,20 +595,18 @@ def TerminateOp : ArcOp<"terminate", [
 ]> {
   let summary = "Request simulation termination";
   let description = [{
-    Sets a termination flag in the model's storage.
+    Sets a termination flag in the model's context.
     It unconditionally writes 1 for success or 2 for failure.
     This allows the simulation to exit gracefully after the current
     evaluation cycle.
   }];
 
   let arguments = (ins
-    StorageType:$storage,
+    ContextType:$arcContext,
     BoolAttr:$success
   );
 
-  let assemblyFormat = [{
-    $storage `,` $success attr-dict `:` qualified(type($storage))
-  }];
+  let assemblyFormat = [{ $arcContext `,` $success attr-dict }];
 }
 
 def GetNextWakeupOp : ArcOp<"get_next_wakeup", [
@@ -618,17 +614,15 @@ def GetNextWakeupOp : ArcOp<"get_next_wakeup", [
 ]> {
   let summary = "Read the model's next wakeup time";
   let description = [{
-    Reads the next wakeup time from the model's storage. The time is an
+    Reads the next wakeup time from the model's context. The time is an
     absolute timestamp in femtoseconds, not a duration relative to the current
     simulation time. A wakeup at the current time requests an immediate
     re-evaluation in the same time step; a value of `UINT64_MAX` indicates that
     no wakeup is pending.
   }];
-  let arguments = (ins StorageType:$storage);
+  let arguments = (ins ContextType:$arcContext);
   let results = (outs I64:$time);
-  let assemblyFormat = [{
-    $storage attr-dict `:` qualified(type($storage))
-  }];
+  let assemblyFormat = [{ $arcContext attr-dict }];
 }
 
 def SetNextWakeupOp : ArcOp<"set_next_wakeup", [
@@ -642,10 +636,35 @@ def SetNextWakeupOp : ArcOp<"set_next_wakeup", [
     process suspension code lowers the value to the earliest scheduled
     wakeup over the course of an evaluation.
   }];
-  let arguments = (ins StorageType:$storage, I64:$time);
-  let assemblyFormat = [{
-    $storage `,` $time attr-dict `:` qualified(type($storage))
+  let arguments = (ins ContextType:$arcContext, I64:$time);
+  let assemblyFormat = [{ $arcContext `,` $time attr-dict }];
+}
+
+//===----------------------------------------------------------------------===//
+// Context
+//===----------------------------------------------------------------------===//
+
+def AsContextOp : ArcOp<"as_context", [Pure]> {
+  let summary = "Derive context from a root storage or instance handle";
+  let description = [{
+    Retrieve a runtime handle to the context of a model's instance from either
+    the instance's root storage or a specialized simulation instance handle.
   }];
+  let arguments = (ins AnyTypeOf<[StorageType, SimModelInstance]>:$input);
+  let results = (outs ContextType:$arcContext);
+  let assemblyFormat = [{ $input attr-dict `:` qualified(type($input)) }];
+}
+
+def InferredContextOp : ArcOp<"inferred_context", [Pure]> {
+  let summary = "Get the inferred runtime context";
+  let description = [{
+    Retrieve a runtime handle to the context of the model instance currently
+    being executed. This can be used in situations where the concrete context
+    is not yet available or in the body of functions that are called by one or
+    several models.
+  }];
+  let results = (outs ContextType:$arcContext);
+  let assemblyFormat = [{ attr-dict }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -1116,22 +1135,6 @@ def SimEmitValueOp : ArcOp<"sim.emit"> {
   let assemblyFormat = [{ $valueName `,` $value attr-dict `:` type($value) }];
 }
 
-def SimGetTimeOp : ArcOp<"sim.get_time", [
-  MemoryEffects<[MemRead]>,
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>
-]> {
-  let summary = "Gets the current simulation time of the model instance";
-  let description = [{
-    Gets the current simulation time of the given model instance. The time is
-    represented as an `i64` value in femtoseconds.
-  }];
-  let arguments = (ins SimModelInstance:$instance);
-  let results = (outs I64:$time);
-  let assemblyFormat = [{
-    $instance attr-dict `:` qualified(type($instance))
-  }];
-}
-
 def SimSetTimeOp : ArcOp<"sim.set_time", [
   MemoryEffects<[MemWrite]>,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
@@ -1144,27 +1147,6 @@ def SimSetTimeOp : ArcOp<"sim.set_time", [
   let arguments = (ins SimModelInstance:$instance, I64:$time);
   let assemblyFormat = [{
     $instance `,` $time attr-dict `:` qualified(type($instance))
-  }];
-}
-
-def SimGetNextWakeupOp : ArcOp<"sim.get_next_wakeup", [
-  MemoryEffects<[MemRead]>,
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>
-]> {
-  let summary = "Gets the next wakeup time of the model instance";
-  let description = [{
-    Gets the next wakeup time of the given model instance. The time is an
-    absolute timestamp in femtoseconds, not a duration relative to the current
-    simulation time. A wakeup at the current time requests an immediate
-    re-evaluation in the same time step; a value of `UINT64_MAX` indicates that
-    no wakeup is pending. The slot is recomputed on every evaluation, so a
-    driver typically reads it after each `arc.sim.step` to decide how far to
-    advance simulation time before the next step.
-  }];
-  let arguments = (ins SimModelInstance:$instance);
-  let results = (outs I64:$time);
-  let assemblyFormat = [{
-    $instance attr-dict `:` qualified(type($instance))
   }];
 }
 

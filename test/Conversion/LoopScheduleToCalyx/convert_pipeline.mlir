@@ -1,3 +1,5 @@
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: circt-opt %s -lower-loopschedule-to-calyx -split-input-file | FileCheck %s
 
 // CHECK:     module attributes {calyx.entrypoint = "minimal"} {

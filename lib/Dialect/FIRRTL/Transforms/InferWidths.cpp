@@ -2027,7 +2027,8 @@ namespace {
 /// of variables and constraints to be solved later.
 class InferenceTypeUpdate {
 public:
-  InferenceTypeUpdate(InferenceMapping &mapping) : mapping(mapping) {}
+  InferenceTypeUpdate(InferenceMapping &mapping, bool warnOnTruncation)
+      : mapping(mapping), warnOnTruncation(warnOnTruncation) {}
 
   LogicalResult update(CircuitOp op);
   FailureOr<bool> updateOperation(Operation *op);
@@ -2036,6 +2037,7 @@ public:
 
 private:
   const InferenceMapping &mapping;
+  const bool warnOnTruncation;
 };
 
 } // namespace
@@ -2088,8 +2090,9 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
     auto lhsWidth = lhsType.getBitWidthOrSentinel();
     auto rhsWidth = rhsType.getBitWidthOrSentinel();
     if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
-      con.emitWarning() << "RHS width " << rhsWidth << " exceeds LHS width "
-                        << lhsWidth << ", inserting implicit truncation";
+      if (warnOnTruncation)
+        con.emitWarning() << "RHS width " << rhsWidth << " exceeds LHS width "
+                          << lhsWidth << ", inserting implicit truncation";
       OpBuilder builder(op);
       auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.getSrc(),
                                                     rhsWidth - lhsWidth);
@@ -2272,6 +2275,7 @@ FIRRTLBaseType InferenceTypeUpdate::updateType(FieldRef fieldRef,
 namespace {
 class InferWidthsPass
     : public circt::firrtl::impl::InferWidthsBase<InferWidthsPass> {
+  using Base::Base;
   void runOnOperation() override;
 };
 } // namespace
@@ -2293,6 +2297,7 @@ void InferWidthsPass::runOnOperation() {
     return signalPassFailure();
 
   // Update the types with the inferred widths.
-  if (failed(InferenceTypeUpdate(mapping).update(getOperation())))
+  if (failed(InferenceTypeUpdate(mapping, warnOnTruncation)
+                 .update(getOperation())))
     return signalPassFailure();
 }

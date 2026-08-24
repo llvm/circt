@@ -84,9 +84,16 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
     // Propagate the class's per-field locations onto each field value, fused
     // with the value's existing location.
     if (auto classOp = dyn_cast<ClassOp>(classLike.getOperation()))
-      for (auto [i, v] : llvm::enumerate(fieldValues))
-        v.setLoc(
-            rewriter.getFusedLoc({classOp.getFieldLocByIndex(i), v.getLoc()}));
+      for (auto [i, v] : llvm::enumerate(fieldValues)) {
+        Location fieldLoc =
+            rewriter.getFusedLoc({classOp.getFieldLocByIndex(i), v.getLoc()});
+        if (auto *fieldOp = v.getDefiningOp())
+          rewriter.modifyOpInPlace(fieldOp, [&] { fieldOp->setLoc(fieldLoc); });
+        else
+          rewriter.modifyOpInPlace(
+              cast<BlockArgument>(v).getOwner()->getParentOp(),
+              [&] { v.setLoc(fieldLoc); });
+      }
 
     // Erase the terminator and inline the body at the object instantiation.
     rewriter.eraseOp(clonedFields);
@@ -204,8 +211,29 @@ LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
           return success();
         }
 
+        // The message is supposed to be fully evaluated at this point, though
+        // it could be unknown.
+        auto messageOp =
+            dyn_cast_or_null<ConstantOp>(assertOp.getMessage().getDefiningOp());
+        if (!messageOp) {
+          if (allowUnevaluated)
+            return op->emitError("OM property assertion failed: <unevaluated>");
+
+          auto diag = emitError(op->getLoc(),
+                                "OM property assertion failed, but no message "
+                                "is available as the message is unevaluated");
+          diag.attachNote(assertOp.getMessage().getLoc())
+              << "unevaluated message operation is here";
+          return failure();
+        }
+
+        StringAttr message;
+        if (!matchPattern(assertOp.getMessage(), m_Constant(&message)))
+          return op->emitError()
+                 << "OM property assertion failed, but no message is available "
+                    "because the message is not a constant string";
         return op->emitError("OM property assertion failed: ")
-               << assertOp.getMessage();
+               << message.getValue();
       };
 
       // Condition is a constant integer/bool - check if it's true.

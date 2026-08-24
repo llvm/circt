@@ -19,17 +19,17 @@ with Context() as ctx, Location.unknown():
       %1 = om.constant "Component.inst1.foo" : !om.string
       om.class.fields %1 : !om.string
     }
-    
+
     om.class @comp(
         %inst1_propOut_bore: !om.class.type<@node>,
         %inst2_propOut_bore: !om.class.type<@node>) -> (field2: !om.class.type<@node>, field3: !om.class.type<@node>) {
       om.class.fields %inst1_propOut_bore, %inst2_propOut_bore : !om.class.type<@node>, !om.class.type<@node>
     }
-    
+
     om.class  @Client() -> (client_omnode_0_OMIROut: !om.class.type<@comp>, node0_OMIROut : !om.class.type<@node>, node1_OMIROut : !om.class.type<@node>) {
       %0 = om.object @node() : () -> !om.class.type<@node>
       %2 = om.object @comp(%0, %0) : (!om.class.type<@node>, !om.class.type<@node>) -> !om.class.type<@comp>
-    
+
       om.class.fields %2, %0, %0 : !om.class.type<@comp>, !om.class.type<@node>, !om.class.type<@node>
     }
 
@@ -67,7 +67,7 @@ with Context() as ctx, Location.unknown():
     hw.module @Root(in %clock: i1) {
       %0 = sv.wire sym @x : !hw.inout<i1>
     }
-    
+
     om.class @Paths(%basepath: !om.frozenbasepath) -> (path: !om.frozenpath, deleted: !om.frozenpath) {
       %0 = om.frozenbasepath_create %basepath "Foo/bar"
       %1 = om.frozenpath_create reference %0 "Bar/baz:Baz>w"
@@ -146,7 +146,7 @@ print("field:", obj.get_field_loc("field"))
 
 # CHECK: child.foo: 14
 print("child.foo: ", obj.child.foo)
-# CHECK: child.foo.loc loc("-":{{.*}}:{{.*}})
+# CHECK: child.foo.loc loc(fused
 print("child.foo.loc", obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
@@ -160,7 +160,7 @@ for (name, field) in obj:
   # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
   # location from om.class.field "reference"
   # CHECK: name: reference, field: ('Root', 'x')
-  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
+  # CHECK-SAME: loc: loc(fused
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
@@ -320,16 +320,19 @@ with Context() as ctx, Location.unknown():
   module {
     om.class @AssertTrue() -> () {
       %true = om.constant true
-      om.property_assert %true, "should not fail" : i1
+      %message = om.constant "should not fail" : !om.string
+      om.property_assert %true, %message : i1
       om.class.fields
     }
     om.class @AssertFalse() -> () {
       %false = om.constant false
-      om.property_assert %false, "condition is false" : i1
+      %message = om.constant "condition is false" : !om.string
+      om.property_assert %false, %message : i1
       om.class.fields
     }
     om.class @AssertUnknown(%cond: i1) -> () {
-      om.property_assert %cond, "unknown condition" : i1
+      %message = om.constant "unknown condition" : !om.string
+      om.property_assert %cond, %message : i1
       om.class.fields
     }
   }

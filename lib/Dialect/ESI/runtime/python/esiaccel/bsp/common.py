@@ -7,7 +7,7 @@ from math import ceil
 
 from pycde.common import Clock, Input, InputChannel, Output, OutputChannel, Reset
 from pycde.constructs import (AssignableSignal, ControlReg, Counter, Mux,
-                              NamedWire, Wire)
+                              NamedWire, Reg, Wire)
 from pycde import esi
 from pycde.module import Module, generator, modparams
 from pycde.signals import BitsSignal, ChannelSignal, StructSignal
@@ -442,7 +442,7 @@ class ChannelMMIO(esi.ServiceImplementation):
     - 0x12: ESI version number (0)
     - 0x18: Location of the manifest ROM (absolute address)
 
-    - 0x400: Start of MMIO space for requests. Mapping is contained in the
+    - 0x800: Start of MMIO space for requests. Mapping is contained in the
              manifest so can be dynamically queried.
 
     - addr(Manifest ROM) + 0: Size of compressed manifest
@@ -467,9 +467,9 @@ class ChannelMMIO(esi.ServiceImplementation):
   # TODO: make the amount of register space each client gets a parameter.
   # Supporting this will require more address decode logic.
 
-  RegisterSpace = 0x400
+  RegisterSpace = 0x800
   RegisterSpaceBits = RegisterSpace.bit_length() - 1
-  AddressMask = 0x3FF
+  AddressMask = RegisterSpace - 1
 
   # Start at this address for assigning MMIO addresses to service requests.
   initial_offset: int = RegisterSpace
@@ -584,7 +584,14 @@ class ChannelMMIO(esi.ServiceImplementation):
         assert False, "Unrecognized bundle type."
       bundle_wire.assign(bundle)
       client_data_channels.append(bundle_froms["data"])
-    resp_channel = esi.ChannelMux(client_data_channels)
+    # `cmd_rate_limiter` above caps the design at one outstanding MMIO command,
+    # and `client_cmd_demux` routes that one command to exactly one client. So
+    # provided each client only asserts its response `valid` in reply to a
+    # command it was given -- see `ChannelMergeOneValid` for why that second
+    # half matters, and note it is required by `ChannelMux` too -- at most one
+    # client response is ever valid, and arbitration is unnecessary.
+    resp_channel = esi.ChannelMergeOneValid(client_data_channels, ports.clk,
+                                            ports.rst)
     data_resp_channel.assign(resp_channel)
 
     # The header surfaces a reset request when the host writes the reset magic
@@ -716,19 +723,82 @@ class MMIOIndirection(Module):
 
 
 @modparams
-def TaggedReadGearbox(input_bitwidth: int,
-                      output_bitwidth: int) -> type["TaggedReadGearboxImpl"]:
-  """Build a gearbox to convert the upstream data to the client data
-  type. Assumes a struct {tag, data} and only gearboxes the data. Tag is stored
-  separately and the struct is re-assembled later on."""
+def SliceReadGearbox(input_bitwidth: int,
+                     output_bitwidth: int) -> type["SliceReadGearboxImpl"]:
+  """Narrow one engine word to a single-message client element no wider than the
+  word (``OUT <= IN``). The element sits in the word's low bits, so the datapath
+  is a slice; ``valid_bytes`` is unused (a single element is never a partial
+  word). Wider single elements use `ConcatReadGearbox`; packed list reads use
+  `DepackReadGearbox`/`ShiftReadGearbox`."""
 
-  class TaggedReadGearboxImpl(Module):
+  if input_bitwidth <= 0 or input_bitwidth % 8 != 0:
+    raise ValueError("engine word width must be a positive multiple of 8 bits")
+  if not 0 < output_bitwidth <= input_bitwidth:
+    raise ValueError("SliceReadGearbox requires 0 < output <= input")
+
+  in_bytes = input_bitwidth // 8
+  vb_width = clog2(in_bytes)
+
+  class SliceReadGearboxImpl(Module):
     clk = Clock()
     rst = Reset()
     in_ = InputChannel(
         StructType([
             ("tag", esi.HostMem.TagType),
             ("data", Bits(input_bitwidth)),
+            ("valid_bytes", UInt(vb_width)),
+            ("last", Bits(1)),
+        ]))
+    out = OutputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(output_bitwidth)),
+            ("last", Bits(1)),
+        ]))
+
+    @generator
+    def build(ports):
+      up_ready = Wire(Bits(1), name="up_ready")
+      up, up_valid = ports.in_.unwrap(up_ready)
+      client_channel, client_ready = SliceReadGearboxImpl.out.type.wrap(
+          {
+              "tag": up.tag,
+              "data": up.data[:output_bitwidth],
+              "last": up.last,
+          }, up_valid)
+      up_ready.assign(client_ready)
+      ports.out = client_channel
+
+  return SliceReadGearboxImpl
+
+
+@modparams
+def ConcatReadGearbox(input_bitwidth: int,
+                      output_bitwidth: int) -> type["ConcatReadGearboxImpl"]:
+  """Concatenate ``ceil(OUT/IN)`` consecutive engine words into one client
+  element wider than the word (``OUT > IN``). Serves single-message reads (any
+  ``OUT > IN``; the low ``OUT`` bits of the concatenation are the element) and
+  contiguous list reads whose element is a whole number of output_bitwidth
+  (``OUT % IN == 0``, so elements never straddle). ``valid_bytes`` is unused:
+  such lists have no partial words and a single element is one flit. Straddling
+  lists use `ShiftReadGearbox`."""
+
+  if input_bitwidth <= 0 or input_bitwidth % 8 != 0:
+    raise ValueError("engine word width must be a positive multiple of 8 bits")
+  if output_bitwidth <= input_bitwidth:
+    raise ValueError("ConcatReadGearbox requires output > input")
+
+  in_bytes = input_bitwidth // 8
+  vb_width = clog2(in_bytes)
+
+  class ConcatReadGearboxImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(input_bitwidth)),
+            ("valid_bytes", UInt(vb_width)),
             ("last", Bits(1)),
         ]))
     out = OutputChannel(
@@ -741,91 +811,335 @@ def TaggedReadGearbox(input_bitwidth: int,
     @generator
     def build(ports):
       ready_for_upstream = Wire(Bits(1), name="ready_for_upstream")
-      upstream_tag_and_data, upstream_valid = ports.in_.unwrap(
-          ready_for_upstream)
-      upstream_data = upstream_tag_and_data.data
-      upstream_last = upstream_tag_and_data.last
+      # Register the input for fmax; the ESI channel buffer keeps the handshake
+      # elastic.
+      in_reg = ports.in_.buffer(ports.clk, ports.rst, stages=1)
+      up, upstream_valid = in_reg.unwrap(ready_for_upstream)
+      upstream_data = up.data
+      upstream_last = up.last
       upstream_xact = ready_for_upstream & upstream_valid
 
-      # Determine if gearboxing is necessary and whether it needs to be
-      # gearboxed up or just sliced down. 'last' (the burst end-of-list marker)
-      # travels with the final engine word that completes each client flit.
-      if output_bitwidth == input_bitwidth:
-        client_data_bits = upstream_data
-        client_valid = upstream_valid
-        client_last = upstream_last
-      elif output_bitwidth < input_bitwidth:
-        client_data_bits = upstream_data[:output_bitwidth]
-        client_valid = upstream_valid
-        client_last = upstream_last
-      else:
-        # Registers accumulate `chunks` upstream words into one client element;
-        # the output is their concatenation.
-        chunks = ceil(output_bitwidth / input_bitwidth)
-        counter_width = clog2(chunks)
-        reg_ces = [Wire(Bits(1)) for _ in range(chunks)]
-        regs = [
-            upstream_data.reg(ports.clk,
-                              ports.rst,
-                              ce=reg_ces[idx],
-                              name=f"chunk_reg_{idx}") for idx in range(chunks)
-        ]
-        client_data_bits = BitsSignal.concat(reversed(regs))[:output_bitwidth]
+      # Registers accumulate `chunks` upstream words into one client element;
+      # the output is their concatenation. For a list, elements stream back to
+      # back and 'last' rides the final word of the burst's final element.
+      chunks = ceil(output_bitwidth / input_bitwidth)
+      counter_width = clog2(chunks)
+      reg_ces = [Wire(Bits(1)) for _ in range(chunks)]
+      regs = [
+          upstream_data.reg(ports.clk,
+                            ports.rst,
+                            ce=reg_ces[idx],
+                            name=f"chunk_reg_{idx}") for idx in range(chunks)
+      ]
+      client_data_bits = BitsSignal.concat(reversed(regs))[:output_bitwidth]
 
-        # Pair-index counter: the word accepted this cycle is written to
-        # chunk_reg[counter]; it advances on each accepted word and resets after
-        # a client element is consumed. When a client consume (`client_xact`)
-        # and an upstream accept (`upstream_xact`) land on the same cycle, the
-        # accepted word is chunk 0 of the *next* element, so the next index must
-        # be 1 -- not 0. A plain `Counter` mishandles this (its `clear` beats
-        # `increment`, dropping the accepted word and stalling the pairing,
-        # which loses words and can deadlock the read), so compute the next
-        # value explicitly. `Mux(sel, a, b)` selects `a` when sel==0, `b` when
-        # sel==1.
-        counter = Wire(UInt(counter_width), name="chunk_counter")
-        client_xact = Wire(Bits(1))
-        incremented = Mux(counter == UInt(counter_width)(chunks - 1),
-                          (counter + 1).as_uint(counter_width),
-                          UInt(counter_width)(0))
-        counter.assign(
-            Mux(
-                client_xact, Mux(upstream_xact, counter, incremented),
-                Mux(upstream_xact,
-                    UInt(counter_width)(0),
-                    UInt(counter_width)(1))).reg(ports.clk,
-                                                 ports.rst,
-                                                 rst_value=0,
-                                                 ce=upstream_xact | client_xact,
-                                                 name="chunk_counter_reg"))
-        set_client_valid = counter == (chunks - 1)
-        client_valid = ControlReg(ports.clk, ports.rst,
-                                  [set_client_valid & upstream_xact],
-                                  [client_xact])
-        client_xact.assign(client_valid & ready_for_upstream)
-        for idx, reg_ce in enumerate(reg_ces):
-          reg_ce.assign(upstream_xact & (counter == UInt(counter_width)(idx)))
-        # 'last' of the final engine word that completes this client flit.
-        client_last = upstream_last.reg(ports.clk,
-                                        ports.rst,
-                                        ce=upstream_xact,
-                                        name="last_reg")
+      # Pair-index counter: the word accepted this cycle is written to
+      # chunk_reg[counter]. 'Counter' clears in preference to incrementing, so
+      # mask the clear with the accept -- a consume and an accept on the same
+      # cycle means the accepted word is chunk 0 of the *next* element, so the
+      # index must land on 1, not 0. 'chunks' need not be a power of two, so
+      # wrap explicitly rather than relying on the counter's natural rollover.
+      counter = Wire(UInt(counter_width), name="chunk_counter")
+      client_xact = Wire(Bits(1))
+      set_client_valid = counter == UInt(counter_width)(chunks - 1)
+      counter.assign(
+          Counter(counter_width)(clk=ports.clk,
+                                 rst=ports.rst,
+                                 clear=(upstream_xact & set_client_valid) |
+                                 (client_xact & ~upstream_xact),
+                                 increment=upstream_xact,
+                                 instance_name="chunk_counter").out)
+      client_valid = ControlReg(ports.clk, ports.rst,
+                                [set_client_valid & upstream_xact],
+                                [client_xact])
+      for idx, reg_ce in enumerate(reg_ces):
+        reg_ce.assign(upstream_xact & (counter == UInt(counter_width)(idx)))
+      # 'last' of the final engine word that completes this client flit.
+      client_last = upstream_last.reg(ports.clk,
+                                      ports.rst,
+                                      ce=upstream_xact,
+                                      name="last_reg")
+      tag_reg = up.tag.reg(ports.clk,
+                           ports.rst,
+                           ce=upstream_xact,
+                           name="tag_reg")
 
-      # Construct the output channel. Shared logic across all three cases.
-      tag_reg = upstream_tag_and_data.tag.reg(ports.clk,
-                                              ports.rst,
-                                              ce=upstream_xact,
-                                              name="tag_reg")
-
-      client_channel, client_ready = TaggedReadGearboxImpl.out.type.wrap(
+      client_channel, client_ready = ConcatReadGearboxImpl.out.type.wrap(
           {
               "tag": tag_reg,
               "data": client_data_bits,
               "last": client_last,
           }, client_valid)
-      ready_for_upstream.assign(client_ready)
+      client_xact.assign(client_valid & client_ready)
+      ready_for_upstream.assign(~client_valid | client_ready)
       ports.out = client_channel
 
-  return TaggedReadGearboxImpl
+  return ConcatReadGearboxImpl
+
+
+@modparams
+def DepackReadGearbox(input_bitwidth: int,
+                      output_bitwidth: int) -> type["DepackReadGearboxImpl"]:
+  """Unpack a byte-aligned element that divides the engine word
+  (``OUT % 8 == 0`` and ``IN % OUT == 0``) from a contiguous list response. Each
+  word holds ``IN/OUT`` gap-free elements that never straddle, so a counter
+  drives a parts:1 element mux -- no shifter (e.g. 32b/64b, 64b/256b).
+  ``valid_bytes`` locates the last element in the burst's (possibly partial)
+  final word. Straddling relationships use `ShiftReadGearbox`."""
+
+  if input_bitwidth % 8 != 0:
+    raise ValueError("engine word width must be a multiple of 8 bits")
+  if output_bitwidth == 0 or output_bitwidth % 8 != 0 \
+      or input_bitwidth % output_bitwidth != 0:
+    raise ValueError(
+        "DepackReadGearbox requires a byte-aligned element that divides the "
+        "engine word")
+
+  in_bytes = input_bitwidth // 8
+  # 'valid_bytes' is the real byte count minus 1; a word always has >= 1 byte.
+  vb_width = clog2(in_bytes)
+  count_width = clog2(in_bytes + 1)
+  parts = input_bitwidth // output_bitwidth
+  elem_bytes = output_bitwidth // 8
+
+  class DepackReadGearboxImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(input_bitwidth)),
+            ("valid_bytes", UInt(vb_width)),
+            ("last", Bits(1)),
+        ]))
+    out = OutputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(output_bitwidth)),
+            ("last", Bits(1)),
+        ]))
+
+    @generator
+    def build(ports):
+      client_ready = Wire(Bits(1), name="client_ready")
+      up_ready = Wire(Bits(1), name="up_ready")
+      # Register the input for fmax; the ESI channel buffer keeps the handshake
+      # elastic and decouples the ready path.
+      in_reg = ports.in_.buffer(ports.clk, ports.rst, stages=1)
+      up, up_valid = in_reg.unwrap(up_ready)
+      client_xact = up_valid & client_ready
+
+      if parts == 1:
+        # One element per word; nothing to select.
+        last_in_word = Bits(1)(1)
+        client_data = up.data
+      else:
+        idx_width = clog2(parts)
+        idx = Reg(UInt(idx_width),
+                  clk=ports.clk,
+                  rst=ports.rst,
+                  rst_value=0,
+                  ce=client_xact,
+                  name="idx")
+        # (idx + 1) * elem_bytes == real valid bytes marks the word's last
+        # element (the final word may hold fewer than `parts`); add 1 back to
+        # the biased 'valid_bytes' to recover the real count.
+        real_valid_bytes = (up.valid_bytes + UInt(1)(1)).as_uint(count_width)
+        consumed = ((idx + UInt(1)(1)) *
+                    UInt(count_width)(elem_bytes)).as_uint(count_width)
+        last_in_word = consumed == real_valid_bytes
+        # parts:1 element-select mux -- the entire datapath, no shifter.
+        word_parts = Array(Bits(output_bitwidth), parts)([
+            up.data[k * output_bitwidth:(k + 1) * output_bitwidth]
+            for k in range(parts)
+        ])
+        client_data = word_parts[idx]
+        idx.assign(
+            Mux(last_in_word, (idx + UInt(1)(1)).as_uint(idx_width),
+                UInt(idx_width)(0)))
+
+      # Consume the buffered word as its last element leaves.
+      up_ready.assign(client_xact & last_in_word)
+      client_channel, client_ready_sig = DepackReadGearboxImpl.out.type.wrap(
+          {
+              "tag": up.tag,
+              "data": client_data,
+              "last": (up.last & last_in_word).as_bits(),
+          }, up_valid)
+      client_ready.assign(client_ready_sig)
+      ports.out = client_channel
+
+  return DepackReadGearboxImpl
+
+
+@modparams
+def ShiftReadGearbox(input_bitwidth: int,
+                     output_bitwidth: int) -> type["ShiftReadGearboxImpl"]:
+  """Universal fallback: unpack a contiguous, byte-packed element stream (a
+  `read_list` response) for ANY ``(input_bitwidth, output_bitwidth)`` pair.
+
+  Elements are packed at their natural byte stride ``stride = ceil(OUT/8)``
+  bytes, so element k begins at wire bit ``k*stride*8`` and, in general,
+  straddles engine-word boundaries at an arbitrary bit offset. A byte-addressed
+  shift-register accumulator realigns each element across words. This is correct
+  for every width relationship; `SliceReadGearbox`, `ConcatReadGearbox` and
+  `DepackReadGearbox` are optimizations that avoid this barrel shifter for the
+  regular (non-straddling) cases.
+
+  Each input word carries ``valid_bytes`` (how many of its bytes are real) and
+  ``last``. Both are framed to one whole `read_list` request rather than to the
+  transport: `HostMemReadReqSplitter` drops the per-chunk framing of the reads
+  it issues and re-derives these from the request's total length, so only the
+  request's final word is ever partial. That length is ``num_elements *
+  stride``, so tracking real bytes lets the gearbox emit exactly the right
+  elements and place the list-terminating ``last`` on the final one -- no
+  padding element is ever emitted."""
+
+  if input_bitwidth % 8 != 0:
+    raise ValueError("engine word width must be a multiple of 8 bits")
+  if output_bitwidth <= 0:
+    raise ValueError("client element width must be positive")
+  in_bytes = input_bitwidth // 8
+  stride_bytes = (output_bitwidth + 7) // 8
+  stride_bits = stride_bytes * 8
+  # Hold at most one partial element plus one freshly accepted word.
+  buf_bytes = stride_bytes + in_bytes
+  buf_bits = buf_bytes * 8
+  # 'valid_bytes' is the real byte count minus 1; a word always has >= 1 byte.
+  vb_width = clog2(in_bytes)
+  cnt_width = clog2(buf_bytes + 1)
+  # The append offset is only ever in [0, stride_bytes] (has_room), so the shift
+  # index needs fewer bits than the full count -- see `build`.
+  offset_width = clog2(stride_bytes + 1)
+
+  class ShiftReadGearboxImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(input_bitwidth)),
+            ("valid_bytes", UInt(vb_width)),
+            ("last", Bits(1)),
+        ]))
+    out = OutputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(output_bitwidth)),
+            ("last", Bits(1)),
+        ]))
+
+    @generator
+    def build(ports):
+      client_ready = Wire(Bits(1), name="client_ready")
+      up_ready = Wire(Bits(1), name="up_ready")
+      # Register the input for fmax; the ESI channel buffer keeps the handshake
+      # elastic and decouples the ready path.
+      in_reg = ports.in_.buffer(ports.clk, ports.rst, stages=1)
+      up, up_valid = in_reg.unwrap(up_ready)
+
+      from pycde.circt.dialects import comb
+
+      # Byte-addressed accumulator: `buffer` holds `count` valid bytes packed
+      # from bit 0 up; the element being emitted is buffer[0:OUT].
+      buffer = Reg(Bits(buf_bits),
+                   clk=ports.clk,
+                   rst=ports.rst,
+                   rst_value=0,
+                   name="buffer")
+      count = Reg(UInt(cnt_width),
+                  clk=ports.clk,
+                  rst=ports.rst,
+                  rst_value=0,
+                  name="count")
+      saw_last = Wire(Bits(1), name="saw_last")
+
+      # Accept a whole engine word only when there's room, and never while
+      # draining a finished burst -- otherwise the next burst's bytes would mix
+      # into this one's buffer.
+      has_room = count <= UInt(cnt_width)(buf_bytes - in_bytes)
+      up_ready.assign(has_room & ~saw_last)
+      up_xact = up_ready & up_valid
+
+      # Emit an element once a full stride slot is buffered.
+      client_valid = count >= UInt(cnt_width)(stride_bytes)
+      client_xact = client_valid & client_ready
+
+      # The burst's final word sets `saw_last`; the emit that drains the buffer
+      # to empty terminates the list. These never coincide: emitting needs a
+      # slot buffered by a prior cycle's accept, so `after_emit == 0` on an
+      # accept cycle is impossible.
+      added = Mux(up_xact,
+                  UInt(cnt_width)(0), (up.valid_bytes.as_uint(cnt_width) +
+                                       UInt(1)(1)).as_uint(cnt_width))
+      after_add = (count + added).as_uint(cnt_width)
+      after_emit = (after_add -
+                    UInt(cnt_width)(stride_bytes)).as_uint(cnt_width)
+      set_saw_last = (up_xact & up.last).as_bits()
+      is_final_slot = (after_emit == UInt(cnt_width)(0))
+      burst_ending = saw_last | set_saw_last
+      client_last = client_valid & burst_ending & is_final_slot
+      final_emit = client_xact & client_last
+
+      # Append the accepted word at bit offset count*8 (dynamic left shift);
+      # then, if we emit this cycle, drop the consumed slot (constant right
+      # shift by the stride). The append offset is <= stride_bytes when
+      # accepting, so bound the shift index to that range: its high bits are
+      # constant 0, which lets constant-propagation prune the upper barrel-
+      # shifter stages (synthesis won't infer this bound from the count reg).
+      append_off = count.as_bits()[0:offset_width]
+      shamt = BitsSignal.concat([append_off,
+                                 Bits(3)(0)]).pad_or_truncate(buf_bits)
+      word_ext = up.data.pad_or_truncate(buf_bits)
+      shifted_word = BitsSignal(
+          comb.ShlOp(word_ext.value, shamt.value).result, Bits(buf_bits))
+      appended = buffer | Mux(up_xact, Bits(buf_bits)(0), shifted_word)
+      drained = appended[stride_bits:buf_bits].pad_or_truncate(buf_bits)
+      buffer.assign(
+          Mux(final_emit, Mux(client_xact, appended, drained),
+              Bits(buf_bits)(0)))
+
+      # count += accepted real bytes (biased 'valid_bytes' + 1); -= stride on
+      # emit.
+      count.assign(Mux(client_xact, after_add, after_emit))
+
+      saw_last.assign(
+          ControlReg(ports.clk, ports.rst, [set_saw_last], [final_emit]))
+
+      tag_reg = up.tag.reg(ports.clk, ports.rst, ce=up_xact, name="tag_reg")
+      client_channel, client_ready_sig = ShiftReadGearboxImpl.out.type.wrap(
+          {
+              "tag": tag_reg,
+              "data": buffer[0:output_bitwidth],
+              "last": client_last,
+          }, client_valid)
+      client_ready.assign(client_ready_sig)
+      ports.out = client_channel
+
+  return ShiftReadGearboxImpl
+
+
+def select_read_gearbox(is_list: bool, input_bitwidth: int,
+                        output_bitwidth: int):
+  """Pick the read-gearbox module for a client of the given kind and width
+  relationship. Every gearbox shares the {tag, data, valid_bytes, last} input
+  (from `HostMemReadReqSplitter`) and the {tag, data, last} output, so callers
+  wire them identically. `ShiftReadGearbox` is the correct-for-everything
+  fallback; the others avoid its barrel shifter for regular relationships."""
+  if not is_list:
+    # A single element starts at bit 0 and never straddles at a bit offset.
+    if output_bitwidth <= input_bitwidth:
+      return SliceReadGearbox(input_bitwidth, output_bitwidth)
+    return ConcatReadGearbox(input_bitwidth, output_bitwidth)
+  if output_bitwidth > input_bitwidth:
+    # Super-word list: a whole-word-multiple element never straddles.
+    if output_bitwidth % input_bitwidth == 0:
+      return ConcatReadGearbox(input_bitwidth, output_bitwidth)
+    return ShiftReadGearbox(input_bitwidth, output_bitwidth)
+  # Sub-word list: a byte-aligned element that divides the word never straddles.
+  if input_bitwidth % output_bitwidth == 0 and output_bitwidth % 8 == 0:
+    return DepackReadGearbox(input_bitwidth, output_bitwidth)
+  return ShiftReadGearbox(input_bitwidth, output_bitwidth)
 
 
 # Maximum size, in bytes, of a single upstream read request. Reads larger than
@@ -884,6 +1198,18 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   word_bytes = dict(resp_struct.fields)["data"].bitwidth // 8
   word_shift = clog2(word_bytes)
   words_width = length_width - word_shift
+  # The response is augmented with a per-word 'valid_bytes': the number of real
+  # bytes in the (possibly partial) final word, biased by -1. A burst word
+  # always has >= 1 real byte, so encoding count-1 fits in one fewer bit.
+  vb_width = clog2(word_bytes)
+  resp_fields = dict(resp_struct.fields)
+  resp_out_struct = StructType([
+      ("tag", resp_fields["tag"]),
+      ("data", resp_fields["data"]),
+      ("valid_bytes", UInt(vb_width)),
+      ("last", Bits(1)),
+  ])
+  resp_out_channel_type = Channel(resp_out_struct)
 
   class HostMemReadReqSplitterImpl(Module):
     clk = Clock()
@@ -891,7 +1217,7 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
     req_in = Input(req_channel_type)
     req_out = Output(req_channel_type)
     resp_in = Input(resp_channel_type)
-    resp_out = Output(resp_channel_type)
+    resp_out = Output(resp_out_channel_type)
 
     @generator
     def build(ports):
@@ -919,10 +1245,23 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
       chunk_len = Mux(remaining > max_chunk, remaining, max_chunk)
       last_chunk = remaining <= max_chunk
 
+      # Round the emitted read length up to a whole word. The reader response
+      # is word-granular and 'valid_bytes' still carries the real trailing byte
+      # count, so total_words and the reassembled element count are unchanged;
+      # this just keeps every read word-aligned for single-flit HostMem
+      # transports that reject sub-word read lengths.
+      if word_shift == 0:
+        chunk_len_out = chunk_len
+      else:
+        chunk_words = (chunk_len + UInt(length_width)(word_bytes - 1)
+                      ).as_bits()[word_shift:].as_uint(words_width)
+        chunk_len_out = BitsSignal.concat(
+            [chunk_words.as_bits(), Bits(word_shift)(0)]).as_uint(length_width)
+
       req_out_ch, req_out_ready = req_channel_type.wrap(
           req_struct({
               "address": cur_addr,
-              "length": chunk_len,
+              "length": chunk_len_out,
               "tag": tag_reg,
           }), emit_busy)
       ports.req_out = req_out_ch
@@ -956,16 +1295,34 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
 
       tag_reg.assign(req_payload.tag.reg(clk, rst, ce=accept, name="tag_reg_r"))
 
-      # --- Response reassembly: re-derive the single burst-final 'last'. ---
-      total_words = req_payload.length.as_bits()[word_shift:].as_uint()
+      # --- Response reassembly: re-derive the burst-final 'last' and the byte
+      # count of the (possibly partial) final word. Elements need not tile
+      # evenly into words, so count words with ceil(length / word_bytes). ---
+      total_words = ((req_payload.length + UInt(length_width)(word_bytes - 1)
+                     ).as_bits()[word_shift:]).as_uint(words_width)
+      # Bytes valid in the final word = length - (total_words - 1) * word_bytes.
+      words_before_last = (total_words -
+                           UInt(words_width)(1)).as_uint(words_width)
+      bytes_before_last = BitsSignal.concat(
+          [words_before_last.as_bits(),
+           Bits(word_shift)(0)]).as_uint(length_width)
+      final_valid_bytes = (req_payload.length - bytes_before_last -
+                           UInt(length_width)(1)).as_uint(vb_width).reg(
+                               clk, rst, ce=accept, name="final_valid_bytes")
       resp_ready = Wire(Bits(1))
       resp_payload, resp_valid = ports.resp_in.unwrap(resp_ready)
       is_final_word = words_left == UInt(words_width)(1)
-      resp_out_ch, resp_out_ready = resp_channel_type.wrap(
-          resp_struct({
-              "tag": resp_payload.tag,
-              "data": resp_payload.data,
-              "last": is_final_word,
+      resp_out_ch, resp_out_ready = resp_out_channel_type.wrap(
+          resp_out_struct({
+              "tag":
+                  resp_payload.tag,
+              "data":
+                  resp_payload.data,
+              "valid_bytes":
+                  Mux(is_final_word,
+                      UInt(vb_width)(word_bytes - 1), final_valid_bytes),
+              "last":
+                  is_final_word,
           }), resp_valid)
       ports.resp_out = resp_out_ch
       resp_ready.assign(resp_out_ready)
@@ -1046,10 +1403,10 @@ def HostmemReadProcessor(
       ports.upstream = upstream_read_bundle
       upstream_resp_channel = froms["resp"]
 
-      # Demux the upstream parallel-window frames {tag, data, last} to each
-      # client by tag. The gearbox consumes {tag, data, last}: single-message
-      # clients discard 'last'; burst (read_list) clients propagate it as their
-      # response window's per-frame 'last'.
+      # Demux the upstream response frames {tag, data, last} to each client by
+      # tag. Each client's stream then flows through a `HostMemReadReqSplitter`
+      # (which annotates per-word 'valid_bytes' and the burst-final 'last') into
+      # the leaf gearbox chosen by `select_read_gearbox`.
       demux = esi.TaggedDemux(len(reqs), upstream_resp_channel.type)(
           clk=ports.clk, rst=ports.rst, in_=upstream_resp_channel)
 
@@ -1068,14 +1425,13 @@ def HostmemReadProcessor(
         # the additional benefit of letting the upstream tag be the client
         # identifier. TODO: Implement the gating logic here.
         client_type = resp_type.inner_type
+        is_list = isinstance(client_type, Window)
 
-        if isinstance(client_type, Window):
-          # Burst read (read_list): the response is a parallel window over
-          # struct{tag, data: list<element>} with num_items=1, lowering to
-          # struct{tag, data: element, last}. Gearbox each engine word to the
-          # element width, propagate 'last', then re-wrap as the window. Each
-          # element is word-aligned on the wire, so any element width maps onto
-          # a whole number of engine words.
+        # A read_list response is a parallel window over
+        # struct{tag, data: list<element>} (num_items=1), lowering to
+        # struct{tag, data: element, data_size, last}; a single read carries the
+        # element directly. Pull the element width out of whichever shape.
+        if is_list:
           lowered = client_type.lowered_type
           lowered_fields = dict(lowered.fields)
           element_type = lowered_fields["data"]
@@ -1083,23 +1439,30 @@ def HostmemReadProcessor(
           data_size_type = lowered_fields["data_size"]
           if element_bits == 0:
             raise ValueError("read_list element type cannot be zero-width.")
-          words_per_elem = (element_bits + read_width - 1) // read_width
-          elem_stride_bytes = words_per_elem * word_bytes
+        else:
+          if client_type.data.bitwidth == 0:
+            raise ValueError("Client data type cannot be zero-width. Use a "
+                             "single-bit type if no data is needed.")
+          element_bits = client_type.data.bitwidth
+        # Elements are packed contiguously in host memory at their natural byte
+        # size, independent of the engine word width.
+        elem_stride_bytes = (element_bits + 7) // 8
 
-          # A burst can request far more than a single upstream read request can
-          # carry, so split it into request-sized, word-aligned chunks before
-          # arbitration and reassemble the responses afterwards; the gearbox
-          # sees one contiguous response stream. Elements may span chunks -- the
-          # splitter re-derives a single burst-final 'last' from the total
-          # length. 'splitter_resp' breaks the request/response construction
-          # cycle (the client request is derived from the packed response
-          # bundle).
-          max_chunk_bytes = (max_read_request_bytes // word_bytes) * word_bytes
-          splitter_resp = Wire(demuxed_upstream_channel.type)
-          gearbox = TaggedReadGearbox(read_width,
-                                      element_bits)(clk=ports.clk,
-                                                    rst=ports.rst,
-                                                    in_=splitter_resp)
+        # Both single-message and list reads flow demux -> splitter -> gearbox
+        # with a uniform {tag, data, valid_bytes, last} interface. The splitter
+        # chunks oversized requests (so even a wide single element is
+        # request-chunked) and annotates each word with 'valid_bytes' plus the
+        # burst-final 'last'; `select_read_gearbox` picks the leaf gearbox for
+        # this (is_list, read_width, element_bits). 'splitter_resp' breaks the
+        # request/response construction cycle (the client request is derived
+        # from the gearbox's response bundle).
+        max_chunk_bytes = (max_read_request_bytes // word_bytes) * word_bytes
+        gearbox_mod = select_read_gearbox(is_list, read_width, element_bits)
+        splitter_resp = Wire(gearbox_mod.in_.type)
+        gearbox = gearbox_mod(clk=ports.clk, rst=ports.rst, in_=splitter_resp)
+
+        if is_list:
+          # Propagate 'last', then re-wrap the element as the response window.
           client_resp_channel = gearbox.out.transform(
               lambda m, lowered=lowered, element_type=element_type,
               data_size_type=data_size_type, client_type=client_type:
@@ -1122,22 +1485,8 @@ def HostmemReadProcessor(
                   "tag":
                       idx,
               }))
-          splitter = HostMemReadReqSplitter(
-              logical_req.type, demuxed_upstream_channel.type,
-              max_chunk_bytes)(clk=ports.clk,
-                               rst=ports.rst,
-                               req_in=logical_req,
-                               resp_in=demuxed_upstream_channel)
-          splitter_resp.assign(splitter.resp_out)
-          tagged_client_req = splitter.req_out
         else:
-          # Single-message read: gearbox to the client width and discard the
-          # 'last' burst marker.
-          if client_type.data.bitwidth == 0:
-            raise ValueError("Client data type cannot be zero-width. Use a "
-                             "single-bit type if no data is needed.")
-          gearbox = TaggedReadGearbox(read_width, client_type.data.bitwidth)(
-              clk=ports.clk, rst=ports.rst, in_=demuxed_upstream_channel)
+          # Single-message read: one element; discard the 'last' burst marker.
           client_resp_channel = gearbox.out.transform(
               lambda m, client_type=client_type: client_type({
                   "tag": m.tag,
@@ -1145,14 +1494,23 @@ def HostmemReadProcessor(
               }))
           client_bundle, froms = client.type.pack(resp=client_resp_channel)
           client_req = froms["req"]
-          tagged_client_req = client_req.transform(
-              lambda r, idx=idx, client_type=client_type: hostmem_module.
-              UpstreamReadReq({
+          logical_req = client_req.transform(
+              lambda r, idx=idx, elem_stride_bytes=elem_stride_bytes:
+              hostmem_module.UpstreamReadReq({
                   "address": r.address,
-                  "length": (client_type.data.bitwidth + 7) // 8,
+                  "length": UInt(32)(elem_stride_bytes),
                   # TODO: Change this once we support tag-rewriting.
-                  "tag": idx
+                  "tag": idx,
               }))
+
+        splitter = HostMemReadReqSplitter(
+            logical_req.type, demuxed_upstream_channel.type,
+            max_chunk_bytes)(clk=ports.clk,
+                             rst=ports.rst,
+                             req_in=logical_req,
+                             resp_in=demuxed_upstream_channel)
+        splitter_resp.assign(splitter.resp_out)
+        tagged_client_req = splitter.req_out
 
         tagged_client_reqs.append(tagged_client_req)
 
@@ -1164,11 +1522,15 @@ def HostmemReadProcessor(
       # list-aware, pipelined ChannelArbiter (vs. the combinational ChannelMux)
       # for a registered N:1 mux that closes timing at high client fan-in. Read
       # requests are single-flit, so list-awareness is a no-op here.
+      # `mux_pipeline_levels=2` retimes the wide payload selection mux, whose
+      # depth otherwise grows as log2(num_clients); the added latency is
+      # absorbed by the arbiter's output FIFO / credit counter.
       # TODO: Don't release a request until the client is ready to accept
       # the response otherwise the system could deadlock.
       muxed_client_reqs = ChannelArbiter(tagged_client_reqs,
                                          ports.clk,
                                          ports.rst,
+                                         mux_pipeline_levels=2,
                                          telemetry=False)
       upstream_req_channel.assign(muxed_client_reqs)
       HostmemReadProcessorImpl.reqPortMap.clear()
@@ -1466,11 +1828,11 @@ def HostMemWriteProcessor(
           lowered = client_type.lowered_type
           array_type = dict(lowered.fields)["data"]
           element_bits = array_type.element_type.bitwidth
-          # Each element occupies a whole number of upstream bus words, so the
-          # base-address stride is beat-aligned (matches the read_list path).
-          word_bytes = write_width // 8
-          words_per_elem = (element_bits + write_width - 1) // write_width
-          elem_stride = words_per_elem * word_bytes
+          # Elements are packed contiguously in host memory at their natural
+          # byte size, independent of the engine word width (matches the
+          # read_list path). Each per-element write is byte-enabled via
+          # data_size, so a sub-word element writes only its own bytes.
+          elem_stride = (element_bits + 7) // 8
 
           gearbox_mod = TaggedWriteGearbox(element_bits, write_width,
                                            max_write_payload_bytes)
@@ -1548,9 +1910,13 @@ def HostMemWriteProcessor(
       # awareness -- via the frame's 'last' -- to keep a client's words
       # contiguous; single-word (<= engine width) clients emit one message per
       # word, for which single-flit arbitration is correct.
+      # `mux_pipeline_levels=2` retimes the (wide -- a full engine word plus
+      # address) payload selection mux; the added latency is absorbed by the
+      # arbiter's output FIFO / credit counter.
       muxed_write_channel = ChannelArbiter(write_channels,
                                            ports.clk,
                                            ports.rst,
+                                           mux_pipeline_levels=2,
                                            telemetry=False)
       upstream_req_channel.assign(muxed_write_channel)
 

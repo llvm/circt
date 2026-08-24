@@ -15,9 +15,6 @@ circuit Issue794: %[[{
     "target":"~Issue794|Issue794"
   },
   {
-    "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
-  },
-  {
     "class": "sifive.enterprise.firrtl.FullAsyncResetAnnotation",
     "target": "~Issue794|Issue794>reset"
   }]]

@@ -697,10 +697,10 @@ conditions for macro replacement are as follows:
 
 Any `MemOp` not satisfying the above conditions is lowered to Register vector.
 
-#### MemToRegOfVec transformation outline:
+#### Combinational memory lowering:
 
-The `MemToRegOfVec` pass runs early in the pipeline, after the `LowerCHIRRTL`
-pass and right before the `InferResets` pass.
+Combinational memories are lowered as part of full-reset processing when they
+belong to an asynchronous full-reset domain.
 
 1. Select all MemOps that are not candidates for macro replacement,
 2. Create a reg
@@ -731,18 +731,12 @@ to registers, this annotation must be properly scattered such that
 GrandCentralTaps can generate the appropriate code.
 
 The memtap module has memtap annotations, where the number of ports with the
-annotation is equal to the memory depth. In the `MemToRegOfVec` transformation,
-after lowering the memory to the register vector, a subannotation is created for
+annotation is equal to the memory depth. In the combinational memory lowering
+transformation, after lowering the memory to the register vector, a subannotation is created for
 each sub-field of the data and the
 `sifive.enterprise.grandcentral.MemTapAnnotation` annotation is copied from the
 original `MemOp`. The `LowerTypes` pass will handle the subannotations
 appropriately.
-
-#### Interaction with AsyncReset Inference
-
-The `AsyncReset` pass runs right after the `MemToRegOfVec`.  It will transform
-the memory registers to async registers if the corresponding annotations are
-present.
 
 #### `firrtl.mem` Attributes
 

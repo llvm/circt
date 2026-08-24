@@ -443,15 +443,39 @@ firrtl.module @WireDomainOperands(
 // In a class body.
 // CHECK-LABEL: firrtl.class @AssertInClass
 firrtl.class @AssertInClass(in %cond : !firrtl.bool) {
-  // CHECK: firrtl.property_assert %cond, "must be true" : !firrtl.bool
-  firrtl.property_assert %cond, "must be true" : !firrtl.bool
+  // CHECK-NEXT: %0 = firrtl.string "must be true"
+  // CHECK-NEXT: firrtl.property_assert %cond, %0 : !firrtl.bool
+  %0 = firrtl.string "must be true"
+  firrtl.property_assert %cond, %0 : !firrtl.bool
 }
 
 // In a module body.
 // CHECK-LABEL: firrtl.module @AssertInModule
 firrtl.module @AssertInModule(in %cond : !firrtl.bool) {
-  // CHECK: firrtl.property_assert %cond, "module invariant" : !firrtl.bool
-  firrtl.property_assert %cond, "module invariant" : !firrtl.bool
+  // CHECK-NEXT: %0 = firrtl.string "module invariant"
+  // CHECK-NEXT: firrtl.property_assert %cond, %0 : !firrtl.bool
+  %0 = firrtl.string "module invariant"
+  firrtl.property_assert %cond, %0 : !firrtl.bool
+}
+
+// Round-trip test for the `initial` time-zero simulation value attribute on
+// `firrtl.reg` and `firrtl.regreset`.
+// CHECK-LABEL: firrtl.module @RegInitial
+firrtl.module @RegInitial(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+                          in %d: !firrtl.uint<8>, out %q: !firrtl.uint<8>) {
+  // CHECK: %r = firrtl.reg %clock {initial = 5 : ui8} : !firrtl.clock, !firrtl.uint<8>
+  %r = firrtl.reg %clock {initial = 5 : ui8} : !firrtl.clock, !firrtl.uint<8>
+  firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+
+  %c7 = firrtl.constant 7 : !firrtl.uint<8>
+  // CHECK: %s = firrtl.regreset %clock, %reset, %c7_ui8 {initial = 0 : ui8}
+  %s = firrtl.regreset %clock, %reset, %c7 {initial = 0 : ui8} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+
+  // Signed register with signed initial value.
+  // CHECK: %t = firrtl.reg %clock {initial = -1 : si8} : !firrtl.clock, !firrtl.sint<8>
+  %t = firrtl.reg %clock {initial = -1 : si8} : !firrtl.clock, !firrtl.sint<8>
+
+  firrtl.matchingconnect %q, %r : !firrtl.uint<8>
 }
 
 }

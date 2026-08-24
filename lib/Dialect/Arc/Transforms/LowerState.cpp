@@ -142,6 +142,7 @@ struct ModuleLowering {
 
   /// The storage value that can be used for `arc.alloc_state` and friends.
   Value storageArg;
+  Value arcContext;
 
   /// The symbol table of the enclosing top-level module. Used to resolve
   /// coroutine callees without walking the entire IR.
@@ -208,13 +209,14 @@ LogicalResult ModuleLowering::run() {
   storageArg = modelBlock.addArgument(StorageType::get(builder.getContext()),
                                       modelOp.getLoc());
   builder.setInsertionPointToStart(&modelBlock);
+  arcContext = AsContextOp::create(builder, moduleOp.getLoc(), storageArg);
 
   // Reset the next wakeup slot to `UINT64_MAX` ("no wakeup pending") at the
   // start of every eval. Process suspension code lowers the value to the
   // earliest scheduled wakeup over the course of the evaluation.
   auto noWakeup = hw::ConstantOp::create(builder, moduleOp.getLoc(),
                                          builder.getI64Type(), -1);
-  SetNextWakeupOp::create(builder, moduleOp.getLoc(), storageArg, noWakeup);
+  SetNextWakeupOp::create(builder, moduleOp.getLoc(), arcContext, noWakeup);
 
   // Create the `arc.initial` op to contain the ops for the initialization
   // phase.
@@ -952,7 +954,7 @@ LogicalResult OpLowering::lower(CoroutineInstanceOp op) {
 
   // Re-enter the coroutine if its scheduled wakeup time has been reached or if
   // an observed argument changed.
-  auto now = CurrentTimeOp::create(module.builder, loc, module.storageArg);
+  auto now = CurrentTimeOp::create(module.builder, loc, module.arcContext);
   auto wakeup = StateReadOp::create(module.builder, loc, wakeupSlot);
   auto timeReady = comb::ICmpOp::create(module.builder, loc,
                                         comb::ICmpPredicate::uge, now, wakeup);
@@ -1003,10 +1005,10 @@ LogicalResult OpLowering::lower(CoroutineInstanceOp op) {
   // evaluation, its stored wakeup must keep the model scheduled.
   auto curWakeup = StateReadOp::create(module.builder, loc, wakeupSlot);
   auto nextWakeup =
-      GetNextWakeupOp::create(module.builder, loc, module.storageArg);
+      GetNextWakeupOp::create(module.builder, loc, module.arcContext);
   auto minWakeup =
       arith::MinUIOp::create(module.builder, loc, curWakeup, nextWakeup);
-  SetNextWakeupOp::create(module.builder, loc, module.storageArg, minWakeup);
+  SetNextWakeupOp::create(module.builder, loc, module.arcContext, minWakeup);
 
   return success();
 }
@@ -1244,7 +1246,7 @@ LogicalResult OpLowering::lower(llhd::CurrentTimeOp op) {
   case Phase::Final: {
     // Get the current time from storage.
     auto &builder = module.getBuilder(phase);
-    auto timeInt = CurrentTimeOp::create(builder, loc, module.storageArg);
+    auto timeInt = CurrentTimeOp::create(builder, loc, module.arcContext);
     time = llhd::IntToTimeOp::create(builder, loc, timeInt);
     break;
   }
@@ -1278,8 +1280,7 @@ LogicalResult OpLowering::lower(sim::ClockedTerminateOp op) {
     return op.emitOpError("Failed to create condition block");
 
   module.builder.setInsertionPoint(ifOp.thenYield());
-
-  arc::TerminateOp::create(module.builder, loc, module.storageArg,
+  arc::TerminateOp::create(module.builder, loc, module.arcContext,
                            op.getSuccessAttr());
 
   return success();

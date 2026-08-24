@@ -643,8 +643,8 @@ def ConvertHWToBTOR2 : Pass<"convert-hw-to-btor2", "mlir::ModuleOp"> {
 def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
   let summary = "Convert LTL and Verif to Core";
   let description = [{
-    This pass converts ltl and verif operations to core ones. This can be done directly
-    without going through FSM if we're only working with overlapping properties (no delays).
+    This pass converts LTL and Verif operations that can be expressed with Core
+    operations. Other LTL operations are left for downstream backends.
   }];
   let constructor = "circt::createLowerLTLToCorePass()";
   let dependentDialects = [
@@ -800,6 +800,10 @@ def LowerSMTToZ3LLVM : Pass<"lower-smt-to-z3-llvm", "mlir::ModuleOp"> {
     Option<"debug", "debug", "bool", "false",
            "Insert additional printf calls printing the solver's state to "
            "stdout (e.g. at check-sat operations) for debugging purposes">,
+    Option<"printOnlyFirstCounterexample", "print-only-first-counterexample",
+           "bool", "false",
+           "Suppress counterexample printing after the first successfully "
+           "printed model in each solver invocation">,
   ];
 }
 
@@ -823,7 +827,10 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
     Option<"emitSeparateAlwaysBlocks", "emit-separate-always-blocks", "bool", "false",
            "Emit assigments to registers in separate always blocks">,
     Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
-           "Place assignments to registers into `always_ff` blocks if possible">
+           "Place assignments to registers into `always_ff` blocks if possible">,
+    Option<"emitPresetAsInlineInit", "emit-preset-as-inline-init", "bool", "true",
+           "Emit register preset values as inline `sv.reg` initializers instead "
+           "of a guarded `initial` block">
   ];
   let statistics = [
     Statistic<"numSubaccessRestored", "num-subaccess-restored",

@@ -376,7 +376,9 @@ om.class @UnknownValue() {
 
 // CHECK-LABEL: @PropertyAssert(
 om.class @PropertyAssert(%basepath: !om.basepath, %cond: i1) {
-  // CHECK: om.property_assert %cond, "invariant must hold" : i1
-  om.property_assert %cond, "invariant must hold" : i1
+  // CHECK: %0 = om.constant "invariant must hold" : !om.string
+  // CHECK: om.property_assert %cond, %0 : i1
+  %0 = om.constant "invariant must hold" : !om.string
+  om.property_assert %cond, %0 : i1
   om.class.fields
 }

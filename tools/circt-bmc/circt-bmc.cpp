@@ -65,6 +65,8 @@
 #ifdef CIRCT_BMC_ENABLE_JIT
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
+#include "llvm/InitializePasses.h"
+#include "llvm/PassRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #endif
 
@@ -116,6 +118,12 @@ static cl::opt<bool> printSolverOutput(
     cl::desc("Print the output (counterexample or proof) produced by the "
              "solver on each invocation and the assertion set that they "
              "prove/disprove."),
+    cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool> printOnlyFirstCounterexample(
+    "print-only-first-counterexample",
+    cl::desc("Print only the first successfully generated counterexample for "
+             "each solver invocation"),
     cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
@@ -282,6 +290,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
   if (outputFormat != OutputMLIR && outputFormat != OutputSMTLIB) {
     LowerSMTToZ3LLVMOptions options;
     options.debug = printSolverOutput;
+    options.printOnlyFirstCounterexample = printOnlyFirstCounterexample;
     pm.addPass(createLowerSMTToZ3LLVM(options));
     pm.addPass(createCSEPass());
     pm.addPass(createSimpleCanonicalizerPass());
@@ -354,6 +363,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
 
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
+    llvm::initializeCodeGen(*llvm::PassRegistry::getPassRegistry());
 
     SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
                                               sharedLibs.end());
@@ -375,6 +385,9 @@ static LogicalResult executeBMC(MLIRContext &context) {
     llvm::orc::SymbolMap symbolMap;
     symbolMap[interner("circt_bmc_record_trace")] = {
         llvm::orc::ExecutorAddr::fromPtr(&bmc::circt_bmc_record_trace),
+        llvm::JITSymbolFlags::Exported};
+    symbolMap[interner("circt_bmc_print_trace")] = {
+        llvm::orc::ExecutorAddr::fromPtr(&bmc::circt_bmc_print_trace),
         llvm::JITSymbolFlags::Exported};
     return symbolMap;
   });

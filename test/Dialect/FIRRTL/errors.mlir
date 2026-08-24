@@ -3543,8 +3543,9 @@ firrtl.circuit "PropAssertFalseInClass" {
   firrtl.module @PropAssertFalseInClass() {}
   firrtl.class @C() {
     %false = firrtl.bool false
-    // expected-error @below {{property assertion is statically false: invariant violated}}
-    firrtl.property_assert %false, "invariant violated" : !firrtl.bool
+    %msg = firrtl.string "invariant violated"
+    // expected-error @below {{property assertion is statically false}}
+    firrtl.property_assert %false, %msg : !firrtl.bool
   }
 }
 
@@ -3554,7 +3555,8 @@ firrtl.circuit "PropAssertFalseInClass" {
 firrtl.circuit "PropAssertFalseInModule" {
   firrtl.module @PropAssertFalseInModule() {
     %false = firrtl.bool false
-    // expected-error @below {{property assertion is statically false: module invariant violated}}
-    firrtl.property_assert %false, "module invariant violated" : !firrtl.bool
+    %msg = firrtl.string "module invariant violated"
+    // expected-error @below {{property assertion is statically false}}
+    firrtl.property_assert %false, %msg : !firrtl.bool
   }
 }

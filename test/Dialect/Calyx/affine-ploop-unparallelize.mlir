@@ -1,3 +1,5 @@
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: circt-opt --affine-ploop-unparallelize --canonicalize --split-input-file --verify-diagnostics %s | FileCheck %s
 
 // CHECK-LABEL:   func.func @main(

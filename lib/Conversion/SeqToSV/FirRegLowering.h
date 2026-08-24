@@ -92,7 +92,8 @@ public:
   FirRegLowering(TypeConverter &typeConverter, hw::HWModuleOp module,
                  const PathTable &pathTable,
                  bool disableRegRandomization = false,
-                 bool emitSeparateAlwaysBlocks = false);
+                 bool emitSeparateAlwaysBlocks = false,
+                 bool emitPresetAsInlineInit = true);
 
   void lower();
   bool needsRegRandomization() const { return needsRandom; }
@@ -204,6 +205,7 @@ private:
 
   bool disableRegRandomization;
   bool emitSeparateAlwaysBlocks;
+  bool emitPresetAsInlineInit;
 
   bool needsRandom = false;
 };

@@ -1786,38 +1786,39 @@ struct LazyLocationListener : public OpBuilder::Listener {
     isActive = true;
   }
 
+  /// Compute the location an operation created at `loc` should be given,
+  /// or that a diagnostic about it should be emitted on, honoring the
+  /// the @info handling policy. This will only translate the SMLoc when the
+  /// policy actually needs it, since that will intern a location into the
+  /// context permanently.
+  Location getLoc(FIRParser &parser, SMLoc loc) {
+    using ILH = FIRParserOptions::InfoLocHandling;
+    switch (parser.getConstants().options.infoLocatorHandling) {
+    case ILH::IgnoreInfo:
+      // Shouldn't have an infoLoc, but if we do ignore it.
+      break;
+    case ILH::PreferInfo:
+      if (infoLoc)
+        return infoLoc;
+      break;
+    case ILH::FusedInfo:
+      if (infoLoc)
+        return FusedLoc::get(infoLoc.getContext(),
+                             {infoLoc, parser.translateLocation(loc)});
+      break;
+    }
+    return parser.translateLocation(loc);
+  }
+
   /// This is called when done with each statement.  This applies the locations
   /// to each statement.
   void endStatement(FIRParser &parser) {
     assert(isActive && "Not parsing a statement");
 
-    // If we have a symbolic location, apply it to any subOps specified.
-    if (infoLoc) {
-      for (auto opAndSMLoc : subOps) {
-        // Follow user preference to either only use @info locations,
-        // or apply a fused location with @info and file loc.
-        using ILH = FIRParserOptions::InfoLocHandling;
-        switch (parser.getConstants().options.infoLocatorHandling) {
-        case ILH::IgnoreInfo:
-          // Shouldn't have an infoLoc, but if we do ignore it.
-          opAndSMLoc.first->setLoc(parser.translateLocation(opAndSMLoc.second));
-          break;
-        case ILH::PreferInfo:
-          opAndSMLoc.first->setLoc(infoLoc);
-          break;
-        case ILH::FusedInfo:
-          opAndSMLoc.first->setLoc(FusedLoc::get(
-              infoLoc.getContext(),
-              {infoLoc, parser.translateLocation(opAndSMLoc.second)}));
-          break;
-        }
-      }
-    } else {
-      // If we don't, translate all the individual SMLoc's to Location objects
-      // in the .fir file.
-      for (auto opAndSMLoc : subOps)
-        opAndSMLoc.first->setLoc(parser.translateLocation(opAndSMLoc.second));
-    }
+    // Apply a location to each subop, following user preference to use the
+    // @info location, a fused location, or the location in the .fir file.
+    for (auto opAndSMLoc : subOps)
+      opAndSMLoc.first->setLoc(getLoc(parser, opAndSMLoc.second));
 
     // Reset our state.
     isActive = false;
@@ -2152,7 +2153,8 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   if (props.isPassive && !props.containsAnalog) {
     if (flow == Flow::Source)
       return;
-    emitConnect(builder, val, InvalidValueOp::create(builder, tpe));
+    emitConnect(builder, val, InvalidValueOp::create(builder, tpe),
+                getConstants().options.warnOnTruncation);
     return;
   }
 
@@ -3975,9 +3977,11 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         // Connect to/from the result per flow.
         builder.setInsertionPointAfter(defining);
         if (foldFlow(instResult) == Flow::Source)
-          emitConnect(builder, bounceVal, instResult);
+          emitConnect(builder, bounceVal, instResult,
+                      getConstants().options.warnOnTruncation);
         else
-          emitConnect(builder, instResult, bounceVal);
+          emitConnect(builder, instResult, bounceVal,
+                      getConstants().options.warnOnTruncation);
         // Set the parse result AND update `instResult` which is a reference to
         // the unbundled entry for the instance result, so that future uses also
         // find this new wire.
@@ -4226,7 +4230,7 @@ ParseResult FIRStmtParser::parseDomainDefine() {
       parseDomainExp(src) || parseOptionalInfo())
     return failure();
 
-  emitConnect(builder, dest, src);
+  emitConnect(builder, dest, src, getConstants().options.warnOnTruncation);
   return success();
 }
 
@@ -4266,7 +4270,7 @@ ParseResult FIRStmtParser::parseRefDefine() {
            << target.getType() << " with incompatible reference of type "
            << src.getType();
 
-  emitConnect(builder, target, src);
+  emitConnect(builder, target, src, getConstants().options.warnOnTruncation);
 
   return success();
 }
@@ -4556,43 +4560,77 @@ ParseResult FIRStmtParser::parseConnect() {
   auto lhsType = type_dyn_cast<FIRRTLBaseType>(lhs.getType());
   auto rhsType = type_dyn_cast<FIRRTLBaseType>(rhs.getType());
   if (!lhsType || !rhsType)
-    return emitError(loc, "cannot connect reference or property types");
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect reference or property types");
   // TODO: Once support lands for agg-of-ref, add test for this check!
   if (lhsType.containsReference() || rhsType.containsReference())
-    return emitError(loc, "cannot connect types containing references");
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect types containing references");
 
   if (!areTypesEquivalent(lhsType, rhsType))
-    return emitError(loc, "cannot connect non-equivalent type ")
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect non-equivalent type ")
            << rhsType << " to " << lhsType;
 
   locationProcessor.setLoc(loc);
-  emitConnect(builder, lhs, rhs);
+  emitConnect(
+      builder, lhs, rhs, [&] { return locationProcessor.getLoc(*this, loc); },
+      getConstants().options.warnOnTruncation);
   return success();
 }
 
-/// propassert ::= 'propassert' expr ',' string_literal
+/// FIRRTL 6.0.0 <= version < FIRRTL 8.0.0:
+///   propassert ::= 'propassert' expr ',' string_literal
+/// FIRRTL 7.0.0 <= version:
+///   propassert ::= 'propassert' expr ',' expr
+///
+/// Before calling, it has already been verified that the FIRRTL version is
+/// greater than 6.0.0.
 ParseResult FIRStmtParser::parsePropAssert() {
   auto startTok = consumeToken(FIRToken::kw_propassert);
   auto loc = startTok.getLoc();
 
-  Value condition;
-  StringRef message;
+  llvm::SMLoc conditionLoc = getToken().getLoc(), messageLoc;
+  Value condition, message;
   if (parseExp(condition, "expected condition in 'propassert'") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(message) ||
-      parseToken(FIRToken::string, "expected message string in 'propassert'"))
+      parseToken(FIRToken::comma, "expected ','"))
     return failure();
+  // String message handling
+  if (getToken().is(FIRToken::string)) {
+    if (removedFeature({8, 0, 0}, "string messages in property asserts"))
+      return failure();
+    StringRef messageStr;
+    messageLoc = getToken().getLoc();
+    if (parseGetSpelling(messageStr) ||
+        parseToken(FIRToken::string, "expected message string in 'propassert'"))
+      return failure();
+    locationProcessor.setLoc(messageLoc);
+    auto attr = builder.getStringAttr(FIRToken::getStringValue(messageStr));
+    message = moduleContext.getCachedConstant<StringConstantOp>(
+        builder, attr, builder.getType<StringType>(), attr);
+  } else {
+    if (requireFeature(
+            {7, 0, 0},
+            "string property expression message in property asserts"))
+      return failure();
+    messageLoc = getToken().getLoc();
+    if (parseExp(message, "expected message in 'propassert'"))
+      return failure();
+  }
 
   if (!isa<BoolType>(condition.getType()))
-    return emitError(loc, "propassert condition must be of boolean type");
+    return emitError(conditionLoc,
+                     "propassert condition must be of boolean type");
+
+  // Note: This is a dead check for FIRRTL < 7.0.0.
+  if (!type_isa<StringType>(message.getType()))
+    return emitError(messageLoc, "propassert message must be a string type");
 
   if (parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(loc);
-  auto messageUnescaped = FIRToken::getStringValue(message);
-  PropertyAssertOp::create(builder, condition,
-                           builder.getStringAttr(messageUnescaped));
+  PropertyAssertOp::create(builder, condition, message);
   return success();
 }
 
@@ -4755,15 +4793,20 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   auto lhsType = type_dyn_cast<FIRRTLBaseType>(lhs.getType());
   auto rhsType = type_dyn_cast<FIRRTLBaseType>(rhs.getType());
   if (!lhsType || !rhsType)
-    return emitError(loc, "cannot connect reference or property types");
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect reference or property types");
   // TODO: Once support lands for agg-of-ref, add test for this check!
   if (lhsType.containsReference() || rhsType.containsReference())
-    return emitError(loc, "cannot connect types containing references");
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect types containing references");
 
   if (!areTypesEquivalent(lhsType, rhsType))
-    return emitError(loc, "cannot connect non-equivalent type ")
+    return mlir::emitError(locationProcessor.getLoc(*this, loc),
+                           "cannot connect non-equivalent type ")
            << rhsType << " to " << lhsType;
-  emitConnect(builder, lhs, rhs);
+  emitConnect(
+      builder, lhs, rhs, [&] { return locationProcessor.getLoc(*this, loc); },
+      getConstants().options.warnOnTruncation);
   return success();
 }
 

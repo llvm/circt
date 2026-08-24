@@ -113,3 +113,15 @@ firrtl.circuit "BoolXor" {
     firrtl.propassign %out, %0 : !firrtl.bool
   }
 }
+
+// -----
+
+// Property assertions require FIRRTL >= 6.0.0.
+firrtl.circuit "PropertyAsserts" {
+  firrtl.module @PropertyAsserts() {
+    %cond = firrtl.bool true
+    %message = firrtl.string "foo"
+    // expected-error @below {{property assert requires FIRRTL 6.0.0}}
+    firrtl.property_assert %cond, %message : !firrtl.bool
+  }
+}

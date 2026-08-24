@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -19,6 +20,16 @@
 
 using namespace circt;
 using namespace seq;
+
+namespace {
+struct SeqProbeTypeDialectInterface : public hw::ProbeTypeDialectInterface {
+  using ProbeTypeDialectInterface::ProbeTypeDialectInterface;
+
+  bool isValidProbeElementType(Type type) const override {
+    return isa<ClockType>(type);
+  }
+};
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Dialect specification.
@@ -33,6 +44,8 @@ void SeqDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/Seq/Seq.cpp.inc"
       >();
+
+  addInterfaces<SeqProbeTypeDialectInterface>();
 }
 
 /// Registered hook to materialize a single constant operation from a given
