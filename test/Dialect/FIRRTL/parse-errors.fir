@@ -1217,7 +1217,7 @@ circuit LeadingList:
 FIRRTL version 4.0.0
 circuit LeadingPath:
   public module LeadingPath:
-    ; expected-error @below {{unexpected path expression as start of statement}}
+    ; expected-error @below {{unexpected path() as start of statement}}
     path("")
 
 ;// -----

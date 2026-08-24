@@ -2422,7 +2422,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
   case FIRToken::lp_path:
     if (isLeadingStmt)
-      return emitError("unexpected path expression as start of statement");
+      return emitError("unexpected path() as start of statement");
     if (requireFeature({6, 0, 0}, "Paths") || parsePathExp(result))
       return failure();
     break;
