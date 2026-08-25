@@ -35,6 +35,18 @@ Type circt::om::ListAttr::getType() {
   return ListType::get(getContext(), getElementType());
 }
 
+Type circt::om::FrozenBasePathAttr::getType() {
+  return FrozenBasePathType::get(getContext());
+}
+
+Type circt::om::FrozenPathAttr::getType() {
+  return FrozenPathType::get(getContext());
+}
+
+Type circt::om::FrozenEmptyPathAttr::getType() {
+  return FrozenPathType::get(getContext());
+}
+
 circt::om::SymbolRefAttr circt::om::SymbolRefAttr::get(mlir::Operation *op) {
   return om::SymbolRefAttr::get(op->getContext(),
                                 mlir::FlatSymbolRefAttr::get(op));

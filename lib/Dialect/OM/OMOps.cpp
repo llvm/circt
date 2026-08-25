@@ -15,6 +15,8 @@
 #include "circt/Dialect/OM/OMUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -717,6 +719,119 @@ ParseResult circt::om::ListCreateOp::parse(OpAsmParser &parser,
   return success();
 }
 
+static Attribute foldListCreate(MLIRContext *context, ListType type,
+                                ArrayRef<Attribute> inputs) {
+  if (!llvm::all_of(inputs, [](Attribute operand) {
+        return isa_and_nonnull<TypedAttr>(operand);
+      }))
+    return {};
+
+  auto elementType = type.getElementType();
+  if (!llvm::all_of(inputs, [elementType](Attribute operand) {
+        return cast<TypedAttr>(operand).getType() == elementType;
+      }))
+    return {};
+
+  return ListAttr::get(context, elementType, ArrayAttr::get(context, inputs));
+}
+
+OpFoldResult circt::om::ListCreateOp::fold(FoldAdaptor adaptor) {
+  return foldListCreate(getContext(), getType(), adaptor.getInputs());
+}
+
+namespace {
+struct FoldListCreate : OpRewritePattern<ListCreateOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ListCreateOp op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<Attribute> inputs;
+    inputs.reserve(op.getInputs().size());
+    for (auto input : op.getInputs()) {
+      Attribute attr;
+      if (!matchPattern(input, m_Constant(&attr)))
+        return failure();
+      inputs.push_back(attr);
+    }
+
+    auto attr = foldListCreate(op.getContext(), op.getType(), inputs);
+    if (!attr)
+      return failure();
+
+    rewriter.replaceOpWithNewOp<ConstantOp>(op, cast<TypedAttr>(attr));
+    return success();
+  }
+};
+} // namespace
+
+void circt::om::ListCreateOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add<FoldListCreate>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// ListConcatOp
+//===----------------------------------------------------------------------===//
+
+static Attribute foldListConcat(MLIRContext *context, ListType type,
+                                ArrayRef<Attribute> subLists) {
+  if (!llvm::all_of(subLists, [](Attribute operand) {
+        return isa_and_nonnull<ListAttr>(operand);
+      }))
+    return {};
+
+  auto elementType = type.getElementType();
+  SmallVector<Attribute> elements;
+  for (auto operand : subLists) {
+    auto listAttr = cast<ListAttr>(operand);
+    if (listAttr.getElementType() != elementType)
+      return {};
+    llvm::append_range(elements, listAttr.getElements().getValue());
+  }
+
+  return ListAttr::get(context, elementType, ArrayAttr::get(context, elements));
+}
+
+OpFoldResult circt::om::ListConcatOp::fold(FoldAdaptor adaptor) {
+  return foldListConcat(getContext(), getType(), adaptor.getSubLists());
+}
+
+namespace {
+struct FoldListConcat : OpRewritePattern<ListConcatOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ListConcatOp op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<Attribute> subLists;
+    subLists.reserve(op.getSubLists().size());
+    for (auto subList : op.getSubLists()) {
+      Attribute attr;
+      if (!matchPattern(subList, m_Constant(&attr)))
+        return failure();
+      subLists.push_back(attr);
+    }
+
+    auto attr = foldListConcat(op.getContext(), op.getType(), subLists);
+    if (!attr)
+      return failure();
+
+    rewriter.replaceOpWithNewOp<ConstantOp>(op, cast<TypedAttr>(attr));
+    return success();
+  }
+};
+} // namespace
+
+void circt::om::ListConcatOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add<FoldListConcat>(context);
+}
+
+static PathAttr appendPath(PathAttr basePath, PathAttr path) {
+  auto elements = llvm::to_vector(basePath.getPath());
+  llvm::append_range(elements, path.getPath());
+  return PathAttr::get(path.getContext(), elements);
+}
+
 //===----------------------------------------------------------------------===//
 // BasePathCreateOp
 //===----------------------------------------------------------------------===//
@@ -731,6 +846,20 @@ BasePathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// FrozenBasePathCreateOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult circt::om::FrozenBasePathCreateOp::fold(FoldAdaptor adaptor) {
+  auto basePathAttr =
+      dyn_cast_or_null<FrozenBasePathAttr>(adaptor.getBasePath());
+  if (!basePathAttr)
+    return {};
+
+  return FrozenBasePathAttr::get(getContext(),
+                                 appendPath(basePathAttr.getPath(), getPath()));
+}
+
+//===----------------------------------------------------------------------===//
 // PathCreateOp
 //===----------------------------------------------------------------------===//
 
@@ -741,6 +870,29 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!hierPath)
     return emitOpError("invalid symbol reference");
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FrozenPathCreateOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult circt::om::FrozenPathCreateOp::fold(FoldAdaptor adaptor) {
+  auto basePathAttr =
+      dyn_cast_or_null<FrozenBasePathAttr>(adaptor.getBasePath());
+  if (!basePathAttr)
+    return {};
+
+  return FrozenPathAttr::get(getContext(), getTargetKindAttr(),
+                             appendPath(basePathAttr.getPath(), getPath()),
+                             getModuleAttr(), getRefAttr(), getFieldAttr());
+}
+
+//===----------------------------------------------------------------------===//
+// FrozenEmptyPathOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult circt::om::FrozenEmptyPathOp::fold(FoldAdaptor adaptor) {
+  return FrozenEmptyPathAttr::get(getContext());
 }
 
 //===----------------------------------------------------------------------===//

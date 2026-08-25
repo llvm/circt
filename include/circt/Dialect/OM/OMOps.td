@@ -299,6 +299,8 @@ def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
   );
 
   let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
@@ -316,6 +318,8 @@ def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
   let results = (outs ListType:$result);
 
   let assemblyFormat = "$subLists attr-dict `:` type($result)";
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,
@@ -406,6 +410,7 @@ def FrozenBasePathCreateOp : OMOp<"frozenbasepath_create", [Pure]> {
   let arguments = (ins FrozenBasePathType:$basePath, OMPathAttr:$path);
   let results = (outs FrozenBasePathType:$result);
   let assemblyFormat = "$basePath custom<BasePathString>($path) attr-dict";
+  let hasFolder = 1;
 }
 
 def FrozenPathCreateOp : OMOp<"frozenpath_create", [Pure]> {
@@ -434,6 +439,7 @@ def FrozenPathCreateOp : OMOp<"frozenpath_create", [Pure]> {
     $targetKind $basePath custom<PathString>($path, $module, $ref, $field)
       attr-dict
   }];
+  let hasFolder = 1;
 }
 
 def FrozenEmptyPathOp : OMOp<"frozenpath_empty", [Pure]> {
@@ -450,6 +456,7 @@ def FrozenEmptyPathOp : OMOp<"frozenpath_empty", [Pure]> {
   }];
   let results = (outs FrozenPathType:$result);
   let assemblyFormat = "attr-dict";
+  let hasFolder = 1;
 }
 
 def UnknownValueOp : OMOp<"unknown", [

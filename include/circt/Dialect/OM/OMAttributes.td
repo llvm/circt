@@ -13,9 +13,9 @@
 #ifndef CIRCT_DIALECT_OM_OMATTRIBUTES_TD
 #define CIRCT_DIALECT_OM_OMATTRIBUTES_TD
 
-include "circt/Dialect/OM/OMDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
+include "circt/Dialect/OM/OMEnums.td"
 
 def ReferenceAttr : AttrDef<OMDialect, "Reference", [TypedAttrInterface]> {
   let summary = "An attribute that wraps a #hw.innerNameRef with !om.ref type";
@@ -96,6 +96,57 @@ def OMPathAttr : AttrDef<OMDialect, "Path"> {
   let extraClassDeclaration = [{
     auto begin() const { return getPath().begin(); }
     auto end() const { return getPath().end(); }
+  }];
+}
+
+def OMFrozenBasePathAttr : AttrDef<OMDialect, "FrozenBasePath",
+    [TypedAttrInterface]> {
+  let summary = "An attribute that represents a frozen base path";
+
+  let mnemonic = "frozenbasepath";
+
+  let parameters = (ins "circt::om::PathAttr":$path);
+
+  let assemblyFormat = "`<` $path `>`";
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
+
+def OMFrozenPathAttr : AttrDef<OMDialect, "FrozenPath",
+    [TypedAttrInterface]> {
+  let summary = "An attribute that represents a frozen path";
+
+  let mnemonic = "frozenpath";
+
+  let parameters = (ins
+    "circt::om::TargetKindAttr":$targetKind,
+    "circt::om::PathAttr":$path,
+    "mlir::StringAttr":$module,
+    "mlir::StringAttr":$ref,
+    "mlir::StringAttr":$field
+  );
+
+  let assemblyFormat = [{
+    `<` $targetKind `,` $path `,` $module `,` $ref `,` $field `>`
+  }];
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
+
+def OMFrozenEmptyPathAttr : AttrDef<OMDialect, "FrozenEmptyPath",
+    [TypedAttrInterface]> {
+  let summary = "An attribute that represents an empty frozen path";
+
+  let mnemonic = "frozenpath_empty";
+
+  let assemblyFormat = "";
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
   }];
 }
 
