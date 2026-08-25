@@ -15,6 +15,7 @@
 #include "circt/Dialect/OM/OMTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -41,6 +42,48 @@ Type circt::om::FrozenBasePathAttr::getType() {
 
 Type circt::om::FrozenPathAttr::getType() {
   return FrozenPathType::get(getContext());
+}
+
+StringAttr circt::om::FrozenPathAttr::getAsString() const {
+  SmallString<64> result;
+  switch (getTargetKind().getValue()) {
+  case TargetKind::DontTouch:
+    result += "OMDontTouchedReferenceTarget";
+    break;
+  case TargetKind::Instance:
+    result += "OMInstanceTarget";
+    break;
+  case TargetKind::MemberInstance:
+    result += "OMMemberInstanceTarget";
+    break;
+  case TargetKind::MemberReference:
+    result += "OMMemberReferenceTarget";
+    break;
+  case TargetKind::Reference:
+    result += "OMReferenceTarget";
+    break;
+  }
+  result += ":~";
+  if (!getPath().getPath().empty())
+    result += getPath().getPath().front().module;
+  else
+    result += getModule().getValue();
+  result += '|';
+  for (const auto &element : getPath()) {
+    result += element.module.getValue();
+    result += '/';
+    result += element.instance.getValue();
+    result += ':';
+  }
+  if (!getModule().getValue().empty())
+    result += getModule().getValue();
+  if (!getRef().getValue().empty()) {
+    result += '>';
+    result += getRef().getValue();
+  }
+  if (!getField().getValue().empty())
+    result += getField().getValue();
+  return StringAttr::get(getContext(), result);
 }
 
 Type circt::om::FrozenEmptyPathAttr::getType() {

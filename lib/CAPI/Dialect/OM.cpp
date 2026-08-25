@@ -14,7 +14,6 @@
 #include "mlir/CAPI/Wrap.h"
 #include "mlir/IR/Location.h"
 #include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Casting.h"
 
 using namespace mlir;
@@ -307,46 +306,7 @@ MlirAttribute omFrozenPathAttrGetAsString(MlirAttribute attr) {
   auto path = dyn_cast<FrozenPathAttr>(unwrap(attr));
   if (!path)
     return wrap(StringAttr::get(unwrap(attr).getContext(), "OMDeleted:"));
-
-  SmallString<64> result;
-  switch (path.getTargetKind().getValue()) {
-  case TargetKind::DontTouch:
-    result += "OMDontTouchedReferenceTarget";
-    break;
-  case TargetKind::Instance:
-    result += "OMInstanceTarget";
-    break;
-  case TargetKind::MemberInstance:
-    result += "OMMemberInstanceTarget";
-    break;
-  case TargetKind::MemberReference:
-    result += "OMMemberReferenceTarget";
-    break;
-  case TargetKind::Reference:
-    result += "OMReferenceTarget";
-    break;
-  }
-  result += ":~";
-  if (!path.getPath().getPath().empty())
-    result += path.getPath().getPath().front().module;
-  else
-    result += path.getModule().getValue();
-  result += '|';
-  for (const auto &element : path.getPath()) {
-    result += element.module.getValue();
-    result += '/';
-    result += element.instance.getValue();
-    result += ':';
-  }
-  if (!path.getModule().getValue().empty())
-    result += path.getModule().getValue();
-  if (!path.getRef().getValue().empty()) {
-    result += '>';
-    result += path.getRef().getValue();
-  }
-  if (!path.getField().getValue().empty())
-    result += path.getField().getValue();
-  return wrap(StringAttr::get(path.getContext(), result));
+  return wrap(path.getAsString());
 }
 
 /// Query if the EvaluatorValue is an Unknown value.

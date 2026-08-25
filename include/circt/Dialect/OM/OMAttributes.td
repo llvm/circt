@@ -134,6 +134,7 @@ def OMFrozenPathAttr : AttrDef<OMDialect, "FrozenPath",
 
   let extraClassDeclaration = [{
     mlir::Type getType();
+    mlir::StringAttr getAsString() const;
   }];
 }
 
