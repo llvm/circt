@@ -1,3 +1,5 @@
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: circt-opt %s --lower-scf-to-calyx -canonicalize -split-input-file | FileCheck %s
 
 // CHECK:      module attributes {calyx.entrypoint = "main"} {

@@ -527,9 +527,8 @@ struct StmtVisitor {
 
           // Take note if the expression is a constant.
           auto maybeConst = value;
-          while (
-              isa_and_nonnull<moore::ConversionOp, moore::IntToLogicOp,
-                              moore::LogicToIntOp>(maybeConst.getDefiningOp()))
+          while (isa_and_nonnull<moore::IntToLogicOp, moore::LogicToIntOp>(
+              maybeConst.getDefiningOp()))
             maybeConst = maybeConst.getDefiningOp()->getOperand(0);
           if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
             itemConsts.push_back(defOp.getValueAttr());
@@ -1446,6 +1445,8 @@ struct StmtVisitor {
         auto convertedValue = context.materializeConversion(
             cast<moore::RefType>(lhs.getType()).getNestedType(), strValue,
             false, loc);
+        if (!convertedValue)
+          return failure();
         moore::BlockingAssignOp::create(builder, loc, lhs, convertedValue);
         return true;
       }

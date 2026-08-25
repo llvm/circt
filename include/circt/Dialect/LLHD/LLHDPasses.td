@@ -14,10 +14,11 @@ include "mlir/Pass/PassBase.td"
 def InlineCallsPass : Pass<"llhd-inline-calls", "ModuleOp"> {
   let summary = "Inline all function calls in HW modules";
   let description = [{
-    Inlines all `func.call` operations nested within `llhd.combinational`,
+    Inlines `func.call` operations nested within `llhd.combinational`,
     `llhd.process`, and `llhd.final` ops within `hw.module`s. The `func.func`
     definitions are left untouched. After the inlining, MLIR's symbol DCE pass
-    may be used to eliminate the function definitions where possible.
+    may be used to eliminate the function definitions where possible. Recursive
+    calls are left unchanged.
 
     This pass expects the `llhd-wrap-procedural-ops` pass to have already run.
     Otherwise call ops immediately in the module body, a graph region, cannot be

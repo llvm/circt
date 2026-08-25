@@ -7,6 +7,7 @@ from __future__ import annotations
 from .common import Clock, Input, Output, Reset
 from .dialects import comb, msft, sv
 from .module import generator, modparams, Module, _BlockContext
+from .seq import Counter
 from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
 from .signals import get_slice_bounds, _FromCirctValue
 from .support import get_user_loc
@@ -260,29 +261,3 @@ def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
   dummy_op.operation.erase()
 
   return _FromCirctValue(array.peOutputs)
-
-
-@modparams
-def Counter(width: int):
-  """Construct a counter with the specified width. Increment the counter on the
-  if the increment signal is asserted."""
-
-  class Counter(Module):
-    clk = Clock()
-    rst = Reset()
-    clear = Input(Bits(1))
-    increment = Input(Bits(1))
-    out = Output(UInt(width))
-
-    @generator
-    def construct(ports):
-      count = Reg(UInt(width),
-                  clk=ports.clk,
-                  rst=ports.rst,
-                  rst_value=0,
-                  ce=ports.increment | ports.clear)
-      next = (count + 1).as_uint(width)
-      count.assign(Mux(ports.clear, next, UInt(width)(0)))
-      ports.out = count
-
-  return Counter

@@ -854,6 +854,22 @@ def NullOp : MooreOp<"null", [Pure]> {
   }];
 }
 
+def NullChandleOp : MooreOp<"null_chandle", [Pure]> {
+  let summary = "A null `chandle`";
+  let results = (outs ChandleType:$result);
+  let assemblyFormat = [{
+     attr-dict
+  }];
+}
+
+def NullClassOp : MooreOp<"null_class", [Pure]> {
+  let summary = "A null class handle";
+  let results = (outs ClassHandleType:$result);
+  let assemblyFormat = [{
+     `:` type($result) attr-dict
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Handle Comparison Ops
 //===----------------------------------------------------------------------===//
@@ -916,37 +932,6 @@ def HandleCaseNeOp : HandleCaseEqOpBase<"handle_case_ne"> {
 //===----------------------------------------------------------------------===//
 // Casting
 //===----------------------------------------------------------------------===//
-
-def ConversionOp : MooreOp<"conversion", [Pure]> {
-  let summary = "A type conversion";
-  let description = [{
-    An explicit or implicit type conversion. These are either generated
-    automatically in order to make assignments compatible:
-
-    ```
-    int a;
-    shortint b;
-    a = b;  // generates an implicit cast from shortint to int
-    ```
-
-    Or explicitly by the user through a type, sign, or const cast expression:
-
-    ```
-    byte'(a)
-    unsigned'(a)
-    signed'(a)
-    42'(a)
-    ```
-
-    See IEEE 1800-2017 § 6.24 "Casting".
-  }];
-  let arguments = (ins AnyType:$input);
-  let results = (outs AnyType:$result);
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input) `->` type($result)
-  }];
-  let hasFolder = 1;
-}
 
 def PackedToSBVOp : MooreOp<"packed_to_sbv", [
   Pure,

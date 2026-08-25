@@ -570,7 +570,7 @@ class TestBundleTransformBasic(Module):
 # are present.
 # CHECK:         %buf_item = seq.compreg.ce sym @buf_item %{{.+}}, %clk, %{{.+}} reset %rst, %{{.+}} : i8
 # CHECK:         comb.mux bin %{{.+}}, %buf_item, %{{.+}} {{.+}} : i8
-# CHECK:         hw.instance "Counter" sym @Counter @Counter_width8
+# CHECK:         hw.instance "remaining" sym @remaining @DownCounter_decrement_on_loadFalse_width8
 # CHECK:         %state = seq.compreg sym @state %{{.+}}, %clk reset %rst, %{{.+}} : i2
 @unittestmodule()
 class TestListWindowToParallel(Module):
@@ -643,7 +643,7 @@ class TestListWindowToSerial(Module):
 # item is forwarded directly into the output struct.
 # CHECK-NOT:     @buf_item
 # CHECK:         hw.struct_create (%{{.+}}, %{{.+}}, %{{.+}}) : !hw.struct<header: i4, data: i0, last: i1>
-# CHECK:         hw.instance "Counter" sym @Counter @Counter_width8
+# CHECK:         hw.instance "remaining" sym @remaining @DownCounter_decrement_on_loadFalse_width8
 # CHECK-NOT:     @buf_item
 # CHECK:         %state = seq.compreg sym @state %{{.+}}, %clk reset %rst, %{{.+}} : i2
 @unittestmodule()
@@ -707,3 +707,104 @@ class TestListWindowToSerialZeroWidth(Module):
         TestListWindowToSerialZeroWidth.fifo_depth)(
             clk=self.clk, rst=self.rst, parallel_in=self.parallel_lst_in)
     self.serial_lst_out = to_serial.serial_out
+
+
+# CHECK-LABEL: hw.module @ChannelMergeOneValidImpl_{{.*}}num_inputs3_register_outputFalse
+# Every input is unwrapped with the *same* `%ready`. This broadcast is the
+# property the module exists for: no input's `ready` is a function of any
+# sibling's `valid`, so there is no combinational coupling between the inputs.
+# If arbitration ever creeps back in, these three stop matching.
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
+# `valid` is a single OR-reduce over the inputs' valids, and the payload is a
+# list select on a binary encode of that same vector -- never an OR of masked
+# payloads, so only one input's data can reach the output even if the caller
+# violates the at-most-one-valid contract. The interleaved `CHECK-NOT`s cover
+# the whole span from the last unwrap to the wrap.
+# CHECK-NOT:     comb.or {{.*}} : i8
+# CHECK:         comb.or bin %{{.+}}, %{{.+}}, %{{.+}} : i1
+# CHECK-NOT:     comb.or {{.*}} : i8
+# CHECK:         comb.concat %{{.+}}, %{{.+}} {{.*}}: i1, i1
+# The payload is read straight out of an array indexed by that select, sized to
+# the input count -- no rounding up to a power of two, since under the contract
+# the select only ever takes on a real input's index.
+# CHECK:         hw.array_create
+# CHECK:         hw.array_get %{{.+}}[%{{.+}}] {{.*}}: !hw.array<3xi8>, i2
+# CHECK-NOT:     comb.or {{.*}} : i8
+# CHECK:         esi.wrap.vr
+@unittestmodule()
+class TestChannelMergeOneValid(Module):
+  """Merge channels which are never simultaneously valid, without
+  arbitration."""
+
+  clk = Clock()
+  rst = Reset()
+
+  in0 = InputChannel(Bits(8))
+  in1 = InputChannel(Bits(8))
+  in2 = InputChannel(Bits(8))
+  merged_out = OutputChannel(Bits(8))
+
+  @generator
+  def build(self):
+    self.merged_out = esi.ChannelMergeOneValid([self.in0, self.in1, self.in2],
+                                               self.clk,
+                                               self.rst,
+                                               register_output=False)
+
+
+# CHECK-LABEL: hw.module @ChannelMergeOneValidImpl_{{.*}}num_inputs2_register_outputTrue
+# `register_output=True` is the default every caller gets. It must still
+# broadcast one `ready`, and must terminate in a one-stage buffer -- that skid
+# is what makes every input's `ready` a flop output, which is the whole point
+# of the option. With two inputs the select is a single `valid` bit, so the
+# array is indexed directly by it with no encode in between.
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
+# CHECK:         comb.or bin %{{.+}}, %{{.+}} : i1
+# CHECK:         hw.array_get %{{.+}}[%{{.+}}] {{.*}}: !hw.array<2xi8>, i1
+# CHECK:         esi.wrap.vr
+# CHECK:         esi.buffer %clk, %rst, %{{.+}} {stages = 1 : i64}
+@unittestmodule()
+class TestChannelMergeOneValidRegistered(Module):
+  """The default `register_output=True` path: skid buffer on the output."""
+
+  clk = Clock()
+  rst = Reset()
+
+  in0 = InputChannel(Bits(8))
+  in1 = InputChannel(Bits(8))
+  merged_out = OutputChannel(Bits(8))
+
+  @generator
+  def build(self):
+    self.merged_out = esi.ChannelMergeOneValid([self.in0, self.in1], self.clk,
+                                               self.rst)
+
+
+# CHECK-LABEL: hw.module @ChannelMergeOneValidImpl_{{.*}}esi_channel_i0{{.*}}register_outputFalse
+# Zero-width payload: there is nothing to select, so the merge degenerates to
+# the `valid` OR-reduce and no payload select is built at all.
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i0
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i0
+# CHECK-NOT:     hw.array_get
+# CHECK:         comb.or bin %{{.+}}, %{{.+}} : i1
+# CHECK:         esi.wrap.vr %{{.+}}, %{{.+}} {{.*}}: i0
+@unittestmodule()
+class TestChannelMergeOneValidZeroWidth(Module):
+  """Zero-width payloads (pure tokens) take the no-mux path."""
+
+  clk = Clock()
+  rst = Reset()
+
+  in0 = InputChannel(Bits(0))
+  in1 = InputChannel(Bits(0))
+  merged_out = OutputChannel(Bits(0))
+
+  @generator
+  def build(self):
+    self.merged_out = esi.ChannelMergeOneValid([self.in0, self.in1],
+                                               self.clk,
+                                               self.rst,
+                                               register_output=False)

@@ -31,7 +31,6 @@
 namespace circt {
 namespace firrtl {
 #define GEN_PASS_DEF_FULLRESET
-#define GEN_PASS_DEF_MEMTOREGOFVEC
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
 } // namespace firrtl
 } // namespace circt
@@ -627,35 +626,6 @@ void circt::firrtl::runCombMemsToRegOfVec(FModuleOp mod, bool ignoreReadEnable,
   converter.runOnModule(mod);
   numConverted += converter.numConverted;
 }
-
-namespace {
-struct MemToRegOfVecPass
-    : public circt::firrtl::impl::MemToRegOfVecBase<MemToRegOfVecPass> {
-  using Base::Base;
-
-  void runOnOperation() override {
-    auto circtOp = getOperation();
-    auto &instanceInfo = getAnalysis<InstanceInfo>();
-
-    if (!AnnotationSet::removeAnnotations(circtOp,
-                                          convertMemToRegOfVecAnnoClass))
-      return markAllAnalysesPreserved();
-
-    SmallVector<FModuleOp> modules;
-    for (auto moduleOp : circtOp.getOps<FModuleOp>())
-      if (instanceInfo.anyInstanceInEffectiveDesign(moduleOp))
-        modules.push_back(moduleOp);
-
-    std::atomic<unsigned> totalConverted{0};
-    mlir::parallelForEach(&getContext(), modules, [&](FModuleOp mod) {
-      unsigned numConverted = 0;
-      runCombMemsToRegOfVec(mod, ignoreReadEnable, numConverted);
-      totalConverted += numConverted;
-    });
-    numConvertedMems += totalConverted.load();
-  }
-};
-} // end anonymous namespace
 
 namespace {
 struct FullResetRunner {
@@ -1437,7 +1407,7 @@ LogicalResult FullResetRunner::implementFullReset(Operation *op,
         builder, regOp.getResult().getType(), regOp.getClockVal(), actualReset,
         zero, regOp.getNameAttr(), regOp.getNameKindAttr(),
         regOp.getAnnotations(), regOp.getInnerSymAttr(),
-        regOp.getForceableAttr());
+        regOp.getForceableAttr(), regOp.getInitialAttr());
     regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
     if (regOp.getForceable())
       regOp.getRef().replaceAllUsesWith(newRegOp.getRef());

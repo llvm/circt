@@ -1,3 +1,5 @@
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: circt-opt %s -canonicalize -split-input-file | FileCheck %s
 
 // Nested SeqOps are collapsed.

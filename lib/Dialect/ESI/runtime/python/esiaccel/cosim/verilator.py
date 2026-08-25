@@ -2,6 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import json
 import os
 import re
 import shutil
@@ -19,6 +20,15 @@ class Verilator(Simulator):
   Falls back to ``make`` when cmake/ninja are not available."""
 
   DefaultDriver = CosimCollateralDir / "driver.cpp"
+  _CMakeSignatureFilename = ".esi-cosim-cmake-config.json"
+  _CMakeSignatureEnv = (
+      "CMAKE_PREFIX_PATH",
+      "CMAKE_TOOLCHAIN_FILE",
+      "CXX",
+      "CXXFLAGS",
+      "LDFLAGS",
+      "PATH",
+  )
   VerilatorBinNotFound = (
       "Cannot find verilator_bin. Set VERILATOR_PATH to an absolute path "
       "or ensure verilator_bin is in PATH.")
@@ -56,6 +66,8 @@ class Verilator(Simulator):
         make_default_logs=make_default_logs,
         macro_definitions=macro_definitions,
     )
+    # Set by _write_cmake when the generated CMakeLists.txt actually changed.
+    self._cmake_dirty = True
 
   @property
   def verilator_bin(self) -> Path:
@@ -121,6 +133,56 @@ class Verilator(Simulator):
     return shutil.which("cmake") is not None and \
         shutil.which("ninja") is not None
 
+  @staticmethod
+  def _raise_stack_limit() -> None:
+    """Lift the stack soft limit to the hard limit for the verilator process.
+
+    Verilator recurses over the design AST and segfaults on large designs with
+    the usual 8MB stack. Its ``verilator`` wrapper script normally runs
+    ``ulimit -s unlimited`` first; we invoke ``verilator_bin`` directly and so
+    have to do it ourselves. Subprocesses inherit the raised limit.
+    """
+    if os.name == "nt":
+      return
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_STACK)
+    if soft == hard:
+      return
+    try:
+      resource.setrlimit(resource.RLIMIT_STACK, (hard, hard))
+    except (ValueError, OSError):
+      pass
+
+  @staticmethod
+  def _toolchain_args() -> List[str]:
+    """Prefer clang and lld when they are available.
+
+    Verilated code compiles about twice as fast with clang as with gcc, and
+    the model is a throwaway simulation binary, so the toolchain only affects
+    build time. Setting ``CXX`` or ``LDFLAGS`` opts back out.
+    """
+    if os.name == "nt":
+      return []
+    args = []
+    if not os.environ.get("CXX"):
+      clangxx = shutil.which("clang++")
+      if clangxx is not None:
+        args.append(f"-DCMAKE_CXX_COMPILER={clangxx}")
+    if not os.environ.get("LDFLAGS") and shutil.which("ld.lld") is not None:
+      args.append("-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld")
+    return args
+
+  @staticmethod
+  def _cmake_signature(cmake_cmd: List[str]) -> str:
+    """Serialize inputs that can affect CMake configuration."""
+    signature = {
+        "command": cmake_cmd,
+        "environment": {
+            name: os.environ.get(name) for name in Verilator._CMakeSignatureEnv
+        },
+    }
+    return json.dumps(signature, indent=2, sort_keys=True) + "\n"
+
   def compile_commands(self) -> List[Simulator.CompileStep]:
     """Return the compile steps for the full compile flow.
 
@@ -128,7 +190,7 @@ class Verilator(Simulator):
     sequential steps:
       1. ``verilator_bin`` – generates C++ from RTL.
       2. Python callback – generates the CMakeLists.txt from the depfile.
-      3. ``cmake`` – configures the C++ build (Ninja generator).
+      3. Python callback – configures the C++ build when inputs changed.
       4. ``ninja`` – builds the simulation executable.
 
     Otherwise falls back to two commands:
@@ -142,6 +204,7 @@ class Verilator(Simulator):
     if verilator_root is None:
       raise RuntimeError(Verilator.VerilatorRootNotFound)
     os.environ["VERILATOR_ROOT"] = str(verilator_root)
+    self._raise_stack_limit()
 
     verilator_cmd: List[str] = [
         str(verilator_bin),
@@ -163,8 +226,10 @@ class Verilator(Simulator):
         "-sv",
         "--verilate-jobs",
         "0",
+        # Every generated .cpp re-parses the model headers, so file count sets
+        # the floor for the C++ build; 5000 balances that against parallelism.
         "--output-split",
-        "2500",
+        "5000",
     ]
     if self.debug:
       verilator_cmd += [
@@ -176,15 +241,17 @@ class Verilator(Simulator):
 
     if self._use_cmake:
       verilator_cmd += [str(p) for p in self.sources.rtl_sources]
-      build_dir = str(Path.cwd() / "obj_dir" / "cmake_build")
+      build_dir = Path.cwd() / "obj_dir" / "cmake_build"
       # ``CMAKE_BUILD_TYPE=Release`` is important on Windows: the prebuilt
       # ``EsiCosimDpiServer.dll`` ships with the Release MSVC runtime, and
       # mixing it with a Debug-runtime executable causes silent failures
       # (e.g. transport/control connections come up but requests stall).
       cmake_cmd = [
-          "cmake", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-S", build_dir,
-          "-B", build_dir
+          "cmake", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-S",
+          str(build_dir), "-B",
+          str(build_dir)
       ]
+      cmake_cmd += self._toolchain_args()
       # If vcpkg is available, use its toolchain file so that
       # ``find_package(ZLIB)`` (and other transitive deps) can pick up vcpkg
       # installations. This is the standard story on Windows.
@@ -195,9 +262,26 @@ class Verilator(Simulator):
             vcpkg_root) / "scripts" / "buildsystems" / "vcpkg.cmake"
         if toolchain.exists():
           cmake_cmd.append(f"-DCMAKE_TOOLCHAIN_FILE={toolchain}")
-      ninja_cmd = ["ninja", "-C", build_dir]
+      ninja_cmd = ["ninja", "-C", str(build_dir)]
+      cmake_signature = self._cmake_signature(cmake_cmd)
+      signature_file = build_dir / self._CMakeSignatureFilename
+
+      def configure(cmake_cmd=cmake_cmd,
+                    cmake_signature=cmake_signature,
+                    signature_file=signature_file) -> int:
+        # Ninja regenerates an existing build graph when CMakeLists.txt changes.
+        # Run CMake explicitly only for a new tree or changed configure inputs.
+        signature_matches = signature_file.exists() and \
+            signature_file.read_text() == cmake_signature
+        if (build_dir / "build.ninja").exists() and signature_matches:
+          return 0
+        result = self._run_compile_command(cmake_cmd)
+        if result == 0:
+          signature_file.write_text(cmake_signature)
+        return result
+
       return [
-          verilator_cmd, self._write_cmake_from_depfile, cmake_cmd, ninja_cmd
+          verilator_cmd, self._write_cmake_from_depfile, configure, ninja_cmd
       ]
 
     # -- make fallback --
@@ -254,6 +338,12 @@ class Verilator(Simulator):
           f"No generated C++ sources found in depfile: {depfile}")
     return generated_sources
 
+  @staticmethod
+  def _is_slow(source: Path) -> bool:
+    """Verilator suffixes cold-path TUs, including Syms/ConstPool, with
+    ``__Slow``."""
+    return source.stem.endswith("__Slow")
+
   def _write_cmake(self,
                    obj_dir: Path,
                    generated_sources: List[Path],
@@ -268,6 +358,9 @@ class Verilator(Simulator):
     include_dir = verilator_root / "include"
     exe_name = "V" + self.sources.top
 
+    slow_sources = [s for s in generated_sources if self._is_slow(s)]
+    fast_sources = [s for s in generated_sources if not self._is_slow(s)]
+
     if os.name == "nt" and all(source.exists() for source in generated_sources):
       # Verilator can emit deeply descriptive source filenames. CMake uses the
       # source basename in MSVC's /Fo object path, which can overflow Windows'
@@ -278,12 +371,17 @@ class Verilator(Simulator):
       if short_source_dir.exists():
         shutil.rmtree(short_source_dir)
       short_source_dir.mkdir(parents=True)
-      shortened_sources = []
-      for index, source in enumerate(generated_sources):
-        shortened_source = short_source_dir / f"vsrc_{index}.cpp"
-        shutil.copy2(source, shortened_source)
-        shortened_sources.append(shortened_source)
-      generated_sources = shortened_sources
+
+      def shorten(sources: List[Path], prefix: str) -> List[Path]:
+        shortened = []
+        for index, source in enumerate(sources):
+          destination = short_source_dir / f"{prefix}{index}.cpp"
+          shutil.copy2(source, destination)
+          shortened.append(destination)
+        return shortened
+
+      fast_sources = shorten(fast_sources, "vfast_")
+      slow_sources = shorten(slow_sources, "vslow_")
 
     runtime_sources = [
         include_dir / "verilated.cpp",
@@ -299,10 +397,10 @@ class Verilator(Simulator):
     if random_cpp.exists():
       runtime_sources.append(random_cpp)
 
-    generated_src = "\n  ".join(
-        source.as_posix() for source in generated_sources)
     rt_src = "\n  ".join(s.as_posix() for s in runtime_sources)
     driver = Path(Verilator.DefaultDriver).as_posix()
+    rt_and_driver = "\n  ".join([s.as_posix() for s in runtime_sources] +
+                                [driver])
     inc = include_dir.as_posix()
     vltstd = (include_dir / "vltstd").as_posix()
 
@@ -319,25 +417,34 @@ class Verilator(Simulator):
       dpi_paths = self.sources.dpi_link_paths()
       dpi_link = "\n  ".join(p.as_posix() for p in dpi_paths)
 
-    pch_setup = ""
-    if pch_header is not None:
-      runtime_and_driver = "\n  ".join(
-          [source.as_posix() for source in runtime_sources] + [driver])
-      pch_setup = f"""
-target_precompile_headers({exe_name} PRIVATE
-  {pch_header.as_posix()}
+    # Separate object libraries so each optimization group gets its own
+    # precompiled header; one PCH cannot serve two different -O levels.
+    groups = []
+    obj_refs = []
+    for name, group_sources in (("vl_fast", fast_sources), ("vl_slow",
+                                                            slow_sources)):
+      if not group_sources:
+        continue
+      listing = "\n  ".join(s.as_posix() for s in group_sources)
+      opts = ("\ntarget_compile_options(vl_slow PRIVATE ${VL_OPT_SLOW})"
+              if name == "vl_slow" else "")
+      pch = ("" if pch_header is None else
+             f"\ntarget_precompile_headers({name} PRIVATE "
+             f"{pch_header.as_posix()})")
+      groups.append(f"""
+add_library({name} OBJECT
+  {listing}
 )
+target_link_libraries({name} PRIVATE vl_common){opts}{pch}""")
+      obj_refs.append(f"$<TARGET_OBJECTS:{name}>")
+    groups_str = "\n".join(groups)
+    obj_str = "\n  ".join(obj_refs)
 
-set_source_files_properties(
-  {runtime_and_driver}
-  PROPERTIES SKIP_PRECOMPILE_HEADERS ON
-)
-"""
-
-    # zlib is only needed when FST tracing (debug builds) is enabled.
+    # Verilator's FST writer (debug builds) pulls in both zlib and lz4.
     if self.debug:
-      zlib_find = "find_package(ZLIB REQUIRED)"
-      zlib_link = "ZLIB::ZLIB"
+      zlib_find = ("find_package(ZLIB REQUIRED)\n"
+                   "find_library(LZ4_LIBRARY NAMES lz4 REQUIRED)")
+      zlib_link = "ZLIB::ZLIB\n  ${LZ4_LIBRARY}"
     else:
       zlib_find = ""
       zlib_link = ""
@@ -351,28 +458,41 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
   add_compile_options(/EHsc /bigobj)
+  set(VL_OPT_SLOW /Od)
+  set(VL_OPT_GLOBAL /O1)
+else()
+  set(VL_OPT_SLOW -O0)
+  set(VL_OPT_GLOBAL -Os)
 endif()
 
 find_package(Threads REQUIRED)
 {zlib_find}
-add_executable({exe_name}
-  {generated_src}
-  {rt_src}
-  {driver}
-)
+add_library(vl_common INTERFACE)
 
-target_include_directories({exe_name} PRIVATE
+target_include_directories(vl_common INTERFACE
   {inc}
   {vltstd}
   ${{CMAKE_CURRENT_SOURCE_DIR}}/..
 )
 
-target_compile_definitions({exe_name} PRIVATE
+target_compile_definitions(vl_common INTERFACE
   {defs_str}
 )
-{pch_setup}
+{groups_str}
+
+add_executable({exe_name}
+  {obj_str}
+  {rt_src}
+  {driver}
+)
+
+set_source_files_properties(
+  {rt_and_driver}
+  PROPERTIES COMPILE_OPTIONS "${{VL_OPT_GLOBAL}}"
+)
 
 target_link_libraries({exe_name} PRIVATE
+  vl_common
   Threads::Threads
   {zlib_link}
   {dpi_link}
@@ -380,7 +500,11 @@ target_link_libraries({exe_name} PRIVATE
 """
     build_dir = obj_dir / "cmake_build"
     build_dir.mkdir(parents=True, exist_ok=True)
-    (build_dir / "CMakeLists.txt").write_text(content)
+    cmake_file = build_dir / "CMakeLists.txt"
+    existing = cmake_file.read_text() if cmake_file.exists() else None
+    self._cmake_dirty = existing != content
+    if self._cmake_dirty:
+      cmake_file.write_text(content)
     return build_dir
 
   @property

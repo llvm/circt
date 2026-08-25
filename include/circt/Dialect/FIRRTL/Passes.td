@@ -386,6 +386,9 @@ def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
     This pass infers the widths of all types throughout a FIRRTL module, and
     emits diagnostics for types that could not be inferred.
   }];
+  let options = [Option<"warnOnTruncation", "warn-on-implicit-truncation", "bool",
+                              "false",
+                              "Warn when connects require implicit truncation">];
 }
 
 def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
@@ -578,22 +581,6 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
     "emit::EmitDialect",
     "circt::hw::HWDialect",
     "sv::SVDialect",
-  ];
-}
-
-def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
-  let summary = "Convert combinational memories to a vector of registers";
-  let description = [{
-    This pass generates the logic to implement a memory using Registers.
-  }];
-  let options = [
-    Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool",
-                "false",
-    "ignore the read enable signal, instead of assigning X on read disable">
-   ];
-  let statistics = [
-    Statistic<"numConvertedMems", "num-converted-mems",
-      "Number of memories converted to registers">,
   ];
 }
 

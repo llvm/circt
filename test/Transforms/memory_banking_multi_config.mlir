@@ -1,3 +1,5 @@
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: circt-opt %s -memory-banking="factors=4,6 dimensions=0,1" --canonicalize --split-input-file | FileCheck %s
 
 // CHECK: #[[$ATTR_0:.+]] = affine_map<(d0) -> (d0 mod 2)>

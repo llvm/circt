@@ -125,6 +125,10 @@
 //  * I9  (ghost-contexts)
 //        `underFlatten` ORs over parents (any, not all):
 //        P2 may mint contexts P3 never realizes.
+//        The upward trace prunes subtrees that can only repeat an
+//        already-recorded root, keeping enumeration sized by realized
+//        copies; the residue inside flatten-reachable regions is believed
+//        empty (no witness constructed) but not asserted.
 //        `wasUsed` gates fork emission, not the primary.
 //        Retention (I15) prevents a ghost renaming a survivor's symbol.
 //
@@ -585,7 +589,8 @@ struct PathHop {
   }
 };
 
-/// A hop-path view with precomputed hash: the trimmed-upper-path dedup key.
+/// A hop-path view with precomputed hash: the upper-path distinctness key
+/// for the debug check that the pruned climb never repeats a path.
 /// The view must reference storage that outlives the set (`upperPaths`).
 struct TrimmedPathRef {
   ArrayRef<PathHop> path;
@@ -631,6 +636,13 @@ private:
   /// Trace upward from a root module until reaching surviving modules,
   /// discovering all contexts where the root appears after inlining.
   /// Depth-first over the instance graph's uses, with an explicit stack.
+  ///
+  /// Once the path climbed so far contains the module we would trim to
+  /// when NOT under a flatten, climbing through flatten-free parents can only
+  /// rediscover that same context.  Those subtrees are skipped entirely
+  /// ("pinned", below).  Recorded paths /may/ still be broader than realized
+  /// copies (I9), but the work is sized by those copies, not raw path
+  /// count.
   LogicalResult
   traceUpUntilSurviving(StringAttr rootModName, hw::HierPathOp diagAnchor,
                         SmallVectorImpl<SmallVector<PathHop>> &discoveredPaths);
@@ -649,6 +661,15 @@ private:
   ///
   /// `rootMod` is the (original) NLA root that the last upper hop climbs into.
   /// Its own fate decides: real climb above (keep) or spurious (trim).
+  ///
+  /// The pruned climb only produces paths that already trim to themselves, so
+  /// this should always return 0 (asserted in run()).
+  ///
+  /// This is the forward version (top-down) and more intuitive formulation; we
+  /// keep it as the oracle and as the primary "definition".
+  ///
+  /// Additional inlining behaviors need to update this and re-derive the
+  /// upwards tracing logic together.
   size_t minimalRootIndex(ArrayRef<PathHop> upperPath, StringAttr rootMod);
 
   /// Resolve an instance named by (`module`, `innerSym`) to its op.
@@ -726,16 +747,16 @@ LogicalResult NLAPlanner::run() {
     if (failed(traceUpUntilSurviving(origRoot, nlas.front(), upperPaths)))
       return failure();
 
-    // 1.2 Trim these back down and dedup, being careful to preserve their
-    // order.  Hash equivalence (collision) does not mean contexts are lost.
-    SmallVector<SmallVector<PathHop>> trimmedUppers;
-    llvm::SmallDenseSet<TrimmedPathRef, 8> seenTrimmed;
+#ifndef NDEBUG
+    // Check paths trim to themselves and there are no duplicates.
+    llvm::SmallDenseSet<TrimmedPathRef, 8> seenPaths;
     for (auto &upperPath : upperPaths) {
-      size_t root = minimalRootIndex(upperPath, origRoot);
-      ArrayRef<PathHop> trimmed(upperPath.begin() + root, upperPath.end());
-      if (seenTrimmed.insert(TrimmedPathRef::get(trimmed)).second)
-        trimmedUppers.emplace_back(trimmed.begin(), trimmed.end());
+      assert(minimalRootIndex(upperPath, origRoot) == 0 &&
+             "pruned climb leaked a trimmable path");
+      assert(seenPaths.insert(TrimmedPathRef::get(upperPath)).second &&
+             "pruned climb repeated a path");
     }
+#endif
 
     // 2. Process each NLA in the bucket.
     for (auto nla : nlas) {
@@ -759,9 +780,9 @@ LogicalResult NLAPlanner::run() {
 
       // 2.2 Construct each (bucket-common) prefix + NLA path, and hand to
       // helper to walk the full path and produce final VNLA for each.
-      for (auto &trimmedUpper : trimmedUppers) {
+      for (auto &upperPath : upperPaths) {
         SmallVector<PathHop> absolutePath;
-        llvm::append_range(absolutePath, trimmedUpper);
+        llvm::append_range(absolutePath, upperPath);
         llvm::append_range(absolutePath, nlaHops);
 
         if (failed(processSinglePathContext(origSym, absolutePath, nla)))
@@ -814,6 +835,7 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
     UseIterator currentEdge;
     UseIterator endEdge;
     bool isFirstVisit;
+    bool pinned;
   };
 
   SmallVector<Frame, 16> stack;
@@ -831,7 +853,8 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
       return diagAnchor.emitOpError()
              << "names non-existent root module @" << name;
     auto uses = node->uses();
-    stack.push_back({name, uses.begin(), uses.end(), /*isFirstVisit=*/true});
+    stack.push_back({name, uses.begin(), uses.end(), /*isFirstVisit=*/true,
+                     /*pinned=*/false});
 
 #ifndef NDEBUG
     if (visited[name])
@@ -873,10 +896,29 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
                << "encountered tracing up from root of this hierarchical path";
       auto info = *infoIfValid;
 
-      // If this module is live in the output in any context, emit VNLA for it.
-      // A live root's own context is discovered first (frame pushed first).
-      // Primary selection rests on that ordering (I4).
-      if (info.isLive)
+      // Track whether the path climbed so far already contains the module
+      // we would trim to when NOT under a flatten ("pinned").
+      //
+      // Per frame:
+      // - a non-inline module pins (it roots; a deeper root still wins)
+      // - an inline module passes its child's state through
+      // - an inline+flatten module unpins (it cannot root, and its flatten
+      //   cuts every deeper root off, so the root must come from above).
+      bool childPinned =
+          stack.size() > 1 ? stack[stack.size() - 2].pinned : false;
+      frame.pinned = !info.hasInline || (!info.hasFlatten && childPinned);
+
+      // Record a path here if this module is live AND actually roots /some/
+      // context.
+      //
+      // Don't emit if a deeper root already emitted the trimmed form for this!
+      // This happened if child frame is pinned (deeper root must be live) as
+      // long as our own flatten doesn't override that.
+      //
+      // A context's original root frame records it before anything above climbs
+      // (stack).  Primary selection rests on that ordering (I4).
+      bool deeperRootWins = childPinned && !info.hasFlatten;
+      if (info.isLive && !deeperRootWins)
         discoveredPaths.push_back(llvm::to_vector(llvm::reverse(currentPath)));
 
       // If this module is unconditionally live, we're done tracing upwards.
@@ -906,6 +948,23 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
     // There is no copy in this parent to enumerate -> don't climb!
     if (!getInlinableInstance(instOp))
       continue;
+    // Once pinned, the only reason to climb is a flatten above us!
+    //
+    // Parents that neither flatten NOR are (in any context) flattened
+    // themselves will all trim back down, skip those subtrees entirely.
+    if (frame.pinned) {
+      auto *parentOp = edge->getParent()->getModule().getOperation();
+      auto parentInfo = facts.getModuleInfoIfPresent(parentOp);
+      // This is expected unreachable, but diagnose for safety.
+      if (!parentInfo)
+        return mlir::emitError(
+                   parentOp->getLoc(),
+                   "hierarchical path traced up through unknown operation")
+                   .attachNote(diagAnchor.getLoc())
+               << "encountered tracing up from root of this hierarchical path";
+      if (!parentInfo->mayBeFlattened())
+        continue;
+    }
     auto parentName = edge->getParent()->getModule().getModuleNameAttr();
     currentPath.push_back({parentName, instOp, getInnerSymName(instOp)});
     if (failed(pushState(parentName)))

@@ -1,5 +1,6 @@
 llvm_canonicalize_cmake_booleans(
   CIRCT_BINDINGS_PYTHON_ENABLED
+  MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS
   )
 
 set(CIRCT_INTEGRATION_TEST_DEPENDS
@@ -50,7 +51,12 @@ endif()
 get_target_property(ESI_PrimsDir ESIPrimitives SOURCE_DIR)
 set(ESI_Prims "${ESI_PrimsDir}/ESIPrimitives.sv")
 
-set(CIRCT_INTEGRATION_TIMEOUT 120) # Set a 120s timeout on individual tests.
+# The expensive pattern API checks can significantly increase test runtime.
+if (MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS)
+  set(CIRCT_INTEGRATION_TIMEOUT 600)
+else()
+  set(CIRCT_INTEGRATION_TIMEOUT 120)
+endif()
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py

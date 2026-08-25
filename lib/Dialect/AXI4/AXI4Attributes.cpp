@@ -107,7 +107,7 @@ SmallVector<WindowAttr> WindowSetAttr::normalize(MLIRContext *ctx,
     if (specs.empty())
       continue;
 
-    // BurstSetAttr::get sorts and de-duplicates the union for us.
+    // BurstSetAttr::get sorts the union and merges each kind for us.
     auto burstSpecs = BurstSetAttr::get(ctx, specs);
 
     // Merge into the previous window where they are contiguous and share

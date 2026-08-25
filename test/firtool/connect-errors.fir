@@ -1,4 +1,4 @@
-; RUN: firtool %s --format=fir --parse-only -verify-diagnostics --split-input-file
+; RUN: firtool %s --format=fir --parse-only -verify-diagnostics --split-input-file --warn-on-implicit-truncation
 
 ; CHECK-LABEL: outOfOrderFields
 FIRRTL version 4.0.0

@@ -7,12 +7,12 @@ from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel,
 from .constructs import AssignableSignal, Mux, Wire
 from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
-from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal,
+from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal, Or,
                       Signal, _FromCirctValue, UIntSignal)
 from .support import (clog2, optional_dict_to_optional_dict_attr, get_user_loc,
                       optional_dict_to_dict_attr)
 from .system import System
-from .types import (Any, Bits, Bundle, BundledChannel, Channel,
+from .types import (Any, Array, Bits, Bundle, BundledChannel, Channel,
                     ChannelDirection, ChannelSignaling, List as EsiListType,
                     StructType, Type, Window, UInt, _FromCirctType)
 
@@ -1091,7 +1091,25 @@ class TelemetryMMIO(ServiceImplementation):
   region. Each client request is assigned a register in the MMIO space. When a
   read request is received for the assigned address, it gets routed to the
   assigned client. When a write request is received, it is discarded. The
-  assignment table is stored in the manifest."""
+  assignment table is stored in the manifest.
+
+  **REQUIREMENTS.** Both are needed to make the response merge safe:
+
+  1. The `MMIO` service implementation this connects to must not issue a read
+     command while a previous read's response is still outstanding.
+  2. Every telemetry client must assert its `data` channel's `valid` only in
+     response to a `get`. `Telemetry.report_signal` does this; a client which
+     holds `valid` high permanently -- legal ESI, and the natural way to
+     express an always-available counter -- does not.
+
+  Given both, each command is demuxed to exactly one client and at most one
+  client is offering a response at a time, so the responses can be merged with
+  `ChannelMergeOneValid` instead of arbitrated -- which keeps the response path
+  from building a combinational cone across every telemetry client.
+
+  Nothing here enforces either, and violating either loses responses. Note (2)
+  is not specific to this merge: `ChannelMux2` is fixed-priority, so under an
+  arbiter a permanently-valid client starves every client behind it."""
 
   clk = Clock()
   rst = Reset()
@@ -1148,7 +1166,13 @@ class TelemetryMMIO(ServiceImplementation):
       bundle_wire.assign(bundle)
       client_data_channels.append(
           bundle_froms["data"].transform(lambda m: m.as_bits(64)))
-    resp_channel = ChannelMux(client_data_channels)
+    # The demux above routes each command to exactly one client, so -- given
+    # both requirements in this class' docs -- at most one client is offering a
+    # response at a time and no arbitration is needed to merge them.
+    resp_channel = ChannelMergeOneValid(client_data_channels,
+                                        ports.clk,
+                                        ports.rst,
+                                        instance_name="telemetry_resp_merge")
     data_resp_channel.assign(resp_channel)
     return True
 
@@ -1346,6 +1370,170 @@ def ChannelMux(input_channels: List[ChannelSignal]) -> ChannelSignal:
 
 
 @modparams
+def ChannelMergeOneValidMod(channel_type: Channel, num_inputs: int,
+                            register_output: bool):
+  """Build the N:1 one-valid channel merge module. See the
+  `ChannelMergeOneValid` convenience function for the user-facing entry point
+  and the precondition it requires."""
+
+  assert num_inputs >= 2, "ChannelMergeOneValidMod requires at least two inputs"
+  inner = channel_type.inner_type
+  width = inner.bitwidth
+  if width is None:
+    raise TypeError(
+        f"ChannelMergeOneValid requires a fixed-width payload; got {inner}")
+
+  class ChannelMergeOneValidImpl(Module):
+    clk = Clock()
+    rst = Reset()
+
+    inputs = Input(Array(channel_type, num_inputs))
+    output = Output(channel_type)
+
+    @generator
+    def build(ports) -> None:
+      # A single `ready`, broadcast to every input. This is the entire point of
+      # the module: no input's `ready` depends on any other input's `valid`, so
+      # there is no combinational coupling between the inputs at all.
+      in_ready = Wire(Bits(1), name="in_ready")
+
+      valids: List[BitsSignal] = []
+      datas: List[BitsSignal] = []
+      for i in range(num_inputs):
+        data_i, valid_i = ports.inputs[i].unwrap(in_ready)
+        valids.append(valid_i)
+        if width > 0:
+          datas.append(data_i.bitcast(Bits(width)))
+
+      merged_valid = Or(*valids)
+
+      if width > 0:
+        # The payload is read out of an array indexed by a binary encode of the
+        # one-hot `valid` vector. Left as a single array select so the synthesis
+        # tool can pick a structure for the target device. Selecting rather than
+        # OR-ing the payloads together also bounds the damage if the contract is
+        # broken: the output is always some input's payload, never a mixture.
+        def or_reduce(bits: List[BitsSignal]) -> BitsSignal:
+          return bits[0] if len(bits) == 1 else Or(*bits)
+
+        # Bit `k` of the index is set for exactly those inputs whose number has
+        # bit `k` set, so a one-hot `valid` encodes to the valid input's index.
+        sel_width = clog2(num_inputs)
+        sel_bits = [
+            or_reduce([valids[i]
+                       for i in range(num_inputs)
+                       if (i >> k) & 1])
+            for k in reversed(range(sel_width))
+        ]
+        sel = sel_bits[0]
+        if len(sel_bits) > 1:
+          sel = BitsSignal.concat(sel_bits)
+          sel.name = "merge_sel"
+        # The array is exactly `num_inputs` long: under the contract `sel` only
+        # ever resolves to a valid input's index, so it is always in range.
+        data_array = Array(Bits(width), num_inputs)(datas)
+        data_array.name = "merge_data"
+        merged_bits = data_array[sel]
+      else:
+        # Zero-width payload: there is nothing to select.
+        merged_bits = Bits(0)(0)
+
+      out_chan, out_ready = channel_type.wrap(merged_bits.bitcast(inner),
+                                              merged_valid)
+      if register_output:
+        # One skid buffer on the output. `ESI_PipelineStage` drives its
+        # `a_ready` from flops, so after this every input's `ready` is a flop
+        # output -- which is what takes the merge off the critical path.
+        out_chan = out_chan.buffer(ports.clk, ports.rst, stages=1)
+      ports.output = out_chan
+      in_ready.assign(out_ready)
+
+  return ChannelMergeOneValidImpl
+
+
+def ChannelMergeOneValid(input_channels: List[ChannelSignal],
+                         clk: ClockSignal,
+                         rst: Signal,
+                         *,
+                         register_output: bool = True,
+                         appid: Optional[AppID] = None,
+                         instance_name: Optional[str] = None) -> ChannelSignal:
+  """Merge N channels into one, given that at most one of them ever has a
+  message to offer at a time.
+
+  **Contract: at most one input may be valid in any given cycle.** The caller
+  must arrange this. In a request/response fabric it takes two things: at most
+  one request in flight (e.g. a `MaxOutstandingLimiter(1)`), *and* every client
+  asserting its reply's `valid` only in response to a request. The second is
+  easy to miss -- a channel may legally hold `valid` high forever, so an
+  always-available counter breaks the contract by itself.
+  `Telemetry.report_signal` drives its data `valid` from the `get` channel's;
+  hand-written clients must do likewise.
+
+  Given the contract, no arbitration is needed:
+
+  * `valid` = OR over the inputs' `valid`.
+  * `data`  = the valid input's payload, read out of an array indexed by a
+    binary encode of the `valid` vector.
+  * `ready` = the output's `ready`, broadcast unchanged to every input.
+
+  Broadcasting `ready` is the entire win: no input's `ready` depends on any
+  other input's `valid`, and with `register_output` it is a flop output.
+
+  Violating the contract is lossy but does not corrupt data: every valid input
+  completes its handshake, only one beat is emitted, and the rest are dropped.
+  The payload is selected rather than OR-ed, so the output is always some
+  input's payload, never a bitwise mixture of several.
+
+  TODO: flag the dropped-message case with an `sv.assert.concurrent`. Not
+  currently possible from PyCDE: the SV dialect's Python bindings do not expose
+  the `EventControl` enum needed to build the op's `event` attribute.
+
+  TODO: take the select as an optional *input*, driven from the request side
+  (for an MMIO processor, the same select that drives the command demux, one
+  cycle earlier and already registered). That would make both requirements
+  structural rather than documented -- an unselected input is never readied, so
+  holding `valid` high is harmless -- and is cheaper, since a registered select
+  deletes the encoder from the response path instead of adding to it.
+
+  Arguments:
+    input_channels: the channels to merge. All must share the same type.
+    clk, rst: clock and reset.
+    register_output: insert one skid buffer on the output (recommended; adds
+      one cycle of latency and makes every input's `ready` a flop output).
+    appid: optional `AppID` for the instance.
+    instance_name: optional instance name.
+  """
+
+  assert len(input_channels) > 0
+  if len(input_channels) == 1:
+    return input_channels[0]
+
+  channel_type = input_channels[0].type
+  for c in input_channels:
+    if c.type != channel_type:
+      raise TypeError("All ChannelMergeOneValid inputs must have the same "
+                      f"type; got {channel_type} and {c.type}")
+  # The merge is built directly out of `unwrap(ready)`/`wrap(data, valid)` and
+  # broadcasts a single `ready` to every input, which is only meaningful for
+  # ValidReady. Under FIFO signaling the broadcast signal is `rden`, so one
+  # output beat would pop *every* input FIFO and silently discard N-1
+  # messages. Reject it rather than elaborate wrong hardware.
+  if channel_type.signaling != ChannelSignaling.ValidReady:
+    raise TypeError("ChannelMergeOneValid requires ValidReady channels; got "
+                    f"{channel_type}")
+
+  mod = ChannelMergeOneValidMod(channel_type, len(input_channels),
+                                register_output)
+  inst = mod(clk=clk,
+             rst=rst,
+             inputs=Array(channel_type, len(input_channels))(input_channels),
+             appid=appid,
+             instance_name=instance_name)
+  return inst.output
+
+
+@modparams
 def Mailbox(type):
   """Constructs a module which stores an ESI message until it is read. Acts as a
   sink -- always accepts new messages, dropping the current unread one if
@@ -1522,7 +1710,8 @@ def ListWindowToParallel(serial_window_type: Window):
 
     @generator
     def build(ports):
-      from .constructs import Counter
+      from .seq import DownCounter
+
       # State machine for serial-to-parallel conversion. Per the ESI spec, the
       # serial encoding may transmit a list across multiple bursts, each of
       # which is a header (with a non-zero count of items) followed by `count`
@@ -1574,13 +1763,20 @@ def ListWindowToParallel(serial_window_type: Window):
 
       # ----- Counters -----
       zero = UInt(count_bitwidth)(0)
-      # `emitted` counts the number of items already emitted in the current
-      # burst. It is driven below by a constructs.Counter; we predeclare a
-      # Wire so it can be used in handshake/state expressions before the
-      # Counter is instantiated.
-      emitted_wire = Wire(UInt(count_bitwidth))
-      next_emitted = (emitted_wire +
-                      UInt(count_bitwidth)(1)).as_uint(count_bitwidth)
+      # `remaining` counts the items of the current burst not yet consumed: it
+      # is loaded with the burst's count when a header is accepted and
+      # decremented as items are emitted. The last item of a burst is therefore
+      # `remaining == 1`, a comparison against a *constant* on a registered
+      # value.
+      #
+      # Counting down is ~2x cheaper than the best up-counter formulation
+      # (`emitted == count_minus_1`), and much better than the naive one
+      # (`emitted + 1 == count`), and the decrement itself only ever feeds the
+      # register input, never the comparison.
+      #
+      # Predeclared as a Wire so it can be used in handshake/state expressions
+      # before its driver is built.
+      remaining_wire = Wire(UInt(count_bitwidth))
 
       # ----- Header acceptance -----
       # Headers are accepted whenever we are in S_WAIT or S_PEEK and serial_in
@@ -1613,8 +1809,8 @@ def ListWindowToParallel(serial_window_type: Window):
                                 rst_value=0,
                                 name="count")
       cur_count = count_reg.as_uint(count_bitwidth)
-      # In S_EMIT, the (emitted+1)-th item is the last of the burst.
-      is_last_of_burst = next_emitted == cur_count
+      # In S_EMIT, the item consumed when `remaining == 1` is the burst's last.
+      is_last_of_burst = remaining_wire == UInt(count_bitwidth)(1)
 
       # ----- Buffered item -----
       # Latch the last data item of a burst into a register before peeking
@@ -1677,18 +1873,23 @@ def ListWindowToParallel(serial_window_type: Window):
       emit_normal_xact = in_emit & serial_valid & ~is_last_of_burst & out_ready
       emit_buf_xact = in_emit_buf & out_ready
 
-      # ----- emitted counter -----
-      # Increment on each non-last emit; clear to 0 when accepting a new
-      # header (start of a new burst) or finishing the buffered emit.
-      # `increment` and `clear` are mutually exclusive (they require
-      # different states), and Counter.clear takes precedence over
-      # increment, matching the prior cascaded-Mux semantics.
-      reset_emitted = hdr_xact | emit_buf_xact
-      emitted_counter = Counter(count_bitwidth)(clk=ports.clk,
-                                                rst=ports.rst,
-                                                clear=reset_emitted,
-                                                increment=emit_normal_xact)
-      emitted_wire.assign(emitted_counter.out)
+      # ----- remaining counter -----
+      # Load the burst's item count when a header is accepted; decrement on
+      # each non-last emit. The two enables are mutually exclusive (they
+      # require different states), so `DownCounter`'s load-over-decrement
+      # priority never comes into play. The counter never *decrements* to 0:
+      # decrement is gated by `~is_last_of_burst`, i.e. `remaining != 1`.
+      # (`remaining` may still be loaded with 0 for count==0 terminators.)
+      # Not cleared on `emit_buf_xact`: by then the peeked header's `hdr_xact`
+      # has already loaded the next burst's count.
+      remaining_counter = DownCounter(count_bitwidth)(
+          clk=ports.clk,
+          rst=ports.rst,
+          load=hdr_xact,
+          load_value=new_count,
+          decrement=emit_normal_xact,
+          instance_name="remaining")
+      remaining_wire.assign(remaining_counter.out)
 
       # ----- State transitions -----
       # The conditions below are mutually exclusive (each requires a specific
@@ -1846,8 +2047,8 @@ def ListWindowToSerial(parallel_window_type: Window,
 
     @generator
     def build(ports):
-      from .seq import FIFO as SeqFIFO
-      from .constructs import ControlReg, Counter
+      from .seq import Counter, DownCounter, FIFO as SeqFIFO
+      from .constructs import ControlReg
 
       one_bc = UInt(bc_bitwidth)(1)
       depth_bc = UInt(bc_bitwidth)(fifo_depth)
@@ -1964,13 +2165,13 @@ def ListWindowToSerial(parallel_window_type: Window,
       meta_fifo.push(meta_entry_value, meta_push_xact)
 
       # Burst counter: increment on each par_xact, clear on meta_push_xact.
-      # Counter.clear takes precedence over .increment, so when both fire
-      # in the same cycle the counter resets to 0 (correct: that cycle's
-      # item is the last of the burst, and the next burst starts at 0).
-      burst_counter = Counter(bc_bitwidth)(clk=ports.clk,
-                                           rst=ports.rst,
-                                           clear=meta_push_xact,
-                                           increment=par_xact)
+      # That cycle's item is the last of the burst, and the next burst starts at
+      # 0 so clear needs to override increment.
+      burst_counter = Counter(bc_bitwidth,
+                              increment_on_clear=False)(clk=ports.clk,
+                                                        rst=ports.rst,
+                                                        clear=meta_push_xact,
+                                                        increment=par_xact)
       burst_count_wire.assign(burst_counter.out)
 
       # ===== Output side: drain meta + data FIFOs into serial frames. =====
@@ -2013,11 +2214,22 @@ def ListWindowToSerial(parallel_window_type: Window,
       footer_fields[count_field_name] = Bits(count_bitwidth)(0)
       footer_value = header_struct_type(footer_fields)
 
-      # Per-burst emitted-item counter, cleared at burst end.
-      emitted_wire = Wire(UInt(count_bitwidth))
-      next_emitted = (emitted_wire +
-                      UInt(count_bitwidth)(1)).as_uint(count_bitwidth)
-      last_item_in_burst = next_emitted == cur_count
+      # Per-burst counter. `remaining_wire` is driven by the `DownCounter`
+      # instantiated below -- it is predeclared here only because the handshake
+      # and state expressions between here and there need it. Counting down
+      # makes the "last item" test a comparison against a constant on a
+      # registered value, rather than `emitted + 1 == count` -- which would put
+      # a `count_bitwidth`-wide adder and equality inside a single-cycle loop
+      # (the result gates `out_ready`, the state transitions and the counter's
+      # own enables). See the matching comment in `ListWindowToParallel`.
+      #
+      # The test is `== 1` rather than the counter's `is_zero` because the
+      # counter is loaded with the burst's count as it appears in the header.
+      # Loading `count - 1` to use `is_zero` would buy nothing -- both are
+      # compares against a constant -- and would need a subtract on the load
+      # path plus a special case for the `count == 0` terminator.
+      remaining_wire = Wire(UInt(count_bitwidth))
+      last_item_in_burst = remaining_wire == UInt(count_bitwidth)(1)
 
       # Data FIFO pop. With no data FIFO (zero-width elements), there is
       # nothing to pop or wait on: data_value is a constant zero-width
@@ -2060,14 +2272,21 @@ def ListWindowToSerial(parallel_window_type: Window,
       if not data_is_zero:
         data_pop_rden.assign(data_xact)
 
-      # Emitted-counter: clear at burst_done, increment on every other
-      # data xact. Counter.clear takes precedence over .increment.
-      emitted_counter = Counter(count_bitwidth)(clk=ports.clk,
-                                                rst=ports.rst,
-                                                clear=burst_done,
-                                                increment=data_xact &
-                                                ~last_item_in_burst)
-      emitted_wire.assign(emitted_counter.out)
+      # Remaining-counter: load the burst's item count when the burst is armed
+      # (from the same combinational value `cur_meta` latches, so the load and
+      # `cur_hdr` stay in step), and decrement on every non-last data xact.
+      # `arm_burst` and `data_xact` require different states, so the load-over-
+      # decrement priority never comes into play, and the decrement is gated by
+      # `~last_item_in_burst` so the saturation at zero is never reached.
+      remaining_counter = DownCounter(count_bitwidth)(
+          clk=ports.clk,
+          rst=ports.rst,
+          load=arm_burst,
+          load_value=meta_value["hdr"][count_field_name].as_uint(
+              count_bitwidth),
+          decrement=data_xact & ~last_item_in_burst,
+          instance_name="remaining")
+      remaining_wire.assign(remaining_counter.out)
 
       # Per-state next-state expressions, selected by the current state.
       # Transitions:

@@ -1,5 +1,7 @@
 // This test lowers an SCF construct through Calyx, FSM and (TODO)
 // to RTL.
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: hlstool %s --calyx-hw --ir --output-level=sv | FileCheck %s
 
 // TODO: ... simulate the hardware!

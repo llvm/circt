@@ -1496,6 +1496,78 @@ firrtl.circuit "NLAThroughLayer" {
 
 // -----
 
+// Show the shape where "is under a flatten" alone would cause us to search
+// upwards much more than necessary (in particular, @L "is under a flatten" but
+// in most contexts it's not flattened away), only to trim back down to just @R
+// again for all but the instances under @F.
+//
+// Ideally we wouldn't need to trim and could directly compute the contexts the
+// planner will ultimately emit.
+//
+// This is presently (at time of writing) done by tracking what would be "root"
+// where it's NOT under a flatten, causing us to avoid large amounts of
+// unnecessary tracing and specifically never emit, even temporarily, contexts
+// that need to be trimmed back down (and often, to the same context).
+//
+// This test checks the final IR result for good measure, but its real power is
+// both to demonstrate and to trip over assertions (when enabled) that validate
+// our upwards trace produced only paths that:
+// - trim to themselves
+// - never repeat
+//
+// The forward version of this (the trimming mentioned above) is more intuitive
+// to reason about, and these assertions ensure the two are aligned.
+//
+// Visualization (courtesy of @seldridge):
+//
+// * @SmearedFanIn
+// |\
+// | |\
+// | | * f:@F  <-- Flatten
+// | * | w0:W0
+// * | | w1:W1
+// | |/
+// |/
+// * {f,i,i}:@L
+// |\
+// |/
+// x {i0,i1}:R <-- NLA start
+// v           <-- NLA end
+// 
+firrtl.circuit "SmearedFanIn" {
+  // CHECK: hw.hierpath private @nla [@R::@w]
+  // CHECK-NOT: hw.hierpath
+  hw.hierpath private @nla [@R::@w]
+  // CHECK: firrtl.module private @R
+  firrtl.module private @R() {
+    // CHECK-NEXT: firrtl.wire sym @w {annotations = [{class = "test"}]}
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
+  }
+  firrtl.module private @L() {
+    firrtl.instance i0 @R()
+    firrtl.instance i1 @R()
+  }
+  firrtl.module private @F() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    firrtl.instance f @L()
+  }
+  // CHECK: firrtl.module private @F() {
+  // CHECK-NEXT: firrtl.wire sym @w {annotations = [{class = "test"}]}
+  // CHECK-NEXT: firrtl.wire sym @w_0 {annotations = [{class = "test"}]}
+  firrtl.module private @W0() {
+    firrtl.instance i @L()
+  }
+  firrtl.module private @W1() {
+    firrtl.instance i @L()
+  }
+  firrtl.module @SmearedFanIn() {
+    firrtl.instance f @F()
+    firrtl.instance w0 @W0()
+    firrtl.instance w1 @W1()
+  }
+}
+
+// -----
+
 // The circuit op's own attributes resolve inside it (enable_layers,
 // select_inst_choice); a module reference there is a use.
 // CHECK-LABEL:  firrtl.circuit "CircuitAttrIsUse"

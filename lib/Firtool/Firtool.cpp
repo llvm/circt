@@ -84,18 +84,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createLowerMatches());
 
   // Width inference creates canonicalization opportunities.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
+  firrtl::InferWidthsOptions inferWidthsOptions;
+  inferWidthsOptions.warnOnTruncation = opt.shouldWarnOnTruncation();
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createInferWidths(inferWidthsOptions));
 
-  if (opt.shouldUseNewFullResetFlow()) {
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createFullReset());
-  } else {
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createMemToRegOfVec(
-        {/*ignoreReadEnable=*/opt.shouldIgnoreReadEnableMemories()}));
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
-    pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createFullReset({/*convertAsyncDomainMems=*/false}));
-  }
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createFullReset());
 
   // TODO: Move this to the same location as SpecializeLayers.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOption(
@@ -645,11 +640,6 @@ public:
                      "assigning X on read disable"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<bool> useNewFullResetFlow{
-      "use-new-full-reset-flow",
-      llvm::cl::desc("Use the split InferResets and FullReset pipeline"),
-      llvm::cl::init(true)};
-
   firtool::FirtoolOptions::RandomKind disableRandomValue =
       firtool::FirtoolOptions::RandomKind::None;
 
@@ -697,6 +687,11 @@ public:
       "warn-on-unprocessed-annotations",
       llvm::cl::desc(
           "Warn about annotations that were not removed by lower-to-hw"),
+      llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> warnOnTruncation{
+      "warn-on-implicit-truncation",
+      llvm::cl::desc("Warn when connects require implicit truncation"),
       llvm::cl::init(false)};
 
   llvm::cl::opt<bool> lowerToCore{
@@ -869,9 +864,10 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       dedupClasses(true), companionMode(firrtl::CompanionMode::Bind),
       noViews(false), disableAggressiveMergeConnections(false),
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
-      replSeqMemFile(""), ignoreReadEnableMem(false), useNewFullResetFlow(true),
+      replSeqMemFile(""), ignoreReadEnableMem(false),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
-      enableAnnotationWarning(false), lowerToCore(false), addMuxPragmas(false),
+      enableAnnotationWarning(false), warnOnTruncation(false),
+      lowerToCore(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
@@ -909,10 +905,10 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   replSeqMem = clOptions->replSeqMem;
   replSeqMemFile = clOptions->replSeqMemFile;
   ignoreReadEnableMem = clOptions->ignoreReadEnableMem;
-  useNewFullResetFlow = clOptions->useNewFullResetFlow;
   disableRandom = clOptions->disableRandomValue;
   outputAnnotationFilename = clOptions->outputAnnotationFilename;
   enableAnnotationWarning = clOptions->enableAnnotationWarning;
+  warnOnTruncation = clOptions->warnOnTruncation;
   lowerToCore = clOptions->lowerToCore;
   addMuxPragmas = clOptions->addMuxPragmas;
   verificationFlavor = clOptions->verificationFlavor;

@@ -1,3 +1,5 @@
+// XFAIL: mlir-expensive-checks
+// See https://github.com/llvm/circt/issues/7047
 // RUN: circt-opt %s --lower-scf-to-calyx="write-json=%t" -canonicalize>/dev/null && FileCheck %s < %t.json
 
 // CHECK-LABEL:   "mem_0": {

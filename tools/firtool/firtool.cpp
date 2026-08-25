@@ -435,6 +435,7 @@ static LogicalResult processBuffer(
     options.scalarizePublicModules = scalarizePublicModules;
     options.scalarizeInternalModules = scalarizeIntModules;
     options.scalarizeExtModules = scalarizeExtModules;
+    options.warnOnTruncation = firtoolOptions.shouldWarnOnTruncation();
     options.enableLayers = enableLayers;
     options.disableLayers = disableLayers;
     options.selectInstanceChoice = selectInstanceChoice;

@@ -384,65 +384,6 @@ getModulePortInfo(const TypeConverter &typeConverter, SVModuleOp op) {
   return hw::ModulePortInfo(ports);
 }
 
-struct DpiArrayCastInfo {
-  bool isRef = false;
-  bool isOpen = false;
-  bool isPacked = false;
-  Type elementType;
-};
-
-static std::optional<DpiArrayCastInfo> getDpiArrayCastInfo(Type type) {
-  DpiArrayCastInfo info;
-  if (auto refType = dyn_cast<RefType>(type)) {
-    info.isRef = true;
-    type = refType.getNestedType();
-  }
-
-  if (auto arrayType = dyn_cast<ArrayType>(type)) {
-    info.isPacked = true;
-    info.elementType = arrayType.getElementType();
-    return info;
-  }
-  if (auto arrayType = dyn_cast<OpenArrayType>(type)) {
-    info.isOpen = true;
-    info.isPacked = true;
-    info.elementType = arrayType.getElementType();
-    return info;
-  }
-  if (auto arrayType = dyn_cast<UnpackedArrayType>(type)) {
-    info.elementType = arrayType.getElementType();
-    return info;
-  }
-  if (auto arrayType = dyn_cast<OpenUnpackedArrayType>(type)) {
-    info.isOpen = true;
-    info.elementType = arrayType.getElementType();
-    return info;
-  }
-  return std::nullopt;
-}
-
-static bool hasOpenArrayBoundaryType(Type type) {
-  if (isa<OpenArrayType, OpenUnpackedArrayType>(type))
-    return true;
-  if (auto refType = dyn_cast<RefType>(type))
-    return isa<OpenArrayType, OpenUnpackedArrayType>(refType.getNestedType());
-  return false;
-}
-
-static bool isSupportedDpiOpenArrayCast(Type source, Type target) {
-  auto sourceInfo = getDpiArrayCastInfo(source);
-  auto targetInfo = getDpiArrayCastInfo(target);
-  if (!sourceInfo || !targetInfo)
-    return false;
-  // note: We currently don't support converting from open array to non-open
-  // array, even if the element types match, because there is no size
-  // information for the open array.
-  return sourceInfo->isRef == targetInfo->isRef &&
-         sourceInfo->isPacked == targetInfo->isPacked &&
-         sourceInfo->elementType == targetInfo->elementType &&
-         (targetInfo->isOpen && !sourceInfo->isOpen);
-}
-
 //===----------------------------------------------------------------------===//
 // Structural Conversion
 //===----------------------------------------------------------------------===//
@@ -1398,121 +1339,100 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
     Value input = adaptor.getInput();
     Type inputType = input.getType();
     int32_t low = adaptor.getLowBit();
+    auto loc = op.getLoc();
 
-    if (auto structTy = dyn_cast<hw::StructType>(inputType)) {
-      int32_t width = hw::getBitWidth(structTy);
-      if (width == -1)
-        return failure();
-      input = rewriter.createOrFold<hw::BitcastOp>(
-          op.getLoc(), rewriter.getIntegerType(width), input);
-      inputType = input.getType();
-    }
-
+    // Bit-addressed extract out of an integer into any bitcastable result.
     if (isa<IntegerType>(inputType)) {
       int32_t inputWidth = inputType.getIntOrFloatBitWidth();
       int32_t resultWidth = hw::getBitWidth(resultType);
+      if (resultWidth < 0)
+        return failure();
+
       int32_t high = low + resultWidth;
+      int32_t lsbPad = std::clamp(-low, 0, resultWidth);
+      int32_t msbPad = std::clamp(high - inputWidth, 0, resultWidth - lsbPad);
+      int32_t extractWidth = resultWidth - lsbPad - msbPad;
 
-      SmallVector<Value> toConcat;
-      if (low < 0)
-        toConcat.push_back(hw::ConstantOp::create(
-            rewriter, op.getLoc(), APInt(std::min(-low, resultWidth), 0)));
+      SmallVector<Value> sbv;
+      if (msbPad > 0)
+        sbv.push_back(hw::ConstantOp::create(rewriter, loc, APInt(msbPad, 0)));
 
-      if (low < inputWidth && high > 0) {
-        int32_t lowIdx = std::max(low, 0);
-        Value middle = rewriter.createOrFold<comb::ExtractOp>(
-            op.getLoc(),
-            rewriter.getIntegerType(
-                std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
-            input, lowIdx);
-        toConcat.push_back(middle);
-      }
+      if (extractWidth > 0)
+        sbv.push_back(rewriter.createOrFold<comb::ExtractOp>(
+            loc, rewriter.getIntegerType(extractWidth), input,
+            std::max(low, 0)));
 
-      int32_t diff = high - inputWidth;
-      if (diff > 0) {
-        Value val =
-            hw::ConstantOp::create(rewriter, op.getLoc(), APInt(diff, 0));
-        toConcat.push_back(val);
-      }
+      if (lsbPad > 0)
+        sbv.push_back(hw::ConstantOp::create(rewriter, loc, APInt(lsbPad, 0)));
 
-      Value concat =
-          rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), toConcat);
-      rewriter.replaceOp(op, concat);
+      Value res = rewriter.createOrFold<comb::ConcatOp>(loc, sbv);
+      if (res.getType() != resultType)
+        res = rewriter.createOrFold<hw::BitcastOp>(loc, resultType, res);
+
+      rewriter.replaceOp(op, res);
       return success();
     }
 
+    // Element-addressed extract out of an array
     if (auto arrTy = dyn_cast<hw::ArrayType>(inputType)) {
-      int32_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
+      Type elementType = arrTy.getElementType();
+      int32_t idxWidth = llvm::Log2_64_Ceil(arrTy.getNumElements());
       int32_t inputWidth = arrTy.getNumElements();
 
-      if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType);
-          resArrTy && resArrTy != arrTy.getElementType()) {
-        int32_t elementWidth = hw::getBitWidth(arrTy.getElementType());
-        if (elementWidth < 0)
-          return failure();
+      // Array element
+      if (resultType == elementType) {
+        if (low < 0 || low >= inputWidth) {
+          auto zeros = createZeroValue(resultType, loc, rewriter);
+          if (!zeros)
+            return failure();
+          rewriter.replaceOp(op, zeros);
+        } else {
+          rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(
+              op, input,
+              hw::ConstantOp::create(rewriter, loc,
+                                     rewriter.getIntegerType(idxWidth), low));
+        }
+        return success();
+      }
 
-        int32_t high = low + resArrTy.getNumElements();
-        int32_t resWidth = resArrTy.getNumElements();
+      // Array slice
+      if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType);
+          resArrTy && resArrTy.getElementType() == elementType) {
+        int32_t resultWidth = resArrTy.getNumElements();
+        int32_t high = low + resultWidth;
+
+        int32_t lsbPad = std::clamp(-low, 0, resultWidth);
+        int32_t msbPad = std::clamp(high - inputWidth, 0, resultWidth - lsbPad);
+        int32_t extractWidth = resultWidth - lsbPad - msbPad;
 
         SmallVector<Value> toConcat;
-        if (low < 0) {
-          Value val = hw::ConstantOp::create(
-              rewriter, op.getLoc(),
-              APInt(std::min((-low) * elementWidth, resWidth * elementWidth),
-                    0));
-          Value res = rewriter.createOrFold<hw::BitcastOp>(
-              op.getLoc(), hw::ArrayType::get(arrTy.getElementType(), -low),
-              val);
-          toConcat.push_back(res);
+        if (msbPad > 0) {
+          auto zeros = createZeroValue(hw::ArrayType::get(elementType, msbPad),
+                                       loc, rewriter);
+          if (!zeros)
+            return failure();
+          toConcat.push_back(zeros);
         }
 
-        if (low < inputWidth && high > 0) {
-          int32_t lowIdx = std::max(0, low);
-          Value lowIdxVal = hw::ConstantOp::create(
-              rewriter, op.getLoc(), rewriter.getIntegerType(width), lowIdx);
-          Value middle = rewriter.createOrFold<hw::ArraySliceOp>(
-              op.getLoc(),
-              hw::ArrayType::get(
-                  arrTy.getElementType(),
-                  std::min(resWidth, std::min(inputWidth, high) - lowIdx)),
-              adaptor.getInput(), lowIdxVal);
-          toConcat.push_back(middle);
+        if (extractWidth > 0)
+          toConcat.push_back(rewriter.createOrFold<hw::ArraySliceOp>(
+              loc, hw::ArrayType::get(elementType, extractWidth), input,
+              hw::ConstantOp::create(rewriter, loc,
+                                     rewriter.getIntegerType(idxWidth),
+                                     std::max(low, 0))));
+
+        if (lsbPad > 0) {
+          auto zeros = createZeroValue(hw::ArrayType::get(elementType, lsbPad),
+                                       loc, rewriter);
+          if (!zeros)
+            return failure();
+          toConcat.push_back(zeros);
         }
 
-        int32_t diff = high - inputWidth;
-        if (diff > 0) {
-          Value constZero = hw::ConstantOp::create(
-              rewriter, op.getLoc(), APInt(diff * elementWidth, 0));
-          Value val = hw::BitcastOp::create(
-              rewriter, op.getLoc(),
-              hw::ArrayType::get(arrTy.getElementType(), diff), constZero);
-          toConcat.push_back(val);
-        }
-
-        Value concat =
-            rewriter.createOrFold<hw::ArrayConcatOp>(op.getLoc(), toConcat);
-        rewriter.replaceOp(op, concat);
+        rewriter.replaceOp(
+            op, rewriter.createOrFold<hw::ArrayConcatOp>(loc, toConcat));
         return success();
       }
-
-      // Otherwise, it has to be the array's element type
-      if (low < 0 || low >= inputWidth) {
-        int32_t bw = hw::getBitWidth(resultType);
-        if (bw < 0)
-          return failure();
-
-        Value val = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(bw, 0));
-        Value bitcast =
-            rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType, val);
-        rewriter.replaceOp(op, bitcast);
-        return success();
-      }
-
-      Value idx = hw::ConstantOp::create(rewriter, op.getLoc(),
-                                         rewriter.getIntegerType(width),
-                                         adaptor.getLowBit());
-      rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
-      return success();
     }
 
     return failure();
@@ -1942,11 +1862,14 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
-struct NullOpConversion : public OpConversionPattern<NullOp> {
-  using OpConversionPattern::OpConversionPattern;
+template <typename SourceOp>
+struct NullOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpConversionPattern<SourceOp>::getTypeConverter;
+  using OpAdaptor = typename SourceOp::Adaptor;
 
   LogicalResult
-  matchAndRewrite(NullOp op, OpAdaptor adaptor,
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type ptrTy = getTypeConverter()->convertType(op.getResult().getType());
     if (!ptrTy)
@@ -2034,47 +1957,6 @@ struct CaseXZEqOpConversion : public OpConversionPattern<SourceOp> {
 //===----------------------------------------------------------------------===//
 // Conversions
 //===----------------------------------------------------------------------===//
-
-struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ConversionOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Location loc = op.getLoc();
-    Type resultType = typeConverter->convertType(op.getResult().getType());
-    if (!resultType) {
-      op.emitError("conversion result type is not currently supported");
-      return failure();
-    }
-    int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
-    int64_t resultBw = hw::getBitWidth(resultType);
-    if (inputBw == -1 || resultBw == -1) {
-      if (isSupportedDpiOpenArrayCast(op.getInput().getType(),
-                                      op.getResult().getType())) {
-        rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
-            op, resultType, adaptor.getInput());
-        return success();
-      }
-      if (hasOpenArrayBoundaryType(op.getInput().getType()) ||
-          hasOpenArrayBoundaryType(op.getResult().getType())) {
-        op.emitError("unsupported DPI open-array conversion from ")
-            << op.getInput().getType() << " to " << op.getResult().getType();
-        return failure();
-      }
-      return failure();
-    }
-
-    Value input = rewriter.createOrFold<hw::BitcastOp>(
-        loc, rewriter.getIntegerType(inputBw), adaptor.getInput());
-    Value amount = adjustIntegerWidth(rewriter, input, resultBw, loc);
-
-    Value result =
-        rewriter.createOrFold<hw::BitcastOp>(loc, resultType, amount);
-    rewriter.replaceOp(op, result);
-    return success();
-  }
-};
 
 template <typename SourceOp>
 struct BitcastConversion : public OpConversionPattern<SourceOp> {
@@ -4002,13 +3884,14 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   // clang-format off
   patterns.add<
     ClassUpcastOpConversion,
-    NullOpConversion,
+    NullOpConversion<NullOp>,
+    NullOpConversion<NullChandleOp>,
+    NullOpConversion<NullClassOp>,
     // Patterns of declaration operations.
     VariableOpConversion,
     NetOpConversion,
 
     // Patterns for conversion operations.
-    ConversionOpConversion,
     BitcastConversion<PackedToSBVOp>,
     BitcastConversion<SBVToPackedOp>,
     NoOpConversion<LogicToIntOp>,
