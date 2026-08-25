@@ -284,6 +284,7 @@ struct FIRParser {
                               const Twine &message);
   ParseResult parseEnumType(FIRRTLType &result);
   ParseResult parseListType(FIRRTLType &result);
+  ParseResult parseRegistryType(FIRRTLType &result);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
   // Parse a property type specifically.
   ParseResult parsePropertyType(PropertyType &result, const Twine &message);
@@ -924,6 +925,20 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
   return success();
 }
 
+/// registry-type ::= 'Registry' '<' type '>'
+ParseResult FIRParser::parseRegistryType(FIRRTLType &result) {
+  consumeToken(FIRToken::kw_Registry);
+
+  PropertyType elementType;
+  if (parseToken(FIRToken::less, "expected '<' in Registry type") ||
+      parsePropertyType(elementType, "expected Registry element type") ||
+      parseToken(FIRToken::greater, "expected '>' in Registry type"))
+    return failure();
+
+  result = RegistryType::get(getContext(), elementType);
+  return success();
+}
+
 /// type ::= 'Clock'
 ///      ::= 'Reset'
 ///      ::= 'AsyncReset'
@@ -938,6 +953,7 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
 ///      ::= 'const' type
 ///      ::= 'String'
 ///      ::= list-type
+///      ::= registry-type
 ///      ::= id
 ///
 /// field: 'flip'? fieldId ':' type
@@ -1251,6 +1267,28 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       return failure();
 
     result = ListType::get(getContext(), elementType);
+    break;
+  }
+
+  case FIRToken::kw_Registry:
+    if (requireFeature(missingSpecFIRVersion, "Registries") ||
+        parseRegistryType(result))
+      return failure();
+    break;
+
+  case FIRToken::langle_Registry: {
+    // The '<' has already been consumed by the lexer, so we need to parse
+    // the element type and the trailing '>'.
+    if (requireFeature(missingSpecFIRVersion, "Registries"))
+      return failure();
+    consumeToken();
+
+    PropertyType elementType;
+    if (parsePropertyType(elementType, "expected Registry element type") ||
+        parseToken(FIRToken::greater, "expected '>' in Registry type"))
+      return failure();
+
+    result = RegistryType::get(getContext(), elementType);
     break;
   }
   }
@@ -3066,7 +3104,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 /// stmt ::= instance
 ///      ::= cmem | smem | mem
 ///      ::= node | wire
-///      ::= register
+///      ::= insert
 ///      ::= contract
 ///
 ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
@@ -5282,9 +5320,13 @@ ParseResult FIRStmtParser::parseWire() {
   StringRef id;
   FIRRTLType type;
   if (parseId(id, "expected wire name") ||
-      parseToken(FIRToken::colon, "expected ':' in wire") ||
-      parseType(type, "expected wire type"))
+      parseToken(FIRToken::colon, "expected ':' in wire"))
     return failure();
+  auto typeLoc = getToken().getLoc();
+  if (parseType(type, "expected wire type"))
+    return failure();
+  if (type_isa<RegistryType>(type))
+    return emitError(typeLoc, "Registry types are only valid as domain fields");
 
   // Parse optional domain associations
   SmallVector<Value> domains;
@@ -5838,9 +5880,14 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     FIRRTLType type;
     LocWithInfo info(getToken().getLoc(), this);
     if (parseId(name, "expected port name") ||
-        parseToken(FIRToken::colon, "expected ':' in port definition") ||
-        parseType(type, "expected a type in port declaration"))
+        parseToken(FIRToken::colon, "expected ':' in port definition"))
       return failure();
+    auto typeLoc = getToken().getLoc();
+    if (parseType(type, "expected a type in port declaration"))
+      return failure();
+    if (type_isa<RegistryType>(type))
+      return emitError(typeLoc,
+                       "Registry types are only valid as domain fields");
     Attribute domainInfoElement = {};
     size_t portIdx = resultPorts.size();
     if (auto domainType = dyn_cast<DomainType>(type)) {

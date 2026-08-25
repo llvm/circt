@@ -830,8 +830,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
               ConnectOp, MatchingConnectOp, PropertyAssertOp, PropAssignOp,
               InstanceOp, InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp,
               SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
-              MemoryPortAccessOp, DomainDefineOp, RefDefineOp, RefForceOp,
-              RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+              MemoryPortAccessOp, DomainDefineOp, RefDefineOp,
+              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
               LayerBlockOp, GenericIntrinsicOp, DomainCreateAnonOp,
               DomainCreateOp>([&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
@@ -1974,6 +1974,11 @@ void Emitter::emitType(Type type, bool includeConst) {
       .Case<PathType>([&](PathType type) { ps << "Path"; })
       .Case<ListType>([&](ListType type) {
         ps << "List<";
+        emitType(type.getElementType());
+        ps << ">";
+      })
+      .Case<RegistryType>([&](RegistryType type) {
+        ps << "Registry<";
         emitType(type.getElementType());
         ps << ">";
       })
