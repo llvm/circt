@@ -1,5 +1,24 @@
 // RUN: circt-opt --cse --canonicalize %s | FileCheck %s
 
+// CHECK-LABEL: @FrozenPathFold
+om.class @FrozenPathFold() -> (base: !om.frozenbasepath,
+                               path: !om.frozenpath,
+                               empty: !om.frozenpath) {
+  %root = om.constant #om.frozenbasepath<#om<path[]>> : !om.frozenbasepath
+
+  // CHECK-DAG: [[BASE:%.+]] = om.constant #om.frozenbasepath<[Foo:bar]> : !om.frozenbasepath
+  %base = om.frozenbasepath_create %root "Foo/bar"
+
+  // CHECK-DAG: [[PATH:%.+]] = om.constant #om.frozenpath<4 : i32, [Foo:bar], "Bar", "w", ".a"> : !om.frozenpath
+  %path = om.frozenpath_create reference %root "Foo/bar:Bar>w.a"
+
+  // CHECK-DAG: [[EMPTY:%.+]] = om.constant #om.frozenpath_empty : !om.frozenpath
+  %empty = om.frozenpath_empty
+
+  // CHECK: om.class.fields [[BASE]], [[PATH]], [[EMPTY]]
+  om.class.fields %base, %path, %empty : !om.frozenbasepath, !om.frozenpath, !om.frozenpath
+}
+
 om.class @Foo() {
   om.class.fields
 }

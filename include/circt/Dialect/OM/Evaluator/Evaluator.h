@@ -349,15 +349,6 @@ private:
                                                   ActualParameters actualParams,
                                                   Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
-  evaluateBasePathCreate(FrozenBasePathCreateOp op,
-                         ActualParameters actualParams, Location loc);
-  FailureOr<evaluator::EvaluatorValuePtr>
-  evaluatePathCreate(FrozenPathCreateOp op, ActualParameters actualParams,
-                     Location loc);
-  FailureOr<evaluator::EvaluatorValuePtr>
-  evaluateEmptyPath(FrozenEmptyPathOp op, ActualParameters actualParams,
-                    Location loc);
-  FailureOr<evaluator::EvaluatorValuePtr>
   evaluateUnknownValue(UnknownValueOp op, Location loc);
 
   FailureOr<evaluator::EvaluatorValuePtr> createUnknownValue(Type type,

@@ -403,26 +403,6 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                 .Case<AnyCastOp>([&](AnyCastOp op) {
                   return getOrCreateValue(op.getInput(), actualParams, loc);
                 })
-                .Case<FrozenBasePathCreateOp>([&](FrozenBasePathCreateOp op) {
-                  evaluator::EvaluatorValuePtr result =
-                      std::make_shared<evaluator::BasePathValue>(
-                          op.getPathAttr(), loc);
-                  return success(result);
-                })
-                .Case<FrozenPathCreateOp>([&](FrozenPathCreateOp op) {
-                  evaluator::EvaluatorValuePtr result =
-                      std::make_shared<evaluator::PathValue>(
-                          op.getTargetKindAttr(), op.getPathAttr(),
-                          op.getModuleAttr(), op.getRefAttr(),
-                          op.getFieldAttr(), loc);
-                  return success(result);
-                })
-                .Case<FrozenEmptyPathOp>([&](FrozenEmptyPathOp op) {
-                  evaluator::EvaluatorValuePtr result =
-                      std::make_shared<evaluator::PathValue>(
-                          evaluator::PathValue::getEmptyPath(loc));
-                  return success(result);
-                })
                 .Case<ListCreateOp, ListConcatOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
                 })
@@ -636,15 +616,6 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams, loc);
             })
-            .Case([&](FrozenBasePathCreateOp op) {
-              return evaluateBasePathCreate(op, actualParams, loc);
-            })
-            .Case([&](FrozenPathCreateOp op) {
-              return evaluatePathCreate(op, actualParams, loc);
-            })
-            .Case([&](FrozenEmptyPathOp op) {
-              return evaluateEmptyPath(op, actualParams, loc);
-            })
             .Case<UnknownValueOp>([&](UnknownValueOp op) {
               return evaluateUnknownValue(op, loc);
             })
@@ -786,60 +757,6 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
     list.value()->markUnknown();
 
   return list;
-}
-
-FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateBasePathCreate(FrozenBasePathCreateOp op,
-                                             ActualParameters actualParams,
-                                             Location loc) {
-  // Evaluate the Object itself, in case it hasn't been evaluated yet.
-  auto valueResult = getOrCreateValue(op, actualParams, loc).value();
-  auto *path = llvm::cast<evaluator::BasePathValue>(valueResult.get());
-  auto result = evaluateValue(op.getBasePath(), actualParams, loc);
-  if (failed(result))
-    return result;
-  auto &value = result.value();
-  if (!value->isFullyEvaluated())
-    return valueResult;
-
-  // If the base path is unknown, mark the result as unknown.
-  if (result.value()->isUnknown()) {
-    valueResult->markUnknown();
-    return valueResult;
-  }
-
-  path->setBasepath(*llvm::cast<evaluator::BasePathValue>(value.get()));
-  return valueResult;
-}
-
-FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluatePathCreate(FrozenPathCreateOp op,
-                                         ActualParameters actualParams,
-                                         Location loc) {
-  // Evaluate the Object itself, in case it hasn't been evaluated yet.
-  auto valueResult = getOrCreateValue(op, actualParams, loc).value();
-  auto *path = llvm::cast<evaluator::PathValue>(valueResult.get());
-  auto result = evaluateValue(op.getBasePath(), actualParams, loc);
-  if (failed(result))
-    return result;
-  auto &value = result.value();
-  if (!value->isFullyEvaluated())
-    return valueResult;
-
-  // If the base path is unknown, mark the result as unknown.
-  if (result.value()->isUnknown()) {
-    valueResult->markUnknown();
-    return valueResult;
-  }
-
-  path->setBasepath(*llvm::cast<evaluator::BasePathValue>(value.get()));
-  return valueResult;
-}
-
-FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateEmptyPath(
-    FrozenEmptyPathOp op, ActualParameters actualParams, Location loc) {
-  auto valueResult = getOrCreateValue(op, actualParams, loc).value();
-  return valueResult;
 }
 
 /// Create an unknown value of the specified type
