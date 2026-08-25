@@ -231,7 +231,7 @@ particular message is waiting.
 **Ordering differs from §7, deliberately.** Every input valid at snapshot time is
 *scheduled* exactly once per sweep, but that is a property of the sweep, not an
 end-to-end guarantee: the datapath may serve an input without consulting the
-queue (see `stale`/parked-grant handling in `_build_scheduler`). Service order is
+queue (see `stale`/parked-grant handling in `GrantScheduler`). Service order is
 therefore best-effort. Do not enable this where exact ordering fairness is
 load-bearing.
 
