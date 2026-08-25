@@ -3471,7 +3471,7 @@ firrtl.circuit "DomainCreateWrongFieldCountTooFew" {
   firrtl.module @DomainCreateWrongFieldCountTooFew() {
     %name = firrtl.string "MyClock"
     %my_domain = firrtl.domain.create(%name) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
-  // expected-error @+1 {{number of field values (1) does not match domain field count (2)}}
+  // expected-error @+1 {{number of field values (1) does not match non-registry domain field count (2)}}
   }
 }
 
@@ -3484,7 +3484,7 @@ firrtl.circuit "DomainCreateWrongFieldCountTooMany" {
     %name = firrtl.string "MyClock"
     %period = firrtl.integer 42
     %my_domain = firrtl.domain.create(%name, %period) : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
-  // expected-error @+1 {{number of field values (2) does not match domain field count (1)}}
+  // expected-error @+1 {{number of field values (2) does not match non-registry domain field count (1)}}
   }
 }
 
@@ -3533,6 +3533,25 @@ firrtl.circuit "WireDomainTypeWithAssociation" {
   ) {
     // expected-error @below {{of domain type must not have domain associations}}
     %w = firrtl.wire domains[%A] : !firrtl.domain<@ClockDomain()> domains[!firrtl.domain<@ClockDomain()>]
+  }
+}
+
+// -----
+
+firrtl.circuit "DomainInsertInWhen" {
+  firrtl.domain @ClockDomain [
+    #firrtl.domain.field<"paths", !firrtl.registry<path>>
+  ]
+  firrtl.module @DomainInsertInWhen(
+    in %A: !firrtl.domain<@ClockDomain(paths: !firrtl.registry<path>)>,
+    in %cond: !firrtl.uint<1>
+  ) {
+    %registry = firrtl.domain.subfield %A[paths] : !firrtl.domain<@ClockDomain(paths: !firrtl.registry<path>)>
+    firrtl.when %cond : !firrtl.uint<1> {
+      %path = firrtl.unresolved_path "OMReferenceTarget:~DomainInsertInWhen|DomainInsertInWhen>value"
+      // expected-error @below {{'firrtl.domain.insert' op expects parent op 'firrtl.module'}}
+      firrtl.domain.insert %registry, %path : !firrtl.registry<path>, !firrtl.path
+    }
   }
 }
 

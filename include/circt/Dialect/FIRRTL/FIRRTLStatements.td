@@ -135,6 +135,32 @@ def DomainDefineOp
   }];
 }
 
+def DomainInsertOp
+    : FIRRTLOp<"domain.insert", [
+        ParentOneOf<["firrtl::FModuleOp"]>
+      ]> {
+  let summary = "Insert a path into a domain registry field.";
+  let description = [{
+    Insert a path value into a domain registry field.
+
+    Example:
+    ```mlir
+    %gate = firrtl.unresolved_path "OMReferenceTarget:~Foo|Bar>clockGate"
+    firrtl.domain.insert %domain, %gate : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>, !firrtl.path
+    ```
+
+    The destination must be a `!firrtl.registry<T>` value obtained from a domain
+    field. Registry fields are unordered and may only be mutated through this
+    operation; direct property assignment is illegal.
+  }];
+  let arguments = (ins RegistryType:$dest, PropertyType:$src);
+  let results = (outs);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    $dest `,` $src attr-dict `:` type($dest) `,` type($src)
+  }];
+}
+
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
