@@ -2434,6 +2434,20 @@ def OpenUArrayDeleteOp: MooreOp<"open_uarray_delete"> {
   }];
 }
 
+def OpenUArrayFromUnpackedArrayOp: MooreOp<"open_uarray_from_uarray">{
+  let summary = "Create an open unpacked array from a fixed-size unpacked array";
+
+  let description = [{
+    Converts a fixed-size unpacked array into an open (dynamic) unpacked array.
+  }];
+  let arguments = (ins UnpackedArrayType:$input);
+  let results = (outs OpenUnpackedArrayType:$output);
+  
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($output)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//

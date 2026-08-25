@@ -898,6 +898,13 @@ module Expressions;
   // CHECK-DAG: %strArr = moore.variable [[ARR_CREATE]] : <uarray<3 x string>>
   string strArr[3] = { "hello", "sad", "world" };
 
+  // CHECK-DAG: [[DYN_ARR_CREATE:%.+]] = moore.array_create [[INT_TO_STR0]],
+  // [[INT_TO_STR1]], [[INT_TO_STR2]] : !moore.string, !moore.string,
+  // !moore.string -> uarray<3 x string> CHECK-DAG: [[DYN_ARR_CONV:%.+]] =
+  // moore.open_uarray_from_uarray [[DYN_ARR_CREATE]] : !moore.uarray<3 x
+  // string> -> !moore.open_uarray<string> CHECK-DAG: %strDynArr =
+  // moore.variable [[DYN_ARR_CONV]] : <open_uarray<string>>
+  string strDynArr[] = {"hello", "sad", "world"};
   initial begin
     // CHECK: moore.constant 0 : i32
     c = '0;
