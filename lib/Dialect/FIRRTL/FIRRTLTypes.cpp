@@ -153,6 +153,11 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(listType.getElementType(), os);
         os << '>';
       })
+      .Case<RegistryType>([&](auto registryType) {
+        os << "registry<";
+        printNestedType(registryType.getElementType(), os);
+        os << '>';
+      })
       .Case<PathType>([&](auto pathType) { os << "path"; })
       .Case<BaseTypeAliasType>([&](BaseTypeAliasType alias) {
         os << "alias<" << alias.getName().getValue() << ", ";
@@ -523,6 +528,20 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
         parser.parseGreater())
       return failure();
     result = parser.getChecked<ListType>(context, elementType);
+    if (!result)
+      return failure();
+    return success();
+  }
+  if (name == "registry") {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "registries cannot be const");
+      return failure();
+    }
+    PropertyType elementType;
+    if (parser.parseLess() || parseNestedPropertyType(elementType, parser) ||
+        parser.parseGreater())
+      return failure();
+    result = RegistryType::get(context, elementType);
     if (!result)
       return failure();
     return success();
