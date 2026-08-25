@@ -300,9 +300,13 @@ bool omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue) {
 
 MlirAttribute omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue) {
   auto *value = cast<evaluator::AttributeValue>(unwrap(evaluatorValue).get());
-  auto path = dyn_cast<FrozenPathAttr>(value->getAttr());
+  return omFrozenPathAttrGetAsString(wrap(value->getAttr()));
+}
+
+MlirAttribute omFrozenPathAttrGetAsString(MlirAttribute attr) {
+  auto path = dyn_cast<FrozenPathAttr>(unwrap(attr));
   if (!path)
-    return wrap(StringAttr::get(value->getContext(), "OMDeleted:"));
+    return wrap(StringAttr::get(unwrap(attr).getContext(), "OMDeleted:"));
 
   SmallString<64> result;
   switch (path.getTargetKind().getValue()) {
@@ -342,7 +346,7 @@ MlirAttribute omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue) {
   }
   if (!path.getField().getValue().empty())
     result += path.getField().getValue();
-  return wrap(StringAttr::get(value->getContext(), result));
+  return wrap(StringAttr::get(path.getContext(), result));
 }
 
 /// Query if the EvaluatorValue is an Unknown value.

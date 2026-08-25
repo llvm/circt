@@ -101,7 +101,8 @@ struct Path {
   OMEvaluatorValue getValue() const { return value; }
 
   std::string dunderStr() {
-    auto ref = mlirStringAttrGetValue(omEvaluatorPathGetAsString(getValue()));
+    auto attr = omEvaluatorValueGetPrimitive(getValue());
+    auto ref = mlirStringAttrGetValue(omFrozenPathAttrGetAsString(attr));
     return std::string(ref.data, ref.length);
   }
 
