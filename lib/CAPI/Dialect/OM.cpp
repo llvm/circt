@@ -14,6 +14,7 @@
 #include "mlir/CAPI/Wrap.h"
 #include "mlir/IR/Location.h"
 #include "llvm/ADT/Hashing.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Casting.h"
 
 using namespace mlir;
@@ -277,6 +278,71 @@ OMEvaluatorValue omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue,
                                            intptr_t pos) {
   return wrap(cast<evaluator::ListValue>(unwrap(evaluatorValue).get())
                   ->getElements()[pos]);
+}
+
+bool omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue) {
+  auto *value =
+      dyn_cast<evaluator::AttributeValue>(unwrap(evaluatorValue).get());
+  return value && isa<FrozenBasePathAttr>(value->getAttr());
+}
+
+OMEvaluatorValue omEvaluatorBasePathGetEmpty(MlirContext context) {
+  auto *cppContext = unwrap(context);
+  return wrap(evaluator::AttributeValue::get(
+      FrozenBasePathAttr::get(cppContext, PathAttr::get(cppContext, {}))));
+}
+
+bool omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue) {
+  auto *value =
+      dyn_cast<evaluator::AttributeValue>(unwrap(evaluatorValue).get());
+  return value && isa<FrozenPathAttr, FrozenEmptyPathAttr>(value->getAttr());
+}
+
+MlirAttribute omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue) {
+  auto *value = cast<evaluator::AttributeValue>(unwrap(evaluatorValue).get());
+  auto path = dyn_cast<FrozenPathAttr>(value->getAttr());
+  if (!path)
+    return wrap(StringAttr::get(value->getContext(), "OMDeleted:"));
+
+  SmallString<64> result;
+  switch (path.getTargetKind().getValue()) {
+  case TargetKind::DontTouch:
+    result += "OMDontTouchedReferenceTarget";
+    break;
+  case TargetKind::Instance:
+    result += "OMInstanceTarget";
+    break;
+  case TargetKind::MemberInstance:
+    result += "OMMemberInstanceTarget";
+    break;
+  case TargetKind::MemberReference:
+    result += "OMMemberReferenceTarget";
+    break;
+  case TargetKind::Reference:
+    result += "OMReferenceTarget";
+    break;
+  }
+  result += ":~";
+  if (!path.getPath().getPath().empty())
+    result += path.getPath().getPath().front().module;
+  else
+    result += path.getModule().getValue();
+  result += '|';
+  for (const auto &element : path.getPath()) {
+    result += element.module.getValue();
+    result += '/';
+    result += element.instance.getValue();
+    result += ':';
+  }
+  if (!path.getModule().getValue().empty())
+    result += path.getModule().getValue();
+  if (!path.getRef().getValue().empty()) {
+    result += '>';
+    result += path.getRef().getValue();
+  }
+  if (!path.getField().getValue().empty())
+    result += path.getField().getValue();
+  return wrap(StringAttr::get(value->getContext(), result));
 }
 
 /// Query if the EvaluatorValue is an Unknown value.
