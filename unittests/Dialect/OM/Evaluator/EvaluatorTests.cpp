@@ -1190,8 +1190,6 @@ om.class @Foo(
   b: !om.integer,
   c: !om.list<!om.integer>,
   d: !om.list<!om.integer>,
-  e: !om.frozenbasepath,
-  f: !om.frozenpath,
   g: !om.integer,
   h: !om.integer,
   i: !om.class.type<@Baz>,
@@ -1208,20 +1206,18 @@ om.class @Foo(
   %1 = om.integer.add %0, %unknown_int : !om.integer
   %2 = om.list_create %0, %unknown_int : !om.integer
   %3 = om.list_concat %2, %2 : !om.list<!om.integer>
-  %4 = om.frozenbasepath_create %unknown_frozenbasepath "Foo/bar"
-  %5 = om.frozenpath_create reference %unknown_frozenbasepath "Foo/bar:Bar>w.a"
-  %6 = om.object.field %unknown_class["b"] : (!om.class.type<@Bar>) -> !om.integer
-  %7 = om.unknown : !om.integer
-  %8 = om.object @Baz() : () -> !om.class.type<@Baz>
-  %9 = om.object.field %8["a"] : (!om.class.type<@Baz>) -> !om.integer
-  %10 = om.unknown : !om.integer
-  %11 = om.unknown : !om.string
-  %12 = om.unknown : !om.list<!om.string>
-  %13 = om.unknown : !om.class.type<@Bar>
-  %14 = om.unknown : !om.frozenbasepath
-  %15 = om.unknown : !om.frozenpath
-  %16 = om.unknown : !om.class.type<@Baz>
-  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.integer, !om.class.type<@Baz>, !om.integer, !om.integer, !om.string, !om.list<!om.string>, !om.class.type<@Bar>, !om.frozenbasepath, !om.frozenpath, !om.class.type<@Baz>
+  %4 = om.object.field %unknown_class["b"] : (!om.class.type<@Bar>) -> !om.integer
+  %5 = om.unknown : !om.integer
+  %6 = om.object @Baz() : () -> !om.class.type<@Baz>
+  %7 = om.object.field %6["a"] : (!om.class.type<@Baz>) -> !om.integer
+  %8 = om.unknown : !om.integer
+  %9 = om.unknown : !om.string
+  %10 = om.unknown : !om.list<!om.string>
+  %11 = om.unknown : !om.class.type<@Bar>
+  %12 = om.unknown : !om.frozenbasepath
+  %13 = om.unknown : !om.frozenpath
+  %14 = om.unknown : !om.class.type<@Baz>
+  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.integer, !om.integer, !om.class.type<@Baz>, !om.integer, !om.integer, !om.string, !om.list<!om.string>, !om.class.type<@Bar>, !om.frozenbasepath, !om.frozenpath, !om.class.type<@Baz>
 }
 )MLIR";
 
@@ -1253,7 +1249,7 @@ om.class @Foo(
   ASSERT_TRUE(succeeded(result));
 
   auto *object = getObject(result.value());
-  ASSERT_EQ(object->getFieldNames().size(), 17ul);
+  ASSERT_EQ(object->getFieldNames().size(), 15ul);
 
   for (auto fieldName : object->getFieldNames()) {
     auto field = object->getField(cast<StringAttr>(fieldName));
@@ -1295,13 +1291,13 @@ om.class @Foo(
   };
 
   using Kind = circt::om::evaluator::EvaluatorValue::Kind;
-  checkFieldValueType("k", Kind::Attr);     // integer -> AttributeValue
-  checkFieldValueType("l", Kind::Attr);     // string -> AttributeValue
-  checkFieldValueType("m", Kind::List);     // list -> ListValue
-  checkFieldValueType("n", Kind::Object);   // class -> ObjectValue
-  checkFieldValueType("o", Kind::BasePath); // frozenbasepath -> BasePathValue
-  checkFieldValueType("p", Kind::Path);     // frozenpath -> PathValue
-  checkFieldValueType("q", Kind::Object);   // external class -> ObjectValue
+  checkFieldValueType("k", Kind::Attr);   // integer -> AttributeValue
+  checkFieldValueType("l", Kind::Attr);   // string -> AttributeValue
+  checkFieldValueType("m", Kind::List);   // list -> ListValue
+  checkFieldValueType("n", Kind::Object); // class -> ObjectValue
+  checkFieldValueType("o", Kind::Attr);   // frozenbasepath -> AttributeValue
+  checkFieldValueType("p", Kind::Attr);   // frozenpath -> AttributeValue
+  checkFieldValueType("q", Kind::Object); // external class -> ObjectValue
 }
 
 TEST_F(EvaluatorTests, UnknownValuesNested) {
@@ -1399,7 +1395,8 @@ om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<
 
   Evaluator evaluator(owning.release());
 
-  auto basepath = std::make_shared<evaluator::BasePathValue>(&context);
+  auto basepath = evaluator::AttributeValue::get(
+      FrozenBasePathAttr::get(&context, PathAttr::get(&context, {})));
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "TestHarness_Class"), {basepath});
@@ -1571,7 +1568,8 @@ om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
 
   // Test 11: Two asserts on a value flowing through chained object instances.
   // Both assertions fail.
-  auto basepath = std::make_shared<evaluator::BasePathValue>(&context);
+  auto basepath = evaluator::AttributeValue::get(
+      FrozenBasePathAttr::get(&context, PathAttr::get(&context, {})));
   ASSERT_TRUE(failed(evaluator.instantiate(
       StringAttr::get(&context, "ChainedDomainAssert"), {basepath})));
 

@@ -72,6 +72,17 @@ struct SynchronousData {
   std::optional<StringAttr> comment;
 };
 
+static std::optional<StringAttr>
+getFrozenPathRef(const om::evaluator::EvaluatorValuePtr &value) {
+  auto *attr = dyn_cast<om::evaluator::AttributeValue>(value.get());
+  if (!attr)
+    return std::nullopt;
+  auto path = dyn_cast<om::FrozenPathAttr>(attr->getAttr());
+  if (!path)
+    return std::nullopt;
+  return path.getRef();
+}
+
 /// A handler that generates Clock Spec JSON output from Clock Domain
 /// information.  This is an internal format that is an input to further tooling
 /// that generates Synopsys Design Constraint (SDC) files.
@@ -131,9 +142,9 @@ public:
           });
       if (isAsync) {
         for (auto &association : associations) {
-          if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
+          if (auto ref = getFrozenPathRef(association)) {
             // TODO: Add checks that path is empty.
-            asyncPorts.push_back(p->getRef());
+            asyncPorts.push_back(*ref);
             continue;
           }
           emitError(association->getLoc())
@@ -151,9 +162,9 @@ public:
           });
       if (isStatic) {
         for (auto &association : associations) {
-          if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
+          if (auto ref = getFrozenPathRef(association)) {
             // TODO: Add checks that path is empty.
-            staticPorts.push_back(p->getRef());
+            staticPorts.push_back(*ref);
             continue;
           }
           emitError(association->getLoc())
@@ -170,10 +181,10 @@ public:
                         /*relationships=*/{}});
 
       for (auto &association : associations) {
-        if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
+        if (auto ref = getFrozenPathRef(association)) {
           // TODO: Add checks that path is empty.
           syncPorts.try_emplace(name, SynchronousData{name, {}, {}})
-              .first->second.portPatterns.push_back(p->getRef());
+              .first->second.portPatterns.push_back(*ref);
           continue;
         }
         emitError(association->getLoc())

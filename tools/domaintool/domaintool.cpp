@@ -94,9 +94,9 @@ class Domain {
 public:
   /// Construct a domain and parse its arguments into internal datastructures.
   Domain(MLIRContext &context, StringRef str) {
-    om::evaluator::BasePathValue emptyPath(&context);
     parameters.push_back(
-        std::make_shared<om::evaluator::BasePathValue>(emptyPath));
+        om::evaluator::AttributeValue::get(om::FrozenBasePathAttr::get(
+            &context, om::PathAttr::get(&context, {}))));
 
     SmallVector<StringRef> parts;
     str.split(parts, ",");
@@ -251,9 +251,8 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   // Build the parameter list by iterating through formal parameters and
   // assigning domains by type or unknown values.
   SmallVector<om::evaluator::EvaluatorValuePtr> parameters;
-  om::evaluator::BasePathValue emptyPath(&context);
-  parameters.push_back(
-      std::make_shared<om::evaluator::BasePathValue>(emptyPath));
+  parameters.push_back(om::evaluator::AttributeValue::get(
+      om::FrozenBasePathAttr::get(&context, om::PathAttr::get(&context, {}))));
 
   // Track the next assignment index for each domain type
   auto unknownLoc = UnknownLoc::get(&context);

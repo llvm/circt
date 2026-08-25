@@ -21,7 +21,6 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LogicalResult.h"
-#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Debug.h"
 
 #include <utility>
@@ -47,7 +46,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 class EvaluatorValue : public std::enable_shared_from_this<EvaluatorValue> {
 public:
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, BasePath, Path };
+  enum class Kind { Attr, Object, List };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
       : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
@@ -228,64 +227,6 @@ private:
   llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> fields;
 };
 
-/// A Basepath value.
-class BasePathValue : public EvaluatorValue {
-public:
-  BasePathValue(MLIRContext *context);
-
-  /// Create a path value representing a basepath.
-  BasePathValue(om::PathAttr path, Location loc);
-
-  om::PathAttr getPath() const;
-
-  /// Set the basepath which this path is relative to.
-  void setBasepath(const BasePathValue &basepath);
-
-  /// Implement LLVM RTTI.
-  static bool classof(const EvaluatorValue *e) {
-    return e->getKind() == Kind::BasePath;
-  }
-
-private:
-  om::PathAttr path;
-};
-
-/// A Path value.
-class PathValue : public EvaluatorValue {
-public:
-  /// Create a path value representing a regular path.
-  PathValue(om::TargetKindAttr targetKind, om::PathAttr path, StringAttr module,
-            StringAttr ref, StringAttr field, Location loc);
-
-  static PathValue getEmptyPath(Location loc);
-
-  om::TargetKindAttr getTargetKind() const { return targetKind; }
-
-  om::PathAttr getPath() const { return path; }
-
-  StringAttr getModule() const { return module; }
-
-  StringAttr getRef() const { return ref; }
-
-  StringAttr getField() const { return field; }
-
-  StringAttr getAsString() const;
-
-  void setBasepath(const BasePathValue &basepath);
-
-  /// Implement LLVM RTTI.
-  static bool classof(const EvaluatorValue *e) {
-    return e->getKind() == Kind::Path;
-  }
-
-private:
-  om::TargetKindAttr targetKind;
-  om::PathAttr path;
-  StringAttr module;
-  StringAttr ref;
-  StringAttr field;
-};
-
 } // namespace evaluator
 
 using Object = evaluator::ObjectValue;
@@ -393,10 +334,6 @@ operator<<(mlir::Diagnostic &diag,
     diag << "Object(" << object->getType() << ")";
   else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
     diag << "List(" << list->getType() << ")";
-  else if (llvm::isa<evaluator::BasePathValue>(&evaluatorValue))
-    diag << "BasePath()";
-  else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))
-    diag << "Path()";
   else
     assert(false && "unhandled evaluator value");
 

@@ -181,22 +181,6 @@ omEvaluatorListGetNumElements(OMEvaluatorValue evaluatorValue);
 MLIR_CAPI_EXPORTED OMEvaluatorValue
 omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
 
-/// Query if the EvaluatorValue is a BasePath.
-MLIR_CAPI_EXPORTED bool
-omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue);
-
-/// Create an empty BasePath.
-MLIR_CAPI_EXPORTED OMEvaluatorValue
-omEvaluatorBasePathGetEmpty(MlirContext context);
-
-/// Query if the EvaluatorValue is a Path.
-MLIR_CAPI_EXPORTED bool
-omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue);
-
-/// Get a string representation of a Path.
-MLIR_CAPI_EXPORTED MlirAttribute
-omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue);
-
 /// Query if the EvaluatorValue is Unknown.
 MLIR_CAPI_EXPORTED bool
 omEvaluatorValueIsUnknown(OMEvaluatorValue evaluatorValue);

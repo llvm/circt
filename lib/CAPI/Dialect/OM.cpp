@@ -279,23 +279,6 @@ OMEvaluatorValue omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue,
                   ->getElements()[pos]);
 }
 
-bool omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue) {
-  return isa<evaluator::BasePathValue>(unwrap(evaluatorValue).get());
-}
-
-OMEvaluatorValue omEvaluatorBasePathGetEmpty(MlirContext context) {
-  return wrap(std::make_shared<evaluator::BasePathValue>(unwrap(context)));
-}
-
-bool omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue) {
-  return isa<evaluator::PathValue>(unwrap(evaluatorValue).get());
-}
-
-MlirAttribute omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue) {
-  const auto *path = cast<evaluator::PathValue>(unwrap(evaluatorValue).get());
-  return wrap((Attribute)path->getAsString());
-}
-
 /// Query if the EvaluatorValue is an Unknown value.
 bool omEvaluatorValueIsUnknown(OMEvaluatorValue evaluatorValue) {
   return unwrap(evaluatorValue)->isUnknown();
