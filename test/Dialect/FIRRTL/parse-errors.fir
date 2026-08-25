@@ -1971,3 +1971,41 @@ circuit PropertyAssertNonStringMessage:
   public module PropertyAssertNonStringMessage:
     ; expected-error @below {{propassert message must be a string type}}
     propassert Bool(true), Integer(42)
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryOnPort:
+  public module RegistryOnPort:
+    ; expected-error @below {{Registry types are only valid as domain fields}}
+    input a: Registry<Path>
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryOnWire:
+  public module RegistryOnWire:
+    ; expected-error @below {{Registry types are only valid as domain fields}}
+    wire a: Registry<Path>
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryAssign:
+  domain ClockDomain:
+    clockGates: Registry<Path>
+  public module RegistryAssign:
+    input A: Domain of ClockDomain
+    ; expected-error @below {{cannot propassign non-equivalent type '!firrtl.path' to '!firrtl.registry<path>'}}
+    propassign A.clockGates, path("OMReferenceTarget:~RegistryAssign|RegistryAssign>x")
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryNotField:
+  domain ClockDomain:
+    name: String
+  public module RegistryNotField:
+    input A: Domain of ClockDomain
+    ; expected-error @below {{'firrtl.domain.insert' op operand #0 must be registry type, but got '!firrtl.string'}}
+    insert A.name, path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")

@@ -2127,6 +2127,7 @@ private:
   ParseResult parseMatch(unsigned matchIndent);
   ParseResult parseDomainInstantiation();
   ParseResult parseDomainDefine();
+  ParseResult parseDomainInsert();
   ParseResult parseRefDefine();
   ParseResult parseRefForce();
   ParseResult parseRefForceInitial();
@@ -3171,6 +3172,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseDomainInstantiation();
   case FIRToken::kw_domain_define:
     return parseDomainDefine();
+  case FIRToken::kw_insert:
+    return parseDomainInsert();
   case FIRToken::kw_define:
     return parseRefDefine();
   case FIRToken::lp_force:
@@ -4269,6 +4272,27 @@ ParseResult FIRStmtParser::parseDomainDefine() {
     return failure();
 
   emitConnect(builder, dest, src, getConstants().options.warnOnTruncation);
+  return success();
+}
+
+/// insert ::= 'insert' registry_exp ',' property_exp info?
+ParseResult FIRStmtParser::parseDomainInsert() {
+  auto startTok = consumeToken(FIRToken::kw_insert);
+  auto startLoc = startTok.getLoc();
+  locationProcessor.setLoc(startLoc);
+
+  if (requireFeature(missingSpecFIRVersion, "domain registries", startLoc))
+    return failure();
+
+  Value registry, target;
+  if (parseExp(registry, "expected registry field expression") ||
+      parseToken(FIRToken::comma, "expected ',' after registry field") ||
+      parseExp(target, "expected registry element expression") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startLoc);
+  DomainInsertOp::create(builder, registry, target);
   return success();
 }
 
