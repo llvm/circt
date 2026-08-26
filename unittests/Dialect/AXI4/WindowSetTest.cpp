@@ -70,6 +70,18 @@ TEST_F(WindowSetTest, OverlappingAndDisjointSpellingsAreEquivalent) {
   EXPECT_EQ(a.getWindows()[1], disjoint[1]);
 }
 
+// Check a window subsumed by a window with the same burst kind is absorbed by
+// it, leaving one window rather than two
+TEST_F(WindowSetTest, OverlapAbsorbedByLongerBurst) {
+  WindowAttr overlapping[] = {window(0, 0xFF, {{BurstKind::Incr, 4}}),
+                              window(0, 0x1FF, {{BurstKind::Incr, 16}})};
+
+  auto set = WindowSetAttr::get(&context, overlapping);
+
+  ASSERT_EQ(set.getWindows().size(), 1u);
+  EXPECT_EQ(set.getWindows()[0], window(0, 0x1FF, {{BurstKind::Incr, 16}}));
+}
+
 // Ensure that window_sets covering the whole address space are equivalent
 // wherever they happen to be split
 TEST_F(WindowSetTest, WholeAddressSpaceSplitsAreEquivalent) {

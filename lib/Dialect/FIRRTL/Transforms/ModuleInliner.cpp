@@ -2015,11 +2015,10 @@ LogicalResult Inliner::processInto(StringRef prefix, InliningLevel &il,
 }
 
 LogicalResult Inliner::processInstances(FModuleOp module, bool flatten) {
-  auto moduleName = module.getNameAttr();
   ModuleInliningContext mic(module);
 
-  LLVM_DEBUG(llvm::dbgs() << "inlining instances within " << moduleName
-                          << "...\n");
+  LLVM_DEBUG(llvm::dbgs() << "inlining instances within "
+                          << module.getNameAttr() << "...\n");
   auto visit = [&](FInstanceLike instanceLike) {
     auto instance = getInlinableInstance(instanceLike.getOperation());
     if (!instance)

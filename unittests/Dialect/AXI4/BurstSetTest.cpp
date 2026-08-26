@@ -48,16 +48,29 @@ TEST_F(BurstSetTest, ShuffledInputUniquesToSortedInput) {
 
 // Ensure burst_specs are accessed in the canonical order
 TEST_F(BurstSetTest, StoredOrderIsCanonical) {
-  BurstSpecAttr shuffled[] = {
-      spec(BurstKind::Wrap, 2), spec(BurstKind::Incr, 256),
-      spec(BurstKind::Incr, 1), spec(BurstKind::Fixed, 16)};
+  BurstSpecAttr shuffled[] = {spec(BurstKind::Wrap, 2),
+                              spec(BurstKind::Incr, 256),
+                              spec(BurstKind::Fixed, 16)};
   auto set = BurstSetAttr::get(&context, shuffled);
 
-  ASSERT_EQ(set.getBurstSpecs().size(), 4u);
+  ASSERT_EQ(set.getBurstSpecs().size(), 3u);
   EXPECT_EQ(set.getBurstSpecs()[0], spec(BurstKind::Fixed, 16));
-  EXPECT_EQ(set.getBurstSpecs()[1], spec(BurstKind::Incr, 1));
-  EXPECT_EQ(set.getBurstSpecs()[2], spec(BurstKind::Incr, 256));
-  EXPECT_EQ(set.getBurstSpecs()[3], spec(BurstKind::Wrap, 2));
+  EXPECT_EQ(set.getBurstSpecs()[1], spec(BurstKind::Incr, 256));
+  EXPECT_EQ(set.getBurstSpecs()[2], spec(BurstKind::Wrap, 2));
+}
+
+// Check a `len` is a maximum, so the longest burst of a kind is the only one
+// kept, and only of its own kind
+TEST_F(BurstSetTest, LongestOfEachKindWins) {
+  BurstSpecAttr specs[] = {spec(BurstKind::Incr, 4), spec(BurstKind::Incr, 256),
+                           spec(BurstKind::Incr, 16),
+                           spec(BurstKind::Fixed, 8)};
+
+  auto set = BurstSetAttr::get(&context, specs);
+
+  ASSERT_EQ(set.getBurstSpecs().size(), 2u);
+  EXPECT_EQ(set.getBurstSpecs()[0], spec(BurstKind::Fixed, 8));
+  EXPECT_EQ(set.getBurstSpecs()[1], spec(BurstKind::Incr, 256));
 }
 
 // Check duplicate specs are collapsed together
