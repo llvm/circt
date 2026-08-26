@@ -1035,7 +1035,8 @@ template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   p << ' ';
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = mod.getOperation()->template getAttrOfType<StringAttr>(
           visibilityAttrName))
     p << visibility.getValue() << ' ';
@@ -3377,7 +3378,8 @@ void HierPathOp::print(OpAsmPrinter &p) {
   p << " ";
 
   // Print visibility if present.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility =
           getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';

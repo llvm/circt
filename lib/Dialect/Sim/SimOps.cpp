@@ -152,7 +152,8 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
 void DPIFuncOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(getSymName());

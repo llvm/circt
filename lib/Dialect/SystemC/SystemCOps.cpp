@@ -193,7 +193,8 @@ void SCModuleOp::print(OpAsmPrinter &p) {
   p << ' ';
 
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility =
           getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
@@ -930,7 +931,8 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   // Disallow attributes that are inferred from elsewhere in the attribute
   // dictionary.
   for (StringRef disallowed :
-       {SymbolTable::getVisibilityAttrName(), SymbolTable::getSymbolAttrName(),
+       {mlir::SymbolOpInterface::getDefaultVisibilityAttrName(),
+        SymbolTable::getSymbolAttrName(),
         FuncOp::getFunctionTypeAttrName(result.name).getValue()}) {
     if (parsedAttributes.get(disallowed))
       return parser.emitError(attributeDictLocation, "'")
@@ -992,7 +994,8 @@ void FuncOp::print(OpAsmPrinter &p) {
           .getValue();
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(funcName);
