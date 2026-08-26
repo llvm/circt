@@ -93,17 +93,15 @@ def _onehot_to_index(onehot: BitsSignal) -> BitsSignal:
 
 
 # Grant-control strategies. `GrantSchedulerMod` and `RoundRobinControlMod` are
-# interchangeable: they deliberately carry the *same* port signature, so the
-# arbiter picks one and wires it up identically. (PyCDE scans only a class's own
-# dict for ports, so the signature cannot be inherited from a common base -- it
-# is spelled out in each and must be kept in sync.) `launch` is unused by the
-# round-robin strategy; it is present so the signature stays uniform.
+# interchangeable: they deliberately carry the *same* port signature, documented
+# per-port on `GrantScheduler` below, so the arbiter picks one and wires it up
+# identically. (PyCDE scans only a class's own dict for ports, so the signature
+# cannot be inherited from a common base -- it is spelled out in each and must be
+# kept in sync.) `launch` is unused by the round-robin strategy; it is present so
+# the signature stays uniform.
 #
 # The registered `grant`/`busy` live in the arbiter, since the datapath reads
 # them; a control module sees their current values and drives the next ones.
-# `grant_oh` is the arbiter's registered one-hot decode of `grant`, passed in so
-# neither strategy has to re-decode it. `switch` is high on cycles the grant is
-# (re)loaded, and feeds the `arbSwitches` telemetry counter.
 
 
 @modparams
@@ -128,15 +126,24 @@ def GrantSchedulerMod(num_inputs: int, queue_depth: int):
     clk = Clock()
     rst = Reset()
 
+    # Per-input `valid`; bit `i` is high when input `i` is offering a flit.
     valids = Input(Bits(num_inputs))
+    # Index of the currently granted input (the arbiter's `grant` register).
     grant = Input(Bits(gw))
+    # `grant` pre-decoded to one-hot, registered by the arbiter.
     grant_oh = Input(Bits(num_inputs))
+    # High while `grant` is in force, i.e. an input is currently being served.
     busy = Input(Bits(1))
+    # High on cycles a flit is accepted from the granted input.
     launch = Input(Bits(1))
+    # High on the `launch` of a message's final flit.
     msg_end = Input(Bits(1))
 
+    # Next value of the arbiter's `grant` register.
     next_grant = Output(Bits(gw))
+    # Next value of the arbiter's `busy` register.
     next_busy = Output(Bits(1))
+    # High on cycles the grant is (re)loaded from the queue; telemetry only.
     switch = Output(Bits(1))
 
     @generator
