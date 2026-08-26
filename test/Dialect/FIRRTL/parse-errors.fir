@@ -1818,6 +1818,14 @@ circuit Domains:
     domain_define
 
 ;// -----
+; Registries are introduced alongside the FIRRTL domain syntax.
+FIRRTL version 6.0.0
+circuit RegistryType:
+  public module RegistryType:
+    ; expected-error @below {{Registries are a FIRRTL 7.0.0+ feature}}
+    input clockGates: Registry<Path>
+
+;// -----
 
 FIRRTL version 7.0.0
 circuit Domains:

@@ -2472,3 +2472,13 @@ circuit WireDomains:
     ; Wire with multiple domains
     ; CHECK: %w_multi = firrtl.wire interesting_name domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>]
     wire w_multi : UInt<16> domains [A, B]
+
+;// -----
+FIRRTL version 7.0.0
+circuit RegistryType:
+  ; CHECK-LABEL: firrtl.domain @RegistryDomain
+  ; CHECK-SAME:    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+  domain RegistryDomain:
+    clockGates: Registry<Path>
+
+  public module RegistryType:
