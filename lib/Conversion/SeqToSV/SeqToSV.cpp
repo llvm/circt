@@ -132,7 +132,7 @@ ModuleLoweringState::ImmutableValueLowering::lower(seq::InitialOp initialOp) {
   return success();
 }
 
-/// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
+/// Lower CompRegOp to `sv.var` and `sv.alwaysff`. Use a posedge clock and
 /// synchronous reset.
 template <typename OpTy>
 class CompRegLower : public OpConversionPattern<OpTy> {
@@ -153,7 +153,7 @@ public:
 
     auto regTy =
         ConversionPattern::getTypeConverter()->convertType(reg.getType());
-    auto svReg = sv::RegOp::create(rewriter, loc, regTy, reg.getNameAttr(),
+    auto svReg = sv::VarOp::create(rewriter, loc, regTy, reg.getNameAttr(),
                                    reg.getInnerSymAttr());
 
     svReg->setDialectAttrs(reg->getDialectAttrs());
@@ -225,7 +225,7 @@ public:
 
   // Helper to create an assignment based on the register type.
   void createAssign(ConversionPatternRewriter &rewriter, Location loc,
-                    sv::RegOp svReg, OpAdaptor reg) const;
+                    sv::VarOp svReg, OpAdaptor reg) const;
 
 private:
   bool lowerToAlwaysFF;
@@ -235,21 +235,21 @@ private:
 /// Create the assign.
 template <>
 void CompRegLower<CompRegOp>::createAssign(ConversionPatternRewriter &rewriter,
-                                           Location loc, sv::RegOp svReg,
+                                           Location loc, sv::VarOp svReg,
                                            OpAdaptor reg) const {
   sv::PAssignOp::create(rewriter, loc, svReg, reg.getInput());
 }
 /// Create the assign inside of an if block.
 template <>
 void CompRegLower<CompRegClockEnabledOp>::createAssign(
-    ConversionPatternRewriter &rewriter, Location loc, sv::RegOp svReg,
+    ConversionPatternRewriter &rewriter, Location loc, sv::VarOp svReg,
     OpAdaptor reg) const {
   sv::IfOp::create(rewriter, loc, reg.getClockEnable(), [&]() {
     sv::PAssignOp::create(rewriter, loc, svReg, reg.getInput());
   });
 }
 
-/// Lower FromImmutable to `sv.reg` and `sv.initial`.
+/// Lower FromImmutable to `sv.var` and `sv.initial`.
 class FromImmutableLowering : public OpConversionPattern<FromImmutableOp> {
 public:
   FromImmutableLowering(
@@ -267,7 +267,7 @@ public:
 
     auto regTy = ConversionPattern::getTypeConverter()->convertType(
         fromImmutableOp.getType());
-    auto svReg = sv::RegOp::create(rewriter, loc, regTy);
+    auto svReg = sv::VarOp::create(rewriter, loc, regTy);
 
     auto regVal = sv::ReadInOutOp::create(rewriter, loc, svReg);
 
@@ -311,7 +311,7 @@ public:
 
     // Enable latch.
     Value enableLatch =
-        sv::RegOp::create(rewriter, loc, rewriter.getI1Type(),
+        sv::VarOp::create(rewriter, loc, rewriter.getI1Type(),
                           rewriter.getStringAttr("cg_en_latch"));
 
     // Latch the enable signal using an always @* block.
@@ -505,7 +505,7 @@ public:
 
     SmallVector<Value> regs;
     for (unsigned i = 0; i < clockDiv.getPow2(); ++i) {
-      Value reg = sv::RegOp::create(
+      Value reg = sv::VarOp::create(
           rewriter, loc, rewriter.getI1Type(),
           rewriter.getStringAttr("clock_out_" + std::to_string(i)));
       regs.push_back(reg);
@@ -782,8 +782,7 @@ void SeqToSVPass::runOnOperation() {
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, []() {}, body);
+    sv::IfDefOp::create(b, guard, []() {}, body);
   };
 
   emit::FragmentOp::create(b, randomInitFragmentName.getAttr(), [&] {

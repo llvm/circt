@@ -32,23 +32,23 @@ hw.module @top(in %arg0: i1, in %arg1: i1, in %clk : !seq.clock, in %rst : i1, o
 
 // CHECK-LABEL:  hw.module @top(in %a0 : i1, in %a1 : i1, out r0 : i8, out r1 : i8, in %clk : !seq.clock, in %rst : i1)
 // CHECK-NEXT:    %A = hw.enum.constant A : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
-// CHECK-NEXT:    %to_A = sv.reg sym @A  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
+// CHECK-NEXT:    %to_A = sv.wire sym @A  : !sv.net<!hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    sv.assign %to_A, %A : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
-// CHECK-NEXT:    %0 = sv.read_inout %to_A : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
+// CHECK-NEXT:    %0 = sv.read_inout %to_A : !sv.net<!hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    %B = hw.enum.constant B : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
-// CHECK-NEXT:    %to_B = sv.reg sym @B  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
+// CHECK-NEXT:    %to_B = sv.wire sym @B  : !sv.net<!hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    sv.assign %to_B, %B : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
-// CHECK-NEXT:    %1 = sv.read_inout %to_B : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
-// CHECK-NEXT:    %state_next = sv.reg  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
-// CHECK-NEXT:    %2 = sv.read_inout %state_next : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
+// CHECK-NEXT:    %1 = sv.read_inout %to_B : !sv.net<!hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
+// CHECK-NEXT:    %state_next = sv.var  : !sv.var<!hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
+// CHECK-NEXT:    %2 = sv.read_inout %state_next : !sv.var<!hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    %state_reg = seq.compreg sym @state_reg %2, %clk reset %rst, %0  : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:    %c42_i8 = hw.constant 42 : i8
 // CHECK-NEXT:    %c0_i8 = hw.constant 0 : i8
 // CHECK-NEXT:    %c1_i8 = hw.constant 1 : i8
 // CHECK-NEXT:    %3 = comb.and %a0, %a1 : i1
 // CHECK-NEXT:    %4 = comb.mux %3, %0, %1 : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
-// CHECK-NEXT:    %output_0 = sv.reg  : !hw.inout<i8>
-// CHECK-NEXT:    %output_1 = sv.reg  : !hw.inout<i8>
+// CHECK-NEXT:    %output_0 = sv.var  : !sv.var<i8>
+// CHECK-NEXT:    %output_1 = sv.var  : !sv.var<i8>
 // CHECK-NEXT:    sv.alwayscomb {
 // CHECK-NEXT:      sv.case %state_reg : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:      case A: {
@@ -64,8 +64,8 @@ hw.module @top(in %arg0: i1, in %arg1: i1, in %clk : !seq.clock, in %rst : i1, o
 // CHECK-NEXT:      default: {
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
-// CHECK-NEXT:    %5 = sv.read_inout %output_0 : !hw.inout<i8>
-// CHECK-NEXT:    %6 = sv.read_inout %output_1 : !hw.inout<i8>
+// CHECK-NEXT:    %5 = sv.read_inout %output_0 : !sv.var<i8>
+// CHECK-NEXT:    %6 = sv.read_inout %output_1 : !sv.var<i8>
 // CHECK-NEXT:    hw.output %5, %6 : i8, i8
 // CHECK-NEXT:  }
 

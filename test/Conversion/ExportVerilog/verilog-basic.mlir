@@ -100,8 +100,8 @@ hw.module @Expressions(in %in8: i8, in %in4: i4, in %clock: i1,
   %26 = comb.concat %c0_i2, %9 : i2, i2
   %27 = comb.concat %c0_i2, %17 : i2, i2
 
-  %w1 = sv.wire : !hw.inout<i4>
-  %w1_use = sv.read_inout %w1 : !hw.inout<i4>
+  %w1 = sv.wire : !sv.net<i4>
+  %w1_use = sv.read_inout %w1 : !sv.net<i4>
 
   sv.assign %w1, %3 : i4
   sv.assign %w1, %4 : i4
@@ -116,13 +116,13 @@ hw.module @Expressions(in %in8: i8, in %in4: i4, in %clock: i1,
   %29 = comb.concat %c0_i6, %in4, %clock, %clock, %in4 : i6, i4, i1, i1, i4
   %30 = comb.concat %c0_i10, %21 : i10, i6
 
-  %w2 = sv.wire : !hw.inout<i16>
-  %w2_use = sv.read_inout %w2 : !hw.inout<i16>
+  %w2 = sv.wire : !sv.net<i16>
+  %w2_use = sv.read_inout %w2 : !sv.net<i16>
   sv.assign %w2, %29 : i16
   sv.assign %w2, %30 : i16
 
-  %w3 = sv.wire : !hw.inout<i16>
-  %w3_use = sv.read_inout %w3 : !hw.inout<i16>
+  %w3 = sv.wire : !sv.net<i16>
+  %w3_use = sv.read_inout %w3 : !sv.net<i16>
 
   // CHECK-DAG: assign out1a = ^in4;
   %p_res = comb.parity %in4 : i4
@@ -173,8 +173,8 @@ hw.module @Precedence(in %a: i4, in %b: i4, in %c: i4, out out1: i1, out out: i1
   %c0_i5 = hw.constant 0 : i5
   %c0_i3 = hw.constant 0 : i3
   %c0_i6 = hw.constant 0 : i6
-  %_out1_output = sv.wire  : !hw.inout<i1>
-  %_out_output = sv.wire  : !hw.inout<i10>
+  %_out1_output = sv.wire  : !sv.net<i1>
+  %_out_output = sv.wire  : !sv.net<i10>
 
   // CHECK: wire [4:0] _GEN = {1'h0, b};
   // CHECK: wire [4:0] _GEN_0 = _GEN + {1'h0, c};
@@ -249,12 +249,12 @@ hw.module @Precedence(in %a: i4, in %b: i4, in %c: i4, out out1: i1, out out: i1
   %40 = comb.or %38, %39 : i1
   sv.assign %_out1_output, %40 : i1
   %41 = comb.xor %b, %c : i4
-  %42 = sv.read_inout %_out1_output : !hw.inout<i1>
+  %42 = sv.read_inout %_out1_output : !sv.net<i1>
   %43 = comb.concat %c0_i3, %42 : i3, i1
   %44 = comb.and %41, %43 : i4
   %45 = comb.concat %c0_i6, %44 : i6, i4
   sv.assign %_out_output, %45 : i10
-  %46 = sv.read_inout %_out_output : !hw.inout<i10>
+  %46 = sv.read_inout %_out_output : !sv.net<i10>
   %47 = comb.extract %46 from 2 : (i10) -> i8
   %48 = comb.concat %c0_i2, %47 : i2, i8
   sv.assign %_out_output, %48 : i10
@@ -336,8 +336,8 @@ hw.module @Wires(in %a: i4, out x: i4, out y: i4) {
   // CHECK-DAG: symRef2(Wires.wire5);
   %wire5 = hw.wire %a sym @myWire : i4
   sv.verbatim "symRef1({{0}});" {symbols = [#hw.innerNameRef<@Wires::@myWire>]}
-  %2 = sv.xmr.ref @myWirePath : !hw.inout<i4>
-  %3 = sv.read_inout %2 : !hw.inout<i4>
+  %2 = sv.xmr.ref @myWirePath : !sv.var<i4>
+  %3 = sv.read_inout %2 : !sv.var<i4>
   sv.verbatim "symRef2({{0}});"(%3) : i4
 
   hw.output %wire1, %0 : i4, i4
@@ -378,7 +378,7 @@ hw.module @MultiUseExpr(in %a: i4, out b0: i1, out b1: i1, out b2: i1, out b3: i
 // CHECK:  assign out4 = in4 + 4'h1;
 // CHECK-NEXT: endmodule
 hw.module @SimpleConstPrint(in %in4: i4, out out4: i4) {
-  %w = sv.wire : !hw.inout<i4>
+  %w = sv.wire : !sv.net<i4>
   %c1_i4 = hw.constant 1 : i4
   sv.assign %w, %c1_i4 : i4
   %1 = comb.add %in4, %c1_i4 : i4
@@ -389,8 +389,8 @@ hw.module @SimpleConstPrint(in %in4: i4, out out4: i4) {
 // CHECK-LABEL: module SimpleConstPrintReset(
 // CHECK:  q <= 4'h1;
 hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
-  %w = sv.wire : !hw.inout<i4>
-  %q = sv.reg : !hw.inout<i4>
+  %w = sv.wire : !sv.net<i4>
+  %q = sv.var : !sv.var<i4>
   %c1_i4 = hw.constant 1 : i4
   sv.assign %w, %c1_i4 : i4
   sv.always posedge %clock, posedge %reset {
@@ -407,12 +407,12 @@ hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
 // CHECK-LABEL: module InlineDeclAssignment
 hw.module @InlineDeclAssignment(in %a: i1) {
   // CHECK: wire b = a;
-  %b = sv.wire : !hw.inout<i1>
+  %b = sv.wire : !sv.net<i1>
   sv.assign %b, %a : i1
 
   // CHECK: wire c = a + a;
   %0 = comb.add %a, %a : i1
-  %c = sv.wire : !hw.inout<i1>
+  %c = sv.wire : !sv.net<i1>
   sv.assign %c, %0 : i1
 }
 
@@ -428,14 +428,14 @@ hw.module @ordered_region(in %a: i1) {
     // CHECK-NEXT: `ifdef foo
     sv.ifdef @foo {
       // CHECK-NEXT: wire_0 = a;
-      %wire = sv.wire : !hw.inout<i1>
+      %wire = sv.wire : !sv.net<i1>
       sv.assign %wire, %a : i1
     }
     // CHECK-NEXT: `endif
     // CHECK-NEXT: `ifdef bar
     sv.ifdef @bar {
       // CHECK-NEXT: wire_1 = a;
-      %wire = sv.wire : !hw.inout<i1>
+      %wire = sv.wire : !sv.net<i1>
       sv.assign %wire, %a : i1
     }
     // CHECK-NEXT: `endif
@@ -583,15 +583,15 @@ hw.module @Print(in %clock: i1, in %reset: i1, in %a: i4, in %b: i4) {
 
 // CHECK-LABEL: module ReadMem()
 hw.module @ReadMem() {
-  // CHECK:      reg [31:0] mem[0:7];
-  %mem = sv.reg sym @mem : !hw.inout<uarray<8xi32>>
+  // CHECK:      logic [31:0] mem[0:7];
+  %mem = sv.var sym @mem : !sv.var<!hw.uarray<8xi32>>
   // CHECK-NEXT: initial begin
   // CHECK-NEXT:   $readmemb("file1.txt", mem);
   // CHECK-NEXT:   $readmemh("file2.txt", mem);
   // CHECK-NEXT: end
   sv.initial {
-    sv.readmem %mem, "file1.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
-    sv.readmem %mem, "file2.txt", MemBaseHex : !hw.inout<uarray<8xi32>>
+    sv.readmem %mem, "file1.txt", MemBaseBin : !sv.var<!hw.uarray<8xi32>>
+    sv.readmem %mem, "file2.txt", MemBaseHex : !sv.var<!hw.uarray<8xi32>>
   }
 
 }
@@ -603,8 +603,8 @@ hw.module @ReadMemXMR() {
   // CHECK:      initial
   // CHECK-NEXT:   $readmemb("file3.txt", ReadMem.mem)
   sv.initial {
-    %xmr = sv.xmr.ref @ReadMemXMRPath {} : !hw.inout<uarray<8xi32>>
-    sv.readmem %xmr, "file3.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+    %xmr = sv.xmr.ref @ReadMemXMRPath {} : !sv.var<!hw.uarray<8xi32>>
+    sv.readmem %xmr, "file3.txt", MemBaseBin : !sv.var<!hw.uarray<8xi32>>
   }
 }
 
@@ -615,8 +615,8 @@ hw.module @ReadMemXMRHierPath() {
   // CHECK:      initial
   // CHECK-NEXT:   $readmemb("file4.txt", ReadMemXMRHierPath.ReadMemXMR.ReadMem.mem)
   sv.initial {
-    %xmr = sv.xmr.ref @ReadMem_path : !hw.inout<uarray<8xi32>>
-    sv.readmem %xmr, "file4.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+    %xmr = sv.xmr.ref @ReadMem_path : !sv.var<!hw.uarray<8xi32>>
+    sv.readmem %xmr, "file4.txt", MemBaseBin : !sv.var<!hw.uarray<8xi32>>
   }
 }
 
@@ -626,12 +626,12 @@ sv.verbatim "// VERB: hierpath {{0:|}}" {symbols = [@ReadMem_path]}
 // CHECK-LABEL: module UninitReg1(
 hw.module @UninitReg1(in %clock: i1, in %reset: i1, in %cond: i1, in %value: i2) {
   %c-1_i2 = hw.constant -1 : i2
-  %count = sv.reg  : !hw.inout<i2>
+  %count = sv.var  : !sv.var<i2>
 
   // CHECK: always_ff @(posedge clock)
   // CHECK-NEXT:   count <= ~{2{reset}} & (cond ? value : count);
 
-  %0 = sv.read_inout %count : !hw.inout<i2>
+  %0 = sv.read_inout %count : !sv.var<i2>
   %1 = comb.mux %cond, %value, %0 : i2
   %2 = comb.replicate %reset : (i1) -> i2
   %3 = comb.xor %2, %c-1_i2 : i2
@@ -671,11 +671,11 @@ hw.module.extern @VerbatimModuleExtern(in %foo: i1 {hw.exportPort = #hw<innerSym
 // CHECK-NEXT:    input  signed_0
 // CHECK-NEXT:    output unsigned_0
 hw.module @VerbatimModule(in %signed: i1 {hw.exportPort = #hw<innerSym@symA>}, out unsigned: i1 {hw.exportPort = #hw<innerSym@symB>}) {
-  %parameter = sv.wire sym @symC : !hw.inout<i4>
-  %localparam = sv.reg sym @symD : !hw.inout<i4>
+  %parameter = sv.wire sym @symC : !sv.net<i4>
+  %localparam = sv.var sym @symD : !sv.var<i4>
   %shortint = sv.interface.instance sym @symE : !sv.interface<@Interface>
-  // CHECK: wire [3:0] parameter_0;
-  // CHECK: reg  [3:0] localparam_0;
+  // CHECK: wire  [3:0] parameter_0;
+  // CHECK: logic [3:0] localparam_0;
   // CHECK: Interface shortint();
   hw.output %signed : i1
 }
@@ -731,7 +731,7 @@ hw.module @rename_port(in %r: i1 {hw.verilogName = "w"}) {
 // CHECK-LABEL: module rename_port
 // CHECK:  input w
 // CHECK:  wire [3:0] w_0;
-    %w = sv.wire : !hw.inout<i4>
+    %w = sv.wire : !sv.net<i4>
     hw.output
 }
 
@@ -774,7 +774,7 @@ hw.module @W422_Foo() {
   %false = hw.constant false
   %bar.clock, %bar.reset = hw.instance "bar" @W422_Bar() -> (clock: i1, reset: i1)
   %baz.q = hw.instance "baz" @W422_Baz() -> (q: i1)
-  %q = sv.reg sym @__q__  : !hw.inout<i1>
+  %q = sv.var sym @__q__  : !sv.var<i1>
   sv.always posedge %bar.clock, posedge %bar.reset {
     sv.if %bar.reset {
       sv.passign %q, %false : i1

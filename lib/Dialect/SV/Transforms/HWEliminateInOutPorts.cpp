@@ -73,6 +73,7 @@ private:
   llvm::StringRef readSuffix;
   // Suffix to be used when creating write ports.
   llvm::StringRef writeSuffix;
+  llvm::SmallVector<sv::NetFromInOutOp, 1> bridges;
 };
 
 HWInOutPortConversion::HWInOutPortConversion(PortConverterImpl &converter,
@@ -83,15 +84,23 @@ HWInOutPortConversion::HWInOutPortConversion(PortConverterImpl &converter,
       writeSuffix(writeSuffix) {}
 
 LogicalResult HWInOutPortConversion::init() {
-  // Gather readers and writers (how to handle sv.passign?)
+  // An HW inout port is seen by SV operations through an SV net bridge.
   for (auto *user : body->getArgument(origPort.argNum).getUsers()) {
-    if (auto read = dyn_cast<sv::ReadInOutOp>(user))
-      readers.push_back(read);
-    else if (auto write = dyn_cast<sv::AssignOp>(user))
-      writers.push_back(write);
-    else
+    auto bridge = dyn_cast<sv::NetFromInOutOp>(user);
+    if (!bridge)
       return user->emitOpError() << "uses hw.inout port " << origPort.name
                                  << " but the operation itself is unsupported.";
+    bridges.push_back(bridge);
+    for (auto *bridgeUser : bridge.getResult().getUsers()) {
+      if (auto read = dyn_cast<sv::ReadInOutOp>(bridgeUser))
+        readers.push_back(read);
+      else if (auto write = dyn_cast<sv::AssignOp>(bridgeUser))
+        writers.push_back(write);
+      else
+        return bridgeUser->emitOpError()
+               << "uses hw.inout port " << origPort.name
+               << " but the operation itself is unsupported.";
+    }
   }
 
   if (writers.size() > 1)
@@ -107,12 +116,7 @@ void HWInOutPortConversion::buildInputSignals() {
     // Replace all sv::ReadInOutOp's with the new input.
     Value readValue =
         converter.createNewInput(origPort, readSuffix, origPort.type, readPort);
-    Value origInput = body->getArgument(origPort.argNum);
-    for (auto *user : llvm::make_early_inc_range(origInput.getUsers())) {
-      sv::ReadInOutOp read = dyn_cast<sv::ReadInOutOp>(user);
-      if (!read)
-        continue;
-
+    for (auto read : readers) {
       read.replaceAllUsesWith(readValue);
       read.erase();
     }
@@ -125,6 +129,10 @@ void HWInOutPortConversion::buildInputSignals() {
                               write.getSrc(), writePort);
     write.erase();
   }
+
+  for (auto bridge : bridges)
+    if (bridge->use_empty())
+      bridge.erase();
 }
 
 void HWInOutPortConversion::buildOutputSignals() {
@@ -144,15 +152,21 @@ void HWInOutPortConversion::mapInputSignals(OpBuilder &b, Operation *inst,
   if (hasReaders()) {
     // Create a read_inout op at the instantiation point. This effectively
     // pushes the read_inout op from the module to the instantiation site.
+    auto bridge = NetFromInOutOp::create(
+        b, inst->getLoc(),
+        NetType::get(getInOutElementType(instValue.getType())), instValue);
     newOperands[readPort.argNum] =
-        ReadInOutOp::create(b, inst->getLoc(), instValue).getResult();
+        ReadInOutOp::create(b, inst->getLoc(), bridge).getResult();
   }
 
   if (hasWriters()) {
     // Create a sv::AssignOp at the instantiation point. This effectively
     // pushes the write op from the module to the instantiation site.
     Value writeFromInsideMod = newResults[writePort.argNum];
-    sv::AssignOp::create(b, inst->getLoc(), instValue, writeFromInsideMod);
+    auto bridge = NetFromInOutOp::create(
+        b, inst->getLoc(),
+        NetType::get(getInOutElementType(instValue.getType())), instValue);
+    sv::AssignOp::create(b, inst->getLoc(), bridge, writeFromInsideMod);
   }
 }
 

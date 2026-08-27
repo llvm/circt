@@ -25,11 +25,15 @@ sv.interface @foo {
 hw.module @Aliasing(inout %a : i42, inout %b : i42,
                       inout %c : i42) {
 
+  %netA = sv.net.from_inout %a : !hw.inout<i42> -> !sv.net<i42>
+  %netB = sv.net.from_inout %b : !hw.inout<i42> -> !sv.net<i42>
+  %netC = sv.net.from_inout %c : !hw.inout<i42> -> !sv.net<i42>
+
   // ok
-  sv.alias %a, %b     : !hw.inout<i42>, !hw.inout<i42>
+  sv.alias %netA, %netB : !sv.net<i42>, !sv.net<i42>
 
   // expected-error @+1 {{'sv.alias' op alias must have at least two operands}}
-  sv.alias %a : !hw.inout<i42>
+  sv.alias %netA : !sv.net<i42>
 }
 
 // -----
@@ -41,30 +45,30 @@ hw.module @Fwrite() {
 
 // -----
 hw.module @Bpassign(in %arg0: i1) {
-  %reg = sv.reg : !hw.inout<i1>
+  %reg = sv.var : !sv.var<i1>
   // expected-error @+1 {{'sv.bpassign' op must not be in a non-procedural region}}
   sv.bpassign %reg, %arg0 : i1
 }
 
 // -----
 hw.module @Passign(in %arg0: i1) {
-  %reg = sv.reg : !hw.inout<i1>
+  %reg = sv.var : !sv.var<i1>
   // expected-error @+1 {{'sv.passign' op must not be in a non-procedural region}}
   sv.passign %reg, %arg0 : i1
 }
 
 // -----
 hw.module @ForcePassign(in %arg0: i1) {
-  %reg = sv.reg : !hw.inout<i1>
+  %reg = sv.var : !sv.var<i1>
   // expected-error @+1 {{'sv.force' op must not be in a non-procedural region}}
-  sv.force %reg, %arg0 : i1
+  sv.force %reg, %arg0 : !sv.var<i1>
 }
 
 // -----
 hw.module @ReleasePassign(in %arg0: i1) {
-  %reg = sv.reg : !hw.inout<i1>
+  %reg = sv.var : !sv.var<i1>
   // expected-error @+1 {{'sv.release' op must not be in a non-procedural region}}
-  sv.release %reg : !hw.inout<i1>
+  sv.release %reg : !sv.var<i1>
 }
 
 // -----
@@ -179,7 +183,7 @@ hw.module @AlwaysFF(in %arg0: i1) {
 hw.module @Wire() {
   sv.initial {
     // expected-error @+1 {{'sv.wire' op must not be in a procedural region}}
-    %wire = sv.wire : !hw.inout<i1>
+    %wire = sv.wire : !sv.net<i1>
   }
 }
 
@@ -231,18 +235,18 @@ hw.module @test() {
 // -----
 
 hw.module @part_select1() {
-  %selWire = sv.wire : !hw.inout<i10>
+  %selWire = sv.wire : !sv.net<i10>
   %c2 = hw.constant 2 : i3
   // expected-error @+1 {{slice width should not be greater than input width}}
-  %xx1 = sv.indexed_part_select_inout %selWire[%c2:11] :  !hw.inout<i10>, i3
+  %xx1 = sv.indexed_part_select_inout %selWire[%c2:11] :  !sv.net<i10>, i3
 }
 
 // -----
 
 hw.module @part_select1() {
-  %selWire = sv.wire : !hw.inout<i10>
+  %selWire = sv.wire : !sv.net<i10>
   %c2 = hw.constant 2 : i3
-  %r1 = sv.read_inout %selWire : !hw.inout<i10>
+  %r1 = sv.read_inout %selWire : !sv.net<i10>
   // expected-error @+1 {{slice width should not be greater than input width}}
   %c = sv.indexed_part_select %r1[%c2 : 20] : i10,i3
 }
@@ -379,4 +383,12 @@ hw.module @ConcatStrNoOperands(out o: i1) {
   %cat = sv.concat_str () : !hw.string
   %0 = sv.system "test$plusargs"(%cat) : (!hw.string) -> i1
   hw.output %0 : i1
+}
+
+// -----
+hw.module @XMRAssignToVar(in %a : i23) {
+  // expected-note @+1 {{prior use here}}
+  %xmr = sv.xmr isRooted x,y,z : !sv.var<i23>
+  // expected-error @+1 {{expects different type than prior uses}}
+  sv.assign %xmr, %a : i23
 }

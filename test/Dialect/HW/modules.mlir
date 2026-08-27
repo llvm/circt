@@ -28,8 +28,10 @@ hw.module @A(in %d: i1, inout %e: i1, out "": i1, out "": i1) {
   %r1, %r2 = hw.instance "b1" @B(a: %d: i1) -> (nameOfPortInSV: i1, "": i1)
   // Instantiate @C with a public symbol on the instance
   %f, %g = hw.instance "c1" sym @E @C(nameOfPortInSV: %d: i1) -> ("": i1, "": i1)
+  // Bridge the inout port to a net before assigning
+  %e_net = sv.net.from_inout %e : !hw.inout<i1> -> !sv.net<i1>
   // Connect the inout port with %f
-  sv.assign %e, %f : i1
+  sv.assign %e_net, %f : i1
   // Output values
   hw.output %g, %r1 : i1, i1
 }

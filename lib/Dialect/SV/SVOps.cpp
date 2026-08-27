@@ -356,21 +356,46 @@ LogicalResult LocalParamOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// RegOp
+// VarOp
 //===----------------------------------------------------------------------===//
 
+static ParseResult parseNetAssignTypes(OpAsmParser &p, mlir::Type &destType,
+                                       mlir::Type &srcType) {
+  if (p.parseType(srcType))
+    return failure();
+  destType = NetType::get(srcType);
+  return success();
+}
+
+static void printNetAssignTypes(OpAsmPrinter &p, Operation *op,
+                                mlir::Type destType, mlir::Type srcType) {
+  p.printType(srcType);
+}
+
+static ParseResult parseVarAssignTypes(OpAsmParser &p, mlir::Type &destType,
+                                       mlir::Type &srcType) {
+  if (p.parseType(srcType))
+    return failure();
+  destType = VarType::get(srcType);
+  return success();
+}
+
+static void printVarAssignTypes(OpAsmPrinter &p, Operation *op,
+                                mlir::Type destType, mlir::Type srcType) {
+  p.printType(srcType);
+}
+
 static ParseResult
-parseImplicitInitType(OpAsmParser &p, mlir::Type regType,
+parseImplicitInitType(OpAsmParser &p, mlir::Type varType,
                       std::optional<OpAsmParser::UnresolvedOperand> &initValue,
                       mlir::Type &initType) {
   if (!initValue.has_value())
     return success();
 
-  hw::InOutType ioType = dyn_cast<hw::InOutType>(regType);
-  if (!ioType)
-    return p.emitError(p.getCurrentLocation(), "expected inout type for reg");
-
-  initType = ioType.getElementType();
+  initType = getLvalueElementType(varType);
+  if (!initType)
+    return p.emitError(p.getCurrentLocation(),
+                       "expected SV lvalue type for variable");
   return success();
 }
 
@@ -378,81 +403,78 @@ static void printImplicitInitType(OpAsmPrinter &p, Operation *op,
                                   mlir::Type regType, mlir::Value initValue,
                                   mlir::Type initType) {}
 
-void RegOp::build(OpBuilder &builder, OperationState &odsState,
+void VarOp::build(OpBuilder &builder, OperationState &odsState,
                   Type elementType, StringAttr name, hw::InnerSymAttr innerSym,
-                  mlir::Value initValue) {
+                  mlir::Value initValue, SVVarKeywordAttr keyword) {
   if (!name)
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
                           innerSym);
-  odsState.addTypes(hw::InOutType::get(elementType));
+  if (keyword)
+    odsState.addAttribute("keyword", keyword);
+  odsState.addTypes(VarType::get(elementType));
   if (initValue)
     odsState.addOperands(initValue);
 }
 
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
-void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void VarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
   if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
 
-std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
+std::optional<size_t> VarOp::getTargetResultIndex() { return 0; }
 
-// If this reg is only written to, delete the reg and all writers.
-LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
+// If this variable is only written to, delete the variable and all writers.
+LogicalResult VarOp::canonicalize(VarOp op, PatternRewriter &rewriter) {
   // Block if op has SV attributes.
   if (hasSVAttributes(op))
     return failure();
 
-  // If the reg has a symbol, then we can't delete it.
+  // If the variable has a symbol, then we can't delete it.
   if (op.getInnerSymAttr())
     return failure();
-  // Check that all operations on the wire are sv.assigns. All other wire
+  // Check that all operations on the variable are assignments. All other
   // operations will have been handled by other canonicalization.
   for (auto *user : op.getResult().getUsers())
-    if (!isa<AssignOp>(user))
+    if (!isa<AssignOp, BPAssignOp, PAssignOp>(user))
       return failure();
 
-  // Remove all uses of the wire.
+  // Remove all uses of the variable.
   for (auto *user : llvm::make_early_inc_range(op.getResult().getUsers()))
     rewriter.eraseOp(user);
 
-  // Remove the wire.
+  // Remove the variable.
   rewriter.eraseOp(op);
   return success();
 }
 
 //===----------------------------------------------------------------------===//
-// LogicOp
+// NetFromInOutOp / InOutFromNetOp folds
 //===----------------------------------------------------------------------===//
 
-void LogicOp::build(OpBuilder &builder, OperationState &odsState,
-                    Type elementType, StringAttr name,
-                    hw::InnerSymAttr innerSym) {
-  if (!name)
-    name = builder.getStringAttr("");
-  odsState.addAttribute("name", name);
-  if (innerSym)
-    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
-                          innerSym);
-  odsState.addTypes(hw::InOutType::get(elementType));
+OpFoldResult NetFromInOutOp::fold(FoldAdaptor adaptor) {
+  // sv.net.from_inout(sv.inout.from_net(x)) -> x
+  if (auto inoutFromNet = getInput().getDefiningOp<InOutFromNetOp>())
+    return inoutFromNet.getInput();
+  return {};
 }
 
-/// Suggest a name for each result value based on the saved result names
-/// attribute.
-void LogicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the logic has an optional 'name' attribute, use it.
-  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
-  if (!nameAttr.getValue().empty())
-    setNameFn(getResult(), nameAttr.getValue());
-}
+//===----------------------------------------------------------------------===//
+// InOutFromNetOp folds
+//===----------------------------------------------------------------------===//
 
-std::optional<size_t> LogicOp::getTargetResultIndex() { return 0; }
+OpFoldResult InOutFromNetOp::fold(FoldAdaptor adaptor) {
+  // sv.inout.from_net(sv.net.from_inout(x)) -> x
+  if (auto netFromInOut = getInput().getDefiningOp<NetFromInOutOp>())
+    return netFromInOut.getInput();
+  return {};
+}
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -1365,7 +1387,7 @@ LogicalResult BPAssignOp::verify() {
   if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
-        "to use a variable type, e.g., sv.reg?)");
+        "to use a variable type, e.g., sv.var?)");
   return success();
 }
 
@@ -1373,7 +1395,7 @@ LogicalResult PAssignOp::verify() {
   if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
-        "to use a variable type, e.g., sv.reg?)");
+        "to use a variable type, e.g., sv.var?)");
   return success();
 }
 
@@ -1763,7 +1785,7 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
                           innerSym);
 
   odsState.addAttribute("name", name);
-  odsState.addTypes(InOutType::get(elementType));
+  odsState.addTypes(NetType::get(elementType));
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -1818,9 +1840,9 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     // If no write and only reads, then replace with ZOp.
     // SV 6.6: "If no driver is connected to a net, its
     // value shall be high-impedance (z) unless the net is a trireg"
-    connected = ConstantZOp::create(
-        rewriter, wire.getLoc(),
-        cast<InOutType>(wire.getResult().getType()).getElementType());
+    connected =
+        ConstantZOp::create(rewriter, wire.getLoc(),
+                            getLvalueElementType(wire.getResult().getType()));
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
     connected = write.getSrc();
   else
@@ -1852,12 +1874,14 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
 // A helper function to infer a return type of IndexedPartSelectInOutOp.
 static Type getElementTypeOfWidth(Type type, int32_t width) {
-  auto elemTy = cast<hw::InOutType>(type).getElementType();
+  auto elemTy = getLvalueElementType(type);
   if (isa<IntegerType>(elemTy))
-    return hw::InOutType::get(IntegerType::get(type.getContext(), width));
+    return getLvalueOfSameCategory(type,
+                                   IntegerType::get(type.getContext(), width));
   if (isa<hw::ArrayType>(elemTy))
-    return hw::InOutType::get(hw::ArrayType::get(
-        cast<hw::ArrayType>(elemTy).getElementType(), width));
+    return getLvalueOfSameCategory(
+        type, hw::ArrayType::get(cast<hw::ArrayType>(elemTy).getElementType(),
+                                 width));
   return {};
 }
 
@@ -1867,22 +1891,31 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto width = adaptor.getWidthAttr();
-  if (!width)
+  if (!width || operands.empty())
     return failure();
 
-  auto typ = getElementTypeOfWidth(operands[0].getType(),
-                                   width.getValue().getZExtValue());
-  if (!typ)
+  Type inputType = operands[0].getType();
+  if (!inputType)
     return failure();
-  results.push_back(typ);
+
+  Type elemType = getLvalueElementType(inputType);
+  if (!elemType)
+    return failure();
+
+  Type resultType =
+      getElementTypeOfWidth(inputType, width.getValue().getZExtValue());
+  if (!resultType)
+    return failure();
+
+  results.push_back(resultType);
   return success();
 }
 
 LogicalResult IndexedPartSelectInOutOp::verify() {
   unsigned inputWidth = 0, resultWidth = 0;
   auto opWidth = getWidth();
-  auto inputElemTy = cast<InOutType>(getInput().getType()).getElementType();
-  auto resultElemTy = cast<InOutType>(getType()).getElementType();
+  auto inputElemTy = getLvalueElementType(getInput().getType());
+  auto resultElemTy = getLvalueElementType(getType());
   if (auto i = dyn_cast<IntegerType>(inputElemTy))
     inputWidth = i.getWidth();
   else if (auto i = hw::type_cast<hw::ArrayType>(inputElemTy))
@@ -1952,19 +1985,40 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
   auto field = adaptor.getFieldAttr();
   if (!field)
     return failure();
+  auto lvalueType = operands[0].getType();
   auto structType =
-      hw::type_cast<hw::StructType>(getInOutElementType(operands[0].getType()));
+      hw::type_cast<hw::StructType>(getLvalueElementType(lvalueType));
   auto resultType = structType.getFieldType(field);
   if (!resultType)
     return failure();
-
-  results.push_back(hw::InOutType::get(resultType));
+  results.push_back(getLvalueOfSameCategory(lvalueType, resultType));
   return success();
 }
 
 //===----------------------------------------------------------------------===//
 // Other ops.
 //===----------------------------------------------------------------------===//
+
+static bool isIllegalVariableForceTarget(Value target) {
+  auto *projection = target.getDefiningOp();
+  if (!isa_and_nonnull<ArrayIndexInOutOp, IndexedPartSelectInOutOp>(projection))
+    return false;
+  return isSVVar(projection->getOperand(0).getType());
+}
+
+LogicalResult ForceOp::verify() {
+  if (isIllegalVariableForceTarget(getDest()))
+    return emitOpError(
+        "cannot force a memory word or bit/part-select of a variable");
+  return success();
+}
+
+LogicalResult ReleaseOp::verify() {
+  if (isIllegalVariableForceTarget(getDest()))
+    return emitOpError(
+        "cannot release a memory word or bit/part-select of a variable");
+  return success();
+}
 
 LogicalResult AliasOp::verify() {
   // Must have at least two operands.

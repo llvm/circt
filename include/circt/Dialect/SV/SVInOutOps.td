@@ -18,6 +18,7 @@ include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVDialect.td"
+include "circt/Dialect/SV/SVEnums.td"
 include "circt/Dialect/SV/SVTypes.td"
 include "circt/Support/ProceduralRegionTrait.td"
 include "circt/Types.td"
@@ -36,7 +37,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
     }];
 
   let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs InOutType:$result);
+  let results = (outs SVNetType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -57,31 +58,33 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return llvm::cast<InOutType>(getResult().getType()).getElementType();
+      return llvm::cast<NetType>(getResult().getType()).getElementType();
     }
   }];
 }
 
-def RegOp : SVOp<"reg", [
-          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-          DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
-  let summary = "Define a new `reg` in SystemVerilog";
-   let description = [{
-     Declare a SystemVerilog Variable Declaration of 'reg' type.
-     See SV Spec 6.8, pp100.
-   }];
+def VarOp : SVOp<"var", [
+      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
+  let summary = "Define a new SystemVerilog variable";
+  let description = [{
+    Declare a SystemVerilog variable. The optional keyword controls whether
+    the declaration is emitted as `reg`, `logic`, or without a keyword.
+  }];
   let arguments = (ins
     StrAttr:$name,
     Optional<AnyType>:$init,
+    OptionalAttr<SVVarKeywordAttr>:$keyword,
     OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs InOutType:$result);
+  let results = (outs SVVarType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                     CArg<"StringAttr", "StringAttr()">:$name,
                     CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
-                    CArg<"mlir::Value", "{}">:$init)>
+                    CArg<"mlir::Value", "{}">:$init,
+                    CArg<"SVVarKeywordAttr", "{}">:$keyword)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
@@ -94,7 +97,7 @@ def RegOp : SVOp<"reg", [
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return llvm::cast<InOutType>(getResult().getType()).getElementType();
+      return llvm::cast<VarType>(getResult().getType()).getElementType();
     }
   }];
 }
@@ -116,7 +119,7 @@ def XMROp : SVOp<"xmr", []> {
     path has public visibility so paths are not invalidated.
   }];
   let arguments = (ins UnitAttr:$isRooted, StrArrayAttr:$path, StrAttr:$terminal);
-  let results = (outs InOutType:$result);
+  let results = (outs SVLvalueType:$result);
   let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` qualified(type($result))";
 }
 
@@ -142,7 +145,7 @@ def XMRRefOp : SVOp<"xmr.ref", [
     ins FlatSymbolRefAttr:$ref,
     DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix
   );
-  let results = (outs InOutType:$result);
+  let results = (outs SVLvalueType:$result);
   let assemblyFormat = [{
     $ref ( $verbatimSuffix^ )? attr-dict `:` qualified(type($result))
   }];
@@ -154,32 +157,52 @@ def XMRRefOp : SVOp<"xmr.ref", [
 
 def ReadInOutOp
  : SVOp<"read_inout",
-        [Pure, InOutElementConstraint<"result", "input">]> {
+        [Pure, SVLvalueElementConstraint<"result", "input">]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
-  let arguments = (ins InOutType:$input);
+  let arguments = (ins SVLvalueType:$input);
   let results = (outs HWValueType:$result);
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
-def InOutArrayType
-  : Type<CPred<"getAnyHWArrayElementType(getInOutElementType($_self)) "
-                        "!= Type()">,
-         "an inout type with array element", "::circt::hw::InOutType">;
+def NetFromInOutOp : SVOp<"net.from_inout", [
+    Pure, HWInOutToSVNetConstraint<"input", "result">]> {
+  let summary = "View an HW inout port as an SV net";
+  let arguments = (ins InOutType:$input);
+  let results = (outs SVNetType:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `->` "
+                       "qualified(type($result))";
+}
 
-class InOutIndexConstraint<string value, string inoutValue>
-  : TypesMatchWith<"type should be element of inout type",
-                   inoutValue, value,
-                   "InOutType::get(getAnyHWArrayElementType("
-                                            "getInOutElementType($_self)))">;
+def InOutFromNetOp : SVOp<"inout.from_net", [
+    Pure, SVNetToHWInOutConstraint<"input", "result">]> {
+  let summary = "View an SV net as an HW inout port";
+  let arguments = (ins SVNetType:$input);
+  let results = (outs InOutType:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `->` "
+                       "qualified(type($result))";
+}
+
+def SVLvalueArrayType
+  : Type<CPred<"getAnyHWArrayElementType(sv::getLvalueElementType($_self)) "
+                        "!= Type()">,
+         "an SV lvalue type with array element">;
+
+class SVLvalueIndexConstraint<string input, string result>
+  : TypesMatchWith<"result should preserve SV lvalue category", input, result,
+                   "sv::getLvalueOfSameCategory($_self, "
+                   "getAnyHWArrayElementType("
+                   "sv::getLvalueElementType($_self)))">;
 
 def ArrayIndexInOutOp
  : SVOp<"array_index_inout",
-        [Pure, InOutIndexConstraint<"result", "input">]> {
+        [Pure, SVLvalueIndexConstraint<"input", "result">]> {
   let summary = "Index an inout memory to produce an inout element";
   let description = "See SV Spec 11.5.2.";
-  let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
-  let results = (outs InOutType:$result);
+  let arguments = (ins SVLvalueArrayType:$input, HWIntegerType:$index);
+  let results = (outs SVLvalueType:$result);
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 }
@@ -194,9 +217,9 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
                 " then part select decrements starting from $base."
                 "See SV Spec 11.5.1.";
 
-  let arguments = (ins InOutType:$input, HWIntegerType:$base, I32Attr:$width,
+  let arguments = (ins SVLvalueType:$input, HWIntegerType:$base, I32Attr:$width,
                       UnitAttr:$decrement);
-  let results = (outs InOutType:$result);
+  let results = (outs SVLvalueType:$result);
 
   let hasVerifier = 1;
 
@@ -216,17 +239,18 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
                         " attr-dict `:` qualified(type($input)) `,` qualified(type($base))";
 }
 
-def InOutStructType
-  : Type<CPred<"circt::hw::type_isa_and_nonnull<hw::StructType>(getInOutElementType($_self))">,
-         "an inout type with struct field", "::circt::hw::InOutType">;
+def SVLvalueStructType
+  : Type<CPred<"circt::hw::type_isa_and_nonnull<hw::StructType>("
+               "sv::getLvalueElementType($_self))">,
+         "an SV lvalue type with struct field">;
 
 def StructFieldInOutOp : SVOp<"struct_field_inout",
                               [Pure, InferTypeOpInterface]> {
   let summary = "Create an subfield inout memory to produce an inout element.";
   let description = "See SV Spec 7.2.";
 
-  let arguments = (ins InOutStructType:$input, StrAttr:$field);
-  let results = (outs InOutType:$result);
+  let arguments = (ins SVLvalueStructType:$input, StrAttr:$field);
+  let results = (outs SVLvalueType:$result);
 
   let assemblyFormat =
     "$input `[` $field `]` attr-dict `:` qualified(type($input))";
@@ -242,41 +266,6 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
                                           SmallVectorImpl<Type> &results);
   }];
 
-}
-
-def LogicOp : SVOp<"logic", [
-      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
-  let summary = "Define a logic";
-  let description = [{
-    Declare a SystemVerilog Variable Declaration of 'logic' type.
-    See SV Spec 6.8, pp100.
-    }];
-
-  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs InOutType:$result);
-
-  let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilder<(ins "::mlir::Type":$elementType,
-                   CArg<"StringAttr", "StringAttr()">:$name,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
-    OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
-      return build($_builder, $_state, elementType,
-                   $_builder.getStringAttr(name));
-    }]>
-  ];
-
-  let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
-    `:` qualified(type($result))
-  }];
-
-  let extraClassDeclaration = [{
-    Type getElementType() {
-      return llvm::cast<InOutType>(getResult().getType()).getElementType();
-    }
-  }];
 }
 
 #endif // CIRCT_DIALECT_SV_SVINOUTOPS_TD

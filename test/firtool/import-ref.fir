@@ -70,7 +70,7 @@ circuit Inner:
     reg r : UInt<32>, clock
     define read = probe(r)
     define write = rwprobe(r)
-    ; CHECK: reg  [31:0] [[REG:.+]];
+    ; CHECK: logic  [31:0] [[REG:.+]];
 
 ; CHECK-LABEL: FILE "ref_Inner.sv"
 ; CHECK-EMPTY:

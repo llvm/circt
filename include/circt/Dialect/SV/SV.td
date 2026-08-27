@@ -16,6 +16,7 @@
 include "circt/Dialect/SV/SVDialect.td"
 include "circt/Dialect/SV/SVAttributes.td"
 include "circt/Dialect/SV/SVEnums.td"
+include "circt/Dialect/SV/SVTypesImpl.td"
 include "circt/Dialect/SV/SVTypes.td"
 include "circt/Dialect/SV/SVExpressions.td"
 include "circt/Dialect/SV/SVInOutOps.td"

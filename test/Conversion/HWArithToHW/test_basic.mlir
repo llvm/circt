@@ -349,10 +349,10 @@ hw.module @backedges() {
 // -----
 
 // CHECK-LABEL:   hw.module @wires() {
-// CHECK:           %[[VAL_0:.*]] = sv.wire  : !hw.inout<i2>
-// CHECK:           %[[VAL_1:.*]] = sv.reg  : !hw.inout<i2>
-// CHECK:           %[[VAL_2:.*]] = sv.read_inout %[[VAL_0]] : !hw.inout<i2>
-// CHECK:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_1]] : !hw.inout<i2>
+// CHECK:           %[[VAL_0:.*]] = sv.wire  : !sv.net<i2>
+// CHECK:           %[[VAL_1:.*]] = sv.wire  : !sv.net<i2>
+// CHECK:           %[[VAL_2:.*]] = sv.read_inout %[[VAL_0]] : !sv.net<i2>
+// CHECK:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_1]] : !sv.net<i2>
 // CHECK:           %[[VAL_4:.*]] = comb.icmp eq %[[VAL_3]], %[[VAL_2]] : i2
 // CHECK:           %[[VAL_5:.*]] = hw.constant -2 : i2
 // CHECK:           sv.assign %[[VAL_0]], %[[VAL_5]] : i2
@@ -360,10 +360,10 @@ hw.module @backedges() {
 // CHECK:           hw.output
 // CHECK:         }
 hw.module @wires () {
-  %r52 = sv.wire  : !hw.inout<ui2>
-  %r53 = sv.reg : !hw.inout<ui2>
-  %0 = sv.read_inout %r52 : !hw.inout<ui2>
-  %1 = sv.read_inout %r53 : !hw.inout<ui2>
+  %r52 = sv.wire  : !sv.net<ui2>
+  %r53 = sv.wire : !sv.net<ui2>
+  %0 = sv.read_inout %r52 : !sv.net<ui2>
+  %1 = sv.read_inout %r53 : !sv.net<ui2>
   %33 = hwarith.cast %0 : (ui2) -> i2
   %34 = hwarith.cast %1 : (ui2) -> i2
   %35 = comb.icmp eq %34, %33 : i2
@@ -397,13 +397,13 @@ hw.module @MMIOAxiReadWriteMux(out cmd : !hw.typealias<@pycde::@MMIOIntermediate
 
 // -----
 // CHECK-LABEL:  hw.module @UnpackedArrayInout() {
-// CHECK-NEXT:     %vec_a = sv.reg : !hw.inout<uarray<16xi32>>
+// CHECK-NEXT:     %vec_a = sv.var : !sv.var<!hw.uarray<16xi32>>
 // CHECK-NEXT:     %c0_i4 = hw.constant 0 : i4
-// CHECK-NEXT:     [[R0:%.+]] = sv.array_index_inout %vec_a[%c0_i4] : !hw.inout<uarray<16xi32>>, i4
-// CHECK-NEXT:     sv.read_inout [[R0]] : !hw.inout<i32>
+// CHECK-NEXT:     [[R0:%.+]] = sv.array_index_inout %vec_a[%c0_i4] : !sv.var<!hw.uarray<16xi32>>, i4
+// CHECK-NEXT:     sv.read_inout [[R0]] : !sv.var<i32>
 hw.module @UnpackedArrayInout() {
-    %vec_a = sv.reg : !hw.inout<uarray<16xsi32>>
+    %vec_a = sv.var : !sv.var<!hw.uarray<16xsi32>>
     %1 = hw.constant 0 : i4
-    %2 = sv.array_index_inout %vec_a[%1] : !hw.inout<uarray<16xsi32>>, i4
-    %3 = sv.read_inout %2 : !hw.inout<si32>
+    %2 = sv.array_index_inout %vec_a[%1] : !sv.var<!hw.uarray<16xsi32>>, i4
+    %3 = sv.read_inout %2 : !sv.var<si32>
 }

@@ -20,8 +20,8 @@ hw.module @Callstack(in %a: i1 loc("")) {
 hw.module @MergedLocations(in %clock: i1, in %flag1 : i1, in %flag2: i1, in %flag3: i1) {
   %true = hw.constant 1 : i1 loc("")
   %false = hw.constant 0 : i1
-  %r1 = sv.reg : !hw.inout<i1>
-  %r2 = sv.reg : !hw.inout<i1>
+  %r1 = sv.var : !sv.var<i1>
+  %r2 = sv.var : !sv.var<i1>
   sv.always posedge %clock {
     
     // Induce FileLineColLoc merging.

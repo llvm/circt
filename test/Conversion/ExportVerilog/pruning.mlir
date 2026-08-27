@@ -4,19 +4,19 @@
 // CHECK:       always_ff @(posedge clk) begin        
 // CHECK-NEXT:  end
 hw.module @zeroWidthPAssign(in %arg0 : i0, in %clk: i1, out out: i0) {
-  %0 = sv.reg  {hw.verilogName = "_GEN"} : !hw.inout<i0>
+  %0 = sv.var  {hw.verilogName = "_GEN"} : !sv.var<i0>
   sv.alwaysff(posedge %clk) {
     sv.passign %0, %arg0 : i0
   }
-  %1 = sv.read_inout %0 : !hw.inout<i0>
+  %1 = sv.read_inout %0 : !sv.var<i0>
   hw.output %1 : i0
 }
 
 // CHECK-LABEL: module zeroWidthLogic(
 // CHECK-NOT: reg
 hw.module @zeroWidthLogic(in %arg0 : i0, in %sel : i1, in %clk : i1, out out : i0) {
-  %r = sv.reg : !hw.inout<i0>
-  %rr = sv.read_inout %r : !hw.inout<i0>
+  %r = sv.var : !sv.var<i0>
+  %rr = sv.read_inout %r : !sv.var<i0>
   %2 = comb.mux %sel, %rr, %arg0 : i0
   hw.output %2 : i0
 }

@@ -350,7 +350,8 @@ hw.module @shl(in %a: i1, out b: i1) {
 
 
 hw.module @inout_0(inout %a: i42, out out: i42) {
-  %aget = sv.read_inout %a: !hw.inout<i42>
+  %a_net = sv.net.from_inout %a : !hw.inout<i42> -> !sv.net<i42>
+  %aget = sv.read_inout %a_net: !sv.net<i42>
   hw.output %aget : i42
 }
 // CHECK-LABEL:  module inout_0(
@@ -390,41 +391,41 @@ hw.module @wires(in %in4: i4, in %in8: i8, out a: i4, out b: i8, out c: i8) {
 
   // Wires.
   // CHECK-NEXT: wire [3:0]            myWire = in4;
-  %myWire = sv.wire : !hw.inout<i4>
+  %myWire = sv.wire : !sv.net<i4>
 
   // Packed arrays.
 
   // CHECK-NEXT: wire [41:0][7:0]      myArray1;
-  %myArray1 = sv.wire : !hw.inout<array<42 x i8>>
+  %myArray1 = sv.wire : !sv.net<!hw.array<42 x i8>>
   // CHECK-NEXT: wire [2:0][41:0][3:0] myWireArray2;
-  %myWireArray2 = sv.wire : !hw.inout<array<3 x array<42 x i4>>>
+  %myWireArray2 = sv.wire : !sv.net<!hw.array<3 x array<42 x i4>>>
 
   // Unpacked arrays, and unpacked arrays of packed arrays.
 
   // CHECK-NEXT: wire [7:0]            myUArray1[0:41];
-  %myUArray1 = sv.wire : !hw.inout<uarray<42 x i8>>
+  %myUArray1 = sv.wire : !sv.net<!hw.uarray<42 x i8>>
 
   // CHECK-NEXT: wire [9:0][7:0]       myUArray2[0:13][0:11];
-  %myUArray2 = sv.wire : !hw.inout<uarray<14 x uarray<12 x array<10 x i8>>>>
+  %myUArray2 = sv.wire : !sv.net<!hw.uarray<14 x uarray<12 x array<10 x i8>>>>
 
   // Wires.
   sv.assign %myWire, %in4 : i4
-  %wireout = sv.read_inout %myWire : !hw.inout<i4>
+  %wireout = sv.read_inout %myWire : !sv.net<i4>
 
   // Packed arrays.
 
-  %subscript = sv.array_index_inout %myArray1[%in4] : !hw.inout<array<42 x i8>>, i4
+  %subscript = sv.array_index_inout %myArray1[%in4] : !sv.net<!hw.array<42 x i8>>, i4
   // CHECK-NEXT: assign myArray1[in4] = in8;
   sv.assign %subscript, %in8 : i8
 
-  %memout1 = sv.read_inout %subscript : !hw.inout<i8>
+  %memout1 = sv.read_inout %subscript : !sv.net<i8>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
-  %subscriptu = sv.array_index_inout %myUArray1[%in4] : !hw.inout<uarray<42 x i8>>, i4
+  %subscriptu = sv.array_index_inout %myUArray1[%in4] : !sv.net<!hw.uarray<42 x i8>>, i4
   // CHECK-NEXT: assign myUArray1[in4] = in8;
   sv.assign %subscriptu, %in8 : i8
 
-  %memout2 = sv.read_inout %subscriptu : !hw.inout<i8>
+  %memout2 = sv.read_inout %subscriptu : !sv.net<i8>
 
   // CHECK-NEXT: assign a = myWire;
   // CHECK-NEXT: assign b = myArray1[in4];
@@ -434,7 +435,7 @@ hw.module @wires(in %in4: i4, in %in8: i8, out a: i4, out b: i8, out c: i8) {
 
 // CHECK-LABEL: module signs
 hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
-  %awire = sv.wire : !hw.inout<i4>
+  %awire = sv.wire : !sv.net<i4>
   // CHECK: wire [3:0] awire;
 
   // CHECK:      assign awire =
@@ -683,7 +684,7 @@ hw.module @longvariadic(in %a: i8, out b: i8) {
 // CHECK-NEXT:    input clock
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
-// CHECK-NEXT:   reg memory_r_en_pipe[0:0];
+// CHECK-NEXT:   logic memory_r_en_pipe[0:0];
 // CHECK:        always_ff @(posedge clock)
 // CHECK-NEXT:     memory_r_en_pipe[1'h0] <= 1'h0;
 // CHECK-NEXT:   initial
@@ -691,8 +692,8 @@ hw.module @longvariadic(in %a: i8, out b: i8) {
 // CHECK-NEXT: endmodule
 hw.module @ArrayLHS(in %clock: i1) {
   %false = hw.constant false
-  %memory_r_en_pipe = sv.reg  : !hw.inout<uarray<1xi1>>
-  %3 = sv.array_index_inout %memory_r_en_pipe[%false] : !hw.inout<uarray<1xi1>>, i1
+  %memory_r_en_pipe = sv.var  : !sv.var<!hw.uarray<1xi1>>
+  %3 = sv.array_index_inout %memory_r_en_pipe[%false] : !sv.var<!hw.uarray<1xi1>>, i1
   sv.alwaysff(posedge %clock)  {
     sv.passign %3, %false : i1
   }
@@ -715,8 +716,8 @@ hw.module @noTemporaryIfReadInOutIsAfterUse(in %clock: i1, in %x: i1) {
   }
 
   // CHECK: end // always_ff @(posedge)
-  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !hw.inout<i1>
-  %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !hw.inout<i1>
+  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !sv.net<i1>
+  %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !sv.net<i1>
 }
 
 // CHECK-LABEL: module largeConstant
@@ -763,7 +764,7 @@ hw.module @StrurctExtractInline(in %a: !hw.struct<v: i1>, out b: i1, out c: i1) 
 hw.module @NoExtraTemporaryWireForAssign(in %a: i2, in %b: i4) {
   // CHECK: wire struct packed {logic [1:0] foo; logic [3:0] bar; } _GEN = '{foo: a, bar: b};
   %0 = hw.struct_create (%a, %b) : !hw.struct<foo: i2, bar: i4>
-  %1 = sv.wire : !hw.inout<!hw.struct<foo: i2, bar: i4>>
+  %1 = sv.wire : !sv.net<!hw.struct<foo: i2, bar: i4>>
   sv.assign %1, %0: !hw.struct<foo: i2, bar: i4>
 }
 
@@ -791,8 +792,8 @@ hw.module @instance_result_reuse_wires(out b: i3) {
   // CHECK-NEXT:  .res (some_wire)
   // CHECK-NEXT:  );
   // CHECK-NEXT:  assign b = some_wire;
-  %some_wire = sv.wire : !hw.inout<i3>
-  %read = sv.read_inout %some_wire : !hw.inout<i3>
+  %some_wire = sv.wire : !sv.net<i3>
+  %read = sv.read_inout %some_wire : !sv.net<i3>
 
   %out1 = hw.instance "b1" @single_result() -> (res: i3)
   sv.assign %some_wire, %out1 : i3
@@ -805,8 +806,8 @@ hw.module @InternalDestMod(in %a: i1, in %b: i3, in %c: i1) {}
 // CHECK-LABEL: module ABC
 hw.module @ABC(in %a: i1, in %b: i2, out c: i4) {
   %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint}
-  %2 = sv.xmr "whatever", "a" : !hw.inout<i1>
-  %3 = sv.read_inout %2: !hw.inout<i1>
+  %2 = sv.xmr "whatever", "a" : !sv.var<i1>
+  %3 = sv.read_inout %2: !sv.var<i1>
   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3, c: %3: i1) -> () {doNotPrint}
   hw.output %1 : i4
 }
@@ -1093,7 +1094,8 @@ hw.module @renameKeyword(in %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: !h
 // CHECK-NEXT:                                                            r4
 // CHECK-NEXT:  );
 hw.module @useRenamedStruct(inout %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: i1, out r2: i1, out r3: !hw.struct<repeat: i1, repeat_0: i1>, out r4: !hw.struct<repeat: i1, repeat_0: i1>) {
-  %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
+  %a_net = sv.net.from_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>> -> !sv.net<!hw.struct<repeat: i1, repeat_0: i1>>
+  %read = sv.read_inout %a_net : !sv.net<!hw.struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
   // CHECK:      renameKeyword inst1 (
@@ -1101,8 +1103,8 @@ hw.module @useRenamedStruct(inout %a: !hw.struct<repeat: i1, repeat_0: i1>, out 
   // CHECK-NEXT:   .r1 (r4)
   // CHECK-NEXT: )
 
-  %0 = sv.struct_field_inout %a["repeat"] : !hw.inout<struct<repeat: i1, repeat_0: i1>>
-  %1 = sv.read_inout %0 : !hw.inout<i1>
+  %0 = sv.struct_field_inout %a_net["repeat"] : !sv.net<!hw.struct<repeat: i1, repeat_0: i1>>
+  %1 = sv.read_inout %0 : !sv.net<i1>
   // CHECK: assign r1 = a.repeat_0;
   %2 = hw.struct_extract %read["repeat_0"] : !hw.struct<repeat: i1, repeat_0: i1>
   // CHECK: assign r2 = a.repeat_0_0
@@ -1165,9 +1167,9 @@ hw.module @addParenthesesToSuccessiveOperators(in %a: i4, in %b: i1, in %c: i4, 
 hw.module @parameters<p1: i42 = 17, p2: i1>(in %arg0: i8, out out: i8) {
   // Local values should not conflict with output or parameter names.
   // CHECK: wire [3:0] p1_0;
-  %p1 = sv.wire : !hw.inout<i4>
+  %p1 = sv.wire : !sv.net<i4>
 
-  %out = sv.wire : !hw.inout<i4>
+  %out = sv.wire : !sv.net<i4>
   // CHECK: wire [3:0] out_0;
   hw.output %arg0 : i8
 }
@@ -1294,7 +1296,7 @@ hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
 
   // Check that the parameter name renamification propagates.
   // CHECK: wire [wire_0 - 1:0] paramWire;
-  %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"wire">>>
+  %paramWire = sv.wire : !sv.net<!hw.int<#hw.param.decl.ref<"wire">>>
 
 }
 
@@ -1388,7 +1390,8 @@ hw.module @ArrayGetInline(in %a: !hw.array<4xstruct<a: i32>>, in %b: !hw.array<4
   // CHECK-NEXT: assign out4 = b[idx_port];
   // CHECK-NEXT: assign out5 = b[idx_port];
   %array_get_idx = hw.array_get %b[%idx] : !hw.array<4xi1>, i2
-  %read = sv.read_inout %idx_port : !hw.inout<i2>
+  %idx_port_net = sv.net.from_inout %idx_port : !hw.inout<i2> -> !sv.net<i2>
+  %read = sv.read_inout %idx_port_net : !sv.net<i2>
   %array_get_idx_port = hw.array_get %b[%read] : !hw.array<4xi1>, i2
   hw.output %y, %array_get_idx, %array_get_idx, %array_get_idx_port, %array_get_idx_port : i32, i1, i1, i1, i1
 }
@@ -1479,7 +1482,7 @@ hw.module @Issue6275(out z: !hw.struct<a: !hw.array<2xstruct<b: i1>>>) {
 
 // CHECK-LABEL: module ArrayInjectStructural(
 hw.module @ArrayInjectStructural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2, out z: !hw.array<4xi42>) {
-  // CHECK: reg [3:0][41:0] [[TMP:.+]];
+  // CHECK: logic [3:0][41:0] [[TMP:.+]];
   // CHECK-NEXT: always_comb begin
   // CHECK-NEXT:   [[TMP]] = a;
   // CHECK-NEXT:   [[TMP]][i] = b;
@@ -1491,8 +1494,8 @@ hw.module @ArrayInjectStructural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2,
 
 // CHECK-LABEL: module ArrayInjectProcedural(
 hw.module @ArrayInjectProcedural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2) {
-  // CHECK: reg [3:0][41:0] z;
-  %z = sv.reg : !hw.inout<array<4xi42>>
+  // CHECK: logic [3:0][41:0] z;
+  %z = sv.var : !sv.var<!hw.array<4xi42>>
   // CHECK-NEXT: always_comb begin
   sv.alwayscomb {
     // CHECK-NEXT: automatic logic [3:0][41:0] [[TMP:.+]];

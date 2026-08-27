@@ -51,10 +51,12 @@ using namespace ExportVerilog;
 bool ExportVerilog::isSimpleReadOrPort(Value v) {
   if (isa<BlockArgument>(v))
     return true;
+  if (isa<hw::InOutType>(v.getType()))
+    return true;
   auto vOp = v.getDefiningOp();
   if (!vOp)
     return false;
-  if (isa<sv::InOutType>(v.getType()) && isa<sv::WireOp>(vOp))
+  if (sv::isSVNet(v.getType()) && isa<sv::WireOp, sv::NetFromInOutOp>(vOp))
     return true;
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
@@ -62,7 +64,8 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
-  return isa<sv::WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
+  return isa<sv::WireOp, sv::VarOp, XMROp, XMRRefOp, sv::NetFromInOutOp>(
+      readSrc);
 }
 
 // Check if the value is deemed worth spilling into a wire.
@@ -119,8 +122,8 @@ static void replacePortWithWire(ImplicitLocOpBuilder &builder, Operation *op,
 
   Value newTarget;
   if (isProcedural) {
-    newTarget = sv::LogicOp::create(builder, result.getType(),
-                                    builder.getStringAttr(name));
+    newTarget = sv::VarOp::create(builder, result.getType(),
+                                  builder.getStringAttr(name));
   } else {
     newTarget = sv::WireOp::create(builder, result.getType(), name);
   }
@@ -237,24 +240,28 @@ static void lowerUsersToTemporaryWire(Operation &op,
   auto createWireForResult = [&](Value result, StringAttr name) {
     Value newWire;
     Type wireElementType = result.getType();
-    bool isResultInOut = false;
+    bool isResultLvalue = false;
 
     // If the result already is an InOut, make sure to not wrap it again
     if (auto inoutType = hw::type_dyn_cast<hw::InOutType>(result.getType())) {
       wireElementType = inoutType.getElementType();
-      isResultInOut = true;
+      isResultLvalue = true;
+    } else if (auto lvalueElementType =
+                   sv::getLvalueElementType(result.getType())) {
+      wireElementType = lvalueElementType;
+      isResultLvalue = true;
     }
 
     // If the op is in a procedural region, use logic op.
     if (isProceduralRegion)
-      newWire = LogicOp::create(builder, wireElementType, name);
+      newWire = sv::VarOp::create(builder, wireElementType, name);
     else
       newWire = sv::WireOp::create(builder, wireElementType, name);
 
     // Replace all uses with newWire. Wrap in ReadInOutOp if required.
     while (!result.use_empty()) {
       OpOperand &use = *result.getUses().begin();
-      if (isResultInOut) {
+      if (isResultLvalue) {
         use.set(newWire);
       } else {
         auto newWireRead = ReadInOutOp::create(builder, newWire);
@@ -267,15 +274,15 @@ static void lowerUsersToTemporaryWire(Operation &op,
     Operation *connect;
     ReadInOutOp resultRead;
 
-    if (isResultInOut)
+    if (isResultLvalue)
       resultRead = ReadInOutOp::create(builder, result);
 
     if (isProceduralRegion)
       connect = BPAssignOp::create(
-          builder, newWire, isResultInOut ? resultRead.getResult() : result);
+          builder, newWire, isResultLvalue ? resultRead.getResult() : result);
     else
       connect = AssignOp::create(
-          builder, newWire, isResultInOut ? resultRead.getResult() : result);
+          builder, newWire, isResultLvalue ? resultRead.getResult() : result);
 
     connect->moveAfter(&op);
     if (resultRead)
@@ -374,10 +381,10 @@ static void lowerAlwaysInlineOperation(Operation *op,
 // Logic ops are emitted as "automatic logic" in procedural regions, but
 // they must be declared at beginning of blocks.
 static std::pair<Block *, Block::iterator>
-findLogicOpInsertionPoint(Operation *op) {
+findVarOpInsertionPoint(Operation *op) {
   // We have to skip `ifdef.procedural` because it is a just macro.
   if (isa<IfDefProceduralOp>(op->getParentOp()))
-    return findLogicOpInsertionPoint(op->getParentOp());
+    return findVarOpInsertionPoint(op->getParentOp());
   return {op->getBlock(), op->getBlock()->begin()};
 }
 
@@ -473,7 +480,7 @@ static Operation *findParentInNonProceduralRegion(Operation *op) {
 /// This function is invoked on side effecting Verilog expressions when we're in
 /// 'disallowLocalVariables' mode for old Verilog clients.  This ensures that
 /// any side effecting expressions are only used by a single BPAssign to a
-/// sv.reg or sv.logic operation.  This ensures that the verilog emitter doesn't
+/// sv.var operation.  This ensures that the verilog emitter doesn't
 /// have to worry about spilling them.
 ///
 /// This returns true if the op was rewritten, false otherwise.
@@ -494,7 +501,7 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   // Scan to the top of the region tree to find out where to insert the reg.
   Operation *parentOp = findParentInNonProceduralRegion(op);
   OpBuilder builder(parentOp);
-  auto reg = RegOp::create(builder, op->getLoc(), opValue.getType());
+  auto reg = sv::VarOp::create(builder, op->getLoc(), opValue.getType());
 
   // Everything using the expr now uses a read_inout of the reg.
   auto value = ReadInOutOp::create(builder, op->getLoc(), reg);
@@ -516,7 +523,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   // never generate a temporary and in fact must always be emitted inline.
   if (isExpressionAlwaysInline(op) &&
       !(isa<sv::ReadInOutOp>(op) ||
-        isa<hw::InOutType>(op->getResult(0).getType())))
+        sv::getLvalueElementType(op->getResult(0).getType())))
     return false;
 
   // Scan to the top of the region tree to find out where to move the op.
@@ -566,7 +573,8 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
   if (op->getNumResults() != 1 ||
-      !isa<InOutType, sv::InterfaceType>(op->getResult(0).getType()))
+      !(sv::getLvalueElementType(op->getResult(0).getType()) ||
+        isa<sv::InterfaceType>(op->getResult(0).getType())))
     return false;
 
   // If all operands (e.g. init value) are constant, it is safe to move
@@ -598,7 +606,7 @@ class EmittedExpressionStateManager
                          EmittedExpressionState> {
 public:
   EmittedExpressionStateManager(const LoweringOptions &options)
-      : options(options){};
+      : options(options) {};
 
   // Get or caluculate an emitted expression state.
   EmittedExpressionState getExpressionState(Value value);
@@ -749,8 +757,8 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // Don't spill wires for inout operations and simple expressions such as read
   // or constant.
   if (op.getNumResults() == 0 ||
-      isa<hw::InOutType>(op.getResult(0).getType()) ||
-      isa<ReadInOutOp, ConstantOp>(op))
+      sv::getLvalueElementType(op.getResult(0).getType()) ||
+      isa<ReadInOutOp, ConstantOp, NetFromInOutOp>(op))
     return false;
 
   // If the operation is only used by an assignment, the op is already spilled
@@ -866,8 +874,8 @@ static void applyWireLowerings(Block &block,
     Value decl;
     if (isProceduralRegion) {
       decl =
-          LogicOp::create(builder, hwWireOp.getType(), hwWireOp.getNameAttr(),
-                          hwWireOp.getInnerSymAttr());
+          sv::VarOp::create(builder, hwWireOp.getType(), hwWireOp.getNameAttr(),
+                            hwWireOp.getInnerSymAttr());
     } else {
       decl = sv::WireOp::create(builder, hwWireOp.getType(),
                                 hwWireOp.getNameAttr(),
@@ -987,7 +995,7 @@ static LogicalResult legalizeHWModule(Block &block,
 
     // If a reg or logic is located in a procedural region, we have to move the
     // op declaration to a valid program point.
-    if (isProceduralRegion && isa<LogicOp, RegOp>(op)) {
+    if (isProceduralRegion && isa<sv::VarOp>(op)) {
       if (options.disallowLocalVariables) {
         // When `disallowLocalVariables` is enabled, "automatic logic" is
         // prohibited so hoist the op to a non-procedural region.
@@ -1001,7 +1009,7 @@ static LogicalResult legalizeHWModule(Block &block,
     if (options.disallowLocalVariables && isVerilogExpression(&op) &&
         isProceduralRegion) {
 
-      // Force any side-effecting expressions in nested regions into a sv.reg
+      // Force any side-effecting expressions in nested regions into a sv.var
       // if we aren't allowing local variable declarations.  The Verilog emitter
       // doesn't want to have to have to know how to synthesize a reg in the
       // case they have to be spilled for whatever reason.
@@ -1077,7 +1085,7 @@ static LogicalResult legalizeHWModule(Block &block,
           cast<hw::StructType>(structCreateOp.getResult().getType());
       bool procedural = op.getParentOp()->hasTrait<ProceduralRegion>();
       if (procedural)
-        wireOp = LogicOp::create(builder, structType);
+        wireOp = sv::VarOp::create(builder, structType);
       else
         wireOp = sv::WireOp::create(builder, structType);
 
@@ -1106,9 +1114,9 @@ static LogicalResult legalizeHWModule(Block &block,
       ImplicitLocOpBuilder builder(op.getLoc(), &op);
       Value decl;
       if (procedural)
-        decl = LogicOp::create(builder, arrayInjectOp.getType());
+        decl = sv::VarOp::create(builder, arrayInjectOp.getType());
       else
-        decl = sv::RegOp::create(builder, arrayInjectOp.getType());
+        decl = sv::VarOp::create(builder, arrayInjectOp.getType());
       for (auto &use : llvm::make_early_inc_range(arrayInjectOp->getUses()))
         use.set(ReadInOutOp::create(builder, decl));
 
@@ -1142,7 +1150,7 @@ static LogicalResult legalizeHWModule(Block &block,
       Value readOp;
       if (auto maybeReadOp =
               op.getOperand(1).getDefiningOp<sv::ReadInOutOp>()) {
-        if (isa_and_nonnull<sv::WireOp, LogicOp>(
+        if (isa_and_nonnull<sv::WireOp, sv::VarOp>(
                 maybeReadOp.getInput().getDefiningOp())) {
           wireOp = maybeReadOp.getInput();
           readOp = maybeReadOp;
@@ -1155,7 +1163,8 @@ static LogicalResult legalizeHWModule(Block &block,
         auto type = op.getOperand(1).getType();
         const auto *name = "_GEN_ARRAY_IDX";
         if (op.getParentOp()->hasTrait<ProceduralRegion>()) {
-          wireOp = LogicOp::create(builder, type, name);
+          wireOp =
+              sv::VarOp::create(builder, type, builder.getStringAttr(name));
           BPAssignOp::create(builder, wireOp, op.getOperand(1));
         } else {
           wireOp = sv::WireOp::create(builder, type, name);
@@ -1276,9 +1285,9 @@ static LogicalResult legalizeHWModule(Block &block,
 
     // This keeps tracks of an insertion point of logic op.
     std::pair<Block *, Block::iterator> logicOpInsertionPoint =
-        findLogicOpInsertionPoint(&block.front());
+        findVarOpInsertionPoint(&block.front());
     for (auto &op : llvm::make_early_inc_range(block)) {
-      if (auto logic = dyn_cast<LogicOp>(&op)) {
+      if (auto logic = dyn_cast<sv::VarOp>(&op)) {
         // If the logic op is already located at the given point, increment the
         // iterator to keep the order of logic operations in the block.
         if (logicOpInsertionPoint.second == logic->getIterator()) {
@@ -1377,12 +1386,37 @@ static void fixUpEmptyModules(hw::HWEmittableModuleLike module) {
   sv::AssignOp::create(builder, module.getLoc(), wire, constant);
 }
 
+static void bridgeInOutPorts(hw::HWEmittableModuleLike module) {
+  Block *body = module.getBodyBlock();
+  if (!body)
+    return;
+
+  ImplicitLocOpBuilder builder(module.getLoc(), body, body->begin());
+
+  for (BlockArgument argument : body->getArguments()) {
+    auto inoutType = dyn_cast<hw::InOutType>(argument.getType());
+    if (!inoutType)
+      continue;
+
+    bool hasBridge = llvm::any_of(argument.getUsers(), [](Operation *user) {
+      return isa<sv::NetFromInOutOp>(user);
+    });
+    if (hasBridge)
+      continue;
+
+    sv::NetFromInOutOp::create(
+        builder, sv::NetType::get(inoutType.getElementType()), argument);
+  }
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
                                              const LoweringOptions &options) {
   // If the module body is empty, just skip it.
   if (!module.getBodyBlock())
     return success();
+
+  bridgeInOutPorts(module);
 
   // Zero-valued logic pruning.
   pruneZeroValuedLogic(module);

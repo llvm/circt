@@ -15,19 +15,19 @@ hw.module @divide_by_0(in %clock: !seq.clock, out by_2: !seq.clock) {
 // CHECK-LABEL: @divide_by_2
 hw.module @divide_by_2(in %clock: !seq.clock, out by_2: !seq.clock) {
 
-  // CHECK: [[REGISTER:%.+]] = sv.reg
+  // CHECK: [[REGISTER:%.+]] = sv.var
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[READ_ALWAYS:%.+]] = sv.read_inout [[REGISTER]] : !hw.inout<i1>
+  // CHECK:   [[READ_ALWAYS:%.+]] = sv.read_inout [[REGISTER]] : !sv.var<i1>
   // CHECK:   [[INVERTED:%.+]] = comb.xor [[READ_ALWAYS]], %true : i1
   // CHECK:   sv.bpassign [[REGISTER]], [[INVERTED]] : i1
   // CHECK: }
-  // CHECK: [[READ_OUTPUT:%.+]] = sv.read_inout [[REGISTER]] : !hw.inout<i1>
+  // CHECK: [[READ_OUTPUT:%.+]] = sv.read_inout [[REGISTER]] : !sv.var<i1>
   // CHECK: sv.initial {
   // CHECK:   sv.bpassign [[REGISTER]], %false : i1
   // CHECK: }
   // CHECK: hw.output [[READ_OUTPUT]] : i1
 
-  // VERILOG: reg clock_out_0;
+  // VERILOG: logic clock_out_0;
   // VERILOG: always @(posedge clock)
   // VERILOG:   clock_out_0 = ~clock_out_0;
   // VERILOG: assign by_2 = clock_out_0;
@@ -39,27 +39,27 @@ hw.module @divide_by_2(in %clock: !seq.clock, out by_2: !seq.clock) {
 // VERILOG-LABEL: module divide_by_8
 // CHECK-LABEL: @divide_by_8
 hw.module @divide_by_8(in %clock: !seq.clock, out by_8: !seq.clock) {
-  // CHECK: [[REGISTER_0:%.+]] = sv.reg : !hw.inout<i1>
+  // CHECK: [[REGISTER_0:%.+]] = sv.var : !sv.var<i1>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[REGISTER_0_READ:%.+]] = sv.read_inout [[REGISTER_0]] : !hw.inout<i1>
+  // CHECK:   [[REGISTER_0_READ:%.+]] = sv.read_inout [[REGISTER_0]] : !sv.var<i1>
   // CHECK:   [[INVERTED_0:%.+]] = comb.xor [[REGISTER_0_READ]], %true : i1
   // CHECK:   sv.bpassign [[REGISTER_0]], [[INVERTED_0]] : i1
   // CHECK: }
-  // CHECK: [[REGISTER_0_OUT:%.+]] = sv.read_inout [[REGISTER_0]] : !hw.inout<i1>
-  // CHECK: [[REGISTER_1:%.+]] = sv.reg : !hw.inout<i1>
+  // CHECK: [[REGISTER_0_OUT:%.+]] = sv.read_inout [[REGISTER_0]] : !sv.var<i1>
+  // CHECK: [[REGISTER_1:%.+]] = sv.var : !sv.var<i1>
   // CHECK: sv.always posedge [[REGISTER_0_OUT]] {
-  // CHECK:   [[REGISTER_1_READ:%.+]] = sv.read_inout [[REGISTER_1]] : !hw.inout<i1>
+  // CHECK:   [[REGISTER_1_READ:%.+]] = sv.read_inout [[REGISTER_1]] : !sv.var<i1>
   // CHECK:   [[INVERTED_1:%.+]] = comb.xor [[REGISTER_1_READ]], %true : i1
   // CHECK:   sv.bpassign [[REGISTER_1]], [[INVERTED_1]] : i1
   // CHECK: }
-  // CHECK: [[REGISTER_1_OUT:%.+]] = sv.read_inout [[REGISTER_1]] : !hw.inout<i1>
-  // CHECK: [[REGISTER_2:%.+]] = sv.reg : !hw.inout<i1>
+  // CHECK: [[REGISTER_1_OUT:%.+]] = sv.read_inout [[REGISTER_1]] : !sv.var<i1>
+  // CHECK: [[REGISTER_2:%.+]] = sv.var : !sv.var<i1>
   // CHECK: sv.always posedge [[REGISTER_1_OUT]] {
-  // CHECK:   [[REGISTER_2_READ:%.+]] = sv.read_inout [[REGISTER_2]] : !hw.inout<i1>
+  // CHECK:   [[REGISTER_2_READ:%.+]] = sv.read_inout [[REGISTER_2]] : !sv.var<i1>
   // CHECK:   [[INVERTED_2:%.+]] = comb.xor [[REGISTER_2_READ]], %true : i1
   // CHECK:   sv.bpassign [[REGISTER_2]], [[INVERTED_2]] : i1
   // CHECK: }
-  // CHECK: [[REGISTER_2_OUT:%.+]] = sv.read_inout [[REGISTER_2]] : !hw.inout<i1>
+  // CHECK: [[REGISTER_2_OUT:%.+]] = sv.read_inout [[REGISTER_2]] : !sv.var<i1>
   // CHECK: sv.initial {
   // CHECK:   sv.bpassign [[REGISTER_0]], %false : i1
   // CHECK:   sv.bpassign [[REGISTER_1]], %false : i1
@@ -67,13 +67,13 @@ hw.module @divide_by_8(in %clock: !seq.clock, out by_8: !seq.clock) {
   // CHECK: }
   // CHECK: hw.output [[REGISTER_2_OUT]] : i1
 
-  // VERILOG: reg clock_out_0;
+  // VERILOG: logic clock_out_0;
   // VERILOG: always @(posedge clock)
   // VERILOG:   clock_out_0 = ~clock_out_0;
-  // VERILOG: reg clock_out_1;
+  // VERILOG: logic clock_out_1;
   // VERILOG: always @(posedge clock_out_0)
   // VERILOG:   clock_out_1 = ~clock_out_1;
-  // VERILOG: reg clock_out_2;
+  // VERILOG: logic clock_out_2;
   // VERILOG: always @(posedge clock_out_1)
   // VERILOG:   clock_out_2 = ~clock_out_2;
   // VERILOG: initial begin
@@ -86,4 +86,3 @@ hw.module @divide_by_8(in %clock: !seq.clock, out by_8: !seq.clock) {
   %by_8 = seq.clock_div %clock by 3
   hw.output %by_8 : !seq.clock
 }
-

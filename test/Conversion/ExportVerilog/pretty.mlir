@@ -165,8 +165,8 @@ hw.module @MuxChain(in %a_0: i1, in %a_1: i1, in %a_2: i1, in %c_0: i1, in %c_1:
 hw.module @svattrs() {
 //      CHECK:  (* dont_merge, dont_retime = true, foo0 = bar0, foo1 = bar1, foo2 = bar2, foo3 = bar3,
 // CHECK-NEXT:     foo4 = bar4, foo5 = bar5, foo6 = bar6 *)
-// CHECK-NEXT:  reg [9:0] reg0;{{.*}}
-  %reg0 = sv.reg {
+// CHECK-NEXT:  logic [9:0] reg0;{{.*}}
+  %reg0 = sv.var {
     sv.attributes = [
       #sv.attribute<"dont_merge">,
       #sv.attribute<"dont_retime" ="true">,
@@ -177,15 +177,15 @@ hw.module @svattrs() {
       #sv.attribute<"foo4"="bar4">,
       #sv.attribute<"foo5"="bar5">,
       #sv.attribute<"foo6"="bar6">
-   ]} : !hw.inout<i10>
+   ]} : !sv.var<i10>
 
 //      CHECK:  (* start *)
 // CHECK-NEXT:  /* foo0 = bar0, foo1 = bar1, foo2 = bar2, foo3 = bar3, foo4 = bar4, foo5 = bar5,
 // CHECK-NEXT:     foo6 = bar6 */
 // CHECK-NEXT:  (* foo0 = bar0, foo1 = bar1, foo2 = bar2, foo3 = bar3, foo4 = bar4, foo5 = bar5,
 // CHECK-NEXT:     foo6 = bar6 *)
-// CHECK-NEXT:  reg [9:0] reg1;{{.*}}
-  %reg1 = sv.reg {
+// CHECK-NEXT:  logic [9:0] reg1;{{.*}}
+  %reg1 = sv.var {
     sv.attributes = [
       #sv.attribute<"start">,
       #sv.attribute<"foo0"="bar0", emitAsComment>,
@@ -202,17 +202,17 @@ hw.module @svattrs() {
       #sv.attribute<"foo4"="bar4">,
       #sv.attribute<"foo5"="bar5">,
       #sv.attribute<"foo6"="bar6">
-   ]} : !hw.inout<i10>
+   ]} : !sv.var<i10>
 
 // Put containers on same line if they fit!
 //      CHECK:  (* start *) /* comment */ (* end *)
-// CHECK-NEXT:  reg [9:0] reg2;{{.*}}
-  %reg2 = sv.reg {
+// CHECK-NEXT:  logic [9:0] reg2;{{.*}}
+  %reg2 = sv.var {
     sv.attributes = [
       #sv.attribute<"start">,
       #sv.attribute<"comment", emitAsComment>,
       #sv.attribute<"end">
-   ]} : !hw.inout<i10>
+   ]} : !sv.var<i10>
 
 // Check behavior where some fit and some don't:
 // (notably don't glue '(* end *)' after the comment container)
@@ -220,8 +220,8 @@ hw.module @svattrs() {
 // CHECK-NEXT:  /* foo0 = bar0, foo1 = bar1, foo2 = bar2, foo3 = bar3, foo4 = bar4, foo5 = bar5,
 // CHECK-NEXT:     foo6 = bar6 */
 // CHECK-NEXT:  (* end *)
-// CHECK-NEXT:  reg [9:0] reg3;{{.*}}
-  %reg3 = sv.reg {
+// CHECK-NEXT:  logic [9:0] reg3;{{.*}}
+  %reg3 = sv.var {
     sv.attributes = [
       #sv.attribute<"start">,
       #sv.attribute<"foo0"="bar0", emitAsComment>,
@@ -232,7 +232,7 @@ hw.module @svattrs() {
       #sv.attribute<"foo5"="bar5", emitAsComment>,
       #sv.attribute<"foo6"="bar6", emitAsComment>,
       #sv.attribute<"end">
-   ]} : !hw.inout<i10>
+   ]} : !sv.var<i10>
 }
 
 // -----
@@ -241,7 +241,7 @@ sv.macro.decl @RANDOM
 
 // CHECK-LABEL:module ForStatement{{.*}}
 hw.module @ForStatement(in %aaaaaaaaaaa: i5, in %xxxxxxxxxxxxxxx : i2, in %yyyyyyyyyyyyyyy : i2, in %zzzzzzzzzzzzzzz : i2) {
-  %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
+  %_RANDOM = sv.var : !sv.var<!hw.uarray<3xi32>>
   sv.initial {
     %x_and_y = comb.and %xxxxxxxxxxxxxxx, %yyyyyyyyyyyyyyy : i2
     %x_or_y = comb.or %xxxxxxxxxxxxxxx, %yyyyyyyyyyyyyyy : i2
@@ -257,7 +257,7 @@ hw.module @ForStatement(in %aaaaaaaaaaa: i5, in %xxxxxxxxxxxxxxx : i2, in %yyyyy
     // CHECK-NEXT:    end{{.*}}
     sv.for %iiiiiiiiiiiiiiiiiiiiiiiii = %lowerBound to %upperBound step %step : i2 {
       %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
-      %index = sv.array_index_inout %_RANDOM[%iiiiiiiiiiiiiiiiiiiiiiiii] : !hw.inout<uarray<3xi32>>, i2
+      %index = sv.array_index_inout %_RANDOM[%iiiiiiiiiiiiiiiiiiiiiiiii] : !sv.var<!hw.uarray<3xi32>>, i2
       sv.bpassign %index, %RANDOM : i32
     }
   }
@@ -293,14 +293,14 @@ hw.module @TestCond() {
 // See https://github.com/llvm/circt/pull/6171
 
 // CHECK-LABEL:module Top{{.*}}
-// CHECK-NEXT:  reg        foo;{{.*}}
-// CHECK-NEXT:  reg [63:0] bar;{{.*}}
+// CHECK-NEXT:  logic        foo;{{.*}}
+// CHECK-NEXT:  logic [63:0] bar;{{.*}}
 // CHECK-NEXT:  struct packed {logic dw; logic [3:0] fn; logic [63:0] in; } agg;{{.*}}
 // CHECK-NEXT:endmodule
 hw.module @Top() {
-  %foo = sv.reg : !hw.inout<i1>
-  %bar = sv.reg : !hw.inout<i64>
-  %agg = sv.reg : !hw.inout<struct<dw: i1, fn: i4, in: i64>>
+  %foo = sv.var : !sv.var<i1>
+  %bar = sv.var : !sv.var<i64>
+  %agg = sv.var : !sv.var<!hw.struct<dw: i1, fn: i4, in: i64>>
 }
 
 // -----

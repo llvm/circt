@@ -20,7 +20,7 @@ circuit Foo :
       connect MPORT, write.data
 
       ; CHECK:             module [[memoryModule:[a-zA-Z0-9_]+]](
-      ; CHECK:               reg [7:0] [[memory:[a-zA-Z0-9_]+]][0:31];
+      ; CHECK:               logic [7:0] [[memory:[a-zA-Z0-9_]+]][0:31];
 
       ; INIT_NONE-NOT:       readmem
 

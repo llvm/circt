@@ -42,8 +42,8 @@ hw.module @MultiUseExpr(in %a: i4, out b0: i1) {
 
 module attributes {circt.loweringOptions = "locationInfoStyle=none,emitVerilogLocations"} {
 hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
-  %w = sv.wire : !hw.inout<i4>
-  %q = sv.reg : !hw.inout<i4>
+  %w = sv.wire : !sv.net<i4>
+  %q = sv.var : !sv.var<i4>
   %c1_i4 = hw.constant 1 : i4
   sv.assign %w, %c1_i4 : i4
   sv.always posedge %clock, posedge %reset {
@@ -63,7 +63,7 @@ hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
 // );
 //
 //   wire [3:0] w = 4'h1;
-//   reg  [3:0] q;
+//   logic  [3:0] q;
 //   always @(posedge clock or posedge reset) begin
 //     if (reset)
 //       q <= 4'h1;
@@ -72,8 +72,8 @@ hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
 //   end // always @(posedge, posedge)
 // endmodule
 // CHECK:   hw.module @SimpleConstPrintReset
-// CHECK:     %w = sv.wire {hw.verilogName = "w"} : !hw.inout<i4> loc(#loc49)
-// CHECK:     %q = sv.reg {hw.verilogName = "q"} : !hw.inout<i4>  loc(#loc50)
+// CHECK:     %w = sv.wire {hw.verilogName = "w"} : !sv.net<i4> loc(#loc49)
+// CHECK:     %q = sv.var {hw.verilogName = "q"} : !sv.var<i4>  loc(#loc50)
 // CHECK:     %c1_i4 = hw.constant 1 : i4 loc(#loc51)
 // CHECK:     sv.assign %w, %c1_i4 : i4 loc(#loc18)
 // CHECK:     sv.always posedge %clock, posedge %reset {
@@ -92,13 +92,13 @@ hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
 // CHECK: #loc3 = loc("":16:9)
 // CHECK: #loc7 = loc("{{.*}}verilog-locations.mlir{{.*}})
 // CHECK: #loc8 = loc("":8:2)
-// CHECK: #loc9 = loc("":8:22)
+// CHECK: #loc9 = loc("":8:23)
 // CHECK: #loc10 = loc("{{.*}}verilog-locations.mlir{{.*}})
 // CHECK: #loc11 = loc("":9:2)
-// CHECK: #loc12 = loc("":9:15)
+// CHECK: #loc12 = loc("":9:16)
 // CHECK: #loc13 = loc("{{.*}}verilog-locations.mlir{{.*}})
-// CHECK: #loc14 = loc("":8:17)
-// CHECK: #loc15 = loc("":8:21)
+// CHECK: #loc14 = loc("":8:18)
+// CHECK: #loc15 = loc("":8:22)
 // CHECK: #loc16 = loc("":12:11)
 // CHECK: #loc17 = loc("":12:15)
 // CHECK: #loc18 = loc("{{.*}}verilog-locations.mlir{{.*}})
@@ -144,11 +144,11 @@ hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
 
 module attributes {circt.loweringOptions = "emitVerilogLocations"} {
 hw.module @InlineDeclAssignment(in %a: i1) {
-  %b = sv.wire : !hw.inout<i1>
+  %b = sv.wire : !sv.net<i1>
   sv.assign %b, %a : i1
 
   %0 = comb.add %a, %a : i1
-  %c = sv.wire : !hw.inout<i1>
+  %c = sv.wire : !sv.net<i1>
   sv.assign %c, %0 : i1
 }
 }
@@ -162,10 +162,10 @@ hw.module @InlineDeclAssignment(in %a: i1) {
 // endmodule
 //
 // CHECK:   hw.module @InlineDeclAssignment
-// CHECK:     %b = sv.wire {hw.verilogName = "b"} : !hw.inout<i1> loc(#loc25)
+// CHECK:     %b = sv.wire {hw.verilogName = "b"} : !sv.net<i1> loc(#loc25)
 // CHECK:     sv.assign %b, %a : i1 loc(#loc8)
 // CHECK:     %[[v0:.+]] = comb.add %a, %a : i1 loc(#loc26)
-// CHECK:     %c = sv.wire {hw.verilogName = "c"} : !hw.inout<i1> loc(#loc27)
+// CHECK:     %c = sv.wire {hw.verilogName = "c"} : !sv.net<i1> loc(#loc27)
 // CHECK:     sv.assign %c, %[[v0]] : i1 loc(#loc15)
 // CHECK:     hw.output loc(#loc1)
 // CHECK:   } loc(#loc24)

@@ -12,6 +12,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/raw_ostream.h"
@@ -354,7 +355,7 @@ void ResolveXMRRefPass::runOnOperation() {
     OpBuilder builder(xmrRefOp);
     Value resolvedValue = nullptr;
 
-    Type targetType = cast<hw::InOutType>(xmrRefOp.getType()).getElementType();
+    Type targetType = sv::getLvalueElementType(xmrRefOp.getType());
 
     ArrayAttr pathArray = pathOp.getNamepath();
     auto currentModule = xmrRefOp->getParentOfType<hw::HWModuleOp>();

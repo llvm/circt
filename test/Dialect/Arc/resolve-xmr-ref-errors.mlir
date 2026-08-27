@@ -19,7 +19,7 @@ module {
   hw.module @Top() {
     hw.instance "mid" sym @mid @Mid() -> ()
     // expected-error @below {{unsupported sv.xmr.ref use by 'sv.assign'; only read-only uses (sv.read_inout) are supported}}
-    %x = sv.xmr.ref @p : !hw.inout<i1>
+    %x = sv.xmr.ref @p : !sv.net<i1>
     %t = hw.constant true
     sv.assign %x, %t : i1
     hw.output
@@ -45,7 +45,7 @@ module {
   hw.module @Top() {
     hw.instance "mid" sym @mid @Mid() -> ()
     // expected-error @below {{sv.xmr.ref has no read uses; write/other uses are not supported yet}}
-    %x = sv.xmr.ref @p : !hw.inout<i1>
+    %x = sv.xmr.ref @p : !sv.var<i1>
     hw.output
   }
 }
@@ -60,8 +60,8 @@ module {
   hw.module @Top(out o : i1) {
     hw.instance "bb" sym @bb @BlackBox() -> (out_clk: i1)
     // expected-error @below {{unable to resolve XMR into internal blackbox symbol; rerun with --arc-resolve-xmr=lower-blackbox-internal-to-zero to force zero-lowering}}
-    %x = sv.xmr.ref @bbInternal : !hw.inout<i1>
-    %r = sv.read_inout %x : !hw.inout<i1>
+    %x = sv.xmr.ref @bbInternal : !sv.var<i1>
+    %r = sv.read_inout %x : !sv.var<i1>
     hw.output %r : i1
   }
 }
@@ -74,8 +74,8 @@ module {
 
   hw.module @Payload(out o : i8) {
     // expected-error @below {{cannot resolve XMR through conditionally guarded sv.bind; only unconditional sv.bind is supported}}
-    %x = sv.xmr.ref @bindPath : !hw.inout<i8>
-    %r = sv.read_inout %x : !hw.inout<i8>
+    %x = sv.xmr.ref @bindPath : !sv.var<i8>
+    %r = sv.read_inout %x : !sv.var<i8>
     hw.output %r : i8
   }
 
@@ -97,8 +97,8 @@ module {
 
   hw.module @Payload(out o : i8) {
     // expected-error @below {{payload module has non-bind instances; refusing to resolve bind-context XMR ambiguously}}
-    %x = sv.xmr.ref @bindPath : !hw.inout<i8>
-    %r = sv.read_inout %x : !hw.inout<i8>
+    %x = sv.xmr.ref @bindPath : !sv.var<i8>
+    %r = sv.read_inout %x : !sv.var<i8>
     hw.output %r : i8
   }
 

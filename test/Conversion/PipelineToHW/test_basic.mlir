@@ -146,24 +146,24 @@ hw.module @testSingleWithExt(in %arg0: i32, in %ext1: i32, in %go : i1, in %clk:
 
 // CHECK:   hw.module @testControlUsage(in %[[VAL_0:.*]] : i32, in %[[VAL_1:.*]] : i1, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : i32) {
 // CHECK:           %[[VAL_4:.*]] = hw.constant 0 : i32
-// CHECK:           %[[VAL_5:.*]] = sv.wire : !hw.inout<i32>
-// CHECK:           %[[VAL_6:.*]] = sv.read_inout %[[VAL_5]] : !hw.inout<i32>
+// CHECK:           %[[VAL_5:.*]] = sv.wire : !sv.net<i32>
+// CHECK:           %[[VAL_6:.*]] = sv.read_inout %[[VAL_5]] : !sv.net<i32>
 // CHECK:           %[[VAL_7:.*]] = comb.add %[[VAL_6]], %[[VAL_0]] : i32
 // CHECK:           %[[VAL_8:.*]] = seq.compreg.ce %[[VAL_7]], %[[CLOCK]], %[[VAL_1]] reset %[[VAL_3]], %[[VAL_4]]  : i32
 // CHECK:           sv.assign %[[VAL_5]], %[[VAL_8]] : i32
 // CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage0_reg0 %[[VAL_8]], %[[CLOCK]] : i32
 // CHECK:           %[[VAL_10:.*]] = hw.constant false
 // CHECK:           %[[VAL_11:.*]] = seq.compreg sym @p0_stage1_enable  %[[VAL_1]], %[[CLOCK]] reset %[[VAL_3]], %[[VAL_10]]  : i1
-// CHECK:           %[[VAL_12:.*]] = sv.wire : !hw.inout<i32>
-// CHECK:           %[[VAL_13:.*]] = sv.read_inout %[[VAL_12]] : !hw.inout<i32>
+// CHECK:           %[[VAL_12:.*]] = sv.wire : !sv.net<i32>
+// CHECK:           %[[VAL_13:.*]] = sv.read_inout %[[VAL_12]] : !sv.net<i32>
 // CHECK:           %[[VAL_14:.*]] = comb.add %[[VAL_13]], %[[VAL_9]] : i32
 // CHECK:           %[[VAL_15:.*]] = seq.compreg.ce %[[VAL_14]], %[[CLOCK]], %[[VAL_11]] reset %[[VAL_3]], %[[VAL_4]]  : i32
 // CHECK:           sv.assign %[[VAL_12]], %[[VAL_15]] : i32
 // CHECK:           %[[VAL_16:.*]] = seq.compreg sym @p0_stage1_reg0 %[[VAL_15]], %[[CLOCK]] : i32
 // CHECK:           %[[VAL_17:.*]] = hw.constant false
 // CHECK:           %[[VAL_18:.*]] = seq.compreg sym @p0_stage2_enable  %[[VAL_11]], %[[CLOCK]] reset %[[VAL_3]], %[[VAL_17]]  : i1
-// CHECK:           %[[VAL_19:.*]] = sv.wire : !hw.inout<i32>
-// CHECK:           %[[VAL_20:.*]] = sv.read_inout %[[VAL_19]] : !hw.inout<i32>
+// CHECK:           %[[VAL_19:.*]] = sv.wire : !sv.net<i32>
+// CHECK:           %[[VAL_20:.*]] = sv.read_inout %[[VAL_19]] : !sv.net<i32>
 // CHECK:           %[[VAL_21:.*]] = comb.add %[[VAL_20]], %[[VAL_16]] : i32
 // CHECK:           %[[VAL_22:.*]] = seq.compreg.ce %[[VAL_21]], %[[CLOCK]], %[[VAL_18]] reset %[[VAL_3]], %[[VAL_4]]  : i32
 // CHECK:           sv.assign %[[VAL_19]], %[[VAL_22]] : i32
@@ -172,16 +172,16 @@ hw.module @testSingleWithExt(in %arg0: i32, in %ext1: i32, in %go : i1, in %clk:
 hw.module @testControlUsage(in %arg0: i32, in %go : i1, in %clk: !seq.clock, in %rst: i1, out out0: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
     %zero = hw.constant 0 : i32
-    %reg_out_wire = sv.wire : !hw.inout<i32>
-    %reg_out = sv.read_inout %reg_out_wire : !hw.inout<i32>
+    %reg_out_wire = sv.wire : !sv.net<i32>
+    %reg_out = sv.read_inout %reg_out_wire : !sv.net<i32>
     %add0 = comb.add %reg_out, %a0 : i32
     %out = seq.compreg.ce %add0, %clk, %go reset %rst, %zero : i32
     sv.assign %reg_out_wire, %out : i32
     pipeline.stage ^bb1 regs(%out : i32)
 
   ^bb1(%6: i32, %s1_enable: i1):
-    %reg1_out_wire = sv.wire : !hw.inout<i32>
-    %reg1_out = sv.read_inout %reg1_out_wire : !hw.inout<i32>
+    %reg1_out_wire = sv.wire : !sv.net<i32>
+    %reg1_out = sv.read_inout %reg1_out_wire : !sv.net<i32>
     %add1 = comb.add %reg1_out, %6 : i32
     %out1 = seq.compreg.ce %add1, %clk, %s1_enable reset %rst, %zero : i32
     sv.assign %reg1_out_wire, %out1 : i32
@@ -189,8 +189,8 @@ hw.module @testControlUsage(in %arg0: i32, in %go : i1, in %clk: !seq.clock, in 
     pipeline.stage ^bb2 regs(%out1 : i32)
 
   ^bb2(%9 : i32, %s2_enable: i1):
-    %reg2_out_wire = sv.wire : !hw.inout<i32>
-    %reg2_out = sv.read_inout %reg2_out_wire : !hw.inout<i32>
+    %reg2_out_wire = sv.wire : !sv.net<i32>
+    %reg2_out = sv.read_inout %reg2_out_wire : !sv.net<i32>
     %add2 = comb.add %reg2_out, %9 : i32
     %out2 = seq.compreg.ce %add2, %clk, %s2_enable reset %rst, %zero : i32
     sv.assign %reg2_out_wire, %out2 : i32

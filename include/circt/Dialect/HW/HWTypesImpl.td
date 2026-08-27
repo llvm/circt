@@ -118,9 +118,10 @@ def UnpackedArrayTypeImpl : HWType<"UnpackedArray", [
 def InOutTypeImpl : HWType<"InOut"> {
   let summary = "inout type";
   let description = [{
-    InOut type is used for model operations and values that have "connection"
-    semantics, instead of typical dataflow behavior.  This is used for wires
-    and inout ports in Verilog.
+    InOut type is a category-neutral addressable storage carrier with
+    connection/lvalue semantics, as opposed to typical dataflow behavior.
+    HW makes no net-vs-variable distinction here; that classification is
+    decided downstream (e.g. by HWToSV).
   }];
 
   let mnemonic = "inout";

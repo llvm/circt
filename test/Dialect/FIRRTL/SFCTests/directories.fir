@@ -119,18 +119,18 @@ circuit TestHarness:
 
 
 ; CHECK:            module Foo(
-; MEMTOREG_DUT-NOT:   reg [7:0] foo_combmem
-; MEMTOREG_NODUT:     reg [7:0] foo_combmem
+; MEMTOREG_DUT-NOT:   logic [7:0] foo_combmem
+; MEMTOREG_NODUT:     logic [7:0] foo_combmem
 ; CHECK:            endmodule
 
 ; CHECK:            module Bar(
-; MEMTOREG_DUT:       reg [7:0] bar_combmem
-; MEMTOREG_NODUT:     reg [7:0] bar_combmem
+; MEMTOREG_DUT:       logic [7:0] bar_combmem
+; MEMTOREG_NODUT:     logic [7:0] bar_combmem
 ; CHECK:            endmodule
 
 ; CHECK:            module Baz(
-; MEMTOREG_DUT:       reg [7:0] baz_combmem
-; MEMTOREG_NODUT:     reg [7:0] baz_combmem
+; MEMTOREG_DUT:       logic [7:0] baz_combmem
+; MEMTOREG_NODUT:     logic [7:0] baz_combmem
 ; CHECK:            endmodule
 
 ; SITEST_DUT:       FILE "testbench.sitest.json"

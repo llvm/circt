@@ -53,7 +53,7 @@ hw.module.extern @module_with_bool<bparam: i1>()
 // CHECK-NEXT:    input [7:0] p1
 // CHECK-NEXT: );
 hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(in %p1: i8) {
-  %myWire = sv.wire : !hw.inout<i1>
+  %myWire = sv.wire : !sv.net<i1>
 
   // CHECK: `ifdef SOMEMACRO
   sv.ifdef @SOMEMACRO {
@@ -92,8 +92,8 @@ hw.module @useParametersNameConflict(in %xxx: i8) {
 
   // CHECK: `ifdef SOMEMACRO
   sv.ifdef @SOMEMACRO {
-    // CHECK: reg [3:0] xxx_0;
-    %0 = sv.reg name "xxx" : !hw.inout<i4>
+    // CHECK: logic [3:0] xxx_0;
+    %0 = sv.var name "xxx" : !sv.var<i4>
   }
 }
 
@@ -161,12 +161,12 @@ hw.module @TestEmptyInstanceName(in %a: i1) {
 
 // CHECK-LABEL: module TestInstanceNameValueConflict(
 hw.module @TestInstanceNameValueConflict(in %a: i1) {
-  // CHECK:  wire name;
-  %name = sv.wire : !hw.inout<i1>
-  // CHECK:  wire output_0;
-  %output = sv.wire : !hw.inout<i1>
-  // CHECK:  reg  input_0;
-  %input = sv.reg : !hw.inout<i1>
+  // CHECK: wire  name;
+  %name = sv.wire : !sv.net<i1>
+  // CHECK:  wire  output_0;
+  %output = sv.wire : !sv.net<i1>
+  // CHECK:  logic input_0;
+  %input = sv.var : !sv.var<i1>
   // CHECK: B name_0 (
   hw.instance "name" @B(a: %a: i1) -> ()
 }
@@ -174,8 +174,8 @@ hw.module @TestInstanceNameValueConflict(in %a: i1) {
 // https://github.com/llvm/circt/issues/855
 // CHECK-LABEL: module nameless_reg(
 hw.module @nameless_reg(in %a: i1) {
-  // CHECK: reg [3:0] _GEN;
-  %661 = sv.reg : !hw.inout<i4>
+  // CHECK: logic [3:0] _GEN;
+  %661 = sv.var : !sv.var<i4>
 }
 
 // CHECK-LABEL: module verif_renames(
@@ -194,7 +194,7 @@ hw.module @verbatim_renames(in %a: i1 {hw.exportPort = #hw<innerSym@asym>}) {
   sv.verbatim "// VERB Module : {{0}} {{1}}" {symbols = [@reg, @inout]}
 
   // Make sure symbol references to wires and instances get renamed correctly.
-  %wire = sv.wire sym @wire1 : !hw.inout<i1>
+  %wire = sv.wire sym @wire1 : !sv.net<i1>
 
   // CHECK: inout_0 module_0 (
   %0 = hw.instance "module" sym @struct @inout (inout: %a: i1) -> (output: i1)

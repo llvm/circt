@@ -11,8 +11,8 @@ module {
   hw.module @Top(out o : i1) {
     // expected-warning @below {{internal to blackbox. Lowering to 0.}}
     hw.instance "bb" sym @bb @BlackBox() -> (out_clk: i1)
-    %x = sv.xmr.ref @bbInternal : !hw.inout<i1>
-    %r = sv.read_inout %x : !hw.inout<i1>
+    %x = sv.xmr.ref @bbInternal : !sv.var<i1>
+    %r = sv.read_inout %x : !sv.var<i1>
     hw.output %r : i1
   }
 }

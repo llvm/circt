@@ -114,6 +114,18 @@ struct LegalizeAnonEnums
       return {};
     }
 
+    if (auto netType = dyn_cast<sv::NetType>(type)) {
+      if (auto newType = processType(netType.getElementType()))
+        return sv::NetType::get(newType);
+      return {};
+    }
+
+    if (auto varType = dyn_cast<sv::VarType>(type)) {
+      if (auto newType = processType(varType.getElementType()))
+        return sv::VarType::get(newType);
+      return {};
+    }
+
     // EnumTypes must be changed into TypeAlias.
     if (auto enumType = dyn_cast<EnumType>(type))
       return getEnumTypeDecl(enumType);

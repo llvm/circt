@@ -126,6 +126,10 @@ static bool isSignednessType(Type type) {
           })
           .Case<hw::InOutType>(
               [](auto type) { return isSignednessType(type.getElementType()); })
+          .Case<sv::NetType, sv::VarType>([](auto type) {
+            Type elem = sv::getLvalueElementType(type);
+            return elem && isSignednessType(elem);
+          })
           .Case<hw::TypeAliasType>(
               [](auto type) { return isSignednessType(type.getInnerType()); })
           .Default([](auto type) { return false; });
@@ -399,6 +403,12 @@ Type HWArithToHWTypeConverter::removeSignedness(Type type) {
           })
           .Case<hw::InOutType>([this](auto type) {
             return hw::InOutType::get(removeSignedness(type.getElementType()));
+          })
+          .Case<sv::NetType>([this](auto type) {
+            return sv::NetType::get(removeSignedness(type.getElementType()));
+          })
+          .Case<sv::VarType>([this](auto type) {
+            return sv::VarType::get(removeSignedness(type.getElementType()));
           })
           .Case<hw::TypeAliasType>([this](auto type) {
             return hw::TypeAliasType::get(

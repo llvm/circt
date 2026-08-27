@@ -881,8 +881,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib)
@@ -2499,9 +2498,10 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   if (!result)
     return result;
 
-  // If we got an inout value, implicitly read it.  FIRRTL allows direct use
-  // of wires and other things that lower to inout type.
-  if (isa<hw::InOutType>(result.getType()))
+  // If we got an lvalue, implicitly read it. FIRRTL allows direct use of
+  // wires and other addressable values.
+  if (isa<hw::InOutType>(result.getType()) ||
+      sv::getLvalueElementType(result.getType()))
     return getReadValue(result);
 
   return result;
@@ -3227,8 +3227,13 @@ Value FIRRTLLowering::getReadValue(Value v) {
     result = builder.createOrFold<hw::ArrayGetOp>(result,
                                                   arrayIndexInout.getIndex());
   } else {
+    Value readOperand = v;
+    if (auto inoutType = dyn_cast<hw::InOutType>(v.getType()))
+      readOperand = sv::NetFromInOutOp::create(
+          builder, sv::NetType::get(inoutType.getElementType()), v);
+
     // Otherwise, create a read inout operation.
-    result = builder.createOrFold<sv::ReadInOutOp>(v);
+    result = builder.createOrFold<sv::ReadInOutOp>(readOperand);
   }
   builder.restoreInsertionPoint(oldIP);
   readInOutCreated.insert({v, result});
@@ -3274,8 +3279,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -3467,10 +3471,10 @@ FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
               .getNumElements()),
       op.getIndex());
 
-  // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
+  // If the input is an SV lvalue, we need to lower to ArrayIndexInOutOp;
   // otherwise hw::ArrayGetOp.
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (sv::getLvalueElementType(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, iIdx);
   else
     result = builder.createOrFold<hw::ArrayGetOp>(input, iIdx);
@@ -3491,10 +3495,10 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
     return failure();
   }
 
-  // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
+  // If the input is an SV lvalue, we need to lower to ArrayIndexInOutOp;
   // otherwise, lower the op to array indexing.
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (sv::getLvalueElementType(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, valueIdx);
   else
     result = createArrayIndexing(input, valueIdx);
@@ -3510,12 +3514,12 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
     return failure();
   }
 
-  // If the input has an inout type, we need to lower to StructFieldInOutOp;
+  // If the input is an SV lvalue, we need to lower to StructFieldInOutOp;
   // otherwise, StructExtractOp.
   auto field = firrtl::type_cast<BundleType>(op.getInput().getType())
                    .getElementName(op.getFieldIndex());
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (sv::getLvalueElementType(input.getType()))
     result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
   else
     result = builder.createOrFold<hw::StructExtractOp>(input, field);
@@ -3746,7 +3750,7 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
   auto resultTy = lowerType(op.getType());
   if (!resultTy)
     return failure();
-  resultTy = sv::InOutType::get(op.getContext(), resultTy);
+  resultTy = sv::NetType::get(op.getContext(), resultTy);
 
   SmallVector<Value, 4> operands;
   operands.reserve(op.getSubstitutions().size());
@@ -4049,8 +4053,11 @@ FIRRTLLowering::prepareInstanceOperands(ArrayRef<PortInfo> portInfo,
 
     // Create a wire for each inout operand, so there is something to connect
     // to. The instance becomes the sole driver of this wire.
-    auto wire = sv::WireOp::create(builder, portType,
-                                   "." + port.getName().str() + ".wire");
+    auto wire = hw::VarOp::create(
+        builder, portType,
+        builder.getStringAttr("." + port.getName().str() + ".wire"));
+    // auto wire = sv::WireOp::create(builder, portType,
+    //                                "." + port.getName().str() + ".wire");
 
     // Know that the argument FIRRTL value is equal to this wire, allowing
     // connects to it to be lowered.
@@ -4906,7 +4913,8 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   if (type_isa<AnalogType>(op.getType()))
     // This is a locally visible, private wire created by the compiler, so do
     // not attach a symbol name.
-    return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
+    // return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
+    return setLoweringTo<hw::VarOp>(op, resultTy, ".invalid_analog");
 
   // We don't allow aggregate values which contain values of analog types.
   if (type_cast<FIRRTLBaseType>(op.getType()).containsAnalog())
@@ -5161,8 +5169,8 @@ LogicalResult FIRRTLLowering::visitExpr(XMRRefOp op) {
   else
     xmrType = lowerType(baseType);
 
-  return setLoweringTo<sv::XMRRefOp>(op, sv::InOutType::get(xmrType),
-                                     op.getRef(), op.getVerbatimSuffixAttr());
+  return setLoweringTo<sv::XMRRefOp>(op, sv::VarType::get(xmrType), op.getRef(),
+                                     op.getVerbatimSuffixAttr());
 }
 
 LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
@@ -5174,7 +5182,7 @@ LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
   else
     xmrType = lowerType(op.getType());
 
-  auto xmr = sv::XMRRefOp::create(builder, sv::InOutType::get(xmrType),
+  auto xmr = sv::XMRRefOp::create(builder, sv::NetType::get(xmrType),
                                   op.getRef(), op.getVerbatimSuffixAttr());
   auto readXmr = getReadValue(xmr);
   if (!isa<ClockType>(op.getType()))
@@ -5255,11 +5263,18 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!isa<hw::InOutType>(destVal.getType()))
-    return op.emitError("destination isn't an inout type");
-
-  sv::AssignOp::create(builder, destVal, srcVal);
-  return success();
+  return llvm::TypeSwitch<Type, LogicalResult>(destVal.getType())
+      .Case<sv::NetType>([&](auto) {
+        sv::AssignOp::create(builder, destVal, srcVal);
+        return success();
+      })
+      .Case<sv::VarType>([&](auto) {
+        sv::BPAssignOp::create(builder, destVal, srcVal);
+        return success();
+      })
+      .Default([&](auto) {
+        return op.emitError("destination isn't an SV lvalue type");
+      });
 }
 
 LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
@@ -5283,11 +5298,18 @@ LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!isa<hw::InOutType>(destVal.getType()))
-    return op.emitError("destination isn't an inout type");
-
-  sv::AssignOp::create(builder, destVal, srcVal);
-  return success();
+  return llvm::TypeSwitch<Type, LogicalResult>(destVal.getType())
+      .Case<sv::NetType>([&](auto) {
+        sv::AssignOp::create(builder, destVal, srcVal);
+        return success();
+      })
+      .Case<sv::VarType>([&](auto) {
+        sv::BPAssignOp::create(builder, destVal, srcVal);
+        return success();
+      })
+      .Default([&](auto) {
+        return op.emitError("destination isn't an SV lvalue type");
+      });
 }
 
 LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
@@ -5302,8 +5324,8 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
   if (!destVal)
     return failure();
 
-  if (!isa<hw::InOutType>(destVal.getType()))
-    return op.emitError("destination isn't an inout type");
+  if (!sv::getLvalueElementType(destVal.getType()))
+    return op.emitError("destination isn't an SV lvalue type");
 
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
@@ -6035,7 +6057,15 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   }
 
   // If the attach operands contain a port, then we can't do anything to
-  // simplify the attach operation.
+  // simplify the attach operation. Convert to SV net types now, right before
+  // we actually need to emit SV ops.
+  SmallVector<Value, 4> netValues;
+  for (auto v : inoutValues) {
+    auto inoutType = cast<hw::InOutType>(v.getType());
+    netValues.push_back(sv::NetFromInOutOp::create(
+        builder, sv::NetType::get(inoutType.getElementType()), v));
+  }
+
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   circuitState.addMacroDecl(builder.getStringAttr("VERILATOR"));
   addToIfDefBlock(
@@ -6043,13 +6073,13 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       // If we're doing synthesis, we emit an all-pairs assign complex.
       [&]() {
         SmallVector<Value, 4> values;
-        for (auto inoutValue : inoutValues)
-          values.push_back(getReadValue(inoutValue));
+        for (auto netValue : netValues)
+          values.push_back(getReadValue(netValue));
 
-        for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
+        for (size_t i1 = 0, e = netValues.size(); i1 != e; ++i1) {
           for (size_t i2 = 0; i2 != e; ++i2)
             if (i1 != i2)
-              sv::AssignOp::create(builder, inoutValues[i1], values[i2]);
+              sv::AssignOp::create(builder, netValues[i1], values[i2]);
         }
       },
       // In the non-synthesis case, we emit a SystemVerilog alias
@@ -6064,7 +6094,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
                   "cannot "
                   "arbitrarily connect bidirectional wires and ports\"");
             },
-            [&]() { sv::AliasOp::create(builder, inoutValues); });
+            [&]() { sv::AliasOp::create(builder, netValues); });
       });
 
   return success();

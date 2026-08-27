@@ -21,7 +21,7 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-def HWValueOrInOutType : AnyTypeOf<[HWValueType, InOutType]>;
+def HWValueOrSVLvalueType : AnyTypeOf<[HWValueType, SVLvalueType]>;
 
 
 def SystemFunctionOp : SVOp<"system"> {
@@ -57,7 +57,7 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName,
 
   let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
                   DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
-  let results = (outs HWValueOrInOutType:$result);
+  let results = (outs HWValueOrSVLvalueType:$result);
   let assemblyFormat = [{
     $format_string (`(` $substitutions^ `)`)?
       `:` functional-type($substitutions, $result) attr-dict
@@ -90,7 +90,7 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName,
 
   let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
                  DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols );
-  let results = (outs HWValueOrInOutType:$result);
+  let results = (outs HWValueOrSVLvalueType:$result);
   let assemblyFormat = [{
     $format_string (`(` $substitutions^ `)`)?
       `:` functional-type($substitutions, $result) attr-dict
@@ -116,7 +116,7 @@ def MacroRefExprOp : SVOp<"macro.ref.expr", [Pure, HasCustomSSAName,
     }];
 
   let arguments = (ins FlatSymbolRefAttr:$macroName, Variadic<AnyType>:$inputs);
-  let results = (outs HWValueOrInOutType:$result);
+  let results = (outs HWValueOrSVLvalueType:$result);
 
   let assemblyFormat = "$macroName `(` $inputs `)` attr-dict `:` functional-type($inputs, $result)";
 
@@ -143,7 +143,7 @@ def MacroRefExprSEOp : SVOp<"macro.ref.expr.se", [HasCustomSSAName,
     }];
 
   let arguments = (ins FlatSymbolRefAttr:$macroName, Variadic<AnyType>:$inputs);
-  let results = (outs HWValueOrInOutType:$result);
+  let results = (outs HWValueOrSVLvalueType:$result);
 
   let assemblyFormat = "$macroName `(` $inputs `)` attr-dict `:` functional-type($inputs, $result)";
 

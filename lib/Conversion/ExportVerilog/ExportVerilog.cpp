@@ -177,8 +177,9 @@ static bool isDuplicatableExpression(Operation *op) {
       return true;
     if (auto read = dyn_cast<ReadInOutOp>(indexOp)) {
       auto *readSrc = read.getInput().getDefiningOp();
-      // A port or wire is ok to duplicate reads.
-      return !readSrc || isa<sv::WireOp, LogicOp>(readSrc);
+      // A port or wire or net-conversion from inout is ok to duplicate reads.
+      return !readSrc ||
+             isa<sv::WireOp, sv::VarOp, sv::NetFromInOutOp>(readSrc);
     }
 
     return false;
@@ -255,7 +256,8 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
           ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp, SFormatFOp,
           SystemFunctionOp, STimeOp, TimeOp, UnpackedArrayCreateOp,
-          UnpackedOpenArrayCastOp, ConcatStrOp>(op))
+          UnpackedOpenArrayCastOp, ConcatStrOp, NetFromInOutOp, InOutFromNetOp>(
+          op))
     return true;
 
   // These are Verif dialect expressions.
@@ -290,6 +292,10 @@ static void getTypeDims(
 
   if (auto inout = hw::type_dyn_cast<InOutType>(type))
     return getTypeDims(dims, inout.getElementType(), loc, errorHandler);
+  if (auto lvalue = hw::type_dyn_cast<sv::NetType>(type))
+    return getTypeDims(dims, lvalue.getElementType(), loc, errorHandler);
+  if (auto lvalue = hw::type_dyn_cast<sv::VarType>(type))
+    return getTypeDims(dims, lvalue.getElementType(), loc, errorHandler);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc, errorHandler);
   if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
@@ -321,6 +327,10 @@ bool ExportVerilog::isZeroBitType(Type type) {
     return intType.getWidth() == 0;
   if (auto inout = dyn_cast<hw::InOutType>(type))
     return isZeroBitType(inout.getElementType());
+  if (auto lvalue = dyn_cast<sv::NetType>(type))
+    return isZeroBitType(lvalue.getElementType());
+  if (auto lvalue = dyn_cast<sv::VarType>(type))
+    return isZeroBitType(lvalue.getElementType());
   if (auto uarray = dyn_cast<hw::UnpackedArrayType>(type))
     return uarray.getNumElements() == 0 ||
            isZeroBitType(uarray.getElementType());
@@ -348,6 +358,9 @@ static Type stripUnpackedTypes(Type type) {
       .Case<InOutType>([](InOutType inoutType) {
         return stripUnpackedTypes(inoutType.getElementType());
       })
+      .Case<sv::NetType, sv::VarType>([](auto lvalueType) {
+        return stripUnpackedTypes(lvalueType.getElementType());
+      })
       .Case<UnpackedArrayType, sv::UnpackedOpenArrayType>([](auto arrayType) {
         return stripUnpackedTypes(arrayType.getElementType());
       })
@@ -356,17 +369,22 @@ static Type stripUnpackedTypes(Type type) {
 
 /// Return true if the type has a leading unpacked type.
 static bool hasLeadingUnpackedType(Type type) {
-  assert(isa<hw::InOutType>(type) && "inout type is expected");
-  auto elementType = cast<hw::InOutType>(type).getElementType();
+  Type elementType;
+  if (auto inoutType = dyn_cast<hw::InOutType>(type))
+    elementType = inoutType.getElementType();
+  else
+    elementType = sv::getLvalueElementType(type);
+  assert(elementType && "lvalue type is expected");
   return stripUnpackedTypes(elementType) != elementType;
 }
 
 /// Return true if type has a struct type as a subtype.
 static bool hasStructType(Type type) {
   return TypeSwitch<Type, bool>(type)
-      .Case<InOutType, UnpackedArrayType, ArrayType>([](auto parentType) {
-        return hasStructType(parentType.getElementType());
-      })
+      .Case<InOutType, sv::NetType, sv::VarType, UnpackedArrayType, ArrayType>(
+          [](auto parentType) {
+            return hasStructType(parentType.getElementType());
+          })
       .Case<StructType>([](auto) { return true; })
       .Default([](auto) { return false; });
 }
@@ -820,7 +838,8 @@ static bool isExpressionUnableToInline(Operation *op,
       auto read = dyn_cast<ReadInOutOp>(op);
       if (!read)
         return true;
-      if (!isa_and_nonnull<sv::WireOp, RegOp>(read.getInput().getDefiningOp()))
+      if (!isa_and_nonnull<sv::WireOp, sv::VarOp>(
+              read.getInput().getDefiningOp()))
         return true;
     }
   }
@@ -1393,7 +1412,7 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
 
   } else if (auto *op = expr.getDefiningOp()) {
     // Uses of a wire, register or logic can be done inline.
-    if (isa<sv::WireOp, RegOp, LogicOp>(op)) {
+    if (isa<sv::WireOp, sv::VarOp>(op)) {
       StringRef name = getSymOpName(op);
       result = StringAttr::get(expr.getContext(), name);
 
@@ -1553,12 +1572,19 @@ public:
 /// in a non-procedural region.
 static StringRef getVerilogDeclWord(Operation *op,
                                     const ModuleEmitter &emitter) {
-  if (isa<RegOp>(op)) {
+  // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
+  // fall through to default.
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+
+  // If this decl is within a function, "automatic" is not needed because
+  // "automatic" is added to its definition.
+  bool stripAutomatic = isa_and_nonnull<FuncOp>(emitter.currentModuleOp);
+
+  if (auto var = dyn_cast<sv::VarOp>(op)) {
     // Check if the type stored in this register is a struct or array of
     // structs. In this case, according to spec section 6.8, the "reg" prefix
     // should be left off.
-    auto elementType =
-        cast<InOutType>(op->getResult(0).getType()).getElementType();
+    auto elementType = var.getElementType();
     // Unwrap arrays. Since packed arrays cannot contain unpacked arrays, we can
     // unpack unpacked arrays first.
     while (auto arrayType = hw::type_dyn_cast<UnpackedArrayType>(elementType))
@@ -1566,10 +1592,33 @@ static StringRef getVerilogDeclWord(Operation *op,
     while (auto arrayType = hw::type_dyn_cast<ArrayType>(elementType))
       elementType = arrayType.getElementType();
 
-    if (isa<StructType, UnionType, EnumType, TypeAliasType>(elementType))
-      return "";
+    bool hasStruct =
+        isa<StructType, UnionType, EnumType, TypeAliasType>(elementType);
 
-    return "reg";
+    // If the variable op is defined in a procedural region, add 'automatic'
+    // keyword. If the op has a struct type, 'logic' keyword is already emitted
+    // within a struct type definition (e.g. struct packed {logic foo;}). So we
+    // should not emit extra 'logic'.
+    if (hasStruct) {
+      if (isProcedural && !stripAutomatic)
+        return "automatic";
+      return "";
+    }
+
+    if (auto keyword = var.getKeyword()) {
+      switch (keyword.value()) {
+      case SVVarKeyword::Reg:
+        return "reg";
+      case SVVarKeyword::Logic:
+        return "logic";
+      case SVVarKeyword::None:
+        return "";
+      }
+    }
+
+    if (isProcedural && !stripAutomatic)
+      return "automatic logic";
+    return "logic";
   }
   if (isa<sv::WireOp>(op))
     return "wire";
@@ -1579,25 +1628,6 @@ static StringRef getVerilogDeclWord(Operation *op,
   // Interfaces instances use the name of the declared interface.
   if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
     return interface.getInterfaceType().getInterface().getValue();
-
-  // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
-  // fall through to default.
-  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
-
-  // If this decl is within a function, "automatic" is not needed because
-  // "automatic" is added to its definition.
-  bool stripAutomatic = isa_and_nonnull<FuncOp>(emitter.currentModuleOp);
-
-  if (isa<LogicOp>(op)) {
-    // If the logic op is defined in a procedural region, add 'automatic'
-    // keyword. If the op has a struct type, 'logic' keyword is already emitted
-    // within a struct type definition (e.g. struct packed {logic foo;}). So we
-    // should not emit extra 'logic'.
-    bool hasStruct = hasStructType(op->getResult(0).getType());
-    if (isProcedural && !stripAutomatic)
-      return hasStruct ? "automatic" : "automatic logic";
-    return hasStruct ? "" : "logic";
-  }
 
   if (!isProcedural)
     return "wire";
@@ -1750,6 +1780,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<InOutType>([&](InOutType inoutType) {
         return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+                                   implicitIntType, singleBitDefaultType,
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
+      })
+      .Case<sv::NetType, sv::VarType>([&](auto lvalueType) {
+        return printPackedTypeImpl(lvalueType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
                                    emitter, /*optionalAliasType=*/{},
                                    emitAsTwoStateType);
@@ -1911,6 +1947,9 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
       .Case<InOutType>([&](InOutType inoutType) {
         printUnpackedTypePostfix(inoutType.getElementType(), os);
+      })
+      .Case<sv::NetType, sv::VarType>([&](auto lvalueType) {
+        printUnpackedTypePostfix(lvalueType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         auto loc = currentModuleOp ? currentModuleOp->getLoc()
@@ -2320,8 +2359,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -2373,6 +2411,10 @@ private:
     emitSVAttributes(op);
     return result;
   }
+  SubExprInfo visitSV(NetFromInOutOp op) {
+    return emitSubExpr(op.getInput(), LowestPrecedence);
+  }
+  SubExprInfo visitSV(InOutFromNetOp op);
   SubExprInfo visitSV(ArrayIndexInOutOp op);
   SubExprInfo visitSV(IndexedPartSelectInOutOp op);
   SubExprInfo visitSV(IndexedPartSelectOp op);
@@ -2915,6 +2957,16 @@ SubExprInfo ExprEmitter::visitSV(XMRRefOp op) {
   if (leaf && leaf.size())
     ps << PPExtString(leaf);
   return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(InOutFromNetOp op) {
+  // The input is an SV net (typically a WireOp result). WireOp has no
+  // expression-emission case of its own. It is only handled as a
+  // declaration (see visitSV(sv::WireOp) in the statement visitor). Reference
+  // it by its declared Verilog name directly, the same way XMR references
+  // print a name rather than recursing into a sub-expression.
+  ps << PPExtString(getVerilogValueName(op.getInput()));
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
@@ -4136,8 +4188,9 @@ private:
   LogicalResult visitInvalidVerif(Operation *op) { return failure(); }
 
   LogicalResult visitSV(sv::WireOp op) { return emitDeclaration(op); }
-  LogicalResult visitSV(RegOp op) { return emitDeclaration(op); }
-  LogicalResult visitSV(LogicOp op) { return emitDeclaration(op); }
+  LogicalResult visitSV(sv::VarOp op) { return emitDeclaration(op); }
+  LogicalResult visitSV(NetFromInOutOp op) { return success(); }
+  LogicalResult visitSV(InOutFromNetOp op) { return success(); }
   LogicalResult visitSV(LocalParamOp op) { return emitDeclaration(op); }
   template <typename Op>
   LogicalResult
@@ -6092,13 +6145,13 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
 
       // Reject struct_field_inout/array_index_inout for now because it's
       // necessary to consider aliasing inout operations.
-      if (!isa<RegOp, LogicOp>(defOp))
+      if (!isa<sv::VarOp>(defOp))
         return false;
 
       // It's safe to inline if all users are read op, passign or assign.
       // If the op is a logic op whose single assignment is inlined into
       // declaration, we can inline the read.
-      if (isa<LogicOp>(defOp) &&
+      if (isa<sv::VarOp>(defOp) &&
           stmtEmitter.emitter.expressionsEmittedIntoDecl.count(defOp))
         continue;
 
@@ -6252,7 +6305,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       });
     }
 
-    if (auto regOp = dyn_cast<RegOp>(op)) {
+    if (auto regOp = dyn_cast<sv::VarOp>(op)) {
       if (auto initValue = regOp.getInit()) {
         ps << PP::space << "=" << PP::space;
         ps.scopedBox(PP::ibox0, [&]() {
@@ -6265,7 +6318,8 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining an assignment into declarations.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (!state.options.disallowDeclAssignments && isa<sv::WireOp>(op) &&
+    if (!state.options.disallowDeclAssignments &&
+        sv::isSVNet(op->getResult(0).getType()) &&
         !op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignments if any.
@@ -6290,7 +6344,8 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining a blocking assignment to logic op declaration.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (!state.options.disallowDeclAssignments && isa<LogicOp>(op) &&
+    if (!state.options.disallowDeclAssignments &&
+        sv::isSVVar(op->getResult(0).getType()) &&
         op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignment which might be possible to inline.

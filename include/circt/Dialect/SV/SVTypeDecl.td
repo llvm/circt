@@ -18,6 +18,7 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVDialect.td"
 include "circt/Dialect/SV/SVTypes.td"
+include "circt/Dialect/SV/SVTypesImpl.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -280,6 +281,8 @@ def SVVerbatimModuleOp
       for (const auto &port : ports) {
         Type portType = port.type;
         hw::ModulePort::Direction portDir = port.dir;
+        // This is HW module-port handling. HW inout ports remain
+        // category-neutral; SV operations use sv.net.from_inout instead.
         if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
           portType = inoutType.getElementType();
           portDir = hw::ModulePort::Direction::InOut;

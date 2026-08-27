@@ -74,7 +74,7 @@ private:
   bool unvisited = true;
 };
 
-/// Lower FirRegOp to `sv.reg` and `sv.always`.
+/// Lower FirRegOp to `sv.var` and `sv.always`.
 class FirRegLowering {
 public:
   /// A map sending registers to their paths.
@@ -117,7 +117,7 @@ private:
   };
 
   struct RegLowerInfo {
-    sv::RegOp reg;
+    sv::VarOp reg;
     hw::HierPathOp path;
     IntegerAttr preset;
     Value asyncResetSignal;
@@ -170,7 +170,7 @@ private:
 
   /// Recreate the ifdefs under which `reg` was defined. Leave the builder with
   /// its insertion point inside the created ifdef guards.
-  void buildRegConditions(OpBuilder &b, sv::RegOp reg);
+  void buildRegConditions(OpBuilder &b, sv::VarOp reg);
 
   using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
                                    sv::ResetType, sv::EventControl, Value>;
@@ -191,7 +191,7 @@ private:
 
   /// A map from RegOps to the ifdef conditions under which they are defined.
   /// We only bother recording a list of conditions if there is at least one.
-  DenseMap<sv::RegOp, std::vector<RegCondition>> regConditionTable;
+  DenseMap<sv::VarOp, std::vector<RegCondition>> regConditionTable;
 
   /// A map from async reset signal to the registers that use it.
   llvm::MapVector<Value, SmallVector<RegLowerInfo>> asyncResets;

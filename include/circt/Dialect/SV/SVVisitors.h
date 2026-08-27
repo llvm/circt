@@ -28,13 +28,13 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
             // Expressions
-            ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, VerbatimExprSEOp,
+            ReadInOutOp, NetFromInOutOp, InOutFromNetOp, ArrayIndexInOutOp, VerbatimExprOp, VerbatimExprSEOp,
             IndexedPartSelectInOutOp, IndexedPartSelectOp, StructFieldInOutOp,
             ConstantXOp, ConstantZOp, ConstantStrOp, MacroRefExprOp,
             MacroRefExprSEOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp,
             SFormatFOp, ConcatStrOp,
             // Declarations.
-            RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
+            VarOp, WireOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
             OrderedOutputOp, IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp,
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
@@ -94,15 +94,16 @@ public:
   }
 
   // Declarations
-  HANDLE(RegOp, Unhandled);
+  HANDLE(VarOp, Unhandled);
   HANDLE(WireOp, Unhandled);
-  HANDLE(LogicOp, Unhandled);
   HANDLE(LocalParamOp, Unhandled);
   HANDLE(XMROp, Unhandled);
   HANDLE(XMRRefOp, Unhandled);
 
   // Expressions
   HANDLE(ReadInOutOp, Unhandled);
+  HANDLE(NetFromInOutOp, Unhandled);
+  HANDLE(InOutFromNetOp, Unhandled);
   HANDLE(ArrayIndexInOutOp, Unhandled);
   HANDLE(VerbatimExprOp, Unhandled);
   HANDLE(VerbatimExprSEOp, Unhandled);

@@ -80,8 +80,8 @@ hw.type_scope @__AnFSMTypedecl {
 
 hw.module @AnFSM(in %clock : i1) {
   // Anonymous enum
-  %reg = sv.reg : !hw.inout<!hw.enum<A, B>>
-  %reg_read = sv.read_inout %reg : !hw.inout<!hw.enum<A, B>>
+  %reg = sv.var : !sv.var<!hw.enum<A, B>>
+  %reg_read = sv.read_inout %reg : !sv.var<!hw.enum<A, B>>
   %A = hw.enum.constant A : !hw.enum<A, B>
   %B = hw.enum.constant B : !hw.enum<A, B>
   sv.always posedge %clock {
@@ -91,8 +91,8 @@ hw.module @AnFSM(in %clock : i1) {
   }
 
   // typedecl'd # 1
-  %reg_state1 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
-  %reg_read_state1 = sv.read_inout %reg_state1 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
+  %reg_state1 = sv.var : !sv.var<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
+  %reg_read_state1 = sv.read_inout %reg_state1 : !sv.var<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
 
   %A_state1 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
   %B_state1 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
@@ -103,8 +103,8 @@ hw.module @AnFSM(in %clock : i1) {
   }
 
   // typedecl'd # 2
-  %reg_state2 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
-  %reg_read_state2 = sv.read_inout %reg_state2 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
+  %reg_state2 = sv.var : !sv.var<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
+  %reg_read_state2 = sv.read_inout %reg_state2 : !sv.var<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
 
   %A_state2 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
   %B_state2 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>

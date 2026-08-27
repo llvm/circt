@@ -20,34 +20,34 @@ hw.module @fragment_ref(in %clk : !seq.clock) attributes {emit.fragments = [@Som
 hw.module @lowering(in %clk : !seq.clock, in %rst : i1, in %in : i32, out a : i32, out b : i32, out c : i32, out d : i32, out e : i32, out f : i32) {
   %cst0 = hw.constant 0 : i32
 
-  // CHECK: %rA = sv.reg sym @regA : !hw.inout<i32>
-  // CHECK: [[VAL_A:%.+]] = sv.read_inout %rA : !hw.inout<i32>
+  // CHECK: %rA = sv.var sym @regA : !sv.var<i32>
+  // CHECK: [[VAL_A:%.+]] = sv.read_inout %rA : !sv.var<i32>
   %rA = seq.firreg %in clock %clk sym @regA : i32
 
-  // CHECK: %rB = sv.reg sym @regB : !hw.inout<i32>
-  // CHECK: [[VAL_B:%.+]] = sv.read_inout %rB : !hw.inout<i32>
+  // CHECK: %rB = sv.var sym @regB : !sv.var<i32>
+  // CHECK: [[VAL_B:%.+]] = sv.read_inout %rB : !sv.var<i32>
   %rB = seq.firreg %in clock %clk sym @regB reset sync %rst, %cst0 : i32
 
-  // CHECK: %rC = sv.reg sym @regC : !hw.inout<i32>
-  // CHECK: [[VAL_C:%.+]] = sv.read_inout %rC : !hw.inout<i32>
+  // CHECK: %rC = sv.var sym @regC : !sv.var<i32>
+  // CHECK: [[VAL_C:%.+]] = sv.read_inout %rC : !sv.var<i32>
   %rC = seq.firreg %in clock %clk sym @regC reset async %rst, %cst0 : i32
 
-  // CHECK: %rD = sv.reg sym @regD : !hw.inout<i32>
-  // CHECK: [[VAL_D:%.+]] = sv.read_inout %rD : !hw.inout<i32>
+  // CHECK: %rD = sv.var sym @regD : !sv.var<i32>
+  // CHECK: [[VAL_D:%.+]] = sv.read_inout %rD : !sv.var<i32>
   %rD = seq.firreg %in clock %clk sym @regD : i32
 
-  // CHECK: %rE = sv.reg sym @regE : !hw.inout<i32>
-  // CHECK: [[VAL_E:%.+]] = sv.read_inout %rE : !hw.inout<i32>
+  // CHECK: %rE = sv.var sym @regE : !sv.var<i32>
+  // CHECK: [[VAL_E:%.+]] = sv.read_inout %rE : !sv.var<i32>
   %rE = seq.firreg %in clock %clk sym @regE reset sync %rst, %cst0 : i32
 
-  // CHECK: %rF = sv.reg sym @regF : !hw.inout<i32>
-  // CHECK: [[VAL_F:%.+]] = sv.read_inout %rF : !hw.inout<i32>
+  // CHECK: %rF = sv.var sym @regF : !sv.var<i32>
+  // CHECK: [[VAL_F:%.+]] = sv.read_inout %rF : !sv.var<i32>
   %rF = seq.firreg %in clock %clk sym @regF reset async %rst, %cst0 : i32
 
-  // CHECK: %rGnamed = sv.reg sym @regG : !hw.inout<i32>
+  // CHECK: %rGnamed = sv.var sym @regG : !sv.var<i32>
   %r = seq.firreg %in clock %clk sym @regG { "name" = "rGnamed" }: i32
 
-  // CHECK: %rNoSym = sv.reg : !hw.inout<i32>
+  // CHECK: %rNoSym = sv.var : !sv.var<i32>
   %rNoSym = seq.firreg %in clock %clk : i32
 
   // CHECK:      sv.always posedge %clk {
@@ -127,36 +127,36 @@ hw.module @lowering(in %clk : !seq.clock, in %rst : i1, in %in : i32, out a : i3
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
-  // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<8xi32>>
+  // CHECK-NEXT:         %_RANDOM = sv.var : !sv.var<!hw.uarray<8xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i4 to %c-8_i4 step %c1_i4 : i4 {
   // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %24 = comb.extract %i from 0 : (i4) -> i3
-  // CHECK-NEXT:           %25 = sv.array_index_inout %_RANDOM[%24] : !hw.inout<uarray<8xi32>>, i3
+  // CHECK-NEXT:           %25 = sv.array_index_inout %_RANDOM[%24] : !sv.var<!hw.uarray<8xi32>>, i3
   // CHECK-NEXT:           sv.bpassign %25, %RANDOM : i32
   // CHECK-NEXT:         }
-  // CHECK-NEXT:         %8 = sv.array_index_inout %_RANDOM[%c0_i3] : !hw.inout<uarray<8xi32>>, i3
-  // CHECK-NEXT:         %9 = sv.array_index_inout %_RANDOM[%c1_i3] : !hw.inout<uarray<8xi32>>, i3
-  // CHECK-NEXT:         %10 = sv.array_index_inout %_RANDOM[%c2_i3] : !hw.inout<uarray<8xi32>>, i3
-  // CHECK-NEXT:         %11 = sv.array_index_inout %_RANDOM[%c3_i3] : !hw.inout<uarray<8xi32>>, i3
-  // CHECK-NEXT:         %12 = sv.array_index_inout %_RANDOM[%c-4_i3] : !hw.inout<uarray<8xi32>>, i3
-  // CHECK-NEXT:         %13 = sv.array_index_inout %_RANDOM[%c-3_i3] : !hw.inout<uarray<8xi32>>, i3
-  // CHECK-NEXT:         %14 = sv.array_index_inout %_RANDOM[%c-2_i3] : !hw.inout<uarray<8xi32>>, i3
-  // CHECK-NEXT:         %15 = sv.array_index_inout %_RANDOM[%c-1_i3] : !hw.inout<uarray<8xi32>>, i3
-  // CHECK-NEXT:         %16 = sv.read_inout %8 : !hw.inout<i32>
+  // CHECK-NEXT:         %8 = sv.array_index_inout %_RANDOM[%c0_i3] : !sv.var<!hw.uarray<8xi32>>, i3
+  // CHECK-NEXT:         %9 = sv.array_index_inout %_RANDOM[%c1_i3] : !sv.var<!hw.uarray<8xi32>>, i3
+  // CHECK-NEXT:         %10 = sv.array_index_inout %_RANDOM[%c2_i3] : !sv.var<!hw.uarray<8xi32>>, i3
+  // CHECK-NEXT:         %11 = sv.array_index_inout %_RANDOM[%c3_i3] : !sv.var<!hw.uarray<8xi32>>, i3
+  // CHECK-NEXT:         %12 = sv.array_index_inout %_RANDOM[%c-4_i3] : !sv.var<!hw.uarray<8xi32>>, i3
+  // CHECK-NEXT:         %13 = sv.array_index_inout %_RANDOM[%c-3_i3] : !sv.var<!hw.uarray<8xi32>>, i3
+  // CHECK-NEXT:         %14 = sv.array_index_inout %_RANDOM[%c-2_i3] : !sv.var<!hw.uarray<8xi32>>, i3
+  // CHECK-NEXT:         %15 = sv.array_index_inout %_RANDOM[%c-1_i3] : !sv.var<!hw.uarray<8xi32>>, i3
+  // CHECK-NEXT:         %16 = sv.read_inout %8 : !sv.var<i32>
   // CHECK-NEXT:         sv.bpassign %rA, %16 : i32
-  // CHECK-NEXT:         %17 = sv.read_inout %9 : !hw.inout<i32>
+  // CHECK-NEXT:         %17 = sv.read_inout %9 : !sv.var<i32>
   // CHECK-NEXT:         sv.bpassign %rB, %17 : i32
-  // CHECK-NEXT:         %18 = sv.read_inout %10 : !hw.inout<i32>
+  // CHECK-NEXT:         %18 = sv.read_inout %10 : !sv.var<i32>
   // CHECK-NEXT:         sv.bpassign %rC, %18 : i32
-  // CHECK-NEXT:         %19 = sv.read_inout %11 : !hw.inout<i32>
+  // CHECK-NEXT:         %19 = sv.read_inout %11 : !sv.var<i32>
   // CHECK-NEXT:         sv.bpassign %rD, %19 : i32
-  // CHECK-NEXT:         %20 = sv.read_inout %12 : !hw.inout<i32>
+  // CHECK-NEXT:         %20 = sv.read_inout %12 : !sv.var<i32>
   // CHECK-NEXT:         sv.bpassign %rE, %20 : i32
-  // CHECK-NEXT:         %21 = sv.read_inout %13 : !hw.inout<i32>
+  // CHECK-NEXT:         %21 = sv.read_inout %13 : !sv.var<i32>
   // CHECK-NEXT:         sv.bpassign %rF, %21 : i32
-  // CHECK-NEXT:         %22 = sv.read_inout %14 : !hw.inout<i32>
+  // CHECK-NEXT:         %22 = sv.read_inout %14 : !sv.var<i32>
   // CHECK-NEXT:         sv.bpassign %rGnamed, %22 : i32
-  // CHECK-NEXT:         %23 = sv.read_inout %15 : !hw.inout<i32>
+  // CHECK-NEXT:         %23 = sv.read_inout %15 : !sv.var<i32>
   // CHECK-NEXT:         sv.bpassign %rNoSym, %23 : i32
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.if %rst {
@@ -178,8 +178,8 @@ hw.module @lowering(in %clk : !seq.clock, in %rst : i1, in %in : i32, out a : i3
 hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond : i1, in %value : i2) {
   // CHECK: %c0_i2 = hw.constant 0 : i2
   %c0_i2 = hw.constant 0 : i2
-  // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
-  // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
+  // CHECK-NEXT: %count = sv.var sym @count : !sv.var<i2>
+  // CHECK-NEXT: %0 = sv.read_inout %count : !sv.var<i2>
   // CHECK-NEXT: %1 = comb.mux bin %cond, %value, %0 : i2
   // CHECK-NEXT: %2 = comb.mux bin %reset, %c0_i2, %1 : i2
   // CHECK-NEXT: sv.always posedge %clock {
@@ -208,15 +208,15 @@ hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond :
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
-  // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
+  // CHECK-NEXT:         %_RANDOM = sv.var : !sv.var<!hw.uarray<1xi32>>
   // CHECK:              sv.for %i = %{{false.*}} to %{{true.*}} step %{{true.*}} : i1 {
   // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
-  // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
+  // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !sv.var<!hw.uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32
   // CHECK-NEXT:         }
-  // CHECK-NEXT:         %3 = sv.array_index_inout %_RANDOM[%c0_i0] : !hw.inout<uarray<1xi32>>, i0
-  // CHECK-NEXT:         %4 = sv.read_inout %3 : !hw.inout<i32>
+  // CHECK-NEXT:         %3 = sv.array_index_inout %_RANDOM[%c0_i0] : !sv.var<!hw.uarray<1xi32>>, i0
+  // CHECK-NEXT:         %4 = sv.read_inout %3 : !sv.var<i32>
   // CHECK-NEXT:         %5 = comb.extract %4 from 0 : (i32) -> i2
   // CHECK-NEXT:         sv.bpassign %count, %5 : i2
   // CHECK-NEXT:       }
@@ -235,8 +235,8 @@ hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond :
 hw.module private @UninitReg1_nonbin(in %clock : !seq.clock, in %reset : i1, in %cond : i1, in %value : i2) {
   // CHECK: %c0_i2 = hw.constant 0 : i2
   %c0_i2 = hw.constant 0 : i2
-  // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
-  // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
+  // CHECK-NEXT: %count = sv.var sym @count : !sv.var<i2>
+  // CHECK-NEXT: %0 = sv.read_inout %count : !sv.var<i2>
   // CHECK-NEXT: %1 = comb.mux %cond, %value, %0 : i2
   // CHECK-NEXT: %2 = comb.mux %reset, %c0_i2, %1 : i2
   // CHECK-NEXT: sv.always posedge %clock {
@@ -279,12 +279,12 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   %4 = comb.mux bin %io_en, %io_d, %3 : i32
 
   // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
-  // COMMON:       %reg = sv.reg sym @[[reg_sym:.+]] : !hw.inout<i32>
-  // COMMON-NEXT:  %0 = sv.read_inout %reg : !hw.inout<i32>
-  // COMMON-NEXT:  %reg2 = sv.reg sym @[[reg2_sym:.+]] : !hw.inout<i32>
-  // COMMON-NEXT:  %1 = sv.read_inout %reg2 : !hw.inout<i32>
-  // COMMON-NEXT:  %reg3 = sv.reg sym @[[reg3_sym:.+]] : !hw.inout<i32
-  // COMMON-NEXT:  %2 = sv.read_inout %reg3 : !hw.inout<i32>
+  // COMMON:       %reg = sv.var sym @[[reg_sym:.+]] : !sv.var<i32>
+  // COMMON-NEXT:  %0 = sv.read_inout %reg : !sv.var<i32>
+  // COMMON-NEXT:  %reg2 = sv.var sym @[[reg2_sym:.+]] : !sv.var<i32>
+  // COMMON-NEXT:  %1 = sv.read_inout %reg2 : !sv.var<i32>
+  // COMMON-NEXT:  %reg3 = sv.var sym @[[reg3_sym:.+]] : !sv.var<i32
+  // COMMON-NEXT:  %2 = sv.read_inout %reg3 : !sv.var<i32>
   // COMMON-NEXT:  %3 = comb.concat %false, %0 : i1, i32
   // COMMON-NEXT:  %4 = comb.concat %false, %1 : i1, i32
   // COMMON-NEXT:  %5 = comb.add %3, %4 : i33
@@ -315,20 +315,20 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
-  // CHECK-NEXT:          %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
+  // CHECK-NEXT:          %_RANDOM = sv.var : !sv.var<!hw.uarray<3xi32>>
   // CHECK-NEXT:          sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
   // CHECK-NEXT:            %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
-  // CHECK-NEXT:            %14 = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
+  // CHECK-NEXT:            %14 = sv.array_index_inout %_RANDOM[%i] : !sv.var<!hw.uarray<3xi32>>, i2
   // CHECK-NEXT:            sv.bpassign %14, %RANDOM : i32
   // CHECK-NEXT:          }
-  // CHECK-NEXT:          %8 = sv.array_index_inout %_RANDOM[%c0_i2] : !hw.inout<uarray<3xi32>>, i2
-  // CHECK-NEXT:          %9 = sv.array_index_inout %_RANDOM[%c1_i2] : !hw.inout<uarray<3xi32>>, i2
-  // CHECK-NEXT:          %10 = sv.array_index_inout %_RANDOM[%c-2_i2] : !hw.inout<uarray<3xi32>>, i2
-  // CHECK-NEXT:          %11 = sv.read_inout %8 : !hw.inout<i32>
+  // CHECK-NEXT:          %8 = sv.array_index_inout %_RANDOM[%c0_i2] : !sv.var<!hw.uarray<3xi32>>, i2
+  // CHECK-NEXT:          %9 = sv.array_index_inout %_RANDOM[%c1_i2] : !sv.var<!hw.uarray<3xi32>>, i2
+  // CHECK-NEXT:          %10 = sv.array_index_inout %_RANDOM[%c-2_i2] : !sv.var<!hw.uarray<3xi32>>, i2
+  // CHECK-NEXT:          %11 = sv.read_inout %8 : !sv.var<i32>
   // CHECK-NEXT:          sv.bpassign %reg, %11 : i32
-  // CHECK-NEXT:          %12 = sv.read_inout %9 : !hw.inout<i32>
+  // CHECK-NEXT:          %12 = sv.read_inout %9 : !sv.var<i32>
   // CHECK-NEXT:          sv.bpassign %reg2, %12 : i32
-  // CHECK-NEXT:          %13 = sv.read_inout %10 : !hw.inout<i32>
+  // CHECK-NEXT:          %13 = sv.read_inout %10 : !sv.var<i32>
   // CHECK-NEXT:          sv.bpassign %reg3, %13 : i32
   // CHECK-NEXT:       }
   // COMMON-NEXT:      sv.if %reset {
@@ -353,7 +353,7 @@ hw.module private @UninitReg42(in %clock: !seq.clock, in %reset: i1, in %cond: i
   %1 = comb.mux %reset, %c0_i42, %0 : i42
 
   // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
-  // CHECK:      %count = sv.reg sym @count : !hw.inout<i42>
+  // CHECK:      %count = sv.var sym @count : !sv.var<i42>
   // CHECK:      sv.ifdef @ENABLE_INITIAL_REG_ {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef @FIRRTL_BEFORE_INITIAL {
@@ -364,17 +364,17 @@ hw.module private @UninitReg42(in %clock: !seq.clock, in %reset: i1, in %cond: i
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
-  // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<2xi32>>
+  // CHECK-NEXT:         %_RANDOM = sv.var : !sv.var<!hw.uarray<2xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i2 to %c-2_i2 step %c1_i2 : i2 {
   // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %9 = comb.extract %i from 0 : (i2) -> i1
-  // CHECK-NEXT:           %10 = sv.array_index_inout %_RANDOM[%9] : !hw.inout<uarray<2xi32>>, i1
+  // CHECK-NEXT:           %10 = sv.array_index_inout %_RANDOM[%9] : !sv.var<!hw.uarray<2xi32>>, i1
   // CHECK-NEXT:           sv.bpassign %10, %RANDOM : i32
   // CHECK-NEXT:         }
-  // CHECK-NEXT:         %3 = sv.array_index_inout %_RANDOM[%false] : !hw.inout<uarray<2xi32>>, i1
-  // CHECK-NEXT:         %4 = sv.array_index_inout %_RANDOM[%true] : !hw.inout<uarray<2xi32>>, i1
-  // CHECK-NEXT:         %5 = sv.read_inout %3 : !hw.inout<i32>
-  // CHECK-NEXT:         %6 = sv.read_inout %4 : !hw.inout<i32>
+  // CHECK-NEXT:         %3 = sv.array_index_inout %_RANDOM[%false] : !sv.var<!hw.uarray<2xi32>>, i1
+  // CHECK-NEXT:         %4 = sv.array_index_inout %_RANDOM[%true] : !sv.var<!hw.uarray<2xi32>>, i1
+  // CHECK-NEXT:         %5 = sv.read_inout %3 : !sv.var<i32>
+  // CHECK-NEXT:         %6 = sv.read_inout %4 : !sv.var<i32>
   // CHECK-NEXT:         %7 = comb.extract %6 from 0 : (i32) -> i10
   // CHECK-NEXT:         %8 = comb.concat %5, %7 : i32, i10
   // CHECK-NEXT:         sv.bpassign %count, %8 : i42
@@ -393,7 +393,7 @@ hw.module private @UninitReg42(in %clock: !seq.clock, in %reset: i1, in %cond: i
 hw.module private @init1DVector(in %clock: !seq.clock, in %a: !hw.array<2xi1>, out b: !hw.array<2xi1>) {
   %r = seq.firreg %a clock %clock sym @__r__ : !hw.array<2xi1>
 
-  // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
+  // CHECK:      %r = sv.var sym @[[r_sym:[_A-Za-z0-9]+]]
 
   // CHECK:      sv.always posedge %clock  {
   // CHECK-NEXT:   sv.passign %r, %a : !hw.array<2xi1>
@@ -410,20 +410,20 @@ hw.module private @init1DVector(in %clock: !seq.clock, in %a: !hw.array<2xi1>, o
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
-  // CHECK-NEXT:       %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
+  // CHECK-NEXT:       %_RANDOM = sv.var : !sv.var<!hw.uarray<1xi32>>
   // CHECK-NEXT:       sv.for %i = %false to %true step %true : i1 {
   // CHECK-NEXT:         %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:         %8 = comb.extract %i from 0 : (i1) -> i0
-  // CHECK-NEXT:         %9 = sv.array_index_inout %_RANDOM[%8] : !hw.inout<uarray<1xi32>>, i0
+  // CHECK-NEXT:         %9 = sv.array_index_inout %_RANDOM[%8] : !sv.var<!hw.uarray<1xi32>>, i0
   // CHECK-NEXT:         sv.bpassign %9, %RANDOM : i32
   // CHECK-NEXT:       }
-  // CHECK-NEXT:       %1 = sv.array_index_inout %_RANDOM[%c0_i0] : !hw.inout<uarray<1xi32>>, i0
-  // CHECK-NEXT:       %2 = sv.read_inout %1 : !hw.inout<i32>
+  // CHECK-NEXT:       %1 = sv.array_index_inout %_RANDOM[%c0_i0] : !sv.var<!hw.uarray<1xi32>>, i0
+  // CHECK-NEXT:       %2 = sv.read_inout %1 : !sv.var<i32>
   // CHECK-NEXT:       %3 = comb.extract %2 from 0 : (i32) -> i2
-  // CHECK-NEXT:       %4 = sv.array_index_inout %r[%false] : !hw.inout<array<2xi1>>, i1
+  // CHECK-NEXT:       %4 = sv.array_index_inout %r[%false] : !sv.var<!hw.array<2xi1>>, i1
   // CHECK-NEXT:       %5 = comb.extract %3 from 1 : (i2) -> i1
   // CHECK-NEXT:       sv.bpassign %4, %5 : i1
-  // CHECK-NEXT:       %6 = sv.array_index_inout %r[%true] : !hw.inout<array<2xi1>>, i1
+  // CHECK-NEXT:       %6 = sv.array_index_inout %r[%true] : !sv.var<!hw.array<2xi1>>, i1
   // CHECK-NEXT:       %7 = comb.extract %3 from 0 : (i2) -> i1
   // CHECK-NEXT:       sv.bpassign %6, %7 : i1
 
@@ -457,18 +457,18 @@ hw.module private @init2DVector(in %clock: !seq.clock, in %a: !hw.array<1xarray<
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
-  // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
+  // CHECK-NEXT:         %_RANDOM = sv.var : !sv.var<!hw.uarray<1xi32>>
   // CHECK-NEXT:         sv.for %i = %false to %true step %true : i1 {
   // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
-  // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
+  // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !sv.var<!hw.uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32
   // CHECK-NEXT:         }
-  // CHECK-NEXT:         %1 = sv.array_index_inout %_RANDOM[%c0_i0] : !hw.inout<uarray<1xi32>>, i0
-  // CHECK-NEXT:         %2 = sv.read_inout %1 : !hw.inout<i32>
+  // CHECK-NEXT:         %1 = sv.array_index_inout %_RANDOM[%c0_i0] : !sv.var<!hw.uarray<1xi32>>, i0
+  // CHECK-NEXT:         %2 = sv.read_inout %1 : !sv.var<i32>
   // CHECK-NEXT:         %3 = comb.extract %2 from 0 : (i32) -> i1
-  // CHECK-NEXT:         %4 = sv.array_index_inout %r[%c0_i0] : !hw.inout<array<1xarray<1xi1>>>, i0
-  // CHECK-NEXT:         %5 = sv.array_index_inout %4[%c0_i0] : !hw.inout<array<1xi1>>, i0
+  // CHECK-NEXT:         %4 = sv.array_index_inout %r[%c0_i0] : !sv.var<!hw.array<1xarray<1xi1>>>, i0
+  // CHECK-NEXT:         %5 = sv.array_index_inout %4[%c0_i0] : !sv.var<!hw.array<1xi1>>, i0
   // CHECK-NEXT:         sv.bpassign %5, %3 : i1
   // CHECK:            }
   // CHECK-NEXT:     }
@@ -486,7 +486,7 @@ hw.module private @init2DVector(in %clock: !seq.clock, in %a: !hw.array<1xarray<
 hw.module private @initStruct(in %clock: !seq.clock) {
   %r = seq.firreg %r clock %clock sym @__r__ : !hw.struct<a: i1>
 
-  // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
+  // CHECK:      %r = sv.var sym @[[r_sym:[_A-Za-z0-9]+]]
   // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // CHECK:      sv.ifdef @ENABLE_INITIAL_REG_ {
   // CHECK-NEXT:   sv.ordered {
@@ -499,7 +499,7 @@ hw.module private @initStruct(in %clock: !seq.clock) {
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK:              %[[EXTRACT:.*]] = comb.extract %{{.*}} from 0 : (i32) -> i1
-  // CHECK-NEXT:         %[[INOUT:.*]] = sv.struct_field_inout %r["a"] : !hw.inout<struct<a: i1>>
+  // CHECK-NEXT:         %[[INOUT:.*]] = sv.struct_field_inout %r["a"] : !sv.var<!hw.struct<a: i1>>
   // CHECK-NEXT:         sv.bpassign %[[INOUT]], %[[EXTRACT]] : i1
   // CHECK:            }
   // CHECK-NEXT:     }
@@ -517,8 +517,8 @@ hw.module private @initStruct(in %clock: !seq.clock) {
 hw.module @issue1594(in %clock: !seq.clock, in %reset: i1, in %a: i1, out b: i1) {
   %true = hw.constant true
   %false = hw.constant false
-  %reset_n = sv.wire sym @__issue1594__reset_n  : !hw.inout<i1>
-  %0 = sv.read_inout %reset_n : !hw.inout<i1>
+  %reset_n = sv.wire sym @__issue1594__reset_n  : !sv.net<i1>
+  %0 = sv.read_inout %reset_n : !sv.net<i1>
   %1 = comb.xor %reset, %true : i1
   sv.assign %reset_n, %1 : i1
   %r = seq.firreg %a clock %clock sym @__r__ reset sync %0, %false : i1
@@ -602,8 +602,8 @@ hw.module @ArrayElements(in %a: !hw.array<2xi1>, in %clock: !seq.clock, in %cond
   %5 = comb.mux bin %cond, %0, %2 : i1
   %6 = hw.array_create %5, %4 : i1
   hw.output %r : !hw.array<2xi1>
-  // CHECK:      %[[r1:.+]] = sv.array_index_inout %r[%false] : !hw.inout<array<2xi1>>, i1
-  // CHECK-NEXT: %[[r2:.+]] = sv.array_index_inout %r[%true] : !hw.inout<array<2xi1>>, i1
+  // CHECK:      %[[r1:.+]] = sv.array_index_inout %r[%false] : !sv.var<!hw.array<2xi1>>, i1
+  // CHECK-NEXT: %[[r2:.+]] = sv.array_index_inout %r[%true] : !sv.var<!hw.array<2xi1>>, i1
   // CHECK:      sv.always posedge %clock {
   // CHECK-NEXT:   sv.if %cond {
   // CHECK-NEXT:     sv.passign %[[r2]], %0 : i1
@@ -650,7 +650,7 @@ hw.module @Subaccess(in %clock: !seq.clock, in %en: i1, in %addr: i2, in %data: 
   %11 = comb.mux bin %10, %data, %2 : i32
   %12 = hw.array_create %11, %8, %5 : i32
   hw.output %r : !hw.array<3xi32>
-  // CHECK:     %[[IDX:.+]] = sv.array_index_inout %r[%addr] : !hw.inout<array<3xi32>>, i2
+  // CHECK:     %[[IDX:.+]] = sv.array_index_inout %r[%addr] : !sv.var<!hw.array<3xi32>>, i2
   // CHECK:        sv.always posedge %clock {
   // CHECK-NEXT:     sv.if %en {
   // CHECK-NEXT:       sv.passign %[[IDX]], %data : i32
@@ -711,10 +711,10 @@ hw.module @NestedSubaccess(in %clock: !seq.clock, in %en_0: i1, in %en_1: i1, in
   %31 = comb.mux bin %en_1, %27, %30 : !hw.array<3xi32>
   %32 = hw.array_create %26, %24, %22 : i32
   %33 = comb.mux bin %en_0, %31, %32 : !hw.array<3xi32>
-  // CHECK:        %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
-  // CHECK:        %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
-  // CHECK:        %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
-  // CHECK:        %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !sv.var<!hw.array<3xi32>>, i2
+  // CHECK:        %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !sv.var<!hw.array<3xi32>>, i2
+  // CHECK:        %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !sv.var<!hw.array<3xi32>>, i2
+  // CHECK:        %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !sv.var<!hw.array<3xi32>>, i2
   // CHECK:        sv.always posedge %clock {
   // CHECK-NEXT:   sv.if %en_0 {
   // CHECK-NEXT:     sv.if %en_1 {
@@ -781,15 +781,15 @@ hw.module @with_preset(
 
 // CHECK-LABEL: @reg_of_clock_type
 hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock, out out: !seq.clock) {
-  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i1>
-  // CHECK: [[REG0_READ:%.+]] = sv.read_inout [[REG0]] : !hw.inout<i1>
+  // CHECK: [[REG0:%.+]] = sv.var : !sv.var<i1>
+  // CHECK: [[REG0_READ:%.+]] = sv.read_inout [[REG0]] : !sv.var<i1>
   %r0 = seq.firreg %i clock %clk : !seq.clock
 
   // CHECK: [[WIRE:%.+]] = hw.wire [[REG0_READ]]  : i1
   %r1 = hw.wire %r0 : !seq.clock
 
-  // CHECK: [[REG2:%.+]] = sv.reg : !hw.inout<i1>
-  // CHECK: [[REG2_READ:%.+]] = sv.read_inout [[REG2]] : !hw.inout<i1>
+  // CHECK: [[REG2:%.+]] = sv.var : !sv.var<i1>
+  // CHECK: [[REG2_READ:%.+]] = sv.read_inout [[REG2]] : !sv.var<i1>
   %r2 = seq.firreg %r1 clock %clk : !seq.clock
 
   // CHECK: sv.always posedge %clk {
@@ -810,7 +810,7 @@ hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock
 //
 // CHECK-LABEL: @FirregClockType
 hw.module @FirregClockType(in %a : !seq.clock) {
-  // CHECK: sv.reg : !hw.inout<i1>
+  // CHECK: sv.var : !sv.var<i1>
   // CHECK: sv.read_inout
   // CHECK-NOT: seq.from_clock
   %false = hw.constant false
@@ -839,10 +839,10 @@ hw.module @FirregClockType(in %a : !seq.clock) {
 //     connect r2, buzz
 // CHECK-LABEL: @RegMuxInlining1
 hw.module @RegMuxInlining1(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %b: i1, in %c: i1, in %foo: i8, in %bar: i8, in %fizz: i8, in %buzz: i8, out out: i8) {
-  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  // CHECK: [[REG0:%.+]] = sv.var : !sv.var<i8>
   %r1 = seq.firreg %3 clock %clock : i8
 
-  // CHECK: [[REG1:%.+]] = sv.reg : !hw.inout<i8>
+  // CHECK: [[REG1:%.+]] = sv.var : !sv.var<i8>
   %r2 = seq.firreg %4 clock %clock : i8
 
   // CHECK: [[VALUE:%.+]] = comb.mux bin %a, %foo, %bar
@@ -879,7 +879,7 @@ hw.module @RegMuxInlining1(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %
 //     connect r1, z
 // CHECK-LABEL: @RegMuxInlining2
 hw.module @RegMuxInlining2(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %b: i1, in %c: i1, in %x: i8, in %y: i8, in %z: i8, out out: i8) {
-  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  // CHECK: [[REG0:%.+]] = sv.var : !sv.var<i8>
   %r1 = seq.firreg %2 clock %clock : i8
 
   // CHECK: sv.always posedge %clock {
@@ -911,14 +911,14 @@ hw.module @RegMuxInlining2(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %
 //   r3 <= r1
 // CHECK-LABEL: @RegMuxInlining3
 hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
-  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  // CHECK: [[REG0:%.+]] = sv.var : !sv.var<i8>
   // CHECK: [[REG0_READ:%.+]] = sv.read_inout [[REG0]]
   %r1 = seq.firreg %0 clock %clock : i8
 
-  // CHECK: [[REG1:%.+]] = sv.reg : !hw.inout<i8>
+  // CHECK: [[REG1:%.+]] = sv.var : !sv.var<i8>
   %r2 = seq.firreg %r1 clock %clock : i8
 
-  // CHECK: [[REG2:%.+]] = sv.reg : !hw.inout<i8>
+  // CHECK: [[REG2:%.+]] = sv.var : !sv.var<i8>
   %r3 = seq.firreg %r1 clock %clock : i8
 
   // CHECK: [[MUX:%.+]] = comb.mux
@@ -937,10 +937,10 @@ hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
     %r1 = seq.firreg %mux clock %clock : i2
     %r2 = seq.firreg %mux clock %clock : i2
     hw.output %r2: i2
-    //CHECK: %r1 = sv.reg : !hw.inout<i2>
-    //CHECK: %[[V1:.+]] = sv.read_inout %r1 : !hw.inout<i2>
-    //CHECK: %r2 = sv.reg : !hw.inout<i2>
-    //CHECK: %[[V2:.+]] = sv.read_inout %r2 : !hw.inout<i2>
+    //CHECK: %r1 = sv.var : !sv.var<i2>
+    //CHECK: %[[V1:.+]] = sv.read_inout %r1 : !sv.var<i2>
+    //CHECK: %r2 = sv.var : !sv.var<i2>
+    //CHECK: %[[V2:.+]] = sv.read_inout %r2 : !sv.var<i2>
     //CHECK: sv.always posedge %clock {
     //CHECK:   sv.if %cond {
     //CHECK:     sv.passign %r2, %[[V1]] : i2
@@ -960,7 +960,7 @@ sv.macro.decl @MyMacro
 hw.module @RegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %value : i1) {
   %c = hw.constant 0 : i1
   // CHECK: sv.ifdef @MyMacro {
-  // CHECK:   %reg = sv.reg sym @reg
+  // CHECK:   %reg = sv.var sym @reg
   // CHECK:   sv.if %reset {
   // CHECK:     sv.passign %reg, %false_0 : i1
   // CHECK:   } else {
@@ -973,8 +973,8 @@ hw.module @RegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %value : i1)
 
   // CHECK: sv.initial {
   // CHECK:   sv.ifdef.procedural @MyMacro {
-  // CHECK:     %[[REG:.*]] = sv.xmr.ref @RegUnderIfdef_reg : !hw.inout<i1>
-  // CHECK:     %[[RNG:.*]] = sv.read_inout %{{.*}} : !hw.inout<i32>
+  // CHECK:     %[[REG:.*]] = sv.xmr.ref @RegUnderIfdef_reg : !sv.var<i1>
+  // CHECK:     %[[RNG:.*]] = sv.read_inout %{{.*}} : !sv.var<i32>
   // CHECK:     %[[VAL:.*]] = comb.extract %[[RNG]] from 0 : (i32) -> i1
   // CHECK:     sv.bpassign %[[REG]], %[[VAL]] : i1
   // CHECK:   }
@@ -991,7 +991,7 @@ hw.module @RegUnderIfdefElse(in %clock : !seq.clock, in %reset : i1, in %value :
 
   // CHECK: sv.ifdef @MyMacro {
   // CHECK: } else {
-  // CHECK:   %reg = sv.reg sym @reg
+  // CHECK:   %reg = sv.var sym @reg
   // CHECK:   sv.if %reset {
   // CHECK:     sv.passign %reg, %false_0 : i1
   // CHECK:   } else {
@@ -1006,8 +1006,8 @@ hw.module @RegUnderIfdefElse(in %clock : !seq.clock, in %reset : i1, in %value :
   // CHECK: sv.initial {
   // CHECK:   sv.ifdef.procedural @MyMacro {
   // CHECK:   } else {
-  // CHECK:     %[[REG:.*]] = sv.xmr.ref @RegUnderIfdefElse_reg : !hw.inout<i1>
-  // CHECK:     %[[RNG:.*]] = sv.read_inout %{{.*}} : !hw.inout<i32>
+  // CHECK:     %[[REG:.*]] = sv.xmr.ref @RegUnderIfdefElse_reg : !sv.var<i1>
+  // CHECK:     %[[RNG:.*]] = sv.read_inout %{{.*}} : !sv.var<i32>
   // CHECK:     %[[VAL:.*]] = comb.extract %[[RNG]] from 0 : (i32) -> i1
   // CHECK:     sv.bpassign %[[REG]], %[[VAL]] : i1
   // CHECK:   }
@@ -1038,8 +1038,8 @@ hw.module @AsyncResetRegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %v
   %c = hw.constant 0 : i1
 
   // CHECK: sv.ifdef @MyMacro {
-  // CHECK:   %reg = sv.reg sym @reg : !hw.inout<i1>
-  // CHECK:   %0 = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK:   %reg = sv.var sym @reg : !sv.var<i1>
+  // CHECK:   %0 = sv.read_inout %reg : !sv.var<i1>
   // CHECK:   sv.always posedge %clock, posedge %reset {
   // CHECK:     sv.if %reset {
   // CHECK:       sv.passign %reg, %false_0 : i1
@@ -1055,7 +1055,7 @@ hw.module @AsyncResetRegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %v
   // CHECK: sv.initial {
   // CHECK:   sv.if %reset {
   // CHECK:     sv.ifdef.procedural @MyMacro {
-  // CHECK:       %0 = sv.xmr.ref @[[reg_path]] : !hw.inout<i1>
+  // CHECK:       %0 = sv.xmr.ref @[[reg_path]] : !sv.var<i1>
   // CHECK:       sv.bpassign %0, %false_0 : i1
   // CHECK:     }
   // CHECK:   }
@@ -1070,8 +1070,8 @@ hw.module @PresetRegUnderIfdef(in %clock : !seq.clock, in %value : i1) {
   %c = hw.constant 0 : i1
 
   // CHECK: sv.ifdef @MyMacro {
-  // CHECK:   %reg = sv.reg sym @reg : !hw.inout<i1>
-  // CHECK:   %0 = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK:   %reg = sv.var sym @reg : !sv.var<i1>
+  // CHECK:   %0 = sv.read_inout %reg : !sv.var<i1>
   // CHECK:   sv.always posedge %clock {
   // CHECK:     sv.passign %reg, %value : i1
   // CHECK:   }
@@ -1082,7 +1082,7 @@ hw.module @PresetRegUnderIfdef(in %clock : !seq.clock, in %value : i1) {
 
   // CHECK: sv.initial {
   // CHECK:   sv.ifdef.procedural @MyMacro {
-  // CHECK:     %0 = sv.xmr.ref @[[reg_path]] : !hw.inout<i1>
+  // CHECK:     %0 = sv.xmr.ref @[[reg_path]] : !sv.var<i1>
   // CHECK:     sv.bpassign %0, %false : i1
   // CHECK:   }
   // CHECK: }

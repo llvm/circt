@@ -14,14 +14,14 @@ hw.module @side_effect_expr(in %clock: i1, out a: i1, out a2: i1) {
   // DISALLOW: `ifdef FOO_MACRO
   sv.ifdef @FOO_MACRO {
     // DISALLOW: logic logicOp;
-    // DISALLOW: {{^    }}reg   [[SE_REG:[_A-Za-z0-9]+]];
+    // DISALLOW: {{^    }}logic [[SE_REG:[_A-Za-z0-9]+]];
 
     // CHECK:    always @(posedge clock)
     // DISALLOW: always @(posedge clock)
     sv.always posedge %clock  {
       %0 = sv.verbatim.expr "INLINE_OK" : () -> i1
       // CHECK: automatic logic logicOp;
-      %logicOp = sv.logic : !hw.inout<i1>
+      %logicOp = sv.var : !sv.var<i1>
 
       // This shouldn't be pushed into a reg.
       // CHECK: if (INLINE_OK)
@@ -82,13 +82,13 @@ hw.module @hoist_expressions(in %clock: i1, in %x: i8, in %y: i8, in %z: i8) {
   // Check out wires.
   // CHECK: wire [7:0] myWire = x;
   // DISALLOW: wire [7:0] myWire = x;
-  %myWire = sv.wire : !hw.inout<i8>
+  %myWire = sv.wire : !sv.net<i8>
   sv.assign %myWire, %x : i8
 
   // CHECK: always @(posedge clock)
   // DISALLOW: always @(posedge clock)
   sv.always posedge %clock  {
-    %wireout = sv.read_inout %myWire : !hw.inout<i8>
+    %wireout = sv.read_inout %myWire : !sv.net<i8>
     %3 = comb.add %x, %wireout: i8
     %4 = comb.icmp eq %3, %z : i8
     // CHECK: if (x + myWire == z)
@@ -105,9 +105,9 @@ hw.module @hoist_expressions(in %clock: i1, in %x: i8, in %y: i8, in %z: i8) {
 // DISALLOW-LABEL: module always_inline_expr
 // https://github.com/llvm/circt/issues/1705
 hw.module @always_inline_expr(in %ro_clock_0: i1, in %ro_en_0: i1, in %ro_addr_0: i1, in %wo_clock_0: i1, in %wo_en_0: i1, in %wo_addr_0: i1, in %wo_mask_0: i1, in %wo_data_0: i5, out ro_data_0: i5) {
-  %Memory = sv.reg  : !hw.inout<uarray<2xi5>>
-  %0 = sv.array_index_inout %Memory[%ro_addr_0] : !hw.inout<uarray<2xi5>>, i1
-  %1 = sv.read_inout %0 : !hw.inout<i5>
+  %Memory = sv.var  : !sv.var<!hw.uarray<2xi5>>
+  %0 = sv.array_index_inout %Memory[%ro_addr_0] : !sv.var<!hw.uarray<2xi5>>, i1
+  %1 = sv.read_inout %0 : !sv.var<i5>
   %x_i5 = sv.constantX : i5
   %2 = comb.mux %ro_en_0, %1, %x_i5 : i5
   sv.alwaysff(posedge %wo_clock_0)  {
@@ -117,7 +117,7 @@ hw.module @always_inline_expr(in %ro_clock_0: i1, in %ro_en_0: i1, in %ro_addr_0
     sv.if %3  {
       // CHECK: Memory[wo_addr_0] <= wo_data_0;
       // DISALLOW: Memory[wo_addr_0] <= wo_data_0;
-      %4 = sv.array_index_inout %Memory[%wo_addr_0] : !hw.inout<uarray<2xi5>>, i1
+      %4 = sv.array_index_inout %Memory[%wo_addr_0] : !sv.var<!hw.uarray<2xi5>>, i1
       sv.passign %4, %wo_data_0 : i5
     }
   }
@@ -128,11 +128,11 @@ hw.module @always_inline_expr(in %ro_clock_0: i1, in %ro_en_0: i1, in %ro_addr_0
 // DISALLOW-LABEL: module EmittedDespiteDisallowed
 // https://github.com/llvm/circt/issues/2216
 hw.module @EmittedDespiteDisallowed(in %clock: i1, in %reset: i1) {
-  %tick_value_2 = sv.reg  : !hw.inout<i1>
-  %counter_value = sv.reg  : !hw.inout<i1>
+  %tick_value_2 = sv.var  : !sv.var<i1>
+  %counter_value = sv.var  : !sv.var<i1>
 
   // Temporary reg gets introduced.
-  // DISALLOW: reg [1:0] [[TEMP:.+]];
+  // DISALLOW: logic [1:0] [[TEMP:.+]];
 
   // DISALLOW: initial begin
   sv.initial {
@@ -155,13 +155,13 @@ hw.module @EmittedDespiteDisallowed(in %clock: i1, in %reset: i1) {
 
 // CHECK-LABEL: module ReadInoutAggregate(
 hw.module @ReadInoutAggregate(in %clock: i1) {
-  %register = sv.reg  : !hw.inout<array<1xstruct<a: i32>>>
+  %register = sv.var  : !sv.var<!hw.array<1xstruct<a: i32>>>
   sv.always posedge %clock  {
     %c0_i16 = hw.constant 0 : i16
     %false = hw.constant false
-    %0 = sv.array_index_inout %register[%false] : !hw.inout<array<1xstruct<a: i32>>>, i1
-    %1 = sv.struct_field_inout %0["a"] : !hw.inout<struct<a: i32>>
-    %2 = sv.read_inout %1 : !hw.inout<i32>
+    %0 = sv.array_index_inout %register[%false] : !sv.var<!hw.array<1xstruct<a: i32>>>, i1
+    %1 = sv.struct_field_inout %0["a"] : !sv.var<!hw.struct<a: i32>>
+    %2 = sv.read_inout %1 : !sv.var<i32>
     %3 = comb.extract %2 from 0 : (i32) -> i16
     %4 = comb.concat %c0_i16, %3 : i16, i16
     sv.passign %1, %4 : i32
@@ -224,7 +224,7 @@ hw.module @AggregateInline(in %clock: i1) {
   // CHECK: wire [15:0]{{ *}}[[GEN:.+]];
   // DISALLOW: wire [15:0]{{ *}}[[GEN:.+]];
 
-  %register = sv.reg  : !hw.inout<struct<a: i32>>
+  %register = sv.var  : !sv.var<!hw.struct<a: i32>>
   sv.always posedge %clock  {
     // %4 can not be inlined because %3 uses %2.
     %4 = comb.concat %c0_i16, %3 : i16, i16
@@ -232,8 +232,8 @@ hw.module @AggregateInline(in %clock: i1) {
     // CHECK: register.a <= {16'h0, [[GEN]]};
     sv.passign %1, %4 : i32
   }
-  %1 = sv.struct_field_inout %register["a"] : !hw.inout<struct<a: i32>>
-  %2 = sv.read_inout %1 : !hw.inout<i32>
+  %1 = sv.struct_field_inout %register["a"] : !sv.var<!hw.struct<a: i32>>
+  %2 = sv.read_inout %1 : !sv.var<i32>
   %3 = comb.extract %2 from 0 : (i32) -> i16
   // DISALLOW: assign [[GEN]] = register.a[15:0]
   // CHECK: assign [[GEN]] = register.a[15:0]
@@ -243,29 +243,29 @@ hw.module @AggregateInline(in %clock: i1) {
 // CHECK-LABEL: module hoist_reg
 // DISALLOW-LABEL: module hoist_reg
 hw.module @hoist_reg(in %dummy : i32, out out : i17) {
-  %res_reg = sv.reg : !hw.inout<i17>
+  %res_reg = sv.var : !sv.var<i17>
   // CHECK: initial
-  // CHECK: reg  [31:0] tmp;
+  // CHECK: logic [31:0] tmp;
   // CHECK end // initial
-  // DISALLOW: reg  [31:0] tmp;
+  // DISALLOW: logic [31:0] tmp;
   // DISALLOW: initial
   sv.initial {
-    %tmp = sv.reg : !hw.inout<i32>
-    %17 = sv.read_inout %tmp : !hw.inout<i32>
+    %tmp = sv.var : !sv.var<i32>
+    %17 = sv.read_inout %tmp : !sv.var<i32>
     %29 = comb.xor %dummy, %17 : i32
     %32 = comb.extract %29 from 3 : (i32) -> i17
     sv.passign %res_reg, %32 : i17
   }
 
-  %res_reg_data = sv.read_inout %res_reg : !hw.inout<i17>
+  %res_reg_data = sv.read_inout %res_reg : !sv.var<i17>
   hw.output %res_reg_data : i17
 }
 
 // DISALLOW-LABEL: module ArrayInjectProcedural(
 hw.module @ArrayInjectProcedural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2) {
-  // DISALLOW: reg [3:0][41:0] z;
-  %z = sv.reg : !hw.inout<array<4xi42>>
-  // DISALLOW-NEXT: reg [3:0][41:0] [[TMP:.+]];
+  // DISALLOW: logic [3:0][41:0] z;
+  %z = sv.var : !sv.var<!hw.array<4xi42>>
+  // DISALLOW-NEXT: logic [3:0][41:0] [[TMP:.+]];
   // DISALLOW-NEXT: always_comb begin
   // DISALLOW-NEXT:   [[TMP]] = a;
   // DISALLOW-NEXT:   [[TMP]][i] = b;

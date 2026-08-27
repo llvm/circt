@@ -15,12 +15,6 @@
 
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVDialect.td"
-include "mlir/IR/AttrTypeBase.td"
-
-// TODO: The following should go into a `SVTypesImpl.td` if we ever actually
-// define any SV-specific types. Doing so will keep this `SVTypes.td` file
-// includable for other dialects, without polluting their output with SV types.
-class SVType<string name> : TypeDef<SVDialect, name> { }
 
 //===----------------------------------------------------------------------===//
 // InOut type and related helpers.
@@ -53,31 +47,40 @@ class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "sv::getInOutElementType($_self)">;
 
-def UnpackedOpenArrayTypeImpl : SVType<"UnpackedOpenArray"> {
-  let summary = "SystemVerilog unpacked 'open' array";
-  let description = [{
-    This type represents unpacked 'open' array. Open array is a special type that can be
-    used as formal arguments of DPI import statements.
-
-    See SystemVerilog Spec 35.5.6.1.
-  }];
-
-  let mnemonic = "open_uarray";
-  let parameters = (ins "::mlir::Type":$elementType);
-
-  let builders = [
-    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
-      auto *ctx = elementType.getContext();
-      return $_get(ctx, elementType);
-    }]>
-  ];
-
-  let assemblyFormat = "`<` $elementType `>`";
-}
-
 def UnpackedOpenArrayType : DialectType<SVDialect,
     CPred<"::circt::hw::type_isa<circt::sv::UnpackedOpenArrayType>($_self)">,
           "an Unpacked Open ArrayType",
           "::circt::hw::TypeAliasOr<circt::sv::UnpackedOpenArrayType>">;
+
+def SVNetType : DialectType<SVDialect,
+    CPred<"::circt::hw::type_isa<circt::sv::NetType>($_self)">,
+    "an SV net type", "::circt::sv::NetType">;
+
+def SVVarType : DialectType<SVDialect,
+    CPred<"::circt::hw::type_isa<circt::sv::VarType>($_self)">,
+    "an SV variable type", "::circt::sv::VarType">;
+
+def SVLvalueType : AnyTypeOf<[SVNetType, SVVarType]>;
+
+class SVLvalueElementConstraint<string value, string lvalue>
+  : TypesMatchWith<"type should be element of SV lvalue type",
+                   lvalue, value, "sv::getLvalueElementType($_self)">;
+
+def SVForceDestType : AnyTypeOf<[SVNetType, SVVarType, InOutType]>;
+
+class SVForceDestElementConstraint<string value, string lvalue>
+  : TypesMatchWith<"type should be element of SV force destination type",
+                   lvalue, value, "sv::getForceDestElementType($_self)">;
+
+class HWInOutToSVNetConstraint<string input, string result>
+  : TypesMatchWith<"result should be an SV net of the inout element type",
+                   input, result,
+                   "sv::NetType::get(sv::getInOutElementType($_self))">;
+
+class SVNetToHWInOutConstraint<string input, string result>
+  : TypesMatchWith<"result should be an InOut of an SV net element type",
+                   input, result,
+                   "hw::InOutType::get($_self.getContext(), "
+                   "cast<sv::NetType>($_self).getElementType())">;
 
 #endif // CIRCT_DIALECT_SV_SVTYPES

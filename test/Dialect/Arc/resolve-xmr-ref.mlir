@@ -57,14 +57,14 @@ module {
                  out out_ext_port : i1, out out_ext_sig : i1) {
     hw.instance "mid_inst" sym @mid_inst @Mid() -> ()
 
-    %0 = sv.xmr.ref @intSigPath : !hw.inout<i32>
-    %1 = sv.read_inout %0 : !hw.inout<i32>
-    %2 = sv.xmr.ref @intPortPath : !hw.inout<i32>
-    %3 = sv.read_inout %2 : !hw.inout<i32>
-    %4 = sv.xmr.ref @extPortPath : !hw.inout<i1>
-    %5 = sv.read_inout %4 : !hw.inout<i1>
-    %6 = sv.xmr.ref @extSigPath : !hw.inout<i1>
-    %7 = sv.read_inout %6 : !hw.inout<i1>
+    %0 = sv.xmr.ref @intSigPath : !sv.var<i32>
+    %1 = sv.read_inout %0 : !sv.var<i32>
+    %2 = sv.xmr.ref @intPortPath : !sv.var<i32>
+    %3 = sv.read_inout %2 : !sv.var<i32>
+    %4 = sv.xmr.ref @extPortPath : !sv.var<i1>
+    %5 = sv.read_inout %4 : !sv.var<i1>
+    %6 = sv.xmr.ref @extSigPath : !sv.var<i1>
+    %7 = sv.read_inout %6 : !sv.var<i1>
 
     // CHECK: hw.output %[[MID_OUT_SIG]], %[[MID_OUT_PORT]], %[[MID_OUT_CLK]], %[[MID_OUT_SEC]] : i32, i32, i1, i1
     hw.output %1, %3, %5, %7 : i32, i32, i1, i1
@@ -98,14 +98,14 @@ module {
     hw.instance "mid_inst_0" sym @mid_inst_0 @MidReuse() -> ()
     hw.instance "mid_inst_1" sym @mid_inst_1 @MidReuse() -> ()
 
-    %ra0 = sv.xmr.ref @reusePathA : !hw.inout<i8>
-    %rb0 = sv.xmr.ref @reusePathB : !hw.inout<i8>
-    %ra1 = sv.xmr.ref @reusePathA : !hw.inout<i8>
-    %rb1 = sv.xmr.ref @reusePathB : !hw.inout<i8>
-    %va0 = sv.read_inout %ra0 : !hw.inout<i8>
-    %vb0 = sv.read_inout %rb0 : !hw.inout<i8>
-    %va1 = sv.read_inout %ra1 : !hw.inout<i8>
-    %vb1 = sv.read_inout %rb1 : !hw.inout<i8>
+    %ra0 = sv.xmr.ref @reusePathA : !sv.var<i8>
+    %rb0 = sv.xmr.ref @reusePathB : !sv.var<i8>
+    %ra1 = sv.xmr.ref @reusePathA : !sv.var<i8>
+    %rb1 = sv.xmr.ref @reusePathB : !sv.var<i8>
+    %va0 = sv.read_inout %ra0 : !sv.var<i8>
+    %vb0 = sv.read_inout %rb0 : !sv.var<i8>
+    %va1 = sv.read_inout %ra1 : !sv.var<i8>
+    %vb1 = sv.read_inout %rb1 : !sv.var<i8>
     hw.output %va0, %vb0, %va1, %vb1 : i8, i8, i8, i8
   }
 
@@ -144,10 +144,10 @@ module {
   // CHECK: hw.output %[[MC0]], %[[MC1]] : i1, i4
   hw.module @TopCollision(out out_a : i1, out out_b : i4) {
     hw.instance "mid_inst" sym @mid_inst @MidCollision() -> ()
-    %ca = sv.xmr.ref @collisionA : !hw.inout<i1>
-    %cb = sv.xmr.ref @collisionB : !hw.inout<i4>
-    %va = sv.read_inout %ca : !hw.inout<i1>
-    %vb = sv.read_inout %cb : !hw.inout<i4>
+    %ca = sv.xmr.ref @collisionA : !sv.var<i1>
+    %cb = sv.xmr.ref @collisionB : !sv.var<i4>
+    %va = sv.read_inout %ca : !sv.var<i1>
+    %vb = sv.read_inout %cb : !sv.var<i4>
     hw.output %va, %vb : i1, i4
   }
 
@@ -184,10 +184,10 @@ module {
   // CHECK: hw.output %[[TSA]], %[[TSB]] : i1, i1
   hw.module @TopSameTypeCollision(out out_a : i1, out out_b : i1) {
     hw.instance "mid_inst" sym @mid_inst @MidSameTypeCollision() -> ()
-    %ca = sv.xmr.ref @sameTypeCollisionA : !hw.inout<i1>
-    %cb = sv.xmr.ref @sameTypeCollisionB : !hw.inout<i1>
-    %va = sv.read_inout %ca : !hw.inout<i1>
-    %vb = sv.read_inout %cb : !hw.inout<i1>
+    %ca = sv.xmr.ref @sameTypeCollisionA : !sv.var<i1>
+    %cb = sv.xmr.ref @sameTypeCollisionB : !sv.var<i1>
+    %va = sv.read_inout %ca : !sv.var<i1>
+    %vb = sv.read_inout %cb : !sv.var<i1>
     hw.output %va, %vb : i1, i1
   }
 }

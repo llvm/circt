@@ -303,10 +303,10 @@ SmallVector<Value> FirRegLowering::createRandomizationVector(OpBuilder &builder,
   // Create randomization vector
   SmallVector<Value> randValues;
   auto numRandomCalls = (maxBit + 31) / 32;
-  auto logic = sv::LogicOp::create(
+  auto logic = sv::VarOp::create(
       builder, loc,
       hw::UnpackedArrayType::get(builder.getIntegerType(32), numRandomCalls),
-      "_RANDOM");
+      builder.getStringAttr("_RANDOM"));
   // Indvar's width must be equal to `ceil(log2(numRandomCalls +
   // 1))` to avoid overflow.
   auto inducionVariableWidth = llvm::Log2_64_Ceil(numRandomCalls + 1);
@@ -697,7 +697,7 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   ImplicitLocOpBuilder builder(reg.getLoc(), reg);
   RegLowerInfo svReg{nullptr, path, reg.getPresetAttr(), nullptr, nullptr,
                      -1,      0};
-  svReg.reg = sv::RegOp::create(builder, loc, regTy, reg.getNameAttr());
+  svReg.reg = sv::VarOp::create(builder, loc, regTy, reg.getNameAttr());
   svReg.width = hw::getBitWidth(regTy);
 
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
@@ -757,7 +757,7 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   if (!conditions.empty())
     regConditionTable.emplace_or_assign(svReg.reg, conditions);
 
-  // For clock-typed registers the lowered sv.reg holds i1, but any remaining
+  // For clock-typed registers the lowered sv.var holds i1, but any remaining
   // users of the original !seq.clock result (e.g. seq.from_clock, hw.wire)
   // still expect that type.  Bridge the gap with a seq.to_clock so that those
   // users stay type-correct until applyPartialConversion resolves them via
@@ -777,7 +777,7 @@ void FirRegLowering::initializeRegisterElements(Location loc,
                                                 OpBuilder &builder, Value reg,
                                                 Value randomSource,
                                                 unsigned &pos) {
-  auto type = cast<sv::InOutType>(reg.getType()).getElementType();
+  auto type = sv::getLvalueElementType(reg.getType());
   if (auto intTy = hw::type_dyn_cast<IntegerType>(type)) {
     // Use randomSource[pos-1:pos-width] as a random value.
     pos -= intTy.getWidth();
@@ -803,7 +803,7 @@ void FirRegLowering::initializeRegisterElements(Location loc,
 }
 // NOLINTEND(misc-no-recursion)
 
-void FirRegLowering::buildRegConditions(OpBuilder &b, sv::RegOp reg) {
+void FirRegLowering::buildRegConditions(OpBuilder &b, sv::VarOp reg) {
   // If there are no conditions, just return the current insertion point.
   auto lookup = regConditionTable.find(reg);
   if (lookup == regConditionTable.end())
@@ -904,8 +904,7 @@ void FirRegLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, []() {}, []() {});
+        insideIfOp = sv::IfOp::create(builder, reset, []() {}, []() {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};

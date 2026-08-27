@@ -28,6 +28,21 @@ using InOutType = circt::hw::InOutType;
 /// InOut type.
 mlir::Type getInOutElementType(mlir::Type type);
 
+/// Return the element type of an SV lvalue type or null if the operand is not
+/// an SV lvalue.
+mlir::Type getLvalueElementType(mlir::Type type);
+
+/// Return the element type of a force destination type or null if the operand is
+/// not a valid force destination.
+mlir::Type getForceDestElementType(mlir::Type type);
+
+bool isSVNet(mlir::Type type);
+bool isSVVar(mlir::Type type);
+
+/// Form an SV lvalue with `newElement`, preserving the category of `lvalue`.
+/// Return null if `lvalue` is not an SV lvalue.
+mlir::Type getLvalueOfSameCategory(mlir::Type lvalue, mlir::Type newElement);
+
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
 mlir::Type getAnyHWArrayElementType(mlir::Type type);

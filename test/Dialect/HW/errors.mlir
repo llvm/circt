@@ -75,14 +75,14 @@ hw.module private @invalidInout(in %arg0: !hw.inout<tensor<*xf32>>) { }
 // -----
 
 hw.module @inout(in %a: i42) {
-  // expected-error @+1 {{'input' must be InOutType, but got 'i42'}}
+  // expected-error @+1 {{'input' must be an SV net type or an SV variable type, but got 'i42'}}
   %aget = sv.read_inout %a: i42
 }
 
 // -----
 
 hw.module @wire(in %a: i42) {
-  // expected-error @+1 {{'sv.wire' op result #0 must be InOutType, but got 'i42'}}
+  // expected-error @+1 {{'sv.wire' op result #0 must be an SV net type, but got 'i42'}}
   %aget = sv.wire: i42
 }
 
@@ -554,4 +554,11 @@ hw.module @triggeredInTriggered(in %trigger : i1) {
     hw.triggered posedge %arg {
     }
   }
+}
+
+// -----
+
+hw.module @VarOpBadElementType() {
+  // expected-error @+1 {{invalid element for hw.inout type}}
+  %0 = hw.var : !hw.inout<!hw.inout<i1>>
 }

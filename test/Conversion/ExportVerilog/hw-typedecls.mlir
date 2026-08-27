@@ -58,30 +58,30 @@ hw.module @testTypeAlias(
 // CHECK-LABEL: module testRegOp
 hw.module @testRegOp() {
   // CHECK: foo {{.+}};
-  %r1 = sv.reg : !hw.inout<!hw.typealias<@__hw_typedecls::@foo,i1>>
+  %r1 = sv.var : !sv.var<!hw.typealias<@__hw_typedecls::@foo,i1>>
   // CHECK: foo[2:0] {{.+}};
-  %r2 = sv.reg : !hw.inout<!hw.array<3xtypealias<@__hw_typedecls::@foo,i1>>>
+  %r2 = sv.var : !sv.var<!hw.array<3xtypealias<@__hw_typedecls::@foo,i1>>>
 }
 
-// Check that sv.reg omits the "reg" keyword for typealias types wrapped in
+// Check that sv.var omits the "reg" keyword for typealias types wrapped in
 // unpacked arrays, matching the behaviour for StructType in the same position.
 // CHECK-LABEL: module testRegOpUnpackedArrayTypealias
 hw.module @testRegOpUnpackedArrayTypealias() {
   // CHECK-NOT: reg
   // CHECK: foo{{.*}}[0:7]
-  %r1 = sv.reg : !hw.inout<uarray<8xtypealias<@__hw_typedecls::@foo, i1>>>
+  %r1 = sv.var : !sv.var<!hw.uarray<8xtypealias<@__hw_typedecls::@foo, i1>>>
 
   // CHECK-NOT: reg
   // CHECK: foo{{.*}}[0:3][0:7]
-  %r2 = sv.reg : !hw.inout<uarray<4xuarray<8xtypealias<@__hw_typedecls::@foo, i1>>>>
+  %r2 = sv.var : !sv.var<!hw.uarray<4xuarray<8xtypealias<@__hw_typedecls::@foo, i1>>>>
 
   // CHECK-NOT: reg
   // CHECK: bar{{.*}}[0:7]
-  %r3 = sv.reg : !hw.inout<uarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>
+  %r3 = sv.var : !sv.var<!hw.uarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>
 
   // CHECK-NOT: reg
   // CHECK: bar[7:0]{{.*}}[0:3]
-  %r4 = sv.reg : !hw.inout<uarray<4xarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>>
+  %r4 = sv.var : !sv.var<!hw.uarray<4xarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>>
 }
 
 // CHECK-LABEL: module testAggregateCreate
@@ -105,13 +105,13 @@ hw.module @testAggregateInout(in %i: i1, out out1: i8, out out2: i1) {
   // CHECK-NEXT: wire bar str;
   // CHECK-NEXT: assign out1 = array[4'h0];
   // CHECK-NEXT: assign out2 = str.a;
-  %array = sv.wire : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>
-  %str = sv.wire : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+  %array = sv.wire : !sv.net<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>
+  %str = sv.wire : !sv.net<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
   %c0_i4 = hw.constant 0 : i4
-  %0 = sv.array_index_inout %array[%c0_i4] : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>, i4
-  %1 = sv.struct_field_inout %str["a"] : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
-  %2 = sv.read_inout %0 : !hw.inout<i8>
-  %3 = sv.read_inout %1 : !hw.inout<i1>
+  %0 = sv.array_index_inout %array[%c0_i4] : !sv.net<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>, i4
+  %1 = sv.struct_field_inout %str["a"] : !sv.net<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+  %2 = sv.read_inout %0 : !sv.net<i8>
+  %3 = sv.read_inout %1 : !sv.net<i1>
   hw.output %2, %3 : i8, i1
 }
 

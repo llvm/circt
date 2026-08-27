@@ -118,6 +118,50 @@ def WireOp : HWOp<"wire", [
   }];
 }
 
+def VarOp : HWOp<"var", [
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
+  let summary = "A generic, category-neutral addressable storage declaration";
+  let description = [{
+    Declares a piece of generic lvalue storage. Unlike `hw.wire`, which is
+    value-semantic, `hw.var` produces an `!hw.inout<T>` result, an lvalue
+    that downstream dialects (e.g. SV) can resolve into a concrete net or
+    variable. 
+
+    Example:
+    ```mlir
+    %0 = hw.var : !hw.inout<i42>
+    %1 = hw.var sym @mySym : !hw.inout<i42>
+    %2 = hw.var name "myVar" : !hw.inout<i42>
+    ```
+  }];
+
+  let arguments = (ins OptionalAttr<StrAttr>:$name,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs InOutType:$result);
+
+  let hasCanonicalizeMethod = 1; 
+
+  let builders = [
+    OpBuilder<(ins "mlir::Type":$elementType,
+                   CArg<"const StringAttrOrRef &", "{}">:$name,
+                   CArg<"hw::InnerSymAttr", "{}">:$innerSym), [{
+      auto *context = odsBuilder.getContext();
+      if (auto attr = name.get(context))
+        odsState.addAttribute(getNameAttrName(odsState.name), attr);
+      if (innerSym)
+        odsState.addAttribute(getInnerSymAttrName(odsState.name), innerSym);
+      odsState.addTypes(hw::InOutType::get(elementType));
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
+  }];
+}
+
+
 def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
   "Type wherein the bitwidth in hardware is known">;
 

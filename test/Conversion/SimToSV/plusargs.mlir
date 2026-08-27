@@ -3,7 +3,7 @@
 // CHECK-LABEL: hw.module @plusargs_test
 hw.module @plusargs_test(out test: i1) {
   // CHECK-NEXT: [[FOO_STR:%.*]] = sv.constantStr "foo"
-  // CHECK-NEXT: [[FOO_DECL:%.*]] = sv.reg : !hw.inout<i1>
+  // CHECK-NEXT: [[FOO_DECL:%.*]] = sv.var : !sv.var<i1>
   // CHECK-NEXT: sv.initial {
   // CHECK-NEXT:   [[TMP:%.*]] = sv.system "test$plusargs"([[FOO_STR]])
   // CHECK-NEXT:   sv.bpassign [[FOO_DECL]], [[TMP]]
@@ -16,8 +16,8 @@ hw.module @plusargs_test(out test: i1) {
 
 // CHECK-LABEL: hw.module @plusargs_value
 hw.module @plusargs_value(out test: i1, out value: i5) {
-  // CHECK-NEXT: [[BAR_VALUE:%.*]] = sv.wire : !hw.inout<i5>
-  // CHECK-NEXT: [[BAR_FOUND:%.*]] = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: [[BAR_VALUE:%.*]] = sv.wire : !sv.net<i5>
+  // CHECK-NEXT: [[BAR_FOUND:%.*]] = sv.wire : !sv.net<i1>
   // CHECK-NEXT: sv.ifdef @SYNTHESIS {
   // CHECK-NEXT:   %false = hw.constant false
   // CHECK-NEXT:   %z_i5 = sv.constantZ : i5
@@ -26,15 +26,15 @@ hw.module @plusargs_value(out test: i1, out value: i5) {
   // CHECK-SAME:     emitAsComment
   // CHECK-NEXT:   sv.assign [[BAR_FOUND]], %false
   // CHECK-NEXT: } else {
-  // CHECK-NEXT:   [[FOUND_REG:%.*]] = sv.reg : !hw.inout<i32>
-  // CHECK-NEXT:   [[VALUE_REG:%.*]] = sv.reg : !hw.inout<i5>
+  // CHECK-NEXT:   [[FOUND_REG:%.*]] = sv.var : !sv.var<i32>
+  // CHECK-NEXT:   [[VALUE_REG:%.*]] = sv.var : !sv.var<i5>
   // CHECK-NEXT:   sv.initial {
   // CHECK-NEXT:     [[BAR_STR:%.*]] = sv.constantStr "bar"
   // CHECK-NEXT:     [[PLUSARG_FOUND:%.*]] = sv.system "value$plusargs"([[BAR_STR]], [[VALUE_REG]])
   // CHECK-NEXT:     sv.bpassign [[FOUND_REG]], [[PLUSARG_FOUND]]
   // CHECK-NEXT:   }
-  // CHECK-NEXT:   [[FOUND_READ:%.*]] = sv.read_inout [[FOUND_REG]] : !hw.inout<i32>
-  // CHECK-NEXT:   [[VALUE_READ:%.*]] = sv.read_inout [[VALUE_REG]] : !hw.inout<i5>
+  // CHECK-NEXT:   [[FOUND_READ:%.*]] = sv.read_inout [[FOUND_REG]] : !sv.var<i32>
+  // CHECK-NEXT:   [[VALUE_READ:%.*]] = sv.read_inout [[VALUE_REG]] : !sv.var<i5>
   // CHECK-NEXT:   %c1_i32 = hw.constant 1 : i32
   // CHECK-NEXT:   [[FOUND:%.*]] = comb.icmp ceq [[FOUND_READ]], %c1_i32 : i32
   // CHECK-NEXT:   sv.assign [[BAR_FOUND]], [[FOUND]] : i1

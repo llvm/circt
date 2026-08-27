@@ -405,6 +405,33 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// VarOp
+//===----------------------------------------------------------------------===//
+
+void VarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the variable has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (nameAttr && !nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+std::optional<size_t> VarOp::getTargetResultIndex() { return 0; }
+
+LogicalResult VarOp::canonicalize(VarOp var, PatternRewriter &rewriter) {
+  // If the var has a symbol, it may be referenced elsewhere; keep it.
+  if (var.getInnerSymAttr())
+    return failure();
+
+  // If the var has no uses, it's dead, so remove it.
+  if (var.getResult().use_empty()) {
+    rewriter.eraseOp(var);
+    return success();
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // AggregateConstantOp
 //===----------------------------------------------------------------------===//
 

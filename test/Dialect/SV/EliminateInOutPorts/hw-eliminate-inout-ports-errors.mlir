@@ -10,6 +10,7 @@ hw.module @unsupported(inout %a: i42) {
 // expected-error @+1 {{multiple writers of inout port "a" is unsupported.}}
 hw.module @multipleWriters(inout %a: i42) {
   %0 = hw.constant 0 : i42
-  sv.assign %a, %0 : i42
-  sv.assign %a, %0 : i42
+  %a_net = sv.net.from_inout %a : !hw.inout<i42> -> !sv.net<i42>
+  sv.assign %a_net, %0 : i42
+  sv.assign %a_net, %0 : i42
 }

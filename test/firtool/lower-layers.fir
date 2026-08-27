@@ -90,7 +90,7 @@ circuit TestHarness:
   layer Verification, bind:
 
   ; CHECK: module DUT_Verification();
-  ; CHECK:   reg  [31:0] pc_d;
+  ; CHECK:   logic  [31:0] pc_d;
   ; CHECK:   always @(posedge DUT.clock)
   ; CHECK:     pc_d <= DUT.a;
   ; CHECK: endmodule
@@ -100,7 +100,7 @@ circuit TestHarness:
   ; CHECK:   input  [31:0] a,
   ; CHECK:   output [31:0] b
   ; CHECK: );
-  ; CHECK:   reg [31:0] pc;
+  ; CHECK:   logic [31:0] pc;
   ; CHECK:   always @(posedge clock)
   ; CHECK:     pc <= a;
   ; CHECK:   assign b = pc;

@@ -7,8 +7,8 @@ module {
   // CHECK-SAME: in %xmr_capture_src_{{[0-9]+}} : i8
   // CHECK: hw.output %{{.+}} : i8
   hw.module @Payload(out o : i8) {
-    %x = sv.xmr.ref @bindPath : !hw.inout<i8>
-    %r = sv.read_inout %x : !hw.inout<i8>
+    %x = sv.xmr.ref @bindPath : !sv.var<i8>
+    %r = sv.read_inout %x : !sv.var<i8>
     hw.output %r : i8
   }
 

@@ -6,7 +6,7 @@ FIRRTL version 5.1.0
 ; lower-layers and the vector subaccess op.
 
 ; CHECK: module Foo_Verification_Assert();
-; CHECK:   reg  hasBeenResetReg;
+; CHECK:   logic  hasBeenResetReg;
 ; CHECK:   initial
 ; CHECK:     hasBeenResetReg = 1'bx;
 ; CHECK:   always @(posedge Foo.clock) begin

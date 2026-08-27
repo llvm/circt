@@ -152,10 +152,10 @@ hw.module @EmptyAggregates() {
 // CHECK:         "value": {"opcode":"'{","operands":[{"sig_name":"bar"}]}
 // CHECK:         "type_name": "SingleElementAggregates_varBar"
 hw.module @SingleElementAggregates() {
-  %foo = sv.wire : !hw.inout<i1>
-  %bar = sv.wire : !hw.inout<i1>
-  %0 = sv.read_inout %foo : !hw.inout<i1>
-  %1 = sv.read_inout %bar : !hw.inout<i1>
+  %foo = sv.wire : !sv.net<i1>
+  %bar = sv.wire : !sv.net<i1>
+  %0 = sv.read_inout %foo : !sv.net<i1>
+  %1 = sv.read_inout %bar : !sv.net<i1>
   %2 = dbg.array [%0] : i1
   %3 = dbg.struct {"x": %1} : i1
   dbg.variable "varFoo", %2 : !dbg.array
@@ -228,22 +228,22 @@ hw.module @Expressions(in %a: i1, in %b: i1) {
   // CHECK-LABEL: "var_name": "readWire"
   // CHECK: "value": {"sig_name":"svWire"}
   // CHECK: "type_name": "logic"
-  %svWire = sv.wire : !hw.inout<i1>
-  %3 = sv.read_inout %svWire : !hw.inout<i1>
+  %svWire = sv.wire : !sv.net<i1>
+  %3 = sv.read_inout %svWire : !sv.net<i1>
   dbg.variable "readWire", %3 : i1
 
   // CHECK-LABEL: "var_name": "readReg"
   // CHECK: "value": {"sig_name":"svReg"}
   // CHECK: "type_name": "logic"
-  %svReg = sv.reg : !hw.inout<i1>
-  %4 = sv.read_inout %svReg : !hw.inout<i1>
+  %svReg = sv.var : !sv.var<i1>
+  %4 = sv.read_inout %svReg : !sv.var<i1>
   dbg.variable "readReg", %4 : i1
 
   // CHECK-LABEL: "var_name": "readLogic"
   // CHECK: "value": {"sig_name":"svLogic"}
   // CHECK: "type_name": "logic"
-  %svLogic = sv.logic : !hw.inout<i1>
-  %5 = sv.read_inout %svLogic : !hw.inout<i1>
+  %svLogic = sv.var : !sv.var<i1>
+  %5 = sv.read_inout %svLogic : !sv.var<i1>
   dbg.variable "readLogic", %5 : i1
 
   // CHECK-LABEL: "var_name": "myWire"
@@ -503,7 +503,7 @@ hw.module @Issue6735_Case1(out someOutput: i1) {
   // CHECK: "sig_name":"wireB"
   %b = hw.instance "instB" @SingleResult() -> (outPort: i1)
   dbg.variable "varB", %b : i1
-  %wireB = sv.wire : !hw.inout<i1>
+  %wireB = sv.wire : !sv.net<i1>
   sv.assign %wireB, %b : i1
   // CHECK: "var_name": "varC"
   // CHECK-NOT: "sig_name":"instC"
@@ -511,7 +511,7 @@ hw.module @Issue6735_Case1(out someOutput: i1) {
   // CHECK: "sig_name":"wireC"
   %c = hw.instance "instC" @SingleResult() -> (outPort: i1)
   dbg.variable "varC", %c : i1
-  %wireC = sv.logic : !hw.inout<i1>
+  %wireC = sv.wire : !sv.net<i1>
   sv.assign %wireC, %c : i1
   // CHECK: "var_name": "varD"
   // CHECK-NOT: "sig_name":"instD"
@@ -519,7 +519,7 @@ hw.module @Issue6735_Case1(out someOutput: i1) {
   // CHECK: "sig_name":"wireD"
   %d = hw.instance "instD" @SingleResult() -> (outPort: i1)
   dbg.variable "varD", %d : i1
-  %wireD = sv.logic : !hw.inout<i1>
+  %wireD = sv.wire : !sv.net<i1>
   sv.assign %wireD, %d : i1
 
   // Use module's output port name to refer to instance output.

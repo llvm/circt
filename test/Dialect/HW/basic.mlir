@@ -60,22 +60,22 @@ hw.module @test1(in %arg0: i3, in %arg1: i1, in %arg2: !hw.array<1000xi8>, out r
   // CHECK-NEXT: comb.icmp uge [[RES9]], [[RES10]] : i19
   %ugeq = comb.icmp uge %small1, %small2 : i19
 
-  // CHECK-NEXT: %w = sv.wire : !hw.inout<i4>
-  %w = sv.wire : !hw.inout<i4>
+  // CHECK-NEXT: %w = sv.wire : !sv.net<i4>
+  %w = sv.wire : !sv.net<i4>
 
-  // CHECK-NEXT: %after1 = sv.wire : !hw.inout<i4>
-  %before1 = sv.wire name "after1" : !hw.inout<i4>
+  // CHECK-NEXT: %after1 = sv.wire : !sv.net<i4>
+  %before1 = sv.wire name "after1" : !sv.net<i4>
 
-  // CHECK-NEXT: sv.read_inout %after1 : !hw.inout<i4>
-  %read_before1 = sv.read_inout %before1 : !hw.inout<i4>
+  // CHECK-NEXT: sv.read_inout %after1 : !sv.net<i4>
+  %read_before1 = sv.read_inout %before1 : !sv.net<i4>
 
-  // CHECK-NEXT: %after2_conflict = sv.wire : !hw.inout<i4>
-  // CHECK-NEXT: %after2_conflict_0 = sv.wire name "after2_conflict" : !hw.inout<i4>
-  %before2_0 = sv.wire name "after2_conflict" : !hw.inout<i4>
-  %before2_1 = sv.wire name "after2_conflict" : !hw.inout<i4>
+  // CHECK-NEXT: %after2_conflict = sv.wire : !sv.net<i4>
+  // CHECK-NEXT: %after2_conflict_0 = sv.wire name "after2_conflict" : !sv.net<i4>
+  %before2_0 = sv.wire name "after2_conflict" : !sv.net<i4>
+  %before2_1 = sv.wire name "after2_conflict" : !sv.net<i4>
 
-  // CHECK-NEXT: %after3 = sv.wire {someAttr = "foo"} : !hw.inout<i4>
-  %before3 = sv.wire name "after3" {someAttr = "foo"} : !hw.inout<i4>
+  // CHECK-NEXT: %after3 = sv.wire {someAttr = "foo"} : !sv.net<i4>
+  %before3 = sv.wire name "after3" {someAttr = "foo"} : !sv.net<i4>
 
   // CHECK-NEXT: %w2 = hw.wire [[RES2]] : i7
   %w2 = hw.wire %d : i7
@@ -163,8 +163,8 @@ hw.module @UnionOps(in %a: !hw.union<foo: i1, bar: i3>, out x: i3, out z: !hw.un
 // https://github.com/llvm/circt/issues/863
 // CHECK-LABEL: hw.module @signed_arrays
 hw.module @signed_arrays(in %arg0: si8, out out: !hw.array<2xsi8>) {
-  // CHECK-NEXT:  %wireArray = sv.wire  : !hw.inout<array<2xsi8>>
-  %wireArray = sv.wire : !hw.inout<!hw.array<2xsi8>>
+  // CHECK-NEXT:  %wireArray = sv.wire  : !sv.net<!hw.array<2xsi8>>
+  %wireArray = sv.wire : !sv.net<!hw.array<2xsi8>>
 
   // CHECK-NEXT: %0 = hw.array_create %arg0, %arg0 : si8
   %0 = hw.array_create %arg0, %arg0 : si8
@@ -172,7 +172,7 @@ hw.module @signed_arrays(in %arg0: si8, out out: !hw.array<2xsi8>) {
   // CHECK-NEXT: sv.assign %wireArray, %0 : !hw.array<2xsi8>
   sv.assign %wireArray, %0 : !hw.array<2xsi8>
 
-  %result = sv.read_inout %wireArray : !hw.inout<!hw.array<2xsi8>>
+  %result = sv.read_inout %wireArray : !sv.net<!hw.array<2xsi8>>
   hw.output %result : !hw.array<2xsi8>
 }
 
@@ -258,4 +258,14 @@ hw.module @aggregate_const(out o : !hw.array<1x!seq.clock>) {
   // CHECK-NEXT: hw.aggregate_constant [#seq<clock_constant high> : !seq.clock] : !hw.array<1x!seq.clock>
   %0 = hw.aggregate_constant [#seq<clock_constant high> : !seq.clock] : !hw.array<1x!seq.clock>
   hw.output %0 : !hw.array<1x!seq.clock>
+}
+
+// CHECK-LABEL: hw.module @VarOp
+hw.module @VarOp() {
+  // CHECK: %0 = hw.var : !hw.inout<i42>
+  %0 = hw.var : !hw.inout<i42>
+  // CHECK: %1 = hw.var sym @mySym : !hw.inout<i42>
+  %1 = hw.var sym @mySym : !hw.inout<i42>
+  // CHECK: %myVar = hw.var : !hw.inout<i42>
+  %2 = hw.var name "myVar" : !hw.inout<i42>
 }

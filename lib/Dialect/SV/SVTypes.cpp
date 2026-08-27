@@ -45,6 +45,46 @@ mlir::Type circt::sv::getInOutElementType(mlir::Type type) {
   return {};
 }
 
+Type circt::sv::getLvalueElementType(Type type) {
+  type = hw::getCanonicalType(type);
+  return TypeSwitch<Type, Type>(type)
+      .Case<NetType, VarType>([](auto type) { return type.getElementType(); })
+      .Default([](Type) { return Type{}; });
+}
+
+Type circt::sv::getForceDestElementType(Type type) {
+  if (auto element = getLvalueElementType(type))
+    return element;
+  return getInOutElementType(type);
+}
+
+bool circt::sv::isSVNet(Type type) { return hw::type_isa<NetType>(type); }
+
+bool circt::sv::isSVVar(Type type) { return hw::type_isa<VarType>(type); }
+
+Type circt::sv::getLvalueOfSameCategory(Type lvalue, Type newElement) {
+  lvalue = hw::getCanonicalType(lvalue);
+  return TypeSwitch<Type, Type>(lvalue)
+      .Case([&](NetType) -> Type { return NetType::get(newElement); })
+      .Case([&](VarType) -> Type { return VarType::get(newElement); })
+      .Default([](Type) { return Type{}; });
+}
+
+LogicalResult NetType::verify(function_ref<InFlightDiagnostic()> emitError,
+                              Type elementType) {
+  if (!hw::isHWValueType(elementType))
+    return emitError() << "invalid element for sv.net type " << elementType;
+  return success();
+}
+
+LogicalResult VarType::verify(function_ref<InFlightDiagnostic()> emitError,
+                              Type elementType) {
+  if (!hw::isHWValueType(elementType))
+    return emitError() << "invalid element for sv.var type " << elementType;
+  // TODO: Support SV variable-only element types in a later change.
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

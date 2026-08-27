@@ -411,20 +411,21 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
 // Assignment Related Statements
 //===----------------------------------------------------------------------===//
 
-def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
-                                 NonProceduralOp]> {
+def AssignOp : SVOp<"assign", [NonProceduralOp,
+                               SVLvalueElementConstraint<"src", "dest">]> {
   let summary = "Continuous assignment";
   let description = [{
     A SystemVerilog assignment statement 'x = y;'.
     These occur in module scope.  See SV Spec 10.3.2.
   }];
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins SVNetType:$dest, HWValueType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($src))";
+  let assemblyFormat =
+    "$dest `,` $src attr-dict `:` custom<NetAssignTypes>(type($dest), type($src))";
 }
 
-def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
-                                   ProceduralOp]> {
+def BPAssignOp : SVOp<"bpassign", [ProceduralOp,
+                                   SVLvalueElementConstraint<"src", "dest">]> {
   let summary = "Blocking procedural assignment";
   let description = [{
     A SystemVerilog blocking procedural assignment statement 'x = y;'.  These
@@ -432,14 +433,15 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
     executed before any following statements are. See SV Spec 10.4.1.
   }];
   let hasCanonicalizeMethod = true;
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins SVVarType:$dest, HWValueType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` custom<VarAssignTypes>(type($dest), type($src))";
   let hasVerifier = 1;
 }
 
-def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
-                                 ProceduralOp]> {
+def PAssignOp : SVOp<"passign", [ProceduralOp,
+                                 SVLvalueElementConstraint<"src", "dest">]> {
   let summary = "Nonblocking procedural assignment";
   let description = [{
     A SystemVerilog nonblocking procedural assignment statement 'x <= y;'.
@@ -447,9 +449,10 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
     can be scheduled without blocking procedural flow.  See SV Spec 10.4.2.
   }];
   let hasCanonicalizeMethod = true;
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins SVVarType:$dest, HWValueType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` custom<VarAssignTypes>(type($dest), type($src))";
   let hasVerifier = 1;
 }
 
@@ -459,8 +462,8 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
 // Other Statements
 //===----------------------------------------------------------------------===//
 
-def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
-                                   ProceduralOp]> {
+def ForceOp : SVOp<"force", [ProceduralOp,
+                             SVForceDestElementConstraint<"src", "dest">]> {
   let summary = "Force procedural statement";
   let description = [{
     A SystemVerilog force procedural statement 'force x = y;'.  These
@@ -472,9 +475,10 @@ def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
     net or a concatenation. It cannot be a memory word or a bit-select
     or part-select of a vector variable. See SV Spec 10.6.2.
   }];
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins SVForceDestType:$dest, HWValueType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+  let hasVerifier = 1;
 }
 
 def ReleaseOp : SVOp<"release", [ProceduralOp]> {
@@ -489,9 +493,10 @@ def ReleaseOp : SVOp<"release", [ProceduralOp]> {
     active assign procedural continuous assignment shall immediately
     reestablish that assignment. See SV Spec 10.6.2.
   }];
-  let arguments = (ins InOutType:$dest);
+  let arguments = (ins SVLvalueType:$dest);
   let results = (outs);
   let assemblyFormat = "$dest attr-dict `:` qualified(type($dest))";
+  let hasVerifier = 1;
 }
 
 def AliasOp : SVOp<"alias"> {
@@ -501,7 +506,7 @@ def AliasOp : SVOp<"alias"> {
     bits within a net.  Aliases always have at least two operands.
   }];
 
-  let arguments = (ins Variadic<InOutType>:$aliases);
+  let arguments = (ins Variadic<SVNetType>:$aliases);
   let results = (outs);
 
   let assemblyFormat = "$aliases attr-dict `:` qualified(type($aliases))";
@@ -824,15 +829,16 @@ foreach severity = ["Error", "Warning", "Info"] in {
 }
 
 def DepositOp : SVOp<"nonstandard.deposit",
-    [ProceduralOp, VendorExtension, InOutTypeConstraint<"src", "dest">]> {
+    [ProceduralOp, VendorExtension, SVLvalueElementConstraint<"src", "dest">]> {
   let summary = "`$deposit` system task";
   let description = [{
     This system task sets the value of a net or variable, but doesn't hold it.
     This is a common simulation vendor extension.
   }];
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins SVLvalueType:$dest, HWValueType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` custom<VarAssignTypes>(type($dest), type($src))";
 }
 
 
@@ -855,7 +861,7 @@ def ReadMemOp : SVOp<"readmem", [ProceduralOp]> {
     See Section 21.4 of IEEE 1800-2017 for more information.
   }];
   let arguments =
-    (ins InOutType:$dest, StrAttr:$filename, MemBaseTypeAttr:$base);
+    (ins SVVarType:$dest, StrAttr:$filename, MemBaseTypeAttr:$base);
   let results = (outs);
   let assemblyFormat =
     "$dest `,` $filename `,` $base attr-dict `:` qualified(type($dest))";

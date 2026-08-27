@@ -31,9 +31,9 @@ hw.module @ExistingWire(in %a: !hw.array<16xi1>, in %b : i4, out c: i1) {
 
   %c1_i4 = hw.constant 3 : i4
   %0 = comb.add %b, %c1_i4 : i4
-  %existingWire = sv.wire : !hw.inout<i4>
+  %existingWire = sv.wire : !sv.net<i4>
   sv.assign %existingWire, %0 : i4
-  %1 = sv.read_inout %existingWire : !hw.inout<i4>
+  %1 = sv.read_inout %existingWire : !sv.net<i4>
   %2 = hw.array_get %a[%1] : !hw.array<16xi1>, i4
   hw.output %2 : i1
 }

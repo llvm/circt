@@ -30,4 +30,15 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
   let cppNamespace = "circt::sv";
 }
 
+def SVVarKeywordReg : I32EnumAttrCase<"Reg", 0, "reg">;
+def SVVarKeywordLogic : I32EnumAttrCase<"Logic", 1, "logic">;
+def SVVarKeywordNone : I32EnumAttrCase<"None", 2, "none">;
+
+def SVVarKeywordAttr : I32EnumAttr<"SVVarKeyword",
+                                   "variable declaration keyword",
+                                   [SVVarKeywordReg, SVVarKeywordLogic,
+                                    SVVarKeywordNone]> {
+  let cppNamespace = "circt::sv";
+}
+
 #endif // CIRCT_DIALECT_SV_SVENUMS_TD

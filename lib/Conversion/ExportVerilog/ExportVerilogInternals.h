@@ -409,6 +409,11 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
   if (isa<sv::ArrayIndexInOutOp>(op) || isa<sv::StructFieldInOutOp>(op) ||
       isa<sv::IndexedPartSelectInOutOp>(op) || isa<sv::ReadInOutOp>(op))
     return true;
+  
+  // An SV net-conversion from inout must inline too.
+  if (isa<sv::NetFromInOutOp>(op)){
+    return true;
+  }
 
   // An SV interface modport is a symbolic name that is always inlined.
   if (isa<sv::GetModportOp>(op) || isa<sv::ReadInterfaceSignalOp>(op))

@@ -61,13 +61,13 @@ class WireOp(WireOp):
 
   @staticmethod
   def create(data_type, name=None, sym_name=None):
-    if not isinstance(data_type, hw.InOutType):
-      data_type = hw.InOutType.get(data_type)
+    if not isinstance(data_type, NetType):
+      data_type = NetType.get(data_type)
     return sv.WireOp(data_type, name, sym_name=sym_name)
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
-class RegOp(RegOp):
+class VarOp(VarOp):
 
   def __init__(self,
                data_type,

@@ -135,12 +135,11 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 
 // HW-LABEL:    hw.module @__ESI_Manifest_ROM(in %clk : !seq.clock, in %address : i29, out data : i64) {
 // HW:            [[R0:%.+]] = hw.aggregate_constant
-// HW:            [[R1:%.+]] = sv.reg : !hw.inout<uarray<{{.*}}xi64>>
-// HW:            sv.assign [[R1]], [[R0]] : !hw.uarray<{{.*}}xi64>
+// HW:            [[R1:%.+]] = sv.var init [[R0]] : !sv.var<!hw.uarray<{{.*}}xi64>>
 // HW:            [[R2:%.+]] = comb.extract %address from 0 : (i29) -> i8
 // HW:            [[R3:%.+]] = seq.compreg  [[R2]], %clk : i8
-// HW:            [[R4:%.+]] = sv.array_index_inout [[R1]][[[R3]]] : !hw.inout<uarray<{{.*}}xi64>>, i8
-// HW:            [[R5:%.+]] = sv.read_inout [[R4]] : !hw.inout<i64>
+// HW:            [[R4:%.+]] = sv.array_index_inout [[R1]][[[R3]]] : !sv.var<!hw.uarray<{{.*}}xi64>>, i8
+// HW:            [[R5:%.+]] = sv.read_inout [[R4]] : !sv.var<i64>
 // HW:            [[R6:%.+]] = seq.compreg  [[R5]], %clk : i64
 // HW:            hw.output [[R6]] : i64
 

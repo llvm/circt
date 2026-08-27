@@ -25,15 +25,15 @@ hw.module @large_use_in_procedural(in %clock: i1, in %a: i1) {
     }
   }
 
-  // CHECK: reg [[REG:.+]];
-  %reg = sv.reg : !hw.inout<i1>
+  // CHECK: logic [[REG:.+]];
+  %reg = sv.var : !sv.var<i1>
 
   // CHECK: wire [[GEN_0:.+]] = reg_0 + reg_0 + reg_0 + reg_0 + reg_0;
   sv.alwaysff(posedge %clock) {
     // CHECK: always
     // CHECK: [[REG]] = a;
     sv.bpassign %reg, %a : i1
-    %0 = sv.read_inout %reg : !hw.inout<i1>
+    %0 = sv.read_inout %reg : !sv.var<i1>
     %1 = comb.add %0, %0, %0, %0, %0 : i1
     // CHECK: if ([[GEN_0]])
     sv.if %1 {
@@ -60,8 +60,8 @@ hw.module @large_use_in_procedural_successive(in %clock: i1, in %a: i1) {
 
 // CHECK-LABEL: module dont_spill_to_procedural_regions
 hw.module @dont_spill_to_procedural_regions(in %z: i10) {
-  %r1 = sv.reg : !hw.inout<i1>
-  %r2 = sv.reg : !hw.inout<i10>
+  %r1 = sv.var : !sv.var<i1>
+  %r2 = sv.var : !sv.var<i10>
   // CHECK: wire [9:0] _GEN = r2 + r2 + r2 + r2 + r2;
   // CHECK: initial begin
   // CHECK-NEXT:   `ifdef BAR
@@ -69,7 +69,7 @@ hw.module @dont_spill_to_procedural_regions(in %z: i10) {
   // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // initial
   sv.initial {
-    %x = sv.read_inout %r2: !hw.inout<i10>
+    %x = sv.read_inout %r2: !sv.var<i10>
     sv.ifdef.procedural @BAR {
       %2 = comb.add %x, %x, %x, %x, %x : i10
       %3 = comb.icmp eq %2, %z: i10

@@ -203,7 +203,7 @@ void StateEncoding::setEncoding(StateOp state, Value v, bool wire) {
   if (wire) {
     auto loc = machine.getLoc();
     auto stateType = getStateType();
-    auto stateEncodingWire = sv::RegOp::create(
+    auto stateEncodingWire = sv::WireOp::create(
         b, loc, stateType, b.getStringAttr("to_" + state.getName()),
         hw::InnerSymAttr::get(state.getNameAttr()));
     sv::AssignOp::create(b, loc, stateEncodingWire, v);
@@ -277,7 +277,7 @@ private:
                           std::variant<Value, std::shared_ptr<CaseMuxItem>>>;
   struct CaseMuxItem {
     // The target wire to be assigned.
-    sv::RegOp wire;
+    sv::VarOp wire;
 
     // The case select signal to be used.
     Value select;
@@ -442,14 +442,14 @@ LogicalResult MachineOpConverter::dispatch() {
   auto stateType = encoding->getStateType();
 
   auto nextStateWire =
-      sv::RegOp::create(b, loc, stateType, b.getStringAttr("state_next"));
+      sv::VarOp::create(b, loc, stateType, b.getStringAttr("state_next"));
   auto nextStateWireRead = sv::ReadInOutOp::create(b, loc, nextStateWire);
   stateReg = seq::CompRegOp::create(
       b, loc, nextStateWireRead, clock, reset,
       /*reset value=*/encoding->encode(machineOp.getInitialStateOp()),
       "state_reg");
 
-  llvm::DenseMap<VariableOp, sv::RegOp> variableNextStateWires;
+  llvm::DenseMap<VariableOp, sv::VarOp> variableNextStateWires;
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
     auto initValueAttr = dyn_cast<IntegerAttr>(variableOp.getInitValueAttr());
     if (!initValueAttr)
@@ -457,7 +457,7 @@ LogicalResult MachineOpConverter::dispatch() {
                                          "for the initial value.";
     Type varType = variableOp.getType();
     auto varLoc = variableOp.getLoc();
-    auto varNextState = sv::RegOp::create(
+    auto varNextState = sv::VarOp::create(
         b, varLoc, varType, b.getStringAttr(variableOp.getName() + "_next"));
     auto varResetVal = hw::ConstantOp::create(b, varLoc, initValueAttr);
     auto variableReg = seq::CompRegOp::create(
@@ -499,7 +499,7 @@ LogicalResult MachineOpConverter::dispatch() {
       continue;
     auto outputPortType = port.type;
     CaseMuxItem outputAssignment;
-    outputAssignment.wire = sv::RegOp::create(
+    outputAssignment.wire = sv::VarOp::create(
         b, machineOp.getLoc(), outputPortType,
         b.getStringAttr("output_" + std::to_string(portIndex)));
     outputAssignment.select = stateReg;

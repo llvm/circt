@@ -31,7 +31,7 @@ circuit Foo: %[[{"class": "firrtl.AttributeAnnotation",
     ; CHECK-NEXT: wire n
     node n = w;
     ; CHECK:      (* keep = "true" *)
-    ; CHECK-NEXT: reg r
+    ; CHECK-NEXT: logic r
     reg r: UInt<1>, clock
     connect w, a
     connect b1, n

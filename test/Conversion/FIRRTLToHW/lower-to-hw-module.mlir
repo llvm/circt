@@ -136,7 +136,8 @@ firrtl.circuit "Simple" {
   }
 
   // CHECK-LABEL: hw.module private @Analog(inout %a1 : i1, out outClock : !seq.clock) {
-  // CHECK-NEXT:    [[READ:%.+]] = sv.read_inout %a1 : !hw.inout<i1>
+  // CHECK-NEXT:    [[NET:%.+]] = sv.net.from_inout %a1 : !hw.inout<i1> -> !sv.net<i1>
+  // CHECK-NEXT:    [[READ:%.+]] = sv.read_inout [[NET]] : !sv.net<i1>
   // CHECK-NEXT:    [[CLK:%.+]] = seq.to_clock [[READ]]
   // CHECK-NEXT:    hw.output [[CLK]] : !seq.clock
   firrtl.module private @Analog(in %a1: !firrtl.analog<1>,
@@ -249,7 +250,7 @@ firrtl.circuit "Simple" {
   }
   // CHECK-LABEL: hw.module private @foo690()
   firrtl.module private @foo690() {
-    // CHECK: %.led_0.wire = sv.wire
+    // CHECK: %.led_0.wire = hw.var
     // CHECK: hw.instance "fpga" @bar690(led_0: %.led_0.wire: !hw.inout<i1>) -> ()
     %result = firrtl.instance fpga @bar690(in led_0: !firrtl.analog<1>)
   }

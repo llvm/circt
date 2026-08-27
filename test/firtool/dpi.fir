@@ -32,7 +32,7 @@ circuit DPI:
 
 ; CHECK-LABEL: module DPI(
 ; CHECK:        logic [7:0] [[TMP:_.+]];
-; CHECK-NEXT:   reg   [7:0] [[RESULT1:_.+]];
+; CHECK-NEXT:   logic   [7:0] [[RESULT1:_.+]];
 ; CHECK-NEXT:   wire [7:0] [[OPEN_ARRAY:_.+]][0:1];
 ; CHECK-NEXT:   assign [[OPEN_ARRAY]] = '{in_0, in_1};
 ; CHECK-NEXT:   always @(posedge clock) begin
@@ -42,7 +42,7 @@ circuit DPI:
 ; CHECK-NEXT:       clocked_void(in_0, in_1, [[OPEN_ARRAY]]);
 ; CHECK-NEXT:     end
 ; CHECK-NEXT:   end // always @(posedge)
-; CHECK-NEXT:   reg   [7:0] [[RESULT2:_.+]];
+; CHECK-NEXT:   logic   [7:0] [[RESULT2:_.+]];
 ; CHECK-NEXT:   always_comb begin
 ; CHECK-NEXT:     if (enable) begin
 ; CHECK-NEXT:       unclocked_result(in_0, in_1, [[RESULT2]]);
