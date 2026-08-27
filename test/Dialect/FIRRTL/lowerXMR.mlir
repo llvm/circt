@@ -804,7 +804,6 @@ firrtl.circuit "ConstantProbe" {
       !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK-NEXT: %[[PROBE:.+]] = firrtl.node sym @{{.*}} %c0_ui1 : !firrtl.uint<1>
-    // CHECK-NOT: %reg = firrtl.regreset %clock, %reset, %[[PROBE]]
     // CHECK: %reg = firrtl.regreset %clock, %reset, %c0_ui1 :
   }
 }
