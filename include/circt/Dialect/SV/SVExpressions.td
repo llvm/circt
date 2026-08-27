@@ -239,18 +239,28 @@ def ConcatStrOp : SVOp<"concat_str", [Pure]> {
 }
 
 def LocalParamOp : SVOp<"localparam",
-      [FirstAttrDerivedResultType, Pure, HasCustomSSAName]> {
+      [FirstAttrDerivedResultType, HasCustomSSAName,
+       DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
   let summary = "Declare a localparam";
   let description = [{
     The localparam operation produces a `localparam` declaration. See SV spec
     6.20.4 p125.
     }];
 
-  let arguments = (ins AnyAttr:$value, StrAttr:$name);
+  let arguments = (ins AnyAttr:$value, StrAttr:$name,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs HWValueType:$result);
 
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$result, "::mlir::Attribute":$value,
+                   "::mlir::StringAttr":$name,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
+  ];
+
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
   }];
 
   let hasVerifier = 1;

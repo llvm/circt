@@ -342,6 +342,17 @@ OpFoldResult ConcatStrOp::fold(FoldAdaptor) {
 // LocalParamOp
 //===----------------------------------------------------------------------===//
 
+void LocalParamOp::build(OpBuilder &builder, OperationState &odsState,
+                         Type result, Attribute value, StringAttr name,
+                         hw::InnerSymAttr innerSym) {
+  odsState.addTypes(result);
+  odsState.addAttribute("value", value);
+  odsState.addAttribute("name", name);
+  if (innerSym)
+    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                          innerSym);
+}
+
 void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the localparam has an optional 'name' attribute, use it.
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
@@ -354,6 +365,8 @@ LogicalResult LocalParamOp::verify() {
   return hw::checkParameterInContext(
       getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
+
+std::optional<size_t> LocalParamOp::getTargetResultIndex() { return 0; }
 
 //===----------------------------------------------------------------------===//
 // RegOp
