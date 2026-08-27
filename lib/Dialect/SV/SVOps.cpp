@@ -362,8 +362,9 @@ void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 LogicalResult LocalParamOp::verify() {
   // Verify that this is a valid parameter value.
-  return hw::checkParameterInContext(
-      getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
+  if (auto module = (*this)->getParentOfType<hw::HWModuleOp>())
+    return hw::checkParameterInContext(getValue(), module, *this);
+  return success();
 }
 
 std::optional<size_t> LocalParamOp::getTargetResultIndex() { return 0; }

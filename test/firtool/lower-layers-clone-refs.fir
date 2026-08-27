@@ -3,11 +3,11 @@
 ; Check that there is no probe wire in the output example.
 
 ; CHECK:      module Example_A();
-; CHECK-NEXT:   wire _GEN = 1'h0;
+; CHECK-NEXT:   localparam [0:0] _GEN = 0;
 ; CHECK-NEXT: endmodule
 
 ; CHECK:      module Example_B();
-; CHECK-NEXT:   wire _GEN = 1'h0;
+; CHECK-NEXT:   localparam [0:0] _GEN = 0;
 ; CHECK-NEXT: endmodule
 
 ; CHECK:      module Example();

@@ -28,7 +28,8 @@ firrtl.circuit "Top" {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.node sym @[[xmrSym]] %c0_ui1  : !firrtl.uint<1>
+    // CHECK:  %0 = sv.localparam sym @[[xmrSym]] {value = false} : i1
+    // CHECK:  builtin.unrealized_conversion_cast %0 : i1 to !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
@@ -121,7 +122,8 @@ firrtl.circuit "Top" {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK:   %c0_ui1 = firrtl.constant 0
-    // CHECK:  %0 = firrtl.node sym @[[xmrSym]] %c0_ui1  : !firrtl.uint<1>
+    // CHECK:  %0 = sv.localparam sym @[[xmrSym]] {value = false} : i1
+    // CHECK:  builtin.unrealized_conversion_cast %0 : i1 to !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
@@ -761,6 +763,27 @@ firrtl.circuit "Foo" {
       %0 = firrtl.ref.send %b : !firrtl.uint<1>
       firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
     }
+  }
+}
+
+// -----
+// A constant used by both a reset value and a read probe is lowered to an SV
+// localparam. Its other uses must remain connected directly to the constant.
+// https://github.com/llvm/circt/issues/9766
+// CHECK-LABEL: firrtl.circuit "ConstantProbe"
+firrtl.circuit "ConstantProbe" {
+  firrtl.module @ConstantProbe(in %clock: !firrtl.clock,
+                               in %reset: !firrtl.asyncreset,
+                               out %probe: !firrtl.probe<uint<1>>) {
+    %c0 = firrtl.constant 0 : !firrtl.uint<1>
+    %ref = firrtl.ref.send %c0 : !firrtl.uint<1>
+    firrtl.ref.define %probe, %ref : !firrtl.probe<uint<1>>
+    %reg = firrtl.regreset %clock, %reset, %c0 : !firrtl.clock,
+      !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: %[[PROBE:.+]] = sv.localparam sym @{{.*}} {value = false} : i1
+    // CHECK-NEXT: builtin.unrealized_conversion_cast %[[PROBE]] : i1 to !firrtl.uint<1>
+    // CHECK: %reg = firrtl.regreset %clock, %reset, %c0_ui1 :
   }
 }
 
