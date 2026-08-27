@@ -100,8 +100,42 @@ def _onehot_to_index(onehot: BitsSignal) -> BitsSignal:
 # kept in sync.) `launch` is unused by the round-robin strategy; it is present so
 # the signature stays uniform.
 #
-# The registered `grant`/`busy` live in the arbiter, since the datapath reads
-# them; a control module sees their current values and drives the next ones.
+# A control module owns the grant FSM state (`grant`/`grant_oh`/`busy`, plus
+# whatever else the strategy needs) and exposes it for the datapath to read. Its
+# inputs are purely observations of the datapath: which inputs are offering
+# (`valids`), and whether a flit / a final flit was accepted (`launch`,
+# `msg_end`). `_build_grant_state` below builds the state common to both.
+
+
+def _build_grant_state(
+    ports, clk: ClockSignal, rst: Signal, num_inputs: int,
+    next_grant: BitsSignal,
+    next_busy: BitsSignal) -> Tuple[BitsSignal, BitsSignal, BitsSignal]:
+  """Register `next_grant`/`next_busy` into the grant FSM state every control
+  module has, drive the `grant`/`grant_oh`/`busy` ports with it, and return
+  `(grant, grant_oh, busy)` for the strategy to compute its next state from
+  (typically via `Wire`s, since next state depends on current).
+
+  `grant_oh` is decoded *ahead* of its registers -- one flop per input -- so
+  each high-fanout per-input grant is driven straight from a flop rather than a
+  shared combinational decode of `grant`. Decoding at the instantiation site
+  would necessarily land after the register, hence it lives here. Both are fed
+  from the same next-state, so `grant_oh[i]` is high exactly when
+  `grant == i`."""
+  gw = clog2(num_inputs)
+  grant = next_grant.reg(clk, rst, name="grant")
+  grant_oh = BitsSignal.concat([
+      (next_grant == Bits(gw)(i)).reg(clk,
+                                      rst,
+                                      rst_value=(1 if i == 0 else 0),
+                                      name=f"grant_oh_{i}")
+      for i in reversed(range(num_inputs))
+  ])
+  busy = next_busy.reg(clk, rst, name="busy")
+  ports.grant = grant
+  ports.grant_oh = grant_oh
+  ports.busy = busy
+  return grant, grant_oh, busy
 
 
 @modparams
@@ -128,21 +162,17 @@ def GrantSchedulerMod(num_inputs: int, queue_depth: int):
 
     # Per-input `valid`; bit `i` is high when input `i` is offering a flit.
     valids = Input(Bits(num_inputs))
-    # Index of the currently granted input (the arbiter's `grant` register).
-    grant = Input(Bits(gw))
-    # `grant` pre-decoded to one-hot, registered by the arbiter.
-    grant_oh = Input(Bits(num_inputs))
-    # High while `grant` is in force, i.e. an input is currently being served.
-    busy = Input(Bits(1))
     # High on cycles a flit is accepted from the granted input.
     launch = Input(Bits(1))
     # High on the `launch` of a message's final flit.
     msg_end = Input(Bits(1))
 
-    # Next value of the arbiter's `grant` register.
-    next_grant = Output(Bits(gw))
-    # Next value of the arbiter's `busy` register.
-    next_busy = Output(Bits(1))
+    # Index of the currently granted input.
+    grant = Output(Bits(gw))
+    # `grant` pre-decoded to one-hot, one register per bit.
+    grant_oh = Output(Bits(num_inputs))
+    # High while `grant` is in force, i.e. an input is currently being served.
+    busy = Output(Bits(1))
     # High on cycles the grant is (re)loaded from the queue; telemetry only.
     switch = Output(Bits(1))
 
@@ -150,7 +180,10 @@ def GrantSchedulerMod(num_inputs: int, queue_depth: int):
     def build(ports) -> None:
       clk = ports.clk
       rst = ports.rst
-      busy = ports.busy
+      next_grant = Wire(Bits(gw), "next_grant")
+      next_busy = Wire(Bits(1), "next_busy")
+      grant, grant_oh, busy = _build_grant_state(ports, clk, rst, num_inputs,
+                                                 next_grant, next_busy)
 
       # Grant queue. `rd_latency=0` makes it show-ahead, so `q_head` is a
       # registered value available the same cycle -- popping adds no bubble.
@@ -172,6 +205,7 @@ def GrantSchedulerMod(num_inputs: int, queue_depth: int):
       low = pending & neg_pending
       push = pend_nonzero & ~gq.full
       gq.push(_onehot_to_index(low), push)
+
       # Clear the bit just scheduled (or hold if the queue is full), and reload
       # the snapshot as soon as the sweep is exhausted. The reload has to happen
       # on the *same* cycle the last bit is pushed: deferring it to the cycle
@@ -190,7 +224,7 @@ def GrantSchedulerMod(num_inputs: int, queue_depth: int):
       # `started` distinguishes "this grant has not delivered a flit yet" (safe
       # to abandon) from "mid-message" (abandoning would split the message).
       started = Reg(Bits(1), clk, rst, rst_value=0, name="grant_started")
-      sel_valid_now = (ports.valids & ports.grant_oh).or_reduce()
+      sel_valid_now = (ports.valids & grant_oh).or_reduce()
       # Abandon a grant that has not yet delivered a flit and whose input is not
       # offering one, but only when there is someone else to serve.
       stale = busy & ~started & ~sel_valid_now & q_nonempty
@@ -198,12 +232,13 @@ def GrantSchedulerMod(num_inputs: int, queue_depth: int):
       take_next = ~busy | advance
       q_pop.assign(take_next & q_nonempty)
 
-      ports.next_grant = Mux(take_next & q_nonempty, ports.grant, q_head)
-      ports.next_busy = Mux(take_next, busy, q_nonempty)
+      next_grant.assign(Mux(take_next & q_nonempty, grant, q_head))
+      next_busy.assign(Mux(take_next, busy, q_nonempty))
       # Taking a new grant clears `started`; otherwise the first launched flit
       # sets it.
       started_next = Mux(ports.launch, started, Bits(1)(1))
       started.assign(Mux(take_next, started_next, Bits(1)(0)))
+
       # The grant is replaced by a queued decision exactly when it is popped.
       ports.switch = q_pop
 
@@ -219,8 +254,7 @@ def RoundRobinArbiterMod(num_inputs: int):
   `winner` is the lowest-index input that is valid and at index `>= start`
   (cyclically), falling back to the lowest-index valid input overall; `any_valid`
   is high when any input is valid. Purely combinational -- the owning state
-  lives in its parent (`rr_ptr` in `RoundRobinControlMod`, `grant`/`busy` in the
-  arbiter itself)."""
+  (`rr_ptr`, `grant`/`busy`) lives in `RoundRobinControlMod`."""
   assert num_inputs >= 2, "RoundRobinArbiterMod requires at least two inputs"
   gw = clog2(num_inputs)
 
@@ -280,8 +314,8 @@ def RoundRobinControlMod(num_inputs: int):
   Answers "who is granted next?" combinationally in the cycle the current
   message ends, using two `RoundRobinArbiter` instances -- one for picking up
   from idle, one for the message-end turnaround -- plus the `rr_ptr` fairness
-  pointer, which is owned here because only this strategy has one. See section
-  7 of `docs/components/ChannelArbiter.md`.
+  pointer, which is private to this strategy. See section 7 of
+  `docs/components/ChannelArbiter.md`.
 
   `launch` is unused; it exists only to match `GrantSchedulerMod`'s
   signature."""
@@ -293,22 +327,22 @@ def RoundRobinControlMod(num_inputs: int):
     rst = Reset()
 
     valids = Input(Bits(num_inputs))
-    grant = Input(Bits(gw))
-    grant_oh = Input(Bits(num_inputs))
-    busy = Input(Bits(1))
     launch = Input(Bits(1))
     msg_end = Input(Bits(1))
 
-    next_grant = Output(Bits(gw))
-    next_busy = Output(Bits(1))
+    grant = Output(Bits(gw))
+    grant_oh = Output(Bits(num_inputs))
+    busy = Output(Bits(1))
     switch = Output(Bits(1))
 
     @generator
     def build(ports) -> None:
       clk = ports.clk
       rst = ports.rst
-      grant = ports.grant
-      busy = ports.busy
+      next_grant = Wire(Bits(gw), "next_grant")
+      next_busy = Wire(Bits(1), "next_busy")
+      grant, grant_oh, busy = _build_grant_state(ports, clk, rst, num_inputs,
+                                                 next_grant, next_busy)
       rr_ptr = Reg(Bits(gw), clk, rst, name="rr_ptr")
       rr_arbiter = RoundRobinArbiterMod(num_inputs)
 
@@ -331,7 +365,7 @@ def RoundRobinControlMod(num_inputs: int):
       # speculatively re-grant that stale valid and the FSM would get stuck
       # `busy` on an input that goes empty next cycle. A genuinely backlogged
       # input is re-selected on the following idle cycle instead.
-      valids_next = ports.valids & ~ports.grant_oh
+      valids_next = ports.valids & ~grant_oh
       winner_next, any_next = round_robin(valids_next, grant_p1, "rr_next")
 
       pick = ~busy & any_idle
@@ -339,8 +373,8 @@ def RoundRobinControlMod(num_inputs: int):
       grant_if_not_reend = Mux(pick, grant, winner_idle)
       busy_if_not_reend = Mux(pick, busy, Bits(1)(1))
 
-      ports.next_grant = Mux(reend, grant_if_not_reend, winner_next)
-      ports.next_busy = Mux(reend, busy_if_not_reend, any_next)
+      next_grant.assign(Mux(reend, grant_if_not_reend, winner_next))
+      next_busy.assign(Mux(reend, busy_if_not_reend, any_next))
       rr_ptr.assign(Mux(reend, rr_ptr, grant_p1))
       ports.switch = pick | (reend & any_next)
 
@@ -440,24 +474,17 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
           return inner.wrap(bits.bitcast(inner.lowered_type))
         return bits.bitcast(inner)
 
-      # ---- Registered arbiter state (Reg: read now, next-state assigned
-      # below). ----
-      grant = Reg(Bits(gw), clk, rst, name="grant")
-      busy = Reg(Bits(1), clk, rst, name="busy")
+      # ---- Arbiter state. `grant`/`grant_oh`/`busy` are owned and registered
+      # by the grant-control module instantiated below; these wires forward-
+      # declare them because the input stage reads them first. ----
+      grant = Wire(Bits(gw), "grant")
+      grant_oh = Wire(Bits(num_inputs), "grant_oh")
+      busy = Wire(Bits(1), "busy")
       credit = Reg(UInt(cw), clk, rst, rst_value=depth, name="credit")
 
       credit_gt0 = credit > UInt(cw)(0)
 
       # ---- Inputs: optional skid buffer, then unwrap with a local ready. ----
-      # Per-input one-hot grant, registered below (one register each) so these
-      # potentially high-fanout signals are not a shared combinational decode.
-      grant_is = [
-          Reg(Bits(1),
-              clk,
-              rst,
-              rst_value=(1 if i == 0 else 0),
-              name=f"grant_oh_{i}") for i in range(num_inputs)
-      ]
       valids: List[BitsSignal] = []
       last_bits: List[BitsSignal] = []
       data_bits: List[BitsSignal] = []
@@ -467,7 +494,7 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
           chan = chan.buffer(clk, rst, stages=1)
         # ready[i]: consume only the granted input, and only when a credit is
         # available. Independent of valid, so no combinational ready loop.
-        ready_i = busy & grant_is[i] & credit_gt0
+        ready_i = busy & grant_oh[i] & credit_gt0
         data_i, valid_i = chan.unwrap(ready_i)
         valids.append(valid_i)
         last_bits.append(flit_last(data_i))
@@ -529,23 +556,13 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
       ctrl = ctrl_mod(clk=clk,
                       rst=rst,
                       valids=BitsSignal.concat(list(reversed(valids))),
-                      grant=grant,
-                      grant_oh=BitsSignal.concat(list(reversed(grant_is))),
-                      busy=busy,
                       launch=launch,
                       msg_end=msg_end,
                       instance_name="arb_ctrl")
-      next_grant = ctrl.next_grant
+      grant.assign(ctrl.grant)
+      grant_oh.assign(ctrl.grant_oh)
+      busy.assign(ctrl.busy)
       arb_switch = ctrl.switch
-      grant.assign(next_grant)
-      busy.assign(ctrl.next_busy)
-
-      # Register the one-hot grant decode -- one register per input -- so each
-      # (potentially high-fanout) per-input grant signal is driven by its own
-      # register instead of a shared combinational decode of `grant`. Fed from
-      # the same next-state, so it stays coherent with `grant` (== grant == i).
-      for i in range(num_inputs):
-        grant_is[i].assign(next_grant == Bits(gw)(i))
 
       # ---- Telemetry. ----
       if telemetry:
@@ -556,7 +573,7 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
           served = Counter(64)(clk=clk,
                                rst=rst,
                                clear=Bits(1)(0),
-                               increment=launch & grant_is[i])
+                               increment=launch & grant_oh[i])
           Telemetry.report_signal(clk, rst, AppID(f"grantCount_{i}"),
                                   served.out)
 
