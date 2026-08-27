@@ -787,6 +787,28 @@ firrtl.circuit "PF" {
   }
 }
 
+// -----
+
+// A constant used by both a reset value and a read probe must not have its
+// reset use rewritten to the probe node.
+// https://github.com/llvm/circt/issues/9766
+// CHECK-LABEL: firrtl.circuit "ConstantProbe"
+firrtl.circuit "ConstantProbe" {
+  firrtl.module @ConstantProbe(in %clock: !firrtl.clock,
+                               in %reset: !firrtl.asyncreset,
+                               out %probe: !firrtl.probe<uint<1>>) {
+    %c0 = firrtl.constant 0 : !firrtl.uint<1>
+    %ref = firrtl.ref.send %c0 : !firrtl.uint<1>
+    firrtl.ref.define %probe, %ref : !firrtl.probe<uint<1>>
+    %reg = firrtl.regreset %clock, %reset, %c0 : !firrtl.clock,
+      !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: %[[PROBE:.+]] = firrtl.node sym @{{.*}} %c0_ui1 : !firrtl.uint<1>
+    // CHECK-NOT: %reg = firrtl.regreset %clock, %reset, %[[PROBE]]
+    // CHECK: %reg = firrtl.regreset %clock, %reset, %c0_ui1 :
+  }
+}
+
 
 // -----
 // Test that instance results used in both connects and ref.send preserve
