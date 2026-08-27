@@ -2975,7 +2975,7 @@ Value Context::materializeOpenUnpackedArrayType(
 
   // Create open array value
   auto arrType = moore::UnpackedArrayType::get(getContext(), elementType, 0);
-  return builder.create<moore::ArrayCreateOp>(loc, arrType, elemVals).getResult();
+  return builder.create<moore::ArrayCreateOp>(loc, arrType, elemVals).getResult(); ̰ ̰
 }
 Value Context::materializeConstant(const slang::ConstantValue &constant,
                                    const slang::ast::Type &type, Location loc) {
