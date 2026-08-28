@@ -11,6 +11,24 @@ hw.module @ReservedName1 (in %reservedName2 : i1) {
   %reservedName3 = sv.reg : !hw.inout<i1>
 }
 
+// CHECK-LABEL: module LocalParamXMRTarget
+// CHECK:       localparam [7:0] param = 42;
+hw.module @LocalParamXMRTarget() {
+  %param = sv.localparam sym @param {value = 42 : i8} : i8
+}
+
+// CHECK-LABEL: module LocalParamXMRSource
+// CHECK:       LocalParamXMRTarget dut ();
+// CHECK:       assign out = LocalParamXMRSource.dut.param;
+hw.module @LocalParamXMRSource(out out : i8) {
+  hw.instance "dut" sym @dut @LocalParamXMRTarget() -> ()
+  %xmr = sv.xmr.ref @LocalParamXMRPath : !hw.inout<i8>
+  %read = sv.read_inout %xmr : !hw.inout<i8>
+  hw.output %read : i8
+}
+
+hw.hierpath @LocalParamXMRPath [@LocalParamXMRSource::@dut, @LocalParamXMRTarget::@param]
+
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
 hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {

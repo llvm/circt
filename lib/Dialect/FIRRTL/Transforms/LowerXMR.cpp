@@ -217,6 +217,23 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
                 nameKind = NameKindEnum::InterestingName;
               }
             }
+
+            // Materialize the probe target as a localparam instead of a node,
+            // and bridge its HW type back to FIRRTL for the local XMR value.
+            if (auto constant = dyn_cast<ConstantOp>(xmrDefOp)) {
+              auto localParamType = lowerType(xmrDef.getType());
+              auto localParamValue =
+                  IntegerAttr::get(localParamType, constant.getValue());
+              auto localParam = sv::LocalParamOp::create(
+                  b, localParamType, localParamValue, b.getStringAttr(opName));
+              mlir::UnrealizedConversionCastOp::create(b, xmrDef.getType(),
+                                                       localParam.getResult());
+              addReachingSendsEntry(send.getResult(),
+                                    getInnerRefTo(localParam.getResult()));
+              markForRemoval(send);
+              return success();
+            }
+
             auto node = NodeOp::create(b, xmrDef, opName, nameKind);
             auto newValue = node.getResult();
             // Replace all uses except the node itself and except when the value

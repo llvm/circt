@@ -12,6 +12,8 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
 
   // CHECK: %param_x = sv.localparam {value = 11 : i42} : i42
   %param_x = sv.localparam {value = 11 : i42} : i42
+  // CHECK: %param_xmr = sv.localparam sym @param_xmr {value = 12 : i42} : i42
+  %param_xmr = sv.localparam sym @param_xmr {value = 12 : i42} : i42
 
 
   // This corresponds to this block of system verilog code:
