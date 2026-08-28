@@ -587,7 +587,8 @@ def RegistryImpl : PropImplType<"Registry"> {
     assignment. Downstream consumers must treat registry contents as
     order-independent.
   }];
-  let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "element type">:$elementType);
+  let parameters = (ins TypeParameter<"circt::firrtl::PropertyType",
+                                      "element type">:$elementType);
   let genStorageClass = true;
   let genAccessors = true;
   let typeName = "firrtl.propRegistry";
