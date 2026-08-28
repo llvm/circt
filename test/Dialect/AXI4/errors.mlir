@@ -100,8 +100,8 @@
 hw.module @Fanout(in %clk : !seq.clock, in %rst_ni : i1) {
   // expected-error @below {{'axi4.abstract_manager' op port result must have at most one use; route through an 'axi4.xbar' to fan out to multiple endpoints}}
   %mgr = axi4.abstract_manager %clk, %rst_ni : !port
-  axi4.abstract_subordinate %clk, %rst_ni, %mgr : !port
-  axi4.abstract_subordinate %clk, %rst_ni, %mgr : !port
+  axi4.abstract_subordinate %clk, %rst_ni, %mgr concurrent_writes 4 concurrent_reads 4 : !port
+  axi4.abstract_subordinate %clk, %rst_ni, %mgr concurrent_writes 4 concurrent_reads 4 : !port
 }
 
 // -----
