@@ -226,7 +226,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
             // optimizations generally but only if we think they will be
             // optimized, else we'll have dead code in some cases that some
             // tools object to; filtering on constants is a good heuristic for
-            // this and solves a problem we see in practice with registers
+            // this and solves a problem we see in practice with registers.
             if (!isa<ConstantOp>(xmrDefOp)) {
               xmrDef.replaceUsesWithIf(newValue, [&](OpOperand &operand) {
                 if (operand.getOwner() == node.getOperation())
