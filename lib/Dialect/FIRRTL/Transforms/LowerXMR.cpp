@@ -222,14 +222,21 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
             // Replace all uses except the node itself and except when the value
             // is the destination of a connect (operand 0). We need to preserve
             // connect destinations to maintain proper flow semantics.
-            xmrDef.replaceUsesWithIf(newValue, [&](OpOperand &operand) {
-              if (operand.getOwner() == node.getOperation())
-                return false;
-              if (isa<FConnectLike>(operand.getOwner()) &&
-                  operand.getOperandNumber() == 0)
-                return false;
-              return true;
-            });
+            // Constants need an additional exception. We want to support
+            // optimizations generally but only if we think they will be
+            // optimized, else we'll have dead code in some cases that some
+            // tools object to; filtering on constants is a good heuristic for
+            // this and solves a problem we see in practice with registers.
+            if (!isa<ConstantOp>(xmrDefOp)) {
+              xmrDef.replaceUsesWithIf(newValue, [&](OpOperand &operand) {
+                if (operand.getOwner() == node.getOperation())
+                  return false;
+                if (isa<FConnectLike>(operand.getOwner()) &&
+                    operand.getOperandNumber() == 0)
+                  return false;
+                return true;
+              });
+            }
             xmrDef = newValue;
 
             // Create a new entry for this RefSendOp. The path is currently
