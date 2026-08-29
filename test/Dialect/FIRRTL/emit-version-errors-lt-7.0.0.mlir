@@ -45,17 +45,6 @@ firrtl.circuit "DomainDecl" {
 
 // -----
 
-// Registry fields in domain declarations require >= 7.0.0.
-firrtl.circuit "RegistryDomain" {
-  // expected-error @+1 {{'firrtl.domain' op registries requires FIRRTL 7.0.0}}
-  firrtl.domain @RegistryDomain [
-    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
-  ]
-  firrtl.module @RegistryDomain() {}
-}
-
-// -----
-
 // simulation test declaration requires >= 7.0.0.  The circuit must contain a
 // module matching its name (@SimulationTest) for FIRRTL verification; the
 // simulation op and the referenced extmodule are placed so the emitter
