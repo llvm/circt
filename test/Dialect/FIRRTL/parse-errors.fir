@@ -1818,7 +1818,6 @@ circuit Domains:
     domain_define
 
 ;// -----
-; Registries are introduced alongside the FIRRTL domain syntax.
 FIRRTL version 6.0.0
 circuit RegistryType:
   public module RegistryType:

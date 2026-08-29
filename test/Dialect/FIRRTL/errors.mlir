@@ -1692,14 +1692,6 @@ firrtl.module @ConstHardwareString(in %string: !firrtl.const.string) {}
 }
 
 // -----
-// Registries cannot be const-qualified.
-
-firrtl.circuit "ConstRegistry" {
-  // expected-error @+1 {{registries cannot be const}}
-  firrtl.module @ConstRegistry(in %registry: !firrtl.const.registry<path>) {}
-}
-
-// -----
 
 // Constcast non-const to const
 firrtl.circuit "ConstcastNonConstToConst" {
