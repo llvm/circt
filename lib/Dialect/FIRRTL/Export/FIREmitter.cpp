@@ -1977,6 +1977,11 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getElementType());
         ps << ">";
       })
+      .Case<RegistryType>([&](RegistryType type) {
+        ps << "Registry<";
+        emitType(type.getElementType());
+        ps << ">";
+      })
       .Case<DomainType>([&](DomainType type) {
         ps << "Domain of " << PPExtString(type.getName().getValue());
       })
