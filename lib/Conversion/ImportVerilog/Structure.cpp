@@ -896,6 +896,11 @@ struct ModuleVisitor : public BaseVisitor {
   }
 
   LogicalResult visit(const slang::ast::ProceduralBlockSymbol &procNode) {
+    // Slang wraps module-level concurrent assertions in a synthetic `always`
+    // procedure. The assertion is self-clocked, so it needs no process.
+    if (procNode.isFromAssertion)
+      return context.convertStatement(procNode.getBody());
+
     // Detect `always @(*) <stmt>` and convert to `always_comb <stmt>` if
     // requested by the user.
     if (context.options.lowerAlwaysAtStarAsComb) {
