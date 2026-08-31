@@ -509,9 +509,9 @@ private:
 
       auto typeScopeBuilder =
           ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());
-      auto typeDecl = hw::TypedeclOp::create(
-          typeScopeBuilder, typeLoc, /*sym_visibility=*/{}, typeName, rawType,
-          nullptr);
+      auto typeDecl = hw::TypedeclOp::create(typeScopeBuilder, typeLoc,
+                                             /*sym_visibility=*/{}, typeName,
+                                             rawType, nullptr);
       auto hwAlias = hw::TypeAliasType::get(
           SymbolRefAttr::get(typeScope.getSymNameAttr(),
                              {FlatSymbolRefAttr::get(typeDecl)}),
@@ -885,8 +885,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib)
@@ -1371,10 +1370,12 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   // Copy over any attributes which are not required for FModuleOp.
   SmallVector<StringRef, 13> attrNames = {
-      "annotations",   "convention",      "layers",
-      "portNames",     "sym_name",        "portDirections",
-      "portTypes",     "portAnnotations", "portSymbols",
-      "portLocations", "parameters",      "sym_visibility",
+      "annotations", "convention",
+      "layers",      "portNames",
+      "sym_name",    "portDirections",
+      "portTypes",   "portAnnotations",
+      "portSymbols", "portLocations",
+      "parameters",  mlir::SymbolOpInterface::getDefaultVisibilityAttrName(),
       "domainInfo"};
 
   DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());
@@ -3278,8 +3279,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};

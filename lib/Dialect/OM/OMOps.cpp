@@ -137,8 +137,7 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
 
   // Parse the Class symbol name.
   StringAttr symName;
-  if (parser.parseSymbolName(symName, "sym_name",
-                             state.attributes))
+  if (parser.parseSymbolName(symName, "sym_name", state.attributes))
     return failure();
 
   // Parse the formal parameters.
@@ -192,7 +191,8 @@ static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
   printer << " ";
 
   // Print the optional symbol visibility.
-  StringRef visibilityAttrName = "sym_visibility";
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility =
           classLike->getAttrOfType<StringAttr>(visibilityAttrName))
     printer << visibility.getValue() << ' ';

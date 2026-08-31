@@ -1481,7 +1481,8 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p << " ";
 
   // Print the visibility of the module.
-  StringRef visibilityAttrName = "sym_visibility";
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
@@ -2114,7 +2115,8 @@ static void printClassLike(OpAsmPrinter &p, ClassLike op) {
   p << ' ';
 
   // Print the visibility of the class.
-  StringRef visibilityAttrName = "sym_visibility";
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 

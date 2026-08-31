@@ -82,8 +82,7 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, "sym_name",
-                             result.attributes))
+  if (parser.parseSymbolName(nameAttr, "sym_name", result.attributes))
     return failure();
 
   SmallVector<DPIArgument> args;
@@ -152,7 +151,8 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
 void DPIFuncOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = "sym_visibility";
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(getSymName());

@@ -822,8 +822,7 @@ StringAttr HWModuleGeneratedOp::getVerilogModuleNameAttr() {
   if (auto vName = getVerilogNameAttr()) {
     return vName;
   }
-  return (*this)->getAttrOfType<StringAttr>(
-      "sym_name");
+  return (*this)->getAttrOfType<StringAttr>("sym_name");
 }
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
@@ -922,8 +921,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser,
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, "sym_name",
-                             result.attributes))
+  if (parser.parseSymbolName(nameAttr, "sym_name", result.attributes))
     return failure();
 
   // Parse the generator information.
@@ -1035,7 +1033,8 @@ template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   p << ' ';
   // Print the visibility of the module.
-  StringRef visibilityAttrName = "sym_visibility";
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = mod.getOperation()->template getAttrOfType<StringAttr>(
           visibilityAttrName))
     p << visibility.getValue() << ' ';
@@ -3377,7 +3376,8 @@ void HierPathOp::print(OpAsmPrinter &p) {
   p << " ";
 
   // Print visibility if present.
-  StringRef visibilityAttrName = "sym_visibility";
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility =
           getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
@@ -3394,9 +3394,8 @@ void HierPathOp::print(OpAsmPrinter &p) {
     }
   });
   p << "]";
-  p.printOptionalAttrDict(
-      (*this)->getAttrs(),
-      {"sym_name", "namepath", visibilityAttrName});
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          {"sym_name", "namepath", visibilityAttrName});
 }
 
 ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -3405,8 +3404,7 @@ ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the symbol name.
   StringAttr symName;
-  if (parser.parseSymbolName(symName, "sym_name",
-                             result.attributes))
+  if (parser.parseSymbolName(symName, "sym_name", result.attributes))
     return failure();
 
   // Parse the namepath.
