@@ -18,6 +18,9 @@
 // target's driver, so a force overrides the observed value rather than the
 // assignment that computes it.
 //
+// Gated clocks are converted first so synthesized state runs on a free-running
+// clock.
+//
 // Pre-requisites for complete conversion:
 // * LowerOpenAggs
 //   - Simplifies this pass, Probes are always separate.
@@ -43,6 +46,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/GatedClockConversion.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/Threading.h"
@@ -995,6 +999,26 @@ struct ProbesToSignalsPass
 
 void ProbesToSignalsPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+
+  // Collect gated-clock roots: the synthesized state must run on a
+  // free-running clock.
+  SmallVector<Operation *> gatedClockRoots;
+  getOperation()->walk([&](Operation *op) {
+    auto fop = dyn_cast<Forceable>(op);
+    if (isa<RefForceOp, RefReleaseOp>(op) ||
+        (fop && isa<RegOp, RegResetOp>(op) && fop.isForceable()))
+      gatedClockRoots.push_back(op);
+  });
+
+  // Sequential: tracer mutates signatures globally. Skip if nothing is clocked.
+  if (!gatedClockRoots.empty()) {
+    GatedClockConversion tracer(getAnalysis<InstanceGraph>());
+    for (auto *op : gatedClockRoots)
+      if (failed(tracer.addRoot(op)))
+        return signalPassFailure();
+    if (failed(tracer.run()))
+      return signalPassFailure();
+  }
 
   SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
 
