@@ -21,7 +21,7 @@ class EmitOp<string mnemonic, list<Trait> traits = []> :
     Op<EmitDialect, mnemonic, traits>;
 
 def FileOp : EmitOp<"file", [
-    Symbol,
+    SymbolName, SymbolVisibility, Symbol,
     SingleBlock,
     NoTerminator,
     NoRegionArguments,
@@ -38,6 +38,7 @@ def FileOp : EmitOp<"file", [
 
   let regions = (region SizedRegion<1>:$bodyRegion);
   let arguments = (ins
+    OptionalAttr<StrAttr>:$sym_visibility,
     StrAttr:$file_name,
     OptionalAttr<SymbolNameAttr>:$sym_name
   );
@@ -66,7 +67,7 @@ def FileOp : EmitOp<"file", [
 }
 
 def FragmentOp : EmitOp<"fragment", [
-    Symbol,
+    SymbolName, SymbolVisibility, Symbol,
     SingleBlock,
     NoTerminator,
     NoRegionArguments,
@@ -86,7 +87,7 @@ def FragmentOp : EmitOp<"fragment", [
   }];
 
   let regions = (region SizedRegion<1>:$bodyRegion);
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
 
   let assemblyFormat = "$sym_name $bodyRegion attr-dict";
 
@@ -138,7 +139,7 @@ def RefOp : EmitOp<"ref", [
 }
 
 def FileListOp : EmitOp<"file_list", [
-    Symbol,
+    SymbolName, SymbolVisibility, Symbol,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Represents a file list";
@@ -151,6 +152,7 @@ def FileListOp : EmitOp<"file_list", [
   }];
 
   let arguments = (ins
+    OptionalAttr<StrAttr>:$sym_visibility,
     StrAttr:$file_name,
     FlatSymbolRefArrayAttr:$files,
     OptionalAttr<SymbolNameAttr>:$sym_name

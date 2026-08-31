@@ -252,7 +252,8 @@ static LogicalResult applyDUTAnno(const AnnoPathValue &target,
   auto moduleOp = cast<FModuleLike>(op);
 
   // DUT has public visibility.
-  moduleOp.setPublic();
+  mlir::SymbolTable::setSymbolVisibility(moduleOp.getOperation(),
+                                         mlir::SymbolTable::Visibility::Public);
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno)
     if (na.getName().getValue() != "target")
@@ -511,7 +512,8 @@ static LogicalResult applyOutputDirAnno(const AnnoPathValue &target,
   auto moduleOp = dyn_cast<FModuleOp>(op);
   if (!moduleOp)
     return error() << "must target a module";
-  if (!moduleOp.isPublic())
+  if (cast<mlir::SymbolOpInterface>(moduleOp.getOperation()).getVisibility() !=
+      mlir::SymbolTable::Visibility::Public)
     return error() << "must target a public module";
   if (moduleOp->hasAttr("output_file"))
     return error() << "target already has an output file";
@@ -993,7 +995,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       for (auto instNode : llvm::reverse(insts)) {
         auto inst = cast<InstanceOp>(*instNode);
         auto mod = inst.getReferencedModule<FModuleOp>(instanceGraph);
-        if (mod.isPublic()) {
+        if (mod.getVisibility() == mlir::SymbolTable::Visibility::Public) {
           auto diag = emitError(mod.getLoc(),
                                 "cannot wire port through this public module");
           diag.attachNote(source.getLoc()) << "source here";

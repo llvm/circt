@@ -57,7 +57,7 @@ class TypeIsSimpleBitVectorOf<string sbvType, string packedType> :
 def SVModuleOp : MooreOp<"module", [
   IsolatedFromAbove,
   RegionKindInterface,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
   SingleBlockImplicitTerminator<"OutputOp">,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
 ]> {
@@ -220,7 +220,7 @@ def UnreachableOp : MooreOp<"unreachable", [Terminator]> {
 def CoroutineOp : MooreOp<"coroutine", [
   IsolatedFromAbove,
   FunctionOpInterface,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
   RegionKindInterface,
   RecursiveMemoryEffects,
 ]> {
@@ -478,7 +478,7 @@ def GlobalVariableOp : MooreOp<"global_variable", [
   IsolatedFromAbove,
   NoRegionArguments,
   SingleBlock,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
 ]> {
   let summary = "A global variable declaration";
   let description = [{
@@ -487,6 +487,7 @@ def GlobalVariableOp : MooreOp<"global_variable", [
     See IEEE 1800-2017 § 6.8 "Variable declarations".
   }];
   let arguments = (ins
+    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
     TypeAttrOf<UnpackedType>:$type
   );
@@ -3641,13 +3642,13 @@ def QueueSizeBIOp : Builtin<"size"> {
 //===----------------------------------------------------------------------===//
 
 def ClassPropertyDeclOp
-    : MooreOp<"class.propertydecl", [Symbol, HasParent<"ClassDeclOp">]> {
+    : MooreOp<"class.propertydecl", [SymbolName, SymbolVisibility, Symbol, HasParent<"ClassDeclOp">]> {
   let summary = "Declare a class property";
   let description = [{
   Declares a property within a class declaration.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttr:$type);
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name, TypeAttr:$type);
 
   let results = (outs);
   let assemblyFormat = [{
@@ -3661,9 +3662,9 @@ def ClassPropertyDeclOp
 
 
 def ClassMethodDeclOp
-    : MooreOp<"class.methoddecl", [Symbol, HasParent<"ClassDeclOp">]> {
+    : MooreOp<"class.methoddecl", [SymbolName, SymbolVisibility, Symbol, HasParent<"ClassDeclOp">]> {
   let summary = "Declare a class method";
-  let arguments = (ins SymbolNameAttr:$sym_name,
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
       TypeAttrOf<FunctionType>:$function_type,
       OptionalAttr<SymbolRefAttr>:$impl);
   let results = (outs);
@@ -3673,10 +3674,10 @@ def ClassMethodDeclOp
 }
 
 def ClassDeclOp
-    : MooreOp<"class.classdecl", [Symbol, SymbolTable, IsolatedFromAbove,
+    : MooreOp<"class.classdecl", [SymbolName, SymbolVisibility, Symbol, SymbolTable, IsolatedFromAbove,
     NoTerminator, SingleBlock]> {
   let summary = "Class declaration";
-  let arguments = (ins SymbolNameAttr:$sym_name,
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
       OptionalAttr<SymbolRefAttr>:$base,
       OptionalAttr<SymbolRefArrayAttr>:$implementedInterfaces);
   let results = (outs);
@@ -3814,7 +3815,7 @@ def DPIArgDirection : I32EnumAttr<"DPIArgDirection",
 }
 
 def DPIFuncOp : MooreOp<"func.dpi",
-  [IsolatedFromAbove, Symbol, OpAsmOpInterface,
+  [IsolatedFromAbove, SymbolName, SymbolVisibility, Symbol, OpAsmOpInterface,
    DeclareOpInterfaceMethods<FunctionOpInterface,
      ["cloneTypeWith"]>]> {
   let summary = "A DPI-imported SystemVerilog function declaration";

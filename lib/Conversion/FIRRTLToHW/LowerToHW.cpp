@@ -495,7 +495,8 @@ private:
             circuitOp.getLoc(),
             &circuitOp->getParentRegion()->getBlocks().back());
         typeScope = hw::TypeScopeOp::create(
-            b, b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
+            b, /*sym_visibility=*/{},
+            b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
         typeScope.getBodyRegion().push_back(new Block());
       }
       auto typeName = firAlias.getName();
@@ -509,7 +510,8 @@ private:
       auto typeScopeBuilder =
           ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());
       auto typeDecl = hw::TypedeclOp::create(typeScopeBuilder, typeLoc,
-                                             typeName, rawType, nullptr);
+                                             /*sym_visibility=*/{}, typeName,
+                                             rawType, nullptr);
       auto hwAlias = hw::TypeAliasType::get(
           SymbolRefAttr::get(typeScope.getSymNameAttr(),
                              {FlatSymbolRefAttr::get(typeDecl)}),
@@ -733,6 +735,7 @@ void FIRRTLModuleLowering::runOnOperation() {
             .Case<FormalOp>([&](auto oldOp) {
               auto builder = OpBuilder::atBlockEnd(topLevelModule);
               auto newOp = verif::FormalOp::create(builder, oldOp.getLoc(),
+                                                   /*sym_visibility=*/{},
                                                    oldOp.getNameAttr(),
                                                    oldOp.getParametersAttr());
               newOp.getBody().emplaceBlock();
@@ -744,7 +747,8 @@ void FIRRTLModuleLowering::runOnOperation() {
               auto loc = oldOp.getLoc();
               auto builder = OpBuilder::atBlockEnd(topLevelModule);
               auto newOp = verif::SimulationOp::create(
-                  builder, loc, oldOp.getNameAttr(), oldOp.getParametersAttr());
+                  builder, loc, /*sym_visibility=*/{}, oldOp.getNameAttr(),
+                  oldOp.getParametersAttr());
               auto &body = newOp.getRegion().emplaceBlock();
               body.addArgument(seq::ClockType::get(builder.getContext()), loc);
               body.addArgument(builder.getI1Type(), loc);
@@ -1198,7 +1202,7 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getVerbatimSourceForExtModule(
 
   if (!verbatimSource) {
     verbatimSource = sv::SVVerbatimSourceOp::create(
-        builder, oldModule.getLoc(),
+        builder, oldModule.getLoc(), /*sym_visibility=*/{},
         circuitNamespace.newName(primaryFileName.str()),
         primaryFileContent.getValue(), primaryOutputFileAttr, parameters,
         additionalFiles.empty() ? nullptr
@@ -1367,10 +1371,18 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   // Copy over any attributes which are not required for FModuleOp.
   SmallVector<StringRef, 13> attrNames = {
-      "annotations",   "convention",      "layers",
-      "portNames",     "sym_name",        "portDirections",
-      "portTypes",     "portAnnotations", "portSymbols",
-      "portLocations", "parameters",      SymbolTable::getVisibilityAttrName(),
+      "annotations",
+      "convention",
+      "layers",
+      "portNames",
+      oldModule.getSymNameAttrName(),
+      "portDirections",
+      "portTypes",
+      "portAnnotations",
+      "portSymbols",
+      "portLocations",
+      "parameters",
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName(),
       "domainInfo"};
 
   DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());
@@ -1685,7 +1697,7 @@ FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp newOp,
 
   // Instantiate the module with the given symbolic inputs.
   hw::InstanceOp::create(builder, newOp.getLoc(), newModule,
-                         newModule.getNameAttr(), symbolicInputs);
+                         newModule.getModuleNameAttr(), symbolicInputs);
   return success();
 }
 
@@ -1709,7 +1721,7 @@ FIRRTLModuleLowering::lowerSimulationBody(verif::SimulationOp newOp,
   SmallVector<Value> inputs(newOp.getBody()->args_begin(),
                             newOp.getBody()->args_end());
   auto instOp = hw::InstanceOp::create(builder, newOp.getLoc(), newModule,
-                                       newModule.getNameAttr(), inputs);
+                                       newModule.getModuleNameAttr(), inputs);
   verif::YieldOp::create(builder, newOp.getLoc(), instOp.getResults());
   return success();
 }

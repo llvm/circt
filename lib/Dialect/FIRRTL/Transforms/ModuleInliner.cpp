@@ -402,7 +402,9 @@ InliningFacts::compute(CircuitOp circuit, InstanceGraph &instanceGraph,
       });
       bool hasOpaqueUse = opaqueRecIt != instantiators.end();
 
-      if (!module.canDiscardOnUseEmpty() || hasOpaqueUse) {
+      if (!cast<mlir::SymbolOpInterface>(module.getOperation())
+               .canDiscardOnUseEmpty() ||
+          hasOpaqueUse) {
         info.isLive = true;
         info.hasUnflattenedPath = true;
       }
@@ -2419,7 +2421,8 @@ void Inliner::writebackHierPaths() {
     // Forked into a fresh symbol: reuse the original op's location so the fork
     // keeps its provenance for diagnostics.
     auto hp = hw::HierPathOp::create(b, origIt->second.getLoc(),
-                                     vnla->realizedSym, arrayAttr);
+                                     /*sym_visibility=*/{}, vnla->realizedSym,
+                                     arrayAttr);
     hp.setPrivate();
     ++stats.hierPathsForked;
   }

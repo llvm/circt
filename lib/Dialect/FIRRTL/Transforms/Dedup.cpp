@@ -1019,7 +1019,7 @@ struct Deduper {
         classString(StringAttr::get(context, "class")) {
     // Populate the NLA cache.
     for (auto nla : circuit.getOps<hw::HierPathOp>())
-      nlaCache[nla.getNamepathAttr()] = nla.getSymNameAttr();
+      nlaCache[nla.getNamepathAttr()] = nla.getNameAttr();
   }
 
   /// Remove the "fromModule", and replace all references to it with the
@@ -1164,7 +1164,9 @@ private:
       auto &cacheEntry = nlaCache[arrayAttr];
       if (!cacheEntry) {
         auto builder = OpBuilder::atBlockBegin(nlaBlock);
-        auto nla = hw::HierPathOp::create(builder, loc, "nla", arrayAttr);
+        auto nla =
+            hw::HierPathOp::create(builder, loc,
+                                   /*sym_visibility=*/{}, "nla", arrayAttr);
         // Insert it into the symbol table to get a unique name.
         symbolTable.insert(nla);
         // Store it in the cache.
@@ -1273,7 +1275,7 @@ private:
       SmallVector<Attribute> namepath(elements.begin(), elements.end());
       auto nlaRefs = createNLAs(fromModule, namepath, nla.getVisibility());
       // Copy out the targets, because we will be updating the map.
-      auto &set = targetMap[nla.getSymNameAttr()];
+      auto &set = targetMap[nla.getNameAttr()];
       SmallVector<AnnoTarget> targets(set.begin(), set.end());
       // Replace the uses of the old NLA with the new NLAs.
       for (auto target : targets) {
@@ -1287,7 +1289,7 @@ private:
           // If this annotation doesn't use the target NLA, copy it with no
           // changes.
           if (!found || cast<FlatSymbolRefAttr>(it->getValue()).getAttr() !=
-                            nla.getSymNameAttr()) {
+                            nla.getNameAttr()) {
             newAnnotations.push_back(anno);
             continue;
           }
@@ -1729,7 +1731,7 @@ static void fixupSymbolSensitiveOps(
       continue;
     LLVM_DEBUG(llvm::dbgs()
                << "- Updating " << ops.size() << " symbol-sensitive ops in "
-               << module.getNameAttr() << "\n");
+               << module.getModuleNameAttr() << "\n");
     for (auto *op : ops)
       fixupSymbolSensitiveOp(op, instanceGraph, dedupMap);
   }
@@ -1883,11 +1885,13 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
 
         // If the current module is public, and the original is private, we
         // want to dedup the private module into the public one.
-        if (!canRemoveModule(module)) {
+        if (!canRemoveModule(
+                cast<mlir::SymbolOpInterface>(module.getOperation()))) {
           // Record that this module's name is staying the same.
           dedupMap[moduleName] = moduleName;
           // If both modules are public, then we can't dedup anything.
-          if (!canRemoveModule(original))
+          if (!canRemoveModule(
+                  cast<mlir::SymbolOpInterface>(original.getOperation())))
             continue;
           // Swap the canonical module in the dedup map.
           for (auto &[_, dedupedName] : dedupMap)

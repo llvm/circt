@@ -1477,16 +1477,18 @@ static void printParameterList(OpAsmPrinter &p, Operation *op,
   p << '>';
 }
 
+template <typename ModuleTy>
 static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p << " ";
 
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
   // Print the operation and the function name.
-  p.printSymbolName(op.getModuleName());
+  p.printSymbolName(cast<mlir::SymbolOpInterface>(op.getOperation()).getName());
 
   // Print the parameter list (if non-empty).
   printParameterList(p, op, op->getAttrOfType<ArrayAttr>("parameters"));
@@ -1503,9 +1505,15 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       op.getDomainInfo());
 
   SmallVector<StringRef, 13> omittedAttrs = {
-      "sym_name",        "portDirections",   "portTypes",
-      "portAnnotations", "portSymbols",      "portLocations",
-      "parameters",      visibilityAttrName, "domainInfo"};
+      ModuleTy::getSymNameAttrName(op->getName()),
+      "portDirections",
+      "portTypes",
+      "portAnnotations",
+      "portSymbols",
+      "portLocations",
+      "parameters",
+      visibilityAttrName,
+      "domainInfo"};
 
   if (op.getConvention() == Convention::Internal)
     omittedAttrs.push_back("convention");
@@ -1537,14 +1545,20 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
-void FExtModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
+void FExtModuleOp::print(OpAsmPrinter &p) {
+  printFModuleLikeOp<FExtModuleOp>(p, *this);
+}
 
-void FIntModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
+void FIntModuleOp::print(OpAsmPrinter &p) {
+  printFModuleLikeOp<FIntModuleOp>(p, *this);
+}
 
-void FMemModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
+void FMemModuleOp::print(OpAsmPrinter &p) {
+  printFModuleLikeOp<FMemModuleOp>(p, *this);
+}
 
 void FModuleOp::print(OpAsmPrinter &p) {
-  printFModuleLikeOp(p, *this);
+  printFModuleLikeOp<FModuleOp>(p, *this);
 
   // Print the body if this is not an external function. Since this block does
   // not have terminators, printing the terminator actually just prints the last
@@ -2027,7 +2041,7 @@ ClassType firrtl::detail::getInstanceTypeForClassLike(ClassLike classOp) {
   for (size_t i = 0; i < n; ++i)
     elements.push_back({classOp.getPortNameAttr(i), classOp.getPortType(i),
                         classOp.getPortDirection(i)});
-  auto name = FlatSymbolRefAttr::get(classOp.getNameAttr());
+  auto name = FlatSymbolRefAttr::get(classOp.getModuleNameAttr());
   return ClassType::get(name, elements);
 }
 
@@ -2110,16 +2124,18 @@ ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
+template <typename ClassTy>
 static void printClassLike(OpAsmPrinter &p, ClassLike op) {
   p << ' ';
 
   // Print the visibility of the class.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
   // Print the class name.
-  p.printSymbolName(op.getName());
+  p.printSymbolName(cast<mlir::SymbolOpInterface>(op.getOperation()).getName());
 
   // Both classes and external classes have a body, but it is always empty for
   // external classes.
@@ -2134,8 +2150,14 @@ static void printClassLike(OpAsmPrinter &p, ClassLike op) {
 
   // Print the attr-dict.
   SmallVector<StringRef, 8> omittedAttrs = {
-      "sym_name",    "portNames",     "portTypes",        "portDirections",
-      "portSymbols", "portLocations", visibilityAttrName, "domainInfo"};
+      ClassTy::getSymNameAttrName(op->getName()),
+      "portNames",
+      "portTypes",
+      "portDirections",
+      "portSymbols",
+      "portLocations",
+      visibilityAttrName,
+      "domainInfo"};
 
   // We can omit the portNames if they were able to be printed as properly as
   // block arguments.
@@ -2202,7 +2224,7 @@ void ClassOp::build(::mlir::OpBuilder &odsBuilder,
   odsBuilder.restoreInsertionPoint(prevLoc);
 }
 void ClassOp::print(OpAsmPrinter &p) {
-  printClassLike(p, cast<ClassLike>(getOperation()));
+  printClassLike<ClassOp>(p, cast<ClassLike>(getOperation()));
 }
 
 ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -2279,6 +2301,18 @@ BlockArgument ClassOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
+StringAttr ClassOp::getNameAttr() { return getSymNameAttr(); }
+
+void ClassOp::setName(StringAttr name) { setSymNameAttr(name); }
+
+SymbolTable::Visibility ClassOp::getVisibility() {
+  return OpTrait::SymbolVisibility<ClassOp>::getVisibility();
+}
+
+void ClassOp::setVisibility(SymbolTable::Visibility visibility) {
+  OpTrait::SymbolVisibility<ClassOp>::setVisibility(visibility);
+}
+
 bool ClassOp::canDiscardOnUseEmpty() {
   // ClassOps are referenced by ClassTypes, and these uses are not
   // discoverable by the symbol infrastructure. Return false here to prevent
@@ -2300,7 +2334,7 @@ void ExtClassOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void ExtClassOp::print(OpAsmPrinter &p) {
-  printClassLike(p, cast<ClassLike>(getOperation()));
+  printClassLike<ExtClassOp>(p, cast<ClassLike>(getOperation()));
 }
 
 ParseResult ExtClassOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -2360,6 +2394,18 @@ SmallVector<::circt::hw::PortInfo> ExtClassOp::getPortList() {
 
 ::circt::hw::PortInfo ExtClassOp::getPort(size_t idx) {
   return ::getPortImpl(*this, idx);
+}
+
+StringAttr ExtClassOp::getNameAttr() { return getSymNameAttr(); }
+
+void ExtClassOp::setName(StringAttr name) { setSymNameAttr(name); }
+
+SymbolTable::Visibility ExtClassOp::getVisibility() {
+  return OpTrait::SymbolVisibility<ExtClassOp>::getVisibility();
+}
+
+void ExtClassOp::setVisibility(SymbolTable::Visibility visibility) {
+  OpTrait::SymbolVisibility<ExtClassOp>::setVisibility(visibility);
 }
 
 bool ExtClassOp::canDiscardOnUseEmpty() {

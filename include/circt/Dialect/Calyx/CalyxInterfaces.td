@@ -27,8 +27,7 @@ def GroupOpInterface : OpInterface<"GroupInterface"> {
       "mlir::StringAttr",
       "symName",
       (ins), [{
-        Operation* op = $_op;
-        return op->getAttrOfType<mlir::StringAttr>("sym_name");
+        return $_op.getSymNameAttr();
       }]>,
     InterfaceMethod<
       "This returns the body of the group.",
@@ -92,8 +91,7 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       (ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        return $_op.getOperation()->template getAttrOfType<mlir::StringAttr>(
-          mlir::SymbolTable::getSymbolAttrName()).getValue();
+        return $_op.getSymNameAttr().getValue();
       }]
     >,
     InterfaceMethod<

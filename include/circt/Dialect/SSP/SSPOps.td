@@ -24,7 +24,7 @@ class SSPOp<string mnemonic, list<Trait> traits = []> :
 
 def InstanceOp : SSPOp<"instance",
     [NoRegionArguments, SingleBlock, NoTerminator,
-     IsolatedFromAbove, OpAsmOpInterface, SymbolTable, Symbol]> {
+     IsolatedFromAbove, OpAsmOpInterface, SymbolTable, SymbolName, SymbolVisibility, Symbol]> {
   let summary = "Instance of a static scheduling problem.";
   let description = [{
     This operation represents an instance of a static scheduling problem,
@@ -58,7 +58,9 @@ def InstanceOp : SSPOp<"instance",
     ```
   }];
 
-  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name, StrAttr:$problemName,
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility,
+                       StrAttr:$problemName,
                        OptionalAttr<ArrayAttr>:$sspProperties);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
@@ -100,7 +102,7 @@ def InstanceOp : SSPOp<"instance",
 
 def OperatorLibraryOp : SSPOp<"library",
     [NoRegionArguments, SingleBlock,
-     NoTerminator, OpAsmOpInterface, SymbolTable, Symbol]> {
+     NoTerminator, OpAsmOpInterface, SymbolTable, SymbolName, SymbolVisibility, Symbol]> {
   let summary = "Container for operator types.";
   let description = [{
     The operator library abstracts the characteristics of the target
@@ -109,7 +111,7 @@ def OperatorLibraryOp : SSPOp<"library",
     `InstanceOp`.
   }];
   
-  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name);
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name, OptionalAttr<StrAttr>:$sym_visibility);
   let assemblyFormat = "($sym_name^)? $body attr-dict";
   let regions = (region SizedRegion<1>:$body);
 
@@ -137,7 +139,7 @@ def OperatorLibraryOp : SSPOp<"library",
 
 def ResourceLibraryOp : SSPOp<"resource",
     [NoRegionArguments, SingleBlock,
-     NoTerminator, OpAsmOpInterface, SymbolTable, Symbol]> {
+     NoTerminator, OpAsmOpInterface, SymbolTable, SymbolName, SymbolVisibility, Symbol]> {
   let summary = "Container for resource types.";
   let description = [{
     The resource library represents different kinds of resource of desired
@@ -147,7 +149,7 @@ def ResourceLibraryOp : SSPOp<"resource",
     an `InstanceOp` so different problems can share the same resource constraints.
   }];
 
-  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name);
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name, OptionalAttr<StrAttr>:$sym_visibility);
   let assemblyFormat = "($sym_name^)? $body attr-dict";
   let regions = (region SizedRegion<1>:$body);
 
@@ -211,7 +213,7 @@ def DependenceGraphOp : SSPOp<"graph",
 }
 
 def OperatorTypeOp : SSPOp<"operator_type",
-    [Symbol, HasParent<"OperatorLibraryOp">]> {
+    [SymbolName, SymbolVisibility, Symbol, HasParent<"OperatorLibraryOp">]> {
   let summary = "Element of the target architecture/IR.";
   let description = [{
     This operation represents an operator type, which can be augmented with a
@@ -223,12 +225,12 @@ def OperatorTypeOp : SSPOp<"operator_type",
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<ArrayAttr>:$sspProperties);
+  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<StrAttr>:$sym_visibility, OptionalAttr<ArrayAttr>:$sspProperties);
   let assemblyFormat = "$sym_name custom<SSPProperties>($sspProperties) attr-dict";
 }
 
 def ResourceTypeOp : SSPOp<"resource_type",
-    [Symbol, HasParent<"ResourceLibraryOp">]> {
+    [SymbolName, SymbolVisibility, Symbol, HasParent<"ResourceLibraryOp">]> {
   let summary = "Resource of desired usage on the target architecture/IR.";
   let description = [{
     This resource represents a resource type, which can be augmented with a
@@ -240,7 +242,7 @@ def ResourceTypeOp : SSPOp<"resource_type",
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<ArrayAttr>:$sspProperties);
+  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<StrAttr>:$sym_visibility, OptionalAttr<ArrayAttr>:$sspProperties);
   let assemblyFormat = "$sym_name custom<SSPProperties>($sspProperties) attr-dict";
 }
 

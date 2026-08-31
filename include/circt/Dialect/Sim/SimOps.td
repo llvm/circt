@@ -62,7 +62,7 @@ def PlusArgsValueOp : SimOp<"plusargs.value", [Pure]> {
 }
 
 def DPIFuncOp : SimOp<"func.dpi",
-     [IsolatedFromAbove, Symbol, OpAsmOpInterface,
+     [IsolatedFromAbove, SymbolName, SymbolVisibility, Symbol, OpAsmOpInterface,
       DeclareOpInterfaceMethods<FunctionOpInterface,
         ["getFunctionType", "setFunctionTypeAttr", "cloneTypeWith"]>]> {
   let summary = "A DPI-C imported function declaration";
@@ -79,6 +79,7 @@ def DPIFuncOp : SimOp<"func.dpi",
   }];
 
   let arguments = (ins
+    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
     TypeAttrOf<DPIFunctionType>:$dpi_function_type,
     OptionalAttr<LocationArrayAttr>:$argument_locs,

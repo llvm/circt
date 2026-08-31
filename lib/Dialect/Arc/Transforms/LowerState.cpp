@@ -201,10 +201,10 @@ LogicalResult ModuleLowering::run() {
                           << "`\n");
 
   // Create the replacement `ModelOp`.
-  auto modelOp =
-      ModelOp::create(builder, moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
-                      TypeAttr::get(moduleOp.getModuleType()), IntegerAttr{},
-                      FlatSymbolRefAttr{}, FlatSymbolRefAttr{}, ArrayAttr{});
+  auto modelOp = ModelOp::create(
+      builder, moduleOp.getLoc(), /*sym_visibility=*/{},
+      moduleOp.getModuleNameAttr(), TypeAttr::get(moduleOp.getModuleType()),
+      IntegerAttr{}, FlatSymbolRefAttr{}, FlatSymbolRefAttr{}, ArrayAttr{});
   auto &modelBlock = modelOp.getBody().emplaceBlock();
   storageArg = modelBlock.addArgument(StorageType::get(builder.getContext()),
                                       modelOp.getLoc());

@@ -153,7 +153,9 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   auto newPortInfo = handshake::getPortInfoForOpTypes(
       func, func.getArgumentTypes(), func.getResultTypes());
   auto extMod = hw::HWModuleExternOp::create(
-      b, loc, StringAttr::get(ctx, "__" + func.getName() + "_hw"), newPortInfo);
+      b, loc,
+      StringAttr::get(ctx, "__" + func.getNameAttr().getValue() + "_hw"),
+      newPortInfo);
 
   // Add an attribute to the original handshake function to indicate that it
   // needs to resolve to extMod in a later pass.
@@ -169,7 +171,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   for (auto i : llvm::reverse(argReplacementsIdxs))
     wrapperModPortInfo.eraseInput(i);
   auto wrapperMod = hw::HWModuleOp::create(
-      b, loc, StringAttr::get(ctx, func.getName() + "_esi_wrapper"),
+      b, loc,
+      StringAttr::get(ctx, func.getNameAttr().getValue() + "_esi_wrapper"),
       wrapperModPortInfo);
   Value clk = wrapperMod.getBodyBlock()->getArgument(
       wrapperMod.getBodyBlock()->getNumArguments() - 2);
@@ -205,8 +208,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     assert(memrefShape.size() == 1 && "Only 1D memrefs are supported");
     unsigned memrefSize = memrefShape[0];
     auto memServiceDecl = esi::RandomAccessMemoryDeclOp::create(
-        b, loc, origPortInfo.name, TypeAttr::get(dataType),
-        b.getI64IntegerAttr(memrefSize));
+        b, loc, /*sym_visibility=*/{}, origPortInfo.name,
+        TypeAttr::get(dataType), b.getI64IntegerAttr(memrefSize));
     esi::ServicePortInfo writePortInfo = memServiceDecl.writePortInfo();
     esi::ServicePortInfo readPortInfo = memServiceDecl.readPortInfo();
 
@@ -281,8 +284,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
         wrapperMod.getBodyBlock()->getArgument(wrapperArgIdx));
 
   // Instantiate the inner module.
-  auto instance =
-      hw::InstanceOp::create(b, loc, extMod, func.getName(), instanceArgs);
+  auto instance = hw::InstanceOp::create(
+      b, loc, extMod, func.getNameAttr().getValue(), instanceArgs);
 
   // And resolve the backedges.
   for (auto [res, be] : llvm::zip(instance.getResults(), backedges))

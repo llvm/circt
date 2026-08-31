@@ -45,7 +45,7 @@ def ComponentOp : CalyxOp<"component", [
     HasParent<"mlir::ModuleOp">,
     RegionKindInterface,
     SymbolTable, /* contains Cell names. */
-    Symbol,
+    SymbolName, SymbolVisibility, Symbol,
     FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
@@ -72,6 +72,8 @@ def ComponentOp : CalyxOp<"component", [
   }];
 
   let arguments = (ins
+    OptionalAttr<StrAttr>:$sym_visibility,
+    SymbolNameAttr:$sym_name,
     TypeAttrOf<FunctionType>:$function_type,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs,
@@ -163,7 +165,7 @@ def ComponentOp : CalyxOp<"component", [
 def CombComponentOp : CalyxOp<"comb_component", [
     HasParent<"mlir::ModuleOp">,
     SymbolTable, /* contains Cell names. */
-    Symbol,
+    SymbolName, SymbolVisibility, Symbol,
     FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
@@ -186,6 +188,8 @@ def CombComponentOp : CalyxOp<"comb_component", [
   }];
 
   let arguments = (ins
+    OptionalAttr<StrAttr>:$sym_visibility,
+    SymbolNameAttr:$sym_name,
     TypeAttrOf<FunctionType>:$function_type,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs,
@@ -364,7 +368,7 @@ def GroupOp : CalyxOp<"group", [
     NoRegionArguments,
     RegionKindInterface,
     SingleBlock,
-    Symbol
+    SymbolName, SymbolVisibility, Symbol
   ]> {
   let summary = "Calyx Group";
   let description = [{
@@ -382,7 +386,7 @@ def GroupOp : CalyxOp<"group", [
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr: $sym_name);
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr: $sym_name);
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
@@ -409,14 +413,14 @@ def GroupOp : CalyxOp<"group", [
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name), [{
       $_state.addAttribute(
-        mlir::SymbolTable::getSymbolAttrName(),
+        getSymNameAttrName($_state.name),
         StringAttr::get($_state.getContext(), sym_name)
       );
       Region* region = $_state.addRegion();
       region->push_back(new Block());
     }]>,
     OpBuilder<(ins "StringAttr":$sym_name), [{
-      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(getSymNameAttrName($_state.name), sym_name);
       Region* region = $_state.addRegion();
       region->push_back(new Block());
     }]>
@@ -429,7 +433,7 @@ def CombGroupOp : CalyxOp<"comb_group", [
     NoRegionArguments,
     RegionKindInterface,
     SingleBlock,
-    Symbol,
+    SymbolName, SymbolVisibility, Symbol,
     NoTerminator
   ]> {
   let summary = "Calyx Combinational Group";
@@ -445,7 +449,7 @@ def CombGroupOp : CalyxOp<"comb_group", [
       }
     ```
   }];
-  let arguments = (ins SymbolNameAttr: $sym_name);
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr: $sym_name);
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
@@ -465,14 +469,14 @@ def CombGroupOp : CalyxOp<"comb_group", [
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name), [{
       $_state.addAttribute(
-        mlir::SymbolTable::getSymbolAttrName(),
+        getSymNameAttrName($_state.name),
         StringAttr::get($_state.getContext(), sym_name)
       );
       Region* region = $_state.addRegion();
       region->push_back(new Block());
     }]>,
     OpBuilder<(ins "StringAttr":$sym_name), [{
-      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(getSymNameAttrName($_state.name), sym_name);
       Region* region = $_state.addRegion();
       region->push_back(new Block());
     }]>
@@ -485,7 +489,7 @@ def StaticGroupOp : CalyxOp<"static_group", [
     NoRegionArguments,
     RegionKindInterface,
     SingleBlock,
-    Symbol,
+    SymbolName, SymbolVisibility, Symbol,
     NoTerminator
   ]> {
   let summary = "Calyx Static Group";
@@ -503,7 +507,7 @@ def StaticGroupOp : CalyxOp<"static_group", [
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr: $sym_name,
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr: $sym_name,
                    I64Attr: $latency);
 
   let extraClassDeclaration = [{
@@ -527,7 +531,7 @@ def StaticGroupOp : CalyxOp<"static_group", [
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name, "uint64_t":$latency), [{
       $_state.addAttribute(
-        mlir::SymbolTable::getSymbolAttrName(),
+        getSymNameAttrName($_state.name),
         StringAttr::get($_state.getContext(), sym_name)
       );
       $_state.addAttribute(
@@ -538,7 +542,7 @@ def StaticGroupOp : CalyxOp<"static_group", [
       region->push_back(new Block());
     }]>,
     OpBuilder<(ins "StringAttr":$sym_name, "uint64_t":$latency), [{
-      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(getSymNameAttrName($_state.name), sym_name);
       $_state.addAttribute(
         getLatencyAttrName($_state.name),
         mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 64), latency)

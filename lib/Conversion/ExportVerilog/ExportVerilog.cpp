@@ -209,6 +209,7 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
           [&](InterfaceSignalOp op) { return op.getSymName(); })
       .Case<InterfaceModportOp>(
           [&](InterfaceModportOp op) { return op.getSymName(); })
+      .Case<GenerateOp>([](GenerateOp op) { return op.getSymName(); })
       .Default([&](Operation *op) {
         if (auto attr = op->getAttrOfType<StringAttr>("name"))
           return attr.getValue();
@@ -216,9 +217,8 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
           return attr.getValue();
         if (auto attr = op->getAttrOfType<StringAttr>("sv.namehint"))
           return attr.getValue();
-        if (auto attr =
-                op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-          return attr.getValue();
+        if (auto symbol = dyn_cast<mlir::SymbolOpInterface>(op))
+          return symbol.getName();
         return StringRef("");
       });
 }
@@ -2936,8 +2936,8 @@ SubExprInfo ExprEmitter::emitMacroCall(MacroTy op) {
   // Use the specified name or the symbol name as appropriate.
   auto macroOp = op.getReferencedMacro(&state.symbolCache);
   assert(macroOp && "Invalid IR");
-  StringRef name =
-      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
+  StringRef name = macroOp.getVerilogName() ? *macroOp.getVerilogName()
+                                            : macroOp.getSymName();
   ps << "`" << PPExtString(name);
   if (!op.getInputs().empty()) {
     ps << "(";
@@ -4462,7 +4462,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
     ps << PPExtString(prefix);
   ps << PPExtString(verilogName)
      << PP::nbsp /* don't break, may be comment line */
-     << PPExtString(op.getName()) << "();";
+     << PPExtString(op.getNameAttr().getValue()) << "();";
 
   ps.addCallback({op, false});
   emitLocationInfoAndNewLine(ops);
@@ -4832,8 +4832,8 @@ LogicalResult StmtEmitter::visitSV(MacroRefOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto macroOp = op.getReferencedMacro(&state.symbolCache);
   assert(macroOp && "Invalid IR");
-  StringRef name =
-      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
+  StringRef name = macroOp.getVerilogName() ? *macroOp.getVerilogName()
+                                            : macroOp.getSymName();
   ps << "`" << PPExtString(name);
   if (!op.getInputs().empty()) {
     ps << "(";
@@ -6513,7 +6513,8 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   auto instance = op.getReferencedInstance(&state.symbolCache);
-  auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
+  auto instantiator =
+      instance->getParentOfType<HWModuleOp>().getNameAttr().getValue();
   auto *interface = op->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
   startStatement();
@@ -6950,9 +6951,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       // Populate the symbolCache with all operations that can define a symbol.
       if (auto name = op->getAttrOfType<InnerSymAttr>(
               hw::InnerSymbolTable::getInnerSymbolAttrName()))
-        symbolCache.addDefinition(moduleOp->getAttrOfType<StringAttr>(
-                                      SymbolTable::getSymbolAttrName()),
-                                  name.getSymName(), op);
+        symbolCache.addDefinition(
+            cast<mlir::SymbolOpInterface>(moduleOp).getNameAttr(),
+            name.getSymName(), op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });
@@ -6966,7 +6967,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         continue;
       for (NamedAttribute portAttr : p.attrs) {
         if (auto sym = dyn_cast<InnerSymAttr>(portAttr.getValue())) {
-          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getSymName(),
+          symbolCache.addDefinition(moduleOp.getSymNameAttr(), sym.getSymName(),
                                     moduleOp, i);
         }
       }
@@ -7092,12 +7093,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
             rootFile.ops.push_back(info);
         })
         .Case<sv::SVVerbatimSourceOp>([&](sv::SVVerbatimSourceOp op) {
-          symbolCache.addDefinition(op.getNameAttr(), op);
+          symbolCache.addDefinition(op.getSymNameAttr(), op);
           separateFile(op, op.getOutputFile().getFilename().getValue());
         })
         .Case<HWModuleExternOp, sv::SVVerbatimModuleOp>([&](auto op) {
           // Build the IR cache.
-          symbolCache.addDefinition(op.getNameAttr(), op);
+          symbolCache.addDefinition(op.getSymNameAttr(), op);
           collectPorts(op);
           // External modules are _not_ emitted.
         })
@@ -7127,7 +7128,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           symbolCache.addDefinition(hierPathOp.getSymNameAttr(), hierPathOp);
         })
         .Case<TypeScopeOp>([&](TypeScopeOp op) {
-          symbolCache.addDefinition(op.getNameAttr(), op);
+          symbolCache.addDefinition(op.getSymNameAttr(), op);
           // TODO: How do we want to handle typedefs in a split output?
           if (!attr) {
             replicatedOps.push_back(op);

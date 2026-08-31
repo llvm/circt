@@ -87,7 +87,7 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
         builder.getDictionaryAttr(explicitReturnAttrs)};
 
     auto func =
-        sv::FuncOp::create(builder, getterSymName,
+        sv::FuncOp::create(builder, /*sym_visibility=*/{}, getterSymName,
                            hw::ModuleType::get(builder.getContext(), ports),
                            builder.getArrayAttr(perArgumentAttrs), ArrayAttr(),
                            ArrayAttr(), getterSymName);

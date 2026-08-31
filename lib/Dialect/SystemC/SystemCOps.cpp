@@ -134,11 +134,7 @@ SmallVector<::circt::hw::PortInfo> SCModuleOp::getPortList() {
 
 mlir::Region *SCModuleOp::getCallableRegion() { return &getBody(); }
 
-StringRef SCModuleOp::getModuleName() {
-  return (*this)
-      ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
-      .getValue();
-}
+StringRef SCModuleOp::getModuleName() { return getSymName(); }
 
 ParseResult SCModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 
@@ -147,7 +143,8 @@ ParseResult SCModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the name as a symbol.
   StringAttr moduleName;
-  if (parser.parseSymbolName(moduleName, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(moduleName,
+                             SCModuleOp::getSymNameAttrName(result.name),
                              result.attributes))
     return failure();
 
@@ -193,7 +190,8 @@ void SCModuleOp::print(OpAsmPrinter &p) {
   p << ' ';
 
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility =
           getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
@@ -249,7 +247,7 @@ void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   odsState.addAttribute(getFunctionTypeAttrName(odsState.name),
                         TypeAttr::get(moduleType));
 
-  odsState.addAttribute(SymbolTable::getSymbolAttrName(), name);
+  odsState.addAttribute(SCModuleOp::getSymNameAttrName(odsState.name), name);
   region->push_back(new Block);
   region->addArguments(
       portTypes,
@@ -852,7 +850,7 @@ void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                    ArrayRef<NamedAttribute> attrs,
                    ArrayRef<DictionaryAttr> argAttrs) {
   odsState.addAttribute(getArgNamesAttrName(odsState.name), argNames);
-  odsState.addAttribute(SymbolTable::getSymbolAttrName(),
+  odsState.addAttribute(FuncOp::getSymNameAttrName(odsState.name),
                         odsBuilder.getStringAttr(name));
   odsState.addAttribute(FuncOp::getFunctionTypeAttrName(odsState.name),
                         TypeAttr::get(type));
@@ -893,7 +891,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr, FuncOp::getSymNameAttrName(result.name),
                              result.attributes))
     return failure();
 
@@ -930,7 +928,8 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   // Disallow attributes that are inferred from elsewhere in the attribute
   // dictionary.
   for (StringRef disallowed :
-       {SymbolTable::getVisibilityAttrName(), SymbolTable::getSymbolAttrName(),
+       {mlir::SymbolOpInterface::getDefaultVisibilityAttrName(),
+        FuncOp::getSymNameAttrName(result.name).getValue(),
         FuncOp::getFunctionTypeAttrName(result.name).getValue()}) {
     if (parsedAttributes.get(disallowed))
       return parser.emitError(attributeDictLocation, "'")
@@ -987,12 +986,11 @@ void FuncOp::print(OpAsmPrinter &p) {
   // need to elide more attributes
 
   // Print the operation and the function name.
-  auto funcName =
-      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
-          .getValue();
+  auto funcName = cast<mlir::SymbolOpInterface>(op.getOperation()).getName();
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(funcName);
@@ -1117,7 +1115,8 @@ LogicalResult FuncOp::verify() {
 
 LogicalResult FuncOp::verifyRegions() {
   auto attachNote = [&](mlir::InFlightDiagnostic &diag) {
-    diag.attachNote(getLoc()) << "in function '@" << getName() << "'";
+    diag.attachNote(getLoc())
+        << "in function '@" << getNameAttr().getValue() << "'";
   };
   return verifyUniqueNamesInRegion(getOperation(), getArgNames(), attachNote);
 }
@@ -1138,7 +1137,8 @@ LogicalResult ReturnOp::verify() {
   if (getNumOperands() != results.size())
     return emitOpError("has ")
            << getNumOperands() << " operands, but enclosing function (@"
-           << function.getName() << ") returns " << results.size();
+           << function.getNameAttr().getValue() << ") returns "
+           << results.size();
 
   for (unsigned i = 0, e = results.size(); i != e; ++i)
     if (getOperand(i).getType() != results[i])
@@ -1146,7 +1146,8 @@ LogicalResult ReturnOp::verify() {
                          << getOperand(i).getType()
                          << ") doesn't match function result type ("
                          << results[i] << ")"
-                         << " in function @" << function.getName();
+                         << " in function @"
+                         << function.getNameAttr().getValue();
 
   return success();
 }
