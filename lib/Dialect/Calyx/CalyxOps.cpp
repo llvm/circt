@@ -214,6 +214,19 @@ LogicalResult calyx::verifyCell(Operation *op) {
   if (!isa<ComponentInterface>(opParent))
     return op->emitOpError()
            << "has parent: " << opParent << ", expected ComponentInterface.";
+
+  auto cell = cast<CellInterface>(op);
+  for (Operation *previous = op->getPrevNode(); previous;
+       previous = previous->getPrevNode()) {
+    auto previousCell = dyn_cast<CellInterface>(previous);
+    if (!previousCell || previousCell.instanceName() != cell.instanceName())
+      continue;
+    auto diagnostic = op->emitOpError() << "redefinition of symbol named '"
+                                        << cell.instanceName() << "'";
+    diagnostic.attachNote(previous->getLoc())
+        << "see existing symbol definition here";
+    return failure();
+  }
   return success();
 }
 
@@ -387,9 +400,8 @@ static void eraseControlWithConditional(OpTy op, PatternRewriter &rewriter) {
 
 template <typename ComponentTy>
 static void printComponentInterface(OpAsmPrinter &p, ComponentInterface comp) {
-  auto componentName = comp->template getAttrOfType<StringAttr>(
-                               "sym_name")
-                           .getValue();
+  auto componentName =
+      comp->template getAttrOfType<StringAttr>("sym_name").getValue();
   p << " ";
   p.printSymbolName(componentName);
 
@@ -507,9 +519,7 @@ static ParseResult parseComponentInterface(OpAsmParser &parser,
   using namespace mlir::function_interface_impl;
 
   StringAttr componentName;
-  if (parser.parseSymbolName(componentName,
-                             "sym_name",
-                             result.attributes))
+  if (parser.parseSymbolName(componentName, "sym_name", result.attributes))
     return failure();
 
   SmallVector<mlir::OpAsmParser::Argument> ports;
@@ -2047,8 +2057,7 @@ OpFoldResult calyx::ConstantOp::fold(FoldAdaptor adaptor) {
 
 void calyx::ConstantOp::build(OpBuilder &builder, OperationState &state,
                               StringRef symName, Attribute attr, Type type) {
-  state.addAttribute("sym_name",
-                     builder.getStringAttr(symName));
+  state.addAttribute("sym_name", builder.getStringAttr(symName));
   state.addAttribute("value", attr);
   SmallVector<Type> types;
   types.push_back(type); // Out
@@ -2154,8 +2163,7 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
                      ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
-  state.addAttribute("sym_name",
-                     builder.getStringAttr(instanceName));
+  state.addAttribute("sym_name", builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
@@ -2254,8 +2262,7 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
 void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
                         StringRef instanceName, int64_t width,
                         ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
-  state.addAttribute("sym_name",
-                     builder.getStringAttr(instanceName));
+  state.addAttribute("sym_name", builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
@@ -2806,10 +2813,19 @@ static LogicalResult verifyComplexLogic(InvokeOp &op, Value &value) {
   return success();
 }
 
+// Look up a cell by its instance name. Cells are no longer symbols, so they
+// cannot be found through the component's symbol table.
+static Operation *lookupCell(ComponentOp componentOp, StringRef name) {
+  for (auto cell : componentOp.getOps<CellInterface>())
+    if (cell.instanceName() == name)
+      return cell;
+  return nullptr;
+}
+
 // Get the go port of the invoked component.
 Value InvokeOp::getInstGoValue() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
-  Operation *operation = componentOp.lookupSymbol(getCallee());
+  Operation *operation = lookupCell(componentOp, getCallee());
   Value ret = nullptr;
   llvm::TypeSwitch<Operation *>(operation)
       .Case<RegisterOp>([&](auto op) { ret = operation->getResult(1); })
@@ -2842,7 +2858,7 @@ Value InvokeOp::getInstGoValue() {
 // Get the done port of the invoked component.
 Value InvokeOp::getInstDoneValue() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
-  Operation *operation = componentOp.lookupSymbol(getCallee());
+  Operation *operation = lookupCell(componentOp, getCallee());
   Value ret = nullptr;
   llvm::TypeSwitch<Operation *>(operation)
       .Case<RegisterOp, MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
@@ -2895,13 +2911,7 @@ getHwModuleExtGoOrDonePortNumber(hw::HWModuleExternOp &moduleExternOp,
 LogicalResult InvokeOp::verify() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   StringRef callee = getCallee();
-  Operation *operation = nullptr;
-  for (auto cell : componentOp.getOps<CellInterface>()) {
-    if (cell.instanceName() == callee) {
-      operation = cell;
-      break;
-    }
-  }
+  Operation *operation = lookupCell(componentOp, callee);
   // The referenced symbol does not exist.
   if (!operation)
     return emitOpError() << "with instance '@" << callee
