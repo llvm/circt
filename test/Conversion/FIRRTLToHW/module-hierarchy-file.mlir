@@ -57,7 +57,7 @@ firrtl.circuit "MyDUT" {
 
 // -----
 
-// Check that "firrtl.extract.do_not_extract" is added to modules in test harness.
+// Check that test harness modules retain their coverage exclusion comment.
 firrtl.circuit "MyTestHarness" attributes {annotations = [ {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation", dirname = "tb"}]}
 {
   // CHECK-LABEL: hw.module private @MyDUT() {
@@ -66,12 +66,10 @@ firrtl.circuit "MyTestHarness" attributes {annotations = [ {class = "sifive.ente
 
   // CHECK-LABEL: hw.module private @Testbench
   // CHECK-SAME:  comment = "VCS coverage exclude_file"
-  // CHECK-SAME:  firrtl.extract.do_not_extract
   firrtl.module private @Testbench() {}
 
   // CHECK-LABEL: hw.module @MyTestHarness
   // CHECK-SAME:  comment = "VCS coverage exclude_file"
-  // CHECK-SAME:  firrtl.extract.do_not_extract
   firrtl.module @MyTestHarness() {
     firrtl.instance myDUT @MyDUT()
     firrtl.instance myTestBench @Testbench()
