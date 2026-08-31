@@ -93,7 +93,7 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         return $_op.getOperation()->template getAttrOfType<mlir::StringAttr>(
-          mlir::SymbolTable::getSymbolAttrName()).getValue();
+          "sym_name").getValue();
       }]
     >,
     InterfaceMethod<
