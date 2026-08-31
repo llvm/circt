@@ -60,6 +60,12 @@ using namespace firrtl;
 
 namespace {
 
+FModuleOp getParentModule(Value value) {
+  if (isa<BlockArgument>(value))
+    return cast<FModuleOp>(value.getParentBlock()->getParentOp());
+  return value.getDefiningOp()->getParentOfType<FModuleOp>();
+}
+
 class ProbeVisitor : public FIRRTLVisitor<ProbeVisitor, LogicalResult> {
 public:
   ProbeVisitor(hw::InnerRefNamespace &irn) : irn(irn) {}
@@ -186,6 +192,12 @@ private:
 
   /// Read-only copy of inner-ref namespace for resolving inner refs.
   hw::InnerRefNamespace &irn;
+
+  /// Override reads, not the target's driver, so force is observed immediately
+  /// and the target stays single-driven.  Only ground-type targets are
+  /// supported; aggregates must be lowered first.
+  LogicalResult injectReadSideOverride(Value data, Value effForced,
+                                       Value effValue);
 };
 
 } // end namespace
@@ -432,6 +444,100 @@ LogicalResult ProbeVisitor::visitActiveForceableDecl(Forceable fop) {
     data = wire.getData();
   }
   probeToHWMap[fop.getDataRef()] = data;
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Read-side override injection
+//===----------------------------------------------------------------------===//
+
+static bool isWriteUse(OpOperand &use) {
+  if (auto conn = dyn_cast<FConnectLike>(use.getOwner())) {
+    // Operand index, not value: `connect a, a` writes dest and reads src.
+    assert(conn.getDest() == conn->getOperand(0) && "unexpected connect shape");
+    return use.getOperandNumber() == 0;
+  }
+  return false;
+}
+
+static bool hasRedirectableRead(Value value,
+                                const SmallPtrSetImpl<Operation *> &skip) {
+  for (OpOperand &use : value.getUses()) {
+    if (skip.contains(use.getOwner()) || isWriteUse(use))
+      continue;
+    return true;
+  }
+  return false;
+}
+
+/// Rewire reads of `raw` to `observed`, leaving the original driver alone.
+static void redirectReads(Value raw, Value observed,
+                          SmallPtrSetImpl<Operation *> &skip) {
+
+  for (OpOperand &use : llvm::make_early_inc_range(raw.getUses())) {
+    Operation *owner = use.getOwner();
+    if (skip.contains(owner) || isWriteUse(use))
+      continue;
+    use.set(observed);
+  }
+}
+
+static void collectFanInCone(ArrayRef<Value> roots,
+                             SmallPtrSetImpl<Operation *> &cone) {
+  SmallVector<Value> worklist(roots);
+  while (!worklist.empty()) {
+    auto *op = worklist.pop_back_val().getDefiningOp();
+    if (!op || !cone.insert(op).second)
+      continue;
+    llvm::append_range(worklist, op->getOperands());
+  }
+}
+
+LogicalResult ProbeVisitor::injectReadSideOverride(Value data, Value effForced,
+                                                   Value effValue) {
+  auto type = type_dyn_cast<FIRRTLBaseType>(data.getType());
+  if (!type || !type.isGround())
+    return mlir::emitError(data.getLoc())
+           << "force/release of aggregate types is not supported; compile with "
+              "preserve-aggregates=none";
+
+  // Control cone must keep the raw target or the mux would loop.
+  SmallPtrSet<Operation *, 16> skip;
+  collectFanInCone({effForced, effValue}, skip);
+
+  if (!hasRedirectableRead(data, skip))
+    return success();
+
+  auto *body = getParentModule(data).getBodyBlock();
+  Location loc = data.getLoc();
+
+  // Wire next to the target: control is only available at block end.
+  ImplicitLocOpBuilder wireBuilder(loc, data.getContext());
+  if (auto *dataDef = data.getDefiningOp())
+    wireBuilder.setInsertionPointAfter(dataDef);
+  else
+    wireBuilder.setInsertionPointToStart(body);
+  SmallString<32> wireName;
+  if (auto [name, valid] = getFieldName(FieldRef(data, 0), /*nameSafe=*/true);
+      valid)
+    wireName = name;
+  wireName += "_forced";
+  auto observedWire = WireOp::create(wireBuilder, data.getType(), wireName);
+  skip.insert(observedWire);
+  Value observed = observedWire.getData();
+
+  ImplicitLocOpBuilder builder(loc, body, body->end());
+  Operation *lastBefore = body->empty() ? nullptr : &body->back();
+  Value selected = builder.createOrFold<MuxPrimOp>(effForced, effValue, data);
+  // Keep the generated override operations out of read redirection. The mux
+  // may fold away, so only add its defining op when it was actually created.
+  if (auto *mux = selected.getDefiningOp();
+      mux && !body->empty() && mux != lastBefore && mux == &body->back())
+    skip.insert(mux);
+  auto connect = MatchingConnectOp::create(builder, observed, selected);
+  skip.insert(connect);
+
+  redirectReads(data, observed, skip);
   return success();
 }
 
