@@ -234,6 +234,17 @@ IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
       type, APInt(width, -1, /*isSigned=*/false, /*implicitTrunc=*/true));
 }
 
+/// Return true if replacing a register with `foldedValue` preserves the
+/// register's time-zero (`initial`) value.
+bool circt::firrtl::preservesInitial(IntegerAttr initial,
+                                     std::optional<APInt> foldedValue) {
+  if (!initial)
+    return true;
+  if (!foldedValue)
+    return false;
+  return initial.getValue() == *foldedValue;
+}
+
 /// Return the single assignment to a Property value. It is assumed that the
 /// single assigment invariant is enforced elsewhere.
 PropAssignOp circt::firrtl::getPropertyAssignment(FIRRTLPropertyValue value) {
