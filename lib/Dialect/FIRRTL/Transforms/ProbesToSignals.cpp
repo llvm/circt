@@ -246,7 +246,7 @@ public:
   LogicalResult visitDecl(WireOp op);
   LogicalResult visitActiveForceableDecl(Forceable fop);
 
-  LogicalResult visitInstanceLike(Operation *op);
+  LogicalResult visitInstanceLike(FInstanceLike oldInst);
   LogicalResult visitDecl(InstanceOp op) { return visitInstanceLike(op); }
   LogicalResult visitDecl(InstanceChoiceOp op) { return visitInstanceLike(op); }
 
@@ -275,6 +275,9 @@ public:
 private:
   /// Map from probe-typed Value's to their non-probe equivalent.
   DenseMap<Value, Value> probeToHWMap;
+
+  /// Diagnosed instead of applying a force to the wrong target or dropping it.
+  DenseMap<Value, Operation *> unsupportedForceDests;
 
   /// Forceable operations to demote.
   SmallVector<Forceable> forceables;
@@ -358,6 +361,16 @@ static Block *getBodyBlock(FModuleLike mod) {
   assert(mod->getNumRegions() == 1);
   auto &blocks = mod->getRegion(0).getBlocks();
   return !blocks.empty() ? &blocks.front() : nullptr;
+}
+
+static void attachForceDestBlockerNote(InFlightDiagnostic &diag,
+                                       Operation *blocker) {
+  if (isa<FInstanceLike>(blocker))
+    diag.attachNote(blocker->getLoc())
+        << "target is a probe of this instance, whose module has no body to "
+           "carry the force control";
+  else
+    diag.attachNote(blocker->getLoc()) << "target is reached through this op";
 }
 
 /// Visit a module, converting its ports and internals to use hardware signals
@@ -799,21 +812,29 @@ ProbeVisitor::buildStateMachineRegisters(FIRRTLBaseType probedType, Value data,
   return injectReadSideOverride(data, forcedReg, clocked.forcedValue);
 }
 
-LogicalResult ProbeVisitor::visitInstanceLike(Operation *op) {
+LogicalResult ProbeVisitor::visitInstanceLike(FInstanceLike oldInst) {
   SmallVector<Type> newTypes;
-  auto needsConv = mapPortRange(op->getResultTypes(), op->getLoc(), newTypes);
+  auto needsConv =
+      mapPortRange(oldInst->getResultTypes(), oldInst->getLoc(), newTypes);
   if (failed(needsConv))
     return failure();
   if (!*needsConv)
     return success();
 
+  // Body-less callee has no state machine; diagnose force through it later.
+  bool bodylessCallee =
+      llvm::any_of(oldInst.getReferencedModuleNames(), [&](StringRef name) {
+        auto mod = irn.symTable.lookup<FModuleLike>(name);
+        return !mod || !getBodyBlock(mod);
+      });
+
   // New instance with converted types.
   // Move users of unconverted results to the new operation.
-  ImplicitLocOpBuilder builder(op->getLoc(), op);
-  auto *newInst = builder.clone(*op);
+  ImplicitLocOpBuilder builder(oldInst->getLoc(), oldInst);
+  auto *newInst = builder.clone(*oldInst);
   builder.setInsertionPointAfter(newInst);
-  for (auto [oldResult, newResult, newType] :
-       llvm::zip_equal(op->getOpResults(), newInst->getOpResults(), newTypes)) {
+  for (auto [oldResult, newResult, newType] : llvm::zip_equal(
+           oldInst->getOpResults(), newInst->getOpResults(), newTypes)) {
     if (newType == oldResult.getType()) {
       oldResult.replaceAllUsesWith(newResult);
       continue;
@@ -827,6 +848,9 @@ LogicalResult ProbeVisitor::visitInstanceLike(Operation *op) {
       continue;
     }
 
+    if (bodylessCallee)
+      unsupportedForceDests[oldResult] = oldInst;
+
     Value data = getProbePortData(builder, newResult);
     probeToHWMap[oldResult] = data;
 
@@ -834,7 +858,7 @@ LogicalResult ProbeVisitor::visitInstanceLike(Operation *op) {
     targets[data].instanceCtrl = getProbePortCtrl(builder, newResult);
   }
 
-  toDelete.push_back(op);
+  toDelete.push_back(oldInst);
   return success();
 }
 
@@ -909,6 +933,8 @@ LogicalResult ProbeVisitor::visitExpr(RefCastOp op) {
   // Identity mapped type: don't copy, force control is keyed by hardware value.
   if (newType == input.getType()) {
     probeToHWMap[op.getResult()] = input;
+    if (auto *blocker = unsupportedForceDests.lookup(op.getInput()))
+      unsupportedForceDests[op.getResult()] = blocker;
     return success();
   }
 
@@ -923,6 +949,10 @@ LogicalResult ProbeVisitor::visitExpr(RefCastOp op) {
   auto wire = WireOp::create(builder, newType);
   emitConnect(builder, wire.getData(), input);
   probeToHWMap[op.getResult()] = wire.getData();
+
+  // Copy wire cannot carry force; diagnose force through this cast.
+  if (cast<RefType>(op.getResult().getType()).getForceable())
+    unsupportedForceDests[op.getResult()] = op;
   return success();
 }
 
@@ -968,6 +998,15 @@ LogicalResult ProbeVisitor::visitExpr(RefSubOp op) {
       getValueByFieldID(builder, val, op.getAccessedField().getFieldID());
   probeToHWMap[op.getResult()] = newVal;
   toDelete.push_back(op);
+
+  // Child-instance control is whole-target; force through a field is diagnosed.
+  if (cast<RefType>(op.getResult().getType()).getForceable()) {
+    if (auto *blocker = unsupportedForceDests.lookup(op.getInput()))
+      unsupportedForceDests[op.getResult()] = blocker;
+    else if (auto it = targets.find(val);
+             it != targets.end() && it->second.instanceCtrl)
+      unsupportedForceDests[op.getResult()] = op;
+  }
   return success();
 }
 
@@ -1136,6 +1175,14 @@ LogicalResult ProbeVisitor::collectExportedTargets(
 
     auto outSrc = refDef.getSrc();
 
+    if (auto *blocker = unsupportedForceDests.lookup(outSrc)) {
+      auto diag = refDef.emitError(
+          "forceable probe port cannot be lowered: force control cannot be "
+          "routed to the target through this probe");
+      attachForceDestBlockerNote(diag, blocker);
+      return failure();
+    }
+
     auto hwSrcIt = probeToHWMap.find(outSrc);
     if (hwSrcIt == probeToHWMap.end())
       return refDef.emitError("forceable probe port cannot be lowered: "
@@ -1206,6 +1253,13 @@ LogicalResult ProbeVisitor::materializeForceControl(FModuleLike mod) {
 //===----------------------------------------------------------------------===//
 
 FailureOr<Value> ProbeVisitor::resolveForceDest(Operation *access, Value dest) {
+  if (auto *blocker = unsupportedForceDests.lookup(dest)) {
+    auto diag = access->emitError(
+        "unsupported force/release: cannot route force control to the target "
+        "through this probe");
+    attachForceDestBlockerNote(diag, blocker);
+    return failure();
+  }
   Value hwDest = probeToHWMap.lookup(dest);
   if (!hwDest)
     return access->emitError(
