@@ -117,7 +117,7 @@ struct PathInfoTable {
 
     // Handle each alternative base path for instances of this module-like.
     for (auto [i, altBasePath] : llvm::enumerate(altBasePaths)) {
-      if (parent.getName().starts_with(altBasePath)) {
+      if (parent.getNameAttr().getValue().starts_with(altBasePath)) {
         // If we are passing down from the root, take the root base path.
         result.push_back(instance->getBlock()->getArgument(0));
       } else {
@@ -1006,7 +1006,7 @@ void LowerClassesPass::runOnOperation() {
 
       if (auto classLike =
               dyn_cast<firrtl::ClassLike>(moduleLike.getOperation()))
-        classTypeTable[classLike.getNameAttr()] = classLike.getInstanceType();
+        classTypeTable[classLike.getModuleNameAttr()] = classLike.getInstanceType();
     }
   }
 
@@ -1177,8 +1177,8 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
     formalParamNames.push_back(kPortsName);
 
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
-  StringRef className = moduleLike.getName();
-  StringAttr baseClassNameAttr = moduleLike.getNameAttr();
+  StringRef className = moduleLike.getModuleName();
+  StringAttr baseClassNameAttr = moduleLike.getModuleNameAttr();
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(moduleLike.getOperation())) {
@@ -1207,7 +1207,7 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
                                   formalParamNames, hasContainingModule);
   }
 
-  SymbolTable::setSymbolVisibility(loweredClassOp, moduleLike.getVisibility());
+  SymbolTable::setSymbolVisibility(loweredClassOp, cast<mlir::SymbolOpInterface>(moduleLike.getOperation()).getVisibility());
 
   return loweredClassOp;
 }
@@ -1516,7 +1516,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
   auto referencedModule =
       firrtlInstance.getReferencedModule<FModuleLike>(instanceGraph);
 
-  StringRef moduleName = referencedModule.getName();
+  StringRef moduleName = referencedModule.getModuleName();
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(referencedModule.getOperation()))
@@ -1940,7 +1940,7 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
       // and modules have been converted to OM classes, but we need to look up
       // based on the parent's original name.
       auto parent = op->getParentOfType<om::ClassOp>();
-      auto parentName = parent.getName();
+      auto parentName = parent.getNameAttr().getValue();
       if (parentName.ends_with(kClassNameSuffix))
         parentName = parentName.drop_back(kClassNameSuffix.size());
       auto originalParentName = StringAttr::get(op->getContext(), parentName);

@@ -887,7 +887,7 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
 LogicalResult LowerCircuit::lowerCircuit() {
   LLVM_DEBUG(llvm::dbgs() << "Processing domains:\n");
   for (auto domain : llvm::make_early_inc_range(circuit.getOps<DomainOp>())) {
-    LLVM_DEBUG(llvm::dbgs() << "  - " << domain.getName() << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "  - " << domain.getNameAttr().getValue() << "\n");
     if (failed(lowerDomain(domain)))
       return failure();
   }
@@ -897,7 +897,7 @@ LogicalResult LowerCircuit::lowerCircuit() {
     auto moduleOp = dyn_cast<FModuleLike>(node.getModule<Operation *>());
     if (!moduleOp)
       return success();
-    LLVM_DEBUG(llvm::dbgs() << "  - module: " << moduleOp.getName() << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "  - module: " << moduleOp.getModuleName() << "\n");
     LowerModule lowerModule(moduleOp, classes, constants, instanceGraph);
     if (failed(lowerModule.lowerModule()))
       return failure();

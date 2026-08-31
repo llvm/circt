@@ -34,7 +34,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       DeclareOpInterfaceMethods<PortList>,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
-      Symbol, InnerSymbolTable,
+      SymbolName, SymbolVisibility, Symbol, InnerSymbolTable,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -123,6 +123,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     connections within the module.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility,
                        TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$per_port_attrs,
                        OptionalAttr<LocationArrayAttr>:$result_locs,
@@ -217,16 +218,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     void insertOutputs(unsigned index,
                        ArrayRef<std::pair<StringAttr, Value>> outputs);
 
-    // Get the module's symbolic name as StringAttr.
-    StringAttr getNameAttr() {
-      return (*this)->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName());
-    }
-
-    // Get the module's symbolic name.
-    StringRef getName() {
-      return getNameAttr().getValue();
-    }
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
@@ -250,6 +241,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     parameterized types instead of just concrete types.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility,
                        TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$per_port_attrs,
                        OptionalAttr<LocationArrayAttr>:$port_locs,
@@ -284,16 +276,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     /// verilogName attribute.
     StringAttr getVerilogModuleNameAttr();
 
-    // Get the module's symbolic name as StringAttr.
-    StringAttr getNameAttr() {
-      return (*this)->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName());
-    }
-
-    // Get the module's symbolic name.
-    StringRef getName() {
-      return getNameAttr().getValue();
-    }
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
@@ -305,7 +287,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
 }
 
 def HWGeneratorSchemaOp : HWOp<"generator.schema",
-      [Symbol, HasParent<"mlir::ModuleOp">]> {
+      [SymbolName, SymbolVisibility, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "HW Generator Schema declaration";
   let description = [{
     The "hw.generator.schema" operation declares a kind of generated module by
@@ -323,7 +305,7 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor,
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name, StrAttr:$descriptor,
                        StrArrayAttr:$requiredAttrs);
   let results = (outs);
   let assemblyFormat = "$sym_name `,` $descriptor `,` $requiredAttrs attr-dict";
@@ -341,7 +323,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     The 'verilogName' attribute (when present) specifies the spelling of the
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name,
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
                        FlatSymbolRefAttr:$generatorKind,
                        TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$per_port_attrs,
@@ -532,7 +514,7 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
 }
 
 def HierPathOp : HWOp<"hierpath",
-      [IsolatedFromAbove, Symbol,
+      [IsolatedFromAbove, SymbolName, SymbolVisibility, Symbol,
        DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
   let summary = "Hierarchical path specification";
   let description = [{
@@ -540,7 +522,7 @@ def HierPathOp : HWOp<"hierpath",
     This is used to specify namable things for use in other operations, for
     example in verbatim substitution. Non-local annotations also use these.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{

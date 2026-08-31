@@ -19,7 +19,7 @@ InstanceGraph::InstanceGraph(Operation *operation)
     // other ops that implement the igraph::ModuleOpInterface.
     auto hwModuleLikeNode =
         dyn_cast<HWModuleLike>(node.getModule().getOperation());
-    if (hwModuleLikeNode && hwModuleLikeNode.isPublic())
+    if (hwModuleLikeNode && cast<mlir::SymbolOpInterface>(hwModuleLikeNode.getOperation()).getVisibility() == mlir::SymbolTable::Visibility::Public)
       entry.addInstance({}, &node);
   }
 }
@@ -27,7 +27,7 @@ InstanceGraph::InstanceGraph(Operation *operation)
 igraph::InstanceGraphNode *InstanceGraph::addHWModule(HWModuleLike module) {
   auto *node = igraph::InstanceGraph::addModule(
       cast<igraph::ModuleOpInterface>(module.getOperation()));
-  if (module.isPublic())
+  if (cast<mlir::SymbolOpInterface>(module.getOperation()).getVisibility() == mlir::SymbolTable::Visibility::Public)
     entry.addInstance({}, node);
   return node;
 }

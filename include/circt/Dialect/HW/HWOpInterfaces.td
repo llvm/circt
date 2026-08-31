@@ -45,7 +45,7 @@ def PortList : OpInterface<"PortList", []> {
 }
 
 def HWModuleLike : OpInterface<"HWModuleLike", [
-  Symbol, PortList, InstanceGraphModuleOpInterface]> {
+  PortList, InstanceGraphModuleOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 

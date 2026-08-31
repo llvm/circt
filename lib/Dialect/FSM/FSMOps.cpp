@@ -27,7 +27,7 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
                       StringRef initialStateName, FunctionType type,
                       ArrayRef<NamedAttribute> attrs,
                       ArrayRef<DictionaryAttr> argAttrs) {
-  state.addAttribute(mlir::SymbolTable::getSymbolAttrName(),
+  state.addAttribute("sym_name",
                      builder.getStringAttr(name));
   state.addAttribute(MachineOp::getFunctionTypeAttrName(state.name),
                      TypeAttr::get(type));

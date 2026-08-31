@@ -26,7 +26,7 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def SCModuleOp : SystemCOp<"module", [
-    Symbol,
+    SymbolName, SymbolVisibility, Symbol,
     DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
     FunctionOpInterface,
     IsolatedFromAbove,
@@ -46,6 +46,8 @@ def SCModuleOp : SystemCOp<"module", [
   }];
 
   let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttrOf<FunctionType>:$function_type,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs,
@@ -319,7 +321,7 @@ def FuncOp : SystemCOp<"cpp.func", [
   IsolatedFromAbove,
   OpAsmOpInterface,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
-  Symbol
+  SymbolName, SymbolVisibility, Symbol
 ]> {
   let summary = "An operation with a name containing a single `SSACFG` region";
   let description = [{

@@ -156,7 +156,8 @@ FlatSymbolRefAttr FirMemLowering::getOrCreateSchema() {
           "writeClockIDs",  "initFilename",
           "initIsBinary",   "initIsInline"};
       schemaOp = hw::HWGeneratorSchemaOp::create(
-          builder, circuit.getLoc(), "FIRRTLMem", "FIRRTL_Memory",
+          builder, circuit.getLoc(), /*sym_visibility=*/{}, "FIRRTLMem",
+          "FIRRTL_Memory",
           builder.getStrArrayAttr(schemaFields));
     }
   }
@@ -333,7 +334,7 @@ void FirMemLowering::lowerMemoriesInModule(
     HWModuleOp module,
     ArrayRef<std::tuple<FirMemConfig *, HWModuleGeneratedOp, FirMemOp>> mems) {
   LLVM_DEBUG(llvm::dbgs() << "Lowering " << mems.size() << " memories in "
-                          << module.getName() << "\n");
+                          << module.getNameAttr().getValue() << "\n");
 
   DenseMap<unsigned, Value> constOneOps;
   auto constOne = [&](unsigned width = 1) {

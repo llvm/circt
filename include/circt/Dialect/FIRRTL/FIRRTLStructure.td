@@ -65,7 +65,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 
 class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   FIRRTLOp<mnemonic, traits # [
-    IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
+    IsolatedFromAbove, SymbolName, SymbolVisibility, Symbol, HasParent<"CircuitOp">,
     DeclareOpInterfaceMethods<FModuleLike>,
     DeclareOpInterfaceMethods<PortList>,
     DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
@@ -135,7 +135,7 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
     the module.
   }];
   let arguments =
-      (ins SymbolNameAttr:$sym_name,
+      (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
            ConventionAttr:$convention,
            DenseBoolArrayAttr:$portDirections,
            ArrayRefAttr:$portLocations,
@@ -193,7 +193,7 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<StrAttr>:$defname,
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name, OptionalAttr<StrAttr>:$defname,
       ParamDeclArrayAttr:$parameters, ConventionAttr:$convention,
       DenseBoolArrayAttr:$portDirections, ArrayRefAttr:$portLocations,
       ArrayRefAttr:$portAnnotations, ArrayRefAttr:$portSymbols,
@@ -232,7 +232,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
     The "firrtl.intmodule" operation represents a compiler intrinsic.
   }];
   let arguments =
-      (ins SymbolNameAttr:$sym_name,
+      (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
            StrAttr:$intrinsic,
            ParamDeclArrayAttr:$parameters,
            DenseBoolArrayAttr:$portDirections,
@@ -278,7 +278,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
     are not directly lowered to registers by the compiler.
   }];
   let arguments =
-      (ins SymbolNameAttr:$sym_name,
+      (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
            UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
            UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
            UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
@@ -341,6 +341,7 @@ def ClassOp : FIRRTLModuleLike<"class", [
     on properties, such as propassign ops.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility,
                        DenseBoolArrayAttr:$portDirections,
                        ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
                        ArrayRefAttr:$portSymbols, ArrayRefAttr:$portLocations,
@@ -414,6 +415,7 @@ def ExtClassOp : FIRRTLModuleLike<"extclass", [
     ```
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility,
                        DenseBoolArrayAttr:$portDirections,
                        ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
                        ArrayRefAttr:$portSymbols, ArrayRefAttr:$portLocations,
@@ -437,7 +439,7 @@ def ExtClassOp : FIRRTLModuleLike<"extclass", [
 
 def LayerOp : FIRRTLOp<
   "layer",
-  [IsolatedFromAbove, Symbol, SymbolTable, SingleBlock, NoTerminator,
+  [IsolatedFromAbove, SymbolName, SymbolVisibility, Symbol, SymbolTable, SingleBlock, NoTerminator,
    ParentOneOf<["firrtl::CircuitOp", "firrtl::LayerOp"]>]
 > {
   let summary = "A layer definition";
@@ -450,7 +452,7 @@ def LayerOp : FIRRTLOp<
     under it.  Functionality is added to modules using the `firrtl.group`
     operation.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, LayerConventionAttr:$convention);
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name, LayerConventionAttr:$convention);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
@@ -460,7 +462,7 @@ def LayerOp : FIRRTLOp<
 
 def OptionOp : FIRRTLOp<"option", [
     IsolatedFromAbove,
-    Symbol,
+    SymbolName, SymbolVisibility, Symbol,
     SymbolTable,
     NoTerminator,
     HasParent<"firrtl::CircuitOp">
@@ -486,7 +488,7 @@ def OptionOp : FIRRTLOp<"option", [
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
@@ -495,7 +497,7 @@ def OptionOp : FIRRTLOp<"option", [
 }
 
 def OptionCaseOp : FIRRTLOp<
-  "option_case", [Symbol, HasParent<"firrtl::OptionOp">,
+  "option_case", [SymbolName, SymbolVisibility, Symbol, HasParent<"firrtl::OptionOp">,
                   DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A configuration option value definition";
@@ -507,7 +509,7 @@ def OptionCaseOp : FIRRTLOp<
     to guard code for this option case (e.g., `__option__Platform_FPGA`).
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
                        OptionalAttr<FlatSymbolRefAttr>:$case_macro);
   let results = (outs);
   let assemblyFormat = [{
@@ -516,14 +518,15 @@ def OptionCaseOp : FIRRTLOp<
 
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name), [{
-      build($_builder, $_state, $_builder.getStringAttr(sym_name), nullptr);
+      build($_builder, $_state, /*sym_visibility=*/{},
+            $_builder.getStringAttr(sym_name), nullptr);
     }]>
   ];
 }
 
 def FormalOp : FIRRTLOp<"formal", [
   HasParent<"firrtl::CircuitOp">,
-  DeclareOpInterfaceMethods<Symbol>,
+  SymbolName, SymbolVisibility, Symbol,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Define a formal unit test";
@@ -548,6 +551,7 @@ def FormalOp : FIRRTLOp<"formal", [
   }];
 
   let arguments = (ins
+    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
     FlatSymbolRefAttr:$moduleName,
     DictionaryAttr:$parameters
@@ -559,7 +563,7 @@ def FormalOp : FIRRTLOp<"formal", [
 
 def SimulationOp : FIRRTLOp<"simulation", [
   HasParent<"firrtl::CircuitOp">,
-  DeclareOpInterfaceMethods<Symbol>,
+  SymbolName, SymbolVisibility, Symbol,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Define a simulation unit test";
@@ -601,6 +605,7 @@ def SimulationOp : FIRRTLOp<"simulation", [
   }];
 
   let arguments = (ins
+    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
     FlatSymbolRefAttr:$moduleName,
     DictionaryAttr:$parameters
@@ -611,7 +616,7 @@ def SimulationOp : FIRRTLOp<"simulation", [
 }
 
 def DomainOp : FIRRTLOp<"domain", [
-  DeclareOpInterfaceMethods<Symbol>,
+  SymbolName, SymbolVisibility, Symbol,
   HasParent<"firrtl::CircuitOp">
 ]> {
   let summary = "Define a domain type";
@@ -621,7 +626,7 @@ def DomainOp : FIRRTLOp<"domain", [
     modeling clocks in FIRRTL Dialect.
   }];
   let arguments = (
-    ins SymbolNameAttr:$sym_name,
+    ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
         DefaultValuedAttr<DomainFieldArrayAttr, "{}">:$fields
   );
   let results = (outs);

@@ -137,7 +137,7 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
 
   // Parse the Class symbol name.
   StringAttr symName;
-  if (parser.parseSymbolName(symName, mlir::SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(symName, "sym_name",
                              state.attributes))
     return failure();
 
@@ -192,7 +192,7 @@ static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
   printer << " ";
 
   // Print the optional symbol visibility.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName = "sym_visibility";
   if (auto visibility =
           classLike->getAttrOfType<StringAttr>(visibilityAttrName))
     printer << visibility.getValue() << ' ';
@@ -312,7 +312,7 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
     ArrayRef<StringRef> formalParamNames, ArrayRef<StringRef> fieldNames,
     ArrayRef<Type> fieldTypes) {
   circt::om::ClassOp classOp = circt::om::ClassOp::create(
-      odsBuilder, loc, odsBuilder.getStringAttr(name),
+      odsBuilder, loc, odsBuilder.getStringAttr(name), /*sym_visibility=*/{},
       odsBuilder.getStrArrayAttr(formalParamNames),
       odsBuilder.getStrArrayAttr(fieldNames),
       odsBuilder.getDictionaryAttr(llvm::map_to_vector(

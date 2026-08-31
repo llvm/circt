@@ -316,7 +316,14 @@ ProblemT loadProblem(InstanceOp instOp,
     for (auto depAttr : depsAttr.getAsRange<DependenceAttr>()) {
       Dependence dep;
       if (FlatSymbolRefAttr sourceRef = depAttr.getSourceRef()) {
-        Operation *sourceOp = SymbolTable::lookupSymbolIn(graphOp, sourceRef);
+        Operation *sourceOp = nullptr;
+        for (auto candidate : graphOp.getOps<OperationOp>()) {
+          auto name = candidate.getSymName();
+          if (name && *name == sourceRef.getValue()) {
+            sourceOp = candidate;
+            break;
+          }
+        }
         assert(sourceOp);
         dep = Dependence(sourceOp, opOp);
         LogicalResult res = prob.insertDependence(dep);
@@ -452,7 +459,7 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
 
   for (auto opr : prob.getOperatorTypes())
     OperatorTypeOp::create(
-        b, opr.getAttr(),
+        b, /*sym_visibility=*/{}, opr.getAttr(),
         saveOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
             prob, opr, b));
 
@@ -465,7 +472,7 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
 
   for (auto rsrc : prob.getResourceTypes())
     ResourceTypeOp::create(
-        b, rsrc.getAttr(),
+        b, /*sym_visibility=*/{}, rsrc.getAttr(),
         saveResourceTypeProperties<ProblemT, ResourceTypePropertyTs...>(
             prob, rsrc, b));
 

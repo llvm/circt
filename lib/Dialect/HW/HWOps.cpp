@@ -553,7 +553,7 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
   if (nameAttr)
     return nameAttr;
 
-  return module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+  return module->getAttrOfType<StringAttr>("sym_name");
 }
 
 template <typename ModuleTy>
@@ -564,7 +564,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   using namespace mlir::function_interface_impl;
 
   // Add an attribute for the name.
-  result.addAttribute(SymbolTable::getSymbolAttrName(), name);
+  result.addAttribute("sym_name", name);
 
   SmallVector<Attribute> perPortAttrs;
   SmallVector<ModulePort> portTypes;
@@ -815,7 +815,7 @@ StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
   if (auto vName = getVerilogNameAttr())
     return vName;
 
-  return (*this)->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+  return (*this)->getAttrOfType<StringAttr>("sym_name");
 }
 
 StringAttr HWModuleGeneratedOp::getVerilogModuleNameAttr() {
@@ -823,7 +823,7 @@ StringAttr HWModuleGeneratedOp::getVerilogModuleNameAttr() {
     return vName;
   }
   return (*this)->getAttrOfType<StringAttr>(
-      ::mlir::SymbolTable::getSymbolAttrName());
+      "sym_name");
 }
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
@@ -922,7 +922,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser,
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr, "sym_name",
                              result.attributes))
     return failure();
 
@@ -1035,7 +1035,7 @@ template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   p << ' ';
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName = "sym_visibility";
   if (auto visibility = mod.getOperation()->template getAttrOfType<StringAttr>(
           visibilityAttrName))
     p << visibility.getValue() << ' ';
@@ -3377,7 +3377,7 @@ void HierPathOp::print(OpAsmPrinter &p) {
   p << " ";
 
   // Print visibility if present.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName = "sym_visibility";
   if (auto visibility =
           getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
@@ -3396,7 +3396,7 @@ void HierPathOp::print(OpAsmPrinter &p) {
   p << "]";
   p.printOptionalAttrDict(
       (*this)->getAttrs(),
-      {SymbolTable::getSymbolAttrName(), "namepath", visibilityAttrName});
+      {"sym_name", "namepath", visibilityAttrName});
 }
 
 ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -3405,7 +3405,7 @@ ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the symbol name.
   StringAttr symName;
-  if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(symName, "sym_name",
                              result.attributes))
     return failure();
 

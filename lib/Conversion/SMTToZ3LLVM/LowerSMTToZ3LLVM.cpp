@@ -902,7 +902,7 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
     auto parentFunction = op->getParentOfType<FunctionOpInterface>();
     auto functionName = parentFunction
                             ? parentFunction->getAttrOfType<StringAttr>(
-                                  SymbolTable::getSymbolAttrName())
+                                  "sym_name")
                             : StringAttr{};
     Operation *traceEmissionOp = nullptr;
     if (functionName && globals.traceFunctionNames.contains(functionName)) {
@@ -1429,7 +1429,7 @@ struct BMCTraceLowering : public SMTLoweringPattern<verif::BMCTraceOp> {
     if (!function || function.getNumArguments() == 0)
       return rewriter.notifyMatchFailure(op, "missing BMC trace context");
     auto functionName =
-        function->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+        function->getAttrOfType<StringAttr>("sym_name");
     unsigned traceArgumentOffset =
         functionName &&
                 globals.traceEmissionFunctionNames.contains(functionName)

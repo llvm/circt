@@ -102,7 +102,7 @@ struct ExtractInstancesPass
     OpBuilder builder(pathOp);
     auto newPathOp = builder.cloneWithoutRegions(pathOp);
     newPathOp.setSymNameAttr(builder.getStringAttr(
-        circuitNamespace.newName(newPathOp.getSymName())));
+        circuitNamespace.newName(newPathOp.getName())));
     newPathOp.setNamepathAttr(builder.getArrayAttr(newPath));
     return newPathOp;
   }
@@ -622,7 +622,7 @@ void ExtractInstancesPass::extractInstances() {
     SmallVector<hw::HierPathOp> sortedInstanceNLAs(instanceNLAs.begin(),
                                                    instanceNLAs.end());
     llvm::sort(sortedInstanceNLAs,
-               [](auto a, auto b) { return a.getSymName() < b.getSymName(); });
+               [](auto a, auto b) { return a.getName() < b.getName(); });
 
     // Move the original instance one level up such that it is right next to
     // the instances of the parent module, and wire the instance ports up to
@@ -769,7 +769,7 @@ void ExtractInstancesPass::extractInstances() {
             auto newNla = cloneWithNewNameAndPath(nla, nlaPath);
             for (auto anno : instNonlocalAnnos.lookup(nla)) {
               anno.setMember("circt.nonlocal",
-                             FlatSymbolRefAttr::get(newNla.getSymNameAttr()));
+                             FlatSymbolRefAttr::get(newNla.getNameAttr()));
               newInstNonlocalAnnos.push_back(anno);
             }
 
@@ -837,7 +837,7 @@ void ExtractInstancesPass::extractInstances() {
           LLVM_DEBUG(llvm::dbgs() << "    - Created " << newNla << "\n");
           for (auto anno : instNonlocalAnnos.lookup(nla)) {
             anno.setMember("circt.nonlocal",
-                           FlatSymbolRefAttr::get(newNla.getSymNameAttr()));
+                           FlatSymbolRefAttr::get(newNla.getNameAttr()));
             newInstNonlocalAnnos.push_back(anno);
           }
         } else {

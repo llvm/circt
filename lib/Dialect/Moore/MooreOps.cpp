@@ -32,7 +32,7 @@ using namespace mlir;
 
 void SVModuleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                        llvm::StringRef name, hw::ModuleType type) {
-  state.addAttribute(SymbolTable::getSymbolAttrName(),
+  state.addAttribute("sym_name",
                      builder.getStringAttr(name));
   state.addAttribute(getModuleTypeAttrName(state.name), TypeAttr::get(type));
   state.addRegion();
@@ -42,7 +42,7 @@ void SVModuleOp::print(OpAsmPrinter &p) {
   p << " ";
 
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName = "sym_visibility";
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
@@ -1917,7 +1917,7 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr, "sym_name",
                              result.attributes))
     return failure();
 
@@ -2069,7 +2069,7 @@ LogicalResult DPIFuncOp::verify() {
 void DPIFuncOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName = "sym_visibility";
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(getSymName());

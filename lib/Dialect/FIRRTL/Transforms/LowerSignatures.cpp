@@ -526,7 +526,7 @@ void LowerSignaturesPass::runOnOperation() {
                        return use->getInstance<InstanceChoiceOp>();
                      }))
       convention = Convention::Scalarized;
-    if (lowerModuleSignature(mod, convention, cache, portMap[mod.getNameAttr()])
+    if (lowerModuleSignature(mod, convention, cache, portMap[mod.getModuleNameAttr()])
             .failed())
       return signalPassFailure();
   }

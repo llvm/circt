@@ -43,7 +43,7 @@ namespace {
 static std::string generateModuleName(Namespace &ns, hw::HWModuleOp moduleOp,
                                       ArrayAttr parameters) {
   assert(parameters.size() != 0);
-  std::string name = moduleOp.getName().str();
+  std::string name = moduleOp.getNameAttr().getValue().str();
   for (auto param : parameters) {
     auto paramAttr = cast<ParamDeclAttr>(param);
     int64_t paramValue = cast<IntegerAttr>(paramAttr.getValue()).getInt();

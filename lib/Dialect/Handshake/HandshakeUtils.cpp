@@ -36,7 +36,7 @@ LogicalResult circt::handshake::resolveInstanceGraph(
     SmallVectorImpl<std::string> &sortedFuncs) {
   // Create use graph
   auto walkFuncOps = [&](handshake::FuncOp funcOp) {
-    auto &funcUses = instanceGraph[funcOp.getName().str()];
+    auto &funcUses = instanceGraph[funcOp.getNameAttr().getValue().str()];
     funcOp.walk([&](handshake::InstanceOp instanceOp) {
       funcUses.insert(instanceOp.getModule().str());
     });

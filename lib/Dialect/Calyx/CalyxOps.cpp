@@ -388,7 +388,7 @@ static void eraseControlWithConditional(OpTy op, PatternRewriter &rewriter) {
 template <typename ComponentTy>
 static void printComponentInterface(OpAsmPrinter &p, ComponentInterface comp) {
   auto componentName = comp->template getAttrOfType<StringAttr>(
-                               ::mlir::SymbolTable::getSymbolAttrName())
+                               "sym_name")
                            .getValue();
   p << " ";
   p.printSymbolName(componentName);
@@ -508,7 +508,7 @@ static ParseResult parseComponentInterface(OpAsmParser &parser,
 
   StringAttr componentName;
   if (parser.parseSymbolName(componentName,
-                             ::mlir::SymbolTable::getSymbolAttrName(),
+                             "sym_name",
                              result.attributes))
     return failure();
 
@@ -552,7 +552,7 @@ static void buildComponentLike(OpBuilder &builder, OperationState &result,
                                bool combinational) {
   using namespace mlir::function_interface_impl;
 
-  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
+  result.addAttribute("sym_name", name);
 
   std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
   std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
@@ -2047,7 +2047,7 @@ OpFoldResult calyx::ConstantOp::fold(FoldAdaptor adaptor) {
 
 void calyx::ConstantOp::build(OpBuilder &builder, OperationState &state,
                               StringRef symName, Attribute attr, Type type) {
-  state.addAttribute(SymbolTable::getSymbolAttrName(),
+  state.addAttribute("sym_name",
                      builder.getStringAttr(symName));
   state.addAttribute("value", attr);
   SmallVector<Type> types;
@@ -2154,7 +2154,7 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
                      ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
-  state.addAttribute(SymbolTable::getSymbolAttrName(),
+  state.addAttribute("sym_name",
                      builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
@@ -2254,7 +2254,7 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
 void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
                         StringRef instanceName, int64_t width,
                         ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
-  state.addAttribute(SymbolTable::getSymbolAttrName(),
+  state.addAttribute("sym_name",
                      builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
@@ -2895,7 +2895,13 @@ getHwModuleExtGoOrDonePortNumber(hw::HWModuleExternOp &moduleExternOp,
 LogicalResult InvokeOp::verify() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   StringRef callee = getCallee();
-  Operation *operation = componentOp.lookupSymbol(callee);
+  Operation *operation = nullptr;
+  for (auto cell : componentOp.getOps<CellInterface>()) {
+    if (cell.instanceName() == callee) {
+      operation = cell;
+      break;
+    }
+  }
   // The referenced symbol does not exist.
   if (!operation)
     return emitOpError() << "with instance '@" << callee

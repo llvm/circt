@@ -31,7 +31,7 @@ struct CircuitNamespace : public Namespace {
   void add(CircuitOp circuit) {
     for (auto &op : *circuit.getBodyBlock())
       if (auto symbol = op.getAttrOfType<mlir::StringAttr>(
-              SymbolTable::getSymbolAttrName()))
+              "sym_name"))
         nextIndex.insert({symbol.getValue(), 0});
   }
 };

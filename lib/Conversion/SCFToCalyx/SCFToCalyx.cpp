@@ -2275,7 +2275,7 @@ private:
         calyx::GroupOp whileLatchGroup =
             getState<ComponentLoweringState>().getWhileLoopLatchGroup(whileOp);
         calyx::EnableOp::create(rewriter, whileLatchGroup.getLoc(),
-                                whileLatchGroup.getName());
+                                whileLatchGroup.getSymName());
       } else if (auto *parSchedPtr = std::get_if<ParScheduleable>(&group)) {
         auto parOp = parSchedPtr->parOp;
         auto calyxParOp = calyx::ParOp::create(rewriter, parOp.getLoc());
@@ -2322,7 +2322,7 @@ private:
         calyx::GroupOp forLatchGroup =
             getState<ComponentLoweringState>().getForLoopLatchGroup(forOp);
         calyx::EnableOp::create(rewriter, forLatchGroup.getLoc(),
-                                forLatchGroup.getName());
+                                forLatchGroup.getSymName());
       } else if (auto *ifSchedPtr = std::get_if<IfScheduleable>(&group);
                  ifSchedPtr) {
         auto ifOp = ifSchedPtr->ifOp;
@@ -2364,7 +2364,7 @@ private:
           calyx::GroupOp thenGroup =
               getState<ComponentLoweringState>().getThenGroup(ifOp);
           calyx::EnableOp::create(rewriter, thenGroup.getLoc(),
-                                  thenGroup.getName());
+                                  thenGroup.getSymName());
         }
 
         if (!ifOp.getElseRegion().empty()) {
@@ -2385,7 +2385,7 @@ private:
             calyx::GroupOp elseGroup =
                 getState<ComponentLoweringState>().getElseGroup(ifOp);
             calyx::EnableOp::create(rewriter, elseGroup.getLoc(),
-                                    elseGroup.getName());
+                                    elseGroup.getSymName());
           }
         }
       } else if (auto *callSchedPtr = std::get_if<CallScheduleable>(&group)) {
@@ -2545,7 +2545,7 @@ private:
     auto parOp = calyx::ParOp::create(rewriter, loc);
     rewriter.setInsertionPointToStart(parOp.getBodyBlock());
     for (calyx::GroupOp group : initGroups)
-      calyx::EnableOp::create(rewriter, group.getLoc(), group.getName());
+      calyx::EnableOp::create(rewriter, group.getLoc(), group.getSymName());
   }
 
   calyx::WhileOp buildWhileCtrlOp(ScfWhileOp whileOp,

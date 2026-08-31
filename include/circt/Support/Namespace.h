@@ -49,8 +49,8 @@ public:
     assert(module->getNumRegions() == 1);
     for (auto &op : module.getBody(0)->getOperations())
       if (auto symbol = op.getAttrOfType<mlir::StringAttr>(
-              SymbolTable::getSymbolAttrName()))
-        nextIndex.insert({symbol.getValue(), 0});
+              "sym_name"))
+        nextIndex.insert(std::pair<StringRef, size_t>(symbol.getValue(), 0));
   }
 
   /// SymbolCache initializer; initialize from every key that is convertible to

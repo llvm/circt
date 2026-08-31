@@ -234,7 +234,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<FModuleOp> {
     OpBuilder builder(module);
     auto extmodule = FExtModuleOp::create(
         builder, module->getLoc(),
-        module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
+        module->getAttrOfType<StringAttr>("sym_name"),
         module.getConventionAttr(), module.getPorts(),
         builder.getArrayAttr(layersArray), StringRef(),
         module.getAnnotationsAttr());

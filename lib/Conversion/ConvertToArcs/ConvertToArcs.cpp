@@ -96,7 +96,7 @@ struct Converter {
 LogicalResult Converter::run(ModuleOp module) {
   for (auto &op : module.getOps())
     if (auto sym =
-            op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
+            op.getAttrOfType<StringAttr>("sym_name"))
       globalNamespace.newName(sym.getValue());
   for (auto module : module.getOps<HWModuleOp>())
     if (failed(runOnModule(module)))

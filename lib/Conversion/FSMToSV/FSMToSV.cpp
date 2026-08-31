@@ -153,7 +153,8 @@ StateEncoding::StateEncoding(OpBuilder &b, hw::TypeScopeOp typeScope,
   OpBuilder::InsertionGuard guard(b);
   b.setInsertionPointToStart(&typeScope.getBodyRegion().front());
   auto typedeclEnumType = hw::TypedeclOp::create(
-      b, loc, b.getStringAttr(hwModule.getName() + "_state_t"),
+      b, loc, /*sym_visibility=*/{},
+      b.getStringAttr(hwModule.getNameAttr().getValue() + "_state_t"),
       TypeAttr::get(rawEnumType), nullptr);
 
   stateType = hw::TypeAliasType::get(
@@ -706,7 +707,8 @@ void FSMToSVPass::runOnOperation() {
   // typedefs.
   b.setInsertionPointToStart(module.getBody());
   hw::TypeScopeOp typeScope =
-      hw::TypeScopeOp::create(b, loc, b.getStringAttr("fsm_enum_typedecls"));
+      hw::TypeScopeOp::create(b, loc, /*sym_visibility=*/{},
+                              b.getStringAttr("fsm_enum_typedecls"));
   typeScope.getBodyRegion().push_back(new Block());
 
   auto file = emit::FileOp::create(b, loc, "fsm_enum_typedefs.sv", [&] {

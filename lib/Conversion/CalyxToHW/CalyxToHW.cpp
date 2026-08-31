@@ -54,7 +54,7 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
 
     SmallVector<Value> argValues;
     auto hwMod = HWModuleOp::create(
-        rewriter, component.getLoc(), component.getNameAttr(), hwPortInfo,
+        rewriter, component.getLoc(), rewriter.getStringAttr(component.getName()), hwPortInfo,
         [&](OpBuilder &b, HWModulePortAccessor &ports) {
           for (auto [name, type, direction, _] : portInfo) {
             switch (direction) {

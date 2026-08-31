@@ -515,7 +515,7 @@ LogicalResult GlobalRuntimeContext::buildRuntimeModelOps() {
     auto symName = globalBuilder.getStringAttr(Twine("arcRuntimeModel_") +
                                                model->modelInfo.name);
     model->runtimeModelOp = RuntimeModelOp::create(
-        globalBuilder, symName,
+        globalBuilder, /*sym_visibility=*/{}, symName,
         globalBuilder.getStringAttr(model->modelInfo.name),
         static_cast<uint64_t>(model->modelInfo.numStateBytes),
         model->modelOp.getTraceTapsAttr());

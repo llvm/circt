@@ -1868,10 +1868,10 @@ public:
     HWModuleLike hwModule;
     if (op.isExternal()) {
       hwModule = hw::HWModuleExternOp::create(
-          rewriter, op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+          rewriter, op.getLoc(), rewriter.getStringAttr(op.getNameAttr().getValue()), ports);
     } else {
       auto hwModuleOp = hw::HWModuleOp::create(
-          rewriter, op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+          rewriter, op.getLoc(), rewriter.getStringAttr(op.getNameAttr().getValue()), ports);
       auto args = hwModuleOp.getBodyBlock()->getArguments().drop_back(2);
       rewriter.inlineBlockBefore(&op.getBody().front(),
                                  hwModuleOp.getBodyBlock()->getTerminator(),

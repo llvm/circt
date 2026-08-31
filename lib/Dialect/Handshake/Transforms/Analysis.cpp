@@ -400,7 +400,7 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
   DenseMap<Block *, unsigned> blockIDs;
   std::map<std::string, unsigned> opTypeCntrs;
   DenseMap<Operation *, unsigned> opIDs;
-  auto name = f.getName();
+  auto name = f.getNameAttr().getValue();
   unsigned thisId = instanceIdMap[name.str()]++;
   std::string instanceName = parentName.str() + "." + name.str();
   // Follow submodule naming convention from FIRRTL lowering:

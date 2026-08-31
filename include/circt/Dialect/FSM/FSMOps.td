@@ -21,7 +21,7 @@ def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResul
 
 def MachineOp : FSMOp<"machine", [
       FunctionOpInterface,
-      Symbol, SymbolTable, NoTerminator,
+      SymbolName, SymbolVisibility, Symbol, SymbolTable, NoTerminator,
       DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>]> {
   let summary = "Define a finite-state machine";
   let description = [{
@@ -30,7 +30,7 @@ def MachineOp : FSMOp<"machine", [
     includes a `$body` region that contains internal variables and states.
   }];
 
-  let arguments = (ins StrAttr:$sym_name, StrAttr:$initialState,
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, StrAttr:$sym_name, StrAttr:$initialState,
                        TypeAttrOf<FunctionType>:$function_type,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
@@ -185,7 +185,7 @@ def HWInstanceOp : FSMOp<"hw_instance", [
   let hasVerifier = 1;
 }
 
-def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
+def StateOp : FSMOp<"state", [HasParent<"MachineOp">, SymbolName, SymbolVisibility, Symbol, NoTerminator]> {
   let summary = "Define a state of a machine";
   let description = [{
     `fsm.state` represents a state of a state machine. This op includes an
@@ -194,7 +194,7 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
     contains all the transitions of this state.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
   let regions = (region AnyRegion:$output, AnyRegion:$transitions);
 
   let hasCanonicalizeMethod = true;

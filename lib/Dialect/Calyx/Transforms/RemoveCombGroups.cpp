@@ -126,7 +126,7 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
 
     auto component = combGroup->getParentOfType<ComponentOp>();
     auto group = calyx::GroupOp::create(rewriter, combGroup.getLoc(),
-                                        combGroup.getName());
+                                        combGroup.getNameAttr().getValue());
     rewriter.mergeBlocks(combGroup.getBodyBlock(), group.getBodyBlock());
     rewriter.replaceOp(combGroup, group);
 

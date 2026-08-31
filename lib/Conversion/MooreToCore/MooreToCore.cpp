@@ -1216,6 +1216,7 @@ static LogicalResult convert(GlobalVariableOp op,
                              const TypeConverter &typeConverter) {
   auto type = typeConverter.convertType(op.getType());
   auto sig = llhd::GlobalSignalOp::create(rewriter, op.getLoc(),
+                                          /*sym_visibility=*/{},
                                           op.getSymNameAttr(), type);
   sig.getInitRegion().takeBody(op.getInitRegion());
   rewriter.eraseOp(op);

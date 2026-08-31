@@ -54,7 +54,7 @@ struct UnusedSymbolPruner : public Reduction {
   }
 
   uint64_t match(Operation *op) override {
-    if (op->hasAttr(SymbolTable::getSymbolAttrName()))
+    if (op->hasAttr("sym_name"))
       if (!symbolUses.hasRef(op))
         return 1;
     return 0;

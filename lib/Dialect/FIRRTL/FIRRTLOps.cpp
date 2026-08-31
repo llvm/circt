@@ -1481,7 +1481,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p << " ";
 
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName = "sym_visibility";
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
@@ -2027,7 +2027,7 @@ ClassType firrtl::detail::getInstanceTypeForClassLike(ClassLike classOp) {
   for (size_t i = 0; i < n; ++i)
     elements.push_back({classOp.getPortNameAttr(i), classOp.getPortType(i),
                         classOp.getPortDirection(i)});
-  auto name = FlatSymbolRefAttr::get(classOp.getNameAttr());
+  auto name = FlatSymbolRefAttr::get(classOp.getModuleNameAttr());
   return ClassType::get(name, elements);
 }
 
@@ -2114,12 +2114,12 @@ static void printClassLike(OpAsmPrinter &p, ClassLike op) {
   p << ' ';
 
   // Print the visibility of the class.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName = "sym_visibility";
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
   // Print the class name.
-  p.printSymbolName(op.getName());
+  p.printSymbolName(op.getModuleName());
 
   // Both classes and external classes have a body, but it is always empty for
   // external classes.
@@ -2279,6 +2279,18 @@ BlockArgument ClassOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
+StringAttr ClassOp::getNameAttr() { return getSymNameAttr(); }
+
+void ClassOp::setName(StringAttr name) { setSymNameAttr(name); }
+
+SymbolTable::Visibility ClassOp::getVisibility() {
+  return OpTrait::SymbolVisibility<ClassOp>::getVisibility();
+}
+
+void ClassOp::setVisibility(SymbolTable::Visibility visibility) {
+  OpTrait::SymbolVisibility<ClassOp>::setVisibility(visibility);
+}
+
 bool ClassOp::canDiscardOnUseEmpty() {
   // ClassOps are referenced by ClassTypes, and these uses are not
   // discoverable by the symbol infrastructure. Return false here to prevent
@@ -2360,6 +2372,18 @@ SmallVector<::circt::hw::PortInfo> ExtClassOp::getPortList() {
 
 ::circt::hw::PortInfo ExtClassOp::getPort(size_t idx) {
   return ::getPortImpl(*this, idx);
+}
+
+StringAttr ExtClassOp::getNameAttr() { return getSymNameAttr(); }
+
+void ExtClassOp::setName(StringAttr name) { setSymNameAttr(name); }
+
+SymbolTable::Visibility ExtClassOp::getVisibility() {
+  return OpTrait::SymbolVisibility<ExtClassOp>::getVisibility();
+}
+
+void ExtClassOp::setVisibility(SymbolTable::Visibility visibility) {
+  OpTrait::SymbolVisibility<ExtClassOp>::setVisibility(visibility);
 }
 
 bool ExtClassOp::canDiscardOnUseEmpty() {

@@ -78,7 +78,7 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // (Scheduling) operation's name
   StringAttr opName;
-  (void)parser.parseOptionalSymbolName(opName, SymbolTable::getSymbolAttrName(),
+  (void)parser.parseOptionalSymbolName(opName, "sym_name",
                                        result.attributes);
 
   // Dependences
@@ -246,7 +246,7 @@ void OperationOp::print(OpAsmPrinter &p) {
 
   // Default attr-dict
   SmallVector<StringRef> elidedAttrs = {
-      SymbolTable::getSymbolAttrName(),
+      "sym_name",
       OperationOp::getDependencesAttrName().getValue(),
       OperationOp::getSspPropertiesAttrName().getValue()};
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
@@ -305,7 +305,14 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       if (!sourceRef)
         continue;
 
-      Operation *sourceOp = symbolTable.lookupSymbolIn(graphOp, sourceRef);
+      Operation *sourceOp = nullptr;
+      for (auto candidate : graphOp.getOps<OperationOp>()) {
+        auto name = candidate.getSymName();
+        if (name && *name == sourceRef.getValue()) {
+          sourceOp = candidate;
+          break;
+        }
+      }
       if (!sourceOp || !isa<OperationOp>(sourceOp)) {
         return emitError(
                    "Auxiliary dependence references invalid source operation: ")

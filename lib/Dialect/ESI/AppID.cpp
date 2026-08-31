@@ -146,7 +146,7 @@ LogicalResult AppIDIndex::walk(
 
     // Call the callback.
     AppIDPathAttr path = AppIDPathAttr::get(
-        current.getContext(), FlatSymbolRefAttr::get(top.getNameAttr()),
+        current.getContext(), FlatSymbolRefAttr::get(top.getModuleNameAttr()),
         pathStack);
     fn(path, opStack);
 
@@ -196,7 +196,7 @@ FailureOr<ArrayAttr> AppIDIndex::getAppIDPathAttr(hw::HWModuleLike fromMod,
     auto f = containerAppIDs.find(fromMod);
     if (f == containerAppIDs.end())
       return emitError(loc, "Could not find appid index for module '")
-             << fromMod.getName() << "'";
+             << fromMod.getModuleName() << "'";
 
     const ModuleAppIDs *modIDs = f->getSecond();
     FailureOr<hw::InnerSymbolOpInterface> op = modIDs->lookup(appid, loc);

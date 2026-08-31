@@ -930,7 +930,7 @@ def MacroErrorOp : SVOp<"macro.error"> {
   }];
 }
 
-def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
+def MacroDeclOp : SVOp<"macro.decl", [SymbolName, SymbolVisibility, Symbol]> {
   let summary = "System verilog macro declaration";
 
   let description = [{
@@ -943,16 +943,17 @@ def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
     The verilog name is the spelling of the macro when emitting verilog.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
                        OptionalAttr<StrArrayAttr>:$args,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
 
   let builders = [
     OpBuilder<(ins "StringRef":$name), [{
-      return build($_builder, $_state,
+      return build($_builder, $_state, /*sym_visibility=*/{},
                    ::mlir::StringAttr::get($_builder.getContext(), name),
-                   ::mlir::ArrayAttr{}, ::mlir::StringAttr{});
+                   ::mlir::ArrayAttr{},
+                   ::mlir::StringAttr{});
     }]>
   ];
 
@@ -1049,7 +1050,7 @@ def FuncDPIImportOp: SVOp<"func.dpi.import",
 }
 
 def FuncOp : SVOp<"func",
-     [IsolatedFromAbove, Symbol, OpAsmOpInterface, ProceduralRegion,
+     [IsolatedFromAbove, SymbolName, SymbolVisibility, Symbol, OpAsmOpInterface, ProceduralRegion,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<PortList>,
       FunctionOpInterface, HasParent<"mlir::ModuleOp">,
@@ -1069,6 +1070,7 @@ def FuncOp : SVOp<"func",
   }];
 
   let arguments = (ins
+    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
     TypeAttrOf<ModuleType>:$module_type,
     OptionalAttr<DictArrayAttr>:$per_argument_attrs,
