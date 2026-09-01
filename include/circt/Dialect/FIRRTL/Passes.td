@@ -909,7 +909,10 @@ def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
     those first as well but not required.
 
     Force/release on an RWProbe is synthesized into a per-probe state machine
-    with an override mux on every read of the target.  `force_initial` and
+    with an override mux on every read of the target.  Only ground-type
+    targets are supported: forcing/releasing an aggregate, or a field of an
+    aggregate through `ref.sub`, is diagnosed; compile with
+    `preserve-aggregates=none` first.  `force_initial` and
     `release_initial` are not supported.
   }];
 }
