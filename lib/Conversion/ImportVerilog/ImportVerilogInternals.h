@@ -460,6 +460,13 @@ struct Context {
                                 Location loc, Value value, Type originalType,
                                 Value clockVal);
 
+  /// Convert sampled value system function calls with two arguments.
+  FailureOr<Value>
+  convertSampledValueCallArity2(const slang::ast::SystemSubroutine &subroutine,
+                                Location loc, Value value, Type originalType,
+                                Value clockVal,
+                                const slang::ast::Expression &secondArg);
+
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
 
