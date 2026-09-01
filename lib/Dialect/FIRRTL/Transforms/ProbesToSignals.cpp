@@ -999,12 +999,12 @@ LogicalResult ProbeVisitor::visitExpr(RefSubOp op) {
   probeToHWMap[op.getResult()] = newVal;
   toDelete.push_back(op);
 
-  // Child-instance control is whole-target; force through a field is diagnosed.
+  // Force control (local or instance) is whole-target; force through a field
+  // is always diagnosed.
   if (cast<RefType>(op.getResult().getType()).getForceable()) {
     if (auto *blocker = unsupportedForceDests.lookup(op.getInput()))
       unsupportedForceDests[op.getResult()] = blocker;
-    else if (auto it = targets.find(val);
-             it != targets.end() && it->second.instanceCtrl)
+    else
       unsupportedForceDests[op.getResult()] = op;
   }
   return success();
