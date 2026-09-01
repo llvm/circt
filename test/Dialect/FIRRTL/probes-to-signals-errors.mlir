@@ -85,6 +85,7 @@ firrtl.circuit "ForceThroughWideningCast" {
 // force of a single field (through `ref.sub`) cannot be routed to it.
 firrtl.circuit "ForceSubOfInstanceProbe" {
   firrtl.module @SubChild(out %p: !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>) {
+    // expected-error @below {{force/release of aggregate types is not supported; compile with preserve-aggregates=none}}
     %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
     firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
   }
@@ -117,6 +118,7 @@ firrtl.circuit "ExportThroughWideningCast" {
 // probe.
 firrtl.circuit "ReleaseSubOfInstanceProbe" {
   firrtl.module @RelSubChild(out %p: !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>) {
+    // expected-error @below {{force/release of aggregate types is not supported; compile with preserve-aggregates=none}}
     %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
     firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
   }
@@ -223,6 +225,37 @@ firrtl.circuit "ForceChoiceUnsupported" {
     %e_p = firrtl.instance_choice e @ChoiceImpl alternatives @Platform { @A -> @ChoiceExtImpl } (out p: !firrtl.rwprobe<uint<8>>)
     %r = firrtl.ref.resolve %e_p : !firrtl.rwprobe<uint<8>>
     firrtl.matchingconnect %o, %r : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Forcing a FIELD of a local aggregate (`ref.sub` of a local target) is
+// diagnosed just like a field of an instance's probe: the state machine's
+// control bundle carries a `forcedValue` sized for the whole target, so a
+// force of a single field cannot be routed to it.
+firrtl.circuit "ForceFieldOfLocalAggregate" {
+  firrtl.module @ForceFieldOfLocalAggregate(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
+    // expected-note @below {{target is reached through this op}}
+    %sub = firrtl.ref.sub %w_ref[0] : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
+    // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
+    firrtl.ref.force %clock, %en, %sub, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Forcing a whole aggregate is diagnosed: only ground-type targets are
+// supported, so an aggregate must be lowered (e.g. `preserve-aggregates=none`)
+// before this pass runs.
+firrtl.circuit "ForceWholeLocalAggregate" {
+  firrtl.module @ForceWholeLocalAggregate(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.bundle<a: uint<8>, b: uint<8>>, out %oa: !firrtl.uint<8>) {
+    // expected-error @below {{force/release of aggregate types is not supported; compile with preserve-aggregates=none}}
+    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
+    %wa = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    firrtl.matchingconnect %oa, %wa : !firrtl.uint<8>
+    firrtl.ref.force %clock, %en, %w_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>, !firrtl.bundle<a: uint<8>, b: uint<8>>
   }
 }
 
