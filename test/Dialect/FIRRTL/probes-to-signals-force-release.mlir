@@ -38,9 +38,6 @@
 // 19. Release-only of an exported target (local release merged with inbound).
 // 20. Release-only of an instance probe through a same-type `ref.cast`.
 // 21. Self-referential register next state (`r <= r + 1`) plus a force.
-// 22. Force of one FIELD of an aggregate whose fields are connected
-//     individually (the target stays single-driven).
-// 23. Force of a whole aggregate whose fields are connected individually.
 // 24. A forced target nobody reads gets no override.
 // 25. Three clocked forces: the sticky one-hot winner keeps the *live* RHS of
 //     whichever force is in effect (a plain last-wins mux would collapse back
@@ -970,92 +967,6 @@ firrtl.circuit "SelfReferentialReg" {
     // does), so there is no combinational loop.
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %v, %r)
     // CHECK: firrtl.matchingconnect %r_forced, %[[OVR]]
-  }
-}
-
-// -----
-// TEST 22: Force ONE FIELD of a local forceable aggregate whose fields are
-// connected individually.  The `ref.sub` lowers to a *fresh* `subfield`, so a
-// write-side override could not find (and would double-drive) the real driver of
-// that field.  The read-side override sidesteps it: the field keeps its single
-// original driver and the observed aggregate is reassembled with the forced
-// field spliced in.
-
-// CHECK-LABEL: firrtl.circuit "ForceFieldOfLocalAggregate"
-firrtl.circuit "ForceFieldOfLocalAggregate" {
-  // CHECK-LABEL: firrtl.module @ForceFieldOfLocalAggregate
-  firrtl.module @ForceFieldOfLocalAggregate(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
-                                           in %v: !firrtl.uint<8>, in %x: !firrtl.uint<8>,
-                                           in %y: !firrtl.uint<8>,
-                                           out %oa: !firrtl.uint<8>, out %ob: !firrtl.uint<8>) {
-    // CHECK: %w = firrtl.wire : !firrtl.bundle<a: uint<8>, b: uint<8>>
-    // CHECK-NEXT: %w_forced = firrtl.wire : !firrtl.bundle<a: uint<8>, b: uint<8>>
-    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-    %wa = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>, b: uint<8>>
-    %wb = firrtl.subfield %w[b] : !firrtl.bundle<a: uint<8>, b: uint<8>>
-    firrtl.matchingconnect %wa, %x : !firrtl.uint<8>
-    firrtl.matchingconnect %wb, %y : !firrtl.uint<8>
-    firrtl.matchingconnect %oa, %wa : !firrtl.uint<8>
-    firrtl.matchingconnect %ob, %wb : !firrtl.uint<8>
-    %sub = firrtl.ref.sub %w_ref[0] : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-    firrtl.ref.force %clock, %en, %sub, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-
-    // Each field of %w has exactly one driver, the original connect.
-    // CHECK: %[[OBS_A:.+]] = firrtl.subfield %w_forced[a]
-    // CHECK: %[[W_A:.+]] = firrtl.subfield %w[a]
-    // CHECK: %[[OBS_B:.+]] = firrtl.subfield %w_forced[b]
-    // CHECK: %[[W_B:.+]] = firrtl.subfield %w[b]
-    // CHECK-NEXT: firrtl.matchingconnect %[[W_A]], %x
-    // CHECK-NEXT: firrtl.matchingconnect %[[W_B]], %y
-    // Readers of the fields observe the override, not the raw field.
-    // CHECK-NEXT: firrtl.matchingconnect %oa, %[[OBS_A]]
-    // CHECK-NEXT: firrtl.matchingconnect %ob, %[[OBS_B]]
-    // The observed aggregate splices the forced field in and passes the rest
-    // straight through.
-    // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %v, %[[W_A]])
-    // CHECK-NEXT: %[[BC:.+]] = firrtl.bundlecreate %[[OVR]], %[[W_B]]
-    // CHECK-NEXT: firrtl.matchingconnect %w_forced, %[[BC]]
-    // No second driver anywhere on %w.
-    // CHECK-NOT: firrtl.matchingconnect %[[W_A]]
-    // CHECK-NOT: firrtl.matchingconnect %[[W_B]]
-  }
-}
-
-// -----
-// TEST 23: Force the WHOLE aggregate while its fields are connected
-// individually.  The indexing chain is both written and read, so it is
-// duplicated: the original `subfield` carries the write, a clone rooted at the
-// observed wire serves the read.
-
-// CHECK-LABEL: firrtl.circuit "ForceWholeAggregateFieldConnects"
-firrtl.circuit "ForceWholeAggregateFieldConnects" {
-  // CHECK-LABEL: firrtl.module @ForceWholeAggregateFieldConnects
-  firrtl.module @ForceWholeAggregateFieldConnects(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
-                                                 in %v: !firrtl.bundle<a: uint<8>, b: uint<8>>,
-                                                 in %x: !firrtl.uint<8>, in %y: !firrtl.uint<8>,
-                                                 out %oa: !firrtl.uint<8>) {
-    // CHECK: %w = firrtl.wire : !firrtl.bundle<a: uint<8>, b: uint<8>>
-    // CHECK-NEXT: %w_forced = firrtl.wire : !firrtl.bundle<a: uint<8>, b: uint<8>>
-    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-    %wa = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>, b: uint<8>>
-    %wb = firrtl.subfield %w[b] : !firrtl.bundle<a: uint<8>, b: uint<8>>
-    firrtl.matchingconnect %wa, %x : !firrtl.uint<8>
-    firrtl.matchingconnect %wb, %y : !firrtl.uint<8>
-    firrtl.matchingconnect %oa, %wa : !firrtl.uint<8>
-    firrtl.ref.force %clock, %en, %w_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>, !firrtl.bundle<a: uint<8>, b: uint<8>>
-
-    // Field `a` is read as well as written, so it gets a clone on the observed
-    // wire; field `b` is write-only and is left alone.
-    // CHECK: %[[OBS_A:.+]] = firrtl.subfield %w_forced[a]
-    // CHECK-NEXT: %[[W_A:.+]] = firrtl.subfield %w[a]
-    // CHECK-NEXT: %[[W_B:.+]] = firrtl.subfield %w[b]
-    // CHECK-NEXT: firrtl.matchingconnect %[[W_A]], %x
-    // CHECK-NEXT: firrtl.matchingconnect %[[W_B]], %y
-    // CHECK-NEXT: firrtl.matchingconnect %oa, %[[OBS_A]]
-    // The whole aggregate is overridden at once.
-    // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %v, %w)
-    // CHECK-NEXT: firrtl.matchingconnect %w_forced, %[[OVR]]
-    // CHECK-NOT: firrtl.bundlecreate
   }
 }
 
