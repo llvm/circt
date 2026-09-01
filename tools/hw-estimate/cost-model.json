@@ -1,0 +1,23 @@
+{
+    "_comment" : "GE cost based on assumption that NAND = 1 GE"
+    "comb.and":     { "ge_per_bit": 1.5, "fixed_ge": 0, "scales_with_operands": true },
+    "comb.or":      { "ge_per_bit": 1.5, "fixed_ge": 0, "scales_with_operands": true },
+    "comb.xor":     { "ge_per_bit": 2.5, "fixed_ge": 0, "scales_with_operands": true },
+    "comb.mux":     { "ge_per_bit": 2.25, "fixed_ge": 0 },
+    "comb.add":     { "ge_per_bit": 9.5, "fixed_ge": 0 },
+    "comb.sub":     { "ge_per_bit": 10.0, "fixed_ge": 0 },
+    "comb.mul":     { "ge_quadratic_k": 11.0 },
+    "comb.divu":    { "ge_quadratic_k": 15.0 },
+    "comb.divs":    { "ge_quadratic_k": 16.0 },
+    "comb.icmp": {
+        "eq_predicates":  { "predicates": ["eq", "ceq", "ne", "cne"], "ge_per_bit": 4.0 },
+        "mag_predicates": { "predicates": ["ult","ule","ugt","uge","slt","sle","sgt","sge"], "ge_per_bit": 9.0 }
+    },
+    "comb.extract": { "ge_per_bit": 0.0, "fixed_ge": 0 },
+    "comb.concat":  { "ge_per_bit": 0.0, "fixed_ge": 0 },
+    "hw.constant":  { "ge_per_bit": 0.0, "fixed_ge": 0 }
+  },
+  "ff_ge_per_bit": 6.0,
+  "sram_ge_per_bit": 0.4
+  }
+}
