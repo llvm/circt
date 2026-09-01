@@ -330,18 +330,18 @@ LogicalResult ChainingProblem::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// SharedOperatorsProblem
+// SharedResourcesProblem
 //===----------------------------------------------------------------------===//
 
 Problem::PropertyStringVector
-SharedOperatorsProblem::getProperties(ResourceType rsrc) {
+SharedResourcesProblem::getProperties(ResourceType rsrc) {
   auto psv = Problem::getProperties(rsrc);
   if (auto limit = getLimit(rsrc))
     psv.emplace_back("limit", std::to_string(*limit));
   return psv;
 }
 
-LogicalResult SharedOperatorsProblem::checkLatency(Operation *op) {
+LogicalResult SharedResourcesProblem::checkLatency(Operation *op) {
   if (failed(Problem::checkLatency(op)))
     return failure();
 
@@ -364,7 +364,7 @@ LogicalResult SharedOperatorsProblem::checkLatency(Operation *op) {
   return success();
 }
 
-LogicalResult SharedOperatorsProblem::verifyUtilization(ResourceType rsrc) {
+LogicalResult SharedResourcesProblem::verifyUtilization(ResourceType rsrc) {
   auto limit = getLimit(rsrc);
   if (!limit)
     return success();
@@ -393,7 +393,7 @@ LogicalResult SharedOperatorsProblem::verifyUtilization(ResourceType rsrc) {
   return success();
 }
 
-LogicalResult SharedOperatorsProblem::verify() {
+LogicalResult SharedResourcesProblem::verify() {
   if (failed(Problem::verify()))
     return failure();
 
@@ -442,7 +442,7 @@ LogicalResult ModuloProblem::verify() {
   if (failed(CyclicProblem::verify()))
     return failure();
 
-  // Don't call SharedOperatorsProblem::verify() here to prevent redundant
+  // Don't call SharedResourcesProblem::verify() here to prevent redundant
   // verification of the base problem.
   for (auto rsrc : getResourceTypes())
     if (failed(verifyUtilization(rsrc)))
