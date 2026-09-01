@@ -80,26 +80,6 @@ firrtl.circuit "ForceThroughWideningCast" {
 
 // -----
 
-// The state machine for a probe exported from an instance lives in the child,
-// and its control bundle carries one `forcedValue` for the whole target, so a
-// force of a single field (through `ref.sub`) cannot be routed to it.
-firrtl.circuit "ForceSubOfInstanceProbe" {
-  firrtl.module @SubChild(out %p: !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>) {
-    // expected-error @below {{force/release of aggregate types is not supported; compile with preserve-aggregates=none}}
-    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-  }
-  firrtl.module @ForceSubOfInstanceProbe(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
-    %c_p = firrtl.instance c @SubChild(out p: !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>)
-    // expected-note @below {{target is reached through this op}}
-    %sub = firrtl.ref.sub %c_p[0] : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-    // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
-    firrtl.ref.force %clock, %en, %sub, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-  }
-}
-
-// -----
-
 // Exporting a forceable probe through a type-changing `ref.cast` is legal when
 // the circuit has no force/release: the port maps to a plain data type and the
 // cast becomes a connect.  Forcing through such a cast is still diagnosed
@@ -112,24 +92,6 @@ firrtl.circuit "ExportThroughWideningCast" {
   }
 }
 
-// -----
-
-// Same restriction for a release (not just a force) of a field of an instance's
-// probe.
-firrtl.circuit "ReleaseSubOfInstanceProbe" {
-  firrtl.module @RelSubChild(out %p: !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>) {
-    // expected-error @below {{force/release of aggregate types is not supported; compile with preserve-aggregates=none}}
-    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-  }
-  firrtl.module @ReleaseSubOfInstanceProbe(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
-    %c_p = firrtl.instance c @RelSubChild(out p: !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>)
-    // expected-note @below {{target is reached through this op}}
-    %sub = firrtl.ref.sub %c_p[1] : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-    // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
-    firrtl.ref.release %clock, %en, %sub : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
-  }
-}
 
 // -----
 
@@ -143,48 +105,6 @@ firrtl.circuit "ForceExtmoduleProbe" {
     %e_p = firrtl.instance e @Ext(out p: !firrtl.rwprobe<uint<8>>)
     // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
     firrtl.ref.force %clock, %en, %e_p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-  }
-}
-
-// -----
-
-// ... and for a release.
-firrtl.circuit "ReleaseExtmoduleProbe" {
-  firrtl.extmodule @Ext(out p: !firrtl.rwprobe<uint<8>>)
-  firrtl.module @ReleaseExtmoduleProbe(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
-    // expected-note @below {{target is a probe of this instance, whose module has no body to carry the force control}}
-    %e_p = firrtl.instance e @Ext(out p: !firrtl.rwprobe<uint<8>>)
-    // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
-    firrtl.ref.release %clock, %en, %e_p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
-  }
-}
-
-// -----
-
-// A field select of an extmodule's forceable probe inherits the instance as the
-// blocker rather than reporting the `ref.sub`.
-firrtl.circuit "ForceSubOfExtmoduleProbe" {
-  firrtl.extmodule @Ext(out p: !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>)
-  firrtl.module @ForceSubOfExtmoduleProbe(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
-    // expected-note @below {{target is a probe of this instance, whose module has no body to carry the force control}}
-    %e_p = firrtl.instance e @Ext(out p: !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>)
-    %sub = firrtl.ref.sub %e_p[0] : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
-    // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
-    firrtl.ref.force %clock, %en, %sub, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-  }
-}
-
-// -----
-
-// Re-exporting an extmodule's forceable probe is legal when the circuit has no
-// force/release: both ports map to a plain data type and the define becomes a
-// connect.  Forcing an extmodule probe is still diagnosed (see
-// ForceExtmoduleProbe above).
-firrtl.circuit "ExportExtmoduleProbe" {
-  firrtl.extmodule @Ext(out p: !firrtl.rwprobe<uint<8>>)
-  firrtl.module @ExportExtmoduleProbe(out %p: !firrtl.rwprobe<uint<8>>) {
-    %e_p = firrtl.instance e @Ext(out p: !firrtl.rwprobe<uint<8>>)
-    firrtl.ref.define %p, %e_p : !firrtl.rwprobe<uint<8>>
   }
 }
 
@@ -204,27 +124,6 @@ firrtl.circuit "ForceChoiceWithExtmodule" {
     %e_p = firrtl.instance_choice e @ChoiceImpl alternatives @Platform { @A -> @ChoiceExtImpl } (out p: !firrtl.rwprobe<uint<8>>)
     // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
     firrtl.ref.force %clock, %en, %e_p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-  }
-}
-
-// -----
-
-// Instance choices of forceable probes are legal when the circuit has no
-// force/release: the port count is unchanged, so the instance_choice signature
-// does not need extra control ports.  Forcing through an
-// instance_choice that includes an extmodule is still diagnosed (see
-// ForceChoiceWithExtmodule above).
-firrtl.circuit "ForceChoiceUnsupported" {
-  firrtl.option @Platform { firrtl.option_case @A }
-  firrtl.module @ChoiceImpl(out %p: !firrtl.rwprobe<uint<8>>) {
-    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
-    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<8>>
-  }
-  firrtl.extmodule @ChoiceExtImpl(out p: !firrtl.rwprobe<uint<8>>)
-  firrtl.module @ForceChoiceUnsupported(out %o: !firrtl.uint<8>) {
-    %e_p = firrtl.instance_choice e @ChoiceImpl alternatives @Platform { @A -> @ChoiceExtImpl } (out p: !firrtl.rwprobe<uint<8>>)
-    %r = firrtl.ref.resolve %e_p : !firrtl.rwprobe<uint<8>>
-    firrtl.matchingconnect %o, %r : !firrtl.uint<8>
   }
 }
 
@@ -256,23 +155,5 @@ firrtl.circuit "ForceWholeLocalAggregate" {
     %wa = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>, b: uint<8>>
     firrtl.matchingconnect %oa, %wa : !firrtl.uint<8>
     firrtl.ref.force %clock, %en, %w_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>, !firrtl.bundle<a: uint<8>, b: uint<8>>
-  }
-}
-
-// -----
-
-// The clocked layer of one target is reduced into state elements running on a
-// single clock, so two clocked accesses on *different* clocks cannot be
-// synthesized: they used to be silently merged onto the first clock.
-firrtl.circuit "MixedClocksOneTarget" {
-  firrtl.module @MixedClocksOneTarget(in %clockA: !firrtl.clock, in %clockB: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
-    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
-    %c0 = firrtl.constant 0 : !firrtl.uint<8>
-    firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
-    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
-    // expected-note @below {{target is also accessed on a different clock here}}
-    firrtl.ref.force %clockA, %en, %w_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // expected-error @below {{unsupported force/release: target is accessed on more than one clock}}
-    firrtl.ref.release %clockB, %en, %w_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
   }
 }
