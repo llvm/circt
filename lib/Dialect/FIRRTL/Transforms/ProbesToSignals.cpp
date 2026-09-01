@@ -324,7 +324,7 @@ private:
   LogicalResult injectReadSideOverride(Value data, Value effForced,
                                        Value effValue);
 
-  static BundleType createForceCtrlBundleType(FIRRTLBaseType probedType) {
+  BundleType createForceCtrlBundleType(FIRRTLBaseType probedType) {
     auto *ctx = probedType.getContext();
     auto u1Type = UIntType::get(ctx, 1);
     auto clkType = ClockType::get(ctx);
@@ -338,7 +338,7 @@ private:
   }
 
   /// `{data, flip ctrl}` so inbound force control needs no extra port.
-  static BundleType createProbePortType(FIRRTLBaseType probedType) {
+  BundleType createProbePortType(FIRRTLBaseType probedType) {
     auto *ctx = probedType.getContext();
     SmallVector<BundleType::BundleElement> elements = {
         {StringAttr::get(ctx, probePortDataField), /*isFlip=*/false,
@@ -363,8 +363,7 @@ static Block *getBodyBlock(FModuleLike mod) {
   return !blocks.empty() ? &blocks.front() : nullptr;
 }
 
-static void attachForceDestBlockerNote(InFlightDiagnostic &diag,
-                                       Operation *blocker) {
+void attachForceDestBlockerNote(InFlightDiagnostic &diag, Operation *blocker) {
   if (isa<FInstanceLike>(blocker))
     diag.attachNote(blocker->getLoc())
         << "target is a probe of this instance, whose module has no body to "
@@ -607,7 +606,7 @@ LogicalResult ProbeVisitor::visitDecl(WireOp op) {
   return success();
 }
 
-static CtrlGroup readCtrlGroup(ImplicitLocOpBuilder &builder, Value bundle) {
+CtrlGroup readCtrlGroup(ImplicitLocOpBuilder &builder, Value bundle) {
   CtrlGroup group;
   group.forceActive = getBundleField(builder, bundle, "forceActive");
   group.releaseActive = getBundleField(builder, bundle, "releaseActive");
@@ -615,33 +614,31 @@ static CtrlGroup readCtrlGroup(ImplicitLocOpBuilder &builder, Value bundle) {
   return group;
 }
 
-static Value readForceCtrlClock(ImplicitLocOpBuilder &builder, Value bundle) {
+Value readForceCtrlClock(ImplicitLocOpBuilder &builder, Value bundle) {
   return getBundleField(builder, bundle, "clk");
 }
 
-static ForceCtrl readForceCtrlFields(ImplicitLocOpBuilder &builder,
-                                     Value bundle) {
+ForceCtrl readForceCtrlFields(ImplicitLocOpBuilder &builder, Value bundle) {
   ForceCtrl fields;
   fields.clocked = readCtrlGroup(builder, bundle);
   fields.clk = readForceCtrlClock(builder, bundle);
   return fields;
 }
 
-static Value createU1Const(ImplicitLocOpBuilder &builder, bool value) {
+Value createU1Const(ImplicitLocOpBuilder &builder, bool value) {
   return builder.createOrFold<ConstantOp>(
       APSInt(APInt(1, value ? 1 : 0, /*isSigned=*/false), /*isUnsigned=*/true));
 }
 
 /// Release-only and no-local-control groups both reduce `forceActive` to 0.
-static bool isKnownZero(Value value) {
+bool isKnownZero(Value value) {
   auto constant = value.getDefiningOp<ConstantOp>();
   return constant && constant.getValue().isZero();
 }
 
 /// Fill nulls so "no local control" can share the reduced-group path.
-static CtrlGroup materializeCtrlGroup(ImplicitLocOpBuilder &builder,
-                                      FIRRTLBaseType probedType,
-                                      CtrlGroup group) {
+CtrlGroup materializeCtrlGroup(ImplicitLocOpBuilder &builder,
+                               FIRRTLBaseType probedType, CtrlGroup group) {
   if (!group.forceActive)
     group.forceActive = createU1Const(builder, false);
   if (!group.releaseActive)
@@ -677,7 +674,7 @@ LogicalResult ProbeVisitor::visitActiveForceableDecl(Forceable fop) {
 // Read-side override injection
 //===----------------------------------------------------------------------===//
 
-static bool isWriteUse(OpOperand &use) {
+bool isWriteUse(OpOperand &use) {
   if (auto conn = dyn_cast<FConnectLike>(use.getOwner())) {
     // Operand index, not value: `connect a, a` writes dest and reads src.
     assert(conn.getDest() == conn->getOperand(0) && "unexpected connect shape");
@@ -686,8 +683,8 @@ static bool isWriteUse(OpOperand &use) {
   return false;
 }
 
-static bool hasRedirectableRead(Value value,
-                                const SmallPtrSetImpl<Operation *> &skip) {
+bool hasRedirectableRead(Value value,
+                         const SmallPtrSetImpl<Operation *> &skip) {
   for (OpOperand &use : value.getUses()) {
     if (skip.contains(use.getOwner()) || isWriteUse(use))
       continue;
@@ -697,8 +694,8 @@ static bool hasRedirectableRead(Value value,
 }
 
 /// Rewire reads of `raw` to `observed`, leaving the original driver alone.
-static void redirectReads(Value raw, Value observed,
-                          SmallPtrSetImpl<Operation *> &skip) {
+void redirectReads(Value raw, Value observed,
+                   SmallPtrSetImpl<Operation *> &skip) {
 
   for (OpOperand &use : llvm::make_early_inc_range(raw.getUses())) {
     Operation *owner = use.getOwner();
@@ -708,8 +705,8 @@ static void redirectReads(Value raw, Value observed,
   }
 }
 
-static void collectFanInCone(ArrayRef<Value> roots,
-                             SmallPtrSetImpl<Operation *> &cone) {
+void collectFanInCone(ArrayRef<Value> roots,
+                      SmallPtrSetImpl<Operation *> &cone) {
   SmallVector<Value> worklist(roots);
   while (!worklist.empty()) {
     auto *op = worklist.pop_back_val().getDefiningOp();
@@ -1016,10 +1013,9 @@ LogicalResult ProbeVisitor::visitExpr(RefSubOp op) {
 
 /// Latch which clocked force is in effect; the RHS stays live so the target
 /// tracks it after predicates drop. Last entry wins a tie.
-static Value stickyLiveForceValue(ImplicitLocOpBuilder &builder,
-                                  ArrayRef<std::pair<Value, Value>> forces,
-                                  Value forceActive, Value clk,
-                                  StringRef regName) {
+Value stickyLiveForceValue(ImplicitLocOpBuilder &builder,
+                           ArrayRef<std::pair<Value, Value>> forces,
+                           Value forceActive, Value clk, StringRef regName) {
   assert(!forces.empty() && "sticky value of a group that never forces");
   if (forces.size() == 1)
     return forces.front().second;
@@ -1061,10 +1057,9 @@ static Value stickyLiveForceValue(ImplicitLocOpBuilder &builder,
 
 /// Merge local with inbound; local wins a simultaneous force. Empty local
 /// folds to inbound. The winner is latched so the target tracks its live RHS.
-static CtrlGroup combineWithInboundCtrl(ImplicitLocOpBuilder &builder,
-                                        CtrlGroup local,
-                                        FIRRTLBaseType probedType,
-                                        CtrlGroup inbound, Value clk) {
+CtrlGroup combineWithInboundCtrl(ImplicitLocOpBuilder &builder, CtrlGroup local,
+                                 FIRRTLBaseType probedType, CtrlGroup inbound,
+                                 Value clk) {
   local = materializeCtrlGroup(builder, probedType, local);
   Value iF = inbound.forceActive;
   Value iR = inbound.releaseActive;
@@ -1085,9 +1080,9 @@ static CtrlGroup combineWithInboundCtrl(ImplicitLocOpBuilder &builder,
 }
 
 /// Drive instance `ctrl`. A null group ties it off inactive.
-static void connectControlFields(ImplicitLocOpBuilder &builder, Value control,
-                                 FIRRTLBaseType probedType, CtrlGroup clocked,
-                                 Value clk) {
+void connectControlFields(ImplicitLocOpBuilder &builder, Value control,
+                          FIRRTLBaseType probedType, CtrlGroup clocked,
+                          Value clk) {
   // Nothing drives this target from here, so the clock is never observed.
   if (!clk)
     clk =
