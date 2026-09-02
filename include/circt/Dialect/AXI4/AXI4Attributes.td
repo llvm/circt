@@ -79,7 +79,8 @@ def BurstSetAttr : AXI4AttrDef<"BurstSet"> {
 
     To avoid functionally equivalent types (e.g. types containing burst_sets with
     the same specs in different orders) being structurally inequivalent, this is
-    sorted and de-duplicated on construction.
+    sorted on construction, with the specs of each kind merged into the longest
+    of them.
   }];
 
   let parameters = (ins
@@ -98,8 +99,14 @@ def BurstSetAttr : AXI4AttrDef<"BurstSet"> {
       ::llvm::SmallVector<::circt::axi4::BurstSpecAttr> sorted(
           burstSpecs.begin(), burstSpecs.end());
       ::llvm::sort(sorted, BurstSpecAttr::compareCanonical);
-      sorted.erase(::llvm::unique(sorted), sorted.end());
-      return $_get($_ctxt, sorted);
+      // A `len` is a maximum, so only the longest burst of each kind is kept
+      // (and we've already sorted so the longest burst, which is the only one
+      // we care about, is at the end)
+      ::llvm::SmallVector<::circt::axi4::BurstSpecAttr> merged;
+      for (size_t i = 0, e = sorted.size(); i != e; ++i)
+        if (i + 1 == e || sorted[i + 1].getKind() != sorted[i].getKind())
+          merged.push_back(sorted[i]);
+      return $_get($_ctxt, merged);
     }]>
   ];
 }

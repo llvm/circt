@@ -1531,6 +1531,7 @@ def HostmemReadProcessor(
                                          ports.clk,
                                          ports.rst,
                                          mux_pipeline_levels=2,
+                                         pipelined_scheduler=True,
                                          telemetry=False)
       upstream_req_channel.assign(muxed_client_reqs)
       HostmemReadProcessorImpl.reqPortMap.clear()
@@ -1917,6 +1918,7 @@ def HostMemWriteProcessor(
                                            ports.clk,
                                            ports.rst,
                                            mux_pipeline_levels=2,
+                                           pipelined_scheduler=True,
                                            telemetry=False)
       upstream_req_channel.assign(muxed_write_channel)
 

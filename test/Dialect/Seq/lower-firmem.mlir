@@ -48,7 +48,8 @@ sv.macro.decl @SomeMacro
 
 // CHECK-LABEL: hw.module @Foo
 hw.module @Foo(in %clk: !seq.clock, in %en: i1, in %addr: i4, in %wdata: i42, in %wmode: i1, in %mask2: i2, in %mask3: i3, in %mask6: i6) {
-  // CHECK-NEXT: %[[c1_i2:.+]] = hw.constant 1 : i2
+  // CHECK-NEXT: %[[C_ALL_ONES_I3:.+]] = hw.constant -1 : i3
+  // CHECK-NEXT: %[[C_ALL_ONES_I2:.+]] = hw.constant -1 : i2
   // CHECK-NEXT: [[TMP0:%.+]] = hw.instance "m0_mem1A_ext" @m0_mem1_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock) -> (R0_data: i42)
   // CHECK-NEXT: [[TMP1:%.+]] = hw.instance "m0_mem1B_ext" @m0_mem1_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock) -> (R0_data: i42)
   // CHECK-NEXT: comb.xor [[TMP0]], [[TMP1]]
@@ -58,14 +59,14 @@ hw.module @Foo(in %clk: !seq.clock, in %en: i1, in %addr: i4, in %wdata: i42, in
   %1 = seq.firmem.read_port %m0_mem1B[%addr], clock %clk enable %en : <12 x 42>
   comb.xor %0, %1 : i42
 
-  // CHECK-NEXT: hw.instance "m0_mem2_ext" @m0_mem2_12x42(W0_addr: %addr: i4, W0_en: %en: i1, W0_clk: %clk: !seq.clock, W0_data: %wdata: i42, W0_mask: %[[c1_i2]]: i2) -> ()
+  // CHECK-NEXT: hw.instance "m0_mem2_ext" @m0_mem2_12x42(W0_addr: %addr: i4, W0_en: %en: i1, W0_clk: %clk: !seq.clock, W0_data: %wdata: i42, W0_mask: %[[C_ALL_ONES_I2]]: i2) -> ()
   %m0_mem2 = seq.firmem 0, 1, undefined, port_order : <12 x 42, mask 2>
   seq.firmem.write_port %m0_mem2[%addr] = %wdata, clock %clk enable %en : <12 x 42, mask 2>
 
-  // CHECK-NEXT: [[TMP:%.+]] = hw.instance "m0_mem3_ext" @m0_mem3_12x42(RW0_addr: %addr: i4, RW0_en: %en: i1, RW0_clk: %clk: !seq.clock, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i42, RW0_wmask: %mask3: i3) -> (RW0_rdata: i42)
+  // CHECK-NEXT: [[TMP:%.+]] = hw.instance "m0_mem3_ext" @m0_mem3_12x42(RW0_addr: %addr: i4, RW0_en: %en: i1, RW0_clk: %clk: !seq.clock, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i42, RW0_wmask: %[[C_ALL_ONES_I3]]: i3) -> (RW0_rdata: i42)
   // CHECK-NEXT: comb.xor [[TMP]]
   %m0_mem3 = seq.firmem 0, 1, undefined, port_order : <12 x 42, mask 3>
-  %2 = seq.firmem.read_write_port %m0_mem3[%addr] = %wdata if %wmode, clock %clk enable %en mask %mask3 : <12 x 42, mask 3>, i3
+  %2 = seq.firmem.read_write_port %m0_mem3[%addr] = %wdata if %wmode, clock %clk enable %en : <12 x 42, mask 3>
   comb.xor %2 : i42
 
   // CHECK-NEXT: [[TMP0:%.+]], [[TMP1:%.+]] = hw.instance "m0_mem4_ext" @m0_mem4_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock, RW0_addr: %addr: i4, RW0_en: %en: i1, RW0_clk: %clk: !seq.clock, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i42, RW0_wmask: %mask6: i6, W0_addr: %addr: i4, W0_en: %en: i1, W0_clk: %clk: !seq.clock, W0_data: %wdata: i42, W0_mask: %mask6: i6) -> (R0_data: i42, RW0_rdata: i42)
