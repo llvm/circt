@@ -1263,6 +1263,9 @@ FailureOr<Value> ProbeVisitor::resolveForceDest(Operation *access, Value dest) {
 }
 
 LogicalResult ProbeVisitor::visitStmt(RefForceOp op) {
+  if (op->getParentOfType<LayerBlockOp>())
+    return op.emitError("force inside a layerblock is not supported");
+
   auto hwDest = resolveForceDest(op, op.getDest());
   if (failed(hwDest))
     return failure();
@@ -1273,6 +1276,9 @@ LogicalResult ProbeVisitor::visitStmt(RefForceOp op) {
 }
 
 LogicalResult ProbeVisitor::visitStmt(RefReleaseOp op) {
+  if (op->getParentOfType<LayerBlockOp>())
+    return op.emitError("release inside a layerblock is not supported");
+
   auto hwDest = resolveForceDest(op, op.getDest());
   if (failed(hwDest))
     return failure();
