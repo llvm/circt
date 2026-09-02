@@ -2937,8 +2937,9 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
     return failure();
 
   // Create the variable op itself.
-  auto varOp = moore::GlobalVariableOp::create(builder, loc, symName,
-                                               cast<moore::UnpackedType>(type));
+  auto varOp =
+      moore::GlobalVariableOp::create(builder, loc, /*sym_visibility=*/{},
+                                      symName, cast<moore::UnpackedType>(type));
   orderedRootOps.insert({locationKey, varOp});
   globalVariables.insert({&var, varOp});
 
