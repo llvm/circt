@@ -206,6 +206,21 @@ LogicalResult calyx::verifyComponent(Operation *op) {
   if (!isa<ModuleOp>(opParent))
     return op->emitOpError()
            << "has parent: " << opParent << ", expected ModuleOp.";
+  DenseMap<StringAttr, Operation *> cells;
+  for (Operation &child : op->getRegion(0).front()) {
+    auto cell = dyn_cast<CellInterface>(&child);
+    if (!cell)
+      continue;
+    auto name = StringAttr::get(op->getContext(), cell.instanceName());
+    auto [it, inserted] = cells.try_emplace(name, &child);
+    if (!inserted) {
+      auto diagnostic = child.emitOpError() << "redefinition of symbol named '"
+                                            << cell.instanceName() << "'";
+      diagnostic.attachNote(it->second->getLoc())
+          << "see existing symbol definition here";
+      return failure();
+    }
+  }
   return success();
 }
 
@@ -214,19 +229,6 @@ LogicalResult calyx::verifyCell(Operation *op) {
   if (!isa<ComponentInterface>(opParent))
     return op->emitOpError()
            << "has parent: " << opParent << ", expected ComponentInterface.";
-
-  auto cell = cast<CellInterface>(op);
-  for (Operation *previous = op->getPrevNode(); previous;
-       previous = previous->getPrevNode()) {
-    auto previousCell = dyn_cast<CellInterface>(previous);
-    if (!previousCell || previousCell.instanceName() != cell.instanceName())
-      continue;
-    auto diagnostic = op->emitOpError() << "redefinition of symbol named '"
-                                        << cell.instanceName() << "'";
-    diagnostic.attachNote(previous->getLoc())
-        << "see existing symbol definition here";
-    return failure();
-  }
   return success();
 }
 

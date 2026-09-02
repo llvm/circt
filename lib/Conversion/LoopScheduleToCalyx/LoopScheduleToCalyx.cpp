@@ -1143,7 +1143,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
     PatternRewriter::InsertionGuard g(rewriter);
     rewriter.setInsertionPoint(combGroup);
     auto group = calyx::GroupOp::create(rewriter, combGroup.getLoc(),
-                                        combGroup.getNameAttr().getValue());
+                                        combGroup.getSymName());
     rewriter.cloneRegionBefore(combGroup.getBodyRegion(),
                                &group.getBody().front());
     group.getBodyRegion().back().erase();
