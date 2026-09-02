@@ -3211,12 +3211,12 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
                                                                    value);
     }
   }
-  if (isa<moore::OpenUnpackedArrayType>(type) &&
-      isa<moore::UnpackedArrayType>(value.getType())) {
-    auto openUnpackedArrayElType =
-        dyn_cast<moore::OpenUnpackedArrayType>(type).getElementType();
-    auto unpackedArrayElType =
-        dyn_cast<moore::UnpackedArrayType>(value.getType()).getElementType();
+  // Convert from fixed-size unpacked array to open unpacked array
+  auto srcUArray = dyn_cast<moore::UnpackedArrayType>(value.getType());
+  auto dstOpenUArray = dyn_cast<moore::OpenUnpackedArrayType>(type);
+  if (srcUArray && dstOpenUArray) {
+    auto openUnpackedArrayElType = dstOpenUArray.getElementType();
+    auto unpackedArrayElType = srcUArray.getElementType();
 
     if (openUnpackedArrayElType == unpackedArrayElType)
       return builder.createOrFold<moore::OpenUArrayFromUnpackedArrayOp>(
