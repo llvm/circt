@@ -2412,7 +2412,6 @@ circuit DomainRegistry:
   ; CHECK-SAME:    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
   public module Bar:
     input A: Domain of ClockDomain
-    ; CHECK: %[[REG:.+]] = firrtl.domain.subfield %A[clockGates] : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
     wire cg: UInt<1>
 
     ; CHECK: firrtl.instance clockGate interesting_name @ClockGate()
@@ -2420,17 +2419,17 @@ circuit DomainRegistry:
 
     ; Registry insertion requires an explicit path(...).
     ; CHECK: %[[PATH0:.+]] = firrtl.unresolved_path "OMReferenceTarget:~DomainRegistry|Bar>clockGate"
-    ; CHECK: firrtl.domain.insert %[[REG]], %[[PATH0]] : !firrtl.registry<path>, !firrtl.path
+    ; CHECK: firrtl.domain.insert %A, %[[PATH0]] {name = "clockGates"} : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>, !firrtl.path
     insert A.clockGates, path("OMReferenceTarget:~DomainRegistry|Bar>clockGate")
 
     ; Explicit reference path.
     ; CHECK: %[[PATH1:.+]] = firrtl.unresolved_path "OMReferenceTarget:~DomainRegistry|Bar>cg"
-    ; CHECK: firrtl.domain.insert %[[REG]], %[[PATH1]]
+    ; CHECK: firrtl.domain.insert %A, %[[PATH1]] {name = "clockGates"}
     insert A.clockGates, path("OMReferenceTarget:~DomainRegistry|Bar>cg")
 
     ; Explicit instance path.
     ; CHECK: %[[PATH2:.+]] = firrtl.unresolved_path "OMInstanceTarget:~DomainRegistry|Bar/clockGate:ClockGate"
-    ; CHECK: firrtl.domain.insert %[[REG]], %[[PATH2]]
+    ; CHECK: firrtl.domain.insert %A, %[[PATH2]] {name = "clockGates"}
     insert A.clockGates, path("OMInstanceTarget:~DomainRegistry|Bar/clockGate:ClockGate")
 
   ; CHECK-LABEL: firrtl.module @DomainRegistry

@@ -4509,9 +4509,20 @@ LogicalResult DomainDefineOp::verify() {
 }
 
 LogicalResult DomainInsertOp::verify() {
-  auto registryType = dyn_cast<RegistryType>(getDest().getType());
+  auto domainType = dyn_cast<DomainType>(getDest().getType());
+  if (!domainType)
+    return emitOpError("destination must be a domain type");
+
+  auto fieldIndex = domainType.getFieldIndex(getNameAttr().getValue());
+  if (!fieldIndex)
+    return emitOpError() << "domain type has no field named '"
+                         << getNameAttr().getValue() << "'";
+
+  auto registryType =
+      dyn_cast<RegistryType>(domainType.getField(*fieldIndex).getType());
   if (!registryType)
-    return emitOpError("destination must be a registry type");
+    return emitOpError() << "domain field '" << getNameAttr().getValue()
+                         << "' is not a registry type";
 
   auto elementType = registryType.getElementType();
   auto srcType = getSrc().getType();
@@ -4519,14 +4530,6 @@ LogicalResult DomainInsertOp::verify() {
     return emitOpError() << "source type " << srcType
                          << " does not match registry element type "
                          << elementType;
-
-  // Registry destinations should come from domain field extraction so that
-  // mutations target an actual domain registry field.
-  auto *defOp = getDest().getDefiningOp();
-  if (!defOp || !isa<DomainSubfieldOp>(defOp))
-    return emitOpError(
-        "destination must be a domain registry field accessed via "
-        "firrtl.domain.subfield");
 
   return success();
 }
@@ -7485,7 +7488,12 @@ Type DomainSubfieldOp::inferReturnType(Type inType, uint32_t fieldIndex,
         loc, "field index ", fieldIndex,
         +" is greater than the number of fields in the domain");
 
-  return cast<DomainFieldAttr>(fields[fieldIndex]).getType();
+  auto fieldType = cast<DomainFieldAttr>(fields[fieldIndex]).getType();
+  if (auto propertyType = dyn_cast<PropertyType>(fieldType))
+    return propertyType;
+
+  return emitInferRetTypeError(
+      loc, "domain.subfield only supports property-typed fields");
 }
 
 Type DomainSubfieldOp::inferReturnType(ValueRange operands,

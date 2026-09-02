@@ -3546,11 +3546,10 @@ firrtl.circuit "DomainInsertInWhen" {
     in %A: !firrtl.domain<@ClockDomain(paths: !firrtl.registry<path>)>,
     in %cond: !firrtl.uint<1>
   ) {
-    %registry = firrtl.domain.subfield %A[paths] : !firrtl.domain<@ClockDomain(paths: !firrtl.registry<path>)>
     firrtl.when %cond : !firrtl.uint<1> {
       %path = firrtl.unresolved_path "OMReferenceTarget:~DomainInsertInWhen|DomainInsertInWhen>value"
       // expected-error @below {{'firrtl.domain.insert' op expects parent op 'firrtl.module'}}
-      firrtl.domain.insert %registry, %path : !firrtl.registry<path>, !firrtl.path
+      firrtl.domain.insert %A, %path {name = "paths"} : !firrtl.domain<@ClockDomain(paths: !firrtl.registry<path>)>, !firrtl.path
     }
   }
 }

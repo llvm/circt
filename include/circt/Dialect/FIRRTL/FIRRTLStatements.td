@@ -146,14 +146,15 @@ def DomainInsertOp
     Example:
     ```mlir
     %gate = firrtl.unresolved_path "OMReferenceTarget:~Foo|Bar>clockGate"
-    firrtl.domain.insert %domain, %gate : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>, !firrtl.path
+    firrtl.domain.insert %domain, %gate {name = "clockGates"} : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>, !firrtl.path
     ```
 
-    The destination must be a `!firrtl.registry<T>` value obtained from a domain
-    field. Registry fields are unordered and may only be mutated through this
-    operation; direct property assignment is illegal.
+    The destination is the domain containing the registry field, and the
+    `name` attribute identifies that field. Registry fields are unordered and
+    may only be mutated through this operation; direct property assignment is
+    illegal.
   }];
-  let arguments = (ins RegistryType:$dest, PropertyType:$src);
+  let arguments = (ins DomainType:$dest, PropertyType:$src, StrAttr:$name);
   let results = (outs);
   let hasVerifier = 1;
   let assemblyFormat = [{

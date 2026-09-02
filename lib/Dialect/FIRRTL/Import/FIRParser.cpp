@@ -4275,7 +4275,7 @@ ParseResult FIRStmtParser::parseDomainDefine() {
   return success();
 }
 
-/// insert ::= 'insert' registry_exp ',' property_exp info?
+/// insert ::= 'insert' domain_exp '.' field_id ',' property_exp info?
 ParseResult FIRStmtParser::parseDomainInsert() {
   auto startTok = consumeToken(FIRToken::kw_insert);
   auto startLoc = startTok.getLoc();
@@ -4284,15 +4284,38 @@ ParseResult FIRStmtParser::parseDomainInsert() {
   if (requireFeature(missingSpecFIRVersion, "domain registries", startLoc))
     return failure();
 
-  Value registry, target;
-  if (parseExp(registry, "expected registry field expression") ||
+  // Parse the domain expression without materializing its registry subfield.
+  // The field name is carried by domain.insert itself.
+  Value domain, target;
+  auto domainLoc = getToken().getLoc();
+  SymbolValueEntry entry;
+  StringRef id;
+  if (parseId(id, "expected domain expression") ||
+      moduleContext.lookupSymbolEntry(entry, id, domainLoc))
+    return failure();
+
+  // An unbundled instance reference requires one field to resolve it to the
+  // domain value (e.g. child.A). A regular domain value (e.g. A) is already
+  // resolved and goes directly to the registry field name below.
+  if (moduleContext.resolveSymbolEntry(domain, entry, domainLoc, false)) {
+    StringRef field;
+    if (parseToken(FIRToken::period, "expected '.' in domain expression") ||
+        parseFieldId(field, "expected domain field name") ||
+        moduleContext.resolveSymbolEntry(domain, entry, field, domainLoc))
+      return failure();
+  }
+
+  StringRef fieldName;
+  if (parseToken(FIRToken::period, "expected '.' before registry field") ||
+      parseFieldId(fieldName, "expected registry field name") ||
       parseToken(FIRToken::comma, "expected ',' after registry field") ||
       parseExp(target, "expected registry element expression") ||
       parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startLoc);
-  DomainInsertOp::create(builder, registry, target);
+  DomainInsertOp::create(builder, domain, target,
+                         builder.getStringAttr(fieldName));
   return success();
 }
 
@@ -6089,11 +6112,15 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
       break;
 
     StringAttr fieldName;
-    PropertyType type;
+    FIRRTLType type;
     if (parseId(fieldName, "field name") ||
-        parseToken(FIRToken::colon, "expected ':' after field name") ||
-        parsePropertyType(type, "field type") || info.parseOptionalInfo())
+        parseToken(FIRToken::colon, "expected ':' after field name"))
       return failure();
+    auto fieldTypeLoc = getToken().getLoc();
+    if (parseType(type, "field type") || info.parseOptionalInfo())
+      return failure();
+    if (!isa<PropertyType, RegistryType>(type))
+      return emitError(fieldTypeLoc) << "expected property or registry type";
 
     fields.push_back(
         DomainFieldAttr::get(circuit.getContext(), fieldName, type));

@@ -1163,8 +1163,7 @@ void Emitter::emitStatement(ConnectOp op) {
   } else {
     auto emitLHS = [&]() { emitExpression(op.getDest()); };
     if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-      emitAssignLike(
-          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+      emitAssignLike(emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
     } else {
       emitAssignLike(
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
@@ -1190,8 +1189,7 @@ void Emitter::emitStatement(MatchingConnectOp op) {
   } else {
     auto emitLHS = [&]() { emitExpression(op.getDest()); };
     if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-      emitAssignLike(
-          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+      emitAssignLike(emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
     } else {
       emitAssignLike(
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
@@ -1430,17 +1428,11 @@ void Emitter::emitStatement(DomainInsertOp op) {
   if (failed(requireVersion(missingSpecFIRVersion, op, "domain registries")))
     return;
 
-  auto subfield =
-      dyn_cast_or_null<DomainSubfieldOp>(op.getDest().getDefiningOp());
-  if (!subfield) {
-    emitOpError(op, "destination must be a domain registry field");
-    return;
-  }
-
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "insert" << PP::space;
-    emitExpression(subfield);
+    emitExpression(op.getDest());
+    ps << "." << legalize(op.getNameAttr());
     ps << "," << PP::space;
     emitExpression(op.getSrc());
   });
