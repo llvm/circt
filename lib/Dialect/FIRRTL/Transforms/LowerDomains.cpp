@@ -584,15 +584,20 @@ LogicalResult LowerModule::lowerModule() {
     // construction performed after the main lowering walk.
     for (auto insertOp :
          llvm::make_early_inc_range(body->getOps<DomainInsertOp>())) {
-      auto subfieldOp =
-          cast<DomainSubfieldOp>(insertOp.getDest().getDefiningOp());
       auto domainType =
-          firrtl::type_cast<DomainType>(subfieldOp.getInput().getType());
+          firrtl::type_cast<DomainType>(insertOp.getDest().getType());
       auto &domainClasses = domainToClasses.at(domainType.getName().getAttr());
-      auto fieldLowering = domainClasses.fields[subfieldOp.getFieldIndex()];
+      auto fieldIndex =
+          domainType.getFieldIndex(insertOp.getNameAttr().getValue());
+      if (!fieldIndex) {
+        insertOp.emitOpError() << "unknown registry field '"
+                               << insertOp.getNameAttr().getValue() << "'";
+        return failure();
+      }
+      auto fieldLowering = domainClasses.fields[*fieldIndex];
       assert(fieldLowering.kind == DomainFieldLowering::Kind::OutputRegistry);
 
-      auto domainIt = domainValues.find(subfieldOp.getInput());
+      auto domainIt = domainValues.find(insertOp.getDest());
       if (domainIt == domainValues.end()) {
         insertOp.emitOpError(
             "inserts into a domain that is not a module domain port");
@@ -601,14 +606,11 @@ LogicalResult LowerModule::lowerModule() {
 
       domainIt->second->localRegistryValues[fieldLowering.slot].push_back(
           insertOp.getSrc());
-      Value domainInput = subfieldOp.getInput();
+      Value domain = insertOp.getDest();
       insertOp.erase();
-      if (subfieldOp->use_empty()) {
-        subfieldOp.erase();
-        if (auto *inputOp = domainInput.getDefiningOp())
-          if (inputOp->use_empty())
-            conversionsToErase.insert(inputOp);
-      }
+      if (domain.use_empty())
+        if (auto *domainOp = domain.getDefiningOp())
+          conversionsToErase.insert(domainOp);
     }
 
     auto walkResult = op.walk([&](Operation *walkOp) {
