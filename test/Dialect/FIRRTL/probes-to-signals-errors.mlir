@@ -65,6 +65,25 @@ firrtl.circuit "LayerProbe" {
 
 // -----
 
+// Force/release synthesis cannot preserve FIRRTL's layer isolation: a
+// layerblock may not drive a value declared in its parent module.
+firrtl.circuit "RejectLayerForce" {
+  firrtl.layer @Layer bind {}
+  firrtl.module @RejectLayerForce(in %clock: !firrtl.clock,
+                                  in %enable: !firrtl.uint<1>,
+                                  in %value: !firrtl.uint<8>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>,
+                                           !firrtl.rwprobe<uint<8>>
+    firrtl.layerblock @Layer {
+      // expected-error @below {{force inside a layerblock is not supported}}
+      firrtl.ref.force %clock, %enable, %w_ref, %value : !firrtl.clock,
+          !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    }
+  }
+}
+
+// -----
+
 // A force through a `ref.cast` that changes the probed type lands on the copy
 // wire the cast lowers to, which cannot drive the real target.  Diagnose
 // instead of silently dropping the force.
