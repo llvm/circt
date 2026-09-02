@@ -43,6 +43,9 @@ using namespace mlir;
 using namespace circt;
 using namespace circt::firrtl;
 
+/// The suffix to append to lowered module names.
+static constexpr StringRef kClassNameSuffix = "_Class";
+
 namespace {
 
 /// Helper class which holds a hierarchical path op reference and a pointer to
@@ -115,9 +118,17 @@ struct PathInfoTable {
     auto altBasePaths = altBasePathsPassthroughs.lookup(moduleNameAttr);
     auto parent = instance->getParentOfType<om::ClassOp>();
 
+    // Compute the name of the hardware module this (parent) is the class for.
+    StringRef parentName = parent.getName();
+    StringAttr parentModuleNameAttr;
+    if (parentName.ends_with(kClassNameSuffix))
+      parentModuleNameAttr =
+          StringAttr::get(moduleNameAttr.getContext(),
+                          parentName.drop_back(kClassNameSuffix.size()));
+
     // Handle each alternative base path for instances of this module-like.
     for (auto [i, altBasePath] : llvm::enumerate(altBasePaths)) {
-      if (parent.getName().starts_with(altBasePath)) {
+      if (parentModuleNameAttr == altBasePath) {
         // If we are passing down from the root, take the root base path.
         result.push_back(instance->getBlock()->getArgument(0));
       } else {
@@ -144,9 +155,6 @@ private:
   // base paths from their parents to a sequence of the parents' module names.
   DenseMap<StringAttr, SmallVector<StringAttr>> altBasePathsPassthroughs;
 };
-
-/// The suffix to append to lowered module names.
-static constexpr StringRef kClassNameSuffix = "_Class";
 
 /// Helper class to capture details about a property.
 struct Property {
