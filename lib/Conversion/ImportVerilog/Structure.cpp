@@ -2609,7 +2609,8 @@ struct ClassPropertyVisitor : ClassDeclVisitorBase {
       return failure();
 
     if (prop.lifetime == slang::ast::VariableLifetime::Automatic) {
-      moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
+      moore::ClassPropertyDeclOp::create(builder, loc, /*sym_visibility=*/{},
+                                         prop.name, ty);
       return success();
     }
 
@@ -2733,7 +2734,8 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
         return failure();
       }
 
-      moore::ClassMethodDeclOp::create(builder, loc, fn.name, funcTy, nullptr);
+      moore::ClassMethodDeclOp::create(builder, loc, /*sym_visibility=*/{},
+                                       fn.name, funcTy, nullptr);
       return success();
     }
 
@@ -2749,7 +2751,7 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
     FunctionType fnTy = cast<FunctionType>(lowering->op.getFunctionType());
     // Emit the method decl into the class body, preserving source order.
     moore::ClassMethodDeclOp::create(
-        builder, loc, fn.name, fnTy,
+        builder, loc, /*sym_visibility=*/{}, fn.name, fnTy,
         SymbolRefAttr::get(lowering->op.getNameAttr()));
 
     return success();
@@ -2821,8 +2823,8 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
   auto symName = fullyQualifiedClassName(*this, cls);
 
   auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
-  auto classDeclOp =
-      moore::ClassDeclOp::create(builder, loc, symName, base, impls);
+  auto classDeclOp = moore::ClassDeclOp::create(
+      builder, loc, /*sym_visibility=*/{}, symName, base, impls);
 
   SymbolTable::setSymbolVisibility(classDeclOp,
                                    SymbolTable::Visibility::Public);
