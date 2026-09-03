@@ -192,7 +192,8 @@ static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
   printer << " ";
 
   // Print the optional symbol visibility.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility =
           classLike->getAttrOfType<StringAttr>(visibilityAttrName))
     printer << visibility.getValue() << ' ';
