@@ -26,6 +26,7 @@ circuit Foo :
     insert A.clockGates, path("OMInstanceTarget:~Foo|Foo/clockGate:ClockGate")
 
 ; CHECK-LABEL: om.class @Foo_Class
+; DOMAIN:       A_registry_clockGates: !om.list<!om.frozenpath>
 ; DOMAIN:        om.elaborated_object @ClockDomain_out(%A,
 ; DOMAIN:        om.elaborated_object @PowerDomain_out(%B,
 ; DOMAIN-DAG:    om.frozenpath_create reference %basepath "Foo>a"
@@ -34,6 +35,6 @@ circuit Foo :
 ;
 ; DOMAIN-LABEL: om.class @ClockDomain
 ; DOMAIN-LABEL: om.class @ClockDomain_out
-; DOMAIN:       %clockGates_registry_in: !om.list<!om.frozenpath>
+; DOMAIN-NOT:   clockGates
 ; DOMAIN-LABEL: om.class @PowerDomain
 ; DOMAIN-LABEL: om.class @PowerDomain_out
