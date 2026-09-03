@@ -879,7 +879,8 @@ std::optional<int64_t> UnpackedArrayType::getBitWidth() const {
 
 LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 Type innerType) {
-  if (!isHWValueType(innerType))
+  if (!isHWValueType(innerType) &&
+      !isa<SimulationVariableTypeInterface>(innerType))
     return emitError() << "invalid element for hw.inout type " << innerType;
   return success();
 }
