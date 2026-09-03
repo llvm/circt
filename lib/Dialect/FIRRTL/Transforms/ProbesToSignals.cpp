@@ -11,19 +11,23 @@
 // behavior-changing transformation that may break ABI compatibility anywhere
 // probes are used relevant to ABI.
 //
-// Force/release on RWProbes is synthesized per target.  Force control from
-// outside a module rides inside the converted port type so no ports are
-// inserted and the pass stays module-local:
+// Force/release on RWProbes is synthesized per target. Forceable probe ports
+// gain an appended input carrying the force control:
 //
-//   probe<T>   -> T
-//   rwprobe<T> -> { data: T, flip ctrl: { forceActive, releaseActive, ... } }
+//   probe<T>              -> T
+//   rwprobe<T>, port `p`  -> out `p`: T, plus
+//                            in `p_force_ctrl`:
+//                              { forceActive, releaseActive, forcedValue, clk }
 //
-// Only the force/release event is sampled; the winning force's RHS stays live,
-// matching Verilog `force a = v`.  The override is injected on reads, not the
-// target's driver, so a force overrides the observed value rather than the
-// assignment that computes it.
+// Control ports are appended, preserving original port indices.
 //
-// Gated clocks are converted first so synthesized state runs on a free-running
+// Only the event is sampled; the winning force's RHS stays live, matching
+// Verilog `force a = v`. Overrides are injected on redirectable reads so the
+// target remains single-driven. Multiple probe ports share one target state
+// machine; later ports have priority, and local control has priority over port
+// control.
+//
+// Gated clocks are converted first so synthesized state uses a free-running
 // clock.
 //
 // Pre-requisites for complete conversion:
@@ -53,10 +57,11 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/GatedClockConversion.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Support/Debug.h"
-#include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringSet.h"
 
 #define DEBUG_TYPE "firrtl-probes-to-signals"
 
@@ -90,17 +95,6 @@ Value getBundleField(ImplicitLocOpBuilder &builder, Value bundle,
   return SubfieldOp::create(builder, bundle, *idx);
 }
 
-constexpr StringRef probePortDataField = "data";
-constexpr StringRef probePortCtrlField = "ctrl";
-
-Value getProbePortData(ImplicitLocOpBuilder &builder, Value port) {
-  return getBundleField(builder, port, probePortDataField);
-}
-
-Value getProbePortCtrl(ImplicitLocOpBuilder &builder, Value port) {
-  return getBundleField(builder, port, probePortCtrlField);
-}
-
 struct ForceReleaseAccess {
   Operation *op;
   Value predicate;
@@ -110,23 +104,49 @@ struct ForceReleaseAccess {
   bool isForce() const { return forceValue.has_value(); }
 };
 
-/// Nulls mean "no local control"; reduction never produces them.
+/// A null field means that local control is absent.
 struct CtrlGroup {
   Value forceActive;
   Value releaseActive;
   Value forcedValue;
 };
 
-/// Reduced control plus the clock the synthesized state runs on.
+/// Reduced control and its clock.
 struct ForceCtrl {
-  CtrlGroup clocked;
+  CtrlGroup group;
   Value clk;
 };
 
+/// Build a `UInt<1>` constant at the builder's insertion point. Keep constants
+/// local because control may be materialized in a nested region.
+Value getU1Const(ImplicitLocOpBuilder &builder, bool value) {
+  return ConstantOp::create(builder, APSInt(APInt(1, value ? 1 : 0,
+                                                  /*isSigned=*/false),
+                                            /*isUnsigned=*/true));
+}
+
+BundleType createForceCtrlBundleType(FIRRTLBaseType probedType) {
+  auto *ctx = probedType.getContext();
+  auto u1Type = UIntType::get(ctx, 1);
+  auto clkType = ClockType::get(ctx);
+  SmallVector<BundleType::BundleElement> elements = {
+      {StringAttr::get(ctx, "forceActive"), /*isFlip=*/false, u1Type},
+      {StringAttr::get(ctx, "releaseActive"), /*isFlip=*/false, u1Type},
+      {StringAttr::get(ctx, "forcedValue"), /*isFlip=*/false, probedType},
+      {StringAttr::get(ctx, "clk"), /*isFlip=*/false, clkType},
+  };
+  return BundleType::get(ctx, elements);
+}
+
 class ProbeVisitor : public FIRRTLVisitor<ProbeVisitor, LogicalResult> {
 public:
-  ProbeVisitor(hw::InnerRefNamespace &irn, bool carryCtrlInPortType)
-      : irn(irn), carryCtrlInPortType(carryCtrlInPortType) {}
+  static constexpr StringRef forceActiveName = "forceActive";
+  static constexpr StringRef releaseActiveName = "releaseActive";
+  static constexpr StringRef forcedValueName = "forcedValue";
+  static constexpr StringRef clockName = "clk";
+
+  ProbeVisitor(hw::InnerRefNamespace &irn, InstanceGraph &instanceGraph)
+      : irn(irn), instanceGraph(instanceGraph) {}
 
   /// Entrypoint.
   LogicalResult visit(FModuleLike mod);
@@ -183,42 +203,6 @@ public:
     return anyConverted;
   }
 
-  /// `{data, flip ctrl}` so inbound force control needs no extra port.
-  FailureOr<Type> convertPortType(Type type, Location loc) {
-    auto conv = convertType(type, loc);
-    if (failed(conv) || !*conv)
-      return conv;
-    // Only a probe type converts to non-null, so this cast is safe.
-    if (!carryCtrlInPortType || !cast<RefType>(type).getForceable())
-      return conv;
-    return Type(createProbePortType(type_cast<FIRRTLBaseType>(*conv)));
-  }
-
-  /// Return the "target" port type, or failure on error.
-  FailureOr<Type> mapPortType(Type type, Location loc) {
-    auto newType = convertPortType(type, loc);
-    if (failed(newType))
-      return failure();
-    return *newType ? *newType : type;
-  }
-
-  /// Map a range of port (or instance result) types, return if changes needed.
-  template <typename R>
-  FailureOr<bool> mapPortRange(R &&range, Location loc,
-                               SmallVectorImpl<Type> &newTypes) {
-    newTypes.reserve(llvm::size(range));
-
-    bool anyConverted = false;
-    for (auto type : range) {
-      auto conv = mapPortType(type, loc);
-      if (failed(conv))
-        return failure();
-      newTypes.emplace_back(*conv);
-      anyConverted |= *conv != type;
-    }
-    return anyConverted;
-  }
-
   // CHIRRTL
   LogicalResult visitMemoryDebugPortOp(chirrtl::MemoryDebugPortOp op);
 
@@ -260,11 +244,11 @@ public:
 
   LogicalResult visitStmt(RefDefineOp op);
 
-  // Force and release operations: collect for later synthesis.
+  // Collect force and release operations for later synthesis.
   LogicalResult visitStmt(RefForceOp op);
   LogicalResult visitStmt(RefReleaseOp op);
 
-  // The `_initial` flavours are not supported: reject as unsupported.
+  // The `_initial` forms are unsupported.
   LogicalResult visitStmt(RefForceInitialOp op) {
     return op.emitError("force_initial not supported");
   }
@@ -276,7 +260,15 @@ private:
   /// Map from probe-typed Value's to their non-probe equivalent.
   DenseMap<Value, Value> probeToHWMap;
 
-  /// Diagnosed instead of applying a force to the wrong target or dropping it.
+  /// Exported probe port, recorded before its argument type is rewritten.
+  struct ExportedTarget {
+    Value probeSrc;
+    Value hwSrc;
+    Operation *define;
+  };
+  DenseMap<Value, ExportedTarget> exportedTargets;
+
+  /// Probe paths through which force control cannot be routed.
   DenseMap<Value, Operation *> unsupportedForceDests;
 
   /// Forceable operations to demote.
@@ -285,69 +277,47 @@ private:
   /// Operations to delete.
   SmallVector<Operation *> toDelete;
 
-  /// Read-only copy of inner-ref namespace for resolving inner refs.
+  /// Inner-ref namespace for resolving inner refs.
   hw::InnerRefNamespace &irn;
 
-  /// Keyed by hardware value so aliasing RWProbes share one entry.
+  /// Keep instance-graph records synchronized with cloned instances.
+  InstanceGraph &instanceGraph;
+
+  /// Per-target force state, keyed by hardware value.
   struct TargetState {
     SmallVector<ForceReleaseAccess> accesses;
     Value instanceCtrl;
-    Value inboundCtrl;
+    SmallVector<Value, 1> inboundCtrls;
   };
 
-  /// First-touch order, so emission is deterministic.
+  /// First-touch order makes emission deterministic.
   MapVector<Value, TargetState> targets;
 
-  /// Circuit-wide: only force/release designs pay for ctrl-in-port-type.
-  bool carryCtrlInPortType;
+  /// Reuse the first materialized value for each `ref.rwprobe` target.
+  DenseMap<hw::InnerRefAttr, Value> rwProbeTargetCache;
+
+  void recordRWProbeTarget(hw::InnerRefAttr target, Value data) {
+    rwProbeTargetCache.try_emplace(target, data);
+  }
 
   FailureOr<Value> resolveForceDest(Operation *access, Value dest);
 
-  /// Emit at end of module body so every access's operands dominate.
+  /// Reduce accesses at module-body end so all operands dominate.
   ForceCtrl reduceAccesses(ImplicitLocOpBuilder &builder,
-                           FIRRTLBaseType probedType,
                            ArrayRef<ForceReleaseAccess> accesses);
 
   LogicalResult
   collectExportedTargets(FModuleLike mod, Block *block,
-                         ArrayRef<std::pair<unsigned, Value>> rwProbePorts,
-                         ArrayRef<Attribute> portNames);
+                         ArrayRef<std::pair<unsigned, Value>> rwProbePorts);
 
   LogicalResult materializeForceControl(FModuleLike mod);
 
-  LogicalResult buildStateMachineRegisters(FIRRTLBaseType probedType,
-                                           Value data, const ForceCtrl &in);
+  LogicalResult buildStateMachineRegisters(Value data, const ForceCtrl &in);
 
-  /// Override reads, not the target's driver, so force is observed immediately
-  /// and the target stays single-driven.  Only ground-type targets are
-  /// supported; aggregates must be lowered first.
+  /// Override reads while leaving the target single-driven. Only ground types
+  /// are supported.
   LogicalResult injectReadSideOverride(Value data, Value effForced,
                                        Value effValue);
-
-  BundleType createForceCtrlBundleType(FIRRTLBaseType probedType) {
-    auto *ctx = probedType.getContext();
-    auto u1Type = UIntType::get(ctx, 1);
-    auto clkType = ClockType::get(ctx);
-    SmallVector<BundleType::BundleElement> elements = {
-        {StringAttr::get(ctx, "forceActive"), /*isFlip=*/false, u1Type},
-        {StringAttr::get(ctx, "releaseActive"), /*isFlip=*/false, u1Type},
-        {StringAttr::get(ctx, "forcedValue"), /*isFlip=*/false, probedType},
-        {StringAttr::get(ctx, "clk"), /*isFlip=*/false, clkType},
-    };
-    return BundleType::get(ctx, elements);
-  }
-
-  /// `{data, flip ctrl}` so inbound force control needs no extra port.
-  BundleType createProbePortType(FIRRTLBaseType probedType) {
-    auto *ctx = probedType.getContext();
-    SmallVector<BundleType::BundleElement> elements = {
-        {StringAttr::get(ctx, probePortDataField), /*isFlip=*/false,
-         probedType},
-        {StringAttr::get(ctx, probePortCtrlField), /*isFlip=*/true,
-         createForceCtrlBundleType(probedType)},
-    };
-    return BundleType::get(ctx, elements);
-  }
 };
 
 } // end namespace
@@ -357,13 +327,13 @@ private:
 //===----------------------------------------------------------------------===//
 
 static Block *getBodyBlock(FModuleLike mod) {
-  // Safety check for below, presently all modules have a region.
   assert(mod->getNumRegions() == 1);
   auto &blocks = mod->getRegion(0).getBlocks();
   return !blocks.empty() ? &blocks.front() : nullptr;
 }
 
-void attachForceDestBlockerNote(InFlightDiagnostic &diag, Operation *blocker) {
+static void attachForceDestBlockerNote(InFlightDiagnostic &diag,
+                                       Operation *blocker) {
   if (isa<FInstanceLike>(blocker))
     diag.attachNote(blocker->getLoc())
         << "target is a probe of this instance, whose module has no body to "
@@ -375,9 +345,7 @@ void attachForceDestBlockerNote(InFlightDiagnostic &diag, Operation *blocker) {
 /// Visit a module, converting its ports and internals to use hardware signals
 /// instead of probes.
 LogicalResult ProbeVisitor::visit(FModuleLike mod) {
-  // Ports -> new ports without probe-ness.
-  // For all probe ports, insert non-probe duplex values to use
-  // as their replacement while rewriting.  Only if has body.
+  // Create stand-ins for probe ports while rewriting the body.
   SmallVector<std::pair<size_t, WireOp>> wires;
 
   auto portTypes = mod.getPortTypes();
@@ -385,15 +353,14 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
   auto portNames = mod.getPortNamesAttr();
   SmallVector<Attribute> newPortTypes;
 
-  SmallVector<std::pair<unsigned, Value>> rwProbePorts;
-
   wires.reserve(portTypes.size());
   newPortTypes.reserve(portTypes.size());
   auto *block = getBodyBlock(mod);
   bool portsToChange = false;
+  SmallVector<std::pair<unsigned, FIRRTLBaseType>> forceablePorts;
   for (auto [idx, typeAttr, loc] : llvm::enumerate(portTypes, portLocs)) {
     auto type = cast<TypeAttr>(typeAttr);
-    auto conv = convertPortType(type.getValue(), loc);
+    auto conv = convertType(type.getValue(), loc);
     if (failed(conv))
       return failure();
     auto newType = *conv;
@@ -405,6 +372,10 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
 
     portsToChange = true;
     newPortTypes.push_back(TypeAttr::get(newType));
+
+    if (cast<RefType>(type.getValue()).getForceable())
+      forceablePorts.emplace_back(idx, type_cast<FIRRTLBaseType>(newType));
+
     if (!block)
       continue;
 
@@ -413,12 +384,7 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
     auto wire = WireOp::create(builder, newType);
     wires.emplace_back(idx, wire);
 
-    if (carryCtrlInPortType && cast<RefType>(type.getValue()).getForceable()) {
-      probeToHWMap[block->getArgument(idx)] =
-          getProbePortData(builder, wire.getData());
-      rwProbePorts.emplace_back(idx, getProbePortCtrl(builder, wire.getData()));
-    } else
-      probeToHWMap[block->getArgument(idx)] = wire.getData();
+    probeToHWMap[block->getArgument(idx)] = wire.getData();
   }
 
   // Update body, if present.
@@ -448,8 +414,41 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
     }
   }
 
+  // Append control inputs without changing existing port indices.
+  SmallVector<std::pair<unsigned, Value>> rwProbePorts;
+  if (!forceablePorts.empty()) {
+    auto *ctx = mod->getContext();
+    unsigned appendAt = mod.getNumPorts();
+
+    llvm::StringSet<> taken;
+    for (auto name : portNames.getAsRange<StringAttr>())
+      taken.insert(name.getValue());
+
+    SmallVector<std::pair<unsigned, PortInfo>> ctrlPorts;
+    ctrlPorts.reserve(forceablePorts.size());
+    for (auto [idx, probedType] : forceablePorts) {
+      SmallString<64> name(cast<StringAttr>(portNames[idx]).getValue());
+      name += "_force_ctrl";
+      auto baseLen = name.size();
+      for (unsigned suffix = 0; !taken.insert(name).second; ++suffix) {
+        name.truncate(baseLen);
+        (Twine("_") + Twine(suffix)).toVector(name);
+      }
+      ctrlPorts.emplace_back(
+          appendAt,
+          PortInfo(StringAttr::get(ctx, name),
+                   createForceCtrlBundleType(probedType), Direction::In,
+                   /*symName=*/StringAttr{}, mod.getPortLocation(idx)));
+    }
+    mod.insertPorts(ctrlPorts);
+
+    if (block)
+      for (auto [k, port] : llvm::enumerate(forceablePorts))
+        rwProbePorts.emplace_back(port.first, block->getArgument(appendAt + k));
+  }
+
   if (block && !rwProbePorts.empty()) {
-    if (failed(collectExportedTargets(mod, block, rwProbePorts, portNames)))
+    if (failed(collectExportedTargets(mod, block, rwProbePorts)))
       return failure();
   }
 
@@ -460,7 +459,7 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
   for (auto *op : llvm::reverse(toDelete))
     op->erase();
 
-  // Forceability is now the synthesized state machine; drop the rwprobe type.
+  // The synthesized state machine replaces forceability.
   for (auto fop : forceables)
     firrtl::detail::replaceWithNewForceability(fop, false);
 
@@ -503,13 +502,10 @@ ProbeVisitor::visitMemoryDebugPortOp(chirrtl::MemoryDebugPortOp op) {
 
   auto vectype = type_cast<FVectorType>(type);
 
-  // Just assert the chirrtl memory IR has the expected structure,
-  // if it didn't many things break.
-  // Must be defined in same module, tapped memory must be comb mem.
+  // The tapped memory must be a local combinational memory.
   auto mem = op.getMemory().getDefiningOp<chirrtl::CombMemOp>();
   assert(mem);
 
-  // The following is adapted from LowerAnnotations.
   Value clock;
   for (auto *portOp : mem.getResult().getUsers()) {
     for (auto result : portOp->getResults()) {
@@ -531,7 +527,7 @@ ProbeVisitor::visitMemoryDebugPortOp(chirrtl::MemoryDebugPortOp op) {
         "does not have an access port to determine a clock connection (this "
         "is necessary when compiling without reference types)");
 
-  // Add one port per memory address.
+  // Add one read port per address.
   SmallVector<Value> data;
   ImplicitLocOpBuilder builder(op.getLoc(), op);
 
@@ -551,16 +547,11 @@ ProbeVisitor::visitMemoryDebugPortOp(chirrtl::MemoryDebugPortOp op) {
     data.push_back(port.getData());
   }
 
-  // Package up all the reads into a vector.
   assert(vectype == FVectorType::get(mem.getType().getElementType(),
                                      mem.getType().getNumElements()));
   auto vecData = VectorCreateOp::create(builder, vectype, data);
 
-  // While the new ports are added as late as possible, the debug port
-  // operation we're replacing likely has users and those are before
-  // the new ports.  Add a wire at a point we know dominates this operation
-  // and the new port access operations added above.  This will be used for
-  // the existing users of the debug port.
+  // Keep existing users dominated by both the replacement and the new reads.
   builder.setInsertionPoint(mem);
   auto wire = WireOp::create(builder, vectype);
   builder.setInsertionPointToEnd(mem->getBlock());
@@ -575,7 +566,7 @@ ProbeVisitor::visitMemoryDebugPortOp(chirrtl::MemoryDebugPortOp op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ProbeVisitor::visitDecl(MemOp op) {
-  // Scan for debug ports.  These are not supported presently, diagnose.
+  // FIRRTL memory debug ports are not supported here.
   SmallVector<Type> newTypes;
   auto needsConv = mapRange(op->getResultTypes(), op->getLoc(), newTypes);
   if (failed(needsConv))
@@ -597,7 +588,7 @@ LogicalResult ProbeVisitor::visitDecl(WireOp op) {
   if (!type) // No conversion needed.
     return success();
 
-  // New Wire of converted type.
+  // Clone the wire with its converted type.
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   auto cloned = cast<WireOp>(builder.clone(*op));
   cloned->getOpResults().front().setType(type);
@@ -608,42 +599,29 @@ LogicalResult ProbeVisitor::visitDecl(WireOp op) {
 
 CtrlGroup readCtrlGroup(ImplicitLocOpBuilder &builder, Value bundle) {
   CtrlGroup group;
-  group.forceActive = getBundleField(builder, bundle, "forceActive");
-  group.releaseActive = getBundleField(builder, bundle, "releaseActive");
-  group.forcedValue = getBundleField(builder, bundle, "forcedValue");
+  group.forceActive =
+      getBundleField(builder, bundle, ProbeVisitor::forceActiveName);
+  group.releaseActive =
+      getBundleField(builder, bundle, ProbeVisitor::releaseActiveName);
+  group.forcedValue =
+      getBundleField(builder, bundle, ProbeVisitor::forcedValueName);
   return group;
 }
 
-Value readForceCtrlClock(ImplicitLocOpBuilder &builder, Value bundle) {
-  return getBundleField(builder, bundle, "clk");
+static Value readForceCtrlClock(ImplicitLocOpBuilder &builder, Value bundle) {
+  return getBundleField(builder, bundle, ProbeVisitor::clockName);
 }
 
-ForceCtrl readForceCtrlFields(ImplicitLocOpBuilder &builder, Value bundle) {
-  ForceCtrl fields;
-  fields.clocked = readCtrlGroup(builder, bundle);
-  fields.clk = readForceCtrlClock(builder, bundle);
-  return fields;
-}
-
-Value createU1Const(ImplicitLocOpBuilder &builder, bool value) {
-  return builder.createOrFold<ConstantOp>(
-      APSInt(APInt(1, value ? 1 : 0, /*isSigned=*/false), /*isUnsigned=*/true));
-}
-
-/// Release-only and no-local-control groups both reduce `forceActive` to 0.
-bool isKnownZero(Value value) {
-  auto constant = value.getDefiningOp<ConstantOp>();
-  return constant && constant.getValue().isZero();
-}
-
-/// Fill nulls so "no local control" can share the reduced-group path.
+/// Fill absent control fields; materialize `forcedValue` when the sink needs a
+/// driven value.
 CtrlGroup materializeCtrlGroup(ImplicitLocOpBuilder &builder,
-                               FIRRTLBaseType probedType, CtrlGroup group) {
+                               FIRRTLBaseType probedType, CtrlGroup group,
+                               bool tieOffValue) {
   if (!group.forceActive)
-    group.forceActive = createU1Const(builder, false);
+    group.forceActive = getU1Const(builder, false);
   if (!group.releaseActive)
-    group.releaseActive = createU1Const(builder, false);
-  if (!group.forcedValue)
+    group.releaseActive = getU1Const(builder, false);
+  if (!group.forcedValue && tieOffValue)
     group.forcedValue = builder.createOrFold<InvalidValueOp>(probedType);
   return group;
 }
@@ -666,6 +644,15 @@ LogicalResult ProbeVisitor::visitActiveForceableDecl(Forceable fop) {
     emitConnect(builder, wire.getData(), data);
     data = wire.getData();
   }
+
+  // Reuse the declaration's symbol so aliased RWProbes share the target.
+  if (auto sym = hw::InnerSymbolTable::getInnerSymbol(fop)) {
+    auto module = fop->getParentOfType<FModuleOp>();
+    assert(module && "forceable declaration must be inside an FModuleOp");
+    recordRWProbeTarget(
+        hw::InnerRefAttr::get(SymbolTable::getSymbolName(module), sym), data);
+  }
+
   probeToHWMap[fop.getDataRef()] = data;
   return success();
 }
@@ -674,7 +661,7 @@ LogicalResult ProbeVisitor::visitActiveForceableDecl(Forceable fop) {
 // Read-side override injection
 //===----------------------------------------------------------------------===//
 
-bool isWriteUse(OpOperand &use) {
+static bool isWriteUse(OpOperand &use) {
   if (auto conn = dyn_cast<FConnectLike>(use.getOwner())) {
     // Operand index, not value: `connect a, a` writes dest and reads src.
     assert(conn.getDest() == conn->getOperand(0) && "unexpected connect shape");
@@ -683,30 +670,21 @@ bool isWriteUse(OpOperand &use) {
   return false;
 }
 
-bool hasRedirectableRead(Value value,
-                         const SmallPtrSetImpl<Operation *> &skip) {
-  for (OpOperand &use : value.getUses()) {
-    if (skip.contains(use.getOwner()) || isWriteUse(use))
-      continue;
-    return true;
-  }
-  return false;
-}
-
-/// Rewire reads of `raw` to `observed`, leaving the original driver alone.
-void redirectReads(Value raw, Value observed,
-                   SmallPtrSetImpl<Operation *> &skip) {
-
+static bool redirectReads(Value raw, Value observed,
+                          SmallPtrSetImpl<Operation *> &skip) {
+  bool redirected = false;
   for (OpOperand &use : llvm::make_early_inc_range(raw.getUses())) {
     Operation *owner = use.getOwner();
     if (skip.contains(owner) || isWriteUse(use))
       continue;
     use.set(observed);
+    redirected = true;
   }
+  return redirected;
 }
 
-void collectFanInCone(ArrayRef<Value> roots,
-                      SmallPtrSetImpl<Operation *> &cone) {
+static void collectFanInCone(ArrayRef<Value> roots,
+                             SmallPtrSetImpl<Operation *> &cone) {
   SmallVector<Value> worklist(roots);
   while (!worklist.empty()) {
     auto *op = worklist.pop_back_val().getDefiningOp();
@@ -722,19 +700,17 @@ LogicalResult ProbeVisitor::injectReadSideOverride(Value data, Value effForced,
   if (!type || !type.isGround())
     return mlir::emitError(data.getLoc())
            << "force/release of aggregate types is not supported; compile with "
-              "preserve-aggregates=none";
+              "preserve-aggregate=none";
 
-  // Control cone must keep the raw target or the mux would loop.
+  // Keep the control cone unchanged to avoid a mux cycle.
   SmallPtrSet<Operation *, 16> skip;
   collectFanInCone({effForced, effValue}, skip);
-
-  if (!hasRedirectableRead(data, skip))
-    return success();
 
   auto *body = getParentModule(data).getBodyBlock();
   Location loc = data.getLoc();
 
-  // Wire next to the target: control is only available at block end.
+  // Place the observed wire next to the target; control is emitted at block
+  // end.
   ImplicitLocOpBuilder wireBuilder(loc, data.getContext());
   if (auto *dataDef = data.getDefiningOp())
     wireBuilder.setInsertionPointAfter(dataDef);
@@ -749,89 +725,108 @@ LogicalResult ProbeVisitor::injectReadSideOverride(Value data, Value effForced,
   skip.insert(observedWire);
   Value observed = observedWire.getData();
 
+  if (!redirectReads(data, observed, skip)) {
+    observedWire.erase();
+    return success();
+  }
+
   ImplicitLocOpBuilder builder(loc, body, body->end());
-  Operation *lastBefore = body->empty() ? nullptr : &body->back();
-  Value selected = builder.createOrFold<MuxPrimOp>(effForced, effValue, data);
-  // Keep the generated override operations out of read redirection. The mux
-  // may fold away, so only add its defining op when it was actually created.
-  if (auto *mux = selected.getDefiningOp();
-      mux && !body->empty() && mux != lastBefore && mux == &body->back())
-    skip.insert(mux);
+  auto mux = MuxPrimOp::create(builder, effForced, effValue, data);
+  skip.insert(mux);
+  Value selected = mux.getResult();
   auto connect = MatchingConnectOp::create(builder, observed, selected);
   skip.insert(connect);
 
-  redirectReads(data, observed, skip);
   return success();
 }
 
-LogicalResult
-ProbeVisitor::buildStateMachineRegisters(FIRRTLBaseType probedType, Value data,
-                                         const ForceCtrl &in) {
+LogicalResult ProbeVisitor::buildStateMachineRegisters(Value data,
+                                                       const ForceCtrl &in) {
   Location loc = data.getLoc();
   ImplicitLocOpBuilder builder(loc, data.getContext());
 
   auto fModule = getParentModule(data);
   assert(fModule && "Expected to find parent FModuleOp");
 
+  if (auto port = dyn_cast<BlockArgument>(data))
+    if (fModule.getPortDirection(port.getArgNumber()) == Direction::Out)
+      return mlir::emitError(
+          loc, "cannot synthesize force/release: target is a module output "
+               "port");
+
+  // A source-flow value cannot be driven by the synthesized state.
+  if (foldFlow(data) == Flow::Source)
+    return mlir::emitError(
+        loc, "cannot synthesize force/release: target is read-only "
+             "(source flow) and cannot be driven");
+
+  // Nothing observes the target, so there is nothing to override; do not emit
+  // dead state or control logic. This check must precede all synthesized ops.
+  if (llvm::none_of(data.getUses(),
+                    [](OpOperand &use) { return !isWriteUse(use); }))
+    return success();
+
   auto u1Type = UIntType::get(data.getContext(), 1);
 
-  // Source-flow: the real driver is elsewhere; don't override local reads only.
-  if (foldFlow(data) == Flow::Source) {
-    mlir::emitError(loc, "cannot synthesize force/release: target is read-only "
-                         "(source flow) and cannot be driven");
-    return failure();
-  }
-
-  assert(in.clocked.forceActive && in.clocked.releaseActive &&
-         in.clocked.forcedValue &&
-         "state machine control must be fully materialized");
-
-  // Only the force/release event is sampled; the value stays live so the
-  // target keeps tracking the winning force's RHS.
-  const CtrlGroup &clocked = in.clocked;
-
+  // Sample the event but keep the winning force's RHS live.
   auto *body = fModule.getBodyBlock();
   builder.setInsertionPointToEnd(body);
+
+  CtrlGroup group =
+      materializeCtrlGroup(builder, type_cast<FIRRTLBaseType>(data.getType()),
+                           in.group, /*tieOffValue=*/true);
+  assert(group.forceActive && group.releaseActive && group.forcedValue &&
+         "state machine control must be fully materialized");
 
   auto forcedRegOp = RegOp::create(builder, u1Type, in.clk, "forced");
   forcedRegOp.setInitialAttr(getIntZerosAttr(u1Type));
   Value forcedReg = forcedRegOp.getResult();
 
-  Value cZero = createU1Const(builder, false);
-  Value cOne = createU1Const(builder, true);
+  Value cZero = getU1Const(builder, false);
+  Value cOne = getU1Const(builder, true);
 
-  builder.create<MatchingConnectOp>(
-      forcedReg, builder.createOrFold<MuxPrimOp>(
-                     clocked.forceActive, cOne,
-                     builder.createOrFold<MuxPrimOp>(clocked.releaseActive,
-                                                     cZero, forcedReg)));
+  MatchingConnectOp::create(builder, forcedReg,
+                            builder.createOrFold<MuxPrimOp>(
+                                group.forceActive, cOne,
+                                builder.createOrFold<MuxPrimOp>(
+                                    group.releaseActive, cZero, forcedReg)));
 
-  return injectReadSideOverride(data, forcedReg, clocked.forcedValue);
+  return injectReadSideOverride(data, forcedReg, group.forcedValue);
 }
 
 LogicalResult ProbeVisitor::visitInstanceLike(FInstanceLike oldInst) {
   SmallVector<Type> newTypes;
   auto needsConv =
-      mapPortRange(oldInst->getResultTypes(), oldInst->getLoc(), newTypes);
+      mapRange(oldInst->getResultTypes(), oldInst->getLoc(), newTypes);
   if (failed(needsConv))
     return failure();
   if (!*needsConv)
     return success();
 
-  // Body-less callee has no state machine; diagnose force through it later.
-  bool bodylessCallee =
-      llvm::any_of(oldInst.getReferencedModuleNames(), [&](StringRef name) {
-        auto mod = irn.symTable.lookup<FModuleLike>(name);
-        return !mod || !getBodyBlock(mod);
-      });
+  // All referenced modules have the same signature.
+  auto aMod = irn.symTable.lookup<FModuleLike>(
+      *oldInst.getReferencedModuleNames().begin());
+  assert(aMod && "instance must reference an existing module");
 
-  // New instance with converted types.
-  // Move users of unconverted results to the new operation.
-  ImplicitLocOpBuilder builder(oldInst->getLoc(), oldInst);
-  auto *newInst = builder.clone(*oldInst);
-  builder.setInsertionPointAfter(newInst);
-  for (auto [oldResult, newResult, newType] : llvm::zip_equal(
-           oldInst->getOpResults(), newInst->getOpResults(), newTypes)) {
+  unsigned origNumPorts = oldInst->getNumResults();
+  assert(aMod.getNumPorts() >= origNumPorts &&
+         "instance results must match the referenced module's ports");
+
+  SmallVector<std::pair<unsigned, PortInfo>> ctrlPorts;
+  for (unsigned idx = origNumPorts, e = aMod.getNumPorts(); idx != e; ++idx)
+    ctrlPorts.emplace_back(
+        idx, PortInfo(aMod.getPortNameAttr(idx), aMod.getPortType(idx),
+                      aMod.getPortDirection(idx),
+                      /*symName=*/StringAttr{}, aMod.getPortLocation(idx)));
+
+  // Clone the instance with converted results and the callee's control ports.
+  auto newInst = oldInst.cloneWithInsertedPorts(ctrlPorts);
+  instanceGraph.replaceInstance(oldInst, newInst);
+
+  unsigned ctrlIdx = origNumPorts;
+  for (auto [idx, newType] : llvm::enumerate(newTypes)) {
+    auto oldResult = oldInst->getOpResult(idx);
+    auto newResult = newInst->getOpResult(idx);
     if (newType == oldResult.getType()) {
       oldResult.replaceAllUsesWith(newResult);
       continue;
@@ -839,21 +834,22 @@ LogicalResult ProbeVisitor::visitInstanceLike(FInstanceLike oldInst) {
 
     newResult.setType(newType);
 
-    auto refType = dyn_cast<RefType>(oldResult.getType());
-    if (!refType || !refType.getForceable() || !carryCtrlInPortType) {
-      probeToHWMap[oldResult] = newResult;
+    auto refType = cast<RefType>(oldResult.getType());
+    probeToHWMap[oldResult] = newResult;
+    if (!refType.getForceable())
       continue;
-    }
 
-    if (bodylessCallee)
-      unsupportedForceDests[oldResult] = oldInst;
+    // Match forceable results with the callee's appended control ports.
+    assert(ctrlIdx < aMod.getNumPorts() &&
+           aMod.getPortDirection(ctrlIdx) == Direction::In &&
+           aMod.getPortType(ctrlIdx) ==
+               createForceCtrlBundleType(type_cast<FIRRTLBaseType>(newType)) &&
+           "control port out of sync with forceable result");
 
-    Value data = getProbePortData(builder, newResult);
-    probeToHWMap[oldResult] = data;
-
-    // Driver of `ctrl` is decided in `materializeForceControl`.
-    targets[data].instanceCtrl = getProbePortCtrl(builder, newResult);
+    // Keep each forceable result as an independent control channel.
+    targets[newResult].instanceCtrl = newInst->getOpResult(ctrlIdx++);
   }
+  assert(ctrlIdx == aMod.getNumPorts() && "unconsumed control ports");
 
   toDelete.push_back(oldInst);
   return success();
@@ -871,13 +867,15 @@ LogicalResult ProbeVisitor::visitStmt(RefDefineOp op) {
   auto newDest = probeToHWMap.at(op.getDest());
   auto newSrc = probeToHWMap.at(op.getSrc());
 
-  // Source must be ancestor of destination block for a connect
-  // to behave the same (generally).
+  // Record exports before rewriting the port argument type.
+  if (isa<BlockArgument>(op.getDest()))
+    exportedTargets[op.getDest()] = {op.getSrc(), newSrc, op};
+
+  // The source must dominate the destination for an equivalent connect.
   assert(!isa<BlockArgument>(newDest));
   auto *destDefiningOp = newDest.getDefiningOp();
   assert(destDefiningOp);
   if (!newSrc.getParentBlock()->findAncestorOpInBlock(*destDefiningOp)) {
-    // Conditional or sending out of a layer...
     auto diag = op.emitError("unable to convert to equivalent connect");
     diag.attachNote(op.getDest().getLoc()) << "destination here";
     diag.attachNote(op.getSrc().getLoc()) << "source here";
@@ -892,8 +890,7 @@ LogicalResult ProbeVisitor::visitStmt(RefDefineOp op) {
 }
 
 LogicalResult ProbeVisitor::visitExpr(RWProbeOp op) {
-  // Handle similar to ref.send but lookup the target
-  // and materialize a value for it (indexing).
+  // Resolve the target and materialize the selected field.
   auto conv = mapType(op.getType(), op.getLoc());
   if (failed(conv))
     return failure();
@@ -904,17 +901,28 @@ LogicalResult ProbeVisitor::visitExpr(RWProbeOp op) {
   assert(ist);
   auto ref = getFieldRefForTarget(ist);
 
-  ImplicitLocOpBuilder builder(op.getLoc(), op);
-  builder.setInsertionPointAfterValue(ref.getValue());
-  auto data = getValueByFieldID(builder, ref.getValue(), ref.getFieldID());
-  assert(cast<FIRRTLBaseType>(data.getType()).getPassiveType() ==
-         op.getType().getType());
-  if (newType != data.getType()) {
-    auto wire = WireOp::create(builder, newType);
-    emitConnect(builder, wire.getData(), data);
-    data = wire.getData();
+  // Reuse one hardware value when multiple RWProbes name the same target.
+  if (Value cached = rwProbeTargetCache.lookup(op.getTarget())) {
+    probeToHWMap[op.getResult()] = cached;
+  } else {
+    ImplicitLocOpBuilder builder(op.getLoc(), op);
+    builder.setInsertionPointAfterValue(ref.getValue());
+    auto data = getValueByFieldID(builder, ref.getValue(), ref.getFieldID());
+    assert(cast<FIRRTLBaseType>(data.getType()).getPassiveType() ==
+           op.getType().getType());
+    if (newType != data.getType()) {
+      auto wire = WireOp::create(builder, newType);
+      emitConnect(builder, wire.getData(), data);
+      data = wire.getData();
+    }
+    recordRWProbeTarget(op.getTarget(), data);
+    probeToHWMap[op.getResult()] = data;
   }
-  probeToHWMap[op.getResult()] = data;
+
+  // Force control covers the whole declaration, not a field-level target.
+  if (ref.getFieldID() != 0)
+    unsupportedForceDests[op.getResult()] = op;
+
   return success();
 }
 
@@ -927,7 +935,7 @@ LogicalResult ProbeVisitor::visitExpr(RefCastOp op) {
   auto newType = *conv;
   toDelete.push_back(op);
 
-  // Identity mapped type: don't copy, force control is keyed by hardware value.
+  // Preserve identity mappings so force control remains keyed by the target.
   if (newType == input.getType()) {
     probeToHWMap[op.getResult()] = input;
     if (auto *blocker = unsupportedForceDests.lookup(op.getInput()))
@@ -935,19 +943,14 @@ LogicalResult ProbeVisitor::visitExpr(RefCastOp op) {
     return success();
   }
 
-  // Otherwise, insert wire of the new type, and connect to it.
-
-  // y = ref.cast x : probe<t1> -> probe<t2>
-  // ->
-  // w = firrtl.wire : t2
-  // emitConnect(w : t2, map(x): t1)
+  // A type-changing cast requires a converted copy.
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   builder.setInsertionPointAfterValue(input);
   auto wire = WireOp::create(builder, newType);
   emitConnect(builder, wire.getData(), input);
   probeToHWMap[op.getResult()] = wire.getData();
 
-  // Copy wire cannot carry force; diagnose force through this cast.
+  // A copy wire cannot carry force control.
   if (cast<RefType>(op.getResult().getType()).getForceable())
     unsupportedForceDests[op.getResult()] = op;
   return success();
@@ -960,14 +963,13 @@ LogicalResult ProbeVisitor::visitExpr(RefSendOp op) {
   auto newType = *conv;
   toDelete.push_back(op);
 
-  // If the mapped type is same as input, just use that.
+  // Reuse the input when no type conversion is needed.
   if (newType == op.getBase().getType()) {
     probeToHWMap[op.getResult()] = op.getBase();
     return success();
   }
 
-  // Otherwise, need to make this the probed type (passive).
-  // Insert wire of the new type, and connect to it.
+  // Otherwise, create a passive copy.
   assert(newType == op.getBase().getType().getPassiveType());
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   builder.setInsertionPointAfterValue(op.getBase());
@@ -978,7 +980,7 @@ LogicalResult ProbeVisitor::visitExpr(RefSendOp op) {
 }
 
 LogicalResult ProbeVisitor::visitExpr(RefResolveOp op) {
-  // ref.resolve x -> map(x)
+  // Replace `ref.resolve` with the mapped value.
   auto val = probeToHWMap.at(op.getRef());
   op.replaceAllUsesWith(val);
   toDelete.push_back(op);
@@ -986,7 +988,7 @@ LogicalResult ProbeVisitor::visitExpr(RefResolveOp op) {
 }
 
 LogicalResult ProbeVisitor::visitExpr(RefSubOp op) {
-  // ref.sub x, fieldid -> index(map(x), fieldid)
+  // Replace `ref.sub` with field selection on the mapped value.
   auto val = probeToHWMap.at(op.getInput());
   assert(val);
   ImplicitLocOpBuilder builder(op.getLoc(), op);
@@ -996,8 +998,7 @@ LogicalResult ProbeVisitor::visitExpr(RefSubOp op) {
   probeToHWMap[op.getResult()] = newVal;
   toDelete.push_back(op);
 
-  // Force control (local or instance) is whole-target; force through a field
-  // is always diagnosed.
+  // Force control covers the whole target, so field forces are diagnosed.
   if (cast<RefType>(op.getResult().getType()).getForceable()) {
     if (auto *blocker = unsupportedForceDests.lookup(op.getInput()))
       unsupportedForceDests[op.getResult()] = blocker;
@@ -1011,164 +1012,154 @@ LogicalResult ProbeVisitor::visitExpr(RefSubOp op) {
 // Visitor: Force/Release Synthesis
 //===----------------------------------------------------------------------===//
 
-/// Latch which clocked force is in effect; the RHS stays live so the target
-/// tracks it after predicates drop. Last entry wins a tie.
-Value stickyLiveForceValue(ImplicitLocOpBuilder &builder,
-                           ArrayRef<std::pair<Value, Value>> forces,
-                           Value forceActive, Value clk, StringRef regName) {
+/// Latch which force is active while keeping its RHS live.
+static Value stickyLiveForceValue(ImplicitLocOpBuilder &builder,
+                                  ArrayRef<std::pair<Value, Value>> forces,
+                                  Value forceActive, Value clk,
+                                  StringRef regName) {
   assert(!forces.empty() && "sticky value of a group that never forces");
   if (forces.size() == 1)
     return forces.front().second;
 
-  // Later forces have higher priority; first force is the implicit default.
+  // Priority has already made the force predicates mutually exclusive.
   auto later = forces.drop_front();
-  SmallVector<Value> sel(later.size());
-  Value laterActive;
-  for (size_t idx = later.size(); idx-- > 0;) {
-    Value predicate = later[idx].first;
-    sel[idx] = laterActive ? builder.createOrFold<AndPrimOp>(
-                                 predicate,
-                                 builder.createOrFold<NotPrimOp>(laterActive))
-                           : predicate;
-    laterActive = laterActive
-                      ? builder.createOrFold<OrPrimOp>(laterActive, predicate)
-                      : predicate;
-  }
 
   auto u1Type = UIntType::get(builder.getContext(), 1);
   Value value = forces.front().second;
   SmallVector<Value> wins;
   wins.reserve(later.size());
-  for (auto [predicate, forceValue] : later) {
+  for (const auto &force : later) {
     auto winRegOp = RegOp::create(builder, u1Type, clk, regName);
     winRegOp.setInitialAttr(getIntZerosAttr(u1Type));
     wins.push_back(winRegOp.getResult());
-    value = builder.createOrFold<MuxPrimOp>(winRegOp.getResult(), forceValue,
+    value = builder.createOrFold<MuxPrimOp>(winRegOp.getResult(), force.second,
                                             value);
   }
 
-  for (auto [win, select] : llvm::zip_equal(wins, sel))
+  for (auto [win, force] : llvm::zip_equal(wins, later))
     MatchingConnectOp::create(
         builder, win,
-        builder.createOrFold<MuxPrimOp>(forceActive, select, win));
+        builder.createOrFold<MuxPrimOp>(forceActive, force.first, win));
 
   return value;
 }
 
-/// Merge local with inbound; local wins a simultaneous force. Empty local
-/// folds to inbound. The winner is latched so the target tracks its live RHS.
-CtrlGroup combineWithInboundCtrl(ImplicitLocOpBuilder &builder, CtrlGroup local,
-                                 FIRRTLBaseType probedType, CtrlGroup inbound,
-                                 Value clk) {
-  local = materializeCtrlGroup(builder, probedType, local);
-  Value iF = inbound.forceActive;
-  Value iR = inbound.releaseActive;
-  Value iV = inbound.forcedValue;
+/// OR-reduce a non-empty list.
+static Value orReduce(ImplicitLocOpBuilder &builder, ArrayRef<Value> values) {
+  Value result = values.front();
+  for (Value value : values.drop_front())
+    result = builder.createOrFold<OrPrimOp>(result, value);
+  return result;
+}
 
-  Value forceActive = builder.createOrFold<OrPrimOp>(local.forceActive, iF);
-  Value releaseActive = builder.createOrFold<OrPrimOp>(local.releaseActive, iR);
+/// Merge control sources so the highest-priority event wins as a whole.
+static CtrlGroup reduceCtrlSources(ImplicitLocOpBuilder &builder,
+                                   MutableArrayRef<CtrlGroup> sources,
+                                   Value clk) {
+  // Mask each source when a higher-priority source is active.
+  Value higherActive;
+  for (size_t idx = sources.size(); idx-- > 0;) {
+    CtrlGroup &source = sources[idx];
+    // The lowest-priority source is not masked.
+    Value active = idx == 0 ? Value()
+                            : builder.createOrFold<OrPrimOp>(
+                                  source.forceActive, source.releaseActive);
+    if (higherActive) {
+      Value selected = builder.createOrFold<NotPrimOp>(higherActive);
+      source.forceActive =
+          builder.createOrFold<AndPrimOp>(source.forceActive, selected);
+      source.releaseActive =
+          builder.createOrFold<AndPrimOp>(source.releaseActive, selected);
+    }
+    if (active)
+      higherActive = higherActive
+                         ? builder.createOrFold<OrPrimOp>(higherActive, active)
+                         : active;
+  }
 
-  Value forcedValue;
-  if (isKnownZero(local.forceActive))
-    forcedValue = iV;
-  else
-    forcedValue = stickyLiveForceValue(
-        builder, {{iF, iV}, {local.forceActive, local.forcedValue}},
-        forceActive, clk, "forcedByLocal");
+  SmallVector<Value> forceActives, releaseActives;
+  SmallVector<std::pair<Value, Value>> forces;
+  for (const CtrlGroup &source : sources) {
+    forceActives.push_back(source.forceActive);
+    releaseActives.push_back(source.releaseActive);
+    if (source.forcedValue)
+      forces.emplace_back(source.forceActive, source.forcedValue);
+  }
+
+  Value forceActive = orReduce(builder, forceActives);
+  Value releaseActive = orReduce(builder, releaseActives);
+  Value forcedValue = forces.empty()
+                          ? Value()
+                          : stickyLiveForceValue(builder, forces, forceActive,
+                                                 clk, "forceWinner");
 
   return {forceActive, releaseActive, forcedValue};
 }
 
-/// Drive instance `ctrl`. A null group ties it off inactive.
+/// Merge inbound controls in port order, then apply local control at highest
+/// priority.
+CtrlGroup combineCtrlSources(ImplicitLocOpBuilder &builder,
+                             FIRRTLBaseType probedType,
+                             ArrayRef<CtrlGroup> inbound, CtrlGroup local,
+                             Value clk) {
+  SmallVector<CtrlGroup> sources(inbound.begin(), inbound.end());
+  sources.push_back(
+      materializeCtrlGroup(builder, probedType, local, /*tieOffValue=*/false));
+  return reduceCtrlSources(builder, sources, clk);
+}
+
+/// Drive an instance control bundle, tying absent control off.
 void connectControlFields(ImplicitLocOpBuilder &builder, Value control,
-                          FIRRTLBaseType probedType, CtrlGroup clocked,
+                          FIRRTLBaseType probedType, CtrlGroup group,
                           Value clk) {
-  // Nothing drives this target from here, so the clock is never observed.
+  // An unforced target still needs a valid clock input.
   if (!clk)
     clk =
         SpecialConstantOp::create(builder, ClockType::get(builder.getContext()),
                                   builder.getBoolAttr(false));
-  clocked = materializeCtrlGroup(builder, probedType, clocked);
-  auto dst = readForceCtrlFields(builder, control);
-  builder.createOrFold<MatchingConnectOp>(dst.clocked.forceActive,
-                                          clocked.forceActive);
-  builder.createOrFold<MatchingConnectOp>(dst.clocked.releaseActive,
-                                          clocked.releaseActive);
-  builder.createOrFold<MatchingConnectOp>(dst.clocked.forcedValue,
-                                          clocked.forcedValue);
-  builder.createOrFold<MatchingConnectOp>(dst.clk, clk);
+  group = materializeCtrlGroup(builder, probedType, group,
+                               /*tieOffValue=*/true);
+  auto dst = readCtrlGroup(builder, control);
+  Value clkField = readForceCtrlClock(builder, control);
+  MatchingConnectOp::create(builder, dst.forceActive, group.forceActive);
+  MatchingConnectOp::create(builder, dst.releaseActive, group.releaseActive);
+  MatchingConnectOp::create(builder, dst.forcedValue, group.forcedValue);
+  MatchingConnectOp::create(builder, clkField, clk);
 }
 
 ForceCtrl ProbeVisitor::reduceAccesses(ImplicitLocOpBuilder &builder,
-                                       FIRRTLBaseType probedType,
                                        ArrayRef<ForceReleaseAccess> accesses) {
   Value clk = accesses.front().clock;
 
-  Value cZero = createU1Const(builder, false);
-  Value cOne = createU1Const(builder, true);
-
-  Value forceWins = cZero;
-  SmallVector<ForceReleaseAccess> forces, releases;
+  // Later accesses have higher priority.
+  Value cZero = getU1Const(builder, false);
+  SmallVector<CtrlGroup> sources;
+  sources.reserve(accesses.size());
   for (auto &access : accesses) {
-    Value isForceVal = access.isForce() ? cOne : cZero;
-    forceWins = builder.createOrFold<MuxPrimOp>(access.predicate, isForceVal,
-                                                forceWins);
-    (access.isForce() ? forces : releases).push_back(access);
+    if (access.isForce())
+      sources.push_back({access.predicate, cZero, access.forceValue.value()});
+    else
+      sources.push_back({cZero, access.predicate, Value()});
   }
 
-  auto orReduce = [&](ArrayRef<ForceReleaseAccess> set) -> Value {
-    if (set.empty())
-      return cZero;
-    Value v = set.front().predicate;
-    for (auto &a : set.drop_front())
-      v = builder.createOrFold<OrPrimOp>(v, a.predicate);
-    return v;
-  };
-
-  Value forceActive = forceWins;
-
-  Value releaseActive =
-      releases.empty()
-          ? Value(cZero)
-          : builder.createOrFold<AndPrimOp>(
-                orReduce(releases), builder.createOrFold<NotPrimOp>(forceWins));
-
-  Value forcedValue;
-  if (forces.empty()) {
-    forcedValue = builder.createOrFold<InvalidValueOp>(probedType);
-  } else {
-    SmallVector<std::pair<Value, Value>> forcePairs;
-    forcePairs.reserve(forces.size());
-    for (auto &access : forces)
-      forcePairs.emplace_back(access.predicate, access.forceValue.value());
-    forcedValue = stickyLiveForceValue(builder, forcePairs, forceActive, clk,
-                                       "forceWinner");
-  }
-
-  return {{forceActive, releaseActive, forcedValue}, clk};
+  return {reduceCtrlSources(builder, sources, clk), clk};
 }
 
 LogicalResult ProbeVisitor::collectExportedTargets(
     FModuleLike mod, Block *block,
-    ArrayRef<std::pair<unsigned, Value>> rwProbePorts,
-    ArrayRef<Attribute> portNames) {
+    ArrayRef<std::pair<unsigned, Value>> rwProbePorts) {
   for (auto [portIdx, inbound] : rwProbePorts) {
-    auto rwProbe = block->getArgument(portIdx);
-    // Find the ref.define that exports the local target out of this port.
-    RefDefineOp refDef;
-    for (auto *o : rwProbe.getUsers())
-      if (auto rd = dyn_cast<RefDefineOp>(o)) {
-        refDef = rd;
-        break;
-      }
+    auto exportIt = exportedTargets.find(block->getArgument(portIdx));
 
-    if (!refDef)
+    if (exportIt == exportedTargets.end())
       return mod->emitError(
                  "forceable probe port cannot be lowered: no ref.define "
                  "exporting a local target for port ")
-             << cast<StringAttr>(portNames[portIdx]).getValue();
+             << mod.getPortNameAttr(portIdx).getValue();
 
-    auto outSrc = refDef.getSrc();
+    const auto &exported = exportIt->second;
+    auto refDef = cast<RefDefineOp>(exported.define);
+    auto outSrc = exported.probeSrc;
 
     if (auto *blocker = unsupportedForceDests.lookup(outSrc)) {
       auto diag = refDef.emitError(
@@ -1178,13 +1169,9 @@ LogicalResult ProbeVisitor::collectExportedTargets(
       return failure();
     }
 
-    auto hwSrcIt = probeToHWMap.find(outSrc);
-    if (hwSrcIt == probeToHWMap.end())
-      return refDef.emitError("forceable probe port cannot be lowered: "
-                              "exported target has no hardware value");
-    Value hwSrc = hwSrcIt->second;
-
-    targets[hwSrc].inboundCtrl = inbound;
+    // `rwProbePorts` is built in ascending port order, so appending preserves
+    // port priority: a later port overrides an earlier port.
+    targets[exported.hwSrc].inboundCtrls.push_back(inbound);
   }
   return success();
 }
@@ -1197,31 +1184,36 @@ LogicalResult ProbeVisitor::materializeForceControl(FModuleLike mod) {
 
     ForceCtrl local;
     if (!state.accesses.empty()) {
-      // One clock per target; gated clocks are already normalized.
+      // The synthesized logic assumes one normalized clock per target.
       const ForceReleaseAccess &first = state.accesses.front();
 
-      ImplicitLocOpBuilder builder(first.op->getLoc(), mod);
-      builder.setInsertionPointToEnd(block);
-      local = reduceAccesses(builder, probedType, state.accesses);
+      ImplicitLocOpBuilder builder(first.op->getLoc(), block, block->end());
+      local = reduceAccesses(builder, state.accesses);
     }
 
-    if (state.inboundCtrl) {
-      ImplicitLocOpBuilder builder(state.inboundCtrl.getLoc(), block,
+    if (!state.inboundCtrls.empty()) {
+      ImplicitLocOpBuilder builder(state.inboundCtrls.front().getLoc(), block,
                                    block->end());
-      CtrlGroup clocked = combineWithInboundCtrl(
-          builder, local.clocked, probedType,
-          readCtrlGroup(builder, state.inboundCtrl), local.clk);
-      Value clk = local.clk ? local.clk
-                            : readForceCtrlClock(builder, state.inboundCtrl);
+      // Preserve port order when merging control bundles.
+      SmallVector<CtrlGroup> inboundGroups;
+      inboundGroups.reserve(state.inboundCtrls.size());
+      for (Value ctrl : state.inboundCtrls)
+        inboundGroups.push_back(readCtrlGroup(builder, ctrl));
+
+      Value clk = local.clk;
+      if (!clk)
+        clk = readForceCtrlClock(builder, state.inboundCtrls.front());
+
+      CtrlGroup group = combineCtrlSources(builder, probedType, inboundGroups,
+                                           local.group, clk);
 
       if (state.instanceCtrl) {
-        connectControlFields(builder, state.instanceCtrl, probedType, clocked,
+        connectControlFields(builder, state.instanceCtrl, probedType, group,
                              clk);
         continue;
       }
 
-      if (failed(buildStateMachineRegisters(probedType, hwVal,
-                                            ForceCtrl{clocked, clk})))
+      if (failed(buildStateMachineRegisters(hwVal, ForceCtrl{group, clk})))
         return failure();
       continue;
     }
@@ -1230,13 +1222,13 @@ LogicalResult ProbeVisitor::materializeForceControl(FModuleLike mod) {
       auto *ctrlBlock = state.instanceCtrl.getParentBlock();
       ImplicitLocOpBuilder builder(state.instanceCtrl.getLoc(), ctrlBlock,
                                    ctrlBlock->end());
-      connectControlFields(builder, state.instanceCtrl, probedType,
-                           local.clocked, local.clk);
+      connectControlFields(builder, state.instanceCtrl, probedType, local.group,
+                           local.clk);
       continue;
     }
 
-    if (!state.accesses.empty() &&
-        failed(buildStateMachineRegisters(probedType, hwVal, local)))
+    assert(!state.accesses.empty());
+    if (failed(buildStateMachineRegisters(hwVal, local)))
       return failure();
   }
 
@@ -1246,6 +1238,16 @@ LogicalResult ProbeVisitor::materializeForceControl(FModuleLike mod) {
 //===----------------------------------------------------------------------===//
 // Visitor: Force/Release operations
 //===----------------------------------------------------------------------===//
+
+/// Reject accesses whose nested region cannot be represented at module scope.
+static LogicalResult checkForceReleaseNesting(Operation *op, StringRef what) {
+  if (op->getParentOfType<LayerBlockOp>())
+    return op->emitError() << what << " inside a layerblock is not supported";
+  if (op->getParentOfType<WhenOp>() || op->getParentOfType<MatchOp>())
+    return op->emitError() << what
+                           << " inside a when or match block is not supported";
+  return success();
+}
 
 FailureOr<Value> ProbeVisitor::resolveForceDest(Operation *access, Value dest) {
   if (auto *blocker = unsupportedForceDests.lookup(dest)) {
@@ -1263,8 +1265,8 @@ FailureOr<Value> ProbeVisitor::resolveForceDest(Operation *access, Value dest) {
 }
 
 LogicalResult ProbeVisitor::visitStmt(RefForceOp op) {
-  if (op->getParentOfType<LayerBlockOp>())
-    return op.emitError("force inside a layerblock is not supported");
+  if (failed(checkForceReleaseNesting(op, "force")))
+    return failure();
 
   auto hwDest = resolveForceDest(op, op.getDest());
   if (failed(hwDest))
@@ -1276,8 +1278,8 @@ LogicalResult ProbeVisitor::visitStmt(RefForceOp op) {
 }
 
 LogicalResult ProbeVisitor::visitStmt(RefReleaseOp op) {
-  if (op->getParentOfType<LayerBlockOp>())
-    return op.emitError("release inside a layerblock is not supported");
+  if (failed(checkForceReleaseNesting(op, "release")))
+    return failure();
 
   auto hwDest = resolveForceDest(op, op.getDest());
   if (failed(hwDest))
@@ -1303,22 +1305,20 @@ struct ProbesToSignalsPass
 void ProbesToSignalsPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
-  // Collect gated-clock roots and whether any force/release exists (needed
-  // before converting forceable ports to carry ctrl).
+  // Collect clocked roots before changing module signatures.
   SmallVector<Operation *> gatedClockRoots;
-  bool anyForceRelease = false;
   getOperation()->walk([&](Operation *op) {
-    if (isa<RefForceOp, RefReleaseOp>(op))
-      anyForceRelease = true;
     auto fop = dyn_cast<Forceable>(op);
     if (isa<RefForceOp, RefReleaseOp>(op) ||
         (fop && isa<RegOp, RegResetOp>(op) && fop.isForceable()))
       gatedClockRoots.push_back(op);
   });
 
-  // Sequential: tracer mutates signatures globally. Skip if nothing is clocked.
+  auto &instanceGraph = getAnalysis<InstanceGraph>();
+
+  // The conversion mutates signatures, so run it sequentially.
   if (!gatedClockRoots.empty()) {
-    GatedClockConversion tracer(getAnalysis<InstanceGraph>());
+    GatedClockConversion tracer(instanceGraph);
     for (auto *op : gatedClockRoots)
       if (failed(tracer.addRoot(op)))
         return signalPassFailure();
@@ -1326,16 +1326,17 @@ void ProbesToSignalsPass::runOnOperation() {
       return signalPassFailure();
   }
 
-  SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
-
   hw::InnerRefNamespace irn{getAnalysis<SymbolTable>(),
                             getAnalysis<hw::InnerSymbolTableCollection>()};
 
-  auto result = failableParallelForEach(&getContext(), ops, [&](Operation *op) {
-    ProbeVisitor visitor(irn, anyForceRelease);
-    return visitor.visit(cast<FModuleLike>(op));
-  });
+  // Convert callees first so callers see final control ports.
+  auto result = instanceGraph.walkPostOrder(
+      [&](InstanceGraphNode &node) -> LogicalResult {
+        auto mod = node.getModule<FModuleLike>();
+        ProbeVisitor visitor(irn, instanceGraph);
+        return visitor.visit(mod);
+      });
 
-  if (result.failed())
+  if (failed(result))
     signalPassFailure();
 }
