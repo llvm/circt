@@ -1,6 +1,6 @@
-// RUN: circt-opt %s --lower-smt-to-z3-llvm="print-only-first-counterexample=true" | FileCheck %s
-// RUN: circt-opt %s --lower-smt-to-z3-llvm="debug=true print-only-first-counterexample=true" | FileCheck %s --check-prefix=CHECK-DEBUG
-// RUN: circt-opt %s --lower-smt-to-z3-llvm | FileCheck %s --check-prefix=CHECK-MULTI
+// RUN: circt-opt %s --lower-smt-to-z3-llvm | FileCheck %s
+// RUN: circt-opt %s --lower-smt-to-z3-llvm="debug=true" | FileCheck %s --check-prefix=CHECK-DEBUG
+// RUN: circt-opt %s --lower-smt-to-z3-llvm="print-only-first-counterexample=false" | FileCheck %s --check-prefix=CHECK-MULTI
 
 // CHECK-LABEL: llvm.mlir.global internal @ctx_0()
 // CHECK-NEXT:   llvm.mlir.zero : !llvm.ptr
