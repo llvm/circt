@@ -61,6 +61,23 @@ def ExternalizeClockGate: Pass<"externalize-clock-gate", "mlir::ModuleOp"> {
   ];
 }
 
+def PropagateClockDomains : Pass<"seq-propagate-clock-domains", "mlir::ModuleOp"> {
+  let summary = "Propagate may clock domains through a hardware hierarchy";
+  let description = [{
+    Propagate may clock domains through dataflow and `hw.instance` operations.
+    The `seq.clock_domains` port attribute is an array of string domain
+    identifiers which seeds a public module input. The pass writes the
+    resulting domain set to each operation result it reaches.
+
+    Results of operations implementing `seq::Clocked` are coherent to their
+    clock operand. Other results conservatively join the domains of their
+    operands. Module bodies are evaluated independently for each instance, so
+    propagation itself is not contaminated by domains from sibling instances.
+    The annotation on a multiply-instantiated operation is the union of its
+    instance-context results.
+  }];
+}
+
 def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
   let summary = "Implement FIRRTMMem memories nodes with simulation model";
   let description = [{
