@@ -100,19 +100,17 @@ public:
             // destination and the second is the source.
             for (auto [dest, source] : df.computeDataFlow())
               addDrivenBy(dest, source);
+            // RegOp/RegResetOp implement CombDataFlow *and* Forceable. Without
+            // this, probe recording is skipped and addToPortPathsIfRWProbe
+            // asserts on a missing equivalence class.
+            if (auto forceableOp = dyn_cast<Forceable>(op))
+              recordForceableProbe(forceableOp);
           })
           .Case<Forceable>([&](Forceable forceableOp) {
             // Any declaration that can be forced.
             if (auto node = dyn_cast<NodeOp>(op))
               recordDataflow(node.getData(), node.getInput());
-            if (!forceableOp.isForceable() ||
-                forceableOp.getDataRef().use_empty())
-              return;
-            auto data = forceableOp.getData();
-            auto ref = forceableOp.getDataRef();
-            // Record dataflow from data to the probe.
-            recordDataflow(ref, data);
-            recordProbe(data, ref);
+            recordForceableProbe(forceableOp);
           })
           .Case<RefSendOp>([&](RefSendOp send) {
             recordDataflow(send.getResult(), send.getBase());
@@ -325,9 +323,16 @@ public:
     if (iter == rwProbeRefersTo.end())
       return;
 
-    assert(iter != rwProbeRefersTo.end());
-    if (iter->second != dstNode)
-      drivenBy[iter->second].second.push_back(getOrAddNode(srcVal));
+    auto dataNode = iter->second;
+    if (dataNode == dstNode)
+      return;
+    // Force of a register is sequential, so do not add a combinational edge
+    // into the register data.
+    auto dataVal = drivenBy[dataNode].first.getValue();
+    if (auto *def = dataVal.getDefiningOp())
+      if (isa<RegOp, RegResetOp>(def))
+        return;
+    drivenBy[dataNode].second.push_back(getOrAddNode(srcVal));
   }
 
   // Helper to process instance ports for a given module and instance results.
@@ -648,6 +653,16 @@ public:
     });
   }
 
+  void recordForceableProbe(Forceable forceableOp) {
+    if (!forceableOp.isForceable() || forceableOp.getDataRef().use_empty())
+      return;
+    auto data = forceableOp.getData();
+    auto ref = forceableOp.getDataRef();
+    // Record dataflow from data to the probe.
+    recordDataflow(ref, data);
+    recordProbe(data, ref);
+  }
+
   void recordProbe(Value data, Value ref) {
     auto refNode = getOrAddNode(ref);
     auto dataNode = getOrAddNode(data);
@@ -668,12 +683,13 @@ public:
     auto baseFieldRef = drivenBy[srcNode].first;
     if (auto defOp = dyn_cast_or_null<Forceable>(baseFieldRef.getDefiningOp()))
       if (defOp.isForceable() && !defOp.getDataRef().use_empty()) {
-        // Assumption, the probe must exist in the equivalence classes.
-        auto rwProbeNode =
-            rwProbeClasses.getLeaderValue(getOrAddNode(defOp.getDataRef()));
+        auto probeNode = getOrAddNode(defOp.getDataRef());
+        auto leader = rwProbeClasses.findLeader(probeNode);
+        if (leader == rwProbeClasses.member_end())
+          return;
         // For all the probes, that are in the same eqv class, i.e., refer to
         // the same value.
-        for (auto probe : rwProbeClasses.members(rwProbeNode)) {
+        for (auto probe : rwProbeClasses.members(*leader)) {
           auto probeVal = drivenBy[probe].first;
           // If the probe is a port, then record the path from the probe to the
           // input port.
