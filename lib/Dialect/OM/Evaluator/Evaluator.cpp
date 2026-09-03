@@ -162,15 +162,24 @@ ScratchIRBuilder::run(ArrayRef<EvaluatorValuePtr> actualParams) {
            .getResult()},
       {builder.getStringAttr("root")});
 
+  PassManager pm(ctx);
+#ifdef NDEBUG
+  // Verifying the entire module is expensive, so verify only the wrapper in
+  // release builds.
+  if (failed(verify(wrapperClass)))
+    return failure();
+  pm.enableVerifier(false);
+#else
+  // Verify the entire module in debug builds.
   if (failed(verify(module)))
     return failure();
+#endif
 
-  PassManager pm(ctx);
   ElaborateObjectOptions options;
   auto wrapperName = wrapperClass.getSymNameAttr();
   options.targetClass = wrapperName.getValue().str();
   pm.addPass(createElaborateObject(std::move(options)));
-  if (failed(pm.run(module)))
+  if (failed(pm.run(module)) || failed(verify(wrapperClass)))
     return failure();
 
   return InstantiationInfo{wrapperName, std::move(wrapperActualParams)};
