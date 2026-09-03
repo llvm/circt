@@ -1,49 +1,7 @@
 // RUN: circt-opt --firrtl-probes-to-signals --cse --split-input-file %s | FileCheck %s
 
-// This test file covers force/release synthesis for the ProbesToSignals pass.
-// The pass synthesizes force/release operations into a per-probe state machine:
-// - a `forced` register (UInt<1>) tracking whether the target is forced,
-// - for several forces, a one-hot `forceWinner` latch recording *which* force is
-//   in effect; the forced value itself is never registered, so a forced target
-//   keeps tracking the winning force's RHS the way Verilog `force a = v` does,
-// - an override mux injected on every *read* of the target, published through a
-//   `<target>_forced` wire; the target's own driver (a wire's connect, a
-//   register's next state and reset) is left completely untouched, and
-// - a control bundle wire {forceActive, releaseActive, forcedValue, clk} whose
-//   fields are driven exactly once by the priority reduction.
-//
-// A target that nothing reads gets no override at all: there is nothing to
-// observe the force through, so the state machine is left dead.
-//
-// Test scenarios covered:
-//  1. Force/release of a register in the same module.
-//  2. Multiple force/release operations to the same target (priority ordering).
-//  3. Force/release targeting the same wire via DIFFERENT rwprobe SSA values
-//     (post-ExpandWhens shape) collapse into one state machine.
-//  4. Same split-rwprobe scenario on a register.
-//  5. Force + release sharing the SAME rwprobe SSA value (non-bug path).
-//  6. A probe exported by a module instantiated more than once (lockstep ports).
-//  7. Preset (power-on) values of the state-machine registers are typed zeros.
-//  8. Three-level hierarchy: forces from leaf, middle, and top compose.
-//  9. Force + release on a plain (no-reset) register.
-// 10. Multiple releases reduced against a single force.
-// 11. Un-forced RWProbe.
-// 12. Force of an instance probe through a same-type `ref.cast`.
-// 13. Force/release of a local target through a same-type `ref.cast`.
-// 14. Export (`ref.define`) of a local target through a same-type `ref.cast`.
-// 15. Pure re-export (no local force) must not tie off the forwarding wire.
-// 16. Two probes on one instance, only one forced (per-result tie-off).
-// 17. Release-only (no force at all) local target.
-// 18. Release-only of an instance probe (forwarded to the child's control).
-// 19. Release-only of an exported target (local release merged with inbound).
-// 20. Release-only of an instance probe through a same-type `ref.cast`.
-// 21. Self-referential register next state (`r <= r + 1`) plus a force.
-// 24. A forced target nobody reads gets no override.
-// 25. Three clocked forces: the sticky one-hot winner keeps the *live* RHS of
-//     whichever force is in effect (a plain last-wins mux would collapse back
-//     to the first force once every predicate dropped).
-// 26. Force of a register clocked by a gated clock.
-// 27. Force of a child's register clocked by a gated clock local to the child.
+// Covers local and hierarchical force/release lowering, control-port routing,
+// priority, aliases, casts, gated clocks, and unsupported targets.
 
 
 // -----
@@ -64,25 +22,18 @@ firrtl.circuit "SameModuleRegisterForceRelease" {
     firrtl.ref.force %clock, %enable, %r_ref, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
     firrtl.ref.release %clock, %release, %r_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // The register keeps its own next-state driver: the force must not become
-    // part of the flop equation (it would land a cycle late and lose to reset).
+    // The force must not become part of the register's next-state driver.
     // CHECK: firrtl.matchingconnect %r, %c1_ui8
     // Readers observe the override instead.
     // CHECK: firrtl.matchingconnect %o, %r_forced
-    // forceActive is forceWins itself (the winning predicate already implies
-    // a force is active).
-    // releaseActive is gated by !forceWins so a concurrent force suppresses it.
-    // CHECK-DAG: %[[NFW:.+]] = firrtl.not %{{.+}}
-    // CHECK-DAG: firrtl.and %release, %[[NFW]]
-    // The only state is the `forced` flag: a plain `firrtl.reg` with an
-    // `initial` attribute of 0 (a power-on value that prevents X-initialization
-    // without depending on the module's `reset` port firing).  The forced
-    // *value* is not registered -- a single force needs no state at all, its
-    // RHS is read live.  It is emitted after the existing target logic.
+    // The release is later, so it has priority: the force predicate is gated by
+    // !release and releaseActive is the release predicate itself.
+    // CHECK-DAG: %[[NR:.+]] = firrtl.not %release
+    // CHECK-DAG: firrtl.and %enable, %[[NR]]
+    // A single force needs only the `forced` flag; its RHS remains live.
     // CHECK: %{{.+}} = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
     // CHECK-NOT: firrtl.reg {{.*}} !firrtl.uint<8>
-    // The override reads the raw register and publishes the observed value,
-    // muxing in the force's live RHS (`%value`, not a snapshot of it).
+    // The override uses the force's live RHS.
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %value, %r)
     // CHECK: firrtl.matchingconnect %r_forced, %[[OVR]]
   }
@@ -101,52 +52,35 @@ firrtl.circuit "MultipleForceReleaseSameWire" {
     firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
     firrtl.matchingconnect %o, %w : !firrtl.uint<8>
 
-    // First force (lowest priority - earliest in PriorityMux chain).
+    // Earlier accesses have lower priority.
     firrtl.ref.force %clock, %en1, %w_ref, %val1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // Second force.
     firrtl.ref.force %clock, %en2, %w_ref, %val2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // Release (highest priority - last in chain).
     firrtl.ref.release %clock, %en2, %w_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
     // The wire keeps its own single driver.
     // CHECK: firrtl.matchingconnect %w, %c0_ui8
     // CHECK: firrtl.matchingconnect %o, %w_forced
-    // forceActive is forceWins itself, the priority mux chain over the two
-    // force predicates and the release predicate.
-    // CHECK: %[[FW0:.+]] = firrtl.mux(%en2, %c1_ui1, %en1)
-    // CHECK: %[[FA:.+]] = firrtl.mux(%en2, %c0_ui1, %[[FW0]])
-    // Two forces, so which one is in effect is latched (one bit per force after
-    // the first) while both RHS values stay live.  `en2` is the last force, so
-    // no later predicate masks it.
+    // The later release masks both forces; the later force masks the first.
+    // CHECK: %[[NR:.+]] = firrtl.not %en2
+    // CHECK: %[[F2:.+]] = firrtl.and %en2, %[[NR]]
+    // CHECK: %[[F1:.+]] = firrtl.and %en1, %[[NR]]
+    // CHECK: %[[FA:.+]] = firrtl.or %[[F1]], %[[F2]]
+    // Latch the winning force while keeping both RHS values live.
     // CHECK: %forceWinner = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
     // CHECK: %[[FV:.+]] = firrtl.mux(%forceWinner, %val2, %val1)
-    // CHECK: %[[WIN:.+]] = firrtl.mux(%[[FA]], %en2, %forceWinner)
+    // CHECK: %[[WIN:.+]] = firrtl.mux(%[[FA]], %[[F2]], %forceWinner)
     // CHECK: firrtl.matchingconnect %forceWinner, %[[WIN]]
-    // The state-machine registers are plain `firrtl.reg` with an `initial`
-    // power-on value of 0.  The `forced` register is emitted after the winner
-    // state because both are materialized at module end.
+    // State registers have a power-on value of 0.
     // CHECK: %{{.+}} = firrtl.reg {{.+}} : !firrtl.clock, !firrtl.uint<1>
     // CHECK-NOT: %{{.+}}_{{[0-9]+}} = firrtl.reg
-    // The override falls back to the wire (and hence its own driver) when
-    // unforced.
+    // Unforced reads fall back to the wire.
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %[[FV]], %w)
     // CHECK: firrtl.matchingconnect %w_forced, %[[OVR]]
   }
 }
 
 // -----
-// TEST 3: Force and release target the same wire via DIFFERENT rwprobe SSA
-// values (post-ExpandWhens shape).  The pass must produce one state machine
-// with both forceActive and releaseActive wired correctly.
-//
-// %w_ref comes from firrtl.wire forceable (visited and mapped in probeToHWMap).
-// %w_ref2 comes from an explicit firrtl.ref.rwprobe on the same inner sym
-// (also visited and mapped to the same hw value in probeToHWMap).
-//
-// Expected output after fix:
-//   - Exactly ONE forced register.
-//   - forceActive driven by %force_en (not constant 0).
-//   - releaseActive driven by a non-constant expression involving %release_en.
+// TEST 3: Different RWProbe values for one target share one state machine.
 
 // CHECK-LABEL: firrtl.module @ForceReleaseSplitRWProbes
 firrtl.circuit "ForceReleaseSplitRWProbes" {
@@ -163,54 +97,71 @@ firrtl.circuit "ForceReleaseSplitRWProbes" {
     firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
     firrtl.matchingconnect %o, %w : !firrtl.uint<8>
 
-    // A second rwprobe value for the SAME inner symbol — this is exactly the
-    // shape firrtl-expand-whens produces when force/release are in separate
-    // when branches.
+    // A second RWProbe value for the same inner symbol.
     %w_ref2 = firrtl.ref.rwprobe <@ForceReleaseSplitRWProbes::@w_sym> :
         !firrtl.rwprobe<uint<8>>
 
-    // Force uses %w_ref; release uses %w_ref2.  Both target @w_sym.
+    // Force and release use different RWProbe values for the same target.
     firrtl.ref.force %clock, %force_en, %w_ref, %val :
         !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
     firrtl.ref.release %clock, %release_en, %w_ref2 :
         !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // Correct output assertions:
-
-    // Exactly ONE observed wire and ONE forced register.  The bug produces two
-    // (forced + forced_0); a duplicate would be renamed with a numeric suffix,
-    // so assert no such second one appears.
+    // One observed wire and one forced register must be emitted.
     // CHECK:     %w_forced = firrtl.wire : !firrtl.uint<8>
     // CHECK-NOT: %w_forced_{{[0-9]+}} = firrtl.wire
-    // %w keeps its single original driver; the reader sees the observed value.
     // CHECK:     firrtl.matchingconnect %w, %c0_ui8
     // CHECK:     firrtl.matchingconnect %o, %w_forced
 
-    // forceActive is forceWins itself, driven by %force_en through the
-    // priority mux (not constant 0).
-    // CHECK-DAG: firrtl.mux(%release_en, %{{.+}}, %force_en)
+    // The release masks the force.
+    // CHECK-DAG: %[[NR:.+]] = firrtl.not %release_en
+    // CHECK-DAG: firrtl.and %force_en, %[[NR]]
 
-    // releaseActive must be gated by NOT(forceWins) — both ops must appear.
-    // CHECK-DAG: firrtl.not %{{.+}}
-    // CHECK-DAG: firrtl.and %release_en, %{{.+}}
-
-    // The generated state is emitted after the original driver and reduction.
     // CHECK:     %{{.+}} = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
     // CHECK-NOT: %{{.+}}_{{[0-9]+}} = firrtl.reg
 
-    // Exactly ONE override, emitted after the control-logic reduction (at the
-    // end of the block).
+    // One read-side override is emitted.
     // CHECK:     %[[OVR:.+]] = firrtl.mux(%forced, %val, %w)
     // CHECK:     firrtl.matchingconnect %w_forced, %[[OVR]]
   }
 }
 
 // -----
-// TEST 4: ForceRelease via split rwprobes on a REGISTER (regreset).
-// Same bug scenario as Test 3 but targeting a regreset instead of a wire.
-//
-// Expected: one forced register, forceActive driven by %force_en,
-// releaseActive driven by expression containing %release_en.
+// TEST 3b: Two independently-created rwprobes of the same inner symbol reuse
+// one materialized hardware target.  The cache must be keyed by the target
+// InnerRefAttr, not by either probe's SSA result.
+
+// CHECK-LABEL: firrtl.module @RepeatedRWProbeTarget
+firrtl.circuit "RepeatedRWProbeTarget" {
+  firrtl.module @RepeatedRWProbeTarget(
+      in %clock: !firrtl.clock,
+      in %en: !firrtl.uint<1>,
+      in %value: !firrtl.uint<8>,
+      out %o: !firrtl.uint<8>) {
+    %w = firrtl.wire sym @w_sym : !firrtl.uint<8>
+    %c0 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+
+    %ref1 = firrtl.ref.rwprobe <@RepeatedRWProbeTarget::@w_sym> :
+        !firrtl.rwprobe<uint<8>>
+    %ref2 = firrtl.ref.rwprobe <@RepeatedRWProbeTarget::@w_sym> :
+        !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %ref1, %value :
+        !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    firrtl.ref.release %clock, %en, %ref2 :
+        !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+
+    // Both accesses must reduce into one target state machine.
+    // CHECK: %w_forced = firrtl.wire : !firrtl.uint<8>
+    // CHECK-NOT: %w_forced_{{[0-9]+}} = firrtl.wire
+    // CHECK: %[[OVR:.+]] = firrtl.mux(%{{.+}}, %value, %w)
+    // CHECK: firrtl.matchingconnect %w_forced, %[[OVR]]
+  }
+}
+
+// -----
+// TEST 4: Different RWProbe values for one regreset share one state machine.
 
 // CHECK-LABEL: firrtl.module @ForceReleaseSplitRWProbesReg
 firrtl.circuit "ForceReleaseSplitRWProbesReg" {
@@ -229,7 +180,7 @@ firrtl.circuit "ForceReleaseSplitRWProbesReg" {
     firrtl.matchingconnect %r, %next : !firrtl.uint<8>
     firrtl.matchingconnect %o, %r : !firrtl.uint<8>
 
-    // Second rwprobe for the same inner sym — different SSA value.
+    // A second RWProbe value for the same inner symbol.
     %r_ref2 = firrtl.ref.rwprobe <@ForceReleaseSplitRWProbesReg::@r_sym> :
         !firrtl.rwprobe<uint<8>>
 
@@ -238,30 +189,22 @@ firrtl.circuit "ForceReleaseSplitRWProbesReg" {
     firrtl.ref.release %clock, %release_en, %r_ref2 :
         !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // One state machine.
     // CHECK:     %r_forced = firrtl.wire : !firrtl.uint<8>
     // CHECK-NOT: %r_forced_{{[0-9]+}} = firrtl.wire
-    // The register keeps its own next-value connect and its reset.
     // CHECK:     firrtl.matchingconnect %r, %next
     // CHECK:     firrtl.matchingconnect %o, %r_forced
-    // forceActive is forceWins, driven by %force_en through the priority mux.
-    // CHECK-DAG: firrtl.mux(%release_en, %{{.+}}, %force_en)
-    // releaseActive has %release_en gated by NOT(forceWins).
-    // CHECK-DAG: firrtl.and %release_en, %{{.+}}
-    // The generated state is emitted after the original register logic.
+    // CHECK-DAG: %[[NR:.+]] = firrtl.not %release_en
+    // CHECK-DAG: firrtl.and %force_en, %[[NR]]
     // CHECK:     %{{.+}} = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
     // CHECK-NOT: %{{.+}}_{{[0-9]+}} = firrtl.reg
-    // The override reads the raw register (appears after the control-logic
-    // reduction, at the end of the block).
+    // The override reads the raw register.
     // CHECK:     %[[OVR:.+]] = firrtl.mux(%forced, %val, %r)
     // CHECK:     firrtl.matchingconnect %r_forced, %[[OVR]]
   }
 }
 
 // -----
-// TEST 5: Sanity check — force AND release sharing the SAME %w_ref (the
-// non-bug case) must continue to work and produce exactly one state machine.
-// This tests that the fix does not break the common path.
+// TEST 5: Force and release sharing one RWProbe produce one state machine.
 
 // CHECK-LABEL: firrtl.module @ForceReleaseSameRWProbe
 firrtl.circuit "ForceReleaseSameRWProbe" {
@@ -277,15 +220,14 @@ firrtl.circuit "ForceReleaseSameRWProbe" {
     firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
     firrtl.matchingconnect %o, %w : !firrtl.uint<8>
 
-    // Both ops use the same %w_ref — the normal (non-bug) path.
+    // Both operations use the same RWProbe.
     firrtl.ref.force %clock, %force_en, %w_ref, %val :
         !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
     firrtl.ref.release %clock, %release_en, %w_ref :
         !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // CHECK-DAG: firrtl.mux(%release_en, %{{.+}}, %force_en)
-    // CHECK-DAG: firrtl.not %{{.+}}
-    // CHECK-DAG: firrtl.and %release_en, %{{.+}}
+    // CHECK-DAG: %[[NR:.+]] = firrtl.not %release_en
+    // CHECK-DAG: firrtl.and %force_en, %[[NR]]
     // CHECK-DAG: firrtl.matchingconnect %w, %c0_ui8
     // The state register is emitted after the target and control reduction.
     // CHECK:     %{{.+}} = firrtl.reg {{.+}} : !firrtl.clock, !firrtl.uint<1>
@@ -296,15 +238,11 @@ firrtl.circuit "ForceReleaseSameRWProbe" {
 
 // -----
 
-// TEST 6: A forceable RWProbe exported by a module that is instantiated more
-// than once.
-// The probe port becomes a `{data, ctrl}` bundle on the module and on *every*
-// instance; the module's port count and its instances' port counts must stay
-// in lockstep.
+// TEST 6: Exported RWProbe data and control ports stay in lockstep across
+// multiple instances.
 
 // CHECK-LABEL: firrtl.module @Child
-// The child's probe port becomes a {data, ctrl} bundle.
-// CHECK-SAME: out %probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>
+// CHECK-SAME: out %probe_out: !firrtl.uint<8>, in %probe_out_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>
 
 firrtl.circuit "MultiInst" {
   firrtl.module @Child(out %probe_out: !firrtl.rwprobe<uint<8>>) {
@@ -314,10 +252,9 @@ firrtl.circuit "MultiInst" {
 
   // CHECK-LABEL: firrtl.module @MultiInst
   firrtl.module @MultiInst(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
-    // Both instances must carry the matching bundled probe port and each
-    // control subfield is driven from the instance.
-    // CHECK: firrtl.instance a @Child(out probe_out: !firrtl.bundle<{{.*}}>)
-    // CHECK: firrtl.instance b @Child(out probe_out: !firrtl.bundle<{{.*}}>)
+    // Both instances carry data and control ports.
+    // CHECK: firrtl.instance a @Child(out probe_out: !firrtl.uint<8>, in probe_out_force_ctrl: !firrtl.bundle<{{.*}}>)
+    // CHECK: firrtl.instance b @Child(out probe_out: !firrtl.uint<8>, in probe_out_force_ctrl: !firrtl.bundle<{{.*}}>)
     // CHECK: firrtl.matchingconnect %{{.+}}, %en : !firrtl.uint<1>
     // CHECK: firrtl.matchingconnect %{{.+}}, %en : !firrtl.uint<1>
     %a_probe = firrtl.instance a @Child(out probe_out: !firrtl.rwprobe<uint<8>>)
@@ -329,9 +266,8 @@ firrtl.circuit "MultiInst" {
 
 
 // -----
-// TEST 7: Verify the `initial` (power-on) VALUE is 0 for `forced`, and that the
-// forced value itself is *not* registered: a wide probed type (uint<16>) must
-// not produce a register at all, the force's RHS being read live.
+// TEST 7: The `forced` state is initialized to zero; the wide force value stays
+// live.
 //
 // CHECK-LABEL: firrtl.module @ForceResetValueIsZero
 firrtl.circuit "ForceResetValueIsZero" {
@@ -339,16 +275,17 @@ firrtl.circuit "ForceResetValueIsZero" {
       in %clock:  !firrtl.clock,
       in %reset:  !firrtl.uint<1>,
       in %enable: !firrtl.uint<1>,
-      in %val:    !firrtl.uint<16>) {
+      in %val:    !firrtl.uint<16>,
+      out %o:     !firrtl.uint<16>) {
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<16>, !firrtl.rwprobe<uint<16>>
     %c0 = firrtl.constant 0 : !firrtl.uint<16>
     firrtl.matchingconnect %w, %c0 : !firrtl.uint<16>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<16>
 
     firrtl.ref.force %clock, %enable, %w_ref, %val :
         !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<16>>, !firrtl.uint<16>
 
-    // The register carries a typed-zero `initial` power-on value: `forced`
-    // initializes to a uint<1> value 0.
+    // The state register has a typed-zero initial value.
     // CHECK: %forced = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
     // Nothing of the probed type is registered.
     // CHECK-NOT: firrtl.reg {{.*}} !firrtl.uint<16>
@@ -357,58 +294,43 @@ firrtl.circuit "ForceResetValueIsZero" {
 
 
 // -----
-// TEST 8: Three-level hierarchy with a register at the leaf.  Leaf owns the
-// forceable register and forces it locally; Middle and Top each force the same
-// probe through the instance chain.  Each module in the chain merges its local
-// force with the one arriving on its probe port's ctrl field.
+// TEST 8: Local and hierarchical forces merge through three levels.
 
 // CHECK-LABEL: firrtl.circuit "Middle"
 firrtl.circuit "Middle" {
-  // Leaf module with forceable register
-  // The leaf's exported probe becomes a {data, ctrl} bundle port.
-  // CHECK: firrtl.module @Leaf(out %reg_probe: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>
+  // The leaf exports data and force control.
+// CHECK: firrtl.module @Leaf(out %reg_probe: !firrtl.uint<8>, in %clock: !firrtl.clock, in %data_in: !firrtl.uint<8>, in %enable: !firrtl.uint<1>, in %reg_probe_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>)
   firrtl.module @Leaf(out %reg_probe: !firrtl.rwprobe<uint<8>>, in %clock: !firrtl.clock, in %data_in: !firrtl.uint<8>, in %enable: !firrtl.uint<1>) {
     %reg, %reg_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
     firrtl.matchingconnect %reg, %data_in : !firrtl.uint<8>
     firrtl.ref.define %reg_probe, %reg_ref : !firrtl.rwprobe<uint<8>>
     firrtl.ref.force %clock, %enable, %reg_ref, %data_in : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // Leaf builds a state machine for its local register and routes the reads of
-    // it through the override.
-    // The bundled probe port is split into its data and ctrl subfields.
-    // CHECK: %[[DATA:.+]] = firrtl.subfield %reg_probe[data]
-    // CHECK: %[[CTRL:.+]] = firrtl.subfield %reg_probe[ctrl]
+    // The leaf overrides reads of its local register.
     // CHECK: %reg_forced = firrtl.wire : !firrtl.uint<8>
-    // The register keeps its own next-value connect; the exported probe carries
-    // the observed value.
     // CHECK: firrtl.matchingconnect %reg, %data_in
-    // CHECK: firrtl.matchingconnect %[[DATA]], %reg_forced
-    // The local force (%enable) is merged with the ctrl subfield's forceActive.
-    // CHECK: %[[CTRL_FORCE:.+]] = firrtl.subfield %[[CTRL]][forceActive]
-    // CHECK: %[[CTRL_RELEASE:.+]] = firrtl.subfield %[[CTRL]][releaseActive]
-    // CHECK: %[[CTRL_VALUE:.+]] = firrtl.subfield %[[CTRL]][forcedValue]
-    // CHECK: %[[ANY_FORCE:.+]] = firrtl.or %enable, %[[CTRL_FORCE]]
-    // ... and which side forced last is latched, so the merged value keeps
-    // tracking that side's live RHS after both predicates drop.
-    // CHECK: %forcedByLocal = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %[[MERGED:.+]] = firrtl.mux(%forcedByLocal, %data_in, %[[CTRL_VALUE]])
-    // CHECK: %[[LOCAL_NEXT:.+]] = firrtl.mux(%[[ANY_FORCE]], %enable, %forcedByLocal)
-    // CHECK: firrtl.matchingconnect %forcedByLocal, %[[LOCAL_NEXT]]
-    // The outer state register is emitted after the local winner state.
+    // CHECK: firrtl.matchingconnect %reg_probe, %reg_forced
+    // Local control has priority over inbound control.
+    // CHECK: %[[CTRL_FORCE:.+]] = firrtl.subfield %reg_probe_force_ctrl[forceActive]
+    // CHECK: %[[CTRL_RELEASE:.+]] = firrtl.subfield %reg_probe_force_ctrl[releaseActive]
+    // CHECK: %[[CTRL_VALUE:.+]] = firrtl.subfield %reg_probe_force_ctrl[forcedValue]
+    // CHECK: %[[ANY_FORCE:.+]] = firrtl.or %{{.+}}, %enable
+    // CHECK: %forceWinner = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %[[MERGED:.+]] = firrtl.mux(%forceWinner, %data_in, %[[CTRL_VALUE]])
+    // CHECK: %[[LOCAL_NEXT:.+]] = firrtl.mux(%[[ANY_FORCE]], %enable, %forceWinner)
+    // CHECK: firrtl.matchingconnect %forceWinner, %[[LOCAL_NEXT]]
     // CHECK: %{{.+}} = firrtl.reg {{.+}} : !firrtl.clock, !firrtl.uint<1>
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %[[MERGED]], %reg)
     // CHECK: firrtl.matchingconnect %reg_forced, %[[OVR]]
   }
 
-  // Middle level module that instantiates Leaf and can force the register
+  // Middle instantiates Leaf and can force the register.
   // CHECK-LABEL: firrtl.module @Middle
-  // Middle's exported probe becomes a {data, ctrl} bundle port, and it
-  // instantiates Leaf with the same bundled probe port shape.
-  // CHECK-SAME: out %reg_probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle
+  // Middle forwards the same data and control port shape.
+  // CHECK-SAME: out %reg_probe_out: !firrtl.uint<8>
   // CHECK: firrtl.instance leaf @Leaf(
-  // CHECK-SAME: out reg_probe: !firrtl.bundle<data: uint<8>, ctrl flip: bundle
-  // Middle's local force (%enable_middle) is merged with the leaf's inbound
-  // control fields.
-  // CHECK: firrtl.or %enable_middle, %{{.+}}
+  // CHECK-SAME: in reg_probe_force_ctrl: !firrtl.bundle
+  // Middle's local force has priority over inbound control.
+  // CHECK: firrtl.or %{{.+}}, %enable_middle
   firrtl.module @Middle(out %reg_probe_out: !firrtl.rwprobe<uint<8>>, in %clock: !firrtl.clock, in %data_in: !firrtl.uint<8>, in %enable_middle: !firrtl.uint<1>, in %value_middle: !firrtl.uint<8>) {
     %leaf_probe, %leaf_clock, %leaf_data, %leaf_enable = firrtl.instance leaf @Leaf(out reg_probe: !firrtl.rwprobe<uint<8>>, in clock: !firrtl.clock, in data_in: !firrtl.uint<8>, in enable: !firrtl.uint<1>)
     firrtl.matchingconnect %leaf_clock, %clock : !firrtl.clock
@@ -423,7 +345,6 @@ firrtl.circuit "Middle" {
     firrtl.ref.define %reg_probe_out, %leaf_probe : !firrtl.rwprobe<uint<8>>
   }
 
-  // Top level module that instantiates Middle and can also force the register
   // CHECK-LABEL: firrtl.module @ThreeLevelHierarchy
   firrtl.module @ThreeLevelHierarchy(in %clock: !firrtl.clock, in %data_in: !firrtl.uint<8>, in %enable_middle: !firrtl.uint<1>, in %value_middle: !firrtl.uint<8>, in %enable_top: !firrtl.uint<1>, in %value_top: !firrtl.uint<8>) {
     %middle_probe, %middle_clock, %middle_data, %middle_enable, %middle_value = firrtl.instance middle @Middle(out reg_probe_out: !firrtl.rwprobe<uint<8>>, in clock: !firrtl.clock, in data_in: !firrtl.uint<8>, in enable_middle: !firrtl.uint<1>, in value_middle: !firrtl.uint<8>)
@@ -432,23 +353,17 @@ firrtl.circuit "Middle" {
     firrtl.matchingconnect %middle_enable, %enable_middle : !firrtl.uint<1>
     firrtl.matchingconnect %middle_value, %value_middle : !firrtl.uint<8>
 
-    // Force from top level - same register probe that middle level forces
     firrtl.ref.force %clock, %enable_top, %middle_probe, %value_top : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // The top-level force drives the Middle instance's bundled probe port's
-    // ctrl subfields directly; Top itself is not exported so it needs no
-    // extra control port.
     // CHECK: firrtl.instance middle @Middle(
-    // CHECK-SAME: out reg_probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle
-    // forceActive on the ctrl subfield is driven from %enable_top.
+    // CHECK-SAME: out reg_probe_out: !firrtl.uint<8>
+    // CHECK-SAME: in reg_probe_out_force_ctrl: !firrtl.bundle
     // CHECK: firrtl.matchingconnect %{{.+}}, %enable_top : !firrtl.uint<1>
   }
 }
 
 
 // -----
-// TEST 9: Force on a RegOp (plain register, no reset) with a release.
-// The existing next-value connect on the register stays put; the override lands
-// on the reads.  No second driver of %r.
+// TEST 9: Force and release on a plain register affect reads only.
 
 // CHECK-LABEL: firrtl.circuit "PlainRegForceRelease"
 firrtl.circuit "PlainRegForceRelease" {
@@ -471,23 +386,21 @@ firrtl.circuit "PlainRegForceRelease" {
 
     // CHECK: %r = firrtl.reg %clock
     // CHECK: %r_forced = firrtl.wire : !firrtl.uint<8>
-    // Exactly ONE connect to %r, the original next-value connect.
+    // The register keeps its single next-state driver.
     // CHECK: firrtl.matchingconnect %r, %next
     // CHECK-NOT: firrtl.matchingconnect %r, %
     // CHECK: firrtl.matchingconnect %o, %r_forced
-    // Release gated by !forceWins.
-    // CHECK-DAG: %[[NFW:.+]] = firrtl.not %{{.+}}
-    // CHECK-DAG: firrtl.and %en_release, %[[NFW]]
-    // Override mux: mux(forced, val, r), emitted at end of block.
+    // The release masks the force.
+    // CHECK-DAG: %[[NR:.+]] = firrtl.not %en_release
+    // CHECK-DAG: firrtl.and %en_force, %[[NR]]
+    // Override reads the raw register.
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %val, %r)
     // CHECK: firrtl.matchingconnect %r_forced, %[[OVR]]
   }
 }
 
 // -----
-// TEST 10: Multiple releases with a single force.
-// releaseActive = OR(all release preds) AND NOT(forceWins).
-// forceActive = OR(force preds) AND forceWins.
+// TEST 10: Multiple releases mask a single force.
 
 // CHECK-LABEL: firrtl.circuit "MultipleReleasesSingleForce"
 firrtl.circuit "MultipleReleasesSingleForce" {
@@ -497,10 +410,12 @@ firrtl.circuit "MultipleReleasesSingleForce" {
       in %en_r1: !firrtl.uint<1>,
       in %en_r2: !firrtl.uint<1>,
       in %en_r3: !firrtl.uint<1>,
-      in %val: !firrtl.uint<8>) {
+      in %val: !firrtl.uint<8>,
+      out %o: !firrtl.uint<8>) {
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
     %c0 = firrtl.constant 0 : !firrtl.uint<8>
     firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
 
     firrtl.ref.force %clock, %en_f, %w_ref, %val :
         !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
@@ -511,23 +426,21 @@ firrtl.circuit "MultipleReleasesSingleForce" {
     firrtl.ref.release %clock, %en_r3, %w_ref :
         !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // releaseActive = (en_r1 OR en_r2 OR en_r3) AND NOT(forceWins).
-    // CHECK-DAG: firrtl.or %en_r1, %en_r2
-    // CHECK-DAG: firrtl.or %{{.+}}, %en_r3
-    // forceActive is forceWins itself.
+    // The force is gated by the absence of every release.
+    // CHECK-DAG: %[[ANY0:.+]] = firrtl.or %en_r3, %en_r2
+    // CHECK-DAG: %[[ANY1:.+]] = firrtl.or %[[ANY0]], %en_r1
+    // CHECK-DAG: %[[NR:.+]] = firrtl.not %[[ANY1]]
+    // CHECK-DAG: firrtl.and %en_f, %[[NR]]
   }
 }
 
 // -----
 
-// TEST 11: This test verifies selective force behavior: a parent module
-// instantiates a child module twice, forcing the RWProbe from only one instance
-// while merely reading from the other instance's probe (no force/release).
+// TEST 11: Only one of two instance probes is forced; the other is tied off.
 
 // CHECK-LABEL: firrtl.circuit "SelectiveForce"
 firrtl.circuit "SelectiveForce" {
-  // Child module exports the RWProbe as a bundled {data, ctrl} port.
-  // CHECK: firrtl.module @Child(out %probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>)
+  // CHECK: firrtl.module @Child(out %probe_out: !firrtl.uint<8>, in %probe_out_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>)
   firrtl.module @Child(out %probe_out: !firrtl.rwprobe<uint<8>>) {
     %target, %target_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
     %c42 = firrtl.constant 42 : !firrtl.uint<8>
@@ -542,45 +455,35 @@ firrtl.circuit "SelectiveForce" {
       in %force_value: !firrtl.uint<8>,
       out %read_value: !firrtl.uint<8>) {
 
-    // Both instances carry the bundled probe port; the ctrl subfield is
-    // extracted from each instance result directly (no forwarding wire).
-    // CHECK-NEXT: %a_probe_out = firrtl.instance a @Child(out probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>)
-    // CHECK-NEXT: %[[A_CTRL:.+]] = firrtl.subfield %a_probe_out[ctrl]
+    // CHECK-NEXT: %a_probe_out, %a_probe_out_force_ctrl = firrtl.instance a @Child(out probe_out: !firrtl.uint<8>, in probe_out_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>)
     %a_probe = firrtl.instance a @Child(out probe_out: !firrtl.rwprobe<uint<8>>)
 
-    // CHECK-NEXT: %b_probe_out = firrtl.instance b @Child(out probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>)
-    // CHECK-NEXT: %[[B_DATA:.+]] = firrtl.subfield %b_probe_out[data]
-    // CHECK-NEXT: %[[B_CTRL:.+]] = firrtl.subfield %b_probe_out[ctrl]
+    // CHECK-NEXT: %b_probe_out, %b_probe_out_force_ctrl = firrtl.instance b @Child(out probe_out: !firrtl.uint<8>, in probe_out_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>)
     %b_probe = firrtl.instance b @Child(out probe_out: !firrtl.rwprobe<uint<8>>)
 
     firrtl.ref.force %clock, %enable, %a_probe, %force_value : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
 
-    // Instance 'b' is only read, not forced
-    // CHECK: firrtl.matchingconnect %read_value, %[[B_DATA]]
+    // CHECK: firrtl.matchingconnect %read_value, %b_probe_out
     %b_read = firrtl.ref.resolve %b_probe : !firrtl.rwprobe<uint<8>>
     firrtl.matchingconnect %read_value, %b_read : !firrtl.uint<8>
 
-    // Instance 'a' is forced, so its ctrl subfields are driven from the
-    // reduced local control: the force predicate on forceActive, its RHS on
-    // forcedValue.
+    // The forced instance receives active control fields.
     // CHECK: %[[FALSE:.+]] = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %[[A_FA:.+]] = firrtl.subfield %[[A_CTRL]][forceActive]
-    // CHECK-NEXT: %[[A_RA:.+]] = firrtl.subfield %[[A_CTRL]][releaseActive]
-    // CHECK-NEXT: %[[A_FV:.+]] = firrtl.subfield %[[A_CTRL]][forcedValue]
-    // CHECK-NEXT: %[[A_CLK:.+]] = firrtl.subfield %[[A_CTRL]][clk]
+    // CHECK: %[[A_FA:.+]] = firrtl.subfield %a_probe_out_force_ctrl[forceActive]
+    // CHECK-NEXT: %[[A_RA:.+]] = firrtl.subfield %a_probe_out_force_ctrl[releaseActive]
+    // CHECK-NEXT: %[[A_FV:.+]] = firrtl.subfield %a_probe_out_force_ctrl[forcedValue]
+    // CHECK-NEXT: %[[A_CLK:.+]] = firrtl.subfield %a_probe_out_force_ctrl[clk]
     // CHECK-NEXT: firrtl.matchingconnect %[[A_FA]], %enable
     // CHECK-NEXT: firrtl.matchingconnect %[[A_RA]], %[[FALSE]]
     // CHECK-NEXT: firrtl.matchingconnect %[[A_FV]], %force_value
     // CHECK-NEXT: firrtl.matchingconnect %[[A_CLK]], %clock
 
-    // Instance 'b' is NOT forced (only read), so its ctrl subfields get
-    // inactive defaults, including a constant-0 clock so the child's SM is
-    // not left with an undriven `clk` (which would X the unforced target).
+    // The unforced instance receives inactive control fields and a zero clock.
     // CHECK: %[[ZEROCLK:.+]] = firrtl.specialconstant 0 : !firrtl.clock
-    // CHECK: %[[B_FA:.+]] = firrtl.subfield %[[B_CTRL]][forceActive]
-    // CHECK-NEXT: %[[B_RA:.+]] = firrtl.subfield %[[B_CTRL]][releaseActive]
-    // CHECK-NEXT: %[[B_FV:.+]] = firrtl.subfield %[[B_CTRL]][forcedValue]
-    // CHECK-NEXT: %[[B_CLK:.+]] = firrtl.subfield %[[B_CTRL]][clk]
+    // CHECK: %[[B_FA:.+]] = firrtl.subfield %b_probe_out_force_ctrl[forceActive]
+    // CHECK-NEXT: %[[B_RA:.+]] = firrtl.subfield %b_probe_out_force_ctrl[releaseActive]
+    // CHECK-NEXT: %[[B_FV:.+]] = firrtl.subfield %b_probe_out_force_ctrl[forcedValue]
+    // CHECK-NEXT: %[[B_CLK:.+]] = firrtl.subfield %b_probe_out_force_ctrl[clk]
     // CHECK-NEXT: firrtl.matchingconnect %[[B_FA]], %[[FALSE]]
     // CHECK-NEXT: firrtl.matchingconnect %[[B_RA]], %[[FALSE]]
     // CHECK-NEXT: firrtl.matchingconnect %[[B_FV]], %{{.+}}
@@ -589,13 +492,10 @@ firrtl.circuit "SelectiveForce" {
 }
 
 // -----
-// TEST 12: Force an instance probe through a same-type `ref.cast`.
-// The cast must not invent a dummy wire / local SM: the force is forwarded
-// to the child's inbound ctrl field, same as a direct force of the
-// instance result.
+// TEST 12: A same-type cast forwards an instance force to the child.
 
 // CHECK-LABEL: firrtl.module @CastChild
-// CHECK-SAME: out %probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>
+// CHECK-SAME: out %probe_out: !firrtl.uint<8>, in %probe_out_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>
 firrtl.circuit "ForceThroughCast" {
   firrtl.module @CastChild(out %probe_out: !firrtl.rwprobe<uint<8>>) {
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
@@ -608,24 +508,20 @@ firrtl.circuit "ForceThroughCast" {
 
   // CHECK-LABEL: firrtl.module @ForceThroughCast
   firrtl.module @ForceThroughCast(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, in %value: !firrtl.uint<8>) {
-    // CHECK: %c_probe_out = firrtl.instance c @CastChild(out probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>)
-    // CHECK-NEXT: %[[C_CTRL:.+]] = firrtl.subfield %c_probe_out[ctrl]
+    // CHECK: %c_probe_out, %c_probe_out_force_ctrl = firrtl.instance c @CastChild(out probe_out: !firrtl.uint<8>, in probe_out_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>)
     %c_probe = firrtl.instance c @CastChild(out probe_out: !firrtl.rwprobe<uint<8>>)
     %cast = firrtl.ref.cast %c_probe : (!firrtl.rwprobe<uint<8>>) -> !firrtl.rwprobe<uint<8>>
     firrtl.ref.force %clock, %enable, %cast, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
 
-    // The same-type cast must not lower to a copy wire (which would be the
-    // target of a parent-local state machine, leaving the child unforced), and
-    // the control fields must not be tied off inactive (which would be a
-    // second driver of these fields as well as dropping the force).
+    // The cast must not create a local copy or tie off the child's control.
     // CHECK-NOT: firrtl.wire : !firrtl.uint<8>
     // CHECK-NOT: firrtl.specialconstant
     // CHECK-NOT: %forced = firrtl.reg
     // The force drives the child's ctrl subfields instead.
-    // CHECK: %[[C_FA:.+]] = firrtl.subfield %[[C_CTRL]][forceActive]
-    // CHECK-NEXT: %[[C_RA:.+]] = firrtl.subfield %[[C_CTRL]][releaseActive]
-    // CHECK-NEXT: %[[C_FV:.+]] = firrtl.subfield %[[C_CTRL]][forcedValue]
-    // CHECK-NEXT: %[[C_CLK:.+]] = firrtl.subfield %[[C_CTRL]][clk]
+    // CHECK: %[[C_FA:.+]] = firrtl.subfield %c_probe_out_force_ctrl[forceActive]
+    // CHECK-NEXT: %[[C_RA:.+]] = firrtl.subfield %c_probe_out_force_ctrl[releaseActive]
+    // CHECK-NEXT: %[[C_FV:.+]] = firrtl.subfield %c_probe_out_force_ctrl[forcedValue]
+    // CHECK-NEXT: %[[C_CLK:.+]] = firrtl.subfield %c_probe_out_force_ctrl[clk]
     // CHECK-NEXT: firrtl.matchingconnect %[[C_FA]], %enable
     // CHECK-NEXT: firrtl.matchingconnect %[[C_RA]], %[[FALSE:.+]]
     // CHECK-NEXT: firrtl.matchingconnect %[[C_FV]], {{%.+}}
@@ -633,9 +529,7 @@ firrtl.circuit "ForceThroughCast" {
   }
 }
 // -----
-// TEST 13: Force + release of a LOCAL forceable target through a same-type
-// `ref.cast`.  The cast must not lower to a copy wire: the state machine and
-// the override mux must land on the real wire, exactly as for a direct force.
+// TEST 13: A same-type cast preserves a local force target.
 
 // CHECK-LABEL: firrtl.module @LocalForceThroughCast
 firrtl.circuit "LocalForceThroughCast" {
@@ -651,34 +545,26 @@ firrtl.circuit "LocalForceThroughCast" {
     firrtl.ref.force %clock, %en, %cast, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
     firrtl.ref.release %clock, %rel, %cast : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // No copy wire for the cast, and no control bundle at all (a purely-local
-    // target drives its registers from SSA).
+    // No copy wire or control bundle is needed for a local target.
     // CHECK-NOT: firrtl.wire
-    // forceActive is forceWins itself; releaseActive is gated by !forceWins.
-    // CHECK-DAG: firrtl.and %rel, %{{.+}}
-    // The state register is emitted after the control reduction.
+    // The release masks the force.
+    // CHECK-DAG: %[[NR:.+]] = firrtl.not %rel
+    // CHECK-DAG: firrtl.and %en, %[[NR]]
     // CHECK: %{{.+}} = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
     // CHECK-NOT: firrtl.reg {{.*}} !firrtl.uint<8>
-    // The override reads the real target, not a copy, and drives the force's
-    // live RHS.
+    // The override reads the real target and uses the live RHS.
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %value, %w)
     // CHECK: firrtl.matchingconnect %w_forced, %[[OVR]]
   }
 }
 
 // -----
-// TEST 14: A child exports its forceable probe through a same-type `ref.cast`
-// (`ref.define %port, %cast`).  The exported target must be resolved through
-// the cast, so the child's state machine overrides the real wire and a force
-// arriving on the probe port's ctrl field takes effect.
+// TEST 14: A same-type cast preserves an exported target's force path.
 
 // CHECK-LABEL: firrtl.module @ExportCastChild
-// CHECK-SAME: out %probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>
+// CHECK-SAME: out %probe_out: !firrtl.uint<8>, in %probe_out_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>
 firrtl.circuit "ForceExportedThroughCast" {
   firrtl.module @ExportCastChild(out %probe_out: !firrtl.rwprobe<uint<8>>) {
-    // The bundled probe port is split into its data and ctrl subfields.
-    // CHECK: %[[DATA:.+]] = firrtl.subfield %probe_out[data]
-    // CHECK: %[[CTRL:.+]] = firrtl.subfield %probe_out[ctrl]
     // CHECK: %w = firrtl.wire : !firrtl.uint<8>
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
     %c0 = firrtl.constant 0 : !firrtl.uint<8>
@@ -686,16 +572,14 @@ firrtl.circuit "ForceExportedThroughCast" {
     %cast = firrtl.ref.cast %w_ref : (!firrtl.rwprobe<uint<8>>) -> !firrtl.rwprobe<uint<8>>
     firrtl.ref.define %probe_out, %cast : !firrtl.rwprobe<uint<8>>
 
-    // The state machine (and the override) is on %w, and %w -- not a copy of it
-    // -- is what feeds the port.
+    // The state machine and override remain on %w.
     // CHECK: %w_forced = firrtl.wire : !firrtl.uint<8>
     // CHECK: firrtl.matchingconnect %w, %c0_ui8
-    // CHECK: firrtl.matchingconnect %[[DATA]], %w_forced
+    // CHECK: firrtl.matchingconnect %probe_out, %w_forced
     // CHECK-NOT: firrtl.reg {{.*}} !firrtl.uint<8>
-    // The `forced` register is anchored after the clk subfield of the ctrl
-    // subfield, which is what clocks it.
-    // CHECK: %[[CTRL_FV:.+]] = firrtl.subfield %[[CTRL]][forcedValue]
-    // CHECK: %[[CTRL_CLK:.+]] = firrtl.subfield %[[CTRL]][clk]
+    // The state uses the control-input clock.
+    // CHECK: %[[CTRL_FV:.+]] = firrtl.subfield %probe_out_force_ctrl[forcedValue]
+    // CHECK: %[[CTRL_CLK:.+]] = firrtl.subfield %probe_out_force_ctrl[clk]
     // CHECK: %forced = firrtl.reg %[[CTRL_CLK]] {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %[[CTRL_FV]], %w)
     // CHECK: firrtl.matchingconnect %w_forced, %[[OVR]]
@@ -703,20 +587,16 @@ firrtl.circuit "ForceExportedThroughCast" {
 
   // CHECK-LABEL: firrtl.module @ForceExportedThroughCast
   firrtl.module @ForceExportedThroughCast(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
-    // CHECK: %c_probe_out = firrtl.instance c @ExportCastChild(out probe_out: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>)
-    // CHECK-NEXT: %[[CTRL:.+]] = firrtl.subfield %c_probe_out[ctrl]
+    // CHECK: %c_probe_out, %c_probe_out_force_ctrl = firrtl.instance c @ExportCastChild(out probe_out: !firrtl.uint<8>, in probe_out_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>)
     %p = firrtl.instance c @ExportCastChild(out probe_out: !firrtl.rwprobe<uint<8>>)
     firrtl.ref.force %clock, %en, %p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // CHECK: %[[CTRL_FA:.+]] = firrtl.subfield %[[CTRL]][forceActive]
+    // CHECK: %[[CTRL_FA:.+]] = firrtl.subfield %c_probe_out_force_ctrl[forceActive]
     // CHECK: firrtl.matchingconnect %[[CTRL_FA]], %en : !firrtl.uint<1>
   }
 }
 
 // -----
-// TEST 15: A module that only *re-exports* a child's probe (no local force)
-// must not have its forwarding wire tied off: it is driven exactly once, from
-// the inbound control port.  A tie-off here would be a second driver and would
-// also drop the force from above.
+// TEST 15: A pure re-export forwards inbound control without a local tie-off.
 
 // CHECK-LABEL: firrtl.circuit "ReExportNoLocalForce"
 firrtl.circuit "ReExportNoLocalForce" {
@@ -728,37 +608,30 @@ firrtl.circuit "ReExportNoLocalForce" {
   }
 
   // CHECK-LABEL: firrtl.module @REMid
-  // CHECK-SAME: out %p: !firrtl.bundle<data: uint<8>, ctrl flip: bundle
+  // CHECK-SAME: out %p: !firrtl.uint<8>, in %p_force_ctrl: !firrtl.bundle
   firrtl.module @REMid(out %p: !firrtl.rwprobe<uint<8>>) {
-    // The bundled probe port and the Leaf instance's bundled probe result are
-    // both split into data/ctrl subfields; no forwarding wire is needed.
-    // CHECK: %[[MID_CTRL:.+]] = firrtl.subfield %p[ctrl]
-    // CHECK: %leaf_p = firrtl.instance leaf @RELeaf(out p: !firrtl.bundle<data: uint<8>, ctrl flip: bundle
-    // CHECK: %[[LEAF_CTRL:.+]] = firrtl.subfield %leaf_p[ctrl]
+    // Forward data and control directly.
+    // CHECK: %leaf_p, %leaf_p_force_ctrl = firrtl.instance leaf @RELeaf(out p: !firrtl.uint<8>, in p_force_ctrl: !firrtl.bundle
     %lp = firrtl.instance leaf @RELeaf(out p: !firrtl.rwprobe<uint<8>>)
     firrtl.ref.define %p, %lp : !firrtl.rwprobe<uint<8>>
-    // The merge of %[[MID_CTRL]] fields onto %[[LEAF_CTRL]] fields (no-op
-    // merge, no local force):
-    // CHECK: %[[MID_FA:.+]] = firrtl.subfield %[[MID_CTRL]][forceActive]
-    // CHECK: %[[LEAF_FA:.+]] = firrtl.subfield %[[LEAF_CTRL]][forceActive]
+    // Forward the control fields without local force.
+    // CHECK: %[[MID_FA:.+]] = firrtl.subfield %p_force_ctrl[forceActive]
+    // CHECK: %[[LEAF_FA:.+]] = firrtl.subfield %leaf_p_force_ctrl[forceActive]
     // CHECK: firrtl.matchingconnect %[[LEAF_FA]], %[[MID_FA]]
   }
 
   // CHECK-LABEL: firrtl.module @ReExportNoLocalForce
   firrtl.module @ReExportNoLocalForce(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
-    // CHECK: %mid_p = firrtl.instance mid @REMid(out p: !firrtl.bundle<data: uint<8>, ctrl flip: bundle
-    // CHECK: %[[CTRL:.+]] = firrtl.subfield %mid_p[ctrl]
+    // CHECK: %mid_p, %mid_p_force_ctrl = firrtl.instance mid @REMid(out p: !firrtl.uint<8>, in p_force_ctrl: !firrtl.bundle
     %mp = firrtl.instance mid @REMid(out p: !firrtl.rwprobe<uint<8>>)
     firrtl.ref.force %clock, %en, %mp, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // CHECK: %[[CTRL_FA:.+]] = firrtl.subfield %[[CTRL]][forceActive]
+    // CHECK: %[[CTRL_FA:.+]] = firrtl.subfield %mid_p_force_ctrl[forceActive]
     // CHECK: firrtl.matchingconnect %[[CTRL_FA]], %en : !firrtl.uint<1>
   }
 }
 
 // -----
-// TEST 16: Two forceable probes on the same instance, only one of which is
-// forced.  The tie-off decision is per probe result: the unforced one gets the
-// inactive default, the forced one is driven by the force reduction only.
+// TEST 16: Per-result tie-off for two forceable probes on one instance.
 
 // CHECK-LABEL: firrtl.module @MixedProbesOneInstance
 firrtl.circuit "MixedProbesOneInstance" {
@@ -770,34 +643,27 @@ firrtl.circuit "MixedProbesOneInstance" {
   }
 
   firrtl.module @MixedProbesOneInstance(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
-    // CHECK: %c_pa, %c_pb = firrtl.instance c @TwoProbes
+    // CHECK: %c_pa, %c_pb, %c_pa_force_ctrl, %c_pb_force_ctrl = firrtl.instance c @TwoProbes
     %pa, %pb = firrtl.instance c @TwoProbes(out pa: !firrtl.rwprobe<uint<8>>, out pb: !firrtl.rwprobe<uint<4>>)
     firrtl.ref.force %clock, %en, %pa, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // CHECK: %[[PA_CTRL:.+]] = firrtl.subfield %c_pa[ctrl]
-    // CHECK: %[[PB_CTRL:.+]] = firrtl.subfield %c_pb[ctrl]
+    // CHECK: %[[PA_FA:.+]] = firrtl.subfield %c_pa_force_ctrl[forceActive]
+    // CHECK: %[[PA_CLK:.+]] = firrtl.subfield %c_pa_force_ctrl[clk]
 
-    // The forced probe `pa` (uint<8> payload) is driven from the force
-    // reduction: the real clock, never a tie-off clock.
-    // CHECK: %[[PA_FA:.+]] = firrtl.subfield %[[PA_CTRL]][forceActive]
-    // CHECK: %[[PA_CLK:.+]] = firrtl.subfield %[[PA_CTRL]][clk]
+    // The forced probe receives the real clock.
     // CHECK: firrtl.matchingconnect %[[PA_FA]], %en : !firrtl.uint<1>
     // CHECK: firrtl.matchingconnect %[[PA_CLK]], %clock : !firrtl.clock
 
-    // The unforced probe `pb` (uint<4> payload) is the only one tied off, and
-    // gets the constant-0 clock.
+    // The unforced probe receives a constant-zero clock.
     // CHECK: %[[ZEROCLK:.+]] = firrtl.specialconstant 0 : !firrtl.clock
-    // CHECK: %[[PB_CLK:.+]] = firrtl.subfield %[[PB_CTRL]][clk]
+    // CHECK: %[[PB_CLK:.+]] = firrtl.subfield %c_pb_force_ctrl[clk]
     // CHECK: firrtl.matchingconnect %[[PB_CLK]], %[[ZEROCLK]]
     // CHECK-NOT: firrtl.specialconstant
   }
 }
 
 // -----
-// TEST 17: Release-only local target: a release with no force anywhere.  The
-// reduction has no force value at all, so `invalid` is substituted for the
-// `forcedValue` input (a null value used to crash here).  `forceActive` is a
-// constant 0, so the state machine can never assert `forced`, the target keeps
-// its original driver, and the whole override folds away downstream.
+// TEST 17: A release-only local target uses an invalid forced value and zero
+// force activity.
 
 // CHECK-LABEL: firrtl.module @ReleaseOnlyLocal
 firrtl.circuit "ReleaseOnlyLocal" {
@@ -811,30 +677,26 @@ firrtl.circuit "ReleaseOnlyLocal" {
 
     firrtl.ref.release %clock, %rel, %w_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // `forced` is only ever cleared (no force fires), so it holds its power-on
-    // 0 forever and the substituted `invalid` is unreachable.
+    // The invalid forced value is unreachable while force activity is zero.
     // CHECK: %[[INV:.+]] = firrtl.invalidvalue : !firrtl.uint<8>
-    // No sticky winner either: there is no force to latch.  The state register
-    // is emitted after the invalid-value control input.
+    // No winner state is needed without a force.
     // CHECK: %{{.+}} = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
     // CHECK-NOT: %forceWinner = firrtl.reg
     // CHECK: %[[FALSE:.+]] = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: %[[NEXT:.+]] = firrtl.mux(%rel, %[[FALSE]], %forced)
     // CHECK: firrtl.matchingconnect %forced, %[[NEXT]]
-    // The target still follows its own driver whenever unforced.
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %[[INV]], %w)
     // CHECK: firrtl.matchingconnect %w_forced, %[[OVR]]
   }
 }
 
 // -----
-// TEST 18: Release-only of an instance probe.  The release is forwarded to the
-// child's inbound control bundle with forceActive = 0 and forcedValue = invalid.
+// TEST 18: A release-only instance probe forwards release control.
 
 // CHECK-LABEL: firrtl.circuit "ReleaseOnlyInstance"
 firrtl.circuit "ReleaseOnlyInstance" {
   // CHECK: firrtl.module @ROChild
-  // CHECK-SAME: out %p: !firrtl.bundle<data: uint<8>, ctrl flip: bundle
+  // CHECK-SAME: out %p: !firrtl.uint<8>, in %p_force_ctrl: !firrtl.bundle
   firrtl.module @ROChild(out %p: !firrtl.rwprobe<uint<8>>) {
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
     %c0 = firrtl.constant 0 : !firrtl.uint<8>
@@ -844,20 +706,18 @@ firrtl.circuit "ReleaseOnlyInstance" {
 
   // CHECK-LABEL: firrtl.module @ReleaseOnlyInstance
   firrtl.module @ReleaseOnlyInstance(in %clock: !firrtl.clock, in %rel: !firrtl.uint<1>) {
-    // CHECK: %c_p = firrtl.instance c @ROChild
-    // CHECK: %[[CTRL:.+]] = firrtl.subfield %c_p[ctrl]
+    // CHECK: %c_p, %c_p_force_ctrl = firrtl.instance c @ROChild
     %p = firrtl.instance c @ROChild(out p: !firrtl.rwprobe<uint<8>>)
     firrtl.ref.release %clock, %rel, %p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // The forwarding wire is driven by the release reduction (not tied off), so
-    // the clock is the release's clock, not a constant-0 clock.
+    // The release drives the control clock instead of a tie-off clock.
     // CHECK-NOT: firrtl.specialconstant
     // CHECK: %[[FALSE:.+]] = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: %[[INVALID:.+]] = firrtl.invalidvalue : !firrtl.uint<8>
-    // CHECK: %[[FA:.+]] = firrtl.subfield %[[CTRL]][forceActive]
-    // CHECK-NEXT: %[[RA:.+]] = firrtl.subfield %[[CTRL]][releaseActive]
-    // CHECK-NEXT: %[[FV:.+]] = firrtl.subfield %[[CTRL]][forcedValue]
-    // CHECK-NEXT: %[[CLK:.+]] = firrtl.subfield %[[CTRL]][clk]
+    // CHECK: %[[FA:.+]] = firrtl.subfield %c_p_force_ctrl[forceActive]
+    // CHECK-NEXT: %[[RA:.+]] = firrtl.subfield %c_p_force_ctrl[releaseActive]
+    // CHECK-NEXT: %[[FV:.+]] = firrtl.subfield %c_p_force_ctrl[forcedValue]
+    // CHECK-NEXT: %[[CLK:.+]] = firrtl.subfield %c_p_force_ctrl[clk]
     // CHECK-NEXT: firrtl.matchingconnect %[[FA]], %[[FALSE]]
     // CHECK-NEXT: firrtl.matchingconnect %[[RA]], %rel
     // CHECK-NEXT: firrtl.matchingconnect %[[FV]], %[[INVALID]]
@@ -866,32 +726,25 @@ firrtl.circuit "ReleaseOnlyInstance" {
 }
 
 // -----
-// TEST 19: Release-only of a target that is also exported.  The local release
-// is merged with the inbound control: the release predicates are OR'd, and the
-// (absent) local force leaves the inbound `forcedValue` as the only force data
-// path.
+// TEST 19: A local release merges with inbound control on an exported target.
 
 // CHECK-LABEL: firrtl.circuit "ReleaseOnlyExported"
 firrtl.circuit "ReleaseOnlyExported" {
   // CHECK: firrtl.module @ROExportChild
-  // CHECK-SAME: out %p: !firrtl.bundle<data: uint<8>, ctrl flip: bundle
+  // CHECK-SAME: out %p: !firrtl.uint<8>, in %p_force_ctrl: !firrtl.bundle
   firrtl.module @ROExportChild(in %clock: !firrtl.clock, in %rel: !firrtl.uint<1>, out %p: !firrtl.rwprobe<uint<8>>) {
-    // The bundled probe port's control subfield %[[CTRL]] is read directly;
-    // no separate inbound placeholder wire is needed.
-    // CHECK: %[[CTRL:.+]] = firrtl.subfield %p[ctrl]
+    // Read the control input directly.
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
     %c0 = firrtl.constant 0 : !firrtl.uint<8>
     firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
     firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<8>>
     firrtl.ref.release %clock, %rel, %w_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // The inbound control fields feed the merge; the local release is OR'd
-    // into the inbound releaseActive from %[[CTRL]], and `forcedValue` comes
-    // straight from %[[CTRL]][forcedValue] (no local force, so the mux folds).
-    // CHECK: %[[IB_FA:.+]] = firrtl.subfield %[[CTRL]][forceActive]
-    // CHECK: %[[IB_RA:.+]] = firrtl.subfield %[[CTRL]][releaseActive]
-    // CHECK: %[[IB_FV:.+]] = firrtl.subfield %[[CTRL]][forcedValue]
-    // CHECK: %[[OR:.+]] = firrtl.or %rel, %[[IB_RA]]
+    // Local release has priority over the inbound event.
+    // CHECK: %[[IB_FA:.+]] = firrtl.subfield %p_force_ctrl[forceActive]
+    // CHECK: %[[IB_RA:.+]] = firrtl.subfield %p_force_ctrl[releaseActive]
+    // CHECK: %[[IB_FV:.+]] = firrtl.subfield %p_force_ctrl[forcedValue]
+    // CHECK: %[[OR:.+]] = firrtl.or %{{.+}}, %rel
   }
 
   // CHECK-LABEL: firrtl.module @ReleaseOnlyExported
@@ -899,16 +752,14 @@ firrtl.circuit "ReleaseOnlyExported" {
     %c_clock, %c_rel, %c_p = firrtl.instance c @ROExportChild(in clock: !firrtl.clock, in rel: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<8>>)
     firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
     firrtl.matchingconnect %c_rel, %rel : !firrtl.uint<1>
-    // The parent's force reaches the child through the new port.
     firrtl.ref.force %clock, %en, %c_p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // CHECK: %[[CTRL:.+]] = firrtl.subfield %c_p[ctrl]
+    // CHECK: %[[CTRL_FA:.+]] = firrtl.subfield %c_p_force_ctrl[forceActive]
     // CHECK: firrtl.matchingconnect %[[FA:.+]], %en : !firrtl.uint<1>
   }
 }
 
 // -----
-// TEST 20: Release-only of an instance probe through a same-type `ref.cast`.
-// The cast is transparent, so the release reaches the child's control bundle.
+// TEST 20: A same-type cast preserves a release to an instance probe.
 
 // CHECK-LABEL: firrtl.circuit "ReleaseOnlyThroughCast"
 firrtl.circuit "ReleaseOnlyThroughCast" {
@@ -921,21 +772,19 @@ firrtl.circuit "ReleaseOnlyThroughCast" {
 
   // CHECK-LABEL: firrtl.module @ReleaseOnlyThroughCast
   firrtl.module @ReleaseOnlyThroughCast(in %clock: !firrtl.clock, in %rel: !firrtl.uint<1>) {
-    // CHECK: %c_p = firrtl.instance c @RCChild
-    // CHECK: %[[CTRL:.+]] = firrtl.subfield %c_p[ctrl]
+    // CHECK: %c_p, %c_p_force_ctrl = firrtl.instance c @RCChild
     %p = firrtl.instance c @RCChild(out p: !firrtl.rwprobe<uint<8>>)
     %cast = firrtl.ref.cast %p : (!firrtl.rwprobe<uint<8>>) -> !firrtl.rwprobe<uint<8>>
     firrtl.ref.release %clock, %rel, %cast : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
 
-    // No copy wire for the cast, no local state machine, and no inactive
-    // tie-off of the forwarding wire.
+    // The cast needs no copy wire or local state machine.
     // CHECK-NOT: %forced = firrtl.reg
     // CHECK-NOT: firrtl.specialconstant
     // CHECK: %[[FALSE:.+]] = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %[[FA:.+]] = firrtl.subfield %[[CTRL]][forceActive]
-    // CHECK-NEXT: %[[RA:.+]] = firrtl.subfield %[[CTRL]][releaseActive]
-    // CHECK-NEXT: %[[FV:.+]] = firrtl.subfield %[[CTRL]][forcedValue]
-    // CHECK-NEXT: %[[CLK:.+]] = firrtl.subfield %[[CTRL]][clk]
+    // CHECK: %[[FA:.+]] = firrtl.subfield %c_p_force_ctrl[forceActive]
+    // CHECK-NEXT: %[[RA:.+]] = firrtl.subfield %c_p_force_ctrl[releaseActive]
+    // CHECK-NEXT: %[[FV:.+]] = firrtl.subfield %c_p_force_ctrl[forcedValue]
+    // CHECK-NEXT: %[[CLK:.+]] = firrtl.subfield %c_p_force_ctrl[clk]
     // CHECK-NEXT: firrtl.matchingconnect %[[FA]], %[[FALSE]]
     // CHECK-NEXT: firrtl.matchingconnect %[[RA]], %rel
     // CHECK-NEXT: firrtl.matchingconnect %[[FV]], %{{.+}}
@@ -944,12 +793,7 @@ firrtl.circuit "ReleaseOnlyThroughCast" {
 }
 
 // -----
-// TEST 21: A self-referential register next state (`r <= r + 1`) plus a clocked
-// force.  The `+ 1` is a *read* of the target, so it goes through the override
-// exactly like any other reader.  That matches the reference lowering: while
-// forced, the procedural assignment is discarded but computed from the forced
-// value, so releasing resumes from there rather than snapping back to the
-// pre-force value.
+// TEST 21: A self-referential register next state reads the overridden value.
 
 // CHECK-LABEL: firrtl.circuit "SelfReferentialReg"
 firrtl.circuit "SelfReferentialReg" {
@@ -968,20 +812,16 @@ firrtl.circuit "SelfReferentialReg" {
     // The adder operand is the observed value, not the raw register.
     // CHECK: %[[SUM:.+]] = firrtl.add %r_forced, %c1_ui8
     // CHECK: %[[NEXT:.+]] = firrtl.tail %[[SUM]], 1
-    // The register keeps exactly one driver, its own next state.
     // CHECK: firrtl.matchingconnect %r, %[[NEXT]]
     // CHECK: firrtl.matchingconnect %o, %r_forced
-    // The override itself reads the raw register (this is the only read that
-    // does), so there is no combinational loop.
+    // The override reads the raw register to avoid a combinational loop.
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %v, %r)
     // CHECK: firrtl.matchingconnect %r_forced, %[[OVR]]
   }
 }
 
 // -----
-// TEST 24: A forced target that nothing reads.  There is no read to override, so
-// no observed wire and no mux are emitted at all -- and, crucially, the target
-// keeps its own single driver.
+// TEST 24: A forced target with no reads gets no override.
 
 // CHECK-LABEL: firrtl.circuit "ForcedButNeverRead"
 firrtl.circuit "ForcedButNeverRead" {
@@ -994,19 +834,17 @@ firrtl.circuit "ForcedButNeverRead" {
     firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
     firrtl.ref.force %clock, %en, %w_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
 
-    // No observed wire, no override mux, and the original driver is intact.
+    // Preserve the original driver without an observed wire or mux.
     // CHECK-NOT: firrtl.wire
+    // CHECK-NOT: firrtl.reg
     // CHECK: firrtl.matchingconnect %w, %[[C0]]
     // CHECK-NOT: firrtl.mux({{.*}}, %w)
   }
 }
 
 // -----
-// TEST 25: Three clocked forces of one wire.  Only the force *event* is sampled:
-// a one-hot latch records which force is currently in effect while every RHS
-// stays live, so once all three predicates have dropped the target keeps
-// tracking the *winning* force's value instead of collapsing back to the first
-// one (which a plain last-wins mux over the current-cycle predicates would do).
+// TEST 25: Three clocked forces latch the winning source while keeping RHS
+// values live.
 
 // CHECK-LABEL: firrtl.circuit "ThreeForcesStickyValue"
 firrtl.circuit "ThreeForcesStickyValue" {
@@ -1023,18 +861,17 @@ firrtl.circuit "ThreeForcesStickyValue" {
     firrtl.ref.force %clock, %en2, %w_ref, %v2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
     firrtl.ref.force %clock, %en3, %w_ref, %v3 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
 
-    // No value register of the probed type: nothing is snapshotted.
+    // The force value is not snapshotted.
     // CHECK-NOT: firrtl.reg {{.*}} !firrtl.uint<8>
-    // forceActive is forceWins itself, the priority mux chain over the three
-    // force predicates: it gates the latch so nothing moves on a cycle with
-    // no force.
-    // CHECK: %[[FW0:.+]] = firrtl.mux(%en2, %c1_ui1, %en1)
-    // CHECK-NEXT: %[[FA:.+]] = firrtl.mux(%en3, %c1_ui1, %[[FW0]])
-    // A later force masks an earlier one in the same cycle, so the second
-    // force's select is gated on `not(en3)` while the third's is just `en3`.
-    // CHECK-NEXT: %[[NOT_EN3:.+]] = firrtl.not %en3
+    // Later forces mask earlier ones before updating the winner state.
+    // CHECK: %[[NOT_EN3:.+]] = firrtl.not %en3
     // CHECK-NEXT: %[[SEL2:.+]] = firrtl.and %en2, %[[NOT_EN3]]
-    // One latch bit per force after the first; the first is the mux default.
+    // CHECK-NEXT: %[[EN23:.+]] = firrtl.or %en3, %en2
+    // CHECK-NEXT: %[[NOT_EN23:.+]] = firrtl.not %[[EN23]]
+    // CHECK-NEXT: %[[SEL1:.+]] = firrtl.and %en1, %[[NOT_EN23]]
+    // CHECK-NEXT: %[[FA0:.+]] = firrtl.or %[[SEL1]], %[[SEL2]]
+    // CHECK-NEXT: %[[FA:.+]] = firrtl.or %[[FA0]], %en3
+    // The first force is the mux default; later forces have winner state.
     // CHECK: %forceWinner = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
     // CHECK-NEXT: %[[V2:.+]] = firrtl.mux(%forceWinner, %v2, %v1)
     // CHECK-NEXT: %forceWinner_0 = firrtl.reg %clock {initial = 0 : ui1, name = "forceWinner"} : !firrtl.clock, !firrtl.uint<1>
@@ -1043,20 +880,15 @@ firrtl.circuit "ThreeForcesStickyValue" {
     // CHECK-NEXT: firrtl.matchingconnect %forceWinner, %[[WIN2]]
     // CHECK-NEXT: %[[WIN3:.+]] = firrtl.mux(%[[FA]], %en3, %forceWinner_0)
     // CHECK-NEXT: firrtl.matchingconnect %forceWinner_0, %[[WIN3]]
-    // The override drives the sticky *live* value.
+    // The override uses the selected live value.
     // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %[[V3]], %w)
     // CHECK: firrtl.matchingconnect %w_forced, %[[OVR]]
   }
 }
 
 // -----
-// TEST 26: Force of a register clocked by a gated clock (`firrtl.int.clock_gate`).
-// ProbesToSignals runs a gated-clock conversion first: the gate is eliminated
-// from the clock path, the register is rebound to the ungated base clock, and
-// the gate's enable becomes a data-path hold mux. The state machine sits
-// entirely on the (now sole) base clock, and -- crucially -- the hold mux
-// reads the *observed* (forced) value, so a forced register correctly stays
-// forced while its gate is closed.
+// TEST 26: A forceable register on a gated clock is converted to base-clock
+// state and an observed-value hold mux.
 
 // CHECK-LABEL: firrtl.circuit "ForceGatedClockRegister"
 firrtl.circuit "ForceGatedClockRegister" {
@@ -1075,11 +907,7 @@ firrtl.circuit "ForceGatedClockRegister" {
 
     firrtl.ref.force %clock, %en, %r_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
 
-    // `forced` is on the base clock: only one clock domain remains.  It is
-    // emitted after the hold logic at module end.
-    // The gate becomes a hold mux over the *observed* value (so the register
-    // holds the forced value, not the raw one, while gated), driving the
-    // register's own next-state connect.
+    // The hold mux reads the observed value, preserving the force while gated.
     // CHECK: %[[HOLD:.+]] = firrtl.mux(%gateEn, %d, %r_forced)
     // CHECK: firrtl.matchingconnect %r, %[[HOLD]]
     // CHECK: firrtl.matchingconnect %o, %r_forced
@@ -1090,25 +918,16 @@ firrtl.circuit "ForceGatedClockRegister" {
 }
 
 // -----
-// TEST 27: Parent forces a child's exported register probe, where the
-// register in the child is clocked by a gated clock local to the child. The
-// clock gate is transparent to the pass: the child gets the same
-// {data, ctrl} bundle port and control-merge shape as an ungated register
-// (Test 14), and the parent's force -- on its own, unrelated clock -- reaches
-// the child's control port exactly as it would for an ungated target.
+// TEST 27: A parent forces a child register whose local clock is gated.
 
 // CHECK-LABEL: firrtl.circuit "ForceChildGatedClockRegister"
 firrtl.circuit "ForceChildGatedClockRegister" {
-  // The child's exported probe becomes a {data, ctrl} bundle port, same as
-  // for an ungated register.
-  // CHECK: firrtl.module @GatedChild(out %p: !firrtl.bundle<data: uint<8>, ctrl flip: bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>>
+  // The child exports data and force control.
+  // CHECK: firrtl.module @GatedChild(out %p: !firrtl.uint<8>, in %clock: !firrtl.clock, in %gateEn: !firrtl.uint<1>, in %d: !firrtl.uint<8>, in %p_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>)
   firrtl.module @GatedChild(out %p: !firrtl.rwprobe<uint<8>>, in %clock: !firrtl.clock,
                             in %gateEn: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
-    // CHECK: %[[DATA:.+]] = firrtl.subfield %p[data]
-    // CHECK: %[[CTRL:.+]] = firrtl.subfield %p[ctrl]
     %gated = firrtl.int.clock_gate %clock, %gateEn
-    // The clock gate is converted away: the register is rebound to the base
-    // clock and the gate becomes a data-path hold mux.
+    // The gate is converted to base-clock state and a hold mux.
     // CHECK: %r = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
     // CHECK-NOT: firrtl.int.clock_gate
     // CHECK: %r_forced = firrtl.wire : !firrtl.uint<8>
@@ -1116,35 +935,192 @@ firrtl.circuit "ForceChildGatedClockRegister" {
     firrtl.matchingconnect %r, %d : !firrtl.uint<8>
     firrtl.ref.define %p, %r_ref : !firrtl.rwprobe<uint<8>>
 
-    // Hold mux over the observed value; the exported data field is the
-    // observed (forced) value too.
+    // The hold mux and exported data use the observed value.
     // CHECK: %[[HOLD:.+]] = firrtl.mux(%gateEn, %d, %r_forced)
     // CHECK: firrtl.matchingconnect %r, %[[HOLD]]
-    // CHECK: firrtl.matchingconnect %[[DATA]], %r_forced
-    // The state machine (inbound control, same shape as Test 14).
-    // CHECK: %[[CTRL_CLK:.+]] = firrtl.subfield %[[CTRL]][clk]
+    // CHECK: firrtl.matchingconnect %p, %r_forced
+    // CHECK: %[[CTRL_CLK:.+]] = firrtl.subfield %p_force_ctrl[clk]
     // CHECK: %forced = firrtl.reg %[[CTRL_CLK]] {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @ForceChildGatedClockRegister
   firrtl.module @ForceChildGatedClockRegister(in %clock: !firrtl.clock, in %gateEn: !firrtl.uint<1>,
                                               in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
-    // CHECK: %c_p, %c_clock, %c_gateEn, %c_d = firrtl.instance c @GatedChild(out p: !firrtl.bundle<data: uint<8>, ctrl flip: bundle
-    // CHECK-NEXT: %[[CTRL:.+]] = firrtl.subfield %c_p[ctrl]
+    // CHECK: %c_p, %c_clock, %c_gateEn, %c_d, %c_p_force_ctrl = firrtl.instance c @GatedChild(out p: !firrtl.uint<8>, in clock: !firrtl.clock, in gateEn: !firrtl.uint<1>, in d: !firrtl.uint<8>, in p_force_ctrl: !firrtl.bundle
     %c_p, %c_clock, %c_gateEn, %c_d = firrtl.instance c @GatedChild(out p: !firrtl.rwprobe<uint<8>>, in clock: !firrtl.clock, in gateEn: !firrtl.uint<1>, in d: !firrtl.uint<8>)
     firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
     firrtl.matchingconnect %c_gateEn, %gateEn : !firrtl.uint<1>
 
-    // The parent forces with its own (ungated) clock, forwarded to the
-    // child's control port -- unrelated to the child's local gated clock.
+    // The parent's clock drives the child's control clock.
     firrtl.ref.force %clock, %en, %c_p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-    // CHECK: %[[CTRL_FA:.+]] = firrtl.subfield %[[CTRL]][forceActive]
-    // CHECK-NEXT: %[[CTRL_RA:.+]] = firrtl.subfield %[[CTRL]][releaseActive]
-    // CHECK-NEXT: %[[CTRL_FV:.+]] = firrtl.subfield %[[CTRL]][forcedValue]
-    // CHECK-NEXT: %[[CTRL_CLK:.+]] = firrtl.subfield %[[CTRL]][clk]
+    // CHECK: %[[CTRL_FA:.+]] = firrtl.subfield %c_p_force_ctrl[forceActive]
+    // CHECK-NEXT: %[[CTRL_RA:.+]] = firrtl.subfield %c_p_force_ctrl[releaseActive]
+    // CHECK-NEXT: %[[CTRL_FV:.+]] = firrtl.subfield %c_p_force_ctrl[forcedValue]
+    // CHECK-NEXT: %[[CTRL_CLK:.+]] = firrtl.subfield %c_p_force_ctrl[clk]
     // CHECK: firrtl.matchingconnect %[[CTRL_FA]], %en
     // CHECK-NEXT: firrtl.matchingconnect %[[CTRL_RA]], %{{.+}}
     // CHECK-NEXT: firrtl.matchingconnect %[[CTRL_FV]], %v
     // CHECK-NEXT: firrtl.matchingconnect %[[CTRL_CLK]], %clock
+  }
+}
+
+// -----
+// TEST 28: Two exported control channels reach one target state.
+
+firrtl.circuit "TwoPortsBothForced" {
+  // CHECK-LABEL: firrtl.module @TwoPortChild
+  firrtl.module @TwoPortChild(out %p0: !firrtl.rwprobe<uint<8>>,
+                              out %p1: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire sym @w forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    %c0 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
+    firrtl.ref.define %p0, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+
+    // Both exported connections observe the override.
+    // CHECK: %w_forced = firrtl.wire : !firrtl.uint<8>
+    // CHECK-NOT: %w_forced_{{[0-9]+}} = firrtl.wire
+    // CHECK: %[[P0FA:.+]] = firrtl.subfield %p0_force_ctrl[forceActive]
+    // CHECK: %[[P0FV:.+]] = firrtl.subfield %p0_force_ctrl[forcedValue]
+    // CHECK: %[[P1FA:.+]] = firrtl.subfield %p1_force_ctrl[forceActive]
+    // CHECK: %[[P1FV:.+]] = firrtl.subfield %p1_force_ctrl[forcedValue]
+    // The later port has priority over the earlier port.
+    // CHECK: %[[FA:.+]] = firrtl.or %{{.+}}, %[[P1FA]]
+    // CHECK: %forceWinner = firrtl.reg
+    // CHECK: %[[VALUE:.+]] = firrtl.mux(%forceWinner, %[[P1FV]], %[[P0FV]])
+    // CHECK: %forced = firrtl.reg
+    // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %[[VALUE]], %w)
+    // CHECK: firrtl.matchingconnect %w_forced, %[[OVR]]
+  }
+
+  // CHECK-LABEL: firrtl.module @TwoPortsBothForced
+  firrtl.module @TwoPortsBothForced(in %clock: !firrtl.clock,
+                                    in %en0: !firrtl.uint<1>,
+                                    in %en1: !firrtl.uint<1>,
+                                    in %v0: !firrtl.uint<8>,
+                                    in %v1: !firrtl.uint<8>) {
+    %p0, %p1 = firrtl.instance child @TwoPortChild(
+        out p0: !firrtl.rwprobe<uint<8>>, out p1: !firrtl.rwprobe<uint<8>>)
+    firrtl.ref.force %clock, %en0, %p0, %v0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    firrtl.ref.force %clock, %en1, %p1, %v1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %{{.+}}, %en0
+    // CHECK: firrtl.matchingconnect %{{.+}}, %en1
+  }
+}
+
+// -----
+// TEST 29: An unforced second exported port is tied off independently.
+
+firrtl.circuit "TwoPortsFirstForced" {
+  // CHECK-LABEL: firrtl.module @TwoPortFirstChild
+  firrtl.module @TwoPortFirstChild(out %p0: !firrtl.rwprobe<uint<8>>,
+                                   out %p1: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire sym @w forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    %c0 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
+    firrtl.ref.define %p0, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+    // CHECK: %w_forced = firrtl.wire : !firrtl.uint<8>
+    // CHECK: %forced = firrtl.reg
+  }
+
+  // CHECK-LABEL: firrtl.module @TwoPortsFirstForced
+  firrtl.module @TwoPortsFirstForced(in %clock: !firrtl.clock,
+                                     in %en: !firrtl.uint<1>,
+                                     in %v: !firrtl.uint<8>) {
+    %p0, %p1 = firrtl.instance child @TwoPortFirstChild(
+        out p0: !firrtl.rwprobe<uint<8>>, out p1: !firrtl.rwprobe<uint<8>>)
+    firrtl.ref.force %clock, %en, %p0, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %{{.+}}, %en
+    // CHECK: firrtl.specialconstant 0 : !firrtl.clock
+  }
+}
+
+// -----
+// TEST 30: Local control has priority over two exported controls.
+
+firrtl.circuit "TwoPortsAndLocalForce" {
+  // CHECK-LABEL: firrtl.module @TwoPortLocalChild
+  firrtl.module @TwoPortLocalChild(out %p0: !firrtl.rwprobe<uint<8>>,
+                                   out %p1: !firrtl.rwprobe<uint<8>>,
+                                   in %local_en: !firrtl.uint<1>,
+                                   in %local_value: !firrtl.uint<8>,
+                                   in %clock: !firrtl.clock) {
+    %w, %w_ref = firrtl.wire sym @w forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    %c0 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
+    firrtl.ref.define %p0, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %local_en, %w_ref, %local_value : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    // CHECK: %forceWinner = firrtl.reg
+    // CHECK: %forceWinner_0 = firrtl.reg
+    // CHECK: %forced = firrtl.reg
+  }
+
+  // CHECK-LABEL: firrtl.module @TwoPortsAndLocalForce
+  firrtl.module @TwoPortsAndLocalForce(in %clock: !firrtl.clock,
+                                       in %en0: !firrtl.uint<1>,
+                                       in %en1: !firrtl.uint<1>,
+                                       in %v0: !firrtl.uint<8>,
+                                       in %v1: !firrtl.uint<8>,
+                                       in %local_en: !firrtl.uint<1>,
+                                       in %local_value: !firrtl.uint<8>) {
+    %p0, %p1, %child_local_en, %child_local_value, %child_clock = firrtl.instance child @TwoPortLocalChild(
+        out p0: !firrtl.rwprobe<uint<8>>, out p1: !firrtl.rwprobe<uint<8>>,
+        in local_en: !firrtl.uint<1>, in local_value: !firrtl.uint<8>,
+        in clock: !firrtl.clock)
+    firrtl.matchingconnect %child_local_en, %local_en : !firrtl.uint<1>
+    firrtl.matchingconnect %child_local_value, %local_value : !firrtl.uint<8>
+    firrtl.matchingconnect %child_clock, %clock : !firrtl.clock
+    firrtl.ref.force %clock, %en0, %p0, %v0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    firrtl.ref.force %clock, %en1, %p1, %v1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %{{.+}}, %en0
+    // CHECK: firrtl.matchingconnect %{{.+}}, %en1
+  }
+}
+
+// -----
+// TEST 31: Layer-local tie-offs do not leak constants into module-scope state.
+
+// CHECK-LABEL: firrtl.module @InstanceControlInLayerblock
+firrtl.circuit "InstanceControlInLayerblock" {
+  firrtl.layer @A bind {}
+
+  firrtl.module @Leaf(out %p: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    %c0 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %w, %c0 : !firrtl.uint<8>
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<8>>
+  }
+
+  firrtl.module @InstanceControlInLayerblock(in %clock: !firrtl.clock,
+                                             in %en: !firrtl.uint<1>,
+                                             in %rel: !firrtl.uint<1>,
+                                             in %v: !firrtl.uint<8>,
+                                             out %o: !firrtl.uint<8>) {
+    %x, %x_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    %c0 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %x, %c0 : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %x : !firrtl.uint<8>
+
+    // Tie off the unused child control inside the layerblock.
+    // CHECK: firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK: %[[TIEOFF:.+]] = firrtl.constant 0 : !firrtl.uint<1>
+      %p = firrtl.instance leaf @Leaf(out p: !firrtl.rwprobe<uint<8>>)
+      // CHECK: firrtl.matchingconnect %{{.+}}, %[[TIEOFF]]
+      // CHECK: firrtl.matchingconnect %{{.+}}, %[[TIEOFF]]
+    }
+
+    firrtl.ref.force %clock, %en, %x_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    firrtl.ref.release %clock, %rel, %x_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+
+    // Module-scope reduction uses dominating constants from its own region.
+    // CHECK: %[[NREL:.+]] = firrtl.not %rel
+    // CHECK: firrtl.and %en, %[[NREL]]
+    // CHECK: %[[ZERO:.+]] = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: %[[ONE:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK: firrtl.mux(%rel, %[[ZERO]], %forced)
+    // CHECK: firrtl.mux(%{{.+}}, %[[ONE]], %{{.+}})
   }
 }
