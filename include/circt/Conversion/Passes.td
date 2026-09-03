@@ -850,6 +850,23 @@ def LowerFirMem : Pass<"lower-seq-firmem", "mlir::ModuleOp"> {
 
 def LowerProbeToSV : Pass<"lower-probe-to-sv", "mlir::ModuleOp"> {
   let summary = "Lower read-only Probe handles to SV cross-module references";
+  let description = [{
+    This pass lowers supported `probe.read` operations to an `sv.xmr.ref`
+    through an `hw.hierpath`, followed by `sv.read_inout`. It materializes
+    anonymous observed values as symbol-bearing `hw.wire` operations and
+    removes Probe output ports and their corresponding instance results after
+    resolving all reads.
+
+    The pass currently supports local reads and reads from a directly
+    instantiated child module. Modules exporting Probe refs must be private,
+    and their Probe outputs must be driven directly by `probe.send`.
+    Multi-level forwarding and Probe outputs on public, external, or generated
+    modules are rejected because their external ABI is not defined.
+
+    Probe payloads must satisfy `hw::isHWValueType`. Types such as `!seq.clock`,
+    including aggregates containing them, must be converted to HW value types
+    before running this pass.
+  }];
   let constructor = "circt::createLowerProbeToSVPass()";
   let dependentDialects = [
     "circt::hw::HWDialect",
