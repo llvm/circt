@@ -64,6 +64,8 @@ struct Relationship {
 struct Clock {
   StringAttr namePattern;
   SmallVector<Relationship> relationships;
+  /// Paths to clock-gate cells accumulated in the domain's clockGates registry.
+  SmallVector<StringAttr> clockGates;
 };
 
 struct SynchronousData {
@@ -86,11 +88,29 @@ public:
     return classType && classType.getClassName().getValue() == "ClockDomain";
   }
 
+  /// Extract path refs from an evaluator path list, reporting type errors.
+  /// Associations use getRef() (leaf names).  Registry assets use
+  /// getAsString() so hierarchical basepaths are preserved.
+  static void collectPathRefs(ArrayRef<om::evaluator::EvaluatorValuePtr> values,
+                              SmallVectorImpl<StringAttr> &out, bool &failed,
+                              bool hierarchical = false) {
+    for (auto &value : values) {
+      if (auto *p = dyn_cast<om::evaluator::PathValue>(value.get())) {
+        out.push_back(hierarchical ? p->getAsString() : p->getRef());
+        continue;
+      }
+      emitError(value->getLoc())
+          << "expected path, but got " << value->getType();
+      failed = true;
+    }
+  }
+
   LogicalResult handle(const ObjectMap &objectMap) override {
     // For a variety of reasons, this could fail.  Track failure, reporting all
     // errors before finally exiting.
     bool failed = false;
-    for (auto &[objectValue, associations] : objectMap) {
+    for (auto &[objectValue, lists] : objectMap) {
+      auto &associations = lists.associations;
       auto name = cast<StringAttr>(cast<om::evaluator::AttributeValue>(
                                        objectValue->getField("name_out")->get())
                                        ->getAttr());
@@ -124,23 +144,22 @@ public:
         domainRelationships[name] = {source, kind};
       }
 
+      // Collect optional clockGates registry paths for this domain.
+      // Use hierarchical stringification so instance prefixes are retained.
+      SmallVector<StringAttr> clockGatePaths;
+      if (auto it = lists.registries.find(
+              StringAttr::get(name.getContext(), "clockGates"));
+          it != lists.registries.end())
+        collectPathRefs(it->second, clockGatePaths, failed,
+                        /*hierarchical=*/true);
+
       // Add to async ports if the name matches a provided option.
       bool isAsync =
           llvm::any_of(options::sifiveClockDomainAsync, [&](auto asyncName) {
             return asyncName == name.getValue();
           });
       if (isAsync) {
-        for (auto &association : associations) {
-          if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
-            // TODO: Add checks that path is empty.
-            asyncPorts.push_back(p->getRef());
-            continue;
-          }
-          emitError(association->getLoc())
-              << "expected associations to be a path, but got "
-              << association->getType();
-          failed = true;
-        }
+        collectPathRefs(associations, asyncPorts, failed);
         continue;
       }
 
@@ -150,24 +169,15 @@ public:
             return staticName == name.getValue();
           });
       if (isStatic) {
-        for (auto &association : associations) {
-          if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
-            // TODO: Add checks that path is empty.
-            staticPorts.push_back(p->getRef());
-            continue;
-          }
-          emitError(association->getLoc())
-              << "expected associations to be a path, but got "
-              << association->getType();
-          failed = true;
-        }
+        collectPathRefs(associations, staticPorts, failed);
         continue;
       }
 
       // Otherwise, this is a normal clock association.  Add the clock and
-      // populate the associations.
+      // populate the associations and clock gates.
       clocks.push_back({/*namePattern=*/name,
-                        /*relationships=*/{}});
+                        /*relationships=*/{},
+                        /*clockGates=*/std::move(clockGatePaths)});
 
       for (auto &association : associations) {
         if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
@@ -212,6 +222,10 @@ public:
                   json.attribute("relationship", "sync");
                 });
               }
+            });
+            json.attributeArray("clock_gates", [&] {
+              for (auto gate : clock.clockGates)
+                json.value(gate.getValue());
             });
           });
         }

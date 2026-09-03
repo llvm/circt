@@ -193,7 +193,7 @@ def DomainFieldAttr : AttrDef<FIRRTLDialect, "DomainField"> {
   let summary = "A single field of a domain";
   let parameters = (
     ins "::mlir::StringAttr":$name,
-        "::circt::firrtl::PropertyType":$type
+        "::circt::firrtl::FIRRTLType":$type
   );
   let assemblyFormat = [{
     `<` $name `,` $type `>`

@@ -2114,6 +2114,11 @@ stripModuleImpl(FModuleLike op,
                 op.erase();
               return WalkResult::advance();
             })
+            .Case<DomainInsertOp>([&](DomainInsertOp op) {
+              // Domain inserts always target domains, which are being stripped.
+              op.erase();
+              return WalkResult::advance();
+            })
             .Case<DomainCreateOp>([&](DomainCreateOp op) {
               if (shouldStripType(op.getType()))
                 op.erase();

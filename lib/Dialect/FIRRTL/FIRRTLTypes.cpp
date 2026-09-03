@@ -745,7 +745,7 @@ bool FIRRTLType::isGround() {
         return alias.getAnonymousType().isGround();
       })
       // Not ground per spec, but leaf of aggregate.
-      .Case<PropertyType, RefType>([](Type) { return false; })
+      .Case<PropertyType, RegistryType, RefType>([](Type) { return false; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
@@ -783,7 +783,7 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
             RefType, BaseTypeAliasType>(
           [](auto type) { return type.getRecursiveTypeProperties(); })
-      .Case<PropertyType>([](auto type) {
+      .Case<PropertyType, RegistryType>([](auto type) {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
@@ -2874,10 +2874,10 @@ ParseResult DomainType::parseInterface(AsmParser &parser, DomainType &result) {
         parser.parseType(fieldTypeRaw))
       return failure();
 
-    auto fieldType = dyn_cast<PropertyType>(fieldTypeRaw);
-    if (!fieldType)
+    auto fieldType = dyn_cast<FIRRTLType>(fieldTypeRaw);
+    if (!fieldType || !isa<PropertyType, RegistryType>(fieldType))
       return parser.emitError(parser.getCurrentLocation(),
-                              "expected property type");
+                              "expected property or registry type");
 
     auto fieldName = StringAttr::get(parser.getContext(), fieldNameStr);
     fields.push_back(
