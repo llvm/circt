@@ -2,7 +2,7 @@
 // REQUIRES: libz3
 // REQUIRES: circt-bmc-jit
 // UNSUPPORTED: valgrind
-// RUN: circt-verilog %s --top=Top | circt-bmc - --module Top -b 1 --shared-libs=%libz3 --print-only-first-counterexample | FileCheck %s
+// RUN: circt-verilog %s --top=Top | circt-bmc - --module Top -b 1 --shared-libs=%libz3 | FileCheck %s
 
 // CHECK: counterexample for Top:
 // CHECK: cycle 0:
