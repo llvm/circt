@@ -14,15 +14,15 @@
 //
 // Each domain is lowered into two classes: (1) a class that has the
 // non-registry domain fields as input/output properties and (2) a class that
-// tracks the input class, associations, and registry field lists.  Every input
-// domain port is lowered to an input of type (1) and an output of type (2).
-// Every output domain port is lowered to an output of type (2).
+// tracks the input class and associations. Every input domain port is lowered
+// to an input of type (1), an output of type (2), and one output List per
+// Registry field. Every output domain port is lowered to an output of type (2)
+// and one output List per Registry field.
 //
 // Intuitively, (1) is the information that a user must specify about a domain
-// and (2) is associations plus accumulated Registry assets.  Registry fields
-// are Lists on (2); local domain.insert paths are concatenated with child
-// instance A_out.<registry>_registry_out contributions and driven into
-// A_object.
+// and (2) is associations. Registry assets accumulate bottom-up through the
+// additional List outputs: local domain.insert paths are concatenated with
+// child instance registry outputs and driven to the corresponding module port.
 //
 // This pass needs to run after InferDomains and before LowerClasses.  This pass
 // assumes that all domain information is available.  It is not written in such
@@ -90,46 +90,33 @@ struct DomainFieldLowering {
   enum class Kind {
     /// Non-registry field living on the input class as an in/out pair.
     InputClass,
-    /// Registry field living on the output class as a List in/out pair.
+    /// Registry field living on an additional module List output.
     OutputRegistry
   };
 
   Kind kind;
 
   /// Pair index within the owning class.  For InputClass this indexes the
-  /// input-class field pairs.  For OutputRegistry this indexes registry pairs
-  /// on the output class after domainInfo and associations.
+  /// input-class field pairs. For OutputRegistry this indexes registry fields
+  /// among the additional module List outputs.
   unsigned slot;
 };
 
 /// Struct of the two classes created from a domain, an input class (which is
 /// one-to-one with non-registry domain fields) and an output class (which
-/// tracks the input class, associations, and registry field lists).
+/// tracks the input class and associations).
 struct Classes {
   /// The domain-lowered class for user-provided, non-registry fields.
   ClassOp input;
 
-  /// A class tracking an instance of the input class, associations, and
-  /// accumulated registry field lists.
+  /// A class tracking an instance of the input class and associations.
   ClassOp output;
 
   /// Lowering info for each original domain field, in declaration order.
   SmallVector<DomainFieldLowering> fields;
 
-  /// Registry element types in declaration order among registries only.
-  SmallVector<PropertyType> registryElementTypes;
-
-  /// Port index of `<name>_registry_in` on the output class for registry slot.
-  unsigned getRegistryInPort(unsigned registrySlot) const {
-    // domainInfo_in/out at 0/1, associations_in/out at 2/3, then registry
-    // pairs.
-    return 4 + registrySlot * 2;
-  }
-
-  /// Port index of `<name>_registry_out` on the output class for registry slot.
-  unsigned getRegistryOutPort(unsigned registrySlot) const {
-    return getRegistryInPort(registrySlot) + 1;
-  }
+  /// Registry fields in declaration order among registries only.
+  SmallVector<std::pair<StringAttr, PropertyType>> registryFields;
 };
 
 /// Track information about the lowering of a domain port.
@@ -159,14 +146,17 @@ struct DomainInfo {
   /// associations of this ObjectOp.
   SmallVector<AssociationInfo> associations{};
 
-  /// Lowered classes for this domain port.  Used when wiring registry lists.
+  /// Lowered classes for this domain port. Used when wiring registry lists.
   const Classes *classes = nullptr;
 
   /// Local values inserted into each registry field.
   SmallVector<SmallVector<Value>> localRegistryValues;
 
-  /// Child domain output objects whose registry lists feed this domain.
-  SmallVector<Value> childRegistryOutputs;
+  /// Child registry lists that feed each registry field of this domain.
+  SmallVector<SmallVector<Value>> childRegistryValues;
+
+  /// Module output port index for each registry field.
+  SmallVector<unsigned> registryOutputPorts;
 
   /// Return a DomainInfo for an input domain port.  This will have both an
   /// input port at the current index and an output port at the next index.
@@ -420,7 +410,9 @@ LogicalResult LowerModule::lowerModule() {
       // Store the lowered classes and allocate per-registry accumulation state.
       indexToDomain[i].classes = &domainClasses;
       indexToDomain[i].localRegistryValues.resize(
-          domainClasses.registryElementTypes.size());
+          domainClasses.registryFields.size());
+      indexToDomain[i].childRegistryValues.resize(
+          domainClasses.registryFields.size());
 
       if (body) {
         // Insert objects in-order at the top of the module's body.  These
@@ -457,9 +449,22 @@ LogicalResult LowerModule::lowerModule() {
           {iDel, PortInfo(StringAttr::get(context, Twine(port.name) + "_out"),
                           classOut.getInstanceType(), Direction::Out)});
       ++iIns;
-
-      // Update annotations.
       portAnnotations.push_back(constants.getEmptyArrayAttr());
+
+      // Registry lists flow bottom-up through independent module outputs. This
+      // keeps the domain output class free of registry inputs.
+      for (auto [slot, registryField] :
+           llvm::enumerate(domainClasses.registryFields)) {
+        auto registryPortName =
+            StringAttr::get(context, Twine(port.name) + "_registry_" +
+                                         registryField.first.getValue());
+        newPorts.push_back(
+            {iDel, PortInfo(registryPortName,
+                            ListType::get(context, registryField.second),
+                            Direction::Out)});
+        indexToDomain[i].registryOutputPorts.push_back(iIns++);
+        portAnnotations.push_back(constants.getEmptyArrayAttr());
+      }
 
       // Don't increment the iDel since we deleted one port.
       continue;
@@ -808,8 +813,8 @@ LogicalResult LowerModule::lowerModule() {
       // ports to the destination object's input ports.  Otherwise, a single
       // prop.assign connects the source to the destination.
       //
-      // Registry lists accumulate separately by pulling child instance
-      // A_out.<registry>_out into the parent domain object.
+      // Registry lists accumulate separately by pulling child registry outputs
+      // into the parent's corresponding registry output.
       auto *src = defineOp.getSrc().getDefiningOp();
       auto dest = dyn_cast<UnrealizedConversionCastOp>(
           defineOp.getDest().getDefiningOp());
@@ -835,8 +840,11 @@ LogicalResult LowerModule::lowerModule() {
           if (auto inst = dyn_cast<InstanceOp>(inputResult.getOwner())) {
             unsigned outputIndex = inputResult.getResultNumber() + 1;
             assert(outputIndex < inst.getNumResults());
-            srcDomainIt->second->childRegistryOutputs.push_back(
-                inst.getResult(outputIndex));
+            auto &srcInfo = *srcDomainIt->second;
+            for (auto registrySlot :
+                 llvm::seq<unsigned>(0, srcInfo.classes->registryFields.size()))
+              srcInfo.childRegistryValues[registrySlot].push_back(
+                  inst.getResult(outputIndex + 1 + registrySlot));
           }
       }
 
@@ -875,11 +883,10 @@ LogicalResult LowerModule::lowerModule() {
     if (walkResult.wasInterrupted())
       return failure();
 
-    // Wire registry lists on each domain port object:
-    //   registry_in = list_concat(local..., child.A_out.<reg>_registry_out...)
+    // Wire each bottom-up registry output:
+    //   A_registry_<field> = list_concat(local..., child.A_registry_<field>...)
     for (auto &[_, info] : indexToDomain) {
-      if (!info.op || !info.classes ||
-          info.classes->registryElementTypes.empty())
+      if (!info.classes || info.classes->registryFields.empty())
         continue;
 
       // Build lists at end of body so path operands dominate the create.
@@ -887,19 +894,17 @@ LogicalResult LowerModule::lowerModule() {
 
       auto *classes = info.classes;
 
-      for (auto [registrySlot, elementType] :
-           llvm::enumerate(classes->registryElementTypes)) {
-        auto listType = ListType::get(context, elementType);
+      for (auto [registrySlot, registryField] :
+           llvm::enumerate(classes->registryFields)) {
+        auto listType = ListType::get(context, registryField.second);
         SmallVector<Value> concatOperands;
 
         concatOperands.push_back(
             ListCreateOp::create(builder, info.op.getLoc(), listType,
                                  info.localRegistryValues[registrySlot]));
 
-        for (Value childOutObj : info.childRegistryOutputs)
-          concatOperands.push_back(ObjectSubfieldOp::create(
-              builder, info.op.getLoc(), childOutObj,
-              classes->getRegistryOutPort(registrySlot)));
+        llvm::append_range(concatOperands,
+                           info.childRegistryValues[registrySlot]);
 
         Value registryList =
             concatOperands.size() == 1
@@ -907,11 +912,10 @@ LogicalResult LowerModule::lowerModule() {
                 : Value(ListConcatOp::create(builder, info.op.getLoc(),
                                              listType, concatOperands));
 
-        auto registryIn =
-            ObjectSubfieldOp::create(builder, info.op.getLoc(), info.op,
-                                     classes->getRegistryInPort(registrySlot));
-        PropAssignOp::create(builder, info.op.getLoc(), registryIn,
-                             registryList);
+        PropAssignOp::create(
+            builder, info.op.getLoc(),
+            body->getArgument(info.registryOutputPorts[registrySlot]),
+            registryList);
       }
     }
 
@@ -1022,27 +1026,19 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   auto name = op.getNameAttr();
 
   // Split fields into non-registry (user parameters on the input class) and
-  // registry (accumulated asset lists on the output class).
+  // registry (accumulated asset lists on independent module outputs).
   SmallVector<PortInfo> classInPorts;
-  SmallVector<PortInfo> classOutPorts;
   SmallVector<DomainFieldLowering> fieldLowerings;
-  SmallVector<PropertyType> registryElementTypes;
+  SmallVector<std::pair<StringAttr, PropertyType>> registryFields;
   unsigned inputSlot = 0;
   unsigned registrySlot = 0;
 
   for (auto field : op.getFields().getAsRange<DomainFieldAttr>()) {
     if (auto registryType = dyn_cast<RegistryType>(field.getType())) {
-      auto listType = ListType::get(context, registryType.getElementType());
-      classOutPorts.append(
-          {{/*name=*/builder.getStringAttr(Twine(field.getName().getValue()) +
-                                           "_registry_in"),
-            /*type=*/listType, /*dir=*/Direction::In},
-           {/*name=*/builder.getStringAttr(Twine(field.getName().getValue()) +
-                                           "_registry_out"),
-            /*type=*/listType, /*dir=*/Direction::Out}});
       fieldLowerings.push_back(
           {DomainFieldLowering::Kind::OutputRegistry, registrySlot++});
-      registryElementTypes.push_back(registryType.getElementType());
+      registryFields.push_back(
+          {field.getName(), registryType.getElementType()});
       continue;
     }
 
@@ -1074,8 +1070,6 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
                                        {/*name=*/constants.getAssociationsOut(),
                                         /*type=*/pathListType,
                                         /*dir=*/Direction::Out}};
-  allOutPorts.append(classOutPorts.begin(), classOutPorts.end());
-
   auto classOut = ClassOp::create(
       builder, StringAttr::get(context, Twine(name) + "_out"), allOutPorts);
 
@@ -1090,7 +1084,7 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
 
   classes.insert({name,
                   {classIn, classOut, std::move(fieldLowerings),
-                   std::move(registryElementTypes)}});
+                   std::move(registryFields)}});
   instanceGraph.addModule(classIn);
   instanceGraph.addModule(classOut);
   op.erase();
