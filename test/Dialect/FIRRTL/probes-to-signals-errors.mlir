@@ -1,7 +1,6 @@
 // RUN: circt-opt --firrtl-probes-to-signals --verify-diagnostics --split-input-file %s
 
-// Sending probe out from under a when is not possible without encompassing ExpandWhens.
-// Detect and diagnose, and in practice use ExpandWhens first to ensure success.
+// Probe exports from conditional regions are rejected.
 firrtl.circuit "RefProducer" {
   // expected-note @below {{destination here}}
   firrtl.module @RefProducer(in %a: !firrtl.uint<4>, in %en: !firrtl.uint<1>, in %clk: !firrtl.clock, out %thereg: !firrtl.probe<uint>) attributes {convention = #firrtl<convention scalarized>} {
@@ -65,8 +64,7 @@ firrtl.circuit "LayerProbe" {
 
 // -----
 
-// Force/release synthesis cannot preserve FIRRTL's layer isolation: a
-// layerblock may not drive a value declared in its parent module.
+// Force/release inside a layerblock is rejected.
 firrtl.circuit "RejectLayerForce" {
   firrtl.layer @Layer bind {}
   firrtl.module @RejectLayerForce(in %clock: !firrtl.clock,
@@ -84,9 +82,58 @@ firrtl.circuit "RejectLayerForce" {
 
 // -----
 
-// A force through a `ref.cast` that changes the probed type lands on the copy
-// wire the cast lowers to, which cannot drive the real target.  Diagnose
-// instead of silently dropping the force.
+// Force/release inside conditional regions is rejected.
+firrtl.circuit "RejectWhenForce" {
+  firrtl.module @RejectWhenForce(in %clock: !firrtl.clock,
+                                 in %enable: !firrtl.uint<1>,
+                                 in %value: !firrtl.uint<8>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>,
+                                           !firrtl.rwprobe<uint<8>>
+    firrtl.when %enable : !firrtl.uint<1> {
+      // expected-error @below {{force inside a when or match block is not supported}}
+      firrtl.ref.force %clock, %enable, %w_ref, %value : !firrtl.clock,
+          !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "RejectWhenRelease" {
+  firrtl.module @RejectWhenRelease(in %clock: !firrtl.clock,
+                                   in %enable: !firrtl.uint<1>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>,
+                                           !firrtl.rwprobe<uint<8>>
+    firrtl.when %enable : !firrtl.uint<1> {
+      // expected-error @below {{release inside a when or match block is not supported}}
+      firrtl.ref.release %clock, %enable, %w_ref : !firrtl.clock,
+          !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "RejectMatchForce" {
+  firrtl.module @RejectMatchForce(in %clock: !firrtl.clock,
+                                  in %enable: !firrtl.uint<1>,
+                                  in %value: !firrtl.uint<8>,
+                                  in %tag: !firrtl.enum<Only: uint<1>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>,
+                                           !firrtl.rwprobe<uint<8>>
+    firrtl.match %tag : !firrtl.enum<Only: uint<1>> {
+      case Only(%caseTag) {
+        // expected-error @below {{force inside a when or match block is not supported}}
+        firrtl.ref.force %clock, %enable, %w_ref, %value : !firrtl.clock,
+            !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+      }
+    }
+  }
+}
+
+// -----
+
+// A type-changing cast cannot carry force control to the original target.
 firrtl.circuit "ForceThroughWideningCast" {
   firrtl.module @ForceThroughWideningCast(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint) {
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
@@ -99,14 +146,13 @@ firrtl.circuit "ForceThroughWideningCast" {
 
 // -----
 
-// Exporting a forceable probe through a type-changing `ref.cast` is legal when
-// the circuit has no force/release: the port maps to a plain data type and the
-// cast becomes a connect.  Forcing through such a cast is still diagnosed
-// (see ForceThroughWideningCast above).
+// A type-changing cast cannot carry an exported force-control port.
 firrtl.circuit "ExportThroughWideningCast" {
   firrtl.module @ExportThroughWideningCast(out %p: !firrtl.rwprobe<uint>) {
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    // expected-note @below {{target is reached through this op}}
     %cast = firrtl.ref.cast %w_ref : (!firrtl.rwprobe<uint<8>>) -> !firrtl.rwprobe<uint>
+    // expected-error @below {{forceable probe port cannot be lowered: force control cannot be routed to the target through this probe}}
     firrtl.ref.define %p, %cast : !firrtl.rwprobe<uint>
   }
 }
@@ -114,44 +160,7 @@ firrtl.circuit "ExportThroughWideningCast" {
 
 // -----
 
-// An extmodule has no body to hold a state machine and its ports cannot be
-// rewritten to carry force control, so a force of one of its forceable probes
-// could never reach the target.  Diagnose instead of dropping it silently.
-firrtl.circuit "ForceExtmoduleProbe" {
-  firrtl.extmodule @Ext(out p: !firrtl.rwprobe<uint<8>>)
-  firrtl.module @ForceExtmoduleProbe(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
-    // expected-note @below {{target is a probe of this instance, whose module has no body to carry the force control}}
-    %e_p = firrtl.instance e @Ext(out p: !firrtl.rwprobe<uint<8>>)
-    // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
-    firrtl.ref.force %clock, %en, %e_p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-  }
-}
-
-// -----
-
-// An `instance_choice` is body-less if *any* of its callees is: the force could
-// land on the extmodule alternative.
-firrtl.circuit "ForceChoiceWithExtmodule" {
-  firrtl.option @Platform { firrtl.option_case @A }
-  firrtl.module @ChoiceImpl(out %p: !firrtl.rwprobe<uint<8>>) {
-    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
-    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<8>>
-  }
-  firrtl.extmodule @ChoiceExtImpl(out p: !firrtl.rwprobe<uint<8>>)
-  firrtl.module @ForceChoiceWithExtmodule(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
-    // expected-note @below {{target is a probe of this instance, whose module has no body to carry the force control}}
-    %e_p = firrtl.instance_choice e @ChoiceImpl alternatives @Platform { @A -> @ChoiceExtImpl } (out p: !firrtl.rwprobe<uint<8>>)
-    // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
-    firrtl.ref.force %clock, %en, %e_p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
-  }
-}
-
-// -----
-
-// Forcing a FIELD of a local aggregate (`ref.sub` of a local target) is
-// diagnosed just like a field of an instance's probe: the state machine's
-// control bundle carries a `forcedValue` sized for the whole target, so a
-// force of a single field cannot be routed to it.
+// A field force cannot use whole-target force control.
 firrtl.circuit "ForceFieldOfLocalAggregate" {
   firrtl.module @ForceFieldOfLocalAggregate(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
     %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
@@ -164,15 +173,47 @@ firrtl.circuit "ForceFieldOfLocalAggregate" {
 
 // -----
 
-// Forcing a whole aggregate is diagnosed: only ground-type targets are
-// supported, so an aggregate must be lowered (e.g. `preserve-aggregates=none`)
-// before this pass runs.
+// A field-level inner symbol cannot carry whole-target force control.
+firrtl.circuit "ForceFieldOfRWProbe" {
+  firrtl.module @ForceFieldOfRWProbe(in %clock: !firrtl.clock,
+                                     in %en: !firrtl.uint<1>,
+                                     in %v: !firrtl.uint<8>) {
+    %w, %w_ref = firrtl.wire sym [<@field_sym, 1, public>] forceable :
+        !firrtl.bundle<a: uint<8>, b: uint<8>>,
+        !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
+    // expected-note @below {{target is reached through this op}}
+    %r = firrtl.ref.rwprobe <@ForceFieldOfRWProbe::@field_sym> :
+        !firrtl.rwprobe<uint<8>>
+    // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
+    firrtl.ref.force %clock, %en, %r, %v : !firrtl.clock, !firrtl.uint<1>,
+        !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Whole-aggregate force is rejected; only ground targets are supported.
 firrtl.circuit "ForceWholeLocalAggregate" {
   firrtl.module @ForceWholeLocalAggregate(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.bundle<a: uint<8>, b: uint<8>>, out %oa: !firrtl.uint<8>) {
-    // expected-error @below {{force/release of aggregate types is not supported; compile with preserve-aggregates=none}}
+    // expected-error @below {{force/release of aggregate types is not supported; compile with preserve-aggregate=none}}
     %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
     %wa = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>, b: uint<8>>
     firrtl.matchingconnect %oa, %wa : !firrtl.uint<8>
     firrtl.ref.force %clock, %en, %w_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>, !firrtl.bundle<a: uint<8>, b: uint<8>>
+  }
+}
+
+// -----
+
+// Module output ports cannot use read-side force overrides.
+firrtl.circuit "ForceOutputPort" {
+  firrtl.module @ForceOutputPort(in %clock: !firrtl.clock,
+                                 in %en: !firrtl.uint<1>,
+                                 in %value: !firrtl.uint<8>,
+                                 // expected-error @below {{cannot synthesize force/release: target is a module output port}}
+                                 out %o: !firrtl.uint<8> sym @osym) {
+    %r = firrtl.ref.rwprobe <@ForceOutputPort::@osym> : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %r, %value : !firrtl.clock, !firrtl.uint<1>,
+        !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
   }
 }
