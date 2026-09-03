@@ -2,20 +2,10 @@
 ; RUN: firtool --probes-to-signals -verilog %s > %t.sv
 ; RUN: circt-rtl-sim.py %t.sv --cycles 16 2>&1 | FileCheck %s
 ;
-; Self-checking Verilator smoke test for force/release synthesis.
-; The instances below cover:
-;   clockedWire          clocked force/release of a wire; RHS tracks while forced
-;   concurrentForce      concurrent force+release (release is last → not forced)
-;   priorityForces       two clocked forces; later force has higher priority
-;   resettableReg        exported regreset, local force, reset while forced
-;   parentChildForce     child + parent both force one probe; local retrigger wins
-;   bundleField          force one field of a locally-connected bundle
-;   selfIncrementingReg  self-incrementing register plus force/release
-;
-; Each force target is driven through a child input. A constant connection to
-; a local wire is copy-propagated before ProbesToSignals and removes the force.
-; Forceable registers export an unused RWProbe to avoid a CheckCombLoops crash
-; on an undefined rwprobe.
+; Test force/release synthesis for wires, registers, lowered aggregate fields,
+; and probes.
+; Test clocked force/release, release priority, reset interaction, and
+; self-incrementing registers.
 
 FIRRTL version 4.0.0
 circuit top :
@@ -33,7 +23,7 @@ circuit top :
     force(clock, en, rwprobe(w), v)
     release(clock, rel, rwprobe(w))
 
-  ; The later force wins when both enables are asserted.
+  ; Test force priority.
   module TwoForces :
     input clock : Clock
     input en1 : UInt<1>
@@ -49,7 +39,7 @@ circuit top :
     force(clock, en1, rwprobe(w), v1)
     force(clock, en2, rwprobe(w), v2)
 
-  ; Keep the probe port so CheckCombLoops has a defined rwprobe.
+  ; Test force/release on a resettable register.
   module ForcedReg :
     input clock : Clock
     input rst : UInt<1>
@@ -97,7 +87,7 @@ circuit top :
     connect ob, w.b
     force(clock, en, rwprobe(w.a), v)
 
-  ; Keep the probe port so CheckCombLoops has a defined rwprobe.
+  ; Test force/release on a self-incrementing register.
   module SelfIncReg :
     input clock : Clock
     input rst : UInt<1>
@@ -121,10 +111,10 @@ circuit top :
     regreset cycle : UInt<8>, clk, rst, UInt<8>(0)
     connect cycle, add(cycle, UInt<8>(1))
     node nreset = eq(rst, UInt<1>(0))
-    ; Keep the default driver non-constant so IMCP cannot fold the target away.
+    ; Test force/release with a non-constant driver.
     node d = pad(rst, 8)
     node y = pad(nreset, 8)
-    ; The live RHS is AA through cycle 2 and BB afterwards.
+    ; Test a changing force value.
     node vLive = mux(gt(cycle, UInt<8>(2)), UInt<8>(0hBB), UInt<8>(0hAA))
 
     inst clockedWire of ClockedWire
@@ -134,7 +124,7 @@ circuit top :
     connect clockedWire.v, vLive
     connect clockedWire.d, d
 
-    ; Force and release occur on the same edge; release is last in ClockedWire.
+    ; Test simultaneous force and release.
     inst concurrentForce of ClockedWire
     connect concurrentForce.clock, clk
     connect concurrentForce.en, eq(cycle, UInt<8>(1))
