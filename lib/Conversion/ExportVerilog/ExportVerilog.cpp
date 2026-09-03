@@ -209,6 +209,7 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
           [&](InterfaceSignalOp op) { return op.getSymName(); })
       .Case<InterfaceModportOp>(
           [&](InterfaceModportOp op) { return op.getSymName(); })
+      .Case<GenerateOp>([](GenerateOp op) { return op.getSymName(); })
       .Default([&](Operation *op) {
         if (auto attr = op->getAttrOfType<StringAttr>("name"))
           return attr.getValue();
@@ -216,9 +217,8 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
           return attr.getValue();
         if (auto attr = op->getAttrOfType<StringAttr>("sv.namehint"))
           return attr.getValue();
-        if (auto attr =
-                op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-          return attr.getValue();
+        if (auto symbol = dyn_cast<mlir::SymbolOpInterface>(op))
+          return symbol.getName();
         return StringRef("");
       });
 }
