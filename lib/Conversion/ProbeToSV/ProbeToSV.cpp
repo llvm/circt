@@ -7,9 +7,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ProbeToSV.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HierPathCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Dialect/HW/PortConverter.h"
 #include "circt/Dialect/Probe/ProbeOps.h"
 #include "circt/Dialect/Probe/ProbeTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -18,7 +20,6 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 
 #define DEBUG_TYPE "lower-probe-to-sv"
@@ -69,35 +70,41 @@ getOrAddInnerSym(hw::InnerSymbolOpInterface op,
   return name;
 }
 
-/// Clone an instance while dropping selected results. All operation attributes
-/// are retained, including non-structural/custom attributes.
-static hw::InstanceOp cloneWithoutResults(hw::InstanceOp instance,
-                                          const llvm::BitVector &eraseResults) {
-  SmallVector<Type> resultTypes;
-  SmallVector<Attribute> resultNames;
-  for (auto [index, result] : llvm::enumerate(instance.getResults())) {
-    if (eraseResults.test(index))
-      continue;
-    resultTypes.push_back(result.getType());
-    resultNames.push_back(instance.getResultNames()[index]);
+/// Remove a Probe output from a module and its instances without replacing it
+/// with any physical port.
+class EraseProbeOutput : public hw::PortConversion {
+public:
+  using PortConversion::PortConversion;
+
+  void mapInputSignals(OpBuilder &, Operation *, Value,
+                       SmallVectorImpl<Value> &, ArrayRef<Backedge>) override {
+    llvm_unreachable("Probe input ports must fail validation");
   }
 
-  OpBuilder builder(instance);
-  OperationState state(instance.getLoc(), hw::InstanceOp::getOperationName());
-  state.addOperands(instance.getOperands());
-  state.addTypes(resultTypes);
-  state.addAttributes(instance->getAttrs());
-  auto newInstance = cast<hw::InstanceOp>(builder.create(state));
-  newInstance.setResultNamesAttr(builder.getArrayAttr(resultNames));
-
-  unsigned newIndex = 0;
-  for (auto [oldIndex, oldResult] : llvm::enumerate(instance.getResults())) {
-    if (eraseResults.test(oldIndex))
-      continue;
-    oldResult.replaceAllUsesWith(newInstance.getResult(newIndex++));
+  void mapOutputSignals(OpBuilder &, Operation *, Value instanceResult,
+                        SmallVectorImpl<Value> &, ArrayRef<Backedge>) override {
+    assert(instanceResult.use_empty() &&
+           "Probe instance result must have no uses before port conversion");
   }
-  return newInstance;
-}
+
+private:
+  void buildInputSignals() override {
+    llvm_unreachable("Probe input ports must fail validation");
+  }
+  void buildOutputSignals() override {}
+};
+
+class ProbePortConversionBuilder : public hw::PortConversionBuilder {
+public:
+  using PortConversionBuilder::PortConversionBuilder;
+
+  FailureOr<std::unique_ptr<hw::PortConversion>>
+  build(hw::PortInfo port) override {
+    if (port.isOutput() && isa<probe::RefType>(port.type))
+      return {std::make_unique<EraseProbeOutput>(converter, port)};
+    return PortConversionBuilder::build(port);
+  }
+};
 
 class LowerProbeToSVPass
     : public circt::impl::LowerProbeToSVBase<LowerProbeToSVPass> {
@@ -112,7 +119,7 @@ private:
   FailureOr<ReadResolution> resolveRead(probe::ReadOp read);
   LogicalResult validateModulePorts(hw::HWModuleLike module);
   LogicalResult validateProbeUses();
-  void rewrite();
+  LogicalResult rewrite();
 
   hw::InnerRefAttr getOrCreateSourceRef(
       probe::SendOp send,
@@ -123,7 +130,7 @@ private:
 
   SymbolTableCollection symbolTables;
   SmallVector<ReadResolution> resolutions;
-  DenseMap<hw::HWModuleOp, SmallVector<unsigned>> probeOutputs;
+  SmallVector<hw::HWModuleOp> modulesWithProbeOutputs;
   SmallVector<probe::SendOp> sendOps;
   SmallVector<hw::InstanceOp> instancesWithProbeResults;
   DenseMap<Operation *, hw::InnerRefAttr> sourceRefs;
@@ -131,6 +138,7 @@ private:
 
 LogicalResult LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module) {
   unsigned outputIndex = 0;
+  bool hasProbeOutput = false;
   for (auto port : module.getPortList()) {
     auto refType = dyn_cast<probe::RefType>(port.type);
     if (!refType) {
@@ -169,9 +177,11 @@ LogicalResult LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module) {
       return output.emitOpError(
           "Probe output must be driven directly by probe.send; forwarding "
           "Probe refs across multiple module levels is not supported");
-    probeOutputs[concreteModule].push_back(outputIndex);
+    hasProbeOutput = true;
     ++outputIndex;
   }
+  if (hasProbeOutput)
+    modulesWithProbeOutputs.push_back(cast<hw::HWModuleOp>(*module));
   return success();
 }
 
@@ -335,7 +345,7 @@ hw::InnerRefAttr LowerProbeToSVPass::getOrCreateInstanceRef(
   return hw::InnerRefAttr::get(module.getModuleNameAttr(), name);
 }
 
-void LowerProbeToSVPass::rewrite() {
+LogicalResult LowerProbeToSVPass::rewrite() {
   auto circuit = getOperation();
   Namespace circuitNamespace;
   circuitNamespace.add(circuit);
@@ -364,32 +374,24 @@ void LowerProbeToSVPass::rewrite() {
     resolution.read.erase();
   }
 
-  // Remove Probe results from instances after all reads have been rewritten.
-  for (auto instance : instancesWithProbeResults) {
-    llvm::BitVector eraseResults(instance.getNumResults());
-    for (auto [index, result] : llvm::enumerate(instance.getResults()))
-      if (isa<probe::RefType>(result.getType()))
-        eraseResults.set(index);
-    cloneWithoutResults(instance, eraseResults);
-    instance.erase();
-  }
-
-  // Remove Probe output operands and ports from their defining modules.
-  for (auto &[module, outputs] : probeOutputs) {
-    auto output = cast<hw::OutputOp>(module.getBodyBlock()->getTerminator());
-    for (unsigned index : llvm::reverse(outputs))
-      output->eraseOperand(index);
-    module.erasePorts({}, outputs);
-  }
+  // Remove Probe output ports and update all corresponding instances.
+  auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
+  for (auto module : modulesWithProbeOutputs)
+    if (failed(
+            hw::PortConverter<ProbePortConversionBuilder>(instanceGraph, module)
+                .run()))
+      return failure();
 
   for (auto send : llvm::reverse(sendOps))
     send.erase();
+  return success();
 }
 
 void LowerProbeToSVPass::runOnOperation() {
   if (failed(validate()))
     return signalPassFailure();
-  rewrite();
+  if (failed(rewrite()))
+    signalPassFailure();
 }
 
 } // namespace

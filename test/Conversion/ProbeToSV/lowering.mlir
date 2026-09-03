@@ -19,10 +19,12 @@ hw.module @Local(in %in: i8, out out: i8) {
 // CHECK-NOT: probe.
 
 // CHECK-LABEL: hw.module private @Producer
-// CHECK-SAME: in %in : i8
-// CHECK-SAME: out passthrough : i8
-hw.module private @Producer(in %in: i8, out passthrough: i8,
-                            out observed: !probe.ref<i8>) {
+// CHECK-SAME: in %in : i8 {hw.verilogName = "kept_in"}
+// CHECK-SAME: out passthrough : i8 {hw.verilogName = "kept_out"}
+hw.module private @Producer(
+    in %in: i8 {hw.verilogName = "kept_in"},
+    out passthrough: i8 {hw.verilogName = "kept_out"},
+    out observed: !probe.ref<i8>) {
   %value = comb.xor %in, %in : i8
   %probe = probe.send %value : i8
   hw.output %in, %probe : i8, !probe.ref<i8>
@@ -63,6 +65,13 @@ hw.module private @UnusedProducer(in %in: i8,
                                   out unused: !probe.ref<i8>) {
   %probe = probe.send %in : i8
   hw.output %probe : !probe.ref<i8>
+}
+
+// CHECK-LABEL: hw.module @UnusedInstance
+// CHECK: hw.instance "unused" @UnusedProducer(in: %in: i8) -> () {doNotPrint}
+hw.module @UnusedInstance(in %in: i8) {
+  %unused = hw.instance "unused" @UnusedProducer(in: %in: i8) ->
+      (unused: !probe.ref<i8>) {doNotPrint}
 }
 
 // CHECK-LABEL: hw.module @Aggregate
