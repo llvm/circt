@@ -40,17 +40,19 @@ bool comb::shouldUseBoothEncoding(Value lhs, Value rhs, unsigned threshold) {
 
   // Check for zext of the multiplicands
   Value lhsZext, rhsZext;
-  if (matchPattern(lhs, comb::m_ZextBy(m_Any(&lhsZext))))
+  if (matchPattern(lhs, comb::m_ZextBy(m_Any(&lhsZext))) &&
+      matchPattern(rhs, comb::m_ZextBy(m_Any(&rhsZext)))) {
     lhsWidth -= lhsZext.getType().getIntOrFloatBitWidth();
-  if (matchPattern(rhs, comb::m_ZextBy(m_Any(&rhsZext))))
     rhsWidth -= rhsZext.getType().getIntOrFloatBitWidth();
+  }
 
   // Check for sext of the multiplicands
   Value lhsSextBits, rhsSextBits;
-  if (matchPattern(lhs, comb::m_SextBy(m_Any(&lhsSextBits))))
+  if (matchPattern(lhs, comb::m_SextBy(m_Any(&lhsSextBits))) &&
+      matchPattern(rhs, comb::m_SextBy(m_Any(&rhsSextBits)))) {
     lhsWidth -= lhsSextBits.getType().getIntOrFloatBitWidth();
-  if (matchPattern(rhs, comb::m_SextBy(m_Any(&rhsSextBits))))
     rhsWidth -= rhsSextBits.getType().getIntOrFloatBitWidth();
+  }
 
   // Heuristic threshold based on:
   // "Datapath Synthesis for Standard-Cell Design", Reto Zimmerman 2009
