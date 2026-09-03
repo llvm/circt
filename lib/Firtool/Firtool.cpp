@@ -150,8 +150,16 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayers());
 
   // Run after inference, layer specialization.
-  if (opt.shouldConvertProbesToSignals())
+  if (opt.shouldConvertProbesToSignals()) {
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignals());
+    // ProbesToSignals maps forceable probe ports to mixed-direction
+    // `{data, flip ctrl}` bundles after the earlier LowerTypes run.  Re-run
+    // with the same preservation options so only those non-passive ports are
+    // peeled; already-lowered aggregates and memories are left unchanged.
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypes(
+        {/*preserveAggregate=*/opt.getPreserveAggregate(),
+         /*preserveMemory=*/firrtl::PreserveAggregate::None}));
+  }
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInliner());
 
