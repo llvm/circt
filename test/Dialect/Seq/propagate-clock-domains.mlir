@@ -1,11 +1,12 @@
 // RUN: circt-opt %s --seq-propagate-clock-domains | FileCheck %s
+// RUN: circt-opt %s --seq-propagate-clock-domains --seq-check-multiple-clock-sources 2>&1 | FileCheck %s --check-prefix=NOTE
 
 // A comb.mux joins the input domains. The register body is evaluated separately
 // for each instance: the annotation on the shared module operation is therefore
 // the union, while the two hw.instance results retain their individual domains.
 // CHECK-LABEL: hw.module private @Register
 hw.module private @Register(in %data: i1, in %clock: !seq.clock, out result: i1) {
-  // CHECK: seq.compreg %data, %clock {seq.clock_domains = {{\[\[("A", "B"|"B", "A")\]\]}}} : i1
+// CHECK: seq.compreg %data, %clock {seq.clock_domains = {{\[\[("A", "B"|"B", "A")\]\]}}} : i1
   %reg = seq.compreg %data, %clock : i1
   hw.output %reg : i1
 }
@@ -28,10 +29,13 @@ hw.module @Top(
   %resultA = hw.instance "registerA" @Register(data: %mixed : i1, clock: %clockA : !seq.clock) -> (result: i1)
   // CHECK: hw.instance "registerB" @Register(data: %{{.*}}: i1, clock: %clockB: !seq.clock) -> (result: i1) {seq.clock_domains = {{\[\["B"\]\]}}}
   %resultB = hw.instance "registerB" @Register(data: %mixed : i1, clock: %clockB : !seq.clock) -> (result: i1)
-  // CHECK: comb.mux %dataA, %dataA, %dataB {seq.clock_domains = {{\[\[("A", "B"|"B", "A")\]\]}}} : i1
+// CHECK: comb.mux %dataA, %dataA, %dataB {seq.clock_domains = {{\[\[("A", "B"|"B", "A")\]\]}}} : i1
   %mixed = comb.mux %dataA, %dataA, %dataB : i1
   hw.output %resultA, %resultB : i1, i1
 }
+
+// NOTE: remark: result #0 has multiple possible clock sources: {{(A, B|B, A)}}
+// NOTE: remark: result #0 has multiple possible clock sources: {{(A, B|B, A)}}
 
 // Public clocks without an explicit annotation receive stable, distinct domain
 // names. Unannotated data instead conservatively starts in the unknown domain.

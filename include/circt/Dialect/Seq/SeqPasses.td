@@ -78,6 +78,16 @@ def PropagateClockDomains : Pass<"seq-propagate-clock-domains", "mlir::ModuleOp"
   }];
 }
 
+def CheckMultipleClockSources : Pass<"seq-check-multiple-clock-sources",
+                                      "mlir::ModuleOp"> {
+  let summary = "Diagnose results with multiple possible clock sources";
+  let description = [{
+    Read `seq.clock_domains` result annotations and emit an informational
+    remark for every result that has more than one possible clock domain. This
+    pass does not modify the IR.
+  }];
+}
+
 def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
   let summary = "Implement FIRRTMMem memories nodes with simulation model";
   let description = [{
