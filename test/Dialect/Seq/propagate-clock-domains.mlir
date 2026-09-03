@@ -5,7 +5,7 @@
 // the union, while the two hw.instance results retain their individual domains.
 // CHECK-LABEL: hw.module private @Register
 hw.module private @Register(in %data: i1, in %clock: !seq.clock, out result: i1) {
-  // CHECK: seq.compreg %data, %clock {seq.clock_domains = {{\[\["A", "B"\]\]}}} : i1
+  // CHECK: seq.compreg %data, %clock {seq.clock_domains = {{\[\[("A", "B"|"B", "A")\]\]}}} : i1
   %reg = seq.compreg %data, %clock : i1
   hw.output %reg : i1
 }
@@ -24,12 +24,12 @@ hw.module @Top(
     in %clockB: !seq.clock {seq.clock_domains = ["B"]},
     out resultA: i1,
     out resultB: i1) {
-  // CHECK: %[[MIXED:.*]] = comb.mux %dataA, %dataA, %dataB {seq.clock_domains = {{\[\["A", "B"\]\]}}} : i1
-  %mixed = comb.mux %dataA, %dataA, %dataB : i1
-  // CHECK: hw.instance "registerA" @Register(data: %[[MIXED]]: i1, clock: %clockA: !seq.clock) -> (result: i1) {seq.clock_domains = {{\[\["A"\]\]}}}
+  // CHECK: hw.instance "registerA" @Register(data: %{{.*}}: i1, clock: %clockA: !seq.clock) -> (result: i1) {seq.clock_domains = {{\[\["A"\]\]}}}
   %resultA = hw.instance "registerA" @Register(data: %mixed : i1, clock: %clockA : !seq.clock) -> (result: i1)
-  // CHECK: hw.instance "registerB" @Register(data: %[[MIXED]]: i1, clock: %clockB: !seq.clock) -> (result: i1) {seq.clock_domains = {{\[\["B"\]\]}}}
+  // CHECK: hw.instance "registerB" @Register(data: %{{.*}}: i1, clock: %clockB: !seq.clock) -> (result: i1) {seq.clock_domains = {{\[\["B"\]\]}}}
   %resultB = hw.instance "registerB" @Register(data: %mixed : i1, clock: %clockB : !seq.clock) -> (result: i1)
+  // CHECK: comb.mux %dataA, %dataA, %dataB {seq.clock_domains = {{\[\[("A", "B"|"B", "A")\]\]}}} : i1
+  %mixed = comb.mux %dataA, %dataA, %dataB : i1
   hw.output %resultA, %resultB : i1, i1
 }
 

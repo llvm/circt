@@ -9,6 +9,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
@@ -134,38 +135,46 @@ private:
          llvm::zip(module.getBodyBlock()->getArguments(), inputDomains))
       instance.values[argument].join(domains);
 
+    SmallVector<Operation *> operations;
+    for (Operation &op : module.getBodyBlock()->without_terminator())
+      operations.push_back(&op);
+    if (!computeTopologicalSorting(operations)) {
+      activeModules.erase(operation);
+      return unknownOutputs(module);
+    }
+
     unsigned nextDerivedClock = 0;
-    for (Operation &op : module.getBodyBlock()->without_terminator()) {
-      if (auto child = dyn_cast<hw::InstanceOp>(op)) {
+    for (Operation *operation : operations) {
+      if (auto child = dyn_cast<hw::InstanceOp>(operation)) {
         propagateInstance(child, instance, path);
         continue;
       }
 
-      for (Value result : op.getResults()) {
-        if (!isa<ClockType>(result.getType()) || isa<hw::WireOp>(op))
+      for (Value result : operation->getResults()) {
+        if (!isa<ClockType>(result.getType()) || isa<hw::WireOp>(operation))
           continue;
         auto name = (Twine(path) + ".clock" + Twine(nextDerivedClock++)).str();
         instance.values[result].insert(StringAttr::get(context, name));
       }
 
-      if (auto clocked = dyn_cast<Clocked>(op)) {
-        for (Value result : op.getResults()) {
-          if (isa<ClockType>(result.getType()) && !isa<hw::WireOp>(op))
+      if (auto clocked = dyn_cast<Clocked>(operation)) {
+        for (Value result : operation->getResults()) {
+          if (isa<ClockType>(result.getType()) && !isa<hw::WireOp>(operation))
             continue;
           instance.values[result].join(get(instance, clocked.getClk()));
         }
       } else {
         DomainSet operandDomains;
-        for (Value operand : op.getOperands())
+        for (Value operand : operation->getOperands())
           operandDomains.join(get(instance, operand));
-        for (Value result : op.getResults()) {
-          if (isa<ClockType>(result.getType()) && !isa<hw::WireOp>(op))
+        for (Value result : operation->getResults()) {
+          if (isa<ClockType>(result.getType()) && !isa<hw::WireOp>(operation))
             continue;
           instance.values[result].join(operandDomains);
         }
       }
 
-      for (Value result : op.getResults())
+      for (Value result : operation->getResults())
         record(result, get(instance, result));
     }
 
