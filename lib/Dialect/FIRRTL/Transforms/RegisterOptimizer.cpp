@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/Dominance.h"
@@ -62,18 +63,36 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
   if (!con)
     return;
 
-  // Register is only written by itself, replace with invalid.
+  // Register is only written by itself.  Without a time-zero `initial` value
+  // its value is unspecified, so replace it with invalid.  With one, the
+  // register holds that constant forever, so replace it with the constant.
   if (con.getSrc() == reg.getResult()) {
     auto builder = OpBuilder(reg);
-    auto inv = InvalidValueOp::create(builder, reg.getLoc(),
-                                      reg.getResult().getType());
-    reg.getResult().replaceAllUsesWith(inv.getResult());
+    Value replacement;
+    if (auto initial = reg.getInitialAttr())
+      replacement =
+          ConstantOp::create(builder, reg.getLoc(),
+                             type_cast<IntType>(reg.getResult().getType()),
+                             initial.getValue())
+              .getResult();
+    else
+      replacement = InvalidValueOp::create(builder, reg.getLoc(),
+                                           reg.getResult().getType())
+                        .getResult();
+    reg.getResult().replaceAllUsesWith(replacement);
     toErase.push_back(reg);
     toErase.push_back(con);
     return;
   }
   // Register is only written by a constant
   if (isConstant(con.getSrc())) {
+    // Bail if replacing the register with the constant would change its
+    // time-zero simulation value.
+    auto cstOp = con.getSrc().getDefiningOp<ConstantOp>();
+    if (!preservesInitial(reg.getInitialAttr(),
+                          cstOp ? std::optional<APInt>(cstOp.getValue())
+                                : std::nullopt))
+      return;
     // constant may not dominate the register.  But it might be the next
     // operation, so we can't just move it.  Straight constants can be
     // rematerialized.  Derived constants are piped through wires.
@@ -117,6 +136,14 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
     return;
   auto con = getSingleConnectUserOf(reg.getResult());
   if (!con)
+    return;
+
+  // Both folds below replace the register with its reset value, so bail if
+  // that would change the register's time-zero (`initial`) value.
+  auto resetCstOp = reg.getResetValue().getDefiningOp<ConstantOp>();
+  if (!preservesInitial(reg.getInitialAttr(),
+                        resetCstOp ? std::optional<APInt>(resetCstOp.getValue())
+                                   : std::nullopt))
     return;
 
   // Register is only written by itself, and reset with a constant.
