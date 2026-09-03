@@ -15,6 +15,7 @@
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
@@ -283,6 +284,93 @@ public:
   template <typename Fn>
   decltype(auto) walkInversePostOrder(Fn &&fn);
 
+  /// Perform a parallel post-order walk across the modules using the MLIR
+  /// context's thread pool. All children of a node are guaranteed to have been
+  /// visited (and their callbacks completed) before the node itself is visited,
+  /// but sibling nodes (those sharing no ancestor/descendant relationship) may
+  /// be visited concurrently.
+  ///
+  /// **Thread safety:** The callback `fn` must be safe to invoke from
+  /// multiple threads concurrently.
+  ///
+  /// The callback must *not* mutate the InstanceGraph's structure.  In
+  /// particular it must not:
+  ///   * add or remove InstanceGraphNodes (`addModule` / `erase`),
+  ///   * add, remove, or replace InstanceRecords (`addInstance` /
+  ///     `InstanceRecord::erase` / `replaceInstance`),
+  ///   * mutate any node's `instances` or `uses` lists by any means.
+  ///
+  /// The callback MAY:
+  ///   * read any field of any InstanceGraphNode or InstanceRecord (target,
+  ///     parent, module, instance),
+  ///   * mutate the underlying MLIR IR of the node's own module, subject to
+  ///     the usual MLIR parallel-walk rules (no cross-thread access to
+  ///     parent regions, symbol tables, or sibling modules' ops),
+  ///   * accumulate results into user-owned data structures using the
+  ///     user's own synchronization.
+  ///
+  /// If the graph must be mutated based on the walk's results, collect the
+  /// required edits into a thread-safe side buffer during the walk, then
+  /// apply them serially after the walk returns.
+  ///
+  /// **DAG requirement:** The InstanceGraph must be a DAG for the parallel
+  /// walk.  If there are cycles, nodes belonging to a cycle will be silently
+  /// skipped (their pending counts never reach zero).
+  ///
+  /// If `fn` returns a `LogicalResult`, the walk returns `failure()` as soon
+  /// as any invocation fails.  Remaining ready but unstarted nodes are
+  /// skipped.
+  ///
+  /// Only nodes in the managed node list (`nodes`) are visited.  Sentinel
+  /// nodes introduced by subclasses (e.g., the virtual top-level entry in
+  /// hw::InstanceGraph) are automatically excluded.
+  template <typename Fn>
+  decltype(auto) walkParallelPostOrder(Fn &&fn);
+
+  /// Perform a parallel inverse-post-order walk across the modules using the
+  /// MLIR context's thread pool. All parents of a node are guaranteed to have
+  /// been visited (and their callbacks completed) before the node itself is
+  /// visited, but sibling nodes may be visited concurrently.
+  ///
+  /// **Thread safety:** The callback `fn` must be safe to invoke from
+  /// multiple threads concurrently.
+  ///
+  /// The callback must *not* mutate the InstanceGraph's structure.  In
+  /// particular it must not:
+  ///   * add or remove InstanceGraphNodes (`addModule` / `erase`),
+  ///   * add, remove, or replace InstanceRecords (`addInstance` /
+  ///     `InstanceRecord::erase` / `replaceInstance`),
+  ///   * mutate any node's `instances` or `uses` lists by any means.
+  ///
+  /// The callback MAY:
+  ///   * read any field of any InstanceGraphNode or InstanceRecord (target,
+  ///     parent, module, instance),
+  ///   * mutate the underlying MLIR IR of the node's own module, subject to
+  ///     the usual MLIR parallel-walk rules (no cross-thread access to
+  ///     parent regions, symbol tables, or sibling modules' ops),
+  ///   * accumulate results into user-owned data structures using the
+  ///     user's own synchronization.
+  ///
+  /// If the graph must be mutated based on the walk's results, collect the
+  /// required edits into a thread-safe side buffer during the walk, then
+  /// apply them serially after the walk returns.
+  ///
+  /// **DAG requirement:** The InstanceGraph must be a DAG for the parallel
+  /// walk.  If there are cycles, nodes belonging to a cycle will be silently
+  /// skipped (their pending counts never reach zero).
+  ///
+  /// If `fn` returns a `LogicalResult`, the walk returns `failure()` as soon
+  /// as any invocation fails.  Remaining ready but unstarted nodes are
+  /// skipped.
+  ///
+  /// Only nodes in the managed node list (`nodes`) are visited.  Sentinel
+  /// nodes introduced by subclasses (e.g., the virtual top-level entry in
+  /// hw::InstanceGraph) are automatically excluded.  This differs from the
+  /// serial `walkInversePostOrder`, which may also visit nodes reachable via
+  /// graph traversal from sentinels.
+  template <typename Fn>
+  decltype(auto) walkParallelInversePostOrder(Fn &&fn);
+
   //===-------------------------------------------------------------------------
   // Methods to keep an InstanceGraph up to date.
   //
@@ -303,6 +391,19 @@ public:
   /// of both InstanceOps must be the same.
   virtual void replaceInstance(InstanceOpInterface inst,
                                InstanceOpInterface newInst);
+
+private:
+  /// Shared non-template implementation for walkParallelPostOrder and
+  /// walkParallelInversePostOrder.  The `forward` flag selects the direction.
+  /// When true, the walk is post-order (children before parents): prereqs
+  /// are a node's children (targets), notifyees are its parents (uses).
+  /// When false, the walk is inverse-post-order.
+  ///
+  /// Defined out-of-line in InstanceGraph.cpp to keep the header free of
+  /// <atomic>, ThreadPool, and Threading includes.
+  LogicalResult
+  walkParallelImpl(llvm::function_ref<LogicalResult(InstanceGraphNode &)> fn,
+                   bool forward);
 
 protected:
   ModuleOpInterface getReferencedModuleImpl(InstanceOpInterface op);
@@ -572,6 +673,46 @@ decltype(auto) InstanceGraph::walkInversePostOrder(Fn &&fn) {
   }
   if constexpr (fallible)
     return success();
+}
+
+template <typename Fn>
+decltype(auto) InstanceGraph::walkParallelPostOrder(Fn &&fn) {
+  constexpr bool fallible =
+      std::is_invocable_r_v<LogicalResult, Fn &, InstanceGraphNode &>;
+  // Forward to the non-template core implementation in InstanceGraph.cpp.
+  // The lambda that adapts `fn` to a LogicalResult-returning callback must
+  // be constructed in this scope so that the function_ref bound to it in
+  // walkParallelImpl does not outlive the underlying callable.
+  if constexpr (fallible) {
+    return walkParallelImpl(
+        [&](InstanceGraphNode &node) -> LogicalResult { return fn(node); },
+        /*forward=*/true);
+  } else {
+    (void)walkParallelImpl(
+        [&](InstanceGraphNode &node) -> LogicalResult {
+          fn(node);
+          return success();
+        },
+        /*forward=*/true);
+  }
+}
+
+template <typename Fn>
+decltype(auto) InstanceGraph::walkParallelInversePostOrder(Fn &&fn) {
+  constexpr bool fallible =
+      std::is_invocable_r_v<LogicalResult, Fn &, InstanceGraphNode &>;
+  if constexpr (fallible) {
+    return walkParallelImpl(
+        [&](InstanceGraphNode &node) -> LogicalResult { return fn(node); },
+        /*forward=*/false);
+  } else {
+    (void)walkParallelImpl(
+        [&](InstanceGraphNode &node) -> LogicalResult {
+          fn(node);
+          return success();
+        },
+        /*forward=*/false);
+  }
 }
 
 } // namespace igraph
