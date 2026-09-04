@@ -396,8 +396,8 @@ def FormalOp : VerifOp<"formal", [
       ```
   }];
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     DictionaryAttr:$parameters
   );
   let regions = (region SizedRegion<1>:$body);
@@ -490,8 +490,8 @@ def SimulationOp : VerifOp<"simulation", [
     ```
   }];
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     DictionaryAttr:$parameters
   );
   let regions = (region SizedRegion<1>:$region);

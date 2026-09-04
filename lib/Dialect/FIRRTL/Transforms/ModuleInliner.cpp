@@ -2420,9 +2420,9 @@ void Inliner::writebackHierPaths() {
 
     // Forked into a fresh symbol: reuse the original op's location so the fork
     // keeps its provenance for diagnostics.
-    auto hp = hw::HierPathOp::create(b, origIt->second.getLoc(),
-                                     /*sym_visibility=*/{}, vnla->realizedSym,
-                                     arrayAttr);
+    auto hp =
+        hw::HierPathOp::create(b, origIt->second.getLoc(), vnla->realizedSym,
+                               /*sym_visibility=*/{}, arrayAttr);
     hp.setPrivate();
     ++stats.hierPathsForked;
   }

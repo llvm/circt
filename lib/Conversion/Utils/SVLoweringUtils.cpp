@@ -66,8 +66,7 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
   SymbolTable symbolTable(fileScopeOp);
 
   auto emitGuard = [&](StringRef guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        builder, guard, [] {}, body);
+    sv::IfDefOp::create(builder, guard, [] {}, body);
   };
 
   if (!symbolTable.lookup(getterSymName)) {
@@ -87,7 +86,7 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
         builder.getDictionaryAttr(explicitReturnAttrs)};
 
     auto func =
-        sv::FuncOp::create(builder, /*sym_visibility=*/{}, getterSymName,
+        sv::FuncOp::create(builder, getterSymName, /*sym_visibility=*/{},
                            hw::ModuleType::get(builder.getContext(), ports),
                            builder.getArrayAttr(perArgumentAttrs), ArrayAttr(),
                            ArrayAttr(), getterSymName);

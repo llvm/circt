@@ -495,8 +495,8 @@ private:
             circuitOp.getLoc(),
             &circuitOp->getParentRegion()->getBlocks().back());
         typeScope = hw::TypeScopeOp::create(
-            b, /*sym_visibility=*/{},
-            b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
+            b, b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"),
+            /*sym_visibility=*/{});
         typeScope.getBodyRegion().push_back(new Block());
       }
       auto typeName = firAlias.getName();
@@ -509,9 +509,9 @@ private:
 
       auto typeScopeBuilder =
           ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());
-      auto typeDecl = hw::TypedeclOp::create(typeScopeBuilder, typeLoc,
-                                             /*sym_visibility=*/{}, typeName,
-                                             rawType, nullptr);
+      auto typeDecl =
+          hw::TypedeclOp::create(typeScopeBuilder, typeLoc, typeName,
+                                 /*sym_visibility=*/{}, rawType, nullptr);
       auto hwAlias = hw::TypeAliasType::get(
           SymbolRefAttr::get(typeScope.getSymNameAttr(),
                              {FlatSymbolRefAttr::get(typeDecl)}),
@@ -734,10 +734,9 @@ void FIRRTLModuleLowering::runOnOperation() {
             })
             .Case<FormalOp>([&](auto oldOp) {
               auto builder = OpBuilder::atBlockEnd(topLevelModule);
-              auto newOp = verif::FormalOp::create(builder, oldOp.getLoc(),
-                                                   /*sym_visibility=*/{},
-                                                   oldOp.getNameAttr(),
-                                                   oldOp.getParametersAttr());
+              auto newOp = verif::FormalOp::create(
+                  builder, oldOp.getLoc(), oldOp.getNameAttr(),
+                  /*sym_visibility=*/{}, oldOp.getParametersAttr());
               newOp.getBody().emplaceBlock();
               state.recordModuleMapping(oldOp, newOp);
               opsToProcess.push_back(newOp);
@@ -747,7 +746,7 @@ void FIRRTLModuleLowering::runOnOperation() {
               auto loc = oldOp.getLoc();
               auto builder = OpBuilder::atBlockEnd(topLevelModule);
               auto newOp = verif::SimulationOp::create(
-                  builder, loc, /*sym_visibility=*/{}, oldOp.getNameAttr(),
+                  builder, loc, oldOp.getNameAttr(), /*sym_visibility=*/{},
                   oldOp.getParametersAttr());
               auto &body = newOp.getRegion().emplaceBlock();
               body.addArgument(seq::ClockType::get(builder.getContext()), loc);
@@ -885,8 +884,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib)
@@ -1202,8 +1200,8 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getVerbatimSourceForExtModule(
 
   if (!verbatimSource) {
     verbatimSource = sv::SVVerbatimSourceOp::create(
-        builder, oldModule.getLoc(), /*sym_visibility=*/{},
-        circuitNamespace.newName(primaryFileName.str()),
+        builder, oldModule.getLoc(),
+        circuitNamespace.newName(primaryFileName.str()), /*sym_visibility=*/{},
         primaryFileContent.getValue(), primaryOutputFileAttr, parameters,
         additionalFiles.empty() ? nullptr
                                 : builder.getArrayAttr(additionalFiles),
@@ -3284,8 +3282,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};

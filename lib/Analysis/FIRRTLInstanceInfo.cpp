@@ -206,8 +206,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
     // Merge in attributes of the module.
     attributes.hasProperties |=
-        cast<mlir::SymbolOpInterface>(moduleLike.getOperation())
-            .getVisibility() == mlir::SymbolTable::Visibility::Public;
+        cast<mlir::SymbolOpInterface>(moduleLike.getOperation()).isPublic();
 
     // If the module is classlike, it is a property.  Walk the ports and update
     // attributes for each.

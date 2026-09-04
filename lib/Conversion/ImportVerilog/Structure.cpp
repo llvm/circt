@@ -2609,8 +2609,8 @@ struct ClassPropertyVisitor : ClassDeclVisitorBase {
       return failure();
 
     if (prop.lifetime == slang::ast::VariableLifetime::Automatic) {
-      moore::ClassPropertyDeclOp::create(builder, loc, /*sym_visibility=*/{},
-                                         prop.name, ty);
+      moore::ClassPropertyDeclOp::create(builder, loc, prop.name,
+                                         /*sym_visibility=*/{}, ty);
       return success();
     }
 
@@ -2734,8 +2734,8 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
         return failure();
       }
 
-      moore::ClassMethodDeclOp::create(builder, loc, /*sym_visibility=*/{},
-                                       fn.name, funcTy, nullptr);
+      moore::ClassMethodDeclOp::create(builder, loc, fn.name,
+                                       /*sym_visibility=*/{}, funcTy, nullptr);
       return success();
     }
 
@@ -2751,7 +2751,7 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
     FunctionType fnTy = cast<FunctionType>(lowering->op.getFunctionType());
     // Emit the method decl into the class body, preserving source order.
     moore::ClassMethodDeclOp::create(
-        builder, loc, /*sym_visibility=*/{}, fn.name, fnTy,
+        builder, loc, fn.name, /*sym_visibility=*/{}, fnTy,
         SymbolRefAttr::get(lowering->op.getNameAttr()));
 
     return success();
@@ -2824,7 +2824,7 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
 
   auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
   auto classDeclOp = moore::ClassDeclOp::create(
-      builder, loc, /*sym_visibility=*/{}, symName, base, impls);
+      builder, loc, symName, /*sym_visibility=*/{}, base, impls);
 
   SymbolTable::setSymbolVisibility(classDeclOp,
                                    SymbolTable::Visibility::Public);
@@ -2939,9 +2939,9 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
     return failure();
 
   // Create the variable op itself.
-  auto varOp =
-      moore::GlobalVariableOp::create(builder, loc, /*sym_visibility=*/{},
-                                      symName, cast<moore::UnpackedType>(type));
+  auto varOp = moore::GlobalVariableOp::create(builder, loc, symName,
+                                               /*sym_visibility=*/{},
+                                               cast<moore::UnpackedType>(type));
   orderedRootOps.insert({locationKey, varOp});
   globalVariables.insert({&var, varOp});
 

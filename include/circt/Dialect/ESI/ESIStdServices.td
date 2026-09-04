@@ -14,7 +14,8 @@ include "circt/Dialect/HW/HWTypes.td"
 
 def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
-          SymbolName, SymbolVisibility, Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+           SymbolName, SymbolVisibility, Symbol,
+           DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
   let summary = "Random access memory service";
   let description = [{
     Declares a service which is backed by a memory of some sort. Allows random
@@ -29,8 +30,11 @@ def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",
     undefined.
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
-                       TypeAttr:$innerType, I64Attr:$depth);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttr:$innerType,
+    I64Attr:$depth);
 
   let assemblyFormat = [{
     $sym_name $innerType `x` $depth attr-dict
@@ -46,7 +50,8 @@ def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",
 
 def ChannelServiceDeclOp : ESI_Op<"service.std.channel",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
-           SymbolName, SymbolVisibility, Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+           SymbolName, SymbolVisibility, Symbol,
+           DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
   let summary = "Channel service";
   let description = [{
     Declares a service which provides a single channel connection between the
@@ -57,7 +62,9 @@ def ChannelServiceDeclOp : ESI_Op<"service.std.channel",
       to_host <- channel<any>
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
 
   let assemblyFormat = [{
     $sym_name attr-dict
@@ -70,7 +77,8 @@ def ChannelServiceDeclOp : ESI_Op<"service.std.channel",
 
 def FuncServiceDeclOp : ESI_Op<"service.std.func",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
-           SymbolName, SymbolVisibility, Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+           SymbolName, SymbolVisibility, Symbol,
+           DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
   let summary = "Function service";
   let description = [{
     Declares a service which provides a function call interface to a client.
@@ -83,7 +91,9 @@ def FuncServiceDeclOp : ESI_Op<"service.std.func",
       TODO: ports for out-of-order returns
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
 
   let assemblyFormat = [{
     $sym_name attr-dict
@@ -96,10 +106,13 @@ def FuncServiceDeclOp : ESI_Op<"service.std.func",
 
 def CallServiceDeclOp : ESI_Op<"service.std.call",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
-           SymbolName, SymbolVisibility, Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+           SymbolName, SymbolVisibility, Symbol,
+           DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
   let summary = "Service against which hardware can call into software";
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
 
   let assemblyFormat = [{
     $sym_name attr-dict
@@ -119,7 +132,9 @@ def MMIOServiceDeclOp: ESI_Op<"service.std.mmio",
     dependent. Must be implemented by a BSP.
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
 
   let assemblyFormat = [{
     $sym_name attr-dict
@@ -139,7 +154,9 @@ def HostMemServiceDeclOp: ESI_Op<"service.std.hostmem",
     implemented by a BSP.
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
 
   let assemblyFormat = [{
     $sym_name attr-dict
@@ -166,7 +183,9 @@ def TelemetryServiceDeclOp: ESI_Op<"service.std.telemetry",
     'data' channel for the return value).
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
 
   let assemblyFormat = [{
     $sym_name attr-dict

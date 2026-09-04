@@ -38,9 +38,9 @@ def FileOp : EmitOp<"file", [
 
   let regions = (region SizedRegion<1>:$bodyRegion);
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     StrAttr:$file_name,
-    OptionalAttr<SymbolNameAttr>:$sym_name
+    OptionalAttr<SymbolNameAttr>:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility
   );
   let results = (outs);
 
@@ -87,7 +87,9 @@ def FragmentOp : EmitOp<"fragment", [
   }];
 
   let regions = (region SizedRegion<1>:$bodyRegion);
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
 
   let assemblyFormat = "$sym_name $bodyRegion attr-dict";
 
@@ -152,10 +154,10 @@ def FileListOp : EmitOp<"file_list", [
   }];
 
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     StrAttr:$file_name,
     FlatSymbolRefArrayAttr:$files,
-    OptionalAttr<SymbolNameAttr>:$sym_name
+    OptionalAttr<SymbolNameAttr>:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility
   );
   let results = (outs);
 

@@ -34,8 +34,8 @@ struct LegalizeAnonEnums
     auto topLevel = getOperation();
     if (!typeScope) {
       auto builder = OpBuilder::atBlockBegin(&topLevel.getRegion().front());
-      typeScope = TypeScopeOp::create(builder, topLevel.getLoc(),
-                                      /*sym_visibility=*/{}, "Enums");
+      typeScope = TypeScopeOp::create(builder, topLevel.getLoc(), "Enums",
+                                      /*sym_visibility=*/{});
       typeScope.getBodyRegion().push_back(new Block());
       mlir::SymbolTable symbolTable(topLevel);
       symbolTable.insert(typeScope);
@@ -53,7 +53,7 @@ struct LegalizeAnonEnums
     auto typeScope = getTypeScope();
     auto builder = OpBuilder::atBlockEnd(&typeScope.getRegion().front());
     auto declName = StringAttr::get(context, "enum" + Twine(enumCount++));
-    TypedeclOp::create(builder, loc, /*sym_visibility=*/{}, declName,
+    TypedeclOp::create(builder, loc, declName, /*sym_visibility=*/{},
                        TypeAttr::get(type), nullptr);
     auto symRef = SymbolRefAttr::get(typeScope.getSymNameAttr(),
                                      FlatSymbolRefAttr::get(declName));

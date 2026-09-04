@@ -188,8 +188,8 @@ void SVMaskNonSynthesizablePass::runOnOperation() {
   if (mode == MaskNonSynthesizableMode::Ifdef && numChanged > 0 &&
       macroDeclNeedsCreation) {
     auto builder = OpBuilder::atBlockBegin(moduleOp.getBody());
-    sv::MacroDeclOp::create(builder, moduleOp.getLoc(),
-                            /*sym_visibility=*/{}, macroSymName,
+    sv::MacroDeclOp::create(builder, moduleOp.getLoc(), macroSymName,
+                            /*sym_visibility=*/{},
                             /*args=*/ArrayAttr{}, builder.getStringAttr(macro));
   }
 }

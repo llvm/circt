@@ -21,7 +21,8 @@ include "circt/Dialect/ESI/ESIDialect.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 
 def ESIPureModuleOp : ESI_Op<"pure_module",
-      [SymbolName, SymbolVisibility, Symbol, NoTerminator, RegionKindInterface, NoRegionArguments,
+      [SymbolName, SymbolVisibility, Symbol, NoTerminator, RegionKindInterface,
+       NoRegionArguments,
        SingleBlock, HasParent<"mlir::ModuleOp">,
        DeclareOpInterfaceMethods<PortList>,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
@@ -34,7 +35,9 @@ def ESIPureModuleOp : ESI_Op<"pure_module",
 
     Useful on its own for simulation and BSPs which don't define a top-level.
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
   let results = (outs); 
   let regions = (region SizedRegion<1>:$body);
 

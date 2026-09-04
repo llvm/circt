@@ -863,8 +863,11 @@ def TestOp : RTGOp<"test", [
     very end.
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name, StrAttr:$templateName,
-      TypeAttrOf<DictType>:$targetType, OptionalAttr<SymbolNameAttr>:$target);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrAttr:$templateName,
+    TypeAttrOf<DictType>:$targetType, OptionalAttr<SymbolNameAttr>:$target);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let hasCustomAssemblyFormat = 1;
@@ -903,8 +906,10 @@ def TargetOp : RTGOp<"target", [
     priviledge modes, available memories, etc.
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
-                       TypeAttrOf<DictType>:$target);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttrOf<DictType>:$target);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let assemblyFormat = [{
@@ -1237,8 +1242,10 @@ def EffectOp : RTGOp<"effect", [
     ```
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
-                       TypeAttrOf<FunctionType>:$function_type);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttrOf<FunctionType>:$function_type);
 
   let assemblyFormat = "$sym_name `:` $function_type attr-dict";
 }

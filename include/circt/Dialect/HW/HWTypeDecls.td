@@ -38,7 +38,9 @@ def TypeScopeOp : HWOp<"type_scope", [
   }];
 
   let regions = (region SizedRegion<1>:$body);
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
 
   let assemblyFormat = "$sym_name $body attr-dict";
 
@@ -47,13 +49,16 @@ def TypeScopeOp : HWOp<"type_scope", [
   }];
 }
 
-def TypedeclOp : HWOp<"typedecl", [SymbolName, SymbolVisibility, Symbol, HasParent<"TypeScopeOp">]> {
+def TypedeclOp : HWOp<"typedecl", [
+    SymbolName, SymbolVisibility, Symbol,
+    HasParent<"TypeScopeOp">
+]> {
   let summary = "Type declaration.";
   let description = "Associate a symbolic name with a type.";
 
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttr:$type,
     OptionalAttr<StrAttr>:$verilogName
   );

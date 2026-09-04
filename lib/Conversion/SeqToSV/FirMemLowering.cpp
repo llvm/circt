@@ -156,7 +156,7 @@ FlatSymbolRefAttr FirMemLowering::getOrCreateSchema() {
           "writeClockIDs",  "initFilename",
           "initIsBinary",   "initIsInline"};
       schemaOp = hw::HWGeneratorSchemaOp::create(
-          builder, circuit.getLoc(), /*sym_visibility=*/{}, "FIRRTLMem",
+          builder, circuit.getLoc(), "FIRRTLMem", /*sym_visibility=*/{},
           "FIRRTL_Memory", builder.getStrArrayAttr(schemaFields));
     }
   }

@@ -24,7 +24,8 @@ class SSPOp<string mnemonic, list<Trait> traits = []> :
 
 def InstanceOp : SSPOp<"instance",
     [NoRegionArguments, SingleBlock, NoTerminator,
-     IsolatedFromAbove, OpAsmOpInterface, SymbolTable, SymbolName, SymbolVisibility, Symbol]> {
+     IsolatedFromAbove, OpAsmOpInterface, SymbolTable, SymbolName,
+     SymbolVisibility, Symbol]> {
   let summary = "Instance of a static scheduling problem.";
   let description = [{
     This operation represents an instance of a static scheduling problem,
@@ -102,7 +103,8 @@ def InstanceOp : SSPOp<"instance",
 
 def OperatorLibraryOp : SSPOp<"library",
     [NoRegionArguments, SingleBlock,
-     NoTerminator, OpAsmOpInterface, SymbolTable, SymbolName, SymbolVisibility, Symbol]> {
+     NoTerminator, OpAsmOpInterface, SymbolTable, SymbolName, SymbolVisibility,
+     Symbol]> {
   let summary = "Container for operator types.";
   let description = [{
     The operator library abstracts the characteristics of the target
@@ -111,7 +113,8 @@ def OperatorLibraryOp : SSPOp<"library",
     `InstanceOp`.
   }];
   
-  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name, OptionalAttr<StrAttr>:$sym_visibility);
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility);
   let assemblyFormat = "($sym_name^)? $body attr-dict";
   let regions = (region SizedRegion<1>:$body);
 
@@ -139,7 +142,8 @@ def OperatorLibraryOp : SSPOp<"library",
 
 def ResourceLibraryOp : SSPOp<"resource",
     [NoRegionArguments, SingleBlock,
-     NoTerminator, OpAsmOpInterface, SymbolTable, SymbolName, SymbolVisibility, Symbol]> {
+     NoTerminator, OpAsmOpInterface, SymbolTable, SymbolName, SymbolVisibility,
+     Symbol]> {
   let summary = "Container for resource types.";
   let description = [{
     The resource library represents different kinds of resource of desired
@@ -149,7 +153,8 @@ def ResourceLibraryOp : SSPOp<"resource",
     an `InstanceOp` so different problems can share the same resource constraints.
   }];
 
-  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name, OptionalAttr<StrAttr>:$sym_visibility);
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility);
   let assemblyFormat = "($sym_name^)? $body attr-dict";
   let regions = (region SizedRegion<1>:$body);
 
@@ -225,7 +230,9 @@ def OperatorTypeOp : SSPOp<"operator_type",
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<StrAttr>:$sym_visibility, OptionalAttr<ArrayAttr>:$sspProperties);
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility,
+                       OptionalAttr<ArrayAttr>:$sspProperties);
   let assemblyFormat = "$sym_name custom<SSPProperties>($sspProperties) attr-dict";
 }
 
@@ -242,7 +249,9 @@ def ResourceTypeOp : SSPOp<"resource_type",
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<StrAttr>:$sym_visibility, OptionalAttr<ArrayAttr>:$sspProperties);
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility,
+                       OptionalAttr<ArrayAttr>:$sspProperties);
   let assemblyFormat = "$sym_name custom<SSPProperties>($sspProperties) attr-dict";
 }
 

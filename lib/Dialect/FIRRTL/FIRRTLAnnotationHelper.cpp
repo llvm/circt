@@ -377,7 +377,7 @@ hw::HierPathOp HierPathCache::getOpFor(ArrayAttr attr) {
   auto &op = cache[attr];
   if (!op) {
     op = hw::HierPathOp::create(builder, UnknownLoc::get(builder.getContext()),
-                                /*sym_visibility=*/{}, "nla", attr);
+                                "nla", /*sym_visibility=*/{}, attr);
     symbolTable.insert(op);
     op.setVisibility(SymbolTable::Visibility::Private);
   }

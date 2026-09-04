@@ -305,8 +305,11 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
     ```
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name, StrAttr:$descriptor,
-                       StrArrayAttr:$requiredAttrs);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrAttr:$descriptor,
+    StrArrayAttr:$requiredAttrs);
   let results = (outs);
   let assemblyFormat = "$sym_name `,` $descriptor `,` $requiredAttrs attr-dict";
 }
@@ -323,13 +326,15 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     The 'verilogName' attribute (when present) specifies the spelling of the
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
-                       FlatSymbolRefAttr:$generatorKind,
-                       TypeAttrOf<ModuleType>:$module_type,
-                       OptionalAttr<DictArrayAttr>:$per_port_attrs,
-                       OptionalAttr<LocationArrayAttr>:$port_locs,
-                       ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<StrAttr>:$verilogName);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    FlatSymbolRefAttr:$generatorKind,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<DictArrayAttr>:$per_port_attrs,
+    OptionalAttr<LocationArrayAttr>:$port_locs,
+    ParamDeclArrayAttr:$parameters,
+    OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -522,7 +527,10 @@ def HierPathOp : HWOp<"hierpath",
     This is used to specify namable things for use in other operations, for
     example in verbatim substitution. Non-local annotations also use these.
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    NameRefArrayAttr:$namepath);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{

@@ -563,7 +563,9 @@ def DesignOp : KanagawaOp<"design", [
 ]> {
   let summary = "All Kanagawa containers must be inside this op";
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{

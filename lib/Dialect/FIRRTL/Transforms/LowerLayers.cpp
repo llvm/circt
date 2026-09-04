@@ -1153,8 +1153,8 @@ void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, OpBuilder &b,
     if (macName != symName)
       macNameAttr = StringAttr::get(ctx, macName);
 
-    sv::MacroDeclOp::create(b, layer->getLoc(), /*sym_visibility=*/{},
-                            symNameAttr, ArrayAttr(), macNameAttr);
+    sv::MacroDeclOp::create(b, layer->getLoc(), symNameAttr,
+                            /*sym_visibility=*/{}, ArrayAttr(), macNameAttr);
     macroNames[layer] = FlatSymbolRefAttr::get(&getContext(), symNameAttr);
   }
   for (auto child : layer.getOps<LayerOp>())
@@ -1202,7 +1202,7 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
     path = filename;
 
   // Declare the macro for the include guard.
-  sv::MacroDeclOp::create(b, loc, /*sym_visibility=*/{}, macroSymbolAttr,
+  sv::MacroDeclOp::create(b, loc, macroSymbolAttr, /*sym_visibility=*/{},
                           ArrayAttr{}, macroNameAttr);
 
   // Create the emit op.

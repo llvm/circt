@@ -220,8 +220,8 @@ static hw::HierPathOp getHierPathTo(OpBuilder &builder, Namespace &ns,
   builder.setInsertionPoint(entry.reg->getParentOfType<HWModuleOp>());
 
   auto path = builder.getArrayAttr({entry.ref});
-  return hw::HierPathOp::create(builder, entry.reg.getLoc(),
-                                /*sym_visibility=*/{}, name, path);
+  return hw::HierPathOp::create(builder, entry.reg.getLoc(), name,
+                                /*sym_visibility=*/{}, path);
 }
 
 FirRegLowering::PathTable FirRegLowering::createPaths(mlir::ModuleOp top) {
@@ -925,8 +925,7 @@ void FirRegLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, []() {}, []() {});
+        insideIfOp = sv::IfOp::create(builder, reset, []() {}, []() {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};

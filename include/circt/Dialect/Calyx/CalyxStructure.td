@@ -72,8 +72,8 @@ def ComponentOp : CalyxOp<"component", [
   }];
 
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttrOf<FunctionType>:$function_type,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs,
@@ -188,8 +188,8 @@ def CombComponentOp : CalyxOp<"comb_component", [
   }];
 
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttrOf<FunctionType>:$function_type,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs,
@@ -386,7 +386,9 @@ def GroupOp : CalyxOp<"group", [
     ```
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr: $sym_name);
+  let arguments = (ins
+    SymbolNameAttr: $sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
@@ -449,7 +451,9 @@ def CombGroupOp : CalyxOp<"comb_group", [
       }
     ```
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr: $sym_name);
+  let arguments = (ins
+    SymbolNameAttr: $sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
@@ -507,8 +511,9 @@ def StaticGroupOp : CalyxOp<"static_group", [
     ```
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr: $sym_name,
-                   I64Attr: $latency);
+  let arguments = (ins SymbolNameAttr: $sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility,
+                       I64Attr: $latency);
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.

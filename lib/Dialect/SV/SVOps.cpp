@@ -1576,7 +1576,7 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
 void InterfaceSignalOp::build(mlir::OpBuilder &builder,
                               ::mlir::OperationState &state, StringRef name,
                               mlir::Type type) {
-  build(builder, state, /*sym_visibility=*/{}, name, mlir::TypeAttr::get(type));
+  build(builder, state, name, /*sym_visibility=*/{}, mlir::TypeAttr::get(type));
 }
 
 void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
@@ -1592,7 +1592,7 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
   for (auto output : outputs)
     directions.push_back(ModportStructAttr::get(
         ctxt, outputDir, SymbolRefAttr::get(ctxt, output)));
-  build(builder, state, /*sym_visibility=*/{}, name,
+  build(builder, state, name, /*sym_visibility=*/{},
         ArrayAttr::get(ctxt, directions));
 }
 

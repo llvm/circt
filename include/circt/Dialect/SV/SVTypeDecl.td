@@ -27,7 +27,8 @@ include "mlir/IR/SymbolInterfaces.td"
 //===----------------------------------------------------------------------===//
 
 def InterfaceOp : SVOp<"interface",
-    [SingleBlock, NoTerminator, SymbolName, SymbolVisibility, Symbol, SymbolTable]> {
+    [SingleBlock, NoTerminator, SymbolName, SymbolVisibility, Symbol,
+     SymbolTable]> {
   let summary = "Operation to define a SystemVerilog interface";
 
   let description = [{
@@ -47,8 +48,8 @@ def InterfaceOp : SVOp<"interface",
   }];
 
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     OptionalAttr<StrAttr>:$comment
   );
 
@@ -108,8 +109,8 @@ def InterfaceSignalOp : SVOp<"interface.signal",
   }];
 
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     SignalTypeAttr:$type
   );
 
@@ -173,8 +174,8 @@ def InterfaceModportOp : SVOp<"interface.modport",
   }];
 
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     ModportStructArrayAttr:$ports
   );
 
@@ -222,7 +223,8 @@ def ModportType : SVType<"Modport"> {
 //===----------------------------------------------------------------------===//
 
 def SVVerbatimSourceOp
-    : SVOp<"verbatim.source", [SymbolName, SymbolVisibility, Symbol, HasParent<"mlir::ModuleOp">,
+    : SVOp<"verbatim.source", [SymbolName, SymbolVisibility, Symbol,
+                                HasParent<"mlir::ModuleOp">,
                                DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Verbatim verilog source";
   let description = [{
@@ -231,12 +233,14 @@ def SVVerbatimSourceOp
     are represented by a `hw.module.extern`.
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
-      StrAttr:$content,
-      OutputFileAttr:$output_file,
-      ParamDeclArrayAttr:$parameters,
-      OptionalAttr<SymbolRefArrayAttr>:$additional_files,
-      StrAttr:$verilogName);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrAttr:$content,
+    OutputFileAttr:$output_file,
+    ParamDeclArrayAttr:$parameters,
+    OptionalAttr<SymbolRefArrayAttr>:$additional_files,
+    StrAttr:$verilogName);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -260,13 +264,15 @@ def SVVerbatimModuleOp
     that contains the actual verilog source code.
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
-      TypeAttrOf<ModuleType>:$module_type,
-      OptionalAttr<DictArrayAttr>:$per_port_attrs,
-      OptionalAttr<LocationArrayAttr>:$port_locs,
-      ParamDeclArrayAttr:$parameters,
-      FlatSymbolRefAttr:$source,
-      OptionalAttr<StrAttr>:$verilogName);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<DictArrayAttr>:$per_port_attrs,
+    OptionalAttr<LocationArrayAttr>:$port_locs,
+    ParamDeclArrayAttr:$parameters,
+    FlatSymbolRefAttr:$source,
+    OptionalAttr<StrAttr>:$verilogName);
 
   let results = (outs);
 
@@ -292,7 +298,7 @@ def SVVerbatimModuleOp
         portLocs.push_back(port.loc ? static_cast<Location>(port.loc) : $_builder.getUnknownLoc());
       }
       auto moduleType = hw::ModuleType::get($_builder.getContext(), modulePorts);
-      build($_builder, $_state, /*sym_visibility=*/{}, name,
+      build($_builder, $_state, name, /*sym_visibility=*/{},
             TypeAttr::get(moduleType),
             $_builder.getArrayAttr(portAttrs), $_builder.getArrayAttr(portLocs),
             parameters, source, verilogName);

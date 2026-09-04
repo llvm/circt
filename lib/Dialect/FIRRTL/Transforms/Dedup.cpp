@@ -1164,9 +1164,8 @@ private:
       auto &cacheEntry = nlaCache[arrayAttr];
       if (!cacheEntry) {
         auto builder = OpBuilder::atBlockBegin(nlaBlock);
-        auto nla =
-            hw::HierPathOp::create(builder, loc,
-                                   /*sym_visibility=*/{}, "nla", arrayAttr);
+        auto nla = hw::HierPathOp::create(builder, loc, "nla",
+                                          /*sym_visibility=*/{}, arrayAttr);
         // Insert it into the symbol table to get a unique name.
         symbolTable.insert(nla);
         // Store it in the cache.

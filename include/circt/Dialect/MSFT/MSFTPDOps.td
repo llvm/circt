@@ -19,8 +19,8 @@ include "circt/Dialect/HW/HWTypes.td"
 def DeclPhysicalRegionOp : MSFTOp<"physical_region",
     [SymbolName, SymbolVisibility, Symbol, HasParent<"mlir::ModuleOp">]> {
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     PhysicalBoundsArray:$bounds
   );
 

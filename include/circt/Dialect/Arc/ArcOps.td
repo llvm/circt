@@ -38,8 +38,8 @@ def DefineOp : ArcOp<"define", [
 ]> {
   let summary = "State transfer arc definition";
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttrOf<FunctionType>:$function_type,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs
@@ -53,13 +53,13 @@ def DefineOp : ArcOp<"define", [
   let builders = [
     OpBuilder<(ins "mlir::StringAttr":$sym_name,
                    "mlir::TypeAttr":$function_type), [{
-      build($_builder, $_state, /*sym_visibility=*/{}, sym_name, function_type,
+      build($_builder, $_state, sym_name, /*sym_visibility=*/{}, function_type,
             mlir::ArrayAttr(),
             mlir::ArrayAttr());
     }]>,
     OpBuilder<(ins "mlir::StringRef":$sym_name,
                    "mlir::FunctionType":$function_type), [{
-      build($_builder, $_state, /*sym_visibility=*/{}, sym_name, function_type,
+      build($_builder, $_state, sym_name, /*sym_visibility=*/{}, function_type,
             mlir::ArrayAttr(),
             mlir::ArrayAttr());
     }]>,
@@ -716,8 +716,8 @@ def CoroutineDefineOp : ArcOp<"coroutine.define", [
     local state across its own suspension points.
   }];
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttrOf<FunctionType>:$function_type,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs
@@ -729,14 +729,14 @@ def CoroutineDefineOp : ArcOp<"coroutine.define", [
   let builders = [
     OpBuilder<(ins "mlir::StringAttr":$sym_name,
                    "mlir::TypeAttr":$function_type), [{
-      build($_builder, $_state, /*sym_visibility=*/{}, sym_name, function_type,
+      build($_builder, $_state, sym_name, /*sym_visibility=*/{}, function_type,
             mlir::ArrayAttr(),
             mlir::ArrayAttr());
     }]>,
     OpBuilder<(ins "mlir::StringRef":$sym_name,
                    "mlir::FunctionType":$function_type), [{
-      build($_builder, $_state, /*sym_visibility=*/{},
-            $_builder.getStringAttr(sym_name),
+      build($_builder, $_state, $_builder.getStringAttr(sym_name),
+            /*sym_visibility=*/{},
             mlir::TypeAttr::get(function_type),
             mlir::ArrayAttr(), mlir::ArrayAttr());
     }]>,
@@ -1178,12 +1178,14 @@ def ModelOp : ArcOp<"model", [
     A model with stratified clocks. The `io` optional attribute
     specifies the I/O of the module associated to this model.
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
-                       TypeAttrOf<ModuleType>:$io,
-                       OptionalAttr<UI32Attr>:$storageBytes,
-                       OptionalAttr<FlatSymbolRefAttr>:$initialFn,
-                       OptionalAttr<FlatSymbolRefAttr>:$finalFn,
-                       OptionalAttr<TraceTapArrayAttr>:$traceTaps);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttrOf<ModuleType>:$io,
+    OptionalAttr<UI32Attr>:$storageBytes,
+    OptionalAttr<FlatSymbolRefAttr>:$initialFn,
+    OptionalAttr<FlatSymbolRefAttr>:$finalFn,
+    OptionalAttr<TraceTapArrayAttr>:$traceTaps);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
@@ -1417,10 +1419,12 @@ def RuntimeModelOp : ArcOp<"runtime.model", [
         state
     - traceTaps: Traced signal metadata
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$sym_visibility, SymbolNameAttr:$sym_name,
-                       StrAttr:$modelName,
-                       I64Attr:$numStateBytes,
-                       OptionalAttr<TraceTapArrayAttr>:$traceTaps);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrAttr:$modelName,
+    I64Attr:$numStateBytes,
+    OptionalAttr<TraceTapArrayAttr>:$traceTaps);
   let assemblyFormat = [{
     $sym_name $modelName `numStateBytes` $numStateBytes
     (`traceTaps` $traceTaps^)? attr-dict

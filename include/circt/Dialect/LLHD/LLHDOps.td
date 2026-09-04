@@ -303,8 +303,8 @@ def GlobalSignalOp : LLHDOp<"global_signal", [
     Global signals behave just like normal signals.
   }];
   let arguments = (ins
-    OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttrOf<AnyType>:$type
   );
   let regions = (region MaxSizedRegion<1>:$initRegion);
