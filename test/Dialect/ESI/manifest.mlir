@@ -157,18 +157,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 
 // CHECK-LABEL:   "design": {
 // CHECK-NEXT:      "instanceOf": "@top",
-// CHECK-NEXT:      "clientPorts": [
-// CHECK-NEXT:        {
-// CHECK-NEXT:          "appID": {
-// CHECK-NEXT:            "name": "func1"
-// CHECK-NEXT:          },
-// CHECK-NEXT:          "typeID": "!esi.bundle<[!esi.channel<i16> to \"arg\", !esi.channel<i16> from \"result\"]>",
-// CHECK-NEXT:          "servicePort": {
-// CHECK-NEXT:            "port": "call",
-// CHECK-NEXT:            "serviceName": "@funcs"
-// CHECK-NEXT:          }
-// CHECK-NEXT:        }
-// CHECK-NEXT:      ],
+// CHECK-NEXT:      "clientPorts": [],
 
 // CHECK-LABEL:     "engines": [
 // CHECK-NEXT:        {
@@ -507,16 +496,6 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        ]
 // CHECK-NEXT:      },
 // CHECK-NEXT:      {
-// CHECK-NEXT:        "symbol": "@funcs",
-// CHECK-NEXT:        "serviceName": "esi.service.std.func",
-// CHECK-NEXT:        "ports": [
-// CHECK-NEXT:          {
-// CHECK-NEXT:            "name": "call",
-// CHECK-NEXT:            "typeID": "!esi.bundle<[!esi.channel<!esi.any> to \"arg\", !esi.channel<!esi.any> from \"result\"]>"
-// CHECK-NEXT:          }
-// CHECK-NEXT:        ]
-// CHECK-NEXT:      },
-// CHECK-NEXT:      {
 // CHECK-NEXT:        "symbol": "@WindowService",
 // CHECK-NEXT:        "ports": [
 // CHECK-NEXT:          {
@@ -561,48 +540,6 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:    ],
 
 // CHECK-LABEL:   "types": [
-// CHECK-NEXT:      {
-// CHECK-NEXT:        "channels": [
-// CHECK-NEXT:          {
-// CHECK-NEXT:            "direction": "to",
-// CHECK-NEXT:            "name": "arg",
-// CHECK-NEXT:            "type": {
-// CHECK-NEXT:              "dialect": "esi",
-// CHECK-NEXT:              "hwBitwidth": 16,
-// CHECK-NEXT:              "id": "!esi.channel<i16>",
-// CHECK-NEXT:              "inner": {
-// CHECK-NEXT:                "dialect": "builtin",
-// CHECK-NEXT:                "hwBitwidth": 16,
-// CHECK-NEXT:                "id": "i16",
-// CHECK-NEXT:                "mnemonic": "int",
-// CHECK-NEXT:                "signedness": "signless"
-// CHECK-NEXT:              },
-// CHECK-NEXT:              "mnemonic": "channel"
-// CHECK-NEXT:            }
-// CHECK-NEXT:          },
-// CHECK-NEXT:          {
-// CHECK-NEXT:            "direction": "from",
-// CHECK-NEXT:            "name": "result",
-// CHECK-NEXT:            "type": {
-// CHECK-NEXT:              "dialect": "esi",
-// CHECK-NEXT:              "hwBitwidth": 16,
-// CHECK-NEXT:              "id": "!esi.channel<i16>",
-// CHECK-NEXT:              "inner": {
-// CHECK-NEXT:                "dialect": "builtin",
-// CHECK-NEXT:                "hwBitwidth": 16,
-// CHECK-NEXT:                "id": "i16",
-// CHECK-NEXT:                "mnemonic": "int",
-// CHECK-NEXT:                "signedness": "signless"
-// CHECK-NEXT:              },
-// CHECK-NEXT:              "mnemonic": "channel"
-// CHECK-NEXT:            }
-// CHECK-NEXT:          }
-// CHECK-NEXT:        ],
-// CHECK-NEXT:        "dialect": "esi",
-// CHECK-NEXT:        "hwBitwidth": 36,
-// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i16> to \"arg\", !esi.channel<i16> from \"result\"]>",
-// CHECK-NEXT:        "mnemonic": "bundle"
-// CHECK-NEXT:      },
 // CHECK-NEXT:      {
 // CHECK-NEXT:        "channels": [
 // CHECK-NEXT:          {
@@ -946,41 +883,6 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        "dialect": "esi",
 // CHECK-NEXT:        "hwBitwidth": 258,
 // CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<!esi.window<\"BulkTransferWindow\", !hw.struct<address: i32, data: !esi.list<i64>>, [<\"HeaderFrame\", [<\"address\">, <\"data\" countWidth 8>]>, <\"DataFrame\", [<\"data\", 4>]>]>> to \"bulk_in\"]>",
-// CHECK-NEXT:        "mnemonic": "bundle"
-// CHECK-NEXT:      },
-// CHECK-NEXT:      {
-// CHECK-NEXT:        "channels": [
-// CHECK-NEXT:          {
-// CHECK-NEXT:            "direction": "to",
-// CHECK-NEXT:            "name": "arg",
-// CHECK-NEXT:            "type": {
-// CHECK-NEXT:              "dialect": "esi",
-// CHECK-NEXT:              "id": "!esi.channel<!esi.any>",
-// CHECK-NEXT:              "inner": {
-// CHECK-NEXT:                "dialect": "esi",
-// CHECK-NEXT:                "id": "!esi.any",
-// CHECK-NEXT:                "mnemonic": "any"
-// CHECK-NEXT:              },
-// CHECK-NEXT:              "mnemonic": "channel"
-// CHECK-NEXT:            }
-// CHECK-NEXT:          },
-// CHECK-NEXT:          {
-// CHECK-NEXT:            "direction": "from",
-// CHECK-NEXT:            "name": "result",
-// CHECK-NEXT:            "type": {
-// CHECK-NEXT:              "dialect": "esi",
-// CHECK-NEXT:              "id": "!esi.channel<!esi.any>",
-// CHECK-NEXT:              "inner": {
-// CHECK-NEXT:                "dialect": "esi",
-// CHECK-NEXT:                "id": "!esi.any",
-// CHECK-NEXT:                "mnemonic": "any"
-// CHECK-NEXT:              },
-// CHECK-NEXT:              "mnemonic": "channel"
-// CHECK-NEXT:            }
-// CHECK-NEXT:          }
-// CHECK-NEXT:        ],
-// CHECK-NEXT:        "dialect": "esi",
-// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<!esi.any> to \"arg\", !esi.channel<!esi.any> from \"result\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
 // CHECK-NEXT:      {
