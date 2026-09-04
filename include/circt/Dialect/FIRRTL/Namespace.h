@@ -30,9 +30,8 @@ struct CircuitNamespace : public Namespace {
   /// a symbol.
   void add(CircuitOp circuit) {
     for (auto &op : *circuit.getBodyBlock())
-      if (auto symbol = op.getAttrOfType<mlir::StringAttr>(
-              SymbolTable::getSymbolAttrName()))
-        nextIndex.insert({symbol.getValue(), 0});
+      if (auto symbol = mlir::dyn_cast<mlir::SymbolOpInterface>(&op))
+        nextIndex.insert({symbol.getName(), 0});
   }
 };
 

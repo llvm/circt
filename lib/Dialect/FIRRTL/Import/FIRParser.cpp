@@ -6754,10 +6754,11 @@ DoneParsing:
     DenseMap<Attribute, Location> nameToOrigLoc;
     for (auto &op : *circuit.getBodyBlock()) {
       // Check for a symbol name attribute.
-      auto nameAttr =
-          op.getAttrOfType<StringAttr>(mlir::SymbolTable::getSymbolAttrName());
-      if (!nameAttr)
+      auto symbol = dyn_cast<mlir::SymbolOpInterface>(&op);
+      if (!symbol)
         continue;
+
+      auto nameAttr = symbol.getNameAttr();
 
       // Try to insert this symbol into the table.
       auto it = nameToOrigLoc.try_emplace(nameAttr, op.getLoc());
