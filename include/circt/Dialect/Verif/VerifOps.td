@@ -342,7 +342,7 @@ def FormalOp : VerifOp<"formal", [
   NoTerminator,
   RegionKindInterface,
   SingleBlock,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
 ]> {
   let summary = "A formal unit test";
   let description = [{
@@ -397,6 +397,7 @@ def FormalOp : VerifOp<"formal", [
   }];
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     DictionaryAttr:$parameters
   );
   let regions = (region SizedRegion<1>:$body);
@@ -413,7 +414,7 @@ def SimulationOp : VerifOp<"simulation", [
   IsolatedFromAbove,
   RegionKindInterface,
   SingleBlockImplicitTerminator<"verif::YieldOp">,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
 ]> {
   let summary = "A simulation unit test";
   let description = [{
@@ -490,6 +491,7 @@ def SimulationOp : VerifOp<"simulation", [
   }];
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     DictionaryAttr:$parameters
   );
   let regions = (region SizedRegion<1>:$region);

@@ -220,7 +220,8 @@ static hw::HierPathOp getHierPathTo(OpBuilder &builder, Namespace &ns,
   builder.setInsertionPoint(entry.reg->getParentOfType<HWModuleOp>());
 
   auto path = builder.getArrayAttr({entry.ref});
-  return hw::HierPathOp::create(builder, entry.reg.getLoc(), name, path);
+  return hw::HierPathOp::create(builder, entry.reg.getLoc(), name,
+                                /*sym_visibility=*/{}, path);
 }
 
 FirRegLowering::PathTable FirRegLowering::createPaths(mlir::ModuleOp top) {

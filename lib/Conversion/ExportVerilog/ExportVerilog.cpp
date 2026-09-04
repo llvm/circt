@@ -6950,9 +6950,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       // Populate the symbolCache with all operations that can define a symbol.
       if (auto name = op->getAttrOfType<InnerSymAttr>(
               hw::InnerSymbolTable::getInnerSymbolAttrName()))
-        symbolCache.addDefinition(moduleOp->getAttrOfType<StringAttr>(
-                                      SymbolTable::getSymbolAttrName()),
-                                  name.getSymName(), op);
+        symbolCache.addDefinition(
+            cast<mlir::SymbolOpInterface>(moduleOp).getNameAttr(),
+            name.getSymName(), op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });
@@ -7118,7 +7118,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           } else
             separateFile(op, "");
 
-          symbolCache.addDefinition(op.getSymNameAttr(), op);
+          symbolCache.addDefinition(op.getNameAttr(), op);
         })
         .Case<HWGeneratorSchemaOp>([&](HWGeneratorSchemaOp schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
@@ -7127,7 +7127,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           symbolCache.addDefinition(hierPathOp.getSymNameAttr(), hierPathOp);
         })
         .Case<TypeScopeOp>([&](TypeScopeOp op) {
-          symbolCache.addDefinition(op.getNameAttr(), op);
+          symbolCache.addDefinition(op.getSymNameAttr(), op);
           // TODO: How do we want to handle typedefs in a split output?
           if (!attr) {
             replicatedOps.push_back(op);

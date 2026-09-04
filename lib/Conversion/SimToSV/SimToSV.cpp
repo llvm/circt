@@ -470,7 +470,7 @@ void LowerDPIFunc::lower(sim::DPIFuncOp func) {
   }
 
   auto svFuncDecl = sv::FuncOp::create(
-      builder, func.getSymNameAttr(), moduleType,
+      builder, func.getSymNameAttr(), /*sym_visibility=*/{}, moduleType,
       buildSVPerArgumentAttrs(builder.getContext(), func), inputLocsAttr,
       outputLocsAttr, func.getVerilogNameAttr());
   // DPI function is a declaration so it must be a private function.

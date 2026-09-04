@@ -48,7 +48,7 @@ struct AddOperatorLibraryPass
 template <typename TOp>
 void addOperator(ImplicitLocOpBuilder &b, int latency) {
   ssp::OperatorTypeOp::create(
-      b, b.getStringAttr(TOp::getOperationName()),
+      b, b.getStringAttr(TOp::getOperationName()), /*sym_visibility=*/{},
       b.getArrayAttr({b.getAttr<ssp::LatencyAttr>(latency)}));
 }
 

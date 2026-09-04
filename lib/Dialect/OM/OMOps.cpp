@@ -131,13 +131,14 @@ static ParseResult parseClassFieldsList(OpAsmParser &parser,
                                         parseElt);
 }
 
+template <typename ClassTy>
 static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
   // Parse the optional symbol visibility.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, state.attributes);
 
   // Parse the Class symbol name.
   StringAttr symName;
-  if (parser.parseSymbolName(symName, mlir::SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(symName, ClassTy::getSymNameAttrName(state.name),
                              state.attributes))
     return failure();
 
@@ -192,7 +193,8 @@ static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
   printer << " ";
 
   // Print the optional symbol visibility.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility =
           classLike->getAttrOfType<StringAttr>(visibilityAttrName))
     printer << visibility.getValue() << ' ';
@@ -304,7 +306,7 @@ void replaceClassLikeFieldTypes(ClassLike classLike,
 
 ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
                                       OperationState &state) {
-  return parseClassLike(parser, state);
+  return parseClassLike<ClassOp>(parser, state);
 }
 
 circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
@@ -312,7 +314,7 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
     ArrayRef<StringRef> formalParamNames, ArrayRef<StringRef> fieldNames,
     ArrayRef<Type> fieldTypes) {
   circt::om::ClassOp classOp = circt::om::ClassOp::create(
-      odsBuilder, loc, odsBuilder.getStringAttr(name),
+      odsBuilder, loc, odsBuilder.getStringAttr(name), /*sym_visibility=*/{},
       odsBuilder.getStrArrayAttr(formalParamNames),
       odsBuilder.getStrArrayAttr(fieldNames),
       odsBuilder.getDictionaryAttr(llvm::map_to_vector(
@@ -483,7 +485,7 @@ mlir::Location circt::om::ClassOp::getFieldLocByIndex(size_t i) {
 
 ParseResult circt::om::ClassExternOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
-  return parseClassLike(parser, state);
+  return parseClassLike<ClassExternOp>(parser, state);
 }
 
 void circt::om::ClassExternOp::print(OpAsmPrinter &printer) {
