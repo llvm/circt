@@ -2301,18 +2301,6 @@ BlockArgument ClassOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
-StringAttr ClassOp::getNameAttr() { return getSymNameAttr(); }
-
-void ClassOp::setName(StringAttr name) { setSymNameAttr(name); }
-
-SymbolTable::Visibility ClassOp::getVisibility() {
-  return OpTrait::SymbolVisibility<ClassOp>::getVisibility();
-}
-
-void ClassOp::setVisibility(SymbolTable::Visibility visibility) {
-  OpTrait::SymbolVisibility<ClassOp>::setVisibility(visibility);
-}
-
 bool ClassOp::canDiscardOnUseEmpty() {
   // ClassOps are referenced by ClassTypes, and these uses are not
   // discoverable by the symbol infrastructure. Return false here to prevent
@@ -2394,18 +2382,6 @@ SmallVector<::circt::hw::PortInfo> ExtClassOp::getPortList() {
 
 ::circt::hw::PortInfo ExtClassOp::getPort(size_t idx) {
   return ::getPortImpl(*this, idx);
-}
-
-StringAttr ExtClassOp::getNameAttr() { return getSymNameAttr(); }
-
-void ExtClassOp::setName(StringAttr name) { setSymNameAttr(name); }
-
-SymbolTable::Visibility ExtClassOp::getVisibility() {
-  return OpTrait::SymbolVisibility<ExtClassOp>::getVisibility();
-}
-
-void ExtClassOp::setVisibility(SymbolTable::Visibility visibility) {
-  OpTrait::SymbolVisibility<ExtClassOp>::setVisibility(visibility);
 }
 
 bool ExtClassOp::canDiscardOnUseEmpty() {

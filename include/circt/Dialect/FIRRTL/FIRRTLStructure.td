@@ -396,6 +396,19 @@ def ClassOp : FIRRTLModuleLike<"class", [
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
+  let extraModuleClassDefinition = [{
+    StringAttr $cppClass::getNameAttr() { return getSymNameAttr(); }
+
+    void $cppClass::setName(StringAttr name) { setSymNameAttr(name); }
+
+    SymbolTable::Visibility $cppClass::getVisibility() {
+      return OpTrait::SymbolVisibility<$cppClass>::getVisibility();
+    }
+
+    void $cppClass::setVisibility(SymbolTable::Visibility visibility) {
+      OpTrait::SymbolVisibility<$cppClass>::setVisibility(visibility);
+    }
+  }];
 }
 
 def ExtClassOp : FIRRTLModuleLike<"extclass", [
@@ -437,6 +450,20 @@ def ExtClassOp : FIRRTLModuleLike<"extclass", [
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
+  }];
+
+  let extraModuleClassDefinition = [{
+    StringAttr $cppClass::getNameAttr() { return getSymNameAttr(); }
+
+    void $cppClass::setName(StringAttr name) { setSymNameAttr(name); }
+
+    SymbolTable::Visibility $cppClass::getVisibility() {
+      return OpTrait::SymbolVisibility<$cppClass>::getVisibility();
+    }
+
+    void $cppClass::setVisibility(SymbolTable::Visibility visibility) {
+      OpTrait::SymbolVisibility<$cppClass>::setVisibility(visibility);
+    }
   }];
   let hasCustomAssemblyFormat = 1;
 }
