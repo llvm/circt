@@ -675,13 +675,11 @@ public:
 
     if (op.isExternal()) {
       auto mod = hw::HWModuleExternOp::create(
-          rewriter, op.getLoc(),
-          rewriter.getStringAttr(op.getNameAttr().getValue()), ports);
+          rewriter, op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
       convertedOps->insert(mod);
     } else {
       auto hwModule = hw::HWModuleOp::create(
-          rewriter, op.getLoc(),
-          rewriter.getStringAttr(op.getNameAttr().getValue()), ports);
+          rewriter, op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
 
       auto &region = op->getRegions().front();
 

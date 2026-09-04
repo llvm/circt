@@ -706,7 +706,7 @@ public:
     auto resultTypes = moduleOp.getOutputTypes();
     FunctionType machineType =
         FunctionType::get(opBuilder.getContext(), inputTypes, resultTypes);
-    StringRef machineName = moduleOp.getNameAttr().getValue();
+    StringRef machineName = moduleOp.getName();
 
     llvm::DenseMap<Value, int> initialStateMap;
     for (seq::CompRegOp reg : moduleOp.getOps<seq::CompRegOp>()) {

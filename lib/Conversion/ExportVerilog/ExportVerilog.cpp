@@ -2936,8 +2936,8 @@ SubExprInfo ExprEmitter::emitMacroCall(MacroTy op) {
   // Use the specified name or the symbol name as appropriate.
   auto macroOp = op.getReferencedMacro(&state.symbolCache);
   assert(macroOp && "Invalid IR");
-  StringRef name = macroOp.getVerilogName() ? *macroOp.getVerilogName()
-                                            : macroOp.getSymName();
+  StringRef name =
+      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
   ps << "`" << PPExtString(name);
   if (!op.getInputs().empty()) {
     ps << "(";
@@ -4462,7 +4462,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
     ps << PPExtString(prefix);
   ps << PPExtString(verilogName)
      << PP::nbsp /* don't break, may be comment line */
-     << PPExtString(op.getNameAttr().getValue()) << "();";
+     << PPExtString(op.getName()) << "();";
 
   ps.addCallback({op, false});
   emitLocationInfoAndNewLine(ops);
@@ -4832,8 +4832,8 @@ LogicalResult StmtEmitter::visitSV(MacroRefOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto macroOp = op.getReferencedMacro(&state.symbolCache);
   assert(macroOp && "Invalid IR");
-  StringRef name = macroOp.getVerilogName() ? *macroOp.getVerilogName()
-                                            : macroOp.getSymName();
+  StringRef name =
+      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
   ps << "`" << PPExtString(name);
   if (!op.getInputs().empty()) {
     ps << "(";
@@ -6513,8 +6513,7 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   auto instance = op.getReferencedInstance(&state.symbolCache);
-  auto instantiator =
-      instance->getParentOfType<HWModuleOp>().getNameAttr().getValue();
+  auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
   auto *interface = op->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
   startStatement();
@@ -6967,7 +6966,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         continue;
       for (NamedAttribute portAttr : p.attrs) {
         if (auto sym = dyn_cast<InnerSymAttr>(portAttr.getValue())) {
-          symbolCache.addDefinition(moduleOp.getSymNameAttr(), sym.getSymName(),
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getSymName(),
                                     moduleOp, i);
         }
       }
@@ -7093,12 +7092,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
             rootFile.ops.push_back(info);
         })
         .Case<sv::SVVerbatimSourceOp>([&](sv::SVVerbatimSourceOp op) {
-          symbolCache.addDefinition(op.getSymNameAttr(), op);
+          symbolCache.addDefinition(op.getNameAttr(), op);
           separateFile(op, op.getOutputFile().getFilename().getValue());
         })
         .Case<HWModuleExternOp, sv::SVVerbatimModuleOp>([&](auto op) {
           // Build the IR cache.
-          symbolCache.addDefinition(op.getSymNameAttr(), op);
+          symbolCache.addDefinition(op.getNameAttr(), op);
           collectPorts(op);
           // External modules are _not_ emitted.
         })
@@ -7119,7 +7118,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           } else
             separateFile(op, "");
 
-          symbolCache.addDefinition(op.getSymNameAttr(), op);
+          symbolCache.addDefinition(op.getNameAttr(), op);
         })
         .Case<HWGeneratorSchemaOp>([&](HWGeneratorSchemaOp schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);

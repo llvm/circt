@@ -153,7 +153,7 @@ StateEncoding::StateEncoding(OpBuilder &b, hw::TypeScopeOp typeScope,
   OpBuilder::InsertionGuard guard(b);
   b.setInsertionPointToStart(&typeScope.getBodyRegion().front());
   auto typedeclEnumType = hw::TypedeclOp::create(
-      b, loc, b.getStringAttr(hwModule.getNameAttr().getValue() + "_state_t"),
+      b, loc, b.getStringAttr(hwModule.getName() + "_state_t"),
       /*sym_visibility=*/{}, TypeAttr::get(rawEnumType), nullptr);
 
   stateType = hw::TypeAliasType::get(

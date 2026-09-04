@@ -457,8 +457,8 @@ void HWIMDeadCodeElim::runOnOperation() {
 void HWIMDeadCodeElim::rewriteModuleSignature(HWModuleOp module) {
 
   igraph::InstanceGraphNode *instanceGraphNode = instanceGraph->lookup(module);
-  LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: "
-                          << module.getNameAttr().getValue() << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
+                          << "\n");
 
   auto replaceInstanceResultWithConst =
       [&](ImplicitLocOpBuilder &builder, unsigned index, InstanceOp instance) {
@@ -623,14 +623,13 @@ void HWIMDeadCodeElim::eraseEmptyModule(HWModuleOp module) {
   // We cannot delete public modules so generate a warning.
   if (module.isPublic()) {
     mlir::emitWarning(module.getLoc())
-        << "module `" << module.getNameAttr().getValue()
+        << "module `" << module.getName()
         << "` is empty but cannot be removed because the module is public";
     return;
   }
 
   // Ok, the module is empty. Delete instances unless they have symbols.
-  LLVM_DEBUG(llvm::dbgs() << "Erase " << module.getNameAttr().getValue()
-                          << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "Erase " << module.getName() << "\n");
   igraph::InstanceGraphNode *instanceGraphNode =
       instanceGraph->lookup(module.getModuleNameAttr());
 
@@ -652,7 +651,7 @@ void HWIMDeadCodeElim::eraseEmptyModule(HWModuleOp module) {
   // If there is an instance with a symbol, we don't delete the module itself.
   if (!instancesWithSymbols.empty()) {
     auto diag = module.emitWarning()
-                << "module `" << module.getNameAttr().getValue()
+                << "module `" << module.getName()
                 << "` is empty but cannot be removed because an instance is "
                    "referenced by name";
     diag.attachNote(FusedLoc::get(&getContext(), instancesWithSymbols))

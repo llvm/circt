@@ -1143,7 +1143,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
     PatternRewriter::InsertionGuard g(rewriter);
     rewriter.setInsertionPoint(combGroup);
     auto group = calyx::GroupOp::create(rewriter, combGroup.getLoc(),
-                                        combGroup.getSymName());
+                                        combGroup.getName());
     rewriter.cloneRegionBefore(combGroup.getBodyRegion(),
                                &group.getBody().front());
     group.getBodyRegion().back().erase();
@@ -1366,7 +1366,7 @@ private:
       auto parOp = calyx::ParOp::create(rewriter, loc);
       rewriter.setInsertionPointToStart(parOp.getBodyBlock());
       for (calyx::GroupOp group : initGroups)
-        calyx::EnableOp::create(rewriter, group.getLoc(), group.getSymName());
+        calyx::EnableOp::create(rewriter, group.getLoc(), group.getName());
     }
 
     /// Insert the while op itself.

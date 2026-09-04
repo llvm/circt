@@ -117,7 +117,7 @@ struct PathInfoTable {
 
     // Handle each alternative base path for instances of this module-like.
     for (auto [i, altBasePath] : llvm::enumerate(altBasePaths)) {
-      if (parent.getNameAttr().getValue().starts_with(altBasePath)) {
+      if (parent.getName().starts_with(altBasePath)) {
         // If we are passing down from the root, take the root base path.
         result.push_back(instance->getBlock()->getArgument(0));
       } else {
@@ -1943,7 +1943,7 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
       // and modules have been converted to OM classes, but we need to look up
       // based on the parent's original name.
       auto parent = op->getParentOfType<om::ClassOp>();
-      auto parentName = parent.getNameAttr().getValue();
+      auto parentName = parent.getName();
       if (parentName.ends_with(kClassNameSuffix))
         parentName = parentName.drop_back(kClassNameSuffix.size());
       auto originalParentName = StringAttr::get(op->getContext(), parentName);

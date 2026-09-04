@@ -503,8 +503,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       OpBuilder::InsertionGuard guard(b);
 
       // Assign a name to the bound module.
-      StringAttr boundModuleName = b.getStringAttr(
-          mlirModuleNamespace.newName(op.getNameAttr().getValue() + "_init"));
+      StringAttr boundModuleName =
+          b.getStringAttr(mlirModuleNamespace.newName(op.getName() + "_init"));
 
       // Generate a name for the file containing the bound module and the bind.
       StringAttr filename;
@@ -528,7 +528,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
       // Build the hierpathop
       auto path = hw::HierPathOp::create(
-          b, mlirModuleNamespace.newName(op.getNameAttr().getValue() + "_path"),
+          b, mlirModuleNamespace.newName(op.getName() + "_path"),
           /*sym_visibility=*/{},
           b.getArrayAttr(
               ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerNameAttr())));
@@ -545,8 +545,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // Instantiate this new module inside the memory module.
       b.setInsertionPointAfter(reg);
       auto boundInstance = hw::InstanceOp::create(
-          b, boundModule, boundModule.getNameAttr().getValue(),
-          ArrayRef<Value>());
+          b, boundModule, boundModule.getName(), ArrayRef<Value>());
       boundInstance->setAttr(
           "inner_sym",
           hw::InnerSymAttr::get(b.getStringAttr(
@@ -746,7 +745,7 @@ void HWMemSimImplPass::runOnOperation() {
       FirMemory mem(oldModule);
 
       OpBuilder builder(oldModule);
-      auto nameAttr = builder.getStringAttr(oldModule.getNameAttr().getValue());
+      auto nameAttr = builder.getStringAttr(oldModule.getName());
 
       // The requirements for macro replacement:
       // 1. read latency and write latency of at least one.

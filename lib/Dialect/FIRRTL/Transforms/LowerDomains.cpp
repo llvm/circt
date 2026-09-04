@@ -887,8 +887,7 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
 LogicalResult LowerCircuit::lowerCircuit() {
   LLVM_DEBUG(llvm::dbgs() << "Processing domains:\n");
   for (auto domain : llvm::make_early_inc_range(circuit.getOps<DomainOp>())) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "  - " << domain.getNameAttr().getValue() << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "  - " << domain.getName() << "\n");
     if (failed(lowerDomain(domain)))
       return failure();
   }

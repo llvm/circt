@@ -754,7 +754,7 @@ void SeqToSVPass::runOnOperation() {
   {
     StringSet<> symbols;
     for (auto sym : circuit.getOps<sv::MacroDeclOp>())
-      symbols.insert(sym.getSymName());
+      symbols.insert(sym.getName());
     if (!symbols.count("SYNTHESIS"))
       sv::MacroDeclOp::create(b, "SYNTHESIS");
     if (!symbols.count("VERILATOR"))

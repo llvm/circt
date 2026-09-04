@@ -333,7 +333,7 @@ void FirMemLowering::lowerMemoriesInModule(
     HWModuleOp module,
     ArrayRef<std::tuple<FirMemConfig *, HWModuleGeneratedOp, FirMemOp>> mems) {
   LLVM_DEBUG(llvm::dbgs() << "Lowering " << mems.size() << " memories in "
-                          << module.getNameAttr().getValue() << "\n");
+                          << module.getName() << "\n");
 
   DenseMap<unsigned, Value> constOneOps;
   auto constOne = [&](unsigned width = 1) {

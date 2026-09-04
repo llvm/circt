@@ -320,7 +320,7 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
   MLIRContext *ctxt = module.getContext();
   // If the module's symbol itself conflicts, then set a "verilogName" attribute
   // on the module to reflect the name we need to use.
-  StringRef oldName = module.getNameAttr().getValue();
+  StringRef oldName = module.getName();
   auto newName = globalNameResolver.getLegalName(oldName);
   if (newName != oldName)
     module->setAttr("verilogName", StringAttr::get(ctxt, newName));

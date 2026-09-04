@@ -1115,8 +1115,7 @@ LogicalResult FuncOp::verify() {
 
 LogicalResult FuncOp::verifyRegions() {
   auto attachNote = [&](mlir::InFlightDiagnostic &diag) {
-    diag.attachNote(getLoc())
-        << "in function '@" << getNameAttr().getValue() << "'";
+    diag.attachNote(getLoc()) << "in function '@" << getName() << "'";
   };
   return verifyUniqueNamesInRegion(getOperation(), getArgNames(), attachNote);
 }
@@ -1137,8 +1136,7 @@ LogicalResult ReturnOp::verify() {
   if (getNumOperands() != results.size())
     return emitOpError("has ")
            << getNumOperands() << " operands, but enclosing function (@"
-           << function.getNameAttr().getValue() << ") returns "
-           << results.size();
+           << function.getName() << ") returns " << results.size();
 
   for (unsigned i = 0, e = results.size(); i != e; ++i)
     if (getOperand(i).getType() != results[i])
@@ -1146,8 +1144,7 @@ LogicalResult ReturnOp::verify() {
                          << getOperand(i).getType()
                          << ") doesn't match function result type ("
                          << results[i] << ")"
-                         << " in function @"
-                         << function.getNameAttr().getValue();
+                         << " in function @" << function.getName();
 
   return success();
 }
