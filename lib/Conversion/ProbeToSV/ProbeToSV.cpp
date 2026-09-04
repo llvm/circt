@@ -144,8 +144,8 @@ LogicalResult LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module) {
     if (!refType) {
       if (containsProbeRef(port.type))
         return module.emitOpError(
-            "nested Probe refs in module ports are not supported by "
-            "Probe-to-SV lowering");
+            "the Probe dialect does not support nested Probe refs in module "
+            "ports");
       if (port.isOutput())
         ++outputIndex;
       continue;
@@ -153,30 +153,29 @@ LogicalResult LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module) {
 
     if (!port.isOutput())
       return module.emitOpError(
-          "Probe-to-SV lowering only supports direct Probe output ports");
+          "the Probe dialect only permits Probe refs on module output ports");
     if (!hw::isHWValueType(refType.getElementType()))
       return module.emitOpError(
-                 "Probe-to-SV lowering does not support payload type ")
-             << refType.getElementType()
-             << "; lower it to an HW value type before this pass";
+                 "Probe-to-SV lowering requires an HW value payload, but got ")
+             << refType.getElementType();
 
     auto concreteModule = dyn_cast<hw::HWModuleOp>(*module);
     if (!concreteModule)
       return module.emitOpError(
-          "Probe output ports on external or generated modules are not "
-          "supported by Probe-to-SV lowering");
+          "Probe refs on external or generated module ports require a defined "
+          "Probe ABI");
     if (!module.isPrivate())
       return module.emitOpError(
-          "public Probe output ports require an external Probe ABI and "
-          "cannot be lowered to an SV XMR");
+          "Probe-to-SV lowering cannot remove a Probe output from a public "
+          "module without a defined external ABI");
 
     auto output =
         cast<hw::OutputOp>(concreteModule.getBodyBlock()->getTerminator());
     auto send = output.getOperand(outputIndex).getDefiningOp<probe::SendOp>();
     if (!send)
       return output.emitOpError(
-          "Probe output must be driven directly by probe.send; forwarding "
-          "Probe refs across multiple module levels is not supported");
+          "the Probe dialect requires a Probe output to be driven directly by "
+          "probe.send; multi-level forwarding is not supported");
     hasProbeOutput = true;
     ++outputIndex;
   }
@@ -192,7 +191,8 @@ FailureOr<ReadResolution> LowerProbeToSVPass::resolveRead(probe::ReadOp read) {
   if (auto send = input.getDefiningOp<probe::SendOp>()) {
     if (send->getParentOfType<hw::HWModuleOp>() != parentModule)
       return read.emitOpError(
-          "local Probe source must be in the same hw.module as the read");
+          "the Probe dialect requires a local probe.send source to be in the "
+          "same hw.module as probe.read");
     return ReadResolution{read, send, {}};
   }
 
@@ -201,28 +201,32 @@ FailureOr<ReadResolution> LowerProbeToSVPass::resolveRead(probe::ReadOp read) {
       result ? dyn_cast<hw::InstanceOp>(result.getOwner()) : hw::InstanceOp{};
   if (!instance)
     return read.emitOpError(
-        "Probe input must come from a local probe.send or a direct child "
-        "hw.instance output");
+        "the Probe dialect requires probe.read input to come from a local "
+        "probe.send or a direct child hw.instance output");
   if (instance.getDoNotPrint())
     return read.emitOpError(
-        "Probe input cannot originate from an hw.instance marked doNotPrint");
+        "Probe-to-SV lowering cannot create an XMR through an hw.instance "
+        "marked doNotPrint");
 
   auto *referenced = symbolTables.lookupNearestSymbolFrom(
       instance, instance.getModuleNameAttr());
   auto childModule = dyn_cast_or_null<hw::HWModuleOp>(referenced);
   if (!childModule)
     return read.emitOpError(
-        "Probe input must originate in a concrete child hw.module");
+        "Probe refs from external or generated modules require a defined "
+        "Probe ABI");
   if (result.getResultNumber() >= childModule.getNumOutputPorts())
-    return read.emitOpError("Probe instance result has no matching output");
+    return read.emitOpError(
+        "Probe instance result has no corresponding module output");
 
   auto output = cast<hw::OutputOp>(childModule.getBodyBlock()->getTerminator());
   auto send = output.getOperand(result.getResultNumber())
                   .getDefiningOp<probe::SendOp>();
   if (!send)
     return read.emitOpError(
-        "Probe instance result is not driven directly by probe.send in the "
-        "child module; multi-level Probe forwarding is not supported");
+        "the Probe dialect requires a Probe instance result to be driven "
+        "directly by probe.send in the child module; multi-level forwarding "
+        "is not supported");
   return ReadResolution{read, send, instance};
 }
 
@@ -242,8 +246,8 @@ LogicalResult LowerProbeToSVPass::validateProbeUses() {
       return WalkResult::advance();
 
     op->emitOpError(
-        "Probe refs may only flow through probe.send, probe.read, hw.output, "
-        "and direct hw.instance results during Probe-to-SV lowering");
+        "the Probe dialect only permits Probe refs to flow through probe.send, "
+        "probe.read, hw.output, and direct hw.instance results");
     return WalkResult::interrupt();
   });
   if (walkResult.wasInterrupted())
@@ -252,13 +256,13 @@ LogicalResult LowerProbeToSVPass::validateProbeUses() {
   for (auto send : sendOps) {
     if (!hw::isHWValueType(send.getInput().getType()))
       return send.emitOpError(
-                 "Probe-to-SV lowering does not support payload type ")
-             << send.getInput().getType()
-             << "; lower it to an HW value type before this pass";
+                 "Probe-to-SV lowering requires an HW value payload, but got ")
+             << send.getInput().getType();
     for (Operation *user : send.getRef().getUsers())
       if (!isa<probe::ReadOp, hw::OutputOp>(user))
         return user->emitOpError(
-            "unsupported use of a Probe ref produced by probe.send");
+            "the Probe dialect does not permit this use of a Probe ref "
+            "produced by probe.send");
   }
 
   for (auto instance : instancesWithProbeResults) {
@@ -270,10 +274,11 @@ LogicalResult LowerProbeToSVPass::validateProbeUses() {
           continue;
         if (isa<hw::OutputOp>(user))
           return user->emitOpError(
-              "forwarding a Probe ref through multiple module levels is not "
-              "supported by Probe-to-SV lowering");
+              "the Probe dialect does not support forwarding a Probe ref "
+              "through multiple module levels");
         return user->emitOpError(
-            "Probe instance results may only be consumed by probe.read");
+            "the Probe dialect only permits Probe instance results to be "
+            "consumed by probe.read");
       }
     }
   }
@@ -307,9 +312,9 @@ LogicalResult LowerProbeToSVPass::validate() {
       return;
     }
     if (!hw::isHWValueType(read.getResult().getType())) {
-      read.emitOpError("Probe-to-SV lowering does not support payload type ")
-          << read.getResult().getType()
-          << "; lower it to an HW value type before this pass";
+      read.emitOpError(
+          "Probe-to-SV lowering requires an HW value payload, but got ")
+          << read.getResult().getType();
       result = failure();
       return;
     }

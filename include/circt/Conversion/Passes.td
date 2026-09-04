@@ -857,15 +857,16 @@ def LowerProbeToSV : Pass<"lower-probe-to-sv", "mlir::ModuleOp"> {
     removes Probe output ports and their corresponding instance results after
     resolving all reads.
 
-    The pass currently supports local reads and reads from a directly
-    instantiated child module. Modules exporting Probe refs must be private,
-    and their Probe outputs must be driven directly by `probe.send`.
-    Multi-level forwarding and Probe outputs on public, external, or generated
-    modules are rejected because their external ABI is not defined.
+    Input IR must follow the Probe dialect's defined propagation path: local
+    reads or reads from a directly instantiated child module, with exported
+    Probe refs driven directly by `probe.send`. Other propagation and Probe
+    refs on external or generated modules do not have defined Probe semantics
+    or an ABI.
 
-    Probe payloads must satisfy `hw::isHWValueType`. Types such as `!seq.clock`,
-    including aggregates containing them, must be converted to HW value types
-    before running this pass.
+    As backend-specific restrictions, modules exporting Probe refs must be
+    private, and Probe payloads must satisfy `hw::isHWValueType`. Types such as
+    `!seq.clock`, including aggregates containing them, must be converted to HW
+    value types before running this pass.
   }];
   let constructor = "circt::createLowerProbeToSVPass()";
   let dependentDialects = [
