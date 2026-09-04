@@ -124,7 +124,7 @@ static cl::opt<bool> printOnlyFirstCounterexample(
     "print-only-first-counterexample",
     cl::desc("Print only the first successfully generated counterexample for "
              "each solver invocation"),
-    cl::init(false), cl::cat(mainCategory));
+    cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
@@ -271,6 +271,9 @@ static LogicalResult executeBMC(MLIRContext &context) {
         {verif::SymbolicValueLowering::HWInput}));
   }
   pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
+  PrepareForBMCOptions prepareForBMCOptions;
+  prepareForBMCOptions.topModule = moduleName;
+  pm.addPass(createPrepareForBMC(prepareForBMCOptions));
   pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
   pm.addPass(createMaterializeDebugVariables());
   pm.addPass(createExternalizeRegisters());

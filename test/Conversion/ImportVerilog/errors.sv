@@ -392,3 +392,11 @@ module Bar;
   // expected-error @below {{inout port `p` expects '!moore.ref<struct<{x: l1, y: l1}>>' but is connected to '!moore.ref<l2>'}}
   Foo foo(y);
 endmodule
+
+// -----
+
+module InvalidOpenArrayAssign;
+  logic [7 : 0] bytes[3] = '{1, 2, 3};
+  // expected-error @below {{no implicit conversion from 'logic[7:0]$[3]' to 'string$[]'}}
+  string strDynArr[] = bytes;
+endmodule
