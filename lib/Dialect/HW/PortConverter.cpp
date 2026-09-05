@@ -47,8 +47,8 @@ public:
 
 private:
   void buildInputSignals() override {
-    Value newValue =
-        converter.createNewInput(origPort, "", origPort.type, portInfo);
+    Value newValue = converter.createNewInput(origPort, "", origPort.type,
+                                              portInfo, origPort.attrs);
     if (body)
       body->getArgument(origPort.argNum).replaceAllUsesWith(newValue);
   }
@@ -57,7 +57,8 @@ private:
     Value output;
     if (body)
       output = body->getTerminator()->getOperand(origPort.argNum);
-    converter.createNewOutput(origPort, "", origPort.type, output, portInfo);
+    converter.createNewOutput(origPort, "", origPort.type, output, portInfo,
+                              origPort.attrs);
   }
 
   hw::PortInfo portInfo;
@@ -84,11 +85,12 @@ PortConverterImpl::PortConverterImpl(igraph::InstanceGraphNode *moduleNode)
 }
 
 Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
-                                        Type type, PortInfo &newPort) {
+                                        Type type, PortInfo &newPort,
+                                        DictionaryAttr attrs) {
   newPort = PortInfo{
       {append(origPort.name, suffix), type, ModulePort::Direction::Input},
       newInputs.size(),
-      {},
+      attrs,
       origPort.loc};
   newInputs.emplace_back(0, newPort);
 
@@ -99,11 +101,12 @@ Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
 
 void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
                                         Type type, Value output,
-                                        PortInfo &newPort) {
+                                        PortInfo &newPort,
+                                        DictionaryAttr attrs) {
   newPort = PortInfo{
       {append(origPort.name, suffix), type, ModulePort::Direction::Output},
       newOutputs.size(),
-      {},
+      attrs,
       origPort.loc};
   newOutputs.emplace_back(0, newPort);
 
@@ -232,6 +235,8 @@ void PortConverterImpl::updateInstance(hw::InstanceOp inst) {
       InstanceOp::create(b, mod, inst.getInstanceNameAttr(), newOperands,
                          inst.getParameters(), inst.getInnerSymAttr());
   newInst->setDialectAttrs(inst->getDialectAttrs());
+  if (auto doNotPrint = inst.getDoNotPrintAttr())
+    newInst.setDoNotPrintAttr(doNotPrint);
 
   // Assign the backedges to the new results.
   for (auto [idx, be] : llvm::enumerate(newResults))
