@@ -43,16 +43,19 @@ public:
   /// These two methods take care of allocating new ports in the correct place
   /// based on the position of 'origPort'. The new port is based on the original
   /// name and suffix. The specification for the new port is given by `newPort`
-  /// and is recorded internally. Any changes to 'newPort' after calling this
-  /// will not be reflected in the modules new port list. Will also add the new
-  /// input to the block arguments of the body of the module.
+  /// and is recorded internally. `attrs` contains the new port's attributes.
+  /// Any changes to 'newPort' after calling this will not be reflected in the
+  /// modules new port list. Will also add the new input to the block arguments
+  /// of the body of the module.
   Value createNewInput(hw::PortInfo origPort, const Twine &suffix, Type type,
-                       hw::PortInfo &newPort);
+                       hw::PortInfo &newPort,
+                       DictionaryAttr attrs = DictionaryAttr());
   /// Same as above. 'output' is the value fed into the new port and is required
   /// if 'body' is non-null. Important note: cannot be a backedge which gets
   /// replaced since this isn't attached to an op until later in the pass.
   void createNewOutput(hw::PortInfo origPort, const Twine &suffix, Type type,
-                       Value output, hw::PortInfo &newPort);
+                       Value output, hw::PortInfo &newPort,
+                       DictionaryAttr attrs = DictionaryAttr());
 
 protected:
   PortConverterImpl(igraph::InstanceGraphNode *moduleNode);

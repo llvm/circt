@@ -623,7 +623,6 @@ static void modifyModuleArgs(
   newArgAttrs.reserve(newArgCount);
   newArgLocs.reserve(newArgCount);
 
-  auto exportPortAttrName = StringAttr::get(context, "hw.exportPort");
   auto emptyDictAttr = DictionaryAttr::get(context, {});
   auto unknownLoc = UnknownLoc::get(context);
 
@@ -638,14 +637,9 @@ static void modifyModuleArgs(
       if (port.dir == ModulePort::Direction::InOut &&
           !isa<InOutType>(port.type))
         port.type = InOutType::get(port.type);
-      auto sym = port.getSym();
-      Attribute attr =
-          (sym && !sym.empty())
-              ? DictionaryAttr::get(context, {{exportPortAttrName, sym}})
-              : emptyDictAttr;
       newArgNames.push_back(port.name);
       newArgTypes.push_back(port.type);
-      newArgAttrs.push_back(attr);
+      newArgAttrs.push_back(port.attrs ? port.attrs : emptyDictAttr);
       insertArgs = insertArgs.drop_front();
       LocationAttr loc = port.loc ? port.loc : unknownLoc;
       newArgLocs.push_back(loc);
