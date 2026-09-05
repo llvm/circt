@@ -2260,6 +2260,23 @@ struct DPIFuncOpConversion : public OpConversionPattern<moore::DPIFuncOp> {
   }
 };
 
+template <typename OpTy>
+struct OpenArrayConversionOpLowering : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OpTy op, typename OpTy::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType =
+        this->getTypeConverter()->convertType(op.getResult().getType());
+    if (!resultType)
+      return rewriter.notifyMatchFailure(op, "failed to convert result type");
+    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(op, resultType,
+                                                            adaptor.getInput());
+    return success();
+  }
+};
+
 struct UnrealizedConversionCastConversion
     : public OpConversionPattern<UnrealizedConversionCastOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -4049,6 +4066,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     CallOpConversion,
     DPIFuncOpConversion,
     FuncDPICallOpConversion,
+    OpenArrayConversionOpLowering<OpenUArrayFromUnpackedArrayOp>,
+    OpenArrayConversionOpLowering<OpenArrayFromArrayOp>,
+    OpenArrayConversionOpLowering<OpenUArrayRefFromUnpackedArrayRefOp>,
+    OpenArrayConversionOpLowering<OpenArrayRefFromArrayRefOp>,
     UnrealizedConversionCastConversion,
     InPlaceOpConversion<debug::ArrayOp>,
     InPlaceOpConversion<debug::StructOp>,
