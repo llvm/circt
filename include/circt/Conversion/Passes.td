@@ -892,7 +892,6 @@ def LowerProbeToSV : Pass<"lower-probe-to-sv", "mlir::ModuleOp"> {
     `!seq.clock`, including aggregates containing them, must be converted to HW
     value types before running this pass.
   }];
-  let constructor = "circt::createLowerProbeToSVPass()";
   let dependentDialects = [
     "circt::hw::HWDialect",
     "circt::probe::ProbeDialect",
