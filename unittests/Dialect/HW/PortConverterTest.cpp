@@ -60,6 +60,12 @@ TEST(PortConverterTest, PreserveUntouchedPortAndInstanceAttributes) {
   auto builder = ImplicitLocOpBuilder::atBlockEnd(loc, circuit.getBody());
   auto i8 = builder.getI8Type();
 
+  auto inputPortSym = builder.getStringAttr("inputPort");
+  auto inputPortAttrs = builder.getDictionaryAttr({
+      builder.getNamedAttr("hw.exportPort", InnerSymAttr::get(inputPortSym)),
+      builder.getNamedAttr("hw.verilogName",
+                           builder.getStringAttr("input_name")),
+  });
   auto keptPortSym = builder.getStringAttr("keptPort");
   auto keptPortAttrs = builder.getDictionaryAttr({
       builder.getNamedAttr("hw.exportPort", InnerSymAttr::get(keptPortSym)),
@@ -67,7 +73,7 @@ TEST(PortConverterTest, PreserveUntouchedPortAndInstanceAttributes) {
                            builder.getStringAttr("kept_name")),
   });
   SmallVector<PortInfo> childPorts = {
-      {{builder.getStringAttr("in"), i8, ModulePort::Input}, 0},
+      {{builder.getStringAttr("in"), i8, ModulePort::Input}, 0, inputPortAttrs},
       {{builder.getStringAttr("kept"), i8, ModulePort::Output},
        0,
        keptPortAttrs},
@@ -98,6 +104,10 @@ TEST(PortConverterTest, PreserveUntouchedPortAndInstanceAttributes) {
         ports.setOutput("out", instance.getResult(0));
       });
 
+  auto inputPortRef =
+      InnerRefAttr::get(child.getModuleNameAttr(), inputPortSym);
+  HierPathOp::create(builder, builder.getStringAttr("inputPortPath"),
+                     builder.getArrayAttr({inputPortRef}));
   auto keptPortRef = InnerRefAttr::get(child.getModuleNameAttr(), keptPortSym);
   HierPathOp::create(builder, builder.getStringAttr("keptPortPath"),
                      builder.getArrayAttr({keptPortRef}));
@@ -112,9 +122,18 @@ TEST(PortConverterTest, PreserveUntouchedPortAndInstanceAttributes) {
 
   auto childPortList = child.getPortList();
   ASSERT_EQ(childPortList.size(), 2u);
-  auto keptPort = llvm::find_if(
+  auto *inputPort = llvm::find_if(
+      childPortList, [](PortInfo port) { return port.getName() == "in"; });
+  ASSERT_NE(inputPort, childPortList.end());
+  ASSERT_TRUE(inputPort->getSym());
+  EXPECT_EQ(inputPort->getSym().getSymName(), inputPortSym);
+  EXPECT_EQ(inputPort->attrs.get("hw.verilogName"),
+            builder.getStringAttr("input_name"));
+
+  auto *keptPort = llvm::find_if(
       childPortList, [](PortInfo port) { return port.getName() == "kept"; });
   ASSERT_NE(keptPort, childPortList.end());
+  ASSERT_TRUE(keptPort->getSym());
   EXPECT_EQ(keptPort->getSym().getSymName(), keptPortSym);
   EXPECT_EQ(keptPort->attrs.get("hw.verilogName"),
             builder.getStringAttr("kept_name"));
@@ -124,6 +143,9 @@ TEST(PortConverterTest, PreserveUntouchedPortAndInstanceAttributes) {
   auto instances = top.getOps<InstanceOp>();
   ASSERT_TRUE(llvm::hasSingleElement(instances));
   auto instance = *instances.begin();
+  ASSERT_EQ(instance.getNumOperands(), 1u);
+  EXPECT_EQ(instance.getArgNames()[0], builder.getStringAttr("in"));
+  EXPECT_EQ(instance.getInputs()[0], top.getBodyBlock()->getArgument(0));
   ASSERT_EQ(instance.getNumResults(), 1u);
   EXPECT_EQ(instance.getResultNames()[0], builder.getStringAttr("kept"));
   EXPECT_EQ(instance.getInnerSymAttr().getSymName(),
