@@ -100,6 +100,9 @@ guaranteed to remain stable across compiler runs or IR transformations.
 External-module probe ABIs are presently outside the scope of this dialect
 definition.
 
+Backend-specific conversion passes, such as ProbeToSV, may lower Probe handles
+to a representation suitable for their target.
+
 ## Types
 
 [include "Dialects/ProbeTypes.md"]
