@@ -1433,16 +1433,21 @@ void Deseq::implementRegister(DriveInfo &drive) {
 
   // Try to guess a name for the register.
   StringAttr name;
-  if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>())
+  IntegerAttr preset;
+  if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>()) {
     name = sigOp.getNameAttr();
+    if (sigOp->hasAttr("llhd.explicit_init"))
+      if (auto constant = sigOp.getInit().getDefiningOp<hw::ConstantOp>())
+        preset = constant.getValueAttr();
+  }
   if (!name)
     name = builder.getStringAttr("");
 
   // Create the register op.
-  auto reg = seq::FirRegOp::create(builder, loc, value, clock, name,
-                                   hw::InnerSymAttr{},
-                                   /*preset=*/IntegerAttr{}, reset, resetValue,
-                                   /*isAsync=*/reset != Value{});
+  auto reg =
+      seq::FirRegOp::create(builder, loc, value, clock, name,
+                            hw::InnerSymAttr{}, preset, reset, resetValue,
+                            /*isAsync=*/reset != Value{});
 
   // If the register has an enable, insert a self-mux in front of the register.
   // Set the `bin` flag on the mux specifically to make up for a subtle

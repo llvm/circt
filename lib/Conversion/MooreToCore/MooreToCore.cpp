@@ -1142,14 +1142,21 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
 
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
+    bool hasExplicitInit = !!init;
     if (!init) {
       init = createZeroValue(refType.getNestedType(), loc, rewriter);
       if (!init)
         return failure();
     }
 
-    rewriter.replaceOpWithNewOp<llhd::SignalOp>(op, resultType,
-                                                op.getNameAttr(), init);
+    auto signal = rewriter.replaceOpWithNewOp<llhd::SignalOp>(
+        op, resultType, op.getNameAttr(), init);
+    // LLHD signals also have a synthesized initial value for variables without
+    // a declaration initializer. Preserve this distinction so Deseq can carry
+    // explicit source initializers into registers without constraining
+    // uninitialized registers to zero.
+    if (hasExplicitInit)
+      signal->setAttr("llhd.explicit_init", rewriter.getUnitAttr());
     return success();
   }
 };

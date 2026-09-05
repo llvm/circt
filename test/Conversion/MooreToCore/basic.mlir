@@ -553,12 +553,12 @@ moore.module @Variable() {
 
   // CHECK: [[PRB:%.+]] = llhd.prb %b1 : i8
   %0 = moore.read %b1 : <i8>
-  // CHECK: %b2 = llhd.sig [[PRB]] : i8
+  // CHECK: %b2 = llhd.sig [[PRB]] {llhd.explicit_init} : i8
   %b2 = moore.variable %0 : <i8>
 
   // CHECK: %true = hw.constant true
   %1 = moore.constant 1 : l1
-  // CHECK: %l = llhd.sig %true : i1
+  // CHECK: %l = llhd.sig %true {llhd.explicit_init} : i1
   %l = moore.variable %1 : <l1>
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i19
   // CHECK: %m = llhd.sig [[TMP]] : i19
@@ -580,7 +580,7 @@ moore.module @Variable() {
   moore.variable : <!moore.time>
 
   // CHECK: [[TMP:%.+]] = llhd.constant_time
-  // CHECK: llhd.sig [[TMP]] : !llhd.time
+  // CHECK: llhd.sig [[TMP]] {llhd.explicit_init} : !llhd.time
   %c42_fs = moore.constant_time 42 fs
   moore.variable %c42_fs : <!moore.time>
 
@@ -688,7 +688,7 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
 
   // CHECK: [[INIT:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.struct<exp_bits: i32, man_bits: i32>
   // CHECK: llhd.sig [[INIT]] : !hw.struct<exp_bits: i32, man_bits: i32>
-  // CHECK: llhd.sig %arg0 : !hw.struct<exp_bits: i32, man_bits: i32>
+  // CHECK: llhd.sig %arg0 {llhd.explicit_init} : !hw.struct<exp_bits: i32, man_bits: i32>
   %1 = moore.variable : <struct<{exp_bits: i32, man_bits: i32}>>
   %2 = moore.variable %arg0 : <struct<{exp_bits: i32, man_bits: i32}>>
 
