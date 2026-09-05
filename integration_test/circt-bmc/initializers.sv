@@ -1,6 +1,7 @@
 // REQUIRES: slang
 // REQUIRES: libz3
 // REQUIRES: circt-bmc-jit
+// UNSUPPORTED: valgrind
 
 // Declaration initializers must reach the generated registers and constrain
 // the initial BMC state.
