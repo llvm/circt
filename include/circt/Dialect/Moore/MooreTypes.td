@@ -628,4 +628,12 @@ def TwoValuedI32RefType : SpecificRefType<TwoValuedI32> {
     "RefType::get(IntType::getInt($_builder.getContext(), 32))";
 }
 
+/// Unpacked array references
+def UnpackedArrayRefType : SpecificRefType<UnpackedArrayType>;
+def OpenUnpackedArrayRefType : SpecificRefType<OpenUnpackedArrayType>;
+
+/// Packed array references
+def ArrayRefType : SpecificRefType<ArrayType>;
+def OpenArrayRefType : SpecificRefType<OpenArrayType>;
+
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

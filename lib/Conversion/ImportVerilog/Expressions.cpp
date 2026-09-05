@@ -3222,6 +3222,38 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
       return builder.createOrFold<moore::OpenUArrayFromUnpackedArrayOp>(
           loc, type, value);
   }
+
+  // Convert from fixed-size packed array to open packed array
+  auto srcArray = dyn_cast<moore::ArrayType>(value.getType());
+  auto dstOpenArray = dyn_cast<moore::OpenArrayType>(type);
+  if (srcArray && dstOpenArray) {
+    auto openArrayElType = dstOpenArray.getElementType();
+    auto arrayElType = srcArray.getElementType();
+
+    if (openArrayElType == arrayElType)
+      return builder.createOrFold<moore::OpenArrayFromArrayOp>(loc, type,
+                                                               value);
+  }
+
+  // Convert from fixed-size array ref to open array ref
+  auto srcRef = dyn_cast<moore::RefType>(value.getType());
+  auto dstRef = dyn_cast<moore::RefType>(type);
+  if (srcRef && dstRef) {
+    auto srcUArray = dyn_cast<moore::UnpackedArrayType>(srcRef.getNestedType());
+    auto dstOpenUArray =
+        dyn_cast<moore::OpenUnpackedArrayType>(dstRef.getNestedType());
+    if (srcUArray && dstOpenUArray &&
+        dstOpenUArray.getElementType() == srcUArray.getElementType())
+      return builder.createOrFold<moore::OpenUArrayRefFromUnpackedArrayRefOp>(
+          loc, type, value);
+
+    auto srcArray = dyn_cast<moore::ArrayType>(srcRef.getNestedType());
+    auto dstOpenArray = dyn_cast<moore::OpenArrayType>(dstRef.getNestedType());
+    if (srcArray && dstOpenArray &&
+        dstOpenArray.getElementType() == srcArray.getElementType())
+      return builder.createOrFold<moore::OpenArrayRefFromArrayRefOp>(loc, type,
+                                                                     value);
+  }
   // Handle Real To Int conversion
   if (dstInt && isa<moore::RealType>(value.getType())) {
     auto twoValInt = builder.createOrFold<moore::RealToIntOp>(
