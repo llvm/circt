@@ -47,8 +47,8 @@ public:
 
 private:
   void buildInputSignals() override {
-    Value newValue = converter.createNewInput(origPort, "", origPort.type,
-                                              portInfo, origPort.attrs);
+    Value newValue = converter.createNewInput(
+        origPort, "", origPort.type, portInfo, PortAttrPolicy::Preserve);
     if (body)
       body->getArgument(origPort.argNum).replaceAllUsesWith(newValue);
   }
@@ -58,7 +58,7 @@ private:
     if (body)
       output = body->getTerminator()->getOperand(origPort.argNum);
     converter.createNewOutput(origPort, "", origPort.type, output, portInfo,
-                              origPort.attrs);
+                              PortAttrPolicy::Preserve);
   }
 
   hw::PortInfo portInfo;
@@ -86,7 +86,10 @@ PortConverterImpl::PortConverterImpl(igraph::InstanceGraphNode *moduleNode)
 
 Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
                                         Type type, PortInfo &newPort,
-                                        DictionaryAttr attrs) {
+                                        PortAttrPolicy attrPolicy) {
+  DictionaryAttr attrs = attrPolicy == PortAttrPolicy::Preserve
+                             ? origPort.attrs
+                             : DictionaryAttr();
   newPort = PortInfo{
       {append(origPort.name, suffix), type, ModulePort::Direction::Input},
       newInputs.size(),
@@ -102,7 +105,10 @@ Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
 void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
                                         Type type, Value output,
                                         PortInfo &newPort,
-                                        DictionaryAttr attrs) {
+                                        PortAttrPolicy attrPolicy) {
+  DictionaryAttr attrs = attrPolicy == PortAttrPolicy::Preserve
+                             ? origPort.attrs
+                             : DictionaryAttr();
   newPort = PortInfo{
       {append(origPort.name, suffix), type, ModulePort::Direction::Output},
       newOutputs.size(),
