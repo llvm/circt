@@ -10,8 +10,8 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/Parser/Parser.h"
 #include "gtest/gtest.h"
 
 using namespace mlir;
@@ -55,66 +55,44 @@ public:
 TEST(PortConverterTest, PreserveUntouchedPortAndInstanceAttributes) {
   MLIRContext context;
   context.loadDialect<HWDialect>();
-  auto loc = UnknownLoc::get(&context);
-  auto circuit = ModuleOp::create(loc);
-  auto builder = ImplicitLocOpBuilder::atBlockEnd(loc, circuit.getBody());
-  auto i8 = builder.getI8Type();
+  const char *ir = R"MLIR(
+module {
+  hw.module private @Child(
+      in %in: i8 {
+        hw.exportPort = #hw<innerSym@inputPort>,
+        hw.verilogName = "input_name"
+      },
+      out kept: i8 {
+        hw.exportPort = #hw<innerSym@keptPort>,
+        hw.verilogName = "kept_name"
+      },
+      out removed: i8) {
+    hw.output %in, %in : i8, i8
+  }
+  hw.module @Top(in %in: i8, out out: i8) {
+    %kept, %removed = hw.instance "child" sym @childInst @Child(
+        in: %in: i8) -> (kept: i8, removed: i8) {
+      doNotPrint,
+      hw.verilogName = "child_name"
+    }
+    hw.output %kept : i8
+  }
+  hw.hierpath @inputPortPath [@Child::@inputPort]
+  hw.hierpath @keptPortPath [@Child::@keptPort]
+}
+)MLIR";
 
-  auto inputPortSym = builder.getStringAttr("inputPort");
-  auto inputPortAttrs = builder.getDictionaryAttr({
-      builder.getNamedAttr("hw.exportPort", InnerSymAttr::get(inputPortSym)),
-      builder.getNamedAttr("hw.verilogName",
-                           builder.getStringAttr("input_name")),
-  });
-  auto keptPortSym = builder.getStringAttr("keptPort");
-  auto keptPortAttrs = builder.getDictionaryAttr({
-      builder.getNamedAttr("hw.exportPort", InnerSymAttr::get(keptPortSym)),
-      builder.getNamedAttr("hw.verilogName",
-                           builder.getStringAttr("kept_name")),
-  });
-  SmallVector<PortInfo> childPorts = {
-      {{builder.getStringAttr("in"), i8, ModulePort::Input}, 0, inputPortAttrs},
-      {{builder.getStringAttr("kept"), i8, ModulePort::Output},
-       0,
-       keptPortAttrs},
-      {{builder.getStringAttr("removed"), i8, ModulePort::Output}, 1},
-  };
-  auto child = HWModuleOp::create(
-      builder, builder.getStringAttr("Child"), ModulePortInfo(childPorts),
-      [&](OpBuilder &, HWModulePortAccessor &ports) {
-        ports.setOutput("kept", ports.getInput("in"));
-        ports.setOutput("removed", ports.getInput("in"));
-      });
-  child.setVisibility(SymbolTable::Visibility::Private);
+  OwningOpRef<ModuleOp> circuit = parseSourceString<ModuleOp>(ir, &context);
+  ASSERT_TRUE(circuit);
+  ASSERT_TRUE(succeeded(verify(circuit->getOperation())));
 
-  SmallVector<PortInfo> topPorts = {
-      {{builder.getStringAttr("in"), i8, ModulePort::Input}, 0},
-      {{builder.getStringAttr("out"), i8, ModulePort::Output}, 0},
-  };
-  HWModuleOp::create(
-      builder, builder.getStringAttr("Top"), ModulePortInfo(topPorts),
-      [&](OpBuilder &builder, HWModulePortAccessor &ports) {
-        auto instance = InstanceOp::create(
-            builder, loc, child, "child",
-            SmallVector<Value>{ports.getInput("in")}, {},
-            InnerSymAttr::get(builder.getStringAttr("childInst")));
-        instance.setDoNotPrintAttr(builder.getUnitAttr());
-        instance->setAttr("hw.verilogName",
-                          builder.getStringAttr("child_name"));
-        ports.setOutput("out", instance.getResult(0));
-      });
+  SymbolTable symbolTable(circuit.get());
+  auto child = symbolTable.lookup<HWModuleOp>("Child");
+  ASSERT_TRUE(child);
+  auto inputPortSym = StringAttr::get(&context, "inputPort");
+  auto keptPortSym = StringAttr::get(&context, "keptPort");
 
-  auto inputPortRef =
-      InnerRefAttr::get(child.getModuleNameAttr(), inputPortSym);
-  HierPathOp::create(builder, builder.getStringAttr("inputPortPath"),
-                     builder.getArrayAttr({inputPortRef}));
-  auto keptPortRef = InnerRefAttr::get(child.getModuleNameAttr(), keptPortSym);
-  HierPathOp::create(builder, builder.getStringAttr("keptPortPath"),
-                     builder.getArrayAttr({keptPortRef}));
-
-  ASSERT_TRUE(succeeded(verify(circuit.getOperation())));
-
-  InstanceGraph instanceGraph(circuit);
+  InstanceGraph instanceGraph(circuit.get());
   auto mutableChild = cast<HWMutableModuleLike>(child.getOperation());
   ASSERT_TRUE(succeeded(
       PortConverter<TestPortConversionBuilder>(instanceGraph, mutableChild)
@@ -128,7 +106,7 @@ TEST(PortConverterTest, PreserveUntouchedPortAndInstanceAttributes) {
   ASSERT_TRUE(inputPort->getSym());
   EXPECT_EQ(inputPort->getSym().getSymName(), inputPortSym);
   EXPECT_EQ(inputPort->attrs.get("hw.verilogName"),
-            builder.getStringAttr("input_name"));
+            StringAttr::get(&context, "input_name"));
 
   auto *keptPort = llvm::find_if(
       childPortList, [](PortInfo port) { return port.getName() == "kept"; });
@@ -136,27 +114,27 @@ TEST(PortConverterTest, PreserveUntouchedPortAndInstanceAttributes) {
   ASSERT_TRUE(keptPort->getSym());
   EXPECT_EQ(keptPort->getSym().getSymName(), keptPortSym);
   EXPECT_EQ(keptPort->attrs.get("hw.verilogName"),
-            builder.getStringAttr("kept_name"));
+            StringAttr::get(&context, "kept_name"));
 
-  auto top = circuit.lookupSymbol<HWModuleOp>("Top");
+  auto top = symbolTable.lookup<HWModuleOp>("Top");
   ASSERT_TRUE(top);
   auto instances = top.getOps<InstanceOp>();
   ASSERT_TRUE(llvm::hasSingleElement(instances));
   auto instance = *instances.begin();
   ASSERT_EQ(instance.getNumOperands(), 1u);
-  EXPECT_EQ(instance.getArgNames()[0], builder.getStringAttr("in"));
+  EXPECT_EQ(instance.getArgNames()[0], StringAttr::get(&context, "in"));
   EXPECT_EQ(instance.getInputs()[0], top.getBodyBlock()->getArgument(0));
   ASSERT_EQ(instance.getNumResults(), 1u);
-  EXPECT_EQ(instance.getResultNames()[0], builder.getStringAttr("kept"));
+  EXPECT_EQ(instance.getResultNames()[0], StringAttr::get(&context, "kept"));
   EXPECT_EQ(instance.getInnerSymAttr().getSymName(),
-            builder.getStringAttr("childInst"));
+            StringAttr::get(&context, "childInst"));
   EXPECT_TRUE(instance.getDoNotPrint());
   EXPECT_EQ(instance->getAttr("hw.verilogName"),
-            builder.getStringAttr("child_name"));
+            StringAttr::get(&context, "child_name"));
   EXPECT_EQ(cast<OutputOp>(top.getBodyBlock()->getTerminator()).getOperand(0),
             instance.getResult(0));
 
-  EXPECT_TRUE(succeeded(verify(circuit.getOperation())));
+  EXPECT_TRUE(succeeded(verify(circuit->getOperation())));
 }
 
 } // namespace
