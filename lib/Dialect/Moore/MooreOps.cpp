@@ -42,7 +42,8 @@ void SVModuleOp::print(OpAsmPrinter &p) {
   p << " ";
 
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
@@ -2069,7 +2070,8 @@ LogicalResult DPIFuncOp::verify() {
 void DPIFuncOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(getSymName());

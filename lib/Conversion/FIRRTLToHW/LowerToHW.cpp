@@ -1367,10 +1367,12 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   // Copy over any attributes which are not required for FModuleOp.
   SmallVector<StringRef, 13> attrNames = {
-      "annotations",   "convention",      "layers",
-      "portNames",     "sym_name",        "portDirections",
-      "portTypes",     "portAnnotations", "portSymbols",
-      "portLocations", "parameters",      SymbolTable::getVisibilityAttrName(),
+      "annotations", "convention",
+      "layers",      "portNames",
+      "sym_name",    "portDirections",
+      "portTypes",   "portAnnotations",
+      "portSymbols", "portLocations",
+      "parameters",  mlir::SymbolOpInterface::getDefaultVisibilityAttrName(),
       "domainInfo"};
 
   DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());

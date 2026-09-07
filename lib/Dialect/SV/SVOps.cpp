@@ -2056,7 +2056,8 @@ void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
 void SVVerbatimSourceOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
@@ -2076,7 +2077,8 @@ ParseResult SVVerbatimSourceOp::parse(OpAsmParser &parser,
                                       OperationState &result) {
 
   // parse optional visibility
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   StringRef visibility;
   if (succeeded(parser.parseOptionalKeyword(&visibility,
                                             {"public", "private", "nested"}))) {
@@ -2241,7 +2243,8 @@ void SVVerbatimModuleOp::setAllPortNames(ArrayRef<Attribute> names) {
 void SVVerbatimModuleOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
@@ -2254,9 +2257,12 @@ void SVVerbatimModuleOp::print(OpAsmPrinter &p) {
       p, emptyRegion, getModuleType(), getAllPortAttrs(), getAllPortLocs());
 
   SmallVector<StringRef> omittedAttrs = {
-      SymbolTable::getSymbolAttrName(),   SymbolTable::getVisibilityAttrName(),
-      getModuleTypeAttrName().getValue(), getPerPortAttrsAttrName().getValue(),
-      getPortLocsAttrName().getValue(),   getParametersAttrName().getValue()};
+      SymbolTable::getSymbolAttrName(),
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName(),
+      getModuleTypeAttrName().getValue(),
+      getPerPortAttrsAttrName().getValue(),
+      getPortLocsAttrName().getValue(),
+      getParametersAttrName().getValue()};
 
   mlir::function_interface_impl::printFunctionAttributes(p, *this,
                                                          omittedAttrs);
@@ -2898,7 +2904,8 @@ void FuncOp::print(OpAsmPrinter &p) {
           .getValue();
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(funcName);
