@@ -99,6 +99,8 @@ public:
     llvm_unreachable("unknown build mode");
   }
 
+  ArrayRef<std::string> getPreserveModules() const { return preserveModules; }
+
   StringRef getOutputFilename() const { return outputFilename; }
   StringRef getBlackBoxRootPath() const { return blackBoxRootPath; }
   StringRef getReplaceSequentialMemoriesFile() const { return replSeqMemFile; }
@@ -223,6 +225,11 @@ public:
   FirtoolOptions &
   setPreserveValues(firrtl::PreserveValues::PreserveMode value) {
     preserveMode = value;
+    return *this;
+  }
+
+  FirtoolOptions &setPreserveModules(std::vector<std::string> value) {
+    preserveModules = value;
     return *this;
   }
 
@@ -443,6 +450,7 @@ private:
   bool probesToSignals;
   firrtl::PreserveAggregate::PreserveMode preserveAggregate;
   firrtl::PreserveValues::PreserveMode preserveMode;
+  std::vector<std::string> preserveModules;
   bool enableDebugInfo;
   BuildMode buildMode;
   bool disableLayerSink;
