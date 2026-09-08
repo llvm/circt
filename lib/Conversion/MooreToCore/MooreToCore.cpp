@@ -3437,6 +3437,57 @@ struct StringCmpOpConversion : public OpConversionPattern<StringCmpOp> {
   }
 };
 
+struct StringCompareOpConversion : public OpConversionPattern<StringCompareOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringCompareOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringCompareOp>(op, adaptor.getLhs(),
+                                                      adaptor.getRhs());
+    return success();
+  }
+};
+
+struct StringICompareOpConversion
+    : public OpConversionPattern<StringICompareOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringICompareOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Value lowerLhs =
+        sim::StringToLowerOp::create(rewriter, loc, adaptor.getLhs());
+    Value lowerRhs =
+        sim::StringToLowerOp::create(rewriter, loc, adaptor.getRhs());
+    rewriter.replaceOpWithNewOp<sim::StringCompareOp>(op, lowerLhs, lowerRhs);
+    return success();
+  }
+};
+
+struct StringToLowerOpConversion : public OpConversionPattern<StringToLowerOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringToLowerOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringToLowerOp>(op, adaptor.getStr());
+    return success();
+  }
+};
+
+struct StringToUpperOpConversion : public OpConversionPattern<StringToUpperOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringToUpperOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringToUpperOp>(op, adaptor.getStr());
+    return success();
+  }
+};
+
 struct ReadMemBIOpConversion : public OpConversionPattern<ReadMemBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -4085,7 +4136,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     StringConcatOpConversion,
     StringGetOpConversion,
     StringCmpOpConversion,
-
+    StringCompareOpConversion,
+    StringICompareOpConversion,
+    StringToLowerOpConversion,
+    StringToUpperOpConversion,
     // Queue operations
     QueueSizeBIOpConversion,
     QueuePushBackOpConversion,
