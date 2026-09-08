@@ -522,6 +522,10 @@ extractConcatToConcatExtract(ExtractOp op, ConcatOp innerCat,
                              PatternRewriter &rewriter,
                              ArrayRef<size_t> prefixWidths = {}) {
   auto concatInputs = innerCat.getInputs();
+  // Do not create a replacement that uses the operation being replaced.
+  if (llvm::is_contained(concatInputs, op.getResult()))
+    return failure();
+
   size_t numOperands = concatInputs.size();
   size_t lowBit = op.getLowBit();
 
