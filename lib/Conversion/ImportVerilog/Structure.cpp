@@ -7,13 +7,23 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/Moore/MooreTypes.h"
+#include "circt/Support/FVInt.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/Expression.h"
+#include "slang/ast/TimingControl.h"
+#include "slang/ast/expressions/AssignmentExpressions.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
 #include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxVisitor.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/LogicalResult.h"
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -2453,6 +2463,10 @@ LogicalResult Context::convertFixedPrimitive(
   if (primName == "pullup" || primName == "pulldown")
     return convertPullGatePrimitive(prim);
 
+  if (primName == "bufif0" || primName == "bufif1" || primName == "notif0" ||
+      primName == "notif1")
+    return convertThreeStateGatePrimitive(prim);
+
   // Remaining fixed primitives still need handling
   mlir::emitError(loc) << "unsupported primitive `" << primName << "`";
   return failure();
@@ -2492,6 +2506,93 @@ LogicalResult Context::convertPullGatePrimitive(
   if (!converted)
     return failure();
   moore::ContinuousAssignOp::create(builder, loc, portVal, converted);
+  return success();
+}
+
+LogicalResult Context::convertThreeStateGatePrimitive(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  auto loc = convertLocation(prim.location);
+  auto primName = prim.primitiveType.name;
+
+  auto portConns = prim.getPortConnections();
+  assert(portConns.size() == 3 &&
+         "Expected exactly 3 ports in three-state gate primitives");
+
+  auto &outputConn =
+      portConns[0]->as<slang::ast::AssignmentExpression>().left();
+  auto outputVal = convertLvalueExpression(outputConn);
+  if (!outputVal)
+    return failure();
+
+  auto inVal = convertRvalueExpression(*portConns[1]);
+  auto enVal = convertRvalueExpression(*portConns[2]);
+  if (!inVal || !enVal)
+    return failure();
+  Value dataVal = inVal;
+
+  if (primName == "notif0" || primName == "notif1")
+    dataVal = moore::NotOp::create(builder, loc, inVal);
+
+  auto enType = cast<moore::IntType>(enVal.getType());
+  int activeLevel = (primName == "bufif1" || primName == "notif1") ? 1 : 0;
+
+  auto enWidth = enType.getBitSize();
+  assert(enWidth && "expected fixed-width type for enable signal");
+
+  FVInt targetFV(*enWidth, static_cast<uint64_t>(activeLevel));
+  Value targetLevel = moore::ConstantOp::create(builder, loc, enType, targetFV);
+  Value cond = moore::EqOp::create(builder, loc, enVal, targetLevel);
+  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  dataVal = materializeConversion(dstType, dataVal, false, loc);
+  if (!dataVal)
+    return failure();
+
+  auto dstWidth = dstType.getBitSize();
+  assert(dstWidth && "expected fixed-width type for three-state primitive");
+
+  auto logicType = moore::IntType::getLogic(getContext(), *dstWidth);
+  FVInt allZVal = FVInt::getAllZ(*dstWidth);
+  Value zVal = moore::ConstantOp::create(builder, loc, logicType, allZVal);
+  zVal = materializeConversion(dstType, zVal, false, loc);
+
+  auto condOp = moore::ConditionalOp::create(builder, loc, dstType, cond);
+  auto &trueBlock = condOp.getTrueRegion().emplaceBlock();
+  auto &falseBlock = condOp.getFalseRegion().emplaceBlock();
+  {
+    OpBuilder::InsertionGuard g(builder);
+    builder.setInsertionPointToStart(&trueBlock);
+    moore::YieldOp::create(builder, loc, dataVal);
+
+    builder.setInsertionPointToStart(&falseBlock);
+    moore::YieldOp::create(builder, loc, zVal);
+  }
+  Value result = condOp.getResult();
+
+  if (prim.getDelay()) {
+    const slang::ast::Expression *delayExpr;
+    if (const auto *delay3 =
+            prim.getDelay()->as_if<slang::ast::Delay3Control>()) {
+      if (delay3->expr2 || delay3->expr3)
+        return mlir::emitError(loc)
+               << "only three-state primitives that specify a single delay are "
+                  "currently supported";
+      delayExpr = &delay3->expr1;
+    } else if (const auto *delay =
+                   prim.getDelay()->as_if<slang::ast::DelayControl>()) {
+      delayExpr = &delay->expr;
+    } else {
+      llvm_unreachable("unexpected delay control type in primitive instance");
+    }
+
+    auto delayVal =
+        convertRvalueExpression(*delayExpr, moore::TimeType::get(getContext()));
+    if (!delayVal)
+      return failure();
+    moore::DelayedContinuousAssignOp::create(builder, loc, outputVal, result,
+                                             delayVal);
+  } else {
+    moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
+  }
   return success();
 }
 

@@ -261,3 +261,85 @@ module wide_pullup_prim;
     wire [3:0] A;
     pullup n (A);
 endmodule
+
+// CHECK-LABEL: moore.module @TestBufif0
+module TestBufif0 (
+    input  wire data_in,
+    input  wire en_n,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[EN:.*]] = moore.read %en_n{{.*}} : <l1>
+  // CHECK: %[[ZERO:.*]] = moore.constant 0 : l1
+  // CHECK: %[[COND:.*]] = moore.eq %[[EN]], %[[ZERO]] : l1 -> l1
+  // CHECK: %[[Z:.*]] = moore.constant bZ : l1
+  // CHECK: %[[VAL:.*]] = moore.conditional %[[COND]] : l1 -> l1 {
+  // CHECK:   moore.yield %[[IN]] : l1
+  // CHECK: } {
+  // CHECK:   moore.yield %[[Z]] : l1
+  // CHECK: }
+  // CHECK: moore.assign %data_out, %[[VAL]] : l1
+  bufif0 b0 (data_out, data_in, en_n);
+endmodule
+
+// CHECK-LABEL: moore.module @TestBufif1
+module TestBufif1 (
+    input  wire data_in,
+    input  wire en_n,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[EN:.*]] = moore.read %en_n{{.*}} : <l1>
+  // CHECK: %[[ONE:.*]] = moore.constant 1 : l1
+  // CHECK: %[[COND:.*]] = moore.eq %[[EN]], %[[ONE]] : l1 -> l1
+  // CHECK: %[[Z:.*]] = moore.constant bZ : l1
+  // CHECK: %[[VAL:.*]] = moore.conditional %[[COND]] : l1 -> l1 {
+  // CHECK:   moore.yield %[[IN]] : l1
+  // CHECK: } {
+  // CHECK:   moore.yield %[[Z]] : l1
+  // CHECK: }
+  // CHECK: moore.assign %data_out, %[[VAL]] : l1
+  bufif1 b0 (data_out, data_in, en_n);
+endmodule
+
+// CHECK-LABEL: moore.module @TestNotif0
+module TestNotif0 (
+    input  wire data_in,
+    input  wire en_n,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[EN:.*]] = moore.read %en_n{{.*}} : <l1>
+  // CHECK: %[[NOTIN:.*]] = moore.not %[[IN]] : l1
+  // CHECK: %[[ZERO:.*]] = moore.constant 0 : l1
+  // CHECK: %[[COND:.*]] = moore.eq %[[EN]], %[[ZERO]] : l1 -> l1
+  // CHECK: %[[Z:.*]] = moore.constant bZ : l1
+  // CHECK: %[[VAL:.*]] = moore.conditional %[[COND]] : l1 -> l1 {
+  // CHECK:   moore.yield %[[NOTIN]] : l1
+  // CHECK: } {
+  // CHECK:   moore.yield %[[Z]] : l1
+  // CHECK: }
+  // CHECK: moore.assign %data_out, %[[VAL]] : l1
+  notif0 n0 (data_out, data_in, en_n);
+endmodule
+
+// CHECK-LABEL: moore.module @TestNotif1
+module TestNotif1 (
+    input  wire data_in,
+    input  wire en_n,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[EN:.*]] = moore.read %en_n{{.*}} : <l1>
+  // CHECK: %[[NOTIN:.*]] = moore.not %[[IN]] : l1
+  // CHECK: %[[ONE:.*]] = moore.constant 1 : l1
+  // CHECK: %[[COND:.*]] = moore.eq %[[EN]], %[[ONE]] : l1 -> l1
+  // CHECK: %[[Z:.*]] = moore.constant bZ : l1
+  // CHECK: %[[VAL:.*]] = moore.conditional %[[COND]] : l1 -> l1 {
+  // CHECK:   moore.yield %[[NOTIN]] : l1
+  // CHECK: } {
+  // CHECK:   moore.yield %[[Z]] : l1
+  // CHECK: }
+  // CHECK: moore.assign %data_out, %[[VAL]] : l1
+  notif1 n1 (data_out, data_in, en_n);
+endmodule
