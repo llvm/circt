@@ -6067,8 +6067,9 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   }
 
   auto builder = circuit.getBodyBuilder();
-  auto domainOp = DomainOp::create(builder, info.getLoc(), name,
-                                   builder.getArrayAttr(fields));
+  auto domainOp =
+      DomainOp::create(builder, info.getLoc(), name, /*sym_visibility=*/{},
+                       builder.getArrayAttr(fields));
 
   // Stash the domain name -> op in the constants, so we can resolve Domain
   // types.
@@ -6330,7 +6331,7 @@ ParseResult FIRCircuitParser::parseFormalLike(CircuitOp circuit,
     }
   }
 
-  Op::create(builder, info.getLoc(), id, moduleName,
+  Op::create(builder, info.getLoc(), id, /*sym_visibility=*/{}, moduleName,
              params.getDictionary(getContext()));
   return success();
 }
@@ -6435,7 +6436,8 @@ ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
     return failure();
 
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
-  auto optionOp = OptionOp::create(builder, info.getLoc(), id);
+  auto optionOp =
+      OptionOp::create(builder, info.getLoc(), id, /*sym_visibility=*/{});
   auto *block = new Block;
   optionOp.getBody().push_back(block);
   builder.setInsertionPointToEnd(block);
@@ -6504,8 +6506,8 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
       return failure();
     auto builder = OpBuilder::atBlockEnd(block);
     // Create the layer definition and give it an empty block.
-    auto layerOp =
-        LayerOp::create(builder, info.getLoc(), id, *layerConvention);
+    auto layerOp = LayerOp::create(builder, info.getLoc(), id,
+                                   /*sym_visibility=*/{}, *layerConvention);
     layerOp->getRegion(0).push_back(new Block());
     if (outputDir)
       layerOp->setAttr("output_file", outputDir);

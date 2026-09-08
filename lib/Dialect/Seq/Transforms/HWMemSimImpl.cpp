@@ -529,6 +529,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // Build the hierpathop
       auto path = hw::HierPathOp::create(
           b, mlirModuleNamespace.newName(op.getName() + "_path"),
+          /*sym_visibility=*/{},
           b.getArrayAttr(
               ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerNameAttr())));
 

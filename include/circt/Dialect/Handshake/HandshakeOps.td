@@ -49,11 +49,11 @@ class Handshake_Op<string mnemonic, list<Trait> traits = []>
 def FuncOp : Op<Handshake_Dialect, "func", [
    IsolatedFromAbove,
    FunctionOpInterface,
-   Symbol,
+   SymbolName, SymbolVisibility, Symbol,
    RegionKindInterface,
    OpAsmOpInterface,
    HasClock,
-   FineGrainedDataflowRegionOpInterface
+   FineGrainedDataflowRegionOpInterface,
 ]> {
   let summary = "Handshake dialect function.";
   let description = [{
@@ -64,6 +64,8 @@ def FuncOp : Op<Handshake_Dialect, "func", [
   }];
 
   let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttrOf<FunctionType>:$function_type,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs

@@ -40,7 +40,7 @@ class FuncOp(FuncOp):
     res_types = [t for _, t in results]
     func_type = FunctionType.get(input_types, res_types)
     func_type_attr = TypeAttr.get(func_type)
-    funcop = FuncOp(func_type_attr, loc=loc, ip=ip)
+    funcop = FuncOp(sym_name, func_type_attr, loc=loc, ip=ip)
     for k, v in attributes.items():
       funcop.attributes[k] = v
     funcop.attributes["sym_name"] = sym_name
