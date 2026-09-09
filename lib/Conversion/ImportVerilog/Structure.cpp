@@ -2453,9 +2453,8 @@ LogicalResult Context::convertFixedPrimitive(
   if (primName == "pullup" || primName == "pulldown")
     return convertPullGatePrimitive(prim);
 
-  if (primName == "nmos" || primName == "pmos" ||
-      primName == "rnmos" || primName == "rpmos" ||
-      primName == "cmos" || primName == "rcmos")
+  if (primName == "nmos" || primName == "pmos" || primName == "rnmos" ||
+      primName == "rpmos" || primName == "cmos" || primName == "rcmos")
     return convertMOSSwitchPrimitive(prim);
 
   // Remaining fixed primitives still need handling
@@ -2502,12 +2501,11 @@ LogicalResult Context::convertPullGatePrimitive(
 
 LogicalResult Context::convertMOSSwitchPrimitive(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
-  assert(prim.primitiveType.name == "nmos" ||
-         prim.primitiveType.name == "pmos" ||
-         prim.primitiveType.name == "rnmos" ||
-         prim.primitiveType.name == "rpmos" ||
-         prim.primitiveType.name == "cmos" ||
-         prim.primitiveType.name == "rcmos");
+  assert(
+      prim.primitiveType.name == "nmos" || prim.primitiveType.name == "pmos" ||
+      prim.primitiveType.name == "rnmos" ||
+      prim.primitiveType.name == "rpmos" || prim.primitiveType.name == "cmos" ||
+      prim.primitiveType.name == "rcmos");
 
   auto loc = convertLocation(prim.location);
   auto primName = prim.primitiveType.name;
@@ -2557,59 +2555,47 @@ LogicalResult Context::convertMOSSwitchPrimitive(
     auto one = makeLevelConstant(nControl, 1);
     auto zero = makeLevelConstant(pControl, 0);
 
-    auto nEnabled = moore::EqOp::create(
-        builder, loc, nControl, one);
+    auto nEnabled = moore::EqOp::create(builder, loc, nControl, one);
 
-    auto pEnabled = moore::EqOp::create(
-        builder, loc, pControl, zero);
+    auto pEnabled = moore::EqOp::create(builder, loc, pControl, zero);
 
-    controlVal = moore::AndOp::create(
-        builder, loc, nEnabled, pEnabled);
+    controlVal = moore::AndOp::create(builder, loc, nEnabled, pEnabled);
   } else {
     auto control = convertRvalueExpression(*portConns[2]);
     if (!control)
       return failure();
 
-    int offLevel =
-        (primName == "nmos" || primName == "rnmos") ? 0 : 1;
+    int offLevel = (primName == "nmos" || primName == "rnmos") ? 0 : 1;
 
     auto offValue = makeLevelConstant(control, offLevel);
 
-    controlVal = moore::CaseEqOp::create(
-        builder, loc, control, offValue);
+    controlVal = moore::CaseEqOp::create(builder, loc, control, offValue);
   }
 
-  auto dstType =
-      cast<moore::RefType>(outputVal.getType()).getNestedType();
+  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
 
-  auto convertedInput =
-      materializeConversion(dstType, inputVal, false, loc);
+  auto convertedInput = materializeConversion(dstType, inputVal, false, loc);
   if (!convertedInput)
     return failure();
 
   auto dstWidth = dstType.getBitSize();
-  assert(dstWidth &&
-         "expected fixed-width type for MOS switch primitive");
+  assert(dstWidth && "expected fixed-width type for MOS switch primitive");
 
-  auto logicType =
-      moore::IntType::getLogic(getContext(), *dstWidth);
+  auto logicType = moore::IntType::getLogic(getContext(), *dstWidth);
 
   FVInt allZVal = FVInt::getAllZ(*dstWidth);
-  Value zVal =
-      moore::ConstantOp::create(builder, loc, logicType, allZVal);
+  Value zVal = moore::ConstantOp::create(builder, loc, logicType, allZVal);
 
   zVal = materializeConversion(dstType, zVal, false, loc);
   if (!zVal)
     return failure();
 
-  auto condOp =
-      moore::ConditionalOp::create(builder, loc, dstType, controlVal);
+  auto condOp = moore::ConditionalOp::create(builder, loc, dstType, controlVal);
 
   auto &trueBlock = condOp.getTrueRegion().emplaceBlock();
   auto &falseBlock = condOp.getFalseRegion().emplaceBlock();
 
-  bool controlMeansOn =
-      primName == "cmos" || primName == "rcmos";
+  bool controlMeansOn = primName == "cmos" || primName == "rcmos";
 
   {
     OpBuilder::InsertionGuard guard(builder);
