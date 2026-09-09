@@ -399,8 +399,6 @@ def ClassOp : FIRRTLModuleLike<"class", [
   let extraModuleClassDefinition = [{
     StringAttr $cppClass::getNameAttr() { return getSymNameAttr(); }
 
-    void $cppClass::setName(StringAttr name) { setSymNameAttr(name); }
-
     SymbolTable::Visibility $cppClass::getVisibility() {
       return OpTrait::SymbolVisibility<$cppClass>::getVisibility();
     }
@@ -454,8 +452,6 @@ def ExtClassOp : FIRRTLModuleLike<"extclass", [
 
   let extraModuleClassDefinition = [{
     StringAttr $cppClass::getNameAttr() { return getSymNameAttr(); }
-
-    void $cppClass::setName(StringAttr name) { setSymNameAttr(name); }
 
     SymbolTable::Visibility $cppClass::getVisibility() {
       return OpTrait::SymbolVisibility<$cppClass>::getVisibility();
