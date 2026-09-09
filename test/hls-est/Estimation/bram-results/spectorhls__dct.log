@@ -1,0 +1,19 @@
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/spectorhls/dct.mlir":28:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/spectorhls/dct.mlir":29:18)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/spectorhls/dct.mlir":107:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/spectorhls/dct.mlir":108:18)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/spectorhls/dct.mlir":109:18)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/spectorhls/dct.mlir":110:18)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+Total BRAM: 0

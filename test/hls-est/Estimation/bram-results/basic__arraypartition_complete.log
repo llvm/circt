@@ -1,0 +1,97 @@
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_complete.mlir":9:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+Total BRAM: 0

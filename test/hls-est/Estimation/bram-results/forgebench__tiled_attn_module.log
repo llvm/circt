@@ -1,0 +1,181 @@
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":52:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":53:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":54:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":55:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":142:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":143:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":144:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":145:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":228:15)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":229:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":230:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":231:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":232:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":233:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":234:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":235:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":354:15)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":355:17)
+  kind=RAM_1P  bram=64
+    65536x16b -> RAM_1P (x32/block) = 64 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":356:17)
+  kind=RAM_1P  bram=64
+    65536x16b -> RAM_1P (x32/block) = 64 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":357:17)
+  kind=RAM_1P  bram=64
+    65536x16b -> RAM_1P (x32/block) = 64 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":358:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":383:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":384:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":385:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":386:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":387:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":388:18)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":389:18)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":390:18)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":495:15)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":496:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":497:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":498:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":499:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":524:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":525:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":526:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":527:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":614:15)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":615:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":616:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":617:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":618:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":619:17)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":620:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":621:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":622:17)
+  kind=RAM_1P  bram=16
+    16384x16b -> RAM_1P (x32/block) = 16 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":623:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":624:18)
+  kind=RAM_1P  bram=64
+    65536x16b -> RAM_1P (x32/block) = 64 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":625:18)
+  kind=RAM_1P  bram=64
+    65536x16b -> RAM_1P (x32/block) = 64 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":626:18)
+  kind=RAM_1P  bram=64
+    65536x16b -> RAM_1P (x32/block) = 64 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":627:18)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":652:18)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":653:18)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":654:18)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":655:18)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":779:18)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":780:18)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":781:18)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/tiled_attn_module.mlir":782:18)
+  kind=RAM_1P  bram=1
+    512x16b -> RAM_1P (x32/block) = 1 BRAM_18K
+Total BRAM: 665

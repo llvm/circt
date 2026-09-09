@@ -1,0 +1,476 @@
+memref.global @ loc("forgebench/tiled_attn_p1.mlir":4:3)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.global @ loc("forgebench/tiled_attn_p1.mlir":5:3)
+  kind=RAM_1P  bram=64
+    65536x16b -> RAM_1P (x32/block) = 64 BRAM_18K
+memref.global @ loc("forgebench/tiled_attn_p1.mlir":6:3)
+  kind=RAM_1P  bram=64
+    65536x16b -> RAM_1P (x32/block) = 64 BRAM_18K
+memref.global @ loc("forgebench/tiled_attn_p1.mlir":7:3)
+  kind=RAM_1P  bram=64
+    65536x16b -> RAM_1P (x32/block) = 64 BRAM_18K
+memref.global @ loc("forgebench/tiled_attn_p1.mlir":8:3)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("forgebench/tiled_attn_p1.mlir":164:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("forgebench/tiled_attn_p1.mlir":165:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("forgebench/tiled_attn_p1.mlir":166:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+memref.alloca @ loc("forgebench/tiled_attn_p1.mlir":167:17)
+  kind=RAM_1P  bram=2
+    2048x16b -> RAM_1P (x32/block) = 2 BRAM_18K
+Total BRAM: 202
+module {
+  memref.global "private" @BRAM_1 : memref<8x256xf16> = uninitialized
+  memref.global "private" @BRAM_weights_v : memref<256x256xf16> = uninitialized
+  memref.global "private" @BRAM_weights_k : memref<256x256xf16> = uninitialized
+  memref.global "private" @BRAM_weights_q : memref<256x256xf16> = uninitialized
+  memref.global "private" @BRAM_attn_input : memref<8x256xf16> = uninitialized
+  func.func @_Z3topPA256_fS0_S0_S0_S0_(%arg0: memref<8x256xf16>, %arg1: memref<256x256xf16>, %arg2: memref<256x256xf16>, %arg3: memref<256x256xf16>, %arg4: memref<8x256xf16>) {
+    %cst = arith.constant 0.000000e+00 : f16
+    %cst_0 = arith.constant 2.500000e-01 : f16
+    %0 = memref.get_global @BRAM_attn_input : memref<8x256xf16>
+    %c8 = arith.constant 8 : index
+    %c256 = arith.constant 256 : index
+    %1 = arith.muli %c8, %c256 overflow<nsw> : index
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg5 = %c0) : (index) -> () {
+      %10 = arith.cmpi ult, %arg5, %1 : index
+      loopschedule.register %10 : i1
+    } do {
+      %10:9 = loopschedule.pipeline.stage start = 0 {
+        %14 = arith.remsi %arg5, %c256 : index
+        %c0_20 = arith.constant 0 : index
+        %c0_21 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %15 = arith.cmpi slt, %arg5, %c0_21 : index
+        %16 = arith.subi %c-1, %arg5 : index
+        %17 = arith.select %15, %16, %arg5 : index
+        %18 = arith.divsi %17, %c256 : index
+        %19 = arith.addi %arg5, %c1 : index
+        loopschedule.register %14, %c0_20, %c0_21, %c-1, %15, %16, %17, %18, %19 : index, index, index, index, i1, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index
+      %11:3 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %10#1, %10#3, %10#4 : index, index, i1
+      } : index, index, i1
+      %12:3 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %11#0, %11#1, %11#2 : index, index, i1
+      } : index, index, i1
+      %13:6 = loopschedule.pipeline.stage start = 3 {
+        %14 = arith.cmpi slt, %10#0, %12#0 : index
+        %15 = arith.addi %10#0, %c256 : index
+        %16 = arith.select %14, %15, %10#0 : index
+        %17 = arith.subi %12#1, %10#7 : index
+        %18 = arith.select %12#2, %17, %10#7 : index
+        %19 = memref.load %arg0[%18, %16] : memref<8x256xf16>
+        loopschedule.register %14, %15, %16, %17, %18, %19 : i1, index, index, index, index, f16
+      } : i1, index, index, index, index, f16
+      loopschedule.pipeline.stage start = 4 {
+        memref.store %13#5, %0[%13#4, %13#2] : memref<8x256xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%10#8), results() : (index) -> ()
+    }
+    %2 = memref.get_global @BRAM_weights_q : memref<256x256xf16>
+    %c256_1 = arith.constant 256 : index
+    %c256_2 = arith.constant 256 : index
+    %3 = arith.muli %c256_1, %c256_2 overflow<nsw> : index
+    %c0_3 = arith.constant 0 : index
+    %c1_4 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg5 = %c0_3) : (index) -> () {
+      %10 = arith.cmpi ult, %arg5, %3 : index
+      loopschedule.register %10 : i1
+    } do {
+      %10:9 = loopschedule.pipeline.stage start = 0 {
+        %14 = arith.remsi %arg5, %c256_2 : index
+        %c0_20 = arith.constant 0 : index
+        %c0_21 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %15 = arith.cmpi slt, %arg5, %c0_21 : index
+        %16 = arith.subi %c-1, %arg5 : index
+        %17 = arith.select %15, %16, %arg5 : index
+        %18 = arith.divsi %17, %c256_2 : index
+        %19 = arith.addi %arg5, %c1_4 : index
+        loopschedule.register %14, %c0_20, %c0_21, %c-1, %15, %16, %17, %18, %19 : index, index, index, index, i1, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index
+      %11:3 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %10#1, %10#3, %10#4 : index, index, i1
+      } : index, index, i1
+      %12:3 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %11#0, %11#1, %11#2 : index, index, i1
+      } : index, index, i1
+      %13:6 = loopschedule.pipeline.stage start = 3 {
+        %14 = arith.cmpi slt, %10#0, %12#0 : index
+        %15 = arith.addi %10#0, %c256_2 : index
+        %16 = arith.select %14, %15, %10#0 : index
+        %17 = arith.subi %12#1, %10#7 : index
+        %18 = arith.select %12#2, %17, %10#7 : index
+        %19 = memref.load %arg1[%18, %16] : memref<256x256xf16>
+        loopschedule.register %14, %15, %16, %17, %18, %19 : i1, index, index, index, index, f16
+      } : i1, index, index, index, index, f16
+      loopschedule.pipeline.stage start = 4 {
+        memref.store %13#5, %2[%13#4, %13#2] : memref<256x256xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%10#8), results() : (index) -> ()
+    }
+    %4 = memref.get_global @BRAM_weights_k : memref<256x256xf16>
+    %c256_5 = arith.constant 256 : index
+    %c256_6 = arith.constant 256 : index
+    %5 = arith.muli %c256_5, %c256_6 overflow<nsw> : index
+    %c0_7 = arith.constant 0 : index
+    %c1_8 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg5 = %c0_7) : (index) -> () {
+      %10 = arith.cmpi ult, %arg5, %5 : index
+      loopschedule.register %10 : i1
+    } do {
+      %10:9 = loopschedule.pipeline.stage start = 0 {
+        %14 = arith.remsi %arg5, %c256_6 : index
+        %c0_20 = arith.constant 0 : index
+        %c0_21 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %15 = arith.cmpi slt, %arg5, %c0_21 : index
+        %16 = arith.subi %c-1, %arg5 : index
+        %17 = arith.select %15, %16, %arg5 : index
+        %18 = arith.divsi %17, %c256_6 : index
+        %19 = arith.addi %arg5, %c1_8 : index
+        loopschedule.register %14, %c0_20, %c0_21, %c-1, %15, %16, %17, %18, %19 : index, index, index, index, i1, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index
+      %11:3 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %10#1, %10#3, %10#4 : index, index, i1
+      } : index, index, i1
+      %12:3 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %11#0, %11#1, %11#2 : index, index, i1
+      } : index, index, i1
+      %13:6 = loopschedule.pipeline.stage start = 3 {
+        %14 = arith.cmpi slt, %10#0, %12#0 : index
+        %15 = arith.addi %10#0, %c256_6 : index
+        %16 = arith.select %14, %15, %10#0 : index
+        %17 = arith.subi %12#1, %10#7 : index
+        %18 = arith.select %12#2, %17, %10#7 : index
+        %19 = memref.load %arg2[%18, %16] : memref<256x256xf16>
+        loopschedule.register %14, %15, %16, %17, %18, %19 : i1, index, index, index, index, f16
+      } : i1, index, index, index, index, f16
+      loopschedule.pipeline.stage start = 4 {
+        memref.store %13#5, %4[%13#4, %13#2] : memref<256x256xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%10#8), results() : (index) -> ()
+    }
+    %6 = memref.get_global @BRAM_weights_v : memref<256x256xf16>
+    %c256_9 = arith.constant 256 : index
+    %c256_10 = arith.constant 256 : index
+    %7 = arith.muli %c256_9, %c256_10 overflow<nsw> : index
+    %c0_11 = arith.constant 0 : index
+    %c1_12 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg5 = %c0_11) : (index) -> () {
+      %10 = arith.cmpi ult, %arg5, %7 : index
+      loopschedule.register %10 : i1
+    } do {
+      %10:9 = loopschedule.pipeline.stage start = 0 {
+        %14 = arith.remsi %arg5, %c256_10 : index
+        %c0_20 = arith.constant 0 : index
+        %c0_21 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %15 = arith.cmpi slt, %arg5, %c0_21 : index
+        %16 = arith.subi %c-1, %arg5 : index
+        %17 = arith.select %15, %16, %arg5 : index
+        %18 = arith.divsi %17, %c256_10 : index
+        %19 = arith.addi %arg5, %c1_12 : index
+        loopschedule.register %14, %c0_20, %c0_21, %c-1, %15, %16, %17, %18, %19 : index, index, index, index, i1, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index
+      %11:3 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %10#1, %10#3, %10#4 : index, index, i1
+      } : index, index, i1
+      %12:3 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %11#0, %11#1, %11#2 : index, index, i1
+      } : index, index, i1
+      %13:6 = loopschedule.pipeline.stage start = 3 {
+        %14 = arith.cmpi slt, %10#0, %12#0 : index
+        %15 = arith.addi %10#0, %c256_10 : index
+        %16 = arith.select %14, %15, %10#0 : index
+        %17 = arith.subi %12#1, %10#7 : index
+        %18 = arith.select %12#2, %17, %10#7 : index
+        %19 = memref.load %arg3[%18, %16] : memref<256x256xf16>
+        loopschedule.register %14, %15, %16, %17, %18, %19 : i1, index, index, index, index, f16
+      } : i1, index, index, index, index, f16
+      loopschedule.pipeline.stage start = 4 {
+        memref.store %13#5, %6[%13#4, %13#2] : memref<256x256xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%10#8), results() : (index) -> ()
+    }
+    %8 = memref.get_global @BRAM_1 : memref<8x256xf16>
+    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf16>
+    %alloca_13 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x256xf16>
+    %alloca_14 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x256xf16>
+    %alloca_15 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x256xf16>
+    affine.for %arg5 = 0 to 8 {
+      affine.for %arg6 = 0 to 256 {
+        memref.store %cst, %alloca_15[%arg5, %arg6] : memref<8x256xf16>
+        memref.store %cst, %alloca_14[%arg5, %arg6] : memref<8x256xf16>
+        memref.store %cst, %alloca_13[%arg5, %arg6] : memref<8x256xf16>
+        %c0_20 = arith.constant 0 : index
+        %c256_21 = arith.constant 256 : index
+        %c1_22 = arith.constant 1 : index
+        %10:3 = loopschedule.pipeline II =  5 trip_count =  256 iter_args(%arg7 = %c0_20, %arg8 = %cst, %arg9 = %cst, %arg10 = %cst) : (index, f16, f16, f16) -> (f16, f16, f16) {
+          %11 = arith.cmpi ult, %arg7, %c256_21 : index
+          loopschedule.register %11 : i1
+        } do {
+          %11:6 = loopschedule.pipeline.stage start = 0 {
+            %18 = memref.load %0[%arg5, %arg7] : memref<8x256xf16>
+            %19 = memref.load %2[%arg6, %arg7] : memref<256x256xf16>
+            %20 = memref.load %0[%arg5, %arg7] : memref<8x256xf16>
+            %21 = memref.load %4[%arg6, %arg7] : memref<256x256xf16>
+            %22 = memref.load %6[%arg6, %arg7] : memref<256x256xf16>
+            %23 = arith.addi %arg7, %c1_22 : index
+            loopschedule.register %18, %19, %20, %21, %22, %23 : f16, f16, f16, f16, f16, index
+          } : f16, f16, f16, f16, f16, index
+          %12:4 = loopschedule.pipeline.stage start = 1 {
+            %18 = arith.mulf %11#0, %11#1 : f16
+            %19 = arith.mulf %11#2, %11#3 : f16
+            %20 = memref.load %0[%arg5, %arg7] : memref<8x256xf16>
+            loopschedule.register %11#4, %18, %19, %20 : f16, f16, f16, f16
+          } : f16, f16, f16, f16
+          %13 = loopschedule.pipeline.stage start = 2 {
+            %18 = arith.mulf %12#3, %12#0 : f16
+            loopschedule.register %18 : f16
+          } : f16
+          %14:2 = loopschedule.pipeline.stage start = 5 {
+            %18 = arith.addf %arg10, %12#1 : f16
+            %19 = arith.addf %arg9, %12#2 : f16
+            loopschedule.register %18, %19 : f16, f16
+          } : f16, f16
+          %15 = loopschedule.pipeline.stage start = 6 {
+            %18 = arith.addf %arg8, %13 : f16
+            loopschedule.register %18 : f16
+          } : f16
+          %16:2 = loopschedule.pipeline.stage start = 10 {
+            memref.store %14#0, %alloca_15[%arg5, %arg6] : memref<8x256xf16>
+            memref.store %14#1, %alloca_14[%arg5, %arg6] : memref<8x256xf16>
+            loopschedule.register %14#0, %14#1 : f16, f16
+          } : f16, f16
+          %17:3 = loopschedule.pipeline.stage start = 11 {
+            memref.store %15, %alloca_13[%arg5, %arg6] : memref<8x256xf16>
+            loopschedule.register %16#0, %16#1, %15 : f16, f16, f16
+          } : f16, f16, f16
+          loopschedule.terminator iter_args(%11#5, %17#2, %17#1, %17#0), results(%17#2, %17#1, %17#0) : (index, f16, f16, f16) -> (f16, f16, f16)
+        }
+      }
+    }
+    affine.for %arg5 = 0 to 16 {
+      affine.for %arg6 = 0 to 8 {
+        affine.for %arg7 = 0 to 8 {
+          memref.store %cst, %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %c0_20 = arith.constant 0 : index
+          %c16 = arith.constant 16 : index
+          %c1_21 = arith.constant 1 : index
+          %10 = loopschedule.pipeline II =  5 trip_count =  16 iter_args(%arg8 = %c0_20, %arg9 = %cst) : (index, f16) -> f16 {
+            %13 = arith.cmpi ult, %arg8, %c16 : index
+            loopschedule.register %13 : i1
+          } do {
+            %13:5 = loopschedule.pipeline.stage start = 0 {
+              %c16_22 = arith.constant 16 : index
+              %18 = arith.muli %arg5, %c16_22 overflow<nsw> : index
+              %c16_23 = arith.constant 16 : index
+              %19 = arith.muli %arg5, %c16_23 overflow<nsw> : index
+              %20 = arith.addi %arg8, %c1_21 : index
+              loopschedule.register %c16_22, %18, %c16_23, %19, %20 : index, index, index, index, index
+            } : index, index, index, index, index
+            %14:4 = loopschedule.pipeline.stage start = 3 {
+              %18 = arith.addi %arg8, %13#1 : index
+              %19 = memref.load %alloca_15[%arg6, %18] : memref<8x256xf16>
+              %20 = arith.addi %arg8, %13#3 : index
+              %21 = memref.load %alloca_14[%arg7, %20] : memref<8x256xf16>
+              loopschedule.register %18, %19, %20, %21 : index, f16, index, f16
+            } : index, f16, index, f16
+            %15 = loopschedule.pipeline.stage start = 4 {
+              %18 = arith.mulf %14#1, %14#3 : f16
+              loopschedule.register %18 : f16
+            } : f16
+            %16 = loopschedule.pipeline.stage start = 8 {
+              %18 = arith.addf %arg9, %15 : f16
+              loopschedule.register %18 : f16
+            } : f16
+            %17 = loopschedule.pipeline.stage start = 13 {
+              memref.store %16, %alloca[%arg6, %arg7] : memref<8x8xf16>
+              loopschedule.register %16 : f16
+            } : f16
+            loopschedule.terminator iter_args(%13#4, %17), results(%17) : (index, f16) -> f16
+          }
+          %11 = memref.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %12 = arith.mulf %11, %cst_0 : f16
+          memref.store %12, %alloca[%arg6, %arg7] : memref<8x8xf16>
+        }
+      }
+      affine.for %arg6 = 0 to 8 {
+        %c0_20 = arith.constant 0 : index
+        %10 = memref.load %alloca[%arg6, %c0_20] : memref<8x8xf16>
+        %c0_21 = arith.constant 0 : index
+        %c7 = arith.constant 7 : index
+        %c1_22 = arith.constant 1 : index
+        %11 = loopschedule.pipeline II =  1 trip_count =  7 iter_args(%arg7 = %c0_21, %arg8 = %10) : (index, f16) -> f16 {
+          %13 = arith.cmpi ult, %arg7, %c7 : index
+          loopschedule.register %13 : i1
+        } do {
+          %13:4 = loopschedule.pipeline.stage start = 0 {
+            %c1_29 = arith.constant 1 : index
+            %15 = arith.addi %arg7, %c1_29 : index
+            %16 = memref.load %alloca[%arg6, %15] : memref<8x8xf16>
+            %17 = arith.addi %arg7, %c1_22 : index
+            loopschedule.register %c1_29, %15, %16, %17 : index, index, f16, index
+          } : index, index, f16, index
+          %14:2 = loopschedule.pipeline.stage start = 1 {
+            %15 = arith.cmpf ogt, %13#2, %arg8 : f16
+            %16 = arith.select %15, %13#2, %arg8 : f16
+            loopschedule.register %15, %16 : i1, f16
+          } : i1, f16
+          loopschedule.terminator iter_args(%13#3, %14#1), results(%14#1) : (index, f16) -> f16
+        }
+        %c0_23 = arith.constant 0 : index
+        %c8_24 = arith.constant 8 : index
+        %c1_25 = arith.constant 1 : index
+        %12 = loopschedule.pipeline II =  5 trip_count =  8 iter_args(%arg7 = %c0_23, %arg8 = %cst) : (index, f16) -> f16 {
+          %13 = arith.cmpi ult, %arg7, %c8_24 : index
+          loopschedule.register %13 : i1
+        } do {
+          %13:2 = loopschedule.pipeline.stage start = 0 {
+            %17 = memref.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+            %18 = arith.addi %arg7, %c1_25 : index
+            loopschedule.register %17, %18 : f16, index
+          } : f16, index
+          %14 = loopschedule.pipeline.stage start = 1 {
+            %17 = arith.subf %13#0, %11 : f16
+            loopschedule.register %17 : f16
+          } : f16
+          %15 = loopschedule.pipeline.stage start = 6 {
+            %17 = math.exp %14 : f16
+            loopschedule.register %17 : f16
+          } : f16
+          %16 = loopschedule.pipeline.stage start = 26 {
+            memref.store %15, %alloca[%arg6, %arg7] : memref<8x8xf16>
+            %17 = arith.addf %arg8, %15 : f16
+            loopschedule.register %17 : f16
+          } : f16
+          loopschedule.terminator iter_args(%13#1, %16), results(%16) : (index, f16) -> f16
+        }
+        %c0_26 = arith.constant 0 : index
+        %c8_27 = arith.constant 8 : index
+        %c1_28 = arith.constant 1 : index
+        loopschedule.pipeline II =  1 trip_count =  8 iter_args(%arg7 = %c0_26) : (index) -> () {
+          %13 = arith.cmpi ult, %arg7, %c8_27 : index
+          loopschedule.register %13 : i1
+        } do {
+          %13:2 = loopschedule.pipeline.stage start = 0 {
+            %15 = memref.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+            %16 = arith.addi %arg7, %c1_28 : index
+            loopschedule.register %15, %16 : f16, index
+          } : f16, index
+          %14 = loopschedule.pipeline.stage start = 1 {
+            %15 = arith.divf %13#0, %12 : f16
+            loopschedule.register %15 : f16
+          } : f16
+          loopschedule.pipeline.stage start = 13 {
+            memref.store %14, %alloca[%arg6, %arg7] : memref<8x8xf16>
+            loopschedule.register 
+          }
+          loopschedule.terminator iter_args(%13#1), results() : (index) -> ()
+        }
+      }
+      affine.for %arg6 = 0 to 8 {
+        affine.for %arg7 = 0 to 16 {
+          %c0_20 = arith.constant 0 : index
+          %c8_21 = arith.constant 8 : index
+          %c1_22 = arith.constant 1 : index
+          %10 = loopschedule.pipeline II =  5 trip_count =  8 iter_args(%arg8 = %c0_20, %arg9 = %cst) : (index, f16) -> f16 {
+            %13 = arith.cmpi ult, %arg8, %c8_21 : index
+            loopschedule.register %13 : i1
+          } do {
+            %13:4 = loopschedule.pipeline.stage start = 0 {
+              %19 = memref.load %alloca[%arg6, %arg8] : memref<8x8xf16>
+              %c16_23 = arith.constant 16 : index
+              %20 = arith.muli %arg5, %c16_23 overflow<nsw> : index
+              %21 = arith.addi %arg8, %c1_22 : index
+              loopschedule.register %19, %c16_23, %20, %21 : f16, index, index, index
+            } : f16, index, index, index
+            %14 = loopschedule.pipeline.stage start = 1 {
+              loopschedule.register %13#0 : f16
+            } : f16
+            %15 = loopschedule.pipeline.stage start = 2 {
+              loopschedule.register %14 : f16
+            } : f16
+            %16:3 = loopschedule.pipeline.stage start = 3 {
+              %19 = arith.addi %arg7, %13#2 : index
+              %20 = memref.load %alloca_13[%arg8, %19] : memref<8x256xf16>
+              loopschedule.register %15, %19, %20 : f16, index, f16
+            } : f16, index, f16
+            %17 = loopschedule.pipeline.stage start = 4 {
+              %19 = arith.mulf %16#0, %16#2 : f16
+              loopschedule.register %19 : f16
+            } : f16
+            %18 = loopschedule.pipeline.stage start = 8 {
+              %19 = arith.addf %arg9, %17 : f16
+              loopschedule.register %19 : f16
+            } : f16
+            loopschedule.terminator iter_args(%13#3, %18), results(%18) : (index, f16) -> f16
+          }
+          %c16 = arith.constant 16 : index
+          %11 = arith.muli %arg5, %c16 overflow<nsw> : index
+          %12 = arith.addi %arg7, %11 : index
+          memref.store %10, %8[%arg6, %12] : memref<8x256xf16>
+        }
+      }
+    }
+    %c8_16 = arith.constant 8 : index
+    %c256_17 = arith.constant 256 : index
+    %9 = arith.muli %c8_16, %c256_17 overflow<nsw> : index
+    %c0_18 = arith.constant 0 : index
+    %c1_19 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg5 = %c0_18) : (index) -> () {
+      %10 = arith.cmpi ult, %arg5, %9 : index
+      loopschedule.register %10 : i1
+    } do {
+      %10:9 = loopschedule.pipeline.stage start = 0 {
+        %14 = arith.remsi %arg5, %c256_17 : index
+        %c0_20 = arith.constant 0 : index
+        %c0_21 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %15 = arith.cmpi slt, %arg5, %c0_21 : index
+        %16 = arith.subi %c-1, %arg5 : index
+        %17 = arith.select %15, %16, %arg5 : index
+        %18 = arith.divsi %17, %c256_17 : index
+        %19 = arith.addi %arg5, %c1_19 : index
+        loopschedule.register %14, %c0_20, %c0_21, %c-1, %15, %16, %17, %18, %19 : index, index, index, index, i1, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index
+      %11:3 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %10#1, %10#3, %10#4 : index, index, i1
+      } : index, index, i1
+      %12:3 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %11#0, %11#1, %11#2 : index, index, i1
+      } : index, index, i1
+      %13:6 = loopschedule.pipeline.stage start = 3 {
+        %14 = arith.cmpi slt, %10#0, %12#0 : index
+        %15 = arith.addi %10#0, %c256_17 : index
+        %16 = arith.select %14, %15, %10#0 : index
+        %17 = arith.subi %12#1, %10#7 : index
+        %18 = arith.select %12#2, %17, %10#7 : index
+        %19 = memref.load %8[%18, %16] : memref<8x256xf16>
+        loopschedule.register %14, %15, %16, %17, %18, %19 : i1, index, index, index, index, f16
+      } : i1, index, index, index, index, f16
+      loopschedule.pipeline.stage start = 4 {
+        memref.store %13#5, %arg4[%13#4, %13#2] : memref<8x256xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%10#8), results() : (index) -> ()
+    }
+    return
+  }
+}
+

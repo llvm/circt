@@ -9,6 +9,7 @@ target_link_libraries(hls-est PRIVATE
         MLIRFuncDialect
         MLIRControlFlowDialect
         MLIRIndexDialect
+        MLIRMathDialect
         MLIRTransforms
 
         # CIRCT dialects

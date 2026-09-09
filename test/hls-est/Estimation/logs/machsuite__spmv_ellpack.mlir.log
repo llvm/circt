@@ -1,0 +1,48 @@
+Total BRAM: 0
+module {
+  func.func @ellpack(%arg0: memref<4940xf64>, %arg1: memref<4940xi32>, %arg2: memref<494xf64>, %arg3: memref<494xf64>) {
+    affine.for %arg4 = 0 to 494 {
+      %0 = memref.load %arg3[%arg4] : memref<494xf64>
+      %c0 = arith.constant 0 : index
+      %c10 = arith.constant 10 : index
+      %c1 = arith.constant 1 : index
+      %1 = loopschedule.pipeline II =  5 trip_count =  10 iter_args(%arg5 = %c0, %arg6 = %0) : (index, f64) -> f64 {
+        %2 = arith.cmpi ult, %arg5, %c10 : index
+        loopschedule.register %2 : i1
+      } do {
+        %2:5 = loopschedule.pipeline.stage start = 0 {
+          %c10_0 = arith.constant 10 : index
+          %7 = arith.muli %arg4, %c10_0 overflow<nsw> : index
+          %c10_1 = arith.constant 10 : index
+          %8 = arith.muli %arg4, %c10_1 overflow<nsw> : index
+          %9 = arith.addi %arg5, %c1 : index
+          loopschedule.register %c10_0, %7, %c10_1, %8, %9 : index, index, index, index, index
+        } : index, index, index, index, index
+        %3:4 = loopschedule.pipeline.stage start = 3 {
+          %7 = arith.addi %arg5, %2#1 : index
+          %8 = memref.load %arg0[%7] : memref<4940xf64>
+          %9 = arith.addi %arg5, %2#3 : index
+          %10 = memref.load %arg1[%9] : memref<4940xi32>
+          loopschedule.register %7, %8, %9, %10 : index, f64, index, i32
+        } : index, f64, index, i32
+        %4:3 = loopschedule.pipeline.stage start = 4 {
+          %7 = arith.index_cast %3#3 : i32 to index
+          %8 = memref.load %arg2[%7] : memref<494xf64>
+          loopschedule.register %3#1, %7, %8 : f64, index, f64
+        } : f64, index, f64
+        %5 = loopschedule.pipeline.stage start = 5 {
+          %7 = arith.mulf %4#0, %4#2 {polygeist.ssa_names = ["Si"]} : f64
+          loopschedule.register %7 : f64
+        } : f64
+        %6 = loopschedule.pipeline.stage start = 9 {
+          %7 = arith.addf %arg6, %5 : f64
+          loopschedule.register %7 : f64
+        } : f64
+        loopschedule.terminator iter_args(%2#4, %6), results(%6) : (index, f64) -> f64
+      }
+      memref.store %1, %arg3[%arg4] : memref<494xf64>
+    }
+    return
+  }
+}
+

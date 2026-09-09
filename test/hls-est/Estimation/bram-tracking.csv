@@ -1,0 +1,112 @@
+dataset,benchmark,BRAM,DSP,FF,LUT,BRAM_util_pct,DSP_util_pct,FF_util_pct,LUT_util_pct,"BRAM (prediction, shim)"
+accelerators_xilinx,DGNN_Booster_convLSTM,1323,2244,108424,109501,212,129,23,47,not compiled (shim): cgeist crash
+accelerators_xilinx,DGNN_Booster_EvolveGCN,1541,1951,87389,112115,246,112,18,48,not compiled (shim): cgeist crash
+accelerators_xilinx,GP_selection_kernel_fixed_dataset,67,1979,72113,78717,10,114,15,34,not compiled (shim): cgeist crash (materialized temporary)
+accelerators_xilinx,GP_selection_kernel_float_dataset,74,2050,240238,203363,11,118,52,88,not compiled (shim): cgeist crash (materialized temporary)
+accelerators_xilinx,Mask-Net_dataset,421,1805,107197,451532,67,104,23,195,not compiled (shim): cgeist crash
+accelerators_xilinx,SkyNet_dataset,414,596,62340,182559,66,34,13,79,not compiled (shim): cgeist crash
+chstone_xilinx,gsm,2,45,3577,8042,0,2,0,3,not compiled (shim): 'arith.shli' op requires the same type for all operands and results
+chstone_xilinx,sha,7,0,16055,50137,1,0,3,21,7
+flowgnn_xilinx,dgn,819,1489,307455,2285964,131,86,66,992,not compiled (shim): cgeist crash
+flowgnn_xilinx,gat,7191,2478,196662,341058,1152,143,42,148,not compiled (shim): cgeist crash
+flowgnn_xilinx,gcn,633,835,243503,2259329,101,48,52,980,not compiled (shim): cgeist crash
+flowgnn_xilinx,gin,1190,1731,254374,2262923,190,100,55,982,hls-est error: invalid memref element type
+flowgnn_xilinx,pna,14584,2497,380652,1950140,2337,144,82,846,hls-est error: invalid memref element type
+forgebench_xilinx,activation_module,210,6,5127,8261,33,0,1,3,120
+forgebench_xilinx,activation_op1,144,3,4261,6435,23,0,0,2,89
+forgebench_xilinx,activation_op2,210,3,4582,6832,33,0,0,2,120
+forgebench_xilinx,activation_op3,210,4,2733,5636,33,0,0,2,120
+forgebench_xilinx,attention_op_p1,69,12,18196,16991,11,0,3,7,28
+forgebench_xilinx,attention_op_p2,24,207,22750,18936,3,11,4,8,hls-est error: hls-est timeout 120s
+forgebench_xilinx,attention_op_p3,24,207,22750,18937,3,11,4,8,hls-est error: hls-est timeout 120s
+forgebench_xilinx,attn_breakdown_module,17,66,66469,57539,2,3,14,24,not compiled (shim): cgeist crash
+forgebench_xilinx,attn_breakdown_op1,10,50,63732,52529,1,2,13,22,not compiled (shim): cgeist crash
+forgebench_xilinx,attn_breakdown_op2,17,66,65957,57488,2,3,14,24,not compiled (shim): cgeist crash
+forgebench_xilinx,conv_A,594,512,14149,30228,95,29,3,13,not compiled (shim): cgeist crash
+forgebench_xilinx,conv_B,586,512,11133,50469,93,29,2,21,not compiled (shim): cgeist crash
+forgebench_xilinx,conv_block_module,3750,1035,46010,135445,600,59,9,58,not compiled (shim): cgeist crash (materialized temporary)
+forgebench_xilinx,conv_block_op1,2800,513,19522,66655,448,29,4,28,not compiled (shim): cgeist crash (materialized temporary)
+forgebench_xilinx,conv_block_op2,3447,515,19971,69071,552,29,4,29,not compiled (shim): cgeist crash (materialized temporary)
+forgebench_xilinx,conv_block_op3,3578,1025,43151,125729,573,59,9,54,not compiled (shim): cgeist crash (materialized temporary)
+forgebench_xilinx,conv_C,610,512,13226,50547,97,29,2,21,not compiled (shim): cgeist crash
+forgebench_xilinx,conv_module,862,516,19360,63688,138,29,4,27,not compiled (shim): cgeist crash (materialized temporary)
+forgebench_xilinx,diff_dims_module_large,1922,2048,65212,218277,308,118,14,94,not compiled (shim): cgeist crash
+forgebench_xilinx,diff_dims_module_small,1058,48,14109,44687,169,2,3,19,not compiled (shim): cgeist crash
+forgebench_xilinx,diff_dims_p1,210,384,17630,32826,33,22,3,14,not compiled (shim): cgeist crash
+forgebench_xilinx,diff_dims_p2,114,128,9594,17435,18,7,2,7,not compiled (shim): cgeist crash
+forgebench_xilinx,diff_dims_p3,354,512,16981,49725,56,29,3,21,not compiled (shim): cgeist crash
+forgebench_xilinx,diff_orders_module,1538,2048,86668,167168,246,118,18,72,not compiled (shim): cgeist crash
+forgebench_xilinx,diff_orders_p1,130,2048,39542,115394,20,118,8,50,not compiled (shim): cgeist crash
+forgebench_xilinx,diff_orders_p2,2,2048,41722,119542,0,118,9,51,not compiled (shim): cgeist crash
+forgebench_xilinx,diff_orders_p3,514,2048,44701,117578,82,118,9,51,not compiled (shim): cgeist crash
+forgebench_xilinx,gpt_transformer_p1,28,217,96111,81638,4,12,20,35,hls-est error: hls-est timeout 120s
+forgebench_xilinx,Llama_GPT_module,30,252,102306,90903,4,14,22,39,not compiled (shim): no member named 'powf' in namespace 'hls'; did you mean simply 'powf'?
+forgebench_xilinx,llama_transformer_p2,30,179,26441,29501,4,10,5,12,not compiled (shim): no member named 'powf' in namespace 'hls'; did you mean simply 'powf'?
+forgebench_xilinx,mlp,1030,8198,202877,365778,165,474,44,158,not compiled (shim): cgeist crash
+forgebench_xilinx,mult_op_module_dot,58,32,7461,11561,9,1,1,5,not compiled (shim): cgeist crash
+forgebench_xilinx,mult_op_module_mm,3,2048,52050,157454,0,118,11,68,not compiled (shim): cgeist crash
+forgebench_xilinx,mult_op_module_mmv,20,256,21762,32007,3,14,4,13,not compiled (shim): cgeist crash
+forgebench_xilinx,mult_op_p1,2,2048,28771,123272,0,118,6,53,not compiled (shim): cgeist crash
+forgebench_xilinx,mult_op_p2,2,256,15010,18516,0,14,3,8,not compiled (shim): cgeist crash
+forgebench_xilinx,mult_op_p3,2,16,2997,3839,0,0,0,1,not compiled (shim): cgeist crash
+forgebench_xilinx,testing_impl,2,64,5688,10612,0,3,1,4,not compiled (shim): cgeist crash
+forgebench_xilinx,testing_unroll,2,592,38635,129695,0,34,8,56,not compiled (shim): cgeist crash
+forgebench_xilinx,tiled_attn_module,258,24,35508,32723,41,1,7,14,1121
+forgebench_xilinx,tiled_attn_p1,73,12,18196,16991,11,0,3,7,28
+forgebench_xilinx,tiled_attn_p2,23,12,18164,16940,3,0,3,7,10
+forgebench_xilinx,vec_mtx_module,2,256,25713,48320,0,14,5,20,not compiled (shim): cgeist crash
+forgebench_xilinx,vec_mtx_p1,2,256,14750,18222,0,14,3,7,not compiled (shim): cgeist crash
+forgebench_xilinx,vec_mtx_p2,2,256,10694,13498,0,1,2,5,not compiled (shim): cgeist crash
+machsuite_xilinx,aes_table,8,0,88995,539100,1,0,19,233,not compiled (shim): cgeist crash
+machsuite_xilinx,aes_tableless,0,0,40824,248355,0,0,8,107,not compiled (shim): cgeist crash
+machsuite_xilinx,backprop,40,110,61407,29916,6,6,13,12,"not compiled (shim): 'func.call' op operand type mismatch: expected operand type 'memref<64xf64>', but provided 'memref<3xf64>' for"
+machsuite_xilinx,bfs_bulk,0,0,462,641,0,0,0,0,not compiled (shim): cgeist crash
+machsuite_xilinx,bfs_queue,1,0,341,972,0,0,0,0,not compiled (shim): cgeist crash
+machsuite_xilinx,fft_transpose,28,275,24099,32089,4,15,5,13,12
+machsuite_xilinx,gemm_blocked,0,14,1385,1509,0,0,0,0,0
+machsuite_xilinx,gemm_ncubed,0,28,10711,5985,0,1,2,2,0
+machsuite_xilinx,md_grid,0,28,4969,3974,0,1,1,1,not compiled (shim): cgeist crash
+machsuite_xilinx,md_knn,0,268,43682,24501,0,15,9,10,0
+machsuite_xilinx,nw,0,0,571,1866,0,0,0,0,
+machsuite_xilinx,sort_merge,4,0,603,1121,0,0,0,0,not compiled (shim): operand #0 does not dominate this use
+machsuite_xilinx,sort_radix,0,0,2623,4572,0,0,0,1,0
+machsuite_xilinx,spmv_crs,0,14,1311,1305,0,0,0,0,hls-est error: unsupported operation
+machsuite_xilinx,spmv_ellpack,0,28,4222,3254,0,1,0,1,0
+machsuite_xilinx,stencil2D,0,6,642,909,0,0,0,0,hls-est error: 'affine.yield' op types mismatch between yield op and its parent
+machsuite_xilinx,stencil3D,0,3,541,1548,0,0,0,0,0
+machsuite_xilinx,viterbi,72,12,25797,38006,11,0,5,16,not compiled (shim): cgeist crash
+polybench_xilinx,atax,13,10,9548,5954,2,0,2,2,13
+polybench_xilinx,bicg,14,10,9546,5981,2,0,2,2,14
+polybench_xilinx,gemm,256,128,21107,14950,41,7,4,6,32
+polybench_xilinx,gesummv,135,1024,79233,68997,21,59,17,29,21
+polybench_xilinx,k2mm,504,128,29759,21733,80,7,6,9,56
+polybench_xilinx,k3mm,728,160,37270,29233,116,9,8,12,56
+polybench_xilinx,mvt,14,10,17642,9417,2,0,3,4,14
+polybench_xilinx,syr2k,392,128,33542,22718,62,7,7,9,320
+polybench_xilinx,syrk,256,128,20854,14596,41,7,4,6,50
+rosetta_xilinx,3d-rendering,111,3,2625,4186,17,0,0,1,not compiled (shim): cgeist crash
+rosetta_xilinx,digit-recognition,289,0,1461,3960,46,0,0,1,"not compiled (shim): subscripted value is not an array, pointer, or vector"
+rosetta_xilinx,face-detection,152,78,23034,61691,24,4,4,26,not compiled (shim): cgeist crash
+rosetta_xilinx,spam-filter,12,8,1419,2330,1,0,0,1,not compiled (shim): cgeist crash
+soda_xilinx,soda__blur,77,32,30740,31926,12,1,6,13,not compiled (shim): cgeist crash
+soda_xilinx,soda__contrast,290,1966,292095,226039,46,113,63,98,not compiled (shim): cgeist crash
+soda_xilinx,soda__denoise2d,48,424,78165,61927,7,24,16,26,not compiled (shim): cgeist crash
+soda_xilinx,soda__denoise3d,38,256,55003,44931,6,14,11,19,not compiled (shim): cgeist crash
+soda_xilinx,soda__erosion,92,0,44901,50657,14,0,9,21,not compiled (shim): cgeist crash
+soda_xilinx,soda__heat3d,28,132,25951,22415,4,7,5,9,not compiled (shim): cgeist crash
+soda_xilinx,soda__jacobi2d,12,44,15743,13839,1,2,3,6,not compiled (shim): cgeist crash
+soda_xilinx,soda__jacobi3d,28,60,21879,19055,4,3,4,8,not compiled (shim): cgeist crash
+soda_xilinx,soda__seidel2d,20,76,24307,20439,3,4,5,8,not compiled (shim): cgeist crash
+soda_xilinx,soda__sobel2d,12,8,15052,15500,1,0,3,6,not compiled (shim): cgeist crash
+soda_xilinx,soda__xcorr,92,4,47967,50854,14,0,10,22,not compiled (shim): cgeist crash
+spectorhls_xilinx,dct,0,90,16950,22308,0,5,3,9,0
+spectorhls_xilinx,fir,4,40,12113,6765,0,2,2,2,not compiled (shim): cgeist crash
+spectorhls_xilinx,histogram,8,0,925,2704,1,0,0,1,8
+spectorhls_xilinx,matrix_multiplication,0,3,211,536,0,0,0,0,hls-est error: invalid memref element type
+spectorhls_xilinx,mergesort,0,12,8309,15199,0,0,1,6,0
+spectorhls_xilinx,normals,4,12,10683,11533,0,0,2,5,not compiled (shim): cgeist crash
+spectorhls_xilinx,sobel_filter_x,0,13,2653,7911,0,0,0,3,not compiled (shim): cgeist crash
+spectorhls_xilinx,sobel_filter_y,0,15,2718,8383,0,0,0,3,hls-est error: hls-est timeout 120s
+spectorhls_xilinx,spmv,0,13,5381,8861,0,0,1,3,not compiled (shim): cgeist crash
+spectorhls_xilinx,template_matching,1,2,1146,3438,0,0,0,1,not compiled (shim): cgeist crash20260904T192512Z,2026-09-04T19:25:13Z,dd76ef952-dirty,,basic,arraypartition_block,ok,2,0,4
+

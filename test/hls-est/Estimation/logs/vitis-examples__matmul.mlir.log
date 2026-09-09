@@ -1,0 +1,899 @@
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":11:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":12:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("vitis-examples/matmul.mlir":13:17)
+  kind=RAM_1P  bram=1
+    256x32b -> RAM_1P (x32/block) = 1 BRAM_18K
+Total BRAM: 1
+module {
+  func.func @matmul_partition(%arg0: memref<?xi32>, %arg1: memref<?xi32>, %arg2: memref<?xi32>, %arg3: i32, %arg4: i32) {
+    %c15 = arith.constant 15 : index
+    %c14 = arith.constant 14 : index
+    %c13 = arith.constant 13 : index
+    %c12 = arith.constant 12 : index
+    %c11 = arith.constant 11 : index
+    %c10 = arith.constant 10 : index
+    %c9 = arith.constant 9 : index
+    %c8 = arith.constant 8 : index
+    %c7 = arith.constant 7 : index
+    %c6 = arith.constant 6 : index
+    %c5 = arith.constant 5 : index
+    %c4 = arith.constant 4 : index
+    %c3 = arith.constant 3 : index
+    %c2 = arith.constant 2 : index
+    %c1 = arith.constant 1 : index
+    %c16 = arith.constant 16 : index
+    %c0 = arith.constant 0 : index
+    %c16_i32 = arith.constant 16 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %alloca = memref.alloca() : memref<16xi32>
+    %alloca_0 = memref.alloca() : memref<16xi32>
+    %alloca_1 = memref.alloca() : memref<16xi32>
+    %alloca_2 = memref.alloca() : memref<16xi32>
+    %alloca_3 = memref.alloca() : memref<16xi32>
+    %alloca_4 = memref.alloca() : memref<16xi32>
+    %alloca_5 = memref.alloca() : memref<16xi32>
+    %alloca_6 = memref.alloca() : memref<16xi32>
+    %alloca_7 = memref.alloca() : memref<16xi32>
+    %alloca_8 = memref.alloca() : memref<16xi32>
+    %alloca_9 = memref.alloca() : memref<16xi32>
+    %alloca_10 = memref.alloca() : memref<16xi32>
+    %alloca_11 = memref.alloca() : memref<16xi32>
+    %alloca_12 = memref.alloca() : memref<16xi32>
+    %alloca_13 = memref.alloca() : memref<16xi32>
+    %alloca_14 = memref.alloca() : memref<16xi32>
+    %alloca_15 = memref.alloca() : memref<16xi32>
+    %alloca_16 = memref.alloca() : memref<16xi32>
+    %alloca_17 = memref.alloca() : memref<16xi32>
+    %alloca_18 = memref.alloca() : memref<16xi32>
+    %alloca_19 = memref.alloca() : memref<16xi32>
+    %alloca_20 = memref.alloca() : memref<16xi32>
+    %alloca_21 = memref.alloca() : memref<16xi32>
+    %alloca_22 = memref.alloca() : memref<16xi32>
+    %alloca_23 = memref.alloca() : memref<16xi32>
+    %alloca_24 = memref.alloca() : memref<16xi32>
+    %alloca_25 = memref.alloca() : memref<16xi32>
+    %alloca_26 = memref.alloca() : memref<16xi32>
+    %alloca_27 = memref.alloca() : memref<16xi32>
+    %alloca_28 = memref.alloca() : memref<16xi32>
+    %alloca_29 = memref.alloca() : memref<16xi32>
+    %alloca_30 = memref.alloca() : memref<16xi32>
+    %alloca_31 = memref.alloca() : memref<256xi32>
+    %0 = arith.muli %arg3, %arg3 : i32
+    %1 = arith.index_cast %0 : i32 to index
+    %c0_32 = arith.constant 0 : index
+    %c1_33 = arith.constant 1 : index
+    %2:2 = loopschedule.pipeline II =  1 iter_args(%arg5 = %c0_32, %arg6 = %c0_i32, %arg7 = %c0_i32) : (index, i32, i32) -> (i32, i32) {
+      %11 = arith.cmpi ult, %arg5, %1 : index
+      loopschedule.register %11 : i1
+    } do {
+      %11:8 = loopschedule.pipeline.stage start = 0 {
+        %15 = arith.cmpi eq, %arg6, %arg3 : i32
+        %16 = arith.select %15, %c0_i32, %arg6 : i32
+        %17 = arith.addi %arg7, %c1_i32 : i32
+        %18 = scf.if %15 -> (i32) {
+          scf.yield %17 : i32
+        } else {
+          scf.yield %arg7 : i32
+        }
+        %19 = arith.muli %18, %c16_i32 : i32
+        %20 = memref.load %arg0[%arg5] : memref<?xi32>
+        %21 = arith.addi %16, %c1_i32 : i32
+        %22 = arith.addi %arg5, %c1_33 : index
+        loopschedule.register %15, %16, %17, %18, %19, %20, %21, %22 : i1, i32, i32, i32, i32, i32, i32, index
+      } : i1, i32, i32, i32, i32, i32, i32, index
+      %12:4 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %11#1, %11#3, %11#5, %11#6 : i32, i32, i32, i32
+      } : i32, i32, i32, i32
+      %13:4 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %12#0, %12#1, %12#2, %12#3 : i32, i32, i32, i32
+      } : i32, i32, i32, i32
+      %14:4 = loopschedule.pipeline.stage start = 3 {
+        %15 = arith.addi %11#4, %13#0 : i32
+        %16 = arith.index_cast %15 : i32 to index
+        memref.store %13#2, %alloca_31[%16] : memref<256xi32>
+        loopschedule.register %13#1, %13#3, %15, %16 : i32, i32, i32, index
+      } : i32, i32, i32, index
+      loopschedule.terminator iter_args(%11#7, %14#1, %14#0), results(%14#1, %14#0) : (index, i32, i32) -> (i32, i32)
+    }
+    %3 = arith.index_cast %0 : i32 to index
+    %c0_34 = arith.constant 0 : index
+    %c1_35 = arith.constant 1 : index
+    %4:2 = loopschedule.pipeline II =  1 iter_args(%arg5 = %c0_34, %arg6 = %c0_i32, %arg7 = %c0_i32) : (index, i32, i32) -> (i32, i32) {
+      %11 = arith.cmpi ult, %arg5, %3 : index
+      loopschedule.register %11 : i1
+    } do {
+      %11:8 = loopschedule.pipeline.stage start = 0 {
+        %18 = arith.cmpi eq, %arg6, %arg3 : i32
+        %19 = arith.select %18, %c0_i32, %arg6 : i32
+        %20 = arith.addi %arg7, %c1_i32 : i32
+        %21 = scf.if %18 -> (i32) {
+          scf.yield %20 : i32
+        } else {
+          scf.yield %arg7 : i32
+        }
+        %22 = arith.muli %21, %c16_i32 : i32
+        %23 = memref.load %arg1[%arg5] : memref<?xi32>
+        %24 = arith.addi %19, %c1_i32 : i32
+        %25 = arith.addi %arg5, %c1_35 : index
+        loopschedule.register %18, %19, %20, %21, %22, %23, %24, %25 : i1, i32, i32, i32, i32, i32, i32, index
+      } : i1, i32, i32, i32, i32, i32, i32, index
+      %12:4 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %11#1, %11#3, %11#5, %11#6 : i32, i32, i32, i32
+      } : i32, i32, i32, i32
+      %13:4 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %12#0, %12#1, %12#2, %12#3 : i32, i32, i32, i32
+      } : i32, i32, i32, i32
+      %14:7 = loopschedule.pipeline.stage start = 3 {
+        %18 = arith.addi %11#4, %13#0 : i32
+        %19 = arith.index_cast %18 : i32 to index
+        %20 = arith.divui %19, %c16 : index
+        %21 = arith.remui %19, %c16 : index
+        loopschedule.register %13#1, %13#2, %13#3, %18, %19, %20, %21 : i32, i32, i32, i32, index, index, index
+      } : i32, i32, i32, i32, index, index, index
+      %15:3 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %14#0, %14#1, %14#2 : i32, i32, i32
+      } : i32, i32, i32
+      %16:3 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %15#0, %15#1, %15#2 : i32, i32, i32
+      } : i32, i32, i32
+      %17:18 = loopschedule.pipeline.stage start = 6 {
+        %18 = arith.cmpi eq, %14#5, %c0 : index
+        hls.store_enable %16#1, %18, %alloca_15[%14#6] : i32, memref<16xi32>
+        %19 = arith.cmpi eq, %14#5, %c1 : index
+        hls.store_enable %16#1, %19, %alloca_16[%14#6] : i32, memref<16xi32>
+        %20 = arith.cmpi eq, %14#5, %c2 : index
+        hls.store_enable %16#1, %20, %alloca_17[%14#6] : i32, memref<16xi32>
+        %21 = arith.cmpi eq, %14#5, %c3 : index
+        hls.store_enable %16#1, %21, %alloca_18[%14#6] : i32, memref<16xi32>
+        %22 = arith.cmpi eq, %14#5, %c4 : index
+        hls.store_enable %16#1, %22, %alloca_19[%14#6] : i32, memref<16xi32>
+        %23 = arith.cmpi eq, %14#5, %c5 : index
+        hls.store_enable %16#1, %23, %alloca_20[%14#6] : i32, memref<16xi32>
+        %24 = arith.cmpi eq, %14#5, %c6 : index
+        hls.store_enable %16#1, %24, %alloca_21[%14#6] : i32, memref<16xi32>
+        %25 = arith.cmpi eq, %14#5, %c7 : index
+        hls.store_enable %16#1, %25, %alloca_22[%14#6] : i32, memref<16xi32>
+        %26 = arith.cmpi eq, %14#5, %c8 : index
+        hls.store_enable %16#1, %26, %alloca_23[%14#6] : i32, memref<16xi32>
+        %27 = arith.cmpi eq, %14#5, %c9 : index
+        hls.store_enable %16#1, %27, %alloca_24[%14#6] : i32, memref<16xi32>
+        %28 = arith.cmpi eq, %14#5, %c10 : index
+        hls.store_enable %16#1, %28, %alloca_25[%14#6] : i32, memref<16xi32>
+        %29 = arith.cmpi eq, %14#5, %c11 : index
+        hls.store_enable %16#1, %29, %alloca_26[%14#6] : i32, memref<16xi32>
+        %30 = arith.cmpi eq, %14#5, %c12 : index
+        hls.store_enable %16#1, %30, %alloca_27[%14#6] : i32, memref<16xi32>
+        %31 = arith.cmpi eq, %14#5, %c13 : index
+        hls.store_enable %16#1, %31, %alloca_28[%14#6] : i32, memref<16xi32>
+        %32 = arith.cmpi eq, %14#5, %c14 : index
+        hls.store_enable %16#1, %32, %alloca_29[%14#6] : i32, memref<16xi32>
+        %33 = arith.cmpi eq, %14#5, %c15 : index
+        hls.store_enable %16#1, %33, %alloca_30[%14#6] : i32, memref<16xi32>
+        loopschedule.register %16#0, %16#2, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33 : i32, i32, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+      } : i32, i32, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+      loopschedule.terminator iter_args(%11#7, %17#1, %17#0), results(%17#1, %17#0) : (index, i32, i32) -> (i32, i32)
+    }
+    %5 = arith.index_cast %arg4 : i32 to index
+    %6 = arith.index_cast %arg3 : i32 to index
+    %7 = arith.index_cast %arg3 : i32 to index
+    %8 = arith.cmpi sgt, %5, %c0 : index
+    affine.for %arg5 = 0 to %6 {
+      affine.for %arg6 = 0 to %7 {
+        %c0_38 = arith.constant 0 : index
+        %c16_39 = arith.constant 16 : index
+        %c1_40 = arith.constant 1 : index
+        %11 = loopschedule.pipeline II =  1 trip_count =  16 iter_args(%arg7 = %c0_38, %arg8 = %c0_i32) : (index, i32) -> i32 {
+          %219 = arith.cmpi ult, %arg7, %c16_39 : index
+          loopschedule.register %219 : i1
+        } do {
+          %219:58 = loopschedule.pipeline.stage start = 0 {
+            %c16_137 = arith.constant 16 : index
+            %225 = arith.muli %arg5, %c16_137 overflow<nsw> : index
+            %c16_138 = arith.constant 16 : index
+            %c0_139 = arith.constant 0 : index
+            %c-1_140 = arith.constant -1 : index
+            %226 = arith.cmpi slt, %arg6, %c0_139 : index
+            %227 = arith.subi %c-1_140, %arg6 : index
+            %228 = arith.select %226, %227, %arg6 : index
+            %229 = arith.divsi %228, %c16_138 : index
+            %c16_141 = arith.constant 16 : index
+            %230 = arith.remsi %arg6, %c16_141 : index
+            %c0_142 = arith.constant 0 : index
+            %c16_143 = arith.constant 16 : index
+            %231 = arith.remsi %arg6, %c16_143 : index
+            %c0_144 = arith.constant 0 : index
+            %c16_145 = arith.constant 16 : index
+            %232 = arith.remsi %arg6, %c16_145 : index
+            %c0_146 = arith.constant 0 : index
+            %c16_147 = arith.constant 16 : index
+            %233 = arith.remsi %arg6, %c16_147 : index
+            %c0_148 = arith.constant 0 : index
+            %c16_149 = arith.constant 16 : index
+            %234 = arith.remsi %arg6, %c16_149 : index
+            %c0_150 = arith.constant 0 : index
+            %c16_151 = arith.constant 16 : index
+            %235 = arith.remsi %arg6, %c16_151 : index
+            %c0_152 = arith.constant 0 : index
+            %c16_153 = arith.constant 16 : index
+            %236 = arith.remsi %arg6, %c16_153 : index
+            %c0_154 = arith.constant 0 : index
+            %c16_155 = arith.constant 16 : index
+            %237 = arith.remsi %arg6, %c16_155 : index
+            %c0_156 = arith.constant 0 : index
+            %c16_157 = arith.constant 16 : index
+            %238 = arith.remsi %arg6, %c16_157 : index
+            %c0_158 = arith.constant 0 : index
+            %c16_159 = arith.constant 16 : index
+            %239 = arith.remsi %arg6, %c16_159 : index
+            %c0_160 = arith.constant 0 : index
+            %c16_161 = arith.constant 16 : index
+            %240 = arith.remsi %arg6, %c16_161 : index
+            %c0_162 = arith.constant 0 : index
+            %c16_163 = arith.constant 16 : index
+            %241 = arith.remsi %arg6, %c16_163 : index
+            %c0_164 = arith.constant 0 : index
+            %c16_165 = arith.constant 16 : index
+            %242 = arith.remsi %arg6, %c16_165 : index
+            %c0_166 = arith.constant 0 : index
+            %c16_167 = arith.constant 16 : index
+            %243 = arith.remsi %arg6, %c16_167 : index
+            %c0_168 = arith.constant 0 : index
+            %c16_169 = arith.constant 16 : index
+            %244 = arith.remsi %arg6, %c16_169 : index
+            %c0_170 = arith.constant 0 : index
+            %c16_171 = arith.constant 16 : index
+            %245 = arith.remsi %arg6, %c16_171 : index
+            %c0_172 = arith.constant 0 : index
+            %246 = arith.addi %arg7, %c1_40 : index
+            loopschedule.register %c16_137, %225, %c16_138, %c0_139, %c-1_140, %226, %227, %228, %229, %c16_141, %230, %c0_142, %c16_143, %231, %c0_144, %c16_145, %232, %c0_146, %c16_147, %233, %c0_148, %c16_149, %234, %c0_150, %c16_151, %235, %c0_152, %c16_153, %236, %c0_154, %c16_155, %237, %c0_156, %c16_157, %238, %c0_158, %c16_159, %239, %c0_160, %c16_161, %240, %c0_162, %c16_163, %241, %c0_164, %c16_165, %242, %c0_166, %c16_167, %243, %c0_168, %c16_169, %244, %c0_170, %c16_171, %245, %c0_172, %246 : index, index, index, index, index, i1, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index
+          } : index, index, index, index, index, i1, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index
+          %220:34 = loopschedule.pipeline.stage start = 1 {
+            loopschedule.register %219#4, %219#5, %219#9, %219#11, %219#12, %219#14, %219#15, %219#17, %219#18, %219#20, %219#21, %219#23, %219#24, %219#26, %219#27, %219#29, %219#30, %219#32, %219#33, %219#35, %219#36, %219#38, %219#39, %219#41, %219#42, %219#44, %219#45, %219#47, %219#48, %219#50, %219#51, %219#53, %219#54, %219#56 : index, i1, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index
+          } : index, i1, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index
+          %221:34 = loopschedule.pipeline.stage start = 2 {
+            loopschedule.register %220#0, %220#1, %220#2, %220#3, %220#4, %220#5, %220#6, %220#7, %220#8, %220#9, %220#10, %220#11, %220#12, %220#13, %220#14, %220#15, %220#16, %220#17, %220#18, %220#19, %220#20, %220#21, %220#22, %220#23, %220#24, %220#25, %220#26, %220#27, %220#28, %220#29, %220#30, %220#31, %220#32, %220#33 : index, i1, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index
+          } : index, i1, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index, index
+          %222:84 = loopschedule.pipeline.stage start = 3 {
+            %225 = arith.addi %arg7, %219#1 : index
+            %226 = memref.load %alloca_31[%225] : memref<256xi32>
+            %227 = arith.subi %221#0, %219#8 : index
+            %228 = arith.select %221#1, %227, %219#8 : index
+            %229 = arith.addi %arg7, %228 : index
+            %230 = arith.cmpi slt, %219#10, %221#3 : index
+            %231 = arith.addi %219#10, %221#2 : index
+            %232 = arith.select %230, %231, %219#10 : index
+            %233 = memref.load %alloca_15[%232] : memref<16xi32>
+            %234 = arith.cmpi slt, %219#13, %221#5 : index
+            %235 = arith.addi %219#13, %221#4 : index
+            %236 = arith.select %234, %235, %219#13 : index
+            %237 = memref.load %alloca_16[%236] : memref<16xi32>
+            %238 = arith.cmpi slt, %219#16, %221#7 : index
+            %239 = arith.addi %219#16, %221#6 : index
+            %240 = arith.select %238, %239, %219#16 : index
+            %241 = memref.load %alloca_17[%240] : memref<16xi32>
+            %242 = arith.cmpi slt, %219#19, %221#9 : index
+            %243 = arith.addi %219#19, %221#8 : index
+            %244 = arith.select %242, %243, %219#19 : index
+            %245 = memref.load %alloca_18[%244] : memref<16xi32>
+            %246 = arith.cmpi slt, %219#22, %221#11 : index
+            %247 = arith.addi %219#22, %221#10 : index
+            %248 = arith.select %246, %247, %219#22 : index
+            %249 = memref.load %alloca_19[%248] : memref<16xi32>
+            %250 = arith.cmpi slt, %219#25, %221#13 : index
+            %251 = arith.addi %219#25, %221#12 : index
+            %252 = arith.select %250, %251, %219#25 : index
+            %253 = memref.load %alloca_20[%252] : memref<16xi32>
+            %254 = arith.cmpi slt, %219#28, %221#15 : index
+            %255 = arith.addi %219#28, %221#14 : index
+            %256 = arith.select %254, %255, %219#28 : index
+            %257 = memref.load %alloca_21[%256] : memref<16xi32>
+            %258 = arith.cmpi slt, %219#31, %221#17 : index
+            %259 = arith.addi %219#31, %221#16 : index
+            %260 = arith.select %258, %259, %219#31 : index
+            %261 = memref.load %alloca_22[%260] : memref<16xi32>
+            %262 = arith.cmpi slt, %219#34, %221#19 : index
+            %263 = arith.addi %219#34, %221#18 : index
+            %264 = arith.select %262, %263, %219#34 : index
+            %265 = memref.load %alloca_23[%264] : memref<16xi32>
+            %266 = arith.cmpi slt, %219#37, %221#21 : index
+            %267 = arith.addi %219#37, %221#20 : index
+            %268 = arith.select %266, %267, %219#37 : index
+            %269 = memref.load %alloca_24[%268] : memref<16xi32>
+            %270 = arith.cmpi slt, %219#40, %221#23 : index
+            %271 = arith.addi %219#40, %221#22 : index
+            %272 = arith.select %270, %271, %219#40 : index
+            %273 = memref.load %alloca_25[%272] : memref<16xi32>
+            %274 = arith.cmpi slt, %219#43, %221#25 : index
+            %275 = arith.addi %219#43, %221#24 : index
+            %276 = arith.select %274, %275, %219#43 : index
+            %277 = memref.load %alloca_26[%276] : memref<16xi32>
+            %278 = arith.cmpi slt, %219#46, %221#27 : index
+            %279 = arith.addi %219#46, %221#26 : index
+            %280 = arith.select %278, %279, %219#46 : index
+            %281 = memref.load %alloca_27[%280] : memref<16xi32>
+            %282 = arith.cmpi slt, %219#49, %221#29 : index
+            %283 = arith.addi %219#49, %221#28 : index
+            %284 = arith.select %282, %283, %219#49 : index
+            %285 = memref.load %alloca_28[%284] : memref<16xi32>
+            %286 = arith.cmpi slt, %219#52, %221#31 : index
+            %287 = arith.addi %219#52, %221#30 : index
+            %288 = arith.select %286, %287, %219#52 : index
+            %289 = memref.load %alloca_29[%288] : memref<16xi32>
+            %290 = arith.cmpi slt, %219#55, %221#33 : index
+            %291 = arith.addi %219#55, %221#32 : index
+            %292 = arith.select %290, %291, %219#55 : index
+            %293 = memref.load %alloca_30[%292] : memref<16xi32>
+            %294 = arith.cmpi eq, %229, %c14 : index
+            %295 = arith.cmpi eq, %229, %c13 : index
+            %296 = arith.cmpi eq, %229, %c12 : index
+            %297 = arith.cmpi eq, %229, %c11 : index
+            %298 = arith.cmpi eq, %229, %c10 : index
+            %299 = arith.cmpi eq, %229, %c9 : index
+            %300 = arith.cmpi eq, %229, %c8 : index
+            %301 = arith.cmpi eq, %229, %c7 : index
+            %302 = arith.cmpi eq, %229, %c6 : index
+            %303 = arith.cmpi eq, %229, %c5 : index
+            %304 = arith.cmpi eq, %229, %c4 : index
+            %305 = arith.cmpi eq, %229, %c3 : index
+            %306 = arith.cmpi eq, %229, %c2 : index
+            %307 = arith.cmpi eq, %229, %c1 : index
+            %308 = arith.cmpi eq, %229, %c0 : index
+            loopschedule.register %225, %226, %227, %228, %229, %230, %231, %232, %233, %234, %235, %236, %237, %238, %239, %240, %241, %242, %243, %244, %245, %246, %247, %248, %249, %250, %251, %252, %253, %254, %255, %256, %257, %258, %259, %260, %261, %262, %263, %264, %265, %266, %267, %268, %269, %270, %271, %272, %273, %274, %275, %276, %277, %278, %279, %280, %281, %282, %283, %284, %285, %286, %287, %288, %289, %290, %291, %292, %293, %294, %295, %296, %297, %298, %299, %300, %301, %302, %303, %304, %305, %306, %307, %308 : index, i32, index, index, index, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+          } : index, i32, index, index, index, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, index, index, i32, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+          %223:16 = loopschedule.pipeline.stage start = 4 {
+            %225 = arith.select %222#69, %222#64, %222#68 : i32
+            %226 = arith.select %222#70, %222#60, %225 : i32
+            %227 = arith.select %222#71, %222#56, %226 : i32
+            %228 = arith.select %222#72, %222#52, %227 : i32
+            %229 = arith.select %222#73, %222#48, %228 : i32
+            %230 = arith.select %222#74, %222#44, %229 : i32
+            %231 = arith.select %222#75, %222#40, %230 : i32
+            %232 = arith.select %222#76, %222#36, %231 : i32
+            %233 = arith.select %222#77, %222#32, %232 : i32
+            %234 = arith.select %222#78, %222#28, %233 : i32
+            %235 = arith.select %222#79, %222#24, %234 : i32
+            %236 = arith.select %222#80, %222#20, %235 : i32
+            %237 = arith.select %222#81, %222#16, %236 : i32
+            %238 = arith.select %222#82, %222#12, %237 : i32
+            %239 = arith.select %222#83, %222#8, %238 : i32
+            %240 = arith.muli %222#1, %239 : i32
+            loopschedule.register %225, %226, %227, %228, %229, %230, %231, %232, %233, %234, %235, %236, %237, %238, %239, %240 : i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32
+          } : i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32
+          %224 = loopschedule.pipeline.stage start = 7 {
+            %225 = arith.addi %arg8, %223#15 : i32
+            loopschedule.register %225 : i32
+          } : i32
+          loopschedule.terminator iter_args(%219#57, %224), results(%224) : (index, i32) -> i32
+        }
+        %c0_41 = arith.constant 0 : index
+        %c16_42 = arith.constant 16 : index
+        %12 = arith.remsi %arg6, %c16_42 : index
+        %c0_43 = arith.constant 0 : index
+        %13 = arith.cmpi slt, %12, %c0_43 : index
+        %14 = arith.addi %12, %c16_42 : index
+        %15 = arith.select %13, %14, %12 : index
+        %16 = arith.cmpi eq, %15, %c0_41 : index
+        %c16_44 = arith.constant 16 : index
+        %c0_45 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %17 = arith.cmpi slt, %arg6, %c0_45 : index
+        %18 = arith.subi %c-1, %arg6 : index
+        %19 = arith.select %17, %18, %arg6 : index
+        %20 = arith.divsi %19, %c16_44 : index
+        %21 = arith.subi %c-1, %20 : index
+        %22 = arith.select %17, %21, %20 : index
+        %23 = arith.addi %22, %arg5 : index
+        hls.store_enable %11, %16, %alloca[%23] : i32, memref<16xi32>
+        %c0_46 = arith.constant 0 : index
+        %c16_47 = arith.constant 16 : index
+        %24 = arith.remsi %arg6, %c16_47 : index
+        %c0_48 = arith.constant 0 : index
+        %25 = arith.cmpi slt, %24, %c0_48 : index
+        %26 = arith.addi %24, %c16_47 : index
+        %27 = arith.select %25, %26, %24 : index
+        %c-1_49 = arith.constant -1 : index
+        %28 = arith.addi %27, %c-1_49 : index
+        %29 = arith.cmpi eq, %28, %c0_46 : index
+        %c16_50 = arith.constant 16 : index
+        %c0_51 = arith.constant 0 : index
+        %c-1_52 = arith.constant -1 : index
+        %30 = arith.cmpi slt, %arg6, %c0_51 : index
+        %31 = arith.subi %c-1_52, %arg6 : index
+        %32 = arith.select %30, %31, %arg6 : index
+        %33 = arith.divsi %32, %c16_50 : index
+        %34 = arith.subi %c-1_52, %33 : index
+        %35 = arith.select %30, %34, %33 : index
+        %36 = arith.addi %35, %arg5 : index
+        hls.store_enable %11, %29, %alloca_0[%36] : i32, memref<16xi32>
+        %c0_53 = arith.constant 0 : index
+        %c16_54 = arith.constant 16 : index
+        %37 = arith.remsi %arg6, %c16_54 : index
+        %c0_55 = arith.constant 0 : index
+        %38 = arith.cmpi slt, %37, %c0_55 : index
+        %39 = arith.addi %37, %c16_54 : index
+        %40 = arith.select %38, %39, %37 : index
+        %c-2 = arith.constant -2 : index
+        %41 = arith.addi %40, %c-2 : index
+        %42 = arith.cmpi eq, %41, %c0_53 : index
+        %c16_56 = arith.constant 16 : index
+        %c0_57 = arith.constant 0 : index
+        %c-1_58 = arith.constant -1 : index
+        %43 = arith.cmpi slt, %arg6, %c0_57 : index
+        %44 = arith.subi %c-1_58, %arg6 : index
+        %45 = arith.select %43, %44, %arg6 : index
+        %46 = arith.divsi %45, %c16_56 : index
+        %47 = arith.subi %c-1_58, %46 : index
+        %48 = arith.select %43, %47, %46 : index
+        %49 = arith.addi %48, %arg5 : index
+        hls.store_enable %11, %42, %alloca_1[%49] : i32, memref<16xi32>
+        %c0_59 = arith.constant 0 : index
+        %c16_60 = arith.constant 16 : index
+        %50 = arith.remsi %arg6, %c16_60 : index
+        %c0_61 = arith.constant 0 : index
+        %51 = arith.cmpi slt, %50, %c0_61 : index
+        %52 = arith.addi %50, %c16_60 : index
+        %53 = arith.select %51, %52, %50 : index
+        %c-3 = arith.constant -3 : index
+        %54 = arith.addi %53, %c-3 : index
+        %55 = arith.cmpi eq, %54, %c0_59 : index
+        %c16_62 = arith.constant 16 : index
+        %c0_63 = arith.constant 0 : index
+        %c-1_64 = arith.constant -1 : index
+        %56 = arith.cmpi slt, %arg6, %c0_63 : index
+        %57 = arith.subi %c-1_64, %arg6 : index
+        %58 = arith.select %56, %57, %arg6 : index
+        %59 = arith.divsi %58, %c16_62 : index
+        %60 = arith.subi %c-1_64, %59 : index
+        %61 = arith.select %56, %60, %59 : index
+        %62 = arith.addi %61, %arg5 : index
+        hls.store_enable %11, %55, %alloca_2[%62] : i32, memref<16xi32>
+        %c0_65 = arith.constant 0 : index
+        %c16_66 = arith.constant 16 : index
+        %63 = arith.remsi %arg6, %c16_66 : index
+        %c0_67 = arith.constant 0 : index
+        %64 = arith.cmpi slt, %63, %c0_67 : index
+        %65 = arith.addi %63, %c16_66 : index
+        %66 = arith.select %64, %65, %63 : index
+        %c-4 = arith.constant -4 : index
+        %67 = arith.addi %66, %c-4 : index
+        %68 = arith.cmpi eq, %67, %c0_65 : index
+        %c16_68 = arith.constant 16 : index
+        %c0_69 = arith.constant 0 : index
+        %c-1_70 = arith.constant -1 : index
+        %69 = arith.cmpi slt, %arg6, %c0_69 : index
+        %70 = arith.subi %c-1_70, %arg6 : index
+        %71 = arith.select %69, %70, %arg6 : index
+        %72 = arith.divsi %71, %c16_68 : index
+        %73 = arith.subi %c-1_70, %72 : index
+        %74 = arith.select %69, %73, %72 : index
+        %75 = arith.addi %74, %arg5 : index
+        hls.store_enable %11, %68, %alloca_3[%75] : i32, memref<16xi32>
+        %c0_71 = arith.constant 0 : index
+        %c16_72 = arith.constant 16 : index
+        %76 = arith.remsi %arg6, %c16_72 : index
+        %c0_73 = arith.constant 0 : index
+        %77 = arith.cmpi slt, %76, %c0_73 : index
+        %78 = arith.addi %76, %c16_72 : index
+        %79 = arith.select %77, %78, %76 : index
+        %c-5 = arith.constant -5 : index
+        %80 = arith.addi %79, %c-5 : index
+        %81 = arith.cmpi eq, %80, %c0_71 : index
+        %c16_74 = arith.constant 16 : index
+        %c0_75 = arith.constant 0 : index
+        %c-1_76 = arith.constant -1 : index
+        %82 = arith.cmpi slt, %arg6, %c0_75 : index
+        %83 = arith.subi %c-1_76, %arg6 : index
+        %84 = arith.select %82, %83, %arg6 : index
+        %85 = arith.divsi %84, %c16_74 : index
+        %86 = arith.subi %c-1_76, %85 : index
+        %87 = arith.select %82, %86, %85 : index
+        %88 = arith.addi %87, %arg5 : index
+        hls.store_enable %11, %81, %alloca_4[%88] : i32, memref<16xi32>
+        %c0_77 = arith.constant 0 : index
+        %c16_78 = arith.constant 16 : index
+        %89 = arith.remsi %arg6, %c16_78 : index
+        %c0_79 = arith.constant 0 : index
+        %90 = arith.cmpi slt, %89, %c0_79 : index
+        %91 = arith.addi %89, %c16_78 : index
+        %92 = arith.select %90, %91, %89 : index
+        %c-6 = arith.constant -6 : index
+        %93 = arith.addi %92, %c-6 : index
+        %94 = arith.cmpi eq, %93, %c0_77 : index
+        %c16_80 = arith.constant 16 : index
+        %c0_81 = arith.constant 0 : index
+        %c-1_82 = arith.constant -1 : index
+        %95 = arith.cmpi slt, %arg6, %c0_81 : index
+        %96 = arith.subi %c-1_82, %arg6 : index
+        %97 = arith.select %95, %96, %arg6 : index
+        %98 = arith.divsi %97, %c16_80 : index
+        %99 = arith.subi %c-1_82, %98 : index
+        %100 = arith.select %95, %99, %98 : index
+        %101 = arith.addi %100, %arg5 : index
+        hls.store_enable %11, %94, %alloca_5[%101] : i32, memref<16xi32>
+        %c0_83 = arith.constant 0 : index
+        %c16_84 = arith.constant 16 : index
+        %102 = arith.remsi %arg6, %c16_84 : index
+        %c0_85 = arith.constant 0 : index
+        %103 = arith.cmpi slt, %102, %c0_85 : index
+        %104 = arith.addi %102, %c16_84 : index
+        %105 = arith.select %103, %104, %102 : index
+        %c-7 = arith.constant -7 : index
+        %106 = arith.addi %105, %c-7 : index
+        %107 = arith.cmpi eq, %106, %c0_83 : index
+        %c16_86 = arith.constant 16 : index
+        %c0_87 = arith.constant 0 : index
+        %c-1_88 = arith.constant -1 : index
+        %108 = arith.cmpi slt, %arg6, %c0_87 : index
+        %109 = arith.subi %c-1_88, %arg6 : index
+        %110 = arith.select %108, %109, %arg6 : index
+        %111 = arith.divsi %110, %c16_86 : index
+        %112 = arith.subi %c-1_88, %111 : index
+        %113 = arith.select %108, %112, %111 : index
+        %114 = arith.addi %113, %arg5 : index
+        hls.store_enable %11, %107, %alloca_6[%114] : i32, memref<16xi32>
+        %c0_89 = arith.constant 0 : index
+        %c16_90 = arith.constant 16 : index
+        %115 = arith.remsi %arg6, %c16_90 : index
+        %c0_91 = arith.constant 0 : index
+        %116 = arith.cmpi slt, %115, %c0_91 : index
+        %117 = arith.addi %115, %c16_90 : index
+        %118 = arith.select %116, %117, %115 : index
+        %c-8 = arith.constant -8 : index
+        %119 = arith.addi %118, %c-8 : index
+        %120 = arith.cmpi eq, %119, %c0_89 : index
+        %c16_92 = arith.constant 16 : index
+        %c0_93 = arith.constant 0 : index
+        %c-1_94 = arith.constant -1 : index
+        %121 = arith.cmpi slt, %arg6, %c0_93 : index
+        %122 = arith.subi %c-1_94, %arg6 : index
+        %123 = arith.select %121, %122, %arg6 : index
+        %124 = arith.divsi %123, %c16_92 : index
+        %125 = arith.subi %c-1_94, %124 : index
+        %126 = arith.select %121, %125, %124 : index
+        %127 = arith.addi %126, %arg5 : index
+        hls.store_enable %11, %120, %alloca_7[%127] : i32, memref<16xi32>
+        %c0_95 = arith.constant 0 : index
+        %c16_96 = arith.constant 16 : index
+        %128 = arith.remsi %arg6, %c16_96 : index
+        %c0_97 = arith.constant 0 : index
+        %129 = arith.cmpi slt, %128, %c0_97 : index
+        %130 = arith.addi %128, %c16_96 : index
+        %131 = arith.select %129, %130, %128 : index
+        %c-9 = arith.constant -9 : index
+        %132 = arith.addi %131, %c-9 : index
+        %133 = arith.cmpi eq, %132, %c0_95 : index
+        %c16_98 = arith.constant 16 : index
+        %c0_99 = arith.constant 0 : index
+        %c-1_100 = arith.constant -1 : index
+        %134 = arith.cmpi slt, %arg6, %c0_99 : index
+        %135 = arith.subi %c-1_100, %arg6 : index
+        %136 = arith.select %134, %135, %arg6 : index
+        %137 = arith.divsi %136, %c16_98 : index
+        %138 = arith.subi %c-1_100, %137 : index
+        %139 = arith.select %134, %138, %137 : index
+        %140 = arith.addi %139, %arg5 : index
+        hls.store_enable %11, %133, %alloca_8[%140] : i32, memref<16xi32>
+        %c0_101 = arith.constant 0 : index
+        %c16_102 = arith.constant 16 : index
+        %141 = arith.remsi %arg6, %c16_102 : index
+        %c0_103 = arith.constant 0 : index
+        %142 = arith.cmpi slt, %141, %c0_103 : index
+        %143 = arith.addi %141, %c16_102 : index
+        %144 = arith.select %142, %143, %141 : index
+        %c-10 = arith.constant -10 : index
+        %145 = arith.addi %144, %c-10 : index
+        %146 = arith.cmpi eq, %145, %c0_101 : index
+        %c16_104 = arith.constant 16 : index
+        %c0_105 = arith.constant 0 : index
+        %c-1_106 = arith.constant -1 : index
+        %147 = arith.cmpi slt, %arg6, %c0_105 : index
+        %148 = arith.subi %c-1_106, %arg6 : index
+        %149 = arith.select %147, %148, %arg6 : index
+        %150 = arith.divsi %149, %c16_104 : index
+        %151 = arith.subi %c-1_106, %150 : index
+        %152 = arith.select %147, %151, %150 : index
+        %153 = arith.addi %152, %arg5 : index
+        hls.store_enable %11, %146, %alloca_9[%153] : i32, memref<16xi32>
+        %c0_107 = arith.constant 0 : index
+        %c16_108 = arith.constant 16 : index
+        %154 = arith.remsi %arg6, %c16_108 : index
+        %c0_109 = arith.constant 0 : index
+        %155 = arith.cmpi slt, %154, %c0_109 : index
+        %156 = arith.addi %154, %c16_108 : index
+        %157 = arith.select %155, %156, %154 : index
+        %c-11 = arith.constant -11 : index
+        %158 = arith.addi %157, %c-11 : index
+        %159 = arith.cmpi eq, %158, %c0_107 : index
+        %c16_110 = arith.constant 16 : index
+        %c0_111 = arith.constant 0 : index
+        %c-1_112 = arith.constant -1 : index
+        %160 = arith.cmpi slt, %arg6, %c0_111 : index
+        %161 = arith.subi %c-1_112, %arg6 : index
+        %162 = arith.select %160, %161, %arg6 : index
+        %163 = arith.divsi %162, %c16_110 : index
+        %164 = arith.subi %c-1_112, %163 : index
+        %165 = arith.select %160, %164, %163 : index
+        %166 = arith.addi %165, %arg5 : index
+        hls.store_enable %11, %159, %alloca_10[%166] : i32, memref<16xi32>
+        %c0_113 = arith.constant 0 : index
+        %c16_114 = arith.constant 16 : index
+        %167 = arith.remsi %arg6, %c16_114 : index
+        %c0_115 = arith.constant 0 : index
+        %168 = arith.cmpi slt, %167, %c0_115 : index
+        %169 = arith.addi %167, %c16_114 : index
+        %170 = arith.select %168, %169, %167 : index
+        %c-12 = arith.constant -12 : index
+        %171 = arith.addi %170, %c-12 : index
+        %172 = arith.cmpi eq, %171, %c0_113 : index
+        %c16_116 = arith.constant 16 : index
+        %c0_117 = arith.constant 0 : index
+        %c-1_118 = arith.constant -1 : index
+        %173 = arith.cmpi slt, %arg6, %c0_117 : index
+        %174 = arith.subi %c-1_118, %arg6 : index
+        %175 = arith.select %173, %174, %arg6 : index
+        %176 = arith.divsi %175, %c16_116 : index
+        %177 = arith.subi %c-1_118, %176 : index
+        %178 = arith.select %173, %177, %176 : index
+        %179 = arith.addi %178, %arg5 : index
+        hls.store_enable %11, %172, %alloca_11[%179] : i32, memref<16xi32>
+        %c0_119 = arith.constant 0 : index
+        %c16_120 = arith.constant 16 : index
+        %180 = arith.remsi %arg6, %c16_120 : index
+        %c0_121 = arith.constant 0 : index
+        %181 = arith.cmpi slt, %180, %c0_121 : index
+        %182 = arith.addi %180, %c16_120 : index
+        %183 = arith.select %181, %182, %180 : index
+        %c-13 = arith.constant -13 : index
+        %184 = arith.addi %183, %c-13 : index
+        %185 = arith.cmpi eq, %184, %c0_119 : index
+        %c16_122 = arith.constant 16 : index
+        %c0_123 = arith.constant 0 : index
+        %c-1_124 = arith.constant -1 : index
+        %186 = arith.cmpi slt, %arg6, %c0_123 : index
+        %187 = arith.subi %c-1_124, %arg6 : index
+        %188 = arith.select %186, %187, %arg6 : index
+        %189 = arith.divsi %188, %c16_122 : index
+        %190 = arith.subi %c-1_124, %189 : index
+        %191 = arith.select %186, %190, %189 : index
+        %192 = arith.addi %191, %arg5 : index
+        hls.store_enable %11, %185, %alloca_12[%192] : i32, memref<16xi32>
+        %c0_125 = arith.constant 0 : index
+        %c16_126 = arith.constant 16 : index
+        %193 = arith.remsi %arg6, %c16_126 : index
+        %c0_127 = arith.constant 0 : index
+        %194 = arith.cmpi slt, %193, %c0_127 : index
+        %195 = arith.addi %193, %c16_126 : index
+        %196 = arith.select %194, %195, %193 : index
+        %c-14 = arith.constant -14 : index
+        %197 = arith.addi %196, %c-14 : index
+        %198 = arith.cmpi eq, %197, %c0_125 : index
+        %c16_128 = arith.constant 16 : index
+        %c0_129 = arith.constant 0 : index
+        %c-1_130 = arith.constant -1 : index
+        %199 = arith.cmpi slt, %arg6, %c0_129 : index
+        %200 = arith.subi %c-1_130, %arg6 : index
+        %201 = arith.select %199, %200, %arg6 : index
+        %202 = arith.divsi %201, %c16_128 : index
+        %203 = arith.subi %c-1_130, %202 : index
+        %204 = arith.select %199, %203, %202 : index
+        %205 = arith.addi %204, %arg5 : index
+        hls.store_enable %11, %198, %alloca_13[%205] : i32, memref<16xi32>
+        %c0_131 = arith.constant 0 : index
+        %c16_132 = arith.constant 16 : index
+        %206 = arith.remsi %arg6, %c16_132 : index
+        %c0_133 = arith.constant 0 : index
+        %207 = arith.cmpi slt, %206, %c0_133 : index
+        %208 = arith.addi %206, %c16_132 : index
+        %209 = arith.select %207, %208, %206 : index
+        %c-15 = arith.constant -15 : index
+        %210 = arith.addi %209, %c-15 : index
+        %211 = arith.cmpi eq, %210, %c0_131 : index
+        %c16_134 = arith.constant 16 : index
+        %c0_135 = arith.constant 0 : index
+        %c-1_136 = arith.constant -1 : index
+        %212 = arith.cmpi slt, %arg6, %c0_135 : index
+        %213 = arith.subi %c-1_136, %arg6 : index
+        %214 = arith.select %212, %213, %arg6 : index
+        %215 = arith.divsi %214, %c16_134 : index
+        %216 = arith.subi %c-1_136, %215 : index
+        %217 = arith.select %212, %216, %215 : index
+        %218 = arith.addi %217, %arg5 : index
+        hls.store_enable %11, %211, %alloca_14[%218] : i32, memref<16xi32>
+      }
+    }
+    scf.if %8 {
+    }
+    %9 = arith.index_cast %0 : i32 to index
+    %c0_36 = arith.constant 0 : index
+    %c1_37 = arith.constant 1 : index
+    %10:2 = loopschedule.pipeline II =  1 iter_args(%arg5 = %c0_36, %arg6 = %c0_i32, %arg7 = %c0_i32) : (index, i32, i32) -> (i32, i32) {
+      %11 = arith.cmpi ult, %arg5, %9 : index
+      loopschedule.register %11 : i1
+    } do {
+      %11:7 = loopschedule.pipeline.stage start = 0 {
+        %19 = arith.cmpi eq, %arg6, %arg3 : i32
+        %20 = arith.select %19, %c0_i32, %arg6 : i32
+        %21 = arith.addi %arg7, %c1_i32 : i32
+        %22 = scf.if %19 -> (i32) {
+          scf.yield %21 : i32
+        } else {
+          scf.yield %arg7 : i32
+        }
+        %23 = arith.muli %22, %c16_i32 : i32
+        %24 = arith.addi %20, %c1_i32 : i32
+        %25 = arith.addi %arg5, %c1_37 : index
+        loopschedule.register %19, %20, %21, %22, %23, %24, %25 : i1, i32, i32, i32, i32, i32, index
+      } : i1, i32, i32, i32, i32, i32, index
+      %12:3 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %11#1, %11#3, %11#5 : i32, i32, i32
+      } : i32, i32, i32
+      %13:3 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %12#0, %12#1, %12#2 : i32, i32, i32
+      } : i32, i32, i32
+      %14:6 = loopschedule.pipeline.stage start = 3 {
+        %19 = arith.addi %11#4, %13#0 : i32
+        %20 = arith.index_cast %19 : i32 to index
+        %21 = arith.remui %20, %c16 : index
+        %22 = arith.divui %20, %c16 : index
+        loopschedule.register %13#1, %13#2, %19, %20, %21, %22 : i32, i32, i32, index, index, index
+      } : i32, i32, i32, index, index, index
+      %15:2 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %14#0, %14#1 : i32, i32
+      } : i32, i32
+      %16:2 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %15#0, %15#1 : i32, i32
+      } : i32, i32
+      %17:33 = loopschedule.pipeline.stage start = 6 {
+        %19 = memref.load %alloca[%14#5] : memref<16xi32>
+        %20 = memref.load %alloca_0[%14#5] : memref<16xi32>
+        %21 = memref.load %alloca_1[%14#5] : memref<16xi32>
+        %22 = memref.load %alloca_2[%14#5] : memref<16xi32>
+        %23 = memref.load %alloca_3[%14#5] : memref<16xi32>
+        %24 = memref.load %alloca_4[%14#5] : memref<16xi32>
+        %25 = memref.load %alloca_5[%14#5] : memref<16xi32>
+        %26 = memref.load %alloca_6[%14#5] : memref<16xi32>
+        %27 = memref.load %alloca_7[%14#5] : memref<16xi32>
+        %28 = memref.load %alloca_8[%14#5] : memref<16xi32>
+        %29 = memref.load %alloca_9[%14#5] : memref<16xi32>
+        %30 = memref.load %alloca_10[%14#5] : memref<16xi32>
+        %31 = memref.load %alloca_11[%14#5] : memref<16xi32>
+        %32 = memref.load %alloca_12[%14#5] : memref<16xi32>
+        %33 = memref.load %alloca_13[%14#5] : memref<16xi32>
+        %34 = memref.load %alloca_14[%14#5] : memref<16xi32>
+        %35 = arith.cmpi eq, %14#4, %c14 : index
+        %36 = arith.cmpi eq, %14#4, %c13 : index
+        %37 = arith.cmpi eq, %14#4, %c12 : index
+        %38 = arith.cmpi eq, %14#4, %c11 : index
+        %39 = arith.cmpi eq, %14#4, %c10 : index
+        %40 = arith.cmpi eq, %14#4, %c9 : index
+        %41 = arith.cmpi eq, %14#4, %c8 : index
+        %42 = arith.cmpi eq, %14#4, %c7 : index
+        %43 = arith.cmpi eq, %14#4, %c6 : index
+        %44 = arith.cmpi eq, %14#4, %c5 : index
+        %45 = arith.cmpi eq, %14#4, %c4 : index
+        %46 = arith.cmpi eq, %14#4, %c3 : index
+        %47 = arith.cmpi eq, %14#4, %c2 : index
+        %48 = arith.cmpi eq, %14#4, %c1 : index
+        %49 = arith.cmpi eq, %14#4, %c0 : index
+        loopschedule.register %16#0, %16#1, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33, %34, %35, %36, %37, %38, %39, %40, %41, %42, %43, %44, %45, %46, %47, %48, %49 : i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+      } : i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+      %18:17 = loopschedule.pipeline.stage start = 7 {
+        %19 = arith.select %17#18, %17#16, %17#17 : i32
+        %20 = arith.select %17#19, %17#15, %19 : i32
+        %21 = arith.select %17#20, %17#14, %20 : i32
+        %22 = arith.select %17#21, %17#13, %21 : i32
+        %23 = arith.select %17#22, %17#12, %22 : i32
+        %24 = arith.select %17#23, %17#11, %23 : i32
+        %25 = arith.select %17#24, %17#10, %24 : i32
+        %26 = arith.select %17#25, %17#9, %25 : i32
+        %27 = arith.select %17#26, %17#8, %26 : i32
+        %28 = arith.select %17#27, %17#7, %27 : i32
+        %29 = arith.select %17#28, %17#6, %28 : i32
+        %30 = arith.select %17#29, %17#5, %29 : i32
+        %31 = arith.select %17#30, %17#4, %30 : i32
+        %32 = arith.select %17#31, %17#3, %31 : i32
+        %33 = arith.select %17#32, %17#2, %32 : i32
+        memref.store %33, %arg2[%arg5] : memref<?xi32>
+        loopschedule.register %17#0, %17#1, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33 : i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32
+      } : i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32
+      loopschedule.terminator iter_args(%11#6, %18#1, %18#0), results(%18#1, %18#0) : (index, i32, i32) -> (i32, i32)
+    }
+    return
+  }
+}
+

@@ -1,0 +1,25 @@
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/fft_transpose.mlir":12:15)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/fft_transpose.mlir":173:15)
+  kind=RAM_T2P  bram=4
+    576x64b -> RAM_T2P (x16/block) = 4 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/fft_transpose.mlir":174:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/fft_transpose.mlir":175:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/fft_transpose.mlir":176:17)
+  kind=RAM_T2P  bram=4
+    512x64b -> RAM_T2P (x16/block) = 4 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/fft_transpose.mlir":177:17)
+  kind=RAM_T2P  bram=4
+    512x64b -> RAM_T2P (x16/block) = 4 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/fft_transpose.mlir":178:17)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/fft_transpose.mlir":543:18)
+  kind=RAM_1P  bram=0
+    excluded from BRAM accounting (LUTRAM / stream / zero-size)
+Total BRAM: 12

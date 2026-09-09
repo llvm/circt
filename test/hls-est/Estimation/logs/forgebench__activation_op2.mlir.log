@@ -1,0 +1,817 @@
+memref.global @ loc("forgebench/activation_op2.mlir":2:3)
+  kind=RAM_1P  bram=49
+    50176x16b -> RAM_1P (x32/block) = 49 BRAM_18K
+memref.global @ loc("forgebench/activation_op2.mlir":3:3)
+  kind=RAM_1P  bram=49
+    50176x16b -> RAM_1P (x32/block) = 49 BRAM_18K
+memref.global @ loc("forgebench/activation_op2.mlir":4:3)
+  kind=RAM_1P  bram=49
+    50176x16b -> RAM_1P (x32/block) = 49 BRAM_18K
+memref.global @ loc("forgebench/activation_op2.mlir":5:3)
+  kind=RAM_1P  bram=49
+    50176x16b -> RAM_1P (x32/block) = 49 BRAM_18K
+Total BRAM: 196
+module {
+  memref.global "private" @FM_buffer_4 : memref<64x28x28xf16> = uninitialized
+  memref.global "private" @FM_buffer_3 : memref<64x28x28xf16> = uninitialized
+  memref.global "private" @FM_buffer_2 : memref<64x28x28xf16> = uninitialized
+  memref.global "private" @FM_buffer_1 : memref<64x28x28xf16> = uninitialized
+  func.func @_Z3topPA28_A28_fS1_S1_S1_S1_S1_(%arg0: memref<64x28x28xf16>, %arg1: memref<64x28x28xf16>, %arg2: memref<64x28x28xf16>, %arg3: memref<64x28x28xf16>, %arg4: memref<64x28x28xf16>, %arg5: memref<64x28x28xf16>) attributes {hls.allocation = [{instances = "", limit = 1 : i32, type = "function"}, {instances = "", limit = 1 : i32, type = "function"}, {instances = "", limit = 1 : i32, type = "function"}, {instances = "", limit = 1 : i32, type = "function"}, {instances = "", limit = 1 : i32, type = "function"}, {instances = "", limit = 1 : i32, type = "function"}, {instances = "", limit = 1 : i32, type = "function"}, {instances = "", limit = 1 : i32, type = "function"}, {instances = "", limit = 1 : i32, type = "function"}]} {
+    %0 = memref.get_global @FM_buffer_1 : memref<64x28x28xf16>
+    %c64 = arith.constant 64 : index
+    %c28 = arith.constant 28 : index
+    %1 = arith.muli %c64, %c28 overflow<nsw> : index
+    %c28_0 = arith.constant 28 : index
+    %2 = arith.muli %1, %c28_0 overflow<nsw> : index
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg6 = %c0) : (index) -> () {
+      %22 = arith.cmpi ult, %arg6, %2 : index
+      loopschedule.register %22 : i1
+    } do {
+      %22:12 = loopschedule.pipeline.stage start = 0 {
+        %29 = arith.remsi %arg6, %c28_0 : index
+        %c0_41 = arith.constant 0 : index
+        %c0_42 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %30 = arith.cmpi slt, %arg6, %c0_42 : index
+        %31 = arith.subi %c-1, %arg6 : index
+        %32 = arith.select %30, %31, %arg6 : index
+        %33 = arith.divsi %32, %c28_0 : index
+        %c0_43 = arith.constant 0 : index
+        %c0_44 = arith.constant 0 : index
+        %c-1_45 = arith.constant -1 : index
+        %34 = arith.addi %arg6, %c1 : index
+        loopschedule.register %29, %c0_41, %c0_42, %c-1, %30, %31, %32, %33, %c0_43, %c0_44, %c-1_45, %34 : index, index, index, index, i1, index, index, index, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index, index, index, index
+      %23:6 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %22#1, %22#3, %22#4, %22#8, %22#9, %22#10 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %24:6 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %23#0, %23#1, %23#2, %23#3, %23#4, %23#5 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %25:12 = loopschedule.pipeline.stage start = 3 {
+        %29 = arith.cmpi slt, %22#0, %24#0 : index
+        %30 = arith.addi %22#0, %c28_0 : index
+        %31 = arith.select %29, %30, %22#0 : index
+        %32 = arith.subi %24#1, %22#7 : index
+        %33 = arith.select %24#2, %32, %22#7 : index
+        %34 = arith.remsi %33, %c28 : index
+        %35 = arith.cmpi slt, %33, %24#4 : index
+        %36 = arith.subi %24#5, %33 : index
+        %37 = arith.select %35, %36, %33 : index
+        %38 = arith.divsi %37, %c28 : index
+        loopschedule.register %24#3, %24#5, %29, %30, %31, %32, %33, %34, %35, %36, %37, %38 : index, index, i1, index, index, index, index, index, i1, index, index, index
+      } : index, index, i1, index, index, index, index, index, i1, index, index, index
+      %26:4 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %25#0, %25#1, %25#4, %25#8 : index, index, index, i1
+      } : index, index, index, i1
+      %27:4 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %26#0, %26#1, %26#2, %26#3 : index, index, index, i1
+      } : index, index, index, i1
+      %28:7 = loopschedule.pipeline.stage start = 6 {
+        %29 = arith.cmpi slt, %25#7, %27#0 : index
+        %30 = arith.addi %25#7, %c28 : index
+        %31 = arith.select %29, %30, %25#7 : index
+        %32 = arith.subi %27#1, %25#11 : index
+        %33 = arith.select %27#3, %32, %25#11 : index
+        %34 = memref.load %arg2[%33, %31, %27#2] : memref<64x28x28xf16>
+        loopschedule.register %27#2, %29, %30, %31, %32, %33, %34 : index, i1, index, index, index, index, f16
+      } : index, i1, index, index, index, index, f16
+      loopschedule.pipeline.stage start = 7 {
+        memref.store %28#6, %0[%28#5, %28#3, %28#0] : memref<64x28x28xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%22#11), results() : (index) -> ()
+    }
+    %3 = memref.get_global @FM_buffer_2 : memref<64x28x28xf16>
+    %c64_1 = arith.constant 64 : index
+    %c28_2 = arith.constant 28 : index
+    %4 = arith.muli %c64_1, %c28_2 overflow<nsw> : index
+    %c28_3 = arith.constant 28 : index
+    %5 = arith.muli %4, %c28_3 overflow<nsw> : index
+    %c0_4 = arith.constant 0 : index
+    %c1_5 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg6 = %c0_4) : (index) -> () {
+      %22 = arith.cmpi ult, %arg6, %5 : index
+      loopschedule.register %22 : i1
+    } do {
+      %22:12 = loopschedule.pipeline.stage start = 0 {
+        %49 = arith.remsi %arg6, %c28_3 : index
+        %c0_41 = arith.constant 0 : index
+        %c0_42 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %50 = arith.cmpi slt, %arg6, %c0_42 : index
+        %51 = arith.subi %c-1, %arg6 : index
+        %52 = arith.select %50, %51, %arg6 : index
+        %53 = arith.divsi %52, %c28_3 : index
+        %c0_43 = arith.constant 0 : index
+        %c0_44 = arith.constant 0 : index
+        %c-1_45 = arith.constant -1 : index
+        %54 = arith.addi %arg6, %c1_5 : index
+        loopschedule.register %49, %c0_41, %c0_42, %c-1, %50, %51, %52, %53, %c0_43, %c0_44, %c-1_45, %54 : index, index, index, index, i1, index, index, index, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index, index, index, index
+      %23:6 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %22#1, %22#3, %22#4, %22#8, %22#9, %22#10 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %24:6 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %23#0, %23#1, %23#2, %23#3, %23#4, %23#5 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %25:12 = loopschedule.pipeline.stage start = 3 {
+        %49 = arith.cmpi slt, %22#0, %24#0 : index
+        %50 = arith.addi %22#0, %c28_3 : index
+        %51 = arith.select %49, %50, %22#0 : index
+        %52 = arith.subi %24#1, %22#7 : index
+        %53 = arith.select %24#2, %52, %22#7 : index
+        %54 = arith.remsi %53, %c28_2 : index
+        %55 = arith.cmpi slt, %53, %24#4 : index
+        %56 = arith.subi %24#5, %53 : index
+        %57 = arith.select %55, %56, %53 : index
+        %58 = arith.divsi %57, %c28_2 : index
+        loopschedule.register %24#3, %24#5, %49, %50, %51, %52, %53, %54, %55, %56, %57, %58 : index, index, i1, index, index, index, index, index, i1, index, index, index
+      } : index, index, i1, index, index, index, index, index, i1, index, index, index
+      %26:4 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %25#0, %25#1, %25#4, %25#8 : index, index, index, i1
+      } : index, index, index, i1
+      %27:4 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %26#0, %26#1, %26#2, %26#3 : index, index, index, i1
+      } : index, index, index, i1
+      %28:7 = loopschedule.pipeline.stage start = 6 {
+        %49 = arith.cmpi slt, %25#7, %27#0 : index
+        %50 = arith.addi %25#7, %c28_2 : index
+        %51 = arith.select %49, %50, %25#7 : index
+        %52 = arith.subi %27#1, %25#11 : index
+        %53 = arith.select %27#3, %52, %25#11 : index
+        %54 = memref.load %0[%53, %51, %27#2] : memref<64x28x28xf16>
+        loopschedule.register %27#2, %49, %50, %51, %52, %53, %54 : index, i1, index, index, index, index, f16
+      } : index, i1, index, index, index, index, f16
+      %29:4 = loopschedule.pipeline.stage start = 7 {
+        %49 = math.exp %28#6 : f16
+        loopschedule.register %28#0, %28#3, %28#5, %49 : index, index, index, f16
+      } : index, index, index, f16
+      %30:3 = loopschedule.pipeline.stage start = 8 {
+        loopschedule.register %29#0, %29#1, %29#2 : index, index, index
+      } : index, index, index
+      %31:3 = loopschedule.pipeline.stage start = 9 {
+        loopschedule.register %30#0, %30#1, %30#2 : index, index, index
+      } : index, index, index
+      %32:3 = loopschedule.pipeline.stage start = 10 {
+        loopschedule.register %31#0, %31#1, %31#2 : index, index, index
+      } : index, index, index
+      %33:3 = loopschedule.pipeline.stage start = 11 {
+        loopschedule.register %32#0, %32#1, %32#2 : index, index, index
+      } : index, index, index
+      %34:3 = loopschedule.pipeline.stage start = 12 {
+        loopschedule.register %33#0, %33#1, %33#2 : index, index, index
+      } : index, index, index
+      %35:3 = loopschedule.pipeline.stage start = 13 {
+        loopschedule.register %34#0, %34#1, %34#2 : index, index, index
+      } : index, index, index
+      %36:3 = loopschedule.pipeline.stage start = 14 {
+        loopschedule.register %35#0, %35#1, %35#2 : index, index, index
+      } : index, index, index
+      %37:3 = loopschedule.pipeline.stage start = 15 {
+        loopschedule.register %36#0, %36#1, %36#2 : index, index, index
+      } : index, index, index
+      %38:3 = loopschedule.pipeline.stage start = 16 {
+        loopschedule.register %37#0, %37#1, %37#2 : index, index, index
+      } : index, index, index
+      %39:3 = loopschedule.pipeline.stage start = 17 {
+        loopschedule.register %38#0, %38#1, %38#2 : index, index, index
+      } : index, index, index
+      %40:3 = loopschedule.pipeline.stage start = 18 {
+        loopschedule.register %39#0, %39#1, %39#2 : index, index, index
+      } : index, index, index
+      %41:3 = loopschedule.pipeline.stage start = 19 {
+        loopschedule.register %40#0, %40#1, %40#2 : index, index, index
+      } : index, index, index
+      %42:3 = loopschedule.pipeline.stage start = 20 {
+        loopschedule.register %41#0, %41#1, %41#2 : index, index, index
+      } : index, index, index
+      %43:3 = loopschedule.pipeline.stage start = 21 {
+        loopschedule.register %42#0, %42#1, %42#2 : index, index, index
+      } : index, index, index
+      %44:3 = loopschedule.pipeline.stage start = 22 {
+        loopschedule.register %43#0, %43#1, %43#2 : index, index, index
+      } : index, index, index
+      %45:3 = loopschedule.pipeline.stage start = 23 {
+        loopschedule.register %44#0, %44#1, %44#2 : index, index, index
+      } : index, index, index
+      %46:3 = loopschedule.pipeline.stage start = 24 {
+        loopschedule.register %45#0, %45#1, %45#2 : index, index, index
+      } : index, index, index
+      %47:3 = loopschedule.pipeline.stage start = 25 {
+        loopschedule.register %46#0, %46#1, %46#2 : index, index, index
+      } : index, index, index
+      %48:3 = loopschedule.pipeline.stage start = 26 {
+        loopschedule.register %47#0, %47#1, %47#2 : index, index, index
+      } : index, index, index
+      loopschedule.pipeline.stage start = 27 {
+        memref.store %29#3, %3[%48#2, %48#1, %48#0] : memref<64x28x28xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%22#11), results() : (index) -> ()
+    }
+    %6 = memref.get_global @FM_buffer_3 : memref<64x28x28xf16>
+    %c64_6 = arith.constant 64 : index
+    %c28_7 = arith.constant 28 : index
+    %7 = arith.muli %c64_6, %c28_7 overflow<nsw> : index
+    %c28_8 = arith.constant 28 : index
+    %8 = arith.muli %7, %c28_8 overflow<nsw> : index
+    %c0_9 = arith.constant 0 : index
+    %c1_10 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg6 = %c0_9) : (index) -> () {
+      %22 = arith.cmpi ult, %arg6, %8 : index
+      loopschedule.register %22 : i1
+    } do {
+      %22:12 = loopschedule.pipeline.stage start = 0 {
+        %30 = arith.remsi %arg6, %c28_8 : index
+        %c0_41 = arith.constant 0 : index
+        %c0_42 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %31 = arith.cmpi slt, %arg6, %c0_42 : index
+        %32 = arith.subi %c-1, %arg6 : index
+        %33 = arith.select %31, %32, %arg6 : index
+        %34 = arith.divsi %33, %c28_8 : index
+        %c0_43 = arith.constant 0 : index
+        %c0_44 = arith.constant 0 : index
+        %c-1_45 = arith.constant -1 : index
+        %35 = arith.addi %arg6, %c1_10 : index
+        loopschedule.register %30, %c0_41, %c0_42, %c-1, %31, %32, %33, %34, %c0_43, %c0_44, %c-1_45, %35 : index, index, index, index, i1, index, index, index, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index, index, index, index
+      %23:6 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %22#1, %22#3, %22#4, %22#8, %22#9, %22#10 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %24:6 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %23#0, %23#1, %23#2, %23#3, %23#4, %23#5 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %25:12 = loopschedule.pipeline.stage start = 3 {
+        %30 = arith.cmpi slt, %22#0, %24#0 : index
+        %31 = arith.addi %22#0, %c28_8 : index
+        %32 = arith.select %30, %31, %22#0 : index
+        %33 = arith.subi %24#1, %22#7 : index
+        %34 = arith.select %24#2, %33, %22#7 : index
+        %35 = arith.remsi %34, %c28_7 : index
+        %36 = arith.cmpi slt, %34, %24#4 : index
+        %37 = arith.subi %24#5, %34 : index
+        %38 = arith.select %36, %37, %34 : index
+        %39 = arith.divsi %38, %c28_7 : index
+        loopschedule.register %24#3, %24#5, %30, %31, %32, %33, %34, %35, %36, %37, %38, %39 : index, index, i1, index, index, index, index, index, i1, index, index, index
+      } : index, index, i1, index, index, index, index, index, i1, index, index, index
+      %26:4 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %25#0, %25#1, %25#4, %25#8 : index, index, index, i1
+      } : index, index, index, i1
+      %27:4 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %26#0, %26#1, %26#2, %26#3 : index, index, index, i1
+      } : index, index, index, i1
+      %28:7 = loopschedule.pipeline.stage start = 6 {
+        %30 = arith.cmpi slt, %25#7, %27#0 : index
+        %31 = arith.addi %25#7, %c28_7 : index
+        %32 = arith.select %30, %31, %25#7 : index
+        %33 = arith.subi %27#1, %25#11 : index
+        %34 = arith.select %27#3, %33, %25#11 : index
+        %35 = memref.load %0[%34, %32, %27#2] : memref<64x28x28xf16>
+        loopschedule.register %27#2, %30, %31, %32, %33, %34, %35 : index, i1, index, index, index, index, f16
+      } : index, i1, index, index, index, index, f16
+      %29 = loopschedule.pipeline.stage start = 7 {
+        %30 = arith.negf %28#6 : f16
+        memref.store %30, %6[%28#5, %28#3, %28#0] : memref<64x28x28xf16>
+        loopschedule.register %30 : f16
+      } : f16
+      loopschedule.terminator iter_args(%22#11), results() : (index) -> ()
+    }
+    %c64_11 = arith.constant 64 : index
+    %c28_12 = arith.constant 28 : index
+    %9 = arith.muli %c64_11, %c28_12 overflow<nsw> : index
+    %c28_13 = arith.constant 28 : index
+    %10 = arith.muli %9, %c28_13 overflow<nsw> : index
+    %c0_14 = arith.constant 0 : index
+    %c1_15 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg6 = %c0_14) : (index) -> () {
+      %22 = arith.cmpi ult, %arg6, %10 : index
+      loopschedule.register %22 : i1
+    } do {
+      %22:12 = loopschedule.pipeline.stage start = 0 {
+        %49 = arith.remsi %arg6, %c28_13 : index
+        %c0_41 = arith.constant 0 : index
+        %c0_42 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %50 = arith.cmpi slt, %arg6, %c0_42 : index
+        %51 = arith.subi %c-1, %arg6 : index
+        %52 = arith.select %50, %51, %arg6 : index
+        %53 = arith.divsi %52, %c28_13 : index
+        %c0_43 = arith.constant 0 : index
+        %c0_44 = arith.constant 0 : index
+        %c-1_45 = arith.constant -1 : index
+        %54 = arith.addi %arg6, %c1_15 : index
+        loopschedule.register %49, %c0_41, %c0_42, %c-1, %50, %51, %52, %53, %c0_43, %c0_44, %c-1_45, %54 : index, index, index, index, i1, index, index, index, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index, index, index, index
+      %23:6 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %22#1, %22#3, %22#4, %22#8, %22#9, %22#10 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %24:6 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %23#0, %23#1, %23#2, %23#3, %23#4, %23#5 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %25:12 = loopschedule.pipeline.stage start = 3 {
+        %49 = arith.cmpi slt, %22#0, %24#0 : index
+        %50 = arith.addi %22#0, %c28_13 : index
+        %51 = arith.select %49, %50, %22#0 : index
+        %52 = arith.subi %24#1, %22#7 : index
+        %53 = arith.select %24#2, %52, %22#7 : index
+        %54 = arith.remsi %53, %c28_12 : index
+        %55 = arith.cmpi slt, %53, %24#4 : index
+        %56 = arith.subi %24#5, %53 : index
+        %57 = arith.select %55, %56, %53 : index
+        %58 = arith.divsi %57, %c28_12 : index
+        loopschedule.register %24#3, %24#5, %49, %50, %51, %52, %53, %54, %55, %56, %57, %58 : index, index, i1, index, index, index, index, index, i1, index, index, index
+      } : index, index, i1, index, index, index, index, index, i1, index, index, index
+      %26:4 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %25#0, %25#1, %25#4, %25#8 : index, index, index, i1
+      } : index, index, index, i1
+      %27:4 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %26#0, %26#1, %26#2, %26#3 : index, index, index, i1
+      } : index, index, index, i1
+      %28:7 = loopschedule.pipeline.stage start = 6 {
+        %49 = arith.cmpi slt, %25#7, %27#0 : index
+        %50 = arith.addi %25#7, %c28_12 : index
+        %51 = arith.select %49, %50, %25#7 : index
+        %52 = arith.subi %27#1, %25#11 : index
+        %53 = arith.select %27#3, %52, %25#11 : index
+        %54 = memref.load %6[%53, %51, %27#2] : memref<64x28x28xf16>
+        loopschedule.register %27#2, %49, %50, %51, %52, %53, %54 : index, i1, index, index, index, index, f16
+      } : index, i1, index, index, index, index, f16
+      %29:4 = loopschedule.pipeline.stage start = 7 {
+        %49 = math.exp %28#6 : f16
+        loopschedule.register %28#0, %28#3, %28#5, %49 : index, index, index, f16
+      } : index, index, index, f16
+      %30:3 = loopschedule.pipeline.stage start = 8 {
+        loopschedule.register %29#0, %29#1, %29#2 : index, index, index
+      } : index, index, index
+      %31:3 = loopschedule.pipeline.stage start = 9 {
+        loopschedule.register %30#0, %30#1, %30#2 : index, index, index
+      } : index, index, index
+      %32:3 = loopschedule.pipeline.stage start = 10 {
+        loopschedule.register %31#0, %31#1, %31#2 : index, index, index
+      } : index, index, index
+      %33:3 = loopschedule.pipeline.stage start = 11 {
+        loopschedule.register %32#0, %32#1, %32#2 : index, index, index
+      } : index, index, index
+      %34:3 = loopschedule.pipeline.stage start = 12 {
+        loopschedule.register %33#0, %33#1, %33#2 : index, index, index
+      } : index, index, index
+      %35:3 = loopschedule.pipeline.stage start = 13 {
+        loopschedule.register %34#0, %34#1, %34#2 : index, index, index
+      } : index, index, index
+      %36:3 = loopschedule.pipeline.stage start = 14 {
+        loopschedule.register %35#0, %35#1, %35#2 : index, index, index
+      } : index, index, index
+      %37:3 = loopschedule.pipeline.stage start = 15 {
+        loopschedule.register %36#0, %36#1, %36#2 : index, index, index
+      } : index, index, index
+      %38:3 = loopschedule.pipeline.stage start = 16 {
+        loopschedule.register %37#0, %37#1, %37#2 : index, index, index
+      } : index, index, index
+      %39:3 = loopschedule.pipeline.stage start = 17 {
+        loopschedule.register %38#0, %38#1, %38#2 : index, index, index
+      } : index, index, index
+      %40:3 = loopschedule.pipeline.stage start = 18 {
+        loopschedule.register %39#0, %39#1, %39#2 : index, index, index
+      } : index, index, index
+      %41:3 = loopschedule.pipeline.stage start = 19 {
+        loopschedule.register %40#0, %40#1, %40#2 : index, index, index
+      } : index, index, index
+      %42:3 = loopschedule.pipeline.stage start = 20 {
+        loopschedule.register %41#0, %41#1, %41#2 : index, index, index
+      } : index, index, index
+      %43:3 = loopschedule.pipeline.stage start = 21 {
+        loopschedule.register %42#0, %42#1, %42#2 : index, index, index
+      } : index, index, index
+      %44:3 = loopschedule.pipeline.stage start = 22 {
+        loopschedule.register %43#0, %43#1, %43#2 : index, index, index
+      } : index, index, index
+      %45:3 = loopschedule.pipeline.stage start = 23 {
+        loopschedule.register %44#0, %44#1, %44#2 : index, index, index
+      } : index, index, index
+      %46:3 = loopschedule.pipeline.stage start = 24 {
+        loopschedule.register %45#0, %45#1, %45#2 : index, index, index
+      } : index, index, index
+      %47:3 = loopschedule.pipeline.stage start = 25 {
+        loopschedule.register %46#0, %46#1, %46#2 : index, index, index
+      } : index, index, index
+      %48:3 = loopschedule.pipeline.stage start = 26 {
+        loopschedule.register %47#0, %47#1, %47#2 : index, index, index
+      } : index, index, index
+      loopschedule.pipeline.stage start = 27 {
+        memref.store %29#3, %0[%48#2, %48#1, %48#0] : memref<64x28x28xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%22#11), results() : (index) -> ()
+    }
+    %c64_16 = arith.constant 64 : index
+    %c28_17 = arith.constant 28 : index
+    %11 = arith.muli %c64_16, %c28_17 overflow<nsw> : index
+    %c28_18 = arith.constant 28 : index
+    %12 = arith.muli %11, %c28_18 overflow<nsw> : index
+    %c0_19 = arith.constant 0 : index
+    %c1_20 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg6 = %c0_19) : (index) -> () {
+      %22 = arith.cmpi ult, %arg6, %12 : index
+      loopschedule.register %22 : i1
+    } do {
+      %22:12 = loopschedule.pipeline.stage start = 0 {
+        %34 = arith.remsi %arg6, %c28_18 : index
+        %c0_41 = arith.constant 0 : index
+        %c0_42 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %35 = arith.cmpi slt, %arg6, %c0_42 : index
+        %36 = arith.subi %c-1, %arg6 : index
+        %37 = arith.select %35, %36, %arg6 : index
+        %38 = arith.divsi %37, %c28_18 : index
+        %c0_43 = arith.constant 0 : index
+        %c0_44 = arith.constant 0 : index
+        %c-1_45 = arith.constant -1 : index
+        %39 = arith.addi %arg6, %c1_20 : index
+        loopschedule.register %34, %c0_41, %c0_42, %c-1, %35, %36, %37, %38, %c0_43, %c0_44, %c-1_45, %39 : index, index, index, index, i1, index, index, index, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index, index, index, index
+      %23:6 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %22#1, %22#3, %22#4, %22#8, %22#9, %22#10 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %24:6 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %23#0, %23#1, %23#2, %23#3, %23#4, %23#5 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %25:12 = loopschedule.pipeline.stage start = 3 {
+        %34 = arith.cmpi slt, %22#0, %24#0 : index
+        %35 = arith.addi %22#0, %c28_18 : index
+        %36 = arith.select %34, %35, %22#0 : index
+        %37 = arith.subi %24#1, %22#7 : index
+        %38 = arith.select %24#2, %37, %22#7 : index
+        %39 = arith.remsi %38, %c28_17 : index
+        %40 = arith.cmpi slt, %38, %24#4 : index
+        %41 = arith.subi %24#5, %38 : index
+        %42 = arith.select %40, %41, %38 : index
+        %43 = arith.divsi %42, %c28_17 : index
+        loopschedule.register %24#3, %24#5, %34, %35, %36, %37, %38, %39, %40, %41, %42, %43 : index, index, i1, index, index, index, index, index, i1, index, index, index
+      } : index, index, i1, index, index, index, index, index, i1, index, index, index
+      %26:4 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %25#0, %25#1, %25#4, %25#8 : index, index, index, i1
+      } : index, index, index, i1
+      %27:4 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %26#0, %26#1, %26#2, %26#3 : index, index, index, i1
+      } : index, index, index, i1
+      %28:8 = loopschedule.pipeline.stage start = 6 {
+        %34 = arith.cmpi slt, %25#7, %27#0 : index
+        %35 = arith.addi %25#7, %c28_17 : index
+        %36 = arith.select %34, %35, %25#7 : index
+        %37 = arith.subi %27#1, %25#11 : index
+        %38 = arith.select %27#3, %37, %25#11 : index
+        %39 = memref.load %3[%38, %36, %27#2] : memref<64x28x28xf16>
+        %40 = memref.load %0[%38, %36, %27#2] : memref<64x28x28xf16>
+        loopschedule.register %27#2, %34, %35, %36, %37, %38, %39, %40 : index, i1, index, index, index, index, f16, f16
+      } : index, i1, index, index, index, index, f16, f16
+      %29:4 = loopschedule.pipeline.stage start = 7 {
+        %34 = arith.addf %28#6, %28#7 : f16
+        loopschedule.register %28#0, %28#3, %28#5, %34 : index, index, index, f16
+      } : index, index, index, f16
+      %30:3 = loopschedule.pipeline.stage start = 8 {
+        loopschedule.register %29#0, %29#1, %29#2 : index, index, index
+      } : index, index, index
+      %31:3 = loopschedule.pipeline.stage start = 9 {
+        loopschedule.register %30#0, %30#1, %30#2 : index, index, index
+      } : index, index, index
+      %32:3 = loopschedule.pipeline.stage start = 10 {
+        loopschedule.register %31#0, %31#1, %31#2 : index, index, index
+      } : index, index, index
+      %33:3 = loopschedule.pipeline.stage start = 11 {
+        loopschedule.register %32#0, %32#1, %32#2 : index, index, index
+      } : index, index, index
+      loopschedule.pipeline.stage start = 12 {
+        memref.store %29#3, %6[%33#2, %33#1, %33#0] : memref<64x28x28xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%22#11), results() : (index) -> ()
+    }
+    %13 = memref.get_global @FM_buffer_4 : memref<64x28x28xf16>
+    %c64_21 = arith.constant 64 : index
+    %c28_22 = arith.constant 28 : index
+    %14 = arith.muli %c64_21, %c28_22 overflow<nsw> : index
+    %c28_23 = arith.constant 28 : index
+    %15 = arith.muli %14, %c28_23 overflow<nsw> : index
+    %c0_24 = arith.constant 0 : index
+    %c1_25 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg6 = %c0_24) : (index) -> () {
+      %22 = arith.cmpi ult, %arg6, %15 : index
+      loopschedule.register %22 : i1
+    } do {
+      %22:12 = loopschedule.pipeline.stage start = 0 {
+        %30 = arith.remsi %arg6, %c28_23 : index
+        %c0_41 = arith.constant 0 : index
+        %c0_42 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %31 = arith.cmpi slt, %arg6, %c0_42 : index
+        %32 = arith.subi %c-1, %arg6 : index
+        %33 = arith.select %31, %32, %arg6 : index
+        %34 = arith.divsi %33, %c28_23 : index
+        %c0_43 = arith.constant 0 : index
+        %c0_44 = arith.constant 0 : index
+        %c-1_45 = arith.constant -1 : index
+        %35 = arith.addi %arg6, %c1_25 : index
+        loopschedule.register %30, %c0_41, %c0_42, %c-1, %31, %32, %33, %34, %c0_43, %c0_44, %c-1_45, %35 : index, index, index, index, i1, index, index, index, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index, index, index, index
+      %23:6 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %22#1, %22#3, %22#4, %22#8, %22#9, %22#10 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %24:6 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %23#0, %23#1, %23#2, %23#3, %23#4, %23#5 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %25:12 = loopschedule.pipeline.stage start = 3 {
+        %30 = arith.cmpi slt, %22#0, %24#0 : index
+        %31 = arith.addi %22#0, %c28_23 : index
+        %32 = arith.select %30, %31, %22#0 : index
+        %33 = arith.subi %24#1, %22#7 : index
+        %34 = arith.select %24#2, %33, %22#7 : index
+        %35 = arith.remsi %34, %c28_22 : index
+        %36 = arith.cmpi slt, %34, %24#4 : index
+        %37 = arith.subi %24#5, %34 : index
+        %38 = arith.select %36, %37, %34 : index
+        %39 = arith.divsi %38, %c28_22 : index
+        loopschedule.register %24#3, %24#5, %30, %31, %32, %33, %34, %35, %36, %37, %38, %39 : index, index, i1, index, index, index, index, index, i1, index, index, index
+      } : index, index, i1, index, index, index, index, index, i1, index, index, index
+      %26:4 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %25#0, %25#1, %25#4, %25#8 : index, index, index, i1
+      } : index, index, index, i1
+      %27:4 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %26#0, %26#1, %26#2, %26#3 : index, index, index, i1
+      } : index, index, index, i1
+      %28:7 = loopschedule.pipeline.stage start = 6 {
+        %30 = arith.cmpi slt, %25#7, %27#0 : index
+        %31 = arith.addi %25#7, %c28_22 : index
+        %32 = arith.select %30, %31, %25#7 : index
+        %33 = arith.subi %27#1, %25#11 : index
+        %34 = arith.select %27#3, %33, %25#11 : index
+        %35 = memref.load %0[%34, %32, %27#2] : memref<64x28x28xf16>
+        loopschedule.register %27#2, %30, %31, %32, %33, %34, %35 : index, i1, index, index, index, index, f16
+      } : index, i1, index, index, index, index, f16
+      %29 = loopschedule.pipeline.stage start = 7 {
+        %30 = arith.negf %28#6 : f16
+        memref.store %30, %13[%28#5, %28#3, %28#0] : memref<64x28x28xf16>
+        loopschedule.register %30 : f16
+      } : f16
+      loopschedule.terminator iter_args(%22#11), results() : (index) -> ()
+    }
+    %c64_26 = arith.constant 64 : index
+    %c28_27 = arith.constant 28 : index
+    %16 = arith.muli %c64_26, %c28_27 overflow<nsw> : index
+    %c28_28 = arith.constant 28 : index
+    %17 = arith.muli %16, %c28_28 overflow<nsw> : index
+    %c0_29 = arith.constant 0 : index
+    %c1_30 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg6 = %c0_29) : (index) -> () {
+      %22 = arith.cmpi ult, %arg6, %17 : index
+      loopschedule.register %22 : i1
+    } do {
+      %22:12 = loopschedule.pipeline.stage start = 0 {
+        %34 = arith.remsi %arg6, %c28_28 : index
+        %c0_41 = arith.constant 0 : index
+        %c0_42 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %35 = arith.cmpi slt, %arg6, %c0_42 : index
+        %36 = arith.subi %c-1, %arg6 : index
+        %37 = arith.select %35, %36, %arg6 : index
+        %38 = arith.divsi %37, %c28_28 : index
+        %c0_43 = arith.constant 0 : index
+        %c0_44 = arith.constant 0 : index
+        %c-1_45 = arith.constant -1 : index
+        %39 = arith.addi %arg6, %c1_30 : index
+        loopschedule.register %34, %c0_41, %c0_42, %c-1, %35, %36, %37, %38, %c0_43, %c0_44, %c-1_45, %39 : index, index, index, index, i1, index, index, index, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index, index, index, index
+      %23:6 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %22#1, %22#3, %22#4, %22#8, %22#9, %22#10 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %24:6 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %23#0, %23#1, %23#2, %23#3, %23#4, %23#5 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %25:12 = loopschedule.pipeline.stage start = 3 {
+        %34 = arith.cmpi slt, %22#0, %24#0 : index
+        %35 = arith.addi %22#0, %c28_28 : index
+        %36 = arith.select %34, %35, %22#0 : index
+        %37 = arith.subi %24#1, %22#7 : index
+        %38 = arith.select %24#2, %37, %22#7 : index
+        %39 = arith.remsi %38, %c28_27 : index
+        %40 = arith.cmpi slt, %38, %24#4 : index
+        %41 = arith.subi %24#5, %38 : index
+        %42 = arith.select %40, %41, %38 : index
+        %43 = arith.divsi %42, %c28_27 : index
+        loopschedule.register %24#3, %24#5, %34, %35, %36, %37, %38, %39, %40, %41, %42, %43 : index, index, i1, index, index, index, index, index, i1, index, index, index
+      } : index, index, i1, index, index, index, index, index, i1, index, index, index
+      %26:4 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %25#0, %25#1, %25#4, %25#8 : index, index, index, i1
+      } : index, index, index, i1
+      %27:4 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %26#0, %26#1, %26#2, %26#3 : index, index, index, i1
+      } : index, index, index, i1
+      %28:8 = loopschedule.pipeline.stage start = 6 {
+        %34 = arith.cmpi slt, %25#7, %27#0 : index
+        %35 = arith.addi %25#7, %c28_27 : index
+        %36 = arith.select %34, %35, %25#7 : index
+        %37 = arith.subi %27#1, %25#11 : index
+        %38 = arith.select %27#3, %37, %25#11 : index
+        %39 = memref.load %3[%38, %36, %27#2] : memref<64x28x28xf16>
+        %40 = memref.load %13[%38, %36, %27#2] : memref<64x28x28xf16>
+        loopschedule.register %27#2, %34, %35, %36, %37, %38, %39, %40 : index, i1, index, index, index, index, f16, f16
+      } : index, i1, index, index, index, index, f16, f16
+      %29:4 = loopschedule.pipeline.stage start = 7 {
+        %34 = arith.addf %28#6, %28#7 : f16
+        loopschedule.register %28#0, %28#3, %28#5, %34 : index, index, index, f16
+      } : index, index, index, f16
+      %30:3 = loopschedule.pipeline.stage start = 8 {
+        loopschedule.register %29#0, %29#1, %29#2 : index, index, index
+      } : index, index, index
+      %31:3 = loopschedule.pipeline.stage start = 9 {
+        loopschedule.register %30#0, %30#1, %30#2 : index, index, index
+      } : index, index, index
+      %32:3 = loopschedule.pipeline.stage start = 10 {
+        loopschedule.register %31#0, %31#1, %31#2 : index, index, index
+      } : index, index, index
+      %33:3 = loopschedule.pipeline.stage start = 11 {
+        loopschedule.register %32#0, %32#1, %32#2 : index, index, index
+      } : index, index, index
+      loopschedule.pipeline.stage start = 12 {
+        memref.store %29#3, %0[%33#2, %33#1, %33#0] : memref<64x28x28xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%22#11), results() : (index) -> ()
+    }
+    %c64_31 = arith.constant 64 : index
+    %c28_32 = arith.constant 28 : index
+    %18 = arith.muli %c64_31, %c28_32 overflow<nsw> : index
+    %c28_33 = arith.constant 28 : index
+    %19 = arith.muli %18, %c28_33 overflow<nsw> : index
+    %c0_34 = arith.constant 0 : index
+    %c1_35 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg6 = %c0_34) : (index) -> () {
+      %22 = arith.cmpi ult, %arg6, %19 : index
+      loopschedule.register %22 : i1
+    } do {
+      %22:12 = loopschedule.pipeline.stage start = 0 {
+        %41 = arith.remsi %arg6, %c28_33 : index
+        %c0_41 = arith.constant 0 : index
+        %c0_42 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %42 = arith.cmpi slt, %arg6, %c0_42 : index
+        %43 = arith.subi %c-1, %arg6 : index
+        %44 = arith.select %42, %43, %arg6 : index
+        %45 = arith.divsi %44, %c28_33 : index
+        %c0_43 = arith.constant 0 : index
+        %c0_44 = arith.constant 0 : index
+        %c-1_45 = arith.constant -1 : index
+        %46 = arith.addi %arg6, %c1_35 : index
+        loopschedule.register %41, %c0_41, %c0_42, %c-1, %42, %43, %44, %45, %c0_43, %c0_44, %c-1_45, %46 : index, index, index, index, i1, index, index, index, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index, index, index, index
+      %23:6 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %22#1, %22#3, %22#4, %22#8, %22#9, %22#10 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %24:6 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %23#0, %23#1, %23#2, %23#3, %23#4, %23#5 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %25:12 = loopschedule.pipeline.stage start = 3 {
+        %41 = arith.cmpi slt, %22#0, %24#0 : index
+        %42 = arith.addi %22#0, %c28_33 : index
+        %43 = arith.select %41, %42, %22#0 : index
+        %44 = arith.subi %24#1, %22#7 : index
+        %45 = arith.select %24#2, %44, %22#7 : index
+        %46 = arith.remsi %45, %c28_32 : index
+        %47 = arith.cmpi slt, %45, %24#4 : index
+        %48 = arith.subi %24#5, %45 : index
+        %49 = arith.select %47, %48, %45 : index
+        %50 = arith.divsi %49, %c28_32 : index
+        loopschedule.register %24#3, %24#5, %41, %42, %43, %44, %45, %46, %47, %48, %49, %50 : index, index, i1, index, index, index, index, index, i1, index, index, index
+      } : index, index, i1, index, index, index, index, index, i1, index, index, index
+      %26:4 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %25#0, %25#1, %25#4, %25#8 : index, index, index, i1
+      } : index, index, index, i1
+      %27:4 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %26#0, %26#1, %26#2, %26#3 : index, index, index, i1
+      } : index, index, index, i1
+      %28:8 = loopschedule.pipeline.stage start = 6 {
+        %41 = arith.cmpi slt, %25#7, %27#0 : index
+        %42 = arith.addi %25#7, %c28_32 : index
+        %43 = arith.select %41, %42, %25#7 : index
+        %44 = arith.subi %27#1, %25#11 : index
+        %45 = arith.select %27#3, %44, %25#11 : index
+        %46 = memref.load %0[%45, %43, %27#2] : memref<64x28x28xf16>
+        %47 = memref.load %6[%45, %43, %27#2] : memref<64x28x28xf16>
+        loopschedule.register %27#2, %41, %42, %43, %44, %45, %46, %47 : index, i1, index, index, index, index, f16, f16
+      } : index, i1, index, index, index, index, f16, f16
+      %29:4 = loopschedule.pipeline.stage start = 7 {
+        %41 = arith.divf %28#6, %28#7 : f16
+        loopschedule.register %28#0, %28#3, %28#5, %41 : index, index, index, f16
+      } : index, index, index, f16
+      %30:3 = loopschedule.pipeline.stage start = 8 {
+        loopschedule.register %29#0, %29#1, %29#2 : index, index, index
+      } : index, index, index
+      %31:3 = loopschedule.pipeline.stage start = 9 {
+        loopschedule.register %30#0, %30#1, %30#2 : index, index, index
+      } : index, index, index
+      %32:3 = loopschedule.pipeline.stage start = 10 {
+        loopschedule.register %31#0, %31#1, %31#2 : index, index, index
+      } : index, index, index
+      %33:3 = loopschedule.pipeline.stage start = 11 {
+        loopschedule.register %32#0, %32#1, %32#2 : index, index, index
+      } : index, index, index
+      %34:3 = loopschedule.pipeline.stage start = 12 {
+        loopschedule.register %33#0, %33#1, %33#2 : index, index, index
+      } : index, index, index
+      %35:3 = loopschedule.pipeline.stage start = 13 {
+        loopschedule.register %34#0, %34#1, %34#2 : index, index, index
+      } : index, index, index
+      %36:3 = loopschedule.pipeline.stage start = 14 {
+        loopschedule.register %35#0, %35#1, %35#2 : index, index, index
+      } : index, index, index
+      %37:3 = loopschedule.pipeline.stage start = 15 {
+        loopschedule.register %36#0, %36#1, %36#2 : index, index, index
+      } : index, index, index
+      %38:3 = loopschedule.pipeline.stage start = 16 {
+        loopschedule.register %37#0, %37#1, %37#2 : index, index, index
+      } : index, index, index
+      %39:3 = loopschedule.pipeline.stage start = 17 {
+        loopschedule.register %38#0, %38#1, %38#2 : index, index, index
+      } : index, index, index
+      %40:3 = loopschedule.pipeline.stage start = 18 {
+        loopschedule.register %39#0, %39#1, %39#2 : index, index, index
+      } : index, index, index
+      loopschedule.pipeline.stage start = 19 {
+        memref.store %29#3, %3[%40#2, %40#1, %40#0] : memref<64x28x28xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%22#11), results() : (index) -> ()
+    }
+    %c64_36 = arith.constant 64 : index
+    %c28_37 = arith.constant 28 : index
+    %20 = arith.muli %c64_36, %c28_37 overflow<nsw> : index
+    %c28_38 = arith.constant 28 : index
+    %21 = arith.muli %20, %c28_38 overflow<nsw> : index
+    %c0_39 = arith.constant 0 : index
+    %c1_40 = arith.constant 1 : index
+    loopschedule.pipeline II =  1 iter_args(%arg6 = %c0_39) : (index) -> () {
+      %22 = arith.cmpi ult, %arg6, %21 : index
+      loopschedule.register %22 : i1
+    } do {
+      %22:12 = loopschedule.pipeline.stage start = 0 {
+        %29 = arith.remsi %arg6, %c28_38 : index
+        %c0_41 = arith.constant 0 : index
+        %c0_42 = arith.constant 0 : index
+        %c-1 = arith.constant -1 : index
+        %30 = arith.cmpi slt, %arg6, %c0_42 : index
+        %31 = arith.subi %c-1, %arg6 : index
+        %32 = arith.select %30, %31, %arg6 : index
+        %33 = arith.divsi %32, %c28_38 : index
+        %c0_43 = arith.constant 0 : index
+        %c0_44 = arith.constant 0 : index
+        %c-1_45 = arith.constant -1 : index
+        %34 = arith.addi %arg6, %c1_40 : index
+        loopschedule.register %29, %c0_41, %c0_42, %c-1, %30, %31, %32, %33, %c0_43, %c0_44, %c-1_45, %34 : index, index, index, index, i1, index, index, index, index, index, index, index
+      } : index, index, index, index, i1, index, index, index, index, index, index, index
+      %23:6 = loopschedule.pipeline.stage start = 1 {
+        loopschedule.register %22#1, %22#3, %22#4, %22#8, %22#9, %22#10 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %24:6 = loopschedule.pipeline.stage start = 2 {
+        loopschedule.register %23#0, %23#1, %23#2, %23#3, %23#4, %23#5 : index, index, i1, index, index, index
+      } : index, index, i1, index, index, index
+      %25:12 = loopschedule.pipeline.stage start = 3 {
+        %29 = arith.cmpi slt, %22#0, %24#0 : index
+        %30 = arith.addi %22#0, %c28_38 : index
+        %31 = arith.select %29, %30, %22#0 : index
+        %32 = arith.subi %24#1, %22#7 : index
+        %33 = arith.select %24#2, %32, %22#7 : index
+        %34 = arith.remsi %33, %c28_37 : index
+        %35 = arith.cmpi slt, %33, %24#4 : index
+        %36 = arith.subi %24#5, %33 : index
+        %37 = arith.select %35, %36, %33 : index
+        %38 = arith.divsi %37, %c28_37 : index
+        loopschedule.register %24#3, %24#5, %29, %30, %31, %32, %33, %34, %35, %36, %37, %38 : index, index, i1, index, index, index, index, index, i1, index, index, index
+      } : index, index, i1, index, index, index, index, index, i1, index, index, index
+      %26:4 = loopschedule.pipeline.stage start = 4 {
+        loopschedule.register %25#0, %25#1, %25#4, %25#8 : index, index, index, i1
+      } : index, index, index, i1
+      %27:4 = loopschedule.pipeline.stage start = 5 {
+        loopschedule.register %26#0, %26#1, %26#2, %26#3 : index, index, index, i1
+      } : index, index, index, i1
+      %28:7 = loopschedule.pipeline.stage start = 6 {
+        %29 = arith.cmpi slt, %25#7, %27#0 : index
+        %30 = arith.addi %25#7, %c28_37 : index
+        %31 = arith.select %29, %30, %25#7 : index
+        %32 = arith.subi %27#1, %25#11 : index
+        %33 = arith.select %27#3, %32, %25#11 : index
+        %34 = memref.load %3[%33, %31, %27#2] : memref<64x28x28xf16>
+        loopschedule.register %27#2, %29, %30, %31, %32, %33, %34 : index, i1, index, index, index, index, f16
+      } : index, i1, index, index, index, index, f16
+      loopschedule.pipeline.stage start = 7 {
+        memref.store %28#6, %arg3[%28#5, %28#3, %28#0] : memref<64x28x28xf16>
+        loopschedule.register 
+      }
+      loopschedule.terminator iter_args(%22#11), results() : (index) -> ()
+    }
+    return
+  }
+}
+

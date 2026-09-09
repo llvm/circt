@@ -9,6 +9,7 @@ add_mlir_library(HLSPasses
         DebugUnroll.cpp
 
         DEPENDS
+        CIRCTTransformsPassIncGen
         CIRCTConversionPassIncGen
         MemoryInterfaceIncGen
         BRAMTransformsIncGen

@@ -25,6 +25,7 @@
 #include "circt/Dialect/Seq/SeqDialect.h"              // seq::SeqDialect
 #include "circt/Dialect/Calyx/CalyxDialect.h"          // calyx::CalyxDialect
 #include "circt/Dialect/Resource/HLS/HLSOps.h"         // custom dialect
+#include "mlir/Dialect/Math/IR/Math.h"    
 
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
@@ -38,6 +39,7 @@ int main(int argc, char **argv) {
       mlir::func::FuncDialect,
       mlir::cf::ControlFlowDialect,
       mlir::index::IndexDialect,
+      mlir::math::MathDialect,
       // CIRCT
       circt::loopschedule::LoopScheduleDialect,
       circt::hw::HWDialect,
@@ -60,6 +62,7 @@ int main(int argc, char **argv) {
   mlir::affine::registerAffinePasses();
   mlir::registerCSEPass();
   mlir::registerCanonicalizerPass();
+  mlir::registerTransformsPasses();
 
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "HLS BRAM analysis driver\n", registry));

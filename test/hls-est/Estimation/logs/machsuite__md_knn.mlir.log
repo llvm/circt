@@ -1,0 +1,229 @@
+Total BRAM: 0
+module {
+  func.func @md_kernel(%arg0: memref<256xf64>, %arg1: memref<256xf64>, %arg2: memref<256xf64>, %arg3: memref<256xf64>, %arg4: memref<256xf64>, %arg5: memref<256xf64>, %arg6: memref<4096xi32>) {
+    %cst = arith.constant 2.000000e+00 : f64
+    %cst_0 = arith.constant 1.500000e+00 : f64
+    %cst_1 = arith.constant 1.000000e+00 : f64
+    %cst_2 = arith.constant 0.000000e+00 : f64
+    affine.for %arg7 = 0 to 256 {
+      %0 = memref.load %arg3[%arg7] : memref<256xf64>
+      %1 = memref.load %arg4[%arg7] : memref<256xf64>
+      %2 = memref.load %arg5[%arg7] : memref<256xf64>
+      %c0 = arith.constant 0 : index
+      %c16 = arith.constant 16 : index
+      %c1 = arith.constant 1 : index
+      %3:3 = loopschedule.pipeline II =  5 trip_count =  16 iter_args(%arg8 = %c0, %arg9 = %cst_2, %arg10 = %cst_2, %arg11 = %cst_2) : (index, f64, f64, f64) -> (f64, f64, f64) {
+        %4 = arith.cmpi ult, %arg8, %c16 : index
+        loopschedule.register %4 : i1
+      } do {
+        %4:3 = loopschedule.pipeline.stage start = 0 {
+          %c16_3 = arith.constant 16 : index
+          %61 = arith.muli %arg7, %c16_3 overflow<nsw> : index
+          %62 = arith.addi %arg8, %c1 : index
+          loopschedule.register %c16_3, %61, %62 : index, index, index
+        } : index, index, index
+        %5:2 = loopschedule.pipeline.stage start = 3 {
+          %61 = arith.addi %arg8, %4#1 : index
+          %62 = memref.load %arg6[%61] : memref<4096xi32>
+          loopschedule.register %61, %62 : index, i32
+        } : index, i32
+        %6:4 = loopschedule.pipeline.stage start = 4 {
+          %61 = arith.index_cast %5#1 : i32 to index
+          %62 = memref.load %arg3[%61] : memref<256xf64>
+          %63 = memref.load %arg4[%61] : memref<256xf64>
+          %64 = memref.load %arg5[%61] : memref<256xf64>
+          loopschedule.register %61, %62, %63, %64 : index, f64, f64, f64
+        } : index, f64, f64, f64
+        %7:3 = loopschedule.pipeline.stage start = 5 {
+          %61 = arith.subf %0, %6#1 {polygeist.ssa_names = ["delx"]} : f64
+          %62 = arith.subf %1, %6#2 {polygeist.ssa_names = ["dely"]} : f64
+          %63 = arith.subf %2, %6#3 {polygeist.ssa_names = ["delz"]} : f64
+          loopschedule.register %61, %62, %63 : f64, f64, f64
+        } : f64, f64, f64
+        %8:6 = loopschedule.pipeline.stage start = 10 {
+          %61 = arith.mulf %7#0, %7#0 : f64
+          %62 = arith.mulf %7#1, %7#1 : f64
+          %63 = arith.mulf %7#2, %7#2 : f64
+          loopschedule.register %7#0, %7#1, %7#2, %61, %62, %63 : f64, f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64, f64
+        %9:3 = loopschedule.pipeline.stage start = 11 {
+          loopschedule.register %8#0, %8#1, %8#2 : f64, f64, f64
+        } : f64, f64, f64
+        %10:3 = loopschedule.pipeline.stage start = 12 {
+          loopschedule.register %9#0, %9#1, %9#2 : f64, f64, f64
+        } : f64, f64, f64
+        %11:3 = loopschedule.pipeline.stage start = 13 {
+          loopschedule.register %10#0, %10#1, %10#2 : f64, f64, f64
+        } : f64, f64, f64
+        %12:5 = loopschedule.pipeline.stage start = 14 {
+          %61 = arith.addf %8#3, %8#4 : f64
+          loopschedule.register %11#0, %11#1, %11#2, %8#5, %61 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %13:4 = loopschedule.pipeline.stage start = 15 {
+          loopschedule.register %12#0, %12#1, %12#2, %12#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %14:4 = loopschedule.pipeline.stage start = 16 {
+          loopschedule.register %13#0, %13#1, %13#2, %13#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %15:4 = loopschedule.pipeline.stage start = 17 {
+          loopschedule.register %14#0, %14#1, %14#2, %14#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %16:4 = loopschedule.pipeline.stage start = 18 {
+          loopschedule.register %15#0, %15#1, %15#2, %15#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %17:4 = loopschedule.pipeline.stage start = 19 {
+          %61 = arith.addf %12#4, %16#3 : f64
+          loopschedule.register %16#0, %16#1, %16#2, %61 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %18:3 = loopschedule.pipeline.stage start = 20 {
+          loopschedule.register %17#0, %17#1, %17#2 : f64, f64, f64
+        } : f64, f64, f64
+        %19:3 = loopschedule.pipeline.stage start = 21 {
+          loopschedule.register %18#0, %18#1, %18#2 : f64, f64, f64
+        } : f64, f64, f64
+        %20:3 = loopschedule.pipeline.stage start = 22 {
+          loopschedule.register %19#0, %19#1, %19#2 : f64, f64, f64
+        } : f64, f64, f64
+        %21:3 = loopschedule.pipeline.stage start = 23 {
+          loopschedule.register %20#0, %20#1, %20#2 : f64, f64, f64
+        } : f64, f64, f64
+        %22:4 = loopschedule.pipeline.stage start = 24 {
+          %61 = arith.divf %cst_1, %17#3 {polygeist.ssa_names = ["r2inv"]} : f64
+          loopschedule.register %21#0, %21#1, %21#2, %61 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %23:3 = loopschedule.pipeline.stage start = 25 {
+          loopschedule.register %22#0, %22#1, %22#2 : f64, f64, f64
+        } : f64, f64, f64
+        %24:3 = loopschedule.pipeline.stage start = 26 {
+          loopschedule.register %23#0, %23#1, %23#2 : f64, f64, f64
+        } : f64, f64, f64
+        %25:3 = loopschedule.pipeline.stage start = 27 {
+          loopschedule.register %24#0, %24#1, %24#2 : f64, f64, f64
+        } : f64, f64, f64
+        %26:3 = loopschedule.pipeline.stage start = 28 {
+          loopschedule.register %25#0, %25#1, %25#2 : f64, f64, f64
+        } : f64, f64, f64
+        %27:3 = loopschedule.pipeline.stage start = 29 {
+          loopschedule.register %26#0, %26#1, %26#2 : f64, f64, f64
+        } : f64, f64, f64
+        %28:3 = loopschedule.pipeline.stage start = 30 {
+          loopschedule.register %27#0, %27#1, %27#2 : f64, f64, f64
+        } : f64, f64, f64
+        %29:3 = loopschedule.pipeline.stage start = 31 {
+          loopschedule.register %28#0, %28#1, %28#2 : f64, f64, f64
+        } : f64, f64, f64
+        %30:3 = loopschedule.pipeline.stage start = 32 {
+          loopschedule.register %29#0, %29#1, %29#2 : f64, f64, f64
+        } : f64, f64, f64
+        %31:3 = loopschedule.pipeline.stage start = 33 {
+          loopschedule.register %30#0, %30#1, %30#2 : f64, f64, f64
+        } : f64, f64, f64
+        %32:3 = loopschedule.pipeline.stage start = 34 {
+          loopschedule.register %31#0, %31#1, %31#2 : f64, f64, f64
+        } : f64, f64, f64
+        %33:3 = loopschedule.pipeline.stage start = 35 {
+          loopschedule.register %32#0, %32#1, %32#2 : f64, f64, f64
+        } : f64, f64, f64
+        %34:5 = loopschedule.pipeline.stage start = 36 {
+          %61 = arith.mulf %22#3, %22#3 : f64
+          loopschedule.register %33#0, %33#1, %33#2, %22#3, %61 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %35:4 = loopschedule.pipeline.stage start = 37 {
+          loopschedule.register %34#0, %34#1, %34#2, %34#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %36:4 = loopschedule.pipeline.stage start = 38 {
+          loopschedule.register %35#0, %35#1, %35#2, %35#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %37:4 = loopschedule.pipeline.stage start = 39 {
+          loopschedule.register %36#0, %36#1, %36#2, %36#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %38:5 = loopschedule.pipeline.stage start = 40 {
+          %61 = arith.mulf %34#4, %37#3 {polygeist.ssa_names = ["r6inv"]} : f64
+          loopschedule.register %37#0, %37#1, %37#2, %37#3, %61 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %39:4 = loopschedule.pipeline.stage start = 41 {
+          loopschedule.register %38#0, %38#1, %38#2, %38#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %40:4 = loopschedule.pipeline.stage start = 42 {
+          loopschedule.register %39#0, %39#1, %39#2, %39#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %41:4 = loopschedule.pipeline.stage start = 43 {
+          loopschedule.register %40#0, %40#1, %40#2, %40#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %42:6 = loopschedule.pipeline.stage start = 44 {
+          %61 = arith.mulf %38#4, %cst_0 : f64
+          loopschedule.register %41#0, %41#1, %41#2, %41#3, %38#4, %61 : f64, f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64, f64
+        %43:5 = loopschedule.pipeline.stage start = 45 {
+          loopschedule.register %42#0, %42#1, %42#2, %42#3, %42#4 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %44:5 = loopschedule.pipeline.stage start = 46 {
+          loopschedule.register %43#0, %43#1, %43#2, %43#3, %43#4 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %45:5 = loopschedule.pipeline.stage start = 47 {
+          loopschedule.register %44#0, %44#1, %44#2, %44#3, %44#4 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %46:6 = loopschedule.pipeline.stage start = 48 {
+          %61 = arith.subf %42#5, %cst : f64
+          loopschedule.register %45#0, %45#1, %45#2, %45#3, %45#4, %61 : f64, f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64, f64
+        %47:5 = loopschedule.pipeline.stage start = 49 {
+          loopschedule.register %46#0, %46#1, %46#2, %46#3, %46#4 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %48:5 = loopschedule.pipeline.stage start = 50 {
+          loopschedule.register %47#0, %47#1, %47#2, %47#3, %47#4 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %49:5 = loopschedule.pipeline.stage start = 51 {
+          loopschedule.register %48#0, %48#1, %48#2, %48#3, %48#4 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %50:5 = loopschedule.pipeline.stage start = 52 {
+          loopschedule.register %49#0, %49#1, %49#2, %49#3, %49#4 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %51:5 = loopschedule.pipeline.stage start = 53 {
+          %61 = arith.mulf %50#4, %46#5 {polygeist.ssa_names = ["potential"]} : f64
+          loopschedule.register %50#0, %50#1, %50#2, %50#3, %61 : f64, f64, f64, f64, f64
+        } : f64, f64, f64, f64, f64
+        %52:4 = loopschedule.pipeline.stage start = 54 {
+          loopschedule.register %51#0, %51#1, %51#2, %51#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %53:4 = loopschedule.pipeline.stage start = 55 {
+          loopschedule.register %52#0, %52#1, %52#2, %52#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %54:4 = loopschedule.pipeline.stage start = 56 {
+          loopschedule.register %53#0, %53#1, %53#2, %53#3 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %55:4 = loopschedule.pipeline.stage start = 57 {
+          %61 = arith.mulf %54#3, %51#4 {polygeist.ssa_names = ["force"]} : f64
+          loopschedule.register %54#0, %54#1, %54#2, %61 : f64, f64, f64, f64
+        } : f64, f64, f64, f64
+        %56:3 = loopschedule.pipeline.stage start = 58 {
+          loopschedule.register %55#0, %55#1, %55#2 : f64, f64, f64
+        } : f64, f64, f64
+        %57:3 = loopschedule.pipeline.stage start = 59 {
+          loopschedule.register %56#0, %56#1, %56#2 : f64, f64, f64
+        } : f64, f64, f64
+        %58:3 = loopschedule.pipeline.stage start = 60 {
+          loopschedule.register %57#0, %57#1, %57#2 : f64, f64, f64
+        } : f64, f64, f64
+        %59:3 = loopschedule.pipeline.stage start = 61 {
+          %61 = arith.mulf %58#0, %55#3 : f64
+          %62 = arith.mulf %58#1, %55#3 : f64
+          %63 = arith.mulf %58#2, %55#3 : f64
+          loopschedule.register %61, %62, %63 : f64, f64, f64
+        } : f64, f64, f64
+        %60:3 = loopschedule.pipeline.stage start = 65 {
+          %61 = arith.addf %arg11, %59#0 : f64
+          %62 = arith.addf %arg10, %59#1 : f64
+          %63 = arith.addf %arg9, %59#2 : f64
+          loopschedule.register %61, %62, %63 : f64, f64, f64
+        } : f64, f64, f64
+        loopschedule.terminator iter_args(%4#2, %60#2, %60#1, %60#0), results(%60#2, %60#1, %60#0) : (index, f64, f64, f64) -> (f64, f64, f64)
+      }
+      memref.store %3#2, %arg0[%arg7] : memref<256xf64>
+      memref.store %3#1, %arg1[%arg7] : memref<256xf64>
+      memref.store %3#0, %arg2[%arg7] : memref<256xf64>
+    }
+    return
+  }
+}
+

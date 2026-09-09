@@ -1,0 +1,16 @@
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/polybench/bicg.mlir":8:15)
+  kind=RAM_1P  bram=1
+    64x32b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/polybench/bicg.mlir":9:17)
+  kind=RAM_2P  bram=2
+    64x32b -> RAM_2P (x16/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/polybench/bicg.mlir":10:17)
+  kind=RAM_1P  bram=1
+    64x32b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/polybench/bicg.mlir":11:17)
+  kind=RAM_1P  bram=1
+    64x32b -> RAM_1P (x32/block) = 1 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/polybench/bicg.mlir":12:17)
+  kind=RAM_1P  bram=8
+    4096x32b -> RAM_1P (x32/block) = 8 BRAM_18K
+Total BRAM: 13

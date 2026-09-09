@@ -1,0 +1,48 @@
+Total BRAM: 0
+module {
+  func.func @gemm(%arg0: memref<4096xf64>, %arg1: memref<4096xf64>, %arg2: memref<4096xf64>) {
+    %cst = arith.constant 0.000000e+00 : f64
+    affine.for %arg3 = 0 to 64 {
+      affine.for %arg4 = 0 to 64 {
+        %c0 = arith.constant 0 : index
+        %c64 = arith.constant 64 : index
+        %c1 = arith.constant 1 : index
+        %0 = loopschedule.pipeline II =  5 trip_count =  64 iter_args(%arg5 = %c0, %arg6 = %cst) : (index, f64) -> f64 {
+          %3 = arith.cmpi ult, %arg5, %c64 : index
+          loopschedule.register %3 : i1
+        } do {
+          %3:5 = loopschedule.pipeline.stage start = 0 {
+            %c64_1 = arith.constant 64 : index
+            %7 = arith.muli %arg3, %c64_1 overflow<nsw> : index
+            %c64_2 = arith.constant 64 : index
+            %8 = arith.muli %arg5, %c64_2 overflow<nsw> : index
+            %9 = arith.addi %arg5, %c1 : index
+            loopschedule.register %c64_1, %7, %c64_2, %8, %9 : index, index, index, index, index
+          } : index, index, index, index, index
+          %4:4 = loopschedule.pipeline.stage start = 3 {
+            %7 = arith.addi %arg5, %3#1 : index
+            %8 = memref.load %arg0[%7] : memref<4096xf64>
+            %9 = arith.addi %arg4, %3#3 : index
+            %10 = memref.load %arg1[%9] : memref<4096xf64>
+            loopschedule.register %7, %8, %9, %10 : index, f64, index, f64
+          } : index, f64, index, f64
+          %5 = loopschedule.pipeline.stage start = 4 {
+            %7 = arith.mulf %4#1, %4#3 {polygeist.ssa_names = ["mult"]} : f64
+            loopschedule.register %7 : f64
+          } : f64
+          %6 = loopschedule.pipeline.stage start = 8 {
+            %7 = arith.addf %arg6, %5 : f64
+            loopschedule.register %7 : f64
+          } : f64
+          loopschedule.terminator iter_args(%3#4, %6), results(%6) : (index, f64) -> f64
+        }
+        %c64_0 = arith.constant 64 : index
+        %1 = arith.muli %arg3, %c64_0 overflow<nsw> : index
+        %2 = arith.addi %arg4, %1 : index
+        memref.store %0, %arg2[%2] : memref<4096xf64>
+      }
+    }
+    return
+  }
+}
+

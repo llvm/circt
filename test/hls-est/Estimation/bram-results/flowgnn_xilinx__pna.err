@@ -1,0 +1,3 @@
+/mnt/d/HLS/circt/test/hls-est/Estimation/flowgnn_xilinx/pna.mlir:2:55: error: `!"llvm"<"struct<(array<4 x f32>)>">` type created with unregistered dialect. If this is intended, please call allowUnregisteredDialects() on the MLIRContext, or use -allow-unregistered-dialect with the MLIR opt tool used
+memref.global @messages_ping : memref<4x5000x80x!llvm.struct<(array<4 x f32>)>>
+                                                      ^

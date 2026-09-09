@@ -1,0 +1,50 @@
+/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/stencil2D.mlir:7:16: error: 'affine.for' op operation destroyed but still has uses
+          %1 = affine.for %arg7 = 0 to 3 iter_args(%arg8 = %arg6) -> (i32) {
+               ^
+/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/stencil2D.mlir:7:16: note: see current operation: 
+%0 = "affine.for"(<<UNKNOWN SSA VALUE>>) <{lowerBoundMap = affine_map<() -> (0)>, operandSegmentSizes = array<i32: 0, 0, 1>, step = 1 : index, upperBoundMap = affine_map<() -> (3)>}> ({
+^bb0(%arg0: index, %arg1: i32):
+}) : (i32) -> i32
+/mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/stencil2D.mlir:14:11: note: - use: "affine.yield"(<<UNKNOWN SSA VALUE>>) : (i32) -> ()
+
+          affine.yield %1 : i32
+          ^
+LLVM ERROR: operation destroyed but still has uses
+PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+Stack dump:
+0.	Program arguments: /mnt/d/HLS/circt/build-clion-v2/bin/hls-est /mnt/d/HLS/circt/test/hls-est/Estimation/machsuite/stencil2D.mlir --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis -o /dev/null
+Stack dump without symbol names (ensure you have llvm-symbolizer in your PATH or set the environment var `LLVM_SYMBOLIZER_PATH` to point to it):
+0  hls-est   0x00006019eb859497
+1  hls-est   0x00006019eb856fea
+2  hls-est   0x00006019eb85a285
+3  libc.so.6 0x000070210a242520
+4  libc.so.6 0x000070210a2969bc pthread_kill + 300
+5  libc.so.6 0x000070210a242476 raise + 22
+6  libc.so.6 0x000070210a2287f3 abort + 211
+7  hls-est   0x00006019eb7d9f47
+8  hls-est   0x00006019eb7d9da6
+9  hls-est   0x00006019eb735255
+10 hls-est   0x00006019eb735f60
+11 hls-est   0x00006019eb6810be
+12 hls-est   0x00006019eb225616
+13 hls-est   0x00006019eaf8c12b
+14 hls-est   0x00006019eaf8ba4f
+15 hls-est   0x00006019eb508e0b
+16 hls-est   0x00006019eb5099d9
+17 hls-est   0x00006019eb5140eb
+18 hls-est   0x00006019eb50c468
+19 hls-est   0x00006019eb508e48
+20 hls-est   0x00006019eb5099d9
+21 hls-est   0x00006019eb510198
+22 hls-est   0x00006019eb50fa88
+23 hls-est   0x00006019eb020426
+24 hls-est   0x00006019eb01f65e
+25 hls-est   0x00006019eb773b9b
+26 hls-est   0x00006019eb016402
+27 hls-est   0x00006019eb0167fc
+28 hls-est   0x00006019eb016a3d
+29 hls-est   0x00006019ea4ff3f8
+30 libc.so.6 0x000070210a229d90
+31 libc.so.6 0x000070210a229e40 __libc_start_main + 128
+32 hls-est   0x00006019ea4ff275
+timeout: the monitored command dumped core

@@ -58,6 +58,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/IRMapping.h"
@@ -242,15 +243,26 @@ void AffineToLoopSchedule::coalescePerfectNests() {
 static void anchorUntrackedSideEffects(AffineForOp forOp,
                                        ModuloProblem &problem) {
   Operation *anchor = forOp.getBody()->getTerminator();
-  forOp.getBody()->walk([&](Operation *op) {
-    if (!isa<hls_analysis::StoreEnableOp>(op))
-      return;
-    // Aux (control) dependence: op must be scheduled before the terminator.
+
+  SmallVector<Operation *> ops(problem.getOperations().begin(),
+                               problem.getOperations().end());
+
+  // Every op that is already the source of some dependence has an outgoing
+  // edge; everything else is a sink.
+  DenseSet<Operation *> hasSuccessor;
+  for (Operation *op : ops)
+    for (auto dep : problem.getDependences(op))
+      if (Operation *src = dep.getSource())
+        hasSuccessor.insert(src);
+
+  for (Operation *op : ops) {
+    if (op == anchor || hasSuccessor.contains(op))
+      continue;
     Problem::Dependence dep(op, anchor);
     auto inserted = problem.insertDependence(dep);
     (void)inserted;
-    assert(succeeded(inserted) && "failed to anchor store_enable");
-  });
+    assert(succeeded(inserted) && "failed to anchor sink");
+  }
 }
 
 /// MODIFIED: Fully unroll constant-trip innermost reduction loops so the
@@ -299,6 +311,22 @@ void AffineToLoopSchedule::runOnOperation() {
   coalescePerfectNests();      // flatten perfect rectangular bands
   // unrollInnerReductions();     // unroll innermost reduction loops; the loop
   // above becomes the new innermost/pipelined loop
+
+  // MODIFIED: drop trivially dead ops up front. A dead op has no outgoing
+  // dependence edge, so it is a sink in the scheduling DAG; anchoring it
+  // would burn a slot and a pipeline register for a value nothing reads.
+  // This must precede getAnalysis<MemoryDependenceAnalysis>(), since
+  // erasing ops later invalidates the analysis's cached Operation* keys —
+  // and must never run after a ModuloProblem has been built from them.
+  {
+    SmallVector<Operation *> dead;
+    getOperation().walk([&](Operation *op) {
+      if (isOpTriviallyDead(op))
+        dead.push_back(op);
+    });
+    for (Operation *op : llvm::reverse(dead))
+      op->erase();
+  }
   
   // Get dependence analysis for the whole function.
   auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
@@ -320,8 +348,7 @@ void AffineToLoopSchedule::runOnOperation() {
   {
     OpPassManager cleanup(getOperation()->getName());
     cleanup.addPass(createCSEPass());
-    if (failed(runPipeline(cleanup, getOperation())))
-      return signalPassFailure();
+    cleanup.addPass(mlir::createSymbolDCEPass());
   }
 
   // Get scheduling analysis for the whole function.
@@ -655,6 +682,11 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   problem.setLatency(fpAddOpr, 5);
   Problem::OperatorType fpDivOpr = problem.getOrInsertOperatorType("fpdiv");
   problem.setLatency(fpDivOpr, 12);
+
+  Problem::OperatorType fpSqrtOpr = problem.getOrInsertOperatorType("fpsqrt");
+  problem.setLatency(fpSqrtOpr, 16);
+  Problem::OperatorType fpTransOpr = problem.getOrInsertOperatorType("fptrans");
+  problem.setLatency(fpTransOpr, 20);
  
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
@@ -709,6 +741,32 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
         .Case<DivFOp, RemFOp>([&](Operation *fpOp) {
           problem.setLinkedOperatorType(fpOp, fpDivOpr);
           return WalkResult::advance();
+        })
+        .Case<math::SqrtOp, math::RsqrtOp>([&](Operation *fpOp) {
+        problem.setLinkedOperatorType(fpOp, fpSqrtOpr);
+        return WalkResult::advance();
+        })
+        .Case<math::ExpOp, math::Exp2Op, math::ExpM1Op, math::LogOp,
+          math::Log2Op, math::Log10Op, math::Log1pOp, math::PowFOp,
+          math::SinOp, math::CosOp, math::TanOp, math::TanhOp,
+          math::ErfOp, math::AtanOp, math::Atan2Op>(
+        [&](Operation *fpOp) {
+          problem.setLinkedOperatorType(fpOp, fpTransOpr);
+          return WalkResult::advance();
+        })
+        .Case<math::FmaOp>([&](Operation *fpOp) {
+        problem.setLinkedOperatorType(fpOp, fpAddOpr);
+        return WalkResult::advance();
+        })
+        .Case<math::AbsFOp, math::CopySignOp, math::AbsIOp>(
+        [&](Operation *combOp) {
+          problem.setLinkedOperatorType(combOp, combOpr);
+          return WalkResult::advance();
+        })
+        .Case<math::FloorOp, math::CeilOp, math::RoundOp,
+          math::RoundEvenOp, math::TruncOp>([&](Operation *fpOp) {
+        problem.setLinkedOperatorType(fpOp, fpAddOpr);
+        return WalkResult::advance();
         })
         .Default([&](Operation *badOp) {
           unsupported = op;

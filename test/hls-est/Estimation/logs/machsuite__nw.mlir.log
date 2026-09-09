@@ -1,0 +1,4 @@
+machsuite/nw.mlir:114:15: error: Dialect `llvm' not found for custom op 'llvm.mlir.undef' 
+        %13 = llvm.mlir.undef : i32
+              ^
+machsuite/nw.mlir:114:15: note: Available dialects: affine, arith, builtin, calyx, cf, comb, func, hls, hw, index, loopschedule, math, memref, scf, seq, ub (*) (* corresponding to loaded but unregistered dialects); for more info on dialect registration see https://mlir.llvm.org/getting_started/Faq/#registered-loaded-dependent-whats-up-with-dialects-management

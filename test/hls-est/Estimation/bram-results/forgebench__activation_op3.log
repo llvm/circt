@@ -1,0 +1,13 @@
+memref.global @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/activation_op3.mlir":2:3)
+  kind=RAM_1P  bram=49
+    50176x16b -> RAM_1P (x32/block) = 49 BRAM_18K
+memref.global @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/activation_op3.mlir":3:3)
+  kind=RAM_1P  bram=49
+    50176x16b -> RAM_1P (x32/block) = 49 BRAM_18K
+memref.global @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/activation_op3.mlir":4:3)
+  kind=RAM_1P  bram=49
+    50176x16b -> RAM_1P (x32/block) = 49 BRAM_18K
+memref.global @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/forgebench/activation_op3.mlir":5:3)
+  kind=RAM_1P  bram=49
+    50176x16b -> RAM_1P (x32/block) = 49 BRAM_18K
+Total BRAM: 196

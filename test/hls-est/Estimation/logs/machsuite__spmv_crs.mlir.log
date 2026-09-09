@@ -1,0 +1,35 @@
+machsuite/spmv_crs.mlir:5:5: error: unsupported operation 
+%8 = "scf.for"(%7, %6, %0, %1) ({
+^bb0(%arg6: index, %arg7: f64):
+  %9 = "memref.load"(%arg0, %arg6) : (memref<1666xf64>, index) -> f64
+  %10 = "memref.load"(%arg1, %arg6) : (memref<1666xi32>, index) -> i32
+  %11 = "arith.index_cast"(%10) : (i32) -> index
+  %12 = "memref.load"(%arg3, %11) : (memref<494xf64>, index) -> f64
+  %13 = "arith.mulf"(%9, %12) <{fastmath = #arith.fastmath<none>}> {polygeist.ssa_names = ["Si"]} : (f64, f64) -> f64
+  %14 = "arith.addf"(%arg7, %13) <{fastmath = #arith.fastmath<none>}> {polygeist.ssa_names = ["sum"]} : (f64, f64) -> f64
+  "scf.yield"(%14) : (f64) -> ()
+}) : (index, index, index, f64) -> f64
+    affine.for %arg5 = 0 to 494 {
+    ^
+machsuite/spmv_crs.mlir:5:5: note: see current operation: 
+"affine.for"() <{lowerBoundMap = affine_map<() -> (0)>, operandSegmentSizes = array<i32: 0, 0, 0>, step = 1 : index, upperBoundMap = affine_map<() -> (494)>}> ({
+^bb0(%arg5: index):
+  %2 = "memref.load"(%arg2, %arg5) <{nontemporal = false}> : (memref<495xi32>, index) -> i32
+  %3 = "arith.constant"() <{value = 1 : index}> : () -> index
+  %4 = "arith.addi"(%arg5, %3) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+  %5 = "memref.load"(%arg2, %4) <{nontemporal = false}> : (memref<495xi32>, index) -> i32
+  %6 = "arith.index_cast"(%5) : (i32) -> index
+  %7 = "arith.index_cast"(%2) : (i32) -> index
+  %8 = "scf.for"(%7, %6, %0, %1) ({
+  ^bb0(%arg6: index, %arg7: f64):
+    %9 = "memref.load"(%arg0, %arg6) : (memref<1666xf64>, index) -> f64
+    %10 = "memref.load"(%arg1, %arg6) : (memref<1666xi32>, index) -> i32
+    %11 = "arith.index_cast"(%10) : (i32) -> index
+    %12 = "memref.load"(%arg3, %11) : (memref<494xf64>, index) -> f64
+    %13 = "arith.mulf"(%9, %12) <{fastmath = #arith.fastmath<none>}> {polygeist.ssa_names = ["Si"]} : (f64, f64) -> f64
+    %14 = "arith.addf"(%arg7, %13) <{fastmath = #arith.fastmath<none>}> {polygeist.ssa_names = ["sum"]} : (f64, f64) -> f64
+    "scf.yield"(%14) : (f64) -> ()
+  }) : (index, index, index, f64) -> f64
+  "memref.store"(%8, %arg4, %arg5) <{nontemporal = false}> : (f64, memref<494xf64>, index) -> ()
+  "affine.yield"() : () -> ()
+}) : () -> ()

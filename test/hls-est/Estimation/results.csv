@@ -1,0 +1,43 @@
+test,top_func,top_rule,status,exit_code,total_bram,num_memrefs,ram_kinds,elapsed_s,error,log
+basic/arraypartition_block.mlir,kernel,name,OK,0,4,2,RAM_2P,0.2,,logs/basic__arraypartition_block.mlir.log
+basic/arraypartition_complete.mlir,kernel,name,OK,0,0,32,RAM_1P,226.8,,logs/basic__arraypartition_complete.mlir.log
+basic/arraypartition_cyclic.mlir,kernel,name,OK,0,2,2,RAM_1P,0.1,,logs/basic__arraypartition_cyclic.mlir.log
+basic/arraypartition_multidim.mlir,kernel,name,OK,0,8,2,RAM_2P,0.1,,logs/basic__arraypartition_multidim.mlir.log
+chstone_xilinx/sha.mlir,sha_stream,last,FAIL,1,,0,,0.1,"chstone_xilinx/sha.mlir:19:34: error: operation being parsed with an unregistered dialect. If this is intended, please use -allow-unregistered-dialect with the MLIR tool used",logs/chstone_xilinx__sha.mlir.log
+flowgnn_xilinx/gin.mlir,GIN_compute_graphs,single,FAIL,1,,0,,0.1,"flowgnn_xilinx/gin.mlir:4:157: error: `!""llvm""<""struct<(array<9 x i32>)>"">` type created with unregistered dialect. If this is intended, please call allowUnregisteredDialects() on the MLIRContext, or use -allow-unregistered-dialect with the MLIR opt tool used",logs/flowgnn_xilinx__gin.mlir.log
+flowgnn_xilinx/pna.mlir,PNA_compute_graphs,single,FAIL,1,,0,,0.1,"flowgnn_xilinx/pna.mlir:2:55: error: `!""llvm""<""struct<(array<4 x f32>)>"">` type created with unregistered dialect. If this is intended, please call allowUnregisteredDialects() on the MLIRContext, or use -allow-unregistered-dialect with the MLIR opt tool used",logs/flowgnn_xilinx__pna.mlir.log
+forgebench/activation_module.mlir,_Z3topPA28_A28_fS1_S1_S1_S1_S1_,hls.allocation,OK,0,196,4,RAM_1P,0.2,,logs/forgebench__activation_module.mlir.log
+forgebench/activation_op1.mlir,_Z3topPA28_A28_fS1_S1_S1_S1_S1_,hls.allocation,OK,0,147,3,RAM_1P,0.1,,logs/forgebench__activation_op1.mlir.log
+forgebench/activation_op2.mlir,_Z3topPA28_A28_fS1_S1_S1_S1_S1_,hls.allocation,OK,0,196,4,RAM_1P,0.1,,logs/forgebench__activation_op2.mlir.log
+forgebench/activation_op3.mlir,_Z3topPA28_A28_fS1_S1_S1_S1_S1_,hls.allocation,OK,0,196,4,RAM_1P,0.1,,logs/forgebench__activation_op3.mlir.log
+forgebench/attention_op_p1.mlir,_Z3topPA256_fS0_S0_S0_S0_,name,OK,0,202,9,RAM_1P,0.1,,logs/forgebench__attention_op_p1.mlir.log
+forgebench/attention_op_p2.mlir,_Z3topPA64_fS0_S0_S0_S0_,name,OK,0,17,9,RAM_1P,0.1,,logs/forgebench__attention_op_p2.mlir.log
+forgebench/attention_op_p3.mlir,_Z3topPA64_fS0_S0_S0_S0_,name,OK,0,17,9,RAM_1P,0.1,,logs/forgebench__attention_op_p3.mlir.log
+forgebench/tiled_attn_module.mlir,_Z5top_APA256_fS0_S0_S0_S0_,name,OK,0,248,13,RAM_1P,0.2,,logs/forgebench__tiled_attn_module.mlir.log
+forgebench/tiled_attn_p1.mlir,_Z3topPA256_fS0_S0_S0_S0_,name,OK,0,202,9,RAM_1P,0.1,,logs/forgebench__tiled_attn_p1.mlir.log
+forgebench/tiled_attn_p2.mlir,_Z3topPA256_fS0_S0_S0_PA64_f,name,OK,0,54,9,RAM_1P,0.1,,logs/forgebench__tiled_attn_p2.mlir.log
+machsuite/fft_transpose.mlir,fft1D_512,last,OK,0,12,7,RAM_1P;RAM_T2P,1.2,,logs/machsuite__fft_transpose.mlir.log
+machsuite/gemm_blocked.mlir,bbgemm,single,OK,0,0,0,,0.1,,logs/machsuite__gemm_blocked.mlir.log
+machsuite/gemm_ncubed.mlir,gemm,single,OK,0,0,0,,0.1,,logs/machsuite__gemm_ncubed.mlir.log
+machsuite/md_knn.mlir,md_kernel,single,OK,0,0,0,,0.1,,logs/machsuite__md_knn.mlir.log
+machsuite/nw.mlir,needwun,single,FAIL,1,,0,,0.1,machsuite/nw.mlir:114:15: error: Dialect `llvm' not found for custom op 'llvm.mlir.undef' ,logs/machsuite__nw.mlir.log
+machsuite/sort_radix.mlir,ss_sort,last,OK,0,0,0,,0.1,,logs/machsuite__sort_radix.mlir.log
+machsuite/spmv_crs.mlir,spmv,single,FAIL,1,,0,,0.0,machsuite/spmv_crs.mlir:5:5: error: unsupported operation ,logs/machsuite__spmv_crs.mlir.log
+machsuite/spmv_ellpack.mlir,ellpack,single,OK,0,0,0,,0.1,,logs/machsuite__spmv_ellpack.mlir.log
+machsuite/stencil2D.mlir,stencil,single,FAIL,134,,0,,0.2,machsuite/stencil2D.mlir:7:16: error: 'affine.for' op operation destroyed but still has uses,logs/machsuite__stencil2D.mlir.log
+machsuite/stencil3D.mlir,stencil3d,single,OK,0,0,0,,0.1,,logs/machsuite__stencil3D.mlir.log
+polybench/atax.mlir,atax,single,OK,0,13,4,RAM_1P;RAM_2P,0.1,,logs/polybench__atax.mlir.log
+polybench/bicg.mlir,bicg,single,OK,0,13,5,RAM_1P;RAM_2P,0.1,,logs/polybench__bicg.mlir.log
+polybench/gemm.mlir,gemm,single,OK,0,32,4,RAM_1P;RAM_2P,0.1,,logs/polybench__gemm.mlir.log
+polybench/gesummv.mlir,gesummv,single,OK,0,20,6,RAM_1P,0.1,,logs/polybench__gesummv.mlir.log
+polybench/k2mm.mlir,k2mm,single,OK,0,56,7,RAM_1P,0.1,,logs/polybench__k2mm.mlir.log
+polybench/k3mm.mlir,k3mm,single,OK,0,56,7,RAM_1P,0.1,,logs/polybench__k3mm.mlir.log
+polybench/mvt.mlir,mvt,single,OK,0,12,5,RAM_1P,0.1,,logs/polybench__mvt.mlir.log
+polybench/syr2k.mlir,syr2k,single,OK,0,56,7,RAM_1P,0.1,,logs/polybench__syr2k.mlir.log
+polybench/syrk.mlir,syrk,single,OK,0,32,4,RAM_1P;RAM_2P,0.1,,logs/polybench__syrk.mlir.log
+spectorhls/dct.mlir,_Z3DCTPiS_,last,OK,0,0,4,RAM_1P,0.1,,logs/spectorhls__dct.mlir.log
+spectorhls/histogram.mlir,_Z13histogram_hlsPhPjm,single,OK,0,8,8,RAM_1P,0.1,,logs/spectorhls__histogram.mlir.log
+spectorhls/matrix_multiplication.mlir,_ZN5dtypeC1ERKS_,last,FAIL,1,,0,,0.1,"spectorhls/matrix_multiplication.mlir:2:63: error: `!""llvm""<""struct<(i32, i64)>"">` type created with unregistered dialect. If this is intended, please call allowUnregisteredDialects() on the MLIRContext, or use -allow-unregistered-dialect with the MLIR opt tool used",logs/spectorhls__matrix_multiplication.mlir.log
+spectorhls/mergesort.mlir,_Z9mergesortPiS_,single,OK,0,0,0,,0.1,,logs/spectorhls__mergesort.mlir.log
+spectorhls/sobel_filter_y.mlir,_Z7sobel_yPA1920_yS0_,single,FAIL,1,,0,,0.1,spectorhls/sobel_filter_y.mlir:21:10: error: Dialect `llvm' not found for custom op 'llvm.mlir.undef' ,logs/spectorhls__sobel_filter_y.mlir.log
+vitis-examples/matmul.mlir,matmul_partition,single,OK,0,1,33,RAM_1P,0.3,,logs/vitis-examples__matmul.mlir.log

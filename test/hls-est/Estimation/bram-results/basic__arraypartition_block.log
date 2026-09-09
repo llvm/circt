@@ -1,0 +1,7 @@
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_block.mlir":9:15)
+  kind=RAM_2P  bram=2
+    512x32b -> RAM_2P (x16/block) = 2 BRAM_18K
+memref.alloca @ loc("/mnt/d/HLS/circt/test/hls-est/Estimation/basic/arraypartition_block.mlir":9:15)
+  kind=RAM_2P  bram=2
+    512x32b -> RAM_2P (x16/block) = 2 BRAM_18K
+Total BRAM: 4

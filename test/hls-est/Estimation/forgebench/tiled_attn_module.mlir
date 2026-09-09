@@ -1,864 +1,864 @@
 // RUN: hls-est %s --affine-loop-normalize --memory-banking-bram --convert-affine-to-loopschedule --bram-analysis | FileCheck %s -check-prefix=CHECK-BRAM
 
 module {
-  func.func @_Z25load_8_256_ap_fixed_16_5_PA256_fS0_(%arg0: memref<8x256xf32>, %arg1: memref<8x256xf32>){
+  func.func @_Z25load_8_256_ap_fixed_16_5_PA256_fS0_(%arg0: memref<8x256xf16>, %arg1: memref<8x256xf16>){
     affine.for %arg2 = 0 to 8 {
       affine.for %arg3 = 0 to 256 {
-        %0 = affine.load %arg0[%arg2, %arg3] : memref<8x256xf32>
-        affine.store %0, %arg1[%arg2, %arg3] : memref<8x256xf32>
+        %0 = affine.load %arg0[%arg2, %arg3] : memref<8x256xf16>
+        affine.store %0, %arg1[%arg2, %arg3] : memref<8x256xf16>
       }
     }
     return
   }
-  func.func @_Z26load_64_256_ap_fixed_16_5_PA256_fS0_(%arg0: memref<64x256xf32>, %arg1: memref<64x256xf32>) {
+  func.func @_Z26load_64_256_ap_fixed_16_5_PA256_fS0_(%arg0: memref<64x256xf16>, %arg1: memref<64x256xf16>) {
     affine.for %arg2 = 0 to 64 {
       affine.for %arg3 = 0 to 256 {
-        %0 = affine.load %arg0[%arg2, %arg3] : memref<64x256xf32>
-        affine.store %0, %arg1[%arg2, %arg3] : memref<64x256xf32>
+        %0 = affine.load %arg0[%arg2, %arg3] : memref<64x256xf16>
+        affine.store %0, %arg1[%arg2, %arg3] : memref<64x256xf16>
       }
     }
     return
   }
-  func.func @_Z27load_256_256_ap_fixed_16_5_PA256_fS0_(%arg0: memref<256x256xf32>, %arg1: memref<256x256xf32>) {
+  func.func @_Z27load_256_256_ap_fixed_16_5_PA256_fS0_(%arg0: memref<256x256xf16>, %arg1: memref<256x256xf16>) {
     affine.for %arg2 = 0 to 256 {
       affine.for %arg3 = 0 to 256 {
-        %0 = affine.load %arg0[%arg2, %arg3] : memref<256x256xf32>
-        affine.store %0, %arg1[%arg2, %arg3] : memref<256x256xf32>
+        %0 = affine.load %arg0[%arg2, %arg3] : memref<256x256xf16>
+        affine.store %0, %arg1[%arg2, %arg3] : memref<256x256xf16>
       }
     }
     return
   }
-  func.func @_Z12transpose_64PA64_f(%arg0: memref<64x64xf32>) {
+  func.func @_Z12transpose_64PA64_f(%arg0: memref<64x64xf16>) {
     affine.for %arg1 = 0 to 64 {
       affine.for %arg2 = 0 to 64 {
-        %0 = affine.load %arg0[%arg2, %arg1] : memref<64x64xf32>
-        affine.store %0, %arg0[%arg1, %arg2] : memref<64x64xf32>
+        %0 = affine.load %arg0[%arg2, %arg1] : memref<64x64xf16>
+        affine.store %0, %arg0[%arg1, %arg2] : memref<64x64xf16>
       }
     }
     return
   }
-  func.func @_Z12transpoe_256PA256_f(%arg0: memref<256x256xf32>) {
+  func.func @_Z12transpoe_256PA256_f(%arg0: memref<256x256xf16>) {
     affine.for %arg1 = 0 to 256 {
       affine.for %arg2 = 0 to 256 {
-        %0 = affine.load %arg0[%arg2, %arg1] : memref<256x256xf32>
-        affine.store %0, %arg0[%arg1, %arg2] : memref<256x256xf32>
+        %0 = affine.load %arg0[%arg2, %arg1] : memref<256x256xf16>
+        affine.store %0, %arg0[%arg1, %arg2] : memref<256x256xf16>
       }
     }
     return
   }
-  func.func @_Z53grouped_multihead_attention_8_256_4_16_ap_fixed_16_5_PA256_fS0_S0_S0_PA64_f(%arg0: memref<8x256xf32>, %arg1: memref<64x256xf32>, %arg2: memref<64x256xf32>, %arg3: memref<64x256xf32>, %arg4: memref<8x64xf32>) {
-    %cst = arith.constant 2.500000e-01 : f32
-    %cst_0 = arith.constant 0.000000e+00 : f32
-    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf32>
-    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf32>
-    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf32>
-    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf32>
+  func.func @_Z53grouped_multihead_attention_8_256_4_16_ap_fixed_16_5_PA256_fS0_S0_S0_PA64_f(%arg0: memref<8x256xf16>, %arg1: memref<64x256xf16>, %arg2: memref<64x256xf16>, %arg3: memref<64x256xf16>, %arg4: memref<8x64xf16>) {
+    %cst = arith.constant 2.500000e-01 : f16
+    %cst_0 = arith.constant 0.000000e+00 : f16
+    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf16>
+    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf16>
+    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf16>
+    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf16>
     affine.for %arg5 = 0 to 8 {
       affine.for %arg6 = 0 to 64 {
-        affine.store %cst_0, %alloca_3[%arg5, %arg6] : memref<8x64xf32>
-        affine.store %cst_0, %alloca_2[%arg5, %arg6] : memref<8x64xf32>
-        affine.store %cst_0, %alloca_1[%arg5, %arg6] : memref<8x64xf32>
-        %0:3 = affine.for %arg7 = 0 to 256 iter_args(%arg8 = %cst_0, %arg9 = %cst_0, %arg10 = %cst_0) -> (f32, f32, f32) {
-          %1 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf32>
-          %2 = affine.load %arg1[%arg6, %arg7] : memref<64x256xf32>
-          %3 = arith.mulf %1, %2 : f32
-          %4 = arith.addf %arg10, %3 : f32
-          affine.store %4, %alloca_3[%arg5, %arg6] : memref<8x64xf32>
-          %5 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf32>
-          %6 = affine.load %arg2[%arg6, %arg7] : memref<64x256xf32>
-          %7 = arith.mulf %5, %6 : f32
-          %8 = arith.addf %arg9, %7 : f32
-          affine.store %8, %alloca_2[%arg5, %arg6] : memref<8x64xf32>
-          %9 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf32>
-          %10 = affine.load %arg3[%arg6, %arg7] : memref<64x256xf32>
-          %11 = arith.mulf %9, %10 : f32
-          %12 = arith.addf %arg8, %11 : f32
-          affine.store %12, %alloca_1[%arg5, %arg6] : memref<8x64xf32>
-          affine.yield %12, %8, %4 : f32, f32, f32
+        affine.store %cst_0, %alloca_3[%arg5, %arg6] : memref<8x64xf16>
+        affine.store %cst_0, %alloca_2[%arg5, %arg6] : memref<8x64xf16>
+        affine.store %cst_0, %alloca_1[%arg5, %arg6] : memref<8x64xf16>
+        %0:3 = affine.for %arg7 = 0 to 256 iter_args(%arg8 = %cst_0, %arg9 = %cst_0, %arg10 = %cst_0) -> (f16, f16, f16) {
+          %1 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf16>
+          %2 = affine.load %arg1[%arg6, %arg7] : memref<64x256xf16>
+          %3 = arith.mulf %1, %2 : f16
+          %4 = arith.addf %arg10, %3 : f16
+          affine.store %4, %alloca_3[%arg5, %arg6] : memref<8x64xf16>
+          %5 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf16>
+          %6 = affine.load %arg2[%arg6, %arg7] : memref<64x256xf16>
+          %7 = arith.mulf %5, %6 : f16
+          %8 = arith.addf %arg9, %7 : f16
+          affine.store %8, %alloca_2[%arg5, %arg6] : memref<8x64xf16>
+          %9 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf16>
+          %10 = affine.load %arg3[%arg6, %arg7] : memref<64x256xf16>
+          %11 = arith.mulf %9, %10 : f16
+          %12 = arith.addf %arg8, %11 : f16
+          affine.store %12, %alloca_1[%arg5, %arg6] : memref<8x64xf16>
+          affine.yield %12, %8, %4 : f16, f16, f16
         }
       }
     }
     affine.for %arg5 = 0 to 4 {
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 8 {
-          affine.store %cst_0, %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %0 = affine.for %arg8 = 0 to 16 iter_args(%arg9 = %cst_0) -> (f32) {
-            %3 = affine.load %alloca_3[%arg6, %arg8 + %arg5 * 16] : memref<8x64xf32>
-            %4 = affine.load %alloca_2[%arg7, %arg8 + %arg5 * 16] : memref<8x64xf32>
-            %5 = arith.mulf %3, %4 : f32
-            %6 = arith.addf %arg9, %5 : f32
-            affine.store %6, %alloca[%arg6, %arg7] : memref<8x8xf32>
-            affine.yield %6 : f32
+          affine.store %cst_0, %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %0 = affine.for %arg8 = 0 to 16 iter_args(%arg9 = %cst_0) -> (f16) {
+            %3 = affine.load %alloca_3[%arg6, %arg8 + %arg5 * 16] : memref<8x64xf16>
+            %4 = affine.load %alloca_2[%arg7, %arg8 + %arg5 * 16] : memref<8x64xf16>
+            %5 = arith.mulf %3, %4 : f16
+            %6 = arith.addf %arg9, %5 : f16
+            affine.store %6, %alloca[%arg6, %arg7] : memref<8x8xf16>
+            affine.yield %6 : f16
           }
-          %1 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %2 = arith.mulf %1, %cst : f32
-          affine.store %2, %alloca[%arg6, %arg7] : memref<8x8xf32>
+          %1 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %2 = arith.mulf %1, %cst : f16
+          affine.store %2, %alloca[%arg6, %arg7] : memref<8x8xf16>
         }
       }
       affine.for %arg6 = 0 to 8 {
-        %0 = affine.load %alloca[%arg6, 0] : memref<8x8xf32>
-        %1 = affine.for %arg7 = 1 to 8 iter_args(%arg8 = %0) -> (f32) {
-          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %4 = arith.cmpf ogt, %3, %arg8 : f32
-          %5 = arith.select %4, %3, %arg8 : f32
-          affine.yield %5 : f32
+        %0 = affine.load %alloca[%arg6, 0] : memref<8x8xf16>
+        %1 = affine.for %arg7 = 1 to 8 iter_args(%arg8 = %0) -> (f16) {
+          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %4 = arith.cmpf ogt, %3, %arg8 : f16
+          %5 = arith.select %4, %3, %arg8 : f16
+          affine.yield %5 : f16
         }
-        %2 = affine.for %arg7 = 0 to 8 iter_args(%arg8 = %cst_0) -> (f32) {
-          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %4 = arith.subf %3, %1 : f32
-          %5 = math.exp %4 : f32
-          affine.store %5, %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %6 = arith.addf %arg8, %5 : f32
-          affine.yield %6 : f32
+        %2 = affine.for %arg7 = 0 to 8 iter_args(%arg8 = %cst_0) -> (f16) {
+          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %4 = arith.subf %3, %1 : f16
+          %5 = math.exp %4 : f16
+          affine.store %5, %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %6 = arith.addf %arg8, %5 : f16
+          affine.yield %6 : f16
         }
         affine.for %arg7 = 0 to 8 {
-          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %4 = arith.divf %3, %2 : f32
-          affine.store %4, %alloca[%arg6, %arg7] : memref<8x8xf32>
+          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %4 = arith.divf %3, %2 : f16
+          affine.store %4, %alloca[%arg6, %arg7] : memref<8x8xf16>
         }
       }
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 16 {
-          %0 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst_0) -> (f32) {
-            %1 = affine.load %alloca[%arg6, %arg8] : memref<8x8xf32>
-            %2 = affine.load %alloca_1[%arg8, %arg7 + %arg5 * 16] : memref<8x64xf32>
-            %3 = arith.mulf %1, %2 : f32
-            %4 = arith.addf %arg9, %3 : f32
-            affine.yield %4 : f32
+          %0 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst_0) -> (f16) {
+            %1 = affine.load %alloca[%arg6, %arg8] : memref<8x8xf16>
+            %2 = affine.load %alloca_1[%arg8, %arg7 + %arg5 * 16] : memref<8x64xf16>
+            %3 = arith.mulf %1, %2 : f16
+            %4 = arith.addf %arg9, %3 : f16
+            affine.yield %4 : f16
           }
-          affine.store %0, %arg4[%arg6, %arg7 + %arg5 * 16] : memref<8x64xf32>
+          affine.store %0, %arg4[%arg6, %arg7 + %arg5 * 16] : memref<8x64xf16>
         }
       }
     }
     return
   }
-  func.func @_ZSt4sqrtf(%arg0: f32) -> f32 {
-    %0 = math.sqrt %arg0 : f32
-    return %0 : f32
+  func.func @_ZSt4sqrtf(%arg0: f16) -> f16 {
+    %0 = math.sqrt %arg0 : f16
+    return %0 : f16
   }
-  func.func @_Z54grouped_multihead_attention_8_256_16_16_ap_fixed_16_5_PA256_fS0_S0_S0_S0_(%arg0: memref<8x256xf32>, %arg1: memref<256x256xf32>, %arg2: memref<256x256xf32>, %arg3: memref<256x256xf32>, %arg4: memref<8x256xf32>) {
-    %cst = arith.constant 2.500000e-01 : f32
-    %cst_0 = arith.constant 0.000000e+00 : f32
-    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf32>
-    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x256xf32>
-    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x256xf32>
-    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x256xf32>
+  func.func @_Z54grouped_multihead_attention_8_256_16_16_ap_fixed_16_5_PA256_fS0_S0_S0_S0_(%arg0: memref<8x256xf16>, %arg1: memref<256x256xf16>, %arg2: memref<256x256xf16>, %arg3: memref<256x256xf16>, %arg4: memref<8x256xf16>) {
+    %cst = arith.constant 2.500000e-01 : f16
+    %cst_0 = arith.constant 0.000000e+00 : f16
+    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf16>
+    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x256xf16>
+    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x256xf16>
+    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x256xf16>
     affine.for %arg5 = 0 to 8 {
       affine.for %arg6 = 0 to 256 {
-        affine.store %cst_0, %alloca_3[%arg5, %arg6] : memref<8x256xf32>
-        affine.store %cst_0, %alloca_2[%arg5, %arg6] : memref<8x256xf32>
-        affine.store %cst_0, %alloca_1[%arg5, %arg6] : memref<8x256xf32>
-        %0:3 = affine.for %arg7 = 0 to 256 iter_args(%arg8 = %cst_0, %arg9 = %cst_0, %arg10 = %cst_0) -> (f32, f32, f32) {
-          %1 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf32>
-          %2 = affine.load %arg1[%arg6, %arg7] : memref<256x256xf32>
-          %3 = arith.mulf %1, %2 : f32
-          %4 = arith.addf %arg10, %3 : f32
-          affine.store %4, %alloca_3[%arg5, %arg6] : memref<8x256xf32>
-          %5 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf32>
-          %6 = affine.load %arg2[%arg6, %arg7] : memref<256x256xf32>
-          %7 = arith.mulf %5, %6 : f32
-          %8 = arith.addf %arg9, %7 : f32
-          affine.store %8, %alloca_2[%arg5, %arg6] : memref<8x256xf32>
-          %9 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf32>
-          %10 = affine.load %arg3[%arg6, %arg7] : memref<256x256xf32>
-          %11 = arith.mulf %9, %10 : f32
-          %12 = arith.addf %arg8, %11 : f32
-          affine.store %12, %alloca_1[%arg5, %arg6] : memref<8x256xf32>
-          affine.yield %12, %8, %4 : f32, f32, f32
+        affine.store %cst_0, %alloca_3[%arg5, %arg6] : memref<8x256xf16>
+        affine.store %cst_0, %alloca_2[%arg5, %arg6] : memref<8x256xf16>
+        affine.store %cst_0, %alloca_1[%arg5, %arg6] : memref<8x256xf16>
+        %0:3 = affine.for %arg7 = 0 to 256 iter_args(%arg8 = %cst_0, %arg9 = %cst_0, %arg10 = %cst_0) -> (f16, f16, f16) {
+          %1 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf16>
+          %2 = affine.load %arg1[%arg6, %arg7] : memref<256x256xf16>
+          %3 = arith.mulf %1, %2 : f16
+          %4 = arith.addf %arg10, %3 : f16
+          affine.store %4, %alloca_3[%arg5, %arg6] : memref<8x256xf16>
+          %5 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf16>
+          %6 = affine.load %arg2[%arg6, %arg7] : memref<256x256xf16>
+          %7 = arith.mulf %5, %6 : f16
+          %8 = arith.addf %arg9, %7 : f16
+          affine.store %8, %alloca_2[%arg5, %arg6] : memref<8x256xf16>
+          %9 = affine.load %arg0[%arg5, %arg7] : memref<8x256xf16>
+          %10 = affine.load %arg3[%arg6, %arg7] : memref<256x256xf16>
+          %11 = arith.mulf %9, %10 : f16
+          %12 = arith.addf %arg8, %11 : f16
+          affine.store %12, %alloca_1[%arg5, %arg6] : memref<8x256xf16>
+          affine.yield %12, %8, %4 : f16, f16, f16
         }
       }
     }
     affine.for %arg5 = 0 to 16 {
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 8 {
-          affine.store %cst_0, %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %0 = affine.for %arg8 = 0 to 16 iter_args(%arg9 = %cst_0) -> (f32) {
-            %3 = affine.load %alloca_3[%arg6, %arg8 + %arg5 * 16] : memref<8x256xf32>
-            %4 = affine.load %alloca_2[%arg7, %arg8 + %arg5 * 16] : memref<8x256xf32>
-            %5 = arith.mulf %3, %4 : f32
-            %6 = arith.addf %arg9, %5 : f32
-            affine.store %6, %alloca[%arg6, %arg7] : memref<8x8xf32>
-            affine.yield %6 : f32
+          affine.store %cst_0, %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %0 = affine.for %arg8 = 0 to 16 iter_args(%arg9 = %cst_0) -> (f16) {
+            %3 = affine.load %alloca_3[%arg6, %arg8 + %arg5 * 16] : memref<8x256xf16>
+            %4 = affine.load %alloca_2[%arg7, %arg8 + %arg5 * 16] : memref<8x256xf16>
+            %5 = arith.mulf %3, %4 : f16
+            %6 = arith.addf %arg9, %5 : f16
+            affine.store %6, %alloca[%arg6, %arg7] : memref<8x8xf16>
+            affine.yield %6 : f16
           }
-          %1 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %2 = arith.mulf %1, %cst : f32
-          affine.store %2, %alloca[%arg6, %arg7] : memref<8x8xf32>
+          %1 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %2 = arith.mulf %1, %cst : f16
+          affine.store %2, %alloca[%arg6, %arg7] : memref<8x8xf16>
         }
       }
       affine.for %arg6 = 0 to 8 {
-        %0 = affine.load %alloca[%arg6, 0] : memref<8x8xf32>
-        %1 = affine.for %arg7 = 1 to 8 iter_args(%arg8 = %0) -> (f32) {
-          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %4 = arith.cmpf ogt, %3, %arg8 : f32
-          %5 = arith.select %4, %3, %arg8 : f32
-          affine.yield %5 : f32
+        %0 = affine.load %alloca[%arg6, 0] : memref<8x8xf16>
+        %1 = affine.for %arg7 = 1 to 8 iter_args(%arg8 = %0) -> (f16) {
+          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %4 = arith.cmpf ogt, %3, %arg8 : f16
+          %5 = arith.select %4, %3, %arg8 : f16
+          affine.yield %5 : f16
         }
-        %2 = affine.for %arg7 = 0 to 8 iter_args(%arg8 = %cst_0) -> (f32) {
-          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %4 = arith.subf %3, %1 : f32
-          %5 = math.exp %4 : f32
-          affine.store %5, %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %6 = arith.addf %arg8, %5 : f32
-          affine.yield %6 : f32
+        %2 = affine.for %arg7 = 0 to 8 iter_args(%arg8 = %cst_0) -> (f16) {
+          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %4 = arith.subf %3, %1 : f16
+          %5 = math.exp %4 : f16
+          affine.store %5, %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %6 = arith.addf %arg8, %5 : f16
+          affine.yield %6 : f16
         }
         affine.for %arg7 = 0 to 8 {
-          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf32>
-          %4 = arith.divf %3, %2 : f32
-          affine.store %4, %alloca[%arg6, %arg7] : memref<8x8xf32>
+          %3 = affine.load %alloca[%arg6, %arg7] : memref<8x8xf16>
+          %4 = arith.divf %3, %2 : f16
+          affine.store %4, %alloca[%arg6, %arg7] : memref<8x8xf16>
         }
       }
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 16 {
-          %0 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst_0) -> (f32) {
-            %1 = affine.load %alloca[%arg6, %arg8] : memref<8x8xf32>
-            %2 = affine.load %alloca_1[%arg8, %arg7 + %arg5 * 16] : memref<8x256xf32>
-            %3 = arith.mulf %1, %2 : f32
-            %4 = arith.addf %arg9, %3 : f32
-            affine.yield %4 : f32
+          %0 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst_0) -> (f16) {
+            %1 = affine.load %alloca[%arg6, %arg8] : memref<8x8xf16>
+            %2 = affine.load %alloca_1[%arg8, %arg7 + %arg5 * 16] : memref<8x256xf16>
+            %3 = arith.mulf %1, %2 : f16
+            %4 = arith.addf %arg9, %3 : f16
+            affine.yield %4 : f16
           }
-          affine.store %0, %arg4[%arg6, %arg7 + %arg5 * 16] : memref<8x256xf32>
+          affine.store %0, %arg4[%arg6, %arg7 + %arg5 * 16] : memref<8x256xf16>
         }
       }
     }
     return
   }
-  func.func @_Z34grouped_mha_8_256_16_16_with_mha_4PA256_fS0_S0_S0_S0_(%arg0: memref<8x256xf32>, %arg1: memref<256x256xf32>, %arg2: memref<256x256xf32>, %arg3: memref<256x256xf32>, %arg4: memref<8x256xf32>) {
-    %cst = arith.constant 0.000000e+00 : f32
-    %cst_0 = arith.constant 2.500000e-01 : f32
-    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "split_out"} : memref<8x64xf32>
-    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "split_wv"} : memref<64x256xf32>
-    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "split_wk"} : memref<64x256xf32>
-    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "split_wq"} : memref<64x256xf32>
-    %alloca_4 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf32>
-    %alloca_5 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf32>
-    %alloca_6 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf32>
-    %alloca_7 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf32>
+  func.func @_Z34grouped_mha_8_256_16_16_with_mha_4PA256_fS0_S0_S0_S0_(%arg0: memref<8x256xf16>, %arg1: memref<256x256xf16>, %arg2: memref<256x256xf16>, %arg3: memref<256x256xf16>, %arg4: memref<8x256xf16>) {
+    %cst = arith.constant 0.000000e+00 : f16
+    %cst_0 = arith.constant 2.500000e-01 : f16
+    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "split_out"} : memref<8x64xf16>
+    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "split_wv"} : memref<64x256xf16>
+    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "split_wk"} : memref<64x256xf16>
+    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "split_wq"} : memref<64x256xf16>
+    %alloca_4 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf16>
+    %alloca_5 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf16>
+    %alloca_6 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf16>
+    %alloca_7 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf16>
     affine.for %arg5 = 0 to 4 {
       affine.for %arg6 = 0 to 64 {
         affine.for %arg7 = 0 to 256 {
-          %0 = affine.load %arg1[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf32>
-          affine.store %0, %alloca_3[%arg6, %arg7] : memref<64x256xf32>
-          %1 = affine.load %arg2[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf32>
-          affine.store %1, %alloca_2[%arg6, %arg7] : memref<64x256xf32>
-          %2 = affine.load %arg3[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf32>
-          affine.store %2, %alloca_1[%arg6, %arg7] : memref<64x256xf32>
+          %0 = affine.load %arg1[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf16>
+          affine.store %0, %alloca_3[%arg6, %arg7] : memref<64x256xf16>
+          %1 = affine.load %arg2[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf16>
+          affine.store %1, %alloca_2[%arg6, %arg7] : memref<64x256xf16>
+          %2 = affine.load %arg3[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf16>
+          affine.store %2, %alloca_1[%arg6, %arg7] : memref<64x256xf16>
         }
       }
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 64 {
-          affine.store %cst, %alloca_7[%arg6, %arg7] : memref<8x64xf32>
-          affine.store %cst, %alloca_6[%arg6, %arg7] : memref<8x64xf32>
-          affine.store %cst, %alloca_5[%arg6, %arg7] : memref<8x64xf32>
-          %0:3 = affine.for %arg8 = 0 to 256 iter_args(%arg9 = %cst, %arg10 = %cst, %arg11 = %cst) -> (f32, f32, f32) {
-            %1 = affine.load %arg0[%arg6, %arg8] : memref<8x256xf32>
-            %2 = affine.load %alloca_3[%arg7, %arg8] : memref<64x256xf32>
-            %3 = arith.mulf %1, %2 : f32
-            %4 = arith.addf %arg11, %3 : f32
-            affine.store %4, %alloca_7[%arg6, %arg7] : memref<8x64xf32>
-            %5 = affine.load %arg0[%arg6, %arg8] : memref<8x256xf32>
-            %6 = affine.load %alloca_2[%arg7, %arg8] : memref<64x256xf32>
-            %7 = arith.mulf %5, %6 : f32
-            %8 = arith.addf %arg10, %7 : f32
-            affine.store %8, %alloca_6[%arg6, %arg7] : memref<8x64xf32>
-            %9 = affine.load %arg0[%arg6, %arg8] : memref<8x256xf32>
-            %10 = affine.load %alloca_1[%arg7, %arg8] : memref<64x256xf32>
-            %11 = arith.mulf %9, %10 : f32
-            %12 = arith.addf %arg9, %11 : f32
-            affine.store %12, %alloca_5[%arg6, %arg7] : memref<8x64xf32>
-            affine.yield %12, %8, %4 : f32, f32, f32
+          affine.store %cst, %alloca_7[%arg6, %arg7] : memref<8x64xf16>
+          affine.store %cst, %alloca_6[%arg6, %arg7] : memref<8x64xf16>
+          affine.store %cst, %alloca_5[%arg6, %arg7] : memref<8x64xf16>
+          %0:3 = affine.for %arg8 = 0 to 256 iter_args(%arg9 = %cst, %arg10 = %cst, %arg11 = %cst) -> (f16, f16, f16) {
+            %1 = affine.load %arg0[%arg6, %arg8] : memref<8x256xf16>
+            %2 = affine.load %alloca_3[%arg7, %arg8] : memref<64x256xf16>
+            %3 = arith.mulf %1, %2 : f16
+            %4 = arith.addf %arg11, %3 : f16
+            affine.store %4, %alloca_7[%arg6, %arg7] : memref<8x64xf16>
+            %5 = affine.load %arg0[%arg6, %arg8] : memref<8x256xf16>
+            %6 = affine.load %alloca_2[%arg7, %arg8] : memref<64x256xf16>
+            %7 = arith.mulf %5, %6 : f16
+            %8 = arith.addf %arg10, %7 : f16
+            affine.store %8, %alloca_6[%arg6, %arg7] : memref<8x64xf16>
+            %9 = affine.load %arg0[%arg6, %arg8] : memref<8x256xf16>
+            %10 = affine.load %alloca_1[%arg7, %arg8] : memref<64x256xf16>
+            %11 = arith.mulf %9, %10 : f16
+            %12 = arith.addf %arg9, %11 : f16
+            affine.store %12, %alloca_5[%arg6, %arg7] : memref<8x64xf16>
+            affine.yield %12, %8, %4 : f16, f16, f16
           }
         }
       }
       affine.for %arg6 = 0 to 4 {
         affine.for %arg7 = 0 to 8 {
           affine.for %arg8 = 0 to 8 {
-            affine.store %cst, %alloca_4[%arg7, %arg8] : memref<8x8xf32>
-            %0 = affine.for %arg9 = 0 to 16 iter_args(%arg10 = %cst) -> (f32) {
-              %3 = affine.load %alloca_7[%arg7, %arg9 + %arg6 * 16] : memref<8x64xf32>
-              %4 = affine.load %alloca_6[%arg8, %arg9 + %arg6 * 16] : memref<8x64xf32>
-              %5 = arith.mulf %3, %4 : f32
-              %6 = arith.addf %arg10, %5 : f32
-              affine.store %6, %alloca_4[%arg7, %arg8] : memref<8x8xf32>
-              affine.yield %6 : f32
+            affine.store %cst, %alloca_4[%arg7, %arg8] : memref<8x8xf16>
+            %0 = affine.for %arg9 = 0 to 16 iter_args(%arg10 = %cst) -> (f16) {
+              %3 = affine.load %alloca_7[%arg7, %arg9 + %arg6 * 16] : memref<8x64xf16>
+              %4 = affine.load %alloca_6[%arg8, %arg9 + %arg6 * 16] : memref<8x64xf16>
+              %5 = arith.mulf %3, %4 : f16
+              %6 = arith.addf %arg10, %5 : f16
+              affine.store %6, %alloca_4[%arg7, %arg8] : memref<8x8xf16>
+              affine.yield %6 : f16
             }
-            %1 = affine.load %alloca_4[%arg7, %arg8] : memref<8x8xf32>
-            %2 = arith.mulf %1, %cst_0 : f32
-            affine.store %2, %alloca_4[%arg7, %arg8] : memref<8x8xf32>
+            %1 = affine.load %alloca_4[%arg7, %arg8] : memref<8x8xf16>
+            %2 = arith.mulf %1, %cst_0 : f16
+            affine.store %2, %alloca_4[%arg7, %arg8] : memref<8x8xf16>
           }
         }
         affine.for %arg7 = 0 to 8 {
-          %0 = affine.load %alloca_4[%arg7, 0] : memref<8x8xf32>
-          %1 = affine.for %arg8 = 1 to 8 iter_args(%arg9 = %0) -> (f32) {
-            %3 = affine.load %alloca_4[%arg7, %arg8] : memref<8x8xf32>
-            %4 = arith.cmpf ogt, %3, %arg9 : f32
-            %5 = arith.select %4, %3, %arg9 : f32
-            affine.yield %5 : f32
+          %0 = affine.load %alloca_4[%arg7, 0] : memref<8x8xf16>
+          %1 = affine.for %arg8 = 1 to 8 iter_args(%arg9 = %0) -> (f16) {
+            %3 = affine.load %alloca_4[%arg7, %arg8] : memref<8x8xf16>
+            %4 = arith.cmpf ogt, %3, %arg9 : f16
+            %5 = arith.select %4, %3, %arg9 : f16
+            affine.yield %5 : f16
           }
-          %2 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst) -> (f32) {
-            %3 = affine.load %alloca_4[%arg7, %arg8] : memref<8x8xf32>
-            %4 = arith.subf %3, %1 : f32
-            %5 = math.exp %4 : f32
-            affine.store %5, %alloca_4[%arg7, %arg8] : memref<8x8xf32>
-            %6 = arith.addf %arg9, %5 : f32
-            affine.yield %6 : f32
+          %2 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst) -> (f16) {
+            %3 = affine.load %alloca_4[%arg7, %arg8] : memref<8x8xf16>
+            %4 = arith.subf %3, %1 : f16
+            %5 = math.exp %4 : f16
+            affine.store %5, %alloca_4[%arg7, %arg8] : memref<8x8xf16>
+            %6 = arith.addf %arg9, %5 : f16
+            affine.yield %6 : f16
           }
           affine.for %arg8 = 0 to 8 {
-            %3 = affine.load %alloca_4[%arg7, %arg8] : memref<8x8xf32>
-            %4 = arith.divf %3, %2 : f32
-            affine.store %4, %alloca_4[%arg7, %arg8] : memref<8x8xf32>
+            %3 = affine.load %alloca_4[%arg7, %arg8] : memref<8x8xf16>
+            %4 = arith.divf %3, %2 : f16
+            affine.store %4, %alloca_4[%arg7, %arg8] : memref<8x8xf16>
           }
         }
         affine.for %arg7 = 0 to 8 {
           affine.for %arg8 = 0 to 16 {
-            %0 = affine.for %arg9 = 0 to 8 iter_args(%arg10 = %cst) -> (f32) {
-              %1 = affine.load %alloca_4[%arg7, %arg9] : memref<8x8xf32>
-              %2 = affine.load %alloca_5[%arg9, %arg8 + %arg6 * 16] : memref<8x64xf32>
-              %3 = arith.mulf %1, %2 : f32
-              %4 = arith.addf %arg10, %3 : f32
-              affine.yield %4 : f32
+            %0 = affine.for %arg9 = 0 to 8 iter_args(%arg10 = %cst) -> (f16) {
+              %1 = affine.load %alloca_4[%arg7, %arg9] : memref<8x8xf16>
+              %2 = affine.load %alloca_5[%arg9, %arg8 + %arg6 * 16] : memref<8x64xf16>
+              %3 = arith.mulf %1, %2 : f16
+              %4 = arith.addf %arg10, %3 : f16
+              affine.yield %4 : f16
             }
-            affine.store %0, %alloca[%arg7, %arg8 + %arg6 * 16] : memref<8x64xf32>
+            affine.store %0, %alloca[%arg7, %arg8 + %arg6 * 16] : memref<8x64xf16>
           }
         }
       }
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 64 {
-          %0 = affine.load %alloca[%arg7, %arg6] : memref<8x64xf32>
-          affine.store %0, %arg4[%arg7, %arg6 + %arg5 * 64] : memref<8x256xf32>
+          %0 = affine.load %alloca[%arg7, %arg6] : memref<8x64xf16>
+          affine.store %0, %arg4[%arg7, %arg6 + %arg5 * 64] : memref<8x256xf16>
         }
       }
     }
     return
   }
-  func.func @_Z25store_8_64_ap_fixed_16_5_PA64_fS0_(%arg0: memref<8x64xf32>, %arg1: memref<8x64xf32>) {
+  func.func @_Z25store_8_64_ap_fixed_16_5_PA64_fS0_(%arg0: memref<8x64xf16>, %arg1: memref<8x64xf16>) {
     affine.for %arg2 = 0 to 8 {
       affine.for %arg3 = 0 to 64 {
-        %0 = affine.load %arg0[%arg2, %arg3] : memref<8x64xf32>
-        affine.store %0, %arg1[%arg2, %arg3] : memref<8x64xf32>
+        %0 = affine.load %arg0[%arg2, %arg3] : memref<8x64xf16>
+        affine.store %0, %arg1[%arg2, %arg3] : memref<8x64xf16>
       }
     }
     return
   }
-  func.func @_Z26store_8_256_ap_fixed_16_5_PA256_fS0_(%arg0: memref<8x256xf32>, %arg1: memref<8x256xf32>) {
+  func.func @_Z26store_8_256_ap_fixed_16_5_PA256_fS0_(%arg0: memref<8x256xf16>, %arg1: memref<8x256xf16>) {
     affine.for %arg2 = 0 to 8 {
       affine.for %arg3 = 0 to 256 {
-        %0 = affine.load %arg0[%arg2, %arg3] : memref<8x256xf32>
-        affine.store %0, %arg1[%arg2, %arg3] : memref<8x256xf32>
+        %0 = affine.load %arg0[%arg2, %arg3] : memref<8x256xf16>
+        affine.store %0, %arg1[%arg2, %arg3] : memref<8x256xf16>
       }
     }
     return
   }
-  func.func @_Z5top_APA256_fS0_S0_S0_S0_(%arg0: memref<8x256xf32>, %arg1: memref<256x256xf32>, %arg2: memref<256x256xf32>, %arg3: memref<256x256xf32>, %arg4: memref<8x256xf32>) {
-    %cst = arith.constant 2.500000e-01 : f32
-    %cst_0 = arith.constant 0.000000e+00 : f32
-    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_1"} : memref<8x256xf32>
-    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_v"} : memref<256x256xf32>
-    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_k"} : memref<256x256xf32>
-    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_q"} : memref<256x256xf32>
-    %alloca_4 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_attn_input"} : memref<8x256xf32>
+  func.func @_Z5top_APA256_fS0_S0_S0_S0_(%arg0: memref<8x256xf16>, %arg1: memref<256x256xf16>, %arg2: memref<256x256xf16>, %arg3: memref<256x256xf16>, %arg4: memref<8x256xf16>) {
+    %cst = arith.constant 2.500000e-01 : f16
+    %cst_0 = arith.constant 0.000000e+00 : f16
+    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_1"} : memref<8x256xf16>
+    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_v"} : memref<256x256xf16>
+    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_k"} : memref<256x256xf16>
+    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_q"} : memref<256x256xf16>
+    %alloca_4 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_attn_input"} : memref<8x256xf16>
     affine.for %arg5 = 0 to 8 {
       affine.for %arg6 = 0 to 256 {
-        %0 = affine.load %arg0[%arg5, %arg6] : memref<8x256xf32>
-        affine.store %0, %alloca_4[%arg5, %arg6] : memref<8x256xf32>
+        %0 = affine.load %arg0[%arg5, %arg6] : memref<8x256xf16>
+        affine.store %0, %alloca_4[%arg5, %arg6] : memref<8x256xf16>
       }
     }
     affine.for %arg5 = 0 to 256 {
       affine.for %arg6 = 0 to 256 {
-        %0 = affine.load %arg1[%arg5, %arg6] : memref<256x256xf32>
-        affine.store %0, %alloca_3[%arg5, %arg6] : memref<256x256xf32>
+        %0 = affine.load %arg1[%arg5, %arg6] : memref<256x256xf16>
+        affine.store %0, %alloca_3[%arg5, %arg6] : memref<256x256xf16>
       }
     }
     affine.for %arg5 = 0 to 256 {
       affine.for %arg6 = 0 to 256 {
-        %0 = affine.load %arg2[%arg5, %arg6] : memref<256x256xf32>
-        affine.store %0, %alloca_2[%arg5, %arg6] : memref<256x256xf32>
+        %0 = affine.load %arg2[%arg5, %arg6] : memref<256x256xf16>
+        affine.store %0, %alloca_2[%arg5, %arg6] : memref<256x256xf16>
       }
     }
     affine.for %arg5 = 0 to 256 {
       affine.for %arg6 = 0 to 256 {
-        %0 = affine.load %arg3[%arg5, %arg6] : memref<256x256xf32>
-        affine.store %0, %alloca_1[%arg5, %arg6] : memref<256x256xf32>
+        %0 = affine.load %arg3[%arg5, %arg6] : memref<256x256xf16>
+        affine.store %0, %alloca_1[%arg5, %arg6] : memref<256x256xf16>
       }
     }
-    %alloca_5 = memref.alloca() {hls.preserve, polygeist.varname = "split_out"} : memref<8x64xf32>
-    %alloca_6 = memref.alloca() {hls.preserve, polygeist.varname = "split_wv"} : memref<64x256xf32>
-    %alloca_7 = memref.alloca() {hls.preserve, polygeist.varname = "split_wk"} : memref<64x256xf32>
-    %alloca_8 = memref.alloca() {hls.preserve, polygeist.varname = "split_wq"} : memref<64x256xf32>
-    %alloca_9 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf32>
-    %alloca_10 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf32>
-    %alloca_11 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf32>
-    %alloca_12 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf32>
+    %alloca_5 = memref.alloca() {hls.preserve, polygeist.varname = "split_out"} : memref<8x64xf16>
+    %alloca_6 = memref.alloca() {hls.preserve, polygeist.varname = "split_wv"} : memref<64x256xf16>
+    %alloca_7 = memref.alloca() {hls.preserve, polygeist.varname = "split_wk"} : memref<64x256xf16>
+    %alloca_8 = memref.alloca() {hls.preserve, polygeist.varname = "split_wq"} : memref<64x256xf16>
+    %alloca_9 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf16>
+    %alloca_10 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf16>
+    %alloca_11 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf16>
+    %alloca_12 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf16>
     affine.for %arg5 = 0 to 4 {
       affine.for %arg6 = 0 to 64 {
         affine.for %arg7 = 0 to 256 {
-          %0 = affine.load %alloca_3[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf32>
-          affine.store %0, %alloca_8[%arg6, %arg7] : memref<64x256xf32>
-          %1 = affine.load %alloca_2[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf32>
-          affine.store %1, %alloca_7[%arg6, %arg7] : memref<64x256xf32>
-          %2 = affine.load %alloca_1[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf32>
-          affine.store %2, %alloca_6[%arg6, %arg7] : memref<64x256xf32>
+          %0 = affine.load %alloca_3[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf16>
+          affine.store %0, %alloca_8[%arg6, %arg7] : memref<64x256xf16>
+          %1 = affine.load %alloca_2[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf16>
+          affine.store %1, %alloca_7[%arg6, %arg7] : memref<64x256xf16>
+          %2 = affine.load %alloca_1[%arg6 + %arg5 * 64, %arg7] : memref<256x256xf16>
+          affine.store %2, %alloca_6[%arg6, %arg7] : memref<64x256xf16>
         }
       }
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 64 {
-          affine.store %cst_0, %alloca_12[%arg6, %arg7] : memref<8x64xf32>
-          affine.store %cst_0, %alloca_11[%arg6, %arg7] : memref<8x64xf32>
-          affine.store %cst_0, %alloca_10[%arg6, %arg7] : memref<8x64xf32>
-          %0:3 = affine.for %arg8 = 0 to 256 iter_args(%arg9 = %cst_0, %arg10 = %cst_0, %arg11 = %cst_0) -> (f32, f32, f32) {
-            %1 = affine.load %alloca_4[%arg6, %arg8] : memref<8x256xf32>
-            %2 = affine.load %alloca_8[%arg7, %arg8] : memref<64x256xf32>
-            %3 = arith.mulf %1, %2 : f32
-            %4 = arith.addf %arg11, %3 : f32
-            affine.store %4, %alloca_12[%arg6, %arg7] : memref<8x64xf32>
-            %5 = affine.load %alloca_7[%arg7, %arg8] : memref<64x256xf32>
-            %6 = arith.mulf %1, %5 : f32
-            %7 = arith.addf %arg10, %6 : f32
-            affine.store %7, %alloca_11[%arg6, %arg7] : memref<8x64xf32>
-            %8 = affine.load %alloca_6[%arg7, %arg8] : memref<64x256xf32>
-            %9 = arith.mulf %1, %8 : f32
-            %10 = arith.addf %arg9, %9 : f32
-            affine.store %10, %alloca_10[%arg6, %arg7] : memref<8x64xf32>
-            affine.yield %10, %7, %4 : f32, f32, f32
+          affine.store %cst_0, %alloca_12[%arg6, %arg7] : memref<8x64xf16>
+          affine.store %cst_0, %alloca_11[%arg6, %arg7] : memref<8x64xf16>
+          affine.store %cst_0, %alloca_10[%arg6, %arg7] : memref<8x64xf16>
+          %0:3 = affine.for %arg8 = 0 to 256 iter_args(%arg9 = %cst_0, %arg10 = %cst_0, %arg11 = %cst_0) -> (f16, f16, f16) {
+            %1 = affine.load %alloca_4[%arg6, %arg8] : memref<8x256xf16>
+            %2 = affine.load %alloca_8[%arg7, %arg8] : memref<64x256xf16>
+            %3 = arith.mulf %1, %2 : f16
+            %4 = arith.addf %arg11, %3 : f16
+            affine.store %4, %alloca_12[%arg6, %arg7] : memref<8x64xf16>
+            %5 = affine.load %alloca_7[%arg7, %arg8] : memref<64x256xf16>
+            %6 = arith.mulf %1, %5 : f16
+            %7 = arith.addf %arg10, %6 : f16
+            affine.store %7, %alloca_11[%arg6, %arg7] : memref<8x64xf16>
+            %8 = affine.load %alloca_6[%arg7, %arg8] : memref<64x256xf16>
+            %9 = arith.mulf %1, %8 : f16
+            %10 = arith.addf %arg9, %9 : f16
+            affine.store %10, %alloca_10[%arg6, %arg7] : memref<8x64xf16>
+            affine.yield %10, %7, %4 : f16, f16, f16
           }
         }
       }
       affine.for %arg6 = 0 to 4 {
         affine.for %arg7 = 0 to 8 {
           affine.for %arg8 = 0 to 8 {
-            affine.store %cst_0, %alloca_9[%arg7, %arg8] : memref<8x8xf32>
-            %0 = affine.for %arg9 = 0 to 16 iter_args(%arg10 = %cst_0) -> (f32) {
-              %3 = affine.load %alloca_12[%arg7, %arg9 + %arg6 * 16] : memref<8x64xf32>
-              %4 = affine.load %alloca_11[%arg8, %arg9 + %arg6 * 16] : memref<8x64xf32>
-              %5 = arith.mulf %3, %4 : f32
-              %6 = arith.addf %arg10, %5 : f32
-              affine.store %6, %alloca_9[%arg7, %arg8] : memref<8x8xf32>
-              affine.yield %6 : f32
+            affine.store %cst_0, %alloca_9[%arg7, %arg8] : memref<8x8xf16>
+            %0 = affine.for %arg9 = 0 to 16 iter_args(%arg10 = %cst_0) -> (f16) {
+              %3 = affine.load %alloca_12[%arg7, %arg9 + %arg6 * 16] : memref<8x64xf16>
+              %4 = affine.load %alloca_11[%arg8, %arg9 + %arg6 * 16] : memref<8x64xf16>
+              %5 = arith.mulf %3, %4 : f16
+              %6 = arith.addf %arg10, %5 : f16
+              affine.store %6, %alloca_9[%arg7, %arg8] : memref<8x8xf16>
+              affine.yield %6 : f16
             }
-            %1 = affine.load %alloca_9[%arg7, %arg8] : memref<8x8xf32>
-            %2 = arith.mulf %1, %cst : f32
-            affine.store %2, %alloca_9[%arg7, %arg8] : memref<8x8xf32>
+            %1 = affine.load %alloca_9[%arg7, %arg8] : memref<8x8xf16>
+            %2 = arith.mulf %1, %cst : f16
+            affine.store %2, %alloca_9[%arg7, %arg8] : memref<8x8xf16>
           }
         }
         affine.for %arg7 = 0 to 8 {
-          %0 = affine.load %alloca_9[%arg7, 0] : memref<8x8xf32>
-          %1 = affine.for %arg8 = 1 to 8 iter_args(%arg9 = %0) -> (f32) {
-            %3 = affine.load %alloca_9[%arg7, %arg8] : memref<8x8xf32>
-            %4 = arith.cmpf ogt, %3, %arg9 : f32
-            %5 = arith.select %4, %3, %arg9 : f32
-            affine.yield %5 : f32
+          %0 = affine.load %alloca_9[%arg7, 0] : memref<8x8xf16>
+          %1 = affine.for %arg8 = 1 to 8 iter_args(%arg9 = %0) -> (f16) {
+            %3 = affine.load %alloca_9[%arg7, %arg8] : memref<8x8xf16>
+            %4 = arith.cmpf ogt, %3, %arg9 : f16
+            %5 = arith.select %4, %3, %arg9 : f16
+            affine.yield %5 : f16
           }
-          %2 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst_0) -> (f32) {
-            %3 = affine.load %alloca_9[%arg7, %arg8] : memref<8x8xf32>
-            %4 = arith.subf %3, %1 : f32
-            %5 = math.exp %4 : f32
-            affine.store %5, %alloca_9[%arg7, %arg8] : memref<8x8xf32>
-            %6 = arith.addf %arg9, %5 : f32
-            affine.yield %6 : f32
+          %2 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst_0) -> (f16) {
+            %3 = affine.load %alloca_9[%arg7, %arg8] : memref<8x8xf16>
+            %4 = arith.subf %3, %1 : f16
+            %5 = math.exp %4 : f16
+            affine.store %5, %alloca_9[%arg7, %arg8] : memref<8x8xf16>
+            %6 = arith.addf %arg9, %5 : f16
+            affine.yield %6 : f16
           }
           affine.for %arg8 = 0 to 8 {
-            %3 = affine.load %alloca_9[%arg7, %arg8] : memref<8x8xf32>
-            %4 = arith.divf %3, %2 : f32
-            affine.store %4, %alloca_9[%arg7, %arg8] : memref<8x8xf32>
+            %3 = affine.load %alloca_9[%arg7, %arg8] : memref<8x8xf16>
+            %4 = arith.divf %3, %2 : f16
+            affine.store %4, %alloca_9[%arg7, %arg8] : memref<8x8xf16>
           }
         }
         affine.for %arg7 = 0 to 8 {
           affine.for %arg8 = 0 to 16 {
-            %0 = affine.for %arg9 = 0 to 8 iter_args(%arg10 = %cst_0) -> (f32) {
-              %1 = affine.load %alloca_9[%arg7, %arg9] : memref<8x8xf32>
-              %2 = affine.load %alloca_10[%arg9, %arg8 + %arg6 * 16] : memref<8x64xf32>
-              %3 = arith.mulf %1, %2 : f32
-              %4 = arith.addf %arg10, %3 : f32
-              affine.yield %4 : f32
+            %0 = affine.for %arg9 = 0 to 8 iter_args(%arg10 = %cst_0) -> (f16) {
+              %1 = affine.load %alloca_9[%arg7, %arg9] : memref<8x8xf16>
+              %2 = affine.load %alloca_10[%arg9, %arg8 + %arg6 * 16] : memref<8x64xf16>
+              %3 = arith.mulf %1, %2 : f16
+              %4 = arith.addf %arg10, %3 : f16
+              affine.yield %4 : f16
             }
-            affine.store %0, %alloca_5[%arg7, %arg8 + %arg6 * 16] : memref<8x64xf32>
+            affine.store %0, %alloca_5[%arg7, %arg8 + %arg6 * 16] : memref<8x64xf16>
           }
         }
       }
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 64 {
-          %0 = affine.load %alloca_5[%arg7, %arg6] : memref<8x64xf32>
-          affine.store %0, %alloca[%arg7, %arg6 + %arg5 * 64] : memref<8x256xf32>
+          %0 = affine.load %alloca_5[%arg7, %arg6] : memref<8x64xf16>
+          affine.store %0, %alloca[%arg7, %arg6 + %arg5 * 64] : memref<8x256xf16>
         }
       }
     }
     affine.for %arg5 = 0 to 8 {
       affine.for %arg6 = 0 to 256 {
-        %0 = affine.load %alloca[%arg5, %arg6] : memref<8x256xf32>
-        affine.store %0, %arg4[%arg5, %arg6] : memref<8x256xf32>
+        %0 = affine.load %alloca[%arg5, %arg6] : memref<8x256xf16>
+        affine.store %0, %arg4[%arg5, %arg6] : memref<8x256xf16>
       }
     }
     return
   }
-  func.func @_Z5top_BPA256_fS0_S0_S0_PA64_f(%arg0: memref<8x256xf32>, %arg1: memref<64x256xf32>, %arg2: memref<64x256xf32>, %arg3: memref<64x256xf32>, %arg4: memref<8x64xf32>) {
-    %cst = arith.constant 0.000000e+00 : f32
-    %cst_0 = arith.constant 2.500000e-01 : f32
-    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_1"} : memref<8x64xf32>
-    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_v"} : memref<64x256xf32>
-    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_k"} : memref<64x256xf32>
-    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_q"} : memref<64x256xf32>
-    %alloca_4 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_attn_input"} : memref<8x256xf32>
+  func.func @_Z5top_BPA256_fS0_S0_S0_PA64_f(%arg0: memref<8x256xf16>, %arg1: memref<64x256xf16>, %arg2: memref<64x256xf16>, %arg3: memref<64x256xf16>, %arg4: memref<8x64xf16>) {
+    %cst = arith.constant 0.000000e+00 : f16
+    %cst_0 = arith.constant 2.500000e-01 : f16
+    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_1"} : memref<8x64xf16>
+    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_v"} : memref<64x256xf16>
+    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_k"} : memref<64x256xf16>
+    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_weights_q"} : memref<64x256xf16>
+    %alloca_4 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_attn_input"} : memref<8x256xf16>
     affine.for %arg5 = 0 to 8 {
       affine.for %arg6 = 0 to 256 {
-        %0 = affine.load %arg0[%arg5, %arg6] : memref<8x256xf32>
-        affine.store %0, %alloca_4[%arg5, %arg6] : memref<8x256xf32>
+        %0 = affine.load %arg0[%arg5, %arg6] : memref<8x256xf16>
+        affine.store %0, %alloca_4[%arg5, %arg6] : memref<8x256xf16>
       }
     }
     affine.for %arg5 = 0 to 64 {
       affine.for %arg6 = 0 to 256 {
-        %0 = affine.load %arg1[%arg5, %arg6] : memref<64x256xf32>
-        affine.store %0, %alloca_3[%arg5, %arg6] : memref<64x256xf32>
+        %0 = affine.load %arg1[%arg5, %arg6] : memref<64x256xf16>
+        affine.store %0, %alloca_3[%arg5, %arg6] : memref<64x256xf16>
       }
     }
     affine.for %arg5 = 0 to 64 {
       affine.for %arg6 = 0 to 256 {
-        %0 = affine.load %arg2[%arg5, %arg6] : memref<64x256xf32>
-        affine.store %0, %alloca_2[%arg5, %arg6] : memref<64x256xf32>
+        %0 = affine.load %arg2[%arg5, %arg6] : memref<64x256xf16>
+        affine.store %0, %alloca_2[%arg5, %arg6] : memref<64x256xf16>
       }
     }
     affine.for %arg5 = 0 to 64 {
       affine.for %arg6 = 0 to 256 {
-        %0 = affine.load %arg3[%arg5, %arg6] : memref<64x256xf32>
-        affine.store %0, %alloca_1[%arg5, %arg6] : memref<64x256xf32>
+        %0 = affine.load %arg3[%arg5, %arg6] : memref<64x256xf16>
+        affine.store %0, %alloca_1[%arg5, %arg6] : memref<64x256xf16>
       }
     }
-    %alloca_5 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf32>
-    %alloca_6 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf32>
-    %alloca_7 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf32>
-    %alloca_8 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf32>
+    %alloca_5 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf16>
+    %alloca_6 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf16>
+    %alloca_7 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf16>
+    %alloca_8 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf16>
     affine.for %arg5 = 0 to 8 {
       affine.for %arg6 = 0 to 64 {
-        affine.store %cst, %alloca_8[%arg5, %arg6] : memref<8x64xf32>
-        affine.store %cst, %alloca_7[%arg5, %arg6] : memref<8x64xf32>
-        affine.store %cst, %alloca_6[%arg5, %arg6] : memref<8x64xf32>
-        %0:3 = affine.for %arg7 = 0 to 256 iter_args(%arg8 = %cst, %arg9 = %cst, %arg10 = %cst) -> (f32, f32, f32) {
-          %1 = affine.load %alloca_4[%arg5, %arg7] : memref<8x256xf32>
-          %2 = affine.load %alloca_3[%arg6, %arg7] : memref<64x256xf32>
-          %3 = arith.mulf %1, %2 : f32
-          %4 = arith.addf %arg10, %3 : f32
-          affine.store %4, %alloca_8[%arg5, %arg6] : memref<8x64xf32>
-          %5 = affine.load %alloca_2[%arg6, %arg7] : memref<64x256xf32>
-          %6 = arith.mulf %1, %5 : f32
-          %7 = arith.addf %arg9, %6 : f32
-          affine.store %7, %alloca_7[%arg5, %arg6] : memref<8x64xf32>
-          %8 = affine.load %alloca_1[%arg6, %arg7] : memref<64x256xf32>
-          %9 = arith.mulf %1, %8 : f32
-          %10 = arith.addf %arg8, %9 : f32
-          affine.store %10, %alloca_6[%arg5, %arg6] : memref<8x64xf32>
-          affine.yield %10, %7, %4 : f32, f32, f32
+        affine.store %cst, %alloca_8[%arg5, %arg6] : memref<8x64xf16>
+        affine.store %cst, %alloca_7[%arg5, %arg6] : memref<8x64xf16>
+        affine.store %cst, %alloca_6[%arg5, %arg6] : memref<8x64xf16>
+        %0:3 = affine.for %arg7 = 0 to 256 iter_args(%arg8 = %cst, %arg9 = %cst, %arg10 = %cst) -> (f16, f16, f16) {
+          %1 = affine.load %alloca_4[%arg5, %arg7] : memref<8x256xf16>
+          %2 = affine.load %alloca_3[%arg6, %arg7] : memref<64x256xf16>
+          %3 = arith.mulf %1, %2 : f16
+          %4 = arith.addf %arg10, %3 : f16
+          affine.store %4, %alloca_8[%arg5, %arg6] : memref<8x64xf16>
+          %5 = affine.load %alloca_2[%arg6, %arg7] : memref<64x256xf16>
+          %6 = arith.mulf %1, %5 : f16
+          %7 = arith.addf %arg9, %6 : f16
+          affine.store %7, %alloca_7[%arg5, %arg6] : memref<8x64xf16>
+          %8 = affine.load %alloca_1[%arg6, %arg7] : memref<64x256xf16>
+          %9 = arith.mulf %1, %8 : f16
+          %10 = arith.addf %arg8, %9 : f16
+          affine.store %10, %alloca_6[%arg5, %arg6] : memref<8x64xf16>
+          affine.yield %10, %7, %4 : f16, f16, f16
         }
       }
     }
     affine.for %arg5 = 0 to 4 {
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 8 {
-          affine.store %cst, %alloca_5[%arg6, %arg7] : memref<8x8xf32>
-          %0 = affine.for %arg8 = 0 to 16 iter_args(%arg9 = %cst) -> (f32) {
-            %3 = affine.load %alloca_8[%arg6, %arg8 + %arg5 * 16] : memref<8x64xf32>
-            %4 = affine.load %alloca_7[%arg7, %arg8 + %arg5 * 16] : memref<8x64xf32>
-            %5 = arith.mulf %3, %4 : f32
-            %6 = arith.addf %arg9, %5 : f32
-            affine.store %6, %alloca_5[%arg6, %arg7] : memref<8x8xf32>
-            affine.yield %6 : f32
+          affine.store %cst, %alloca_5[%arg6, %arg7] : memref<8x8xf16>
+          %0 = affine.for %arg8 = 0 to 16 iter_args(%arg9 = %cst) -> (f16) {
+            %3 = affine.load %alloca_8[%arg6, %arg8 + %arg5 * 16] : memref<8x64xf16>
+            %4 = affine.load %alloca_7[%arg7, %arg8 + %arg5 * 16] : memref<8x64xf16>
+            %5 = arith.mulf %3, %4 : f16
+            %6 = arith.addf %arg9, %5 : f16
+            affine.store %6, %alloca_5[%arg6, %arg7] : memref<8x8xf16>
+            affine.yield %6 : f16
           }
-          %1 = affine.load %alloca_5[%arg6, %arg7] : memref<8x8xf32>
-          %2 = arith.mulf %1, %cst_0 : f32
-          affine.store %2, %alloca_5[%arg6, %arg7] : memref<8x8xf32>
+          %1 = affine.load %alloca_5[%arg6, %arg7] : memref<8x8xf16>
+          %2 = arith.mulf %1, %cst_0 : f16
+          affine.store %2, %alloca_5[%arg6, %arg7] : memref<8x8xf16>
         }
       }
       affine.for %arg6 = 0 to 8 {
-        %0 = affine.load %alloca_5[%arg6, 0] : memref<8x8xf32>
-        %1 = affine.for %arg7 = 1 to 8 iter_args(%arg8 = %0) -> (f32) {
-          %3 = affine.load %alloca_5[%arg6, %arg7] : memref<8x8xf32>
-          %4 = arith.cmpf ogt, %3, %arg8 : f32
-          %5 = arith.select %4, %3, %arg8 : f32
-          affine.yield %5 : f32
+        %0 = affine.load %alloca_5[%arg6, 0] : memref<8x8xf16>
+        %1 = affine.for %arg7 = 1 to 8 iter_args(%arg8 = %0) -> (f16) {
+          %3 = affine.load %alloca_5[%arg6, %arg7] : memref<8x8xf16>
+          %4 = arith.cmpf ogt, %3, %arg8 : f16
+          %5 = arith.select %4, %3, %arg8 : f16
+          affine.yield %5 : f16
         }
-        %2 = affine.for %arg7 = 0 to 8 iter_args(%arg8 = %cst) -> (f32) {
-          %3 = affine.load %alloca_5[%arg6, %arg7] : memref<8x8xf32>
-          %4 = arith.subf %3, %1 : f32
-          %5 = math.exp %4 : f32
-          affine.store %5, %alloca_5[%arg6, %arg7] : memref<8x8xf32>
-          %6 = arith.addf %arg8, %5 : f32
-          affine.yield %6 : f32
+        %2 = affine.for %arg7 = 0 to 8 iter_args(%arg8 = %cst) -> (f16) {
+          %3 = affine.load %alloca_5[%arg6, %arg7] : memref<8x8xf16>
+          %4 = arith.subf %3, %1 : f16
+          %5 = math.exp %4 : f16
+          affine.store %5, %alloca_5[%arg6, %arg7] : memref<8x8xf16>
+          %6 = arith.addf %arg8, %5 : f16
+          affine.yield %6 : f16
         }
         affine.for %arg7 = 0 to 8 {
-          %3 = affine.load %alloca_5[%arg6, %arg7] : memref<8x8xf32>
-          %4 = arith.divf %3, %2 : f32
-          affine.store %4, %alloca_5[%arg6, %arg7] : memref<8x8xf32>
+          %3 = affine.load %alloca_5[%arg6, %arg7] : memref<8x8xf16>
+          %4 = arith.divf %3, %2 : f16
+          affine.store %4, %alloca_5[%arg6, %arg7] : memref<8x8xf16>
         }
       }
       affine.for %arg6 = 0 to 8 {
         affine.for %arg7 = 0 to 16 {
-          %0 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst) -> (f32) {
-            %1 = affine.load %alloca_5[%arg6, %arg8] : memref<8x8xf32>
-            %2 = affine.load %alloca_6[%arg8, %arg7 + %arg5 * 16] : memref<8x64xf32>
-            %3 = arith.mulf %1, %2 : f32
-            %4 = arith.addf %arg9, %3 : f32
-            affine.yield %4 : f32
+          %0 = affine.for %arg8 = 0 to 8 iter_args(%arg9 = %cst) -> (f16) {
+            %1 = affine.load %alloca_5[%arg6, %arg8] : memref<8x8xf16>
+            %2 = affine.load %alloca_6[%arg8, %arg7 + %arg5 * 16] : memref<8x64xf16>
+            %3 = arith.mulf %1, %2 : f16
+            %4 = arith.addf %arg9, %3 : f16
+            affine.yield %4 : f16
           }
-          affine.store %0, %alloca[%arg6, %arg7 + %arg5 * 16] : memref<8x64xf32>
+          affine.store %0, %alloca[%arg6, %arg7 + %arg5 * 16] : memref<8x64xf16>
         }
       }
     }
     affine.for %arg5 = 0 to 8 {
       affine.for %arg6 = 0 to 64 {
-        %0 = affine.load %alloca[%arg5, %arg6] : memref<8x64xf32>
-        affine.store %0, %arg4[%arg5, %arg6] : memref<8x64xf32>
+        %0 = affine.load %alloca[%arg5, %arg6] : memref<8x64xf16>
+        affine.store %0, %arg4[%arg5, %arg6] : memref<8x64xf16>
       }
     }
     return
   }
-  func.func @_Z3topPA256_fS0_S0_S0_S0_S0_S0_S0_S0_PA64_f(%arg0: memref<8x256xf32>, %arg1: memref<256x256xf32>, %arg2: memref<256x256xf32>, %arg3: memref<256x256xf32>, %arg4: memref<8x256xf32>, %arg5: memref<8x256xf32>, %arg6: memref<64x256xf32>, %arg7: memref<64x256xf32>, %arg8: memref<64x256xf32>, %arg9: memref<8x64xf32>) {
-    %cst = arith.constant 0.000000e+00 : f32
-    %cst_0 = arith.constant 2.500000e-01 : f32
-    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B5"} : memref<8x64xf32>
-    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B4"} : memref<64x256xf32>
-    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B3"} : memref<64x256xf32>
-    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B2"} : memref<64x256xf32>
-    %alloca_4 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B1"} : memref<8x256xf32>
-    %alloca_5 = memref.alloca() {hls.preserve, polygeist.varname = "split_out"} : memref<8x64xf32>
-    %alloca_6 = memref.alloca() {hls.preserve, polygeist.varname = "split_wv"} : memref<64x256xf32>
-    %alloca_7 = memref.alloca() {hls.preserve, polygeist.varname = "split_wk"} : memref<64x256xf32>
-    %alloca_8 = memref.alloca() {hls.preserve, polygeist.varname = "split_wq"} : memref<64x256xf32>
-    %alloca_9 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A5"} : memref<8x256xf32>
-    %alloca_10 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A4"} : memref<256x256xf32>
-    %alloca_11 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A3"} : memref<256x256xf32>
-    %alloca_12 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A2"} : memref<256x256xf32>
-    %alloca_13 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A1"} : memref<8x256xf32>
+  func.func @_Z3topPA256_fS0_S0_S0_S0_S0_S0_S0_S0_PA64_f(%arg0: memref<8x256xf16>, %arg1: memref<256x256xf16>, %arg2: memref<256x256xf16>, %arg3: memref<256x256xf16>, %arg4: memref<8x256xf16>, %arg5: memref<8x256xf16>, %arg6: memref<64x256xf16>, %arg7: memref<64x256xf16>, %arg8: memref<64x256xf16>, %arg9: memref<8x64xf16>) {
+    %cst = arith.constant 0.000000e+00 : f16
+    %cst_0 = arith.constant 2.500000e-01 : f16
+    %alloca = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B5"} : memref<8x64xf16>
+    %alloca_1 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B4"} : memref<64x256xf16>
+    %alloca_2 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B3"} : memref<64x256xf16>
+    %alloca_3 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B2"} : memref<64x256xf16>
+    %alloca_4 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_B1"} : memref<8x256xf16>
+    %alloca_5 = memref.alloca() {hls.preserve, polygeist.varname = "split_out"} : memref<8x64xf16>
+    %alloca_6 = memref.alloca() {hls.preserve, polygeist.varname = "split_wv"} : memref<64x256xf16>
+    %alloca_7 = memref.alloca() {hls.preserve, polygeist.varname = "split_wk"} : memref<64x256xf16>
+    %alloca_8 = memref.alloca() {hls.preserve, polygeist.varname = "split_wq"} : memref<64x256xf16>
+    %alloca_9 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A5"} : memref<8x256xf16>
+    %alloca_10 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A4"} : memref<256x256xf16>
+    %alloca_11 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A3"} : memref<256x256xf16>
+    %alloca_12 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A2"} : memref<256x256xf16>
+    %alloca_13 = memref.alloca() {hls.preserve, polygeist.varname = "BRAM_A1"} : memref<8x256xf16>
     affine.for %arg10 = 0 to 8 {
       affine.for %arg11 = 0 to 256 {
-        %0 = affine.load %arg0[%arg10, %arg11] : memref<8x256xf32>
-        affine.store %0, %alloca_13[%arg10, %arg11] : memref<8x256xf32>
+        %0 = affine.load %arg0[%arg10, %arg11] : memref<8x256xf16>
+        affine.store %0, %alloca_13[%arg10, %arg11] : memref<8x256xf16>
       }
     }
     affine.for %arg10 = 0 to 256 {
       affine.for %arg11 = 0 to 256 {
-        %0 = affine.load %arg1[%arg10, %arg11] : memref<256x256xf32>
-        affine.store %0, %alloca_12[%arg10, %arg11] : memref<256x256xf32>
+        %0 = affine.load %arg1[%arg10, %arg11] : memref<256x256xf16>
+        affine.store %0, %alloca_12[%arg10, %arg11] : memref<256x256xf16>
       }
     }
     affine.for %arg10 = 0 to 256 {
       affine.for %arg11 = 0 to 256 {
-        %0 = affine.load %arg2[%arg10, %arg11] : memref<256x256xf32>
-        affine.store %0, %alloca_11[%arg10, %arg11] : memref<256x256xf32>
+        %0 = affine.load %arg2[%arg10, %arg11] : memref<256x256xf16>
+        affine.store %0, %alloca_11[%arg10, %arg11] : memref<256x256xf16>
       }
     }
     affine.for %arg10 = 0 to 256 {
       affine.for %arg11 = 0 to 256 {
-        %0 = affine.load %arg3[%arg10, %arg11] : memref<256x256xf32>
-        affine.store %0, %alloca_10[%arg10, %arg11] : memref<256x256xf32>
+        %0 = affine.load %arg3[%arg10, %arg11] : memref<256x256xf16>
+        affine.store %0, %alloca_10[%arg10, %arg11] : memref<256x256xf16>
       }
     }
-    %alloca_14 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf32>
-    %alloca_15 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf32>
-    %alloca_16 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf32>
-    %alloca_17 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf32>
+    %alloca_14 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf16>
+    %alloca_15 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf16>
+    %alloca_16 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf16>
+    %alloca_17 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf16>
     affine.for %arg10 = 0 to 4 {
       affine.for %arg11 = 0 to 64 {
         affine.for %arg12 = 0 to 256 {
-          %0 = affine.load %alloca_12[%arg11 + %arg10 * 64, %arg12] : memref<256x256xf32>
-          affine.store %0, %alloca_8[%arg11, %arg12] : memref<64x256xf32>
-          %1 = affine.load %alloca_11[%arg11 + %arg10 * 64, %arg12] : memref<256x256xf32>
-          affine.store %1, %alloca_7[%arg11, %arg12] : memref<64x256xf32>
-          %2 = affine.load %alloca_10[%arg11 + %arg10 * 64, %arg12] : memref<256x256xf32>
-          affine.store %2, %alloca_6[%arg11, %arg12] : memref<64x256xf32>
+          %0 = affine.load %alloca_12[%arg11 + %arg10 * 64, %arg12] : memref<256x256xf16>
+          affine.store %0, %alloca_8[%arg11, %arg12] : memref<64x256xf16>
+          %1 = affine.load %alloca_11[%arg11 + %arg10 * 64, %arg12] : memref<256x256xf16>
+          affine.store %1, %alloca_7[%arg11, %arg12] : memref<64x256xf16>
+          %2 = affine.load %alloca_10[%arg11 + %arg10 * 64, %arg12] : memref<256x256xf16>
+          affine.store %2, %alloca_6[%arg11, %arg12] : memref<64x256xf16>
         }
       }
       affine.for %arg11 = 0 to 8 {
         affine.for %arg12 = 0 to 64 {
-          affine.store %cst, %alloca_17[%arg11, %arg12] : memref<8x64xf32>
-          affine.store %cst, %alloca_16[%arg11, %arg12] : memref<8x64xf32>
-          affine.store %cst, %alloca_15[%arg11, %arg12] : memref<8x64xf32>
-          %0:3 = affine.for %arg13 = 0 to 256 iter_args(%arg14 = %cst, %arg15 = %cst, %arg16 = %cst) -> (f32, f32, f32) {
-            %1 = affine.load %alloca_13[%arg11, %arg13] : memref<8x256xf32>
-            %2 = affine.load %alloca_8[%arg12, %arg13] : memref<64x256xf32>
-            %3 = arith.mulf %1, %2 : f32
-            %4 = arith.addf %arg16, %3 : f32
-            affine.store %4, %alloca_17[%arg11, %arg12] : memref<8x64xf32>
-            %5 = affine.load %alloca_7[%arg12, %arg13] : memref<64x256xf32>
-            %6 = arith.mulf %1, %5 : f32
-            %7 = arith.addf %arg15, %6 : f32
-            affine.store %7, %alloca_16[%arg11, %arg12] : memref<8x64xf32>
-            %8 = affine.load %alloca_6[%arg12, %arg13] : memref<64x256xf32>
-            %9 = arith.mulf %1, %8 : f32
-            %10 = arith.addf %arg14, %9 : f32
-            affine.store %10, %alloca_15[%arg11, %arg12] : memref<8x64xf32>
-            affine.yield %10, %7, %4 : f32, f32, f32
+          affine.store %cst, %alloca_17[%arg11, %arg12] : memref<8x64xf16>
+          affine.store %cst, %alloca_16[%arg11, %arg12] : memref<8x64xf16>
+          affine.store %cst, %alloca_15[%arg11, %arg12] : memref<8x64xf16>
+          %0:3 = affine.for %arg13 = 0 to 256 iter_args(%arg14 = %cst, %arg15 = %cst, %arg16 = %cst) -> (f16, f16, f16) {
+            %1 = affine.load %alloca_13[%arg11, %arg13] : memref<8x256xf16>
+            %2 = affine.load %alloca_8[%arg12, %arg13] : memref<64x256xf16>
+            %3 = arith.mulf %1, %2 : f16
+            %4 = arith.addf %arg16, %3 : f16
+            affine.store %4, %alloca_17[%arg11, %arg12] : memref<8x64xf16>
+            %5 = affine.load %alloca_7[%arg12, %arg13] : memref<64x256xf16>
+            %6 = arith.mulf %1, %5 : f16
+            %7 = arith.addf %arg15, %6 : f16
+            affine.store %7, %alloca_16[%arg11, %arg12] : memref<8x64xf16>
+            %8 = affine.load %alloca_6[%arg12, %arg13] : memref<64x256xf16>
+            %9 = arith.mulf %1, %8 : f16
+            %10 = arith.addf %arg14, %9 : f16
+            affine.store %10, %alloca_15[%arg11, %arg12] : memref<8x64xf16>
+            affine.yield %10, %7, %4 : f16, f16, f16
           }
         }
       }
       affine.for %arg11 = 0 to 4 {
         affine.for %arg12 = 0 to 8 {
           affine.for %arg13 = 0 to 8 {
-            affine.store %cst, %alloca_14[%arg12, %arg13] : memref<8x8xf32>
-            %0 = affine.for %arg14 = 0 to 16 iter_args(%arg15 = %cst) -> (f32) {
-              %3 = affine.load %alloca_17[%arg12, %arg14 + %arg11 * 16] : memref<8x64xf32>
-              %4 = affine.load %alloca_16[%arg13, %arg14 + %arg11 * 16] : memref<8x64xf32>
-              %5 = arith.mulf %3, %4 : f32
-              %6 = arith.addf %arg15, %5 : f32
-              affine.store %6, %alloca_14[%arg12, %arg13] : memref<8x8xf32>
-              affine.yield %6 : f32
+            affine.store %cst, %alloca_14[%arg12, %arg13] : memref<8x8xf16>
+            %0 = affine.for %arg14 = 0 to 16 iter_args(%arg15 = %cst) -> (f16) {
+              %3 = affine.load %alloca_17[%arg12, %arg14 + %arg11 * 16] : memref<8x64xf16>
+              %4 = affine.load %alloca_16[%arg13, %arg14 + %arg11 * 16] : memref<8x64xf16>
+              %5 = arith.mulf %3, %4 : f16
+              %6 = arith.addf %arg15, %5 : f16
+              affine.store %6, %alloca_14[%arg12, %arg13] : memref<8x8xf16>
+              affine.yield %6 : f16
             }
-            %1 = affine.load %alloca_14[%arg12, %arg13] : memref<8x8xf32>
-            %2 = arith.mulf %1, %cst_0 : f32
-            affine.store %2, %alloca_14[%arg12, %arg13] : memref<8x8xf32>
+            %1 = affine.load %alloca_14[%arg12, %arg13] : memref<8x8xf16>
+            %2 = arith.mulf %1, %cst_0 : f16
+            affine.store %2, %alloca_14[%arg12, %arg13] : memref<8x8xf16>
           }
         }
         affine.for %arg12 = 0 to 8 {
-          %0 = affine.load %alloca_14[%arg12, 0] : memref<8x8xf32>
-          %1 = affine.for %arg13 = 1 to 8 iter_args(%arg14 = %0) -> (f32) {
-            %3 = affine.load %alloca_14[%arg12, %arg13] : memref<8x8xf32>
-            %4 = arith.cmpf ogt, %3, %arg14 : f32
-            %5 = arith.select %4, %3, %arg14 : f32
-            affine.yield %5 : f32
+          %0 = affine.load %alloca_14[%arg12, 0] : memref<8x8xf16>
+          %1 = affine.for %arg13 = 1 to 8 iter_args(%arg14 = %0) -> (f16) {
+            %3 = affine.load %alloca_14[%arg12, %arg13] : memref<8x8xf16>
+            %4 = arith.cmpf ogt, %3, %arg14 : f16
+            %5 = arith.select %4, %3, %arg14 : f16
+            affine.yield %5 : f16
           }
-          %2 = affine.for %arg13 = 0 to 8 iter_args(%arg14 = %cst) -> (f32) {
-            %3 = affine.load %alloca_14[%arg12, %arg13] : memref<8x8xf32>
-            %4 = arith.subf %3, %1 : f32
-            %5 = math.exp %4 : f32
-            affine.store %5, %alloca_14[%arg12, %arg13] : memref<8x8xf32>
-            %6 = arith.addf %arg14, %5 : f32
-            affine.yield %6 : f32
+          %2 = affine.for %arg13 = 0 to 8 iter_args(%arg14 = %cst) -> (f16) {
+            %3 = affine.load %alloca_14[%arg12, %arg13] : memref<8x8xf16>
+            %4 = arith.subf %3, %1 : f16
+            %5 = math.exp %4 : f16
+            affine.store %5, %alloca_14[%arg12, %arg13] : memref<8x8xf16>
+            %6 = arith.addf %arg14, %5 : f16
+            affine.yield %6 : f16
           }
           affine.for %arg13 = 0 to 8 {
-            %3 = affine.load %alloca_14[%arg12, %arg13] : memref<8x8xf32>
-            %4 = arith.divf %3, %2 : f32
-            affine.store %4, %alloca_14[%arg12, %arg13] : memref<8x8xf32>
+            %3 = affine.load %alloca_14[%arg12, %arg13] : memref<8x8xf16>
+            %4 = arith.divf %3, %2 : f16
+            affine.store %4, %alloca_14[%arg12, %arg13] : memref<8x8xf16>
           }
         }
         affine.for %arg12 = 0 to 8 {
           affine.for %arg13 = 0 to 16 {
-            %0 = affine.for %arg14 = 0 to 8 iter_args(%arg15 = %cst) -> (f32) {
-              %1 = affine.load %alloca_14[%arg12, %arg14] : memref<8x8xf32>
-              %2 = affine.load %alloca_15[%arg14, %arg13 + %arg11 * 16] : memref<8x64xf32>
-              %3 = arith.mulf %1, %2 : f32
-              %4 = arith.addf %arg15, %3 : f32
-              affine.yield %4 : f32
+            %0 = affine.for %arg14 = 0 to 8 iter_args(%arg15 = %cst) -> (f16) {
+              %1 = affine.load %alloca_14[%arg12, %arg14] : memref<8x8xf16>
+              %2 = affine.load %alloca_15[%arg14, %arg13 + %arg11 * 16] : memref<8x64xf16>
+              %3 = arith.mulf %1, %2 : f16
+              %4 = arith.addf %arg15, %3 : f16
+              affine.yield %4 : f16
             }
-            affine.store %0, %alloca_5[%arg12, %arg13 + %arg11 * 16] : memref<8x64xf32>
+            affine.store %0, %alloca_5[%arg12, %arg13 + %arg11 * 16] : memref<8x64xf16>
           }
         }
       }
       affine.for %arg11 = 0 to 8 {
         affine.for %arg12 = 0 to 64 {
-          %0 = affine.load %alloca_5[%arg12, %arg11] : memref<8x64xf32>
-          affine.store %0, %alloca_9[%arg12, %arg11 + %arg10 * 64] : memref<8x256xf32>
+          %0 = affine.load %alloca_5[%arg12, %arg11] : memref<8x64xf16>
+          affine.store %0, %alloca_9[%arg12, %arg11 + %arg10 * 64] : memref<8x256xf16>
         }
       }
     }
     affine.for %arg10 = 0 to 8 {
       affine.for %arg11 = 0 to 256 {
-        %0 = affine.load %alloca_9[%arg10, %arg11] : memref<8x256xf32>
-        affine.store %0, %arg4[%arg10, %arg11] : memref<8x256xf32>
+        %0 = affine.load %alloca_9[%arg10, %arg11] : memref<8x256xf16>
+        affine.store %0, %arg4[%arg10, %arg11] : memref<8x256xf16>
       }
     }
     affine.for %arg10 = 0 to 8 {
       affine.for %arg11 = 0 to 256 {
-        %0 = affine.load %arg5[%arg10, %arg11] : memref<8x256xf32>
-        affine.store %0, %alloca_4[%arg10, %arg11] : memref<8x256xf32>
+        %0 = affine.load %arg5[%arg10, %arg11] : memref<8x256xf16>
+        affine.store %0, %alloca_4[%arg10, %arg11] : memref<8x256xf16>
       }
     }
     affine.for %arg10 = 0 to 64 {
       affine.for %arg11 = 0 to 256 {
-        %0 = affine.load %arg6[%arg10, %arg11] : memref<64x256xf32>
-        affine.store %0, %alloca_3[%arg10, %arg11] : memref<64x256xf32>
+        %0 = affine.load %arg6[%arg10, %arg11] : memref<64x256xf16>
+        affine.store %0, %alloca_3[%arg10, %arg11] : memref<64x256xf16>
       }
     }
     affine.for %arg10 = 0 to 64 {
       affine.for %arg11 = 0 to 256 {
-        %0 = affine.load %arg7[%arg10, %arg11] : memref<64x256xf32>
-        affine.store %0, %alloca_2[%arg10, %arg11] : memref<64x256xf32>
+        %0 = affine.load %arg7[%arg10, %arg11] : memref<64x256xf16>
+        affine.store %0, %alloca_2[%arg10, %arg11] : memref<64x256xf16>
       }
     }
     affine.for %arg10 = 0 to 64 {
       affine.for %arg11 = 0 to 256 {
-        %0 = affine.load %arg8[%arg10, %arg11] : memref<64x256xf32>
-        affine.store %0, %alloca_1[%arg10, %arg11] : memref<64x256xf32>
+        %0 = affine.load %arg8[%arg10, %arg11] : memref<64x256xf16>
+        affine.store %0, %alloca_1[%arg10, %arg11] : memref<64x256xf16>
       }
     }
-    %alloca_18 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf32>
-    %alloca_19 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf32>
-    %alloca_20 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf32>
-    %alloca_21 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf32>
+    %alloca_18 = memref.alloca() {hls.preserve, polygeist.varname = "scores"} : memref<8x8xf16>
+    %alloca_19 = memref.alloca() {hls.preserve, polygeist.varname = "V"} : memref<8x64xf16>
+    %alloca_20 = memref.alloca() {hls.preserve, polygeist.varname = "K"} : memref<8x64xf16>
+    %alloca_21 = memref.alloca() {hls.preserve, polygeist.varname = "Q"} : memref<8x64xf16>
     affine.for %arg10 = 0 to 8 {
       affine.for %arg11 = 0 to 64 {
-        affine.store %cst, %alloca_21[%arg10, %arg11] : memref<8x64xf32>
-        affine.store %cst, %alloca_20[%arg10, %arg11] : memref<8x64xf32>
-        affine.store %cst, %alloca_19[%arg10, %arg11] : memref<8x64xf32>
-        %0:3 = affine.for %arg12 = 0 to 256 iter_args(%arg13 = %cst, %arg14 = %cst, %arg15 = %cst) -> (f32, f32, f32) {
-          %1 = affine.load %alloca_4[%arg10, %arg12] : memref<8x256xf32>
-          %2 = affine.load %alloca_3[%arg11, %arg12] : memref<64x256xf32>
-          %3 = arith.mulf %1, %2 : f32
-          %4 = arith.addf %arg15, %3 : f32
-          affine.store %4, %alloca_21[%arg10, %arg11] : memref<8x64xf32>
-          %5 = affine.load %alloca_2[%arg11, %arg12] : memref<64x256xf32>
-          %6 = arith.mulf %1, %5 : f32
-          %7 = arith.addf %arg14, %6 : f32
-          affine.store %7, %alloca_20[%arg10, %arg11] : memref<8x64xf32>
-          %8 = affine.load %alloca_1[%arg11, %arg12] : memref<64x256xf32>
-          %9 = arith.mulf %1, %8 : f32
-          %10 = arith.addf %arg13, %9 : f32
-          affine.store %10, %alloca_19[%arg10, %arg11] : memref<8x64xf32>
-          affine.yield %10, %7, %4 : f32, f32, f32
+        affine.store %cst, %alloca_21[%arg10, %arg11] : memref<8x64xf16>
+        affine.store %cst, %alloca_20[%arg10, %arg11] : memref<8x64xf16>
+        affine.store %cst, %alloca_19[%arg10, %arg11] : memref<8x64xf16>
+        %0:3 = affine.for %arg12 = 0 to 256 iter_args(%arg13 = %cst, %arg14 = %cst, %arg15 = %cst) -> (f16, f16, f16) {
+          %1 = affine.load %alloca_4[%arg10, %arg12] : memref<8x256xf16>
+          %2 = affine.load %alloca_3[%arg11, %arg12] : memref<64x256xf16>
+          %3 = arith.mulf %1, %2 : f16
+          %4 = arith.addf %arg15, %3 : f16
+          affine.store %4, %alloca_21[%arg10, %arg11] : memref<8x64xf16>
+          %5 = affine.load %alloca_2[%arg11, %arg12] : memref<64x256xf16>
+          %6 = arith.mulf %1, %5 : f16
+          %7 = arith.addf %arg14, %6 : f16
+          affine.store %7, %alloca_20[%arg10, %arg11] : memref<8x64xf16>
+          %8 = affine.load %alloca_1[%arg11, %arg12] : memref<64x256xf16>
+          %9 = arith.mulf %1, %8 : f16
+          %10 = arith.addf %arg13, %9 : f16
+          affine.store %10, %alloca_19[%arg10, %arg11] : memref<8x64xf16>
+          affine.yield %10, %7, %4 : f16, f16, f16
         }
       }
     }
     affine.for %arg10 = 0 to 4 {
       affine.for %arg11 = 0 to 8 {
         affine.for %arg12 = 0 to 8 {
-          affine.store %cst, %alloca_18[%arg11, %arg12] : memref<8x8xf32>
-          %0 = affine.for %arg13 = 0 to 16 iter_args(%arg14 = %cst) -> (f32) {
-            %3 = affine.load %alloca_21[%arg11, %arg13 + %arg10 * 16] : memref<8x64xf32>
-            %4 = affine.load %alloca_20[%arg12, %arg13 + %arg10 * 16] : memref<8x64xf32>
-            %5 = arith.mulf %3, %4 : f32
-            %6 = arith.addf %arg14, %5 : f32
-            affine.store %6, %alloca_18[%arg11, %arg12] : memref<8x8xf32>
-            affine.yield %6 : f32
+          affine.store %cst, %alloca_18[%arg11, %arg12] : memref<8x8xf16>
+          %0 = affine.for %arg13 = 0 to 16 iter_args(%arg14 = %cst) -> (f16) {
+            %3 = affine.load %alloca_21[%arg11, %arg13 + %arg10 * 16] : memref<8x64xf16>
+            %4 = affine.load %alloca_20[%arg12, %arg13 + %arg10 * 16] : memref<8x64xf16>
+            %5 = arith.mulf %3, %4 : f16
+            %6 = arith.addf %arg14, %5 : f16
+            affine.store %6, %alloca_18[%arg11, %arg12] : memref<8x8xf16>
+            affine.yield %6 : f16
           }
-          %1 = affine.load %alloca_18[%arg11, %arg12] : memref<8x8xf32>
-          %2 = arith.mulf %1, %cst_0 : f32
-          affine.store %2, %alloca_18[%arg11, %arg12] : memref<8x8xf32>
+          %1 = affine.load %alloca_18[%arg11, %arg12] : memref<8x8xf16>
+          %2 = arith.mulf %1, %cst_0 : f16
+          affine.store %2, %alloca_18[%arg11, %arg12] : memref<8x8xf16>
         }
       }
       affine.for %arg11 = 0 to 8 {
-        %0 = affine.load %alloca_18[%arg11, 0] : memref<8x8xf32>
-        %1 = affine.for %arg12 = 1 to 8 iter_args(%arg13 = %0) -> (f32) {
-          %3 = affine.load %alloca_18[%arg11, %arg12] : memref<8x8xf32>
-          %4 = arith.cmpf ogt, %3, %arg13 : f32
-          %5 = arith.select %4, %3, %arg13 : f32
-          affine.yield %5 : f32
+        %0 = affine.load %alloca_18[%arg11, 0] : memref<8x8xf16>
+        %1 = affine.for %arg12 = 1 to 8 iter_args(%arg13 = %0) -> (f16) {
+          %3 = affine.load %alloca_18[%arg11, %arg12] : memref<8x8xf16>
+          %4 = arith.cmpf ogt, %3, %arg13 : f16
+          %5 = arith.select %4, %3, %arg13 : f16
+          affine.yield %5 : f16
         }
-        %2 = affine.for %arg12 = 0 to 8 iter_args(%arg13 = %cst) -> (f32) {
-          %3 = affine.load %alloca_18[%arg11, %arg12] : memref<8x8xf32>
-          %4 = arith.subf %3, %1 : f32
-          %5 = math.exp %4 : f32
-          affine.store %5, %alloca_18[%arg11, %arg12] : memref<8x8xf32>
-          %6 = arith.addf %arg13, %5 : f32
-          affine.yield %6 : f32
+        %2 = affine.for %arg12 = 0 to 8 iter_args(%arg13 = %cst) -> (f16) {
+          %3 = affine.load %alloca_18[%arg11, %arg12] : memref<8x8xf16>
+          %4 = arith.subf %3, %1 : f16
+          %5 = math.exp %4 : f16
+          affine.store %5, %alloca_18[%arg11, %arg12] : memref<8x8xf16>
+          %6 = arith.addf %arg13, %5 : f16
+          affine.yield %6 : f16
         }
         affine.for %arg12 = 0 to 8 {
-          %3 = affine.load %alloca_18[%arg11, %arg12] : memref<8x8xf32>
-          %4 = arith.divf %3, %2 : f32
-          affine.store %4, %alloca_18[%arg11, %arg12] : memref<8x8xf32>
+          %3 = affine.load %alloca_18[%arg11, %arg12] : memref<8x8xf16>
+          %4 = arith.divf %3, %2 : f16
+          affine.store %4, %alloca_18[%arg11, %arg12] : memref<8x8xf16>
         }
       }
       affine.for %arg11 = 0 to 8 {
         affine.for %arg12 = 0 to 16 {
-          %0 = affine.for %arg13 = 0 to 8 iter_args(%arg14 = %cst) -> (f32) {
-            %1 = affine.load %alloca_18[%arg11, %arg13] : memref<8x8xf32>
-            %2 = affine.load %alloca_19[%arg13, %arg12 + %arg10 * 16] : memref<8x64xf32>
-            %3 = arith.mulf %1, %2 : f32
-            %4 = arith.addf %arg14, %3 : f32
-            affine.yield %4 : f32
+          %0 = affine.for %arg13 = 0 to 8 iter_args(%arg14 = %cst) -> (f16) {
+            %1 = affine.load %alloca_18[%arg11, %arg13] : memref<8x8xf16>
+            %2 = affine.load %alloca_19[%arg13, %arg12 + %arg10 * 16] : memref<8x64xf16>
+            %3 = arith.mulf %1, %2 : f16
+            %4 = arith.addf %arg14, %3 : f16
+            affine.yield %4 : f16
           }
-          affine.store %0, %alloca[%arg11, %arg12 + %arg10 * 16] : memref<8x64xf32>
+          affine.store %0, %alloca[%arg11, %arg12 + %arg10 * 16] : memref<8x64xf16>
         }
       }
     }
     affine.for %arg10 = 0 to 8 {
       affine.for %arg11 = 0 to 64 {
-        %0 = affine.load %alloca[%arg10, %arg11] : memref<8x64xf32>
-        affine.store %0, %arg9[%arg10, %arg11] : memref<8x64xf32>
+        %0 = affine.load %alloca[%arg10, %arg11] : memref<8x64xf16>
+        affine.store %0, %arg9[%arg10, %arg11] : memref<8x64xf16>
       }
     }
     return
