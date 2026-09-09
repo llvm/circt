@@ -261,3 +261,93 @@ module wide_pullup_prim;
     wire [3:0] A;
     pullup n (A);
 endmodule
+
+// CHECK-LABEL: moore.module @TestNmos
+module TestNmos (
+    input  wire data_in,
+    input  wire en,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[EN:.*]] = moore.read %en{{.*}} : <l1>
+  // CHECK: %[[COND:.*]] = moore.logic_to_int %[[EN]] : l1
+  // CHECK: moore.conditional_assign %data_out, %[[IN]] if %[[COND]] : l1, i1
+  nmos n0 (data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestPmos
+module TestPmos (
+    input  wire data_in,
+    input  wire en,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[EN:.*]] = moore.read %en{{.*}} : <l1>
+  // CHECK: %[[COND0:.*]] = moore.logic_to_int %[[EN]] : l1
+  // CHECK: %[[COND:.*]] = moore.not %[[COND0]] : i1
+  // CHECK: moore.conditional_assign %data_out, %[[IN]] if %[[COND]] : l1, i1
+  pmos p0 (data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestCmos
+module TestCmos (
+    input  wire data_in,
+    input  wire n_en,
+    input  wire p_en,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[NEN:.*]] = moore.read %n_en{{.*}} : <l1>
+  // CHECK: %[[PEN:.*]] = moore.read %p_en{{.*}} : <l1>
+  // CHECK: %[[NCOND:.*]] = moore.logic_to_int %[[NEN]] : l1
+  // CHECK: %[[PCOND0:.*]] = moore.logic_to_int %[[PEN]] : l1
+  // CHECK: %[[PCOND:.*]] = moore.not %[[PCOND0]] : i1
+  // CHECK: %[[COND:.*]] = moore.and %[[NCOND]], %[[PCOND]] : i1
+  // CHECK: moore.conditional_assign %data_out, %[[IN]] if %[[COND]] : l1, i1
+  cmos c0 (data_out, data_in, n_en, p_en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestRnmos
+module TestRnmos (
+    input  wire data_in,
+    input  wire en,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[EN:.*]] = moore.read %en{{.*}} : <l1>
+  // CHECK: %[[COND:.*]] = moore.logic_to_int %[[EN]] : l1
+  // CHECK: moore.conditional_assign %data_out, %[[IN]] if %[[COND]] : l1, i1
+  rnmos n0 (data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestRpmos
+module TestRpmos (
+    input  wire data_in,
+    input  wire en,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[EN:.*]] = moore.read %en{{.*}} : <l1>
+  // CHECK: %[[COND0:.*]] = moore.logic_to_int %[[EN]] : l1
+  // CHECK: %[[COND:.*]] = moore.not %[[COND0]] : i1
+  // CHECK: moore.conditional_assign %data_out, %[[IN]] if %[[COND]] : l1, i1
+  rpmos p0 (data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestRcmos
+module TestRcmos (
+    input  wire data_in,
+    input  wire n_en,
+    input  wire p_en,
+    output wire data_out
+);
+  // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
+  // CHECK: %[[NEN:.*]] = moore.read %n_en{{.*}} : <l1>
+  // CHECK: %[[PEN:.*]] = moore.read %p_en{{.*}} : <l1>
+  // CHECK: %[[NCOND:.*]] = moore.logic_to_int %[[NEN]] : l1
+  // CHECK: %[[PCOND0:.*]] = moore.logic_to_int %[[PEN]] : l1
+  // CHECK: %[[PCOND:.*]] = moore.not %[[PCOND0]] : i1
+  // CHECK: %[[COND:.*]] = moore.and %[[NCOND]], %[[PCOND]] : i1
+  // CHECK: moore.conditional_assign %data_out, %[[IN]] if %[[COND]] : l1, i1
+  rcmos c0 (data_out, data_in, n_en, p_en);
+endmodule
