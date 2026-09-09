@@ -365,7 +365,9 @@ def ValidationQualifierTypeEnum: I32EnumAttr<"ValidationQualifierTypeEnum", "val
   let cppNamespace = "::circt::sv";
 }
 
-def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier">;
+def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier"> {
+  let assemblyFormat = "$value";
+}
 
 def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
                            ProceduralRegion, ProceduralOp]> {
@@ -1025,7 +1027,9 @@ def IncludeStyle
   let genSpecializedAttr = 0;
 }
 
-def IncludeStyleAttr : EnumAttr<SVDialect, IncludeStyle, "include_style">;
+def IncludeStyleAttr : EnumAttr<SVDialect, IncludeStyle, "include_style"> {
+  let assemblyFormat = "$value";
+}
 
 def IncludeOp : SVOp<"include"> {
   let summary = "preprocessor `include directive";
