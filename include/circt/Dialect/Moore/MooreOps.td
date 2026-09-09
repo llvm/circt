@@ -2468,50 +2468,6 @@ def OpenArrayFromArrayOp : MooreOp<"open_array_from_array", [
   }];
 }
 
-def OpenUArrayRefFromUnpackedArrayRefOp
-    : MooreOp<"open_uarray_from_uarray_ref", [
-  Pure,
-  TypesMatchWith<"input's elements type must match the result's elements type",
-                 "input", "output", [{
-    RefType::get(OpenUnpackedArrayType::get($_self.getContext(),
-      cast<UnpackedArrayType>(cast<RefType>($_self).getNestedType())
-        .getElementType()))
-  }]>
-]> {
-  let summary =
-      "Create an open unpacked array ref from a fixed-size unpacked array ref";
-  let description = [{
-    Converts a reference to a fixed-size unpacked array into a reference to an
-    open unpacked array.
-  }];
-  let arguments = (ins UnpackedArrayRefType:$input);
-  let results = (outs OpenUnpackedArrayRefType:$output);
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input) `->` type($output)
-  }];
-}
-
-def OpenArrayRefFromArrayRefOp : MooreOp<"open_array_from_array_ref", [
-  Pure,
-  TypesMatchWith<"input's elements type must match the result's elements type",
-                 "input", "output", [{
-    RefType::get(OpenArrayType::get($_self.getContext(),
-      cast<ArrayType>(cast<RefType>($_self).getNestedType()).getElementType()))
-  }]>
-]> {
-  let summary =
-      "Create an open packed array ref from a fixed-size packed array ref";
-  let description = [{
-    Converts a reference to a fixed-size packed array into a reference to an
-    open packed array.
-  }];
-  let arguments = (ins ArrayRefType:$input);
-  let results = (outs OpenArrayRefType:$output);
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input) `->` type($output)
-  }];
-}
-
 //===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//
