@@ -64,6 +64,7 @@ def ConstantOp : RTGOp<"constant", [
 def SequenceOp : RTGOp<"sequence", [
   IsolatedFromAbove,
   DeclareOpInterfaceMethods<Symbol, ["getVisibility", "setVisibility"]>,
+  SymbolName,
   SingleBlock,
   NoTerminator,
   HasParent<"mlir::ModuleOp">,
@@ -832,7 +833,7 @@ def RandomScopeOp : RTGOp<"random_scope", [
 
 def TestOp : RTGOp<"test", [
   IsolatedFromAbove,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
   SingleBlock,
   NoTerminator,
   Emittable,
@@ -873,8 +874,11 @@ def TestOp : RTGOp<"test", [
     very end.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$templateName,
-      TypeAttrOf<DictType>:$targetType, OptionalAttr<SymbolNameAttr>:$target);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrAttr:$templateName,
+    TypeAttrOf<DictType>:$targetType, OptionalAttr<SymbolNameAttr>:$target);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let hasCustomAssemblyFormat = 1;
@@ -897,7 +901,7 @@ def TestFailureOp : RTGOp<"test.failure", []> {
 
 def TargetOp : RTGOp<"target", [
   IsolatedFromAbove,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
   NoRegionArguments,
   SingleBlockImplicitTerminator<"rtg::YieldOp">,
   HasParent<"mlir::ModuleOp">
@@ -913,8 +917,10 @@ def TargetOp : RTGOp<"target", [
     priviledge modes, available memories, etc.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<DictType>:$target);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttrOf<DictType>:$target);
   let regions = (region SizedRegion<1>:$bodyRegion);
 
   let assemblyFormat = [{
@@ -1232,7 +1238,7 @@ def SegmentOp : RTGISAOp<"segment", [
 //===- Algebraic Effect Handler Operations --------------------------------===//
 
 def EffectOp : RTGOp<"effect", [
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
   HasParent<"mlir::ModuleOp">,
 ]> {
   let summary = "algebraic effect signature";
@@ -1247,8 +1253,10 @@ def EffectOp : RTGOp<"effect", [
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<FunctionType>:$function_type);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttrOf<FunctionType>:$function_type);
 
   let assemblyFormat = "$sym_name `:` $function_type attr-dict";
 }

@@ -73,7 +73,8 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
 
     // Create a hierpath to replace us.
     ArrayAttr hierPath = inst.getPath();
-    ref = hw::HierPathOp::create(b, inst.getLoc(), refSym, hierPath);
+    ref = hw::HierPathOp::create(b, inst.getLoc(), refSym,
+                                 /*sym_visibility=*/{}, hierPath);
 
     // Add the new symbol to the symbol cache.
     topSyms.addDefinition(refSym, ref);

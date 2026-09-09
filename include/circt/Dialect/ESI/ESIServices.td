@@ -22,7 +22,8 @@ include "circt/Dialect/HW/HWTypes.td"
 
 def CustomServiceDeclOp : ESI_Op<"service.decl",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
-          Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+           SymbolName, SymbolVisibility, Symbol,
+           DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
   let summary = "An ESI service interface declaration";
   let description = [{
     A declaration of an ESI service interface. Defines a contract between a
@@ -38,7 +39,9 @@ def CustomServiceDeclOp : ESI_Op<"service.decl",
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
   let regions = (region SizedRegion<1>:$ports);
 
   let assemblyFormat = [{

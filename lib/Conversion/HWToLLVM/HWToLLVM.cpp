@@ -302,9 +302,9 @@ struct ArrayInjectOpConversion
       // Clamp index to prevent OOB access. We add an extra element to the
       // array so that OOB access modifies this element, leaving the original
       // array intact.
-      auto maxIndex =
-          LLVM::ConstantOp::create(rewriter, op->getLoc(), zextIndex.getType(),
-                                   rewriter.getI32IntegerAttr(arrElems));
+      auto maxIndex = LLVM::ConstantOp::create(
+          rewriter, op->getLoc(), zextIndex.getType(),
+          rewriter.getIntegerAttr(zextIndex.getType(), arrElems));
       zextIndex =
           LLVM::UMinOp::create(rewriter, op->getLoc(), zextIndex, maxIndex);
 

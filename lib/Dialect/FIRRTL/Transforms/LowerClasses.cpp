@@ -1006,7 +1006,8 @@ void LowerClassesPass::runOnOperation() {
 
       if (auto classLike =
               dyn_cast<firrtl::ClassLike>(moduleLike.getOperation()))
-        classTypeTable[classLike.getNameAttr()] = classLike.getInstanceType();
+        classTypeTable[classLike.getModuleNameAttr()] =
+            classLike.getInstanceType();
     }
   }
 
@@ -1177,8 +1178,8 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
     formalParamNames.push_back(kPortsName);
 
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
-  StringRef className = moduleLike.getName();
-  StringAttr baseClassNameAttr = moduleLike.getNameAttr();
+  StringRef className = moduleLike.getModuleName();
+  StringAttr baseClassNameAttr = moduleLike.getModuleNameAttr();
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(moduleLike.getOperation())) {
@@ -1207,7 +1208,9 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
                                   formalParamNames, hasContainingModule);
   }
 
-  SymbolTable::setSymbolVisibility(loweredClassOp, moduleLike.getVisibility());
+  SymbolTable::setSymbolVisibility(
+      loweredClassOp,
+      cast<mlir::SymbolOpInterface>(moduleLike.getOperation()).getVisibility());
 
   return loweredClassOp;
 }
@@ -1516,7 +1519,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
   auto referencedModule =
       firrtlInstance.getReferencedModule<FModuleLike>(instanceGraph);
 
-  StringRef moduleName = referencedModule.getName();
+  StringRef moduleName = referencedModule.getModuleName();
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(referencedModule.getOperation()))

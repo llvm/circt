@@ -52,6 +52,7 @@ class CalyxOp<string mnemonic, list<Trait> traits = []> :
 /// Base class for Calyx cells.
 class CalyxCell<string mnemonic, list<Trait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
+    SymbolName,
     DeclareOpInterfaceMethods<CellOpInterface>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
   ])> {}

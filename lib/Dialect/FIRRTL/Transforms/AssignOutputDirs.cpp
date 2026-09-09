@@ -107,7 +107,7 @@ void AssignOutputDirsPass::runOnOperation() {
     if (!moduleLike || !isa<FModuleOp, FExtModuleOp>(moduleLike))
       return;
     if (moduleLike->getAttrOfType<hw::OutputFileAttr>("output_file") ||
-        moduleLike.isPublic())
+        cast<mlir::SymbolOpInterface>(moduleLike.getOperation()).isPublic())
       return;
 
     // Get the output directory of the first parent, and then fold the current
@@ -140,7 +140,7 @@ void AssignOutputDirsPass::runOnOperation() {
       moduleLike->setAttr("output_file", f);
       changed = true;
       LLVM_DEBUG({
-        llvm::dbgs() << "  - name: " << moduleLike.getName() << "\n"
+        llvm::dbgs() << "  - name: " << moduleLike.getModuleName() << "\n"
                      << "    directory: " << f.getFilename() << "\n";
       });
     }

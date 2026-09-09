@@ -3211,7 +3211,17 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
                                                                    value);
     }
   }
+  // Convert from fixed-size unpacked array to open unpacked array
+  auto srcUArray = dyn_cast<moore::UnpackedArrayType>(value.getType());
+  auto dstOpenUArray = dyn_cast<moore::OpenUnpackedArrayType>(type);
+  if (srcUArray && dstOpenUArray) {
+    auto openUnpackedArrayElType = dstOpenUArray.getElementType();
+    auto unpackedArrayElType = srcUArray.getElementType();
 
+    if (openUnpackedArrayElType == unpackedArrayElType)
+      return builder.createOrFold<moore::OpenUArrayFromUnpackedArrayOp>(
+          loc, type, value);
+  }
   // Handle Real To Int conversion
   if (dstInt && isa<moore::RealType>(value.getType())) {
     auto twoValInt = builder.createOrFold<moore::RealToIntOp>(

@@ -294,7 +294,7 @@ def GlobalSignalOp : LLHDOp<"global_signal", [
   IsolatedFromAbove,
   NoRegionArguments,
   SingleBlock,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
 ]> {
   let summary = "A global signal declaration";
   let description = [{
@@ -304,6 +304,7 @@ def GlobalSignalOp : LLHDOp<"global_signal", [
   }];
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttrOf<AnyType>:$type
   );
   let regions = (region MaxSizedRegion<1>:$initRegion);
@@ -725,7 +726,7 @@ def YieldOp : LLHDOp<"yield", [
 def CoroutineOp : LLHDOp<"coroutine", [
   IsolatedFromAbove,
   FunctionOpInterface,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
   RegionKindInterface,
   ProceduralRegion,
   RecursiveMemoryEffects,

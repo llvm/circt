@@ -1,7 +1,7 @@
 // REQUIRES: libz3
 // REQUIRES: circt-bmc-jit
-// RUN: circt-bmc %s -b 3 --module FormalTop --shared-libs=%libz3 | FileCheck %s --check-prefix=MULTI
-// RUN: circt-bmc %s -b 3 --module FormalTop --shared-libs=%libz3 --print-only-first-counterexample | FileCheck %s --check-prefix=ONE
+// RUN: circt-bmc %s -b 3 --module FormalTop --shared-libs=%libz3 --print-only-first-counterexample=false | FileCheck %s --check-prefix=MULTI
+// RUN: circt-bmc %s -b 3 --module FormalTop --shared-libs=%libz3 --print-only-first-counterexample=true | FileCheck %s --check-prefix=ONE
 
 // MULTI: counterexample for FormalTop:
 // MULTI: counterexample for FormalTop:

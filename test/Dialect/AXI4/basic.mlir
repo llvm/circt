@@ -99,8 +99,8 @@
 hw.module @AbstractEndpoints(in %clk : !seq.clock, in %rst_ni : i1) {
   // CHECK: %[[MGR:.+]] = axi4.abstract_manager %clk, %rst_ni {a} : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 5, read_id_width = 3, user_width = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
   %mgr = axi4.abstract_manager %clk, %rst_ni {a} : !port
-  // CHECK: axi4.abstract_subordinate %clk, %rst_ni, %[[MGR]] {b} : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 5, read_id_width = 3, user_width = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
-  axi4.abstract_subordinate %clk, %rst_ni, %mgr {b} : !port
+  // CHECK: axi4.abstract_subordinate %clk, %rst_ni, %[[MGR]] concurrent_writes 2 concurrent_reads 3 {b} : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 5, read_id_width = 3, user_width = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+  axi4.abstract_subordinate %clk, %rst_ni, %mgr concurrent_writes 2 concurrent_reads 3 {b} : !port
 }
 
 // CHECK-LABEL: hw.module @Subordinate
@@ -123,9 +123,10 @@ hw.module @Manager(in %clk : !seq.clock, in %rst_ni : i1, in %port : !port,
                    in %b : !b, in %b_valid : i1,
                    in %ar_ready : i1,
                    in %r : !r, in %r_valid : i1) {
-  // CHECK: %aw, %aw_valid, %w, %w_valid, %b_ready, %ar, %ar_valid, %r_ready = axi4.port_to_channel_structs %clk, %rst_ni, %port aw %aw_ready w %w_ready b %b, %b_valid ar %ar_ready r %r, %r_valid : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 5, read_id_width = 3, user_width = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+  // CHECK: %aw, %aw_valid, %w, %w_valid, %b_ready, %ar, %ar_valid, %r_ready = axi4.port_to_channel_structs %clk, %rst_ni, %port aw %aw_ready w %w_ready b %b, %b_valid ar %ar_ready r %r, %r_valid concurrent_writes 2 concurrent_reads 3 : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 5, read_id_width = 3, user_width = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
   %aw, %aw_valid, %w, %w_valid, %b_ready, %ar, %ar_valid, %r_ready =
     axi4.port_to_channel_structs %clk, %rst_ni, %port
       aw %aw_ready w %w_ready b %b, %b_valid
-      ar %ar_ready r %r, %r_valid : !port
+      ar %ar_ready r %r, %r_valid
+      concurrent_writes 2 concurrent_reads 3 : !port
 }
