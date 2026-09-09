@@ -4739,11 +4739,9 @@ LogicalResult FIRRTLLowering::visitExpr(SizeOfIntrinsicOp op) {
   SizeOfIntrinsicOp::FoldAdaptor adaptor({}, {});
   OpFoldResult folded = op.fold(adaptor);
 
-  if (auto foldedAttr = dyn_cast<Attribute>(folded)) {
-    if (auto foldedIntAttr = dyn_cast<IntegerAttr>(foldedAttr)) {
-      APInt value = foldedIntAttr.getValue();
-      return setLowering(op, getOrCreateIntConstant(value));
-    }
+  if (auto foldedAttr = dyn_cast_or_null<Attribute>(folded)) {
+    if (auto foldedIntAttr = dyn_cast<IntegerAttr>(foldedAttr))
+      return setLowering(op, getOrCreateIntConstant(foldedIntAttr.getValue()));
   }
 
   op.emitError("Invalid SizeOf integer resolution.");
