@@ -9,7 +9,7 @@ from .integers import Integer, IntegerType
 from .immediates import Immediate
 from .arrays import Array
 from .core import Value
-from .base import ir
+from .base import ir, _get_index_type
 from .scf import scf
 from .support import _collect_values_recursively
 
@@ -272,7 +272,7 @@ class For:
         regions=1)
     ir.Block.create_at_start(
         self._op.regions[0],
-        [ir.IndexType.get()] +
+        [_get_index_type()] +
         [x.get_type()._codegen() for x in self._init_args])
     self._ip = ir.InsertionPoint(self._op.regions[0].blocks[0])
 

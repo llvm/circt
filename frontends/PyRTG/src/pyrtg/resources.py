@@ -7,7 +7,7 @@ from __future__ import annotations
 from .rtg import rtg
 from .rtgtest import rtgtest
 from .core import Value, Type
-from .base import ir
+from .base import ir, _get_string_type
 from .strings import String
 
 
@@ -170,7 +170,7 @@ class IntegerRegister(Value):
     return String(ir.Operation.create(
         "rtg.register_format",
         operands=[self._value],
-        results=[rtg.StringType.get()], regions=0).result)
+        results=[_get_string_type()], regions=0).result)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
@@ -228,7 +228,7 @@ class FloatRegister(Value):
     return String(ir.Operation.create(
         "rtg.register_format",
         operands=[self._value],
-        results=[rtg.StringType.get()], regions=0).result)
+        results=[_get_string_type()], regions=0).result)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value

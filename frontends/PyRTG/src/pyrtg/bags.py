@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .base import ir
+from .base import ir, _get_index_type
 from .rtg import rtg
 from .core import Value, Type
 from .index import index
@@ -53,8 +53,8 @@ class Bag(Value):
     counts = [
         (x if not isinstance(x, int) else ir.Operation.create(
             "index.constant",
-            attributes={"value": ir.IntegerAttr.get(ir.IndexType.get(), x)},
-            results=[ir.IndexType.get()],
+            attributes={"value": ir.IntegerAttr.get(_get_index_type(), x)},
+            results=[_get_index_type()],
             regions=0).result) for x, _ in elements
     ]
     op = ir.Operation.create(

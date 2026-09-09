@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .base import ir
+from .base import ir, _get_signless_integer_type, _get_string_type
 from .core import Value, Type
 from .rtg import rtg
 
@@ -23,9 +23,9 @@ class String(Value):
     if isinstance(value, str):
       self._value = ir.Operation.create(
           "rtg.constant",
-          attributes={"value": ir.StringAttr.get_typed(rtg.StringType.get(),
+          attributes={"value": ir.StringAttr.get_typed(_get_string_type(),
                                                          value)},
-          results=[rtg.StringType.get()],
+          results=[_get_string_type()],
           regions=0).result
     else:
       self._value = value
@@ -38,7 +38,7 @@ class String(Value):
     return String(ir.Operation.create(
         "rtg.string_concat",
         operands=[self._value, other._value],
-        results=[rtg.StringType.get()],
+        results=[_get_string_type()],
         regions=0).result)
 
   @staticmethod
@@ -80,7 +80,7 @@ class String(Value):
     return String(ir.Operation.create(
         "rtg.string_concat",
         operands=[value._value for value in result],
-        results=[rtg.StringType.get()],
+        results=[_get_string_type()],
         regions=0).result)
 
   def to_ascii_array(self) -> Array:
@@ -95,7 +95,7 @@ class String(Value):
         ir.Operation.create(
             "rtg.string_to_ascii_array",
             operands=[self._value],
-            results=[rtg.ArrayType.get(ir.IntegerType.get_signless(8))],
+            results=[rtg.ArrayType.get(_get_signless_integer_type(8))],
             regions=0).result)
 
   def get_type(self) -> Type:
@@ -114,7 +114,7 @@ class StringType(Type):
     return isinstance(other, StringType)
 
   def _codegen(self) -> ir.Type:
-    return rtg.StringType.get()
+    return _get_string_type()
 
   def _wrap(self, value: ir.Value) -> String:
     return String(value)

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .base import ir
+from .base import ir, _get_string_type
 from .core import Type
 from .rtg import rtg
 from .strings import String
@@ -39,7 +39,7 @@ class Bool(Immediate):
     return String(
         ir.Operation.create("rtg.bool_format",
                             operands=[self._get_ssa_value()],
-                            results=[rtg.StringType.get()],
+                            results=[_get_string_type()],
                             regions=0).result)
 
   def get_type(self) -> Type:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .core import Value, Type
-from .base import ir
+from .base import ir, _get_index_type, _get_signless_integer_type
 from .index import index
 from .rtg import rtg
 from .integers import Integer
@@ -36,9 +36,9 @@ class MemoryBlock(Value):
         "rtg.isa.memory_block_declare",
         attributes={
             "baseAddress": ir.IntegerAttr.get(
-                ir.IntegerType.get_signless(address_width), base_address),
+                _get_signless_integer_type(address_width), base_address),
             "endAddress": ir.IntegerAttr.get(
-                ir.IntegerType.get_signless(address_width), end_address),
+                _get_signless_integer_type(address_width), end_address),
         },
         results=[rtg.MemoryBlockType.get(address_width)],
         regions=0)
@@ -98,14 +98,14 @@ class Memory(Value):
     if isinstance(size, int):
       size = ir.Operation.create(
           "index.constant",
-          attributes={"value": ir.IntegerAttr.get(ir.IndexType.get(), size)},
-          results=[ir.IndexType.get()],
+          attributes={"value": ir.IntegerAttr.get(_get_index_type(), size)},
+          results=[_get_index_type()],
           regions=0).result
     if isinstance(align, int):
       align = ir.Operation.create(
           "index.constant",
-          attributes={"value": ir.IntegerAttr.get(ir.IndexType.get(), align)},
-          results=[ir.IndexType.get()],
+          attributes={"value": ir.IntegerAttr.get(_get_index_type(), align)},
+          results=[_get_index_type()],
           regions=0).result
     op = ir.Operation.create(
         "rtg.isa.memory_alloc",
@@ -124,7 +124,7 @@ class Memory(Value):
     return Integer(ir.Operation.create(
         "rtg.isa.memory_size",
         operands=[self._value],
-        results=[ir.IndexType.get()],
+        results=[_get_index_type()],
         regions=0).result)
 
   def base_address(self) -> Immediate:
@@ -137,7 +137,7 @@ class Memory(Value):
                      ir.Operation.create(
                          "rtg.isa.memory_base_address",
                          operands=[self._value],
-                         results=[ir.IntegerType.get_signless(
+                         results=[_get_signless_integer_type(
                              self.get_type().address_width)],
                          regions=0).result)
 

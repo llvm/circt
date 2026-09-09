@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .base import ir
+from .base import ir, _get_index_type
 from .rtg import rtg
 from .core import Value, Type
 from .support import _FromCirctType
@@ -49,7 +49,7 @@ class Tuple(Value):
     op = ir.Operation.create(
         "rtg.tuple_extract",
         operands=[self._value],
-        attributes={"index": ir.IntegerAttr.get(ir.IndexType.get(), i)},
+        attributes={"index": ir.IntegerAttr.get(_get_index_type(), i)},
         results=[self.get_type().element_types[i]._codegen()],
         regions=0)
     return self.get_type().element_types[i]._wrap(op.result)

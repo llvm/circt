@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .base import ir
+from .base import ir, _get_index_type
 from .rtg import rtg
 from .index import index
 from .core import Value, Type
@@ -55,8 +55,8 @@ class Array(Value):
     if isinstance(i, int):
       idx = ir.Operation.create(
           "index.constant",
-          attributes={"value": ir.IntegerAttr.get(ir.IndexType.get(), i)},
-          results=[ir.IndexType.get()],
+          attributes={"value": ir.IntegerAttr.get(_get_index_type(), i)},
+          results=[_get_index_type()],
           regions=0).result
 
     op = ir.Operation.create(
@@ -87,7 +87,7 @@ class Array(Value):
     return Integer(ir.Operation.create(
         "rtg.array_size",
         operands=[self._value],
-        results=[ir.IndexType.get()],
+        results=[_get_index_type()],
         regions=0).result)
 
   def append(self, element: Value) -> Array:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .rtg import rtg
 from .core import Value, Type
-from .base import ir
+from .base import ir, _get_signless_integer_type, _get_string_type
 from .integers import Integer
 from .strings import String
 from .arith import arith
@@ -65,7 +65,7 @@ class Immediate(Value):
     return Immediate(width, ir.Operation.create(
         "rtg.isa.concat_immediate",
         operands=[arg._get_ssa_value() for arg in args],
-        results=[ir.IntegerType.get_signless(width)],
+        results=[_get_signless_integer_type(width)],
         regions=0).result)
 
   def replicate(self, count: int) -> Immediate:
@@ -100,8 +100,8 @@ class Immediate(Value):
           "rtg.isa.slice_immediate",
           operands=[self._get_ssa_value()],
           attributes={"lowBit": ir.IntegerAttr.get(
-              ir.IntegerType.get_signless(32), start)},
-          results=[ir.IntegerType.get_signless(width)],
+              _get_signless_integer_type(32), start)},
+          results=[_get_signless_integer_type(width)],
           regions=0).result)
 
     if isinstance(slice_range, int):
@@ -112,8 +112,8 @@ class Immediate(Value):
           "rtg.isa.slice_immediate",
           operands=[self._get_ssa_value()],
           attributes={"lowBit": ir.IntegerAttr.get(
-              ir.IntegerType.get_signless(32), slice_range)},
-          results=[ir.IntegerType.get_signless(1)],
+              _get_signless_integer_type(32), slice_range)},
+          results=[_get_signless_integer_type(1)],
           regions=0).result)
 
     raise TypeError("Slice must be an integer or slice object")
@@ -153,7 +153,7 @@ class Immediate(Value):
     return String(ir.Operation.create(
         "rtg.immediate_format",
         operands=[self._get_ssa_value()],
-        results=[rtg.StringType.get()],
+        results=[_get_string_type()],
         regions=0).result)
 
   def __add__(self, other: Immediate) -> Immediate:
@@ -217,8 +217,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.eq))},
-        results=[ir.IntegerType.get_signless(1)],
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.eq))},
+        results=[_get_signless_integer_type(1)],
         regions=0).result)
 
   def __ne__(self, other: Immediate) -> Value:
@@ -226,8 +226,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.ne))},
-        results=[ir.IntegerType.get_signless(1)],
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.ne))},
+        results=[_get_signless_integer_type(1)],
         regions=0).result)
 
   def ult(self, other: Immediate) -> Value:
@@ -238,8 +238,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.ult))},
-        results=[ir.IntegerType.get_signless(1)],
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.ult))},
+        results=[_get_signless_integer_type(1)],
         regions=0).result)
 
   def ule(self, other: Immediate) -> Value:
@@ -250,8 +250,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.ule))},
-        results=[ir.IntegerType.get_signless(1)], regions=0).result)
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.ule))},
+        results=[_get_signless_integer_type(1)], regions=0).result)
 
   def ugt(self, other: Immediate) -> Value:
     """
@@ -261,8 +261,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.ugt))},
-        results=[ir.IntegerType.get_signless(1)], regions=0).result)
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.ugt))},
+        results=[_get_signless_integer_type(1)], regions=0).result)
 
   def uge(self, other: Immediate) -> Value:
     """
@@ -272,8 +272,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.uge))},
-        results=[ir.IntegerType.get_signless(1)], regions=0).result)
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.uge))},
+        results=[_get_signless_integer_type(1)], regions=0).result)
 
   def slt(self, other: Immediate) -> Value:
     """
@@ -283,8 +283,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.slt))},
-        results=[ir.IntegerType.get_signless(1)], regions=0).result)
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.slt))},
+        results=[_get_signless_integer_type(1)], regions=0).result)
 
   def sle(self, other: Immediate) -> Value:
     """
@@ -294,8 +294,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.sle))},
-        results=[ir.IntegerType.get_signless(1)], regions=0).result)
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.sle))},
+        results=[_get_signless_integer_type(1)], regions=0).result)
 
   def sgt(self, other: Immediate) -> Value:
     """
@@ -305,8 +305,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.sgt))},
-        results=[ir.IntegerType.get_signless(1)], regions=0).result)
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.sgt))},
+        results=[_get_signless_integer_type(1)], regions=0).result)
 
   def sge(self, other: Immediate) -> Value:
     """
@@ -316,8 +316,8 @@ class Immediate(Value):
         "arith.cmpi",
         operands=[self._get_ssa_value(), other._get_ssa_value()],
         attributes={"predicate": ir.IntegerAttr.get(
-            ir.IntegerType.get_signless(64), int(arith.CmpIPredicate.sge))},
-        results=[ir.IntegerType.get_signless(1)], regions=0).result)
+            _get_signless_integer_type(64), int(arith.CmpIPredicate.sge))},
+        results=[_get_signless_integer_type(1)], regions=0).result)
 
   def umax_of(self, other: Immediate) -> Immediate:
     """
@@ -371,7 +371,7 @@ class Immediate(Value):
     return Immediate(target_width, ir.Operation.create(
         "arith.extui",
         operands=[self._get_ssa_value()],
-        results=[ir.IntegerType.get_signless(target_width)], regions=0).result)
+        results=[_get_signless_integer_type(target_width)], regions=0).result)
 
   def sext(self, target_width: int) -> Immediate:
     """
@@ -389,7 +389,7 @@ class Immediate(Value):
     return Immediate(target_width, ir.Operation.create(
         "arith.extsi",
         operands=[self._get_ssa_value()],
-        results=[ir.IntegerType.get_signless(target_width)], regions=0).result)
+        results=[_get_signless_integer_type(target_width)], regions=0).result)
 
   def __repr__(self) -> str:
     return f"Immediate<{self._width}, {self._value}>"
@@ -399,14 +399,14 @@ class Immediate(Value):
       return ir.Operation.create(
           "rtg.constant",
           attributes={"value": ir.IntegerAttr.get(
-              ir.IntegerType.get_signless(self._width), self._value)},
-          results=[ir.IntegerType.get_signless(self._width)],
+              _get_signless_integer_type(self._width), self._value)},
+          results=[_get_signless_integer_type(self._width)],
           regions=0).result
     if isinstance(self._value, Integer):
       return ir.Operation.create(
           "rtg.isa.int_to_immediate",
           operands=[self._value._get_ssa_value()],
-          results=[ir.IntegerType.get_signless(self._width)],
+          results=[_get_signless_integer_type(self._width)],
           regions=0).result
     return self._value
 
@@ -432,7 +432,7 @@ class ImmediateType(Type):
     return f"ImmediateType<{self.width}>"
 
   def _codegen(self) -> ir.Type:
-    return ir.IntegerType.get(self.width)
+    return _get_signless_integer_type(self.width)
 
   def _wrap(self, value: ir.Value) -> Immediate:
     return Immediate(self.width, value)
