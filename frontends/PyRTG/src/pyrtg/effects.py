@@ -10,7 +10,7 @@ from typing import Any, Callable, Optional
 from .base import ir
 from .rtg import rtg
 from .core import CodeGenContext, CodeGenObject, Value, Type
-from .support import _FromCirctType, _create
+from .support import _FromCirctType
 
 # ---------------------------------------------------------------------------
 # Continuation types / values
@@ -58,9 +58,12 @@ class Continuation(Value):
   def resume(self, result: Optional[Value] = None) -> None:
     """Resume this continuation, optionally passing a result value."""
     if result is not None:
-      _create(rtg.ResumeOp, self._value, value=result)
+      ir.Operation.create(
+          "rtg.resume",
+          operands=[self._value, result._get_ssa_value()],
+          regions=0)
     else:
-      _create(rtg.ResumeOp, self._value)
+      ir.Operation.create("rtg.resume", operands=[self._value], regions=0)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
@@ -93,7 +96,13 @@ class EffectDeclaration(CodeGenObject):
     result_types = ([] if isinstance(self.result, VoidType) else
                     [self.result._codegen()])
     fn_type = ir.FunctionType.get(input_types, result_types)
-    _create(rtg.EffectOp, self.name, ir.TypeAttr.get(fn_type))
+    ir.Operation.create(
+        "rtg.effect",
+        attributes={
+            "sym_name": ir.StringAttr.get(self.name),
+            "function_type": ir.TypeAttr.get(fn_type),
+        },
+        regions=0)
 
   def codegen_depends_on(self):
     return []
@@ -145,7 +154,12 @@ def perform(decl: EffectDeclaration, *args: Value) -> Optional[Value]:
   operand_values = [a._get_ssa_value() for a in args]
   is_void = isinstance(decl.result, VoidType)
   result_type = None if is_void else decl.result._codegen()
-  op = _create(rtg.PerformOp, result_type, decl.name, operand_values)
+  op = ir.Operation.create(
+      "rtg.perform",
+      operands=operand_values,
+      attributes={"effect": ir.FlatSymbolRefAttr.get(decl.name)},
+      results=[] if result_type is None else [result_type],
+      regions=0)
   if is_void:
     return None
   return decl.result._wrap(op.result)
@@ -209,8 +223,11 @@ class HandlerScope:
     effects_attr = ir.ArrayAttr.get(effect_syms)
 
     # Create the rtg.effect_handlers op; insert body block and set insertion point.
-    self._handle_op = rtg.WithHandlersOp(effects_attr, len(self._entries))
-    op = self._handle_op.operation
+    self._handle_op = ir.Operation.create(
+        "rtg.with_handlers",
+        attributes={"effects": effects_attr},
+        regions=len(self._entries) + 1)
+    op = self._handle_op
     body_block = ir.Block.create_at_start(op.regions[0], [])
     self._body_ip = ir.InsertionPoint(body_block)
     self._body_ip.__enter__()
@@ -220,11 +237,11 @@ class HandlerScope:
     if exc_value is not None:
       return
     # Terminate the body region.
-    _create(rtg.YieldOp, [])
+    ir.Operation.create("rtg.yield", regions=0)
     self._body_ip.__exit__(exc_type, exc_value, traceback)
 
     # Emit each handler region.
-    op = self._handle_op.operation
+    op = self._handle_op
     for i, (decl, fn) in enumerate(self._entries):
       # Compute block argument types: effect inputs + continuation.
       arg_types = [t._codegen() for t in decl.inputs]
@@ -259,7 +276,7 @@ class HandlerScope:
                 f"Simple handler for @{decl.name} must return a value"
             cont_val.resume(ret)
 
-        _create(rtg.YieldOp, [])
+        ir.Operation.create("rtg.yield", regions=0)
 
 
 def effect_handler(

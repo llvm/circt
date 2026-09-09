@@ -8,7 +8,7 @@ from .rtg import rtg
 from .rtgtest import rtgtest
 from .core import Value, Type
 from .base import ir
-from .support import _collect_values_recursively, _create
+from .support import _collect_values_recursively
 from .sequences import Sequence
 
 import ctypes
@@ -67,7 +67,11 @@ class CPUCore(Value):
     """
 
     assert from_core._attr is not None and to_core._attr is not None, "must have attribute available"
-    _create(rtg.ContextSwitchOp, from_core._attr, to_core._attr, seq)
+    ir.Operation.create(
+        "rtg.context_switch",
+        operands=[seq._get_ssa_value()],
+        attributes={"from": from_core._attr, "to": to_core._attr},
+        regions=0)
 
   def __enter__(self):
     # TODO: just adding all variables in the context is not particularly nice.
@@ -89,12 +93,29 @@ class CPUCore(Value):
     seq_name = "_context_seq_" + _get_next_seq_num()
     seq_type = rtg.SequenceType.get(arg_types)
     with ir.InsertionPoint(curr.regions[0].blocks[0]):
-      seq_decl = rtg.SequenceOp(seq_name, ir.TypeAttr.get(seq_type))
+      seq_decl = ir.Operation.create(
+          "rtg.sequence",
+          attributes={
+              "sym_name": ir.StringAttr.get(seq_name),
+              "sequenceType": ir.TypeAttr.get(seq_type),
+          },
+          regions=1)
       block = ir.Block.create_at_start(seq_decl.regions[0], arg_types)
 
-    seq = _create(rtg.GetSequenceOp, seq_type, seq_name)
-    seq = _create(rtg.SubstituteSequenceOp, seq.result, args)
-    _create(rtg.OnContextOp, self, seq.result)
+    seq = ir.Operation.create(
+        "rtg.get_sequence",
+        attributes={"sequence": ir.FlatSymbolRefAttr.get(seq_name)},
+        results=[seq_type],
+        regions=0)
+    seq = ir.Operation.create(
+        "rtg.substitute_sequence",
+        operands=[seq.result] + [arg._get_ssa_value() for arg in args],
+        results=[rtg.SequenceType.get([])],
+        regions=0)
+    ir.Operation.create(
+        "rtg.on_context",
+        operands=[self._get_ssa_value(), seq.result],
+        regions=0)
 
     s = inspect.stack()[1][0]
     _context_stack.get().append((block, dict(s.f_locals), arg_names, args))
@@ -144,7 +165,11 @@ class CPUCore(Value):
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, ir.Attribute):
-      return _create(rtg.ConstantOp, self._value).result
+      return ir.Operation.create(
+          "rtg.constant",
+          attributes={"value": self._value},
+          results=[rtgtest.CPUType.get()],
+          regions=0).result
     return self._value
 
   def get_type(self) -> Type:

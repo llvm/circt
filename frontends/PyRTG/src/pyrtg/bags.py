@@ -8,7 +8,7 @@ from .base import ir
 from .rtg import rtg
 from .core import Value, Type
 from .index import index
-from .support import _FromCirctType, _create
+from .support import _FromCirctType
 
 import typing
 
@@ -32,7 +32,11 @@ class Bag(Value):
     Create an empty bag that can hold elements of the provided type.
     """
 
-    op = _create(rtg.BagCreateOp, rtg.BagType.get(elementType), [], [])
+    op = ir.Operation.create(
+        "rtg.bag_create",
+        operands=[],
+        results=[rtg.BagType.get(elementType)],
+        regions=0)
     return Bag(op.result, BagType(_FromCirctType(elementType)))
 
   def create(*elements: tuple[typing.Union[Value, int], Value]) -> Bag:
@@ -46,11 +50,18 @@ class Bag(Value):
     if not all([e.get_type() == elements[0][1].get_type() for _, e in elements
                ]):
       raise TypeError("all elements must have the same type")
-    op = _create(rtg.BagCreateOp,
-        rtg.BagType.get(elements[0][1].get_type()._codegen()),
-        [x for _, x in elements],
-         [(x if not isinstance(x, int) else _create(index.ConstantOp, x).result)
-         for x, _ in elements])
+    counts = [
+        (x if not isinstance(x, int) else ir.Operation.create(
+            "index.constant",
+            attributes={"value": ir.IntegerAttr.get(ir.IndexType.get(), x)},
+            results=[ir.IndexType.get()],
+            regions=0).result) for x, _ in elements
+    ]
+    op = ir.Operation.create(
+        "rtg.bag_create",
+        operands=[e._get_ssa_value() for _, e in elements] + counts,
+        results=[rtg.BagType.get(elements[0][1].get_type()._codegen())],
+        regions=0)
     return Bag(op.result, BagType(elements[0][1].get_type()))
 
   def __add__(self, other: Value) -> Bag:
@@ -65,7 +76,11 @@ class Bag(Value):
     if isinstance(other, Bag):
       if self.get_type() != other.get_type():
         raise TypeError("bags must be of the same type")
-      op = _create(rtg.BagUnionOp, [self._value, other._value])
+      op = ir.Operation.create(
+          "rtg.bag_union",
+          operands=[self._value, other._value],
+          results=[self.get_type()._codegen()],
+          regions=0)
       return Bag(op.result, self.get_type())
 
     if self.get_type().element_type != other.get_type():
@@ -86,7 +101,11 @@ class Bag(Value):
     if isinstance(other, Bag):
       if self.get_type() != other.get_type():
         raise TypeError("bags must be of the same type")
-      op = _create(rtg.BagDifferenceOp, self._value, other._value)
+      op = ir.Operation.create(
+          "rtg.bag_difference",
+          operands=[self._value, other._value],
+          results=[self.get_type()._codegen()],
+          regions=0)
       return Bag(op.result, self.get_type())
 
     if self.get_type().element_type != other.get_type():
@@ -107,8 +126,12 @@ class Bag(Value):
     if isinstance(other, Bag):
       if self.get_type() != other.get_type():
         raise TypeError("bags must be of the same type")
-      op = _create(rtg.BagDifferenceOp, self._value, other._value,
-                   inf=ir.UnitAttr.get())
+      op = ir.Operation.create(
+          "rtg.bag_difference",
+          operands=[self._value, other._value],
+          attributes={"inf": ir.UnitAttr.get()},
+          results=[self.get_type()._codegen()],
+          regions=0)
       return Bag(op.result, self.get_type())
 
     if self.get_type().element_type != other.get_type():
@@ -124,7 +147,11 @@ class Bag(Value):
     """
 
     return self.get_type().element_type._wrap(
-        _create(rtg.BagSelectRandomOp, self._value).result)
+        ir.Operation.create(
+            "rtg.bag_select_random",
+            operands=[self._value],
+            results=[self.get_type().element_type._codegen()],
+            regions=0).result)
 
   def get_random_and_exclude(self) -> Value:
     """
@@ -145,7 +172,11 @@ class Bag(Value):
     """
 
     from .sets import Set, SetType
-    return Set(_create(rtg.BagConvertToSetOp, self).result,
+    return Set(ir.Operation.create(
+                   "rtg.bag_convert_to_set",
+                   operands=[self._value],
+                   results=[rtg.SetType.get(self.get_type().element_type._codegen())],
+                   regions=0).result,
                SetType(self.get_type().element_type))
 
   def _get_ssa_value(self) -> ir.Value:

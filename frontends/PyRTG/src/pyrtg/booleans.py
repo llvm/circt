@@ -36,7 +36,11 @@ class Bool(Immediate):
     Format this integer as a string in unsigned decimal.
     """
 
-    return rtg.BoolFormatOp(self)
+    return String(
+        ir.Operation.create("rtg.bool_format",
+                            operands=[self._get_ssa_value()],
+                            results=[rtg.StringType.get()],
+                            regions=0).result)
 
   def get_type(self) -> Type:
     return BoolType()

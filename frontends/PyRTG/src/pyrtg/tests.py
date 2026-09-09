@@ -7,7 +7,6 @@ from .core import CodeGenContext, CodeGenRoot, CodeGenObject
 from .rtg import rtg
 from .configs import PythonParam
 from .strings import String
-from .support import _create
 
 from typing import Union
 
@@ -37,14 +36,19 @@ class Test(CodeGenRoot):
     params_sorted = self.config.get_params()
     params_sorted.sort(key=lambda param: param.get_name())
 
-    test = rtg.TestOp(
-        self.name, self.name,
-        ir.TypeAttr.get(
-            rtg.DictType.get([(ir.StringAttr.get(param.get_name()),
-                               param.get_type()._codegen())
-                              for param in params_sorted])))
+    test = ir.Operation.create(
+        "rtg.test",
+        attributes={
+            "sym_name": ir.StringAttr.get(self.name),
+            "templateName": ir.StringAttr.get(self.name),
+            "targetType": ir.TypeAttr.get(
+                rtg.DictType.get([(ir.StringAttr.get(param.get_name()),
+                                   param.get_type()._codegen())
+                                  for param in params_sorted])),
+        },
+        regions=1)
     block = ir.Block.create_at_start(
-        test.bodyRegion,
+        test.regions[0],
         [param.get_type()._codegen() for param in params_sorted])
     new_config = []
     for param, arg in zip(params_sorted, block.arguments):
@@ -74,7 +78,10 @@ def embed_comment(comment: Union[str, String]) -> None:
 
   if not isinstance(comment, String):
     comment = String(comment)
-  _create(rtg.CommentOp, comment)
+  ir.Operation.create(
+      "rtg.comment",
+      operands=[comment._get_ssa_value()],
+      regions=0)
 
 
 def report_success() -> None:
@@ -82,7 +89,7 @@ def report_success() -> None:
   Exit this test and report a success.
   """
 
-  rtg.TestSuccessOp()
+  ir.Operation.create("rtg.test.success", regions=0)
 
 
 def report_failure(message: Union[str, String]) -> None:
@@ -92,4 +99,7 @@ def report_failure(message: Union[str, String]) -> None:
 
   if not isinstance(message, String):
     message = String(message)
-  _create(rtg.TestFailureOp, message)
+  ir.Operation.create(
+      "rtg.test.failure",
+      operands=[message._get_ssa_value()],
+      regions=0)

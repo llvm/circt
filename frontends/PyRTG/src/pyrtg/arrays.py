@@ -9,7 +9,7 @@ from .rtg import rtg
 from .index import index
 from .core import Value, Type
 from .integers import Integer
-from .support import _FromCirctType, _create
+from .support import _FromCirctType
 
 from typing import Union
 
@@ -37,8 +37,11 @@ class Array(Value):
       raise TypeError(
           "all elements of an RTG array must be of the specified element type")
 
-    op = _create(rtg.ArrayCreateOp, rtg.ArrayType.get(element_type._codegen()),
-                 elements)
+    op = ir.Operation.create(
+        "rtg.array_create",
+        operands=[element._get_ssa_value() for element in elements],
+        results=[rtg.ArrayType.get(element_type._codegen())],
+        regions=0)
     return Array(op.result, ArrayType(element_type))
 
   def __getitem__(self, i) -> Value:
@@ -50,9 +53,17 @@ class Array(Value):
 
     idx = i
     if isinstance(i, int):
-      idx = _create(index.ConstantOp, i).result
+      idx = ir.Operation.create(
+          "index.constant",
+          attributes={"value": ir.IntegerAttr.get(ir.IndexType.get(), i)},
+          results=[ir.IndexType.get()],
+          regions=0).result
 
-    op = _create(rtg.ArrayExtractOp, self._value, idx)
+    op = ir.Operation.create(
+        "rtg.array_extract",
+        operands=[self._value, idx._get_ssa_value() if isinstance(idx, Integer) else idx],
+        results=[self.get_type().element_type._codegen()],
+        regions=0)
     return self.get_type().element_type._wrap(op.result)
 
   def set(self, index: Union[int, Integer], value: Value) -> Array:
@@ -61,7 +72,11 @@ class Array(Value):
     """
 
     index = index if isinstance(index, Integer) else Integer(index)
-    op = _create(rtg.ArrayInjectOp, self._value, index, value)
+    op = ir.Operation.create(
+        "rtg.array_inject",
+        operands=[self._value, index._get_ssa_value(), value._get_ssa_value()],
+        results=[self.get_type()._codegen()],
+        regions=0)
     return Array(op.result, self.get_type())
 
   def size(self) -> Integer:
@@ -69,14 +84,22 @@ class Array(Value):
     Get the number of elements in the array.
     """
 
-    return Integer(_create(rtg.ArraySizeOp, self._value).result)
+    return Integer(ir.Operation.create(
+        "rtg.array_size",
+        operands=[self._value],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def append(self, element: Value) -> Array:
     """
     Append an element to the end of the array.
     """
 
-    op = _create(rtg.ArrayAppendOp, self._value, element)
+    op = ir.Operation.create(
+        "rtg.array_append",
+        operands=[self._value, element._get_ssa_value()],
+        results=[self.get_type()._codegen()],
+        regions=0)
     return Array(op.result, self.get_type())
 
   def __add__(self, other: Value) -> Array:

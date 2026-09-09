@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .core import CodeGenContext, CodeGenObject, Value, Type
-from .support import _FromCirctType, _create
+from .support import _FromCirctType
 from .base import ir
 from .rtg import rtg
 
@@ -71,9 +71,14 @@ class SequenceDeclaration(CodeGenObject):
     self.context = context
 
     mlir_arg_types = [arg._codegen() for arg in self.arg_types]
-    seq = rtg.SequenceOp(self.name,
-                         ir.TypeAttr.get(rtg.SequenceType.get(mlir_arg_types)))
-    block = ir.Block.create_at_start(seq.bodyRegion, mlir_arg_types)
+    seq = ir.Operation.create(
+        "rtg.sequence",
+        attributes={
+            "sym_name": ir.StringAttr.get(self.name),
+            "sequenceType": ir.TypeAttr.get(rtg.SequenceType.get(mlir_arg_types)),
+        },
+        regions=1)
+    block = ir.Block.create_at_start(seq.regions[0], mlir_arg_types)
     with ir.InsertionPoint(block):
       self.sequence_func(*[
           arg_type._wrap(arg)
@@ -82,8 +87,11 @@ class SequenceDeclaration(CodeGenObject):
 
   def _get_ssa_value(self) -> ir.Value:
     self.register()
-    return _create(rtg.GetSequenceOp, self.get_type()._codegen(),
-                   self.name).result
+    return ir.Operation.create(
+        "rtg.get_sequence",
+        attributes={"sequence": ir.FlatSymbolRefAttr.get(self.name)},
+        results=[self.get_type()._codegen()],
+        regions=0).result
 
   def get_type(self) -> Type:
     return SequenceType(self.arg_types)
@@ -140,8 +148,11 @@ class Sequence(Value):
             f"Expected argument of type {expected_type}, got {arg.get_type()}")
 
     result_type = SequenceType(element_types[len(args):])
-    return Sequence(_create(rtg.SubstituteSequenceOp, self, args).result,
-                    result_type)
+    return Sequence(ir.Operation.create(
+        "rtg.substitute_sequence",
+        operands=[self._value] + [arg._get_ssa_value() for arg in args],
+        results=[result_type._codegen()],
+        regions=0).result, result_type)
 
   def randomize(self, *args: Value) -> RandomizedSequence:
     """
@@ -167,7 +178,11 @@ class Sequence(Value):
 
       value = self.substitute(*args)
 
-    return RandomizedSequence(_create(rtg.RandomizeSequenceOp, value).result)
+    return RandomizedSequence(ir.Operation.create(
+        "rtg.randomize_sequence",
+        operands=[value._get_ssa_value()],
+        results=[rtg.RandomizedSequenceType.get()],
+        regions=0).result)
 
   def __call__(self, *args: Value) -> None:
     """
@@ -241,7 +256,10 @@ class RandomizedSequence(Value):
     sequence.
     """
 
-    _create(rtg.EmbedSequenceOp, self)
+    ir.Operation.create(
+        "rtg.embed_sequence",
+        operands=[self._value],
+        regions=0)
 
   def __call__(self) -> None:
     """

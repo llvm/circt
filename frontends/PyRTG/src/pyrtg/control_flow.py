@@ -11,7 +11,7 @@ from .arrays import Array
 from .core import Value
 from .base import ir
 from .scf import scf
-from .support import _collect_values_recursively, _create
+from .support import _collect_values_recursively
 
 import ctypes
 from contextvars import ContextVar
@@ -58,7 +58,12 @@ class If:
     self._old_system_token = _current_if_stmt.set(self)
     # Keep all the important logic in the _IfBlock class so we can share it with
     # 'Else'.
-    self._op = scf.IfOp(self._cond._get_ssa_value(), has_else=True)
+    self._op = ir.Operation.create("scf.if",
+                                   operands=[self._cond._get_ssa_value()],
+                                   results=[],
+                                   regions=2)
+    ir.Block.create_at_start(self._op.regions[0], [])
+    ir.Block.create_at_start(self._op.regions[1], [])
     self.then = _IfBlock(True)
     self.then.__enter__(stack_level=2)
 
@@ -89,24 +94,35 @@ class If:
       then_list.append(then_val)
       else_list.append(else_val)
 
-    with ir.InsertionPoint(self._op.then_block):
-      _create(scf.YieldOp, then_list)
+    with ir.InsertionPoint(self._op.regions[0].blocks[0]):
+      ir.Operation.create(
+          "scf.yield",
+          operands=[value._get_ssa_value() for value in then_list],
+          regions=0)
 
-    with ir.InsertionPoint(self._op.else_block):
-      _create(scf.YieldOp, else_list)
+    with ir.InsertionPoint(self._op.regions[1].blocks[0]):
+      ir.Operation.create(
+          "scf.yield",
+          operands=[value._get_ssa_value() for value in else_list],
+          regions=0)
 
     # FIXME: this is very ugly because the MLIR python bindings do now allow us
     # to delete blocks from regions and the IfOp class directly adds blocks to
     # the region in its constructor.
     hasElse = self._hasElse or len(else_list) > 0
-    new_if = scf.IfOp(self._cond._get_ssa_value(),
-                      [v.get_type()._codegen() for v in then_list],
-                      has_else=hasElse)
-    for op in self._op.then_block.operations:
-      new_if.operation.regions[0].blocks[0].append(op)
+    new_if = ir.Operation.create(
+        "scf.if",
+        operands=[self._cond._get_ssa_value()],
+        results=[v.get_type()._codegen() for v in then_list],
+        regions=2)
+    ir.Block.create_at_start(new_if.regions[0], [])
     if hasElse:
-      for op in self._op.else_block.operations:
-        new_if.operation.regions[1].blocks[0].append(op)
+      ir.Block.create_at_start(new_if.regions[1], [])
+    for op in self._op.regions[0].blocks[0].operations:
+      new_if.regions[0].blocks[0].append(op)
+    if hasElse:
+      for op in self._op.regions[1].blocks[0].operations:
+        new_if.regions[1].blocks[0].append(op)
     self._op.erase()
     self._op = new_if
 
@@ -134,9 +150,9 @@ class _IfBlock:
   def __enter__(self, stack_level=1):
     if_stmt = If.current()
     if self._is_then:
-      self._ip = ir.InsertionPoint(if_stmt._op.then_block)
+      self._ip = ir.InsertionPoint(if_stmt._op.regions[0].blocks[0])
     else:
-      self._ip = ir.InsertionPoint(if_stmt._op.else_block)
+      self._ip = ir.InsertionPoint(if_stmt._op.regions[1].blocks[0])
       if_stmt._hasElse = True
 
     s = inspect.stack()[stack_level][0]
@@ -246,21 +262,29 @@ class For:
         _collect_values_recursively(obj, varname, self._init_args,
                                     self._init_arg_names, visited)
 
-    self._op = scf.ForOp(self._lower._get_ssa_value(),
-                         self._upper._get_ssa_value(),
-                         self._step._get_ssa_value(),
-                         [x._get_ssa_value() for x in self._init_args])
-    self._ip = ir.InsertionPoint(self._op.body)
+    self._op = ir.Operation.create(
+        "scf.for",
+        operands=[
+            self._lower._get_ssa_value(), self._upper._get_ssa_value(),
+            self._step._get_ssa_value()
+        ] + [x._get_ssa_value() for x in self._init_args],
+        results=[x.get_type()._codegen() for x in self._init_args],
+        regions=1)
+    ir.Block.create_at_start(
+        self._op.regions[0],
+        [ir.IndexType.get()] +
+        [x.get_type()._codegen() for x in self._init_args])
+    self._ip = ir.InsertionPoint(self._op.regions[0].blocks[0])
 
     s = inspect.stack()[stack_level][0]
     self._scope = dict(s.f_locals)
 
     self._ip.__enter__()
 
-    all = [IntegerType()._wrap(self._op.body.arguments[0])]
+    all = [IntegerType()._wrap(self._op.regions[0].blocks[0].arguments[0])]
     all += [arg.get_type()._wrap(block_arg)
-            for arg, block_arg in zip(self._init_args,
-                                      self._op.body.arguments[1:])]
+            for arg, block_arg in zip(
+                self._init_args, self._op.regions[0].blocks[0].arguments[1:])]
     self._index = all[0]
     self._iter_args = all[1:]
 
@@ -299,7 +323,10 @@ class For:
         results[i] = s.f_locals[path]
         s.f_locals[path] = arg
 
-    _create(scf.YieldOp, results)
+    ir.Operation.create(
+        "scf.yield",
+        operands=[value._get_ssa_value() for value in results],
+        regions=0)
 
     self._ip.__exit__(exc_type, exc_value, traceback)
 

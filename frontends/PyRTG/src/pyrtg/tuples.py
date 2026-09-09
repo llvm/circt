@@ -7,7 +7,7 @@ from __future__ import annotations
 from .base import ir
 from .rtg import rtg
 from .core import Value, Type
-from .support import _FromCirctType, _create
+from .support import _FromCirctType
 
 
 class Tuple(Value):
@@ -30,7 +30,12 @@ class Tuple(Value):
     element must be provided. Each element can be of a different type.
     """
 
-    op = _create(rtg.TupleCreateOp, elements)
+    op = ir.Operation.create(
+        "rtg.tuple_create",
+        operands=[element._get_ssa_value() for element in elements],
+        results=[rtg.TupleType.get([element.get_type()._codegen()
+                                    for element in elements])],
+        regions=0)
     return Tuple(op.result, TupleType([element.get_type() for element in elements]))
 
   def __getitem__(self, i) -> Value:
@@ -41,7 +46,12 @@ class Tuple(Value):
     if not isinstance(i, int):
       raise TypeError("index must be a python int")
 
-    op = _create(rtg.TupleExtractOp, self, i)
+    op = ir.Operation.create(
+        "rtg.tuple_extract",
+        operands=[self._value],
+        attributes={"index": ir.IntegerAttr.get(ir.IndexType.get(), i)},
+        results=[self.get_type().element_types[i]._codegen()],
+        regions=0)
     return self.get_type().element_types[i]._wrap(op.result)
 
   def _get_ssa_value(self) -> ir.Value:

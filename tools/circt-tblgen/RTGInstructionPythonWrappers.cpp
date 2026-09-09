@@ -262,10 +262,12 @@ static void emitFunctionBody(const Operator &op,
                              ArrayRef<OperandType> combination,
                              ArrayRef<StringRef> operandNames,
                              raw_ostream &os) {
-  os << "  _create(" << op.getDialectName() << "." << op.getCppClassName()
-     << ", ";
-  llvm::interleaveComma(operandNames, os);
-  os << ")\n";
+  os << "  ir.Operation.create(\"" << op.getOperationName()
+     << "\", operands=[";
+  llvm::interleaveComma(operandNames, os, [&](StringRef name) {
+    os << name << "._get_ssa_value()";
+  });
+  os << "], results=[], regions=0)\n";
 }
 
 static void

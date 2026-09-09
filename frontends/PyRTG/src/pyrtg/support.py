@@ -98,22 +98,3 @@ def _collect_values_recursively(obj, path, args, arg_names, visited):
     pass
 
   return args, arg_names
-
-
-def _to_circt(arg):
-  """Convert frontend operands for an explicit dialect operation call."""
-  from .sequences import SequenceDeclaration
-  if isinstance(arg, (Value, SequenceDeclaration)):
-    return arg._get_ssa_value()
-  if isinstance(arg, Type):
-    return arg._codegen()
-  if isinstance(arg, (list, tuple)):
-    return [_to_circt(a) for a in arg]
-  return arg
-
-
-def _create(op_class, *args, **kwargs):
-  """Create a dialect operation without changing the binding's return type."""
-  args = [_to_circt(arg) for arg in args]
-  kwargs = {k: _to_circt(v) for k, v in kwargs.items()}
-  return op_class(*args, **kwargs)

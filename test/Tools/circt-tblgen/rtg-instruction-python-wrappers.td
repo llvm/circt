@@ -45,7 +45,7 @@ def TestFloatRegType : TypeDef<RTGDialect, "TestFloatReg", [
 // HEADER-NEXT:              args=[(TestRegType(), SideEffect.READ)],
 // HEADER-NEXT:              mnemonic="source_reg")
 // HEADER-NEXT: def source_reg(rs: TestReg):
-// HEADER-NEXT:   test.SourceRegOp(rs)
+// HEADER-NEXT:   ir.Operation.create("test.source_reg", operands=[rs._get_ssa_value()], results=[], regions=0)
 
 def Test1_SourceRegOp : TestOp<"source_reg"> {
   let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs);
@@ -54,7 +54,7 @@ def Test1_SourceRegOp : TestOp<"source_reg"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.READ)],
 // CHECK-NEXT:              mnemonic="source_reg")
 // CHECK-NEXT: def source_reg(rs: TestReg):
-// CHECK-NEXT:   test.SourceRegOp(rs)
+// CHECK-NEXT:   ir.Operation.create("test.source_reg", operands=[rs._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test2_DestRegOp : TestOp<"dest_reg"> {
@@ -64,7 +64,7 @@ def Test2_DestRegOp : TestOp<"dest_reg"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.WRITE)],
 // CHECK-NEXT:              mnemonic="dest_reg")
 // CHECK-NEXT: def dest_reg(rd: TestReg):
-// CHECK-NEXT:   test.DestRegOp(rd)
+// CHECK-NEXT:   ir.Operation.create("test.dest_reg", operands=[rd._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test3_ReadWriteRegOp : TestOp<"read_write_reg"> {
@@ -74,7 +74,7 @@ def Test3_ReadWriteRegOp : TestOp<"read_write_reg"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="read_write_reg")
 // CHECK-NEXT: def read_write_reg(rd_rs: TestReg):
-// CHECK-NEXT:   test.ReadWriteRegOp(rd_rs)
+// CHECK-NEXT:   ir.Operation.create("test.read_write_reg", operands=[rd_rs._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test4_ImmediateOp : TestOp<"immediate"> {
@@ -84,7 +84,7 @@ def Test4_ImmediateOp : TestOp<"immediate"> {
 // CHECK-NEXT:              args=[(ImmediateType(12), SideEffect.READ)],
 // CHECK-NEXT:              mnemonic="immediate")
 // CHECK-NEXT: def immediate(imm: Immediate):
-// CHECK-NEXT:   test.ImmediateOp(imm)
+// CHECK-NEXT:   ir.Operation.create("test.immediate", operands=[imm._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test5_LabelOp : TestOp<"label"> {
@@ -94,7 +94,7 @@ def Test5_LabelOp : TestOp<"label"> {
 // CHECK-NEXT:              args=[(LabelType(), SideEffect.READ)],
 // CHECK-NEXT:              mnemonic="label")
 // CHECK-NEXT: def label(label: Label):
-// CHECK-NEXT:   test.LabelOp(label)
+// CHECK-NEXT:   ir.Operation.create("test.label", operands=[label._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test6_DestSourceOp : TestOp<"dest_source"> {
@@ -105,7 +105,7 @@ def Test6_DestSourceOp : TestOp<"dest_source"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.WRITE), (TestRegType(), SideEffect.READ)],
 // CHECK-NEXT:              mnemonic="dest_source")
 // CHECK-NEXT: def dest_source(rd: TestReg, rs: TestReg):
-// CHECK-NEXT:   test.DestSourceOp(rd, rs)
+// CHECK-NEXT:   ir.Operation.create("test.dest_source", operands=[rd._get_ssa_value(), rs._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test7_NoOperandsOp : TestOp<"no_operands"> {}
@@ -113,7 +113,7 @@ def Test7_NoOperandsOp : TestOp<"no_operands"> {}
 // CHECK-NEXT:              args=[],
 // CHECK-NEXT:              mnemonic="no_operands")
 // CHECK-NEXT: def no_operands():
-// CHECK-NEXT:   test.NoOperandsOp()
+// CHECK-NEXT:   ir.Operation.create("test.no_operands", operands=[], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test8_NoDecoratorOp : TestOp<"no_decorator"> {
@@ -123,7 +123,7 @@ def Test8_NoDecoratorOp : TestOp<"no_decorator"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="no_decorator")
 // CHECK-NEXT: def no_decorator(rd: TestReg):
-// CHECK-NEXT:   test.NoDecoratorOp(rd)
+// CHECK-NEXT:   ir.Operation.create("test.no_decorator", operands=[rd._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test9_UnionWithRegisterOp : TestOp<"union_with_register"> {
@@ -134,13 +134,13 @@ def Test9_UnionWithRegisterOp : TestOp<"union_with_register"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.WRITE), (TestRegType(), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="union_with_register")
 // CHECK-NEXT: def union_with_register_testreg(rd: TestReg, src: TestReg):
-// CHECK-NEXT:   test.UnionWithRegisterOp(rd, src)
+// CHECK-NEXT:   ir.Operation.create("test.union_with_register", operands=[rd._get_ssa_value(), src._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 // CHECK-NEXT: @instruction(return_val_func=mock_return_val_func,
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.WRITE), (ImmediateType(12), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="union_with_register")
 // CHECK-NEXT: def union_with_register_imm12(rd: TestReg, src: Immediate):
-// CHECK-NEXT:   test.UnionWithRegisterOp(rd, src)
+// CHECK-NEXT:   ir.Operation.create("test.union_with_register", operands=[rd._get_ssa_value(), src._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 // CHECK-NEXT: def union_with_register(rd: TestReg, src: Union[TestReg, Immediate]):
 // CHECK-NEXT:   if isinstance(src, TestReg):
@@ -156,13 +156,13 @@ def Test10_MultiRegisterUnionOp : TestOp<"multi_register_union"> {
 // CHECK-NEXT:              args=[(TestFloatRegType(), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="multi_register_union")
 // CHECK-NEXT: def multi_register_union_testfloatreg(reg: TestFloatReg):
-// CHECK-NEXT:   test.MultiRegisterUnionOp(reg)
+// CHECK-NEXT:   ir.Operation.create("test.multi_register_union", operands=[reg._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 // CHECK-NEXT: @instruction(return_val_func=mock_return_val_func,
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="multi_register_union")
 // CHECK-NEXT: def multi_register_union_testreg(reg: TestReg):
-// CHECK-NEXT:   test.MultiRegisterUnionOp(reg)
+// CHECK-NEXT:   ir.Operation.create("test.multi_register_union", operands=[reg._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 // CHECK-NEXT: def multi_register_union(reg: Union[TestFloatReg, TestReg]):
 // CHECK-NEXT:   if isinstance(reg, TestFloatReg):
@@ -179,25 +179,25 @@ def Test11_TwoUnionArgsOp : TestOp<"two_union_args"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.WRITE), (TestFloatRegType(), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="two_union_args")
 // CHECK-NEXT: def two_union_args_testreg_testfloatreg(dst: TestReg, src: TestFloatReg):
-// CHECK-NEXT:   test.TwoUnionArgsOp(dst, src)
+// CHECK-NEXT:   ir.Operation.create("test.two_union_args", operands=[dst._get_ssa_value(), src._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 // CHECK-NEXT: @instruction(return_val_func=mock_return_val_func,
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.WRITE), (TestRegType(), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="two_union_args")
 // CHECK-NEXT: def two_union_args_testreg_testreg(dst: TestReg, src: TestReg):
-// CHECK-NEXT:   test.TwoUnionArgsOp(dst, src)
+// CHECK-NEXT:   ir.Operation.create("test.two_union_args", operands=[dst._get_ssa_value(), src._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 // CHECK-NEXT: @instruction(return_val_func=mock_return_val_func,
 // CHECK-NEXT:              args=[(ImmediateType(12), SideEffect.WRITE), (TestFloatRegType(), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="two_union_args")
 // CHECK-NEXT: def two_union_args_imm12_testfloatreg(dst: Immediate, src: TestFloatReg):
-// CHECK-NEXT:   test.TwoUnionArgsOp(dst, src)
+// CHECK-NEXT:   ir.Operation.create("test.two_union_args", operands=[dst._get_ssa_value(), src._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 // CHECK-NEXT: @instruction(return_val_func=mock_return_val_func,
 // CHECK-NEXT:              args=[(ImmediateType(12), SideEffect.WRITE), (TestRegType(), SideEffect.READ_WRITE)],
 // CHECK-NEXT:              mnemonic="two_union_args")
 // CHECK-NEXT: def two_union_args_imm12_testreg(dst: Immediate, src: TestReg):
-// CHECK-NEXT:   test.TwoUnionArgsOp(dst, src)
+// CHECK-NEXT:   ir.Operation.create("test.two_union_args", operands=[dst._get_ssa_value(), src._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 // CHECK-NEXT: def two_union_args(dst: Union[TestReg, Immediate], src: Union[TestFloatReg, TestReg]):
 // CHECK-NEXT:   if isinstance(dst, TestReg) and isinstance(src, TestFloatReg):
@@ -217,7 +217,7 @@ def Test12_AndKeywordOp : TestOp<"and"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.READ)],
 // CHECK-NEXT:              mnemonic="and")
 // CHECK-NEXT: def and_(rs: TestReg):
-// CHECK-NEXT:   test.AndKeywordOp(rs)
+// CHECK-NEXT:   ir.Operation.create("test.and", operands=[rs._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test13_LeadingDigitOp : TestOp<"1add"> {
@@ -227,7 +227,7 @@ def Test13_LeadingDigitOp : TestOp<"1add"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.READ)],
 // CHECK-NEXT:              mnemonic="1add")
 // CHECK-NEXT: def _1add(rs: TestReg):
-// CHECK-NEXT:   test.LeadingDigitOp(rs)
+// CHECK-NEXT:   ir.Operation.create("test.1add", operands=[rs._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test14_SpecialCharsOp : TestOp<"load#word"> {
@@ -237,7 +237,7 @@ def Test14_SpecialCharsOp : TestOp<"load#word"> {
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.READ)],
 // CHECK-NEXT:              mnemonic="load#word")
 // CHECK-NEXT: def load_word(rs: TestReg):
-// CHECK-NEXT:   test.SpecialCharsOp(rs)
+// CHECK-NEXT:   ir.Operation.create("test.load#word", operands=[rs._get_ssa_value()], results=[], regions=0)
 // CHECK-EMPTY:
 
 def Test15_MetadataOp : TestOp<"metadata"> {
@@ -249,7 +249,7 @@ def Test15_MetadataOp : TestOp<"metadata"> {
 // CHECK-NEXT:              mnemonic="some_mnemonic",
 // CHECK-NEXT:              extension="some_ext")
 // CHECK-NEXT: def some_mnemonic():
-// CHECK-NEXT:   test.MetadataOp()
+// CHECK-NEXT:   ir.Operation.create("test.metadata", operands=[], results=[], regions=0)
 // CHECK-EMPTY:
 
 #ifdef TEST_EXTENSION_FILTER

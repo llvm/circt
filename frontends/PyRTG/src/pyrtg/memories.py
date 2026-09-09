@@ -6,7 +6,7 @@ from .index import index
 from .rtg import rtg
 from .integers import Integer
 from .immediates import Immediate
-from .support import _FromCirctType, _create
+from .support import _FromCirctType
 
 from typing import Union
 
@@ -32,12 +32,16 @@ class MemoryBlock(Value):
       address_width: The width of the memory block addresses in bits.
     """
 
-    op = _create(rtg.MemoryBlockDeclareOp,
-        rtg.MemoryBlockType.get(address_width),
-        ir.IntegerAttr.get(ir.IntegerType.get_signless(address_width),
-                           base_address),
-        ir.IntegerAttr.get(ir.IntegerType.get_signless(address_width),
-                           end_address))
+    op = ir.Operation.create(
+        "rtg.isa.memory_block_declare",
+        attributes={
+            "baseAddress": ir.IntegerAttr.get(
+                ir.IntegerType.get_signless(address_width), base_address),
+            "endAddress": ir.IntegerAttr.get(
+                ir.IntegerType.get_signless(address_width), end_address),
+        },
+        results=[rtg.MemoryBlockType.get(address_width)],
+        regions=0)
     return MemoryBlock(op.result, MemoryBlockType(address_width))
 
   def _get_ssa_value(self) -> ir.Value:
@@ -92,10 +96,24 @@ class Memory(Value):
     """
 
     if isinstance(size, int):
-      size = _create(index.ConstantOp, size).result
+      size = ir.Operation.create(
+          "index.constant",
+          attributes={"value": ir.IntegerAttr.get(ir.IndexType.get(), size)},
+          results=[ir.IndexType.get()],
+          regions=0).result
     if isinstance(align, int):
-      align = _create(index.ConstantOp, align).result
-    op = _create(rtg.MemoryAllocOp, mem_block, size, align)
+      align = ir.Operation.create(
+          "index.constant",
+          attributes={"value": ir.IntegerAttr.get(ir.IndexType.get(), align)},
+          results=[ir.IndexType.get()],
+          regions=0).result
+    op = ir.Operation.create(
+        "rtg.isa.memory_alloc",
+        operands=[mem_block._get_ssa_value(),
+                  size._get_ssa_value() if isinstance(size, Integer) else size,
+                  align._get_ssa_value() if isinstance(align, Integer) else align],
+        results=[rtg.MemoryType.get(mem_block.get_type().address_width)],
+        regions=0)
     return Memory(op.result, MemoryType(mem_block.get_type().address_width))
 
   def size(self) -> Integer:
@@ -103,7 +121,11 @@ class Memory(Value):
     Get the size of the memory in bytes.
     """
 
-    return Integer(_create(rtg.MemorySizeOp, self._value).result)
+    return Integer(ir.Operation.create(
+        "rtg.isa.memory_size",
+        operands=[self._value],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def base_address(self) -> Immediate:
     """
@@ -112,7 +134,12 @@ class Memory(Value):
     """
 
     return Immediate(self.get_type().address_width,
-                     _create(rtg.MemoryBaseAddressOp, self._value).result)
+                     ir.Operation.create(
+                         "rtg.isa.memory_base_address",
+                         operands=[self._value],
+                         results=[ir.IntegerType.get_signless(
+                             self.get_type().address_width)],
+                         regions=0).result)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value

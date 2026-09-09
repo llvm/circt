@@ -7,7 +7,6 @@ from __future__ import annotations
 from .base import ir
 from .core import Value, Type
 from .rtg import rtg
-from .support import _create
 
 from typing import Union, TYPE_CHECKING
 
@@ -22,9 +21,12 @@ class String(Value):
 
   def __init__(self, value: Union[ir.Value, str]):
     if isinstance(value, str):
-      self._value = _create(rtg.ConstantOp,
-          ir.StringAttr.get_typed(rtg.StringType.get(),
-                                  value)).result
+      self._value = ir.Operation.create(
+          "rtg.constant",
+          attributes={"value": ir.StringAttr.get_typed(rtg.StringType.get(),
+                                                         value)},
+          results=[rtg.StringType.get()],
+          regions=0).result
     else:
       self._value = value
 
@@ -33,7 +35,11 @@ class String(Value):
     String concatenation.
     """
 
-    return String(_create(rtg.StringConcatOp, [self, other]).result)
+    return String(ir.Operation.create(
+        "rtg.string_concat",
+        operands=[self._value, other._value],
+        results=[rtg.StringType.get()],
+        regions=0).result)
 
   @staticmethod
   def format(*args, delimiter: str = ' ') -> String:
@@ -71,7 +77,11 @@ class String(Value):
         result.append(delimiter_str)
       result.append(convert_to_string(arg))
 
-    return String(_create(rtg.StringConcatOp, result).result)
+    return String(ir.Operation.create(
+        "rtg.string_concat",
+        operands=[value._value for value in result],
+        results=[rtg.StringType.get()],
+        regions=0).result)
 
   def to_ascii_array(self) -> Array:
     """
@@ -82,7 +92,11 @@ class String(Value):
     from .arrays import ArrayType
     from .immediates import ImmediateType
     return ArrayType(ImmediateType(8))._wrap(
-        _create(rtg.StringToASCIIArrayOp, self).result)
+        ir.Operation.create(
+            "rtg.string_to_ascii_array",
+            operands=[self._value],
+            results=[rtg.ArrayType.get(ir.IntegerType.get_signless(8))],
+            regions=0).result)
 
   def get_type(self) -> Type:
     return StringType()

@@ -6,10 +6,8 @@ from __future__ import annotations
 
 from .base import ir
 from .core import Value, Type
-from .index import index
 from .rtg import rtg
 from .strings import String
-from .support import _create
 
 from typing import Union, TYPE_CHECKING
 
@@ -43,78 +41,145 @@ class Integer(Value):
     if isinstance(upper_bound, int):
       upper_bound = Integer(upper_bound)
 
-    op = _create(rtg.RandomNumberInRangeOp, lower_bound, upper_bound)
+    op = ir.Operation.create(
+        "rtg.random_number_in_range",
+        operands=[lower_bound._get_ssa_value(), upper_bound._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0)
     return Integer(op.result)
 
   def __add__(self, other: Integer) -> Integer:
-    return Integer(_create(index.AddOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.add",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __sub__(self, other: Integer) -> Integer:
-    return Integer(_create(index.SubOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.sub",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __mul__(self, other: Integer) -> Integer:
-    return Integer(_create(index.MulOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.mul",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __floordiv__(self, other: Integer) -> Integer:
-    return Integer(_create(index.DivUOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.divu",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __truediv__(self, other: Integer) -> Integer:
-    return Integer(_create(index.CeilDivUOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.ceildivu",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __mod__(self, other: Integer) -> Integer:
-    return Integer(_create(index.RemUOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.remu",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __lshift__(self, other: Integer) -> Integer:
-    return Integer(_create(index.ShlOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.shl",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __rshift__(self, other: Integer) -> Integer:
-    return Integer(_create(index.ShrUOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.shru",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __and__(self, other: Integer) -> Integer:
-    return Integer(_create(index.AndOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.and",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __or__(self, other: Integer) -> Integer:
-    return Integer(_create(index.OrOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.or",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def __xor__(self, other: Integer) -> Integer:
-    return Integer(_create(index.XOrOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.xor",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
+
+  def _compare(self, predicate: str, other: Integer) -> Immediate:
+    from .immediates import Immediate
+    return Immediate(
+        1,
+        ir.Operation.create(
+            "index.cmp",
+            operands=[self._get_ssa_value(), other._get_ssa_value()],
+            attributes={
+                "pred": ir.Attribute.parse(f"#index<cmp_predicate {predicate}>")
+            },
+            results=[ir.IntegerType.get_signless(1)],
+            regions=0).result)
 
   def __eq__(self, other: Integer) -> Immediate:
-    from .immediates import Immediate
-    return Immediate(1, _create(index.CmpOp, "eq", self, other).result)
+    return self._compare("eq", other)
 
   def __ne__(self, other: Integer) -> Immediate:
-    from .immediates import Immediate
-    return Immediate(1, _create(index.CmpOp, "ne", self, other).result)
+    return self._compare("ne", other)
 
   def __lt__(self, other: Integer) -> Immediate:
-    from .immediates import Immediate
-    return Immediate(1, _create(index.CmpOp, "ult", self, other).result)
+    return self._compare("ult", other)
 
   def __le__(self, other: Integer) -> Immediate:
-    from .immediates import Immediate
-    return Immediate(1, _create(index.CmpOp, "ule", self, other).result)
+    return self._compare("ule", other)
 
   def __gt__(self, other: Integer) -> Immediate:
-    from .immediates import Immediate
-    return Immediate(1, _create(index.CmpOp, "ugt", self, other).result)
+    return self._compare("ugt", other)
 
   def __ge__(self, other: Integer) -> Immediate:
-    from .immediates import Immediate
-    return Immediate(1, _create(index.CmpOp, "uge", self, other).result)
+    return self._compare("uge", other)
 
   def max(self, other: Integer) -> Integer:
-    return Integer(_create(index.MaxUOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.maxu",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def min(self, other: Integer) -> Integer:
-    return Integer(_create(index.MinUOp, self, other).result)
+    return Integer(ir.Operation.create(
+        "index.minu",
+        operands=[self._get_ssa_value(), other._get_ssa_value()],
+        results=[ir.IndexType.get()],
+        regions=0).result)
 
   def to_string(self) -> String:
     """
     Format this integer as a string in unsigned decimal.
     """
 
-    return String(_create(rtg.IntFormatOp, self).result)
+    return String(ir.Operation.create(
+        "rtg.int_format",
+        operands=[self._get_ssa_value()],
+        results=[rtg.StringType.get()],
+        regions=0).result)
 
   def get_type(self) -> Type:
     return IntegerType()
@@ -130,9 +195,22 @@ class Integer(Value):
       # anyway, so we can compute the signed integer that matches the bitvector
       # of the unsigned integer and use that.
       if self._value >= 2**63:
-        return _create(index.ConstantOp, self._value - 2**64).result
+        return ir.Operation.create(
+            "index.constant",
+            attributes={
+                "value": ir.IntegerAttr.get(ir.IndexType.get(),
+                                             self._value - 2**64)
+            },
+            results=[ir.IndexType.get()],
+            regions=0).result
       else:
-        return _create(index.ConstantOp, self._value).result
+        return ir.Operation.create(
+            "index.constant",
+            attributes={
+                "value": ir.IntegerAttr.get(ir.IndexType.get(), self._value)
+            },
+            results=[ir.IndexType.get()],
+            regions=0).result
 
     return self._value
 

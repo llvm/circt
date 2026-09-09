@@ -4,21 +4,30 @@
 
 from .base import ir
 from .base.dialects import rtgtest as _rtgtest
-from .support import _create
+from .core import Value
 
 
 class _RTGTestDialect:
-  """Frontend view of rtgtest with explicit operand conversion.
-
-  The underlying OpView classes are left untouched.  This proxy only converts
-  PyRTG operands at the public frontend boundary and returns the normal
-  binding OpView.
-  """
 
   def __getattr__(self, name):
     attr = getattr(_rtgtest, name)
     if isinstance(attr, type) and issubclass(attr, ir.OpView):
-      return lambda *args, **kwargs: _create(attr, *args, **kwargs)
+
+      def create(*args, **kwargs):
+        def convert(value):
+          if isinstance(value, Value):
+            return value._get_ssa_value()
+          if isinstance(value, (list, tuple)):
+            return [convert(element) for element in value]
+          return value
+
+        return ir.Operation.create(
+            attr.OPERATION_NAME,
+            operands=[convert(arg) for arg in args],
+            attributes=kwargs,
+            regions=0)
+
+      return create
     return attr
 
 

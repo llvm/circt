@@ -9,7 +9,6 @@ from .core import Value, Type
 from .rtg import rtg
 from .integers import Integer
 from .strings import String
-from .support import _create
 
 from typing import Union
 
@@ -34,9 +33,17 @@ class Label(Value):
     """
 
     if isinstance(string, str):
-      return Label(_create(rtg.ConstantOp, rtg.LabelAttr.get(string)).result)
+      return Label(ir.Operation.create(
+          "rtg.constant",
+          attributes={"value": rtg.LabelAttr.get(string)},
+          results=[rtg.LabelType.get()],
+          regions=0).result)
 
-    return Label(_create(rtg.StringToLabelOp, string).result)
+    return Label(ir.Operation.create(
+        "rtg.string_to_label",
+        operands=[string._get_ssa_value()],
+        results=[rtg.LabelType.get()],
+        regions=0).result)
 
   def declare_unique(string: Union[str, String]) -> Label:
     """
@@ -49,7 +56,11 @@ class Label(Value):
     if isinstance(string, str):
       string = String(string)
 
-    return Label(_create(rtg.LabelUniqueDeclOp, string).result)
+    return Label(ir.Operation.create(
+        "rtg.label_unique_decl",
+        operands=[string._get_ssa_value()],
+        results=[rtg.LabelType.get()],
+        regions=0).result)
 
   def place(
       self,
@@ -58,8 +69,11 @@ class Label(Value):
     Places a declared label in a sequence or test.
     """
 
-    return _create(rtg.LabelOp, rtg.LabelVisibilityAttr.get(visibility),
-                   self._value)
+    return ir.Operation.create(
+        "rtg.label",
+        operands=[self._value],
+        attributes={"visibility": rtg.LabelVisibilityAttr.get(visibility)},
+        regions=0)
 
   def get_type(self) -> Type:
     return LabelType()

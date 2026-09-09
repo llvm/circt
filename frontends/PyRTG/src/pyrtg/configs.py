@@ -8,7 +8,6 @@ from .core import CodeGenContext, CodeGenRoot, Type, Value
 from .base import ir
 from .rtg import rtg
 from .tuples import Tuple, TupleType
-from .support import _create
 
 
 class ParamBase:
@@ -182,16 +181,26 @@ class Config(CodeGenRoot):
     self._already_generated = True
 
     # Construct the target operation.
-    target_op = rtg.TargetOp(self._name, ir.TypeAttr.get(rtg.DictType.get()))
-    entry_block = ir.Block.create_at_start(target_op.bodyRegion, [])
+    target_op = ir.Operation.create(
+        "rtg.target",
+        attributes={
+            "sym_name": ir.StringAttr.get(self._name),
+            "target": ir.TypeAttr.get(rtg.DictType.get()),
+        },
+        regions=1)
+    entry_block = ir.Block.create_at_start(target_op.regions[0], [])
     with ir.InsertionPoint(entry_block):
       if hasattr(self, "load"):
         self.load()
 
       params = self.get_params()
       params.sort(key=lambda param: param.get_name())
-      _create(rtg.YieldOp, [param.load_and_get_value() for param in params])
+      ir.Operation.create(
+          "rtg.yield",
+          operands=[param.load_and_get_value()._get_ssa_value()
+                    for param in params],
+          regions=0)
 
       dict_entries = [(ir.StringAttr.get(param.get_name()),
                        param.get_type()._codegen()) for param in params]
-      target_op.target = ir.TypeAttr.get(rtg.DictType.get(dict_entries))
+      target_op.attributes["target"] = ir.TypeAttr.get(rtg.DictType.get(dict_entries))
