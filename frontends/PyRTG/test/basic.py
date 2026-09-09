@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, FloatRegister, Array, ArrayType, Tuple, TupleType, MemoryBlock, Memory, String, embed_comment
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, FloatRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, embed_comment
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }

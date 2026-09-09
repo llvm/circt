@@ -43,6 +43,13 @@ def EmitRTGISAAssemblyPass : Pass<"rtg-emit-isa-assembly", "emit::FileOp"> {
     - "-" means that the output should be emitted to stdout.
     - "" means that the output should be emitted to stderr.
 
+    When the 'output-path' option is provided:
+    - If it's a full file path (not ending in a separator), it's used as-is and
+      the emit.file filename is ignored (useful for single-file output).
+    - If it's a directory (ending in a separator or when the emit.file has a
+      relative path), the emit.file filename is treated as relative to this
+      directory.
+
     In order to operate on 'emit.file' operations in parallel, the pass
     requires that all 'emit.file' operations have a unique filename (this is not
     checked by the pass and violations will result in race conditions).
@@ -53,6 +60,9 @@ def EmitRTGISAAssemblyPass : Pass<"rtg-emit-isa-assembly", "emit::FileOp"> {
   }];
 
   let options = [
+    Option<"outputPath", "output-path",
+      "std::string", /*default=*/"",
+      "Output path for the generated files. Can be a file path or directory.">,
     Option<"unsupportedInstructionsFile", "unsupported-instructions-file",
       "std::string", /*default=*/"",
       "An absolute path to a file with a list of instruction names not "

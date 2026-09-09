@@ -30,8 +30,12 @@ def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
     from .sets import SetType
     return SetType(_FromCirctType(type.element_type))
   if isinstance(type, ir.IntegerType) and type.is_signless:
-    from .immediates import ImmediateType
-    return ImmediateType(type.width)
+    if type.width == 1:
+      from .booleans import BoolType
+      return BoolType()
+    else:
+      from .immediates import ImmediateType
+      return ImmediateType(type.width)
   if isinstance(type, ir.IndexType):
     from .integers import IntegerType
     return IntegerType()

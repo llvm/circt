@@ -200,7 +200,7 @@ def FailedToClassifyOp : TestOp<"error_failed_to_classify"> {
   let isaBinaryFormat = "$imm";
   let isaAssemblyFormat = "$imm";
 }
-// FAILED_TO_CLASSIFY: [[@LINE-2]]:28: error: failed to classify ISA type for operand 'imm' with type 'F32'
+// FAILED_TO_CLASSIFY: [[@LINE-2]]:28: error: immediate operand '$imm' must be wrapped in signed() or unsigned()
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods %TABLEGEN_INC% %s -DTEST_MISSING_SPACE 2>&1 | FileCheck %s --check-prefix=MISSING_SPACE

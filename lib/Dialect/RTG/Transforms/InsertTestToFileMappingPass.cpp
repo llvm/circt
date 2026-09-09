@@ -40,6 +40,8 @@ void InsertTestToFileMappingPass::runOnOperation() {
   SmallVector<TestOp> tests(getOperation().getOps<TestOp>());
   auto loc = getOperation().getLoc();
   if (!splitOutput) {
+    // When split-output is false, the emit.file should have an empty or "-"
+    // path. The actual output path will be provided to the emission pass.
     OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBody());
     auto fileOp = emit::FileOp::create(builder, loc, path);
     builder.setInsertionPointToStart(fileOp.getBody());
@@ -56,8 +58,11 @@ void InsertTestToFileMappingPass::runOnOperation() {
 
   for (auto testOp : tests) {
     OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBody());
-    llvm::SmallString<128> filename(path.getValue());
-    appendPossiblyAbsolutePath(filename, testOp.getSymName() + ".s");
+    // When split-output is true, use relative paths. The emission pass will
+    // combine this with the output directory.
+    llvm::SmallString<128> filename;
+    filename.append(testOp.getSymName());
+    filename.append(".s");
     auto fileOp = emit::FileOp::create(builder, loc, filename);
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(fileOp.getBody());

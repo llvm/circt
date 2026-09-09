@@ -4,6 +4,7 @@
 
 from . import tests
 from . import core
+from .booleans import Bool, BoolType
 from .core import Value, Type
 from .tests import test, embed_comment, report_success, report_failure
 from .labels import Label, LabelType

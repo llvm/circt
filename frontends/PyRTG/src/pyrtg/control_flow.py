@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from .booleans import Bool
 from .integers import Integer, IntegerType
 from .immediates import Immediate
 from .arrays import Array

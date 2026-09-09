@@ -28,6 +28,7 @@ declare_mlir_python_sources(PyRTGSources.Core
     arith.py
     arrays.py
     bags.py
+    booleans.py
     configs.py
     control_flow.py
     core.py
