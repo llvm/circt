@@ -4,13 +4,13 @@
 
 from __future__ import annotations
 
-from .integers import Integer
+from .integers import Integer, IntegerType
 from .immediates import Immediate
 from .arrays import Array
 from .core import Value
 from .base import ir
 from .scf import scf
-from .support import _FromCirctValue, _collect_values_recursively
+from .support import _collect_values_recursively, _create
 
 import ctypes
 from contextvars import ContextVar
@@ -89,10 +89,10 @@ class If:
       else_list.append(else_val)
 
     with ir.InsertionPoint(self._op.then_block):
-      scf.YieldOp(then_list)
+      _create(scf.YieldOp, then_list)
 
     with ir.InsertionPoint(self._op.else_block):
-      scf.YieldOp(else_list)
+      _create(scf.YieldOp, else_list)
 
     # FIXME: this is very ugly because the MLIR python bindings do now allow us
     # to delete blocks from regions and the IfOp class directly adds blocks to
@@ -113,7 +113,10 @@ class If:
     s = inspect.stack()[2][0]
 
     for i, varname in enumerate(results):
-      s.f_locals[varname] = _FromCirctValue(self._op.results[i])
+      result_value = self._then_results.get(varname,
+                                            self._else_results.get(varname,
+                                                                    self._defaults[varname]))
+      s.f_locals[varname] = result_value.get_type()._wrap(self._op.results[i])
 
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
@@ -253,7 +256,10 @@ class For:
 
     self._ip.__enter__()
 
-    all = [_FromCirctValue(arg) for arg in self._op.body.arguments]
+    all = [IntegerType()._wrap(self._op.body.arguments[0])]
+    all += [arg.get_type()._wrap(block_arg)
+            for arg, block_arg in zip(self._init_args,
+                                      self._op.body.arguments[1:])]
     self._index = all[0]
     self._iter_args = all[1:]
 
@@ -279,7 +285,7 @@ class For:
     results = len(self._op.results) * [None]
 
     for i, path in enumerate(self._init_arg_names):
-      arg = _FromCirctValue(self._op.results[i])
+      arg = self._init_args[i].get_type()._wrap(self._op.results[i])
       if '.' in path:
         parts = path.split('.')
         base_name = parts[0]
@@ -292,7 +298,7 @@ class For:
         results[i] = s.f_locals[path]
         s.f_locals[path] = arg
 
-    scf.YieldOp(results)
+    _create(scf.YieldOp, results)
 
     self._ip.__exit__(exc_type, exc_value, traceback)
 

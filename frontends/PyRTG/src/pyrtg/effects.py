@@ -10,7 +10,7 @@ from typing import Any, Callable, Optional
 from .base import ir
 from .rtg import rtg
 from .core import CodeGenContext, CodeGenObject, Value, Type
-from .support import _FromCirctValue, _FromCirctType
+from .support import _FromCirctType, _create
 
 # ---------------------------------------------------------------------------
 # Continuation types / values
@@ -34,6 +34,9 @@ class ContinuationType(Type):
   def _codegen(self) -> ir.Type:
     return rtg.ContinuationType.get(self.resume_type._codegen())
 
+  def _wrap(self, value: ir.Value) -> Continuation:
+    return Continuation(value, self)
+
 
 class VoidType(Type):
   """Elaboration-time void (no value returned by handler)."""
@@ -48,20 +51,23 @@ class VoidType(Type):
 class Continuation(Value):
   """A first-class continuation value (received by control handlers)."""
 
-  def __init__(self, value: ir.Value):
+  def __init__(self, value: ir.Value, type: ContinuationType = None):
     self._value = value
+    self._type = type
 
   def resume(self, result: Optional[Value] = None) -> None:
     """Resume this continuation, optionally passing a result value."""
     if result is not None:
-      rtg.ResumeOp(self._value, value=result._get_ssa_value())
+      _create(rtg.ResumeOp, self._value, value=result)
     else:
-      rtg.ResumeOp(self._value)
+      _create(rtg.ResumeOp, self._value)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
   def get_type(self) -> Type:
+    if self._type is not None:
+      return self._type
     return _FromCirctType(self._value.type)
 
 
@@ -87,7 +93,7 @@ class EffectDeclaration(CodeGenObject):
     result_types = ([] if isinstance(self.result, VoidType) else
                     [self.result._codegen()])
     fn_type = ir.FunctionType.get(input_types, result_types)
-    rtg.EffectOp(self.name, ir.TypeAttr.get(fn_type))
+    _create(rtg.EffectOp, self.name, ir.TypeAttr.get(fn_type))
 
   def codegen_depends_on(self):
     return []
@@ -139,10 +145,10 @@ def perform(decl: EffectDeclaration, *args: Value) -> Optional[Value]:
   operand_values = [a._get_ssa_value() for a in args]
   is_void = isinstance(decl.result, VoidType)
   result_type = None if is_void else decl.result._codegen()
-  op = rtg.PerformOp(result_type, decl.name, operand_values)
+  op = _create(rtg.PerformOp, result_type, decl.name, operand_values)
   if is_void:
     return None
-  return _FromCirctValue(op._get_ssa_value())
+  return decl.result._wrap(op.result)
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +220,7 @@ class HandlerScope:
     if exc_value is not None:
       return
     # Terminate the body region.
-    rtg.YieldOp([])
+    _create(rtg.YieldOp, [])
     self._body_ip.__exit__(exc_type, exc_value, traceback)
 
     # Emit each handler region.
@@ -231,10 +237,12 @@ class HandlerScope:
       with ir.InsertionPoint(handler_block):
         # Convert block args to Python values.
         py_args = [
-            _FromCirctValue(handler_block.arguments[j])
-            for j in range(len(decl.inputs))
+            typ._wrap(handler_block.arguments[j])
+            for j, typ in enumerate(decl.inputs)
         ]
-        cont_val = Continuation(handler_block.arguments[len(decl.inputs)])
+        cont_type = ContinuationType(decl.result)
+        cont_val = Continuation(handler_block.arguments[len(decl.inputs)],
+                                cont_type)
 
         nparams = len(inspect.signature(fn).parameters)
         is_control = nparams == len(decl.inputs) + 1
@@ -251,7 +259,7 @@ class HandlerScope:
                 f"Simple handler for @{decl.name} must return a value"
             cont_val.resume(ret)
 
-        rtg.YieldOp([])
+        _create(rtg.YieldOp, [])
 
 
 def effect_handler(

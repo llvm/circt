@@ -9,7 +9,7 @@ from .rtg import rtg
 from .index import index
 from .core import Value, Type
 from .integers import Integer
-from .support import _FromCirctType
+from .support import _FromCirctType, _create
 
 from typing import Union
 
@@ -19,12 +19,13 @@ class Array(Value):
   Represents a statically typed array for any kind of values.
   """
 
-  def __init__(self, value: ir.Value) -> Array:
+  def __init__(self, value: ir.Value, type: ArrayType = None) -> Array:
     """
     Intended for library internal usage only.
     """
 
     self._value = value
+    self._type = type
 
   def create(elements: list[Value], element_type: Type) -> Array:
     """
@@ -36,8 +37,9 @@ class Array(Value):
       raise TypeError(
           "all elements of an RTG array must be of the specified element type")
 
-    return rtg.ArrayCreateOp(rtg.ArrayType.get(element_type._codegen()),
-                             elements)
+    op = _create(rtg.ArrayCreateOp, rtg.ArrayType.get(element_type._codegen()),
+                 elements)
+    return Array(op.result, ArrayType(element_type))
 
   def __getitem__(self, i) -> Value:
     """
@@ -48,9 +50,10 @@ class Array(Value):
 
     idx = i
     if isinstance(i, int):
-      idx = index.ConstantOp(i)
+      idx = _create(index.ConstantOp, i).result
 
-    return rtg.ArrayExtractOp(self._value, idx)
+    op = _create(rtg.ArrayExtractOp, self._value, idx)
+    return self.get_type().element_type._wrap(op.result)
 
   def set(self, index: Union[int, Integer], value: Value) -> Array:
     """
@@ -58,21 +61,23 @@ class Array(Value):
     """
 
     index = index if isinstance(index, Integer) else Integer(index)
-    return rtg.ArrayInjectOp(self._value, index, value)
+    op = _create(rtg.ArrayInjectOp, self._value, index, value)
+    return Array(op.result, self.get_type())
 
   def size(self) -> Integer:
     """
     Get the number of elements in the array.
     """
 
-    return rtg.ArraySizeOp(self._value)
+    return Integer(_create(rtg.ArraySizeOp, self._value).result)
 
   def append(self, element: Value) -> Array:
     """
     Append an element to the end of the array.
     """
 
-    return rtg.ArrayAppendOp(self._value, element)
+    op = _create(rtg.ArrayAppendOp, self._value, element)
+    return Array(op.result, self.get_type())
 
   def __add__(self, other: Value) -> Array:
     return self.append(other)
@@ -81,6 +86,8 @@ class Array(Value):
     return self._value
 
   def get_type(self) -> Type:
+    if self._type is not None:
+      return self._type
     return _FromCirctType(self._value.type)
 
 
@@ -101,3 +108,6 @@ class ArrayType(Type):
 
   def _codegen(self) -> ir.Type:
     return rtg.ArrayType.get(self.element_type._codegen())
+
+  def _wrap(self, value: ir.Value) -> Array:
+    return Array(value, self)

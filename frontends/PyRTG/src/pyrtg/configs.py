@@ -8,6 +8,7 @@ from .core import CodeGenContext, CodeGenRoot, Type, Value
 from .base import ir
 from .rtg import rtg
 from .tuples import Tuple, TupleType
+from .support import _create
 
 
 class ParamBase:
@@ -189,7 +190,7 @@ class Config(CodeGenRoot):
 
       params = self.get_params()
       params.sort(key=lambda param: param.get_name())
-      rtg.YieldOp([param.load_and_get_value() for param in params])
+      _create(rtg.YieldOp, [param.load_and_get_value() for param in params])
 
       dict_entries = [(ir.StringAttr.get(param.get_name()),
                        param.get_type()._codegen()) for param in params]

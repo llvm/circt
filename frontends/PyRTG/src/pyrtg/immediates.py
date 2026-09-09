@@ -10,6 +10,7 @@ from .base import ir
 from .integers import Integer
 from .strings import String
 from .arith import arith
+from .support import _create
 
 from typing import Union
 
@@ -61,7 +62,8 @@ class Immediate(Value):
     if len(args) == 0:
       raise ValueError("At least one immediate required")
 
-    return rtg.ConcatImmediateOp(list(args))
+    width = sum(arg._width for arg in args)
+    return Immediate(width, _create(rtg.ConcatImmediateOp, list(args)).result)
 
   def replicate(self, count: int) -> Immediate:
     """
@@ -90,13 +92,16 @@ class Immediate(Value):
       if start < 0 or stop > self._width or start >= stop:
         raise ValueError(
             f"Invalid slice range [{start}:{stop}] for width {self._width}")
-      return rtg.SliceImmediateOp(ImmediateType(stop - start), self, start)
+      width = stop - start
+      return Immediate(width, _create(rtg.SliceImmediateOp, ImmediateType(width),
+                                      self, start).result)
 
     if isinstance(slice_range, int):
       if slice_range < 0 or slice_range >= self._width:
         raise ValueError(
             f"Index {slice_range} out of range for width {self._width}")
-      return rtg.SliceImmediateOp(ImmediateType(1), self, slice_range)
+      return Immediate(1, _create(rtg.SliceImmediateOp, ImmediateType(1), self,
+                                  slice_range).result)
 
     raise TypeError("Slice must be an integer or slice object")
 
@@ -132,119 +137,119 @@ class Immediate(Value):
     Formats this immediate as a string.
     """
 
-    return rtg.ImmediateFormatOp(self)
+    return String(_create(rtg.ImmediateFormatOp, self).result)
 
   def __add__(self, other: Immediate) -> Immediate:
-    return arith.AddIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.AddIOp, self, other).result)
 
   def __sub__(self, other: Immediate) -> Immediate:
-    return arith.SubIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.SubIOp, self, other).result)
 
   def __mul__(self, other: Immediate) -> Immediate:
-    return arith.MulIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.MulIOp, self, other).result)
 
   def __lshift__(self, other: Immediate) -> Immediate:
-    return arith.ShLIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.ShLIOp, self, other).result)
 
   def __rshift__(self, other: Immediate) -> Immediate:
-    return arith.ShRUIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.ShRUIOp, self, other).result)
 
   def __and__(self, other: Immediate) -> Immediate:
-    return arith.AndIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.AndIOp, self, other).result)
 
   def __or__(self, other: Immediate) -> Immediate:
-    return arith.OrIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.OrIOp, self, other).result)
 
   def __xor__(self, other: Immediate) -> Immediate:
-    return arith.XOrIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.XOrIOp, self, other).result)
 
   def __eq__(self, other: Immediate) -> Value:
-    return arith.CmpIOp(arith.CmpIPredicate.eq, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.eq, self,
+                                other).result)
 
   def __ne__(self, other: Immediate) -> Value:
-    return arith.CmpIOp(arith.CmpIPredicate.ne, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.ne, self,
+                                other).result)
 
   def ult(self, other: Immediate) -> Value:
     """
     Unsigned less than comparison.
     """
-    return arith.CmpIOp(arith.CmpIPredicate.ult, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.ult, self,
+                                other).result)
 
   def ule(self, other: Immediate) -> Value:
     """
     Unsigned less than or equal comparison.
     """
-    return arith.CmpIOp(arith.CmpIPredicate.ule, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.ule, self,
+                                other).result)
 
   def ugt(self, other: Immediate) -> Value:
     """
     Unsigned greater than comparison.
     """
-    return arith.CmpIOp(arith.CmpIPredicate.ugt, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.ugt, self,
+                                other).result)
 
   def uge(self, other: Immediate) -> Value:
     """
     Unsigned greater than or equal comparison.
     """
-    return arith.CmpIOp(arith.CmpIPredicate.uge, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.uge, self,
+                                other).result)
 
   def slt(self, other: Immediate) -> Value:
     """
     Signed less than comparison.
     """
-    return arith.CmpIOp(arith.CmpIPredicate.slt, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.slt, self,
+                                other).result)
 
   def sle(self, other: Immediate) -> Value:
     """
     Signed less than or equal comparison.
     """
-    return arith.CmpIOp(arith.CmpIPredicate.sle, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.sle, self,
+                                other).result)
 
   def sgt(self, other: Immediate) -> Value:
     """
     Signed greater than comparison.
     """
-    return arith.CmpIOp(arith.CmpIPredicate.sgt, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.sgt, self,
+                                other).result)
 
   def sge(self, other: Immediate) -> Value:
     """
     Signed greater than or equal comparison.
     """
-    return arith.CmpIOp(arith.CmpIPredicate.sge, self._get_ssa_value(),
-                        other._get_ssa_value())
+    return Immediate(1, _create(arith.CmpIOp, arith.CmpIPredicate.sge, self,
+                                other).result)
 
   def umax_of(self, other: Immediate) -> Immediate:
     """
     Unsigned maximum of this immediate and another.
     """
-    return arith.MaxUIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.MaxUIOp, self, other).result)
 
   def umin_of(self, other: Immediate) -> Immediate:
     """
     Unsigned minimum of this immediate and another.
     """
-    return arith.MinUIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.MinUIOp, self, other).result)
 
   def smax_of(self, other: Immediate) -> Immediate:
     """
     Signed maximum of this immediate and another.
     """
-    return arith.MaxSIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.MaxSIOp, self, other).result)
 
   def smin_of(self, other: Immediate) -> Immediate:
     """
     Signed minimum of this immediate and another.
     """
-    return arith.MinSIOp(self._get_ssa_value(), other._get_ssa_value())
+    return Immediate(self._width, _create(arith.MinSIOp, self, other).result)
 
   def zext(self, target_width: int) -> Immediate:
     """
@@ -259,8 +264,9 @@ class Immediate(Value):
     if target_width == self._width:
       return self
 
-    return arith.ExtUIOp(ir.IntegerType.get_signless(target_width),
-                         self._get_ssa_value())
+    return Immediate(target_width, _create(arith.ExtUIOp,
+                                           ir.IntegerType.get_signless(target_width),
+                                           self).result)
 
   def sext(self, target_width: int) -> Immediate:
     """
@@ -275,20 +281,22 @@ class Immediate(Value):
     if target_width == self._width:
       return self
 
-    return arith.ExtSIOp(ir.IntegerType.get_signless(target_width),
-                         self._get_ssa_value())
+    return Immediate(target_width, _create(arith.ExtSIOp,
+                                           ir.IntegerType.get_signless(target_width),
+                                           self).result)
 
   def __repr__(self) -> str:
     return f"Immediate<{self._width}, {self._value}>"
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, int):
-      self = rtg.ConstantOp(
+      return _create(rtg.ConstantOp,
           ir.IntegerAttr.get(ir.IntegerType.get_signless(self._width),
-                             self._value))
+                             self._value)).result
     if isinstance(self._value, Integer):
-      self = rtg.IntToImmediateOp(ir.IntegerType.get_signless(self._width),
-                                  self._value)
+      return _create(rtg.IntToImmediateOp,
+                     ir.IntegerType.get_signless(self._width),
+                     self._value).result
     return self._value
 
   def get_type(self) -> Type:
@@ -314,3 +322,6 @@ class ImmediateType(Type):
 
   def _codegen(self) -> ir.Type:
     return ir.IntegerType.get(self.width)
+
+  def _wrap(self, value: ir.Value) -> Immediate:
+    return Immediate(self.width, value)

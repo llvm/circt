@@ -8,7 +8,7 @@ from .rtg import rtg
 from .rtgtest import rtgtest
 from .core import Value, Type
 from .base import ir
-from .support import _FromCirctValue, _collect_values_recursively
+from .support import _collect_values_recursively, _create
 from .sequences import Sequence
 
 import ctypes
@@ -67,7 +67,7 @@ class CPUCore(Value):
     """
 
     assert from_core._attr is not None and to_core._attr is not None, "must have attribute available"
-    rtg.ContextSwitchOp(from_core._attr, to_core._attr, seq)
+    _create(rtg.ContextSwitchOp, from_core._attr, to_core._attr, seq)
 
   def __enter__(self):
     # TODO: just adding all variables in the context is not particularly nice.
@@ -92,9 +92,9 @@ class CPUCore(Value):
       seq_decl = rtg.SequenceOp(seq_name, ir.TypeAttr.get(seq_type))
       block = ir.Block.create_at_start(seq_decl.regions[0], arg_types)
 
-    seq = rtg.GetSequenceOp(seq_type, seq_name)
-    seq = rtg.SubstituteSequenceOp(seq, args)
-    rtg.OnContextOp(self, seq)
+    seq = _create(rtg.GetSequenceOp, seq_type, seq_name)
+    seq = _create(rtg.SubstituteSequenceOp, seq.result, args)
+    _create(rtg.OnContextOp, self, seq.result)
 
     s = inspect.stack()[1][0]
     _context_stack.get().append((block, dict(s.f_locals), arg_names, args))
@@ -107,9 +107,10 @@ class CPUCore(Value):
         obj = s.f_locals[parts[0]]
         for part in parts[1:-1]:
           obj = getattr(obj, part)
-        setattr(obj, parts[-1], _FromCirctValue(arg))
+        setattr(obj, parts[-1], args[arg_names.index(path)].get_type()._wrap(arg))
       else:
-        s.f_locals[path] = _FromCirctValue(arg)
+        source = args[arg_names.index(path)]
+        s.f_locals[path] = source.get_type()._wrap(arg)
 
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
@@ -143,7 +144,7 @@ class CPUCore(Value):
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, ir.Attribute):
-      self = rtg.ConstantOp(self._value)
+      return _create(rtg.ConstantOp, self._value).result
     return self._value
 
   def get_type(self) -> Type:
@@ -163,3 +164,6 @@ class CPUCoreType(Type):
 
   def _codegen(self) -> ir.Type:
     return rtgtest.CPUType.get()
+
+  def _wrap(self, value: ir.Value) -> CPUCore:
+    return CPUCore(value)

@@ -9,6 +9,7 @@ from .core import Value, Type
 from .rtg import rtg
 from .integers import Integer
 from .strings import String
+from .support import _create
 
 from typing import Union
 
@@ -33,9 +34,9 @@ class Label(Value):
     """
 
     if isinstance(string, str):
-      return rtg.ConstantOp(rtg.LabelAttr.get(string))
+      return Label(_create(rtg.ConstantOp, rtg.LabelAttr.get(string)).result)
 
-    return rtg.StringToLabelOp(string)
+    return Label(_create(rtg.StringToLabelOp, string).result)
 
   def declare_unique(string: Union[str, String]) -> Label:
     """
@@ -48,7 +49,7 @@ class Label(Value):
     if isinstance(string, str):
       string = String(string)
 
-    return rtg.LabelUniqueDeclOp(string)
+    return Label(_create(rtg.LabelUniqueDeclOp, string).result)
 
   def place(
       self,
@@ -57,7 +58,8 @@ class Label(Value):
     Places a declared label in a sequence or test.
     """
 
-    return rtg.LabelOp(rtg.LabelVisibilityAttr.get(visibility), self._value)
+    return _create(rtg.LabelOp, rtg.LabelVisibilityAttr.get(visibility),
+                   self._value)
 
   def get_type(self) -> Type:
     return LabelType()
@@ -76,3 +78,6 @@ class LabelType(Type):
 
   def _codegen(self) -> ir.Type:
     return rtg.LabelType.get()
+
+  def _wrap(self, value: ir.Value) -> Label:
+    return Label(value)

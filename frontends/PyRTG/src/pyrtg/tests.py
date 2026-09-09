@@ -5,9 +5,9 @@
 from .base import ir
 from .core import CodeGenContext, CodeGenRoot, CodeGenObject
 from .rtg import rtg
-from .support import _FromCirctValue
 from .configs import PythonParam
 from .strings import String
+from .support import _create
 
 from typing import Union
 
@@ -50,7 +50,7 @@ class Test(CodeGenRoot):
     for param, arg in zip(params_sorted, block.arguments):
       new_config.append(
           (param.get_original_name(), param.get_value() if isinstance(
-              param, PythonParam) else _FromCirctValue(arg)))
+              param, PythonParam) else param.get_type()._wrap(arg)))
 
     with ir.InsertionPoint(block):
       self.test_func(SimpleNamespace(**dict(new_config)))
@@ -74,7 +74,7 @@ def embed_comment(comment: Union[str, String]) -> None:
 
   if not isinstance(comment, String):
     comment = String(comment)
-  rtg.CommentOp(comment)
+  _create(rtg.CommentOp, comment)
 
 
 def report_success() -> None:
@@ -92,4 +92,4 @@ def report_failure(message: Union[str, String]) -> None:
 
   if not isinstance(message, String):
     message = String(message)
-  rtg.TestFailureOp(message)
+  _create(rtg.TestFailureOp, message)

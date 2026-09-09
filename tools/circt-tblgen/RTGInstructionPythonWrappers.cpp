@@ -262,7 +262,8 @@ static void emitFunctionBody(const Operator &op,
                              ArrayRef<OperandType> combination,
                              ArrayRef<StringRef> operandNames,
                              raw_ostream &os) {
-  os << "  " << op.getDialectName() << "." << op.getCppClassName() << "(";
+  os << "  _create(" << op.getDialectName() << "." << op.getCppClassName()
+     << ", ";
   llvm::interleaveComma(operandNames, os);
   os << ")\n";
 }

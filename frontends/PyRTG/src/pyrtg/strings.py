@@ -7,6 +7,7 @@ from __future__ import annotations
 from .base import ir
 from .core import Value, Type
 from .rtg import rtg
+from .support import _create
 
 from typing import Union, TYPE_CHECKING
 
@@ -21,9 +22,9 @@ class String(Value):
 
   def __init__(self, value: Union[ir.Value, str]):
     if isinstance(value, str):
-      self._value = rtg.ConstantOp(
+      self._value = _create(rtg.ConstantOp,
           ir.StringAttr.get_typed(rtg.StringType.get(),
-                                  value))._get_ssa_value()
+                                  value)).result
     else:
       self._value = value
 
@@ -32,7 +33,7 @@ class String(Value):
     String concatenation.
     """
 
-    return rtg.StringConcatOp([self, other])
+    return String(_create(rtg.StringConcatOp, [self, other]).result)
 
   @staticmethod
   def format(*args, delimiter: str = ' ') -> String:
@@ -70,7 +71,7 @@ class String(Value):
         result.append(delimiter_str)
       result.append(convert_to_string(arg))
 
-    return rtg.StringConcatOp(result)
+    return String(_create(rtg.StringConcatOp, result).result)
 
   def to_ascii_array(self) -> Array:
     """
@@ -78,7 +79,10 @@ class String(Value):
     byte.
     """
 
-    return rtg.StringToASCIIArrayOp(self)
+    from .arrays import ArrayType
+    from .immediates import ImmediateType
+    return ArrayType(ImmediateType(8))._wrap(
+        _create(rtg.StringToASCIIArrayOp, self).result)
 
   def get_type(self) -> Type:
     return StringType()
@@ -97,3 +101,6 @@ class StringType(Type):
 
   def _codegen(self) -> ir.Type:
     return rtg.StringType.get()
+
+  def _wrap(self, value: ir.Value) -> String:
+    return String(value)

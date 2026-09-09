@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .core import CodeGenContext, CodeGenObject, Value, Type
-from .support import _FromCirctValue, _FromCirctType
+from .support import _FromCirctType, _create
 from .base import ir
 from .rtg import rtg
 
@@ -33,7 +33,7 @@ class SequenceDeclaration(CodeGenObject):
     """
 
     self.register()
-    return Sequence(self._get_ssa_value())
+    return Sequence(self._get_ssa_value(), self.get_type())
 
   def substitute(self, *args: Value) -> Sequence:
     """
@@ -75,12 +75,15 @@ class SequenceDeclaration(CodeGenObject):
                          ir.TypeAttr.get(rtg.SequenceType.get(mlir_arg_types)))
     block = ir.Block.create_at_start(seq.bodyRegion, mlir_arg_types)
     with ir.InsertionPoint(block):
-      self.sequence_func(*[_FromCirctValue(arg) for arg in block.arguments])
+      self.sequence_func(*[
+          arg_type._wrap(arg)
+          for arg_type, arg in zip(self.arg_types, block.arguments)
+      ])
 
   def _get_ssa_value(self) -> ir.Value:
     self.register()
-    return rtg.GetSequenceOp(self.get_type()._codegen(),
-                             self.name)._get_ssa_value()
+    return _create(rtg.GetSequenceOp, self.get_type()._codegen(),
+                   self.name).result
 
   def get_type(self) -> Type:
     return SequenceType(self.arg_types)
@@ -107,12 +110,13 @@ class Sequence(Value):
   randomized it can be embedded into a test or another sequence.
   """
 
-  def __init__(self, value: ir.Value) -> Sequence:
+  def __init__(self, value: ir.Value, type: SequenceType = None) -> Sequence:
     """
     Intended for library internal usage only.
     """
 
     self._value = value
+    self._type = type
 
   def substitute(self, *args: Value) -> Sequence:
     """
@@ -135,7 +139,9 @@ class Sequence(Value):
         raise TypeError(
             f"Expected argument of type {expected_type}, got {arg.get_type()}")
 
-    return rtg.SubstituteSequenceOp(self, args)
+    result_type = SequenceType(element_types[len(args):])
+    return Sequence(_create(rtg.SubstituteSequenceOp, self, args).result,
+                    result_type)
 
   def randomize(self, *args: Value) -> RandomizedSequence:
     """
@@ -161,7 +167,7 @@ class Sequence(Value):
 
       value = self.substitute(*args)
 
-    return rtg.RandomizeSequenceOp(value)
+    return RandomizedSequence(_create(rtg.RandomizeSequenceOp, value).result)
 
   def __call__(self, *args: Value) -> None:
     """
@@ -186,6 +192,8 @@ class Sequence(Value):
     return self._value
 
   def get_type(self) -> Type:
+    if self._type is not None:
+      return self._type
     return _FromCirctType(self._value.type)
 
 
@@ -207,6 +215,9 @@ class SequenceType(Type):
   def _codegen(self):
     return rtg.SequenceType.get([ty._codegen() for ty in self.element_types])
 
+  def _wrap(self, value: ir.Value) -> Sequence:
+    return Sequence(value, self)
+
 
 class RandomizedSequence(Value):
   """
@@ -215,12 +226,14 @@ class RandomizedSequence(Value):
   sequence.
   """
 
-  def __init__(self, value: ir.Value) -> RandomizedSequence:
+  def __init__(self, value: ir.Value,
+               type: RandomizedSequenceType = None) -> RandomizedSequence:
     """
     Intended for library internal usage only.
     """
 
     self._value = value
+    self._type = type
 
   def embed(self) -> None:
     """
@@ -228,7 +241,7 @@ class RandomizedSequence(Value):
     sequence.
     """
 
-    rtg.EmbedSequenceOp(self)
+    _create(rtg.EmbedSequenceOp, self)
 
   def __call__(self) -> None:
     """
@@ -245,6 +258,8 @@ class RandomizedSequence(Value):
     return self._value
 
   def get_type(self) -> Type:
+    if self._type is not None:
+      return self._type
     return _FromCirctType(self._value.type)
 
 
@@ -258,3 +273,6 @@ class RandomizedSequenceType(Type):
 
   def _codegen(self) -> ir.Type:
     return rtg.RandomizedSequenceType.get()
+
+  def _wrap(self, value: ir.Value) -> RandomizedSequence:
+    return RandomizedSequence(value, self)

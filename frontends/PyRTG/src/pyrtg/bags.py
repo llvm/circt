@@ -8,7 +8,7 @@ from .base import ir
 from .rtg import rtg
 from .core import Value, Type
 from .index import index
-from .support import _FromCirctType
+from .support import _FromCirctType, _create
 
 import typing
 
@@ -19,19 +19,21 @@ class Bag(Value):
   values that allows picking elements at random.
   """
 
-  def __init__(self, value: ir.Value):
+  def __init__(self, value: ir.Value, type: BagType = None):
     """
     Intended for library internal usage only.
     """
 
     self._value = value
+    self._type = type
 
   def create_empty(elementType: ir.Type) -> Bag:
     """
     Create an empty bag that can hold elements of the provided type.
     """
 
-    return rtg.BagCreateOp(rtg.BagType.get(elementType), [], [])
+    op = _create(rtg.BagCreateOp, rtg.BagType.get(elementType), [], [])
+    return Bag(op.result, BagType(_FromCirctType(elementType)))
 
   def create(*elements: tuple[typing.Union[Value, int], Value]) -> Bag:
     """
@@ -44,11 +46,12 @@ class Bag(Value):
     if not all([e.get_type() == elements[0][1].get_type() for _, e in elements
                ]):
       raise TypeError("all elements must have the same type")
-    return rtg.BagCreateOp(
+    op = _create(rtg.BagCreateOp,
         rtg.BagType.get(elements[0][1].get_type()._codegen()),
         [x for _, x in elements],
-        [(x if not isinstance(x, int) else index.ConstantOp(x))
+         [(x if not isinstance(x, int) else _create(index.ConstantOp, x).result)
          for x, _ in elements])
+    return Bag(op.result, BagType(elements[0][1].get_type()))
 
   def __add__(self, other: Value) -> Bag:
     """
@@ -62,7 +65,8 @@ class Bag(Value):
     if isinstance(other, Bag):
       if self.get_type() != other.get_type():
         raise TypeError("bags must be of the same type")
-      return rtg.BagUnionOp([self._value, other._value])
+      op = _create(rtg.BagUnionOp, [self._value, other._value])
+      return Bag(op.result, self.get_type())
 
     if self.get_type().element_type != other.get_type():
       raise TypeError(
@@ -82,7 +86,8 @@ class Bag(Value):
     if isinstance(other, Bag):
       if self.get_type() != other.get_type():
         raise TypeError("bags must be of the same type")
-      return rtg.BagDifferenceOp(self._value, other._value)
+      op = _create(rtg.BagDifferenceOp, self._value, other._value)
+      return Bag(op.result, self.get_type())
 
     if self.get_type().element_type != other.get_type():
       raise TypeError(
@@ -102,9 +107,9 @@ class Bag(Value):
     if isinstance(other, Bag):
       if self.get_type() != other.get_type():
         raise TypeError("bags must be of the same type")
-      return rtg.BagDifferenceOp(self._value,
-                                 other._value,
-                                 inf=ir.UnitAttr.get())
+      op = _create(rtg.BagDifferenceOp, self._value, other._value,
+                   inf=ir.UnitAttr.get())
+      return Bag(op.result, self.get_type())
 
     if self.get_type().element_type != other.get_type():
       raise TypeError(
@@ -118,7 +123,8 @@ class Bag(Value):
     If the bag is empty, calling this method is undefined behavior.
     """
 
-    return rtg.BagSelectRandomOp(self._value)
+    return self.get_type().element_type._wrap(
+        _create(rtg.BagSelectRandomOp, self._value).result)
 
   def get_random_and_exclude(self) -> Value:
     """
@@ -138,12 +144,16 @@ class Bag(Value):
     not modify this object.
     """
 
-    return rtg.BagConvertToSetOp(self)
+    from .sets import Set, SetType
+    return Set(_create(rtg.BagConvertToSetOp, self).result,
+               SetType(self.get_type().element_type))
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
   def get_type(self) -> Type:
+    if self._type is not None:
+      return self._type
     return _FromCirctType(self._value.type)
 
 
@@ -164,3 +174,6 @@ class BagType(Type):
 
   def _codegen(self) -> ir.Type:
     return rtg.BagType.get(self.element_type._codegen())
+
+  def _wrap(self, value: ir.Value) -> Bag:
+    return Bag(value, self)

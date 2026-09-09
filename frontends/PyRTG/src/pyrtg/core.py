@@ -91,6 +91,15 @@ class Type:
   def _codegen(self) -> ir.Type:
     assert False, "must be implemented by subclass"
 
+  def _wrap(self, value: ir.Value) -> Value:
+    """Wrap an SSA value using this frontend type.
+
+    This is deliberately a frontend operation.  Unlike converting a raw MLIR
+    value by inspecting its MLIR type, callers already know the type of most
+    operation results from the operation's operands or declaration.
+    """
+    assert False, "must be implemented by subclass"
+
 
 class Value:
   """

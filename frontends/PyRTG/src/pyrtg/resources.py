@@ -9,6 +9,7 @@ from .rtgtest import rtgtest
 from .core import Value, Type
 from .base import ir
 from .strings import String
+from .support import _create
 
 
 class IntegerRegister(Value):
@@ -26,7 +27,7 @@ class IntegerRegister(Value):
     self._value = value
 
   def virtual() -> IntegerRegister:
-    return rtg.VirtualRegisterOp(
+    return IntegerRegister(_create(rtg.VirtualRegisterOp,
         rtg.VirtualRegisterConfigAttr.get([
             # Choose temporaries with highest priority
             rtgtest.RegT0Attr.get(),
@@ -61,110 +62,110 @@ class IntegerRegister(Value):
             rtgtest.RegS0Attr.get(),
             rtgtest.RegRaAttr.get(),
             rtgtest.RegSpAttr.get(),
-        ]))
+        ])).result)
 
   def zero() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegZeroAttr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegZeroAttr.get()).result)
 
   def ra() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegRaAttr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegRaAttr.get()).result)
 
   def sp() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegSpAttr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegSpAttr.get()).result)
 
   def gp() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegGpAttr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegGpAttr.get()).result)
 
   def tp() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegTpAttr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegTpAttr.get()).result)
 
   def t0() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT0Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegT0Attr.get()).result)
 
   def t1() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT1Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegT1Attr.get()).result)
 
   def t2() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT2Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegT2Attr.get()).result)
 
   def s0() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS0Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS0Attr.get()).result)
 
   def s1() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS1Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS1Attr.get()).result)
 
   def a0() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA0Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegA0Attr.get()).result)
 
   def a1() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA1Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegA1Attr.get()).result)
 
   def a2() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA2Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegA2Attr.get()).result)
 
   def a3() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA3Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegA3Attr.get()).result)
 
   def a4() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA4Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegA4Attr.get()).result)
 
   def a5() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA5Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegA5Attr.get()).result)
 
   def a6() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA6Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegA6Attr.get()).result)
 
   def a7() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA7Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegA7Attr.get()).result)
 
   def s2() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS2Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS2Attr.get()).result)
 
   def s3() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS3Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS3Attr.get()).result)
 
   def s4() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS4Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS4Attr.get()).result)
 
   def s5() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS5Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS5Attr.get()).result)
 
   def s6() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS6Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS6Attr.get()).result)
 
   def s7() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS7Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS7Attr.get()).result)
 
   def s8() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS8Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS8Attr.get()).result)
 
   def s9() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS9Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS9Attr.get()).result)
 
   def s10() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS10Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS10Attr.get()).result)
 
   def s11() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS11Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegS11Attr.get()).result)
 
   def t3() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT3Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegT3Attr.get()).result)
 
   def t4() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT4Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegT4Attr.get()).result)
 
   def t5() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT5Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegT5Attr.get()).result)
 
   def t6() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT6Attr.get())
+    return IntegerRegister(_create(rtg.ConstantOp, rtgtest.RegT6Attr.get()).result)
 
   def to_string(self) -> String:
     """
     Formats this register as a string.
     """
 
-    return rtg.RegisterFormatOp(self)
+    return String(_create(rtg.RegisterFormatOp, self).result)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
@@ -184,6 +185,9 @@ class IntegerRegisterType(Type):
   def _codegen(self):
     return rtgtest.IntegerRegisterType.get()
 
+  def _wrap(self, value: ir.Value) -> IntegerRegister:
+    return IntegerRegister(value)
+
 
 class FloatRegister(Value):
   """
@@ -200,20 +204,20 @@ class FloatRegister(Value):
     self._value = value
 
   def virtual() -> FloatRegister:
-    return rtg.VirtualRegisterOp(
+    return FloatRegister(_create(rtg.VirtualRegisterOp,
         rtg.VirtualRegisterConfigAttr.get([
             rtgtest.RegF0Attr.get(),
-        ]))
+        ])).result)
 
   def f0() -> FloatRegister:
-    return rtg.ConstantOp(rtgtest.RegF0Attr.get())
+    return FloatRegister(_create(rtg.ConstantOp, rtgtest.RegF0Attr.get()).result)
 
   def to_string(self) -> String:
     """
     Formats this register as a string.
     """
 
-    return rtg.RegisterFormatOp(self)
+    return String(_create(rtg.RegisterFormatOp, self).result)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
@@ -232,3 +236,6 @@ class FloatRegisterType(Type):
 
   def _codegen(self):
     return rtgtest.FloatRegisterType.get()
+
+  def _wrap(self, value: ir.Value) -> FloatRegister:
+    return FloatRegister(value)

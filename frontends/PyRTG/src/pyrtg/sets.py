@@ -7,7 +7,7 @@ from __future__ import annotations
 from .base import ir
 from .rtg import rtg
 from .core import Value, Type
-from .support import _FromCirctType
+from .support import _FromCirctType, _create
 
 
 class Set(Value):
@@ -16,19 +16,21 @@ class Set(Value):
   elements at random.
   """
 
-  def __init__(self, value: ir.Value):
+  def __init__(self, value: ir.Value, type: SetType = None):
     """
     Intended for library internal usage only.
     """
 
     self._value = value
+    self._type = type
 
   def create_empty(elementType: ir.Type) -> Set:
     """
     Create an empty set that can hold elements of the provided type.
     """
 
-    return rtg.SetCreateOp(rtg.SetType.get(elementType), [])
+    op = _create(rtg.SetCreateOp, rtg.SetType.get(elementType), [])
+    return Set(op.result, SetType(_FromCirctType(elementType)))
 
   def create(*elements: Value) -> Set:
     """
@@ -40,8 +42,9 @@ class Set(Value):
       raise ValueError("use 'create_empty' to create sets with no elements")
     if not all([e.get_type() == elements[0].get_type() for e in elements]):
       raise TypeError("all elements must have the same type")
-    return rtg.SetCreateOp(rtg.SetType.get(elements[0].get_type()._codegen()),
-                           elements)
+    op = _create(rtg.SetCreateOp,
+                 rtg.SetType.get(elements[0].get_type()._codegen()), elements)
+    return Set(op.result, SetType(elements[0].get_type()))
 
   def __add__(self, other: Value) -> Set:
     """
@@ -55,7 +58,8 @@ class Set(Value):
     if isinstance(other, Set):
       if self.get_type() != other.get_type():
         raise TypeError("sets must be of the same type")
-      return rtg.SetUnionOp([self._value, other._value])
+      op = _create(rtg.SetUnionOp, [self._value, other._value])
+      return Set(op.result, self.get_type())
 
     if self.get_type().element_type != other.get_type():
       raise TypeError(
@@ -74,7 +78,8 @@ class Set(Value):
     if isinstance(other, Set):
       if self.get_type() != other.get_type():
         raise TypeError("sets must be of the same type")
-      return rtg.SetDifferenceOp(self._value, other._value)
+      op = _create(rtg.SetDifferenceOp, self._value, other._value)
+      return Set(op.result, self.get_type())
 
     if self.get_type().element_type != other.get_type():
       raise TypeError(
@@ -92,14 +97,20 @@ class Set(Value):
 
     if len(args) == 0:
       raise ValueError("at least one set must be provided")
-    return rtg.SetCartesianProductOp(args)
+    from .tuples import TupleType
+    result_type = SetType(
+        TupleType([arg.get_type().element_type for arg in args]))
+    op = _create(rtg.SetCartesianProductOp, args)
+    return Set(op.result, result_type)
 
   def to_bag(self) -> Value:
     """
     Returns this set converted to a bag. Does not modify this object.
     """
 
-    return rtg.SetConvertToBagOp(self)
+    from .bags import Bag, BagType
+    return Bag(_create(rtg.SetConvertToBagOp, self).result,
+               BagType(self.get_type().element_type))
 
   def get_random(self) -> Value:
     """
@@ -107,7 +118,8 @@ class Set(Value):
     empty, calling this method is undefined behavior.
     """
 
-    return rtg.SetSelectRandomOp(self._value)
+    return self.get_type().element_type._wrap(
+        _create(rtg.SetSelectRandomOp, self._value).result)
 
   def get_random_and_exclude(self) -> Value:
     """
@@ -124,6 +136,8 @@ class Set(Value):
     return self._value
 
   def get_type(self) -> Type:
+    if self._type is not None:
+      return self._type
     return _FromCirctType(self._value.type)
 
 
@@ -144,3 +158,6 @@ class SetType(Type):
 
   def _codegen(self):
     return rtg.SetType.get(self.element_type._codegen())
+
+  def _wrap(self, value: ir.Value) -> Set:
+    return Set(value, self)

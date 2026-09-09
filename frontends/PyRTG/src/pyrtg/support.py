@@ -9,58 +9,7 @@ from typing import Union
 
 
 def _FromCirctValue(value: ir.Value) -> Value:
-  type = support.type_to_pytype(value.type)
-  from .rtg import rtg
-  from .rtgtest import rtgtest
-  if isinstance(type, rtg.ArrayType):
-    from .arrays import Array
-    return Array(value)
-  if isinstance(type, rtg.LabelType):
-    from .labels import Label
-    return Label(value)
-  if isinstance(type, rtg.SetType):
-    from .sets import Set
-    return Set(value)
-  if isinstance(type, rtg.BagType):
-    from .bags import Bag
-    return Bag(value)
-  if isinstance(type, rtg.StringType):
-    from .strings import String
-    return String(value)
-  if isinstance(type, rtg.SequenceType):
-    from .sequences import Sequence
-    return Sequence(value)
-  if isinstance(type, rtg.RandomizedSequenceType):
-    from .sequences import RandomizedSequence
-    return RandomizedSequence(value)
-  if isinstance(type, ir.IndexType):
-    from .integers import Integer
-    return Integer(value)
-  if isinstance(type, ir.IntegerType):
-    from .immediates import Immediate
-    return Immediate(type.width, value)
-  if isinstance(type, rtgtest.IntegerRegisterType):
-    from .resources import IntegerRegister
-    return IntegerRegister(value)
-  if isinstance(type, rtgtest.FloatRegisterType):
-    from .resources import FloatRegister
-    return FloatRegister(value)
-  if isinstance(type, rtgtest.CPUType):
-    from .contexts import CPUCore
-    return CPUCore(value)
-  if isinstance(type, rtg.TupleType):
-    from .tuples import Tuple
-    return Tuple(value)
-  if isinstance(type, rtg.MemoryType):
-    from .memories import Memory
-    return Memory(value)
-  if isinstance(type, rtg.MemoryBlockType):
-    from .memories import MemoryBlock
-    return MemoryBlock(value)
-  if isinstance(type, rtg.ContinuationType):
-    from .effects import Continuation
-    return Continuation(value)
-  assert False, "Unsupported value"
+  return _FromCirctType(value.type)._wrap(value)
 
 
 def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
@@ -147,54 +96,20 @@ def _collect_values_recursively(obj, path, args, arg_names, visited):
   return args, arg_names
 
 
-def wrap_opviews_with_values(dialect, module_name, excluded=[]):
-  """
-  Wraps all of a dialect's OpView classes to have their create method return a
-  Value instead of an OpView.
-  """
+def _to_circt(arg):
+  """Convert frontend operands for an explicit dialect operation call."""
+  from .sequences import SequenceDeclaration
+  if isinstance(arg, (Value, SequenceDeclaration)):
+    return arg._get_ssa_value()
+  if isinstance(arg, Type):
+    return arg._codegen()
+  if isinstance(arg, (list, tuple)):
+    return [_to_circt(a) for a in arg]
+  return arg
 
-  import sys
-  module = sys.modules[module_name]
 
-  for attr in dir(dialect):
-    cls = getattr(dialect, attr)
-
-    if attr not in excluded and isinstance(cls, type) and issubclass(
-        cls, ir.OpView):
-
-      def specialize_create(cls):
-
-        def create(*args, **kwargs):
-          # If any of the arguments are 'pyrtg.Value', we need to convert them.
-          def to_circt(arg):
-            from .sequences import SequenceDeclaration
-            if isinstance(arg, (Value, SequenceDeclaration)):
-              return arg._get_ssa_value()
-            if isinstance(arg, Type):
-              return arg._codegen()
-            if isinstance(arg, (list, tuple)):
-              return [to_circt(a) for a in arg]
-            return arg
-
-          args = [to_circt(arg) for arg in args]
-          kwargs = {k: to_circt(v) for k, v in kwargs.items()}
-          # Create the OpView.
-          if hasattr(cls, "create"):
-            created = cls.create(*args, **kwargs)
-          else:
-            created = cls(*args, **kwargs)
-          if isinstance(created, support.NamedValueOpView):
-            created = created.opview
-
-          # Return the wrapped values, if any.
-          converted_results = tuple(
-              _FromCirctValue(res) for res in created.results)
-          return converted_results[0] if len(
-              converted_results) == 1 else created
-
-        return create
-
-      wrapped_class = specialize_create(cls)
-      setattr(module, attr, wrapped_class)
-    else:
-      setattr(module, attr, cls)
+def _create(op_class, *args, **kwargs):
+  """Create a dialect operation without changing the binding's return type."""
+  args = [_to_circt(arg) for arg in args]
+  kwargs = {k: _to_circt(v) for k, v in kwargs.items()}
+  return op_class(*args, **kwargs)

@@ -7,6 +7,7 @@
 
 from typing import Union
 from pyrtg import instruction, SideEffect, Type, Value, Immediate, ImmediateType, Label, LabelType, Memory, MemoryType, IntegerRegister, IntegerRegisterType, FloatRegister, FloatRegisterType, rtgtest
+from pyrtg.support import _create
 
 
 def get_virtual_reg(ty: Type) -> Value:

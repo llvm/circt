@@ -7,7 +7,7 @@ from __future__ import annotations
 from .base import ir
 from .rtg import rtg
 from .core import Value, Type
-from .support import _FromCirctType
+from .support import _FromCirctType, _create
 
 
 class Tuple(Value):
@@ -16,12 +16,13 @@ class Tuple(Value):
   of elements of potentially different types.
   """
 
-  def __init__(self, value: ir.Value) -> Tuple:
+  def __init__(self, value: ir.Value, type: TupleType = None) -> Tuple:
     """
     Intended for library internal usage only.
     """
 
     self._value = value
+    self._type = type
 
   def create(*elements: Value) -> Tuple:
     """
@@ -29,7 +30,8 @@ class Tuple(Value):
     element must be provided. Each element can be of a different type.
     """
 
-    return rtg.TupleCreateOp(elements)
+    op = _create(rtg.TupleCreateOp, elements)
+    return Tuple(op.result, TupleType([element.get_type() for element in elements]))
 
   def __getitem__(self, i) -> Value:
     """
@@ -39,12 +41,15 @@ class Tuple(Value):
     if not isinstance(i, int):
       raise TypeError("index must be a python int")
 
-    return rtg.TupleExtractOp(self, i)
+    op = _create(rtg.TupleExtractOp, self, i)
+    return self.get_type().element_types[i]._wrap(op.result)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
   def get_type(self) -> Type:
+    if self._type is not None:
+      return self._type
     return _FromCirctType(self._value.type)
 
 
@@ -65,3 +70,6 @@ class TupleType(Type):
 
   def _codegen(self) -> ir.Type:
     return rtg.TupleType.get([ty._codegen() for ty in self.element_types])
+
+  def _wrap(self, value: ir.Value) -> Tuple:
+    return Tuple(value, self)

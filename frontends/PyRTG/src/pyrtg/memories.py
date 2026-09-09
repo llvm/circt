@@ -6,19 +6,20 @@ from .index import index
 from .rtg import rtg
 from .integers import Integer
 from .immediates import Immediate
-from .support import _FromCirctType
+from .support import _FromCirctType, _create
 
 from typing import Union
 
 
 class MemoryBlock(Value):
 
-  def __init__(self, value: ir.Value):
+  def __init__(self, value: ir.Value, type: MemoryBlockType = None):
     """
     For library internal usage only.
     """
 
     self._value = value
+    self._type = type
 
   def declare(base_address: int, end_address: int,
               address_width: int) -> MemoryBlock:
@@ -31,17 +32,20 @@ class MemoryBlock(Value):
       address_width: The width of the memory block addresses in bits.
     """
 
-    return rtg.MemoryBlockDeclareOp(
+    op = _create(rtg.MemoryBlockDeclareOp,
         rtg.MemoryBlockType.get(address_width),
         ir.IntegerAttr.get(ir.IntegerType.get_signless(address_width),
                            base_address),
         ir.IntegerAttr.get(ir.IntegerType.get_signless(address_width),
                            end_address))
+    return MemoryBlock(op.result, MemoryBlockType(address_width))
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
   def get_type(self) -> Type:
+    if self._type is not None:
+      return self._type
     return _FromCirctType(self._value.type)
 
 
@@ -63,15 +67,19 @@ class MemoryBlockType(Type):
   def _codegen(self):
     return rtg.MemoryBlockType.get(self.address_width)
 
+  def _wrap(self, value: ir.Value) -> MemoryBlock:
+    return MemoryBlock(value, self)
+
 
 class Memory(Value):
 
-  def __init__(self, value: ir.Value):
+  def __init__(self, value: ir.Value, type: MemoryType = None):
     """
     For library internal usage only.
     """
 
     self._value = value
+    self._type = type
 
   def alloc(mem_block: MemoryBlock, size: Union[Integer, int],
             align: Union[Integer, int]) -> Memory:
@@ -84,17 +92,18 @@ class Memory(Value):
     """
 
     if isinstance(size, int):
-      size = index.ConstantOp(size)
+      size = _create(index.ConstantOp, size).result
     if isinstance(align, int):
-      align = index.ConstantOp(align)
-    return rtg.MemoryAllocOp(mem_block, size, align)
+      align = _create(index.ConstantOp, align).result
+    op = _create(rtg.MemoryAllocOp, mem_block, size, align)
+    return Memory(op.result, MemoryType(mem_block.get_type().address_width))
 
   def size(self) -> Integer:
     """
     Get the size of the memory in bytes.
     """
 
-    return rtg.MemorySizeOp(self._value)
+    return Integer(_create(rtg.MemorySizeOp, self._value).result)
 
   def base_address(self) -> Immediate:
     """
@@ -102,12 +111,15 @@ class Memory(Value):
     address width.
     """
 
-    return rtg.MemoryBaseAddressOp(self._value)
+    return Immediate(self.get_type().address_width,
+                     _create(rtg.MemoryBaseAddressOp, self._value).result)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
   def get_type(self) -> Type:
+    if self._type is not None:
+      return self._type
     return _FromCirctType(self._value.type)
 
 
@@ -128,3 +140,6 @@ class MemoryType(Type):
 
   def _codegen(self):
     return rtg.MemoryType.get(self.address_width)
+
+  def _wrap(self, value: ir.Value) -> Memory:
+    return Memory(value, self)
