@@ -359,6 +359,9 @@ struct Context {
   Value convertLTLTimingControl(const slang::ast::TimingControl &ctrl,
                                 const Value &seqOrPro);
 
+LogicalResult
+convertMOSSwitchPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
+
   LogicalResult
   convertNInputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
