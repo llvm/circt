@@ -36,6 +36,9 @@ ResetMagicNumber = 0x00000E510000B007
 # gives in-flight transactions time to drain.
 ResetCycles = 8192
 
+MMIOWordBytes = esi.MMIODataType.width // 8
+MMIOWordOffsetBits = MMIOWordBytes.bit_length() - 1
+
 
 class ESI_Manifest_ROM(Module):
   """Module which will be created later by CIRCT which will contain the
@@ -371,6 +374,263 @@ def ChannelDemuxTree_HalfStage_ReadyBlocking(
   return ChannelDemuxTree
 
 
+def MMIOAddressDecoder(
+    region_bases: Tuple[int, ...]) -> type["MMIOAddressDecoderImpl"]:
+  """Decode MMIO addresses into region indices and client-local offsets.
+
+  This exact-packed alternative is retained for layouts which cannot use the
+  power-of-two prefix router; ChannelMMIO does not currently instantiate it.
+  The sorted region bases are compile-time constants. MMIO uses 32-bit byte
+  addresses and 64-bit words, so the decoder iteratively searches 29-bit word
+  addresses and reuses one comparator. The table lookup is registered before
+  the comparison, keeping its mux out of the comparator's timing path.
+  """
+
+  num_regions = len(region_bases)
+  assert num_regions > 1, "MMIO address decode requires at least two regions"
+  assert region_bases[0] == 0, "the first MMIO region must start at zero"
+  assert all(a < b for a, b in zip(region_bases, region_bases[1:])), \
+      "MMIO region bases must be strictly increasing"
+
+  index_width = clog2(num_regions)
+  table_size = 1 << index_width
+  padded_bases = list(region_bases) + [0] * (table_size - num_regions)
+  word_address_width = 32 - MMIOWordOffsetBits
+  DecodedCommandType = StructType([
+      ("sel", Bits(index_width)),
+      ("data", esi.MMIOReadWriteCmdType),
+  ])
+
+  class MMIOAddressDecoderImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    inp = Input(Channel(esi.MMIOReadWriteCmdType))
+    out = Output(Channel(DecodedCommandType))
+
+    @generator
+    def build(ports):
+      """Hold one command and probe its region index from MSB to LSB. Each of
+      the ``ceil(log2(num_regions))`` probes takes two cycles: one registered
+      table lookup and one compare/update cycle. A final cycle registers the
+      region index and client-local command, so output valid rises after
+      ``2 * ceil(log2(num_regions)) + 1`` cycles. Downstream backpressure can
+      extend that latency; searches are not overlapped."""
+
+      # Pad to a power of two so each probe bit forms a valid table index.
+      base_table = Array(UInt(word_address_width), table_size)(
+          [base >> MMIOWordOffsetBits for base in padded_bases])
+
+      # Hold one command while alternating registered lookup and compare cycles.
+      input_ready = Wire(Bits(1), name="input_ready")
+      cmd, cmd_valid = ports.inp.unwrap(input_ready)
+      accept = cmd_valid & input_ready
+
+      output_consumed = Wire(Bits(1), name="output_consumed")
+      search_finished = Wire(Bits(1), name="search_finished")
+      emit_result = Wire(Bits(1), name="emit_result")
+      compare_pending = Wire(Bits(1), name="compare_pending")
+
+      busy = ControlReg(ports.clk,
+                        ports.rst,
+                        asserts=[accept],
+                        resets=[search_finished],
+                        name="busy")
+      lookup_step = busy & ~compare_pending
+      compare_step = busy & compare_pending
+      compare_pending.assign(
+          ControlReg(ports.clk,
+                     ports.rst,
+                     asserts=[lookup_step],
+                     resets=[compare_step],
+                     name="compare_pending_reg"))
+
+      cmd_reg = cmd.reg(ports.clk, ports.rst, ce=accept, name="cmd")
+      best_index = Wire(UInt(index_width), name="best_index")
+      best_base = Wire(UInt(word_address_width), name="best_base")
+      probe_mask = Wire(UInt(index_width), name="probe_mask")
+
+      # Test index bits from MSB to LSB, retaining the greatest matching base.
+      candidate_index = (best_index.as_bits() |
+                         probe_mask.as_bits()).as_uint(index_width)
+      candidate_index_reg = candidate_index.reg(ports.clk,
+                                                ports.rst,
+                                                ce=lookup_step,
+                                                name="candidate_index")
+      candidate_base_reg = base_table[candidate_index].reg(
+          ports.clk, ports.rst, ce=lookup_step, name="candidate_base")
+
+      if num_regions == table_size:
+        candidate_valid = Bits(1)(1)
+      else:
+        candidate_valid = candidate_index_reg < UInt(index_width)(num_regions)
+      cmd_word_address = cmd_reg.offset.as_bits()[MMIOWordOffsetBits:].as_uint()
+      take_candidate = candidate_valid & (cmd_word_address
+                                          >= candidate_base_reg)
+      next_best_index = Mux(take_candidate, best_index, candidate_index_reg)
+      next_best_base = Mux(take_candidate, best_base, candidate_base_reg)
+
+      state_ce = accept | compare_step
+      best_index.assign(
+          Mux(accept, next_best_index,
+              UInt(index_width)(0)).reg(ports.clk,
+                                        ports.rst,
+                                        rst_value=0,
+                                        ce=state_ce,
+                                        name="best_index_reg"))
+      best_base.assign(
+          Mux(accept, next_best_base,
+              UInt(word_address_width)(0)).reg(ports.clk,
+                                               ports.rst,
+                                               rst_value=0,
+                                               ce=state_ce,
+                                               name="best_base_reg"))
+
+      initial_probe = UInt(index_width)(1 << (index_width - 1))
+      if index_width == 1:
+        shifted_probe = UInt(1)(0)
+      else:
+        shifted_probe = BitsSignal.concat(
+            [Bits(1)(0), probe_mask.as_bits()[1:]]).as_uint()
+      probe_mask.assign(
+          Mux(accept, shifted_probe, initial_probe).reg(ports.clk,
+                                                        ports.rst,
+                                                        rst_value=0,
+                                                        ce=state_ce,
+                                                        name="probe_mask_reg"))
+      last_probe = probe_mask == UInt(index_width)(1)
+      search_finished.assign(compare_step & last_probe)
+
+      # Buffer the decoded result until the downstream demux accepts it.
+      format_pending = ControlReg(ports.clk,
+                                  ports.rst,
+                                  asserts=[search_finished],
+                                  resets=[emit_result],
+                                  name="format_pending")
+      output_valid = ControlReg(ports.clk,
+                                ports.rst,
+                                asserts=[emit_result],
+                                resets=[output_consumed],
+                                name="output_valid")
+      emit_result.assign(format_pending & ~output_valid)
+
+      selected_base = BitsSignal.concat(
+          [best_base.as_bits(),
+           Bits(MMIOWordOffsetBits)(0)]).as_uint()
+      local_offset = (cmd_reg.offset - selected_base).as_uint(32)
+      decoded_cmd = DecodedCommandType({
+          "sel":
+              best_index.as_bits(),
+          "data":
+              esi.MMIOReadWriteCmdType({
+                  "write": cmd_reg.write,
+                  "offset": local_offset,
+                  "data": cmd_reg.data
+              }),
+      }).reg(ports.clk, ports.rst, ce=emit_result, name="decoded_cmd")
+
+      output_chan, output_ready = Channel(DecodedCommandType).wrap(
+          decoded_cmd, output_valid)
+      ports.out = output_chan
+      output_consumed.assign(output_valid & output_ready)
+      input_ready.assign(~busy & ~format_pending & ~output_valid)
+
+  return MMIOAddressDecoderImpl
+
+
+def MMIOPrefixRouter(
+    regions: Tuple[Tuple[int, int], ...]) -> type["MMIOPrefixRouterImpl"]:
+  """Build a pipelined address-prefix tree which routes MMIO commands.
+
+  Each ``(base, size)`` must describe a disjoint, power-of-two-aligned block.
+  Internal nodes test one address bit and register both outgoing paths. Leaves
+  replace the global address with the block-local low bits.
+  """
+
+  assert len(regions) > 1, "MMIO routing requires at least two regions"
+  for base, size in regions:
+    assert size > 0 and size & (size - 1) == 0, \
+        "MMIO region sizes must be powers of two"
+    assert base % size == 0, "MMIO regions must be aligned to their size"
+  assert all(a_base + a_size <= b_base
+             for (a_base, a_size), (b_base, _) in zip(regions, regions[1:])), \
+      "MMIO regions must be sorted and disjoint"
+
+  entries = [(idx, base, size) for idx, (base, size) in enumerate(regions)]
+
+  def build_tree(node_entries):
+    if len(node_entries) == 1:
+      return node_entries[0][0]
+
+    lowest_fixed_bit = max(size.bit_length() - 1 for _, _, size in node_entries)
+    candidates = []
+    for bit in range(31, lowest_fixed_bit - 1, -1):
+      zeros = [entry for entry in node_entries if not (entry[1] >> bit) & 1]
+      if zeros and len(zeros) != len(node_entries):
+        candidates.append(
+            (abs(len(node_entries) - 2 * len(zeros)), -bit, bit, zeros))
+    assert candidates, "unable to distinguish disjoint MMIO regions"
+    _, _, bit, zeros = min(candidates)
+    zero_indices = {entry[0] for entry in zeros}
+    ones = [entry for entry in node_entries if entry[0] not in zero_indices]
+    return bit, build_tree(zeros), build_tree(ones)
+
+  tree = build_tree(entries)
+
+  class MMIOPrefixRouterImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    inp = Input(Channel(esi.MMIOReadWriteCmdType))
+    for idx in range(len(regions)):
+      locals()[f"output_{idx}"] = Output(Channel(esi.MMIOReadWriteCmdType))
+
+    @generator
+    def build(ports):
+      """Route through one registered address-bit branch per tree level."""
+
+      def route(node, command_channel: ChannelSignal, path: str):
+        if isinstance(node, int):
+          _, size = regions[node]
+          local_width = size.bit_length() - 1
+
+          def localize(cmd):
+            local_offset = cmd.offset.as_bits()[:local_width].pad_or_truncate(
+                32).as_uint()
+            return esi.MMIOReadWriteCmdType({
+                "write": cmd.write,
+                "offset": local_offset,
+                "data": cmd.data
+            })
+
+          setattr(ports, f"output_{node}", command_channel.transform(localize))
+          return
+
+        bit, zero_node, one_node = node
+        Demux = ChannelDemuxN_HalfStage_ReadyBlocking(esi.MMIOReadWriteCmdType,
+                                                      num_outs=2,
+                                                      next_sel_width=0)
+        demux_input = command_channel.transform(
+            lambda cmd, _bit=bit, _type=Demux.InPayloadType: _type({
+                "sel": cmd.offset.as_bits()[_bit],
+                "next_sel": Bits(0)(0),
+                "data": cmd
+            }))
+        demux = Demux(clk=ports.clk,
+                      rst=ports.rst,
+                      inp=demux_input,
+                      instance_name=f"prefix_{path}_bit{bit}")
+        route(zero_node,
+              demux.get_out(0).transform(lambda p: p.data), path + "0")
+        route(one_node,
+              demux.get_out(1).transform(lambda p: p.data), path + "1")
+
+      route(tree, ports.inp, "")
+
+    def get_out(self, index: int) -> ChannelSignal:
+      return getattr(self, f"output_{index}")
+
+  return MMIOPrefixRouterImpl
+
+
 @modparams
 def DesignResetController(
     delay_cycles: int) -> type["DesignResetControllerImpl"]:
@@ -442,9 +702,11 @@ class ChannelMMIO(esi.ServiceImplementation):
     - 0x12: ESI version number (0)
     - 0x18: Location of the manifest ROM (absolute address)
 
-    - 0x800: Start of MMIO space for requests. Mapping is contained in the
+    - 0x100: Start of MMIO space for requests. Mapping is contained in the
              manifest so can be dynamically queried.
 
+    - addr(after last client allocation), aligned to the manifest aperture:
+      Start of the manifest ROM
     - addr(Manifest ROM) + 0: Size of compressed manifest
     - addr(Manifest ROM) + 8: Start of compressed manifest
 
@@ -462,14 +724,13 @@ class ChannelMMIO(esi.ServiceImplementation):
   # write to the header. Propagates up to the BSP which performs the reset.
   reset_request = Output(Bits(1))
 
-  # Amount of register space each client gets. This is a GIANT HACK and needs to
-  # be replaced by parameterizable services.
-  # TODO: make the amount of register space each client gets a parameter.
-  # Supporting this will require more address decode logic.
-
-  RegisterSpace = 0x800
-  RegisterSpaceBits = RegisterSpace.bit_length() - 1
-  AddressMask = RegisterSpace - 1
+  # Default amount of register space each client gets. A client can request a
+  # different size with the `size` service request option.
+  RegisterSpace = 0x100
+  AllocationGranularity = MMIOWordBytes
+  # The runtime caps uncompressed manifests at 10 MiB. Reserve an aligned
+  # 16 MiB after the clients so manifest routing is a single address prefix.
+  ManifestSpace = 1 << 24
 
   # Start at this address for assigning MMIO addresses to service requests.
   initial_offset: int = RegisterSpace
@@ -481,47 +742,82 @@ class ChannelMMIO(esi.ServiceImplementation):
     return True
 
   @staticmethod
-  def build_table(bundles) -> Tuple[Dict[int, AssignableSignal], int]:
+  def build_table(
+      bundles) -> Tuple[Dict[int, Tuple[int, AssignableSignal]], int]:
     """Build a table of read and write addresses to BundleSignals."""
+    register_space = ChannelMMIO.RegisterSpace
+    if (isinstance(register_space, bool) or
+        not isinstance(register_space, int) or register_space < MMIOWordBytes or
+        register_space % MMIOWordBytes != 0 or
+        register_space & (register_space - 1) != 0):
+      raise ValueError("MMIO register space must be a power-of-two multiple "
+                       "of the MMIO word size")
+
+    granularity = ChannelMMIO.AllocationGranularity
+    if (isinstance(granularity, bool) or not isinstance(granularity, int) or
+        granularity < MMIOWordBytes or granularity % MMIOWordBytes != 0 or
+        granularity & (granularity - 1) != 0):
+      raise ValueError("MMIO allocation granularity must be a power-of-two "
+                       "multiple of the MMIO word size")
+
+    def align(value: int, alignment: int) -> int:
+      return (value + alignment - 1) // alignment * alignment
+
     offset = ChannelMMIO.initial_offset
-    table: Dict[int, AssignableSignal] = {}
+    table: Dict[int, Tuple[int, AssignableSignal]] = {}
     for bundle in bundles.to_client_reqs:
+      requested_size = bundle.options.get("size", register_space)
+      if isinstance(requested_size,
+                    bool) or not isinstance(requested_size, int):
+        raise ValueError("MMIO request option 'size' must be an integer")
+      if requested_size <= 0:
+        raise ValueError("MMIO request option 'size' must be positive")
+      minimum_size = max(requested_size, granularity)
+      size = 1 << (minimum_size - 1).bit_length()
+      offset = align(offset, size)
+      next_offset = offset + size
+      if next_offset >= 1 << 32:
+        raise ValueError("MMIO address allocation exceeds the 32-bit space")
+
       if bundle.port == 'read':
-        table[offset] = bundle
+        table[offset] = size, bundle
         bundle.add_record(details={
             "offset": offset,
-            "size": ChannelMMIO.RegisterSpace,
+            "size": size,
             "type": "ro"
         })
-        offset += ChannelMMIO.RegisterSpace
       elif bundle.port == 'read_write':
-        table[offset] = bundle
+        table[offset] = size, bundle
         bundle.add_record(details={
             "offset": offset,
-            "size": ChannelMMIO.RegisterSpace,
+            "size": size,
             "type": "rw"
         })
-        offset += ChannelMMIO.RegisterSpace
       else:
-        assert False, "Unrecognized port name."
+        raise ValueError(f"Unrecognized MMIO port name: {bundle.port}")
+      offset = next_offset
 
-    manifest_loc = offset
+    manifest_loc = align(offset, ChannelMMIO.ManifestSpace)
+    if manifest_loc + ChannelMMIO.ManifestSpace > 1 << 32:
+      raise ValueError(
+          "MMIO address allocation leaves no room for the manifest")
     return table, manifest_loc
 
   @staticmethod
-  def build_read(ports, manifest_loc: int, table: Dict[int, AssignableSignal]):
+  def build_read(ports, manifest_loc: int,
+                 table: Dict[int, Tuple[int, AssignableSignal]]):
     """Builds the read side of the MMIO service."""
 
     # Instantiate the header and manifest ROM. Fill in the read_table with
     # bundle wires to be assigned identically to the other MMIO clients.
     header_bundle_wire = Wire(esi.MMIO.read_write.type)
-    table[0] = header_bundle_wire
+    table[0] = ChannelMMIO.RegisterSpace, header_bundle_wire
     header = HeaderMMIO(manifest_loc)(clk=ports.clk,
                                       rst=ports.rst,
                                       read=header_bundle_wire)
 
     mani_bundle_wire = Wire(esi.MMIO.read.type)
-    table[manifest_loc] = mani_bundle_wire
+    table[manifest_loc] = ChannelMMIO.ManifestSpace, mani_bundle_wire
     ESI_Manifest_ROM_Wrapper(clk=ports.clk, read=mani_bundle_wire)
 
     # Unpack the cmd bundle.
@@ -545,41 +841,25 @@ class ChannelMMIO(esi.ServiceImplementation):
                                         )
     cmd_channel = cmd_limiter.out
 
-    # Get the selection index and the address to hand off to the clients.
-    sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(
-        cmd_channel, len(table), manifest_loc)
-
-    # Build the demux/mux and assign the results of each appropriately.
-    read_clients_clog2 = clog2(len(table))
-    # Combine selection bits and command channel payload into a struct channel for the demux tree.
-    TreeInType = StructType([
-        ("sel", Bits(read_clients_clog2)),
-        ("data", client_cmd_chan.type.inner_type),
-    ])
-    sel_bits_truncated = sel_bits.pad_or_truncate(read_clients_clog2)
-    combined_cmd_chan = client_cmd_chan.transform(
-        lambda cmd, _sel=sel_bits_truncated: TreeInType({
-            "sel": _sel,
-            "data": cmd
-        }))
-    demux_inst = ChannelDemuxTree_HalfStage_ReadyBlocking(
-        client_cmd_chan.type.inner_type, len(table), branching_factor_log2=2)(
+    sorted_table = sorted(table.items())
+    command_router = MMIOPrefixRouter(
+        tuple((base, size) for base, (size, _) in sorted_table))(
             clk=ports.clk,
             rst=ports.rst,
-            inp=combined_cmd_chan,
-            instance_name="client_cmd_demux",
+            inp=cmd_channel,
+            instance_name="command_router",
         )
-    client_cmd_channels = [demux_inst.get_out(i) for i in range(len(table))]
+
     client_data_channels = []
-    for (idx, offset) in enumerate(sorted(table.keys())):
-      bundle_wire = table[offset]
+    for idx, (_, (_, bundle_wire)) in enumerate(sorted_table):
+      client_cmd_channel = command_router.get_out(idx)
       bundle_type = bundle_wire.type
       if bundle_type == esi.MMIO.read.type:
-        offset = client_cmd_channels[idx].transform(lambda cmd: cmd.offset)
+        offset = client_cmd_channel.transform(lambda cmd: cmd.offset)
         bundle, bundle_froms = esi.MMIO.read.type.pack(offset=offset)
       elif bundle_type == esi.MMIO.read_write.type:
         bundle, bundle_froms = esi.MMIO.read_write.type.pack(
-            cmd=client_cmd_channels[idx])
+            cmd=client_cmd_channel)
       else:
         assert False, "Unrecognized bundle type."
       bundle_wire.assign(bundle)
@@ -597,44 +877,6 @@ class ChannelMMIO(esi.ServiceImplementation):
     # The header surfaces a reset request when the host writes the reset magic
     # number to slot 7. Propagate it up to the caller (the BSP).
     ports.reset_request = header.reset_request
-
-  @staticmethod
-  def build_addr_read(read_addr_chan: ChannelSignal, num_clients: int,
-                      manifest_loc: int) -> Tuple[BitsSignal, ChannelSignal]:
-    """Build a channel for the address read request. Returns the index to select
-    the client and a channel for the masked address to be passed to the
-    clients."""
-
-    # Decoding the selection bits is very simple as of now. This might need to
-    # change to support more flexibility in addressing. Not clear if what we're
-    # doing now it sufficient or not.
-
-    manifest_loc_const = UInt(32)(manifest_loc)
-
-    cmd_ready_wire = Wire(Bits(1))
-    cmd, cmd_valid = read_addr_chan.unwrap(cmd_ready_wire)
-    is_manifest_read = cmd.offset >= manifest_loc_const
-    sel_bits = NamedWire(Bits(32 - ChannelMMIO.RegisterSpaceBits), "sel_bits")
-    # If reading the manifest, override the selection to select the manifest instead.
-    sel_bits.assign(
-        Mux(is_manifest_read,
-            cmd.offset.as_bits()[ChannelMMIO.RegisterSpaceBits:],
-            Bits(32 - ChannelMMIO.RegisterSpaceBits)(num_clients - 1)))
-    regular_client_offset = (cmd.offset.as_bits() &
-                             Bits(32)(ChannelMMIO.AddressMask)).as_uint()
-    offset = Mux(is_manifest_read, regular_client_offset,
-                 (cmd.offset - manifest_loc_const).as_uint(32))
-    client_cmd = NamedWire(esi.MMIOReadWriteCmdType, "client_cmd")
-    client_cmd.assign(
-        esi.MMIOReadWriteCmdType({
-            "write": cmd.write,
-            "offset": offset,
-            "data": cmd.data
-        }))
-    client_addr_chan, client_addr_ready = Channel(
-        esi.MMIOReadWriteCmdType).wrap(client_cmd, cmd_valid)
-    cmd_ready_wire.assign(client_addr_ready)
-    return sel_bits, client_addr_chan
 
 
 class MMIOIndirection(Module):

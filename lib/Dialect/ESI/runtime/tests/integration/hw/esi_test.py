@@ -6,9 +6,9 @@ import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
 from esiaccel.bsp import get_bsp
 from pycde.common import Constant, Input, Output
-from pycde.constructs import ControlReg, Mux, Reg, Wire
+from pycde.constructs import ControlReg, Counter, Mux, Reg, Wire
 from pycde.esi import (ChannelService, CallService, FuncService, MMIO,
-                       MMIOReadWriteCmdType)
+                       MMIOReadWriteCmdType, Telemetry)
 from pycde.testing import print_info
 from pycde.types import (Bits, Channel, ChannelSignaling, StructType, UInt,
                          Window)
@@ -79,7 +79,7 @@ class CallbackTest(Module):
 
 
 @modparams
-def MMIOClient(add_amt: int):
+def MMIOClient(add_amt: int, size: int = None):
 
   class MMIOClient(Module):
     """A module which requests an MMIO address space and upon an MMIO read
@@ -87,7 +87,9 @@ def MMIOClient(add_amt: int):
 
     @generator
     def build(ports):
-      mmio_read_bundle = MMIO.read(appid=AppID("mmio_client", add_amt))
+      options = None if size is None else {"size": size}
+      mmio_read_bundle = MMIO.read(appid=AppID("mmio_client", add_amt),
+                                   options=options)
 
       address_chan_wire = Wire(Channel(UInt(32)))
       address, address_valid = address_chan_wire.unwrap(1)
@@ -107,7 +109,8 @@ class MMIOReadWriteClient(Module):
 
   @generator
   def build(ports):
-    mmio_read_write_bundle = MMIO.read_write(appid=AppID("mmio_rw_client"))
+    mmio_read_write_bundle = MMIO.read_write(appid=AppID("mmio_rw_client"),
+                                             options={"size": 0x141})
 
     cmd_chan_wire = Wire(Channel(MMIOReadWriteCmdType))
     resp_ready_wire = Wire(Bits(1))
@@ -144,6 +147,12 @@ class ConstProducer(Module):
     valid = ~ControlReg(ports.clk, ports.rst, [xact], [Bits(1)(0)])
     ch, ready = Channel(UInt(32)).wrap(const, valid)
     xact.assign(ready & valid)
+    items_sent = Counter(64)(clk=ports.clk,
+                             rst=ports.rst,
+                             clear=Bits(1)(0),
+                             increment=xact)
+    Telemetry.report_signal(ports.clk, ports.rst, AppID("itemsSent"),
+                            items_sent.out)
     ChannelService.to_host(AppID("const_producer"), ch)
 
 
@@ -398,7 +407,7 @@ class Top(Module):
     CallbackTest(clk=ports.clk, rst=ports.rst, appid=AppID("callback"))
     LoopbackInOutAdd(clk=ports.clk, rst=ports.rst, appid=AppID("loopback"))
     for i in range(4, 18, 5):
-      MMIOClient(i)()
+      MMIOClient(i, 0x1203 if i == 9 else None)()
     MMIOReadWriteClient(clk=ports.clk, rst=ports.rst)
     ConstProducer(clk=ports.clk, rst=ports.rst)
     WindowToStructFunc(clk=ports.clk, rst=ports.rst)

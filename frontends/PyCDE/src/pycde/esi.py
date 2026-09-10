@@ -640,7 +640,9 @@ MMIOReadWriteCmdType = StructType([
 class MMIO:
   """ESI standard service to request access to an MMIO region.
 
-  For now, each client request gets a 1KB region of memory."""
+  The service implementation determines the allocation. The ESI runtime
+  `ChannelMMIO` implementation defaults to 256 bytes and accepts a byte count
+  through the request's `size` option."""
 
   read = Bundle([
       BundledChannel("offset", ChannelDirection.TO, UInt(32)),
@@ -1120,9 +1122,7 @@ class TelemetryMMIO(ServiceImplementation):
       # No clients to connect to, so we don't need to do anything.
       return True
 
-    mmio_cmd = MMIO.read_write(AppID("__telemetry_mmio"))
     # Assign each telemetry client a register offset in MMIO space.
-
     offset = 0
     table: Dict[int, AssignableSignal] = {}
     for bundle in bundles.to_client_reqs:
@@ -1133,6 +1133,9 @@ class TelemetryMMIO(ServiceImplementation):
         offset += 8
       else:
         raise ValueError(f"Unrecognized port name: {bundle.port}")
+
+    mmio_cmd = MMIO.read_write(AppID("__telemetry_mmio"),
+                               options={"size": offset})
 
     # Unpack the cmd bundle.
     data_resp_channel = Wire(Channel(MMIODataType), "telemetry_data_resp")
