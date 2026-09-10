@@ -338,8 +338,7 @@ private:
 
     SmallVector<Value> bBits = extractBits(rewriter, b);
     // Pad with two zeros - for case where there's no extensions
-    bBits.push_back(zeroFalse); // Add a zero bit for the first row
-    bBits.push_back(zeroFalse); // Add a zero bit for the last row
+    bBits.append(2, zeroFalse);
 
     // Retain two leading zeros as when b has an even number of bits we just
     // need to retain two leading zeros
@@ -516,11 +515,209 @@ struct DatapathPosPartialProductOpConversion
       return success();
     }
 
-    // TODO: Implement Booth lowering
+    // A one-bit product has no spare row for the correction of a negative
+    // redundant Booth digit.  The direct AND-array form is already minimal.
+    if (width == 1)
+      return lowerAndArray(rewriter, a, b, c, op, width);
+
+    // Recoding the carry-save operand directly avoids materializing a
+    // carry-propagate addition before the multiplier.
+    if (comb::shouldUseBoothEncoding(a, b) || forceBooth)
+      return lowerBoothArray(rewriter, a, b, c, op, width);
     return lowerAndArray(rewriter, a, b, c, op, width);
   }
 
 private:
+  static LogicalResult lowerBoothArray(PatternRewriter &rewriter, Value a,
+                                       Value b, Value c, PosPartialProductOp op,
+                                       unsigned width) {
+    Location loc = op.getLoc();
+    Value zero = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
+
+    // An implementation based on Zimmerman's 2003 paper:
+    // "Optimized Synthesis of Sum-of-Products"
+    // The idea is to modify the Booth encoding to consumer 6-bits for each row
+    // of the partial product array (3 from a and 3 from b).
+    // Change from a traditional Booth encoder is that there is a carry-chain
+    // booth[i] = -2*(a[i+1]+b[i+1]) + (a[i]+b[i]) + (a[i-1]+b[i-1])
+    //                      + carry[i] - 4*carry[i+1]
+    //
+    // The additional carry-bits are there to keep the booth digit in the range
+    // [-2, 2] but do not constitute a full-carry chain as c[i+1] is independent
+    // of c[i].
+
+    // Handle sign/zero-extended multiplicand c
+    auto [cSigned, cBase] = getBaseOfExt(rewriter, loc, c);
+    unsigned cBaseWidth = cBase.getType().getIntOrFloatBitWidth();
+    unsigned rowWidth = width;
+    if (cBaseWidth < width) {
+      // Retain a leading zero or sign bit so that 2*c is representable.
+      rowWidth = cBaseWidth + 1;
+      c = rewriter.createOrFold<comb::ExtractOp>(loc, c, 0, rowWidth);
+    }
+
+    Value twoCPre =
+        rewriter.createOrFold<comb::ConcatOp>(loc, ValueRange{c, zero});
+    Value twoC =
+        rewriter.createOrFold<comb::ExtractOp>(loc, twoCPre, 0, rowWidth);
+
+    // Now compute the bits of the encoding pair of values
+    auto [aSigned, aBase] = getBaseOfExt(rewriter, loc, a);
+    auto [bSigned, bBase] = getBaseOfExt(rewriter, loc, b);
+
+    auto aBaseWidth = aBase.getType().getIntOrFloatBitWidth();
+    auto bBaseWidth = bBase.getType().getIntOrFloatBitWidth();
+
+    auto encodeSigned = aSigned && bSigned;
+    auto encodeBaseWidth = std::max(aBaseWidth, bBaseWidth);
+
+    SmallVector<Value> aBits = extractBits(rewriter, a);
+    SmallVector<Value> bBits = extractBits(rewriter, b);
+    // First reduce to their base widths - clip leading zeros/sign-bits
+    aBits.resize(encodeBaseWidth);
+    bBits.resize(encodeBaseWidth);
+
+    // For unsigned pad with three leading zeros
+    if (!encodeSigned) {
+      aBits.append(3, zero);
+      bBits.append(3, zero);
+    }
+
+    // If a & b are signed, we need to sign-extend by two bits
+    if (encodeSigned) {
+      aBits.append(2, aBits.back());
+      bBits.append(2, bBits.back());
+    }
+    SmallVector<Value> partialProducts;
+    SmallVector<Value> encNegs;
+    partialProducts.reserve(op.getNumResults());
+    encNegs.reserve(aBits.size());
+    Value encNegPrev;
+    Value recoderCarry = zero;
+
+    for (unsigned i = 0; i + 1 < aBits.size(); i += 2) {
+      // Select the Booth bits (first row will have b[-1] = a[-1] = 0)
+      Value aim1 = (i == 0) ? zero : aBits[i - 1];
+      Value bim1 = (i == 0) ? zero : bBits[i - 1];
+      Value ai = aBits[i];
+      Value bi = bBits[i];
+      Value aip1 = aBits[i + 1];
+      Value bip1 = bBits[i + 1];
+
+      // The implementation is entirely based on Figure 3 of
+      // "Optimized Synthesis of Sum-of-Products"
+      // which provides little intuition behind the encoding circuit - but it is
+      // really just compact logical expressions to determine the value of
+      // -2*(a[i+1]+b[i+1]) + (a[i]+b[i]) + (a[i-1]+b[i-1])
+      //                    + carry[i] - 4*carry[i+1]
+
+      // Compute a majority function of a[i], b[i] and b[i-1] indicating
+      // a[i] + b[i] + b[i-1] >= 2
+      Value aAndB = rewriter.createOrFold<comb::AndOp>(loc, ai, bi, true);
+      Value aAndPrevB = rewriter.createOrFold<comb::AndOp>(loc, ai, bim1, true);
+      Value bAndPrevB = rewriter.createOrFold<comb::AndOp>(loc, bi, bim1, true);
+      Value majority = rewriter.createOrFold<comb::OrOp>(
+          loc, ValueRange{aAndB, aAndPrevB, bAndPrevB}, true);
+
+      Value nextXor = rewriter.createOrFold<comb::XorOp>(loc, aip1, bip1, true);
+      Value aXorB = rewriter.createOrFold<comb::XorOp>(loc, ai, bi, true);
+      Value aXorPrevA = rewriter.createOrFold<comb::XorOp>(loc, ai, aim1, true);
+      Value prevOr = rewriter.createOrFold<comb::OrOp>(loc, aim1, bim1, true);
+
+      // Second layer of logic
+      // y1 = (a[i] ^ b[i]) ^ (a[i-1] | b[i-1])
+      Value y1 = rewriter.createOrFold<comb::XorOp>(loc, aXorB, prevOr, true);
+      Value y2 = rewriter.createOrFold<comb::OrOp>(loc, aXorB, aXorPrevA, true);
+      // z1 = (a[i+1] ^ b[i+1]) ^ ((a[i] ^ b[i]) | (a[i-1] ^ b[i-1]))
+      Value z1 = rewriter.createOrFold<comb::XorOp>(loc, nextXor, y2, true);
+
+      // Encoding signals
+      // encNeg selects a negative partial product
+      Value encNeg =
+          rewriter.createOrFold<comb::XorOp>(loc, majority, nextXor, true);
+      Value invNextXor = comb::createOrFoldNot(rewriter, loc, nextXor);
+      // Compute the carry for the next row - this is to keep the digits within
+      // the range [-2,2]
+      Value recoderCarryNext =
+          rewriter.createOrFold<comb::AndOp>(loc, invNextXor, majority, true);
+
+      // encOne selects a partial product of magnitude 1
+      Value encOne = rewriter.createOrFold<comb::XorOp>(
+          loc, ValueRange{y1, recoderCarry}, true);
+      Value encOneInv = comb::createOrFoldNot(rewriter, loc, encOne);
+      // encTwo selects a partial product of magnitude 2
+      Value encTwo = rewriter.createOrFold<comb::AndOp>(
+          loc, ValueRange{z1, encOneInv}, true);
+
+      // From here this is conventional Booth encoding!
+      Value encNegRepl =
+          rewriter.createOrFold<comb::ReplicateOp>(loc, encNeg, rowWidth);
+      Value encOneRepl =
+          rewriter.createOrFold<comb::ReplicateOp>(loc, encOne, rowWidth);
+      Value encTwoRepl =
+          rewriter.createOrFold<comb::ReplicateOp>(loc, encTwo, rowWidth);
+      Value selTwoC = rewriter.createOrFold<comb::AndOp>(loc, encTwoRepl, twoC);
+      Value selOneC = rewriter.createOrFold<comb::AndOp>(loc, encOneRepl, c);
+      Value magnitude = rewriter.createOrFold<comb::OrOp>(
+          loc, ValueRange{selTwoC, selOneC}, true);
+      Value ppRow =
+          rewriter.createOrFold<comb::XorOp>(loc, magnitude, encNegRepl, true);
+
+      encNegs.push_back(encNeg);
+      if (i == 0)
+        partialProducts.push_back(ppRow);
+      else if (i == 2)
+        partialProducts.push_back(rewriter.createOrFold<comb::ConcatOp>(
+            loc, ValueRange{ppRow, zero, encNegPrev}));
+      else {
+        Value shift = hw::ConstantOp::create(rewriter, loc, APInt(i - 2, 0));
+        partialProducts.push_back(rewriter.createOrFold<comb::ConcatOp>(
+            loc, ValueRange{ppRow, zero, encNegPrev, shift}));
+      }
+      encNegPrev = encNeg;
+      recoderCarry = recoderCarryNext;
+
+      if (partialProducts.size() == op.getNumResults())
+        break;
+    }
+
+    // Add the final sign-correction row for signed multiplication
+    // Not necessary for unsigned multiplication as the final row is positive
+    // The final recoderCarry will always be zero by construction
+    if (encodeSigned) {
+      auto numPP = partialProducts.size();
+      Value shiftByFinal =
+          hw::ConstantOp::create(rewriter, loc, APInt((numPP - 1) * 2, 0));
+      Value finalSignCorrection = rewriter.createOrFold<comb::ConcatOp>(
+          loc, ValueRange{zero, encNegPrev, shiftByFinal});
+      partialProducts.push_back(finalSignCorrection);
+      encNegs.push_back(zero); // No sign-extension for the final row
+    }
+
+    // Handle sign-extesion of the partial products to full width
+    for (auto [index, ppRow] : llvm::enumerate(partialProducts)) {
+      unsigned ppWidth = ppRow.getType().getIntOrFloatBitWidth();
+      if (ppWidth < width) {
+        Value sign = encNegs[index];
+        if (cSigned)
+          sign = rewriter.createOrFold<comb::ExtractOp>(loc, ppRow, ppWidth - 1,
+                                                        1);
+        Value padding = rewriter.createOrFold<comb::ReplicateOp>(
+            loc, sign, width - ppWidth);
+        ppRow = rewriter.createOrFold<comb::ConcatOp>(
+            loc, ValueRange{padding, ppRow});
+      }
+      if (ppRow.getType().getIntOrFloatBitWidth() > width)
+        ppRow = rewriter.createOrFold<comb::ExtractOp>(loc, ppRow, 0, width);
+      partialProducts[index] = ppRow;
+    }
+
+    Value zeroWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+    partialProducts.resize(op.getNumResults(), zeroWidth);
+    rewriter.replaceOp(op, partialProducts);
+    return success();
+  }
+
   static LogicalResult lowerAndArray(PatternRewriter &rewriter, Value a,
                                      Value b, Value c, PosPartialProductOp op,
                                      unsigned width) {
