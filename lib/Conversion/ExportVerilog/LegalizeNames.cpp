@@ -33,6 +33,18 @@ void GlobalNameTable::addReservedNames(NameCollisionResolver &resolver) const {
     resolver.insertUsedName(name);
 }
 
+std::optional<std::pair<Operation *, StringAttr>>
+GlobalNameTable::getPackageEnumField(hw::EnumFieldAttr field) const {
+  Type type = field.getType().getValue();
+  while (auto alias = dyn_cast<TypeAliasType>(type)) {
+    auto it = packageEnumFields.find({alias, field.getField()});
+    if (it != packageEnumFields.end())
+      return it->second;
+    type = alias.getInnerType();
+  }
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // NameCollisionResolver
 //===----------------------------------------------------------------------===//
@@ -79,7 +91,15 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
   return newFieldNameAttr;
 }
 
-std::string FieldNameResolver::getEnumFieldName(hw::EnumFieldAttr attr) {
+std::string FieldNameResolver::getEnumFieldName(hw::EnumFieldAttr attr,
+                                                Operation *currentPackage) {
+  if (auto field = globalNames.getPackageEnumField(attr)) {
+    auto [package, name] = *field;
+    if (package != currentPackage)
+      return (getSymOpName(package) + "::" + name.getValue()).str();
+    return name.getValue().str();
+  }
+
   auto aliasType = dyn_cast<hw::TypeAliasType>(attr.getType().getValue());
   if (!aliasType)
     return attr.getField().getValue().str();
@@ -118,6 +138,7 @@ private:
   /// globalNameTable.
   void legalizeModuleNames(HWModuleOp module);
   void legalizeInterfaceNames(InterfaceOp interface);
+  void legalizePackageNames(PackageOp package);
   void legalizeFunctionNames(FuncOp func);
 
   // Gathers prefixes of enum types by inspecting typescopes in the module.
@@ -283,6 +304,9 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
       legalizeInterfaceNames(interface);
       continue;
     }
+
+    if (auto package = dyn_cast<PackageOp>(op))
+      legalizePackageNames(package);
   }
 
   // Legalize names in HW modules parallelly.
@@ -294,6 +318,32 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
 
   // Gather enum prefixes.
   gatherEnumPrefixes(topLevel);
+}
+
+void GlobalNameResolver::legalizePackageNames(PackageOp package) {
+  auto *ctx = package.getContext();
+  auto name = globalNameResolver.getLegalName(getSymOpName(package));
+  package->setAttr("hw.verilogName", StringAttr::get(ctx, name));
+
+  NameCollisionResolver localNames(options);
+  globalNameTable.addReservedNames(localNames);
+  for (auto decl : package.getOps<hw::TypedeclOp>()) {
+    auto preferredName = decl->getAttrOfType<StringAttr>("hw.verilogName");
+    auto name = localNames.getLegalName(
+        preferredName ? preferredName.getValue() : decl.getPreferredName());
+    decl->setAttr("hw.verilogName", StringAttr::get(ctx, name));
+  }
+  for (auto decl : package.getOps<hw::TypedeclOp>()) {
+    auto enumType = dyn_cast<hw::EnumType>(decl.getType());
+    if (!enumType)
+      continue;
+    for (auto field : enumType.getFields().getAsRange<StringAttr>()) {
+      auto name = localNames.getLegalName(
+          (getSymOpName(decl) + "_" + field.getValue()).str());
+      globalNameTable.packageEnumFields[{decl.getAliasType(), field}] = {
+          package, StringAttr::get(ctx, name)};
+    }
+  }
 }
 
 // Gathers prefixes of enum types by investigating typescopes in the module.
