@@ -93,6 +93,17 @@ verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
 }
 
 //===----------------------------------------------------------------------===//
+// PackageOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult PackageOp::verify() {
+  for (Operation &op : *getBodyBlock())
+    if (!isa<hw::TypedeclOp>(op))
+      return emitOpError("body may only contain hw.typedecl operations");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // VerbatimOp
 //===----------------------------------------------------------------------===//
 

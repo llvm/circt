@@ -933,12 +933,15 @@ void TypeAliasType::print(AsmPrinter &p) const {
 /// in.  This returns null when the IR is malformed.
 TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
   SymbolRefAttr ref = getRef();
-  auto typeScope = ::dyn_cast_or_null<TypeScopeOp>(
+  if (ref.getNestedReferences().size() != 1)
+    return {};
+  auto typeScope = ::dyn_cast_or_null<TypeScopeLike>(
       cache.getDefinition(ref.getRootReference()));
   if (!typeScope)
     return {};
 
-  return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
+  return dyn_cast_or_null<TypedeclOp>(
+      SymbolTable::lookupSymbolIn(typeScope, ref.getLeafReference()));
 }
 
 std::optional<int64_t> TypeAliasType::getBitWidth() const {

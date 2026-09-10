@@ -18,6 +18,20 @@ include "mlir/IR/OpBase.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
 include "circt/Support/InstanceGraphInterface.td"
 
+def TypeScopeLike : OpInterface<"TypeScopeLike", [Symbol]> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+    A named symbol table which contains `hw.typedecl` operations. Declarations
+    in such a scope are referenced by a `!hw.typealias` whose symbol reference
+    uses the scope name as its root and the declaration name as its sole nested
+    reference.
+
+    This allows type declarations to be shared between containers with
+    different emission semantics, such as `hw.type_scope` and `sv.package`,
+    without the HW dialect depending on the dialect that defines them.
+  }];
+}
+
 def PortList : OpInterface<"PortList", []> {
   let cppNamespace = "circt::hw";
   let description = "Operations which produce a unified port list representation";
