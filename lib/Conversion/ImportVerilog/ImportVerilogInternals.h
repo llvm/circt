@@ -263,6 +263,13 @@ struct Context {
   LogicalResult materializeClassMethods(const slang::ast::ClassType &classdecl);
   LogicalResult convertGlobalVariable(const slang::ast::VariableSymbol &var);
 
+  /// Get the helper function implementing one of the `name`, `next`, and `prev`
+  /// built-in methods for the given enum type, creating it on first use.
+  /// Returns null and emits an error if the helper cannot be created.
+  mlir::func::FuncOp
+  getOrCreateEnumHelper(const slang::ast::Type &type,
+                        slang::parsing::KnownSystemName method, Location loc);
+
   /// Convert a Slang virtual interface type into the Moore type used to
   /// represent virtual interface handles. Populates internal caches so that
   /// interface instance references can be materialized consistently.
@@ -524,6 +531,13 @@ struct Context {
 
   /// DPI-C export directives keyed by the SystemVerilog subroutine they expose.
   DenseMap<const slang::ast::SubroutineSymbol *, std::string> dpiExportCNames;
+
+  /// Helper functions generated for the enum built-in methods, keyed by the
+  /// canonical enum type and the method they implement.
+  DenseMap<
+      std::pair<const slang::ast::EnumType *, slang::parsing::KnownSystemName>,
+      mlir::func::FuncOp>
+      enumHelpers;
 
   /// Classes that have already been converted.
   DenseMap<const slang::ast::ClassType *, std::unique_ptr<ClassLowering>>
