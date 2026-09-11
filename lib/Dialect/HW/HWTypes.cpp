@@ -915,6 +915,22 @@ TypeAliasType TypeAliasType::get(SymbolRefAttr ref, Type innerType) {
   return get(ref.getContext(), ref, innerType, computeCanonicalType(innerType));
 }
 
+TypeAliasType
+TypeAliasType::getChecked(function_ref<InFlightDiagnostic()> emitError,
+                          SymbolRefAttr ref, Type innerType) {
+  return getChecked(emitError, ref.getContext(), ref, innerType,
+                    computeCanonicalType(innerType));
+}
+
+LogicalResult
+TypeAliasType::verify(function_ref<InFlightDiagnostic()> emitError,
+                      SymbolRefAttr ref, Type innerType, Type canonicalType) {
+  if (ref.getNestedReferences().size() != 1)
+    return emitError()
+           << "expected exactly one nested reference in hw.typealias";
+  return success();
+}
+
 Type TypeAliasType::parse(AsmParser &p) {
   SymbolRefAttr ref;
   Type type;
@@ -922,7 +938,7 @@ Type TypeAliasType::parse(AsmParser &p) {
       p.parseType(type) || p.parseGreater())
     return Type();
 
-  return get(ref, type);
+  return p.getChecked<TypeAliasType>(ref, type);
 }
 
 void TypeAliasType::print(AsmPrinter &p) const {
@@ -933,8 +949,6 @@ void TypeAliasType::print(AsmPrinter &p) const {
 /// in.  This returns null when the IR is malformed.
 TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
   SymbolRefAttr ref = getRef();
-  if (ref.getNestedReferences().size() != 1)
-    return {};
   auto typeScope = ::dyn_cast_or_null<TypeScopeLike>(
       cache.getDefinition(ref.getRootReference()));
   if (!typeScope)

@@ -1,5 +1,15 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
+// expected-error @+1 {{expected exactly one nested reference in hw.typealias}}
+hw.module @missingTypeName(in %arg: !hw.typealias<@scope, i8>) {}
+
+// -----
+
+// expected-error @+1 {{expected exactly one nested reference in hw.typealias}}
+hw.module @tooManyNames(in %arg: !hw.typealias<@scope::@nested::@word, i8>) {}
+
+// -----
+
 hw.module private @test_extract(in %arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %a = comb.extract %arg0 from 6 : (i4) -> i3
