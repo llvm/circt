@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -export-verilog -o %t.mlir | FileCheck %s
+// RUN: FileCheck %s --check-prefix=IR < %t.mlir
 // RUN: circt-opt %t.mlir -export-verilog -o /dev/null | FileCheck %s
 
 hw.module.extern @external() attributes {verilogName = "foo"}
@@ -11,7 +12,9 @@ hw.module.extern @external() attributes {verilogName = "foo"}
 // CHECK: // typedef logic {{.*}}empty;
 // CHECK: endpackage
 sv.package @foo {
+  // IR: hw.typedecl @word, "logic_0" : i32
   hw.typedecl @word, "logic" : i32
+  // IR: hw.typedecl @byte, "logic_1" : i8
   hw.typedecl @byte, "logic" : i8
   hw.typedecl @State_Idle : i2
   hw.typedecl @state, "State" : !hw.enum<Idle, Busy>

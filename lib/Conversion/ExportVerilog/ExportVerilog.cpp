@@ -1875,10 +1875,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         if (auto package = dyn_cast<PackageOp>(typedecl->getParentOp())) {
           if (package != emitter.currentPackage)
             os << getSymOpName(package) << "::";
-          os << getSymOpName(typedecl);
-        } else {
-          os << typedecl.getPreferredName();
         }
+        os << typedecl.getPreferredName();
         emitDims(dims, os, typedecl->getLoc(), emitter);
         return true;
       })
@@ -4568,10 +4566,7 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
       emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
                               op.getAliasType(), false);
     });
-    ps << PP::space
-       << PPExtString(isa<PackageOp>(op->getParentOp())
-                          ? getSymOpName(op)
-                          : op.getPreferredName());
+    ps << PP::space << PPExtString(op.getPreferredName());
     ps.invokeWithStringOS(
         [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
     ps << ";";
