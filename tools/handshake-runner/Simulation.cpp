@@ -243,6 +243,28 @@ private:
                         std::vector<Any> &);
   LogicalResult execute(mlir::arith::AddIOp, std::vector<Any> &,
                         std::vector<Any> &);
+  LogicalResult execute(mlir::arith::SelectOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::AndIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::OrIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::TruncIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::ShLIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::ShRSIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::ShRUIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::RemSIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::RemUIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::MaxSIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::MinSIOp, std::vector<Any> &,
+                        std::vector<Any> &);
   LogicalResult execute(mlir::arith::XOrIOp, std::vector<Any> &,
                         std::vector<Any> &);
   LogicalResult execute(mlir::arith::AddFOp, std::vector<Any> &,
@@ -319,6 +341,84 @@ LogicalResult HandshakeExecuter::execute(mlir::arith::ConstantIntOp op,
                                          std::vector<Any> &out) {
   auto attr = op->getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue();
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::SelectOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]).getBoolValue() ? in[1] : in[2];
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::AndIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]) & any_cast<APInt>(in[1]);
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::OrIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]) | any_cast<APInt>(in[1]);
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::ShLIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]).shl(any_cast<APInt>(in[1]));
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::ShRSIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]).ashr(any_cast<APInt>(in[1]));
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::ShRUIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]).lshr(any_cast<APInt>(in[1]));
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::RemSIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]).srem(any_cast<APInt>(in[1]));
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::RemUIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]).urem(any_cast<APInt>(in[1]));
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::MaxSIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]).sgt(any_cast<APInt>(in[1])) ? in[0] : in[1];
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::MinSIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]).slt(any_cast<APInt>(in[1])) ? in[0] : in[1];
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::TruncIOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  int64_t width = op.getType().getIntOrFloatBitWidth();
+  out[0] = any_cast<APInt>(in[0]).trunc(width);
   return success();
 }
 
@@ -720,6 +820,11 @@ HandshakeExecuter::HandshakeExecuter(
     auto res =
         llvm::TypeSwitch<Operation *, LogicalResult>(&op)
             .Case<mlir::arith::ConstantIndexOp, mlir::arith::ConstantIntOp,
+                  mlir::arith::SelectOp, mlir::arith::AndIOp, mlir::arith::OrIOp,
+                  mlir::arith::TruncIOp, mlir::arith::ShLIOp,
+                  mlir::arith::ShRSIOp, mlir::arith::ShRUIOp,
+                  mlir::arith::RemSIOp, mlir::arith::RemUIOp,
+                  mlir::arith::MaxSIOp, mlir::arith::MinSIOp,
                   mlir::arith::AddIOp, mlir::arith::AddFOp, mlir::arith::CmpIOp,
                   mlir::arith::CmpFOp, mlir::arith::SubIOp, mlir::arith::SubFOp,
                   mlir::arith::MulIOp, mlir::arith::MulFOp,
@@ -871,6 +976,11 @@ HandshakeExecuter::HandshakeExecuter(
     LogicalResult res =
         llvm::TypeSwitch<Operation *, LogicalResult>(&op)
             .Case<mlir::arith::ConstantIndexOp, mlir::arith::ConstantIntOp,
+                  mlir::arith::SelectOp, mlir::arith::AndIOp, mlir::arith::OrIOp,
+                  mlir::arith::TruncIOp, mlir::arith::ShLIOp,
+                  mlir::arith::ShRSIOp, mlir::arith::ShRUIOp,
+                  mlir::arith::RemSIOp, mlir::arith::RemUIOp,
+                  mlir::arith::MaxSIOp, mlir::arith::MinSIOp,
                   mlir::arith::AddIOp, mlir::arith::AddFOp, mlir::arith::CmpIOp,
                   mlir::arith::CmpFOp, mlir::arith::SubIOp, mlir::arith::SubFOp,
                   mlir::arith::MulIOp, mlir::arith::MulFOp,
