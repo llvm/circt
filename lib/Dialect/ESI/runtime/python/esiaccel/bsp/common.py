@@ -538,7 +538,7 @@ class ChannelMMIO(esi.ServiceImplementation):
     - 0x12: ESI version number (0)
     - 0x18: Location of the manifest ROM (absolute address)
 
-    - 0x100: Start of MMIO space for requests. Mapping is contained in the
+    - 0x800: Start of MMIO space for requests. Mapping is contained in the
              manifest so can be dynamically queried.
 
     - addr(after last client allocation), aligned to the manifest aperture:
@@ -561,8 +561,9 @@ class ChannelMMIO(esi.ServiceImplementation):
   reset_request = Output(Bits(1))
 
   # Default amount of register space each client gets. A client can request a
-  # different size with the `size` service request option.
-  RegisterSpace = 0x100
+  # different size with the `size` service request option. Keep this large
+  # enough for clients which don't request a size at all.
+  RegisterSpace = 0x800
   AllocationGranularity = MMIOWordBytes
   # The runtime caps uncompressed manifests at 10 MiB. Reserve an aligned
   # 16 MiB after the clients so manifest routing is a single address prefix.
@@ -713,6 +714,101 @@ class ChannelMMIO(esi.ServiceImplementation):
     # The header surfaces a reset request when the host writes the reset magic
     # number to slot 7. Propagate it up to the caller (the BSP).
     ports.reset_request = header.reset_request
+
+
+class TelemetryMMIO(esi.ServiceImplementation):
+  """An ESI service implementation which provides telemetry data through an MMIO
+  region. Each client request is assigned a register in the MMIO space. When a
+  read request is received for the assigned address, it gets routed to the
+  assigned client. When a write request is received, it is discarded. The
+  assignment table is stored in the manifest.
+
+  **REQUIREMENTS.** Both are needed to make the response merge safe:
+
+  1. The `MMIO` service implementation this connects to must not issue a read
+     command while a previous read's response is still outstanding.
+  2. Every telemetry client must assert its `data` channel's `valid` only in
+     response to a `get`. `Telemetry.report_signal` does this; a client which
+     holds `valid` high permanently -- legal ESI, and the natural way to
+     express an always-available counter -- does not.
+
+  Given both, each command is demuxed to exactly one client and at most one
+  client is offering a response at a time, so the responses can be merged with
+  `ChannelMergeOneValid` instead of arbitrated -- which keeps the response path
+  from building a combinational cone across every telemetry client.
+
+  Nothing here enforces either, and violating either loses responses. Note (2)
+  is not specific to this merge: `ChannelMux2` is fixed-priority, so under an
+  arbiter a permanently-valid client starves every client behind it."""
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def generate(ports, bundles: esi._ServiceGeneratorBundles) -> bool:
+    if len(bundles.to_client_reqs) == 0:
+      # No clients to connect to, so we don't need to do anything.
+      return True
+
+    # Assign each telemetry client a register offset in MMIO space.
+    offset = 0
+    table: Dict[int, AssignableSignal] = {}
+    for bundle in bundles.to_client_reqs:
+      # Only support 'report' port for telemetry.
+      if bundle.port == 'report':
+        table[offset] = bundle
+        bundle.add_record(details={"offset": offset, "type": "mmio"})
+        offset += MMIOWordBytes
+      else:
+        raise ValueError(f"Unrecognized port name: {bundle.port}")
+
+    # Request exactly the space the register table occupies rather than relying
+    # on the MMIO service's default allocation.
+    mmio_cmd = esi.MMIO.read_write(esi.AppID("__telemetry_mmio"),
+                                   options={"size": offset})
+
+    # Unpack the cmd bundle.
+    data_resp_channel = Wire(Channel(esi.MMIODataType), "telemetry_data_resp")
+    counted_output = Wire(Channel(esi.MMIODataType), "telemetry_counted_output")
+    cmd_channel = mmio_cmd.unpack(data=counted_output)["cmd"]
+    counted_output.assign(data_resp_channel)
+
+    # Decode the address to select the client.
+    cmd_ready_wire = Wire(Bits(1), "telemetry_cmd_ready")
+    cmd, cmd_valid = cmd_channel.unwrap(cmd_ready_wire)
+    client_addr_chan, client_addr_ready = Channel(Bits(0)).wrap(
+        Bits(0)(0), cmd_valid)
+    cmd_ready_wire.assign(client_addr_ready)
+
+    # Build the demux/mux and assign the results of each appropriately.
+    read_clients_clog2 = clog2(len(table))
+    chan_sel = cmd.offset.as_bits()[3:read_clients_clog2 + 3]
+    client_cmd_channels = esi.ChannelDemux(
+        sel=chan_sel,
+        input=client_addr_chan,
+        num_outs=len(table),
+        instance_name="telemetry_client_cmd_demux")
+    client_data_channels = []
+    for (idx, offset) in enumerate(sorted(table.keys())):
+      bundle_wire = table[offset]
+      bundle_type = bundle_wire.type
+      # For telemetry, the client expects a 'get' channel and returns 'data'.
+      offset_chan = client_cmd_channels[idx]
+      bundle, bundle_froms = bundle_type.pack(get=offset_chan)
+
+      bundle_wire.assign(bundle)
+      client_data_channels.append(
+          bundle_froms["data"].transform(lambda m: m.as_bits(64)))
+    # The demux above routes each command to exactly one client, so -- given
+    # both requirements in this class' docs -- at most one client is offering a
+    # response at a time and no arbitration is needed to merge them.
+    resp_channel = esi.ChannelMergeOneValid(
+        client_data_channels,
+        ports.clk,
+        ports.rst,
+        instance_name="telemetry_resp_merge")
+    data_resp_channel.assign(resp_channel)
+    return True
 
 
 class MMIOIndirection(Module):

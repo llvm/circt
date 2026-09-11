@@ -12,7 +12,7 @@ from pycde.types import Array, Bits, Channel, UInt
 from pycde import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
-                     MMIOIndirection, Reset)
+                     MMIOIndirection, Reset, TelemetryMMIO)
 from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
 import glob
@@ -279,10 +279,10 @@ def XrtBSP(user_module):
       ports.s_axi_control_WREADY = wready
 
       user_module(clk=clk, rst=rst)
-      esi.TelemetryMMIO(esi.Telemetry,
-                        appid=esi.AppID("__telemetry"),
-                        clk=clk,
-                        rst=rst)
+      TelemetryMMIO(esi.Telemetry,
+                    appid=esi.AppID("__telemetry"),
+                    clk=clk,
+                    rst=rst)
 
       data = Wire(Channel(esi.MMIODataType))
       rw_mux = MMIOAxiReadWriteMux(clk=clk,

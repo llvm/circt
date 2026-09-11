@@ -30,21 +30,21 @@ def test_channel_mmio_allocations():
 
   table, manifest_loc = ChannelMMIO.build_table(_Bundles(default, custom))
 
-  assert list(table) == [0x100, 0x2000]
+  assert list(table) == [0x800, 0x2000]
   assert manifest_loc == ChannelMMIO.ManifestSpace
-  assert default.records == [{"offset": 0x100, "size": 0x100, "type": "ro"}]
+  assert default.records == [{"offset": 0x800, "size": 0x800, "type": "ro"}]
   assert custom.records == [{"offset": 0x2000, "size": 0x2000, "type": "rw"}]
 
 
 def test_channel_mmio_allocation_granularity(monkeypatch):
   monkeypatch.setattr(ChannelMMIO, "AllocationGranularity", 0x400)
-  default = _Bundle("read")
+  small = _Bundle("read", {"size": 8})
   custom = _Bundle("read", {"size": 0x401})
 
-  table, manifest_loc = ChannelMMIO.build_table(_Bundles(default, custom))
+  table, manifest_loc = ChannelMMIO.build_table(_Bundles(small, custom))
 
-  assert list(table) == [0x400, 0x800]
-  assert default.records[0]["size"] == 0x400
+  assert list(table) == [0x800, 0x1000]
+  assert small.records[0]["size"] == 0x400
   assert custom.records[0]["size"] == 0x800
   assert manifest_loc == ChannelMMIO.ManifestSpace
 

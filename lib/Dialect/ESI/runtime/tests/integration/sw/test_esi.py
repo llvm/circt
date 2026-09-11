@@ -79,8 +79,12 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
 
   num_telemetry_counters = count_telemetry_counters(d)
   assert num_telemetry_counters > 0
-  telemetry_region = next(region for id, region in mmio_svc.regions.items()
-                          if str(id) == "__telemetry_mmio")
+  # Note: the keys of 'regions' are AppIDPaths, whose repr is the dotted path
+  # without decoration (unlike AppID, which is wrapped in angle brackets).
+  telemetry_region = next((region for id, region in mmio_svc.regions.items()
+                           if str(id) == "__telemetry_mmio"), None)
+  assert telemetry_region is not None, \
+      f"no __telemetry_mmio region in {[str(i) for i in mmio_svc.regions]}"
   telemetry_bytes = num_telemetry_counters * 8
   expected_telemetry_allocation = 1 << (telemetry_bytes - 1).bit_length()
   assert telemetry_region.size == expected_telemetry_allocation
@@ -98,7 +102,7 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
       assert False, f"read_offset({offset}, {add_amt}) -> {data}"
 
   mmio4 = d.ports[esi.AppID("mmio_client", 4)]
-  assert mmio4.descriptor.size == 0x100
+  assert mmio4.descriptor.size == 0x800
   assert mmio4.descriptor.base % mmio4.descriptor.size == 0
   read_offset(mmio4, 0, 4)
   read_offset(mmio4, 13, 4)
@@ -112,7 +116,7 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
   read_offset(mmio9, 0x1200, 9)
 
   mmio14 = d.ports[esi.AppID("mmio_client", 14)]
-  assert mmio14.descriptor.size == 0x100
+  assert mmio14.descriptor.size == 0x800
   assert mmio14.descriptor.base % mmio14.descriptor.size == 0
   read_offset(mmio14, 0, 14)
   read_offset(mmio14, 13, 14)
