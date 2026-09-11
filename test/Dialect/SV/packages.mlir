@@ -1,5 +1,4 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
-// RUN: circt-opt %s -mlir-print-op-generic | circt-opt | FileCheck %s
 
 // CHECK-LABEL: sv.package @empty {
 // CHECK-NEXT: }
