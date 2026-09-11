@@ -328,10 +328,10 @@ void GlobalNameResolver::legalizePackageNames(PackageOp package) {
   NameCollisionResolver localNames(options);
   globalNameTable.addReservedNames(localNames);
   for (auto decl : package.getOps<hw::TypedeclOp>()) {
-    auto preferredName = decl->getAttrOfType<StringAttr>("hw.verilogName");
-    auto name = localNames.getLegalName(
-        preferredName ? preferredName.getValue() : decl.getPreferredName());
-    decl->setAttr("hw.verilogName", StringAttr::get(ctx, name));
+    auto preferredName = decl.getPreferredName();
+    auto name = localNames.getLegalName(preferredName);
+    if (name != preferredName)
+      decl.setVerilogNameAttr(StringAttr::get(ctx, name));
   }
   for (auto decl : package.getOps<hw::TypedeclOp>()) {
     auto enumType = dyn_cast<hw::EnumType>(decl.getType());
@@ -339,7 +339,7 @@ void GlobalNameResolver::legalizePackageNames(PackageOp package) {
       continue;
     for (auto field : enumType.getFields().getAsRange<StringAttr>()) {
       auto name = localNames.getLegalName(
-          (getSymOpName(decl) + "_" + field.getValue()).str());
+          (decl.getPreferredName() + "_" + field.getValue()).str());
       globalNameTable.packageEnumFields[{decl.getAliasType(), field}] = {
           package, StringAttr::get(ctx, name)};
     }
