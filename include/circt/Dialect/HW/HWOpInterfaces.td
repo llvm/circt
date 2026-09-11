@@ -30,6 +30,13 @@ def TypeScopeLike : OpInterface<"TypeScopeLike", [Symbol]> {
     different emission semantics, such as `hw.type_scope` and `sv.package`,
     without the HW dialect depending on the dialect that defines them.
   }];
+
+  let verify = [{
+    static_assert(
+        ConcreteOp::template hasTrait<::mlir::OpTrait::SymbolTable>(),
+        "expected type scope to be a symbol table");
+    return success();
+  }];
 }
 
 def PortList : OpInterface<"PortList", []> {

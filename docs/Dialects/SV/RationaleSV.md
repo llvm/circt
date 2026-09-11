@@ -12,7 +12,6 @@ other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
   - [Overview of `sv` dialect operations](#overview-of-sv-dialect-operations)
   - [Statements](#statements)
   - [Declarations](#declarations)
-    - [Packages and type declarations](#packages-and-type-declarations)
   - [Expressions](#expressions)
     - [Verbatim op](#verbatim-op)
   - [Cost Model](#cost-model)
@@ -70,25 +69,6 @@ TODO.
 ## Declarations
 
 TODO: Describe `sv.wire`, `sv.reg`, 
-
-### Packages and type declarations
-
-`sv.package` models a SystemVerilog package explicitly, rather than wrapping a
-collection of declarations in verbatim text. Its symbol table contains
-`hw.typedecl` operations, referenced by the same `!hw.typealias` types used for
-declarations in `hw.type_scope`. Both containers implement `hw::TypeScopeLike`,
-which lets the HW dialect resolve a declaration without knowing which dialect
-defines its container. A separate SV typedef operation or alias type would
-instead duplicate the HW type system.
-
-Unlike `hw.type_scope`, which groups compilation-unit declarations, `sv.package`
-gives its declarations a SystemVerilog namespace, so uses are emitted
-package-qualified and wildcard imports are unnecessary. The package body is
-restricted to type declarations rather than arbitrary SystemVerilog statements,
-which is all that is needed to declare shared types.
-
-Packages are written directly by whoever builds the IR; `hw.type_scope` keeps
-its existing emission and is not converted into one.
 
 ## Expressions
 

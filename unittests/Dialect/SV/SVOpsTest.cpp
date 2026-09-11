@@ -8,6 +8,8 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "gtest/gtest.h"
 
@@ -17,6 +19,62 @@ using namespace hw;
 using namespace sv;
 
 namespace {
+
+TEST(PackageOpTest, ResolveTypeAliases) {
+  MLIRContext context;
+  context.loadDialect<SVDialect, HWDialect>();
+  auto loc = UnknownLoc::get(&context);
+  OwningOpRef<ModuleOp> module = ModuleOp::create(loc);
+  auto builder = ImplicitLocOpBuilder::atBlockEnd(loc, module->getBody());
+
+  auto package = PackageOp::create(builder, "types", StringAttr());
+  auto scope = TypeScopeOp::create(builder, "legacy", StringAttr());
+  auto interface = InterfaceOp::create(builder, "not_a_type_scope");
+  auto i8 = builder.getIntegerType(8);
+  auto i16 = builder.getIntegerType(16);
+
+  builder.createBlock(&package.getBody());
+  auto packageDecl =
+      TypedeclOp::create(builder, builder.getStringAttr("word"), StringAttr(),
+                         TypeAttr::get(i8), builder.getStringAttr("word_t"));
+  builder.createBlock(&scope.getBody());
+  auto scopeDecl =
+      TypedeclOp::create(builder, builder.getStringAttr("word"), StringAttr(),
+                         TypeAttr::get(i16), StringAttr());
+
+  HWSymbolCache cache;
+  cache.addDefinition(package.getSymNameAttr(), package);
+  cache.addDefinition(scope.getSymNameAttr(), scope);
+  cache.addDefinition(interface.getSymNameAttr(), interface);
+  cache.freeze();
+
+  auto alias = [&](StringRef root, StringRef leaf, Type inner) {
+    return TypeAliasType::get(
+        SymbolRefAttr::get(builder.getStringAttr(root),
+                           {FlatSymbolRefAttr::get(&context, leaf)}),
+        inner);
+  };
+  auto packageAlias = alias("types", "word", i8);
+  auto scopeAlias = alias("legacy", "word", i16);
+  EXPECT_EQ(packageDecl.getAliasType(), packageAlias);
+  EXPECT_EQ(scopeDecl.getAliasType(), scopeAlias);
+  EXPECT_EQ(packageAlias.getTypeDecl(cache), packageDecl);
+  EXPECT_EQ(scopeAlias.getTypeDecl(cache), scopeDecl);
+
+  EXPECT_FALSE(alias("missing", "word", i8).getTypeDecl(cache));
+  EXPECT_FALSE(alias("types", "missing", i8).getTypeDecl(cache));
+  EXPECT_FALSE(alias("types", "word_t", i8).getTypeDecl(cache));
+  EXPECT_FALSE(alias("not_a_type_scope", "word", i8).getTypeDecl(cache));
+  EXPECT_FALSE(TypeAliasType::get(FlatSymbolRefAttr::get(&context, "types"), i8)
+                   .getTypeDecl(cache));
+  EXPECT_FALSE(
+      TypeAliasType::get(
+          SymbolRefAttr::get(package.getSymNameAttr(),
+                             {FlatSymbolRefAttr::get(&context, "nested"),
+                              FlatSymbolRefAttr::get(&context, "word")}),
+          i8)
+          .getTypeDecl(cache));
+}
 
 TEST(SVVerbatimModuleOpTest, GetPortListArgNumIsDirectionRelative) {
   MLIRContext context;
