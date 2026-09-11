@@ -1,4 +1,4 @@
-// RUN: circt-opt --lower-firrtl-to-hw --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-sizeof)), lower-firrtl-to-hw)' --verify-diagnostics %s | FileCheck %s
 
 firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @Intrinsics

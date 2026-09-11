@@ -4735,16 +4735,8 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SizeOfIntrinsicOp op) {
-  // Evaluate using this operation's existing folding implementation.
-  SizeOfIntrinsicOp::FoldAdaptor adaptor({}, {});
-  OpFoldResult folded = op.fold(adaptor);
-
-  if (auto foldedAttr = dyn_cast_or_null<Attribute>(folded)) {
-    if (auto foldedIntAttr = dyn_cast<IntegerAttr>(foldedAttr))
-      return setLowering(op, getOrCreateIntConstant(foldedIntAttr.getValue()));
-  }
-
-  op.emitError("Invalid SizeOf integer resolution.");
+  op.emitError("sizeof intrinsic should have been resolved by the "
+               "LowerSizeOf pass.");
   return failure();
 }
 
