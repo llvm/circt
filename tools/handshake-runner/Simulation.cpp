@@ -1000,11 +1000,12 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
       unsigned buffer = allocateMemRef(memreftype, nothing, store, storeTimes);
       valueMap[blockArgs[i]] = buffer;
       timeMap[blockArgs[i]] = 0.0;
-      int64_t i = 0;
+      int64_t elem = 0;
       std::stringstream arg(inputArgs[i]);
       while (!arg.eof()) {
         getline(arg, x, ',');
-        store[buffer][i++] = readValueWithType(memreftype.getElementType(), x);
+        store[buffer][elem++] =
+            readValueWithType(memreftype.getElementType(), x);
       }
     } else {
       Any value = readValueWithType(type, inputArgs[i]);
