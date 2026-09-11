@@ -20,7 +20,7 @@ def VerifyAXI4Networks : Pass<"verify-axi4-networks", "mlir::ModuleOp"> {
   let description = [{
     Verifies non-local properties of an AXI4 network:
     - Ensures every `!axi4.port` value has at most one consumer, and that ports
-    do not connect endpoints in different clock or reset domains.
+      do not connect endpoints in different clock or reset domains.
     - Ensures a network occupies a single clock and reset domain.
   }];
 
