@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the LowerSizeOf pass.
+// This file defines the LowerSizeOf pass for lowering FIRRTL sizeof intrinsic
+// operations to constants.
 //
 //===----------------------------------------------------------------------===//
 
