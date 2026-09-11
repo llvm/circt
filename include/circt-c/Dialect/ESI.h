@@ -19,6 +19,7 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(ESI, esi);
 MLIR_CAPI_EXPORTED void registerESIPasses(void);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAChannelType(MlirType type);
+MLIR_CAPI_EXPORTED MlirTypeID circtESIChannelTypeGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirType circtESIChannelTypeGet(MlirType inner,
                                                    uint32_t signaling,
                                                    uint64_t dataDelay);
@@ -27,9 +28,11 @@ MLIR_CAPI_EXPORTED uint32_t circtESIChannelGetSignaling(MlirType channelType);
 MLIR_CAPI_EXPORTED uint64_t circtESIChannelGetDataDelay(MlirType channelType);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAnAnyType(MlirType type);
+MLIR_CAPI_EXPORTED MlirTypeID circtESIAnyTypeGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirType circtESIAnyTypeGet(MlirContext);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAListType(MlirType type);
+MLIR_CAPI_EXPORTED MlirTypeID circtESIListTypeGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirType circtESIListTypeGet(MlirType inner);
 MLIR_CAPI_EXPORTED MlirType
 circtESIListTypeGetElementType(MlirType channelType);
@@ -53,6 +56,7 @@ typedef struct {
 } CirctESIBundleTypeBundleChannel;
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsABundleType(MlirType type);
+MLIR_CAPI_EXPORTED MlirTypeID circtESIBundleTypeGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirType circtESIBundleTypeGet(
     MlirContext, size_t numChannels,
     const CirctESIBundleTypeBundleChannel *channels, bool resettable);
@@ -66,6 +70,7 @@ circtESIBundleTypeGetChannel(MlirType bundle, size_t idx);
 //===----------------------------------------------------------------------===//
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowType(MlirType type);
+MLIR_CAPI_EXPORTED MlirTypeID circtESIWindowTypeGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGet(MlirContext cctxt,
                                                   MlirAttribute name,
                                                   MlirType into,
@@ -79,6 +84,7 @@ MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetFrame(MlirType window,
 MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetLoweredType(MlirType window);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowFrameType(MlirType type);
+MLIR_CAPI_EXPORTED MlirTypeID circtESIWindowFrameTypeGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirType circtESIWindowFrameTypeGet(MlirContext cctxt,
                                                        MlirAttribute name,
                                                        size_t numMembers,
@@ -89,6 +95,7 @@ MLIR_CAPI_EXPORTED MlirType circtESIWindowFrameTypeGetMember(MlirType frame,
                                                              size_t idx);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowFieldType(MlirType type);
+MLIR_CAPI_EXPORTED MlirTypeID circtESIWindowFieldTypeGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirType circtESIWindowFieldTypeGet(MlirContext cctxt,
                                                        MlirAttribute fieldName,
                                                        uint64_t numItems,
