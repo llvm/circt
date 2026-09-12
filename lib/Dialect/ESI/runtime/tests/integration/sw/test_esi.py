@@ -9,7 +9,7 @@ from typing import Optional
 import esiaccel as esi
 from esiaccel.accelerator import AcceleratorConnection
 from esiaccel.cosim.pytest import cosim_test
-from esiaccel.types import MMIORegion
+from esiaccel.types import MMIORegion, MetricPort
 
 HW_DIR = Path(__file__).resolve().parent.parent / "hw"
 
@@ -71,7 +71,24 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
   for id, region in mmio_svc.regions.items():
     print(f"Region {id}: {region.base} - {region.base + region.size}")
 
-  assert len(mmio_svc.regions) == 5
+  def count_telemetry_counters(module) -> int:
+    local_count = sum(
+        isinstance(port, MetricPort) for port in module.ports.values())
+    return local_count + sum(
+        count_telemetry_counters(child) for child in module.children.values())
+
+  num_telemetry_counters = count_telemetry_counters(d)
+  assert num_telemetry_counters > 0
+  # Note: the keys of 'regions' are AppIDPaths, whose repr is the dotted path
+  # without decoration (unlike AppID, which is wrapped in angle brackets).
+  telemetry_region = next((region for id, region in mmio_svc.regions.items()
+                           if str(id) == "__telemetry_mmio"), None)
+  assert telemetry_region is not None, \
+      f"no __telemetry_mmio region in {[str(i) for i in mmio_svc.regions]}"
+  telemetry_bytes = num_telemetry_counters * 8
+  expected_telemetry_allocation = 1 << (telemetry_bytes - 1).bit_length()
+  assert telemetry_region.size == expected_telemetry_allocation
+  assert len(mmio_svc.regions) == 6
 
   ##############################################################################
   # MMIOClient tests
@@ -84,15 +101,23 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
     else:
       assert False, f"read_offset({offset}, {add_amt}) -> {data}"
 
-  mmio9 = d.ports[esi.AppID("mmio_client", 9)]
-  read_offset(mmio9, 0, 9)
-  read_offset(mmio9, 13, 9)
-
   mmio4 = d.ports[esi.AppID("mmio_client", 4)]
+  assert mmio4.descriptor.size == 0x800
+  assert mmio4.descriptor.base % mmio4.descriptor.size == 0
   read_offset(mmio4, 0, 4)
   read_offset(mmio4, 13, 4)
 
+  mmio9 = d.ports[esi.AppID("mmio_client", 9)]
+  assert mmio9.descriptor.size == 0x2000
+  assert mmio9.descriptor.base % mmio9.descriptor.size == 0
+  read_offset(mmio9, 0, 9)
+  read_offset(mmio9, 13, 9)
+  read_offset(mmio9, 0x1000, 9)
+  read_offset(mmio9, 0x1200, 9)
+
   mmio14 = d.ports[esi.AppID("mmio_client", 14)]
+  assert mmio14.descriptor.size == 0x800
+  assert mmio14.descriptor.base % mmio14.descriptor.size == 0
   read_offset(mmio14, 0, 14)
   read_offset(mmio14, 13, 14)
 
@@ -101,6 +126,8 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
   ##############################################################################
 
   mmio_rw = d.ports[esi.AppID("mmio_rw_client")]
+  assert mmio_rw.descriptor.size == 0x200
+  assert mmio_rw.descriptor.base % mmio_rw.descriptor.size == 0
 
   def read_offset_check(i: int, add_amt: int):
     d = mmio_rw.read(i)
