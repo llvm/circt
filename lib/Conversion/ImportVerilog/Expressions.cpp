@@ -2941,7 +2941,6 @@ Value Context::materializeFixedSizeUnpackedArrayType(
 
   llvm::SmallVector<mlir::Value> elemVals;
   moore::ConstantOp constOp;
-
   mlir::OpBuilder::InsertionGuard guard(builder);
 
   // Add one ConstantOp for every element in the array
@@ -2957,12 +2956,34 @@ Value Context::materializeFixedSizeUnpackedArrayType(
 
   return arrayOp.getResult();
 }
+Value Context::materializeOpenUnpackedArrayType(
+    const slang::ConstantValue &constant,
+    const slang::ast::OpenUnpackedArrayType &type, Location loc) {
+  // Extract element type
+  auto elementType = convertType(type.elementType);
+  if (!elementType)
+    return {};
 
+  // Construct elements
+  llvm::SmallVector<Value> elemVals;
+  for (auto elem : constant.elements()) {
+    auto elemVal = materializeConstant(elem, type.elementType, loc);
+    if (!elemVal)
+      return {};
+    elemVals.push_back(elemVal);
+  }
+
+  // Create open array value
+  auto arrType = moore::UnpackedArrayType::get(getContext(), elementType, 0);
+  return builder.create<moore::ArrayCreateOp>(loc, arrType, elemVals).getResult(); ̰ ̰
+}
 Value Context::materializeConstant(const slang::ConstantValue &constant,
                                    const slang::ast::Type &type, Location loc) {
 
   if (auto *arr = type.as_if<slang::ast::FixedSizeUnpackedArrayType>())
     return materializeFixedSizeUnpackedArrayType(constant, *arr, loc);
+    if (auto *openArr = type.as_if<slang::ast::OpenUnpackedArrayType>())
+      return materializeOpenUnpackedArrayType(constant, *openArr, loc);
   if (constant.isInteger())
     return materializeSVInt(constant.integer(), type, loc);
   if (constant.isReal() || constant.isShortReal())
