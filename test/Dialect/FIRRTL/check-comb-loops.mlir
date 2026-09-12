@@ -1214,3 +1214,55 @@ firrtl.circuit "InstanceChoiceLoopAlt" {
     firrtl.matchingconnect %y, %inst_out : !firrtl.uint<8>
   }
 }
+
+// -----
+
+// Forceable registers implement CombDataFlow, so their RWProbes must still be
+// recorded.
+// CHECK: firrtl.circuit "ForceableRegInChild"
+firrtl.circuit "ForceableRegInChild" {
+  firrtl.module @Child(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
+                       in %v: !firrtl.uint<8>, in %d: !firrtl.uint<8>,
+                       out %o: !firrtl.uint<8>) {
+    %r, %r_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %r : !firrtl.uint<8>
+    firrtl.ref.force %clock, %en, %r_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+  firrtl.module @ForceableRegInChild(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
+                                     in %v: !firrtl.uint<8>, in %d: !firrtl.uint<8>,
+                                     out %o: !firrtl.uint<8>) {
+    %c_clock, %c_en, %c_v, %c_d, %c_o = firrtl.instance c @Child(in clock: !firrtl.clock, in en: !firrtl.uint<1>, in v: !firrtl.uint<8>, in d: !firrtl.uint<8>, out o: !firrtl.uint<8>)
+    firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %c_en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %c_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Exporting the RWProbe of a forceable register.
+// CHECK: firrtl.circuit "ForceableRegExportedRWProbe"
+firrtl.circuit "ForceableRegExportedRWProbe" {
+  firrtl.module @Child(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
+                       in %v: !firrtl.uint<8>, in %d: !firrtl.uint<8>,
+                       out %o: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %r, %r_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %r : !firrtl.uint<8>
+    firrtl.ref.define %p, %r_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %r_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+  firrtl.module @ForceableRegExportedRWProbe(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
+                                             in %v: !firrtl.uint<8>, in %d: !firrtl.uint<8>,
+                                             out %o: !firrtl.uint<8>) {
+    %c_clock, %c_en, %c_v, %c_d, %c_o, %c_p = firrtl.instance c @Child(in clock: !firrtl.clock, in en: !firrtl.uint<1>, in v: !firrtl.uint<8>, in d: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %c_en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %c_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+  }
+}
