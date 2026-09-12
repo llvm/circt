@@ -155,6 +155,7 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
   auto *ctxt = module.getContext();
 
   auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
+  auto verilogCaseNamesAttr = StringAttr::get(ctxt, "hw.verilogCaseNames");
   // Legalize the port names.
   auto ports = module.getPortList();
   SmallVector<Attribute> newNames(ports.size());
@@ -229,6 +230,17 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
           nameEntries.emplace_back(
               op, StringAttr::get(op->getContext(), defaultName));
         }
+      } else if (auto genCase = dyn_cast<GenerateCaseOp>(op)) {
+        llvm::StringMap<size_t> nextGenIds;
+        SmallVector<Attribute> legalizedNames;
+        for (Attribute name : genCase.getCaseNames()) {
+          StringRef legal =
+              sv::legalizeName(cast<StringAttr>(name).getValue(), nextGenIds,
+                               options.caseInsensitiveKeywords);
+          legalizedNames.emplace_back(StringAttr::get(ctxt, legal));
+        }
+        genCase->setAttr(verilogCaseNamesAttr,
+                         ArrayAttr::get(ctxt, legalizedNames));
       }
     }
   });
