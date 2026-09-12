@@ -3025,14 +3025,21 @@ void ArrayInjectOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 // TypedeclOp
 //===----------------------------------------------------------------------===//
 
+LogicalResult TypedeclOp::verify() {
+  if (!isa_and_nonnull<hw::TypeScopeLike>(getOperation()->getParentOp()))
+    return emitOpError("expects parent op to be a type scope, such as "
+                       "'hw.type_scope' or 'sv.package'");
+  return success();
+}
+
 StringRef TypedeclOp::getPreferredName() {
   return getVerilogName().value_or(getName());
 }
 
 Type TypedeclOp::getAliasType() {
-  auto parentScope = cast<hw::TypeScopeOp>(getOperation()->getParentOp());
+  auto parentScope = cast<hw::TypeScopeLike>(getOperation()->getParentOp());
   return hw::TypeAliasType::get(
-      SymbolRefAttr::get(parentScope.getSymNameAttr(),
+      SymbolRefAttr::get(parentScope.getNameAttr(),
                          {FlatSymbolRefAttr::get(*this)}),
       getType());
 }

@@ -23,6 +23,36 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
+// Package operations
+//===----------------------------------------------------------------------===//
+
+def PackageOp : SVOp<"package", [
+    Emittable, SymbolName, SymbolVisibility, Symbol, SymbolTable, TypeScopeLike,
+    SingleBlock, NoTerminator, NoRegionArguments, IsolatedFromAbove,
+    HasParent<"mlir::ModuleOp">
+]> {
+  let summary = "SystemVerilog package containing type declarations";
+  let description = [{
+    A named, top-level SystemVerilog package containing only `hw.typedecl`
+    operations. Its declarations are referenced using `hw.typealias` with a
+    symbol reference of the form `@package::@type`. Empty packages are allowed.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility
+  );
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name $body attr-dict";
+
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Interface operations
 //===----------------------------------------------------------------------===//
 
