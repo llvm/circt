@@ -4746,7 +4746,8 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SizeOfIntrinsicOp op) {
-  op.emitError("SizeOf should have been resolved.");
+  op.emitError("sizeof intrinsic should have been resolved by the "
+               "LowerSizeOf pass.");
   return failure();
 }
 

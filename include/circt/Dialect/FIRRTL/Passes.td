@@ -391,6 +391,13 @@ def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
                               "Warn when connects require implicit truncation">];
 }
 
+def LowerSizeOf : Pass<"firrtl-lower-sizeof", "firrtl::FModuleOp"> {
+  let summary = "Lower sizeof intrinsic operations";
+  let description = [{
+    This pass elaborates sizeof intrinsics into constants.
+  }];
+}
+
 def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
   let summary = "Infer reset synchronicity and add implicit resets";
   let description = [{

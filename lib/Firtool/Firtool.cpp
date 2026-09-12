@@ -88,6 +88,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   inferWidthsOptions.warnOnTruncation = opt.shouldWarnOnTruncation();
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createInferWidths(inferWidthsOptions));
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createLowerSizeOf());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createFullReset());
