@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
+#include <optional>
 
 namespace circt {
 namespace hw {
@@ -41,6 +42,13 @@ IntegerAttr getIntZerosAttr(Type type);
 
 /// Utility for generating a constant all ones attribute.
 IntegerAttr getIntOnesAttr(Type type);
+
+/// Return true if replacing a register carrying the time-zero `initial` value
+/// `initial` with `foldedValue` does not change the register's time-zero
+/// behavior.  A register with no `initial` attribute can always be folded; a
+/// register with one can only be folded into a constant that matches it.
+bool preservesInitial(IntegerAttr initial,
+                      std::optional<APInt> foldedValue = std::nullopt);
 
 /// Return the single assignment to a Property value.
 PropAssignOp getPropertyAssignment(FIRRTLPropertyValue value);
