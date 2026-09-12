@@ -58,6 +58,9 @@ struct GlobalNameTable {
     return it != enumPrefixes.end() ? it->second : StringAttr();
   }
 
+  std::optional<std::pair<Operation *, StringAttr>>
+  getPackageEnumField(hw::EnumFieldAttr field) const;
+
   // Add the set of reserved names to a resolver.
   void addReservedNames(NameCollisionResolver &nameResolver) const;
 
@@ -80,6 +83,9 @@ private:
   // This contains prefixes for any typedecl'd enum types. Keys are type-aliases
   // of enum types.
   DenseMap<Type, StringAttr> enumPrefixes;
+
+  DenseMap<std::pair<Type, StringAttr>, std::pair<Operation *, StringAttr>>
+      packageEnumFields;
 
   /// List of names which are marked as reserved for any name.
   DenseSet<StringAttr> reservedNames;
@@ -131,7 +137,8 @@ struct FieldNameResolver {
   /// case a prefix can be inferred for the provided enum type (the enum type is
   /// a type alias), the prefix will be applied. If not, the raw field name
   /// is returned.
-  std::string getEnumFieldName(hw::EnumFieldAttr attr);
+  std::string getEnumFieldName(hw::EnumFieldAttr attr,
+                               Operation *currentPackage = nullptr);
 
 private:
   void setRenamedFieldName(StringAttr fieldName, StringAttr newFieldName);
