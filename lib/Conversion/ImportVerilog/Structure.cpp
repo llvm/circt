@@ -2453,6 +2453,10 @@ LogicalResult Context::convertFixedPrimitive(
   if (primName == "pullup" || primName == "pulldown")
     return convertPullGatePrimitive(prim);
 
+  if (primName == "nmos" || primName == "pmos" || primName == "rnmos" ||
+      primName == "rpmos" || primName == "cmos" || primName == "rcmos")
+    return convertMOSSwitchPrimitive(prim);
+
   // Remaining fixed primitives still need handling
   mlir::emitError(loc) << "unsupported primitive `" << primName << "`";
   return failure();
@@ -2492,6 +2496,129 @@ LogicalResult Context::convertPullGatePrimitive(
   if (!converted)
     return failure();
   moore::ContinuousAssignOp::create(builder, loc, portVal, converted);
+  return success();
+}
+
+LogicalResult Context::convertMOSSwitchPrimitive(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  assert(
+      prim.primitiveType.name == "nmos" || prim.primitiveType.name == "pmos" ||
+      prim.primitiveType.name == "rnmos" ||
+      prim.primitiveType.name == "rpmos" || prim.primitiveType.name == "cmos" ||
+      prim.primitiveType.name == "rcmos");
+
+  auto loc = convertLocation(prim.location);
+  auto primName = prim.primitiveType.name;
+
+  auto portConns = prim.getPortConnections();
+
+  if (primName == "cmos" || primName == "rcmos") {
+    assert(portConns.size() == 4 &&
+           "cmos primitive should have exactly 4 ports");
+  } else {
+    assert(portConns.size() == 3 &&
+           "mos primitive should have exactly 3 ports");
+  }
+
+  auto &outputConn =
+      portConns[0]->as<slang::ast::AssignmentExpression>().left();
+
+  auto outputVal = convertLvalueExpression(outputConn);
+  if (!outputVal)
+    return failure();
+
+  auto inputVal = convertRvalueExpression(*portConns[1]);
+  if (!inputVal)
+    return failure();
+
+  Value controlVal;
+
+  auto makeLevelConstant = [&](Value value, int level) -> Value {
+    auto type = cast<moore::IntType>(value.getType());
+    auto width = type.getBitSize();
+
+    assert(width && "expected fixed-width MOS control signal");
+
+    FVInt target(*width, static_cast<uint64_t>(level));
+    return moore::ConstantOp::create(builder, loc, type, target);
+  };
+
+  if (primName == "cmos" || primName == "rcmos") {
+    auto nControl = convertRvalueExpression(*portConns[2]);
+    if (!nControl)
+      return failure();
+
+    auto pControl = convertRvalueExpression(*portConns[3]);
+    if (!pControl)
+      return failure();
+
+    auto one = makeLevelConstant(nControl, 1);
+    auto zero = makeLevelConstant(pControl, 0);
+
+    auto nEnabled = moore::EqOp::create(builder, loc, nControl, one);
+
+    auto pEnabled = moore::EqOp::create(builder, loc, pControl, zero);
+
+    controlVal = moore::AndOp::create(builder, loc, nEnabled, pEnabled);
+  } else {
+    auto control = convertRvalueExpression(*portConns[2]);
+    if (!control)
+      return failure();
+
+    int offLevel = (primName == "nmos" || primName == "rnmos") ? 0 : 1;
+
+    auto offValue = makeLevelConstant(control, offLevel);
+
+    controlVal = moore::CaseEqOp::create(builder, loc, control, offValue);
+  }
+
+  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+
+  auto convertedInput = materializeConversion(dstType, inputVal, false, loc);
+  if (!convertedInput)
+    return failure();
+
+  auto dstWidth = dstType.getBitSize();
+  assert(dstWidth && "expected fixed-width type for MOS switch primitive");
+
+  auto logicType = moore::IntType::getLogic(getContext(), *dstWidth);
+
+  FVInt allZVal = FVInt::getAllZ(*dstWidth);
+  Value zVal = moore::ConstantOp::create(builder, loc, logicType, allZVal);
+
+  zVal = materializeConversion(dstType, zVal, false, loc);
+  if (!zVal)
+    return failure();
+
+  auto condOp = moore::ConditionalOp::create(builder, loc, dstType, controlVal);
+
+  auto &trueBlock = condOp.getTrueRegion().emplaceBlock();
+  auto &falseBlock = condOp.getFalseRegion().emplaceBlock();
+
+  bool controlMeansOn = primName == "cmos" || primName == "rcmos";
+
+  {
+    OpBuilder::InsertionGuard guard(builder);
+
+    if (controlMeansOn) {
+      builder.setInsertionPointToStart(&trueBlock);
+      moore::YieldOp::create(builder, loc, convertedInput);
+
+      builder.setInsertionPointToStart(&falseBlock);
+      moore::YieldOp::create(builder, loc, zVal);
+    } else {
+      builder.setInsertionPointToStart(&trueBlock);
+      moore::YieldOp::create(builder, loc, zVal);
+
+      builder.setInsertionPointToStart(&falseBlock);
+      moore::YieldOp::create(builder, loc, convertedInput);
+    }
+  }
+
+  Value result = condOp.getResult();
+
+  moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
+
   return success();
 }
 
