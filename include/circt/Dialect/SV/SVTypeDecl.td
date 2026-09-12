@@ -133,7 +133,9 @@ def ModportDirection : I32EnumAttr<"ModportDirection",
 }
 
 def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,
-  "modport_direction">;
+  "modport_direction"> {
+  let assemblyFormat = "$value";
+}
 
 class SV_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
     : AttrDef<SVDialect, attrName, traits> {
