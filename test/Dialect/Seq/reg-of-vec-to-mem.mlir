@@ -96,3 +96,117 @@ hw.module @shared_reg_test(in %clk: i1, in %addr: i2, in %data: i8, in %we: i1, 
   // Register used elsewhere - should prevent transformation
   hw.output %mem, %read : !hw.array<4xi8>, i8
 }
+
+// Recognize a chain of equal-width masked writes, including an outer global
+// enable mux. The lane updates are deliberately listed from low to high bits.
+// CHECK-LABEL: hw.module @masked_mem(
+hw.module @masked_mem(in %clk: i1, in %addr: i2, in %data: i32, in %mask: i4, in %enable: i1, out read: i32) {
+  %clock = seq.to_clock %clk
+  %m0 = comb.extract %mask from 0 : (i4) -> i1
+  %m1 = comb.extract %mask from 1 : (i4) -> i1
+  %m2 = comb.extract %mask from 2 : (i4) -> i1
+  %m3 = comb.extract %mask from 3 : (i4) -> i1
+  %d0 = comb.extract %data from 0 : (i32) -> i8
+  %d1 = comb.extract %data from 8 : (i32) -> i8
+  %d2 = comb.extract %data from 16 : (i32) -> i8
+  %d3 = comb.extract %data from 24 : (i32) -> i8
+
+  %old0 = hw.array_get %mem[%addr] : !hw.array<4xi32>, i2
+  %high0 = comb.extract %old0 from 8 : (i32) -> i24
+  %word0 = comb.concat %high0, %d0 : i24, i8
+  %inject0 = hw.array_inject %mem[%addr], %word0 : !hw.array<4xi32>, i2
+  %state0 = comb.mux %m0, %inject0, %mem : !hw.array<4xi32>
+
+  %old1 = hw.array_get %state0[%addr] : !hw.array<4xi32>, i2
+  %high1 = comb.extract %old1 from 16 : (i32) -> i16
+  %low1 = comb.extract %old1 from 0 : (i32) -> i8
+  %word1 = comb.concat %high1, %d1, %low1 : i16, i8, i8
+  %inject1 = hw.array_inject %state0[%addr], %word1 : !hw.array<4xi32>, i2
+  %state1 = comb.mux %m1, %inject1, %state0 : !hw.array<4xi32>
+
+  %old2 = hw.array_get %state1[%addr] : !hw.array<4xi32>, i2
+  %high2 = comb.extract %old2 from 24 : (i32) -> i8
+  %low2 = comb.extract %old2 from 0 : (i32) -> i16
+  %word2 = comb.concat %high2, %d2, %low2 : i8, i8, i16
+  %inject2 = hw.array_inject %state1[%addr], %word2 : !hw.array<4xi32>, i2
+  %state2 = comb.mux %m2, %inject2, %state1 : !hw.array<4xi32>
+
+  %old3 = hw.array_get %state2[%addr] : !hw.array<4xi32>, i2
+  %low3 = comb.extract %old3 from 0 : (i32) -> i24
+  %word3 = comb.concat %d3, %low3 : i8, i24
+  %inject3 = hw.array_inject %state2[%addr], %word3 : !hw.array<4xi32>, i2
+  %state3 = comb.mux %m3, %inject3, %state2 : !hw.array<4xi32>
+
+  %next = comb.mux %enable, %state3, %mem : !hw.array<4xi32>
+  %mem = seq.firreg %next clock %clock : !hw.array<4xi32>
+  %read = hw.array_get %mem[%addr] : !hw.array<4xi32>, i2
+  hw.output %read : i32
+}
+
+// CHECK: %[[CLOCK:.+]] = seq.to_clock %clk
+// CHECK: %[[M0:.+]] = comb.extract %mask from 0 : (i4) -> i1
+// CHECK: %[[M1:.+]] = comb.extract %mask from 1 : (i4) -> i1
+// CHECK: %[[M2:.+]] = comb.extract %mask from 2 : (i4) -> i1
+// CHECK: %[[M3:.+]] = comb.extract %mask from 3 : (i4) -> i1
+// CHECK: %[[D0:.+]] = comb.extract %data from 0 : (i32) -> i8
+// CHECK: %[[D1:.+]] = comb.extract %data from 8 : (i32) -> i8
+// CHECK: %[[D2:.+]] = comb.extract %data from 16 : (i32) -> i8
+// CHECK: %[[D3:.+]] = comb.extract %data from 24 : (i32) -> i8
+// CHECK: %mem = seq.firmem 0, 1, undefined, undefined : <4 x 32, mask 4>
+// CHECK: %[[READ:.+]] = seq.firmem.read_port %mem[%addr], clock %[[CLOCK]]
+// CHECK: %[[DATA:.+]] = comb.concat %[[D3]], %[[D2]], %[[D1]], %[[D0]] : i8, i8, i8, i8
+// CHECK: %[[MASK:.+]] = comb.concat %[[M3]], %[[M2]], %[[M1]], %[[M0]] : i1, i1, i1, i1
+// CHECK: seq.firmem.write_port %mem[%addr] = %[[DATA]], clock %[[CLOCK]] enable %enable mask %[[MASK]]
+// CHECK: hw.output %[[READ]] : i32
+// CHECK-NOT: seq.firreg %{{.*}} : !hw.array<4xi32>
+// CHECK-NOT: hw.array_get
+// CHECK-NOT: hw.array_inject
+
+// A memory without an external read access is still a valid write-only memory.
+// CHECK-LABEL: hw.module @masked_write_only(
+hw.module @masked_write_only(in %clk: i1, in %addr: i2, in %lo: i8, in %hi: i8, in %lo_en: i1, in %hi_en: i1) {
+  %clock = seq.to_clock %clk
+  %old0 = hw.array_get %mem[%addr] : !hw.array<4xi16>, i2
+  %old_hi = comb.extract %old0 from 8 : (i16) -> i8
+  %word0 = comb.concat %old_hi, %lo : i8, i8
+  %inject0 = hw.array_inject %mem[%addr], %word0 : !hw.array<4xi16>, i2
+  %state0 = comb.mux %lo_en, %inject0, %mem : !hw.array<4xi16>
+  %old1 = hw.array_get %state0[%addr] : !hw.array<4xi16>, i2
+  %old_lo = comb.extract %old1 from 0 : (i16) -> i8
+  %word1 = comb.concat %hi, %old_lo : i8, i8
+  %inject1 = hw.array_inject %state0[%addr], %word1 : !hw.array<4xi16>, i2
+  %next = comb.mux %hi_en, %inject1, %state0 : !hw.array<4xi16>
+  %mem = seq.firreg %next clock %clock : !hw.array<4xi16>
+}
+
+// CHECK: %[[CLOCK:.+]] = seq.to_clock %clk
+// CHECK: %mem = seq.firmem 0, 1, undefined, undefined : <4 x 16, mask 2>
+// CHECK-NOT: seq.firmem.read_port %mem
+// CHECK: %[[DATA:.+]] = comb.concat %hi, %lo : i8, i8
+// CHECK: %[[MASK:.+]] = comb.concat %hi_en, %lo_en : i1, i1
+// CHECK: %[[TRUE:.+]] = hw.constant true
+// CHECK: seq.firmem.write_port %mem[%addr] = %[[DATA]], clock %[[CLOCK]] enable %[[TRUE]] mask %[[MASK]]
+// CHECK-NOT: seq.firreg %{{.*}} : !hw.array<4xi16>
+
+// Do not combine writes which target different addresses.
+// CHECK-LABEL: hw.module @masked_different_addresses(
+hw.module @masked_different_addresses(in %clk: i1, in %addr0: i2, in %addr1: i2, in %lo: i8, in %hi: i8, in %lo_en: i1, in %hi_en: i1, out read: i16) {
+  %clock = seq.to_clock %clk
+  %old0 = hw.array_get %mem[%addr0] : !hw.array<4xi16>, i2
+  %old_hi = comb.extract %old0 from 8 : (i16) -> i8
+  %word0 = comb.concat %old_hi, %lo : i8, i8
+  %inject0 = hw.array_inject %mem[%addr0], %word0 : !hw.array<4xi16>, i2
+  %state0 = comb.mux %lo_en, %inject0, %mem : !hw.array<4xi16>
+  %old1 = hw.array_get %state0[%addr1] : !hw.array<4xi16>, i2
+  %old_lo = comb.extract %old1 from 0 : (i16) -> i8
+  %word1 = comb.concat %hi, %old_lo : i8, i8
+  %inject1 = hw.array_inject %state0[%addr1], %word1 : !hw.array<4xi16>, i2
+  %next = comb.mux %hi_en, %inject1, %state0 : !hw.array<4xi16>
+  %mem = seq.firreg %next clock %clock : !hw.array<4xi16>
+  %read = hw.array_get %mem[%addr0] : !hw.array<4xi16>, i2
+  hw.output %read : i16
+}
+
+// CHECK: %[[CLOCK:.+]] = seq.to_clock %clk
+// CHECK: seq.firreg %{{.*}} clock %[[CLOCK]] : !hw.array<4xi16>
+// CHECK-NOT: seq.firmem
