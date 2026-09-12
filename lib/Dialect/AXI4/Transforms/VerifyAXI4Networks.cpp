@@ -72,6 +72,24 @@ static void emitDomainCrossing(Operation *op, Operation *other,
   diag.attachNote(other->getLoc()) << "connected operation here";
 }
 
+/// Report an endpoint that can handle fewer requests than the port reaching it
+/// can have concurrently outstanding - this is a warning since it will only
+/// impact throughput.
+static void warnBottleneck(Operation *op, Value port, uint32_t writes,
+                           uint32_t reads) {
+  auto reaching = cast<PortType>(port.getType());
+  if (writes < reaching.getOutstandingWrites())
+    op->emitWarning() << "endpoint can handle fewer writes than the port "
+                         "reaching it can have concurrently outstanding ("
+                      << writes << " < " << reaching.getOutstandingWrites()
+                      << ")";
+  if (reads < reaching.getOutstandingReads())
+    op->emitWarning() << "endpoint can handle fewer reads than the port "
+                         "reaching it can have concurrently outstanding ("
+                      << reads << " < " << reaching.getOutstandingReads()
+                      << ")";
+}
+
 namespace {
 struct VerifyAXI4NetworksPass
     : public circt::axi4::impl::VerifyAXI4NetworksBase<VerifyAXI4NetworksPass> {
@@ -128,6 +146,21 @@ void VerifyAXI4NetworksPass::runOnOperation() {
         anyFailed = true;
       }
     }
+  });
+
+  // Warn on bottlenecks where an endpoint may not be able to keep up with the
+  // requests reaching it
+  module.walk([](Operation *op) {
+    TypeSwitch<Operation *>(op)
+        .Case<AbstractSubordinateOp>([](AbstractSubordinateOp subordinate) {
+          warnBottleneck(subordinate, subordinate.getUpstream(),
+                         subordinate.getConcurrentWrites(),
+                         subordinate.getConcurrentReads());
+        })
+        .Case<PortToChannelStructsOp>([](PortToChannelStructsOp bridge) {
+          warnBottleneck(bridge, bridge.getPort(), bridge.getConcurrentWrites(),
+                         bridge.getConcurrentReads());
+        });
   });
 
   if (anyFailed)
