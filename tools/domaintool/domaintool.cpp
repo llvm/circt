@@ -292,6 +292,8 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   //
   //   - "domainInfo_out": a domain object
   //   - "associations_out": all the ports associated with the domain object
+  //   - sibling "<domain>_registry_<registry>" fields containing registry
+  //     asset lists, e.g. "A_registry_clockGates"
   //
   // The domain object we get back may be a parameter that we passed in or it
   // may have been created internal to the circuit.
@@ -299,11 +301,12 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   // The end result of this loop is that the `byType` map is created.  This
   // organizes the resulting objects into a map of:
   //
-  //     Domain Kind -> Domain -> Associations
+  //     Domain Kind -> Domain -> {Associations, Registries}
   //
   // The domain kind is "clock", "reset", or "power".  The domain is the actual
   // domain object with all its fields populated.  The associations are the
-  // ports associated with that domain.
+  // ports associated with that domain.  Registries are named unordered path
+  // lists accumulated via domain.insert.
   //
   // Note: Care needs to be taken here to ensure the stability of the output.
   // This means that the iteration over the fields must be stable.  (Using
@@ -350,9 +353,32 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
     if (!associationsList)
       continue;
 
-    // Update the `byType` map.
-    byType[domainInfoObject->getType()][domainInfoObject].append(
-        associationsList->getElements());
+    // Update the `byType` map with associations and the registry lists that
+    // accompany this domain output on the enclosing module class.
+    DomainLists &lists = byType[domainInfoObject->getType()][domainInfoObject];
+    lists.associations.append(associationsList->getElements());
+
+    // Registry lists are separate, bottom-up outputs of the enclosing module.
+    // Associate the lists with `<domain>_out` by their dedicated prefix.
+    auto domainOutputName = fieldNameAttr.getValue();
+    if (!domainOutputName.consume_back("_out"))
+      continue;
+    auto registryPrefix = (Twine(domainOutputName) + "_registry_").str();
+    for (auto attr : object->getFieldNames()) {
+      auto name = cast<StringAttr>(attr);
+      if (!name.getValue().starts_with(registryPrefix))
+        continue;
+
+      auto registryValue = object->getField(name);
+      auto *registryList =
+          dyn_cast<om::evaluator::ListValue>(registryValue->get());
+      if (!registryList)
+        continue;
+
+      auto registryName = StringAttr::get(
+          &context, name.getValue().drop_front(registryPrefix.size()));
+      lists.registries[registryName].append(registryList->getElements());
+    }
   }
 
   // Accumulate domain information into registered handlers.  Pass each object

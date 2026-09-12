@@ -1217,7 +1217,7 @@ circuit LeadingList:
 FIRRTL version 4.0.0
 circuit LeadingPath:
   public module LeadingPath:
-    ; expected-error @below {{unexpected path() as start of statement}}
+    ; expected-error @below {{unexpected path expression as start of statement}}
     path("")
 
 ;// -----
@@ -1978,3 +1978,41 @@ circuit PropertyAssertNonStringMessage:
   public module PropertyAssertNonStringMessage:
     ; expected-error @below {{propassert message must be a string type}}
     propassert Bool(true), Integer(42)
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryOnPort:
+  public module RegistryOnPort:
+    ; expected-error @below {{Registry types are only valid as domain fields}}
+    input a: Registry<Path>
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryOnWire:
+  public module RegistryOnWire:
+    ; expected-error @below {{Registry types are only valid as domain fields}}
+    wire a: Registry<Path>
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryAssign:
+  domain ClockDomain:
+    clockGates: Registry<Path>
+  public module RegistryAssign:
+    input A: Domain of ClockDomain
+    ; expected-error @below {{domain.subfield only supports property-typed fields}}
+    propassign A.clockGates, path("OMReferenceTarget:~RegistryAssign|RegistryAssign>x")
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryNotField:
+  domain ClockDomain:
+    name: String
+  public module RegistryNotField:
+    input A: Domain of ClockDomain
+    ; expected-error @below {{domain field 'name' is not a registry type}}
+    insert A.name, path("OMReferenceTarget:~RegistryNotField|RegistryNotField>x")
