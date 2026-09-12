@@ -1,6 +1,7 @@
 // FIXME: max-cuts-per-root=20 is due to a lack of non-minimal cut filtering.
 // RUN: circt-opt --pass-pipeline='builtin.module(hw.module(synth-generic-lut-mapper{test=true max-cuts-per-root=20}))' %s | FileCheck %s --check-prefixes CHECK,LUT
-// RUN: circt-opt --pass-pipeline='builtin.module(hw.module(synth-generic-lut-mapper{test=true max-lut-size=2}))' %s | FileCheck %s --check-prefixes CHECK,LUT2
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.module(synth-generic-lut-mapper{test=true max-lut-size=2 strategy=timing}))' %s | FileCheck %s --check-prefixes CHECK,LUT2
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.module(synth-generic-lut-mapper{test=true max-lut-size=2 strategy=area}))' %s | FileCheck %s --check-prefixes CHECK,LUT2
 
 // CHECK:      %[[B_0:.+]] = comb.extract %b from 0 : (i2) -> i1
 // CHECK-NEXT: %[[B_1:.+]] = comb.extract %b from 1 : (i2) -> i1
@@ -67,4 +68,20 @@ hw.module @choice_slow_branch(in %a : i1, in %b : i1, in %c : i1,
 
   %choice = synth.choice %slow, %fast : i1
   hw.output %choice : i1
+}
+
+// CHECK-LABEL: hw.module @choice_shared_area_flow
+// LUT2-NEXT: %[[AB:.+]] = comb.truth_table %b, %a -> [false, false, false, true]
+// LUT2-SAME: test.arrival_times = [1]
+// LUT2-NEXT: %[[OUT:.+]] = comb.truth_table %[[AB]], %c -> [false, false, false, true]
+// LUT2-SAME: test.arrival_times = [2]
+// LUT2-NEXT: hw.output %[[AB]], %[[OUT]] : i1, i1
+hw.module @choice_shared_area_flow(in %a : i1, in %b : i1, in %c : i1,
+                                   out share : i1, out y : i1) {
+  %ab = synth.aig.and_inv %a, %b : i1
+  %left = synth.aig.and_inv %ab, %c : i1
+  %bc = synth.aig.and_inv %b, %c : i1
+  %right = synth.aig.and_inv %a, %bc : i1
+  %choice = synth.choice %right, %left : i1
+  hw.output %ab, %choice : i1, i1
 }
