@@ -2451,6 +2451,24 @@ def OpenUArrayFromUnpackedArrayOp: MooreOp<"open_uarray_from_uarray",
   }];
 }
 
+def OpenArrayFromArrayOp : MooreOp<"open_array_from_array", [
+  Pure,
+  TypesMatchWith<"input's elements type must match the result's elements type",
+                 "input", "output",
+                 "OpenArrayType::get($_self.getContext(), "
+                 "cast<ArrayType>($_self).getElementType())">
+]> {
+  let summary = "Create an open packed array from a fixed-size packed array";
+  let description = [{
+    Converts a fixed-size packed array into an open packed array.
+  }];
+  let arguments = (ins ArrayType:$input);
+  let results = (outs OpenArrayType:$output);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($output)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//

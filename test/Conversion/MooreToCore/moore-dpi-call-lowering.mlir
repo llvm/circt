@@ -41,6 +41,14 @@ moore.module @DpiInoutRetTest(in %val : !moore.i32, in %state : !moore.i32, out 
   moore.output %0#0, %0#1 : !moore.i32, !moore.i32
 }
 
+// CHECK-LABEL: func.func @call_dpi_open_array
+func.func @call_dpi_open_array(%wd: !moore.uarray<8 x i8>) {
+  %0 = moore.open_uarray_from_uarray %wd : !moore.uarray<8 x i8> -> !moore.open_uarray<i8>
+  // CHECK: sim.func.dpi.call @dpi_open_array(%{{.*}}) : (!llvm.ptr) -> !llvm.ptr
+  %1 = moore.func.dpi.call @dpi_open_array(%0) : (!moore.open_uarray<i8>) -> !moore.open_uarray<i8>
+  return
+}
+
 moore.func.dpi private @dpi_void(in %val : !moore.i32)
 
 // CHECK: sim.func.dpi private @dpi_void(in %val : i32)
