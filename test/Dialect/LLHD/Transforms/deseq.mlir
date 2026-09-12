@@ -23,6 +23,32 @@ hw.module @ClockPosEdge(in %clock: i1, in %d: i42) {
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
+// Explicit source initializers become register presets. The unmarked signal
+// in ClockPosEdge above must continue to produce a register without a preset.
+// CHECK-LABEL: @ClockPosEdgeExplicitInit(
+hw.module @ClockPosEdgeExplicitInit(in %clock: i1, in %d: i42) {
+  %zero = hw.constant 0 : i42
+  %init = hw.constant 7 : i42
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK:%.+]] = seq.to_clock %clock
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] preset 7 {name = "sig"} : i42
+  %value, %enable = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%zero, %false : i42, i1)
+  ^bb1(%data: i42, %en: i1):
+    llhd.wait yield (%data, %en : i42, i1), (%clock : i1), ^bb2(%clock : i1)
+  ^bb2(%prev: i1):
+    %notPrev = comb.xor bin %prev, %true : i1
+    %posedge = comb.and bin %notPrev, %clock : i1
+    cf.cond_br %posedge, ^bb1(%d, %true : i42, i1), ^bb1(%zero, %false : i42, i1)
+  }
+  %sig = llhd.sig %init {llhd.explicit_init} : i42
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %value after %time if %enable : i42
+}
+
 // CHECK-LABEL: @ClockNegEdge(
 hw.module @ClockNegEdge(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
@@ -1279,4 +1305,3 @@ hw.module @ClockExtractedFromAliasedStructExtractPosEdge(in %st: !hw.typealias<@
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
-
