@@ -852,6 +852,52 @@ def StringCmpOp : SimOp<"string.cmp", [Pure]> {
   let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 
+def StringCompareOp: SimOp<"string.compare", [Pure]> {
+  let summary = "Compare two dynamic strings lexicographically";
+
+  let description = [{
+    Compares two strings lexicographically and returns the ASCII difference.
+    This corresponds to the behavior of the ANSI C `strcmp` function.
+  }];
+
+  let arguments = (ins
+    DynamicStringType:$lhs,
+    DynamicStringType:$rhs
+  );
+  let results = (outs I32:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict";
+}
+
+def StringToLowerOp: SimOp<"string.tolower", [Pure]> {
+  let summary = "Convert a string to lowercase"; 
+
+  let description = [{
+    Returns a new string with all characters in lowercase.
+  }];
+
+  let arguments = (ins
+    DynamicStringType:$input
+  );
+  let results = (outs DynamicStringType:$result);
+
+  let assemblyFormat = "$input attr-dict";
+}
+
+def StringToUpperOp: SimOp<"string.toupper", [Pure]> {
+  let summary = "Convert a string to uppercase"; 
+
+  let description = [{
+    Returns a new string with all characters in uppercase.
+  }];
+
+  let arguments = (ins
+    DynamicStringType:$input
+  );
+  let results = (outs DynamicStringType:$result);
+
+  let assemblyFormat = "$input attr-dict";
+}
 //===----------------------------------------------------------------------===//
 // Queues
 //===----------------------------------------------------------------------===//
