@@ -106,6 +106,9 @@ struct OpLowering {
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
   LogicalResult lower(llhd::CurrentTimeOp op);
+  LogicalResult lower(llhd::SignalOp op);
+  LogicalResult lower(llhd::ProbeOp op);
+  LogicalResult lower(llhd::DriveOp op);
   LogicalResult lower(sim::ClockedTerminateOp op);
 
   scf::IfOp createIfClockOp(Value clock);
@@ -121,6 +124,7 @@ struct OpLowering {
   Value lowerValue(sim::DPICallOp op, OpResult result, Phase phase);
   Value lowerValue(MemoryReadPortOp op, OpResult result, Phase phase);
   Value lowerValue(seq::InitialOp op, OpResult result, Phase phase);
+  Value lowerValue(llhd::ProbeOp op, OpResult result, Phase phase);
   Value lowerValue(seq::FromImmutableOp op, OpResult result, Phase phase);
 
   void addPending(Value value, Phase phase);
@@ -168,6 +172,8 @@ struct ModuleLowering {
   DenseMap<Value, Value> allocatedInitials;
   /// The allocated storage for taps.
   DenseMap<Operation *, Value> allocatedTaps;
+  /// Persistent storage allocated for local LLHD signals.
+  DenseMap<Operation *, Value> allocatedSignals;
 
   /// A mapping from unlowered clocks to a value indicating a posedge. This is
   /// used to not create an excessive number of posedge detectors.
@@ -186,6 +192,7 @@ struct ModuleLowering {
   LogicalResult run();
   LogicalResult lowerOp(Operation *op);
   Value getAllocatedState(OpResult result);
+  Value getAllocatedSignal(llhd::SignalOp op);
   Value detectPosedge(Value clock);
   OpBuilder &getBuilder(Phase phase);
   Value requireLoweredValue(Value value, Phase phase, Location useLoc);
@@ -272,6 +279,8 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
     phases = {Phase::Final};
   if (isa<StateOp>(op))
     phases = {Phase::Initial, Phase::New};
+  if (isa<llhd::SignalOp>(op))
+    phases = {Phase::Initial};
 
   for (auto phase : phases) {
     if (loweredOps.contains({op, phase}))
@@ -370,6 +379,19 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
   return alloc;
 }
 
+Value ModuleLowering::getAllocatedSignal(llhd::SignalOp op) {
+  if (auto alloc = allocatedSignals.lookup(op))
+    return alloc;
+
+  auto alloc =
+      AllocStateOp::create(allocBuilder, op.getLoc(),
+                           StateType::get(op.getInit().getType()), storageArg);
+  if (auto name = op.getNameAttr())
+    alloc->setAttr("name", name);
+  allocatedSignals.insert({op, alloc});
+  return alloc;
+}
+
 /// Allocate the necessary storage, reads, writes, and comparisons to detect a
 /// rising edge on a clock value.
 Value ModuleLowering::detectPosedge(Value clock) {
@@ -438,7 +460,8 @@ LogicalResult OpLowering::lower() {
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
             CoroutineInstanceOp, hw::TriggeredOp, hw::OutputOp, seq::InitialOp,
-            llhd::FinalOp, llhd::CurrentTimeOp, sim::ClockedTerminateOp>(
+            llhd::FinalOp, llhd::CurrentTimeOp, llhd::SignalOp, llhd::ProbeOp,
+            llhd::DriveOp, sim::ClockedTerminateOp>(
           [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
@@ -530,6 +553,83 @@ LogicalResult OpLowering::lower(StateOp op) {
                                                inputs)
                              .getResults();
                        });
+}
+
+/// Lower an LLHD signal to persistent model state. The signal initializer runs
+/// in arc.initial, which is executed once when the model instance is created.
+LogicalResult OpLowering::lower(llhd::SignalOp op) {
+  if (phase != Phase::Initial)
+    return op.emitOpError("signals inside triggered regions are not supported");
+
+  auto initialValue = lowerValue(op.getInit(), Phase::Initial);
+  if (initial)
+    return success();
+  if (!initialValue)
+    return failure();
+
+  auto state = module.getAllocatedSignal(op);
+  StateWriteOp::create(module.initialBuilder, op.getLoc(), state, initialValue);
+  return success();
+}
+
+LogicalResult OpLowering::lower(llhd::ProbeOp op) {
+  if (initial)
+    return success();
+
+  auto signal = op.getSignal().getDefiningOp<llhd::SignalOp>();
+  if (!signal)
+    return op.emitOpError(
+        "only probes of locally defined signals are supported");
+
+  auto state = module.getAllocatedSignal(signal);
+  auto value =
+      StateReadOp::create(module.getBuilder(phase), op.getLoc(), state);
+  module.loweredValues[{op.getResult(), phase}] = value;
+  return success();
+}
+
+LogicalResult OpLowering::lower(llhd::DriveOp op) {
+  auto value = lowerValue(op.getValue(), phase);
+  Value enable;
+  if (op.getEnable())
+    enable = lowerValue(op.getEnable(), phase);
+  if (initial)
+    return success();
+  if (!value || (op.getEnable() && !enable))
+    return failure();
+
+  auto signal = op.getSignal().getDefiningOp<llhd::SignalOp>();
+  if (!signal)
+    return op.emitOpError(
+        "only drives of locally defined signals are supported");
+
+  auto delay = op.getTime().getDefiningOp<llhd::ConstantTimeOp>();
+  if (!delay || delay.getValue().getTime() != 0 ||
+      delay.getValue().getDelta() != 0)
+    return op.emitOpError("only zero-time, zero-delta drives are supported; "
+                          "epsilon cycles are ignored");
+
+  auto state = module.getAllocatedSignal(signal);
+  OpBuilder &builder = module.getBuilder(phase);
+  for (auto *user : signal->getUsers()) {
+    auto probe = dyn_cast<llhd::ProbeOp>(user);
+    if (!probe)
+      continue;
+    auto loweredValueKey = std::pair{probe.getResult(), Phase::Old};
+    if (module.loweredValues.contains(loweredValueKey))
+      continue;
+    auto oldValue = StateReadOp::create(builder, probe.getLoc(), state);
+    module.loweredValues[loweredValueKey] = oldValue;
+  }
+  if (enable) {
+    OpBuilder::InsertionGuard guard(builder);
+    auto ifOp = createOrReuseIf(builder, enable, false);
+    builder.setInsertionPoint(ifOp.thenYield());
+    StateWriteOp::create(builder, op.getLoc(), state, value);
+    return success();
+  }
+  StateWriteOp::create(builder, op.getLoc(), state, value);
+  return success();
 }
 
 /// Lower a DPI call to a corresponding storage allocation and write of the
@@ -1347,6 +1447,8 @@ Value OpLowering::lowerValue(Value value, Phase phase) {
     return lowerValue(initialOp, result, phase);
   if (auto castOp = dyn_cast<seq::FromImmutableOp>(op))
     return lowerValue(castOp, result, phase);
+  if (auto probeOp = dyn_cast<llhd::ProbeOp>(op))
+    return lowerValue(probeOp, result, phase);
 
   // Otherwise we mark the defining operation as to be lowered first. This will
   // cause the lookup in `loweredValues` above to return a value the next time
@@ -1468,6 +1570,36 @@ Value OpLowering::lowerValue(MemoryReadPortOp op, OpResult result,
   auto state = module.getAllocatedState(memOp->getResult(0));
   return MemoryReadOp::create(module.getBuilder(phase), result.getLoc(), state,
                               address);
+}
+
+/// Handle uses of an LLHD signal probe. This creates an `arc.state_read` from
+/// the signal's storage. Reading the old value requires that no drives to the
+/// signal have been lowered in the new phase yet.
+Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
+  auto signal = op.getSignal().getDefiningOp<llhd::SignalOp>();
+  if (!signal) {
+    if (!initial)
+      op.emitOpError("only probes of locally defined signals are supported");
+    return {};
+  }
+
+  if (initial) {
+    addPending(signal.getResult(), Phase::Initial);
+    return {};
+  }
+
+  if (phase == Phase::Old) {
+    for (auto *user : signal->getUsers()) {
+      auto drive = dyn_cast<llhd::DriveOp>(user);
+      if (!drive || drive.getSignal() != op.getSignal())
+        continue;
+      assert(!module.loweredOps.contains({drive, Phase::New}) &&
+             "need old signal value but new value already written");
+    }
+  }
+
+  auto state = module.getAllocatedSignal(signal);
+  return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
 }
 
 /// Handle uses of `seq.initial` values computed during the initial phase. This
