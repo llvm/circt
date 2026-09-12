@@ -188,6 +188,30 @@ module Foo;
 endmodule
 
 // -----
+
+module Foo;
+  logic a, clk;
+  // expected-error @below {{explicit clocking event argument for `$rose` is not yet supported}}
+  assert property (@(posedge clk) $rose(a, @(posedge clk)));
+endmodule
+
+// -----
+
+module Foo;
+  logic a, clk;
+  // expected-error @below {{'number_of_ticks' argument must be greater than or equal to 1}}
+  assert property (@(posedge clk) $past(a, 0));
+endmodule
+
+// -----
+
+module Foo;
+  logic a, clk;
+  // expected-error @below {{`$past` with 3 arguments is not yet supported}}
+  assert property (@(posedge clk) $past(a, 1, a));
+endmodule
+
+// -----
 module Foo;
   int a;
   // expected-error @below {{sequence has no explicit clocking event and one cannot be inferred from context}}

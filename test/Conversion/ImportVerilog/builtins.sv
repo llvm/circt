@@ -653,6 +653,18 @@ module SampleValueBuiltins #() (
   always @(posedge clk_i) past_data_i <= $past(data_i);
 
   // CHECK: moore.procedure always {
+  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK: [[D2:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK: [[D2_INT:%.+]] = moore.logic_to_int [[D2]] : l8
+  // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D2_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 3 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  past_ticks: assert property (@(posedge clk_i) data_i == $past(data_i, 3));
+
+  // CHECK: moore.procedure always {
   // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
   // CHECK: [[RED:%.+]] = moore.reduce_xor [[D]] : l8 -> l1
   // CHECK: [[X:%.+]] = moore.constant bX : l1
