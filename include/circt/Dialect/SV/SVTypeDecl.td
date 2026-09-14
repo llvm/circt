@@ -36,6 +36,13 @@ def PackageOp : SVOp<"package", [
     A named, top-level SystemVerilog package containing only `hw.typedecl`
     operations. Its declarations are referenced using `hw.typealias` with a
     symbol reference of the form `@package::@type`. Empty packages are allowed.
+
+    The body is currently restricted to type declarations because the lookup,
+    legalization, and emission infrastructure for other declarations is not yet
+    prepared to handle them in a package's nested symbol table. This restriction
+    can be relaxed to support declarations such as functions and parameters as
+    that infrastructure is extended; it is not a limitation of SystemVerilog
+    packages.
   }];
 
   let arguments = (ins
