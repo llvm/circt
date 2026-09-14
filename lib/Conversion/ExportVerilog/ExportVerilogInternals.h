@@ -58,6 +58,7 @@ struct GlobalNameTable {
     return it != enumPrefixes.end() ? it->second : StringAttr();
   }
 
+  /// Return the owning package and legalized member name, or nullopt if absent.
   std::optional<std::pair<Operation *, StringAttr>>
   getPackageEnumField(hw::EnumFieldAttr field) const;
 
@@ -84,6 +85,7 @@ private:
   // of enum types.
   DenseMap<Type, StringAttr> enumPrefixes;
 
+  /// Map (enum alias, original member) to (owning package, legalized member).
   DenseMap<std::pair<Type, StringAttr>, std::pair<Operation *, StringAttr>>
       packageEnumFields;
 

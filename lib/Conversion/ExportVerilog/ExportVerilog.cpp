@@ -6858,6 +6858,13 @@ void ModuleEmitter::emitFunc(FuncOp func) {
 // Emitter for files & file lists.
 //===----------------------------------------------------------------------===//
 
+static bool isPackageReference(Operation *op,
+                               const HWSymbolCache &symbolCache) {
+  auto ref = dyn_cast<emit::RefOp>(op);
+  return ref && isa_and_nonnull<PackageOp>(
+                    symbolCache.getDefinition(ref.getTargetAttr()));
+}
+
 class FileEmitter : public EmitterBase {
 public:
   explicit FileEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
@@ -6877,8 +6884,14 @@ private:
 };
 
 void FileEmitter::emit(Block *block) {
-  for (Operation &op : *block) {
-    TypeSwitch<Operation *>(&op)
+  auto ops = llvm::to_vector(
+      llvm::map_range(*block, [](Operation &op) { return &op; }));
+  // Order the emission list, not the IR: files may be emitted in parallel.
+  std::stable_partition(ops.begin(), ops.end(), [&](Operation *op) {
+    return isPackageReference(op, state.symbolCache);
+  });
+  for (Operation *op : ops) {
+    TypeSwitch<Operation *>(op)
         .Case<emit::VerbatimOp, emit::RefOp>([&](auto op) { emitOp(op); })
         .Case<VerbatimOp, IfDefOp, MacroDefOp, sv::FuncDPIImportOp>(
             [&](auto op) { ModuleEmitter(state).emitStatement(op); })
@@ -7216,8 +7229,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   // emit the files defining them before the rest of the file list.  The
   // relative order of the packages themselves is preserved: ordering between
   // packages is the responsibility of whoever created them.
-  auto isPackage = [](const OpFileInfo &info) {
-    return isa<PackageOp>(info.op);
+  auto isPackage = [&](const OpFileInfo &info) {
+    if (isa<PackageOp>(info.op))
+      return true;
+    auto file = dyn_cast<emit::FileOp>(info.op);
+    return file && llvm::any_of(file.getOps<emit::RefOp>(), [&](auto ref) {
+             return isPackageReference(ref, symbolCache);
+           });
   };
   auto hasPackage = [&](const auto &file) {
     return llvm::any_of(file.second.ops, isPackage);
@@ -7225,7 +7243,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   std::stable_partition(rootFile.ops.begin(), rootFile.ops.end(), isPackage);
   for (auto &[name, file] : files)
     std::stable_partition(file.ops.begin(), file.ops.end(), isPackage);
-  std::stable_partition(files.begin(), files.end(), hasPackage);
+  // Rebuild the key-to-index map after reordering the backing vector.
+  auto orderedFiles = files.takeVector();
+  std::stable_partition(orderedFiles.begin(), orderedFiles.end(), hasPackage);
+  for (auto &file : orderedFiles)
+    files.insert(std::move(file));
 }
 
 /// Given a FileInfo, collect all the replicated and designated operations
