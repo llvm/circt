@@ -2392,10 +2392,13 @@ def ChannelEngineService(
         if hasattr(engine_mod, "hostmem_write"):
           eng_inputs["hostmem_write"] = esi.HostMem.write_from_bundle(
               esi.AppID(idbase + ".hostmem_write"),
-              engine_mod.hostmem_write.type)
+              engine_mod.hostmem_write.type,
+              options=bundle.options)
         if hasattr(engine_mod, "hostmem_read"):
           eng_inputs["hostmem_read"] = esi.HostMem.read_from_bundle(
-              esi.AppID(idbase + ".hostmem_read"), engine_mod.hostmem_read.type)
+              esi.AppID(idbase + ".hostmem_read"),
+              engine_mod.hostmem_read.type,
+              options=bundle.options)
         engine = engine_mod(appid=eng_appid, **eng_inputs)
         engine_rec = bundles.emit_engine(engine, details=eng_details)
         engine_rec.add_record(bundle, {bc.name: {}})
