@@ -7013,9 +7013,21 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     for (auto refs : file.getOps<emit::RefOp>())
       symbolsToFiles[refs.getTargetAttr().getAttr()].push_back(file);
 
+  SmallPtrSet<Operation *, 8> packageFiles;
+  for (auto package : designOp.getOps<PackageOp>())
+    if (auto it = symbolsToFiles.find(package.getSymNameAttr());
+        it != symbolsToFiles.end())
+      for (auto file : it->second)
+        packageFiles.insert(file);
+
+  // Collect package entries separately so they can precede each file's users.
+  SmallVector<OpFileInfo> rootPackageOps;
+  DenseMap<StringAttr, SmallVector<OpFileInfo>> packageFileOps;
+
   SmallString<32> outputPath;
   for (auto &op : *designOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
+    bool emitFirst = isa<PackageOp>(op) || packageFiles.contains(&op);
 
     bool isFileOp = isa<emit::FileOp, emit::FileListOp>(&op);
 
@@ -7054,7 +7066,10 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 
       auto destFile = StringAttr::get(op->getContext(), outputPath);
       auto &file = files[destFile];
-      file.ops.push_back(info);
+      if (emitFirst)
+        packageFileOps[destFile].push_back(info);
+      else
+        file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
       file.isVerilog = outputPath.ends_with(".sv");
@@ -7140,16 +7155,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
             return;
           }
 
-          // Emit into a separate file named after the package.  A package only
-          // contains type declarations, so the replicated per-file operations
-          // are not emitted alongside it unless explicitly requested.
-          if (attr || separateModules) {
-            if (!attr)
-              emitReplicatedOps = false;
+          // Emit into a separate file named after the package.
+          if (attr || separateModules)
             separateFile(package, getSymOpName(package) + ".sv");
-          } else {
-            rootFile.ops.push_back(info);
-          }
+          else
+            rootPackageOps.push_back(info);
         })
         .Case<sv::SVVerbatimSourceOp>([&](sv::SVVerbatimSourceOp op) {
           symbolCache.addDefinition(op.getNameAttr(), op);
@@ -7224,30 +7234,23 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   // querying it (potentially concurrently).
   symbolCache.freeze();
 
-  // A package has to be compiled before anything referring to its types, so
-  // emit packages before the other contents of the file they belong to, and
-  // emit the files defining them before the rest of the file list.  The
-  // relative order of the packages themselves is preserved: ordering between
-  // packages is the responsibility of whoever created them.
-  auto isPackage = [&](const OpFileInfo &info) {
-    if (isa<PackageOp>(info.op))
-      return true;
-    auto file = dyn_cast<emit::FileOp>(info.op);
-    return file && llvm::any_of(file.getOps<emit::RefOp>(), [&](auto ref) {
-             return isPackageReference(ref, symbolCache);
-           });
-  };
-  auto hasPackage = [&](const auto &file) {
-    return llvm::any_of(file.second.ops, isPackage);
-  };
-  std::stable_partition(rootFile.ops.begin(), rootFile.ops.end(), isPackage);
-  for (auto &[name, file] : files)
-    std::stable_partition(file.ops.begin(), file.ops.end(), isPackage);
-  // Rebuild the key-to-index map after reordering the backing vector.
-  auto orderedFiles = files.takeVector();
-  std::stable_partition(orderedFiles.begin(), orderedFiles.end(), hasPackage);
-  for (auto &file : orderedFiles)
-    files.insert(std::move(file));
+  rootFile.ops.insert(rootFile.ops.begin(), rootPackageOps.begin(),
+                      rootPackageOps.end());
+
+  // Join package entries before other contents, keeping package files first
+  // and preserving file discovery order within each group.
+  llvm::MapVector<StringAttr, FileInfo> orderedFiles;
+  for (auto &[name, file] : files) {
+    auto it = packageFileOps.find(name);
+    if (it == packageFileOps.end())
+      continue;
+    file.ops.insert(file.ops.begin(), it->second.begin(), it->second.end());
+    orderedFiles.insert({name, std::move(file)});
+  }
+  for (auto &file : files)
+    if (!packageFileOps.contains(file.first))
+      orderedFiles.insert(std::move(file));
+  files = std::move(orderedFiles);
 }
 
 /// Given a FileInfo, collect all the replicated and designated operations

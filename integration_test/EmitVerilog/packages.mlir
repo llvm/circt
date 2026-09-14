@@ -8,6 +8,7 @@
 // RUN: circt-opt %S/../../test/Conversion/ExportVerilog/package-files.mlir -export-split-verilog="dir-name=%t.files" -o /dev/null
 // RUN: cd %t.files && verilator --lint-only --top-module Consumer -f filelist.f
 // RUN: cd %t.files && verilator --lint-only --top-module First -f filelist.f
+// RUN: cd %t.files && verilator --lint-only --top-module SharedFirst -f filelist.f
 
 // Compile the emitted output: textual checks alone cannot catch an invalid
 // package scope, a mis-scoped enumeration member or a bad compilation order.
