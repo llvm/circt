@@ -30,50 +30,37 @@ def test_channel_mmio_allocations():
 
   table, manifest_loc = ChannelMMIO.build_table(_Bundles(default, custom))
 
-  assert list(table) == [0x800, 0x2000]
-  assert manifest_loc == ChannelMMIO.ManifestSpace
-  assert default.records == [{"offset": 0x800, "size": 0x800, "type": "ro"}]
+  assert list(table) == [0x100, 0x2000]
+  assert default.records == [{"offset": 0x100, "size": 0x100, "type": "ro"}]
   assert custom.records == [{"offset": 0x2000, "size": 0x2000, "type": "rw"}]
+  # The manifest lands directly above the last client, rounded to a power of
+  # two so a single prefix test separates it from the client space.
+  assert manifest_loc == 0x4000
 
 
-def test_channel_mmio_allocation_granularity(monkeypatch):
-  monkeypatch.setattr(ChannelMMIO, "AllocationGranularity", 0x400)
-  small = _Bundle("read", {"size": 8})
-  custom = _Bundle("read", {"size": 0x401})
+def test_channel_mmio_manifest_tracks_client_space():
+  """The manifest window must not be a fixed reservation: it follows whatever
+  the clients actually use so the BAR stays as small as possible."""
 
-  table, manifest_loc = ChannelMMIO.build_table(_Bundles(small, custom))
+  small, = _Bundles(_Bundle("read", {"size": 8})).to_client_reqs
+  _, small_loc = ChannelMMIO.build_table(_Bundles(small))
+  assert small_loc == 0x200
 
-  assert list(table) == [0x800, 0x1000]
-  assert small.records[0]["size"] == 0x400
-  assert custom.records[0]["size"] == 0x800
-  assert manifest_loc == ChannelMMIO.ManifestSpace
+  big = _Bundle("read", {"size": 1 << 20})
+  _, big_loc = ChannelMMIO.build_table(_Bundles(big))
+  assert big_loc == 1 << 21
 
 
-def test_channel_mmio_places_manifest_after_clients(monkeypatch):
-  monkeypatch.setattr(ChannelMMIO, "ManifestSpace", 0x1000)
+def test_channel_mmio_places_manifest_after_clients():
   table, manifest_loc = ChannelMMIO.build_table(
       _Bundles(_Bundle("read"), _Bundle("read", {"size": 0x1203})))
   last_base = list(table)[-1]
   last_size = table[last_base][0]
 
-  assert manifest_loc == 0x4000
   assert manifest_loc >= last_base + last_size
-  assert manifest_loc % ChannelMMIO.ManifestSpace == 0
-
-
-@pytest.mark.parametrize("granularity", [True, 0, 4, 12, 24])
-def test_channel_mmio_rejects_invalid_granularity(monkeypatch, granularity):
-  monkeypatch.setattr(ChannelMMIO, "AllocationGranularity", granularity)
-  with pytest.raises(ValueError, match="allocation granularity"):
-    ChannelMMIO.build_table(_Bundles(_Bundle("read")))
-
-
-@pytest.mark.parametrize("register_space", [True, 0, 4, 12, 24, 0x180])
-def test_channel_mmio_rejects_invalid_register_space(monkeypatch,
-                                                     register_space):
-  monkeypatch.setattr(ChannelMMIO, "RegisterSpace", register_space)
-  with pytest.raises(ValueError, match="register space"):
-    ChannelMMIO.build_table(_Bundles(_Bundle("read")))
+  # A power-of-two base means 'address has a bit set above the clients' is the
+  # whole decode: no comparator, and the region can't overflow.
+  assert manifest_loc & (manifest_loc - 1) == 0
 
 
 @pytest.mark.parametrize("size", [True, 1.5, "256", 0, -8])
