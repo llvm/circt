@@ -2,8 +2,13 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=named})))' %s | FileCheck %s --check-prefix=NAMED
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=none})))' %s  | FileCheck %s --check-prefix=NONE
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=strip})))' %s  | FileCheck %s --check-prefix=STRIP
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=none preserve-modules=Foo})))' %s | FileCheck %s --check-prefix=PRESERVE
 
 firrtl.circuit "Foo" {
+  // PRESERVE-LABEL: firrtl.module @Foo
+  // PRESERVE: %a  = firrtl.wire interesting_name : !firrtl.uint<1>
+  // PRESERVE: %_a = firrtl.wire : !firrtl.uint<1>
+  // PRESERVE: %0  = firrtl.wire : !firrtl.uint<1>
   firrtl.module @Foo() {
     // ALL:   %a = firrtl.wire  interesting_name : !firrtl.uint<1>
     // NAMED: %a = firrtl.wire  interesting_name : !firrtl.uint<1>
@@ -23,5 +28,16 @@ firrtl.circuit "Foo" {
     // STRIP: %2 = firrtl.wire  : !firrtl.uint<1>
     %_T = firrtl.wire interesting_name : !firrtl.uint<1>
 
+  }
+
+  // 'preserve-modules=Foo' should not affect Bar
+  // PRESERVE-LABEL: firrtl.module @Bar
+  // PRESERVE: %a  = firrtl.wire : !firrtl.uint<1>
+  // PRESERVE: %_a = firrtl.wire : !firrtl.uint<1>
+  // PRESERVE: %0  = firrtl.wire : !firrtl.uint<1>
+  firrtl.module @Bar() {
+    %a  = firrtl.wire interesting_name : !firrtl.uint<1>
+    %_a = firrtl.wire interesting_name : !firrtl.uint<1>
+    %_T = firrtl.wire interesting_name : !firrtl.uint<1>
   }
 }
