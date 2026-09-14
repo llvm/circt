@@ -385,22 +385,26 @@ def MMIOPrefixRouter(
   replace the global address with the block-local low bits, so no subtractor is
   needed (the open-ended region is the one exception).
 
-  For two 0x100-byte regions at 0x0 and 0x100, a 0x200-byte region at 0x200,
-  and an open-ended region at 0x400, one address bit is tested per level::
+  For four 0x100-byte regions at 0x0/0x100/0x200/0x300 plus an open-ended
+  region at 0x400: the open-ended region is peeled off first, then each level
+  splits the remaining candidates in half, so depth is ``O(log N)`` rather than
+  one level per region::
 
-      cmd ──▶ addr[31:10]≠0 ──1──▶ region @0x400  (open ended)
+      cmd ──▶ addr[31:10]≠0 ──1──▶ @0x400  (open ended, offset -= 0x400)
                     │
                     0
                     ▼
-                 addr[9] ──1──▶ region @0x200  (offset = addr[8:0])
-                    │
-                    0
-                    ▼
-                 addr[8] ──1──▶ region @0x100  (offset = addr[7:0])
-                    │
-                    0
-                    ▼
-              region @0x0      (offset = addr[7:0])
+                 addr[9]
+                 ╱      ╲
+                0        1
+               ▼          ▼
+            addr[8]     addr[8]
+            ╱    ╲      ╱    ╲
+           0      1    0      1
+           ▼      ▼    ▼      ▼
+         @0x0 @0x100 @0x200 @0x300
+
+  The four leaves all take their client-local offset as ``addr[7:0]``.
   """
 
   assert len(regions) > 1, "MMIO routing requires at least two regions"
