@@ -1796,6 +1796,14 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
             if (llvm::StringRef(inst->name.data(), inst->name.size()) ==
                 name.take_front(dot)) {
               hierValue = hierValueSymbols.lookup({inst, innerName});
+              // Locally expanded interfaces have no instance results. Their
+              // members live in the per-instance map after expansion's value
+              // symbol scope ends. Keep the reference for the generated port.
+              if (!hierValue)
+                for (auto &alias : hierPath.valueSyms)
+                  if ((hierValue =
+                           lookupExpandedInterfaceMember(*inst, *alias.first)))
+                    break;
               break;
             }
       } else if (auto *sym =
