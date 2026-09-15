@@ -480,12 +480,19 @@ struct ModuleVisitor : public BaseVisitor {
     SmallDenseMap<const PortSymbol *, Value> portValues;
     portValues.reserve(moduleType.getNumPorts());
 
-    // Map each InterfacePortSymbol to the connected interface instance.
-    SmallDenseMap<const slang::ast::InterfacePortSymbol *,
-                  const slang::ast::InstanceSymbol *>
-        ifaceConnMap;
+    // Match interface ports by name since the module lowering can use a
+    // canonical body whose port symbols differ from this instance's symbols.
+    SmallDenseMap<StringRef, const slang::ast::Symbol *> ifaceConnMap;
 
     for (const auto *con : instNode.getPortConnections()) {
+      // Interface connections carry symbols rather than value expressions.
+      if (const auto *ifacePort =
+              con->port.as_if<slang::ast::InterfacePortSymbol>()) {
+        if (const auto *conn = con->getIfaceConn().first)
+          ifaceConnMap[ifacePort->name] = conn;
+        continue;
+      }
+
       const auto *expr = con->getExpression();
 
       // Handle unconnected behavior. The expression is null if it have no
@@ -623,18 +630,6 @@ struct ModuleVisitor : public BaseVisitor {
         continue;
       }
 
-      // Interface ports: record the connected interface instance for later
-      // resolution via InterfaceLowering.
-      if (const auto *ifacePort =
-              con->port.as_if<slang::ast::InterfacePortSymbol>()) {
-        auto ifaceConn = con->getIfaceConn();
-        const auto *connInst =
-            ifaceConn.first->as_if<slang::ast::InstanceSymbol>();
-        if (connInst)
-          ifaceConnMap[ifacePort] = connInst;
-        continue;
-      }
-
       mlir::emitError(loc) << "unsupported instance port `" << con->port.name
                            << "` (" << slang::ast::toString(con->port.kind)
                            << ")";
@@ -662,13 +657,25 @@ struct ModuleVisitor : public BaseVisitor {
       if (!fp.bodySym || !fp.origin)
         continue;
       // Find which interface instance is connected to this port.
-      auto it = ifaceConnMap.find(fp.origin);
+      auto it = ifaceConnMap.find(fp.origin->name);
       if (it == ifaceConnMap.end()) {
         mlir::emitError(loc)
             << "no interface connection for port `" << fp.name << "`";
         return failure();
       }
-      const auto *connInst = it->second;
+      const auto *connSym = it->second;
+      for (unsigned index : fp.arrayPath) {
+        const auto *array = connSym->as_if<slang::ast::InstanceArraySymbol>();
+        if (!array || index >= array->elements.size())
+          return mlir::emitError(loc)
+                 << "invalid interface array connection for port `" << fp.name
+                 << "`";
+        connSym = array->elements[index];
+      }
+      const auto *connInst = connSym->as_if<slang::ast::InstanceSymbol>();
+      if (!connInst)
+        return mlir::emitError(loc)
+               << "expected interface instance for port `" << fp.name << "`";
       // Look up the InterfaceLowering for that instance.
       auto *ifaceLowering = context.interfaceInstances.lookup(connInst);
       if (!ifaceLowering) {
@@ -677,13 +684,16 @@ struct ModuleVisitor : public BaseVisitor {
         return failure();
       }
       // Find the expanded SSA value for this body member.
-      auto valIt = ifaceLowering->expandedMembers.find(fp.bodySym);
-      if (valIt == ifaceLowering->expandedMembers.end()) {
+      // The callee may use a different elaborated body (for example when
+      // forwarding an interface port). Resolve the member within this element
+      // by name rather than requiring identical body symbols.
+      auto val = ifaceLowering->expandedMembersByName.lookup(
+          builder.getStringAttr(fp.bodySym->name));
+      if (!val) {
         mlir::emitError(loc)
             << "unresolved interface port signal `" << fp.name << "`";
         return failure();
       }
-      Value val = valIt->second;
       if (fp.direction == hw::ModulePort::Output) {
         outputValues[*fp.outputIdx] = val;
       } else {
@@ -1168,6 +1178,13 @@ struct ModulePredeclaration {
       return success();
     }
 
+    if (const auto *array = member.as_if<slang::ast::InstanceArraySymbol>()) {
+      for (const auto *element : array->elements)
+        if (failed(predeclareInterfaceMember(*element, blockNamePrefix)))
+          return failure();
+      return success();
+    }
+
     if (const auto *genNode = member.as_if<slang::ast::GenerateBlockSymbol>())
       return predeclareInterfaceGenerateBlock(*genNode, blockNamePrefix);
 
@@ -1449,77 +1466,98 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
                                    &ifacePort) {
       auto portLoc = convertLocation(ifacePort.location);
       auto [connSym, modportSym] = ifacePort.getConnection();
-      const auto *ifaceInst =
-          connSym ? connSym->as_if<slang::ast::InstanceSymbol>() : nullptr;
-      auto portPrefix = (Twine(ifacePort.name) + "_").str();
-
-      if (modportSym) {
-        // Modport specified: iterate modport members for signal directions.
-        for (const auto &member : modportSym->members()) {
-          const auto *mpp = member.as_if<slang::ast::ModportPortSymbol>();
-          if (!mpp)
-            continue;
-          auto type = convertType(mpp->getType());
-          if (!type)
-            return failure();
-          auto name =
-              builder.getStringAttr(Twine(portPrefix) + StringRef(mpp->name));
-          BlockArgument arg;
-          hw::ModulePort::Direction dir;
-          std::optional<unsigned> ifaceOutputIdx;
-          std::optional<unsigned> ifaceInputIdx;
-          if (mpp->direction == ArgumentDirection::Out) {
-            dir = hw::ModulePort::Output;
-            modulePorts.push_back({name, type, dir});
-            ifaceOutputIdx = outputIdx++;
-          } else {
-            dir = hw::ModulePort::Input;
-            if (mpp->direction != ArgumentDirection::In)
-              type = moore::RefType::get(cast<moore::UnpackedType>(type));
-            modulePorts.push_back({name, type, dir});
-            arg = block->addArgument(type, portLoc);
-            ifaceInputIdx = inputIdx++;
+      SmallVector<unsigned> arrayPath;
+      auto flatten = [&](auto &self, const slang::ast::Symbol *connSym,
+                         const std::string &portPrefix) -> LogicalResult {
+        if (const auto *array =
+                connSym ? connSym->as_if<slang::ast::InstanceArraySymbol>()
+                        : nullptr) {
+          for (auto [index, element] : llvm::enumerate(array->elements)) {
+            arrayPath.push_back(index);
+            auto prefix = (Twine(portPrefix) +
+                           Twine(array->range.lower() + int32_t(index)) + "_")
+                              .str();
+            if (failed(self(self, element, prefix)))
+              return failure();
+            arrayPath.pop_back();
           }
-          lowering.ifacePorts.push_back(
-              {name, dir, type, portLoc, arg, &ifacePort, mpp->internalSymbol,
-               ifaceInst, mpp, ifaceOutputIdx, ifaceInputIdx});
+          return success();
         }
-      } else {
-        // No modport: iterate interface body for all variables and nets.
-        // Treat them all as inout (input with ref type).
-        const auto *instSym = connSym->as_if<slang::ast::InstanceSymbol>();
-        if (!instSym) {
-          mlir::emitError(portLoc)
-              << "unsupported interface port connection for `" << ifacePort.name
-              << "`";
-          return failure();
-        }
-        for (const auto &member : instSym->body.members()) {
-          const slang::ast::Type *slangType = nullptr;
-          const slang::ast::Symbol *bodySym = nullptr;
-          if (const auto *var = member.as_if<slang::ast::VariableSymbol>()) {
-            slangType = &var->getType();
-            bodySym = var;
-          } else if (const auto *net = member.as_if<slang::ast::NetSymbol>()) {
-            slangType = &net->getType();
-            bodySym = net;
-          } else {
-            continue;
+        const auto *ifaceInst =
+            connSym ? connSym->as_if<slang::ast::InstanceSymbol>() : nullptr;
+        if (!ifaceInst)
+          return mlir::emitError(portLoc)
+                 << "unsupported interface port connection for `"
+                 << ifacePort.name << "`";
+        // Each element has its own body and modport member symbols.
+        const auto *elementModport =
+            modportSym ? ifaceInst->body.find(modportSym->name)
+                             ->as_if<slang::ast::ModportSymbol>()
+                       : nullptr;
+        if (elementModport) {
+          // Modport specified: iterate modport members for signal directions.
+          for (const auto &member : elementModport->members()) {
+            const auto *mpp = member.as_if<slang::ast::ModportPortSymbol>();
+            if (!mpp)
+              continue;
+            auto type = convertType(mpp->getType());
+            if (!type)
+              return failure();
+            auto name =
+                builder.getStringAttr(Twine(portPrefix) + StringRef(mpp->name));
+            BlockArgument arg;
+            hw::ModulePort::Direction dir;
+            std::optional<unsigned> ifaceOutputIdx;
+            std::optional<unsigned> ifaceInputIdx;
+            if (mpp->direction == ArgumentDirection::Out) {
+              dir = hw::ModulePort::Output;
+              modulePorts.push_back({name, type, dir});
+              ifaceOutputIdx = outputIdx++;
+            } else {
+              dir = hw::ModulePort::Input;
+              if (mpp->direction != ArgumentDirection::In)
+                type = moore::RefType::get(cast<moore::UnpackedType>(type));
+              modulePorts.push_back({name, type, dir});
+              arg = block->addArgument(type, portLoc);
+              ifaceInputIdx = inputIdx++;
+            }
+            lowering.ifacePorts.push_back(
+                {name, dir, type, portLoc, arg, &ifacePort, mpp->internalSymbol,
+                 ifaceInst, mpp, ifaceOutputIdx, ifaceInputIdx, arrayPath});
           }
-          auto type = convertType(*slangType);
-          if (!type)
-            return failure();
-          auto name = builder.getStringAttr(Twine(portPrefix) +
-                                            StringRef(bodySym->name));
-          auto refType = moore::RefType::get(cast<moore::UnpackedType>(type));
-          modulePorts.push_back({name, refType, hw::ModulePort::Input});
-          auto arg = block->addArgument(refType, portLoc);
-          lowering.ifacePorts.push_back(
-              {name, hw::ModulePort::Input, refType, portLoc, arg, &ifacePort,
-               bodySym, instSym, nullptr, std::nullopt, inputIdx++});
+        } else {
+          // No modport: iterate interface body for all variables and nets.
+          // Treat them all as inout (input with ref type).
+          for (const auto &member : ifaceInst->body.members()) {
+            const slang::ast::Type *slangType = nullptr;
+            const slang::ast::Symbol *bodySym = nullptr;
+            if (const auto *var = member.as_if<slang::ast::VariableSymbol>()) {
+              slangType = &var->getType();
+              bodySym = var;
+            } else if (const auto *net =
+                           member.as_if<slang::ast::NetSymbol>()) {
+              slangType = &net->getType();
+              bodySym = net;
+            } else {
+              continue;
+            }
+            auto type = convertType(*slangType);
+            if (!type)
+              return failure();
+            auto name = builder.getStringAttr(Twine(portPrefix) +
+                                              StringRef(bodySym->name));
+            auto refType = moore::RefType::get(cast<moore::UnpackedType>(type));
+            modulePorts.push_back({name, refType, hw::ModulePort::Input});
+            auto arg = block->addArgument(refType, portLoc);
+            lowering.ifacePorts.push_back({name, hw::ModulePort::Input, refType,
+                                           portLoc, arg, &ifacePort, bodySym,
+                                           ifaceInst, nullptr, std::nullopt,
+                                           inputIdx++, arrayPath});
+          }
         }
-      }
-      return success();
+        return success();
+      };
+      return flatten(flatten, connSym, (Twine(ifacePort.name) + "_").str());
     };
 
     if (const auto *port = symbol->as_if<PortSymbol>()) {
