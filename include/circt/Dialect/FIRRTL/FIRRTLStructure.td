@@ -295,6 +295,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
            ArrayRefAttr:$portTypes,
            DefaultValuedAttr<RUWBehaviorAttr,
              "firrtl::RUWBehavior::Undefined">:$ruw,
+           OptionalAttr<MemoryInitAttr>:$init,
            AnnotationArrayAttr:$annotations,
            DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
            DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo
@@ -312,6 +313,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
                    "uint32_t":$writeLatency, "uint64_t":$depth,
                    CArg<"firrtl::RUWBehavior",
                     "firrtl::RUWBehavior::Undefined">:$ruw,
+                   CArg<"firrtl::MemoryInitAttr", "{}">:$init,
                    CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
                    CArg<"ArrayAttr", "ArrayAttr()">:$layers)>
   ];
