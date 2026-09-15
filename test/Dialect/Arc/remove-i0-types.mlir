@@ -214,3 +214,18 @@ func.func @AggregateConstantStaysAggregate() -> !hw.array<2x!hw.array<1xi32>> {
   %0 = hw.aggregate_constant [[0 : i32], [1 : i32]] : !hw.array<2x!hw.array<1xi32>>
   return %0 : !hw.array<2x!hw.array<1xi32>>
 }
+
+// A state of an i0 type holds no data. It is removed together with its reads and
+// writes, while states of other types are left untouched.
+// CHECK-LABEL: func.func @StateI0(%arg0: !arc.state<i32>)
+// CHECK-NEXT:    [[V:%.+]] = arc.state_read %arg0 : <i32>
+// CHECK-NEXT:    arc.state_write %arg0 = [[V]] : <i32>
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+func.func @StateI0(%a: !arc.state<i0>, %b: !arc.state<i32>) {
+  %0 = arc.state_read %a : <i0>
+  arc.state_write %a = %0 : <i0>
+  %1 = arc.state_read %b : <i32>
+  arc.state_write %b = %1 : <i32>
+  return
+}
