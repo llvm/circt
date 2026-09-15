@@ -15,6 +15,7 @@
 
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
 include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
@@ -25,6 +26,7 @@ def TypeScopeOp : HWOp<"type_scope", [
     Emittable,
     SymbolName, SymbolVisibility, Symbol,
     SymbolTable,
+    TypeScopeLike,
     SingleBlock,
     NoTerminator,
     NoRegionArguments
@@ -50,8 +52,7 @@ def TypeScopeOp : HWOp<"type_scope", [
 }
 
 def TypedeclOp : HWOp<"typedecl", [
-    SymbolName, SymbolVisibility, Symbol,
-    HasParent<"TypeScopeOp">
+    SymbolName, SymbolVisibility, Symbol
 ]> {
   let summary = "Type declaration.";
   let description = "Associate a symbolic name with a type.";
@@ -64,6 +65,8 @@ def TypedeclOp : HWOp<"typedecl", [
   );
 
   let assemblyFormat = "$sym_name (`,` $verilogName^)? `:` $type attr-dict";
+
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     StringRef getPreferredName();
