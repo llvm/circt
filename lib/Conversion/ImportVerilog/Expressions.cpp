@@ -1148,56 +1148,55 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Handle blocking and non-blocking assignments.
   Value visit(const slang::ast::AssignmentExpression &expr) {
-    auto lhs = context.convertLvalueExpression(expr.left());
-    if (!lhs)
+    auto target = context.convertAssignmentTarget(expr.left());
+    if (failed(target))
       return {};
 
-    // Determine the right-hand side value of the assignment.
-    context.lvalueStack.push_back(lhs);
-    auto rhs = context.convertRvalueExpression(
-        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+    // Compound assignments use the original reference to read the LHS.
+    // Patterns cannot be compound-assignment destinations.
+    context.lvalueStack.push_back(target->reference);
+    auto rhs = context.convertRvalueExpression(expr.right(), target->type);
     context.lvalueStack.pop_back();
     if (!rhs)
       return {};
 
-    // If this is a blocking assignment, we can insert the delay/wait ops of the
-    // optional timing control directly in between computing the RHS and
-    // executing the assignment.
+    // Evaluate timing controls once, before assigning any pattern elements.
+    Value delay;
     if (!expr.isNonBlocking()) {
       if (expr.timingControl)
         if (failed(context.convertTimingControl(*expr.timingControl)))
           return {};
-      auto assignOp = moore::BlockingAssignOp::create(builder, loc, lhs, rhs);
-      if (context.variableAssignCallback)
-        context.variableAssignCallback(assignOp);
-      return rhs;
-    }
-
-    // For non-blocking assignments, we only support time delays for now.
-    if (expr.timingControl) {
-      // Handle regular time delays.
+    } else if (expr.timingControl) {
       if (auto *ctrl = expr.timingControl->as_if<slang::ast::DelayControl>()) {
-        auto delay = context.convertRvalueExpression(
+        delay = context.convertRvalueExpression(
             ctrl->expr, moore::TimeType::get(builder.getContext()));
         if (!delay)
           return {};
-        auto assignOp = moore::DelayedNonBlockingAssignOp::create(
-            builder, loc, lhs, rhs, delay);
-        if (context.variableAssignCallback)
-          context.variableAssignCallback(assignOp);
-        return rhs;
+      } else {
+        auto loc = context.convertLocation(expr.timingControl->sourceRange);
+        mlir::emitError(loc)
+            << "unsupported non-blocking assignment timing control: "
+            << slang::ast::toString(expr.timingControl->kind);
+        return {};
       }
-
-      // All other timing controls are not supported.
-      auto loc = context.convertLocation(expr.timingControl->sourceRange);
-      mlir::emitError(loc)
-          << "unsupported non-blocking assignment timing control: "
-          << slang::ast::toString(expr.timingControl->kind);
-      return {};
     }
-    auto assignOp = moore::NonBlockingAssignOp::create(builder, loc, lhs, rhs);
-    if (context.variableAssignCallback)
-      context.variableAssignCallback(assignOp);
+
+    if (failed(context.assignToTarget(
+            *target, rhs, loc, [&](Value lhs, Value value) {
+              Operation *assignOp;
+              if (!expr.isNonBlocking())
+                assignOp =
+                    moore::BlockingAssignOp::create(builder, loc, lhs, value);
+              else if (delay)
+                assignOp = moore::DelayedNonBlockingAssignOp::create(
+                    builder, loc, lhs, value, delay);
+              else
+                assignOp = moore::NonBlockingAssignOp::create(builder, loc, lhs,
+                                                              value);
+              if (context.variableAssignCallback)
+                context.variableAssignCallback(assignOp);
+            })))
+      return {};
     return rhs;
   }
 
@@ -2807,6 +2806,76 @@ Value Context::convertRvalueExpression(const slang::ast::Expression &expr,
     value =
         materializeConversion(requiredType, value, expr.type->isSigned(), loc);
   return value;
+}
+
+FailureOr<AssignmentTarget>
+Context::convertAssignmentTarget(const slang::ast::Expression &expr) {
+  using namespace slang::ast;
+  AssignmentTarget target;
+  if (auto *pattern = expr.as_if<SimpleAssignmentPatternExpression>()) {
+    target.type = convertType(*expr.type);
+    if (!target.type)
+      return failure();
+    for (auto *element : pattern->elements()) {
+      // Slang binds each destination as `destination = EmptyArgument`,
+      // optionally converting the placeholder to the destination type.
+      const auto &assignment = element->as<AssignmentExpression>();
+      assert(assignment.isLValueArg());
+      const Expression *source = &assignment.right();
+      if (auto *conversion = source->as_if<ConversionExpression>())
+        source = &conversion->operand();
+      auto child = convertAssignmentTarget(assignment.left());
+      if (failed(child))
+        return failure();
+      child->type = convertType(*source->type);
+      if (!child->type)
+        return failure();
+      child->isSigned = source->type->isSigned();
+      target.elements.push_back(std::move(*child));
+    }
+  } else {
+    target.reference = convertLvalueExpression(expr);
+    if (!target.reference)
+      return failure();
+    target.type =
+        cast<moore::RefType>(target.reference.getType()).getNestedType();
+  }
+  return target;
+}
+
+LogicalResult
+Context::assignToTarget(const AssignmentTarget &target, Value value,
+                        Location loc,
+                        llvm::function_ref<void(Value, Value)> emitAssignment) {
+  if (target.reference) {
+    auto type =
+        cast<moore::RefType>(target.reference.getType()).getNestedType();
+    value = materializeConversion(type, value, target.isSigned, loc);
+    if (!value)
+      return failure();
+    emitAssignment(target.reference, value);
+    return success();
+  }
+
+  for (auto [index, element] : llvm::enumerate(target.elements)) {
+    Value output;
+    if (auto type = dyn_cast<moore::StructType>(value.getType())) {
+      output = moore::StructExtractOp::create(
+          builder, loc, element.type, type.getMembers()[index].name, value);
+    } else if (auto type =
+                   dyn_cast<moore::UnpackedStructType>(value.getType())) {
+      output = moore::StructExtractOp::create(
+          builder, loc, element.type, type.getMembers()[index].name, value);
+    } else {
+      // Positional patterns follow declaration order. Moore stores the first
+      // declared element at the highest index, regardless of the SV bounds.
+      output = moore::ExtractOp::create(builder, loc, element.type, value,
+                                        target.elements.size() - index - 1);
+    }
+    if (failed(assignToTarget(element, output, loc, emitAssignment)))
+      return failure();
+  }
+  return success();
 }
 
 Value Context::convertLvalueExpression(const slang::ast::Expression &expr) {
