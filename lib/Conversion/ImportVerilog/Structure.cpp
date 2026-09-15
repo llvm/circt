@@ -309,6 +309,63 @@ struct ModuleVisitor : public BaseVisitor {
   ModuleVisitor(Context &context, Location loc, StringRef blockNamePrefix = "")
       : BaseVisitor(context, loc), blockNamePrefix(blockNamePrefix) {}
 
+  /// Connect an output value to a pattern of destinations. Slang binds each
+  /// element as `destination = EmptyArgument`, possibly with a conversion on
+  /// the RHS. The placeholder carries the source type; it is not an rvalue.
+  LogicalResult assignOutputPattern(
+      const slang::ast::SimpleAssignmentPatternExpression &pattern,
+      Value value) {
+    using namespace slang::ast;
+    auto patternLoc = context.convertLocation(pattern.sourceRange);
+    auto elements = pattern.elements();
+    for (auto [index, element] : llvm::enumerate(elements)) {
+      const auto &assignment = element->as<AssignmentExpression>();
+      assert(assignment.isLValueArg());
+      const Expression *source = &assignment.right();
+      if (auto *conversion = source->as_if<ConversionExpression>())
+        source = &conversion->operand();
+      auto elementType = context.convertType(*source->type);
+      if (!elementType)
+        return failure();
+
+      Value output;
+      if (auto type = dyn_cast<moore::StructType>(value.getType())) {
+        output = moore::StructExtractOp::create(
+            builder, patternLoc, elementType, type.getMembers()[index].name,
+            value);
+      } else if (auto type =
+                     dyn_cast<moore::UnpackedStructType>(value.getType())) {
+        output = moore::StructExtractOp::create(
+            builder, patternLoc, elementType, type.getMembers()[index].name,
+            value);
+      } else {
+        // Positional patterns follow declaration order. Moore stores the first
+        // declared element at the highest index, regardless of the SV bounds.
+        output = moore::ExtractOp::create(builder, patternLoc, elementType,
+                                          value, elements.size() - index - 1);
+      }
+
+      const auto &destination = assignment.left();
+      if (auto *nested =
+              destination.as_if<SimpleAssignmentPatternExpression>()) {
+        if (failed(assignOutputPattern(*nested, output)))
+          return failure();
+        continue;
+      }
+      auto lvalue = context.convertLvalueExpression(destination);
+      if (!lvalue)
+        return failure();
+      auto destinationType =
+          cast<moore::RefType>(lvalue.getType()).getNestedType();
+      output = context.materializeConversion(
+          destinationType, output, source->type->isSigned(), patternLoc);
+      if (!output)
+        return failure();
+      moore::ContinuousAssignOp::create(builder, patternLoc, lvalue, output);
+    }
+    return success();
+  }
+
   // Skip ports which are already handled by the module itself.
   LogicalResult visit(const slang::ast::PortSymbol &) { return success(); }
   LogicalResult visit(const slang::ast::MultiPortSymbol &) { return success(); }
@@ -445,6 +502,7 @@ struct ModuleVisitor : public BaseVisitor {
     using slang::ast::AssignmentExpression;
     using slang::ast::MultiPortSymbol;
     using slang::ast::PortSymbol;
+    using slang::ast::SimpleAssignmentPatternExpression;
 
     if (context.predeclaredInstances.contains(&instNode))
       return success();
@@ -479,6 +537,8 @@ struct ModuleVisitor : public BaseVisitor {
     // ports with their corresponding connection.
     SmallDenseMap<const PortSymbol *, Value> portValues;
     portValues.reserve(moduleType.getNumPorts());
+    SmallDenseMap<const PortSymbol *, const SimpleAssignmentPatternExpression *>
+        outputPatterns;
 
     // Match interface ports by name since the module lowering can use a
     // canonical body whose port symbols differ from this instance's symbols.
@@ -575,6 +635,18 @@ struct ModuleVisitor : public BaseVisitor {
       // either attach it to the instance as an operand (for input, inout, and
       // ref ports), or assign an instance output to it (for output ports).
       if (auto *port = con->port.as_if<PortSymbol>()) {
+        // Output patterns are collections of destinations, not aggregate
+        // references. Wire their elements after creating the instance.
+        if (port->direction == ArgumentDirection::Out) {
+          if (auto *pattern =
+                  expr->as_if<SimpleAssignmentPatternExpression>()) {
+            if (auto *existingPort = moduleLowering->portsBySyntaxNode.lookup(
+                    con->port.getSyntax()))
+              port = existingPort;
+            outputPatterns.insert({port, pattern});
+            continue;
+          }
+        }
         // Convert as rvalue for inputs, lvalue for all others.
         auto value = (port->direction == ArgumentDirection::In)
                          ? context.convertRvalueExpression(*expr)
@@ -791,6 +863,12 @@ struct ModuleVisitor : public BaseVisitor {
             context.valueSymbols.insert(alias.first, result);
         context.hierValueSymbols[{&instNode, hierPath.hierName}] = result;
       }
+
+    for (auto &port : moduleLowering->ports)
+      if (auto *pattern = outputPatterns.lookup(&port.ast))
+        if (failed(assignOutputPattern(*pattern,
+                                       inst.getOutputs()[*port.outputIdx])))
+          return failure();
 
     // Assign output values from the instance to the connected expression.
     for (auto [lvalue, output] : llvm::zip(outputValues, inst.getOutputs())) {
