@@ -1189,6 +1189,20 @@ firrtl.module @CatOfConstant(in %a: !firrtl.uint<4>, out %out1: !firrtl.uint<12>
   firrtl.matchingconnect %out2, %cat2 : !firrtl.uint<10>
 }
 
+// CHECK-LABEL: firrtl.module @CatOfConstConstant
+// Ensure CatOfConstant preserves constness when folding adjacent const
+// constants (issue #10787).
+firrtl.module @CatOfConstConstant(in %x: !firrtl.const.uint<4>,
+                                  out %out: !firrtl.const.uint<8>) {
+  %c0 = firrtl.constant 0 : !firrtl.const.uint<1>
+  %c1 = firrtl.constant 1 : !firrtl.const.uint<3>
+  // CHECK: %[[C:.+]] = firrtl.constant 1 : !firrtl.const.uint<4>
+  // CHECK: %[[CAT:.+]] = firrtl.cat %[[C]], %x : (!firrtl.const.uint<4>, !firrtl.const.uint<4>) -> !firrtl.const.uint<8>
+  // CHECK: firrtl.matchingconnect %out, %[[CAT]] : !firrtl.const.uint<8>
+  %cat = firrtl.cat %c0, %c1, %x : (!firrtl.const.uint<1>, !firrtl.const.uint<3>, !firrtl.const.uint<4>) -> !firrtl.const.uint<8>
+  firrtl.matchingconnect %out, %cat : !firrtl.const.uint<8>
+}
+
 // CHECK-LABEL: firrtl.module @BitsOfCat
 firrtl.module @BitsOfCat(in %a: !firrtl.uint<4>, in %b: !firrtl.uint<3>, in %c: !firrtl.uint<2>,
                         out %out1: !firrtl.uint<2>, out %out2: !firrtl.uint<1>, out %out3: !firrtl.uint<5>) {
@@ -2678,6 +2692,26 @@ firrtl.module @issue1142(in %cond: !firrtl.uint<1>, out %z: !firrtl.uint) {
   firrtl.connect %z, %1 : !firrtl.uint, !firrtl.uint
   firrtl.connect %z, %3 : !firrtl.uint, !firrtl.uint
   firrtl.connect %z, %4 : !firrtl.uint, !firrtl.uint
+}
+
+// CHECK-LABEL: firrtl.module @PadConstMuxOperands
+// MuxPad must infer pad result constness from the narrow arm, not reuse the
+// non-const mux result type (issue #10787).
+firrtl.module @PadConstMuxOperands(
+    in %sel: !firrtl.uint<1>, in %x: !firrtl.const.uint<2>,
+    in %y: !firrtl.uint<12>, out %outHigh: !firrtl.uint<12>,
+    out %outLow: !firrtl.uint<12>) {
+  // CHECK: %[[PADH:.+]] = firrtl.pad %x, 12 : (!firrtl.const.uint<2>) -> !firrtl.const.uint<12>
+  // CHECK: %[[MUXH:.+]] = firrtl.mux(%sel, %[[PADH]], %y)
+  // CHECK: firrtl.matchingconnect %outHigh, %[[MUXH]]
+  %muxHigh = firrtl.mux(%sel, %x, %y) : (!firrtl.uint<1>, !firrtl.const.uint<2>, !firrtl.uint<12>) -> !firrtl.uint<12>
+  firrtl.matchingconnect %outHigh, %muxHigh : !firrtl.uint<12>
+
+  // CHECK: %[[PADL:.+]] = firrtl.pad %x, 12 : (!firrtl.const.uint<2>) -> !firrtl.const.uint<12>
+  // CHECK: %[[MUXL:.+]] = firrtl.mux(%sel, %y, %[[PADL]])
+  // CHECK: firrtl.matchingconnect %outLow, %[[MUXL]]
+  %muxLow = firrtl.mux(%sel, %y, %x) : (!firrtl.uint<1>, !firrtl.uint<12>, !firrtl.const.uint<2>) -> !firrtl.uint<12>
+  firrtl.matchingconnect %outLow, %muxLow : !firrtl.uint<12>
 }
 
 // CHECK-LABEL: firrtl.module @PadMuxOperands
