@@ -39,6 +39,16 @@ hw.module @AggregateClockPayload(
 
 // -----
 
+hw.module private @ClockProbe(
+    in %clock: !seq.clock,
+    out probe: !probe.ref<!seq.clock>) {
+  // expected-error @below {{Probe-to-SV lowering requires an HW value payload, but got '!seq.clock'}}
+  %probe = probe.send %clock : !seq.clock
+  hw.output %probe : !probe.ref<!seq.clock>
+}
+
+// -----
+
 hw.module private @Leaf(in %in: i8, out p: !probe.ref<i8>) {
   %p = probe.send %in : i8
   hw.output %p : !probe.ref<i8>
@@ -64,6 +74,24 @@ hw.module @GenericPropagation(in %in: i8, out out: i8) {
   %p = probe.send %in : i8
   // expected-error @below {{the Probe dialect only permits Probe refs to flow through probe.send, probe.read, hw.output, and direct hw.instance results}}
   %forwarded = builtin.unrealized_conversion_cast %p : !probe.ref<i8> to !probe.ref<i8>
+  %read = probe.read %forwarded : <i8>
+  hw.output %read : i8
+}
+
+// -----
+
+hw.module private @InstanceProducer(in %in: i8,
+                                    out probe: !probe.ref<i8>) {
+  %probe = probe.send %in : i8
+  hw.output %probe : !probe.ref<i8>
+}
+
+hw.module @InstanceGenericPropagation(in %in: i8, out out: i8) {
+  %probe = hw.instance "producer" @InstanceProducer(in: %in: i8) ->
+      (probe: !probe.ref<i8>)
+  // expected-error @below {{the Probe dialect only permits Probe refs to flow through probe.send, probe.read, hw.output, and direct hw.instance results}}
+  %forwarded = builtin.unrealized_conversion_cast %probe
+      : !probe.ref<i8> to !probe.ref<i8>
   %read = probe.read %forwarded : <i8>
   hw.output %read : i8
 }
