@@ -1804,6 +1804,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         }
 
         int64_t unionWidth = hw::getBitWidth(unionType);
+        assert(unionWidth > 0 &&
+               "SV packed union must have known positive bitwidth");
         os << "union packed {";
         for (auto &element : unionType.getElements()) {
           if (isZeroBitType(element.type)) {
@@ -1812,12 +1814,16 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             continue;
           }
           int64_t elementWidth = hw::getBitWidth(element.type);
-          bool needsPadding = elementWidth < unionWidth || element.offset > 0;
+          // Members share the LSB of the union and are moved towards the MSB
+          // by their offset.
+          auto elementOffset = static_cast<int64_t>(element.offset);
+          bool needsPadding = elementWidth < unionWidth || elementOffset > 0;
+          int64_t prePadding = unionWidth - (elementWidth + elementOffset);
           if (needsPadding) {
             os << " struct packed {";
-            if (element.offset) {
+            if (prePadding > 0) {
               os << (emitAsTwoStateType ? "bit" : "logic") << " ["
-                 << element.offset - 1 << ":0] "
+                 << prePadding - 1 << ":0] "
                  << "__pre_padding_" << element.name.getValue() << "; ";
             }
           }
@@ -1832,9 +1838,9 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           os << ";";
 
           if (needsPadding) {
-            if (elementWidth + (int64_t)element.offset < unionWidth) {
+            if (elementOffset > 0) {
               os << " " << (emitAsTwoStateType ? "bit" : "logic") << " ["
-                 << unionWidth - (elementWidth + element.offset) - 1 << ":0] "
+                 << elementOffset - 1 << ":0] "
                  << "__post_padding_" << element.name.getValue() << ";";
             }
             os << "} " << emitter.getVerilogStructFieldName(element.name)
@@ -3498,17 +3504,20 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
     return {Unary, IsUnsigned};
   }
 
-  // Emit the value as a bitconcat, supplying 0 for the padding bits.
+  // Emit the value as a bitconcat, supplying 0 for the padding bits. The
+  // member shares the LSB of the union, moved towards the MSB by its offset.
+  auto elementOffset = static_cast<int64_t>(element.offset);
+  int64_t prePadding = unionWidth - elementWidth - elementOffset;
   ps << "{";
   ps.scopedBox(PP::ibox0, [&]() {
-    if (auto prePadding = element.offset) {
+    if (prePadding > 0) {
       ps.addAsString(prePadding);
       ps << "'h0," << PP::space;
     }
     emitSubExpr(op.getInput(), Selection);
-    if (auto postPadding = unionWidth - elementWidth - element.offset) {
+    if (elementOffset > 0) {
       ps << "," << PP::space;
-      ps.addAsString(postPadding);
+      ps.addAsString(elementOffset);
       ps << "'h0";
     }
     ps << "}";

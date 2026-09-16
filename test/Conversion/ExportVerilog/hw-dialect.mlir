@@ -1024,7 +1024,7 @@ hw.module @structExtractFromTemporary(in %cond: i1, in %a: !hw.struct<c: i1>, in
 
 // CHECK-LABEL: module unionCreateNoPadding(
 // CHECK-NEXT:    input [1:0] in,
-// CHECK-NEXT:    output union packed { struct packed {logic a; logic [0:0] __post_padding_a;} a;logic [1:0] b;} out
+// CHECK-NEXT:    output union packed { struct packed {logic [0:0] __pre_padding_a; logic a;} a;logic [1:0] b;} out
 hw.module @unionCreateNoPadding(in %in: i2, out out: !hw.union<a: i1, b: i2>) {
   // CHECK: assign out = in + in;
   %add = comb.add %in, %in : i2
@@ -1034,9 +1034,9 @@ hw.module @unionCreateNoPadding(in %in: i2, out out: !hw.union<a: i1, b: i2>) {
 
 // CHECK-LABEL: module unionCreatePadding(
 // CHECK-NEXT:    input in,
-// CHECK-NEXT:    output union packed { struct packed {logic a; logic [0:0] __post_padding_a;} a;logic [1:0] b;} out
+// CHECK-NEXT:    output union packed { struct packed {logic [0:0] __pre_padding_a; logic a;} a;logic [1:0] b;} out
 hw.module @unionCreatePadding(in %in: i1, out out: !hw.union<a: i1, b: i2>) {
-  // CHECK: assign out = {in, 1'h0};
+  // CHECK: assign out = {1'h0, in};
   %0 = hw.union_create "a", %in : !hw.union<a: i1, b: i2>
   hw.output %0 : !hw.union<a: i1, b: i2>
 }
@@ -1439,7 +1439,7 @@ hw.module @DontInlineAggregateConstantIntoPorts() {
 }
 
 // CHECK-LABEL: module FooA(
-// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [9:0] b; logic [5:0] __post_padding_b;} b;} test
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [5:0] __pre_padding_b; logic [9:0] b;} b;} test
 // CHECK-NEXT:    output [15:0] a,
 // CHECK-NEXT:    output [9:0] b
 // CHECK-NEXT:  );
@@ -1455,7 +1455,7 @@ hw.module @FooA(in %test: !unionA, out a: i16, out b: i10) {
 }
 
 // CHECK-LABEL: module FooB(
-// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding_b; logic [13:0] b;} b;} test,
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [13:0] b; logic [1:0] __post_padding_b;} b;} test,
 // CHECK-NEXT:    output [15:0] a,
 // CHECK-NEXT:    output [13:0] b
 // CHECK-NEXT:  );
@@ -1468,6 +1468,30 @@ hw.module @FooB(in %test: !unionB, out a: i16, out b: i14) {
   %0 = hw.union_extract %test["a"] : !unionB
   %1 = hw.union_extract %test["b"] : !unionB
   hw.output %0, %1 : i16, i14
+}
+
+// A member that is narrower than the union and has a non-zero offset is padded
+// on both sides: the offset pads the LSBs, the remaining bits pad the MSBs.
+// CHECK-LABEL: module unionExtractPrePostPadding
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [3:0] __pre_padding_b; logic [9:0] b; logic [1:0] __post_padding_b;} b;} test,
+// CHECK-NEXT:    output [15:0] a,
+// CHECK-NEXT:    output [9:0] b
+!unionPrePostPadding = !hw.union<a: i16, b: i10 offset 2>
+hw.module @unionExtractPrePostPadding(in %test: !unionPrePostPadding, out a: i16, out b: i10) {
+  // CHECK-DAG:     assign a = test.a;
+  %0 = hw.union_extract %test["a"] : !unionPrePostPadding
+  // CHECK-DAG:     assign b = test.b.b;
+  %1 = hw.union_extract %test["b"] : !unionPrePostPadding
+  hw.output %0, %1 : i16, i10
+}
+
+// CHECK-LABEL: module unionCreatePrePostPadding
+// CHECK-NEXT:    input [9:0] in,
+// CHECK-NEXT:    output union packed {logic [15:0] a; struct packed {logic [3:0] __pre_padding_b; logic [9:0] b; logic [1:0] __post_padding_b;} b;} out
+hw.module @unionCreatePrePostPadding(in %in: i10, out out: !unionPrePostPadding) {
+  // CHECK: assign out = {4'h0, in, 2'h0};
+  %0 = hw.union_create "b", %in : !unionPrePostPadding
+  hw.output %0 : !unionPrePostPadding
 }
 
 // CHECK-LABEL: module Issue6275
