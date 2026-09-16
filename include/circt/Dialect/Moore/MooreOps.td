@@ -964,6 +964,12 @@ def LogicToIntOp : MooreOp<"logic_to_int", [
     "input", "result", "cast<IntType>($_self).getTwoValued()">
 ]> {
   let summary = "Convert a four-valued to a two-valued integer";
+  let description = [{
+    Casts a four-valued Moore integer to a two-valued Moore integer, keeping
+    `0` or `1` bits and casting unknown bits (`z` or `x`) to 0 (see IEEE
+    1800-2023 § 6.11.2 "2-state (two-value) and 4-state (four-value) data
+    types").
+  }];
   let arguments = (ins FourValuedIntType:$input);
   let results = (outs TwoValuedIntType:$result);
   let assemblyFormat = [{
