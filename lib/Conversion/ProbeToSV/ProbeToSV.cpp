@@ -199,26 +199,28 @@ FailureOr<ReadResolution> LowerProbeToSVPass::resolveRead(probe::ReadOp read) {
 
 LogicalResult LowerProbeToSVPass::validateProbeUses() {
   auto circuit = getOperation();
-  auto walkResult = circuit.walk([&](Operation *op) -> WalkResult {
-    bool hasProbeValue = llvm::any_of(op->getOperands(), [](Value value) {
-      return containsProbeRef(value.getType());
-    });
-    hasProbeValue |= llvm::any_of(op->getResults(), [](Value value) {
-      return containsProbeRef(value.getType());
-    });
-    if (!hasProbeValue)
-      return WalkResult::advance();
+  for (auto module : circuit.getOps<hw::HWModuleOp>()) {
+    auto walkResult = module.walk([&](Operation *op) -> WalkResult {
+      bool hasProbeValue = llvm::any_of(op->getOperands(), [](Value value) {
+        return containsProbeRef(value.getType());
+      });
+      hasProbeValue |= llvm::any_of(op->getResults(), [](Value value) {
+        return containsProbeRef(value.getType());
+      });
+      if (!hasProbeValue)
+        return WalkResult::advance();
 
-    if (isa<probe::SendOp, probe::ReadOp, hw::OutputOp, hw::InstanceOp>(op))
-      return WalkResult::advance();
+      if (isa<probe::SendOp, probe::ReadOp, hw::OutputOp, hw::InstanceOp>(op))
+        return WalkResult::advance();
 
-    op->emitOpError(
-        "the Probe dialect only permits Probe refs to flow through probe.send, "
-        "probe.read, hw.output, and direct hw.instance results");
-    return WalkResult::interrupt();
-  });
-  if (walkResult.wasInterrupted())
-    return failure();
+      op->emitOpError(
+          "the Probe dialect only permits Probe refs to flow through "
+          "probe.send, probe.read, hw.output, and direct hw.instance results");
+      return WalkResult::interrupt();
+    });
+    if (walkResult.wasInterrupted())
+      return failure();
+  }
 
   for (auto send : sendOps)
     if (!hw::isHWValueType(send.getInput().getType()))
@@ -235,22 +237,24 @@ LogicalResult LowerProbeToSVPass::validate() {
     if (failed(validateModulePorts(module)))
       return failure();
 
-  circuit.walk([&](probe::SendOp send) { sendOps.push_back(send); });
+  for (auto module : circuit.getOps<hw::HWModuleOp>())
+    module.walk([&](probe::SendOp send) { sendOps.push_back(send); });
 
   if (failed(validateProbeUses()))
     return failure();
 
   LogicalResult result = success();
-  circuit.walk([&](probe::ReadOp read) {
-    if (failed(result))
-      return;
-    auto resolution = resolveRead(read);
-    if (failed(resolution)) {
-      result = failure();
-      return;
-    }
-    resolutions.push_back(*resolution);
-  });
+  for (auto module : circuit.getOps<hw::HWModuleOp>())
+    module.walk([&](probe::ReadOp read) {
+      if (failed(result))
+        return;
+      auto resolution = resolveRead(read);
+      if (failed(resolution)) {
+        result = failure();
+        return;
+      }
+      resolutions.push_back(*resolution);
+    });
   return result;
 }
 
