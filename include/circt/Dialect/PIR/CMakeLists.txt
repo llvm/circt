@@ -16,14 +16,3 @@ mlir_tablegen(PIREnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(CIRCTPIREnumsIncGen)
 add_dependencies(circt-headers CIRCTPIREnumsIncGen)
 
-set(LLVM_TARGET_DEFINITIONS PIROps.td)
-mlir_tablegen(PIRAttrDefs.h.inc -gen-attrdef-decls
--attrdefs-dialect=pir)
-mlir_tablegen(PIRAttrDefs.cpp.inc -gen-attrdef-defs
--attrdefs-dialect=pir)
-add_public_tablegen_target(CIRCTPIRAttrDefsIncGen)
-
-set(LLVM_TARGET_DEFINITIONS PIROps.td)
-mlir_tablegen(PIRInterfaces.h.inc -gen-op-interface-decls)
-mlir_tablegen(PIRInterfaces.cpp.inc -gen-op-interface-defs)
-add_public_tablegen_target(CIRCTPIRInterfaceDefsIncGen)

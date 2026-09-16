@@ -10,6 +10,8 @@
 #define CIRCT_DIALECT_PIR_PIR_TD
 
 include "circt/Dialect/PIR/PIRDialect.td"
+include "circt/Dialect/PIR/PIREnums.td"
+include "circt/Dialect/PIR/PIRTypes.td"
 include "circt/Dialect/PIR/PIROps.td"
 
 #endif // CIRCT_DIALECT_PIR_PIR_TD

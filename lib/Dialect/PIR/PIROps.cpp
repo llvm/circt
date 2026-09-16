@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/PIR/PIROps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/PIR/PIREnums.h"
 #include "circt/Dialect/PIR/PIRTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
@@ -189,12 +190,10 @@ void CoverPropertyOp::getCanonicalizationPatterns(RewritePatternSet &results,
 LogicalResult
 ClockedSeqToClockedPropOp::canonicalize(ClockedSeqToClockedPropOp op,
                                         PatternRewriter &rewriter) {
-  if (auto bToClkSeq = op.getInput().getDefiningOp<BoolToClockedSeqOp>()) {
-    rewriter.replaceOpWithNewOp<BoolToClockedPropOp>(op, bToClkSeq.getInput());
-    return success();
-  }
-  return failure();
+  // if (auto bToClkSeq = op.getInput().getDefiningOp<BoolToClockedSeqOp>()) {
+  //   rewriter.replaceOpWithNewOp<BoolToClockedPropOp>(op,
+  //   bToClkSeq.getInput());
+  return success();
+  // }
+  // return failure();
 }
-
-#define GET_OP_CLASSES
-#include "circt/Dialect/PIR/PIR.cpp.inc"

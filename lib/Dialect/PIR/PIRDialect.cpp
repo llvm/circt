@@ -27,6 +27,7 @@ void PIRDialect::initialize() {
 }
 
 #include "circt/Dialect/PIR/PIRDialect.cpp.inc"
+#include "circt/Dialect/PIR/PIREnums.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/PIR/PIRTypes.cpp.inc"

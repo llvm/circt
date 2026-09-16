@@ -30,7 +30,7 @@ class I8EnumAttr<string name, string summary, list<I8EnumAttrCase> cases> :
 }
 
 //----------------------------------------------------------------------------//
-// Property Sampling Type (always vs. initial)
+// Property S (always vs. initial)
 //----------------------------------------------------------------------------//
 
 /// Always refers to properties that must hold in all samples of a trace
@@ -38,8 +38,8 @@ def Always : I8EnumAttrCase<"Always", 1, "always">;
 /// Initial refers to proeprties that must only hold in the first step of a trace
 def Initial : I8EnumAttrCase<"Initial", 0, "initial">;
 
-def SamplingTypeAttr : I8EnumAttr<"SamplingType", "Sampling stategy for a PIR property",
+def SamplingTypeAttr : I8EnumAttr<"SamplingTypeAttr", "Sampling stategy for a PIR property",
                                    [Always, Initial]>;
-} // namspace circt::PIR
+} // namspace circt::pir
 
 #endif // CIRCT_DIALECT_PIR_PIRENUMS_TD

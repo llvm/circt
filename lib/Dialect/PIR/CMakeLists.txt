@@ -6,6 +6,7 @@ add_circt_dialect_library(CIRCTPIR
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/PIR
 
   DEPENDS
+  CIRCTPIREnumsIncGen
   MLIRPIRIncGen
 
   LINK_COMPONENTS

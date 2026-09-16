@@ -62,7 +62,7 @@ def AssumePropertyOp : AssertPropertyLikeOp<"assume_property"> {
   }];
 }
 
-def RestrictOp : AssertPropertyLikeOp<"restric"> {
+def RestrictOp : AssertPropertyLikeOp<"restrict"> {
   let summary = "Restricts the input space checked for a given property.";
   let description = [{
     Similarly to Assumptions, restrictions allow for a property's input space to be 
