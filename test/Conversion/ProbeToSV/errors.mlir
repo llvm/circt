@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --lower-probe-to-sv --verify-diagnostics --split-input-file
 
-// expected-error @below {{Probe-to-SV lowering cannot remove a Probe output from a public module without a defined external ABI}}
+// expected-error @below {{Probe output ports on public modules are not supported}}
 hw.module @PublicOutput(in %in: i8, out p: !probe.ref<i8>) {
   %p = probe.send %in : i8
   hw.output %p : !probe.ref<i8>
@@ -8,13 +8,13 @@ hw.module @PublicOutput(in %in: i8, out p: !probe.ref<i8>) {
 
 // -----
 
-// expected-error @below {{Probe refs on external or generated module ports require a defined Probe ABI}}
+// expected-error @below {{Probe refs on external or generated module ports are not supported}}
 hw.module.extern private @ExternalProbe(out p: !probe.ref<i8>)
 
 // -----
 
 hw.generator.schema @Schema, "Schema", []
-// expected-error @below {{Probe refs on external or generated module ports require a defined Probe ABI}}
+// expected-error @below {{Probe refs on external or generated module ports are not supported}}
 hw.module.generated private @GeneratedProbe, @Schema(out p: !probe.ref<i8>)
 
 // -----
