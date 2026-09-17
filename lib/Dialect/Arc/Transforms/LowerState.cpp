@@ -573,17 +573,12 @@ LogicalResult OpLowering::lower(llhd::SignalOp op) {
 }
 
 LogicalResult OpLowering::lower(llhd::ProbeOp op) {
+  auto value = lowerValue(op.getResult(), phase);
   if (initial)
     return success();
 
-  auto signal = op.getSignal().getDefiningOp<llhd::SignalOp>();
-  if (!signal)
-    return op.emitOpError(
-        "only probes of locally defined signals are supported");
-
-  auto state = module.getAllocatedSignal(signal);
-  auto value =
-      StateReadOp::create(module.getBuilder(phase), op.getLoc(), state);
+  if (!value)
+    return failure();
   module.loweredValues[{op.getResult(), phase}] = value;
   return success();
 }
@@ -1573,8 +1568,12 @@ Value OpLowering::lowerValue(MemoryReadPortOp op, OpResult result,
 }
 
 /// Handle uses of an LLHD signal probe. This creates an `arc.state_read` from
-/// the signal's storage. Reading the old value requires that no drives to the
-/// signal have been lowered in the new phase yet.
+/// the signal's storage. Reading the new value requires all drives to the
+/// signal to be lowered first, including the coroutines producing their values.
+/// This schedules chains of blocking assignments independently of source order.
+/// Cycles through signal assignments are rejected by the lowering worklist,
+/// since evaluating these would require iteration to a fixed point. Reading the
+/// old value requires that no drives have been lowered in the new phase yet.
 Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
   auto signal = op.getSignal().getDefiningOp<llhd::SignalOp>();
   if (!signal) {
@@ -1585,6 +1584,12 @@ Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
 
   if (initial) {
     addPending(signal.getResult(), Phase::Initial);
+    if (phase == Phase::New)
+      for (auto *user : signal->getUsers()) {
+        auto drive = dyn_cast<llhd::DriveOp>(user);
+        if (drive && drive.getSignal() == op.getSignal())
+          addPending(drive, Phase::New);
+      }
     return {};
   }
 
