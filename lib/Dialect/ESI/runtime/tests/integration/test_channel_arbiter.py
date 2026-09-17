@@ -36,9 +36,9 @@ HW_DIR = Path(__file__).resolve().parent / "hw"
 NUM_INPUTS = 4  # power-of-two ("balanced") input count.
 ODD_NUM_INPUTS = 3  # non-power-of-two ("unbalanced") input count.
 PIPE_NUM_INPUTS = 6  # input count for the pipelined-mux-tree variant.
+WIDE_NUM_INPUTS = 13  # wide fan-in; must match hw/channel_arbiter.py.
 TOKEN_NUM_INPUTS = 5  # input count for the zero-width (i0) token variant.
 TOKENS_PER_INPUT = 8  # tokens each producer emits in the token test.
-WIDE_NUM_INPUTS = 13  # must match hw/channel_arbiter.py.
 THROUGHPUT_NUM_INPUTS = 4  # must match hw/channel_arbiter.py.
 THROUGHPUT_WINDOW = 1000  # measurement window in cycles; must match hw.
 
@@ -108,15 +108,45 @@ class TestChannelArbiterCosim:
     once."""
     _check_mux(conn, "arbiter_test_pipe", PIPE_NUM_INPUTS)
 
+  def test_mux_correctness_wide(self, conn: AcceleratorConnection) -> None:
+    """Wide fan-in: the BSP instantiates arbiters with ~31 inputs, a regime the
+    small counts above never reach. Every value must still be delivered exactly
+    once and every input served."""
+    _check_mux(conn, "arbiter_test_wide", WIDE_NUM_INPUTS)
+
+  def test_mux_correctness_scheduled(self, conn: AcceleratorConnection) -> None:
+    """Decoupled grant-queue scheduler at wide fan-in: grants are chosen ahead
+    of time and buffered, so this exercises the queue, the sweep reload and the
+    stale-entry skip. Delivery must still be exactly-once and every input
+    served."""
+    _check_mux(conn, "arbiter_test_sched", WIDE_NUM_INPUTS)
+
+  def test_mux_correctness_scheduled_unbalanced(
+      self, conn: AcceleratorConnection) -> None:
+    """The scheduler with a non-power-of-two input count: the one-hot->index
+    encode and the sweep must not produce an out-of-range grant."""
+    _check_mux(conn, "arbiter_test_sched_odd", ODD_NUM_INPUTS)
+
   def test_list_contiguity(self, conn: AcceleratorConnection) -> None:
     """Contending multi-flit list messages are never interleaved."""
+    self._check_contiguity(conn, "list_test", {1, 2})
+
+  def test_list_contiguity_scheduled(self, conn: AcceleratorConnection) -> None:
+    """Message atomicity under the decoupled grant-queue scheduler, with more
+    contending producers than the grant queue is deep."""
+    self._check_contiguity(conn, "list_test_sched", set(range(1, 7)))
+
+  @staticmethod
+  def _check_contiguity(conn: AcceleratorConnection, dut_name: str,
+                        expected_src: set[int]) -> None:
     acc = conn.build_accelerator()
-    dut = acc.children[esiaccel.AppID("list_test")]
+    dut = acc.children[esiaccel.AppID(dut_name)]
     report = dut.ports[esiaccel.AppID("report")]
     report.connect()
 
     seen_src: set[int] = set()
-    num_reports = 40
+    # Enough reports to see every producer served several times over.
+    num_reports = 20 * len(expected_src)
     for _ in range(num_reports):
       value = report.read().result()
       err = (value >> 24) & 0x1
@@ -125,9 +155,9 @@ class TestChannelArbiterCosim:
           f"hardware detected interleaved list flits (report {value:#010x})"
       seen_src.add(src)
 
-    # Both contending producers (src 1 and src 2) must get through.
-    assert seen_src == {1, 2}, \
-        f"expected both sources to be served, saw {sorted(seen_src)}"
+    # Every contending producer must get through -- i.e. no starvation.
+    assert seen_src == expected_src, \
+        f"expected sources {sorted(expected_src)}, saw {sorted(seen_src)}"
 
   def test_token_conservation(self, conn: AcceleratorConnection) -> None:
     """Zero-width (`i0`) token payloads: the credit-counter-as-buffer path
@@ -144,24 +174,35 @@ class TestChannelArbiterCosim:
       assert value == expected, \
           f"token {expected} arrived as {value} (loss / duplication / reorder)"
 
-  def test_mux_correctness_wide(self, conn: AcceleratorConnection) -> None:
-    """Wide fan-in: the small counts above are far below what the BSP
-    instantiates, and the selection mux depth grows with the input count."""
-    _check_mux(conn, "arbiter_test_wide", WIDE_NUM_INPUTS)
+  def test_throughput_flat(self, conn: AcceleratorConnection) -> None:
+    """The flat round-robin arbiter sustains ~one beat per cycle."""
+    self._check_throughput(conn, "throughput_test")
 
-  def test_throughput(self, conn: AcceleratorConnection) -> None:
-    """The arbiter sustains ~one beat per cycle with every input backlogged.
+  def test_throughput_scheduled(self, conn: AcceleratorConnection) -> None:
+    """The decoupled grant-queue scheduler must sustain ~one beat per cycle
+    too. Regression test: reloading the sweep snapshot a cycle after it drains
+    (rather than on the cycle the last entry is queued) costs one idle cycle
+    per sweep, which caps throughput at `n/(n+1)` -- 0.8 here. Correctness
+    tests do not notice that, only this one does.
 
-    Correctness tests cannot see this: they are rate-limited by the cosim DPI,
-    so a per-message turnaround bubble would pass them unnoticed. The probe
-    drains the arbiter in hardware instead."""
+    The producers emit **single-flit** messages deliberately: with multi-flit
+    lists the datapath keeps streaming while the sweep refills, which hides the
+    bubble entirely (measured: no loss at list length >= 2)."""
+    self._check_throughput(conn, "throughput_test_sched")
+
+  @staticmethod
+  def _check_throughput(conn: AcceleratorConnection, dut_name: str) -> None:
     acc = conn.build_accelerator()
-    dut = acc.children[esiaccel.AppID("throughput_test")]
+    dut = acc.children[esiaccel.AppID(dut_name)]
     report = dut.ports[esiaccel.AppID("throughput_report")]
     report.connect()
 
     beats = report.read().result()
     throughput = beats / THROUGHPUT_WINDOW
-    # Allow for pipeline fill at the start of the window.
-    assert throughput >= 0.95, (f"{beats} beats in {THROUGHPUT_WINDOW} cycles "
-                                f"({throughput:.3f}/cycle); expected >= 0.95")
+    # Allow for pipeline fill at the start of the window; well above the 0.8
+    # a per-sweep bubble would produce with this input count.
+    assert throughput >= 0.95, (
+        f"{dut_name}: {beats} beats in {THROUGHPUT_WINDOW} cycles "
+        f"({throughput:.3f}/cycle); expected >= 0.95. A throughput of about "
+        f"{THROUGHPUT_NUM_INPUTS / (THROUGHPUT_NUM_INPUTS + 1):.3f} means the "
+        "scheduler is losing a cycle per sweep.")

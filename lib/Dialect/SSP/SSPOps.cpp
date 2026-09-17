@@ -54,6 +54,50 @@ DependenceGraphOp InstanceOp::getDependenceGraph() {
 }
 
 //===----------------------------------------------------------------------===//
+// DependenceGraphOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DependenceGraphOp::verifyRegions() {
+  SmallDenseMap<StringAttr, OperationOp> namedOps;
+
+  // Check uniqueness of operation names.
+  for (auto opOp : getOps<OperationOp>()) {
+    if (StringAttr name = opOp.getNameAttr()) {
+      [[maybe_unused]] auto [it, ins] = namedOps.try_emplace(name, opOp);
+      if (!ins)
+        return emitError("Contains multiple operations named @")
+               << name.getValue();
+    }
+  }
+
+  // Check auxiliary dependences within this graph.
+  for (auto opOp : getOps<OperationOp>()) {
+    if (ArrayAttr dependences = opOp.getDependencesAttr()) {
+      for (auto dep : dependences.getAsRange<DependenceAttr>()) {
+        StringAttr sourceRef = dep.getSourceRef();
+        if (!sourceRef)
+          continue;
+
+        if (!namedOps.contains(sourceRef))
+          return opOp->emitError("Auxiliary dependence references invalid "
+                                 "source operation: @")
+                 << sourceRef.getValue();
+      }
+    }
+  }
+  return success();
+}
+
+OperationOp DependenceGraphOp::lookupNamedOperation(StringRef name) {
+  auto opOps = getOps<OperationOp>();
+  auto it = find_if(opOps, [&](OperationOp opOp) {
+    StringAttr nameAttr = opOp.getNameAttr();
+    return nameAttr && nameAttr.getValue() == name;
+  });
+  return it != opOps.end() ? *it : OperationOp{};
+}
+
+//===----------------------------------------------------------------------===//
 // OperationOp
 //===----------------------------------------------------------------------===//
 
@@ -78,8 +122,7 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // (Scheduling) operation's name
   StringAttr opName;
-  (void)parser.parseOptionalSymbolName(opName, SymbolTable::getSymbolAttrName(),
-                                       result.attributes);
+  (void)parser.parseOptionalSymbolName(opName, "name", result.attributes);
 
   // Dependences
   SmallVector<OpAsmParser::UnresolvedOperand> unresolvedOperands;
@@ -87,14 +130,11 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   unsigned operandIdx = 0;
   auto parseDependenceSourceWithAttrDict = [&]() -> ParseResult {
     llvm::SMLoc loc = parser.getCurrentLocation();
-    FlatSymbolRefAttr sourceRef;
+    StringAttr sourceRef;
     ArrayAttr properties;
 
-    // Try to parse either symbol reference...
-    auto parseSymbolResult = parser.parseOptionalAttribute(sourceRef);
-    if (parseSymbolResult.has_value())
-      assert(succeeded(*parseSymbolResult));
-    else {
+    // Try to parse either a reference to another op's @name...
+    if (parser.parseOptionalSymbolName(sourceRef)) {
       // ...or an SSA operand.
       OpAsmParser::UnresolvedOperand operand;
       if (parser.parseOperand(operand))
@@ -183,9 +223,9 @@ void OperationOp::print(OpAsmPrinter &p) {
   p << '>';
 
   // (Scheduling) operation's name
-  if (StringAttr symName = getSymNameAttr()) {
+  if (StringAttr name = getNameAttr()) {
     p << ' ';
-    p.printSymbolName(symName);
+    p.printSymbolName(name);
   }
 
   // Dependences = SSA operands + other OperationOps via symbol references.
@@ -214,7 +254,7 @@ void OperationOp::print(OpAsmPrinter &p) {
     if (!defUseDeps.empty())
       p << ", ";
     llvm::interleaveComma(auxDeps, p, [&](DependenceAttr dep) {
-      p.printAttribute(dep.getSourceRef());
+      p.printSymbolName(dep.getSourceRef());
       if (ArrayAttr depProps = dep.getProperties()) {
         p << ' ';
         printPropertyArray(depProps, p);
@@ -246,7 +286,7 @@ void OperationOp::print(OpAsmPrinter &p) {
 
   // Default attr-dict
   SmallVector<StringRef> elidedAttrs = {
-      SymbolTable::getSymbolAttrName(),
+      OperationOp::getNameAttrName().getValue(),
       OperationOp::getDependencesAttrName().getValue(),
       OperationOp::getSspPropertiesAttrName().getValue()};
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
@@ -261,7 +301,7 @@ LogicalResult OperationOp::verify() {
   int lastIdx = -1;
   for (auto dep : dependences.getAsRange<DependenceAttr>()) {
     int idx = dep.getOperandIdx();
-    FlatSymbolRefAttr sourceRef = dep.getSourceRef();
+    StringAttr sourceRef = dep.getSourceRef();
 
     if (!sourceRef) {
       // Def-use deps use the index to refer to one of the SSA operands.
@@ -277,7 +317,8 @@ LogicalResult OperationOp::verify() {
       // Auxiliary deps are expected to follow the def-use deps (if present),
       // and hence use indices >= #operands.
       if (idx < nOperands)
-        return emitError() << "Auxiliary dependence from " << sourceRef
+        return emitError() << "Auxiliary dependence from @"
+                           << sourceRef.getValue()
                            << " is interleaved with SSA operands";
 
       // Indices shall be consecutive (special case: the first aux dep)
@@ -295,23 +336,6 @@ LogicalResult
 OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto instanceOp = (*this)->getParentOfType<InstanceOp>();
   auto libraryOp = instanceOp.getOperatorLibrary();
-  auto graphOp = instanceOp.getDependenceGraph();
-
-  // Verify that all auxiliary dependences reference valid named operations
-  // inside the dependence graph.
-  if (ArrayAttr dependences = getDependencesAttr())
-    for (auto dep : dependences.getAsRange<DependenceAttr>()) {
-      FlatSymbolRefAttr sourceRef = dep.getSourceRef();
-      if (!sourceRef)
-        continue;
-
-      Operation *sourceOp = symbolTable.lookupSymbolIn(graphOp, sourceRef);
-      if (!sourceOp || !isa<OperationOp>(sourceOp)) {
-        return emitError(
-                   "Auxiliary dependence references invalid source operation: ")
-               << sourceRef;
-      }
-    }
 
   // If a linkedOperatorType property is present, verify that it references a
   // valid operator type.

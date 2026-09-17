@@ -50,7 +50,7 @@ ssp.instance @deps_aux_not_consecutive of "Problem" {
   graph {
     operation<> @Op()
     // expected-error @+1 {{Auxiliary operand indices in dependence attribute are not consecutive}}
-    "ssp.operation"() {dependences = [#ssp.dependence<1, @Op>]} : () -> ()
+    "ssp.operation"() {dependences = [#ssp.dependence<1, "Op">]} : () -> ()
   }
 }
 
@@ -82,5 +82,16 @@ ssp.instance @standalone_opr_invalid of "Problem" {
   graph {
     // expected-error @+1 {{Linked operator type property references invalid operator type: @standalone::@InvalidOpr}}
     operation<@standalone::@InvalidOpr>()
+  }
+}
+
+// -----
+
+ssp.instance @duplicate_op_names of "Problem" {
+  library {}
+  // expected-error @+1 {{Contains multiple operations named @Op}}
+  graph {
+    operation<> @Op()
+    operation<> @Op()
   }
 }

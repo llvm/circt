@@ -196,26 +196,6 @@ endmodule
 
 // -----
 module Foo;
-  typedef enum { A, B, C } e;
-  e val;
-  initial begin
-    // expected-error @below {{unsupported system call `next`}}
-    val = val.next();
-  end
-endmodule
-
-// -----
-module Foo;
-  typedef enum { A, B, C } e;
-  e val;
-  initial begin
-    // expected-error @below {{unsupported system call `prev`}}
-    val = val.prev();
-  end
-endmodule
-
-// -----
-module Foo;
   int inp[];
   int tmp[];
   initial begin
@@ -391,4 +371,12 @@ module Bar;
   wire [1:0] y;
   // expected-error @below {{inout port `p` expects '!moore.ref<struct<{x: l1, y: l1}>>' but is connected to '!moore.ref<l2>'}}
   Foo foo(y);
+endmodule
+
+// -----
+
+module InvalidOpenArrayAssign;
+  logic [7 : 0] bytes[3] = '{1, 2, 3};
+  // expected-error @below {{no implicit conversion from 'logic[7:0]$[3]' to 'string$[]'}}
+  string strDynArr[] = bytes;
 endmodule

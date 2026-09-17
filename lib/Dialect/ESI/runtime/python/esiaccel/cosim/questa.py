@@ -68,11 +68,12 @@ class Questa(Simulator):
     else:
       suppressed_questa_errors_cmd = ""
 
+    acc_flag = " +acc" if self.debug else ""
     for src in sources:
       cmds.append(
-          f"vlog -incr +acc -sv {macro_definitions_cmd} {suppressed_questa_errors_cmd} +define+TOP_MODULE={self.sources.top}"
+          f"vlog -incr{acc_flag} -sv {macro_definitions_cmd} {suppressed_questa_errors_cmd} +define+TOP_MODULE={self.sources.top}"
           f" +define+SIMULATION {src.as_posix()}")
-    cmds.append(f"vopt -incr driver -o driver_opt +acc")
+    cmds.append(f"vopt -incr driver -o driver_opt{acc_flag}")
     return cmds
 
   def compile_commands(self) -> List[Simulator.CompileStep]:

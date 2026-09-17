@@ -587,6 +587,14 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set(SLANG_USE_THREADS OFF)  # avoid race condition in BS::thread_pool
     FetchContent_MakeAvailable(slang)
 
+    # The vendored Boost.Regex headers can otherwise discover an unrelated
+    # system Boost installation through the global include paths.  Force the
+    # header-only fallback into standalone mode so it does not require a
+    # Boost.Regex library at link time.
+    if(TARGET boost_unordered)
+      target_compile_definitions(boost_unordered INTERFACE BOOST_REGEX_STANDALONE)
+    endif()
+
     if(LLVM_ENABLE_ASSERTIONS)
       target_compile_definitions(slang_slang PUBLIC SLANG_ASSERT_ENABLED=1)
     endif()

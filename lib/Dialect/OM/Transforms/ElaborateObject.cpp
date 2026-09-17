@@ -87,12 +87,14 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
       for (auto [i, v] : llvm::enumerate(fieldValues)) {
         Location fieldLoc =
             rewriter.getFusedLoc({classOp.getFieldLocByIndex(i), v.getLoc()});
-        if (auto *fieldOp = v.getDefiningOp())
+        if (auto *fieldOp = v.getDefiningOp()) {
           rewriter.modifyOpInPlace(fieldOp, [&] { fieldOp->setLoc(fieldLoc); });
-        else
+        } else {
+          auto &val = v;
           rewriter.modifyOpInPlace(
               cast<BlockArgument>(v).getOwner()->getParentOp(),
-              [&] { v.setLoc(fieldLoc); });
+              [&] { val.setLoc(fieldLoc); });
+        }
       }
 
     // Erase the terminator and inline the body at the object instantiation.

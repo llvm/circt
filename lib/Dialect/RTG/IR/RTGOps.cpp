@@ -117,6 +117,10 @@ void SequenceOp::print(OpAsmPrinter &p) {
   p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false);
 }
 
+StringAttr SequenceOp::getNameAttr() { return getSymNameAttr(); }
+
+void SequenceOp::setName(StringAttr name) { setSymNameAttr(name); }
+
 mlir::SymbolTable::Visibility SequenceOp::getVisibility() {
   return mlir::SymbolTable::Visibility::Private;
 }

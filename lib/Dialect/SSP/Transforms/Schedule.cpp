@@ -51,7 +51,7 @@ static OperationOp getLastOp(InstanceOp instOp, StringRef options) {
   auto graphOp = instOp.getDependenceGraph();
   if (lastOpName.empty() && !graphOp.getBodyBlock()->empty())
     return cast<OperationOp>(graphOp.getBodyBlock()->back());
-  return graphOp.lookupSymbol<OperationOp>(lastOpName);
+  return graphOp.lookupNamedOperation(lastOpName);
 }
 
 // Determine desired cycle time (only relevant for `ChainingProblem` instances).

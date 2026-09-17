@@ -284,6 +284,7 @@ struct FIRParser {
                               const Twine &message);
   ParseResult parseEnumType(FIRRTLType &result);
   ParseResult parseListType(FIRRTLType &result);
+  ParseResult parseRegistryType(FIRRTLType &result);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
   // Parse a property type specifically.
   ParseResult parsePropertyType(PropertyType &result, const Twine &message);
@@ -924,6 +925,20 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
   return success();
 }
 
+/// registry-type ::= 'Registry' '<' type '>'
+ParseResult FIRParser::parseRegistryType(FIRRTLType &result) {
+  consumeToken(FIRToken::kw_Registry);
+
+  PropertyType elementType;
+  if (parseToken(FIRToken::less, "expected '<' in Registry type") ||
+      parsePropertyType(elementType, "expected Registry element type") ||
+      parseToken(FIRToken::greater, "expected '>' in Registry type"))
+    return failure();
+
+  result = RegistryType::get(getContext(), elementType);
+  return success();
+}
+
 /// type ::= 'Clock'
 ///      ::= 'Reset'
 ///      ::= 'AsyncReset'
@@ -938,6 +953,7 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
 ///      ::= 'const' type
 ///      ::= 'String'
 ///      ::= list-type
+///      ::= registry-type
 ///      ::= id
 ///
 /// field: 'flip'? fieldId ':' type
@@ -1251,6 +1267,28 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       return failure();
 
     result = ListType::get(getContext(), elementType);
+    break;
+  }
+
+  case FIRToken::kw_Registry:
+    if (requireFeature(missingSpecFIRVersion, "Registries") ||
+        parseRegistryType(result))
+      return failure();
+    break;
+
+  case FIRToken::langle_Registry: {
+    // The '<' has already been consumed by the lexer, so we need to parse
+    // the element type and the trailing '>'.
+    if (requireFeature(missingSpecFIRVersion, "Registries"))
+      return failure();
+    consumeToken();
+
+    PropertyType elementType;
+    if (parsePropertyType(elementType, "expected Registry element type") ||
+        parseToken(FIRToken::greater, "expected '>' in Registry type"))
+      return failure();
+
+    result = RegistryType::get(getContext(), elementType);
     break;
   }
   }
@@ -6029,8 +6067,9 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   }
 
   auto builder = circuit.getBodyBuilder();
-  auto domainOp = DomainOp::create(builder, info.getLoc(), name,
-                                   builder.getArrayAttr(fields));
+  auto domainOp =
+      DomainOp::create(builder, info.getLoc(), name, /*sym_visibility=*/{},
+                       builder.getArrayAttr(fields));
 
   // Stash the domain name -> op in the constants, so we can resolve Domain
   // types.
@@ -6292,7 +6331,7 @@ ParseResult FIRCircuitParser::parseFormalLike(CircuitOp circuit,
     }
   }
 
-  Op::create(builder, info.getLoc(), id, moduleName,
+  Op::create(builder, info.getLoc(), id, /*sym_visibility=*/{}, moduleName,
              params.getDictionary(getContext()));
   return success();
 }
@@ -6397,7 +6436,8 @@ ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
     return failure();
 
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
-  auto optionOp = OptionOp::create(builder, info.getLoc(), id);
+  auto optionOp =
+      OptionOp::create(builder, info.getLoc(), id, /*sym_visibility=*/{});
   auto *block = new Block;
   optionOp.getBody().push_back(block);
   builder.setInsertionPointToEnd(block);
@@ -6466,8 +6506,8 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
       return failure();
     auto builder = OpBuilder::atBlockEnd(block);
     // Create the layer definition and give it an empty block.
-    auto layerOp =
-        LayerOp::create(builder, info.getLoc(), id, *layerConvention);
+    auto layerOp = LayerOp::create(builder, info.getLoc(), id,
+                                   /*sym_visibility=*/{}, *layerConvention);
     layerOp->getRegion(0).push_back(new Block());
     if (outputDir)
       layerOp->setAttr("output_file", outputDir);
@@ -6716,10 +6756,11 @@ DoneParsing:
     DenseMap<Attribute, Location> nameToOrigLoc;
     for (auto &op : *circuit.getBodyBlock()) {
       // Check for a symbol name attribute.
-      auto nameAttr =
-          op.getAttrOfType<StringAttr>(mlir::SymbolTable::getSymbolAttrName());
-      if (!nameAttr)
+      auto symbol = dyn_cast<mlir::SymbolOpInterface>(&op);
+      if (!symbol)
         continue;
+
+      auto nameAttr = symbol.getNameAttr();
 
       // Try to insert this symbol into the table.
       auto it = nameToOrigLoc.try_emplace(nameAttr, op.getLoc());

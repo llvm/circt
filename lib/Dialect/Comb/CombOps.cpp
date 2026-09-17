@@ -35,22 +35,32 @@ bool comb::shouldUseBoothEncoding(Value lhs, Value rhs, unsigned threshold) {
       rhs.getDefiningOp<hw::ConstantOp>())
     return false;
 
+  // Check for zext/sext of the multiplicands.
+  Value lhsZext, rhsZext;
+  bool lhsIsZext = matchPattern(lhs, comb::m_ZextBy(m_Any(&lhsZext)));
+  bool rhsIsZext = matchPattern(rhs, comb::m_ZextBy(m_Any(&rhsZext)));
+
+  Value lhsSextBits, rhsSextBits;
+  bool lhsIsSext = matchPattern(lhs, comb::m_SextBy(m_Any(&lhsSextBits)));
+  bool rhsIsSext = matchPattern(rhs, comb::m_SextBy(m_Any(&rhsSextBits)));
+
+  // Booth encoding assumes both operands are extended the same way; mixed
+  // signage is not supported
+  if ((lhsIsZext && rhsIsSext) || (lhsIsSext && rhsIsZext))
+    return false;
+
   auto lhsWidth = lhs.getType().getIntOrFloatBitWidth();
   auto rhsWidth = rhs.getType().getIntOrFloatBitWidth();
 
-  // Check for zext of the multiplicands
-  Value lhsZext, rhsZext;
-  if (matchPattern(lhs, comb::m_ZextBy(m_Any(&lhsZext))))
+  if (lhsIsZext && rhsIsZext) {
     lhsWidth -= lhsZext.getType().getIntOrFloatBitWidth();
-  if (matchPattern(rhs, comb::m_ZextBy(m_Any(&rhsZext))))
     rhsWidth -= rhsZext.getType().getIntOrFloatBitWidth();
+  }
 
-  // Check for sext of the multiplicands
-  Value lhsSextBits, rhsSextBits;
-  if (matchPattern(lhs, comb::m_SextBy(m_Any(&lhsSextBits))))
+  if (lhsIsSext && rhsIsSext) {
     lhsWidth -= lhsSextBits.getType().getIntOrFloatBitWidth();
-  if (matchPattern(rhs, comb::m_SextBy(m_Any(&rhsSextBits))))
     rhsWidth -= rhsSextBits.getType().getIntOrFloatBitWidth();
+  }
 
   // Heuristic threshold based on:
   // "Datapath Synthesis for Standard-Cell Design", Reto Zimmerman 2009

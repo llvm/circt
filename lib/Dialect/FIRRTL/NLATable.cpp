@@ -39,10 +39,9 @@ ArrayRef<hw::HierPathOp> NLATable::lookup(StringAttr name) {
 }
 
 ArrayRef<hw::HierPathOp> NLATable::lookup(Operation *op) {
-  auto name = op->getAttrOfType<StringAttr>("sym_name");
-  if (!name)
-    return {};
-  return lookup(name);
+  if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+    return lookup(symOp.getNameAttr());
+  return {};
 }
 
 hw::HierPathOp NLATable::getNLA(StringAttr name) {

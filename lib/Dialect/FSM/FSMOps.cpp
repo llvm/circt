@@ -27,7 +27,7 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
                       StringRef initialStateName, FunctionType type,
                       ArrayRef<NamedAttribute> attrs,
                       ArrayRef<DictionaryAttr> argAttrs) {
-  state.addAttribute(mlir::SymbolTable::getSymbolAttrName(),
+  state.addAttribute(MachineOp::getSymNameAttrName(state.name),
                      builder.getStringAttr(name));
   state.addAttribute(MachineOp::getFunctionTypeAttrName(state.name),
                      TypeAttr::get(type));
@@ -323,7 +323,8 @@ void StateOp::build(OpBuilder &builder, OperationState &state,
   fsm::OutputOp::create(builder, state.location);
   Region *transitions = state.addRegion();
   transitions->push_back(new Block());
-  state.addAttribute("sym_name", builder.getStringAttr(stateName));
+  state.addAttribute(StateOp::getSymNameAttrName(state.name),
+                     builder.getStringAttr(stateName));
 }
 
 void StateOp::build(OpBuilder &builder, OperationState &state,
@@ -335,7 +336,8 @@ void StateOp::build(OpBuilder &builder, OperationState &state,
   fsm::OutputOp::create(builder, state.location, outputs);
   Region *transitions = state.addRegion();
   transitions->push_back(new Block());
-  state.addAttribute("sym_name", builder.getStringAttr(stateName));
+  state.addAttribute(StateOp::getSymNameAttrName(state.name),
+                     builder.getStringAttr(stateName));
 }
 
 SetVector<StateOp> StateOp::getNextStates() {

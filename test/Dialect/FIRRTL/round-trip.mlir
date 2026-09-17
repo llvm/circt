@@ -289,6 +289,13 @@ firrtl.domain @PowerDomain [
   #firrtl.domain.field<"alwaysOn", !firrtl.bool>
 ]
 
+// CHECK-LABEL: firrtl.domain @RegistryDomain [
+// CHECK-SAME:    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+// CHECK-SAME:  ]
+firrtl.domain @RegistryDomain [
+  #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+]
+
 firrtl.module @DomainsSubmodule(
   in %A: !firrtl.domain<@ClockDomain()>,
   in %a: !firrtl.uint<1> domains [%A]

@@ -1017,6 +1017,12 @@ firrtl.circuit "Foo" {
     #firrtl.domain.field<"alwaysOn", !firrtl.bool>
   ]
 
+  // CHECK-LABEL: domain RegistryDomain :
+  // CHECK-NEXT:    clockGates : Registry<Path>
+  firrtl.domain @RegistryDomain [
+    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+  ]
+
   // CHECK-LABEL:  extmodule ExtModuleWithDomains :
   // CHECK-NEXT:     input I : Domain of PowerDomain
   // CHECK-NEXT:     output O : Domain of PowerDomain

@@ -896,6 +896,13 @@ struct ModuleVisitor : public BaseVisitor {
   }
 
   LogicalResult visit(const slang::ast::ProceduralBlockSymbol &procNode) {
+    // Slang wraps module-level concurrent assertions in a synthetic `always`
+    // procedure. The assertion is self-clocked, so it needs no process.
+    if (auto *syntax = procNode.getSyntax();
+        syntax &&
+        syntax->kind == slang::syntax::SyntaxKind::ConcurrentAssertionMember)
+      return context.convertStatement(procNode.getBody());
+
     // Detect `always @(*) <stmt>` and convert to `always_comb <stmt>` if
     // requested by the user.
     if (context.options.lowerAlwaysAtStarAsComb) {
@@ -2609,7 +2616,8 @@ struct ClassPropertyVisitor : ClassDeclVisitorBase {
       return failure();
 
     if (prop.lifetime == slang::ast::VariableLifetime::Automatic) {
-      moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
+      moore::ClassPropertyDeclOp::create(builder, loc, prop.name,
+                                         /*sym_visibility=*/{}, ty);
       return success();
     }
 
@@ -2733,7 +2741,8 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
         return failure();
       }
 
-      moore::ClassMethodDeclOp::create(builder, loc, fn.name, funcTy, nullptr);
+      moore::ClassMethodDeclOp::create(builder, loc, fn.name,
+                                       /*sym_visibility=*/{}, funcTy, nullptr);
       return success();
     }
 
@@ -2749,7 +2758,7 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
     FunctionType fnTy = cast<FunctionType>(lowering->op.getFunctionType());
     // Emit the method decl into the class body, preserving source order.
     moore::ClassMethodDeclOp::create(
-        builder, loc, fn.name, fnTy,
+        builder, loc, fn.name, /*sym_visibility=*/{}, fnTy,
         SymbolRefAttr::get(lowering->op.getNameAttr()));
 
     return success();
@@ -2821,8 +2830,8 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
   auto symName = fullyQualifiedClassName(*this, cls);
 
   auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
-  auto classDeclOp =
-      moore::ClassDeclOp::create(builder, loc, symName, base, impls);
+  auto classDeclOp = moore::ClassDeclOp::create(
+      builder, loc, symName, /*sym_visibility=*/{}, base, impls);
 
   SymbolTable::setSymbolVisibility(classDeclOp,
                                    SymbolTable::Visibility::Public);
@@ -2938,6 +2947,7 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
 
   // Create the variable op itself.
   auto varOp = moore::GlobalVariableOp::create(builder, loc, symName,
+                                               /*sym_visibility=*/{},
                                                cast<moore::UnpackedType>(type));
   orderedRootOps.insert({locationKey, varOp});
   globalVariables.insert({&var, varOp});

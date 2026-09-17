@@ -44,7 +44,7 @@ public:
             MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
             MacroErrorOp,
             // Type declarations.
-            InterfaceOp, SVVerbatimSourceOp, InterfaceSignalOp,
+            PackageOp, InterfaceOp, SVVerbatimSourceOp, InterfaceSignalOp,
             InterfaceModportOp, InterfaceInstanceOp, GetModportOp,
             AssignInterfaceSignalOp, ReadInterfaceSignalOp, MacroDeclOp,
             MacroDefOp, FuncOp, FuncDPIImportOp,
@@ -151,6 +151,7 @@ public:
   HANDLE(MacroErrorOp, Unhandled);
 
   // Type declarations.
+  HANDLE(PackageOp, Unhandled);
   HANDLE(InterfaceOp, Unhandled);
   HANDLE(SVVerbatimSourceOp, Unhandled);
   HANDLE(InterfaceInstanceOp, Unhandled);

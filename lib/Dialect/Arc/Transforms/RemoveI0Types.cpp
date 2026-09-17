@@ -290,10 +290,15 @@ void RemoveI0TypesPass::runOnOperation() {
       });
   converter.addConversion(
       [&converter](arc::StateType type, SmallVectorImpl<Type> &types) {
-        if (failed(converter.convertType(type.getType(), types)))
+        SmallVector<Type> innerTypes;
+        if (failed(converter.convertType(type.getType(), innerTypes)))
           return failure();
-        assert(types.size() == 1);
-        types[0] = arc::StateType::get(types[0]);
+        // A state of an i0 type holds no data. Remove the state type as well so
+        // that the ops allocating, reading, or writing it are erased.
+        if (innerTypes.empty())
+          return success();
+        assert(innerTypes.size() == 1);
+        types.push_back(arc::StateType::get(innerTypes[0]));
         return success();
       });
 
