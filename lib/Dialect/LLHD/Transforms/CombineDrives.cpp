@@ -39,6 +39,7 @@ static unsigned getLength(Type type) {
       .Case<IntegerType>([](auto type) { return type.getWidth(); })
       .Case<hw::ArrayType>([](auto type) { return type.getNumElements(); })
       .Case<hw::StructType>([](auto type) { return type.getElements().size(); })
+      .Case<hw::UnionType>([](auto type) { return type.getElements().size(); })
       .Default([](auto) { return 0; });
 }
 
@@ -252,18 +253,28 @@ SignalSlice ModuleContext::traceProjectionImpl(Value value) {
   }
 
   if (auto op = value.getDefiningOp<SigStructExtractOp>()) {
-    auto structType = hw::type_cast<hw::StructType>(
-        cast<RefType>(op.getInput().getType()).getNestedType());
     auto input = traceProjection(op.getInput());
     if (!input)
       return {};
-    assert(input.offset == 0);
-    assert(input.length == structType.getElements().size());
-    unsigned index = *structType.getFieldIndex(op.getFieldAttr());
-    SignalSlice slice;
-    slice.signal = internSignal(value, input.signal, index);
-    slice.length = getLength(value.getType());
-    return slice;
+    auto type = cast<RefType>(op.getInput().getType()).getNestedType();
+    if (auto structType = hw::type_dyn_cast<hw::StructType>(type)) {
+      assert(input.offset == 0);
+      assert(input.length == structType.getElements().size());
+      unsigned index = *structType.getFieldIndex(op.getFieldAttr());
+      SignalSlice slice;
+      slice.signal = internSignal(value, input.signal, index);
+      slice.length = getLength(value.getType());
+      return slice;
+    } else {
+      auto unionType = hw::type_cast<hw::UnionType>(type);
+      assert(input.offset == 0);
+      assert(input.length == unionType.getElements().size());
+      unsigned index = *unionType.getFieldIndex(op.getFieldAttr());
+      SignalSlice slice;
+      slice.signal = internSignal(value, input.signal, index);
+      slice.length = getLength(value.getType());
+      return slice;
+    }
   }
 
   // Otherwise create a root node for this signal.
@@ -415,15 +426,21 @@ void ModuleContext::addDefaultDriveSlices(Signal &signal,
 
   // Go through the slices and keep track of the offset at which we expect the
   // slice to start. If a slice starts beyond that offset, there is a gap which
-  // we can fill with a chunk of the signal's default value.
-  unsigned expectedOffset = 0;
-  for (auto slice : slices) {
-    fillGap(expectedOffset, slice.offset);
-    expectedOffset = slice.offset + std::max<unsigned>(1, slice.length);
-    if (anyOverlaps)
-      return;
+  // we can fill with a chunk of the signal's default value. Unions require a
+  // single slice defining the entire union's value.
+  if (hw::type_isa<hw::UnionType>(type)) {
+    if (slices.empty())
+      gapSlices.push_back(DriveSlice{DriveOp{}, Value{}, 0, 0});
+  } else {
+    unsigned expectedOffset = 0;
+    for (auto slice : slices) {
+      fillGap(expectedOffset, slice.offset);
+      expectedOffset = slice.offset + std::max<unsigned>(1, slice.length);
+      if (anyOverlaps)
+        return;
+    }
+    fillGap(expectedOffset, getLength(signal.value.getType()));
   }
-  fillGap(expectedOffset, getLength(signal.value.getType()));
 
   // If we have seen any overlapping slices, don't bother filling in gaps
   // because we'll later give up on combining the drives anyway.
@@ -474,6 +491,13 @@ void ModuleContext::addDefaultDriveSlices(Signal &signal,
       continue;
     }
 
+    // Handle unions.
+    if (auto unionType = hw::type_dyn_cast<hw::UnionType>(type)) {
+      assert(slice.offset == 0 && slice.length == 0);
+      slice.value = hw::UnionExtractOp::create(builder, defaultValue, 0);
+      continue;
+    }
+
     // Handle arrays.
     if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
       assert(slice.length > 0);
@@ -498,29 +522,42 @@ void ModuleContext::addDefaultDriveSlices(Signal &signal,
 void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
                                          Value driveEnable,
                                          ArrayRef<DriveSlice> slices) {
-  // Check whether the slices are consecutive and non-overlapping.
-  unsigned expectedOffset = 0;
-  for (auto slice : slices) {
-    assert(slice.value && "all slices must have an assigned value");
-    if (slice.offset != expectedOffset) {
-      expectedOffset = -1;
-      break;
+  auto type = cast<RefType>(signal.value.getType()).getNestedType();
+
+  // Check whether the slices are consecutive and non-overlapping. Unions
+  // require a single slice where the index indicates the union variant.
+  if (hw::type_isa<hw::UnionType>(type)) {
+    if (slices.size() != 1) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Union " << signal << " not uniquely driven\n");
+      return;
     }
-    // Individual subsignals are represented with length 0, since these describe
-    // an individual field and not a slice of the aggregate (`array<1xi42>` vs.
-    // `i42`). Therefore we have to count length 0 fields as single elements.
-    expectedOffset += std::max<unsigned>(1, slice.length);
-  }
-  if (expectedOffset != getLength(signal.value.getType())) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "- Signal " << signal << " not completely driven\n");
-    return;
+  } else {
+    unsigned expectedOffset = 0;
+    for (auto slice : slices) {
+      assert(slice.value && "all slices must have an assigned value");
+      if (slice.offset != expectedOffset) {
+        expectedOffset = -1;
+        break;
+      }
+      // Individual subsignals are represented with length 0, since these
+      // describe an individual field and not a slice of the aggregate
+      // (`array<1xi42>` vs. `i42`). Therefore we have to count length 0 fields
+      // as single elements.
+      expectedOffset += std::max<unsigned>(1, slice.length);
+    }
+    if (expectedOffset != getLength(signal.value.getType())) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Signal " << signal << " not completely driven\n");
+      return;
+    }
   }
 
   // If we get here we cover the entire signal. If we already have a single
   // drive, simply mark that as this signal's single drive. Otherwise we have to
   // do some actual work.
-  if (slices.size() == 1 && slices[0].length != 0 && slices[0].op) {
+  if (slices.size() == 1 && slices[0].length != 0 && slices[0].op &&
+      !hw::type_isa<hw::UnionType>(type)) {
     signal.completeDrives.push_back(slices[0].op);
     return;
   }
@@ -536,7 +573,6 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
   });
 
   Value result;
-  auto type = cast<RefType>(signal.value.getType()).getNestedType();
   ImplicitLocOpBuilder builder(signal.value.getLoc(),
                                signal.value.getContext());
   builder.setInsertionPointAfterValue(signal.value);
@@ -562,6 +598,16 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
     for (auto slice : slices)
       operands.push_back(slice.value);
     result = hw::StructCreateOp::create(builder, structType, operands);
+    LLVM_DEBUG(llvm::dbgs() << "  - Created " << result << "\n");
+  }
+
+  // Handle unions.
+  if (auto unionType = hw::type_dyn_cast<hw::UnionType>(type)) {
+    // Unions have a single-element slice. All we need to do is wrap that
+    // element up into the actual union type.
+    assert(slices.size() == 1);
+    result = hw::UnionCreateOp::create(builder, unionType, slices[0].offset,
+                                       slices[0].value);
     LLVM_DEBUG(llvm::dbgs() << "  - Created " << result << "\n");
   }
 
