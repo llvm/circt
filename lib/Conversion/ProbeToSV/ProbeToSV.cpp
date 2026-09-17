@@ -41,7 +41,7 @@ struct ReadResolution {
 };
 
 /// Return true if `type` is, or recursively contains, a Probe ref.
-static bool containsProbeRef(Type type) {
+bool containsProbeRef(Type type) {
   bool found = false;
   type.walk([&](Type nested) {
     if (isa<probe::RefType>(nested))
@@ -51,10 +51,9 @@ static bool containsProbeRef(Type type) {
 }
 
 /// Add a field-zero inner symbol to `op`, or return its existing one.
-static StringAttr
-getOrAddInnerSym(hw::InnerSymbolOpInterface op,
-                 hw::InnerSymbolNamespaceCollection &namespaces,
-                 hw::HWModuleOp module, StringRef nameHint) {
+StringAttr getOrAddInnerSym(hw::InnerSymbolOpInterface op,
+                            hw::InnerSymbolNamespaceCollection &namespaces,
+                            hw::HWModuleOp module, StringRef nameHint) {
   auto oldAttr = op.getInnerSymAttr();
   if (oldAttr)
     if (auto name = oldAttr.getSymName())
@@ -118,7 +117,7 @@ private:
   LogicalResult validate();
   FailureOr<ReadResolution> resolveRead(probe::ReadOp read);
   LogicalResult validateModulePorts(hw::HWModuleLike module);
-  LogicalResult validateProbeUses();
+  LogicalResult validateProbeUse(Operation *op);
   LogicalResult rewrite();
 
   hw::InnerRefAttr getOrCreateSourceRef(
@@ -138,6 +137,7 @@ private:
 LogicalResult LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module) {
   unsigned outputIndex = 0;
   bool hasProbeOutput = false;
+  auto concreteModule = dyn_cast<hw::HWModuleOp>(*module);
   for (auto port : module.getPortList()) {
     if (!isa<probe::RefType>(port.type)) {
       if (containsProbeRef(port.type))
@@ -149,15 +149,12 @@ LogicalResult LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module) {
       continue;
     }
 
-    auto concreteModule = dyn_cast<hw::HWModuleOp>(*module);
     if (!concreteModule)
       return module.emitOpError(
-          "Probe refs on external or generated module ports require a defined "
-          "Probe ABI");
+          "Probe refs on external or generated module ports are not supported");
     if (!module.isPrivate())
       return module.emitOpError(
-          "Probe-to-SV lowering cannot remove a Probe output from a public "
-          "module without a defined external ABI");
+          "Probe output ports on public modules are not supported");
 
     auto output =
         cast<hw::OutputOp>(concreteModule.getBodyBlock()->getTerminator());
@@ -197,26 +194,41 @@ FailureOr<ReadResolution> LowerProbeToSVPass::resolveRead(probe::ReadOp read) {
   return ReadResolution{read, send, instance};
 }
 
-LogicalResult LowerProbeToSVPass::validateProbeUses() {
+LogicalResult LowerProbeToSVPass::validateProbeUse(Operation *op) {
+  bool hasProbeValue = llvm::any_of(op->getOperands(), [](Value value) {
+    return containsProbeRef(value.getType());
+  });
+  hasProbeValue |= llvm::any_of(op->getResults(), [](Value value) {
+    return containsProbeRef(value.getType());
+  });
+  if (!hasProbeValue ||
+      isa<probe::SendOp, probe::ReadOp, hw::OutputOp, hw::InstanceOp>(op))
+    return success();
+
+  op->emitOpError(
+      "the Probe dialect only permits Probe refs to flow through "
+      "probe.send, probe.read, hw.output, and direct hw.instance results");
+  return failure();
+}
+
+LogicalResult LowerProbeToSVPass::validate() {
   auto circuit = getOperation();
+
+  for (auto module : circuit.getOps<hw::HWModuleLike>())
+    if (failed(validateModulePorts(module)))
+      return failure();
+
+  SmallVector<probe::ReadOp> readOps;
   for (auto module : circuit.getOps<hw::HWModuleOp>()) {
     auto walkResult = module.walk([&](Operation *op) -> WalkResult {
-      bool hasProbeValue = llvm::any_of(op->getOperands(), [](Value value) {
-        return containsProbeRef(value.getType());
-      });
-      hasProbeValue |= llvm::any_of(op->getResults(), [](Value value) {
-        return containsProbeRef(value.getType());
-      });
-      if (!hasProbeValue)
-        return WalkResult::advance();
+      if (auto send = dyn_cast<probe::SendOp>(op))
+        sendOps.push_back(send);
+      else if (auto read = dyn_cast<probe::ReadOp>(op))
+        readOps.push_back(read);
 
-      if (isa<probe::SendOp, probe::ReadOp, hw::OutputOp, hw::InstanceOp>(op))
-        return WalkResult::advance();
-
-      op->emitOpError(
-          "the Probe dialect only permits Probe refs to flow through "
-          "probe.send, probe.read, hw.output, and direct hw.instance results");
-      return WalkResult::interrupt();
+      if (failed(validateProbeUse(op)))
+        return WalkResult::interrupt();
+      return WalkResult::advance();
     });
     if (walkResult.wasInterrupted())
       return failure();
@@ -227,35 +239,14 @@ LogicalResult LowerProbeToSVPass::validateProbeUses() {
       return send.emitOpError(
                  "Probe-to-SV lowering requires an HW value payload, but got ")
              << send.getInput().getType();
-  return success();
-}
 
-LogicalResult LowerProbeToSVPass::validate() {
-  auto circuit = getOperation();
-
-  for (auto module : circuit.getOps<hw::HWModuleLike>())
-    if (failed(validateModulePorts(module)))
+  for (auto read : readOps) {
+    auto resolution = resolveRead(read);
+    if (failed(resolution))
       return failure();
-
-  for (auto module : circuit.getOps<hw::HWModuleOp>())
-    module.walk([&](probe::SendOp send) { sendOps.push_back(send); });
-
-  if (failed(validateProbeUses()))
-    return failure();
-
-  LogicalResult result = success();
-  for (auto module : circuit.getOps<hw::HWModuleOp>())
-    module.walk([&](probe::ReadOp read) {
-      if (failed(result))
-        return;
-      auto resolution = resolveRead(read);
-      if (failed(resolution)) {
-        result = failure();
-        return;
-      }
-      resolutions.push_back(*resolution);
-    });
-  return result;
+    resolutions.push_back(*resolution);
+  }
+  return success();
 }
 
 hw::InnerRefAttr LowerProbeToSVPass::getOrCreateSourceRef(
