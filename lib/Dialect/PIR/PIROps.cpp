@@ -14,6 +14,9 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 
+#define GET_OP_CLASSES
+#include "circt/Dialect/PIR/PIR.cpp.inc"
+
 using namespace circt;
 using namespace pir;
 using namespace mlir;
@@ -30,13 +33,17 @@ struct RemoveEnableTrue : public OpRewritePattern<Op> {
 
   LogicalResult matchAndRewrite(Op op,
                                 PatternRewriter &rewriter) const override {
+    // Check if an enable exists
     Value enable = op.getEnable();
     if (!enable)
       return failure();
+
+    // Only modify if the enable is `hw.constant true`
     auto enableConst = enable.getDefiningOp<hw::ConstantOp>();
     if (!enableConst || !enableConst.getValue().isOne())
       return failure();
 
+    // Erase enable signal
     rewriter.modifyOpInPlace(op, [&]() { op.getEnableMutable().clear(); });
     return success();
   }
@@ -49,9 +56,12 @@ struct EraseIfEnableFalse : public OpRewritePattern<Op> {
 
   LogicalResult matchAndRewrite(Op op,
                                 PatternRewriter &rewriter) const override {
+    // Check if there is an enable signal
     Value enable = op.getEnable();
     if (!enable)
       return failure();
+
+    // Only modify is enable is `hw.constant false`
     auto enableConst = enable.getDefiningOp<hw::ConstantOp>();
     if (!enableConst || !enableConst.getValue().isZero())
       return failure();
@@ -68,13 +78,17 @@ struct RemoveDisableFalse : public OpRewritePattern<Op> {
 
   LogicalResult matchAndRewrite(Op op,
                                 PatternRewriter &rewriter) const override {
+    // Check for a disable signal
     Value disable = op.getDisable();
     if (!disable)
       return failure();
+
+    // Only modify is disable is `hw.constant false`
     auto disableConst = disable.getDefiningOp<hw::ConstantOp>();
     if (!disableConst || !disableConst.getValue().isZero())
       return failure();
 
+    // Erase the disable input since it's useless
     rewriter.modifyOpInPlace(op, [&]() { op.getDisableMutable().clear(); });
     return success();
   }
@@ -110,7 +124,7 @@ struct EraseIfPropertyTrivial : public OpRewritePattern<Op> {
                                 PatternRewriter &rewriter) const override {
     Value property = op.getProperty();
 
-    // Check for pir.bool_to_clocked_prop true
+    // Check for (pir.bool_to_clocked_prop (hw.constant true))
     if (auto boolToProp =
             property.template getDefiningOp<BoolToClockedPropOp>()) {
       if (auto constOp =
@@ -122,7 +136,9 @@ struct EraseIfPropertyTrivial : public OpRewritePattern<Op> {
       }
     }
 
-    // Check for pir.clocked_seq_to_clocked_prop pir.bool_to_clocked_seq true
+    // Check for (pir.clocked_seq_to_clocked_prop
+    //              (pir.bool_to_clocked_seq
+    //                (hw.constant true)))
     if (auto clkSeqToClkProp =
             property.template getDefiningOp<ClockedSeqToClockedPropOp>()) {
       if (auto boolToClkSeq =
@@ -190,10 +206,9 @@ void CoverPropertyOp::getCanonicalizationPatterns(RewritePatternSet &results,
 LogicalResult
 ClockedSeqToClockedPropOp::canonicalize(ClockedSeqToClockedPropOp op,
                                         PatternRewriter &rewriter) {
-  // if (auto bToClkSeq = op.getInput().getDefiningOp<BoolToClockedSeqOp>()) {
-  //   rewriter.replaceOpWithNewOp<BoolToClockedPropOp>(op,
-  //   bToClkSeq.getInput());
-  return success();
-  // }
-  // return failure();
+  if (auto bToClkSeq = op.getInput().getDefiningOp<BoolToClockedSeqOp>()) {
+    rewriter.replaceOpWithNewOp<BoolToClockedPropOp>(op, bToClkSeq.getInput());
+    return success();
+  }
+  return failure();
 }
