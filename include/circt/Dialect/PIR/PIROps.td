@@ -145,10 +145,10 @@ def ClockedSeqToClockedPropOp : ConversionOp<"clocked_seq_to_clocked_prop"> {
   }];
 
   let arguments = (
-    ins PIRSequenceType:$input
+    ins PIRClockedSequenceType:$input
   );
   let results = (
-    outs PIRClockedSequenceType:$output
+    outs PIRClockedPropertyType:$output
   );
 
   let hasCanonicalizeMethod = 1;

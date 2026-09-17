@@ -10,7 +10,16 @@
 // Type Conversions
 //===----------------------------------------------------------------------===//
 
-//===----------------------------------------------------------------------===//
+// CHECK: {{%.+}} = pir.bool_to_clocked_seq {{%.+}}
+// CHECK: {{%.+}} = pir.seq_to_clocked_seq {{%.+}}
+// CHECK: {{%.+}} = pir.bool_to_clocked_prop {{%.+}}
+// CHECK: {{%.+}} = pir.clocked_seq_to_clocked_prop {{%.+}}
+%csb = pir.bool_to_clocked_seq %b 
+%css = pir.seq_to_clocked_seq %s
+%cpb = pir.bool_to_clocked_prop %b
+%cpcs = pir.clocked_seq_to_clocked_prop %clk_s
+
+//===---------------------------------------------------------------------===//
 // Assertions
 //===----------------------------------------------------------------------===//
 
