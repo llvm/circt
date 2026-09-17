@@ -15,16 +15,85 @@ include "circt/Dialect/PIR/PIRTypes.td"
 include "circt/Dialect/PIR/PIREnums.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/PatternBase.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 class PIROp<string mnemonic, list<Trait> traits = []> :
   Op<PIRDialect, mnemonic, traits>;
+
+class PIRInnerOp<string mnemonic, list<Trait> traits = [
+  HasParent<"pir::CellOp">
+]> : PIROp<mnemonic, traits>;
+
+//===----------------------------------------------------------------------===//
+// Top-level operations
+//===----------------------------------------------------------------------===//
+
+def CellOp : PIROp<"cell", [
+  IsolatedFromAbove,
+  NoRegionArguments,
+  NoTerminator,
+  RegionKindInterface,
+  SingleBlock,
+  Symbol
+]> {
+  let summary = "PIR Wrapper Cell for Properties and Sequences.";
+  let description = [{
+    Wrapper cell which encapsulates all of the logic related to a specific 
+    property or sequence. This allows PIR properties to be both well contained 
+    and exist within any other dialect. When interoperating with Yosys, the 
+    contents of a cell will be the only information shared with Yosys infrastructure.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    DictionaryAttr:$parameters
+  );
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name $parameters attr-dict-with-keyword $body";
+  let extraClassDeclaration = [{
+    static RegionKind getRegionKind(unsigned index) {
+      return RegionKind::Graph;
+    }
+  }];
+}
+
+def InputOp : PIRInnerOp<"input", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  SameVariadicResultSize
+]> {
+  let summary = "Defines the inputs to a PIR Cell.";
+  let description = [{
+    Defines the inputs to a PIR Cell as a single variadic symbolic value.
+    This can of course also be used to model non-determinism or `ANY_SEQ` 
+    macros from YOSYS produced SystemVerilog into CIRCT, e.g.
+    ```mlir
+    pir.cell @prop1 {
+      %a, %b, %c = pir.input : i1, i8, i8
+    }
+    ```
+    In the example above, the inputs `a`, `b`, and `c` can then be used to 
+    reference signals from the surrounding design in a manner that allows 
+    the logic of the property to remain isolated from the logic of the design 
+    under verification (DUV).
+  }];
+
+  let arguments = (ins StrArrayAttr:$names);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat = "`` custom<ImplicitSSAName>($names) attr-dict `:` type($results)";
+}
 
 //===----------------------------------------------------------------------===//
 // Assertions
 //===----------------------------------------------------------------------===//
 
-class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [AttrSizedOperandSegments]> :
-  PIROp<mnemonic, traits> {
+class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [
+  AttrSizedOperandSegments
+]> : PIRInnerOp<mnemonic, traits> {
   let arguments = (ins 
     PIRClockedPropertyType:$property,
     OptionalAttr<SamplingTypeAttr>:$samplingType,
@@ -85,7 +154,7 @@ def CoverPropertyOp : AssertPropertyLikeOp<"cover_property"> {
 //===----------------------------------------------------------------------===//
 
 class ConversionOp<string mnemonic, list<Trait> traits = [Pure]> :
-  PIROp<mnemonic, traits> {
+  PIRInnerOp<mnemonic, traits> {
     let assemblyFormat = [{
       $input attr-dict
     }];

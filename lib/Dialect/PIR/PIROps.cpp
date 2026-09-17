@@ -14,12 +14,29 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 
-#define GET_OP_CLASSES
-#include "circt/Dialect/PIR/PIR.cpp.inc"
-
 using namespace circt;
 using namespace pir;
 using namespace mlir;
+
+//===----------------------------------------------------------------------===//
+// InputOp
+//===----------------------------------------------------------------------===//
+
+/// Attribute every name in input to its related result
+void InputOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // Retrieve the names array
+  auto namesAttr = (*this)->getAttrOfType<ArrayRef<StringAttr>>("names");
+
+  // Check if any names were given
+  if (!namesAttr.empty()) {
+    auto results = getResults();
+
+    // Match every name with its associated result
+    for (size_t i = 0; i < results.size(); ++i) {
+      setNameFn(results[i], namesAttr[i].getValue());
+    }
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // AssertLike Canonicalizations
@@ -212,3 +229,10 @@ ClockedSeqToClockedPropOp::canonicalize(ClockedSeqToClockedPropOp op,
   }
   return failure();
 }
+
+//===----------------------------------------------------------------------===//
+// Generated code
+//===----------------------------------------------------------------------===//
+
+#define GET_OP_CLASSES
+#include "circt/Dialect/PIR/PIR.cpp.inc"
