@@ -1,6 +1,6 @@
 // RUN: circt-opt --verify-roundtrip %s | FileCheck %s
 
-%true = hw.constant true
+%b = unrealized_conversion_cast to i1
 %s = unrealized_conversion_cast to !pir.sequence
 %p = unrealized_conversion_cast to !pir.property
 %clk_s = unrealized_conversion_cast to !pir.clocked_sequence
@@ -26,12 +26,12 @@
 pir.assert_property %clk_p : !pir.clocked_property
 pir.assert_property %clk_p always : !pir.clocked_property
 pir.assert_property %clk_p initial : !pir.clocked_property
-pir.assert_property %clk_p disable iff %true : !pir.clocked_property
-pir.assert_property %clk_p always disable iff %true : !pir.clocked_property
-pir.assert_property %clk_p on %true : !pir.clocked_property
-pir.assert_property %clk_p always on %true : !pir.clocked_property
-pir.assert_property %clk_p disable iff %true on %true : !pir.clocked_property
-pir.assert_property %clk_p always disable iff %true on %true : !pir.clocked_property
+pir.assert_property %clk_p disable iff %b : !pir.clocked_property
+pir.assert_property %clk_p always disable iff %b : !pir.clocked_property
+pir.assert_property %clk_p on %b : !pir.clocked_property
+pir.assert_property %clk_p always on %b : !pir.clocked_property
+pir.assert_property %clk_p disable iff %b on %b : !pir.clocked_property
+pir.assert_property %clk_p always disable iff %b on %b : !pir.clocked_property
 
 // CHECK: pir.assume_property {{%.+}} : !pir.clocked_property
 // CHECK: pir.assume_property {{%.+}} always : !pir.clocked_property
@@ -45,12 +45,12 @@ pir.assert_property %clk_p always disable iff %true on %true : !pir.clocked_prop
 pir.assume_property %clk_p : !pir.clocked_property
 pir.assume_property %clk_p always : !pir.clocked_property
 pir.assume_property %clk_p initial : !pir.clocked_property
-pir.assume_property %clk_p disable iff %true : !pir.clocked_property
-pir.assume_property %clk_p always disable iff %true : !pir.clocked_property
-pir.assume_property %clk_p on %true : !pir.clocked_property
-pir.assume_property %clk_p always on %true : !pir.clocked_property
-pir.assume_property %clk_p disable iff %true on %true : !pir.clocked_property
-pir.assume_property %clk_p always disable iff %true on %true : !pir.clocked_property
+pir.assume_property %clk_p disable iff %b : !pir.clocked_property
+pir.assume_property %clk_p always disable iff %b : !pir.clocked_property
+pir.assume_property %clk_p on %b : !pir.clocked_property
+pir.assume_property %clk_p always on %b : !pir.clocked_property
+pir.assume_property %clk_p disable iff %b on %b : !pir.clocked_property
+pir.assume_property %clk_p always disable iff %b on %b : !pir.clocked_property
 
 // CHECK: pir.cover_property {{%.+}} : !pir.clocked_property
 // CHECK: pir.cover_property {{%.+}} always : !pir.clocked_property
@@ -64,12 +64,12 @@ pir.assume_property %clk_p always disable iff %true on %true : !pir.clocked_prop
 pir.cover_property %clk_p : !pir.clocked_property
 pir.cover_property %clk_p always : !pir.clocked_property
 pir.cover_property %clk_p initial : !pir.clocked_property
-pir.cover_property %clk_p disable iff %true : !pir.clocked_property
-pir.cover_property %clk_p always disable iff %true : !pir.clocked_property
-pir.cover_property %clk_p on %true : !pir.clocked_property
-pir.cover_property %clk_p always on %true : !pir.clocked_property
-pir.cover_property %clk_p disable iff %true on %true : !pir.clocked_property
-pir.cover_property %clk_p always disable iff %true on %true : !pir.clocked_property
+pir.cover_property %clk_p disable iff %b : !pir.clocked_property
+pir.cover_property %clk_p always disable iff %b : !pir.clocked_property
+pir.cover_property %clk_p on %b : !pir.clocked_property
+pir.cover_property %clk_p always on %b : !pir.clocked_property
+pir.cover_property %clk_p disable iff %b on %b : !pir.clocked_property
+pir.cover_property %clk_p always disable iff %b on %b : !pir.clocked_property
 
 // CHECK: pir.restrict {{%.+}} : !pir.clocked_property
 // CHECK: pir.restrict {{%.+}} always : !pir.clocked_property
@@ -83,9 +83,9 @@ pir.cover_property %clk_p always disable iff %true on %true : !pir.clocked_prope
 pir.restrict %clk_p : !pir.clocked_property
 pir.restrict %clk_p always : !pir.clocked_property
 pir.restrict %clk_p initial : !pir.clocked_property
-pir.restrict %clk_p disable iff %true : !pir.clocked_property
-pir.restrict %clk_p always disable iff %true : !pir.clocked_property
-pir.restrict %clk_p on %true : !pir.clocked_property
-pir.restrict %clk_p always on %true : !pir.clocked_property
-pir.restrict %clk_p disable iff %true on %true : !pir.clocked_property
-pir.restrict %clk_p always disable iff %true on %true : !pir.clocked_property
+pir.restrict %clk_p disable iff %b : !pir.clocked_property
+pir.restrict %clk_p always disable iff %b : !pir.clocked_property
+pir.restrict %clk_p on %b : !pir.clocked_property
+pir.restrict %clk_p always on %b : !pir.clocked_property
+pir.restrict %clk_p disable iff %b on %b : !pir.clocked_property
+pir.restrict %clk_p always disable iff %b on %b : !pir.clocked_property

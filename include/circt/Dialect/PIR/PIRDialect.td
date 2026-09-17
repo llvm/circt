@@ -14,6 +14,7 @@ include "mlir/IR/OpBase.td"
 def PIRDialect : Dialect {
   let name = "pir";
   let summary = "Property IR ingress dialect, used to encode SystemVerilog Assertion properties and sequences.";
+  let useDefaultTypePrinterParser = 1;
   // See `docs/Dialect/PIR.md` for detailed dialect documentation.
   let cppNamespace = "circt::pir";
 }

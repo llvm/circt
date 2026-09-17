@@ -23,7 +23,7 @@ class PIROp<string mnemonic, list<Trait> traits = []> :
 // Assertions
 //===----------------------------------------------------------------------===//
 
-class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [SameVariadicOperandSize]> :
+class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [AttrSizedOperandSegments]> :
   PIROp<mnemonic, traits> {
   let arguments = (ins 
     PIRClockedPropertyType:$property,
