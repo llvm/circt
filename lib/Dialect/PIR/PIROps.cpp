@@ -19,13 +19,20 @@ using namespace pir;
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
+// Generated code
+//===----------------------------------------------------------------------===//
+
+#define GET_OP_CLASSES
+#include "circt/Dialect/PIR/PIR.cpp.inc"
+
+//===----------------------------------------------------------------------===//
 // InputOp
 //===----------------------------------------------------------------------===//
 
 /// Attribute every name in input to its related result
 void InputOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // Retrieve the names array
-  auto namesAttr = (*this)->getAttrOfType<ArrayRef<StringAttr>>("names");
+  auto namesAttr = (*this)->getAttrOfType<ArrayAttr>("names");
 
   // Check if any names were given
   if (!namesAttr.empty()) {
@@ -33,7 +40,13 @@ void InputOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
     // Match every name with its associated result
     for (size_t i = 0; i < results.size(); ++i) {
-      setNameFn(results[i], namesAttr[i].getValue());
+      // Check for string attributes in the array
+      if (auto name = dyn_cast<StringAttr>(namesAttr[i])) {
+        setNameFn(results[i], name);
+      } else {
+        // This should be unreachable, but in case raise an error
+        (*this)->emitOpError("Non-string attribute in string array!");
+      }
     }
   }
 }
@@ -119,8 +132,11 @@ struct EraseIfDisableTrue : public OpRewritePattern<Op> {
   LogicalResult matchAndRewrite(Op op,
                                 PatternRewriter &rewriter) const override {
     Value disable = op.getDisable();
+    // Do nothing if no disable was given
     if (!disable)
       return failure();
+
+    // Skip any case where the disable is not `hw.constant true`
     auto disableConst = disable.getDefiningOp<hw::ConstantOp>();
     if (!disableConst || !disableConst.getValue().isOne())
       return failure();
@@ -229,10 +245,3 @@ ClockedSeqToClockedPropOp::canonicalize(ClockedSeqToClockedPropOp op,
   }
   return failure();
 }
-
-//===----------------------------------------------------------------------===//
-// Generated code
-//===----------------------------------------------------------------------===//
-
-#define GET_OP_CLASSES
-#include "circt/Dialect/PIR/PIR.cpp.inc"

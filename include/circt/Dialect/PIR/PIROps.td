@@ -39,6 +39,8 @@ def CellOp : PIROp<"cell", [
   NoTerminator,
   RegionKindInterface,
   SingleBlock,
+  SymbolName, 
+  SymbolVisibility, 
   Symbol
 ]> {
   let summary = "PIR Wrapper Cell for Properties and Sequences.";
@@ -51,6 +53,7 @@ def CellOp : PIROp<"cell", [
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     DictionaryAttr:$parameters
   );
   let regions = (region SizedRegion<1>:$body);
