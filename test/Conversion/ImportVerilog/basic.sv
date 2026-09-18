@@ -2618,7 +2618,7 @@ module ImmediateAssert(input clk);
     // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
     // CHECK: [[OneBX:%.+]] = moore.constant bX : l1
     // CHECK: [[NE:%.+]] = moore.ne [[READ_CLK]], [[OneBX]] : l1 -> l1
-    // CHECK: moore.assert immediate [[NE]] : l1
+    // CHECK: moore.assert immediate [[NE]] label "clk != 1'bx" : l1
   always_comb begin
     assert (clk != 1'bx);
   end
@@ -2626,14 +2626,14 @@ module ImmediateAssert(input clk);
   // CHECK: moore.procedure always_comb
     // CHECK: [[C100:%.+]] = moore.constant 100 : i32
     // CHECK: [[BC:%.+]] = moore.bool_cast [[C100]] : i32 -> i1
-    // CHECK: moore.assume observed [[BC]] : i1
+    // CHECK: moore.assume observed [[BC]] label "100" : i1
   always_comb begin
     assume #0 (100);
   end
 
   // CHECK: moore.procedure always_comb
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: moore.cover final [[READ_A]] : i1
+    // CHECK: moore.cover final [[READ_A]] label "a" : i1
   always_comb begin
     cover final (a);
   end
@@ -2701,7 +2701,7 @@ module ImmediateAssertiWithActionBlock;
   // CHECK:func.func private @check([[ARG:%.*]]: !moore.l32) {
   // CHECK:  [[C0:%.+]] = moore.constant 0 : l32
   // CHECK:  [[COND:%.+]] = moore.ugt [[ARG]], [[C0]] : l32 -> l1
-  // CHECK:  moore.assert immediate [[COND]] : l1
+  // CHECK:  moore.assert immediate [[COND]] label "w > 0" : l1
   function automatic void check(logic[31:0] w);
     assert (w > 0);
   endfunction
