@@ -2517,18 +2517,16 @@ unwrapImplicitConversions(const slang::ast::Expression &expr) {
 
 LogicalResult Context::convertMOSSwitchPrimitive(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
-  assert(prim.primitiveType.name == "nmos" ||
-         prim.primitiveType.name == "pmos" ||
-         prim.primitiveType.name == "rnmos" ||
-         prim.primitiveType.name == "rpmos");
+  assert(
+      prim.primitiveType.name == "nmos" || prim.primitiveType.name == "pmos" ||
+      prim.primitiveType.name == "rnmos" || prim.primitiveType.name == "rpmos");
 
   auto loc = convertLocation(prim.location);
   auto primName = prim.primitiveType.name;
 
   auto portConns = prim.getPortConnections();
 
-  assert(portConns.size() == 3 &&
-         "mos primitive should have exactly 3 ports");
+  assert(portConns.size() == 3 && "mos primitive should have exactly 3 ports");
 
   auto &outputConn =
       portConns[0]->as<slang::ast::AssignmentExpression>().left();
@@ -2597,8 +2595,7 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   if (!zVal)
     return failure();
 
-  auto condOp =
-      moore::ConditionalOp::create(builder, loc, dstType, controlVal);
+  auto condOp = moore::ConditionalOp::create(builder, loc, dstType, controlVal);
 
   auto &trueBlock = condOp.getTrueRegion().emplaceBlock();
   auto &falseBlock = condOp.getFalseRegion().emplaceBlock();
@@ -2625,8 +2622,7 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
 
   auto loc = convertLocation(prim.location);
   auto portConns = prim.getPortConnections();
-  assert(portConns.size() == 4 &&
-         "cmos primitive should have exactly 4 ports");
+  assert(portConns.size() == 4 && "cmos primitive should have exactly 4 ports");
 
   auto &outputConn =
       portConns[0]->as<slang::ast::AssignmentExpression>().left();
@@ -2698,21 +2694,21 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
     return condOp.getResult();
   };
 
-  // Lado N: comporta-se como NMOS -- desligado (Z) quando ncontrol === 0.
+  // N side: behaves like NMOS -- off (Z) when ncontrol === 0.
   auto nOff = makeLevelConstant(ncontrolVal, 0);
   auto nIsOff = moore::CaseEqOp::create(builder, loc, ncontrolVal, nOff);
   Value nResult = muxZOrData(nIsOff);
 
-  // Lado P: comporta-se como PMOS -- desligado (Z) quando pcontrol === 1.
+  // P side: behaves like PMOS -- off (Z) when pcontrol === 1.
   auto pOff = makeLevelConstant(pcontrolVal, 1);
   auto pIsOff = moore::CaseEqOp::create(builder, loc, pcontrolVal, pOff);
   Value pResult = muxZOrData(pIsOff);
 
-  // Resolve os dois resultados como dois drivers no mesmo fio:
-  //   concordam            -> esse valor
-  //   n é Z (só p dirige)  -> p
-  //   p é Z (só n dirige)  -> n
-  //   caso contrário       -> x (conflito)
+  // Resolve the two results as if they were two drivers on the same wire:
+  //   agree              -> that value
+  //   n is Z (only p drives) -> p
+  //   p is Z (only n drives) -> n
+  //   otherwise               -> x (conflict)
   auto agree = moore::CaseEqOp::create(builder, loc, nResult, pResult);
   auto nIsZ = moore::CaseEqOp::create(builder, loc, nResult, zVal);
   auto pIsZ = moore::CaseEqOp::create(builder, loc, pResult, zVal);
