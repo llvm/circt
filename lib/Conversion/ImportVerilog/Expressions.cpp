@@ -129,24 +129,30 @@ static uint64_t getTimeScaleInFemtoseconds(Context &context) {
   return scale;
 }
 
+Value Context::lookupExpandedInterfaceMember(
+    const slang::ast::InstanceSymbol &instance,
+    const slang::ast::Symbol &member) {
+  auto *lowering = interfaceInstances.lookup(&instance);
+  if (!lowering)
+    return {};
+  if (auto value = lowering->expandedMembers.lookup(&member))
+    return value;
+  // Canonical module bodies can use different Slang symbols for the same
+  // member. Only fall back by name within the selected interface instance.
+  return lowering->expandedMembersByName.lookup(
+      builder.getStringAttr(member.name));
+}
+
 /// Resolve a hierarchical value that refers to a member of an expanded
 /// interface instance.
 static Value lookupExpandedInterfaceMember(
     Context &context, const slang::ast::HierarchicalValueExpression &expr) {
-  auto nameAttr = context.builder.getStringAttr(expr.symbol.name);
   for (const auto &element : expr.ref.path) {
     auto *inst = element.symbol->as_if<slang::ast::InstanceSymbol>();
     if (!inst)
       continue;
-    auto *lowering = context.interfaceInstances.lookup(inst);
-    if (!lowering)
-      continue;
-    if (auto it = lowering->expandedMembers.find(&expr.symbol);
-        it != lowering->expandedMembers.end())
-      return it->second;
-    if (auto it = lowering->expandedMembersByName.find(nameAttr);
-        it != lowering->expandedMembersByName.end())
-      return it->second;
+    if (auto value = context.lookupExpandedInterfaceMember(*inst, expr.symbol))
+      return value;
   }
   return {};
 }
