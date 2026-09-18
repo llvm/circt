@@ -921,6 +921,64 @@ struct ExprVisitor {
 
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
+
+/// Takes one streaming operand and appends its packed pieces to `leaves`,
+/// in the order defined in IEEE 1800-2023 § 11.4.14.1.
+static LogicalResult flattenStreamingValue(Context &context, Location loc,
+                                           Value value,
+                                           SmallVectorImpl<Value> &leaves) {
+  auto &builder = context.builder;
+
+  // Convert packed values to a simple bit vector.
+  if (isa<moore::PackedType>(value.getType())) {
+    value = context.convertToSimpleBitVector(value);
+    if (!value)
+      return failure();
+    leaves.push_back(value);
+    return success();
+  }
+
+  // Fixed-size unpacked arrays are traversed in foreach order.
+  if (auto type = dyn_cast<moore::UnpackedArrayType>(value.getType())) {
+    for (unsigned i = type.getSize(); i > 0; --i) {
+      auto element = moore::ExtractOp::create(
+          builder, loc, type.getElementType(), value, i - 1);
+      if (failed(flattenStreamingValue(context, loc, element, leaves)))
+        return failure();
+    }
+    return success();
+  }
+
+  // Struct members are traversed in declaration order.
+  if (auto type = dyn_cast<moore::UnpackedStructType>(value.getType())) {
+    for (auto member : type.getMembers()) {
+      auto field = moore::StructExtractOp::create(builder, loc, member.type,
+                                                  member.name, value);
+      if (failed(flattenStreamingValue(context, loc, field, leaves)))
+        return failure();
+    }
+    return success();
+  }
+
+  // Untagged unions are traversed through their first-declared member.
+  if (auto type = dyn_cast<moore::UnpackedUnionType>(value.getType())) {
+    if (type.getMembers().empty())
+      return failure();
+    auto member = type.getMembers().front();
+    auto field = moore::UnionExtractOp::create(builder, loc, member.type,
+                                               member.name, value);
+    return flattenStreamingValue(context, loc, field, leaves);
+  }
+
+  // Dynamic arrays, queues, associative arrays, strings, and class handles
+  // are not streamed yet and remain unsupported.
+  value = context.convertToSimpleBitVector(value);
+  if (!value)
+    return failure();
+  leaves.push_back(value);
+  return success();
+}
+
 struct RvalueExprVisitor : public ExprVisitor {
   RvalueExprVisitor(Context &context, Location loc)
       : ExprVisitor(context, loc, /*isLvalue=*/false) {}
@@ -1152,10 +1210,44 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (!lhs)
       return {};
 
-    // Determine the right-hand side value of the assignment.
     context.lvalueStack.push_back(lhs);
-    auto rhs = context.convertRvalueExpression(
-        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+    Value rhs;
+    auto rhsType = context.convertType(*expr.right().type);
+    // Flatten a fixed-size aggregate RHS for a streaming assignment target.
+    // See IEEE 1800-2023 § 11.4.14.3.
+    bool flattenRhs =
+        expr.left().as_if<slang::ast::StreamingConcatenationExpression>() &&
+        isa_and_nonnull<moore::UnpackedArrayType, moore::UnpackedStructType,
+                        moore::UnpackedUnionType>(rhsType);
+    if (flattenRhs) {
+      rhs = context.convertRvalueExpression(expr.right());
+      SmallVector<Value> leaves;
+      if (rhs && failed(flattenStreamingValue(context, loc, rhs, leaves)))
+        rhs = {};
+      if (rhs) {
+        if (leaves.size() == 1)
+          rhs = leaves.front();
+        else
+          rhs = moore::ConcatOp::create(builder, loc, leaves);
+      }
+
+      if (rhs) {
+        auto targetType = cast<moore::RefType>(lhs.getType()).getNestedType();
+        auto sourceType = cast<moore::IntType>(rhs.getType());
+        auto targetWidth = targetType.getBitSize().value();
+        if (sourceType.getWidth() > targetWidth) {
+          auto truncatedType = moore::IntType::get(
+              context.getContext(), targetWidth, sourceType.getDomain());
+          rhs = moore::ExtractOp::create(builder, loc, truncatedType, rhs,
+                                         sourceType.getWidth() - targetWidth);
+        }
+        rhs = context.materializeConversion(targetType, rhs,
+                                            expr.right().type->isSigned(), loc);
+      }
+    } else {
+      rhs = context.convertRvalueExpression(
+          expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+    }
     context.lvalueStack.pop_back();
     if (!rhs)
       return {};
@@ -2411,21 +2503,14 @@ struct RvalueExprVisitor : public ExprVisitor {
         return {};
       }
       Value value;
-      if (stream.constantWithWidth.has_value()) {
+      if (stream.constantWithWidth.has_value())
         value = context.convertRvalueExpression(*stream.withExpr);
-        auto type = cast<moore::UnpackedType>(value.getType());
-        auto intType = moore::IntType::get(
-            context.getContext(), type.getBitSize().value(), type.getDomain());
-        // Do not care if it's signed, because we will not do expansion.
-        value = context.materializeConversion(intType, value, false, loc);
-      } else {
+      else
         value = context.convertRvalueExpression(*stream.operand);
-      }
 
-      value = context.convertToSimpleBitVector(value);
-      if (!value)
+      if (!value ||
+          failed(flattenStreamingValue(context, operandLoc, value, operands)))
         return {};
-      operands.push_back(value);
     }
     Value value;
 
@@ -2569,6 +2654,104 @@ struct RvalueExprVisitor : public ExprVisitor {
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+/// Takes one streaming assignment target and appends its packed references to
+/// `leaves`, in the order defined in IEEE 1800-2023 § 11.4.14.1.
+static LogicalResult flattenStreamingRef(Context &context, Location loc,
+                                         Value value,
+                                         SmallVectorImpl<Value> &leaves) {
+  auto &builder = context.builder;
+  auto refType = dyn_cast<moore::RefType>(value.getType());
+  if (!refType)
+    return failure();
+
+  // If already packed, we are done.
+  if (isa<moore::PackedType>(refType.getNestedType())) {
+    leaves.push_back(value);
+    return success();
+  }
+
+  // Fixed-size unpacked arrays are traversed in foreach order.
+  if (auto type = dyn_cast<moore::UnpackedArrayType>(refType.getNestedType())) {
+    auto elementRefType = moore::RefType::get(type.getElementType());
+    for (unsigned i = type.getSize(); i > 0; --i) {
+      auto element = moore::ExtractRefOp::create(builder, loc, elementRefType,
+                                                 value, i - 1);
+      if (failed(flattenStreamingRef(context, loc, element, leaves)))
+        return failure();
+    }
+    return success();
+  }
+
+  // Struct members are traversed in declaration order.
+  if (auto type =
+          dyn_cast<moore::UnpackedStructType>(refType.getNestedType())) {
+    for (auto member : type.getMembers()) {
+      auto field = moore::StructExtractRefOp::create(
+          builder, loc, moore::RefType::get(member.type), member.name, value);
+      if (failed(flattenStreamingRef(context, loc, field, leaves)))
+        return failure();
+    }
+    return success();
+  }
+
+  // Untagged unions are traversed through their first-declared member.
+  if (auto type = dyn_cast<moore::UnpackedUnionType>(refType.getNestedType())) {
+    if (type.getMembers().empty())
+      return failure();
+    auto member = type.getMembers().front();
+    auto field = moore::UnionExtractRefOp::create(
+        builder, loc, moore::RefType::get(member.type), member.name, value);
+    return flattenStreamingRef(context, loc, field, leaves);
+  }
+
+  // Dynamic arrays, queues, associative arrays, strings, and class handles
+  // are not streamed yet and remain unsupported.
+  return failure();
+}
+
+/// Extract a range [lowBit, lowBit + width) without creating
+/// extract_ref(concat_ref), which SimplifyRefs cannot decompose.
+static Value sliceStreamingRefs(Context &context, Location loc,
+                                ArrayRef<Value> leaves, unsigned lowBit,
+                                unsigned width) {
+  auto &builder = context.builder;
+  SmallVector<Value> pieces;
+  unsigned highBit = lowBit + width;
+  unsigned leafLow = 0;
+
+  // The last concat operand contains the least-significant bits.
+  for (Value leaf : llvm::reverse(leaves)) {
+    auto refType = cast<moore::RefType>(leaf.getType());
+    auto type = cast<moore::PackedType>(refType.getNestedType());
+    auto leafWidth = type.getBitSize();
+    if (!leafWidth)
+      return {};
+    unsigned leafHigh = leafLow + *leafWidth;
+
+    // Find the intersection of this leaf with the requested range.
+    unsigned begin = std::max(lowBit, leafLow);
+    unsigned end = std::min(highBit, leafHigh);
+    if (begin < end) {
+      unsigned pieceWidth = end - begin;
+      auto pieceType = moore::RefType::get(moore::IntType::get(
+          context.getContext(), pieceWidth, type.getDomain()));
+      pieces.push_back(moore::ExtractRefOp::create(builder, loc, pieceType,
+                                                   leaf, begin - leafLow));
+    }
+    leafLow = leafHigh;
+  }
+
+  if (pieces.empty())
+    return {};
+  // `moore.concat_ref` expects operands from most-significant to
+  // least-significant.
+  std::reverse(pieces.begin(), pieces.end());
+  if (pieces.size() == 1)
+    return pieces.front();
+  return moore::ConcatRefOp::create(builder, loc, pieces);
+}
+
 struct LvalueExprVisitor : public ExprVisitor {
   LvalueExprVisitor(Context &context, Location loc)
       : ExprVisitor(context, loc, /*isLvalue=*/true) {}
@@ -2686,63 +2869,48 @@ struct LvalueExprVisitor : public ExprVisitor {
         return {};
       }
       Value value;
-      if (stream.constantWithWidth.has_value()) {
+      if (stream.constantWithWidth.has_value())
         value = context.convertLvalueExpression(*stream.withExpr);
-        auto type = cast<moore::UnpackedType>(
-            cast<moore::RefType>(value.getType()).getNestedType());
-        auto intType = moore::RefType::get(moore::IntType::get(
-            context.getContext(), type.getBitSize().value(), type.getDomain()));
-        // Do not care if it's signed, because we will not do expansion.
-        value = context.materializeConversion(intType, value, false, loc);
-      } else {
+      else
         value = context.convertLvalueExpression(*stream.operand);
-      }
-
-      if (!value)
+      if (!value ||
+          failed(flattenStreamingRef(context, operandLoc, value, operands)))
         return {};
-      operands.push_back(value);
-    }
-    Value value;
-    if (operands.size() == 1) {
-      // There must be at least one element, otherwise slang will report an
-      // error.
-      value = operands.front();
-    } else {
-      value = moore::ConcatRefOp::create(builder, loc, operands).getResult();
     }
 
     if (expr.getSliceSize() == 0) {
-      return value;
+      if (operands.size() == 1)
+        return operands.front();
+      return moore::ConcatRefOp::create(builder, loc, operands);
     }
 
-    auto type = cast<moore::IntType>(
-        cast<moore::RefType>(value.getType()).getNestedType());
-    SmallVector<Value> slicedOperands;
-    auto widthSum = type.getWidth();
-    auto domain = type.getDomain();
-    auto iterMax = widthSum / expr.getSliceSize();
-    auto remainSize = widthSum % expr.getSliceSize();
-
-    for (size_t i = 0; i < iterMax; i++) {
-      auto extractResultType = moore::RefType::get(moore::IntType::get(
-          context.getContext(), expr.getSliceSize(), domain));
-
-      auto extracted = moore::ExtractRefOp::create(
-          builder, loc, extractResultType, value, i * expr.getSliceSize());
-      slicedOperands.push_back(extracted);
-    }
-    // Handle other wire
-    if (remainSize) {
-      auto extractResultType = moore::RefType::get(
-          moore::IntType::get(context.getContext(), remainSize, domain));
-
-      auto extracted =
-          moore::ExtractRefOp::create(builder, loc, extractResultType, value,
-                                      iterMax * expr.getSliceSize());
-      slicedOperands.push_back(extracted);
+    unsigned width = 0;
+    for (Value operand : operands) {
+      auto operandWidth =
+          cast<moore::RefType>(operand.getType()).getNestedType().getBitSize();
+      if (!operandWidth)
+        return {};
+      width += *operandWidth;
     }
 
-    return moore::ConcatRefOp::create(builder, loc, slicedOperands);
+    SmallVector<Value> slices;
+    unsigned numSlices = width / expr.getSliceSize();
+    unsigned remainder = width % expr.getSliceSize();
+    for (unsigned i = 0; i < numSlices; ++i) {
+      auto slice = sliceStreamingRefs(
+          context, loc, operands, i * expr.getSliceSize(), expr.getSliceSize());
+      if (!slice)
+        return {};
+      slices.push_back(slice);
+    }
+    if (remainder) {
+      auto slice = sliceStreamingRefs(
+          context, loc, operands, numSlices * expr.getSliceSize(), remainder);
+      if (!slice)
+        return {};
+      slices.push_back(slice);
+    }
+    return moore::ConcatRefOp::create(builder, loc, slices);
   }
 
   /// Emit an error for all other expressions.
