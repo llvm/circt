@@ -331,7 +331,9 @@ def BufferTypeEnum: I32EnumAttr<
   "BufferTypeEnum", "BufferOp seq or fifo", [BufferCaseSeq, BufferCaseFIFO]> {
   let genSpecializedAttr = 0;
 }
-def BufferTypeEnumAttr: EnumAttr<Handshake_Dialect, BufferTypeEnum, "buffer_type_enum">;
+def BufferTypeEnumAttr: EnumAttr<Handshake_Dialect, BufferTypeEnum, "buffer_type_enum"> {
+  let assemblyFormat = "$value";
+}
 
 def BufferOp : Handshake_Op<"buffer", [Pure, HasClock, SameOperandsAndResultType,
   DeclareOpInterfaceMethods<SOSTInterface, ["getSize"]>,
