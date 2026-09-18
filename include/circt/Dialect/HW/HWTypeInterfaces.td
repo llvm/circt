@@ -97,4 +97,13 @@ def BitWidthTypeInterface : TypeInterface<"BitWidthTypeInterface"> {
   ];
 }
 
+def SimulationVariableTypeInterface : TypeInterface<"SimulationVariableTypeInterface"> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+  Marks non-synthesizable simulation types with value semantics (e.g. `!sim.assoc_array`)
+  so they can be held in procedural state containers (e.g. `hw.inout`, `sv.reg`) while remaining excluded
+  from physical `isHWValueType` structures like module ports.
+  }];
+}
+
 #endif // CIRCT_DIALECT_HW_HWTYPEINTERFACES_TD
