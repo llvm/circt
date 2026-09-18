@@ -202,7 +202,7 @@ class Simulator:
                compile_stdout_callback: Optional[Callable[[str], None]] = None,
                compile_stderr_callback: Optional[Callable[[str], None]] = None,
                make_default_logs: bool = True,
-               macro_definitions: Optional[Dict[str, str]] = None):
+               macro_definitions: Optional[Dict[str, Optional[str]]] = None):
     """Simulator base class.
 
     Optional sinks can be provided for capturing output. If not provided,
@@ -512,17 +512,38 @@ class Simulator:
         simProc.force_stop()
 
 
-def get_simulator(name: str,
-                  sources: SourceFiles,
-                  rundir: Path,
-                  debug: bool,
-                  save_waveform: bool = False) -> Simulator:
+def get_simulator(
+    name: str,
+    sources: SourceFiles,
+    rundir: Path,
+    debug: bool,
+    save_waveform: bool = False,
+    macro_definitions: Optional[Dict[str, Optional[str]]] = None) -> Simulator:
+  """Create a simulator backend.
+
+  Args:
+    name: Simulator backend name.
+    sources: SourceFiles describing RTL/DPI inputs.
+    rundir: Directory where build/run artifacts are placed.
+    debug: Enable cosim debug mode.
+    save_waveform: Save simulator waveforms when debug mode is enabled.
+    macro_definitions: Optional mapping of macro names to values. A value of
+      None defines the macro without assigning a value.
+  """
   name = name.lower()
   if name == "verilator":
     from .verilator import Verilator
-    return Verilator(sources, rundir, debug, save_waveform=save_waveform)
+    return Verilator(sources,
+                     rundir,
+                     debug,
+                     save_waveform=save_waveform,
+                     macro_definitions=macro_definitions)
   elif name == "questa":
     from .questa import Questa
-    return Questa(sources, rundir, debug, save_waveform=save_waveform)
+    return Questa(sources,
+                  rundir,
+                  debug,
+                  save_waveform=save_waveform,
+                  macro_definitions=macro_definitions)
   else:
     raise ValueError(f"Unknown simulator: {name}")
