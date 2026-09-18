@@ -7119,7 +7119,8 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 
           if (auto it = symbolsToFiles.find(sym); it != symbolsToFiles.end()) {
             if (it->second.size() != 1 || attr) {
-              package.emitError("packages can be emitted to a single file");
+              package.emitError(
+                  "packages can only be emitted to a single file");
               encounteredError = true;
             }
             // Otherwise the package is pulled into the file operation which
