@@ -3222,6 +3222,19 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
       return builder.createOrFold<moore::OpenUArrayFromUnpackedArrayOp>(
           loc, type, value);
   }
+
+  // Convert from fixed-size packed array to open packed array
+  auto srcArray = dyn_cast<moore::ArrayType>(value.getType());
+  auto dstOpenArray = dyn_cast<moore::OpenArrayType>(type);
+  if (srcArray && dstOpenArray) {
+    auto openArrayElType = dstOpenArray.getElementType();
+    auto arrayElType = srcArray.getElementType();
+
+    if (openArrayElType == arrayElType)
+      return builder.createOrFold<moore::OpenArrayFromArrayOp>(loc, type,
+                                                               value);
+  }
+
   // Handle Real To Int conversion
   if (dstInt && isa<moore::RealType>(value.getType())) {
     auto twoValInt = builder.createOrFold<moore::RealToIntOp>(
