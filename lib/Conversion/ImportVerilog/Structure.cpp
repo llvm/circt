@@ -2237,9 +2237,6 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
 /// Convert a primitive instance.
 LogicalResult Context::convertPrimitiveInstance(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
-  llvm::errs() << "PRIMITIVE: " << prim.primitiveType.name
-             << " KIND: " << static_cast<int>(prim.primitiveType.primitiveKind)
-             << "\n";
   if (prim.getDriveStrength().first.has_value() ||
       prim.getDriveStrength().second.has_value())
     return mlir::emitError(convertLocation(prim.location))
@@ -2448,8 +2445,6 @@ LogicalResult Context::convertNOutputPrimitive(
 
 LogicalResult Context::convertFixedPrimitive(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
-  llvm::errs() << "ENTERED convertFixedPrimitive: "
-             << prim.primitiveType.name << "\n";
   auto primName = prim.primitiveType.name;
   auto loc = convertLocation(prim.location);
 
@@ -2458,11 +2453,8 @@ LogicalResult Context::convertFixedPrimitive(
   if (primName == "pullup" || primName == "pulldown")
     return convertPullGatePrimitive(prim);
 
-  llvm::errs() << "primName = [" << primName << "]\n";
-
   if (primName == "nmos" || primName == "pmos" || primName == "rnmos" ||
       primName == "rpmos") {
-    llvm::errs() << "MATCHED NMOS\n";
     return convertMOSSwitchPrimitive(prim);
   }
 
@@ -2525,7 +2517,6 @@ unwrapImplicitConversions(const slang::ast::Expression &expr) {
 
 LogicalResult Context::convertMOSSwitchPrimitive(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
-  llvm::errs() << "ENTERED convertMOSSwitchPrimitive\n";
   assert(prim.primitiveType.name == "nmos" ||
          prim.primitiveType.name == "pmos" ||
          prim.primitiveType.name == "rnmos" ||
@@ -2545,11 +2536,9 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   auto outputVal = convertLvalueExpression(outputConn);
   if (!outputVal)
     return failure();
-  llvm::errs() << "Converted output\n";
 
   auto &inputExpr = unwrapImplicitConversions(*portConns[1]);
   auto inputWidth = inputExpr.type->getBitWidth();
-  llvm::errs() << "MOS input width: " << inputWidth << "\n";
 
   if (inputWidth != 1)
     return mlir::emitError(loc) << "MOS switch input must be 1 bit";
@@ -2557,7 +2546,6 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   auto inputVal = convertRvalueExpression(*portConns[1]);
   if (!inputVal)
     return failure();
-  llvm::errs() << "Converted input\n";
 
   Value controlVal;
 
@@ -2580,7 +2568,6 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   auto control = convertRvalueExpression(*portConns[2]);
   if (!control)
     return failure();
-  llvm::errs() << "Converted control\n";
 
   int offLevel = (primName == "nmos" || primName == "rnmos") ? 0 : 1;
 
@@ -2627,7 +2614,6 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   Value result = condOp.getResult();
 
   moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
-  llvm::errs() << "Created MOS ContinuousAssign\n";
 
   return success();
 }
