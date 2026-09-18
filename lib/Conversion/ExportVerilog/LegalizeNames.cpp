@@ -327,6 +327,8 @@ void GlobalNameResolver::legalizePackageNames(PackageOp package) {
 
   NameCollisionResolver localNames(options);
   globalNameTable.addReservedNames(localNames);
+  // Reserve all typedef names before choosing enum member names, including
+  // typedefs that appear after the enum declaration.
   for (auto decl : package.getOps<hw::TypedeclOp>()) {
     auto preferredName = decl.getPreferredName();
     auto name = localNames.getLegalName(preferredName);

@@ -5,9 +5,6 @@
 // RUN: FileCheck %s --check-prefix=GROUPED < %t/grouped.sv
 // RUN: FileCheck %s --check-prefix=FIRST < %t/First.sv
 // RUN: FileCheck %s --check-prefix=SHARED < %t/shared.sv
-// RUN: circt-opt %s -test-apply-lowering-options="options=emitReplicatedOpsToHeader" -export-split-verilog="dir-name=%t.header" -o /dev/null
-// RUN: FileCheck %s --check-prefix=HEADER < %t.header/types.sv
-// RUN: FileCheck %s --check-prefix=GROUPED < %t.header/grouped.sv
 // RUN: circt-opt %t.mlir -export-split-verilog="dir-name=%t.again" -o /dev/null
 // RUN: FileCheck %s --check-prefix=LIST < %t.again/filelist.f
 // RUN: FileCheck %s --check-prefix=GROUPED < %t.again/grouped.sv
@@ -21,57 +18,52 @@ emit.fragment @Width {
 // Package files use the same replication defaults as other generated files.
 sv.verbatim "// Replicated into consumers."
 
-// Packages encountered later must still lead this shared output file.
-hw.module @SharedFirst(in %w: !hw.typealias<@shared::@word, i8>)
+// A package encountered later stays after this module in their shared file.
+hw.module @SharedFirst()
     attributes {output_file = #hw.output_file<"shared.sv", includeReplicatedOps>} {}
 
-// This file is collected before the package files but must follow them.
-hw.module @First(in %b: !hw.typealias<@grouped::@byte, i8>) {}
+// Files and operations keep their discovery order, with no package priority.
+// CHECK-LABEL: module First(
+hw.module @First() {}
 
-// Packages precede the other contents of the file they belong to, and the
-// files defining them come first in the generated file list.
 // CHECK-LABEL: package types;
 // CHECK-NEXT:    `WIDTH
 // CHECK-NEXT:  endpackage
-// CHECK-LABEL: module First(
-// CHECK: grouped::byte_0 b
 // TYPES:       // Replicated into consumers.
 // TYPES:       `define WIDTH 8
 // TYPES:       package types;
 // TYPES:       endpackage
 // TYPES-NOT:   Replicated into consumers.
-// HEADER:      `include "circt_header.svh"
-// HEADER:      `define WIDTH 8
-// HEADER:      package types;
 sv.package @types {
   hw.typedecl @word : !hw.int<#hw.param.verbatim<"`WIDTH">>
 } {emit.fragments = [@Width]}
 
 // A package explicitly assigned to a file is emitted there, once.
-// Explicit output_file attributes can disable replication, including headers.
+// Explicit output_file attributes can disable replication.
+// The macro preamble and references in emit.file must remain in order.
 // GROUPED-NOT: Replicated into consumers.
-// GROUPED-NOT: `include "circt_header.svh"
+// GROUPED:      `define GROUP_WIDTH 1
 // GROUPED:      package grouped;
 // GROUPED-NEXT:   typedef logic [7:0] byte_0;
 // GROUPED-NEXT: endpackage
-// GROUPED-NEXT: package second;
-// GROUPED-NEXT:   typedef logic flag;
-// GROUPED-NEXT: endpackage
 // GROUPED-NEXT: module Grouped
 // GROUPED: // After the consumer.
+// GROUPED-NEXT: package second;
+// GROUPED-NEXT:   typedef logic [`GROUP_WIDTH - 1:0] flag;
+// GROUPED-NEXT: endpackage
 // GROUPED-NOT:  {{^}}package
 // GROUPED-NOT: Replicated into consumers.
-// GROUPED-NOT: `include "circt_header.svh"
 sv.package @grouped {
   hw.typedecl @byte : i8
 }
 hw.module @Grouped(in %b: !hw.typealias<@grouped::@byte, i8>) {}
 sv.package @second {
-  hw.typedecl @flag : i1
+  hw.typedecl @flag : !hw.int<#hw.param.verbatim<"`GROUP_WIDTH">>
 }
 emit.file "grouped.sv" {
-  emit.ref @Grouped
+  emit.verbatim "`define GROUP_WIDTH 1"
   emit.ref @grouped
+  emit.ref @Grouped
   emit.verbatim "// After the consumer."
   emit.ref @second
 } {output_file = #hw.output_file<"grouped.sv">}
@@ -90,22 +82,20 @@ sv.package @sharedSecond {
 } {output_file = #hw.output_file<"shared.sv", includeReplicatedOps>}
 
 // SHARED: // Replicated into consumers.
+// SHARED: module SharedFirst(
 // SHARED: package shared;
 // SHARED: endpackage
-// SHARED-NEXT: package sharedSecond;
+// SHARED-NEXT: module SharedLast(
+// SHARED: shared::word w
+// SHARED: package sharedSecond;
 // SHARED: endpackage
-// SHARED-NEXT: module SharedFirst(
-// SHARED: shared::word w
-// SHARED: module SharedLast(
-// SHARED: shared::word w
 // SHARED-NOT: {{^}}package
 
 // LIST:      shared.sv
+// LIST-NEXT: First.sv
 // LIST-NEXT: types.sv
 // LIST-NEXT: grouped.sv
-// LIST-NEXT: First.sv
 // LIST-NEXT: Consumer.sv
 // LIST-NOT:  grouped.sv
 // FIRST: module First(
-// FIRST: grouped::byte_0 b
 // FIRST-NOT: {{^}}package

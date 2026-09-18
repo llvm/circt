@@ -6858,13 +6858,6 @@ void ModuleEmitter::emitFunc(FuncOp func) {
 // Emitter for files & file lists.
 //===----------------------------------------------------------------------===//
 
-static bool isPackageReference(Operation *op,
-                               const HWSymbolCache &symbolCache) {
-  auto ref = dyn_cast<emit::RefOp>(op);
-  return ref && isa_and_nonnull<PackageOp>(
-                    symbolCache.getDefinition(ref.getTargetAttr()));
-}
-
 class FileEmitter : public EmitterBase {
 public:
   explicit FileEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
@@ -6884,14 +6877,8 @@ private:
 };
 
 void FileEmitter::emit(Block *block) {
-  auto ops = llvm::to_vector(
-      llvm::map_range(*block, [](Operation &op) { return &op; }));
-  // Order the emission list, not the IR: files may be emitted in parallel.
-  std::stable_partition(ops.begin(), ops.end(), [&](Operation *op) {
-    return isPackageReference(op, state.symbolCache);
-  });
-  for (Operation *op : ops) {
-    TypeSwitch<Operation *>(op)
+  for (Operation &op : *block) {
+    TypeSwitch<Operation *>(&op)
         .Case<emit::VerbatimOp, emit::RefOp>([&](auto op) { emitOp(op); })
         .Case<VerbatimOp, IfDefOp, MacroDefOp, sv::FuncDPIImportOp>(
             [&](auto op) { ModuleEmitter(state).emitStatement(op); })
@@ -7013,21 +7000,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     for (auto refs : file.getOps<emit::RefOp>())
       symbolsToFiles[refs.getTargetAttr().getAttr()].push_back(file);
 
-  SmallPtrSet<Operation *, 8> packageFiles;
-  for (auto package : designOp.getOps<PackageOp>())
-    if (auto it = symbolsToFiles.find(package.getSymNameAttr());
-        it != symbolsToFiles.end())
-      for (auto file : it->second)
-        packageFiles.insert(file);
-
-  // Collect package entries separately so they can precede each file's users.
-  SmallVector<OpFileInfo> rootPackageOps;
-  DenseMap<StringAttr, SmallVector<OpFileInfo>> packageFileOps;
-
   SmallString<32> outputPath;
   for (auto &op : *designOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
-    bool emitFirst = isa<PackageOp>(op) || packageFiles.contains(&op);
 
     bool isFileOp = isa<emit::FileOp, emit::FileListOp>(&op);
 
@@ -7066,10 +7041,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 
       auto destFile = StringAttr::get(op->getContext(), outputPath);
       auto &file = files[destFile];
-      if (emitFirst)
-        packageFileOps[destFile].push_back(info);
-      else
-        file.ops.push_back(info);
+      file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
       file.isVerilog = outputPath.ends_with(".sv");
@@ -7159,7 +7131,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           if (attr || separateModules)
             separateFile(package, getSymOpName(package) + ".sv");
           else
-            rootPackageOps.push_back(info);
+            rootFile.ops.push_back(info);
         })
         .Case<sv::SVVerbatimSourceOp>([&](sv::SVVerbatimSourceOp op) {
           symbolCache.addDefinition(op.getNameAttr(), op);
@@ -7233,24 +7205,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   // We've built the whole symbol cache.  Freeze it so things can start
   // querying it (potentially concurrently).
   symbolCache.freeze();
-
-  rootFile.ops.insert(rootFile.ops.begin(), rootPackageOps.begin(),
-                      rootPackageOps.end());
-
-  // Join package entries before other contents, keeping package files first
-  // and preserving file discovery order within each group.
-  llvm::MapVector<StringAttr, FileInfo> orderedFiles;
-  for (auto &[name, file] : files) {
-    auto it = packageFileOps.find(name);
-    if (it == packageFileOps.end())
-      continue;
-    file.ops.insert(file.ops.begin(), it->second.begin(), it->second.end());
-    orderedFiles.insert({name, std::move(file)});
-  }
-  for (auto &file : files)
-    if (!packageFileOps.contains(file.first))
-      orderedFiles.insert(std::move(file));
-  files = std::move(orderedFiles);
 }
 
 /// Given a FileInfo, collect all the replicated and designated operations

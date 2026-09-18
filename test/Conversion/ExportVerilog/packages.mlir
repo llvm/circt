@@ -8,8 +8,7 @@
 // CHECK:        typedef enum bit [0:0] {enum0_A, enum0_B} enum0;
 // CHECK:      `endif // _TYPESCOPE_Enums
 
-// A package has to be declared before its users, so it is emitted first even
-// though it is declared last in this file.
+// The producer puts packages before their users; emission preserves this order.
 // CHECK-LABEL: package types;
 // CHECK-NEXT:    typedef logic [31:0] word;
 // CHECK-NEXT:    typedef word wordAlias;
@@ -18,23 +17,28 @@
 // CHECK-NEXT:    typedef enum bit [0:0] {state_Idle, state_Busy} state;
 // CHECK-NEXT:    typedef state stateAlias;
 // CHECK-NEXT:  endpackage
+sv.package @types {
+  hw.typedecl @word : i32
+  hw.typedecl @wordAlias : !hw.typealias<@types::@word, i32>
+  hw.typedecl @packet : !hw.struct<data: !hw.typealias<@types::@word, i32>, valid: i1>
+  hw.typedecl @memory : !hw.uarray<4xtypealias<@types::@word, i32>>
+  hw.typedecl @state : !hw.enum<Idle, Busy>
+  hw.typedecl @stateAlias : !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>
+}
 
 // A second package may declare the same type name and refer to the first.
 // CHECK-LABEL: package other;
 // CHECK-NEXT:    typedef logic [7:0] word;
 // CHECK-NEXT:    typedef types::word imported;
 // CHECK-NEXT:  endpackage
+sv.package @other {
+  hw.typedecl @word : i8
+  hw.typedecl @imported : !hw.typealias<@types::@word, i32>
+}
 
 // CHECK-LABEL: package empty;
 // CHECK-NEXT:  endpackage
-
-// CHECK-LABEL: package foo_0;
-// CHECK: typedef logic [31:0] logic_0;
-// CHECK: typedef logic [7:0] logic_1;
-// CHECK: typedef logic [1:0] State_Idle;
-// CHECK: typedef enum bit [0:0] {State_Idle_0, State_Busy} State;
-// CHECK: // typedef logic {{.*}}empty;
-// CHECK: endpackage
+sv.package @empty {}
 
 // CHECK-LABEL: module Consumer(
 // CHECK-NEXT:    input  types::word      word,
@@ -102,32 +106,25 @@ hw.module @Anonymous(out out: !hw.enum<A, B>) {
   hw.output %a : !hw.enum<A, B>
 }
 
-sv.package @types {
-  hw.typedecl @word : i32
-  hw.typedecl @wordAlias : !hw.typealias<@types::@word, i32>
-  hw.typedecl @packet : !hw.struct<data: !hw.typealias<@types::@word, i32>, valid: i1>
-  hw.typedecl @memory : !hw.uarray<4xtypealias<@types::@word, i32>>
-  hw.typedecl @state : !hw.enum<Idle, Busy>
-  hw.typedecl @stateAlias : !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>
-}
-
-sv.package @other {
-  hw.typedecl @word : i8
-  hw.typedecl @imported : !hw.typealias<@types::@word, i32>
-}
-
-sv.package @empty {}
-
 // Package names share the global namespace; typedefs and enum members share
 // the package namespace. Explicit names are preserved unless they collide.
+// This package must not move above the preceding modules.
+// CHECK-LABEL: package foo_0;
+// CHECK: typedef logic [31:0] logic_0;
+// CHECK: typedef logic [7:0] logic_1;
+// CHECK: typedef enum bit [0:0] {State_Idle_0, State_Busy} State;
+// CHECK: typedef logic [1:0] State_Idle;
+// CHECK: // typedef logic {{.*}}empty;
+// CHECK: endpackage
 hw.module.extern @external() attributes {verilogName = "foo"}
 sv.package @foo {
   // IR: hw.typedecl @word, "logic_0" : i32
   hw.typedecl @word, "logic" : i32
   // IR: hw.typedecl @byte, "logic_1" : i8
   hw.typedecl @byte, "logic" : i8
-  hw.typedecl @State_Idle : i2
   hw.typedecl @state, "State" : !hw.enum<Idle, Busy>
+  // A later typedef reserves its name before the enum's members are named.
+  hw.typedecl @State_Idle : i2
   hw.typedecl @empty : i0
 }
 
