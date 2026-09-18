@@ -735,6 +735,12 @@ public:
   matchAndRewrite(T op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
+    // Give the pattern a chance to reject the operation *before* any submodule
+    // is built - building a submodule for an op this lowering cannot express
+    // would otherwise construct malformed IR (or crash).
+    if (failed(matchOp(op)))
+      return failure();
+
     // Check if a submodule has already been created for the op. If so,
     // instantiate the submodule. Else, run the pattern-defined module
     // builder.
@@ -771,6 +777,10 @@ public:
 
   virtual void buildModule(T op, BackedgeBuilder &bb, RTLBuilder &builder,
                            hw::HWModulePortAccessor &ports) const = 0;
+
+  /// Hook for patterns to reject operations they cannot lower. Implementations
+  /// are expected to emit their own diagnostic before returning failure.
+  virtual LogicalResult matchOp(T op) const { return success(); }
 
   // Syntactic sugar functions.
   // Unwraps an ESI-interfaced module into its constituent handshake signals.
@@ -1642,12 +1652,23 @@ class ConstantConversionPattern
 public:
   using HandshakeConversionPattern<
       handshake::ConstantOp>::HandshakeConversionPattern;
+  LogicalResult matchOp(handshake::ConstantOp op) const override {
+    // Only integer-typed constants can be materialized as a hw.constant. A
+    // floating-point (or otherwise non-integer) value used to reach
+    // buildModule() and null-dereference the failed IntegerAttr cast below.
+    if (!isa<IntegerAttr>(op.getValue()))
+      return op.emitError()
+             << "lowering to HW only supports integer constants, got '"
+             << op.getValue() << "'";
+    return success();
+  }
+
   void buildModule(handshake::ConstantOp op, BackedgeBuilder &bb, RTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
     unwrappedIO.outputs[0].valid->setValue(unwrappedIO.inputs[0].valid);
     unwrappedIO.inputs[0].ready->setValue(unwrappedIO.outputs[0].ready);
-    auto constantValue = op->getAttrOfType<IntegerAttr>("value").getValue();
+    auto constantValue = cast<IntegerAttr>(op.getValue()).getValue();
     unwrappedIO.outputs[0].data->setValue(s.constant(constantValue));
   };
 };
