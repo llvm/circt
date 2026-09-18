@@ -908,7 +908,12 @@ def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
     Due to differences in width and reset inference, it is suggested to run
     those first as well but not required.
 
-    RWProbes and related operations are not supported.
+    Force/release on an RWProbe is synthesized into a per-probe state machine
+    with an override mux on every read of the target.  Only ground-type
+    targets are supported: forcing/releasing an aggregate, or a field of an
+    aggregate through `ref.sub`, is diagnosed; compile with
+    `preserve-aggregates=none` first.  `force_initial` and
+    `release_initial` are not supported.
   }];
 }
 
