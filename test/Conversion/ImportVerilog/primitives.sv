@@ -287,22 +287,36 @@ endmodule
 pmos p0(data_out, data_in, en);
 endmodule
 
-    // CHECK-LABEL: moore.module @TestCmos
-    module
-    TestCmos(input wire data_in, input wire n_en, input wire p_en,
-             output wire data_out);
+// CHECK-LABEL: moore.module @TestCmos
+module TestCmos(input wire data_in, input wire n_en, input wire p_en,
+                 output wire data_out);
 // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
 // CHECK: %[[NEN:.*]] = moore.read %n_en{{.*}} : <l1>
 // CHECK: %[[PEN:.*]] = moore.read %p_en{{.*}} : <l1>
-// CHECK: %[[NLEVEL:.*]] = moore.constant 1 : l1
-// CHECK: %[[PLEVEL:.*]] = moore.constant 0 : l1
-// CHECK: %[[NCOND:.*]] = moore.eq %[[NEN]], %[[NLEVEL]] : l1 -> l1
-// CHECK: %[[PCOND:.*]] = moore.eq %[[PEN]], %[[PLEVEL]] : l1 -> l1
-// CHECK: %[[COND:.*]] = moore.and %[[NCOND]], %[[PCOND]] : l1
 // CHECK: %[[Z:.*]] = moore.constant bZ : l1
-// CHECK: %[[RESULT:.*]] = moore.conditional %[[COND]] : l1 -> l1
-// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[X:.*]] = moore.constant bX : l1
+// CHECK: %[[NOFF:.*]] = moore.constant 0 : l1
+// CHECK: %[[NCOND:.*]] = moore.case_eq %[[NEN]], %[[NOFF]] : l1
+// CHECK: %[[NRESULT:.*]] = moore.conditional %[[NCOND]] : i1 -> l1
 // CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[POFF:.*]] = moore.constant 1 : l1
+// CHECK: %[[PCOND:.*]] = moore.case_eq %[[PEN]], %[[POFF]] : l1
+// CHECK: %[[PRESULT:.*]] = moore.conditional %[[PCOND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[AGREE:.*]] = moore.case_eq %[[NRESULT]], %[[PRESULT]] : l1
+// CHECK: %[[NISZ:.*]] = moore.case_eq %[[NRESULT]], %[[Z]] : l1
+// CHECK: %[[PISZ:.*]] = moore.case_eq %[[PRESULT]], %[[Z]] : l1
+// CHECK: %[[DISAGREE:.*]] = moore.conditional %[[PISZ]] : i1 -> l1
+// CHECK: moore.yield %[[NRESULT]] : l1
+// CHECK: moore.yield %[[X]] : l1
+// CHECK: %[[WHENNISZ:.*]] = moore.conditional %[[NISZ]] : i1 -> l1
+// CHECK: moore.yield %[[PRESULT]] : l1
+// CHECK: moore.yield %[[DISAGREE]] : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[AGREE]] : i1 -> l1
+// CHECK: moore.yield %[[NRESULT]] : l1
+// CHECK: moore.yield %[[WHENNISZ]] : l1
 cmos c0(data_out, data_in, n_en, p_en);
 endmodule
 
@@ -334,21 +348,35 @@ endmodule
 rpmos rp0(data_out, data_in, en);
 endmodule
 
-    // CHECK-LABEL: moore.module @TestRcmos
-    module
-    TestRcmos(input wire data_in, input wire n_en, input wire p_en,
-              output wire data_out);
+// CHECK-LABEL: moore.module @TestRcmos
+module TestRcmos(input wire data_in, input wire n_en, input wire p_en,
+                  output wire data_out);
 // CHECK: %[[IN:.*]] = moore.read %data_in{{.*}} : <l1>
 // CHECK: %[[NEN:.*]] = moore.read %n_en{{.*}} : <l1>
 // CHECK: %[[PEN:.*]] = moore.read %p_en{{.*}} : <l1>
-// CHECK: %[[NLEVEL:.*]] = moore.constant 1 : l1
-// CHECK: %[[PLEVEL:.*]] = moore.constant 0 : l1
-// CHECK: %[[NCOND:.*]] = moore.eq %[[NEN]], %[[NLEVEL]] : l1 -> l1
-// CHECK: %[[PCOND:.*]] = moore.eq %[[PEN]], %[[PLEVEL]] : l1 -> l1
-// CHECK: %[[COND:.*]] = moore.and %[[NCOND]], %[[PCOND]] : l1
 // CHECK: %[[Z:.*]] = moore.constant bZ : l1
-// CHECK: %[[RESULT:.*]] = moore.conditional %[[COND]] : l1 -> l1
-// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[X:.*]] = moore.constant bX : l1
+// CHECK: %[[NOFF:.*]] = moore.constant 0 : l1
+// CHECK: %[[NCOND:.*]] = moore.case_eq %[[NEN]], %[[NOFF]] : l1
+// CHECK: %[[NRESULT:.*]] = moore.conditional %[[NCOND]] : i1 -> l1
 // CHECK: moore.yield %[[Z]] : l1
-rcmos rc0(data_out, data_in, n_en, p_en);
+// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[POFF:.*]] = moore.constant 1 : l1
+// CHECK: %[[PCOND:.*]] = moore.case_eq %[[PEN]], %[[POFF]] : l1
+// CHECK: %[[PRESULT:.*]] = moore.conditional %[[PCOND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[AGREE:.*]] = moore.case_eq %[[NRESULT]], %[[PRESULT]] : l1
+// CHECK: %[[NISZ:.*]] = moore.case_eq %[[NRESULT]], %[[Z]] : l1
+// CHECK: %[[PISZ:.*]] = moore.case_eq %[[PRESULT]], %[[Z]] : l1
+// CHECK: %[[DISAGREE:.*]] = moore.conditional %[[PISZ]] : i1 -> l1
+// CHECK: moore.yield %[[NRESULT]] : l1
+// CHECK: moore.yield %[[X]] : l1
+// CHECK: %[[WHENNISZ:.*]] = moore.conditional %[[NISZ]] : i1 -> l1
+// CHECK: moore.yield %[[PRESULT]] : l1
+// CHECK: moore.yield %[[DISAGREE]] : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[AGREE]] : i1 -> l1
+// CHECK: moore.yield %[[NRESULT]] : l1
+// CHECK: moore.yield %[[WHENNISZ]] : l1
+rcmos c0(data_out, data_in, n_en, p_en);
 endmodule

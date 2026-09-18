@@ -363,6 +363,9 @@ struct Context {
   convertMOSSwitchPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
   LogicalResult
+  convertCMOSSwitchPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
+
+  LogicalResult
   convertNInputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
   LogicalResult

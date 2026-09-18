@@ -2237,6 +2237,9 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
 /// Convert a primitive instance.
 LogicalResult Context::convertPrimitiveInstance(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
+  llvm::errs() << "PRIMITIVE: " << prim.primitiveType.name
+             << " KIND: " << static_cast<int>(prim.primitiveType.primitiveKind)
+             << "\n";
   if (prim.getDriveStrength().first.has_value() ||
       prim.getDriveStrength().second.has_value())
     return mlir::emitError(convertLocation(prim.location))
@@ -2445,6 +2448,8 @@ LogicalResult Context::convertNOutputPrimitive(
 
 LogicalResult Context::convertFixedPrimitive(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
+  llvm::errs() << "ENTERED convertFixedPrimitive: "
+             << prim.primitiveType.name << "\n";
   auto primName = prim.primitiveType.name;
   auto loc = convertLocation(prim.location);
 
@@ -2453,9 +2458,16 @@ LogicalResult Context::convertFixedPrimitive(
   if (primName == "pullup" || primName == "pulldown")
     return convertPullGatePrimitive(prim);
 
+  llvm::errs() << "primName = [" << primName << "]\n";
+
   if (primName == "nmos" || primName == "pmos" || primName == "rnmos" ||
-      primName == "rpmos" || primName == "cmos" || primName == "rcmos")
+      primName == "rpmos") {
+    llvm::errs() << "MATCHED NMOS\n";
     return convertMOSSwitchPrimitive(prim);
+  }
+
+  if (primName == "cmos" || primName == "rcmos")
+    return convertCMOSSwitchPrimitive(prim);
 
   // Remaining fixed primitives still need handling
   mlir::emitError(loc) << "unsupported primitive `" << primName << "`";
@@ -2499,26 +2511,33 @@ LogicalResult Context::convertPullGatePrimitive(
   return success();
 }
 
+static const slang::ast::Expression &
+unwrapImplicitConversions(const slang::ast::Expression &expr) {
+  const slang::ast::Expression *cur = &expr;
+  while (cur->kind == slang::ast::ExpressionKind::Conversion) {
+    auto &conv = cur->as<slang::ast::ConversionExpression>();
+    if (!conv.isImplicit())
+      break;
+    cur = &conv.operand();
+  }
+  return *cur;
+}
+
 LogicalResult Context::convertMOSSwitchPrimitive(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
-  assert(
-      prim.primitiveType.name == "nmos" || prim.primitiveType.name == "pmos" ||
-      prim.primitiveType.name == "rnmos" ||
-      prim.primitiveType.name == "rpmos" || prim.primitiveType.name == "cmos" ||
-      prim.primitiveType.name == "rcmos");
+  llvm::errs() << "ENTERED convertMOSSwitchPrimitive\n";
+  assert(prim.primitiveType.name == "nmos" ||
+         prim.primitiveType.name == "pmos" ||
+         prim.primitiveType.name == "rnmos" ||
+         prim.primitiveType.name == "rpmos");
 
   auto loc = convertLocation(prim.location);
   auto primName = prim.primitiveType.name;
 
   auto portConns = prim.getPortConnections();
 
-  if (primName == "cmos" || primName == "rcmos") {
-    assert(portConns.size() == 4 &&
-           "cmos primitive should have exactly 4 ports");
-  } else {
-    assert(portConns.size() == 3 &&
-           "mos primitive should have exactly 3 ports");
-  }
+  assert(portConns.size() == 3 &&
+         "mos primitive should have exactly 3 ports");
 
   auto &outputConn =
       portConns[0]->as<slang::ast::AssignmentExpression>().left();
@@ -2526,10 +2545,19 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   auto outputVal = convertLvalueExpression(outputConn);
   if (!outputVal)
     return failure();
+  llvm::errs() << "Converted output\n";
+
+  auto &inputExpr = unwrapImplicitConversions(*portConns[1]);
+  auto inputWidth = inputExpr.type->getBitWidth();
+  llvm::errs() << "MOS input width: " << inputWidth << "\n";
+
+  if (inputWidth != 1)
+    return mlir::emitError(loc) << "MOS switch input must be 1 bit";
 
   auto inputVal = convertRvalueExpression(*portConns[1]);
   if (!inputVal)
     return failure();
+  llvm::errs() << "Converted input\n";
 
   Value controlVal;
 
@@ -2543,36 +2571,28 @@ LogicalResult Context::convertMOSSwitchPrimitive(
     return moore::ConstantOp::create(builder, loc, type, target);
   };
 
-  if (primName == "cmos" || primName == "rcmos") {
-    auto nControl = convertRvalueExpression(*portConns[2]);
-    if (!nControl)
-      return failure();
+  auto &controlExpr = unwrapImplicitConversions(*portConns[2]);
+  auto controlWidth = controlExpr.type->getBitWidth();
 
-    auto pControl = convertRvalueExpression(*portConns[3]);
-    if (!pControl)
-      return failure();
+  if (controlWidth != 1)
+    return mlir::emitError(loc) << "MOS switch control must be 1 bit";
 
-    auto one = makeLevelConstant(nControl, 1);
-    auto zero = makeLevelConstant(pControl, 0);
+  auto control = convertRvalueExpression(*portConns[2]);
+  if (!control)
+    return failure();
+  llvm::errs() << "Converted control\n";
 
-    auto nEnabled = moore::EqOp::create(builder, loc, nControl, one);
+  int offLevel = (primName == "nmos" || primName == "rnmos") ? 0 : 1;
 
-    auto pEnabled = moore::EqOp::create(builder, loc, pControl, zero);
+  auto offValue = makeLevelConstant(control, offLevel);
 
-    controlVal = moore::AndOp::create(builder, loc, nEnabled, pEnabled);
-  } else {
-    auto control = convertRvalueExpression(*portConns[2]);
-    if (!control)
-      return failure();
-
-    int offLevel = (primName == "nmos" || primName == "rnmos") ? 0 : 1;
-
-    auto offValue = makeLevelConstant(control, offLevel);
-
-    controlVal = moore::CaseEqOp::create(builder, loc, control, offValue);
-  }
+  controlVal = moore::CaseEqOp::create(builder, loc, control, offValue);
 
   auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+
+  auto dstIntType = dyn_cast<moore::IntType>(dstType);
+  if (!dstIntType || dstIntType.getBitSize() != 1)
+    return mlir::emitError(loc) << "MOS switch output must be 1 bit";
 
   auto convertedInput = materializeConversion(dstType, inputVal, false, loc);
   if (!convertedInput)
@@ -2590,32 +2610,142 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   if (!zVal)
     return failure();
 
-  auto condOp = moore::ConditionalOp::create(builder, loc, dstType, controlVal);
+  auto condOp =
+      moore::ConditionalOp::create(builder, loc, dstType, controlVal);
 
   auto &trueBlock = condOp.getTrueRegion().emplaceBlock();
   auto &falseBlock = condOp.getFalseRegion().emplaceBlock();
 
-  bool controlMeansOn = primName == "cmos" || primName == "rcmos";
+  builder.setInsertionPointToStart(&trueBlock);
+  moore::YieldOp::create(builder, loc, zVal);
 
-  {
-    OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(&falseBlock);
+  moore::YieldOp::create(builder, loc, convertedInput);
 
-    if (controlMeansOn) {
-      builder.setInsertionPointToStart(&trueBlock);
-      moore::YieldOp::create(builder, loc, convertedInput);
-
-      builder.setInsertionPointToStart(&falseBlock);
-      moore::YieldOp::create(builder, loc, zVal);
-    } else {
-      builder.setInsertionPointToStart(&trueBlock);
-      moore::YieldOp::create(builder, loc, zVal);
-
-      builder.setInsertionPointToStart(&falseBlock);
-      moore::YieldOp::create(builder, loc, convertedInput);
-    }
-  }
+  builder.setInsertionPointAfter(condOp);
 
   Value result = condOp.getResult();
+
+  moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
+  llvm::errs() << "Created MOS ContinuousAssign\n";
+
+  return success();
+}
+
+LogicalResult Context::convertCMOSSwitchPrimitive(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  assert(prim.primitiveType.name == "cmos" ||
+         prim.primitiveType.name == "rcmos");
+
+  auto loc = convertLocation(prim.location);
+  auto portConns = prim.getPortConnections();
+  assert(portConns.size() == 4 &&
+         "cmos primitive should have exactly 4 ports");
+
+  auto &outputConn =
+      portConns[0]->as<slang::ast::AssignmentExpression>().left();
+  auto outputVal = convertLvalueExpression(outputConn);
+  if (!outputVal)
+    return failure();
+
+  auto &dataExpr = unwrapImplicitConversions(*portConns[1]);
+  if (dataExpr.type->getBitWidth() != 1)
+    return mlir::emitError(loc) << "CMOS switch input must be 1 bit";
+
+  auto &ncontrolExpr = unwrapImplicitConversions(*portConns[2]);
+  if (ncontrolExpr.type->getBitWidth() != 1)
+    return mlir::emitError(loc) << "CMOS switch ncontrol must be 1 bit";
+
+  auto &pcontrolExpr = unwrapImplicitConversions(*portConns[3]);
+  if (pcontrolExpr.type->getBitWidth() != 1)
+    return mlir::emitError(loc) << "CMOS switch pcontrol must be 1 bit";
+
+  auto dataVal = convertRvalueExpression(*portConns[1]);
+  if (!dataVal)
+    return failure();
+  auto ncontrolVal = convertRvalueExpression(*portConns[2]);
+  if (!ncontrolVal)
+    return failure();
+  auto pcontrolVal = convertRvalueExpression(*portConns[3]);
+  if (!pcontrolVal)
+    return failure();
+
+  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  auto dstIntType = dyn_cast<moore::IntType>(dstType);
+  if (!dstIntType || dstIntType.getBitSize() != 1)
+    return mlir::emitError(loc) << "CMOS switch output must be 1 bit";
+
+  auto convertedData = materializeConversion(dstType, dataVal, false, loc);
+  if (!convertedData)
+    return failure();
+
+  auto dstWidth = dstType.getBitSize();
+  assert(dstWidth && "expected fixed-width type for CMOS switch primitive");
+  auto logicType = moore::IntType::getLogic(getContext(), *dstWidth);
+
+  auto makeConst = [&](FVInt val) -> Value {
+    Value c = moore::ConstantOp::create(builder, loc, logicType, val);
+    return materializeConversion(dstType, c, false, loc);
+  };
+  Value zVal = makeConst(FVInt::getAllZ(*dstWidth));
+  Value xVal = makeConst(FVInt::getAllX(*dstWidth));
+  if (!zVal || !xVal)
+    return failure();
+
+  auto makeLevelConstant = [&](Value value, int level) -> Value {
+    auto type = cast<moore::IntType>(value.getType());
+    auto width = type.getBitSize();
+    assert(width && "expected fixed-width MOS control signal");
+    FVInt target(*width, static_cast<uint64_t>(level));
+    return moore::ConstantOp::create(builder, loc, type, target);
+  };
+
+  auto muxZOrData = [&](Value cond) -> Value {
+    auto condOp = moore::ConditionalOp::create(builder, loc, dstType, cond);
+    auto &trueBlk = condOp.getTrueRegion().emplaceBlock();
+    auto &falseBlk = condOp.getFalseRegion().emplaceBlock();
+    builder.setInsertionPointToStart(&trueBlk);
+    moore::YieldOp::create(builder, loc, zVal);
+    builder.setInsertionPointToStart(&falseBlk);
+    moore::YieldOp::create(builder, loc, convertedData);
+    builder.setInsertionPointAfter(condOp);
+    return condOp.getResult();
+  };
+
+  // Lado N: comporta-se como NMOS -- desligado (Z) quando ncontrol === 0.
+  auto nOff = makeLevelConstant(ncontrolVal, 0);
+  auto nIsOff = moore::CaseEqOp::create(builder, loc, ncontrolVal, nOff);
+  Value nResult = muxZOrData(nIsOff);
+
+  // Lado P: comporta-se como PMOS -- desligado (Z) quando pcontrol === 1.
+  auto pOff = makeLevelConstant(pcontrolVal, 1);
+  auto pIsOff = moore::CaseEqOp::create(builder, loc, pcontrolVal, pOff);
+  Value pResult = muxZOrData(pIsOff);
+
+  // Resolve os dois resultados como dois drivers no mesmo fio:
+  //   concordam            -> esse valor
+  //   n é Z (só p dirige)  -> p
+  //   p é Z (só n dirige)  -> n
+  //   caso contrário       -> x (conflito)
+  auto agree = moore::CaseEqOp::create(builder, loc, nResult, pResult);
+  auto nIsZ = moore::CaseEqOp::create(builder, loc, nResult, zVal);
+  auto pIsZ = moore::CaseEqOp::create(builder, loc, pResult, zVal);
+
+  auto resolveConflict = [&](Value cond, Value onTrue, Value onFalse) -> Value {
+    auto condOp = moore::ConditionalOp::create(builder, loc, dstType, cond);
+    auto &trueBlk = condOp.getTrueRegion().emplaceBlock();
+    auto &falseBlk = condOp.getFalseRegion().emplaceBlock();
+    builder.setInsertionPointToStart(&trueBlk);
+    moore::YieldOp::create(builder, loc, onTrue);
+    builder.setInsertionPointToStart(&falseBlk);
+    moore::YieldOp::create(builder, loc, onFalse);
+    builder.setInsertionPointAfter(condOp);
+    return condOp.getResult();
+  };
+
+  Value whenDisagree = resolveConflict(pIsZ, nResult, xVal);
+  Value whenNIsZ = resolveConflict(nIsZ, pResult, whenDisagree);
+  Value result = resolveConflict(agree, nResult, whenNIsZ);
 
   moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
 
