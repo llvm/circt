@@ -2399,6 +2399,55 @@ circuit DomainCreateWithFields:
 
 ;// -----
 FIRRTL version 7.0.0
+circuit DomainRegistry:
+  ; CHECK-LABEL: firrtl.domain @ClockDomain [
+  ; CHECK-SAME:    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+  ; CHECK-SAME:  ]
+  domain ClockDomain:
+    clockGates: Registry<Path>
+
+  extmodule ClockGate:
+
+  ; CHECK-LABEL: firrtl.module @Bar
+  ; CHECK-SAME:    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+  public module Bar:
+    input A: Domain of ClockDomain
+    wire cg: UInt<1>
+
+    ; CHECK: firrtl.instance clockGate interesting_name @ClockGate()
+    inst clockGate of ClockGate
+
+    ; Registry insertion requires an explicit path(...).
+    ; CHECK: %[[PATH0:.+]] = firrtl.unresolved_path "OMReferenceTarget:~DomainRegistry|Bar>clockGate"
+    ; CHECK: firrtl.domain.insert %A["clockGates"], %[[PATH0]] : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>, !firrtl.path
+    insert A.clockGates, path("OMReferenceTarget:~DomainRegistry|Bar>clockGate")
+
+    ; Explicit reference path.
+    ; CHECK: %[[PATH1:.+]] = firrtl.unresolved_path "OMReferenceTarget:~DomainRegistry|Bar>cg"
+    ; CHECK: firrtl.domain.insert %A["clockGates"], %[[PATH1]]
+    insert A.clockGates, path("OMReferenceTarget:~DomainRegistry|Bar>cg")
+
+    ; Explicit instance path.
+    ; CHECK: %[[PATH2:.+]] = firrtl.unresolved_path "OMInstanceTarget:~DomainRegistry|Bar/clockGate:ClockGate"
+    ; CHECK: firrtl.domain.insert %A["clockGates"], %[[PATH2]]
+    insert A.clockGates, path("OMInstanceTarget:~DomainRegistry|Bar/clockGate:ClockGate")
+
+  ; CHECK-LABEL: firrtl.module @DomainRegistry
+  public module DomainRegistry:
+    input A: Domain of ClockDomain
+
+    ; CHECK: %bar1_A = firrtl.instance bar1 interesting_name @Bar
+    inst bar1 of Bar
+    ; CHECK: %bar2_A = firrtl.instance bar2 interesting_name @Bar
+    inst bar2 of Bar
+
+    ; CHECK: firrtl.domain.define %bar1_A, %A
+    domain_define bar1.A = A
+    ; CHECK: firrtl.domain.define %bar2_A, %A
+    domain_define bar2.A = A
+
+;// -----
+FIRRTL version 7.0.0
 circuit UnknownProperties:
   class Foo:
     skip

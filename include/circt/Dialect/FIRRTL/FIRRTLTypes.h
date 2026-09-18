@@ -191,7 +191,8 @@ public:
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
            !llvm::isa<PropertyType, RefType, LHSType, OpenBundleType,
-                      OpenVectorType, FStringType, DomainType>(type);
+                      OpenVectorType, FStringType, RegistryType, DomainType>(
+               type);
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
@@ -332,7 +333,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<AnyRefType, ClassType, StringType, FIntegerType, ListType,
-                     RegistryType, PathType, BoolType, DoubleType>(type);
+                     PathType, BoolType, DoubleType>(type);
   }
 
 protected:
