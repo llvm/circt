@@ -80,6 +80,8 @@ module ESI_PipelineStage # (
   // Did we accept a token this cycle?
   wire a_rcv = a_ready && a_valid;
 
+  // Occupancy. This is the state that has to survive a reset correctly, and it
+  // is two bits wide.
   always @(posedge clk) begin
     if (rst) begin
       l_valid <= 1'b0;
@@ -88,16 +90,13 @@ module ESI_PipelineStage # (
       // If we have an empty output reg due to a transmit and the lookaside is
       // also empty, load the input into the output reg.
       if (xmit && !l_valid) begin
-        x_reg <= a;
         x_valid_reg <= a_rcv;
 
       // If we have an empty output reg due to a transmit and the lookaside is
       // full, load the lookaside into the output reg and put the input in the
       // lookaside buffer.
       end if (xmit && l_valid) begin
-        x_reg <= l;
         x_valid_reg <= 1'b1;
-        l <= a;
         l_valid <= a_rcv;
 
       // If we didn't transmit but we did accept a token:
@@ -107,13 +106,28 @@ module ESI_PipelineStage # (
         assert (~l_valid);
         // If the output reg is occupied, place it in the lookaside reg.
         if (x_valid_reg) begin
-          l <= a;
           l_valid <= 1'b1;
         // If the output reg is empty, put the input there.
         end else begin
-          x_reg <= a;
           x_valid_reg <= 1'b1;
         end
+      end
+    end
+  end
+
+  // Payload. Deliberately *not* under `if (rst)`: only control signals are
+  // reset, payload is allowed to hold its value across resets.
+  always @(posedge clk) begin
+    if (xmit && !l_valid) begin
+      x_reg <= a;
+    end if (xmit && l_valid) begin
+      x_reg <= l;
+      l <= a;
+    end else if (~xmit && a_rcv) begin
+      if (x_valid_reg) begin
+        l <= a;
+      end else begin
+        x_reg <= a;
       end
     end
   end

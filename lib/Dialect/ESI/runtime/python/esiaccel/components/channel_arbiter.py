@@ -76,8 +76,8 @@ def _select_mux(sel: BitsSignal, values: List[BitsSignal], clk: ClockSignal,
     if rem.type.width > 1:
       rem = rem[1:]
     if level in reg_levels:
-      cur = [c.reg(clk, rst) for c in cur]
-      rem = rem.reg(clk, rst)
+      cur = [c.reg(clk) for c in cur]
+      rem = rem.reg(clk)
   return cur[0]
 
 
@@ -529,7 +529,8 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
         for _ in range(tree_latency):
           pipe_valid = pipe_valid.reg(clk, rst)
         pipe_valid = pipe_valid.reg(clk, rst, name="pipe_valid")
-        pipe_beat = sel_bits.reg(clk, rst, name="pipe_beat")
+        # No reset on the beat: it is payload -- not control.
+        pipe_beat = sel_bits.reg(clk, name="pipe_beat")
         fifo = SeqFIFO(beat_type, depth, clk, rst)
         fifo.push(pipe_beat, pipe_valid)
         fifo_pop = Wire(Bits(1), "arb_pop")
