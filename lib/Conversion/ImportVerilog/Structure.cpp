@@ -445,6 +445,7 @@ struct ModuleVisitor : public BaseVisitor {
     using slang::ast::AssignmentExpression;
     using slang::ast::MultiPortSymbol;
     using slang::ast::PortSymbol;
+    using slang::ast::SimpleAssignmentPatternExpression;
 
     if (context.predeclaredInstances.contains(&instNode))
       return success();
@@ -479,6 +480,8 @@ struct ModuleVisitor : public BaseVisitor {
     // ports with their corresponding connection.
     SmallDenseMap<const PortSymbol *, Value> portValues;
     portValues.reserve(moduleType.getNumPorts());
+    SmallDenseMap<const PortSymbol *, const SimpleAssignmentPatternExpression *>
+        outputPatterns;
 
     // Map each InterfacePortSymbol to the connected interface instance.
     SmallDenseMap<const slang::ast::InterfacePortSymbol *,
@@ -568,6 +571,18 @@ struct ModuleVisitor : public BaseVisitor {
       // either attach it to the instance as an operand (for input, inout, and
       // ref ports), or assign an instance output to it (for output ports).
       if (auto *port = con->port.as_if<PortSymbol>()) {
+        // Output patterns are collections of destinations, not aggregate
+        // references. Wire their elements after creating the instance.
+        if (port->direction == ArgumentDirection::Out) {
+          if (auto *pattern =
+                  expr->as_if<SimpleAssignmentPatternExpression>()) {
+            if (auto *existingPort = moduleLowering->portsBySyntaxNode.lookup(
+                    con->port.getSyntax()))
+              port = existingPort;
+            outputPatterns.insert({port, pattern});
+            continue;
+          }
+        }
         // Convert as rvalue for inputs, lvalue for all others.
         auto value = (port->direction == ArgumentDirection::In)
                          ? context.convertRvalueExpression(*expr)
@@ -782,6 +797,20 @@ struct ModuleVisitor : public BaseVisitor {
         context.hierValueSymbols[{&instNode, hierPath.hierName}] = result;
       }
 
+    for (auto &port : moduleLowering->ports) {
+      if (auto *pattern = outputPatterns.lookup(&port.ast)) {
+        auto patternLoc = context.convertLocation(pattern->sourceRange);
+        auto target = context.convertAssignmentTarget(*pattern);
+        if (failed(target) || failed(context.assignToTarget(
+                                  *target, inst.getOutputs()[*port.outputIdx],
+                                  patternLoc, [&](Value lhs, Value rhs) {
+                                    moore::ContinuousAssignOp::create(
+                                        builder, patternLoc, lhs, rhs);
+                                  })))
+          return failure();
+      }
+    }
+
     // Assign output values from the instance to the connected expression.
     for (auto [lvalue, output] : llvm::zip(outputValues, inst.getOutputs())) {
       if (!lvalue)
@@ -849,32 +878,34 @@ struct ModuleVisitor : public BaseVisitor {
   LogicalResult visit(const slang::ast::ContinuousAssignSymbol &assignNode) {
     const auto &expr =
         assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
-    auto lhs = context.convertLvalueExpression(expr.left());
-    if (!lhs)
+    auto target = context.convertAssignmentTarget(expr.left());
+    if (failed(target))
       return failure();
 
-    auto rhs = context.convertRvalueExpression(
-        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+    auto rhs = context.convertRvalueExpression(expr.right(), target->type);
     if (!rhs)
       return failure();
 
-    // Handle delayed assignments.
+    // Evaluate the delay once for all destinations in a pattern.
+    Value delay;
     if (auto *timingCtrl = assignNode.getDelay()) {
       if (auto *ctrl = timingCtrl->as_if<slang::ast::DelayControl>()) {
-        auto delay = context.convertRvalueExpression(
+        delay = context.convertRvalueExpression(
             ctrl->expr, moore::TimeType::get(builder.getContext()));
         if (!delay)
           return failure();
-        moore::DelayedContinuousAssignOp::create(builder, loc, lhs, rhs, delay);
-        return success();
+      } else {
+        mlir::emitError(loc) << "unsupported delay with rise/fall/turn-off";
+        return failure();
       }
-      mlir::emitError(loc) << "unsupported delay with rise/fall/turn-off";
-      return failure();
     }
 
-    // Otherwise this is a regular assignment.
-    moore::ContinuousAssignOp::create(builder, loc, lhs, rhs);
-    return success();
+    return context.assignToTarget(*target, rhs, loc, [&](Value lhs, Value rhs) {
+      if (delay)
+        moore::DelayedContinuousAssignOp::create(builder, loc, lhs, rhs, delay);
+      else
+        moore::ContinuousAssignOp::create(builder, loc, lhs, rhs);
+    });
   }
 
   // Handle procedures.
