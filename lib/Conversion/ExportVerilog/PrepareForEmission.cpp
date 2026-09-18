@@ -866,10 +866,10 @@ static void applyWireLowerings(Block &block,
     Value decl;
     if (isProceduralRegion) {
       decl =
-          LogicOp::create(builder, hwWireOp.getType(), hwWireOp.getNameAttr(),
-                          hwWireOp.getInnerSymAttr());
+          LogicOp::create(builder, hwWireOp.getResult().getType(),
+                          hwWireOp.getNameAttr(), hwWireOp.getInnerSymAttr());
     } else {
-      decl = sv::WireOp::create(builder, hwWireOp.getType(),
+      decl = sv::WireOp::create(builder, hwWireOp.getResult().getType(),
                                 hwWireOp.getNameAttr(),
                                 hwWireOp.getInnerSymAttr());
     }
@@ -899,8 +899,8 @@ static void applyWireLowerings(Block &block,
       builder.setInsertionPointAfterValue(decl);
     auto readOp = sv::ReadInOutOp::create(builder, decl);
 
-    // Replace the HW wire.
-    hwWireOp.replaceAllUsesWith(readOp.getResult());
+    // Replace the HW wire's data result (not the ref result if forceable).
+    hwWireOp.getResult().replaceAllUsesWith(readOp.getResult());
   }
 
   for (auto [hwWireOp, declarePoint, assignPoint] : wireLowerings)
