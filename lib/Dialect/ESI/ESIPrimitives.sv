@@ -95,7 +95,7 @@ module ESI_PipelineStage # (
       // If we have an empty output reg due to a transmit and the lookaside is
       // full, load the lookaside into the output reg and put the input in the
       // lookaside buffer.
-      end if (xmit && l_valid) begin
+      end else if (xmit && l_valid) begin
         x_valid_reg <= 1'b1;
         l_valid <= a_rcv;
 
