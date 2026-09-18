@@ -120,7 +120,7 @@ module ESI_PipelineStage # (
   always @(posedge clk) begin
     if (xmit && !l_valid) begin
       x_reg <= a;
-    end if (xmit && l_valid) begin
+    end else if (xmit && l_valid) begin
       x_reg <= l;
       l <= a;
     end else if (~xmit && a_rcv) begin
