@@ -2505,13 +2505,18 @@ LogicalResult Context::convertPullGatePrimitive(
 }
 
 /// Yields `data` unless it is exactly Z, in which case yields `xVal` instead.
-/// Per IEEE 1800-2023  Section 28.6's table 28-5 for three-state gates, a Z
-/// data input yields X on either the actively-driven or ambiguous-enable path,
-/// and collapses to X in both cases. Known 0/1 data values pass through
-/// unchanged. For three-state gates this depende on the assumption that we
-/// collapse L to 0 and H to 1.
+/// Per IEEE 1800-2023 Section 28.6's table 28-5 for three-state gates, a Z
+/// data input yields X on either the actively-driven or ambiguous-enable path.
+/// Known 0/1 data values pass through unchanged. For three-state gates this
+/// depends on the assumption that we collapse L to 0 and H to 1.
 static Value collapseZToX(OpBuilder &builder, Location loc, Value data,
-                          Value xVal, Value zVal, Type dstType) {
+                          Type dstType) {
+  auto dstIntType = cast<moore::IntType>(dstType);
+  Value xVal =
+      moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllX(1));
+  Value zVal =
+      moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
+
   auto isZ = moore::CaseEqOp::create(builder, loc, data, zVal);
   auto condOp = moore::ConditionalOp::create(builder, loc, dstType, isZ);
   auto &trueBlk = condOp.getTrueRegion().emplaceBlock();
@@ -2520,9 +2525,6 @@ static Value collapseZToX(OpBuilder &builder, Location loc, Value data,
     OpBuilder::InsertionGuard g(builder);
     builder.setInsertionPointToStart(&trueBlk);
     moore::YieldOp::create(builder, loc, xVal);
-  }
-  {
-    OpBuilder::InsertionGuard g(builder);
     builder.setInsertionPointToStart(&falseBlk);
     moore::YieldOp::create(builder, loc, data);
   }
@@ -2576,18 +2578,10 @@ LogicalResult Context::convertThreeStateGatePrimitive(
   Value inactiveConst =
       moore::ConstantOp::create(builder, loc, enType, inactiveLevel, false);
 
-  auto logicType = moore::IntType::getLogic(getContext(), 1);
-  Value zVal = materializeConversion(
-      dstType,
-      moore::ConstantOp::create(builder, loc, logicType, FVInt::getAllZ(1)),
-      false, loc);
-  Value xVal = materializeConversion(
-      dstType,
-      moore::ConstantOp::create(builder, loc, logicType, FVInt::getAllX(1)),
-      false, loc);
+  auto dstIntType = cast<moore::IntType>(dstType);
+  Value zVal =
+      moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
 
-  if (!zVal || !xVal)
-    return failure();
   // Compare enable to what we consider active (0 or 1 depending on type of
   // buffer)
   auto condActive = moore::CaseEqOp::create(builder, loc, enVal, activeConst);
@@ -2596,39 +2590,34 @@ LogicalResult Context::convertThreeStateGatePrimitive(
   auto &activeTrue = activeOp.getTrueRegion().emplaceBlock();
   auto &activeFalse = activeOp.getFalseRegion().emplaceBlock();
 
-  // en == activeValue: buffer is actively driving.
   {
     OpBuilder::InsertionGuard g(builder);
+
+    // en == activeValue: buffer is actively driving.
     builder.setInsertionPointToStart(&activeTrue);
+    moore::YieldOp::create(builder, loc,
+                           collapseZToX(builder, loc, inVal, dstType));
 
-    moore::YieldOp::create(
-        builder, loc, collapseZToX(builder, loc, inVal, xVal, zVal, dstType));
-  }
-  // en != activeValue: buffer is either disabled or state is ambiguous.
-  {
-    OpBuilder::InsertionGuard g(builder);
+    // en != activeValue: buffer is either disabled or its state is ambiguous.
     builder.setInsertionPointToStart(&activeFalse);
-
     auto condInactive =
-        moore::CaseEqOp::create(builder, loc, enVal, inactiveConst).getResult();
+        moore::CaseEqOp::create(builder, loc, enVal, inactiveConst);
     auto inactiveOp =
         moore::ConditionalOp::create(builder, loc, dstType, condInactive);
     auto &inactiveTrue = inactiveOp.getTrueRegion().emplaceBlock();
     auto &inactiveFalse = inactiveOp.getFalseRegion().emplaceBlock();
 
-    // en == inactiveValue: buffer is disabled, output is Z.
     {
-      OpBuilder::InsertionGuard gTrue(builder);
+      OpBuilder::InsertionGuard g2(builder);
+
+      // en == inactiveValue: buffer is disabled, output is Z.
       builder.setInsertionPointToStart(&inactiveTrue);
       moore::YieldOp::create(builder, loc, zVal);
-    }
-    // en == X or Z:  ambiguous enable. Per the spec's L/H symbols map L->0 and
-    // H->1, unknown data collapses to X.
-    {
-      OpBuilder::InsertionGuard gFalse(builder);
+
+      // en is X or Z: ambiguous enable.
       builder.setInsertionPointToStart(&inactiveFalse);
-      moore::YieldOp::create(
-          builder, loc, collapseZToX(builder, loc, inVal, xVal, zVal, dstType));
+      moore::YieldOp::create(builder, loc,
+                             collapseZToX(builder, loc, inVal, dstType));
     }
     moore::YieldOp::create(builder, loc, inactiveOp.getResult());
   }
