@@ -36,3 +36,33 @@ handshake.func @i0(%c : memref<1xi32>) {
   return
 }
 
+// CHECK-LABEL:   handshake.func @two_extmems(
+// CHECK-SAME:          %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, %[[VAL_3:.*]]: none, ...) -> (none, i4, !hw.struct<address: i4, data: i32>, !hw.struct<address: i4, data: i32>)
+// CHECK:           %[[VAL_4:.*]] = constant %[[VAL_3]] {value = 0 : index} : index
+// CHECK:           %[[VAL_5:.*]] = constant %[[VAL_3]] {value = 0 : index} : index
+// CHECK:           %[[VAL_6:.*]] = constant %[[VAL_3]] {value = 0 : index} : index
+// CHECK:           %[[VAL_7:.*]] = constant %[[VAL_3]] {value = 0 : i32} : i32
+// CHECK:           %[[VAL_8:.*]] = constant %[[VAL_3]] {value = 0 : i32} : i32
+// CHECK:           %[[VAL_9:.*]]:2 = fork [2] %[[VAL_0]] : i32
+// CHECK:           %[[VAL_10:.*]] = join %[[VAL_9]]#1 : i32
+// CHECK:           %[[VAL_11:.*]] = arith.index_cast %[[VAL_4]] : index to i4
+// CHECK:           %[[VAL_12:.*]] = arith.index_cast %[[VAL_5]] : index to i4
+// CHECK:           %[[VAL_13:.*]] = hw.struct_create (%[[VAL_12]], %[[VAL_7]]) : !hw.struct<address: i4, data: i32>
+// CHECK:           %[[VAL_14:.*]] = arith.index_cast %[[VAL_6]] : index to i4
+// CHECK:           %[[VAL_15:.*]] = hw.struct_create (%[[VAL_14]], %[[VAL_8]]) : !hw.struct<address: i4, data: i32>
+// CHECK:           sink %[[VAL_9]]#0 : i32
+// CHECK:           %[[VAL_16:.*]] = join %[[VAL_1]], %[[VAL_10]], %[[VAL_2]] : none, none, none
+// CHECK:           return %[[VAL_16]], %[[VAL_11]], %[[VAL_13]], %[[VAL_15]] : none, i4, !hw.struct<address: i4, data: i32>, !hw.struct<address: i4, data: i32>
+// CHECK:         }
+handshake.func @two_extmems(%mem0: memref<10xi32>, %mem1: memref<10xi32>, %argCtrl: none) -> none {
+  %ldAddr = constant %argCtrl {value = 0 : index} : index
+  %stAddr0 = constant %argCtrl {value = 0 : index} : index
+  %stAddr1 = constant %argCtrl {value = 0 : index} : index
+  %stData0 = constant %argCtrl {value = 0 : i32} : i32
+  %stData1 = constant %argCtrl {value = 0 : i32} : i32
+  %ldData, %stCtrl0, %ldCtrl = handshake.extmemory[ld=1, st=1](%mem0 : memref<10xi32>)(%stData0, %stAddr0, %ldAddr) {id = 0 : i32} : (i32, index, index) -> (i32, none, none)
+  %stCtrl1 = handshake.extmemory[ld=0, st=1](%mem1 : memref<10xi32>)(%stData1, %stAddr1) {id = 1 : i32} : (i32, index) -> none
+  sink %ldData : i32
+  %finCtrl = join %stCtrl0, %ldCtrl, %stCtrl1 : none, none, none
+  return %finCtrl : none
+}
