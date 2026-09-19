@@ -12,6 +12,8 @@ circuit LowerToCore:
     printf(clock, enable, "value=%d\n", x)
     fprintf(clock, enable, "out.txt", "value=%d\n", x)
     fprintf(clock, enable, "out%d.txt", x, "value=%d\n", x)
+    fflush(clock, enable, "out%d.txt", x)
+    fflush(clock, enable)
     printf(clock, enable, "{{SimulationTime}}")
 
 ; CHECK-LABEL: hw.module @LowerToCore
@@ -23,22 +25,19 @@ circuit LowerToCore:
 ; CHECK-DAG: [[CLK:%.+]] = seq.from_clock %clock
 ; CHECK-DAG: verif.clocked_assert %pred if %enable, posedge [[CLK]] : i1
 ; CHECK-DAG: [[FMT:%.+]] = sim.fmt.dec %x signed : i4
-; CHECK: [[MSG:%.+]] = sim.fmt.concat ([[LIT]], [[FMT]], [[NL]])
-; CHECK: [[STDERR:%.+]] = sim.stderr_stream
+; CHECK-DAG: [[MSG:%.+]] = sim.fmt.concat ([[LIT]], [[FMT]], [[NL]])
+; CHECK-DAG: [[FMTFILE2:%.+]] = sim.fmt.concat ([[LITFILE1]], [[FMT]], [[LITFILE2]])
+; CHECK-DAG: [[STDERR:%.+]] = sim.stderr_stream
+; CHECK-DAG: [[TIME:%.+]] = sim.fmt.current_time
 ; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[STDERR]]
-; CHECK-NEXT: }
-; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   [[FILE1:%.+]] = sim.get_file [[FMTFILE1]]
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[FILE1]]
-; CHECK-NEXT: }
-; CHECK: [[FMTFILE2:%.+]] = sim.fmt.concat ([[LITFILE1]], [[FMT]], [[LITFILE2]])
-; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   [[FILE2:%.+]] = sim.get_file [[FMTFILE2]]
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[FILE2]]
-; CHECK-NEXT: }
-; CHECK: [[TIME:%.+]] = sim.fmt.current_time
-; CHECK: sim.triggered %clock if %enable {
+; CHECK-NEXT:   [[FILE3:%.+]] = sim.get_file [[FMTFILE2]]
+; CHECK-NEXT:   sim.flush [[FILE3]]
+; CHECK-NEXT:   sim.flush [[STDERR]]
 ; CHECK-NEXT:   sim.proc.print [[TIME]] to [[STDERR]]
 ; CHECK-NEXT: }
 ; CHECK-NOT: sv.assert
