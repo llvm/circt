@@ -261,3 +261,137 @@ module wide_pullup_prim;
     wire [3:0] A;
     pullup n (A);
 endmodule
+
+// CHECK-LABEL: moore.module @TestBufif0
+module TestBufif0(
+  input wire data_in,
+  input wire en_n,
+  output wire data_out
+);
+  // CHECK: [[DATA_IN:%.+]] = moore.net name "data_in" wire : <l1>
+  // CHECK: [[EN_N:%.+]] = moore.net name "en_n" wire : <l1>
+  // CHECK: [[DATA_OUT:%.+]] = moore.net wire : <l1>
+  // CHECK: [[IN:%.+]] = moore.read [[DATA_IN]] : <l1>
+  // CHECK: [[EN:%.+]] = moore.read [[EN_N]] : <l1>
+  // CHECK: [[ACTIVE:%.+]] = moore.constant 0 : l1
+  // CHECK: [[INACTIVE:%.+]] = moore.constant 1 : l1
+  // CHECK: [[Z:%.+]] = moore.constant bZ : l1
+  // CHECK: moore.case_eq [[EN]], [[ACTIVE]] : l1
+  // CHECK: [[RESULT:%.+]] = moore.conditional
+  // CHECK: moore.constant bX : l1
+  // CHECK: moore.constant bZ : l1
+  // CHECK: moore.case_eq [[IN]], %{{.+}} : l1
+  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: moore.yield [[IN]] : l1
+  // CHECK: moore.case_eq [[EN]], [[INACTIVE]] : l1
+  // CHECK: moore.yield [[Z]] : l1
+  // CHECK: moore.constant bX : l1
+  // CHECK: moore.constant bZ : l1
+  // CHECK: moore.case_eq [[IN]], %{{.+}} : l1
+  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: moore.yield [[IN]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  bufif0 bufif0_inst(data_out, data_in, en_n);
+
+endmodule
+
+// CHECK-LABEL: moore.module @TestBufif1
+module TestBufif1(
+  input wire data_in,
+  input wire en_n,
+  output wire data_out
+);
+  // CHECK: [[DATA_IN:%.+]] = moore.net name "data_in" wire : <l1>
+  // CHECK: [[EN_N:%.+]] = moore.net name "en_n" wire : <l1>
+  // CHECK: [[DATA_OUT:%.+]] = moore.net wire : <l1>
+  // CHECK: [[IN:%.+]] = moore.read [[DATA_IN]] : <l1>
+  // CHECK: [[EN:%.+]] = moore.read [[EN_N]] : <l1>
+  // CHECK: [[ACTIVE:%.+]] = moore.constant 1 : l1
+  // CHECK: [[INACTIVE:%.+]] = moore.constant 0 : l1
+  // CHECK: [[Z:%.+]] = moore.constant bZ : l1
+  // CHECK: moore.case_eq [[EN]], [[ACTIVE]] : l1
+  // CHECK: [[RESULT:%.+]] = moore.conditional
+  // CHECK: moore.constant bX : l1
+  // CHECK: moore.constant bZ : l1
+  // CHECK: moore.case_eq [[IN]], %{{.+}} : l1
+  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: moore.yield [[IN]] : l1
+  // CHECK: moore.case_eq [[EN]], [[INACTIVE]] : l1
+  // CHECK: moore.yield [[Z]] : l1
+  // CHECK: moore.constant bX : l1
+  // CHECK: moore.constant bZ : l1
+  // CHECK: moore.case_eq [[IN]], %{{.+}} : l1
+  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: moore.yield [[IN]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  bufif1 bufif1_inst(data_out, data_in, en_n);
+
+endmodule
+
+// CHECK-LABEL: moore.module @TestNotif0
+module TestNotif0(
+  input wire data_in,
+  input wire en_n,
+  output wire data_out
+);
+  // CHECK: [[DATA_IN:%.+]] = moore.net name "data_in" wire : <l1>
+  // CHECK: [[EN_N:%.+]] = moore.net name "en_n" wire : <l1>
+  // CHECK: [[DATA_OUT:%.+]] = moore.net wire : <l1>
+  // CHECK: [[IN:%.+]] = moore.read [[DATA_IN]] : <l1>
+  // CHECK: [[EN:%.+]] = moore.read [[EN_N]] : <l1>
+  // CHECK: [[NOT_IN:%.+]] = moore.not [[IN]] : l1
+  // CHECK: [[ACTIVE:%.+]] = moore.constant 0 : l1
+  // CHECK: [[INACTIVE:%.+]] = moore.constant 1 : l1
+  // CHECK: [[Z:%.+]] = moore.constant bZ : l1
+  // CHECK: moore.case_eq [[EN]], [[ACTIVE]] : l1
+  // CHECK: [[RESULT:%.+]] = moore.conditional
+  // CHECK: moore.constant bX : l1
+  // CHECK: moore.constant bZ : l1
+  // CHECK: moore.case_eq [[NOT_IN]], %{{.+}} : l1
+  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: moore.yield [[NOT_IN]] : l1
+  // CHECK: moore.case_eq [[EN]], [[INACTIVE]] : l1
+  // CHECK: moore.yield [[Z]] : l1
+  // CHECK: moore.constant bX : l1
+  // CHECK: moore.constant bZ : l1
+  // CHECK: moore.case_eq [[NOT_IN]], %{{.+}} : l1
+  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: moore.yield [[NOT_IN]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  notif0 notif0_inst(data_out, data_in, en_n);
+
+endmodule
+
+// CHECK-LABEL: moore.module @TestNotif1
+module TestNotif1(
+  input wire data_in,
+  input wire en_n,
+  output wire data_out
+);
+  // CHECK: [[DATA_IN:%.+]] = moore.net name "data_in" wire : <l1>
+  // CHECK: [[EN_N:%.+]] = moore.net name "en_n" wire : <l1>
+  // CHECK: [[DATA_OUT:%.+]] = moore.net wire : <l1>
+  // CHECK: [[IN:%.+]] = moore.read [[DATA_IN]] : <l1>
+  // CHECK: [[EN:%.+]] = moore.read [[EN_N]] : <l1>
+  // CHECK: [[NOT_IN:%.+]] = moore.not [[IN]] : l1
+  // CHECK: [[ACTIVE:%.+]] = moore.constant 1 : l1
+  // CHECK: [[INACTIVE:%.+]] = moore.constant 0 : l1
+  // CHECK: [[Z:%.+]] = moore.constant bZ : l1
+  // CHECK: moore.case_eq [[EN]], [[ACTIVE]] : l1
+  // CHECK: [[RESULT:%.+]] = moore.conditional
+  // CHECK: moore.constant bX : l1
+  // CHECK: moore.constant bZ : l1
+  // CHECK: moore.case_eq [[NOT_IN]], %{{.+}} : l1
+  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: moore.yield [[NOT_IN]] : l1
+  // CHECK: moore.case_eq [[EN]], [[INACTIVE]] : l1
+  // CHECK: moore.yield [[Z]] : l1
+  // CHECK: moore.constant bX : l1
+  // CHECK: moore.constant bZ : l1
+  // CHECK: moore.case_eq [[NOT_IN]], %{{.+}} : l1
+  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: moore.yield [[NOT_IN]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  notif1 notif1_inst(data_out, data_in, en_n);
+
+endmodule

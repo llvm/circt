@@ -378,6 +378,9 @@ struct Context {
   LogicalResult
   convertPullGatePrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
+  LogicalResult convertThreeStateGatePrimitive(
+      const slang::ast::PrimitiveInstanceSymbol &prim);
+
   /// Helper function to convert a value to its "truthy" boolean value.
   Value convertToBool(Value value);
 
