@@ -2,6 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import json
 import os
 import re
 import shutil
@@ -510,6 +511,50 @@ class Simulator:
     finally:
       if simProc and simProc.proc.poll() is None:
         simProc.force_stop()
+
+
+def load_macro_definitions(path: Path) -> Dict[str, Optional[str]]:
+  """Read RTL macro definitions from a JSON file.
+
+  The file must hold an object mapping macro name to value, where null defines
+  the macro without assigning one::
+
+      {"SPB_256BIT_DATA": "1", "SYNTHESIS": null}
+
+  This lets a source generator that only discovers its macros while running --
+  a build system reading its own project description, for instance -- hand them
+  to the simulator without the caller having to know them up front.
+
+  Args:
+    path: The JSON file to read.
+
+  Returns:
+    The macro mapping, suitable for `get_simulator`'s `macro_definitions`.
+
+  Raises:
+    FileNotFoundError: If *path* does not exist.
+    ValueError: If *path* is not a JSON object of name/value pairs.
+  """
+  if not path.is_file():
+    raise FileNotFoundError(f"Macro definitions file not found: {path}")
+
+  try:
+    definitions = json.loads(path.read_text())
+  except ValueError as e:
+    raise ValueError(f"{path} is not valid JSON: {e}") from e
+
+  if not isinstance(definitions, dict):
+    raise ValueError(f"{path} must contain a JSON object mapping macro name "
+                     f"to value, got {type(definitions).__name__}")
+
+  macros: Dict[str, Optional[str]] = {}
+  for name, value in definitions.items():
+    if value is not None and not isinstance(value, (str, int, float, bool)):
+      raise ValueError(f"{path}: macro '{name}' has a "
+                       f"{type(value).__name__} value; expected a scalar or "
+                       f"null")
+    macros[str(name)] = None if value is None else str(value)
+  return macros
 
 
 def get_simulator(
