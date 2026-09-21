@@ -2571,10 +2571,7 @@ LogicalResult Context::convertThreeStateGatePrimitive(
     return failure();
 
   // Value of enable to be considered active or inactive
-  int activeLevel = (primName == "bufif1" || primName == "notif1") ? 1 : 0;
-  int inactiveLevel = activeLevel ? 0 : 1;
-  Value activeConst =
-      moore::ConstantOp::create(builder, loc, enType, activeLevel, false);
+  int inactiveLevel = (primName == "bufif1" || primName == "notif1") ? 0 : 1;
   Value inactiveConst =
       moore::ConstantOp::create(builder, loc, enType, inactiveLevel, false);
 
@@ -2582,56 +2579,34 @@ LogicalResult Context::convertThreeStateGatePrimitive(
   Value zVal =
       moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
 
-  // Compare enable to what we consider active (0 or 1 depending on type of
+  // Compare enable to what we consider inactive (0 or 1 depending on type of
   // buffer)
-  auto condActive = moore::CaseEqOp::create(builder, loc, enVal, activeConst);
-  auto activeOp =
-      moore::ConditionalOp::create(builder, loc, dstType, condActive);
-  auto &activeTrue = activeOp.getTrueRegion().emplaceBlock();
-  auto &activeFalse = activeOp.getFalseRegion().emplaceBlock();
+  auto condInactive =
+      moore::CaseEqOp::create(builder, loc, enVal, inactiveConst);
+  auto inactiveOp =
+      moore::ConditionalOp::create(builder, loc, dstType, condInactive);
+  auto &inactiveTrue = inactiveOp.getTrueRegion().emplaceBlock();
+  auto &inactiveFalse = inactiveOp.getFalseRegion().emplaceBlock();
 
   {
     OpBuilder::InsertionGuard g(builder);
-
-    // en == activeValue: buffer is actively driving.
-    builder.setInsertionPointToStart(&activeTrue);
+    builder.setInsertionPointToStart(&inactiveTrue);
+    moore::YieldOp::create(builder, loc, zVal);
+    builder.setInsertionPointToStart(&inactiveFalse);
     moore::YieldOp::create(builder, loc,
                            collapseZToX(builder, loc, inVal, dstType));
-
-    // en != activeValue: buffer is either disabled or its state is ambiguous.
-    builder.setInsertionPointToStart(&activeFalse);
-    auto condInactive =
-        moore::CaseEqOp::create(builder, loc, enVal, inactiveConst);
-    auto inactiveOp =
-        moore::ConditionalOp::create(builder, loc, dstType, condInactive);
-    auto &inactiveTrue = inactiveOp.getTrueRegion().emplaceBlock();
-    auto &inactiveFalse = inactiveOp.getFalseRegion().emplaceBlock();
-
-    {
-      OpBuilder::InsertionGuard g2(builder);
-
-      // en == inactiveValue: buffer is disabled, output is Z.
-      builder.setInsertionPointToStart(&inactiveTrue);
-      moore::YieldOp::create(builder, loc, zVal);
-
-      // en is X or Z: ambiguous enable.
-      builder.setInsertionPointToStart(&inactiveFalse);
-      moore::YieldOp::create(builder, loc,
-                             collapseZToX(builder, loc, inVal, dstType));
-    }
-    moore::YieldOp::create(builder, loc, inactiveOp.getResult());
   }
 
-  Value result = activeOp.getResult();
+  Value result = inactiveOp.getResult();
 
   if (prim.getDelay()) {
     const slang::ast::Expression *delayExpr;
     if (const auto *delay3 =
             prim.getDelay()->as_if<slang::ast::Delay3Control>()) {
       if (delay3->expr2 || delay3->expr3)
-        return mlir::emitError(loc)
-               << "only three-state primitives that specify a single delay are "
-                  "currently supported";
+        return mlir::emitError(loc) << "only three-state primitives that "
+                                       "specify a single delay are "
+                                       "currently supported";
       delayExpr = &delay3->expr1;
     } else if (const auto *delay =
                    prim.getDelay()->as_if<slang::ast::DelayControl>()) {
