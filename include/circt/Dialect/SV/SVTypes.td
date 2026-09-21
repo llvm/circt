@@ -17,10 +17,6 @@ include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
-// TODO: The following should go into a `SVTypesImpl.td` if we ever actually
-// define any SV-specific types. Doing so will keep this `SVTypes.td` file
-// includable for other dialects, without polluting their output with SV types.
-class SVType<string name> : TypeDef<SVDialect, name> { }
 
 //===----------------------------------------------------------------------===//
 // InOut type and related helpers.
@@ -53,27 +49,91 @@ class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "sv::getInOutElementType($_self)">;
 
-def UnpackedOpenArrayTypeImpl : SVType<"UnpackedOpenArray"> {
-  let summary = "SystemVerilog unpacked 'open' array";
-  let description = [{
-    This type represents unpacked 'open' array. Open array is a special type that can be
-    used as formal arguments of DPI import statements.
 
-    See SystemVerilog Spec 35.5.6.1.
-  }];
+//===----------------------------------------------------------------------===//
+// SVNet type and related helpers.
+//===----------------------------------------------------------------------===//
 
-  let mnemonic = "open_uarray";
-  let parameters = (ins "::mlir::Type":$elementType);
+def SVNetType : DialectType<SVDialect,
+    CPred<"::circt::hw::type_isa<circt::sv::NetType>($_self)">,
+    "an SV net type", "::circt::sv::NetType">;
 
-  let builders = [
-    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
-      auto *ctx = elementType.getContext();
-      return $_get(ctx, elementType);
-    }]>
-  ];
+// Type constraint that indicates that an operand or result may only be a valid
+// net element type.
+def NetElementType : Type<CPred<"hw::isHWValueType($_self)">,
+                          "a valid net element">;
 
-  let assemblyFormat = "`<` $elementType `>`";
-}
+// This type constraint is used by operations whose asm strings have a type
+// "T" in the asmstring, which constrains an input or output to type `T`, and
+// then constrains another to `!sv.net<T>`.  The "value" and "netValue" are
+// the name of the operand or result for the type sides of this.
+//
+// Note that the netValue must be constrained to being a NetElementType to
+// ensure that functions and other things aren't passed into this.
+class NetTypeConstraint<string value, string netValue>
+  : TypesMatchWith<"type should be element of net type",
+                   value, netValue,
+                   "NetType::get($_self.getContext(), $_self)">;
+
+// This type constraint indicates that the specified value matches the
+// element type of the specified netValue.  It is the dual to
+// NetTypeConstraint used when inference needs to "go the other way".
+//
+// Note that the netValue must be constrained to being a NetElementType to
+// ensure that functions and other things aren't passed into this.
+class NetElementConstraint<string value, string netValue>
+  : TypesMatchWith<"type should be element of net type",
+                   netValue, value, "sv::getNetElementType($_self)">;
+
+//===----------------------------------------------------------------------===//
+// SVVar type and related helpers.
+//===----------------------------------------------------------------------===//
+
+def SVVarType : DialectType<SVDialect,
+    CPred<"::circt::hw::type_isa<circt::sv::VarType>($_self)">,
+    "an SV variable type", "::circt::sv::VarType">;
+
+// Type constraint that indicates that an operand/result may only be a valid
+// var element type.
+def VarElementType : Type<CPred<"hw::isHWValueType($_self)">,
+                          "a valid var element">;
+
+// This type constraint is used by operations whose asm strings have a type
+// "T" in the asmstring, which constrains an input or output to type `T`, and
+// then constrains another to `!sv.var<T>`.  The "value" and "varValue" are
+// the name of the operand or result for the type sides of this.
+//
+// Note that the varValue must be constrained to being a VarElementType to
+// ensure that functions and other things aren't passed into this.
+class VarTypeConstraint<string value, string varValue>
+  : TypesMatchWith<"type should be element of var type",
+                   value, varValue,
+                   "VarType::get($_self.getContext(), $_self)">;
+
+// This type constraint indicates that the specified value matches the
+// element type of the specified varValue.  It is the dual to
+// VarTypeConstraint used when inference needs to "go the other way".
+//
+// Note that the varValue must be constrained to being a VarElementType to
+// ensure that functions and other things aren't passed into this.
+class VarElementConstraint<string value, string varValue>
+  : TypesMatchWith<"type should be element of var type",
+                   varValue, value, "sv::getVarElementType($_self)">;
+
+//===----------------------------------------------------------------------===//
+// SVLvalue type and related helpers.
+//===----------------------------------------------------------------------===//
+
+def SVLvalueType : AnyTypeOf<[SVNetType, SVVarType]>;
+
+class SVLvalueElementConstraint<string value, string lvalue>
+: TypesMatchWith<"type should be element of SV lvalue type",
+lvalue, value, "sv::getLvalueElementType($_self)">;
+
+
+//===----------------------------------------------------------------------===//
+// UnpackedOpenArrayType type 
+//===----------------------------------------------------------------------===//
 
 def UnpackedOpenArrayType : DialectType<SVDialect,
     CPred<"::circt::hw::type_isa<circt::sv::UnpackedOpenArrayType>($_self)">,
