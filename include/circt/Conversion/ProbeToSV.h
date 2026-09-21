@@ -17,8 +17,6 @@ namespace circt {
 #define GEN_PASS_DECL_LOWERPROBETOSV
 #include "circt/Conversion/Passes.h.inc"
 
-std::unique_ptr<mlir::Pass> createLowerProbeToSVPass();
-
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_PROBETOSV_H
