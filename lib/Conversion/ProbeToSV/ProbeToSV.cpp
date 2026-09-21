@@ -326,7 +326,3 @@ void LowerProbeToSVPass::runOnOperation() {
 }
 
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::createLowerProbeToSVPass() {
-  return std::make_unique<LowerProbeToSVPass>();
-}
