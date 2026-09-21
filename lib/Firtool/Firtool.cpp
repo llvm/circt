@@ -152,7 +152,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // Run after inference, layer specialization.
   if (opt.shouldConvertProbesToSignals())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignals());
-  
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInliner());
 
