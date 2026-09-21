@@ -95,16 +95,14 @@ Value ImportVerilog::getSelectIndex(Context &context, Location loc, Value index,
   if (offset == 0) {
     if (range.isDescending())
       return index;
-    else
-      return moore::NegOp::create(builder, loc, index);
+    return moore::NegOp::create(builder, loc, index);
   }
 
   auto offsetConst =
       moore::ConstantOp::create(builder, loc, intType, offset, needSigned);
   if (range.isDescending())
     return moore::SubOp::create(builder, loc, index, offsetConst);
-  else
-    return moore::SubOp::create(builder, loc, offsetConst, index);
+  return moore::SubOp::create(builder, loc, offsetConst, index);
 }
 
 /// Get the currently active timescale as an integer number of femtoseconds.
@@ -389,17 +387,15 @@ struct ExprVisitor {
                                                  value,
                                                  range.translateIndex(lowBit));
             });
-      else
-        return llvm::TypeSwitch<Type, Value>(derefType)
-            .Case<moore::QueueType>([&](moore::QueueType) {
-              mlir::emitError(loc)
-                  << "Unexpected RValue extract on Queue Type!";
-              return Value();
-            })
-            .Default([&](Type) {
-              return moore::ExtractOp::create(builder, loc, resultType, value,
-                                              range.translateIndex(lowBit));
-            });
+      return llvm::TypeSwitch<Type, Value>(derefType)
+          .Case<moore::QueueType>([&](moore::QueueType) {
+            mlir::emitError(loc) << "Unexpected RValue extract on Queue Type!";
+            return Value();
+          })
+          .Default([&](Type) {
+            return moore::ExtractOp::create(builder, loc, resultType, value,
+                                            range.translateIndex(lowBit));
+          });
     }
 
     // Save the queue which is being indexed: this allows us to handle the `$`
@@ -431,16 +427,15 @@ struct ExprVisitor {
                                                   value, lowBit);
           });
 
-    else
-      return llvm::TypeSwitch<Type, Value>(derefType)
-          .Case<moore::QueueType>([&](moore::QueueType) {
-            return moore::DynQueueExtractOp::create(builder, loc, resultType,
-                                                    value, lowBit, lowBit);
-          })
-          .Default([&](Type) {
-            return moore::DynExtractOp::create(builder, loc, resultType, value,
-                                               lowBit);
-          });
+    return llvm::TypeSwitch<Type, Value>(derefType)
+        .Case<moore::QueueType>([&](moore::QueueType) {
+          return moore::DynQueueExtractOp::create(builder, loc, resultType,
+                                                  value, lowBit, lowBit);
+        })
+        .Default([&](Type) {
+          return moore::DynExtractOp::create(builder, loc, resultType, value,
+                                             lowBit);
+        });
   }
 
   /// Handle null assignments to variables.
@@ -611,23 +606,18 @@ struct ExprVisitor {
 
     if (offsetDyn) {
       offsetDyn = getSelectIndex(context, loc, offsetDyn, range);
-      if (isLvalue) {
+      if (isLvalue)
         return moore::DynExtractRefOp::create(builder, loc, resultType, value,
                                               offsetDyn);
-      } else {
-        return moore::DynExtractOp::create(builder, loc, resultType, value,
-                                           offsetDyn);
-      }
-    } else {
-      offsetConst = range.translateIndex(offsetConst);
-      if (isLvalue) {
-        return moore::ExtractRefOp::create(builder, loc, resultType, value,
-                                           offsetConst);
-      } else {
-        return moore::ExtractOp::create(builder, loc, resultType, value,
-                                        offsetConst);
-      }
+      return moore::DynExtractOp::create(builder, loc, resultType, value,
+                                         offsetDyn);
     }
+    offsetConst = range.translateIndex(offsetConst);
+    if (isLvalue)
+      return moore::ExtractRefOp::create(builder, loc, resultType, value,
+                                         offsetConst);
+    return moore::ExtractOp::create(builder, loc, resultType, value,
+                                    offsetConst);
   }
 
   /// Handle concatenations.
@@ -699,8 +689,7 @@ struct ExprVisitor {
     }
     if (isLvalue)
       return moore::ConcatRefOp::create(builder, loc, operands);
-    else
-      return moore::ConcatOp::create(builder, loc, operands);
+    return moore::ConcatOp::create(builder, loc, operands);
   }
 
   // Handles a `ConcatenationExpression` which produces a queue as a result.
@@ -1650,8 +1639,7 @@ struct RvalueExprVisitor : public ExprVisitor {
           lhs.getType(), rhs, expr.right().type->isSigned(), rhs.getLoc());
       if (expr.type->isSigned())
         return createBinary<moore::PowSOp>(lhs, rhsCast);
-      else
-        return createBinary<moore::PowUOp>(lhs, rhsCast);
+      return createBinary<moore::PowUOp>(lhs, rhsCast);
     }
 
     case BinaryOperator::BinaryAnd:
