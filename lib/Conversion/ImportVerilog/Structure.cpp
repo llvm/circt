@@ -2674,31 +2674,57 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
   auto pIsOff = moore::CaseEqOp::create(builder, loc, pcontrolVal, pOff);
   Value pResult = muxZOrData(pIsOff);
 
-  // Resolve the two results as if they were two drivers on the same wire:
-  //   agree              -> that value
-  //   n is Z (only p drives) -> p
-  //   p is Z (only n drives) -> n
-  //   otherwise               -> x (conflict)
   auto agree = moore::CaseEqOp::create(builder, loc, nResult, pResult);
   auto nIsZ = moore::CaseEqOp::create(builder, loc, nResult, zVal);
   auto pIsZ = moore::CaseEqOp::create(builder, loc, pResult, zVal);
 
-  auto resolveConflict = [&](Value cond, Value onTrue, Value onFalse) -> Value {
-    auto condOp = moore::ConditionalOp::create(builder, loc, dstType, cond);
-    auto &trueBlk = condOp.getTrueRegion().emplaceBlock();
-    auto &falseBlk = condOp.getFalseRegion().emplaceBlock();
-    builder.setInsertionPointToStart(&trueBlk);
-    moore::YieldOp::create(builder, loc, onTrue);
-    builder.setInsertionPointToStart(&falseBlk);
-    moore::YieldOp::create(builder, loc, onFalse);
-    builder.setInsertionPointAfter(condOp);
-    return condOp.getResult();
-  };
+  auto outerCond = moore::ConditionalOp::create(builder, loc, dstType, agree);
+  auto &outerTrue = outerCond.getTrueRegion().emplaceBlock();
+  auto &outerFalse = outerCond.getFalseRegion().emplaceBlock();
 
-  Value whenDisagree = resolveConflict(pIsZ, nResult, xVal);
-  Value whenNIsZ = resolveConflict(nIsZ, pResult, whenDisagree);
-  Value result = resolveConflict(agree, nResult, whenNIsZ);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&outerTrue);
+    moore::YieldOp::create(builder, loc, nResult);
+  }
 
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&outerFalse);
+
+    auto middleCond =
+        moore::ConditionalOp::create(builder, loc, dstType, nIsZ);
+    auto &middleTrue = middleCond.getTrueRegion().emplaceBlock();
+    auto &middleFalse = middleCond.getFalseRegion().emplaceBlock();
+
+    {
+      OpBuilder::InsertionGuard innerGuard(builder);
+      builder.setInsertionPointToStart(&middleTrue);
+      moore::YieldOp::create(builder, loc, pResult);
+    }
+
+    {
+      OpBuilder::InsertionGuard innerGuard(builder);
+      builder.setInsertionPointToStart(&middleFalse);
+
+      auto innerCond =
+          moore::ConditionalOp::create(builder, loc, dstType, pIsZ);
+      auto &innerTrue = innerCond.getTrueRegion().emplaceBlock();
+      auto &innerFalse = innerCond.getFalseRegion().emplaceBlock();
+
+      builder.setInsertionPointToStart(&innerTrue);
+      moore::YieldOp::create(builder, loc, nResult);
+      builder.setInsertionPointToStart(&innerFalse);
+      moore::YieldOp::create(builder, loc, xVal);
+
+      builder.setInsertionPointAfter(innerCond);
+      moore::YieldOp::create(builder, loc, innerCond.getResult());
+    }
+
+    moore::YieldOp::create(builder, loc, middleCond.getResult());
+  }
+
+  Value result = outerCond.getResult();
   moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
 
   return success();
