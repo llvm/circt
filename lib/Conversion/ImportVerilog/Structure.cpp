@@ -2535,32 +2535,19 @@ LogicalResult Context::convertMOSSwitchPrimitive(
 
   Value controlVal;
 
-  auto makeLevelConstant = [&](Value value, int level) -> Value {
-    auto type = cast<moore::IntType>(value.getType());
-    auto width = type.getBitSize();
-
-    assert(width && "expected fixed-width MOS control signal");
-
-    FVInt target(*width, static_cast<uint64_t>(level));
-    return moore::ConstantOp::create(builder, loc, type, target);
-  };
-
   auto control = convertRvalueExpression(*portConns[2]);
   if (!control)
     return failure();
 
   auto controlType = cast<moore::IntType>(control.getType());
-  auto controlWidth = controlType.getBitSize();
-
-  if (controlWidth != 1)
+  if (controlType.getBitSize() != 1)
     return mlir::emitError(loc) << "MOS switch control must be 1 bit";
 
   int offLevel = (primName == "nmos" || primName == "rnmos") ? 0 : 1;
-
-  auto offValue = makeLevelConstant(control, offLevel);
+  auto offValue = moore::ConstantOp::create(
+      builder, loc, controlType, FVInt(1, static_cast<uint64_t>(offLevel)));
 
   controlVal = moore::CaseEqOp::create(builder, loc, control, offValue);
-
   auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
 
   auto dstIntType = dyn_cast<moore::IntType>(dstType);
