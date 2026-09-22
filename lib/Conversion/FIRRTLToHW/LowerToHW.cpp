@@ -884,8 +884,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib)
@@ -1003,7 +1002,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
       // If the port is an inout bundle or contains an analog type, then it is
       // implicitly inout.
       hwPort.type = hw::InOutType::get(hwPort.type);
-      hwPort.dir = hw::ModulePort::Direction::InOut;
+      hwPort.dir = hw::ModulePort::Direction::Input;
       hwPort.argNum = numArgs++;
     }
     hwPort.loc = firrtlPort.loc;
@@ -3283,8 +3282,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};

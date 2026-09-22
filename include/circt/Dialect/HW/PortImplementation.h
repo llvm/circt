@@ -34,7 +34,6 @@ struct PortInfo : public ModulePort {
   StringRef getName() const { return name.getValue(); }
   bool isInput() const { return dir == ModulePort::Direction::Input; }
   bool isOutput() const { return dir == ModulePort::Direction::Output; }
-  bool isInOut() const { return dir == ModulePort::Direction::InOut; }
 
   /// Return a unique numeric identifier for this port.
   ssize_t getId() const { return isOutput() ? argNum : (-1 - argNum); };
@@ -59,13 +58,10 @@ struct ModulePortInfo {
                           ArrayRef<PortInfo> outputs) {
     ports.insert(ports.end(), inputs.begin(), inputs.end());
     ports.insert(ports.end(), outputs.begin(), outputs.end());
-    sanitizeInOut();
   }
 
   explicit ModulePortInfo(ArrayRef<PortInfo> mergedPorts)
-      : ports(mergedPorts.begin(), mergedPorts.end()) {
-    sanitizeInOut();
-  }
+      : ports(mergedPorts.begin(), mergedPorts.end()) {}
 
   using iterator = SmallVector<PortInfo>::iterator;
   using const_iterator = SmallVector<PortInfo>::const_iterator;
@@ -85,8 +81,7 @@ struct ModulePortInfo {
     std::function<bool(const PortInfo &)> predicateFn;
     if (input) {
       predicateFn = [](const PortInfo &port) -> bool {
-        return port.dir == ModulePort::Direction::Input ||
-               port.dir == ModulePort::Direction::InOut;
+        return port.dir == ModulePort::Direction::Input;
       };
     } else {
       predicateFn = [](const PortInfo &port) -> bool {
@@ -100,8 +95,7 @@ struct ModulePortInfo {
     std::function<bool(const PortInfo &)> predicateFn;
     if (input) {
       predicateFn = [](const PortInfo &port) -> bool {
-        return port.dir == ModulePort::Direction::Input ||
-               port.dir == ModulePort::Direction::InOut;
+        return port.dir == ModulePort::Direction::Input;
       };
     } else {
       predicateFn = [](const PortInfo &port) -> bool {
@@ -171,15 +165,6 @@ struct ModulePortInfo {
   }
 
 private:
-  // convert input inout<type> -> inout type
-  void sanitizeInOut() {
-    for (auto &p : ports)
-      if (auto inout = dyn_cast<hw::InOutType>(p.type)) {
-        p.type = inout.getElementType();
-        p.dir = ModulePort::Direction::InOut;
-      }
-  }
-
   /// This contains a list of all ports.  Input first.
   SmallVector<PortInfo> ports;
 };

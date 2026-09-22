@@ -28,6 +28,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/ErrorHandling.h"
 
 using namespace circt;
 using namespace circt::hw;
@@ -945,15 +946,6 @@ std::optional<int64_t> TypeAliasType::getBitWidth() const {
 // ModuleType
 //===----------------------------------------------------------------------===//
 
-LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                 ArrayRef<ModulePort> ports) {
-  if (llvm::any_of(ports, [](const ModulePort &port) {
-        return hasHWInOutType(port.type);
-      }))
-    return emitError() << "Ports cannot be inout types";
-  return success();
-}
-
 size_t ModuleType::getPortIdForInputId(size_t idx) {
   assert(idx < getImpl()->inputToAbs.size() && "input port out of range");
   return getImpl()->inputToAbs[idx];
@@ -987,9 +979,6 @@ SmallVector<Type> ModuleType::getInputTypes() {
   for (auto &p : getPorts()) {
     if (p.dir == ModulePort::Direction::Input)
       retval.push_back(p.type);
-    else if (p.dir == ModulePort::Direction::InOut) {
-      retval.push_back(hw::InOutType::get(p.type));
-    }
   }
   return retval;
 }
@@ -1010,10 +999,7 @@ SmallVector<Type> ModuleType::getPortTypes() {
 }
 
 Type ModuleType::getInputType(size_t idx) {
-  const auto &portInfo = getPorts()[getPortIdForInputId(idx)];
-  if (portInfo.dir != ModulePort::InOut)
-    return portInfo.type;
-  return InOutType::get(portInfo.type);
+  return getPorts()[getPortIdForInputId(idx)].type;
 }
 
 Type ModuleType::getOutputType(size_t idx) {
@@ -1079,8 +1065,6 @@ FunctionType ModuleType::getFuncType() {
   for (auto p : getPorts())
     if (p.dir == ModulePort::Input)
       inputs.push_back(p.type);
-    else if (p.dir == ModulePort::InOut)
-      inputs.push_back(InOutType::get(p.type));
     else
       outputs.push_back(p.type);
   return FunctionType::get(getContext(), inputs, outputs);
@@ -1111,9 +1095,8 @@ static StringRef dirToStr(ModulePort::Direction dir) {
     return "input";
   case ModulePort::Direction::Output:
     return "output";
-  case ModulePort::Direction::InOut:
-    return "inout";
   }
+  llvm_unreachable("invalid direction");
 }
 
 static ModulePort::Direction strToDir(StringRef str) {
@@ -1121,8 +1104,6 @@ static ModulePort::Direction strToDir(StringRef str) {
     return ModulePort::Direction::Input;
   if (str == "output")
     return ModulePort::Direction::Output;
-  if (str == "inout")
-    return ModulePort::Direction::InOut;
   llvm::report_fatal_error("invalid direction");
 }
 
@@ -1180,18 +1161,10 @@ ModuleType circt::hw::detail::fnToMod(FunctionType fnty,
   SmallVector<ModulePort> ports;
   if (!inputNames.empty()) {
     for (auto [t, n] : llvm::zip_equal(fnty.getInputs(), inputNames))
-      if (auto iot = dyn_cast<hw::InOutType>(t))
-        ports.push_back({cast<StringAttr>(n), iot.getElementType(),
-                         ModulePort::Direction::InOut});
-      else
-        ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Input});
+      ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Input});
   } else {
     for (auto t : fnty.getInputs())
-      if (auto iot = dyn_cast<hw::InOutType>(t))
-        ports.push_back(
-            {{}, iot.getElementType(), ModulePort::Direction::InOut});
-      else
-        ports.push_back({{}, t, ModulePort::Direction::Input});
+      ports.push_back({{}, t, ModulePort::Direction::Input});
   }
   if (!outputNames.empty()) {
     for (auto [t, n] : llvm::zip_equal(fnty.getResults(), outputNames))
