@@ -2503,18 +2503,6 @@ LogicalResult Context::convertPullGatePrimitive(
   return success();
 }
 
-static const slang::ast::Expression &
-unwrapImplicitConversions(const slang::ast::Expression &expr) {
-  const slang::ast::Expression *cur = &expr;
-  while (cur->kind == slang::ast::ExpressionKind::Conversion) {
-    auto &conv = cur->as<slang::ast::ConversionExpression>();
-    if (!conv.isImplicit())
-      break;
-    cur = &conv.operand();
-  }
-  return *cur;
-}
-
 LogicalResult Context::convertMOSSwitchPrimitive(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
   assert(
@@ -2535,15 +2523,15 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   if (!outputVal)
     return failure();
 
-  auto &inputExpr = unwrapImplicitConversions(*portConns[1]);
-  auto inputWidth = inputExpr.type->getBitWidth();
-
-  if (inputWidth != 1)
-    return mlir::emitError(loc) << "MOS switch input must be 1 bit";
-
   auto inputVal = convertRvalueExpression(*portConns[1]);
   if (!inputVal)
     return failure();
+
+  auto inputType = cast<moore::IntType>(inputVal.getType());
+  auto inputWidth = inputType.getBitSize();
+
+  if (inputWidth != 1)
+    return mlir::emitError(loc) << "MOS switch input must be 1 bit";
 
   Value controlVal;
 
@@ -2557,15 +2545,15 @@ LogicalResult Context::convertMOSSwitchPrimitive(
     return moore::ConstantOp::create(builder, loc, type, target);
   };
 
-  auto &controlExpr = unwrapImplicitConversions(*portConns[2]);
-  auto controlWidth = controlExpr.type->getBitWidth();
-
-  if (controlWidth != 1)
-    return mlir::emitError(loc) << "MOS switch control must be 1 bit";
-
   auto control = convertRvalueExpression(*portConns[2]);
   if (!control)
     return failure();
+
+  auto controlType = cast<moore::IntType>(control.getType());
+  auto controlWidth = controlType.getBitSize();
+
+  if (controlWidth != 1)
+    return mlir::emitError(loc) << "MOS switch control must be 1 bit";
 
   int offLevel = (primName == "nmos" || primName == "rnmos") ? 0 : 1;
 
@@ -2630,27 +2618,26 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
   if (!outputVal)
     return failure();
 
-  auto &dataExpr = unwrapImplicitConversions(*portConns[1]);
-  if (dataExpr.type->getBitWidth() != 1)
-    return mlir::emitError(loc) << "CMOS switch input must be 1 bit";
-
-  auto &ncontrolExpr = unwrapImplicitConversions(*portConns[2]);
-  if (ncontrolExpr.type->getBitWidth() != 1)
-    return mlir::emitError(loc) << "CMOS switch ncontrol must be 1 bit";
-
-  auto &pcontrolExpr = unwrapImplicitConversions(*portConns[3]);
-  if (pcontrolExpr.type->getBitWidth() != 1)
-    return mlir::emitError(loc) << "CMOS switch pcontrol must be 1 bit";
-
   auto dataVal = convertRvalueExpression(*portConns[1]);
   if (!dataVal)
     return failure();
+  auto dataType = cast<moore::IntType>(dataVal.getType());
+  if (dataType.getBitSize() != 1)
+    return mlir::emitError(loc) << "CMOS switch input must be 1 bit";
+
   auto ncontrolVal = convertRvalueExpression(*portConns[2]);
   if (!ncontrolVal)
     return failure();
+  auto ncontrolType = cast<moore::IntType>(ncontrolVal.getType());
+  if (ncontrolType.getBitSize() != 1)
+    return mlir::emitError(loc) << "CMOS switch ncontrol must be 1 bit";
+
   auto pcontrolVal = convertRvalueExpression(*portConns[3]);
   if (!pcontrolVal)
     return failure();
+  auto pcontrolType = cast<moore::IntType>(pcontrolVal.getType());
+  if (pcontrolType.getBitSize() != 1)
+    return mlir::emitError(loc) << "CMOS switch pcontrol must be 1 bit";
 
   auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
   auto dstIntType = dyn_cast<moore::IntType>(dstType);
