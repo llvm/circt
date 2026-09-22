@@ -2635,25 +2635,21 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
   if (!convertedData)
     return failure();
 
-  auto dstWidth = dstType.getBitSize();
-  assert(dstWidth && "expected fixed-width type for CMOS switch primitive");
-  auto logicType = moore::IntType::getLogic(getContext(), *dstWidth);
+  auto logicType = moore::IntType::getLogic(getContext(), 1);
 
   auto makeConst = [&](FVInt val) -> Value {
     Value c = moore::ConstantOp::create(builder, loc, logicType, val);
     return materializeConversion(dstType, c, false, loc);
   };
-  Value zVal = makeConst(FVInt::getAllZ(*dstWidth));
-  Value xVal = makeConst(FVInt::getAllX(*dstWidth));
+  Value zVal = makeConst(FVInt::getAllZ(1));
+  Value xVal = makeConst(FVInt::getAllX(1));
   if (!zVal || !xVal)
     return failure();
 
   auto makeLevelConstant = [&](Value value, int level) -> Value {
     auto type = cast<moore::IntType>(value.getType());
-    auto width = type.getBitSize();
-    assert(width && "expected fixed-width MOS control signal");
-    FVInt target(*width, static_cast<uint64_t>(level));
-    return moore::ConstantOp::create(builder, loc, type, target);
+    return moore::ConstantOp::create(builder, loc, type,
+                                     FVInt(1, static_cast<uint64_t>(level)));
   };
 
   auto muxZOrData = [&](Value cond) -> Value {
