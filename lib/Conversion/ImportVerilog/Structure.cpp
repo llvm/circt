@@ -2692,8 +2692,7 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(&outerFalse);
 
-    auto middleCond =
-        moore::ConditionalOp::create(builder, loc, dstType, nIsZ);
+    auto middleCond = moore::ConditionalOp::create(builder, loc, dstType, nIsZ);
     auto &middleTrue = middleCond.getTrueRegion().emplaceBlock();
     auto &middleFalse = middleCond.getFalseRegion().emplaceBlock();
 
