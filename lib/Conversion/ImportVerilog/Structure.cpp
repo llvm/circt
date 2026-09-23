@@ -2533,7 +2533,7 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   if (inputWidth != 1)
     return mlir::emitError(loc) << "MOS switch input must be 1 bit";
 
-  Value controlVal;
+  Value controlIsOff;
 
   auto control = convertRvalueExpression(*portConns[2]);
   if (!control)
@@ -2547,7 +2547,7 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   auto offValue = moore::ConstantOp::create(
       builder, loc, controlType, FVInt(1, static_cast<uint64_t>(offLevel)));
 
-  controlVal = moore::CaseEqOp::create(builder, loc, control, offValue);
+  controlIsOff = moore::CaseEqOp::create(builder, loc, control, offValue);
   auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
 
   auto dstIntType = dyn_cast<moore::IntType>(dstType);
@@ -2570,7 +2570,7 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   if (!zVal)
     return failure();
 
-  auto condOp = moore::ConditionalOp::create(builder, loc, dstType, controlVal);
+  auto condOp = moore::ConditionalOp::create(builder, loc, dstType, controlIsOff );
 
   auto &trueBlock = condOp.getTrueRegion().emplaceBlock();
   auto &falseBlock = condOp.getFalseRegion().emplaceBlock();
