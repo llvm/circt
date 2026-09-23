@@ -275,14 +275,16 @@ module TestBufif0(
   // CHECK: [[EN:%.+]] = moore.read [[EN_N]] : <l1>
   // CHECK: [[INACTIVE:%.+]] = moore.constant 1 : l1
   // CHECK: [[Z:%.+]] = moore.constant bZ : l1
-  // CHECK: moore.case_eq [[EN]], [[INACTIVE]] : l1
-  // CHECK: [[RESULT:%.+]] = moore.conditional
+  // CHECK: [[COND:%.+]] = moore.case_eq [[EN]], [[INACTIVE]] : l1
+  // CHECK: [[RESULT:%.+]] = moore.conditional [[COND]] : i1 -> l1
   // CHECK: moore.yield [[Z]] : l1
-  // CHECK: moore.constant bX : l1
-  // CHECK: moore.constant bZ : l1
-  // CHECK: moore.case_eq [[IN]], %{{.+}} : l1
-  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: [[INNERX:%.+]] = moore.constant bX : l1
+  // CHECK: [[INNERZ:%.+]] = moore.constant bZ : l1
+  // CHECK: [[ISZ:%.+]] = moore.case_eq [[IN]], [[INNERZ]] : l1
+  // CHECK: [[INNERRESULT:%.+]] = moore.conditional [[ISZ]] : i1 -> l1
+  // CHECK: moore.yield [[INNERX]] : l1
   // CHECK: moore.yield [[IN]] : l1
+  // CHECK: moore.yield [[INNERRESULT]] : l1
   // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
   bufif0 bufif0_inst(data_out, data_in, en_n);
 
@@ -301,14 +303,16 @@ module TestBufif1(
   // CHECK: [[EN:%.+]] = moore.read [[EN_N]] : <l1>
   // CHECK: [[INACTIVE:%.+]] = moore.constant 0 : l1
   // CHECK: [[Z:%.+]] = moore.constant bZ : l1
-  // CHECK: moore.case_eq [[EN]], [[INACTIVE]] : l1
-  // CHECK: [[RESULT:%.+]] = moore.conditional
+  // CHECK: [[COND:%.+]] = moore.case_eq [[EN]], [[INACTIVE]] : l1
+  // CHECK: [[RESULT:%.+]] = moore.conditional [[COND]] : i1 -> l1
   // CHECK: moore.yield [[Z]] : l1
-  // CHECK: moore.constant bX : l1
-  // CHECK: moore.constant bZ : l1
-  // CHECK: moore.case_eq [[IN]], %{{.+}} : l1
-  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: [[INNERX:%.+]] = moore.constant bX : l1
+  // CHECK: [[INNERZ:%.+]] = moore.constant bZ : l1
+  // CHECK: [[ISZ:%.+]] = moore.case_eq [[IN]], [[INNERZ]] : l1
+  // CHECK: [[INNERRESULT:%.+]] = moore.conditional [[ISZ]] : i1 -> l1
+  // CHECK: moore.yield [[INNERX]] : l1
   // CHECK: moore.yield [[IN]] : l1
+  // CHECK: moore.yield [[INNERRESULT]] : l1
   // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
   bufif1 bufif1_inst(data_out, data_in, en_n);
 
@@ -328,14 +332,16 @@ module TestNotif0(
   // CHECK: [[NOT_IN:%.+]] = moore.not [[IN]] : l1
   // CHECK: [[INACTIVE:%.+]] = moore.constant 1 : l1
   // CHECK: [[Z:%.+]] = moore.constant bZ : l1
-  // CHECK: moore.case_eq [[EN]], [[INACTIVE]] : l1
-  // CHECK: [[RESULT:%.+]] = moore.conditional
+  // CHECK: [[COND:%.+]] = moore.case_eq [[EN]], [[INACTIVE]] : l1
+  // CHECK: [[RESULT:%.+]] = moore.conditional [[COND]] : i1 -> l1
   // CHECK: moore.yield [[Z]] : l1
-  // CHECK: moore.constant bX : l1
-  // CHECK: moore.constant bZ : l1
-  // CHECK: moore.case_eq [[NOT_IN]], %{{.+}} : l1
-  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: [[INNERX:%.+]] = moore.constant bX : l1
+  // CHECK: [[INNERZ:%.+]] = moore.constant bZ : l1
+  // CHECK: [[ISZ:%.+]] = moore.case_eq [[NOT_IN]], [[INNERZ]] : l1
+  // CHECK: [[INNERRESULT:%.+]] = moore.conditional [[ISZ]] : i1 -> l1
+  // CHECK: moore.yield [[INNERX]] : l1
   // CHECK: moore.yield [[NOT_IN]] : l1
+  // CHECK: moore.yield [[INNERRESULT]] : l1
   // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
   notif0 notif0_inst(data_out, data_in, en_n);
 
@@ -355,14 +361,16 @@ module TestNotif1(
   // CHECK: [[NOT_IN:%.+]] = moore.not [[IN]] : l1
   // CHECK: [[INACTIVE:%.+]] = moore.constant 0 : l1
   // CHECK: [[Z:%.+]] = moore.constant bZ : l1
-  // CHECK: moore.case_eq [[EN]], [[INACTIVE]] : l1
-  // CHECK: [[RESULT:%.+]] = moore.conditional
+  // CHECK: [[COND:%.+]] = moore.case_eq [[EN]], [[INACTIVE]] : l1
+  // CHECK: [[RESULT:%.+]] = moore.conditional [[COND]] : i1 -> l1
   // CHECK: moore.yield [[Z]] : l1
-  // CHECK: moore.constant bX : l1
-  // CHECK: moore.constant bZ : l1
-  // CHECK: moore.case_eq [[NOT_IN]], %{{.+}} : l1
-  // CHECK: moore.yield %{{.+}} : l1
+  // CHECK: [[INNERX:%.+]] = moore.constant bX : l1
+  // CHECK: [[INNERZ:%.+]] = moore.constant bZ : l1
+  // CHECK: [[ISZ:%.+]] = moore.case_eq [[NOT_IN]], [[INNERZ]] : l1
+  // CHECK: [[INNERRESULT:%.+]] = moore.conditional [[ISZ]] : i1 -> l1
+  // CHECK: moore.yield [[INNERX]] : l1
   // CHECK: moore.yield [[NOT_IN]] : l1
+  // CHECK: moore.yield [[INNERRESULT]] : l1
   // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
   notif1 notif1_inst(data_out, data_in, en_n);
 

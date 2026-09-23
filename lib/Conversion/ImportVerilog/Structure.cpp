@@ -2504,7 +2504,7 @@ LogicalResult Context::convertPullGatePrimitive(
   return success();
 }
 
-/// Yields `data` unless it is exactly Z, in which case yields `xVal` instead.
+/// Yields `data` unless it is exactly Z, in which case yields X instead.
 /// Per IEEE 1800-2023 Section 28.6's table 28-5 for three-state gates, a Z
 /// data input yields X on either the actively-driven or ambiguous-enable path.
 /// Known 0/1 data values pass through unchanged. For three-state gates this
