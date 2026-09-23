@@ -57,14 +57,6 @@ mlir::Type circt::sv::getNetElementType(mlir::Type type) {
   return {};
 }
 
-LogicalResult NetType::verify(function_ref<InFlightDiagnostic()> emitError,
-                              Type elementType) {
-  if (isa_and_nonnull<NetType, VarType>(elementType))
-    return emitError() << "sv.net element type may not itself be an sv.net "
-                          "or sv.var handle";
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // VarType type logic.
 //===----------------------------------------------------------------------===//
@@ -74,31 +66,6 @@ LogicalResult NetType::verify(function_ref<InFlightDiagnostic()> emitError,
 mlir::Type circt::sv::getVarElementType(mlir::Type type) {
   if (auto var = dyn_cast_or_null<VarType>(type))
     return var.getElementType();
-  return {};
-}
-
-LogicalResult VarType::verify(function_ref<InFlightDiagnostic()> emitError,
-                              Type elementType) {
-  if (isa_and_nonnull<VarType, NetType>(elementType))
-    return emitError() << "sv.var element type may not itself be an sv.net "
-                          "or sv.var handle";
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// SV lvalue type logic.
-//===----------------------------------------------------------------------===//
-
-/// Return the element type of an SV lvalue (NetType or VarType) or null if
-/// the operand is not an SV lvalue.
-mlir::Type circt::sv::getLvalueElementType(mlir::Type type) {
-  if (!type)
-    return {};
-  if (auto net = dyn_cast_or_null<NetType>(type))
-    return net.getElementType();
-  if (auto var = dyn_cast_or_null<VarType>(type))
-    return var.getElementType();
-
   return {};
 }
 

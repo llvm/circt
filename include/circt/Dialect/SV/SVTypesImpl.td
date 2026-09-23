@@ -25,7 +25,6 @@ def NetTypeImpl : SVType<"Net"> {
   }];
   let mnemonic = "net";
   let parameters = (ins "::mlir::Type":$elementType);
-  let genVerifyDecl = 1;
 
   let builders = [
     TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
@@ -46,7 +45,6 @@ def VarTypeImpl : SVType<"Var"> {
   }];
   let mnemonic = "var";
   let parameters = (ins "::mlir::Type":$elementType);
-  let genVerifyDecl = 1;
 
   let builders = [
     TypeBuilderWithInferredContext<(ins "Type":$elementType), [{

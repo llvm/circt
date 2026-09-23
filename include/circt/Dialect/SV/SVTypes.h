@@ -36,10 +36,6 @@ mlir::Type getNetElementType(mlir::Type type);
 /// type.
 mlir::Type getVarElementType(mlir::Type type);
 
-/// Return the element type of an SV lvalue type (NetType or VarType) or null if
-/// the operand is not an SV lvalue.
-mlir::Type getLvalueElementType(mlir::Type type);
-
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
 mlir::Type getAnyHWArrayElementType(mlir::Type type);

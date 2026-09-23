@@ -76,8 +76,7 @@ class NetTypeConstraint<string value, string netValue>
                    "NetType::get($_self.getContext(), $_self)">;
 
 // This type constraint indicates that the specified value matches the
-// element type of the specified netValue.  It is the dual to
-// NetTypeConstraint used when inference needs to "go the other way".
+// element type of the specified netValue.
 //
 // Note that the netValue must be constrained to being a NetElementType to
 // ensure that functions and other things aren't passed into this.
@@ -111,25 +110,13 @@ class VarTypeConstraint<string value, string varValue>
                    "VarType::get($_self.getContext(), $_self)">;
 
 // This type constraint indicates that the specified value matches the
-// element type of the specified varValue.  It is the dual to
-// VarTypeConstraint used when inference needs to "go the other way".
+// element type of the specified varValue.
 //
 // Note that the varValue must be constrained to being a VarElementType to
 // ensure that functions and other things aren't passed into this.
 class VarElementConstraint<string value, string varValue>
   : TypesMatchWith<"type should be element of var type",
                    varValue, value, "sv::getVarElementType($_self)">;
-
-//===----------------------------------------------------------------------===//
-// SVLvalue type and related helpers.
-//===----------------------------------------------------------------------===//
-
-def SVLvalueType : AnyTypeOf<[SVNetType, SVVarType]>;
-
-class SVLvalueElementConstraint<string value, string lvalue>
-: TypesMatchWith<"type should be element of SV lvalue type",
-lvalue, value, "sv::getLvalueElementType($_self)">;
-
 
 //===----------------------------------------------------------------------===//
 // UnpackedOpenArrayType type 
