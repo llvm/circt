@@ -349,7 +349,7 @@ def _run_hw_script(script_path: Union[str, Path], config: CosimPytestConfig,
           cwd=tmp_dir,
           timeout=config.timeout_s,
       )
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
       # Codegen is optional for tests that don't use C++ artifacts
       _logger.warning("codegen failed (non-fatal): %s", e)
   return tmp_dir
