@@ -2554,21 +2554,9 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   if (!dstIntType || dstIntType.getBitSize() != 1)
     return mlir::emitError(loc) << "MOS switch output must be 1 bit";
 
-  auto convertedInput = materializeConversion(dstType, inputVal, false, loc);
-  if (!convertedInput)
-    return failure();
+  auto convertedInput = inputVal;
 
-  auto dstWidth = dstType.getBitSize();
-  assert(dstWidth && "expected fixed-width type for MOS switch primitive");
-
-  auto logicType = moore::IntType::getLogic(getContext(), *dstWidth);
-
-  FVInt allZVal = FVInt::getAllZ(*dstWidth);
-  Value zVal = moore::ConstantOp::create(builder, loc, logicType, allZVal);
-
-  zVal = materializeConversion(dstType, zVal, false, loc);
-  if (!zVal)
-    return failure();
+  Value zVal = moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
 
   auto condOp = moore::ConditionalOp::create(builder, loc, dstType, controlIsOff );
 
