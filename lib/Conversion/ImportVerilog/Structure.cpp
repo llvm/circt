@@ -2556,9 +2556,11 @@ LogicalResult Context::convertMOSSwitchPrimitive(
 
   auto convertedInput = inputVal;
 
-  Value zVal = moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
+  Value zVal =
+      moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
 
-  auto condOp = moore::ConditionalOp::create(builder, loc, dstType, controlIsOff );
+  auto condOp =
+      moore::ConditionalOp::create(builder, loc, dstType, controlIsOff);
 
   auto &trueBlock = condOp.getTrueRegion().emplaceBlock();
   auto &falseBlock = condOp.getFalseRegion().emplaceBlock();
