@@ -814,7 +814,13 @@ struct ModuleVisitor : public BaseVisitor {
 
     if (const auto *init = varNode.getInitializer()) {
       auto loweredType = cast<moore::RefType>(ref.getType()).getNestedType();
-      auto initial = context.convertRvalueExpression(*init, loweredType);
+      Value initial;
+      if (context.isStreamingConcatenation(*init))
+        initial = context.convertStreamingAssignmentValue(
+            *init, loweredType, loc, Context::StreamingDirection::Pack);
+      else
+        initial = context.convertRvalueExpression(*init, loweredType);
+
       if (!initial)
         return failure();
       varOp.getInitialMutable().assign(initial);
@@ -837,7 +843,13 @@ struct ModuleVisitor : public BaseVisitor {
 
     if (const auto *init = netNode.getInitializer()) {
       auto loweredType = cast<moore::RefType>(ref.getType()).getNestedType();
-      auto assignment = context.convertRvalueExpression(*init, loweredType);
+      Value assignment;
+      if (context.isStreamingConcatenation(*init))
+        assignment = context.convertStreamingAssignmentValue(
+            *init, loweredType, loc, Context::StreamingDirection::Pack);
+      else
+        assignment = context.convertRvalueExpression(*init, loweredType);
+
       if (!assignment)
         return failure();
       netOp.getAssignmentMutable().assign(assignment);
@@ -853,8 +865,16 @@ struct ModuleVisitor : public BaseVisitor {
     if (!lhs)
       return failure();
 
-    auto rhs = context.convertRvalueExpression(
-        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+    auto targetType = cast<moore::RefType>(lhs.getType()).getNestedType();
+    Value rhs;
+    if (context.isStreamingConcatenation(expr.left()))
+      rhs = context.convertStreamingAssignmentValue(
+          expr.right(), targetType, loc, Context::StreamingDirection::Unpack);
+    else if (context.isStreamingConcatenation(expr.right()))
+      rhs = context.convertStreamingAssignmentValue(
+          expr.right(), targetType, loc, Context::StreamingDirection::Pack);
+    else
+      rhs = context.convertRvalueExpression(expr.right(), targetType);
     if (!rhs)
       return failure();
 
@@ -1369,8 +1389,15 @@ LogicalResult Context::convertCompilation() {
     auto &block = varOp.getInitRegion().emplaceBlock();
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(&block);
-    auto value =
-        convertRvalueExpression(*var->getInitializer(), varOp.getType());
+    const auto &initializer = *var->getInitializer();
+    Value value;
+    if (isStreamingConcatenation(initializer))
+      value = convertStreamingAssignmentValue(initializer, varOp.getType(),
+                                              varOp.getLoc(),
+                                              StreamingDirection::Pack);
+    else
+      value = convertRvalueExpression(initializer, varOp.getType());
+
     if (!value)
       return failure();
     moore::YieldOp::create(builder, varOp.getLoc(), value);

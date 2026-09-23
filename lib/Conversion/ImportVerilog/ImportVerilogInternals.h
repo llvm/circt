@@ -326,6 +326,13 @@ struct Context {
                                 Type requiredType = {});
   Value convertLvalueExpression(const slang::ast::Expression &expr);
 
+  enum class StreamingDirection { Pack, Unpack };
+  bool isStreamingConcatenation(const slang::ast::Expression &expr);
+  /// Convert an assignment value under streaming rules.
+  Value convertStreamingAssignmentValue(const slang::ast::Expression &expr,
+                                        Type targetType, Location loc,
+                                        StreamingDirection direction);
+
   // Convert an assertion expression AST node to MLIR ops.
   Value convertAssertionExpression(const slang::ast::AssertionExpr &expr,
                                    Location loc);
