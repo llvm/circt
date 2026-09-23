@@ -171,6 +171,10 @@ applyEnableTransformation(arc::DefineOp arcOp, arc::StateOp stateOp,
     if (!info)
       return failure();
 
+    // Validate feedback zeros before creating operations or changing the state.
+    if (info.selfArg.hasOneUse() && hw::getBitWidth(info.selfArg.getType()) < 0)
+      return failure();
+
     // We can only pull out the enable to the whole arc when all the output
     // values have the same enable applied to them.
     // TODO: split the arcs such that there is one for each enable kind,
@@ -207,9 +211,17 @@ applyEnableTransformation(arc::DefineOp arcOp, arc::StateOp stateOp,
   stateOp.getEnableMutable().assign(enableCond);
 
   for (size_t i = 0, e = outputOp.getOutputs().size(); i < e; ++i) {
-    if (enableInfos[i].selfArg.hasOneUse())
-      inputs[enableInfos[i].selfArg.getArgNumber()] = hw::ConstantOp::create(
-          builder, stateOp.getLoc(), enableInfos[i].selfArg.getType(), 0);
+    if (enableInfos[i].selfArg.hasOneUse()) {
+      // The feedback value may be an aggregate, but hw.constant only supports
+      // integers. Create an integer zero and bitcast it to the feedback type.
+      auto type = enableInfos[i].selfArg.getType();
+      Value zero = hw::ConstantOp::create(
+          builder, stateOp.getLoc(),
+          builder.getIntegerType(hw::getBitWidth(type)), 0);
+      if (zero.getType() != type)
+        zero = hw::BitcastOp::create(builder, type, zero);
+      inputs[enableInfos[i].selfArg.getArgNumber()] = zero;
+    }
   }
 
   stateOp.getInputsMutable().assign(inputs);
