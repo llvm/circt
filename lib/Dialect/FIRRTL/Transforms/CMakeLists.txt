@@ -11,7 +11,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   Dedup.cpp
   DropConst.cpp
   DropName.cpp
-  LowerSizeOf.cpp
   EliminateWires.cpp
   ExpandWhens.cpp
   ExtractInstances.cpp
@@ -44,6 +43,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerMemory.cpp
   LowerOpenAggs.cpp
   LowerSignatures.cpp
+  LowerSizeOf.cpp
   LowerTypes.cpp
   LowerXMR.cpp
   MaterializeDebugInfo.cpp
