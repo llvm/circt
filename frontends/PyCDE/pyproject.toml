@@ -11,7 +11,7 @@ requires = [
   "numpy",
 
   # MLIR build depends.
-  "nanobind>=2.2",
+  "nanobind==2.9.2",
   "PyYAML",
 ]
 build-backend = "setuptools.build_meta"
