@@ -182,8 +182,18 @@ foldAndEnqueueResults(Operation *user, Value current, Attribute currentAttr,
       continue;
     }
     auto *defOp = operand.getDefiningOp();
-    if (!defOp || !defOp->hasTrait<OpTrait::ConstantLike>())
-      return failure();
+    if (!defOp) {
+      auto diag =
+          user->emitError("operand must be defined by a constant-like "
+                          "operation for folding, but is a block argument");
+      return diag.attachNote(operand.getLoc()) << "operand value defined here";
+    }
+    if (!defOp->hasTrait<OpTrait::ConstantLike>()) {
+      auto diag = user->emitError("operand must be defined by a constant-like "
+                                  "operation for folding, but got '")
+                  << defOp->getName() << "'";
+      return diag.attachNote(defOp->getLoc()) << "operand value defined here";
+    }
 
     SmallVector<OpFoldResult> operandFoldResults;
     if (failed(operand.getDefiningOp()->fold(operandFoldResults))) {
