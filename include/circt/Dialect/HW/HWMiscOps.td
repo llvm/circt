@@ -192,4 +192,30 @@ def EnumCmpOp : HWOp<"enum.cmp", [Pure]> {
   }];
 }
 
+def AttachOp : HWOp<"attach", [ 
+  Commutative, 
+  SameTypeOperands
+]> {
+  let summary = "Attach multiple inout signals together";
+  let description = [{
+    The `hw.attach` operation represents a physical connection (aliasing) 
+    between multiple bidirectional signals. This is the HW-level representation 
+    of FIRRTL's `attach` and typically lowers to a SystemVerilog `alias` 
+    statement or net-list join.
+
+    Example:
+    ```mlir
+    hw.attach %a, %b, %c : !hw.inout<i1>, !hw.inout<i1>, !hw.inout<i1>
+    ```
+  }];
+
+  let arguments = (ins Variadic<InOutType>:$signals);
+  
+  let results = (outs);
+
+  let assemblyFormat = "$signals attr-dict `:` type($signals)";
+
+  let hasVerifier = 1;
+}
+
 #endif // CIRCT_DIALECT_HW_HWMISCOPS_TD
