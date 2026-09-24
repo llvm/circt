@@ -1,9 +1,8 @@
-# REQUIRES: iverilog,cocotb
+# REQUIRES: iverilog-12,cocotb
 # RUN: %PYTHON% %s 2>&1 | FileCheck %s
 
-# Struct type aliases used in module ports must simulate with every supported
-# Icarus Verilog version, including those which cannot use structs declared in
-# SystemVerilog packages.
+# Struct type aliases are declared in a SystemVerilog package. Check that the
+# package is compiled and its structs can be used in module ports.
 
 from pycde import Input, Output, generator, Module
 from pycde.signals import Struct

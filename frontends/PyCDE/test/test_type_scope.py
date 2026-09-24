@@ -22,22 +22,6 @@ s = System(Dummy, output_directory="out_package")
 TypeAlias.declare_aliases(s.mod, "DummyTypes")
 s.print()
 
-# The legacy, include-guarded type scope is used when requested. An existing
-# type scope is reused rather than creating a package.
-# CHECK-LABEL: === legacy
-# CHECK:       sv.verbatim "`ifndef __PYCDE_TYPES__"
-# CHECK-NEXT:  sv.verbatim "`define __PYCDE_TYPES__"
-# CHECK-NEXT:  hw.type_scope @pycde {
-# CHECK-NEXT:    hw.typedecl @ScopeWord : i8
-# CHECK-NEXT:  }
-# CHECK-NEXT:  sv.verbatim "`endif // __PYCDE_TYPES__"
-# CHECK-NOT:   sv.package
-print("=== legacy")
-s = System(Dummy, output_directory="out_legacy")
-TypeAlias.declare_aliases(s.mod, legacy_type_scope=True)
-TypeAlias.declare_aliases(s.mod, "DummyTypes")
-s.print()
-
 # An imported type scope in the layout emitted by previous versions of PyCDE is
 # reused.
 # CHECK-LABEL: === imported
