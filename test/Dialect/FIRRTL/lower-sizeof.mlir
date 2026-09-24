@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-sizeof)), lower-firrtl-to-hw)' --verify-diagnostics --split-input-file %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-sizeof)), lower-firrtl-to-hw)' %s | FileCheck %s
 
 firrtl.circuit "SizeOf" {
   // CHECK-LABEL: hw.module @SizeOf
