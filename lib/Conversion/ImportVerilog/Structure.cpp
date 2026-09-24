@@ -2246,6 +2246,36 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
   return success();
 }
 
+LogicalResult
+Context::assignPrimOutputWithDelay(Value outputVal, Value assignment,
+                                   const slang::ast::TimingControl *delay,
+                                   Location loc) {
+  if (delay) {
+    const slang::ast::Expression *delayExpr;
+    if (const auto *delay3 = delay->as_if<slang::ast::Delay3Control>()) {
+      if (delay3->expr2 || delay3->expr3)
+        return mlir::emitError(loc) << "only primitives that specify a "
+                                       "single delay are currently supported.";
+      delayExpr = &delay3->expr1;
+    } else if (const auto *delayControl =
+                   delay->as_if<slang::ast::DelayControl>()) {
+      delayExpr = &delayControl->expr;
+    } else {
+      llvm_unreachable("unexpected delay control type in primitive instance");
+    }
+    auto delayVal = this->convertRvalueExpression(
+        *delayExpr, moore::TimeType::get(getContext()));
+    if (!delayVal)
+      return failure();
+    moore::DelayedContinuousAssignOp::create(builder, loc, outputVal,
+                                             assignment, delayVal);
+  } else {
+    moore::ContinuousAssignOp::create(builder, loc, outputVal, assignment);
+  }
+
+  return success();
+}
+
 /// Convert a primitive instance.
 LogicalResult Context::convertPrimitiveInstance(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
@@ -2351,31 +2381,7 @@ LogicalResult Context::convertNInputPrimitive(
   if (!result)
     return failure();
 
-  if (prim.getDelay()) {
-    const slang::ast::Expression *delayExpr;
-    if (const auto *delay3 =
-            prim.getDelay()->as_if<slang::ast::Delay3Control>()) {
-      if (delay3->expr2 || delay3->expr3)
-        return mlir::emitError(loc) << "only n-input primitives that specify a "
-                                       "single delay are currently supported.";
-      delayExpr = &delay3->expr1;
-    } else if (const auto *delay =
-                   prim.getDelay()->as_if<slang::ast::DelayControl>()) {
-      delayExpr = &delay->expr;
-    } else {
-      llvm_unreachable("unexpected delay control type in primitive instance");
-    }
-    auto delayVal = this->convertRvalueExpression(
-        *delayExpr, moore::TimeType::get(getContext()));
-    if (!delayVal)
-      return failure();
-    moore::DelayedContinuousAssignOp::create(builder, loc, outputVal, result,
-                                             delayVal);
-  } else {
-    moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
-  }
-
-  return success();
+  return assignPrimOutputWithDelay(outputVal, result, prim.getDelay(), loc);
 }
 
 LogicalResult Context::convertNOutputPrimitive(
@@ -2418,40 +2424,16 @@ LogicalResult Context::convertNOutputPrimitive(
   if (!result)
     return failure();
 
-  Value delayVal;
-  if (prim.getDelay()) {
-    const slang::ast::Expression *delayExpr;
-    if (const auto *delay3 =
-            prim.getDelay()->as_if<slang::ast::Delay3Control>()) {
-      if (delay3->expr2 || delay3->expr3)
-        return mlir::emitError(loc)
-               << "only n-output primitives that specify a "
-                  "single delay are currently supported.";
-      delayExpr = &delay3->expr1;
-    } else if (const auto *delay =
-                   prim.getDelay()->as_if<slang::ast::DelayControl>()) {
-      delayExpr = &delay->expr;
-    } else {
-      llvm_unreachable("unexpected delay control type in primitive instance");
-    }
-    delayVal = this->convertRvalueExpression(
-        *delayExpr, moore::TimeType::get(getContext()));
-    if (!delayVal)
-      return failure();
-  }
-
   for (auto outputVal : outputVals) {
     auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
     Value converted = materializeConversion(dstType, result, false, loc);
     if (!converted)
       return failure();
-    if (delayVal) {
-      moore::DelayedContinuousAssignOp::create(builder, loc, outputVal,
-                                               converted, delayVal);
-    } else {
-      moore::ContinuousAssignOp::create(builder, loc, outputVal, converted);
-    }
+    if (failed(assignPrimOutputWithDelay(outputVal, converted, prim.getDelay(),
+                                         loc)))
+      return failure();
   }
+
   return success();
 }
 
@@ -2606,32 +2588,7 @@ LogicalResult Context::convertThreeStateGatePrimitive(
 
   Value result = inactiveOp.getResult();
 
-  if (prim.getDelay()) {
-    const slang::ast::Expression *delayExpr;
-    if (const auto *delay3 =
-            prim.getDelay()->as_if<slang::ast::Delay3Control>()) {
-      if (delay3->expr2 || delay3->expr3)
-        return mlir::emitError(loc) << "only three-state primitives that "
-                                       "specify a single delay are "
-                                       "currently supported";
-      delayExpr = &delay3->expr1;
-    } else if (const auto *delay =
-                   prim.getDelay()->as_if<slang::ast::DelayControl>()) {
-      delayExpr = &delay->expr;
-    } else {
-      llvm_unreachable("unexpected delay control type in primitive instance");
-    }
-
-    auto delayVal =
-        convertRvalueExpression(*delayExpr, moore::TimeType::get(getContext()));
-    if (!delayVal)
-      return failure();
-    moore::DelayedContinuousAssignOp::create(builder, loc, outputVal, result,
-                                             delayVal);
-  } else {
-    moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
-  }
-  return success();
+  return assignPrimOutputWithDelay(outputVal, result, prim.getDelay(), loc);
 }
 
 namespace {
