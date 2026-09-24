@@ -209,12 +209,18 @@ class TypeAlias(Type):
     raise AttributeError("Only struct and union type aliases have fields")
 
   @staticmethod
-  def declare_aliases(mod, package_name: typing.Optional[str] = None):
-    """Declare all of the registered type aliases in the `sv.package` with the
-    symbol `TYPE_SCOPE`. If that package does not exist, it is created at the
-    start of `mod` so that it is emitted before any of its users; an existing
-    one is assumed to already be correctly placed. If `package_name` is given,
-    the package is emitted with that name in SystemVerilog."""
+  def declare_aliases(mod,
+                      package_name: typing.Optional[str] = None,
+                      legacy_type_scope: bool = False):
+    """Declare all of the registered type aliases in the type scope with the
+    symbol `TYPE_SCOPE`. An existing `sv.package` or `hw.type_scope` with that
+    symbol is reused and assumed to already be correctly placed. Otherwise, one
+    is created at the start of `mod` so that it is emitted before any of its
+    users: an `sv.package` by default or, if `legacy_type_scope` is set, an
+    include-guarded `hw.type_scope` which is replicated into every output file.
+    The latter is for tools which cannot use structs declared in packages (e.g.
+    Icarus Verilog < 12). If `package_name` is given, an `sv.package` is emitted
+    with that name in SystemVerilog."""
     if TypeAlias.RegisteredAliases is None:
       return
 
@@ -229,6 +235,17 @@ class TypeAlias(Type):
     if len(type_scopes) == 1:
       type_scope = type_scopes[0]
       type_scope_body = type_scope.regions[0].blocks[0]
+    elif legacy_type_scope:
+      guard_name = "__PYCDE_TYPES__"
+      with ir.InsertionPoint.at_block_begin(mod.body):
+        sv.VerbatimOp(ir.StringAttr.get("`ifndef " + guard_name), [],
+                      symbols=ir.ArrayAttr.get([]))
+        sv.VerbatimOp(ir.StringAttr.get("`define " + guard_name), [],
+                      symbols=ir.ArrayAttr.get([]))
+        type_scope = hw.TypeScopeOp.create(TypeAlias.TYPE_SCOPE)
+        sv.VerbatimOp(ir.StringAttr.get("`endif // " + guard_name), [],
+                      symbols=ir.ArrayAttr.get([]))
+      type_scope_body = type_scope.body
     else:
       with ir.InsertionPoint.at_block_begin(mod.body):
         type_scope = sv.PackageOp(type_scope_attr)

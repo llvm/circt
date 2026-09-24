@@ -1,6 +1,7 @@
 from .signals import Signal
 from .system import System
 from .module import Module
+from .types import TypeAlias
 
 import builtins
 import inspect
@@ -127,6 +128,13 @@ class _IVerilogHandler:
     ver = ver_match.group(1)
     if float(ver) < 11:
       raise Exception(f"Icarus Verilog version must be >= 11, got {ver}")
+    self.version = float(ver)
+
+  @property
+  def supports_package_structs(self) -> bool:
+    """Icarus Verilog < 12 aborts when a struct or union declared in a package
+    is used outside of that package."""
+    return self.version >= 12
 
   def extra_compile_args(self, pycde_system: System):
     # If no timescale is defined in the source code, icarus assumes a
@@ -167,6 +175,10 @@ def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
   def testbenchmodule_inner(tb_class):
     sys = System([pycde_mod])
     sys.generate()
+    if simhandler is not None and not simhandler.supports_package_structs:
+      # Declare the type aliases in a type scope before the default lowering
+      # can declare them in a package.
+      TypeAlias.declare_aliases(sys.mod, legacy_type_scope=True)
     sys.run_passes()
     sys.emit_outputs()
     testmodule = "test_" + pycde_mod.__name__
