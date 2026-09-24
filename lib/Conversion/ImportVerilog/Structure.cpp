@@ -2560,9 +2560,9 @@ LogicalResult Context::convertThreeStateGatePrimitive(
 
   auto enType = cast<moore::IntType>(enVal.getType());
   auto enWidth = enType.getBitSize();
-  if (!enWidth || *enWidth != 1)
-    return mlir::emitError(loc)
-           << "enable signal of a three-state gate primitive must be 1 bit";
+  // Slang automatically casts enable signals (or errors if it can't be cast)
+  assert(enWidth && *enWidth == 1 &&
+         "enable signal of a three-state gate primitive must be 1 bit");
 
   auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
   auto dstWidth = dstType.getBitSize();
