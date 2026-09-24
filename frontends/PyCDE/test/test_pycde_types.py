@@ -24,6 +24,9 @@ int_alias = TypeAlias(Bits(8), "myname1")
 # CHECK: myname1
 print(int_alias)
 assert int_alias == TypeAlias(Bits(8), "myname1")
+# CHECK: 8
+print(int_alias.width)
+assert int_alias.width == 8
 
 # CHECK: struct { a: Bits<1>, b: SInt<1>}
 struct = StructType({"a": Bit, "b": SInt(1)})
