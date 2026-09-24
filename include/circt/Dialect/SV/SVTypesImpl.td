@@ -16,12 +16,9 @@ class SVType<string name> : TypeDef<SVDialect, name> { }
 
 
 def NetTypeImpl : SVType<"Net"> {
-  let summary = "SystemVerilog net lvalue";
+  let summary = "SystemVerilog net handle";
   let description = [{
-    Represents a SystemVerilog net handle (e.g. a structural wire). The
-    element type must be a valid net element type; it may not itself be a
-    net or var handle, since handles do not nest and net/var kinds do not
-    mix.
+    Represents a SystemVerilog net data object handle (e.g. a structural wire).
   }];
   let mnemonic = "net";
   let parameters = (ins "::mlir::Type":$elementType);
@@ -36,12 +33,9 @@ def NetTypeImpl : SVType<"Net"> {
 }
 
 def VarTypeImpl : SVType<"Var"> {
-  let summary = "SystemVerilog variable lvalue";
+  let summary = "SystemVerilog variable handle";
   let description = [{
-    Represents a SystemVerilog variable handle (e.g. a register or logic
-    declaration). The element type must be a valid var element type; it may
-    not itself be a net or var handle, since handles do not nest and
-    net/var kinds do not mix.
+    Represents a SystemVerilog variable data object handle (e.g., an assignable storage location).
   }];
   let mnemonic = "var";
   let parameters = (ins "::mlir::Type":$elementType);
