@@ -799,6 +799,35 @@ def FormatToStringOp : SimOp<"string.format_to_string", [ProceduralOp]> {
   let assemblyFormat = "$fmtstring attr-dict";
 }
 
+def StringPutOp : SimOp<"string.put", [Pure,
+    AllTypesMatch<["str", "outStr"]>]> {
+  let summary = "Replace a character in a string at a given index.";
+  let description = [{
+    Returns a new string with the character at the specified index replaced
+    by the given character (byte). The index is zero-based, where 0 refers
+    to the first character.
+
+    The input string is not modified. All characters other than the one
+    at the specified index remain unchanged.
+
+    Example:
+    ```mlir
+    %str = sim.string.literal "Hello"
+    %idx = hw.constant 1 : i32
+    %char = hw.constant 97 : i8
+    %outStr = sim.string.put %str[%idx], %char : !sim.dstring
+    // %outStr is "Hallo"; %str is still "Hello"
+    ```
+  }];
+
+  let arguments = (ins DynamicStringType:$str, I32:$index, I8:$character);
+  let results = (outs DynamicStringType:$outStr);
+
+  let assemblyFormat = [{
+    $str `[` $index `]` `,` $character attr-dict `:` type($str)
+  }];
+}
+
 def StringGetOp : SimOp<"string.get", [Pure]> {
   let summary = "Get a character from a string at a given index";
   let description = [{

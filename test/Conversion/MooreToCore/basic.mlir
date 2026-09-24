@@ -677,6 +677,19 @@ moore.module @QueueHierRef() {
   moore.output
 }
 
+// CHECK-LABEL: hw.module @StringIndexAssignment
+moore.module @StringIndexAssignment(in %index : !moore.i32, in %character : !moore.i8) {
+  // CHECK: [[STR:%.+]] = llhd.sig {{.*}} : !sim.dstring
+  %str = moore.variable : <string>
+
+  // CHECK: [[OLD:%.+]] = llhd.prb [[STR]] : !sim.dstring
+  // CHECK: [[NEW:%.+]] = sim.string.put [[OLD]]{{.*}} : !sim.dstring
+  // CHECK: llhd.drv [[STR]], [[NEW]] after {{.*}} : !sim.dstring
+  moore.string.put %str[%index], %character : <string>
+
+  moore.output
+}
+
 // CHECK-LABEL: hw.module @Struct
 moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, in %arg1 : !moore.ref<!moore.struct<{exp_bits: i32, man_bits: i32}>>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
   // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>
