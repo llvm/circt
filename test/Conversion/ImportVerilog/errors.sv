@@ -406,3 +406,12 @@ module InvalidOpenArrayAssign;
   // expected-error @below {{no implicit conversion from 'logic[7:0]$[3]' to 'string$[]'}}
   string strDynArr[] = bytes;
 endmodule
+
+// -----
+
+module UnsupportedOutputArgument;
+  task f(output int x[$]); endtask
+  int q[$];
+  // expected-error @below {{queue lvalue range selections are not supported}}
+  initial f(q[0:1]);
+endmodule

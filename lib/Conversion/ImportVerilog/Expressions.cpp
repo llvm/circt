@@ -2072,6 +2072,8 @@ struct RvalueExprVisitor : public ExprVisitor {
         value = context.convertRvalueExpression(*expr, type);
       } else {
         Value lvalue = context.convertLvalueExpression(*expr);
+        if (!lvalue)
+          return {};
         auto unpackedType = dyn_cast<moore::UnpackedType>(type);
         if (!unpackedType)
           return {};
