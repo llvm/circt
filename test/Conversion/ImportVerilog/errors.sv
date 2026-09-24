@@ -313,6 +313,32 @@ endmodule
 
 // -----
 
+module multi_delay_threestate_prim;
+    wire A, E, Q;
+    // expected-error @below {{only three-state primitives that specify a single delay are currently supported}}
+    bufif0 #(5, 5, 5) b (Q, A, E);
+endmodule
+
+// -----
+
+module wide_output_threestate_prim;
+    wire [1:0] Q;
+    wire A, E;
+    // expected-error @below {{output of a three-state gate primitive must be 1 bit}}
+    bufif1 b (Q, A, E);
+endmodule
+
+// -----
+
+module non_integral_output_threestate_prim;
+    real Q;
+    wire A, E;
+    // expected-error @below {{output of a three-state gate primitive must be 1 bit}}
+    notif0 n (Q, A, E);
+endmodule
+
+// -----
+
 module unsupported_prim(inout A, inout B);
     // expected-error @below {{unsupported instance of primitive `tran`}}
     tran u1 (A, B);
