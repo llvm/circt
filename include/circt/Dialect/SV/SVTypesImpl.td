@@ -19,6 +19,9 @@ def NetTypeImpl : SVType<"Net"> {
   let summary = "SystemVerilog net handle";
   let description = [{
     Represents a SystemVerilog net data object handle (e.g. a structural wire).
+
+    See SystemVerilog Spec 6.5, 6.6, and 6.7
+
   }];
   let mnemonic = "net";
   let parameters = (ins "::mlir::Type":$elementType);
@@ -36,6 +39,8 @@ def VarTypeImpl : SVType<"Var"> {
   let summary = "SystemVerilog variable handle";
   let description = [{
     Represents a SystemVerilog variable data object handle (e.g., an assignable storage location).
+
+    See SystemVerilog Spec 6.5 and 6.8
   }];
   let mnemonic = "var";
   let parameters = (ins "::mlir::Type":$elementType);

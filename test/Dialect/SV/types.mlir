@@ -1,4 +1,4 @@
-// RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt --verify-roundtrip %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL: module
 module {

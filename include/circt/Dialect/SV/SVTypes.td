@@ -63,23 +63,14 @@ def SVNetType : DialectType<SVDialect,
 def NetElementType : Type<CPred<"hw::isHWValueType($_self)">,
                           "a valid net element">;
 
-// This type constraint is used by operations whose asm strings have a type
-// "T" in the asmstring, which constrains an input or output to type `T`, and
-// then constrains another to `!sv.net<T>`.  The "value" and "netValue" are
-// the name of the operand or result for the type sides of this.
-//
-// Note that the netValue must be constrained to being a NetElementType to
-// ensure that functions and other things aren't passed into this.
+
+// Constrains `netValue` to `!sv.net<T>`, inferring the net handle from element type `T`.
 class NetTypeConstraint<string value, string netValue>
   : TypesMatchWith<"type should be element of net type",
                    value, netValue,
                    "NetType::get($_self.getContext(), $_self)">;
 
-// This type constraint indicates that the specified value matches the
-// element type of the specified netValue.
-//
-// Note that the netValue must be constrained to being a NetElementType to
-// ensure that functions and other things aren't passed into this.
+// Constrains `value` to type `T`, inferring the element type from net handle `netValue` (`!sv.net<T>`).
 class NetElementConstraint<string value, string netValue>
   : TypesMatchWith<"type should be element of net type",
                    netValue, value, "sv::getNetElementType($_self)">;
@@ -97,23 +88,13 @@ def SVVarType : DialectType<SVDialect,
 def VarElementType : Type<CPred<"hw::isHWValueType($_self)">,
                           "a valid var element">;
 
-// This type constraint is used by operations whose asm strings have a type
-// "T" in the asmstring, which constrains an input or output to type `T`, and
-// then constrains another to `!sv.var<T>`.  The "value" and "varValue" are
-// the name of the operand or result for the type sides of this.
-//
-// Note that the varValue must be constrained to being a VarElementType to
-// ensure that functions and other things aren't passed into this.
+// Constrains `varValue` to `!sv.var<T>`, inferring the var handle from element type `T`.
 class VarTypeConstraint<string value, string varValue>
   : TypesMatchWith<"type should be element of var type",
                    value, varValue,
                    "VarType::get($_self.getContext(), $_self)">;
 
-// This type constraint indicates that the specified value matches the
-// element type of the specified varValue.
-//
-// Note that the varValue must be constrained to being a VarElementType to
-// ensure that functions and other things aren't passed into this.
+// Constrains `value` to type `T`, inferring the element type from var handle `varValue` (`!sv.var<T>`).
 class VarElementConstraint<string value, string varValue>
   : TypesMatchWith<"type should be element of var type",
                    varValue, value, "sv::getVarElementType($_self)">;
