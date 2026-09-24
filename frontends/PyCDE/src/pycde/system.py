@@ -432,7 +432,7 @@ class System:
       "builtin.module(verify-esi-connections)",
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
-      lambda sys: TypeAlias.declare_aliases(sys.mod),
+      lambda sys: TypeAlias.declare_aliases(sys.mod, sys.name + "Types"),
   ]
 
   # Pipeline dialect lowering passes

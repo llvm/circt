@@ -1,6 +1,8 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 # RUN: FileCheck %s --input-file %t/hw/PolynomialCompute.sv --check-prefix=OUTPUT
+# RUN: FileCheck %s --input-file %t/hw/PolynomialSystemTypes.sv --check-prefix=PACKAGE
+# RUN: FileCheck %s --input-file %t/hw/filelist.f --check-prefix=FILELIST
 
 from __future__ import annotations
 
@@ -139,11 +141,14 @@ poly.print()
 
 poly.emit_outputs()
 
-# OUTPUT-LABEL: `ifndef __PYCDE_TYPES__
-# OUTPUT: `define __PYCDE_TYPES__
-# OUTPUT: typedef struct packed {logic a; } exTypedef;
-# OUTPUT: `endif // __PYCDE_TYPES__
+# PACKAGE-LABEL: package PolynomialSystemTypes;
+# PACKAGE-NEXT:    typedef struct packed {logic a; } exTypedef;
+# PACKAGE-NEXT:  endpackage
 
+# FILELIST-NOT: .sv
+# FILELIST:     PolynomialSystemTypes.sv
+
+# OUTPUT-NOT: typedef
 # OUTPUT-LABEL:   module PolyComputeForCoeff__62__42__6_
 # OUTPUT:    input  [31:0] x,
 # OUTPUT:    output [31:0] y
