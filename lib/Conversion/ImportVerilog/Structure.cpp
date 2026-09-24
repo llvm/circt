@@ -7,11 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
-#include "circt/Dialect/Moore/MooreOps.h"
-#include "circt/Dialect/Moore/MooreTypes.h"
 #include "circt/Support/FVInt.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/Diagnostics.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
