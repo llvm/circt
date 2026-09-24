@@ -82,8 +82,20 @@ class SourceFiles:
       raise FileNotFoundError(f"File {file} does not exist")
 
   def add_dir(self, dir: Path):
-    """Add all the RTL files in a directory to the source list."""
-    for file in sorted(dir.iterdir()):
+    """Add all the RTL files in a directory to the source list. Files named in
+    the directory's `filelist.f` (as written by ExportVerilog) are added first,
+    in the listed order, since some simulators require dependencies such as
+    packages to be compiled before their users."""
+    listed: List[Path] = []
+    filelist = dir / "filelist.f"
+    if filelist.is_file():
+      for line in filelist.read_text().splitlines():
+        line = line.strip()
+        if line and (dir / line).is_file():
+          listed.append(dir / line)
+    for file in listed + sorted(dir.iterdir()):
+      if file in self.user:
+        continue
       if file.is_file() and (file.suffix == ".sv" or file.suffix == ".v"):
         self.user.append(file)
       elif file.is_dir():
