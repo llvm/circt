@@ -800,11 +800,11 @@ firrtl.circuit "ConstantProbe" {
     %c0 = firrtl.constant 0 : !firrtl.uint<1>
     %ref = firrtl.ref.send %c0 : !firrtl.uint<1>
     firrtl.ref.define %probe, %ref : !firrtl.probe<uint<1>>
-    %reg = firrtl.regreset %clock, %reset, %c0 : !firrtl.clock,
+    %reg = firrtl.regreset %clock, %reset, %c0 {resetType = 1 : i32} : !firrtl.clock,
       !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK-NEXT: %[[PROBE:.+]] = firrtl.node sym @{{.*}} %c0_ui1 : !firrtl.uint<1>
-    // CHECK: %reg = firrtl.regreset %clock, %reset, %c0_ui1 :
+    // CHECK: %reg = firrtl.regreset %clock, %reset, %c0_ui1 {resetType = 1 : i32} :
   }
 }
 

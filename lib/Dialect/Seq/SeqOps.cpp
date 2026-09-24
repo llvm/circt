@@ -419,8 +419,8 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
                      Value clk, StringAttr name, Value reset, Value resetValue,
-                     hw::InnerSymAttr innerSym, bool isAsync,
-                     Attribute preset, StringAttr comment) {
+                     hw::InnerSymAttr innerSym, bool isAsync, Attribute preset,
+                     StringAttr comment) {
 
   OpBuilder::InsertionGuard guard(builder);
 

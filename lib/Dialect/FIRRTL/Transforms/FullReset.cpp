@@ -1409,12 +1409,12 @@ LogicalResult FullResetRunner::implementFullReset(Operation *op,
         zero, regOp.getNameAttr(), regOp.getNameKindAttr(),
         regOp.getAnnotations(), regOp.getInnerSymAttr(),
         regOp.getForceableAttr(), regOp.getInitialAttr());
-    // Preserve a non-default clock edge across the reset insertion; the
-    // authoritative `resetType` is stamped later by InferResets.
+    // Preserve a non-default clock edge across the reset insertion.
     if (auto clockEdge = regOp.getClockEdgeAttr())
       newRegOp.setClockEdgeAttr(clockEdge);
     if (type_isa<AsyncResetType>(actualReset.getType()))
-      newRegOp.setResetType(RegResetType::AsyncReset);
+      newRegOp.setResetTypeAttr(RegResetTypeAttr::get(
+          newRegOp.getContext(), RegResetType::AsyncReset));
     copyDeclarationComment(regOp, newRegOp);
     regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
     if (regOp.getForceable())
@@ -1455,7 +1455,8 @@ LogicalResult FullResetRunner::implementFullReset(Operation *op,
     regOp.getResetSignalMutable().assign(actualReset);
     regOp.getResetValueMutable().assign(zero);
     if (type_isa<AsyncResetType>(actualReset.getType()))
-      regOp.setResetType(RegResetType::AsyncReset);
+      regOp.setResetTypeAttr(
+          RegResetTypeAttr::get(regOp.getContext(), RegResetType::AsyncReset));
   }
   return success();
 }

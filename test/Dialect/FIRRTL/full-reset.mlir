@@ -46,7 +46,7 @@ firrtl.circuit "Top" {
 
     // Existing async reset remains untouched.
     // CHECK: %reg2 = firrtl.regreset %clock, %reset, %c1_ui8
-    %reg2 = firrtl.regreset %clock, %reset, %c1_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    %reg2 = firrtl.regreset %clock, %reset, %c1_ui8 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.matchingconnect %reg2, %in : !firrtl.uint<8>
 
     // Existing sync reset is moved to mux.
@@ -115,7 +115,7 @@ firrtl.circuit "Top" {
 
     // Existing async reset remains untouched.
     // CHECK: %reg2 = firrtl.regreset %clock, %reset, %c1_ui8
-    %reg2 = firrtl.regreset %clock, %reset, %c1_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    %reg2 = firrtl.regreset %clock, %reset, %c1_ui8 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.matchingconnect %reg2, %in : !firrtl.uint<8>
 
     // Existing sync reset remains untouched.
@@ -163,10 +163,10 @@ firrtl.circuit "Top" {
     // CHECK: %reg_vector = firrtl.regreset %clock, %reset, %6
     %reg_vector = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<8>, 4>
     // CHECK: [[ENUMCREATE:%[0-9]+]] = firrtl.enumcreate a(%c0_ui0) : (!firrtl.const.uint<0>) -> !firrtl.const.enum<a>
-    // CHECK: %reg_enum_0 = firrtl.regreset %clock, %reset, [[ENUMCREATE]] : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a>, !firrtl.enum<a>
+    // CHECK: %reg_enum_0 = firrtl.regreset %clock, %reset, [[ENUMCREATE]] {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a>, !firrtl.enum<a>
     %reg_enum_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.enum<a>
     // CHECK: [[BITCAST:%[0-9]+]] = firrtl.bitcast %c0_ui1 : (!firrtl.const.uint<1>) -> !firrtl.const.enum<a = 1>
-    // CHECK: %reg_enum_1 = firrtl.regreset %clock, %reset, [[BITCAST]] : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a = 1>, !firrtl.enum<a = 1>
+    // CHECK: %reg_enum_1 = firrtl.regreset %clock, %reset, [[BITCAST]] {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a = 1>, !firrtl.enum<a = 1>
     %reg_enum_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.enum<a = 1>
   }
 }
@@ -235,7 +235,7 @@ firrtl.circuit "FullAsyncNested" {
   firrtl.module @FullAsyncNestedDeeper(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     // CHECK: %io_out_REG = firrtl.regreset %clock, %reset, %c1_ui1
-    %io_out_REG = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<8>
+    %io_out_REG = firrtl.regreset %clock, %reset, %c1_ui1 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<8>
     firrtl.matchingconnect %io_out_REG, %io_in : !firrtl.uint<8>
     firrtl.matchingconnect %io_out, %io_out_REG : !firrtl.uint<8>
   }
@@ -367,7 +367,7 @@ firrtl.circuit "MoveAcrossBlocks1" {
     // CHECK-NEXT: %localReset = firrtl.wire
     // CHECK-NEXT: firrtl.when %ui1 : !firrtl.uint<1> {
     // CHECK-NEXT:   [[RV:%.+]] = firrtl.constant 0
-    // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]] {resetType = 1 : i32}
     // CHECK-NEXT: }
     // CHECK-NEXT: firrtl.when %ui1 : !firrtl.uint<1> {
     // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
@@ -397,7 +397,7 @@ firrtl.circuit "MoveAcrossBlocks2" {
     // CHECK-NEXT: }
     // CHECK-NEXT: firrtl.when %ui1 : !firrtl.uint<1> {
     // CHECK-NEXT:   [[RV:%.+]] = firrtl.constant 0
-    // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]] {resetType = 1 : i32}
     // CHECK-NEXT: }
   }
 }
@@ -436,7 +436,7 @@ firrtl.circuit "MoveAcrossBlocks4" {
     // CHECK-NEXT: %localReset = firrtl.wire
     // CHECK-NEXT: firrtl.when %ui1 : !firrtl.uint<1> {
     // CHECK-NEXT:   [[RV:%.+]] = firrtl.constant 0
-    // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]] {resetType = 1 : i32}
     // CHECK-NEXT: }
     // CHECK-NEXT: [[TMP:%.+]] = firrtl.asAsyncReset %ui1
     // CHECK-NEXT: [[TMP2:%.+]] = firrtl.node [[TMP]] : !firrtl.asyncreset
@@ -454,7 +454,7 @@ firrtl.circuit "SubAccess" {
     %reg6 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
     %2 = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
     firrtl.matchingconnect %2, %in : !firrtl.uint<8>
-    // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<2>, !firrtl.uint<2>
+    // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<2>, !firrtl.uint<2>
     // CHECK-NEXT: %0 = firrtl.mux(%init, %c1_ui2, %reg6)
     // CHECK: firrtl.matchingconnect %reg6, %0
     // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
@@ -487,7 +487,7 @@ firrtl.circuit "top" {
     %resetvalue = firrtl.wire : !firrtl.uint<8>
     %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
     firrtl.matchingconnect %resetvalue, %invalid_ui8 : !firrtl.uint<8>
-    %reg1 = firrtl.regreset %clock, %reset, %resetvalue : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    %reg1 = firrtl.regreset %clock, %reset, %resetvalue {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.matchingconnect %reg1, %in : !firrtl.uint<8>
     firrtl.matchingconnect %out, %reg1 : !firrtl.uint<8>
   }
@@ -631,7 +631,7 @@ firrtl.circuit "Mem"{
     // CHECK:           %[[v1:.+]] = firrtl.subfield %mem_read[en]
     // CHECK:           %[[v2:.+]] = firrtl.subfield %mem_read[clk]
     // CHECK:           %[[v3:.+]] = firrtl.subfield %mem_read[data]
-    // CHECK:           %mem = firrtl.regreset %[[v6:.+]], %reset, {{.*}} : !firrtl.clock, !firrtl.asyncreset, {{.*}}, !firrtl.vector<uint<8>, 8>
+    // CHECK:           %mem = firrtl.regreset %[[v6:.+]], %reset, {{.*}} {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, {{.*}}, !firrtl.vector<uint<8>, 8>
     // CHECK:           %[[v23:.+]] = firrtl.subaccess %mem[%[[v4:.+]]]
     // CHECK:           %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
     // CHECK:           firrtl.matchingconnect %[[v3]], %invalid_ui8 : !firrtl.uint<8>
@@ -740,7 +740,7 @@ firrtl.circuit "WriteMask" {
     } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 2>>,
         !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
     // CHECK-LABEL: firrtl.module public @WriteMask(
-    // CHECK:         %mem = firrtl.regreset %2, %reset, {{.*}} : !firrtl.clock, !firrtl.asyncreset, {{.*}}, !firrtl.vector<vector<uint<8>, 2>, 8>
+    // CHECK:         %mem = firrtl.regreset %2, %reset, {{.*}} {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, {{.*}}, !firrtl.vector<vector<uint<8>, 2>, 8>
     // CHECK:         %mem_write = firrtl.wire  : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
     // CHECK:         %[[v5:.+]] = firrtl.subfield %mem_write[addr]
     // CHECK:         %[[v6:.+]] = firrtl.subfield %mem_write[en]

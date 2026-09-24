@@ -6,8 +6,8 @@
 // RUN:   --pass-pipeline="builtin.module(firrtl.circuit(firrtl.module(firrtl-sfc-compat)))" \
 // RUN:   | FileCheck %s --check-prefix=SFCCOMPAT
 // RUN: circt-opt %s --split-input-file \
-// RUN:   --pass-pipeline="builtin.module(firrtl.circuit(firrtl-infer-resets))" \
-// RUN:   | FileCheck %s --check-prefix=INFERRESETS
+// RUN:   --pass-pipeline="builtin.module(firrtl.circuit(firrtl-infer-resets,firrtl-full-reset))" \
+// RUN:   | FileCheck %s --check-prefix=FULLRESET
 
 // LowerTypes splits an aggregate register into per-field registers; each must
 // keep the non-default clock edge.
@@ -38,11 +38,10 @@ firrtl.module @SFCCompatKeepsClockEdge(in %clk: !firrtl.clock, in %rst: !firrtl.
 
 // -----
 
-// InferResets converts a reset-less register into a regreset when a full async
-// reset is added; the non-default clock edge must survive and the authoritative
-// async resetType must be stamped.
-// INFERRESETS-LABEL: firrtl.module @InferResetsKeepsClockEdge
-// INFERRESETS: firrtl.regreset %clock, %reset, {{.*}} {clockEdge = 1 : i32, resetType = 1 : i32}
+// FullReset converts a reset-less register into a regreset after reset type
+// inference; the non-default clock edge and async resetType must be preserved.
+// FULLRESET-LABEL: firrtl.module @InferResetsKeepsClockEdge
+// FULLRESET: firrtl.regreset %clock, %reset, {{.*}} {clockEdge = 1 : i32, resetType = 1 : i32}
 firrtl.circuit "InferResetsKeepsClockEdge" {
 firrtl.module @InferResetsKeepsClockEdge(in %clock: !firrtl.clock,
     in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}],

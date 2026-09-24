@@ -208,7 +208,7 @@ firrtl.module @DedupDifferentlyChild1(in %clock: !firrtl.clock, in %childReset: 
 // CHECK-SAME: in %childReset: !firrtl.asyncreset
 firrtl.module @DedupDifferentlyChild2(in %clock: !firrtl.clock, in %childReset: !firrtl.reset, in %x: !firrtl.uint<8>, out %z: !firrtl.uint<8>) {
   %c123_ui = firrtl.constant 123 : !firrtl.uint
-  // CHECK: %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint, !firrtl.uint<8>
+  // CHECK: %r = firrtl.regreset %clock, %childReset, %c123_ui {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint, !firrtl.uint<8>
   %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.reset, !firrtl.uint, !firrtl.uint<8>
   firrtl.matchingconnect %r, %x : !firrtl.uint<8>
   firrtl.matchingconnect %z, %r : !firrtl.uint<8>
