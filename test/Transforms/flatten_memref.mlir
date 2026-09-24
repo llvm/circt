@@ -23,7 +23,7 @@ func.func @as_func_arg(%a : memref<4x4xi32>, %i : index) -> i32 {
 
 // CHECK-LABEL:   func @multidim3(
 // CHECK:                    %[[VAL_0:.*]]: memref<210xi32>, %[[VAL_1:.*]]: index, %[[VAL_2:.*]]: index, %[[VAL_3:.*]]: index) -> i32 {
-// CHECK:           %[[VAL_4:.*]] = arith.constant 42 : index
+// CHECK:           %[[VAL_4:.*]] = arith.constant 6 : index
 // CHECK:           %[[VAL_5:.*]] = arith.muli %[[VAL_1]], %[[VAL_4]] : index
 // CHECK:           %[[VAL_6:.*]] = arith.addi %[[VAL_5]], %[[VAL_2]] : index
 // CHECK:           %[[VAL_7:.*]] = arith.constant 7 : index
@@ -41,13 +41,13 @@ func.func @multidim3(%a : memref<5x6x7xi32>, %i1 : index, %i2 : index, %i3 : ind
 
 // CHECK-LABEL:   func @multidim5(
 // CHECK:                    %[[VAL_0:.*]]: memref<18900xi32>, %[[VAL_1:.*]]: index) -> i32 {
-// CHECK:           %[[VAL_2:.*]] = arith.constant 3780 : index
+// CHECK:           %[[VAL_2:.*]] = arith.constant 6 : index
 // CHECK:           %[[VAL_3:.*]] = arith.muli %[[VAL_1]], %[[VAL_2]] : index
 // CHECK:           %[[VAL_4:.*]] = arith.addi %[[VAL_3]], %[[VAL_1]] : index
-// CHECK:           %[[VAL_5:.*]] = arith.constant 630 : index
+// CHECK:           %[[VAL_5:.*]] = arith.constant 7 : index
 // CHECK:           %[[VAL_6:.*]] = arith.muli %[[VAL_4]], %[[VAL_5]] : index
 // CHECK:           %[[VAL_7:.*]] = arith.addi %[[VAL_6]], %[[VAL_1]] : index
-// CHECK:           %[[VAL_8:.*]] = arith.constant 90 : index
+// CHECK:           %[[VAL_8:.*]] = arith.constant 9 : index
 // CHECK:           %[[VAL_9:.*]] = arith.muli %[[VAL_7]], %[[VAL_8]] : index
 // CHECK:           %[[VAL_10:.*]] = arith.addi %[[VAL_9]], %[[VAL_1]] : index
 // CHECK:           %[[VAL_11:.*]] = arith.constant 10 : index
@@ -65,13 +65,13 @@ func.func @multidim5(%a : memref<5x6x7x9x10xi32>, %i : index) -> i32 {
 
 // CHECK-LABEL:   func @multidim5_p2(
 // CHECK:                    %[[VAL_0:.*]]: memref<512xi32>, %[[VAL_1:.*]]: index) -> i32 {
-// CHECK:           %[[VAL_2:.*]] = arith.constant 8 : index
+// CHECK:           %[[VAL_2:.*]] = arith.constant 2 : index
 // CHECK:           %[[VAL_3:.*]] = arith.shli %[[VAL_1]], %[[VAL_2]] : index
 // CHECK:           %[[VAL_4:.*]] = arith.addi %[[VAL_3]], %[[VAL_1]] : index
-// CHECK:           %[[VAL_5:.*]] = arith.constant 6 : index
+// CHECK:           %[[VAL_5:.*]] = arith.constant 3 : index
 // CHECK:           %[[VAL_6:.*]] = arith.shli %[[VAL_4]], %[[VAL_5]] : index
 // CHECK:           %[[VAL_7:.*]] = arith.addi %[[VAL_6]], %[[VAL_1]] : index
-// CHECK:           %[[VAL_8:.*]] = arith.constant 3 : index
+// CHECK:           %[[VAL_8:.*]] = arith.constant 1 : index
 // CHECK:           %[[VAL_9:.*]] = arith.shli %[[VAL_7]], %[[VAL_8]] : index
 // CHECK:           %[[VAL_10:.*]] = arith.addi %[[VAL_9]], %[[VAL_1]] : index
 // CHECK:           %[[VAL_11:.*]] = arith.constant 2 : index
