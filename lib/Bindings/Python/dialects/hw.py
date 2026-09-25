@@ -198,7 +198,7 @@ class ModuleLike:
 
   @staticmethod
   def is_external(op):
-    return len(op.regions[0].blocks) == 0
+    return len(op.regions) == 0 or len(op.regions[0].blocks) == 0
 
   @staticmethod
   def parameters(op) -> list[ParamDeclAttr]:
