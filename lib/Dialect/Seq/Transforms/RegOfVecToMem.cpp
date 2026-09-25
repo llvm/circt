@@ -17,7 +17,9 @@
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 
@@ -36,19 +38,30 @@ namespace seq {
 
 namespace {
 
+struct WriteDataPiece {
+  unsigned lowBit;
+  Value value;
+};
+
+struct WriteLane {
+  unsigned lowBit;
+  unsigned width;
+  Value condition;
+  SmallVector<WriteDataPiece> dataPieces;
+};
+
 struct MemoryPattern {
-  FirRegOp memReg;               // The register array representing memory
-  FirRegOp outputReg;            // Optional output register
-  Value clock;                   // Clock signal
-  Value readAddr;                // Read address
-  Value writeAddr;               // Write address
-  Value writeData;               // Write data
-  Value writeEnable;             // Write enable
-  Value readEnable;              // Read enable (optional)
-  comb::MuxOp writeMux;          // Mux selecting between old/new memory state
-  comb::MuxOp readMux;           // Mux for read data
-  hw::ArrayGetOp readAccess;     // Array read operation
-  hw::ArrayInjectOp writeAccess; // Array write operation
+  FirRegOp memReg;           // The register array representing memory
+  Value clock;               // Clock signal
+  Value readAddr;            // Read address
+  Value writeAddr;           // Write address
+  Value writeEnable;         // Write enable
+  Value writeCondition;      // Condition for an unmasked write
+  Value writeData;           // Full-word write data
+  hw::ArrayGetOp readAccess; // Optional array read operation
+  SmallVector<WriteLane> writeLanes;
+  SmallVector<Operation *> opsToErase;
+  unsigned maskWidth = 1;
 };
 
 class RegOfVecToMemPass : public impl::RegOfVecToMemBase<RegOfVecToMemPass> {
@@ -57,9 +70,16 @@ public:
 
 private:
   bool analyzeMemoryPattern(FirRegOp reg, MemoryPattern &pattern);
+  bool analyzeUpdatedWord(Value value, Value oldWord, Value memValue,
+                          unsigned lowBit,
+                          SmallVectorImpl<WriteDataPiece> &dataPieces,
+                          llvm::SmallPtrSetImpl<Operation *> &matchedOps);
+  bool matchWriteChain(Value value, Value memValue, MemoryPattern &pattern,
+                       llvm::SmallPtrSetImpl<Operation *> &matchedOps);
   bool createFirMemory(MemoryPattern &pattern);
   bool isArrayType(Type type);
   std::optional<std::pair<uint64_t, uint64_t>> getArrayDimensions(Type type);
+  bool valueDependsOn(Value value, Value dependency);
 
   SmallVector<Operation *> opsToErase;
 };
@@ -89,83 +109,238 @@ bool RegOfVecToMemPass::analyzeMemoryPattern(FirRegOp reg,
   if (!isArrayType(reg.getType()))
     return false;
 
-  ArrayGetOp readAccess;
-  ArrayInjectOp writeAccess;
-  comb::MuxOp writeMux;
-  for (auto *user : reg.getResult().getUsers()) {
-    LLVM_DEBUG(llvm::dbgs() << "  Register user: " << *user << "\n");
-    if (auto arrayGet = dyn_cast<hw::ArrayGetOp>(user); !readAccess && arrayGet)
-      readAccess = arrayGet;
-    else if (auto arrayInject = dyn_cast<hw::ArrayInjectOp>(user);
-             !writeAccess && arrayInject)
-      writeAccess = arrayInject;
-    else if (auto mux = dyn_cast<comb::MuxOp>(user); !writeMux && mux)
-      writeMux = mux;
-    else
-      return false;
-  }
-  if (!readAccess || !writeAccess || !writeMux)
+  auto dims = getArrayDimensions(reg.getType());
+  if (!dims)
     return false;
+  unsigned wordWidth = dims->second;
 
   pattern.memReg = reg;
   pattern.clock = reg.getClk();
 
-  // Find the mux that drives this register
-  auto nextValue = reg.getNext();
-  auto mux = nextValue.getDefiningOp<comb::MuxOp>();
-  if (!mux)
-    return false;
+  llvm::SmallPtrSet<Operation *, 32> matchedOps;
+  Value nextValue = reg.getNext();
+  if (!matchWriteChain(nextValue, reg.getResult(), pattern, matchedOps)) {
+    pattern = MemoryPattern{};
+    pattern.memReg = reg;
+    pattern.clock = reg.getClk();
+    matchedOps.clear();
 
-  LLVM_DEBUG(llvm::dbgs() << "  Found driving mux: " << mux << "\n");
-  pattern.writeMux = mux;
-
-  // Check that the mux is only used by this register (safety check)
-  if (!mux.getResult().hasOneUse()) {
-    LLVM_DEBUG(llvm::dbgs() << "  Mux has multiple uses, cannot transform\n");
-    return false;
+    // Slang emits an additional mux around a chain of masked writes. Treat
+    // this as a global write enable if its false value is the memory itself.
+    auto enableMux = nextValue.getDefiningOp<comb::MuxOp>();
+    if (!enableMux || enableMux.getFalseValue() != reg.getResult() ||
+        !matchWriteChain(enableMux.getTrueValue(), reg.getResult(), pattern,
+                         matchedOps))
+      return false;
+    pattern.writeEnable = enableMux.getCond();
+    matchedOps.insert(enableMux);
   }
 
-  // Analyze mux inputs: sel ? write_result : current_memory
-  Value writeResult = mux.getTrueValue();
-  Value currentMemory = mux.getFalseValue();
-
-  // Check if false value is the current register (feedback)
-  if (currentMemory != reg.getResult())
+  if (pattern.writeLanes.empty())
     return false;
 
-  // Look for array_inject operation in write path
-  auto arrayInject = writeResult.getDefiningOp<hw::ArrayInjectOp>();
-  if (!arrayInject)
-    return false;
+  // A single full-word lane is the original unmasked memory pattern.
+  if (pattern.writeLanes.size() == 1 &&
+      pattern.writeLanes.front().lowBit == 0 &&
+      pattern.writeLanes.front().width == wordWidth) {
+    auto &lane = pattern.writeLanes.front();
+    if (lane.dataPieces.size() != 1 || lane.dataPieces.front().lowBit != 0)
+      return false;
+    pattern.writeData = lane.dataPieces.front().value;
+    pattern.writeCondition = lane.condition;
+    pattern.writeLanes.clear();
+  } else {
+    unsigned laneWidth = pattern.writeLanes.front().width;
+    if (laneWidth == 0 || wordWidth % laneWidth != 0)
+      return false;
+    pattern.maskWidth = wordWidth / laneWidth;
 
-  LLVM_DEBUG(llvm::dbgs() << "  Found array_inject: " << arrayInject << "\n");
-  pattern.writeAccess = arrayInject;
-  pattern.writeAddr = arrayInject.getIndex();
-  pattern.writeData = arrayInject.getElement();
-  pattern.writeEnable = mux.getCond();
-
-  // Look for read pattern - find array_get users
-  auto arrayGet = readAccess;
-  LLVM_DEBUG(llvm::dbgs() << "  Found array_get: " << arrayGet << "\n");
-  pattern.readAccess = arrayGet;
-  pattern.readAddr = arrayGet.getIndex();
-
-  // Check if read goes through output register
-  for (auto *readUser : arrayGet.getResult().getUsers()) {
-    if (auto outputReg = dyn_cast<FirRegOp>(readUser)) {
-      if (outputReg.getClk() == pattern.clock) {
-        LLVM_DEBUG(llvm::dbgs()
-                   << "  Found output register: " << outputReg << "\n");
-        pattern.outputReg = outputReg;
-        break;
-      }
+    llvm::DenseSet<unsigned> occupiedLanes;
+    for (auto &lane : pattern.writeLanes) {
+      if (lane.width != laneWidth || lane.lowBit % laneWidth != 0 ||
+          lane.lowBit + lane.width > wordWidth ||
+          !occupiedLanes.insert(lane.lowBit / laneWidth).second)
+        return false;
     }
   }
 
-  bool success = pattern.readAccess != nullptr;
+  // Users which are not part of the write chain may only be a single read
+  // access. A read is optional, which also allows write-only memories.
+  for (auto *user : reg.getResult().getUsers()) {
+    LLVM_DEBUG(llvm::dbgs() << "  Register user: " << *user << "\n");
+    if (matchedOps.contains(user)) {
+      // An array_get used to preserve the first updated word may also be the
+      // externally visible read when the read and write addresses are equal.
+      auto arrayGet = dyn_cast<hw::ArrayGetOp>(user);
+      if (arrayGet &&
+          llvm::any_of(arrayGet.getResult().getUses(), [&](auto &use) {
+            return !matchedOps.contains(use.getOwner());
+          })) {
+        if (pattern.readAccess)
+          return false;
+        pattern.readAccess = arrayGet;
+        pattern.readAddr = arrayGet.getIndex();
+      }
+      continue;
+    }
+    auto arrayGet = dyn_cast<hw::ArrayGetOp>(user);
+    if (!arrayGet || pattern.readAccess)
+      return false;
+    pattern.readAccess = arrayGet;
+    pattern.readAddr = arrayGet.getIndex();
+    matchedOps.insert(arrayGet);
+  }
+
+  matchedOps.insert(reg);
+
+  // Except for the external read result, the matched graph must be closed.
+  // This makes it safe to break the register feedback cycle during cleanup.
+  for (auto *op : matchedOps) {
+    if (pattern.readAccess && op == pattern.readAccess.getOperation())
+      continue;
+    for (Value result : op->getResults())
+      for (auto &use : result.getUses())
+        if (!matchedOps.contains(use.getOwner()))
+          return false;
+  }
+  pattern.opsToErase.assign(matchedOps.begin(), matchedOps.end());
+
+  bool success = pattern.writeData || !pattern.writeLanes.empty();
   LLVM_DEBUG(llvm::dbgs() << "  Pattern analysis "
                           << (success ? "succeeded" : "failed") << "\n");
   return success;
+}
+
+bool RegOfVecToMemPass::valueDependsOn(Value value, Value dependency) {
+  SmallVector<Value> worklist{value};
+  llvm::DenseSet<Value> visited;
+  while (!worklist.empty()) {
+    Value current = worklist.pop_back_val();
+    if (current == dependency)
+      return true;
+    if (!visited.insert(current).second)
+      continue;
+    if (auto *definingOp = current.getDefiningOp())
+      llvm::append_range(worklist, definingOp->getOperands());
+  }
+  return false;
+}
+
+bool RegOfVecToMemPass::analyzeUpdatedWord(
+    Value value, Value oldWord, Value memValue, unsigned lowBit,
+    SmallVectorImpl<WriteDataPiece> &dataPieces,
+    llvm::SmallPtrSetImpl<Operation *> &matchedOps) {
+  unsigned width = cast<IntegerType>(value.getType()).getWidth();
+
+  if (value == oldWord)
+    return lowBit == 0 &&
+           width == cast<IntegerType>(oldWord.getType()).getWidth();
+
+  if (auto extract = value.getDefiningOp<comb::ExtractOp>()) {
+    if (extract.getInput() == oldWord && extract.getLowBit() == lowBit) {
+      matchedOps.insert(extract);
+      return true;
+    }
+  }
+
+  if (auto concat = value.getDefiningOp<comb::ConcatOp>()) {
+    unsigned operandLowBit = lowBit + width;
+    for (Value input : concat.getInputs()) {
+      unsigned inputWidth = cast<IntegerType>(input.getType()).getWidth();
+      operandLowBit -= inputWidth;
+      if (!analyzeUpdatedWord(input, oldWord, memValue, operandLowBit,
+                              dataPieces, matchedOps))
+        return false;
+    }
+    matchedOps.insert(concat);
+    return true;
+  }
+
+  // The replacement data must be independent of the memory being converted.
+  if (valueDependsOn(value, memValue))
+    return false;
+  dataPieces.push_back({lowBit, value});
+  return true;
+}
+
+bool RegOfVecToMemPass::matchWriteChain(
+    Value value, Value memValue, MemoryPattern &pattern,
+    llvm::SmallPtrSetImpl<Operation *> &matchedOps) {
+  if (value == memValue)
+    return true;
+
+  auto mux = value.getDefiningOp<comb::MuxOp>();
+  if (!mux)
+    return false;
+  Value base = mux.getFalseValue();
+  auto inject = mux.getTrueValue().getDefiningOp<hw::ArrayInjectOp>();
+  if (!inject || inject.getInput() != base)
+    return false;
+
+  if (!matchWriteChain(base, memValue, pattern, matchedOps))
+    return false;
+
+  if (pattern.writeAddr && pattern.writeAddr != inject.getIndex())
+    return false;
+  pattern.writeAddr = inject.getIndex();
+
+  WriteLane lane;
+  lane.condition = mux.getCond();
+  unsigned wordWidth =
+      cast<IntegerType>(inject.getElement().getType()).getWidth();
+
+  if (!valueDependsOn(inject.getElement(), memValue)) {
+    lane.lowBit = 0;
+    lane.width = wordWidth;
+    lane.dataPieces.push_back({0, inject.getElement()});
+  } else {
+    // Find the word read from the exact array value updated by this chain
+    // element. This read provides all preserved slices of the reconstructed
+    // word.
+    SmallVector<hw::ArrayGetOp> arrayGets;
+    SmallVector<Value> worklist{inject.getElement()};
+    llvm::SmallPtrSet<Operation *, 16> visited;
+    while (!worklist.empty()) {
+      Value current = worklist.pop_back_val();
+      auto *definingOp = current.getDefiningOp();
+      if (!definingOp || !visited.insert(definingOp).second)
+        continue;
+      if (auto arrayGet = dyn_cast<hw::ArrayGetOp>(definingOp)) {
+        if (arrayGet.getInput() == base &&
+            arrayGet.getIndex() == inject.getIndex())
+          arrayGets.push_back(arrayGet);
+        continue;
+      }
+      llvm::append_range(worklist, definingOp->getOperands());
+    }
+    if (arrayGets.size() != 1)
+      return false;
+
+    auto oldWord = arrayGets.front();
+    if (!analyzeUpdatedWord(inject.getElement(), oldWord, memValue, 0,
+                            lane.dataPieces, matchedOps) ||
+        lane.dataPieces.empty())
+      return false;
+
+    llvm::sort(lane.dataPieces,
+               [](const WriteDataPiece &lhs, const WriteDataPiece &rhs) {
+                 return lhs.lowBit < rhs.lowBit;
+               });
+    lane.lowBit = lane.dataPieces.front().lowBit;
+    unsigned nextBit = lane.lowBit;
+    for (auto piece : lane.dataPieces) {
+      if (piece.lowBit != nextBit)
+        return false;
+      nextBit += cast<IntegerType>(piece.value.getType()).getWidth();
+    }
+    lane.width = nextBit - lane.lowBit;
+    matchedOps.insert(oldWord);
+  }
+
+  pattern.writeLanes.push_back(std::move(lane));
+  matchedOps.insert(inject);
+  matchedOps.insert(mux);
+  return true;
 }
 
 bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
@@ -184,8 +359,8 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
   ImplicitLocOpBuilder builder(pattern.memReg.getLoc(), pattern.memReg);
 
   // Create FirMem
-  auto memType =
-      FirMemType::get(builder.getContext(), depth, width, /*maskWidth=*/1);
+  auto memType = FirMemType::get(builder.getContext(), depth, width,
+                                 /*maskWidth=*/pattern.maskWidth);
   auto firMem = seq::FirMemOp::create(
       builder, memType, /*readLatency=*/0, /*writeLatency=*/1,
       /*readUnderWrite=*/seq::RUW::Undefined,
@@ -206,39 +381,65 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
     return addr;
   };
 
-  // Create read port
-  auto readAddr = fixZeroWidthAddr(pattern.readAddr);
-  Value readData = FirMemReadOp::create(
-      builder, firMem, readAddr, pattern.clock,
-      /*enable=*/hw::ConstantOp::create(builder, builder.getI1Type(), 1));
+  if (pattern.readAccess) {
+    auto readAddr = fixZeroWidthAddr(pattern.readAddr);
+    Value readData = FirMemReadOp::create(
+        builder, firMem, readAddr, pattern.clock,
+        /*enable=*/hw::ConstantOp::create(builder, builder.getI1Type(), 1));
+    pattern.readAccess.getResult().replaceAllUsesWith(readData);
+    LLVM_DEBUG(llvm::dbgs() << "  Created read port\n"
+                            << firMem << "\n " << readData);
+  }
 
-  LLVM_DEBUG(llvm::dbgs() << "  Created read port\n"
-                          << firMem << "\n " << readData);
-
+  Value writeData = pattern.writeData;
   Value mask;
+  if (!pattern.writeLanes.empty()) {
+    unsigned laneWidth = width / pattern.maskWidth;
+    SmallVector<Value> laneData(pattern.maskWidth);
+    SmallVector<Value> laneMask(pattern.maskWidth);
+    for (auto &lane : pattern.writeLanes) {
+      unsigned laneIndex = lane.lowBit / laneWidth;
+      SmallVector<Value> pieces;
+      for (auto piece : llvm::reverse(lane.dataPieces))
+        pieces.push_back(piece.value);
+      laneData[laneIndex] = pieces.size() == 1
+                                ? pieces.front()
+                                : comb::ConcatOp::create(builder, pieces);
+      laneMask[laneIndex] = lane.condition;
+    }
+
+    for (unsigned i = 0; i < pattern.maskWidth; ++i) {
+      if (!laneData[i])
+        laneData[i] = hw::ConstantOp::create(
+            builder, IntegerType::get(builder.getContext(), laneWidth), 0);
+      if (!laneMask[i])
+        laneMask[i] =
+            hw::ConstantOp::create(builder, builder.getI1Type(), false);
+    }
+
+    SmallVector<Value> concatData(llvm::reverse(laneData));
+    SmallVector<Value> concatMask(llvm::reverse(laneMask));
+    writeData = comb::ConcatOp::create(builder, concatData);
+    mask = comb::ConcatOp::create(builder, concatMask);
+    if (!pattern.writeEnable)
+      pattern.writeEnable =
+          hw::ConstantOp::create(builder, builder.getI1Type(), true);
+  } else if (pattern.writeEnable) {
+    pattern.writeEnable = comb::AndOp::create(
+        builder, ValueRange{pattern.writeEnable, pattern.writeCondition},
+        /*twoState=*/false);
+  } else {
+    pattern.writeEnable = pattern.writeCondition;
+  }
+
   // Create write port
   auto writeAddr = fixZeroWidthAddr(pattern.writeAddr);
   FirMemWriteOp::create(builder, firMem, writeAddr, pattern.clock,
-                        pattern.writeEnable, pattern.writeData, mask);
+                        pattern.writeEnable, writeData, mask);
 
   LLVM_DEBUG(llvm::dbgs() << "  Created write port\n");
 
-  // Replace read access
-  if (pattern.outputReg)
-    // If there's an output register, replace its input
-    pattern.outputReg.getNext().replaceAllUsesWith(readData);
-  else
-    // Replace direct read access
-    pattern.readAccess.getResult().replaceAllUsesWith(readData);
-
-  // Mark old operations for removal
-  opsToErase.push_back(pattern.memReg);
-  if (pattern.readAccess)
-    opsToErase.push_back(pattern.readAccess);
-  if (pattern.writeAccess)
-    opsToErase.push_back(pattern.writeAccess);
-  if (pattern.writeMux)
-    opsToErase.push_back(pattern.writeMux);
+  llvm::append_range(opsToErase, pattern.opsToErase);
 
   return true;
 }
@@ -263,12 +464,13 @@ void RegOfVecToMemPass::runOnOperation() {
     }
   }
 
-  // Erase all marked operations
-  for (auto *op : opsToErase) {
+  // Break the closed feedback graphs, then erase all matched operations.
+  for (auto *op : opsToErase)
+    op->dropAllUses();
+  for (auto *op : llvm::reverse(opsToErase)) {
     LLVM_DEBUG(llvm::dbgs()
                << "Erasing operation: " << *op << " number of uses:"
                << "\n");
-    op->dropAllUses();
     op->erase();
   }
   opsToErase.clear();

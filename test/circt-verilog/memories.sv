@@ -32,3 +32,35 @@ module Memory(
       storage[waddr] <= wdata;
   assign rdata = storage[raddr];
 endmodule
+
+// CHECK-LABEL: hw.module @MaskedMemory(
+module MaskedMemory(
+  input  bit clock,
+  input  bit [1:0] addr,
+  input  bit [31:0] wdata,
+  input  bit wenable,
+  input  bit [3:0] wmask,
+  output bit [31:0] rdata
+);
+  // MEMON: [[MASKED_MEM:%.+]] = seq.firmem 0, 1, undefined, undefined : <4 x 32, mask 4>
+  // MEMON: [[MASKED_READ:%.+]] = seq.firmem.read_port [[MASKED_MEM]]
+  // MEMON: seq.firmem.write_port [[MASKED_MEM]]{{.*}}mask
+  // MEMON-NOT: hw.array_inject
+
+  // MEMOFF-DAG: hw.array_inject
+  // MEMOFF-DAG: seq.firreg {{.*}} : !hw.array<4xi32>
+
+  // CHECK: hw.output %{{.*}}
+  bit [31:0] storage [3:0];
+  always_ff @(posedge clock) begin
+    if (wenable && wmask[0])
+      storage[addr][7:0] <= wdata[7:0];
+    if (wenable && wmask[1])
+      storage[addr][15:8] <= wdata[15:8];
+    if (wenable && wmask[2])
+      storage[addr][23:16] <= wdata[23:16];
+    if (wenable && wmask[3])
+      storage[addr][31:24] <= wdata[31:24];
+  end
+  assign rdata = storage[addr];
+endmodule
