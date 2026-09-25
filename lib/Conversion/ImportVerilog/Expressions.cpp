@@ -1137,6 +1137,38 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Handle blocking and non-blocking assignments.
   Value visit(const slang::ast::AssignmentExpression &expr) {
+    // Handle blocking assignments to individual string characters.
+    if (!expr.isNonBlocking()) {
+      if (auto *select =
+              expr.left().as_if<slang::ast::ElementSelectExpression>()) {
+        if (select->value().type->isString()) {
+          // StringPutOp needs a reference to the whole string.
+          auto str = context.convertLvalueExpression(select->value());
+          if (!str)
+            return {};
+
+          auto i32Type = moore::IntType::getInt(builder.getContext(), 32);
+          auto index =
+              context.convertRvalueExpression(select->selector(), i32Type);
+          if (!index)
+            return {};
+
+          auto i8Type = moore::IntType::getInt(builder.getContext(), 8);
+          auto character =
+              context.convertRvalueExpression(expr.right(), i8Type);
+          if (!character)
+            return {};
+
+          if (expr.timingControl)
+            if (failed(context.convertTimingControl(*expr.timingControl)))
+              return {};
+
+          moore::StringPutOp::create(builder, loc, str, index, character);
+          return character;
+        }
+      }
+    }
+
     auto lhs = context.convertLvalueExpression(expr.left());
     if (!lhs)
       return {};
