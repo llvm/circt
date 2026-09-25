@@ -375,3 +375,33 @@ module TestNotif1(
   notif1 notif1_inst(data_out, data_in, en_n);
 
 endmodule
+
+// Ensure Slang automatically inserts conversions for enable signals that aren't 1-bit
+// CHECK-LABEL: moore.module @TestBufif1WideEnable
+module TestBufif1WideEnable(
+  input wire data_in,
+  input wire [1:0] en,
+  output wire data_out
+);
+  // CHECK: [[DATA_IN:%.+]] = moore.net name "data_in" wire : <l1>
+  // CHECK: [[EN_W:%.+]] = moore.net name "en" wire : <l2>
+  // CHECK: [[DATA_OUT:%.+]] = moore.net wire : <l1>
+  // CHECK: [[IN:%.+]] = moore.read [[DATA_IN]] : <l1>
+  // CHECK: [[EN_READ:%.+]] = moore.read [[EN_W]] : <l2>
+  // CHECK: [[EN:%.+]] = moore.trunc [[EN_READ]] : l2 -> l1
+  // CHECK: [[INACTIVE:%.+]] = moore.constant 0 : l1
+  // CHECK: [[Z:%.+]] = moore.constant bZ : l1
+  // CHECK: [[COND:%.+]] = moore.case_eq [[EN]], [[INACTIVE]] : l1
+  // CHECK: [[RESULT:%.+]] = moore.conditional [[COND]] : i1 -> l1
+  // CHECK: moore.yield [[Z]] : l1
+  // CHECK: [[INNERX:%.+]] = moore.constant bX : l1
+  // CHECK: [[INNERZ:%.+]] = moore.constant bZ : l1
+  // CHECK: [[ISZ:%.+]] = moore.case_eq [[IN]], [[INNERZ]] : l1
+  // CHECK: [[INNERRESULT:%.+]] = moore.conditional [[ISZ]] : i1 -> l1
+  // CHECK: moore.yield [[INNERX]] : l1
+  // CHECK: moore.yield [[IN]] : l1
+  // CHECK: moore.yield [[INNERRESULT]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  bufif1 bufif1_inst(data_out, data_in, en);
+
+endmodule
