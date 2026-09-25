@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
@@ -363,6 +364,55 @@ LogicalResult LocalParamOp::verify() {
   return hw::checkParameterInContext(
       getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
+
+//===----------------------------------------------------------------------===//
+// VarOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseImplicitVarInitType(
+    OpAsmParser &p, mlir::Type varType,
+    std::optional<OpAsmParser::UnresolvedOperand> &initValue,
+    mlir::Type &initType) {
+  if (!initValue.has_value())
+    return success();
+
+  sv::VarType var = dyn_cast<sv::VarType>(varType);
+  if (!var)
+    return p.emitError(p.getCurrentLocation(),
+                       "expected `!sv.var<T>` type for var");
+
+  initType = var.getElementType();
+  return success();
+}
+
+static void printImplicitVarInitType(OpAsmPrinter &p, Operation *op,
+                                     mlir::Type varType, mlir::Value initValue,
+                                     mlir::Type initType) {}
+
+void VarOp::build(OpBuilder &builder, OperationState &odsState,
+                  Type elementType, StringAttr name, hw::InnerSymAttr innerSym,
+                  mlir::Value initValue) {
+  if (!name)
+    name = builder.getStringAttr("");
+  odsState.addAttribute("name", name);
+  if (innerSym)
+    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                          innerSym);
+  odsState.addTypes(VarType::get(elementType));
+  if (initValue)
+    odsState.addOperands(initValue);
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void VarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the var has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+std::optional<size_t> VarOp::getTargetResultIndex() { return 0; }
 
 //===----------------------------------------------------------------------===//
 // RegOp
