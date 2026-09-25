@@ -20,6 +20,7 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "slang/ast/ASTVisitor.h"
+#include "slang/ast/TimingControl.h"
 #include "slang/text/SourceManager.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/Debug.h"
@@ -365,6 +366,13 @@ struct Context {
   // Convert a slang timing control for LTL
   Value convertLTLTimingControl(const slang::ast::TimingControl &ctrl,
                                 const Value &seqOrPro);
+
+  /// Creates a delayed assignment based on the given TimingControl delay (or
+  /// without a delay if the TimingControl is null)
+  LogicalResult
+  assignPrimOutputWithDelay(Value outputVal, Value assignment,
+                            const slang::ast::TimingControl *delay,
+                            Location loc);
 
   LogicalResult
   convertNInputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
