@@ -189,3 +189,9 @@ hw.module @LongerBurstSubordinate(in %clk : !seq.clock, in %rst_ni : i1) {
   // CHECK: axi4.abstract_subordinate %clk, %rst_ni, %[[XBAR]] concurrent_writes 2 concurrent_reads 2 :
   axi4.abstract_subordinate %clk, %rst_ni, %sub concurrent_writes 2 concurrent_reads 2 : !long_sub
 }
+
+// CHECK-LABEL: hw.module @Cut
+hw.module @Cut(in %clk : !seq.clock, in %rst_ni : i1, in %upstream : !port) {
+  // CHECK: axi4.cut %clk, %rst_ni, %upstream : !axi4.port<addr_width = 32, data_width = 64, write_id_width = 5, read_id_width = 3, user_width = 4, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+  %cut = axi4.cut %clk, %rst_ni, %upstream : !port
+}
