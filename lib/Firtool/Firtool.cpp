@@ -73,7 +73,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createPassiveWires());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createDropName({/*preserveMode=*/opt.getPreserveMode()}));
+      firrtl::createDropName(
+          {/*preserveMode=*/opt.getPreserveMode(),
+           /*preserveModules=*/llvm::to_vector(opt.getPreserveModules())}));
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerCHIRRTLPass());
@@ -543,6 +545,12 @@ public:
                      "Preserve all values")),
       llvm::cl::init(firrtl::PreserveValues::None)};
 
+  llvm::cl::list<std::string> preserveModules{
+      "preserve-modules",
+      llvm::cl::desc(
+          "Specify the modules in which all meaningful names are preserved"),
+      llvm::cl::ZeroOrMore};
+
   llvm::cl::opt<bool> enableDebugInfo{
       "g", llvm::cl::desc("Enable the generation of debug information"),
       llvm::cl::init(false)};
@@ -858,16 +866,16 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       disableAnnotationsClassless(false), lowerAnnotationsNoRefTypePorts(false),
       probesToSignals(false),
       preserveAggregate(firrtl::PreserveAggregate::None),
-      preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
-      buildMode(BuildModeRelease), disableLayerSink(false),
-      disableOptimization(false), vbToBV(false), noDedup(false),
-      dedupClasses(true), companionMode(firrtl::CompanionMode::Bind),
-      noViews(false), disableAggressiveMergeConnections(false),
-      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
-      replSeqMemFile(""), ignoreReadEnableMem(false),
-      disableRandom(RandomKind::None), outputAnnotationFilename(""),
-      enableAnnotationWarning(false), warnOnTruncation(false),
-      lowerToCore(false), addMuxPragmas(false),
+      preserveMode(firrtl::PreserveValues::None), preserveModules({}),
+      enableDebugInfo(false), buildMode(BuildModeRelease),
+      disableLayerSink(false), disableOptimization(false), vbToBV(false),
+      noDedup(false), dedupClasses(true),
+      companionMode(firrtl::CompanionMode::Bind), noViews(false),
+      disableAggressiveMergeConnections(false), lowerMemories(false),
+      blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
+      ignoreReadEnableMem(false), disableRandom(RandomKind::None),
+      outputAnnotationFilename(""), enableAnnotationWarning(false),
+      warnOnTruncation(false), lowerToCore(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
@@ -889,6 +897,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   probesToSignals = clOptions->probesToSignals;
   preserveAggregate = clOptions->preserveAggregate;
   preserveMode = clOptions->preserveMode;
+  preserveModules = clOptions->preserveModules;
   enableDebugInfo = clOptions->enableDebugInfo;
   buildMode = clOptions->buildMode;
   disableLayerSink = clOptions->disableLayerSink;
