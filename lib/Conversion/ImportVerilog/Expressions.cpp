@@ -3878,9 +3878,11 @@ Value Context::convertSystemCall(
   // String Methods
   //===--------------------------------------------------------------------===//
 
-  if (nameId == ksn::Len) {
+  if (nameId == ksn::Len ||
+      (nameId == ksn::Size && numArgs == 1 &&
+      args[0]->type->isString())) {
     // Slang already checks the arity of string methods.
-    assert(numArgs == 1 && "`len` takes 1 argument");
+    assert(numArgs == 1 && "string length takes 1 argument");
     auto stringType = moore::StringType::get(getContext());
     auto value = convertRvalueExpression(*args[0], stringType);
     if (!value)

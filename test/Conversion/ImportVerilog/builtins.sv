@@ -985,6 +985,9 @@ function void StringBuiltins(string string_in, int int_in, string other);
   // CHECK: [[READ:%.+]] = moore.read [[VAR]] : <string>
   // CHECK: [[LEN:%.+]] = moore.string.len [[READ]]
   dummyA(string_in.len());
+  // CHECK: [[SIZE_READ:%.+]] = moore.read [[VAR]] : <string>
+  // CHECK: moore.string.len [[SIZE_READ]]
+  dummyA($size(string_in));
   // CHECK: moore.string.put [[VAR]]{{\[}}[[INT]]{{\]}}, {{%.+}} : <string>
   string_in.putc(int_in, "A");
   // CHECK: [[GET:%.+]] = moore.string.get {{%.+}}{{\[}}{{%.+}}{{\]}}
