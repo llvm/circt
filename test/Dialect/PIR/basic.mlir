@@ -5,16 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: pir.cell @test
-pir.cell @test {
+pir.cell @test {} {
 
   // CHECK: {{%.+}}, {{%.+}}, {{%.+}} = pir.input : i1, i2, i3
-  %a, %b, %c = pir.input : i1, i2, i3
+  %i_0, %i_1, %i_2 = pir.input : i1, i2, i3
 
-  %b = unrealized_conversion_cast to i1
-  %s = unrealized_conversion_cast to !pir.sequence
-  %p = unrealized_conversion_cast to !pir.property
-  %clk_s = unrealized_conversion_cast to !pir.clocked_sequence
-  %clk_p = unrealized_conversion_cast to !pir.clocked_property
+  // CHECK: %b, %s, %p = pir.input : i1, !pir.sequence, !pir.property
+  %b, %s, %p = pir.input : i1, !pir.sequence, !pir.property
+  // CHECK: %clk_s, %clk_p = pir.input : !pir.clocked_sequence, !pir.clocked_property
+  %clk_s, %clk_p = pir.input : !pir.clocked_sequence, !pir.clocked_property
 
   //===----------------------------------------------------------------------===//
   // Type Conversions
