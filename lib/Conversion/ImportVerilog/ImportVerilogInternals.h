@@ -21,10 +21,12 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "slang/ast/ASTVisitor.h"
 #include "slang/text/SourceManager.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/Debug.h"
 #include <map>
 #include <queue>
+#include <vector>
 
 #define DEBUG_TYPE "import-verilog"
 
@@ -40,6 +42,17 @@ getCanonicalBody(const slang::ast::InstanceSymbol &inst) {
   const slang::ast::InstanceBodySymbol *body = inst.getCanonicalBody();
   return body == nullptr ? &inst.body : body;
 }
+
+/// An assignment destination, either a reference or a positional pattern.
+/// Resolve references before evaluating the RHS or emitting any assignments.
+struct AssignmentTarget {
+  Value reference;
+  /// Type and signedness of the value supplied to this destination, before
+  /// any per-element conversion to the reference type.
+  Type type;
+  bool isSigned = false;
+  std::vector<AssignmentTarget> elements;
+};
 
 /// Port lowering information.
 struct PortLowering {
@@ -325,6 +338,15 @@ struct Context {
   Value convertRvalueExpression(const slang::ast::Expression &expr,
                                 Type requiredType = {});
   Value convertLvalueExpression(const slang::ast::Expression &expr);
+
+  /// Resolve an assignment's references, including nested destination patterns.
+  FailureOr<AssignmentTarget>
+  convertAssignmentTarget(const slang::ast::Expression &expr);
+  /// Distribute a value to the resolved destinations and emit each assignment
+  /// using the caller's assignment kind and timing.
+  LogicalResult
+  assignToTarget(const AssignmentTarget &target, Value value, Location loc,
+                 llvm::function_ref<void(Value, Value)> emitAssignment);
 
   // Convert an assertion expression AST node to MLIR ops.
   Value convertAssertionExpression(const slang::ast::AssertionExpr &expr,
