@@ -78,7 +78,7 @@ pir.cell @prop {} {
 ```
 
 This is a simple example but shows the general structure of a PIR property. 
-Assert-like operations function as terminator's for a cell's region, meaning that each property should exist within its own cell.
+Assert-like operations function as terminators for a cell's region, meaning that each property should exist within its own cell.
 Note that by default, type conversions will tie a property or sequence to the global clock, 
 that is, the clock defined by the steps taken by a model checker. 
 This is what distinguishes "clocking operations" with "type conversion operations". 
