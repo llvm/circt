@@ -258,6 +258,10 @@ class TypeAlias(Type):
   def inner_type(self):
     return _FromCirctType(self._type.inner_type)
 
+  @property
+  def width(self):
+    return self.inner_type.width
+
   def __repr__(self):
     return f"TypeAlias<'{self.name}', {repr(self.inner_type)}"
 
