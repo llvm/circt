@@ -361,13 +361,15 @@ static bool hasLeadingUnpackedType(Type type) {
   return stripUnpackedTypes(elementType) != elementType;
 }
 
-/// Return true if type has a struct type as a subtype.
+/// Return true if the element type is emitted as a type name or a keyword
+/// (struct, union, enum or typedef), so that no "logic" prefix is allowed.
 static bool hasStructType(Type type) {
   return TypeSwitch<Type, bool>(type)
       .Case<InOutType, UnpackedArrayType, ArrayType>([](auto parentType) {
         return hasStructType(parentType.getElementType());
       })
-      .Case<StructType>([](auto) { return true; })
+      .Case<StructType, UnionType, EnumType, TypeAliasType>(
+          [](auto) { return true; })
       .Default([](auto) { return false; });
 }
 // NOLINTEND(misc-no-recursion)
