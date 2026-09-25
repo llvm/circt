@@ -47,7 +47,7 @@ hw.module @EnumCmp(in %test: !hw.enum<A, B>, out result: i1) {
 // OLD:   _state2     reg_state2;
 // CHECK:   always @(posedge clock) begin
 // CHECK:     case (reg_0)
-// CHECK:       A:
+// CHECK:       enum0_A:
 // CHECK:         reg_0 <= enum0_B;
 // CHECK:       default:
 // CHECK:         reg_0 <= enum0_A;
