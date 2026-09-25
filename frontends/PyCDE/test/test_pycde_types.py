@@ -25,6 +25,25 @@ int_alias = TypeAlias(Bits(8), "myname1")
 print(int_alias)
 assert int_alias == TypeAlias(Bits(8), "myname1")
 
+nested_alias = TypeAlias(UInt(3), "nested_alias")
+outer_alias = TypeAlias(
+    StructType([("nested", nested_alias), ("plain", UInt(8))]), "outer_alias")
+# CHECK: struct { nested: UInt<3>, plain: UInt<8>}
+print(outer_alias.canonical_type)
+
+unaliased_struct = StructType([("nested", nested_alias)])
+# CHECK: struct { nested: UInt<3>}
+print(unaliased_struct.canonical_type)
+assert UInt(3).canonical_type == UInt(3)
+
+nested_array = Array(nested_alias, 2)
+# CHECK: UInt<3>[2]
+print(nested_array.canonical_type)
+
+nested_union = UnionType([("nested", nested_alias, 1)])
+# CHECK: union { nested: UInt<3> offset 1}
+print(nested_union.canonical_type)
+
 # CHECK: struct { a: Bits<1>, b: SInt<1>}
 struct = StructType({"a": Bit, "b": SInt(1)})
 print(struct)
