@@ -24,7 +24,7 @@ using namespace mlir::python::nanobind_adaptors;
 void circt::python::populateDialectSeqSubmodule(nb::module_ &m) {
   m.doc() = "Seq dialect Python native extension";
 
-  mlir_type_subclass(m, "ClockType", seqTypeIsAClock)
+  mlir_type_subclass(m, "ClockType", seqTypeIsAClock, seqClockTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, MlirContext ctx) {
