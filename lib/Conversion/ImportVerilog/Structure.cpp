@@ -2554,7 +2554,9 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   if (!dstIntType || dstIntType.getBitSize() != 1)
     return mlir::emitError(loc) << "MOS switch output must be 1 bit";
 
-  auto convertedInput = inputVal;
+  auto convertedInput = materializeConversion(dstType, inputVal, false, loc);
+  if (!convertedInput)
+    return failure();
 
   Value zVal =
       moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
