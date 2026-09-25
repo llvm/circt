@@ -1,8 +1,9 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde import dim, Input, Output, generator, System, Module
-from pycde.types import (Array, Bit, Bits, List, SInt, StructType, TypeAlias,
-                         UnionType, UInt, Window)
+from pycde.types import (Array, Bit, Bits, Bundle, BundledChannel, Channel,
+                         ChannelDirection, ChannelSignaling, InOut, List, SInt,
+                         StructType, TypeAlias, UnionType, UInt, Window)
 from pycde.testing import unittestmodule
 from pycde.signals import Struct, UIntSignal
 
@@ -43,6 +44,33 @@ print(nested_array.canonical_type)
 nested_union = UnionType([("nested", nested_alias, 1)])
 # CHECK: union { nested: UInt<3> offset 1}
 print(nested_union.canonical_type)
+
+canonical_inout = InOut(nested_alias).canonical_type
+assert isinstance(canonical_inout, InOut)
+assert canonical_inout.element_type == UInt(3)
+
+nested_channel = Channel(nested_alias, ChannelSignaling.FIFO, 2)
+canonical_channel = nested_channel.canonical_type
+assert canonical_channel.inner_type == UInt(3)
+assert canonical_channel.signaling == ChannelSignaling.FIFO
+assert canonical_channel.data_delay == 2
+
+nested_bundle = Bundle(
+    [BundledChannel("nested", ChannelDirection.TO, nested_alias)])
+canonical_bundle = nested_bundle.canonical_type
+assert canonical_bundle.channels[0].name == "nested"
+assert canonical_bundle.channels[0].direction == ChannelDirection.TO
+assert canonical_bundle.channels[0].channel.inner_type == UInt(3)
+
+canonical_list = List(nested_alias).canonical_type
+assert canonical_list.element_type == UInt(3)
+
+nested_window = Window("nested_window", StructType([("nested", nested_alias)]),
+                       [Window.Frame(None, ["nested"])])
+canonical_window = nested_window.canonical_type
+assert canonical_window.name == nested_window.name
+assert canonical_window.frames == nested_window.frames
+assert canonical_window.into.fields[0][1] == UInt(3)
 
 # CHECK: struct { a: Bits<1>, b: SInt<1>}
 struct = StructType({"a": Bit, "b": SInt(1)})

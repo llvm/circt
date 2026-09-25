@@ -732,6 +732,11 @@ class Channel(Type):
     return _FromCirctType(self._type.inner)
 
   @property
+  def canonical_type(self) -> Type:
+    return Channel(self.inner_type.canonical_type, self.signaling,
+                   self.data_delay)
+
+  @property
   def is_hw_type(self) -> bool:
     return False
 
@@ -888,6 +893,14 @@ class Bundle(Type):
         BundledChannel(name, dir, _FromCirctType(type))
         for (name, dir, type) in self._type.channels
     ]
+
+  @property
+  def canonical_type(self) -> Type:
+    return Bundle([
+        BundledChannel(channel.name, channel.direction,
+                       channel.channel.canonical_type)
+        for channel in self.channels
+    ])
 
   def castable(self, _) -> bool:
     raise TypeError("Cannot check cast-ablity to a bundle")
@@ -1057,6 +1070,10 @@ class List(Type):
   @property
   def element_type(self):
     return _FromCirctType(self._type.element_type)
+
+  @property
+  def canonical_type(self) -> Type:
+    return List(self.element_type.canonical_type)
 
   @property
   def is_hw_type(self) -> bool:
@@ -1303,6 +1320,10 @@ class Window(Type):
           Window.Frame(frame.name.value if frame.name.value != "" else None,
                        members))
     return ret
+
+  @property
+  def canonical_type(self) -> Type:
+    return Window(self.name.value, self.into.canonical_type, self.frames)
 
   @property
   def lowered_type(self) -> Type:
