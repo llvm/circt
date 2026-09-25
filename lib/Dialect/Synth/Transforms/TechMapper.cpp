@@ -240,11 +240,7 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
       SmallVector<DelayType> delay;
       for (auto attr : arcs) {
         auto arc = cast<LinearTimingArcAttr>(attr);
-
-        // TechMapper currently preserves the old integer per-pin delay model.
-        // The sensitivity, polarity, and input capacitance fields are carried
-        // in the attribute for future load-aware mapping.
-        delay.push_back(static_cast<DelayType>(arc.getIntrinsic()));
+        delay.push_back(arc.getIntrinsic() + arc.getSensitivity());
       }
 
       // Compute NPN Class for the module.
