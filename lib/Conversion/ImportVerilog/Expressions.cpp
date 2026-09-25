@@ -3210,6 +3210,23 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
       return builder.createOrFold<moore::OpenUArrayFromUnpackedArrayOp>(
           loc, type, value);
   }
+
+  // Convert from a plain packed bit vector to a packed open array. This
+  // covers DPI import calls where the formal parameter is a packed open
+  // array (e.g. `bit []`) but the actual argument is a fixed-width packed
+  // vector (e.g. `bit [7:0]`). Unlike the open-array cases above, there is
+  // no array-typed operand to reinterpret here: the vector's individual
+  // bits become the elements of the open array, so a real conversion op is
+  // needed rather than a cast.
+  if (auto dstOpenArray = dyn_cast<moore::OpenArrayType>(type)) {
+    if (auto srcInt = dyn_cast<moore::IntType>(value.getType())) {
+      auto openArrayElType = dstOpenArray.getElementType();
+      if (moore::isIntType(openArrayElType, 1, srcInt.getDomain()))
+        return builder.createOrFold<moore::PackedToOpenArrayOp>(loc, type,
+                                                                 value);
+    }
+  }
+
   // Handle Real To Int conversion
   if (dstInt && isa<moore::RealType>(value.getType())) {
     auto twoValInt = builder.createOrFold<moore::RealToIntOp>(
