@@ -208,6 +208,9 @@ class TypeAlias(Type):
       return self.inner_type.fields
     raise AttributeError("Only struct and union type aliases have fields")
 
+  def __getattr__(self, attrname: str):
+    return getattr(self.inner_type, attrname)
+
   @staticmethod
   def declare_aliases(mod, package_name: typing.Optional[str] = None):
     """Declare all of the registered type aliases in the `sv.package` with the

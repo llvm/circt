@@ -28,6 +28,16 @@ assert int_alias == TypeAlias(Bits(8), "myname1")
 print(int_alias.width)
 assert int_alias.width == 8
 
+struct_alias = TypeAlias(
+    StructType({
+        "f": UInt(3),
+        "nested": TypeAlias(StructType({"g": UInt(8)}), "nested_alias")
+    }), "struct_alias")
+# CHECK: UInt<3>
+print(struct_alias.f)
+# CHECK: UInt<8>
+print(struct_alias.nested.g)
+
 # CHECK: struct { a: Bits<1>, b: SInt<1>}
 struct = StructType({"a": Bit, "b": SInt(1)})
 print(struct)
