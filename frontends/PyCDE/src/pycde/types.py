@@ -51,6 +51,11 @@ class Type:
     return self
 
   @property
+  def canonical_type(self) -> Type:
+    """Return this type with all nested type aliases removed."""
+    return self
+
+  @property
   def bitwidth(self) -> int | None:
     bw = hw.get_bitwidth(self._type)
     return bw if bw >= 0 else None
@@ -165,6 +170,10 @@ class InOut(Type):
     return _FromCirctType(self._type.element_type)
 
   @property
+  def canonical_type(self) -> Type:
+    return InOut(self.element_type.canonical_type)
+
+  @property
   def is_hw_type(self) -> bool:
     return True
 
@@ -275,6 +284,10 @@ class TypeAlias(Type):
   def strip(self):
     return _FromCirctType(self._type.inner_type)
 
+  @property
+  def canonical_type(self) -> Type:
+    return self.strip.canonical_type
+
   def _get_value_class(self):
     return self.strip._get_value_class()
 
@@ -300,6 +313,10 @@ class Array(Type):
   @property
   def element_type(self):
     return _FromCirctType(self._type.element_type)
+
+  @property
+  def canonical_type(self) -> Type:
+    return Array(self.element_type.canonical_type, self.size)
 
   @property
   def is_hw_type(self) -> bool:
@@ -372,6 +389,12 @@ class StructType(Type):
   @property
   def fields(self):
     return [(n, _FromCirctType(t)) for n, t in self._type.get_fields()]
+
+  @property
+  def canonical_type(self) -> Type:
+    return StructType([
+        (name, field_type.canonical_type) for name, field_type in self.fields
+    ])
 
   def __getattr__(self, attrname: str):
     for field in self.fields:
@@ -474,6 +497,11 @@ class UnionType(Type):
   @property
   def fields(self):
     return [(n, _FromCirctType(t), o) for n, t, o in self._type.get_fields()]
+
+  @property
+  def canonical_type(self) -> Type:
+    return UnionType([(name, field_type.canonical_type, offset)
+                      for name, field_type, offset in self.fields])
 
   def __getattr__(self, attrname: str):
     for field in self.fields:
@@ -711,6 +739,11 @@ class Channel(Type):
     return _FromCirctType(self._type.inner)
 
   @property
+  def canonical_type(self) -> Type:
+    return Channel(self.inner_type.canonical_type, self.signaling,
+                   self.data_delay)
+
+  @property
   def is_hw_type(self) -> bool:
     return False
 
@@ -867,6 +900,14 @@ class Bundle(Type):
         BundledChannel(name, dir, _FromCirctType(type))
         for (name, dir, type) in self._type.channels
     ]
+
+  @property
+  def canonical_type(self) -> Type:
+    return Bundle([
+        BundledChannel(channel.name, channel.direction,
+                       channel.channel.canonical_type)
+        for channel in self.channels
+    ])
 
   def castable(self, _) -> bool:
     raise TypeError("Cannot check cast-ablity to a bundle")
@@ -1036,6 +1077,10 @@ class List(Type):
   @property
   def element_type(self):
     return _FromCirctType(self._type.element_type)
+
+  @property
+  def canonical_type(self) -> Type:
+    return List(self.element_type.canonical_type)
 
   @property
   def is_hw_type(self) -> bool:
@@ -1282,6 +1327,10 @@ class Window(Type):
           Window.Frame(frame.name.value if frame.name.value != "" else None,
                        members))
     return ret
+
+  @property
+  def canonical_type(self) -> Type:
+    return Window(self.name.value, self.into.canonical_type, self.frames)
 
   @property
   def lowered_type(self) -> Type:
