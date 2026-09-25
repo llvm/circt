@@ -34,6 +34,10 @@ namespace circt {
 /// implicit-name ::= (`name` str-attr)?
 ParseResult parseImplicitSSAName(OpAsmParser &parser, StringAttr &attr);
 
+/// Parse an array of implicit SSA name string attributes. Each name is inferred
+/// from the corresponding SSA name of the operation's results.
+ParseResult parseImplicitSSANames(OpAsmParser &parser, ArrayAttr &attr);
+
 /// Parse an attribute dictionary and ensure that it contains a `name` field by
 /// inferring its value from the SSA name of the operation's first result if
 /// necessary.
@@ -51,6 +55,11 @@ bool inferImplicitSSAName(OpAsmParser &parser, NamedAttrList &attrs);
 ///
 /// implicit-name ::= (`name` str-attr)?
 void printImplicitSSAName(OpAsmPrinter &p, Operation *op, StringAttr attr);
+
+/// Print an array of implicit SSA name string attributes. The names are
+/// represented by the SSA result names and therefore require no additional
+/// output.
+void printImplicitSSANames(OpAsmPrinter &p, Operation *op, ArrayAttr attr);
 
 /// Print an attribute dictionary and elide the `name` field if its value
 /// matches the SSA name of the operation's first result.

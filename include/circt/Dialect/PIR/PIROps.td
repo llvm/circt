@@ -87,7 +87,7 @@ def InputOp : PIRInnerOp<"input", [
 
   let arguments = (ins StrArrayAttr:$names);
   let results = (outs Variadic<AnyType>:$results);
-  let assemblyFormat = "`` custom<ImplicitSSAName>($names) attr-dict `:` type($results)";
+  let assemblyFormat = "`` custom<ImplicitSSANames>($names) attr-dict `:` type($results)";
 }
 
 //===----------------------------------------------------------------------===//
