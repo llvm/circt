@@ -1834,6 +1834,29 @@ LogicalResult QueueFromUnpackedArrayOp::verify() {
   return success();
 }
 
+LogicalResult PackedToOpenArrayOp::verify() {
+  // The source is a plain packed bit vector (e.g. `!moore.i8`); the result
+  // is a packed open array of single-bit elements (`!moore.open_array<i1>`)
+  // that DPI import calls expect for a `bit []`/`logic []` formal argument.
+  // Every bit of the input becomes one element of the result, so there is
+  // no per-element type to compare -- just make sure the result's element
+  // type is a 1-bit packed integer, since that is the only element width a
+  // packed bit vector can be unpacked into.
+  auto resultElementType =
+      cast<OpenArrayType>(getOutput().getType()).getElementType();
+
+  auto elementIntType = dyn_cast<IntType>(resultElementType);
+  if (!elementIntType || elementIntType.getWidth() != 1)
+    return emitOpError() << "result element type must be a single-bit "
+                         << "packed integer, got " << resultElementType;
+
+  if (!isa<IntType>(getInput().getType()))
+    return emitOpError() << "input must be a packed bit vector, got "
+                         << getInput().getType();
+
+  return success();
+}
+
 LogicalResult QueueConcatOp::verify() {
   // Verify the element types of all concatenated queues equal that of the
   // result queue.

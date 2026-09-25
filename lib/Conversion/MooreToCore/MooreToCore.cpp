@@ -3093,6 +3093,134 @@ struct QueueFromUnpackedArrayOpConversion
   }
 };
 
+/// moore.open_uarray_from_unpacked_array lowering: `open_uarray<T>` lowers to
+/// an opaque `!llvm.ptr` with no static size, so unlike
+/// QueueFromUnpackedArrayOpConversion above (which reuses `sim.queue`,
+/// itself backed by a runtime-managed buffer) we cannot just hand the fixed
+/// array value to a core op. Instead we heap-allocate a buffer sized for the
+/// known number of elements and copy each element of the (register-valued)
+/// source array into it.
+struct OpenUArrayFromUnpackedArrayOpConversion
+    : public OpConversionPattern<OpenUArrayFromUnpackedArrayOp> {
+  OpenUArrayFromUnpackedArrayOpConversion(TypeConverter &tc, MLIRContext *ctx,
+                                          FunctionCache &funcCache)
+      : OpConversionPattern<OpenUArrayFromUnpackedArrayOp>(tc, ctx),
+        funcCache(funcCache) {}
+
+  LogicalResult
+  matchAndRewrite(OpenUArrayFromUnpackedArrayOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    MLIRContext *ctx = rewriter.getContext();
+
+    auto srcArrayTy = cast<UnpackedArrayType>(op.getInput().getType());
+    uint64_t numElements = srcArrayTy.getSize();
+
+    Type elementTy =
+        getTypeConverter()->convertType(srcArrayTy.getElementType());
+    if (!elementTy)
+      return rewriter.notifyMatchFailure(op, "unsupported element type");
+
+    auto ptrTy = LLVM::LLVMPointerType::get(ctx);
+    auto bufferTy = LLVM::LLVMArrayType::get(elementTy, numElements);
+
+    // Allocate exactly enough storage for `numElements` elements.
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+    DataLayout dl(mod);
+    uint64_t byteSize = dl.getTypeSize(bufferTy);
+    auto i64Ty = IntegerType::get(ctx, 64);
+    auto cSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
+                                          rewriter.getI64IntegerAttr(byteSize));
+    auto mallocFn =
+        funcCache.getOrCreate(rewriter, "malloc", {i64Ty}, {ptrTy});
+    auto call =
+        func::CallOp::create(rewriter, loc, mallocFn, ValueRange{cSize});
+    Value buffer = call.getResult(0);
+
+    // The source array was converted to `!hw.array<N x T>` and lives as a
+    // single SSA value; extract and store each element into the buffer.
+    auto i32Ty = IntegerType::get(ctx, 32);
+    unsigned idxWidth =
+        numElements <= 1 ? 1 : llvm::Log2_64_Ceil(numElements);
+    auto elemIdxTy = rewriter.getIntegerType(idxWidth);
+    Value input = adaptor.getInput();
+    Value zero = LLVM::ConstantOp::create(rewriter, loc, i32Ty,
+                                          rewriter.getI32IntegerAttr(0));
+    for (uint64_t i = 0; i < numElements; ++i) {
+      Value elemIdx = hw::ConstantOp::create(rewriter, loc, elemIdxTy, i);
+      Value elem = hw::ArrayGetOp::create(rewriter, loc, input, elemIdx);
+      Value gepIdx = LLVM::ConstantOp::create(
+          rewriter, loc, i32Ty, rewriter.getI32IntegerAttr(i));
+      Value elemPtr = LLVM::GEPOp::create(rewriter, loc, ptrTy, bufferTy,
+                                          buffer, ValueRange{zero, gepIdx});
+      LLVM::StoreOp::create(rewriter, loc, elem, elemPtr);
+    }
+
+    rewriter.replaceOp(op, buffer);
+    return success();
+  }
+
+  FunctionCache &funcCache;
+};
+
+/// moore.packed_to_open_array lowering: materialize a packed open array
+/// (`open_array<i1>`) from a plain packed bit vector by heap-allocating one
+/// element per bit and storing each extracted bit into it. This is the DPI
+/// counterpart to OpenUArrayFromUnpackedArrayOpConversion above: there is no
+/// array-typed operand to work from, only a scalar integer, so the elements
+/// have to be split out bit by bit rather than copied.
+struct PackedToOpenArrayOpConversion
+    : public OpConversionPattern<PackedToOpenArrayOp> {
+  PackedToOpenArrayOpConversion(TypeConverter &tc, MLIRContext *ctx,
+                                FunctionCache &funcCache)
+      : OpConversionPattern<PackedToOpenArrayOp>(tc, ctx),
+        funcCache(funcCache) {}
+
+  LogicalResult
+  matchAndRewrite(PackedToOpenArrayOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    MLIRContext *ctx = rewriter.getContext();
+
+    auto srcIntTy = cast<IntType>(op.getInput().getType());
+    uint64_t numElements = srcIntTy.getWidth();
+
+    auto i1Ty = IntegerType::get(ctx, 1);
+    auto ptrTy = LLVM::LLVMPointerType::get(ctx);
+    auto bufferTy = LLVM::LLVMArrayType::get(i1Ty, numElements);
+
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+    DataLayout dl(mod);
+    uint64_t byteSize = dl.getTypeSize(bufferTy);
+    auto i64Ty = IntegerType::get(ctx, 64);
+    auto cSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
+                                          rewriter.getI64IntegerAttr(byteSize));
+    auto mallocFn =
+        funcCache.getOrCreate(rewriter, "malloc", {i64Ty}, {ptrTy});
+    auto call =
+        func::CallOp::create(rewriter, loc, mallocFn, ValueRange{cSize});
+    Value buffer = call.getResult(0);
+
+    auto i32Ty = IntegerType::get(ctx, 32);
+    Value zero = LLVM::ConstantOp::create(rewriter, loc, i32Ty,
+                                          rewriter.getI32IntegerAttr(0));
+    Value input = adaptor.getInput();
+    for (uint64_t i = 0; i < numElements; ++i) {
+      Value bit = comb::ExtractOp::create(rewriter, loc, input, i, 1);
+      Value gepIdx = LLVM::ConstantOp::create(
+          rewriter, loc, i32Ty, rewriter.getI32IntegerAttr(i));
+      Value bitPtr = LLVM::GEPOp::create(rewriter, loc, ptrTy, bufferTy,
+                                         buffer, ValueRange{zero, gepIdx});
+      LLVM::StoreOp::create(rewriter, loc, bit, bitPtr);
+    }
+
+    rewriter.replaceOp(op, buffer);
+    return success();
+  }
+
+  FunctionCache &funcCache;
+};
+
 struct QueueConcatOpConversion : public OpConversionPattern<QueueConcatOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3932,6 +4060,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
                                      classCache, funcCache);
   patterns.add<ClassPropertyRefOpConversion>(typeConverter,
                                              patterns.getContext(), classCache);
+  patterns.add<OpenUArrayFromUnpackedArrayOpConversion>(
+      typeConverter, patterns.getContext(), funcCache);
+  patterns.add<PackedToOpenArrayOpConversion>(typeConverter,
+                                              patterns.getContext(), funcCache);
 
   // clang-format off
   patterns.add<
