@@ -94,8 +94,7 @@ def InputOp : PIRInnerOp<"input", [
 //===----------------------------------------------------------------------===//
 
 class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [
-  AttrSizedOperandSegments, 
-  Terminator
+  AttrSizedOperandSegments
 ]> : PIRInnerOp<mnemonic, traits> {
   let arguments = (ins 
     PIRClockedPropertyType:$property,
