@@ -566,9 +566,13 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
   // One more map is needed for the pipeline stages terminator
   stageValueMaps.push_back(valueMap);
 
-  // Create stages along with maps
-  for (auto startTime : startTimes) {
+  // Create stages along with maps. `registerValues` may contain a time slot
+  // with no scheduled operations that is still needed to forward a value to a
+  // later stage. Materialize those forwarding-only stages as well.
+  for (unsigned startTime = 0; startTime < registerValues.size(); ++startTime) {
     auto group = startGroups[startTime];
+    if (group.empty() && registerValues[startTime].empty())
+      continue;
     llvm::sort(group, [&](Operation *a, Operation *b) {
       return dom.properlyDominates(a, b);
     });
