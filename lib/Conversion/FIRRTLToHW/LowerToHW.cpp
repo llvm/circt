@@ -819,6 +819,58 @@ void FIRRTLModuleLowering::runOnOperation() {
         ->setAttr(moduleHierarchyFileAttrName,
                   ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
+  // A forced instance name must be unique within its parent module.  The
+  // annotations have all been collected at this point, so check for conflicts
+  // before lowering module bodies in parallel.
+  DenseMap<Attribute, DenseMap<Attribute, Attribute>> forcedNamesByModule;
+  for (const auto &[instance, forcedName] : state.instanceForceNames) {
+    auto &names = forcedNamesByModule[instance.first];
+    auto [it, inserted] = names.try_emplace(forcedName, instance.second);
+    if (!inserted && it->second != instance.second) {
+      circuit.emitError()
+          << "multiple ForceNameAnnotations require the name " << forcedName
+          << " for different instances in module " << instance.first;
+      return signalPassFailure();
+    }
+  }
+
+  // Check forced names against both forced and existing instance names.
+  for (auto *op : opsToProcess) {
+    auto module = dyn_cast<hw::HWModuleOp>(op);
+    if (!module)
+      continue;
+
+    DenseMap<StringAttr, std::pair<Operation *, bool>> names;
+
+    WalkResult result = module.walk([&](firrtl::InstanceOp inst) {
+      Attribute forcedName;
+
+      if (auto sym = inst.getInnerSymAttr()) {
+        forcedName = state.instanceForceNames.lookup(
+            {module.getNameAttr(), sym.getSymName()});
+      }
+
+      auto name = forcedName ? cast<StringAttr>(forcedName)
+                             : inst.getNameAttr();
+
+      auto [it, inserted] =
+          names.try_emplace(name, inst.getOperation(), bool(forcedName));
+
+      if (!inserted && (forcedName || it->second.second)) {
+        inst.emitOpError()
+            << "forced instance name '" << name.getValue()
+            << "' conflicts with another instance in module "
+            << module.getName();
+        return WalkResult::interrupt();
+      }
+
+      return WalkResult::advance();
+    });
+
+    if (result.wasInterrupted())
+      return signalPassFailure();
+  }
+
   // Lower all module and formal op bodies.
   auto result =
       mlir::failableParallelForEach(&getContext(), opsToProcess, [&](auto op) {
@@ -826,6 +878,44 @@ void FIRRTLModuleLowering::runOnOperation() {
       });
   if (failed(result))
     return signalPassFailure();
+
+  // Verify the actual HW instance names after FIRRTL instances have been
+  // lowered and their ForceNameAnnotations became hw.verilogName attributes.
+  // Unforced names may be uniquified by Verilog emission, but an explicit
+  // hw.verilogName must not collide with another instance in the same module.
+  for (auto *op : opsToProcess) {
+    auto module = dyn_cast<hw::HWModuleOp>(op);
+    if (!module)
+      continue;
+
+    DenseMap<StringAttr, hw::InstanceOp> forcedNames;
+    for (auto inst : module.getOps<hw::InstanceOp>()) {
+      auto forcedName = inst->getAttrOfType<StringAttr>("hw.verilogName");
+      if (!forcedName)
+        continue;
+      auto [it, inserted] = forcedNames.try_emplace(forcedName, inst);
+      if (!inserted) {
+        inst.emitOpError() << "forced Verilog instance name '"
+                           << forcedName.getValue()
+                           << "' is already used by another instance in module "
+                           << module.getName();
+        return signalPassFailure();
+      }
+    }
+
+    for (auto inst : module.getOps<hw::InstanceOp>()) {
+      if (inst->hasAttr("hw.verilogName"))
+        continue;
+      auto it = forcedNames.find(inst.getInstanceNameAttr());
+      if (it != forcedNames.end()) {
+        it->second.emitOpError()
+            << "forced Verilog instance name '" << it->first.getValue()
+            << "' conflicts with the existing instance '"
+            << inst.getInstanceName() << "' in module " << module.getName();
+        return signalPassFailure();
+      }
+    }
+  }
 
   // Move binds from inside modules to outside modules.
   for (auto bind : state.binds) {
