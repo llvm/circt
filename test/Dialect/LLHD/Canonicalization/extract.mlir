@@ -35,3 +35,13 @@ func.func @sigArraySliceOp(%arg0: !llhd.ref<!hw.array<30xi32>>, %arg1: i5) -> (!
   // CHECK-NEXT: return %[[EXT]], %arg0, %[[RES1]], %[[RES2]] : !llhd.ref<!hw.array<30xi32>>, !llhd.ref<!hw.array<30xi32>>, !llhd.ref<!hw.array<20xi32>>, !llhd.ref<!hw.array<3xi32>>
   return %ext, %identity, %1, %2 : !llhd.ref<!hw.array<30xi32>>, !llhd.ref<!hw.array<30xi32>>, !llhd.ref<!hw.array<20xi32>>, !llhd.ref<!hw.array<3xi32>>
 }
+
+// A full-width aggregate extraction must not fold to a differently typed ref.
+// CHECK-LABEL: @sigExtractStruct
+func.func @sigExtractStruct(%arg0: !llhd.ref<!hw.struct<hi: i8, lo: i8>>) -> !llhd.ref<i16> {
+  %zero = hw.constant 0 : i4
+  // CHECK: [[BITS:%.+]] = llhd.sig.extract %arg0 from {{%.+}} : <!hw.struct<hi: i8, lo: i8>> -> <i16>
+  // CHECK-NEXT: return [[BITS]] : !llhd.ref<i16>
+  %bits = llhd.sig.extract %arg0 from %zero : <!hw.struct<hi: i8, lo: i8>> -> <i16>
+  return %bits : !llhd.ref<i16>
+}

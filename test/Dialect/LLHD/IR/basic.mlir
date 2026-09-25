@@ -21,6 +21,18 @@ hw.module @sigExtract(in %arg0 : !llhd.ref<i32>, in %arg1 : i5) {
   %1 = llhd.sig.extract %arg0 from %arg1 : <i32> -> <i5>
 }
 
+// All aggregate indices address bits, even when the aggregate has only two
+// fields or elements. These inputs each require a four-bit index.
+// CHECK-LABEL: @sigExtractAggregates
+hw.module @sigExtractAggregates(in %s: !llhd.ref<!hw.struct<a: i8, b: i8>>, in %a: !llhd.ref<!hw.array<2xi8>>, in %u: !llhd.ref<!hw.union<a: i16, b: i8>>, in %index: i4) {
+  // CHECK-NEXT: llhd.sig.extract %s from %index : <!hw.struct<a: i8, b: i8>> -> <i6>
+  %0 = llhd.sig.extract %s from %index : <!hw.struct<a: i8, b: i8>> -> <i6>
+  // CHECK-NEXT: llhd.sig.extract %a from %index : <!hw.array<2xi8>> -> <i6>
+  %1 = llhd.sig.extract %a from %index : <!hw.array<2xi8>> -> <i6>
+  // CHECK-NEXT: llhd.sig.extract %u from %index : <!hw.union<a: i16, b: i8>> -> <i6>
+  %2 = llhd.sig.extract %u from %index : <!hw.union<a: i16, b: i8>> -> <i6>
+}
+
 // CHECK-LABEL: @sigArray
 hw.module @sigArray(in %arg0 : !llhd.ref<!hw.array<5xi1>>, in %arg1 : i3) {
   // CHECK-NEXT: %{{.*}} = llhd.sig.array_slice %arg0 at %arg1 : <!hw.array<5xi1>> -> <!hw.array<3xi1>>

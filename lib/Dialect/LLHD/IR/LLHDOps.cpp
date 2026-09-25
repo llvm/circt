@@ -240,7 +240,21 @@ static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult llhd::SigExtractOp::fold(FoldAdaptor adaptor) {
+  // A full-width extraction from an aggregate still changes the reference type.
+  if (getInput().getType() != getResult().getType())
+    return {};
   return foldSigPtrExtractOp(*this, adaptor.getOperands());
+}
+
+LogicalResult llhd::SigExtractOp::verify() {
+  int64_t inputWidth = getInputWidth();
+  if (inputWidth < 0)
+    return emitOpError("input must have a statically known bit width");
+  if (getResultWidth() > inputWidth)
+    return emitOpError(
+        "width of result type has to be smaller than or equal to "
+        "the input type");
+  return success();
 }
 
 // Returns the number of elements that overlap between [a1, a2) and [b1, b2).
@@ -273,6 +287,9 @@ bool SigExtractOp::canRewire(const DestructurableMemorySlot &slot,
                              SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                              const DataLayout &dataLayout) {
   if (slot.ptr != getInput())
+    return false;
+  // Aggregate subslots are indexed by field or element, not by bit offset.
+  if (!isa<IntegerType>(slot.elemType))
     return false;
   APInt idx;
   Type type = getLLHDElementType(getResult().getType());

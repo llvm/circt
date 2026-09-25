@@ -1540,7 +1540,10 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
     Type inputType =
         cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
 
-    if (auto intType = dyn_cast<IntegerType>(inputType)) {
+    // Packed structs are bit-addressed, using the same layout as hw.bitcast.
+    // Keep the projection as a reference so that drives only update the slice.
+    auto mooreInputType = op.getInput().getType().getNestedType();
+    if (isa<IntegerType>(inputType) || isa<StructType>(mooreInputType)) {
       int64_t width = hw::getBitWidth(inputType);
       if (width == -1)
         return failure();

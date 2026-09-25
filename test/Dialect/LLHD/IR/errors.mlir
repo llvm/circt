@@ -21,6 +21,20 @@ hw.module @illegal_sig_to_int_to_wide(in %s : !llhd.ref<i32>, in %ind : i5) {
 
 // -----
 
+hw.module @struct_extract_too_wide(in %s: !llhd.ref<!hw.struct<a: i3, b: i5>>, in %index: i3) {
+  // expected-error @+1 {{width of result type has to be smaller than or equal to the input type}}
+  %0 = llhd.sig.extract %s from %index : <!hw.struct<a: i3, b: i5>> -> <i9>
+}
+
+// -----
+
+hw.module @struct_extract_index_width(in %s: !llhd.ref<!hw.struct<a: i3, b: i5>>, in %index: i1) {
+  // expected-error @+1 {{index width must be exactly ceil(log2(input bit width))}}
+  %0 = "llhd.sig.extract"(%s, %index) : (!llhd.ref<!hw.struct<a: i3, b: i5>>, i1) -> !llhd.ref<i4>
+}
+
+// -----
+
 hw.module @extract_element_tuple_index_out_of_bounds(in %tup : !llhd.ref<!hw.struct<foo: i1, bar: i2, baz: i3>>) {
   // expected-error @+1 {{invalid field name specified}}
   %0 = llhd.sig.struct_extract %tup["foobar"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>

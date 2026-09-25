@@ -336,24 +336,33 @@ def GetGlobalSignalOp : LLHDOp<"get_global_signal", [
 }
 
 //===----------------------------------------------------------------------===//
-// Integer Signal Projections
+// Bit Signal Projections
 //===----------------------------------------------------------------------===//
 
 def SigExtractOp : LLHDOp<"sig.extract", [
   Pure,
-  SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
-  SigPtrIndexBitWidthConstraint<"lowBit", "input">,
+  TypesMatchWith<"index width must be exactly ceil(log2(input bit width))",
+    "input", "lowBit", [{IntegerType::get($_self.getContext(),
+      llvm::Log2_64_Ceil(hw::getBitWidth(
+        cast<RefType>($_self).getNestedType())))}]>,
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
 ]> {
-  let summary = "Extract a range of bits from an integer signal";
+  let summary = "Extract a range of bits from a signal";
   let description = [{
     The `llhd.sig.extract` operation allows to access a range of bits
     of the `$input` operand, starting at the index given by the `$lowBit`
-    operand. The result length is defined by the result type.
+    operand. The result length is defined by the result type. The result aliases
+    the selected bits of the input signal; driving it leaves all other bits
+    unchanged.
+
+    The input must have a statically known bit width. Aggregate inputs use the
+    same bit layout as `hw.bitcast` to an integer of that width. The index width
+    must be exactly ceil(log2(input bit width)), and the result cannot be wider
+    than the input. Out-of-bounds accesses have undefined behavior.
   }];
 
-  let arguments = (ins RefTypeOf<HWIntegerType>:$input,
+  let arguments = (ins RefTypeOf<HWValueType>:$input,
                        HWIntegerType:$lowBit);
   let results = (outs RefTypeOf<HWIntegerType>: $result);
 
@@ -363,9 +372,12 @@ def SigExtractOp : LLHDOp<"sig.extract", [
 
   let extraClassDeclaration = [{
     unsigned getResultWidth()  { return getLLHDTypeWidth(getResult().getType()); }
-    unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
+    int64_t getInputWidth() {
+      return hw::getBitWidth(getInput().getType().getNestedType());
+    }
   }];
   let hasFolder = true;
+  let hasVerifier = true;
 }
 
 //===----------------------------------------------------------------------===//
