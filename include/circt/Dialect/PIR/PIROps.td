@@ -36,7 +36,6 @@ class PIRInnerOp<string mnemonic, list<Trait> traits = [
 def CellOp : PIROp<"cell", [
   IsolatedFromAbove,
   NoRegionArguments,
-  NoTerminator,
   RegionKindInterface,
   SingleBlock,
   SymbolName, 
@@ -95,7 +94,8 @@ def InputOp : PIRInnerOp<"input", [
 //===----------------------------------------------------------------------===//
 
 class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [
-  AttrSizedOperandSegments
+  AttrSizedOperandSegments, 
+  Terminator
 ]> : PIRInnerOp<mnemonic, traits> {
   let arguments = (ins 
     PIRClockedPropertyType:$property,

@@ -31,6 +31,62 @@ The property IR flow looks as follows:
                                              |----------------------------|       
 ```
 
+### Structure of PIR Property
+The general structure of a PIR block is a a `pir.cell`, which represents a property being asserted, assumed, cover, etc. which can have inputs that represent signals which it inherits from outside of the cell (by default it is isolated), and a top-level `pir.assert_property`, `pir.assume_property`, `pir.coover_property`, or `pir.restrict_property`. 
+
+Unlike in other interpretations of SVA, PIR follows a strict typing isolation where there is no inherit hierarchy between the types. For example in `ltl`, `!ltl.property` > `!ltl.sequence` > `i1` so a boolean is a sequence which itself is a property. In `pir`, explicit casts or clocking operations are needed to move between types, e.g. `!pir.sequence` must be explicitly clocked to become a `!pir.clocked_sequence`, same for `!pir.property` and `!pir.clocked_property`, and of course `i1` to any clocked expression. This reduces the amount of analyses required, and potential inference, to retrieve information as a `!pir.clocked_property` will always be explicitly tied to a clock somewhere. This same reasoning is why all assertlike operations only accept `!pir.clocked_property` as their inputs.
+
+Here's an example of how an SVA property gets encoded in PIR:
+Given a SystemVerilog property to assert:
+```sv
+prop_ assert property (a ##1 b |-> always(c))
+```
+this becomes the following textual property IR (s-expressions): 
+```lisp
+(documnent
+  (declare-input a)
+  (declare-input b)
+  (declare-input c)
+  (declare prop 
+    (clk-prop-overlapped-implication
+      (clk-seq-concat
+        (clk-seq-bool a)
+        (clk-seq-bool b)
+      )
+      (clk-prop-always
+        (clk-prop-bool c)
+      )
+    )
+  )
+  (assert-property prop)
+)
+```
+which is equivalent to the following `pir` dialect:
+```mlir
+pir.cell @prop {} {
+  %a, %b, %c = pir.input : i1, i1, i1
+  %clk_s_a = pir.bool_to_clocked_seq %a
+  %clk_s_b = pir.bool_to_clocked_seq %b
+  %clk_p_c = pir.bool_to_clocked_prop %c
+
+  %aconcatb = pir.concat %clk_s_a, %clk_s_b 
+  %always_c = pir.always %clk_p_c
+  %prop = pir.overlapped_implication %aconcatb, %always_c 
+
+  pir.assert_property %prop : !pir.clocked_property
+}
+```
+
+This is a simple example but shows the general structure of a PIR property. 
+Assert-like operations function as terminator's for a cell's region, meaning that each property should exist within its own cell.
+Note that by default, type conversions will tie a property or sequence to the global clock, 
+that is, the clock defined by the steps taken by a model checker. 
+This is what distinguishes "clocking operations" with "type conversion operations". 
+A neat addition is that the type signature in the pretty printed mlir assembly can be omitted in most 
+cases since all of the operations only accept a single type of operand.  
+The general structure is close enough to actual SVA to make a much cleaner interface than `ltl`, which should be used 
+as a core dialect and not an interfacing dialect.  
+
 ## Enums
 
 [include "Dialects/PIREnums.md"]
