@@ -1,4 +1,4 @@
-# REQUIRES: iverilog,cocotb
+# REQUIRES: iverilog-12,cocotb
 # RUN: %PYTHON% %s 2>&1 | FileCheck %s
 from pycde import Input, Output, generator, modparams, Module, Clock
 from pycde.types import Bit, Bits

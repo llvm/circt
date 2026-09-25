@@ -732,8 +732,8 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
         getRefABIPrefix(module, circuitRefPrefix);
       auto macroName =
           getRefABIMacroForPort(module, portIndex, circuitRefPrefix);
-      sv::MacroDeclOp::create(declBuilder, macroName, ArrayAttr(),
-                              StringAttr());
+      sv::MacroDeclOp::create(declBuilder, macroName, /*sym_visibility=*/{},
+                              ArrayAttr(), StringAttr());
       ports.emplace_back(macroName, declBuilder.getStringAttr(formatString),
                          ref ? declBuilder.getArrayAttr({ref}) : ArrayAttr{});
     }

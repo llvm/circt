@@ -72,7 +72,9 @@ void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
 //===----------------------------------------------------------------------===//
 
 static StringAttr getSymbolName(Operation *op) {
-  return op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+  if (auto symbol = dyn_cast<mlir::SymbolOpInterface>(op))
+    return symbol.getNameAttr();
+  return {};
 }
 
 InnerSymbolUses::InnerSymbolUses(Operation *root) {

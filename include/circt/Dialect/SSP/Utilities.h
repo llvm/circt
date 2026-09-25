@@ -458,7 +458,7 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
 
   for (auto opr : prob.getOperatorTypes())
     OperatorTypeOp::create(
-        b, opr.getAttr(),
+        b, opr.getAttr(), /*sym_visibility=*/{},
         saveOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
             prob, opr, b));
 
@@ -471,7 +471,7 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
 
   for (auto rsrc : prob.getResourceTypes())
     ResourceTypeOp::create(
-        b, rsrc.getAttr(),
+        b, rsrc.getAttr(), /*sym_visibility=*/{},
         saveResourceTypeProperties<ProblemT, ResourceTypePropertyTs...>(
             prob, rsrc, b));
 

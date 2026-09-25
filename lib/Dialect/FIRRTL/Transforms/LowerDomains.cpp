@@ -897,7 +897,8 @@ LogicalResult LowerCircuit::lowerCircuit() {
     auto moduleOp = dyn_cast<FModuleLike>(node.getModule<Operation *>());
     if (!moduleOp)
       return success();
-    LLVM_DEBUG(llvm::dbgs() << "  - module: " << moduleOp.getName() << "\n");
+    LLVM_DEBUG(llvm::dbgs()
+               << "  - module: " << moduleOp.getModuleName() << "\n");
     LowerModule lowerModule(moduleOp, classes, constants, instanceGraph);
     if (failed(lowerModule.lowerModule()))
       return failure();

@@ -18,7 +18,15 @@ from pathlib import Path
 import sys
 import textwrap
 
-from esiaccel.cosim.simulator import get_simulator, SourceFiles
+from esiaccel.cosim.simulator import (get_simulator, load_macro_definitions,
+                                      SourceFiles)
+
+
+def _parse_macro_definition(value):
+  name, separator, macro_value = value.partition("=")
+  if not name:
+    raise argparse.ArgumentTypeError("macro name cannot be empty")
+  return name, macro_value if separator else None
 
 
 def __main__(args):
@@ -66,6 +74,24 @@ def __main__(args):
   argparser.add_argument("--source",
                          help="Directories containing the source files.",
                          default="hw")
+  argparser.add_argument(
+      "-D",
+      "--define",
+      dest="macro_definitions",
+      action="append",
+      default=[],
+      metavar="NAME[=VALUE]",
+      type=_parse_macro_definition,
+      help="Define an RTL macro during compilation. May be specified multiple "
+      "times.")
+  argparser.add_argument(
+      "--define-file",
+      dest="macro_definitions_file",
+      metavar="FILE",
+      help="Read RTL macro definitions from a JSON file: an object mapping "
+      "macro name to value, where null defines the macro without one. Useful "
+      "when the macros are produced by the same build that generated the "
+      "sources. Any -D on the command line overrides what the file defines.")
 
   argparser.add_argument("inner_cmd",
                          nargs=argparse.REMAINDER,
@@ -90,8 +116,18 @@ def __main__(args):
   sources = SourceFiles(args.top)
   sources.add_dir(Path(args.source))
 
-  sim = get_simulator(args.sim, sources, Path(args.rundir), args.debug,
-                      args.save_waveform)
+  macro_definitions = {}
+  if args.macro_definitions_file is not None:
+    macro_definitions.update(
+        load_macro_definitions(Path(args.macro_definitions_file)))
+  macro_definitions.update(args.macro_definitions)
+
+  sim = get_simulator(args.sim,
+                      sources,
+                      Path(args.rundir),
+                      args.debug,
+                      args.save_waveform,
+                      macro_definitions=macro_definitions)
   if not args.no_compile:
     rc = sim.compile()
     if rc != 0:

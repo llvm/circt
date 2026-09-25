@@ -12,7 +12,7 @@ from pycde.testing import unittestmodule
 # CHECK-NEXT:    %0:4 = fsm.hw_instance "F0" @F0(%a, %b, %c), clock %clk, reset %rst : (i1, i1, i1) -> (i1, i1, i1, i1)
 # CHECK-NEXT:    hw.output %0#1, %0#2, %0#3 : i1, i1, i1
 # CHECK-NEXT:  }
-# CHECK-LABEL: fsm.machine @F0(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1, i1, i1) attributes {clock_name = "clk", in_names = ["a", "b", "c"], initialState = "idle", out_names = ["is_idle", "is_A", "is_B", "is_C"], reset_name = "rst"} {
+# CHECK-LABEL: fsm.machine @F0(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1, i1, i1) attributes {clock_name = "clk", in_names = ["a", "b", "c"], out_names = ["is_idle", "is_A", "is_B", "is_C"], reset_name = "rst", initialState = "idle"} {
 # CHECK-NEXT:    fsm.state @idle output {
 # CHECK-NEXT:      %true = hw.constant true
 # CHECK-NEXT:      %false = hw.constant false
@@ -128,7 +128,7 @@ system.print()
 # Test alternative clock / reset names.
 
 
-# CHECK-LABEL:  fsm.machine @FsmClockTest(%arg0: i1) -> (i1, i1) attributes {clock_name = "clock", in_names = ["a"], initialState = "A", out_names = ["is_A", "is_B"], reset_name = "reset"}
+# CHECK-LABEL:  fsm.machine @FsmClockTest(%arg0: i1) -> (i1, i1) attributes {clock_name = "clock", in_names = ["a"], out_names = ["is_A", "is_B"], reset_name = "reset", initialState = "A"}
 @unittestmodule()
 class FsmClockTest(fsm.Machine):
   clock = Clock()

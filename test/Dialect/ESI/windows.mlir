@@ -17,7 +17,7 @@
 
 !ArrayWindow = !hw.array<2x!TypeAwin1>
 !ListOfWindows = !esi.list<!TypeAwin1>
-!AliasStruct = !hw.typealias<@AliasStruct, !hw.struct<aliasField: !TypeAwin1>>
+!AliasStruct = !hw.typealias<@types::@AliasStruct, !hw.struct<aliasField: !TypeAwin1>>
 
 // CHECK-LABEL:   hw.module.extern @TypeAModuleDst(in %windowed : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>)
 hw.module.extern @TypeAModuleDst(in %windowed: !TypeAwin1)
@@ -130,14 +130,14 @@ hw.module @UnionWindowModule(in %u: !hw.union<frame: !TypeAwin1>, out x: !hw.uni
 }
 
 // CHECK-LABEL: hw.module @AliasStructWindowModule
-// CHECK:         %[[FIELD:.*]] = hw.struct_extract %a["aliasField"] : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>>
+// CHECK:         %[[FIELD:.*]] = hw.struct_extract %a["aliasField"] : !hw.typealias<@types::@AliasStruct, !hw.struct<aliasField: !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>>
 // CHECK:         %[[U:.*]] = esi.window.unwrap %[[FIELD]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
 // CHECK:         %[[R:.*]] = esi.window.wrap %[[U]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
-// CHECK:         %[[STRUCT:.*]] = hw.struct_create (%[[R]]) : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>>
+// CHECK:         %[[STRUCT:.*]] = hw.struct_create (%[[R]]) : !hw.typealias<@types::@AliasStruct, !hw.struct<aliasField: !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>>
 // LOW-LABEL: hw.module @AliasStructWindowModule(
-// LOW-NEXT:    %[[FIELD:.*]] = hw.struct_extract %a["aliasField"] : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>>
-// LOW-NEXT:    %[[STRUCT:.*]] = hw.struct_create (%[[FIELD]]) : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>>
-// LOW-NEXT:    hw.output %[[STRUCT]] : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>>
+// LOW-NEXT:    %[[FIELD:.*]] = hw.struct_extract %a["aliasField"] : !hw.typealias<@types::@AliasStruct, !hw.struct<aliasField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>>
+// LOW-NEXT:    %[[STRUCT:.*]] = hw.struct_create (%[[FIELD]]) : !hw.typealias<@types::@AliasStruct, !hw.struct<aliasField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>>
+// LOW-NEXT:    hw.output %[[STRUCT]] : !hw.typealias<@types::@AliasStruct, !hw.struct<aliasField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>>
 hw.module @AliasStructWindowModule(in %a: !AliasStruct, out x: !AliasStruct) {
   %field = hw.struct_extract %a["aliasField"] : !AliasStruct
   %unwrapped = esi.window.unwrap %field : !TypeAwin1

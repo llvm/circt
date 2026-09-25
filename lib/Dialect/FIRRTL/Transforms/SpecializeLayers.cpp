@@ -494,7 +494,7 @@ struct SpecializeLayers {
     // have been specialized away.
     llvm::BitVector disabledPorts(oldTypeAttrs.size());
 
-    auto moduleName = moduleLike.getNameAttr();
+    auto moduleName = moduleLike.getModuleNameAttr();
     for (auto [index, typeAttr] :
          llvm::enumerate(oldTypeAttrs.getAsRange<TypeAttr>())) {
       // Specialize the type fo the port.

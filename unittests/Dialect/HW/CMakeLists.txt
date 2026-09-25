@@ -4,6 +4,7 @@ add_circt_unittest(CIRCTHWTests
   InstanceGraphTest.cpp
   InstancePathTest.cpp
   MaterializerTest.cpp
+  PortConverterTest.cpp
   TypesTest.cpp
 )
 

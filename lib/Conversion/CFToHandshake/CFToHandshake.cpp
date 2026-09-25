@@ -1681,7 +1681,7 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
   // Only retain those attributes that are not constructed by build.
   SmallVector<NamedAttribute, 4> attributes;
   for (const auto &attr : funcOp->getAttrs()) {
-    if (attr.getName() == SymbolTable::getSymbolAttrName() ||
+    if (attr.getName() == funcOp.getSymNameAttrName() ||
         attr.getName() == funcOp.getFunctionTypeAttrName())
       continue;
     attributes.push_back(attr);

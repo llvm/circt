@@ -307,9 +307,9 @@ static MemoryAccess prepareMemoryAccess(Location loc, Value memory,
   auto zextAddrType = rewriter.getIntegerType(
       cast<IntegerType>(address.getType()).getWidth() + 1);
   Value addr = LLVM::ZExtOp::create(rewriter, loc, zextAddrType, address);
-  Value addrLimit =
-      LLVM::ConstantOp::create(rewriter, loc, zextAddrType,
-                               rewriter.getI32IntegerAttr(type.getNumWords()));
+  Value addrLimit = LLVM::ConstantOp::create(
+      rewriter, loc, zextAddrType,
+      rewriter.getIntegerAttr(zextAddrType, type.getNumWords()));
   Value withinBounds = LLVM::ICmpOp::create(
       rewriter, loc, LLVM::ICmpPredicate::ult, addr, addrLimit);
   Value ptr = LLVM::GEPOp::create(
@@ -340,7 +340,7 @@ struct MemoryReadOpLowering : public OpConversionPattern<arc::MemoryReadOp> {
         },
         [&](auto &builder, auto loc) {
           Value zeroValue = LLVM::ConstantOp::create(
-              builder, loc, type, builder.getI64IntegerAttr(0));
+              builder, loc, type, builder.getIntegerAttr(type, 0));
           scf::YieldOp::create(builder, loc, zeroValue);
         });
     return success();
@@ -1273,9 +1273,11 @@ struct RuntimeModelOpLowering
     }
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto namesGlobal = buildGlobalConstantIntArray(
-        rewriter, op.getLoc(), "_arc_tap_names_" + op.getName(), namesArray);
+        rewriter, op.getLoc(), "_arc_tap_names_" + op.getModelName(),
+        namesArray);
     auto traceTapsArrayGlobal = buildGlobalConstantRuntimeStructArray(
-        rewriter, op.getLoc(), "_arc_trace_taps_" + op.getName(), tapArray);
+        rewriter, op.getLoc(), "_arc_trace_taps_" + op.getModelName(),
+        tapArray);
 
     //
     //  struct ArcModelTraceInfo {
@@ -1292,7 +1294,7 @@ struct RuntimeModelOpLowering
                   "Unexpected size of ArcModelTraceInfo struct");
 
     auto globalSymName =
-        rewriter.getStringAttr("_arc_trace_info_" + op.getName());
+        rewriter.getStringAttr("_arc_trace_info_" + op.getModelName());
     auto traceInfoGlobalOp = LLVM::GlobalOp::create(
         rewriter, op.getLoc(), traceInfoStructType,
         /*isConstant=*/false, LLVM::Linkage::Internal, globalSymName,
@@ -1362,13 +1364,13 @@ struct RuntimeModelOpLowering
     auto traceInfoGlobal = buildTraceInfoStruct(op, rewriter);
 
     // Construct the Model Name String GlobalOp
-    SmallVector<char, 16> modNameArray(op.getName().begin(),
-                                       op.getName().end());
+    SmallVector<char, 16> modNameArray(op.getModelName().begin(),
+                                       op.getModelName().end());
     modNameArray.push_back('\0');
     auto nameGlobalType =
         LLVM::LLVMArrayType::get(rewriter.getI8Type(), modNameArray.size());
     auto globalSymName =
-        rewriter.getStringAttr("_arc_mod_name_" + op.getName());
+        rewriter.getStringAttr("_arc_mod_name_" + op.getModelName());
     auto nameGlobal = LLVM::GlobalOp::create(
         rewriter, op.getLoc(), nameGlobalType, /*isConstant=*/true,
         LLVM::Linkage::Internal,

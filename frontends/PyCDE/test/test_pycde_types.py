@@ -46,7 +46,7 @@ class Dummy(Module):
   pass
 
 
-# CHECK: hw.type_scope @pycde
+# CHECK: sv.package @pycde
 # CHECK: hw.typedecl @myname1 : i8
 # CHECK: hw.typedecl @myname5 : !hw.array<8xi1>
 # CHECK-NOT: hw.typedecl @myname1

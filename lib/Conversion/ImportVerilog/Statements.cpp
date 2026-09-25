@@ -1823,7 +1823,7 @@ void Context::ensureMonitorGlobals() {
   // Create "active_id" global variable. Index 0 indicates no monitor
   // is active.
   monitorActiveIdGlobal = moore::GlobalVariableOp::create(
-      builder, loc, "__monitor_active_id", i32Type);
+      builder, loc, "__monitor_active_id", /*sym_visibility=*/{}, i32Type);
   {
     OpBuilder::InsertionGuard initGuard(builder);
     builder.setInsertionPointToStart(
@@ -1835,7 +1835,7 @@ void Context::ensureMonitorGlobals() {
 
   // Create "enabled" global variable.
   monitorEnabledGlobal = moore::GlobalVariableOp::create(
-      builder, loc, "__monitor_enabled", i1Type);
+      builder, loc, "__monitor_enabled", /*sym_visibility=*/{}, i1Type);
   {
     OpBuilder::InsertionGuard initGuard(builder);
     builder.setInsertionPointToStart(
@@ -1947,7 +1947,7 @@ void Context::ensureTimeFormatGlobal() {
   auto structTy = moore::UnpackedStructType::get(getContext(), members);
 
   timeFormatGlobal = moore::GlobalVariableOp::create(
-      builder, loc, "__timeformat_state", structTy);
+      builder, loc, "__timeformat_state", /*sym_visibility=*/{}, structTy);
   {
     OpBuilder::InsertionGuard initGuard(builder);
     builder.setInsertionPointToStart(

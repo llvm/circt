@@ -14,7 +14,7 @@ from pycde.constructs import Wire
 from pycde import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
-                     DesignResetController, ResetCycles)
+                     DesignResetController, ResetCycles, TelemetryMMIO)
 from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
 from pycde.circt import ir
@@ -61,10 +61,10 @@ def CosimBSP(
     @generator
     def build(ports):
       user_module(clk=ports.clk, rst=ports.rst)
-      esi.TelemetryMMIO(esi.Telemetry,
-                        appid=esi.AppID("__telemetry"),
-                        clk=ports.clk,
-                        rst=ports.rst)
+      TelemetryMMIO(esi.Telemetry,
+                    appid=esi.AppID("__telemetry"),
+                    clk=ports.clk,
+                    rst=ports.rst)
 
       if dma_engine_pair is not None:
         ChannelEngineService(dma_engine_pair[0], dma_engine_pair[1])(

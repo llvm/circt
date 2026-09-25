@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Support/FVInt.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
@@ -896,6 +897,13 @@ struct ModuleVisitor : public BaseVisitor {
   }
 
   LogicalResult visit(const slang::ast::ProceduralBlockSymbol &procNode) {
+    // Slang wraps module-level concurrent assertions in a synthetic `always`
+    // procedure. The assertion is self-clocked, so it needs no process.
+    if (auto *syntax = procNode.getSyntax();
+        syntax &&
+        syntax->kind == slang::syntax::SyntaxKind::ConcurrentAssertionMember)
+      return context.convertStatement(procNode.getBody());
+
     // Detect `always @(*) <stmt>` and convert to `always_comb <stmt>` if
     // requested by the user.
     if (context.options.lowerAlwaysAtStarAsComb) {
@@ -2453,6 +2461,10 @@ LogicalResult Context::convertFixedPrimitive(
   if (primName == "pullup" || primName == "pulldown")
     return convertPullGatePrimitive(prim);
 
+  if (primName == "bufif0" || primName == "bufif1" || primName == "notif0" ||
+      primName == "notif1")
+    return convertThreeStateGatePrimitive(prim);
+
   if (primName == "nmos" || primName == "pmos" || primName == "rnmos" ||
       primName == "rpmos") {
     return convertMOSSwitchPrimitive(prim);
@@ -2500,6 +2512,129 @@ LogicalResult Context::convertPullGatePrimitive(
   if (!converted)
     return failure();
   moore::ContinuousAssignOp::create(builder, loc, portVal, converted);
+  return success();
+}
+
+/// Yields `data` unless it is exactly Z, in which case yields X instead.
+/// Per IEEE 1800-2023 Section 28.6's table 28-5 for three-state gates, a Z
+/// data input yields X on either the actively-driven or ambiguous-enable path.
+/// Known 0/1 data values pass through unchanged. For three-state gates this
+/// depends on the assumption that we collapse L to 0 and H to 1.
+static Value collapseZToX(OpBuilder &builder, Location loc, Value data,
+                          Type dstType) {
+  auto dstIntType = cast<moore::IntType>(dstType);
+  Value xVal =
+      moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllX(1));
+  Value zVal =
+      moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
+
+  auto isZ = moore::CaseEqOp::create(builder, loc, data, zVal);
+  auto condOp = moore::ConditionalOp::create(builder, loc, dstType, isZ);
+  auto &trueBlk = condOp.getTrueRegion().emplaceBlock();
+  auto &falseBlk = condOp.getFalseRegion().emplaceBlock();
+  {
+    OpBuilder::InsertionGuard g(builder);
+    builder.setInsertionPointToStart(&trueBlk);
+    moore::YieldOp::create(builder, loc, xVal);
+    builder.setInsertionPointToStart(&falseBlk);
+    moore::YieldOp::create(builder, loc, data);
+  }
+  return condOp.getResult();
+}
+
+LogicalResult Context::convertThreeStateGatePrimitive(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  auto loc = convertLocation(prim.location);
+  auto primName = prim.primitiveType.name;
+
+  auto portConns = prim.getPortConnections();
+  assert(portConns.size() == 3 &&
+         "Expected exactly 3 ports in three-state gate primitives");
+
+  auto &outputConn =
+      portConns[0]->as<slang::ast::AssignmentExpression>().left();
+  auto outputVal = convertLvalueExpression(outputConn);
+  if (!outputVal)
+    return failure();
+
+  auto inVal = convertRvalueExpression(*portConns[1]);
+  auto enVal = convertRvalueExpression(*portConns[2]);
+  if (!inVal || !enVal)
+    return failure();
+
+  auto enType = cast<moore::IntType>(enVal.getType());
+  auto enWidth = enType.getBitSize();
+  if (!enWidth || *enWidth != 1)
+    return mlir::emitError(loc)
+           << "enable signal of a three-state gate primitive must be 1 bit";
+
+  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  auto dstWidth = dstType.getBitSize();
+  if (!dstWidth || *dstWidth != 1)
+    return mlir::emitError(loc)
+           << "output of a three-state gate primitive must be 1 bit";
+
+  if (primName == "notif0" || primName == "notif1")
+    inVal = moore::NotOp::create(builder, loc, inVal);
+
+  inVal = materializeConversion(dstType, inVal, false, loc);
+  if (!inVal)
+    return failure();
+
+  // Value of enable to be considered active or inactive
+  int inactiveLevel = (primName == "bufif1" || primName == "notif1") ? 0 : 1;
+  Value inactiveConst =
+      moore::ConstantOp::create(builder, loc, enType, inactiveLevel, false);
+
+  auto dstIntType = cast<moore::IntType>(dstType);
+  Value zVal =
+      moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
+
+  // Compare enable to what we consider inactive (0 or 1 depending on type of
+  // buffer)
+  auto condInactive =
+      moore::CaseEqOp::create(builder, loc, enVal, inactiveConst);
+  auto inactiveOp =
+      moore::ConditionalOp::create(builder, loc, dstType, condInactive);
+  auto &inactiveTrue = inactiveOp.getTrueRegion().emplaceBlock();
+  auto &inactiveFalse = inactiveOp.getFalseRegion().emplaceBlock();
+
+  {
+    OpBuilder::InsertionGuard g(builder);
+    builder.setInsertionPointToStart(&inactiveTrue);
+    moore::YieldOp::create(builder, loc, zVal);
+    builder.setInsertionPointToStart(&inactiveFalse);
+    moore::YieldOp::create(builder, loc,
+                           collapseZToX(builder, loc, inVal, dstType));
+  }
+
+  Value result = inactiveOp.getResult();
+
+  if (prim.getDelay()) {
+    const slang::ast::Expression *delayExpr;
+    if (const auto *delay3 =
+            prim.getDelay()->as_if<slang::ast::Delay3Control>()) {
+      if (delay3->expr2 || delay3->expr3)
+        return mlir::emitError(loc) << "only three-state primitives that "
+                                       "specify a single delay are "
+                                       "currently supported";
+      delayExpr = &delay3->expr1;
+    } else if (const auto *delay =
+                   prim.getDelay()->as_if<slang::ast::DelayControl>()) {
+      delayExpr = &delay->expr;
+    } else {
+      llvm_unreachable("unexpected delay control type in primitive instance");
+    }
+
+    auto delayVal =
+        convertRvalueExpression(*delayExpr, moore::TimeType::get(getContext()));
+    if (!delayVal)
+      return failure();
+    moore::DelayedContinuousAssignOp::create(builder, loc, outputVal, result,
+                                             delayVal);
+  } else {
+    moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
+  }
   return success();
 }
 
@@ -2835,7 +2970,8 @@ struct ClassPropertyVisitor : ClassDeclVisitorBase {
       return failure();
 
     if (prop.lifetime == slang::ast::VariableLifetime::Automatic) {
-      moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
+      moore::ClassPropertyDeclOp::create(builder, loc, prop.name,
+                                         /*sym_visibility=*/{}, ty);
       return success();
     }
 
@@ -2959,7 +3095,8 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
         return failure();
       }
 
-      moore::ClassMethodDeclOp::create(builder, loc, fn.name, funcTy, nullptr);
+      moore::ClassMethodDeclOp::create(builder, loc, fn.name,
+                                       /*sym_visibility=*/{}, funcTy, nullptr);
       return success();
     }
 
@@ -2975,7 +3112,7 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
     FunctionType fnTy = cast<FunctionType>(lowering->op.getFunctionType());
     // Emit the method decl into the class body, preserving source order.
     moore::ClassMethodDeclOp::create(
-        builder, loc, fn.name, fnTy,
+        builder, loc, fn.name, /*sym_visibility=*/{}, fnTy,
         SymbolRefAttr::get(lowering->op.getNameAttr()));
 
     return success();
@@ -3047,8 +3184,8 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
   auto symName = fullyQualifiedClassName(*this, cls);
 
   auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
-  auto classDeclOp =
-      moore::ClassDeclOp::create(builder, loc, symName, base, impls);
+  auto classDeclOp = moore::ClassDeclOp::create(
+      builder, loc, symName, /*sym_visibility=*/{}, base, impls);
 
   SymbolTable::setSymbolVisibility(classDeclOp,
                                    SymbolTable::Visibility::Public);
@@ -3164,6 +3301,7 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
 
   // Create the variable op itself.
   auto varOp = moore::GlobalVariableOp::create(builder, loc, symName,
+                                               /*sym_visibility=*/{},
                                                cast<moore::UnpackedType>(type));
   orderedRootOps.insert({locationKey, varOp});
   globalVariables.insert({&var, varOp});

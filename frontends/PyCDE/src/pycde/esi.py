@@ -640,7 +640,9 @@ MMIOReadWriteCmdType = StructType([
 class MMIO:
   """ESI standard service to request access to an MMIO region.
 
-  For now, each client request gets a 1KB region of memory."""
+  The service implementation determines the allocation. The ESI runtime
+  `ChannelMMIO` implementation defaults to 2048 bytes and accepts a byte count
+  through the request's `size` option."""
 
   read = Bundle([
       BundledChannel("offset", ChannelDirection.TO, UInt(32)),
@@ -1084,97 +1086,6 @@ class _Telemetry(ServiceDecl):
 
 
 Telemetry = _Telemetry()
-
-
-class TelemetryMMIO(ServiceImplementation):
-  """An ESI service implementation which provides telemetry data through an MMIO
-  region. Each client request is assigned a register in the MMIO space. When a
-  read request is received for the assigned address, it gets routed to the
-  assigned client. When a write request is received, it is discarded. The
-  assignment table is stored in the manifest.
-
-  **REQUIREMENTS.** Both are needed to make the response merge safe:
-
-  1. The `MMIO` service implementation this connects to must not issue a read
-     command while a previous read's response is still outstanding.
-  2. Every telemetry client must assert its `data` channel's `valid` only in
-     response to a `get`. `Telemetry.report_signal` does this; a client which
-     holds `valid` high permanently -- legal ESI, and the natural way to
-     express an always-available counter -- does not.
-
-  Given both, each command is demuxed to exactly one client and at most one
-  client is offering a response at a time, so the responses can be merged with
-  `ChannelMergeOneValid` instead of arbitrated -- which keeps the response path
-  from building a combinational cone across every telemetry client.
-
-  Nothing here enforces either, and violating either loses responses. Note (2)
-  is not specific to this merge: `ChannelMux2` is fixed-priority, so under an
-  arbiter a permanently-valid client starves every client behind it."""
-
-  clk = Clock()
-  rst = Reset()
-
-  @generator
-  def generate(ports, bundles: _ServiceGeneratorBundles) -> bool:
-    if len(bundles.to_client_reqs) == 0:
-      # No clients to connect to, so we don't need to do anything.
-      return True
-
-    mmio_cmd = MMIO.read_write(AppID("__telemetry_mmio"))
-    # Assign each telemetry client a register offset in MMIO space.
-
-    offset = 0
-    table: Dict[int, AssignableSignal] = {}
-    for bundle in bundles.to_client_reqs:
-      # Only support 'report' port for telemetry.
-      if bundle.port == 'report':
-        table[offset] = bundle
-        bundle.add_record(details={"offset": offset, "type": "mmio"})
-        offset += 8
-      else:
-        raise ValueError(f"Unrecognized port name: {bundle.port}")
-
-    # Unpack the cmd bundle.
-    data_resp_channel = Wire(Channel(MMIODataType), "telemetry_data_resp")
-    counted_output = Wire(Channel(MMIODataType), "telemetry_counted_output")
-    cmd_channel = mmio_cmd.unpack(data=counted_output)["cmd"]
-    counted_output.assign(data_resp_channel)
-
-    # Decode the address to select the client.
-    cmd_ready_wire = Wire(Bits(1), "telemetry_cmd_ready")
-    cmd, cmd_valid = cmd_channel.unwrap(cmd_ready_wire)
-    client_addr_chan, client_addr_ready = Channel(Bits(0)).wrap(
-        Bits(0)(0), cmd_valid)
-    cmd_ready_wire.assign(client_addr_ready)
-
-    # Build the demux/mux and assign the results of each appropriately.
-    read_clients_clog2 = clog2(len(table))
-    chan_sel = cmd.offset.as_bits()[3:read_clients_clog2 + 3]
-    client_cmd_channels = ChannelDemux(
-        sel=chan_sel,
-        input=client_addr_chan,
-        num_outs=len(table),
-        instance_name="telemetry_client_cmd_demux")
-    client_data_channels = []
-    for (idx, offset) in enumerate(sorted(table.keys())):
-      bundle_wire = table[offset]
-      bundle_type = bundle_wire.type
-      # For telemetry, the client expects a 'get' channel and returns 'data'.
-      offset_chan = client_cmd_channels[idx]
-      bundle, bundle_froms = bundle_type.pack(get=offset_chan)
-
-      bundle_wire.assign(bundle)
-      client_data_channels.append(
-          bundle_froms["data"].transform(lambda m: m.as_bits(64)))
-    # The demux above routes each command to exactly one client, so -- given
-    # both requirements in this class' docs -- at most one client is offering a
-    # response at a time and no arbitration is needed to merge them.
-    resp_channel = ChannelMergeOneValid(client_data_channels,
-                                        ports.clk,
-                                        ports.rst,
-                                        instance_name="telemetry_resp_merge")
-    data_resp_channel.assign(resp_channel)
-    return True
 
 
 def package(sys: System):

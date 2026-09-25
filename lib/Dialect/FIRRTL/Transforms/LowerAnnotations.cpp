@@ -252,7 +252,8 @@ static LogicalResult applyDUTAnno(const AnnoPathValue &target,
   auto moduleOp = cast<FModuleLike>(op);
 
   // DUT has public visibility.
-  moduleOp.setPublic();
+  mlir::SymbolTable::setSymbolVisibility(moduleOp.getOperation(),
+                                         mlir::SymbolTable::Visibility::Public);
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno)
     if (na.getName().getValue() != "target")

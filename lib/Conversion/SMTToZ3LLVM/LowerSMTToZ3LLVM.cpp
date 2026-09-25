@@ -900,10 +900,11 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
     // supplied by the JITed module so the BMC runtime remains independent of a
     // particular Z3 library at link time.
     auto parentFunction = op->getParentOfType<FunctionOpInterface>();
-    auto functionName = parentFunction
-                            ? parentFunction->getAttrOfType<StringAttr>(
-                                  SymbolTable::getSymbolAttrName())
-                            : StringAttr{};
+    StringAttr functionName;
+    if (parentFunction)
+      if (auto symbol =
+              dyn_cast<SymbolOpInterface>(parentFunction.getOperation()))
+        functionName = symbol.getNameAttr();
     Operation *traceEmissionOp = nullptr;
     if (functionName && globals.traceFunctionNames.contains(functionName)) {
       rewriter.setInsertionPointToStart(satIfOp.thenBlock());
@@ -1429,7 +1430,7 @@ struct BMCTraceLowering : public SMTLoweringPattern<verif::BMCTraceOp> {
     if (!function || function.getNumArguments() == 0)
       return rewriter.notifyMatchFailure(op, "missing BMC trace context");
     auto functionName =
-        function->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+        dyn_cast<SymbolOpInterface>(function.getOperation()).getNameAttr();
     unsigned traceArgumentOffset =
         functionName &&
                 globals.traceEmissionFunctionNames.contains(functionName)
