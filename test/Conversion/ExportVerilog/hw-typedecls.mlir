@@ -121,3 +121,36 @@ hw.module @testEnumOps(out out1: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum
   %0 = hw.enum.constant A : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
 }
+
+// Declarations of aliased types must not get a "logic" keyword.
+// CHECK-LABEL: module testAliasLocalDecls
+hw.module @testAliasLocalDecls(in %clk: i1, in %s: !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>, in %f: !hw.typealias<@__hw_typedecls::@foo, i1>) {
+  // CHECK:      {{^}}  bar{{ +}}m;
+  // CHECK-NEXT: {{^}}  myEnum{{ +}}e;
+  %m = sv.logic : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+  %e = sv.logic : !hw.inout<!hw.typealias<@__hw_typedecls::@myEnum, !hw.enum<A, B, C>>>
+  // CHECK:      always @(posedge clk) begin
+  // CHECK-NEXT:   automatic bar{{ +}}l = s;
+  // CHECK-NEXT:   automatic foo{{ +}}lf = f;
+  sv.always posedge %clk {
+    %l = sv.logic : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+    sv.bpassign %l, %s : !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>
+    %lf = sv.logic : !hw.inout<!hw.typealias<@__hw_typedecls::@foo, i1>>
+    sv.bpassign %lf, %f : !hw.typealias<@__hw_typedecls::@foo, i1>
+    %v = sv.read_inout %l : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+    sv.passign %m, %v : !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>
+  }
+}
+
+// Unions and enums are keyword types too.
+// CHECK-LABEL: module testUnionLocalDecls
+hw.module @testUnionLocalDecls(in %clk: i1, in %u: !hw.union<a: i4, b: i4>) {
+  // CHECK:      {{^}}  union packed {logic [3:0] a;logic [3:0] b;} mu;
+  %mu = sv.logic : !hw.inout<!hw.union<a: i4, b: i4>>
+  // CHECK:      always @(posedge clk) begin
+  // CHECK-NEXT:   automatic union packed {logic [3:0] a;logic [3:0] b;} l = u;
+  sv.always posedge %clk {
+    %l = sv.logic : !hw.inout<!hw.union<a: i4, b: i4>>
+    sv.bpassign %l, %u : !hw.union<a: i4, b: i4>
+  }
+}
