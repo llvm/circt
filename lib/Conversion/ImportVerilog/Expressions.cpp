@@ -3279,17 +3279,12 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     }
   }
 
-  // Handle String to Int
-  if (auto intType = dyn_cast<moore::IntType>(type)) {
-    if (isa<moore::StringType>(value.getType())) {
-      value = moore::StringToIntOp::create(builder, loc, intType.getTwoValued(),
-                                           value);
-
-      if (intType.getDomain() == moore::Domain::FourValued)
-        return moore::IntToLogicOp::create(builder, loc, value);
-
-      return value;
-    }
+  // Convert strings to a simple bit vector of the destination's full packed
+  // width, then restore its domain and packed representation.
+  if (dstInt && isa<moore::StringType>(value.getType())) {
+    value = moore::StringToIntOp::create(builder, loc, dstInt.getTwoValued(),
+                                         value);
+    return materializeConversion(type, value, false, loc, fallible);
   }
 
   // Handle Int to FormatString
