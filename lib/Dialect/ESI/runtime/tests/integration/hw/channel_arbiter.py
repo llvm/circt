@@ -50,6 +50,8 @@ TOKENS_PER_INPUT = 8  # tokens each producer emits in the token test.
 # arbiters with ~31 inputs (one per host-memory write client), a regime none of
 # the small counts above reach.
 WIDE_NUM_INPUTS = 13
+# Above `channel_arbiter._WIDE_FANIN_THRESHOLD`; all counts above are below it.
+WIDE_FANIN_NUM_INPUTS = 17
 
 # A list-window payload: a struct with a `src` tag and a variable-length list.
 # `Window.default_of` adds a per-flit `last` field to the lowered frame struct,
@@ -61,11 +63,14 @@ FlitLowered = Flit.lowered_type  # struct<src: ui8, items: ui16, last: i1>
 
 def HostMux(num_inputs: int,
             mux_pipeline_levels=None,
-            pipelined_scheduler=False):
+            pipelined_scheduler=False,
+            wide_fanin=None,
+            throttle=False):
   """A host-driven single-flit multiplexer: `num_inputs` `from_host` UInt(32)
   channels muxed into a single `to_host` channel. `mux_pipeline_levels` pipelines
   the selection mux tree; `pipelined_scheduler` selects the decoupled
-  grant-queue arbitration."""
+  grant-queue arbitration. `throttle` drains the output one beat in four
+  through a minimal output FIFO, so the credit counter runs down to zero."""
 
   class HostMux(Module):
     clk = Clock()
@@ -82,11 +87,23 @@ def HostMux(num_inputs: int,
                            ports.rst,
                            mux_pipeline_levels=mux_pipeline_levels,
                            pipelined_scheduler=pipelined_scheduler,
+                           wide_fanin=wide_fanin,
+                           output_fifo_depth=2 if throttle else None,
                            telemetry=False)
+      if throttle:
+        phase = Counter(2)(clk=ports.clk,
+                           rst=ports.rst,
+                           clear=Bits(1)(0),
+                           increment=Bits(1)(1)).out
+        en = phase == UInt(2)(0)
+        ready = Wire(Bits(1))
+        data, valid = out.unwrap(ready)
+        out, out_ready = Channel(UInt(32)).wrap(data, valid & en)
+        ready.assign(out_ready & en)
       esi.ChannelService.to_host(AppID("out"), out)
 
-  HostMux.__name__ = (
-      f"HostMux_{num_inputs}_{mux_pipeline_levels}_{pipelined_scheduler}")
+  HostMux.__name__ = (f"HostMux_{num_inputs}_{mux_pipeline_levels}_"
+                      f"{pipelined_scheduler}_{wide_fanin}_{throttle}")
   return HostMux
 
 
@@ -400,6 +417,21 @@ class Top(Module):
             pipelined_scheduler=True)(clk=ports.clk,
                                       rst=ports.rst,
                                       appid=AppID("arbiter_test_sched_odd"))
+    HostMux(WIDE_FANIN_NUM_INPUTS,
+            throttle=True)(clk=ports.clk,
+                           rst=ports.rst,
+                           appid=AppID("arbiter_test_widefanin"))
+    HostMux(WIDE_FANIN_NUM_INPUTS, pipelined_scheduler=True,
+            throttle=True)(clk=ports.clk,
+                           rst=ports.rst,
+                           appid=AppID("arbiter_test_widefanin_sched"))
+    HostMux(NUM_INPUTS, wide_fanin=True)(clk=ports.clk,
+                                         rst=ports.rst,
+                                         appid=AppID("arbiter_test_forced_on"))
+    HostMux(WIDE_FANIN_NUM_INPUTS,
+            wide_fanin=False)(clk=ports.clk,
+                              rst=ports.rst,
+                              appid=AppID("arbiter_test_forced_off"))
     ChannelArbiterListTestMod(False)(clk=ports.clk,
                                      rst=ports.rst,
                                      appid=AppID("list_test"))
