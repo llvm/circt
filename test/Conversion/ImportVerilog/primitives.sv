@@ -404,3 +404,40 @@ module TestRcmos(input wire data_in, input wire n_en, input wire p_en,
 // CHECK: }
 rcmos c0(data_out, data_in, n_en, p_en);
 endmodule
+
+// CHECK-LABEL: moore.module @TestPmosArrayConcatLiteral
+module TestPmosArrayConcatLiteral;
+  wire [1:0] ad;
+  reg regff;
+  reg en;
+
+  // Regression test: bit-blasting an array primitive instantiation whose
+  // data connection is a concatenation containing a two-state literal
+  // (1'b0) used to leave that bit's extracted value two-state (i1),
+  // causing a 'moore.yield' type mismatch against the (4-state)
+  // primitive output.
+  // CHECK: %ad = moore.net wire : <l2>
+  // CHECK: %regff = moore.variable : <l1>
+  // CHECK: %en = moore.variable : <l1>
+  // CHECK: %[[REGFFREAD:.*]] = moore.read %regff : <l1>
+  // CHECK: %[[ENREAD0:.*]] = moore.read %en : <l1>
+  // CHECK: %[[OFF0:.*]] = moore.constant 1 : l1
+  // CHECK: %[[COND0:.*]] = moore.case_eq %[[ENREAD0]], %[[OFF0]] : l1
+  // CHECK: %[[Z0:.*]] = moore.constant bZ : l1
+  // CHECK: moore.conditional %[[COND0]] : i1 -> l1 {
+  // CHECK:   moore.yield %[[Z0]] : l1
+  // CHECK: } {
+  // CHECK:   moore.yield %[[REGFFREAD]] : l1
+  // CHECK: }
+  // CHECK: %[[ENREAD1:.*]] = moore.read %en : <l1>
+  // CHECK: %[[OFF1:.*]] = moore.constant 1 : l1
+  // CHECK: %[[COND1:.*]] = moore.case_eq %[[ENREAD1]], %[[OFF1]] : l1
+  // CHECK: %[[ZEROBIT:.*]] = moore.constant 0 : l1
+  // CHECK: %[[Z1:.*]] = moore.constant bZ : l1
+  // CHECK: moore.conditional %[[COND1]] : i1 -> l1 {
+  // CHECK:   moore.yield %[[Z1]] : l1
+  // CHECK: } {
+  // CHECK:   moore.yield %[[ZEROBIT]] : l1
+  // CHECK: }
+  pmos ad_drv[1:0] (ad, {1'b0, regff}, en);
+endmodule
