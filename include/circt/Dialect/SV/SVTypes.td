@@ -81,13 +81,13 @@ def NetElementType : Type<CPred<"hw::isHWValueType($_self)">,
 
 // Constrains `netValue` to `!sv.net<T>`, inferring the net handle from element type `T`.
 class NetTypeConstraint<string value, string netValue>
-  : TypesMatchWith<"type should be element of net type",
+  : TypesMatchWith<"type should be `!sv.net<T>`",
                    value, netValue,
                    "NetType::get($_self.getContext(), $_self)">;
 
 // Constrains `value` to type `T`, inferring the element type from net handle `netValue` (`!sv.net<T>`).
 class NetElementConstraint<string value, string netValue>
-  : TypesMatchWith<"type should be element of net type",
+  : TypesMatchWith<"type should be net's element type",
                    netValue, value, "sv::getNetElementType($_self)">;
 
 //===----------------------------------------------------------------------===//
@@ -120,13 +120,13 @@ def VarElementType : Type<CPred<"hw::isHWValueType($_self)">,
 
 // Constrains `varValue` to `!sv.var<T>`, inferring the var handle from element type `T`.
 class VarTypeConstraint<string value, string varValue>
-  : TypesMatchWith<"type should be element of var type",
+  : TypesMatchWith<"type should be `!sv.var<T>`",
                    value, varValue,
                    "VarType::get($_self.getContext(), $_self)">;
 
 // Constrains `value` to type `T`, inferring the element type from var handle `varValue` (`!sv.var<T>`).
 class VarElementConstraint<string value, string varValue>
-  : TypesMatchWith<"type should be element of var type",
+  : TypesMatchWith<"type should be var's element type",
                    varValue, value, "sv::getVarElementType($_self)">;
 
 //===----------------------------------------------------------------------===//
