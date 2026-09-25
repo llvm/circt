@@ -2465,6 +2465,14 @@ LogicalResult Context::convertFixedPrimitive(
       primName == "notif1")
     return convertThreeStateGatePrimitive(prim);
 
+  if (primName == "nmos" || primName == "pmos" || primName == "rnmos" ||
+      primName == "rpmos") {
+    return convertMOSSwitchPrimitive(prim);
+  }
+
+  if (primName == "cmos" || primName == "rcmos")
+    return convertCMOSSwitchPrimitive(prim);
+
   // Remaining fixed primitives still need handling
   mlir::emitError(loc) << "unsupported primitive `" << primName << "`";
   return failure();
@@ -2627,6 +2635,224 @@ LogicalResult Context::convertThreeStateGatePrimitive(
   } else {
     moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
   }
+  return success();
+}
+
+LogicalResult Context::convertMOSSwitchPrimitive(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  assert(
+      prim.primitiveType.name == "nmos" || prim.primitiveType.name == "pmos" ||
+      prim.primitiveType.name == "rnmos" || prim.primitiveType.name == "rpmos");
+
+  auto loc = convertLocation(prim.location);
+  auto primName = prim.primitiveType.name;
+
+  auto portConns = prim.getPortConnections();
+
+  assert(portConns.size() == 3 && "mos primitive should have exactly 3 ports");
+
+  auto &outputConn =
+      portConns[0]->as<slang::ast::AssignmentExpression>().left();
+
+  auto outputVal = convertLvalueExpression(outputConn);
+  if (!outputVal)
+    return failure();
+
+  auto inputVal = convertRvalueExpression(*portConns[1]);
+  if (!inputVal)
+    return failure();
+
+  auto inputType = cast<moore::IntType>(inputVal.getType());
+  auto inputWidth = inputType.getBitSize();
+
+  if (inputWidth != 1)
+    return mlir::emitError(loc) << "MOS switch input must be 1 bit";
+
+  Value controlIsOff;
+
+  auto control = convertRvalueExpression(*portConns[2]);
+  if (!control)
+    return failure();
+
+  auto controlType = cast<moore::IntType>(control.getType());
+  if (controlType.getBitSize() != 1)
+    return mlir::emitError(loc) << "MOS switch control must be 1 bit";
+
+  int offLevel = (primName == "nmos" || primName == "rnmos") ? 0 : 1;
+  auto offValue = moore::ConstantOp::create(
+      builder, loc, controlType, FVInt(1, static_cast<uint64_t>(offLevel)));
+
+  controlIsOff = moore::CaseEqOp::create(builder, loc, control, offValue);
+  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+
+  auto dstIntType = dyn_cast<moore::IntType>(dstType);
+  if (!dstIntType || dstIntType.getBitSize() != 1)
+    return mlir::emitError(loc) << "MOS switch output must be 1 bit";
+
+  auto convertedInput = materializeConversion(dstType, inputVal, false, loc);
+  if (!convertedInput)
+    return failure();
+
+  Value zVal =
+      moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
+
+  auto condOp =
+      moore::ConditionalOp::create(builder, loc, dstType, controlIsOff);
+
+  auto &trueBlock = condOp.getTrueRegion().emplaceBlock();
+  auto &falseBlock = condOp.getFalseRegion().emplaceBlock();
+
+  builder.setInsertionPointToStart(&trueBlock);
+  moore::YieldOp::create(builder, loc, zVal);
+
+  builder.setInsertionPointToStart(&falseBlock);
+  moore::YieldOp::create(builder, loc, convertedInput);
+
+  builder.setInsertionPointAfter(condOp);
+
+  Value result = condOp.getResult();
+
+  moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
+
+  return success();
+}
+
+LogicalResult Context::convertCMOSSwitchPrimitive(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  assert(prim.primitiveType.name == "cmos" ||
+         prim.primitiveType.name == "rcmos");
+
+  auto loc = convertLocation(prim.location);
+  auto portConns = prim.getPortConnections();
+  assert(portConns.size() == 4 && "cmos primitive should have exactly 4 ports");
+
+  auto &outputConn =
+      portConns[0]->as<slang::ast::AssignmentExpression>().left();
+  auto outputVal = convertLvalueExpression(outputConn);
+  if (!outputVal)
+    return failure();
+
+  auto dataVal = convertRvalueExpression(*portConns[1]);
+  if (!dataVal)
+    return failure();
+  auto dataType = cast<moore::IntType>(dataVal.getType());
+  if (dataType.getBitSize() != 1)
+    return mlir::emitError(loc) << "CMOS switch input must be 1 bit";
+
+  auto ncontrolVal = convertRvalueExpression(*portConns[2]);
+  if (!ncontrolVal)
+    return failure();
+  auto ncontrolType = cast<moore::IntType>(ncontrolVal.getType());
+  if (ncontrolType.getBitSize() != 1)
+    return mlir::emitError(loc) << "CMOS switch ncontrol must be 1 bit";
+
+  auto pcontrolVal = convertRvalueExpression(*portConns[3]);
+  if (!pcontrolVal)
+    return failure();
+  auto pcontrolType = cast<moore::IntType>(pcontrolVal.getType());
+  if (pcontrolType.getBitSize() != 1)
+    return mlir::emitError(loc) << "CMOS switch pcontrol must be 1 bit";
+
+  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  auto dstIntType = dyn_cast<moore::IntType>(dstType);
+  if (!dstIntType || dstIntType.getBitSize() != 1)
+    return mlir::emitError(loc) << "CMOS switch output must be 1 bit";
+
+  auto convertedData = materializeConversion(dstType, dataVal, false, loc);
+  if (!convertedData)
+    return failure();
+
+  auto logicType = moore::IntType::getLogic(getContext(), 1);
+
+  auto makeConst = [&](FVInt val) -> Value {
+    Value c = moore::ConstantOp::create(builder, loc, logicType, val);
+    return materializeConversion(dstType, c, false, loc);
+  };
+  Value zVal = makeConst(FVInt::getAllZ(1));
+  Value xVal = makeConst(FVInt::getAllX(1));
+  if (!zVal || !xVal)
+    return failure();
+
+  auto makeLevelConstant = [&](Value value, int level) -> Value {
+    auto type = cast<moore::IntType>(value.getType());
+    return moore::ConstantOp::create(builder, loc, type,
+                                     FVInt(1, static_cast<uint64_t>(level)));
+  };
+
+  auto muxZOrData = [&](Value cond) -> Value {
+    auto condOp = moore::ConditionalOp::create(builder, loc, dstType, cond);
+    auto &trueBlk = condOp.getTrueRegion().emplaceBlock();
+    auto &falseBlk = condOp.getFalseRegion().emplaceBlock();
+    builder.setInsertionPointToStart(&trueBlk);
+    moore::YieldOp::create(builder, loc, zVal);
+    builder.setInsertionPointToStart(&falseBlk);
+    moore::YieldOp::create(builder, loc, convertedData);
+    builder.setInsertionPointAfter(condOp);
+    return condOp.getResult();
+  };
+
+  // N side: behaves like NMOS -- off (Z) when ncontrol === 0.
+  auto nOff = makeLevelConstant(ncontrolVal, 0);
+  auto nIsOff = moore::CaseEqOp::create(builder, loc, ncontrolVal, nOff);
+  Value nResult = muxZOrData(nIsOff);
+
+  // P side: behaves like PMOS -- off (Z) when pcontrol === 1.
+  auto pOff = makeLevelConstant(pcontrolVal, 1);
+  auto pIsOff = moore::CaseEqOp::create(builder, loc, pcontrolVal, pOff);
+  Value pResult = muxZOrData(pIsOff);
+
+  auto agree = moore::CaseEqOp::create(builder, loc, nResult, pResult);
+  auto nIsZ = moore::CaseEqOp::create(builder, loc, nResult, zVal);
+  auto pIsZ = moore::CaseEqOp::create(builder, loc, pResult, zVal);
+
+  auto outerCond = moore::ConditionalOp::create(builder, loc, dstType, agree);
+  auto &outerTrue = outerCond.getTrueRegion().emplaceBlock();
+  auto &outerFalse = outerCond.getFalseRegion().emplaceBlock();
+
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&outerTrue);
+    moore::YieldOp::create(builder, loc, nResult);
+  }
+
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&outerFalse);
+
+    auto middleCond = moore::ConditionalOp::create(builder, loc, dstType, nIsZ);
+    auto &middleTrue = middleCond.getTrueRegion().emplaceBlock();
+    auto &middleFalse = middleCond.getFalseRegion().emplaceBlock();
+
+    {
+      OpBuilder::InsertionGuard innerGuard(builder);
+      builder.setInsertionPointToStart(&middleTrue);
+      moore::YieldOp::create(builder, loc, pResult);
+    }
+
+    {
+      OpBuilder::InsertionGuard innerGuard(builder);
+      builder.setInsertionPointToStart(&middleFalse);
+
+      auto innerCond =
+          moore::ConditionalOp::create(builder, loc, dstType, pIsZ);
+      auto &innerTrue = innerCond.getTrueRegion().emplaceBlock();
+      auto &innerFalse = innerCond.getFalseRegion().emplaceBlock();
+
+      builder.setInsertionPointToStart(&innerTrue);
+      moore::YieldOp::create(builder, loc, nResult);
+      builder.setInsertionPointToStart(&innerFalse);
+      moore::YieldOp::create(builder, loc, xVal);
+
+      builder.setInsertionPointAfter(innerCond);
+      moore::YieldOp::create(builder, loc, innerCond.getResult());
+    }
+
+    moore::YieldOp::create(builder, loc, middleCond.getResult());
+  }
+
+  Value result = outerCond.getResult();
+  moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
+
   return success();
 }
 
