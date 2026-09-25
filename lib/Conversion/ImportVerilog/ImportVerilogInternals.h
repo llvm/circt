@@ -505,6 +505,10 @@ struct Context {
                             InterfaceLowering *>;
   using InterfaceInstanceScope = InterfaceInstances::ScopeTy;
   InterfaceInstances interfaceInstances;
+  /// Look up a member of a specific expanded interface without reading its ref.
+  Value
+  lookupExpandedInterfaceMember(const slang::ast::InstanceSymbol &instance,
+                                const slang::ast::Symbol &member);
   /// Owning storage for InterfaceLowering objects
   /// because ScopedHashTable stores values by copy.
   SmallVector<std::unique_ptr<InterfaceLowering>> interfaceInstanceStorage;
