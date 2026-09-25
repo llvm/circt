@@ -44,9 +44,7 @@ IntegerAttr getIntZerosAttr(Type type);
 IntegerAttr getIntOnesAttr(Type type);
 
 /// Return true if replacing a register carrying the time-zero `initial` value
-/// `initial` with `foldedValue` does not change the register's time-zero
-/// behavior.  A register with no `initial` attribute can always be folded; a
-/// register with one can only be folded into a constant that matches it.
+/// with `foldedValue` does not change the register's time-zero behavior.
 bool preservesInitial(IntegerAttr initial,
                       std::optional<APInt> foldedValue = std::nullopt);
 

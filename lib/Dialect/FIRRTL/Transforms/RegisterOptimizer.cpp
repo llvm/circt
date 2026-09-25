@@ -97,11 +97,11 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
     // operation, so we can't just move it.  Straight constants can be
     // rematerialized.  Derived constants are piped through wires.
 
-    if (auto cst = con.getSrc().getDefiningOp<ConstantOp>()) {
+    if (cstOp) {
       // Simple constants we can move safely
       auto *fmodb = con->getParentOfType<FModuleOp>().getBodyBlock();
-      cst->moveBefore(fmodb, fmodb->begin());
-      reg.getResult().replaceAllUsesWith(cst.getResult());
+      cstOp->moveBefore(fmodb, fmodb->begin());
+      reg.getResult().replaceAllUsesWith(cstOp.getResult());
       toErase.push_back(con);
     } else {
       bool dominatesAll = true;

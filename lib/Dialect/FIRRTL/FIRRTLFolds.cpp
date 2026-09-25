@@ -2321,7 +2321,8 @@ static LogicalResult canonicalizeSingleSetConnect(MatchingConnectOp op,
   } else {
     // Constants/invalids in the same block are ok to forward, even through
     // reg's since the clocking doesn't matter for constants.
-    if (!isa<ConstantOp>(srcValueOp))
+    auto cnst = dyn_cast<ConstantOp>(srcValueOp);
+    if (!cnst)
       return failure();
     if (srcValueOp->getBlock() != declBlock)
       return failure();
@@ -2329,8 +2330,7 @@ static LogicalResult canonicalizeSingleSetConnect(MatchingConnectOp op,
     // the first edge; until then it holds `initial`.  Forwarding the constant
     // would change its value at time zero, so bail unless the two agree.
     if (auto reg = dyn_cast<RegOp>(connectedDecl))
-      if (!preservesInitial(reg.getInitialAttr(),
-                            cast<ConstantOp>(srcValueOp).getValue()))
+      if (!preservesInitial(reg.getInitialAttr(), cnst.getValue()))
         return failure();
   }
 

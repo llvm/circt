@@ -11,71 +11,52 @@ firrtl.circuit "invalidReg"   {
     firrtl.matchingconnect %a, %foobar : !firrtl.uint<1>
   }
 
-  // A self-driven register with a time-zero `initial` value holds that value
-  // forever, so it folds to the constant -- not to invalid.
-  // CHECK-LABEL: @invalidRegInitialOne
-  firrtl.module @invalidRegInitialOne(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
-    %foobar = firrtl.reg %clock {initial = 1 : ui1} : !firrtl.clock, !firrtl.uint<1>
-    firrtl.matchingconnect %foobar, %foobar : !firrtl.uint<1>
-    //CHECK-NOT: firrtl.invalidvalue
-    //CHECK: %[[const:.*]] = firrtl.constant 1
-    //CHECK: firrtl.matchingconnect %a, %[[const]]
-    firrtl.matchingconnect %a, %foobar : !firrtl.uint<1>
+  // Initial-value folding tests.
+  // CHECK-LABEL: @selfDrivenRegInitial
+  firrtl.module @selfDrivenRegInitial(in %clock: !firrtl.clock, out %one: !firrtl.uint<1>, out %zero: !firrtl.uint<1>) {
+    %regOne = firrtl.reg %clock {initial = 1 : ui1} : !firrtl.clock, !firrtl.uint<1>
+    %regZero = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
+    firrtl.matchingconnect %regOne, %regOne : !firrtl.uint<1>
+    firrtl.matchingconnect %regZero, %regZero : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.invalidvalue
+    // CHECK: %[[one:.*]] = firrtl.constant 1
+    // CHECK: %[[zero:.*]] = firrtl.constant 0
+    // CHECK: firrtl.matchingconnect %one, %[[one]]
+    // CHECK: firrtl.matchingconnect %zero, %[[zero]]
+    firrtl.matchingconnect %one, %regOne : !firrtl.uint<1>
+    firrtl.matchingconnect %zero, %regZero : !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: @invalidRegInitialZero
-  firrtl.module @invalidRegInitialZero(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
-    %foobar = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
-    firrtl.matchingconnect %foobar, %foobar : !firrtl.uint<1>
-    //CHECK-NOT: firrtl.invalidvalue
-    //CHECK: %[[const:.*]] = firrtl.constant 0
-    //CHECK: firrtl.matchingconnect %a, %[[const]]
-    firrtl.matchingconnect %a, %foobar : !firrtl.uint<1>
-  }
-
-  // A constant-driven register whose `initial` value differs from that constant
-  // must not be folded: it is 1 at time zero and 0 afterwards.
-  // CHECK-LABEL: @constantRegWriteInitialMismatch
-  firrtl.module @constantRegWriteInitialMismatch(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
+  // CHECK-LABEL: @constantRegWriteInitial
+  firrtl.module @constantRegWriteInitial(in %clock: !firrtl.clock, out %mismatch: !firrtl.uint<1>, out %match: !firrtl.uint<1>) {
     %c = firrtl.constant 0 : !firrtl.uint<1>
-    %foobar = firrtl.reg %clock {initial = 1 : ui1} : !firrtl.clock, !firrtl.uint<1>
-    //CHECK: %[[reg:.*]] = firrtl.reg %clock {initial = 1 : ui1}
-    //CHECK: firrtl.matchingconnect %[[reg]], %c
-    firrtl.matchingconnect %foobar, %c : !firrtl.uint<1>
-    //CHECK: firrtl.matchingconnect %a, %[[reg]]
-    firrtl.matchingconnect %a, %foobar : !firrtl.uint<1>
+    %mismatchReg = firrtl.reg %clock {initial = 1 : ui1} : !firrtl.clock, !firrtl.uint<1>
+    firrtl.matchingconnect %mismatchReg, %c : !firrtl.uint<1>
+    %matchReg = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
+    firrtl.matchingconnect %matchReg, %c : !firrtl.uint<1>
+    // CHECK: %[[reg:.*]] = firrtl.reg %clock {initial = 1 : ui1}
+    // CHECK: firrtl.matchingconnect %[[reg]], %c
+    // CHECK-NOT: firrtl.reg
+    // CHECK: firrtl.matchingconnect %mismatch, %[[reg]]
+    // CHECK: firrtl.matchingconnect %match, %c
+    firrtl.matchingconnect %mismatch, %mismatchReg : !firrtl.uint<1>
+    firrtl.matchingconnect %match, %matchReg : !firrtl.uint<1>
   }
 
-  // Matching `initial` and driver: folding is still allowed.
-  // CHECK-LABEL: @constantRegWriteInitialMatch
-  firrtl.module @constantRegWriteInitialMatch(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
+  // CHECK-LABEL: @constantRegResetWriteInitial
+  firrtl.module @constantRegResetWriteInitial(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %mismatch: !firrtl.uint<1>, out %match: !firrtl.uint<1>) {
     %c = firrtl.constant 0 : !firrtl.uint<1>
-    %foobar = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
-    firrtl.matchingconnect %foobar, %c : !firrtl.uint<1>
-    //CHECK-NOT: firrtl.reg
-    //CHECK: firrtl.matchingconnect %a, %c
-    firrtl.matchingconnect %a, %foobar : !firrtl.uint<1>
-  }
-
-  // CHECK-LABEL: @constantRegResetWriteInitialMismatch
-  firrtl.module @constantRegResetWriteInitialMismatch(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
-    %c = firrtl.constant 0 : !firrtl.uint<1>
-    %foobar = firrtl.regreset %clock, %reset, %c {initial = 1 : ui1} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-    //CHECK: %[[reg:.*]] = firrtl.regreset {{.*}} {initial = 1 : ui1}
-    //CHECK: firrtl.matchingconnect %[[reg]], %c
-    firrtl.matchingconnect %foobar, %c : !firrtl.uint<1>
-    //CHECK: firrtl.matchingconnect %a, %[[reg]]
-    firrtl.matchingconnect %a, %foobar : !firrtl.uint<1>
-  }
-
-  // CHECK-LABEL: @constantRegResetWriteInitialMatch
-  firrtl.module @constantRegResetWriteInitialMatch(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
-    %c = firrtl.constant 0 : !firrtl.uint<1>
-    %foobar = firrtl.regreset %clock, %reset, %c {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.matchingconnect %foobar, %c : !firrtl.uint<1>
-    //CHECK-NOT: firrtl.regreset
-    //CHECK: firrtl.matchingconnect %a, %c
-    firrtl.matchingconnect %a, %foobar : !firrtl.uint<1>
+    %mismatchReg = firrtl.regreset %clock, %reset, %c {initial = 1 : ui1} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.matchingconnect %mismatchReg, %c : !firrtl.uint<1>
+    %matchReg = firrtl.regreset %clock, %reset, %c {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.matchingconnect %matchReg, %c : !firrtl.uint<1>
+    // CHECK: %[[reg:.*]] = firrtl.regreset {{.*}} {initial = 1 : ui1}
+    // CHECK: firrtl.matchingconnect %[[reg]], %c
+    // CHECK-NOT: firrtl.regreset
+    // CHECK: firrtl.matchingconnect %mismatch, %[[reg]]
+    // CHECK: firrtl.matchingconnect %match, %c
+    firrtl.matchingconnect %mismatch, %mismatchReg : !firrtl.uint<1>
+    firrtl.matchingconnect %match, %matchReg : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: @constantRegWrite

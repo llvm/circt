@@ -4229,12 +4229,9 @@ firrtl.module @ZeroResetForwardsInitial(in %clock: !firrtl.clock, out %q: !firrt
   firrtl.matchingconnect %q, %r : !firrtl.uint<8>
 }
 
-// A register driven only by a constant is *not* that constant while it still
-// holds its time-zero `initial` value, so the single-set forward must bail.
-// This is the "has the clock ticked yet" flag shape: `initial = 0`, driven by a
-// constant 1.
-// CHECK-LABEL: firrtl.module @SingleSetConstantRegKeepsInitial
-firrtl.module @SingleSetConstantRegKeepsInitial(in %clock: !firrtl.clock, out %q: !firrtl.uint<1>, out %q2: !firrtl.uint<1>) {
+// Ensure reg initial is considered by the canonicalizer.
+// CHECK-LABEL: firrtl.module @RegInitial
+firrtl.module @RegInitial(in %clock: !firrtl.clock, out %q: !firrtl.uint<1>, out %q2: !firrtl.uint<1>) {
   // CHECK: %r = firrtl.reg %clock {initial = 0 : ui1}
   // CHECK: firrtl.matchingconnect %r, %c1_ui1
   %r = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
@@ -4242,17 +4239,11 @@ firrtl.module @SingleSetConstantRegKeepsInitial(in %clock: !firrtl.clock, out %q
   firrtl.matchingconnect %r, %c1 : !firrtl.uint<1>
   firrtl.matchingconnect %q, %r : !firrtl.uint<1>
   firrtl.matchingconnect %q2, %r : !firrtl.uint<1>
+  // CHECK-NOT: %r2 = firrtl.reg
+  %r2 = firrtl.reg %clock {initial = 1 : ui1} : !firrtl.clock, !firrtl.uint<1>
+  firrtl.matchingconnect %r2, %c1 : !firrtl.uint<1>
+  firrtl.matchingconnect %q2, %r2 : !firrtl.uint<1>
 }
 
-// The same forward is fine when `initial` agrees with the constant.
-// CHECK-LABEL: firrtl.module @SingleSetConstantRegMatchingInitial
-firrtl.module @SingleSetConstantRegMatchingInitial(in %clock: !firrtl.clock, out %q: !firrtl.uint<1>, out %q2: !firrtl.uint<1>) {
-  // CHECK-NOT: firrtl.reg
-  %r = firrtl.reg %clock {initial = 1 : ui1} : !firrtl.clock, !firrtl.uint<1>
-  %c1 = firrtl.constant 1 : !firrtl.uint<1>
-  firrtl.matchingconnect %r, %c1 : !firrtl.uint<1>
-  firrtl.matchingconnect %q, %r : !firrtl.uint<1>
-  firrtl.matchingconnect %q2, %r : !firrtl.uint<1>
-}
 
 }
