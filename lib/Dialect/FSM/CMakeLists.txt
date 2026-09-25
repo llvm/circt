@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTFSM
 
   LINK_LIBS PUBLIC
   MLIRIR
+  CIRCTComb
   CIRCTHW
   CIRCTSeq
   MLIRFuncDialect
