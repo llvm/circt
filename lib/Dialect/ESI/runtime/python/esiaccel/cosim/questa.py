@@ -25,7 +25,7 @@ class Questa(Simulator):
       compile_stdout_callback: Optional[Callable[[str], None]] = None,
       compile_stderr_callback: Optional[Callable[[str], None]] = None,
       make_default_logs: bool = True,
-      macro_definitions: Optional[Dict[str, str]] = None,
+      macro_definitions: Optional[Dict[str, Optional[str]]] = None,
       # An optional list of questa error codes to suppress
       suppressed_questa_errors: Optional[List[int]] = None):
     super().__init__(

@@ -47,7 +47,8 @@ import pytest
 from esiaccel.accelerator import Accelerator, AcceleratorConnection
 
 from .simulator import (available_simulators, get_simulator,
-                        is_simulator_available, Simulator, SourceFiles)
+                        is_simulator_available, load_macro_definitions,
+                        Simulator, SourceFiles)
 
 LogMatcher = Union[str, Pattern[str], Callable[[str, str], bool]]
 SourceGeneratorFunc = Callable[["CosimPytestConfig", Path], Path]
@@ -160,6 +161,12 @@ class CosimPytestConfig:
     pytest_run_id: Unique identifier for the pytest run (e.g., "pytest-12345").
     xdist_worker_id: ID of the xdist worker if running under pytest-xdist (e.g., "gw0").
     save_waveform: If True, dump waveform file. Format depends on backend. Requires debug=True.
+    macro_definitions: RTL macros to define during compilation. A value of None
+      defines the macro without assigning a value.
+    macro_definitions_file: JSON file of macro definitions to read. A relative
+      path is resolved against the generated sources directory, which is what
+      lets a source generator produce the file. `macro_definitions` is layered
+      on top of whatever it contains.
   """
 
   source_generator: SourceGeneratorArg
@@ -177,6 +184,8 @@ class CosimPytestConfig:
   pytest_run_id: Optional[str] = None
   xdist_worker_id: Optional[str] = None
   save_waveform: bool = False
+  macro_definitions: Optional[Dict[str, Optional[str]]] = None
+  macro_definitions_file: Optional[Union[str, Path]] = None
 
 
 @dataclass
@@ -271,6 +280,32 @@ def _generate_sources(config: CosimPytestConfig, tmp_dir: Path) -> Path:
   return source_generator(config, tmp_dir)
 
 
+def _resolve_macro_definitions(
+    config: CosimPytestConfig,
+    sources_dir: Path) -> Optional[Dict[str, Optional[str]]]:
+  """Collect the RTL macros to compile with.
+
+  Reads `macro_definitions_file` if one was given, then layers the test's own
+  `macro_definitions` on top. A relative file path is resolved against
+  *sources_dir* rather than the working directory, so a source generator can
+  write the file into the directory it returns -- the path is not knowable
+  before it runs.
+  """
+  macros: Dict[str, Optional[str]] = {}
+
+  if config.macro_definitions_file is not None:
+    macros_file = Path(config.macro_definitions_file)
+    if not macros_file.is_absolute():
+      macros_file = sources_dir / macros_file
+    macros.update(load_macro_definitions(macros_file))
+    _logger.debug("Read %d macro(s) from %s", len(macros), macros_file)
+
+  if config.macro_definitions:
+    macros.update(config.macro_definitions)
+
+  return macros or None
+
+
 def _create_simulator(config: CosimPytestConfig, sources_dir: Path,
                       run_dir: Path) -> Simulator:
   """Instantiate a ``Simulator`` from the generated source files."""
@@ -279,7 +314,8 @@ def _create_simulator(config: CosimPytestConfig, sources_dir: Path,
   sources.add_dir(hw_dir if hw_dir.exists() else sources_dir)
 
   return get_simulator(config.simulator, sources, run_dir, config.debug,
-                       config.save_waveform)
+                       config.save_waveform,
+                       _resolve_macro_definitions(config, sources_dir))
 
 
 def _run_hw_script(script_path: Union[str, Path], config: CosimPytestConfig,
@@ -294,7 +330,8 @@ def _run_hw_script(script_path: Union[str, Path], config: CosimPytestConfig,
   with _chdir(tmp_dir):
     subprocess.run([sys.executable, str(script), *script_args],
                    check=True,
-                   cwd=tmp_dir)
+                   cwd=tmp_dir,
+                   timeout=config.timeout_s)
 
   # Run codegen automatically to generate C++ artifacts from manifest, if present.
   manifest_path = tmp_dir / "esi_system_manifest.json"
@@ -310,8 +347,9 @@ def _run_hw_script(script_path: Union[str, Path], config: CosimPytestConfig,
           ],
           check=True,
           cwd=tmp_dir,
+          timeout=config.timeout_s,
       )
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
       # Codegen is optional for tests that don't use C++ artifacts
       _logger.warning("codegen failed (non-fatal): %s", e)
   return tmp_dir
@@ -689,6 +727,8 @@ def cosim_test(
     tmp_dir_root: Optional[Path] = None,
     delete_tmp_dir: Optional[bool] = None,
     save_waveform: Optional[bool] = None,
+    macro_definitions: Optional[Dict[str, Optional[str]]] = None,
+    macro_definitions_file: Optional[Union[str, Path]] = None,
 ):
   """Decorator that turns a function or class into a cosimulation test.
 
@@ -732,6 +772,12 @@ def cosim_test(
       debug mode to be enabled. Defaults to the value of the
       ``ESIACCEL_PYTEST_SAVE_WAVEFORM`` environment variable if set, otherwise
       False.
+    macro_definitions: RTL macros to define during compilation. A value of
+      None defines the macro without assigning a value.
+    macro_definitions_file: JSON file of macro definitions to read, as written
+      by e.g. a source generator. A relative path is resolved against the
+      generated sources directory. ``macro_definitions`` takes precedence over
+      anything it defines.
   """
   # Use environment variables as defaults if not explicitly provided
   if debug is None:
@@ -773,6 +819,8 @@ def cosim_test(
       pytest_run_id=pytest_run_id,
       xdist_worker_id=xdist_worker_id,
       save_waveform=save_waveform,
+      macro_definitions=macro_definitions,
+      macro_definitions_file=macro_definitions_file,
   )
 
   def _decorator(target):

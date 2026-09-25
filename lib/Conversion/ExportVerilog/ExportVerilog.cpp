@@ -1532,6 +1532,7 @@ public:
 
   /// This is the current module being emitted for a HWModuleOp.
   Operation *currentModuleOp;
+  Operation *currentPackage = nullptr;
 
   /// This set keeps track of expressions that were emitted into their
   /// 'automatic logic' or 'localparam' declaration.  This is only used for
@@ -1766,7 +1767,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             enumType.getFields().getAsRange<StringAttr>(), os,
             [&](auto enumerator) {
               os << emitter.fieldNameResolver.getEnumFieldName(
-                  hw::EnumFieldAttr::get(loc, enumerator, enumPrefixType));
+                  hw::EnumFieldAttr::get(loc, enumerator, enumPrefixType),
+                  emitter.currentPackage);
             });
         os << "}";
         return true;
@@ -1870,6 +1872,10 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           return false;
         }
 
+        if (auto package = dyn_cast<PackageOp>(typedecl->getParentOp())) {
+          if (package != emitter.currentPackage)
+            os << getSymOpName(package) << "::";
+        }
         os << typedecl.getPreferredName();
         emitDims(dims, os, typedecl->getLoc(), emitter);
         return true;
@@ -4141,6 +4147,7 @@ private:
 
   LogicalResult visitStmt(TypeScopeOp op);
   LogicalResult visitStmt(TypedeclOp op);
+  LogicalResult visitSV(PackageOp op);
 
   LogicalResult emitIfDef(Operation *op, MacroIdentAttr cond);
   LogicalResult visitSV(OrderedOutputOp op);
@@ -4545,6 +4552,20 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
   if (zeroBitType)
     ps << PP::end;
   emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(PackageOp op) {
+  llvm::SaveAndRestore<Operation *> package(emitter.currentPackage, op);
+  startStatement();
+  ps.addCallback({op, true});
+  ps << "package " << PPExtString(getSymOpName(op)) << ";";
+  setPendingNewline();
+  ps.scopedBox(PP::bbox2, [&]() { emitStatementBlock(*op.getBodyBlock()); });
+  startStatement();
+  ps << "endpackage";
+  ps.addCallback({op, false});
+  setPendingNewline();
   return success();
 }
 
@@ -6877,7 +6898,7 @@ void FileEmitter::emitOp(emit::RefOp op) {
       .Case<sv::FuncOp>([&](auto func) { ModuleEmitter(state).emitFunc(func); })
       .Case<hw::HWModuleOp>(
           [&](auto module) { ModuleEmitter(state).emitHWModule(module); })
-      .Case<TypeScopeOp>([&](auto typedecls) {
+      .Case<TypeScopeOp, PackageOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);
       })
       .Default(
@@ -7069,6 +7090,28 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
+        .Case<PackageOp>([&](PackageOp package) {
+          // Build the IR cache.
+          auto sym = package.getSymNameAttr();
+          symbolCache.addDefinition(sym, package);
+
+          if (auto it = symbolsToFiles.find(sym); it != symbolsToFiles.end()) {
+            if (it->second.size() != 1 || attr) {
+              package.emitError(
+                  "packages can only be emitted to a single file");
+              encounteredError = true;
+            }
+            // Otherwise the package is pulled into the file operation which
+            // references it.
+            return;
+          }
+
+          // Emit into a separate file named after the package.
+          if (attr || separateModules)
+            separateFile(package, getSymOpName(package) + ".sv");
+          else
+            rootFile.ops.push_back(info);
+        })
         .Case<sv::SVVerbatimSourceOp>([&](sv::SVVerbatimSourceOp op) {
           symbolCache.addDefinition(op.getNameAttr(), op);
           separateFile(op, op.getOutputFile().getFilename().getValue());
@@ -7216,7 +7259,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<InterfaceOp, VerbatimOp, IfDefOp, sv::SVVerbatimSourceOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
-      .Case<TypeScopeOp>([&](auto typedecls) {
+      .Case<TypeScopeOp, PackageOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);
       })
       .Case<emit::FileOp, emit::FileListOp, emit::FragmentOp>(

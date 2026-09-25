@@ -84,8 +84,7 @@ jobs:
           python3 -m pytest tests/ -v --log-cli-level=INFO
 
   # ---------------------------------------------------------------------------
-  #  Build and test Windows. Tests that require an unavailable simulator skip
-  #  themselves based on the esiaccel.cosim simulator discovery helpers.
+  #  Build and test Windows, including Verilator-based integration tests.
   # ---------------------------------------------------------------------------
 
   build-windows:
@@ -114,6 +113,15 @@ jobs:
           .\venv\Scripts\python.exe -m pip install pytest pytest-xdist nanobind
           .\venv\Scripts\python.exe -m pip install pycde --pre
 
+      - name: Install Verilator
+        shell: pwsh
+        run: |
+          C:\msys64\usr\bin\bash.exe -lc "pacman --noconfirm -S --needed mingw-w64-ucrt-x86_64-gcc-libs mingw-w64-ucrt-x86_64-verilator"
+          & "${env:GITHUB_WORKSPACE}\utils\find-vs.ps1"
+          editbin /STACK:67108864 C:\msys64\ucrt64\bin\verilator_bin.exe
+          "VERILATOR_PATH=C:\msys64\ucrt64\bin\verilator_bin.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VERILATOR_ROOT=C:\msys64\ucrt64\share\verilator" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Build ESI runtime
         working-directory: lib/Dialect/ESI/runtime
         shell: pwsh
@@ -121,6 +129,7 @@ jobs:
           & "${env:GITHUB_WORKSPACE}\utils\find-vs.ps1"
           cmake --version
           ninja --version
+          & $env:VERILATOR_PATH --version
 
           $python = "$PWD\venv\Scripts\python.exe"
 

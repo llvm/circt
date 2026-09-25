@@ -209,43 +209,40 @@ class TypeAlias(Type):
     raise AttributeError("Only struct and union type aliases have fields")
 
   @staticmethod
-  def declare_aliases(mod):
+  def declare_aliases(mod, package_name: typing.Optional[str] = None):
+    """Declare all of the registered type aliases in the `sv.package` with the
+    symbol `TYPE_SCOPE`. If that package does not exist, it is created at the
+    start of `mod` so that it is emitted before any of its users; an existing
+    one is assumed to already be correctly placed. If `package_name` is given,
+    the package is emitted with that name in SystemVerilog."""
     if TypeAlias.RegisteredAliases is None:
       return
 
-    guard_name = "__PYCDE_TYPES__"
     type_scope_attr = ir.StringAttr.get(TypeAlias.TYPE_SCOPE)
-    type_scopes = list()
-    for op in mod.body.operations:
-      if isinstance(op, hw.TypeScopeOp) and op.sym_name == type_scope_attr:
-        type_scopes.append(op)
-        continue
-      if isinstance(op, sv.IfDefOp):
-        if len(op.elseRegion.blocks) == 0:
-          continue
-        for else_block_op in op.elseRegion.blocks[0]:
-          if isinstance(
-              else_block_op,
-              hw.TypeScopeOp) and else_block_op.sym_name == type_scope_attr:
-            type_scopes.append(else_block_op)
+    type_scopes = [
+        op for op in mod.body.operations
+        if isinstance(op, (sv.PackageOp,
+                           hw.TypeScopeOp)) and op.sym_name == type_scope_attr
+    ]
 
     assert len(type_scopes) <= 1
     if len(type_scopes) == 1:
       type_scope = type_scopes[0]
+      type_scope_body = type_scope.regions[0].blocks[0]
     else:
       with ir.InsertionPoint.at_block_begin(mod.body):
-        sv.VerbatimOp(ir.StringAttr.get("`ifndef " + guard_name), [],
-                      symbols=ir.ArrayAttr.get([]))
-        sv.VerbatimOp(ir.StringAttr.get("`define " + guard_name), [],
-                      symbols=ir.ArrayAttr.get([]))
-        type_scope = hw.TypeScopeOp.create(TypeAlias.TYPE_SCOPE)
-        sv.VerbatimOp(ir.StringAttr.get("`endif // " + guard_name), [],
-                      symbols=ir.ArrayAttr.get([]))
+        type_scope = sv.PackageOp(type_scope_attr)
+      type_scope_body = type_scope.body.blocks.append()
 
-    with ir.InsertionPoint(type_scope.body):
+    # The type aliases reference the package by its `TYPE_SCOPE` symbol, so
+    # only the emitted name can be changed.
+    if package_name is not None and isinstance(type_scope, sv.PackageOp):
+      type_scope.attributes["hw.verilogName"] = ir.StringAttr.get(package_name)
+
+    with ir.InsertionPoint(type_scope_body):
       for (name, type) in TypeAlias.RegisteredAliases.items():
         declared_aliases = [
-            op for op in type_scope.body.operations
+            op for op in type_scope_body.operations
             if isinstance(op, hw.TypedeclOp) and
             ir.StringAttr(op.sym_name).value == name
         ]
