@@ -76,6 +76,9 @@ struct FlattenedIfacePort {
   /// Slot index in the module signature; see `PortLowering::outputIdx`.
   std::optional<unsigned> outputIdx;
   std::optional<unsigned> inputIdx;
+  /// Element offsets through the connected interface array, outermost first.
+  /// Slang has already adjusted the connection to the port dimensions.
+  SmallVector<unsigned> arrayPath;
 };
 
 /// Lowering information for an expanded interface instance. Maps each interface
