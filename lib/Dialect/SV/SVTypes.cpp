@@ -46,6 +46,30 @@ mlir::Type circt::sv::getInOutElementType(mlir::Type type) {
 }
 
 //===----------------------------------------------------------------------===//
+// NetType type logic.
+//===----------------------------------------------------------------------===//
+
+/// Return the element type of a NetType or null if the operand isn't a Net
+/// type.
+mlir::Type circt::sv::getNetElementType(mlir::Type type) {
+  if (auto net = dyn_cast_or_null<NetType>(type))
+    return net.getElementType();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// VarType type logic.
+//===----------------------------------------------------------------------===//
+
+/// Return the element type of a VarType or null if the operand isn't a Var
+/// type.
+mlir::Type circt::sv::getVarElementType(mlir::Type type) {
+  if (auto var = dyn_cast_or_null<VarType>(type))
+    return var.getElementType();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
