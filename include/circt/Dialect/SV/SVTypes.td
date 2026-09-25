@@ -17,6 +17,7 @@ include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
+class SVType<string name> : TypeDef<SVDialect, name> { }
 
 //===----------------------------------------------------------------------===//
 // InOut type and related helpers.
@@ -49,20 +50,34 @@ class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "sv::getInOutElementType($_self)">;
 
-
 //===----------------------------------------------------------------------===//
-// SVNet type and related helpers.
+// Net type and related helpers.
 //===----------------------------------------------------------------------===//
 
-def SVNetType : DialectType<SVDialect,
-    CPred<"::circt::hw::type_isa<circt::sv::NetType>($_self)">,
-    "an SV net type", "::circt::sv::NetType">;
+def NetType : SVType<"Net"> {
+  let summary = "SystemVerilog net handle";
+  let description = [{
+    Represents a SystemVerilog net data object handle (e.g. a structural wire).
+
+    See SystemVerilog Spec 6.5, 6.6, and 6.7
+
+  }];
+  let mnemonic = "net";
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
+      return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $elementType `>`";
+}
 
 // Type constraint that indicates that an operand or result may only be a valid
 // net element type.
 def NetElementType : Type<CPred<"hw::isHWValueType($_self)">,
                           "a valid net element">;
-
 
 // Constrains `netValue` to `!sv.net<T>`, inferring the net handle from element type `T`.
 class NetTypeConstraint<string value, string netValue>
@@ -76,12 +91,27 @@ class NetElementConstraint<string value, string netValue>
                    netValue, value, "sv::getNetElementType($_self)">;
 
 //===----------------------------------------------------------------------===//
-// SVVar type and related helpers.
+// Var type and related helpers.
 //===----------------------------------------------------------------------===//
 
-def SVVarType : DialectType<SVDialect,
-    CPred<"::circt::hw::type_isa<circt::sv::VarType>($_self)">,
-    "an SV variable type", "::circt::sv::VarType">;
+def VarType : SVType<"Var"> {
+  let summary = "SystemVerilog variable handle";
+  let description = [{
+    Represents a SystemVerilog variable data object handle (e.g., an assignable storage location).
+
+    See SystemVerilog Spec 6.5 and 6.8
+  }];
+  let mnemonic = "var";
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
+      return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $elementType `>`";
+}
 
 // Type constraint that indicates that an operand/result may only be a valid
 // var element type.
@@ -102,6 +132,28 @@ class VarElementConstraint<string value, string varValue>
 //===----------------------------------------------------------------------===//
 // UnpackedOpenArrayType type 
 //===----------------------------------------------------------------------===//
+
+def UnpackedOpenArrayTypeImpl : SVType<"UnpackedOpenArray"> {
+  let summary = "SystemVerilog unpacked 'open' array";
+  let description = [{
+    This type represents unpacked 'open' array. Open array is a special type that can be
+    used as formal arguments of DPI import statements.
+
+    See SystemVerilog Spec 35.5.6.1.
+  }];
+
+  let mnemonic = "open_uarray";
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
+      auto *ctx = elementType.getContext();
+      return $_get(ctx, elementType);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $elementType `>`";
+}
 
 def UnpackedOpenArrayType : DialectType<SVDialect,
     CPred<"::circt::hw::type_isa<circt::sv::UnpackedOpenArrayType>($_self)">,
