@@ -64,12 +64,14 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
 
 def VarOp : SVOp<"var", [
           DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-          DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
+          DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+          VarElementConstraint<"init", "result">]> {
   let summary = "Define a new `var` SystemVerilog variable";
   let description = [{
-    Declare a SystemVerilog Variable Declaration of `var` type. A variable is an abstraction of a data storage element.
+    Declare a SystemVerilog Variable Declaration of `var` type.
+    A variable is an abstraction of a data storage element.
 
-    See SV spec 6.8, pp100.
+    See SV spec 6.8.
   }];
   let arguments = (ins
     StrAttr:$name,
