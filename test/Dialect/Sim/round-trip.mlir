@@ -195,3 +195,20 @@ hw.module @FormatString(in %str: !sim.dstring) {
   // CHECK: sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
   %fmt1 = sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
 }
+
+// Round-trip tests for !sim.variant type syntax.
+// CHECK-LABEL: func.func @variant_type_roundtrip
+func.func @variant_type_roundtrip(
+  // CHECK-SAME: %arg0: !sim.variant<a: i32, b: i8>
+  %arg0: !sim.variant<a: i32, b: i8>,
+  // CHECK-SAME: %arg1: !sim.variant<only: !sim.dstring>
+  %arg1: !sim.variant<only: !sim.dstring>,
+  // CHECK-SAME: %arg2: !sim.variant<>
+  %arg2: !sim.variant<>,
+  // CHECK-SAME: %arg3: !sim.variant<nested: !sim.variant<x: i1>, arr: !hw.array<2xi8>>
+  %arg3: !sim.variant<nested: !sim.variant<x: i1>, arr: !hw.array<2xi8>>,
+  // CHECK-SAME: %arg4: !sim.variant<a: i32, b: i32, c: i32>
+  %arg4: !sim.variant<a: i32, b: i32, c: i32>
+) {
+  return
+}

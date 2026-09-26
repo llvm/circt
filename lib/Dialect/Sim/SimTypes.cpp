@@ -11,6 +11,8 @@
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 // Include the generated enum definitions (DPIDirection).
@@ -213,4 +215,89 @@ void DPIFunctionType::print(AsmPrinter &printer) const {
     printer.printType(arg.type);
   });
   printer << '>';
+}
+
+//===----------------------------------------------------------------------===//
+// VariantType
+//===----------------------------------------------------------------------===//
+
+/// Parse: !sim.variant<a: i32, b: i8>
+Type VariantType::parse(AsmParser &p) {
+  SmallVector<VariantAlternative, 4> alternatives;
+  llvm::StringSet<> nameSet;
+  bool hasDuplicateName = false;
+  if (p.parseCommaSeparatedList(
+          AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
+            StringRef name;
+            Type type;
+
+            auto altLoc = p.getCurrentLocation();
+            if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
+              return failure();
+
+            if (!nameSet.insert(name).second) {
+              p.emitError(altLoc, "duplicate alternative name '" + name +
+                                      "' in sim.variant type");
+              // Continue parsing to report all duplicates, but make sure to
+              // error eventually.
+              hasDuplicateName = true;
+            }
+
+            alternatives.push_back(VariantAlternative{
+                StringAttr::get(p.getContext(), name), type});
+            return success();
+          }))
+    return Type();
+
+  if (hasDuplicateName)
+    return Type();
+
+  return get(p.getContext(), alternatives);
+}
+
+/// Print: !sim.variant<a: i32, b: i8>
+void VariantType::print(AsmPrinter &p) const {
+  p << '<';
+  llvm::interleaveComma(
+      getAlternatives(), p, [&](const VariantAlternative &alternative) {
+        p << alternative.name.getValue() << ": " << alternative.type;
+      });
+  p << '>';
+}
+
+LogicalResult VariantType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                  ArrayRef<VariantAlternative> alternatives) {
+  llvm::SmallDenseSet<StringAttr> nameSet;
+  LogicalResult result = success();
+  nameSet.reserve(alternatives.size());
+  for (const auto &alternative : alternatives)
+    if (!nameSet.insert(alternative.name).second) {
+      result = failure();
+      emitError() << "duplicate alternative name '"
+                  << alternative.name.getValue() << "' in sim.variant type";
+    }
+  return result;
+}
+
+std::optional<uint32_t> VariantType::getAlternativeIndex(StringAttr name) {
+  ArrayRef<VariantAlternative> alternatives = getAlternatives();
+  for (size_t idx = 0, numAlternatives = alternatives.size();
+       idx < numAlternatives; ++idx)
+    if (alternatives[idx].name == name)
+      return idx;
+  return {};
+}
+
+std::optional<uint32_t> VariantType::getAlternativeIndex(StringRef name) {
+  return getAlternativeIndex(StringAttr::get(getContext(), name));
+}
+
+VariantType::Alternative VariantType::getAlternative(StringRef name) {
+  if (auto index = getAlternativeIndex(name))
+    return getAlternatives()[*index];
+  return Alternative();
+}
+
+Type VariantType::getAlternativeType(StringRef name) {
+  return getAlternative(name).type;
 }
