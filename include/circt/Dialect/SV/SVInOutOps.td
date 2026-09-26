@@ -62,6 +62,44 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
   }];
 }
 
+def VarOp : SVOp<"var", [
+          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+          DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+          VarElementConstraint<"init", "result">]> {
+  let summary = "Define a new `var` SystemVerilog variable";
+  let description = [{
+    Declare a SystemVerilog Variable Declaration of `var` type.
+    A variable is an abstraction of a data storage element.
+
+    See SV spec 6.8.
+  }];
+  let arguments = (ins
+    StrAttr:$name,
+    Optional<AnyType>:$init,
+    OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs VarType:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                    CArg<"StringAttr", "StringAttr()">:$name,
+                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
+                    CArg<"mlir::Value", "{}">:$init)>
+  ];
+
+  let assemblyFormat = [{
+    (`init` $init^)? (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
+    custom<ImplicitVarInitType>(ref(type($result)),ref($init), type($init))
+  }];
+
+  let extraClassDeclaration = [{
+    Type getElementType() {
+      return llvm::cast<VarType>(getResult().getType()).getElementType();
+    }
+  }];
+}
+
 def RegOp : SVOp<"reg", [
           DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
           DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {

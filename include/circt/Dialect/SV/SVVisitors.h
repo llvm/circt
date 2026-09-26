@@ -34,7 +34,7 @@ public:
             MacroRefExprSEOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp,
             SFormatFOp, ConcatStrOp,
             // Declarations.
-            RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
+            RegOp, WireOp, VarOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
             OrderedOutputOp, IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp,
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
@@ -96,6 +96,7 @@ public:
   // Declarations
   HANDLE(RegOp, Unhandled);
   HANDLE(WireOp, Unhandled);
+  HANDLE(VarOp, Unhandled);
   HANDLE(LogicOp, Unhandled);
   HANDLE(LocalParamOp, Unhandled);
   HANDLE(XMROp, Unhandled);
