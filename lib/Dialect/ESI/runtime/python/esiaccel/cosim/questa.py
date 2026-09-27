@@ -25,7 +25,7 @@ class Questa(Simulator):
       compile_stdout_callback: Optional[Callable[[str], None]] = None,
       compile_stderr_callback: Optional[Callable[[str], None]] = None,
       make_default_logs: bool = True,
-      macro_definitions: Optional[Dict[str, str]] = None,
+      macro_definitions: Optional[Dict[str, Optional[str]]] = None,
       # An optional list of questa error codes to suppress
       suppressed_questa_errors: Optional[List[int]] = None):
     super().__init__(
@@ -68,11 +68,12 @@ class Questa(Simulator):
     else:
       suppressed_questa_errors_cmd = ""
 
+    acc_flag = " +acc" if self.debug else ""
     for src in sources:
       cmds.append(
-          f"vlog -incr +acc -sv {macro_definitions_cmd} {suppressed_questa_errors_cmd} +define+TOP_MODULE={self.sources.top}"
+          f"vlog -incr{acc_flag} -sv {macro_definitions_cmd} {suppressed_questa_errors_cmd} +define+TOP_MODULE={self.sources.top}"
           f" +define+SIMULATION {src.as_posix()}")
-    cmds.append(f"vopt -incr driver -o driver_opt +acc")
+    cmds.append(f"vopt -incr driver -o driver_opt{acc_flag}")
     return cmds
 
   def compile_commands(self) -> List[Simulator.CompileStep]:

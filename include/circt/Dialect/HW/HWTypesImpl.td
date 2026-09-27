@@ -238,6 +238,7 @@ def TypeAliasType : HWType<"TypeAlias", [
   }];
 
   let mnemonic = "typealias";
+  let genVerifyDecl = 1;
 
   let parameters = (ins
     "mlir::SymbolRefAttr":$ref,

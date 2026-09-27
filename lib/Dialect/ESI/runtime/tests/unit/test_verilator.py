@@ -7,6 +7,7 @@ module before the real package is imported.
 """
 
 import os
+import runpy
 import shutil
 import sys
 from pathlib import Path
@@ -26,6 +27,7 @@ sys.modules["esiaccel.esiCppAccel"] = _accel_mock
 from esiaccel.cosim.verilator import Verilator  # noqa: E402
 from esiaccel.cosim.simulator import (
     available_simulators,  # noqa: E402
+    get_simulator,
     is_simulator_available,
     SourceFiles)
 
@@ -309,6 +311,74 @@ class TestCompileCommands:
     cmd = v.compile_commands()[0]
     assert "+define+FOO=BAR" in cmd
     assert "+define+BAZ" in cmd
+
+  @pytest.mark.parametrize("name", ("verilator", "questa"))
+  def test_get_simulator_macro_definitions(self, tmp_path, name):
+    sources = SourceFiles("TestTop")
+    simulator = get_simulator(name,
+                              sources,
+                              tmp_path,
+                              False,
+                              macro_definitions={
+                                  "FOO": "BAR",
+                                  "BAZ": None
+                              })
+    assert simulator.macro_definitions == {"FOO": "BAR", "BAZ": None}
+
+
+def test_source_files_add_dir_uses_filelist_order(tmp_path):
+  # Files named in `filelist.f` come first, in the listed order, then any
+  # other RTL files sorted by name. Nothing is added twice.
+  for name in ("A.sv", "zPkg.sv", "B.v", "notes.txt"):
+    (tmp_path / name).touch()
+  (tmp_path / "sub").mkdir()
+  (tmp_path / "sub" / "C.sv").touch()
+  (tmp_path / "filelist.f").write_text("zPkg.sv\n\nB.v\nmissing.sv\n")
+
+  sources = SourceFiles("TestTop")
+  sources.add_dir(tmp_path)
+  assert sources.user == [
+      tmp_path / "zPkg.sv", tmp_path / "B.v", tmp_path / "A.sv",
+      tmp_path / "sub" / "C.sv"
+  ]
+
+
+def test_source_files_add_dir_without_filelist(tmp_path):
+  for name in ("b.sv", "A.sv"):
+    (tmp_path / name).touch()
+  sources = SourceFiles("TestTop")
+  sources.add_dir(tmp_path)
+  assert sources.user == [tmp_path / "A.sv", tmp_path / "b.sv"]
+
+
+def test_esi_cosim_macro_definitions(tmp_path):
+  script = (Path(__file__).parents[2] / "cosim_dpi_server" / "esi-cosim.py")
+  script_globals = runpy.run_path(str(script))
+  main = script_globals["__main__"]
+  simulator = MagicMock()
+  simulator.run.return_value = 0
+  sources = MagicMock()
+  source_files_factory = MagicMock(return_value=sources)
+  simulator_factory = MagicMock(return_value=simulator)
+
+  with mock.patch.dict(main.__globals__, {
+      "SourceFiles": source_files_factory,
+      "get_simulator": simulator_factory,
+  }):
+    assert main([
+        "esi-cosim", "-DFOO=BAR", "--define", "BAZ", "--source",
+        str(tmp_path), "--no-compile", "--server-only"
+    ]) == 0
+
+  simulator_factory.assert_called_once_with("verilator",
+                                            sources,
+                                            Path("run"),
+                                            False,
+                                            False,
+                                            macro_definitions={
+                                                "FOO": "BAR",
+                                                "BAZ": None
+                                            })
 
 
 @requires_verilator_bin

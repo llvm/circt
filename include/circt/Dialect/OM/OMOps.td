@@ -36,12 +36,15 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
-    Symbol, RegionKindInterface, IsolatedFromAbove,
+    SymbolName, SymbolVisibility, Symbol,
+    RegionKindInterface,
+    IsolatedFromAbove,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     StrArrayAttr:$formalParamNames,
     ArrayAttr:$fieldNames,
     DictionaryAttr:$fieldTypes
@@ -56,37 +59,39 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
                    "::mlir::ArrayRef<::mlir::Attribute>":$fieldNames,
                    "::mlir::ArrayRef<::mlir::NamedAttribute>":$fieldTypes), [{
-      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name), {},
             odsBuilder.getStrArrayAttr(formalParamNames),
             odsBuilder.getArrayAttr(fieldNames),
             odsBuilder.getDictionaryAttr(fieldTypes));
     }]>,
     OpBuilder<(ins "::mlir::Twine":$name,
                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames), [{
-      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-            odsBuilder.getStrArrayAttr(formalParamNames));
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name), {},
+            odsBuilder.getStrArrayAttr(formalParamNames),
+            odsBuilder.getArrayAttr({}), odsBuilder.getDictionaryAttr({}));
     }]>,
     OpBuilder<(ins "::mlir::Twine":$name), [{
-      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-            odsBuilder.getStrArrayAttr({}));
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name), {},
+            odsBuilder.getStrArrayAttr({}), odsBuilder.getArrayAttr({}),
+            odsBuilder.getDictionaryAttr({}));
     }]>,
     OpBuilder<(ins "::mlir::Twine":$name,
                    "::mlir::ArrayAttr":$fieldNames,
                    "::mlir::DictionaryAttr":$fieldTypes), [{
-      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name), {},
             odsBuilder.getStrArrayAttr({}), fieldNames, fieldTypes);
     }]>,
     OpBuilder<(ins "::mlir::Twine":$name,
                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
                    "::mlir::ArrayAttr":$fieldNames,
                    "::mlir::DictionaryAttr":$fieldTypes), [{
-      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name), {},
             odsBuilder.getStrArrayAttr(formalParamNames), fieldNames,
             fieldTypes);
     }]>,
     OpBuilder<(ins "::mlir::StringAttr":$name,
                    "::mlir::ArrayAttr":$formalParamNames), [{
-      build(odsBuilder, odsState, name, formalParamNames,
+      build(odsBuilder, odsState, name, {}, formalParamNames,
             odsBuilder.getArrayAttr({}), odsBuilder.getDictionaryAttr({}));
 
     }]>

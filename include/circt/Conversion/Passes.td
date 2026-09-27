@@ -38,6 +38,30 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
 }
 
 //===----------------------------------------------------------------------===//
+// AXI4ToHW
+//===----------------------------------------------------------------------===//
+
+def AXI4ToHW : Pass<"lower-axi4-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower the AXI4 network dialect to HW";
+  let description = [{
+    Converts an AXI4 network specification into a concrete RTL description,
+    lowering every `!axi4.port` to the HW expression of an AXI4 interface used
+    by `axi4.channel_structs_to_port`: a `hw.struct` payload per channel plus
+    scalar valid and ready signals. Module interfaces carrying `!axi4.port`
+    ports are rewritten in terms of those signals, as are the instances of
+    those modules.
+
+    Crossbars become instances of generic external modules, optionally wrapping
+    a concrete implementation from the PULP Platform AXI library.
+
+    Abstract endpoints are currently unsupported for lowering.
+  }];
+
+  let dependentDialects = ["circt::hw::HWDialect", "circt::seq::SeqDialect",
+                           "circt::sv::SVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 

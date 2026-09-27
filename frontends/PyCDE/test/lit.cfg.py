@@ -74,6 +74,16 @@ if config.iverilog_path != "":
   tools.append('iverilog')
   config.available_features.add('iverilog')
   config.substitutions.append(('%iverilog', config.iverilog_path))
+  # `cocotestbench` requires Icarus Verilog 12 or newer.
+  try:
+    iverilog_version = subprocess.run([config.iverilog_path, "-V"],
+                                      capture_output=True,
+                                      text=True).stdout
+    match = re.search(r"Icarus Verilog version (\d+)", iverilog_version)
+    if match is not None and int(match.group(1)) >= 12:
+      config.available_features.add('iverilog-12')
+  except OSError:
+    pass
 
 # cocotb availability
 try:

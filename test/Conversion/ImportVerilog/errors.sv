@@ -196,26 +196,6 @@ endmodule
 
 // -----
 module Foo;
-  typedef enum { A, B, C } e;
-  e val;
-  initial begin
-    // expected-error @below {{unsupported system call `next`}}
-    val = val.next();
-  end
-endmodule
-
-// -----
-module Foo;
-  typedef enum { A, B, C } e;
-  e val;
-  initial begin
-    // expected-error @below {{unsupported system call `prev`}}
-    val = val.prev();
-  end
-endmodule
-
-// -----
-module Foo;
   int inp[];
   int tmp[];
   initial begin
@@ -333,6 +313,32 @@ endmodule
 
 // -----
 
+module multi_delay_threestate_prim;
+    wire A, E, Q;
+    // expected-error @below {{only three-state primitives that specify a single delay are currently supported}}
+    bufif0 #(5, 5, 5) b (Q, A, E);
+endmodule
+
+// -----
+
+module wide_output_threestate_prim;
+    wire [1:0] Q;
+    wire A, E;
+    // expected-error @below {{output of a three-state gate primitive must be 1 bit}}
+    bufif1 b (Q, A, E);
+endmodule
+
+// -----
+
+module non_integral_output_threestate_prim;
+    real Q;
+    wire A, E;
+    // expected-error @below {{output of a three-state gate primitive must be 1 bit}}
+    notif0 n (Q, A, E);
+endmodule
+
+// -----
+
 module unsupported_prim(inout A, inout B);
     // expected-error @below {{unsupported instance of primitive `tran`}}
     tran u1 (A, B);
@@ -399,4 +405,13 @@ module InvalidOpenArrayAssign;
   logic [7 : 0] bytes[3] = '{1, 2, 3};
   // expected-error @below {{no implicit conversion from 'logic[7:0]$[3]' to 'string$[]'}}
   string strDynArr[] = bytes;
+endmodule
+
+// -----
+
+module UnsupportedOutputArgument;
+  task f(output int x[$]); endtask
+  int q[$];
+  // expected-error @below {{queue lvalue range selections are not supported}}
+  initial f(q[0:1]);
 endmodule

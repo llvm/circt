@@ -120,6 +120,8 @@ def test_cosim_loopback(conn: AcceleratorConnection) -> None:
 
 def test_cosim_loopback_make_fallback(monkeypatch) -> None:
   """Run the loopback test using the ``make`` fallback (no cmake/ninja)."""
+  if sys.platform == "win32":
+    pytest.skip("make fallback cannot link against MSVC-built runtime DLLs")
   if shutil.which("make") is None:
     pytest.skip("make fallback requires make on PATH")
   from esiaccel.cosim.verilator import Verilator

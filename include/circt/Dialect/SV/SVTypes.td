@@ -17,9 +17,6 @@ include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
-// TODO: The following should go into a `SVTypesImpl.td` if we ever actually
-// define any SV-specific types. Doing so will keep this `SVTypes.td` file
-// includable for other dialects, without polluting their output with SV types.
 class SVType<string name> : TypeDef<SVDialect, name> { }
 
 //===----------------------------------------------------------------------===//
@@ -52,6 +49,89 @@ class InOutTypeConstraint<string value, string inoutValue>
 class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "sv::getInOutElementType($_self)">;
+
+//===----------------------------------------------------------------------===//
+// Net type and related helpers.
+//===----------------------------------------------------------------------===//
+
+def NetType : SVType<"Net"> {
+  let summary = "SystemVerilog net handle";
+  let description = [{
+    Represents a SystemVerilog net data object handle (e.g. a structural wire).
+
+    See SystemVerilog Spec 6.5, 6.6, and 6.7
+
+  }];
+  let mnemonic = "net";
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
+      return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $elementType `>`";
+}
+
+// Type constraint that indicates that an operand or result may only be a valid
+// net element type.
+def NetElementType : Type<CPred<"hw::isHWValueType($_self)">,
+                          "a valid net element">;
+
+// Constrains `netValue` to `!sv.net<T>`, inferring the net handle from element type `T`.
+class NetTypeConstraint<string value, string netValue>
+  : TypesMatchWith<"type should be `!sv.net<T>`",
+                   value, netValue,
+                   "NetType::get($_self.getContext(), $_self)">;
+
+// Constrains `value` to type `T`, inferring the element type from net handle `netValue` (`!sv.net<T>`).
+class NetElementConstraint<string value, string netValue>
+  : TypesMatchWith<"type should be net's element type",
+                   netValue, value, "sv::getNetElementType($_self)">;
+
+//===----------------------------------------------------------------------===//
+// Var type and related helpers.
+//===----------------------------------------------------------------------===//
+
+def VarType : SVType<"Var"> {
+  let summary = "SystemVerilog variable handle";
+  let description = [{
+    Represents a SystemVerilog variable data object handle (e.g., an assignable storage location).
+
+    See SystemVerilog Spec 6.5 and 6.8
+  }];
+  let mnemonic = "var";
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
+      return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $elementType `>`";
+}
+
+// Type constraint that indicates that an operand/result may only be a valid
+// var element type.
+def VarElementType : Type<CPred<"hw::isHWValueType($_self)">,
+                          "a valid var element">;
+
+// Constrains `varValue` to `!sv.var<T>`, inferring the var handle from element type `T`.
+class VarTypeConstraint<string value, string varValue>
+  : TypesMatchWith<"type should be `!sv.var<T>`",
+                   value, varValue,
+                   "VarType::get($_self.getContext(), $_self)">;
+
+// Constrains `value` to type `T`, inferring the element type from var handle `varValue` (`!sv.var<T>`).
+class VarElementConstraint<string value, string varValue>
+  : TypesMatchWith<"type should be var's element type",
+                   varValue, value, "sv::getVarElementType($_self)">;
+
+//===----------------------------------------------------------------------===//
+// UnpackedOpenArrayType type 
+//===----------------------------------------------------------------------===//
 
 def UnpackedOpenArrayTypeImpl : SVType<"UnpackedOpenArray"> {
   let summary = "SystemVerilog unpacked 'open' array";

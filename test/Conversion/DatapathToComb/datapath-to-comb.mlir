@@ -262,6 +262,13 @@ hw.module @timing(in %a : i1, in %b : i1, in %c : i1, out carry : i1, out save :
 }
 
 // CHECK-LABEL: @pos_partial_product
+// FORCE-BOOTH-LABEL: @pos_partial_product
+// The carry-save operand is recoded directly; no carry-propagate add is used.
+// FORCE-BOOTH-NOT: comb.add
+// FORCE-BOOTH: comb.xor bin
+// FORCE-BOOTH: comb.and bin
+// FORCE-BOOTH: comb.replicate
+// FORCE-BOOTH: hw.output {{%.+}}, {{%.+}}, {{%.+}} : i3, i3, i3
 hw.module @pos_partial_product(in %a : i3, in %b : i3, in %c : i3, out pp0 : i3, out pp1 : i3, out pp2 : i3) {
   // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
   // CHECK-NEXT: %false = hw.constant false

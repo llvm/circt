@@ -3891,14 +3891,20 @@ ParseResult FIRStmtParser::parseDomainExp(Value &result) {
   return success();
 }
 
-/// ref_expr ::= probe | rwprobe | static_reference
+/// ref_expr ::= 'probe' '(' static_reference ')'
+///          ::= 'rwprobe' '(' static_reference ')'
+///          ::= id
+///          ::= ref_expr '.' id
+///          ::= ref_expr '[' int ']'
 // NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
   auto token = getToken().getKind();
   if (token == FIRToken::lp_probe)
-    return parseProbe(result);
+    return failure(parseProbe(result) ||
+                   parseOptionalExpPostscript(result, /*allowDynamic=*/false));
   if (token == FIRToken::lp_rwprobe)
-    return parseRWProbe(result);
+    return failure(parseRWProbe(result) ||
+                   parseOptionalExpPostscript(result, /*allowDynamic=*/false));
 
   // Default to parsing as static reference expression.
   // Don't check token kind, we need to support literal_identifier and keywords,
@@ -4313,8 +4319,7 @@ ParseResult FIRStmtParser::parseRefDefine() {
   return success();
 }
 
-/// read ::= '(' ref_expr ')'
-/// XXX: spec says static_reference, allow ref_expr anyway for read(probe(x)).
+/// read ::= 'read' '(' ref_expr ')'
 ParseResult FIRStmtParser::parseRefRead(Value &result) {
   auto startTok = consumeToken(FIRToken::lp_read);
 
@@ -6067,8 +6072,9 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   }
 
   auto builder = circuit.getBodyBuilder();
-  auto domainOp = DomainOp::create(builder, info.getLoc(), name,
-                                   builder.getArrayAttr(fields));
+  auto domainOp =
+      DomainOp::create(builder, info.getLoc(), name, /*sym_visibility=*/{},
+                       builder.getArrayAttr(fields));
 
   // Stash the domain name -> op in the constants, so we can resolve Domain
   // types.
@@ -6330,7 +6336,7 @@ ParseResult FIRCircuitParser::parseFormalLike(CircuitOp circuit,
     }
   }
 
-  Op::create(builder, info.getLoc(), id, moduleName,
+  Op::create(builder, info.getLoc(), id, /*sym_visibility=*/{}, moduleName,
              params.getDictionary(getContext()));
   return success();
 }
@@ -6435,7 +6441,8 @@ ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
     return failure();
 
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
-  auto optionOp = OptionOp::create(builder, info.getLoc(), id);
+  auto optionOp =
+      OptionOp::create(builder, info.getLoc(), id, /*sym_visibility=*/{});
   auto *block = new Block;
   optionOp.getBody().push_back(block);
   builder.setInsertionPointToEnd(block);
@@ -6504,8 +6511,8 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
       return failure();
     auto builder = OpBuilder::atBlockEnd(block);
     // Create the layer definition and give it an empty block.
-    auto layerOp =
-        LayerOp::create(builder, info.getLoc(), id, *layerConvention);
+    auto layerOp = LayerOp::create(builder, info.getLoc(), id,
+                                   /*sym_visibility=*/{}, *layerConvention);
     layerOp->getRegion(0).push_back(new Block());
     if (outputDir)
       layerOp->setAttr("output_file", outputDir);

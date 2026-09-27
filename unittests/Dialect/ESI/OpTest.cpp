@@ -81,9 +81,11 @@ TEST(ESIOpTest, TypeMatching) {
   EXPECT_FAILURE(checkInnerTypeMatch(esiWindowAny, i1Type));
 
   // Type alias type tests
-  auto typeAliasAny =
-      b.getType<hw::TypeAliasType>(b.getType<SymbolRefAttr>("foo"),
-                                   b.getType<AnyType>(), b.getType<AnyType>());
+  auto typeAliasRef =
+      SymbolRefAttr::get(b.getStringAttr("types"),
+                         {FlatSymbolRefAttr::get(b.getStringAttr("foo"))});
+  auto typeAliasAny = b.getType<hw::TypeAliasType>(
+      typeAliasRef, b.getType<AnyType>(), b.getType<AnyType>());
   EXPECT_SUCCESS(checkInnerTypeMatch(typeAliasAny, i1Type));
 }
 } // namespace

@@ -23,11 +23,49 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
+// Package operations
+//===----------------------------------------------------------------------===//
+
+def PackageOp : SVOp<"package", [
+    Emittable, SymbolName, SymbolVisibility, Symbol, SymbolTable, TypeScopeLike,
+    SingleBlock, NoTerminator, NoRegionArguments, IsolatedFromAbove,
+    HasParent<"mlir::ModuleOp">
+]> {
+  let summary = "SystemVerilog package containing type declarations";
+  let description = [{
+    A named, top-level SystemVerilog package containing only `hw.typedecl`
+    operations. Its declarations are referenced using `hw.typealias` with a
+    symbol reference of the form `@package::@type`. Empty packages are allowed.
+
+    The body is currently restricted to type declarations because the lookup,
+    legalization, and emission infrastructure for other declarations is not yet
+    prepared to handle them in a package's nested symbol table. This restriction
+    can be relaxed to support declarations such as functions and parameters as
+    that infrastructure is extended; it is not a limitation of SystemVerilog
+    packages.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility
+  );
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name $body attr-dict";
+
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Interface operations
 //===----------------------------------------------------------------------===//
 
 def InterfaceOp : SVOp<"interface",
-    [SingleBlock, NoTerminator, Symbol, SymbolTable]> {
+    [SingleBlock, NoTerminator, SymbolName, SymbolVisibility, Symbol,
+     SymbolTable]> {
   let summary = "Operation to define a SystemVerilog interface";
 
   let description = [{
@@ -48,6 +86,7 @@ def InterfaceOp : SVOp<"interface",
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     OptionalAttr<StrAttr>:$comment
   );
 
@@ -73,8 +112,7 @@ def InterfaceOp : SVOp<"interface",
 
     // Get the interface's symbolic name as StringAttr.
     StringAttr getNameAttr() {
-      return (*this)->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName());
+      return getSymNameAttr();
     }
 
     // Get the interface's symbolic name.
@@ -93,7 +131,7 @@ def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/HW type"> {
 }
 
 def InterfaceSignalOp : SVOp<"interface.signal",
-    [Symbol, HasParent<"InterfaceOp">]> {
+    [SymbolName, SymbolVisibility, Symbol, HasParent<"InterfaceOp">]> {
   let summary = "Operation to define a SystemVerilog signal for interfaces";
 
   let description = [{
@@ -109,6 +147,7 @@ def InterfaceSignalOp : SVOp<"interface.signal",
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     SignalTypeAttr:$type
   );
 
@@ -154,7 +193,7 @@ def ModportStructArrayAttr : TypedArrayAttrBase<ModportStruct,
   "array of modport structs">;
 
 def InterfaceModportOp : SVOp<"interface.modport",
-    [Symbol, HasParent<"InterfaceOp">]> {
+    [SymbolName, SymbolVisibility, Symbol, HasParent<"InterfaceOp">]> {
   let summary = "Operation to define a SystemVerilog modport for interfaces";
 
   let description = [{
@@ -173,6 +212,7 @@ def InterfaceModportOp : SVOp<"interface.modport",
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     ModportStructArrayAttr:$ports
   );
 
@@ -220,7 +260,8 @@ def ModportType : SVType<"Modport"> {
 //===----------------------------------------------------------------------===//
 
 def SVVerbatimSourceOp
-    : SVOp<"verbatim.source", [Symbol, HasParent<"mlir::ModuleOp">,
+    : SVOp<"verbatim.source", [SymbolName, SymbolVisibility, Symbol,
+                                HasParent<"mlir::ModuleOp">,
                                DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Verbatim verilog source";
   let description = [{
@@ -229,12 +270,14 @@ def SVVerbatimSourceOp
     are represented by a `hw.module.extern`.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
-      StrAttr:$content,
-      OutputFileAttr:$output_file,
-      ParamDeclArrayAttr:$parameters,
-      OptionalAttr<SymbolRefArrayAttr>:$additional_files,
-      StrAttr:$verilogName);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrAttr:$content,
+    OutputFileAttr:$output_file,
+    ParamDeclArrayAttr:$parameters,
+    OptionalAttr<SymbolRefArrayAttr>:$additional_files,
+    StrAttr:$verilogName);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -247,8 +290,9 @@ def SVVerbatimSourceOp
 
 def SVVerbatimModuleOp
     : SVOp<"verbatim.module", [DeclareOpInterfaceMethods<PortList>,
-                               DeclareOpInterfaceMethods<HWModuleLike>, Symbol,
+                               DeclareOpInterfaceMethods<HWModuleLike>,
                                DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+                               SymbolName, SymbolVisibility, Symbol,
                                HasParent<"mlir::ModuleOp">]> {
   let summary = "Verbatim verilog module";
   let description = [{
@@ -257,13 +301,15 @@ def SVVerbatimModuleOp
     that contains the actual verilog source code.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
-      TypeAttrOf<ModuleType>:$module_type,
-      OptionalAttr<DictArrayAttr>:$per_port_attrs,
-      OptionalAttr<LocationArrayAttr>:$port_locs,
-      ParamDeclArrayAttr:$parameters,
-      FlatSymbolRefAttr:$source,
-      OptionalAttr<StrAttr>:$verilogName);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<DictArrayAttr>:$per_port_attrs,
+    OptionalAttr<LocationArrayAttr>:$port_locs,
+    ParamDeclArrayAttr:$parameters,
+    FlatSymbolRefAttr:$source,
+    OptionalAttr<StrAttr>:$verilogName);
 
   let results = (outs);
 
@@ -289,7 +335,8 @@ def SVVerbatimModuleOp
         portLocs.push_back(port.loc ? static_cast<Location>(port.loc) : $_builder.getUnknownLoc());
       }
       auto moduleType = hw::ModuleType::get($_builder.getContext(), modulePorts);
-      build($_builder, $_state, name, TypeAttr::get(moduleType),
+      build($_builder, $_state, name, /*sym_visibility=*/{},
+            TypeAttr::get(moduleType),
             $_builder.getArrayAttr(portAttrs), $_builder.getArrayAttr(portLocs),
             parameters, source, verilogName);
     }]>

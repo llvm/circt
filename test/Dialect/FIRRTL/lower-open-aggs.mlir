@@ -384,3 +384,43 @@ firrtl.circuit "NestedBaseInnerSym" {
     %w = firrtl.wire sym [<@sym, 0, public>, <@sym_b, 2, public>, <@sym_c, 3, public>] : !firrtl.openbundle<a: probe<uint<1>>, b: bundle<c: uint<1>>, d: probe<uint<1>>>
   }
 }
+
+// -----
+
+// CHECK-LABEL: circuit "DomainField"
+firrtl.circuit "DomainField" {
+  firrtl.domain @ClockDomain
+
+  // CHECK-LABEL: firrtl.module private @Child(
+  // CHECK-SAME:    in %A_clock: !firrtl.domain<@ClockDomain()>,
+  // CHECK-SAME:    out %B: !firrtl.domain<@ClockDomain()>)
+  // CHECK-NEXT:    firrtl.domain.define %B, %A_clock
+  firrtl.module private @Child(
+    in %A: !firrtl.openbundle<clock: domain<@ClockDomain()>>,
+    out %B: !firrtl.domain<@ClockDomain()>
+  ) {
+    %clock = firrtl.opensubfield %A[clock] : !firrtl.openbundle<clock: domain<@ClockDomain()>>
+    firrtl.domain.define %B, %clock : !firrtl.domain<@ClockDomain()>
+  }
+
+  // CHECK-LABEL: firrtl.module @DomainField(
+  // CHECK-SAME:    in %A: !firrtl.domain<@ClockDomain()>,
+  // CHECK-SAME:    out %B: !firrtl.domain<@ClockDomain()>)
+  firrtl.module @DomainField(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %B: !firrtl.domain<@ClockDomain()>
+  ) {
+    // CHECK: %child_A_clock, %child_B = firrtl.instance child @Child(
+    // CHECK-SAME: in A_clock: !firrtl.domain<@ClockDomain()>,
+    // CHECK-SAME: out B: !firrtl.domain<@ClockDomain()>)
+    %child_A, %child_B = firrtl.instance child @Child(
+      in A: !firrtl.openbundle<clock: domain<@ClockDomain()>>,
+      out B: !firrtl.domain<@ClockDomain()>
+    )
+    %child_clock = firrtl.opensubfield %child_A[clock] : !firrtl.openbundle<clock: domain<@ClockDomain()>>
+    // CHECK: firrtl.domain.define %child_A_clock, %A
+    firrtl.domain.define %child_clock, %A : !firrtl.domain<@ClockDomain()>
+    // CHECK: firrtl.domain.define %B, %child_B
+    firrtl.domain.define %B, %child_B : !firrtl.domain<@ClockDomain()>
+  }
+}

@@ -33,7 +33,7 @@ class ExStruct(Struct):
   a: SInt(8)
 
 
-# CHECK:  hw.type_scope @pycde {
+# CHECK:  sv.package @pycde {
 # CHECK:    hw.typedecl @ExStruct : !hw.struct<a: si8>
 # CHECK:  }
 

@@ -27,6 +27,7 @@
 #include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/LLHD/LLHDDialect.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -793,6 +794,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     emit::EmitDialect,
     hw::HWDialect,
     llhd::LLHDDialect,
+    ltl::LTLDialect,
     mlir::arith::ArithDialect,
     mlir::cf::ControlFlowDialect,
     mlir::DLTIDialect,

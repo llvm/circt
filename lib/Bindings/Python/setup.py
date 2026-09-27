@@ -21,6 +21,10 @@
 #
 # By default, this will use the llvm-project submodule included with CIRCT.
 # This can be overridden with the CIRCT_LLVM_DIR env var.
+#
+# For CI, it can be useful or required to place limits on especially the number
+# of allowed linker jobs.  When using Ninja, this limit can be specified with the
+# CIRCT_PARALLEL_LINK_JOBS env var (passed through as -DLLVM_PARALLEL_LINK_JOBS).
 
 import os
 import platform
@@ -72,6 +76,12 @@ class CMakeBuild(build_py):
     # Use lld if available.
     exist_lld = shutil.which("lld") is not None
     cmake_linker = ["-DLLVM_USE_LINKER=lld"] if exist_lld else []
+
+    # Optionally cap the number of concurrent link jobs.
+    link_jobs = os.getenv("CIRCT_PARALLEL_LINK_JOBS")
+    cmake_link_jobs = ["-DLLVM_PARALLEL_LINK_JOBS={}".format(int(link_jobs))
+                      ] if link_jobs else []
+
     cmake_args = [
         "-DCMAKE_BUILD_TYPE=Release",  # not used on MSVC, but no harm
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
@@ -90,7 +100,7 @@ class CMakeBuild(build_py):
         "-DCIRCT_BINDINGS_PYTHON_ENABLED=ON",
         "-DCIRCT_RELEASE_TAG_ENABLED=ON",
         "-DCIRCT_RELEASE_TAG=firtool"
-    ] + cmake_linker + cmake_generator
+    ] + cmake_link_jobs + cmake_linker + cmake_generator
 
     # HACK: CMake fails to auto-detect static linked Python installations, which
     # happens to be what exists on manylinux. We detect this and give it a dummy

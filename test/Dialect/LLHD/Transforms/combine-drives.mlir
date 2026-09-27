@@ -314,4 +314,55 @@ hw.module @SkipGapsOnUnknownUse(in %u: i42) {
   func.call @useSigI42(%2) : (!llhd.ref<i42>) -> ()
 }
 
+// CHECK-LABEL: @Unions
+hw.module @Unions(in %u : i42, in %v : i1337) {
+  %c0_i1337 = hw.constant 0 : i1337
+  %0 = hw.bitcast %c0_i1337 : (i1337) -> !hw.union<x: i42, y: i1337>
+  %1 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: %a = llhd.sig
+  // CHECK-NEXT: [[A:%.+]] = hw.union_create "x", %u
+  // CHECK-NEXT: llhd.drv %a, [[A]] after {{%.+}}
+  %a = llhd.sig %0 : !hw.union<x: i42, y: i1337>
+  %2 = llhd.sig.struct_extract %a["x"] : <!hw.union<x: i42, y: i1337>>
+  llhd.drv %2, %u after %1 : i42
+  // CHECK: %b = llhd.sig
+  // CHECK-NEXT: [[B:%.+]] = hw.union_create "y", %v
+  // CHECK-NEXT: llhd.drv %b, [[B]] after {{%.+}}
+  %b = llhd.sig %0 : !hw.union<x: i42, y: i1337>
+  %3 = llhd.sig.struct_extract %b["y"] : <!hw.union<x: i42, y: i1337>>
+  llhd.drv %3, %v after %1 : i1337
+}
+
+// CHECK-LABEL: @UnionDefault
+hw.module @UnionDefault(in %v: i1337) {
+  %c0_i1337 = hw.constant 0 : i1337
+  %0 = hw.bitcast %c0_i1337 : (i1337) -> !hw.union<x: i42, y: i1337>
+  %1 = hw.struct_create (%0, %c0_i1337) : !hw.struct<u: !hw.union<x: i42, y: i1337>, v: i1337>
+  %2 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: %a = llhd.sig [[INIT:%.+]] :
+  // CHECK-NEXT: [[TMP:%.+]] = hw.struct_create ([[DEFAULT:%.+]], %v)
+  // CHECK-NEXT: llhd.drv %a, [[TMP]] after {{%.+}}
+  // CHECK-NEXT: [[DEFAULT]] = hw.struct_extract [[INIT]]["u"]
+  %a = llhd.sig %1 : !hw.struct<u: !hw.union<x: i42, y: i1337>, v: i1337>
+  %3 = llhd.sig.struct_extract %a["v"] : <!hw.struct<u: !hw.union<x: i42, y: i1337>, v: i1337>>
+  llhd.drv %3, %v after %2 : i1337
+}
+
+// CHECK-LABEL: @UnionConflict
+hw.module @UnionConflict(in %u : i42, in %v : i1337) {
+  %c0_i1337 = hw.constant 0 : i1337
+  %0 = hw.bitcast %c0_i1337 : (i1337) -> !hw.union<x: i42, y: i1337>
+  %1 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %0 : !hw.union<x: i42, y: i1337>
+  // Union covered twice via different variants.
+  // CHECK: [[TMP1:%.+]] = llhd.sig.struct_extract %a["x"]
+  // CHECK: [[TMP2:%.+]] = llhd.sig.struct_extract %a["y"]
+  // CHECK: llhd.drv [[TMP1]], %u
+  // CHECK: llhd.drv [[TMP2]], %v
+  %2 = llhd.sig.struct_extract %a["x"] : <!hw.union<x: i42, y: i1337>>
+  %3 = llhd.sig.struct_extract %a["y"] : <!hw.union<x: i42, y: i1337>>
+  llhd.drv %2, %u after %1 : i42
+  llhd.drv %3, %v after %1 : i1337
+}
+
 func.func private @useSigI42(%arg0: !llhd.ref<i42>)

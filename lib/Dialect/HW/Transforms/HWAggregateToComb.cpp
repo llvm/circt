@@ -9,6 +9,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/APInt.h"
@@ -34,6 +35,95 @@ struct HWArrayCreateLikeOpConversion : OpConversionPattern<OpTy> {
   matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, adaptor.getInputs());
+    return success();
+  }
+};
+
+struct HWUnionCreateOpConversion
+    : public OpConversionPattern<hw::UnionCreateOp> {
+  using OpConversionPattern<hw::UnionCreateOp>::OpConversionPattern;
+  // hw.union_create -> hw.bitcast [ + comb.concat ]
+  LogicalResult
+  matchAndRewrite(hw::UnionCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    hw::UnionType unionTy = op.getType();
+    auto outputTy =
+        dyn_cast_or_null<IntegerType>(typeConverter->convertType(unionTy));
+    if (!outputTy)
+      return rewriter.notifyMatchFailure(op.getLoc(),
+                                         "Failed to convert union to integer");
+
+    auto inputBitWidth = hw::getBitWidth(adaptor.getInput().getType());
+    if (inputBitWidth < 0)
+      return rewriter.notifyMatchFailure(op.getLoc(),
+                                         "Failed to convert input to integer");
+
+    // Bitcast the input value to its integer representation.
+    auto inputIntTy = rewriter.getIntegerType(inputBitWidth);
+    Value inputAsInt = rewriter.createOrFold<hw::BitcastOp>(
+        op.getLoc(), inputIntTy, adaptor.getInput());
+
+    // The field shares the LSB of the union and is moved towards the MSB by
+    // its offset. The bits the field does not cover are undefined and filled
+    // with zeros.
+    int64_t bitOffset = unionTy.getElements()[op.getFieldIndex()].offset;
+    int64_t prePadding = outputTy.getWidth() - inputBitWidth - bitOffset;
+
+    auto createZeroCst = [&](Location loc, int64_t bitWidth) -> Value {
+      return hw::ConstantOp::create(rewriter, loc,
+                                    rewriter.getIntegerType(bitWidth), 0);
+    };
+
+    SmallVector<Value> concatOperands;
+    if (prePadding > 0)
+      concatOperands.push_back(createZeroCst(op.getLoc(), prePadding));
+    concatOperands.push_back(inputAsInt);
+    if (bitOffset > 0)
+      concatOperands.push_back(createZeroCst(op.getLoc(), bitOffset));
+
+    Value result =
+        rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), concatOperands);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct HWUnionExtractOpConversion
+    : public OpConversionPattern<hw::UnionExtractOp> {
+  using OpConversionPattern<hw::UnionExtractOp>::OpConversionPattern;
+  // hw.union_extract -> [ comb.extract + ] hw.bitcast
+  LogicalResult
+  matchAndRewrite(hw::UnionExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    hw::UnionType unionTy = op.getInput().getType();
+
+    auto inputTy = dyn_cast_or_null<IntegerType>(adaptor.getInput().getType());
+    if (!inputTy)
+      return rewriter.notifyMatchFailure(op.getLoc(),
+                                         "Failed to convert union to integer");
+    auto outputTy = typeConverter->convertType(op.getType());
+    if (!outputTy)
+      return rewriter.notifyMatchFailure(
+          op.getLoc(), "Failed to convert union extract result type");
+
+    auto resultFieldBits = hw::getBitWidth(outputTy);
+    assert(resultFieldBits >= 0);
+    auto integerValue = adaptor.getInput();
+
+    // If the output is narrower than the union, extract the active bits.
+    if (resultFieldBits < integerValue.getType().getIntOrFloatBitWidth()) {
+      auto bitOffset = unionTy.getElements()[op.getFieldIndex()].offset;
+      integerValue = comb::ExtractOp::create(
+          rewriter, op->getLoc(), rewriter.getIntegerType(resultFieldBits),
+          integerValue, bitOffset);
+    }
+
+    // Bitcast the extracted bits to the result. Fold inplace if outputTy ==
+    // inputTy.
+    auto bitcastOp = rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), outputTy,
+                                                          integerValue);
+
+    rewriter.replaceOp(op, bitcastOp);
     return success();
   }
 };
@@ -249,6 +339,32 @@ struct HWStructExtractOpConversion : OpConversionPattern<hw::StructExtractOp> {
   }
 };
 
+struct BitcastOpConversion : OpConversionPattern<hw::BitcastOp> {
+  using OpConversionPattern<hw::BitcastOp>::OpConversionPattern;
+  // Recreate bitcast with legalized types.
+  LogicalResult
+  matchAndRewrite(hw::BitcastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto inputTy = adaptor.getInput().getType();
+    auto outputTy = typeConverter->convertType(op.getType());
+    if (!outputTy)
+      return rewriter.notifyMatchFailure(op, "Failed to convert result type.");
+
+    auto inBits = hw::getBitWidth(inputTy);
+    auto outBits = hw::getBitWidth(outputTy);
+    if (inBits != outBits)
+      return rewriter.notifyMatchFailure(
+          op, "Width of converted types does not match.");
+    if (inBits < 0)
+      return rewriter.notifyMatchFailure(op, "Unknown bitwidth.");
+
+    auto bitcastOp = rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), outputTy,
+                                                          adaptor.getInput());
+    rewriter.replaceOp(op, bitcastOp);
+    return success();
+  }
+};
+
 struct MuxOpConversion : OpConversionPattern<comb::MuxOp> {
   using OpConversionPattern<comb::MuxOp>::OpConversionPattern;
 
@@ -269,10 +385,22 @@ public:
   AggregateTypeConverter() {
     addConversion([](Type type) -> Type { return type; });
     addConversion([](hw::ArrayType t) -> Type {
-      return IntegerType::get(t.getContext(), hw::getBitWidth(t));
+      auto bitWidth = t.getBitWidth();
+      if (!bitWidth)
+        return {};
+      return IntegerType::get(t.getContext(), *bitWidth);
     });
     addConversion([](hw::StructType t) -> Type {
-      return IntegerType::get(t.getContext(), hw::getBitWidth(t));
+      auto bitWidth = t.getBitWidth();
+      if (!bitWidth)
+        return {};
+      return IntegerType::get(t.getContext(), *bitWidth);
+    });
+    addConversion([](hw::UnionType t) -> Type {
+      auto bitWidth = t.getBitWidth();
+      if (!bitWidth)
+        return {};
+      return IntegerType::get(t.getContext(), *bitWidth);
     });
     addTargetMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
                                 mlir::ValueRange inputs,
@@ -299,12 +427,13 @@ public:
 
 static void populateHWAggregateToCombOpConversionPatterns(
     RewritePatternSet &patterns, AggregateTypeConverter &typeConverter) {
-  patterns.add<HWArrayGetOpConversion,
-               HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
-               HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
-               HWAggregateConstantOpConversion, HWArraySliceOpConversion,
-               HWArrayInjectOpConversion, HWStructCreateOpConversion,
-               HWStructExtractOpConversion, MuxOpConversion>(
+  patterns.add<
+      HWArrayGetOpConversion, HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
+      HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
+      HWAggregateConstantOpConversion, HWArraySliceOpConversion,
+      HWArrayInjectOpConversion, HWStructCreateOpConversion,
+      HWStructExtractOpConversion, HWUnionCreateOpConversion,
+      HWUnionExtractOpConversion, BitcastOpConversion, MuxOpConversion>(
       typeConverter, patterns.getContext());
 }
 
@@ -321,15 +450,16 @@ void HWAggregateToCombPass::runOnOperation() {
 
   target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
                       hw::AggregateConstantOp, hw::ArrayInjectOp,
-                      hw::ArraySliceOp, hw::StructCreateOp,
-                      hw::StructExtractOp>();
-  target.addDynamicallyLegalOp<comb::MuxOp>(
-      [](comb::MuxOp op) { return hw::type_isa<IntegerType>(op.getType()); });
+                      hw::ArraySliceOp, hw::StructCreateOp, hw::StructExtractOp,
+                      hw::UnionCreateOp, hw::UnionExtractOp>();
   target.addLegalDialect<hw::HWDialect, comb::CombDialect>();
 
   RewritePatternSet patterns(&getContext());
   AggregateTypeConverter typeConverter;
   populateHWAggregateToCombOpConversionPatterns(patterns, typeConverter);
+
+  target.addDynamicallyLegalOp<comb::MuxOp, hw::BitcastOp>(
+      [&typeConverter](auto op) { return typeConverter.isLegal(op); });
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

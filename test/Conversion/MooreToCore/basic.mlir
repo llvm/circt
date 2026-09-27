@@ -1770,6 +1770,16 @@ func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moo
   moore.string_cmp ge %arg1, %arg2 : string -> i1
   // CHECK: sim.string.cmp gt %arg1, %arg2 : !sim.dstring
   moore.string_cmp gt %arg1, %arg2 : string -> i1
+  // CHECK: sim.string.compare %arg1, %arg2
+  moore.string.compare %arg1, %arg2
+  // CHECK: [[LOWER_LHS:%.+]] = sim.string.tolower %arg1
+  // CHECK: [[LOWER_RHS:%.+]] = sim.string.tolower %arg2
+  // CHECK: sim.string.compare [[LOWER_LHS]], [[LOWER_RHS]]
+  moore.string.icompare %arg1, %arg2
+  // CHECK: sim.string.tolower %arg1
+  moore.string.tolower %arg1
+  // CHECK: sim.string.toupper %arg1
+  moore.string.toupper %arg1
   return
 }
 

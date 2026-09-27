@@ -498,7 +498,17 @@ circuit RefSubaccess:
     input sel : UInt<2>
     output out : UInt<1>
 
-    connect out, read(probe(in)[sel]) ; expected-error {{expected ')' in 'read'}}
+    connect out, read(probe(in)[sel]) ; expected-error {{subaccess not allowed here}}
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit RefSubfieldUnknown:
+  public module RefSubfieldUnknown:
+    input agg : { a : UInt<1> }
+    output out : UInt<1>
+
+    connect out, read(probe(agg).nosuchfield) ; expected-error {{unknown field 'nosuchfield' in type '!firrtl.probe<bundle<a: uint<1>>>'}}
 
 ;// -----
 

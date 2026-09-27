@@ -1,7 +1,10 @@
 numpy
 nanobind>=2.2.0,<3
 PyYAML
-cocotb>=1.6.2
+# cocotb 2.1 removed `cocotb_tools.config.lib_name`, which cocotb-test (the
+# runner we use in `pycde.testing`) still relies on. Cap the version until
+# cocotb-test supports cocotb 2.1 or we move off of cocotb-test.
+cocotb>=1.6.2,<2.1
 cocotb-test>=0.2.2
 jinja2
 executing>=2.2.0

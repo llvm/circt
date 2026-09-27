@@ -179,3 +179,134 @@ hw.module private @struct_create_extract_roundtrip(in %foo: i3, in %bar: i5, out
   %bar_out = hw.struct_extract %s["bar"] : !hw.struct<foo: i3, bar: i5>
   hw.output %foo_out, %bar_out : i3, i5
 }
+
+// CHECK-LABEL: @union_create_same_width(
+hw.module private @union_create_same_width(in %in: i4, out out: !hw.union<a: i4, b: i4>) {
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %in : (i4) -> !hw.union<a: i4, b: i4>
+  // CHECK-NEXT: hw.output %[[BITCAST]]
+  %u = hw.union_create "b", %in : !hw.union<a: i4, b: i4>
+  hw.output %u : !hw.union<a: i4, b: i4>
+}
+
+// CHECK-LABEL: @union_create_padding(
+hw.module private @union_create_padding(in %in: i4, out out: !hw.union<a: i8, b: i4>) {
+  // CHECK-NEXT: %[[PRE:.+]] = hw.constant 0 : i4
+  // CHECK-NEXT: %[[CONCAT:.+]] = comb.concat %[[PRE]], %in : i4, i4
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %[[CONCAT]] : (i8) -> !hw.union<a: i8, b: i4>
+  // CHECK-NEXT: hw.output %[[BITCAST]]
+  %u = hw.union_create "b", %in : !hw.union<a: i8, b: i4>
+  hw.output %u : !hw.union<a: i8, b: i4>
+}
+
+// CHECK-LABEL: @union_create_offset(
+hw.module private @union_create_offset(in %in: i4, out out: !hw.union<a: i8, b: i4 offset 3>) {
+  // CHECK-NEXT: %[[PRE:.+]] = hw.constant false
+  // CHECK-NEXT: %[[POST:.+]] = hw.constant 0 : i3
+  // CHECK-NEXT: %[[CONCAT:.+]] = comb.concat %[[PRE]], %in, %[[POST]] : i1, i4, i3
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %[[CONCAT]] : (i8) -> !hw.union<a: i8, b: i4 offset 3>
+  // CHECK-NEXT: hw.output %[[BITCAST]]
+  %u = hw.union_create "b", %in : !hw.union<a: i8, b: i4 offset 3>
+  hw.output %u : !hw.union<a: i8, b: i4 offset 3>
+}
+
+// CHECK-LABEL: @union_extract(
+hw.module private @union_extract(in %u: !hw.union<a: i8, b: i4, c: i2 offset 5>, out a: i8, out b: i4, out c: i2) {
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %u : (!hw.union<a: i8, b: i4, c: i2 offset 5>) -> i8
+  // CHECK-NEXT: %[[B:.+]] = comb.extract %[[BITCAST]] from 0 : (i8) -> i4
+  // CHECK-NEXT: %[[C:.+]] = comb.extract %[[BITCAST]] from 5 : (i8) -> i2
+  // CHECK-NEXT: hw.output %[[BITCAST]], %[[B]], %[[C]]
+  %a = hw.union_extract %u["a"] : !hw.union<a: i8, b: i4, c: i2 offset 5>
+  %b = hw.union_extract %u["b"] : !hw.union<a: i8, b: i4, c: i2 offset 5>
+  %c = hw.union_extract %u["c"] : !hw.union<a: i8, b: i4, c: i2 offset 5>
+  hw.output %a, %b, %c : i8, i4, i2
+}
+
+// CHECK-LABEL: @union_create_extract_roundtrip(
+hw.module private @union_create_extract_roundtrip(in %in: i4, out a: i8, out b: i4) {
+  // CHECK-NEXT: %[[PRE:.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: %[[POST:.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: %[[CAT:.+]] = comb.concat %[[PRE]], %in, %[[POST]] : i2, i4, i2
+  // CHECK-NEXT: %[[B:.+]] = comb.extract %[[CAT]] from 2 : (i8) -> i4
+  // CHECK-NEXT: hw.output %[[CAT]], %[[B]]
+  %u = hw.union_create "b", %in : !hw.union<a: i8, b: i4 offset 2>
+  %a = hw.union_extract %u["a"] : !hw.union<a: i8, b: i4 offset 2>
+  %b = hw.union_extract %u["b"] : !hw.union<a: i8, b: i4 offset 2>
+  hw.output %a, %b : i8, i4
+}
+
+// CHECK-LABEL: @union_bitcast(
+hw.module private @union_bitcast(in %u: !hw.union<a: i8, b: i4>, out out: !hw.struct<x: i4, y: i4>) {
+  // CHECK-NEXT: %[[IN:.+]] = hw.bitcast %u : (!hw.union<a: i8, b: i4>) -> i8
+  // CHECK-NEXT: %[[OUT:.+]] = hw.bitcast %[[IN]] : (i8) -> !hw.struct<x: i4, y: i4>
+  // CHECK-NEXT: hw.output %[[OUT]]
+  %s = hw.bitcast %u : (!hw.union<a: i8, b: i4>) -> !hw.struct<x: i4, y: i4>
+  hw.output %s : !hw.struct<x: i4, y: i4>
+}
+
+// CHECK-LABEL: @union_mux(
+hw.module private @union_mux(in %cond: i1, in %t: !hw.union<a: i8, b: i4>, in %f: !hw.union<a: i8, b: i4>, out b: i4) {
+  // CHECK-NEXT: %[[F:.+]] = hw.bitcast %f : (!hw.union<a: i8, b: i4>) -> i8
+  // CHECK-NEXT: %[[T:.+]] = hw.bitcast %t : (!hw.union<a: i8, b: i4>) -> i8
+  // CHECK-NEXT: %[[MUX:.+]] = comb.mux %cond, %[[T]], %[[F]] : i8
+  // CHECK-NEXT: %[[B:.+]] = comb.extract %[[MUX]] from 0 : (i8) -> i4
+  // CHECK-NEXT: hw.output %[[B]]
+  %m = comb.mux %cond, %t, %f : !hw.union<a: i8, b: i4>
+  %b = hw.union_extract %m["b"] : !hw.union<a: i8, b: i4>
+  hw.output %b : i4
+}
+
+// CHECK-LABEL: @array_in_union(
+hw.module private @array_in_union(in %arr: !hw.array<2xi3>, in %idx: i1, out elem: i3) {
+  // CHECK-NEXT: %[[ARR:.+]] = hw.bitcast %arr : (!hw.array<2xi3>) -> i6
+  // CHECK-NEXT: %[[PRE:.+]] = hw.constant false
+  // CHECK-NEXT: %[[POST:.+]] = hw.constant false
+  // CHECK-NEXT: %[[CAT:.+]] = comb.concat %[[PRE]], %[[ARR]], %[[POST]] : i1, i6, i1
+  // CHECK-NEXT: %[[FIELD:.+]] = comb.extract %[[CAT]] from 1 : (i8) -> i6
+  // CHECK-NEXT: %[[ELEM_0:.+]] = comb.extract %[[FIELD]] from 0 : (i6) -> i3
+  // CHECK-NEXT: %[[ELEM_1:.+]] = comb.extract %[[FIELD]] from 3 : (i6) -> i3
+  // CHECK-NEXT: %[[MUX:.+]] = comb.mux %idx, %[[ELEM_1]], %[[ELEM_0]] : i3
+  // CHECK-NEXT: hw.output %[[MUX]]
+  %u = hw.union_create "arr", %arr : !hw.union<raw: i8, arr: !hw.array<2xi3> offset 1>
+  %a = hw.union_extract %u["arr"] : !hw.union<raw: i8, arr: !hw.array<2xi3> offset 1>
+  %e = hw.array_get %a[%idx] : !hw.array<2xi3>, i1
+  hw.output %e : i3
+}
+
+// CHECK-LABEL: @union_in_struct(
+hw.module private @union_in_struct(in %tag: i1, in %val: i4, out tag_out: i1, out val_out: i4) {
+  // CHECK-NEXT: %[[POST:.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: %[[CAT:.+]] = comb.concat %val, %[[POST]] : i4, i2
+  // CHECK-NEXT: %[[STRUCT:.+]] = comb.concat %tag, %[[CAT]] : i1, i6
+  // CHECK-NEXT: %[[VAL:.+]] = comb.extract %[[CAT]] from 2 : (i6) -> i4
+  // CHECK-NEXT: hw.output %tag, %[[VAL]]
+  %u = hw.union_create "b", %val : !hw.union<a: i6, b: i4 offset 2>
+  %s = hw.struct_create (%tag, %u) : !hw.struct<tag: i1, data: !hw.union<a: i6, b: i4 offset 2>>
+  %t = hw.struct_extract %s["tag"] : !hw.struct<tag: i1, data: !hw.union<a: i6, b: i4 offset 2>>
+  %d = hw.struct_extract %s["data"] : !hw.struct<tag: i1, data: !hw.union<a: i6, b: i4 offset 2>>
+  %v = hw.union_extract %d["b"] : !hw.union<a: i6, b: i4 offset 2>
+  hw.output %t, %v : i1, i4
+}
+
+// CHECK-LABEL: @struct_in_union(
+hw.module private @struct_in_union(in %u: !hw.union<raw: i8, s: !hw.struct<x: i2, y: i3>>, out y: i3) {
+  // CHECK-NEXT: %[[CAST:.+]] = hw.bitcast %u : (!hw.union<raw: i8, s: !hw.struct<x: i2, y: i3>>) -> i8
+  // CHECK-NEXT: %[[STRUCT:.+]] = comb.extract %[[CAST]] from 0 : (i8) -> i5
+  // CHECK-NEXT: %[[Y:.+]] = comb.extract %[[STRUCT]] from 0 : (i5) -> i3
+  // CHECK-NEXT: hw.output %[[Y]]
+  %s = hw.union_extract %u["s"] : !hw.union<raw: i8, s: !hw.struct<x: i2, y: i3>>
+  %y = hw.struct_extract %s["y"] : !hw.struct<x: i2, y: i3>
+  hw.output %y : i3
+}
+
+// CHECK-LABEL: @union_array(
+hw.module private @union_array(in %arr: !hw.array<2x!hw.union<a: i4, b: i2 offset 1>>, in %idx: i1, out b: i2) {
+  // CHECK-NEXT: %[[ARR:.+]] = hw.bitcast %arr : (!hw.array<2xunion<a: i4, b: i2 offset 1>>) -> i8
+  // CHECK-NEXT: %[[ELEM_0:.+]] = comb.extract %[[ARR]] from 0 : (i8) -> i4
+  // CHECK-NEXT: %[[ELEM_1:.+]] = comb.extract %[[ARR]] from 4 : (i8) -> i4
+  // CHECK-NEXT: %[[MUX:.+]] = comb.mux %idx, %[[ELEM_1]], %[[ELEM_0]] : i4
+  // CHECK-NEXT: %[[B:.+]] = comb.extract %[[MUX]] from 1 : (i4) -> i2
+  // CHECK-NEXT: hw.output %[[B]]
+  %e = hw.array_get %arr[%idx] : !hw.array<2x!hw.union<a: i4, b: i2 offset 1>>, i1
+  %b = hw.union_extract %e["b"] : !hw.union<a: i4, b: i2 offset 1>
+  hw.output %b : i2
+}

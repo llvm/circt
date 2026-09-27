@@ -160,7 +160,7 @@ struct ObjectModelIR {
     auto portIndex = retimeModulesMetadataClass.getNumPorts();
     SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
         {portIndex,
-         PortInfo(builderOM.getStringAttr(module.getName() + "_field"),
+         PortInfo(builderOM.getStringAttr(module.getModuleName() + "_field"),
                   object.getType(), Direction::Out)}};
     retimeModulesMetadataClass.insertPorts(newPorts);
     auto blockarg = retimeModulesMetadataClass.getBodyBlock()->addArgument(
@@ -228,7 +228,7 @@ struct ObjectModelIR {
     auto portIndex = blackBoxMetadataClass.getNumPorts();
     SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
         {portIndex,
-         PortInfo(builderOM.getStringAttr(module.getName() + "_field"),
+         PortInfo(builderOM.getStringAttr(module.getModuleName() + "_field"),
                   object.getType(), Direction::Out)}};
     blackBoxMetadataClass.insertPorts(newPorts);
     auto blockarg = blackBoxMetadataClass.getBodyBlock()->addArgument(

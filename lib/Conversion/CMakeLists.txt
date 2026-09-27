@@ -1,5 +1,6 @@
 add_subdirectory(AffineToLoopSchedule)
 add_subdirectory(ArcToLLVM)
+add_subdirectory(AXI4ToHW)
 add_subdirectory(CalyxNative)
 add_subdirectory(CalyxToFSM)
 add_subdirectory(CalyxToHW)

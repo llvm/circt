@@ -232,12 +232,11 @@ struct FIRRTLModuleExternalizer : public OpReduction<FModuleOp> {
 
     nlaRemover.markNLAsInOperation(module);
     OpBuilder builder(module);
-    auto extmodule = FExtModuleOp::create(
-        builder, module->getLoc(),
-        module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getConventionAttr(), module.getPorts(),
-        builder.getArrayAttr(layersArray), StringRef(),
-        module.getAnnotationsAttr());
+    auto extmodule =
+        FExtModuleOp::create(builder, module->getLoc(), module.getSymNameAttr(),
+                             module.getConventionAttr(), module.getPorts(),
+                             builder.getArrayAttr(layersArray), StringRef(),
+                             module.getAnnotationsAttr());
     SymbolTable::setSymbolVisibility(extmodule,
                                      SymbolTable::getSymbolVisibility(module));
     module->erase();
