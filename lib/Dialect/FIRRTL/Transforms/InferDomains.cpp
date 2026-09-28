@@ -64,6 +64,12 @@ using DomainValue = mlir::TypedValue<DomainType>;
 
 using PortInsertions = SmallVector<std::pair<unsigned, PortInfo>>;
 
+/// Pairs of module port indices which are known to refer to the same domain
+/// value. These are kept as pairs rather than as terms because the terms are
+/// local to a ModuleState. The relationships are instantiated on each
+/// internal instance when its containing module is processed.
+using DomainPortAliases = SmallVector<std::pair<unsigned, unsigned>>;
+
 /// From a domain info attribute, get the row of associated domains for a
 /// hardware value at index i.
 static auto getPortDomainAssociation(ArrayAttr info, size_t i) {
@@ -161,12 +167,17 @@ struct CircuitState {
     return moduleUpdateTable;
   }
 
+  DenseMap<StringAttr, DomainPortAliases> &getModuleDomainPortAliases() {
+    return moduleDomainPortAliases;
+  }
+
   InnerRefNamespace &getInnerRefNamespace() { return innerRefNamespace; }
 
   DenseSet<Value> inserted;
 
 private:
   LogicalResult runOnModule(Operation *moduleOp);
+  LogicalResult materializeOnModule(Operation *moduleOp);
 
   void processDomain(DomainOp op) {
     auto index = domainTable.size();
@@ -189,6 +200,7 @@ private:
   DenseMap<VariableTerm *, size_t> variableIDTable;
   std::unique_ptr<AsmState> asmState;
   DenseMap<StringAttr, ModuleUpdateInfo> moduleUpdateTable;
+  DenseMap<StringAttr, DomainPortAliases> moduleDomainPortAliases;
 };
 } // namespace
 
@@ -295,6 +307,9 @@ public:
     return globals.getDomainTypeID(value.getType());
   }
   auto &getModuleUpdateTable() { return globals.getModuleUpdateTable(); }
+  auto &getModuleDomainPortAliases() {
+    return globals.getModuleDomainPortAliases();
+  }
 
   mlir::AsmState &getAsmState() { return globals.getAsmState(); }
   void dirty() { globals.dirty(); }
@@ -380,6 +395,7 @@ public:
   FInstanceLike fixInstancePorts(FInstanceLike op,
                                  const ModuleUpdateInfo &update);
   LogicalResult processOp(FInstanceLike op);
+  LogicalResult processInstanceDomainPortAliases(FInstanceLike op);
   LogicalResult processOp(UnsafeDomainCastOp op);
   LogicalResult processOp(DomainDefineOp op);
   LogicalResult processOp(WireOp op);
@@ -387,6 +403,8 @@ public:
   LogicalResult processOp(Operation *op);
   LogicalResult processModuleBody(FModuleOp moduleOp);
   LogicalResult processModule(FModuleOp moduleOp);
+  LogicalResult materializeModule(FModuleOp moduleOp);
+  void recordDomainPortAliases(FModuleOp moduleOp);
 
   ExportTable initializeExportTable(FModuleOp moduleOp);
   void ensureSolved(Namespace &ns, DomainTypeID typeID, size_t ip,
@@ -1307,7 +1325,7 @@ LogicalResult ModuleState::processInstancePorts(T op) {
     if (!port)
       continue;
 
-    if (op.getPortDirection(i) == Direction::Out)
+    if (op.getPortDirection(i) == Direction::Out && !getOptTermForDomain(port))
       processDomainDefinition(port);
 
     domainTypeIDTable[i] = getDomainTypeID(op, i);
@@ -1348,6 +1366,58 @@ LogicalResult ModuleState::processInstancePorts(T op) {
   return success();
 }
 
+LogicalResult ModuleState::processInstanceDomainPortAliases(FInstanceLike op) {
+  auto names = op.getReferencedModuleNamesAttr().getAsRange<StringAttr>();
+  auto &aliases = getModuleDomainPortAliases();
+
+  DomainPortAliases commonAliases;
+  bool first = true;
+  for (auto name : names) {
+    auto lookup = aliases.find(name);
+    // An external module is a hard boundary. For an instance choice, an alias
+    // is only sound when every possible target provides it.
+    if (lookup == aliases.end()) {
+      commonAliases.clear();
+      first = false;
+      break;
+    }
+
+    if (first) {
+      commonAliases = lookup->second;
+      first = false;
+      continue;
+    }
+
+    commonAliases.erase(llvm::remove_if(commonAliases,
+                                        [&](auto alias) {
+                                          return !llvm::is_contained(
+                                              lookup->second, alias);
+                                        }),
+                        commonAliases.end());
+  }
+
+  for (auto [lhsIndex, rhsIndex] : commonAliases) {
+    auto lhs = dyn_cast<DomainValue>(op->getResult(lhsIndex));
+    auto rhs = dyn_cast<DomainValue>(op->getResult(rhsIndex));
+    if (!lhs || !rhs)
+      continue;
+
+    auto *lhsTerm = getTermForDomain(lhs);
+    auto *rhsTerm = getTermForDomain(rhs);
+    if (succeeded(unify(lhsTerm, rhsTerm)))
+      continue;
+
+    auto diag = op->emitOpError()
+                << "domain ports " << op.getPortName(lhsIndex) << " and "
+                << op.getPortName(rhsIndex) << " must alias";
+    noteDomainSource(diag, lhs);
+    noteDomainSource(diag, rhs);
+    return failure();
+  }
+
+  return success();
+}
+
 FInstanceLike ModuleState::fixInstancePorts(FInstanceLike op,
                                             const ModuleUpdateInfo &update) {
   auto clone = op.cloneWithInsertedPortsAndReplaceUses(update.portInsertions);
@@ -1363,8 +1433,19 @@ LogicalResult ModuleState::processOp(FInstanceLike op) {
       cast<StringAttr>(cast<ArrayAttr>(op.getReferencedModuleNamesAttr())[0]);
   auto updateTable = getModuleUpdateTable();
   auto lookup = updateTable.find(moduleName);
-  if (lookup != updateTable.end())
-    op = fixInstancePorts(op, lookup->second);
+  if (lookup != updateTable.end()) {
+    auto &update = lookup->second;
+    if (op->getNumResults() != update.portDomainInfo.size())
+      op = fixInstancePorts(op, update);
+    else {
+      op.setDomainInfoAttr(update.portDomainInfo);
+      dirty();
+    }
+  }
+
+  if (failed(processInstanceDomainPortAliases(op)))
+    return failure();
+
   return processInstancePorts(op);
 }
 
@@ -1488,6 +1569,29 @@ LogicalResult ModuleState::processModule(FModuleOp moduleOp) {
   if (failed(processModuleBody(moduleOp)))
     return failure();
   return success();
+}
+
+void ModuleState::recordDomainPortAliases(FModuleOp moduleOp) {
+  DomainPortAliases aliases;
+
+  for (size_t i = 0, e = moduleOp.getNumPorts(); i < e; ++i) {
+    if (!isa<DomainType>(moduleOp.getPortType(i)))
+      continue;
+
+    auto lhs = cast<DomainValue>(moduleOp.getArgument(i));
+    auto *lhsTerm = find(getTermForDomain(lhs));
+    for (size_t j = 0; j < i; ++j) {
+      if (moduleOp.getPortType(i) != moduleOp.getPortType(j))
+        continue;
+
+      auto rhs = cast<DomainValue>(moduleOp.getArgument(j));
+      if (lhsTerm == find(getTermForDomain(rhs)))
+        aliases.push_back({static_cast<unsigned>(j), static_cast<unsigned>(i)});
+    }
+  }
+
+  getModuleDomainPortAliases()[moduleOp.getModuleNameAttr()] =
+      std::move(aliases);
 }
 
 ExportTable ModuleState::initializeExportTable(FModuleOp moduleOp) {
@@ -1629,6 +1733,7 @@ void ModuleState::applyUpdatesToModule(FModuleOp moduleOp, ExportTable &exports,
     LLVM_DEBUG(llvm::dbgs().indent(4)
                << "new-input " << render(portValue) << "\n");
     solve(var, solution);
+    setTermForDomain(portValue, solution);
     exports[portValue].push_back(portValue);
     globals.inserted.insert(portValue);
   }
@@ -1925,16 +2030,17 @@ LogicalResult ModuleState::updateModule(FModuleOp moduleOp) {
   if (failed(updateModuleDomainInfo(moduleOp, exports, portDomainInfo)))
     return failure();
 
-  if (failed(driveModuleOutputDomainPorts(moduleOp)))
-    return failure();
-
   // Record the updated interface change in the update
   auto &entry = getModuleUpdateTable()[moduleOp.getModuleNameAttr()];
   entry.portDomainInfo = portDomainInfo;
-  entry.portInsertions = std::move(pending.insertions);
+  // Keep the complete insertion list available to instances if this module
+  // is revisited by the circuit worklist after its interface was generalized.
+  // A later analysis visit normally has no new insertions because the module
+  // already contains the inferred ports.
+  if (!pending.insertions.empty())
+    entry.portInsertions = std::move(pending.insertions);
 
-  if (failed(updateModuleBody(moduleOp)))
-    return failure();
+  recordDomainPortAliases(moduleOp);
 
   LLVM_DEBUG({
     llvm::dbgs().indent(2) << "port summary:\n";
@@ -1955,6 +2061,16 @@ LogicalResult ModuleState::updateModule(FModuleOp moduleOp) {
   });
 
   return success();
+}
+
+LogicalResult ModuleState::materializeModule(FModuleOp moduleOp) {
+  if (failed(processModule(moduleOp)))
+    return failure();
+
+  if (failed(driveModuleOutputDomainPorts(moduleOp)))
+    return failure();
+
+  return updateModuleBody(moduleOp);
 }
 
 LogicalResult ModuleState::checkModulePorts(FModuleLike moduleOp) {
@@ -2057,7 +2173,10 @@ LogicalResult ModuleState::checkModule(FModuleOp moduleOp) {
   if (failed(checkModuleBody(moduleOp)))
     return failure();
 
-  return processModule(moduleOp);
+  if (failed(processModule(moduleOp)))
+    return failure();
+  recordDomainPortAliases(moduleOp);
+  return success();
 }
 
 LogicalResult ModuleState::checkModule(FExtModuleOp extModuleOp) {
@@ -2075,10 +2194,8 @@ LogicalResult ModuleState::checkAndInferModule(FModuleOp moduleOp) {
   if (failed(processModule(moduleOp)))
     return failure();
 
-  if (failed(driveModuleOutputDomainPorts(moduleOp)))
-    return failure();
-
-  return updateModuleBody(moduleOp);
+  recordDomainPortAliases(moduleOp);
+  return success();
 }
 
 //===---------------------------------------------------------------------------
@@ -2238,20 +2355,102 @@ LogicalResult CircuitState::runOnModule(Operation *op) {
   return success();
 }
 
+LogicalResult CircuitState::materializeOnModule(Operation *op) {
+  assert(mode != InferDomainsMode::Strip && mode != InferDomainsMode::Check);
+  ModuleState state(*this);
+  if (auto moduleOp = dyn_cast<FModuleOp>(op))
+    return state.materializeModule(moduleOp);
+  return success();
+}
+
 LogicalResult CircuitState::run() {
   DenseSet<Operation *> errored;
+  SmallVector<igraph::InstanceGraphNode *> worklist;
+  DenseSet<igraph::InstanceGraphNode *> queued;
+
+  // Seed the worklist in dependency order. Interface and alias summaries
+  // are published as each module is processed; a changed summary requeues
+  // all of the module's users below. This is important when a module is
+  // reached through more than one hierarchy path, or when a graph edge is
+  // revisited after an interface update.
   instanceGraph.walkPostOrder([&](auto &node) {
-    auto moduleOp = node.getModule();
-    for (auto *inst : node) {
+    worklist.push_back(&node);
+    queued.insert(&node);
+  });
+
+  for (size_t workIndex = 0; workIndex < worklist.size(); ++workIndex) {
+    auto *node = worklist[workIndex];
+    queued.erase(node);
+    auto moduleOp = node->getModule();
+    bool dependencyFailed = false;
+    for (auto *inst : *node) {
       if (errored.contains(inst->getTarget()->getModule())) {
         errored.insert(moduleOp);
-        return;
+        dependencyFailed = true;
+        break;
       }
     }
-    if (failed(runOnModule(node.getModule())))
+    if (dependencyFailed)
+      continue;
+
+    size_t oldNumPorts = 0;
+    Attribute oldDomainInfo;
+    if (auto moduleLike = dyn_cast<FModuleLike>(moduleOp.getOperation())) {
+      oldNumPorts = moduleLike.getNumPorts();
+      oldDomainInfo = moduleLike.getDomainInfoAttr();
+    }
+
+    auto oldAliasesIt =
+        moduleDomainPortAliases.find(moduleOp.getModuleNameAttr());
+    bool hadAliases = oldAliasesIt != moduleDomainPortAliases.end();
+    DomainPortAliases oldAliases;
+    if (hadAliases)
+      oldAliases = oldAliasesIt->second;
+
+    if (failed(runOnModule(node->getModule())))
       errored.insert(moduleOp);
+
+    if (errored.contains(moduleOp))
+      continue;
+
+    bool interfaceChanged = false;
+    if (auto moduleLike = dyn_cast<FModuleLike>(moduleOp.getOperation()))
+      interfaceChanged = oldNumPorts != moduleLike.getNumPorts() ||
+                         oldDomainInfo != moduleLike.getDomainInfoAttr();
+
+    auto newAliasesIt =
+        moduleDomainPortAliases.find(moduleOp.getModuleNameAttr());
+    bool aliasesChanged =
+        hadAliases != (newAliasesIt != moduleDomainPortAliases.end());
+    if (!aliasesChanged && hadAliases)
+      aliasesChanged = oldAliases != newAliasesIt->second;
+
+    if (interfaceChanged || aliasesChanged) {
+      for (auto *use : node->uses()) {
+        auto *user = use->getParent();
+        if (queued.insert(user).second)
+          worklist.push_back(user);
+      }
+    }
+  }
+
+  if (!errored.empty())
+    return failure();
+
+  // The analysis above deliberately leaves body-generated domain operations
+  // out of the IR. Materialize them only once all effective module interfaces
+  // and alias summaries are stable, so a worklist revisit cannot duplicate
+  // them. Definitions for newly inserted output ports are kept during
+  // analysis because they establish terms needed by later visits.
+  if (mode == InferDomainsMode::Check)
+    return success();
+
+  bool materializationFailed = false;
+  instanceGraph.walkPostOrder([&](auto &node) {
+    if (failed(materializeOnModule(node.getModule())))
+      materializationFailed = true;
   });
-  return success(errored.empty());
+  return success(!materializationFailed);
 }
 
 namespace {
