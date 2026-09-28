@@ -24,7 +24,8 @@ def HWArithIntegerType : DialectType<HWArithDialect,
 // Type constraint for an integer with signedness semantics, or a type alias of
 // one.
 def HWArithIntegerOrAliasType : DialectType<HWArithDialect,
-    CPred<"isHWArithIntegerOrAliasType($_self)">,
+    SubstLeaves<"$_self", "::circt::hw::getCanonicalType($_self)",
+                HWArithIntegerType.predicate>,
     "an arbitrary precision integer with signedness semantics or a type alias "
     "of one",
     "::mlir::Type">;
