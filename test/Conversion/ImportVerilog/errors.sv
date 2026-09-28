@@ -339,6 +339,42 @@ endmodule
 
 // -----
 
+module wide_output_mos_prim;
+    wire [1:0] Q;
+    wire A, E;
+    // expected-error @below {{MOS switch output must be 1 bit}}
+    nmos n (Q, A, E);
+endmodule
+
+// -----
+
+module non_integral_output_mos_prim;
+    real Q;
+    wire A, E;
+    // expected-error @below {{MOS switch output must be 1 bit}}
+    pmos p (Q, A, E);
+endmodule
+
+// -----
+
+module wide_output_cmos_prim;
+    wire [1:0] Q;
+    wire A, N, P;
+    // expected-error @below {{CMOS switch output must be 1 bit}}
+    cmos c (Q, A, N, P);
+endmodule
+
+// -----
+
+module non_integral_output_cmos_prim;
+    real Q;
+    wire A, N, P;
+    // expected-error @below {{CMOS switch output must be 1 bit}}
+    rcmos c (Q, A, N, P);
+endmodule
+
+// -----
+
 module unsupported_prim(inout A, inout B);
     // expected-error @below {{unsupported instance of primitive `tran`}}
     tran u1 (A, B);
