@@ -39,7 +39,7 @@ print(struct_alias.f)
 # CHECK: UInt<8>
 print(struct_alias.nested.g)
 
-nested_alias = TypeAlias(UInt(3), "nested_alias")
+nested_alias = TypeAlias(UInt(3), "canonical_nested_alias")
 outer_alias = TypeAlias(
     StructType([("nested", nested_alias), ("plain", UInt(8))]), "outer_alias")
 # CHECK: struct { nested: UInt<3>, plain: UInt<8>}
