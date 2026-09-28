@@ -2813,41 +2813,28 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(&outerTrue);
     moore::YieldOp::create(builder, loc, nResult);
-  }
 
-  {
-    OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(&outerFalse);
-
     auto middleCond = moore::ConditionalOp::create(builder, loc, dstType, nIsZ);
     auto &middleTrue = middleCond.getTrueRegion().emplaceBlock();
     auto &middleFalse = middleCond.getFalseRegion().emplaceBlock();
-
-    {
-      OpBuilder::InsertionGuard innerGuard(builder);
-      builder.setInsertionPointToStart(&middleTrue);
-      moore::YieldOp::create(builder, loc, pResult);
-    }
-
-    {
-      OpBuilder::InsertionGuard innerGuard(builder);
-      builder.setInsertionPointToStart(&middleFalse);
-
-      auto innerCond =
-          moore::ConditionalOp::create(builder, loc, dstType, pIsZ);
-      auto &innerTrue = innerCond.getTrueRegion().emplaceBlock();
-      auto &innerFalse = innerCond.getFalseRegion().emplaceBlock();
-
-      builder.setInsertionPointToStart(&innerTrue);
-      moore::YieldOp::create(builder, loc, nResult);
-      builder.setInsertionPointToStart(&innerFalse);
-      moore::YieldOp::create(builder, loc, xVal);
-
-      builder.setInsertionPointAfter(innerCond);
-      moore::YieldOp::create(builder, loc, innerCond.getResult());
-    }
-
     moore::YieldOp::create(builder, loc, middleCond.getResult());
+
+    builder.setInsertionPointToStart(&middleTrue);
+    moore::YieldOp::create(builder, loc, pResult);
+
+    builder.setInsertionPointToStart(&middleFalse);
+    auto innerCond = moore::ConditionalOp::create(builder, loc, dstType, pIsZ);
+    auto &innerTrue = innerCond.getTrueRegion().emplaceBlock();
+    auto &innerFalse = innerCond.getFalseRegion().emplaceBlock();
+
+    builder.setInsertionPointToStart(&innerTrue);
+    moore::YieldOp::create(builder, loc, nResult);
+    builder.setInsertionPointToStart(&innerFalse);
+    moore::YieldOp::create(builder, loc, xVal);
+
+    builder.setInsertionPointAfter(innerCond);
+    moore::YieldOp::create(builder, loc, innerCond.getResult());
   }
 
   Value result = outerCond.getResult();
