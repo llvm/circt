@@ -2662,11 +2662,9 @@ LogicalResult Context::convertMOSSwitchPrimitive(
   if (!inputVal)
     return failure();
 
-  auto inputType = cast<moore::IntType>(inputVal.getType());
-  auto inputWidth = inputType.getBitSize();
-
-  if (inputWidth != 1)
-    return mlir::emitError(loc) << "MOS switch input must be 1 bit";
+  // Slang automatically casts MOS switch inputs to 1-bit logic.
+  assert(cast<moore::IntType>(inputVal.getType()).getBitSize() == 1 &&
+         "MOS switch input must be 1 bit");
 
   Value controlIsOff;
 
@@ -2675,8 +2673,7 @@ LogicalResult Context::convertMOSSwitchPrimitive(
     return failure();
 
   auto controlType = cast<moore::IntType>(control.getType());
-  if (controlType.getBitSize() != 1)
-    return mlir::emitError(loc) << "MOS switch control must be 1 bit";
+  assert(controlType.getBitSize() == 1 && "MOS switch control must be 1 bit");
 
   int offLevel = (primName == "nmos" || primName == "rnmos") ? 0 : 1;
   auto offValue = moore::ConstantOp::create(
@@ -2735,23 +2732,21 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
   auto dataVal = convertRvalueExpression(*portConns[1]);
   if (!dataVal)
     return failure();
-  auto dataType = cast<moore::IntType>(dataVal.getType());
-  if (dataType.getBitSize() != 1)
-    return mlir::emitError(loc) << "CMOS switch input must be 1 bit";
+  // Slang automatically casts CMOS switch inputs to 1-bit logic.
+  assert(cast<moore::IntType>(dataVal.getType()).getBitSize() == 1 &&
+         "CMOS switch input must be 1 bit");
 
   auto ncontrolVal = convertRvalueExpression(*portConns[2]);
   if (!ncontrolVal)
     return failure();
-  auto ncontrolType = cast<moore::IntType>(ncontrolVal.getType());
-  if (ncontrolType.getBitSize() != 1)
-    return mlir::emitError(loc) << "CMOS switch ncontrol must be 1 bit";
+  assert(cast<moore::IntType>(ncontrolVal.getType()).getBitSize() == 1 &&
+         "CMOS switch ncontrol must be 1 bit");
 
   auto pcontrolVal = convertRvalueExpression(*portConns[3]);
   if (!pcontrolVal)
     return failure();
-  auto pcontrolType = cast<moore::IntType>(pcontrolVal.getType());
-  if (pcontrolType.getBitSize() != 1)
-    return mlir::emitError(loc) << "CMOS switch pcontrol must be 1 bit";
+  assert(cast<moore::IntType>(pcontrolVal.getType()).getBitSize() == 1 &&
+         "CMOS switch pcontrol must be 1 bit");
 
   auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
   auto dstIntType = dyn_cast<moore::IntType>(dstType);
