@@ -2080,3 +2080,14 @@ hw.module @SelfRefWire() {
   // CHECK: hw.wire
   %w = hw.wire %w : i1
 }
+
+// Folded aggregate constant fields may differ from the result type in
+// signedness, in which case the materialized constant takes the result type.
+// CHECK-LABEL: hw.module @foldSignedAggregateConstantField
+// CHECK-NEXT:    %c-1_i5 = hw.constant -1 : i5
+// CHECK-NEXT:    hw.output %c-1_i5 : i5
+hw.module @foldSignedAggregateConstantField(out o: i5) {
+  %0 = hw.aggregate_constant [31 : ui5, 0 : i64] : !hw.struct<address: i5, data: i64>
+  %1 = hw.struct_extract %0["address"] : !hw.struct<address: i5, data: i64>
+  hw.output %1 : i5
+}
