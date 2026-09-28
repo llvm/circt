@@ -88,4 +88,38 @@ TEST(ESIOpTest, TypeMatching) {
       typeAliasRef, b.getType<AnyType>(), b.getType<AnyType>());
   EXPECT_SUCCESS(checkInnerTypeMatch(typeAliasAny, i1Type));
 }
+
+TEST(ESIOpTest, ReplaceBundleSubElements) {
+  MLIRContext context;
+  context.loadDialect<hw::HWDialect, ESIDialect>();
+  Builder builder(&context);
+
+  auto i8Type = builder.getI8Type();
+  auto name = builder.getStringAttr("payload");
+  auto ref = SymbolRefAttr::get(
+      builder.getStringAttr("types"),
+      {FlatSymbolRefAttr::get(builder.getStringAttr("payloadAlias"))});
+  auto alias = hw::TypeAliasType::get(ref, i8Type);
+  auto channel = ChannelType::get(&context, alias, ChannelSignaling::FIFO, 2);
+  auto expectedChannel =
+      ChannelType::get(&context, i8Type, ChannelSignaling::FIFO, 2);
+  auto bundle = ChannelBundleType::get(
+      &context, {{name, ChannelDirection::to, channel}}, builder.getUnitAttr());
+
+  AttrTypeReplacer replacer;
+  replacer.addReplacement(
+      [](hw::TypeAliasType type) { return type.getCanonicalType(); });
+  replacer.addReplacement([&](StringAttr attr) -> std::optional<Attribute> {
+    if (attr == name)
+      return builder.getStringAttr("renamed");
+    return std::nullopt;
+  });
+  auto renamedBundle = cast<ChannelBundleType>(replacer.replace(bundle));
+  EXPECT_EQ(renamedBundle.getResettable(), bundle.getResettable());
+  ASSERT_EQ(renamedBundle.getChannels().size(), 1u);
+  EXPECT_EQ(renamedBundle.getChannels()[0].name,
+            builder.getStringAttr("renamed"));
+  EXPECT_EQ(renamedBundle.getChannels()[0].direction, ChannelDirection::to);
+  EXPECT_EQ(renamedBundle.getChannels()[0].type, expectedChannel);
+}
 } // namespace
