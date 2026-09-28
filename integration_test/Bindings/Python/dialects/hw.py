@@ -73,6 +73,10 @@ with Context() as ctx, Location.unknown():
       # CHECK: hw.struct_extract [[STRUCT1]]["a"] : !hw.struct<a: i32, b: i1>
       hw.StructExtractOp.create(struct1, 'a')
 
+      # CHECK: %c5_intAlias = hw.constant 5 : i32 : !hw.typealias<@intScope::@intAlias, i32>
+      int_type_alias = hw.TypeAliasType.get("intScope", "intAlias", i32)
+      hw.ConstantOp.create(int_type_alias, 5)
+
     hw.HWModuleOp(name="test", body_builder=build)
 
   print(m)

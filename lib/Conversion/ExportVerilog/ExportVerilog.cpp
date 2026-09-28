@@ -3044,7 +3044,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
     return {Unary, IsUnsigned};
   }
 
-  return printConstantScalar(value, cast<IntegerType>(op.getType()));
+  return printConstantScalar(value, hw::type_cast<IntegerType>(op.getType()));
 }
 
 void ExprEmitter::printConstantArray(ArrayAttr elementValues, Type elementType,

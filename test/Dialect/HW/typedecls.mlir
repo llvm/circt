@@ -57,3 +57,21 @@ hw.module @testTypeAliasStruct(in %arg0: !FooStruct, in %arg1: i1) {
 hw.module @testTypeAliasUnion(in %arg0: !FooUnion, in %arg1: i1) {
   %0 = hw.union_extract %arg0["a"] : !FooUnion
 }
+
+// CHECK-LABEL: hw.module @testTypeAliasConstant
+!FooInt = !hw.typealias<@__hw_typedecls::@fooInt, i4>
+!FooBool = !hw.typealias<@__hw_typedecls::@foo, i1>
+!FooNested = !hw.typealias<@__hw_typedecls::@fooNested, !FooInt>
+hw.module @testTypeAliasConstant(out a: !FooInt, out b: !FooInt, out c: !FooBool, out d: !FooNested, out e: i4) {
+  // CHECK: %c5_fooInt = hw.constant 5 : i4 : !hw.typealias<@__hw_typedecls::@fooInt, i4>
+  %0 = hw.constant 5 : i4 : !FooInt
+  // CHECK: %c-1_fooInt = hw.constant -1 : i4 : !hw.typealias<@__hw_typedecls::@fooInt, i4>
+  %1 = hw.constant 15 : i4 : !FooInt
+  // CHECK: %true = hw.constant true : !hw.typealias<@__hw_typedecls::@foo, i1>
+  %2 = hw.constant true : !FooBool
+  // CHECK: %c3_fooNested = hw.constant 3 : i4 : !hw.typealias<@__hw_typedecls::@fooNested, !hw.typealias<@__hw_typedecls::@fooInt, i4>>
+  %3 = hw.constant 3 : i4 : !FooNested
+  // CHECK: %c3_i4 = hw.constant 3 : i4{{$}}
+  %4 = hw.constant 3 : i4 : i4
+  hw.output %0, %1, %2, %3, %4 : !FooInt, !FooInt, !FooBool, !FooNested, i4
+}
