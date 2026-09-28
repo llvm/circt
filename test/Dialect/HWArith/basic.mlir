@@ -35,6 +35,15 @@ hw.module @test1() {
   %13 = hwarith.icmp eq %5, %10 : ui2, si9
 }
 
+// CHECK-LABEL: hw.type_scope @ns {
+// CHECK-NEXT:    hw.typedecl @uint_t : ui4
+// CHECK-NEXT:    hw.typedecl @sint_t : si4
+// CHECK-NEXT:  }
+hw.type_scope @ns {
+  hw.typedecl @uint_t : ui4
+  hw.typedecl @sint_t : si4
+}
+
 // CHECK-LABEL: @aliasedConstants
 !UIntAlias = !hw.typealias<@ns::@uint_t, ui4>
 !SIntAlias = !hw.typealias<@ns::@sint_t, si4>

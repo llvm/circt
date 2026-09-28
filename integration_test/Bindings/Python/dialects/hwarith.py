@@ -13,6 +13,12 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
+    # CHECK: hw.type_scope @intScope {
+    # CHECK:   hw.typedecl @uintAlias : ui4
+    # CHECK: }
+    int_type_scope = hw.TypeScopeOp.create("intScope")
+    with InsertionPoint(int_type_scope.body):
+      hw.TypedeclOp.create("uintAlias", ui4)
 
     def build(module):
       # CHECK: hwarith.constant 3 : ui4{{$}}

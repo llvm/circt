@@ -425,11 +425,19 @@ hw.module @UnpackedArrayInout() {
 // -----
 
 // Type aliases of constants are retained with signless inner types.
+// CHECK-LABEL: hw.type_scope @ns {
+// CHECK-NEXT:    hw.typedecl @uint_t : i4
+// CHECK-NEXT:    hw.typedecl @sint_t : i4
+// CHECK-NEXT:  }
 // CHECK-LABEL: hw.module @aliasedConstant
 // CHECK-SAME:    out u : !hw.typealias<@ns::@uint_t, i4>, out s : !hw.typealias<@ns::@sint_t, i4>
 // CHECK:         %[[U:.+]] = hw.constant 5 : i4 : !hw.typealias<@ns::@uint_t, i4>
 // CHECK:         %[[S:.+]] = hw.constant -2 : i4 : !hw.typealias<@ns::@sint_t, i4>
 // CHECK:         hw.output %[[U]], %[[S]]
+hw.type_scope @ns {
+  hw.typedecl @uint_t : ui4
+  hw.typedecl @sint_t : si4
+}
 hw.module @aliasedConstant(out u: !hw.typealias<@ns::@uint_t, ui4>, out s: !hw.typealias<@ns::@sint_t, si4>) {
   %0 = hwarith.constant 5 : ui4 : !hw.typealias<@ns::@uint_t, ui4>
   %1 = hwarith.constant -2 : si4 : !hw.typealias<@ns::@sint_t, si4>
