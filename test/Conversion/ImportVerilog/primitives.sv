@@ -165,7 +165,6 @@ module delayed3_nand_prim;
     nand #(5) a (Q, A, B);
 endmodule
 
-
 // CHECK-LABEL: moore.module @not_prim()
 // CHECK: [[A:%.+]] = moore.net wire : <l1>
 // CHECK: [[Q:%.+]] = moore.net wire : <l1>
@@ -374,4 +373,185 @@ module TestNotif1(
   // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
   notif1 notif1_inst(data_out, data_in, en_n);
 
+endmodule
+
+// CHECK-LABEL: moore.module @TestNmos
+module TestNmos(input wire data_in, input wire en, output wire data_out);
+// CHECK: %[[DATA_IN:.*]] = moore.net name "data_in" wire : <l1>
+// CHECK: %[[EN:.*]] = moore.net name "en" wire : <l1>
+// CHECK: %[[IN:.*]] = moore.read %[[DATA_IN]] : <l1>
+// CHECK: %[[ENV:.*]] = moore.read %[[EN]] : <l1>
+// CHECK: %[[OFF:.*]] = moore.constant 0 : l1
+// CHECK: %[[COND:.*]] = moore.case_eq %[[ENV]], %[[OFF]] : l1
+// CHECK: %[[Z:.*]] = moore.constant bZ : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[COND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+nmos n0(data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestPmos
+module TestPmos(input wire data_in, input wire en, output wire data_out);
+// CHECK: %[[DATA_IN:.*]] = moore.net name "data_in" wire : <l1>
+// CHECK: %[[EN:.*]] = moore.net name "en" wire : <l1>
+// CHECK: %[[IN:.*]] = moore.read %[[DATA_IN]] : <l1>
+// CHECK: %[[ENV:.*]] = moore.read %[[EN]] : <l1>
+// CHECK: %[[OFF:.*]] = moore.constant 1 : l1
+// CHECK: %[[COND:.*]] = moore.case_eq %[[ENV]], %[[OFF]] : l1
+// CHECK: %[[Z:.*]] = moore.constant bZ : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[COND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+pmos p0(data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestCmos
+module TestCmos(input wire data_in, input wire n_en, input wire p_en,
+                 output wire data_out);
+// CHECK: %[[DATA_IN:.*]] = moore.net name "data_in" wire : <l1>
+// CHECK: %[[N_EN:.*]] = moore.net name "n_en" wire : <l1>
+// CHECK: %[[P_EN:.*]] = moore.net name "p_en" wire : <l1>
+// CHECK: %[[IN:.*]] = moore.read %[[DATA_IN]] : <l1>
+// CHECK: %[[NEN:.*]] = moore.read %[[N_EN]] : <l1>
+// CHECK: %[[PEN:.*]] = moore.read %[[P_EN]] : <l1>
+// CHECK: %[[Z:.*]] = moore.constant bZ : l1
+// CHECK: %[[X:.*]] = moore.constant bX : l1
+// CHECK: %[[NOFF:.*]] = moore.constant 0 : l1
+// CHECK: %[[NCOND:.*]] = moore.case_eq %[[NEN]], %[[NOFF]] : l1
+// CHECK: %[[NRESULT:.*]] = moore.conditional %[[NCOND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[POFF:.*]] = moore.constant 1 : l1
+// CHECK: %[[PCOND:.*]] = moore.case_eq %[[PEN]], %[[POFF]] : l1
+// CHECK: %[[PRESULT:.*]] = moore.conditional %[[PCOND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[AGREE:.*]] = moore.case_eq %[[NRESULT]], %[[PRESULT]] : l1
+// CHECK: %[[NISZ:.*]] = moore.case_eq %[[NRESULT]], %[[Z]] : l1
+// CHECK: %[[PISZ:.*]] = moore.case_eq %[[PRESULT]], %[[Z]] : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[AGREE]] : i1 -> l1 {
+// CHECK: moore.yield %[[NRESULT]] : l1
+// CHECK: } {
+// CHECK: %[[WHENNISZ:.*]] = moore.conditional %[[NISZ]] : i1 -> l1 {
+// CHECK: moore.yield %[[PRESULT]] : l1
+// CHECK: } {
+// CHECK: %[[WHENDISAGREE:.*]] = moore.conditional %[[PISZ]] : i1 -> l1 {
+// CHECK: moore.yield %[[NRESULT]] : l1
+// CHECK: } {
+// CHECK: moore.yield %[[X]] : l1
+// CHECK: }
+// CHECK: moore.yield %[[WHENDISAGREE]] : l1
+// CHECK: }
+// CHECK: moore.yield %[[WHENNISZ]] : l1
+// CHECK: }
+cmos c0(data_out, data_in, n_en, p_en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestRnmos
+module TestRnmos(input wire data_in, input wire en, output wire data_out);
+// CHECK: %[[DATA_IN:.*]] = moore.net name "data_in" wire : <l1>
+// CHECK: %[[EN:.*]] = moore.net name "en" wire : <l1>
+// CHECK: %[[IN:.*]] = moore.read %[[DATA_IN]] : <l1>
+// CHECK: %[[ENV:.*]] = moore.read %[[EN]] : <l1>
+// CHECK: %[[OFF:.*]] = moore.constant 0 : l1
+// CHECK: %[[COND:.*]] = moore.case_eq %[[ENV]], %[[OFF]] : l1
+// CHECK: %[[Z:.*]] = moore.constant bZ : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[COND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+rnmos rn0(data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestRpmos
+module TestRpmos(input wire data_in, input wire en, output wire data_out);
+// CHECK: %[[DATA_IN:.*]] = moore.net name "data_in" wire : <l1>
+// CHECK: %[[EN:.*]] = moore.net name "en" wire : <l1>
+// CHECK: %[[IN:.*]] = moore.read %[[DATA_IN]] : <l1>
+// CHECK: %[[ENV:.*]] = moore.read %[[EN]] : <l1>
+// CHECK: %[[OFF:.*]] = moore.constant 1 : l1
+// CHECK: %[[COND:.*]] = moore.case_eq %[[ENV]], %[[OFF]] : l1
+// CHECK: %[[Z:.*]] = moore.constant bZ : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[COND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+rpmos rp0(data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestRcmos
+module TestRcmos(input wire data_in, input wire n_en, input wire p_en,
+                  output wire data_out);
+// CHECK: %[[DATA_IN:.*]] = moore.net name "data_in" wire : <l1>
+// CHECK: %[[N_EN:.*]] = moore.net name "n_en" wire : <l1>
+// CHECK: %[[P_EN:.*]] = moore.net name "p_en" wire : <l1>
+// CHECK: %[[IN:.*]] = moore.read %[[DATA_IN]] : <l1>
+// CHECK: %[[NEN:.*]] = moore.read %[[N_EN]] : <l1>
+// CHECK: %[[PEN:.*]] = moore.read %[[P_EN]] : <l1>
+// CHECK: %[[Z:.*]] = moore.constant bZ : l1
+// CHECK: %[[X:.*]] = moore.constant bX : l1
+// CHECK: %[[NOFF:.*]] = moore.constant 0 : l1
+// CHECK: %[[NCOND:.*]] = moore.case_eq %[[NEN]], %[[NOFF]] : l1
+// CHECK: %[[NRESULT:.*]] = moore.conditional %[[NCOND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[POFF:.*]] = moore.constant 1 : l1
+// CHECK: %[[PCOND:.*]] = moore.case_eq %[[PEN]], %[[POFF]] : l1
+// CHECK: %[[PRESULT:.*]] = moore.conditional %[[PCOND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[AGREE:.*]] = moore.case_eq %[[NRESULT]], %[[PRESULT]] : l1
+// CHECK: %[[NISZ:.*]] = moore.case_eq %[[NRESULT]], %[[Z]] : l1
+// CHECK: %[[PISZ:.*]] = moore.case_eq %[[PRESULT]], %[[Z]] : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[AGREE]] : i1 -> l1 {
+// CHECK: moore.yield %[[NRESULT]] : l1
+// CHECK: } {
+// CHECK: %[[WHENNISZ:.*]] = moore.conditional %[[NISZ]] : i1 -> l1 {
+// CHECK: moore.yield %[[PRESULT]] : l1
+// CHECK: } {
+// CHECK: %[[WHENDISAGREE:.*]] = moore.conditional %[[PISZ]] : i1 -> l1 {
+// CHECK: moore.yield %[[NRESULT]] : l1
+// CHECK: } {
+// CHECK: moore.yield %[[X]] : l1
+// CHECK: }
+// CHECK: moore.yield %[[WHENDISAGREE]] : l1
+// CHECK: }
+// CHECK: moore.yield %[[WHENNISZ]] : l1
+// CHECK: }
+rcmos c0(data_out, data_in, n_en, p_en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestPmosArrayConcatLiteral
+module TestPmosArrayConcatLiteral;
+  wire [1:0] ad;
+  reg regff;
+  reg en;
+
+  // Regression test: bit-blasting an array primitive instantiation whose
+  // data connection is a concatenation containing a two-state literal
+  // (1'b0) used to leave that bit's extracted value two-state (i1),
+  // causing a 'moore.yield' type mismatch against the (4-state)
+  // primitive output.
+  // CHECK: %ad = moore.net wire : <l2>
+  // CHECK: %regff = moore.variable : <l1>
+  // CHECK: %en = moore.variable : <l1>
+  // CHECK: %[[REGFFREAD:.*]] = moore.read %regff : <l1>
+  // CHECK: %[[ENREAD0:.*]] = moore.read %en : <l1>
+  // CHECK: %[[OFF0:.*]] = moore.constant 1 : l1
+  // CHECK: %[[COND0:.*]] = moore.case_eq %[[ENREAD0]], %[[OFF0]] : l1
+  // CHECK: %[[Z0:.*]] = moore.constant bZ : l1
+  // CHECK: moore.conditional %[[COND0]] : i1 -> l1 {
+  // CHECK:   moore.yield %[[Z0]] : l1
+  // CHECK: } {
+  // CHECK:   moore.yield %[[REGFFREAD]] : l1
+  // CHECK: }
+  // CHECK: %[[ENREAD1:.*]] = moore.read %en : <l1>
+  // CHECK: %[[OFF1:.*]] = moore.constant 1 : l1
+  // CHECK: %[[COND1:.*]] = moore.case_eq %[[ENREAD1]], %[[OFF1]] : l1
+  // CHECK: %[[ZEROBIT:.*]] = moore.constant 0 : l1
+  // CHECK: %[[Z1:.*]] = moore.constant bZ : l1
+  // CHECK: moore.conditional %[[COND1]] : i1 -> l1 {
+  // CHECK:   moore.yield %[[Z1]] : l1
+  // CHECK: } {
+  // CHECK:   moore.yield %[[ZEROBIT]] : l1
+  // CHECK: }
+  pmos ad_drv[1:0] (ad, {1'b0, regff}, en);
 endmodule
