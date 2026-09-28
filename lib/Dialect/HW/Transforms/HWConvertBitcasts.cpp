@@ -61,6 +61,19 @@ bool HWConvertBitcastsPass::isTypeSupported(Type ty) {
 static void collectIntegersRecursively(OpBuilder builder, Location loc,
                                        Value inputVal,
                                        SmallVectorImpl<Value> &accumulator) {
+  // If input is defined by BitcastOp, unwrap it:
+  if (auto bitcast = inputVal.getDefiningOp<BitcastOp>()) {
+    collectIntegersRecursively(builder, loc, bitcast.getInput(), accumulator);
+    return;
+  }
+
+  // If input is defined by ConcatOp, unwrap its operands:
+  if (auto concat = inputVal.getDefiningOp<comb::ConcatOp>()) {
+    for (Value op : concat.getInputs())
+      collectIntegersRecursively(builder, loc, op, accumulator);
+    return;
+  }
+
   // End of recursion: Integer value
   if (isa<IntegerType>(inputVal.getType())) {
     accumulator.push_back(inputVal);
@@ -189,16 +202,35 @@ LogicalResult HWConvertBitcastsPass::convertBitcastOp(OpBuilder builder,
   SmallVector<Value> integers;
   collectIntegersRecursively(builder, bitcastOp.getLoc(), bitcastOp.getInput(),
                              integers);
-  Value concat;
-  if (integers.size() == 1)
-    concat = integers.front();
-  else
-    concat = comb::ConcatOp::create(builder, bitcastOp.getLoc(), integers)
-                 .getResult();
 
-  // Convert packed integer to the target type
-  auto result = constructAggregateRecursively(builder, bitcastOp.getLoc(),
-                                              concat, bitcastOp.getType());
+  Value result;
+  if (auto arrayTy = dyn_cast<ArrayType>(bitcastOp.getType())) {
+    // If the target is an array and the collected integers match the element
+    // count and element type, construct the array directly without
+    // materializing a monolithic concat and a chain of bit extractions.
+    if (integers.size() == arrayTy.getNumElements() &&
+        llvm::all_of(integers, [&](Value v) {
+          return v.getType() == arrayTy.getElementType();
+        })) {
+      // Both integers and ArrayCreateOp operands are ordered from MSB to LSB
+      // (index N-1 down to index 0).
+      result = ArrayCreateOp::create(builder, bitcastOp.getLoc(), arrayTy,
+                                     integers);
+    }
+  }
+
+  if (!result) {
+    Value concat;
+    if (integers.size() == 1)
+      concat = integers.front();
+    else
+      concat = comb::ConcatOp::create(builder, bitcastOp.getLoc(), integers)
+                   .getResult();
+
+    // Convert packed integer to the target type
+    result = constructAggregateRecursively(builder, bitcastOp.getLoc(),
+                                           concat, bitcastOp.getType());
+  }
 
   // Replace operation
   bitcastOp.getResult().replaceAllUsesWith(result);
