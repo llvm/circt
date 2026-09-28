@@ -58,7 +58,13 @@ class Top(Module):
 # CHECK:    [[S:%.+]] = hwarith.constant -2 : si4 : !hw.typealias<@pycde::@sint_t, si4>
 # CHECK:    hw.output %c3_bits_t, [[U]], [[S]]
 
-# After lowering, the aliases are retained with their signless inner types.
+# After lowering, the aliases are declared and retained with their signless
+# inner types.
+# CHECK-LABEL:  sv.package @pycde {
+# CHECK-DAG:      hw.typedecl @bits_t : i4
+# CHECK-DAG:      hw.typedecl @uint_t : i4
+# CHECK-DAG:      hw.typedecl @sint_t : i4
+# CHECK:        }
 # CHECK-LABEL:  hw.module @AliasedIntConsts(out b : !hw.typealias<@pycde::@bits_t, i4>, out u : !hw.typealias<@pycde::@uint_t, i4>, out s : !hw.typealias<@pycde::@sint_t, i4>)
 # CHECK-DAG:    %c3_bits_t = hw.constant 3 : i4 : !hw.typealias<@pycde::@bits_t, i4>
 # CHECK-DAG:    %c5_uint_t = hw.constant 5 : i4 : !hw.typealias<@pycde::@uint_t, i4>
