@@ -27,6 +27,7 @@
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/LTL/LTLVisitors.h"
 #include "circt/Dialect/OM/OMOps.h"
+#include "circt/Dialect/SV/DPITypeInfo.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
@@ -1679,23 +1680,6 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
   emitDims(dims, os, loc, *this);
 }
 
-/// Return a 2-state integer atom type name if the width matches. See Spec 6.8
-/// Variable declarations.
-static StringRef getTwoStateIntegerAtomType(size_t width) {
-  switch (width) {
-  case 8:
-    return "byte";
-  case 16:
-    return "shortint";
-  case 32:
-    return "int";
-  case 64:
-    return "longint";
-  default:
-    return "";
-  }
-}
-
 /// Output the basic type that consists of packed and primitive types.  This is
 /// those to the left of the name in verilog. implicitIntType controls whether
 /// to print a base type for (logic) for inteters or whether the caller will
@@ -1713,19 +1697,22 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 bool emitAsTwoStateType = false) {
   return TypeSwitch<Type, bool>(type)
       .Case<IntegerType>([&](IntegerType integerType) -> bool {
-        if (emitAsTwoStateType && dims.empty()) {
-          auto typeName = getTwoStateIntegerAtomType(integerType.getWidth());
-          if (!typeName.empty()) {
-            os << typeName;
-            return true;
-          }
+        auto integerInfo = sv::getDPIIntegerTypeInfo(
+            integerType.getWidth(),
+            !emitAsTwoStateType ? sv::DPIIntegerContext::Typedef
+            : dims.empty()      ? sv::DPIIntegerContext::Import
+                                : sv::DPIIntegerContext::Packed);
+        if (emitAsTwoStateType && integerInfo.isIntegerAtom()) {
+          os << integerInfo.getIntegerKeyword();
+          return true;
         }
         if (integerType.getWidth() != 1 || !singleBitDefaultType)
           dims.push_back(
               getInt32Attr(type.getContext(), integerType.getWidth()));
 
-        StringRef typeName =
-            (emitAsTwoStateType ? "bit" : (implicitIntType ? "" : "logic"));
+        StringRef typeName = emitAsTwoStateType || !implicitIntType
+                                 ? integerInfo.getIntegerKeyword()
+                                 : StringRef();
         if (!typeName.empty()) {
           os << typeName;
           if (!dims.empty())
@@ -1759,7 +1746,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         assert(enumType.getBitWidth().has_value() &&
                "enum type must have bitwidth");
         os << "enum ";
-        if (enumType.getBitWidth() != 32)
+        auto enumInfo = sv::getDPIEnumTypeInfo(*enumType.getBitWidth());
+        if (!enumInfo.isSigned)
           os << "bit [" << *enumType.getBitWidth() - 1 << ":0] ";
         os << "{";
         Type enumPrefixType = optionalAliasType ? optionalAliasType : enumType;
