@@ -23,6 +23,10 @@ namespace hwarith {
 // HWArithIntegerType
 bool isHWArithIntegerType(::mlir::Type type);
 
+// Check whether a specified type satisfies the constraints for the
+// HWArithIntegerOrAliasType
+bool isHWArithIntegerOrAliasType(::mlir::Type type);
+
 } // namespace hwarith
 } // namespace circt
 

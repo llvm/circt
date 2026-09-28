@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HWArith/HWArithOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HWArith/HWArithTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
@@ -68,6 +69,9 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printAttribute(getRawValueAttr());
+  // Type aliases of the value's type are printed after it.
+  if (getType() != getRawValueAttr().getType())
+    p << " : " << getType();
   p.printOptionalAttrDict(getOperation()->getAttrs(),
                           /*elidedAttrs=*/{getRawValueAttrName()});
 }
@@ -76,11 +80,28 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   IntegerAttr valueAttr;
 
   if (parser.parseAttribute(valueAttr, getRawValueAttrName(result.name),
-                            result.attributes) ||
-      parser.parseOptionalAttrDict(result.attributes))
+                            result.attributes))
     return failure();
 
-  result.addTypes(valueAttr.getType());
+  // The result type may be a type alias of the value's type.
+  Type resultType = valueAttr.getType();
+  if (succeeded(parser.parseOptionalColon()) && parser.parseType(resultType))
+    return failure();
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  result.addTypes(resultType);
+  return success();
+}
+
+LogicalResult ConstantOp::verify() {
+  // The result type may be a type alias of the value's type.
+  if (getRawValueAttr().getType() != hw::getCanonicalType(getType()))
+    return emitOpError("value type ")
+           << getRawValueAttr().getType()
+           << " doesn't match the canonical result type "
+           << hw::getCanonicalType(getType());
   return success();
 }
 

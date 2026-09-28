@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HWArith/HWArithTypes.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 
 using namespace circt;
@@ -19,6 +20,10 @@ using namespace hwarith;
 bool circt::hwarith::isHWArithIntegerType(Type type) {
   return isa<IntegerType>(type) && !type.isSignlessInteger() &&
          type.getIntOrFloatBitWidth() > 0;
+}
+
+bool circt::hwarith::isHWArithIntegerOrAliasType(Type type) {
+  return isHWArithIntegerType(hw::getCanonicalType(type));
 }
 
 //===----------------------------------------------------------------------===//

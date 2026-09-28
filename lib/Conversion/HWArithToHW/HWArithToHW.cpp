@@ -177,8 +177,14 @@ struct ConstantOpLowering : public OpConversionPattern<ConstantOp> {
   LogicalResult
   matchAndRewrite(ConstantOp constOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp,
-                                                constOp.getConstantValue());
+    // The result may be a type alias, which is retained with a signless inner
+    // type.
+    Type resultType = getTypeConverter()->convertType(constOp.getType());
+    if (!resultType)
+      return failure();
+    auto valueAttr = rewriter.getIntegerAttr(
+        hw::type_cast<IntegerType>(resultType), constOp.getConstantValue());
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp, resultType, valueAttr);
     return success();
   }
 };

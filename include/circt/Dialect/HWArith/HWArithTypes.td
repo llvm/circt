@@ -21,4 +21,12 @@ def HWArithIntegerType : DialectType<HWArithDialect,
     "an arbitrary precision integer with signedness semantics",
     "::mlir::IntegerType">;
 
+// Type constraint for an integer with signedness semantics, or a type alias of
+// one.
+def HWArithIntegerOrAliasType : DialectType<HWArithDialect,
+    CPred<"isHWArithIntegerOrAliasType($_self)">,
+    "an arbitrary precision integer with signedness semantics or a type alias "
+    "of one",
+    "::mlir::Type">;
+
 #endif // CIRCT_DIALECT_HWARITH_HWARITHTYPES_TD

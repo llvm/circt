@@ -34,3 +34,14 @@ hw.module @test1() {
   // CHECK: %13 = hwarith.icmp eq %5, %10 : ui2, si9
   %13 = hwarith.icmp eq %5, %10 : ui2, si9
 }
+
+// CHECK-LABEL: @aliasedConstants
+!UIntAlias = !hw.typealias<@ns::@uint_t, ui4>
+!SIntAlias = !hw.typealias<@ns::@sint_t, si4>
+hw.module @aliasedConstants(out u: !UIntAlias, out s: !SIntAlias) {
+  // CHECK: %0 = hwarith.constant 15 : ui4 : !hw.typealias<@ns::@uint_t, ui4>
+  // CHECK: %1 = hwarith.constant -2 : si4 : !hw.typealias<@ns::@sint_t, si4>
+  %0 = hwarith.constant 15 : ui4 : !UIntAlias
+  %1 = hwarith.constant -2 : si4 : !SIntAlias
+  hw.output %0, %1 : !UIntAlias, !SIntAlias
+}
