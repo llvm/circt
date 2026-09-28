@@ -10,6 +10,10 @@ hw.type_scope @__hw_typedecls {
   hw.typedecl @baz, "MY_NAMESPACE_baz" : i8
   // CHECK: hw.typedecl @nested : !hw.struct<a: !hw.typealias<@__hw_typedecls::@foo, i1>, b: i1>
   hw.typedecl @nested : !hw.struct<a: !hw.typealias<@__hw_typedecls::@foo, i1>, b: i1>
+  // CHECK: hw.typedecl @fooInt : i4
+  hw.typedecl @fooInt : i4
+  // CHECK: hw.typedecl @fooNested : !hw.typealias<@__hw_typedecls::@fooInt, i4>
+  hw.typedecl @fooNested : !hw.typealias<@__hw_typedecls::@fooInt, i4>
 }
 
 // CHECK-LABEL: hw.module.extern @testTypeAlias
