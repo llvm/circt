@@ -78,10 +78,21 @@ class Type:
     assert not isinstance(
         obj, ir.Value
     ), "Not intended to be called on CIRCT Values, only Python objects."
+    self._check_insertion_point()
     v = self._from_obj_or_sig(obj)
     if name is not None:
       v.name = name
     return v
+
+  def _check_insertion_point(self):
+    """Signals are built from ops which must be inserted into a block (e.g. in
+    a generator). Detached ops are destroyed when the Python objects which own
+    them are, which aborts if they still have uses."""
+    try:
+      ir.InsertionPoint.current
+    except ValueError:
+      raise RuntimeError(f"Cannot create a signal of type '{self}' outside of "
+                         "a generator or other insertion point") from None
 
   def _from_obj_or_sig(self,
                        obj,
@@ -434,6 +445,7 @@ class RegisteredStruct(TypeAlias):
     return inst
 
   def __call__(self, **kwargs):
+    self._check_insertion_point()
     return self._from_obj_or_sig(kwargs)
 
   def _get_value_class(self):
