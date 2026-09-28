@@ -203,7 +203,7 @@ static ValueField getValueField(Value value) {
 /// The work horse promoting processes into concrete registers.
 struct Deseq {
   Deseq(ProcessOp process) : process(process) {}
-  void deseq();
+  LogicalResult deseq();
 
   bool analyzeProcess();
   Value tracePastValue(Value pastValue);
@@ -318,12 +318,12 @@ private:
 } // namespace
 
 /// Try to lower the process to a set of registers.
-void Deseq::deseq() {
+LogicalResult Deseq::deseq() {
   // Check whether the process meets the basic criteria for being replaced by a
   // register. This includes having only a single `llhd.wait` op and feeding
   // only particular kinds of `llhd.drv` ops.
   if (!analyzeProcess())
-    return;
+    return success();
   LLVM_DEBUG({
     llvm::dbgs() << "Desequentializing " << process.getLoc() << "\n";
     llvm::dbgs() << "- Feeds " << driveInfos.size() << " conditional drives\n";
@@ -341,7 +341,18 @@ void Deseq::deseq() {
   // them to drive a new value, and ensure that the behavior can be represented
   // by a register.
   if (!matchDrives())
-    return;
+    return success();
+
+  // An integer register preset can only represent a constant initializer.
+  // Keep dynamic scalar initializers from silently becoming unconstrained
+  // register state.
+  for (auto &drive : driveInfos) {
+    auto signal = drive.op.getSignal().getDefiningOp<SignalOp>();
+    if (signal && isa<IntegerType>(signal.getType().getNestedType()) &&
+        signal.getInit() && !signal.getInit().getDefiningOp<hw::ConstantOp>())
+      return signal.emitError("cannot lower a nonconstant signal initializer "
+                              "to a register preset");
+  }
 
   // Make the drives unconditional and capture the conditional behavior as
   // register operations.
@@ -350,6 +361,7 @@ void Deseq::deseq() {
   // At this point the process has been replaced with specialized versions of it
   // for the different triggers and can be removed.
   process.erase();
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1436,7 +1448,7 @@ void Deseq::implementRegister(DriveInfo &drive) {
   IntegerAttr preset;
   if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>()) {
     name = sigOp.getNameAttr();
-    if (sigOp->hasAttr("llhd.explicit_init"))
+    if (sigOp.getInit())
       if (auto constant = sigOp.getInit().getDefiningOp<hw::ConstantOp>())
         preset = constant.getValueAttr();
   }
@@ -1711,5 +1723,8 @@ struct DeseqPass : public llhd::impl::DeseqPassBase<DeseqPass> {
 void DeseqPass::runOnOperation() {
   SmallVector<ProcessOp> processes(getOperation().getOps<ProcessOp>());
   for (auto process : processes)
-    Deseq(process).deseq();
+    if (failed(Deseq(process).deseq())) {
+      signalPassFailure();
+      return;
+    }
 }

@@ -1140,23 +1140,21 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
       return rewriter.notifyMatchFailure(
           op.getLoc(), "variable type did not convert to llhd::RefType");
 
-    // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
-    bool hasExplicitInit = !!init;
-    if (!init) {
+    auto sourceType =
+        cast<moore::RefType>(op.getResult().getType()).getNestedType();
+    // Statically sized four-valued variables start with an unknown value.
+    // The core dialects cannot represent X yet, so leave them unconstrained.
+    // Other variable types have a defined default value.
+    if (!init && (sourceType.getDomain() == moore::Domain::TwoValued ||
+                  !sourceType.getBitSize())) {
       init = createZeroValue(refType.getNestedType(), loc, rewriter);
       if (!init)
         return failure();
     }
 
-    auto signal = rewriter.replaceOpWithNewOp<llhd::SignalOp>(
-        op, resultType, op.getNameAttr(), init);
-    // LLHD signals also have a synthesized initial value for variables without
-    // a declaration initializer. Preserve this distinction so Deseq can carry
-    // explicit source initializers into registers without constraining
-    // uninitialized registers to zero.
-    if (hasExplicitInit)
-      signal->setAttr("llhd.explicit_init", rewriter.getUnitAttr());
+    rewriter.replaceOpWithNewOp<llhd::SignalOp>(op, resultType,
+                                                op.getNameAttr(), init);
     return success();
   }
 };

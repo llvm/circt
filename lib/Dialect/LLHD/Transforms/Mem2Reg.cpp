@@ -1239,6 +1239,8 @@ void Promoter::constructLattice() {
       if (auto signalOp = dyn_cast<SignalOp>(op)) {
         if (signalOp.getResult() != currentSlot)
           continue;
+        if (!signalOp.getInit())
+          continue;
         auto *def =
             lattice->createDef(signalOp.getInit(), DriveCondition::never());
         auto *node = lattice->createNode<SignalNode>(signalOp, def, valueBefore,

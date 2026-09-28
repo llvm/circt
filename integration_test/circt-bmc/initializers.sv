@@ -8,6 +8,8 @@
 // RUN: circt-verilog %s --top=Zero | FileCheck %s --check-prefix=ZERO-IR
 // RUN: circt-verilog %s --top=Nonzero | FileCheck %s --check-prefix=NONZERO-IR
 // RUN: circt-verilog %s --top=Uninitialized | FileCheck %s --check-prefix=UNINITIALIZED-IR
+// RUN: circt-verilog %s --top=TwoValued | FileCheck %s --check-prefix=TWOVALUED-IR
+// RUN: not circt-verilog %s --top=Nonconstant 2>&1 | FileCheck %s --check-prefix=NONCONSTANT
 // RUN: circt-verilog %s --top=Zero | circt-bmc - --module Zero -b 1 --shared-libs=%libz3 | FileCheck %s --check-prefix=SAFE
 // RUN: circt-verilog %s --top=Zero | circt-bmc - --module Zero -b 4 --shared-libs=%libz3 | FileCheck %s --check-prefix=FAIL
 // RUN: circt-verilog %s --top=Zero | circt-bmc - --module Zero -b 1 --rising-clocks-only --shared-libs=%libz3 | FileCheck %s --check-prefix=SAFE
@@ -22,6 +24,8 @@
 // ZERO-IR: seq.firreg {{.*}} preset 0
 // NONZERO-IR: seq.firreg {{.*}} preset 7
 // UNINITIALIZED-IR: seq.firreg {{.*}} clock {{%[a-zA-Z0-9_]+}} : i4
+// TWOVALUED-IR: seq.firreg {{.*}} preset 0
+// NONCONSTANT: cannot lower a nonconstant signal initializer to a register preset
 
 module Zero(input logic clk);
   logic [3:0] count = 4'd0;
@@ -42,4 +46,17 @@ module Uninitialized(input logic clk);
   always_ff @(posedge clk)
     count <= count + 4'd1;
   assert property (@(posedge clk) count == 4'd0);
+endmodule
+
+module TwoValued(input logic clk);
+  bit [3:0] count;
+  always_ff @(posedge clk)
+    count <= count + 4'd1;
+endmodule
+
+module Nonconstant(input logic clk, input int x, output int y);
+  int z = x;
+  always_ff @(posedge clk)
+    z <= 42;
+  assign y = z;
 endmodule

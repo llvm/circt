@@ -91,7 +91,7 @@ module LeafInst();
   assign leaf_val = TopRoot.root_val;
 endmodule
 // CHECK: hw.module @TopRoot() {
-// CHECK:   %[[ROOT_VAL:.+]] = llhd.sig %false : i1
+// CHECK:   %[[ROOT_VAL:.+]] = llhd.sig : i1
 // CHECK:   hw.instance "mid" @MiddleInst(TopRoot.root_val: %[[ROOT_VAL]]: !llhd.ref<i1>) -> ()
 // CHECK: }
 
@@ -134,4 +134,3 @@ endmodule
 
 // CHECK: hw.module @Top2(in %c1.i : !llhd.ref<i1>) {
 // CHECK:   hw.instance "c2" @Child() -> ()
-

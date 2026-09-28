@@ -153,3 +153,13 @@ hw.module @nested(in %init : !hw.array<2x!hw.struct<a: i32, b: i32>>, out out : 
   // CHECK: hw.output [[V16]] : !hw.array<2xstruct<a: i32, b: i32>>
   hw.output %0 : !hw.array<2x!hw.struct<a: i32, b: i32>>
 }
+
+// CHECK-LABEL: hw.module @uninitialized
+hw.module @uninitialized(out a: i32) {
+  // CHECK: [[A:%.+]] = llhd.sig : i32
+  %sig = llhd.sig : !hw.struct<a: i32, b: i32>
+  %a = llhd.sig.struct_extract %sig["a"] : !llhd.ref<!hw.struct<a: i32, b: i32>>
+  %value = llhd.prb %a : i32
+  // CHECK: llhd.prb [[A]] : i32
+  hw.output %value : i32
+}

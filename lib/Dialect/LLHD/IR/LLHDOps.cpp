@@ -75,6 +75,31 @@ void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
 // SignalOp
 //===----------------------------------------------------------------------===//
 
+static ParseResult parseSignalType(OpAsmParser &parser, Type &resultType) {
+  Type valueType;
+  if (parser.parseType(valueType))
+    return failure();
+  resultType = RefType::get(valueType);
+  return success();
+}
+
+static void printSignalType(OpAsmPrinter &printer, Operation *op,
+                            Type resultType) {
+  printer.printType(cast<RefType>(resultType).getNestedType());
+}
+
+static ParseResult
+parseImplicitInitType(OpAsmParser &parser, Type resultType,
+                      std::optional<OpAsmParser::UnresolvedOperand> &init,
+                      Type &initType) {
+  if (init)
+    initType = cast<RefType>(resultType).getNestedType();
+  return success();
+}
+
+static void printImplicitInitType(OpAsmPrinter &printer, Operation *op,
+                                  Type resultType, Value init, Type initType) {}
+
 static Value getValueAtIndex(OpBuilder &builder, Location loc, Value val,
                              unsigned index, Type resultType) {
   return TypeSwitch<Type, Value>(val.getType())
@@ -202,8 +227,11 @@ DenseMap<Attribute, MemorySlot> SignalOp::destructure(
   llvm::sort(indices, [](auto a, auto b) { return a.first < b.first; });
 
   for (auto [index, type] : indices) {
-    Value init = getValueAtIndex(builder, getLoc(), getInit(), index, type);
-    auto sigOp = SignalOp::create(builder, getLoc(), getNameAttr(), init);
+    Value init =
+        getInit() ? getValueAtIndex(builder, getLoc(), getInit(), index, type)
+                  : Value{};
+    auto sigOp = SignalOp::create(builder, getLoc(), RefType::get(type),
+                                  getNameAttr(), init);
     newAllocators.push_back(sigOp);
     slotMap.try_emplace<MemorySlot>(
         IntegerAttr::get(IndexType::get(getContext()), index),

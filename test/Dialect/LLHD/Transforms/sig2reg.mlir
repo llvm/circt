@@ -180,3 +180,14 @@ hw.module @RemoveDriveOnlySignals(in %d: i42, in %e: i1) {
   llhd.drv %b, %d after %1 if %e : i42
   // CHECK: hw.output
 }
+
+// CHECK-LABEL: hw.module @UninitializedFullDrive
+hw.module @UninitializedFullDrive(in %value : i4, out out : i4) {
+  %time = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NOT: llhd.sig
+  %sig = llhd.sig : i4
+  llhd.drv %sig, %value after %time : i4
+  %read = llhd.prb %sig : i4
+  // CHECK: hw.output %value : i4
+  hw.output %read : i4
+}
