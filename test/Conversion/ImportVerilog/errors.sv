@@ -321,6 +321,22 @@ endmodule
 
 // -----
 
+module multi_delay_mos_prim;
+    wire A, E, Q;
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
+    pmos #(5, 5, 5) p (Q, A, E);
+endmodule
+
+// -----
+
+module multi_delay_cmos_prim;
+    wire A, N, P, Q;
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
+    cmos #(5, 5, 5) c (Q, A, N, P);
+endmodule
+
+// -----
+
 module wide_output_threestate_prim;
     wire [1:0] Q;
     wire A, E;

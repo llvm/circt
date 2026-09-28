@@ -565,6 +565,28 @@ module TestCmosWideInputs(input wire [1:0] data_in, input wire [1:0] n_en,
 cmos c0(data_out, data_in, n_en, p_en);
 endmodule
 
+// CHECK-LABEL: moore.module @TestDelayedPmos
+module TestDelayedPmos(input wire data_in, input wire en, output wire data_out);
+// CHECK: %[[DATA_OUT:.*]] = moore.net wire : <l1>
+// CHECK: %[[RESULT:.*]] = moore.conditional
+// CHECK: %[[DELAY:.*]] = moore.constant_time 5000000 fs
+// CHECK: moore.delayed_assign %[[DATA_OUT]], %[[RESULT]], %[[DELAY]] : l1
+pmos #5 p0(data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestDelayedCmos
+module TestDelayedCmos(input wire data_in, input wire n_en, input wire p_en,
+                       output wire data_out);
+// CHECK: %[[DATA_OUT:.*]] = moore.net wire : <l1>
+// CHECK: %[[NRESULT:.*]] = moore.conditional
+// CHECK: %[[PRESULT:.*]] = moore.conditional
+// CHECK: %[[AGREE:.*]] = moore.case_eq %[[NRESULT]], %[[PRESULT]] : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[AGREE]] : i1 -> l1
+// CHECK: %[[DELAY:.*]] = moore.constant_time 5000000 fs
+// CHECK: moore.delayed_assign %[[DATA_OUT]], %[[RESULT]], %[[DELAY]] : l1
+cmos #5 c0(data_out, data_in, n_en, p_en);
+endmodule
+
 // CHECK-LABEL: moore.module @TestPmosArrayConcatLiteral
 module TestPmosArrayConcatLiteral;
   wire [1:0] ad;
