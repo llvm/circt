@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SV/DPITypeInfo.h"
+#include "mlir/IR/BuiltinTypes.h"
 
 using namespace circt;
 using namespace mlir;
@@ -36,6 +37,11 @@ StringRef DPITypeInfo::getIntegerKeyword() const {
 bool DPITypeInfo::isIntegerAtom() const {
   return kind == Kind::Byte || kind == Kind::ShortInt || kind == Kind::Int ||
          kind == Kind::LongInt;
+}
+
+bool DPITypeInfo::isValidReturn() const {
+  return isIntegerAtom() ||
+         ((kind == Kind::Bit || kind == Kind::Logic) && width == 1);
 }
 
 DPITypeInfo sv::getDPIIntegerTypeInfo(unsigned width,
@@ -69,4 +75,11 @@ DPITypeInfo sv::getDPIEnumTypeInfo(unsigned width) {
   result.width = width;
   result.isSigned = width == 32;
   return result;
+}
+
+FailureOr<DPITypeInfo> sv::resolveDPIType(Type type) {
+  auto integer = dyn_cast<IntegerType>(type);
+  if (!integer || !integer.getWidth())
+    return failure();
+  return getDPIIntegerTypeInfo(integer.getWidth(), DPIIntegerContext::Import);
 }
