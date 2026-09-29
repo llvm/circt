@@ -32,6 +32,7 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
   m.doc() = "HW dialect Python native extension";
 
   m.def("get_bitwidth", &hwGetBitWidth);
+  m.def("get_canonical_type", &hwGetCanonicalType);
 
   mlir_type_subclass(m, "InOutType", hwTypeIsAInOut)
       .def_classmethod("get",

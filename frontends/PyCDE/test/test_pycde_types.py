@@ -1,9 +1,11 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde import dim, Input, Output, generator, System, Module
+from pycde.circt import ir
+from pycde.circt.dialects import hw
 from pycde.types import (Array, Bit, Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, ChannelSignaling, InOut, List, SInt,
-                         StructType, TypeAlias, UnionType, UInt, Window)
+                         StructType, Type, TypeAlias, UnionType, UInt, Window)
 from pycde.testing import unittestmodule
 from pycde.signals import Struct, UIntSignal
 
@@ -44,15 +46,21 @@ outer_alias = TypeAlias(
     StructType([("nested", nested_alias), ("plain", UInt(8))]), "outer_alias")
 # CHECK: struct { nested: UInt<3>, plain: UInt<8>}
 print(outer_alias.canonical_type)
+assert outer_alias.canonical_type._type == hw.get_canonical_type(
+    outer_alias._type)
 
 unaliased_struct = StructType([("nested", nested_alias)])
 # CHECK: struct { nested: UInt<3>}
 print(unaliased_struct.canonical_type)
-assert UInt(3).canonical_type == UInt(3)
+assert UInt(3).canonical_type is UInt(3)
+opaque_type = Type(ir.NoneType.get())
+assert opaque_type.canonical_type is opaque_type
 
 nested_array = Array(nested_alias, 2)
 # CHECK: UInt<3>[2]
 print(nested_array.canonical_type)
+assert nested_array.canonical_type._type == hw.get_canonical_type(
+    nested_array._type)
 
 nested_union = UnionType([("nested", nested_alias, 1)])
 # CHECK: union { nested: UInt<3> offset 1}
@@ -81,6 +89,7 @@ assert canonical_list.element_type == UInt(3)
 nested_window = Window("nested_window", StructType([("nested", nested_alias)]),
                        [Window.Frame(None, ["nested"])])
 canonical_window = nested_window.canonical_type
+assert canonical_window._type == hw.get_canonical_type(nested_window._type)
 assert canonical_window.name == nested_window.name
 assert canonical_window.frames == nested_window.frames
 assert canonical_window.into.fields[0][1] == UInt(3)
