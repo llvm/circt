@@ -126,7 +126,7 @@ class VarTypeConstraint<string value, string varValue>
 
 // Constrains `value` to type `T`, inferring the element type from var handle `varValue` (`!sv.var<T>`).
 class VarElementConstraint<string value, string varValue>
-  : TypesMatchWith<"type should be var's element type",
+  : OptionalTypesMatchWith<"type should be var's element type",
                    varValue, value, "sv::getVarElementType($_self)">;
 
 //===----------------------------------------------------------------------===//
