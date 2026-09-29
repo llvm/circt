@@ -269,28 +269,47 @@ namespace {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttribute(getValueAttr());
-  // Type aliases of the value's type are printed after it.
-  if (getType() != getValueAttr().getType())
+  if (getType() == getValueAttr().getType()) {
+    p.printAttribute(getValueAttr());
+  } else {
+    // The result is a type alias of the value's type.
+    p.printAttributeWithoutType(getValueAttr());
     p << " : " << getType();
+  }
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  IntegerAttr valueAttr;
-
-  if (parser.parseAttribute(valueAttr, "value", result.attributes))
+  auto loc = parser.getCurrentLocation();
+  APInt value;
+  Type type;
+  // Booleans may omit their type, in which case they are `i1`.
+  bool isTrue = succeeded(parser.parseOptionalKeyword("true"));
+  if (isTrue || succeeded(parser.parseOptionalKeyword("false"))) {
+    value = APInt(1, isTrue);
+    if (failed(parser.parseOptionalColon()))
+      type = parser.getBuilder().getI1Type();
+  } else if (parser.parseInteger(value) || parser.parseColon()) {
     return failure();
-
-  // The result type may be a type alias of the value's type.
-  Type resultType = valueAttr.getType();
-  if (succeeded(parser.parseOptionalColon()) && parser.parseType(resultType))
+  }
+  if (!type && parser.parseType(type))
     return failure();
-
   if (parser.parseOptionalAttrDict(result.attributes))
     return failure();
 
-  result.addTypes(resultType);
+  // The type may be a type alias of an integer type, which determines the
+  // value's type.
+  auto intType = type_dyn_cast<IntegerType>(type);
+  if (!intType)
+    return parser.emitError(loc, "expected an integer type, but got ") << type;
+  unsigned width = intType.getWidth();
+  if (value.isNegative() ? value.getSignificantBits() > width
+                         : value.getActiveBits() > width)
+    return parser.emitError(loc, "constant out of range for type ") << type;
+
+  result.addAttribute("value",
+                      IntegerAttr::get(intType, value.sextOrTrunc(width)));
+  result.addTypes(type);
   return success();
 }
 

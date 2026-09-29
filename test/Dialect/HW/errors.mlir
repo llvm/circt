@@ -573,8 +573,19 @@ hw.type_scope @ns {
 }
 
 hw.module @constantNonIntegerAlias() {
-  // expected-error @+1 {{'hw.constant' op result #0 must be a signless integer bitvector, but got '!hw.typealias<@ns::@t, !hw.array<2xi1>>'}}
-  %0 = hw.constant 1 : i2 : !hw.typealias<@ns::@t, !hw.array<2xi1>>
+  // expected-error @+1 {{expected an integer type, but got '!hw.typealias<@ns::@t, !hw.array<2xi1>>'}}
+  %0 = hw.constant 1 : !hw.typealias<@ns::@t, !hw.array<2xi1>>
+}
+
+// -----
+
+hw.type_scope @ns {
+  hw.typedecl @t : i4
+}
+
+hw.module @constantAliasOutOfRange() {
+  // expected-error @+1 {{constant out of range for type '!hw.typealias<@ns::@t, i4>'}}
+  %0 = hw.constant 16 : !hw.typealias<@ns::@t, i4>
 }
 
 // -----
@@ -585,7 +596,7 @@ hw.type_scope @ns {
 
 hw.module @constantAliasTypeMismatch() {
   // expected-error @+1 {{hw.constant attribute type 'ui4' doesn't match the canonical result type 'i4'}}
-  %0 = hw.constant 1 : ui4 : !hw.typealias<@ns::@t, i4>
+  %0 = "hw.constant"() <{value = 1 : ui4}> : () -> !hw.typealias<@ns::@t, i4>
 }
 
 // -----
@@ -596,5 +607,5 @@ hw.type_scope @ns {
 
 hw.module @constantAliasWidthMismatch() {
   // expected-error @+1 {{hw.constant attribute bitwidth doesn't match return type}}
-  %0 = hw.constant 1 : i8 : !hw.typealias<@ns::@t, i4>
+  %0 = "hw.constant"() <{value = 1 : i8}> : () -> !hw.typealias<@ns::@t, i4>
 }

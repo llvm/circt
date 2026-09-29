@@ -30,11 +30,11 @@ def ConstantOp
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of standard integer type
-    without a sign. The result may also be a type alias of the value's type,
-    which is then printed after the value.
+    without a sign. The result may also be a type alias of such an integer
+    type, in which case the value has the aliased integer type.
     ```
       %result = hw.constant 42 : t1
-      %aliased = hw.constant 42 : i8 : !hw.typealias<@ns::@t2, i8>
+      %aliased = hw.constant 42 : !hw.typealias<@ns::@t2, i8>
     ```
     }];
 
