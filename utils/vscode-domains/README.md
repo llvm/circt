@@ -15,13 +15,18 @@ process, so large reports do not enter a VS Code text buffer.
    components. Each component contains its explicit associations, recorded
    connections, nodes, minimum cut, and illegal crossings. Expand **Minimum
    cut** to find the fewest recorded edges whose removal splits that
-   component. Choose **Choose two nodes…** there, or run **FIRRTL Domains:
-   Choose Min-Cut Endpoints**, to find a cut between nodes in the same
-   component. Cut edges can be opened at their source locations. For a failed
-   report, components involved in an illegal crossing receive the theme's
-   error color and an error badge. Expand **Illegal crossings** under either
-   component to see the shortest recorded path between the reported domain
-   annotations. The failed connection appears as a separate step.
+   component. The **Source** and **Target** rows show the selected nodes. Click
+   either row to search node names, module names, or IDs as you type, then
+   select a match. Choose **Calculate cut between selected nodes** to find a
+   cut between them. **FIRRTL Domains: Choose Min-Cut Endpoints** also lets you
+   select both nodes from the Command Palette. If the component has an illegal
+   crossing with a recorded path, the first crossing's path endpoints within
+   that component are selected initially when they are distinct. Cut edges can
+   be opened at their source locations.
+   For a failed report, components involved in an illegal crossing receive the
+   theme's error color and an error badge. Expand **Illegal crossings** under
+   either component to see the shortest recorded path between the reported
+   domain annotations. The failed connection appears as a separate step.
 4. Use **Search Values** or **Show Values at Cursor** to inspect a value's
    assignments. **Trace Value** on a value, or from the Command Palette,
    opens the shortest recorded provenance route in a temporary editor.

@@ -100,16 +100,26 @@ async function testDomainsView() {
   assert.equal(associations[0].kind, 'domainAssociation');
   const connections = await domains.getChildren(groups[1]);
   assert.equal(connections[0].data.kind, 'association');
-  const [action, result] = await domains.getChildren(groups[3]);
+  const [source, target, result] = await domains.getChildren(groups[3]);
   assert.equal(result.data.count, 1);
-  assert.equal(action.kind, 'cutAction');
+  assert.equal(domains.getTreeItem(source).label, 'Source: Choose node…');
+  assert.equal(domains.getTreeItem(target).label, 'Target: Choose node…');
   const cutEdges = await domains.getChildren(result);
   assert.equal(cutEdges[0].kind, 'cutEdge');
+  domains.setCutEndpoint('42', 0, 'source',
+    {id: '1', name: 'portA', module: 'M'});
+  domains.setCutEndpoint('42', 0, 'target',
+    {id: '2', name: 'dom', module: 'M'});
+  const [selectedSource, selectedTarget, action] =
+    await domains.getChildren(groups[3]);
+  assert.equal(domains.getTreeItem(selectedSource).label, 'Source: M.portA');
+  assert.equal(domains.getTreeItem(selectedTarget).label, 'Target: M.dom');
+  assert.equal(action.kind, 'cutAction');
   domains.setBetweenCut('42', 0,
     {available: true, mode: 'between', count: 0,
     sourceSideSize: 1, targetSideSize: 1, edges: []}, 'M.portA', 'M.dom');
   const afterChoice = await domains.getChildren(groups[3]);
-  assert.equal(afterChoice[1].data.count, 0);
+  assert.equal(afterChoice[3].data.count, 0);
   domains.summary = {complete: false};
   assert.match((await domains.getChildren())[0].label, /Partial report/);
 }

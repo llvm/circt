@@ -70,7 +70,11 @@ interface CrossingInfo {
   rhsSourceId?: string;
   rhsSourceModule?: string;
   lhsValue?: string;
+  lhsValueId?: string;
+  lhsValueModule?: string;
   rhsValue?: string;
+  rhsValueId?: string;
+  rhsValueModule?: string;
 }
 interface CrossingPath {
   found: boolean;
@@ -102,6 +106,15 @@ interface CutResult {
   targetId?: string;
   componentIndex?: number;
   edges?: EdgeInfo[];
+}
+interface CutEndpoint {
+  id: string;
+  name: string;
+  module: string;
+}
+interface CutEndpointPair {
+  source: CutEndpoint;
+  target: CutEndpoint;
 }
 interface InstanceInfo {
   id: string;
@@ -150,7 +163,8 @@ type Kind =
     'value'|'instance'|'assignment'|'binding'|'traceStep'|'neighbors'|'edge'|
     'domainDetail'|'domainGroup'|'domainNode'|'domainAssociation'|
     'domainConnection'|'minCutGroup'|'domainComponent'|'cutResult'|'cutEdge'|'cutPage'|
-    'cutAction'|'crossingGroup'|'illegalCrossing'|'crossingStep'|'crossingStepPage';
+    'cutEndpoint'|'cutAction'|'crossingGroup'|'illegalCrossing'|'crossingStep'|
+    'crossingStepPage';
 interface Node {
   kind: Kind;
   label?: string;
@@ -170,6 +184,7 @@ interface Node {
   unmapped?: boolean;
   treeId?: string;
   crossingIndex?: number;
+  cutRole?: 'source'|'target';
 }
 
 const componentScheme = 'circt-domain-component';
@@ -290,8 +305,11 @@ function treeItem(node: Node): vscode.TreeItem {
     state = cut.edges?.length ? vscode.TreeItemCollapsibleState.Collapsed
                               : vscode.TreeItemCollapsibleState.None;
   }
+  if (node.kind === 'cutEndpoint')
+    label = `${node.cutRole === 'source' ? 'Source' : 'Target'}: ${
+        data ? `${data.module}.${data.name}` : 'Choose node…'}`;
   if (node.kind === 'cutAction')
-    label = 'Choose two nodes…';
+    label = 'Calculate cut between selected nodes';
   if (node.kind === 'cutPage') {
     label = `More (${(node.offset ?? 0) + 1}–${
         Math.min((node.offset ?? 0) + pageSize, node.total ?? 0)} of ${
@@ -357,6 +375,9 @@ function treeItem(node: Node): vscode.TreeItem {
     item.id = `domain:${node.domainTypeId}:component:${
         node.componentIndex}:cut:${
         data.mode ?? 'unavailable'}:${data.componentIndex ?? ''}`;
+  if (node.kind === 'cutEndpoint')
+    item.id = `domain:${node.domainTypeId}:component:${
+        node.componentIndex}:cutEndpoint:${node.cutRole}`;
   if (node.kind === 'module')
     item.description = `${data.ports} ports · ${data.values} values`;
   if (node.kind === 'value' || node.kind === 'port')
@@ -402,6 +423,8 @@ function treeItem(node: Node): vscode.TreeItem {
     item.description = data.count === 0 ? 'already separate'
                                           : `${data.sourceSideSize} / ${
                                                 data.targetSideSize} nodes`;
+  if (node.kind === 'cutEndpoint' && data)
+    item.description = `ID ${data.id}`;
   if (node.kind === 'instance')
     item.description = data.targets?.join(', ');
   if (node.kind === 'assignment')
@@ -442,10 +465,16 @@ function treeItem(node: Node): vscode.TreeItem {
       title : 'Trace Value',
       arguments : [ node ]
     };
+  } else if (node.kind === 'cutEndpoint') {
+    item.command = {
+      command : 'circtDomains.selectCutEndpoint',
+      title : 'Select Min-Cut Node',
+      arguments : [ node ]
+    };
   } else if (node.kind === 'cutAction') {
     item.command = {
-      command : 'circtDomains.chooseCutEndpoints',
-      title : 'Choose Min-Cut Endpoints',
+      command : 'circtDomains.calculateCut',
+      title : 'Calculate Min-Cut',
       arguments : [ node ]
     };
   } else if (data?.location && node.kind !== 'value' &&
@@ -570,6 +599,8 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
   private readonly betweenCuts = new Map<
       string, {result: CutResult; source: string; target: string}>();
   private readonly crossingPaths = new Map<number, CrossingPath>();
+  private readonly cutSelections = new Map<
+      string, {source?: CutEndpoint; target?: CutEndpoint}>();
   helper?: Helper;
   summary?: Summary;
 
@@ -578,6 +609,24 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
     this.componentCuts.clear();
     this.betweenCuts.clear();
     this.crossingPaths.clear();
+    this.cutSelections.clear();
+    this.refresh();
+  }
+  getCutSelection(domainTypeId: string, componentIndex: number):
+      {source?: CutEndpoint; target?: CutEndpoint} {
+    return this.cutSelections.get(`${domainTypeId}:${componentIndex}`) ?? {};
+  }
+  setCutEndpoint(domainTypeId: string, componentIndex: number,
+                 role: 'source'|'target', endpoint: CutEndpoint): void {
+    const key = `${domainTypeId}:${componentIndex}`;
+    const current = this.getCutSelection(domainTypeId, componentIndex);
+    if (current[role]?.id === endpoint.id)
+      return;
+    const selection = {...current, [role] : endpoint};
+    if (selection.source?.id === selection.target?.id)
+      selection[role === 'source' ? 'target' : 'source'] = undefined;
+    this.cutSelections.set(key, selection);
+    this.betweenCuts.delete(key);
     this.refresh();
   }
   setBetweenCut(domainTypeId: string, componentIndex: number,
@@ -585,6 +634,67 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
     this.betweenCuts.set(`${domainTypeId}:${componentIndex}`,
                          {result, source, target});
     this.refresh();
+  }
+  private async getCrossingPath(index: number): Promise<CrossingPath|undefined> {
+    let path = this.crossingPaths.get(index);
+    if (path)
+      return path;
+    const requestHelper = this.helper!;
+    path = await requestHelper.request<CrossingPath>(
+        'crossingPath', {crossingIndex : index});
+    if (this.helper !== requestHelper)
+      return undefined;
+    this.crossingPaths.set(index, path);
+    return path;
+  }
+  private async suggestedCutEndpoints(domainTypeId: string,
+                                      componentIndex: number):
+      Promise<CutEndpointPair|undefined> {
+    const requestHelper = this.helper!;
+    const crossings = await requestHelper.request<Page<CrossingInfo>>(
+        'listIllegalCrossings',
+        {domainTypeId, componentIndex, offset : 0, limit : 1});
+    if (this.helper !== requestHelper)
+      return undefined;
+    if (!crossings.items.length)
+      return undefined;
+    const crossing = crossings.items[0];
+    const path = await this.getCrossingPath(crossing.index);
+    if (this.helper !== requestHelper)
+      return undefined;
+    if (!path?.found)
+      return undefined;
+    const endpoint = (id?: string, name?: string,
+                      module?: string): CutEndpoint|undefined =>
+        id ? {id, name : name || id, module : module || '?'} : undefined;
+    // The failed connection is absent from the cut graph. Each side of its
+    // shortest explanation path therefore needs its own component cut.
+    const candidates = [
+      [
+        endpoint(crossing.lhsSourceId, crossing.lhsSource,
+                 crossing.lhsSourceModule),
+        endpoint(crossing.lhsValueId, crossing.lhsValue,
+                 crossing.lhsValueModule)
+      ],
+      [
+        endpoint(crossing.rhsValueId, crossing.rhsValue,
+                 crossing.rhsValueModule),
+        endpoint(crossing.rhsSourceId, crossing.rhsSource,
+                 crossing.rhsSourceModule)
+      ]
+    ];
+    for (const [source, target] of candidates) {
+      if (!source || !target || source.id === target.id)
+        continue;
+      const component = await requestHelper.request<{index: number}>(
+          'componentForValue',
+          {domainTypeId, valueId : source.id});
+      if (this.helper !== requestHelper)
+        return undefined;
+      if (component.index === componentIndex)
+        return {source, target};
+    }
+    return undefined;
   }
   getTreeItem(node: Node): vscode.TreeItem { return treeItem(node); }
 
@@ -639,7 +749,7 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
             },
             {kind : 'minCutGroup', domainTypeId : node.domainTypeId,
               domainName : node.domainName, componentIndex : component.index,
-              total : component.nodes});
+              total : component.nodes, count : component.illegalCrossings});
       }
       groups.push({kind : 'crossingGroup', count : component.illegalCrossings,
                    ...selection});
@@ -662,15 +772,9 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
       const crossingId = `domain:${node.domainTypeId}:component:${
           node.unmapped ? 'unmapped' : node.componentIndex}:crossing:${
           crossing.index}`;
-      let path = this.crossingPaths.get(crossing.index);
-      if (!path) {
-        const requestHelper = this.helper;
-        path = await requestHelper.request<CrossingPath>(
-            'crossingPath', {crossingIndex : crossing.index});
-        if (this.helper !== requestHelper)
-          return [];
-        this.crossingPaths.set(crossing.index, path);
-      }
+      const path = await this.getCrossingPath(crossing.index);
+      if (!path)
+        return [];
       if (!path.found)
         return [{kind : 'message', label : path.message ?? 'No path recorded'}];
       const steps = path.steps ?? [];
@@ -743,9 +847,30 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
       const componentIndex = node.componentIndex!;
       const key = `${domainTypeId}:${componentIndex}`;
       const children: Node[] = [];
-      if ((node.total ?? 0) >= 2)
-        children.push({kind : 'cutAction', domainTypeId,
-                       domainName : node.domainName, componentIndex});
+      const requestHelper = this.helper;
+      if ((node.total ?? 0) >= 2) {
+        if (!this.cutSelections.has(key)) {
+          const suggestion = node.count
+                                 ? await this.suggestedCutEndpoints(
+                                       domainTypeId, componentIndex)
+                                 : undefined;
+          if (this.helper !== requestHelper)
+            return [];
+          this.cutSelections.set(key, suggestion ?? {});
+        }
+        if (this.helper !== requestHelper)
+          return [];
+        const selection = this.getCutSelection(domainTypeId, componentIndex);
+        children.push(
+            {kind : 'cutEndpoint', domainTypeId, domainName : node.domainName,
+              componentIndex, cutRole : 'source', data : selection.source},
+            {kind : 'cutEndpoint', domainTypeId, domainName : node.domainName,
+              componentIndex, cutRole : 'target', data : selection.target});
+        if (selection.source && selection.target &&
+            selection.source.id !== selection.target.id)
+          children.push({kind : 'cutAction', domainTypeId,
+                         domainName : node.domainName, componentIndex});
+      }
       const between = this.betweenCuts.get(key);
       if (between)
         children.push({
@@ -757,7 +882,6 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
         });
       let cut = this.componentCuts.get(key);
       if (!cut) {
-        const requestHelper = this.helper;
         cut = await vscode.window.withProgress(
             {
               location : vscode.ProgressLocation.Window,
@@ -1039,6 +1163,103 @@ function traceMarkdown(value: ValueInfo, domainTypeId: string,
   return lines.join('\n');
 }
 
+interface CutNodeChoice extends vscode.QuickPickItem {
+  endpoint?: CutEndpoint;
+  nextOffset?: number;
+}
+
+export function pickDomainNode(requestHelper: Helper, domainTypeId: string,
+                               role: 'source'|'target',
+                               componentIndex?: number,
+                               excludedId?: string):
+    Promise<CutEndpoint|undefined> {
+  const picker = vscode.window.createQuickPick<CutNodeChoice>();
+  picker.title = `Select ${role} node for minimum cut`;
+  picker.placeholder = 'Type a node name, module name, or numeric ID';
+  picker.matchOnDescription = true;
+  picker.busy = true;
+  let sequence = 0;
+  let timer: ReturnType<typeof setTimeout>|undefined;
+  let finished = false;
+  let choices: CutNodeChoice[] = [];
+  return new Promise((resolve) => {
+    const finish = (endpoint?: CutEndpoint) => {
+      if (finished)
+        return;
+      finished = true;
+      if (timer)
+        clearTimeout(timer);
+      picker.hide();
+      picker.dispose();
+      resolve(endpoint);
+    };
+    const load = async (query: string, offset: number, current: number) => {
+      try {
+        const result = await requestHelper.request<Page<ValueInfo>>(
+            'domainItems',
+            {domainTypeId,
+              ...(componentIndex !== undefined ? {componentIndex} : {}),
+              category : 'nodes', query, offset, limit : 100});
+        if (finished || current !== sequence)
+          return;
+        const page = result.items
+                         .filter((value) => value.id !== excludedId)
+                         .map<CutNodeChoice>((value) => ({
+                                               label : value.name,
+                                               description : `${value.module} · ${
+                                                   value.kind} · ID ${value.id}`,
+                                               endpoint : {
+                                                 id : value.id,
+                                                 name : value.name,
+                                                 module : value.module
+                                               }
+                                             }));
+        choices = offset ? [ ...choices, ...page ] : page;
+        const more = offset + result.items.length < result.total
+                         ? [{label : 'More results…',
+                             description : `${result.total - offset -
+                                              result.items.length} remaining`,
+                             alwaysShow : true,
+                             nextOffset : offset + result.items.length}]
+                         : [];
+        picker.items = choices.length || more.length
+                           ? [ ...choices, ...more ]
+                           : [{label : 'No matching nodes', alwaysShow : true}];
+        picker.busy = false;
+      } catch (error) {
+        if (finished || current !== sequence)
+          return;
+        picker.items = [{label : `Search failed: ${String(error)}`,
+                         alwaysShow : true}];
+        picker.busy = false;
+      }
+    };
+    picker.onDidChangeValue((query) => {
+      const current = ++sequence;
+      if (timer)
+        clearTimeout(timer);
+      choices = [];
+      picker.items = [];
+      picker.busy = true;
+      timer = setTimeout(() => void load(query, 0, current), 150);
+    });
+    picker.onDidAccept(() => {
+      const choice = picker.selectedItems[0];
+      if (choice?.endpoint) {
+        finish(choice.endpoint);
+        return;
+      }
+      if (choice?.nextOffset !== undefined) {
+        picker.busy = true;
+        void load(picker.value, choice.nextOffset, sequence);
+      }
+    });
+    picker.onDidHide(() => finish());
+    picker.show();
+    void load('', 0, ++sequence);
+  });
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('FIRRTL Domains');
   const domainsView = new DomainsView();
@@ -1290,52 +1511,39 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
-  async function chooseDomainNode(domainTypeId: string,
-                                  prompt: string, componentIndex?: number):
-      Promise<ValueInfo|undefined> {
-    if (!helper)
-      return undefined;
-    const query = await vscode.window.showInputBox({
-      prompt,
-      placeHolder : 'Value or port name, module name, or numeric ID'
-    });
-    if (query === undefined)
-      return undefined;
-    let offset = 0;
-    while (true) {
-      const result = await helper.request<Page<ValueInfo>>('domainItems', {
-        domainTypeId,
-        ...(componentIndex !== undefined ? {componentIndex} : {}),
-        category : 'nodes',
-        query,
-        offset,
-        limit : 100
-      });
-      if (!result.total) {
-        void vscode.window.showInformationMessage(
-            `No nodes match “${query}” in this domain.`);
-        return undefined;
-      }
-      const choices: Array<vscode.QuickPickItem&{value?: ValueInfo}> =
-          result.items.map((value) => ({
-                             label : value.name,
-                             description : `${value.module} · ${value.kind} · ID ${
-                                 value.id}`,
-                             value
-                           }));
-      if (offset + result.items.length < result.total)
-        choices.push({
-          label : 'More results…',
-          description : `${result.total - offset - result.items.length} remaining`
-        });
-      const choice = await vscode.window.showQuickPick(
-          choices, {placeHolder : `${result.total} matching domain nodes`});
-      if (!choice)
-        return undefined;
-      if (choice.value)
-        return choice.value;
-      offset += result.items.length;
+  async function calculateSelectedCut(requestHelper: Helper,
+                                      domainTypeId: string, domainName: string,
+                                      componentIndex: number): Promise<void> {
+    const {source, target} =
+        domainsView.getCutSelection(domainTypeId, componentIndex);
+    if (!source || !target || source.id === target.id) {
+      void vscode.window.showWarningMessage(
+          'Choose two different nodes for the minimum cut.');
+      return;
     }
+    const result = await vscode.window.withProgress(
+        {
+          location : vscode.ProgressLocation.Notification,
+          title : `Calculating minimum cut between ${source.name} and ${
+              target.name}`
+        },
+        () => requestHelper.request<CutResult>(
+            'minCut',
+            {domainTypeId, sourceId : source.id, targetId : target.id}));
+    if (helper !== requestHelper)
+      return;
+    const selection = domainsView.getCutSelection(domainTypeId, componentIndex);
+    if (selection.source?.id !== source.id ||
+        selection.target?.id !== target.id)
+      return;
+    domainsView.setBetweenCut(domainTypeId, componentIndex, result,
+                             `${source.module}.${source.name}`,
+                             `${target.module}.${target.name}`);
+    await vscode.commands.executeCommand('circtDomains.domains.focus');
+    void vscode.window.showInformationMessage(
+        `${domainName} component ${componentIndex + 1}: cut ${result.count} edge${
+            result.count === 1 ? '' : 's'} between ${source.name} and ${
+            target.name}. Expand its Minimum cut to inspect.`);
   }
 
   context.subscriptions.push(
@@ -1373,6 +1581,42 @@ export function activate(context: vscode.ExtensionContext): void {
           }),
       vscode.commands.registerCommand('circtDomains.traceValue', traceValue),
       vscode.commands.registerCommand(
+          'circtDomains.selectCutEndpoint',
+          async (node?: Node) => {
+            if (!helper || !node?.domainTypeId ||
+                node.componentIndex === undefined || !node.cutRole)
+              return;
+            const requestHelper = helper;
+            const selection = domainsView.getCutSelection(
+                node.domainTypeId, node.componentIndex);
+            const excludedId = node.cutRole === 'source'
+                                   ? selection.target?.id
+                                   : selection.source?.id;
+            const endpoint = await pickDomainNode(
+                requestHelper, node.domainTypeId, node.cutRole,
+                node.componentIndex, excludedId);
+            if (endpoint && helper === requestHelper)
+              domainsView.setCutEndpoint(node.domainTypeId,
+                                         node.componentIndex, node.cutRole,
+                                         endpoint);
+          }),
+      vscode.commands.registerCommand(
+          'circtDomains.calculateCut',
+          async (node?: Node) => {
+            if (!helper || !node?.domainTypeId ||
+                node.componentIndex === undefined)
+              return;
+            try {
+              await calculateSelectedCut(
+                  helper, node.domainTypeId,
+                  node.domainName ?? node.domainTypeId, node.componentIndex);
+            } catch (error) {
+              output.appendLine(`Minimum cut failed: ${String(error)}`);
+              void vscode.window.showErrorMessage(
+                  `Could not calculate minimum cut: ${String(error)}`);
+            }
+          }),
+      vscode.commands.registerCommand(
           'circtDomains.chooseCutEndpoints',
           async (node?: Node) => {
             if (!helper)
@@ -1387,9 +1631,8 @@ export function activate(context: vscode.ExtensionContext): void {
               if (!domain)
                 return;
               let componentIndex = node?.componentIndex;
-              const source = await chooseDomainNode(
-                  domain.id, 'Search for the first min-cut node',
-                  componentIndex);
+              const source = await pickDomainNode(
+                  requestHelper, domain.id, 'source', componentIndex);
               if (!source)
                 return;
               if (componentIndex === undefined) {
@@ -1398,40 +1641,21 @@ export function activate(context: vscode.ExtensionContext): void {
                     {domainTypeId : domain.id, valueId : source.id});
                 componentIndex = component.index;
               }
-              const target = await chooseDomainNode(
-                  domain.id, 'Search for the second min-cut node',
-                  componentIndex);
+              if (helper !== requestHelper)
+                return;
+              domainsView.setCutEndpoint(domain.id, componentIndex, 'source',
+                                         source);
+              const target = await pickDomainNode(
+                  requestHelper, domain.id, 'target', componentIndex,
+                  source.id);
               if (!target)
                 return;
               if (helper !== requestHelper)
                 return;
-              if (source.id === target.id) {
-                void vscode.window.showWarningMessage(
-                    'Choose two different nodes for the minimum cut.');
-                return;
-              }
-              const result = await vscode.window.withProgress(
-                  {
-                    location : vscode.ProgressLocation.Notification,
-                    title : `Calculating minimum cut between ${source.name} and ${
-                        target.name}`
-                  },
-                  () => requestHelper.request<CutResult>('minCut', {
-                    domainTypeId : domain.id,
-                    sourceId : source.id,
-                    targetId : target.id
-                  }));
-              if (helper !== requestHelper)
-                return;
-              domainsView.setBetweenCut(
-                  domain.id, componentIndex, result,
-                  `${source.module}.${source.name}`,
-                  `${target.module}.${target.name}`);
-              await vscode.commands.executeCommand('circtDomains.domains.focus');
-              void vscode.window.showInformationMessage(
-                  `${domain.name} component ${componentIndex + 1}: cut ${result.count} edge${
-                      result.count === 1 ? '' : 's'} between ${source.name} and ${
-                      target.name}. Expand its Minimum cut to inspect.`);
+              domainsView.setCutEndpoint(domain.id, componentIndex, 'target',
+                                         target);
+              await calculateSelectedCut(requestHelper, domain.id, domain.name,
+                                         componentIndex);
             } catch (error) {
               output.appendLine(`Minimum cut failed: ${String(error)}`);
               void vscode.window.showErrorMessage(
