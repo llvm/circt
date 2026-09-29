@@ -37,6 +37,12 @@ def PackageOp : SVOp<"package", [
     operations. Its declarations are referenced using `hw.typealias` with a
     symbol reference of the form `@package::@type`. Empty packages are allowed.
 
+    The optional `extern` attribute marks a package whose implementation is
+    provided externally. Its declarations remain available for type resolution,
+    but ExportVerilog does not emit the package or create an output file for it.
+    References to it from `emit.file` operations do not emit any text either.
+    Its package name must be valid SystemVerilog and is not renamed.
+
     The body is currently restricted to type declarations because the lookup,
     legalization, and emission infrastructure for other declarations is not yet
     prepared to handle them in a package's nested symbol table. This restriction
@@ -56,6 +62,9 @@ def PackageOp : SVOp<"package", [
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &getBody().front(); }
+
+    // Kept out of ODS arguments because `extern` is a C++ keyword.
+    bool getExtern() { return (*this)->hasAttrOfType<UnitAttr>("extern"); }
   }];
 }
 

@@ -4578,6 +4578,9 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(PackageOp op) {
+  if (op.getExtern())
+    return success();
+
   llvm::SaveAndRestore<Operation *> package(emitter.currentPackage, op);
   startStatement();
   ps.addCallback({op, true});
@@ -7116,6 +7119,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           // Build the IR cache.
           auto sym = package.getSymNameAttr();
           symbolCache.addDefinition(sym, package);
+
+          if (package.getExtern())
+            return;
 
           if (auto it = symbolsToFiles.find(sym); it != symbolsToFiles.end()) {
             if (it->second.size() != 1 || attr) {

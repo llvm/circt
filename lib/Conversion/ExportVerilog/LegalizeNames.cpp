@@ -269,10 +269,7 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
 GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
                                        const LoweringOptions &options)
     : globalNameResolver(options), options(options) {
-  // Register the names of external modules which we cannot rename. This has to
-  // occur in a first pass separate from the modules and interfaces which we are
-  // actually allowed to rename, in order to ensure that we don't accidentally
-  // rename a module that later collides with an extern module.
+  // Reserve externally defined names before legalizing emitted declarations.
   for (auto &op : *topLevel.getBody()) {
     // Note that external modules *often* have name collisions, because they
     // correspond to the same verilog module with different parameters.
@@ -280,6 +277,13 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
       auto name = getVerilogModuleNameAttr(&op).getValue();
       if (!sv::isNameValid(name, options.caseInsensitiveKeywords))
         op.emitError("name \"")
+            << name << "\" is not allowed in Verilog output";
+      globalNameResolver.insertUsedName(name);
+    } else if (auto package = dyn_cast<PackageOp>(op);
+               package && package.getExtern()) {
+      auto name = getSymOpName(package);
+      if (!sv::isNameValid(name, options.caseInsensitiveKeywords))
+        package.emitError("name \"")
             << name << "\" is not allowed in Verilog output";
       globalNameResolver.insertUsedName(name);
     } else if (auto reservedNamesOp = dyn_cast<sv::ReserveNamesOp>(op)) {
@@ -322,11 +326,14 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
 
 void GlobalNameResolver::legalizePackageNames(PackageOp package) {
   auto *ctx = package.getContext();
-  auto name = globalNameResolver.getLegalName(getSymOpName(package));
-  package->setAttr("hw.verilogName", StringAttr::get(ctx, name));
+  if (!package.getExtern()) {
+    auto name = globalNameResolver.getLegalName(getSymOpName(package));
+    package->setAttr("hw.verilogName", StringAttr::get(ctx, name));
+  }
 
   NameCollisionResolver localNames(options);
-  globalNameTable.addReservedNames(localNames);
+  if (!package.getExtern())
+    globalNameTable.addReservedNames(localNames);
   // Reserve all typedef names before choosing enum member names, including
   // typedefs that appear after the enum declaration.
   for (auto decl : package.getOps<hw::TypedeclOp>()) {

@@ -14,6 +14,13 @@ sv.package @types {
 // CHECK-NEXT: } {sym_visibility = "private"}
 sv.package @private_types {} {sym_visibility = "private"}
 
+// CHECK-LABEL: sv.package @external_types {
+// CHECK-NEXT: hw.typedecl @word : i8
+// CHECK-NEXT: } {extern}
+sv.package @external_types {
+  hw.typedecl @word : i8
+} {extern}
+
 // CHECK-LABEL: hw.module @use_package(
 hw.module @use_package(
   in %arg: !hw.typealias<@types::@word, i8>,

@@ -97,6 +97,9 @@ verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
 //===----------------------------------------------------------------------===//
 
 LogicalResult PackageOp::verify() {
+  if (auto attr = (*this)->getAttr("extern"); attr && !isa<UnitAttr>(attr))
+    return emitOpError("'extern' must be a unit attribute");
+
   for (Operation &op : *getBodyBlock())
     if (!isa<hw::TypedeclOp>(op))
       return emitOpError("body may only contain hw.typedecl operations");

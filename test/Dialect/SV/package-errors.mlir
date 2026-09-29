@@ -7,6 +7,11 @@ sv.package @invalid {
 
 // -----
 
+// expected-error @+1 {{'extern' must be a unit attribute}}
+sv.package @invalid {} {extern = true}
+
+// -----
+
 hw.module @invalid() {
   // expected-error @+1 {{expects parent op 'builtin.module'}}
   sv.package @nested {}
