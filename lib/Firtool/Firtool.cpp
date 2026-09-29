@@ -134,11 +134,16 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // default connections that are then overridden later.  If this pass is run
   // before ExpandWhens, then users can get errors if they rely on last-connect
   // semantics.
-  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode())) {
+  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode());
+      mode || !opt.getDomainReportFilename().empty()) {
     firrtl::InferDomainsOptions passOptions;
-    passOptions.mode = *mode;
+    // Keep the normal domain mode semantics. If reporting was requested while
+    // domain checking is disabled, run the pass in strip mode so it can issue
+    // a clear diagnostic instead of silently skipping the report.
+    passOptions.mode = mode.value_or(firrtl::InferDomainsMode::Strip);
     passOptions.skippedDomains.assign(opt.getSkippedDomains().begin(),
                                       opt.getSkippedDomains().end());
+    passOptions.reportJson = opt.getDomainReportFilename().str();
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createInferDomains(passOptions));
   }
@@ -827,6 +832,12 @@ public:
                      "domain checking. Skipped domains will be erased from the "
                      "circuit after inference")};
 
+  llvm::cl::opt<std::string> domainReportJson{
+      "domain-report-json",
+      llvm::cl::desc("Write domain inference data to JSON (requires "
+                     "--domain-mode=check, infer, or infer-all)"),
+      llvm::cl::init("")};
+
   //===----------------------------------------------------------------------===
   // Lint options
   //===----------------------------------------------------------------------===
@@ -934,4 +945,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   domainMode = clOptions->domainMode;
   skippedDomains.assign(clOptions->skippedDomains.begin(),
                         clOptions->skippedDomains.end());
+  domainReportFilename = clOptions->domainReportJson;
 }

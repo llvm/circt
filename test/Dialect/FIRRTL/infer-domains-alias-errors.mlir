@@ -44,8 +44,11 @@ firrtl.circuit "NonCommonChoiceAlias" {
     firrtl.domain.define %A, %D1 : !firrtl.domain<@ClockDomain()>
     firrtl.domain.define %B, %D2 : !firrtl.domain<@ClockDomain()>
     %X = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    // expected-note @below {{X aliases output instance port choice.O}}
     firrtl.domain.define %X, %O : !firrtl.domain<@ClockDomain()>
     // expected-note @below {{x has domains [choice.O : ClockDomain]}}
+    // expected-note @below {{domain inference path from x to output instance port choice.O}}
+    // expected-note @below {{x is associated with X}}
     %x = firrtl.wire domains[%X] : !firrtl.uint<1>
         domains[!firrtl.domain<@ClockDomain()>]
     // expected-note @below {{y has domains [D1 : ClockDomain]}}

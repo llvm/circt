@@ -188,6 +188,8 @@ public:
 
   ArrayRef<std::string> getSkippedDomains() const { return skippedDomains; }
 
+  StringRef getDomainReportFilename() const { return domainReportFilename; }
+
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
     outputFilename = name;
@@ -432,6 +434,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setDomainReportFilename(StringRef value) {
+    domainReportFilename = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
 
@@ -487,6 +494,7 @@ private:
   bool inlineInputOnlyModules;
   DomainMode domainMode;
   SmallVector<std::string> skippedDomains;
+  std::string domainReportFilename;
 };
 
 void registerFirtoolCLOptions();

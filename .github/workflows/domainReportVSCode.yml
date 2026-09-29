@@ -1,0 +1,49 @@
+name: Package FIRRTL Domain Report VS Code Extension
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: darwin-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: ubuntu-22.04
+            target: linux-x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Configure CIRCT
+        run: >-
+          cmake -G Ninja llvm/llvm -B build
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DLLVM_ENABLE_ASSERTIONS=ON
+          -DLLVM_TARGETS_TO_BUILD=host
+          -DLLVM_ENABLE_PROJECTS=mlir
+          -DLLVM_EXTERNAL_PROJECTS=circt
+          -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=${{ github.workspace }}
+          -DLLVM_ENABLE_LLD=ON
+      - name: Build helper
+        run: ninja -C build bin/circt-domain-report-server
+      - name: Install VS Code package dependencies
+        working-directory: utils/vscode-domains
+        run: npm install --no-audit --no-fund
+      - name: Package extension
+        working-directory: utils/vscode-domains
+        run: npm run package -- --target ${{ matrix.target }} --helper ../../build/bin/circt-domain-report-server
+      - name: Verify packaged helper
+        run: unzip -Z -1 utils/vscode-domains/circt-firrtl-domains-${{ matrix.target }}.vsix | grep -Fx 'extension/bin/${{ matrix.target }}/circt-domain-report-server'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: circt-firrtl-domains-${{ matrix.target }}
+          path: utils/vscode-domains/circt-firrtl-domains-${{ matrix.target }}.vsix

@@ -25,13 +25,22 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Iterators.h"
+#include "mlir/IR/Location.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/JSON.h"
+
+#include <algorithm>
+#include <optional>
 
 #define DEBUG_TYPE "firrtl-infer-domains"
 
@@ -122,6 +131,48 @@ struct DomainTypeID {
 };
 } // namespace
 
+namespace {
+enum class DomainProvenanceKind {
+  Constraint,
+  Association,
+  DomainAlias,
+  InstanceBinding,
+};
+
+struct DomainProvenanceEdge {
+  Value lhs;
+  Value rhs;
+  Operation *op;
+  mlir::Location loc;
+  DomainProvenanceKind kind;
+  size_t domainIndex;
+  bool inferred;
+  bool summarized;
+};
+
+struct DomainAssignment {
+  Value value;
+  Value domain;
+  size_t domainIndex;
+  bool inferred;
+};
+
+struct IllegalDomainCrossing {
+  Operation *owner;
+  Operation *op;
+  Value lhs;
+  Value rhs;
+  DomainValue lhsDomain;
+  DomainValue rhsDomain;
+  DomainValue lhsSource;
+  DomainValue rhsSource;
+  size_t domainIndex;
+};
+
+using ModulePortDomainInferences =
+    SmallVector<std::pair<StringAttr, StringAttr>>;
+} // namespace
+
 /// Information about the changes made to the interface of a moduleOp, which can
 /// be replayed onto an instance.
 namespace {
@@ -136,9 +187,11 @@ struct ModuleUpdateInfo {
 namespace {
 struct CircuitState {
   CircuitState(CircuitOp circuit, InstanceGraph &instanceGraph,
-               InnerRefNamespace &innerRefNamespace, InferDomainsMode mode)
+               InnerRefNamespace &innerRefNamespace, InferDomainsMode mode,
+               StringRef reportJson)
       : circuit(circuit), instanceGraph(instanceGraph),
-        innerRefNamespace(innerRefNamespace), mode(mode) {
+        innerRefNamespace(innerRefNamespace), mode(mode),
+        reportJson(reportJson.str()) {
     processCircuit(circuit);
   }
 
@@ -148,6 +201,40 @@ struct CircuitState {
   size_t getNumDomains() const { return domainTable.size(); }
   DomainOp getDomain(DomainTypeID id) const { return domainTable[id.index]; }
   DomainTypeID getDomainTypeID(Type type) { return typeIDTable[type]; }
+
+  void clearDomainProvenance(Operation *moduleOp) {
+    moduleDomainProvenance[moduleOp].clear();
+  }
+  void recordDomainProvenance(Operation *moduleOp, Value lhs, Value rhs,
+                              Operation *op, mlir::Location loc,
+                              DomainProvenanceKind kind, size_t domainIndex,
+                              bool inferred = false, bool summarized = false) {
+    moduleDomainProvenance[moduleOp].push_back(
+        {lhs, rhs, op, loc, kind, domainIndex, inferred, summarized});
+  }
+  bool isInferredModulePortAssociation(StringAttr moduleName,
+                                       StringAttr portName,
+                                       StringAttr domainPortName) const {
+    auto entry = modulePortDomainInferences.find(moduleName);
+    return entry != modulePortDomainInferences.end() &&
+           llvm::is_contained(entry->second,
+                              std::make_pair(portName, domainPortName));
+  }
+  bool hasExplicitDomainAssociation(Operation *moduleOp, Value value,
+                                    size_t domainIndex) const;
+  void clearDomainAssignments(Operation *moduleOp) {
+    moduleDomainAssignments[moduleOp].clear();
+  }
+  void recordDomainAssignment(Operation *moduleOp, Value value, Value domain,
+                              size_t domainIndex, bool inferred);
+  void recordIllegalDomainCrossing(IllegalDomainCrossing crossing) {
+    if (shouldEmitDomainReport())
+      illegalDomainCrossings.push_back(crossing);
+  }
+  bool shouldEmitDomainReport() const { return !reportJson.empty(); }
+  SmallVector<DomainProvenanceEdge>
+  findDomainProvenancePath(Value value, DomainValue domain,
+                           size_t domainIndex) const;
 
   void dirty() { asmState = nullptr; }
   AsmState &getAsmState() {
@@ -171,6 +258,11 @@ struct CircuitState {
     return moduleDomainPortAliases;
   }
 
+  DenseMap<StringAttr, ModulePortDomainInferences> &
+  getModulePortDomainInferences() {
+    return modulePortDomainInferences;
+  }
+
   InnerRefNamespace &getInnerRefNamespace() { return innerRefNamespace; }
 
   DenseSet<Value> inserted;
@@ -178,6 +270,7 @@ struct CircuitState {
 private:
   LogicalResult runOnModule(Operation *moduleOp);
   LogicalResult materializeOnModule(Operation *moduleOp);
+  LogicalResult writeDomainReport(bool complete);
 
   void processDomain(DomainOp op) {
     auto index = domainTable.size();
@@ -195,14 +288,597 @@ private:
   InstanceGraph &instanceGraph;
   InnerRefNamespace &innerRefNamespace;
   InferDomainsMode mode;
+  std::string reportJson;
   SmallVector<DomainOp> domainTable;
   DenseMap<Type, DomainTypeID> typeIDTable;
   DenseMap<VariableTerm *, size_t> variableIDTable;
   std::unique_ptr<AsmState> asmState;
   DenseMap<StringAttr, ModuleUpdateInfo> moduleUpdateTable;
   DenseMap<StringAttr, DomainPortAliases> moduleDomainPortAliases;
+  DenseMap<StringAttr, ModulePortDomainInferences> modulePortDomainInferences;
+  llvm::MapVector<Operation *, SmallVector<DomainProvenanceEdge>>
+      moduleDomainProvenance;
+  llvm::MapVector<Operation *, SmallVector<DomainAssignment>>
+      moduleDomainAssignments;
+  SmallVector<IllegalDomainCrossing> illegalDomainCrossings;
 };
 } // namespace
+
+SmallVector<DomainProvenanceEdge>
+CircuitState::findDomainProvenancePath(Value value, DomainValue domain,
+                                       size_t domainIndex) const {
+  SmallVector<DomainProvenanceEdge> edges;
+  for (auto &entry : moduleDomainProvenance)
+    llvm::append_range(edges, entry.second);
+
+  DenseMap<Value, SmallVector<unsigned>> adjacency;
+  for (auto [index, edge] : llvm::enumerate(edges)) {
+    adjacency[edge.lhs].push_back(index);
+    adjacency[edge.rhs].push_back(index);
+  }
+
+  struct Previous {
+    Value value;
+    unsigned edgeIndex;
+  };
+  DenseMap<Value, Previous> previous;
+  SmallVector<Value> worklist{value};
+  previous.insert({value, Previous{Value(), 0}});
+  for (size_t i = 0; i < worklist.size(); ++i) {
+    auto current = worklist[i];
+    if (current == domain)
+      break;
+    for (auto edgeIndex : adjacency.lookup(current)) {
+      const auto &edge = edges[edgeIndex];
+      if (edge.domainIndex != domainIndex ||
+          (edge.kind == DomainProvenanceKind::Association && edge.summarized))
+        continue;
+      auto other = edge.lhs == current ? edge.rhs : edge.lhs;
+      if (previous.contains(other))
+        continue;
+      previous.insert({other, Previous{current, edgeIndex}});
+      worklist.push_back(other);
+    }
+  }
+
+  if (!previous.contains(domain))
+    return {};
+
+  SmallVector<DomainProvenanceEdge> path;
+  for (Value current = domain; current != value;) {
+    auto prev = previous.lookup(current);
+    path.push_back(edges[prev.edgeIndex]);
+    current = prev.value;
+  }
+  std::reverse(path.begin(), path.end());
+  return path;
+}
+
+bool CircuitState::hasExplicitDomainAssociation(Operation *moduleOp,
+                                                Value value,
+                                                size_t domainIndex) const {
+  auto it = moduleDomainProvenance.find(moduleOp);
+  if (it == moduleDomainProvenance.end())
+    return false;
+  return llvm::any_of(it->second, [&](const DomainProvenanceEdge &edge) {
+    return edge.kind == DomainProvenanceKind::Association && !edge.inferred &&
+           edge.domainIndex == domainIndex &&
+           (edge.lhs == value || edge.rhs == value);
+  });
+}
+
+void CircuitState::recordDomainAssignment(Operation *moduleOp, Value value,
+                                          Value domain, size_t domainIndex,
+                                          bool inferred) {
+  moduleDomainAssignments[moduleOp].push_back(
+      {value, domain, domainIndex, inferred});
+}
+
+static void collectFileLocations(Location loc, llvm::json::Array &locations) {
+  if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(loc)) {
+    locations.push_back(llvm::json::Object{
+        {"file", fileLoc.getFilename().getValue().str()},
+        {"line", static_cast<int64_t>(fileLoc.getLine())},
+        {"column", static_cast<int64_t>(fileLoc.getColumn())}});
+    return;
+  }
+  if (auto fileRange = dyn_cast<mlir::FileLineColRange>(loc)) {
+    locations.push_back(llvm::json::Object{
+        {"file", fileRange.getFilename().getValue().str()},
+        {"start_line", static_cast<int64_t>(fileRange.getStartLine())},
+        {"start_column", static_cast<int64_t>(fileRange.getStartColumn())},
+        {"end_line", static_cast<int64_t>(fileRange.getEndLine())},
+        {"end_column", static_cast<int64_t>(fileRange.getEndColumn())}});
+    return;
+  }
+  if (auto callSiteLoc = dyn_cast<mlir::CallSiteLoc>(loc)) {
+    collectFileLocations(callSiteLoc.getCallee(), locations);
+    collectFileLocations(callSiteLoc.getCaller(), locations);
+    return;
+  }
+  if (auto nameLoc = dyn_cast<mlir::NameLoc>(loc)) {
+    collectFileLocations(nameLoc.getChildLoc(), locations);
+    return;
+  }
+  if (auto fusedLoc = dyn_cast<mlir::FusedLoc>(loc))
+    for (auto child : fusedLoc.getLocations())
+      collectFileLocations(child, locations);
+}
+
+static llvm::json::Object locationToJSON(Location loc) {
+  std::string printed;
+  llvm::raw_string_ostream stream(printed);
+  loc.print(stream);
+
+  llvm::json::Array locations;
+  collectFileLocations(loc, locations);
+  return llvm::json::Object{{"display", std::move(printed)},
+                            {"sources", std::move(locations)}};
+}
+
+static std::string typeToString(Type type) {
+  std::string printed;
+  llvm::raw_string_ostream stream(printed);
+  type.print(stream);
+  return printed;
+}
+
+static Location getValueLocation(Value value) {
+  if (auto arg = dyn_cast<BlockArgument>(value)) {
+    if (auto module = dyn_cast<FModuleLike>(arg.getOwner()->getParentOp()))
+      return module.getPortLocation(arg.getArgNumber());
+  }
+  if (auto result = dyn_cast<OpResult>(value))
+    if (auto instance = dyn_cast<FInstanceLike>(result.getOwner()))
+      return instance.getPortLocation(result.getResultNumber());
+  return value.getLoc();
+}
+
+static std::string getValueName(Value value, StringRef fallback) {
+  auto name = getFieldName(value).first;
+  if (!name.empty())
+    return name;
+  if (auto arg = dyn_cast<BlockArgument>(value))
+    if (auto module = dyn_cast<FModuleLike>(arg.getOwner()->getParentOp()))
+      return module.getPortName(arg.getArgNumber()).str();
+  if (auto result = dyn_cast<OpResult>(value))
+    if (auto instance = dyn_cast<FInstanceLike>(result.getOwner()))
+      return instance.getPortName(result.getResultNumber()).str();
+
+  return fallback.str();
+}
+
+LogicalResult CircuitState::writeDomainReport(bool complete) {
+  using llvm::json::Array;
+  using llvm::json::Object;
+  using JsonValue = llvm::json::Value;
+  using ID = int64_t;
+
+  struct ModuleReport {
+    FModuleLike module;
+    ID id;
+    SmallVector<Value> values;
+    SmallVector<FInstanceLike> instances;
+  };
+
+  SmallVector<ModuleReport> modules;
+  DenseMap<Operation *, ID> moduleIDs;
+  DenseMap<Operation *, ID> instanceIDs;
+  DenseMap<Value, ID> valueIDs;
+  DenseMap<Location, ID> locationIDs;
+  DenseMap<Type, ID> typeIDs;
+  DenseMap<Operation *, ID> operationKindIDByOp;
+  llvm::StringMap<ID> operationKindIDs;
+  SmallVector<Location> locations;
+  SmallVector<Type> types;
+  SmallVector<std::string> operationKindNames;
+
+  for (auto module : circuit.getOps<FModuleLike>()) {
+    auto moduleID = static_cast<ID>(modules.size());
+    moduleIDs[module.getOperation()] = moduleID;
+    modules.push_back({module, moduleID, {}, {}});
+  }
+
+  for (auto &moduleReport : modules) {
+    auto module = moduleReport.module;
+    DenseSet<Value> seenValues;
+    auto addValue = [&](Value value) {
+      if (!seenValues.insert(value).second)
+        return;
+      auto valueID = static_cast<ID>(valueIDs.size());
+      valueIDs[value] = valueID;
+      moduleReport.values.push_back(value);
+    };
+
+    if (auto moduleOp = dyn_cast<FModuleOp>(module.getOperation()))
+      for (size_t i = 0; i < moduleOp.getNumPorts(); ++i) {
+        auto value = moduleOp.getArgument(i);
+        addValue(value);
+      }
+
+    module->walk([&](Operation *op) {
+      if (op != module.getOperation()) {
+        if (auto instance = dyn_cast<FInstanceLike>(op)) {
+          auto instanceID = static_cast<ID>(instanceIDs.size());
+          instanceIDs[op] = instanceID;
+          moduleReport.instances.push_back(instance);
+        }
+        for (auto result : op->getResults())
+          if (isHardware(result) || isa<DomainType>(result.getType()))
+            addValue(result);
+      }
+      for (auto &region : op->getRegions())
+        for (auto &block : region)
+          if (op != module.getOperation())
+            for (auto arg : block.getArguments())
+              if (isHardware(arg) || isa<DomainType>(arg.getType()))
+                addValue(arg);
+    });
+  }
+
+  auto getLocationID = [&](Location location) -> ID {
+    auto it = locationIDs.find(location);
+    if (it != locationIDs.end())
+      return it->second;
+    auto id = static_cast<ID>(locations.size());
+    locationIDs[location] = id;
+    locations.push_back(location);
+    return id;
+  };
+  auto getTypeID = [&](Type type) -> ID {
+    auto it = typeIDs.find(type);
+    if (it != typeIDs.end())
+      return it->second;
+    auto id = static_cast<ID>(types.size());
+    typeIDs[type] = id;
+    types.push_back(type);
+    return id;
+  };
+  auto getOperationKindID = [&](Operation *op) -> ID {
+    auto opIt = operationKindIDByOp.find(op);
+    if (opIt != operationKindIDByOp.end())
+      return opIt->second;
+    auto name = op->getName().getStringRef();
+    auto kindIt = operationKindIDs.find(name);
+    ID id;
+    if (kindIt != operationKindIDs.end()) {
+      id = kindIt->second;
+    } else {
+      id = static_cast<ID>(operationKindIDs.size());
+      operationKindIDs[name] = id;
+      operationKindNames.push_back(name.str());
+    }
+    operationKindIDByOp[op] = id;
+    return id;
+  };
+  auto getValueID = [&](mlir::Value value) -> std::optional<ID> {
+    auto it = valueIDs.find(value);
+    if (it == valueIDs.end())
+      return std::nullopt;
+    return it->second;
+  };
+  auto getValueIDJSON = [&](mlir::Value value) -> JsonValue {
+    if (auto id = getValueID(value))
+      return *id;
+    return nullptr;
+  };
+
+  Array domainJSON;
+  for (auto [index, domain] : llvm::enumerate(domainTable)) {
+    domainJSON.push_back(
+        Object{{"id", static_cast<int64_t>(index)},
+               {"name", domain.getNameAttr().getValue().str()},
+               {"location_id", getLocationID(domain.getLoc())}});
+  }
+
+  Array moduleJSON;
+  for (auto &moduleReport : modules) {
+    auto module = moduleReport.module;
+    auto moduleName = module.getModuleNameAttr().getValue();
+    Array valuesJSON;
+    for (auto value : moduleReport.values) {
+      auto valueID = valueIDs.lookup(value);
+      auto fallbackName = (Twine("value#") + Twine(valueID)).str();
+      Object valueObject{
+          {"id", valueID},
+          {"name", getValueName(value, fallbackName)},
+          {"kind", isa<DomainType>(value.getType()) ? "domain" : "hardware"},
+          {"type_id", getTypeID(value.getType())},
+          {"location_id", getLocationID(getValueLocation(value))}};
+
+      if (isa<DomainType>(value.getType())) {
+        auto domainIndex = getDomainTypeID(value.getType()).index;
+        valueObject["domain_type_id"] = static_cast<int64_t>(domainIndex);
+      }
+      if (auto arg = dyn_cast<BlockArgument>(value)) {
+        if (auto parentModule =
+                dyn_cast<FModuleLike>(arg.getOwner()->getParentOp())) {
+          auto index = arg.getArgNumber();
+          valueObject["port_index"] = static_cast<int64_t>(index);
+          valueObject["port_direction"] =
+              direction::toString(parentModule.getPortDirection(index)).str();
+        }
+      } else if (auto result = dyn_cast<OpResult>(value)) {
+        if (auto instance = dyn_cast<FInstanceLike>(result.getOwner())) {
+          auto index = result.getResultNumber();
+          valueObject["instance_port_index"] = static_cast<int64_t>(index);
+          valueObject["port_direction"] =
+              direction::toString(instance.getPortDirection(index)).str();
+          auto instanceID = instanceIDs.find(instance);
+          if (instanceID != instanceIDs.end())
+            valueObject["instance_id"] = instanceID->second;
+        } else if (auto *op = result.getOwner()) {
+          valueObject["definition"] = op->getName().getStringRef().str();
+        }
+      }
+
+      Array assignmentsJSON;
+      auto assignmentsIt = moduleDomainAssignments.find(module.getOperation());
+      if (assignmentsIt != moduleDomainAssignments.end())
+        for (const auto &assignment : assignmentsIt->second) {
+          if (assignment.value != value)
+            continue;
+          Object assignmentObject{
+              {"domain_type_id", static_cast<int64_t>(assignment.domainIndex)},
+              {"inferred", assignment.inferred}};
+          if (auto assignedDomain = getValueID(assignment.domain))
+            assignmentObject["domain_value_id"] = *assignedDomain;
+          else
+            assignmentObject["domain_value_id"] = nullptr;
+          assignmentsJSON.push_back(std::move(assignmentObject));
+        }
+      if (!assignmentsJSON.empty())
+        valueObject["domain_assignments"] = std::move(assignmentsJSON);
+      valuesJSON.push_back(std::move(valueObject));
+    }
+
+    Array portsJSON;
+    auto domainInfo = module.getDomainInfoAttr();
+    for (size_t i = 0; i < module.getNumPorts(); ++i) {
+      Object portObject{{"index", static_cast<int64_t>(i)}};
+      if (auto moduleOp = dyn_cast<FModuleOp>(module.getOperation())) {
+        portObject["value_id"] = getValueIDJSON(moduleOp.getArgument(i));
+      } else {
+        portObject["name"] = module.getPortName(i).str();
+        portObject["type_id"] = getTypeID(module.getPortType(i));
+        portObject["direction"] =
+            direction::toString(module.getPortDirection(i)).str();
+        portObject["location_id"] = getLocationID(module.getPortLocation(i));
+      }
+      Array portAssignmentsJSON;
+      if (isHardware(module.getPortType(i)))
+        for (auto domainPortIndexAttr :
+             getPortDomainAssociation(domainInfo, i)) {
+          auto domainPortIndex = domainPortIndexAttr.getUInt();
+          if (domainPortIndex >= module.getNumPorts() ||
+              !isa<DomainType>(module.getPortType(domainPortIndex)))
+            continue;
+          auto domainIndex =
+              getDomainTypeID(module.getPortType(domainPortIndex)).index;
+          bool inferred = false;
+          if (isa<FModuleOp>(module.getOperation()))
+            inferred = isInferredModulePortAssociation(
+                module.getModuleNameAttr(), module.getPortNameAttr(i),
+                module.getPortNameAttr(domainPortIndex));
+          Object assignment{
+              {"domain_type_id", static_cast<int64_t>(domainIndex)},
+              {"domain_port_index", static_cast<int64_t>(domainPortIndex)},
+              {"domain_port_value_id",
+               [&]() -> JsonValue {
+                 if (auto moduleOp = dyn_cast<FModuleOp>(module.getOperation()))
+                   return getValueIDJSON(moduleOp.getArgument(domainPortIndex));
+                 return nullptr;
+               }()},
+              {"inferred", inferred}};
+          portAssignmentsJSON.push_back(std::move(assignment));
+        }
+      if (!portAssignmentsJSON.empty())
+        portObject["domain_assignments"] = std::move(portAssignmentsJSON);
+      portsJSON.push_back(std::move(portObject));
+    }
+
+    Array instancesJSON;
+    auto &irns = getInnerRefNamespace();
+    for (auto instance : moduleReport.instances) {
+      auto instanceID = instanceIDs.lookup(instance);
+      auto targetNames = instance.getReferencedModuleNamesAttr();
+      Array targetsJSON;
+      Array bindingsJSON;
+      for (auto targetNameAttr : targetNames.getAsRange<StringAttr>()) {
+        auto targetName = targetNameAttr.getValue();
+        auto targetOp = irns.symTable.lookup(targetNameAttr);
+        auto targetIDIt = moduleIDs.find(targetOp);
+        JsonValue targetID = targetIDIt == moduleIDs.end()
+                                 ? JsonValue(targetName.str())
+                                 : JsonValue(targetIDIt->second);
+        targetsJSON.push_back(std::move(targetID));
+        auto target = llvm::dyn_cast_if_present<FModuleLike>(targetOp);
+        if (!target || targetIDIt == moduleIDs.end())
+          continue;
+        auto numPorts = std::min(instance.getNumPorts(), target.getNumPorts());
+        for (size_t i = 0; i < numPorts; ++i) {
+          if (!isHardware(target.getPortType(i)))
+            continue;
+          auto instancePort = instance->getResult(i);
+          for (auto domainPortIndexAttr :
+               getPortDomainAssociation(target.getDomainInfoAttr(), i)) {
+            auto domainPortIndex = domainPortIndexAttr.getUInt();
+            if (domainPortIndex >= instance.getNumPorts() ||
+                !isa<DomainType>(
+                    instance->getResult(domainPortIndex).getType()))
+              continue;
+            auto domainIndex =
+                getDomainTypeID(target.getPortType(domainPortIndex)).index;
+            auto domainValue = instance->getResult(domainPortIndex);
+            Object binding{
+                {"target_module_id", targetIDIt->second},
+                {"port_index", static_cast<int64_t>(i)},
+                {"port_value_id", getValueIDJSON(instancePort)},
+                {"domain_type_id", static_cast<int64_t>(domainIndex)},
+                {"domain_port_index", static_cast<int64_t>(domainPortIndex)},
+                {"effective_domain_value_id", getValueIDJSON(domainValue)},
+                {"effective_domain_value_name", getValueName(domainValue, "")},
+                {"location_id", getLocationID(instance.getPortLocation(i))}};
+            bindingsJSON.push_back(std::move(binding));
+          }
+        }
+      }
+      instancesJSON.push_back(
+          Object{{"id", instanceID},
+                 {"name", instance.getInstanceName().str()},
+                 {"targets", std::move(targetsJSON)},
+                 {"location_id", getLocationID(instance.getLoc())},
+                 {"effective_domain_bindings", std::move(bindingsJSON)}});
+    }
+
+    moduleJSON.push_back(
+        Object{{"id", moduleReport.id},
+               {"name", moduleName.str()},
+               {"kind", isa<FExtModuleOp>(module.getOperation()) ? "extmodule"
+                                                                 : "module"},
+               {"ports", std::move(portsJSON)},
+               {"values", std::move(valuesJSON)},
+               {"instances", std::move(instancesJSON)}});
+  }
+
+  // Keep edge records as positional arrays to avoid repeating object keys.
+  Array edgeKindsJSON{"constraint", "association", "domain_alias",
+                      "instance_binding"};
+  Array edgeFieldsJSON{"owner_module_id", "kind_id",
+                       "domain_type_id",  "location_id",
+                       "flags",           "lhs_value_id",
+                       "rhs_value_id",    "operation_kind_id",
+                       "instance_id",     "target_module_id"};
+
+  // Intern source locations and operation kinds before serializing the tables.
+  for (auto &entry : moduleDomainProvenance)
+    for (const auto &edge : entry.second) {
+      getLocationID(edge.loc);
+      if (edge.op)
+        getOperationKindID(edge.op);
+    }
+  for (const auto &crossing : illegalDomainCrossings) {
+    getLocationID(crossing.op->getLoc());
+    getOperationKindID(crossing.op);
+  }
+
+  Array typesJSON;
+  for (auto type : types)
+    typesJSON.push_back(typeToString(type));
+
+  Array locationsJSON;
+  for (auto location : locations)
+    locationsJSON.push_back(locationToJSON(location));
+
+  Array operationKindsJSON;
+  for (const auto &operationKind : operationKindNames)
+    operationKindsJSON.push_back(operationKind);
+
+  Array edgesJSON;
+  for (auto &entry : moduleDomainProvenance) {
+    auto ownerIt = moduleIDs.find(entry.first);
+    if (ownerIt == moduleIDs.end())
+      continue;
+    for (const auto &edge : entry.second) {
+      int64_t kindID = 0;
+      switch (edge.kind) {
+      case DomainProvenanceKind::Constraint:
+        kindID = 0;
+        break;
+      case DomainProvenanceKind::Association:
+        kindID = 1;
+        break;
+      case DomainProvenanceKind::DomainAlias:
+        kindID = 2;
+        break;
+      case DomainProvenanceKind::InstanceBinding:
+        kindID = 3;
+        break;
+      }
+      auto lhsID = getValueID(edge.lhs);
+      auto rhsID = getValueID(edge.rhs);
+      int64_t flags = (edge.inferred ? 1 : 0) | (edge.summarized ? 2 : 0);
+      Array edgeJSON{ownerIt->second,
+                     kindID,
+                     static_cast<int64_t>(edge.domainIndex),
+                     getLocationID(edge.loc),
+                     flags,
+                     lhsID ? JsonValue(*lhsID) : JsonValue(nullptr),
+                     rhsID ? JsonValue(*rhsID) : JsonValue(nullptr),
+                     edge.op ? JsonValue(operationKindIDByOp.lookup(edge.op))
+                             : JsonValue(nullptr),
+                     nullptr,
+                     nullptr};
+
+      if (edge.op)
+        if (auto instance = dyn_cast<FInstanceLike>(edge.op))
+          if (auto instanceIt = instanceIDs.find(instance);
+              instanceIt != instanceIDs.end())
+            edgeJSON[8] = instanceIt->second;
+
+      if (edge.kind == DomainProvenanceKind::InstanceBinding)
+        if (auto rhsArg = dyn_cast<BlockArgument>(edge.rhs))
+          if (auto targetModule =
+                  dyn_cast<FModuleLike>(rhsArg.getOwner()->getParentOp())) {
+            auto targetIt = moduleIDs.find(targetModule.getOperation());
+            if (targetIt != moduleIDs.end())
+              edgeJSON[9] = targetIt->second;
+          }
+
+      edgesJSON.push_back(std::move(edgeJSON));
+    }
+  }
+
+  Array crossingsJSON;
+  for (const auto &crossing : illegalDomainCrossings) {
+    auto owner = moduleIDs.find(crossing.owner);
+    if (owner == moduleIDs.end())
+      continue;
+    crossingsJSON.push_back(
+        Object{{"owner_module_id", owner->second},
+               {"domain_type_id", static_cast<ID>(crossing.domainIndex)},
+               {"location_id", getLocationID(crossing.op->getLoc())},
+               {"operation_kind_id", operationKindIDByOp.lookup(crossing.op)},
+               {"lhs_value_id", getValueIDJSON(crossing.lhs)},
+               {"rhs_value_id", getValueIDJSON(crossing.rhs)},
+               {"lhs_domain_value_id", getValueIDJSON(crossing.lhsDomain)},
+               {"rhs_domain_value_id", getValueIDJSON(crossing.rhsDomain)},
+               {"lhs_source_value_id", getValueIDJSON(crossing.lhsSource)},
+               {"rhs_source_value_id", getValueIDJSON(crossing.rhsSource)}});
+  }
+
+  Object report{
+      {"format", "circt-domain-inference"},
+      {"version", 3},
+      {"complete", complete},
+      {"types", std::move(typesJSON)},
+      {"locations", std::move(locationsJSON)},
+      {"operation_kinds", std::move(operationKindsJSON)},
+      {"provenance_edge_kinds", std::move(edgeKindsJSON)},
+      {"provenance_edge_fields", std::move(edgeFieldsJSON)},
+      {"provenance_edge_flags", Object{{"inferred", 1}, {"summarized", 2}}},
+      {"instance_binding_direction", "parent_instance_to_module_template"},
+      {"domains", std::move(domainJSON)},
+      {"modules", std::move(moduleJSON)},
+      {"provenance_edges", std::move(edgesJSON)},
+      {"illegal_crossings", std::move(crossingsJSON)}};
+
+  std::error_code error;
+  llvm::raw_fd_ostream output(reportJson, error, llvm::sys::fs::OF_Text);
+  if (error)
+    return circuit.emitError() << "could not open domain report '" << reportJson
+                               << "': " << error.message();
+  llvm::json::OStream json(output, /*IndentSize=*/2);
+  json.value(JsonValue(std::move(report)));
+  json.flush();
+  if (output.has_error()) {
+    auto message = output.error().message();
+    output.clear_error();
+    return circuit.emitError() << "failed to write domain report '"
+                               << reportJson << "': " << message;
+  }
+  return success();
+}
 
 //====--------------------------------------------------------------------------
 // Terms: Syntax for unifying domain and domain-rows.
@@ -366,8 +1042,10 @@ public:
 
   void noteLocation(InFlightDiagnostic &diag, Operation *op);
   void noteDomain(InFlightDiagnostic &diag, DomainValue domain);
-  void noteDomainSource(InFlightDiagnostic &diag, DomainValue domain);
-  void noteDomainSource(InFlightDiagnostic &diag, Term *term);
+  DomainValue noteDomainSource(InFlightDiagnostic &diag, DomainValue domain);
+  DomainValue noteDomainSource(InFlightDiagnostic &diag, Term *term);
+  void noteDomainInferencePath(InFlightDiagnostic &diag, Value value,
+                               DomainValue domain, size_t domainIndex);
   void emitDomainCrossingError(Operation *op, Value lhs, Term *lhsTerm,
                                Value rhs, Term *rhsTerm);
   template <typename T>
@@ -401,6 +1079,18 @@ public:
   LogicalResult processOp(WireOp op);
   LogicalResult processOp(RWProbeOp op);
   LogicalResult processOp(Operation *op);
+  void recordProvenance(Value lhs, Value rhs, Operation *op,
+                        DomainProvenanceKind kind, size_t domainIndex,
+                        bool inferred = false, bool summarized = false);
+  void recordProvenance(Value lhs, Value rhs, Operation *op,
+                        DomainProvenanceKind kind, size_t domainIndex,
+                        mlir::Location loc, bool inferred = false,
+                        bool summarized = false);
+  void recordDomainDefinition(DomainDefineOp op);
+  void recordInstanceBindings(FInstanceLike op);
+  void recordVariableAssociations(VariableTerm *var, DomainValue domain,
+                                  Operation *op);
+  void recordDomainAssignments(FModuleOp moduleOp);
   LogicalResult processModuleBody(FModuleOp moduleOp);
   LogicalResult processModule(FModuleOp moduleOp);
   LogicalResult materializeModule(FModuleOp moduleOp);
@@ -464,6 +1154,7 @@ public:
 
 private:
   CircuitState &globals;
+  Operation *provenanceOwner = nullptr;
   DenseMap<Value, Term *> termTable;
   DenseMap<Value, Term *> associationTable;
   /// Memoization for `isColorless`. Absent = not computed; present = result.
@@ -573,6 +1264,142 @@ ModuleState::RenderLong ModuleState::renderLong(Value value) {
 static Diagnostic &operator<<(Diagnostic &diag, ModuleState::RenderLong r) {
   r.state->renderLong(r.value, diag);
   return diag;
+}
+
+void ModuleState::recordProvenance(Value lhs, Value rhs, Operation *op,
+                                   DomainProvenanceKind kind,
+                                   size_t domainIndex, bool inferred,
+                                   bool summarized) {
+  if (!provenanceOwner || !lhs || !rhs)
+    return;
+  auto loc = op ? op->getLoc() : lhs.getLoc();
+  recordProvenance(lhs, rhs, op, kind, domainIndex, loc, inferred, summarized);
+}
+
+void ModuleState::recordProvenance(Value lhs, Value rhs, Operation *op,
+                                   DomainProvenanceKind kind,
+                                   size_t domainIndex, mlir::Location loc,
+                                   bool inferred, bool summarized) {
+  if (!provenanceOwner || !lhs || !rhs)
+    return;
+  globals.recordDomainProvenance(provenanceOwner, lhs, rhs, op, loc, kind,
+                                 domainIndex, inferred, summarized);
+}
+
+void ModuleState::recordDomainDefinition(DomainDefineOp op) {
+  auto dest = op.getDest();
+  recordProvenance(dest, op.getSrc(), op, DomainProvenanceKind::DomainAlias,
+                   getDomainTypeID(dest).index);
+}
+
+void ModuleState::recordInstanceBindings(FInstanceLike op) {
+  auto &irns = globals.getInnerRefNamespace();
+  auto names = op.getReferencedModuleNamesAttr().getAsRange<StringAttr>();
+  for (auto name : names) {
+    auto moduleOp = dyn_cast<FModuleOp>(irns.symTable.lookup(name));
+    if (!moduleOp)
+      continue;
+
+    auto numPorts = std::min(op.getNumPorts(), moduleOp.getNumPorts());
+    for (size_t i = 0; i < numPorts; ++i) {
+      auto instancePort = op->getResult(i);
+      auto modulePort = moduleOp.getArgument(i);
+      if (isa<DomainType>(instancePort.getType()) &&
+          isa<DomainType>(modulePort.getType())) {
+        auto typeID = getDomainTypeID(instancePort.getType());
+        recordProvenance(instancePort, modulePort, op,
+                         DomainProvenanceKind::InstanceBinding, typeID.index);
+        continue;
+      }
+      if (!isHardware(instancePort) || !isHardware(modulePort))
+        continue;
+      for (size_t domainIndex = 0; domainIndex < getNumDomains(); ++domainIndex)
+        recordProvenance(instancePort, modulePort, op,
+                         DomainProvenanceKind::InstanceBinding, domainIndex);
+    }
+  }
+}
+
+void ModuleState::recordVariableAssociations(VariableTerm *var,
+                                             DomainValue domain,
+                                             Operation *op) {
+  auto *root = find(var);
+  auto domainIndex = getDomainTypeID(domain).index;
+  for (auto [value, term] : associationTable) {
+    auto *association = find(term);
+    if (auto *row = dyn_cast<RowTerm>(association)) {
+      if (domainIndex < row->elements.size() &&
+          find(row->elements[domainIndex]) == root)
+        recordProvenance(value, domain, op, DomainProvenanceKind::Association,
+                         domainIndex, true);
+      continue;
+    }
+    if (association == root)
+      recordProvenance(value, domain, op, DomainProvenanceKind::Association,
+                       domainIndex, true);
+  }
+}
+
+void ModuleState::recordDomainAssignments(FModuleOp moduleOp) {
+  if (!globals.shouldEmitDomainReport())
+    return;
+
+  globals.clearDomainAssignments(moduleOp);
+  for (auto [value, term] : associationTable) {
+    auto *row = dyn_cast<RowTerm>(find(term));
+    if (!row)
+      continue;
+    for (auto [domainIndex, domainTerm] : llvm::enumerate(row->elements)) {
+      Value domain;
+      if (auto *domainValue = dyn_cast<ValueTerm>(find(domainTerm)))
+        domain = domainValue->value;
+      auto inferred =
+          !globals.hasExplicitDomainAssociation(moduleOp, value, domainIndex);
+      globals.recordDomainAssignment(moduleOp, value, domain, domainIndex,
+                                     inferred);
+    }
+  }
+}
+
+void ModuleState::noteDomainInferencePath(InFlightDiagnostic &diag, Value value,
+                                          DomainValue domain,
+                                          size_t domainIndex) {
+  auto path = globals.findDomainProvenancePath(value, domain, domainIndex);
+  if (path.empty())
+    return;
+  if (path.size() == 1 &&
+      path.front().kind == DomainProvenanceKind::Association &&
+      !path.front().inferred)
+    return;
+
+  auto &header = diag.attachNote(value.getLoc());
+  header << "domain inference path from " << renderLong(value) << " to "
+         << renderLong(domain);
+  for (const auto &edge : path) {
+    auto &note = diag.attachNote(edge.loc);
+    switch (edge.kind) {
+    case DomainProvenanceKind::Constraint:
+      note << "domains of " << renderLong(edge.lhs) << " and "
+           << renderLong(edge.rhs) << " are constrained to match";
+      if (edge.op)
+        note << " by " << edge.op->getName().getStringRef();
+      break;
+    case DomainProvenanceKind::Association: {
+      auto hardware = isa<DomainType>(edge.lhs.getType()) ? edge.rhs : edge.lhs;
+      auto associatedDomain =
+          isa<DomainType>(edge.lhs.getType()) ? edge.lhs : edge.rhs;
+      note << renderLong(hardware) << " is associated with "
+           << renderLong(associatedDomain);
+      break;
+    }
+    case DomainProvenanceKind::DomainAlias:
+      note << renderLong(edge.lhs) << " aliases " << renderLong(edge.rhs);
+      break;
+    case DomainProvenanceKind::InstanceBinding:
+      note << renderLong(edge.lhs) << " is bound to " << renderLong(edge.rhs);
+      break;
+    }
+  }
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -978,8 +1805,8 @@ void ModuleState::noteDomain(InFlightDiagnostic &diag, DomainValue domain) {
   note << " declared here";
 }
 
-void ModuleState::noteDomainSource(InFlightDiagnostic &diag,
-                                   DomainValue domain) {
+DomainValue ModuleState::noteDomainSource(InFlightDiagnostic &diag,
+                                          DomainValue domain) {
   auto &irns = globals.getInnerRefNamespace();
   SmallVector<FInstanceLike> stack;
   llvm::SmallDenseSet<DomainValue> seen;
@@ -1066,7 +1893,7 @@ void ModuleState::noteDomainSource(InFlightDiagnostic &diag,
   while (true) {
     auto [it, inserted] = seen.insert(domain);
     if (!inserted)
-      return;
+      return domain;
 
     noteDomain(diag, domain);
     chaseConnect() || chaseModulePort() || chaseInstancePort() ||
@@ -1074,12 +1901,13 @@ void ModuleState::noteDomainSource(InFlightDiagnostic &diag,
   }
 }
 
-void ModuleState::noteDomainSource(InFlightDiagnostic &diag, Term *term) {
+DomainValue ModuleState::noteDomainSource(InFlightDiagnostic &diag,
+                                          Term *term) {
   auto *val = dyn_cast<ValueTerm>(find(term));
   if (!val)
-    return;
+    return nullptr;
 
-  noteDomainSource(diag, val->value);
+  return noteDomainSource(diag, val->value);
 }
 
 void ModuleState::emitDomainCrossingError(Operation *op, Value lhs,
@@ -1107,8 +1935,18 @@ void ModuleState::emitDomainCrossingError(Operation *op, Value lhs,
     if (lhsDomain == rhsDomain)
       continue;
 
-    noteDomainSource(diag, lhsDomain);
-    noteDomainSource(diag, rhsDomain);
+    if (auto *domain = dyn_cast<ValueTerm>(lhsDomain))
+      noteDomainInferencePath(diag, lhs, domain->value, i);
+    if (auto *domain = dyn_cast<ValueTerm>(rhsDomain))
+      noteDomainInferencePath(diag, rhs, domain->value, i);
+    auto lhsSource = noteDomainSource(diag, lhsDomain);
+    auto rhsSource = noteDomainSource(diag, rhsDomain);
+    auto *lhsValue = dyn_cast<ValueTerm>(lhsDomain);
+    auto *rhsValue = dyn_cast<ValueTerm>(rhsDomain);
+    if (lhsValue && rhsValue)
+      globals.recordIllegalDomainCrossing({provenanceOwner, op, lhs, rhs,
+                                           lhsValue->value, rhsValue->value,
+                                           lhsSource, rhsSource, i});
   }
 }
 
@@ -1219,20 +2057,32 @@ LogicalResult ModuleState::unifyAssociations(Operation *op, Value lhs,
         emitDomainCrossingError(op, lhs, lhsTerm, rhs, rhsTerm);
         return failure();
       }
+      for (size_t domainIndex = 0; domainIndex < getNumDomains(); ++domainIndex)
+        recordProvenance(lhs, rhs, op, DomainProvenanceKind::Constraint,
+                         domainIndex);
       return success();
     }
     setDomainAssociation(rhs, lhsTerm);
+    for (size_t domainIndex = 0; domainIndex < getNumDomains(); ++domainIndex)
+      recordProvenance(lhs, rhs, op, DomainProvenanceKind::Constraint,
+                       domainIndex);
     return success();
   }
 
   if (rhsTerm) {
     setDomainAssociation(lhs, rhsTerm);
+    for (size_t domainIndex = 0; domainIndex < getNumDomains(); ++domainIndex)
+      recordProvenance(lhs, rhs, op, DomainProvenanceKind::Constraint,
+                       domainIndex);
     return success();
   }
 
   auto *var = allocVar();
   setDomainAssociation(lhs, var);
   setDomainAssociation(rhs, var);
+  for (size_t domainIndex = 0; domainIndex < getNumDomains(); ++domainIndex)
+    recordProvenance(lhs, rhs, op, DomainProvenanceKind::Constraint,
+                     domainIndex);
   return success();
 }
 
@@ -1308,6 +2158,19 @@ LogicalResult ModuleState::processModulePorts(FModuleOp moduleOp) {
 
     auto *domainAssociations = allocRow(elements);
     setDomainAssociation(port, domainAssociations);
+    for (size_t domainIndex = 0; domainIndex < numDomains; ++domainIndex) {
+      auto domainPortIndex = associations[domainIndex];
+      if (!domainPortIndex)
+        continue;
+      auto domainPortValue =
+          cast<DomainValue>(moduleOp.getArgument(domainPortIndex.getUInt()));
+      auto inferred = globals.isInferredModulePortAssociation(
+          moduleOp.getModuleNameAttr(), moduleOp.getPortNameAttr(i),
+          moduleOp.getPortNameAttr(domainPortIndex.getUInt()));
+      recordProvenance(port, domainPortValue, moduleOp,
+                       DomainProvenanceKind::Association, domainIndex,
+                       moduleOp.getPortLocation(i), inferred, inferred);
+    }
   }
 
   return success();
@@ -1361,6 +2224,25 @@ LogicalResult ModuleState::processInstancePorts(T op) {
 
     auto *domainAssociations = allocRow(elements);
     setDomainAssociation(port, domainAssociations);
+    for (size_t domainIndex = 0; domainIndex < numDomains; ++domainIndex) {
+      auto domainPortIndex = associations[domainIndex];
+      if (!domainPortIndex)
+        continue;
+      auto domainPortValue =
+          cast<DomainValue>(op->getResult(domainPortIndex.getUInt()));
+      bool inferred = false;
+      auto portName = op.getPortNameAttr(i);
+      auto domainPortName = op.getPortNameAttr(domainPortIndex.getUInt());
+      auto names =
+          op.getReferencedModuleNamesAttr().template getAsRange<StringAttr>();
+      for (auto name : names) {
+        inferred |= globals.isInferredModulePortAssociation(name, portName,
+                                                            domainPortName);
+      }
+      recordProvenance(port, domainPortValue, op,
+                       DomainProvenanceKind::Association, domainIndex,
+                       op.getPortLocation(i), inferred, inferred);
+    }
   }
 
   return success();
@@ -1404,8 +2286,11 @@ LogicalResult ModuleState::processInstanceDomainPortAliases(FInstanceLike op) {
 
     auto *lhsTerm = getTermForDomain(lhs);
     auto *rhsTerm = getTermForDomain(rhs);
-    if (succeeded(unify(lhsTerm, rhsTerm)))
+    if (succeeded(unify(lhsTerm, rhsTerm))) {
+      recordProvenance(lhs, rhs, op, DomainProvenanceKind::DomainAlias,
+                       getDomainTypeID(lhs).index);
       continue;
+    }
 
     auto diag = op->emitOpError()
                 << "domain ports " << op.getPortName(lhsIndex) << " and "
@@ -1443,6 +2328,7 @@ LogicalResult ModuleState::processOp(FInstanceLike op) {
     }
   }
 
+  recordInstanceBindings(op);
   if (failed(processInstanceDomainPortAliases(op)))
     return failure();
 
@@ -1457,19 +2343,29 @@ LogicalResult ModuleState::processOp(UnsafeDomainCastOp op) {
   auto input = op.getInput();
 
   SmallVector<Term *> elements(getNumDomains());
-  if (isHardware(input) && !isColorless(input)) {
+  bool hasInputAssociation = isHardware(input) && !isColorless(input);
+  if (hasInputAssociation) {
     auto *inputRow = getDomainAssociationAsRow(input);
     elements.assign(inputRow->elements);
   }
 
+  DenseSet<size_t> explicitDomains;
   for (auto value : op.getDomains()) {
     auto domain = cast<DomainValue>(value);
     auto typeID = getDomainTypeID(domain);
     elements[typeID.index] = getTermForDomain(domain);
+    explicitDomains.insert(typeID.index);
+    recordProvenance(op.getResult(), domain, op,
+                     DomainProvenanceKind::Association, typeID.index);
   }
 
   auto *row = allocRow(elements);
   setDomainAssociation(op.getResult(), row);
+  if (hasInputAssociation)
+    for (size_t domainIndex = 0; domainIndex < getNumDomains(); ++domainIndex)
+      if (!explicitDomains.contains(domainIndex))
+        recordProvenance(input, op.getResult(), op,
+                         DomainProvenanceKind::Constraint, domainIndex);
   return success();
 }
 
@@ -1479,8 +2375,11 @@ LogicalResult ModuleState::processOp(DomainDefineOp op) {
 
   auto *srcTerm = getTermForDomain(src);
   auto *dstTerm = getTermForDomain(dst);
-  if (succeeded(unify(dstTerm, srcTerm)))
+  if (succeeded(unify(dstTerm, srcTerm))) {
+    recordProvenance(dst, src, op, DomainProvenanceKind::DomainAlias,
+                     getDomainTypeID(dst).index);
     return success();
+  }
 
   auto diag =
       op->emitOpError()
@@ -1504,15 +2403,21 @@ LogicalResult ModuleState::processOp(WireOp op) {
   // Build a row with the explicitly-specified domain slots filled in and set
   // it as the association for this wire result.
   SmallVector<Term *> elements(getNumDomains());
+  SmallVector<std::pair<DomainValue, size_t>> explicitDomains;
   for (auto domain : op.getDomains()) {
     auto domainValue = cast<DomainValue>(domain);
     auto typeID = getDomainTypeID(domainValue);
     elements[typeID.index] = getTermForDomain(domainValue);
+    explicitDomains.push_back({domainValue, typeID.index});
   }
 
   auto *row = allocRow(elements);
   for (auto result : op.getResults())
     setDomainAssociation(result, row);
+  for (auto result : op.getResults())
+    for (auto [domain, domainIndex] : explicitDomains)
+      recordProvenance(result, domain, op, DomainProvenanceKind::Association,
+                       domainIndex);
 
   return success();
 }
@@ -1564,10 +2469,16 @@ LogicalResult ModuleState::processModuleBody(FModuleOp moduleOp) {
 
 LogicalResult ModuleState::processModule(FModuleOp moduleOp) {
   LLVM_DEBUG(llvm::dbgs().indent(2) << "processing:\n");
-  if (failed(processModulePorts(moduleOp)))
+  globals.clearDomainProvenance(moduleOp);
+  provenanceOwner = moduleOp;
+  if (failed(processModulePorts(moduleOp))) {
+    recordDomainAssignments(moduleOp);
     return failure();
-  if (failed(processModuleBody(moduleOp)))
+  }
+  if (failed(processModuleBody(moduleOp))) {
+    recordDomainAssignments(moduleOp);
     return failure();
+  }
   return success();
 }
 
@@ -1585,8 +2496,12 @@ void ModuleState::recordDomainPortAliases(FModuleOp moduleOp) {
         continue;
 
       auto rhs = cast<DomainValue>(moduleOp.getArgument(j));
-      if (lhsTerm == find(getTermForDomain(rhs)))
+      if (lhsTerm == find(getTermForDomain(rhs))) {
         aliases.push_back({static_cast<unsigned>(j), static_cast<unsigned>(i)});
+        recordProvenance(lhs, rhs, moduleOp, DomainProvenanceKind::DomainAlias,
+                         getDomainTypeID(lhs).index,
+                         moduleOp.getPortLocation(i));
+      }
     }
   }
 
@@ -1732,23 +2647,29 @@ void ModuleState::applyUpdatesToModule(FModuleOp moduleOp, ExportTable &exports,
     auto *solution = allocVal(portValue);
     LLVM_DEBUG(llvm::dbgs().indent(4)
                << "new-input " << render(portValue) << "\n");
+    recordVariableAssociations(var, portValue, moduleOp);
     solve(var, solution);
     setTermForDomain(portValue, solution);
     exports[portValue].push_back(portValue);
     globals.inserted.insert(portValue);
   }
 
-  // Drive the output ports, and record the export.
+  // Drive the output ports and record the exports. These definitions establish
+  // the terms of newly inserted ports for any later analysis visit. Other
+  // generated operations are materialized after the circuit-level analysis
+  // has reached a fixed point.
   auto builder = OpBuilder::atBlockEnd(moduleOp.getBodyBlock());
   for (auto [domainValue, portIndex] : pending.exports) {
     auto portValue = cast<DomainValue>(moduleOp.getArgument(portIndex));
     builder.setInsertionPointAfterValue(domainValue);
-    DomainDefineOp::create(builder, portValue.getLoc(), portValue, domainValue);
-    LLVM_DEBUG(llvm::dbgs().indent(4) << "new-output " << render(portValue)
-                                      << " := " << render(domainValue) << "\n");
+    auto defineOp = DomainDefineOp::create(builder, portValue.getLoc(),
+                                           portValue, domainValue);
+    recordDomainDefinition(defineOp);
     exports[domainValue].push_back(portValue);
     globals.inserted.insert(portValue);
     setTermForDomain(portValue, allocVal(domainValue));
+    LLVM_DEBUG(llvm::dbgs().indent(4) << "new-output " << render(portValue)
+                                      << " := " << render(domainValue) << "\n");
   }
 }
 
@@ -1783,7 +2704,8 @@ LogicalResult ModuleState::driveModuleOutputDomainPorts(FModuleOp moduleOp) {
     auto value = val->value;
     LLVM_DEBUG(llvm::dbgs().indent(4) << "connect " << render(port)
                                       << " := " << render(value) << "\n");
-    DomainDefineOp::create(builder, loc, port, value);
+    auto defineOp = DomainDefineOp::create(builder, loc, port, value);
+    recordDomainDefinition(defineOp);
   }
 
   return success();
@@ -1800,6 +2722,8 @@ LogicalResult ModuleState::updateModuleDomainInfo(
   auto oldModuleDomainInfo = moduleOp.getDomainInfoAttr();
   auto numPorts = moduleOp.getNumPorts();
   SmallVector<Attribute> newModuleDomainInfo(numPorts);
+  auto &inferredAssociations =
+      globals.getModulePortDomainInferences()[moduleOp.getModuleNameAttr()];
 
   for (size_t i = 0; i < numPorts; ++i) {
     auto port = moduleOp.getArgument(i);
@@ -1848,6 +2772,16 @@ LogicalResult ModuleState::updateModuleDomainInfo(
       associations[domainTypeID.index] =
           IntegerAttr::get(IntegerType::get(context, 32, IntegerType::Unsigned),
                            domainPortIndex);
+      auto domainPort =
+          cast<DomainValue>(moduleOp.getArgument(domainPortIndex));
+      auto association =
+          std::make_pair(moduleOp.getPortNameAttr(i),
+                         moduleOp.getPortNameAttr(domainPortIndex));
+      if (!llvm::is_contained(inferredAssociations, association))
+        inferredAssociations.push_back(association);
+      recordProvenance(port, domainPort, moduleOp,
+                       DomainProvenanceKind::Association, domainIndex,
+                       moduleOp.getPortLocation(i), true, true);
     }
 
     newModuleDomainInfo[i] = ArrayAttr::get(context, associations);
@@ -1866,6 +2800,7 @@ DomainValue ModuleState::solveVarWithAnonDomain(
       DomainCreateAnonOp::create(builder, user->getLoc(), type, name);
   dirty();
   LLVM_DEBUG(llvm::dbgs().indent(6) << "create anon " << render(anon) << "\n");
+  recordVariableAssociations(var, anon, user);
   solve(var, allocVal(anon));
   domainsInScope[anon] = anon;
   globals.inserted.insert(anon);
@@ -1886,7 +2821,9 @@ DomainValue ModuleState::getDomainInScope(
 
   OpBuilder::InsertionGuard guard(builder);
   builder.setInsertionPointAfterValue(domain);
-  DomainDefineOp::create(builder, domain.getLoc(), domainInScope, domain);
+  auto defineOp =
+      DomainDefineOp::create(builder, domain.getLoc(), domainInScope, domain);
+  recordDomainDefinition(defineOp);
   dirty();
   LLVM_DEBUG(llvm::dbgs().indent(6) << "bounce wire " << render(domainInScope)
                                     << " := " << render(domain) << "\n");
@@ -1920,14 +2857,16 @@ ModuleState::updateInstance(DenseMap<DomainValue, DomainValue> &domainsInScope,
                                              port.getType(), var);
         LLVM_DEBUG(llvm::dbgs().indent(6) << "connect " << render(port)
                                           << " := " << render(domain) << "\n");
-        DomainDefineOp::create(builder, loc, port, domain);
+        auto defineOp = DomainDefineOp::create(builder, loc, port, domain);
+        recordDomainDefinition(defineOp);
         continue;
       }
       if (auto *val = dyn_cast<ValueTerm>(term)) {
         auto domain = getDomainInScope(builder, domainsInScope, val->value);
         LLVM_DEBUG(llvm::dbgs().indent(6) << "connect " << render(port)
                                           << " := " << render(domain) << "\n");
-        DomainDefineOp::create(builder, loc, port, domain);
+        auto defineOp = DomainDefineOp::create(builder, loc, port, domain);
+        recordDomainDefinition(defineOp);
         continue;
       }
       llvm_unreachable("unhandled domain term type");
@@ -1955,14 +2894,18 @@ ModuleState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
                                         tgt.getType(), var);
       LLVM_DEBUG(llvm::dbgs().indent(6)
                  << "connect " << render(tgt) << " := " << render(src) << "\n");
-      DomainDefineOp::create(builder, wireOp.getLoc(), tgt, src);
+      auto defineOp =
+          DomainDefineOp::create(builder, wireOp.getLoc(), tgt, src);
+      recordDomainDefinition(defineOp);
       return success();
     }
     if (auto *val = dyn_cast<ValueTerm>(term)) {
       auto src = getDomainInScope(builder, domainsInScope, val->value);
       LLVM_DEBUG(llvm::dbgs().indent(6)
                  << "connect " << render(tgt) << " := " << render(src) << "\n");
-      DomainDefineOp::create(builder, wireOp.getLoc(), tgt, src);
+      auto defineOp =
+          DomainDefineOp::create(builder, wireOp.getLoc(), tgt, src);
+      recordDomainDefinition(defineOp);
       return success();
     }
     llvm_unreachable("unhandled domain term type");
@@ -2067,10 +3010,17 @@ LogicalResult ModuleState::materializeModule(FModuleOp moduleOp) {
   if (failed(processModule(moduleOp)))
     return failure();
 
-  if (failed(driveModuleOutputDomainPorts(moduleOp)))
+  if (failed(driveModuleOutputDomainPorts(moduleOp))) {
+    recordDomainAssignments(moduleOp);
     return failure();
+  }
 
-  return updateModuleBody(moduleOp);
+  if (failed(updateModuleBody(moduleOp))) {
+    recordDomainAssignments(moduleOp);
+    return failure();
+  }
+  recordDomainAssignments(moduleOp);
+  return success();
 }
 
 LogicalResult ModuleState::checkModulePorts(FModuleLike moduleOp) {
@@ -2159,7 +3109,11 @@ LogicalResult ModuleState::inferModule(FModuleOp moduleOp) {
   if (failed(processModule(moduleOp)))
     return failure();
 
-  return updateModule(moduleOp);
+  if (failed(updateModule(moduleOp))) {
+    recordDomainAssignments(moduleOp);
+    return failure();
+  }
+  return success();
 }
 
 LogicalResult ModuleState::checkModule(FModuleOp moduleOp) {
@@ -2175,6 +3129,7 @@ LogicalResult ModuleState::checkModule(FModuleOp moduleOp) {
 
   if (failed(processModule(moduleOp)))
     return failure();
+  recordDomainAssignments(moduleOp);
   recordDomainPortAliases(moduleOp);
   return success();
 }
@@ -2194,6 +3149,7 @@ LogicalResult ModuleState::checkAndInferModule(FModuleOp moduleOp) {
   if (failed(processModule(moduleOp)))
     return failure();
 
+  recordDomainAssignments(moduleOp);
   recordDomainPortAliases(moduleOp);
   return success();
 }
@@ -2370,7 +3326,7 @@ LogicalResult CircuitState::run() {
 
   // Seed the worklist in dependency order. Interface and alias summaries
   // are published as each module is processed; a changed summary requeues
-  // all of the module's users below. This is important when a module is
+  // all of the module's users below.  This is important when a module is
   // reached through more than one hierarchy path, or when a graph edge is
   // revisited after an interface update.
   instanceGraph.walkPostOrder([&](auto &node) {
@@ -2433,9 +3389,11 @@ LogicalResult CircuitState::run() {
       }
     }
   }
-
-  if (!errored.empty())
+  if (!errored.empty()) {
+    if (shouldEmitDomainReport() && failed(writeDomainReport(false)))
+      return failure();
     return failure();
+  }
 
   // The analysis above deliberately leaves body-generated domain operations
   // out of the IR. Materialize them only once all effective module interfaces
@@ -2443,14 +3401,19 @@ LogicalResult CircuitState::run() {
   // them. Definitions for newly inserted output ports are kept during
   // analysis because they establish terms needed by later visits.
   if (mode == InferDomainsMode::Check)
-    return success();
+    return shouldEmitDomainReport() ? writeDomainReport(true) : success();
 
   bool materializationFailed = false;
   instanceGraph.walkPostOrder([&](auto &node) {
     if (failed(materializeOnModule(node.getModule())))
       materializationFailed = true;
   });
-  return success(!materializationFailed);
+  if (materializationFailed) {
+    if (shouldEmitDomainReport() && failed(writeDomainReport(false)))
+      return failure();
+    return failure();
+  }
+  return shouldEmitDomainReport() ? writeDomainReport(true) : success();
 }
 
 namespace {
@@ -2462,6 +3425,11 @@ struct InferDomainsPass
     auto circuit = getOperation();
 
     if (mode == InferDomainsMode::Strip) {
+      if (!reportJson.empty()) {
+        circuit.emitError() << "domain report requires domain inference or "
+                               "checking to be enabled";
+        return signalPassFailure();
+      }
       // Strip all domain types
       if (failed(stripDomainsFromCircuit(&getContext(), circuit,
                                          [](StringAttr) { return true; })))
@@ -2489,7 +3457,8 @@ struct InferDomainsPass
         getAnalysis<InnerSymbolTableCollection>();
     circt::hw::InnerRefNamespace innerRefNamespace{symbolTable,
                                                    innerSymbolTableCollection};
-    CircuitState state(circuit, instanceGraph, innerRefNamespace, mode);
+    CircuitState state(circuit, instanceGraph, innerRefNamespace, mode,
+                       reportJson);
     if (failed(state.run()))
       signalPassFailure();
   }

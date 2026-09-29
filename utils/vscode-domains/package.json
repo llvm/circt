@@ -1,0 +1,94 @@
+{
+  "name": "circt-firrtl-domains",
+  "displayName": "CIRCT FIRRTL Domains",
+  "description": "Explore FIRRTL domain inference reports",
+  "version": "0.1.0",
+  "publisher": "circt",
+  "license": "Apache-2.0 WITH LLVM-exception",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/llvm/circt.git",
+    "directory": "utils/vscode-domains"
+  },
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "extensionKind": ["workspace"],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onView:circtDomains.domains",
+    "onCommand:circtDomains.loadReport",
+    "onCommand:circtDomains.reloadReport",
+    "onCommand:circtDomains.searchValues",
+    "onCommand:circtDomains.showValuesAtCursor",
+    "onCommand:circtDomains.traceValue",
+    "onCommand:circtDomains.chooseCutEndpoints"
+  ],
+  "scripts": {
+    "compile": "tsc -p .",
+    "vscode:prepublish": "npm run compile",
+    "package": "node scripts/package.mjs",
+    "test": "npm run compile && node --test test/*.test.cjs",
+    "test:vscode": "npm run compile && node test/run.cjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.1",
+    "@vscode/test-electron": "^2.4.1",
+    "typescript": "^5.5.4"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{
+        "id": "circtDomains",
+        "title": "FIRRTL Domains",
+        "icon": "resources/domains.svg"
+      }]
+    },
+    "views": {
+      "circtDomains": [
+        { "id": "circtDomains.domains", "name": "Domains" }
+      ]
+    },
+    "commands": [
+      { "command": "circtDomains.loadReport", "title": "FIRRTL Domains: Load Domain Report" },
+      { "command": "circtDomains.reloadReport", "title": "FIRRTL Domains: Reload Domain Report" },
+      { "command": "circtDomains.searchValues", "title": "FIRRTL Domains: Search Values" },
+      { "command": "circtDomains.showValuesAtCursor", "title": "FIRRTL Domains: Show Values at Cursor" },
+      { "command": "circtDomains.traceValue", "title": "FIRRTL Domains: Trace Value" },
+      { "command": "circtDomains.openSource", "title": "FIRRTL Domains: Open Source" },
+      { "command": "circtDomains.showDetails", "title": "FIRRTL Domains: Show Details" },
+      { "command": "circtDomains.chooseCutEndpoints", "title": "FIRRTL Domains: Choose Min-Cut Endpoints" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "circtDomains.loadReport", "when": "view == circtDomains.domains", "group": "navigation" },
+        { "command": "circtDomains.reloadReport", "when": "view == circtDomains.domains", "group": "navigation" },
+        { "command": "circtDomains.searchValues", "when": "view == circtDomains.domains", "group": "navigation" },
+        { "command": "circtDomains.chooseCutEndpoints", "when": "view == circtDomains.domains", "group": "navigation" }
+      ],
+      "view/item/context": [
+        { "command": "circtDomains.traceValue", "when": "viewItem == domainValue", "group": "inline" },
+        { "command": "circtDomains.showDetails", "when": "viewItem == domainValue", "group": "inline" },
+        { "command": "circtDomains.chooseCutEndpoints", "when": "viewItem == domainDefinition", "group": "inline" },
+        { "command": "circtDomains.openSource", "when": "viewItem == domainValue || viewItem == domainTraceStep || viewItem == domainAssociation || viewItem == domainGraphEdge", "group": "navigation" }
+      ]
+    },
+    "configuration": {
+      "title": "FIRRTL Domains",
+      "properties": {
+        "circtDomains.helperPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a locally built circt-domain-report-server executable. Relative paths use the first workspace folder."
+        },
+        "circtDomains.sourceRoots": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Additional local roots for relative source paths in the report. Relative roots use the first workspace folder."
+        }
+      }
+    }
+  }
+}

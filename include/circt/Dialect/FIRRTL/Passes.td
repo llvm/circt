@@ -973,7 +973,9 @@ def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
                      "modules"))
       }]>,
                  ListOption<"skippedDomains", "skip-domain", "std::string",
-                            "List of domain names to skip checking for">];
+                            "List of domain names to skip checking for">,
+                 Option<"reportJson", "report-json", "std::string", "",
+                        "Write a versioned JSON report of values, module templates, and instance-specific bindings">];
 }
 
 def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {

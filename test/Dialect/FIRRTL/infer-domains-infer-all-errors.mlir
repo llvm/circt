@@ -281,13 +281,18 @@ firrtl.circuit "AliasedChildDifferentDomain" {
     // expected-note @below {{input module port D2 declared here}}
     in %D2: !firrtl.domain<@ClockDomain()>
   ) {
+    // expected-note @below {{input instance port child.A aliases output instance port child.B}}
     %A, %B = firrtl.instance child @AliasedChild(
       in A: !firrtl.domain<@ClockDomain()>,
       out B: !firrtl.domain<@ClockDomain()>)
+    // expected-note @below {{input instance port child.A aliases input module port D1}}
     firrtl.domain.define %A, %D1 : !firrtl.domain<@ClockDomain()>
     %X = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    // expected-note @below {{X aliases output instance port child.B}}
     firrtl.domain.define %X, %B : !firrtl.domain<@ClockDomain()>
     // expected-note @below {{x has domains [D1 : ClockDomain]}}
+    // expected-note @below {{domain inference path from x to input module port D1}}
+    // expected-note @below {{x is associated with X}}
     %x = firrtl.wire domains[%X] : !firrtl.uint<1>
         domains[!firrtl.domain<@ClockDomain()>]
     // expected-note @below {{y has domains [D2 : ClockDomain]}}
@@ -316,8 +321,11 @@ firrtl.circuit "ExternalAliasBoundary" {
       out B: !firrtl.domain<@ClockDomain()>)
     firrtl.domain.define %A, %D : !firrtl.domain<@ClockDomain()>
     %X = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    // expected-note @below {{X aliases output instance port external.B}}
     firrtl.domain.define %X, %B : !firrtl.domain<@ClockDomain()>
     // expected-note @below {{x has domains [external.B : ClockDomain]}}
+    // expected-note @below {{domain inference path from x to output instance port external.B}}
+    // expected-note @below {{x is associated with X}}
     %x = firrtl.wire domains[%X] : !firrtl.uint<1>
         domains[!firrtl.domain<@ClockDomain()>]
     // expected-note @below {{y has domains [D : ClockDomain]}}

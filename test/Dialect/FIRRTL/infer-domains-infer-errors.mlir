@@ -62,6 +62,7 @@ firrtl.circuit "ColorlessPlusColoredStillError" {
   firrtl.module @ColorlessPlusColoredStillError(
     // expected-note @below {{input module port A declared here}}
     in %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{input module port x is associated with input module port A}}
     in %x: !firrtl.uint<1> domains [%A],
     // expected-note @below {{input module port B declared here}}
     in %B: !firrtl.domain<@ClockDomain()>,
@@ -71,6 +72,8 @@ firrtl.circuit "ColorlessPlusColoredStillError" {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %y = firrtl.node %c1_ui1 : !firrtl.uint<1>
     // expected-note @below {{%0 has domains [A : ClockDomain]}}
+    // expected-note @below {{domain inference path from %0 to input module port A}}
+    // expected-note @below {{domains of input module port x and %0 are constrained to match by firrtl.eq}}
     %0 = firrtl.eq %x, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // expected-error @below {{illegal domain crossing in operation}}
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
@@ -106,10 +109,13 @@ firrtl.circuit "UndrivenWireNotColorless" {
     in %B: !firrtl.domain<@ClockDomain()>,
     // expected-note @below {{b has domains [B : ClockDomain]}}
     out %b: !firrtl.uint<1> domains [%B],
+    // expected-note @below {{output module port a is associated with input module port A}}
     out %a: !firrtl.uint<1> domains [%A]
   ) {
     // expected-note @below {{w has domains [A : ClockDomain]}}
+    // expected-note @below {{domain inference path from w to input module port A}}
     %w = firrtl.wire : !firrtl.uint<1>
+    // expected-note @below {{domains of output module port a and w are constrained to match by firrtl.matchingconnect}}
     firrtl.matchingconnect %a, %w : !firrtl.uint<1>
     // expected-error @below {{illegal domain crossing in operation}}
     firrtl.matchingconnect %b, %w : !firrtl.uint<1>
@@ -125,6 +131,7 @@ firrtl.circuit "InvalidValueNotColorless" {
   firrtl.module @InvalidValueNotColorless(
     // expected-note @below {{input module port A declared here}}
     in %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{output module port a is associated with input module port A}}
     out %a: !firrtl.uint<1> domains [%A],
     // expected-note @below {{input module port B declared here}}
     in %B: !firrtl.domain<@ClockDomain()>,
@@ -132,7 +139,9 @@ firrtl.circuit "InvalidValueNotColorless" {
     out %b: !firrtl.uint<1> domains [%B]
   ) {
     // expected-note @below {{%invalid_ui1 has domains [A : ClockDomain]}}
+    // expected-note @below {{domain inference path from %invalid_ui1 to input module port A}}
     %0 = firrtl.invalidvalue : !firrtl.uint<1>
+    // expected-note @below {{domains of output module port a and %invalid_ui1 are constrained to match by firrtl.matchingconnect}}
     firrtl.matchingconnect %a, %0 : !firrtl.uint<1>
     // expected-error @below {{illegal domain crossing in operation}}
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
@@ -158,6 +167,7 @@ firrtl.circuit "PrivateModuleConstantOutputStillErrors" {
   firrtl.module @PrivateModuleConstantOutputStillErrors(
     // expected-note @below {{input module port A declared here}}
     in %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{output module port a is associated with input module port A}}
     out %a: !firrtl.uint<4> domains [%A],
     // expected-note @below {{input module port B declared here}}
     in %B: !firrtl.domain<@ClockDomain()>,
@@ -165,7 +175,9 @@ firrtl.circuit "PrivateModuleConstantOutputStillErrors" {
     out %b: !firrtl.uint<4> domains [%B]
   ) {
     // expected-note @below {{bar.o has domains [A : ClockDomain]}}
+    // expected-note @below {{domain inference path from output instance port bar.o to input module port A}}
     %bar_o = firrtl.instance bar @Bar(out o: !firrtl.uint<4>)
+    // expected-note @below {{domains of output module port a and output instance port bar.o are constrained to match by firrtl.matchingconnect}}
     firrtl.matchingconnect %a, %bar_o : !firrtl.uint<4>
     // expected-error @below {{illegal domain crossing in operation}}
     firrtl.matchingconnect %b, %bar_o : !firrtl.uint<4>
