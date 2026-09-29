@@ -298,7 +298,7 @@ endmodule
 
 module multi_delay_input_prim;
     logic A, B, Q;
-    // expected-error @below {{only n-input primitives that specify a single delay are currently supported.}}
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
     and #(5, 5) a (Q, A, B);
 endmodule
 
@@ -307,7 +307,7 @@ endmodule
 
 module multi_delay_noutput_prim;
     wire A, Q;
-    // expected-error @below {{only n-output primitives that specify a single delay are currently supported.}}
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
     not #(5, 5) n (Q, A);
 endmodule
 
@@ -315,7 +315,7 @@ endmodule
 
 module multi_delay_threestate_prim;
     wire A, E, Q;
-    // expected-error @below {{only three-state primitives that specify a single delay are currently supported}}
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
     bufif0 #(5, 5, 5) b (Q, A, E);
 endmodule
 
