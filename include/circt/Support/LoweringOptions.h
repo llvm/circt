@@ -192,6 +192,14 @@ struct LoweringOptions {
   /// If true, always emit begin/end blocks around if/else/always bodies, even
   /// when there is only a single statement.
   bool alwaysEmitBeginEnd = false;
+
+  /// Controls the declaration syntax emitted for the SystemVerilog variable
+  /// operation.
+  enum class VarOpDeclStyle {
+    VarLogic,
+    Logic,
+    Reg
+  } varOpDeclStyle = VarOpDeclStyle::VarLogic;
 };
 } // namespace circt
 

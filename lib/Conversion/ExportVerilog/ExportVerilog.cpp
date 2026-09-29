@@ -321,6 +321,8 @@ bool ExportVerilog::isZeroBitType(Type type) {
     return intType.getWidth() == 0;
   if (auto inout = dyn_cast<hw::InOutType>(type))
     return isZeroBitType(inout.getElementType());
+  if (auto var = dyn_cast<sv::VarType>(type))
+    return isZeroBitType(var.getElementType());
   if (auto uarray = dyn_cast<hw::UnpackedArrayType>(type))
     return uarray.getNumElements() == 0 ||
            isZeroBitType(uarray.getElementType());
@@ -345,8 +347,8 @@ bool ExportVerilog::isZeroBitType(Type type) {
 // NOLINTBEGIN(misc-no-recursion)
 static Type stripUnpackedTypes(Type type) {
   return TypeSwitch<Type, Type>(type)
-      .Case<InOutType>([](InOutType inoutType) {
-        return stripUnpackedTypes(inoutType.getElementType());
+      .Case<InOutType, VarType>([](auto valueType) {
+        return stripUnpackedTypes(valueType.getElementType());
       })
       .Case<UnpackedArrayType, sv::UnpackedOpenArrayType>([](auto arrayType) {
         return stripUnpackedTypes(arrayType.getElementType());
@@ -364,9 +366,10 @@ static bool hasLeadingUnpackedType(Type type) {
 /// Return true if type has a struct type as a subtype.
 static bool hasStructType(Type type) {
   return TypeSwitch<Type, bool>(type)
-      .Case<InOutType, UnpackedArrayType, ArrayType>([](auto parentType) {
-        return hasStructType(parentType.getElementType());
-      })
+      .Case<InOutType, VarType, UnpackedArrayType, ArrayType>(
+          [](auto parentType) {
+            return hasStructType(parentType.getElementType());
+          })
       .Case<StructType>([](auto) { return true; })
       .Default([](auto) { return false; });
 }
@@ -1549,6 +1552,15 @@ public:
 
 } // end anonymous namespace
 
+static bool hasExplicitDataType(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<VarType, UnpackedArrayType, ArrayType>(
+          [](auto type) { return hasExplicitDataType(type.getElementType()); })
+      .Case<StructType, UnionType, EnumType, TypeAliasType>(
+          [](auto) { return true; })
+      .Default([](auto) { return false; });
+}
+
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 /// If `stripAutomatic` is true, "automatic" is not used even for a declaration
 /// in a non-procedural region.
@@ -1572,6 +1584,19 @@ static StringRef getVerilogDeclWord(Operation *op,
 
     return "reg";
   }
+
+  if (auto var = dyn_cast<VarOp>(op)) {
+    bool hasExplicitType = hasExplicitDataType(var.getResult().getType());
+    switch (emitter.state.options.varOpDeclStyle) {
+    case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
+      return hasExplicitType ? "var" : "var logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Logic:
+      return hasExplicitType ? "" : "logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Reg:
+      return hasExplicitType ? "" : "reg";
+    }
+  }
+
   if (isa<sv::WireOp>(op))
     return "wire";
   if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
@@ -1915,8 +1940,8 @@ bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
 // NOLINTBEGIN(misc-no-recursion)
 void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
-      .Case<InOutType>([&](InOutType inoutType) {
-        printUnpackedTypePostfix(inoutType.getElementType(), os);
+      .Case<InOutType, VarType>([&](auto valueType) {
+        printUnpackedTypePostfix(valueType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         auto loc = currentModuleOp ? currentModuleOp->getLoc()
@@ -2326,8 +2351,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -4142,6 +4166,7 @@ private:
   LogicalResult visitInvalidVerif(Operation *op) { return failure(); }
 
   LogicalResult visitSV(sv::WireOp op) { return emitDeclaration(op); }
+  LogicalResult visitSV(VarOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(RegOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LogicOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LocalParamOp op) { return emitDeclaration(op); }
@@ -6271,6 +6296,16 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
           return op->emitOpError("invalid localparam value");
         });
       });
+    }
+
+    if (auto varOp = dyn_cast<VarOp>(op)) {
+      if (auto initValue = varOp.getInit()) {
+        ps << PP::space << "=" << PP::space;
+        ps.scopedBox(PP::ibox0, [&]() {
+          emitExpression(initValue, opsForLocation, LowestPrecedence,
+                         /*isAssignmentLikeContext=*/true);
+        });
+      }
     }
 
     if (auto regOp = dyn_cast<RegOp>(op)) {
