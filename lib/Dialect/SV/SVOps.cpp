@@ -370,13 +370,12 @@ LogicalResult LocalParamOp::verify() {
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseImplicitVarInitType(
-    OpAsmParser &p, mlir::Type varType,
-    std::optional<OpAsmParser::UnresolvedOperand> &initValue,
-    mlir::Type &initType) {
+    OpAsmParser &p, Type varType,
+    std::optional<OpAsmParser::UnresolvedOperand> &initValue, Type &initType) {
   if (!initValue.has_value())
     return success();
 
-  sv::VarType var = dyn_cast<sv::VarType>(varType);
+  auto var = dyn_cast<VarType>(varType);
   if (!var)
     return p.emitError(p.getCurrentLocation(),
                        "expected `!sv.var<T>` type for var");
@@ -386,18 +385,17 @@ static ParseResult parseImplicitVarInitType(
 }
 
 static void printImplicitVarInitType(OpAsmPrinter &p, Operation *op,
-                                     mlir::Type varType, mlir::Value initValue,
-                                     mlir::Type initType) {}
+                                     Type varType, Value initValue,
+                                     Type initType) {}
 
 void VarOp::build(OpBuilder &builder, OperationState &odsState,
                   Type elementType, StringAttr name, hw::InnerSymAttr innerSym,
-                  mlir::Value initValue) {
-  if (!name)
-    name = builder.getStringAttr("");
-  odsState.addAttribute("name", name);
+                  Value initValue) {
+
+  auto &props = odsState.getOrAddProperties<Properties>();
+  props.name = name ? name : builder.getStringAttr("");
   if (innerSym)
-    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
-                          innerSym);
+    props.inner_sym = innerSym;
   odsState.addTypes(VarType::get(elementType));
   if (initValue)
     odsState.addOperands(initValue);
@@ -407,9 +405,9 @@ void VarOp::build(OpBuilder &builder, OperationState &odsState,
 /// attribute.
 void VarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the var has an optional 'name' attribute, use it.
-  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
-  if (!nameAttr.getValue().empty())
-    setNameFn(getResult(), nameAttr.getValue());
+  StringRef name = getName();
+  if (!name.empty())
+    setNameFn(getResult(), name);
 }
 
 std::optional<size_t> VarOp::getTargetResultIndex() { return 0; }

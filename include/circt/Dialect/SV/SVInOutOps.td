@@ -82,20 +82,20 @@ def VarOp : SVOp<"var", [
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
-                    CArg<"StringAttr", "StringAttr()">:$name,
-                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
+                    CArg<"::mlir::StringAttr", "::mlir::StringAttr()">:$name,
+                    CArg<"::circt::hw::InnerSymAttr", "::circt::hw::InnerSymAttr()">:$innerSym,
                     CArg<"mlir::Value", "{}">:$init)>
   ];
 
   let assemblyFormat = [{
     (`init` $init^)? (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
-    custom<ImplicitVarInitType>(ref(type($result)),ref($init), type($init))
+    custom<ImplicitVarInitType>(ref(type($result)), ref($init), type($init))
   }];
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return llvm::cast<VarType>(getResult().getType()).getElementType();
+      return getResult().getType().getElementType();
     }
   }];
 }
