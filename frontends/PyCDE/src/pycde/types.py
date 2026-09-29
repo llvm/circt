@@ -51,6 +51,13 @@ class Type:
     return self
 
   @property
+  def canonical_type(self) -> Type:
+    """Return this type with all nested type aliases removed."""
+    canonical_type = hw.get_canonical_type(self._type)
+    return self if canonical_type == self._type else _FromCirctType(
+        canonical_type)
+
+  @property
   def bitwidth(self) -> int | None:
     bw = hw.get_bitwidth(self._type)
     return bw if bw >= 0 else None
