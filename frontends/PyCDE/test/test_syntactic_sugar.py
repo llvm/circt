@@ -53,9 +53,9 @@ class Top(Module):
 # Constants of aliased integer types are built with the alias as their type.
 
 # CHECK-LABEL:  hw.module @AliasedIntConsts(out b : !hw.typealias<@pycde::@bits_t, i4>, out u : !hw.typealias<@pycde::@uint_t, ui4>, out s : !hw.typealias<@pycde::@sint_t, si4>)
-# CHECK:    %c3_bits_t = hw.constant 3 : i4 : !hw.typealias<@pycde::@bits_t, i4>
-# CHECK:    [[U:%.+]] = hwarith.constant 5 : ui4 : !hw.typealias<@pycde::@uint_t, ui4>
-# CHECK:    [[S:%.+]] = hwarith.constant -2 : si4 : !hw.typealias<@pycde::@sint_t, si4>
+# CHECK:    %c3_bits_t = hw.constant 3 : !hw.typealias<@pycde::@bits_t, i4>
+# CHECK:    [[U:%.+]] = hwarith.constant 5 : !hw.typealias<@pycde::@uint_t, ui4>
+# CHECK:    [[S:%.+]] = hwarith.constant -2 : !hw.typealias<@pycde::@sint_t, si4>
 # CHECK:    hw.output %c3_bits_t, [[U]], [[S]]
 
 # After lowering, the aliases are declared and retained with their signless
@@ -66,9 +66,9 @@ class Top(Module):
 # CHECK-DAG:      hw.typedecl @sint_t : i4
 # CHECK:        }
 # CHECK-LABEL:  hw.module @AliasedIntConsts(out b : !hw.typealias<@pycde::@bits_t, i4>, out u : !hw.typealias<@pycde::@uint_t, i4>, out s : !hw.typealias<@pycde::@sint_t, i4>)
-# CHECK-DAG:    %c3_bits_t = hw.constant 3 : i4 : !hw.typealias<@pycde::@bits_t, i4>
-# CHECK-DAG:    %c5_uint_t = hw.constant 5 : i4 : !hw.typealias<@pycde::@uint_t, i4>
-# CHECK-DAG:    %c-2_sint_t = hw.constant -2 : i4 : !hw.typealias<@pycde::@sint_t, i4>
+# CHECK-DAG:    %c3_bits_t = hw.constant 3 : !hw.typealias<@pycde::@bits_t, i4>
+# CHECK-DAG:    %c5_uint_t = hw.constant 5 : !hw.typealias<@pycde::@uint_t, i4>
+# CHECK-DAG:    %c-2_sint_t = hw.constant -2 : !hw.typealias<@pycde::@sint_t, i4>
 # CHECK:        hw.output %c3_bits_t, %c5_uint_t, %c-2_sint_t
 
 BitsAlias = TypeAlias(Bits(4), "bits_t")
