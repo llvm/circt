@@ -194,7 +194,7 @@ struct LoweringOptions {
   bool alwaysEmitBeginEnd = false;
 
   /// This option controls the declaration syntax emitted for the SystemVerilog
-  /// variable operation.
+  /// variable op.
   enum class VarOpDeclStyle {
     VarLogic,
     Logic,
