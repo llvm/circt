@@ -127,7 +127,7 @@ Operation *hw::materializeConstant(OpBuilder &builder, Attribute value,
   // constants can't be materialized.
   if (auto intType = type_dyn_cast<IntegerType>(type))
     if (auto attrValue = dyn_cast<IntegerAttr>(value)) {
-      if (!isHWIntegerType(type) ||
+      if (!intType.isSignless() ||
           attrValue.getValue().getBitWidth() != intType.getWidth())
         return nullptr;
       return ConstantOp::create(
