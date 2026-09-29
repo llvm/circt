@@ -12,7 +12,7 @@ firrtl.circuit "Component" {
   // CHECK-LABEL: om.class private @Class_1
   // CHECK-SAME: -> (someInt: !om.integer)
   firrtl.class private @Class_1(out %someInt: !firrtl.integer) {
-    // CHECK: %[[C1:.+]] = om.constant #om.integer<1 : si4> : !om.integer
+    // CHECK: %[[C1:.+]] = om.constant #om.integer<1 : si64> : !om.integer
     %0 = firrtl.integer 1
     // CHECK: om.class.fields %[[C1]] : !om.integer
     firrtl.propassign %someInt, %0 : !firrtl.integer
@@ -61,8 +61,8 @@ firrtl.circuit "Component" {
   firrtl.class @TwoInputs(in %a: !firrtl.integer, in %b: !firrtl.integer) { }
 
   firrtl.class @AssignInputsInOrder() {
-    // CHECK: %0 = om.constant #om.integer<123 : si12> : !om.integer
-    // CHECK: %1 = om.constant #om.integer<456 : si12> : !om.integer
+    // CHECK: %0 = om.constant #om.integer<123 : si64> : !om.integer
+    // CHECK: %1 = om.constant #om.integer<456 : si64> : !om.integer
     // CHECK: %2 = om.object @TwoInputs(%basepath, %0, %1) : (!om.basepath, !om.integer, !om.integer) -> !om.class.type<@TwoInputs>
     %x = firrtl.integer 123
     %y = firrtl.integer 456
@@ -76,8 +76,8 @@ firrtl.circuit "Component" {
   }
 
   firrtl.class @AssignInputsOutOfOrder() {
-    // CHECK: %0 = om.constant #om.integer<123 : si12> : !om.integer
-    // CHECK: %1 = om.constant #om.integer<456 : si12> : !om.integer
+    // CHECK: %0 = om.constant #om.integer<123 : si64> : !om.integer
+    // CHECK: %1 = om.constant #om.integer<456 : si64> : !om.integer
     // CHECK: %2 = om.object @TwoInputs(%basepath, %0, %1) : (!om.basepath, !om.integer, !om.integer) -> !om.class.type<@TwoInputs>
     %x = firrtl.integer 123
     %y = firrtl.integer 456
@@ -240,7 +240,7 @@ firrtl.circuit "PathModule" {
     %0 = firrtl.integer 123
     %1 = firrtl.list.create %propIn, %0 : !firrtl.list<integer>
     firrtl.propassign %propOut, %1 : !firrtl.list<integer>
-    // CHECK:  %[[c0:.+]] = om.constant #om.integer<123 : si12> : !om.integer
+    // CHECK:  %[[c0:.+]] = om.constant #om.integer<123 : si64> : !om.integer
     // CHECK:  %[[c1:.+]] = om.list_create %propIn, %[[c0]] : !om.integer
     // CHECK:  om.class.fields %[[c1]] : !om.list<!om.integer>
   }

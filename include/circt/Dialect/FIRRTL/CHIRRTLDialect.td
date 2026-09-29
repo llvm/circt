@@ -18,6 +18,8 @@ include "mlir/IR/OpBase.td"
 
 
 def CHIRRTLDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "chirrtl";
   let cppNamespace = "::circt::chirrtl";
 
