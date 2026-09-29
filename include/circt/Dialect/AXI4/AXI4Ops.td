@@ -219,4 +219,31 @@ def CutOp : AXI4Op<"cut", [PortResultsAtMostOneUse,
       "$clock `,` $reset `,` $upstream attr-dict `:` qualified(type($upstream))";
 }
 
+def CDCOp : AXI4Op<"cdc", [PortResultsAtMostOneUse,
+    TypesMatchWith<"downstream port matches the upstream port", "upstream",
+                   "downstream", "$_self">]> {
+  let summary = "An AXI4 clock domain crossing";
+  let description = [{
+    Carries an AXI4 connection from one clock domain into another. Not a reset
+    crossing.
+
+    Example:
+    ```mlir
+    %downstream =
+      axi4.cdc from %upstream_clk to %downstream_clk, %rst_ni, %upstream
+        : !axi4.port<...>
+    ```
+  }];
+
+  let arguments = (ins ClockType:$upstream_clock,
+                       ClockType:$downstream_clock,
+                       I1:$reset, PortType:$upstream);
+  let results = (outs PortType:$downstream);
+
+  let assemblyFormat = [{
+    `from` $upstream_clock `to` $downstream_clock `,` $reset `,` $upstream
+      attr-dict `:` qualified(type($upstream))
+  }];
+}
+
 #endif // CIRCT_DIALECT_AXI4_AXI4OPS_TD
