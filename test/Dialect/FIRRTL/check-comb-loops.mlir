@@ -1238,3 +1238,47 @@ firrtl.circuit "Issue11085" {
     }
   }
 }
+
+// -----
+
+// Test that casting an RWProbe preserves its equivalence with the original
+// forceable reference. Without this, the comb-loop analysis can miss cycles
+// through the casted output probe.
+firrtl.circuit "RefCastRWProbeLoop" {
+  firrtl.layer @Test bind {}
+
+  firrtl.module private @RefCastRWProbeChild(
+    in %clock: !firrtl.clock,
+    in %in: !firrtl.uint<1>,
+    out %out: !firrtl.uint<1>,
+    out %probe: !firrtl.rwprobe<uint<1>, @Test>
+  ) {
+    %value, %value_ref = firrtl.reg %clock forceable
+      : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    firrtl.connect %out, %value : !firrtl.uint<1>
+    firrtl.layerblock @Test {
+      %colored_ref = firrtl.ref.cast %value_ref
+        : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @Test>
+      firrtl.ref.define %probe, %colored_ref
+        : !firrtl.rwprobe<uint<1>, @Test>
+    }
+  }
+
+  // expected-error @below {{detected combinational cycle in a FIRRTL module}}
+  firrtl.module @RefCastRWProbeLoop(in %clock: !firrtl.clock) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.layerblock @Test {
+      %value = firrtl.wire : !firrtl.uint<1>
+      %child_clock, %child_in, %child_out, %child_probe = firrtl.instance child @RefCastRWProbeChild(
+        in clock: !firrtl.clock, in in: !firrtl.uint<1>,
+        out out: !firrtl.uint<1>, out probe: !firrtl.rwprobe<uint<1>, @Test>
+      )
+      firrtl.connect %child_clock, %clock : !firrtl.clock
+      firrtl.connect %value, %child_out : !firrtl.uint<1>
+      firrtl.ref.force %clock, %c1_ui1, %child_probe, %child_in :
+        !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @Test>,
+        !firrtl.uint<1>
+      firrtl.connect %child_in, %value : !firrtl.uint<1>
+    }
+  }
+}
