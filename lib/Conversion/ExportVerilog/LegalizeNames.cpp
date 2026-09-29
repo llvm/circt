@@ -17,6 +17,7 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/Threading.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include <type_traits>
 
@@ -96,9 +97,10 @@ std::string FieldNameResolver::getEnumFieldName(hw::EnumFieldAttr attr,
                                                 Operation *currentPackage) {
   if (auto field = globalNames.getPackageEnumField(attr)) {
     auto [package, name] = *field;
+    auto member = getVerilogIdentifier(name.getValue());
     if (package != currentPackage)
-      return (getSymOpName(package) + "::" + name.getValue()).str();
-    return name.getValue().str();
+      return getVerilogIdentifier(getSymOpName(package)) + "::" + member;
+    return member;
   }
 
   auto aliasType = dyn_cast<hw::TypeAliasType>(attr.getType().getValue());
@@ -131,7 +133,11 @@ public:
   /// module/interfaces, port/parameter and declaration names.
   GlobalNameResolver(mlir::ModuleOp topLevel, const LoweringOptions &options);
 
-  GlobalNameTable takeGlobalNameTable() { return std::move(globalNameTable); }
+  FailureOr<GlobalNameTable> takeGlobalNameTable() {
+    if (encounteredError)
+      return failure();
+    return std::move(globalNameTable);
+  }
 
 private:
   /// Check to see if the port names of the specified module conflict with
@@ -151,6 +157,7 @@ private:
 
   /// This keeps track of globally visible names like module parameters.
   GlobalNameTable globalNameTable;
+  bool encounteredError = false;
 
   GlobalNameResolver(const GlobalNameResolver &) = delete;
   void operator=(const GlobalNameResolver &) = delete;
@@ -282,9 +289,11 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
     if (isa<HWModuleExternOp, HWModuleGeneratedOp, PackageExternOp>(op)) {
       auto name = isa<PackageExternOp>(op) ? getSymOpName(&op)
                                            : getVerilogModuleName(&op);
-      if (!sv::isNameValid(name, options.caseInsensitiveKeywords))
+      if (!sv::isNameValid(name, options.caseInsensitiveKeywords)) {
         op.emitError("name \"")
             << name << "\" is not allowed in Verilog output";
+        encounteredError = true;
+      }
       globalNameResolver.insertUsedName(name);
     } else if (auto reservedNamesOp = dyn_cast<sv::ReserveNamesOp>(op)) {
       for (StringAttr name :
@@ -337,11 +346,35 @@ void GlobalNameResolver::legalizePackageNames(Package package) {
   NameCollisionResolver localNames(options);
   if constexpr (!std::is_same_v<Package, PackageExternOp>)
     globalNameTable.addReservedNames(localNames);
+
+  llvm::StringSet<> externalNames;
+  auto getMemberName = [&](hw::TypedeclOp decl, StringRef name) -> StringRef {
+    if constexpr (std::is_same_v<Package, PackageExternOp>) {
+      if (!sv::isNameValid(name, options.caseInsensitiveKeywords)) {
+        decl.emitError("external package member name \"")
+            << name << "\" is not allowed in Verilog output";
+        encounteredError = true;
+        return name;
+      }
+      // Escaping an identifier does not change its identity.
+      auto unescapedName = name;
+      unescapedName.consume_front("\\");
+      if (!externalNames.insert(unescapedName).second) {
+        decl.emitError("external package member name \"")
+            << name << "\" is not unique";
+        encounteredError = true;
+      }
+      return name;
+    } else {
+      return localNames.getLegalName(name);
+    }
+  };
+
   // Reserve all typedef names before choosing enum member names, including
   // typedefs that appear after the enum declaration.
   for (hw::TypedeclOp decl : package.template getOps<hw::TypedeclOp>()) {
     auto preferredName = decl.getPreferredName();
-    auto name = localNames.getLegalName(preferredName);
+    auto name = getMemberName(decl, preferredName);
     if (name != preferredName)
       decl.setVerilogNameAttr(StringAttr::get(ctx, name));
   }
@@ -350,8 +383,8 @@ void GlobalNameResolver::legalizePackageNames(Package package) {
     if (!enumType)
       continue;
     for (auto field : enumType.getFields().getAsRange<StringAttr>()) {
-      auto name = localNames.getLegalName(
-          (decl.getPreferredName() + "_" + field.getValue()).str());
+      auto fieldName = (decl.getPreferredName() + "_" + field.getValue()).str();
+      auto name = getMemberName(decl, fieldName);
       globalNameTable.packageEnumFields[{decl.getAliasType(), field}] = {
           package, StringAttr::get(ctx, name)};
     }
@@ -434,7 +467,7 @@ void GlobalNameResolver::legalizeFunctionNames(FuncOp func) {
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
-GlobalNameTable
+FailureOr<GlobalNameTable>
 ExportVerilog::legalizeGlobalNames(ModuleOp topLevel,
                                    const LoweringOptions &options) {
   GlobalNameResolver resolver(topLevel, options);
