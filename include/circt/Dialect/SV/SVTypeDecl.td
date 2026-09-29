@@ -84,11 +84,11 @@ def PackageExternOp : SVPackageOp<"package.extern"> {
     optional and defaults to the symbol name. The Verilog name must be valid
     SystemVerilog and is not renamed.
 
-    Typedef names and enum member names are also preserved rather than
-    legalized. Enum members use the typedef's Verilog name followed by `_`
-    and the enum field name. These names must be valid, distinct SystemVerilog
-    identifiers under the configured lowering options; invalid names and
-    collisions are errors. Escaped identifiers are supported.
+    Typedef and enum member names use the same legalization as `sv.package`,
+    including keyword avoidance, reserved names, and member-name collisions.
+    This allows a CIRCT-generated package to be represented by changing
+    `sv.package` to `sv.package.extern`, using the same lowering options and
+    reserved names. Only the external package's own Verilog name remains fixed.
 
     Example:
 

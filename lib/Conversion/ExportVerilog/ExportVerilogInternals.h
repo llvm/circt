@@ -58,7 +58,7 @@ struct GlobalNameTable {
     return it != enumPrefixes.end() ? it->second : StringAttr();
   }
 
-  /// Return the owning package and Verilog member name, or nullopt if absent.
+  /// Return the owning package and legalized member name, or nullopt if absent.
   std::optional<std::pair<Operation *, StringAttr>>
   getPackageEnumField(hw::EnumFieldAttr field) const;
 
@@ -85,7 +85,7 @@ private:
   // of enum types.
   DenseMap<Type, StringAttr> enumPrefixes;
 
-  /// Map (enum alias, original member) to (owning package, Verilog member).
+  /// Map (enum alias, original member) to (owning package, legalized member).
   DenseMap<std::pair<Type, StringAttr>, std::pair<Operation *, StringAttr>>
       packageEnumFields;
 
@@ -471,9 +471,9 @@ LogicalResult prepareHWModule(hw::HWEmittableModuleLike module,
 void pruneZeroValuedLogic(hw::HWEmittableModuleLike module);
 
 /// Rewrite module names and interfaces to not conflict with each other or with
-/// Verilog keywords. Fail if external names cannot be used without renaming.
-FailureOr<GlobalNameTable> legalizeGlobalNames(ModuleOp topLevel,
-                                               const LoweringOptions &options);
+/// Verilog keywords.
+GlobalNameTable legalizeGlobalNames(ModuleOp topLevel,
+                                    const LoweringOptions &options);
 
 } // namespace ExportVerilog
 } // namespace circt

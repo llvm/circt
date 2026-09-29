@@ -8,7 +8,7 @@
 // RUN: test ! -e %t/Unused.sv
 // RUN: test ! -e %t/external.sv
 
-// Reserved names in this compilation must not rename external package members.
+// External package members use the same reserved names as emitted packages.
 sv.reserve_names ["Req", "State_Idle"]
 
 // External package names are reserved before renaming emitted declarations.
@@ -20,7 +20,7 @@ sv.package @local {} {hw.verilogName = "ExtTypes"}
 sv.package @local_file_types {} {hw.verilogName = "FileTypes"}
 
 // IR: sv.package.extern @ExtTypes {
-// IR: hw.typedecl @Req, "Req" : !hw.struct<addr: i32, data: i8>
+// IR: hw.typedecl @Req, "Req_0" : !hw.struct<addr: i32, data: i8>
 // IR: hw.typedecl @State : !hw.enum<Idle, Busy>
 // IR: }
 sv.package.extern @ExtTypes {
@@ -35,7 +35,7 @@ sv.package.extern @renamed_file_types {
 } {hw.verilogName = "FileTypes", output_file = #hw.output_file<"external.sv">, sym_visibility = "private"}
 
 // SV-LABEL: package LocalTypes;
-// SV: typedef ExtTypes::Req Request;
+// SV: typedef ExtTypes::Req_0 Request;
 sv.package @LocalTypes {
   hw.typedecl @Request : !hw.typealias<@ExtTypes::@Req, !hw.struct<addr: i32, data: i8>>
 }
@@ -43,12 +43,12 @@ sv.package @LocalTypes {
 hw.module.extern @ExtMod(in %req: !hw.typealias<@ExtTypes::@Req, !hw.struct<addr: i32, data: i8>>)
 
 // SV-LABEL: module Consumer(
-// SV: input {{ *}}ExtTypes::Req req
+// SV: input {{ *}}ExtTypes::Req_0 req
 // SV: input {{ *}}FileTypes::word word
 // SV: output ExtTypes::State state
 // SV: ExtMod ext (
 // CONSUMER-LABEL: module Consumer(
-// CONSUMER: input {{ *}}ExtTypes::Req req
+// CONSUMER: input {{ *}}ExtTypes::Req_0 req
 // CONSUMER: input {{ *}}FileTypes::word word
 // CONSUMER: output ExtTypes::State state
 // CONSUMER: ExtMod ext (
@@ -57,8 +57,8 @@ hw.module @Consumer(
     in %word: !hw.typealias<@renamed_file_types::@word, i8>,
     out state: !hw.typealias<@ExtTypes::@State, !hw.enum<Idle, Busy>>) {
   hw.instance "ext" @ExtMod(req: %req: !hw.typealias<@ExtTypes::@Req, !hw.struct<addr: i32, data: i8>>) -> ()
-  // SV: assign state = ExtTypes::State_Idle;
-  // CONSUMER: assign state = ExtTypes::State_Idle;
+  // SV: assign state = ExtTypes::State_Idle_0;
+  // CONSUMER: assign state = ExtTypes::State_Idle_0;
   %idle = hw.enum.constant Idle : !hw.typealias<@ExtTypes::@State, !hw.enum<Idle, Busy>>
   hw.output %idle : !hw.typealias<@ExtTypes::@State, !hw.enum<Idle, Busy>>
 }

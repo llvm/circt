@@ -1881,7 +1881,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           if (package != emitter.currentPackage)
             os << getVerilogIdentifier(getSymOpName(package)) << "::";
         }
-        os << getVerilogIdentifier(typedecl.getPreferredName());
+        os << typedecl.getPreferredName();
         emitDims(dims, os, typedecl->getLoc(), emitter);
         return true;
       })
@@ -7407,11 +7407,9 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
 
 static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
   LoweringOptions options(module);
-  auto globalNames = legalizeGlobalNames(module, options);
-  if (failed(globalNames))
-    return failure();
+  GlobalNameTable globalNames = legalizeGlobalNames(module, options);
 
-  SharedEmitterState emitter(module, options, std::move(*globalNames));
+  SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(false);
 
   if (emitter.options.emitReplicatedOpsToHeader)
@@ -7567,11 +7565,9 @@ static LogicalResult exportSplitVerilogImpl(ModuleOp module,
   // Prepare the ops in the module for emission and legalize the names that will
   // end up in the output.
   LoweringOptions options(module);
-  auto globalNames = legalizeGlobalNames(module, options);
-  if (failed(globalNames))
-    return failure();
+  GlobalNameTable globalNames = legalizeGlobalNames(module, options);
 
-  SharedEmitterState emitter(module, options, std::move(*globalNames));
+  SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(true);
 
   if (emitter.options.emitReplicatedOpsToHeader) {
