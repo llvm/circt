@@ -29,11 +29,11 @@ def ConstantOp : HWArithOp<"constant",
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a sign-aware constant value. The result
-    may also be a type alias of the value's type, which is then printed after
-    the value.
+    may also be a type alias of a sign-aware integer type, in which case the
+    value has the aliased integer type.
     ```
       %result = hwarith.constant 42 : t1
-      %aliased = hwarith.constant 42 : ui8 : !hw.typealias<@ns::@t2, ui8>
+      %aliased = hwarith.constant 42 : !hw.typealias<@ns::@t2, ui8>
     ```
     }];
 

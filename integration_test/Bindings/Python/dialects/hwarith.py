@@ -24,7 +24,7 @@ with Context() as ctx, Location.unknown():
       # CHECK: hwarith.constant 3 : ui4{{$}}
       hwarith.ConstantOp.create(ui4, 3)
 
-      # CHECK: hwarith.constant 3 : ui4 : !hw.typealias<@intScope::@uintAlias, ui4>
+      # CHECK: hwarith.constant 3 : !hw.typealias<@intScope::@uintAlias, ui4>
       uint_type_alias = hw.TypeAliasType.get("intScope", "uintAlias", ui4)
       hwarith.ConstantOp.create(uint_type_alias, 3)
 

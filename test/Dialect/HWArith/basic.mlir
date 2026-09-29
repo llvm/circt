@@ -48,9 +48,9 @@ hw.type_scope @ns {
 !UIntAlias = !hw.typealias<@ns::@uint_t, ui4>
 !SIntAlias = !hw.typealias<@ns::@sint_t, si4>
 hw.module @aliasedConstants(out u: !UIntAlias, out s: !SIntAlias) {
-  // CHECK: %0 = hwarith.constant 15 : ui4 : !hw.typealias<@ns::@uint_t, ui4>
-  // CHECK: %1 = hwarith.constant -2 : si4 : !hw.typealias<@ns::@sint_t, si4>
-  %0 = hwarith.constant 15 : ui4 : !UIntAlias
-  %1 = hwarith.constant -2 : si4 : !SIntAlias
+  // CHECK: %0 = hwarith.constant 15 : !hw.typealias<@ns::@uint_t, ui4>
+  // CHECK: %1 = hwarith.constant -2 : !hw.typealias<@ns::@sint_t, si4>
+  %0 = hwarith.constant 15 : !UIntAlias
+  %1 = hwarith.constant -2 : !SIntAlias
   hw.output %0, %1 : !UIntAlias, !SIntAlias
 }
