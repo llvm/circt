@@ -451,3 +451,16 @@ module UnsupportedOutputArgument;
   // expected-error @below {{queue lvalue range selections are not supported}}
   initial f(q[0:1]);
 endmodule
+
+// -----
+
+typedef struct packed { bit x; bit y; } Pair;
+
+function automatic void useRef(ref Pair p);
+endfunction
+
+module Foo;
+  bit [1:0] z;
+  // expected-error @below {{ref argument `p` expects '!moore.ref<struct<{x: i1, y: i1}>>' but call provides '!moore.ref<i2>'}}
+  initial useRef(z);
+endmodule
