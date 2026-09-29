@@ -123,13 +123,15 @@ Operation *hw::materializeConstant(OpBuilder &builder, Attribute value,
   // Signless integer constants, including those of aliased integer types, can
   // materialize into hw.constant. Folders may produce attributes whose type
   // differs from the result type only in signedness, e.g. aggregate constant
-  // fields, so the value is given the canonical result type.
+  // fields, so the value is given the canonical result type. Other integer
+  // constants can't be materialized.
   if (auto intType = type_dyn_cast<IntegerType>(type))
-    if (auto attrValue = dyn_cast<IntegerAttr>(value);
-        attrValue && isHWIntegerType(type)) {
-      if (attrValue.getValue().getBitWidth() == intType.getWidth())
-        attrValue = IntegerAttr::get(intType, attrValue.getValue());
-      return ConstantOp::create(builder, loc, type, attrValue);
+    if (auto attrValue = dyn_cast<IntegerAttr>(value)) {
+      if (!isHWIntegerType(type) ||
+          attrValue.getValue().getBitWidth() != intType.getWidth())
+        return nullptr;
+      return ConstantOp::create(
+          builder, loc, type, IntegerAttr::get(intType, attrValue.getValue()));
     }
 
   // Aggregate constants.

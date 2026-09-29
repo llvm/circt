@@ -8,6 +8,8 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "gtest/gtest.h"
@@ -44,6 +46,51 @@ TEST(MaterializerTest, ParamAttr) {
   auto type = builder.getI16Type();
   context.getLoadedDialect<HWDialect>()->materializeConstant(builder, attr,
                                                              type, loc);
+}
+
+TEST(MaterializerTest, IntegerConstant) {
+  MLIRContext context;
+  context.loadDialect<HWDialect>();
+  Location loc(UnknownLoc::get(&context));
+  OpBuilder builder(&context);
+  Block block;
+  builder.setInsertionPointToStart(&block);
+  auto *dialect = context.getLoadedDialect<HWDialect>();
+  auto i5 = builder.getIntegerType(5);
+  auto ui5 = builder.getIntegerType(5, /*isSigned=*/false);
+
+  // Values which differ from the result type only in signedness are given the
+  // result type.
+  auto *op = dialect->materializeConstant(
+      builder, builder.getIntegerAttr(ui5, 3), i5, loc);
+  auto constOp = dyn_cast_or_null<ConstantOp>(op);
+  ASSERT_TRUE(constOp);
+  EXPECT_EQ(constOp.getValueAttr().getType(), i5);
+  EXPECT_EQ(constOp.getType(), i5);
+  EXPECT_TRUE(succeeded(constOp.verify()));
+
+  // Aliases of integer types are materialized, with the value having the
+  // canonical type.
+  auto alias = TypeAliasType::get(
+      SymbolRefAttr::get(builder.getStringAttr("ns"),
+                         {FlatSymbolRefAttr::get(builder.getStringAttr("t"))}),
+      i5);
+  op = dialect->materializeConstant(builder, builder.getIntegerAttr(i5, 3),
+                                    alias, loc);
+  constOp = dyn_cast_or_null<ConstantOp>(op);
+  ASSERT_TRUE(constOp);
+  EXPECT_EQ(constOp.getValueAttr().getType(), i5);
+  EXPECT_EQ(constOp.getType(), alias);
+  EXPECT_TRUE(succeeded(constOp.verify()));
+
+  // Width mismatches and non-signless result types can't be materialized.
+  EXPECT_EQ(
+      dialect->materializeConstant(
+          builder, builder.getIntegerAttr(builder.getI8Type(), 3), i5, loc),
+      nullptr);
+  EXPECT_EQ(dialect->materializeConstant(
+                builder, builder.getIntegerAttr(ui5, 3), ui5, loc),
+            nullptr);
 }
 
 } // namespace
