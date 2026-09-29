@@ -122,4 +122,49 @@ TEST(ESIOpTest, ReplaceBundleSubElements) {
   EXPECT_EQ(renamedBundle.getChannels()[0].direction, ChannelDirection::to);
   EXPECT_EQ(renamedBundle.getChannels()[0].type, expectedChannel);
 }
+
+TEST(ESIOpTest, CanonicalizeNestedAliases) {
+  MLIRContext context;
+  context.loadDialect<hw::HWDialect, ESIDialect>();
+  Builder builder(&context);
+
+  auto i8Type = builder.getI8Type();
+  auto name = builder.getStringAttr("payload");
+  auto ref = SymbolRefAttr::get(
+      builder.getStringAttr("types"),
+      {FlatSymbolRefAttr::get(builder.getStringAttr("payloadAlias"))});
+  auto alias = hw::TypeAliasType::get(ref, i8Type);
+  auto channel = ChannelType::get(&context, alias, ChannelSignaling::FIFO, 2);
+  auto expectedChannel =
+      ChannelType::get(&context, i8Type, ChannelSignaling::FIFO, 2);
+  EXPECT_EQ(hw::getCanonicalType(channel), expectedChannel);
+  EXPECT_EQ(hw::getCanonicalType(ListType::get(&context, alias)),
+            ListType::get(&context, i8Type));
+
+  auto bundle = ChannelBundleType::get(
+      &context, {{name, ChannelDirection::to, channel}}, builder.getUnitAttr());
+  auto canonicalBundle = cast<ChannelBundleType>(hw::getCanonicalType(bundle));
+  EXPECT_EQ(canonicalBundle.getResettable(), bundle.getResettable());
+  ASSERT_EQ(canonicalBundle.getChannels().size(), 1u);
+  EXPECT_EQ(canonicalBundle.getChannels()[0].name, name);
+  EXPECT_EQ(canonicalBundle.getChannels()[0].direction, ChannelDirection::to);
+  EXPECT_EQ(canonicalBundle.getChannels()[0].type, expectedChannel);
+  auto bundleAlias = hw::TypeAliasType::get(
+      SymbolRefAttr::get(
+          builder.getStringAttr("types"),
+          {FlatSymbolRefAttr::get(builder.getStringAttr("bundleAlias"))}),
+      bundle);
+  EXPECT_EQ(bundleAlias.getCanonicalType(), canonicalBundle);
+
+  auto field = hw::StructType::get(&context, {{name, alias}});
+  auto frame = WindowFrameType::get(
+      &context, name, {WindowFieldType::get(&context, name, 0, 0)});
+  auto window = WindowType::get(&context, builder.getStringAttr("window"),
+                                field, {frame});
+  auto canonicalWindow = cast<WindowType>(hw::getCanonicalType(window));
+  EXPECT_EQ(canonicalWindow.getName(), window.getName());
+  EXPECT_EQ(canonicalWindow.getFrames(), window.getFrames());
+  EXPECT_EQ(canonicalWindow.getInto(),
+            hw::StructType::get(&context, {{name, i8Type}}));
+}
 } // namespace
