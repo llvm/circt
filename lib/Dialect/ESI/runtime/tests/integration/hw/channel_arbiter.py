@@ -201,7 +201,7 @@ class ListChecker(Module):
     in_ready.assign(Mux(is_completing, Bits(1)(1), report_ready))
 
 
-def ChannelArbiterListTestMod(pipelined_scheduler: bool):
+def ChannelArbiterListTestMod(pipelined_scheduler: bool, wide_fanin=None):
   """Contending list producers -> arbiter -> contiguity checker. Message
   atomicity is the property most at risk from any arbitration change, so it is
   covered for both arbitration modes."""
@@ -225,12 +225,13 @@ def ChannelArbiterListTestMod(pipelined_scheduler: bool):
                              ports.clk,
                              ports.rst,
                              pipelined_scheduler=pipelined_scheduler,
+                             wide_fanin=wide_fanin,
                              telemetry=False)
       chk = ListChecker(clk=ports.clk, rst=ports.rst, in_=muxed)
       esi.ChannelService.to_host(AppID("report"), chk.report)
 
   ChannelArbiterListTest.__name__ = (
-      f"ChannelArbiterListTest_{pipelined_scheduler}")
+      f"ChannelArbiterListTest_{pipelined_scheduler}_{wide_fanin}")
   return ChannelArbiterListTest
 
 
@@ -438,6 +439,14 @@ class Top(Module):
     ChannelArbiterListTestMod(True)(clk=ports.clk,
                                     rst=ports.rst,
                                     appid=AppID("list_test_sched"))
+    # Multi-flit messages through the `wide_fanin` `msg_end` path.
+    ChannelArbiterListTestMod(False, True)(clk=ports.clk,
+                                           rst=ports.rst,
+                                           appid=AppID("list_test_widefanin"))
+    ChannelArbiterListTestMod(True,
+                              True)(clk=ports.clk,
+                                    rst=ports.rst,
+                                    appid=AppID("list_test_widefanin_sched"))
     ChannelArbiterTokenTest(clk=ports.clk,
                             rst=ports.rst,
                             appid=AppID("token_test"))

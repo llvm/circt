@@ -158,6 +158,16 @@ class TestChannelArbiterCosim:
     contending producers than the grant queue is deep."""
     self._check_contiguity(conn, "list_test_sched", set(range(1, 7)))
 
+  def test_list_contiguity_wide_fanin(self,
+                                      conn: AcceleratorConnection) -> None:
+    """Contiguity with `wide_fanin` forced on."""
+    self._check_contiguity(conn, "list_test_widefanin", {1, 2})
+
+  def test_list_contiguity_wide_fanin_scheduled(
+      self, conn: AcceleratorConnection) -> None:
+    """As above, under the grant-queue scheduler."""
+    self._check_contiguity(conn, "list_test_widefanin_sched", set(range(1, 7)))
+
   @staticmethod
   def _check_contiguity(conn: AcceleratorConnection, dut_name: str,
                         expected_src: set[int]) -> None:
