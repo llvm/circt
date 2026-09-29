@@ -94,14 +94,30 @@ verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
 }
 
 //===----------------------------------------------------------------------===//
-// PackageOp
+// PackageOp and PackageExternOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult PackageOp::verify() {
-  for (Operation &op : *getBodyBlock())
+template <typename Package>
+static LogicalResult verifyPackage(Package package) {
+  for (Operation &op : *package.getBodyBlock())
     if (!isa<hw::TypedeclOp>(op))
-      return emitOpError("body may only contain hw.typedecl operations");
+      return package.emitOpError(
+          "body may only contain hw.typedecl operations");
   return success();
+}
+
+LogicalResult PackageOp::verify() { return verifyPackage(*this); }
+
+LogicalResult PackageExternOp::verify() {
+  if (auto attr = (*this)->getAttr("hw.verilogName")) {
+    auto name = dyn_cast<StringAttr>(attr);
+    if (!name || name.getValue().empty())
+      return emitOpError("'hw.verilogName' must be a non-empty string");
+  } else if (!isPublic()) {
+    return emitOpError("non-public packages require 'hw.verilogName' to "
+                       "preserve their external name when renamed");
+  }
+  return verifyPackage(*this);
 }
 
 //===----------------------------------------------------------------------===//

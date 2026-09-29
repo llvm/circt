@@ -1,6 +1,8 @@
 # REQUIRES: bindings_python
 # RUN: %PYTHON% %s | FileCheck %s
 
+import io
+
 import circt
 from circt.dialects import hw, sv
 
@@ -32,3 +34,42 @@ with ir.Context() as ctx, ir.Location.unknown() as loc:
     reg_op.attributes["sv.attributes"] = ir.ArrayAttr.get([sv_attr])
     print(reg_op)
     # CHECK: %reg1 = sv.reg  {sv.attributes = [#sv.attribute<"no_merge">]} : !hw.inout<i1>
+
+    package_op = sv.PackageExternOp("ExternalTypes")
+    with ir.InsertionPoint(package_op.body.blocks.append()):
+      hw.TypedeclOp.create("word", i1)
+    assert package_op.operation.verify()
+    print(package_op)
+    # CHECK: sv.package.extern @ExternalTypes {
+    # CHECK-NEXT: hw.typedecl @word : i1
+    # CHECK-NEXT: }
+
+  # Renaming a private MLIR symbol must not rename its external Verilog package.
+  m = ir.Module.parse("""
+    sv.package.extern @types {
+      hw.typedecl @word : i8
+      hw.typedecl @State : !hw.enum<Idle, Busy>
+    } {hw.verilogName = "ExternalTypes", sym_visibility = "private"}
+  """)
+  package_op = m.body.operations[0]
+  ir.SymbolTable.set_symbol_name(package_op, "renamed_types")
+  consumer = ir.Module.parse("""
+    hw.module @Consumer(
+        in %word: !hw.typealias<@renamed_types::@word, i8>,
+        out state: !hw.typealias<@renamed_types::@State, !hw.enum<Idle, Busy>>) {
+      %idle = hw.enum.constant Idle : !hw.typealias<@renamed_types::@State, !hw.enum<Idle, Busy>>
+      hw.output %idle : !hw.typealias<@renamed_types::@State, !hw.enum<Idle, Busy>>
+    }
+  """)
+  m.body.append(consumer.body.operations[0])
+  assert m.operation.verify()
+  buffer = io.StringIO()
+  circt.export_verilog(m, buffer)
+  verilog = buffer.getvalue()
+  assert "renamed_types::" not in verilog
+  assert "package ExternalTypes;" not in verilog
+  print(verilog)
+  # CHECK-LABEL: module Consumer(
+  # CHECK: input {{ *}}ExternalTypes::word word
+  # CHECK: output ExternalTypes::State state
+  # CHECK: assign state = ExternalTypes::State_Idle;

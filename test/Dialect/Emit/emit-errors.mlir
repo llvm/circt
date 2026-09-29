@@ -9,3 +9,23 @@ emit.file_list "filelist.f", [@SomeMacro]
 
 // expected-error @below {{invalid symbol reference: @InvalidRef}}
 emit.file_list "filelist.f", [@InvalidRef]
+
+// -----
+
+hw.module.extern @ExternalModule()
+
+emit.file "external.sv" {
+  // expected-error @below {{does not target an emittable op: @ExternalModule}}
+  emit.ref @ExternalModule
+}
+
+// -----
+
+sv.package.extern @ExternalPackage {
+  hw.typedecl @word : i8
+}
+
+emit.file "external.sv" {
+  // expected-error @below {{does not target an emittable op: @ExternalPackage}}
+  emit.ref @ExternalPackage
+}

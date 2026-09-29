@@ -26,25 +26,12 @@ include "mlir/IR/SymbolInterfaces.td"
 // Package operations
 //===----------------------------------------------------------------------===//
 
-def PackageOp : SVOp<"package", [
-    Emittable, SymbolName, SymbolVisibility, Symbol, SymbolTable, TypeScopeLike,
+class SVPackageOp<string mnemonic, list<Trait> traits = []> :
+    SVOp<mnemonic, traits # [
+    SymbolName, SymbolVisibility, Symbol, SymbolTable, TypeScopeLike,
     SingleBlock, NoTerminator, NoRegionArguments, IsolatedFromAbove,
     HasParent<"mlir::ModuleOp">
 ]> {
-  let summary = "SystemVerilog package containing type declarations";
-  let description = [{
-    A named, top-level SystemVerilog package containing only `hw.typedecl`
-    operations. Its declarations are referenced using `hw.typealias` with a
-    symbol reference of the form `@package::@type`. Empty packages are allowed.
-
-    The body is currently restricted to type declarations because the lookup,
-    legalization, and emission infrastructure for other declarations is not yet
-    prepared to handle them in a package's nested symbol table. This restriction
-    can be relaxed to support declarations such as functions and parameters as
-    that infrastructure is extended; it is not a limitation of SystemVerilog
-    packages.
-  }];
-
   let arguments = (ins
     SymbolNameAttr:$sym_name,
     OptionalAttr<StrAttr>:$sym_visibility
@@ -56,6 +43,55 @@ def PackageOp : SVOp<"package", [
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
+def PackageOp : SVPackageOp<"package", [Emittable]> {
+  let summary = "SystemVerilog package containing type declarations";
+  let description = [{
+    A named, top-level SystemVerilog package containing only `hw.typedecl`
+    operations. Its declarations are referenced using `hw.typealias` with a
+    symbol reference of the form `@package::@type`. Empty packages are allowed.
+
+    Use `sv.package.extern` when the package's SystemVerilog definition is
+    provided externally and should not be emitted.
+
+    The body is currently restricted to type declarations because the lookup,
+    legalization, and emission infrastructure for other declarations is not yet
+    prepared to handle them in a package's nested symbol table. This restriction
+    can be relaxed to support declarations such as functions and parameters as
+    that infrastructure is extended; it is not a limitation of SystemVerilog
+    packages.
+  }];
+}
+
+def PackageExternOp : SVPackageOp<"package.extern"> {
+  let summary = "Externally defined SystemVerilog package";
+  let description = [{
+    A named, top-level SystemVerilog package whose implementation is provided
+    externally. Like `sv.package`, its body contains only `hw.typedecl`
+    operations, which are referenced using `hw.typealias` with a symbol
+    reference of the form `@package::@type`. Empty packages are allowed.
+
+    The declarations remain available for type resolution, but ExportVerilog
+    does not emit the package or create an output file for it. Like
+    `hw.module.extern`, it is not emittable and cannot be an `emit.ref` target.
+
+    The `hw.verilogName` string attribute specifies the externally defined
+    SystemVerilog package name, independently of the MLIR symbol name. It is
+    required for non-public packages so that renaming their MLIR symbols does
+    not change references to the external package. For public packages it is
+    optional and defaults to the symbol name. The Verilog name must be valid
+    SystemVerilog and is not renamed.
+
+    Example:
+
+    ```mlir
+    sv.package.extern @ExtTypes {
+      hw.typedecl @word : i8
+    }
+    hw.module.extern @ExtMod(in %arg: !hw.typealias<@ExtTypes::@word, i8>)
+    ```
   }];
 }
 
