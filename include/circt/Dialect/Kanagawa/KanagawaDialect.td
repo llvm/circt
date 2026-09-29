@@ -12,6 +12,8 @@
 include "mlir/IR/OpBase.td"
 
 def KanagawaDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "kanagawa";
   let cppNamespace = "::circt::kanagawa";
 
