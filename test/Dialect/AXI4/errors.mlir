@@ -232,3 +232,13 @@ hw.module @UndersizedXbarPort(in %clk : !seq.clock, in %rst_ni : i1) {
   %sub = axi4.xbar %clk, %rst_ni mgrs %a, %b : (!mgr, !mgr) -> !sub
 }
 
+// -----
+
+!port = !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+!narrow = !axi4.port<addr_width = 32, data_width = 32, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+hw.module @ConvertingCut(in %clk : !seq.clock, in %rst_ni : i1,
+                         in %upstream : !port) {
+  // expected-error @below {{'axi4.cut' op failed to verify that downstream port matches the upstream port}}
+  %cut = "axi4.cut"(%clk, %rst_ni, %upstream) : (!seq.clock, i1, !port) -> !narrow
+}

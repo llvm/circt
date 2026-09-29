@@ -197,4 +197,26 @@ def XbarOp : AXI4Op<"xbar", [PortResultsAtMostOneUse]> {
   let hasVerifier = 1;
 }
 
+def CutOp : AXI4Op<"cut", [PortResultsAtMostOneUse,
+    TypesMatchWith<"downstream port matches the upstream port", "upstream",
+                   "downstream", "$_self">]> {
+  let summary = "An AXI4 register cut";
+  let description = [{
+    Breaks the combinational paths through an AXI4 connection, at the cost of a
+    cycle of latency in each direction.
+
+    Example:
+    ```mlir
+    %downstream = axi4.cut %clk, %rst_ni, %upstream
+      : !axi4.port<...>
+    ```
+  }];
+
+  let arguments = (ins ClockType:$clock, I1:$reset, PortType:$upstream);
+  let results = (outs PortType:$downstream);
+
+  let assemblyFormat =
+      "$clock `,` $reset `,` $upstream attr-dict `:` qualified(type($upstream))";
+}
+
 #endif // CIRCT_DIALECT_AXI4_AXI4OPS_TD
