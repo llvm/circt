@@ -519,6 +519,52 @@ module TestRcmos(input wire data_in, input wire n_en, input wire p_en,
 rcmos c0(data_out, data_in, n_en, p_en);
 endmodule
 
+// Ensure Slang automatically inserts conversions for MOS switch inputs that
+// aren't 1-bit
+// CHECK-LABEL: moore.module @TestNmosWideInputs
+module TestNmosWideInputs(input wire [1:0] data_in, input wire [1:0] en,
+                          output wire data_out);
+// CHECK: %[[DATA_IN:.*]] = moore.net name "data_in" wire : <l2>
+// CHECK: %[[EN:.*]] = moore.net name "en" wire : <l2>
+// CHECK: %[[INW:.*]] = moore.read %[[DATA_IN]] : <l2>
+// CHECK: %[[IN:.*]] = moore.trunc %[[INW]] : l2 -> l1
+// CHECK: %[[ENW:.*]] = moore.read %[[EN]] : <l2>
+// CHECK: %[[ENV:.*]] = moore.trunc %[[ENW]] : l2 -> l1
+// CHECK: %[[OFF:.*]] = moore.constant 0 : l1
+// CHECK: %[[COND:.*]] = moore.case_eq %[[ENV]], %[[OFF]] : l1
+// CHECK: %[[Z:.*]] = moore.constant bZ : l1
+// CHECK: %[[RESULT:.*]] = moore.conditional %[[COND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+nmos n0(data_out, data_in, en);
+endmodule
+
+// CHECK-LABEL: moore.module @TestCmosWideInputs
+module TestCmosWideInputs(input wire [1:0] data_in, input wire [1:0] n_en,
+                          input wire [1:0] p_en, output wire data_out);
+// CHECK: %[[DATA_IN:.*]] = moore.net name "data_in" wire : <l2>
+// CHECK: %[[N_EN:.*]] = moore.net name "n_en" wire : <l2>
+// CHECK: %[[P_EN:.*]] = moore.net name "p_en" wire : <l2>
+// CHECK: %[[INW:.*]] = moore.read %[[DATA_IN]] : <l2>
+// CHECK: %[[IN:.*]] = moore.trunc %[[INW]] : l2 -> l1
+// CHECK: %[[NENW:.*]] = moore.read %[[N_EN]] : <l2>
+// CHECK: %[[NEN:.*]] = moore.trunc %[[NENW]] : l2 -> l1
+// CHECK: %[[PENW:.*]] = moore.read %[[P_EN]] : <l2>
+// CHECK: %[[PEN:.*]] = moore.trunc %[[PENW]] : l2 -> l1
+// CHECK: %[[Z:.*]] = moore.constant bZ : l1
+// CHECK: %[[NOFF:.*]] = moore.constant 0 : l1
+// CHECK: %[[NCOND:.*]] = moore.case_eq %[[NEN]], %[[NOFF]] : l1
+// CHECK: moore.conditional %[[NCOND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+// CHECK: %[[POFF:.*]] = moore.constant 1 : l1
+// CHECK: %[[PCOND:.*]] = moore.case_eq %[[PEN]], %[[POFF]] : l1
+// CHECK: moore.conditional %[[PCOND]] : i1 -> l1
+// CHECK: moore.yield %[[Z]] : l1
+// CHECK: moore.yield %[[IN]] : l1
+cmos c0(data_out, data_in, n_en, p_en);
+endmodule
+
 // CHECK-LABEL: moore.module @TestPmosArrayConcatLiteral
 module TestPmosArrayConcatLiteral;
   wire [1:0] ad;
