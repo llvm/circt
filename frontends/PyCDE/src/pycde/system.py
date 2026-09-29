@@ -14,7 +14,7 @@ from .types import TypeAlias
 
 from . import circt
 from .circt import ir, passmanager
-from .circt.dialects import esi, hw, msft
+from .circt.dialects import esi, hw, msft, sv
 
 from contextvars import ContextVar
 from collections.abc import Iterable
@@ -177,7 +177,8 @@ class System:
                   importer: Optional[Callable] = None,
                   preprocess_op: Optional[Callable[[ir.OpView],
                                                    Optional[ir.OpView]]] = None,
-                  debug: bool = False) -> Dict[str, Any]:
+                  debug: bool = False,
+                  external_packages: bool = False) -> Dict[str, Any]:
     """Import mlir asm created elsewhere into our space. Exactly one of the
     arguments module_str or file must be provided.
     
@@ -192,6 +193,11 @@ class System:
       preprocess_op: Optional preprocessing function which takes an Operation and
                      returns a modified Operation or None to skip.
       debug: Whether to enable debug output for the import process.
+      external_packages: Mark imported sv.package operations as externally
+                         provided, retaining their type declarations without
+                         emitting their SystemVerilog definitions. Defaults to
+                         False. To select individual packages instead, set their
+                         extern unit attribute in preprocess_op.
     """
 
     if module_str is not None:
@@ -254,6 +260,9 @@ class System:
         if op is None:
           # If the op was preprocessed to None, skip it.
           continue
+
+      if external_packages and isinstance(op, sv.PackageOp):
+        op.attributes["extern"] = ir.UnitAttr.get()
 
       # TODO: handle symbolrefs pointing to potentially renamed symbols.
       imported_obj = None
