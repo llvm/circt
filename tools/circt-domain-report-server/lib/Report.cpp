@@ -1601,6 +1601,8 @@ JsonValue Report::request(llvm::StringRef method, const Object &params,
     return trace(params, error);
   if (method == "crossingPath")
     return crossingPath(params, error);
+  if (method == "instanceAssociation")
+    return instanceAssociation(params, error);
   if (method == "neighbors")
     return neighbors(params, error);
   if (method == "domainItems")
@@ -1869,6 +1871,89 @@ JsonValue Report::trace(const Object &params, std::string &error) const {
   return response;
 }
 
+JsonValue Report::instanceAssociation(const Object &params,
+                                      std::string &error) const {
+  auto index = params.getInteger("edgeIndex");
+  if (!index || *index < 0 || *index >= static_cast<int64_t>(edges.size())) {
+    error = "unknown provenance edge index";
+    return nullptr;
+  }
+  const auto &edge = edges[*index];
+  if (edge.kind >= edgeKinds.size() || edgeKinds[edge.kind] != "association" ||
+      edge.instance == none || edge.lhs == none || edge.rhs == none) {
+    error = "edge is not an instance association";
+    return nullptr;
+  }
+
+  const auto &instance = instances[edge.instance];
+  const auto &portValue = values[edge.lhs];
+  const auto &domainValue = values[edge.rhs];
+  Array targets;
+  for (const auto &binding : instance.bindings) {
+    if (binding.portValue != portValue.id ||
+        binding.effectiveDomainValue != domainValue.id ||
+        binding.domainType != domains[edge.domain].id)
+      continue;
+    auto targetIt = moduleById.find(binding.targetModule);
+    if (targetIt == moduleById.end())
+      continue;
+    const auto &module = modules[targetIt->second];
+    auto findPort = [&](int32_t portIndex) {
+      return std::find_if(
+          module.ports.begin(), module.ports.end(),
+          [&](const Port &port) { return port.index == portIndex; });
+    };
+    auto port = findPort(binding.portIndex);
+    auto domainPort = findPort(binding.domainPortIndex);
+    if (port == module.ports.end() || domainPort == module.ports.end())
+      continue;
+    auto valueForPort = [&](const Port &port) -> const Value * {
+      auto valueIt = valueById.find(port.value);
+      return valueIt == valueById.end() ||
+                     values[valueIt->second].module != targetIt->second
+                 ? nullptr
+                 : &values[valueIt->second];
+    };
+    const Value *targetValue = valueForPort(*port);
+    const Value *targetDomain = valueForPort(*domainPort);
+    auto portName = [&](const Port &port, const Value *value) {
+      if (value)
+        return value->name;
+      return port.name.empty() ? ("port#" + std::to_string(port.index))
+                               : port.name;
+    };
+    auto portLocation = [&](const Port &port, const Value *value) {
+      return locationJSON(value ? value->location : port.location);
+    };
+    Object item{
+        {"moduleId", std::to_string(module.id)},
+        {"module", module.name},
+        {"port", portName(*port, targetValue)},
+        {"portIndex", binding.portIndex},
+        {"domainPort", portName(*domainPort, targetDomain)},
+        {"domainPortIndex", binding.domainPortIndex},
+        {"location", portLocation(*port, targetValue)},
+        {"domainPortLocation", portLocation(*domainPort, targetDomain)}};
+    if (targetValue)
+      item["portValueId"] = std::to_string(targetValue->id);
+    if (targetDomain)
+      item["domainPortValueId"] = std::to_string(targetDomain->id);
+    auto assignment = std::find_if(
+        port->assignments.begin(), port->assignments.end(),
+        [&](const PortAssignment &candidate) {
+          return candidate.domainType == binding.domainType &&
+                 candidate.domainPortIndex == binding.domainPortIndex;
+        });
+    if (assignment != port->assignments.end())
+      item["inferred"] = assignment->inferred;
+    targets.push_back(std::move(item));
+  }
+  return Object{{"instanceId", std::to_string(instance.id)},
+                {"instance", instance.name},
+                {"ownerModule", modules[instance.module].name},
+                {"targets", std::move(targets)}};
+}
+
 JsonValue Report::crossingPath(const Object &params, std::string &error) const {
   auto index = params.getInteger("crossingIndex");
   if (!index || *index < 0 ||
@@ -1979,6 +2064,29 @@ JsonValue Report::neighbors(const Object &params, std::string &error) const {
     error = "unknown value or domain type ID";
     return nullptr;
   }
+  std::vector<uint32_t> kinds;
+  bool filterKinds = false;
+  if (const auto *requested = params.get("kinds")) {
+    const auto *items = requested->getAsArray();
+    if (!items) {
+      error = "expected provenance edge kinds array";
+      return nullptr;
+    }
+    filterKinds = true;
+    for (const auto &item : *items) {
+      auto name = item.getAsString();
+      auto found = name ? std::find_if(edgeKinds.begin(), edgeKinds.end(),
+                                       [&](const std::string &kind) {
+                                         return llvm::StringRef(kind) == *name;
+                                       })
+                        : edgeKinds.end();
+      if (found == edgeKinds.end()) {
+        error = "unknown provenance edge kind";
+        return nullptr;
+      }
+      kinds.push_back(found - edgeKinds.begin());
+    }
+  }
   uint32_t current = valueIt->second;
   uint32_t offset = pageOffset(params), limit = pageLimit(params);
   uint64_t total = 0;
@@ -1987,7 +2095,9 @@ JsonValue Report::neighbors(const Object &params, std::string &error) const {
        i < adjacencyOffsets[current + 1]; ++i) {
     uint32_t edgeIndex = adjacencyEdges[i];
     const auto &edge = edges[edgeIndex];
-    if (edge.domain != domainIt->second)
+    if (edge.domain != domainIt->second ||
+        (filterKinds &&
+         std::find(kinds.begin(), kinds.end(), edge.kind) == kinds.end()))
       continue;
     uint32_t other = edge.lhs == current ? edge.rhs : edge.lhs;
     if (other == none)
@@ -2288,6 +2398,15 @@ JsonValue Report::minCut(const Object &params, std::string &error) const {
     error = "unknown domain type ID";
     return nullptr;
   }
+  bool associationOnly = false;
+  if (const auto *requested = params.get("associationOnly")) {
+    auto enabled = requested->getAsBoolean();
+    if (!enabled) {
+      error = "associationOnly must be a boolean";
+      return nullptr;
+    }
+    associationOnly = *enabled;
+  }
   uint32_t domainIndex = domainIt->second;
   auto componentNumber = params.getInteger("componentIndex");
   if (componentNumber &&
@@ -2304,7 +2423,8 @@ JsonValue Report::minCut(const Object &params, std::string &error) const {
                       : domainEdges[domainIndex];
   if (nodes.size() < 2)
     return Object{{"available", false},
-                  {"message", "The graph has fewer than two nodes"}};
+                  {"message", "The graph has fewer than two nodes"},
+                  {"associationOnly", associationOnly}};
   bool hasSource = params.getString("sourceId").has_value();
   bool hasTarget = params.getString("targetId").has_value();
   if (hasSource != hasTarget || (componentNumber && hasSource)) {
@@ -2368,6 +2488,7 @@ JsonValue Report::minCut(const Object &params, std::string &error) const {
       (hasSource && !inComponent[nodes[target]])) {
     Object response{{"available", true},
                     {"mode", hasSource ? "between" : "global"},
+                    {"associationOnly", associationOnly},
                     {"count", 0},
                     {"nodeCount", static_cast<int64_t>(nodes.size())},
                     {"sourceSideSize", static_cast<int64_t>(component.size())},
@@ -2381,20 +2502,84 @@ JsonValue Report::minCut(const Object &params, std::string &error) const {
     return response;
   }
 
-  CutGraph graph(component.size());
   std::vector<uint32_t> localIndex(values.size(), none);
   for (uint32_t i = 0; i < component.size(); ++i)
     localIndex[component[i]] = i;
+  std::vector<uint32_t> cutNode(component.size());
+  uint32_t cutNodeCount = component.size();
+  auto associationKind =
+      std::find(edgeKinds.begin(), edgeKinds.end(), "association") -
+      edgeKinds.begin();
+  if (associationOnly) {
+    // Every non-association edge must remain intact. Contract its endpoints
+    // before finding a cut among the remaining association edges.
+    std::vector<uint32_t> parent(component.size()), size(component.size(), 1);
+    for (uint32_t i = 0; i < component.size(); ++i)
+      parent[i] = i;
+    auto findRoot = [&](uint32_t node) {
+      while (parent[node] != node) {
+        parent[node] = parent[parent[node]];
+        node = parent[node];
+      }
+      return node;
+    };
+    for (uint32_t edgeIndex : connections) {
+      const auto &edge = edges[edgeIndex];
+      if (!inComponent[edge.lhs] || edge.kind == associationKind)
+        continue;
+      uint32_t lhs = findRoot(localIndex[edge.lhs]);
+      uint32_t rhs = findRoot(localIndex[edge.rhs]);
+      if (lhs == rhs)
+        continue;
+      if (size[lhs] < size[rhs])
+        std::swap(lhs, rhs);
+      parent[rhs] = lhs;
+      size[lhs] += size[rhs];
+    }
+    std::vector<uint32_t> rootToNode(component.size(), none);
+    cutNodeCount = 0;
+    for (uint32_t i = 0; i < component.size(); ++i) {
+      uint32_t root = findRoot(i);
+      if (rootToNode[root] == none)
+        rootToNode[root] = cutNodeCount++;
+      cutNode[i] = rootToNode[root];
+    }
+    if (cutNodeCount < 2 ||
+        (hasSource && cutNode[localIndex[nodes[source]]] ==
+                          cutNode[localIndex[nodes[target]]]))
+      return Object{
+          {"available", false},
+          {"mode", hasSource         ? "between"
+                   : componentNumber ? "component"
+                                     : "global"},
+          {"associationOnly", true},
+          {"message", hasSource
+                          ? "No association-only cut exists: these nodes are "
+                            "connected without crossing an association edge"
+                          : "No association-only cut exists: non-association "
+                            "edges keep this component connected"}};
+  } else {
+    for (uint32_t i = 0; i < component.size(); ++i)
+      cutNode[i] = i;
+  }
+
+  CutGraph graph(cutNodeCount);
   for (uint32_t edgeIndex : connections) {
     const auto &edge = edges[edgeIndex];
-    if (inComponent[edge.lhs])
-      graph.addEdge(localIndex[edge.lhs], localIndex[edge.rhs], edgeIndex);
+    if (!inComponent[edge.lhs] ||
+        (associationOnly && edge.kind != associationKind))
+      continue;
+    uint32_t lhs = cutNode[localIndex[edge.lhs]];
+    uint32_t rhs = cutNode[localIndex[edge.rhs]];
+    if (lhs != rhs)
+      graph.addEdge(lhs, rhs, edgeIndex);
   }
-  auto cut = hasSource ? graph.minimumSTCut(localIndex[nodes[source]],
-                                            localIndex[nodes[target]])
+  auto cut = hasSource ? graph.minimumSTCut(cutNode[localIndex[nodes[source]]],
+                                            cutNode[localIndex[nodes[target]]])
                        : graph.minimumGlobalCut();
-  uint64_t sourceSideSize =
-      std::count(cut.sourceSide.begin(), cut.sourceSide.end(), 1);
+  uint64_t sourceSideSize = 0;
+  for (uint32_t node : cutNode)
+    sourceSideSize += cut.sourceSide[node];
   Array cutEdges;
   for (uint32_t edgeIndex : cut.edgeIndices)
     cutEdges.push_back(edgeJSON(edgeIndex));
@@ -2403,6 +2588,7 @@ JsonValue Report::minCut(const Object &params, std::string &error) const {
       {"mode", hasSource         ? "between"
                : componentNumber ? "component"
                                  : "global"},
+      {"associationOnly", associationOnly},
       {"count", static_cast<int64_t>(cut.edgeIndices.size())},
       {"nodeCount", static_cast<int64_t>(nodes.size())},
       {"sourceSideSize", static_cast<int64_t>(sourceSideSize)},

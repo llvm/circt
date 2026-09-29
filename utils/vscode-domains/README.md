@@ -17,16 +17,26 @@ process, so large reports do not enter a VS Code text buffer.
    cut** to find the fewest recorded edges whose removal splits that
    component. The **Source** and **Target** rows show the selected nodes. Click
    either row to search node names, module names, or IDs as you type, then
-   select a match. Choose **Calculate cut between selected nodes** to find a
-   cut between them. **FIRRTL Domains: Choose Min-Cut Endpoints** also lets you
-   select both nodes from the Command Palette. If the component has an illegal
-   crossing with a recorded path, the first crossing's path endpoints within
+   select a match. Click **Cut edges** to choose **All edge kinds** or
+   **Associations only**. Choose **Calculate cut between selected nodes** to
+   find a cut between them using that choice. **FIRRTL Domains: Choose Min-Cut
+   Endpoints** also lets you select both nodes from the Command Palette. If
+   the component has an illegal crossing with a recorded path, the first
+   crossing's path endpoints within
    that component are selected initially when they are distinct. Cut edges can
    be opened at their source locations.
    For a failed report, components involved in an illegal crossing receive the
    theme's error color and an error badge. Expand **Illegal crossings** under
    either component to see the shortest recorded path between the reported
    domain annotations. The failed connection appears as a separate step.
+   Expand an instance association in the path to see which target module port
+   is paired with which domain port, whether that pairing was explicit or
+   inferred, and the target port's source location. Select the pairing to
+   open that source location. The same expansion lists the instance's recorded
+   parent connections for both ports. Expand either connection group and
+   select a row to open the connection's source location. These are domain
+   provenance relations, so ports without a recorded parent connection show a
+   count of zero; the report is not a complete wiring netlist.
 4. Use **Search Values** or **Show Values at Cursor** to inspect a value's
    assignments. **Trace Value** on a value, or from the Command Palette,
    opens the shortest recorded provenance route in a temporary editor.
@@ -43,7 +53,11 @@ as one report edge. Self-edges cannot cross a cut and are omitted from the
 connection list. A domain type such as `ClockDomain` can have many connected
 components because a design can contain many independent clocks. Minimum cuts
 are shown within each component; choosing two nodes restricts the second
-choice to the first node's component. Cut
+choice to the first node's component. **Associations only** keeps constraints,
+aliases, and instance bindings connected and minimizes the number of
+association edges removed, whether the associations are explicit or inferred.
+If those retained edges still connect the selected nodes, no association-only
+cut exists. Cut
 results describe recorded relations, not physical wires. Module values are
 shared templates rather than separate copies for every instance. Ports on an
 extmodule have no value IDs in the report, so their explicit associations are

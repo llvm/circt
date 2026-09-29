@@ -76,6 +76,7 @@ Module._load = originalLoad;
 
 test('Domains view lists components and calculates their cuts lazily', async () => {
   const requests = [];
+  const cutRequests = [];
   let suggestionRequests = 0;
   const view = new DomainsView();
   view.summary = {complete: true, hasIllegalCrossings: true};
@@ -116,6 +117,28 @@ test('Domains view lists components and calculates their cuts lazily', async () 
           location: {display: 'association', sources: []}}
       ]};
     }
+    if (method === 'instanceAssociation') {
+      assert.equal(params.edgeIndex, 7);
+      return {instance: 'child', targets: [{
+        moduleId: '9', module: 'Child', port: 'clk', portIndex: 0,
+        domainPort: 'clockDomain', domainPortIndex: 1, inferred: true,
+        location: {display: 'target hardware port', sources: []},
+        domainPortLocation: {display: 'target domain port', sources: []}
+      }]};
+    }
+    if (method === 'neighbors') {
+      assert.equal(params.domainTypeId, '42');
+      assert.deepEqual(params.kinds, ['constraint', 'domain_alias']);
+      if (params.valueId === '11')
+        return {total: 0, items: []};
+      assert.equal(params.valueId, '10');
+      return {total: 1, items: [{
+        index: 8, kind: 'constraint', operation: 'firrtl.matchingconnect',
+        lhsId: '10', rhsId: '12', lhsModule: 'M', rhsModule: 'Peer',
+        otherValue: 'clockOut', inferred: false, summarized: false,
+        location: {display: 'parent connection', sources: []}
+      }]};
+    }
     if (method === 'componentForValue')
       return {index: params.valueId === '1' ? 0 : 1};
     if (method === 'listDomainComponents')
@@ -149,8 +172,10 @@ test('Domains view lists components and calculates their cuts lazily', async () 
     }
     if (method === 'minCut') {
       assert.ok(params.componentIndex === 0 || params.componentIndex === 1);
+      cutRequests.push(params);
       return {available: true, mode: 'component',
         componentIndex: params.componentIndex,
+        associationOnly: params.associationOnly,
         count: 1, sourceSideSize: 1, targetSideSize: 2, edges: [{
           index: 3, kind: 'association', lhs: 'portA', rhs: 'clock',
           lhsModule: 'M', rhsModule: 'M', inferred: false, summarized: false,
@@ -213,8 +238,11 @@ test('Domains view lists components and calculates their cuts lazily', async () 
   await view.getChildren(crossing);
   assert.equal(requests.filter(method => method === 'crossingPath').length, 1);
 
-  const [sourceRow, targetRow, action, cut] =
+  const [filterRow, sourceRow, targetRow, action, cut] =
     await view.getChildren(groups[3]);
+  assert.equal(view.getTreeItem(filterRow).label, 'Cut edges: All edge kinds');
+  assert.equal(view.getTreeItem(filterRow).command.command,
+    'circtDomains.selectCutFilter');
   assert.equal(view.getTreeItem(sourceRow).label, 'Source: M.A');
   assert.equal(view.getTreeItem(targetRow).label, 'Target: M.a');
   assert.equal(view.getTreeItem(sourceRow).description, 'ID 1');
@@ -230,32 +258,45 @@ test('Domains view lists components and calculates their cuts lazily', async () 
   assert.equal((await view.getChildren(cut))[0].kind, 'cutEdge');
   await view.getChildren(groups[3]);
   assert.equal(requests.filter(method => method === 'minCut').length, 1);
+  assert.equal(cutRequests[0].associationOnly, false);
   assert.equal(suggestionRequests, 1);
+
+  view.setAssociationOnlyCut('42', 0, true);
+  const associationRows = await view.getChildren(groups[3]);
+  assert.equal(view.getTreeItem(associationRows[0]).label,
+    'Cut edges: Associations only');
+  assert.equal(view.getTreeItem(associationRows[4]).label,
+    'Minimum: 1 association');
+  assert.equal(cutRequests.at(-1).associationOnly, true);
+  assert.equal(view.getTreeItem(associationRows[1]).label, 'Source: M.A');
+  view.setAssociationOnlyCut('42', 0, false);
+  await view.getChildren(groups[3]);
+  assert.equal(cutRequests.at(-1).associationOnly, false);
 
   view.setBetweenCut('42', 0,
     {available: true, mode: 'between', count: 0, edges: []},
     'M.portA', 'M.portB');
   const withPair = await view.getChildren(groups[3]);
-  assert.equal(withPair[3].data.count, 0);
+  assert.equal(withPair[4].data.count, 0);
   view.setCutEndpoint('42', 0, 'source',
     {id: '1', name: 'A', module: 'M'});
-  assert.equal((await view.getChildren(groups[3]))[3].data.count, 0);
+  assert.equal((await view.getChildren(groups[3]))[4].data.count, 0);
 
   view.setCutEndpoint('42', 0, 'source',
     {id: '5', name: 'other', module: 'M'});
   const changedPair = await view.getChildren(groups[3]);
-  assert.equal(view.getTreeItem(changedPair[0]).label, 'Source: M.other');
-  assert.equal(view.getTreeItem(changedPair[1]).label, 'Target: M.a');
-  assert.equal(changedPair.length, 4);
+  assert.equal(view.getTreeItem(changedPair[1]).label, 'Source: M.other');
+  assert.equal(view.getTreeItem(changedPair[2]).label, 'Target: M.a');
+  assert.equal(changedPair.length, 5);
   view.setCutEndpoint('42', 0, 'source',
     {id: '3', name: 'a', module: 'M'});
   const missingTarget = await view.getChildren(groups[3]);
-  assert.equal(view.getTreeItem(missingTarget[1]).label,
+  assert.equal(view.getTreeItem(missingTarget[2]).label,
     'Target: Choose node…');
   assert.equal(missingTarget.some(row => row.kind === 'cutAction'), false);
 
   const otherGroups = await view.getChildren(second);
-  const [rightSource, rightTarget] = await view.getChildren(otherGroups[3]);
+  const [, rightSource, rightTarget] = await view.getChildren(otherGroups[3]);
   assert.equal(suggestionRequests, 2);
   assert.equal(view.getTreeItem(rightSource).label, 'Source: M.b');
   assert.equal(view.getTreeItem(rightTarget).label, 'Target: M.B');
@@ -264,6 +305,37 @@ test('Domains view lists components and calculates their cuts lazily', async () 
     'domain:42:component:1:crossing:0');
   await view.getChildren(sameCrossing);
   assert.equal(requests.filter(method => method === 'crossingPath').length, 1);
+
+  const instanceStep = {kind: 'crossingStep', data: {
+    index: 7, kind: 'association', domainTypeId: '42',
+    instance: 'child', instanceId: '5',
+    lhs: 'child.clk', rhs: 'child.clockDomain', lhsId: '10', rhsId: '11',
+    lhsModule: 'M', rhsModule: 'M', fromId: '10', toId: '11',
+    inferred: true, summarized: true,
+    location: {display: 'instance site', sources: []}
+  }};
+  const instanceItem = view.getTreeItem(instanceStep);
+  assert.equal(instanceItem.label,
+    'Instance association: M.child.clk → M.child.clockDomain');
+  assert.equal(instanceItem.collapsibleState, 1);
+  const [targetAssociation, hardwareConnections, domainConnections] =
+    await view.getChildren(instanceStep);
+  assert.equal(targetAssociation.kind, 'instanceAssociation');
+  const targetItem = view.getTreeItem(targetAssociation);
+  assert.equal(targetItem.label, 'Child.clk → clockDomain');
+  assert.match(targetItem.description, /inferred in target module/);
+  assert.match(targetItem.tooltip, /target domain port/);
+  assert.equal(targetItem.command.command, 'circtDomains.openSource');
+  assert.equal(view.getTreeItem(hardwareConnections).label,
+    'Hardware port connections (1)');
+  assert.equal(view.getTreeItem(domainConnections).label,
+    'Domain port connections (0)');
+  const [connection] = await view.getChildren(hardwareConnections);
+  const connectionItem = view.getTreeItem(connection);
+  assert.equal(connectionItem.label, 'Peer.clockOut');
+  assert.equal(connectionItem.description, 'firrtl.matchingconnect');
+  assert.match(connectionItem.tooltip, /parent connection/);
+  assert.equal(connectionItem.command.command, 'circtDomains.openSource');
 
   const unmappedGroups = await view.getChildren(unmapped);
   assert.deepEqual(unmappedGroups.map(node => node.kind),
@@ -278,9 +350,9 @@ test('Domains view lists components and calculates their cuts lazily', async () 
       originalHelper.request(method, params)};
   const manualRows = await view.getChildren(groups[3]);
   assert.equal(suggestionRequests, 3);
-  assert.equal(view.getTreeItem(manualRows[0]).label,
-    'Source: Choose node…');
   assert.equal(view.getTreeItem(manualRows[1]).label,
+    'Source: Choose node…');
+  assert.equal(view.getTreeItem(manualRows[2]).label,
     'Target: Choose node…');
   assert.equal(manualRows.some(row => row.kind === 'cutAction'), false);
 });

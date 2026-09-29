@@ -160,6 +160,108 @@ static std::string crossingReport() {
   })json";
 }
 
+static std::string instanceAssociationReport() {
+  return R"json({
+    "format":"circt-domain-inference", "version":3, "complete":true,
+    "types":["!firrtl.clock","!firrtl.domain<@D()>"],
+    "locations":[{"display":"instance", "sources":[]},
+                 {"display":"target port", "sources":[]},
+                 {"display":"target domain port", "sources":[]},
+                 {"display":"parent connection", "sources":[]}],
+    "operation_kinds":["firrtl.instance","firrtl.matchingconnect",
+                       "firrtl.domain.define"],
+    "domains":[{"id":42,"name":"D","location_id":0}],
+    "provenance_edge_kinds":["association","constraint","domain_alias",
+                             "instance_binding"],
+    "provenance_edge_fields":["owner_module_id","kind_id",
+      "domain_type_id","location_id","flags","lhs_value_id","rhs_value_id",
+      "operation_kind_id","instance_id","target_module_id"],
+    "provenance_edge_flags":{"inferred":1,"summarized":2},
+    "instance_binding_direction":"parent_instance_to_module_template",
+    "modules":[
+      {"id":1,"name":"Top","kind":"module","ports":[],"values":[
+        {"id":10,"name":"child.clock","kind":"hardware","type_id":0,
+         "location_id":0,"instance_id":5,"instance_port_index":0},
+        {"id":11,"name":"child.domain","kind":"domain","type_id":1,
+         "location_id":0,"domain_type_id":42,"instance_id":5,
+         "instance_port_index":1},
+        {"id":12,"name":"driver","kind":"hardware","type_id":0,
+         "location_id":3},
+        {"id":13,"name":"alias","kind":"domain","type_id":1,
+         "location_id":3,"domain_type_id":42}],
+       "instances":[{"id":5,"name":"child","location_id":0,"targets":[2],
+         "effective_domain_bindings":[{"target_module_id":2,
+           "port_index":0,"port_value_id":10,"domain_type_id":42,
+           "domain_port_index":1,"effective_domain_value_id":11,
+           "effective_domain_value_name":"child.domain","location_id":0}]}]},
+      {"id":2,"name":"Child","kind":"module","ports":[
+        {"index":0,"value_id":20,"domain_assignments":[{
+          "domain_type_id":42,"domain_port_index":1,
+          "domain_port_value_id":21,"inferred":true}]},
+        {"index":1,"value_id":21}],
+       "values":[
+         {"id":20,"name":"clock","kind":"hardware","type_id":0,
+          "location_id":1},
+         {"id":21,"name":"domain","kind":"domain","type_id":1,
+          "location_id":2,"domain_type_id":42}],"instances":[]}],
+    "provenance_edges":[[1,0,42,0,3,10,11,0,5,null],
+                        [1,1,42,3,0,10,12,1,null,null],
+                        [1,2,42,3,0,11,13,2,null,null],
+                        [1,3,42,0,0,10,20,0,5,2]]
+  })json";
+}
+
+TEST(DomainReport, ExplainsInstanceAssociationThroughTargetPorts) {
+  std::istringstream input(instanceAssociationReport());
+  Report report;
+  std::string error;
+  ASSERT_TRUE(report.load(input, error)) << error;
+  auto explanation =
+      report.request("instanceAssociation", Object{{"edgeIndex", 0}}, error);
+  const auto *result = explanation.getAsObject();
+  ASSERT_TRUE(result) << error;
+  EXPECT_EQ(result->getString("instance"), "child");
+  const auto *targets = result->getArray("targets");
+  ASSERT_TRUE(targets);
+  ASSERT_EQ(targets->size(), 1u);
+  const auto *target = targets->front().getAsObject();
+  ASSERT_TRUE(target);
+  EXPECT_EQ(target->getString("module"), "Child");
+  EXPECT_EQ(target->getString("port"), "clock");
+  EXPECT_EQ(target->getInteger("portIndex"), 0);
+  EXPECT_EQ(target->getString("domainPort"), "domain");
+  EXPECT_EQ(target->getInteger("domainPortIndex"), 1);
+  EXPECT_EQ(target->getBoolean("inferred"), true);
+  EXPECT_EQ(target->getString("portValueId"), "20");
+  EXPECT_EQ(target->getString("domainPortValueId"), "21");
+  EXPECT_EQ(target->getObject("location")->getString("display"), "target port");
+  EXPECT_EQ(target->getObject("domainPortLocation")->getString("display"),
+            "target domain port");
+
+  for (auto [valueId, expectedKind, expectedPeer] :
+       {std::tuple{"10", "constraint", "driver"},
+        std::tuple{"11", "domain_alias", "alias"}}) {
+    auto connections = report.request(
+        "neighbors",
+        Object{{"valueId", valueId},
+               {"domainTypeId", "42"},
+               {"kinds", llvm::json::Array{"constraint", "domain_alias"}}},
+        error);
+    const auto *page = connections.getAsObject();
+    ASSERT_TRUE(page) << error;
+    EXPECT_EQ(page->getInteger("total"), 1);
+    const auto *items = page->getArray("items");
+    ASSERT_TRUE(items);
+    ASSERT_EQ(items->size(), 1u);
+    const auto *connection = items->front().getAsObject();
+    ASSERT_TRUE(connection);
+    EXPECT_EQ(connection->getString("kind"), expectedKind);
+    EXPECT_EQ(connection->getString("otherValue"), expectedPeer);
+    EXPECT_EQ(connection->getObject("location")->getString("display"),
+              "parent connection");
+  }
+}
+
 TEST(DomainReport, ExplainsIllegalCrossingWithShortestPath) {
   std::istringstream input(crossingReport());
   Report report;
@@ -380,6 +482,73 @@ TEST(DomainReport, CutsAssociationAndFindsMinimumBetweenValues) {
   EXPECT_FALSE(reached.count(3));
 }
 
+TEST(DomainReport, RestrictsCutsToAssociations) {
+  std::istringstream input(graphReport(
+      {{1, 2, 0, 0}, {2, 3, 1, 0}, {2, 3, 1, 1}, {3, 4, 0, 0}, {1, 5, 1, 0}}));
+  Report report;
+  std::string error;
+  ASSERT_TRUE(report.load(input, error)) << error;
+  auto unrestricted = report.request(
+      "minCut",
+      Object{{"domainTypeId", "42"}, {"sourceId", "1"}, {"targetId", "4"}},
+      error);
+  ASSERT_TRUE(unrestricted.getAsObject()) << error;
+  EXPECT_EQ(unrestricted.getAsObject()->getInteger("count"), 1);
+
+  auto between = report.request("minCut",
+                                Object{{"domainTypeId", "42"},
+                                       {"sourceId", "1"},
+                                       {"targetId", "4"},
+                                       {"associationOnly", true}},
+                                error);
+  const auto *result = between.getAsObject();
+  ASSERT_TRUE(result) << error;
+  EXPECT_EQ(result->getBoolean("available"), true);
+  EXPECT_EQ(result->getBoolean("associationOnly"), true);
+  EXPECT_EQ(result->getInteger("count"), 2);
+  EXPECT_EQ(result->getInteger("sourceSideSize"), 3);
+  EXPECT_EQ(result->getInteger("targetSideSize"), 2);
+  const auto *cutEdges = result->getArray("edges");
+  ASSERT_TRUE(cutEdges);
+  ASSERT_EQ(cutEdges->size(), 2u);
+  for (const auto &edge : *cutEdges)
+    EXPECT_EQ(edge.getAsObject()->getString("kind"), "association");
+
+  auto component = report.request("minCut",
+                                  Object{{"domainTypeId", "42"},
+                                         {"componentIndex", 0},
+                                         {"associationOnly", true}},
+                                  error);
+  ASSERT_TRUE(component.getAsObject()) << error;
+  EXPECT_EQ(component.getAsObject()->getInteger("count"), 1);
+  EXPECT_EQ(component.getAsObject()
+                ->getArray("edges")
+                ->front()
+                .getAsObject()
+                ->getString("kind"),
+            "association");
+
+  auto impossiblePair = report.request("minCut",
+                                       Object{{"domainTypeId", "42"},
+                                              {"sourceId", "1"},
+                                              {"targetId", "2"},
+                                              {"associationOnly", true}},
+                                       error);
+  ASSERT_TRUE(impossiblePair.getAsObject()) << error;
+  EXPECT_EQ(impossiblePair.getAsObject()->getBoolean("available"), false);
+
+  std::istringstream hardConnected(
+      graphReport({{1, 2, 0, 0}, {2, 5, 0, 0}, {1, 5, 1, 0}}));
+  ASSERT_TRUE(report.load(hardConnected, error)) << error;
+  auto impossibleComponent = report.request("minCut",
+                                            Object{{"domainTypeId", "42"},
+                                                   {"componentIndex", 0},
+                                                   {"associationOnly", true}},
+                                            error);
+  ASSERT_TRUE(impossibleComponent.getAsObject()) << error;
+  EXPECT_EQ(impossibleComponent.getAsObject()->getBoolean("available"), false);
+}
+
 TEST(DomainReport, CountsParallelEdgesAndPrunesFloatingFragments) {
   std::istringstream parallel(
       graphReport({{1, 5, 1, 0}, {1, 2, 0, 0}, {1, 2, 0, 0}}));
@@ -481,6 +650,64 @@ TEST(DomainReport, CutCountsAgreeWithSmallGraphEnumeration) {
     ASSERT_TRUE(between.getAsObject()) << error;
     EXPECT_EQ(between.getAsObject()->getInteger("count"), pairMinimum)
         << "trial " << trial;
+  }
+}
+
+TEST(DomainReport, AssociationOnlyCutsAgreeWithSmallGraphEnumeration) {
+  std::minstd_rand random(29);
+  for (int trial = 0; trial < 30; ++trial) {
+    std::vector<std::tuple<int, int, int, int>> rows{
+        {1, 2, 0, 0}, {2, 3, 1, 0}, {3, 4, 0, 0}, {4, 5, 1, 0}};
+    for (int lhs = 1; lhs <= 5; ++lhs)
+      for (int rhs = lhs + 1; rhs <= 5; ++rhs)
+        for (unsigned count = random() % 3; count; --count)
+          rows.push_back({lhs, rhs, static_cast<int>(random() % 2), 0});
+    std::istringstream input(graphReport(rows));
+    Report report;
+    std::string error;
+    ASSERT_TRUE(report.load(input, error)) << error;
+
+    int globalMinimum = INT_MAX, pairMinimum = INT_MAX;
+    for (unsigned side = 1; side < (1u << 5) - 1; ++side) {
+      int associations = 0;
+      bool valid = true;
+      for (auto [lhs, rhs, kind, flags] : rows) {
+        if (((side >> (lhs - 1)) & 1) == ((side >> (rhs - 1)) & 1))
+          continue;
+        if (kind == 0)
+          valid = false;
+        else
+          ++associations;
+      }
+      if (!valid)
+        continue;
+      globalMinimum = std::min(globalMinimum, associations);
+      if (((side >> 0) & 1) != ((side >> 2) & 1))
+        pairMinimum = std::min(pairMinimum, associations);
+    }
+    auto global = report.request(
+        "minCut", Object{{"domainTypeId", "42"}, {"associationOnly", true}},
+        error);
+    ASSERT_TRUE(global.getAsObject()) << error;
+    EXPECT_EQ(global.getAsObject()->getBoolean("available"),
+              globalMinimum != INT_MAX)
+        << "trial " << trial;
+    if (globalMinimum != INT_MAX)
+      EXPECT_EQ(global.getAsObject()->getInteger("count"), globalMinimum)
+          << "trial " << trial;
+    auto between = report.request("minCut",
+                                  Object{{"domainTypeId", "42"},
+                                         {"sourceId", "1"},
+                                         {"targetId", "3"},
+                                         {"associationOnly", true}},
+                                  error);
+    ASSERT_TRUE(between.getAsObject()) << error;
+    EXPECT_EQ(between.getAsObject()->getBoolean("available"),
+              pairMinimum != INT_MAX)
+        << "trial " << trial;
+    if (pairMinimum != INT_MAX)
+      EXPECT_EQ(between.getAsObject()->getInteger("count"), pairMinimum)
+          << "trial " << trial;
   }
 }
 

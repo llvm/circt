@@ -97,6 +97,7 @@ interface DomainComponentInfo {
 interface CutResult {
   available: boolean;
   mode?: 'global'|'component'|'between';
+  associationOnly?: boolean;
   message?: string;
   count?: number;
   nodeCount?: number;
@@ -126,6 +127,7 @@ interface InstanceInfo {
 interface EdgeInfo {
   index?: number;
   kind: string;
+  domainTypeId?: string;
   operation?: string;
   lhs?: string;
   rhs?: string;
@@ -142,6 +144,32 @@ interface EdgeInfo {
   inferred: boolean;
   summarized: boolean;
   location: Location;
+}
+interface InstanceAssociationTarget {
+  moduleId: string;
+  module: string;
+  port: string;
+  portIndex: number;
+  portValueId?: string;
+  domainPort: string;
+  domainPortIndex: number;
+  domainPortValueId?: string;
+  inferred?: boolean;
+  location: Location;
+  domainPortLocation: Location;
+  instance?: string;
+}
+interface InstanceAssociationInfo {
+  instance: string;
+  targets: InstanceAssociationTarget[];
+}
+interface InstanceConnections {
+  role: 'hardware'|'domain';
+  port: string;
+  valueId: string;
+  domainTypeId: string;
+  total: number;
+  firstPage: EdgeInfo[];
 }
 interface Page<T> {
   items: T[];
@@ -163,8 +191,9 @@ type Kind =
     'value'|'instance'|'assignment'|'binding'|'traceStep'|'neighbors'|'edge'|
     'domainDetail'|'domainGroup'|'domainNode'|'domainAssociation'|
     'domainConnection'|'minCutGroup'|'domainComponent'|'cutResult'|'cutEdge'|'cutPage'|
-    'cutEndpoint'|'cutAction'|'crossingGroup'|'illegalCrossing'|'crossingStep'|
-    'crossingStepPage';
+    'cutFilter'|'cutEndpoint'|'cutAction'|'crossingGroup'|'illegalCrossing'|'crossingStep'|
+    'crossingStepPage'|'instanceAssociation'|'instanceConnections'|
+    'instanceConnection'|'instanceConnectionPage';
 interface Node {
   kind: Kind;
   label?: string;
@@ -214,6 +243,72 @@ function locationText(location?: Location): string {
              : location.display;
 }
 function itemNode(kind: Kind, data: any): Node { return {kind, data}; }
+function hasInstanceAssociation(data?: EdgeInfo): boolean {
+  return data?.kind === 'association' && data.instanceId !== undefined &&
+         data.index !== undefined;
+}
+
+async function instanceAssociationChildren(helper: Helper,
+                                           edge: EdgeInfo): Promise<Node[]> {
+  if (!hasInstanceAssociation(edge))
+    return [];
+  const info = await helper.request<InstanceAssociationInfo>(
+      'instanceAssociation', {edgeIndex : edge.index});
+  const children: Node[] = info.targets.map((target) => ({
+    kind : 'instanceAssociation',
+    data : {...target, instance : info.instance}
+  }));
+  if (!children.length)
+    children.push({kind : 'message',
+                   label : 'No matching target port binding was recorded'});
+  if (edge.domainTypeId && edge.lhsId && edge.rhsId) {
+    const connections = await Promise.all(
+        [
+          {role : 'hardware' as const, port : edge.lhs ?? edge.lhsId,
+           valueId : edge.lhsId},
+          {role : 'domain' as const, port : edge.rhs ?? edge.rhsId,
+           valueId : edge.rhsId}
+        ].map(async ({role, port, valueId}) => {
+          const page = await helper.request<Page<EdgeInfo>>('neighbors', {
+            valueId, domainTypeId : edge.domainTypeId,
+            kinds : [ 'constraint', 'domain_alias' ], offset : 0,
+            limit : pageSize
+          });
+          return {
+            role, port, valueId, domainTypeId : edge.domainTypeId!,
+            total : page.total, firstPage : page.items
+          };
+        }));
+    children.push(...connections.map((data) => ({
+      kind : 'instanceConnections' as Kind,
+      data
+    })));
+  }
+  return children;
+}
+
+async function instanceConnectionChildren(helper: Helper,
+                                          node: Node): Promise<Node[]> {
+  const data = node.data as InstanceConnections;
+  const offset = node.offset ?? 0;
+  const page = node.kind === 'instanceConnections'
+                   ? {items : data.firstPage, total : data.total}
+                   : await helper.request<Page<EdgeInfo>>('neighbors', {
+                       valueId : data.valueId,
+                       domainTypeId : data.domainTypeId,
+                       kinds : [ 'constraint', 'domain_alias' ], offset,
+                       limit : pageSize
+                     });
+  const children: Node[] = page.items.map((edge) => ({
+    kind : 'instanceConnection',
+    data : {...edge, portValueId : data.valueId}
+  }));
+  const nextOffset = offset + page.items.length;
+  if (nextOffset < page.total)
+    children.push({kind : 'instanceConnectionPage', data,
+                   offset : nextOffset, total : page.total});
+  return children;
+}
 
 function treeItem(node: Node): vscode.TreeItem {
   const data = node.data;
@@ -268,8 +363,29 @@ function treeItem(node: Node): vscode.TreeItem {
                          : `${data.rhsModule}.${data.rhs}`;
     const to = forward ? `${data.rhsModule}.${data.rhs}`
                        : `${data.lhsModule}.${data.lhs}`;
-    label = `${data.kind === 'failed_constraint' ? 'Failed connection'
-                : data.kind}: ${from} → ${to}`;
+    label = `${data.kind === 'failed_constraint'
+                 ? 'Failed connection'
+             : hasInstanceAssociation(data) ? 'Instance association'
+                                            : data.kind}: ${from} → ${to}`;
+  }
+  if (node.kind === 'instanceAssociation')
+    label = `${data.module}.${data.port} → ${data.domainPort}`;
+  if (node.kind === 'instanceConnections') {
+    label = `${data.role === 'hardware' ? 'Hardware' : 'Domain'} port connections (${
+        data.total})`;
+    state = data.total ? vscode.TreeItemCollapsibleState.Collapsed
+                       : vscode.TreeItemCollapsibleState.None;
+  }
+  if (node.kind === 'instanceConnection') {
+    const fromLhs = data.portValueId === data.lhsId;
+    label = `${fromLhs ? data.rhsModule : data.lhsModule}.${
+        data.otherValue ?? '?'}`;
+  }
+  if (node.kind === 'instanceConnectionPage') {
+    label = `More (${(node.offset ?? 0) + 1}–${
+        Math.min((node.offset ?? 0) + pageSize, node.total ?? 0)} of ${
+        node.total})`;
+    state = vscode.TreeItemCollapsibleState.Collapsed;
   }
   if (node.kind === 'crossingStepPage') {
     label = `More (${(node.offset ?? 0) + 1}–${
@@ -295,16 +411,22 @@ function treeItem(node: Node): vscode.TreeItem {
   }
   if (node.kind === 'cutResult') {
     const cut = data as CutResult;
-    label = !cut.available ? cut.message ?? 'No cut available'
-            : cut.mode === 'between'
-                ? `${node.label}: ${cut.count} edge${cut.count === 1 ? '' : 's'}`
-            : cut.mode === 'component'
-                ? `Minimum: ${cut.count} edge${cut.count === 1 ? '' : 's'}`
-                : `Global minimum: ${cut.count} edge${
-                      cut.count === 1 ? '' : 's'}`;
+    const edgeName = cut.associationOnly ? 'association' : 'edge';
+    const count = `${cut.count} ${edgeName}${cut.count === 1 ? '' : 's'}`;
+    if (!cut.available)
+      label = cut.message ?? 'No cut available';
+    else if (cut.mode === 'between')
+      label = `${node.label}: ${count}`;
+    else if (cut.mode === 'component')
+      label = `Minimum: ${count}`;
+    else
+      label = `Global minimum: ${count}`;
     state = cut.edges?.length ? vscode.TreeItemCollapsibleState.Collapsed
                               : vscode.TreeItemCollapsibleState.None;
   }
+  if (node.kind === 'cutFilter')
+    label = `Cut edges: ${data.associationOnly ? 'Associations only'
+                                               : 'All edge kinds'}`;
   if (node.kind === 'cutEndpoint')
     label = `${node.cutRole === 'source' ? 'Source' : 'Target'}: ${
         data ? `${data.module}.${data.name}` : 'Choose node…'}`;
@@ -350,6 +472,10 @@ function treeItem(node: Node): vscode.TreeItem {
     label = `${data.kind}: ${data.otherValue ?? '?'}${
         data.instance ? ` (${data.instance})` : ''}`;
   }
+  if (hasInstanceAssociation(data) &&
+      (node.kind === 'crossingStep' || node.kind === 'domainConnection' ||
+       node.kind === 'cutEdge' || node.kind === 'edge'))
+    state = vscode.TreeItemCollapsibleState.Collapsed;
   const item = new vscode.TreeItem(label, state);
   if (node.treeId)
     item.id = node.treeId;
@@ -374,7 +500,12 @@ function treeItem(node: Node): vscode.TreeItem {
   if (node.kind === 'cutResult')
     item.id = `domain:${node.domainTypeId}:component:${
         node.componentIndex}:cut:${
-        data.mode ?? 'unavailable'}:${data.componentIndex ?? ''}`;
+        data.mode ?? 'unavailable'}:${data.associationOnly ? 'associations'
+                                                       : 'all'}:${
+        data.componentIndex ?? ''}`;
+  if (node.kind === 'cutFilter')
+    item.id = `domain:${node.domainTypeId}:component:${
+        node.componentIndex}:cutFilter`;
   if (node.kind === 'cutEndpoint')
     item.id = `domain:${node.domainTypeId}:component:${
         node.componentIndex}:cutEndpoint:${node.cutRole}`;
@@ -410,21 +541,42 @@ function treeItem(node: Node): vscode.TreeItem {
         data.portIndex !== undefined ? ` · port ${data.portIndex}` : ''}`;
   if (node.kind === 'domainConnection' || node.kind === 'cutEdge')
     item.description = [
-      data.kind, data.operation, data.inferred ? 'inferred' : 'explicit',
-      data.summarized ? 'summary' : undefined
+      data.kind, data.operation,
+      data.instance ? `instance ${data.instance}` : undefined,
+      data.inferred ? 'inferred' : 'explicit',
+      data.summarized ? 'summary' : undefined,
+      hasInstanceAssociation(data) ? 'expand for ports and connections'
+                                   : undefined
     ].filter(Boolean).join(' · ');
   if (node.kind === 'illegalCrossing')
     item.description = `${data.ownerModule} · ${data.operation}`;
   if (node.kind === 'crossingStep')
     item.description = [
-      data.operation, data.summarized ? 'summary' : undefined
+      data.operation, data.instance ? `instance ${data.instance}` : undefined,
+      data.kind === 'failed_constraint'
+          ? undefined
+          : data.inferred ? 'inferred' : 'explicit',
+      data.summarized ? 'summary' : undefined,
+      hasInstanceAssociation(data) ? 'expand for ports and connections'
+                                   : undefined
     ].filter(Boolean).join(' · ');
+  if (node.kind === 'instanceAssociation')
+    item.description = `${data.inferred === undefined
+                            ? 'origin unknown'
+                            : data.inferred ? 'inferred' : 'explicit'} in target module · port ${
+        data.portIndex} → domain port ${data.domainPortIndex}`;
+  if (node.kind === 'instanceConnections')
+    item.description = data.port;
+  if (node.kind === 'instanceConnection')
+    item.description = data.operation ?? data.kind;
   if (node.kind === 'cutResult' && data.available)
     item.description = data.count === 0 ? 'already separate'
                                           : `${data.sourceSideSize} / ${
                                                 data.targetSideSize} nodes`;
   if (node.kind === 'cutEndpoint' && data)
     item.description = `ID ${data.id}`;
+  if (node.kind === 'cutFilter')
+    item.description = 'Select removable edge kinds';
   if (node.kind === 'instance')
     item.description = data.targets?.join(', ');
   if (node.kind === 'assignment')
@@ -433,12 +585,30 @@ function treeItem(node: Node): vscode.TreeItem {
     item.description = data.domain;
   if (node.kind === 'traceStep' || node.kind === 'edge') {
     item.description = [
-      data.operation, data.inferred ? 'inferred' : 'explicit',
-      data.summarized ? 'summary' : undefined
+      data.operation, data.instance ? `instance ${data.instance}` : undefined,
+      data.inferred ? 'inferred' : 'explicit',
+      data.summarized ? 'summary' : undefined,
+      hasInstanceAssociation(data) ? 'expand for ports and connections'
+                                   : undefined
     ].filter(Boolean).join(' · ');
   }
   if (data?.location)
     item.tooltip = `${locationText(data.location)}\n${data.type ?? ''}`;
+  if (hasInstanceAssociation(data))
+    item.tooltip = `Instance ${data.instance} inherits a target module port association. Expand to see the target ports and recorded parent connections.\nInstance site: ${
+        locationText(data.location)}`;
+  if (node.kind === 'instanceAssociation')
+    item.tooltip = `Instance ${data.instance} inherits this ${
+        data.inferred === undefined
+            ? 'recorded'
+            : data.inferred ? 'inferred' : 'explicit'} association from ${
+        data.module}'s port domain metadata.\nHardware port: ${
+        locationText(data.location)}\nDomain port: ${
+        locationText(data.domainPortLocation)}`;
+  if (node.kind === 'instanceConnection')
+    item.tooltip = `${data.kind} via ${
+        data.operation ?? 'unknown operation'}\nConnection site: ${
+        locationText(data.location)}`;
   if (node.kind === 'value')
     item.contextValue = 'domainValue';
   if (node.kind === 'domainDetail')
@@ -463,6 +633,12 @@ function treeItem(node: Node): vscode.TreeItem {
     item.command = {
       command : 'circtDomains.traceValue',
       title : 'Trace Value',
+      arguments : [ node ]
+    };
+  } else if (node.kind === 'cutFilter') {
+    item.command = {
+      command : 'circtDomains.selectCutFilter',
+      title : 'Select Min-Cut Edge Kinds',
       arguments : [ node ]
     };
   } else if (node.kind === 'cutEndpoint') {
@@ -601,6 +777,7 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
   private readonly crossingPaths = new Map<number, CrossingPath>();
   private readonly cutSelections = new Map<
       string, {source?: CutEndpoint; target?: CutEndpoint}>();
+  private readonly associationOnlyCuts = new Set<string>();
   helper?: Helper;
   summary?: Summary;
 
@@ -610,6 +787,23 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
     this.betweenCuts.clear();
     this.crossingPaths.clear();
     this.cutSelections.clear();
+    this.associationOnlyCuts.clear();
+    this.refresh();
+  }
+  isAssociationOnlyCut(domainTypeId: string, componentIndex: number): boolean {
+    return this.associationOnlyCuts.has(`${domainTypeId}:${componentIndex}`);
+  }
+  setAssociationOnlyCut(domainTypeId: string, componentIndex: number,
+                        enabled: boolean): void {
+    const key = `${domainTypeId}:${componentIndex}`;
+    if (this.associationOnlyCuts.has(key) === enabled)
+      return;
+    if (enabled)
+      this.associationOnlyCuts.add(key);
+    else
+      this.associationOnlyCuts.delete(key);
+    this.componentCuts.delete(key);
+    this.betweenCuts.delete(key);
     this.refresh();
   }
   getCutSelection(domainTypeId: string, componentIndex: number):
@@ -824,6 +1018,12 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
                        offset : offset + pageSize, total : steps.length});
       return children;
     }
+    if (node.kind === 'crossingStep' || node.kind === 'domainConnection' ||
+        node.kind === 'cutEdge')
+      return instanceAssociationChildren(this.helper, node.data as EdgeInfo);
+    if (node.kind === 'instanceConnections' ||
+        node.kind === 'instanceConnectionPage')
+      return instanceConnectionChildren(this.helper, node);
     if (node.kind === 'domainGroup') {
       const category = node.category === 'Explicit associations'
                            ? 'associations'
@@ -846,7 +1046,12 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
       const domainTypeId = node.domainTypeId!;
       const componentIndex = node.componentIndex!;
       const key = `${domainTypeId}:${componentIndex}`;
-      const children: Node[] = [];
+      const associationOnly = this.isAssociationOnlyCut(domainTypeId,
+                                                        componentIndex);
+      const children: Node[] = [
+        {kind : 'cutFilter', domainTypeId, domainName : node.domainName,
+         componentIndex, data : {associationOnly}}
+      ];
       const requestHelper = this.helper;
       if ((node.total ?? 0) >= 2) {
         if (!this.cutSelections.has(key)) {
@@ -854,11 +1059,15 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
                                  ? await this.suggestedCutEndpoints(
                                        domainTypeId, componentIndex)
                                  : undefined;
-          if (this.helper !== requestHelper)
+          if (this.helper !== requestHelper ||
+              this.isAssociationOnlyCut(domainTypeId, componentIndex) !==
+                  associationOnly)
             return [];
           this.cutSelections.set(key, suggestion ?? {});
         }
-        if (this.helper !== requestHelper)
+        if (this.helper !== requestHelper ||
+            this.isAssociationOnlyCut(domainTypeId, componentIndex) !==
+                associationOnly)
           return [];
         const selection = this.getCutSelection(domainTypeId, componentIndex);
         children.push(
@@ -889,8 +1098,10 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
                   componentIndex + 1}`
             },
             () => requestHelper.request<CutResult>(
-                'minCut', {domainTypeId, componentIndex}));
-        if (this.helper !== requestHelper)
+                'minCut', {domainTypeId, componentIndex, associationOnly}));
+        if (this.helper !== requestHelper ||
+            this.isAssociationOnlyCut(domainTypeId, componentIndex) !==
+                associationOnly)
           return [];
         this.componentCuts.set(key, cut);
       }
@@ -902,13 +1113,15 @@ export class DomainsView implements vscode.TreeDataProvider<Node> {
       const cut = node.data as CutResult;
       const edges = cut.edges ?? [];
       const offset = node.offset ?? 0;
+      const cutId = `domain:${node.domainTypeId}:component:${
+          node.componentIndex}:cut:${cut.mode}:${
+          cut.associationOnly ? 'associations' : 'all'}`;
       const children: Node[] = edges.slice(offset, offset + pageSize)
                                    .map((data, index) => ({
                                           kind : 'cutEdge',
                                           data,
-                                          treeId : `domain:${node.domainTypeId}:component:${
-                                              node.componentIndex}:cut:${
-                                              cut.mode}:edge:${offset + index}`
+                                          treeId : `${cutId}:edge:${
+                                              offset + index}`
                                         }));
       if (offset + pageSize < edges.length)
         children.push({kind : 'cutPage', data : cut,
@@ -1009,11 +1222,20 @@ export class TraceView implements vscode.TreeDataProvider<Node> {
       return nodes;
     }
     if (node.kind === 'traceStep')
-      return [ {
-        kind : 'neighbors',
-        valueId : node.data.toId,
-        domainTypeId : this.domainTypeId
-      } ];
+      return [
+        ...await instanceAssociationChildren(this.helper,
+                                             node.data as EdgeInfo),
+        {
+          kind : 'neighbors',
+          valueId : node.data.toId,
+          domainTypeId : this.domainTypeId
+        }
+      ];
+    if (node.kind === 'edge')
+      return instanceAssociationChildren(this.helper, node.data as EdgeInfo);
+    if (node.kind === 'instanceConnections' ||
+        node.kind === 'instanceConnectionPage')
+      return instanceConnectionChildren(this.helper, node);
     if (node.kind === 'neighbors' || node.kind === 'page') {
       const valueId = node.valueId!;
       const domainTypeId = node.domainTypeId!;
@@ -1521,6 +1743,8 @@ export function activate(context: vscode.ExtensionContext): void {
           'Choose two different nodes for the minimum cut.');
       return;
     }
+    const associationOnly = domainsView.isAssociationOnlyCut(domainTypeId,
+                                                              componentIndex);
     const result = await vscode.window.withProgress(
         {
           location : vscode.ProgressLocation.Notification,
@@ -1529,19 +1753,28 @@ export function activate(context: vscode.ExtensionContext): void {
         },
         () => requestHelper.request<CutResult>(
             'minCut',
-            {domainTypeId, sourceId : source.id, targetId : target.id}));
+            {domainTypeId, sourceId : source.id, targetId : target.id,
+             associationOnly}));
     if (helper !== requestHelper)
       return;
     const selection = domainsView.getCutSelection(domainTypeId, componentIndex);
     if (selection.source?.id !== source.id ||
-        selection.target?.id !== target.id)
+        selection.target?.id !== target.id ||
+        domainsView.isAssociationOnlyCut(domainTypeId, componentIndex) !==
+            associationOnly)
       return;
     domainsView.setBetweenCut(domainTypeId, componentIndex, result,
                              `${source.module}.${source.name}`,
                              `${target.module}.${target.name}`);
     await vscode.commands.executeCommand('circtDomains.domains.focus');
+    if (!result.available) {
+      void vscode.window.showInformationMessage(
+          result.message ?? 'No cut is available for these nodes.');
+      return;
+    }
     void vscode.window.showInformationMessage(
-        `${domainName} component ${componentIndex + 1}: cut ${result.count} edge${
+        `${domainName} component ${componentIndex + 1}: cut ${result.count} ${
+            associationOnly ? 'association' : 'edge'}${
             result.count === 1 ? '' : 's'} between ${source.name} and ${
             target.name}. Expand its Minimum cut to inspect.`);
   }
@@ -1580,6 +1813,26 @@ export function activate(context: vscode.ExtensionContext): void {
               await showValueDetails(value.id);
           }),
       vscode.commands.registerCommand('circtDomains.traceValue', traceValue),
+      vscode.commands.registerCommand(
+          'circtDomains.selectCutFilter',
+          async (node?: Node) => {
+            if (!helper || !node?.domainTypeId ||
+                node.componentIndex === undefined)
+              return;
+            const requestHelper = helper;
+            const choice = await vscode.window.showQuickPick(
+                [
+                  {label : 'All edge kinds', associationOnly : false,
+                   description : 'Allow any recorded edge in the cut'},
+                  {label : 'Associations only', associationOnly : true,
+                   description : 'Keep constraints, aliases, and instance bindings connected'}
+                ],
+                {placeHolder : 'Choose which edge kinds the cut may remove'});
+            if (choice && helper === requestHelper)
+              domainsView.setAssociationOnlyCut(
+                  node.domainTypeId, node.componentIndex,
+                  choice.associationOnly);
+          }),
       vscode.commands.registerCommand(
           'circtDomains.selectCutEndpoint',
           async (node?: Node) => {

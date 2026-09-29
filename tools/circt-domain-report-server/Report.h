@@ -197,6 +197,8 @@ private:
   llvm::json::Object instanceJSON(uint32_t index, bool details = false) const;
   llvm::json::Object edgeJSON(uint32_t index) const;
   llvm::json::Object crossingJSON(uint32_t index) const;
+  llvm::json::Value instanceAssociation(const llvm::json::Object &params,
+                                        std::string &error) const;
   llvm::json::Value crossingPath(const llvm::json::Object &params,
                                  std::string &error) const;
   llvm::json::Value trace(const llvm::json::Object &params,
