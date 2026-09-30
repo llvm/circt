@@ -193,11 +193,15 @@ class System:
       preprocess_op: Optional preprocessing function which takes an Operation and
                      returns a modified Operation or None to skip.
       debug: Whether to enable debug output for the import process.
-      external_packages: Mark imported sv.package operations as externally
-                         provided, retaining their type declarations without
-                         emitting their SystemVerilog definitions. Defaults to
-                         False. To select individual packages instead, set their
-                         extern unit attribute in preprocess_op.
+      external_packages: Convert imported sv.package operations to
+                         sv.package.extern, retaining their type declarations
+                         without emitting their SystemVerilog definitions.
+                         Defaults to False. Conversion preserves attributes and
+                         fixes non-public packages' hw.verilogName to their
+                         symbol name if not already set. To select individual
+                         packages instead, return sv.package.extern operations
+                         from preprocess_op. Existing external packages are
+                         preserved regardless of this flag.
     """
 
     if module_str is not None:
@@ -254,7 +258,7 @@ class System:
       return None, None, None
 
     ret: Dict[str, Any] = {}
-    for op in compat_mod.body:
+    for op in list(compat_mod.body):
       if preprocess_op is not None:
         op = preprocess_op(op)
         if op is None:
@@ -262,7 +266,16 @@ class System:
           continue
 
       if external_packages and isinstance(op, sv.PackageOp):
-        op.attributes["extern"] = ir.UnitAttr.get()
+        external_op = sv.PackageExternOp(op.sym_name, loc=op.location, ip=False)
+        for attr_name in op.attributes:
+          external_op.attributes[attr_name] = op.attributes[attr_name]
+        if (op.sym_visibility is not None and
+            op.sym_visibility.value != "public" and
+            "hw.verilogName" not in external_op.attributes):
+          external_op.attributes["hw.verilogName"] = op.sym_name
+        op.body.blocks[0].append_to(external_op.body)
+        op.erase()
+        op = external_op
 
       # TODO: handle symbolrefs pointing to potentially renamed symbols.
       imported_obj = None
