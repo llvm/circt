@@ -55,6 +55,14 @@ using namespace firrtl;
 
 using DrivenBysMapType = DenseMap<FieldRef, DenseSet<FieldRef>>;
 
+/// The results of a module, that are inlined at its instances.
+struct ModuleSummary {
+  /// The comb paths between the ports of the module.
+  DrivenBysMapType portPaths;
+  /// The RWProbe ports of registers, forcing them is not combinational.
+  DenseSet<unsigned> registerProbePorts;
+};
+
 class DiscoverLoops {
 
   /// Adjacency list representation.
@@ -69,15 +77,21 @@ class DiscoverLoops {
 public:
   DiscoverLoops(
       FModuleOp module, InstanceGraph &instanceGraph,
-      const DenseMap<FModuleLike, DrivenBysMapType> &otherModulePortPaths,
-      DrivenBysMapType &thisModulePortPaths)
-      : module(module), instanceGraph(instanceGraph),
-        modulePortPaths(otherModulePortPaths), portPaths(thisModulePortPaths) {}
+      hw::InnerRefNamespace &irn,
+      const DenseMap<FModuleLike, ModuleSummary> &otherModuleSummaries,
+      ModuleSummary &thisModuleSummary)
+      : module(module), instanceGraph(instanceGraph), irn(irn),
+        moduleSummaries(otherModuleSummaries),
+        portPaths(thisModuleSummary.portPaths),
+        registerProbePorts(thisModuleSummary.registerProbePorts) {}
 
   LogicalResult processModule() {
     LLVM_DEBUG(llvm::dbgs() << "\n processing module :" << module.getName());
     constructConnectivityGraph(module);
-    return dfsTraverse(drivenBy);
+    recordRegisterProbePorts();
+    auto result = dfsTraverse(drivenBy);
+    dumpMap();
+    return result;
   }
 
   void constructConnectivityGraph(FModuleOp module) {
@@ -100,19 +114,15 @@ public:
             // destination and the second is the source.
             for (auto [dest, source] : df.computeDataFlow())
               addDrivenBy(dest, source);
+            // Registers are CombDataFlow, so they miss the Forceable case.
+            if (auto forceableOp = dyn_cast<Forceable>(op))
+              recordForceableProbe(forceableOp);
           })
           .Case<Forceable>([&](Forceable forceableOp) {
             // Any declaration that can be forced.
             if (auto node = dyn_cast<NodeOp>(op))
               recordDataflow(node.getData(), node.getInput());
-            if (!forceableOp.isForceable() ||
-                forceableOp.getDataRef().use_empty())
-              return;
-            auto data = forceableOp.getData();
-            auto ref = forceableOp.getDataRef();
-            // Record dataflow from data to the probe.
-            recordDataflow(ref, data);
-            recordProbe(data, ref);
+            recordForceableProbe(forceableOp);
           })
           .Case<RefSendOp>([&](RefSendOp send) {
             recordDataflow(send.getResult(), send.getBase());
@@ -125,8 +135,15 @@ public:
             // Dataflow from dst to src, for RWProbe.
             probesReferToSameData(def.getSrc(), def.getDest());
           })
-          .Case<RefForceOp, RefForceInitialOp>(
-              [&](auto ref) { handleRefForce(ref.getDest(), ref.getSrc()); })
+          .Case<RefCastOp>([&](RefCastOp cast) {
+            recordDataflow(cast.getResult(), cast.getInput());
+            // A cast RWProbe refers to the same data as its input.
+            if (cast.getType().getForceable())
+              probesReferToSameData(cast.getInput(), cast.getResult());
+          })
+          .Case<RefForceOp, RefForceInitialOp>([&](auto ref) {
+            forces.emplace_back(ref.getDest(), ref.getSrc());
+          })
           .Case<InstanceOp>([&](auto inst) { handleInstanceOp(inst); })
           .Case<InstanceChoiceOp>(
               [&](auto inst) { handleInstanceChoiceOp(inst); })
@@ -160,6 +177,9 @@ public:
                                  });
             recordValueRefersToFieldRef(sub.getInput(), fieldID,
                                         sub.getResult());
+            // Resolved after the walk, once the data of the input is known.
+            if (sub.getInput().getType().getForceable())
+              rwProbeSubs.push_back(sub.getResult());
           })
           .Case<BundleCreateOp, VectorCreateOp>([&](auto op) {
             auto type = op.getType();
@@ -177,6 +197,22 @@ public:
           .Case<FConnectLike>([&](FConnectLike connect) {
             recordDataflow(connect.getDest(), connect.getSrc());
           })
+          .Case<RWProbeOp>([&](RWProbeOp probe) {
+            auto ist = irn.lookup(probe.getTarget());
+            auto target = getFieldRefForTarget(ist);
+            if (!target) {
+              probe->emitWarning("check-comb-loops cannot resolve target");
+              return;
+            }
+            auto res = probe.getResult();
+            auto type = probe.getType().getType();
+            walkGroundTypes(type, [&](uint64_t index, FIRRTLBaseType, bool) {
+              addDrivenBy(FieldRef(res, index), target.getSubField(index));
+            });
+            if (!type.isGround())
+              addDrivenBy({res, 0}, target);
+            recordProbe(target, getOrAddNode(res));
+          })
           .Default([&](Operation *op) {
             // All other expressions are assumed to be combinational, so record
             // the dataflow between all inputs to outputs.
@@ -185,6 +221,11 @@ public:
                 recordDataflow(res, src);
           });
     });
+
+    for (auto sub : rwProbeSubs)
+      recordRefSubProbe(sub);
+    for (auto [dest, src] : forces)
+      handleRefForce(dest, src);
   }
 
   static std::string getName(FieldRef v) { return getFieldName(v).first; };
@@ -309,33 +350,108 @@ public:
     });
   }
 
+  // Return the data of any RWProbe in the class of `probeNode`.
+  std::optional<unsigned> getProbeData(unsigned probeNode) {
+    auto leader = rwProbeClasses.findLeader(probeNode);
+    if (leader == rwProbeClasses.member_end())
+      return std::nullopt;
+    for (auto probe : rwProbeClasses.members(*leader)) {
+      auto iter = rwProbeRefersTo.find(probe);
+      if (iter != rwProbeRefersTo.end())
+        return iter->second;
+    }
+    return std::nullopt;
+  }
+
+  // Record a RefSubOp of a RWProbe as a probe of the same field of its data.
+  void recordRefSubProbe(Value sub) {
+    auto iter = valToFieldRefs.find(sub);
+    if (iter == valToFieldRefs.end())
+      return;
+    for (auto field : iter->second) {
+      auto inputNode = getOrAddNode(FieldRef(field.getValue(), 0));
+      auto subNode = getOrAddNode(field);
+      if (isRegisterProbe(inputNode)) {
+        addProbeNode(subNode);
+        registerProbes.insert(subNode);
+        continue;
+      }
+      auto data = getProbeData(inputNode);
+      if (!data)
+        continue;
+      recordProbe(drivenBy[*data].first.getSubField(field.getFieldID()),
+                  subNode);
+    }
+  }
+
   // Record srcVal as driving the original data value that the probe refers to.
   void handleRefForce(Value dstProbe, Value srcVal) {
-    recordDataflow(dstProbe, srcVal);
     auto dstNode = getOrAddNode(dstProbe);
+    // Forcing a register is not combinational.
+    if (isRegisterProbe(dstNode))
+      return;
+    recordDataflow(dstProbe, srcVal);
     // Now add srcVal as driving the data that dstProbe refers to.
     auto leader = rwProbeClasses.findLeader(dstNode);
     if (leader == rwProbeClasses.member_end())
       return;
-    auto iter = rwProbeRefersTo.find(*leader);
-
-    // This should be found, but for now may not be due to needing
-    // RWProbeOp support.  May cause missed loops involving force for now.
-    // https://github.com/llvm/circt/issues/6820
-    if (iter == rwProbeRefersTo.end())
+    auto members = rwProbeClasses.members(*leader);
+    std::optional<unsigned> base = getProbeData(dstNode);
+    // An instance probe port stands in for the forced data inside the child.
+    if (!base) {
+      for (auto probe : members) {
+        auto val = drivenBy[probe].first.getValue();
+        if (!isa_and_nonnull<InstanceOp, InstanceChoiceOp>(val.getDefiningOp()))
+          continue;
+        if (auto refType = type_dyn_cast<RefType>(val.getType());
+            refType && refType.getForceable()) {
+          base = probe;
+          break;
+        }
+      }
+    }
+    if (!base || *base == dstNode)
       return;
+    recordForceDataflow(drivenBy[*base].first, srcVal);
+  }
 
-    assert(iter != rwProbeRefersTo.end());
-    if (iter->second != dstNode)
-      drivenBy[iter->second].second.push_back(getOrAddNode(srcVal));
+  // Record `srcVal` as driving the forced `data`, per field, since `data` may
+  // be read by field.
+  void recordForceDataflow(FieldRef data, Value srcVal) {
+    // Ignore connectivity from constants.
+    if (auto *def = srcVal.getDefiningOp())
+      if (def->hasTrait<OpTrait::ConstantLike>())
+        return;
+    SmallVector<FieldRef> srcFields;
+    auto srcIt = valToFieldRefs.find(srcVal);
+    if (srcIt != valToFieldRefs.end())
+      srcFields.append(srcIt->second.begin(), srcIt->second.end());
+    else
+      srcFields.emplace_back(srcVal, 0);
+    auto type = getBaseType(srcVal.getType());
+    for (auto src : srcFields) {
+      addDrivenBy(data, src);
+      if (type && !type.isGround())
+        walkGroundTypes(type, [&](uint64_t index, FIRRTLBaseType, bool) {
+          addDrivenBy(data.getSubField(index), src.getSubField(index));
+        });
+    }
+  }
+
+  // Return true if there is a path from the port `src` to the port `sink`.
+  static bool hasPortPath(const DrivenBysMapType &paths, FieldRef sink,
+                          FieldRef src) {
+    auto iter = paths.find(sink);
+    return iter != paths.end() && iter->second.contains(src);
   }
 
   // Helper to process instance ports for a given module and instance results.
   // This is used by both handleInstanceOp and handleInstanceChoiceOp.
   void processInstancePorts(FModuleOp refMod, ValueRange instResults) {
-    auto modulePaths = modulePortPaths.find(refMod);
-    if (modulePaths == modulePortPaths.end())
+    auto summary = moduleSummaries.find(refMod);
+    if (summary == moduleSummaries.end())
       return;
+    const auto &modulePaths = summary->second.portPaths;
     // Note: Handling RWProbes.
     // 1. For RWProbes, output ports can be source of dataflow.
     // 2. All the RWProbes that refer to the same base value form a strongly
@@ -349,7 +465,9 @@ public:
     //    port in the set.
     // 4. This will ensure we can detect cycles involving different RWProbes to
     //    the same base value.
-    for (auto &path : modulePaths->second) {
+    // 5. A RWProbe port of another output port also has paths to and from it.
+    //    Record it as a probe of that port, instead of a false loop.
+    for (auto &path : modulePaths) {
       auto modSinkPortField = path.first;
       auto sinkArgNum =
           cast<BlockArgument>(modSinkPortField.getValue()).getArgNumber();
@@ -375,6 +493,12 @@ public:
         if (auto refResultType =
                 type_dyn_cast<RefType>(instResults[srcArgNum].getType()))
           srcPortIsForceable = refResultType.getForceable();
+        // The RWProbe port refers to the sink port (5. above).
+        if (!sinkPortIsForceable && srcPortIsForceable &&
+            hasPortPath(modulePaths, modSrcPortField, modSinkPortField)) {
+          recordProbe(sinkPort, getOrAddNode(srcPort));
+          continue;
+        }
         // RWProbes can potentially refer to the same base value. Such ports
         // have a path from each other, a false loop, detect such cases.
         if (sinkPortIsForceable && srcPortIsForceable) {
@@ -386,45 +510,61 @@ public:
                   rwProbeClasses.findLeader(srcNode))
             continue;
           // Check if sinkPort is a driver of sourcePort.
-          auto drivenBysToSrcPort = modulePaths->second.find(modSrcPortField);
-          if (drivenBysToSrcPort != modulePaths->second.end())
-            if (llvm::find(drivenBysToSrcPort->second, modSinkPortField) !=
-                drivenBysToSrcPort->second.end()) {
-              // This case can occur when there are multiple RWProbes on the
-              // port, which refer to the same base value. So, each of such
-              // probes are drivers of each other. Hence the false
-              // loops. Instead of recording this in the drivenByGraph,
-              // record it separately with the rwProbeClasses.
-              setOfEquivalentRWProbes.insert(srcNode);
-              if (minArgNum > srcArgNum) {
-                // Make one of the RWProbe port the base node. Use the first
-                // port for deterministic error messages.
-                minArgNum = srcArgNum;
-                basePortNode = srcNode;
-              }
-              continue;
+          if (hasPortPath(modulePaths, modSrcPortField, modSinkPortField)) {
+            // This case can occur when there are multiple RWProbes on the
+            // port, which refer to the same base value. So, each of such
+            // probes are drivers of each other. Hence the false
+            // loops. Instead of recording this in the drivenByGraph,
+            // record it separately with the rwProbeClasses.
+            setOfEquivalentRWProbes.insert(srcNode);
+            if (minArgNum > srcArgNum) {
+              // Make one of the RWProbe port the base node. Use the first
+              // port for deterministic error messages.
+              minArgNum = srcArgNum;
+              basePortNode = srcNode;
             }
+            continue;
+          }
         }
         addDrivenBy(sinkPort, srcPort);
       }
       if (setOfEquivalentRWProbes.empty())
         continue;
 
+      setOfEquivalentRWProbes.insert(sinkNode);
       // Add all the rwprobes to the same class.
-      for (auto probe : setOfEquivalentRWProbes)
+      for (auto probe : setOfEquivalentRWProbes) {
+        addProbeNode(probe);
         rwProbeClasses.unionSets(probe, sinkNode);
+      }
 
       // Make the first port as the base value.
       // Note: this is a port and the actual reference base exists in another
-      // module.
-      auto leader = rwProbeClasses.getLeaderValue(sinkNode);
-      rwProbeRefersTo[leader] = basePortNode;
-
-      setOfEquivalentRWProbes.insert(sinkNode);
-      // Add the base RWProbe port as a driver to all other RWProbe ports.
-      for (auto probe : setOfEquivalentRWProbes)
+      // module. Add the base RWProbe port as a driver to all other RWProbe
+      // ports.
+      for (auto probe : setOfEquivalentRWProbes) {
+        rwProbeRefersTo.try_emplace(probe, basePortNode);
         if (probe != basePortNode)
           drivenBy[probe].second.push_back(basePortNode);
+      }
+    }
+  }
+
+  // Mark the instance ports that are register RWProbes in all the modules.
+  void recordInstanceRegisterProbes(ArrayRef<FModuleOp> refMods,
+                                    ValueRange instResults) {
+    if (refMods.empty())
+      return;
+    for (unsigned argNum = 0, e = instResults.size(); argNum < e; ++argNum) {
+      if (!llvm::all_of(refMods, [&](FModuleOp refMod) {
+            auto summary = moduleSummaries.find(refMod);
+            return summary != moduleSummaries.end() &&
+                   summary->second.registerProbePorts.contains(argNum);
+          }))
+        continue;
+      auto node = getOrAddNode(FieldRef(instResults[argNum], 0));
+      addProbeNode(node);
+      registerProbes.insert(node);
     }
   }
 
@@ -436,6 +576,7 @@ public:
     // Skip if the instance is not a module (e.g. external module).
     if (!refMod)
       return;
+    recordInstanceRegisterProbes(refMod, inst.getResults());
     processInstancePorts(refMod, inst.getResults());
   }
 
@@ -443,17 +584,29 @@ public:
   // Since we cannot determine which module will be selected at runtime, we
   // must consider combinational paths through all alternatives.
   void handleInstanceChoiceOp(InstanceChoiceOp inst) {
+    SmallVector<FModuleOp> refMods;
+    // Conservatively, a port is a register RWProbe only if it is one in all
+    // the alternatives.
+    bool allAreModules = true;
     // Process all referenced modules (default + alternatives)
     for (auto moduleName : inst.getReferencedModuleNamesAttr()) {
       auto moduleNameStr = cast<StringAttr>(moduleName);
       auto *node = instanceGraph.lookup(moduleNameStr);
-      if (!node)
+      if (!node) {
+        allAreModules = false;
         continue;
+      }
 
       // Skip if the instance is not a module (e.g. external module).
       if (auto refMod = dyn_cast<FModuleOp>(*node->getModule()))
-        processInstancePorts(refMod, inst.getResults());
+        refMods.push_back(refMod);
+      else
+        allAreModules = false;
     }
+    if (allAreModules)
+      recordInstanceRegisterProbes(refMods, inst.getResults());
+    for (auto refMod : refMods)
+      processInstancePorts(refMod, inst.getResults());
   }
 
   // Record the FieldRef, corresponding to the result of the sub op
@@ -507,13 +660,15 @@ public:
                      << getName(drivenBy[currentNode].first));
 
           FieldRef currentF = drivenBy[currentNode].first;
-          if (recordPortPaths && currentNode != rootNode) {
-            if (isa<mlir::BlockArgument>(currentF.getValue()))
-              portPaths[drivenBy[rootNode].first].insert(currentF);
+          if (recordPortPaths) {
+            auto &inputPortPaths = portPaths[drivenBy[rootNode].first];
+            if (currentNode != rootNode &&
+                isa<mlir::BlockArgument>(currentF.getValue()))
+              inputPortPaths.insert(currentF);
             // Even if the current node is not a port, there can be RWProbes of
-            // the current node at the port.
-            addToPortPathsIfRWProbe(currentNode,
-                                    portPaths[drivenBy[rootNode].first]);
+            // the current node at the port. Includes the root, which is driven
+            // by a force of its RWProbes.
+            addToPortPathsIfRWProbe(currentNode, inputPortPaths);
           }
         } else {
           onStack[currentNode] = false;
@@ -642,16 +797,65 @@ public:
         // Print members in this set.
         llvm::interleave(rwProbeClasses.members(*i), llvm::dbgs(), "\n");
         llvm::dbgs() << "\n dataflow at leader::" << i->getData() << "\n =>"
-                     << rwProbeRefersTo[i->getData()];
+                     << rwProbeRefersTo.lookup(i->getData());
         llvm::dbgs() << "\n Done\n"; // Finish set.
       }
     });
   }
 
-  void recordProbe(Value data, Value ref) {
-    auto refNode = getOrAddNode(ref);
+  void recordForceableProbe(Forceable forceableOp) {
+    if (!forceableOp.isForceable() || forceableOp.getDataRef().use_empty())
+      return;
+    auto data = forceableOp.getData();
+    auto ref = forceableOp.getDataRef();
+    // Record dataflow from data to the probe.
+    recordDataflow(ref, data);
+    recordProbe({data, 0}, getOrAddNode(ref));
+  }
+
+  static uint64_t getMaxFieldID(FieldRef ref) {
+    auto type = hw::FieldIdImpl::getFinalTypeByFieldID(
+        getBaseType(ref.getValue().getType()), ref.getFieldID());
+    return hw::FieldIdImpl::getMaxFieldID(type);
+  }
+
+  // The probe is recorded in rwProbesOf, so that a read through it records a
+  // port path to all the RWProbe ports in its class.
+  void addProbeNode(unsigned probeNode) {
+    if (rwProbeClasses.contains(probeNode))
+      return;
+    rwProbeClasses.insert(probeNode);
+    auto probe = drivenBy[probeNode].first;
+    uint64_t low = probe.getFieldID();
+    rwProbesOf[probe.getValue()].emplace_back(low, low + getMaxFieldID(probe),
+                                              probeNode);
+  }
+
+  // Return true if the RWProbe refers to a register.
+  bool isRegisterProbe(unsigned probeNode) {
+    if (registerProbes.contains(probeNode))
+      return true;
+    auto leader = rwProbeClasses.findLeader(probeNode);
+    if (leader == rwProbeClasses.member_end())
+      return false;
+    return llvm::any_of(rwProbeClasses.members(*leader), [&](unsigned probe) {
+      return registerProbes.contains(probe);
+    });
+  }
+
+  void recordProbe(FieldRef data, unsigned refNode) {
+    addProbeNode(refNode);
+    // Forcing a register is not combinational, so a force must not add an edge
+    // into the register.
+    if (isa_and_nonnull<RegOp, RegResetOp>(data.getDefiningOp())) {
+      registerProbes.insert(refNode);
+      return;
+    }
     auto dataNode = getOrAddNode(data);
-    rwProbeRefersTo[rwProbeClasses.getOrInsertLeaderValue(refNode)] = dataNode;
+    rwProbeRefersTo[refNode] = dataNode;
+    uint64_t low = data.getFieldID();
+    uint64_t high = low + getMaxFieldID(drivenBy[refNode].first);
+    rwProbesOf[data.getValue()].emplace_back(low, high, refNode);
   }
 
   // Add both the probes to the same equivalence class, to record that they
@@ -659,45 +863,63 @@ public:
   void probesReferToSameData(Value probe1, Value probe2) {
     auto p1Node = getOrAddNode(probe1);
     auto p2Node = getOrAddNode(probe2);
+    addProbeNode(p1Node);
+    addProbeNode(p2Node);
     rwProbeClasses.unionSets(p1Node, p2Node);
+  }
+
+  // Record the register RWProbe ports, so that the instances of this module
+  // do not treat forcing them as combinational.
+  void recordRegisterProbePorts() {
+    for (auto port : module.getArguments()) {
+      auto refType = type_dyn_cast<RefType>(port.getType());
+      if (!refType || !refType.getForceable())
+        continue;
+      auto iter = nodes.find(FieldRef(port, 0));
+      if (iter != nodes.end() && isRegisterProbe(iter->second))
+        registerProbePorts.insert(port.getArgNumber());
+    }
   }
 
   void addToPortPathsIfRWProbe(unsigned srcNode,
                                DenseSet<FieldRef> &inputPortPaths) {
-    // Check if there exists any RWProbe for the srcNode.
-    auto baseFieldRef = drivenBy[srcNode].first;
-    if (auto defOp = dyn_cast_or_null<Forceable>(baseFieldRef.getDefiningOp()))
-      if (defOp.isForceable() && !defOp.getDataRef().use_empty()) {
-        // Assumption, the probe must exist in the equivalence classes.
-        auto rwProbeNode =
-            rwProbeClasses.getLeaderValue(getOrAddNode(defOp.getDataRef()));
-        // For all the probes, that are in the same eqv class, i.e., refer to
-        // the same value.
-        for (auto probe : rwProbeClasses.members(rwProbeNode)) {
-          auto probeVal = drivenBy[probe].first;
-          // If the probe is a port, then record the path from the probe to the
-          // input port.
-          if (isa<BlockArgument>(probeVal.getValue())) {
-            inputPortPaths.insert(probeVal);
-          }
-        }
-      }
+    // Check if there exists any RWProbe for the srcNode, which can also be a
+    // RWProbe itself.
+    auto ref = drivenBy[srcNode].first;
+    auto it = rwProbesOf.find(ref.getValue());
+    if (it == rwProbesOf.end())
+      return;
+    for (auto [low, high, probeNode] : it->second) {
+      if (ref.getFieldID() < low || ref.getFieldID() > high)
+        continue;
+      if (isRegisterProbe(probeNode))
+        continue;
+      auto leader = rwProbeClasses.findLeader(probeNode);
+      // If a probe in the same eqv class is a port, then record the path from
+      // the corresponding field of the probe to the input port.
+      for (auto probe : rwProbeClasses.members(*leader))
+        if (isa<BlockArgument>(drivenBy[probe].first.getValue()))
+          inputPortPaths.insert(
+              drivenBy[probe].first.getSubField(ref.getFieldID() - low));
+    }
   }
 
 private:
   FModuleOp module;
   InstanceGraph &instanceGraph;
+  hw::InnerRefNamespace &irn;
 
   /// Map of values to the set of all FieldRefs (same base) that this may be
   /// directly derived from through indexing operations.
   DenseMap<Value, SmallVector<FieldRef>> valToFieldRefs;
-  /// Comb paths that exist between module ports. This is maintained across
-  /// modules.
-  const DenseMap<FModuleLike, DrivenBysMapType> &modulePortPaths;
+  /// The summaries of the modules. This is maintained across modules.
+  const DenseMap<FModuleLike, ModuleSummary> &moduleSummaries;
   /// The comb paths between the ports of this module. This is the final
   /// output of this intra-procedural analysis, that is used to construct the
   /// inter-procedural dataflow.
   DrivenBysMapType &portPaths;
+  /// The register RWProbe ports of this module.
+  DenseSet<unsigned> &registerProbePorts;
 
   /// This is an adjacency list representation of the connectivity graph. This
   /// can be indexed by the graph node id, and each entry is the list of graph
@@ -707,32 +929,49 @@ private:
   /// Map of FieldRef to its corresponding graph node.
   DenseMap<FieldRef, size_t> nodes;
 
-  /// The base value that the RWProbe refers to. Used to add an edge to the base
-  /// value, when the probe is forced.
+  /// The base value that the RWProbe node refers to. Used to add an edge to the
+  /// base value, when the probe is forced.
   DenseMap<unsigned, unsigned> rwProbeRefersTo;
+
+  /// The RWProbes of each value, as (lowFieldID, highFieldID, probeNode).
+  DenseMap<Value, SmallVector<std::tuple<uint64_t, uint64_t, unsigned>>>
+      rwProbesOf;
 
   /// An eqv class of all the RWProbes that refer to the same base value.
   llvm::EquivalenceClasses<unsigned> rwProbeClasses;
+
+  /// The RWProbes that refer to a register.
+  DenseSet<unsigned> registerProbes;
+
+  /// The (dest, src) of all forces, handled after the walk once all the probes
+  /// are known.
+  SmallVector<std::pair<Value, Value>> forces;
+
+  /// The results of all RefSubOps of RWProbes, handled after the walk once all
+  /// the probes are known.
+  SmallVector<Value> rwProbeSubs;
 };
 
 /// This pass constructs a local graph for each module to detect
 /// combinational cycles. To capture the cross-module combinational cycles,
 /// this pass inlines the combinational paths between IOs of its
-/// subinstances into a subgraph and encodes them in `modulePortPaths`.
+/// subinstances into a subgraph and encodes them in `moduleSummaries`.
 class CheckCombLoopsPass
     : public circt::firrtl::impl::CheckCombLoopsBase<CheckCombLoopsPass> {
 public:
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    DenseMap<FModuleLike, DrivenBysMapType> modulePortPaths;
+    DenseMap<FModuleLike, ModuleSummary> moduleSummaries;
+    hw::InnerRefNamespace irn{getAnalysis<SymbolTable>(),
+                              getAnalysis<hw::InnerSymbolTableCollection>()};
 
     // Traverse modules in a post order to make sure the combinational paths
     // between IOs of a module have been detected and recorded in
-    // `modulePortPaths` before we handle its parent modules.
+    // `moduleSummaries` before we handle its parent modules.
     for (auto *igNode : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       if (auto module = dyn_cast<FModuleOp>(*igNode->getModule())) {
-        DiscoverLoops rdf(module, instanceGraph, modulePortPaths,
-                          modulePortPaths[module]);
+        DiscoverLoops rdf(module, instanceGraph, irn, moduleSummaries,
+                          moduleSummaries[module]);
         if (rdf.processModule().failed()) {
           return signalPassFailure();
         }
