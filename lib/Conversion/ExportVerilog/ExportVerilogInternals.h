@@ -436,9 +436,6 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
 
 StringRef getSymOpName(Operation *symOp);
 
-/// Return an identifier token, terminating escaped identifiers with whitespace.
-std::string getVerilogIdentifier(StringRef name);
-
 /// Return whether an operation is a constant.
 static inline bool isConstantExpression(Operation *op) {
   return isa<hw::ConstantOp, sv::ConstantXOp, sv::ConstantZOp,

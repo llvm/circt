@@ -97,8 +97,7 @@ std::string FieldNameResolver::getEnumFieldName(hw::EnumFieldAttr attr,
   if (auto field = globalNames.getPackageEnumField(attr)) {
     auto [package, name] = *field;
     if (package != currentPackage)
-      return getVerilogIdentifier(getSymOpName(package)) +
-             "::" + name.getValue().str();
+      return (getSymOpName(package) + "::" + name.getValue()).str();
     return name.getValue().str();
   }
 

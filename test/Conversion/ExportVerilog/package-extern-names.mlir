@@ -10,8 +10,6 @@
 // RUN: circt-opt %t/extern-exported.mlir -export-verilog -o /dev/null > %t/extern-exported.sv
 // RUN: sed -n '/^module /,$p' %t/extern-exported.sv > %t/extern-exported-module.sv
 // RUN: diff %t/package-module.sv %t/extern-exported-module.sv
-// RUN: circt-opt %t/escaped.mlir -export-verilog -o /dev/null > %t/escaped.sv
-// RUN: FileCheck %s --check-prefix=ESCAPED < %t/escaped.sv
 
 // Converting either the original or already-legalized package to an external
 // package must preserve the consumer's typedef and enum-member references.
@@ -24,14 +22,6 @@
 // MEMBER: output Types::State state
 // MEMBER: assign state = Types::State_Idle_1;
 // MEMBER-NOT: {{^}}package
-
-// The externally supplied package name remains fixed, including escaped names.
-// ESCAPED-NOT: {{^}}package
-// ESCAPED-LABEL: module Escaped(
-// ESCAPED: input {{ *}}\Ext-Types ::word word
-// ESCAPED: output \Ext-Types ::State state
-// ESCAPED: assign state = \Ext-Types ::State_Idle;
-// ESCAPED-NOT: {{^}}package
 
 //--- package.mlir
 module attributes {circt.loweringOptions = "caseInsensitiveKeywords,locationInfoStyle=none"} {
@@ -56,22 +46,3 @@ module attributes {circt.loweringOptions = "caseInsensitiveKeywords,locationInfo
     hw.output %state : !hw.typealias<@types::@State, !hw.enum<Idle, Busy>>
   }
 }
-
-//--- escaped.mlir
-sv.package.extern @pkg {
-  hw.typedecl @word : i8
-  hw.typedecl @State : !hw.enum<Idle, Busy>
-} {hw.verilogName = "\\Ext-Types"}
-
-hw.module @Escaped(
-    in %word: !hw.typealias<@pkg::@word, i8>,
-    out state: !hw.typealias<@pkg::@State, !hw.enum<Idle, Busy>>) {
-  %state = hw.enum.constant Idle : !hw.typealias<@pkg::@State, !hw.enum<Idle, Busy>>
-  hw.output %state : !hw.typealias<@pkg::@State, !hw.enum<Idle, Busy>>
-}
-
-//--- escaped-package.sv
-package \Ext-Types ;
-  typedef logic [7:0] word;
-  typedef enum bit { State_Idle, State_Busy } State;
-endpackage

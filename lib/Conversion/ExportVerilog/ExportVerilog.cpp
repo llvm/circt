@@ -223,10 +223,6 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
       });
 }
 
-std::string ExportVerilog::getVerilogIdentifier(StringRef name) {
-  return (name + (name.starts_with("\\") ? " " : "")).str();
-}
-
 /// Emits a known-safe token that is legal when indexing into singleton arrays.
 template <typename PPS>
 static void emitZeroWidthIndexingValue(PPS &os) {
@@ -1879,7 +1875,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         if (auto *package = typedecl->getParentOp();
             isa<PackageOp, PackageExternOp>(package)) {
           if (package != emitter.currentPackage)
-            os << getVerilogIdentifier(getSymOpName(package)) << "::";
+            os << getSymOpName(package) << "::";
         }
         os << typedecl.getPreferredName();
         emitDims(dims, os, typedecl->getLoc(), emitter);
