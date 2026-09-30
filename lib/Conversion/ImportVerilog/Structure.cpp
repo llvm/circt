@@ -2664,11 +2664,8 @@ LogicalResult Context::convertMOSSwitchPrimitive(
 
   builder.setInsertionPointAfter(condOp);
 
-  Value result = condOp.getResult();
-
-  moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
-
-  return success();
+  return assignPrimOutputWithDelay(outputVal, condOp.getResult(),
+                                   prim.getDelay(), loc);
 }
 
 LogicalResult Context::convertCMOSSwitchPrimitive(
@@ -2789,10 +2786,8 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
     moore::YieldOp::create(builder, loc, innerCond.getResult());
   }
 
-  Value result = outerCond.getResult();
-  moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
-
-  return success();
+  return assignPrimOutputWithDelay(outputVal, outerCond.getResult(),
+                                   prim.getDelay(), loc);
 }
 
 namespace {
