@@ -353,7 +353,7 @@ hw.module @Vars() {
   %xmr = sv.xmr.ref @myVarPath : !hw.inout<i4>
   %value = sv.read_inout %xmr : !hw.inout<i4>
   sv.verbatim "symRef1({{0}});"(%value) : i4
-  }
+}
 
 // CHECK-LABEL: module MultiUseExpr
 hw.module @MultiUseExpr(in %a: i4, out b0: i1, out b1: i1, out b2: i1, out b3: i1, out b4: i2) {
