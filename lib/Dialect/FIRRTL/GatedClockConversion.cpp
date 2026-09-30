@@ -18,12 +18,11 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/Dominance.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include <deque>
 
 #define DEBUG_TYPE "firrtl-gated-clock-conversion"
 
@@ -34,8 +33,6 @@ namespace {
 
 StringRef edgeKindName(EdgeKind kind) {
   switch (kind) {
-  case EdgeKind::Alias:
-    return "Alias";
   case EdgeKind::Gate:
     return "Gate";
   case EdgeKind::InstanceIn:
@@ -46,15 +43,6 @@ StringRef edgeKindName(EdgeKind kind) {
   return "?";
 }
 
-/// The gate's effective enable, `enable | test_enable` or just `enable`.
-Value materializeGateEnable(ClockGateIntrinsicOp gate) {
-  if (!gate.getTestEnable())
-    return gate.getEnable();
-  ImplicitLocOpBuilder b(gate.getLoc(), gate);
-  return b.createOrFold<OrPrimOp>(gate.getEnable(), gate.getTestEnable());
-}
-
-/// Build the (baseClock, gateEnable) PortInfo pair for the given direction.
 std::pair<PortInfo, PortInfo>
 makeGatedClockPortInfos(MLIRContext *ctx, StringRef tag, Direction dir,
                         Location loc, Type clockType, Type u1Type) {
@@ -64,132 +52,75 @@ makeGatedClockPortInfos(MLIRContext *ctx, StringRef tag, Direction dir,
                    u1Type, dir, /*symName=*/StringAttr(), loc)};
 }
 
-/// The FModuleOp `value` lives in.
 FModuleOp getParentModule(Value value) {
   if (isa<BlockArgument>(value))
     return cast<FModuleOp>(value.getParentBlock()->getParentOp());
   return value.getDefiningOp()->getParentOfType<FModuleOp>();
 }
 
-/// The clock operand of a supported root op, null otherwise. The `*_initial`
-/// ref force/release variants have no clock, so they are not roots.
+/// The `*_initial` force/release variants have no clock, so they are not
+/// roots.
 Value clockOperandOf(Operation *op) {
-  if (auto fop = dyn_cast<RefForceOp>(op))
-    return fop.getClock();
-  if (auto rop = dyn_cast<RefReleaseOp>(op))
-    return rop.getClock();
-  if (auto reg = dyn_cast<RegOp>(op))
-    return reg.getClockVal();
-  if (auto regr = dyn_cast<RegResetOp>(op))
-    return regr.getClockVal();
-  if (auto gc = dyn_cast<ClockGateIntrinsicOp>(op))
-    return gc.getInput();
-  return Value();
+  return TypeSwitch<Operation *, Value>(op)
+      .Case<RefForceOp, RefReleaseOp>([](auto op) { return op.getClock(); })
+      .Case<RegOp, RegResetOp>([](auto op) { return op.getClockVal(); })
+      .Case<ClockGateIntrinsicOp>([](auto op) { return op.getInput(); })
+      .Default([](auto) { return Value(); });
+}
+
+/// The driver of `clk` through wires, nodes and casts; null if undriven.
+Value clockDriver(Value clk) {
+  Value driver = getModuleScopedDriver(clk, /*lookThroughWires=*/true,
+                                       /*lookThroughNodes=*/true,
+                                       /*lookThroughCasts=*/true);
+  // `asClock(asUInt(clk))` is `clk`, but `asClock(u)` is a clock of its own.
+  if (driver && !type_isa<ClockType>(driver.getType()))
+    driver = getModuleScopedDriver(clk, /*lookThroughWires=*/true,
+                                   /*lookThroughNodes=*/true,
+                                   /*lookThroughCasts=*/false);
+  return driver;
+}
+
+/// Whichever of `a` and `b` an op must be inserted after to see both.
+Value laterOf(Value a, Value b) {
+  Operation *defA = a.getDefiningOp(), *defB = b.getDefiningOp();
+  if (!defA)
+    return b;
+  if (!defB)
+    return a;
+  Operation *ancestor = defA->getBlock()->findAncestorOpInBlock(*defB);
+  if (!ancestor)
+    return a;
+  return ancestor == defA || defA->isBeforeInBlock(ancestor) ? b : a;
 }
 
 } // namespace
 
 //===----------------------------------------------------------------------===//
-// GatedClockConversion: the plan's value model
+// Helpers
 //===----------------------------------------------------------------------===//
 
-void GatedClockConversion::MatRef::print(llvm::raw_ostream &os) const {
-  switch (kind) {
-  case Kind::None:
-    os << "<none>";
-    return;
-  case Kind::Direct:
-    os << "direct(" << value << ")";
-    return;
-  case Kind::InstResult:
-    os << "instResult(" << cast<InstanceOp>(op).getName() << ", " << index
-       << ")";
-    return;
-  case Kind::ModuleArg:
-    os << "moduleArg(" << cast<FModuleOp>(op).getModuleName() << ", " << index
-       << ")";
-    return;
-  case Kind::PlannedWire:
-    os << "plannedWire(" << index << ")";
-    return;
-  case Kind::GateEnable:
-    os << "gateEnable(" << *op << ")";
-    return;
-  }
+Value GatedClockConversion::live(Value v) const {
+  if (auto result = dyn_cast<OpResult>(v))
+    if (auto *clone = instClones.lookup(result.getOwner()))
+      return clone->getResult(result.getResultNumber());
+  return v;
 }
-
-Value GatedClockConversion::resolve(MatRef ref) {
-  switch (ref.getKind()) {
-  case MatRef::Kind::None:
-    return Value();
-  case MatRef::Kind::Direct:
-    return ref.getValue();
-  case MatRef::Kind::InstResult:
-    return liveInstance(ref.getOp())->getResult(ref.getIndex());
-  case MatRef::Kind::ModuleArg:
-    return cast<FModuleOp>(ref.getOp())
-        .getBodyBlock()
-        ->getArgument(ref.getIndex());
-  case MatRef::Kind::PlannedWire:
-    return plannedWireValues[ref.getIndex()];
-  case MatRef::Kind::GateEnable:
-    return gateEnableOf(ref.gate());
-  }
-  llvm_unreachable("unhandled MatRef kind");
-}
-
-unsigned GatedClockConversion::newEnableNode(unsigned parent, MatRef term,
-                                             Location loc, MatRef anchor) {
-  enableNodes.push_back({parent, term, anchor, loc});
-  return enableNodes.size() - 1;
-}
-
-Value GatedClockConversion::lower(unsigned enableId) {
-  if (enableId == kNoEnable)
-    return Value();
-  loweredEnables.resize(enableNodes.size());
-  if (Value cached = loweredEnables[enableId])
-    return cached;
-
-  // Walk up to the first already-lowered node, then emit from there back down.
-  // Iterative so that a long gate cascade cannot overflow the stack.
-  SmallVector<unsigned> chain;
-  unsigned cur = enableId;
-  while (cur != kNoEnable && !loweredEnables[cur]) {
-    chain.push_back(cur);
-    cur = enableNodes[cur].parent;
-  }
-
-  Value upstream = cur == kNoEnable ? Value() : loweredEnables[cur];
-  for (unsigned id : llvm::reverse(chain)) {
-    const EnableNode &node = enableNodes[id];
-    Value result = resolve(node.term);
-    if (node.parent != kNoEnable) {
-      // AND with the upstream enable, so the register holds whenever any gate
-      // in the chain is closed. The anchor is the clock this enable
-      // accompanies, which dominates every consumer of the pair.
-      assert(upstream && "an upstream enable must lower to a value");
-      ImplicitLocOpBuilder builder(node.loc, context);
-      builder.setInsertionPointAfterValue(resolve(node.anchor));
-      result = builder.createOrFold<AndPrimOp>(upstream, result);
-    }
-    loweredEnables[id] = result;
-    upstream = result;
-  }
-  return upstream;
-}
-
-//===----------------------------------------------------------------------===//
-// GatedClockConversion: value materialization helpers
-//===----------------------------------------------------------------------===//
 
 Value GatedClockConversion::gateEnableOf(ClockGateIntrinsicOp gate) {
-  auto it = gateEnableCache.find(gate);
-  if (it != gateEnableCache.end())
-    return it->second;
-  Value v = materializeGateEnable(gate);
-  gateEnableCache[gate] = v;
-  return v;
+  if (!gate.getTestEnable())
+    return gate.getEnable();
+  ImplicitLocOpBuilder b(gate.getLoc(), gate);
+  return b.createOrFold<OrPrimOp>(gate.getEnable(), gate.getTestEnable());
+}
+
+Value GatedClockConversion::andEnables(Value upstream, Value gateEn,
+                                       Location loc) {
+  if (!upstream)
+    return gateEn;
+  ImplicitLocOpBuilder builder(loc, context);
+  builder.setInsertionPointAfterValue(laterOf(upstream, gateEn));
+  return builder.createOrFold<AndPrimOp>(upstream, gateEn);
 }
 
 Value GatedClockConversion::getOrCreateConstU1One(FModuleOp mod) {
@@ -197,7 +128,7 @@ Value GatedClockConversion::getOrCreateConstU1One(FModuleOp mod) {
   if (it != constU1Cache.end())
     return it->second;
 
-  // At the top of the body, so it dominates every possible use.
+  // At the top of the body, so it dominates every use.
   ImplicitLocOpBuilder builder(mod.getLoc(), context);
   builder.setInsertionPointToStart(mod.getBodyBlock());
   Value constOne = builder.createOrFold<ConstantOp>(
@@ -206,24 +137,39 @@ Value GatedClockConversion::getOrCreateConstU1One(FModuleOp mod) {
   return constOne;
 }
 
-void GatedClockConversion::connectMaterializedToInstancePorts(
-    InstanceOp inst, unsigned clkPortIndex, unsigned enPortIndex,
-    Value materializedClk, Value materializedEn) {
-  ImplicitLocOpBuilder builder(inst.getLoc(), context);
-  // At the end of the block, so the materialized clock dominates the connect.
-  builder.setInsertionPointToEnd(inst->getBlock());
+void GatedClockConversion::drivePair(Location loc, Value dstClk, Value dstEn,
+                                     Value clk, Value en) {
+  // At the end of the block, so `clk` and `en` dominate the connects.
+  auto builder = ImplicitLocOpBuilder::atBlockEnd(loc, dstClk.getParentBlock());
+  MatchingConnectOp::create(builder, dstClk, clk);
+  if (!en)
+    en = getOrCreateConstU1One(getParentModule(dstClk));
+  MatchingConnectOp::create(builder, dstEn, en);
+}
 
-  MatchingConnectOp::create(builder, inst->getResult(clkPortIndex),
-                            materializedClk);
+Value GatedClockConversion::getDominatingValue(Operation *user, Value v) {
+  auto *def = v.getDefiningOp();
+  if (!def)
+    return v;
+  Operation *ancestor = def->getBlock()->findAncestorOpInBlock(*user);
+  assert(ancestor && "a value is used within the block that defines it");
+  if (def->isBeforeInBlock(ancestor))
+    return v;
 
-  if (!materializedEn)
-    materializedEn = getOrCreateConstU1One(inst->getParentOfType<FModuleOp>());
-  MatchingConnectOp::create(builder, inst->getResult(enPortIndex),
-                            materializedEn);
+  // `user` reads `v` through a wire driven later in the block.
+  auto [it, inserted] = dominatingValues.try_emplace(v);
+  if (inserted) {
+    ImplicitLocOpBuilder builder(v.getLoc(), context);
+    builder.setInsertionPointToStart(def->getBlock());
+    it->second = WireOp::create(builder, v.getType()).getData();
+    builder.setInsertionPointAfterValue(v);
+    MatchingConnectOp::create(builder, it->second, v);
+  }
+  return it->second;
 }
 
 //===----------------------------------------------------------------------===//
-// GatedClockConversion: worklist analysis (no IR mutation)
+// Analysis
 //===----------------------------------------------------------------------===//
 
 LogicalResult GatedClockConversion::addRoot(Operation *op) {
@@ -233,113 +179,99 @@ LogicalResult GatedClockConversion::addRoot(Operation *op) {
         "unsupported operation type for gated clock "
         "conversion; expected RefForceOp, RefReleaseOp, RegOp, "
         "RegResetOp or ClockGateIntrinsicOp");
-  roots.emplace_back(op, clk);
+  Root root{op, clk};
+
+  // The enable is sunk into the register's write, so there must be exactly one.
+  Value regData =
+      TypeSwitch<Operation *, Value>(op)
+          .Case<RegOp, RegResetOp>([](auto reg) { return reg.getData(); })
+          .Default([](auto) { return Value(); });
+  if (regData) {
+    for (auto &use : regData.getUses()) {
+      auto fconn = dyn_cast<FConnectLike>(use.getOwner());
+      if (fconn && fconn.getDest() == regData) {
+        ++root.numWrites;
+        root.dataWrite = fconn;
+      }
+    }
+    if (root.numWrites != 1)
+      root.dataWrite = {};
+  }
+  roots.push_back(root);
   return success();
 }
 
-LogicalResult GatedClockConversion::analyzeFrom(ArrayRef<Value> seeds) {
-  LLVM_DEBUG(llvm::dbgs() << "[analyzeFrom] " << seeds.size() << " seeds\n");
-  SmallVector<Value> worklist(seeds.begin(), seeds.end());
+LogicalResult GatedClockConversion::analyze() {
   LogicalResult result = success();
+  SmallVector<Value> worklist;
+  bool needed = true;
 
-  // Record the edge `srcClk` -> `dstClk` through `op` and enqueue the driver of
-  // `srcClk`, looking through wire/node/cast aliases.
-  auto pushIfFresh = [&](Value dstClk, Value srcClk, Operation *op,
-                         EdgeKind kind) {
-    if (!dstClk || !srcClk)
-      return;
-    LLVM_DEBUG(llvm::dbgs()
-               << "  [pushIfFresh] edge kind=" << edgeKindName(kind) << "\n");
-    Value baseClkDriver =
-        getModuleScopedDriver(srcClk, /*lookThroughWires=*/true,
-                              /*lookThroughNodes=*/true,
-                              /*lookThroughCasts=*/true);
-    // An undriven clock net has no source to thread a (base, enable) pair from,
-    // and skipping it would break the invariant that every caller drives a
-    // planned input pair. Report it while the IR is still untouched.
-    if (!baseClkDriver) {
-      mlir::emitError(srcClk.getLoc())
-          << "gated clock conversion: this clock is not driven; run this "
-             "utility after firrtl-expand-whens and firrtl-check-init";
-      result = failure();
-      return;
-    }
-    // `srcToDstClocks` is replayed forwards, from base clocks to users.
-    if (kind != EdgeKind::Alias)
-      srcToDstClocks[srcClk].push_back({dstClk, op, kind});
-    if (baseClkDriver != srcClk)
-      // Drives `srcClk` through wires/nodes/casts, so no op is needed.
-      srcToDstClocks[baseClkDriver].push_back(
-          {srcClk, nullptr, EdgeKind::Alias});
-    if (!visited.insert(baseClkDriver).second)
-      return;
-    worklist.push_back(baseClkDriver);
+  // Without a driver there is no pair to give the clock, and a caller of an
+  // input port pair would be left not driving it.
+  auto reportUndriven = [&](Value clk) {
+    mlir::emitError(clk.getLoc())
+        << "gated clock conversion: this clock is not driven; run this "
+           "utility after firrtl-expand-whens and firrtl-check-init";
+    result = failure();
   };
 
-  // Backward DFS from leaf clock values to the base clock that drives them.
-  while (!worklist.empty()) {
-    Value clk = worklist.pop_back_val();
-    // Case 1: clk is an input-port BlockArg (fan out to every caller).
+  auto enqueue = [&](Value clk) {
+    if (analyzed.try_emplace(clk, needed).second)
+      worklist.push_back(clk);
+  };
+
+  auto addEdge = [&](Value dstClk, Value srcClk, Operation *op, EdgeKind kind) {
+    Value driver = clockDriver(srcClk);
+    if (!driver)
+      return reportUndriven(srcClk);
+    LLVM_DEBUG(llvm::dbgs() << "  edge kind=" << edgeKindName(kind) << "\n");
+    srcToDstClocks[driver].push_back({dstClk, op, kind});
+    enqueue(driver);
+  };
+
+  auto visit = [&](Value clk) {
     if (auto blockArg = dyn_cast<BlockArgument>(clk)) {
-      auto mod = dyn_cast<FModuleOp>(blockArg.getOwner()->getParentOp());
-      assert(mod &&
-             mod.getPortDirection(blockArg.getArgNumber()) == Direction::In &&
-             "expected input port of an FModuleOp");
+      auto mod = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
       unsigned portIdx = blockArg.getArgNumber();
       auto *node = ig.lookup(mod);
-      // Top-level module: this is the base clock, nothing else to traverse.
-      if (node->uses().empty()) {
-        LLVM_DEBUG(llvm::dbgs() << "  top-level port, base clock\n");
+      if (node->noUses()) {
         baseClks.push_back(clk);
-        continue;
+        return;
       }
       for (auto *use : node->uses()) {
-        if (auto callerInst = dyn_cast<InstanceOp>(*use->getInstance()))
-          pushIfFresh(clk, callerInst.getResult(portIdx), callerInst,
-                      EdgeKind::InstanceIn);
-        else
+        if (auto callerInst = dyn_cast<InstanceOp>(*use->getInstance())) {
+          addEdge(clk, callerInst.getResult(portIdx), callerInst,
+                  EdgeKind::InstanceIn);
+        } else {
           use->getInstance()->emitError("can only handle InstanceOp");
+          result = failure();
+        }
       }
-      continue;
+      return;
     }
     auto *defOp = clk.getDefiningOp();
 
-    // Case 2: clk is the result of a clock gate.
-    if (auto gate = dyn_cast<ClockGateIntrinsicOp>(defOp)) {
-      pushIfFresh(clk, gate.getInput(), gate, EdgeKind::Gate);
-      continue;
-    }
+    if (auto gate = dyn_cast<ClockGateIntrinsicOp>(defOp))
+      return addEdge(clk, gate.getInput(), gate, EdgeKind::Gate);
 
-    // Case 3: clk is an instance result (descend into the referenced module).
     if (auto inst = dyn_cast<InstanceOp>(defOp)) {
-      auto refMod = inst.getReferencedModule(ig);
-      auto childMod = dyn_cast_or_null<FModuleOp>(refMod.getOperation());
+      auto childMod = dyn_cast_or_null<FModuleOp>(
+          inst.getReferencedModule(ig).getOperation());
       if (!childMod) {
-        // External module: treat as base.
-        LLVM_DEBUG(llvm::dbgs() << "  external module, base clock\n");
         baseClks.push_back(clk);
-        continue;
+        return;
       }
       unsigned portIdx = cast<OpResult>(clk).getResultNumber();
-      pushIfFresh(clk, childMod.getBodyBlock()->getArgument(portIdx), inst,
-                  EdgeKind::InstanceOut);
-      continue;
-    }
-    if (isa<WireOp, NodeOp>(defOp)) {
-      pushIfFresh(clk, clk, defOp, EdgeKind::Alias);
-      continue;
+      return addEdge(clk, childMod.getBodyBlock()->getArgument(portIdx), inst,
+                     EdgeKind::InstanceOut);
     }
 
-    // A clock mux is the post-ExpandWhens form of a multi-driver gated clock.
-    // There is no single enable to sink through it, so say so rather than
-    // silently leaving the gate in place. Remark only when a gate feeds the
-    // mux, so that ordinary clock selection stays silent.
+    // A mux of gated clocks has no single enable to sink. Stay silent for
+    // ordinary clock selection, which leaves nothing behind.
     if (auto mux = dyn_cast<MuxPrimOp>(defOp)) {
       Value inputs[] = {mux.getHigh(), mux.getLow()};
       if (llvm::any_of(inputs, [](Value v) {
-            Value d = getModuleScopedDriver(v, /*lookThroughWires=*/true,
-                                            /*lookThroughNodes=*/true,
-                                            /*lookThroughCasts=*/true);
+            Value d = clockDriver(v);
             return d && d.getDefiningOp<ClockGateIntrinsicOp>();
           }))
         mlir::emitRemark(mux.getLoc())
@@ -347,354 +279,145 @@ LogicalResult GatedClockConversion::analyzeFrom(ArrayRef<Value> seeds) {
                "clock gate feeding this mux was left in place";
     }
 
-    // Any other op generating the clock is a base clock; stop tracing here.
-    LLVM_DEBUG(llvm::dbgs() << "  base clock\n");
     baseClks.push_back(clk);
+  };
+
+  // Unsinkable roots go last, and only to tell whether they are gated, so
+  // that no port pair is added for them alone.
+  for (bool sinkable : {true, false}) {
+    needed = sinkable;
+    for (Root &root : roots) {
+      if (root.isSinkable() != sinkable)
+        continue;
+      root.key = clockDriver(root.clock);
+      if (!root.key) {
+        reportUndriven(root.clock);
+        continue;
+      }
+      enqueue(root.key);
+    }
+    while (!worklist.empty())
+      visit(worklist.pop_back_val());
   }
-  LLVM_DEBUG(llvm::dbgs() << "[analyzeFrom] " << baseClks.size()
-                          << " base clocks\n");
+  return result;
+}
+
+void GatedClockConversion::markGated() {
+  // Requeue a clock only when its bit flips, so each is visited at most twice.
+  SmallVector<Value> worklist;
+  for (Value baseClk : baseClks) {
+    gated.try_emplace(baseClk, false);
+    worklist.push_back(baseClk);
+  }
+  while (!worklist.empty()) {
+    Value src = worklist.pop_back_val();
+    auto edges = srcToDstClocks.find(src);
+    if (edges == srcToDstClocks.end())
+      continue;
+    bool srcGated = gated.lookup(src);
+    for (const ClockEdge &edge : edges->second) {
+      bool dstGated = srcGated || edge.kind == EdgeKind::Gate;
+      auto [it, inserted] = gated.try_emplace(edge.dst, dstGated);
+      if (!inserted) {
+        if (!dstGated || it->second)
+          continue;
+        it->second = true;
+      }
+      worklist.push_back(edge.dst);
+    }
+  }
+}
+
+LogicalResult GatedClockConversion::checkRoots() {
+  LogicalResult result = success();
+  for (const Root &root : roots) {
+    auto it = gated.find(root.key);
+    if (it == gated.end()) {
+      mlir::emitWarning(root.clock.getLoc())
+          << "gated clock conversion: this clock is not reachable from any "
+             "free-running base clock (clock feedback loop?); leaving the op "
+             "unchanged";
+      continue;
+    }
+    if (!it->second)
+      continue;
+    if (isa<ClockGateIntrinsicOp>(root.op)) {
+      root.op->emitError("unsupported for gated clock conversion");
+      result = failure();
+      continue;
+    }
+    // Rebinding the clock without sinking the enable would drop the gate.
+    if (!root.isSinkable())
+      root.op->emitWarning()
+          << "gated clock conversion: expected exactly one connect driving "
+             "this register (run after firrtl-expand-whens); found "
+          << root.numWrites << "; leaving the gated clock in place";
+  }
   return result;
 }
 
 //===----------------------------------------------------------------------===//
-// GatedClockConversion: root rewriting
+// Mutation
 //===----------------------------------------------------------------------===//
 
-LogicalResult GatedClockConversion::rewriteRoot(Operation *op, Value baseClk,
-                                                Value enable) {
-  if (!enable)
-    return success();
-
-  // RefForce/RefRelease: rebind the clock to the ungated base and fold the
-  // enable into the predicate.
-  if (auto fop = dyn_cast<RefForceOp>(op)) {
-    fop.getClockMutable().assign(baseClk);
-    ImplicitLocOpBuilder b(fop.getLoc(), fop);
-    fop.getPredicateMutable().assign(
-        b.createOrFold<AndPrimOp>(fop.getPredicate(), enable));
-    return success();
-  }
-  if (auto rop = dyn_cast<RefReleaseOp>(op)) {
-    rop.getClockMutable().assign(baseClk);
-    ImplicitLocOpBuilder b(rop.getLoc(), rop);
-    rop.getPredicateMutable().assign(
-        b.createOrFold<AndPrimOp>(rop.getPredicate(), enable));
-    return success();
-  }
-
-  Value regData;
-  if (auto reg = dyn_cast<RegOp>(op))
-    regData = reg.getData();
-  else if (auto regr = dyn_cast<RegResetOp>(op))
-    regData = regr.getData();
-  else
-    return op->emitError("unsupported for gated clock conversion");
-
-  // ExpandWhens leaves exactly one write per register. Rebinding the clock
-  // without sinking the enable would silently drop the gate, so bail out if
-  // that precondition does not hold.
-  FConnectLike dataWrite;
-  unsigned writers = 0;
-  for (auto &use : regData.getUses()) {
-    auto fconn = dyn_cast<FConnectLike>(use.getOwner());
-    if (fconn && fconn.getDest() == regData) {
-      ++writers;
-      dataWrite = fconn;
-    }
-  }
-  if (writers != 1) {
-    op->emitWarning() << "gated clock conversion: expected exactly one connect "
-                         "driving this register (run after "
-                         "firrtl-expand-whens); found "
-                      << writers << "; leaving the gated clock in place";
-    return success();
-  }
-
-  // Rebind to the ungated base and wrap the write with mux(enable, RHS,
-  // regData), so the register holds while the clock gate is closed.
-  op->setOperand(0, baseClk);
-  ImplicitLocOpBuilder b(dataWrite.getLoc(), dataWrite);
-  Value newRhs = b.createOrFold<MuxPrimOp>(enable, dataWrite.getSrc(), regData);
-  dataWrite->setOperand(1, newRhs);
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// GatedClockConversion: planning (no IR mutation)
-//===----------------------------------------------------------------------===//
-
-void GatedClockConversion::planAlias(Value dstClk, FModuleOp srcMod,
-                                     MatRef baseClk, unsigned enableId) {
-  if (enableId == kNoEnable) {
-    clockEnablePairs[dstClk] = {baseClk, kNoEnable};
-    return;
-  }
-  // A wire pair carries (base, enable) past the alias;
-  // eliminateTemporaryWires() forwards it away when safe.
-  unsigned wireId = 2 * wirePlans.size();
-  wirePlans.push_back({srcMod, baseClk, enableId, dstClk.getLoc()});
-  clockEnablePairs[dstClk] = {
-      MatRef::plannedWire(wireId),
-      newEnableLeaf(MatRef::plannedWire(wireId + 1), dstClk.getLoc())};
-}
-
-void GatedClockConversion::planGate(ClockGateIntrinsicOp gate, Value dstClk,
-                                    MatRef baseClk, unsigned enableId) {
-  // The base clock passes through unchanged, so cascaded gates all resolve to
-  // the same ungated base.
-  auto gateEn = newEnableNode(enableId, MatRef::gateEnable(gate), gate.getLoc(),
-                              /*anchor=*/MatRef::of(dstClk));
-  clockEnablePairs[dstClk] = {baseClk, gateEn};
-}
-
-void GatedClockConversion::recordInstanceDrive(InstanceOp inst,
-                                               const PortPairPlan &plan,
-                                               MatRef baseClk,
-                                               unsigned enableId) {
-  assert(plan.dir == Direction::In &&
-         "only input port pairs are driven at the caller");
-  // A clock loop closed through an instance (`inst.clk_in <- inst.clk_out`) is
-  // deliberately not diagnosed here: doing it precisely needs an
-  // instance-path-sensitive analysis, and `firrtl-check-comb-loops` already
-  // rejects such input.
-
-  // Keyed by (instance, port index), so a second edge reaching an already
-  // planned pair from the same caller is a no-op, not a duplicate connect.
-  instanceDrives.try_emplace(
-      {inst, plan.baseIdx},
-      InstanceDrive{inst, plan.baseIdx, plan.enIdx, baseClk, enableId});
-}
-
-std::pair<unsigned, unsigned>
-GatedClockConversion::planGatedPorts(InstanceOp inst, FModuleOp childMod,
-                                     unsigned gatedClkIndex, Direction dir,
-                                     MatRef baseClk, unsigned enableId) {
-  PortPlanKey key{childMod, gatedClkIndex};
-  auto *it = portPlans.find(key);
-  if (it == portPlans.end()) {
-    // The final indices are known already: `insertPlannedPorts()` only appends
-    // ports, so existing indices never shift (asserted when applying).
-    unsigned &nextIdx =
-        nextPortIdx.try_emplace(childMod, childMod.getNumPorts()).first->second;
-    PortPairPlan plan({childMod, gatedClkIndex, dir, nextIdx, nextIdx + 1});
-    nextIdx += 2;
-    if (dir == Direction::Out) {
-      assert(enableId != kNoEnable &&
-             "unless this is a gated clock, no need to add output enable port");
-      plan.outBaseClk = baseClk;
-      plan.outEnableId = enableId;
-    }
-    it = portPlans.insert({key, plan}).first;
-    plansPerModule[childMod].push_back(key);
-  }
-
-  const PortPairPlan &plan = it->second;
-  assert(plan.dir == dir && "a port cannot change direction");
-  // Every caller of the module must drive a planned input pair.
-  if (dir == Direction::In)
-    recordInstanceDrive(inst, plan, baseClk, enableId);
-  return {plan.baseIdx, plan.enIdx};
-}
-
-void GatedClockConversion::planInstancePort(Direction dir, InstanceOp inst,
-                                            Value dstClk, Value srcClk,
-                                            MatRef baseClk, unsigned enableId) {
-  auto childMod =
-      dyn_cast_or_null<FModuleOp>(inst.getReferencedModule(ig).getOperation());
-  auto gatedClkIndex = cast<OpResult>(srcClk).getResultNumber();
-  if (enableId == kNoEnable) {
-    if (dir == Direction::Out) {
-      // Symbolic, because a port pair for a *different* clock port of this
-      // module would clone all of its instances.
-      clockEnablePairs[dstClk] = {MatRef::of(dstClk), kNoEnable};
-      return;
-    }
-    // This instance drives an ungated clock input, but a sibling instance may
-    // drive a gated one, in which case the pair is added for *every* instance.
-    // `gatedClocks` answers that without blocking on the sibling's pair, which
-    // in a same-module cascade would depend on this very port.
-    if (!gatedClocks.contains(dstClk)) {
-      clockEnablePairs[dstClk] = {MatRef::of(dstClk), kNoEnable};
-      return;
-    }
-
-    // A sibling is gated: add the pair here too. `kNoEnable` on the resulting
-    // instance drive connects a constant 1.
-  }
-  assert((enableId == kNoEnable || dir == Direction::Out ||
-          gatedClocks.contains(dstClk)) &&
-         "a gated pair must imply a gated mark");
-  auto [baseClkIndex, enableIndex] =
-      planGatedPorts(inst, childMod, gatedClkIndex, dir, baseClk, enableId);
-
-  // An output pair is read on the instance result side, an input pair on the
-  // child's block-argument side. Neither exists yet, hence symbolic refs.
-  MatRef baseRef, enRef;
-  if (dir == Direction::Out) {
-    baseRef = MatRef::instResult(inst, baseClkIndex);
-    enRef = MatRef::instResult(inst, enableIndex);
-  } else {
-    baseRef = MatRef::moduleArg(childMod, baseClkIndex);
-    enRef = MatRef::moduleArg(childMod, enableIndex);
-  }
-  assert((dir == Direction::Out ? inst->getParentOfType<FModuleOp>()
-                                : childMod) == getParentModule(dstClk) &&
-         "parent modules must match");
-  clockEnablePairs[dstClk] = {baseRef, newEnableLeaf(enRef, dstClk.getLoc())};
-}
-
-void GatedClockConversion::planMultiplyInstantiatedInput(Value srcClk,
-                                                         MatRef baseClk,
-                                                         unsigned enableId) {
-  // `srcClk` is a result of the caller instance; drive the port pair that an
-  // earlier caller of this module already planned.
-  auto inst = srcClk.getDefiningOp<InstanceOp>();
-  assert(inst);
-  auto childMod =
-      dyn_cast_or_null<FModuleOp>(inst.getReferencedModule(ig).getOperation());
-  auto gatedClkIndex = cast<OpResult>(srcClk).getResultNumber();
-  auto *it = portPlans.find({childMod, gatedClkIndex});
-  // No plan means an output port, which the InstanceOut path handles.
-  if (it == portPlans.end()) {
-    LLVM_DEBUG(llvm::dbgs() << "  no plan for index " << gatedClkIndex
-                            << ", skipping drive (handled by InstanceOut)\n");
-    return;
-  }
-  recordInstanceDrive(inst, it->second, baseClk, enableId);
-}
-
-void GatedClockConversion::computeGatedClocks() {
-  // Forward closure of every `Gate` edge over `srcToDstClocks`.
-  SmallVector<Value> worklist;
-  for (const auto &[src, edges] : srcToDstClocks)
-    for (const auto &edge : edges)
-      if (edge.kind == EdgeKind::Gate && gatedClocks.insert(edge.dst).second)
-        worklist.push_back(edge.dst);
-
-  // Iterating a DenseMap above is fine: the result is a set, not an order.
-  while (!worklist.empty()) {
-    Value clk = worklist.pop_back_val();
-    auto it = srcToDstClocks.find(clk);
-    if (it == srcToDstClocks.end())
-      continue;
-    for (const auto &edge : it->second)
-      if (gatedClocks.insert(edge.dst).second)
-        worklist.push_back(edge.dst);
-  }
-  LLVM_DEBUG(llvm::dbgs() << "[computeGatedClocks] " << gatedClocks.size()
-                          << " gated clock values\n");
-}
-
-Value GatedClockConversion::processEdge(const ClockEdge &edge, Value srcClk,
-                                        FModuleOp srcMod, MatRef baseClk,
-                                        unsigned enableId) {
-  LLVM_DEBUG(llvm::dbgs() << "  edge kind=" << edgeKindName(edge.kind) << "\n");
-
-  if (clockEnablePairs.count(edge.dst)) {
-    // For InstanceIn this is a multiply-instantiated module whose ports an
-    // earlier caller planned; this caller still has to drive them.
-    if (edge.kind == EdgeKind::InstanceIn)
-      planMultiplyInstantiatedInput(srcClk, baseClk, enableId);
-    return Value();
-  }
-
-  switch (edge.kind) {
-  case EdgeKind::Alias:
-    planAlias(edge.dst, srcMod, baseClk, enableId);
-    break;
-  case EdgeKind::Gate:
-    planGate(edge.gate(), edge.dst, baseClk, enableId);
-    break;
-  case EdgeKind::InstanceIn:
-    planInstancePort(Direction::In, edge.instance(), edge.dst, srcClk, baseClk,
-                     enableId);
-    break;
-  case EdgeKind::InstanceOut:
-    planInstancePort(Direction::Out, edge.instance(), edge.dst, edge.dst,
-                     baseClk, enableId);
-    break;
-  }
-  // `edge.dst` now has a pair, so it is safe to visit next.
-  assert(clockEnablePairs.count(edge.dst) && "the destination must be planned");
-  return edge.dst;
-}
-
-void GatedClockConversion::plan() {
-  LLVM_DEBUG(llvm::dbgs() << "[plan] " << baseClks.size() << " base clocks\n");
-  // Propagate (base, enable) pairs from the base clocks through the clock flow
-  // graph, planning ports as needed.
-  //
-  // This terminates on any graph, cyclic or not: a node is enqueued only once
-  // it has a pair and `processEdge` skips destinations that already have one.
-  // Clocks in a loop with no base clock are never planned; `run()` reports
-  // them.
-  //
-  // BFS rather than DFS purely to keep the emission order stable.
-  std::deque<Value> worklist(baseClks.begin(), baseClks.end());
-  for (auto baseClk : baseClks)
-    clockEnablePairs[baseClk] = {MatRef::of(baseClk), kNoEnable};
-
-  while (!worklist.empty()) {
-    auto srcClk = worklist.front();
-    worklist.pop_front();
-    FModuleOp srcMod = getParentModule(srcClk);
-
-    auto it = clockEnablePairs.find(srcClk);
-    assert(it != clockEnablePairs.end() &&
-           "a node is only enqueued once it has a pair");
-    // Copy the pair out: `processEdge` inserts into `clockEnablePairs` and
-    // invalidates `it`.
-    MatRef baseClk = it->second.baseClk;
-    unsigned enableId = it->second.enableId;
-
-    for (auto &edge : srcToDstClocks[srcClk])
-      if (Value next = processEdge(edge, srcClk, srcMod, baseClk, enableId))
-        worklist.push_back(next);
-  }
-  LLVM_DEBUG(llvm::dbgs() << "[plan] complete\n");
-}
-
-//===----------------------------------------------------------------------===//
-// GatedClockConversion: applyPlan (the only IR-mutating phase)
-//===----------------------------------------------------------------------===//
-
-void GatedClockConversion::createPlannedWires() {
-  auto createWire = [&](Type type, ImplicitLocOpBuilder &builder) {
-    auto w = WireOp::create(builder, type);
-    wireOps.push_back(w);
-    return w.getData();
+SmallVector<Value> GatedClockConversion::selectPortPairs() {
+  // BFS, which `materialize()` relies on.
+  SmallVector<Value> order;
+  DenseSet<Value> seen;
+  auto push = [&](Value clk) {
+    if (analyzed.lookup(clk) && seen.insert(clk).second)
+      order.push_back(clk);
   };
-  plannedWireValues.reserve(2 * wirePlans.size());
-  for (auto &wirePlan : wirePlans) {
-    // Wires have no operands, so they can all be created up front.
-    auto builder = ImplicitLocOpBuilder::atBlockBegin(
-        wirePlan.loc, wirePlan.mod.getBodyBlock());
-    plannedWireValues.push_back(createWire(clockType, builder));
-    plannedWireValues.push_back(createWire(u1Type, builder));
+  for (Value baseClk : baseClks)
+    push(baseClk);
+
+  for (size_t i = 0; i < order.size(); ++i) {
+    Value src = order[i];
+    auto edges = srcToDstClocks.find(src);
+    if (edges == srcToDstClocks.end())
+      continue;
+    for (const ClockEdge &edge : edges->second) {
+      if (!analyzed.lookup(edge.dst))
+        continue;
+      if (edge.kind == EdgeKind::InstanceIn && gated.lookup(edge.dst)) {
+        auto arg = cast<BlockArgument>(edge.dst);
+        portPairs.try_emplace({cast<FModuleOp>(arg.getOwner()->getParentOp()),
+                               arg.getArgNumber()},
+                              PortPair{Direction::In});
+      } else if (edge.kind == EdgeKind::InstanceOut && gated.lookup(src)) {
+        portPairs.try_emplace(
+            {getParentModule(src), cast<OpResult>(edge.dst).getResultNumber()},
+            PortPair{Direction::Out});
+      }
+      push(edge.dst);
+    }
   }
+  return order;
 }
 
-void GatedClockConversion::insertPlannedPorts() {
-  for (auto &[mod, keys] : plansPerModule) {
-    // All pairs of a module are appended in one call, so every instance is
-    // re-created exactly once no matter how many pairs the module needs.
+void GatedClockConversion::insertPorts() {
+  llvm::MapVector<FModuleOp, SmallVector<std::pair<unsigned, PortPair *>>>
+      perModule;
+  for (auto &[key, portPair] : portPairs)
+    perModule[key.first].push_back({key.second, &portPair});
+
+  for (auto &[mod, modPairs] : perModule) {
+    // One call per module, so each instance is re-created once.
+    llvm::sort(modPairs, llvm::less_first());
     const unsigned origNumPorts = mod.getNumPorts();
     SmallVector<std::pair<unsigned, PortInfo>> newPorts;
-    for (auto key : keys) {
-      const PortPairPlan &portPlan = portPlans.find(key)->second;
-      assert(portPlan.baseIdx == origNumPorts + newPorts.size() &&
-             "port index pre-assignment invalidated: ports were inserted "
-             "outside applyPlan()");
+    for (auto [portIdx, portPair] : modPairs) {
+      portPair->baseIdx = origNumPorts + newPorts.size();
+      portPair->enIdx = portPair->baseIdx + 1;
       auto [baseInfo, enableInfo] = makeGatedClockPortInfos(
-          context, mod.getPortName(portPlan.gatedClkIndex), portPlan.dir,
-          mod.getLoc(), clockType, u1Type);
+          context, mod.getPortName(portIdx), portPair->dir, mod.getLoc(),
+          clockType, u1Type);
       newPorts.emplace_back(origNumPorts, baseInfo);
       newPorts.emplace_back(origNumPorts, enableInfo);
     }
     mod.insertPorts(newPorts);
 
-    // A result list cannot grow in place, so every instance has to be
-    // re-created. Collect them first: cloning updates the use list.
+    // Collect first: cloning updates the use list.
     auto *node = ig.lookup(mod);
     SmallVector<InstanceOp> oldInsts;
     for (auto *use : node->uses())
@@ -707,179 +430,153 @@ void GatedClockConversion::insertPlannedPorts() {
       ig.replaceInstance(oldInst, newInst);
       assert(!instClones.count(oldInst) && "instance re-created twice");
       instClones[oldInst] = newInst;
-      // Defer erasure until nothing reads the plan any more.
       deadInstances.push_back(oldInst);
     }
   }
 }
 
-LogicalResult GatedClockConversion::emitPlannedIR() {
-  // Planned output port pairs: drive the new ports from inside the module.
-  for (auto &[key, portPlan] : portPlans) {
-    if (portPlan.dir != Direction::Out)
+void GatedClockConversion::materialize(ArrayRef<Value> order) {
+  for (Value baseClk : baseClks)
+    if (analyzed.lookup(baseClk))
+      pairs[baseClk] = {live(baseClk), Value()};
+
+  for (Value src : order) {
+    auto [baseClk, enable] = pairs.at(src);
+    assert(!enable == !gated.lookup(src) && "a clock has an enable iff gated");
+    auto edges = srcToDstClocks.find(src);
+    if (edges == srcToDstClocks.end())
       continue;
-    Value materializedClk = resolve(portPlan.outBaseClk);
-    Value materializedEn = lower(portPlan.outEnableId);
-    auto *body = portPlan.mod.getBodyBlock();
-    ImplicitLocOpBuilder builder(portPlan.mod.getLoc(), context);
-    builder.setInsertionPointToEnd(body);
-    MatchingConnectOp::create(builder, body->getArgument(portPlan.baseIdx),
-                              materializedClk);
-    MatchingConnectOp::create(builder, body->getArgument(portPlan.enIdx),
-                              materializedEn);
-  }
-
-  // Planned input port pairs: drive them at every caller instance.
-  for (auto &[key, drive] : instanceDrives) {
-    Value materializedClk = resolve(drive.baseClk);
-    Value materializedEn = lower(drive.enableId);
-    connectMaterializedToInstancePorts(
-        cast<InstanceOp>(liveInstance(drive.inst)), drive.baseIdx, drive.enIdx,
-        materializedClk, materializedEn);
-  }
-
-  // Planned carrier wires: connect them to their source pair.
-  for (auto [index, wirePlan] : llvm::enumerate(wirePlans)) {
-    Value clockWire = plannedWireValues[2 * index];
-    Value enWire = plannedWireValues[2 * index + 1];
-    Value materializedClk = resolve(wirePlan.baseClk);
-    Value materializedEn = lower(wirePlan.enableId);
-    ImplicitLocOpBuilder builder(wirePlan.loc, context);
-    builder.setInsertionPointAfter(enWire.getDefiningOp());
-    if (!isa<BlockArgument>(materializedClk))
-      builder.setInsertionPointAfterValue(materializedClk);
-    MatchingConnectOp::create(builder, clockWire, materializedClk);
-    if (!isa<BlockArgument>(materializedEn))
-      builder.setInsertionPointAfterValue(materializedEn);
-    MatchingConnectOp::create(builder, enWire, materializedEn);
-  }
-
-  // Root rewrites, last: they consume the fully materialized pairs.
-  for (const auto &rewrite : rootRewrites)
-    if (failed(rewriteRoot(rewrite.op, resolve(rewrite.baseClk),
-                           lower(rewrite.enableId))))
-      return failure();
-  return success();
-}
-
-LogicalResult GatedClockConversion::applyPlan() {
-  createPlannedWires();
-  insertPlannedPorts();
-  return emitPlannedIR();
-}
-
-void GatedClockConversion::eliminateTemporaryWires() {
-  DenseMap<FModuleOp, mlir::DominanceInfo> dominanceInfo;
-  for (auto wire : wireOps) {
-    auto wireData = wire.getData();
-    FModuleOp mod = wire->getParentOfType<FModuleOp>();
-    if (!dominanceInfo.count(mod))
-      dominanceInfo.try_emplace(mod, mod);
-    auto &modDomInfo = dominanceInfo.find(mod)->second;
-
-    FConnectLike writeConnect = {}; // Connect writing to the wire.
-    bool cannotRemove = false;
-    SmallVector<Operation *> wireReaders;
-
-    for (auto *user : wireData.getUsers()) {
-      if (auto connect = dyn_cast<MatchingConnectOp>(user)) {
-        if (connect.getDest() == wireData) {
-          // A second write means we can't safely forward; bail out.
-          if (writeConnect) {
-            cannotRemove = true;
-            break;
-          }
-          writeConnect = connect;
-          continue;
-        }
-      } else if (!isa<RegOp, RegResetOp, RefForceOp, RefReleaseOp, MuxPrimOp>(
-                     user)) {
-        // Unhandled user; can't optimize.
-        cannotRemove = true;
+    for (const ClockEdge &edge : edges->second) {
+      if (!analyzed.lookup(edge.dst))
+        continue;
+      switch (edge.kind) {
+      case EdgeKind::Gate: {
+        auto gate = edge.gate();
+        [[maybe_unused]] bool inserted =
+            pairs
+                .try_emplace(
+                    edge.dst, baseClk,
+                    andEnables(enable, gateEnableOf(gate), gate.getLoc()))
+                .second;
+        assert(inserted && "a gate is reached by a single edge");
         break;
       }
-      wireReaders.push_back(user);
+      case EdgeKind::InstanceIn: {
+        auto arg = cast<BlockArgument>(edge.dst);
+        auto childMod = cast<FModuleOp>(arg.getOwner()->getParentOp());
+        auto *portPair = portPairs.find({childMod, arg.getArgNumber()});
+        if (portPair == portPairs.end()) {
+          pairs.try_emplace(arg, arg, Value());
+          break;
+        }
+        // Every caller drives the pair, so this is done on every edge.
+        const PortPair &pp = portPair->second;
+        auto *inst = liveInstance(edge.op);
+        drivePair(inst->getLoc(), inst->getResult(pp.baseIdx),
+                  inst->getResult(pp.enIdx), baseClk, enable);
+        Block *body = childMod.getBodyBlock();
+        pairs.try_emplace(arg, body->getArgument(pp.baseIdx),
+                          body->getArgument(pp.enIdx));
+        break;
+      }
+      case EdgeKind::InstanceOut: {
+        auto *portPair = portPairs.find(
+            {getParentModule(src), cast<OpResult>(edge.dst).getResultNumber()});
+        if (portPair == portPairs.end()) {
+          pairs.try_emplace(edge.dst, live(edge.dst), Value());
+          break;
+        }
+        PortPair &pp = portPair->second;
+        if (!pp.driven) {
+          pp.driven = true;
+          Block *body = getParentModule(src).getBodyBlock();
+          drivePair(src.getLoc(), body->getArgument(pp.baseIdx),
+                    body->getArgument(pp.enIdx), baseClk, enable);
+        }
+        auto *inst = liveInstance(edge.op);
+        pairs.try_emplace(edge.dst, inst->getResult(pp.baseIdx),
+                          inst->getResult(pp.enIdx));
+        break;
+      }
+      }
     }
-    if (cannotRemove || !writeConnect)
-      continue;
+  }
+}
 
-    // Bypass the wire if the write dominates every read.
-    Value writeSource = writeConnect.getSrc();
-    if (llvm::all_of(wireReaders, [&](Operation *user) {
-          return modDomInfo.dominates(writeConnect, user);
-        })) {
-      wireData.replaceAllUsesWith(writeSource);
-      writeConnect.erase();
-      wire.erase();
-    }
+void GatedClockConversion::rewriteRoot(const Root &root, Value baseClk,
+                                       Value enable) {
+  TypeSwitch<Operation *>(root.op)
+      .Case<RefForceOp, RefReleaseOp>([&](auto op) {
+        op.getClockMutable().assign(getDominatingValue(op, baseClk));
+        ImplicitLocOpBuilder b(op.getLoc(), op);
+        op.getPredicateMutable().assign(b.createOrFold<AndPrimOp>(
+            op.getPredicate(), getDominatingValue(op, enable)));
+      })
+      .Case<RegOp, RegResetOp>([&](auto reg) {
+        // Hold the register while the gate is closed.
+        reg.getClockValMutable().assign(getDominatingValue(reg, baseClk));
+        FConnectLike write = root.dataWrite;
+        ImplicitLocOpBuilder b(write.getLoc(), write);
+        Value newRhs = b.createOrFold<MuxPrimOp>(
+            getDominatingValue(write, enable), write.getSrc(), reg.getData());
+        write->setOperand(1, newRhs);
+      })
+      .Default([](Operation *) {
+        llvm_unreachable("rejected by addRoot() or checkRoots()");
+      });
+}
+
+void GatedClockConversion::rewriteRoots() {
+  for (const Root &root : roots) {
+    if (!root.isSinkable())
+      continue;
+    auto it = pairs.find(root.key);
+    if (it == pairs.end())
+      continue;
+    auto [baseClk, enable] = it->second;
+    if (enable)
+      rewriteRoot(root, baseClk, enable);
   }
 }
 
 //===----------------------------------------------------------------------===//
-// GatedClockConversion: the driver
+// Driver
 //===----------------------------------------------------------------------===//
 
 LogicalResult GatedClockConversion::run() {
-  LLVM_DEBUG(llvm::dbgs() << "===== GatedClockConversion::run() =====\n");
-
   if (roots.empty())
     return success();
-  context = roots[0].first->getContext();
+  context = roots[0].op->getContext();
   clockType = ClockType::get(context);
   u1Type = UIntType::get(context, 1);
 
-  // Phase 1: analysis. A failure here means invalid input; the IR is untouched,
-  // so returning early leaves it intact.
-  LLVM_DEBUG(llvm::dbgs() << "--- Phase 1: Analysis ---\n");
-  if (failed(analyzeFrom(llvm::to_vector(llvm::make_second_range(roots)))))
+  if (failed(analyze()))
     return failure();
   LLVM_DEBUG(dump());
-
-  computeGatedClocks();
-
-  // Phase 2: plan the whole mutation. Still no IR mutation.
-  LLVM_DEBUG(llvm::dbgs() << "--- Phase 2: Planning ---\n");
-  plan();
-
-  // Record the root rewrites now, so that nothing reads `clockEnablePairs`
-  // after the IR has been mutated.
-  for (auto &[op, clk] : roots) {
-    auto it = clockEnablePairs.find(clk);
-    // An unplanned clock is one no base clock reaches, i.e. a clock feedback
-    // loop, which is invalid input. Skipping the rewrite is always safe.
-    if (it == clockEnablePairs.end()) {
-      mlir::emitWarning(clk.getLoc())
-          << "gated clock conversion: this clock is not reachable from any "
-             "free-running base clock (clock feedback loop?); leaving the op "
-             "unchanged";
-      continue;
-    }
-    rootRewrites.push_back({op, it->second.baseClk, it->second.enableId});
-  }
-  LLVM_DEBUG(dumpPlan());
-
-  // Phase 3: apply the plan. This is the only phase that mutates the IR.
-  LLVM_DEBUG(llvm::dbgs() << "--- Phase 3: Applying the plan ---\n");
-  if (failed(applyPlan()))
+  markGated();
+  if (failed(checkRoots()))
     return failure();
 
-  // Phase 4: cleanup. Nothing reads the plan any more, so the instances that
-  // were replaced can be erased.
-  LLVM_DEBUG(llvm::dbgs() << "--- Phase 4: Cleanup (" << deadInstances.size()
-                          << " ops) ---\n");
-  eliminateTemporaryWires();
+  SmallVector<Value> order = selectPortPairs();
+  insertPorts();
+  materialize(order);
+  rewriteRoots();
   for (auto oldInst : deadInstances)
     oldInst.erase();
-  deadInstances.clear();
 
   roots.clear();
-  LLVM_DEBUG(llvm::dbgs() << "===== run() complete =====\n");
+  analyzed.clear();
+  srcToDstClocks.clear();
+  baseClks.clear();
+  gated.clear();
+  portPairs.clear();
+  pairs.clear();
+  constU1Cache.clear();
+  instClones.clear();
+  deadInstances.clear();
+  dominatingValues.clear();
   return success();
 }
-
-//===----------------------------------------------------------------------===//
-// GatedClockConversion: debug printing
-//===----------------------------------------------------------------------===//
 
 void GatedClockConversion::dump() const {
   llvm::dbgs() << "=== srcToDstClocks ===\n";
@@ -893,10 +590,7 @@ void GatedClockConversion::dump() const {
                    << getParentModule(edge.dst).getModuleName() << "\n";
       edge.dst.print(llvm::dbgs());
       llvm::dbgs() << " via op: ";
-      if (edge.op)
-        edge.op->print(llvm::dbgs());
-      else
-        llvm::dbgs() << "<alias>";
+      edge.op->print(llvm::dbgs());
       llvm::dbgs() << " [" << edgeKindName(edge.kind) << "]\n";
     }
   }
@@ -907,65 +601,4 @@ void GatedClockConversion::dump() const {
     llvm::dbgs() << "\n";
   }
   llvm::dbgs() << "======================\n";
-}
-
-void GatedClockConversion::dumpPlan() const {
-  auto &os = llvm::dbgs();
-  auto printEnable = [&](unsigned id) {
-    if (id == kNoEnable) {
-      os << "<none>";
-      return;
-    }
-    // Print the accumulation chain leaf-to-root, i.e. as it will be ANDed.
-    for (unsigned cur = id; cur != kNoEnable; cur = enableNodes[cur].parent) {
-      if (cur != id)
-        os << " & ";
-      enableNodes[cur].term.print(os);
-    }
-  };
-
-  os << "=== Planned wire pairs ===\n";
-  for (auto [index, wirePlan] : llvm::enumerate(wirePlans)) {
-    FModuleOp mod = wirePlan.mod;
-    os << "  #" << 2 * index << "/" << 2 * index + 1 << " in "
-       << mod.getModuleName() << " <- ";
-    wirePlan.baseClk.print(os);
-    os << ", ";
-    printEnable(wirePlan.enableId);
-    os << "\n";
-  }
-  os << "=== Planned port pairs ===\n";
-  for (const auto &[key, portPlan] : portPlans) {
-    FModuleOp mod = portPlan.mod;
-    os << "  " << mod.getModuleName() << "."
-       << mod.getPortName(portPlan.gatedClkIndex) << ": "
-       << (portPlan.dir == Direction::In ? "in" : "out") << " @"
-       << portPlan.baseIdx << "/" << portPlan.enIdx;
-    if (portPlan.dir == Direction::Out) {
-      os << " <- ";
-      portPlan.outBaseClk.print(os);
-      os << ", ";
-      printEnable(portPlan.outEnableId);
-    }
-    os << "\n";
-  }
-  os << "=== Planned instance drives ===\n";
-  for (const auto &[key, drive] : instanceDrives) {
-    InstanceOp inst = drive.inst;
-    os << "  " << inst.getName() << " @" << drive.baseIdx << "/" << drive.enIdx
-       << " <- ";
-    drive.baseClk.print(os);
-    os << ", ";
-    printEnable(drive.enableId);
-    os << "\n";
-  }
-  os << "=== Planned root rewrites ===\n";
-  for (const auto &rewrite : rootRewrites) {
-    os << "  " << rewrite.op->getName() << " <- ";
-    rewrite.baseClk.print(os);
-    os << ", ";
-    printEnable(rewrite.enableId);
-    os << "\n";
-  }
-  os << "======================\n";
 }
