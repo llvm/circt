@@ -6185,4 +6185,5 @@ LogicalResult FIRRTLLowering::fixupLTLOps() {
   }
 
   return success();
+  
 }
