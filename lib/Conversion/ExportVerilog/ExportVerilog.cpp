@@ -1552,13 +1552,17 @@ public:
 
 } // end anonymous namespace
 
+/// Returns true if `type` prints its own SystemVerilog `data_type`, so
+/// its declaration must not be prefixed with `logic` or `reg`. Integer types
+/// are the exception: they print only a packed range like `[3:0]`, so the
+/// declaration must supply `logic` or `reg`. Packed and unpacked arrays
+/// inherit this property from their elememt type. See SV Spec 6.8.
 static bool hasExplicitDataType(Type type) {
   return TypeSwitch<Type, bool>(type)
-      .Case<VarType, UnpackedArrayType, ArrayType>(
-          [](auto type) { return hasExplicitDataType(type.getElementType()); })
-      .Case<StructType, UnionType, EnumType, TypeAliasType>(
-          [](auto) { return true; })
-      .Default([](auto) { return false; });
+      .Case<UnpackedArrayType, ArrayType>(
+          [](auto t) { return hasExplicitDataType(t.getElementType()); })
+      .Case<IntegerType>([](auto) { return false; })
+      .Default([](auto) { return true; });
 }
 
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
@@ -1586,7 +1590,7 @@ static StringRef getVerilogDeclWord(Operation *op,
   }
 
   if (auto var = dyn_cast<VarOp>(op)) {
-    bool hasExplicitType = hasExplicitDataType(var.getResult().getType());
+    bool hasExplicitType = hasExplicitDataType(var.getElementType());
     switch (emitter.state.options.varOpDeclStyle) {
     case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
       return hasExplicitType ? "var" : "var logic";

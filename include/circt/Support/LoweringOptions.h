@@ -193,12 +193,17 @@ struct LoweringOptions {
   /// when there is only a single statement.
   bool alwaysEmitBeginEnd = false;
 
-  /// This option controls the declaration syntax emitted for the SystemVerilog
-  /// variable op.
+  /// This option controls the declaration syntax emitted for `sv.var`.
+  ///
+  /// - VarLogic: Always emits the `var` keyword. Integer vectors print as `var logic [3:0] x`; types that supply their own data type (structs, unions, enums, typedefs) print as `var my_struct x`.
+  /// - Logic: Omits the `var` keyword, Integer vectors print as `logic [3:0] x`; types that supply their own data type print with no prefix (`my_struct x`).
+  /// - Reg: Omits the `var` keyword, Integer vectors print as `reg [3:0] x`; types that supply their own data type print with no prefix (`my_struct x`).
+  ///
+  /// All there styles are equivalent in meaning and differ only in spelling.
   enum class VarOpDeclStyle {
     VarLogic,
     Logic,
-    Reg
+    Reg,
   } varOpDeclStyle = VarOpDeclStyle::VarLogic;
 };
 } // namespace circt

@@ -343,6 +343,18 @@ hw.module @Wires(in %a: i4, out x: i4, out y: i4) {
   hw.output %wire1, %0 : i4, i4
 }
 
+// CHECK-LABEL: module Vars(
+hw.hierpath @myVarPath [@Vars::@myVar]
+hw.module @Vars() {
+  // sv.var with an inner symbol is a valid XMR target
+  // CHECK: var logic [3:0] v;
+  // CHECK: symRef1(Vars.v);
+  %v = sv.var sym @myVar : !sv.var<i4>
+  %xmr = sv.xmr.ref @myVarPath : !hw.inout<i4>
+  %value = sv.read_inout %xmr : !hw.inout<i4>
+  sv.verbatim "symRef1({{0}});"(%value) : i4
+  }
+
 // CHECK-LABEL: module MultiUseExpr
 hw.module @MultiUseExpr(in %a: i4, out b0: i1, out b1: i1, out b2: i1, out b3: i1, out b4: i2) {
   %false = hw.constant false
