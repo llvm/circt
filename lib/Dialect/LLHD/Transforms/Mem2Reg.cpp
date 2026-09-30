@@ -913,13 +913,15 @@ void Promoter::findPromotableSlots() {
       // We can only promote probes and drives on a locally-defined signal.
       // Other signals, such as the ones brought into a module through a port,
       // have an unknown aliasing relationship with the other ports.
-      if (!operand.getDefiningOp<llhd::SignalOp>())
+      auto signalOp = operand.getDefiningOp<llhd::SignalOp>();
+      if (!signalOp)
         continue;
 
       // Ensure the slot is not used in any way we cannot reason about.
       bool hasProjection = false;
       bool hasBlockingDrive = false;
       bool hasDeltaDrive = false;
+      bool hasConditionalDrive = false;
       auto checkUser = [&](Operation *user) -> bool {
         // We don't support nested probes and drives.
         if (region.isProperAncestor(user->getParentRegion()))
@@ -948,6 +950,8 @@ void Promoter::findPromotableSlots() {
         }
         hasBlockingDrive |= isBlockingDrive(user);
         hasDeltaDrive |= isDeltaDrive(user);
+        if (auto driveOp = dyn_cast<DriveOp>(user))
+          hasConditionalDrive |= bool(driveOp.getEnable());
         return isa<ProbeOp>(user) || isBlockingDrive(user) ||
                isDeltaDrive(user);
       };
@@ -967,6 +971,12 @@ void Promoter::findPromotableSlots() {
       // delta drives. A blocking drive erases the delayed reaching definition,
       // which leaves delta projection drives without a reaching definition.
       if (hasProjection && hasBlockingDrive && hasDeltaDrive)
+        continue;
+
+      // Combining a partial or conditional drive needs the signal's preceding
+      // value. An uninitialized signal has no definition to forward on all
+      // paths, so leave its drives and probes in place.
+      if (!signalOp.getInit() && (hasProjection || hasConditionalDrive))
         continue;
 
       // Mem2Reg may have to materialize a zero value for promoted slots. Skip

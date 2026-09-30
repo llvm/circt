@@ -1391,3 +1391,26 @@ hw.module private @Timeout_10314() {
   }
   hw.output
 }
+
+// A signal with no initializer has no value to forward into a partial drive.
+// Keep the signal when it is declared on only one branch of the process.
+// CHECK-LABEL: @UninitializedPartialDrive
+hw.module @UninitializedPartialDrive() {
+  %time = llhd.constant_time <0ns, 0d, 1e>
+  %zero = hw.constant 0 : i12
+  %offset = hw.constant 0 : i5
+  %false = hw.constant false
+  llhd.process {
+    cf.cond_br %false, ^bb1, ^bb2
+  ^bb1:
+    // CHECK: %[[SIG:.+]] = llhd.sig : <i32>
+    %sig = llhd.sig : <i32>
+    // CHECK: %[[PART:.+]] = llhd.sig.extract %[[SIG]]
+    %part = llhd.sig.extract %sig from %offset : <i32> -> <i12>
+    // CHECK: llhd.drv %[[PART]],
+    llhd.drv %part, %zero after %time : i12
+    cf.br ^bb2
+  ^bb2:
+    llhd.halt
+  }
+}
