@@ -17,6 +17,6 @@ hw.module @NonconstantInit(in %clock: i1, in %d: i42) {
     cf.cond_br %posedge, ^bb1(%d, %true : i42, i1), ^bb1(%zero, %false : i42, i1)
   }
   // expected-error@+1 {{cannot lower a nonconstant signal initializer to a register preset}}
-  %sig = llhd.sig %d : i42
+  %sig = llhd.sig %d : <i42>
   llhd.drv %sig, %value after %time if %enable : i42
 }

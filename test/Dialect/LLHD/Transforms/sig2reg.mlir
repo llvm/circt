@@ -11,20 +11,20 @@ hw.module @basic(in %init : i32, in %cond : i1, in %in0 : i32, in %in1 : i32, ou
   %delta = llhd.constant_time <0ns, 1d, 0e>
 
   // Promoted without delay op
-  %sig1 = llhd.sig %init : i32
+  %sig1 = llhd.sig %init : <i32>
   // Promoted with delay op
-  %sig2 = llhd.sig %init : i32
+  %sig2 = llhd.sig %init : <i32>
   // Not promoted because time is opaque, can support if the delay op takes a
   // time value instead of attribute
-  %sig3 = llhd.sig %init : i32
+  %sig3 = llhd.sig %init : <i32>
   // Promoted to %init because no drive present
-  %sig4 = llhd.sig %init : i32
+  %sig4 = llhd.sig %init : <i32>
   // Not promoted because of drive condition
-  %sig5 = llhd.sig %init : i32
+  %sig5 = llhd.sig %init : <i32>
   // Not promoted because a user is in a nested region
-  %sig6 = llhd.sig %init : i32
+  %sig6 = llhd.sig %init : <i32>
   // Not promoted because of multiple drivers
-  %sig7 = llhd.sig %init : i32
+  %sig7 = llhd.sig %init : <i32>
 
   llhd.drv %sig1, %in0 after %epsilon : i32
   // CHECK: [[DELAY:%.+]] = llhd.delay %in0 by <0ns, 1d, 0e> : i32
@@ -81,7 +81,7 @@ hw.module @aliasStatic(in %init : i4, in %in0 : i1, in %in1 : i1, out out: i4) {
   %c1_c2 = hw.constant 1 : i2
   %c0_c2 = hw.constant 0 : i2
   %false = hw.constant false
-  %out = llhd.sig %init : i4
+  %out = llhd.sig %init : <i4>
   %3 = llhd.sig.extract %out from %c1_c2 : <i4> -> <i2>
   %6 = llhd.sig.extract %3 from %false : <i2> -> <i1>
   %7 = llhd.sig.extract %3 from %true : <i2> -> <i1>
@@ -123,7 +123,7 @@ hw.module @aliasDynamicSuccess(in %init : i8, in %in0 : i1, in %in1 : i1, in %id
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c4_c3 = hw.constant 4 : i3
   %c0_c3 = hw.constant 0 : i3
-  %out = llhd.sig %init : i8
+  %out = llhd.sig %init : <i8>
   %3 = llhd.sig.extract %out from %c0_c3 : <i8> -> <i4>
   %4 = llhd.sig.extract %out from %c4_c3 : <i8> -> <i4>
   %5 = llhd.sig.extract %3 from %idx0 : <i4> -> <i2>
@@ -140,7 +140,7 @@ hw.module @aliasDynamicFailure(in %init : i4, in %in0 : i1, in %in1 : i1, in %id
   // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
   // CHECK-NEXT: [[C_2_I2:%.+]] = hw.constant -2 : i2
   // CHECK-NEXT: [[C0_I2:%.+]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[OUT:%.+]] = llhd.sig %init : i4
+  // CHECK-NEXT: [[OUT:%.+]] = llhd.sig %init : <i4>
   // CHECK-NEXT: [[V1:%.+]] = llhd.sig.extract [[OUT]] from [[C0_I2]] : <i4> -> <i2>
   // CHECK-NEXT: [[V2:%.+]] = llhd.sig.extract [[OUT]] from [[C_2_I2]] : <i4> -> <i2>
   // CHECK-NEXT: [[V3:%.+]] = llhd.sig.extract [[V1]] from %idx0 : <i2> -> <i1>
@@ -155,7 +155,7 @@ hw.module @aliasDynamicFailure(in %init : i4, in %in0 : i1, in %in1 : i1, in %id
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c2_c2 = hw.constant 2 : i2
   %c0_c2 = hw.constant 0 : i2
-  %out = llhd.sig %init : i4
+  %out = llhd.sig %init : <i4>
   %3 = llhd.sig.extract %out from %c0_c2 : <i4> -> <i2>
   %4 = llhd.sig.extract %out from %c2_c2 : <i4> -> <i2>
   %5 = llhd.sig.extract %3 from %idx0 : <i2> -> <i1>
@@ -173,8 +173,8 @@ hw.module @RemoveDriveOnlySignals(in %d: i42, in %e: i1) {
   %0 = hw.constant 0 : i42
   %1 = llhd.constant_time <0ns, 0d, 1e>
   // CHECK-NOT: llhd.sig
-  %a = llhd.sig %0 : i42
-  %b = llhd.sig %0 : i42
+  %a = llhd.sig %0 : <i42>
+  %b = llhd.sig %0 : <i42>
   // CHECK-NOT: llhd.drv
   llhd.drv %a, %d after %1 : i42
   llhd.drv %b, %d after %1 if %e : i42
@@ -185,7 +185,7 @@ hw.module @RemoveDriveOnlySignals(in %d: i42, in %e: i1) {
 hw.module @UninitializedFullDrive(in %value : i4, out out : i4) {
   %time = llhd.constant_time <0ns, 0d, 1e>
   // CHECK-NOT: llhd.sig
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   llhd.drv %sig, %value after %time : i4
   %read = llhd.prb %sig : i4
   // CHECK: hw.output %value : i4

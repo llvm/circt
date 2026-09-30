@@ -148,9 +148,9 @@ def SignalOp : LLHDOp<"sig", [
 
     ```mlir
     %c123_i64 = hw.constant 123 : i64
-    %foo = llhd.sig %c123_i64 : i64
-    %0 = llhd.sig name "foo" %c123_i64 : i64
-    %bar = llhd.sig : i64
+    %foo = llhd.sig %c123_i64 : <i64>
+    %0 = llhd.sig name "foo" %c123_i64 : <i64>
+    %bar = llhd.sig : <i64>
     ```
 
     This example creates a new signal named "foo", carrying an `i64` type with
@@ -163,8 +163,7 @@ def SignalOp : LLHDOp<"sig", [
   let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) ($init^)? attr-dict
-    `:` custom<SignalType>(type($result))
-    custom<ImplicitInitType>(ref(type($result)), ref($init), type($init))
+    `:` type($result)
   }];
 }
 
@@ -187,7 +186,7 @@ def ProbeOp : LLHDOp<"prb", [
 
     ```mlir
     %true = hw.constant true
-    %sig_i1 = llhd.sig %true : i1
+    %sig_i1 = llhd.sig %true : <i1>
     %prbd = llhd.prb %sig_i1 : i1
     ```
   }];
@@ -218,7 +217,7 @@ def DriveOp : LLHDOp<"drv", [
     %true = hw.constant true
     %false = hw.constant false
     %time = llhd.constant_time <1ns, 0d, 0e>
-    %sig = llhd.sig %true : i1
+    %sig = llhd.sig %true : <i1>
 
     llhd.drv %sig, %false after %time : i1
     llhd.drv %sig, %false after %time if %true : i1
@@ -262,7 +261,7 @@ def OutputOp : LLHDOp<"output", [
 
     %value = hw.constant true
     %time = llhd.constant_time <1ns, 0d, 0e>
-    %sig = llhd.sig "sigName" %value : i1
+    %sig = llhd.sig name "sigName" %value : <i1>
     llhd.drv %sig, %value after %time : i1
     ```
   }];

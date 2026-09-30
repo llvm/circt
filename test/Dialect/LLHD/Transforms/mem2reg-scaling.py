@@ -23,7 +23,7 @@ def generate(n: int) -> str:
   w("  %td = llhd.constant_time <0ns, 1d, 0e>")
   w("  %tb = llhd.constant_time <0ns, 0d, 1e>")
   for i in range(n):
-    w(f"  %a{i} = llhd.sig %u : i42")
+    w(f"  %a{i} = llhd.sig %u : <i42>")
   w("  llhd.process {")
   w("    cf.br ^body")
   w("  ^body:")

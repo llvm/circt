@@ -18,7 +18,7 @@ hw.module @ClockPosEdge(in %clock: i1, in %d: i42) {
     %7 = comb.and bin %6, %clock : i1  // posedge clock
     cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -44,7 +44,7 @@ hw.module @ClockPosEdgeExplicitInit(in %clock: i1, in %d: i42) {
     %posedge = comb.and bin %notPrev, %clock : i1
     cf.cond_br %posedge, ^bb1(%d, %true : i42, i1), ^bb1(%zero, %false : i42, i1)
   }
-  %sig = llhd.sig %init : i42
+  %sig = llhd.sig %init : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %value after %time if %enable : i42
 }
@@ -68,7 +68,7 @@ hw.module @ClockNegEdge(in %clock: i1, in %d: i42) {
     %7 = comb.and bin %5, %6 : i1  // negedge clock
     cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -98,7 +98,7 @@ hw.module @ClockPosEdgeWithActiveLowReset(in %clock: i1, in %reset: i1, in %d: i
   ^bb3:
     cf.cond_br %reset, ^bb1(%d, %true : i42, i1), ^bb1(%c42_i42, %true : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -128,7 +128,7 @@ hw.module @ClockNegEdgeWithActiveHighReset(in %clock: i1, in %reset: i1, in %d: 
   ^bb3:
     cf.cond_br %reset, ^bb1(%c42_i42, %true : i42, i1), ^bb1(%d, %true : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -156,7 +156,7 @@ hw.module @ClockWithEnable(in %clock: i1, in %d: i42, in %en: i1) {
   ^bb3:
     cf.cond_br %en, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
@@ -193,7 +193,7 @@ hw.module @ClockWithEnableAndReset(in %clock: i1, in %reset: i1, in %d: i42, in 
   ^bb4:
     cf.cond_br %en, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] reset async %reset, %c42_i42 : i42
@@ -220,7 +220,7 @@ hw.module @ChasePastValuesThroughControlFlow(in %clock: i1, in %d: i42) {
   ^bb3:
     cf.cond_br %clock, ^bb1(%d, %true, %true : i42, i1, i1), ^bb1(%d, %true, %false : i42, i1, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
@@ -241,7 +241,7 @@ hw.module @AbortIfPastValueUnobserved(in %clock: i1, in %d: i42) {
     %7 = comb.and bin %6, %clock : i1  // posedge clock
     cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
@@ -262,7 +262,7 @@ hw.module @AbortIfPastValueNotI1(in %clock: i1, in %d: i42) {
     %8 = comb.and bin %7, %clock : i1  // posedge clock
     cf.cond_br %8, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
@@ -283,7 +283,7 @@ hw.module @AbortIfPastValueLocal(in %clock: i1, in %d: i42) {
     %7 = comb.and bin %6, %clock : i1  // posedge clock
     cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
@@ -307,7 +307,7 @@ hw.module @AbortIfMultipleClocks(in %clock1: i1, in %clock2: i1, in %d: i42) {
     %11 = comb.or bin %8, %10 : i1
     cf.cond_br %11, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
@@ -339,7 +339,7 @@ hw.module @AbortIfMultipleResets(in %clock: i1, in %reset1: i1, in %reset2: i1, 
   ^bb4:
     cf.cond_br %reset2, ^bb1(%c43_i42, %true : i42, i1), ^bb1(%d, %true : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
@@ -366,7 +366,7 @@ hw.module @AbortOnAndOfMultipleEdges(in %clock: i1, in %reset: i1, in %d: i42, i
   ^bb3:
     cf.cond_br %reset, ^bb1(%c42_i42, %true : i42, i1), ^bb1(%d, %true : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
@@ -395,7 +395,7 @@ hw.module @AcceptMuxForReset(in %clock: i1, in %reset: i1, in %d: i42) {
     %12 = comb.mux %reset, %c42_i42, %d : i42
     cf.br ^bb1(%12, %true : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -446,7 +446,7 @@ hw.module @ComplexControlFlow(in %clock: i1, in %d: i42) {
     %15 = comb.icmp ult %14, %c42_i42 : i42
     cf.cond_br %15, ^bb4(%14, %13 : i42, i42), ^bb1(%13, %true : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
@@ -478,7 +478,7 @@ hw.module @ClockAndResetSameConst(in %clock: i1, in %reset: i1) {
   ^bb3:
     cf.cond_br %reset, ^bb1(%c42_i42, %true : i42, i1), ^bb1(%c42_i42, %true : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -507,7 +507,7 @@ hw.module @ClockAndResetDifferentConst(in %clock: i1, in %reset: i1) {
   ^bb3:
     cf.cond_br %reset, ^bb1(%c0_i42, %true : i42, i1), ^bb1(%c42_i42, %true : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -538,7 +538,7 @@ hw.module @NonConstButStaticReset(in %clock: i1, in %reset: i1, in %d: i42) {
   ^bb3:
     cf.cond_br %reset, ^bb1(%2, %true : i42, i1), ^bb1(%d, %true : i42, i1)
   }
-  %5 = llhd.sig : i42
+  %5 = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %5, %3 after %0 if %4 : i42
 }
@@ -586,41 +586,41 @@ hw.module @LargeControlFlowRegression(in %clk: i1, in %rstn: i1, in %a: i6, in %
   %c0_i6 = hw.constant 0 : i6
   %false = hw.constant false
   %c-31_i6 = hw.constant -31 : i6
-  %mem0 = llhd.sig : i15
-  %mem1 = llhd.sig : i15
-  %mem2 = llhd.sig : i15
-  %mem3 = llhd.sig : i15
-  %mem4 = llhd.sig : i15
-  %mem5 = llhd.sig : i15
-  %mem6 = llhd.sig : i15
-  %mem7 = llhd.sig : i15
-  %mem8 = llhd.sig : i15
-  %mem9 = llhd.sig : i15
-  %mem10 = llhd.sig : i15
-  %mem11 = llhd.sig : i15
-  %mem12 = llhd.sig : i15
-  %mem13 = llhd.sig : i15
-  %mem14 = llhd.sig : i15
-  %mem15 = llhd.sig : i15
-  %mem16 = llhd.sig : i15
-  %mem17 = llhd.sig : i15
-  %mem18 = llhd.sig : i15
-  %mem19 = llhd.sig : i15
-  %mem20 = llhd.sig : i15
-  %mem21 = llhd.sig : i15
-  %mem22 = llhd.sig : i15
-  %mem23 = llhd.sig : i15
-  %mem24 = llhd.sig : i15
-  %mem25 = llhd.sig : i15
-  %mem26 = llhd.sig : i15
-  %mem27 = llhd.sig : i15
-  %mem28 = llhd.sig : i15
-  %mem29 = llhd.sig : i15
-  %mem30 = llhd.sig : i15
-  %mem31 = llhd.sig : i15
-  %mem32 = llhd.sig : i15
-  %mem33 = llhd.sig : i15
-  %mem34 = llhd.sig : i15
+  %mem0 = llhd.sig : <i15>
+  %mem1 = llhd.sig : <i15>
+  %mem2 = llhd.sig : <i15>
+  %mem3 = llhd.sig : <i15>
+  %mem4 = llhd.sig : <i15>
+  %mem5 = llhd.sig : <i15>
+  %mem6 = llhd.sig : <i15>
+  %mem7 = llhd.sig : <i15>
+  %mem8 = llhd.sig : <i15>
+  %mem9 = llhd.sig : <i15>
+  %mem10 = llhd.sig : <i15>
+  %mem11 = llhd.sig : <i15>
+  %mem12 = llhd.sig : <i15>
+  %mem13 = llhd.sig : <i15>
+  %mem14 = llhd.sig : <i15>
+  %mem15 = llhd.sig : <i15>
+  %mem16 = llhd.sig : <i15>
+  %mem17 = llhd.sig : <i15>
+  %mem18 = llhd.sig : <i15>
+  %mem19 = llhd.sig : <i15>
+  %mem20 = llhd.sig : <i15>
+  %mem21 = llhd.sig : <i15>
+  %mem22 = llhd.sig : <i15>
+  %mem23 = llhd.sig : <i15>
+  %mem24 = llhd.sig : <i15>
+  %mem25 = llhd.sig : <i15>
+  %mem26 = llhd.sig : <i15>
+  %mem27 = llhd.sig : <i15>
+  %mem28 = llhd.sig : <i15>
+  %mem29 = llhd.sig : <i15>
+  %mem30 = llhd.sig : <i15>
+  %mem31 = llhd.sig : <i15>
+  %mem32 = llhd.sig : <i15>
+  %mem33 = llhd.sig : <i15>
+  %mem34 = llhd.sig : <i15>
   // CHECK-NOT: llhd.process
   // CHECK: [[ER:%.+]]:70 = llhd.combinational ->
   %1:70 = llhd.process -> i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1 {
@@ -982,7 +982,7 @@ hw.module @OpOnConstantInputsMistakenlyPoison(in %clock: i1, in %d: i42) {
     %10 = comb.xor %8, %9 : i1
     cf.cond_br %10, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
-  %3 = llhd.sig : i42
+  %3 = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -1013,7 +1013,7 @@ hw.module @ClockExtractedFromBusPosEdge(in %bus: i8, in %data: i4) {
     %posedge = comb.and bin %notPast, %presentClk : i1
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
@@ -1036,7 +1036,7 @@ hw.module @ProcessResultAsDriveTime(in %clock: i1, in %d: i42) {
     %posedge = comb.and bin %not_past, %clock : i1
     cf.cond_br %posedge, ^bb1(%d, %one, %true : i42, !llhd.time, i1), ^bb1(%c0_i42, %zero, %false : i42, !llhd.time, i1)
   }
-  %sig = llhd.sig : i42
+  %sig = llhd.sig : <i42>
   // CHECK: llhd.drv {{%.+}}, {{%.+}} after {{%.+}} if {{%.+}} : i42
   llhd.drv %sig, %value after %time if %enable : i42
 }
@@ -1064,7 +1064,7 @@ hw.module @ClockExtractedFromBusNegEdge(in %bus: i8, in %data: i4) {
     %negedge = comb.and bin %notPresent, %pastClk : i1
     cf.cond_br %negedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
@@ -1095,7 +1095,7 @@ hw.module @ClockExtractedFromChainedExtractPosEdge(in %bus: i16, in %data: i4) {
     %posedge = comb.and bin %notPast, %presentClk : i1
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
@@ -1122,7 +1122,7 @@ hw.module @ClockExtractedFromOverlappingExtractWidthsPosEdge(in %bus: i42, in %d
     %posedge = comb.and bin %notPast, %presentClk : i1
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
@@ -1149,7 +1149,7 @@ hw.module @ClockExtractedFromArrayGetPosEdge(in %arr: !hw.array<4xi1>, in %data:
     %posedge = comb.and bin %notPast, %presentClk : i1
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
@@ -1175,7 +1175,7 @@ hw.module @ClockExtractedFromStructExtractPosEdge(in %st: !hw.struct<a: i1, b: i
     %posedge = comb.and bin %notPast, %presentClk : i1
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
@@ -1206,7 +1206,7 @@ hw.module @ClockExtractedFromArraySlicePosEdge(in %arr: !hw.array<8xi1>, in %dat
     %posedge = comb.and bin %notPast, %presentClk : i1
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
@@ -1239,7 +1239,7 @@ hw.module @ClockExtractedFromArrayGetThenExtractPosEdge(in %arr: !hw.array<4xi8>
     %posedge = comb.and bin %notPast, %presentClk : i1
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
@@ -1275,7 +1275,7 @@ hw.module @ClockExtractedFromStructArrayGetThenExtractPosEdge(in %st: !hw.struct
     %posedge = comb.and bin %notPast, %presentClk : i1
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
@@ -1301,7 +1301,7 @@ hw.module @ClockExtractedFromAliasedStructExtractPosEdge(in %st: !hw.typealias<@
     %posedge = comb.and bin %notPast, %presentClk : i1
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
-  %sig = llhd.sig : i4
+  %sig = llhd.sig : <i4>
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }

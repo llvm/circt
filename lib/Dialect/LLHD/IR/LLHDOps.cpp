@@ -75,31 +75,6 @@ void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
 // SignalOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseSignalType(OpAsmParser &parser, Type &resultType) {
-  Type valueType;
-  if (parser.parseType(valueType))
-    return failure();
-  resultType = RefType::get(valueType);
-  return success();
-}
-
-static void printSignalType(OpAsmPrinter &printer, Operation *op,
-                            Type resultType) {
-  printer.printType(cast<RefType>(resultType).getNestedType());
-}
-
-static ParseResult
-parseImplicitInitType(OpAsmParser &parser, Type resultType,
-                      std::optional<OpAsmParser::UnresolvedOperand> &init,
-                      Type &initType) {
-  if (init)
-    initType = cast<RefType>(resultType).getNestedType();
-  return success();
-}
-
-static void printImplicitInitType(OpAsmPrinter &printer, Operation *op,
-                                  Type resultType, Value init, Type initType) {}
-
 static Value getValueAtIndex(OpBuilder &builder, Location loc, Value val,
                              unsigned index, Type resultType) {
   return TypeSwitch<Type, Value>(val.getType())
