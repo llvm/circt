@@ -23,6 +23,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include <deque>
 
 #define DEBUG_TYPE "firrtl-gated-clock-conversion"
 
@@ -79,6 +80,20 @@ Value clockDriver(Value clk) {
                                    /*lookThroughNodes=*/true,
                                    /*lookThroughCasts=*/false);
   return driver;
+}
+
+/// A driver-normal clock that is neither a gate nor passed in through a port.
+bool isBaseClock(Value clk, InstanceGraph &ig) {
+  if (clockDriver(clk) != clk)
+    return false;
+  if (auto arg = dyn_cast<BlockArgument>(clk))
+    return ig.lookup(getParentModule(arg))->noUses();
+  Operation *op = clk.getDefiningOp();
+  if (isa<ClockGateIntrinsicOp>(op))
+    return false;
+  if (auto inst = dyn_cast<InstanceOp>(op))
+    return !isa<FModuleOp>(inst.getReferencedModule(ig).getOperation());
+  return true;
 }
 
 /// Whichever of `a` and `b` an op must be inserted after to see both.
@@ -173,6 +188,7 @@ Value GatedClockConversion::getDominatingValue(Operation *user, Value v) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult GatedClockConversion::addRoot(Operation *op) {
+  aliasesBuilt = false;
   Value clk = clockOperandOf(op);
   if (!clk)
     return op->emitError(
@@ -540,6 +556,282 @@ void GatedClockConversion::rewriteRoots() {
 }
 
 //===----------------------------------------------------------------------===//
+// Clock alias analysis
+//===----------------------------------------------------------------------===//
+
+using ClockAliasAnalysis = GatedClockConversion::ClockAliasAnalysis;
+
+unsigned ClockAliasAnalysis::find(unsigned node) const {
+  unsigned root = node;
+  while (nodes[root].parent != root)
+    root = nodes[root].parent;
+  // Path compression.
+  while (nodes[node].parent != root)
+    node = std::exchange(nodes[node].parent, root);
+  return root;
+}
+
+unsigned ClockAliasAnalysis::track(Value v) {
+  auto [it, inserted] = nodeOf.try_emplace(v, nodes.size());
+  if (inserted) {
+    nodes.push_back({v, it->second});
+    members[it->second].push_back(it->second);
+  }
+  return it->second;
+}
+
+bool ClockAliasAnalysis::unionNodes(unsigned a, unsigned b) {
+  a = find(a);
+  b = find(b);
+  if (a == b)
+    return false;
+  // Union by size.
+  if (members[a].size() < members[b].size())
+    std::swap(a, b);
+  nodes[b].parent = a;
+  auto small = members.find(b);
+  members[a].append(small->second);
+  members.erase(small);
+  return true;
+}
+
+bool ClockAliasAnalysis::unionClocks(Value a, Value b) {
+  if (!a || !b)
+    return false;
+  unsigned na = track(a);
+  return unionNodes(na, track(b));
+}
+
+void ClockAliasAnalysis::clear() {
+  nodes.clear();
+  nodeOf.clear();
+  members.clear();
+  classBaseClock.clear();
+}
+
+Value ClockAliasAnalysis::getRepresentative(Value v) const {
+  unsigned node = lookup(v);
+  if (node == kNoNode)
+    return Value();
+  return nodes[members.find(find(node))->second.front()].value;
+}
+
+Value ClockAliasAnalysis::getBaseClock(Value v) const {
+  unsigned node = lookup(v);
+  return node == kNoNode ? Value() : classBaseClock.lookup(find(node));
+}
+
+SmallVector<Value> ClockAliasAnalysis::aliasSet(Value v) const {
+  unsigned node = lookup(v);
+  if (node == kNoNode)
+    return {};
+  return llvm::map_to_vector(members.find(find(node))->second,
+                             [&](unsigned m) { return nodes[m].value; });
+}
+
+void ClockAliasAnalysis::setBaseClocks(ArrayRef<Value> baseClks) {
+  for (Value base : baseClks)
+    classBaseClock.try_emplace(find(track(base)), base);
+}
+
+void ClockAliasAnalysis::build(InstanceGraph &ig,
+                               ArrayRef<std::pair<Value, Value>> shadowPairs) {
+  clear();
+  SmallVector<Value> baseClks;
+  // A clock aliases its driver, and a gate aliases its input.
+  auto visit = [&](Value v) {
+    if (!type_isa<ClockType>(v.getType()))
+      return;
+    track(v);
+    if (auto gate = v.getDefiningOp<ClockGateIntrinsicOp>())
+      unionClocks(v, gate.getInput());
+    else if (Value driver = clockDriver(v); driver && driver != v)
+      unionClocks(v, driver);
+    else if (driver && isBaseClock(v, ig))
+      baseClks.push_back(v);
+  };
+  for (auto *node : ig) {
+    auto mod = dyn_cast_or_null<FModuleOp>(node->getModule().getOperation());
+    if (!mod)
+      continue;
+    Block *body = mod.getBodyBlock();
+    for (BlockArgument arg : body->getArguments())
+      visit(arg);
+    body->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
+      for (Value result : op->getResults())
+        visit(result);
+      // Drivers cannot be traced through nested block arguments.
+      if (llvm::any_of(op->getRegions(), [](Region &region) {
+            return !region.empty() && region.front().getNumArguments();
+          }))
+        return WalkResult::skip();
+      return WalkResult::advance();
+    });
+  }
+  for (auto [a, b] : shadowPairs)
+    unionClocks(a, b);
+  closeOverInstances(ig);
+  setBaseClocks(baseClks);
+}
+
+void ClockAliasAnalysis::closeOverInstances(InstanceGraph &ig) {
+  // The rules are monotone, so a worklist reaches the least fixed point.
+  std::deque<Value> worklist;
+  DenseSet<Value> queued;
+  auto enqueue = [&](Value v) {
+    if (queued.insert(v).second)
+      worklist.push_back(v);
+  };
+  for (const Node &node : nodes)
+    enqueue(node.value);
+
+  // A newly satisfied rule reads a value of each merged class, so requeueing
+  // the smaller class suffices.
+  auto merge = [&](Value a, Value b) {
+    for (Value v : {a, b})
+      if (!isTracked(v)) {
+        track(v);
+        enqueue(v);
+      }
+    unsigned ra = find(lookup(a)), rb = find(lookup(b));
+    if (ra == rb)
+      return;
+    auto &ma = members[ra], &mb = members[rb];
+    for (unsigned m : ma.size() <= mb.size() ? ma : mb)
+      enqueue(nodes[m].value);
+    unionNodes(ra, rb);
+  };
+
+  // Empty if some instance is not an `InstanceOp`.
+  DenseMap<Operation *, SmallVector<InstanceOp>> instanceCache;
+  auto instancesOf = [&](FModuleOp mod) -> MutableArrayRef<InstanceOp> {
+    auto [it, inserted] = instanceCache.try_emplace(mod);
+    if (!inserted)
+      return it->second;
+    for (auto *use : ig.lookup(mod)->uses()) {
+      auto inst = use->getInstance<InstanceOp>();
+      if (!inst) {
+        it->second.clear();
+        break;
+      }
+      it->second.push_back(inst);
+    }
+    return it->second;
+  };
+
+  // An input port joins its callers' class only if all instances agree; an
+  // output port is related per instance.
+  auto crossBoundary = [&](Value v) {
+    FModuleOp mod;
+    unsigned idx = 0;
+    bool isArg = false;
+    if (auto arg = dyn_cast<BlockArgument>(v)) {
+      mod = dyn_cast_or_null<FModuleOp>(arg.getOwner()->getParentOp());
+      idx = arg.getArgNumber();
+      isArg = true;
+    } else if (auto inst = v.getDefiningOp<InstanceOp>()) {
+      mod = dyn_cast_or_null<FModuleOp>(
+          inst.getReferencedModule(ig).getOperation());
+      idx = cast<OpResult>(v).getResultNumber();
+    }
+    if (!mod)
+      return;
+    auto insts = instancesOf(mod);
+    if (insts.empty())
+      return;
+    Block *body = mod.getBodyBlock();
+    BlockArgument arg = body->getArgument(idx);
+    if (!isTracked(arg))
+      return;
+    if (insts.size() == 1) {
+      merge(arg, insts[0].getResult(idx));
+      return;
+    }
+    bool isInput = mod.getPortDirection(idx) == Direction::In;
+    if (isInput) {
+      Value first = insts[0].getResult(idx);
+      if (llvm::all_of(insts, [&](InstanceOp inst) {
+            Value driver = inst.getResult(idx);
+            return isTracked(driver) && alias(first, driver);
+          }))
+        merge(arg, first);
+    }
+    // Output-to-input relations only read the child's classes.
+    if (!isArg)
+      return;
+    for (BlockArgument other : body->getArguments()) {
+      unsigned otherIdx = other.getArgNumber();
+      bool otherIsInput = mod.getPortDirection(otherIdx) == Direction::In;
+      if (otherIsInput == isInput || !alias(arg, other))
+        continue;
+      unsigned outIdx = isInput ? otherIdx : idx;
+      unsigned inIdx = isInput ? idx : otherIdx;
+      for (auto inst : insts)
+        merge(inst.getResult(outIdx), inst.getResult(inIdx));
+    }
+  };
+
+  unsigned visits = 0;
+  while (!worklist.empty()) {
+    Value v = worklist.front();
+    worklist.pop_front();
+    queued.erase(v);
+    ++visits;
+    crossBoundary(v);
+  }
+  LLVM_DEBUG(llvm::dbgs() << "[closeOverInstances] " << visits << " visits, "
+                          << members.size() << " classes\n");
+}
+
+static std::string getClockName(Value v) {
+  auto [name, rootKnown] = getFieldName(getFieldRefFromValue(v));
+  if (!rootKnown) {
+    auto result = cast<OpResult>(v);
+    name = ("<" + result.getOwner()->getName().getStringRef() + "#" +
+            Twine(result.getResultNumber()) + ">")
+               .str();
+  }
+  return (getParentModule(v).getModuleName() + "." + name).str();
+}
+
+void ClockAliasAnalysis::print(llvm::raw_ostream &os) const {
+  SmallVector<std::string> lines;
+  for (const auto &[root, classMembers] : members) {
+    SmallVector<std::string> names;
+    for (unsigned m : classMembers)
+      names.push_back(getClockName(nodes[m].value));
+    llvm::sort(names);
+    Value base = classBaseClock.lookup(root);
+    lines.push_back(
+        "clock-alias-class: base=" + (base ? getClockName(base) : "<none>") +
+        " members=[" + llvm::join(names, ", ") + "]");
+  }
+  llvm::sort(lines);
+  for (auto &line : lines)
+    os << line << "\n";
+}
+
+void GatedClockConversion::buildClockAliases() {
+  // Input pairs are related in the module, output pairs at every instance.
+  SmallVector<std::pair<Value, Value>> shadowPairs;
+  for (auto &[key, portPair] : portPairs) {
+    auto [mod, portIdx] = key;
+    if (portPair.dir == Direction::In) {
+      Block *body = mod.getBodyBlock();
+      shadowPairs.emplace_back(body->getArgument(portPair.baseIdx),
+                               body->getArgument(portIdx));
+      continue;
+    }
+    for (auto *use : ig.lookup(mod)->uses())
+      if (auto inst = use->getInstance<InstanceOp>())
+        shadowPairs.emplace_back(inst.getResult(portPair.baseIdx),
+                                 inst.getResult(portIdx));
+  }
+  aliases.build(ig, shadowPairs);
+  aliasesBuilt = true;
+}
+
+//===----------------------------------------------------------------------===//
 // Driver
 //===----------------------------------------------------------------------===//
 
@@ -549,6 +841,7 @@ LogicalResult GatedClockConversion::run() {
   context = roots[0].op->getContext();
   clockType = ClockType::get(context);
   u1Type = UIntType::get(context, 1);
+  aliasesBuilt = false;
 
   if (failed(analyze()))
     return failure();
@@ -563,6 +856,7 @@ LogicalResult GatedClockConversion::run() {
   rewriteRoots();
   for (auto oldInst : deadInstances)
     oldInst.erase();
+  buildClockAliases();
 
   roots.clear();
   analyzed.clear();

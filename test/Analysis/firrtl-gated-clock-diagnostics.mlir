@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -test-firrtl-gated-clock-conversion -split-input-file -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -test-firrtl-gated-clock-conversion=verify-clock-aliases -split-input-file -verify-diagnostics -o /dev/null
 
 // A local clock loop has no base clock.
 firrtl.circuit "LocalClockFeedback" {

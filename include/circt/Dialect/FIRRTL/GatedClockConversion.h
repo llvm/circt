@@ -57,6 +57,70 @@ public:
 
   void dump() const;
 
+  /// Must-alias analysis over every clock of the circuit, valid right after a
+  /// successful `run()`.
+  ///
+  /// Two values alias iff they are provably driven by the same base clock. A
+  /// gate aliases its input, and an appended base port aliases the port it
+  /// shadows. Muxes, `clock_div` and `clock_inv` start new base clocks. Values
+  /// of a module that alias do so in every instance of it. `false` means "not
+  /// proven equal", never "proven different".
+  class ClockAliasAnalysis {
+  public:
+    bool alias(Value a, Value b) const {
+      if (a == b)
+        return true;
+      unsigned na = lookup(a), nb = lookup(b);
+      return na != kNoNode && nb != kNoNode && find(na) == find(nb);
+    }
+    bool isTracked(Value v) const { return nodeOf.contains(v); }
+    /// Null if untracked.
+    Value getRepresentative(Value v) const;
+    /// Null if the class has no base clock, e.g. a port that different
+    /// instances drive with different clocks.
+    Value getBaseClock(Value v) const;
+    /// Empty if untracked.
+    SmallVector<Value> aliasSet(Value v) const;
+    void print(llvm::raw_ostream &os) const;
+
+  private:
+    friend class GatedClockConversion;
+
+    static constexpr unsigned kNoNode = ~0u;
+
+    struct Node {
+      Value value;
+      mutable unsigned parent;
+    };
+
+    /// `shadowPairs` relate the appended base ports to the ports they shadow,
+    /// which the IR alone does not when callers disagree.
+    void build(InstanceGraph &ig,
+               ArrayRef<std::pair<Value, Value>> shadowPairs);
+
+    unsigned lookup(Value v) const { return nodeOf.lookup_or(v, kNoNode); }
+    unsigned find(unsigned node) const;
+    unsigned track(Value v);
+    bool unionClocks(Value a, Value b);
+    bool unionNodes(unsigned a, unsigned b);
+    void closeOverInstances(InstanceGraph &ig);
+    void setBaseClocks(ArrayRef<Value> baseClks);
+    void clear();
+
+    SmallVector<Node> nodes;
+    DenseMap<Value, unsigned> nodeOf;
+    /// Keyed by class root.
+    DenseMap<unsigned, SmallVector<unsigned>> members;
+    /// Keyed by class root.
+    DenseMap<unsigned, Value> classBaseClock;
+  };
+
+  bool hasClockAliases() const { return aliasesBuilt; }
+  const ClockAliasAnalysis &getClockAliases() const {
+    assert(aliasesBuilt && "clock aliases are built by a successful run()");
+    return aliases;
+  }
+
 private:
   struct Root {
     Operation *op;
@@ -91,6 +155,7 @@ private:
   void insertPorts();
   void materialize(ArrayRef<Value> order);
   void rewriteRoots();
+  void buildClockAliases();
 
   void rewriteRoot(const Root &root, Value baseClk, Value enable);
   Value gateEnableOf(ClockGateIntrinsicOp gate);
@@ -139,6 +204,9 @@ private:
   MLIRContext *context;
 
   Type clockType, u1Type;
+
+  ClockAliasAnalysis aliases;
+  bool aliasesBuilt = false;
 };
 
 } // namespace firrtl
