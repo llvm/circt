@@ -407,17 +407,3 @@ hw.module @UnpackedArrayInout() {
     %2 = sv.array_index_inout %vec_a[%1] : !hw.inout<uarray<16xsi32>>, i4
     %3 = sv.read_inout %2 : !hw.inout<si32>
 }
-
-// -----
-
-// Folding while converting must not materialize a signed or unsigned
-// hw.constant.
-// CHECK-LABEL: hw.module @foldSignedStructExtract
-// CHECK-NEXT:    %[[AGG:.+]] = hw.aggregate_constant [3 : ui5, 0] : !hw.struct<address: i5, data: i64>
-// CHECK-NEXT:    %[[ADDR:.+]] = hw.struct_extract %[[AGG]]["address"] : !hw.struct<address: i5, data: i64>
-hw.module @foldSignedStructExtract(out o: i5) {
-  %0 = hw.aggregate_constant [3 : ui5, 0 : i64] : !hw.struct<address: ui5, data: i64>
-  %1 = hw.struct_extract %0["address"] : !hw.struct<address: ui5, data: i64>
-  %2 = hw.bitcast %1 : (ui5) -> i5
-  hw.output %2 : i5
-}

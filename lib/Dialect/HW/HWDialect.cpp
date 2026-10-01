@@ -120,16 +120,10 @@ void HWDialect::initialize() {
 /// constant value. Otherwise, it should return null on failure.
 Operation *hw::materializeConstant(OpBuilder &builder, Attribute value,
                                    Type type, Location loc) {
-  // Signless integer constants, including those of aliased integer types, can
-  // materialize into hw.constant.
-  if (auto intType = type_dyn_cast<IntegerType>(type))
-    if (auto attrValue = dyn_cast<IntegerAttr>(value)) {
-      if (!intType.isSignless() ||
-          attrValue.getValue().getBitWidth() != intType.getWidth())
-        return nullptr;
-      return ConstantOp::create(
-          builder, loc, type, IntegerAttr::get(intType, attrValue.getValue()));
-    }
+  // Integer constants can materialize into hw.constant
+  if (auto intType = dyn_cast<IntegerType>(type))
+    if (auto attrValue = dyn_cast<IntegerAttr>(value))
+      return ConstantOp::create(builder, loc, type, attrValue);
 
   // Aggregate constants.
   if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
