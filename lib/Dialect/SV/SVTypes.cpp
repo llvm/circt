@@ -13,7 +13,9 @@
 #include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -31,6 +33,30 @@ Type circt::sv::getAnyHWArrayElementType(Type type) {
     return array.getElementType();
 
   return {};
+}
+
+/// Return true if the specified type has a packed layout, i.e. it
+/// represents a contiguous, bit-sliceable vector: basic bit-vectors, or
+/// packed aggregates (hw.array, hw.struct, hw.union) built up entirely out of
+/// packed element types.
+static bool isPackedType(Type type) {
+  type = hw::getCanonicalType(type);
+
+  if (isa<hw::IntType, IntegerType, hw::EnumType>(type))
+    return true;
+
+  if (auto array = dyn_cast<hw::ArrayType>(type))
+    return isPackedType(array.getElementType());
+
+  if (auto t = dyn_cast<hw::StructType>(type))
+    return llvm::all_of(t.getElements(),
+                        [](auto f) { return isPackedType(f.type); });
+
+  if (auto t = dyn_cast<hw::UnionType>(type))
+    return llvm::all_of(t.getElements(),
+                        [](auto m) { return isPackedType(m.type); });
+
+  return false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -55,6 +81,37 @@ mlir::Type circt::sv::getNetElementType(mlir::Type type) {
   if (auto net = dyn_cast_or_null<NetType>(type))
     return net.getElementType();
   return {};
+}
+
+/// Unwraps type aliases and outer unpacked array layers to
+/// return the innermost non-unpacked element type.
+static Type getNetPackedElementType(Type type) {
+  type = hw::getCanonicalType(type);
+  while (auto uarray = dyn_cast<hw::UnpackedArrayType>(type))
+    type = hw::getCanonicalType(uarray.getElementType());
+  return type;
+}
+
+/// Return whether a type is valid as the element type of a NetType.
+bool circt::sv::isValidNetElementType(Type type) {
+  if (!type)
+    return false;
+  return isPackedType(getNetPackedElementType(type));
+}
+
+LogicalResult NetType::verify(function_ref<InFlightDiagnostic()> emitError,
+                              Type elementType) {
+  if (isa_and_nonnull<NetType, VarType>(elementType))
+    return emitError() << "sv.net element type may not be itself an sv.net or "
+                          "sv.var handle";
+
+  Type packedElementType = getNetPackedElementType(elementType);
+  if (!isPackedType(packedElementType))
+    return emitError()
+           << "sv.net element type must have a packed base type, but got "
+           << packedElementType;
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
