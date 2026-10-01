@@ -219,9 +219,9 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
       if (auto name = op->getAttrOfType<StringAttr>(verilogNameAttr)) {
         nameResolver.insertUsedName(
             op->getAttrOfType<StringAttr>(verilogNameAttr));
-      } else if (isa<sv::WireOp, hw::WireOp, RegOp, LogicOp, LocalParamOp,
-                     hw::InstanceOp, sv::InterfaceInstanceOp, sv::GenerateOp>(
-                     op)) {
+      } else if (isa<sv::WireOp, hw::WireOp, VarOp, RegOp, LogicOp,
+                     LocalParamOp, hw::InstanceOp, sv::InterfaceInstanceOp,
+                     sv::GenerateOp>(op)) {
         // Otherwise, get a verilog name via `getSymOpName`.
         nameEntries.emplace_back(
             op, StringAttr::get(op->getContext(), getSymOpName(op)));

@@ -220,3 +220,11 @@ hw.module @InterfaceAsInstance () {
   // CHECK: output_0 myOutput();
   %myOutput = sv.interface.instance : !sv.interface<@output>
 }
+
+// CHECK-LABEL: module VarOpNameConflicts();
+hw.module @VarOpNameConflicts() {
+  // CHECK: var logic v;
+  %first = sv.var name "v" : !sv.var<i1>
+  // CHECK: var logic v_0;
+  %second = sv.var name "v" : !sv.var<i1>
+}
