@@ -254,7 +254,7 @@ def If(sel: BitVectorSignal, true_value: Union[Signal, Callable[[], Signal]],
 
   input_names = [
       value.name if value.name is not None else f"in{idx}"
-      for idx, value in [false_value, true_value]
+      for idx, value in enumerate((false_value, true_value))
   ]
   result = comb.MuxOp(sel, true_value, false_value)
   result.name = f"mux_{sel.name}_" + "_".join(input_names)
