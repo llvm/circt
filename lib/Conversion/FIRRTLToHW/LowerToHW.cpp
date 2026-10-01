@@ -4943,6 +4943,9 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
+  if (type_isa<ClockType>(op.getType()))
+    return setLowering(op, getOrCreateClockConstant(seq::ClockConst::Low));
+
   if (auto bitwidth =
           firrtl::getBitWidth(type_cast<FIRRTLBaseType>(op.getType()))) {
     if (*bitwidth == 0) // Let the caller handle zero width values.
