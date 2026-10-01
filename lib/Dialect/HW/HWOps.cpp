@@ -319,16 +319,11 @@ LogicalResult ConstantOp::verify() {
   if (!intType)
     return emitError("hw.constant must have an integer result type");
 
-  // If the result type has a bitwidth, then the attribute must match its width.
-  if (getValue().getBitWidth() != intType.getWidth())
-    return emitError(
-        "hw.constant attribute bitwidth doesn't match return type");
-
-  // The result type may only alias the attribute's type.
+  // The result type must be the same as the attribute's type.
   if (getValueAttr().getType() != intType)
     return emitError("hw.constant attribute type ")
-           << getValueAttr().getType()
-           << " doesn't match the canonical result type " << intType;
+           << getValueAttr().getType() << " doesn't match the result type "
+           << intType;
 
   return success();
 }

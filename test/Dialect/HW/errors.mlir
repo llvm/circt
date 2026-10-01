@@ -595,7 +595,7 @@ hw.type_scope @ns {
 }
 
 hw.module @constantAliasTypeMismatch() {
-  // expected-error @+1 {{hw.constant attribute type 'ui4' doesn't match the canonical result type 'i4'}}
+  // expected-error @+1 {{hw.constant attribute type 'ui4' doesn't match the result type 'i4'}}
   %0 = "hw.constant"() <{value = 1 : ui4}> : () -> !hw.typealias<@ns::@t, i4>
 }
 
@@ -606,6 +606,6 @@ hw.type_scope @ns {
 }
 
 hw.module @constantAliasWidthMismatch() {
-  // expected-error @+1 {{hw.constant attribute bitwidth doesn't match return type}}
+  // expected-error @+1 {{hw.constant attribute type 'i8' doesn't match the result type 'i4'}}
   %0 = "hw.constant"() <{value = 1 : i8}> : () -> !hw.typealias<@ns::@t, i4>
 }
