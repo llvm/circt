@@ -5,6 +5,7 @@
 
 hw.type_scope @var_types {
   hw.typedecl @byte_t : i8
+  hw.typedecl @mode_t : !hw.enum<Read, Write, Execute>
 }
 
 // VARLOGIC-LABEL: module var_declarations(
@@ -16,6 +17,7 @@ hw.type_scope @var_types {
 // VARLOGIC: var struct packed {logic a; logic [2:0] b; } struct_value
 // VARLOGIC: var union packed {{.*}}union_value;
 // VARLOGIC: var enum {{.*}}enum_value;
+// VARLOGIC: var mode_t mode_alias_value;
 // VARLOGIC: var byte_t alias_value;
 // VARLOGIC: var byte_t alias_unpacked[0:1];
 
@@ -28,6 +30,7 @@ hw.type_scope @var_types {
 // LOGIC: struct packed {logic a; logic [2:0] b; } struct_value
 // LOGIC: union packed {{.*}}union_value;
 // LOGIC: enum {{.*}}enum_value;
+// LOGIC: mode_t mode_alias_value;
 // LOGIC: byte_t alias_value;
 // LOGIC: byte_t alias_unpacked[0:1];
 
@@ -40,6 +43,7 @@ hw.type_scope @var_types {
 // REG: struct packed {logic a; logic [2:0] b; } struct_value
 // REG: union packed {{.*}}union_value;
 // REG: enum {{.*}}enum_value;
+// REG: mode_t mode_alias_value;
 // REG: byte_t alias_value;
 // REG: byte_t alias_unpacked[0:1];
 
@@ -58,7 +62,7 @@ hw.module @var_declarations() {
     %struct_value = sv.var : !sv.var<!hw.struct<a: i1, b: i3>>
     %union_value = sv.var : !sv.var<!hw.union<raw: i8, bytes: i8>>
     %enum_value = sv.var : !sv.var<!hw.enum<A, B, C>>
-
+    %mode_alias_value = sv.var : !sv.var<!hw.typealias<@var_types::@mode_t, !hw.enum<Read, Write, Execute>>>
     %alias_value = sv.var : !sv.var<!hw.typealias<@var_types::@byte_t, i8>>
     %alias_unpacked = sv.var :  !sv.var<!hw.uarray<2x!hw.typealias<@var_types::@byte_t, i8>>>
 }
