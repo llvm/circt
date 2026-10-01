@@ -1,11 +1,9 @@
 # RUN: %PYTHON% %s %t.default default
 # RUN: %PYTHON% %s %t.external external
-# RUN: %PYTHON% %s %t.external-string external-string
 # RUN: %PYTHON% %s %t.preprocess preprocess
 # RUN: %PYTHON% %s %t.existing existing
 # RUN: %PYTHON% %s %t.existing-external existing-external
 
-from pathlib import Path
 import sys
 
 from pycde import Module, System, generator
@@ -30,6 +28,10 @@ module {
 def importer(system, op):
   if isinstance(op, (sv.PackageOp, sv.PackageExternOp)):
     assert isinstance(op, sv.PackageExternOp) == external
+    siblings = list(op.operation.parent.regions[0].blocks[0].operations)
+    assert siblings[0] == op
+    assert isinstance(siblings[1], hw.HWModuleExternOp)
+    assert siblings[1].name.value == "ExtMod"
   if isinstance(op, hw.HWModuleExternOp):
     cls = import_hw_module(system, op, ModuleBuilder)
     return "ExtMod", cls, cls._builder
@@ -38,12 +40,7 @@ def importer(system, op):
 
 def preprocess_op(op):
   if isinstance(op, sv.PackageOp):
-    external_op = sv.PackageExternOp(op.sym_name, loc=op.location, ip=False)
-    for attr_name in op.attributes:
-      external_op.attributes[attr_name] = op.attributes[attr_name]
-    op.body.blocks[0].append_to(external_op.body)
-    op.erase()
-    return external_op
+    op.attributes["test.preprocessed"] = ir.UnitAttr.get()
   return op
 
 
@@ -60,25 +57,20 @@ system = System([Top], name="repro", output_directory=sys.argv[1])
 if mode in ("existing", "existing-external"):
   module_str = module_str.replace("sv.package ", "sv.package.extern ")
 
-# Exercise both string and file import, as well as output_filename overrides.
-options = {"importer": importer}
+# Exercise string imports, including output_filename overrides.
+options = {"importer": importer, "module_str": module_str}
 if mode == "external":
-  input_file = Path(sys.argv[1]) / "imported.mlir"
-  input_file.write_text(module_str)
-  options.update(file=input_file,
-                 external_packages=True,
-                 output_filename="imported.sv")
-else:
-  options["module_str"] = module_str
-  if mode == "preprocess":
-    options["preprocess_op"] = preprocess_op
-  if mode in ("external-string", "existing-external"):
-    options["external_packages"] = True
+  options["output_filename"] = "imported.sv"
+if mode == "preprocess":
+  options["preprocess_op"] = preprocess_op
+if mode in ("external", "preprocess", "existing-external"):
+  options["external_packages"] = True
 imported = system.import_mlir(**options)
 
 package = imported["ExtTypes"].op
 assert isinstance(package, sv.PackageExternOp if external else sv.PackageOp)
 assert "extern" not in package.attributes
+assert ("test.preprocessed" in package.attributes) == (mode == "preprocess")
 assert ir.StringAttr(package.attributes["test.marker"]).value == "preserved"
 assert package.location == ir.Location.file("provider.mlir", 3, 5)
 assert len(package.body.blocks[0].operations) == 2

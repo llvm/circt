@@ -196,12 +196,13 @@ class System:
       external_packages: Convert imported sv.package operations to
                          sv.package.extern, retaining their type declarations
                          without emitting their SystemVerilog definitions.
-                         Defaults to False. Conversion preserves attributes and
-                         fixes non-public packages' hw.verilogName to their
-                         symbol name if not already set. To select individual
-                         packages instead, return sv.package.extern operations
-                         from preprocess_op. Existing external packages are
-                         preserved regardless of this flag.
+                         Defaults to False. Conversion preserves the operation's
+                         position and attributes, and fixes non-public packages'
+                         hw.verilogName to their symbol name if not already set.
+                         To select individual packages instead, return
+                         sv.package.extern operations from preprocess_op.
+                         Existing external packages are preserved regardless of
+                         this flag.
     """
 
     if module_str is not None:
@@ -266,7 +267,10 @@ class System:
           continue
 
       if external_packages and isinstance(op, sv.PackageOp):
-        external_op = sv.PackageExternOp(op.sym_name, loc=op.location, ip=False)
+        external_op = sv.PackageExternOp(
+            op.sym_name,
+            loc=op.location,
+            ip=ir.InsertionPoint(op) if op.attached else False)
         for attr_name in op.attributes:
           external_op.attributes[attr_name] = op.attributes[attr_name]
         if (op.sym_visibility is not None and
