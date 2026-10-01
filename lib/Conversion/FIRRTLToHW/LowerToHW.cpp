@@ -884,8 +884,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib)
@@ -1044,7 +1043,7 @@ bool FIRRTLModuleLowering::handleForceNameAnnos(
     FModuleLike oldModule, AnnotationSet &annos,
     CircuitLoweringState &loweringState) {
   bool failed = false;
-  DenseMap<Attribute, Attribute> usedNames;
+  DenseSet<Attribute> usedNames;
   // Remove ForceNameAnnotations by generating verilogNames on instances.
   annos.removeAnnotations([&](Annotation anno) {
     if (!anno.isClass(forceNameAnnoClass))
@@ -1103,10 +1102,11 @@ bool FIRRTLModuleLowering::handleForceNameAnnos(
       return false;
     }
 
-    auto [it, insertedName] = usedNames.try_emplace(anno.getMember("name"), inst.getName());
-
-    if(!insertedName && it->second != inst.getName()){
-      oldModule.emitError() << "multiple ForceNameAnnotations require the name " << anno.getMember("name") << " for different instances in module " << inst.getModule();
+    if (!usedNames.insert(anno.getMember("name")).second) {
+      oldModule.emitError()
+          << "multiple ForceNameAnnotations require the name "
+          << anno.getMember("name") << " for different instances in module "
+          << inst.getModule();
       failed = true;
       return false;
     }
@@ -3293,8 +3293,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -6185,5 +6184,4 @@ LogicalResult FIRRTLLowering::fixupLTLOps() {
   }
 
   return success();
-  
 }
