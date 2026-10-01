@@ -125,9 +125,10 @@ public:
             // Dataflow from dst to src, for RWProbe.
             probesReferToSameData(def.getSrc(), def.getDest());
           })
-          .Case<RefCastOp>([&](RefCastOp cast){
+          .Case<RefCastOp>([&](RefCastOp cast) {
             // Preserve RWProbe equivalence for casts that stay forceable.
-            if (cast.getInput().getType().getForceable() && cast.getResult().getType().getForceable()) {
+            if (cast.getInput().getType().getForceable() &&
+                cast.getResult().getType().getForceable()) {
               probesReferToSameData(cast.getInput(), cast.getResult());
             }
           })
