@@ -1,4 +1,4 @@
-// RUN: circt-opt -split-input-file -lower-hwarith-to-hw %s | circt-opt -split-input-file | FileCheck %s
+// RUN: circt-opt -split-input-file -lower-hwarith-to-hw %s | FileCheck %s
 
 // CHECK: hw.module @constant(out out : i32) {
 // CHECK:   %c0_i32 = hw.constant 0 : i32
