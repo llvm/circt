@@ -1142,12 +1142,9 @@ class CppTypeEmitter:
                    for name, field_type in into_type.fields
                    if name != list_field_name]
 
-    # Frame fields are kept in declared (MSB-first) order and laid out
-    # MSB-aligned within the frame/union bit width, matching how CIRCT
-    # lowers the frame union (content packed from the most-significant bit
-    # down, with any slack as low-end padding). Widths are exact bit widths
-    # -- no per-field byte rounding -- so sub-byte count/static fields land
-    # at the same offsets the hardware uses.
+    # Keep declared (MSB-first) struct field order. Each frame shares the
+    # union's LSB, with any slack at the high end. Use exact bit widths so
+    # sub-byte count/static fields land at the same offsets as in hardware.
     header_fields = []
     header_bits = 0
     count_field_name = f"{list_field_name}_count"
@@ -1667,12 +1664,9 @@ class CppTypeEmitter:
     """Emit a union as a raw byte buffer with per-variant accessors.
 
     The union's storage is a single `std::array<uint8_t, N>` sized to the
-    widest variant. Each variant lives at the MSB end of the buffer
-    (matching the existing SV-style packed union layout where padding
-    occupies the lower bytes), so the byte offset for a variant of size
-    V is `union_bytes - V`. Sub-byte integer variants are byte-padded to
-    full bytes within that region, matching the Python runtime's union
-    serialization.
+    widest variant. Each variant starts at bit zero, matching the hw.union
+    bitcast layout. Accessors use the exact member bit width and preserve
+    bits outside that member.
     """
     # Zero-width unions collapse to `void` (see _cpp_type) so there is
     # nothing meaningful to emit here.
@@ -1694,15 +1688,8 @@ class CppTypeEmitter:
         field_cpp = self._cpp_type(field_type)
         if field_cpp == "void":
           continue
-        field_bytes = self._field_byte_width(field_type)
-        byte_offset = union_bytes - field_bytes
-        bit_offset = byte_offset * 8
-        bit_width = field_type.bit_width
-        # Each variant is reached at the same MSB-aligned position regardless
-        # of width. Reuse `_emit_field_accessor` so we share the integer /
-        # aggregate code paths and don't duplicate the bit-access boilerplate.
         self._emit_field_accessor(w, "_bytes", union_name, field_name,
-                                  field_type, bit_offset, bit_width)
+                                  field_type, 0, field_type.bit_width)
         w.line()
 
       w.line(f"static constexpr std::string_view _ESI_ID = "
@@ -1717,11 +1704,10 @@ class CppTypeEmitter:
   ) -> List[Tuple[str, types.ESIType, int, int]]:
     """Compute (name, type, bit_offset, bit_width) for each window frame field.
 
-    Fields are listed in declared (MSB-first) order and laid out MSB-aligned
-    within `frame_bits`, matching how CIRCT lowers the serial-window frame
-    union: the first field occupies the highest bits, each subsequent field
-    sits immediately below it with no inter-field padding, and any slack
-    (`frame_bits - content_bits`) is left as zero padding at the LSB end.
+    Fields are listed in declared (MSB-first) struct order. The last field
+    starts at bit zero, matching how CIRCT lowers the serial-window frame
+    union. Earlier fields sit immediately above it with no inter-field
+    padding, and any slack (`frame_bits - content_bits`) is at the MSB end.
     The returned `bit_offset` is the field's LSB position within the frame's
     little-endian `_bytes` array, ready to hand straight to
     `_emit_field_accessor`.
@@ -1735,20 +1721,21 @@ class CppTypeEmitter:
     offsets, so fail fast rather than emit silently-wrong accessors.
     """
     layout = []
-    bit_top = frame_bits
-    for name, ftype in fields:
+    bit_offset = 0
+    for name, ftype in reversed(fields):
       actual_type = count_type_synth if ftype is None else ftype
       bit_width = actual_type.bit_width
       if bit_width < 0:
         raise ValueError(
             f"window frame field '{name}' has an unbounded width; window "
             f"codegen requires every frame field to be fixed-width")
-      bit_top -= bit_width
-      if bit_top < 0:
+      if bit_offset + bit_width > frame_bits:
         raise ValueError(
             f"window frame field '{name}' overflows the {frame_bits}-bit frame "
             f"(content is wider than the frame width)")
-      layout.append((name, actual_type, bit_top, bit_width))
+      layout.append((name, actual_type, bit_offset, bit_width))
+      bit_offset += bit_width
+    layout.reverse()
     return layout
 
   def _emit_window_frame(
