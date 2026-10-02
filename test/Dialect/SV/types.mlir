@@ -62,9 +62,7 @@ func.func @varUnpackedArray(%arg0: !sv.var<!hw.uarray<4xi32>>) {
 }
 
 // CHECK-LABEL: func @varNestedUnpackedArrays(%arg0: !sv.var<!hw.uarray<4xuarray<8xi32>>>)
-func.func @varNestedUnpackedArrays(
-  %arg0: !sv.var<!hw.uarray<4xuarray<8xi32>>>
-) {
+func.func @varNestedUnpackedArrays(%arg0: !sv.var<!hw.uarray<4xuarray<8xi32>>>) {
   return
 }
 
