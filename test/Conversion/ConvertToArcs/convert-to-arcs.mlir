@@ -341,7 +341,7 @@ hw.module @TimeOpsPassthrough(in %a : i64, out t : i64) {
 //   CHECK:   hw.output [[RES]]
 hw.module @ProbeIsNonPure(in %in : i1, out out : i1) {
   %false = hw.constant false
-  %r1 = llhd.sig %false : i1
+  %r1 = llhd.sig %false : <i1>
   %1 = llhd.prb %r1 : i1
   %2 = comb.and %in, %1 : i1
   hw.output %2 : i1

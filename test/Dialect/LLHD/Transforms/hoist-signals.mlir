@@ -3,7 +3,7 @@
 // CHECK-LABEL: @SimpleProbesInProcessOp
 hw.module @SimpleProbesInProcessOp() {
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.sig
   // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
   // CHECK-NEXT: llhd.process
@@ -26,7 +26,7 @@ hw.module @SimpleProbesInProcessOp() {
 // CHECK-LABEL: @SimpleProbesInCombinationalOp
 hw.module @SimpleProbesInCombinationalOp() {
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.sig
   // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
   // CHECK-NEXT: llhd.combinational -> i42
@@ -44,7 +44,7 @@ hw.module @SimpleProbesInCombinationalOp() {
 hw.module @DontHoistProbesAcrossSideEffects() {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.drv
@@ -70,7 +70,7 @@ hw.module @DontHoistProbesAcrossSideEffects() {
 // CHECK-LABEL: @DontHoistProbesIfLeakingAcrossWait
 hw.module @DontHoistProbesIfLeakingAcrossWait() {
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
@@ -104,7 +104,7 @@ hw.module @DontHoistLocalSignals() {
   %c0_i42 = hw.constant 0 : i42
   // CHECK: llhd.process
   llhd.process {
-    %a = llhd.sig %c0_i42 : i42
+    %a = llhd.sig %c0_i42 : <i42>
     llhd.wait ^bb1
   ^bb1:
     // CHECK: ^bb1:
@@ -123,10 +123,10 @@ hw.module @SimpleDrives(in %u: i42, in %v: i42, in %w: i42) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   %1 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
-  %b = llhd.sig %c0_i42 : i42
-  %c = llhd.sig %c0_i42 : i42
-  %d = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
+  %b = llhd.sig %c0_i42 : <i42>
+  %c = llhd.sig %c0_i42 : <i42>
+  %d = llhd.sig %c0_i42 : <i42>
   // CHECK: [[RES:%.+]]:7 = llhd.process -> i42, i42, i42, i42, !llhd.time, i42, i1 {
   %2 = llhd.process -> i42 {
     // CHECK-NEXT: cf.br ^bb1
@@ -166,7 +166,7 @@ hw.module @SimpleDrives(in %u: i42, in %v: i42, in %w: i42) {
 hw.module @DontHoistDrivesAcrossSideEffects() {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.drv %a
@@ -181,8 +181,8 @@ hw.module @DontHoistDrivesAcrossSideEffects() {
 hw.module @DontHoistDrivesOfSlotsWithUnsavoryUsers(in %c: !llhd.ref<i42>) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
-  %b = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
+  %b = llhd.sig %c0_i42 : <i42>
   // Unsavory uses outside of process don't affect hoistability.
   // CHECK: call @use_inout_i42(%a)
   func.call @use_inout_i42(%a) : (!llhd.ref<i42>) -> ()
@@ -215,8 +215,8 @@ hw.module @DontHoistDrivesOfSlotsWithUnsavoryUsers(in %c: !llhd.ref<i42>) {
 hw.module @OnlyHoistLastDrive(in %u: i42, in %v: i42) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
-  %b = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
+  %b = llhd.sig %c0_i42 : <i42>
   // CHECK: [[RES:%.+]]:2 = llhd.process -> i42, i42
   llhd.process {
     // CHECK-NEXT: llhd.drv %a, %u
@@ -237,7 +237,7 @@ hw.module @OnlyHoistLastDrive(in %u: i42, in %v: i42) {
 // CHECK-LABEL: @HoistProbesOutOfIf
 hw.module @HoistProbesOutOfIf(in %u: i42, in %v: i1) {
   // CHECK: llhd.sig
-  %a = llhd.sig %u : i42
+  %a = llhd.sig %u : <i42>
   // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
   // CHECK-NEXT: scf.if
   scf.if %v {
@@ -259,7 +259,7 @@ hw.module @HoistProbesOutOfIf(in %u: i42, in %v: i1) {
 hw.module @NonUniformDelayValues(in %b : i42) {
   %0 = llhd.constant_time <1ns, 0d, 0e>
   %1 = llhd.constant_time <2ns, 0d, 0e>
-  %a = llhd.sig %b : i42
+  %a = llhd.sig %b : <i42>
   // CHECK: [[RES:%.+]]:3 = llhd.process -> i42, !llhd.time, i1
   // CHECK: llhd.drv %a, [[RES]]#0 after [[RES]]#1 if [[RES]]#2 : i42
   llhd.process {
@@ -278,7 +278,7 @@ hw.module @NonUniformDelayValues(in %b : i42) {
 hw.module @DontHoistMultipleDrivesWithDifferentDelays(in %v0: i42, in %v1: i42, in %v2: i42) {
   %0 = llhd.constant_time <5ns, 0d, 0e>
   %1 = llhd.constant_time <10ns, 0d, 0e>
-  %a = llhd.sig %v0 : i42
+  %a = llhd.sig %v0 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.drv %a, %v1
@@ -293,7 +293,7 @@ hw.module @DontHoistMultipleDrivesWithDifferentDelays(in %v0: i42, in %v1: i42, 
 // CHECK-LABEL: @DontHoistAcrossSideEffects
 hw.module @DontHoistAcrossSideEffects(in %v0: i42, in %v1: i42, in %v2: i42) {
   %0 = llhd.constant_time <1ns, 0d, 0e>
-  %a = llhd.sig %v0 : i42
+  %a = llhd.sig %v0 : <i42>
   llhd.process {
     // CHECK: llhd.drv %a, %v1
     llhd.drv %a, %v1 after %0 : i42
@@ -315,7 +315,7 @@ hw.module @DontHoistAcrossSideEffects(in %v0: i42, in %v1: i42, in %v2: i42) {
 hw.module @RealSignalDriveAcrossWait(in %v : f64) {
   %0 = llhd.constant_time <1ns, 0d, 0e>
   %cst = arith.constant 0.0 : f64
-  %a = llhd.sig %cst : f64
+  %a = llhd.sig %cst : <f64>
   // CHECK: llhd.process -> f64
   // CHECK: llhd.drv %a
   llhd.process {
@@ -332,7 +332,7 @@ hw.module @RealSignalDriveAcrossWait(in %v : f64) {
 hw.module @UnsupportedTypeNotHoisted(in %v : index) {
   %0 = llhd.constant_time <1ns, 0d, 0e>
   %c0 = arith.constant 0 : index
-  %a = llhd.sig %c0 : index
+  %a = llhd.sig %c0 : <index>
   // CHECK: llhd.process
   llhd.process {
     // CHECK: llhd.drv %a, %v after
@@ -352,8 +352,8 @@ hw.module @DriveOnlyInNonSuspendBlock(in %v : f64, in %w : i42, in %c : i1) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %cst = arith.constant 0.0 : f64
   %c0 = hw.constant 0 : i42
-  %a = llhd.sig %cst : f64
-  %b = llhd.sig %c0 : i42
+  %a = llhd.sig %cst : <f64>
+  %b = llhd.sig %c0 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // This f64 drive is only in ^bb0 (ends with cond_br, not halt/wait).

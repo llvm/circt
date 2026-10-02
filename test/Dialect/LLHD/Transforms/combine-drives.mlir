@@ -14,7 +14,7 @@ hw.module @Basic(in %u0: i42, in %u1: i42, in %u2: i42, in %u3: i20, in %u4: i22
   // CHECK: %s = llhd.sig
   // CHECK-NEXT: [[STRUCT:%.+]] = hw.struct_create ([[A:%.+]], [[B:%.+]])
   // CHECK-NEXT: llhd.drv %s, [[STRUCT]] after {{%.+}}
-  %s = llhd.sig %0 : !hw.struct<a: !hw.array<3xi42>, b: i42>
+  %s = llhd.sig %0 : <!hw.struct<a: !hw.array<3xi42>, b: i42>>
   // CHECK-NEXT: [[A]] = hw.array_create %u2, %u1, %u0
   %a = llhd.sig.struct_extract %s["a"] : <!hw.struct<a: !hw.array<3xi42>, b: i42>>
   %a12 = llhd.sig.array_slice %a at %c1_i2 : <!hw.array<3xi42>> -> <!hw.array<2xi42>>
@@ -43,7 +43,7 @@ hw.module @DriveParameters(in %u: i21, in %v: i21, in %e: i1) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %1 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NEXT: %a = llhd.sig
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK-NEXT: [[TMP:%.+]] = comb.concat %v, %u
   // CHECK-NEXT: llhd.drv %a, [[TMP]] after [[T0]] :
   // CHECK-NEXT: [[TMP:%.+]] = comb.concat %u, %v
@@ -98,7 +98,7 @@ hw.module @DrivesToOpaqueSignals(in %u: i20, in %v: i22) {
 hw.module @SkipDynamicExtract(in %u: i6, in %v: i8) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %1 = builtin.unrealized_conversion_cast to i42
-  %a = llhd.sig %1 : i42
+  %a = llhd.sig %1 : <i42>
   // CHECK: [[TMP:%.+]] = llhd.sig.extract %a from %u
   // CHECK: llhd.drv [[TMP]], %v
   %2 = llhd.sig.extract %a from %u : <i42> -> <i8>
@@ -109,7 +109,7 @@ hw.module @SkipDynamicExtract(in %u: i6, in %v: i8) {
 hw.module @SkipDynamicArraySlice(in %u: i6, in %v: !hw.array<8xi42>) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %1 = builtin.unrealized_conversion_cast to !hw.array<42xi42>
-  %a = llhd.sig %1 : !hw.array<42xi42>
+  %a = llhd.sig %1 : <!hw.array<42xi42>>
   // CHECK: [[TMP:%.+]] = llhd.sig.array_slice %a at %u
   // CHECK: llhd.drv [[TMP]], %v
   %2 = llhd.sig.array_slice %a at %u : <!hw.array<42xi42>> -> <!hw.array<8xi42>>
@@ -120,7 +120,7 @@ hw.module @SkipDynamicArraySlice(in %u: i6, in %v: !hw.array<8xi42>) {
 hw.module @SkipDynamicArrayGet(in %u: i6, in %v: i42) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %1 = builtin.unrealized_conversion_cast to !hw.array<42xi42>
-  %a = llhd.sig %1 : !hw.array<42xi42>
+  %a = llhd.sig %1 : <!hw.array<42xi42>>
   // CHECK: [[TMP:%.+]] = llhd.sig.array_get %a[%u]
   // CHECK: llhd.drv [[TMP]], %v
   %2 = llhd.sig.array_get %a[%u] : <!hw.array<42xi42>>
@@ -149,7 +149,7 @@ hw.module @SkipIfOverlapsPresent(in %u: i13, in %v: i30) {
   %c12_i6 = hw.constant 12 : i6
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %1 = builtin.unrealized_conversion_cast to i42
-  %a = llhd.sig %1 : i42
+  %a = llhd.sig %1 : <i42>
   // Bit 12 is covered twice.
   // CHECK: [[TMP1:%.+]] = llhd.sig.extract %a from %c0_i6
   // CHECK: [[TMP2:%.+]] = llhd.sig.extract %a from %c12_i6
@@ -165,7 +165,7 @@ hw.module @SkipIfOverlapsPresent(in %u: i13, in %v: i30) {
 hw.module @RegressionOverlappingDrives(in %u: i153, in %v: i5) {
   %c42_i8 = hw.constant 42 : i8
   %0 = llhd.constant_time <0ns, 0d, 1e>
-  %a = llhd.sig %u : i153
+  %a = llhd.sig %u : <i153>
   // CHECK: llhd.drv %a, %u
   llhd.drv %a, %u after %0 : i153
   // CHECK: [[TMP:%.+]] = llhd.sig.extract
@@ -181,7 +181,7 @@ hw.module @IgnoreNestedSignalUsers(in %u: i20, in %v: i22) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %1 = builtin.unrealized_conversion_cast to i42
 
-  %a = llhd.sig %1 : i42
+  %a = llhd.sig %1 : <i42>
   // CHECK: [[TMP1:%.+]] = llhd.sig.extract %a from %c0_i6
   // CHECK: [[TMP2:%.+]] = llhd.sig.extract %a from %c20_i6
   %2 = llhd.sig.extract %a from %c0_i6 : <i42> -> <i20>
@@ -194,7 +194,7 @@ hw.module @IgnoreNestedSignalUsers(in %u: i20, in %v: i22) {
     llhd.halt
   }
 
-  %b = llhd.sig %1 : i42
+  %b = llhd.sig %1 : <i42>
   // CHECK: [[TMP1:%.+]] = llhd.sig.extract %b from %c0_i6
   %4 = llhd.sig.extract %b from %c0_i6 : <i42> -> <i20>
   // CHECK: llhd.drv [[TMP1]], %u
@@ -218,7 +218,7 @@ hw.module @RegressionSingleElementArray(in %u: i1) {
   // CHECK-NEXT: %a = llhd.sig
   // CHECK-NEXT: [[TMP:%.+]] = hw.array_create %u
   // CHECK-NEXT: llhd.drv %a, [[TMP]] after [[T]] :
-  %a = llhd.sig %0 : !hw.array<1xi1>
+  %a = llhd.sig %0 : <!hw.array<1xi1>>
   %2 = llhd.sig.array_get %a[%c0_i0] : <!hw.array<1xi1>>
   llhd.drv %2, %u after %1 : i1
 }
@@ -233,7 +233,7 @@ hw.module @RegressionSingleFieldStruct(in %u: i1) {
   // CHECK-NEXT: %a = llhd.sig
   // CHECK-NEXT: [[TMP:%.+]] = hw.struct_create (%u)
   // CHECK-NEXT: llhd.drv %a, [[TMP]] after [[T]] :
-  %a = llhd.sig %0 : !hw.struct<x: i1>
+  %a = llhd.sig %0 : <!hw.struct<x: i1>>
   %2 = llhd.sig.struct_extract %a["x"] : <!hw.struct<x: i1>>
   llhd.drv %2, %u after %1 : i1
 }
@@ -250,7 +250,7 @@ hw.module @FillIntegerGaps(in %u: i42) {
   // CHECK-NEXT: [[TMP:%.+]] = comb.concat [[DEFAULT:%.+]], %u
   // CHECK-NEXT: llhd.drv %a, [[TMP]] after [[T]] :
   // CHECK-NEXT: [[DEFAULT]] = comb.extract %c0_i126 from 42 : (i126) -> i84
-  %a = llhd.sig %c0_i126 : i126
+  %a = llhd.sig %c0_i126 : <i126>
   %1 = llhd.sig.extract %a from %c0_i7 : <i126> -> <i42>
   llhd.drv %1, %u after %0 : i42
 }
@@ -269,7 +269,7 @@ hw.module @FillStructGaps(in %u: i42) {
   // CHECK-NEXT: llhd.drv %x, [[TMP]] after [[T]] :
   // CHECK-NEXT: [[DEFAULT_B]] = hw.struct_extract [[INIT]]["b"]
   // CHECK-NEXT: [[DEFAULT_C]] = hw.struct_extract [[INIT]]["c"]
-  %x = llhd.sig %0 : !hw.struct<a: i42, b: i41, c: i43>
+  %x = llhd.sig %0 : <!hw.struct<a: i42, b: i41, c: i43>>
   %2 = llhd.sig.struct_extract %x["a"] : <!hw.struct<a: i42, b: i41, c: i43>>
   llhd.drv %2, %u after %1 : i42
 }
@@ -289,7 +289,7 @@ hw.module @FillArrayGaps(in %u: i42) {
   // CHECK-NEXT: llhd.drv %a, [[TMP2]] after [[T]] :
   // CHECK-NEXT: %c1_i2 = hw.constant 1 : i2
   // CHECK-NEXT: [[DEFAULT]] = hw.array_slice [[INIT]][%c1_i2]
-  %a = llhd.sig %0 : !hw.array<3xi42>
+  %a = llhd.sig %0 : <!hw.array<3xi42>>
   %2 = llhd.sig.array_get %a[%c0_i2] : <!hw.array<3xi42>>
   llhd.drv %2, %u after %1 : i42
 }
@@ -303,7 +303,7 @@ hw.module @SkipGapsOnUnknownUse(in %u: i42) {
   %c42_i7 = hw.constant 42 : i7
   %c0_i126 = hw.constant 0 : i126
   %0 = llhd.constant_time <0ns, 0d, 1e>
-  %a = llhd.sig %c0_i126 : i126
+  %a = llhd.sig %c0_i126 : <i126>
   // CHECK: [[TMP1:%.+]] = llhd.sig.extract %a from %c0_i7
   // CHECK: [[TMP2:%.+]] = llhd.sig.extract %a from %c42_i7
   // CHECK: llhd.drv [[TMP1]], %u
@@ -322,13 +322,13 @@ hw.module @Unions(in %u : i42, in %v : i1337) {
   // CHECK: %a = llhd.sig
   // CHECK-NEXT: [[A:%.+]] = hw.union_create "x", %u
   // CHECK-NEXT: llhd.drv %a, [[A]] after {{%.+}}
-  %a = llhd.sig %0 : !hw.union<x: i42, y: i1337>
+  %a = llhd.sig %0 : <!hw.union<x: i42, y: i1337>>
   %2 = llhd.sig.struct_extract %a["x"] : <!hw.union<x: i42, y: i1337>>
   llhd.drv %2, %u after %1 : i42
   // CHECK: %b = llhd.sig
   // CHECK-NEXT: [[B:%.+]] = hw.union_create "y", %v
   // CHECK-NEXT: llhd.drv %b, [[B]] after {{%.+}}
-  %b = llhd.sig %0 : !hw.union<x: i42, y: i1337>
+  %b = llhd.sig %0 : <!hw.union<x: i42, y: i1337>>
   %3 = llhd.sig.struct_extract %b["y"] : <!hw.union<x: i42, y: i1337>>
   llhd.drv %3, %v after %1 : i1337
 }
@@ -343,7 +343,7 @@ hw.module @UnionDefault(in %v: i1337) {
   // CHECK-NEXT: [[TMP:%.+]] = hw.struct_create ([[DEFAULT:%.+]], %v)
   // CHECK-NEXT: llhd.drv %a, [[TMP]] after {{%.+}}
   // CHECK-NEXT: [[DEFAULT]] = hw.struct_extract [[INIT]]["u"]
-  %a = llhd.sig %1 : !hw.struct<u: !hw.union<x: i42, y: i1337>, v: i1337>
+  %a = llhd.sig %1 : <!hw.struct<u: !hw.union<x: i42, y: i1337>, v: i1337>>
   %3 = llhd.sig.struct_extract %a["v"] : <!hw.struct<u: !hw.union<x: i42, y: i1337>, v: i1337>>
   llhd.drv %3, %v after %2 : i1337
 }
@@ -353,7 +353,7 @@ hw.module @UnionConflict(in %u : i42, in %v : i1337) {
   %c0_i1337 = hw.constant 0 : i1337
   %0 = hw.bitcast %c0_i1337 : (i1337) -> !hw.union<x: i42, y: i1337>
   %1 = llhd.constant_time <0ns, 0d, 1e>
-  %a = llhd.sig %0 : !hw.union<x: i42, y: i1337>
+  %a = llhd.sig %0 : <!hw.union<x: i42, y: i1337>>
   // Union covered twice via different variants.
   // CHECK: [[TMP1:%.+]] = llhd.sig.struct_extract %a["x"]
   // CHECK: [[TMP2:%.+]] = llhd.sig.struct_extract %a["y"]

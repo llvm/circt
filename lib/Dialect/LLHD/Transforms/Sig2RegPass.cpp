@@ -199,6 +199,13 @@ public:
   /// Check if we can promote the entire signal according to the current
   /// limitations of the pass.
   bool isPromotable() {
+    if (!sigOp.getInit()) {
+      auto bw = hw::getBitWidth(sigOp.getType().getNestedType());
+      return intervals.size() == 1 && intervals.front().low.isStatic() &&
+             intervals.front().low.min == 0 &&
+             intervals.front().bitwidth == bw &&
+             isImmediate(intervals.front().delay);
+    }
     for (unsigned i = 0; i < intervals.size(); ++i) {
       if (i >= intervals.size() - 1)
         break;
@@ -218,49 +225,56 @@ public:
   /// Promote the signal. This builds the necessary operations, replaces the
   /// values, and removes the signal and signal value handling operations.
   void promote() {
-    auto bw = hw::getBitWidth(sigOp.getInit().getType());
+    auto bw = hw::getBitWidth(sigOp.getType().getNestedType());
     assert(bw > 0 && "bw must be known and non-zero");
 
     OpBuilder builder(sigOp);
     Value val = sigOp.getInit();
     Location loc = sigOp->getLoc();
     auto type = builder.getIntegerType(bw);
-    val = builder.createOrFold<hw::BitcastOp>(loc, type, val);
+    if (!val) {
+      // A single immediate drive covering every bit defines the signal without
+      // needing an initial value.
+      val = builder.createOrFold<hw::BitcastOp>(loc, type,
+                                                intervals.front().value);
+    } else {
+      val = builder.createOrFold<hw::BitcastOp>(loc, type, val);
 
-    // Handle the writes by starting with the signal init value and injecting
-    // the written values at the right offsets.
-    for (auto interval : intervals) {
-      Value invMask = hw::ConstantOp::create(
-          builder, loc, APInt::getAllOnes(interval.bitwidth));
+      // Handle the writes by starting with the signal init value and injecting
+      // the written values at the right offsets.
+      for (auto interval : intervals) {
+        Value invMask = hw::ConstantOp::create(
+            builder, loc, APInt::getAllOnes(interval.bitwidth));
 
-      if (uint64_t(bw) > interval.bitwidth) {
-        Value pad = hw::ConstantOp::create(
-            builder, loc, APInt::getZero(bw - interval.bitwidth));
-        invMask = builder.createOrFold<comb::ConcatOp>(loc, pad, invMask);
+        if (uint64_t(bw) > interval.bitwidth) {
+          Value pad = hw::ConstantOp::create(
+              builder, loc, APInt::getZero(bw - interval.bitwidth));
+          invMask = builder.createOrFold<comb::ConcatOp>(loc, pad, invMask);
+        }
+
+        Value amt = buildDynamicIndex(builder, loc, interval.low.min,
+                                      interval.low.dynamic, bw);
+        invMask = builder.createOrFold<comb::ShlOp>(loc, invMask, amt);
+        Value allOnes =
+            hw::ConstantOp::create(builder, loc, APInt::getAllOnes(bw));
+        Value mask = builder.createOrFold<comb::XorOp>(loc, invMask, allOnes);
+        val = builder.createOrFold<comb::AndOp>(loc, val, mask);
+
+        Value assignVal = builder.createOrFold<hw::BitcastOp>(
+            loc, builder.getIntegerType(interval.bitwidth), interval.value);
+
+        if (uint64_t(bw) > interval.bitwidth) {
+          Value pad = hw::ConstantOp::create(
+              builder, loc, APInt::getZero(bw - interval.bitwidth));
+          assignVal = builder.createOrFold<comb::ConcatOp>(loc, pad, assignVal);
+        }
+
+        assignVal = builder.createOrFold<comb::ShlOp>(loc, assignVal, amt);
+        if (!isImmediate(interval.delay))
+          assignVal = builder.createOrFold<llhd::DelayOp>(loc, assignVal,
+                                                          interval.delay);
+        val = builder.createOrFold<comb::OrOp>(loc, assignVal, val);
       }
-
-      Value amt = buildDynamicIndex(builder, loc, interval.low.min,
-                                    interval.low.dynamic, bw);
-      invMask = builder.createOrFold<comb::ShlOp>(loc, invMask, amt);
-      Value allOnes =
-          hw::ConstantOp::create(builder, loc, APInt::getAllOnes(bw));
-      Value mask = builder.createOrFold<comb::XorOp>(loc, invMask, allOnes);
-      val = builder.createOrFold<comb::AndOp>(loc, val, mask);
-
-      Value assignVal = builder.createOrFold<hw::BitcastOp>(
-          loc, builder.getIntegerType(interval.bitwidth), interval.value);
-
-      if (uint64_t(bw) > interval.bitwidth) {
-        Value pad = hw::ConstantOp::create(
-            builder, loc, APInt::getZero(bw - interval.bitwidth));
-        assignVal = builder.createOrFold<comb::ConcatOp>(loc, pad, assignVal);
-      }
-
-      assignVal = builder.createOrFold<comb::ShlOp>(loc, assignVal, amt);
-      if (!isImmediate(interval.delay))
-        assignVal =
-            builder.createOrFold<llhd::DelayOp>(loc, assignVal, interval.delay);
-      val = builder.createOrFold<comb::OrOp>(loc, assignVal, val);
     }
 
     // Handle the reads by extracting right number of bits at the right offset.
