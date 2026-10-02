@@ -287,8 +287,11 @@ class SIntType(IntType):
     return bytearray(int.to_bytes(obj, self.max_size, "little", signed=True))
 
   def deserialize(self, data: bytearray) -> Tuple[int, bytearray]:
-    return (int.from_bytes(data[0:self.max_size], "little",
-                           signed=True), data[self.max_size:])
+    value = int.from_bytes(data[:self.max_size], "little")
+    value &= (1 << self.bit_width) - 1
+    if self.bit_width and value & (1 << (self.bit_width - 1)):
+      value -= 1 << self.bit_width
+    return (value, data[self.max_size:])
 
 
 __esi_mapping[cpp.SIntType] = SIntType
@@ -509,7 +512,9 @@ class UnionType(ESIType):
     active_name = next(iter(obj))
     for (fname, ftype) in self.fields:
       if fname == active_name:
-        field_bytes = ftype.serialize(obj[active_name])
+        field_bytes = bytearray(ftype.serialize(obj[active_name]))
+        if ftype.bit_width % 8:
+          field_bytes[-1] &= (1 << (ftype.bit_width % 8)) - 1
         # Union members share the low bits; padding follows in byte order.
         union_bytes = (self.bit_width + 7) // 8
         pad_len = union_bytes - len(field_bytes)
@@ -520,12 +525,19 @@ class UnionType(ESIType):
 
   def deserialize(self, data: bytearray) -> Tuple[Dict[str, Any], bytearray]:
     union_bytes = (self.bit_width + 7) // 8
+    if len(data) < union_bytes:
+      raise ValueError(
+          f"insufficient data for union: expected {union_bytes} bytes, "
+          f"got {len(data)}")
     union_data = data[:union_bytes]
     remaining = data[union_bytes:]
     result = {}
     for (fname, ftype) in self.fields:
       field_bytes = (ftype.bit_width + 7) // 8
-      (fval, _) = ftype.deserialize(bytearray(union_data[:field_bytes]))
+      field_data = bytearray(union_data[:field_bytes])
+      if ftype.bit_width % 8:
+        field_data[-1] &= (1 << (ftype.bit_width % 8)) - 1
+      (fval, _) = ftype.deserialize(field_data)
       result[fname] = fval
     return (result, remaining)
 

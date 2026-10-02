@@ -157,6 +157,43 @@ def test_union_signed_variant():
   assert remaining == bytearray()
 
 
+@pytest.mark.parametrize("use_alias", [False, True])
+@pytest.mark.parametrize("union_width", [8, 12, 16])
+def test_union_subbyte_members(use_alias, union_width):
+  signed = types.SIntType("si5", 5)
+  if use_alias:
+    signed = types.TypeAlias("signed_alias", "Signed", signed)
+  union_type = types.UnionType(
+      "subbyte_union",
+      [("signed", signed), ("unsigned", types.UIntType("ui3", 3)),
+       ("bits", types.BitsType("i5", 5)),
+       ("wide", types.UIntType(f"ui{union_width}", union_width))])
+  union_bytes = (union_width + 7) // 8
+  for value in [-16, -7, -1, 0, 7, 15]:
+    serialized = union_type.serialize({"signed": value})
+    assert serialized == bytearray([value & 0x1F]) + bytearray(union_bytes - 1)
+    decoded, remaining = union_type.deserialize(serialized)
+    assert decoded["signed"] == value
+    assert decoded["unsigned"] == value & 7
+    assert decoded["bits"] == bytearray([value & 0x1F])
+    assert remaining == bytearray()
+
+  raw = bytearray([0xBC]) + bytearray([0x0A] * (union_bytes - 1))
+  decoded, remaining = union_type.deserialize(raw + bytearray([0xDE, 0xAD]))
+  assert decoded["signed"] == -4
+  assert decoded["unsigned"] == 4
+  assert decoded["bits"] == bytearray([0x1C])
+  assert remaining == bytearray([0xDE, 0xAD])
+
+  bits = bytearray([0xF9])
+  assert union_type.serialize({"bits": bits}) == (bytearray([0x19]) +
+                                                  bytearray(union_bytes - 1))
+  assert bits == bytearray([0xF9])
+
+  with pytest.raises(ValueError, match="insufficient data for union"):
+    union_type.deserialize(bytearray(union_bytes - 1))
+
+
 def test_union_in_struct():
   uint8 = types.UIntType("ui8", 8)
   union_type = types.UnionType("nested_union",

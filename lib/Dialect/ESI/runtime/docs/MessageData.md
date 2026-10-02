@@ -183,9 +183,13 @@ work, but they are adapters layered on top of the segmented ownership path.
 ## Union and serial-window wire layout
 
 Union members start at bit zero, matching the `hw.union` bitcast layout.
+Nonzero member offsets are not supported by the runtime; manifest generation
+rejects those union types instead of silently dropping their offsets.
 The union width is the width of its widest member; runtime serializers
 zero-pad narrower members at the high end. Bytes are sent least-significant
 first, so an 8-bit value `0xA5` in a 16-bit union serializes as `[0xA5, 0x00]`.
+Sub-byte members use their declared bit width, not their rounded byte width:
+a signed 5-bit value of `-7` in a 16-bit union serializes as `[0x19, 0x00]`.
 Generated C++ union accessors use the same bit positions, but setters preserve
 bits outside the selected member.
 

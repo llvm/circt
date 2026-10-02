@@ -353,6 +353,7 @@ private:
 /// Unions contain one active field without storing a tag. All fields start at
 /// bit zero, and the width is the maximum field width. Serialization zero-pads
 /// the high bits of narrower fields, matching the hw.union bitcast layout.
+/// Nonzero hw.union member offsets are rejected during manifest generation.
 class UnionType : public Type {
 public:
   using FieldVector = std::vector<std::pair<std::string, const Type *>>;
