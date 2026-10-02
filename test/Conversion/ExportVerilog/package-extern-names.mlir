@@ -49,7 +49,7 @@ module attributes {circt.loweringOptions = "caseInsensitiveKeywords,locationInfo
     hw.typedecl @second, "Word" : i8
     hw.typedecl @State : !hw.enum<Idle, Busy>
     hw.typedecl @State_Idle : i8
-  } {hw.verilogName = "Types"}
+  } {verilogName = "Types"}
 
   hw.module @Consumer(
       in %req: !hw.typealias<@types::@req, i8>,

@@ -21,11 +21,11 @@ sv.package.extern @external_empty {}
 // CHECK-LABEL: sv.package.extern @external_types {
 // CHECK-NEXT: hw.typedecl @word, "word_t" : i8
 // CHECK-NEXT: hw.typedecl @local_word : !hw.typealias<@types::@word, i8>
-// CHECK-NEXT: } {hw.verilogName = "ExternalTypes", sym_visibility = "private"}
+// CHECK-NEXT: } {sym_visibility = "private", verilogName = "ExternalTypes"}
 sv.package.extern @external_types {
   hw.typedecl @word, "word_t" : i8
   hw.typedecl @local_word : !hw.typealias<@types::@word, i8>
-} {hw.verilogName = "ExternalTypes", sym_visibility = "private"}
+} {sym_visibility = "private", verilogName = "ExternalTypes"}
 
 // CHECK-LABEL: hw.module @use_package(
 hw.module @use_package(

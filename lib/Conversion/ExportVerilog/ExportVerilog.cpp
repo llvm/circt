@@ -202,6 +202,9 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
       .Case<SVVerbatimSourceOp>([](SVVerbatimSourceOp op) {
         return op.getVerilogNameAttr().getValue();
       })
+      .Case<PackageExternOp>([](PackageExternOp op) {
+        return op.getVerilogName().value_or(op.getSymName());
+      })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
       })

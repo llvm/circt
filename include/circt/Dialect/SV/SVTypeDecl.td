@@ -66,6 +66,11 @@ def PackageOp : SVPackageOp<"package", [Emittable]> {
 }
 
 def PackageExternOp : SVPackageOp<"package.extern"> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    OptionalAttr<StrAttr>:$verilogName
+  );
   let summary = "Externally defined SystemVerilog package";
   let description = [{
     A named, top-level SystemVerilog package whose implementation is provided
@@ -77,7 +82,7 @@ def PackageExternOp : SVPackageOp<"package.extern"> {
     does not emit the package or create an output file for it. Like
     `hw.module.extern`, it is not emittable and cannot be an `emit.ref` target.
 
-    The `hw.verilogName` string attribute specifies the externally defined
+    The `verilogName` string attribute specifies the externally defined
     SystemVerilog package name, independently of the MLIR symbol name. It is
     required for non-public packages so that renaming their MLIR symbols does
     not change references to the external package. For public packages it is
@@ -87,8 +92,9 @@ def PackageExternOp : SVPackageOp<"package.extern"> {
     Typedef and enum member names use the same legalization as `sv.package`,
     including keyword avoidance, reserved names, and member-name collisions.
     This allows a CIRCT-generated package to be represented by changing
-    `sv.package` to `sv.package.extern`, using the same lowering options and
-    reserved names. Only the external package's own Verilog name remains fixed.
+    `sv.package` to `sv.package.extern`, transferring its `hw.verilogName` to
+    `verilogName`, and using the same lowering options and reserved names.
+    Only the external package's own Verilog name remains fixed.
 
     Example:
 

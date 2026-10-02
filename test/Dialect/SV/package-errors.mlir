@@ -14,23 +14,23 @@ sv.package.extern @invalid {
 
 // -----
 
-// expected-error @+1 {{non-public packages require 'hw.verilogName'}}
+// expected-error @+1 {{non-public packages require 'verilogName'}}
 sv.package.extern @private_types {} {sym_visibility = "private"}
 
 // -----
 
-// expected-error @+1 {{non-public packages require 'hw.verilogName'}}
+// expected-error @+1 {{non-public packages require 'verilogName'}}
 sv.package.extern @nested_types {} {sym_visibility = "nested"}
 
 // -----
 
-// expected-error @+1 {{'hw.verilogName' must be a non-empty string}}
-sv.package.extern @invalid_name {} {hw.verilogName = 1 : i32}
+// expected-error @+1 {{'verilogName' failed to satisfy constraint: string attribute}}
+sv.package.extern @invalid_name {} {verilogName = 1 : i32}
 
 // -----
 
-// expected-error @+1 {{'hw.verilogName' must be a non-empty string}}
-sv.package.extern @empty_name {} {hw.verilogName = ""}
+// expected-error @+1 {{'verilogName' must be a non-empty string}}
+sv.package.extern @empty_name {} {verilogName = ""}
 
 // -----
 

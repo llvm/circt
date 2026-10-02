@@ -35,21 +35,23 @@ with ir.Context() as ctx, ir.Location.unknown() as loc:
     print(reg_op)
     # CHECK: %reg1 = sv.reg  {sv.attributes = [#sv.attribute<"no_merge">]} : !hw.inout<i1>
 
-    package_op = sv.PackageExternOp("ExternalTypes")
+    package_op = sv.PackageExternOp("ExternalTypesSymbol",
+                                    verilogName="ExternalTypes")
     with ir.InsertionPoint(package_op.body.blocks.append()):
       hw.TypedeclOp.create("word", i1)
     assert package_op.operation.verify()
+    assert package_op.verilogName.value == "ExternalTypes"
     print(package_op)
-    # CHECK: sv.package.extern @ExternalTypes {
+    # CHECK: sv.package.extern @ExternalTypesSymbol {
     # CHECK-NEXT: hw.typedecl @word : i1
-    # CHECK-NEXT: }
+    # CHECK-NEXT: } {verilogName = "ExternalTypes"}
 
   # Renaming a private MLIR symbol must not rename its external Verilog package.
   m = ir.Module.parse("""
     sv.package.extern @types {
       hw.typedecl @word : i8
       hw.typedecl @State : !hw.enum<Idle, Busy>
-    } {hw.verilogName = "ExternalTypes", sym_visibility = "private"}
+    } {sym_visibility = "private", verilogName = "ExternalTypes"}
   """)
   package_op = m.body.operations[0]
   ir.SymbolTable.set_symbol_name(package_op, "renamed_types")

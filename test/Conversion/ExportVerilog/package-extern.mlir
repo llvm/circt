@@ -30,7 +30,7 @@ sv.package.extern @ExtTypes {
 sv.package.extern @Unused {}
 sv.package.extern @renamed_file_types {
   hw.typedecl @word : i8
-} {hw.verilogName = "FileTypes", output_file = #hw.output_file<"external.sv">, sym_visibility = "private"}
+} {verilogName = "FileTypes", output_file = #hw.output_file<"external.sv">, sym_visibility = "private"}
 
 // SV-LABEL: package LocalTypes;
 // SV: typedef ExtTypes::Req_0 Request;
