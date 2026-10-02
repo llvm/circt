@@ -40,7 +40,6 @@ Type circt::sv::getAnyHWArrayElementType(Type type) {
 /// packed aggregates (hw.array, hw.struct, hw.union) built up entirely out of
 /// packed element types.
 static bool isPackedType(Type type) {
-  type = hw::getCanonicalType(type);
 
   if (isa<hw::IntType, IntegerType, hw::EnumType>(type))
     return true;
@@ -83,29 +82,26 @@ mlir::Type circt::sv::getNetElementType(mlir::Type type) {
   return {};
 }
 
-/// Unwraps type aliases and outer unpacked array layers to
-/// return the innermost non-unpacked element type.
-static Type getNetPackedElementType(Type type) {
+/// Return the innermost non-unpacked element type.
+static Type stripUnpackedDimensions(Type type) {
   type = hw::getCanonicalType(type);
   while (auto uarray = dyn_cast<hw::UnpackedArrayType>(type))
-    type = hw::getCanonicalType(uarray.getElementType());
+    type = uarray.getElementType();
   return type;
 }
 
 /// Return whether a type is valid as the element type of a NetType.
 bool circt::sv::isValidNetElementType(Type type) {
-  if (!type)
-    return false;
-  return isPackedType(getNetPackedElementType(type));
+  return isPackedType(stripUnpackedDimensions(type));
 }
 
 LogicalResult NetType::verify(function_ref<InFlightDiagnostic()> emitError,
                               Type elementType) {
-  if (isa_and_nonnull<NetType, VarType>(elementType))
+  if (isa_and_present<NetType, VarType>(elementType))
     return emitError() << "sv.net element type may not be itself an sv.net or "
                           "sv.var handle";
 
-  Type packedElementType = getNetPackedElementType(elementType);
+  Type packedElementType = stripUnpackedDimensions(elementType);
   if (!isPackedType(packedElementType))
     return emitError()
            << "sv.net element type must have a packed base type, but got "
