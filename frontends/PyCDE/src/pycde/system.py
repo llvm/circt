@@ -197,8 +197,9 @@ class System:
                          sv.package.extern, retaining their type declarations
                          without emitting their SystemVerilog definitions.
                          Defaults to False. Conversion preserves the operation's
-                         position and attributes, and fixes non-public packages'
-                         hw.verilogName to their symbol name if not already set.
+                         position and attributes, transferring hw.verilogName to
+                         verilogName. For non-public packages without an explicit
+                         name, verilogName is set to the symbol name.
                          To select individual packages instead, return
                          sv.package.extern operations from preprocess_op.
                          Existing external packages are preserved regardless of
@@ -273,10 +274,13 @@ class System:
             ip=ir.InsertionPoint(op) if op.attached else False)
         for attr_name in op.attributes:
           external_op.attributes[attr_name] = op.attributes[attr_name]
+        if "hw.verilogName" in external_op.attributes:
+          external_op.verilogName = external_op.attributes["hw.verilogName"]
+          del external_op.attributes["hw.verilogName"]
         if (op.sym_visibility is not None and
             op.sym_visibility.value != "public" and
-            "hw.verilogName" not in external_op.attributes):
-          external_op.attributes["hw.verilogName"] = op.sym_name
+            external_op.verilogName is None):
+          external_op.verilogName = op.sym_name
         op.body.blocks[0].append_to(external_op.body)
         op.erase()
         op = external_op

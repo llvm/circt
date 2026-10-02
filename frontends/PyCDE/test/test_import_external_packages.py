@@ -9,7 +9,7 @@ module_str = """
 sv.verbatim "before"
 sv.package @Types {
   hw.typedecl @word : i8
-}
+} {hw.verilogName = "ExternalTypes", sym_visibility = "private"}
 sv.verbatim "after"
 """
 
@@ -30,6 +30,6 @@ assert system.mod.operation.verify()
 # CHECK:      sv.verbatim "before"
 # CHECK-NEXT: sv.package.extern @Types {
 # CHECK-NEXT:   hw.typedecl @word : i8
-# CHECK-NEXT: }
+# CHECK-NEXT: } {sym_visibility = "private", verilogName = "ExternalTypes"}
 # CHECK-NEXT: sv.verbatim "after"
 system.print()
