@@ -123,7 +123,7 @@ mlir::Type circt::sv::getVarElementType(mlir::Type type) {
 }
 
 /// Return true if the type can be stored in a variable, including
-// simulation-only and unpacked data types that are not valid net elements.
+/// simulation-only and unpacked data types that are not valid net elements.
 bool circt::sv::isValidVarElementType(Type type) {
   type = hw::getCanonicalType(type);
 
