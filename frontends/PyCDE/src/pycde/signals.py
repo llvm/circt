@@ -618,7 +618,7 @@ class ArraySignal(Signal):
     _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
-      if isinstance(idx, (BitsSignal, UIntSignal)):
+      if isinstance(idx, BitVectorSignal):
         idx = idx.as_bits()
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
@@ -657,7 +657,7 @@ class ArraySignal(Signal):
       raise ValueError(
           f"num_bits ({num_elems}) must be <= value width ({len(self)})")
     if isinstance(low_idx, BitVectorSignal):
-      low_idx = low_idx.pad_or_truncate(self.type.size.bit_length()).as_bits()
+      low_idx = low_idx.as_bits()
 
     from .dialects import hw
     from .types import Array

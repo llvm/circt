@@ -120,6 +120,11 @@ selectors are unwrapped before multiplexing or indexing an array.
 
 `Bits(32) * 10 * 12` creates an array of arrays.
 
+Dynamic array indexes and slice offsets accept `Bits`, `UInt`, or `SInt`
+signals, including aliases. Their bit patterns are interpreted as unsigned
+indexes and must be exactly `clog2(array_length)` bits wide; converting an index
+to signless bits does not change its width.
+
 ### Structs
 
 ```python
