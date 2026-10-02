@@ -85,6 +85,11 @@
 
 // -----
 
+// expected-error @below {{port window #axi4.window<base = 0xfffff000, last = 0x100000fff, burst_specs = <<fixed, len = 4>>> does not fit in an 'addr_width' of 32}}
+"test.port"() : () -> !axi4.port<addr_width = 32, data_width = 64, write_id_width = 4, read_id_width = 4, user_width = 0, windows = <<base = 0xfffff000, last = 0x100000fff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 4, outstanding_reads = 4>
+
+// -----
+
 // expected-error @below {{port 'outstanding_writes' must be at most 4 for a 'write_id_width' of 2, got 5}}
 "test.port"() : () -> !axi4.port<addr_width = 32, data_width = 64, write_id_width = 2, read_id_width = 4, user_width = 0, windows = <<base = 0x0, last = 0xfff, burst_specs = <<fixed, len = 4>>>>, outstanding_writes = 5, outstanding_reads = 4>
 
