@@ -72,11 +72,12 @@ def NetType : SVType<"Net"> {
   ];
 
   let assemblyFormat = "`<` $elementType `>`";
+  let genVerifyDecl = 1;
 }
 
 // Type constraint that indicates that an operand or result may only be a valid
 // net element type.
-def NetElementType : Type<CPred<"hw::isHWValueType($_self)">,
+def NetElementType : Type<CPred<"sv::isValidNetElementType($_self)">,
                           "a valid net element">;
 
 // Constrains `netValue` to `!sv.net<T>`, inferring the net handle from element type `T`.
