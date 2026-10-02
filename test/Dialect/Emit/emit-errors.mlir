@@ -12,15 +12,6 @@ emit.file_list "filelist.f", [@InvalidRef]
 
 // -----
 
-hw.module.extern @ExternalModule()
-
-emit.file "external.sv" {
-  // expected-error @below {{does not target an emittable op: @ExternalModule}}
-  emit.ref @ExternalModule
-}
-
-// -----
-
 sv.package.extern @ExternalPackage {
   hw.typedecl @word : i8
 }

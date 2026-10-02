@@ -4,9 +4,7 @@
 // RUN: circt-opt %s -export-split-verilog="dir-name=%t" -o /dev/null
 // RUN: FileCheck %s --check-prefix=LIST < %t/filelist.f
 // RUN: FileCheck %s --check-prefix=CONSUMER < %t/Consumer.sv
-// RUN: test ! -e %t/ExtTypes.sv
-// RUN: test ! -e %t/Unused.sv
-// RUN: test ! -e %t/external.sv
+// RUN: %PYTHON% -c "import os, sys; print(*sorted(os.listdir(sys.argv[1])), sep='\n')" %t | FileCheck %s --check-prefix=FILES --implicit-check-not=ExtTypes.sv --implicit-check-not=Unused.sv --implicit-check-not=external.sv
 
 // External package members use the same reserved names as emitted packages.
 sv.reserve_names ["Req", "State_Idle"]
@@ -68,3 +66,9 @@ hw.module @Consumer(
 // LIST-NEXT: LocalTypes.sv
 // LIST-NEXT: Consumer.sv
 // LIST-NOT: .sv
+
+// FILES: Consumer.sv
+// FILES-NEXT: ExtTypes_0.sv
+// FILES-NEXT: FileTypes_0.sv
+// FILES-NEXT: LocalTypes.sv
+// FILES-NEXT: filelist.f
