@@ -63,3 +63,4 @@ requires-python = ">=3.10"
 
 [project.urls]
 "Homepage" = "https://circt.llvm.org/docs/PyCDE/"
+"Changelog" = "https://github.com/llvm/circt/blob/main/frontends/PyCDE/CHANGELOG.md"
