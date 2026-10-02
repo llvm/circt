@@ -202,6 +202,9 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
       .Case<SVVerbatimSourceOp>([](SVVerbatimSourceOp op) {
         return op.getVerilogNameAttr().getValue();
       })
+      .Case<PackageExternOp>([](PackageExternOp op) {
+        return op.getVerilogName().value_or(op.getSymName());
+      })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
       })
@@ -1907,7 +1910,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           return false;
         }
 
-        if (auto package = dyn_cast<PackageOp>(typedecl->getParentOp())) {
+        if (auto *package = typedecl->getParentOp();
+            isa<PackageOp, PackageExternOp>(package)) {
           if (package != emitter.currentPackage)
             os << getSymOpName(package) << "::";
         }
@@ -7183,6 +7187,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
+        .Case<PackageExternOp>([&](PackageExternOp package) {
+          symbolCache.addDefinition(package.getSymNameAttr(), package);
+        })
         .Case<sv::SVVerbatimSourceOp>([&](sv::SVVerbatimSourceOp op) {
           symbolCache.addDefinition(op.getNameAttr(), op);
           separateFile(op, op.getOutputFile().getFilename().getValue());
@@ -7321,9 +7328,10 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
 static void emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
-      .Case<HWModuleExternOp, sv::SVVerbatimModuleOp>([&](auto op) {
-        // External modules are _not_ emitted.
-      })
+      .Case<HWModuleExternOp, sv::SVVerbatimModuleOp, PackageExternOp>(
+          [&](auto op) {
+            // External declarations are _not_ emitted.
+          })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })

@@ -18,6 +18,7 @@
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <type_traits>
 
 using namespace circt;
 using namespace sv;
@@ -138,7 +139,8 @@ private:
   /// globalNameTable.
   void legalizeModuleNames(HWModuleOp module);
   void legalizeInterfaceNames(InterfaceOp interface);
-  void legalizePackageNames(PackageOp package);
+  template <typename Package>
+  void legalizePackageNames(Package package);
   void legalizeFunctionNames(FuncOp func);
 
   // Gathers prefixes of enum types by inspecting typescopes in the module.
@@ -269,15 +271,17 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
 GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
                                        const LoweringOptions &options)
     : globalNameResolver(options), options(options) {
-  // Register the names of external modules which we cannot rename. This has to
-  // occur in a first pass separate from the modules and interfaces which we are
-  // actually allowed to rename, in order to ensure that we don't accidentally
-  // rename a module that later collides with an extern module.
+  // Register the names of external declarations which we cannot rename. This
+  // has to occur in a first pass separate from the modules, interfaces and
+  // packages which we are actually allowed to rename, in order to ensure that
+  // we don't accidentally rename a declaration that later collides with an
+  // external one.
   for (auto &op : *topLevel.getBody()) {
     // Note that external modules *often* have name collisions, because they
     // correspond to the same verilog module with different parameters.
-    if (isa<HWModuleExternOp>(op) || isa<HWModuleGeneratedOp>(op)) {
-      auto name = getVerilogModuleNameAttr(&op).getValue();
+    if (isa<HWModuleExternOp, HWModuleGeneratedOp, PackageExternOp>(op)) {
+      auto name = isa<PackageExternOp>(op) ? getSymOpName(&op)
+                                           : getVerilogModuleName(&op);
       if (!sv::isNameValid(name, options.caseInsensitiveKeywords))
         op.emitError("name \"")
             << name << "\" is not allowed in Verilog output";
@@ -307,6 +311,8 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
 
     if (auto package = dyn_cast<PackageOp>(op))
       legalizePackageNames(package);
+    else if (auto package = dyn_cast<PackageExternOp>(op))
+      legalizePackageNames(package);
   }
 
   // Legalize names in HW modules parallelly.
@@ -320,22 +326,25 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
   gatherEnumPrefixes(topLevel);
 }
 
-void GlobalNameResolver::legalizePackageNames(PackageOp package) {
+template <typename Package>
+void GlobalNameResolver::legalizePackageNames(Package package) {
   auto *ctx = package.getContext();
-  auto name = globalNameResolver.getLegalName(getSymOpName(package));
-  package->setAttr("hw.verilogName", StringAttr::get(ctx, name));
+  if constexpr (!std::is_same_v<Package, PackageExternOp>) {
+    auto name = globalNameResolver.getLegalName(getSymOpName(package));
+    package->setAttr("hw.verilogName", StringAttr::get(ctx, name));
+  }
 
   NameCollisionResolver localNames(options);
   globalNameTable.addReservedNames(localNames);
   // Reserve all typedef names before choosing enum member names, including
   // typedefs that appear after the enum declaration.
-  for (auto decl : package.getOps<hw::TypedeclOp>()) {
+  for (hw::TypedeclOp decl : package.template getOps<hw::TypedeclOp>()) {
     auto preferredName = decl.getPreferredName();
     auto name = localNames.getLegalName(preferredName);
     if (name != preferredName)
       decl.setVerilogNameAttr(StringAttr::get(ctx, name));
   }
-  for (auto decl : package.getOps<hw::TypedeclOp>()) {
+  for (hw::TypedeclOp decl : package.template getOps<hw::TypedeclOp>()) {
     auto enumType = dyn_cast<hw::EnumType>(decl.getType());
     if (!enumType)
       continue;
