@@ -350,9 +350,9 @@ private:
   std::vector<Frame> frames;
 };
 
-/// Unions are a tagged collection of fields where only one field is active
-/// at a time. All fields share the same bit range (the width is the max of
-/// all field widths, matching SystemVerilog packed-union semantics).
+/// Unions contain one active field without storing a tag. All fields start at
+/// bit zero, and the width is the maximum field width. Serialization zero-pads
+/// the high bits of narrower fields, matching the hw.union bitcast layout.
 class UnionType : public Type {
 public:
   using FieldVector = std::vector<std::pair<std::string, const Type *>>;

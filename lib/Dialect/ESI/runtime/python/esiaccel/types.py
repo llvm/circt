@@ -510,12 +510,11 @@ class UnionType(ESIType):
     for (fname, ftype) in self.fields:
       if fname == active_name:
         field_bytes = ftype.serialize(obj[active_name])
-        # In a packed union, padding is at LSB (beginning of byte stream)
-        # and field data is at MSB (end of byte stream).
+        # Union members share the low bits; padding follows in byte order.
         union_bytes = (self.bit_width + 7) // 8
         pad_len = union_bytes - len(field_bytes)
         if pad_len > 0:
-          return bytearray(pad_len) + field_bytes
+          return field_bytes + bytearray(pad_len)
         return field_bytes
     raise ValueError(f"unknown field '{active_name}' in union")
 
@@ -525,11 +524,8 @@ class UnionType(ESIType):
     remaining = data[union_bytes:]
     result = {}
     for (fname, ftype) in self.fields:
-      # In a packed union, field data is at MSB (end of byte stream).
-      # Skip the LSB padding to reach each field's data.
       field_bytes = (ftype.bit_width + 7) // 8
-      pad_len = union_bytes - field_bytes
-      (fval, _) = ftype.deserialize(bytearray(union_data[pad_len:]))
+      (fval, _) = ftype.deserialize(bytearray(union_data[:field_bytes]))
       result[fname] = fval
     return (result, remaining)
 
