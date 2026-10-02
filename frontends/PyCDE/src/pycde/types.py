@@ -78,7 +78,9 @@ class Type:
     assert not isinstance(
         obj, ir.Value
     ), "Not intended to be called on CIRCT Values, only Python objects."
-    self._check_insertion_point()
+    from .signals import Signal
+    if not isinstance(obj, Signal):
+      self._check_insertion_point()
     v = self._from_obj_or_sig(obj)
     if name is not None:
       v.name = name
