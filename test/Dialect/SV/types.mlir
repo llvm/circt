@@ -50,3 +50,26 @@ func.func @netTypeAlias(%arg0: !sv.net<!hw.typealias<@types::@word, !hw.uarray<8
 }
 
 }
+
+// CHECK-LABEL: func @varString(%arg0: !sv.var<!hw.string>)
+func.func @varString(%arg0: !sv.var<!hw.string>) {
+  return 
+}
+
+// CHECK-LABEL: func @varUnpackedArray(%arg0: !sv.var<!hw.uarray<4xi32>>)
+func.func @varUnpackedArray(%arg0: !sv.var<!hw.uarray<4xi32>>) {
+  return 
+}
+
+// CHECK-LABEL: func @varNestedUnpackedArrays(%arg0: !sv.var<!hw.uarray<4xuarray<8xi32>>>)
+func.func @varNestedUnpackedArrays(
+  %arg0: !sv.var<!hw.uarray<4xuarray<8xi32>>>
+) {
+  return
+}
+
+// CHECK-LABEL: func @varPackedStruct(%arg0: !sv.var<!hw.struct<a: i1, b: !hw.array<4xi2>>>)
+func.func @varPackedStruct(%arg0: !sv.var<!hw.struct<a: i1, b: !hw.array<4xi2>>>) {
+  return
+}
+

@@ -112,11 +112,12 @@ def VarType : SVType<"Var"> {
   ];
 
   let assemblyFormat = "`<` $elementType `>`";
+  let genVerifyDecl = 1;
 }
 
 // Type constraint that indicates that an operand/result may only be a valid
 // var element type.
-def VarElementType : Type<CPred<"hw::isHWValueType($_self)">,
+def VarElementType : Type<CPred<"sv::isValidVarElementType($_self)">,
                           "a valid var element">;
 
 // Constrains `varValue` to `!sv.var<T>`, inferring the var handle from element type `T`.

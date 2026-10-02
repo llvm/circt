@@ -122,6 +122,32 @@ mlir::Type circt::sv::getVarElementType(mlir::Type type) {
   return {};
 }
 
+/// Return true if the type can be stored in a variable, including
+// simulation-only and unpacked data types that are not valid net elements.
+bool circt::sv::isValidVarElementType(Type type) {
+  type = hw::getCanonicalType(type);
+
+  if (isPackedType(type) || isa<hw::StringType>(type))
+    return true;
+
+  if (auto uarray = dyn_cast<hw::UnpackedArrayType>(type))
+    return isValidVarElementType(uarray.getElementType());
+
+  return false;
+}
+
+LogicalResult VarType::verify(function_ref<InFlightDiagnostic()> emitError,
+                              Type elementType) {
+  if (isa_and_present<VarType, NetType>(elementType))
+    return emitError() << "sv.var element type may not be itself an sv.var or "
+                          "sv.net handle";
+  if (!isValidVarElementType(elementType))
+    return emitError() << "sv.var element type must be a valid value type, "
+                          "but got "
+                       << elementType;
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
