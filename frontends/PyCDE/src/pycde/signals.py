@@ -80,6 +80,15 @@ class Signal:
     casted_value = hw.BitcastOp(new_type._type, self.value, loc=get_user_loc())
     return _FromCirctValue(casted_value.result, new_type)
 
+  def _unwrap_type_aliases(self) -> Signal:
+    canonical_type = self.type.canonical_type
+    if canonical_type == self.type:
+      return self
+    value = self.bitcast(canonical_type)
+    if self.name is not None:
+      value.name = self.name
+    return value
+
   def reg(self,
           clk=None,
           rst=None,
@@ -291,9 +300,10 @@ class BitVectorSignal(Signal):
     if width is None:
       width = self.type.width
 
-    if isinstance(self, targetValueType) and width == self.type.width:
-      return self
-    cast = hwarith.CastOp(self.value, type_getter(width))
+    value = self._unwrap_type_aliases()
+    if isinstance(value, targetValueType) and width == self.type.width:
+      return value
+    cast = hwarith.CastOp(value, type_getter(width))
     if self.name is not None:
       cast.name = self.name
     return cast
@@ -490,7 +500,7 @@ class BitsSignal(BitVectorSignal):
       alwaysff_op.bodyBlk.blocks.append()
       # Insert the sv.if inside the alwaysff body
       with ir.InsertionPoint(alwaysff_op.bodyBlk.blocks[0]):
-        if_op = sv.IfOp(cond=self.value)
+        if_op = sv.IfOp(cond=self.as_bits().value)
         # Append a block to the then region
         if_op.thenRegion.blocks.append()
         # Execute the callback inside the if block
@@ -608,7 +618,7 @@ class ArraySignal(Signal):
     _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
-      if isinstance(idx, UIntSignal):
+      if isinstance(idx, (BitsSignal, UIntSignal)):
         idx = idx.as_bits()
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
@@ -647,7 +657,7 @@ class ArraySignal(Signal):
       raise ValueError(
           f"num_bits ({num_elems}) must be <= value width ({len(self)})")
     if isinstance(low_idx, BitVectorSignal):
-      low_idx = low_idx.pad_or_truncate(self.type.size.bit_length())
+      low_idx = low_idx.pad_or_truncate(self.type.size.bit_length()).as_bits()
 
     from .dialects import hw
     from .types import Array
@@ -660,12 +670,12 @@ class ArraySignal(Signal):
 
   def and_reduce(self):
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == Bit
+    assert bits[0].type.canonical_type == Bit
     return And(*bits)
 
   def or_reduce(self):
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == Bit
+    assert bits[0].type.canonical_type == Bit
     return Or(*bits)
 
   def __len__(self):
@@ -1213,10 +1223,14 @@ class WindowSignal(Signal):
     return esi.UnwrapWindow(self.value)
 
 
-def wrap_opviews_with_values(dialect, module_name, excluded=[]):
+def wrap_opviews_with_values(dialect,
+                             module_name,
+                             excluded=[],
+                             unwrap_type_aliases=False):
   """Wraps all of a dialect's OpView classes to have their create method return
      a Signal instead of an OpView. The wrapped classes are inserted into
-     the provided module."""
+     the provided module. Integer-only dialects can unwrap operand type aliases
+     before constructing their operations."""
   import sys
   from .types import Type
   module = sys.modules[module_name]
@@ -1228,19 +1242,34 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
         cls, ir.OpView):
 
       def specialize_create(cls):
+        is_mux = getattr(cls, "OPERATION_NAME", None) == "comb.mux"
 
         def create(*args, **kwargs):
           # If any of the arguments are Signal or Type (which are both PyCDE
           # classes) objects, we need to convert them.
-          def to_circt(arg):
+          def to_circt(arg, unwrap):
             if isinstance(arg, Signal):
-              return arg.value
+              arg = arg.value
             elif isinstance(arg, Type):
               return arg._type
+            if unwrap:
+              if isinstance(arg, ir.Value):
+                return _FromCirctValue(arg)._unwrap_type_aliases().value
+              if isinstance(arg, (list, tuple)):
+                return [to_circt(item, True) for item in arg]
             return arg
 
-          args = [to_circt(arg) for arg in args]
-          kwargs = {k: to_circt(v) for k, v in kwargs.items()}
+          # Mux data operands support aliases; only its condition requires i1.
+          args = [
+              to_circt(arg, unwrap_type_aliases and (not is_mux or i == 0))
+              for i, arg in enumerate(args)
+          ]
+          kwargs = {
+              k:
+                  to_circt(v, unwrap_type_aliases and
+                           (not is_mux or k == "cond"))
+              for k, v in kwargs.items()
+          }
           # Create the OpView.
           with get_user_loc():
             if hasattr(cls, "create"):
