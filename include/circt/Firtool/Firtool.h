@@ -38,8 +38,6 @@ public:
   enum class RandomKind { None, Mem, Reg, All };
 
   enum class DomainMode {
-    /// Erase domains from the input circuit.
-    Strip,
     /// Disable domain checking.
     Disable,
     /// Check domains without inference.
@@ -55,8 +53,6 @@ public:
   static constexpr std::optional<firrtl::InferDomainsMode>
   toInferDomainsPassMode(DomainMode mode) {
     switch (mode) {
-    case DomainMode::Strip:
-      return firrtl::InferDomainsMode::Strip;
     case DomainMode::Disable:
       return std::nullopt;
     case DomainMode::Check:
@@ -185,6 +181,8 @@ public:
   bool shouldInlineInputOnlyModules() const { return inlineInputOnlyModules; }
 
   DomainMode getDomainMode() const { return domainMode; }
+
+  bool shouldStripDomain() const { return stripDomain; }
 
   ArrayRef<std::string> getSkippedDomains() const { return skippedDomains; }
 
@@ -432,6 +430,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setStripDomain(bool value) {
+    stripDomain = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
 
@@ -486,6 +489,7 @@ private:
   bool emitAllBindFiles;
   bool inlineInputOnlyModules;
   DomainMode domainMode;
+  bool stripDomain;
   SmallVector<std::string> skippedDomains;
 };
 

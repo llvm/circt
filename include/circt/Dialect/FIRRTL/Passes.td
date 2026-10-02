@@ -969,8 +969,6 @@ def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
                         "InferDomainsMode::Infer", "infer, check, infer-all.",
                         [{
                  llvm::cl::values(
-                   clEnumValN(InferDomainsMode::Strip, "strip",
-                    "Erase domains from the circuit without checking"),
                    clEnumValN(InferDomainsMode::Infer, "infer",
                      "Check domains with inference for private modules"),
                    clEnumValN(InferDomainsMode::Check, "check",
@@ -981,6 +979,15 @@ def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
       }]>,
                  ListOption<"skippedDomains", "skip-domain", "std::string",
                             "List of domain names to skip checking for">];
+}
+
+def StripDomains : Pass<"firrtl-strip-domains", "firrtl::CircuitOp"> {
+  let summary = "Strip all FIRRTL domain information";
+  let description = [{
+    Erase domain declarations, ports, operations, and associations from a FIRRTL
+    circuit without checking them. Run this pass after domain inference and
+    checking to discard domain information before further lowering.
+  }];
 }
 
 def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {

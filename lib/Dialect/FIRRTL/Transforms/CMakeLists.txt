@@ -62,6 +62,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   SFCCompat.cpp
   SpecializeLayers.cpp
   SpecializeOption.cpp
+  StripDomains.cpp
   VBToBV.cpp
   Vectorization.cpp
 

@@ -145,6 +145,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
         firrtl::createInferDomains(passOptions));
   }
 
+  if (opt.shouldStripDomain())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createStripDomains());
+
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCheckCombLoops());
 
   // Must run this pass after all diagnostic passes have run, otherwise it can
@@ -809,7 +812,7 @@ public:
 
   llvm::cl::opt<firtool::FirtoolOptions::DomainMode> domainMode{
       "domain-mode", llvm::cl::desc("Enable domain inference and checking"),
-      llvm::cl::init(firtool::FirtoolOptions::DomainMode::Strip),
+      llvm::cl::init(firtool::FirtoolOptions::DomainMode::Disable),
       llvm::cl::values(
           clEnumValN(firtool::FirtoolOptions::DomainMode::Check, "check",
                      "Check domains without inference"),
@@ -819,9 +822,13 @@ public:
                      "Check domains with inference for private modules"),
           clEnumValN(firtool::FirtoolOptions::DomainMode::InferAll, "infer-all",
                      "Check domains with inference for both public and private "
-                     "modules"),
-          clEnumValN(firtool::FirtoolOptions::DomainMode::Strip, "strip",
-                     "Erase all domain information"))};
+                     "modules"))};
+
+  llvm::cl::opt<bool> stripDomain{
+      "strip-domain",
+      llvm::cl::desc(
+          "Erase all domain information after inference and checking"),
+      llvm::cl::init(true)};
 
   llvm::cl::list<std::string> skippedDomains{
       "skip-domain",
@@ -881,7 +888,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
       lintXmrsInDesign(true), emitAllBindFiles(false),
-      inlineInputOnlyModules(false), domainMode(DomainMode::Disable) {
+      inlineInputOnlyModules(false), domainMode(DomainMode::Disable),
+      stripDomain(true) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -934,6 +942,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   emitAllBindFiles = clOptions->emitAllBindFiles;
   inlineInputOnlyModules = clOptions->inlineInputOnlyModules;
   domainMode = clOptions->domainMode;
+  stripDomain = clOptions->stripDomain;
   skippedDomains.assign(clOptions->skippedDomains.begin(),
                         clOptions->skippedDomains.end());
 }
