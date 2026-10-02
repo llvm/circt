@@ -57,6 +57,7 @@ repair-wheel-command = "delvewheel repair --ignore-existing -w {dest_dir} {wheel
 name = "pycde"
 dynamic = ["version"]
 description = "Python CIRCT Design Entry"
+readme = "README.md"
 authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
 dependencies = ['numpy', 'executing']
 requires-python = ">=3.10"
