@@ -164,3 +164,37 @@ class AliasedSelectors(Module):
     assert Unsigned(3).type == Unsigned
     assert Signed(-2).type == Signed
     ports.sel.when_true(lambda: ~ports.sel, clk=ports.clk)
+
+
+# CHECK-LABEL: hw.module @ArraySelectors
+# CHECK: hwarith.cast %signed {{.*}} : (si2) -> i2
+# CHECK: hw.bitcast %aliased_signed {{.*}} -> si2
+# CHECK: hw.array_slice {{.*}} : (!hw.array<4xi8>) -> !hw.array<2xi8>
+@unittestmodule(run_passes=True)
+class ArraySelectors(Module):
+  three = Input(Array(Bits(8), 3))
+  four = Input(Array(Bits(8), 4))
+  bits = Input(Bits(2))
+  unsigned = Input(UInt(2))
+  signed = Input(SInt(2))
+  aliased_bits = Input(TypeAlias(Index, "nested_index"))
+  aliased_unsigned = Input(
+      TypeAlias(TypeAlias(UInt(2), "unsigned_index"), "nested_unsigned_index"))
+  aliased_signed = Input(
+      TypeAlias(TypeAlias(SInt(2), "signed_index"), "nested_signed_index"))
+
+  @generator
+  def build(ports):
+    for array in (ports.three, ports.four):
+      for index in (ports.bits, ports.unsigned, ports.signed,
+                    ports.aliased_bits, ports.aliased_unsigned,
+                    ports.aliased_signed):
+        element = array[index]
+        assert element.type == Bits(8)
+        assert element.value.owner.operands[1].type == Bits(2)._type
+        sliced = array.slice(index, 2)
+        assert sliced.type == Array(Bits(8), 2)
+        assert sliced.value.owner.operands[1].type == Bits(2)._type
+        mux = Mux(index, *[array[i] for i in range(len(array))])
+        assert mux.type == Bits(8)
+        assert mux.value.owner.operands[1].type == Bits(2)._type
