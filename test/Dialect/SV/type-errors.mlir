@@ -32,3 +32,24 @@ func.func @netOfNet(%arg0: !sv.net<!sv.net<i1>>) {
 func.func @netOfVar(%arg0: !sv.net<!sv.var<i1>>) {
   return
 }
+
+// -----
+
+// expected-error @+1 {{sv.var element type may not be itself an sv.var or sv.net handle}}
+func.func @varOfVar(%arg0: !sv.var<!sv.var<i1>>) {
+  return
+}
+
+// -----
+
+// expected-error @+1 {{sv.var element type may not be itself an sv.var or sv.net handle}}
+func.func @varOfNet(%arg0: !sv.var<!sv.net<i1>>) {
+  return
+}
+
+// -----
+
+// expected-error @+1 {{sv.var element type must be a valid value type, but got 'index'}}
+func.func @varOfIndex(%arg0: !sv.var<index>) {
+  return
+}

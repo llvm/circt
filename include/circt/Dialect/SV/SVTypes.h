@@ -39,6 +39,9 @@ bool isValidNetElementType(mlir::Type type);
 /// type.
 mlir::Type getVarElementType(mlir::Type type);
 
+/// Return true if a type is a valid element type of a VarType.
+bool isValidVarElementType(mlir::Type type);
+
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
 mlir::Type getAnyHWArrayElementType(mlir::Type type);
