@@ -49,7 +49,7 @@ jobs:
           . venv/bin/activate
           pip install --upgrade pip
           pip install pytest nanobind
-          pip install "pycde>=0.12.0" --pre
+          pip install "pycde>=0.12.1" --pre
 
       # --------
       # Build and test CIRCT
@@ -111,7 +111,7 @@ jobs:
           python -m venv venv
           .\venv\Scripts\python.exe -m pip install --upgrade pip
           .\venv\Scripts\python.exe -m pip install pytest pytest-xdist nanobind
-          .\venv\Scripts\python.exe -m pip install "pycde>=0.12.0" --pre
+          .\venv\Scripts\python.exe -m pip install "pycde>=0.12.1" --pre
 
       - name: Install Verilator
         shell: pwsh
