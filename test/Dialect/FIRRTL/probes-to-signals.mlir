@@ -39,7 +39,27 @@ firrtl.circuit "RefDefineAndCastWidths" {
 
 // -----
 
-// Check trickier transform, and handling of ref.send, ref.sub, aliases, and ref.define.
+// A same-type cast drops forceability without creating a copy wire.
+
+// CHECK-LABEL: "ReadOnlyCastOfRWProbe"
+firrtl.circuit "ReadOnlyCastOfRWProbe" {
+  // CHECK: @ReadOnlyCastOfRWProbe(
+  // CHECK-SAME: out %p: !firrtl.uint<8>
+  firrtl.module @ReadOnlyCastOfRWProbe(in %x: !firrtl.uint<8>, out %p: !firrtl.probe<uint<8>>) {
+    // CHECK-NEXT: %w = firrtl.wire : !firrtl.uint<8>
+    // CHECK-NEXT: firrtl.matchingconnect %w, %x
+    // CHECK: firrtl.matchingconnect %p, %w
+    // CHECK-NEXT: }
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %x : !firrtl.uint<8>
+    %cast = firrtl.ref.cast %w_ref : (!firrtl.rwprobe<uint<8>>) -> !firrtl.probe<uint<8>>
+    firrtl.ref.define %p, %cast : !firrtl.probe<uint<8>>
+  }
+}
+
+// -----
+
+// Check ref.send, ref.sub, aliases, and ref.define.
 
 // CHECK-LABEL: "TestP"
 firrtl.circuit "TestP" {
@@ -75,13 +95,32 @@ firrtl.circuit "ExtModule" {
 
 // -----
 
-// Extmodule using rwprobe
+// Extmodule RWProbe lowering adds a force-control port.
 
 // CHECK-LABEL: "ExtModuleRW"
 firrtl.circuit "ExtModuleRW" {
   // CHECK: out ro: !firrtl.uint<1>
   // CHECK-SAME: out rw: !firrtl.uint<2>
+  // CHECK-SAME: in rw_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>
   firrtl.extmodule @ExtModuleRW(out ro: !firrtl.probe<uint<1>>, out rw: !firrtl.rwprobe<uint<2>>)
+}
+
+// -----
+
+// An extmodule RWProbe's force-control port propagates to its instance.
+
+// CHECK-LABEL: "ExtModuleRWRead"
+firrtl.circuit "ExtModuleRWRead" {
+  // CHECK: firrtl.extmodule @ExtRW(out rw: !firrtl.uint<2>, in rw_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>)
+  firrtl.extmodule @ExtRW(out rw: !firrtl.rwprobe<uint<2>>)
+  // CHECK-LABEL: firrtl.module @ExtModuleRWRead
+  firrtl.module @ExtModuleRWRead(out %o: !firrtl.uint<2>) {
+    // CHECK: %[[EXT:.+]], %{{.+}} = firrtl.instance e @ExtRW(out rw: !firrtl.uint<2>, in rw_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>)
+    %e_rw = firrtl.instance e @ExtRW(out rw: !firrtl.rwprobe<uint<2>>)
+    %r = firrtl.ref.resolve %e_rw : !firrtl.rwprobe<uint<2>>
+    // CHECK-NEXT: firrtl.matchingconnect %o, %[[EXT]]
+    firrtl.matchingconnect %o, %r : !firrtl.uint<2>
+  }
 }
 
 // -----
@@ -122,15 +161,15 @@ firrtl.circuit "DbgsMemPort" {
 }
 
 // -----
-// RWProbe exported out top should be supported.
+// Exported RWProbe lowering adds an appended force-control input.
 
 // CHECK-LABEL: "ForceableRWProbeExport"
 firrtl.circuit "ForceableRWProbeExport" {
-  // CHECK: @ForceableRWProbeExport(out %p: !firrtl.uint<2>)
+  // CHECK: @ForceableRWProbeExport(out %p: !firrtl.uint<2>, in %p_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>)
   firrtl.module @ForceableRWProbeExport(out %p : !firrtl.rwprobe<uint<2>>) {
     // CHECK-NEXT: %w = firrtl.wire : !firrtl.uint<2>
-    // CHECK-NEXT: firrtl.matchingconnect %p, %w
-    // CHECK-NEXT: }
+    // CHECK-NEXT: %w_forced = firrtl.wire : !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.matchingconnect %p, %w_forced
     %w, %w_f = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %p, %w_f : !firrtl.rwprobe<uint<2>>
   }
@@ -138,8 +177,30 @@ firrtl.circuit "ForceableRWProbeExport" {
 
 // -----
 
-// Test use of forceable + rwprobe + read works.
-// Forceable is handled by using passive copy of data result.
+// A force-control port is renamed when its generated name collides.
+// CHECK-LABEL: "ForceControlPortNameCollision"
+firrtl.circuit "ForceControlPortNameCollision" {
+  // CHECK: firrtl.module private @Child(in %p_force_ctrl: !firrtl.uint<1>, out %p: !firrtl.uint<8>, in %p_force_ctrl_0: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<8>, clk: clock>)
+  firrtl.module private @Child(in %p_force_ctrl: !firrtl.uint<1>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module @ForceControlPortNameCollision(in %clock: !firrtl.clock,
+                                                in %en: !firrtl.uint<1>,
+                                                in %value: !firrtl.uint<8>,
+                                                out %o: !firrtl.uint<8>) {
+    %i_dummy, %i_p = firrtl.instance i @Child(in p_force_ctrl: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<8>>)
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.matchingconnect %i_dummy, %zero : !firrtl.uint<1>
+    firrtl.ref.force %clock, %en, %i_p, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    %r = firrtl.ref.resolve %i_p : !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %o, %r : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Check reading a forceable RWProbe.
 
 // CHECK-LABEL: "ForceableToRead"
 firrtl.circuit "ForceableToRead" {
@@ -155,18 +216,17 @@ firrtl.circuit "ForceableToRead" {
 
 // -----
 
-// Check rwprobe operation.
+// Check RWProbe lowering and its force-control port.
 
 // CHECK-LABEL: "RWProbeOp"
 firrtl.circuit "RWProbeOp" {
-  // CHECK: @RWProbeOp(out %p: !firrtl.uint<2>)
+  // CHECK: @RWProbeOp(out %p: !firrtl.uint<2>, in %p_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>)
   firrtl.module @RWProbeOp(out %p: !firrtl.rwprobe<uint<2>>) {
-    // CHECK-NEXT: %w = firrtl.wire sym @sym
-    // CHECK-NEXT: firrtl.matchingconnect %p, %w
-    // CHECK-NEXT: }
+    // CHECK-NEXT: %w = firrtl.wire sym @sym : !firrtl.uint<2>
+    // CHECK-NEXT: %w_forced = firrtl.wire : !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.matchingconnect %p, %w_forced
     %w = firrtl.wire sym @sym : !firrtl.uint<2>
     %rwprobe = firrtl.ref.rwprobe <@RWProbeOp::@sym> : !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %p, %rwprobe : !firrtl.rwprobe<uint<2>>
   }
 }
-
