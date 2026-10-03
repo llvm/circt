@@ -374,7 +374,8 @@ static bool hasStructType(Type type) {
           [](auto parentType) {
             return hasStructType(parentType.getElementType());
           })
-      .Case<StructType, UnionType, EnumType, TypeAliasType>([](auto) { return true; })
+      .Case<StructType, UnionType, EnumType, TypeAliasType>(
+          [](auto) { return true; })
       .Default([](auto) { return false; });
 }
 // NOLINTEND(misc-no-recursion)
