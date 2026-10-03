@@ -670,9 +670,9 @@ static LogicalResult processBuffer(
           llvm::errs() << "invalid integer argument: '" << val << "'\n";
           return failure();
         }
-        if (apVal.getBitWidth() > width) {
+        if (apVal.getActiveBits() > width) {
           llvm::errs() << "integer argument '" << val << "' (required width "
-                       << apVal.getBitWidth() << ") is too large for type '"
+                       << apVal.getActiveBits() << ") is too large for type '"
                        << type << "'\n";
           return failure();
         }
