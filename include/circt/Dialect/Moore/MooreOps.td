@@ -2457,6 +2457,36 @@ def OpenUArrayFromUnpackedArrayOp: MooreOp<"open_uarray_from_uarray",
   }];
 }
 
+def PackedToOpenArrayOp : MooreOp<"packed_to_open_array", [Pure]> {
+  let summary = "Create a packed open array from a packed bit vector";
+  let description = [{
+    Creates a packed open array of single-bit elements from a plain packed
+    bit vector, unpacking the vector's bits into the array's elements.
+
+    Needed when a packed bit vector is passed as the actual argument to a
+    DPI import whose formal parameter is a packed open array:
+
+    ```
+    import "DPI-C" function void packed_bits_fn(input bit [] data);
+    bit [7:0] pdata;
+    packed_bits_fn(pdata); // pdata: !moore.i8 -> !moore.open_array<i1>
+    ```
+
+    Unlike OpenUArrayFromUnpackedArrayOp above, there is no array-typed
+    operand to reinterpret here -- the input's bits directly become the
+    result's elements -- so this needs a real, imperatively-verified
+    conversion op rather than a TypesMatchWith-style cast.
+  }];
+
+  let arguments = (ins IntType:$input);
+  let results = (outs OpenArrayType:$output);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($output)
+  }];
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//
