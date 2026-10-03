@@ -986,6 +986,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %w, %0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
 
+  firrtl.module private @InvalidClock() {
+    %a = firrtl.wire : !firrtl.clock
+    %b = firrtl.invalidvalue : !firrtl.clock
+    firrtl.strictconnect %a, %b : !firrtl.clock
+  }
+
   // CHECK-LABEL: ASQ
   // https://github.com/llvm/circt/issues/699
   firrtl.module private @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
