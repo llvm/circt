@@ -14,6 +14,10 @@
 #include "mlir/Pass/PassInstrumentation.h"
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/Timer.h"
+
+#include <iomanip>
+#include <sstream>
 
 namespace circt {
 // This class prints logs before and after of pass executions when its pass
@@ -28,13 +32,22 @@ class VerbosePassInstrumentation : public mlir::PassInstrumentation {
   int level = 0;
   const char *toolName;
 
+  void emitToolNameAndTimestamp(llvm::raw_fd_ostream &os, TimePoint &now) {
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&time), "%Y-%m-%d %X");
+
+    os << "[" << ss.str() << ":" << toolName << "] ";
+  }
+
 public:
   VerbosePassInstrumentation(const char *toolName) : toolName(toolName){};
   void runBeforePass(Pass *pass, Operation *op) override {
     if (isa<LoggedOpTypes...>(op)) {
-      timePoints.push_back(TimePoint::clock::now());
+      auto now = TimePoint::clock::now();
+      timePoints.push_back(now);
       auto &os = llvm::errs();
-      os << llvm::format("[%s] ", toolName);
+      emitToolNameAndTimestamp(os, now);
       os.indent(2 * level++);
       os << "Running \"";
       pass->printAsTextualPipeline(llvm::errs());
@@ -46,10 +59,10 @@ public:
     using namespace std::chrono;
     if (isa<LoggedOpTypes...>(op)) {
       auto &os = llvm::errs();
-      auto elapsed = duration<double>(TimePoint::clock::now() -
-                                      timePoints.pop_back_val()) /
-                     seconds(1);
-      os << llvm::format("[%s] ", toolName);
+      auto now = TimePoint::clock::now();
+      emitToolNameAndTimestamp(os, now);
+      auto elapsed =
+          duration<double>(now - timePoints.pop_back_val()) / seconds(1);
       os.indent(2 * --level);
       os << "-- Done in " << llvm::format("%.3f", elapsed) << " sec\n";
     }
