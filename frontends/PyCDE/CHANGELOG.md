@@ -1,5 +1,21 @@
 # PyCDE changelog
 
+## 0.12.1
+
+### Breaking changes
+
+- **ESI manifests now report ABI version 1.** The manifest's `apiVersion`
+  field changes from 0 to 1, with matching updates to the MMIO and cosimulation
+  version metadata. This marks the compatibility break caused by the CIRCT
+  union-layout bug fix included in PyCDE 0.12.0; it does not introduce another
+  layout change ([#11225](https://github.com/llvm/circt/pull/11225)).
+
+  **Migration:** Regenerate hardware with PyCDE 0.12.1 or newer when using an
+  ESI runtime that requires ABI version 1. PyCDE 0.12.0 has the corrected union
+  layout but still emits version-0 manifests, which that runtime rejects.
+  Update the compiler and runtime together rather than editing manifest
+  version fields by hand.
+
 ## 0.12.0
 
 ### Breaking changes

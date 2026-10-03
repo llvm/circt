@@ -1,6 +1,27 @@
+import json
+
 import pytest
 
 import esiaccel.types as types
+
+
+def test_manifest_version():
+  ctxt = types.cpp.Context()
+  manifest = types.cpp.Manifest(
+      ctxt, json.dumps({
+          "apiVersion": 1,
+          "types": [],
+          "modules": []
+      }))
+  assert manifest.api_version == 1
+
+
+@pytest.mark.parametrize("version", [0, 2, -1, 1 << 32 | 1, 1.5, "1", None])
+def test_manifest_rejects_incompatible_version(version):
+  ctxt = types.cpp.Context()
+  # Reject the version before parsing any types or design metadata.
+  with pytest.raises(RuntimeError, match="Unsupported ESI ABI version:"):
+    types.cpp.Manifest(ctxt, json.dumps({"apiVersion": version}))
 
 
 def test_types():

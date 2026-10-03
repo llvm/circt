@@ -27,9 +27,6 @@ using namespace esi;
 using namespace esi::services;
 using namespace esi::backends::trace;
 
-// We only support v0.
-constexpr uint32_t ESIVersion = 0;
-
 namespace {
 class TraceChannelPort;
 class TraceEngine;
@@ -178,7 +175,9 @@ public:
   TraceSysInfo(AcceleratorConnection &conn, std::filesystem::path manifestJson)
       : SysInfo(conn), manifestJson(manifestJson) {}
 
-  uint32_t getEsiVersion() const override { return ESIVersion; }
+  uint32_t getEsiVersion() const override {
+    return Manifest(conn.getCtxt(), getJsonManifest()).getApiVersion();
+  }
 
   std::string getJsonManifest() const override {
     // Read in the whole json file and return it.

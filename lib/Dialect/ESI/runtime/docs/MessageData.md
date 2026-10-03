@@ -11,6 +11,18 @@ Goals:
 - Let backends handle multi-segment messages efficiently (scatter-gather,
   chunked DMA) or fall back to flattening.
 
+## ABI compatibility
+
+ESI ABI version 1 marks the compatibility break caused by a CIRCT bug fix:
+Verilog emission for `hw.union` now matches its documented LSB-aligned bitcast
+layout. The runtime previously matched the buggy MSB-aligned emission and must
+be updated accordingly. The version bump distinguishes compatible hardware
+and runtime artifacts; it does not introduce a new union layout.
+
+The compiler manifest, cosimulation metadata, and MMIO header advertise
+version 1; the runtime rejects unsupported manifest and MMIO header versions
+before using their data.
+
 ## Background
 
 The existing `MessageData` is a concrete, value-type class wrapping a

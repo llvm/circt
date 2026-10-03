@@ -49,7 +49,7 @@ classifiers = [
 "Changelog" = "https://github.com/llvm/circt/blob/main/lib/Dialect/ESI/runtime/CHANGELOG.md"
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-xdist", "pycde>=0.11.0"]
+test = ["pytest", "pytest-xdist", "pycde>=0.12.1"]
 
 [project.scripts]
 esiquery = "esiaccel.utils:run_esiquery"
