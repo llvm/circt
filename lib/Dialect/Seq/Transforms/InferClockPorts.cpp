@@ -116,7 +116,7 @@ bool InferClockPortsPass::isRewritable(hw::HWModuleOp module) {
 /// Ports with an inner symbol may be referenced elsewhere, so keep their type.
 bool InferClockPortsPass::canPromote(hw::HWModuleOp module, size_t portId) {
   auto port = module.getPort(portId);
-  return !port.isInOut() && port.type.isInteger(1) && !port.getSym() &&
+  return port.type.isInteger(1) && !port.getSym() &&
          isRewritable(module);
 }
 
