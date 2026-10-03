@@ -262,3 +262,19 @@ print(window_single)
 
 # CHECK: struct { hdr: Bits<8>, tail: Bits<4>}
 print(window_single.lowered_type)
+
+# Passing an existing signal to a type checks its type and returns it unchanged.
+# That doesn't create an op, so it works outside of a generator.
+captured_signals = []
+
+
+@unittestmodule(print=False)
+class CaptureSignal(Module):
+  x = Input(UInt(4))
+
+  @generator
+  def build(ports):
+    captured_signals.append(ports.x)
+
+
+assert UInt(4)(captured_signals[0]) is captured_signals[0]

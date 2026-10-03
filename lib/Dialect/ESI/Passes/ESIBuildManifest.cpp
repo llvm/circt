@@ -74,6 +74,7 @@ private:
   DenseSet<SymbolRefAttr> modules;
 
   hw::HWSymbolCache symCache;
+  bool encounteredError = false;
 };
 } // anonymous namespace
 
@@ -92,6 +93,10 @@ void ESIBuildManifestPass::runOnOperation() {
 
   // JSONify the manifest.
   std::string jsonManifest = json();
+  if (encounteredError) {
+    signalPassFailure();
+    return;
+  }
 
   std::error_code ec;
   llvm::raw_fd_ostream os("esi_system_manifest.json", ec);
@@ -328,10 +333,19 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type,
           .Case([&](hw::UnionType t) {
             m = "union";
             Array fields;
-            for (auto field : t.getElements())
+            for (auto field : t.getElements()) {
+              if (field.offset != 0) {
+                errorOp->emitError()
+                    << "ESI system manifest does not support nonzero union "
+                       "member offsets: "
+                    << t;
+                encounteredError = true;
+                return Object();
+              }
               fields.push_back(
                   Object({{"name", field.name.getValue()},
                           {"type", json(errorOp, field.type, useTable)}}));
+            }
             return Object({{"fields", Value(std::move(fields))}});
           })
           .Case([&](hw::TypeAliasType t) {

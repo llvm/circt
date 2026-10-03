@@ -12,6 +12,20 @@ hw.module @constant(out out: i32) {
 
 // -----
 
+// CHECK-LABEL: hw.module @aggregate_constant(out agg : !hw.struct<a: i5, b: i4>, out field : i5)
+// CHECK-NEXT: %[[AGG:.*]] = hw.aggregate_constant [3 : i5, -2 : i4] : !hw.struct<a: i5, b: i4>
+// CHECK-NEXT: %[[FIELD:.*]] = hw.constant 3 : i5
+// CHECK-NEXT: %[[CAST:.*]] = hw.bitcast %[[FIELD]] : (i5) -> i5
+// CHECK-NEXT: hw.output %[[AGG]], %[[CAST]] : !hw.struct<a: i5, b: i4>, i5
+hw.module @aggregate_constant(out agg: !hw.struct<a: ui5, b: si4>, out field: i5) {
+  %0 = hw.aggregate_constant [3 : ui5, -2 : si4] : !hw.struct<a: ui5, b: si4>
+  %1 = hw.struct_extract %0["a"] : !hw.struct<a: ui5, b: si4>
+  %2 = hw.bitcast %1 : (ui5) -> i5
+  hw.output %0, %2 : !hw.struct<a: ui5, b: si4>, i5
+}
+
+// -----
+
 // CHECK: hw.module @add(in %op0 : i32, in %op1 : i32, out sisi : i32, out siui : i32, out uisi : i32, out uiui : i32) {
 hw.module @add(in %op0 : i32, in %op1 : i32, out sisi : i32, out siui : i32, out uisi : i32, out uiui : i32) {
   %op0Signed = hwarith.cast %op0 : (i32) -> si32
@@ -406,4 +420,26 @@ hw.module @UnpackedArrayInout() {
     %1 = hw.constant 0 : i4
     %2 = sv.array_index_inout %vec_a[%1] : !hw.inout<uarray<16xsi32>>, i4
     %3 = sv.read_inout %2 : !hw.inout<si32>
+}
+
+// -----
+
+// Type aliases of constants are retained with signless inner types.
+// CHECK-LABEL: hw.type_scope @ns {
+// CHECK-NEXT:    hw.typedecl @uint_t : i4
+// CHECK-NEXT:    hw.typedecl @sint_t : i4
+// CHECK-NEXT:  }
+// CHECK-LABEL: hw.module @aliasedConstant
+// CHECK-SAME:    out u : !hw.typealias<@ns::@uint_t, i4>, out s : !hw.typealias<@ns::@sint_t, i4>
+// CHECK:         %[[U:.+]] = hw.constant 5 : !hw.typealias<@ns::@uint_t, i4>
+// CHECK:         %[[S:.+]] = hw.constant -2 : !hw.typealias<@ns::@sint_t, i4>
+// CHECK:         hw.output %[[U]], %[[S]]
+hw.type_scope @ns {
+  hw.typedecl @uint_t : ui4
+  hw.typedecl @sint_t : si4
+}
+hw.module @aliasedConstant(out u: !hw.typealias<@ns::@uint_t, ui4>, out s: !hw.typealias<@ns::@sint_t, si4>) {
+  %0 = hwarith.constant 5 : !hw.typealias<@ns::@uint_t, ui4>
+  %1 = hwarith.constant -2 : !hw.typealias<@ns::@sint_t, si4>
+  hw.output %0, %1 : !hw.typealias<@ns::@uint_t, ui4>, !hw.typealias<@ns::@sint_t, si4>
 }

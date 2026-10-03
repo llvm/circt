@@ -899,10 +899,8 @@ class ChannelWindowedListWrite(Module):
 #
 # The window is a *bare* list of byte-sized items (no static header fields)
 # with an 8-bit count, so both the header frame (a single ui8 count) and each
-# data frame (one ui8) fill exactly one byte with no frame padding. That keeps
-# the on-wire layout unambiguous: a narrower (sub-byte) count would introduce
-# sub-byte frame padding, which the C++ facade codegen does not currently
-# model.
+# data frame (one ui8) fill exactly one byte with no frame padding. The
+# narrow-count probe below covers sub-byte frame padding.
 _MULTIBURST_N_ITEMS = 256
 _MULTIBURST_BULK_WIDTH = 8
 _MULTIBURST_ITEMS_PER_FRAME = 1
@@ -989,12 +987,9 @@ class ChannelMultiBurstListWrite(Module):
 # three bursts (3 + 3 + 1). Unlike `ChannelMultiBurstListWrite` (8-bit,
 # byte-aligned count where every frame fills whole bytes), the header frame
 # here is `{tag: ui16, items_count: ui2}` -- 18 bits of content that does NOT
-# fill the 32-bit data frame. CIRCT lowers the frame union MSB-first, so on the
-# wire `tag` occupies bits [31:16] and the 2-bit count sits at bits [15:14].
-# The C++ facade codegen must place them at exactly those offsets; the old
-# byte-granular layout put the count in the low bits and the HW would read a
-# garbage (zero) count and stall. This probe therefore exercises the sub-byte /
-# misaligned-static-field frame layout end-to-end.
+# fill the 32-bit data frame. The union members share bit zero, so `tag`
+# occupies bits [17:2], the count sits at bits [1:0], and the high bits are
+# padding. This probe exercises that sub-byte frame layout end-to-end.
 _NARROW_TAG = 0xBEEF
 _NARROW_ITEMS = [0x1000 + i for i in range(7)]
 _NARROW_BULK_WIDTH = 2

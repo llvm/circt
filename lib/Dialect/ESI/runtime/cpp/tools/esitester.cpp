@@ -2205,10 +2205,10 @@ struct SerialCoordHeader {
 };
 static_assert(sizeof(SerialCoordHeader) == 10, "Size mismatch");
 struct SerialCoordData {
-  SerialCoordData(uint32_t x, uint32_t y) : _pad_head(0), y(y), x(x) {}
-  uint16_t _pad_head;
+  SerialCoordData(uint32_t x, uint32_t y) : y(y), x(x), _pad_tail(0) {}
   uint32_t y;
   uint32_t x;
+  uint16_t _pad_tail;
 };
 static_assert(sizeof(SerialCoordData) == sizeof(SerialCoordHeader),
               "Size mismatch");
@@ -2295,8 +2295,8 @@ public:
 
 #pragma pack(push, 1)
 struct SerialCoordOutputHeader {
-  uint8_t _pad[6];
   uint16_t coordsCount;
+  uint8_t _pad[6];
 };
 struct SerialCoordOutputData {
   uint32_t y;

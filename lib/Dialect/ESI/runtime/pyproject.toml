@@ -25,6 +25,7 @@ manylinux-x86_64-image = "ghcr.io/circt/images/esiruntime-wheel"
 name = "esiaccel"
 dynamic = ["version"]
 description = "ESI accelerators runtime"
+readme = "README.md"
 authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
 dependencies = []
 requires-python = ">=3.8"
@@ -42,6 +43,10 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
+
+[project.urls]
+"Homepage" = "https://circt.llvm.org/docs/Dialects/ESI/"
+"Changelog" = "https://github.com/llvm/circt/blob/main/lib/Dialect/ESI/runtime/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-xdist", "pycde>=0.12.0"]

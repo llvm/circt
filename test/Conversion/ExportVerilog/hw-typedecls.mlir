@@ -121,3 +121,11 @@ hw.module @testEnumOps(out out1: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum
   %0 = hw.enum.constant A : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
 }
+
+// CHECK-LABEL: module testAliasedConstant
+// CHECK:         output customName out1
+// CHECK:         assign out1 = 32'h2A;
+hw.module @testAliasedConstant(out out1: !hw.typealias<@__hw_typedecls::@qux, i32>) {
+  %0 = hw.constant 42 : !hw.typealias<@__hw_typedecls::@qux, i32>
+  hw.output %0 : !hw.typealias<@__hw_typedecls::@qux, i32>
+}

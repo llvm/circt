@@ -44,10 +44,10 @@ public:
             MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
             MacroErrorOp,
             // Type declarations.
-            PackageOp, InterfaceOp, SVVerbatimSourceOp, InterfaceSignalOp,
-            InterfaceModportOp, InterfaceInstanceOp, GetModportOp,
-            AssignInterfaceSignalOp, ReadInterfaceSignalOp, MacroDeclOp,
-            MacroDefOp, FuncOp, FuncDPIImportOp,
+            PackageOp, PackageExternOp, InterfaceOp, SVVerbatimSourceOp,
+            InterfaceSignalOp, InterfaceModportOp, InterfaceInstanceOp,
+            GetModportOp, AssignInterfaceSignalOp, ReadInterfaceSignalOp,
+            MacroDeclOp, MacroDefOp, FuncOp, FuncDPIImportOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp, AssertPropertyOp, AssumePropertyOp,
@@ -153,6 +153,7 @@ public:
 
   // Type declarations.
   HANDLE(PackageOp, Unhandled);
+  HANDLE(PackageExternOp, Unhandled);
   HANDLE(InterfaceOp, Unhandled);
   HANDLE(SVVerbatimSourceOp, Unhandled);
   HANDLE(InterfaceInstanceOp, Unhandled);

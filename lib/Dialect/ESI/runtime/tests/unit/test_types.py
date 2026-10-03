@@ -128,30 +128,29 @@ def test_union_type():
   assert not valid
 
   # serialize / deserialize round-trip through field "a"
-  # Padding is at LSB (beginning of byte stream), data at MSB (end).
   serialized_a = union_type.serialize({"a": 42})
-  assert len(serialized_a) == 2  # padded to 16-bit union width
-  # Field "a" is 1 byte; padding byte comes first, data byte second.
-  assert serialized_a[0] == 0  # padding byte
-  assert serialized_a[1] == 42  # data byte
+  assert serialized_a == bytearray([42, 0])
   (deserialized, remaining) = union_type.deserialize(serialized_a)
   assert remaining == bytearray()
   assert "a" in deserialized
   assert "b" in deserialized
   assert deserialized["a"] == 42
+  assert deserialized["b"] == 42
 
   # serialize / deserialize round-trip through field "b"
   # Field "b" is 2 bytes (full width), no padding needed.
   serialized_b = union_type.serialize({"b": 0x1234})
   assert len(serialized_b) == 2
   assert serialized_b == bytearray([0x34, 0x12])  # little-endian, no padding
-  (deserialized_b, remaining_b) = union_type.deserialize(serialized_b)
-  assert remaining_b == bytearray()
+  (deserialized_b,
+   remaining_b) = union_type.deserialize(serialized_b + bytearray([0xDE, 0xAD]))
+  assert remaining_b == bytearray([0xDE, 0xAD])
+  assert deserialized_b["a"] == 0x34
   assert deserialized_b["b"] == 0x1234
 
 
 def test_union_padding_with_struct():
-  """Union padding places struct data at MSB when field is narrower."""
+  """Union members share the LSB without changing their internal layout."""
   uint8 = types.UIntType("uint8", 8)
   uint32 = types.UIntType("uint32", 32)
   small_struct = types.StructType("!hw.struct<x: ui8, y: ui8>", [("x", uint8),
@@ -160,19 +159,88 @@ def test_union_padding_with_struct():
                                             ("narrow", small_struct)])
   assert union_type.bit_width == 32
 
-  # Serializing via "narrow" (16 bits) into a 32-bit union:
-  # 2 bytes padding at start, then 2 bytes of struct data.
   serialized = union_type.serialize({"narrow": {"x": 0xAA, "y": 0xBB}})
-  assert len(serialized) == 4
-  assert serialized[0] == 0  # padding
-  assert serialized[1] == 0  # padding
-  # Struct data occupies the last 2 bytes.
-  assert serialized[2:] != bytearray(2)
+  assert serialized == bytearray([0xBB, 0xAA, 0, 0])
 
-  # Deserializing recovers the struct from the MSB portion.
   (result, leftover) = union_type.deserialize(serialized)
   assert leftover == bytearray()
   assert result["narrow"] == {"x": 0xAA, "y": 0xBB}
+  assert result["wide"] == 0xAABB
+
+
+def test_union_signed_variant():
+  union_type = types.UnionType("signed_union",
+                               [("small", types.SIntType("si8", 8)),
+                                ("wide", types.UIntType("ui16", 16))])
+  assert union_type.serialize({"small": -2}) == bytearray([0xFE, 0])
+  result, remaining = union_type.deserialize(bytearray([0x80, 0xAB]))
+  assert result == {"small": -128, "wide": 0xAB80}
+  assert remaining == bytearray()
+
+
+@pytest.mark.parametrize("use_alias", [False, True])
+@pytest.mark.parametrize("union_width", [8, 12, 16])
+def test_union_subbyte_members(use_alias, union_width):
+  signed = types.SIntType("si5", 5)
+  if use_alias:
+    signed = types.TypeAlias("signed_alias", "Signed", signed)
+  union_type = types.UnionType(
+      "subbyte_union",
+      [("signed", signed), ("unsigned", types.UIntType("ui3", 3)),
+       ("bits", types.BitsType("i5", 5)),
+       ("wide", types.UIntType(f"ui{union_width}", union_width))])
+  union_bytes = (union_width + 7) // 8
+  for value in [-16, -7, -1, 0, 7, 15]:
+    serialized = union_type.serialize({"signed": value})
+    assert serialized == bytearray([value & 0x1F]) + bytearray(union_bytes - 1)
+    decoded, remaining = union_type.deserialize(serialized)
+    assert decoded["signed"] == value
+    assert decoded["unsigned"] == value & 7
+    assert decoded["bits"] == bytearray([value & 0x1F])
+    assert remaining == bytearray()
+
+  raw = bytearray([0xBC]) + bytearray([0x0A] * (union_bytes - 1))
+  decoded, remaining = union_type.deserialize(raw + bytearray([0xDE, 0xAD]))
+  assert decoded["signed"] == -4
+  assert decoded["unsigned"] == 4
+  assert decoded["bits"] == bytearray([0x1C])
+  assert remaining == bytearray([0xDE, 0xAD])
+
+  bits = bytearray([0xF9])
+  assert union_type.serialize({"bits": bits}) == (bytearray([0x19]) +
+                                                  bytearray(union_bytes - 1))
+  assert bits == bytearray([0xF9])
+
+  with pytest.raises(ValueError, match="insufficient data for union"):
+    union_type.deserialize(bytearray(union_bytes - 1))
+
+
+def test_union_in_struct():
+  uint8 = types.UIntType("ui8", 8)
+  union_type = types.UnionType("nested_union",
+                               [("small", uint8),
+                                ("wide", types.UIntType("ui16", 16))])
+  struct_type = types.StructType("union_struct", [("tag", uint8),
+                                                  ("payload", union_type),
+                                                  ("tail", uint8)])
+  serialized = struct_type.serialize({
+      "tag": 0x12,
+      "payload": {
+          "small": 0xA5
+      },
+      "tail": 0x87
+  })
+  assert serialized == bytearray([0x87, 0xA5, 0, 0x12])
+  result, remaining = struct_type.deserialize(serialized)
+  assert result == {
+      "tag": 0x12,
+      "payload": {
+          "small": 0xA5,
+          "wide": 0xA5
+      },
+      "tail": 0x87
+  }
+  assert remaining == bytearray()
 
 
 def test_list_type_not_supported_for_host():

@@ -573,4 +573,11 @@ void circt::populateLlhdToCorePipeline(
     modulePM.addPass(mlir::createCSEPass());
     modulePM.addPass(mlir::createCanonicalizerPass());
   }
+
+  if (options.inferClockPorts) {
+    pm.addPass(seq::createInferClockPorts());
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(mlir::createCSEPass());
+    anyPM.addPass(mlir::createCanonicalizerPass());
+  }
 }

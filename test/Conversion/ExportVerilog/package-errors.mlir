@@ -5,3 +5,7 @@
 sv.package @duplicated {}
 emit.file "first.sv" { emit.ref @duplicated }
 emit.file "second.sv" { emit.ref @duplicated }
+
+// External package names cannot be legalized by renaming them.
+// expected-error @+1 {{name "module" is not allowed in Verilog output}}
+sv.package.extern @module {}
