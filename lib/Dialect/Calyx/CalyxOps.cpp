@@ -2960,6 +2960,50 @@ LogicalResult InvokeOp::verify() {
            << "'@" << callee << "'"
            << " is a combinational component and cannot be invoked, which must "
               "have single go port and single done port.";
+  if (auto instanceOp = dyn_cast<InstanceOp>(operation)) {
+    if (auto compInterface = instanceOp.getReferencedComponent()) {
+      if (auto calleeComp =
+              dyn_cast<ComponentOp>(compInterface.getOperation())) {
+        if (auto refCells = getRefCellsMap()) {
+          for (Attribute attr : refCells) {
+            auto dictAttr = cast<DictionaryAttr>(attr);
+            for (NamedAttribute namedAttr : dictAttr) {
+              StringRef calleeRefCellName = namedAttr.getName().getValue();
+
+              Operation *calleeCell = lookupCell(calleeComp, calleeRefCellName);
+
+              if (!calleeCell) {
+                return emitOpError()
+                       << "references cell '" << calleeRefCellName
+                       << "' which does not exist in callee component '"
+                       << instanceOp.getComponentName() << "'.";
+              }
+
+              auto isRefBoolAttr =
+                  calleeCell->getAttrOfType<BoolAttr>("is_ref");
+              bool isUnitAttr = calleeCell->hasAttr("is_ref");
+              bool isRef = false;
+
+              if (isRefBoolAttr) {
+                isRef = isRefBoolAttr.getValue();
+              } else if (isUnitAttr) {
+                isRef = true;
+              }
+
+              if (!isRef) {
+                return emitOpError()
+                       << "attempts to pass a reference to cell '"
+                       << calleeRefCellName << "' in component '"
+                       << instanceOp.getComponentName()
+                       << "', but the target is a localized instance, not a "
+                          "reference cell (missing 'is_ref' attribute).";
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
   auto ports = getPorts();
   auto inputs = getInputs();
