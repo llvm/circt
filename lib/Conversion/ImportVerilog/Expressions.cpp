@@ -351,18 +351,18 @@ struct ExprVisitor {
 
     // Handle string indexing.
     if (isa<moore::StringType>(derefType)) {
-      if (isLvalue) {
-        mlir::emitError(loc) << "string index assignment not supported";
-        return {};
-      }
-
       // Convert the index to an rvalue with the required type (TwoValuedI32).
       auto i32Type = moore::IntType::getInt(builder.getContext(), 32);
       auto index = context.convertRvalueExpression(expr.selector(), i32Type);
       if (!index)
         return {};
 
-      // Create the StringGetOp operation.
+      if (isLvalue) {
+        auto resultType = moore::RefType::get(cast<moore::UnpackedType>(type));
+        return moore::StringExtractRefOp::create(builder, loc, resultType,
+                                                 value, index);
+      }
+
       return moore::StringGetOp::create(builder, loc, value, index);
     }
 
