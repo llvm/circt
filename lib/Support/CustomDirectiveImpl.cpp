@@ -29,6 +29,19 @@ ParseResult circt::parseImplicitSSAName(OpAsmParser &parser, StringAttr &attr) {
   return success();
 }
 
+ParseResult circt::parseImplicitSSANames(OpAsmParser &parser, ArrayAttr &attr) {
+  SmallVector<Attribute> names;
+  unsigned resultIndex = 0;
+  while (resultIndex < parser.getNumResults()) {
+    auto resultName = parser.getResultName(resultIndex++).first;
+    if (!resultName.empty() && isdigit(resultName[0]))
+      resultName = "";
+    names.push_back(parser.getBuilder().getStringAttr(resultName));
+  }
+  attr = parser.getBuilder().getArrayAttr(names);
+  return success();
+}
+
 ParseResult circt::parseImplicitSSAName(OpAsmParser &parser,
                                         NamedAttrList &attrs) {
   if (parser.parseOptionalAttrDict(attrs))
@@ -50,6 +63,11 @@ bool circt::inferImplicitSSAName(OpAsmParser &parser, NamedAttrList &attrs) {
   auto *context = parser.getBuilder().getContext();
   attrs.push_back({StringAttr::get(context, "name"), nameAttr});
   return true;
+}
+
+void circt::printImplicitSSANames(OpAsmPrinter &printer, Operation *op,
+                                  ArrayAttr attr) {
+  // The names are already printed by the standard SSA result syntax.
 }
 
 void circt::printImplicitSSAName(OpAsmPrinter &printer, Operation *op,
