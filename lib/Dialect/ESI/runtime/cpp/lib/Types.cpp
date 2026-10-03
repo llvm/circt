@@ -485,16 +485,9 @@ MutableBitVector UnionType::serialize(const std::any &obj) const {
     }
   }
 
-  MutableBitVector fieldBits = activeType->serialize(activeValue);
-  std::ptrdiff_t unionWidth = getBitWidth();
-  // In a packed union, field data occupies the MSBs and padding (zeros)
-  // occupies the LSBs. Shift field data up by the padding amount.
-  if (fieldBits.width() < static_cast<uint64_t>(unionWidth)) {
-    uint64_t padBits = unionWidth - fieldBits.width();
-    fieldBits <<= padBits;
-    return fieldBits;
-  }
-  return fieldBits;
+  MutableBitVector unionBits(getBitWidth());
+  unionBits |= activeType->serialize(activeValue);
+  return unionBits;
 }
 
 std::any UnionType::deserialize(BitVector &data) const {
@@ -509,12 +502,7 @@ std::any UnionType::deserialize(BitVector &data) const {
   BitVector unionBits = data.slice(0, unionWidth);
   std::map<std::string, std::any> result;
   for (const auto &[fieldName, fieldType] : fields) {
-    // In a packed union, field data is at the MSBs. Skip the LSB padding
-    // to reach each field's data.
-    std::ptrdiff_t fieldWidth = fieldType->getBitWidth();
-    uint64_t padBits = unionWidth - fieldWidth;
-    BitVector fieldData(unionBits);
-    fieldData >>= padBits;
+    BitVector fieldData = unionBits.lsb(fieldType->getBitWidth());
     result[fieldName] = fieldType->deserialize(fieldData);
   }
   data >>= unionWidth;

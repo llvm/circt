@@ -3891,14 +3891,20 @@ ParseResult FIRStmtParser::parseDomainExp(Value &result) {
   return success();
 }
 
-/// ref_expr ::= probe | rwprobe | static_reference
+/// ref_expr ::= 'probe' '(' static_reference ')'
+///          ::= 'rwprobe' '(' static_reference ')'
+///          ::= id
+///          ::= ref_expr '.' id
+///          ::= ref_expr '[' int ']'
 // NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
   auto token = getToken().getKind();
   if (token == FIRToken::lp_probe)
-    return parseProbe(result);
+    return failure(parseProbe(result) ||
+                   parseOptionalExpPostscript(result, /*allowDynamic=*/false));
   if (token == FIRToken::lp_rwprobe)
-    return parseRWProbe(result);
+    return failure(parseRWProbe(result) ||
+                   parseOptionalExpPostscript(result, /*allowDynamic=*/false));
 
   // Default to parsing as static reference expression.
   // Don't check token kind, we need to support literal_identifier and keywords,
@@ -4313,8 +4319,7 @@ ParseResult FIRStmtParser::parseRefDefine() {
   return success();
 }
 
-/// read ::= '(' ref_expr ')'
-/// XXX: spec says static_reference, allow ref_expr anyway for read(probe(x)).
+/// read ::= 'read' '(' ref_expr ')'
 ParseResult FIRStmtParser::parseRefRead(Value &result) {
   auto startTok = consumeToken(FIRToken::lp_read);
 

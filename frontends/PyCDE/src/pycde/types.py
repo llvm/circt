@@ -51,6 +51,13 @@ class Type:
     return self
 
   @property
+  def canonical_type(self) -> Type:
+    """Return this type with all nested type aliases removed."""
+    canonical_type = hw.get_canonical_type(self._type)
+    return self if canonical_type == self._type else _FromCirctType(
+        canonical_type)
+
+  @property
   def bitwidth(self) -> int | None:
     bw = hw.get_bitwidth(self._type)
     return bw if bw >= 0 else None
@@ -71,10 +78,23 @@ class Type:
     assert not isinstance(
         obj, ir.Value
     ), "Not intended to be called on CIRCT Values, only Python objects."
+    from .signals import Signal
+    if not isinstance(obj, Signal):
+      self._check_insertion_point()
     v = self._from_obj_or_sig(obj)
     if name is not None:
       v.name = name
     return v
+
+  def _check_insertion_point(self):
+    """Signals are built from ops which must be inserted into a block (e.g. in
+    a generator). Detached ops are destroyed when the Python objects which own
+    them are, which aborts if they still have uses."""
+    try:
+      ir.InsertionPoint.current
+    except ValueError:
+      raise RuntimeError(f"Cannot create a signal of type '{self}' outside of "
+                         "a generator or other insertion point") from None
 
   def _from_obj_or_sig(self,
                        obj,
@@ -208,6 +228,9 @@ class TypeAlias(Type):
       return self.inner_type.fields
     raise AttributeError("Only struct and union type aliases have fields")
 
+  def __getattr__(self, attrname: str):
+    return getattr(self.inner_type, attrname)
+
   @staticmethod
   def declare_aliases(mod, package_name: typing.Optional[str] = None):
     """Declare all of the registered type aliases in the `sv.package` with the
@@ -257,6 +280,10 @@ class TypeAlias(Type):
   @property
   def inner_type(self):
     return _FromCirctType(self._type.inner_type)
+
+  @property
+  def width(self):
+    return self.inner_type.width
 
   def __repr__(self):
     return f"TypeAlias<'{self.name}', {repr(self.inner_type)}"
@@ -420,6 +447,7 @@ class RegisteredStruct(TypeAlias):
     return inst
 
   def __call__(self, **kwargs):
+    self._check_insertion_point()
     return self._from_obj_or_sig(kwargs)
 
   def _get_value_class(self):

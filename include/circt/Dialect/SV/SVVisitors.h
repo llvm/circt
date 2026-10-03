@@ -34,7 +34,7 @@ public:
             MacroRefExprSEOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp,
             SFormatFOp, ConcatStrOp,
             // Declarations.
-            RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
+            RegOp, WireOp, VarOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
             OrderedOutputOp, IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp,
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
@@ -44,10 +44,10 @@ public:
             MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
             MacroErrorOp,
             // Type declarations.
-            PackageOp, InterfaceOp, SVVerbatimSourceOp, InterfaceSignalOp,
-            InterfaceModportOp, InterfaceInstanceOp, GetModportOp,
-            AssignInterfaceSignalOp, ReadInterfaceSignalOp, MacroDeclOp,
-            MacroDefOp, FuncOp, FuncDPIImportOp,
+            PackageOp, PackageExternOp, InterfaceOp, SVVerbatimSourceOp,
+            InterfaceSignalOp, InterfaceModportOp, InterfaceInstanceOp,
+            GetModportOp, AssignInterfaceSignalOp, ReadInterfaceSignalOp,
+            MacroDeclOp, MacroDefOp, FuncOp, FuncDPIImportOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp, AssertPropertyOp, AssumePropertyOp,
@@ -96,6 +96,7 @@ public:
   // Declarations
   HANDLE(RegOp, Unhandled);
   HANDLE(WireOp, Unhandled);
+  HANDLE(VarOp, Unhandled);
   HANDLE(LogicOp, Unhandled);
   HANDLE(LocalParamOp, Unhandled);
   HANDLE(XMROp, Unhandled);
@@ -152,6 +153,7 @@ public:
 
   // Type declarations.
   HANDLE(PackageOp, Unhandled);
+  HANDLE(PackageExternOp, Unhandled);
   HANDLE(InterfaceOp, Unhandled);
   HANDLE(SVVerbatimSourceOp, Unhandled);
   HANDLE(InterfaceInstanceOp, Unhandled);

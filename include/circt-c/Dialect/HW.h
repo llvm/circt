@@ -67,6 +67,9 @@ MLIR_CAPI_EXPORTED void registerHWPasses(void);
 /// statically computed.
 MLIR_CAPI_EXPORTED int64_t hwGetBitWidth(MlirType);
 
+/// Recursively remove HW type aliases from a type and its subelements.
+MLIR_CAPI_EXPORTED MlirType hwGetCanonicalType(MlirType type);
+
 /// Return true if the specified type can be used as an HW value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType or unknown types from other

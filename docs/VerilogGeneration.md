@@ -97,6 +97,13 @@ The current set of "tool capability" Lowering Options is:
 
 The current set of "style" Lowering Options is:
 
+ * `svVarDeclStyle` (default=`varLogic`). Controls declaration style for `sv.var`:
+   * `varLogic`: Emits `var` for all types (e.g.,`var logic [3:0]` or
+     `var my_struct`).
+   * `logic`: Omits `var` and uses `logic` for integer vectors; types with
+     their own data type have no prefix (`my_struct`).
+   * `reg`: Omits `var` and uses `reg` for integer vectors; types with their
+     own data type have no prefix (`my_struct`).
  * `emittedLineLength` (default=`90`).  This is the target width of lines in an
    emitted Verilog source file in columns.  Zero indicates no wrapping.
    Lengths greater than or equal to 16384 (2^14) are not supported.

@@ -323,6 +323,11 @@ void circtFirtoolOptionsSetDomainMode(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setDomainMode(converted);
 }
 
+void circtFirtoolOptionsSetStripDomain(CirctFirtoolFirtoolOptions options,
+                                       bool value) {
+  unwrap(options)->setStripDomain(value);
+}
+
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//

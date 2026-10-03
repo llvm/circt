@@ -269,26 +269,61 @@ namespace {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttribute(getValueAttr());
+  if (getType() == getValueAttr().getType()) {
+    p.printAttribute(getValueAttr());
+  } else {
+    // The result is a type alias of the value's type.
+    p.printAttributeWithoutType(getValueAttr());
+    p << " : " << getType();
+  }
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  IntegerAttr valueAttr;
-
-  if (parser.parseAttribute(valueAttr, "value", result.attributes) ||
-      parser.parseOptionalAttrDict(result.attributes))
+  auto loc = parser.getCurrentLocation();
+  APInt value;
+  Type type;
+  // Booleans may omit their type, in which case they are `i1`.
+  bool isTrue = succeeded(parser.parseOptionalKeyword("true"));
+  if (isTrue || succeeded(parser.parseOptionalKeyword("false"))) {
+    value = APInt(1, isTrue);
+    if (failed(parser.parseOptionalColon()))
+      type = parser.getBuilder().getI1Type();
+  } else if (parser.parseInteger(value) || parser.parseColon()) {
+    return failure();
+  }
+  if (!type && parser.parseType(type))
+    return failure();
+  if (parser.parseOptionalAttrDict(result.attributes))
     return failure();
 
-  result.addTypes(valueAttr.getType());
+  // The type may be a type alias of an integer type, which determines the
+  // value's type.
+  auto intType = type_dyn_cast<IntegerType>(type);
+  if (!intType)
+    return parser.emitError(loc, "expected an integer type, but got ") << type;
+  unsigned width = intType.getWidth();
+  if (value.isNegative() ? value.getSignificantBits() > width
+                         : value.getActiveBits() > width)
+    return parser.emitError(loc, "constant out of range for type ") << type;
+
+  result.addAttribute("value",
+                      IntegerAttr::get(intType, value.sextOrTrunc(width)));
+  result.addTypes(type);
   return success();
 }
 
 LogicalResult ConstantOp::verify() {
-  // If the result type has a bitwidth, then the attribute must match its width.
-  if (getValue().getBitWidth() != cast<IntegerType>(getType()).getWidth())
-    return emitError(
-        "hw.constant attribute bitwidth doesn't match return type");
+  // The result type may be a type alias of an integer type.
+  auto intType = type_dyn_cast<IntegerType>(getType());
+  if (!intType)
+    return emitError("hw.constant must have an integer result type");
+
+  // The result type must be the same as the attribute's type.
+  if (getValueAttr().getType() != intType)
+    return emitError("hw.constant attribute type ")
+           << getValueAttr().getType() << " doesn't match the result type "
+           << intType;
 
   return success();
 }
@@ -316,25 +351,32 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 /// an int64_t.  Use APInt's instead.
 void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
                        int64_t value) {
-  auto numBits = cast<IntegerType>(type).getWidth();
-  build(builder, result,
-        APInt(numBits, (uint64_t)value, /*isSigned=*/true,
-              /*implicitTrunc=*/true));
+  auto intType = type_cast<IntegerType>(type);
+  build(
+      builder, result, type,
+      builder.getIntegerAttr(intType, APInt(intType.getWidth(), (uint64_t)value,
+                                            /*isSigned=*/true,
+                                            /*implicitTrunc=*/true)));
 }
 
 void ConstantOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  auto intTy = getType();
+  Type intTy = getType();
   auto intCst = getValue();
 
   // Sugar i1 constants with 'true' and 'false'.
-  if (cast<IntegerType>(intTy).getWidth() == 1)
+  if (type_cast<IntegerType>(intTy).getWidth() == 1)
     return setNameFn(getResult(), intCst.isZero() ? "false" : "true");
 
-  // Otherwise, build a complex name with the value and type.
+  // Otherwise, build a complex name with the value and type, using the alias
+  // name for aliased types.
   SmallVector<char, 32> specialNameBuffer;
   llvm::raw_svector_ostream specialName(specialNameBuffer);
-  specialName << 'c' << intCst << '_' << intTy;
+  specialName << 'c' << intCst << '_';
+  if (auto alias = dyn_cast<TypeAliasType>(intTy))
+    specialName << alias.getRef().getLeafReference().getValue();
+  else
+    specialName << intTy;
   setNameFn(getResult(), specialName.str());
 }
 

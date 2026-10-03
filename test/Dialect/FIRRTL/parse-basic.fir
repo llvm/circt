@@ -1099,6 +1099,36 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
    wire inst_rcoa_a : RWProbe<UInt<1>>
    define inst_rcoa_a = rwprobe(rcoa.in.a)
 
+  ; CHECK-LABEL: module private @RefsProbePostfix(
+  ; CHECK-SAME: in %agg: !firrtl.bundle<a: uint<1>, b: uint<2>> sym @[[AGG_SYM:[^,]+]],
+  module RefsProbePostfix :
+    input agg : { a : UInt<1>, b : UInt<2> }
+    input vec : UInt<3>[2]
+    output out_b : UInt<2>
+    output out_v : UInt<3>
+    output out_rw : UInt<2>
+    output p : Probe<UInt<2>>
+
+    ; CHECK-NEXT: %[[AGG_REF:.+]] = firrtl.ref.send %agg
+    ; CHECK-NEXT: %[[AGG_REF_B:.+]] = firrtl.ref.sub %[[AGG_REF]][1] : !firrtl.probe<
+    ; CHECK-NEXT: %[[READ_AGG_REF_B:.+]] = firrtl.ref.resolve %[[AGG_REF_B]]
+    ; CHECK-NEXT: firrtl.matchingconnect %out_b, %[[READ_AGG_REF_B]]
+    connect out_b, read(probe(agg).b)
+    ; CHECK-NEXT: %[[VEC_REF:.+]] = firrtl.ref.send %vec
+    ; CHECK-NEXT: %[[VEC_REF_0:.+]] = firrtl.ref.sub %[[VEC_REF]][0] : !firrtl.probe<
+    ; CHECK-NEXT: %[[READ_VEC_REF_0:.+]] = firrtl.ref.resolve %[[VEC_REF_0]]
+    ; CHECK-NEXT: firrtl.matchingconnect %out_v, %[[READ_VEC_REF_0]]
+    connect out_v, read(probe(vec)[0])
+    ; CHECK-NEXT: %[[AGG_RW:.+]] = firrtl.ref.rwprobe <@RefsProbePostfix::@[[AGG_SYM]]>
+    ; CHECK-NEXT: %[[AGG_RW_B:.+]] = firrtl.ref.sub %[[AGG_RW]][1] : !firrtl.rwprobe<
+    ; CHECK-NEXT: %[[READ_AGG_RW_B:.+]] = firrtl.ref.resolve %[[AGG_RW_B]]
+    ; CHECK-NEXT: firrtl.matchingconnect %out_rw, %[[READ_AGG_RW_B]]
+    connect out_rw, read(rwprobe(agg).b)
+    ; CHECK-NEXT: %[[AGG_REF2:.+]] = firrtl.ref.send %agg
+    ; CHECK-NEXT: %[[AGG_REF2_B:.+]] = firrtl.ref.sub %[[AGG_REF2]][1] : !firrtl.probe<
+    ; CHECK-NEXT: firrtl.ref.define %p, %[[AGG_REF2_B]]
+    define p = probe(agg).b
+
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :
     input in : UInt<1>
