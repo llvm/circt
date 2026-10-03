@@ -108,10 +108,10 @@ DPIFunctionTypeToHWModuleType(const DPIFunctionType &dpiFuncType) {
       break;
     case DPIDirection::InOut:
       hwDir = hw::ModulePort::Direction::Input;
-      Type = hw::InOutType::get(Type);
+      type = hw::InOutType::get(type);
       break;
     }
-    hwPorts.push_back({arg.name, Type, hwDir});
+    hwPorts.push_back({arg.name, type, hwDir});
   }
   return hw::ModuleType::get(dpiFuncType.getContext(), hwPorts);
 }
