@@ -2365,199 +2365,198 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(
+        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+  }
 
-    /// Print an APInt constant.
-    SubExprInfo printConstantScalar(APInt & value, IntegerType type);
+  /// Print an APInt constant.
+  SubExprInfo printConstantScalar(APInt &value, IntegerType type);
 
-    /// Print a constant array.
-    void printConstantArray(ArrayAttr elementValues, Type elementType,
-                            bool printAsPattern, Operation *op);
-    /// Print a constant struct.
-    void printConstantStruct(ArrayRef<hw::detail::FieldInfo> fieldInfos,
-                             ArrayAttr fieldValues, bool printAsPattern,
-                             Operation *op);
-    /// Print an aggregate array or struct constant as the given type.
-    void printConstantAggregate(Attribute attr, Type type, Operation * op);
+  /// Print a constant array.
+  void printConstantArray(ArrayAttr elementValues, Type elementType,
+                          bool printAsPattern, Operation *op);
+  /// Print a constant struct.
+  void printConstantStruct(ArrayRef<hw::detail::FieldInfo> fieldInfos,
+                           ArrayAttr fieldValues, bool printAsPattern,
+                           Operation *op);
+  /// Print an aggregate array or struct constant as the given type.
+  void printConstantAggregate(Attribute attr, Type type, Operation *op);
 
-    using sv::Visitor<ExprEmitter, SubExprInfo>::visitSV;
-    SubExprInfo visitSV(GetModportOp op);
-    SubExprInfo visitSV(SystemFunctionOp op);
-    SubExprInfo visitSV(ReadInterfaceSignalOp op);
-    SubExprInfo visitSV(XMROp op);
-    SubExprInfo visitSV(SFormatFOp op);
-    SubExprInfo visitSV(XMRRefOp op);
-    SubExprInfo visitVerbatimExprOp(Operation * op, ArrayAttr symbols);
-    SubExprInfo visitSV(VerbatimExprOp op) {
-      return visitVerbatimExprOp(op, op.getSymbols());
-    }
-    SubExprInfo visitSV(VerbatimExprSEOp op) {
-      return visitVerbatimExprOp(op, op.getSymbols());
-    }
-    SubExprInfo visitSV(MacroRefExprOp op);
-    SubExprInfo visitSV(MacroRefExprSEOp op);
-    template <typename MacroTy>
-    SubExprInfo emitMacroCall(MacroTy op);
+  using sv::Visitor<ExprEmitter, SubExprInfo>::visitSV;
+  SubExprInfo visitSV(GetModportOp op);
+  SubExprInfo visitSV(SystemFunctionOp op);
+  SubExprInfo visitSV(ReadInterfaceSignalOp op);
+  SubExprInfo visitSV(XMROp op);
+  SubExprInfo visitSV(SFormatFOp op);
+  SubExprInfo visitSV(XMRRefOp op);
+  SubExprInfo visitVerbatimExprOp(Operation *op, ArrayAttr symbols);
+  SubExprInfo visitSV(VerbatimExprOp op) {
+    return visitVerbatimExprOp(op, op.getSymbols());
+  }
+  SubExprInfo visitSV(VerbatimExprSEOp op) {
+    return visitVerbatimExprOp(op, op.getSymbols());
+  }
+  SubExprInfo visitSV(MacroRefExprOp op);
+  SubExprInfo visitSV(MacroRefExprSEOp op);
+  template <typename MacroTy>
+  SubExprInfo emitMacroCall(MacroTy op);
 
-    SubExprInfo visitSV(ConstantXOp op);
-    SubExprInfo visitSV(ConstantZOp op);
-    SubExprInfo visitSV(ConstantStrOp op);
-    SubExprInfo visitSV(ConcatStrOp op);
+  SubExprInfo visitSV(ConstantXOp op);
+  SubExprInfo visitSV(ConstantZOp op);
+  SubExprInfo visitSV(ConstantStrOp op);
+  SubExprInfo visitSV(ConcatStrOp op);
 
-    SubExprInfo visitSV(sv::UnpackedArrayCreateOp op);
-    SubExprInfo visitSV(sv::UnpackedOpenArrayCastOp op) {
-      // Cast op is noop.
-      return emitSubExpr(op->getOperand(0), LowestPrecedence);
-    }
+  SubExprInfo visitSV(sv::UnpackedArrayCreateOp op);
+  SubExprInfo visitSV(sv::UnpackedOpenArrayCastOp op) {
+    // Cast op is noop.
+    return emitSubExpr(op->getOperand(0), LowestPrecedence);
+  }
 
-    // Noop cast operators.
-    SubExprInfo visitSV(ReadInOutOp op) {
-      auto result = emitSubExpr(op->getOperand(0), LowestPrecedence);
-      emitSVAttributes(op);
-      return result;
-    }
-    SubExprInfo visitSV(ArrayIndexInOutOp op);
-    SubExprInfo visitSV(IndexedPartSelectInOutOp op);
-    SubExprInfo visitSV(IndexedPartSelectOp op);
-    SubExprInfo visitSV(StructFieldInOutOp op);
+  // Noop cast operators.
+  SubExprInfo visitSV(ReadInOutOp op) {
+    auto result = emitSubExpr(op->getOperand(0), LowestPrecedence);
+    emitSVAttributes(op);
+    return result;
+  }
+  SubExprInfo visitSV(ArrayIndexInOutOp op);
+  SubExprInfo visitSV(IndexedPartSelectInOutOp op);
+  SubExprInfo visitSV(IndexedPartSelectOp op);
+  SubExprInfo visitSV(StructFieldInOutOp op);
 
-    // Sampled value functions
-    SubExprInfo visitSV(SampledOp op);
+  // Sampled value functions
+  SubExprInfo visitSV(SampledOp op);
 
-    // Time system functions
-    SubExprInfo visitSV(TimeOp op);
-    SubExprInfo visitSV(STimeOp op);
+  // Time system functions
+  SubExprInfo visitSV(TimeOp op);
+  SubExprInfo visitSV(STimeOp op);
 
-    // Other
-    using TypeOpVisitor::visitTypeOp;
-    SubExprInfo visitTypeOp(ConstantOp op);
-    SubExprInfo visitTypeOp(AggregateConstantOp op);
-    SubExprInfo visitTypeOp(BitcastOp op);
-    SubExprInfo visitTypeOp(ParamValueOp op);
-    SubExprInfo visitTypeOp(ArraySliceOp op);
-    SubExprInfo visitTypeOp(ArrayGetOp op);
-    SubExprInfo visitTypeOp(ArrayCreateOp op);
-    SubExprInfo visitTypeOp(ArrayConcatOp op);
-    SubExprInfo visitTypeOp(StructCreateOp op);
-    SubExprInfo visitTypeOp(StructExtractOp op);
-    SubExprInfo visitTypeOp(StructInjectOp op);
-    SubExprInfo visitTypeOp(UnionCreateOp op);
-    SubExprInfo visitTypeOp(UnionExtractOp op);
-    SubExprInfo visitTypeOp(EnumCmpOp op);
-    SubExprInfo visitTypeOp(EnumConstantOp op);
+  // Other
+  using TypeOpVisitor::visitTypeOp;
+  SubExprInfo visitTypeOp(ConstantOp op);
+  SubExprInfo visitTypeOp(AggregateConstantOp op);
+  SubExprInfo visitTypeOp(BitcastOp op);
+  SubExprInfo visitTypeOp(ParamValueOp op);
+  SubExprInfo visitTypeOp(ArraySliceOp op);
+  SubExprInfo visitTypeOp(ArrayGetOp op);
+  SubExprInfo visitTypeOp(ArrayCreateOp op);
+  SubExprInfo visitTypeOp(ArrayConcatOp op);
+  SubExprInfo visitTypeOp(StructCreateOp op);
+  SubExprInfo visitTypeOp(StructExtractOp op);
+  SubExprInfo visitTypeOp(StructInjectOp op);
+  SubExprInfo visitTypeOp(UnionCreateOp op);
+  SubExprInfo visitTypeOp(UnionExtractOp op);
+  SubExprInfo visitTypeOp(EnumCmpOp op);
+  SubExprInfo visitTypeOp(EnumConstantOp op);
 
-    // Comb Dialect Operations
-    using CombinationalVisitor::visitComb;
-    SubExprInfo visitComb(MuxOp op);
-    SubExprInfo visitComb(ReverseOp op);
-    SubExprInfo visitComb(AddOp op) {
-      assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
-      return emitBinary(op, Addition, "+");
-    }
-    SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
-    SubExprInfo visitComb(MulOp op) {
-      assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
-      return emitBinary(op, Multiply, "*");
-    }
-    SubExprInfo visitComb(DivUOp op) {
-      return emitBinary(op, Multiply, "/", EB_RequireUnsignedOperands);
-    }
-    SubExprInfo visitComb(DivSOp op) {
-      return emitBinary(op, Multiply, "/",
-                        EB_RequireSignedOperands | EB_ForceResultSigned);
-    }
-    SubExprInfo visitComb(ModUOp op) {
-      return emitBinary(op, Multiply, "%", EB_RequireUnsignedOperands);
-    }
-    SubExprInfo visitComb(ModSOp op) {
-      return emitBinary(op, Multiply, "%",
-                        EB_RequireSignedOperands | EB_ForceResultSigned);
-    }
-    SubExprInfo visitComb(ShlOp op) {
-      return emitBinary(op, Shift, "<<",
-                        EB_RHS_UnsignedWithSelfDeterminedWidth);
-    }
-    SubExprInfo visitComb(ShrUOp op) {
-      // >> in Verilog is always an unsigned right shift.
-      return emitBinary(op, Shift, ">>",
-                        EB_RHS_UnsignedWithSelfDeterminedWidth);
-    }
-    SubExprInfo visitComb(ShrSOp op) {
-      // >>> is only an arithmetic shift right when both operands are signed.
-      // Otherwise it does a logical shift.
-      return emitBinary(op, Shift, ">>>",
-                        EB_RequireSignedOperands | EB_ForceResultSigned |
-                            EB_RHS_UnsignedWithSelfDeterminedWidth);
-    }
-    SubExprInfo visitComb(AndOp op) {
-      assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
-      return emitBinary(op, And, "&");
-    }
-    SubExprInfo visitComb(OrOp op) {
-      assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
-      return emitBinary(op, Or, "|");
-    }
-    SubExprInfo visitComb(XorOp op) {
-      if (op.isBinaryNot())
-        return emitUnary(op, "~");
-      assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
-      return emitBinary(op, Xor, "^");
-    }
+  // Comb Dialect Operations
+  using CombinationalVisitor::visitComb;
+  SubExprInfo visitComb(MuxOp op);
+  SubExprInfo visitComb(ReverseOp op);
+  SubExprInfo visitComb(AddOp op) {
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, Addition, "+");
+  }
+  SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
+  SubExprInfo visitComb(MulOp op) {
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, Multiply, "*");
+  }
+  SubExprInfo visitComb(DivUOp op) {
+    return emitBinary(op, Multiply, "/", EB_RequireUnsignedOperands);
+  }
+  SubExprInfo visitComb(DivSOp op) {
+    return emitBinary(op, Multiply, "/",
+                      EB_RequireSignedOperands | EB_ForceResultSigned);
+  }
+  SubExprInfo visitComb(ModUOp op) {
+    return emitBinary(op, Multiply, "%", EB_RequireUnsignedOperands);
+  }
+  SubExprInfo visitComb(ModSOp op) {
+    return emitBinary(op, Multiply, "%",
+                      EB_RequireSignedOperands | EB_ForceResultSigned);
+  }
+  SubExprInfo visitComb(ShlOp op) {
+    return emitBinary(op, Shift, "<<", EB_RHS_UnsignedWithSelfDeterminedWidth);
+  }
+  SubExprInfo visitComb(ShrUOp op) {
+    // >> in Verilog is always an unsigned right shift.
+    return emitBinary(op, Shift, ">>", EB_RHS_UnsignedWithSelfDeterminedWidth);
+  }
+  SubExprInfo visitComb(ShrSOp op) {
+    // >>> is only an arithmetic shift right when both operands are signed.
+    // Otherwise it does a logical shift.
+    return emitBinary(op, Shift, ">>>",
+                      EB_RequireSignedOperands | EB_ForceResultSigned |
+                          EB_RHS_UnsignedWithSelfDeterminedWidth);
+  }
+  SubExprInfo visitComb(AndOp op) {
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, And, "&");
+  }
+  SubExprInfo visitComb(OrOp op) {
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, Or, "|");
+  }
+  SubExprInfo visitComb(XorOp op) {
+    if (op.isBinaryNot())
+      return emitUnary(op, "~");
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, Xor, "^");
+  }
 
-    // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
-    // regardless of the operands."
-    SubExprInfo visitComb(ParityOp op) { return emitUnary(op, "^", true); }
+  // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
+  // regardless of the operands."
+  SubExprInfo visitComb(ParityOp op) { return emitUnary(op, "^", true); }
 
-    SubExprInfo visitComb(ReplicateOp op);
-    SubExprInfo visitComb(ConcatOp op);
-    SubExprInfo visitComb(ExtractOp op);
-    SubExprInfo visitComb(ICmpOp op);
+  SubExprInfo visitComb(ReplicateOp op);
+  SubExprInfo visitComb(ConcatOp op);
+  SubExprInfo visitComb(ExtractOp op);
+  SubExprInfo visitComb(ICmpOp op);
 
-    InFlightDiagnostic emitAssignmentPatternContextError(Operation * op) {
-      auto d = emitOpError(op, "must be printed as assignment pattern, but is "
-                               "not printed within an assignment-like context");
-      d.attachNote() << "this is likely a bug in PrepareForEmission, which is "
-                        "supposed to spill such expressions";
-      return d;
-    }
+  InFlightDiagnostic emitAssignmentPatternContextError(Operation *op) {
+    auto d = emitOpError(op, "must be printed as assignment pattern, but is "
+                             "not printed within an assignment-like context");
+    d.attachNote() << "this is likely a bug in PrepareForEmission, which is "
+                      "supposed to spill such expressions";
+    return d;
+  }
 
-    SubExprInfo printStructCreate(
-        ArrayRef<hw::detail::FieldInfo> fieldInfos,
-        llvm::function_ref<void(const hw::detail::FieldInfo &, unsigned)>
-            fieldFn,
-        bool printAsPattern, Operation *op);
+  SubExprInfo printStructCreate(
+      ArrayRef<hw::detail::FieldInfo> fieldInfos,
+      llvm::function_ref<void(const hw::detail::FieldInfo &, unsigned)> fieldFn,
+      bool printAsPattern, Operation *op);
 
-  public:
-    ModuleEmitter & emitter;
+public:
+  ModuleEmitter &emitter;
 
-  private:
-    /// This is set (before a visit method is called) if emitSubExpr would
-    /// prefer to get an output of a specific sign.  This is a hint to cause the
-    /// visitor to change its emission strategy, but the visit method can ignore
-    /// it without a correctness problem.
-    SubExprSignRequirement signPreference = NoRequirement;
+private:
+  /// This is set (before a visit method is called) if emitSubExpr would
+  /// prefer to get an output of a specific sign.  This is a hint to cause the
+  /// visitor to change its emission strategy, but the visit method can ignore
+  /// it without a correctness problem.
+  SubExprSignRequirement signPreference = NoRequirement;
 
-    /// Keep track of all operations emitted within this subexpression for
-    /// location information tracking.
-    SmallPtrSetImpl<Operation *> &emittedExprs;
+  /// Keep track of all operations emitted within this subexpression for
+  /// location information tracking.
+  SmallPtrSetImpl<Operation *> &emittedExprs;
 
-    /// Tokens buffered for inserting casts/parens after emitting children.
-    SmallVector<Token> localTokens;
+  /// Tokens buffered for inserting casts/parens after emitting children.
+  SmallVector<Token> localTokens;
 
-    /// Stores tokens until told to flush.  Uses provided buffer (tokens).
-    BufferingPP buffer;
+  /// Stores tokens until told to flush.  Uses provided buffer (tokens).
+  BufferingPP buffer;
 
-    /// Stream to emit expressions into, will add to buffer.
-    TokenStreamWithCallback<OpLocMap, CallbackDataTy, BufferingPP> ps;
+  /// Stream to emit expressions into, will add to buffer.
+  TokenStreamWithCallback<OpLocMap, CallbackDataTy, BufferingPP> ps;
 
-    /// Tracks whether the expression being emitted is currently within an
-    /// assignment-like context. Certain constructs such as `'{...}` assignment
-    /// patterns are restricted to only appear in assignment-like contexts.
-    /// Others, like packed struct and array constants, can be printed as either
-    /// `{...}` concatenation or `'{...}` assignment pattern, depending on
-    /// whether they appear within an assignment-like context or not.
-    bool isAssignmentLikeContext = false;
-  };
+  /// Tracks whether the expression being emitted is currently within an
+  /// assignment-like context. Certain constructs such as `'{...}` assignment
+  /// patterns are restricted to only appear in assignment-like contexts.
+  /// Others, like packed struct and array constants, can be printed as either
+  /// `{...}` concatenation or `'{...}` assignment pattern, depending on whether
+  /// they appear within an assignment-like context or not.
+  bool isAssignmentLikeContext = false;
+};
 } // end anonymous namespace
 
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
