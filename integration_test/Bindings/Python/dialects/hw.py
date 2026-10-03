@@ -147,7 +147,7 @@ with Context() as ctx, Location.unknown():
       hw.ModulePort(StringAttr.get("in1"), i2, hw.ModulePortDirection.INPUT),
       hw.ModulePort(StringAttr.get("in2"), i32, hw.ModulePortDirection.INPUT),
       hw.ModulePort(StringAttr.get("in3"), hw.InOutType.get(i32),
-                   hw.ModulePortDirection.INPUT)
+                    hw.ModulePortDirection.INPUT)
   ]
   module_type = hw.ModuleType.get(ports)
   # CHECK: !hw.modty<output out : i1, input in1 : i2, input in2 : i32, input in3 : !hw.inout<i32>>
