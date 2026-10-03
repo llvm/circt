@@ -19,6 +19,8 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "slang/analysis/AnalysisManager.h"
+#include "slang/analysis/ValueDriver.h"
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/TimingControl.h"
 #include "slang/text/SourceManager.h"
@@ -381,6 +383,14 @@ struct Context {
   convertCMOSSwitchPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
   LogicalResult
+  convertTranSwitchPrimative(const slang::ast::PrimitiveInstanceSymbol &prim);
+
+  slang::analysis::AnalysisManager &getDriverAnalysis();
+
+  Value buildTriStatePass(Value inVal, Value enVal, moore::UnpackedType dstType,
+                          int inactiveLevel, Location loc);
+
+  LogicalResult
   convertNInputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
   LogicalResult
@@ -493,6 +503,7 @@ struct Context {
 
   const ImportVerilogOptions &options;
   slang::ast::Compilation &compilation;
+  std::optional<slang::analysis::AnalysisManager> driverAnalysis;
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;
 

@@ -2291,6 +2291,9 @@ LogicalResult Context::convertPrimitiveInstance(
   case slang::ast::PrimitiveSymbol::PrimitiveKind::Fixed:
     return this->convertFixedPrimitive(prim);
     break;
+  case slang::ast::PrimitiveSymbol::PrimitiveKind::BiDiSwitch:
+    return this->convertTranSwitchPrimative(prim);
+    break;
   default:
     return mlir::emitError(convertLocation(prim.location))
            << "unsupported instance of primitive `" << prim.primitiveType.name
@@ -2788,6 +2791,189 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
 
   return assignPrimOutputWithDelay(outputVal, outerCond.getResult(),
                                    prim.getDelay(), loc);
+}
+
+slang::analysis::AnalysisManager &Context::getDriverAnalysis() {
+  if (!driverAnalysis) {
+    compilation.freeze();
+    driverAnalysis.emplace();
+    driverAnalysis->analyze(compilation);
+    compilation.unfreeze();
+  }
+  return *driverAnalysis;
+}
+
+Value Context::buildTriStatePass(Value inVal, Value enVal,
+                                 moore::UnpackedType dstType, int inactiveLevel,
+                                 Location loc) {
+  auto enType = cast<moore::IntType>(enVal.getType());
+  Value inactiveConst =
+      moore::ConstantOp::create(builder, loc, enType, inactiveLevel, false);
+
+  auto dstIntType = cast<moore::IntType>(dstType);
+  Value zVal =
+      moore::ConstantOp::create(builder, loc, dstIntType, FVInt::getAllZ(1));
+
+  auto condInactive =
+      moore::CaseEqOp::create(builder, loc, enVal, inactiveConst);
+  auto inactiveOp =
+      moore::ConditionalOp::create(builder, loc, dstType, condInactive);
+  auto &inactiveTrue = inactiveOp.getTrueRegion().emplaceBlock();
+  auto &inactiveFalse = inactiveOp.getFalseRegion().emplaceBlock();
+
+  {
+    OpBuilder::InsertionGuard g(builder);
+    builder.setInsertionPointToStart(&inactiveTrue);
+    moore::YieldOp::create(builder, loc, zVal);
+    builder.setInsertionPointToStart(&inactiveFalse);
+    moore::YieldOp::create(builder, loc,
+                           collapseZToX(builder, loc, inVal, dstType));
+  }
+
+  return inactiveOp.getResult();
+}
+
+LogicalResult Context::convertTranSwitchPrimative(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  assert(prim.primitiveType.name == "tran" ||
+         prim.primitiveType.name == "tranif0" ||
+         prim.primitiveType.name == "tranif1");
+
+  auto loc = convertLocation(prim.location);
+  auto primName = prim.primitiveType.name;
+  auto portConns = prim.getPortConnections();
+
+  if (primName == "tran") {
+    assert(portConns.size() == 2 &&
+           "tran primitives should have exactly 2 ports");
+
+    auto &terminalAExpr =
+        portConns[0]->as<slang::ast::AssignmentExpression>().left();
+    auto &terminalBExpr =
+        portConns[1]->as<slang::ast::AssignmentExpression>().left();
+
+    auto terminalA = convertLvalueExpression(terminalAExpr);
+    if (!terminalA)
+      return failure();
+
+    auto terminalB = convertLvalueExpression(terminalBExpr);
+    if (!terminalB)
+      return failure();
+
+    auto terminalAType =
+        cast<moore::RefType>(terminalA.getType()).getNestedType();
+    auto terminalBType =
+        cast<moore::RefType>(terminalB.getType()).getNestedType();
+
+    if (terminalAType.getBitSize() != 1 || terminalBType.getBitSize() != 1)
+      return mlir::emitError(loc) << "tran switch terminals must be 1 bit";
+
+    if (terminalAType != terminalBType)
+      return mlir::emitError(loc)
+             << "tran between mismatched net types is not yet supported";
+
+    auto netA = terminalA.getDefiningOp<moore::NetOp>();
+    auto netB = terminalB.getDefiningOp<moore::NetOp>();
+
+    if (!netA || !netB)
+      return mlir::emitError(loc)
+             << "tran is only supported between simple net references for now";
+
+    if (netA == netB)
+      return success();
+
+    auto *symBase = terminalBExpr.getSymbolReference();
+    if (!symBase)
+      return mlir::emitError(loc)
+             << "tran terminal must be a simple reference to a net";
+
+    auto *symB = &symBase->as<slang::ast::ValueSymbol>();
+
+    valueSymbols.insert(symB, netA.getResult());
+    netB.getResult().replaceAllUsesWith(netA.getResult());
+    netB.erase();
+
+    return success();
+  }
+
+  assert(portConns.size() == 3 &&
+         "tranif primitives should have exactly 3 ports");
+
+  auto &terminalAExpr =
+      portConns[0]->as<slang::ast::AssignmentExpression>().left();
+  auto &terminalBExpr =
+      portConns[1]->as<slang::ast::AssignmentExpression>().left();
+
+  auto terminalA = convertLvalueExpression(terminalAExpr);
+  if (!terminalA)
+    return failure();
+
+  auto terminalB = convertLvalueExpression(terminalBExpr);
+  if (!terminalB)
+    return failure();
+
+  auto control = convertRvalueExpression(*portConns[2]);
+  if (!control)
+    return failure();
+
+  auto terminalAType =
+      cast<moore::RefType>(terminalA.getType()).getNestedType();
+  auto terminalBType =
+      cast<moore::RefType>(terminalB.getType()).getNestedType();
+  auto controlType = cast<moore::IntType>(control.getType());
+
+  if (terminalAType.getBitSize() != 1 || terminalBType.getBitSize() != 1 ||
+      controlType.getBitSize() != 1)
+    return mlir::emitError(loc)
+           << "tran switch terminals and control must be 1 bit";
+
+  if (terminalAType != terminalBType)
+    return mlir::emitError(loc)
+           << primName << " between mismatched net types is not yet supported";
+
+  auto *symBaseA = terminalAExpr.getSymbolReference();
+  auto *symA = symBaseA ? symBaseA->as_if<slang::ast::ValueSymbol>() : nullptr;
+  auto *symBaseB = terminalBExpr.getSymbolReference();
+  auto *symB = symBaseB ? symBaseB->as_if<slang::ast::ValueSymbol>() : nullptr;
+
+  if (!symA || !symB)
+    return mlir::emitError(loc)
+           << primName
+           << " is only supported between simple net references for now";
+
+  auto countExternalDrivers = [&](const slang::ast::ValueSymbol *sym) {
+    unsigned count = 0;
+    for (auto *d : getDriverAnalysis().getDrivers(*sym))
+      if (d->containingSymbol != &prim)
+        ++count;
+    return count;
+  };
+
+  unsigned driversA = countExternalDrivers(symA);
+  unsigned driversB = countExternalDrivers(symB);
+
+  Value drivenTerminal, undrivenTerminal;
+  if (driversA > 0 && driversB == 0) {
+    drivenTerminal = terminalA;
+    undrivenTerminal = terminalB;
+  } else if (driversB > 0 && driversA == 0) {
+    drivenTerminal = terminalB;
+    undrivenTerminal = terminalA;
+  } else {
+    return mlir::emitError(loc)
+           << primName
+           << " requires exactly one terminal to have an external driver; "
+              "dynamic or ambiguous direction is not yet supported";
+  }
+
+  Value inVal = moore::ReadOp::create(builder, loc, drivenTerminal);
+
+  int inactiveLevel = (primName == "tranif1") ? 0 : 1;
+  Value result =
+      buildTriStatePass(inVal, control, terminalAType, inactiveLevel, loc);
+
+  return assignPrimOutputWithDelay(undrivenTerminal, result, prim.getDelay(),
+                                   loc);
 }
 
 namespace {

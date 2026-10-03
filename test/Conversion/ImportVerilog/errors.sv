@@ -391,9 +391,41 @@ endmodule
 
 // -----
 
-module unsupported_prim(inout A, inout B);
-    // expected-error @below {{unsupported instance of primitive `tran`}}
-    tran u1 (A, B);
+module unsupported_tranif0_prim(inout A, inout B, input C);
+    // expected-error @below {{tranif0 requires exactly one terminal to have an external driver; dynamic or ambiguous direction is not yet supported}}
+    tranif0 u1 (A, B, C);
+endmodule
+
+// -----
+
+module unsupported_tranif1_prim(inout A, inout B, input C);
+    // expected-error @below {{tranif1 requires exactly one terminal to have an external driver; dynamic or ambiguous direction is not yet supported}}
+    tranif1 u1 (A, B, C);
+endmodule
+
+// -----
+
+module unsupported_tran_terminal(output o);
+    wire [1:0] v;
+    wire b;
+    // expected-error @below {{tran is only supported between simple net references for now}}
+    tran (v[0], b);
+    assign o = b;
+endmodule
+
+// -----
+
+// This is the classic bus-mux pattern: two tranif1 instances alternately
+// driving a shared bus from different sources. Each side has an external
+// driver from the other tranif1's perspective, so direction cannot be
+// statically resolved with the current single-driver heuristic. This is
+// expected to be revisited once CIRCT has proper net semantics.
+module unsupported_tranif1_bus_mux(inout a, inout b, input sel, output bus);
+    wire n_sel;
+    assign n_sel = ~sel;
+    // expected-error @below {{tranif1 requires exactly one terminal to have an external driver; dynamic or ambiguous direction is not yet supported}}
+    tranif1 t0 (bus, a, sel);
+    tranif1 t1 (bus, b, n_sel);
 endmodule
 
 // -----

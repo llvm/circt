@@ -652,3 +652,120 @@ module TestBufif1WideEnable(
   // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
   bufif1 bufif1_inst(data_out, data_in, en);
 endmodule
+
+// CHECK-LABEL: moore.module @tran_prim()
+// CHECK: [[A:%.+]] = moore.net wire : <l1>
+// CHECK: [[O:%.+]] = moore.net wire : <l1>
+// CHECK: [[ONE:%.+]] = moore.constant 1 : l1
+// CHECK: moore.assign [[A]], [[ONE]] : l1
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
+// CHECK: moore.assign [[O]], [[RD_A]] : l1
+module tran_prim;
+    wire a, b, o;
+    assign a = 1'b1;
+    tran(a, b);
+    assign o = b;
+endmodule
+
+// CHECK-LABEL: moore.module @tran_prim_reverse_order()
+// CHECK: [[B:%.+]] = moore.net wire : <l1>
+// CHECK: [[O:%.+]] = moore.net wire : <l1>
+// CHECK: [[ONE:%.+]] = moore.constant 1 : l1
+// CHECK: moore.assign [[B]], [[ONE]] : l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
+// CHECK: moore.assign [[O]], [[RD_B]] : l1
+module tran_prim_reverse_order;
+    wire a, b, o;
+    assign b = 1'b1;
+    tran(b, a);
+    assign o = a;
+endmodule
+
+// CHECK-LABEL: moore.module @tran_prim_same_net()
+// CHECK: [[A:%.+]] = moore.net wire : <l1>
+// CHECK-NEXT: moore.output
+module tran_prim_same_net;
+    wire a;
+    tran(a, a);
+endmodule
+
+// CHECK-LABEL: moore.module @tran_prim_ports
+// CHECK-SAME: (in [[A:%.+]] : !moore.ref<l1>, in [[B:%.+]] : !moore.ref<l1>)
+// CHECK: [[A_SHADOW:%.+]] = moore.net name "A" wire : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
+// CHECK: moore.assign [[A_SHADOW]], [[RD_A]] : l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
+// CHECK: moore.assign [[A_SHADOW]], [[RD_B]] : l1
+module tran_prim_ports(inout A, inout B);
+    tran u1 (A, B);
+endmodule
+
+// CHECK-LABEL: moore.module @tranif1_prim
+// CHECK: %bus = moore.net wire : <l1>
+// CHECK: %drv = moore.net wire : <l1>
+// CHECK: %control = moore.net wire : <l1>
+// CHECK: [[RD_CONTROL:%.+]] = moore.read %control : <l1>
+// CHECK: [[RD_DRV:%.+]] = moore.read %drv : <l1>
+// CHECK: [[INACTIVE:%.+]] = moore.constant 0 : l1
+// CHECK: [[Z:%.+]] = moore.constant bZ : l1
+// CHECK: [[COND:%.+]] = moore.case_eq [[RD_CONTROL]], [[INACTIVE]] : l1
+// CHECK: [[RESULT:%.+]] = moore.conditional [[COND]] : i1 -> l1
+// CHECK: moore.yield [[Z]] : l1
+// CHECK: [[INNERX:%.+]] = moore.constant bX : l1
+// CHECK: [[INNERZ:%.+]] = moore.constant bZ : l1
+// CHECK: [[ISZ:%.+]] = moore.case_eq [[RD_DRV]], [[INNERZ]] : l1
+// CHECK: [[INNERRESULT:%.+]] = moore.conditional [[ISZ]] : i1 -> l1
+// CHECK: moore.yield [[INNERX]] : l1
+// CHECK: moore.yield [[RD_DRV]] : l1
+// CHECK: moore.yield [[INNERRESULT]] : l1
+// CHECK: moore.assign %bus, [[RESULT]] : l1
+module tranif1_prim(output o);
+    wire bus, drv, control;
+    assign drv = 1'b1;
+    assign control = 1'b1;
+    tranif1(bus, drv, control);
+    assign o = bus;
+endmodule
+
+// CHECK-LABEL: moore.module @tranif0_prim
+// CHECK: %bus = moore.net wire : <l1>
+// CHECK: %drv = moore.net wire : <l1>
+// CHECK: %control = moore.net wire : <l1>
+// CHECK: [[RD_CONTROL:%.+]] = moore.read %control : <l1>
+// CHECK: [[RD_DRV:%.+]] = moore.read %drv : <l1>
+// CHECK: [[INACTIVE:%.+]] = moore.constant 1 : l1
+// CHECK: [[Z:%.+]] = moore.constant bZ : l1
+// CHECK: [[COND:%.+]] = moore.case_eq [[RD_CONTROL]], [[INACTIVE]] : l1
+// CHECK: [[RESULT:%.+]] = moore.conditional [[COND]] : i1 -> l1
+// CHECK: moore.yield [[Z]] : l1
+// CHECK: [[INNERX:%.+]] = moore.constant bX : l1
+// CHECK: [[INNERZ:%.+]] = moore.constant bZ : l1
+// CHECK: [[ISZ:%.+]] = moore.case_eq [[RD_DRV]], [[INNERZ]] : l1
+// CHECK: [[INNERRESULT:%.+]] = moore.conditional [[ISZ]] : i1 -> l1
+// CHECK: moore.yield [[INNERX]] : l1
+// CHECK: moore.yield [[RD_DRV]] : l1
+// CHECK: moore.yield [[INNERRESULT]] : l1
+// CHECK: moore.assign %bus, [[RESULT]] : l1
+module tranif0_prim(output o);
+    wire bus, drv, control;
+    assign drv = 1'b1;
+    assign control = 1'b0;
+    tranif0(bus, drv, control);
+    assign o = bus;
+endmodule
+
+// CHECK-LABEL: moore.module @tranif1_reverse_prim
+// CHECK: %bus = moore.net wire : <l1>
+// CHECK: %drv = moore.net wire : <l1>
+// CHECK: %control = moore.net wire : <l1>
+// CHECK: moore.assign %bus, {{%.+}} : l1
+module tranif1_reverse_prim(output o);
+    // Same as tranif1_prim, but with the terminal order swapped (drv is
+    // the SECOND terminal instead of the first), exercising the branch
+    // where direction detection picks up the driver on terminal B.
+    wire bus, drv, control;
+    assign drv = 1'b1;
+    assign control = 1'b1;
+    tranif1(drv, bus, control);
+    assign o = bus;
+endmodule
