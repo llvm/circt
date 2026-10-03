@@ -148,4 +148,50 @@ def OutputStreamType : SimTypeDef<"OutputStream"> {
   let mnemonic = "output_stream";
 }
 
+def VariantType : SimTypeDef<"Variant"> {
+  let summary =  "a discriminated (tagged) union";
+  let description = [{
+    A value of variant type either represents a value of one of its
+    alternative types or no value. The value carries a discriminator (tag)
+    indicating which alternative is held or if it is valueless.
+
+    Alternatives are identified by their unique name. There can be multiple
+    distinct alternatives of the same type.
+
+    Variants have value semantics but are designed to facilitate storing
+    union-like values in memory without requiring a specific data layout or
+    encoding of the discriminator.
+
+    ```
+    !sim.variant<a: i32, b: !sim.dstring>
+    ```
+  }];
+
+  let mnemonic = "variant";
+
+  let parameters = (ins
+    ArrayRefParameter<"::circt::sim::VariantAlternative",
+                      "variant alternatives">:$alternatives
+  );
+
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+
+  let extraClassDeclaration = [{
+    using Alternative = ::circt::sim::VariantAlternative;
+
+    /// Return the alternative with the given name. Returns a null alternative
+    /// if no such alternative exists.
+    Alternative getAlternative(::mlir::StringRef name);
+
+    /// Return the type of the alternative with the given name. Returns a null
+    /// type if no such alternative exists.
+    ::mlir::Type getAlternativeType(::mlir::StringRef name);
+
+    /// Return the index of the alternative with the given name, if it exists.
+    std::optional<uint32_t> getAlternativeIndex(::mlir::StringRef name);
+    std::optional<uint32_t> getAlternativeIndex(::mlir::StringAttr name);
+  }];
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD
