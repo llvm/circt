@@ -31,8 +31,8 @@ TEST(SCModuleOpTest, GetPortListArgNumIsDirectionRelative) {
       {{builder.getStringAttr("in0"), i1, ModulePort::Direction::Input}});
   ports.push_back(
       {{builder.getStringAttr("out0"), i1, ModulePort::Direction::Output}});
-  ports.push_back(
-      {{builder.getStringAttr("inout0"), hw::InOutType::get(i1), ModulePort::Direction::Input}});
+  ports.push_back({{builder.getStringAttr("inout0"), hw::InOutType::get(i1),
+                    ModulePort::Direction::Input}});
   ports.push_back(
       {{builder.getStringAttr("in1"), i1, ModulePort::Direction::Input}});
   ports.push_back(
