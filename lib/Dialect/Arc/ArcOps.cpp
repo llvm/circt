@@ -638,9 +638,9 @@ SimSetInputOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("port is not an input port");
 
   auto portType = port->type;
-  if (auto inoutType = dyn_cast<hw::InOutType>(portType)) 
+  if (auto inoutType = dyn_cast<hw::InOutType>(portType))
     portType = inoutType.getElementType();
-  
+
   if (portType != getValue().getType())
     return emitOpError(
                "mismatched types between value and model port, port expects ")
