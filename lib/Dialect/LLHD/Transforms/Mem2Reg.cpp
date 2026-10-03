@@ -669,6 +669,9 @@ static Value unpackProjections(OpBuilder &builder, Value value,
                 .Case<SigExtractOp>([&](auto op) {
                   auto type = cast<RefType>(op.getType()).getNestedType();
                   auto width = type.getIntOrFloatBitWidth();
+                  value = builder.createOrFold<hw::BitcastOp>(
+                      op.getLoc(), builder.getIntegerType(op.getInputWidth()),
+                      value);
                   return comb::createDynamicExtract(builder, op.getLoc(), value,
                                                     op.getLowBit(), width);
                 });
@@ -707,9 +710,13 @@ static Value packProjections(OpBuilder &builder, Value value,
                       op.getLoc(), projection.into, op.getFieldAttr(), value);
                 })
                 .Case<SigExtractOp>([&](auto op) {
-                  return comb::createDynamicInject(builder, op.getLoc(),
-                                                   projection.into,
+                  Value bits = builder.createOrFold<hw::BitcastOp>(
+                      op.getLoc(), builder.getIntegerType(op.getInputWidth()),
+                      projection.into);
+                  bits = comb::createDynamicInject(builder, op.getLoc(), bits,
                                                    op.getLowBit(), value);
+                  return builder.createOrFold<hw::BitcastOp>(
+                      op.getLoc(), projection.into.getType(), bits);
                 });
   }
   return value;
