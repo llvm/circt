@@ -394,6 +394,8 @@ struct DriveNode : public OpNode {
 };
 
 struct SignalNode : public OpNode {
+  /// The initializer, or a probe inserted after an uninitialized declaration
+  /// if its value is needed before the first unconditional full write.
   Def *def;
 
   SignalNode(SignalOp op, Def *def, LatticeValue *valueBefore,
@@ -745,6 +747,7 @@ struct Promoter {
   void insertProbeBlocks();
   void insertProbes();
   void insertProbes(BlockEntry *node);
+  void insertProbes(SignalNode *node);
 
   void insertDriveBlocks();
   void insertDrives();
@@ -913,15 +916,13 @@ void Promoter::findPromotableSlots() {
       // We can only promote probes and drives on a locally-defined signal.
       // Other signals, such as the ones brought into a module through a port,
       // have an unknown aliasing relationship with the other ports.
-      auto signalOp = operand.getDefiningOp<llhd::SignalOp>();
-      if (!signalOp)
+      if (!operand.getDefiningOp<llhd::SignalOp>())
         continue;
 
       // Ensure the slot is not used in any way we cannot reason about.
       bool hasProjection = false;
       bool hasBlockingDrive = false;
       bool hasDeltaDrive = false;
-      bool hasConditionalDrive = false;
       auto checkUser = [&](Operation *user) -> bool {
         // We don't support nested probes and drives.
         if (region.isProperAncestor(user->getParentRegion()))
@@ -950,8 +951,6 @@ void Promoter::findPromotableSlots() {
         }
         hasBlockingDrive |= isBlockingDrive(user);
         hasDeltaDrive |= isDeltaDrive(user);
-        if (auto driveOp = dyn_cast<DriveOp>(user))
-          hasConditionalDrive |= bool(driveOp.getEnable());
         return isa<ProbeOp>(user) || isBlockingDrive(user) ||
                isDeltaDrive(user);
       };
@@ -971,12 +970,6 @@ void Promoter::findPromotableSlots() {
       // delta drives. A blocking drive erases the delayed reaching definition,
       // which leaves delta projection drives without a reaching definition.
       if (hasProjection && hasBlockingDrive && hasDeltaDrive)
-        continue;
-
-      // Combining a partial or conditional drive needs the signal's preceding
-      // value. An uninitialized signal has no definition to forward on all
-      // paths, so leave its drives and probes in place.
-      if (!signalOp.getInit() && (hasProjection || hasConditionalDrive))
         continue;
 
       // Mem2Reg may have to materialize a zero value for promoted slots. Skip
@@ -1249,10 +1242,9 @@ void Promoter::constructLattice() {
       if (auto signalOp = dyn_cast<SignalOp>(op)) {
         if (signalOp.getResult() != currentSlot)
           continue;
-        if (!signalOp.getInit())
-          continue;
-        auto *def =
-            lattice->createDef(signalOp.getInit(), DriveCondition::never());
+        Def *def = nullptr;
+        if (auto init = signalOp.getInit())
+          def = lattice->createDef(init, DriveCondition::never());
         auto *node = lattice->createNode<SignalNode>(signalOp, def, valueBefore,
                                                      lattice->createValue());
         valueBefore = node->valueAfter;
@@ -1319,8 +1311,8 @@ void Promoter::propagateBackward(LatticeNode *node) {
   }
 
   // Local signal declarations kill the need for a definition to be available,
-  // since the op is the first time a signal becomes available and the op
-  // provides an initial value as a definition.
+  // since the signal does not exist before its declaration. If an uninitialized
+  // signal's value is needed, insertProbes will probe it after the declaration.
   if (isa<SignalNode>(node)) {
     auto *signal = cast<SignalNode>(node);
     update(signal->valueBefore, false);
@@ -1440,10 +1432,11 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
     return;
   }
 
-  // Signals propagate their initial value as a reaching def. They also kill
-  // any earlier delayed definition for the same slot.
+  // Signals provide their initializer or inserted probe as the starting value
+  // for both blocking and delayed drives. Its "never" condition also clears
+  // any pending drives from an earlier execution of the declaration.
   if (auto *signal = dyn_cast<SignalNode>(node)) {
-    update(signal->valueAfter, signal->def, nullptr);
+    update(signal->valueAfter, signal->def, signal->def);
     return;
   }
 
@@ -1603,13 +1596,27 @@ void Promoter::insertProbeBlocks() {
 }
 
 /// Insert probes wherever a definition is needed for the first time. This is
-/// the case in the entry block, after any suspensions, and after operations
-/// that have unknown effects on memory slots.
+/// the case in the entry block, after any suspensions, and after uninitialized
+/// signal declarations.
 void Promoter::insertProbes() {
   for (auto *node : lattice->nodes) {
     if (auto *entry = dyn_cast<BlockEntry>(node))
       insertProbes(entry);
+    else if (auto *signal = dyn_cast<SignalNode>(node))
+      insertProbes(signal);
   }
+}
+
+/// Read an uninitialized signal's starting value only if it is needed. The
+/// declaration is the earliest point where the signal can be probed.
+void Promoter::insertProbes(SignalNode *node) {
+  if (node->def || !node->valueAfter->needed)
+    return;
+  auto signalOp = node->getSignalOp();
+  OpBuilder builder(signalOp);
+  builder.setInsertionPointAfter(signalOp);
+  auto value = ProbeOp::create(builder, signalOp.getLoc(), signalOp);
+  node->def = lattice->createDef(value, DriveCondition::never());
 }
 
 /// Insert a probe at the beginning of the block for the current slot, if it

@@ -72,6 +72,11 @@ struct UnusedOpPruner {
         blockArgsToEraseIfUnused.erase(it);
         if (!arg.use_empty())
           continue;
+        // Entry block arguments belong to the parent operation's interface,
+        // rather than to incoming branches. Removing them requires updating
+        // that interface and cannot be handled by this utility.
+        if (arg.getOwner()->isEntryBlock())
+          continue;
         if (!llvm::all_of(arg.getOwner()->getUses(), [](auto &blockOperand) {
               return isa<BranchOpInterface>(blockOperand.getOwner());
             }))

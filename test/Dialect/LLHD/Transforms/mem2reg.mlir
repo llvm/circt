@@ -1392,8 +1392,8 @@ hw.module private @Timeout_10314() {
   hw.output
 }
 
-// A signal with no initializer has no value to forward into a partial drive.
-// Keep the signal when it is declared on only one branch of the process.
+// Probe an uninitialized signal after its declaration, even when it is only
+// declared on one branch. Preserve the bits not overwritten by a partial drive.
 // CHECK-LABEL: @UninitializedPartialDrive
 hw.module @UninitializedPartialDrive() {
   %time = llhd.constant_time <0ns, 0d, 1e>
@@ -1403,14 +1403,127 @@ hw.module @UninitializedPartialDrive() {
   llhd.process {
     cf.cond_br %false, ^bb1, ^bb2
   ^bb1:
-    // CHECK: %[[SIG:.+]] = llhd.sig : <i32>
+    // CHECK: ^bb1:
+    // CHECK-NEXT: %[[SIG:.+]] = llhd.sig : <i32>
     %sig = llhd.sig : <i32>
-    // CHECK: %[[PART:.+]] = llhd.sig.extract %[[SIG]]
+    // CHECK-NEXT: [[INIT:%.+]] = llhd.prb %[[SIG]] : i32
+    // CHECK-NEXT: [[HIGH:%.+]] = comb.extract [[INIT]] from 12 : (i32) -> i20
+    // CHECK-NEXT: [[VALUE:%.+]] = comb.concat [[HIGH]], %c0_i12 : i20, i12
     %part = llhd.sig.extract %sig from %offset : <i32> -> <i12>
-    // CHECK: llhd.drv %[[PART]],
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %[[SIG]], [[VALUE]]
     llhd.drv %part, %zero after %time : i12
     cf.br ^bb2
   ^bb2:
+    llhd.halt
+  }
+}
+
+// A full write supplies the value needed by a subsequent conditional write,
+// even if the signal has no initializer. No probe is needed.
+// CHECK-LABEL: @UninitializedWrittenBeforeConditionalDrive
+hw.module @UninitializedWrittenBeforeConditionalDrive(in %u: i42, in %v: i42, in %q: i1) {
+  %time = llhd.constant_time <0ns, 0d, 1e>
+  %sig = llhd.sig : <i42>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[VALUE:%.+]] = comb.mux %q, %v, %u : i42
+    llhd.drv %sig, %u after %time : i42
+    llhd.drv %sig, %v after %time if %q : i42
+    %value = llhd.prb %sig : i42
+    // CHECK-NEXT: call @use_i42([[VALUE]])
+    func.call @use_i42(%value) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %sig, [[VALUE]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// A full write also supplies the value for a subsequent partial write. The
+// local signal can be removed without probing its unspecified initial value.
+// CHECK-LABEL: @UninitializedWrittenBeforePartialDrive
+hw.module @UninitializedWrittenBeforePartialDrive(in %u: !hw.array<4xi42>, in %v: i42, in %i: i2) {
+  %time = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: llhd.process
+  llhd.process {
+    %sig = llhd.sig : <!hw.array<4xi42>>
+    llhd.drv %sig, %u after %time : !hw.array<4xi42>
+    %part = llhd.sig.array_get %sig[%i] : <!hw.array<4xi42>>
+    // CHECK-NEXT: [[VALUE:%.+]] = hw.array_inject %u[%i], %v
+    llhd.drv %part, %v after %time : i42
+    %value = llhd.prb %sig : !hw.array<4xi42>
+    // CHECK-NEXT: call @use_array_i42([[VALUE]])
+    func.call @use_array_i42(%value) : (!hw.array<4xi42>) -> ()
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Reentering the declaration starts a new signal lifetime. Each iteration
+// must probe the new signal for the value forwarded when the drive is disabled.
+// CHECK-LABEL: @UninitializedConditionalDriveInLoop
+hw.module @UninitializedConditionalDriveInLoop(in %v: i42, in %q: i1, in %again: i1) {
+  %time = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: cf.br ^bb1
+    cf.br ^bb1
+  ^bb1:
+    // CHECK-NEXT: ^bb1:
+    // CHECK-NEXT: %sig = llhd.sig : <i42>
+    %sig = llhd.sig : <i42>
+    // CHECK-NEXT: [[INIT:%.+]] = llhd.prb %sig : i42
+    // CHECK-NEXT: [[VALUE:%.+]] = comb.mux %q, %v, [[INIT]] : i42
+    llhd.drv %sig, %v after %time if %q : i42
+    %value = llhd.prb %sig : i42
+    // CHECK-NEXT: call @use_i42([[VALUE]])
+    func.call @use_i42(%value) : (i42) -> ()
+    cf.cond_br %again, ^bb1, ^bb2
+  ^bb2:
+    llhd.halt
+  }
+}
+
+// A delayed partial drive updates the pending value, while probes still see
+// the starting value. Both values need the read after the local declaration.
+// CHECK-LABEL: @UninitializedDelayedPartialDrive
+hw.module @UninitializedDelayedPartialDrive(in %v: i42, in %i: i2) {
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: %sig = llhd.sig : <!hw.array<4xi42>>
+    %sig = llhd.sig : <!hw.array<4xi42>>
+    // CHECK-NEXT: [[INIT:%.+]] = llhd.prb %sig
+    %part = llhd.sig.array_get %sig[%i] : <!hw.array<4xi42>>
+    // CHECK-NEXT: [[VALUE:%.+]] = hw.array_inject [[INIT]][%i], %v
+    llhd.drv %part, %v after %time : i42
+    %value = llhd.prb %sig : !hw.array<4xi42>
+    // CHECK-NEXT: call @use_array_i42([[INIT]])
+    func.call @use_array_i42(%value) : (!hw.array<4xi42>) -> ()
+    // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK-NEXT: llhd.drv %sig, [[VALUE]] after [[TIME]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// An explicit initializer likewise supplies the starting value for delayed
+// partial writes, so a read of the signal can be forwarded to the initializer.
+// Removing the dead signal and drives must preserve unused module arguments.
+// CHECK-LABEL: @InitializedDelayedPartialDrive
+// CHECK-SAME: (in %u : !hw.array<4xi42>, in %v : i42, in %i : i2)
+hw.module @InitializedDelayedPartialDrive(in %u: !hw.array<4xi42>, in %v: i42, in %i: i2) {
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK: llhd.process
+  llhd.process {
+    %sig = llhd.sig %u : <!hw.array<4xi42>>
+    %part = llhd.sig.array_get %sig[%i] : <!hw.array<4xi42>>
+    llhd.drv %part, %v after %time : i42
+    %value = llhd.prb %sig : !hw.array<4xi42>
+    // CHECK-NEXT: call @use_array_i42(%u)
+    func.call @use_array_i42(%value) : (!hw.array<4xi42>) -> ()
+    // CHECK-NEXT: llhd.halt
     llhd.halt
   }
 }
