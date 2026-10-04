@@ -22,7 +22,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 import typing
 
 MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
-VersionNumber = 0  # Version 0: format subject to change
+VersionNumber = 1  # Keep in sync with circt::esi::esiApiVersion.
 
 IndirectionMagicNumber = 0x312bf0cc_E5100E51  # random + ESI__ESI
 IndirectionVersionNumber = 0  # Version 0: format subject to change
@@ -602,7 +602,7 @@ class ChannelMMIO(esi.ServiceImplementation):
   Implementation-defined MMIO layout:
     - 0x0: 0 constant
     - 0x8: Magic number (0x207D98E5_E5100E51)
-    - 0x12: ESI version number (0)
+    - 0x10: ESI version number (1)
     - 0x18: Location of the manifest ROM (absolute address)
 
     - 0x100: Start of MMIO space for requests. Mapping is contained in the

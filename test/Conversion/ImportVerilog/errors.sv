@@ -298,7 +298,7 @@ endmodule
 
 module multi_delay_input_prim;
     logic A, B, Q;
-    // expected-error @below {{only n-input primitives that specify a single delay are currently supported.}}
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
     and #(5, 5) a (Q, A, B);
 endmodule
 
@@ -307,7 +307,7 @@ endmodule
 
 module multi_delay_noutput_prim;
     wire A, Q;
-    // expected-error @below {{only n-output primitives that specify a single delay are currently supported.}}
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
     not #(5, 5) n (Q, A);
 endmodule
 
@@ -315,8 +315,24 @@ endmodule
 
 module multi_delay_threestate_prim;
     wire A, E, Q;
-    // expected-error @below {{only three-state primitives that specify a single delay are currently supported}}
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
     bufif0 #(5, 5, 5) b (Q, A, E);
+endmodule
+
+// -----
+
+module multi_delay_mos_prim;
+    wire A, E, Q;
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
+    pmos #(5, 5, 5) p (Q, A, E);
+endmodule
+
+// -----
+
+module multi_delay_cmos_prim;
+    wire A, N, P, Q;
+    // expected-error @below {{only primitives that specify a single delay are currently supported.}}
+    cmos #(5, 5, 5) c (Q, A, N, P);
 endmodule
 
 // -----
@@ -335,6 +351,42 @@ module non_integral_output_threestate_prim;
     wire A, E;
     // expected-error @below {{output of a three-state gate primitive must be 1 bit}}
     notif0 n (Q, A, E);
+endmodule
+
+// -----
+
+module wide_output_mos_prim;
+    wire [1:0] Q;
+    wire A, E;
+    // expected-error @below {{MOS switch output must be 1 bit}}
+    nmos n (Q, A, E);
+endmodule
+
+// -----
+
+module non_integral_output_mos_prim;
+    real Q;
+    wire A, E;
+    // expected-error @below {{MOS switch output must be 1 bit}}
+    pmos p (Q, A, E);
+endmodule
+
+// -----
+
+module wide_output_cmos_prim;
+    wire [1:0] Q;
+    wire A, N, P;
+    // expected-error @below {{CMOS switch output must be 1 bit}}
+    cmos c (Q, A, N, P);
+endmodule
+
+// -----
+
+module non_integral_output_cmos_prim;
+    real Q;
+    wire A, N, P;
+    // expected-error @below {{CMOS switch output must be 1 bit}}
+    rcmos c (Q, A, N, P);
 endmodule
 
 // -----
@@ -414,4 +466,17 @@ module UnsupportedOutputArgument;
   int q[$];
   // expected-error @below {{queue lvalue range selections are not supported}}
   initial f(q[0:1]);
+endmodule
+
+// -----
+
+typedef struct packed { bit x; bit y; } Pair;
+
+function automatic void useRef(ref Pair p);
+endfunction
+
+module Foo;
+  bit [1:0] z;
+  // expected-error @below {{ref argument `p` expects '!moore.ref<struct<{x: i1, y: i1}>>' but call provides '!moore.ref<i2>'}}
+  initial useRef(z);
 endmodule

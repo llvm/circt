@@ -37,6 +37,10 @@ void registerHWPasses() { registerPasses(); }
 
 int64_t hwGetBitWidth(MlirType type) { return getBitWidth(unwrap(type)); }
 
+MlirType hwGetCanonicalType(MlirType type) {
+  return wrap(getCanonicalType(unwrap(type)));
+}
+
 bool hwTypeIsAValueType(MlirType type) { return isHWValueType(unwrap(type)); }
 
 bool hwTypeIsAArrayType(MlirType type) { return isa<ArrayType>(unwrap(type)); }

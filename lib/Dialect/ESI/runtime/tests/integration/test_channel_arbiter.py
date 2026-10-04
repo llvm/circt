@@ -37,14 +37,17 @@ NUM_INPUTS = 4  # power-of-two ("balanced") input count.
 ODD_NUM_INPUTS = 3  # non-power-of-two ("unbalanced") input count.
 PIPE_NUM_INPUTS = 6  # input count for the pipelined-mux-tree variant.
 WIDE_NUM_INPUTS = 13  # wide fan-in; must match hw/channel_arbiter.py.
+WIDE_FANIN_NUM_INPUTS = 17  # above the wide-fan-in threshold; must match hw.
 TOKEN_NUM_INPUTS = 5  # input count for the zero-width (i0) token variant.
 TOKENS_PER_INPUT = 8  # tokens each producer emits in the token test.
 THROUGHPUT_NUM_INPUTS = 4  # must match hw/channel_arbiter.py.
 THROUGHPUT_WINDOW = 1000  # measurement window in cycles; must match hw.
 
 
-def _check_mux(conn: AcceleratorConnection, dut_name: str,
-               num_inputs: int) -> None:
+def _check_mux(conn: AcceleratorConnection,
+               dut_name: str,
+               num_inputs: int,
+               max_in_flight: int = 2) -> None:
   """Drive an N-input host mux and check every value is delivered exactly
   once and every input is served."""
   acc = conn.build_accelerator()
@@ -66,7 +69,6 @@ def _check_mux(conn: AcceleratorConnection, dut_name: str,
   # below the output FIFO depth. This keeps a couple of inputs backlogged at
   # once (so the round-robin arbiter has to choose between them) while
   # avoiding the write-a-burst-before-reading deadlock.
-  max_in_flight = 2
   sent: list[int] = []
   recv: list[int] = []
   wi = 0
@@ -127,6 +129,26 @@ class TestChannelArbiterCosim:
     encode and the sweep must not produce an out-of-range grant."""
     _check_mux(conn, "arbiter_test_sched_odd", ODD_NUM_INPUTS)
 
+  def test_mux_correctness_wide_fanin(self,
+                                      conn: AcceleratorConnection) -> None:
+    """`wide_fanin` structures, with a throttled output so credits run out."""
+    _check_mux(conn, "arbiter_test_widefanin", WIDE_FANIN_NUM_INPUTS, 8)
+
+  def test_mux_correctness_wide_fanin_scheduled(
+      self, conn: AcceleratorConnection) -> None:
+    """As above, under the grant-queue scheduler."""
+    _check_mux(conn, "arbiter_test_widefanin_sched", WIDE_FANIN_NUM_INPUTS, 8)
+
+  def test_mux_correctness_wide_fanin_forced_on(
+      self, conn: AcceleratorConnection) -> None:
+    """`wide_fanin=True` below the threshold."""
+    _check_mux(conn, "arbiter_test_forced_on", NUM_INPUTS)
+
+  def test_mux_correctness_wide_fanin_forced_off(
+      self, conn: AcceleratorConnection) -> None:
+    """`wide_fanin=False` above the threshold."""
+    _check_mux(conn, "arbiter_test_forced_off", WIDE_FANIN_NUM_INPUTS)
+
   def test_list_contiguity(self, conn: AcceleratorConnection) -> None:
     """Contending multi-flit list messages are never interleaved."""
     self._check_contiguity(conn, "list_test", {1, 2})
@@ -135,6 +157,16 @@ class TestChannelArbiterCosim:
     """Message atomicity under the decoupled grant-queue scheduler, with more
     contending producers than the grant queue is deep."""
     self._check_contiguity(conn, "list_test_sched", set(range(1, 7)))
+
+  def test_list_contiguity_wide_fanin(self,
+                                      conn: AcceleratorConnection) -> None:
+    """Contiguity with `wide_fanin` forced on."""
+    self._check_contiguity(conn, "list_test_widefanin", {1, 2})
+
+  def test_list_contiguity_wide_fanin_scheduled(
+      self, conn: AcceleratorConnection) -> None:
+    """As above, under the grant-queue scheduler."""
+    self._check_contiguity(conn, "list_test_widefanin_sched", set(range(1, 7)))
 
   @staticmethod
   def _check_contiguity(conn: AcceleratorConnection, dut_name: str,

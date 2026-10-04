@@ -710,7 +710,8 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
 
   // Declare external module.
   Attribute params[] = {
-      ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE", rewriter.getI32Type())};
+      ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE", rewriter.getI32Type()),
+      ParamDeclAttr::get("ESI_VERSION", rewriter.getI32Type())};
   PortInfo ports[] = {
       {{rewriter.getStringAttr("compressed_manifest"),
         rewriter.getType<hw::ArrayType>(
@@ -745,11 +746,15 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
         auto manifest = sv::ReadInOutOp::create(rewriter, loc, manifestLogic);
 
         // Then instantiate the external module.
-        hw::InstanceOp::create(rewriter, loc, cosimManifestExternModule,
-                               "__manifest", ArrayRef<Value>({manifest}),
-                               rewriter.getArrayAttr({ParamDeclAttr::get(
-                                   "COMPRESSED_MANIFEST_SIZE",
-                                   rewriter.getI32IntegerAttr(bytes.size()))}));
+        hw::InstanceOp::create(
+            rewriter, loc, cosimManifestExternModule, "__manifest",
+            ArrayRef<Value>({manifest}),
+            rewriter.getArrayAttr({
+                ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE",
+                                   rewriter.getI32IntegerAttr(bytes.size())),
+                ParamDeclAttr::get("ESI_VERSION",
+                                   rewriter.getI32IntegerAttr(esiApiVersion)),
+            }));
       });
 
   rewriter.setInsertionPoint(op);

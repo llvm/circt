@@ -176,7 +176,7 @@ struct AttrTypeSubElementHandler<circt::hw::detail::OffsetFieldInfo> {
 namespace circt {
 namespace hw {
 
-// Returns the canonical type of a HW type (inner type of a type alias).
+/// Recursively remove HW type aliases from a type and its subelements.
 mlir::Type getCanonicalType(mlir::Type type);
 
 /// Return true if the specified type is a value HW Integer type.  This checks

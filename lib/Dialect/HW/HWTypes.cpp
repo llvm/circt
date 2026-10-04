@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -47,12 +48,10 @@ static void printHWElementType(AsmPrinter &printer, Type dim);
 //===----------------------------------------------------------------------===/
 
 mlir::Type circt::hw::getCanonicalType(mlir::Type type) {
-  Type canonicalType;
-  if (auto typeAlias = dyn_cast<TypeAliasType>(type))
-    canonicalType = typeAlias.getCanonicalType();
-  else
-    canonicalType = type;
-  return canonicalType;
+  mlir::AttrTypeReplacer replacer;
+  replacer.addReplacement(
+      [](TypeAliasType alias) { return alias.getCanonicalType(); });
+  return replacer.replace(type);
 }
 
 /// Return true if the specified type is a value HW Integer type.  This checks
@@ -888,38 +887,15 @@ LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
 // TypeAliasType
 //===----------------------------------------------------------------------===//
 
-static Type computeCanonicalType(Type type) {
-  return llvm::TypeSwitch<Type, Type>(type)
-      .Case([](TypeAliasType t) {
-        return computeCanonicalType(t.getCanonicalType());
-      })
-      .Case([](ArrayType t) {
-        return ArrayType::get(computeCanonicalType(t.getElementType()),
-                              t.getNumElements());
-      })
-      .Case([](UnpackedArrayType t) {
-        return UnpackedArrayType::get(computeCanonicalType(t.getElementType()),
-                                      t.getNumElements());
-      })
-      .Case([](StructType t) {
-        SmallVector<StructType::FieldInfo> fieldInfo;
-        for (auto field : t.getElements())
-          fieldInfo.push_back(StructType::FieldInfo{
-              field.name, computeCanonicalType(field.type)});
-        return StructType::get(t.getContext(), fieldInfo);
-      })
-      .Default([](Type t) { return t; });
-}
-
 TypeAliasType TypeAliasType::get(SymbolRefAttr ref, Type innerType) {
-  return get(ref.getContext(), ref, innerType, computeCanonicalType(innerType));
+  return get(ref.getContext(), ref, innerType, hw::getCanonicalType(innerType));
 }
 
 TypeAliasType
 TypeAliasType::getChecked(function_ref<InFlightDiagnostic()> emitError,
                           SymbolRefAttr ref, Type innerType) {
   return getChecked(emitError, ref.getContext(), ref, innerType,
-                    computeCanonicalType(innerType));
+                    hw::getCanonicalType(innerType));
 }
 
 LogicalResult

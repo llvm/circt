@@ -163,7 +163,7 @@ std::optional<uint64_t> MMIOSysInfo::getCoreClockFrequency() const {
 
 std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
   uint64_t version = getEsiVersion();
-  if (version != 0)
+  if (version != ExpectedVersionNumber)
     throw std::runtime_error("Unsupported ESI header version: " +
                              std::to_string(version));
   uint64_t manifestPtr = mmio->read(MetadataOffset + ManifestPtrOffset);

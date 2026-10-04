@@ -19,9 +19,9 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
   data = mmio.read(8)
   assert data == 0x207D98E5E5100E51
 
-  assert conn.sysinfo().esi_version() == 0
+  assert conn.sysinfo().esi_version() == 1
   m = conn.manifest()
-  assert m.api_version == 0
+  assert m.api_version == 1
   print(m.type_table)
 
   # Test the cycle count and clock frequency APIs

@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Operation.h"
 
@@ -54,5 +55,24 @@ inline llvm::hash_code hash_value(const BundledChannel channel) {
 mlir::Type innerType(mlir::Type type);
 } // namespace esi
 } // namespace circt
+
+namespace mlir {
+template <>
+struct AttrTypeSubElementHandler<circt::esi::BundledChannel> {
+  static void walk(const circt::esi::BundledChannel &channel,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(channel.name);
+    walker.walk(channel.type);
+  }
+
+  static circt::esi::BundledChannel
+  replace(const circt::esi::BundledChannel &channel,
+          AttrSubElementReplacements &attrRepls,
+          TypeSubElementReplacements &typeRepls) {
+    return {cast<StringAttr>(attrRepls.take_front(1)[0]), channel.direction,
+            cast<circt::esi::ChannelType>(typeRepls.take_front(1)[0])};
+  }
+};
+} // namespace mlir
 
 #endif

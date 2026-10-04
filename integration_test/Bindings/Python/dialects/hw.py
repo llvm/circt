@@ -17,6 +17,9 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
+    int_type_scope = hw.TypeScopeOp.create("intScope")
+    with InsertionPoint(int_type_scope.body):
+      hw.TypedeclOp.create("intAlias", i32)
 
     def build(module):
       constI32 = hw.ConstantOp(IntegerAttr.get(i32, 1))
@@ -35,6 +38,9 @@ with Context() as ctx, Location.unknown():
       except ValueError as e:
         print(e)
 
+      # CHECK: hw.type_scope @intScope {
+      # CHECK:   hw.typedecl @intAlias : i32
+      # CHECK: }
       # CHECK: %[[CONST:.+]] = hw.constant 1 : i32
 
       # CHECK: [[ARRAY1:%.+]] = hw.array_create %[[CONST]], %[[CONST]], %[[CONST]] : i32
@@ -72,6 +78,10 @@ with Context() as ctx, Location.unknown():
 
       # CHECK: hw.struct_extract [[STRUCT1]]["a"] : !hw.struct<a: i32, b: i1>
       hw.StructExtractOp.create(struct1, 'a')
+
+      # CHECK: %c5_intAlias = hw.constant 5 : !hw.typealias<@intScope::@intAlias, i32>
+      int_type_alias = hw.TypeAliasType.get("intScope", "intAlias", i32)
+      hw.ConstantOp.create(int_type_alias, 5)
 
     hw.HWModuleOp(name="test", body_builder=build)
 

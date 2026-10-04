@@ -32,9 +32,15 @@ mlir::Type getInOutElementType(mlir::Type type);
 /// type.
 mlir::Type getNetElementType(mlir::Type type);
 
+/// Return true if a type is a valid element type of a NetType.
+bool isValidNetElementType(mlir::Type type);
+
 /// Return the element type of a VarType or null if the operand isn't a Var
 /// type.
 mlir::Type getVarElementType(mlir::Type type);
+
+/// Return true if a type is a valid element type of a VarType.
+bool isValidVarElementType(mlir::Type type);
 
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
