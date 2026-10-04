@@ -170,7 +170,7 @@ def VariantType : SimTypeDef<"Variant"> {
   let mnemonic = "variant";
 
   let parameters = (ins
-    ArrayRefParameter<"::circt::sim::VariantAlternative",
+    ArrayRefParameter<"::circt::sim::detail::VariantAlternative",
                       "variant alternatives">:$alternatives
   );
 
@@ -178,7 +178,7 @@ def VariantType : SimTypeDef<"Variant"> {
   let genVerifyDecl = 1;
 
   let extraClassDeclaration = [{
-    using Alternative = ::circt::sim::VariantAlternative;
+    using Alternative = ::circt::sim::detail::VariantAlternative;
 
     /// Return the alternative with the given name. Returns a null alternative
     /// if no such alternative exists.
