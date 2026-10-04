@@ -95,6 +95,7 @@ hw::ModuleType
 DPIFunctionTypeToHWModuleType(const DPIFunctionType &dpiFuncType) {
   SmallVector<hw::ModulePort> hwPorts;
   for (auto &arg : dpiFuncType.getArguments()) {
+    auto type = arg.type;
     hw::ModulePort::Direction hwDir;
     switch (arg.dir) {
     case DPIDirection::Input:
@@ -106,10 +107,11 @@ DPIFunctionTypeToHWModuleType(const DPIFunctionType &dpiFuncType) {
       hwDir = hw::ModulePort::Direction::Output;
       break;
     case DPIDirection::InOut:
-      hwDir = hw::ModulePort::Direction::InOut;
+      hwDir = hw::ModulePort::Direction::Input;
+      type = hw::InOutType::get(type);
       break;
     }
-    hwPorts.push_back({arg.name, arg.type, hwDir});
+    hwPorts.push_back({arg.name, type, hwDir});
   }
   return hw::ModuleType::get(dpiFuncType.getContext(), hwPorts);
 }

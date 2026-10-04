@@ -48,7 +48,7 @@ protected:
       EXPECT_EQ(fport.name, hwport.name);
       EXPECT_EQ(fport.isInput(), hwport.isInput());
       EXPECT_EQ(fport.isOutput(), hwport.isOutput());
-      EXPECT_EQ(fport.isInOut(), hwport.isInOut());
+      EXPECT_EQ(fport.isInOut(), type_isa<hw::InOutType>(hwport.type));
       EXPECT_EQ(fport.loc, hwport.loc);
       EXPECT_EQ(fport.sym, hwport.getSym());
       EXPECT_EQ(hwport.attrs.size(), (size_t)(fport.sym ? 1 : 0))

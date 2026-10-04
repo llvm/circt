@@ -1845,8 +1845,6 @@ Direction convertHWDirectionToCalyx(hw::ModulePort::Direction direction) {
     return Direction::Input;
   case hw::ModulePort::Direction::Output:
     return Direction::Output;
-  case hw::ModulePort::Direction::InOut:
-    llvm_unreachable("InOut ports not supported by Calyx");
   }
   llvm_unreachable("Impossible port type");
 }

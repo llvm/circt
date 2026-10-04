@@ -42,7 +42,7 @@ struct HWEliminateInOutPortsPass
 class HWInOutPortConversion : public PortConversion {
 public:
   HWInOutPortConversion(PortConverterImpl &converter, hw::PortInfo port,
-                        llvm::StringRef readSuffix,
+                        Type type, llvm::StringRef readSuffix,
                         llvm::StringRef writeSuffix);
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
@@ -66,6 +66,9 @@ private:
   bool hasReaders() { return !readers.empty(); }
   bool hasWriters() { return !writers.empty(); }
 
+  // The type of the port.
+  Type type;
+
   // Handles to port info of the newly created ports.
   PortInfo readPort, writePort;
 
@@ -76,10 +79,10 @@ private:
 };
 
 HWInOutPortConversion::HWInOutPortConversion(PortConverterImpl &converter,
-                                             hw::PortInfo port,
+                                             hw::PortInfo port, Type type,
                                              llvm::StringRef readSuffix,
                                              llvm::StringRef writeSuffix)
-    : PortConversion(converter, port), readSuffix(readSuffix),
+    : PortConversion(converter, port), type(type), readSuffix(readSuffix),
       writeSuffix(writeSuffix) {}
 
 LogicalResult HWInOutPortConversion::init() {
@@ -106,7 +109,7 @@ void HWInOutPortConversion::buildInputSignals() {
   if (hasReaders()) {
     // Replace all sv::ReadInOutOp's with the new input.
     Value readValue =
-        converter.createNewInput(origPort, readSuffix, origPort.type, readPort);
+        converter.createNewInput(origPort, readSuffix, type, readPort);
     Value origInput = body->getArgument(origPort.argNum);
     for (auto *user : llvm::make_early_inc_range(origInput.getUsers())) {
       sv::ReadInOutOp read = dyn_cast<sv::ReadInOutOp>(user);
@@ -121,8 +124,8 @@ void HWInOutPortConversion::buildInputSignals() {
   if (hasWriters()) {
     // Replace the sv::AssignOp with the new output.
     sv::AssignOp write = writers.front();
-    converter.createNewOutput(origPort, writeSuffix, origPort.type,
-                              write.getSrc(), writePort);
+    converter.createNewOutput(origPort, writeSuffix, type, write.getSrc(),
+                              writePort);
     write.erase();
   }
 }
@@ -177,9 +180,9 @@ public:
         writeSuffix(writeSuffix) {}
 
   FailureOr<std::unique_ptr<PortConversion>> build(hw::PortInfo port) override {
-    if (port.dir == hw::ModulePort::Direction::InOut)
-      return {std::make_unique<HWInOutPortConversion>(converter, port,
-                                                      readSuffix, writeSuffix)};
+    if (auto inout = type_dyn_cast<hw::InOutType>(port.type))
+      return {std::make_unique<HWInOutPortConversion>(
+          converter, port, inout.getElementType(), readSuffix, writeSuffix)};
     return PortConversionBuilder::build(port);
   }
 
