@@ -214,8 +214,8 @@ LogicalResult HWConvertBitcastsPass::convertBitcastOp(OpBuilder builder,
         })) {
       // Both integers and ArrayCreateOp operands are ordered from MSB to LSB
       // (index N-1 down to index 0).
-      result = ArrayCreateOp::create(builder, bitcastOp.getLoc(), arrayTy,
-                                     integers);
+      result =
+          ArrayCreateOp::create(builder, bitcastOp.getLoc(), arrayTy, integers);
     }
   }
 
@@ -228,8 +228,8 @@ LogicalResult HWConvertBitcastsPass::convertBitcastOp(OpBuilder builder,
                    .getResult();
 
     // Convert packed integer to the target type
-    result = constructAggregateRecursively(builder, bitcastOp.getLoc(),
-                                           concat, bitcastOp.getType());
+    result = constructAggregateRecursively(builder, bitcastOp.getLoc(), concat,
+                                           bitcastOp.getType());
   }
 
   // Replace operation
