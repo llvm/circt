@@ -1459,8 +1459,8 @@ public:
       for (auto &operand : operands)
         operand = castToUIntIfSigned(operand);
 
-    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, cat, cat.getType(),
-                                             operands);
+    // Infer the result type so constness matches the rewritten operands.
+    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, cat, operands);
     return success();
   }
 };
@@ -1485,20 +1485,26 @@ public:
         continue;
       }
       APSInt value = cst.getValue();
+      bool foldedIsConst = type_cast<IntType>(cst.getType()).isConst();
       size_t j = i + 1;
       for (; j < cat->getNumOperands(); ++j) {
         auto nextCst = cat.getInputs()[j].getDefiningOp<ConstantOp>();
         if (!nextCst)
           break;
         value = value.concat(nextCst.getValue());
+        foldedIsConst &= type_cast<IntType>(nextCst.getType()).isConst();
       }
 
       if (j == i + 1) {
         // Not folded.
         operands.push_back(cst);
       } else {
-        // Folded.
-        operands.push_back(ConstantOp::create(rewriter, cat.getLoc(), value));
+        // Fold adjacent constants. Preserve constness so a cat whose other
+        // operands remain const keeps a const-compatible result type.
+        auto type = IntType::get(rewriter.getContext(), value.isSigned(),
+                                 value.getBitWidth(), foldedIsConst);
+        operands.push_back(ConstantOp::create(rewriter, cat.getLoc(), type,
+                                              static_cast<APInt>(value)));
       }
 
       i = j - 1;
@@ -1507,8 +1513,8 @@ public:
     if (operands.size() == cat->getNumOperands())
       return failure();
 
-    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, cat, cat.getType(),
-                                             operands);
+    // Infer the result type so constness matches the rewritten operands.
+    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, cat, operands);
 
     return success();
   }
@@ -1899,8 +1905,10 @@ public:
           type_cast<FIRRTLBaseType>(input.getType()).getBitWidthOrSentinel();
       if (inputWidth < 0 || width == inputWidth)
         return input;
-      return PadPrimOp::create(rewriter, mux.getLoc(), mux.getType(), input,
-                               width)
+      // Infer the pad result type so constness follows the input. Using the
+      // mux result type here is incorrect when the narrow arm is const and the
+      // mux itself is not.
+      return PadPrimOp::create(rewriter, mux.getLoc(), input, width)
           .getResult();
     };
 
