@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_SIM_SIMTYPES_H
 #define CIRCT_DIALECT_SIM_SIMTYPES_H
 
+#include "circt/Support/FieldInfo.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
@@ -47,20 +48,6 @@ static inline llvm::hash_code hash_value(const DPIArgument &arg) {
   return llvm::hash_combine(static_cast<uint32_t>(arg.dir), arg.name, arg.type);
 }
 
-/// A single alternative of a variant type.
-struct VariantAlternative {
-  mlir::StringAttr name;
-  mlir::Type type;
-};
-
-static inline bool operator==(const VariantAlternative &a,
-                              const VariantAlternative &b) {
-  return a.name == b.name && a.type == b.type;
-}
-static inline llvm::hash_code hash_value(const VariantAlternative &alt) {
-  return llvm::hash_combine(alt.name, alt.type);
-}
-
 namespace detail {
 struct DPIFunctionTypeStorage : public mlir::TypeStorage {
   DPIFunctionTypeStorage(llvm::ArrayRef<DPIArgument> args);
@@ -91,33 +78,13 @@ struct DPIFunctionTypeStorage : public mlir::TypeStorage {
   llvm::SmallVector<size_t> resultToAbs;
   mlir::FunctionType cachedFuncType;
 };
+
+/// A single alternative of a variant type.
+using VariantAlternative = ::circt::FieldInfo;
 } // namespace detail
 
 } // namespace sim
 } // namespace circt
-
-namespace mlir {
-/// Expose the alternative names and types of variant types to the generic
-/// attribute and type walking and replacement infrastructure. This allows
-/// walkers to recurse into the alternatives of a `!sim.variant` type, and
-/// replacers such as `mlir::AttrTypeReplacer` to replace types nested within
-/// the alternatives.
-template <>
-struct AttrTypeSubElementHandler<circt::sim::VariantAlternative> {
-  static void walk(const circt::sim::VariantAlternative &param,
-                   AttrTypeImmediateSubElementWalker &walker) {
-    walker.walk(param.name);
-    walker.walk(param.type);
-  }
-  static circt::sim::VariantAlternative
-  replace(const circt::sim::VariantAlternative &param,
-          AttrSubElementReplacements &attrRepls,
-          TypeSubElementReplacements &typeRepls) {
-    return {cast<StringAttr>(attrRepls.take_front(1)[0]),
-            typeRepls.take_front(1)[0]};
-  }
-};
-} // namespace mlir
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Sim/SimTypes.h.inc"

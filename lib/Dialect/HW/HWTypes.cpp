@@ -336,65 +336,13 @@ void IntType::print(AsmPrinter &p) const {
 // Struct Type
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace hw {
-namespace detail {
-bool operator==(const FieldInfo &a, const FieldInfo &b) {
-  return a.name == b.name && a.type == b.type;
-}
-llvm::hash_code hash_value(const FieldInfo &fi) {
-  return llvm::hash_combine(fi.name, fi.type);
-}
-} // namespace detail
-} // namespace hw
-} // namespace circt
-
-/// Parse a list of unique field names and types within <>. E.g.:
-/// <foo: i7, bar: i8>
-static ParseResult parseFields(AsmParser &p,
-                               SmallVectorImpl<FieldInfo> &parameters) {
-  llvm::StringSet<> nameSet;
-  bool hasDuplicateName = false;
-  auto parseResult = p.parseCommaSeparatedList(
-      mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
-        std::string name;
-        Type type;
-
-        auto fieldLoc = p.getCurrentLocation();
-        if (p.parseKeywordOrString(&name) || p.parseColon() ||
-            p.parseType(type))
-          return failure();
-
-        if (!nameSet.insert(name).second) {
-          p.emitError(fieldLoc, "duplicate field name \'" + name + "\'");
-          // Continue parsing to print all duplicates, but make sure to error
-          // eventually
-          hasDuplicateName = true;
-        }
-
-        parameters.push_back(
-            FieldInfo{StringAttr::get(p.getContext(), name), type});
-        return success();
-      });
-
-  if (hasDuplicateName)
-    return failure();
-  return parseResult;
-}
-
-/// Print out a list of named fields surrounded by <>.
-static void printFields(AsmPrinter &p, ArrayRef<FieldInfo> fields) {
-  p << '<';
-  llvm::interleaveComma(fields, p, [&](const FieldInfo &field) {
-    p.printKeywordOrString(field.name.getValue());
-    p << ": " << field.type;
-  });
-  p << ">";
-}
-
 Type StructType::parse(AsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  if (parseFields(p, parameters))
+  SmallVector<std::pair<llvm::SMLoc, StringAttr>> duplicates;
+  auto parseResult = parseFieldList(p, parameters, duplicates);
+  for (auto [loc, name] : duplicates)
+    p.emitError(loc) << "duplicate field name '" << name.getValue() << "'";
+  if (failed(parseResult) || !duplicates.empty())
     return Type();
   return get(p.getContext(), parameters);
 }
@@ -413,7 +361,9 @@ LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
   return result;
 }
 
-void StructType::print(AsmPrinter &p) const { printFields(p, getElements()); }
+void StructType::print(AsmPrinter &p) const {
+  printFieldList(p, getElements());
+}
 
 Type StructType::getFieldType(mlir::StringRef fieldName) {
   for (const auto &field : getElements())

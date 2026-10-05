@@ -208,7 +208,9 @@ func.func @variant_type_roundtrip(
   // CHECK-SAME: %arg3: !sim.variant<nested: !sim.variant<x: i1>, arr: !hw.array<2xi8>>
   %arg3: !sim.variant<nested: !sim.variant<x: i1>, arr: !hw.array<2xi8>>,
   // CHECK-SAME: %arg4: !sim.variant<a: i32, b: i32, c: i32>
-  %arg4: !sim.variant<a: i32, b: i32, c: i32>
+  %arg4: !sim.variant<a: i32, b: i32, c: i32>,
+  // CHECK-SAME: %arg5: !sim.variant<"123": i42, b: i8>
+  %arg5: !sim.variant<"123": i42, "b": i8>
 ) {
   return
 }
