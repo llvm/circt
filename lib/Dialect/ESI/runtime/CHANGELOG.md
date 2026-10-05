@@ -11,7 +11,7 @@
   `UnionType` layout
   ([#11226](https://github.com/llvm/circt/pull/11226)).
 
-  `esiaccel` 0.8.0 requires accelerator images built with PyCDE 0.12.0. Images
+  `esiaccel` 0.8.0 requires accelerator images built with PyCDE 0.12.1. Images
   built with earlier PyCDE versions use the previous union layout and are not
   wire-compatible for affected fields. Regenerate accelerator images and
   update the runtime together.
