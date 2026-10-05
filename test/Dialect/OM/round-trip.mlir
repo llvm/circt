@@ -330,6 +330,20 @@ om.class @IntegerArithmetic() {
   om.class.fields
 }
 
+// CHECK-LABEL: @IntegerPropertyBitwise
+om.class @IntegerPropertyBitwise(%lhs: !om.integer, %rhs: !om.integer) {
+  // CHECK: om.integer.and %lhs, %rhs : !om.integer
+  %0 = om.integer.and %lhs, %rhs : !om.integer
+
+  // CHECK: om.integer.or %lhs, %rhs : !om.integer
+  %1 = om.integer.or %lhs, %rhs : !om.integer
+
+  // CHECK: om.integer.not %lhs : !om.integer
+  %2 = om.integer.not %lhs : !om.integer
+
+  om.class.fields
+}
+
 // CHECK-LABEL: @IntegerBitwise
 om.class @IntegerBitwise() {
   %0 = om.constant false

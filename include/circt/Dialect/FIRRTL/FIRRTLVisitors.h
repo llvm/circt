@@ -68,8 +68,9 @@ public:
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, ListConcatOp, UnresolvedPathOp,
-            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp, StringConcatOp,
-            PropEqOp, BoolAndOp, BoolOrOp, BoolXorOp, UnknownValueOp,
+            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp, IntegerAndOp,
+            IntegerOrOp, IntegerNotOp, StringConcatOp, PropEqOp,
+            BoolAndOp, BoolOrOp, BoolXorOp, UnknownValueOp,
             // Format String expressions
             TimeOp, HierarchicalModuleNameOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
@@ -233,6 +234,9 @@ public:
   HANDLE(IntegerAddOp, Unhandled);
   HANDLE(IntegerMulOp, Unhandled);
   HANDLE(IntegerShrOp, Unhandled);
+  HANDLE(IntegerAndOp, Unhandled);
+  HANDLE(IntegerOrOp, Unhandled);
+  HANDLE(IntegerNotOp, Unhandled);
   HANDLE(StringConcatOp, Unhandled);
   HANDLE(PropEqOp, Unhandled);
   HANDLE(BoolAndOp, Unhandled);

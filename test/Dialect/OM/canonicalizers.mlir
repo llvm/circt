@@ -108,6 +108,46 @@ om.class @IntegerBinaryArithmeticFold(%x: !om.integer) -> (out1: !om.integer, ou
   om.class.fields %0, %1, %2, %3, %4, %5 : !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer
 }
 
+// CHECK-LABEL: @IntegerPropertyBitwiseFold
+om.class @IntegerPropertyBitwiseFold() -> (andResult: !om.integer, orResult: !om.integer,
+                                  notResult: !om.integer) {
+  %neg2 = om.constant #om.integer<-2 : si4> : !om.integer
+  %five = om.constant #om.integer<5 : si4> : !om.integer
+
+  // CHECK-DAG: [[AND:%.+]] = om.constant #om.integer<4 : si4> : !om.integer
+  %and = om.integer.and %neg2, %five : !om.integer
+
+  // CHECK-DAG: [[OR:%.+]] = om.constant #om.integer<-1 : si4> : !om.integer
+  %or = om.integer.or %neg2, %five : !om.integer
+
+  // CHECK-DAG: [[NOT:%.+]] = om.constant #om.integer<1 : si4> : !om.integer
+  %not = om.integer.not %neg2 : !om.integer
+
+  // CHECK: om.class.fields [[AND]], [[OR]], [[NOT]]
+  om.class.fields %and, %or, %not : !om.integer, !om.integer, !om.integer
+}
+
+// CHECK-LABEL: @IntegerPropertyBitwiseDynamic
+om.class @IntegerPropertyBitwiseDynamic(%input: !om.integer) ->
+    (nestedResult: !om.integer, mixedResult: !om.integer) {
+  %neg2 = om.constant #om.integer<-2 : si4> : !om.integer
+  %five = om.constant #om.integer<5 : si8> : !om.integer
+
+  // Different stored widths must sign-extend before bitwise folding.
+  // CHECK: [[MIXED:%.+]] = om.constant #om.integer<4 : si8> : !om.integer
+  %mixed = om.integer.and %neg2, %five : !om.integer
+
+  // CHECK: [[OR:%.+]] = om.integer.or %input, %{{.+}} : !om.integer
+  %or = om.integer.or %input, %five : !om.integer
+  // CHECK: [[NOT:%.+]] = om.integer.not %input : !om.integer
+  %not = om.integer.not %input : !om.integer
+  // CHECK: [[NESTED:%.+]] = om.integer.and [[OR]], [[NOT]] : !om.integer
+  %nested = om.integer.and %or, %not : !om.integer
+
+  // CHECK: om.class.fields [[NESTED]], [[MIXED]]
+  om.class.fields %nested, %mixed : !om.integer, !om.integer
+}
+
 // CHECK-LABEL: @PropEqFold
 om.class @PropEqFold(%str: !om.string, %b: i1, %n: !om.integer) -> (out1: i1, out2: i1,
                                                                      out3: i1, out4: i1,

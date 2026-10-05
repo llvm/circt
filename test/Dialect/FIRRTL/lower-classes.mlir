@@ -421,6 +421,30 @@ firrtl.circuit "IntegerArithmetic" {
 
     // CHECK: om.integer.shl %in0, %in1 : !om.integer
     %3 = firrtl.integer.shl %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.and %in0, %in1 : !om.integer
+    %4 = firrtl.integer.and %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.or %in0, %in1 : !om.integer
+    %5 = firrtl.integer.or %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.not %in0 : !om.integer
+    %6 = firrtl.integer.not %in0 : (!firrtl.integer) -> !firrtl.integer
+  }
+
+  // CHECK-LABEL: om.class @IntegerBitwiseNested
+  firrtl.class @IntegerBitwiseNested(in %a: !firrtl.integer, in %b: !firrtl.integer,
+                                    in %c: !firrtl.integer, out %result: !firrtl.integer) {
+    // CHECK: [[LITERAL:%.+]] = om.constant #om.integer<5 : si4> : !om.integer
+    %literal = firrtl.integer 5
+    // CHECK: [[OR:%.+]] = om.integer.or %{{.+}}, [[LITERAL]] : !om.integer
+    %or = firrtl.integer.or %a, %literal : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    // CHECK: [[NOT:%.+]] = om.integer.not %{{.+}} : !om.integer
+    %not = firrtl.integer.not %c : (!firrtl.integer) -> !firrtl.integer
+    // CHECK: [[AND:%.+]] = om.integer.and [[OR]], [[NOT]] : !om.integer
+    %and = firrtl.integer.and %or, %not : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    // CHECK: om.class.fields [[AND]] : !om.integer
+    firrtl.propassign %result, %and : !firrtl.integer
   }
 }
 

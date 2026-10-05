@@ -1066,6 +1066,17 @@ static OpFoldResult foldIntegerBitwise(Attribute lhsAttr, Attribute rhsAttr,
       lhsInt.getType(), result->extOrTrunc(lhsInt.getValue().getBitWidth()));
 }
 
+static OpFoldResult
+foldIntegerBitwiseWithPropertyIntegers(Attribute lhsAttr, Attribute rhsAttr,
+                                       IntegerBinaryFn evaluate) {
+  // Property integers are arbitrary precision and use signed two's complement
+  // semantics. Keep this separate from the fixed-width integer path above.
+  if (isa_and_nonnull<circt::om::IntegerAttr>(lhsAttr) ||
+      isa_and_nonnull<circt::om::IntegerAttr>(rhsAttr))
+    return foldIntegerBinaryArithmetic(lhsAttr, rhsAttr, evaluate);
+  return foldIntegerBitwise(lhsAttr, rhsAttr, evaluate);
+}
+
 // Returns true if attr is an IntegerAttr whose value is all-zeros.
 static bool isZeroInt(Attribute a) {
   auto i = dyn_cast_or_null<mlir::IntegerAttr>(a);
@@ -1079,7 +1090,7 @@ static bool isAllOnesInt(Attribute a) {
 }
 
 OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
-  if (auto result = foldIntegerBitwise(
+  if (auto result = foldIntegerBitwiseWithPropertyIntegers(
           adaptor.getLhs(), adaptor.getRhs(),
           [](const APSInt &lhs, const APSInt &rhs) {
             return success(APSInt(lhs & rhs, /*isUnsigned=*/false));
@@ -1087,8 +1098,9 @@ OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
     return result;
   // AND with all-zeros is always zero.
   if (isZeroInt(adaptor.getLhs()) || isZeroInt(adaptor.getRhs()))
-    return mlir::IntegerAttr::get(getResult().getType(),
-                                  APInt::getZero(getType().getWidth()));
+    return mlir::IntegerAttr::get(
+        getResult().getType(),
+        APInt::getZero(cast<IntegerType>(getType()).getWidth()));
   // AND with all-ones is identity.
   if (isAllOnesInt(adaptor.getLhs()))
     return getRhs();
@@ -1098,7 +1110,7 @@ OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
-  if (auto result = foldIntegerBitwise(
+  if (auto result = foldIntegerBitwiseWithPropertyIntegers(
           adaptor.getLhs(), adaptor.getRhs(),
           [](const APSInt &lhs, const APSInt &rhs) {
             return success(APSInt(lhs | rhs, /*isUnsigned=*/false));
@@ -1106,8 +1118,9 @@ OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
     return result;
   // OR with all-ones is always all-ones.
   if (isAllOnesInt(adaptor.getLhs()) || isAllOnesInt(adaptor.getRhs()))
-    return mlir::IntegerAttr::get(getResult().getType(),
-                                  APInt::getAllOnes(getType().getWidth()));
+    return mlir::IntegerAttr::get(
+        getResult().getType(),
+        APInt::getAllOnes(cast<IntegerType>(getType()).getWidth()));
   // OR with all-zeros is identity.
   if (isZeroInt(adaptor.getLhs()))
     return getRhs();
@@ -1128,6 +1141,16 @@ OpFoldResult IntegerXorOp::fold(FoldAdaptor adaptor) {
     return getRhs();
   if (isZeroInt(adaptor.getRhs()))
     return getLhs();
+  return {};
+}
+
+OpFoldResult IntegerNotOp::fold(FoldAdaptor adaptor) {
+  if (auto integer =
+          dyn_cast_or_null<circt::om::IntegerAttr>(adaptor.getInput())) {
+    APSInt value = getAPSIntForOMIntegerAttr(integer);
+    return circt::om::IntegerAttr::get(
+        getContext(), mlir::IntegerAttr::get(getContext(), ~value));
+  }
   return {};
 }
 

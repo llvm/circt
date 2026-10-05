@@ -608,41 +608,48 @@ def PropEqOp : BinaryEqualityOpBase<"prop.eq"> {
   let hasFolder = 1;
 }
 
-class IntegerBitwiseOpBase<string mnemonic, list<Trait> traits = []> :
+class IntegerBitwiseOpBase<string mnemonic, list<Trait> traits = [],
+                           TypeConstraint operandType = AnyInteger> :
     OMOp<mnemonic, [
       Pure,
       SameOperandsAndResultType
     ] # traits> {
-  let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
-  let results = (outs AnyInteger:$result);
+  let arguments = (ins operandType:$lhs, operandType:$rhs);
+  let results = (outs operandType:$result);
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
   let hasFolder = 1;
 }
 
-def IntegerAndOp : IntegerBitwiseOpBase<"integer.and", [Commutative]> {
+def IntegerAndOp : IntegerBitwiseOpBase<
+    "integer.and", [Commutative], AnyTypeOf<[AnyInteger, OMIntegerType]>> {
   let summary = "Bitwise AND of two integer OM values";
   let description = [{
-    Compute the bitwise AND of two integer OM values of the same width,
-    returning an integer result of the same width.
+    Compute the bitwise AND of two same-typed integer OM values. Fixed-width
+    integers retain their width; arbitrary precision integers use signed
+    two's complement semantics.
 
     Example:
     ```mlir
     %2 = om.integer.and %0, %1 : i1
     %3 = om.integer.and %4, %5 : i8
+    %6 = om.integer.and %a, %b : !om.integer
     ```
   }];
 }
 
-def IntegerOrOp : IntegerBitwiseOpBase<"integer.or", [Commutative]> {
+def IntegerOrOp : IntegerBitwiseOpBase<
+    "integer.or", [Commutative], AnyTypeOf<[AnyInteger, OMIntegerType]>> {
   let summary = "Bitwise OR of two integer OM values";
   let description = [{
-    Compute the bitwise OR of two integer OM values of the same width,
-    returning an integer result of the same width.
+    Compute the bitwise OR of two same-typed integer OM values. Fixed-width
+    integers retain their width; arbitrary precision integers use signed
+    two's complement semantics.
 
     Example:
     ```mlir
     %2 = om.integer.or %0, %1 : i1
     %3 = om.integer.or %4, %5 : i8
+    %6 = om.integer.or %a, %b : !om.integer
     ```
   }];
 }
@@ -660,6 +667,24 @@ def IntegerXorOp : IntegerBitwiseOpBase<"integer.xor", [Commutative]> {
     %3 = om.integer.xor %4, %5 : i8
     ```
   }];
+}
+
+def IntegerNotOp : OMOp<"integer.not", [Pure, SameOperandsAndResultType]> {
+  let summary = "Bitwise complement of an integer OM value";
+  let description = [{
+    Compute the two's complement bitwise NOT of an arbitrary precision OM
+    integer value.
+
+    Example:
+    ```mlir
+    %2 = om.integer.not %0 : !om.integer
+    ```
+  }];
+
+  let arguments = (ins OMIntegerType:$input);
+  let results = (outs OMIntegerType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($result)";
+  let hasFolder = 1;
 }
 
 def PropertyAssertOp : OMOp<"property_assert"> {

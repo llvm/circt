@@ -994,6 +994,12 @@ OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) { return {}; }
+
+OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) { return {}; }
+
+OpFoldResult IntegerNotOp::fold(FoldAdaptor adaptor) { return {}; }
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
