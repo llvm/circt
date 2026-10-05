@@ -1025,7 +1025,7 @@ void LowerClassesPass::runOnOperation() {
     if (auto classOp = dyn_cast<om::ClassOp>(classLike.getOperation()))
       if (classOp->getRegion(0).empty())
         return signalPassFailure();
-        
+
   // Erase property ports from all modules that had classes created.  This must
   // be done separately because multiple modules can share the same class (e.g.,
   // external modules with the same defname).
