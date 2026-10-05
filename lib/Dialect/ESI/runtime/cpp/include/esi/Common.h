@@ -19,6 +19,7 @@
 #include <any>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -108,6 +109,9 @@ using HWClientDetails = std::vector<HWClientDetail>;
 using ServiceImplDetails = std::map<std::string, std::any>;
 
 class MessageData;
+namespace services {
+struct HostMemRegion;
+} // namespace services
 
 //===----------------------------------------------------------------------===//
 // SegmentedMessageData -- multi-segment message support.
@@ -118,8 +122,17 @@ class MessageData;
 struct Segment {
   const uint8_t *data;
   size_t size;
+  /// The HostMem region (from services::HostMem::allocate()) which holds
+  /// [data, data + size), if any. Non-owning: the SegmentedMessageData owns the
+  /// region; backends can obtain ownership via SegmentedMessageData::take().
+  services::HostMemRegion *region = nullptr;
+
   std::span<const uint8_t> span() const { return {data, size}; }
   bool empty() const { return size == 0; }
+
+  /// Device address of this segment's bytes, if `region` is set and contains
+  /// them; std::nullopt otherwise.
+  std::optional<uint64_t> getDeviceAddress() const;
 };
 
 /// Abstract multi-segment message. Generated types subclass this to expose
@@ -129,15 +142,27 @@ struct Segment {
 /// interface. Other subclasses represent naturally segmented layouts.
 ///
 /// Subclasses MUST own all data that their segments point to. Read and write
-/// APIs can hold the message across async boundaries / retries.
+/// APIs can hold the message across async boundaries / retries. Subclasses
+/// which hold data in HostMem regions must own the regions (e.g. as
+/// unique_ptr<HostMemRegion>), point their segments' `region` at them, and
+/// override take().
 class SegmentedMessageData {
 public:
   virtual ~SegmentedMessageData() = default;
 
   /// Number of segments in the message.
   virtual size_t numSegments() const = 0;
-  /// Get a segment by index.
+  /// Get a segment by index. Throws if the segment has been take()n.
   virtual Segment segment(size_t idx) const = 0;
+
+  /// Transfer ownership of the HostMem region backing segment `segIdx` to the
+  /// caller (e.g. a backend which, having transmitted the segment, wants to
+  /// re-use the region or return it to a pool). Returns nullptr if the segment
+  /// is not backed by a region, in which case the segment remains accessible.
+  /// Once a region has been taken, segment(segIdx) -- and thus anything which
+  /// reads the whole message, such as toMessageData() -- and further calls to
+  /// take(segIdx) throw. The default implementation returns nullptr.
+  virtual std::unique_ptr<services::HostMemRegion> take(size_t segIdx);
 
   /// Total size across all segments.
   size_t totalSize() const;

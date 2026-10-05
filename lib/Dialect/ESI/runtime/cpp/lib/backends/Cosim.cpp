@@ -662,10 +662,8 @@ public:
   }
 
   struct CosimHostMemRegion : public HostMemRegion {
-    CosimHostMemRegion(std::size_t size) {
-      ptr = malloc(size);
+    CosimHostMemRegion(void *ptr, std::size_t size) : ptr(ptr), size(size) {
       memset(ptr, 0xFF, size);
-      this->size = size;
     }
     virtual ~CosimHostMemRegion() { free(ptr); }
     virtual void *getPtr() const override { return ptr; }
@@ -678,7 +676,13 @@ public:
 
   virtual std::unique_ptr<HostMemRegion>
   allocate(std::size_t size, HostMem::Options opts) const override {
-    auto ret = std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(size));
+    if (size == 0)
+      return nullptr;
+    void *ptr = malloc(size);
+    if (!ptr)
+      return nullptr;
+    auto ret =
+        std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(ptr, size));
     acc.getLogger().debug(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {

@@ -82,8 +82,15 @@ move storage out of it, or leave it untouched for retry.
   struct Segment {
     const uint8_t *data;
     size_t size;
+    /// The HostMem region holding [data, data + size), if any. Non-owning;
+    /// see "Zero-copy from HostMem regions".
+    services::HostMemRegion *region = nullptr;
+
     std::span<const uint8_t> span() const { return {data, size}; }
     bool empty() const { return size == 0; }
+
+    /// Device address of the bytes, if `region` is set and contains them.
+    std::optional<uint64_t> getDeviceAddress() const;
   };
 
   /// Abstract multi-segment message. Generated types subclass this to
@@ -92,14 +99,19 @@ move storage out of it, or leave it untouched for retry.
   /// Subclasses MUST own all data that their segments point to. This is
   /// required because the write API takes ownership
   /// (unique_ptr<SegmentedMessageData>) and a backend may hold the
-  /// message across async boundaries / partial writes.
+  /// message across async boundaries / partial writes. Subclasses which
+  /// hold data in HostMem regions own the regions and override take().
   class SegmentedMessageData {
   public:
     virtual ~SegmentedMessageData() = default;
 
     // --- Segment access ---
     virtual size_t numSegments() const = 0;
+    /// Throws if the segment has been take()n.
     virtual Segment segment(size_t idx) const = 0;
+    /// Transfer ownership of the HostMem region backing a segment (nullptr
+    /// if none). Afterwards, segment(segIdx) throws. Default: nullptr.
+    virtual std::unique_ptr<services::HostMemRegion> take(size_t segIdx);
 
     // --- Convenience ---
     size_t totalSize() const;
@@ -310,6 +322,80 @@ The typed overload takes ownership via `unique_ptr`, matching the
 `WriteChannelPort::write(unique_ptr<SegmentedMessageData>)` overload.
 The generated specialization casts the owned `SampleBatch` up to
 `SegmentedMessageData` implicitly on the move.
+
+### Zero-copy from HostMem regions
+
+A message may keep some of its data in `HostMem` regions (from
+`HostMem::allocate()`), which the accelerator can read directly. Message types
+which do this should allocate through the `services::HostMemAllocator`
+interface (which `HostMem` implements), so that callers can also supply other
+allocators, such as region pools. Segments
+remain non-owning views: the message owns its regions (as
+`std::unique_ptr<HostMemRegion>`), and each segment whose bytes live in one
+points at it via the non-owning `Segment::region`. Such a message overrides
+`take(segIdx)` to hand ownership of a segment's region to the caller. Once
+taken, the segment is gone: `segment(segIdx)` (and therefore anything which
+reads the whole message, like `toMessageData()`) and further calls to
+`take(segIdx)` throw. Taking a segment which isn't backed by a region returns
+nullptr and leaves it accessible.
+
+A scatter-gather backend owns the message while writing it, so it can DMA
+region-backed segments directly from their device address (copying the rest
+into a staging / bounce buffer), and then take the regions to keep, re-use, or
+return to a pool once they've been transmitted:
+
+```c++
+  // Producer: a message which owns a HostMem region.
+  struct Payload : public SegmentedMessageData {
+    std::unique_ptr<HostMem::HostMemRegion> region;
+    const uint8_t *data;
+    size_t size;
+
+    Payload(const std::vector<uint8_t> &bytes,
+            services::HostMemAllocator &allocator)
+        : region(allocator.allocate(bytes.size(), {})), size(bytes.size()) {
+      // allocate() returns nullptr on failure (and for size 0).
+      if (!region)
+        throw std::runtime_error("failed to allocate host memory");
+      std::memcpy(region->getPtr(), bytes.data(), size);
+      region->flush();
+      data = static_cast<const uint8_t *>(region->getPtr());
+    }
+    size_t numSegments() const override { return 1; }
+    Segment segment(size_t) const override {
+      if (!region)
+        throw std::runtime_error("segment has been taken");
+      return {data, size, region.get()};
+    }
+    std::unique_ptr<HostMem::HostMemRegion> take(size_t) override {
+      if (!region)
+        throw std::runtime_error("segment has been taken");
+      return std::move(region);
+    }
+  };
+
+  // Backend write path:
+  for (size_t i = 0; i < msg->numSegments(); ++i) {
+    Segment s = msg->segment(i);
+    if (std::optional<uint64_t> dev = s.getDeviceAddress()) {
+      /* DMA s.size bytes from *dev; once complete: */
+      pool.put(msg->take(i));
+    } else {
+      /* copy s.span() to a bounce buffer */;
+    }
+  }
+```
+
+Notes:
+
+- Before using a region's device address, a backend should make sure the
+  region belongs to *its own* HostMem service (e.g. with a `dynamic_cast` to
+  its own region type). A region from a different connection or device must
+  not be DMA'd; copy its bytes instead.
+- Calling `flush()` on the region before the write remains the producer's
+  responsibility on platforms which need it (e.g. XRT).
+- Memory registered with `HostMem::mapMemory()` has no region object, so it
+  can't be handed over this way.
 
 ## Type de-serialization (read side)
 

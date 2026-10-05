@@ -183,6 +183,25 @@ std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
 
 std::string HostMem::getServiceSymbol() const { return "__builtin_HostMem"; }
 
+std::optional<uint64_t>
+HostMemRegion::getDeviceAddress(const void *ptr, std::size_t size) const {
+  if (size == 0)
+    return std::nullopt;
+  uintptr_t base = reinterpret_cast<uintptr_t>(getPtr());
+  uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
+  std::size_t regionSize = getSize();
+  // Check bounds with subtractions only so nothing can overflow.
+  if (p < base)
+    return std::nullopt;
+  uintptr_t offset = p - base;
+  if (offset >= regionSize || size > regionSize - offset)
+    return std::nullopt;
+  uint64_t devBase = reinterpret_cast<uintptr_t>(getDevicePtr());
+  if (offset > UINT64_MAX - devBase)
+    return std::nullopt;
+  return devBase + offset;
+}
+
 CustomService::CustomService(AppIDPath idPath, AcceleratorConnection &conn,
                              const ServiceImplDetails &details,
                              const HWClientDetails &clients)

@@ -210,8 +210,17 @@ public:
 
   std::unique_ptr<HostMemRegion>
   allocate(std::size_t size, HostMem::Options opts) const override {
-    return std::unique_ptr<HostMemRegion>(
-        new XrtHostMemRegion(device, size, opts, memoryGroup));
+    if (size == 0)
+      return nullptr;
+    try {
+      return std::unique_ptr<HostMemRegion>(
+          new XrtHostMemRegion(device, size, opts, memoryGroup));
+    } catch (const std::exception &e) {
+      getConnection().getLogger().error(
+          "xrt_hostmem", "Failed to allocate " + std::to_string(size) +
+                             " bytes of host memory: " + e.what());
+      return nullptr;
+    }
   }
 
 private:

@@ -323,11 +323,9 @@ public:
   TraceHostMem(TraceAccelerator &conn) : HostMem(conn), impl(conn.getImpl()) {}
 
   struct TraceHostMemRegion : public HostMemRegion {
-    TraceHostMemRegion(std::size_t size, TraceAccelerator::Impl &impl)
-        : impl(impl) {
-      ptr = malloc(size);
-      this->size = size;
-    }
+    TraceHostMemRegion(void *ptr, std::size_t size,
+                       TraceAccelerator::Impl &impl)
+        : ptr(ptr), size(size), impl(impl) {}
     virtual ~TraceHostMemRegion() {
       if (impl.isWriteable())
         impl.write("HostMem") << "free " << ptr << std::endl;
@@ -344,8 +342,13 @@ public:
 
   virtual std::unique_ptr<HostMemRegion>
   allocate(std::size_t size, HostMem::Options opts) const override {
+    if (size == 0)
+      return nullptr;
+    void *ptr = malloc(size);
+    if (!ptr)
+      return nullptr;
     auto ret =
-        std::unique_ptr<HostMemRegion>(new TraceHostMemRegion(size, impl));
+        std::unique_ptr<HostMemRegion>(new TraceHostMemRegion(ptr, size, impl));
     if (impl.isWriteable())
       impl.write("HostMem 0x")
           << ret->getPtr() << " allocate " << size

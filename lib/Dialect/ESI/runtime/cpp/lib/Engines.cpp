@@ -202,6 +202,10 @@ void OneItemBuffersToHostReadPort::connectImpl(
     const ChannelPort::ConnectOptions &options) {
   engine->connect();
   buffer = engine->hostMem->allocate(bufferSize, {true, false});
+  if (!buffer)
+    throw std::runtime_error("OneItemBuffersToHost: failed to allocate " +
+                             std::to_string(bufferSize) +
+                             " bytes of host memory");
   writeBufferPtr();
 }
 
@@ -415,6 +419,9 @@ void OneItemBuffersFromHostWritePort::connectImpl(
   data_buffer = engine->hostMem->allocate(
       std::max(getFrameSizeBytes(), (size_t)512), {false, false});
   completion_buffer = engine->hostMem->allocate(512, {true, false});
+  if (!data_buffer || !completion_buffer)
+    throw std::runtime_error(
+        "OneItemBuffersFromHost: failed to allocate host memory");
   // Set the last byte to '1' to indicate that the buffer is ready to be filled
   // and sent to the device.
   *static_cast<uint8_t *>(completion_buffer->getPtr()) = 1;

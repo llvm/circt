@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Common.h"
+#include "esi/Services.h"
 
 #include <iostream>
 #include <sstream>
@@ -70,6 +71,21 @@ MessageData SegmentedMessageData::toMessageData() const {
     buf.insert(buf.end(), seg.data, seg.data + seg.size);
   }
   return MessageData(std::move(buf));
+}
+
+//===----------------------------------------------------------------------===//
+// Segment
+//===----------------------------------------------------------------------===//
+
+std::optional<uint64_t> Segment::getDeviceAddress() const {
+  if (!region)
+    return std::nullopt;
+  return region->getDeviceAddress(data, size);
+}
+
+std::unique_ptr<services::HostMemRegion>
+SegmentedMessageData::take(size_t segIdx) {
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
