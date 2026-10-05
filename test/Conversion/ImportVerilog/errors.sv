@@ -405,6 +405,15 @@ endmodule
 
 // -----
 
+module unsupported_tran_wide_terminal(output o);
+    wire [1:0] a, b;
+    // expected-error @below {{tran switch terminals must be 1 bit}}
+    tran(a, b);
+    assign o = a[0];
+endmodule
+
+// -----
+
 module unsupported_tran_terminal(output o);
     wire [1:0] v;
     wire b;
@@ -415,11 +424,9 @@ endmodule
 
 // -----
 
-// This is the classic bus-mux pattern: two tranif1 instances alternately
-// driving a shared bus from different sources. Each side has an external
-// driver from the other tranif1's perspective, so direction cannot be
-// statically resolved with the current single-driver heuristic. This is
-// expected to be revisited once CIRCT has proper net semantics.
+// Classic bus-mux pattern: two tranif1 instances alternately drive a
+// shared bus, so each side has an external driver from the other's
+// perspective and direction can't be resolved statically.
 module unsupported_tranif1_bus_mux(inout a, inout b, input sel, output bus);
     wire n_sel;
     assign n_sel = ~sel;

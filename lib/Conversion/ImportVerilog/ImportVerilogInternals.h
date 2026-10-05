@@ -382,8 +382,13 @@ struct Context {
   LogicalResult
   convertCMOSSwitchPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
+  FailureOr<std::tuple<Value, Value, moore::UnpackedType>>
+  convertTranTerminals(const slang::ast::Expression &terminalAExpr,
+                       const slang::ast::Expression &terminalBExpr,
+                       Location loc);
+
   LogicalResult
-  convertTranSwitchPrimative(const slang::ast::PrimitiveInstanceSymbol &prim);
+  convertTranSwitchPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
   slang::analysis::AnalysisManager &getDriverAnalysis();
 

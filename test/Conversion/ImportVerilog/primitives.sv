@@ -701,11 +701,12 @@ module tran_prim_ports(inout A, inout B);
 endmodule
 
 // CHECK-LABEL: moore.module @tranif1_prim
+// CHECK-SAME: (in %drv : !moore.ref<l1>, in %control : !moore.l1, out o : !moore.l1)
+// CHECK: %drv_0 = moore.net name "drv" wire : <l1>
+// CHECK: %control_1 = moore.net name "control" wire : <l1>
 // CHECK: %bus = moore.net wire : <l1>
-// CHECK: %drv = moore.net wire : <l1>
-// CHECK: %control = moore.net wire : <l1>
-// CHECK: [[RD_CONTROL:%.+]] = moore.read %control : <l1>
-// CHECK: [[RD_DRV:%.+]] = moore.read %drv : <l1>
+// CHECK: [[RD_CONTROL:%.+]] = moore.read %control_1 : <l1>
+// CHECK: [[RD_DRV:%.+]] = moore.read %drv_0 : <l1>
 // CHECK: [[INACTIVE:%.+]] = moore.constant 0 : l1
 // CHECK: [[Z:%.+]] = moore.constant bZ : l1
 // CHECK: [[COND:%.+]] = moore.case_eq [[RD_CONTROL]], [[INACTIVE]] : l1
@@ -719,20 +720,19 @@ endmodule
 // CHECK: moore.yield [[RD_DRV]] : l1
 // CHECK: moore.yield [[INNERRESULT]] : l1
 // CHECK: moore.assign %bus, [[RESULT]] : l1
-module tranif1_prim(output o);
-    wire bus, drv, control;
-    assign drv = 1'b1;
-    assign control = 1'b1;
+module tranif1_prim(inout drv, input control, output o);
+    wire bus;
     tranif1(bus, drv, control);
     assign o = bus;
 endmodule
 
 // CHECK-LABEL: moore.module @tranif0_prim
+// CHECK-SAME: (in %drv : !moore.ref<l1>, in %control : !moore.l1, out o : !moore.l1)
+// CHECK: %drv_0 = moore.net name "drv" wire : <l1>
+// CHECK: %control_1 = moore.net name "control" wire : <l1>
 // CHECK: %bus = moore.net wire : <l1>
-// CHECK: %drv = moore.net wire : <l1>
-// CHECK: %control = moore.net wire : <l1>
-// CHECK: [[RD_CONTROL:%.+]] = moore.read %control : <l1>
-// CHECK: [[RD_DRV:%.+]] = moore.read %drv : <l1>
+// CHECK: [[RD_CONTROL:%.+]] = moore.read %control_1 : <l1>
+// CHECK: [[RD_DRV:%.+]] = moore.read %drv_0 : <l1>
 // CHECK: [[INACTIVE:%.+]] = moore.constant 1 : l1
 // CHECK: [[Z:%.+]] = moore.constant bZ : l1
 // CHECK: [[COND:%.+]] = moore.case_eq [[RD_CONTROL]], [[INACTIVE]] : l1
@@ -746,26 +746,21 @@ endmodule
 // CHECK: moore.yield [[RD_DRV]] : l1
 // CHECK: moore.yield [[INNERRESULT]] : l1
 // CHECK: moore.assign %bus, [[RESULT]] : l1
-module tranif0_prim(output o);
-    wire bus, drv, control;
-    assign drv = 1'b1;
-    assign control = 1'b0;
+module tranif0_prim(inout drv, input control, output o);
+    wire bus;
     tranif0(bus, drv, control);
     assign o = bus;
 endmodule
 
 // CHECK-LABEL: moore.module @tranif1_reverse_prim
+// CHECK-SAME: (in %drv : !moore.ref<l1>, in %control : !moore.l1, out o : !moore.l1)
 // CHECK: %bus = moore.net wire : <l1>
-// CHECK: %drv = moore.net wire : <l1>
-// CHECK: %control = moore.net wire : <l1>
 // CHECK: moore.assign %bus, {{%.+}} : l1
-module tranif1_reverse_prim(output o);
+module tranif1_reverse_prim(inout drv, input control, output o);
     // Same as tranif1_prim, but with the terminal order swapped (drv is
     // the SECOND terminal instead of the first), exercising the branch
     // where direction detection picks up the driver on terminal B.
-    wire bus, drv, control;
-    assign drv = 1'b1;
-    assign control = 1'b1;
+    wire bus;
     tranif1(drv, bus, control);
     assign o = bus;
 endmodule

@@ -2292,7 +2292,7 @@ LogicalResult Context::convertPrimitiveInstance(
     return this->convertFixedPrimitive(prim);
     break;
   case slang::ast::PrimitiveSymbol::PrimitiveKind::BiDiSwitch:
-    return this->convertTranSwitchPrimative(prim);
+    return this->convertTranSwitchPrimitive(prim);
     break;
   default:
     return mlir::emitError(convertLocation(prim.location))
@@ -2803,6 +2803,11 @@ slang::analysis::AnalysisManager &Context::getDriverAnalysis() {
   return *driverAnalysis;
 }
 
+/// Build the conditional Z/value propagation used by three-state and
+/// bidirectional switch primitives: yields Z when `enVal` equals the
+/// inactive level, otherwise yields `inVal` (collapsing any Z to X).
+/// Kept separate from its single call site since this logic is
+/// expected to be reused once CIRCT has proper net semantics.
 Value Context::buildTriStatePass(Value inVal, Value enVal,
                                  moore::UnpackedType dstType, int inactiveLevel,
                                  Location loc) {
@@ -2833,7 +2838,36 @@ Value Context::buildTriStatePass(Value inVal, Value enVal,
   return inactiveOp.getResult();
 }
 
-LogicalResult Context::convertTranSwitchPrimative(
+/// Convert and validate the two bidirectional terminals shared by `tran`,
+/// `tranif0`, and `tranif1`: both must be lvalues of the same 1-bit type.
+FailureOr<std::tuple<Value, Value, moore::UnpackedType>>
+Context::convertTranTerminals(const slang::ast::Expression &terminalAExpr,
+                              const slang::ast::Expression &terminalBExpr,
+                              Location loc) {
+  auto terminalA = convertLvalueExpression(terminalAExpr);
+  if (!terminalA)
+    return failure();
+
+  auto terminalB = convertLvalueExpression(terminalBExpr);
+  if (!terminalB)
+    return failure();
+
+  auto terminalAType =
+      cast<moore::RefType>(terminalA.getType()).getNestedType();
+  auto terminalBType =
+      cast<moore::RefType>(terminalB.getType()).getNestedType();
+
+  if (terminalAType.getBitSize() != 1 || terminalBType.getBitSize() != 1)
+    return mlir::emitError(loc) << "tran switch terminals must be 1 bit";
+
+  if (terminalAType != terminalBType)
+    return mlir::emitError(loc)
+           << "tran between mismatched net types is not yet supported";
+
+  return std::make_tuple(terminalA, terminalB, terminalAType);
+}
+
+LogicalResult Context::convertTranSwitchPrimitive(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
   assert(prim.primitiveType.name == "tran" ||
          prim.primitiveType.name == "tranif0" ||
@@ -2852,25 +2886,11 @@ LogicalResult Context::convertTranSwitchPrimative(
     auto &terminalBExpr =
         portConns[1]->as<slang::ast::AssignmentExpression>().left();
 
-    auto terminalA = convertLvalueExpression(terminalAExpr);
-    if (!terminalA)
+    auto terminalsOrFailure =
+        convertTranTerminals(terminalAExpr, terminalBExpr, loc);
+    if (failed(terminalsOrFailure))
       return failure();
-
-    auto terminalB = convertLvalueExpression(terminalBExpr);
-    if (!terminalB)
-      return failure();
-
-    auto terminalAType =
-        cast<moore::RefType>(terminalA.getType()).getNestedType();
-    auto terminalBType =
-        cast<moore::RefType>(terminalB.getType()).getNestedType();
-
-    if (terminalAType.getBitSize() != 1 || terminalBType.getBitSize() != 1)
-      return mlir::emitError(loc) << "tran switch terminals must be 1 bit";
-
-    if (terminalAType != terminalBType)
-      return mlir::emitError(loc)
-             << "tran between mismatched net types is not yet supported";
+    auto [terminalA, terminalB, terminalType] = *terminalsOrFailure;
 
     auto netA = terminalA.getDefiningOp<moore::NetOp>();
     auto netB = terminalB.getDefiningOp<moore::NetOp>();
@@ -2904,32 +2924,19 @@ LogicalResult Context::convertTranSwitchPrimative(
   auto &terminalBExpr =
       portConns[1]->as<slang::ast::AssignmentExpression>().left();
 
-  auto terminalA = convertLvalueExpression(terminalAExpr);
-  if (!terminalA)
+  auto terminalsOrFailure =
+      convertTranTerminals(terminalAExpr, terminalBExpr, loc);
+  if (failed(terminalsOrFailure))
     return failure();
-
-  auto terminalB = convertLvalueExpression(terminalBExpr);
-  if (!terminalB)
-    return failure();
+  auto [terminalA, terminalB, terminalAType] = *terminalsOrFailure;
 
   auto control = convertRvalueExpression(*portConns[2]);
   if (!control)
     return failure();
 
-  auto terminalAType =
-      cast<moore::RefType>(terminalA.getType()).getNestedType();
-  auto terminalBType =
-      cast<moore::RefType>(terminalB.getType()).getNestedType();
   auto controlType = cast<moore::IntType>(control.getType());
 
-  if (terminalAType.getBitSize() != 1 || terminalBType.getBitSize() != 1 ||
-      controlType.getBitSize() != 1)
-    return mlir::emitError(loc)
-           << "tran switch terminals and control must be 1 bit";
-
-  if (terminalAType != terminalBType)
-    return mlir::emitError(loc)
-           << primName << " between mismatched net types is not yet supported";
+  assert(controlType.getBitSize() == 1 && "tranif control must be 1 bit");
 
   auto *symBaseA = terminalAExpr.getSymbolReference();
   auto *symA = symBaseA ? symBaseA->as_if<slang::ast::ValueSymbol>() : nullptr;
@@ -2962,8 +2969,7 @@ LogicalResult Context::convertTranSwitchPrimative(
   } else {
     return mlir::emitError(loc)
            << primName
-           << " requires exactly one terminal to have an external driver; "
-              "dynamic or ambiguous direction is not yet supported";
+           << " with multiple driven terminals is not yet supported";
   }
 
   Value inVal = moore::ReadOp::create(builder, loc, drivenTerminal);
