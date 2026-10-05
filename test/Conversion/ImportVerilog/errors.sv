@@ -392,14 +392,14 @@ endmodule
 // -----
 
 module unsupported_tranif0_prim(inout A, inout B, input C);
-    // expected-error @below {{tranif0 requires exactly one terminal to have an external driver; dynamic or ambiguous direction is not yet supported}}
+    // expected-error @below {{tranif0 with multiple driven terminals is not yet supported}}
     tranif0 u1 (A, B, C);
 endmodule
 
 // -----
 
 module unsupported_tranif1_prim(inout A, inout B, input C);
-    // expected-error @below {{tranif1 requires exactly one terminal to have an external driver; dynamic or ambiguous direction is not yet supported}}
+    // expected-error @below {{tranif1 with multiple driven terminals is not yet supported}}
     tranif1 u1 (A, B, C);
 endmodule
 
@@ -430,7 +430,7 @@ endmodule
 module unsupported_tranif1_bus_mux(inout a, inout b, input sel, output bus);
     wire n_sel;
     assign n_sel = ~sel;
-    // expected-error @below {{tranif1 requires exactly one terminal to have an external driver; dynamic or ambiguous direction is not yet supported}}
+    // expected-error @below {{tranif1 with multiple driven terminals is not yet supported}}
     tranif1 t0 (bus, a, sel);
     tranif1 t1 (bus, b, n_sel);
 endmodule
