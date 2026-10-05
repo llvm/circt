@@ -1,19 +1,5 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(lower-firrtl-to-hw{lower-to-core=true})' --verify-diagnostics --split-input-file %s
 
-firrtl.circuit "fflush_unsupported" {
-  firrtl.module @fflush_unsupported(
-      in %clock: !firrtl.clock,
-      in %enable: !firrtl.uint<1>) {
-    // expected-error @+2 {{'firrtl.fflush' op lower-to-core does not support firrtl.fflush yet}}
-    // expected-error @below {{'firrtl.fflush' op LowerToHW couldn't handle this operation}}
-    firrtl.fflush %clock, %enable, "out.txt"()
-        : !firrtl.clock, !firrtl.uint<1>
-    firrtl.skip
-  }
-}
-
-// -----
-
 firrtl.circuit "force_unsupported" {
   firrtl.module @force_unsupported(in %in: !firrtl.uint<42>) {
     %foo = firrtl.verbatim.wire "foo" : () -> !firrtl.uint<42>
