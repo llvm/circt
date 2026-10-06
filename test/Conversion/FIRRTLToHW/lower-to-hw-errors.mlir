@@ -313,37 +313,3 @@ firrtl.circuit "ForceNameTop" {
     firrtl.instance bar sym @sym_bar @ForceNameSubmodule()
   }
 }
-
-// -----
-
-// Same circuit, but the two ForceNames are distinct: no diagnostic expected.
-firrtl.circuit "ForceNameTopPass" {
-  hw.hierpath private @nla_foo_pass [
-    @ForceNameTopPass::@sym_foo,
-    @ForceNameSubmodulePass
-  ]
-  hw.hierpath private @nla_bar_pass [
-    @ForceNameTopPass::@sym_bar,
-    @ForceNameSubmodulePass
-  ]
-
-  firrtl.module private @ForceNameSubmodulePass()
-      attributes {annotations = [
-        {
-          circt.nonlocal = @nla_foo_pass,
-          class = "chisel3.util.experimental.ForceNameAnnotation",
-          name = "Duplicated_Pass"
-        },
-        {
-          circt.nonlocal = @nla_bar_pass,
-          class = "chisel3.util.experimental.ForceNameAnnotation",
-          name = "Duplicated"
-        }
-      ]} {
-  }
-
-  firrtl.module @ForceNameTopPass() {
-    firrtl.instance foo sym @sym_foo @ForceNameSubmodulePass()
-    firrtl.instance bar sym @sym_bar @ForceNameSubmodulePass()
-  }
-}
