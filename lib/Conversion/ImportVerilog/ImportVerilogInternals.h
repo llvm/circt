@@ -16,6 +16,8 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/SV/SVAttributes.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"

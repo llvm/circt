@@ -14,6 +14,7 @@
 #include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/ConversionPatternSet.h"
@@ -403,6 +404,8 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
 
     auto hwModuleOp = hw::HWModuleOp::create(rewriter, op.getLoc(),
                                              op.getSymNameAttr(), *portInfo);
+    if (auto svAttrs = sv::getSVAttributes(op))
+      sv::setSVAttributes(hwModuleOp, svAttrs);
     // Make hw.module have the same visibility as the moore.module.
     // The entry/top level module is public, otherwise is private.
     SymbolTable::setSymbolVisibility(hwModuleOp,
