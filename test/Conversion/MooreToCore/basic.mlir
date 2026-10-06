@@ -544,24 +544,23 @@ moore.module @MixedPortsWithAssocArray(in %valid : !moore.l1, in %data : !moore.
 // CHECK-LABEL: hw.module @Variable
 moore.module @Variable() {
   // CHECK: [[TMP0:%.+]] = hw.constant 0 : i32
-  // CHECK: %a = llhd.sig [[TMP0]] : i32
+  // CHECK: %a = llhd.sig [[TMP0]] : <i32>
   %a = moore.variable : <i32>
 
   // CHECK: [[TMP1:%.+]] = hw.constant 0 : i8
-  // CHECK: %b1 = llhd.sig [[TMP1]] : i8
+  // CHECK: %b1 = llhd.sig [[TMP1]] : <i8>
   %b1 = moore.variable : <i8>
 
   // CHECK: [[PRB:%.+]] = llhd.prb %b1 : i8
   %0 = moore.read %b1 : <i8>
-  // CHECK: %b2 = llhd.sig [[PRB]] : i8
+  // CHECK: %b2 = llhd.sig [[PRB]] : <i8>
   %b2 = moore.variable %0 : <i8>
 
   // CHECK: %true = hw.constant true
   %1 = moore.constant 1 : l1
-  // CHECK: %l = llhd.sig %true : i1
+  // CHECK: %l = llhd.sig %true : <i1>
   %l = moore.variable %1 : <l1>
-  // CHECK: [[TMP:%.+]] = hw.constant 0 : i19
-  // CHECK: %m = llhd.sig [[TMP]] : i19
+  // CHECK: %m = llhd.sig : <i19>
   %m = moore.variable : <l19>
 
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
@@ -572,24 +571,23 @@ moore.module @Variable() {
   moore.assign %a, %3 : i32
 
   // CHECK: [[TMP:%.+]] = llvm.mlir.zero : !llvm.ptr
-  // CHECK: llhd.sig [[TMP]] : !llvm.ptr
+  // CHECK: llhd.sig [[TMP]] : <!llvm.ptr>
   moore.variable : <!moore.chandle>
 
-  // CHECK: [[TMP:%.+]] = llhd.constant_time <0
-  // CHECK: llhd.sig [[TMP]] : !llhd.time
+  // CHECK: llhd.sig : <!llhd.time>
   moore.variable : <!moore.time>
 
   // CHECK: [[TMP:%.+]] = llhd.constant_time
-  // CHECK: llhd.sig [[TMP]] : !llhd.time
+  // CHECK: llhd.sig [[TMP]] : <!llhd.time>
   %c42_fs = moore.constant_time 42 fs
   moore.variable %c42_fs : <!moore.time>
 
   // CHECK: [[TMP:%.+]] = arith.constant {{0.*}} : f32
-  // CHECK: llhd.sig [[TMP]] : f32
+  // CHECK: llhd.sig [[TMP]] : <f32>
   moore.variable : <!moore.f32>
 
   // CHECK: [[TMP:%.+]] = arith.constant {{0.*}} : f64
-  // CHECK: llhd.sig [[TMP]] : f64
+  // CHECK: llhd.sig [[TMP]] : <f64>
   moore.variable : <!moore.f64>
 
   // CHECK: hw.output
@@ -599,14 +597,14 @@ moore.module @Variable() {
 // CHECK-LABEL: hw.module @Net
 moore.module @Net() {
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
-  // CHECK: %a = llhd.sig [[TMP]] : i32
+  // CHECK: %a = llhd.sig [[TMP]] : <i32>
   %a = moore.net wire : <i32>
 
   // CHECK: [[PRB:%.+]] = llhd.prb %a : i32
   %0 = moore.read %a : <i32>
 
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
-  // CHECK: %b = llhd.sig [[TMP]] : i32
+  // CHECK: %b = llhd.sig [[TMP]] : <i32>
   // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
   // CHECK: llhd.drv %b, [[PRB]] after [[TIME]] : i32
   %b = moore.net wire %0 : <i32>
@@ -643,7 +641,7 @@ moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i
   %punder = moore.extract %arr from -1 : !moore.uarray<2 x i32> -> !moore.uarray<2 x i32>
 
   // CHECK: [[INIT:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32, 0 : i32, 0 : i32] : !hw.array<4xi32>
-  // CHECK: [[SIG_0:%.+]] = llhd.sig [[INIT]] : !hw.array<4xi32>
+  // CHECK: [[SIG_0:%.+]] = llhd.sig [[INIT]] : <!hw.array<4xi32>>
   %2 = moore.variable : <uarray<4 x i32>>
 
   // CHECK: [[C1:%.+]] = hw.constant 1 : i2
@@ -653,7 +651,7 @@ moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i
 
   // CHECK: [[INIT:%.+]] = hw.aggregate_constant
   // CHECK-SAME{LITERAL}: [[[0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4]], [[0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4]], [[0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4]], [[0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4]]] : !hw.array<4xarray<8xarray<8xi4>>>
-  // CHECK: [[SIG_1:%.+]] = llhd.sig [[INIT]] : !hw.array<4xarray<8xarray<8xi4>>>
+  // CHECK: [[SIG_1:%.+]] = llhd.sig [[INIT]] : <!hw.array<4xarray<8xarray<8xi4>>>>
   %4 = moore.variable : <uarray<4 x uarray<8 x array<8 x i4>>>>
 
   moore.output %0 : !moore.i32
@@ -662,7 +660,7 @@ moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i
 // CHECK-LABEL: hw.module private @QueueRefPort(out mem : !llhd.ref<!sim.queue<i8, 0>>)
 moore.module private @QueueRefPort(out mem : !moore.ref<queue<i8, 0>>) {
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i8, 0>
-  // CHECK: [[SIG:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i8, 0>
+  // CHECK: [[SIG:%.+]] = llhd.sig [[EMPTY]] : <!sim.queue<i8, 0>>
   %mem = moore.variable : <queue<i8, 0>>
   // CHECK: hw.output [[SIG]] : !llhd.ref<!sim.queue<i8, 0>>
   moore.output %mem : !moore.ref<queue<i8, 0>>
@@ -687,8 +685,8 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   moore.assign %ref, %0 : !moore.i32
 
   // CHECK: [[INIT:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.struct<exp_bits: i32, man_bits: i32>
-  // CHECK: llhd.sig [[INIT]] : !hw.struct<exp_bits: i32, man_bits: i32>
-  // CHECK: llhd.sig %arg0 : !hw.struct<exp_bits: i32, man_bits: i32>
+  // CHECK: llhd.sig [[INIT]] : <!hw.struct<exp_bits: i32, man_bits: i32>>
+  // CHECK: llhd.sig %arg0 : <!hw.struct<exp_bits: i32, man_bits: i32>>
   %1 = moore.variable : <struct<{exp_bits: i32, man_bits: i32}>>
   %2 = moore.variable %arg0 : <struct<{exp_bits: i32, man_bits: i32}>>
 
@@ -746,7 +744,7 @@ moore.module @UnpackedStruct() {
   %1 = moore.constant 0 : i32
 
   // CHECK: %[[INIT:.*]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.struct<a: i32, b: i32>
-  // CHECK: %[[USTRUCT:.*]] = llhd.sig %[[INIT]] : !hw.struct<a: i32, b: i32>
+  // CHECK: %[[USTRUCT:.*]] = llhd.sig %[[INIT]] : <!hw.struct<a: i32, b: i32>>
   %ms = moore.variable : <ustruct<{a: i32, b: i32}>>
 
 // CHECK: llhd.process {
@@ -1251,7 +1249,7 @@ moore.module @WaitEvent() {
 
 // CHECK-LABEL: hw.module @EmptyWaitEvent(
 moore.module @EmptyWaitEvent(out out : !moore.l32) {
-  // CHECK: [[OUT:%.+]] = llhd.sig %c0_i32
+  // CHECK: [[OUT:%.+]] = llhd.sig : <i32>
   // CHECK: llhd.process {
   // CHECK:   cf.br
   // CHECK: ^bb
@@ -1795,7 +1793,7 @@ func.func @StringIndexing(%arg0: !moore.string, %arg1: !moore.i32) {
 // CHECK-LABEL func.func @QueueOperations
 func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
-  // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i32, 10>
+  // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : <!sim.queue<i32, 10>>
   %q = moore.variable : <!moore.queue<i32, 10>>
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]] = sim.queue.push_back %arg0 into [[QR]] : <i32, 10>
@@ -1852,7 +1850,7 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   %diffbounds = moore.queue.resize %qr : <i32, 10> -> <i32, 0>
 
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
-  // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i32, 10>
+  // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : <!sim.queue<i32, 10>>
   %q2 = moore.variable : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR2:%.+]] = llhd.prb [[Q]]
@@ -1865,7 +1863,7 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   moore.queue.cmp ne %qr, %qr2 : <i32, 10>
 
   // CHECK: [[UPARR:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32, 0 : i32, 0 : i32] : !hw.array<4xi32>
-  // CHECK: [[UPVAR:%.+]] = llhd.sig [[UPARR]] : !hw.array<4xi32>
+  // CHECK: [[UPVAR:%.+]] = llhd.sig [[UPARR]] : <!hw.array<4xi32>>
   %uparray = moore.variable : <!moore.uarray<4 x i32>>
   // CHECK: [[UPR:%.+]] = llhd.prb [[UPVAR]]
   %upr = moore.read %uparray : <!moore.uarray<4 x i32>>
@@ -1892,7 +1890,7 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
 // CHECK-LABEL: func.func @AssocArrayOperations
 func.func @AssocArrayOperations(%arg0: !moore.i32, %arg1: !moore.i8) {
   // CHECK: [[EMPTY:%.+]] = sim.assoc_array.empty : <i8, i32>
-  // CHECK: [[AA:%.+]] = llhd.sig [[EMPTY]] : !sim.assoc_array<i8, i32>
+  // CHECK: [[AA:%.+]] = llhd.sig [[EMPTY]] : <!sim.assoc_array<i8, i32>>
   %aa = moore.variable : <!moore.assoc_array<i8, i32>>
 
   // CHECK: [[AAR:%.+]] = llhd.prb [[AA]]
@@ -1976,65 +1974,65 @@ moore.module @GlobalFooUse() {
 
 // CHECK-LABEL: @Nets
 moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, out o4 : !moore.l2, out o5 : !moore.l1, out o6 : !moore.l2, out o7 : !moore.l1, out o8 : !moore.l2, out o9 : !moore.l1, out o10 : !moore.l2, out o11 : !moore.l1, out o12 : !moore.l2, out o13 : !moore.l1, out o14 : !moore.l2, out o15 : !moore.l1, out o16 : !moore.l2, out o17 : !moore.l1, out o18 : !moore.l2, out o19 : !moore.l1, out o20 : !moore.l2, out o21 : !moore.l1, out o22 : !moore.l2, out o23 : !moore.l1, out o24 : !moore.l2) {
-  // CHECK: [[N1:%.*]] = llhd.sig %false : i1
+  // CHECK: [[N1:%.*]] = llhd.sig %false : <i1>
   %n1 = moore.net wire : <l1>
   // CHECK: [[C0:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N2:%.*]] = llhd.sig [[C0]] : i2
+  // CHECK-NEXT: [[N2:%.*]] = llhd.sig [[C0]] : <i2>
   %n2 = moore.net wire : <l2>
-  // CHECK: [[N3:%.*]] = llhd.sig %false{{.*}} : i1
+  // CHECK: [[N3:%.*]] = llhd.sig %false{{.*}} : <i1>
   %n3 = moore.net tri : <l1>
   // CHECK: [[C0_1:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N4:%.*]] = llhd.sig [[C0_1]] : i2
+  // CHECK-NEXT: [[N4:%.*]] = llhd.sig [[C0_1]] : <i2>
   %n4 = moore.net tri : <l2>
-  // CHECK: [[N5:%.*]] = llhd.sig %false{{.*}} : i1
+  // CHECK: [[N5:%.*]] = llhd.sig %false{{.*}} : <i1>
   %n5 = moore.net uwire : <l1>
   // CHECK: [[C0_2:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N6:%.*]] = llhd.sig [[C0_2]] : i2
+  // CHECK-NEXT: [[N6:%.*]] = llhd.sig [[C0_2]] : <i2>
   %n6 = moore.net uwire : <l2>
-  // CHECK: [[N7:%.*]] = llhd.sig %false{{.*}} : i1
+  // CHECK: [[N7:%.*]] = llhd.sig %false{{.*}} : <i1>
   %n7 = moore.net supply0 : <l1>
   // CHECK: [[C0_3:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N8:%.*]] = llhd.sig [[C0_3]] : i2
+  // CHECK-NEXT: [[N8:%.*]] = llhd.sig [[C0_3]] : <i2>
   %n8 = moore.net supply0 : <l2>
-  // CHECK: [[N9:%.*]] = llhd.sig %true : i1
+  // CHECK: [[N9:%.*]] = llhd.sig %true : <i1>
   %n9 = moore.net supply1 : <l1>
   // CHECK: [[C1:%.*]] = hw.constant -1 : i2
-  // CHECK-NEXT: [[N10:%.*]] = llhd.sig [[C1]] : i2
+  // CHECK-NEXT: [[N10:%.*]] = llhd.sig [[C1]] : <i2>
   %n10 = moore.net supply1 : <l2>
-  // CHECK: [[N11:%.*]] = llhd.sig %false{{.*}} : i1
+  // CHECK: [[N11:%.*]] = llhd.sig %false{{.*}} : <i1>
   %n11 = moore.net tri0 : <l1>
   // CHECK: [[C0_4:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N12:%.*]] = llhd.sig [[C0_4]] : i2
+  // CHECK-NEXT: [[N12:%.*]] = llhd.sig [[C0_4]] : <i2>
   %n12 = moore.net tri0 : <l2>
-  // CHECK: [[N13:%.*]] = llhd.sig %true{{.*}} : i1
+  // CHECK: [[N13:%.*]] = llhd.sig %true{{.*}} : <i1>
   %n13 = moore.net tri1 : <l1>
   // CHECK: [[C1_1:%.*]] = hw.constant -1 : i2
-  // CHECK-NEXT: [[N14:%.*]] = llhd.sig [[C1_1]] : i2
+  // CHECK-NEXT: [[N14:%.*]] = llhd.sig [[C1_1]] : <i2>
   %n14 = moore.net tri1 : <l2>
-  // CHECK: [[N15:%.*]] = llhd.sig %false{{.*}} : i1
+  // CHECK: [[N15:%.*]] = llhd.sig %false{{.*}} : <i1>
   %n15 = moore.net wand : <l1>
   // CHECK: [[C0_5:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N16:%.*]] = llhd.sig [[C0_5]] : i2
+  // CHECK-NEXT: [[N16:%.*]] = llhd.sig [[C0_5]] : <i2>
   %n16 = moore.net wand : <l2>
-  // CHECK: [[N17:%.*]] = llhd.sig %false{{.*}} : i1
+  // CHECK: [[N17:%.*]] = llhd.sig %false{{.*}} : <i1>
   %n17 = moore.net triand : <l1>
   // CHECK: [[C0_6:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N18:%.*]] = llhd.sig [[C0_6]] : i2
+  // CHECK-NEXT: [[N18:%.*]] = llhd.sig [[C0_6]] : <i2>
   %n18 = moore.net triand : <l2>
-  // CHECK: [[N19:%.*]] = llhd.sig %false{{.*}} : i1
+  // CHECK: [[N19:%.*]] = llhd.sig %false{{.*}} : <i1>
   %n19 = moore.net wor : <l1>
   // CHECK: [[C0_7:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N20:%.*]] = llhd.sig [[C0_7]] : i2
+  // CHECK-NEXT: [[N20:%.*]] = llhd.sig [[C0_7]] : <i2>
   %n20 = moore.net wor : <l2>
-  // CHECK: [[N21:%.*]] = llhd.sig %false{{.*}} : i1
+  // CHECK: [[N21:%.*]] = llhd.sig %false{{.*}} : <i1>
   %n21 = moore.net trior : <l1>
   // CHECK: [[C0_8:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N22:%.*]] = llhd.sig [[C0_8]] : i2
+  // CHECK-NEXT: [[N22:%.*]] = llhd.sig [[C0_8]] : <i2>
   %n22 = moore.net trior : <l2>
-  // CHECK: [[N23:%.*]] = llhd.sig %false{{.*}} : i1
+  // CHECK: [[N23:%.*]] = llhd.sig %false{{.*}} : <i1>
   %n23 = moore.net trireg : <l1>
   // CHECK: [[C0_9:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N24:%.*]] = llhd.sig [[C0_9]] : i2
+  // CHECK-NEXT: [[N24:%.*]] = llhd.sig [[C0_9]] : <i2>
   %n24 = moore.net trireg : <l2>
 
   // CHECK: llhd.prb [[N1]] : i1
@@ -2237,7 +2235,7 @@ moore.module @ReadMem() {
 moore.module @StringArrayVariable() {
   // CHECK-NEXT: [[ZERO:%.+]] = sim.string.literal ""
   // CHECK-NEXT: [[INIT:%.+]] = hw.array_create [[ZERO]], [[ZERO]] : !sim.dstring
-  // CHECK-NEXT: [[SIG:%.+]] = llhd.sig [[INIT]] : !hw.array<2x!sim.dstring>
+  // CHECK-NEXT: [[SIG:%.+]] = llhd.sig [[INIT]] : <!hw.array<2x!sim.dstring>>
   %names = moore.variable : <uarray<2 x string>>
 
   // CHECK-NEXT: llhd.process

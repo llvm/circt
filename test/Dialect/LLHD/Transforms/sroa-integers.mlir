@@ -5,10 +5,10 @@ hw.module @integers(in %in : i4, in %v2 : i2, out out : i4) {
   %time = llhd.constant_time <0ns, 0d, 1e>
 
   // CHECK-NOT: llhd.sig{{.*}} : i4
-  // CHECK: %[[SIG0:.*]] = llhd.sig {{.*}} : i1
-  // CHECK: %[[SIG1:.*]] = llhd.sig {{.*}} : i2
-  // CHECK: %[[SIG3:.*]] = llhd.sig {{.*}} : i1
-  %sig = llhd.sig name "test_sig" %in : i4
+  // CHECK: %[[SIG0:.*]] = llhd.sig {{.*}} : <i1>
+  // CHECK: %[[SIG1:.*]] = llhd.sig {{.*}} : <i2>
+  // CHECK: %[[SIG3:.*]] = llhd.sig {{.*}} : <i1>
+  %sig = llhd.sig name "test_sig" %in : <i4>
 
   // CHECK-NOT: llhd.prb %{{.*}} : i4
   // CHECK: %[[PRB0:.*]] = llhd.prb %[[SIG0]]
@@ -46,7 +46,7 @@ hw.module @integers(in %in : i4, in %v2 : i2, out out : i4) {
 // CHECK-LABEL: @simple_add
 // CHECK-NOT: i1
 hw.module @simple_add(in %in : i4, out out : i4) {
-  %sig = llhd.sig name "test_sig" %in : i4
+  %sig = llhd.sig name "test_sig" %in : <i4>
 
   %prb = llhd.prb %sig : i4
 

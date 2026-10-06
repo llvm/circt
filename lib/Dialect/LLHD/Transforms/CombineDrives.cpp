@@ -460,7 +460,7 @@ void ModuleContext::addDefaultDriveSlices(Signal &signal,
   // potentially have to walk up our parent signals to find an actual `llhd.sig`
   // op, and then descend back down, extracting subfields.
   auto signalOp = signal.value.getDefiningOp<SignalOp>();
-  if (!signalOp)
+  if (!signalOp || !signalOp.getInit())
     return;
   auto defaultValue = signalOp.getInit();
 

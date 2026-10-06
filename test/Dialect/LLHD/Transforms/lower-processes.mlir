@@ -55,7 +55,7 @@ hw.module @SupportYieldOperands(in %a: i42) {
 // CHECK-LABEL: @SupportSeparateProbesOfSameValue(
 hw.module @SupportSeparateProbesOfSameValue() {
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   %0 = llhd.prb %a : i42
   %1 = llhd.prb %a : i42
   // CHECK: llhd.combinational
@@ -255,7 +255,7 @@ hw.module @SkipIfEntryAndWaitConvergeWithSideEffectingOps(in %a : i42) {
 hw.module @DelayedWaitsAreNotCombinational(in %v0: i1, in %v1: i1, in %v2: i1) {
   %0 = llhd.constant_time <1ns, 0d, 0e>
   %false = hw.constant false
-  %a = llhd.sig %false : i1
+  %a = llhd.sig %false : <i1>
 
   // CHECK: llhd.process
   llhd.process {
