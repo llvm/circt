@@ -2806,8 +2806,9 @@ slang::analysis::AnalysisManager &Context::getDriverAnalysis() {
 /// Build the conditional Z/value propagation used by three-state and
 /// bidirectional switch primitives: yields Z when `enVal` equals the
 /// inactive level, otherwise yields `inVal` (collapsing any Z to X).
-/// Kept separate from its single call site since this logic is
-/// expected to be reused once CIRCT has proper net semantics.
+/// Kept as a helper since `convertThreeStateGatePrimitive`
+/// (bufif/notif) has essentially the same logic inline today.
+/// This could be refactored to share this helper in a follow-up.
 Value Context::buildTriStatePass(Value inVal, Value enVal,
                                  moore::UnpackedType dstType, int inactiveLevel,
                                  Location loc) {
