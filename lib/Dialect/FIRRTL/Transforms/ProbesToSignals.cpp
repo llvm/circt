@@ -59,6 +59,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Support/Debug.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
@@ -138,6 +139,37 @@ BundleType createForceCtrlBundleType(FIRRTLBaseType probedType) {
   return BundleType::get(ctx, elements);
 }
 
+/// Control input ports appended for forceable probe ports. Modules and their
+/// instances derive these independently, so this defines the ABI.
+template <typename PortOwnerT>
+SmallVector<std::pair<unsigned, PortInfo>> getForceCtrlPorts(
+    PortOwnerT op,
+    ArrayRef<std::pair<unsigned, FIRRTLBaseType>> forceablePorts) {
+  auto *ctx = op->getContext();
+  unsigned appendAt = op.getNumPorts();
+
+  llvm::StringSet<> taken;
+  for (unsigned idx = 0; idx != appendAt; ++idx)
+    taken.insert(op.getPortName(idx));
+
+  SmallVector<std::pair<unsigned, PortInfo>> ctrlPorts;
+  ctrlPorts.reserve(forceablePorts.size());
+  for (auto [idx, probedType] : forceablePorts) {
+    SmallString<64> name(op.getPortName(idx));
+    name += "_force_ctrl";
+    auto baseLen = name.size();
+    for (unsigned suffix = 0; !taken.insert(name).second; ++suffix) {
+      name.truncate(baseLen);
+      (Twine("_") + Twine(suffix)).toVector(name);
+    }
+    ctrlPorts.emplace_back(
+        appendAt, PortInfo(StringAttr::get(ctx, name),
+                           createForceCtrlBundleType(probedType), Direction::In,
+                           /*symName=*/StringAttr{}, op.getPortLocation(idx)));
+  }
+  return ctrlPorts;
+}
+
 class ProbeVisitor : public FIRRTLVisitor<ProbeVisitor, LogicalResult> {
 public:
   static constexpr StringRef forceActiveName = "forceActive";
@@ -145,8 +177,7 @@ public:
   static constexpr StringRef forcedValueName = "forcedValue";
   static constexpr StringRef clockName = "clk";
 
-  ProbeVisitor(hw::InnerRefNamespace &irn, InstanceGraph &instanceGraph)
-      : irn(irn), instanceGraph(instanceGraph) {}
+  ProbeVisitor(hw::InnerRefNamespace &irn) : irn(irn) {}
 
   /// Entrypoint.
   LogicalResult visit(FModuleLike mod);
@@ -280,9 +311,6 @@ private:
   /// Inner-ref namespace for resolving inner refs.
   hw::InnerRefNamespace &irn;
 
-  /// Keep instance-graph records synchronized with cloned instances.
-  InstanceGraph &instanceGraph;
-
   /// Per-target force state, keyed by hardware value.
   struct TargetState {
     SmallVector<ForceReleaseAccess> accesses;
@@ -350,7 +378,6 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
 
   auto portTypes = mod.getPortTypes();
   auto portLocs = mod.getPortLocationsAttr().getAsRange<Location>();
-  auto portNames = mod.getPortNamesAttr();
   SmallVector<Attribute> newPortTypes;
 
   wires.reserve(portTypes.size());
@@ -417,30 +444,8 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
   // Append control inputs without changing existing port indices.
   SmallVector<std::pair<unsigned, Value>> rwProbePorts;
   if (!forceablePorts.empty()) {
-    auto *ctx = mod->getContext();
     unsigned appendAt = mod.getNumPorts();
-
-    llvm::StringSet<> taken;
-    for (auto name : portNames.getAsRange<StringAttr>())
-      taken.insert(name.getValue());
-
-    SmallVector<std::pair<unsigned, PortInfo>> ctrlPorts;
-    ctrlPorts.reserve(forceablePorts.size());
-    for (auto [idx, probedType] : forceablePorts) {
-      SmallString<64> name(cast<StringAttr>(portNames[idx]).getValue());
-      name += "_force_ctrl";
-      auto baseLen = name.size();
-      for (unsigned suffix = 0; !taken.insert(name).second; ++suffix) {
-        name.truncate(baseLen);
-        (Twine("_") + Twine(suffix)).toVector(name);
-      }
-      ctrlPorts.emplace_back(
-          appendAt,
-          PortInfo(StringAttr::get(ctx, name),
-                   createForceCtrlBundleType(probedType), Direction::In,
-                   /*symName=*/StringAttr{}, mod.getPortLocation(idx)));
-    }
-    mod.insertPorts(ctrlPorts);
+    mod.insertPorts(getForceCtrlPorts(mod, forceablePorts));
 
     if (block)
       for (auto [k, port] : llvm::enumerate(forceablePorts))
@@ -803,27 +808,17 @@ LogicalResult ProbeVisitor::visitInstanceLike(FInstanceLike oldInst) {
   if (!*needsConv)
     return success();
 
-  // All referenced modules have the same signature.
-  auto aMod = irn.symTable.lookup<FModuleLike>(
-      *oldInst.getReferencedModuleNames().begin());
-  assert(aMod && "instance must reference an existing module");
+  // Derive the callee's control ports from the ABI, without inspecting the
+  // callee, which may be converted concurrently.
+  SmallVector<std::pair<unsigned, FIRRTLBaseType>> forceablePorts;
+  for (auto [idx, type] : llvm::enumerate(oldInst->getResultTypes()))
+    if (auto refType = dyn_cast<RefType>(type);
+        refType && refType.getForceable())
+      forceablePorts.emplace_back(idx, refType.getType());
+  auto newInst = oldInst.cloneWithInsertedPorts(
+      getForceCtrlPorts(oldInst, forceablePorts));
 
-  unsigned origNumPorts = oldInst->getNumResults();
-  assert(aMod.getNumPorts() >= origNumPorts &&
-         "instance results must match the referenced module's ports");
-
-  SmallVector<std::pair<unsigned, PortInfo>> ctrlPorts;
-  for (unsigned idx = origNumPorts, e = aMod.getNumPorts(); idx != e; ++idx)
-    ctrlPorts.emplace_back(
-        idx, PortInfo(aMod.getPortNameAttr(idx), aMod.getPortType(idx),
-                      aMod.getPortDirection(idx),
-                      /*symName=*/StringAttr{}, aMod.getPortLocation(idx)));
-
-  // Clone the instance with converted results and the callee's control ports.
-  auto newInst = oldInst.cloneWithInsertedPorts(ctrlPorts);
-  instanceGraph.replaceInstance(oldInst, newInst);
-
-  unsigned ctrlIdx = origNumPorts;
+  unsigned ctrlIdx = oldInst->getNumResults();
   for (auto [idx, newType] : llvm::enumerate(newTypes)) {
     auto oldResult = oldInst->getOpResult(idx);
     auto newResult = newInst->getOpResult(idx);
@@ -839,17 +834,10 @@ LogicalResult ProbeVisitor::visitInstanceLike(FInstanceLike oldInst) {
     if (!refType.getForceable())
       continue;
 
-    // Match forceable results with the callee's appended control ports.
-    assert(ctrlIdx < aMod.getNumPorts() &&
-           aMod.getPortDirection(ctrlIdx) == Direction::In &&
-           aMod.getPortType(ctrlIdx) ==
-               createForceCtrlBundleType(type_cast<FIRRTLBaseType>(newType)) &&
-           "control port out of sync with forceable result");
-
     // Keep each forceable result as an independent control channel.
     targets[newResult].instanceCtrl = newInst->getOpResult(ctrlIdx++);
   }
-  assert(ctrlIdx == aMod.getNumPorts() && "unconsumed control ports");
+  assert(ctrlIdx == newInst->getNumResults() && "unconsumed control ports");
 
   toDelete.push_back(oldInst);
   return success();
@@ -1329,13 +1317,12 @@ void ProbesToSignalsPass::runOnOperation() {
   hw::InnerRefNamespace irn{getAnalysis<SymbolTable>(),
                             getAnalysis<hw::InnerSymbolTableCollection>()};
 
-  // Convert callees first so callers see final control ports.
-  auto result = instanceGraph.walkPostOrder(
-      [&](InstanceGraphNode &node) -> LogicalResult {
-        auto mod = node.getModule<FModuleLike>();
-        ProbeVisitor visitor(irn, instanceGraph);
-        return visitor.visit(mod);
-      });
+  // Instances derive control ports from the ABI, so modules are independent.
+  SmallVector<FModuleLike> mods(getOperation().getOps<FModuleLike>());
+  auto result = failableParallelForEach(&getContext(), mods, [&](auto mod) {
+    ProbeVisitor visitor(irn);
+    return visitor.visit(mod);
+  });
 
   if (failed(result))
     signalPassFailure();
