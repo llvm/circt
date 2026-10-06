@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
@@ -93,14 +94,29 @@ verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
 }
 
 //===----------------------------------------------------------------------===//
-// PackageOp
+// PackageOp and PackageExternOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult PackageOp::verify() {
-  for (Operation &op : *getBodyBlock())
+template <typename Package>
+static LogicalResult verifyPackage(Package package) {
+  for (Operation &op : *package.getBodyBlock())
     if (!isa<hw::TypedeclOp>(op))
-      return emitOpError("body may only contain hw.typedecl operations");
+      return package.emitOpError(
+          "body may only contain hw.typedecl operations");
   return success();
+}
+
+LogicalResult PackageOp::verify() { return verifyPackage(*this); }
+
+LogicalResult PackageExternOp::verify() {
+  if (auto name = getVerilogNameAttr()) {
+    if (name.getValue().empty())
+      return emitOpError("'verilogName' must be a non-empty string");
+  } else if (!isPublic()) {
+    return emitOpError("non-public packages require 'verilogName' to "
+                       "preserve their external name when renamed");
+  }
+  return verifyPackage(*this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -363,6 +379,53 @@ LogicalResult LocalParamOp::verify() {
   return hw::checkParameterInContext(
       getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
+
+//===----------------------------------------------------------------------===//
+// VarOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseImplicitVarInitType(
+    OpAsmParser &p, Type varType,
+    std::optional<OpAsmParser::UnresolvedOperand> &initValue, Type &initType) {
+  if (!initValue.has_value())
+    return success();
+
+  auto var = dyn_cast<VarType>(varType);
+  if (!var)
+    return p.emitError(p.getCurrentLocation(),
+                       "expected `!sv.var<T>` type for var");
+
+  initType = var.getElementType();
+  return success();
+}
+
+static void printImplicitVarInitType(OpAsmPrinter &p, Operation *op,
+                                     Type varType, Value initValue,
+                                     Type initType) {}
+
+void VarOp::build(OpBuilder &builder, OperationState &odsState,
+                  Type elementType, StringAttr name, hw::InnerSymAttr innerSym,
+                  Value initValue) {
+
+  auto &props = odsState.getOrAddProperties<Properties>();
+  props.name = name ? name : builder.getStringAttr("");
+  if (innerSym)
+    props.inner_sym = innerSym;
+  odsState.addTypes(VarType::get(elementType));
+  if (initValue)
+    odsState.addOperands(initValue);
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void VarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the var has an optional 'name' attribute, use it.
+  StringRef name = getName();
+  if (!name.empty())
+    setNameFn(getResult(), name);
+}
+
+std::optional<size_t> VarOp::getTargetResultIndex() { return 0; }
 
 //===----------------------------------------------------------------------===//
 // RegOp

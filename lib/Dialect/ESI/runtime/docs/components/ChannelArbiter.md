@@ -42,6 +42,7 @@ def ChannelArbiter(
     mux_pipeline_levels: Optional[int] = None,  # pipeline the N:1 select mux tree
     pipelined_scheduler: bool = False,        # decoupled grant-queue scheduler
     grant_queue_depth: int = 4,               # depth of that grant queue (>= 2)
+    wide_fanin: Optional[bool] = None,        # large-fan-in timing structures
     telemetry: bool = True,
 ) -> ChannelSignal
 ```
@@ -269,3 +270,21 @@ their hierarchical appid path, so no per-instance name prefix is needed:
 
 Counters use `constructs.Counter`; max/high-water use a compare-and-update
 register. Zero hardware cost when `telemetry=False`.
+
+## 10. Wide fan-in (`wide_fanin`)
+
+Two behaviour-preserving timing structures for arbiters with many inputs:
+
+- **Registered `ready`.** `ready[i]` drives the clock enable of every flop in
+  input `i`'s skid buffer, so `credit_gt0` fans out to `num_inputs * width`
+  enables. Registering `ready[i]` per input from next-state values (with
+  `next_credit > 0` derived by cases rather than through the credit adder)
+  reduces that to `num_inputs` flops.
+- **One-hot loop selections.** `sel_valid`/`sel_last` feed `launch`/`msg_end`,
+  which are inside the `grant -> grant` loop. Reducing against `grant_oh`
+  instead of muxing on `grant` shortens it.
+
+Both cost a little depth and area at small fan-in (measured at 356 bits: +10 MHz
+at 35 inputs, -12 MHz at 5-8), so `None` enables them above 16 inputs. Since the
+`ready` fan-out scales with payload width too, that is only a proxy; pass
+`True`/`False` to override.

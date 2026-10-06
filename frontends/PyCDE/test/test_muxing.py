@@ -2,7 +2,7 @@
 
 from pycde import generator, dim, Clock, Input, Output, Module
 from pycde.signals import Signal
-from pycde.constructs import Mux
+from pycde.constructs import If, Mux
 from pycde.testing import unittestmodule
 from pycde.types import Bit, Bits
 
@@ -88,3 +88,30 @@ class SimpleMux4(Module):
   @generator
   def construct(self):
     self.out = Mux(self.op, self.a, self.b, self.c, self.d)
+
+
+# -----
+
+
+# CHECK-LABEL: hw.module @SimpleIf(in %op : i1, in %a : i32, in %b : i32, in %c : i32, in %d : i32, in %e : i32, out out : i32, out lambda_out : i32, out mixed_out : i32)
+# CHECK:         [[R0:%.+]] = comb.mux bin %op, %a, %b
+# CHECK:         [[R1:%.+]] = comb.mux bin %op, %c, %d
+# CHECK:         [[R2:%.+]] = comb.mux bin %op, %e, %d
+# CHECK:         hw.output [[R0]], [[R1]], [[R2]] : i32, i32, i32
+@unittestmodule()
+class SimpleIf(Module):
+  op = Input(Bits(1))
+  a = Input(Bits(32))
+  b = Input(Bits(32))
+  c = Input(Bits(32))
+  d = Input(Bits(32))
+  e = Input(Bits(32))
+  out = Output(Bits(32))
+  lambda_out = Output(Bits(32))
+  mixed_out = Output(Bits(32))
+
+  @generator
+  def construct(self):
+    self.out = If(self.op, self.a, self.b)
+    self.lambda_out = If(self.op, lambda: self.c, lambda: self.d)
+    self.mixed_out = If(self.op, lambda: self.e, self.d)

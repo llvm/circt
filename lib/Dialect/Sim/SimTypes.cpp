@@ -11,6 +11,7 @@
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 // Include the generated enum definitions (DPIDirection).
@@ -213,4 +214,63 @@ void DPIFunctionType::print(AsmPrinter &printer) const {
     printer.printType(arg.type);
   });
   printer << '>';
+}
+
+//===----------------------------------------------------------------------===//
+// VariantType
+//===----------------------------------------------------------------------===//
+
+/// Parse: !sim.variant<a: i32, b: i8>
+Type VariantType::parse(AsmParser &p) {
+  SmallVector<Alternative, 4> alternatives;
+  SmallVector<std::pair<llvm::SMLoc, StringAttr>> duplicates;
+  auto parseResult = parseFieldList(p, alternatives, duplicates);
+  for (auto [loc, name] : duplicates)
+    p.emitError(loc) << "duplicate alternative name '" << name.getValue()
+                     << "' in sim.variant type";
+  if (failed(parseResult) || !duplicates.empty())
+    return Type();
+  return get(p.getContext(), alternatives);
+}
+
+/// Print: !sim.variant<a: i32, b: i8>
+void VariantType::print(AsmPrinter &p) const {
+  printFieldList(p, getAlternatives());
+}
+
+LogicalResult VariantType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                  ArrayRef<Alternative> alternatives) {
+  llvm::SmallDenseSet<StringAttr> nameSet;
+  LogicalResult result = success();
+  nameSet.reserve(alternatives.size());
+  for (const auto &alternative : alternatives)
+    if (!nameSet.insert(alternative.name).second) {
+      result = failure();
+      emitError() << "duplicate alternative name '"
+                  << alternative.name.getValue() << "' in sim.variant type";
+    }
+  return result;
+}
+
+std::optional<uint32_t> VariantType::getAlternativeIndex(StringAttr name) {
+  ArrayRef<Alternative> alternatives = getAlternatives();
+  for (size_t idx = 0, numAlternatives = alternatives.size();
+       idx < numAlternatives; ++idx)
+    if (alternatives[idx].name == name)
+      return idx;
+  return {};
+}
+
+std::optional<uint32_t> VariantType::getAlternativeIndex(StringRef name) {
+  return getAlternativeIndex(StringAttr::get(getContext(), name));
+}
+
+VariantType::Alternative VariantType::getAlternative(StringRef name) {
+  if (auto index = getAlternativeIndex(name))
+    return getAlternatives()[*index];
+  return Alternative();
+}
+
+Type VariantType::getAlternativeType(StringRef name) {
+  return getAlternative(name).type;
 }

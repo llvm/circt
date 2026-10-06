@@ -50,6 +50,16 @@ parseWireSpillingHeuristic(StringRef option) {
       .Default(std::nullopt);
 }
 
+static std::optional<LoweringOptions::VarOpDeclStyle>
+parseVarOpDeclStyle(StringRef option) {
+  return llvm::StringSwitch<std::optional<LoweringOptions::VarOpDeclStyle>>(
+             option)
+      .Case("varLogic", LoweringOptions::VarOpDeclStyle::VarLogic)
+      .Case("logic", LoweringOptions::VarOpDeclStyle::Logic)
+      .Case("reg", LoweringOptions::VarOpDeclStyle::Reg)
+      .Default(std::nullopt);
+}
+
 void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
   while (!text.empty()) {
     // Remove the first option from the text.
@@ -109,6 +119,12 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         wireSpillingHeuristicSet |= *heuristic;
       } else {
         errorHandler("expected ''spillLargeTermsWithNamehints'");
+      }
+    } else if (option.consume_front("svVarDeclStyle=")) {
+      if (auto style = parseVarOpDeclStyle(option)) {
+        varOpDeclStyle = *style;
+      } else {
+        errorHandler("expected 'varLogic', 'logic', or 'reg'");
       }
     } else if (option.consume_front("wireSpillingNamehintTermLimit=")) {
       if (option.getAsInteger(10, wireSpillingNamehintTermLimit)) {
@@ -171,6 +187,10 @@ std::string LoweringOptions::toString() const {
   if (isWireSpillingHeuristicEnabled(
           WireSpillingHeuristic::SpillLargeTermsWithNamehints))
     options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";
+  if (varOpDeclStyle == VarOpDeclStyle::Logic)
+    options += "svVarDeclStyle=logic,";
+  else if (varOpDeclStyle == VarOpDeclStyle::Reg)
+    options += "svVarDeclStyle=reg,";
   if (disallowExpressionInliningInPorts)
     options += "disallowExpressionInliningInPorts,";
   if (disallowMuxInlining)

@@ -19,6 +19,7 @@
 #include "mlir/IR/DialectInterface.h"
 #include "mlir/Interfaces/MemorySlotInterfaces.h"
 
+#include "circt/Support/FieldInfo.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -117,10 +118,7 @@ ModuleType fnToMod(FunctionType fn, ArrayRef<Attribute> inputNames,
                    ArrayRef<Attribute> outputNames);
 
 /// Struct defining a field. Used in structs.
-struct FieldInfo {
-  mlir::StringAttr name;
-  mlir::Type type;
-};
+using FieldInfo = ::circt::FieldInfo;
 
 /// Struct defining a field with an offset. Used in unions.
 struct OffsetFieldInfo {
@@ -133,26 +131,10 @@ struct OffsetFieldInfo {
 } // namespace circt
 
 namespace mlir {
-/// Expose the field names and types of struct and union types to the generic
-/// attribute and type walking and replacement infrastructure. This allows
-/// walkers to recurse into the fields of `!hw.struct` and `!hw.union` types,
-/// and replacers such as `mlir::AttrTypeReplacer` to replace types nested
-/// within the fields.
-template <>
-struct AttrTypeSubElementHandler<circt::hw::detail::FieldInfo> {
-  static void walk(const circt::hw::detail::FieldInfo &param,
-                   AttrTypeImmediateSubElementWalker &walker) {
-    walker.walk(param.name);
-    walker.walk(param.type);
-  }
-  static circt::hw::detail::FieldInfo
-  replace(const circt::hw::detail::FieldInfo &param,
-          AttrSubElementReplacements &attrRepls,
-          TypeSubElementReplacements &typeRepls) {
-    return {cast<StringAttr>(attrRepls.take_front(1)[0]),
-            typeRepls.take_front(1)[0]};
-  }
-};
+/// Expose the field names and types of union types to the generic attribute and
+/// type walking and replacement infrastructure. This allows walkers to recurse
+/// into the fields of `!hw.union` types, and replacers such as
+/// `mlir::AttrTypeReplacer` to replace types nested within the fields.
 template <>
 struct AttrTypeSubElementHandler<circt::hw::detail::OffsetFieldInfo> {
   static void walk(const circt::hw::detail::OffsetFieldInfo &param,
@@ -176,7 +158,7 @@ struct AttrTypeSubElementHandler<circt::hw::detail::OffsetFieldInfo> {
 namespace circt {
 namespace hw {
 
-// Returns the canonical type of a HW type (inner type of a type alias).
+/// Recursively remove HW type aliases from a type and its subelements.
 mlir::Type getCanonicalType(mlir::Type type);
 
 /// Return true if the specified type is a value HW Integer type.  This checks

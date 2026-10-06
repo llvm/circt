@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HWArith/HWArithOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HWArith/HWArithTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
@@ -67,20 +68,50 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttribute(getRawValueAttr());
+  if (getType() == getRawValueAttr().getType()) {
+    p.printAttribute(getRawValueAttr());
+  } else {
+    // The result is a type alias of the value's type.
+    p.printAttributeWithoutType(getRawValueAttr());
+    p << " : " << getType();
+  }
   p.printOptionalAttrDict(getOperation()->getAttrs(),
                           /*elidedAttrs=*/{getRawValueAttrName()});
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  IntegerAttr valueAttr;
-
-  if (parser.parseAttribute(valueAttr, getRawValueAttrName(result.name),
-                            result.attributes) ||
+  auto loc = parser.getCurrentLocation();
+  APInt value;
+  Type type;
+  if (parser.parseInteger(value) || parser.parseColonType(type) ||
       parser.parseOptionalAttrDict(result.attributes))
     return failure();
 
-  result.addTypes(valueAttr.getType());
+  // The type may be a type alias of an integer type, which determines the
+  // value's type.
+  auto intType = hw::type_dyn_cast<IntegerType>(type);
+  if (!intType)
+    return parser.emitError(loc, "expected an integer type, but got ") << type;
+  unsigned width = intType.getWidth();
+  bool fits = value.isNegative()
+                  ? !intType.isUnsigned() && value.getSignificantBits() <= width
+                  : value.getActiveBits() + intType.isSigned() <= width;
+  if (!fits)
+    return parser.emitError(loc, "constant out of range for type ") << type;
+
+  result.addAttribute(getRawValueAttrName(result.name),
+                      IntegerAttr::get(intType, value.sextOrTrunc(width)));
+  result.addTypes(type);
+  return success();
+}
+
+LogicalResult ConstantOp::verify() {
+  // The result type may be a type alias of the value's type.
+  if (getRawValueAttr().getType() != hw::getCanonicalType(getType()))
+    return emitOpError("value type ")
+           << getRawValueAttr().getType()
+           << " doesn't match the canonical result type "
+           << hw::getCanonicalType(getType());
   return success();
 }
 

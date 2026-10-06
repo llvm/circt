@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -47,12 +48,10 @@ static void printHWElementType(AsmPrinter &printer, Type dim);
 //===----------------------------------------------------------------------===/
 
 mlir::Type circt::hw::getCanonicalType(mlir::Type type) {
-  Type canonicalType;
-  if (auto typeAlias = dyn_cast<TypeAliasType>(type))
-    canonicalType = typeAlias.getCanonicalType();
-  else
-    canonicalType = type;
-  return canonicalType;
+  mlir::AttrTypeReplacer replacer;
+  replacer.addReplacement(
+      [](TypeAliasType alias) { return alias.getCanonicalType(); });
+  return replacer.replace(type);
 }
 
 /// Return true if the specified type is a value HW Integer type.  This checks
@@ -337,65 +336,13 @@ void IntType::print(AsmPrinter &p) const {
 // Struct Type
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace hw {
-namespace detail {
-bool operator==(const FieldInfo &a, const FieldInfo &b) {
-  return a.name == b.name && a.type == b.type;
-}
-llvm::hash_code hash_value(const FieldInfo &fi) {
-  return llvm::hash_combine(fi.name, fi.type);
-}
-} // namespace detail
-} // namespace hw
-} // namespace circt
-
-/// Parse a list of unique field names and types within <>. E.g.:
-/// <foo: i7, bar: i8>
-static ParseResult parseFields(AsmParser &p,
-                               SmallVectorImpl<FieldInfo> &parameters) {
-  llvm::StringSet<> nameSet;
-  bool hasDuplicateName = false;
-  auto parseResult = p.parseCommaSeparatedList(
-      mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
-        std::string name;
-        Type type;
-
-        auto fieldLoc = p.getCurrentLocation();
-        if (p.parseKeywordOrString(&name) || p.parseColon() ||
-            p.parseType(type))
-          return failure();
-
-        if (!nameSet.insert(name).second) {
-          p.emitError(fieldLoc, "duplicate field name \'" + name + "\'");
-          // Continue parsing to print all duplicates, but make sure to error
-          // eventually
-          hasDuplicateName = true;
-        }
-
-        parameters.push_back(
-            FieldInfo{StringAttr::get(p.getContext(), name), type});
-        return success();
-      });
-
-  if (hasDuplicateName)
-    return failure();
-  return parseResult;
-}
-
-/// Print out a list of named fields surrounded by <>.
-static void printFields(AsmPrinter &p, ArrayRef<FieldInfo> fields) {
-  p << '<';
-  llvm::interleaveComma(fields, p, [&](const FieldInfo &field) {
-    p.printKeywordOrString(field.name.getValue());
-    p << ": " << field.type;
-  });
-  p << ">";
-}
-
 Type StructType::parse(AsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  if (parseFields(p, parameters))
+  SmallVector<std::pair<llvm::SMLoc, StringAttr>> duplicates;
+  auto parseResult = parseFieldList(p, parameters, duplicates);
+  for (auto [loc, name] : duplicates)
+    p.emitError(loc) << "duplicate field name '" << name.getValue() << "'";
+  if (failed(parseResult) || !duplicates.empty())
     return Type();
   return get(p.getContext(), parameters);
 }
@@ -414,7 +361,9 @@ LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
   return result;
 }
 
-void StructType::print(AsmPrinter &p) const { printFields(p, getElements()); }
+void StructType::print(AsmPrinter &p) const {
+  printFieldList(p, getElements());
+}
 
 Type StructType::getFieldType(mlir::StringRef fieldName) {
   for (const auto &field : getElements())
@@ -888,38 +837,15 @@ LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
 // TypeAliasType
 //===----------------------------------------------------------------------===//
 
-static Type computeCanonicalType(Type type) {
-  return llvm::TypeSwitch<Type, Type>(type)
-      .Case([](TypeAliasType t) {
-        return computeCanonicalType(t.getCanonicalType());
-      })
-      .Case([](ArrayType t) {
-        return ArrayType::get(computeCanonicalType(t.getElementType()),
-                              t.getNumElements());
-      })
-      .Case([](UnpackedArrayType t) {
-        return UnpackedArrayType::get(computeCanonicalType(t.getElementType()),
-                                      t.getNumElements());
-      })
-      .Case([](StructType t) {
-        SmallVector<StructType::FieldInfo> fieldInfo;
-        for (auto field : t.getElements())
-          fieldInfo.push_back(StructType::FieldInfo{
-              field.name, computeCanonicalType(field.type)});
-        return StructType::get(t.getContext(), fieldInfo);
-      })
-      .Default([](Type t) { return t; });
-}
-
 TypeAliasType TypeAliasType::get(SymbolRefAttr ref, Type innerType) {
-  return get(ref.getContext(), ref, innerType, computeCanonicalType(innerType));
+  return get(ref.getContext(), ref, innerType, hw::getCanonicalType(innerType));
 }
 
 TypeAliasType
 TypeAliasType::getChecked(function_ref<InFlightDiagnostic()> emitError,
                           SymbolRefAttr ref, Type innerType) {
   return getChecked(emitError, ref.getContext(), ref, innerType,
-                    computeCanonicalType(innerType));
+                    hw::getCanonicalType(innerType));
 }
 
 LogicalResult
