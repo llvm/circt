@@ -251,7 +251,6 @@ ClockedSeqToClockedPropOp::canonicalize(ClockedSeqToClockedPropOp op,
 // Clocking Ops
 //===----------------------------------------------------------------------===//
 
-/// Result type is always the same as the input property/sequence
 LogicalResult
 ClockedOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
                             ValueRange operands, DictionaryAttr attributes,

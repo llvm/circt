@@ -10,24 +10,10 @@
 #define CIRCT_DIALECT_PIR_PIRTYPES_TD
 
 include "circt/Dialect/PIR/PIRDialect.td"
-include "circt/Dialect/Seq/SeqTypes.td"
 include "mlir/IR/AttrTypeBase.td"
 
 class PIRTypeDef<string name, string typeMnemonic> : TypeDef<PIRDialect, name> {
   let mnemonic = typeMnemonic;
-}
-
-//===----------------------------------------------------------------------===//
-// Clocks
-//===----------------------------------------------------------------------===//
-
-def PIRClockType : PIRTypeDef<"Clock", "clock"> {
-  let summary = "A 4-state logic clock tied to a global clock";
-  let description = [{
-    The `!pir.clock` type represents clocks that are produced from sampling 
-    specific subsets of the global clock. These carry 4-state logic (0, 1, z, x). 
-    The main way to produce these is using the `pir.gclk_sample` operation.
-  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -85,9 +71,6 @@ def PIRClockedSequenceType : PIRTypeDef<"ClockedSequence", "clocked_sequence"> {
 //===----------------------------------------------------------------------===//
 // Group Types
 //===----------------------------------------------------------------------===//
-
-// Any type capable of representing a clock
-def AnyClockType : AnyTypeOf<[PIRClockType, ClockType, I1]>;
 
 // Accept any sequence, simple or clocked
 def PIRAnySequenceType : AnyTypeOf<[PIRSequenceType, PIRClockedSequenceType]>;
