@@ -30,7 +30,35 @@ class I8EnumAttr<string name, string summary, list<I8EnumAttrCase> cases> :
 }
 
 //----------------------------------------------------------------------------//
-// Property S (always vs. initial)
+// Global Clock Sampling Strategies
+//----------------------------------------------------------------------------//
+
+/// gclk :: 0 --> 1
+def RisingGlobalClock : I8EnumAttrCase<"RisingGlobalClock", 0, "rising">;
+
+/// gclk :: 1 --> 0
+def FallingGlobalClock : I8EnumAttrCase<"FallingGlobalClock", 1, "falling">;
+
+/// gclk :: b --> ¬b
+def ChangingGlobalClock : I8EnumAttrCase<"ChangingGlobalClock", 2, "changing">;
+
+/// Value at next global clock tick
+def FutureGlobalClock : I8EnumAttrCase<"FutureGlobalClock", 3, "future">;
+
+/// Sampling strategy used when refering to the global clock
+def GClkSamplingAttr : I8EnumAttr<
+  "GClkSamplingAttr", 
+  "Strategy for sampling the global clock",
+  [
+    RisingGlobalClock,
+    FallingGlobalClock,
+    ChangingGlobalClock,
+    FutureGlobalClock
+  ]
+>;
+
+//----------------------------------------------------------------------------//
+// Property Scope (always vs. initial)
 //----------------------------------------------------------------------------//
 
 /// Always refers to properties that must hold in all samples of a trace
@@ -38,7 +66,7 @@ def Always : I8EnumAttrCase<"Always", 1, "always">;
 /// Initial refers to proeprties that must only hold in the first step of a trace
 def Initial : I8EnumAttrCase<"Initial", 0, "initial">;
 
-def SamplingTypeAttr : I8EnumAttr<"SamplingTypeAttr", "Sampling stategy for a PIR property",
+def ScopeAttr : I8EnumAttr<"ScopeAttr", "Scope of a PIR property",
                                    [Always, Initial]>;
 } // namspace circt::pir
 
