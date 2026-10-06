@@ -100,12 +100,12 @@ class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [
 ]> : PIRInnerOp<mnemonic, traits> {
   let arguments = (ins 
     PIRClockedPropertyType:$property,
-    OptionalAttr<SamplingTypeAttr>:$samplingType,
+    OptionalAttr<ScopeAttr>:$scope,
     Optional<I1>:$disable,
     Optional<I1>:$enable
   );
   let assemblyFormat = [{
-    $property ($samplingType^)? (`disable` `iff` $disable^)? (`on` $enable^)? attr-dict `:` type($property)
+    $property ($scope^)? (`disable` `iff` $disable^)? (`on` $enable^)? attr-dict `:` type($property)
   }];
 
   let hasCanonicalizer = true;
@@ -245,7 +245,7 @@ def ClockedOp : PIRInnerOp<"clocked", [
   }];
 
   let arguments = (ins
-    ClockType: $clock, 
+    AnyClockType: $clock, 
     PIRAnyClockedType:$input
   );
 
@@ -254,15 +254,60 @@ def ClockedOp : PIRInnerOp<"clocked", [
   );
 
   let assemblyFormat = [{
-    $clock `,` $input attr-dict `:` qualified(type($input))
+    $clock `,` $input attr-dict `:` qualified(type($clock)) `,` qualified(type($input))
+  }];
+}
+
+def GlobalClockSampleOp : PIRInnerOp<"gclk_sample", [Pure]> {
+  let summary = "Samples the input with respect to the global clock.";
+  let description = [{
+    Samples a given input signal with respect to the global clock. 
+    This is useful when encoding other clocks through their relation to the 
+    global clock.
+
+    Follows one of 4 sampling strategies (on each global clock tick):
+      - Risging: 1 if the input goes from 0 to 1.
+      - Falling: 1 if the input goes from 1 to 0.
+      - Changing: 1 if the input inverts its value, i.e. v --> ¬v.
+      - Future: Samples whatever the next value of the input will be.
+
+    Additionally, the two arguments of this operation are used to represent 
+    clocks that might have undefined traces, i.e. moments where the clocks 
+    evaluate to either `x` or `z`. 
+    These arguments are used as follows: 
+    
+      operand[0] | operand[1] | result
+      ----------------------------------
+            0    |     1      |    0
+            1    |     1      |    1
+            0    |     0      |    z
+            1    |     0      |    x
+
+    Operand[0] is referred to as "clock_value" as it carries the value of the 
+    clock, while operand[1] is referred to as "clock_defined" as it specifies 
+    whether the clock is currently in an undefined state.
+
+    Clock_defined can be omitted, in which case it is interpreted as a constant 1.
+  }];
+
+  let arguments = (ins
+    GClkSamplingAttr:$samplingAttr,
+    I1:$clockValue,
+    Optional<I1>:$clockDefined
+  );
+
+  let results = (outs
+    PIRClockType:$result
+  );
+
+  let assemblyFormat = [{
+    $samplingAttr $clockValue (`,` $clockDefined^)? attr-dict
   }];
 }
 
 //===----------------------------------------------------------------------===//
 // Sequences
 //===----------------------------------------------------------------------===//
-
-
 
 
 //===----------------------------------------------------------------------===//
