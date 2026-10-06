@@ -5,6 +5,11 @@ moore.module @Empty() {
   // CHECK: moore.output
 }
 
+// CHECK-LABEL: moore.module @EmptyWithAttrs() attributes {sv.attributes = [#sv.attribute<"foo">]}
+moore.module @EmptyWithAttrs() attributes {sv.attributes = [#sv.attribute<"foo">]} {
+  // CHECK: moore.output
+}
+
 // CHECK-LABEL: moore.module @Ports
 moore.module @Ports(
   // CHECK-SAME: in %a : !moore.string
