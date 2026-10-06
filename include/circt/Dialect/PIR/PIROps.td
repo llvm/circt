@@ -13,6 +13,7 @@ include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/PIR/PIRDialect.td"
 include "circt/Dialect/PIR/PIRTypes.td"
 include "circt/Dialect/PIR/PIREnums.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
@@ -231,7 +232,31 @@ def ClockedSeqToClockedPropOp : ConversionOp<"clocked_seq_to_clocked_prop"> {
 // Clocking
 //===----------------------------------------------------------------------===//
 
+def ClockedOp : PIRInnerOp<"clocked", [
+  Pure, 
+  InferTypeOpInterface, 
+  DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+  let summary = "Specify the clock of a clocked operation.";
+  let description = [{
+    Specifies the clock for a given clocked sequence or clocked property.
+    Note that these must be converted into a "clocked" type before being given 
+    a specific clock.
+  }];
 
+  let arguments = (ins
+    ClockType: $clock, 
+    PIRAnyClockedType:$input
+  );
+
+  let results = (outs
+    PIRAnyClockedType:$output
+  );
+
+  let assemblyFormat = [{
+    $clock `,` $input attr-dict `:` qualified(type($input))
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Sequences

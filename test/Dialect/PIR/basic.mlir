@@ -15,6 +15,9 @@ pir.cell @test {} {
   // CHECK: %clk_s, %clk_p = pir.input : !pir.clocked_sequence, !pir.clocked_property
   %clk_s, %clk_p = pir.input : !pir.clocked_sequence, !pir.clocked_property
 
+  // CHECK: %clock = pir.input : !seq.clock
+  %clock = pir.input : !seq.clock
+
   //===----------------------------------------------------------------------===//
   // Type Conversions
   //===----------------------------------------------------------------------===//
@@ -107,5 +110,14 @@ pir.cell @test {} {
   pir.restrict %clk_p always on %b : !pir.clocked_property
   pir.restrict %clk_p disable iff %b on %b : !pir.clocked_property
   pir.restrict %clk_p always disable iff %b on %b : !pir.clocked_property
+
+  //===---------------------------------------------------------------------===//
+  // Clocking Ops
+  //===----------------------------------------------------------------------===//
+
+  // CHECK: {{%.+}} = pir.clocked %clock, %clk_p : !pir.clocked_property
+  // CHECK: {{%.+}} = pir.clocked %clock, %clk_s : !pir.clocked_sequence
+  %clocked_clk_p = pir.clocked %clock, %clk_p : !pir.clocked_property
+  %clocked_clk_s = pir.clocked %clock, %clk_s : !pir.clocked_sequence
 
 }

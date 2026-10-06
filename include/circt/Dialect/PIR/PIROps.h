@@ -16,6 +16,9 @@
 #include "circt/Dialect/PIR/PIRDialect.h"
 #include "circt/Dialect/PIR/PIREnums.h"
 #include "circt/Dialect/PIR/PIRTypes.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
 #define GET_OP_CLASSES

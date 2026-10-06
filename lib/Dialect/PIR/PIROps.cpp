@@ -246,3 +246,20 @@ ClockedSeqToClockedPropOp::canonicalize(ClockedSeqToClockedPropOp op,
   }
   return failure();
 }
+
+//===----------------------------------------------------------------------===//
+// Clocking Ops
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+ClockedOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
+                            ValueRange operands, DictionaryAttr attributes,
+                            PropertyRef properties, RegionRange regions,
+                            SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (isa<ClockedPropertyType>(operands[1].getType())) {
+    inferredReturnTypes.push_back(ClockedPropertyType::get(context));
+  } else {
+    inferredReturnTypes.push_back(ClockedSequenceType::get(context));
+  }
+  return success();
+}
