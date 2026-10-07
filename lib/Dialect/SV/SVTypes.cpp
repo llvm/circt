@@ -151,6 +151,14 @@ LogicalResult VarType::verify(function_ref<InFlightDiagnostic()> emitError,
 }
 
 //===----------------------------------------------------------------------===//
+// Port classification.
+//===----------------------------------------------------------------------===//
+
+bool circt::sv::isNetInputPort(const hw::PortInfo &port) {
+  return port.isInput() && isa<NetType>(port.type);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
