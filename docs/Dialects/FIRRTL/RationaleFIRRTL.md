@@ -56,8 +56,8 @@ The property integer operations `integer_and`, `integer_or`, and `integer_not`
 operate on arbitrary precision signed integer properties with two's complement
 bitwise semantics. They are distinct from the boolean property operations
 `bool_and`, `bool_or`, and `bool_xor`. These integer operations are currently
-gated behind `missingSpecFIRVersion` until they are included in a FIRRTL spec
-release.
+gated behind `missingSpecFIRVersion` until they land in the FIRRTL specification
+repository, then switch to `nextFIRVersion` until release.
 
 ### ABI
 

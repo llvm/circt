@@ -111,16 +111,17 @@ om.class @IntegerBinaryArithmeticFold(%x: !om.integer) -> (out1: !om.integer, ou
 // CHECK-LABEL: @IntegerPropertyBitwiseFold
 om.class @IntegerPropertyBitwiseFold() -> (andResult: !om.integer, orResult: !om.integer,
                                   notResult: !om.integer) {
-  %neg2 = om.constant #om.integer<-2 : si4> : !om.integer
-  %five = om.constant #om.integer<5 : si4> : !om.integer
+  %neg2 = om.constant #om.integer<-2 : si66> : !om.integer
+  // Exercise values beyond 64 bits.
+  %wide = om.constant #om.integer<18446744073709551621 : si66> : !om.integer
 
-  // CHECK-DAG: [[AND:%.+]] = om.constant #om.integer<4 : si4> : !om.integer
-  %and = om.integer.and %neg2, %five : !om.integer
+  // CHECK-DAG: [[AND:%.+]] = om.constant #om.integer<18446744073709551620 : si66> : !om.integer
+  %and = om.integer.and %neg2, %wide : !om.integer
 
-  // CHECK-DAG: [[OR:%.+]] = om.constant #om.integer<-1 : si4> : !om.integer
-  %or = om.integer.or %neg2, %five : !om.integer
+  // CHECK-DAG: [[OR:%.+]] = om.constant #om.integer<-1 : si66> : !om.integer
+  %or = om.integer.or %neg2, %wide : !om.integer
 
-  // CHECK-DAG: [[NOT:%.+]] = om.constant #om.integer<1 : si4> : !om.integer
+  // CHECK-DAG: [[NOT:%.+]] = om.constant #om.integer<1 : si66> : !om.integer
   %not = om.integer.not %neg2 : !om.integer
 
   // CHECK: om.class.fields [[AND]], [[OR]], [[NOT]]
@@ -129,12 +130,18 @@ om.class @IntegerPropertyBitwiseFold() -> (andResult: !om.integer, orResult: !om
 
 // CHECK-LABEL: @IntegerPropertyBitwiseDynamic
 om.class @IntegerPropertyBitwiseDynamic(%input: !om.integer) ->
-    (nestedResult: !om.integer, mixedResult: !om.integer) {
+    (nestedResult: !om.integer, mixedResult: !om.integer,
+     andZero: !om.integer, zeroAnd: !om.integer, andOnes: !om.integer, onesAnd: !om.integer,
+     orZero: !om.integer, zeroOr: !om.integer, orOnes: !om.integer, onesOr: !om.integer) {
   %neg2 = om.constant #om.integer<-2 : si4> : !om.integer
   %five = om.constant #om.integer<5 : si8> : !om.integer
+  // CHECK-DAG: [[ZERO:%.+]] = om.constant #om.integer<0 : si4> : !om.integer
+  // CHECK-DAG: [[ONES:%.+]] = om.constant #om.integer<-1 : si4> : !om.integer
+  %zero = om.constant #om.integer<0 : si4> : !om.integer
+  %ones = om.constant #om.integer<-1 : si4> : !om.integer
 
   // Different stored widths must sign-extend before bitwise folding.
-  // CHECK: [[MIXED:%.+]] = om.constant #om.integer<4 : si8> : !om.integer
+  // CHECK-DAG: [[MIXED:%.+]] = om.constant #om.integer<4 : si8> : !om.integer
   %mixed = om.integer.and %neg2, %five : !om.integer
 
   // CHECK: [[OR:%.+]] = om.integer.or %input, %{{.+}} : !om.integer
@@ -144,8 +151,18 @@ om.class @IntegerPropertyBitwiseDynamic(%input: !om.integer) ->
   // CHECK: [[NESTED:%.+]] = om.integer.and [[OR]], [[NOT]] : !om.integer
   %nested = om.integer.and %or, %not : !om.integer
 
-  // CHECK: om.class.fields [[NESTED]], [[MIXED]]
-  om.class.fields %nested, %mixed : !om.integer, !om.integer
+  // Zero/all-ones folds work with a non-constant operand on either side.
+  %andZero = om.integer.and %input, %zero : !om.integer
+  %zeroAnd = om.integer.and %zero, %input : !om.integer
+  %andOnes = om.integer.and %input, %ones : !om.integer
+  %onesAnd = om.integer.and %ones, %input : !om.integer
+  %orZero = om.integer.or %input, %zero : !om.integer
+  %zeroOr = om.integer.or %zero, %input : !om.integer
+  %orOnes = om.integer.or %input, %ones : !om.integer
+  %onesOr = om.integer.or %ones, %input : !om.integer
+
+  // CHECK: om.class.fields [[NESTED]], [[MIXED]], [[ZERO]], [[ZERO]], %input, %input, %input, %input, [[ONES]], [[ONES]]
+  om.class.fields %nested, %mixed, %andZero, %zeroAnd, %andOnes, %onesAnd, %orZero, %zeroOr, %orOnes, %onesOr : !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer
 }
 
 // CHECK-LABEL: @PropEqFold
@@ -209,7 +226,9 @@ om.class @PropEqFold(%str: !om.string, %b: i1, %n: !om.integer) -> (out1: i1, ou
 // CHECK-LABEL: @IntegerBitwiseFold
 om.class @IntegerBitwiseFold(%b: i8) -> (out1: i8, out2: i8, out3: i8,
                                           out4: i8, out5: i8, out6: i8,
-                                          out7: i8, out8: i8) {
+                                          out7: i8, out8: i8, out9: i8, out10: i8,
+                                          out11: i8, out12: i8, out13: i8, out14: i8,
+                                          out15: i8, out16: i8) {
   // CHECK-DAG: [[ZERO:%.+]] = om.constant 0 : i8
   // CHECK-DAG: [[ONES:%.+]] = om.constant -1 : i8
   %zero = om.constant 0 : i8
@@ -242,6 +261,16 @@ om.class @IntegerBitwiseFold(%b: i8) -> (out1: i8, out2: i8, out3: i8,
   // XOR with all-zeros is identity.
   %7 = om.integer.xor %b, %zero : i8
 
-  // CHECK: om.class.fields [[ZERO]], [[ONES]], [[ONES]], [[ZERO]], [[AND]], [[OR]], [[XOR]], %b
-  om.class.fields %0, %1, %2, %3, %4, %5, %6, %7 : i8, i8, i8, i8, i8, i8, i8, i8
+  // Zero/all-ones folds preserve fixed-width types on either side.
+  %8 = om.integer.and %b, %zero : i8
+  %9 = om.integer.and %zero, %b : i8
+  %10 = om.integer.and %b, %ones : i8
+  %11 = om.integer.and %ones, %b : i8
+  %12 = om.integer.or %b, %zero : i8
+  %13 = om.integer.or %zero, %b : i8
+  %14 = om.integer.or %b, %ones : i8
+  %15 = om.integer.or %ones, %b : i8
+
+  // CHECK: om.class.fields [[ZERO]], [[ONES]], [[ONES]], [[ZERO]], [[AND]], [[OR]], [[XOR]], %b, [[ZERO]], [[ZERO]], %b, %b, %b, %b, [[ONES]], [[ONES]]
+  om.class.fields %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15 : i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8
 }
