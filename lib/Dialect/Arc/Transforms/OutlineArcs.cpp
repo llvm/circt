@@ -47,7 +47,11 @@ struct OutlineArcsPass
 } // namespace
 
 static bool isArcBreaker(Operation *op) {
-  return !mlir::isMemoryEffectFree(op) || op->hasTrait<OpTrait::IsTerminator>();
+  return !mlir::isMemoryEffectFree(op) ||
+         op->hasTrait<OpTrait::IsTerminator>() ||
+         op->hasTrait<OpTrait::ConstantLike>() ||
+         // `llhd.prb` changes memory effects based on its parent op. Yikes.
+         isa<llhd::ProbeOp>(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -293,6 +297,7 @@ void Outliner::run() {
   for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock()))
     if (!isArcBreaker(&op))
       outlineOp(&op);
+  pass.numArcs += arcs.size();
 
   // Sort the ops in outlined blocks and take note of any cycles.
   for (auto &[color, arc] : arcs)
@@ -314,19 +319,16 @@ void Outliner::run() {
     useCallResults(arc);
 }
 
+/// Move the given operation into the outlined arc for its color.
 void Outliner::outlineOp(Operation *op) {
-  // LLVM_DEBUG(llvm::dbgs() << "- Outline " << *op << "\n");
   auto *color = coloring.colors.at(op);
-
-  // Create the block if necessary.
   auto &arc = arcs[color];
   if (!arc.block) {
-    LLVM_DEBUG(llvm::dbgs() << "- Create arc for " << *color << "\n");
     arc.index = arcs.size();
     arc.block = std::make_unique<Block>();
+    LLVM_DEBUG(llvm::dbgs() << "- Create arc " << arc.index << " for color "
+                            << *color << "\n");
   }
-
-  // Move the op to the block.
   op->moveBefore(arc.block.get(), arc.block->end());
 }
 
@@ -347,6 +349,13 @@ void Outliner::sortAndBreakCycles(OutlinedArc &arc) {
         if (defOp->getBlock() == arc.block.get() &&
             !defOp->isBeforeInBlock(blockOp))
           arc.forwardRefs.push_back(&operand);
+  });
+  pass.numForwardRefs += arc.forwardRefs.size();
+
+  LLVM_DEBUG({
+    if (!arc.forwardRefs.empty())
+      llvm::dbgs() << "- Arc " << arc.index << " has " << arc.forwardRefs.size()
+                   << " forward references\n";
   });
 }
 
@@ -380,7 +389,7 @@ void Outliner::createAndCallArc(OutlinedArc &arc, OpBuilder &arcBuilder,
   // Collect all values used in the block that are defined outside the block,
   // and create a block argument for each.
   SmallVector<Value, 8> values;
-  SmallMapVector<Value, BlockArgument, 8> args;
+  SmallMapVector<Value, Value, 8> args;
 
   auto addArg = [&](Value value) {
     auto &arg = args[value];
@@ -390,6 +399,9 @@ void Outliner::createAndCallArc(OutlinedArc &arc, OpBuilder &arcBuilder,
     }
     return arg;
   };
+
+  OpBuilder constBuilder(arc.terminator);
+  constBuilder.setInsertionPointToStart(arc.block.get());
 
   arc.block->walk([&](Operation *op) {
     for (auto &operand : op->getOpOperands()) {
@@ -403,6 +415,20 @@ void Outliner::createAndCallArc(OutlinedArc &arc, OpBuilder &arcBuilder,
         defBlock = defBlock->getParentOp()->getBlock();
       if (defBlock == arc.block.get())
         continue;
+
+      // Clone constant-like ops into the arc.
+      if (auto *defOp = operand.get().getDefiningOp();
+          defOp && defOp->hasTrait<OpTrait::ConstantLike>()) {
+        if (!args.count(operand.get())) {
+          pass.numClonedConstants++;
+          auto *clonedOp = constBuilder.clone(*defOp);
+          for (auto [oldResult, newResult] :
+               llvm::zip(defOp->getResults(), clonedOp->getResults()))
+            args[oldResult] = newResult;
+        }
+        operand.set(args.at(operand.get()));
+        continue;
+      }
 
       // Create a block argument if none exists yet.
       operand.set(addArg(operand.get()));
