@@ -5496,3 +5496,10 @@ module ArrayGateTop(input [3:0] a, input [3:0] b, output [3:0] y);
   // CHECK: moore.assign [[G3]], [[GA3]] : l1
   and g [3:0] (y, a, b);
 endmodule
+
+// CHECK-LABEL: moore.module @ModuleWithAttrs() attributes {sv.attributes = [#sv.attribute<"flag_attr">, #sv.attribute<"str_attr" = "\22hello \\\22world\\\22\22">, #sv.attribute<"int_attr" = "42">]} {
+// CHECK-NEXT:    moore.output
+// CHECK-NEXT:  }
+(* flag_attr, str_attr = "hello \"world\"", int_attr = 42 *)
+module ModuleWithAttrs();
+endmodule
