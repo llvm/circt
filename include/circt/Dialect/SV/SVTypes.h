@@ -14,7 +14,6 @@
 #define CIRCT_DIALECT_SV_TYPES_H
 
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/HW/PortImplementation.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
@@ -42,10 +41,6 @@ mlir::Type getVarElementType(mlir::Type type);
 
 /// Return true if a type is a valid element type of a VarType.
 bool isValidVarElementType(mlir::Type type);
-
-/// Return true if port is an input direction port carrying a NetType
-/// handle, i.e. a bidirectional net (inout) port.
-bool isNetInputPort(const hw::PortInfo &port);
 
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.

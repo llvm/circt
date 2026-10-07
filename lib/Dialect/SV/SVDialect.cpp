@@ -33,8 +33,7 @@ using namespace circt::sv;
 namespace {
 /// Reject NetType or VarType on output direction module ports. Handle types
 /// are only meaningful as an input direction block argument; a module result
-/// is always a pure SSA value, so letting a handle escape through a result
-/// would let an internal pointer leak across the encapsulation boundary.
+/// is always a pure SSA value.
 struct SVHandleModulePortTypeInterface : public hw::HWModulePortTypeInterface {
   using HWModulePortTypeInterface::HWModulePortTypeInterface;
 

@@ -6752,7 +6752,8 @@ void ModuleEmitter::emitPortList(Operation *module,
       // Modport-typed ports (e.g., MyBundle.sink) already encode their
       // direction in the interface modport definition, so we suppress the
       // direction and wire keywords for them.
-      bool isInOut = isa<InOutType>(portType) || isNetInputPort(thisPortInfo);
+      bool isInOut = isa<InOutType>(portType) ||
+                     (thisPortInfo.isInput() && isa<sv::NetType>(portType));
       if (!isa<ModportType>(portType)) {
         if (isInOut) {
           ps << (hasOutputs ? "inout  " : "inout ");
@@ -6766,9 +6767,7 @@ void ModuleEmitter::emitPortList(Operation *module,
             break;
           }
         }
-        // Bidirectional net ports always have `wire` net kind, so make that
-        // explicit regardless of --emit-wire-in-ports.
-        if (state.options.emitWireInPorts || isNetInputPort(thisPortInfo))
+        if (state.options.emitWireInPorts)
           ps << "wire ";
         if (!portTypeStrings[portIdx].empty())
           ps << portTypeStrings[portIdx];
@@ -6817,7 +6816,8 @@ void ModuleEmitter::emitPortList(Operation *module,
       if (!state.options.disallowPortDeclSharing) {
         while (portIdx != e && portInfo.at(portIdx).dir == thisPortDirection &&
                isInOut == (isa<InOutType>(portInfo.at(portIdx).type) ||
-                           sv::isNetInputPort(portInfo.at(portIdx))) &&
+                           (portInfo.at(portIdx).isInput() &&
+                            isa<sv::NetType>(portInfo.at(portIdx).type))) &&
                stripUnpackedTypes(portType) ==
                    stripUnpackedTypes(portInfo.at(portIdx).type)) {
           auto port = portInfo.at(portIdx);
