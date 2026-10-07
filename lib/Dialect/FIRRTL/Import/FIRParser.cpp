@@ -960,6 +960,7 @@ ParseResult FIRParser::parseRegistryType(FIRRTLType &result) {
 ///
 // NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
+  auto typeLoc = getToken().getLoc();
   switch (getToken().getKind()) {
   default:
     return emitError(message), failure();
@@ -1174,8 +1175,13 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
             cast<BundleType::ElementType>(element.type)};
       });
       result = BundleType::get(getContext(), llvm::to_vector(bundleElements));
-    } else
-      result = OpenBundleType::get(getContext(), elements);
+    } else {
+      result = OpenBundleType::getChecked(
+          [&]() { return emitError(typeLoc); }, getContext(),
+          ArrayRef<OpenBundleType::BundleElement>(elements));
+      if (!result)
+        return failure();
+    }
     break;
   }
 
@@ -1307,8 +1313,12 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     auto baseType = type_dyn_cast<FIRRTLBaseType>(result);
     if (baseType)
       result = FVectorType::get(baseType, size);
-    else
-      result = OpenVectorType::get(result, size);
+    else {
+      result = OpenVectorType::getChecked([&]() { return emitError(typeLoc); },
+                                          result, size);
+      if (!result)
+        return failure();
+    }
   }
 
   return success();
