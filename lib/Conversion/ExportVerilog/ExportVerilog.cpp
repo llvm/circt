@@ -25,7 +25,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/HW/PortImplementation.h"
 #include "circt/Dialect/LTL/LTLVisitors.h"
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/SV/SVAttributes.h"
@@ -6752,8 +6751,7 @@ void ModuleEmitter::emitPortList(Operation *module,
       // Modport-typed ports (e.g., MyBundle.sink) already encode their
       // direction in the interface modport definition, so we suppress the
       // direction and wire keywords for them.
-      bool isInOut = isa<InOutType>(portType) ||
-                     (thisPortInfo.isInput() && isa<sv::NetType>(portType));
+      bool isInOut = isa<InOutType, sv::NetType>(portType);
       if (!isa<ModportType>(portType)) {
         if (isInOut) {
           ps << (hasOutputs ? "inout  " : "inout ");
@@ -6815,9 +6813,8 @@ void ModuleEmitter::emitPortList(Operation *module,
       // Thus we must ensure they are not folded into one shared declaration.
       if (!state.options.disallowPortDeclSharing) {
         while (portIdx != e && portInfo.at(portIdx).dir == thisPortDirection &&
-               isInOut == (isa<InOutType>(portInfo.at(portIdx).type) ||
-                           (portInfo.at(portIdx).isInput() &&
-                            isa<sv::NetType>(portInfo.at(portIdx).type))) &&
+               isInOut ==
+                   isa<InOutType, sv::NetType>(portInfo.at(portIdx).type) &&
                stripUnpackedTypes(portType) ==
                    stripUnpackedTypes(portInfo.at(portIdx).type)) {
           auto port = portInfo.at(portIdx);
