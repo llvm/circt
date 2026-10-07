@@ -20,3 +20,4 @@ hw.module @AggregateNetOutput(out p: !hw.struct<n: !sv.net<i4>>) {
 
 hw.module @NetInput(in %p: !sv.net<i4>) {
 }
+
