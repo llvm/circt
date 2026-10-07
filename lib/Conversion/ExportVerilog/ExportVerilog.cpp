@@ -6806,6 +6806,8 @@ void ModuleEmitter::emitPortList(Operation *module,
       // behavior when requested by user.
       if (!state.options.disallowPortDeclSharing) {
         while (portIdx != e && portInfo.at(portIdx).dir == thisPortDirection &&
+               isa<InOutType>(portType) ==
+                   isa<InOutType>(portInfo.at(portIdx).type) &&
                stripUnpackedTypes(portType) ==
                    stripUnpackedTypes(portInfo.at(portIdx).type)) {
           auto port = portInfo.at(portIdx);
