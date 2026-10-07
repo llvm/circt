@@ -31,9 +31,10 @@ using namespace circt::sv;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Reject NetType on output direction module ports. !sv.net denotes a
-/// bidirectional net (inout) port, which is only meaningful as an input
-/// direction block argument; a module result is always a pure SSA value.
+/// Reject NetType or VarType on output direction module ports. Handle types
+/// are only meaningful as an input direction block argument; a module result
+/// is always a pure SSA value, so letting a handle escape through a result
+/// would let an internal pointer leak across the encapsulation boundary.
 struct SVHandleModulePortTypeInterface : public hw::HWModulePortTypeInterface {
   using HWModulePortTypeInterface::HWModulePortTypeInterface;
 
@@ -41,9 +42,9 @@ struct SVHandleModulePortTypeInterface : public hw::HWModulePortTypeInterface {
   verifyHWModulePortType(function_ref<InFlightDiagnostic()> emitError,
                          hw::ModulePort::Direction direction,
                          Type type) const override {
-    if (isa<NetType>(type) && direction == hw::ModulePort::Output)
-      return emitError() << "sv.net handles are not supported on output "
-                            "ports";
+    if (isa<NetType, VarType>(type) && direction == hw::ModulePort::Output)
+      return emitError() << "sv.net/sv.var handles are not supported on "
+                            "output ports";
     return success();
   }
 };
