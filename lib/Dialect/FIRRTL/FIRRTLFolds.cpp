@@ -1829,7 +1829,7 @@ static OpFoldResult foldMux(OpTy op, typename OpTy::FoldAdaptor adaptor) {
   // The following folds require that the result has a known width. Otherwise
   // the mux requires an additional padding operation to be inserted, which is
   // not possible in a fold.
-  if (op.getType().getBitWidthOrSentinel() < 0)
+  if (op.getType().hasUninferredWidth())
     return {};
 
   // mux(0/1, x, y) -> x or y
