@@ -463,4 +463,18 @@ def ResolveXMRRef : Pass<"arc-resolve-xmr", "mlir::ModuleOp"> {
   ];
 }
 
+def OutlineArcsPass : Pass<"arc-outline", "mlir::ModuleOp"> {
+  let summary = "Outline side-effect-free ops into arcs";
+  let description = [{
+    Outline all side-effect-free operations in `hw.module`s into separate
+    `arc.define`s and replace the original operations with `arc.call`s to the
+    outlined arcs.
+
+    The pass colors operations according to which operands on side-effecting
+    operations they contribute to, and uses this color to group the operation
+    into the largest arcs possible while not introducing additional cycles.
+  }];
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 #endif // CIRCT_DIALECT_ARC_ARCPASSES_TD
