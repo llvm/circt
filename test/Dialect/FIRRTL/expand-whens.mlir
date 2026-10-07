@@ -366,6 +366,35 @@ firrtl.module @InvalidValues(in %p: !firrtl.uint<1>, out %out0: !firrtl.uint<2>,
   // CHECK: firrtl.connect %out5, %c2_ui2
 }
 
+// Test invalid value optimization on elements of an invalid aggregate.
+// CHECK-LABEL: firrtl.module @InvalidAggregateElements
+firrtl.module @InvalidAggregateElements(in %p: !firrtl.uint<1>, in %x: !firrtl.uint<2>, in %y: !firrtl.uint<1>, out %out0: !firrtl.uint<2>, out %out1: !firrtl.uint<2>, out %out2: !firrtl.uint<1>) {
+  %invalid_vec = firrtl.invalidvalue : !firrtl.vector<uint<2>, 2>
+  %invalid_bundle = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>>
+  %0 = firrtl.subindex %invalid_vec[0] : !firrtl.vector<uint<2>, 2>
+  %1 = firrtl.subindex %invalid_vec[1] : !firrtl.vector<uint<2>, 2>
+  %2 = firrtl.subfield %invalid_bundle[a] : !firrtl.bundle<a: uint<1>>
+
+  firrtl.connect %out0, %0 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.connect %out0, %x : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out0, %x
+
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.connect %out1, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+  } else {
+    firrtl.connect %out1, %x : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out1, %x
+
+  firrtl.connect %out2, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.connect %out2, %y : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK: firrtl.connect %out2, %y
+}
+
 // Test that registers are multiplexed with themselves.
 firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
