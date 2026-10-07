@@ -2680,6 +2680,49 @@ firrtl.module @issue1142(in %cond: !firrtl.uint<1>, out %z: !firrtl.uint) {
   firrtl.connect %z, %4 : !firrtl.uint, !firrtl.uint
 }
 
+// CHECK-LABEL: firrtl.module @MuxConstantSelectAggregate
+firrtl.module @MuxConstantSelectAggregate(
+  in %va: !firrtl.vector<uint<8>, 2>,
+  in %vb: !firrtl.vector<uint<8>, 2>,
+  in %ba: !firrtl.bundle<a: uint<1>, b: uint<8>>,
+  in %bb: !firrtl.bundle<a: uint<1>, b: uint<8>>,
+  out %v0: !firrtl.vector<uint<8>, 2>,
+  out %v1: !firrtl.vector<uint<8>, 2>,
+  out %b0: !firrtl.bundle<a: uint<1>, b: uint<8>>,
+  out %b1: !firrtl.bundle<a: uint<1>, b: uint<8>>
+) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.mux
+  // CHECK: firrtl.matchingconnect %v0, %vb
+  // CHECK: firrtl.matchingconnect %v1, %va
+  // CHECK: firrtl.matchingconnect %b0, %bb
+  // CHECK: firrtl.matchingconnect %b1, %ba
+  %0 = firrtl.mux(%c0_ui1, %va, %vb) : (!firrtl.uint<1>, !firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<8>, 2>) -> !firrtl.vector<uint<8>, 2>
+  %1 = firrtl.mux(%c1_ui1, %va, %vb) : (!firrtl.uint<1>, !firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<8>, 2>) -> !firrtl.vector<uint<8>, 2>
+  %2 = firrtl.mux(%c0_ui1, %ba, %bb) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: uint<8>>, !firrtl.bundle<a: uint<1>, b: uint<8>>) -> !firrtl.bundle<a: uint<1>, b: uint<8>>
+  %3 = firrtl.mux(%c1_ui1, %ba, %bb) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: uint<8>>, !firrtl.bundle<a: uint<1>, b: uint<8>>) -> !firrtl.bundle<a: uint<1>, b: uint<8>>
+  firrtl.matchingconnect %v0, %0 : !firrtl.vector<uint<8>, 2>
+  firrtl.matchingconnect %v1, %1 : !firrtl.vector<uint<8>, 2>
+  firrtl.matchingconnect %b0, %2 : !firrtl.bundle<a: uint<1>, b: uint<8>>
+  firrtl.matchingconnect %b1, %3 : !firrtl.bundle<a: uint<1>, b: uint<8>>
+}
+
+// CHECK-LABEL: firrtl.module @MuxConstantSelectAggregateUnknownWidth
+firrtl.module @MuxConstantSelectAggregateUnknownWidth(
+  in %a: !firrtl.vector<uint, 2>,
+  in %b: !firrtl.vector<uint, 2>,
+  out %z: !firrtl.vector<uint, 2>
+) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+  // Don't fold away constant selects if any leaf width is unknown.
+  // CHECK: %0 = firrtl.mux(%c0_ui1, %a, %b)
+  %0 = firrtl.mux(%c0_ui1, %a, %b) : (!firrtl.uint<1>, !firrtl.vector<uint, 2>, !firrtl.vector<uint, 2>) -> !firrtl.vector<uint, 2>
+  firrtl.connect %z, %0 : !firrtl.vector<uint, 2>, !firrtl.vector<uint, 2>
+}
+
 // CHECK-LABEL: firrtl.module @PadMuxOperands
 firrtl.module @PadMuxOperands(
   in %cond: !firrtl.uint<1>,
