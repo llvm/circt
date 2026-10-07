@@ -475,6 +475,11 @@ def OutlineArcsPass : Pass<"arc-outline", "mlir::ModuleOp"> {
     into the largest arcs possible while not introducing additional cycles.
   }];
   let dependentDialects = ["circt::hw::HWDialect"];
+  let statistics = [
+    Statistic<"numUpdates", "updates", "Total op color updates">,
+    Statistic<"numFixups", "fixups", "Lattice-based op color fixups">,
+    Statistic<"numVacuousUpdates", "vacuous-updates", "Updates that did not change an op's color">,
+  ];
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCPASSES_TD
