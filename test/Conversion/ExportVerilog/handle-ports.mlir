@@ -21,3 +21,4 @@ hw.module @StructElement(in %n: !sv.net<!hw.struct<f: i4>>) {
 // CHECK-NEXT: );
 hw.module @NoShareAcrossKind(in %a: i4, in %n: !sv.net<i4>) {
 }
+
