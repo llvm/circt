@@ -471,14 +471,26 @@ def OutlineArcsPass : Pass<"arc-outline", "mlir::ModuleOp"> {
     outlined arcs.
 
     The pass colors operations according to which operands on side-effecting
-    operations they contribute to, and uses this color to group the operation
+    operations they contribute to, and uses this color to group the operations
     into the largest arcs possible while not introducing additional cycles.
   }];
   let dependentDialects = ["circt::arc::ArcDialect", "circt::hw::HWDialect"];
   let statistics = [
-    Statistic<"numUpdates", "updates", "Total op color updates">,
-    Statistic<"numFixups", "fixups", "Lattice-based op color fixups">,
-    Statistic<"numVacuousUpdates", "vacuous-updates", "Updates that did not change an op's color">,
+    Statistic<"numUpdates", "color-updates", "Total op color updates">,
+    Statistic<"numFixups", "color-fixups", "Lattice-based op color fixups">,
+    Statistic<
+      "numVacuousUpdates", "vacuous-updates",
+      "Updates that did not change an op's color"
+    >,
+    Statistic<"numArcs", "arcs-created", "Number of arcs created">,
+    Statistic<
+      "numForwardRefs", "forward-refs",
+      "Cyclical forward references within arcs"
+    >,
+    Statistic<
+      "numClonedConstants", "consts-cloned",
+      "Constants cloned into arcs"
+    >,
   ];
 }
 
