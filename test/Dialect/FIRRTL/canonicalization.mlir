@@ -3599,6 +3599,15 @@ firrtl.module @AggregateCreateConst(
   // CHECK-DAG: firrtl.matchingconnect %bundle_out, %[[BUNDLE]] : !firrtl.bundle<a: uint<1>, b: uint<1>>
 }
 
+// Aggregate create ops have no side effects, so unused ones are erased.
+// CHECK-LABEL: firrtl.module @AggregateCreateUnused(
+firrtl.module @AggregateCreateUnused(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
+  // CHECK-NOT: firrtl.vectorcreate
+  // CHECK-NOT: firrtl.bundlecreate
+  %vector = firrtl.vectorcreate %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
+  %bundle = firrtl.bundlecreate %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+}
+
 
 // CHECK-LABEL: firrtl.module private @RWProbeUnused
 firrtl.module private @RWProbeUnused(in %in: !firrtl.uint<4>, in %clk: !firrtl.clock, out %out: !firrtl.uint) {
