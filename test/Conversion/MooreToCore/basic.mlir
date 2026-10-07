@@ -2301,3 +2301,8 @@ func.func @UArrayCmpElementFallback(
 
   func.return
 }
+
+// CHECK-LABEL: hw.module @ModuleWithAttrs() attributes {sv.attributes = [#sv.attribute<"flag_attr">, #sv.attribute<"str_attr" = "\22hello\22">, #sv.attribute<"int_attr" = "42">]}
+moore.module @ModuleWithAttrs() attributes {sv.attributes = [#sv.attribute<"flag_attr">, #sv.attribute<"str_attr" = "\22hello\22">, #sv.attribute<"int_attr" = "42">]} {
+  moore.output
+}

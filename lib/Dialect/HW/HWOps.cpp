@@ -39,8 +39,6 @@ ModulePort::Direction hw::flip(ModulePort::Direction direction) {
     return ModulePort::Direction::Output;
   case ModulePort::Direction::Output:
     return ModulePort::Direction::Input;
-  case ModulePort::Direction::InOut:
-    return ModulePort::Direction::InOut;
   }
   llvm_unreachable("unknown PortDirection");
 }
@@ -678,9 +676,6 @@ static void modifyModuleArgs(
     // Insert new ports at this position.
     while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
       auto port = insertArgs[0].second;
-      if (port.dir == ModulePort::Direction::InOut &&
-          !isa<InOutType>(port.type))
-        port.type = InOutType::get(port.type);
       newArgNames.push_back(port.name);
       newArgTypes.push_back(port.type);
       newArgAttrs.push_back(port.attrs ? port.attrs : emptyDictAttr);
@@ -796,8 +791,6 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
   for (auto port : ports.getInputs()) {
     auto loc = port.loc ? Location(port.loc) : unknownLoc;
     auto type = port.type;
-    if (port.isInOut() && !isa<InOutType>(type))
-      type = InOutType::get(type);
     body->addArgument(type, loc);
   }
 

@@ -6749,16 +6749,17 @@ void ModuleEmitter::emitPortList(Operation *module,
       // direction in the interface modport definition, so we suppress the
       // direction and wire keywords for them.
       if (!isa<ModportType>(portType)) {
-        switch (thisPortDirection) {
-        case ModulePort::Direction::Output:
-          ps << "output ";
-          break;
-        case ModulePort::Direction::Input:
-          ps << (hasOutputs ? "input  " : "input ");
-          break;
-        case ModulePort::Direction::InOut:
+        if (isa<InOutType>(portType)) {
           ps << (hasOutputs ? "inout  " : "inout ");
-          break;
+        } else {
+          switch (thisPortDirection) {
+          case ModulePort::Direction::Output:
+            ps << "output ";
+            break;
+          case ModulePort::Direction::Input:
+            ps << (hasOutputs ? "input  " : "input ");
+            break;
+          }
         }
         if (state.options.emitWireInPorts)
           ps << "wire ";
