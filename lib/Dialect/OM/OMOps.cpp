@@ -1077,14 +1077,18 @@ foldIntegerBitwiseWithPropertyIntegers(Attribute lhsAttr, Attribute rhsAttr,
   return foldIntegerBitwise(lhsAttr, rhsAttr, evaluate);
 }
 
-// Returns true if attr is an IntegerAttr whose value is all-zeros.
+// Returns true if attr is an integer attribute whose value is all-zeros.
 static bool isZeroInt(Attribute a) {
+  if (auto propertyInt = dyn_cast_or_null<circt::om::IntegerAttr>(a))
+    a = propertyInt.getValue();
   auto i = dyn_cast_or_null<mlir::IntegerAttr>(a);
   return i && i.getValue().isZero();
 }
 
-// Returns true if attr is an IntegerAttr whose value is all-ones.
+// Returns true if attr is an integer attribute whose value is all-ones.
 static bool isAllOnesInt(Attribute a) {
+  if (auto propertyInt = dyn_cast_or_null<circt::om::IntegerAttr>(a))
+    a = propertyInt.getValue();
   auto i = dyn_cast_or_null<mlir::IntegerAttr>(a);
   return i && i.getValue().isAllOnes();
 }
@@ -1097,10 +1101,10 @@ OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
           }))
     return result;
   // AND with all-zeros is always zero.
-  if (isZeroInt(adaptor.getLhs()) || isZeroInt(adaptor.getRhs()))
-    return mlir::IntegerAttr::get(
-        getResult().getType(),
-        APInt::getZero(cast<IntegerType>(getType()).getWidth()));
+  if (isZeroInt(adaptor.getLhs()))
+    return adaptor.getLhs();
+  if (isZeroInt(adaptor.getRhs()))
+    return adaptor.getRhs();
   // AND with all-ones is identity.
   if (isAllOnesInt(adaptor.getLhs()))
     return getRhs();
@@ -1117,10 +1121,10 @@ OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
           }))
     return result;
   // OR with all-ones is always all-ones.
-  if (isAllOnesInt(adaptor.getLhs()) || isAllOnesInt(adaptor.getRhs()))
-    return mlir::IntegerAttr::get(
-        getResult().getType(),
-        APInt::getAllOnes(cast<IntegerType>(getType()).getWidth()));
+  if (isAllOnesInt(adaptor.getLhs()))
+    return adaptor.getLhs();
+  if (isAllOnesInt(adaptor.getRhs()))
+    return adaptor.getRhs();
   // OR with all-zeros is identity.
   if (isZeroInt(adaptor.getLhs()))
     return getRhs();
