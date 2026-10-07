@@ -474,7 +474,7 @@ def OutlineArcsPass : Pass<"arc-outline", "mlir::ModuleOp"> {
     operations they contribute to, and uses this color to group the operation
     into the largest arcs possible while not introducing additional cycles.
   }];
-  let dependentDialects = ["circt::hw::HWDialect"];
+  let dependentDialects = ["circt::arc::ArcDialect", "circt::hw::HWDialect"];
   let statistics = [
     Statistic<"numUpdates", "updates", "Total op color updates">,
     Statistic<"numFixups", "fixups", "Lattice-based op color fixups">,

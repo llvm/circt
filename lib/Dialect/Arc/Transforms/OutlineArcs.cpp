@@ -12,6 +12,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/LLHDOps.h"
 #include "mlir/Analysis/Liveness.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
@@ -40,9 +41,14 @@ namespace {
 struct OutlineArcsPass
     : public arc::impl::OutlineArcsPassBase<OutlineArcsPass> {
   void runOnOperation() override;
+  friend struct Colorer;
   friend struct Outliner;
 };
 } // namespace
+
+static bool isArcBreaker(Operation *op) {
+  return !mlir::isMemoryEffectFree(op) || op->hasTrait<OpTrait::IsTerminator>();
+}
 
 //===----------------------------------------------------------------------===//
 // Coloring
@@ -59,6 +65,14 @@ struct Color {
   /// terminal is an `OpOperand` on an arc-breaking operation.
   ArrayRef<unsigned> terminals;
 };
+
+static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const Color &color) {
+  os << "#" << color.index << "[";
+  llvm::interleaveComma(color.terminals, os);
+  os << "]";
+  return os;
+}
 
 /// Special handling for the set interning `Color` instances.
 struct ColorInfo : DenseMapInfo<Color *> {
@@ -93,41 +107,32 @@ struct ColorTable {
   }
 };
 
-} // namespace
+/// The result of coloring the ops in a module.
+struct Coloring {
+  /// The color allocator and interning table.
+  ColorTable table;
+  /// The colors assigned to each non-arc-breaking operation.
+  DenseMap<Operation *, Color *> colors;
+};
 
-static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                                     const Color &color) {
-  os << "#" << color.index << "[";
-  llvm::interleaveComma(color.terminals, os);
-  os << "]";
-  return os;
-}
+/// A helper struct that colors the ops in a module.
+struct Colorer {
+  Colorer(hw::HWModuleOp moduleOp, OutlineArcsPass &pass)
+      : moduleOp(moduleOp), pass(pass) {}
 
-//===----------------------------------------------------------------------===//
-// Outliner
-//===----------------------------------------------------------------------===//
-namespace {
-
-/// A helper struct to outline the ops in a module.
-struct Outliner {
-  Outliner(hw::HWModuleOp moduleOp, SymbolTable &symbolTable,
-           OutlineArcsPass &pass)
-      : moduleOp(moduleOp), symbolTable(symbolTable), pass(pass) {}
-  void run();
-  void colorOps();
+  Coloring run();
   void colorOpFanout(Operation *op);
   bool updateOpColor(Operation *op);
+  void outlineOps();
+  void outlineOp(Operation *op);
 
   hw::HWModuleOp moduleOp;
-  SymbolTable &symbolTable;
   OutlineArcsPass &pass;
 
-  /// All interned colors.
-  ColorTable colors;
+  /// The resulting coloring.
+  Coloring coloring;
   /// The terminal IDs assigned to operands of arc-breaking ops.
   DenseMap<OpOperand *, unsigned> terminals;
-  /// The colors assigned to each non-arc-breaking operation.
-  DenseMap<Operation *, Color *> opColors;
 
   /// The worklist used to color operations.
   struct WorklistItem {
@@ -141,20 +146,11 @@ struct Outliner {
   /// the DFS part misses.
   SetVector<Operation *> dirtyOps;
 };
+
 } // namespace
 
-static bool isArcBreaker(Operation *op) {
-  return !mlir::isMemoryEffectFree(op) || op->hasTrait<OpTrait::IsTerminator>();
-}
-
-void Outliner::run() {
-  LLVM_DEBUG(llvm::dbgs() << "Outlining arcs in @" << moduleOp.getModuleName()
-                          << "\n");
-  colorOps();
-}
-
 /// Color the operations in the module.
-void Outliner::colorOps() {
+Coloring Colorer::run() {
   // Perform a first depth-first traversal along the op user chain.
   for (auto &op : *moduleOp.getBodyBlock())
     if (!isArcBreaker(&op))
@@ -170,17 +166,20 @@ void Outliner::colorOps() {
         for (auto operand : op->getOperands())
           if (auto *defOp = operand.getDefiningOp())
             if (defOp->getBlock() == moduleOp.getBodyBlock())
-              dirtyOps.insert(defOp);
+              if (!isArcBreaker(defOp))
+                dirtyOps.insert(defOp);
       });
     }
   }
+
+  return std::move(coloring);
 }
 
 /// Color an operation and transitively all its users.
-void Outliner::colorOpFanout(Operation *op) {
+void Colorer::colorOpFanout(Operation *op) {
   // Assign a sentinel color to the op such that we can detect recursion. If the
   // insertion fails, we already have a color for the op.
-  if (!opColors.insert({op, nullptr}).second)
+  if (!coloring.colors.insert({op, nullptr}).second)
     return;
 
   // Perform a depth-first traversal of the op's users and color each. An op's
@@ -194,19 +193,16 @@ void Outliner::colorOpFanout(Operation *op) {
       updateOpColor(item.op);
       worklist.pop_back();
     } else {
-      // Lookup the user op and advance the use iterator.
+      // Lookup the user op and advance the use iterator. If the user is in a
+      // nested op, zip up to the parent op that sits directly in the module.
       auto *userOp = (item.use++)->getOwner();
-
-      // If this use is in a nested op, zip up to the parent op that sits
-      // directly in the module.
-      while (userOp->getBlock() != moduleOp.getBodyBlock())
-        userOp = userOp->getParentOp();
+      userOp = moduleOp.getBodyBlock()->findAncestorOpInBlock(*userOp);
 
       // Push the user op onto the worklist if it isn't an arc-breaking op and
       // the op hasn't already been colored (or has a sentinel null color to
       // break cycles).
       if (!isArcBreaker(userOp))
-        if (opColors.insert({userOp, nullptr}).second)
+        if (coloring.colors.insert({userOp, nullptr}).second)
           worklist.push_back({userOp, userOp->use_begin(), userOp->use_end()});
     }
   }
@@ -214,7 +210,7 @@ void Outliner::colorOpFanout(Operation *op) {
 
 /// Update the color of an operation based on the colors of its users. Returns
 /// true if the color changed, false otherwise.
-bool Outliner::updateOpColor(Operation *op) {
+bool Colorer::updateOpColor(Operation *op) {
   // Compute the union of all terminals in the op's users.
   SmallDenseSet<unsigned, 8> fanoutTerminals;
   for (auto &use : op->getUses()) {
@@ -223,7 +219,7 @@ bool Outliner::updateOpColor(Operation *op) {
       // terminal ID to the set.
       auto terminal = terminals.insert({&use, terminals.size()}).first->second;
       fanoutTerminals.insert(terminal);
-    } else if (auto *color = opColors.at(use.getOwner())) {
+    } else if (auto *color = coloring.colors.at(use.getOwner())) {
       // Add the user op's terminals.
       fanoutTerminals.insert_range(color->terminals);
     } else {
@@ -241,14 +237,205 @@ bool Outliner::updateOpColor(Operation *op) {
   llvm::sort(sortedTerminals);
 
   // Turn the list of terminals into a color and update the op's color.
-  auto &color = opColors[op];
+  auto &color = coloring.colors[op];
   auto *oldColor = color;
-  color = colors.get(sortedTerminals);
+  color = coloring.table.get(sortedTerminals);
   pass.numUpdates++;
   if (color != oldColor)
     return true;
   pass.numVacuousUpdates++;
   return false;
+}
+
+//===----------------------------------------------------------------------===//
+// Outlining
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// An outlined set of operations.
+struct OutlinedArc {
+  unsigned index;
+  std::unique_ptr<Block> block;
+  SmallVector<OpOperand *> forwardRefs;
+  OutputOp terminator;
+  CallOp call;
+};
+
+/// A helper struct to outline the colored ops in a module.
+struct Outliner {
+  Outliner(hw::HWModuleOp moduleOp, SymbolTable &symbolTable,
+           Coloring &coloring, OutlineArcsPass &pass)
+      : moduleOp(moduleOp), symbolTable(symbolTable), coloring(coloring),
+        pass(pass) {}
+
+  void run();
+  void outlineOp(Operation *op);
+  void sortAndBreakCycles(OutlinedArc &arc);
+  void createTerminator(OutlinedArc &arc);
+  void createAndCallArc(OutlinedArc &arc, OpBuilder &arcBuilder,
+                        OpBuilder &callBuilder);
+  void useCallResults(OutlinedArc &arc);
+
+  hw::HWModuleOp moduleOp;
+  SymbolTable &symbolTable;
+  Coloring &coloring;
+  OutlineArcsPass &pass;
+
+  /// The outlined block for each color.
+  MapVector<Color *, OutlinedArc> arcs;
+};
+
+} // namespace
+
+void Outliner::run() {
+  // Move all colored ops into a dedicated block for each color.
+  for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock()))
+    if (!isArcBreaker(&op))
+      outlineOp(&op);
+
+  // Sort the ops in outlined blocks and take note of any cycles.
+  for (auto &[color, arc] : arcs)
+    sortAndBreakCycles(arc);
+
+  // Add a terminator to each block.
+  for (auto &[color, arc] : arcs)
+    createTerminator(arc);
+
+  // Create a call in the module body for each outlined block.
+  OpBuilder arcBuilder(moduleOp);
+  OpBuilder callBuilder(moduleOp.getBodyBlock()->getTerminator());
+  for (auto &[color, arc] : arcs)
+    createAndCallArc(arc, arcBuilder, callBuilder);
+
+  // Replace any direct uses of results in an arc with the corresponding call
+  // op's result.
+  for (auto &[color, arc] : arcs)
+    useCallResults(arc);
+}
+
+void Outliner::outlineOp(Operation *op) {
+  // LLVM_DEBUG(llvm::dbgs() << "- Outline " << *op << "\n");
+  auto *color = coloring.colors.at(op);
+
+  // Create the block if necessary.
+  auto &arc = arcs[color];
+  if (!arc.block) {
+    LLVM_DEBUG(llvm::dbgs() << "- Create arc for " << *color << "\n");
+    arc.index = arcs.size();
+    arc.block = std::make_unique<Block>();
+  }
+
+  // Move the op to the block.
+  op->moveBefore(arc.block.get(), arc.block->end());
+}
+
+/// Sort the ops in an outlined block topologically and note any uses of a
+/// result before the defining op. We'll later move the cycle outside the arc
+/// such that the arc body can be an SSACFG region.
+void Outliner::sortAndBreakCycles(OutlinedArc &arc) {
+  // Topologically sort the arc body. If the function returns true there are no
+  // cycles and we don't need to break any cycles.
+  if (mlir::sortTopologically(arc.block.get()))
+    return;
+
+  // Otherwise take note of any uses-before-defs.
+  arc.block->walk([&](Operation *op) {
+    auto *blockOp = arc.block->findAncestorOpInBlock(*op);
+    for (auto &operand : op->getOpOperands())
+      if (auto *defOp = operand.get().getDefiningOp())
+        if (defOp->getBlock() == arc.block.get() &&
+            !defOp->isBeforeInBlock(blockOp))
+          arc.forwardRefs.push_back(&operand);
+  });
+}
+
+void Outliner::createTerminator(OutlinedArc &arc) {
+  // Collect all op results that have uses outside the block.
+  SmallSetVector<Value, 8> results;
+  for (auto &op : *arc.block) {
+    for (auto result : op.getResults()) {
+      for (auto *userOp : result.getUsers()) {
+        if (!arc.block->findAncestorOpInBlock(*userOp)) {
+          results.insert(result);
+          break;
+        }
+      }
+    }
+  }
+
+  // Append values involved in a forward reference.
+  for (auto *operand : arc.forwardRefs)
+    results.insert(operand->get());
+
+  // Create an `arc.output` terminator op with these results as operands.
+  OpBuilder builder(moduleOp);
+  builder.setInsertionPointToEnd(arc.block.get());
+  arc.terminator =
+      OutputOp::create(builder, moduleOp.getLoc(), results.getArrayRef());
+}
+
+void Outliner::createAndCallArc(OutlinedArc &arc, OpBuilder &arcBuilder,
+                                OpBuilder &callBuilder) {
+  // Collect all values used in the block that are defined outside the block,
+  // and create a block argument for each.
+  SmallVector<Value, 8> values;
+  SmallMapVector<Value, BlockArgument, 8> args;
+
+  auto addArg = [&](Value value) {
+    auto &arg = args[value];
+    if (!arg) {
+      arg = arc.block->addArgument(value.getType(), value.getLoc());
+      values.push_back(value);
+    }
+    return arg;
+  };
+
+  arc.block->walk([&](Operation *op) {
+    for (auto &operand : op->getOpOperands()) {
+      // Get the defining block and zip up to the root block. Since the arc
+      // blocks are all detached at the moment, values defined inside an arc
+      // will stop at the arc's block, and all others will zip all the way up to
+      // the root module. We are only interested in values where this block is
+      // not the arc's block.
+      auto *defBlock = operand.get().getParentBlock();
+      while (defBlock && defBlock->getParentOp())
+        defBlock = defBlock->getParentOp()->getBlock();
+      if (defBlock == arc.block.get())
+        continue;
+
+      // Create a block argument if none exists yet.
+      operand.set(addArg(operand.get()));
+    }
+  });
+
+  // Add arguments for all forward references.
+  for (auto *operand : arc.forwardRefs)
+    operand->set(addArg(operand->get()));
+
+  // Create an arc definition.
+  auto arcOp = DefineOp::create(
+      arcBuilder, arc.terminator.getLoc(),
+      arcBuilder.getStringAttr(moduleOp.getModuleName() + "_arc" +
+                               Twine(arc.index)),
+      arcBuilder.getFunctionType(arc.block->getArgumentTypes(),
+                                 arc.terminator->getOperandTypes()));
+  arcOp.getBody().push_back(arc.block.release());
+
+  // Create a call to the arc.
+  arc.call = CallOp::create(callBuilder, arcOp.getLoc(), arcOp, values);
+}
+
+/// Replace any external uses of an arc's internal results with the
+/// corresponding call result.
+void Outliner::useCallResults(OutlinedArc &arc) {
+  auto *arcBlock = arc.terminator->getBlock();
+  for (auto [valueInside, valueOutside] :
+       llvm::zip(arc.terminator.getOperands(), arc.call.getResults())) {
+    valueInside.replaceUsesWithIf(valueOutside, [&](OpOperand &use) {
+      return !arcBlock->findAncestorOpInBlock(*use.getOwner());
+    });
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -258,7 +445,9 @@ bool Outliner::updateOpColor(Operation *op) {
 void OutlineArcsPass::runOnOperation() {
   auto &symbolTable = getAnalysis<SymbolTable>();
   for (auto moduleOp : getOperation().getOps<hw::HWModuleOp>()) {
-    Outliner outliner(moduleOp, symbolTable, *this);
-    outliner.run();
+    LLVM_DEBUG(llvm::dbgs()
+               << "Outline arcs from @" << moduleOp.getModuleName() << "\n");
+    auto coloring = Colorer(moduleOp, *this).run();
+    Outliner(moduleOp, symbolTable, coloring, *this).run();
   }
 }
