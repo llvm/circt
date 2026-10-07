@@ -320,9 +320,6 @@ LogicalResult ModelOp::verify() {
   if (auto type = getBodyBlock().getArgument(0).getType();
       !isa<StorageType>(type))
     return emitOpError("argument must be of storage type");
-  for (const hw::ModulePort &port : getIo().getPorts())
-    if (port.dir == hw::ModulePort::Direction::InOut)
-      return emitOpError("inout ports are not supported");
   return success();
 }
 
@@ -637,11 +634,14 @@ SimSetInputOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!port)
     return emitOpError("port not found on model");
 
-  if (port->dir != hw::ModulePort::Direction::Input &&
-      port->dir != hw::ModulePort::Direction::InOut)
+  if (port->dir != hw::ModulePort::Direction::Input)
     return emitOpError("port is not an input port");
 
-  if (port->type != getValue().getType())
+  auto portType = port->type;
+  if (auto inoutType = dyn_cast<hw::InOutType>(portType))
+    portType = inoutType.getElementType();
+
+  if (portType != getValue().getType())
     return emitOpError(
                "mismatched types between value and model port, port expects ")
            << port->type;

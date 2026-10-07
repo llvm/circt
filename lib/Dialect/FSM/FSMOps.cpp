@@ -180,42 +180,24 @@ LogicalResult MachineOp::verify() {
   return success();
 }
 
-SmallVector<::circt::hw::PortInfo> MachineOp::getPortList() {
+SmallVector<hw::PortInfo> MachineOp::getPortList() {
   SmallVector<hw::PortInfo> ports;
-  auto argNames = getArgNames();
-  auto argTypes = getFunctionType().getInputs();
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    bool isInOut = false;
-    auto type = argTypes[i];
-
-    if (auto inout = dyn_cast<hw::InOutType>(type)) {
-      isInOut = true;
-      type = inout.getElementType();
+  auto fnType = getFunctionType();
+  auto addPorts = [&](TypeRange types, std::optional<ArrayAttr> names,
+                      hw::ModulePort::Direction dir, StringRef prefix) {
+    for (auto [i, type] : llvm::enumerate(types)) {
+      StringAttr name = (names && i < names->size())
+                            ? cast<StringAttr>((*names)[i])
+                            : StringAttr::get(getContext(), prefix + Twine(i));
+      ports.push_back({{name, type, dir}, static_cast<size_t>(i), {}, {}});
     }
+  };
 
-    auto direction = isInOut ? hw::ModulePort::Direction::InOut
-                             : hw::ModulePort::Direction::Input;
+  addPorts(fnType.getInputs(), getArgNames(), hw::ModulePort::Direction::Input,
+           "input");
+  addPorts(fnType.getResults(), getResNames(),
+           hw::ModulePort::Direction::Output, "output");
 
-    ports.push_back(
-        {{argNames ? cast<StringAttr>((*argNames)[i])
-                   : StringAttr::get(getContext(), Twine("input") + Twine(i)),
-          type, direction},
-         i,
-         {},
-         {}});
-  }
-
-  auto resultNames = getResNames();
-  auto resultTypes = getFunctionType().getResults();
-  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    ports.push_back({{resultNames ? cast<StringAttr>((*resultNames)[i])
-                                  : StringAttr::get(getContext(),
-                                                    Twine("output") + Twine(i)),
-                      resultTypes[i], hw::ModulePort::Direction::Output},
-                     i,
-                     {},
-                     {}});
-  }
   return ports;
 }
 
