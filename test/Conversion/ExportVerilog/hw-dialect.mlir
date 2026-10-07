@@ -361,6 +361,21 @@ hw.module @inout_0(in %a: !hw.inout<i42>, out out: i42) {
 // CHECK-NEXT:     assign out = a;
 // CHECK-NEXT:   endmodule
 
+// Inout ports must not share a declaration with adjacent input ports.
+hw.module @inout_mixed(in %a: i1, in %b: !hw.inout<i1>, in %c: !hw.inout<i1>, in %d: i1, out out: i1) {
+  %bget = sv.read_inout %b : !hw.inout<i1>
+  %cget = sv.read_inout %c : !hw.inout<i1>
+  %0 = comb.xor %a, %bget, %cget, %d : i1
+  hw.output %0 : i1
+}
+// CHECK-LABEL:  module inout_mixed(
+// CHECK-NEXT:     input  a,
+// CHECK-NEXT:     inout  b,
+// CHECK-NEXT:            c,
+// CHECK-NEXT:     input  d,
+// CHECK-NEXT:     output out
+// CHECK-NEXT:   );
+
 // https://github.com/llvm/circt/issues/316
 // FIXME: The MLIR parser doesn't accept an i0 even though it is valid IR,
 // this needs to be fixed upstream.
