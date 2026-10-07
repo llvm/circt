@@ -433,8 +433,8 @@ firrtl.circuit "IntegerArithmetic" {
   }
 
   // CHECK-LABEL: om.class @IntegerBitwiseNested
-  firrtl.class @IntegerBitwiseNested(in %a: !firrtl.integer, in %b: !firrtl.integer,
-                                    in %c: !firrtl.integer, out %result: !firrtl.integer) {
+  firrtl.class @IntegerBitwiseNested(in %a: !firrtl.integer, in %c: !firrtl.integer,
+                                    out %result: !firrtl.integer) {
     // CHECK: [[LITERAL:%.+]] = om.constant #om.integer<5 : si4> : !om.integer
     %literal = firrtl.integer 5
     // CHECK: [[OR:%.+]] = om.integer.or %{{.+}}, [[LITERAL]] : !om.integer
