@@ -100,8 +100,8 @@ move storage out of it, or leave it untouched for retry.
   /// required because the write API takes ownership
   /// (unique_ptr<SegmentedMessageData>) and a backend may hold the
   /// message across async boundaries / partial writes. Subclasses which
-  /// hold data in HostMem regions keep those regions alive (owning them,
-  /// or via a shared_ptr) and may override take() to hand them over.
+  /// hold data in HostMem regions keep those regions alive and may
+  /// override take() to hand them over.
   class SegmentedMessageData {
   public:
     virtual ~SegmentedMessageData() = default;
@@ -110,8 +110,8 @@ move storage out of it, or leave it untouched for retry.
     virtual size_t numSegments() const = 0;
     /// Throws if the segment has been take()n.
     virtual Segment segment(size_t idx) const = 0;
-    /// Called once segment `segIdx` has been transmitted. If the message
-    /// transfers region ownership, marks it taken (afterwards,
+    /// Optionally called once segment `segIdx` has been transmitted. If the
+    /// message transfers region ownership, marks it taken (afterwards,
     /// segment(segIdx) throws) and transfers ownership of its HostMem
     /// region once no untaken segment references the region. Otherwise
     /// returns nullptr. Default: nullptr.
@@ -333,13 +333,11 @@ A message may keep some of its data in `HostMem` regions (from
 `HostMem::allocate()`), which the accelerator can read directly. Message types
 which do this should allocate through the `services::HostMemAllocator`
 interface (which `HostMem` implements), so that callers can also supply other
-allocators, such as region pools. Segments
-remain non-owning views: the message keeps its regions alive for its lifetime
-(e.g. owning them as `std::unique_ptr<HostMemRegion>`, or holding a
-`std::shared_ptr` to a region shared with the producer or a pool), and each
-segment whose bytes live in one points at it via the non-owning
-`Segment::region`. Several segments may share a region (e.g. a header and a
-payload carved out of one allocation).
+allocators, such as region pools. Segments remain non-owning views: the message
+keeps its regions alive for its lifetime (e.g. by owning them as
+`std::unique_ptr<HostMemRegion>`), and each segment whose bytes live in one
+points at it via the non-owning `Segment::region`. Several segments may share a
+region (e.g. a header and a payload carved out of one allocation).
 
 Zero-copy only needs the region to stay alive and be identifiable; handing
 ownership of it to the backend is optional. A message which owns its regions
@@ -364,7 +362,7 @@ after the `take()`, throws when it reaches a taken segment. `Segment` copies of
 a taken segment obtained before the `take()` are invalid: their `data` may point
 into a region which has since been re-used.
 
-A scatter-gather backend owns the message while writing it, so it can DMA
+Backends own the message while writing it, so a scatter-gather backend can DMA
 region-backed segments directly from their device address (copying the rest
 into a staging / bounce buffer), and then take the regions to keep, re-use, or
 return to a pool once they've been transmitted:
@@ -426,8 +424,9 @@ Notes:
   not be DMA'd; copy its bytes instead.
 - Calling `flush()` on the region before the write remains the producer's
   responsibility on platforms which need it (e.g. XRT).
-- Memory registered with `HostMem::mapMemory()` has no region object, so it
-  can't be handed over this way.
+- Memory registered with `HostMem::mapMemory()` has no region object, so
+  segments over it can't carry a `region` and are not (yet) zero-copy capable;
+  backends copy them like any other untagged segment.
 
 ## Type de-serialization (read side)
 

@@ -326,11 +326,10 @@ public:
   TraceHostMem(TraceAccelerator &conn) : HostMem(conn), impl(conn.getImpl()) {}
 
   struct TraceHostMemRegion : public HostMemRegion {
-    TraceHostMemRegion(void *ptr, std::size_t size,
-                       TraceAccelerator::Impl &impl)
-        : ptr(ptr), size(size), impl(impl) {}
+    TraceHostMemRegion(std::size_t size, TraceAccelerator::Impl &impl)
+        : ptr(malloc(size)), size(size), impl(impl) {}
     virtual ~TraceHostMemRegion() {
-      if (impl.isWriteable())
+      if (ptr && impl.isWriteable())
         impl.write("HostMem") << "free " << ptr << std::endl;
       free(ptr);
     }
@@ -347,15 +346,10 @@ public:
   allocate(std::size_t size, HostMem::Options opts) const override {
     if (size == 0)
       return nullptr;
-    // Own the buffer until the region takes ownership of it.
-    std::unique_ptr<void, decltype(&free)> buf(malloc(size), &free);
-    if (!buf)
+    std::unique_ptr<HostMemRegion> ret(new (std::nothrow)
+                                           TraceHostMemRegion(size, impl));
+    if (!ret || !ret->getPtr())
       return nullptr;
-    auto *region = new (std::nothrow) TraceHostMemRegion(buf.get(), size, impl);
-    if (!region)
-      return nullptr;
-    buf.release();
-    std::unique_ptr<HostMemRegion> ret(region);
     if (impl.isWriteable())
       impl.write("HostMem 0x")
           << ret->getPtr() << " allocate " << size

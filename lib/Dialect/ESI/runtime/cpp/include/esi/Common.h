@@ -145,10 +145,9 @@ struct Segment {
 /// Subclasses MUST own all data that their segments point to. Read and write
 /// APIs can hold the message across async boundaries / retries. Subclasses
 /// which hold data in HostMem regions must keep those regions alive for the
-/// lifetime of the message (e.g. by owning them as unique_ptr<HostMemRegion>,
-/// or holding a shared_ptr to them) and point their segments' `region` at
-/// them. Subclasses which own their regions exclusively may override take() to
-/// hand them to the backend.
+/// lifetime of the message (e.g. by owning them as unique_ptr<HostMemRegion>)
+/// and point their segments' `region` at them. Subclasses which own their
+/// regions exclusively may override take() to hand them to the backend.
 class SegmentedMessageData {
 public:
   virtual ~SegmentedMessageData() = default;
@@ -158,9 +157,9 @@ public:
   /// Get a segment by index. Throws if the segment has been take()n.
   virtual Segment segment(size_t idx) const = 0;
 
-  /// Called by a backend once it has transmitted segment `segIdx`, to obtain
-  /// ownership of the HostMem region backing it (e.g. to re-use the region or
-  /// return it to a pool).
+  /// Optionally called by a backend once it has transmitted segment `segIdx`,
+  /// to obtain ownership of the HostMem region backing it (e.g. to re-use the
+  /// region or return it to a pool).
   ///
   /// Returns nullptr, leaving the segment accessible, if the segment isn't
   /// backed by a region or the message doesn't transfer region ownership.

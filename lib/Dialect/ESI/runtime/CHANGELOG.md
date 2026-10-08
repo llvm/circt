@@ -27,8 +27,8 @@
   `Segment` can point (non-owningly) at the `HostMemRegion` holding its bytes
   via the new `region` field, and `Segment::getDeviceAddress()` returns the
   device address of those bytes, so a scatter-gather backend can DMA
-  region-backed segments directly. The message keeps its regions alive (e.g.
-  owning them or via a `shared_ptr`). Optionally, a message which owns its
+  region-backed segments directly. The message keeps its regions alive.
+  Optionally, a message which owns its
   regions exclusively can override the new virtual
   `SegmentedMessageData::take(segIdx)` to transfer a segment's region to the
   backend once transmitted (to keep, re-use, or pool); by default it returns
