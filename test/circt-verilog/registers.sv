@@ -67,3 +67,46 @@ module ResetAndEnable(input logic clock, input logic reset, input logic enable, 
   // CHECK: hw.output [[REG]]
   always @(posedge clock, posedge reset) if (reset) q <= 42; else if (enable) q <= d;
 endmodule
+
+// CHECK-LABEL: hw.module @DeclInitPreset(in %clock : !seq.clock,
+module DeclInitPreset
+    (input logic clock,
+     input int d,
+     output int q);
+  // CHECK: seq.firreg
+  // CHECK-SAME: preset 12345 : i32
+  int r = 12345;
+  assign q = r;
+  always @(posedge clock)
+    r <= d;
+endmodule
+
+// CHECK-LABEL: hw.module @InitProcPreset(in %clock : !seq.clock,
+module InitProcPreset
+    (input logic clock,
+     input int d,
+     output int q);
+  // CHECK: seq.firreg
+  // CHECK-SAME: preset 12345 : i32
+  int r;
+  initial
+    r = 12345;
+  assign q = r;
+  always @(posedge clock)
+    r <= d;
+endmodule
+
+// CHECK-LABEL: hw.module @MultiInitPreset(in %clock : !seq.clock,
+module MultiInitPreset
+    (input logic clock,
+     input int d,
+     output int q);
+  // CHECK: seq.firreg
+  // CHECK-SAME: preset 12345 : i32
+  int r = 54321;
+  initial
+    r = 12345;
+  assign q = r;
+  always @(posedge clock)
+    r <= d;
+endmodule
