@@ -784,10 +784,8 @@ FailureOr<MappingInfo> Visitor::mapType(Type type, Location errorLoc,
               pi.fields.emplace_back(std::move(f));
               return FIRRTLBaseType{};
             })
-            .template Case<DomainType>([&](DomainType domain) {
-              auto f = NonHWField{domain, fieldID, flip, {}};
-              suffix.toVector(f.suffix);
-              pi.fields.emplace_back(std::move(f));
+            .template Case<DomainType>([&](DomainType) {
+              llvm_unreachable("domain types cannot appear in open aggregates");
               return FIRRTLBaseType{};
             })
             .Default([&](auto _) {

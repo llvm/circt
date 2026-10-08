@@ -1821,6 +1821,24 @@ circuit Domains:
 
 ;// -----
 
+FIRRTL version 7.0.0
+circuit DomainInAggregate:
+  domain D:
+  public module DomainInAggregate:
+    ; expected-error @below {{bundle element "domain" cannot have a domain type}}
+    input agg: {domain: Domain of D}
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit DomainVector:
+  domain D:
+  public module DomainVector:
+    ; expected-error @below {{vector cannot have a domain type}}
+    input vec: Domain of D[2]
+
+;// -----
+
 FIRRTL version 5.0.0
 circuit Domains:
   public module Domains:

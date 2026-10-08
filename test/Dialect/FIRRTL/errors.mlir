@@ -2638,6 +2638,26 @@ firrtl.module @LHSTypes() {
 
 // -----
 
+firrtl.circuit "DomainInOpenBundle" {
+  firrtl.domain @D
+  firrtl.module @DomainInOpenBundle() {
+    // expected-error @below {{bundle element "domain" cannot have a domain type}}
+    builtin.unrealized_conversion_cast to !firrtl.openbundle<domain: domain<@D()>>
+  }
+}
+
+// -----
+
+firrtl.circuit "DomainInOpenVector" {
+  firrtl.domain @D
+  firrtl.module @DomainInOpenVector() {
+    // expected-error @below {{vector cannot have a domain type}}
+    builtin.unrealized_conversion_cast to !firrtl.openvector<domain<@D()>, 1>
+  }
+}
+
+// -----
+
 firrtl.circuit "LHSTypes" {
 firrtl.module @LHSTypes() {
   // expected-error @below {{lhs type cannot contain an AnalogType}}
