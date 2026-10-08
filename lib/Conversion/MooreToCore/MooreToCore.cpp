@@ -1919,6 +1919,102 @@ struct FCmpOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+/// The four-valued value of `value` if a `moore.constant` defines it.
+static std::optional<FVInt> getFourValuedConstant(Value value) {
+  if (auto constOp = value.getDefiningOp<ConstantOp>())
+    return constOp.getValue();
+  return std::nullopt;
+}
+
+/// Lower a comparison in which some bits of a constant operand are
+/// wildcards (`ignored`) and every other bit must match exactly, X and Z
+/// included (`===`/`!==` ignore no bit, `casez` items ignore their Z bits,
+/// `casex` items their X and Z bits, `==?`/`!=?` the X and Z bits of the right
+/// operand).  The lowering is two-valued: a constant's X and Z bits become 0
+/// and a value that is not a constant has no X or Z bit at all.  So a constant
+/// with an X or Z bit outside `ignored` never matches a non-constant operand
+/// (IEEE 1800 11.4.5, 12.5.1); converting that bit to 0 and comparing would
+/// match a 0 instead.  So `a === 2'bxx` is 0 for every `a`, and a `case` or
+/// `casez` item with an x bit never matches (casez only skips z and `?` bits).
+static Value lowerMaskedCaseCompare(ConversionPatternRewriter &rewriter,
+                                    Location loc, Value lhsOrig, Value rhsOrig,
+                                    Value lhs, Value rhs, APInt ignoredBits,
+                                    ICmpPredicate pred, bool negate) {
+  auto lhsConst = getFourValuedConstant(lhsOrig);
+  auto rhsConst = getFourValuedConstant(rhsOrig);
+  auto constantResult = [&](bool equal) -> Value {
+    return hw::ConstantOp::create(rewriter, loc, APInt(1, equal != negate));
+  };
+  if (lhsConst && rhsConst) {
+    // Both constant: compare the bits that are not ignored exactly.
+    APInt keep = ~ignoredBits;
+    bool equal =
+        (lhsConst->getRawValue() & keep) == (rhsConst->getRawValue() & keep) &&
+        (lhsConst->getRawUnknown() & keep) ==
+            (rhsConst->getRawUnknown() & keep);
+    return constantResult(equal);
+  }
+  for (auto &constant : {lhsConst, rhsConst})
+    if (constant && !(constant->getUnknownBits() & ~ignoredBits).isZero())
+      return constantResult(false);
+  if (!ignoredBits.isZero()) {
+    auto maskOp = hw::ConstantOp::create(rewriter, loc, ~ignoredBits);
+    lhs = rewriter.createOrFold<comb::AndOp>(loc, lhs, maskOp);
+    rhs = rewriter.createOrFold<comb::AndOp>(loc, rhs, maskOp);
+  }
+  return comb::ICmpOp::create(rewriter, loc, pred, lhs, rhs);
+}
+
+/// `===` and `!==`: no bit is a wildcard.
+template <typename SourceOp, ICmpPredicate pred, bool negate>
+struct CaseEqOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    unsigned bitWidth = op.getLhs().getType().getWidth();
+    rewriter.replaceOp(op, lowerMaskedCaseCompare(
+                               rewriter, op.getLoc(), op.getLhs(), op.getRhs(),
+                               adaptor.getLhs(), adaptor.getRhs(),
+                               APInt::getZero(bitWidth), pred, negate));
+    return success();
+  }
+};
+
+/// `==?` and `!=?`: the X and Z bits of a constant right operand are
+/// wildcards.  The left operand's X and Z bits are not (IEEE 1800 11.4.6 makes
+/// the result X there); a constant left operand with such bits is lowered as
+/// before (X and Z read as 0) rather than guessed.
+template <typename SourceOp, ICmpPredicate pred, bool negate>
+struct WildcardEqOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    unsigned bitWidth = op.getLhs().getType().getWidth();
+    auto lhsConst = getFourValuedConstant(op.getLhs());
+    auto rhsConst = getFourValuedConstant(op.getRhs());
+    Value lhs = adaptor.getLhs();
+    Value rhs = adaptor.getRhs();
+    if (lhsConst && lhsConst->hasUnknown()) {
+      rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, pred, lhs, rhs);
+      return success();
+    }
+    APInt ignoredBits =
+        rhsConst ? rhsConst->getUnknownBits() : APInt::getZero(bitWidth);
+    rewriter.replaceOp(op, lowerMaskedCaseCompare(
+                               rewriter, op.getLoc(), op.getLhs(), op.getRhs(),
+                               lhs, rhs, ignoredBits, pred, negate));
+    return success();
+  }
+};
+
+/// `casez` (withoutX: an item's Z bits are wildcards) and `casex` (its X and Z
+/// bits are).
 template <typename SourceOp, bool withoutX>
 struct CaseXZEqOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -1935,30 +2031,21 @@ struct CaseXZEqOpConversion : public OpConversionPattern<SourceOp> {
     unsigned bitWidth = op.getLhs().getType().getWidth();
     auto ignoredBits = APInt::getZero(bitWidth);
     auto detectIgnoredBits = [&](Value value) {
-      auto constOp = value.getDefiningOp<ConstantOp>();
-      if (!constOp)
+      auto constValue = getFourValuedConstant(value);
+      if (!constValue)
         return;
-      auto constValue = constOp.getValue();
       if (withoutX)
-        ignoredBits |= constValue.getZBits();
+        ignoredBits |= constValue->getZBits();
       else
-        ignoredBits |= constValue.getUnknownBits();
+        ignoredBits |= constValue->getUnknownBits();
     };
     detectIgnoredBits(op.getLhs());
     detectIgnoredBits(op.getRhs());
 
-    // If we have detected any bits to be ignored, mask them in the operands for
-    // the comparison.
-    Value lhs = adaptor.getLhs();
-    Value rhs = adaptor.getRhs();
-    if (!ignoredBits.isZero()) {
-      ignoredBits.flipAllBits();
-      auto maskOp = hw::ConstantOp::create(rewriter, op.getLoc(), ignoredBits);
-      lhs = rewriter.createOrFold<comb::AndOp>(op.getLoc(), lhs, maskOp);
-      rhs = rewriter.createOrFold<comb::AndOp>(op.getLoc(), rhs, maskOp);
-    }
-
-    rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, ICmpPredicate::ceq, lhs, rhs);
+    rewriter.replaceOp(op, lowerMaskedCaseCompare(
+                               rewriter, op.getLoc(), op.getLhs(), op.getRhs(),
+                               adaptor.getLhs(), adaptor.getRhs(), ignoredBits,
+                               ICmpPredicate::ceq, /*negate=*/false));
     return success();
   }
 };
@@ -4067,10 +4154,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     ICmpOpConversion<SgeOp, ICmpPredicate::sge>,
     ICmpOpConversion<EqOp, ICmpPredicate::eq>,
     ICmpOpConversion<NeOp, ICmpPredicate::ne>,
-    ICmpOpConversion<CaseEqOp, ICmpPredicate::ceq>,
-    ICmpOpConversion<CaseNeOp, ICmpPredicate::cne>,
-    ICmpOpConversion<WildcardEqOp, ICmpPredicate::weq>,
-    ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
+    CaseEqOpConversion<CaseEqOp, ICmpPredicate::ceq, false>,
+    CaseEqOpConversion<CaseNeOp, ICmpPredicate::cne, true>,
+    WildcardEqOpConversion<WildcardEqOp, ICmpPredicate::weq, false>,
+    WildcardEqOpConversion<WildcardNeOp, ICmpPredicate::wne, true>,
     FCmpOpConversion<NeRealOp, arith::CmpFPredicate::UNE>,
     FCmpOpConversion<FltOp, arith::CmpFPredicate::OLT>,
     FCmpOpConversion<FleOp, arith::CmpFPredicate::OLE>,
