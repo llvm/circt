@@ -1846,6 +1846,18 @@ struct IntegerShlOpConversion
   }
 };
 
+struct IntegerNotOpConversion
+    : public OpConversionPattern<firrtl::IntegerNotOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::IntegerNotOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::IntegerNotOp>(op, adaptor.getInput());
+    return success();
+  }
+};
+
 struct StringConcatOpConversion
     : public OpConversionPattern<firrtl::StringConcatOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -2354,10 +2366,13 @@ static void populateRewritePatterns(
   patterns.add<IntegerMulOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
+  patterns.add(binaryOpConversion<firrtl::IntegerAndOp, om::IntegerAndOp>);
+  patterns.add(binaryOpConversion<firrtl::IntegerOrOp, om::IntegerOrOp>);
+  patterns.add<IntegerNotOpConversion>(converter, patterns.getContext());
   patterns.add<StringConcatOpConversion>(converter, patterns.getContext());
   patterns.add<PropEqOpConversion>(converter, patterns.getContext());
-  patterns.add(binaryOpConversion<firrtl::BoolAndOp, om::IntegerAndOp>);
-  patterns.add(binaryOpConversion<firrtl::BoolOrOp, om::IntegerOrOp>);
+  patterns.add(binaryOpConversion<firrtl::BoolAndOp, om::BoolAndOp>);
+  patterns.add(binaryOpConversion<firrtl::BoolOrOp, om::BoolOrOp>);
   patterns.add(binaryOpConversion<firrtl::BoolXorOp, om::IntegerXorOp>);
   patterns.add<UnrealizedConversionCastOpConversion>(converter,
                                                      patterns.getContext());

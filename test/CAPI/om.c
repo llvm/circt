@@ -222,6 +222,69 @@ void testEvaluator(MlirContext ctx) {
       omEvaluatorValueGetPrimitive(omEvaluatorListGetElement(bar, 1)));
 }
 
+void testBitwiseEvaluator(MlirContext ctx) {
+  const char *testIR =
+      "module {"
+      "  om.class @BitwiseEval(%wide: !om.integer, %boolean: i1) -> "
+      "      (andResult: !om.integer, orResult: !om.integer, "
+      "       notResult: !om.integer, andBool: i1, orBool: i1) {"
+      "    %negativeTwo = om.constant #om.integer<-2 : si4> : !om.integer"
+      "    %andResult = om.integer.and %negativeTwo, %wide : !om.integer"
+      "    %orResult = om.integer.or %negativeTwo, %wide : !om.integer"
+      "    %notResult = om.integer.not %wide : !om.integer"
+      "    %false = om.constant false"
+      "    %true = om.constant true"
+      "    %andBool = om.bool.and %boolean, %false : i1"
+      "    %orBool = om.bool.or %boolean, %true : i1"
+      "    om.class.fields %andResult, %orResult, %notResult, %andBool, "
+      "        %orBool : !om.integer, !om.integer, !om.integer, i1, i1"
+      "  }"
+      "}";
+
+  MlirModule testModule =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testIR));
+  OMEvaluator evaluator = omEvaluatorNew(testModule);
+  MlirAttribute className =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("BitwiseEval"));
+
+  MlirAttribute wideInteger = omIntegerAttrGet(
+      mlirIntegerAttrGet(mlirIntegerTypeSignedGet(ctx, 8), 16));
+  OMEvaluatorValue actualParams[] = {
+      omEvaluatorValueFromPrimitive(wideInteger),
+      omEvaluatorValueFromPrimitive(mlirBoolAttrGet(ctx, true))};
+  OMEvaluatorValue object =
+      omEvaluatorInstantiate(evaluator, className, 2, actualParams);
+
+  MlirAttribute andName =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("andResult"));
+  MlirAttribute orName =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("orResult"));
+  MlirAttribute notName =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("notResult"));
+  MlirAttribute andBoolName =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("andBool"));
+  MlirAttribute orBoolName =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("orBool"));
+
+  // CHECK: #om.integer<16 : si8> : !om.integer
+  mlirAttributeDump(
+      omEvaluatorValueGetPrimitive(omEvaluatorObjectGetField(object, andName)));
+  // CHECK: #om.integer<-2 : si8> : !om.integer
+  mlirAttributeDump(
+      omEvaluatorValueGetPrimitive(omEvaluatorObjectGetField(object, orName)));
+  // CHECK: #om.integer<-17 : si8> : !om.integer
+  mlirAttributeDump(
+      omEvaluatorValueGetPrimitive(omEvaluatorObjectGetField(object, notName)));
+  // CHECK: false
+  mlirAttributeDump(omEvaluatorValueGetPrimitive(
+      omEvaluatorObjectGetField(object, andBoolName)));
+  // CHECK: true
+  mlirAttributeDump(omEvaluatorValueGetPrimitive(
+      omEvaluatorObjectGetField(object, orBoolName)));
+
+  mlirModuleDestroy(testModule);
+}
+
 void testPropertyAssert(MlirContext ctx) {
   // Test om.property_assert evaluation via the C API.
   const char *testIR =
@@ -279,6 +342,7 @@ int main(void) {
   testTypes(ctx);
   testListAttr(ctx);
   testEvaluator(ctx);
+  testBitwiseEvaluator(ctx);
   testPropertyAssert(ctx);
   return 0;
 }

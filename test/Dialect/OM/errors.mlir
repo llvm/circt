@@ -208,3 +208,51 @@ om.class@A() -> () {
   %0 = om.unknown : !om.class.type<@NonExistant>
   om.class.fields
 }
+
+// -----
+
+om.class @MixedIntegerAnd(%lhs: !om.integer, %rhs: i8) {
+  // expected-error @+1 {{'om.integer.and' op operand #1 must be A type that represents an arbitrary width integer}}
+  %0 = "om.integer.and"(%lhs, %rhs) : (!om.integer, i8) -> !om.integer
+  om.class.fields
+}
+
+// -----
+
+om.class @FixedWidthIntegerNot(%input: i8) {
+  // expected-error @+1 {{'om.integer.not' op operand #0 must be}}
+  %0 = "om.integer.not"(%input) : (i8) -> i8
+  om.class.fields
+}
+
+// -----
+
+om.class @PropertyIntegerXor(%lhs: !om.integer, %rhs: !om.integer) {
+  // expected-error @+1 {{'om.integer.xor' op operand #0 must be integer}}
+  %0 = "om.integer.xor"(%lhs, %rhs) : (!om.integer, !om.integer) -> !om.integer
+  om.class.fields
+}
+
+// -----
+
+om.class @FixedWidthIntegerAnd(%input: i1) {
+  // expected-error @+1 {{'om.integer.and' op operand #0 must be A type that represents an arbitrary width integer}}
+  %0 = "om.integer.and"(%input, %input) : (i1, i1) -> i1
+  om.class.fields
+}
+
+// -----
+
+om.class @BooleanAndWithInteger(%boolean: i1, %integer: !om.integer) {
+  // expected-error @+1 {{'om.bool.and' op operand #1 must be 1-bit signless integer}}
+  %0 = "om.bool.and"(%boolean, %integer) : (i1, !om.integer) -> i1
+  om.class.fields
+}
+
+// -----
+
+om.class @BooleanOrWithWideInteger(%lhs: i8, %rhs: i8) {
+  // expected-error @+1 {{'om.bool.or' op operand #0 must be 1-bit signless integer}}
+  %0 = "om.bool.or"(%lhs, %rhs) : (i8, i8) -> i8
+  om.class.fields
+}

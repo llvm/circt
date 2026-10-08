@@ -1066,29 +1066,34 @@ static OpFoldResult foldIntegerBitwise(Attribute lhsAttr, Attribute rhsAttr,
       lhsInt.getType(), result->extOrTrunc(lhsInt.getValue().getBitWidth()));
 }
 
-// Returns true if attr is an IntegerAttr whose value is all-zeros.
+// Returns true if attr is an integer attribute whose value is all-zeros.
 static bool isZeroInt(Attribute a) {
+  if (auto propertyInt = dyn_cast_or_null<circt::om::IntegerAttr>(a))
+    a = propertyInt.getValue();
   auto i = dyn_cast_or_null<mlir::IntegerAttr>(a);
   return i && i.getValue().isZero();
 }
 
-// Returns true if attr is an IntegerAttr whose value is all-ones.
+// Returns true if attr is an integer attribute whose value is all-ones.
 static bool isAllOnesInt(Attribute a) {
+  if (auto propertyInt = dyn_cast_or_null<circt::om::IntegerAttr>(a))
+    a = propertyInt.getValue();
   auto i = dyn_cast_or_null<mlir::IntegerAttr>(a);
   return i && i.getValue().isAllOnes();
 }
 
 OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
-  if (auto result = foldIntegerBitwise(
+  if (auto result = foldIntegerBinaryArithmetic(
           adaptor.getLhs(), adaptor.getRhs(),
           [](const APSInt &lhs, const APSInt &rhs) {
             return success(APSInt(lhs & rhs, /*isUnsigned=*/false));
           }))
     return result;
   // AND with all-zeros is always zero.
-  if (isZeroInt(adaptor.getLhs()) || isZeroInt(adaptor.getRhs()))
-    return mlir::IntegerAttr::get(getResult().getType(),
-                                  APInt::getZero(getType().getWidth()));
+  if (isZeroInt(adaptor.getLhs()))
+    return adaptor.getLhs();
+  if (isZeroInt(adaptor.getRhs()))
+    return adaptor.getRhs();
   // AND with all-ones is identity.
   if (isAllOnesInt(adaptor.getLhs()))
     return getRhs();
@@ -1098,16 +1103,17 @@ OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
-  if (auto result = foldIntegerBitwise(
+  if (auto result = foldIntegerBinaryArithmetic(
           adaptor.getLhs(), adaptor.getRhs(),
           [](const APSInt &lhs, const APSInt &rhs) {
             return success(APSInt(lhs | rhs, /*isUnsigned=*/false));
           }))
     return result;
   // OR with all-ones is always all-ones.
-  if (isAllOnesInt(adaptor.getLhs()) || isAllOnesInt(adaptor.getRhs()))
-    return mlir::IntegerAttr::get(getResult().getType(),
-                                  APInt::getAllOnes(getType().getWidth()));
+  if (isAllOnesInt(adaptor.getLhs()))
+    return adaptor.getLhs();
+  if (isAllOnesInt(adaptor.getRhs()))
+    return adaptor.getRhs();
   // OR with all-zeros is identity.
   if (isZeroInt(adaptor.getLhs()))
     return getRhs();
@@ -1124,6 +1130,56 @@ OpFoldResult IntegerXorOp::fold(FoldAdaptor adaptor) {
           }))
     return result;
   // XOR with all-zeros is identity.
+  if (isZeroInt(adaptor.getLhs()))
+    return getRhs();
+  if (isZeroInt(adaptor.getRhs()))
+    return getLhs();
+  return {};
+}
+
+OpFoldResult IntegerNotOp::fold(FoldAdaptor adaptor) {
+  if (auto integer =
+          dyn_cast_or_null<circt::om::IntegerAttr>(adaptor.getInput())) {
+    APSInt value = getAPSIntForOMIntegerAttr(integer);
+    return circt::om::IntegerAttr::get(
+        getContext(), mlir::IntegerAttr::get(getContext(), ~value));
+  }
+  return {};
+}
+
+OpFoldResult BoolAndOp::fold(FoldAdaptor adaptor) {
+  if (auto result = foldIntegerBitwise(
+          adaptor.getLhs(), adaptor.getRhs(),
+          [](const APSInt &lhs, const APSInt &rhs) {
+            return success(APSInt(lhs & rhs, /*isUnsigned=*/false));
+          }))
+    return result;
+  // AND with all-zeros is always zero.
+  if (isZeroInt(adaptor.getLhs()))
+    return adaptor.getLhs();
+  if (isZeroInt(adaptor.getRhs()))
+    return adaptor.getRhs();
+  // AND with all-ones is identity.
+  if (isAllOnesInt(adaptor.getLhs()))
+    return getRhs();
+  if (isAllOnesInt(adaptor.getRhs()))
+    return getLhs();
+  return {};
+}
+
+OpFoldResult BoolOrOp::fold(FoldAdaptor adaptor) {
+  if (auto result = foldIntegerBitwise(
+          adaptor.getLhs(), adaptor.getRhs(),
+          [](const APSInt &lhs, const APSInt &rhs) {
+            return success(APSInt(lhs | rhs, /*isUnsigned=*/false));
+          }))
+    return result;
+  // OR with all-ones is always all-ones.
+  if (isAllOnesInt(adaptor.getLhs()))
+    return adaptor.getLhs();
+  if (isAllOnesInt(adaptor.getRhs()))
+    return adaptor.getRhs();
+  // OR with all-zeros is identity.
   if (isZeroInt(adaptor.getLhs()))
     return getRhs();
   if (isZeroInt(adaptor.getRhs()))
