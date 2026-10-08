@@ -140,12 +140,17 @@ TEST(HostMemRegionTest, GetDeviceAddressOverflow) {
                                     std::numeric_limits<std::size_t>::max() - 4)
                    .has_value());
 
-  // A device base where devBase + offset would overflow.
+  // A device base where the device range would overflow.
   if constexpr (sizeof(uintptr_t) == sizeof(uint64_t)) {
     FakeRegion devTop(0x1000, maxPtr - 0x3, 0x10);
     EXPECT_EQ(devTop.getDeviceAddress(at(0x1000), 1), maxPtr - 0x3);
     EXPECT_EQ(devTop.getDeviceAddress(at(0x1003), 1), maxPtr);
     EXPECT_FALSE(devTop.getDeviceAddress(at(0x1004), 1).has_value());
+    // Multi-byte ranges whose start fits but whose end would wrap.
+    EXPECT_EQ(devTop.getDeviceAddress(at(0x1000), 4), maxPtr - 0x3);
+    EXPECT_FALSE(devTop.getDeviceAddress(at(0x1000), 5).has_value());
+    EXPECT_FALSE(devTop.getDeviceAddress(at(0x1000), 8).has_value());
+    EXPECT_FALSE(devTop.getDeviceAddress(at(0x1003), 2).has_value());
   }
 }
 

@@ -19,8 +19,11 @@
 #include "esi/Utils.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <new>
 #include <sstream>
 
 using namespace esi;
@@ -344,11 +347,15 @@ public:
   allocate(std::size_t size, HostMem::Options opts) const override {
     if (size == 0)
       return nullptr;
-    void *ptr = malloc(size);
-    if (!ptr)
+    // Own the buffer until the region takes ownership of it.
+    std::unique_ptr<void, decltype(&free)> buf(malloc(size), &free);
+    if (!buf)
       return nullptr;
-    auto ret =
-        std::unique_ptr<HostMemRegion>(new TraceHostMemRegion(ptr, size, impl));
+    auto *region = new (std::nothrow) TraceHostMemRegion(buf.get(), size, impl);
+    if (!region)
+      return nullptr;
+    buf.release();
+    std::unique_ptr<HostMemRegion> ret(region);
     if (impl.isWriteable())
       impl.write("HostMem 0x")
           << ret->getPtr() << " allocate " << size

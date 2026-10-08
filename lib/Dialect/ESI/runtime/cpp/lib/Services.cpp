@@ -197,7 +197,10 @@ HostMemRegion::getDeviceAddress(const void *ptr, std::size_t size) const {
   if (offset >= regionSize || size > regionSize - offset)
     return std::nullopt;
   uint64_t devBase = reinterpret_cast<uintptr_t>(getDevicePtr());
-  if (offset > UINT64_MAX - devBase)
+  // The whole device range [devBase + offset, devBase + offset + size - 1]
+  // must be representable.
+  uint64_t devHeadroom = UINT64_MAX - devBase;
+  if (offset > devHeadroom || size - 1 > devHeadroom - offset)
     return std::nullopt;
   return devBase + offset;
 }

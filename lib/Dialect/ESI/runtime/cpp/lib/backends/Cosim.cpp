@@ -21,10 +21,13 @@
 #include "esi/backends/RpcClient.h"
 
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <new>
 #include <set>
 
 using namespace esi;
@@ -678,11 +681,15 @@ public:
   allocate(std::size_t size, HostMem::Options opts) const override {
     if (size == 0)
       return nullptr;
-    void *ptr = malloc(size);
-    if (!ptr)
+    // Own the buffer until the region takes ownership of it.
+    std::unique_ptr<void, decltype(&free)> buf(malloc(size), &free);
+    if (!buf)
       return nullptr;
-    auto ret =
-        std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(ptr, size));
+    auto *region = new (std::nothrow) CosimHostMemRegion(buf.get(), size);
+    if (!region)
+      return nullptr;
+    buf.release();
+    std::unique_ptr<HostMemRegion> ret(region);
     acc.getLogger().debug(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {

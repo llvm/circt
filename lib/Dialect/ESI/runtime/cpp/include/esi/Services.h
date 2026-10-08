@@ -245,7 +245,7 @@ struct HostMemRegion {
   virtual std::size_t getSize() const = 0;
   /// Device address of the host range [ptr, ptr + size) if that range lies
   /// entirely inside this region; std::nullopt otherwise (including when
-  /// size == 0 or the range would overflow).
+  /// size == 0 or the range would overflow the host or device address space).
   std::optional<uint64_t> getDeviceAddress(const void *ptr,
                                            std::size_t size) const;
   /// Flush the memory region to ensure that the device sees the latest
