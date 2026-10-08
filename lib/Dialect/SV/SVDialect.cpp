@@ -41,9 +41,14 @@ struct SVHandleModulePortTypeInterface : public hw::HWModulePortTypeInterface {
   verifyHWModulePortType(function_ref<InFlightDiagnostic()> emitError,
                          hw::ModulePort::Direction direction,
                          Type type) const override {
-    if (isa<NetType, VarType>(type) && direction == hw::ModulePort::Output)
-      return emitError() << "sv.net/sv.var handles are not supported on "
-                            "output ports";
+    if (direction == hw::ModulePort::Output) {
+      if (isa<NetType>(type))
+        return emitError()
+               << "sv.net handles are not supported on output ports";
+      if (isa<VarType>(type))
+        return emitError()
+               << "sv.var handles are not supported on output ports";
+    }
     return success();
   }
 };

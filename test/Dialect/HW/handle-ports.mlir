@@ -1,18 +1,18 @@
 // RUN: circt-opt %s --verify-diagnostics --split-input-file
 
-// expected-error @below {{sv.net/sv.var handles are not supported on output ports}}
+// expected-error @below {{sv.net handles are not supported on output ports}}
 hw.module @NetOutput(out p: !sv.net<i4>) {
 }
 
 // -----
 
-// expected-error @below {{sv.net/sv.var handles are not supported on output ports}}
+// expected-error @below {{sv.var handles are not supported on output ports}}
 hw.module @VarOutput(out p: !sv.var<i4>) {
 }
 
 // -----
 
-// expected-error @below {{sv.net/sv.var handles are not supported on output ports}}
+// expected-error @below {{sv.net handles are not supported on output ports}}
 hw.module @AggregateNetOutput(out p: !hw.struct<n: !sv.net<i4>>) {
 }
 
