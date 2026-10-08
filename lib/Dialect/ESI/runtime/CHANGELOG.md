@@ -1,5 +1,14 @@
 # ESI Accelerator Runtime changelog
 
+## Unreleased
+
+### Added
+
+- `CosimBSP` accepts a `channel_service` implementation class for custom channel
+  transports, including engines shared by multiple channels. The BSP satisfies
+  the implementation's MMIO and HostMem requests. This option is mutually
+  exclusive with the existing `dma_engine_pair` shorthand.
+
 ## 0.8.0
 
 ### Breaking changes
