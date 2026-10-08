@@ -1451,6 +1451,65 @@ def IntegerShlOp : IntegerBinaryPrimOp<"integer.shl"> {
   }];
 }
 
+def IntegerAndOp : IntegerBinaryPrimOp<"integer.and", [Commutative]> {
+  let summary = "Bitwise AND of two FIntegerType values";
+  let description = [{
+    Computes the bitwise AND of two arbitrary precision signed integer values.
+    If the operands have different widths, the narrower operand is sign-extended
+    to the width of the wider operand before the operation. The result is an
+    arbitrary precision signed integer with no truncation.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.and %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                         !firrtl.integer
+    ```
+  }];
+}
+
+def IntegerOrOp : IntegerBinaryPrimOp<"integer.or", [Commutative]> {
+  let summary = "Bitwise OR of two FIntegerType values";
+  let description = [{
+    Computes the bitwise OR of two arbitrary precision signed integer values.
+    If the operands have different widths, the narrower operand is sign-extended
+    to the width of the wider operand before the operation. The result is an
+    arbitrary precision signed integer with no truncation.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.or %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                        !firrtl.integer
+    ```
+  }];
+}
+
+class IntegerUnaryPrimOp<string mnemonic> :
+    UnaryPrimOp<mnemonic, FIntegerType, FIntegerType,
+                [Pure, SameOperandsAndResultType]> {
+  let inferReturnTypesDecl = "";
+  let inferType = "getFIntegerType";
+
+  let firrtlExtraClassDeclaration = [{
+    static FIntegerType getFIntegerType(FIRRTLType input,
+                                       std::optional<Location> loc) {
+      return FIntegerType::get(input.getContext());
+    }
+  }];
+}
+
+def IntegerNotOp : IntegerUnaryPrimOp<"integer.not"> {
+  let summary = "Bitwise complement of an FIntegerType value";
+  let description = [{
+    Computes the bitwise complement of an arbitrary precision signed integer
+    value using two's complement semantics.
+
+    Example:
+    ```mlir
+    %1 = firrtl.integer.not %0 : (!firrtl.integer) -> !firrtl.integer
+    ```
+  }];
+}
+
 def StringConcatOp : FIRRTLOp<"string.concat", [Pure, SameOperandsAndResultType]> {
   let summary = "Concatenate multiple string values";
   let description = [{
