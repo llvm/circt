@@ -19,6 +19,18 @@
 
 ### Added
 
+- **Multiple outstanding host memory reads per client.**
+  `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
+  (default `1`, which keeps the previous one-request-at-a-time behavior). With
+  a larger value it accepts up to that many logical read requests while
+  earlier ones are still returning data, and frames each request's response
+  burst (`last`, `valid_bytes`) from a small metadata FIFO. Single-chunk
+  requests can be accepted every cycle and response bursts flow back to back
+  with no bubble. The upstream must return each client's response words in
+  request order. `HostmemReadProcessor` and `ChannelHostMem` pass the limit
+  through as `max_outstanding_reads` (default `1`). `CosimBSP` and
+  `CosimBSP_DMA` take the same parameter and default it to `4`, since the
+  cosim host answers reads in order.
 - `CosimBSP` accepts a `channel_service` implementation class for custom channel
   transports, including engines shared by multiple channels. The BSP satisfies
   the implementation's MMIO and HostMem requests. This option is mutually

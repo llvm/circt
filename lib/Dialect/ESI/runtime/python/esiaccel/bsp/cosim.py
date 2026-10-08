@@ -29,6 +29,7 @@ def CosimBSP(
     user_module: Type[Module],
     dma_engine_pair: Optional[Tuple[Callable, Callable]] = None,
     channel_service: Optional[Type[esi.ServiceImplementation]] = None,
+    max_outstanding_reads: int = 4,
 ) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'.
@@ -45,6 +46,11 @@ def CosimBSP(
   issue esi.MMIO and esi.HostMem requests, which the BSP will satisfy.
 
   Passing both 'dma_engine_pair' and 'channel_service' raises ValueError.
+
+  'max_outstanding_reads' is the per-client limit on logical HostMem read
+  requests in flight. The cosim host services each read request in order, so
+  more than one is safe; the default of 4 keeps the multi-outstanding read path
+  exercised in simulation.
   """
   if dma_engine_pair is not None and channel_service is not None:
     raise ValueError(
@@ -65,8 +71,10 @@ def CosimBSP(
     # If this gets changed, update 'Cosim.cpp' in the runtime.
     HostMemWidth = 64
 
-    ChannelHostMemModule = ChannelHostMem(read_width=HostMemWidth,
-                                          write_width=HostMemWidth)
+    ChannelHostMemModule = ChannelHostMem(
+        read_width=HostMemWidth,
+        write_width=HostMemWidth,
+        max_outstanding_reads=max_outstanding_reads)
 
     hostmem_read = ChannelHostMemModule.read
     hostmem_write = ChannelHostMemModule.write
@@ -206,7 +214,9 @@ def CosimBSP(
   return ESI_Cosim_Top
 
 
-def CosimBSP_DMA(user_module: Type[Module]) -> Module:
+def CosimBSP_DMA(user_module: Type[Module],
+                 max_outstanding_reads: int = 4) -> Module:
   return CosimBSP(user_module,
                   channel_service=ChannelEngineService(OneItemBuffersToHost,
-                                                       OneItemBuffersFromHost))
+                                                       OneItemBuffersFromHost),
+                  max_outstanding_reads=max_outstanding_reads)
