@@ -28,7 +28,9 @@
   region from the message to the caller (by default, it returns nullptr), so a
   scatter-gather backend can DMA region-backed segments directly and then keep,
   re-use, or pool the regions. Once taken, a segment is no longer accessible
-  via `segment()`. `Segment{ptr, size}` initialization is unchanged. Also
+  via `segment()`. Several segments may share a region; `take()` returns it
+  once the last of them has been taken. `Segment{ptr, size}` initialization
+  is unchanged. Also
   added `HostMemRegion::getDeviceAddress(ptr, size)`, a bounds-checked device
   address for a host range within the region. See `docs/MessageData.md`.
 - **`services::HostMemAllocator` interface.** Anything which can allocate

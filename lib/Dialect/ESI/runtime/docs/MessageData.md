@@ -109,8 +109,10 @@ move storage out of it, or leave it untouched for retry.
     virtual size_t numSegments() const = 0;
     /// Throws if the segment has been take()n.
     virtual Segment segment(size_t idx) const = 0;
-    /// Transfer ownership of the HostMem region backing a segment (nullptr
-    /// if none). Afterwards, segment(segIdx) throws. Default: nullptr.
+    /// Called once segment `segIdx` has been transmitted. Marks it taken
+    /// (afterwards, segment(segIdx) throws) and transfers ownership of its
+    /// HostMem region once no untaken segment references the region;
+    /// otherwise returns nullptr. Default: nullptr.
     virtual std::unique_ptr<services::HostMemRegion> take(size_t segIdx);
 
     // --- Convenience ---
@@ -332,12 +334,21 @@ interface (which `HostMem` implements), so that callers can also supply other
 allocators, such as region pools. Segments
 remain non-owning views: the message owns its regions (as
 `std::unique_ptr<HostMemRegion>`), and each segment whose bytes live in one
-points at it via the non-owning `Segment::region`. Such a message overrides
-`take(segIdx)` to hand ownership of a segment's region to the caller. Once
-taken, the segment is gone: `segment(segIdx)` (and therefore anything which
-reads the whole message, like `toMessageData()`) and further calls to
-`take(segIdx)` throw. Taking a segment which isn't backed by a region returns
-nullptr and leaves it accessible.
+points at it via the non-owning `Segment::region`. Several segments may share
+a region (e.g. a header and a payload carved out of one allocation).
+
+Such a message overrides `take(segIdx)`, which a backend calls once it has
+transmitted segment `segIdx`:
+
+- If the segment isn't backed by a region, `take()` returns nullptr and the
+  segment remains accessible.
+- Otherwise, the segment is marked taken: `segment(segIdx)` (and therefore
+  anything which reads the whole message, like `toMessageData()`) and further
+  calls to `take(segIdx)` throw.
+- The region is returned once no untaken segment references it; until then,
+  `take()` returns nullptr. So a backend which takes each segment as it is
+  transmitted receives each region exactly once, after the last segment using
+  it.
 
 A scatter-gather backend owns the message while writing it, so it can DMA
 region-backed segments directly from their device address (copying the rest
@@ -379,7 +390,8 @@ return to a pool once they've been transmitted:
     Segment s = msg->segment(i);
     if (std::optional<uint64_t> dev = s.getDeviceAddress()) {
       /* DMA s.size bytes from *dev; once complete: */
-      pool.put(msg->take(i));
+      if (auto region = msg->take(i))
+        pool.put(std::move(region));
     } else {
       /* copy s.span() to a bounce buffer */;
     }

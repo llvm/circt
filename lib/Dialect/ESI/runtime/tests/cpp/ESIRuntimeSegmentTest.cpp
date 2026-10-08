@@ -229,7 +229,8 @@ TEST(SegmentTest, EngineTakesRegionsAndReturnsToPool) {
     if (std::optional<uint64_t> dev = s.getDeviceAddress()) {
       dmaAddrs.push_back(*dev);
       // Once transmitted, take the region and return it to the pool.
-      pool.push_back(msg->take(i));
+      if (auto region = msg->take(i))
+        pool.push_back(std::move(region));
     } else {
       bounced.insert(bounced.end(), s.data, s.data + s.size);
     }
@@ -251,6 +252,78 @@ TEST(SegmentTest, EngineTakesRegionsAndReturnsToPool) {
   EXPECT_FALSE(destroyed);
   EXPECT_EQ(static_cast<BufferRegion *>(pool[0].get())->buf[0], 0x10);
   pool.clear();
+  EXPECT_TRUE(destroyed);
+}
+
+/// A header in a vector, plus two segments carved out of one shared HostMem
+/// region. Tracks which segments have been taken.
+struct SharedRegionMessage : public SegmentedMessageData {
+  SharedRegionMessage(bool *regionDestroyed = nullptr) : header{0xA0, 0xA1} {
+    auto r = std::make_unique<BufferRegion>(8, 0xD000'0000, regionDestroyed);
+    for (size_t i = 0; i < r->buf.size(); ++i)
+      r->buf[i] = static_cast<uint8_t>(0x20 + i);
+    base = r->buf.data();
+    region = std::move(r);
+  }
+
+  size_t numSegments() const override { return 3; }
+  Segment segment(size_t idx) const override {
+    if (idx >= numSegments())
+      throw std::out_of_range("SharedRegionMessage has 3 segments");
+    if (taken[idx])
+      throw std::runtime_error("segment has been taken");
+    if (idx == 0)
+      return {header.data(), header.size()};
+    return {base + (idx - 1) * 4, 4, region.get()};
+  }
+  std::unique_ptr<HostMemRegion> take(size_t segIdx) override {
+    if (segIdx >= numSegments())
+      throw std::out_of_range("SharedRegionMessage has 3 segments");
+    if (segIdx == 0)
+      return nullptr;
+    if (taken[segIdx])
+      throw std::runtime_error("segment has been taken");
+    taken[segIdx] = true;
+    // Hand over the region only once both segments using it are taken.
+    if (taken[1] && taken[2])
+      return std::move(region);
+    return nullptr;
+  }
+
+  std::vector<uint8_t> header;
+  std::unique_ptr<HostMemRegion> region;
+  const uint8_t *base;
+  bool taken[3] = {false, false, false};
+};
+
+TEST(SegmentTest, SharedRegionHandedOverAfterLastSegment) {
+  bool destroyed = false;
+  auto msg = std::make_unique<SharedRegionMessage>(&destroyed);
+  HostMemRegion *shared = msg->region.get();
+  EXPECT_EQ(msg->segment(1).region, shared);
+  EXPECT_EQ(msg->segment(2).region, shared);
+  EXPECT_EQ(msg->segment(1).getDeviceAddress(), 0xD000'0000u);
+  EXPECT_EQ(msg->segment(2).getDeviceAddress(), 0xD000'0004u);
+
+  // Taking the first user of the region marks it taken but keeps the region,
+  // which the second segment still needs.
+  EXPECT_EQ(msg->take(1), nullptr);
+  EXPECT_THROW(msg->segment(1), std::runtime_error);
+  EXPECT_THROW(msg->take(1), std::runtime_error);
+  Segment second = msg->segment(2);
+  EXPECT_EQ(second.region, shared);
+  EXPECT_EQ(second.data[0], 0x24);
+
+  // Taking the last user hands over the region.
+  std::unique_ptr<HostMemRegion> region = msg->take(2);
+  EXPECT_EQ(region.get(), shared);
+  EXPECT_THROW(msg->segment(2), std::runtime_error);
+  EXPECT_THROW(msg->take(2), std::runtime_error);
+  EXPECT_EQ(msg->segment(0).size, 2u);
+
+  msg.reset();
+  EXPECT_FALSE(destroyed);
+  region.reset();
   EXPECT_TRUE(destroyed);
 }
 

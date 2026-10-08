@@ -123,8 +123,9 @@ struct Segment {
   const uint8_t *data;
   size_t size;
   /// The HostMem region (from services::HostMem::allocate()) which holds
-  /// [data, data + size), if any. Non-owning: the SegmentedMessageData owns the
-  /// region; backends can obtain ownership via SegmentedMessageData::take().
+  /// [data, data + size), if any. Several segments may share a region.
+  /// Non-owning: the SegmentedMessageData owns the region; backends can obtain
+  /// ownership via SegmentedMessageData::take().
   services::HostMemRegion *region = nullptr;
 
   std::span<const uint8_t> span() const { return {data, size}; }
@@ -155,13 +156,20 @@ public:
   /// Get a segment by index. Throws if the segment has been take()n.
   virtual Segment segment(size_t idx) const = 0;
 
-  /// Transfer ownership of the HostMem region backing segment `segIdx` to the
-  /// caller (e.g. a backend which, having transmitted the segment, wants to
-  /// re-use the region or return it to a pool). Returns nullptr if the segment
-  /// is not backed by a region, in which case the segment remains accessible.
-  /// Once a region has been taken, segment(segIdx) -- and thus anything which
-  /// reads the whole message, such as toMessageData() -- and further calls to
-  /// take(segIdx) throw. The default implementation returns nullptr.
+  /// Called by a backend once it has transmitted segment `segIdx`, to obtain
+  /// ownership of the HostMem region backing it (e.g. to re-use the region or
+  /// return it to a pool).
+  ///
+  /// If the segment is not backed by a region, returns nullptr and the segment
+  /// remains accessible. Otherwise, marks the segment as taken -- after which
+  /// segment(segIdx) (and thus anything which reads the whole message, such as
+  /// toMessageData()) and further calls to take(segIdx) throw -- and returns
+  /// the region if no other untaken segment references it, or nullptr if some
+  /// still do. Since several segments may share a region, a backend which
+  /// calls take() on each segment as it is transmitted receives each region
+  /// exactly once, after the last segment using it.
+  ///
+  /// The default implementation returns nullptr.
   virtual std::unique_ptr<services::HostMemRegion> take(size_t segIdx);
 
   /// Total size across all segments.
