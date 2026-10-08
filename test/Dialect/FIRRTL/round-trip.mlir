@@ -140,6 +140,16 @@ firrtl.module @PropertyArithmetic() {
 
   // CHECK: firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   %5 = firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  // CHECK: firrtl.integer.and %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  %6 = firrtl.integer.and %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  // CHECK: firrtl.integer.or %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  %7 = firrtl.integer.or %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  %negative = firrtl.integer -2
+  // CHECK: firrtl.integer.not %{{.+}} : (!firrtl.integer) -> !firrtl.integer
+  %8 = firrtl.integer.not %negative : (!firrtl.integer) -> !firrtl.integer
 }
 
 // CHECK-LABEL: firrtl.module @PropertyStringOps

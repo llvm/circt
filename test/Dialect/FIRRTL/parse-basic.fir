@@ -1700,6 +1700,43 @@ circuit IntegerArithmetic :
     propassign f, integer_shl(a, b)
 
 ;// -----
+FIRRTL version 7.0.0
+
+; CHECK-LABEL: firrtl.circuit "IntegerBitwise"
+circuit IntegerBitwise :
+  public module IntegerBitwise :
+    input a : Integer
+    input b : Integer
+    input c : Integer
+    output andResult : Integer
+    output orResult : Integer
+    output notResult : Integer
+    output nestedResult : Integer
+    output literalResult : Integer
+
+    ; CHECK: [[AND:%.+]] = firrtl.integer.and %a, %b
+    ; CHECK: firrtl.propassign %andResult, [[AND]]
+    propassign andResult, integer_and(a, b)
+
+    ; CHECK: [[OR:%.+]] = firrtl.integer.or %a, %b
+    ; CHECK: firrtl.propassign %orResult, [[OR]]
+    propassign orResult, integer_or(a, b)
+
+    ; CHECK: [[NOT:%.+]] = firrtl.integer.not %c
+    ; CHECK: firrtl.propassign %notResult, [[NOT]]
+    propassign notResult, integer_not(c)
+
+    ; CHECK: [[NEST_OR:%.+]] = firrtl.integer.or %a, %b
+    ; CHECK: [[NEST_NOT:%.+]] = firrtl.integer.not %c
+    ; CHECK: [[NEST_AND:%.+]] = firrtl.integer.and [[NEST_OR]], [[NEST_NOT]]
+    ; CHECK: firrtl.propassign %nestedResult, [[NEST_AND]]
+    propassign nestedResult, integer_and(integer_or(a, b), integer_not(c))
+
+    ; CHECK: [[LITERAL:%.+]] = firrtl.integer.and %{{.+}}, %{{.+}}
+    ; CHECK: firrtl.propassign %literalResult, [[LITERAL]]
+    propassign literalResult, integer_and(Integer(5), Integer(-2))
+
+;// -----
 FIRRTL version 4.0.0
 
 ; CHECK-LABEL: firrtl.circuit "PropertyListOps"
