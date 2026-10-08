@@ -2360,10 +2360,21 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
   bool isaXorOp = isa<XorOp>(subExpr);
   bool isaOrOp = isa<OrOp>(subExpr);
 
+  // The condition can be the subexpression itself, as in `mux(x, x, a)` with
+  // `x = xor(a, b, a)` (a one-bit mux, where the replicate above folded to the
+  // condition). The extraction below then replaces `x` by a new operation (it
+  // has two uses, both in this mux, so it cannot be edited in place), and the
+  // value `extendedCond` holds is gone; the mux's condition operand is the
+  // replacement.
+  bool condIsSubExpr = extendedCond == subExpr->getResult(0);
+
   // Handle the fully associative ops, start by pulling out the subexpression
   // from a many operand version of the op.
   auto restOfAssoc =
       extractOperandFromFullyAssociative(subExpr, opNo, rewriter);
+
+  if (condIsSubExpr)
+    extendedCond = op.getCond();
 
   // `mux(cond, x|y|z|a, a)` -> `(x|y|z)&replicate(cond) | a`
   // `mux(cond, x^y^z^a, a)` -> `(x^y^z)&replicate(cond) ^ a`
