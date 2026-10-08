@@ -100,7 +100,8 @@ move storage out of it, or leave it untouched for retry.
   /// required because the write API takes ownership
   /// (unique_ptr<SegmentedMessageData>) and a backend may hold the
   /// message across async boundaries / partial writes. Subclasses which
-  /// hold data in HostMem regions own the regions and override take().
+  /// hold data in HostMem regions keep those regions alive (owning them,
+  /// or via a shared_ptr) and may override take() to hand them over.
   class SegmentedMessageData {
   public:
     virtual ~SegmentedMessageData() = default;
@@ -109,10 +110,11 @@ move storage out of it, or leave it untouched for retry.
     virtual size_t numSegments() const = 0;
     /// Throws if the segment has been take()n.
     virtual Segment segment(size_t idx) const = 0;
-    /// Called once segment `segIdx` has been transmitted. Marks it taken
-    /// (afterwards, segment(segIdx) throws) and transfers ownership of its
-    /// HostMem region once no untaken segment references the region;
-    /// otherwise returns nullptr. Default: nullptr.
+    /// Called once segment `segIdx` has been transmitted. If the message
+    /// transfers region ownership, marks it taken (afterwards,
+    /// segment(segIdx) throws) and transfers ownership of its HostMem
+    /// region once no untaken segment references the region. Otherwise
+    /// returns nullptr. Default: nullptr.
     virtual std::unique_ptr<services::HostMemRegion> take(size_t segIdx);
 
     // --- Convenience ---
@@ -148,14 +150,14 @@ move storage out of it, or leave it untouched for retry.
     /// Contiguous span from current position to end of current segment.
     std::span<const uint8_t> remaining() const;
 
+    /// Same bytes as remaining(), plus the current segment's `region`.
+    Segment remainingSegment() const;
+
     /// Advance by `n` bytes, crossing segment boundaries as needed.
     void advance(size_t n);
 
     /// True when all segments have been consumed.
     bool done() const;
-
-    /// Reset to the beginning.
-    void reset();
 
   private:
     const SegmentedMessageData &msg_;
@@ -332,16 +334,21 @@ A message may keep some of its data in `HostMem` regions (from
 which do this should allocate through the `services::HostMemAllocator`
 interface (which `HostMem` implements), so that callers can also supply other
 allocators, such as region pools. Segments
-remain non-owning views: the message owns its regions (as
-`std::unique_ptr<HostMemRegion>`), and each segment whose bytes live in one
-points at it via the non-owning `Segment::region`. Several segments may share
-a region (e.g. a header and a payload carved out of one allocation).
+remain non-owning views: the message keeps its regions alive for its lifetime
+(e.g. owning them as `std::unique_ptr<HostMemRegion>`, or holding a
+`std::shared_ptr` to a region shared with the producer or a pool), and each
+segment whose bytes live in one points at it via the non-owning
+`Segment::region`. Several segments may share a region (e.g. a header and a
+payload carved out of one allocation).
 
-Such a message overrides `take(segIdx)`, which a backend calls once it has
+Zero-copy only needs the region to stay alive and be identifiable; handing
+ownership of it to the backend is optional. A message which owns its regions
+exclusively may override `take(segIdx)`, which a backend calls once it has
 transmitted segment `segIdx`:
 
-- If the segment isn't backed by a region, `take()` returns nullptr and the
-  segment remains accessible.
+- If the segment isn't backed by a region, or the message doesn't transfer
+  region ownership (e.g. it uses the default `take()`), `take()` returns
+  nullptr and the segment remains accessible.
 - Otherwise, the segment is marked taken: `segment(segIdx)` (and therefore
   anything which reads the whole message, like `toMessageData()`) and further
   calls to `take(segIdx)` throw.
@@ -349,6 +356,13 @@ transmitted segment `segIdx`:
   `take()` returns nullptr. So a backend which takes each segment as it is
   transmitted receives each region exactly once, after the last segment using
   it.
+
+Because `SegmentedMessageDataCursor` reads segments through `segment()`, a
+backend must not take a segment which its cursor can still reach, and must not
+take a segment it may need to retransmit. Any cursor, including one created
+after the `take()`, throws when it reaches a taken segment. `Segment` copies of
+a taken segment obtained before the `take()` are invalid: their `data` may point
+into a region which has since been re-used.
 
 A scatter-gather backend owns the message while writing it, so it can DMA
 region-backed segments directly from their device address (copying the rest
@@ -389,7 +403,8 @@ return to a pool once they've been transmitted:
   for (size_t i = 0; i < msg->numSegments(); ++i) {
     Segment s = msg->segment(i);
     if (std::optional<uint64_t> dev = s.getDeviceAddress()) {
-      /* DMA s.size bytes from *dev; once complete: */
+      /* DMA s.size bytes from *dev; once complete, and only if this segment
+         will not be read again (no cursor revisit, no retry): */
       if (auto region = msg->take(i))
         pool.put(std::move(region));
     } else {
@@ -397,6 +412,11 @@ return to a pool once they've been transmitted:
     }
   }
 ```
+
+Backends which chop segments at frame or descriptor boundaries can walk the
+message with `SegmentedMessageDataCursor::remainingSegment()`, which returns
+the unconsumed part of the current segment along with its `region`, so
+`getDeviceAddress()` works on partial segments too.
 
 Notes:
 

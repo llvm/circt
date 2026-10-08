@@ -215,6 +215,88 @@ TEST(SegmentTest, MessageSegmentsReferenceRegion) {
   EXPECT_EQ(cursor.remaining().data(), msg.payloadData + 1);
 }
 
+TEST(SegmentTest, CursorRemainingSegmentKeepsRegion) {
+  ThreeSegmentMessage msg;
+  SegmentedMessageDataCursor cursor(msg);
+  HostMemRegion *payload = msg.payload.get();
+
+  // Header: no region.
+  Segment s = cursor.remainingSegment();
+  EXPECT_EQ(s.data, msg.header.data());
+  EXPECT_EQ(s.size, 2u);
+  EXPECT_EQ(s.region, nullptr);
+
+  // Cross into the payload.
+  cursor.advance(2);
+  s = cursor.remainingSegment();
+  EXPECT_EQ(s.data, msg.payloadData);
+  EXPECT_EQ(s.size, 8u);
+  EXPECT_EQ(s.region, payload);
+  EXPECT_EQ(s.getDeviceAddress(), 0xC000'0000u);
+
+  // A partial advance within the payload keeps the region; the device address
+  // follows the data pointer.
+  cursor.advance(3);
+  s = cursor.remainingSegment();
+  EXPECT_EQ(s.data, msg.payloadData + 3);
+  EXPECT_EQ(s.size, 5u);
+  EXPECT_EQ(s.region, payload);
+  EXPECT_EQ(s.getDeviceAddress(), 0xC000'0003u);
+  std::span<const uint8_t> r = cursor.remaining();
+  EXPECT_EQ(r.data(), s.data);
+  EXPECT_EQ(r.size(), s.size);
+
+  // Cross into the footer: no region.
+  cursor.advance(5);
+  s = cursor.remainingSegment();
+  EXPECT_EQ(s.data, msg.footer.data());
+  EXPECT_EQ(s.size, 3u);
+  EXPECT_EQ(s.region, nullptr);
+
+  cursor.advance(3);
+  EXPECT_TRUE(cursor.done());
+  s = cursor.remainingSegment();
+  EXPECT_EQ(s.data, nullptr);
+  EXPECT_EQ(s.size, 0u);
+  EXPECT_EQ(s.region, nullptr);
+  EXPECT_TRUE(cursor.remaining().empty());
+}
+
+/// A message whose payload lives in a region shared (via shared_ptr) with the
+/// producer, so it doesn't transfer ownership and uses the default take().
+struct SharedOwnerMessage : public SegmentedMessageData {
+  SharedOwnerMessage(std::shared_ptr<HostMemRegion> region)
+      : region(std::move(region)) {}
+  size_t numSegments() const override { return 1; }
+  Segment segment(size_t idx) const override {
+    if (idx != 0)
+      throw std::out_of_range("SharedOwnerMessage has 1 segment");
+    return {static_cast<const uint8_t *>(region->getPtr()), region->getSize(),
+            region.get()};
+  }
+  std::shared_ptr<HostMemRegion> region;
+};
+
+TEST(SegmentTest, SharedOwnerDefaultTakeKeepsSegment) {
+  bool destroyed = false;
+  auto region = std::make_shared<BufferRegion>(8, 0xE000'0000, &destroyed);
+  auto msg = std::make_unique<SharedOwnerMessage>(region);
+  Segment s = msg->segment(0);
+  EXPECT_EQ(s.region, region.get());
+  EXPECT_EQ(s.getDeviceAddress(), 0xE000'0000u);
+
+  // The message doesn't transfer ownership: take() returns nullptr and the
+  // segment remains accessible.
+  EXPECT_EQ(msg->take(0), nullptr);
+  EXPECT_EQ(msg->segment(0).region, region.get());
+
+  // The producer's reference keeps the region alive after the message is gone.
+  msg.reset();
+  EXPECT_FALSE(destroyed);
+  region.reset();
+  EXPECT_TRUE(destroyed);
+}
+
 TEST(SegmentTest, EngineTakesRegionsAndReturnsToPool) {
   bool destroyed = false;
   auto msg = std::make_unique<ThreeSegmentMessage>(&destroyed);
@@ -246,6 +328,16 @@ TEST(SegmentTest, EngineTakesRegionsAndReturnsToPool) {
   EXPECT_THROW(msg->toMessageData(), std::runtime_error);
   EXPECT_EQ(msg->segment(0).size, 2u);
   EXPECT_EQ(msg->segment(2).size, 3u);
+
+  // A cursor created after the take() works until it reaches the taken
+  // segment, then throws.
+  SegmentedMessageDataCursor late(*msg);
+  EXPECT_EQ(late.remaining().size(), 2u);
+  late.advance(1);
+  EXPECT_THROW(late.advance(2), std::runtime_error);
+  SegmentedMessageDataCursor late2(*msg);
+  late2.advance(2);
+  EXPECT_THROW(late2.remainingSegment(), std::runtime_error);
 
   // Destroying the message doesn't free the region, which the pool now owns.
   msg.reset();
