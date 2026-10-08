@@ -324,6 +324,8 @@ bool ExportVerilog::isZeroBitType(Type type) {
     return intType.getWidth() == 0;
   if (auto inout = dyn_cast<hw::InOutType>(type))
     return isZeroBitType(inout.getElementType());
+  if (auto net = dyn_cast<sv::NetType>(type))
+    return isZeroBitType(net.getElementType());
   if (auto var = dyn_cast<sv::VarType>(type))
     return isZeroBitType(var.getElementType());
   if (auto uarray = dyn_cast<hw::UnpackedArrayType>(type))
@@ -350,7 +352,7 @@ bool ExportVerilog::isZeroBitType(Type type) {
 // NOLINTBEGIN(misc-no-recursion)
 static Type stripUnpackedTypes(Type type) {
   return TypeSwitch<Type, Type>(type)
-      .Case<InOutType, VarType>([](auto valueType) {
+      .Case<InOutType, NetType, VarType>([](auto valueType) {
         return stripUnpackedTypes(valueType.getElementType());
       })
       .Case<UnpackedArrayType, sv::UnpackedOpenArrayType>([](auto arrayType) {
@@ -6741,15 +6743,17 @@ void ModuleEmitter::emitPortList(Operation *module,
       }
 
       // Emit the port direction and optional wire keyword.
-      auto thisPortDirection = portInfo.at(portIdx).dir;
+      auto thisPortInfo = portInfo.at(portIdx);
+      auto thisPortDirection = thisPortInfo.dir;
       size_t startOfNamePos = (hasOutputs ? 7 : 6) +
                               (state.options.emitWireInPorts ? 5 : 0) +
                               maxTypeWidth;
       // Modport-typed ports (e.g., MyBundle.sink) already encode their
       // direction in the interface modport definition, so we suppress the
       // direction and wire keywords for them.
+      bool isInOut = isa<InOutType, sv::NetType>(portType);
       if (!isa<ModportType>(portType)) {
-        if (isa<InOutType>(portType)) {
+        if (isInOut) {
           ps << (hasOutputs ? "inout  " : "inout ");
         } else {
           switch (thisPortDirection) {
@@ -6801,11 +6805,16 @@ void ModuleEmitter::emitPortList(Operation *module,
 
       ++portIdx;
 
-      // If we have any more ports with the same types and the same
-      // direction, emit them in a list one per line. Optionally skip this
-      // behavior when requested by user.
+      // If we have any more ports with the same types, the same direction,
+      // and the same emitted kind (plain/net), emit them in a list one
+      // per line. Optionally skip this behavior when requested by user. This
+      // kind of check is important because two ports can share a direction and
+      // an (unwrapped) element type, emitting completely different keywords.
+      // Thus we must ensure they are not folded into one shared declaration.
       if (!state.options.disallowPortDeclSharing) {
         while (portIdx != e && portInfo.at(portIdx).dir == thisPortDirection &&
+               isInOut ==
+                   isa<InOutType, sv::NetType>(portInfo.at(portIdx).type) &&
                stripUnpackedTypes(portType) ==
                    stripUnpackedTypes(portInfo.at(portIdx).type)) {
           auto port = portInfo.at(portIdx);
