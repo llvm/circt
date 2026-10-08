@@ -50,18 +50,6 @@ FIRRTL IR that is produced from Chisel.  The FIRRTL dialect has support for
 parsing an SFC Annotation file and converting this to operation or argument
 attributes.
 
-### Arbitrary Precision Integer Bitwise Operations
-
-The property integer operations `integer_and`, `integer_or`, and `integer_not`
-operate on arbitrary precision signed integer properties with two's complement
-bitwise semantics. For `integer_and` and `integer_or`, operands with different
-stored widths are sign-extended to the wider operand before applying the
-operation; the result remains arbitrary precision and is not truncated. They
-are distinct from the boolean property operations
-`bool_and`, `bool_or`, and `bool_xor`. These integer operations are currently
-gated behind `missingSpecFIRVersion` until they land in the FIRRTL specification
-repository, then switch to `nextFIRVersion` until release.
-
 ### ABI
 
 An auxillary spec has been written, shipped with the FIRRTL spec, which is the
