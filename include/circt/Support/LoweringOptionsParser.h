@@ -56,7 +56,8 @@ struct LoweringOptionsOption
                 "emitWireInPorts, emitBindComments, omitVersionComment, "
                 "caseInsensitiveKeywords, emitVerilogLocations, "
                 "fixUpEmptyModules, disallowClockedAssertions, "
-                "disallowDeclAssignments"),
+                "disallowDeclAssignments, "
+                "svVarDeclStyle={varLogic,logic,reg}"),
             llvm::cl::cat(cat), llvm::cl::value_desc("option")} {}
 };
 
