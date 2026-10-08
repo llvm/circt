@@ -994,6 +994,53 @@ OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+/// Fold bitwise operations on FIRRTL arbitrary precision signed integer
+/// properties. Integer constants may use different storage widths; sign-extend
+/// both operands to the wider storage width so the operation has signed
+/// two's-complement semantics without truncating its result.
+static IntegerAttr foldFIntegerBinaryBitwise(
+    MLIRContext *context, Attribute lhsAttr, Attribute rhsAttr,
+    const function_ref<APInt(const APInt &, const APInt &)> &evaluate) {
+  auto lhs = dyn_cast_or_null<IntegerAttr>(lhsAttr);
+  auto rhs = dyn_cast_or_null<IntegerAttr>(rhsAttr);
+  if (!lhs || !rhs || !lhs.getType().isSignedInteger() ||
+      !rhs.getType().isSignedInteger())
+    return {};
+
+  APSInt lhsValue = lhs.getAPSInt();
+  APSInt rhsValue = rhs.getAPSInt();
+  unsigned width = std::max(lhsValue.getBitWidth(), rhsValue.getBitWidth());
+  lhsValue = lhsValue.extend(width);
+  rhsValue = rhsValue.extend(width);
+
+  APSInt result(evaluate(lhsValue, rhsValue), /*isUnsigned=*/false);
+  auto resultType = IntegerType::get(context, width, IntegerType::Signed);
+  return IntegerAttr::get(resultType, result);
+}
+
+OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
+  return foldFIntegerBinaryBitwise(
+      getContext(), adaptor.getLhs(), adaptor.getRhs(),
+      [](const APInt &lhs, const APInt &rhs) { return lhs & rhs; });
+}
+
+OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
+  return foldFIntegerBinaryBitwise(
+      getContext(), adaptor.getLhs(), adaptor.getRhs(),
+      [](const APInt &lhs, const APInt &rhs) { return lhs | rhs; });
+}
+
+OpFoldResult IntegerNotOp::fold(FoldAdaptor adaptor) {
+  auto input = dyn_cast_or_null<IntegerAttr>(adaptor.getInput());
+  if (!input || !input.getType().isSignedInteger())
+    return {};
+
+  APSInt result(~input.getAPSInt(), /*isUnsigned=*/false);
+  auto resultType =
+      IntegerType::get(getContext(), result.getBitWidth(), IntegerType::Signed);
+  return IntegerAttr::get(resultType, result);
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
