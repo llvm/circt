@@ -4,7 +4,11 @@
 
 import pytest
 
-from esiaccel.bsp.common import ChannelMMIO
+from pycde import Module
+
+from esiaccel.bsp.common import ChannelEngineService, ChannelMMIO
+from esiaccel.bsp.cosim import CosimBSP
+from esiaccel.bsp.dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
 
 class _Bundle:
@@ -73,3 +77,14 @@ def test_channel_mmio_rejects_address_overflow(monkeypatch):
   monkeypatch.setattr(ChannelMMIO, "initial_offset", 0xFFFF_FFF8)
   with pytest.raises(ValueError, match="exceeds the 32-bit space"):
     ChannelMMIO.build_table(_Bundles(_Bundle("read", {"size": 8})))
+
+
+def test_cosim_bsp_rejects_conflicting_channel_services():
+
+  class Top(Module):
+    pass
+
+  engines = (OneItemBuffersToHost, OneItemBuffersFromHost)
+  channel_service = ChannelEngineService(*engines)
+  with pytest.raises(ValueError, match="dma_engine_pair and channel_service"):
+    CosimBSP(Top, dma_engine_pair=engines, channel_service=channel_service)
