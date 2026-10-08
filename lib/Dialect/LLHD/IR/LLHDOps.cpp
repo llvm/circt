@@ -569,7 +569,7 @@ bool ProbeOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.valueType);
 }
 
 DeletionKind ProbeOp::rewire(const DestructurableMemorySlot &slot,
@@ -651,7 +651,7 @@ bool DriveOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.valueType);
 }
 
 DeletionKind DriveOp::rewire(const DestructurableMemorySlot &slot,
