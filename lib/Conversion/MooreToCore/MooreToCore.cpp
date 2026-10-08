@@ -353,6 +353,57 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
   return comb::MuxOp::create(builder, loc, isZero, lo, max, false);
 }
 
+/// Narrow `index` to the `clog2(numElements)` bits that address the elements
+/// of an array (or the bits of a vector) of `numElements` positions.
+///
+/// If `index` has more bits than that, dropping the high bits (or saturating
+/// them, as `adjustIntegerWidth` does) would make an out-of-range index alias
+/// an element, and a one-element array has a zero-bit index, so every index
+/// would name its only element. Use `getElementInRange` to gate the access;
+/// the narrowed index is exact whenever the access is in range.
+static Value getElementIndex(OpBuilder &builder, Value index,
+                             uint64_t numElements, Location loc) {
+  unsigned idxWidth = llvm::Log2_64_Ceil(numElements);
+  unsigned width = index.getType().getIntOrFloatBitWidth();
+  if (width <= idxWidth)
+    return adjustIntegerWidth(builder, index, idxWidth, loc);
+  if (idxWidth == 0)
+    return hw::ConstantOp::create(builder, loc, builder.getIntegerType(0), 0);
+  return comb::ExtractOp::create(builder, loc, index, 0, idxWidth);
+}
+
+/// The condition under which an element select with `index` into
+/// `numElements` positions is in range, or a null value if `index` has no more
+/// bits than the address, so that the select needs no check here.
+///
+/// IEEE 1800-2017 7.4.6: an element select outside the array reads the default
+/// value of the element type and a write there has no effect, where the index
+/// is the whole value of `index`.
+static Value getElementInRange(OpBuilder &builder, Value index,
+                               uint64_t numElements, Location loc) {
+  unsigned width = index.getType().getIntOrFloatBitWidth();
+  if (width <= llvm::Log2_64_Ceil(numElements))
+    return {};
+  // `numElements <= 2^clog2(numElements) < 2^width`, so the limit fits.
+  Value limit =
+      hw::ConstantOp::create(builder, loc, builder.getIntegerType(width),
+                             static_cast<int64_t>(numElements));
+  return comb::ICmpOp::create(builder, loc, ICmpPredicate::ult, index, limit,
+                              false);
+}
+
+/// The number of positions a dynamic extraction can address when it selects
+/// one element of the signal or value of type `containerType`, or zero if it
+/// does not select a single element (a slice, or a part-select of a vector).
+static uint64_t getSelectableElements(Type containerType, Type resultType) {
+  if (auto arrType = dyn_cast<hw::ArrayType>(containerType))
+    return resultType == arrType.getElementType() ? arrType.getNumElements()
+                                                  : 0;
+  if (isa<IntegerType>(containerType) && hw::getBitWidth(resultType) == 1)
+    return hw::getBitWidth(containerType);
+  return 0;
+}
+
 /// Get the ModulePortInfo from a SVModuleOp.
 static FailureOr<hw::ModulePortInfo>
 getModulePortInfo(const TypeConverter &typeConverter, SVModuleOp op) {
@@ -1517,19 +1568,33 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
     }
 
     if (auto arrType = dyn_cast<hw::ArrayType>(inputType)) {
-      unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getNumElements());
-      Value idx = adjustIntegerWidth(rewriter, adaptor.getLowBit(), idxWidth,
-                                     op->getLoc());
-
-      bool isSingleElementExtract = arrType.getElementType() == resultType;
-
-      if (isSingleElementExtract)
-        rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(),
-                                                    idx);
-      else
+      if (arrType.getElementType() != resultType) {
+        Value idx = adjustIntegerWidth(
+            rewriter, adaptor.getLowBit(),
+            llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
         rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
                                                       adaptor.getInput(), idx);
+        return success();
+      }
 
+      // An element select outside the array reads zero.
+      Value inRange = getElementInRange(rewriter, adaptor.getLowBit(),
+                                        arrType.getNumElements(), op->getLoc());
+      Value idx = getElementIndex(rewriter, adaptor.getLowBit(),
+                                  arrType.getNumElements(), op->getLoc());
+      Value elem = hw::ArrayGetOp::create(rewriter, op->getLoc(),
+                                          adaptor.getInput(), idx);
+      if (!inRange) {
+        rewriter.replaceOp(op, elem);
+        return success();
+      }
+      int64_t bw = hw::getBitWidth(resultType);
+      if (bw < 0)
+        return failure();
+      Value zero = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(bw, 0));
+      zero =
+          rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType, zero);
+      rewriter.replaceOpWithNewOp<comb::MuxOp>(op, inRange, elem, zero);
       return success();
     }
 
@@ -1543,7 +1608,10 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
   LogicalResult
   matchAndRewrite(DynExtractRefOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: properly handle out-of-bounds accesses
+    // An element select whose index is out of range must have no effect when
+    // written to; `AssignOpConversion` gates the drive with the same range
+    // check (`getElementInRange`), so only the narrowed index is used here.
+    // TODO: part-selects and slices are not range checked.
     Type resultType = typeConverter->convertType(op.getResult().getType());
     Type inputType =
         cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
@@ -1553,30 +1621,34 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
       if (width == -1)
         return failure();
 
-      Value amount =
-          adjustIntegerWidth(rewriter, adaptor.getLowBit(),
-                             llvm::Log2_64_Ceil(width), op->getLoc());
+      Value amount;
+      if (getSelectableElements(
+              inputType, cast<llhd::RefType>(resultType).getNestedType()))
+        amount =
+            getElementIndex(rewriter, adaptor.getLowBit(), width, op->getLoc());
+      else
+        amount = adjustIntegerWidth(rewriter, adaptor.getLowBit(),
+                                    llvm::Log2_64_Ceil(width), op->getLoc());
       rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(
           op, resultType, adaptor.getInput(), amount);
       return success();
     }
 
     if (auto arrType = dyn_cast<hw::ArrayType>(inputType)) {
+      auto resultNestedType = cast<llhd::RefType>(resultType).getNestedType();
+      if (arrType.getElementType() == resultNestedType) {
+        Value idx = getElementIndex(rewriter, adaptor.getLowBit(),
+                                    arrType.getNumElements(), op->getLoc());
+        rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
+                                                         idx);
+        return success();
+      }
+
       Value idx = adjustIntegerWidth(
           rewriter, adaptor.getLowBit(),
           llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
-
-      auto resultNestedType = cast<llhd::RefType>(resultType).getNestedType();
-      bool isSingleElementExtract =
-          arrType.getElementType() == resultNestedType;
-
-      if (isSingleElementExtract)
-        rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
-                                                         idx);
-      else
-        rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
-            op, resultType, adaptor.getInput(), idx);
-
+      rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
+          op, resultType, adaptor.getInput(), idx);
       return success();
     }
 
@@ -2473,8 +2545,40 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
       delay = adaptor.getDelay();
     }
 
-    rewriter.replaceOpWithNewOp<llhd::DriveOp>(
-        op, adaptor.getDst(), adaptor.getSrc(), delay, Value{});
+    // A write through `m[i]` is dropped when `i` is out of range. Walk down
+    // the reference chain and AND the in-range conditions of every element
+    // select into the drive enable.
+    Value enable;
+    for (Value ref = op.getDst(); Operation *def = ref.getDefiningOp();) {
+      if (auto dyn = dyn_cast<DynExtractRefOp>(def)) {
+        auto container = dyn_cast_or_null<llhd::RefType>(
+            this->typeConverter->convertType(dyn.getInput().getType()));
+        auto result = dyn_cast_or_null<llhd::RefType>(
+            this->typeConverter->convertType(dyn.getResult().getType()));
+        if (!container || !result)
+          return failure();
+        if (uint64_t count = getSelectableElements(container.getNestedType(),
+                                                   result.getNestedType())) {
+          Value index = rewriter.getRemappedValue(dyn.getLowBit());
+          if (!index)
+            return failure();
+          if (Value inRange =
+                  getElementInRange(rewriter, index, count, op->getLoc()))
+            enable = enable ? comb::AndOp::create(rewriter, op->getLoc(),
+                                                  enable, inRange, false)
+                            : inRange;
+        }
+        ref = dyn.getInput();
+      } else if (auto ext = dyn_cast<ExtractRefOp>(def)) {
+        ref = ext.getInput();
+      } else if (auto ext = dyn_cast<StructExtractRefOp>(def)) {
+        ref = ext.getInput();
+      } else {
+        break;
+      }
+    }
+    rewriter.replaceOpWithNewOp<llhd::DriveOp>(op, adaptor.getDst(),
+                                               adaptor.getSrc(), delay, enable);
     return success();
   }
 };
