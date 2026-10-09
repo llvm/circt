@@ -417,10 +417,18 @@ void circt::om::ClassOp::updateFields(
   // Extract the locations per field.
   SmallVector<Location> locations;
   if (auto fl = dyn_cast<FusedLoc>(fieldOpLoc)) {
-    auto metadataArr = dyn_cast<ArrayAttr>(fl.getMetadata());
-    assert(metadataArr && "Expected the metadata for the fused location");
-    auto r = metadataArr.getAsRange<LocationAttr>();
-    locations.append(r.begin(), r.end());
+    if (auto metadataArr = dyn_cast_or_null<ArrayAttr>(fl.getMetadata())) {
+      auto r = metadataArr.getAsRange<LocationAttr>();
+      locations.append(r.begin(), r.end());
+    } else {
+      auto fieldLocs = fieldsOp.getFieldLocs();
+      if (fieldLocs.has_value() && names.size() == fieldLocs.value().size()) {
+        auto r = fieldLocs.value().getAsRange<LocationAttr>();
+        locations.append(r.begin(), r.end());
+      } else {
+        locations.append(names.size(), fieldOpLoc);
+      }
+    }
   } else {
     // Assume same loc for every field.
     locations.append(names.size(), fieldOpLoc);
