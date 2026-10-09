@@ -21,10 +21,13 @@
 #include "esi/backends/RpcClient.h"
 
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <new>
 #include <set>
 
 using namespace esi;
@@ -662,10 +665,9 @@ public:
   }
 
   struct CosimHostMemRegion : public HostMemRegion {
-    CosimHostMemRegion(std::size_t size) {
-      ptr = malloc(size);
-      memset(ptr, 0xFF, size);
-      this->size = size;
+    CosimHostMemRegion(std::size_t size) : ptr(malloc(size)), size(size) {
+      if (ptr)
+        memset(ptr, 0xFF, size);
     }
     virtual ~CosimHostMemRegion() { free(ptr); }
     virtual void *getPtr() const override { return ptr; }
@@ -678,7 +680,12 @@ public:
 
   virtual std::unique_ptr<HostMemRegion>
   allocate(std::size_t size, HostMem::Options opts) const override {
-    auto ret = std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(size));
+    if (size == 0)
+      return nullptr;
+    std::unique_ptr<HostMemRegion> ret(new (std::nothrow)
+                                           CosimHostMemRegion(size));
+    if (!ret || !ret->getPtr())
+      return nullptr;
     acc.getLogger().debug(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {

@@ -19,8 +19,11 @@
 #include "esi/Utils.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <new>
 #include <sstream>
 
 using namespace esi;
@@ -324,12 +327,9 @@ public:
 
   struct TraceHostMemRegion : public HostMemRegion {
     TraceHostMemRegion(std::size_t size, TraceAccelerator::Impl &impl)
-        : impl(impl) {
-      ptr = malloc(size);
-      this->size = size;
-    }
+        : ptr(malloc(size)), size(size), impl(impl) {}
     virtual ~TraceHostMemRegion() {
-      if (impl.isWriteable())
+      if (ptr && impl.isWriteable())
         impl.write("HostMem") << "free " << ptr << std::endl;
       free(ptr);
     }
@@ -344,8 +344,12 @@ public:
 
   virtual std::unique_ptr<HostMemRegion>
   allocate(std::size_t size, HostMem::Options opts) const override {
-    auto ret =
-        std::unique_ptr<HostMemRegion>(new TraceHostMemRegion(size, impl));
+    if (size == 0)
+      return nullptr;
+    std::unique_ptr<HostMemRegion> ret(new (std::nothrow)
+                                           TraceHostMemRegion(size, impl));
+    if (!ret || !ret->getPtr())
+      return nullptr;
     if (impl.isWriteable())
       impl.write("HostMem 0x")
           << ret->getPtr() << " allocate " << size
