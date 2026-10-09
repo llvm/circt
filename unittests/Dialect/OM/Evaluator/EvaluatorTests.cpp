@@ -1649,14 +1649,29 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
 
 TEST_F(EvaluatorTests, IntegerBitwiseTests) {
   StringRef mod = R"MLIR(
-om.class @IntegerBitwiseAnd(%a: i8, %b: i8) -> (result: i8) {
-  %and = om.integer.and %a, %b : i8
-  om.class.fields %and : i8
+om.class @IntegerBitwiseAnd(%a: !om.integer, %b: !om.integer) -> (result: !om.integer) {
+  %and = om.integer.and %a, %b : !om.integer
+  om.class.fields %and : !om.integer
 }
 
-om.class @IntegerBitwiseOr(%a: i8, %b: i8) -> (result: i8) {
-  %or = om.integer.or %a, %b : i8
-  om.class.fields %or : i8
+om.class @IntegerBitwiseOr(%a: !om.integer, %b: !om.integer) -> (result: !om.integer) {
+  %or = om.integer.or %a, %b : !om.integer
+  om.class.fields %or : !om.integer
+}
+
+om.class @IntegerBitwiseNot(%a: !om.integer) -> (result: !om.integer) {
+  %not = om.integer.not %a : !om.integer
+  om.class.fields %not : !om.integer
+}
+
+om.class @BooleanBitwiseAnd(%a: i1, %b: i1) -> (result: i1) {
+  %and = om.bool.and %a, %b : i1
+  om.class.fields %and : i1
+}
+
+om.class @BooleanBitwiseOr(%a: i1, %b: i1) -> (result: i1) {
+  %or = om.bool.or %a, %b : i1
+  om.class.fields %or : i1
 }
 
 om.class @IntegerBitwiseXor(%a: i8, %b: i8) -> (result: i8) {
@@ -1664,10 +1679,10 @@ om.class @IntegerBitwiseXor(%a: i8, %b: i8) -> (result: i8) {
   om.class.fields %xor : i8
 }
 
-om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
-  %zero = om.constant 0 : i8
-  %unk  = om.integer.and %zero, %b : i8
-  om.class.fields %unk : i8
+om.class @IntegerBitwiseUnknown(%b: !om.integer) -> (unknown: !om.integer) {
+  %zero = om.constant #om.integer<0 : si4> : !om.integer
+  %unk  = om.integer.and %zero, %b : !om.integer
+  om.class.fields %unk : !om.integer
 }
 )MLIR";
 
@@ -1677,9 +1692,74 @@ om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
   Evaluator evaluator(owning.release());
 
   auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
-  auto i8Type = mlir::IntegerType::get(&context, 8);
+  auto getSignedInteger = [&](evaluator::EvaluatorValuePtr obj) -> int64_t {
+    auto value = getAttr<circt::om::IntegerAttr>(getField(obj, "result"))
+                     .getValue()
+                     .getValue();
+    return value.getSExtValue();
+  };
 
-  // Helper: make an i8 AttributeValue.
+  struct {
+    int64_t a, b, expected;
+    unsigned aWidth, bWidth;
+  } andCases[] = {{-2, 16, 16, 4, 8}, {-16, 5, 0, 8, 4}, {-2, 1, 0, 4, 4}};
+  for (auto [a, b, expected, aWidth, bWidth] : andCases) {
+    auto r =
+        evaluator.instantiate(StringAttr::get(&context, "IntegerBitwiseAnd"),
+                              {makeIntegerValue(&context, a, aWidth),
+                               makeIntegerValue(&context, b, bWidth)});
+    ASSERT_TRUE(succeeded(r));
+    ASSERT_EQ(getSignedInteger(r.value()), expected);
+  }
+
+  struct {
+    int64_t a, b, expected;
+    unsigned aWidth, bWidth;
+  } orCases[] = {{-2, 16, -2, 4, 8}, {-16, 5, -11, 8, 4}, {-2, 1, -1, 4, 4}};
+  for (auto [a, b, expected, aWidth, bWidth] : orCases) {
+    auto r =
+        evaluator.instantiate(StringAttr::get(&context, "IntegerBitwiseOr"),
+                              {makeIntegerValue(&context, a, aWidth),
+                               makeIntegerValue(&context, b, bWidth)});
+    ASSERT_TRUE(succeeded(r));
+    ASSERT_EQ(getSignedInteger(r.value()), expected);
+  }
+
+  // Complement follows arbitrary-precision signed two's-complement semantics.
+  for (auto [input, expected] :
+       {std::pair<int64_t, int64_t>{0, -1}, {-2, 1}, {16, -17}}) {
+    auto r =
+        evaluator.instantiate(StringAttr::get(&context, "IntegerBitwiseNot"),
+                              {makeIntegerValue(&context, input, 8)});
+    ASSERT_TRUE(succeeded(r));
+    ASSERT_EQ(getSignedInteger(r.value()), expected);
+  }
+
+  auto makeBool = [&](bool value) -> evaluator::EvaluatorValuePtr {
+    return evaluator::AttributeValue::get(BoolAttr::get(&context, value),
+                                          unknownLoc);
+  };
+  struct {
+    bool a, b, andResult, orResult;
+  } boolCases[] = {{false, false, false, false},
+                   {false, true, false, true},
+                   {true, false, false, true},
+                   {true, true, true, true}};
+  for (auto [a, b, andResult, orResult] : boolCases) {
+    SmallVector<evaluator::EvaluatorValuePtr> actualParams = {makeBool(a),
+                                                              makeBool(b)};
+    auto andValue = evaluator.instantiate(
+        StringAttr::get(&context, "BooleanBitwiseAnd"), actualParams);
+    auto orValue = evaluator.instantiate(
+        StringAttr::get(&context, "BooleanBitwiseOr"), actualParams);
+    ASSERT_TRUE(succeeded(andValue));
+    ASSERT_TRUE(succeeded(orValue));
+    ASSERT_EQ(getBool(getField(andValue.value(), "result")), andResult);
+    ASSERT_EQ(getBool(getField(orValue.value(), "result")), orResult);
+  }
+
+  // The fixed-width xor operation remains available for hardware integers.
+  auto i8Type = mlir::IntegerType::get(&context, 8);
   auto makeI8 = [&](uint8_t val) -> evaluator::EvaluatorValuePtr {
     auto attr = mlir::IntegerAttr::get(i8Type, val);
     auto v = evaluator::AttributeValue::get(i8Type, unknownLoc);
@@ -1687,52 +1767,29 @@ om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
     return v;
   };
 
-  auto getResult = [&](evaluator::EvaluatorValuePtr obj) -> uint64_t {
-    return getBuiltinInteger(getField(obj, "result"));
-  };
-
-  // Test AND: 0xF0 & 0x0F = 0x00, 0xFF & 0xF0 = 0xF0.
-  struct {
-    uint8_t a, b, expected;
-  } andCases[] = {{0xF0, 0x0F, 0x00}, {0xFF, 0xF0, 0xF0}, {0x00, 0xFF, 0x00}};
-  for (auto [a, b, expected] : andCases) {
-    auto r = evaluator.instantiate(
-        StringAttr::get(&context, "IntegerBitwiseAnd"), {makeI8(a), makeI8(b)});
-    ASSERT_TRUE(succeeded(r));
-    ASSERT_EQ(getResult(r.value()), static_cast<uint64_t>(expected));
-  }
-
-  // Test OR: 0xF0 | 0x0F = 0xFF, 0x00 | 0x0F = 0x0F.
-  struct {
-    uint8_t a, b, expected;
-  } orCases[] = {{0xF0, 0x0F, 0xFF}, {0x00, 0x0F, 0x0F}, {0xFF, 0x00, 0xFF}};
-  for (auto [a, b, expected] : orCases) {
-    auto r = evaluator.instantiate(
-        StringAttr::get(&context, "IntegerBitwiseOr"), {makeI8(a), makeI8(b)});
-    ASSERT_TRUE(succeeded(r));
-    ASSERT_EQ(getResult(r.value()), static_cast<uint64_t>(expected));
-  }
-
-  // Test XOR: 0xF0 ^ 0xFF = 0x0F (NOT idiom: xor(a, 0xFF) = ~a).
   struct {
     uint8_t a, b, expected;
   } xorCases[] = {{0xF0, 0xFF, 0x0F}, {0xAA, 0x55, 0xFF}, {0x00, 0x00, 0x00}};
+  auto getXorResult = [&](evaluator::EvaluatorValuePtr obj) -> uint64_t {
+    return getBuiltinInteger(getField(obj, "result"));
+  };
   for (auto [a, b, expected] : xorCases) {
     auto r = evaluator.instantiate(
         StringAttr::get(&context, "IntegerBitwiseXor"), {makeI8(a), makeI8(b)});
     ASSERT_TRUE(succeeded(r));
-    ASSERT_EQ(getResult(r.value()), static_cast<uint64_t>(expected));
+    ASSERT_EQ(getXorResult(r.value()), static_cast<uint64_t>(expected));
   }
 
-  // Test unknown propagation: AND(0x00, unknown) = unknown.
-  // Unknown is treated as poison rather than short-circuiting to zero.
+  // A known zero determines AND even when the other operand is unknown.
   {
-    auto unknown = evaluator::AttributeValue::get(i8Type, unknownLoc);
+    auto unknown = evaluator::AttributeValue::get(OMIntegerType::get(&context),
+                                                  unknownLoc);
     unknown->markUnknown();
     auto r = evaluator.instantiate(
         StringAttr::get(&context, "IntegerBitwiseUnknown"), {unknown});
     ASSERT_TRUE(succeeded(r));
     ASSERT_FALSE(getField(r.value(), "unknown")->isUnknown());
+    ASSERT_EQ(0, getInteger(getField(r.value(), "unknown")));
   }
 }
 

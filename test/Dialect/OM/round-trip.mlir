@@ -330,16 +330,30 @@ om.class @IntegerArithmetic() {
   om.class.fields
 }
 
-// CHECK-LABEL: @IntegerBitwise
-om.class @IntegerBitwise() {
+// CHECK-LABEL: @IntegerPropertyBitwise
+om.class @IntegerPropertyBitwise(%lhs: !om.integer, %rhs: !om.integer) {
+  // CHECK: om.integer.and %lhs, %rhs : !om.integer
+  %0 = om.integer.and %lhs, %rhs : !om.integer
+
+  // CHECK: om.integer.or %lhs, %rhs : !om.integer
+  %1 = om.integer.or %lhs, %rhs : !om.integer
+
+  // CHECK: om.integer.not %lhs : !om.integer
+  %2 = om.integer.not %lhs : !om.integer
+
+  om.class.fields
+}
+
+// CHECK-LABEL: @BoolBitwise
+om.class @BoolBitwise() {
   %0 = om.constant false
   %1 = om.constant true
 
-  // CHECK: om.integer.and %0, %1 : i1
-  %2 = om.integer.and %0, %1 : i1
+  // CHECK: om.bool.and %0, %1 : i1
+  %2 = om.bool.and %0, %1 : i1
 
-  // CHECK: om.integer.or %0, %1 : i1
-  %3 = om.integer.or %0, %1 : i1
+  // CHECK: om.bool.or %0, %1 : i1
+  %3 = om.bool.or %0, %1 : i1
 
   // CHECK: om.integer.xor %0, %1 : i1
   %4 = om.integer.xor %0, %1 : i1
@@ -347,14 +361,8 @@ om.class @IntegerBitwise() {
   %5 = om.constant 0 : i8
   %6 = om.constant -1 : i8
 
-  // CHECK: om.integer.and %5, %6 : i8
-  %7 = om.integer.and %5, %6 : i8
-
-  // CHECK: om.integer.or %5, %6 : i8
-  %8 = om.integer.or %5, %6 : i8
-
   // CHECK: om.integer.xor %5, %6 : i8
-  %9 = om.integer.xor %5, %6 : i8
+  %7 = om.integer.xor %5, %6 : i8
 
   om.class.fields
 }

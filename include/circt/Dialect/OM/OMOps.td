@@ -619,30 +619,32 @@ class IntegerBitwiseOpBase<string mnemonic, list<Trait> traits = []> :
   let hasFolder = 1;
 }
 
-def IntegerAndOp : IntegerBitwiseOpBase<"integer.and", [Commutative]> {
-  let summary = "Bitwise AND of two integer OM values";
+def IntegerAndOp : IntegerBinaryOp<"integer.and", [Commutative]> {
+  let summary = "Bitwise AND of two arbitrary-precision integer OM values";
   let description = [{
-    Compute the bitwise AND of two integer OM values of the same width,
-    returning an integer result of the same width.
+    Compute the bitwise AND of two arbitrary-precision signed OM integer
+    values. If their stored widths differ, sign-extend the narrower operand
+    to the wider operand before applying the operation. The result remains an
+    arbitrary-precision integer and is not truncated.
 
     Example:
     ```mlir
-    %2 = om.integer.and %0, %1 : i1
-    %3 = om.integer.and %4, %5 : i8
+    %2 = om.integer.and %a, %b : !om.integer
     ```
   }];
 }
 
-def IntegerOrOp : IntegerBitwiseOpBase<"integer.or", [Commutative]> {
-  let summary = "Bitwise OR of two integer OM values";
+def IntegerOrOp : IntegerBinaryOp<"integer.or", [Commutative]> {
+  let summary = "Bitwise OR of two arbitrary-precision integer OM values";
   let description = [{
-    Compute the bitwise OR of two integer OM values of the same width,
-    returning an integer result of the same width.
+    Compute the bitwise OR of two arbitrary-precision signed OM integer
+    values. If their stored widths differ, sign-extend the narrower operand
+    to the wider operand before applying the operation. The result remains an
+    arbitrary-precision integer and is not truncated.
 
     Example:
     ```mlir
-    %2 = om.integer.or %0, %1 : i1
-    %3 = om.integer.or %4, %5 : i8
+    %2 = om.integer.or %a, %b : !om.integer
     ```
   }];
 }
@@ -658,6 +660,56 @@ def IntegerXorOp : IntegerBitwiseOpBase<"integer.xor", [Commutative]> {
     ```mlir
     %2 = om.integer.xor %0, %1 : i1
     %3 = om.integer.xor %4, %5 : i8
+    ```
+  }];
+}
+
+def IntegerNotOp : OMOp<"integer.not", [Pure, SameOperandsAndResultType]> {
+  let summary = "Bitwise complement of an integer OM value";
+  let description = [{
+    Compute the two's complement bitwise NOT of an arbitrary precision OM
+    integer value.
+
+    Example:
+    ```mlir
+    %2 = om.integer.not %0 : !om.integer
+    ```
+  }];
+
+  let arguments = (ins OMIntegerType:$input);
+  let results = (outs OMIntegerType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($result)";
+  let hasFolder = 1;
+}
+
+class BoolBinaryOp<string mnemonic, list<Trait> traits = []> :
+    OMOp<mnemonic, [Pure, SameOperandsAndResultType] # traits> {
+  let arguments = (ins I1:$lhs, I1:$rhs);
+  let results = (outs I1:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
+  let hasFolder = 1;
+}
+
+def BoolAndOp : BoolBinaryOp<"bool.and", [Commutative]> {
+  let summary = "Boolean AND of two OM boolean values";
+  let description = [{
+    Compute the AND of two `i1` OM values, returning an `i1` result.
+
+    Example:
+    ```mlir
+    %2 = om.bool.and %lhs, %rhs : i1
+    ```
+  }];
+}
+
+def BoolOrOp : BoolBinaryOp<"bool.or", [Commutative]> {
+  let summary = "Boolean OR of two OM boolean values";
+  let description = [{
+    Compute the OR of two `i1` OM values, returning an `i1` result.
+
+    Example:
+    ```mlir
+    %2 = om.bool.or %lhs, %rhs : i1
     ```
   }];
 }

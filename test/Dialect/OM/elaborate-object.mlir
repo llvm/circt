@@ -53,6 +53,21 @@ om.class @IntegerOps() -> (sum: !om.integer, product: !om.integer, shr: !om.inte
   om.class.fields %sum, %product, %shr_result, %shl_result : !om.integer, !om.integer, !om.integer, !om.integer
 }
 
+// CHECK-LABEL: om.class @IntegerBitwiseOps() -> (andResult: !om.integer, orResult: !om.integer, notResult: !om.integer) {
+// CHECK-DAG:   %[[AND:.+]] = om.constant #om.integer<4 : si8> : !om.integer
+// CHECK-DAG:   %[[OR:.+]] = om.constant #om.integer<-1 : si8> : !om.integer
+// CHECK-DAG:   %[[NOT:.+]] = om.constant #om.integer<-6 : si8> : !om.integer
+// CHECK:   om.class.fields %[[AND]], %[[OR]], %[[NOT]] : !om.integer, !om.integer, !om.integer
+// CHECK: }
+om.class @IntegerBitwiseOps() -> (andResult: !om.integer, orResult: !om.integer, notResult: !om.integer) {
+  %neg2 = om.constant #om.integer<-2 : si4> : !om.integer
+  %five = om.constant #om.integer<5 : si8> : !om.integer
+  %and = om.integer.and %neg2, %five : !om.integer
+  %or = om.integer.or %neg2, %five : !om.integer
+  %not = om.integer.not %five : !om.integer
+  om.class.fields %and, %or, %not : !om.integer, !om.integer, !om.integer
+}
+
 // Test shl with shift amount exceeding the lhs bitwidth (extends lhs to lhsWidth + shiftAmt)
 // CHECK-LABEL: om.class @IntegerShlAutoExtend() -> (result: !om.integer) {
 // CHECK:   %[[R:.+]] = om.constant #om.integer<65536 : si24> : !om.integer
