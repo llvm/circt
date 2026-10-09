@@ -2171,3 +2171,36 @@ hw.module @paritySingleBit(in %a: i1, out o: i1) {
   %0 = comb.parity %a : i1
   hw.output %0 : i1
 }
+
+
+// `mux(x, x, b)` with x = xor(b, a, b): x is both the condition and an arm, and
+// it repeats the operand b that foldCommonMuxValue splits out of it. The split
+// replaces x (it has two users, so it cannot be edited in place), and the
+// condition value the fold had already read dangled: building the comb.and
+// from it crashed the canonicalizer. Here x = a, so the mux is a | b, written
+// as ((a ^ b) ^ b) & (a ^ b) ^ b.
+// CHECK-LABEL: hw.module @mux_cond_is_arm_of_xor_with_repeat
+// CHECK-NEXT:    %[[AB:.+]] = comb.xor %a, %b : i1
+// CHECK-NEXT:    %[[X:.+]] = comb.xor %[[AB]], %b : i1
+// CHECK-NEXT:    %[[AND:.+]] = comb.and %[[X]], %[[AB]] : i1
+// CHECK-NEXT:    %[[R:.+]] = comb.xor %[[AND]], %b : i1
+// CHECK-NEXT:    hw.output %[[R]] : i1
+hw.module @mux_cond_is_arm_of_xor_with_repeat(in %a: i1, in %b: i1, out o: i1) {
+  %x = comb.xor %b, %a, %b : i1
+  %m = comb.mux %x, %x, %b : i1
+  hw.output %m : i1
+}
+
+// The same fold with a condition that is not the xor: it keeps producing the
+// predicated form `(rep(c) & (a ^ b)) ^ b`.
+// CHECK-LABEL: hw.module @mux_xor_repeat_other_cond
+// CHECK-NEXT:    %[[AB2:.+]] = comb.xor %a, %b : i4
+// CHECK-NEXT:    %[[REP:.+]] = comb.replicate %c : (i1) -> i4
+// CHECK-NEXT:    %[[AND2:.+]] = comb.and %[[REP]], %[[AB2]] : i4
+// CHECK-NEXT:    %[[R2:.+]] = comb.xor %[[AND2]], %b : i4
+// CHECK-NEXT:    hw.output %[[R2]] : i4
+hw.module @mux_xor_repeat_other_cond(in %c: i1, in %a: i4, in %b: i4, out o: i4) {
+  %x = comb.xor %b, %a, %b : i4
+  %m = comb.mux %c, %x, %b : i4
+  hw.output %m : i4
+}
