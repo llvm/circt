@@ -33,7 +33,6 @@
 using namespace circt;
 using namespace seq;
 using hw::HWModuleOp;
-using llvm::MapVector;
 
 namespace circt {
 #define GEN_PASS_DEF_LOWERSEQTOSV

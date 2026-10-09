@@ -29,7 +29,6 @@ using namespace mlir;
 using namespace circt;
 using namespace debug;
 
-using llvm::MapVector;
 using llvm::SmallMapVector;
 
 using JValue = llvm::json::Value;
