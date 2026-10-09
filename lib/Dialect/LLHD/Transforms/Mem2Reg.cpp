@@ -66,7 +66,7 @@ static bool isDeltaDelay(Value value) {
 
 /// Check whether an operation is a `llhd.drive` with an epsilon delay. This
 /// corresponds to a blocking assignment in Verilog.
-static bool isBlockingDrive(Operation *op) {
+static bool isBlockingDrive(const Operation *op) {
   if (auto driveOp = dyn_cast<DriveOp>(op))
     return isEpsilonDelay(driveOp.getTime()) || isZeroDelay(driveOp.getTime());
   return false;
@@ -74,7 +74,7 @@ static bool isBlockingDrive(Operation *op) {
 
 /// Check whether an operation is a `llhd.drive` with a delta delay. This
 /// corresponds to a non-blocking assignment in Verilog.
-static bool isDeltaDrive(Operation *op) {
+static bool isDeltaDrive(const Operation *op) {
   if (auto driveOp = dyn_cast<DriveOp>(op))
     return isDeltaDelay(driveOp.getTime());
   return false;
@@ -257,7 +257,7 @@ struct LatticeNode;
 struct BlockExit;
 struct ProbeNode;
 struct DriveNode;
-struct SignalNode;
+struct SlotNode;
 
 /// Lattice state between two adjacent lattice nodes for a single slot.
 ///
@@ -283,7 +283,7 @@ struct LatticeValue {
 };
 
 struct LatticeNode {
-  enum class Kind { BlockEntry, BlockExit, Probe, Drive, Signal };
+  enum class Kind { BlockEntry, BlockExit, Probe, Drive, Slot };
   const Kind kind;
   /// Dirty flag to prevent duplicate pushes to worklist.
   bool dirty = false;
@@ -357,7 +357,7 @@ struct OpNode : public LatticeNode {
   }
 
   static bool classof(const LatticeNode *n) {
-    return isa<ProbeNode, DriveNode, SignalNode>(n);
+    return isa<ProbeNode, DriveNode, SlotNode>(n);
   }
 };
 
@@ -393,19 +393,19 @@ struct DriveNode : public OpNode {
   static bool classof(const LatticeNode *n) { return n->kind == Kind::Drive; }
 };
 
-struct SignalNode : public OpNode {
+struct SlotNode : public OpNode {
   /// The initializer, or a probe inserted after an uninitialized declaration
   /// if its value is needed before the first unconditional full write.
   Def *def;
 
-  SignalNode(SignalOp op, Def *def, LatticeValue *valueBefore,
-             LatticeValue *valueAfter)
-      : OpNode(Kind::Signal, op, valueBefore, valueAfter), def(def) {}
+  SlotNode(Operation *op, Def *def, LatticeValue *valueBefore,
+           LatticeValue *valueAfter)
+      : OpNode(Kind::Slot, op, valueBefore, valueAfter), def(def) {}
 
-  SignalOp getSignalOp() const { return cast<SignalOp>(op); }
-  DefSlot getSlot() const { return blockingSlot(getSignalOp()); }
+  bool isSignal() const { return isa<SignalOp>(op); }
+  DefSlot getSlot() const { return blockingSlot(op->getResult(0)); }
 
-  static bool classof(const LatticeNode *n) { return n->kind == Kind::Signal; }
+  static bool classof(const LatticeNode *n) { return n->kind == Kind::Slot; }
 };
 
 /// A lattice of block entry and exit nodes, nodes for relevant operations such
@@ -467,7 +467,7 @@ private:
   SpecificBumpPtrAllocator<BlockExit> blockExitAllocator;
   SpecificBumpPtrAllocator<ProbeNode> probeAllocator;
   SpecificBumpPtrAllocator<DriveNode> driveAllocator;
-  SpecificBumpPtrAllocator<SignalNode> signalAllocator;
+  SpecificBumpPtrAllocator<SlotNode> slotAllocator;
 
   // Helper function to get the correct allocator given a lattice node class.
   template <class T>
@@ -493,8 +493,8 @@ SpecificBumpPtrAllocator<DriveNode> &Lattice::getAllocator() {
   return driveAllocator;
 }
 template <>
-SpecificBumpPtrAllocator<SignalNode> &Lattice::getAllocator() {
-  return signalAllocator;
+SpecificBumpPtrAllocator<SlotNode> &Lattice::getAllocator() {
+  return slotAllocator;
 }
 
 } // namespace
@@ -576,8 +576,8 @@ void Lattice::dump(llvm::raw_ostream &os) {
         os << "    probe " << memName(blockingSlot(node->slot)) << "\n";
       else if (auto *node = dyn_cast<DriveNode>(value->nodeAfter))
         os << "    drive " << memName(node->slot) << "\n";
-      else if (auto *node = dyn_cast<SignalNode>(value->nodeAfter))
-        os << "    signal " << memName(node->getSlot()) << "\n";
+      else if (auto *node = dyn_cast<SlotNode>(value->nodeAfter))
+        os << "    slot " << memName(node->getSlot()) << "\n";
       else
         os << "    unknown\n";
 
@@ -613,21 +613,44 @@ void Lattice::dump(llvm::raw_ostream &os) {
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+struct ConstProjectionRange {
+  uint64_t offset = 0;
+  uint64_t width = 1;
+};
+struct DynProjectionRange {
+  Value index;
+};
+/// Portion of the signal operand that is selected by a projection.
+using ProjectionRange = std::variant<ConstProjectionRange, DynProjectionRange>;
+
+static bool isDynamic(const ProjectionRange &range) {
+  return std::holds_alternative<DynProjectionRange>(range);
+}
+
 /// A single projection operation, together with the concrete value of the
-/// signal being projected into. This helper is useful to unpack a stack of
-/// projections to get the targeted value, change it, and then pack the stack
-/// back up into an updated value.
+/// signal being projected into and the range of the projection. This helper is
+/// useful to unpack a stack of projections to get the targeted value, change
+/// it, and then pack the stack back up into an updated value.
 struct Projection {
   /// The projection operation.
   Operation *op;
   /// The value being projected into. This is not the op's target signal, but
   /// rather the value of the op's target signal.
   Value into;
+  /// Range of the signal that is selected by this projection (either a concrete
+  /// range or a dynamic index).
+  ProjectionRange range;
 };
 } // namespace
 
 /// A stack of projection operations.
 using ProjectionStack = SmallVector<Projection>;
+
+/// Check if an op is one of the supported projection types.
+static bool isProjection(const Operation *op) {
+  return isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(op);
+}
 
 /// Collect the `llhd.sig.*` projection ops between `fromSignal` and `toSlot`.
 /// The `fromSignal` value must be derived from `toSlot` through only
@@ -717,6 +740,276 @@ static Value packProjections(OpBuilder &builder, Value value,
   return value;
 }
 
+/// Calculate a projection's range.
+/// Returns nullopt if the range could not be calculated for this projection.
+/// Asserts if the provided Operation is not a (supported) projection.
+static std::optional<ProjectionRange> getProjectionRange(Operation *op) {
+  APInt index;
+  uint64_t offset = 0;
+  int64_t width = 0;
+  Value dynIndex;
+
+  TypeSwitch<Operation *>(op)
+      .Case<SigArrayGetOp>([&](auto op) {
+        if (!matchPattern(op.getIndex(), m_ConstantInt(&index))) {
+          dynIndex = op.getIndex();
+        } else {
+          width = hw::getBitWidth(getStoredType(op.getResult()));
+          offset = index.getZExtValue() * width;
+        }
+      })
+      .Case<SigExtractOp>([&](auto op) {
+        if (!matchPattern(op.getLowBit(), m_ConstantInt(&index))) {
+          dynIndex = op.getLowBit();
+        } else {
+          width = op.getResultWidth();
+          offset = index.getZExtValue();
+        }
+      })
+      .Case<SigStructExtractOp>([&](auto op) {
+        auto inputType = cast<RefType>(op.getInput().getType()).getNestedType();
+        if (auto unionType = dyn_cast<hw::UnionType>(inputType)) {
+          width = hw::getBitWidth(unionType);
+        } else {
+          auto structType = cast<hw::StructType>(inputType);
+          auto elements = structType.getElements();
+          auto fieldIdx = *structType.getFieldIndex(op.getFieldAttr());
+          bool fieldWidthsKnown = true;
+          for (auto field : elements.drop_front(fieldIdx + 1)) {
+            auto fieldWidth = hw::getBitWidth(field.type);
+            if (fieldWidth < 0) {
+              fieldWidthsKnown = false;
+              break;
+            }
+            offset += fieldWidth;
+          }
+          width =
+              fieldWidthsKnown ? hw::getBitWidth(elements[fieldIdx].type) : -1;
+        }
+      })
+      .Default([](auto) { llvm_unreachable("Unsupported projection type."); });
+
+  if (dynIndex)
+    return DynProjectionRange{dynIndex};
+
+  if (width < 0)
+    return std::nullopt;
+
+  return ConstProjectionRange{offset, static_cast<uint64_t>(width)};
+}
+
+/// Check whether two projections chains provably describe disjoint
+/// storage.
+static bool isProvablyDisjoint(const ProjectionRange &a,
+                               const ProjectionRange &b) {
+  auto *ca = std::get_if<ConstProjectionRange>(&a);
+  auto *cb = std::get_if<ConstProjectionRange>(&b);
+  // At least one side is dynamic: can't prove disjointness.
+  if (!ca || !cb)
+    return false;
+  // The ranges don't overlap: disjoint.
+  if (ca->offset + ca->width <= cb->offset ||
+      cb->offset + cb->width <= ca->offset)
+    return true;
+  return false;
+}
+
+/// Resolve an operation to the `llhd.sig` declaration it (transitively)
+/// projects into.
+/// Returns null if the chain does not bottom out in an `llhd.sig`.
+static Operation *getRootSignal(Operation *op) {
+  if (!op)
+    return nullptr;
+  while (true) {
+    if (!isProjection(op))
+      break;
+    op = op->getOperand(0).getDefiningOp();
+    if (!op)
+      return nullptr;
+  }
+  if (isa<SignalOp>(op))
+    return op;
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
+// Promotion Tree
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Tree-like structure used to identify the finest-grained promotion slot for
+/// every probe/drive in a region.
+/// Each tree is rooted in an `llhd.sig`. Nodes represent projections from the
+/// root.
+struct PromotionTree {
+  /// An Access represents a probe or drive operation.
+  using Access = Operation *;
+  /// A node in the promotion tree represents a signal (tree root) or a
+  /// projection of it. Some nodes can be promoted to "slots": in this case,
+  /// all reachable projections and accesses are collapsed into the slot node.
+  struct Node {
+    Node(Operation *op) : op(op) {}
+
+    // Helpers to check access types.
+    auto accesses() {
+      return llvm::concat<Access>(directAccesses, foldedAccesses);
+    }
+    bool hasInRegionAccess(const Region &region) {
+      return llvm::any_of(accesses(), [&](Access &access) {
+        return access && access->getParentRegion() == &region;
+      });
+    }
+    bool hasInRegionDeltaDrive(const Region &region) {
+      return llvm::any_of(accesses(), [&](Access &access) {
+        return access->getParentRegion() == &region && isDeltaDrive(access);
+      });
+    }
+    bool hasInRegionBlockingDrive(const Region &region) {
+      return llvm::any_of(accesses(), [&](Access &access) {
+        return access->getParentRegion() == &region && isBlockingDrive(access);
+      });
+    }
+    bool hasInRegionDrive(const Region &region) {
+      return llvm::any_of(accesses(), [&](Access &access) {
+        return access->getParentRegion() == &region && isa<DriveOp>(access);
+      });
+    }
+    bool hasInRegionProjectedDrive(const Region &region) {
+      return llvm::any_of(foldedAccesses, [&](Access &access) {
+        return access->getParentRegion() == &region && isa<DriveOp>(access);
+      });
+    }
+    bool hasProjection() const { return !foldedProjections.empty(); }
+
+    /// Signal or Projection this node corresponds to.
+    Operation *op;
+    /// Direct accesses (probes or drives) of this signal or projection.
+    SmallVector<Access> directAccesses;
+
+    /// Nodes that are promoted to slots become leafs: any reachable op gets
+    /// folded into this node.
+    bool isSlot = false;
+    /// Accesses (probes or drives) reachable from this slot (should be empty if
+    /// isSlot is false).
+    SmallVector<Access> foldedAccesses;
+    /// Projections reachable from this slot (should be empty if isSlot is
+    /// false).
+    SmallVector<Operation *> foldedProjections;
+  };
+
+  /// Build a promotion tree starting from an `llhd.sig` and transitively
+  /// visiting all projections.
+  /// Returns the root node once the whole tree has been computed, or nullptr if
+  /// the tree creation bailed out.
+  /// During this visit, slots are identified using a longest (common) static
+  /// prefix criterion: anytime we find multiple accesses to the same projection
+  /// in this region, or a dynamic projection, the input signal is promoted to a
+  /// slot.
+  /// NOTE: Part of the information held by a PromotionTree could be cached
+  /// globally instead of re-computed separately for each region. Currently the
+  /// blocker is that the folding logic is region-dependent.
+  Node *buildFrom(Operation *signal, Region &region);
+  /// Create a node in this tree.
+  Node *makeNode(Operation *op) {
+    nodes.emplace_back(std::make_unique<Node>(op));
+    return nodes.back().get();
+  }
+
+  /// Nodes owned by this tree.
+  SmallVector<std::unique_ptr<Node>, 8> nodes;
+};
+
+PromotionTree::Node *PromotionTree::buildFrom(Operation *signal,
+                                              Region &region) {
+  // Create root node.
+  assert(isa<SignalOp>(signal));
+  Node *rootNode = makeNode(signal);
+
+  // Walk projection chain.
+  using WorklistItem = std::tuple<Operation *, Node *, ProjectionStack>;
+  SmallVector<WorklistItem, 4> worklist = {{signal, rootNode, {}}};
+  while (!worklist.empty()) {
+    auto [curOp, curNode, relativePath] = worklist.pop_back_val();
+
+    // Collect all users of the current node and check for promotability.
+    SmallVector<Access, 4> accesses;
+    SmallVector<Projection, 4> projections;
+    for (Operation *user : curOp->getUsers()) {
+      // Bail out if there's any user in a nested region.
+      if (region.isProperAncestor(user->getParentRegion()))
+        return nullptr;
+
+      bool inRegion = user->getParentRegion() == &region;
+
+      if (isa<ProbeOp>(user)) {
+        // Promote to slot if it's directly probed.
+        curNode->isSlot |= inRegion;
+        accesses.push_back(user);
+      } else if (isa<DriveOp>(user)) {
+        // Bail out if we find an unsupported drive type.
+        if (inRegion && !isDeltaDrive(user) && !isBlockingDrive(user))
+          return nullptr;
+        // Promote to slot if it's directly driven.
+        curNode->isSlot |= inRegion;
+        accesses.push_back(user);
+      } else if (isa<SigExtractOp, SigArrayGetOp, SigStructExtractOp>(user)) {
+        auto range = getProjectionRange(user);
+        // We can't reason about this projection: bail out.
+        if (!range)
+          return nullptr;
+        // Promote to slot if it has a dynamic projection.
+        curNode->isSlot |= isDynamic(*range);
+        // Record this projection
+        projections.push_back({user, user->getResult(0), *range});
+      } else {
+        // Unsupported user in this region: bail out.
+        if (inRegion)
+          return nullptr;
+      }
+    }
+
+    // If this node has projections that can overlap there's no finer slot to
+    // find: promote this node to a slot.
+    if (!curNode->isSlot) {
+      auto overlaps = [&](const Projection &p1, const Projection &p2) {
+        return p1.op != p2.op && !isProvablyDisjoint(p1.range, p2.range);
+      };
+      curNode->isSlot |= llvm::any_of(projections, [&](Projection &proj) {
+        return llvm::any_of(projections, [&](Projection &sibling) {
+          return overlaps(proj, sibling);
+        });
+      });
+    }
+
+    // Register accesses.
+    if (relativePath.size() == 0)
+      curNode->directAccesses.append(accesses);
+    else
+      curNode->foldedAccesses.append(accesses);
+
+    // Add projection nodes (or fold if it's a slot) and append to worklist.
+    for (auto &proj : projections) {
+      if (curNode->isSlot) {
+        // For slot nodes, the projection gets folded.
+        curNode->foldedProjections.push_back(proj.op);
+        // Compute the new relative path and append to worklist.
+        auto path = relativePath;
+        path.push_back(proj);
+        worklist.push_back({proj.op, curNode, path});
+      } else {
+        // For non-slot nodes, each outgoing projection gets its own node.
+        auto *projNode = makeNode(proj.op);
+        // Add new node to worklist.
+        // Note: worklist paths are populated only for slots.
+        worklist.push_back({proj.op, projNode, {}});
+      }
+    }
+  }
+
+  return rootNode;
+}
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Drive/Probe to SSA Value Promotion
 //===----------------------------------------------------------------------===//
@@ -731,6 +1024,7 @@ struct Promoter {
   Value resolveSlot(Value projectionOrSlot);
   void populateSlotOps();
 
+  void computeLiveOutWait();
   void captureAcrossWait();
   void captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
                          Liveness &liveness, DominanceInfo &dominance);
@@ -747,7 +1041,8 @@ struct Promoter {
   void insertProbeBlocks();
   void insertProbes();
   void insertProbes(BlockEntry *node);
-  void insertProbes(SignalNode *node);
+  void insertProbes(SlotNode *node);
+  void hoistSlot(Operation *slotOp);
 
   void insertDriveBlocks();
   void insertDrives();
@@ -773,6 +1068,14 @@ struct Promoter {
 
   /// The region we are promoting in.
   Region &region;
+
+  /// All wait operations in the region.
+  SmallVector<WaitOp> waitOps;
+  /// Values to capture across waits.
+  llvm::SetVector<Value> liveOutWait;
+  /// Region analyses shared by different stages of the pass.
+  std::unique_ptr<DominanceInfo> dominance;
+  std::unique_ptr<Liveness> liveness;
 
   /// The slots we are promoting. Mostly `llhd.sig` ops in practice. This
   /// establishes a deterministic order for slot allocations, such that
@@ -807,6 +1110,8 @@ struct Promoter {
   /// Maps slot values to all ops that refer to them. The operation list is
   /// laid out in the same order as a loop over blocks in the region.
   DenseMap<Value, SmallVector<Operation *>> slotOps;
+  /// Signals local to the current region.
+  SmallSetVector<Operation *, 4> localSignals;
 };
 } // namespace
 
@@ -814,6 +1119,7 @@ LogicalResult Promoter::promote() {
   if (region.empty())
     return success();
 
+  computeLiveOutWait();
   findPromotableSlots();
   captureAcrossWait();
 
@@ -834,6 +1140,10 @@ LogicalResult Promoter::promote() {
     promoteSlot();
   }
   currentSlot = {};
+
+  // Drop region-local signal declarations that are no longer probed.
+  for (auto *signalOp : localSignals)
+    removeUnusedLocalSignal(cast<SignalOp>(signalOp));
 
   // Erase operations that have become unused.
   pruner.eraseNow();
@@ -891,11 +1201,11 @@ void Promoter::promoteSlot() {
   // Insert the necessary block arguments.
   insertBlockArgs();
 
-  // If this slot is a region-local signal declaration, try to drop it when
-  // no probes remain.
-  if (auto signalOp = currentSlot.getDefiningOp<SignalOp>())
+  // If this slot come from a region-local signal, mark it as a candidate for
+  // later -- will be dropped if not needed.
+  if (auto *signalOp = getRootSignal(currentSlot.getDefiningOp()))
     if (signalOp->getParentRegion() == &region)
-      removeUnusedLocalSignal(signalOp);
+      localSignals.insert(signalOp);
 
   // Release the lattice so the bump allocators free their slabs before the
   // next slot runs.
@@ -905,82 +1215,65 @@ void Promoter::promoteSlot() {
 /// Identify any promotable slots probed or driven under the current region.
 void Promoter::findPromotableSlots() {
   SmallPtrSet<Value, 8> seenSlots;
-  SmallPtrSet<Operation *, 8> checkedUsers;
-  SmallVector<Operation *, 8> userWorklist;
+  SmallPtrSet<Operation *, 8> seenSignals;
 
+  // Create a promotion tree for every signal driven in this region.
+  PromotionTree ptree;
   region.walk([&](Operation *op) {
     for (auto operand : op->getOperands()) {
       if (!seenSlots.insert(operand).second)
         continue;
-
-      // We can only promote probes and drives on a locally-defined signal.
+      // Go back in the projection chain until you find a SignalOp.
       // Other signals, such as the ones brought into a module through a port,
       // have an unknown aliasing relationship with the other ports.
-      if (!operand.getDefiningOp<llhd::SignalOp>())
+      auto *root = getRootSignal(operand.getDefiningOp());
+      if (!root)
+        continue;
+      if (!seenSignals.insert(root).second)
         continue;
 
-      // Ensure the slot is not used in any way we cannot reason about.
-      bool hasProjection = false;
-      bool hasBlockingDrive = false;
-      bool hasDeltaDrive = false;
-      auto checkUser = [&](Operation *user) -> bool {
-        // We don't support nested probes and drives.
-        if (region.isProperAncestor(user->getParentRegion()))
-          return false;
-        // Ignore uses outside of the region.
-        if (user->getParentRegion() != &region)
-          return true;
-        // Projection operations are okay, as long as nested projections
-        // stay in the same block. Cross-block nested projections would break
-        // during promotion because the projection chain gets severed when
-        // Mem2Reg rewrites signal references into SSA block arguments.
-        if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(user)) {
-          hasProjection = true;
-          for (auto *projectionUser : user->getUsers()) {
-            if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(
-                    projectionUser) &&
-                projectionUser->getBlock() != user->getBlock())
-              return false;
-            hasBlockingDrive |= isBlockingDrive(projectionUser);
-            hasDeltaDrive |= isDeltaDrive(projectionUser);
-            if (checkedUsers.insert(projectionUser).second)
-              userWorklist.push_back(projectionUser);
-          }
-          projections.insert({user->getResult(0), operand});
-          return true;
-        }
-        hasBlockingDrive |= isBlockingDrive(user);
-        hasDeltaDrive |= isDeltaDrive(user);
-        return isa<ProbeOp>(user) || isBlockingDrive(user) ||
-               isDeltaDrive(user);
-      };
-      checkedUsers.clear();
-      if (!llvm::all_of(operand.getUsers(), [&](auto *user) {
-            auto allOk = true;
-            if (checkedUsers.insert(user).second)
-              userWorklist.push_back(user);
-            while (!userWorklist.empty() && allOk)
-              allOk &= checkUser(userWorklist.pop_back_val());
-            userWorklist.clear();
-            return allOk;
-          }))
+      unsigned prevSize = ptree.nodes.size();
+      auto *rootNode = ptree.buildFrom(root, region);
+      // Bail out if the root signal has uses we cannot reason about.
+      if (!rootNode) {
+        ptree.nodes.pop_back_n(ptree.nodes.size() - prevSize);
         continue;
-
-      // Don't promote slots that have projections and a mix of blocking and
-      // delta drives. A blocking drive erases the delayed reaching definition,
-      // which leaves delta projection drives without a reaching definition.
-      if (hasProjection && hasBlockingDrive && hasDeltaDrive)
-        continue;
-
-      // Mem2Reg may have to materialize a zero value for promoted slots. Skip
-      // signal types for which we cannot create a suitable default.
-      if (!isPromotableSlotType(getStoredType(operand)))
-        continue;
-
-      slots.push_back(operand);
+      }
     }
   });
+  // Select only the promotable slots.
+  for (auto &node : ptree.nodes) {
+    // Select only slots that are accessed in this region.
+    if (!node->isSlot || !node->hasInRegionAccess(region))
+      continue;
 
+    // Don't promote slots that have projections and a mix of blocking and
+    // delta drives. A blocking drive erases the delayed reaching definition,
+    // which leaves delta projection drives without a reaching definition.
+    if (node->hasProjection() && node->hasInRegionBlockingDrive(region) &&
+        node->hasInRegionDeltaDrive(region))
+      continue;
+
+    // Mem2Reg may have to materialize a zero value for promoted slots. Skip
+    // signal types for which we cannot create a suitable default.
+    Value slotVal = node->op->getResult(0);
+    if (!isPromotableSlotType(getStoredType(slotVal)))
+      continue;
+
+    // Check if promoting this slot would fold in a projection whose parent
+    // value is captured across a wait boundary. Capturing rewrites uses of
+    // the parent value beyond the wait to a new block argument, which would
+    // sever the operand(0) chain the projection stacks are built from.
+    if (llvm::any_of(node->foldedProjections, [&](Operation *proj) {
+          return liveOutWait.contains(proj->getOperand(0));
+        }))
+      continue;
+
+    // Valid slot reached.
+    slots.push_back(slotVal);
+    for (auto *proj : node->foldedProjections)
+      projections[proj->getResult(0)] = slotVal;
+  }
   // Populate `promotable` with the slots and projections we are promoting.
   promotable.insert(slots.begin(), slots.end());
   projections.remove_if([&](auto elem) {
@@ -1002,23 +1295,22 @@ Value Promoter::resolveSlot(Value projectionOrSlot) {
   return projectionOrSlot;
 }
 
-/// Explicitly capture any probes that are live across an `llhd.wait` as block
-/// arguments and destination operand of that wait. This ensures that replacing
-/// the probe with a reaching definition later on will capture the value of the
-/// reaching definition before the wait.
-void Promoter::captureAcrossWait() {
+/// Collect any probes that are live across an `llhd.wait`.
+/// These will be later explicitly captured as block arguments by
+/// captureAcrossWait().
+void Promoter::computeLiveOutWait() {
   if (region.hasOneBlock())
     return;
 
-  SmallVector<WaitOp> waitOps;
   for (auto &block : region)
     if (auto waitOp = dyn_cast<WaitOp>(block.getTerminator()))
       waitOps.push_back(waitOp);
 
-  DominanceInfo dominance(region.getParentOp());
-  Liveness liveness(region.getParentOp());
+  if (waitOps.empty())
+    return;
 
-  llvm::DenseSet<Value> alreadyCaptured;
+  dominance = std::make_unique<DominanceInfo>(region.getParentOp());
+  liveness = std::make_unique<Liveness>(region.getParentOp());
 
   auto isDefinedInRegion = [&](Value v) {
     return v.getParentRegion() == &region;
@@ -1026,18 +1318,25 @@ void Promoter::captureAcrossWait() {
 
   for (auto waitOp : waitOps) {
     Block *waitBlock = waitOp->getBlock();
-    const auto &liveOutValues = liveness.getLiveOut(waitBlock);
+    const auto &liveOutValues = liveness->getLiveOut(waitBlock);
 
     for (Value v : liveOutValues) {
       if (!isDefinedInRegion(v))
         continue;
-
-      if (!alreadyCaptured.insert(v).second)
-        continue;
-
-      captureAcrossWait(v, waitOps, liveness, dominance);
+      liveOutWait.insert(v);
     }
   }
+}
+
+/// Explicitly capture any probes that are live across an `llhd.wait` as block
+/// arguments and destination operand of that wait. This ensures that replacing
+/// the probe with a reaching definition later on will capture the value of the
+/// reaching definition before the wait.
+void Promoter::captureAcrossWait() {
+  if (!dominance || !liveness)
+    return;
+  for (Value v : liveOutWait)
+    captureAcrossWait(v, waitOps, *liveness, *dominance);
 }
 
 /// Add a probe as block argument to a list of wait ops and update uses of the
@@ -1162,6 +1461,12 @@ void Promoter::populateSlotOps() {
                            return resolveSlot(op.getSignal());
                          return Value();
                        })
+                       .Case<SigExtractOp, SigArrayGetOp, SigStructExtractOp>(
+                           [&](Operation *op) -> Value {
+                             if (llvm::is_contained(slots, op->getResult(0)))
+                               return op->getResult(0);
+                             return Value();
+                           })
                        .Case([&](SignalOp op) { return op.getResult(); })
                        .Default([&](Operation *) { return Value(); });
       if (slot)
@@ -1237,16 +1542,17 @@ void Promoter::constructLattice() {
         continue;
       }
 
-      // Handle local signals. Only the current slot's own SignalOp, if it
-      // lives inside this region, contributes a SignalNode.
-      if (auto signalOp = dyn_cast<SignalOp>(op)) {
-        if (signalOp.getResult() != currentSlot)
+      // Handle local slots.
+      if (isa<SignalOp, SigExtractOp, SigArrayGetOp, SigStructExtractOp>(op)) {
+        if (op->getResult(0) != currentSlot)
           continue;
         Def *def = nullptr;
-        if (auto init = signalOp.getInit())
-          def = lattice->createDef(init, DriveCondition::never());
-        auto *node = lattice->createNode<SignalNode>(signalOp, def, valueBefore,
-                                                     lattice->createValue());
+        // Only signals have an initial value.
+        if (auto signalOp = dyn_cast<SignalOp>(op))
+          if (auto init = signalOp.getInit())
+            def = lattice->createDef(init, DriveCondition::never());
+        auto *node = lattice->createNode<SlotNode>(op, def, valueBefore,
+                                                   lattice->createValue());
         valueBefore = node->valueAfter;
         continue;
       }
@@ -1310,12 +1616,14 @@ void Promoter::propagateBackward(LatticeNode *node) {
     return;
   }
 
-  // Local signal declarations kill the need for a definition to be available,
-  // since the signal does not exist before its declaration. If an uninitialized
-  // signal's value is needed, insertProbes will probe it after the declaration.
-  if (isa<SignalNode>(node)) {
-    auto *signal = cast<SignalNode>(node);
-    update(signal->valueBefore, false);
+  // A slot's storage becomes available at its defining op: signal declarations
+  // allocate it, projections name it for the first time. Forward propagation
+  // overwrites the slot's value there in either case, so nothing from above
+  // ever flows through and no definition is ever needed above the op. This also
+  // keeps the need, and therefore any probe inserted to satisfy it, inside the
+  // part of the region that the slot dominates.
+  if (auto *slot = dyn_cast<SlotNode>(node)) {
+    update(slot->valueBefore, false);
     return;
   }
 
@@ -1435,8 +1743,8 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
   // Signals provide their initializer or inserted probe as the starting value
   // for both blocking and delayed drives. Its "never" condition also clears
   // any pending drives from an earlier execution of the declaration.
-  if (auto *signal = dyn_cast<SignalNode>(node)) {
-    update(signal->valueAfter, signal->def, signal->def);
+  if (auto *slot = dyn_cast<SlotNode>(node)) {
+    update(slot->valueAfter, slot->def, slot->isSignal() ? slot->def : nullptr);
     return;
   }
 
@@ -1602,21 +1910,75 @@ void Promoter::insertProbes() {
   for (auto *node : lattice->nodes) {
     if (auto *entry = dyn_cast<BlockEntry>(node))
       insertProbes(entry);
-    else if (auto *signal = dyn_cast<SignalNode>(node))
-      insertProbes(signal);
+    else if (auto *slot = dyn_cast<SlotNode>(node))
+      insertProbes(slot);
   }
 }
 
-/// Read an uninitialized signal's starting value only if it is needed. The
-/// declaration is the earliest point where the signal can be probed.
-void Promoter::insertProbes(SignalNode *node) {
-  if (node->def || !node->valueAfter->needed)
-    return;
-  auto signalOp = node->getSignalOp();
-  OpBuilder builder(signalOp);
-  builder.setInsertionPointAfter(signalOp);
-  auto value = ProbeOp::create(builder, signalOp.getLoc(), signalOp);
-  node->def = lattice->createDef(value, DriveCondition::never());
+/// Insert a probe directly after a SlotNode that is not a SignalOp. Also move
+/// the slot's projection chain in front of the region's parent op, such that
+/// the slot is defined outside the region like a regular signal.
+void Promoter::insertProbes(SlotNode *node) {
+  auto *op = node->op;
+
+  if (!node->def && node->valueAfter->needed) {
+    OpBuilder builder(op);
+    builder.setInsertionPointAfter(op);
+    auto value = ProbeOp::create(builder, currentSlot.getLoc(), currentSlot);
+    node->def = lattice->createDef(value, DriveCondition::never());
+
+    LLVM_DEBUG(llvm::dbgs() << "- Inserting probe for " << currentSlot
+                            << " after " << *op << "\n");
+  }
+
+  // The probe stays where the projection was, so moving the projection out
+  // does not change when the slot is read.
+  hoistSlot(op);
+}
+
+/// Move the in-region part of a slot's projection chain in front of the
+/// region's parent op. Slots are reached from their root signal through
+/// projections with constant indices only, so the only other ops that may have
+/// to move along are the constants. Does nothing if the chain bottoms out in a
+/// signal declared inside the region.
+void Promoter::hoistSlot(Operation *slotOp) {
+  auto isInRegion = [&](Value value) {
+    return region.isAncestor(value.getParentRegion());
+  };
+
+  // Collect the projections inside the region, from the slot up to the first
+  // projection whose input is defined outside the region. Each projection is
+  // followed by the constants it uses.
+  SmallVector<Operation *> toMove;
+  auto *curOp = slotOp;
+  while (true) {
+    if (!isProjection(curOp))
+      return;
+    toMove.push_back(curOp);
+    for (auto index : curOp->getOperands().drop_front()) {
+      if (!isInRegion(index))
+        continue;
+      auto *indexOp = index.getDefiningOp();
+      if (!indexOp || !indexOp->hasTrait<OpTrait::ConstantLike>())
+        return;
+      toMove.push_back(indexOp);
+    }
+    auto input = curOp->getOperand(0);
+    if (!isInRegion(input))
+      break;
+    curOp = input.getDefiningOp();
+    if (!curOp)
+      return;
+  }
+
+  // Move the ops out top-down, such that every op ends up after its operands.
+  // Constants shared by multiple projections only move once.
+  for (auto *op : llvm::reverse(toMove)) {
+    if (!region.isAncestor(op->getParentRegion()))
+      continue;
+    LLVM_DEBUG(llvm::dbgs() << "- Hoisting " << *op << "\n");
+    op->moveBefore(region.getParentOp());
+  }
 }
 
 /// Insert a probe at the beginning of the block for the current slot, if it
