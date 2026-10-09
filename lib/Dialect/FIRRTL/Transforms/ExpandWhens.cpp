@@ -41,6 +41,18 @@ static void mergeBlock(Block &destination, Block::iterator insertPoint,
   destination.getOperations().splice(insertPoint, source.getOperations());
 }
 
+/// Return true if the value is an invalid value or a subelement of one.
+static bool isInvalidValue(Value value) {
+  while (auto *op = value.getDefiningOp()) {
+    if (isa<InvalidValueOp>(op))
+      return true;
+    if (!isa<SubindexOp, SubfieldOp>(op))
+      return false;
+    value = op->getOperand(0);
+  }
+  return false;
+}
+
 /// This is a stack of hashtables, if lookup fails in the top-most hashtable,
 /// it will attempt to lookup in lower hashtables.  This class is used instead
 /// of a ScopedHashTable so we can manually pop off a scope and keep it around.
@@ -281,11 +293,9 @@ public:
     auto fusedLoc =
         b.getFusedLoc({loc, whenTrueConn->getLoc(), whenFalseConn->getLoc()});
     auto whenTrue = getConnectedValue(whenTrueConn);
-    auto trueIsInvalid =
-        isa_and_nonnull<InvalidValueOp>(whenTrue.getDefiningOp());
+    auto trueIsInvalid = isInvalidValue(whenTrue);
     auto whenFalse = getConnectedValue(whenFalseConn);
-    auto falseIsInvalid =
-        isa_and_nonnull<InvalidValueOp>(whenFalse.getDefiningOp());
+    auto falseIsInvalid = isInvalidValue(whenFalse);
     // If one of the branches of the mux is an invalid value, we optimize the
     // mux to be the non-invalid value.  This optimization can only be
     // performed while lowering when-ops into muxes, and would not be legal as

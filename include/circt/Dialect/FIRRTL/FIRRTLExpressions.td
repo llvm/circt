@@ -154,7 +154,7 @@ def AggregateConstantOp : FIRRTLOp<"aggregateconstant", [Pure, ConstantLike]> {
   let hasVerifier = 1;
 }
 
-def BundleCreateOp : FIRRTLOp<"bundlecreate"> {
+def BundleCreateOp : FIRRTLOp<"bundlecreate", [Pure]> {
   let summary = "Produce a bundle value";
   let description = [{
     Create an bundle from component values.  This is equivalent in terms of
@@ -172,7 +172,7 @@ def BundleCreateOp : FIRRTLOp<"bundlecreate"> {
   let hasFolder = 1;
 }
 
-def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
+def VectorCreateOp : FIRRTLOp<"vectorcreate", [Pure]> {
   let summary = "Produce a vector value";
   let description = [{
     Create a vector from component values.  This is equivalent in terms of
