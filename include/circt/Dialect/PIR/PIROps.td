@@ -13,6 +13,8 @@ include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/PIR/PIRDialect.td"
 include "circt/Dialect/PIR/PIRTypes.td"
 include "circt/Dialect/PIR/PIREnums.td"
+include "circt/Dialect/Seq/SeqTypes.td"
+include "circt/Dialect/HW/HWEnums.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
@@ -99,12 +101,12 @@ class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [
 ]> : PIRInnerOp<mnemonic, traits> {
   let arguments = (ins 
     PIRClockedPropertyType:$property,
-    OptionalAttr<SamplingTypeAttr>:$samplingType,
+    OptionalAttr<ScopeAttr>:$scope,
     Optional<I1>:$disable,
     Optional<I1>:$enable
   );
   let assemblyFormat = [{
-    $property ($samplingType^)? (`disable` `iff` $disable^)? (`on` $enable^)? attr-dict `:` type($property)
+    $property ($scope^)? (`disable` `iff` $disable^)? (`on` $enable^)? attr-dict `:` type($property)
   }];
 
   let hasCanonicalizer = true;
@@ -231,13 +233,134 @@ def ClockedSeqToClockedPropOp : ConversionOp<"clocked_seq_to_clocked_prop"> {
 // Clocking
 //===----------------------------------------------------------------------===//
 
+def ClockedOp : PIRInnerOp<"clocked", [
+  Pure, 
+  InferTypeOpInterface, 
+  DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+  let summary = "Specify the clock of a clocked operation.";
+  let description = [{
+    Specifies the clock for a given clocked sequence or clocked property.
+    Note that these must be converted into a "clocked" type before being given 
+    a specific clock.
+  }];
 
+  let arguments = (ins
+    AnyClockType: $clock, 
+    PIRAnyClockedType:$input
+  );
+
+  let results = (outs
+    PIRAnyClockedType:$output
+  );
+
+  let assemblyFormat = [{
+    $clock `,` $input attr-dict `:` qualified(type($clock)) `,` qualified(type($input))
+  }];
+}
+
+def GlobalClockSampleOp : PIRInnerOp<"gclk_sample", [Pure]> {
+  let summary = "Samples the input with respect to the global clock.";
+  let description = [{
+    Samples a given input signal with respect to the global clock on a given 
+    clock edge. This is useful when encoding other clocks through their relation to the 
+    global clock.
+
+    Additionally, the two arguments of this operation are used to represent 
+    clocks that might have undefined traces, i.e. moments where the clocks 
+    evaluate to either `x` or `z`. 
+    These arguments are used as follows: 
+    
+      operand[0] | operand[1] | result
+      ----------------------------------
+            0    |     1      |    0
+            1    |     1      |    1
+            0    |     0      |    z
+            1    |     0      |    x
+
+    Operand[0] is referred to as "clock_value" as it carries the value of the 
+    clock, while operand[1] is referred to as "clock_defined" as it specifies 
+    whether the clock is currently in an undefined state.
+
+    Clock_defined can be omitted, in which case it is interpreted as a constant 1.
+  }];
+
+  let arguments = (ins
+    EventControlAttr:$edge,
+    I1:$clockValue,
+    Optional<I1>:$clockDefined
+  );
+
+  let results = (outs
+    I1:$result
+  );
+
+  let assemblyFormat = [{
+    $edge $clockValue (`,` $clockDefined^)? attr-dict
+  }];
+}
+
+def GlobalClockFutureOp : PIRInnerOp <"gclk_future", [Pure]> {
+  let summary = "Samples the value of the input at the next gobal time step.";
+  let description = [{
+    Samples the value of the input at the next gobal time step.
+    This allows us e.g. to model any clock in terms of the global clock.
+    Note that the three other global clock sampling methods can also be modeled using 
+    future sampling as follows:
+    ```mlir
+    %res = pir.glck_sample posedge %clk_v, %clk_d : i1 
+    
+    // is equivalent to:
+
+    %0 = comb.and bin %clk_v, %clk_d : i1
+    %true = hw.constant true
+    %1 = comb.xor bin %0, %true : i1
+    %2 = pir.gclk_future %0 : i1
+    %res = comb.and bin %2, %1 : i1
+
+    // -----
+
+    %res = pir.glck_sample negedge %clk_v, %clk_d : i1 
+    
+    // is equivalent to:
+
+    %true = hw.constant true
+    %n_clk_v = comb.xor bin %clk_v, %true : i1
+    %0 = comb.and bin %n_clk_v, %clk_d : i1
+    %1 = comb.xor bin %0, %true : i1
+    %2 = pir.gclk_future %0 : i1
+    %res = comb.and bin %2, %1 : i1
+
+    // -----
+
+    %res = pir.glck_sample edge %clk_v, %clk_d : i1 
+    
+    // is equivalent to:
+
+    %f0 = gclk_future %clk_v : i1
+    %f1 = gclk_future %clk_d : i1
+    %0 = comb.xor bin %clk_v, %f0 : i1
+    %1 = comb.xow bin %clk_d, %1 : i1
+    %res = comb.or bin %0, %1 : i1
+    ```  
+  }];
+
+  let arguments = (ins
+    I1:$input
+  );
+
+  let results = (outs
+    I1:$result
+  );
+
+  let assemblyFormat = [{
+    $input attr-dict
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Sequences
 //===----------------------------------------------------------------------===//
-
-
 
 
 //===----------------------------------------------------------------------===//

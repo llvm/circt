@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/PIR/PIREnums.h"
 #include "circt/Dialect/PIR/PIRTypes.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
@@ -245,4 +246,22 @@ ClockedSeqToClockedPropOp::canonicalize(ClockedSeqToClockedPropOp op,
     return success();
   }
   return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// Clocking Ops
+//===----------------------------------------------------------------------===//
+
+/// Result type is always the same as the input property/sequence
+LogicalResult
+ClockedOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
+                            ValueRange operands, DictionaryAttr attributes,
+                            PropertyRef properties, RegionRange regions,
+                            SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (isa<ClockedPropertyType>(operands[1].getType())) {
+    inferredReturnTypes.push_back(ClockedPropertyType::get(context));
+  } else {
+    inferredReturnTypes.push_back(ClockedSequenceType::get(context));
+  }
+  return success();
 }

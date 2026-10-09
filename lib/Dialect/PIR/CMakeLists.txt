@@ -13,7 +13,8 @@ add_circt_dialect_library(CIRCTPIR
   Support
 
   LINK_LIBS PUBLIC
-  CIRCTHW
+  CIRCTHW  
+  CIRCTSeq
   MLIRInferTypeOpInterface
   MLIRIR
 )
