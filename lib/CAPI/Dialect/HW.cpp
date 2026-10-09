@@ -45,6 +45,8 @@ bool hwTypeIsAValueType(MlirType type) { return isHWValueType(unwrap(type)); }
 
 bool hwTypeIsAArrayType(MlirType type) { return isa<ArrayType>(unwrap(type)); }
 
+MlirTypeID hwArrayTypeGetTypeID() { return wrap(ArrayType::getTypeID()); }
+
 MlirType hwArrayTypeGet(MlirType element, size_t size) {
   return wrap(ArrayType::get(unwrap(element), size));
 }
@@ -58,6 +60,8 @@ intptr_t hwArrayTypeGetSize(MlirType type) {
 }
 
 bool hwTypeIsAIntType(MlirType type) { return isa<IntType>(unwrap(type)); }
+
+MlirTypeID hwIntTypeGetTypeID() { return wrap(IntType::getTypeID()); }
 
 MlirType hwParamIntTypeGet(MlirAttribute parameter) {
   return wrap(IntType::get(cast<TypedAttr>(unwrap(parameter))));
@@ -77,9 +81,13 @@ MlirType hwInOutTypeGetElementType(MlirType type) {
 
 bool hwTypeIsAInOut(MlirType type) { return isa<InOutType>(unwrap(type)); }
 
+MlirTypeID hwInOutTypeGetTypeID() { return wrap(InOutType::getTypeID()); }
+
 bool hwTypeIsAModuleType(MlirType type) {
   return isa<ModuleType>(unwrap(type));
 }
+
+MlirTypeID hwModuleTypeGetTypeID() { return wrap(ModuleType::getTypeID()); }
 
 MlirType hwModuleTypeGet(MlirContext ctx, intptr_t numPorts,
                          HWModulePort const *ports) {
@@ -152,6 +160,8 @@ bool hwTypeIsAStructType(MlirType type) {
   return isa<StructType>(unwrap(type));
 }
 
+MlirTypeID hwStructTypeGetTypeID() { return wrap(StructType::getTypeID()); }
+
 MlirType hwStructTypeGet(MlirContext ctx, intptr_t numElements,
                          HWStructFieldInfo const *elements) {
   SmallVector<StructType::FieldInfo> fieldInfos;
@@ -191,6 +201,8 @@ HWStructFieldInfo hwStructTypeGetFieldNum(MlirType structType, unsigned idx) {
 }
 
 bool hwTypeIsAUnionType(MlirType type) { return isa<UnionType>(unwrap(type)); }
+
+MlirTypeID hwUnionTypeGetTypeID() { return wrap(UnionType::getTypeID()); }
 
 MlirType hwUnionTypeGet(MlirContext ctx, intptr_t numElements,
                         HWUnionFieldInfo const *elements) {
@@ -236,6 +248,10 @@ bool hwTypeIsATypeAliasType(MlirType type) {
   return isa<TypeAliasType>(unwrap(type));
 }
 
+MlirTypeID hwTypeAliasTypeGetTypeID() {
+  return wrap(TypeAliasType::getTypeID());
+}
+
 MlirType hwTypeAliasTypeGet(MlirStringRef cScope, MlirStringRef cName,
                             MlirType cInnerType) {
   StringRef scope = unwrap(cScope);
@@ -276,6 +292,8 @@ bool hwAttrIsAInnerSymAttr(MlirAttribute attr) {
   return isa<InnerSymAttr>(unwrap(attr));
 }
 
+MlirTypeID hwInnerSymAttrGetTypeID() { return wrap(InnerSymAttr::getTypeID()); }
+
 MlirAttribute hwInnerSymAttrGet(MlirAttribute symName) {
   return wrap(InnerSymAttr::get(cast<StringAttr>(unwrap(symName))));
 }
@@ -291,6 +309,8 @@ MlirAttribute hwInnerSymAttrGetSymName(MlirAttribute innerSymAttr) {
 bool hwAttrIsAInnerRefAttr(MlirAttribute attr) {
   return isa<InnerRefAttr>(unwrap(attr));
 }
+
+MlirTypeID hwInnerRefAttrGetTypeID() { return wrap(InnerRefAttr::getTypeID()); }
 
 MlirAttribute hwInnerRefAttrGet(MlirAttribute moduleName,
                                 MlirAttribute innerSym) {
@@ -309,6 +329,10 @@ MlirAttribute hwInnerRefAttrGetModule(MlirAttribute innerRefAttr) {
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclAttr(MlirAttribute attr) {
   return isa<ParamDeclAttr>(unwrap(attr));
+}
+
+MlirTypeID hwParamDeclAttrGetTypeID() {
+  return wrap(ParamDeclAttr::getTypeID());
 }
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGet(MlirStringRef cName,
                                                     MlirType cType,
@@ -332,6 +356,10 @@ MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclRefAttr(MlirAttribute attr) {
   return isa<ParamDeclRefAttr>(unwrap(attr));
 }
 
+MlirTypeID hwParamDeclRefAttrGetTypeID() {
+  return wrap(ParamDeclRefAttr::getTypeID());
+}
+
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclRefAttrGet(MlirContext ctx,
                                                        MlirStringRef cName) {
   auto name = StringAttr::get(unwrap(ctx), unwrap(cName));
@@ -349,6 +377,10 @@ MLIR_CAPI_EXPORTED MlirType hwParamDeclRefAttrGetType(MlirAttribute decl) {
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamVerbatimAttr(MlirAttribute attr) {
   return isa<ParamVerbatimAttr>(unwrap(attr));
 }
+
+MlirTypeID hwParamVerbatimAttrGetTypeID() {
+  return wrap(ParamVerbatimAttr::getTypeID());
+}
 MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text) {
   auto textAttr = cast<StringAttr>(unwrap(text));
   MLIRContext *ctx = textAttr.getContext();
@@ -358,6 +390,10 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text) {
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAOutputFileAttr(MlirAttribute attr) {
   return isa<OutputFileAttr>(unwrap(attr));
+}
+
+MlirTypeID hwOutputFileAttrGetTypeID() {
+  return wrap(OutputFileAttr::getTypeID());
 }
 MLIR_CAPI_EXPORTED MlirAttribute
 hwOutputFileGetFromFileName(MlirAttribute fileName, bool excludeFromFileList,
