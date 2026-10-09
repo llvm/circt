@@ -16,9 +16,12 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "mlir/TableGen/Operator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
+#include <type_traits>
+#include <utility>
 
 namespace circt {
 namespace tblgen {
@@ -50,7 +53,6 @@ public:
 
   FormatNode(Kind kind, llvm::SMLoc loc, StringRef desc)
       : kind(kind), loc(loc), desc(desc) {}
-  virtual ~FormatNode() = default;
 
   Kind getKind() const { return kind; }
 
@@ -270,13 +272,22 @@ public:
   /// \param op The MLIR TableGen operator being processed
   explicit ASTContext(mlir::tblgen::Operator &op) : op(op) {}
 
+  ~ASTContext() {
+    for (auto &entry : llvm::reverse(destructors))
+      entry.second(entry.first);
+  }
+
   /// Allocate and construct a format node using the internal allocator.
   /// \tparam T The type of node to create (must derive from FormatNode)
   /// \param args Arguments to forward to the node's constructor
   /// \return Pointer to the newly created node
   template <typename T, typename... Args>
   T *create(Args &&...args) {
-    return new (allocator.Allocate<T>()) T(std::forward<Args>(args)...);
+    auto *node = new (allocator.Allocate<T>()) T(std::forward<Args>(args)...);
+    if constexpr (!std::is_trivially_destructible_v<T>)
+      destructors.push_back(
+          {node, [](FormatNode *node) { static_cast<T *>(node)->~T(); }});
+    return node;
   }
 
   /// Add a node to the list of root nodes in the format.
@@ -292,6 +303,7 @@ public:
 
 private:
   llvm::BumpPtrAllocator allocator;
+  SmallVector<std::pair<FormatNode *, void (*)(FormatNode *)>> destructors;
   SmallVector<FormatNode *> rootNodes;
   mlir::tblgen::Operator &op;
 };
