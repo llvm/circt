@@ -311,4 +311,39 @@ def HWStringTypeImpl : HWType<"String"> {
   let mnemonic = "string";
 }
 
+//===----------------------------------------------------------------------===//
+// RefType - Reference to a signal for force/release operations
+//===----------------------------------------------------------------------===//
+
+def RefTypeImpl : HWType<"Ref"> {
+  let summary = "A reference to a signal elsewhere";
+  let description = [{
+    A reference type, such as `hw.ref<i32, true>` or `hw.ref<i8, false>`.
+
+    Used for remote reads and writes (force/release) of the wrapped type.
+
+    Parameterized over the referenced type and whether it's forceable.
+
+    Values of this type are used to capture dataflow paths for procedural
+    force/release operations, and do not represent a circuit element or entity.
+
+    When forceable=true, the reference supports force/release operations.
+    When forceable=false, it's read-only.
+  }];
+
+  let mnemonic = "ref";
+  let parameters = (ins "::mlir::Type":$type,
+                        "bool":$forceable);
+  let genVerifyDecl = 1;
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Type":$type,
+                                        CArg<"bool", "false">:$forceable), [{
+      return $_get(type.getContext(), type, forceable);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $type `,` $forceable `>`";
+}
+
 #endif // CIRCT_DIALECT_HW_HWTYPESIMPL_TD

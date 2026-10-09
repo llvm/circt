@@ -49,8 +49,11 @@ verifyInnerSymAttr(InnerSymAttr innerSym,
   return verifyInnerSymAttr(innerSym, {}, emitError);
 }
 
+class HWForceable;
+
 namespace detail {
 LogicalResult verifyInnerRefNamespace(Operation *op);
+LogicalResult verifyHWForceableOp(HWForceable op);
 } // namespace detail
 
 /// Classify operations that are InnerRefNamespace-like,
