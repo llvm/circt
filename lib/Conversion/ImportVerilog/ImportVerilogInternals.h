@@ -394,6 +394,12 @@ struct Context {
   LogicalResult
   convertPullGatePrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
+  FailureOr<moore::SVModuleOp>
+  convertUserDefinedPrimitiveDef(const slang::ast::PrimitiveSymbol &primitive);
+
+  LogicalResult convertUserDefinedPrimitiveInstance(
+      const slang::ast::PrimitiveInstanceSymbol &prim);
+
   LogicalResult convertThreeStateGatePrimitive(
       const slang::ast::PrimitiveInstanceSymbol &prim);
 

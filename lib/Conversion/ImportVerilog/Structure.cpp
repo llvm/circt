@@ -134,6 +134,11 @@ struct BaseVisitor {
     return success();
   }
 
+  // Handle UDP declarations.
+  LogicalResult visit(const slang::ast::PrimitiveSymbol &primitive) {
+    return context.convertUserDefinedPrimitiveDef(primitive);
+  }
+
   // Handle parameters.
   LogicalResult visit(const slang::ast::ParameterSymbol &param) {
     visitParameter(param);
@@ -2313,6 +2318,9 @@ LogicalResult Context::convertPrimitiveInstance(
   case slang::ast::PrimitiveSymbol::PrimitiveKind::Fixed:
     return this->convertFixedPrimitive(prim);
     break;
+  case slang::ast::PrimitiveSymbol::PrimitiveKind::UserDefined:
+    return this->convertUserDefinedPrimitiveInstance(prim);
+    break;
   default:
     return mlir::emitError(convertLocation(prim.location))
            << "unsupported instance of primitive `" << prim.primitiveType.name
@@ -2810,6 +2818,182 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
 
   return assignPrimOutputWithDelay(outputVal, outerCond.getResult(),
                                    prim.getDelay(), loc);
+}
+
+FailureOr<moore::SVModuleOp> Context::convertUserDefinedPrimitiveDef(
+    const slang::ast::PrimitiveSymbol &primitive) {
+  // Return the existing module if this UDP was already converted.
+  if (auto moduleOp = symbolTable.lookup<moore::SVModuleOp>(primitive.name))
+    return moduleOp;
+
+  // Sequential UDPs are not yet supported.
+  auto loc = convertLocation(primitive.location);
+  if (primitive.isSequential)
+    return mlir::emitError(loc)
+           << "sequential user-defined primitives are not supported yet";
+  assert(primitive.ports.size() >= 2 &&
+         "user-defined primitives must have at least 2 ports");
+
+  // Protect the caller's insertion point while creating the UDP module and its
+  // body.
+  OpBuilder::InsertionGuard g(builder);
+
+  // UDP ports: the first port is output, the remaining ports are inputs.
+  auto l1Ty = moore::IntType::getLogic(getContext(), 1);
+  SmallVector<hw::ModulePort> modulePorts;
+  modulePorts.reserve(primitive.ports.size());
+  modulePorts.push_back({builder.getStringAttr(primitive.ports[0]->name), l1Ty,
+                         hw::ModulePort::Output});
+  for (const auto *port : primitive.ports.subspan(1))
+    modulePorts.push_back(
+        {builder.getStringAttr(port->name), l1Ty, hw::ModulePort::Input});
+
+  // Pick an insertion point according to the source file location.
+  auto key = LocationKey::get(primitive.location, sourceManager);
+  auto upperIt = orderedRootOps.upper_bound(key);
+  if (upperIt == orderedRootOps.end())
+    builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  else
+    builder.setInsertionPoint(upperIt->second);
+  auto moduleOp =
+      moore::SVModuleOp::create(builder, loc, primitive.name,
+                                hw::ModuleType::get(getContext(), modulePorts));
+  orderedRootOps.insert(upperIt, {key, moduleOp});
+  symbolTable.insert(moduleOp);
+
+  auto *block = builder.createBlock(&moduleOp.getBodyRegion());
+  for (const auto *port : primitive.ports.subspan(1))
+    block->addArgument(l1Ty, convertLocation(port->location));
+
+  // Auxiliary functions for UDP sum-of-products conversion.
+  // Step 1 (parse_input_row): parse the input row into normalized level
+  // characters. Placeholder to support sequential UDPs.
+  auto inputVals = block->getArguments();
+  size_t numInputs = inputVals.size();
+  auto parseInputRow = [&](StringRef inputs, SmallVectorImpl<char> &levels) {
+    levels.clear();
+    levels.reserve(inputs.size());
+    for (char c : inputs)
+      levels.push_back(llvm::toLower(c));
+  };
+  // Step 2 (skip_unsupported_rows): check whether a table row is invalid or
+  // non-productive and should be skipped. Currently, only supporting
+  // combinational UDPs with 0/1/?/b inputs.
+  auto skipUnsupportedRow =
+      [&](const slang::ast::PrimitiveSymbol::TableEntry &entry,
+          ArrayRef<char> levels) {
+        if (entry.isEdgeSensitive || entry.output != '1' ||
+            levels.size() != numInputs)
+          return true;
+        for (char c : levels) {
+          if (c != '0' && c != '1' && c != '?' && c != 'b')
+            return true;
+        }
+        return false;
+      };
+  // Step 3 (build_productive_term): build the productive AND-term for this row.
+  SmallVector<Value> notVars(numInputs, Value{});
+  auto getNotVar = [&](size_t idx) -> Value {
+    if (!notVars[idx])
+      notVars[idx] = moore::NotOp::create(builder, loc, inputVals[idx]);
+    return notVars[idx];
+  };
+  auto buildProductiveTerm = [&](ArrayRef<char> levels) -> Value {
+    Value term;
+    for (size_t i = 0; i < numInputs; ++i) {
+      char c = levels[i];
+      Value lit;
+      if (c == '1')
+        lit = inputVals[i];
+      else if (c == '0')
+        lit = getNotVar(i);
+      else
+        continue; // '?' or 'b' don't care
+
+      term = term ? moore::AndOp::create(builder, loc, term, lit) : lit;
+    }
+    return term;
+  };
+
+  // Construct Disjunctive Normal Form (sum-of-products) boolean logic from
+  // the UDP truth table.
+  Value sum;
+  SmallVector<char> levels;
+  for (const auto &entry : primitive.table) {
+    // 1. parse_input_row
+    parseInputRow(entry.inputs, levels);
+    // 2. skip_unsupported_rows
+    if (skipUnsupportedRow(entry, levels))
+      continue;
+    // 3. build_productive_term
+    Value term = buildProductiveTerm(levels);
+    if (!term) {
+      // All inputs were don't cares ('?'): row unconditionally evaluates to 1.
+      sum = moore::ConstantOp::create(builder, loc, l1Ty, 1);
+      break;
+    }
+    sum = sum ? moore::OrOp::create(builder, loc, sum, term) : term;
+  }
+  if (!sum)
+    sum = moore::ConstantOp::create(builder, loc, l1Ty, 0);
+
+  moore::OutputOp::create(builder, loc, sum);
+  return moduleOp;
+}
+
+LogicalResult Context::convertUserDefinedPrimitiveInstance(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  auto loc = convertLocation(prim.location);
+  auto portConns = prim.getPortConnections();
+  assert(portConns.size() >= 2 &&
+         "user-defined primitives should have at least 2 ports");
+
+  size_t numInputs = portConns.size() - 1;
+
+  // Output port is the first connection.
+  auto &outputConn =
+      portConns[0]->as<slang::ast::AssignmentExpression>().left();
+  auto outputVal = this->convertLvalueExpression(outputConn);
+  if (!outputVal)
+    return failure();
+
+  // UDP allows multiple 1-bit inputs.
+  auto l1Ty = moore::IntType::getLogic(getContext(), 1);
+  SmallVector<Value> inputVals;
+  inputVals.reserve(numInputs);
+  for (const auto *inputConn : portConns.subspan(1, numInputs)) {
+    auto rawVal = convertRvalueExpression(*inputConn);
+    if (!rawVal)
+      return failure();
+    auto converted = materializeConversion(l1Ty, rawVal, false, loc);
+    if (!converted)
+      return failure();
+    inputVals.push_back(converted);
+  }
+
+  // Look up or convert the UDP definition into a moore.module and instantiate
+  // it.
+  auto moduleOpOrFailure = convertUserDefinedPrimitiveDef(prim.primitiveType);
+  if (failed(moduleOpOrFailure))
+    return failure();
+  auto moduleOp = *moduleOpOrFailure;
+  auto moduleType = moduleOp.getModuleType();
+  auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
+  auto outputNames = builder.getArrayAttr(moduleType.getOutputNames());
+  auto inst = moore::InstanceOp::create(
+      builder, loc, moduleType.getOutputTypes(),
+      builder.getStringAttr(prim.name),
+      FlatSymbolRefAttr::get(moduleOp.getSymNameAttr()), inputVals, inputNames,
+      outputNames);
+
+  // Connect output port and emit moore.assign or moore.delayed_assign.
+  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  Value converted =
+      materializeConversion(dstType, inst.getResult(0), false, loc);
+  if (!converted)
+    return failure();
+
+  return assignPrimOutputWithDelay(outputVal, converted, prim.getDelay(), loc);
 }
 
 namespace {
