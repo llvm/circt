@@ -30,34 +30,6 @@ class I8EnumAttr<string name, string summary, list<I8EnumAttrCase> cases> :
 }
 
 //----------------------------------------------------------------------------//
-// Global Clock Sampling Strategies
-//----------------------------------------------------------------------------//
-
-/// gclk :: 0 --> 1
-def RisingGlobalClock : I8EnumAttrCase<"RisingGlobalClock", 0, "rising">;
-
-/// gclk :: 1 --> 0
-def FallingGlobalClock : I8EnumAttrCase<"FallingGlobalClock", 1, "falling">;
-
-/// gclk :: b --> ¬b
-def ChangingGlobalClock : I8EnumAttrCase<"ChangingGlobalClock", 2, "changing">;
-
-/// Value at next global clock tick
-def FutureGlobalClock : I8EnumAttrCase<"FutureGlobalClock", 3, "future">;
-
-/// Sampling strategy used when refering to the global clock
-def GClkSamplingAttr : I8EnumAttr<
-  "GClkSamplingAttr", 
-  "Strategy for sampling the global clock",
-  [
-    RisingGlobalClock,
-    FallingGlobalClock,
-    ChangingGlobalClock,
-    FutureGlobalClock
-  ]
->;
-
-//----------------------------------------------------------------------------//
 // Property Scope (always vs. initial)
 //----------------------------------------------------------------------------//
 

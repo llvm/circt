@@ -14,6 +14,7 @@ include "circt/Dialect/PIR/PIRDialect.td"
 include "circt/Dialect/PIR/PIRTypes.td"
 include "circt/Dialect/PIR/PIREnums.td"
 include "circt/Dialect/Seq/SeqTypes.td"
+include "circt/Dialect/HW/HWEnums.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
@@ -261,15 +262,9 @@ def ClockedOp : PIRInnerOp<"clocked", [
 def GlobalClockSampleOp : PIRInnerOp<"gclk_sample", [Pure]> {
   let summary = "Samples the input with respect to the global clock.";
   let description = [{
-    Samples a given input signal with respect to the global clock. 
-    This is useful when encoding other clocks through their relation to the 
+    Samples a given input signal with respect to the global clock on a given 
+    clock edge. This is useful when encoding other clocks through their relation to the 
     global clock.
-
-    Follows one of 4 sampling strategies (on each global clock tick):
-      - Risging: 1 if the input goes from 0 to 1.
-      - Falling: 1 if the input goes from 1 to 0.
-      - Changing: 1 if the input inverts its value, i.e. v --> ¬v.
-      - Future: Samples whatever the next value of the input will be.
 
     Additionally, the two arguments of this operation are used to represent 
     clocks that might have undefined traces, i.e. moments where the clocks 
@@ -291,17 +286,75 @@ def GlobalClockSampleOp : PIRInnerOp<"gclk_sample", [Pure]> {
   }];
 
   let arguments = (ins
-    GClkSamplingAttr:$samplingAttr,
+    EventControlAttr:$edge,
     I1:$clockValue,
     Optional<I1>:$clockDefined
   );
 
   let results = (outs
-    PIRClockType:$result
+    I1:$result
   );
 
   let assemblyFormat = [{
-    $samplingAttr $clockValue (`,` $clockDefined^)? attr-dict
+    $edge $clockValue (`,` $clockDefined^)? attr-dict
+  }];
+}
+
+def GlobalClockFutureOp : PIRInnerOp <"gclk_future", [Pure]> {
+  let summary = "Samples the value of the input at the next gobal time step.";
+  let description = [{
+    Samples the value of the input at the next gobal time step.
+    This allows us e.g. to model any clock in terms of the global clock.
+    Note that the three other global clock sampling methods can also be modeled using 
+    future sampling as follows:
+    ```mlir
+    %res = pir.glck_sample posedge %clk_v, %clk_d : i1 
+    
+    // is equivalent to:
+
+    %0 = comb.and bin %clk_v, %clk_d : i1
+    %true = hw.constant true
+    %1 = comb.xor bin %0, %true : i1
+    %2 = pir.gclk_future %0 : i1
+    %res = comb.and bin %2, %1 : i1
+
+    // -----
+
+    %res = pir.glck_sample negedge %clk_v, %clk_d : i1 
+    
+    // is equivalent to:
+
+    %true = hw.constant true
+    %n_clk_v = comb.xor bin %clk_v, %true : i1
+    %0 = comb.and bin %n_clk_v, %clk_d : i1
+    %1 = comb.xor bin %0, %true : i1
+    %2 = pir.gclk_future %0 : i1
+    %res = comb.and bin %2, %1 : i1
+
+    // -----
+
+    %res = pir.glck_sample edge %clk_v, %clk_d : i1 
+    
+    // is equivalent to:
+
+    %f0 = gclk_future %clk_v : i1
+    %f1 = gclk_future %clk_d : i1
+    %0 = comb.xor bin %clk_v, %f0 : i1
+    %1 = comb.xow bin %clk_d, %1 : i1
+    %res = comb.or bin %0, %1 : i1
+    ```  
+  }];
+
+  let arguments = (ins
+    I1:$input
+  );
+
+  let results = (outs
+    I1:$result
+  );
+
+  let assemblyFormat = [{
+    $input attr-dict
   }];
 }
 

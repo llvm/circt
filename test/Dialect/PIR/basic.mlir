@@ -115,23 +115,22 @@ pir.cell @test {} {
   // Clocking Ops
   //===----------------------------------------------------------------------===//
 
-  // CHECK: {{%.+}} = pir.gclk_sample rising %clk_val, %clk_def
-  // CHECK: {{%.+}} = pir.gclk_sample falling %clk_val, %clk_def
-  // CHECK: {{%.+}} = pir.gclk_sample changing %clk_val, %clk_def
-  // CHECK: {{%.+}} = pir.gclk_sample future %clk_val, %clk_def
-  %gclk_clk_r = pir.gclk_sample rising %clk_val, %clk_def
-  %gclk_clk_f = pir.gclk_sample falling %clk_val, %clk_def 
-  %gclk_clk_c = pir.gclk_sample changing %clk_val, %clk_def 
-  %gclk_clk_future = pir.gclk_sample future %clk_val, %clk_def
+  // CHECK: {{%.+}} = pir.gclk_sample posedge %clk_val, %clk_def 
+  // CHECK: {{%.+}} = pir.gclk_sample negedge %clk_val, %clk_def 
+  // CHECK: {{%.+}} = pir.gclk_sample edge %clk_val, %clk_def 
+  %gclk_clk_r = pir.gclk_sample posedge %clk_val, %clk_def 
+  %gclk_clk_f = pir.gclk_sample negedge %clk_val, %clk_def 
+  %gclk_clk_c = pir.gclk_sample edge %clk_val, %clk_def 
 
-  // CHECK: {{%.+}} = pir.gclk_sample rising %clk_val
-  // CHECK: {{%.+}} = pir.gclk_sample falling %clk_val
-  // CHECK: {{%.+}} = pir.gclk_sample changing %clk_val
-  // CHECK: {{%.+}} = pir.gclk_sample future %clk_val
-  %gclk_clk_r_ = pir.gclk_sample rising %clk_val
-  %gclk_clk_f_ = pir.gclk_sample falling %clk_val
-  %gclk_clk_c_ = pir.gclk_sample changing %clk_val
-  %gclk_clk_future_ = pir.gclk_sample future %clk_val
+  // CHECK: {{%.+}} = pir.gclk_sample posedge %clk_val 
+  // CHECK: {{%.+}} = pir.gclk_sample negedge %clk_val 
+  // CHECK: {{%.+}} = pir.gclk_sample edge %clk_val 
+  %gclk_clk_r_ = pir.gclk_sample posedge %clk_val 
+  %gclk_clk_f_ = pir.gclk_sample negedge %clk_val 
+  %gclk_clk_c_ = pir.gclk_sample edge %clk_val 
+
+  // CHECK: {{%.+}} = pir.gclk_future %clk_val
+  %gclk_future = pir.gclk_future %clk_val
 
   // CHECK: {{%.+}} = pir.clocked %clock, %clk_p : !seq.clock, !pir.clocked_property
   // CHECK: {{%.+}} = pir.clocked %clock, %clk_s : !seq.clock, !pir.clocked_sequence
@@ -142,10 +141,4 @@ pir.cell @test {} {
   // CHECK: {{%.+}} = pir.clocked %clk_val, %clk_s : i1, !pir.clocked_sequence
   %clocked_i1_clk_p = pir.clocked %clk_val, %clk_p : i1, !pir.clocked_property
   %clocked_i1_clk_s = pir.clocked %clk_val, %clk_s : i1, !pir.clocked_sequence
-
-  // CHECK: {{%.+}} = pir.clocked {{%.+}}, %clk_p : !pir.clock, !pir.clocked_property
-  // CHECK: {{%.+}} = pir.clocked {{%.+}}, %clk_s : !pir.clock, !pir.clocked_sequence
-  %clocked_pir_clk_p = pir.clocked %gclk_clk_r, %clk_p : !pir.clock, !pir.clocked_property
-  %clocked_pir_clk_s = pir.clocked %gclk_clk_r, %clk_s : !pir.clock, !pir.clocked_sequence
-
 }
