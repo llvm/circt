@@ -49,6 +49,24 @@ firrtl.circuit "Prop" {
     // CHECK: %bar.out = firrtl.wire
   }
 
+  // Regression test for https://github.com/llvm/circt/issues/11063: a
+  // zero-width instance result is dropped from the scalarized instance, but a
+  // non-connect user (here sizeof) must keep a value of the original type.
+  firrtl.module private @ZeroWidthSrc(out %out: !firrtl.bundle<nested: bundle<zero: vector<uint<1>, 0>>>) attributes {convention = #firrtl<convention scalarized>} {
+  }
+  // CHECK-LABEL: firrtl.module private @ZeroWidthUser
+  firrtl.module private @ZeroWidthUser(out %size: !firrtl.uint<32>) attributes {convention = #firrtl<convention scalarized>} {
+    // The new instance is cloned first, then the bounce wire is inserted at
+    // the same point, so the wire follows the instance and precedes the
+    // untouched sizeof.
+    // CHECK:      firrtl.instance child @ZeroWidthSrc()
+    // CHECK-NEXT: %[[W:.+]] = firrtl.wire : !firrtl.bundle<nested: bundle<zero: vector<uint<1>, 0>>>
+    // CHECK-NEXT: firrtl.int.sizeof %[[W]]
+    %child_out = firrtl.instance child @ZeroWidthSrc(out out: !firrtl.bundle<nested: bundle<zero: vector<uint<1>, 0>>>)
+    %0 = firrtl.int.sizeof %child_out : (!firrtl.bundle<nested: bundle<zero: vector<uint<1>, 0>>>) -> !firrtl.uint<32>
+    firrtl.matchingconnect %size, %0 : !firrtl.uint<32>
+  }
+
 }
 
 // Instances should preserve their location.
