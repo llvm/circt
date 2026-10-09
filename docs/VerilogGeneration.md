@@ -129,6 +129,10 @@ The current set of "style" Lowering Options is:
  * `emitWireInPorts` (default=`false`). Emits `wire` in port lists rather than
    relying on 'default_nettype'. For instance, instead of `input a` this option
    would emit that port as `input wire a`.
+ * `defaultToVarPorts` (default=`false`). Emits `var logic` in the port lists
+   rather than nothing, i.e., default plain (non-handle) ports to a variable
+   (`input var logic ...`, `output var logic ...`) instead of the implicit
+   net-kind default.
  * `emitBindComments` (default=`false`). Emits a comment wherever an instance or
    interface instance is not printed, because it was emitted as a bind elsewhere.
  * `omitVersionComment` (default=`false`). Avoids emitting a version comment

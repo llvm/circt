@@ -160,6 +160,11 @@ struct LoweringOptions {
   /// where `default_nettype is not set to wire.
   bool emitWireInPorts = false;
 
+  /// If true, emit `var logic` in the port lists rather than nothing, i.e.,
+  /// default plain (non-handle) ports to a variable (`input var logic ...`,
+  /// `output var logic ...`) instead of the implicit net-kind default.
+  bool defaultToVarPorts = false;
+
   /// If true, emit a comment wherever an instance wasn't printed, because
   /// it's emitted elsewhere as a bind.
   bool emitBindComments = false;

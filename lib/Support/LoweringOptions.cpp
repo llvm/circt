@@ -134,6 +134,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       }
     } else if (option == "emitWireInPorts") {
       emitWireInPorts = true;
+    } else if (option == "defaultToVarPorts") {
+      defaultToVarPorts = true;
     } else if (option == "emitBindComments") {
       emitBindComments = true;
     } else if (option == "omitVersionComment") {
@@ -205,6 +207,8 @@ std::string LoweringOptions::toString() const {
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
   if (emitWireInPorts)
     options += "emitWireInPorts,";
+  if (defaultToVarPorts)
+    options += "defaultToVarPorts,";
   if (emitBindComments)
     options += "emitBindComments,";
   if (omitVersionComment)
