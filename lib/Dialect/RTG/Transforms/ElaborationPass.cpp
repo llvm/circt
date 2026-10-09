@@ -40,7 +40,6 @@ namespace rtg {
 using namespace mlir;
 using namespace circt;
 using namespace circt::rtg;
-using llvm::MapVector;
 
 #define DEBUG_TYPE "rtg-elaboration"
 
