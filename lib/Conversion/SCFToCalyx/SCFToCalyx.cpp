@@ -29,8 +29,11 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/BinaryFormat/MsgPackReader.h"
 #include "llvm/Support/LogicalResult.h"
+#include "llvm/Support/NativeFormatting.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -38,6 +41,7 @@
 #include <fstream>
 
 #include <locale>
+#include <mlir/IR/BuiltinAttributes.h>
 #include <numeric>
 #include <variant>
 
@@ -1301,10 +1305,23 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
       rewriter, allocOp.getLoc(), componentState.getUniqueName("mem"),
       memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
 
+  auto componentOp = componentState.getComponentOp();
+
   // Externalize memories conditionally (only in the top-level component because
   // Calyx compiler requires it as a well-formness check).
-  memoryOp->setAttr("external",
-                    IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
+  if (componentOp->hasAttr("toplevel")) {
+    // do nothing to mean ref.
+    // memoryOp->setAttr("ref");
+
+    /*memoryOp->setAttr(
+        "external", IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
+
+    */
+  } else {
+    memoryOp->setAttr(
+        "external", IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 0)));
+  }
+
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          calyx::MemoryInterface(memoryOp));
 
@@ -1335,22 +1352,24 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
         SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.getNameAttr()));
     // Flatten the values in the attribute
     auto cstAttr = llvm::dyn_cast_or_null<DenseElementsAttr>(
-        globalOp.getConstantInitValue());
-    int sizeCount = 0;
-    for (auto attr : cstAttr.template getValues<Attribute>()) {
-      assert((isa<mlir::FloatAttr, mlir::IntegerAttr>(attr)) &&
-             "memory attributes must be float or int");
-      if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr)) {
-        flattenedVals[sizeCount++] =
-            bit_cast<uint64_t>(fltAttr.getValueAsDouble());
-      } else {
-        auto intAttr = dyn_cast<mlir::IntegerAttr>(attr);
-        APInt value = intAttr.getValue();
-        flattenedVals[sizeCount++] = *value.getRawData();
+        globalOp.getInitialValueAttr());
+    if (cstAttr) {
+      int sizeCount = 0;
+      for (auto attr : cstAttr.template getValues<Attribute>()) {
+        assert((isa<mlir::FloatAttr, mlir::IntegerAttr>(attr)) &&
+               "memory attributes must be float or int");
+        if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr)) {
+          flattenedVals[sizeCount++] =
+              bit_cast<uint64_t>(fltAttr.getValueAsDouble());
+        } else {
+          auto intAttr = dyn_cast<mlir::IntegerAttr>(attr);
+          APInt value = intAttr.getValue();
+          flattenedVals[sizeCount++] = *value.getRawData();
+        }
       }
-    }
 
-    rewriter.eraseOp(globalOp);
+      rewriter.eraseOp(globalOp);
+    }
   }
 
   llvm::json::Array result;
