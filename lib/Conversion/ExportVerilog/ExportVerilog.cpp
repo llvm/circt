@@ -6745,28 +6745,29 @@ void ModuleEmitter::emitPortList(Operation *module,
       // Emit the port direction and optional wire keyword.
       auto thisPortInfo = portInfo.at(portIdx);
       auto thisPortDirection = thisPortInfo.dir;
-      size_t startOfNamePos = (hasOutputs ? 7 : 6) +
-                              (state.options.emitWireInPorts ? 5 : 0) +
-                              maxTypeWidth;
+      bool isInOut = isa<InOutType, sv::NetType>(portType);
+      StringRef direction;
+      if (isInOut) {
+        direction = hasOutputs ? "inout  " : "inout ";
+      } else {
+        switch (thisPortDirection) {
+        case ModulePort::Direction::Output:
+          direction = "output ";
+          break;
+        case ModulePort::Direction::Input:
+          direction = hasOutputs ? "input  " : "input ";
+          break;
+        }
+      }
+      StringRef wire = state.options.emitWireInPorts ? "wire " : "";
+      size_t startOfNamePos = direction.size() + wire.size() + maxTypeWidth;
       // Modport-typed ports (e.g., MyBundle.sink) already encode their
       // direction in the interface modport definition, so we suppress the
       // direction and wire keywords for them.
-      bool isInOut = isa<InOutType, sv::NetType>(portType);
       if (!isa<ModportType>(portType)) {
-        if (isInOut) {
-          ps << (hasOutputs ? "inout  " : "inout ");
-        } else {
-          switch (thisPortDirection) {
-          case ModulePort::Direction::Output:
-            ps << "output ";
-            break;
-          case ModulePort::Direction::Input:
-            ps << (hasOutputs ? "input  " : "input ");
-            break;
-          }
-        }
-        if (state.options.emitWireInPorts)
-          ps << "wire ";
+        ps << direction;
+        if (!wire.empty())
+          ps << wire;
         if (!portTypeStrings[portIdx].empty())
           ps << portTypeStrings[portIdx];
         if (portTypeStrings[portIdx].size() < maxTypeWidth)
