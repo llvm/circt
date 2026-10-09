@@ -100,6 +100,8 @@ struct Loop {
   Loop(unsigned loopId, CFGLoop &cfgLoop) : loopId(loopId), cfgLoop(cfgLoop) {}
   bool failMatch(const Twine &msg) const;
   bool match();
+  bool matchExit(BlockOperand *edge);
+  bool routeLiveOutsThroughArguments();
   void unroll(CFGLoopInfo &cfgLoopInfo);
 
   /// A numeric identifier for debugging purposes.
@@ -116,6 +118,9 @@ struct Loop {
   Value indVar;
   /// The updated induction variable passed into the next loop iteration.
   Value indVarNext;
+  /// Whether the exit condition tests the updated induction variable (a
+  /// `do ... while` loop) instead of the header block argument.
+  bool comparesNext = false;
   /// The continuation predicate. The loop continues until the induction
   /// variable compared against the end bound no longer matches this predicate.
   comb::ICmpPredicate predicate;
@@ -145,23 +150,190 @@ bool Loop::failMatch(const Twine &msg) const {
   return false;
 }
 
+/// Evaluate a comparison predicate on two constants. Returns `std::nullopt` for
+/// the four-valued predicates, which never control a loop we unroll.
+static std::optional<bool> evaluatePredicate(comb::ICmpPredicate predicate,
+                                             const APInt &lhs,
+                                             const APInt &rhs) {
+  switch (predicate) {
+  case comb::ICmpPredicate::eq:
+    return lhs == rhs;
+  case comb::ICmpPredicate::ne:
+    return lhs != rhs;
+  case comb::ICmpPredicate::slt:
+    return lhs.slt(rhs);
+  case comb::ICmpPredicate::sle:
+    return lhs.sle(rhs);
+  case comb::ICmpPredicate::sgt:
+    return lhs.sgt(rhs);
+  case comb::ICmpPredicate::sge:
+    return lhs.sge(rhs);
+  case comb::ICmpPredicate::ult:
+    return lhs.ult(rhs);
+  case comb::ICmpPredicate::ule:
+    return lhs.ule(rhs);
+  case comb::ICmpPredicate::ugt:
+    return lhs.ugt(rhs);
+  case comb::ICmpPredicate::uge:
+    return lhs.uge(rhs);
+  default:
+    return std::nullopt;
+  }
+}
+
+/// The largest number of iterations the unroller copies a loop body for.
+static constexpr unsigned kMaxTripCount = 1024;
+
 /// Check that the loop matches the specific pattern we understand, and extract
 /// the loop condition and induction variable.
+///
+/// The loop may have more than one exit (a `break`, or a `return` from a
+/// function inlined into the process): exactly one of them must be the
+/// counting exit that compares the induction variable against a constant, and
+/// the others stay in every unrolled copy of the body as ordinary branches out
+/// of the loop. Such early exits make the exit blocks reachable from every
+/// copy, so the loop's values must leave it only through branch operands
+/// (see routeLiveOutsThroughArguments).
 bool Loop::match() {
-  // Ensure that there is a unique exit point and condition for the loop.
   SmallVector<BlockOperand *> exits;
   for (auto *block : cfgLoop.getBlocks())
     for (auto &edge : block->getTerminator()->getBlockOperands())
       if (!cfgLoop.contains(edge.get()))
         exits.push_back(&edge);
-  if (exits.size() != 1)
-    return failMatch("multiple exits");
-  exitEdge = exits.back();
+  if (exits.empty())
+    return failMatch("no exit");
 
-  // The terminator doing the exit must be a conditional branch.
+  // A single exit may be anywhere in the loop. With several, the counting exit
+  // must be in the header, which every iteration runs: that is where a `for`
+  // loop tests its bound, and a `break` leaves through a later block. An exit
+  // test that an iteration can skip would make the trip count wrong.
+  if (exits.size() == 1)
+    return matchExit(exits.front());
+  auto *header = cfgLoop.getHeader();
+  bool found = false;
+  for (auto *edge : exits)
+    if (edge->getOwner()->getBlock() == header && matchExit(edge)) {
+      found = true;
+      break;
+    }
+  if (!found)
+    return failMatch("no counting exit in the header of a loop with several "
+                     "exits");
+  if (!routeLiveOutsThroughArguments())
+    return failMatch("a value of the loop is used after it where it cannot be "
+                     "passed as a block argument");
+  return true;
+}
+
+/// Make every use of a loop value outside the loop go through a block
+/// argument. Unrolling a loop with several exits clones the exiting blocks, so
+/// a block after the loop gets one predecessor per copy and a loop value it
+/// uses directly would no longer dominate it. A `break` block (outside the
+/// loop, entered from one loop block) commonly reads the induction variable;
+/// such a block, and any chain of single-predecessor blocks after it, gets the
+/// value as a new argument from its predecessor instead; so does a block whose
+/// predecessors are all in the loop (where a `break` from an inner loop joins
+/// its normal exit). A use in a block also entered from outside the loop
+/// cannot be rewritten this way and fails the match. The rewrite does not
+/// change what the region computes, so a failure part-way leaves valid,
+/// equivalent IR.
+bool Loop::routeLiveOutsThroughArguments() {
+  Region *region = cfgLoop.getHeader()->getParent();
+
+  // A header argument that the loop passes back unchanged and that enters with
+  // a single value is that value. Replacing it keeps a use after the loop (a
+  // variable the loop does not write, read where the exits merge) from
+  // counting as a loop value.
+  auto *header = cfgLoop.getHeader();
+  for (auto arg : header->getArguments()) {
+    Value incoming;
+    bool invariant = true;
+    for (auto &pred : header->getUses()) {
+      auto branch = dyn_cast<BranchOpInterface>(pred.getOwner());
+      if (!branch) {
+        invariant = false;
+        break;
+      }
+      Value value = branch.getSuccessorOperands(
+          pred.getOperandNumber())[arg.getArgNumber()];
+      if (value == arg)
+        continue;
+      if (!value || (incoming && incoming != value)) {
+        invariant = false;
+        break;
+      }
+      incoming = value;
+    }
+    if (invariant && incoming)
+      arg.replaceAllUsesWith(incoming);
+  }
+
+  SmallVector<Value> worklist;
+  for (auto *block : cfgLoop.getBlocks()) {
+    for (auto arg : block->getArguments())
+      worklist.push_back(arg);
+    block->walk([&](Operation *op) {
+      for (auto result : op->getResults())
+        worklist.push_back(result);
+    });
+  }
+  unsigned budget = 100000;
+  while (!worklist.empty()) {
+    Value value = worklist.pop_back_val();
+    for (auto &use : value.getUses()) {
+      auto *block =
+          region->findAncestorBlockInRegion(*use.getOwner()->getBlock());
+      if (!block)
+        return false;
+      if (cfgLoop.contains(block))
+        continue;
+      // The block must be entered by a single edge, or only from inside the
+      // loop: the value then dominates every predecessor (it dominated the
+      // block), so each edge can pass it.
+      if (block->use_empty() || --budget == 0)
+        return false;
+      SmallVector<std::pair<BranchOpInterface, unsigned>> edges;
+      for (auto &edge : block->getUses()) {
+        auto branch = dyn_cast<BranchOpInterface>(edge.getOwner());
+        auto *pred = edge.getOwner()->getBlock();
+        if (!branch || pred == block ||
+            (!block->hasOneUse() && !cfgLoop.contains(pred)))
+          return false;
+        edges.push_back({branch, edge.getOperandNumber()});
+      }
+      auto arg = block->addArgument(value.getType(), value.getLoc());
+      value.replaceUsesWithIf(arg, [&](OpOperand &other) {
+        return region->findAncestorBlockInRegion(
+                   *other.getOwner()->getBlock()) == block;
+      });
+      for (auto [branch, index] : edges)
+        branch.getSuccessorOperands(index).append(value);
+      // The value is now used by the predecessor's branch; if that block is
+      // outside the loop too, the next round moves the use up once more.
+      worklist.push_back(value);
+      break;
+    }
+  }
+  return true;
+}
+
+/// Check whether `edge` is a counting exit: a conditional branch on a
+/// comparison of a header block argument against a constant, where the argument
+/// starts at a constant and advances by a constant step. Compute the trip count
+/// by stepping the induction variable from its initial value.
+bool Loop::matchExit(BlockOperand *edge) {
+  exitEdge = edge;
+  indVarNext = {};
+  comparesNext = false;
+
+  // The terminator doing the exit must be a conditional branch whose other
+  // successor stays in the loop.
   auto exitBranch = dyn_cast<cf::CondBranchOp>(exitEdge->getOwner());
   if (!exitBranch)
     return failMatch("unsupported exit branch");
+  if (!cfgLoop.contains(
+          exitBranch->getSuccessor(1 - exitEdge->getOperandNumber())))
+    return failMatch("both successors of the exit branch leave the loop");
   exitCondition = exitBranch.getCondition();
   exitInverted = exitEdge->getOperandNumber() == 1;
 
@@ -187,8 +359,19 @@ bool Loop::match() {
   auto *header = cfgLoop.getHeader();
   auto *latch = cfgLoop.getLoopLatch();
   auto indVarArg = dyn_cast<BlockArgument>(indVar);
+  if (!indVarArg) {
+    // A `do ... while` loop tests the stepped value, `i + step < bound`; the
+    // add is checked against the back-edge value below.
+    if (auto addOp = indVar.getDefiningOp<comb::AddOp>();
+        addOp && addOp.getNumOperands() == 2) {
+      indVarArg = dyn_cast<BlockArgument>(addOp.getOperand(0));
+      comparesNext = true;
+    }
+  }
   if (!indVarArg || indVarArg.getOwner() != header)
     return failMatch("induction variable is not a header block argument");
+  Value compared = indVar;
+  indVar = indVarArg;
   IntegerAttr beginBoundAttr;
   for (auto &pred : header->getUses()) {
     auto branchOp = dyn_cast<BranchOpInterface>(pred.getOwner());
@@ -212,57 +395,56 @@ bool Loop::match() {
     return failMatch("no initial bound");
   beginBound = beginBoundAttr.getValue();
 
-  // Pattern match the increment operation on the induction variable.
+  // Pattern match the increment operation on the induction variable: an add
+  // of a constant (a down-counting loop adds -1), or a subtract of one.
+  if (!indVarNext)
+    return failMatch("no back-edge value for the induction variable");
+  IntegerAttr incAttr;
   if (auto addOp = indVarNext.getDefiningOp<comb::AddOp>();
       addOp && addOp.getNumOperands() == 2) {
     if (addOp.getOperand(0) != indVarArg)
       return failMatch("increment LHS not the induction variable");
-    IntegerAttr incAttr;
     if (!matchPattern(addOp.getOperand(1), m_Constant(&incAttr)))
       return failMatch("increment RHS non-constant");
     indVarIncrement = incAttr.getValue();
+  } else if (auto subOp = indVarNext.getDefiningOp<comb::SubOp>()) {
+    if (subOp.getLhs() != indVarArg)
+      return failMatch("decrement LHS not the induction variable");
+    if (!matchPattern(subOp.getRhs(), m_Constant(&incAttr)))
+      return failMatch("decrement RHS non-constant");
+    indVarIncrement = -incAttr.getValue();
   } else {
     return failMatch("unsupported increment");
   }
+  if (indVarIncrement.isZero())
+    return failMatch("zero increment");
+  if (comparesNext && compared != indVarNext)
+    return failMatch("exit condition tests a value other than the next "
+                     "induction variable");
 
-  std::optional<unsigned> range;
-  // Determine the trip count and loop behavior.
-  // for (unsigned i = N; i < M; i += S) with N <= M and S > 0
-  if (predicate == comb::ICmpPredicate::ult && beginBound.ule(endBound) &&
-      indVarIncrement.sgt(0)) {
-    range = endBound.getZExtValue() - beginBound.getZExtValue();
+  // Determine the trip count by stepping the induction variable from its
+  // initial value until the continuation predicate fails (tested on the
+  // stepped value for a `do ... while`). This covers up- and down-counting
+  // loops with any constant start, step and comparison, also across the
+  // signed and unsigned wrap-around points. A loop that runs longer than
+  // kMaxTripCount iterations, or never ends, is left alone.
+  if (beginBound.getBitWidth() != endBound.getBitWidth() ||
+      beginBound.getBitWidth() != indVarIncrement.getBitWidth())
+    return failMatch("mismatched induction variable widths");
+  APInt value = beginBound;
+  unsigned trips = 0;
+  while (true) {
+    auto proceed = evaluatePredicate(
+        predicate, comparesNext ? value + indVarIncrement : value, endBound);
+    if (!proceed)
+      return failMatch("unsupported loop predicate");
+    if (!*proceed)
+      break;
+    if (++trips > kMaxTripCount)
+      return failMatch("unsupported loop bounds");
+    value += indVarIncrement;
   }
-  // for (signed i = N; i < M; i += S) with M > 0, N <= M and S > 0
-  if (predicate == comb::ICmpPredicate::slt && !endBound.isNegative() &&
-      beginBound.sle(endBound) && indVarIncrement.sgt(0)) {
-    range = endBound.getZExtValue() - beginBound.getZExtValue();
-  }
-  // for (signed i = N; i >= M; i += S) for N > 0, M >= 0, S < 0
-  if (predicate == comb::ICmpPredicate::sgt && !beginBound.isNegative() &&
-      endBound.sle(beginBound) && indVarIncrement.isNegative()) {
-    if (!endBound.isNegative())
-      range = beginBound.getZExtValue() - endBound.getZExtValue();
-    // Expressions like >= 0 are converted into > -1, so we handle this case.
-    else if (endBound.isAllOnes())
-      range = beginBound.getZExtValue() + 1;
-  }
-  // for (signless i = N; i == N; i += S) with S != 0
-  if (predicate == comb::ICmpPredicate::eq && indVarIncrement != 0 &&
-      beginBound == endBound) {
-    tripCount = 1;
-    return true;
-  }
-
-  if (!range.has_value())
-    return failMatch("unsupported loop bounds");
-
-  // Calculate the trip count as ceil(range/stride)
-  unsigned stride = indVarIncrement.abs().getZExtValue();
-  tripCount = (*range + stride - 1) / stride;
-  // For now don't expand more than 1k iterations.
-  if (tripCount >= 1024)
-    return failMatch("unsupported loop bounds");
-
+  tripCount = trips;
   return true;
 }
 
