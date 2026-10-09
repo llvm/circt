@@ -231,8 +231,8 @@ struct Deseq {
   Value materializeProjection(OpBuilder &builder, Location loc, Value value,
                               SmallDenseMap<Value, Value, 8> &cache);
 
-  void implementRegisters();
-  void implementRegister(DriveInfo &drive);
+  LogicalResult implementRegisters();
+  LogicalResult implementRegister(DriveInfo &drive);
 
   Value specializeValue(Value value, FixedValues fixedValues);
   ValueRange specializeProcess(FixedValues fixedValues);
@@ -343,20 +343,10 @@ LogicalResult Deseq::deseq() {
   if (!matchDrives())
     return success();
 
-  // An integer register preset can only represent a constant initializer.
-  // Keep dynamic scalar initializers from silently becoming unconstrained
-  // register state.
-  for (auto &drive : driveInfos) {
-    auto signal = drive.op.getSignal().getDefiningOp<SignalOp>();
-    if (signal && isa<IntegerType>(signal.getType().getNestedType()) &&
-        signal.getInit() && !signal.getInit().getDefiningOp<hw::ConstantOp>())
-      return signal.emitError("cannot lower a nonconstant signal initializer "
-                              "to a register preset");
-  }
-
   // Make the drives unconditional and capture the conditional behavior as
   // register operations.
-  implementRegisters();
+  if (failed(implementRegisters()))
+    return failure();
 
   // At this point the process has been replaced with specialized versions of it
   // for the different triggers and can be removed.
@@ -1337,11 +1327,79 @@ Value Deseq::materializeProjection(OpBuilder &builder, Location loc,
   return value;
 }
 
+/// Attempt to find and set an preset (initializer) value for the newly created
+/// register. This needs to be a constant value that is either used to
+/// initialize the signal itself, or is unconditionally driven to the signal
+/// at the same time the register op begins driving the signal. If such an
+/// initial drive is found, the constant DriveOp operation(s) are erased.
+/// Returns failure if mutiple conflicting initial drivers are found, or if
+/// a non-constant value would be inferred from a signal initializer.
+static LogicalResult inferRegisterPreset(seq::FirRegOp regOp,
+                                         DriveInfo &drive) {
+  auto sigOp = drive.op.getSignal().getDefiningOp<SignalOp>();
+  SmallVector<std::pair<DriveOp, IntegerAttr>> constantDrives;
+
+  // Check if a drive happens at the same time as the register drive.
+  TimeAttr driveTimeAttr;
+  matchPattern(drive.op.getTime(), m_Constant(&driveTimeAttr));
+  auto isConcurrent = [&](DriveOp otherDrive) -> bool {
+    if (otherDrive.getTime() == drive.op.getTime())
+      return true;
+    TimeAttr timeCst;
+    return driveTimeAttr &&
+           matchPattern(otherDrive.getTime(), m_Constant(&timeCst)) &&
+           timeCst == driveTimeAttr;
+  };
+
+  // Find other unconditional concurrent constant drivers on the signal.
+  for (auto *user : drive.op.getSignal().getUsers()) {
+    if (user == drive.op || user->getBlock() != drive.op->getBlock())
+      continue;
+    if (auto driveUser = dyn_cast<DriveOp>(user)) {
+      if (driveUser.getEnable() || !isConcurrent(driveUser))
+        continue;
+      IntegerAttr driveCst;
+      if (matchPattern(driveUser.getValue(), m_Constant(&driveCst)))
+        constantDrives.push_back({driveUser, driveCst});
+    }
+  }
+
+  IntegerAttr preset;
+  // Initial drives take precedence over signal initializers as they occur
+  // later and thus overwrite the initializer.
+  if (!constantDrives.empty()) {
+    // One or more initial drivers found. Ensure they drive the same constant.
+    bool isConflicted = !llvm::all_equal(llvm::map_range(
+        constantDrives, [](auto drivePair) { return drivePair.second; }));
+    if (isConflicted)
+      return drive.op->emitError(
+          "inferred register has conflicting initial drivers.");
+    preset = constantDrives.front().second;
+    // `driveInfos` only contains conditional drives, so erasing unconditional
+    // drives on-the-fly should be safe.
+    for (auto [initDriveOp, _] : constantDrives)
+      initDriveOp->erase();
+  } else if (sigOp && sigOp.getInit()) {
+    // An integer register preset can only represent a constant initializer.
+    // Keep dynamic scalar initializers from silently becoming unconstrained
+    // register state.
+    if (!matchPattern(sigOp.getInit(), m_Constant(&preset)))
+      return sigOp->emitError("cannot lower a nonconstant signal initializer "
+                              "to a register preset");
+  }
+
+  if (preset)
+    regOp.setPresetAttr(preset);
+  return success();
+}
+
 /// Make all drives unconditional and implement the conditional behavior with
 /// register ops.
-void Deseq::implementRegisters() {
+LogicalResult Deseq::implementRegisters() {
+  bool anyFailed = false;
   for (auto &drive : driveInfos)
-    implementRegister(drive);
+    anyFailed |= failed(implementRegister(drive));
+  return llvm::success(!anyFailed);
 }
 
 /// Implement the conditional behavior of a drive with a `seq.firreg` op and
@@ -1351,7 +1409,7 @@ void Deseq::implementRegisters() {
 /// `specializeValue` and `specializeProcess` to convert the sequential
 /// `llhd.process` into a purely combinational `llhd.combinational` that is
 /// simplified by assuming that the clock edge occurs.
-void Deseq::implementRegister(DriveInfo &drive) {
+LogicalResult Deseq::implementRegister(DriveInfo &drive) {
   OpBuilder builder(drive.op);
   auto loc = drive.op.getLoc();
 
@@ -1445,21 +1503,16 @@ void Deseq::implementRegister(DriveInfo &drive) {
 
   // Try to guess a name for the register.
   StringAttr name;
-  IntegerAttr preset;
-  if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>()) {
+  if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>())
     name = sigOp.getNameAttr();
-    if (sigOp.getInit())
-      if (auto constant = sigOp.getInit().getDefiningOp<hw::ConstantOp>())
-        preset = constant.getValueAttr();
-  }
-  if (!name)
+  else
     name = builder.getStringAttr("");
 
   // Create the register op.
-  auto reg =
-      seq::FirRegOp::create(builder, loc, value, clock, name,
-                            hw::InnerSymAttr{}, preset, reset, resetValue,
-                            /*isAsync=*/reset != Value{});
+  auto reg = seq::FirRegOp::create(builder, loc, value, clock, name,
+                                   hw::InnerSymAttr{}, /*preset=*/IntegerAttr{},
+                                   reset, resetValue,
+                                   /*isAsync=*/reset != Value{});
 
   // If the register has an enable, insert a self-mux in front of the register.
   // Set the `bin` flag on the mux specifically to make up for a subtle
@@ -1486,6 +1539,13 @@ void Deseq::implementRegister(DriveInfo &drive) {
           ConstantTimeOp::create(builder, process.getLoc(), 0, "ns", 0, 1);
     drive.op.getTimeMutable().assign(epsilonDelay);
   }
+
+  // Attempt to merge an initial value into the register op
+  if (isa<IntegerType>(reg.getType()))
+    if (failed(inferRegisterPreset(reg, drive)))
+      return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
