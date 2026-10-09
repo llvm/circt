@@ -239,7 +239,7 @@ struct HostMemRegion {
   /// Get a pointer to the host memory.
   virtual void *getPtr() const = 0;
   /// Sometimes the pointer the device sees is different from the pointer the
-  /// host sees. Call this functon to get the device pointer.
+  /// host sees. Call this function to get the device pointer.
   virtual void *getDevicePtr() const { return getPtr(); }
   operator void *() const { return getPtr(); }
   virtual std::size_t getSize() const = 0;

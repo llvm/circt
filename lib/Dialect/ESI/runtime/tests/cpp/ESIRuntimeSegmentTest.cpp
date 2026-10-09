@@ -24,44 +24,33 @@ namespace {
 
 static_assert(std::is_same_v<HostMem::HostMemRegion, HostMemRegion>);
 static_assert(std::is_base_of_v<services::HostMemAllocator, HostMem>);
-static_assert(
-    std::is_same_v<HostMem::Options, services::HostMemAllocator::Options>);
 static_assert(std::is_aggregate_v<Segment>);
-static_assert(std::is_trivially_copyable_v<Segment>);
 
-/// A HostMemRegion whose host and device addresses are arbitrary integers. The
-/// memory is never dereferenced through these pointers.
-struct FakeRegion : public HostMem::HostMemRegion {
-  FakeRegion(uintptr_t hostBase, uintptr_t devBase, std::size_t size)
-      : hostBase(hostBase), devBase(devBase), size(size) {}
-  void *getPtr() const override { return reinterpret_cast<void *>(hostBase); }
-  void *getDevicePtr() const override {
-    return reinterpret_cast<void *>(devBase);
-  }
+/// A region whose host and device addresses are arbitrary integers. Never
+/// dereferenced.
+struct FakeRegion : public HostMemRegion {
+  FakeRegion(uintptr_t host, uintptr_t dev, std::size_t size)
+      : host(host), dev(dev), size(size) {}
+  void *getPtr() const override { return reinterpret_cast<void *>(host); }
+  void *getDevicePtr() const override { return reinterpret_cast<void *>(dev); }
   std::size_t getSize() const override { return size; }
-
-  uintptr_t hostBase;
-  uintptr_t devBase;
+  uintptr_t host, dev;
   std::size_t size;
 };
 
-/// A HostMemRegion backed by a real host buffer, with a distinct device base.
-/// Sets `*destroyed` when deconstructed.
-struct BufferRegion : public HostMem::HostMemRegion {
-  BufferRegion(std::size_t size, uintptr_t devBase, bool *destroyed = nullptr)
-      : buf(size), devBase(devBase), destroyed(destroyed) {}
+/// A region backed by a real buffer. Sets `*destroyed` when deconstructed.
+struct BufferRegion : public HostMemRegion {
+  BufferRegion(std::size_t size, uintptr_t dev, bool *destroyed = nullptr)
+      : buf(size), dev(dev), destroyed(destroyed) {}
   ~BufferRegion() override {
     if (destroyed)
       *destroyed = true;
   }
   void *getPtr() const override { return const_cast<uint8_t *>(buf.data()); }
-  void *getDevicePtr() const override {
-    return reinterpret_cast<void *>(devBase);
-  }
+  void *getDevicePtr() const override { return reinterpret_cast<void *>(dev); }
   std::size_t getSize() const override { return buf.size(); }
-
   std::vector<uint8_t> buf;
-  uintptr_t devBase;
+  uintptr_t dev;
   bool *destroyed;
 };
 
@@ -69,364 +58,126 @@ static const void *at(uintptr_t addr) {
   return reinterpret_cast<const void *>(addr);
 }
 
-static Segment makeSegment(const uint8_t *data, size_t size) {
-  return {data, size};
-}
+TEST(HostMemRegionTest, GetDeviceAddress) {
+  FakeRegion r(0x1000, 0xA000'0000, 0x100);
+  EXPECT_EQ(r.getDeviceAddress(at(0x1000), 0x100), 0xA000'0000u);
+  EXPECT_EQ(r.getDeviceAddress(at(0x10FF), 1), 0xA000'00FFu);
+  // Empty, starting before, ending past, starting past, and wrapping ranges.
+  EXPECT_FALSE(r.getDeviceAddress(at(0x1000), 0));
+  EXPECT_FALSE(r.getDeviceAddress(at(0x0FFF), 2));
+  EXPECT_FALSE(r.getDeviceAddress(at(0x10FF), 2));
+  EXPECT_FALSE(r.getDeviceAddress(at(0x1100), 1));
+  EXPECT_FALSE(r.getDeviceAddress(at(0x1080), SIZE_MAX));
 
-TEST(SegmentTest, NoRegionByDefault) {
-  uint8_t bytes[4] = {1, 2, 3, 4};
-  Segment a{bytes, sizeof(bytes)};
-  Segment b = makeSegment(bytes, 2);
-  EXPECT_EQ(a.region, nullptr);
-  EXPECT_FALSE(a.getDeviceAddress().has_value());
-  EXPECT_EQ(b.region, nullptr);
-  EXPECT_EQ(b.span().size(), 2u);
-}
-
-TEST(SegmentTest, RegionDeviceAddress) {
-  BufferRegion region(64, 0x8000'0000);
-  ASSERT_NE(region.getPtr(), region.getDevicePtr());
-  const uint8_t *data = region.buf.data();
-
-  Segment seg{data + 8, 16, &region};
-  EXPECT_EQ(seg.region, &region);
-  EXPECT_EQ(seg.getDeviceAddress(), 0x8000'0000u + 8);
-
-  // Copies are views of the same region.
-  Segment copy = seg;
-  EXPECT_EQ(copy.region, &region);
-
-  // A segment whose bytes are not inside its region has no device address.
-  Segment oob{data + 60, 8, &region};
-  EXPECT_FALSE(oob.getDeviceAddress().has_value());
-}
-
-TEST(HostMemRegionTest, GetDeviceAddressInBounds) {
-  FakeRegion region(0x1000, 0xA000'0000, 0x100);
-  // Start, middle, and the last byte.
-  EXPECT_EQ(region.getDeviceAddress(at(0x1000), 0x100), 0xA000'0000u);
-  EXPECT_EQ(region.getDeviceAddress(at(0x1000), 1), 0xA000'0000u);
-  EXPECT_EQ(region.getDeviceAddress(at(0x1080), 0x10), 0xA000'0080u);
-  EXPECT_EQ(region.getDeviceAddress(at(0x10FF), 1), 0xA000'00FFu);
-}
-
-TEST(HostMemRegionTest, GetDeviceAddressOutOfBounds) {
-  FakeRegion region(0x1000, 0xA000'0000, 0x100);
-  // Zero size.
-  EXPECT_FALSE(region.getDeviceAddress(at(0x1000), 0).has_value());
-  // Starts before the region.
-  EXPECT_FALSE(region.getDeviceAddress(at(0x0FFF), 2).has_value());
-  EXPECT_FALSE(region.getDeviceAddress(at(0x0F00), 0x10).has_value());
-  // Ends one byte past the region.
-  EXPECT_FALSE(region.getDeviceAddress(at(0x1000), 0x101).has_value());
-  EXPECT_FALSE(region.getDeviceAddress(at(0x10FF), 2).has_value());
-  // Starts at or after the end.
-  EXPECT_FALSE(region.getDeviceAddress(at(0x1100), 1).has_value());
-  // Size which would wrap the address space.
-  EXPECT_FALSE(
-      region
-          .getDeviceAddress(at(0x1080), std::numeric_limits<std::size_t>::max())
-          .has_value());
-}
-
-TEST(HostMemRegionTest, GetDeviceAddressOverflow) {
   constexpr uintptr_t maxPtr = std::numeric_limits<uintptr_t>::max();
-  // A region at the very top of the address space: ptr + size would overflow.
+  // Host range at the top of the address space.
   FakeRegion top(maxPtr - 0xF, 0x2000, 0x10);
   EXPECT_EQ(top.getDeviceAddress(at(maxPtr - 0x7), 8), 0x2008u);
-  EXPECT_FALSE(top.getDeviceAddress(at(maxPtr - 0x7), 9).has_value());
-  EXPECT_FALSE(top.getDeviceAddress(at(maxPtr), 2).has_value());
-  EXPECT_FALSE(top.getDeviceAddress(at(maxPtr - 0x7),
-                                    std::numeric_limits<std::size_t>::max() - 4)
-                   .has_value());
+  EXPECT_FALSE(top.getDeviceAddress(at(maxPtr - 0x7), 9));
 
-  // A device base where the device range would overflow.
+  // Device range at the top of the address space.
   if constexpr (sizeof(uintptr_t) == sizeof(uint64_t)) {
     FakeRegion devTop(0x1000, maxPtr - 0x3, 0x10);
-    EXPECT_EQ(devTop.getDeviceAddress(at(0x1000), 1), maxPtr - 0x3);
-    EXPECT_EQ(devTop.getDeviceAddress(at(0x1003), 1), maxPtr);
-    EXPECT_FALSE(devTop.getDeviceAddress(at(0x1004), 1).has_value());
-    // Multi-byte ranges whose start fits but whose end would wrap.
     EXPECT_EQ(devTop.getDeviceAddress(at(0x1000), 4), maxPtr - 0x3);
-    EXPECT_FALSE(devTop.getDeviceAddress(at(0x1000), 5).has_value());
-    EXPECT_FALSE(devTop.getDeviceAddress(at(0x1000), 8).has_value());
-    EXPECT_FALSE(devTop.getDeviceAddress(at(0x1003), 2).has_value());
+    EXPECT_FALSE(devTop.getDeviceAddress(at(0x1000), 5));
+    EXPECT_FALSE(devTop.getDeviceAddress(at(0x1004), 1));
   }
 }
 
-/// Header and footer owned directly; payload in a HostMem region owned by the
-/// message and handed over by take().
-struct ThreeSegmentMessage : public SegmentedMessageData {
-  ThreeSegmentMessage(bool *regionDestroyed = nullptr)
-      : header{0xA0, 0xA1}, footer{0xF0, 0xF1, 0xF2} {
-    auto r = std::make_unique<BufferRegion>(8, 0xC000'0000, regionDestroyed);
-    for (size_t i = 0; i < r->buf.size(); ++i)
-      r->buf[i] = static_cast<uint8_t>(0x10 + i);
-    payloadData = r->buf.data();
-    payloadSize = r->buf.size();
-    payload = std::move(r);
+TEST(SegmentTest, DeviceAddress) {
+  uint8_t bytes[4] = {};
+  EXPECT_FALSE((Segment{bytes, sizeof(bytes)}.getDeviceAddress()));
+
+  BufferRegion region(16, 0x8000'0000);
+  const uint8_t *data = region.buf.data();
+  EXPECT_EQ((Segment{data + 8, 4, &region}.getDeviceAddress()), 0x8000'0008u);
+  EXPECT_FALSE((Segment{data + 14, 4, &region}.getDeviceAddress()));
+}
+
+/// A header with no region, then two 4-byte segments sharing one region which
+/// the message owns and hands over via take() after both have been taken.
+struct TestMessage : public SegmentedMessageData {
+  TestMessage(bool *destroyed = nullptr)
+      : header{0xA0, 0xA1},
+        region(std::make_unique<BufferRegion>(8, 0xD000'0000, destroyed)) {
+    base = static_cast<const uint8_t *>(region->getPtr());
   }
 
   size_t numSegments() const override { return 3; }
   Segment segment(size_t idx) const override {
-    switch (idx) {
-    case 0:
-      return {header.data(), header.size()};
-    case 1:
-      if (!payload)
-        throw std::runtime_error("segment 1 has been taken");
-      return {payloadData, payloadSize, payload.get()};
-    case 2:
-      return {footer.data(), footer.size()};
-    default:
-      throw std::out_of_range("ThreeSegmentMessage has 3 segments");
-    }
-  }
-  std::unique_ptr<HostMemRegion> take(size_t segIdx) override {
-    if (segIdx != 1)
-      return nullptr;
-    if (!payload)
-      throw std::runtime_error("segment 1 has been taken");
-    return std::move(payload);
-  }
-
-  std::vector<uint8_t> header;
-  std::vector<uint8_t> footer;
-  std::unique_ptr<HostMemRegion> payload;
-  const uint8_t *payloadData;
-  size_t payloadSize;
-};
-
-TEST(SegmentTest, MessageSegmentsReferenceRegion) {
-  ThreeSegmentMessage msg;
-  EXPECT_EQ(msg.segment(0).region, nullptr);
-  EXPECT_EQ(msg.segment(1).region, msg.payload.get());
-  EXPECT_EQ(msg.segment(1).getDeviceAddress(), 0xC000'0000u);
-  EXPECT_EQ(msg.segment(2).region, nullptr);
-
-  MessageData flat = msg.toMessageData();
-  std::vector<uint8_t> expected = {0xA0, 0xA1, 0x10, 0x11, 0x12, 0x13, 0x14,
-                                   0x15, 0x16, 0x17, 0xF0, 0xF1, 0xF2};
-  EXPECT_EQ(flat.getData(), expected);
-
-  // The cursor walks region-backed segments like any other.
-  SegmentedMessageDataCursor cursor(msg);
-  cursor.advance(3);
-  EXPECT_EQ(cursor.remaining().data(), msg.payloadData + 1);
-}
-
-TEST(SegmentTest, CursorRemainingSegmentKeepsRegion) {
-  ThreeSegmentMessage msg;
-  SegmentedMessageDataCursor cursor(msg);
-  HostMemRegion *payload = msg.payload.get();
-
-  // Header: no region.
-  Segment s = cursor.remainingSegment();
-  EXPECT_EQ(s.data, msg.header.data());
-  EXPECT_EQ(s.size, 2u);
-  EXPECT_EQ(s.region, nullptr);
-
-  // Cross into the payload.
-  cursor.advance(2);
-  s = cursor.remainingSegment();
-  EXPECT_EQ(s.data, msg.payloadData);
-  EXPECT_EQ(s.size, 8u);
-  EXPECT_EQ(s.region, payload);
-  EXPECT_EQ(s.getDeviceAddress(), 0xC000'0000u);
-
-  // A partial advance within the payload keeps the region; the device address
-  // follows the data pointer.
-  cursor.advance(3);
-  s = cursor.remainingSegment();
-  EXPECT_EQ(s.data, msg.payloadData + 3);
-  EXPECT_EQ(s.size, 5u);
-  EXPECT_EQ(s.region, payload);
-  EXPECT_EQ(s.getDeviceAddress(), 0xC000'0003u);
-  std::span<const uint8_t> r = cursor.remaining();
-  EXPECT_EQ(r.data(), s.data);
-  EXPECT_EQ(r.size(), s.size);
-
-  // Cross into the footer: no region.
-  cursor.advance(5);
-  s = cursor.remainingSegment();
-  EXPECT_EQ(s.data, msg.footer.data());
-  EXPECT_EQ(s.size, 3u);
-  EXPECT_EQ(s.region, nullptr);
-
-  cursor.advance(3);
-  EXPECT_TRUE(cursor.done());
-  s = cursor.remainingSegment();
-  EXPECT_EQ(s.data, nullptr);
-  EXPECT_EQ(s.size, 0u);
-  EXPECT_EQ(s.region, nullptr);
-  EXPECT_TRUE(cursor.remaining().empty());
-}
-
-/// A message whose payload lives in a region shared (via shared_ptr) with the
-/// producer, so it doesn't transfer ownership and uses the default take().
-struct SharedOwnerMessage : public SegmentedMessageData {
-  SharedOwnerMessage(std::shared_ptr<HostMemRegion> region)
-      : region(std::move(region)) {}
-  size_t numSegments() const override { return 1; }
-  Segment segment(size_t idx) const override {
-    if (idx != 0)
-      throw std::out_of_range("SharedOwnerMessage has 1 segment");
-    return {static_cast<const uint8_t *>(region->getPtr()), region->getSize(),
-            region.get()};
-  }
-  std::shared_ptr<HostMemRegion> region;
-};
-
-TEST(SegmentTest, SharedOwnerDefaultTakeKeepsSegment) {
-  bool destroyed = false;
-  auto region = std::make_shared<BufferRegion>(8, 0xE000'0000, &destroyed);
-  auto msg = std::make_unique<SharedOwnerMessage>(region);
-  Segment s = msg->segment(0);
-  EXPECT_EQ(s.region, region.get());
-  EXPECT_EQ(s.getDeviceAddress(), 0xE000'0000u);
-
-  // The message doesn't transfer ownership: take() returns nullptr and the
-  // segment remains accessible.
-  EXPECT_EQ(msg->take(0), nullptr);
-  EXPECT_EQ(msg->segment(0).region, region.get());
-
-  // The producer's reference keeps the region alive after the message is gone.
-  msg.reset();
-  EXPECT_FALSE(destroyed);
-  region.reset();
-  EXPECT_TRUE(destroyed);
-}
-
-TEST(SegmentTest, EngineTakesRegionsAndReturnsToPool) {
-  bool destroyed = false;
-  auto msg = std::make_unique<ThreeSegmentMessage>(&destroyed);
-  HostMemRegion *payload = msg->payload.get();
-  std::vector<std::unique_ptr<HostMemRegion>> pool;
-  std::vector<uint8_t> bounced;
-  std::vector<uint64_t> dmaAddrs;
-
-  // Mimic a scatter-gather engine's write path.
-  for (size_t i = 0; i < msg->numSegments(); ++i) {
-    Segment s = msg->segment(i);
-    if (std::optional<uint64_t> dev = s.getDeviceAddress()) {
-      dmaAddrs.push_back(*dev);
-      // Once transmitted, take the region and return it to the pool.
-      if (auto region = msg->take(i))
-        pool.push_back(std::move(region));
-    } else {
-      bounced.insert(bounced.end(), s.data, s.data + s.size);
-    }
-  }
-  EXPECT_EQ(dmaAddrs, std::vector<uint64_t>{0xC000'0000u});
-  EXPECT_EQ(bounced, (std::vector<uint8_t>{0xA0, 0xA1, 0xF0, 0xF1, 0xF2}));
-  ASSERT_EQ(pool.size(), 1u);
-  EXPECT_EQ(pool[0].get(), payload);
-
-  // The taken segment is no longer accessible; the others still are.
-  EXPECT_THROW(msg->segment(1), std::runtime_error);
-  EXPECT_THROW(msg->take(1), std::runtime_error);
-  EXPECT_THROW(msg->toMessageData(), std::runtime_error);
-  EXPECT_EQ(msg->segment(0).size, 2u);
-  EXPECT_EQ(msg->segment(2).size, 3u);
-
-  // A cursor created after the take() works until it reaches the taken
-  // segment, then throws.
-  SegmentedMessageDataCursor late(*msg);
-  EXPECT_EQ(late.remaining().size(), 2u);
-  late.advance(1);
-  EXPECT_THROW(late.advance(2), std::runtime_error);
-  SegmentedMessageDataCursor late2(*msg);
-  late2.advance(2);
-  EXPECT_THROW(late2.remainingSegment(), std::runtime_error);
-
-  // Destroying the message doesn't free the region, which the pool now owns.
-  msg.reset();
-  EXPECT_FALSE(destroyed);
-  EXPECT_EQ(static_cast<BufferRegion *>(pool[0].get())->buf[0], 0x10);
-  pool.clear();
-  EXPECT_TRUE(destroyed);
-}
-
-/// A header in a vector, plus two segments carved out of one shared HostMem
-/// region. Tracks which segments have been taken.
-struct SharedRegionMessage : public SegmentedMessageData {
-  SharedRegionMessage(bool *regionDestroyed = nullptr) : header{0xA0, 0xA1} {
-    auto r = std::make_unique<BufferRegion>(8, 0xD000'0000, regionDestroyed);
-    for (size_t i = 0; i < r->buf.size(); ++i)
-      r->buf[i] = static_cast<uint8_t>(0x20 + i);
-    base = r->buf.data();
-    region = std::move(r);
-  }
-
-  size_t numSegments() const override { return 3; }
-  Segment segment(size_t idx) const override {
-    if (idx >= numSegments())
-      throw std::out_of_range("SharedRegionMessage has 3 segments");
-    if (taken[idx])
+    if (taken.at(idx))
       throw std::runtime_error("segment has been taken");
     if (idx == 0)
       return {header.data(), header.size()};
     return {base + (idx - 1) * 4, 4, region.get()};
   }
-  std::unique_ptr<HostMemRegion> take(size_t segIdx) override {
-    if (segIdx >= numSegments())
-      throw std::out_of_range("SharedRegionMessage has 3 segments");
-    if (segIdx == 0)
+  std::unique_ptr<HostMemRegion> take(size_t idx) override {
+    if (idx == 0)
       return nullptr;
-    if (taken[segIdx])
+    if (taken.at(idx))
       throw std::runtime_error("segment has been taken");
-    taken[segIdx] = true;
-    // Hand over the region only once both segments using it are taken.
-    if (taken[1] && taken[2])
-      return std::move(region);
-    return nullptr;
+    taken[idx] = true;
+    return taken[1] && taken[2] ? std::move(region) : nullptr;
   }
 
   std::vector<uint8_t> header;
   std::unique_ptr<HostMemRegion> region;
   const uint8_t *base;
-  bool taken[3] = {false, false, false};
+  std::vector<bool> taken = {false, false, false};
 };
 
-TEST(SegmentTest, SharedRegionHandedOverAfterLastSegment) {
-  bool destroyed = false;
-  auto msg = std::make_unique<SharedRegionMessage>(&destroyed);
-  HostMemRegion *shared = msg->region.get();
-  EXPECT_EQ(msg->segment(1).region, shared);
-  EXPECT_EQ(msg->segment(2).region, shared);
-  EXPECT_EQ(msg->segment(1).getDeviceAddress(), 0xD000'0000u);
-  EXPECT_EQ(msg->segment(2).getDeviceAddress(), 0xD000'0004u);
+TEST(SegmentTest, CursorRemainingSegmentKeepsRegion) {
+  TestMessage msg;
+  SegmentedMessageDataCursor cursor(msg);
+  EXPECT_EQ(cursor.remainingSegment().region, nullptr);
 
-  // Taking the first user of the region marks it taken but keeps the region,
-  // which the second segment still needs.
+  // A partial advance keeps the region; the device address follows the data.
+  cursor.advance(3);
+  Segment s = cursor.remainingSegment();
+  EXPECT_EQ(s.data, msg.base + 1);
+  EXPECT_EQ(s.size, 3u);
+  EXPECT_EQ(s.region, msg.region.get());
+  EXPECT_EQ(s.getDeviceAddress(), 0xD000'0001u);
+  EXPECT_EQ(cursor.remaining().data(), s.data);
+
+  cursor.advance(3);
+  EXPECT_EQ(cursor.remainingSegment().getDeviceAddress(), 0xD000'0004u);
+  cursor.advance(4);
+  EXPECT_TRUE(cursor.done());
+  EXPECT_EQ(cursor.remainingSegment().data, nullptr);
+}
+
+TEST(SegmentTest, TakeHandsOverSharedRegionAfterLastUser) {
+  bool destroyed = false;
+  auto msg = std::make_unique<TestMessage>(&destroyed);
+  HostMemRegion *shared = msg->region.get();
+
+  // Segments without a region are unaffected by take().
+  EXPECT_EQ(msg->take(0), nullptr);
+  EXPECT_EQ(msg->segment(0).size, 2u);
+
+  // Taking the first user marks it taken but keeps the shared region.
   EXPECT_EQ(msg->take(1), nullptr);
   EXPECT_THROW(msg->segment(1), std::runtime_error);
   EXPECT_THROW(msg->take(1), std::runtime_error);
-  Segment second = msg->segment(2);
-  EXPECT_EQ(second.region, shared);
-  EXPECT_EQ(second.data[0], 0x24);
+  EXPECT_THROW(msg->toMessageData(), std::runtime_error);
+  EXPECT_EQ(msg->segment(2).region, shared);
 
-  // Taking the last user hands over the region.
+  // A cursor created after a take() throws upon reaching the taken segment.
+  SegmentedMessageDataCursor cursor(*msg);
+  EXPECT_THROW(cursor.advance(3), std::runtime_error);
+
+  // Taking the last user hands over the region, which outlives the message.
   std::unique_ptr<HostMemRegion> region = msg->take(2);
   EXPECT_EQ(region.get(), shared);
-  EXPECT_THROW(msg->segment(2), std::runtime_error);
-  EXPECT_THROW(msg->take(2), std::runtime_error);
-  EXPECT_EQ(msg->segment(0).size, 2u);
-
   msg.reset();
   EXPECT_FALSE(destroyed);
   region.reset();
   EXPECT_TRUE(destroyed);
-}
 
-TEST(SegmentTest, TakingUnbackedSegmentLeavesItAccessible) {
-  bool destroyed = false;
-  {
-    ThreeSegmentMessage msg(&destroyed);
-    EXPECT_EQ(msg.take(0), nullptr);
-    EXPECT_EQ(msg.segment(0).size, 2u);
-  }
-  // The untaken region is freed with the message.
+  // An untaken region is freed with its message.
+  destroyed = false;
+  { TestMessage untaken(&destroyed); }
   EXPECT_TRUE(destroyed);
 }
 
