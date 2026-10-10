@@ -3,6 +3,7 @@
 # RUN: FileCheck %s --input-file %t/hw/PolynomialCompute.sv --check-prefix=OUTPUT
 # RUN: FileCheck %s --input-file %t/hw/PolynomialSystemTypes.sv --check-prefix=PACKAGE
 # RUN: FileCheck %s --input-file %t/hw/filelist.f --check-prefix=FILELIST
+# RUN: FileCheck %s --input-file %t/hw/PolynomialSystem.sv --check-prefix=EXTERN
 
 from __future__ import annotations
 
@@ -111,6 +112,9 @@ class PolynomialSystem(Module):
     m = ExternWithParams("foo", 4)(ignored_input=None, used_input=w1)
     m.name = "pexternInst"
     w1.assign(0)
+    # A second parameterization of the same extern module gets a uniquified
+    # symbol but must keep the external module name.
+    ExternWithParams("bar", 8)(ignored_input=None, used_input=Bits(8)(0))
 
     self._set_outputs(poly.outputs())
 
@@ -147,6 +151,13 @@ poly.emit_outputs()
 
 # FILELIST-NOT: .sv
 # FILELIST:     PolynomialSystemTypes.sv
+
+# Both parameterizations of the extern module must instantiate it by its
+# external name, even though the second one has a uniquified symbol.
+# EXTERN:      parameterized_extern #(
+# EXTERN-NEXT:   .A("foo"),
+# EXTERN:      parameterized_extern #(
+# EXTERN-NEXT:   .A("bar"),
 
 # OUTPUT-NOT: typedef
 # OUTPUT-LABEL:   module PolyComputeForCoeff__62__42__6_
