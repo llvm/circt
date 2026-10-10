@@ -45,6 +45,17 @@
   which only needs to allocate regions (e.g. message types which keep their
   data in HostMem) can accept a `HostMemAllocator` so callers can supply
   other allocators, such as pools.
+- **DRAM service implementation (`bsp.dram.ChannelDram`)** for the new
+  `esi.Dram` standard service (`esi.service.std.dram`). It multiplexes
+  byte-addressed clients onto one or more independent DRAM channels, chosen per
+  client with the `channel` request option. Each channel is exposed as a
+  generic, word-addressed read/write bundle pair (word address, burst count,
+  byte enable, in-order responses) which maps almost 1:1 onto Avalon-MM.
+  Unaligned and byte-enabled accesses are converted to aligned word accesses.
+- **Cosim DRAM.** `CosimBSP` provides `dram_channels` (default 2) DRAM
+  channels, each backed by `EsiDramModel.sv`. This is a Verilator-compatible
+  behavioral model with sparse storage, fixed latency plus random jitter, and
+  optional random backpressure.
 
 ## 0.8.0
 

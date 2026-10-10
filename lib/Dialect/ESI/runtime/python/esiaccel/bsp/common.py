@@ -1771,11 +1771,18 @@ def HostmemReadProcessor(
 
 
 @modparams
-def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
-                       max_burst_bytes: int) -> type["TaggedWriteGearboxImpl"]:
+def TaggedWriteGearbox(
+    input_bitwidth: int,
+    output_bitwidth: int,
+    max_burst_bytes: int,
+    byteenable: bool = False) -> type["TaggedWriteGearboxImpl"]:
   """Build a gearbox to convert the client data to upstream write chunks.
   Assumes a struct {address, tag, data} and only gearboxes the data. Tag is
   stored separately and the struct is re-assembled later on.
+
+  If 'byteenable' is set, the input struct additionally carries a per-byte
+  'byteenable' mask ({address, tag, data, byteenable}) which is gearboxed
+  alongside the data and emitted as a per-chunk 'byteenable' output field.
 
   'max_burst_bytes' caps a single contiguous upstream write transaction (a
   max-payload-size analog): when an element spans more than 'max_burst_bytes',
@@ -1796,23 +1803,29 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
     assert (max_burst_words & (max_burst_words - 1)) == 0, \
         "max_burst_bytes / (output_bitwidth // 8) must be a power of two"
 
+  input_be_width = input_padded_bitwidth // 8
+  output_be_width = output_bitwidth // 8
+  in_fields = [
+      ("address", UInt(64)),
+      ("tag", esi.HostMem.TagType),
+      ("data", Bits(input_bitwidth)),
+  ]
+  out_fields = [
+      ("address", UInt(64)),
+      ("tag", esi.HostMem.TagType),
+      ("data", Bits(output_bitwidth)),
+      ("valid_bytes", Bits(8)),
+      ("last", Bits(1)),
+  ]
+  if byteenable:
+    in_fields.append(("byteenable", Bits(input_be_width)))
+    out_fields.append(("byteenable", Bits(output_be_width)))
+
   class TaggedWriteGearboxImpl(Module):
     clk = Clock()
     rst = Reset()
-    in_ = InputChannel(
-        StructType([
-            ("address", UInt(64)),
-            ("tag", esi.HostMem.TagType),
-            ("data", Bits(input_bitwidth)),
-        ]))
-    out = OutputChannel(
-        StructType([
-            ("address", UInt(64)),
-            ("tag", esi.HostMem.TagType),
-            ("data", Bits(output_bitwidth)),
-            ("valid_bytes", Bits(8)),
-            ("last", Bits(1)),
-        ]))
+    in_ = InputChannel(StructType(in_fields))
+    out = OutputChannel(StructType(out_fields))
 
     num_chunks = ceil(input_padded_bitwidth / output_bitwidth)
 
@@ -1827,6 +1840,8 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
       client_xact = ready_for_client & client_valid
       input_bitwidth_bytes = input_padded_bitwidth // 8
       output_bitwidth_bytes = output_bitwidth // 8
+      client_be = client_tag_and_data.byteenable if byteenable else None
+      upstream_be = None
 
       # Determine if gearboxing is necessary and whether it needs to be
       # gearboxed up or just sliced down.
@@ -1838,6 +1853,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
         address = client_tag_and_data.address
         valid_bytes = Bits(8)(input_bitwidth_bytes)
         last = Bits(1)(1)
+        upstream_be = client_be
       elif output_bitwidth > input_padded_bitwidth:
         upstream_data_bits = client_data.as_bits(output_bitwidth)
         upstream_valid = client_valid
@@ -1846,6 +1862,8 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
         address = client_tag_and_data.address
         valid_bytes = Bits(8)(input_bitwidth_bytes)
         last = Bits(1)(1)
+        if byteenable:
+          upstream_be = client_be.pad_or_truncate(output_be_width)
       else:
         # Create registers equal to the number of upstream transactions needed
         # to complete the transmission.
@@ -1873,6 +1891,19 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
                                                    increment=increment,
                                                    clear=clear)
         upstream_data_bits = chunk_regs[counter.out]
+        if byteenable:
+          padding_numbytes = padding_numbits // 8
+          client_be_padded = BitsSignal.concat(
+              [Bits(padding_numbytes)(0), client_be]) \
+              if padding_numbytes > 0 else client_be
+          be_regs = Array(Bits(output_be_width), num_chunks)([
+              client_be_padded[i * output_be_width:(i + 1) *
+                               output_be_width].reg(ports.clk,
+                                                    ce=client_xact,
+                                                    name=f"be_chunk_{i}")
+              for i in range(num_chunks)
+          ])
+          upstream_be = be_regs[counter.out]
         upstream_valid = ControlReg(ports.clk, ports.rst, [client_xact],
                                     [clear])
         upstream_xact = upstream_valid & upstream_ready
@@ -1909,14 +1940,17 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
         else:
           last = elem_end
 
+      out_msg = {
+          "address": address,
+          "tag": tag,
+          "data": upstream_data_bits,
+          "valid_bytes": valid_bytes,
+          "last": last,
+      }
+      if byteenable:
+        out_msg["byteenable"] = upstream_be
       upstream_channel, upstrm_ready_sig = TaggedWriteGearboxImpl.out.type.wrap(
-          {
-              "address": address,
-              "tag": tag,
-              "data": upstream_data_bits,
-              "valid_bytes": valid_bytes,
-              "last": last,
-          }, upstream_valid)
+          out_msg, upstream_valid)
       upstream_ready.assign(upstrm_ready_sig)
       ports.out = upstream_channel
 
@@ -1988,7 +2022,14 @@ def HostMemWriteProcessor(
   correct clients.
 
   Generate this module dynamically to allow for multiple write clients of
-  multiple types to be directly accomodated."""
+  multiple types to be directly accomodated.
+
+  If 'hostmem_module.UpstreamWriteReq' has a 'byteenable' field (instead of
+  'data_size'), each upstream word carries a per-byte write mask. In that mode
+  single-message clients may also supply their own 'byteenable' mask field."""
+
+  upstream_write_fields = dict(hostmem_module.UpstreamWriteReq.fields)
+  upstream_has_be = "byteenable" in upstream_write_fields
 
   class HostMemWriteProcessorImpl(Module):
 
@@ -2015,16 +2056,19 @@ def HostMemWriteProcessor(
       # word of a write.
       size_width = clog2(write_width // 8)
 
+      # Convert a 'valid_bytes' count into a contiguous low-order byte mask.
+      def valid_bytes_to_mask(valid_bytes: BitsSignal) -> BitsSignal:
+        write_width_bytes = write_width // 8
+        mask_table = Array(Bits(write_width_bytes), write_width_bytes + 1)([
+            Bits(write_width_bytes)(2**n - 1)
+            for n in range(write_width_bytes + 1)
+        ])
+        return mask_table[valid_bytes.as_uint(clog2(write_width_bytes + 1))]
+
       # If there's no write clients, just create a no-op write bundle
       if len(reqs) == 0:
         req, _ = Channel(hostmem_module.UpstreamWriteReq).wrap(
-            {
-                "address": 0,
-                "tag": 0,
-                "data": 0,
-                "data_size": 0,
-                "last": 0,
-            }, 0)
+            {name: 0 for name in upstream_write_fields}, 0)
         write_bundle, _ = hostmem_module.write.type.pack(req=req)
         ports.upstream = write_bundle
         return
@@ -2096,36 +2140,57 @@ def HostMemWriteProcessor(
                                 in_=gearbox_in_chan)
         else:
           # Single-message write.
-          write_req_bundle_type = esi.HostMem.write_req_bundle_type(
-              client_type.data)
-          bundle_sig, sfroms = write_req_bundle_type.pack(ackTag=input_flit_ack)
+          client_has_be = "byteenable" in dict(client_type.fields)
+          if client_has_be and not upstream_has_be:
+            raise ValueError(
+                f"Write client '{req.client_name_str}' supplies a 'byteenable' "
+                "mask, which this service implementation does not support.")
+          if client_has_be:
+            bundle_sig, sfroms = req.type.pack(ackTag=input_flit_ack)
+          else:
+            write_req_bundle_type = esi.HostMem.write_req_bundle_type(
+                client_type.data)
+            bundle_sig, sfroms = write_req_bundle_type.pack(
+                ackTag=input_flit_ack)
           gearbox_mod = TaggedWriteGearbox(client_type.data.bitwidth,
-                                           write_width, max_write_payload_bytes)
+                                           write_width,
+                                           max_write_payload_bytes,
+                                           byteenable=client_has_be)
           gearbox_in_type = gearbox_mod.in_.type.inner_type
-          bitcast_client_req = sfroms["req"].transform(
-              lambda m, git=gearbox_in_type: git({
-                  "tag": m.tag,
-                  "address": m.address,
-                  "data": m.data.bitcast(git.data)
-              }))
+
+          def to_gearbox(m, git=gearbox_in_type, client_has_be=client_has_be):
+            fields = {
+                "tag": m.tag,
+                "address": m.address,
+                "data": m.data.bitcast(git.data)
+            }
+            if client_has_be:
+              fields["byteenable"] = m.byteenable.bitcast(git.byteenable)
+            return git(fields)
+
+          bitcast_client_req = sfroms["req"].transform(to_gearbox)
           gearbox = gearbox_mod(clk=ports.clk,
                                 rst=ports.rst,
                                 in_=bitcast_client_req)
 
-        write_channels.append(
-            gearbox.out.transform(
-                lambda m, idx=idx: hostmem_module.UpstreamWriteReq({
-                    "address":
-                        m.address,
-                    "tag":
-                        idx,
-                    "data":
-                        m.data,
-                    "data_size": (m.valid_bytes.as_uint() - UInt(8)
-                                  (1)).as_bits()[:size_width],
-                    "last":
-                        m.last,
-                })))
+        def to_upstream(m, idx=idx):
+          fields = {
+              "address": m.address,
+              "tag": idx,
+              "data": m.data,
+              "last": m.last,
+          }
+          if upstream_has_be:
+            if "byteenable" in dict(m.type.fields):
+              fields["byteenable"] = m.byteenable
+            else:
+              fields["byteenable"] = valid_bytes_to_mask(m.valid_bytes)
+          else:
+            fields["data_size"] = (m.valid_bytes.as_uint() -
+                                   UInt(8)(1)).as_bits()[:size_width]
+          return hostmem_module.UpstreamWriteReq(fields)
+
+        write_channels.append(gearbox.out.transform(to_upstream))
 
         # Count the number of acks received from hostmem for this client
         # and only send one back to the client per input.

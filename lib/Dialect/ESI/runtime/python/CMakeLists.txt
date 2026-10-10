@@ -28,6 +28,7 @@ set(ESIPythonRuntimeSources
   esiaccel/bsp/common.py
   esiaccel/bsp/cosim.py
   esiaccel/bsp/dma.py
+  esiaccel/bsp/dram.py
   esiaccel/bsp/xrt.py
   esiaccel/bsp/Makefile.xrt.mk
   esiaccel/bsp/xrt_package.tcl
