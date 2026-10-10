@@ -2847,7 +2847,7 @@ OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
       }
     }
     // If all elements of the array are the same, we can return any element of
-    // array. A constant out-of-range index was handled above.
+    // array.
     if (!inputCst.empty() && llvm::all_equal(inputCst))
       return inputCst[0];
   }
