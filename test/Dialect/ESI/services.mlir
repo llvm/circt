@@ -297,6 +297,38 @@ hw.module @HostmemLists(in %clk : !seq.clock, in %rst : i1, in %writeReq : !esi.
   hw.output %readListData, %ackTag : !esi.channel<!ReadListRespWindow>, !esi.channel<ui8>
 }
 
+// Device DRAM service: same ports as HostMem, plus an optional per-byte
+// 'byteenable' mask on single-message write requests. Each physically distinct
+// memory (e.g. DRAM channel) is its own declaration, so the manifest records
+// which one each client is bound to.
+!dramReadReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: i64>> to "resp"]>
+!dramWriteReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i24, byteenable: i3>> from "req", !esi.channel<ui8> to "ackTag"]>
+
+// CONN-LABEL:  esi.service.std.dram @dram0
+// CONN-NEXT:   esi.service.std.dram @dram1
+// CONN-LABEL:  hw.module @DramRW(
+// CONN-NEXT:     esi.manifest.req #esi.appid<"dramWrite">, <@dram1::@write> std "esi.service.std.dram", !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i24, byteenable: i3>> from "req", !esi.channel<ui8> to "ackTag"]>
+// CONN-NEXT:     %ackTag = esi.bundle.unpack %write from %dramWrite
+// CONN-NEXT:     esi.manifest.req #esi.appid<"dramRead">, <@dram0::@read> std "esi.service.std.dram", !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: i64>> to "resp"]>
+// CONN-NEXT:     %resp = esi.bundle.unpack %readAddress from %dramRead
+// CONN-NEXT:     esi.manifest.req #esi.appid<"dramReadList">, <@dram0::@read_list> std "esi.service.std.dram"
+// CONN-NEXT:     %{{.+}} = esi.bundle.unpack %readListReq from %dramReadList
+esi.service.std.dram @dram0
+esi.service.std.dram @dram1
+
+hw.module @DramRW(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: ui64, tag: ui8, data: i24, byteenable: i3>>, in %readAddress : !esi.channel<!hw.struct<address: ui64, tag: ui8>>, in %readListReq : !esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>>, out readData : !esi.channel<!hw.struct<tag: ui8, data: i64>>, out writeDone : !esi.channel<ui8>, out readListData : !esi.channel<!ReadListRespWindow>) {
+  %writeBundle = esi.service.req <@dram1::@write> (#esi.appid<"dramWrite">) : !dramWriteReq
+  %ackTag = esi.bundle.unpack %write from %writeBundle : !dramWriteReq
+
+  %readBundle = esi.service.req <@dram0::@read> (#esi.appid<"dramRead">) : !dramReadReq
+  %readData = esi.bundle.unpack %readAddress from %readBundle : !dramReadReq
+
+  %readListBundle = esi.service.req <@dram0::@read_list> (#esi.appid<"dramReadList">) : !hostmemReadListReq
+  %readListData = esi.bundle.unpack %readListReq from %readListBundle : !hostmemReadListReq
+
+  hw.output %readData, %ackTag, %readListData : !esi.channel<!hw.struct<tag: ui8, data: i64>>, !esi.channel<ui8>, !esi.channel<!ReadListRespWindow>
+}
+
 esi.service.std.telemetry @telemetry
 hw.module @TelemetryTest1(in %clk : !seq.clock, in %rst : i1, in %value: !esi.channel<ui64>) {
   %telemetryBundle = esi.service.req <@telemetry::@report> (#esi.appid<"telemetry">) : !esi.bundle<[!esi.channel<i0> to "get", !esi.channel<ui64> from "data"]>
