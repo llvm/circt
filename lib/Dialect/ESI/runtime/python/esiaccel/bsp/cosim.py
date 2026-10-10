@@ -16,6 +16,7 @@ from pycde import esi
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
                      DesignResetController, ResetCycles, TelemetryMMIO)
 from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
+from .dram import ChannelDram, connect_dram_model
 
 from pycde.circt import ir
 from pycde.circt.dialects import esi as raw_esi
@@ -24,11 +25,20 @@ from pathlib import Path
 
 __root_dir__ = Path(__file__).parent.parent
 
+# Configuration of the cosim DRAM service ('esi.Dram'). Each channel is backed
+# by an instance of the behavioral 'EsiDramModel'.
+CosimDramDataWidth = 64
+CosimDramAddrWidth = 32
+CosimDramBurstWidth = 7
+# Percentage of cycles on which the model randomly back-pressures requests.
+CosimDramStallPercent = 5
+
 
 def CosimBSP(
     user_module: Type[Module],
     dma_engine_pair: Optional[Tuple[Callable, Callable]] = None,
     channel_service: Optional[Type[esi.ServiceImplementation]] = None,
+    dram_channels: int = 2,
 ) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'.
@@ -45,6 +55,9 @@ def CosimBSP(
   issue esi.MMIO and esi.HostMem requests, which the BSP will satisfy.
 
   Passing both 'dma_engine_pair' and 'channel_service' raises ValueError.
+
+  'dram_channels' sets the number of independent DRAM channels available to
+  'esi.Dram' clients (0 disables the DRAM service).
   """
   if dma_engine_pair is not None and channel_service is not None:
     raise ValueError(
@@ -81,6 +94,28 @@ def CosimBSP(
     @generator
     def build(ports):
       user_module(clk=ports.clk, rst=ports.rst)
+
+      if dram_channels > 0:
+        # DRAM service: each channel is connected to its own behavioral model.
+        dram = ChannelDram(data_width=CosimDramDataWidth,
+                           addr_width=CosimDramAddrWidth,
+                           burst_width=CosimDramBurstWidth,
+                           num_channels=dram_channels)(
+                               decl=esi.Dram,
+                               appid=esi.AppID("__cosim_dram"),
+                               clk=ports.clk,
+                               rst=ports.rst)
+        for ch in range(dram_channels):
+          connect_dram_model(ports.clk,
+                             ports.rst,
+                             getattr(dram, f"read{ch}"),
+                             getattr(dram, f"write{ch}"),
+                             data_width=CosimDramDataWidth,
+                             addr_width=CosimDramAddrWidth,
+                             burst_width=CosimDramBurstWidth,
+                             instance_name=f"dram_model{ch}",
+                             STALL_PERCENT=CosimDramStallPercent,
+                             SEED=ch + 1)
       TelemetryMMIO(esi.Telemetry,
                     appid=esi.AppID("__telemetry"),
                     clk=ports.clk,

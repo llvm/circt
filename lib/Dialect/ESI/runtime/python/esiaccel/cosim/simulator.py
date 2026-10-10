@@ -70,6 +70,8 @@ class SourceFiles:
         CosimCollateralDir / "Cosim_Endpoint.sv",
         CosimCollateralDir / "Cosim_CycleCount.sv",
         CosimCollateralDir / "Cosim_Manifest.sv",
+        # Behavioral DRAM model used by the cosim BSP's DRAM service.
+        CosimCollateralDir / "EsiDramModel.sv",
     ]
     # Name of the top module.
     self.top = top
