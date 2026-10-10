@@ -31,6 +31,9 @@
   through as `max_outstanding_reads` (default `1`). `CosimBSP` and
   `CosimBSP_DMA` take the same parameter and default it to `4`, since the
   cosim host answers reads in order.
+- `HostMem.start()` is now available from Python, so Python code can enable
+  the host memory service (needed before the accelerator reads host memory
+  under cosim).
 - `CosimBSP` accepts a `channel_service` implementation class for custom channel
   transports, including engines shared by multiple channels. The BSP satisfies
   the implementation's MMIO and HostMem requests. This option is mutually
