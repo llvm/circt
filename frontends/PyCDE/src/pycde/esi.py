@@ -871,6 +871,133 @@ class _HostMem(ServiceDecl):
 HostMem = _HostMem()
 
 
+class _Dram(_HostMem):
+  """ESI standard service to request read or write access to device-attached
+  DRAM. The client API is identical to `HostMem` with two additions:
+
+  - Every request method takes an optional `channel` (int) which selects one of
+    the (implementation-defined number of) independent DRAM channels. It is
+    passed to the service implementation as the `channel` request option.
+    Defaults to channel 0 when omitted.
+  - A single-message write request may carry a `byteenable` field (one bit per
+    byte of `data`, bit 0 = least significant byte) to perform a sparse, masked
+    write. Bytes with a clear enable bit are left unmodified.
+  """
+
+  @staticmethod
+  def _channel_options(options: Optional[Dict[str, object]],
+                       channel: Optional[int]) -> Optional[Dict[str, object]]:
+    if channel is None:
+      return options
+    if not isinstance(channel, int) or channel < 0:
+      raise ValueError(f"DRAM channel must be a non-negative int: {channel}")
+    opts = dict(options) if options else {}
+    opts["channel"] = channel
+    return opts
+
+  @staticmethod
+  def byteenable_type(data_type: Type) -> Bits:
+    """The type of the optional 'byteenable' field for 'data_type'."""
+    return Bits((data_type.bitwidth + 7) // 8)
+
+  def write_req_channel_type(self,
+                             data_type: Type,
+                             byteenable: bool = False) -> StructType:
+    """Return a write request struct type for 'data_type', optionally with a
+    'byteenable' mask field."""
+    fields = [
+        ("address", UInt(64)),
+        ("tag", _HostMem.TagType),
+        ("data", data_type),
+    ]
+    if byteenable:
+      fields.append(("byteenable", _Dram.byteenable_type(data_type)))
+    return StructType(fields)
+
+  def write_req_bundle_type(self,
+                            data_type: Type,
+                            byteenable: bool = False) -> Bundle:
+    """Build a write request bundle type for the given data type."""
+    return Bundle([
+        BundledChannel("req", ChannelDirection.FROM,
+                       self.write_req_channel_type(data_type, byteenable)),
+        BundledChannel("ackTag", ChannelDirection.TO, _HostMem.TagType),
+    ])
+
+  def wrap_write_req(
+      self,
+      address: UIntSignal,
+      data: Signal,
+      tag: UIntSignal,
+      valid: BitsSignal,
+      byteenable: Optional[BitsSignal] = None
+  ) -> Tuple[ChannelSignal, BitsSignal]:
+    """Create the proper channel type for a write request and use it to wrap the
+    given request arguments. Returns the Channel signal and a ready bit."""
+    inner_type = self.write_req_channel_type(data.type, byteenable is not None)
+    fields = {"address": address, "tag": tag, "data": data}
+    if byteenable is not None:
+      fields["byteenable"] = byteenable
+    return Channel(inner_type).wrap(inner_type(fields), valid)
+
+  def write(self,
+            appid: AppID,
+            req: ChannelSignal,
+            options: Optional[Dict[str, object]] = None,
+            channel: Optional[int] = None) -> ChannelSignal:
+    return super().write(appid, req, self._channel_options(options, channel))
+
+  def write_from_bundle(self,
+                        appid: AppID,
+                        write_bundle_type: Bundle,
+                        options: Optional[Dict[str, object]] = None,
+                        channel: Optional[int] = None) -> BundleSignal:
+    return super().write_from_bundle(appid, write_bundle_type,
+                                     self._channel_options(options, channel))
+
+  def read_from_bundle(self,
+                       appid: AppID,
+                       read_bundle_type: Bundle,
+                       options: Optional[Dict[str, object]] = None,
+                       channel: Optional[int] = None) -> BundleSignal:
+    return super().read_from_bundle(appid, read_bundle_type,
+                                    self._channel_options(options, channel))
+
+  def read_list_from_bundle(self,
+                            appid: AppID,
+                            read_bundle_type: Bundle,
+                            options: Optional[Dict[str, object]] = None,
+                            channel: Optional[int] = None) -> BundleSignal:
+    return super().read_list_from_bundle(
+        appid, read_bundle_type, self._channel_options(options, channel))
+
+  def read(self,
+           appid: AppID,
+           req: ChannelSignal,
+           data_type: Type,
+           options: Optional[Dict[str, object]] = None,
+           channel: Optional[int] = None) -> ChannelSignal:
+    return super().read(appid, req, data_type,
+                        self._channel_options(options, channel))
+
+  def read_list(self,
+                appid: AppID,
+                req: ChannelSignal,
+                element_type: Type,
+                num_items: int,
+                options: Optional[Dict[str, object]] = None,
+                channel: Optional[int] = None) -> ChannelSignal:
+    return super().read_list(appid, req, element_type, num_items,
+                             self._channel_options(options, channel))
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.DramServiceDeclOp(sym_name, loc=get_user_loc())
+
+
+Dram = _Dram()
+
+
 class _ChannelService(ServiceDecl):
   """Get a single channel connection."""
 
