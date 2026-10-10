@@ -3564,7 +3564,7 @@ LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   // firrtl.mem lowering lowers some SubfieldOps.  Zero-width can leave
   // invalid subfield accesses
-  if (getLoweredValue(op) || !op.getInput())
+  if (getLoweredValue(op) || op->getNumOperands() == 0)
     return success();
 
   if (isZeroBitFIRRTLType(op.getType()))

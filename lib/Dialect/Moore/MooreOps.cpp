@@ -397,7 +397,7 @@ SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
 }
 
 Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
-  auto packedType = dyn_cast<PackedType>(slot.elemType);
+  auto packedType = dyn_cast<PackedType>(slot.valueType);
   if (!packedType)
     return {};
   auto bitWidth = packedType.getBitSize();
@@ -1326,7 +1326,7 @@ bool BlockingAssignOp::canUsesBeRemoved(
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getDst() == slot.ptr &&
-         getSrc() != slot.ptr && getSrc().getType() == slot.elemType;
+         getSrc() != slot.ptr && getSrc().getType() == slot.valueType;
 }
 
 DeletionKind BlockingAssignOp::removeBlockingUses(
@@ -1360,7 +1360,7 @@ bool ReadOp::canUsesBeRemoved(const MemorySlot &slot,
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getOperand() == slot.ptr &&
-         getResult().getType() == slot.elemType;
+         getResult().getType() == slot.valueType;
 }
 
 DeletionKind

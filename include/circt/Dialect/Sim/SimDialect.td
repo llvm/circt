@@ -16,6 +16,8 @@
 include "mlir/IR/DialectBase.td"
 
 def SimDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "sim";
   let cppNamespace = "::circt::sim";
 

@@ -12,6 +12,8 @@
 include "mlir/IR/OpBase.td"
 
 def VerifDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "verif";
   let summary = "Verification constructs and utilities.";
   // See `docs/Dialect/Verif.md` for detailed dialect documentation.
