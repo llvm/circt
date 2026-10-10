@@ -519,11 +519,14 @@ class ModuleBuilder(ModuleLikeBuilderBase):
           hw.ParamDeclAttr.get_nodefault(i.name, i.attr.type)
           for i in self.parameters
       ]
-    self.attributes["verilogName"] = ir.StringAttr.get(self.name)
     self.attributes: Dict = {
         "output_file":
             hw.OutputFileAttr.get_from_filename(
-                ir.StringAttr.get("external_modules.sv"), False, True)
+                ir.StringAttr.get("external_modules.sv"), False, True),
+        # Keep the external name even if the symbol gets uniquified (e.g. when
+        # a parameterized extern module is used with multiple parameter sets).
+        "verilogName":
+            ir.StringAttr.get(self.name),
     }
     return hw.HWModuleExternOp(
         symbol,
