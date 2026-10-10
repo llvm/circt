@@ -22,6 +22,9 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
     print(f"mem1: {mem1.ptr} size {mem1.size}")
     mem1 = None
     assert hostmem.allocate(0) is None
+    # Enabling host memory service is idempotent.
+    hostmem.start()
+    hostmem.start()
 
   assert conn.sysinfo().esi_version() == 1
   m = conn.manifest()
