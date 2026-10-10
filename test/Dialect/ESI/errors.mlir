@@ -237,3 +237,29 @@ hw.module @BadReadListLength(in %req : !esi.channel<!hw.struct<address: ui64, ta
   %resp = esi.bundle.unpack %req from %bundle : !badReadListReq
   hw.output %resp : !esi.channel<!respWin>
 }
+
+// -----
+
+// DRAM 'write' 'byteenable' must have one bit per byte of 'data'.
+esi.service.std.dram @dram
+!badBEReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i24, byteenable: i2>> from "req", !esi.channel<ui8> to "ackTag"]>
+hw.module @BadDramByteEnable(in %req : !esi.channel<!hw.struct<address: ui64, tag: ui8, data: i24, byteenable: i2>>, out ack : !esi.channel<ui8>) {
+  // expected-error @+1 {{'write' request 'byteenable' must be a signless integer with one bit per byte of 'data' (i3), got 'i2'}}
+  %bundle = esi.service.req <@dram::@write> (#esi.appid<"badBE">) : !badBEReq
+  %ack = esi.bundle.unpack %req from %bundle : !badBEReq
+  hw.output %ack : !esi.channel<ui8>
+}
+
+// -----
+
+// DRAM 'read_list' requires the request's 'length' field to be an unsigned
+// integer, just like HostMem.
+esi.service.std.dram @dram
+!respWin = !esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"", [<"tag">, <"data", 4>]>]>
+!badReadListReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: si16>> from "req", !esi.channel<!respWin> to "resp"]>
+hw.module @BadDramReadListLength(in %req : !esi.channel<!hw.struct<address: ui64, tag: ui8, length: si16>>, out resp : !esi.channel<!respWin>) {
+  // expected-error @+1 {{'read_list' request 'length' must be an unsigned integer, got 'si16'}}
+  %bundle = esi.service.req <@dram::@read_list> (#esi.appid<"badReadList">) : !badReadListReq
+  %resp = esi.bundle.unpack %req from %bundle : !badReadListReq
+  hw.output %resp : !esi.channel<!respWin>
+}

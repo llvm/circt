@@ -156,8 +156,12 @@ void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
           /*resettable=*/UnitAttr())});
 }
 
-ServicePortInfo HostMemServiceDeclOp::writePortInfo() {
-  auto *ctxt = getContext();
+//===----------------------------------------------------------------------===//
+// Memory-style services (HostMem and Dram) share the same port shapes.
+//===----------------------------------------------------------------------===//
+
+static ServicePortInfo memWritePortInfo(StringAttr sym) {
+  auto *ctxt = sym.getContext();
 
   // Unified write port. The request is 'AnyType' so a single connection can be
   // either a single-message write (struct{address, tag, data}) or a burst/list
@@ -165,12 +169,12 @@ ServicePortInfo HostMemServiceDeclOp::writePortInfo() {
   // width); the concrete request type is supplied per-connection. Responds with
   // an 'ackTag' per written element.
   return createReqResp(
-      getSymNameAttr(), "write", "req", AnyType::get(ctxt), "ackTag",
+      sym, "write", "req", AnyType::get(ctxt), "ackTag",
       IntegerType::get(ctxt, 8, IntegerType::SignednessSemantics::Unsigned));
 }
 
-ServicePortInfo HostMemServiceDeclOp::readPortInfo() {
-  auto *ctxt = getContext();
+static ServicePortInfo memReadPortInfo(StringAttr sym) {
+  auto *ctxt = sym.getContext();
   auto addressType =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
 
@@ -194,12 +198,11 @@ ServicePortInfo HostMemServiceDeclOp::readPortInfo() {
                 hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
                                           AnyType::get(ctxt)},
             });
-  return createReqResp(getSymNameAttr(), "read", "req", readReqType, "resp",
-                       readRespType);
+  return createReqResp(sym, "read", "req", readReqType, "resp", readRespType);
 }
 
-ServicePortInfo HostMemServiceDeclOp::readListPortInfo() {
-  auto *ctxt = getContext();
+static ServicePortInfo memReadListPortInfo(StringAttr sym) {
+  auto *ctxt = sym.getContext();
   auto ui64 =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
   auto ui8 =
@@ -212,15 +215,55 @@ ServicePortInfo HostMemServiceDeclOp::readListPortInfo() {
   // per-connection -- hence 'AnyType' for 'resp'. 'length' is likewise
   // 'AnyType' so the client may supply an unsigned integer of any width. Since
   // 'AnyType' cannot itself express "unsigned integer of any width",
-  // 'verifyRequest' (below) rejects a non-unsigned-integer 'length' at
+  // 'verifyReadListRequest' (below) rejects a non-unsigned-integer 'length' at
   // op-verification time.
   hw::StructType readReqType = hw::StructType::get(
       ctxt, {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), ui64},
              hw::StructType::FieldInfo{StringAttr::get(ctxt, "tag"), ui8},
              hw::StructType::FieldInfo{StringAttr::get(ctxt, "length"),
                                        AnyType::get(ctxt)}});
-  return createReqResp(getSymNameAttr(), "read_list", "req", readReqType,
-                       "resp", AnyType::get(ctxt));
+  return createReqResp(sym, "read_list", "req", readReqType, "resp",
+                       AnyType::get(ctxt));
+}
+
+/// Return the inner type of the 'req' channel of a request bundle, if any.
+static Type getReqInnerType(ChannelBundleType reqType) {
+  for (BundledChannel ch : reqType.getChannels())
+    if (ch.name.getValue() == "req")
+      return ch.type.getInner();
+  return {};
+}
+
+/// The 'read_list' request struct declares 'length' as 'AnyType' (so the
+/// generic type match accepts any bit width), but here we additionally require
+/// it to be an unsigned integer -- the constraint 'AnyType' alone cannot
+/// express.
+static LogicalResult verifyReadListRequest(ChannelBundleType reqType,
+                                           Operation *reqOp) {
+  auto structType = dyn_cast_or_null<hw::StructType>(getReqInnerType(reqType));
+  if (!structType)
+    return success();
+  Type lengthType = structType.getFieldType("length");
+  if (!lengthType)
+    return success();
+  if (auto intType = dyn_cast<IntegerType>(lengthType);
+      intType && intType.isUnsigned())
+    return success();
+  return reqOp->emitOpError()
+         << "'read_list' request 'length' must be an unsigned integer, got "
+         << lengthType;
+}
+
+ServicePortInfo HostMemServiceDeclOp::writePortInfo() {
+  return memWritePortInfo(getSymNameAttr());
+}
+
+ServicePortInfo HostMemServiceDeclOp::readPortInfo() {
+  return memReadPortInfo(getSymNameAttr());
+}
+
+ServicePortInfo HostMemServiceDeclOp::readListPortInfo() {
+  return memReadListPortInfo(getSymNameAttr());
 }
 
 void HostMemServiceDeclOp::getPortList(
@@ -233,29 +276,63 @@ void HostMemServiceDeclOp::getPortList(
 LogicalResult HostMemServiceDeclOp::verifyRequest(const ServicePortInfo &port,
                                                   ChannelBundleType reqType,
                                                   Operation *reqOp) {
-  // Only the 'read_list' port constrains 'length'. Its request struct declares
-  // 'length' as 'AnyType' (so the generic type match accepts any bit width),
-  // but here we additionally require it to be an unsigned integer -- the
-  // constraint 'AnyType' alone cannot express.
+  // Only the 'read_list' port constrains 'length'.
   if (port.port.getName().getValue() != "read_list")
     return success();
+  return verifyReadListRequest(reqType, reqOp);
+}
 
-  for (BundledChannel ch : reqType.getChannels()) {
-    if (ch.name.getValue() != "req")
-      continue;
-    auto structType = dyn_cast<hw::StructType>(ch.type.getInner());
-    if (!structType)
-      break;
-    Type lengthType = structType.getFieldType("length");
-    if (!lengthType)
-      break;
-    if (auto intType = dyn_cast<IntegerType>(lengthType);
-        intType && intType.isUnsigned())
-      return success();
+ServicePortInfo DramServiceDeclOp::writePortInfo() {
+  return memWritePortInfo(getSymNameAttr());
+}
+
+ServicePortInfo DramServiceDeclOp::readPortInfo() {
+  return memReadPortInfo(getSymNameAttr());
+}
+
+ServicePortInfo DramServiceDeclOp::readListPortInfo() {
+  return memReadListPortInfo(getSymNameAttr());
+}
+
+void DramServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
+  ports.push_back(writePortInfo());
+  ports.push_back(readPortInfo());
+  ports.push_back(readListPortInfo());
+}
+
+LogicalResult DramServiceDeclOp::verifyRequest(const ServicePortInfo &port,
+                                               ChannelBundleType reqType,
+                                               Operation *reqOp) {
+  StringRef portName = port.port.getName().getValue();
+  if (portName == "read_list")
+    return verifyReadListRequest(reqType, reqOp);
+  if (portName != "write")
+    return success();
+
+  // A single-message write may carry an optional 'byteenable' mask with one
+  // bit per byte of 'data'.
+  auto structType = dyn_cast_or_null<hw::StructType>(getReqInnerType(reqType));
+  if (!structType)
+    return success();
+  Type beType = structType.getFieldType("byteenable");
+  if (!beType)
+    return success();
+  Type dataType = structType.getFieldType("data");
+  if (!dataType)
     return reqOp->emitOpError()
-           << "'read_list' request 'length' must be an unsigned integer, got "
-           << lengthType;
-  }
+           << "'write' request with 'byteenable' must have a 'data' field";
+  int64_t dataBits = hw::getBitWidth(dataType);
+  if (dataBits <= 0)
+    return reqOp->emitOpError()
+           << "'write' request 'data' must have a known, non-zero bit width";
+  int64_t expectedWidth = llvm::divideCeil(dataBits, 8);
+  auto beIntType = dyn_cast<IntegerType>(beType);
+  if (!beIntType || !beIntType.isSignless() ||
+      beIntType.getWidth() != expectedWidth)
+    return reqOp->emitOpError()
+           << "'write' request 'byteenable' must be a signless integer "
+              "with one bit per byte of 'data' (i"
+           << expectedWidth << "), got " << beType;
   return success();
 }
 
