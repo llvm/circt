@@ -130,6 +130,22 @@ moore.module @AssocArrayRefs() {
   }
 }
 
+// CHECK-LABEL: moore.module @StringRefs()
+moore.module @StringRefs() {
+  %str = moore.variable : <string>
+  moore.procedure initial {
+    // CHECK: [[IDX:%.+]] = moore.constant 0 : i32
+    %idx = moore.constant 0 : i32
+    // CHECK: [[CHAR:%.+]] = moore.constant_string "w" : i8
+    %char = moore.constant_string "w" : i8
+
+    // CHECK: moore.string.put %str[[[IDX]]], [[CHAR]] : <string>
+    %ref = moore.string.extract_ref %str[%idx] : <string>
+    moore.blocking_assign %ref, %char : i8
+    moore.return
+  }
+}
+
 // CHECK-LABEL: func.func @InFunction
 func.func @InFunction(%arg0: !moore.i32) -> !moore.i32 {
   %imm = moore.variable : <i32>
