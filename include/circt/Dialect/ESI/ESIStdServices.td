@@ -173,6 +173,45 @@ def HostMemServiceDeclOp: ESI_Op<"service.std.hostmem",
   }];
 }
 
+def DramServiceDeclOp: ESI_Op<"service.std.dram",
+          [HasParent<"::mlir::ModuleOp">, SymbolName, SymbolVisibility, Symbol,
+           DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+  let summary = "Device (on-board) DRAM service";
+  let description = [{
+    Declares a service to read/write device-attached DRAM. Must be implemented
+    by a BSP. The client-facing ports are identical to those of
+    `esi.service.std.hostmem` (`read`, `read_list`, and `write`) with one
+    addition: a single-message `write` request struct may carry an optional
+    `byteenable` field (a signless integer with one bit per byte of `data`,
+    bit 0 corresponding to the least significant byte) to perform sparse,
+    masked writes. Bytes whose enable bit is clear are left unmodified.
+
+    Addresses are byte addresses and need not be aligned; the service
+    implementation is responsible for converting to the (typically
+    word-addressed, byte-enabled) device memory interface. Implementations may
+    offer multiple independent DRAM channels, selected per connection via a
+    `channel` request option.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
+
+  let assemblyFormat = [{
+    $sym_name attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    ServicePortInfo readPortInfo();
+    ServicePortInfo writePortInfo();
+    ServicePortInfo readListPortInfo();
+    std::optional<StringRef> getTypeName() { return "esi.service.std.dram"; }
+    LogicalResult verifyRequest(const ServicePortInfo &portInfo,
+                                ChannelBundleType reqBundleType,
+                                Operation *reqOp);
+  }];
+}
+
 def TelemetryServiceDeclOp: ESI_Op<"service.std.telemetry",
           [HasParent<"::mlir::ModuleOp">, SymbolName, SymbolVisibility, Symbol,
            DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
