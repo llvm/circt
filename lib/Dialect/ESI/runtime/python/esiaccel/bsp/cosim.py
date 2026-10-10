@@ -16,6 +16,7 @@ from pycde import esi
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
                      DesignResetController, ResetCycles, TelemetryMMIO)
 from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
+from .dram import ChannelDram, connect_dram_model
 
 from pycde.circt import ir
 from pycde.circt.dialects import esi as raw_esi
@@ -24,12 +25,21 @@ from pathlib import Path
 
 __root_dir__ = Path(__file__).parent.parent
 
+# Configuration of the cosim DRAM service ('esi.Dram'). Each channel is backed
+# by an instance of the behavioral 'EsiDramModel'.
+CosimDramDataWidth = 64
+CosimDramAddrWidth = 32
+CosimDramBurstWidth = 7
+# Percentage of cycles on which the model randomly back-pressures requests.
+CosimDramStallPercent = 5
+
 
 def CosimBSP(
     user_module: Type[Module],
     dma_engine_pair: Optional[Tuple[Callable, Callable]] = None,
     channel_service: Optional[Type[esi.ServiceImplementation]] = None,
     max_outstanding_reads: int = 4,
+    dram_channels: int = 2,
 ) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'.
@@ -47,10 +57,14 @@ def CosimBSP(
 
   Passing both 'dma_engine_pair' and 'channel_service' raises ValueError.
 
-  'max_outstanding_reads' is the per-client limit on logical HostMem read
-  requests in flight. The cosim host services each read request in order, so
-  more than one is safe; the default of 4 keeps the multi-outstanding read path
-  exercised in simulation.
+  'max_outstanding_reads' is the per-client limit on logical HostMem and DRAM
+  read requests in flight. The cosim host and the DRAM model service read
+  requests in order, so more than one is safe; the default of 4 keeps the
+  multi-outstanding read path exercised in simulation.
+
+  'dram_channels' sets the number of DRAM channels: 'esi.Dram[0]' through
+  'esi.Dram[dram_channels - 1]', each backed by its own behavioral DRAM model.
+  Requests to any other DRAM channel are rejected at compile time.
   """
   if dma_engine_pair is not None and channel_service is not None:
     raise ValueError(
@@ -89,6 +103,28 @@ def CosimBSP(
     @generator
     def build(ports):
       user_module(clk=ports.clk, rst=ports.rst)
+
+      # DRAM service: each channel ('esi.Dram[ch]') has its own implementation
+      # connected to its own behavioral model.
+      for ch in range(dram_channels):
+        dram = ChannelDram(data_width=CosimDramDataWidth,
+                           addr_width=CosimDramAddrWidth,
+                           burst_width=CosimDramBurstWidth,
+                           max_outstanding_reads=max_outstanding_reads)(
+                               decl=esi.Dram[ch],
+                               appid=esi.AppID("__cosim_dram", ch),
+                               clk=ports.clk,
+                               rst=ports.rst)
+        connect_dram_model(ports.clk,
+                           ports.rst,
+                           dram.read,
+                           dram.write,
+                           data_width=CosimDramDataWidth,
+                           addr_width=CosimDramAddrWidth,
+                           burst_width=CosimDramBurstWidth,
+                           instance_name=f"dram_model{ch}",
+                           STALL_PERCENT=CosimDramStallPercent,
+                           SEED=ch + 1)
       TelemetryMMIO(esi.Telemetry,
                     appid=esi.AppID("__telemetry"),
                     clk=ports.clk,
