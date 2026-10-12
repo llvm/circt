@@ -2680,6 +2680,49 @@ firrtl.module @issue1142(in %cond: !firrtl.uint<1>, out %z: !firrtl.uint) {
   firrtl.connect %z, %4 : !firrtl.uint, !firrtl.uint
 }
 
+// CHECK-LABEL: firrtl.module @MuxConstantSelectAggregate
+firrtl.module @MuxConstantSelectAggregate(
+  in %va: !firrtl.vector<uint<8>, 2>,
+  in %vb: !firrtl.vector<uint<8>, 2>,
+  in %ba: !firrtl.bundle<a: uint<1>, b: uint<8>>,
+  in %bb: !firrtl.bundle<a: uint<1>, b: uint<8>>,
+  out %v0: !firrtl.vector<uint<8>, 2>,
+  out %v1: !firrtl.vector<uint<8>, 2>,
+  out %b0: !firrtl.bundle<a: uint<1>, b: uint<8>>,
+  out %b1: !firrtl.bundle<a: uint<1>, b: uint<8>>
+) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.mux
+  // CHECK: firrtl.matchingconnect %v0, %vb
+  // CHECK: firrtl.matchingconnect %v1, %va
+  // CHECK: firrtl.matchingconnect %b0, %bb
+  // CHECK: firrtl.matchingconnect %b1, %ba
+  %0 = firrtl.mux(%c0_ui1, %va, %vb) : (!firrtl.uint<1>, !firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<8>, 2>) -> !firrtl.vector<uint<8>, 2>
+  %1 = firrtl.mux(%c1_ui1, %va, %vb) : (!firrtl.uint<1>, !firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<8>, 2>) -> !firrtl.vector<uint<8>, 2>
+  %2 = firrtl.mux(%c0_ui1, %ba, %bb) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: uint<8>>, !firrtl.bundle<a: uint<1>, b: uint<8>>) -> !firrtl.bundle<a: uint<1>, b: uint<8>>
+  %3 = firrtl.mux(%c1_ui1, %ba, %bb) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: uint<8>>, !firrtl.bundle<a: uint<1>, b: uint<8>>) -> !firrtl.bundle<a: uint<1>, b: uint<8>>
+  firrtl.matchingconnect %v0, %0 : !firrtl.vector<uint<8>, 2>
+  firrtl.matchingconnect %v1, %1 : !firrtl.vector<uint<8>, 2>
+  firrtl.matchingconnect %b0, %2 : !firrtl.bundle<a: uint<1>, b: uint<8>>
+  firrtl.matchingconnect %b1, %3 : !firrtl.bundle<a: uint<1>, b: uint<8>>
+}
+
+// CHECK-LABEL: firrtl.module @MuxConstantSelectAggregateUnknownWidth
+firrtl.module @MuxConstantSelectAggregateUnknownWidth(
+  in %a: !firrtl.vector<uint, 2>,
+  in %b: !firrtl.vector<uint, 2>,
+  out %z: !firrtl.vector<uint, 2>
+) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+  // Don't fold away constant selects if any leaf width is unknown.
+  // CHECK: %0 = firrtl.mux(%c0_ui1, %a, %b)
+  %0 = firrtl.mux(%c0_ui1, %a, %b) : (!firrtl.uint<1>, !firrtl.vector<uint, 2>, !firrtl.vector<uint, 2>) -> !firrtl.vector<uint, 2>
+  firrtl.connect %z, %0 : !firrtl.vector<uint, 2>, !firrtl.vector<uint, 2>
+}
+
 // CHECK-LABEL: firrtl.module @PadMuxOperands
 firrtl.module @PadMuxOperands(
   in %cond: !firrtl.uint<1>,
@@ -3597,6 +3640,15 @@ firrtl.module @AggregateCreateConst(
   // CHECK-DAG: %[[BUNDLE:.+]] = firrtl.aggregateconstant [0 : ui1, 0 : ui1] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // CHECK-DAG: firrtl.matchingconnect %vector_out, %[[VEC]] : !firrtl.vector<uint<1>, 2>
   // CHECK-DAG: firrtl.matchingconnect %bundle_out, %[[BUNDLE]] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+}
+
+// Aggregate create ops have no side effects, so unused ones are erased.
+// CHECK-LABEL: firrtl.module @AggregateCreateUnused(
+firrtl.module @AggregateCreateUnused(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
+  // CHECK-NOT: firrtl.vectorcreate
+  // CHECK-NOT: firrtl.bundlecreate
+  %vector = firrtl.vectorcreate %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
+  %bundle = firrtl.bundlecreate %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
 }
 
 
