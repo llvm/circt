@@ -53,7 +53,7 @@ struct LoweringOptionsOption
                 "wireSpillingNamehintTermLimit=<n>, "
                 "disallowExpressionInliningInPorts, disallowMuxInlining, "
                 "mitigateVivadoArrayIndexConstPropBug, "
-                "emitWireInPorts, defaultToVarPorts, emitBindComments, "
+                "emitBindComments, "
                 "omitVersionComment, "
                 "caseInsensitiveKeywords, emitVerilogLocations, "
                 "fixUpEmptyModules, disallowClockedAssertions, "

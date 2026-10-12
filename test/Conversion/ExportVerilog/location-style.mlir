@@ -3,7 +3,7 @@
 module attributes {circt.loweringOptions = "locationInfoStyle=wrapInAtSquareBracket"}{
 // CHECK-LABEL: module Foo(
 // CHECK-SAME:    // @[dummy:1:1]
-// CHECK-NEXT:    input a
+// CHECK-NEXT:    input var logic a
 // CHECK-NOT:     //
 // CHECK:       endmodule
 hw.module @Foo(in %a: i1 loc("")) {

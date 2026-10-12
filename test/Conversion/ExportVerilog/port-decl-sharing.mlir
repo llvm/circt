@@ -2,10 +2,10 @@
 
 module attributes {circt.loweringOptions = "disallowPortDeclSharing"}{
 // CHECK:      module Foo(     // dummy:1:1
-// CHECK-NEXT:   input        a,       // dummy:1:2
-// CHECK-NEXT:   input        b,       // dummy:1:3
-// CHECK-NEXT:   output [1:0] a_0,     // dummy:1:4
-// CHECK-NEXT:   output [1:0] b_0      // dummy:1:5
+// CHECK-NEXT:   input  var logic       a,       // dummy:1:2
+// CHECK-NEXT:   input  var logic       b,       // dummy:1:3
+// CHECK-NEXT:   output var logic [1:0] a_0,     // dummy:1:4
+// CHECK-NEXT:   output var logic [1:0] b_0      // dummy:1:5
 // CHECK-NEXT: );
 hw.module @Foo(in %a: i1 loc("dummy":1:2), in %b: i1 loc("dummy":1:3), out a: i2 loc("dummy":1:4), out b: i2 loc("dummy":1:5)) {
   %ao = comb.concat %a, %b: i1, i1
@@ -18,10 +18,10 @@ hw.module @Foo(in %a: i1 loc("dummy":1:2), in %b: i1 loc("dummy":1:3), out a: i2
 
 module {
 // CHECK:      module Foo(     // dummy:1:1
-// CHECK-NEXT:   input        a,       // dummy:1:2
-// CHECK-NEXT:                b,       // dummy:1:3
-// CHECK-NEXT:   output [1:0] a_0,     // dummy:1:4
-// CHECK-NEXT:                b_0      // dummy:1:5
+// CHECK-NEXT:   input  var logic       a,       // dummy:1:2
+// CHECK-NEXT:                          b,       // dummy:1:3
+// CHECK-NEXT:   output var logic [1:0] a_0,     // dummy:1:4
+// CHECK-NEXT:                          b_0      // dummy:1:5
 // CHECK-NEXT: );
 hw.module @Foo(in %a: i1 loc("dummy":1:2), in %b: i1 loc("dummy":1:3), out a: i2 loc("dummy":1:4), out b: i2 loc("dummy":1:5)) {
   %ao = comb.concat %a, %b: i1, i1
@@ -32,10 +32,10 @@ hw.module @Foo(in %a: i1 loc("dummy":1:2), in %b: i1 loc("dummy":1:3), out a: i2
 
 // -----
 // CHECK:      module Foo(     // dummy:1:1
-// CHECK-NEXT:   // input  /*Zero Width*/ a,   // dummy:1:2
-// CHECK-NEXT:   // input  /*Zero Width*/ b,   // dummy:1:3
-// CHECK-NEXT:   // output /*Zero Width*/ a_0, // dummy:1:4
-// CHECK-NEXT:   // output /*Zero Width*/ b_0  // dummy:1:5
+// CHECK-NEXT:   // input  var logic /*Zero Width*/ a,	// dummy:1:2
+// CHECK-NEXT:   // input  var logic /*Zero Width*/ b,	// dummy:1:3
+// CHECK-NEXT:   // output var logic /*Zero Width*/ a_0,	// dummy:1:4
+// CHECK-NEXT:   // output var logic /*Zero Width*/ b_0	// dummy:1:5
 // CHECK-NEXT: );
 module attributes {circt.loweringOptions = "disallowPortDeclSharing"}{
 hw.module @Foo(in %a: i0 loc("dummy":1:2), in %b: i0 loc("dummy":1:3), out a: i0 loc("dummy":1:4), out b: i0 loc("dummy":1:5)) {
@@ -47,10 +47,10 @@ hw.module @Foo(in %a: i0 loc("dummy":1:2), in %b: i0 loc("dummy":1:3), out a: i0
 
 module {
 // CHECK:      module Foo(     // dummy:1:1
-// CHECK-NEXT:   // input  /*Zero Width*/ a,   // dummy:1:2
-// CHECK-NEXT:   //                       b,   // dummy:1:3
-// CHECK-NEXT:   // output /*Zero Width*/ a_0, // dummy:1:4
-// CHECK-NEXT:   //                       b_0  // dummy:1:5
+// CHECK-NEXT:   // input  var logic /*Zero Width*/ a,	// dummy:1:2
+// CHECK-NEXT:   //                                 b,	// dummy:1:3
+// CHECK-NEXT:   // output var logic /*Zero Width*/ a_0,	// dummy:1:4
+// CHECK-NEXT:   //                                 b_0	// dummy:1:5
 // CHECK-NEXT: );
 hw.module @Foo(in %a: i0 loc("dummy":1:2), in %b: i0 loc("dummy":1:3), out a: i0 loc("dummy":1:4), out b: i0 loc("dummy":1:5)) {
   hw.output %a, %b : i0, i0
@@ -61,11 +61,11 @@ hw.module @Foo(in %a: i0 loc("dummy":1:2), in %b: i0 loc("dummy":1:3), out a: i0
 
 module attributes {circt.loweringOptions = "disallowPortDeclSharing"}{
 // CHECK:      module Foo(     // dummy:1:1
-// CHECK-NEXT:   // input  /*Zero Width*/ a,   // dummy:1:2
-// CHECK-NEXT:   // input  /*Zero Width*/ b,   // dummy:1:3
-// CHECK-NEXT:      input  [99:0]         c    // new:1:1
-// CHECK-NEXT:   // output /*Zero Width*/ a_0, // dummy:1:4
-// CHECK-NEXT:   // output /*Zero Width*/ b_0  // dummy:1:5
+// CHECK-NEXT:   // input  var logic /*Zero Width*/ a,	// dummy:1:2
+// CHECK-NEXT:   // input  var logic /*Zero Width*/ b,	// dummy:1:3
+// CHECK-NEXT:      input  var logic [99:0]         c	// new:1:1
+// CHECK-NEXT:   // output var logic /*Zero Width*/ a_0,	// dummy:1:4
+// CHECK-NEXT:   // output var logic /*Zero Width*/ b_0	// dummy:1:5
 // CHECK-NEXT: );
 hw.module @Foo(in %a: i0 loc("dummy":1:2), in %b: i0 loc("dummy":1:3), in %c : i100 loc("new":1:1), out a: i0 loc("dummy":1:4), out b: i0 loc("dummy":1:5)) {
   hw.output %a, %b : i0, i0
@@ -76,11 +76,11 @@ hw.module @Foo(in %a: i0 loc("dummy":1:2), in %b: i0 loc("dummy":1:3), in %c : i
 
 module {
 // CHECK:      module Foo(     // dummy:1:1
-// CHECK-NEXT:   // input  /*Zero Width*/ a,   // dummy:1:2
-// CHECK-NEXT:   //                       b,   // dummy:1:3
-// CHECK-NEXT:      input  [99:0]         c    // new:1:1
-// CHECK-NEXT:   // output /*Zero Width*/ a_0, // dummy:1:4
-// CHECK-NEXT:   //                       b_0  // dummy:1:5
+// CHECK-NEXT:   // input  var logic /*Zero Width*/ a,	// dummy:1:2
+// CHECK-NEXT:   //                                 b,	// dummy:1:3
+// CHECK-NEXT:      input  var logic [99:0]         c	// new:1:1
+// CHECK-NEXT:   // output var logic /*Zero Width*/ a_0,	// dummy:1:4
+// CHECK-NEXT:   //                                 b_0	// dummy:1:5
 // CHECK-NEXT: );
 hw.module @Foo(in %a: i0 loc("dummy":1:2), in %b: i0 loc("dummy":1:3), in %c : i100 loc("new":1:1), out a: i0 loc("dummy":1:4), out b: i0 loc("dummy":1:5)) {
   hw.output %a, %b : i0, i0

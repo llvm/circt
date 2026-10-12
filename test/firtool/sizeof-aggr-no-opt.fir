@@ -4,7 +4,7 @@
 ; types, even when optimizations are disabled.
 
 ; CHECK-LABEL: module Top(
-; CHECK:          output [31:0] size
+; CHECK:          output var logic [31:0] size
 ; CHECK:          assign size = 32'h0;
 
 FIRRTL version 4.0.0

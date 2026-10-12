@@ -1,8 +1,8 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --strict-whitespace
 
 // CHECK: module namechange(
-// CHECK: input  [3:0] casex_0,
-// CHECK: output [3:0] if_0
+// CHECK: input  var logic [3:0] casex_0,
+// CHECK: output var logic [3:0] if_0
 // CHECK: );
 hw.module @namechange(in %casex: i4, out if: i4) {
   // CHECK: assign if_0 = casex_0;
@@ -13,9 +13,9 @@ hw.module @namechange(in %casex: i4, out if: i4) {
 }) {comment = ""} : () -> ()
 
 // CHECK-LABEL: module moduleInstEscNameModExt
-// CHECK-NEXT:  input  [3:0] a,
-// CHECK-NEXT:               b,
-// CHECK-NEXT:  output [4:0] y
+// CHECK-NEXT:  input  var logic [3:0] a,
+// CHECK-NEXT:                         b,
+// CHECK-NEXT:  output var logic [4:0] y
 // CHECK-NEXT: );
 hw.module @moduleInstEscNameModExt(in %a: i4, in %b: i4, out y: i5) {
 // CHECK:      \$add add (
@@ -32,8 +32,8 @@ hw.module @moduleInstEscNameModExt(in %a: i4, in %b: i4, out y: i5) {
 }) {comment = ""} : () -> ()
 
 // CHECK-LABEL: module moduleInstEscNameModExt2
-// CHECK-NEXT:  input  [3:0] a,
-// CHECK-NEXT:  output [4:0] y
+// CHECK-NEXT:  input  var logic [3:0] a,
+// CHECK-NEXT:  output var logic [4:0] y
 // CHECK-NEXT: );
 hw.module @moduleInstEscNameModExt2(in %a: i4, out y: i5) {
 // CHECK:      \$SOME>ELSE<[]
@@ -50,7 +50,7 @@ hw.module.extern @module_with_bool<bparam: i1>()
 // CHECK-LABEL: module parametersNameConflict
 // CHECK-NEXT:    #(parameter [41:0] p2 = 42'd17,
 // CHECK-NEXT:      parameter [0:0]  wire_0) (
-// CHECK-NEXT:    input [7:0] p1
+// CHECK-NEXT:    input var logic [7:0] p1
 // CHECK-NEXT: );
 hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(in %p1: i8) {
   %myWire = sv.wire : !hw.inout<i1>
@@ -100,8 +100,8 @@ hw.module @useParametersNameConflict(in %xxx: i8) {
 // https://github.com/llvm/circt/issues/681
 // Rename keywords used in variable/module names
 // CHECK-LABEL: module inout_0(
-// CHECK:         input  inout_0,
-// CHECK:         output output_0
+// CHECK:         input  var logic inout_0,
+// CHECK:         output var logic output_0
 // CHECK:       );
 hw.module @inout(in %inout: i1, out output: i1) {
 // CHECK:       assign output_0 = inout_0;
@@ -120,8 +120,8 @@ hw.module @inout_inst(in %a: i1) {
 // https://github.com/llvm/circt/issues/681
 // Rename keywords used in variable/module names
 // CHECK-LABEL: module reg_0(
-// CHECK-NEXT:    input  inout_0,
-// CHECK-NEXT:    output output_0
+// CHECK-NEXT:    input  var logic inout_0,
+// CHECK-NEXT:    output var logic output_0
 // CHECK-NEXT:  );
 hw.module @reg(in %inout: i1, out output: i1) {
   // CHECK: assign output_0 = inout_0;
@@ -130,9 +130,9 @@ hw.module @reg(in %inout: i1, out output: i1) {
 
 // https://github.com/llvm/circt/issues/525
 // CHECK-LABEL: module issue525(
-// CHECK-NEXT:    input  [1:0] struct_0,
-// CHECK-NEXT:                 else_0,
-// CHECK-NEXT:    output [1:0] casex_0
+// CHECK-NEXT:    input  var logic [1:0] struct_0,
+// CHECK-NEXT:                           else_0,
+// CHECK-NEXT:    output var logic [1:0] casex_0
 // CHECK-NEXT:  );
 hw.module @issue525(in %struct: i2, in %else: i2, out casex: i2) {
   // CHECK: assign casex_0 = struct_0 + else_0;

@@ -3,7 +3,7 @@
 sv.macro.decl @SYNTHESIS
 
 // CHECK-LABEL: module inputs_only(
-// CHECK-NEXT:   input a,{{.*}}
+// CHECK-NEXT:   input var logic a,{{.*}}
 // CHECK-NEXT:         b
 // CHECK-NEXT:  );
 hw.module @inputs_only(in %a: i1, in %b: i1) {
@@ -16,23 +16,23 @@ hw.module @no_ports() {
 }
 
 // CHECK-LABEL: module Expressions(
-// CHECK-NEXT:    input  [7:0]  in8,
-// CHECK-NEXT:    input  [3:0]  in4,
-// CHECK-NEXT:    input         clock,
-// CHECK-NEXT:    output        out1a,
+// CHECK-NEXT:    input  var logic [7:0]  in8,
+// CHECK-NEXT:    input  var logic [3:0]  in4,
+// CHECK-NEXT:    input  var logic        clock,
+// CHECK-NEXT:    output var logic        out1a,
 // CHECK-NEXT:                  out1b,
 // CHECK-NEXT:                  out1c,
 // CHECK-NEXT:                  out1d,
 // CHECK-NEXT:                  out1e,
 // CHECK-NEXT:                  out1f,
 // CHECK-NEXT:                  out1g,
-// CHECK-NEXT:    output [3:0]  out4,
+// CHECK-NEXT:    output var logic [3:0]  out4,
 // CHECK-NEXT:                  out4s,
-// CHECK-NEXT:    output [15:0] out16,
+// CHECK-NEXT:    output var logic [15:0] out16,
 // CHECK-NEXT:                  out16s,
-// CHECK-NEXT:    output [16:0] sext17,
-// CHECK-NEXT:    output [1:0]  orvout,
-// CHECK-NEXT:    output [7:0]  out_reverse,
+// CHECK-NEXT:    output var logic [16:0] sext17,
+// CHECK-NEXT:    output var logic [1:0]  orvout,
+// CHECK-NEXT:    output var logic [7:0]  out_reverse,
 // CHECK-NEXT:           [63:0] outTime,
 // CHECK-NEXT:           [31:0] outSTime
 // CHECK-NEXT:  );
@@ -383,8 +383,8 @@ hw.module @MultiUseExpr(in %a: i4, out b0: i1, out b1: i1, out b2: i1, out b3: i
 }
 
 // CHECK-LABEL: module SimpleConstPrint(
-// CHECK-NEXT:    input  [3:0] in4,
-// CHECK-NEXT:    output [3:0] out4
+// CHECK-NEXT:    input  var logic [3:0] in4,
+// CHECK-NEXT:    output var logic [3:0] out4
 // CHECK-NEXT: );
 // CHECK:  wire [3:0] w = 4'h1;
 // CHECK:  assign out4 = in4 + 4'h1;
@@ -432,7 +432,7 @@ sv.macro.decl @foo
 sv.macro.decl @bar
 
 // CHECK-LABEL: module ordered_region
-// CHECK-NEXT: input a
+// CHECK-NEXT: input var logic a
 // CHECK-NEXT: );
 // CHECK-EMPTY:
 hw.module @ordered_region(in %a: i1) {
@@ -501,8 +501,8 @@ hw.module @ArrayParams<param: i32>(
   in %arr: !hw.array<#hw.param.decl.ref<"param"> x i8>,
   in %uarr: !hw.uarray<#hw.param.decl.ref<"param"> x i8>) {}
 // CHECK:        #(parameter /*integer*/ param) (
-// CHECK:        input [param - 64'd1:0][7:0] arr,
-// CHECK:        input [7:0]                  uarr[0:param - 64'd1]
+// CHECK:        input var logic [param - 64'd1:0][7:0] arr,
+// CHECK:        input var logic [7:0]                  uarr[0:param - 64'd1]
 // CHECK:      );
 // CHECK:     endmodule
 
@@ -680,8 +680,8 @@ hw.module @UnaryParensIssue755(in %a: i8, out b: i1) {
 // reserved Verilog keywords.
 hw.module.extern @VerbatimModuleExtern(in %foo: i1 {hw.exportPort = #hw<innerSym@symA>}, out bar: i1 {hw.exportPort = #hw<innerSym@symB>})
 // CHECK-LABEL: module VerbatimModule(
-// CHECK-NEXT:    input  signed_0
-// CHECK-NEXT:    output unsigned_0
+// CHECK-NEXT:    input  var logic signed_0
+// CHECK-NEXT:    output var logic unsigned_0
 hw.module @VerbatimModule(in %signed: i1 {hw.exportPort = #hw<innerSym@symA>}, out unsigned: i1 {hw.exportPort = #hw<innerSym@symB>}) {
   %parameter = sv.wire sym @symC : !hw.inout<i4>
   %localparam = sv.reg sym @symD : !hw.inout<i4>
@@ -741,7 +741,7 @@ hw.module @BindEmission2() {
 
 hw.module @rename_port(in %r: i1 {hw.verilogName = "w"}) {
 // CHECK-LABEL: module rename_port
-// CHECK:  input w
+// CHECK:  input var logic w
 // CHECK:  wire [3:0] w_0;
     %w = sv.wire : !hw.inout<i4>
     hw.output
@@ -749,7 +749,7 @@ hw.module @rename_port(in %r: i1 {hw.verilogName = "w"}) {
 
 hw.module @bind_rename_port(in %.io_req_ready.output: i1, in %reset: i1 { hw.verilogName = "resetSignalName" }, in %clock: i1) {
   // CHECK-LABEL: module bind_rename_port
-  // CHECK-NEXT: input _io_req_ready_output,
+  // CHECK-NEXT: input var logic _io_req_ready_output,
   // CHECK-NEXT:       resetSignalName,
   // CHECK-NEXT:       clock
   hw.output
@@ -812,10 +812,10 @@ hw.module @ModuleUsingMacroWithVerilogName(in %a : i1) {
 }
 
 // CHECK-LABEL: module PrecedenceEqualityRelational(
-// CHECK-NEXT:   input  [3:0] a,{{.*}}
+// CHECK-NEXT:   input  var logic [3:0] a,{{.*}}
 // CHECK-NEXT:                b,{{.*}}
-// CHECK-NEXT:   input        c,{{.*}}
-// CHECK-NEXT:   output       out_eq,{{.*}}
+// CHECK-NEXT:   input  var logic       c,{{.*}}
+// CHECK-NEXT:   output var logic       out_eq,{{.*}}
 // CHECK-NEXT:                out_ne,{{.*}}
 // CHECK-NEXT:                out_ceq,{{.*}}
 // CHECK-NEXT:                out_cne,{{.*}}

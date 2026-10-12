@@ -2,7 +2,7 @@
 
 !fooTy = !hw.struct<bar: i4>
 
-module attributes {circt.loweringOptions="emitWireInPorts"} {
+module attributes {circt.loweringOptions="svPortDeclStyle=wire"} {
 // CHECK-LABEL: module Foo(
 // CHECK-NEXT:    input  wire                                   a,
 // CHECK-NEXT:    input  wire struct packed {logic [3:0] bar; } foo,
@@ -39,8 +39,8 @@ module attributes {circt.loweringOptions="caseInsensitiveKeywords"} {
   // CHECK-LABEL: caseInsensitiveKeywords
   hw.module @caseInsensitiveKeywords() {}
   // CHECK:      module MODULE_0
-  // CHECK:        input Module_0,
-  // CHECK-NEXT:   output MoDuLe_0
+  // CHECK:        input var logic Module_0,
+  // CHECK-NEXT:   output var logic MoDuLe_0
   // CHECK:        assign MoDuLe_0 = Module_0;
   hw.module @MODULE(in %Module: i1, out MoDuLe: i1) {
     hw.output %Module : i1
@@ -51,7 +51,7 @@ module attributes {circt.loweringOptions="caseInsensitiveKeywords"} {
 
 !barTy = !hw.struct<bar: i4>
 
-module attributes {circt.loweringOptions="defaultToVarPorts"} {
+module attributes {circt.loweringOptions="svPortDeclStyle=varLogic"} {
 // CHECK-LABEL: module Bar(
 // CHECK-NEXT:    input  var logic                                   a,
 // CHECK-NEXT:    input  var logic [3:0]                             b,
@@ -66,7 +66,7 @@ hw.module @Bar(in %a: i1, in %b: i4, in %bar: !barTy, out c: i3) {
 
 // -----
 
-module attributes {circt.loweringOptions="defaultToVarPorts"} {
+module attributes {circt.loweringOptions="svPortDeclStyle=varLogic"} {
 // CHECK-LABEL: module Grouped(
 // CHECK-NEXT:    input  var logic [3:0] p,
 // CHECK-NEXT:                           q,

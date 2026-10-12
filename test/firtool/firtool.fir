@@ -114,14 +114,14 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-LABEL: module test_mod(
 ; Check that a fir location is stripped.
 ; VERILOG-NOT:   .fir
-; VERILOG-NEXT:    input        clock,
+; VERILOG-NEXT:    input var logic       clock,
 ; VERILOG-NEXT:                 a,
-; VERILOG-NEXT:    input  [1:0] b,
-; VERILOG-NEXT:    output       c,
-; VERILOG-NEXT:    input vec_0,
+; VERILOG-NEXT:    input var logic  [1:0] b,
+; VERILOG-NEXT:    output var logic       c,
+; VERILOG-NEXT:    input var logic vec_0,
 ; VERILOG-NEXT:          vec_1,
 ; VERILOG-NEXT:          vec_2,
-; VERILOG-NEXT:    output       out_implicitTrunc,
+; VERILOG-NEXT:    output var logic       out_implicitTrunc,
 ; VERILOG-NEXT:                 out_prettifyExample,
 ; VERILOG-NEXT:                 out_multibitMux,
 ; VERILOG-NEXT:                 out_mux2cell_0,
@@ -203,9 +203,9 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; MLIRLOWER-NEXT:  }
 
 ; VERILOG-LABEL: module ImplicitTrunc(
-; VERILOG-NEXT:   input        inp_1,
-; VERILOG-NEXT:   input  [4:0] inp_2,
-; VERILOG-NEXT:   output [2:0] out1,
+; VERILOG-NEXT:   input var logic        inp_1,
+; VERILOG-NEXT:   input var logic  [4:0] inp_2,
+; VERILOG-NEXT:   output var logic [2:0] out1,
 ; VERILOG-NEXT:                out2
 ; VERILOG-NEXT:   );
 ; VERILOG-EMPTY:
@@ -244,9 +244,9 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     connect a_q, r
 
 ; VERILOG-LABEL: module FlipFlop(
-; VERILOG-NEXT:    input  clock,
+; VERILOG-NEXT:    input var logic  clock,
 ; VERILOG-NEXT:           a_d,
-; VERILOG-NEXT:    output a_q
+; VERILOG-NEXT:    output var logic a_q
 ; VERILOG-NEXT:  );
 ; VERILOG:         always @(posedge clock)
 ; VERILOG-NEXT:      r <= a_d;

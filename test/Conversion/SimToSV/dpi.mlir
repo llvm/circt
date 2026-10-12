@@ -13,9 +13,9 @@ sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, out arg2: i1)
 // CHECK-NEXT:  }
 
 // VERILOG:      import "DPI-C" context function void dpi(
-// VERILOG-NEXT:   output bit arg0,
-// VERILOG-NEXT:   input  bit arg1,
-// VERILOG-NEXT:   output bit arg2
+// VERILOG-NEXT:   output var bit arg0,
+// VERILOG-NEXT:   input  var bit arg1,
+// VERILOG-NEXT:   output var bit arg2
 // VERILOG-NEXT: );
 
 
@@ -102,7 +102,7 @@ sim.func.dpi private @increment_counter(in %in_0 : i64, out out_0 : i32)
 sim.func.dpi private @create_counter(out out_0 : i64)
 // CHECK: sv.func private @dpi_ret(in %arg0 : i1, out ret : i1 {sv.func.explicitly_returned})
 // VERILOG: import "DPI-C" context function bit dpi_ret(
-// VERILOG-NEXT:   input  bit arg0
+// VERILOG-NEXT:   input  var bit arg0
 // VERILOG-NEXT: );
 sim.func.dpi private @dpi_ret(in %arg0 : i1, return ret : i1)
 // CHECK-LABEL: hw.module @Issue7191

@@ -517,11 +517,11 @@ hw.module @Aliasing(in %a : !hw.inout<i42>, in %b : !hw.inout<i42>, in %c : !hw.
 
 hw.module @reg_0(in %in4: i4, in %in8: i8, in %in8_2: i8, out a: i8, out b: i8) {
   // CHECK-LABEL: module reg_0(
-  // CHECK-NEXT:   input  [3:0] in4, //
-  // CHECK-NEXT:   input  [7:0] in8, //
-  // CHECK-NEXT:                in8_2, //
-  // CHECK-NEXT:   output [7:0] a, //
-  // CHECK-NEXT:                b //
+  // CHECK-NEXT:   input  var logic [3:0] in4, //
+  // CHECK-NEXT:   input  var logic [7:0] in8, //
+  // CHECK-NEXT:                          in8_2, //
+  // CHECK-NEXT:   output var logic [7:0] a, //
+  // CHECK-NEXT:                          b //
   // CHECK-NEXT:  );
 
   // CHECK-EMPTY:
@@ -1396,7 +1396,7 @@ hw.module.extern @MyExtModule(in %in: i8)
 hw.module.extern @ExtModule(in %in: i8, out out: i8)
 
 // CHECK-LABEL: module InlineBind
-// CHECK:       output [7:0] wire_0
+// CHECK:       output var logic [7:0] wire_0
 hw.module @InlineBind(in %a_in: i8, out wire: i8){
   // CHECK:      wire [7:0] _ext1_out;
   // CHECK-NEXT: wire [7:0] _GEN;
@@ -1439,10 +1439,10 @@ hw.module @MoveInstances(in %a_in: i8, out outc : i8){
 hw.module.extern @extInst(in %_h: i1, in %_i: i1, in %_j: i1, in %_k: i1, in %_z :i0)
 
 // CHECK-LABEL: module extInst2
-// CHECK-NEXT:     input                signed_0,
-// CHECK-NEXT:                          _i,
-// CHECK-NEXT:                          _j,
-// CHECK-NEXT:                          _k
+// CHECK-NEXT:     input var logic                signed_0,
+// CHECK-NEXT:                                    _i,
+// CHECK-NEXT:                                    _j,
+// CHECK-NEXT:                                    _k
 hw.module @extInst2(in %signed: i1, in %_i: i1, in %_j: i1, in %_k: i1, in %_z :i0) {}
 
 // CHECK-LABEL: module zeroWidthArrayIndex
@@ -1611,7 +1611,7 @@ hw.module @ElseIfLocations(in %clock: i1, in %flag1 : i1, in %flag2: i1, in %fla
 // CHECK-LABEL: ReuseExistingInOut
 // CHECK: input {{.+}}, //
 // CHECK:        [[INPUT:[:alnum:]+]], //
-// CHECK: output [[OUTPUT:.+]] //
+// CHECK: output var logic [[OUTPUT:.+]] //
 // CHECK: );
 hw.module @ReuseExistingInOut(in %clock: i1, in %a: i1, out out1: i1) {
   %expr1 = comb.or %a, %a : i1
@@ -1790,9 +1790,9 @@ hw.module @func_call(in %in_0 : i2, in %in_1 : i2, in %in_2: i1, out out: i1) {
 }
 
 // CHECK-LABEL: function automatic logic func_def(
-// CHECK-NEXT:    input  bit [1:0] in_0,
-// CHECK-NEXT:    output bit out_0,
-// CHECK-NEXT:    input  bit [1:0] in_1
+// CHECK-NEXT:    input  var bit [1:0] in_0,
+// CHECK-NEXT:    output var bit       out_0,
+// CHECK-NEXT:    input  var bit [1:0] in_1
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:    logic [1:0] _GEN = 2'(in_0 + in_1);
@@ -1807,7 +1807,7 @@ sv.func @func_def(in %in_0 : i2, out out_0: i1, in %in_1: i2, out out_1 : i1 {sv
 }
 
 // CHECK-LABEL: function automatic logic [31:0] recurse_add(
-// CHECK-NEXT:   input int n
+// CHECK-NEXT:   input var int n
 // CHECK-NEXT: );
 // CHECK-EMPTY:
 // CHECK-NEXT:   logic           [31:0] _recurse_add_0;
@@ -1839,28 +1839,28 @@ sv.func @recurse_add(in %n : i32, out out : i32 {sv.func.explicitly_returned}) {
 // Emit DPI import.
 
 // CHECK-LABEL: import "DPI-C" context linkage_name = function void function_declare1(
-// CHECK-NEXT:    input bit [1:0] in_0,
-// CHECK-NEXT:                    out_0,
-// CHECK-NEXT:                    in_1,
-// CHECK-NEXT:    output bit      out_1
+// CHECK-NEXT:    input  var bit [1:0] in_0,
+// CHECK-NEXT:    output var bit [1:0] out_0,
+// CHECK-NEXT:    input  var bit [1:0] in_1,
+// CHECK-NEXT:    output var bit       out_1
 // CHECK-NEXT: );
 sv.func.dpi.import linkage "linkage_name" @function_declare1
 
 // CHECK-LABEL: import "DPI-C" context function bit function_declare2(
-// CHECK-NEXT:    input bit [1:0] in_0,
-// CHECK-NEXT:                    in_1
+// CHECK-NEXT:    input var bit [1:0] in_0,
+// CHECK-NEXT:                        in_1
 // CHECK-NEXT: );
 sv.func.dpi.import @function_declare2
 
 // CHECK-LABEL: import "DPI-C" context function void function_declare4(
-// CHECK-NEXT:   input bit         in,
-// CHECK-NEXT:   input byte        in_0,
-// CHECK-NEXT:   input shortint    in_1,
-// CHECK-NEXT:   input int         in_2,
-// CHECK-NEXT:   input longint     in_3,
-// CHECK-NEXT:   input bit [127:0] in_4
+// CHECK-NEXT:   input var bit         in,
+// CHECK-NEXT:   input var byte        in_0,
+// CHECK-NEXT:   input var shortint    in_1,
+// CHECK-NEXT:   input var int         in_2,
+// CHECK-NEXT:   input var longint     in_3,
+// CHECK-NEXT:   input var bit [127:0] in_4
 // CHECK-NEXT:   input struct packed {bit [1:0][1:0][31:0] a; longint b; } in_5
-// CHECK-NEXT:   input longint in_6[0:1]
+// CHECK-NEXT:   input var longint in_6[0:1]
 // CHECK-NEXT: );
 sv.func.dpi.import @function_declare4
 

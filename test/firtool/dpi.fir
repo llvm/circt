@@ -4,18 +4,18 @@ FIRRTL version 4.0.0
 circuit DPI:
 ; CHECK-LABEL: `ifndef __CIRCT_DPI_IMPORT_CLOCKED_RESULT
 ; CHECK-NEXT: import "DPI-C" context function void clocked_result(
-; CHECK-NEXT:   input  byte foo,
-; CHECK-NEXT:               bar,
-; CHECK-NEXT:   output byte baz
+; CHECK-NEXT:   input  var byte foo,
+; CHECK-NEXT:                   bar,
+; CHECK-NEXT:   output var byte baz
 ; CHECK-NEXT: );
 ; CHECK:      `define __CIRCT_DPI_IMPORT_CLOCKED_RESULT
 ; CHECK-NEXT: `endif
 
 ; CHECK-LABEL: `ifndef __CIRCT_DPI_IMPORT_CLOCKED_VOID
 ; CHECK-NEXT: import "DPI-C" context function void clocked_void(
-; CHECK-NEXT:   input byte in_0,
-; CHECK-NEXT:              in_1,
-; CHECK-NEXT:              in_2[]
+; CHECK-NEXT:   input var byte in_0,
+; CHECK-NEXT:                  in_1,
+; CHECK-NEXT:                  in_2[]
 ; CHECK-NEXT: );
 ; CHECK:      `define __CIRCT_DPI_IMPORT_CLOCKED_VOID
 ; CHECK-NEXT: `endif
@@ -23,9 +23,9 @@ circuit DPI:
 
 ; CHECK-LABEL: `ifndef __CIRCT_DPI_IMPORT_UNCLOCKED_RESULT
 ; CHECK-NEXT: import "DPI-C" context function void unclocked_result(
-; CHECK-NEXT:   input  byte in_0,
-; CHECK-NEXT:                    in_1,
-; CHECK-NEXT:   output byte out_0
+; CHECK-NEXT:   input  var byte in_0,
+; CHECK-NEXT:                       in_1,
+; CHECK-NEXT:   output var byte out_0
 ; CHECK-NEXT: );
 ; CHECK:      `define __CIRCT_DPI_IMPORT_UNCLOCKED_RESULT
 ; CHECK-NEXT: `endif

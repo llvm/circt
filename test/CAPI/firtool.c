@@ -74,9 +74,9 @@ void testExportVerilog(MlirContext ctx) {
   exportVerilog(ctx, false);
 
   // CHECK:      module ExportTestSimpleModule(  // -:2:3
-  // CHECK-NEXT:   input  [31:0] in_1,   // -:2:44
+  // CHECK-NEXT:   input var logic  [31:0] in_1,   // -:2:44
   // CHECK-NEXT:                 in_2,   // -:3:44
-  // CHECK-NEXT:   output [31:0] out     // -:4:45
+  // CHECK-NEXT:   output var logic [31:0] out     // -:4:45
   // CHECK-NEXT: );
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign out = in_1 & in_2;     // -:2:3, :5:10, :6:10
@@ -85,9 +85,9 @@ void testExportVerilog(MlirContext ctx) {
   exportVerilog(ctx, true);
 
   // CHECK:      module ExportTestSimpleModule(  // -:2:3
-  // CHECK-NEXT:   input  [31:0] in_1,   // -:2:44
+  // CHECK-NEXT:   input var logic [31:0] in_1,   // -:2:44
   // CHECK-NEXT:                 in_2,   // -:3:44
-  // CHECK-NEXT:   output [31:0] out     // -:4:45
+  // CHECK-NEXT:   output var logic [31:0] out     // -:4:45
   // CHECK-NEXT: );
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign out = in_1 & in_2 & in_2;      // -:2:3, :5:10, :6:10

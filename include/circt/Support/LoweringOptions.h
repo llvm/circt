@@ -156,14 +156,20 @@ struct LoweringOptions {
   /// into the array index.
   bool mitigateVivadoArrayIndexConstPropBug = false;
 
-  /// If true, emit `wire` in port lists rather than nothing. Used in cases
-  /// where `default_nettype is not set to wire.
-  bool emitWireInPorts = false;
-
-  /// If true, emit `var logic` in the port lists rather than nothing, i.e.,
-  /// default plain (non-handle) ports to a variable (`input var logic ...`,
-  /// `output var logic ...`) instead of the implicit net-kind default.
-  bool defaultToVarPorts = false;
+  /// Controls the port declaration syntax for module ports.
+  ///
+  /// - emitVarLogic: Emits `var logic` in the port lists rather than nothing,
+  /// i.e., default plain (non-handle) ports to a variable (`input var logic
+  /// ...`, `output var logic ...`).
+  /// - emitWire: Emits 'wire' in port lists rather than nothing. Used in cases
+  /// where `default_nettype` is not set to wire.
+  /// - emitNone: Omits both `var logic` and `wire` in port lists; relies
+  /// on standard SystemVerilog implicit net-kind port declaration.
+  enum class EmitPortType {
+    emitVarLogic,
+    emitWire,
+    emitNone,
+  } emitPortType = EmitPortType::emitVarLogic;
 
   /// If true, emit a comment wherever an instance wasn't printed, because
   /// it's emitted elsewhere as a bind.

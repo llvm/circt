@@ -32,9 +32,9 @@ module {
   ) {}
 
   // CHECK-LABEL: module MixedPorts(
-  // CHECK:  input  [31:0]        data_in,
+  // CHECK:  input  var logic [31:0]        data_in,
   // CHECK:  MyBundle.sink        intf_port,
-  // CHECK:  output [31:0]        data_out
+  // CHECK:  output var logic [31:0]        data_out
   // CHECK:       );
   hw.module @MixedPorts(
     in %data_in : i32,
