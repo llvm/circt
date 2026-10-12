@@ -900,7 +900,7 @@ void ExtractInstancesPass::groupInstances() {
   // Group extracted instances by their wrapper module, requested instance name,
   // and parent module. Instances in different parent modules cannot share a
   // wrapper submodule.
-  using WrapperKey = std::pair<Operation *, std::pair<StringRef, StringRef>>;
+  using WrapperKey = std::tuple<Operation *, StringRef, StringRef>;
   llvm::MapVector<WrapperKey, SmallVector<InstanceOp>> instsByWrapper;
   for (auto &[inst, info] : extractedInstances) {
     if (info.wrapperModule.empty())
@@ -908,8 +908,8 @@ void ExtractInstancesPass::groupInstances() {
     auto instanceName = info.wrapperInstanceName.empty()
                             ? info.wrapperModule
                             : info.wrapperInstanceName;
-    instsByWrapper[{inst->getParentOfType<FModuleOp>(),
-                    {info.wrapperModule, instanceName}}]
+    instsByWrapper[{inst->getParentOfType<FModuleOp>(), info.wrapperModule,
+                    instanceName}]
         .push_back(inst);
   }
   if (instsByWrapper.empty())
@@ -920,9 +920,8 @@ void ExtractInstancesPass::groupInstances() {
   SmallVector<PortInfo> ports;
   auto &nlaTable = getAnalysis<NLATable>();
 
-  for (auto &[parentAndWrapperName, insts] : instsByWrapper) {
-    auto [parentOp, wrapperNames] = parentAndWrapperName;
-    auto [wrapperName, requestedInstanceName] = wrapperNames;
+  for (auto &[wrapperKey, insts] : instsByWrapper) {
+    auto [parentOp, wrapperName, requestedInstanceName] = wrapperKey;
     auto parent = cast<FModuleOp>(parentOp);
     LLVM_DEBUG(llvm::dbgs() << "- Wrapper `" << wrapperName << "` in `"
                             << parent.getModuleName() << "` with "
