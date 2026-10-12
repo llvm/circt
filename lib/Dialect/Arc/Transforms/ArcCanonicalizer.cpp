@@ -725,27 +725,6 @@ MergeVectorizeOps::matchAndRewrite(VectorizeOp vecOp,
   return success();
 }
 
-namespace llvm {
-static unsigned hashValue(const SmallVector<Value> &inputs) {
-  unsigned hash = hash_value(inputs.size());
-  for (auto input : inputs)
-    hash = hash_combine(hash, input);
-  return hash;
-}
-
-template <>
-struct DenseMapInfo<SmallVector<Value>> {
-  static unsigned getHashValue(const SmallVector<Value> &inputs) {
-    return hashValue(inputs);
-  }
-
-  static bool isEqual(const SmallVector<Value> &lhs,
-                      const SmallVector<Value> &rhs) {
-    return lhs == rhs;
-  }
-};
-} // namespace llvm
-
 LogicalResult KeepOneVecOp::matchAndRewrite(VectorizeOp vecOp,
                                             PatternRewriter &rewriter) const {
   DenseMap<SmallVector<Value>, unsigned> inExists;
