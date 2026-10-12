@@ -236,7 +236,11 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
       args.push_back(rewriter.createOrFold<ExtractOp>(inop.getLoc(), newType,
                                                       inop, range.first));
   }
-  auto newop = OpTy::create(rewriter, op.getLoc(), newType, args);
+  typename OpTy::Properties properties{};
+  OpTy::populateDefaultProperties(
+      OperationName(OpTy::getOperationName(), rewriter.getContext()),
+      properties);
+  auto newop = OpTy::create(rewriter, op.getLoc(), newType, args, properties);
   newop->setDialectAttrs(op->getDialectAttrs());
   if (op.getTwoState())
     newop.setTwoState(true);

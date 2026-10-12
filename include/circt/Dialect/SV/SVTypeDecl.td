@@ -418,7 +418,9 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
-      return build($_builder, $_state, result, mlir::ValueRange());
+      Properties properties{};
+      populateDefaultProperties($_state.name, properties);
+      return build($_builder, $_state, result, mlir::ValueRange(), properties);
     }]>
   ];
 
