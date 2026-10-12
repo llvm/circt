@@ -565,6 +565,10 @@ void circt::populateLlhdToCorePipeline(
   modulePM.addPass(llhd::createSig2Reg());
   modulePM.addPass(mlir::createCSEPass());
   modulePM.addPass(mlir::createCanonicalizerPass());
+  // Canonicalization can expose a `comb.concat` drive that sig2reg can promote.
+  modulePM.addPass(llhd::createSig2Reg());
+  modulePM.addPass(mlir::createCSEPass());
+  modulePM.addPass(mlir::createCanonicalizerPass());
 
   // Map `seq.firreg` with array type and `hw.array_inject` self-feedback to
   // `seq.firmem` ops.
