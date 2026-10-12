@@ -2126,11 +2126,27 @@ struct ConvertRealOpConversion : public OpConversionPattern<ConvertRealOp> {
   LogicalResult
   matchAndRewrite(ConvertRealOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    op.getInput().getType().getWidth() < op.getResult().getType().getWidth()
-        ? rewriter.replaceOpWithNewOp<arith::ExtFOp>(
-              op, typeConverter->convertType(op.getType()), adaptor.getInput())
-        : rewriter.replaceOpWithNewOp<arith::TruncFOp>(
-              op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    auto resultType = typeConverter->convertType(op.getType());
+    if (op.getInput().getType().getWidth() <
+        op.getResult().getType().getWidth()) {
+      arith::ExtFOp::Properties properties{};
+      arith::ExtFOp::populateDefaultProperties(
+          OperationName(arith::ExtFOp::getOperationName(),
+                        rewriter.getContext()),
+          properties);
+      rewriter.replaceOpWithNewOp<arith::ExtFOp>(op, TypeRange{resultType},
+                                                 ValueRange{adaptor.getInput()},
+                                                 properties);
+    } else {
+      arith::TruncFOp::Properties properties{};
+      arith::TruncFOp::populateDefaultProperties(
+          OperationName(arith::TruncFOp::getOperationName(),
+                        rewriter.getContext()),
+          properties);
+      rewriter.replaceOpWithNewOp<arith::TruncFOp>(
+          op, TypeRange{resultType}, ValueRange{adaptor.getInput()},
+          properties);
+    }
     return success();
   }
 };
