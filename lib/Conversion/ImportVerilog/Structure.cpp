@@ -2576,6 +2576,7 @@ LogicalResult Context::convertThreeStateGatePrimitive(
 
   auto enType = cast<moore::IntType>(enVal.getType());
   auto enWidth = enType.getBitSize();
+  (void)enWidth;
   // Slang automatically casts enable signals (or errors if it can't be cast)
   assert(enWidth && *enWidth == 1 &&
          "enable signal of a three-state gate primitive must be 1 bit");
@@ -2820,13 +2821,63 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
                                    prim.getDelay(), loc);
 }
 
+// Auxiliary functions for UDP sum-of-products conversion.
+
+// Parse the input row into normalized level characters. Will be expanded to
+// support sequential UDPs.
+static void parseInputRow(StringRef inputs, SmallVectorImpl<char> &levels) {
+  levels.clear();
+  levels.reserve(inputs.size());
+  for (char c : inputs)
+    levels.push_back(llvm::toLower(c));
+}
+
+// Skip invalid or non-productive table rows. Currently, only combinational UDPs
+// with 0/1/?/b inputs are supported.
+static bool
+skipUnsupportedRow(const slang::ast::PrimitiveSymbol::TableEntry &entry,
+                   ArrayRef<char> levels, size_t numInputs) {
+  if (entry.isEdgeSensitive || entry.output != '1' ||
+      levels.size() != numInputs)
+    return true;
+  for (char c : levels) {
+    if (c != '0' && c != '1' && c != '?' && c != 'b')
+      return true;
+  }
+  return false;
+}
+
+/// Build the productive AND-term for this row.
+static Value buildProductiveTerm(OpBuilder &builder, Location loc,
+                                 ArrayRef<char> levels, ValueRange inputVals,
+                                 SmallVectorImpl<Value> &notVars) {
+  Value term;
+  for (size_t i = 0, e = inputVals.size(); i < e; ++i) {
+    char c = levels[i];
+    Value lit;
+    if (c == '1') {
+      lit = inputVals[i];
+    } else if (c == '0') {
+      if (!notVars[i])
+        notVars[i] = moore::NotOp::create(builder, loc, inputVals[i]);
+      lit = notVars[i];
+    } else {
+      continue; // '?' or 'b' don't care
+    }
+
+    term = term ? moore::AndOp::create(builder, loc, term, lit) : lit;
+  }
+  return term;
+}
+
 FailureOr<moore::SVModuleOp> Context::convertUserDefinedPrimitiveDef(
     const slang::ast::PrimitiveSymbol &primitive) {
   // Return the existing module if this UDP was already converted.
   if (auto moduleOp = symbolTable.lookup<moore::SVModuleOp>(primitive.name))
     return moduleOp;
 
-  // Sequential UDPs are not yet supported.
+  // The first port of UDP is the output, the remaining ports should have at
+  // least one input.
   auto loc = convertLocation(primitive.location);
   if (primitive.isSequential)
     return mlir::emitError(loc)
@@ -2836,7 +2887,7 @@ FailureOr<moore::SVModuleOp> Context::convertUserDefinedPrimitiveDef(
 
   // Protect the caller's insertion point while creating the UDP module and its
   // body.
-  OpBuilder::InsertionGuard g(builder);
+  OpBuilder::InsertionGuard guard(builder);
 
   // UDP ports: the first port is output, the remaining ports are inputs.
   auto l1Ty = moore::IntType::getLogic(getContext(), 1);
@@ -2861,72 +2912,23 @@ FailureOr<moore::SVModuleOp> Context::convertUserDefinedPrimitiveDef(
   orderedRootOps.insert(upperIt, {key, moduleOp});
   symbolTable.insert(moduleOp);
 
+  // Memoization cache for cross-row moore.not deduplication.
   auto *block = builder.createBlock(&moduleOp.getBodyRegion());
   for (const auto *port : primitive.ports.subspan(1))
     block->addArgument(l1Ty, convertLocation(port->location));
-
-  // Auxiliary functions for UDP sum-of-products conversion.
-  // Step 1 (parse_input_row): parse the input row into normalized level
-  // characters. Placeholder to support sequential UDPs.
   auto inputVals = block->getArguments();
   size_t numInputs = inputVals.size();
-  auto parseInputRow = [&](StringRef inputs, SmallVectorImpl<char> &levels) {
-    levels.clear();
-    levels.reserve(inputs.size());
-    for (char c : inputs)
-      levels.push_back(llvm::toLower(c));
-  };
-  // Step 2 (skip_unsupported_rows): check whether a table row is invalid or
-  // non-productive and should be skipped. Currently, only supporting
-  // combinational UDPs with 0/1/?/b inputs.
-  auto skipUnsupportedRow =
-      [&](const slang::ast::PrimitiveSymbol::TableEntry &entry,
-          ArrayRef<char> levels) {
-        if (entry.isEdgeSensitive || entry.output != '1' ||
-            levels.size() != numInputs)
-          return true;
-        for (char c : levels) {
-          if (c != '0' && c != '1' && c != '?' && c != 'b')
-            return true;
-        }
-        return false;
-      };
-  // Step 3 (build_productive_term): build the productive AND-term for this row.
   SmallVector<Value> notVars(numInputs, Value{});
-  auto getNotVar = [&](size_t idx) -> Value {
-    if (!notVars[idx])
-      notVars[idx] = moore::NotOp::create(builder, loc, inputVals[idx]);
-    return notVars[idx];
-  };
-  auto buildProductiveTerm = [&](ArrayRef<char> levels) -> Value {
-    Value term;
-    for (size_t i = 0; i < numInputs; ++i) {
-      char c = levels[i];
-      Value lit;
-      if (c == '1')
-        lit = inputVals[i];
-      else if (c == '0')
-        lit = getNotVar(i);
-      else
-        continue; // '?' or 'b' don't care
-
-      term = term ? moore::AndOp::create(builder, loc, term, lit) : lit;
-    }
-    return term;
-  };
 
   // Construct Disjunctive Normal Form (sum-of-products) boolean logic from
   // the UDP truth table.
   Value sum;
   SmallVector<char> levels;
   for (const auto &entry : primitive.table) {
-    // 1. parse_input_row
     parseInputRow(entry.inputs, levels);
-    // 2. skip_unsupported_rows
-    if (skipUnsupportedRow(entry, levels))
+    if (skipUnsupportedRow(entry, levels, numInputs))
       continue;
-    // 3. build_productive_term
-    Value term = buildProductiveTerm(levels);
+    Value term = buildProductiveTerm(builder, loc, levels, inputVals, notVars);
     if (!term) {
       // All inputs were don't cares ('?'): row unconditionally evaluates to 1.
       sum = moore::ConstantOp::create(builder, loc, l1Ty, 1);
