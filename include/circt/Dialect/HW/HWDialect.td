@@ -16,6 +16,8 @@
 include "mlir/IR/OpBase.td"
 
 def HWDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "hw";
   let cppNamespace = "::circt::hw";
 

@@ -3919,16 +3919,16 @@ firrtl.class @IntegerBitwiseFold(out %outAndEqual: !firrtl.integer,
   %zero = firrtl.integer 0
 
   // Equal-width values (-2 and 1 both need two signed bits).
-  // CHECK-DAG: [[AND_EQUAL:%.+]] = firrtl.integer 0
+  // CHECK-DAG: [[C0:%.+]] = firrtl.integer 0
   %andEqual = firrtl.integer.and %neg2, %one : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
-  // CHECK-DAG: [[OR_EQUAL:%.+]] = firrtl.integer -1
+  // CHECK-DAG: [[CNEG1:%.+]] = firrtl.integer -1
   %orEqual = firrtl.integer.or %neg2, %one : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 
   // A narrower negative operand must sign-extend. Zero extension would make
   // this AND produce zero instead of 16.
-  // CHECK-DAG: [[AND_MIXED:%.+]] = firrtl.integer 16
+  // CHECK-DAG: [[C16:%.+]] = firrtl.integer 16
   %andMixed = firrtl.integer.and %neg2, %sixteen : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
-  // CHECK-DAG: [[OR_MIXED:%.+]] = firrtl.integer -2
+  // CHECK-DAG: [[CNEG2:%.+]] = firrtl.integer -2
   %orMixed = firrtl.integer.or %neg2, %sixteen : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 
   // A narrower positive operand with a wider negative operand.
@@ -3939,25 +3939,23 @@ firrtl.class @IntegerBitwiseFold(out %outAndEqual: !firrtl.integer,
   %notZero = firrtl.integer.not %zero : (!firrtl.integer) -> !firrtl.integer
   %notNegative = firrtl.integer.not %neg2 : (!firrtl.integer) -> !firrtl.integer
 
-  // CHECK-DAG: [[AND_WIDE_NEG:%.+]] = firrtl.integer 0
-  // CHECK-DAG: [[OR_WIDE_NEG:%.+]] = firrtl.integer -11
-  // CHECK-DAG: [[NOT_ZERO:%.+]] = firrtl.integer -1
-  // CHECK-DAG: [[NOT_NEGATIVE:%.+]] = firrtl.integer 1
-  // CHECK: firrtl.propassign %outAndEqual, [[AND_EQUAL]]
+  // CHECK-DAG: [[CNEG11:%.+]] = firrtl.integer -11
+  // CHECK-DAG: [[C1:%.+]] = firrtl.integer 1
+  // CHECK: firrtl.propassign %outAndEqual, [[C0]]
   firrtl.propassign %outAndEqual, %andEqual : !firrtl.integer
-  // CHECK: firrtl.propassign %outOrEqual, [[OR_EQUAL]]
+  // CHECK: firrtl.propassign %outOrEqual, [[CNEG1]]
   firrtl.propassign %outOrEqual, %orEqual : !firrtl.integer
-  // CHECK: firrtl.propassign %outAndMixed, [[AND_MIXED]]
+  // CHECK: firrtl.propassign %outAndMixed, [[C16]]
   firrtl.propassign %outAndMixed, %andMixed : !firrtl.integer
-  // CHECK: firrtl.propassign %outOrMixed, [[OR_MIXED]]
+  // CHECK: firrtl.propassign %outOrMixed, [[CNEG2]]
   firrtl.propassign %outOrMixed, %orMixed : !firrtl.integer
-  // CHECK: firrtl.propassign %outAndWideNeg, [[AND_WIDE_NEG]]
+  // CHECK: firrtl.propassign %outAndWideNeg, [[C0]]
   firrtl.propassign %outAndWideNeg, %andWideNeg : !firrtl.integer
-  // CHECK: firrtl.propassign %outOrWideNeg, [[OR_WIDE_NEG]]
+  // CHECK: firrtl.propassign %outOrWideNeg, [[CNEG11]]
   firrtl.propassign %outOrWideNeg, %orWideNeg : !firrtl.integer
-  // CHECK: firrtl.propassign %outNotZero, [[NOT_ZERO]]
+  // CHECK: firrtl.propassign %outNotZero, [[CNEG1]]
   firrtl.propassign %outNotZero, %notZero : !firrtl.integer
-  // CHECK: firrtl.propassign %outNotNegative, [[NOT_NEGATIVE]]
+  // CHECK: firrtl.propassign %outNotNegative, [[C1]]
   firrtl.propassign %outNotNegative, %notNegative : !firrtl.integer
 }
 

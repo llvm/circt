@@ -16,6 +16,8 @@
 include "mlir/IR/DialectBase.td"
 
 def MooreDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "moore";
   let cppNamespace = "::circt::moore";
 

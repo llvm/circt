@@ -16,6 +16,8 @@
 include "mlir/IR/DialectBase.td"
 
 def EmitDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "emit";
   let cppNamespace = "::circt::emit";
 

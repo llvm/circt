@@ -51,7 +51,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   extmodule IntegerParamsModule :
     ; CHECK-SAME: a: ui32 = 1
     parameter a = 1
-    ; CHECK-SAME: b: ui40 = 4294967296
+    ; CHECK-SAME: b: ui64 = 4294967296
     parameter b = 4294967296
 
   ; Module to test type parsing.
@@ -1371,15 +1371,14 @@ circuit RadixEncodedIntegerLiterals:
     ; CHECK-NEXT: firrtl.connect %ou, %[[c_constCast]]
     ou <= UInt(0o052)
 
-    ; Note: this creates a second constant because the width of a parsed
-    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ; Decimal literals use a wider constant than the other radices.
     ;
     ; CHECK:      %[[c42_ui8:[-a-zA-Z_0-9]+]] = firrtl.constant 42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
     ; CHECK-NEXT: firrtl.connect %du0, %[[c_constCast]]
     du0 <= UInt(42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
     ; CHECK-NEXT: firrtl.connect %du1, %[[c_constCast]]
     du1 <= UInt(0d42)
 
@@ -1396,15 +1395,14 @@ circuit RadixEncodedIntegerLiterals:
     ; CHECK-NEXT: firrtl.connect %os, %[[c_constCast]]
     os <= SInt(-0o52)
 
-    ; Note: this creates a second constant because the width of a parsed
-    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ; Decimal literals use a wider constant than the other radices.
     ;
     ; CHECK:      %[[cn42_si8:[-a-zA-Z_0-9]+]] = firrtl.constant -42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
     ; CHECK-NEXT: firrtl.connect %dus0, %[[c_constCast]]
     dus0 <= SInt(-42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
     ; CHECK-NEXT: firrtl.connect %dus1, %[[c_constCast]]
     dus1 <= SInt(-0d42)
 
