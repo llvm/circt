@@ -297,6 +297,10 @@ NB_MODULE(esiCppAccel, m) {
       });
 
   nb::class_<services::HostMem, services::Service>(m, "HostMem")
+      .def("start", &services::HostMem::start,
+           "Enable the host memory service (e.g. start servicing the "
+           "accelerator's read and write requests). Required before the "
+           "accelerator accesses host memory on some backends.")
       .def("allocate", &services::HostMem::allocate, nb::arg("size"),
            nb::arg("options") = services::HostMem::Options(),
            nb::rv_policy::take_ownership)
