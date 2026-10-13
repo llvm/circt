@@ -11,15 +11,12 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/LLHDOps.h"
-#include "mlir/Analysis/Liveness.h"
+#include "circt/Dialect/Seq/SeqOpInterfaces.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
-#include "mlir/IR/Dominance.h"
 #include "mlir/IR/SymbolTable.h"
-#include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/Support/GenericIteratedDominanceFrontier.h"
 
 #define DEBUG_TYPE "arc-outline"
 
@@ -34,7 +31,6 @@ using namespace circt;
 using namespace arc;
 using namespace mlir;
 using llvm::BumpPtrAllocator;
-using llvm::SmallDenseMap;
 using llvm::SmallDenseSet;
 
 namespace {
@@ -47,9 +43,10 @@ struct OutlineArcsPass
 } // namespace
 
 static bool isArcBreaker(Operation *op) {
-  return !mlir::isMemoryEffectFree(op) ||
+  return isa<ClockedOpInterface, seq::Clocked, CallOp>(op) ||
          op->hasTrait<OpTrait::IsTerminator>() ||
          op->hasTrait<OpTrait::ConstantLike>() ||
+         !mlir::isMemoryEffectFree(op) ||
          // `llhd.prb` changes memory effects based on its parent op. Yikes.
          isa<llhd::ProbeOp>(op);
 }
@@ -127,8 +124,6 @@ struct Colorer {
   Coloring run();
   void colorOpFanout(Operation *op);
   bool updateOpColor(Operation *op);
-  void outlineOps();
-  void outlineOp(Operation *op);
 
   hw::HWModuleOp moduleOp;
   OutlineArcsPass &pass;
@@ -218,12 +213,17 @@ bool Colorer::updateOpColor(Operation *op) {
   // Compute the union of all terminals in the op's users.
   SmallDenseSet<unsigned, 8> fanoutTerminals;
   for (auto &use : op->getUses()) {
-    if (isArcBreaker(use.getOwner())) {
+    // If the user is in a nested op, zip up to the parent op that sits directly
+    // in the module.
+    auto *userOp = use.getOwner();
+    userOp = moduleOp.getBodyBlock()->findAncestorOpInBlock(*userOp);
+
+    if (isArcBreaker(userOp)) {
       // The use is an operand of an arc-breaking op. Add that operand's unique
       // terminal ID to the set.
       auto terminal = terminals.insert({&use, terminals.size()}).first->second;
       fanoutTerminals.insert(terminal);
-    } else if (auto *color = coloring.colors.at(use.getOwner())) {
+    } else if (auto *color = coloring.colors.at(userOp)) {
       // Add the user op's terminals.
       fanoutTerminals.insert_range(color->terminals);
     } else {
@@ -324,7 +324,7 @@ void Outliner::outlineOp(Operation *op) {
   auto *color = coloring.colors.at(op);
   auto &arc = arcs[color];
   if (!arc.block) {
-    arc.index = arcs.size();
+    arc.index = arcs.size() - 1;
     arc.block = std::make_unique<Block>();
     LLVM_DEBUG(llvm::dbgs() << "- Create arc " << arc.index << " for color "
                             << *color << "\n");
@@ -336,19 +336,19 @@ void Outliner::outlineOp(Operation *op) {
 /// result before the defining op. We'll later move the cycle outside the arc
 /// such that the arc body can be an SSACFG region.
 void Outliner::sortAndBreakCycles(OutlinedArc &arc) {
-  // Topologically sort the arc body. If the function returns true there are no
-  // cycles and we don't need to break any cycles.
-  if (mlir::sortTopologically(arc.block.get()))
-    return;
+  // Topologically sort the arc body. We can't use the function's return value
+  // to check if any cycles were present, since it does not return false for ops
+  // that depend on themselves.
+  mlir::sortTopologically(arc.block.get());
 
-  // Otherwise take note of any uses-before-defs.
+  // Take note of any uses-before-defs.
   arc.block->walk([&](Operation *op) {
     auto *blockOp = arc.block->findAncestorOpInBlock(*op);
     for (auto &operand : op->getOpOperands())
       if (auto *defOp = operand.get().getDefiningOp())
-        if (defOp->getBlock() == arc.block.get() &&
-            !defOp->isBeforeInBlock(blockOp))
-          arc.forwardRefs.push_back(&operand);
+        if (defOp->getBlock() == arc.block.get())
+          if (defOp == op || !defOp->isBeforeInBlock(blockOp))
+            arc.forwardRefs.push_back(&operand);
   });
   pass.numForwardRefs += arc.forwardRefs.size();
 
@@ -447,6 +447,7 @@ void Outliner::createAndCallArc(OutlinedArc &arc, OpBuilder &arcBuilder,
       arcBuilder.getFunctionType(arc.block->getArgumentTypes(),
                                  arc.terminator->getOperandTypes()));
   arcOp.getBody().push_back(arc.block.release());
+  symbolTable.insert(arcOp);
 
   // Create a call to the arc.
   arc.call = CallOp::create(callBuilder, arcOp.getLoc(), arcOp, values);
