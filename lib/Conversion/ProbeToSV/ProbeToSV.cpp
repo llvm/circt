@@ -139,9 +139,8 @@ private:
       hw::InnerSymbolNamespaceCollection &innerSymbolNamespaces);
 };
 
-LogicalResult
-LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module,
-                                         LoweringState &state) {
+LogicalResult LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module,
+                                                      LoweringState &state) {
   unsigned outputIndex = 0;
   bool hasProbeOutput = false;
   auto concreteModule = dyn_cast<hw::HWModuleOp>(*module);
