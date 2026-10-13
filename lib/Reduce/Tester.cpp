@@ -16,7 +16,6 @@
 #include "mlir/IR/Verifier.h"
 #include "llvm/Support/ToolOutputFile.h"
 
-using namespace llvm;
 using namespace mlir;
 using namespace circt;
 

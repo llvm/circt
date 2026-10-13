@@ -21,7 +21,6 @@
 
 #include <variant>
 
-using namespace llvm;
 using namespace mlir;
 using namespace mlir::arith;
 
