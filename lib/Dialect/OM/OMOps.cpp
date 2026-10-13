@@ -855,6 +855,40 @@ OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// IntegerBitAndOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntegerBitAndOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(
+      adaptor.getLhs(), adaptor.getRhs(),
+      [](const APSInt &lhs, const APSInt &rhs) { return success(lhs & rhs); });
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerBitOrOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntegerBitOrOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(
+      adaptor.getLhs(), adaptor.getRhs(),
+      [](const APSInt &lhs, const APSInt &rhs) { return success(lhs | rhs); });
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerBitNotOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntegerBitNotOp::fold(FoldAdaptor adaptor) {
+  auto input = dyn_cast_or_null<circt::om::IntegerAttr>(adaptor.getInput());
+  if (!input)
+    return {};
+
+  APSInt result = ~getAPSIntForOMIntegerAttr(input);
+  return circt::om::IntegerAttr::get(
+      getContext(), mlir::IntegerAttr::get(getContext(), result));
+}
+
+//===----------------------------------------------------------------------===//
 // StringConcatOp
 //===----------------------------------------------------------------------===//
 

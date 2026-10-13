@@ -558,6 +558,52 @@ def IntegerShlOp : IntegerBinaryOp<"integer.shl"> {
   }];
 }
 
+def IntegerBitAndOp : IntegerBinaryOp<"integer.bitand", [Commutative]> {
+  let summary = "Compute the bitwise AND of two OMIntegerType values";
+  let description = [{
+    Perform arbitrary precision signed integer bitwise AND of two OMIntegerType
+    values.
+
+    Example:
+    ```mlir
+    %2 = om.integer.bitand %0, %1 : !om.integer
+    ```
+  }];
+}
+
+def IntegerBitOrOp : IntegerBinaryOp<"integer.bitor", [Commutative]> {
+  let summary = "Compute the bitwise OR of two OMIntegerType values";
+  let description = [{
+    Perform arbitrary precision signed integer bitwise OR of two OMIntegerType
+    values.
+
+    Example:
+    ```mlir
+    %2 = om.integer.bitor %0, %1 : !om.integer
+    ```
+  }];
+}
+
+def IntegerBitNotOp : OMOp<"integer.bitnot", [Pure]> {
+  let summary = "Compute the bitwise NOT of an OMIntegerType value";
+  let description = [{
+    Perform arbitrary precision signed integer bitwise NOT of an OMIntegerType
+    value.
+
+    Example:
+    ```mlir
+    %1 = om.integer.bitnot %0 : !om.integer
+    ```
+  }];
+
+  let arguments = (ins OMIntegerType:$input);
+
+  let results = (outs OMIntegerType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` type($result)";
+  let hasFolder = 1;
+}
+
 def StringConcatOp : OMOp<"string.concat", [Pure, SameOperandsAndResultType]> {
   let summary = "Concatenate multiple string values";
   let description = [{
