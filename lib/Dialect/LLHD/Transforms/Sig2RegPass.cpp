@@ -202,10 +202,13 @@ public:
   bool isPromotable() {
     if (!sigOp.getInit()) {
       auto bw = hw::getBitWidth(sigOp.getType().getNestedType());
-      return intervals.size() == 1 && intervals.front().low.isStatic() &&
-             intervals.front().low.min == 0 &&
-             intervals.front().bitwidth == bw &&
-             isImmediate(intervals.front().delay);
+      if (intervals.size() != 1 || !intervals.front().low.isStatic() ||
+          intervals.front().low.min != 0 || intervals.front().bitwidth != bw ||
+          !isImmediate(intervals.front().delay)) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  - Uninitialized, not fully driven, skipping...\n\n");
+        return false;
+      }
     }
     for (unsigned i = 0; i < intervals.size(); ++i) {
       if (i >= intervals.size() - 1)
@@ -365,7 +368,7 @@ private:
     // The whole signal probed and driven straight back.
     if (auto probeOp = value.getDefiningOp<llhd::ProbeOp>())
       return probeOp.getSignal() == sigOp.getResult() && lowBit == 0 &&
-             bitwidth == hw::getBitWidth(sigOp.getInit().getType());
+             bitwidth == hw::getBitWidth(sigOp.getType().getNestedType());
 
     // A slice of a whole-signal probe driven back at the offset it came from.
     if (auto extractOp = value.getDefiningOp<comb::ExtractOp>()) {
