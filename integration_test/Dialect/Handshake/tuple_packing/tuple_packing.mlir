@@ -3,13 +3,13 @@
 // Test the original HandshakeToHW flow.
 
 // RUN: rm -rf %t.dir && mkdir %t.dir
-// RUN: hlstool %s --dynamic-hw --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments > %t.sv
+// RUN: hlstool %s --dynamic-hw --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments,svPortDeclStyle=none > %t.sv
 // RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=tuple_packing --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // Test the DC lowering flow.
 // TODO: This test does not pass with DC. Debug.
 // RUN: rm -rf %t.dir && mkdir %t.dir
-// RUN: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments > %t.sv
+// RUN: hlstool %s --dynamic-hw --dc --input-level core --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments,svPortDeclStyle=none > %t.sv
 // RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=tuple_packing --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
 
 // CHECK: ** TEST

@@ -1,8 +1,8 @@
 // REQUIRES: iverilog,cocotb
 
 // RUN: rm -rf %t.dir && mkdir %t.dir
-// RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %t.dir
-// RUN: hlstool %S/kernel.mlir --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %t.dir
+// RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments,svPortDeclStyle=none -o %t.dir
+// RUN: hlstool %S/kernel.mlir --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments,svPortDeclStyle=none -o %t.dir
 // RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=mix_std_hs --pythonFolder="%S,%S/.." %t.dir/*.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
