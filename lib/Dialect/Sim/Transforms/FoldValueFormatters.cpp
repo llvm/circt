@@ -22,7 +22,6 @@ namespace sim {
 } // namespace sim
 } // namespace circt
 
-using namespace llvm;
 using namespace circt;
 using namespace sim;
 

@@ -31,7 +31,6 @@ namespace hw {
 } // namespace hw
 } // namespace circt
 
-using namespace llvm;
 using namespace mlir;
 using namespace circt;
 using namespace hw;

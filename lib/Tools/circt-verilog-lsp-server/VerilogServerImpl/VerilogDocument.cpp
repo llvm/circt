@@ -52,13 +52,12 @@
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 
 using namespace circt::lsp;
-using namespace llvm;
 using namespace llvm::lsp;
 
 static inline void setTopModules(slang::driver::Driver &driver) {
   // Parse the main buffer
   if (!driver.parseAllSources()) {
-    circt::lsp::Logger::error(Twine("Failed to parse main buffer "));
+    circt::lsp::Logger::error(llvm::Twine("Failed to parse main buffer "));
     return;
   }
   // Extract all the top modules in the file directly from the syntax tree
@@ -244,7 +243,7 @@ VerilogDocument::getLspLocation(slang::SourceRange range) const {
       start.uri, llvm::lsp::Range(start.range.start, end.range.end));
 }
 
-std::optional<std::pair<slang::BufferID, SmallString<128>>>
+std::optional<std::pair<slang::BufferID, llvm::SmallString<128>>>
 VerilogDocument::getOrOpenFile(StringRef filePath) {
 
   auto fileInfo = filePathMap.find(filePath);

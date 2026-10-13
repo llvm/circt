@@ -25,7 +25,6 @@
 #include "VerilogIndex.h"
 
 using namespace circt::lsp;
-using namespace llvm;
 
 namespace {
 
