@@ -114,27 +114,34 @@ public:
   void runOnOperation() override;
 
 private:
-  LogicalResult validate();
-  FailureOr<ReadResolution> resolveRead(probe::ReadOp read);
-  LogicalResult validateModulePorts(hw::HWModuleLike module);
+  struct LoweringState {
+    SymbolTableCollection symbolTables;
+    SmallVector<ReadResolution> resolutions;
+    SmallVector<hw::HWModuleOp> modulesWithProbeOutputs;
+    SmallVector<probe::SendOp> sendOps;
+    DenseMap<Operation *, hw::InnerRefAttr> sourceRefs;
+  };
+
+  LogicalResult validate(LoweringState &state);
+  FailureOr<ReadResolution> resolveRead(probe::ReadOp read,
+                                        LoweringState &state);
+  LogicalResult validateModulePorts(hw::HWModuleLike module,
+                                    LoweringState &state);
   LogicalResult validateProbeUse(Operation *op);
-  LogicalResult rewrite();
+  LogicalResult rewrite(LoweringState &state);
 
   hw::InnerRefAttr getOrCreateSourceRef(
       probe::SendOp send,
-      hw::InnerSymbolNamespaceCollection &innerSymbolNamespaces);
+      hw::InnerSymbolNamespaceCollection &innerSymbolNamespaces,
+      LoweringState &state);
   hw::InnerRefAttr getOrCreateInstanceRef(
       hw::InstanceOp instance,
       hw::InnerSymbolNamespaceCollection &innerSymbolNamespaces);
-
-  SymbolTableCollection symbolTables;
-  SmallVector<ReadResolution> resolutions;
-  SmallVector<hw::HWModuleOp> modulesWithProbeOutputs;
-  SmallVector<probe::SendOp> sendOps;
-  DenseMap<Operation *, hw::InnerRefAttr> sourceRefs;
 };
 
-LogicalResult LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module) {
+LogicalResult
+LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module,
+                                         LoweringState &state) {
   unsigned outputIndex = 0;
   bool hasProbeOutput = false;
   auto concreteModule = dyn_cast<hw::HWModuleOp>(*module);
@@ -167,11 +174,12 @@ LogicalResult LowerProbeToSVPass::validateModulePorts(hw::HWModuleLike module) {
     ++outputIndex;
   }
   if (hasProbeOutput)
-    modulesWithProbeOutputs.push_back(cast<hw::HWModuleOp>(*module));
+    state.modulesWithProbeOutputs.push_back(cast<hw::HWModuleOp>(*module));
   return success();
 }
 
-FailureOr<ReadResolution> LowerProbeToSVPass::resolveRead(probe::ReadOp read) {
+FailureOr<ReadResolution>
+LowerProbeToSVPass::resolveRead(probe::ReadOp read, LoweringState &state) {
   Value input = read.getInput();
 
   if (auto send = input.getDefiningOp<probe::SendOp>())
@@ -184,7 +192,7 @@ FailureOr<ReadResolution> LowerProbeToSVPass::resolveRead(probe::ReadOp read) {
         "Probe-to-SV lowering cannot create an XMR through an hw.instance "
         "marked doNotPrint");
 
-  auto *referenced = symbolTables.lookupNearestSymbolFrom(
+  auto *referenced = state.symbolTables.lookupNearestSymbolFrom(
       instance, instance.getModuleNameAttr());
   auto childModule = cast<hw::HWModuleOp>(referenced);
 
@@ -211,18 +219,18 @@ LogicalResult LowerProbeToSVPass::validateProbeUse(Operation *op) {
   return failure();
 }
 
-LogicalResult LowerProbeToSVPass::validate() {
+LogicalResult LowerProbeToSVPass::validate(LoweringState &state) {
   auto circuit = getOperation();
 
   for (auto module : circuit.getOps<hw::HWModuleLike>())
-    if (failed(validateModulePorts(module)))
+    if (failed(validateModulePorts(module, state)))
       return failure();
 
   SmallVector<probe::ReadOp> readOps;
   for (auto module : circuit.getOps<hw::HWModuleOp>()) {
     auto walkResult = module.walk([&](Operation *op) -> WalkResult {
       if (auto send = dyn_cast<probe::SendOp>(op))
-        sendOps.push_back(send);
+        state.sendOps.push_back(send);
       else if (auto read = dyn_cast<probe::ReadOp>(op))
         readOps.push_back(read);
 
@@ -234,25 +242,26 @@ LogicalResult LowerProbeToSVPass::validate() {
       return failure();
   }
 
-  for (auto send : sendOps)
+  for (auto send : state.sendOps)
     if (!hw::isHWValueType(send.getInput().getType()))
       return send.emitOpError(
                  "Probe-to-SV lowering requires an HW value payload, but got ")
              << send.getInput().getType();
 
   for (auto read : readOps) {
-    auto resolution = resolveRead(read);
+    auto resolution = resolveRead(read, state);
     if (failed(resolution))
       return failure();
-    resolutions.push_back(*resolution);
+    state.resolutions.push_back(*resolution);
   }
   return success();
 }
 
 hw::InnerRefAttr LowerProbeToSVPass::getOrCreateSourceRef(
     probe::SendOp send,
-    hw::InnerSymbolNamespaceCollection &innerSymbolNamespaces) {
-  auto [it, inserted] = sourceRefs.try_emplace(send.getOperation());
+    hw::InnerSymbolNamespaceCollection &innerSymbolNamespaces,
+    LoweringState &state) {
+  auto [it, inserted] = state.sourceRefs.try_emplace(send.getOperation());
   if (!inserted)
     return it->second;
 
@@ -276,7 +285,7 @@ hw::InnerRefAttr LowerProbeToSVPass::getOrCreateInstanceRef(
   return hw::InnerRefAttr::get(module.getModuleNameAttr(), name);
 }
 
-LogicalResult LowerProbeToSVPass::rewrite() {
+LogicalResult LowerProbeToSVPass::rewrite(LoweringState &state) {
   auto circuit = getOperation();
   Namespace circuitNamespace;
   circuitNamespace.add(circuit);
@@ -285,13 +294,13 @@ LogicalResult LowerProbeToSVPass::rewrite() {
       OpBuilder::InsertPoint(circuit.getBody(), circuit.getBody()->begin()));
   hw::InnerSymbolNamespaceCollection innerSymbolNamespaces;
 
-  for (auto resolution : resolutions) {
+  for (auto resolution : state.resolutions) {
     SmallVector<Attribute> path;
     if (resolution.instance)
       path.push_back(
           getOrCreateInstanceRef(resolution.instance, innerSymbolNamespaces));
     path.push_back(
-        getOrCreateSourceRef(resolution.send, innerSymbolNamespaces));
+        getOrCreateSourceRef(resolution.send, innerSymbolNamespaces, state));
 
     ImplicitLocOpBuilder builder(resolution.read.getLoc(), resolution.read);
     auto hierPath = pathCache.getOrCreatePath(builder.getArrayAttr(path),
@@ -307,21 +316,22 @@ LogicalResult LowerProbeToSVPass::rewrite() {
 
   // Remove Probe output ports and update all corresponding instances.
   auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
-  for (auto module : modulesWithProbeOutputs)
+  for (auto module : state.modulesWithProbeOutputs)
     if (failed(
             hw::PortConverter<ProbePortConversionBuilder>(instanceGraph, module)
                 .run()))
       return failure();
 
-  for (auto send : llvm::reverse(sendOps))
+  for (auto send : llvm::reverse(state.sendOps))
     send.erase();
   return success();
 }
 
 void LowerProbeToSVPass::runOnOperation() {
-  if (failed(validate()))
+  LoweringState state;
+  if (failed(validate(state)))
     return signalPassFailure();
-  if (failed(rewrite()))
+  if (failed(rewrite(state)))
     signalPassFailure();
 }
 
