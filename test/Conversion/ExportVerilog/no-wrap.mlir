@@ -17,8 +17,8 @@ hw.module @VerbatimWrapping(in %clock : i1, in %cond : i1, in %val : i8, in %a :
 
 // CHECK-LABEL: TestZero(
 
-// CHECK:      input var logic  /*Zero Width*/      zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime
-// CHECK-NEXT: input var logic  [2:0]/*Zero Width*/ arrZero
+// CHECK:      input  /*Zero Width*/      zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime
+// CHECK-NEXT: input  [2:0]/*Zero Width*/ arrZero
 
 // CHECK:      // Zero width: assign rZeroOutputWithAVeryLongName_YepThisToo_LongNamesAreTheWay_MoreText_GoGoGoGoGo
 // CHECK-SAME: ;
@@ -35,9 +35,9 @@ hw.module @TestZero(in %a: i4, in %zeroBitWithAVeryLongNameWhichMightSeemUnlikel
 
 // Module ports:
 // CHECK-LABEL: TestZeroInstance(
-// CHECK:      // input var logic  /*Zero Width*/      azeroBit
-// CHECK-NEXT: // input var logic  [2:0]/*Zero Width*/ aarrZero
-// CHECK:      // output var logic /*Zero Width*/      rZeroOutputWithAVeryLongNameYepThisToo
+// CHECK:      // input  /*Zero Width*/      azeroBit
+// CHECK-NEXT: // input  [2:0]/*Zero Width*/ aarrZero
+// CHECK:      // output /*Zero Width*/      rZeroOutputWithAVeryLongNameYepThisToo
 
 // Wire:
 // CHECK: // Zero width: wire /*Zero Width*/ [[ZERO_WIRE:.+]];

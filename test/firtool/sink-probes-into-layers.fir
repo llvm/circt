@@ -19,7 +19,7 @@
 ; Check that there are no probes in the top level module:
 
 ; CHECK-LABEL: module Foo(
-; CHECK-NEXT:    input var logic clock
+; CHECK-NEXT:    input clock
 ; CHECK-NEXT:  );
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    Bar bar ();

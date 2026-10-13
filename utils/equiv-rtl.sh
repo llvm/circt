@@ -20,13 +20,13 @@ fi
 
 echo "Comparing $1 and $2 with $3 Missing Dir $mdir"
 yosys -q -p "
- read_verilog -sv $1
+ read_verilog $1
  hierarchy -libdir $mdir
  rename $3 top1
  proc
  memory
  flatten top1
- read_verilog -sv $2
+ read_verilog $2
  hierarchy -libdir $mdir 
  rename $3 top2
  proc
@@ -49,13 +49,13 @@ fi
 #repeat with sat
 echo "Trying SAT $1 and $2 with $3 Missing Dir $mdir"
 yosys -q -p "
- read_verilog -sv $1
+ read_verilog $1
  hierarchy -libdir $mdir
  rename $3 top1
  proc
  memory
  flatten top1
- read_verilog -sv $2
+ read_verilog $2
  hierarchy -libdir $mdir 
  rename $3 top2
  proc

@@ -219,8 +219,8 @@ std::string LoweringOptions::toString() const {
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
   if (emitPortType == EmitPortType::emitWire)
     options += "svPortDeclStyle=wire,";
-  else if (emitPortType == EmitPortType::emitNone)
-    options += "svPortDeclStyle=none,";
+  else if (emitPortType == EmitPortType::emitVarLogic)
+    options += "svPortDeclStyle=varLogic,";
   if (emitBindComments)
     options += "emitBindComments,";
   if (omitVersionComment)

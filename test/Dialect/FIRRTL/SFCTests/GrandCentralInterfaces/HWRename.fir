@@ -28,14 +28,14 @@ circuit Top:
     connect b, signed.b
 
     ; CHECK:      module Companion(
-    ; CHECK:        input var logic [[port:[a-zA-Z0-9_]+]]
+    ; CHECK:        input [[port:[a-zA-Z0-9_]+]]
     ; CHECK:      );
     ; CHECK:        MyInterface MyView();
     ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = [[port]];
     ; CHECK-NEXT: endmodule
 
     ; CHECK:      module DUT
-    ; CHECK:        input var logic a
+    ; CHECK:        input a
     ; CHECK:          Companion companion (
     ; CHECK-NEXT:       .[[port]] (a)
     ; CHECK-NEXT:     );

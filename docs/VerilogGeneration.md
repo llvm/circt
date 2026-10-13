@@ -126,7 +126,7 @@ The current set of "style" Lowering Options is:
      with meaningful namehints (i.e. names which start with "\_") are spilled to wires.
      For a namehint with "\_" prefix, if the term size is greater than `wireSpillingNamehintTermLimit`
      (default=3), then the expression is spilled.
- * `svPortDeclStyle` (default=`varLogic`). Controls the port declaration syntax
+ * `svPortDeclStyle` (default=`none`). Controls the port declaration syntax
  for module ports.
    * `emitVarLogic`: Emits `var logic` in the port lists rather than nothing,
    i.e., default plain (non-handle) ports to a variable (`input var logic ...`,

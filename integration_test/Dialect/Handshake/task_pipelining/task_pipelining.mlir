@@ -1,16 +1,16 @@
 // REQUIRES: iverilog,cocotb
 
 // RUN: rm -rf %t.dir && mkdir %t.dir
-// RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables,svPortDeclStyle=none > %t.sv && \
+// RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=task_pipelining --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // RUN: rm -rf %t.dir && mkdir %t.dir
-// RUN: hlstool %s --dynamic-hw --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables,svPortDeclStyle=none > %t.sv && \
+// RUN: hlstool %s --dynamic-hw --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=task_pipelining --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // Locking the circt should yield the same result
 // RUN: rm -rf %t.dir && mkdir %t.dir
-// RUN: hlstool %s --dynamic-hw --buffering-strategy=all --dynamic-parallelism=locking --verilog --lowering-options=disallowLocalVariables,svPortDeclStyle=none > %t.sv && \
+// RUN: hlstool %s --dynamic-hw --buffering-strategy=all --dynamic-parallelism=locking --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=task_pipelining --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // CHECK:      ** TEST

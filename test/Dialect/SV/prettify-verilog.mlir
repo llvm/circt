@@ -611,7 +611,7 @@ hw.module @no_inline_reduction_ops(in %arg0: i8, in %arg1: i8, out a: i1, out b:
 }
 
 // VERILOG-LABEL: module no_inline_reduction_ops
-// VERILOG-NEXT: input var logic  [7:0] arg0,
+// VERILOG-NEXT: input  [7:0] arg0,
 // VERILOG:      wire [[PARITY:.+]] = ^arg0;
 // VERILOG-NEXT: wire [[REDAND:.+]] = &arg1;
 // VERILOG-NEXT: wire [[REDOR:.+]] = |arg1;

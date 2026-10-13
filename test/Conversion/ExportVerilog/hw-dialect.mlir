@@ -109,60 +109,60 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
 
 // CHECK-LABEL: (* svAttr *)
 // CHECK-NEXT: module TESTSIMPLE(
-// CHECK-NEXT:      input  var logic [3:0]                                              a,
-// CHECK-NEXT:                                                                     b,
-// CHECK-NEXT:      input  var logic [1:0]                                              c,
-// CHECK-NEXT:      input  var logic                                                    cond,
-// CHECK-NEXT:      input  var logic [11:0][9:0][3:0]                                   array2d,
-// CHECK-NEXT:      input  var logic [7:0]                                              uarray[0:15],
-// CHECK-NEXT:                                                                     postUArray,
+// CHECK-NEXT:      input  [3:0]                                              a,
+// CHECK-NEXT:                                                                b,
+// CHECK-NEXT:      input  [1:0]                                              c,
+// CHECK-NEXT:      input                                                     cond,
+// CHECK-NEXT:      input  [11:0][9:0][3:0]                                   array2d,
+// CHECK-NEXT:      input  [7:0]                                              uarray[0:15],
+// CHECK-NEXT:                                                                postUArray,
 // CHECK-NEXT:      input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
 // CHECK-NEXT:      input  struct packed {logic [1:0] foo; }[4:0]             arrOfStructA,
-// CHECK-NEXT:      input  var logic [0:0]                                              array1,
-// CHECK-NEXT:      output var logic [3:0]                                              r0,
-// CHECK-NEXT:                                                                     r2,
-// CHECK-NEXT:                                                                     r4,
-// CHECK-NEXT:                                                                     r6,
-// CHECK-NEXT:                                                                     r7,
-// CHECK-NEXT:                                                                     r8,
-// CHECK-NEXT:                                                                     r9,
-// CHECK-NEXT:                                                                     r10,
-// CHECK-NEXT:                                                                     r11,
-// CHECK-NEXT:                                                                     r12,
-// CHECK-NEXT:                                                                     r13,
-// CHECK-NEXT:                                                                     r14,
-// CHECK-NEXT:                                                                     r15,
-// CHECK-NEXT:      output var logic                                                    r16,
-// CHECK-NEXT:                                                                     r17,
-// CHECK-NEXT:                                                                     r18,
-// CHECK-NEXT:                                                                     r19,
-// CHECK-NEXT:                                                                     r20,
-// CHECK-NEXT:                                                                     r21,
-// CHECK-NEXT:                                                                     r22,
-// CHECK-NEXT:                                                                     r23,
-// CHECK-NEXT:                                                                     r24,
-// CHECK-NEXT:                                                                     r25,
-// CHECK-NEXT:                                                                     r26,
-// CHECK-NEXT:                                                                     r27,
-// CHECK-NEXT:                                                                     r28,
-// CHECK-NEXT:      output var logic [11:0]                                             r29,
-// CHECK-NEXT:      output var logic [1:0]                                              r30,
-// CHECK-NEXT:      output var logic [8:0]                                              r31,
-// CHECK-NEXT:      output var logic [3:0]                                              r33,
-// CHECK-NEXT:                                                                     r34,
-// CHECK-NEXT:      output var logic [2:0][3:0]                                         r35,
-// CHECK-NEXT:      output var logic [5:0][3:0]                                         r36,
-// CHECK-NEXT:      output var logic [3:0]                                              r37,
-// CHECK-NEXT:      output var logic [11:0]                                             r38,
+// CHECK-NEXT:      input  [0:0]                                              array1,
+// CHECK-NEXT:      output [3:0]                                              r0,
+// CHECK-NEXT:                                                                r2,
+// CHECK-NEXT:                                                                r4,
+// CHECK-NEXT:                                                                r6,
+// CHECK-NEXT:                                                                r7,
+// CHECK-NEXT:                                                                r8,
+// CHECK-NEXT:                                                                r9,
+// CHECK-NEXT:                                                                r10,
+// CHECK-NEXT:                                                                r11,
+// CHECK-NEXT:                                                                r12,
+// CHECK-NEXT:                                                                r13,
+// CHECK-NEXT:                                                                r14,
+// CHECK-NEXT:                                                                r15,
+// CHECK-NEXT:      output                                                    r16,
+// CHECK-NEXT:                                                                r17,
+// CHECK-NEXT:                                                                r18,
+// CHECK-NEXT:                                                                r19,
+// CHECK-NEXT:                                                                r20,
+// CHECK-NEXT:                                                                r21,
+// CHECK-NEXT:                                                                r22,
+// CHECK-NEXT:                                                                r23,
+// CHECK-NEXT:                                                                r24,
+// CHECK-NEXT:                                                                r25,
+// CHECK-NEXT:                                                                r26,
+// CHECK-NEXT:                                                                r27,
+// CHECK-NEXT:                                                                r28,
+// CHECK-NEXT:      output [11:0]                                             r29,
+// CHECK-NEXT:      output [1:0]                                              r30,
+// CHECK-NEXT:      output [8:0]                                              r31,
+// CHECK-NEXT:      output [3:0]                                              r33,
+// CHECK-NEXT:                                                                r34,
+// CHECK-NEXT:      output [2:0][3:0]                                         r35,
+// CHECK-NEXT:      output [5:0][3:0]                                         r36,
+// CHECK-NEXT:      output [3:0]                                              r37,
+// CHECK-NEXT:      output [11:0]                                             r38,
 // CHECK-NEXT:      output struct packed {logic a; logic b; }                 r39,
-// CHECK-NEXT:      output var logic [3:0][1:0]                                         r40,
-// CHECK-NEXT:      output var logic                                                    r41[0:0],
+// CHECK-NEXT:      output [3:0][1:0]                                         r40,
+// CHECK-NEXT:      output                                                    r41[0:0],
 // CHECK-NEXT:      output struct packed {logic [0:0] a; }                    r42,
-// CHECK-NEXT:      output var logic [3:0]                                              r43,
+// CHECK-NEXT:      output [3:0]                                              r43,
 // CHECK-NEXT:      output struct packed {logic [1:0] foo; logic [3:0] bar; } r44,
-// CHECK-NEXT:                                                                     r45,
-// CHECK-NEXT:                                                                     r46,
-// CHECK-NEXT:      output var logic                                                    r47
+// CHECK-NEXT:                                                                r45,
+// CHECK-NEXT:                                                                r46,
+// CHECK-NEXT:      output                                                    r47
 // CHECK-NEXT: );
 // CHECK{LITERAL}:  wire [8:0][3:0] name_hint = {9{4'hF}};
 // CHECK-NEXT:      wire [2:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
@@ -224,7 +224,7 @@ hw.module @i0Module(in %arg1: i0) {}
 // CHECK-NEXT:     );
 // CHECK-NEXT:  endmodule
 // CHECK-LABEL: module i0Module(
-// CHECK-NEXT:    // input var logic /*Zero Width*/ arg1
+// CHECK-NEXT:    // input /*Zero Width*/ arg1
 // CHECK-NEXT:     );
 // CHECK-EMPTY:
 // CHECK-NEXT:  endmodule
@@ -235,9 +235,9 @@ hw.module @B(in %a: i1, out b: i1, out c: i1) {
   hw.output %0, %1 : i1, i1
 }
 // CHECK-LABEL: module B(
-// CHECK-NEXT:   input  var logic a, //
-// CHECK-NEXT:   output var logic b, //
-// CHECK-NEXT:                    c //
+// CHECK-NEXT:   input  a, //
+// CHECK-NEXT:   output b, //
+// CHECK-NEXT:          c //
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:   assign b = a | a;
@@ -249,9 +249,9 @@ hw.module @A(in %d: i1, in %e: i1, out f: i1) {
   hw.output %1 : i1
 }
 // CHECK-LABEL: module A(
-// CHECK-NEXT:  input  var logic d,
-// CHECK-NEXT:                   e,
-// CHECK-NEXT:  output var logic f
+// CHECK-NEXT:  input  d,
+// CHECK-NEXT:         e,
+// CHECK-NEXT:  output f
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:  assign f = d ? d : e;
@@ -262,9 +262,9 @@ hw.module @AAA(in %d: i1, in %e: i1, out f: i1) {
   hw.output %z : i1
 }
 // CHECK-LABEL: module AAA(
-// CHECK-NEXT:  input  var logic d,
-// CHECK-NEXT:                   e,
-// CHECK-NEXT:  output var logic f
+// CHECK-NEXT:  input  d,
+// CHECK-NEXT:         e,
+// CHECK-NEXT:  output f
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:  assign f = 1'h0;
@@ -293,14 +293,14 @@ hw.module @AB(in %w: i1, in %x: i1, in %i2: i2, in %i3: i0, out y: i1, out z: i1
   hw.output %y, %x, %p, %p2 : i1, i1, i1, i1
 }
 // CHECK-LABEL: module AB(
-// CHECK-NEXT:      input  var logic                w,
-// CHECK-NEXT:                                       x,
-// CHECK-NEXT:      input  var logic [1:0]          i2,
-// CHECK-NEXT:   // input  var logic /*Zero Width*/ i3,
-// CHECK-NEXT:      output var logic                y,
-// CHECK-NEXT:                                       z,
-// CHECK-NEXT:                                       p,
-// CHECK-NEXT:                                       p2
+// CHECK-NEXT:      input                 w,
+// CHECK-NEXT:                            x,
+// CHECK-NEXT:      input  [1:0]          i2,
+// CHECK-NEXT:   // input  /*Zero Width*/ i3,
+// CHECK-NEXT:      output                y,
+// CHECK-NEXT:                            z,
+// CHECK-NEXT:                            p,
+// CHECK-NEXT:                            p2
 // CHECK-NEXT:   );
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire _b1_b;
@@ -341,8 +341,8 @@ hw.module @shl(in %a: i1, out b: i1) {
   hw.output %0 : i1
 }
 // CHECK-LABEL:  module shl(
-// CHECK-NEXT:   input  var logic a,
-// CHECK-NEXT:   output var logic b
+// CHECK-NEXT:   input  a,
+// CHECK-NEXT:   output b
 // CHECK-NEXT:   );
 // CHECK-EMPTY:
 // CHECK-NEXT:   assign b = a << a;
@@ -355,7 +355,7 @@ hw.module @inout_0(in %a: !hw.inout<i42>, out out: i42) {
 }
 // CHECK-LABEL:  module inout_0(
 // CHECK-NEXT:     inout  [41:0] a,
-// CHECK-NEXT:     output var logic [41:0] out
+// CHECK-NEXT:     output [41:0] out
 // CHECK-NEXT:   );
 // CHECK-EMPTY:
 // CHECK-NEXT:     assign out = a;
@@ -379,11 +379,11 @@ hw.module @extract_all(in %tmp85: i1, out tmp106: i1) {
 
 hw.module @wires(in %in4: i4, in %in8: i8, out a: i4, out b: i8, out c: i8) {
   // CHECK-LABEL: module wires( //
-  // CHECK-NEXT:   input  var logic [3:0] in4, //
-  // CHECK-NEXT:   input  var logic [7:0] in8, //
-  // CHECK-NEXT:   output var logic [3:0] a, //
-  // CHECK-NEXT:   output var logic [7:0] b, //
-  // CHECK-NEXT:                           c //
+  // CHECK-NEXT:   input  [3:0] in4, //
+  // CHECK-NEXT:   input  [7:0] in8, //
+  // CHECK-NEXT:   output [3:0] a, //
+  // CHECK-NEXT:   output [7:0] b, //
+  // CHECK-NEXT:                c //
   // CHECK-NEXT:  );
 
   // CHECK-EMPTY:
@@ -469,10 +469,10 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
 
 
 // CHECK-LABEL: module casts(
-// CHECK-NEXT: input var logic  [6:0]      in1,
-// CHECK-NEXT: input var logic  [7:0][3:0] in2,
-// CHECK-NEXT: output var logic [6:0]      r1,
-// CHECK-NEXT: output var logic [31:0]     r2
+// CHECK-NEXT: input  [6:0]      in1,
+// CHECK-NEXT: input  [7:0][3:0] in2,
+// CHECK-NEXT: output [6:0]      r1,
+// CHECK-NEXT: output [31:0]     r2
 // CHECK-NEXT: );
 hw.module @casts(in %in1: i7, in %in2: !hw.array<8xi4>, out r1: !hw.array<7xi1>, out r2: i32) {
   // CHECK-EMPTY:
@@ -485,12 +485,12 @@ hw.module @casts(in %in1: i7, in %in2: !hw.array<8xi4>, out r1: !hw.array<7xi1>,
 }
 
 // CHECK-LABEL: module TestZero(
-// CHECK-NEXT:      input var logic [3:0]               a,
-// CHECK-NEXT:   // input var logic  /*Zero Width*/      zeroBit,
-// CHECK-NEXT:   // input var logic  [2:0]/*Zero Width*/ arrZero,
-// CHECK-NEXT:      output var logic [3:0]               r0
-// CHECK-NEXT:   // output var logic /*Zero Width*/      rZero
-// CHECK-NEXT:   // output var logic [2:0]/*Zero Width*/ arrZero_0
+// CHECK-NEXT:      input  [3:0]               a,
+// CHECK-NEXT:   // input  /*Zero Width*/      zeroBit,
+// CHECK-NEXT:   // input  [2:0]/*Zero Width*/ arrZero,
+// CHECK-NEXT:      output [3:0]               r0
+// CHECK-NEXT:   // output /*Zero Width*/      rZero
+// CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero_0
 // CHECK-NEXT:   );
 // CHECK-EMPTY:
 hw.module @TestZero(in %a: i4, in %zeroBit: i0, in %arrZero: !hw.array<3xi0>,
@@ -540,8 +540,8 @@ hw.module @TestZeroStruct(in %structZero: !hw.struct<>, in %structZeroNest: !hw.
 }
 
 // CHECK-LABEL: module zeroElements
-// CHECK-NEXT:   // input var logic  /*Zero Width*/                                                                                              in0,
-// CHECK-NEXT:      input var logic  [31:0]                                                                                                      in1,
+// CHECK-NEXT:   // input  /*Zero Width*/                                                                                              in0,
+// CHECK-NEXT:      input  [31:0]                                                                                                      in1,
 // CHECK-NEXT:      output struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; } out0
 // CHECK-NEXT:  );
 hw.module @zeroElements(in %in0: i0, in %in1: i32, out out0: !hw.struct<z1: i0, a: i32, z2: i0, b: i32, c: !hw.struct<z: i0>, d: !hw.struct<d1:i32, z:i0>>) {
@@ -577,11 +577,11 @@ hw.module @TestZeroStructInstance(in %structZero: !hw.struct<>, in %structZeroNe
 }
 
 // CHECK-LABEL: module testZeroArrayGet(
-// CHECK-NEXT:   // input var logic  /*Zero Width*/ arg0,
-// CHECK-NEXT:      input var logic  [0:0][31:0]    arg1,
-// CHECK-NEXT:      output var logic [31:0]         out,
+// CHECK-NEXT:   // input  /*Zero Width*/ arg0,
+// CHECK-NEXT:      input  [0:0][31:0]    arg1,
+// CHECK-NEXT:      output [31:0]         out,
 // CHECK-NEXT:                            out1
-// CHECK-NEXT:   // output var logic /*Zero Width*/ out2
+// CHECK-NEXT:   // output /*Zero Width*/ out2
 // CHECK-NEXT:  );
 
 // CHECK:   assign out = arg1[/*Zero width*/ 1'b0];
@@ -662,11 +662,11 @@ hw.module @longvariadic(in %a: i8, out b: i8) {
 // https://github.com/llvm/circt/issues/736
 // Can't depend on left associativeness since ops can have args with different sizes
 // CHECK-LABEL: module eqIssue(
-// CHECK-NEXT: input var logic  [8:0] a,
+// CHECK-NEXT: input  [8:0] a,
 // CHECK-NEXT:              c,
-// CHECK-NEXT: input var logic  [3:0] d,
+// CHECK-NEXT: input  [3:0] d,
 // CHECK-NEXT:              e,
-// CHECK-NEXT: output var logic       r
+// CHECK-NEXT: output       r
 // CHECK-NEXT: );
 // CHECK-EMPTY:
 // CHECK-NEXT: assign r = a == c == (d == e);
@@ -680,7 +680,7 @@ hw.module @longvariadic(in %a: i8, out b: i8) {
 // https://github.com/llvm/circt/issues/750
 // Always get array indexes on the lhs
 // CHECK-LABEL: module ArrayLHS
-// CHECK-NEXT:    input var logic clock
+// CHECK-NEXT:    input clock
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:   reg memory_r_en_pipe[0:0];
@@ -1023,7 +1023,7 @@ hw.module @structExtractFromTemporary(in %cond: i1, in %a: !hw.struct<c: i1>, in
 }
 
 // CHECK-LABEL: module unionCreateNoPadding(
-// CHECK-NEXT:    input var logic [1:0] in,
+// CHECK-NEXT:    input [1:0] in,
 // CHECK-NEXT:    output union packed { struct packed {logic [0:0] __pre_padding_a; logic a;} a;logic [1:0] b;} out
 hw.module @unionCreateNoPadding(in %in: i2, out out: !hw.union<a: i1, b: i2>) {
   // CHECK: assign out = in + in;
@@ -1033,7 +1033,7 @@ hw.module @unionCreateNoPadding(in %in: i2, out out: !hw.union<a: i1, b: i2>) {
 }
 
 // CHECK-LABEL: module unionCreatePadding(
-// CHECK-NEXT:    input var logic in,
+// CHECK-NEXT:    input in,
 // CHECK-NEXT:    output union packed { struct packed {logic [0:0] __pre_padding_a; logic a;} a;logic [1:0] b;} out
 hw.module @unionCreatePadding(in %in: i1, out out: !hw.union<a: i1, b: i2>) {
   // CHECK: assign out = {1'h0, in};
@@ -1042,7 +1042,7 @@ hw.module @unionCreatePadding(in %in: i1, out out: !hw.union<a: i1, b: i2>) {
 }
 
 // CHECK-LABEL: module unionCreateZeroWidthElement(
-// CHECK-NEXT:    // input var logic /*Zero Width*/ in,
+// CHECK-NEXT:    // input /*Zero Width*/ in,
 // CHECK-NEXT:    output union packed {/*a: Zero Width;*/ logic [1:0] b;} out
 hw.module @unionCreateZeroWidthElement(in %in: i0, out out: !hw.union<a: i0, b: i2>) {
   // CHECK: assign out = 2'h0;
@@ -1087,8 +1087,8 @@ hw.module @renameKeyword(in %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: !h
 
 // CHECK-LABEL: useRenamedStruct(
 // CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_0; } a,
-// CHECK-NEXT:  output var logic                                                    r1,
-// CHECK-NEXT:                                                                     r2,
+// CHECK-NEXT:  output                                                    r1,
+// CHECK-NEXT:                                                            r2,
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3,
 // CHECK-NEXT:                                                            r4
 // CHECK-NEXT:  );
@@ -1161,7 +1161,7 @@ hw.module @addParenthesesToSuccessiveOperators(in %a: i4, in %b: i1, in %c: i4, 
 // CHECK-LABEL: module parameters
 // CHECK-NEXT: #(parameter [41:0] p1 = 42'd17
 // CHECK-NEXT:   parameter [0:0]  p2) (
-// CHECK-NEXT: input  var logic [7:0] arg0,
+// CHECK-NEXT: input  [7:0] arg0,
 hw.module @parameters<p1: i42 = 17, p2: i1>(in %arg0: i8, out out: i8) {
   // Local values should not conflict with output or parameter names.
   // CHECK: wire [3:0] p1_0;
@@ -1176,7 +1176,7 @@ hw.module.extern @parameters2<p1: i42 = 17, p2: i1 = 0>(in %arg0: i8, out out: i
 
 // CHECK-LABEL: module parameters3
 // CHECK-NEXT:   #(parameter [41:0] p1 = 42'd17) (
-// CHECK-NEXT:   input [p1 - 1:0] arg0,
+// CHECK-NEXT:   input  [p1 - 1:0] arg0,
 // CHECK-NEXT:   output [p1 - 1:0] out
 // CHECK-NEXT:  );
 // CHECK:   assign out = arg0;
@@ -1285,7 +1285,7 @@ hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
 // CHECK: #(parameter param = 1,
 // CHECK:   parameter wire_0 = 2) (
 hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
-  // CHECK: input var logic [16:0]{{ *}}a,
+  // CHECK: input [16:0]{{ *}}a,
   (in %a: !hw.int<17>,
   // CHECK: input [param - 1:0]{{ *}}b
    in %b: !hw.int<#hw.param.decl.ref<"param">>,
@@ -1329,9 +1329,9 @@ hw.module @parameterizedArrays<param: i32, N: i32>
 }
 
 // CHECK-LABEL: module UseParameterizedArrays(
-// CHECK-NEXT: input var logic [41:0][11:0] a,
-// CHECK-NEXT: input var logic [23:0][11:0] b
-// CHECK-NEXT: output var logic [23:0][11:0] c
+// CHECK-NEXT: input [41:0][11:0] a,
+// CHECK-NEXT: input [23:0][11:0] b
+// CHECK-NEXT: output [23:0][11:0] c
 // CHECK-NEXT: );
 hw.module @UseParameterizedArrays(in %a: !hw.array<42xint<12>>, in %b: !hw.array<24xint<12>>, out c: !hw.array<24xint<12>>) {
 // CHECK:  parameterizedArrays #(
@@ -1402,7 +1402,7 @@ hw.module @UniformArrayCreate(out arr: !hw.array<5xi8>) {
 }
 
 // CHECK-LABEL: module Issue4485(
-// CHECK-NEXT:    input var logic [3:0] in
+// CHECK-NEXT:    input [3:0] in
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:  endmodule
@@ -1414,9 +1414,9 @@ hw.module @Issue4485(in %in: i4) {
 }
 
 // CHECK-LABEL: module inline_bitcast_in_concat(
-// CHECK-NEXT:    input var logic  [6:0]      in1,
-// CHECK-NEXT:    input var logic  [7:0][3:0] in2,
-// CHECK-NEXT:    output var logic [38:0]     out
+// CHECK-NEXT:    input  [6:0]      in1,
+// CHECK-NEXT:    input  [7:0][3:0] in2,
+// CHECK-NEXT:    output [38:0]     out
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:    assign out = {in1, /*cast(bit[31:0])*/in2};
@@ -1440,8 +1440,8 @@ hw.module @DontInlineAggregateConstantIntoPorts() {
 
 // CHECK-LABEL: module FooA(
 // CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [5:0] __pre_padding_b; logic [9:0] b;} b;} test
-// CHECK-NEXT:    output var logic [15:0] a,
-// CHECK-NEXT:    output var logic [9:0] b
+// CHECK-NEXT:    output [15:0] a,
+// CHECK-NEXT:    output [9:0] b
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:    assign a = test.a;
@@ -1456,8 +1456,8 @@ hw.module @FooA(in %test: !unionA, out a: i16, out b: i10) {
 
 // CHECK-LABEL: module FooB(
 // CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [13:0] b; logic [1:0] __post_padding_b;} b;} test,
-// CHECK-NEXT:    output var logic [15:0] a,
-// CHECK-NEXT:    output var logic [13:0] b
+// CHECK-NEXT:    output [15:0] a,
+// CHECK-NEXT:    output [13:0] b
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:    assign a = test.a;
@@ -1474,8 +1474,8 @@ hw.module @FooB(in %test: !unionB, out a: i16, out b: i14) {
 // on both sides: the offset pads the LSBs, the remaining bits pad the MSBs.
 // CHECK-LABEL: module unionExtractPrePostPadding
 // CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [3:0] __pre_padding_b; logic [9:0] b; logic [1:0] __post_padding_b;} b;} test,
-// CHECK-NEXT:    output var logic  [15:0] a,
-// CHECK-NEXT:    output var logic [9:0] b
+// CHECK-NEXT:    output [15:0] a,
+// CHECK-NEXT:    output [9:0] b
 !unionPrePostPadding = !hw.union<a: i16, b: i10 offset 2>
 hw.module @unionExtractPrePostPadding(in %test: !unionPrePostPadding, out a: i16, out b: i10) {
   // CHECK-DAG:     assign a = test.a;
@@ -1486,7 +1486,7 @@ hw.module @unionExtractPrePostPadding(in %test: !unionPrePostPadding, out a: i16
 }
 
 // CHECK-LABEL: module unionCreatePrePostPadding
-// CHECK-NEXT:    input var logic [9:0] in,
+// CHECK-NEXT:    input [9:0] in,
 // CHECK-NEXT:    output union packed {logic [15:0] a; struct packed {logic [3:0] __pre_padding_b; logic [9:0] b; logic [1:0] __post_padding_b;} b;} out
 hw.module @unionCreatePrePostPadding(in %in: i10, out out: !unionPrePostPadding) {
   // CHECK: assign out = {4'h0, in, 2'h0};

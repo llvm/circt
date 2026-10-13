@@ -42,7 +42,7 @@ circuit Foo: %[[
     connect bar.a, d
 
   ; CHECK: module Bar(
-  ; CHECK:  input var logic a
+  ; CHECK:  input a
   ; CHECK: );
   ; CHECK: endmodule
 
@@ -96,9 +96,9 @@ circuit TestHarness:
   ; CHECK: endmodule
 
   ; CHECK: module DUT(
-  ; CHECK:   input var logic         clock,
-  ; CHECK:   input var logic  [31:0] a,
-  ; CHECK:   output var logic [31:0] b
+  ; CHECK:   input         clock,
+  ; CHECK:   input  [31:0] a,
+  ; CHECK:   output [31:0] b
   ; CHECK: );
   ; CHECK:   reg [31:0] pc;
   ; CHECK:   always @(posedge clock)
@@ -136,10 +136,10 @@ circuit TestHarness:
   ; CHECK: endmodule
 
   ; CHECK: module TestHarness(
-  ; CHECK:   input var logic         clock,
+  ; CHECK:   input         clock,
   ; CHECK:                 reset,
-  ; CHECK:   input var logic  [31:0] a,
-  ; CHECK:   output var logic [31:0] b
+  ; CHECK:   input  [31:0] a,
+  ; CHECK:   output [31:0] b
   ; CHECK: );
   ; CHECK:   DUT dut (
   ; CHECK:     .clock (clock),

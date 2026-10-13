@@ -25,7 +25,7 @@ with Context() as ctx, Location.unknown():
   circt.export_verilog(m, buffer)
   print(buffer.getvalue())
   # INMEMORY: module test(
-  # INMEMORY:   output var logic out
+  # INMEMORY:   output out
   # INMEMORY: );
   # INMEMORY:   assign out = 1'h1;
   # INMEMORY: endmodule
@@ -33,7 +33,7 @@ with Context() as ctx, Location.unknown():
   cwd = os.getcwd()
   circt.export_split_verilog(m, cwd)
   # DIRECTORY: module test(
-  # DIRECTORY:   output var logic out
+  # DIRECTORY:   output out
   # DIRECTORY: );
   # DIRECTORY:   assign out = 1'h1;
   # DIRECTORY: endmodule

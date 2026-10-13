@@ -39,8 +39,8 @@ module attributes {circt.loweringOptions="caseInsensitiveKeywords"} {
   // CHECK-LABEL: caseInsensitiveKeywords
   hw.module @caseInsensitiveKeywords() {}
   // CHECK:      module MODULE_0
-  // CHECK:        input var logic Module_0,
-  // CHECK-NEXT:   output var logic MoDuLe_0
+  // CHECK:        input Module_0,
+  // CHECK-NEXT:   output MoDuLe_0
   // CHECK:        assign MoDuLe_0 = Module_0;
   hw.module @MODULE(in %Module: i1, out MoDuLe: i1) {
     hw.output %Module : i1

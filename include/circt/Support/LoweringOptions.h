@@ -169,7 +169,7 @@ struct LoweringOptions {
     emitVarLogic,
     emitWire,
     emitNone,
-  } emitPortType = EmitPortType::emitVarLogic;
+  } emitPortType = EmitPortType::emitNone;
 
   /// If true, emit a comment wherever an instance wasn't printed, because
   /// it's emitted elsewhere as a bind.

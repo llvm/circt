@@ -24,18 +24,18 @@ firrtl.circuit "Top" {
 // MLIR-NEXT:  }
 
 // VERILOG-LABEL: module Top(
-// VERILOG-NEXT:    input var logic clock,
-// VERILOG-NEXT:    input var logic  [7:0] in,
-// VERILOG-NEXT:    output var logic [7:0] out
+// VERILOG-NEXT:    input clock,
+// VERILOG-NEXT:    input  [7:0] in,
+// VERILOG-NEXT:    output [7:0] out
 // VERILOG-NEXT:    );
 // VERILOG-EMPTY:
 // VERILOG-NEXT:    assign out = in;
 // VERILOG-NEXT:  endmodule
 
 // VERILOG-WITH-MLIR-LABEL: module Top(
-// VERILOG-WITH-MLIR-NEXT:    input var logic clock,
-// VERILOG-WITH-MLIR-NEXT:    input var logic  [7:0] in,
-// VERILOG-WITH-MLIR-NEXT:    output var logic [7:0] out
+// VERILOG-WITH-MLIR-NEXT:    input clock,
+// VERILOG-WITH-MLIR-NEXT:    input  [7:0] in,
+// VERILOG-WITH-MLIR-NEXT:    output [7:0] out
 // VERILOG-WITH-MLIR-NEXT:  );
 // VERILOG-WITH-MLIR-EMPTY:
 // VERILOG-WITH-MLIR-NEXT:    assign out = in;
