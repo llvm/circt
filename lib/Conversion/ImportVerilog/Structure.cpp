@@ -2575,8 +2575,7 @@ LogicalResult Context::convertThreeStateGatePrimitive(
     return failure();
 
   auto enType = cast<moore::IntType>(enVal.getType());
-  auto enWidth = enType.getBitSize();
-  (void)enWidth;
+  [[maybe_unused]] auto enWidth = enType.getBitSize();
   // Slang automatically casts enable signals (or errors if it can't be cast)
   assert(enWidth && *enWidth == 1 &&
          "enable signal of a three-state gate primitive must be 1 bit");
@@ -2832,22 +2831,25 @@ static void parseInputRow(StringRef inputs, SmallVectorImpl<char> &levels) {
     levels.push_back(llvm::toLower(c));
 }
 
-// Skip invalid or non-productive table rows. Currently, only combinational UDPs
-// with 0/1/?/b inputs are supported.
+// Skip unsupported or non-productive table rows. Currently, only combinational
+// UDPs with 0/1/?/b inputs are supported.
 static bool
 skipUnsupportedRow(const slang::ast::PrimitiveSymbol::TableEntry &entry,
                    ArrayRef<char> levels, size_t numInputs) {
+  // In the sum-of-products (SOP) representation below, only rows producing '1'
+  // generate product terms in the disjunction; other outputs (e.g., '0' or 'x')
+  // do not contribute. Also skip edge-sensitive entries and rows with
+  // mismatched input counts.
   if (entry.isEdgeSensitive || entry.output != '1' ||
       levels.size() != numInputs)
     return true;
-  for (char c : levels) {
-    if (c != '0' && c != '1' && c != '?' && c != 'b')
-      return true;
-  }
-  return false;
+  return llvm::any_of(levels, [](char c) {
+    return c != '0' && c != '1' && c != '?' && c != 'b';
+  });
 }
 
-/// Build the productive AND-term for this row.
+/// Build the productive AND-term for this row. Returns nullptr if the row is
+/// unproductive (all don't cares).
 static Value buildProductiveTerm(OpBuilder &builder, Location loc,
                                  ArrayRef<char> levels, ValueRange inputVals,
                                  SmallVectorImpl<Value> &notVars) {
@@ -2909,15 +2911,16 @@ FailureOr<moore::SVModuleOp> Context::convertUserDefinedPrimitiveDef(
   auto moduleOp =
       moore::SVModuleOp::create(builder, loc, primitive.name,
                                 hw::ModuleType::get(getContext(), modulePorts));
-  orderedRootOps.insert(upperIt, {key, moduleOp});
-  symbolTable.insert(moduleOp);
-
-  // Memoization cache for cross-row moore.not deduplication.
   auto *block = builder.createBlock(&moduleOp.getBodyRegion());
   for (const auto *port : primitive.ports.subspan(1))
     block->addArgument(l1Ty, convertLocation(port->location));
+  orderedRootOps.insert(upperIt, {key, moduleOp});
+  symbolTable.insert(moduleOp);
+
   auto inputVals = block->getArguments();
   size_t numInputs = inputVals.size();
+
+  // Memoization cache for cross-row moore.not deduplication.
   SmallVector<Value> notVars(numInputs, Value{});
 
   // Construct Disjunctive Normal Form (sum-of-products) boolean logic from
@@ -2975,11 +2978,12 @@ LogicalResult Context::convertUserDefinedPrimitiveInstance(
 
   // Look up or convert the UDP definition into a moore.module and instantiate
   // it.
-  auto moduleOpOrFailure = convertUserDefinedPrimitiveDef(prim.primitiveType);
+  FailureOr<moore::SVModuleOp> moduleOpOrFailure =
+      convertUserDefinedPrimitiveDef(prim.primitiveType);
   if (failed(moduleOpOrFailure))
     return failure();
-  auto moduleOp = *moduleOpOrFailure;
-  auto moduleType = moduleOp.getModuleType();
+  moore::SVModuleOp moduleOp = *moduleOpOrFailure;
+  hw::ModuleType moduleType = moduleOp.getModuleType();
   auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
   auto outputNames = builder.getArrayAttr(moduleType.getOutputNames());
   auto inst = moore::InstanceOp::create(
