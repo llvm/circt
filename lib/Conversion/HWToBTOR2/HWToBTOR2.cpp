@@ -1085,8 +1085,8 @@ public:
     // Typeswitch is used here because other seq types will be supported
     // like all operations relating to memories and CompRegs
     TypeSwitch<Operation *, void>(op)
-        .Case<seq::FirRegOp, seq::CompRegOp, seq::FromClockOp, seq::ToClockOp>(
-            [&](auto expr) { visit(expr); })
+        .Case<seq::FirRegOp, seq::CompRegOp, seq::FromClockOp, seq::ToClockOp,
+              seq::FirMemOp>([&](auto expr) { visit(expr); })
         .Default([&](auto expr) { visitUnsupportedOp(op); });
   }
 
@@ -1181,6 +1181,17 @@ public:
     regOps.push_back(reg);
   }
 
+  /// Memories generate "array" states in btor2.
+  /// These are particular in that they might have separate read and write
+  /// ports, which should be generated *after* the state is generated, so to
+  /// enforce this we generate all of that here. These also generate "array"
+  /// sorts which themselves may require generating bitvec sorts.
+  void visit(seq::FirMemOp op) {
+    // TODO
+    op->emitOpError("is an unsupported operation");
+    return signalPassFailure();
+  }
+
   void visit(seq::FromClockOp op) {
     for (auto *user : op->getResult(0).getUsers()) {
       if (!isa<sv::AlwaysOp, verif::ClockedAssertOp>(user)) {
@@ -1270,7 +1281,7 @@ public:
   }
 
   /// Previsits all registers in a given module (avoids dependency cycles)
-  LogicalResult preVisitRegs(Operation *module) {
+  LogicalResult preVisitStates(Operation *module) {
     // Sanity check
     if (!isSuportedModule(module))
       return failure();
@@ -1278,7 +1289,7 @@ public:
     // Find all supported registers and visit them
     module->walk([&](Operation *op) {
       TypeSwitch<Operation *, void>(op)
-          .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
+          .Case<seq::FirRegOp, seq::CompRegOp, seq::FirMemOp>([&](auto reg) {
             visit(reg);
             handledOps.insert(op);
           })
@@ -1359,7 +1370,7 @@ public:
   LogicalResult handleTopLevel(Operation *module) {
     // Previsit all registers in the module in order to avoid dependency
     // cycles
-    if (failed(preVisitRegs(module)))
+    if (failed(preVisitStates(module)))
       return failure();
 
     // Visit all of the operations in our module
