@@ -29,7 +29,9 @@ firrtl.circuit "hasloops"   {
     %y = firrtl.wire  : !firrtl.uint<1>
     %z = firrtl.wire  : !firrtl.uint<1>
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %z, %y : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -43,6 +45,7 @@ firrtl.circuit "loop"   {
   // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: loop.{w <- w}}}
   firrtl.module @loop(out %y: !firrtl.uint<8>) {
     %w = firrtl.wire  : !firrtl.uint<8>
+    // expected-note @below {{cycle}}
     firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }
@@ -56,8 +59,11 @@ firrtl.circuit "hasloops"   {
   firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
     %y = firrtl.wire  : !firrtl.uint<1>
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     %t = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     %z = firrtl.node %t  : !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -73,16 +79,20 @@ firrtl.circuit "hasloops"   {
     %y = firrtl.wire  : !firrtl.uint<1>
     %z = firrtl.wire  : !firrtl.uint<1>
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     %0 = firrtl.subfield %m_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
     %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    // expected-note @below {{cycle}}
     firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
     %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     %c1_ui = firrtl.constant 1 : !firrtl.uint
     firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
     %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    // expected-note @below {{cycle}}
     firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -94,7 +104,9 @@ firrtl.circuit "hasloops"   {
 // Combination loop through an instance
 // CHECK-NOT: firrtl.circuit "hasloops"
 firrtl.circuit "hasloops"   {
+  // expected-remark @below {{cycle}}
   firrtl.module @thru(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    // expected-note @below {{cycle}}
     firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: hasloops.{inner.in <- y <- z <- inner.out <- inner.in}}}
@@ -102,9 +114,13 @@ firrtl.circuit "hasloops"   {
     %y = firrtl.wire  : !firrtl.uint<1>
     %z = firrtl.wire  : !firrtl.uint<1>
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     %inner_in, %inner_out = firrtl.instance inner @thru(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    // expected-note @below {{cycle}}
     firrtl.connect %inner_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %z, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -124,11 +140,16 @@ firrtl.circuit "hasloops"   {
     %e = firrtl.wire  : !firrtl.uint<1>
     %0 = firrtl.and %c, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     %1 = firrtl.and %a, %d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %b, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     %2 = firrtl.and %c, %e : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %d, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %e, %b : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %o, %e : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -142,7 +163,9 @@ firrtl.circuit "matchingConnectAndConnect" {
   firrtl.module @matchingConnectAndConnect(out %a: !firrtl.uint<11>, out %b: !firrtl.uint<11>) {
     %w = firrtl.wire : !firrtl.uint<11>
     firrtl.matchingconnect %b, %w : !firrtl.uint<11>
+    // expected-note @below {{cycle}}
     firrtl.connect %a, %b : !firrtl.uint<11>, !firrtl.uint<11>
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %b, %a : !firrtl.uint<11>
   }
 }
@@ -155,7 +178,9 @@ firrtl.circuit "outputPortCycle"   {
     %0 = firrtl.subindex %reg[0] : !firrtl.vector<bundle<a: uint<8>>, 2>
     %1 = firrtl.subindex %reg[0] : !firrtl.vector<bundle<a: uint<8>>, 2>
     %w = firrtl.wire : !firrtl.bundle<a:uint<8>>
+    // expected-note @below {{cycle}}
     firrtl.connect %w, %0 : !firrtl.bundle<a:uint<8>>, !firrtl.bundle<a:uint<8>>
+    // expected-note @below {{cycle}}
     firrtl.connect %1, %w : !firrtl.bundle<a:uint<8>>, !firrtl.bundle<a:uint<8>>
   }
 }
@@ -198,7 +223,9 @@ firrtl.circuit "PortReadWrite"  {
   firrtl.module @PortReadWrite() {
     %a = firrtl.wire : !firrtl.uint<1>
     %bar_a = firrtl.instance bar interesting_name  @Bar(in a: !firrtl.uint<1>)
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %a, %bar_a : !firrtl.uint<1>
   }
 }
@@ -210,7 +237,9 @@ firrtl.circuit "Foo"  {
   // expected-error @below {{Foo.{a <- bar.a <- a}}}
   firrtl.module @Foo(out %a: !firrtl.uint<1>) {
     %bar_a = firrtl.instance bar interesting_name  @Bar(in a: !firrtl.uint<1>)
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %a, %bar_a : !firrtl.uint<1>
   }
 }
@@ -224,7 +253,9 @@ firrtl.circuit "outputPortCycle"   {
     %0 = firrtl.subindex %port[0] : !firrtl.vector<bundle<a: uint<8>, b: uint<4>>, 2>
     %1 = firrtl.subindex %port[0] : !firrtl.vector<bundle<a: uint<8>, b: uint<4>>, 2>
     %w = firrtl.instance bar interesting_name  @Bar(in a: !firrtl.bundle<a: uint<8>, b: uint<4>>)
+    // expected-note @below {{cycle}}
     firrtl.connect %w, %0 : !firrtl.bundle<a: uint<8>, b: uint<4>>, !firrtl.bundle<a: uint<8>, b: uint<4>>
+    // expected-note @below {{cycle}}
     firrtl.connect %1, %w : !firrtl.bundle<a: uint<8>, b: uint<4>>, !firrtl.bundle<a: uint<8>, b: uint<4>>
   }
 }
@@ -239,8 +270,11 @@ firrtl.circuit "hasloops"   {
     %w = firrtl.wire  : !firrtl.vector<uint<1>,10>
     %y = firrtl.subindex %w[3]  : !firrtl.vector<uint<1>,10>
     firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     %0 = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     %z = firrtl.node %0  : !firrtl.uint<1>
+    // expected-note @below {{cycle}}
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -257,12 +291,15 @@ firrtl.circuit "hasloops"   {
     %bar_b = firrtl.wire : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
     %4 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
     %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %5, %4 : !firrtl.uint<1>
     %v0 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
     %v1 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %v1, %v0 : !firrtl.uint<1>
   }
 }
@@ -274,18 +311,23 @@ firrtl.circuit "hasloops"   {
 firrtl.circuit "hasLoops"  {
   // expected-error @below {{hasLoops.{b[0] <- bar.b[0] <- bar.a[0] <- b[0]}}}
   firrtl.module @hasLoops(out %b: !firrtl.vector<uint<1>, 2>) {
+    // expected-note @below {{cycle}}
     %bar_a, %bar_b = firrtl.instance bar  @Bar(in a: !firrtl.vector<uint<1>, 2>, out b: !firrtl.vector<uint<1>, 2>)
     %0 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
     %4 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
     %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %5, %4 : !firrtl.uint<1>
   }
 
+  // expected-remark @below {{cycle}}
   firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
     %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
+    // expected-note @below {{cycle}}
     firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
     %2 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 2>
     %3 = firrtl.subindex %b[1] : !firrtl.vector<uint<1>, 2>
