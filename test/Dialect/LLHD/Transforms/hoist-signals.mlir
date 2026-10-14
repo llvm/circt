@@ -369,6 +369,134 @@ hw.module @DriveOnlyInNonSuspendBlock(in %v : f64, in %w : i42, in %c : i1) {
   }
 }
 
+// A drive to a projection of a signal declared outside the process can be
+// hoisted, as long as the projection itself is defined outside the process.
+// CHECK-LABEL: @HoistProjectionDrive
+hw.module @HoistProjectionDrive(in %x : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i1 = hw.constant 0 : i1
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  // CHECK: [[ELT:%.+]] = llhd.sig.array_get %sig
+  %elt = llhd.sig.array_get %sig[%c0_i1] : <!hw.array<2xi5>>
+  // CHECK: [[TMP:%.+]] = llhd.process -> i5 {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK-NOT: llhd.drv
+    // CHECK: llhd.wait yield (%x : i5), ^bb1
+    llhd.drv %elt, %x after %0 : i5
+    llhd.wait ^bb1
+  }
+  // CHECK: llhd.drv [[ELT]], [[TMP]] after
+}
+
+// Drives to provably disjoint projections of the same signal are independent
+// and can be hoisted separately.
+// CHECK-LABEL: @HoistDisjointProjectionDrives
+hw.module @HoistDisjointProjectionDrives(in %x : i5, in %y : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i1 = hw.constant 0 : i1
+  %c1_i1 = hw.constant 1 : i1
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  // CHECK: [[E0:%.+]] = llhd.sig.array_get %sig
+  // CHECK: [[E1:%.+]] = llhd.sig.array_get %sig
+  %e0 = llhd.sig.array_get %sig[%c0_i1] : <!hw.array<2xi5>>
+  %e1 = llhd.sig.array_get %sig[%c1_i1] : <!hw.array<2xi5>>
+  // CHECK: [[TMP:%.+]]:2 = llhd.process -> i5, i5 {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK-NOT: llhd.drv
+    // CHECK: llhd.wait yield (%x, %y : i5, i5), ^bb1
+    llhd.drv %e0, %x after %0 : i5
+    llhd.drv %e1, %y after %0 : i5
+    llhd.wait ^bb1
+  }
+  // CHECK: llhd.drv [[E0]], [[TMP]]#0 after
+  // CHECK: llhd.drv [[E1]], [[TMP]]#1 after
+}
+
+// A drive to a projection and a drive to the signal it projects into overlap.
+// Hoisting them into separate drives would lose their relative order, so
+// neither may be hoisted.
+// CHECK-LABEL: @NoHoistProjectionAliasingRoot
+hw.module @NoHoistProjectionAliasingRoot(in %x : !hw.array<2xi5>, in %y : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i1 = hw.constant 0 : i1
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  %elt = llhd.sig.array_get %sig[%c0_i1] : <!hw.array<2xi5>>
+  // CHECK: llhd.process {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK: llhd.drv %sig, %x after
+    // CHECK: llhd.drv {{%.+}}, %y after
+    llhd.drv %sig, %x after %0 : !hw.array<2xi5>
+    llhd.drv %elt, %y after %0 : i5
+    llhd.wait ^bb1
+  }
+}
+
+// Partially overlapping projections of the same signal must not be hoisted.
+// CHECK-LABEL: @NoHoistOverlappingProjections
+hw.module @NoHoistOverlappingProjections(in %x : i5, in %y : i10) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i4 = hw.constant 0 : i4
+  %sig = llhd.sig : <i10>
+  %lo = llhd.sig.extract %sig from %c0_i4 : <i10> -> <i5>
+  // CHECK: llhd.process {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK: llhd.drv %sig, %y after
+    // CHECK: llhd.drv {{%.+}}, %x after
+    llhd.drv %sig, %y after %0 : i10
+    llhd.drv %lo, %x after %0 : i5
+    llhd.wait ^bb1
+  }
+}
+
+// Projections with a dynamic index may alias each other, so drives to two of
+// them must not be hoisted.
+// CHECK-LABEL: @NoHoistDynamicProjections
+hw.module @NoHoistDynamicProjections(in %i : i1, in %j : i1, in %x : i5, in %y : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  %ei = llhd.sig.array_get %sig[%i] : <!hw.array<2xi5>>
+  %ej = llhd.sig.array_get %sig[%j] : <!hw.array<2xi5>>
+  // CHECK: llhd.process {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK: llhd.drv {{%.+}}, %x after
+    // CHECK: llhd.drv {{%.+}}, %y after
+    llhd.drv %ei, %x after %0 : i5
+    llhd.drv %ej, %y after %0 : i5
+    llhd.wait ^bb1
+  }
+}
+
+// A single dynamically indexed projection is the only slot of its root signal,
+// so all drives through it target the same storage and can be hoisted.
+// CHECK-LABEL: @HoistSingleDynamicProjection
+hw.module @HoistSingleDynamicProjection(in %i : i1, in %x : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  // CHECK: [[ELT:%.+]] = llhd.sig.array_get %sig
+  %ei = llhd.sig.array_get %sig[%i] : <!hw.array<2xi5>>
+  // CHECK: [[TMP:%.+]] = llhd.process -> i5 {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK-NOT: llhd.drv
+    // CHECK: llhd.wait yield (%x : i5), ^bb1
+    llhd.drv %ei, %x after %0 : i5
+    llhd.wait ^bb1
+  }
+  // CHECK: llhd.drv [[ELT]], [[TMP]] after
+}
+
+
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !llhd.ref<i42>)
 func.func private @maybe_side_effecting()
