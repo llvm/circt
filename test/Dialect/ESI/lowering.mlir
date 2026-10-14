@@ -9,6 +9,8 @@ hw.module.extern @i0SenderReceiver(in %in: !esi.channel<i0>, out out: !esi.chann
 // CHECK-LABEL: hw.module.extern @Sender(in %clk : !seq.clock, out x : !esi.channel<i4>, out y : i8)
 // CHECK-LABEL: hw.module.extern @Reciever(in %a : !esi.channel<i4>, in %clk : !seq.clock)
 
+// PORTS-LABEL: hw.module.extern @Sender(in %clk : !seq.clock, in %x_ready : i1, out x : i4, out x_valid : i1, out y : i8)
+// PORTS-LABEL: hw.module.extern @Reciever(in %a : i4, in %a_valid : i1, in %clk : !seq.clock, out a_ready : i1)
 // PORTS-LABEL: hw.module.extern @i0SenderReceiver(in %in : i0, in %in_valid : i1, in %out_ready : i1, out in_ready : i1, out out : i0, out out_valid : i1)
 
 hw.module @test(in %clk: !seq.clock, in %rst:i1) {
