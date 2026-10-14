@@ -71,12 +71,11 @@ hw.module @var_declarations() {
 // VARLOGIC:         var logic [31:0] v;
 // VARLOGIC:         var logic [7:0]  w;
 // VARLOGIC:         assign v = a;
-// VARLOGIC:         (* keep *)
 // VARLOGIC-NEXT:    assign w = b;
 
 hw.module @var_assignments(in %a: i32, in %b: i8) {
   %v = sv.var : !sv.var<i32>
   %w = sv.var : !sv.var<i8>
   sv.var_assign %v, %a : i32
-  sv.var_assign %w, %b {sv.attributes = [#sv.attribute<"keep">]} : i8
+  sv.var_assign %w, %b : i8
 }

@@ -4421,7 +4421,10 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(VarAssignOp op) {
+
+  // Emit SV attributes. See Spec 12.3.
   emitSVAttributes(op);
+
   return emitAssignLike(op, PPExtString("="), PPExtString("assign"));
 }
 
