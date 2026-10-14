@@ -9,7 +9,7 @@
 // CHECK-LABEL: hw.module @KnownVariableIndex(out out : i6) {
 // CHECK-NEXT: [[ONE:%.+]] = hw.constant 1 : i6
 // CHECK-NEXT: hw.output [[ONE]] : i6
-module KnownVariableIndex(output logic [5:0] out);
+module KnownVariableIndex(output bit [5:0] out);
   logic ind = 0;
   always @* begin
     out[ind] = 1;

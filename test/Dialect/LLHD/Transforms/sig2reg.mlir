@@ -205,7 +205,7 @@ hw.module @identityConcatDrive(in %init : i6, out out : i6) {
   // CHECK: hw.output [[OR]] : i6
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %true = hw.constant true
-  %out = llhd.sig %init : i6
+  %out = llhd.sig %init : <i6>
   %1 = llhd.prb %out : i6
   %2 = comb.extract %1 from 1 : (i6) -> i5
   %3 = comb.concat %2, %true : i5, i1
@@ -226,7 +226,7 @@ hw.module @nestedIdentityConcatDrive(in %init : i6, out out : i6) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %true = hw.constant true
   %false = hw.constant false
-  %out = llhd.sig %init : i6
+  %out = llhd.sig %init : <i6>
   %1 = llhd.prb %out : i6
   %2 = comb.extract %1 from 2 : (i6) -> i4
   %3 = comb.concat %2, %true : i4, i1
@@ -244,7 +244,7 @@ hw.module @maskedSelfReferentialDrive(in %init : i6, in %in : i1, out out : i6) 
   // CHECK-NEXT: [[C0_I5:%.+]] = hw.constant 0 : i5
   // CHECK-NEXT: [[C1_I6:%.+]] = hw.constant 1 : i6
   // CHECK-NEXT: [[C_1_I6:%.+]] = hw.constant -1 : i6
-  // CHECK-NEXT: [[OUT:%.+]] = llhd.sig %init : i6
+  // CHECK-NEXT: [[OUT:%.+]] = llhd.sig %init : <i6>
   // CHECK-NEXT: [[PRB:%.+]] = llhd.prb [[OUT]] : i6
   // CHECK-NEXT: [[IDX:%.+]] = comb.concat [[C0_I5]], %in : i5, i1
   // CHECK-NEXT: [[MASK:%.+]] = comb.shl [[C1_I6]], [[IDX]] : i6
@@ -257,7 +257,7 @@ hw.module @maskedSelfReferentialDrive(in %init : i6, in %in : i1, out out : i6) 
   %c0_i5 = hw.constant 0 : i5
   %c1_i6 = hw.constant 1 : i6
   %c-1_i6 = hw.constant -1 : i6
-  %out = llhd.sig %init : i6
+  %out = llhd.sig %init : <i6>
   %1 = llhd.prb %out : i6
   %2 = comb.concat %c0_i5, %in : i5, i1
   %3 = comb.shl %c1_i6, %2 : i6
@@ -272,7 +272,7 @@ hw.module @maskedSelfReferentialDrive(in %init : i6, in %in : i1, out out : i6) 
 // dropped as identity fragments: another drive updates part of them before this
 // one takes effect, so the delayed drive must restore the captured value.
 // CHECK-LABEL: hw.module @delayedIdentityConcatDrive
-// CHECK: [[OUT:%.+]] = llhd.sig %init : i6
+// CHECK: [[OUT:%.+]] = llhd.sig %init : <i6>
 // CHECK: llhd.drv [[OUT]],
 hw.module @delayedIdentityConcatDrive(in %init : i6, out out : i6) {
   %time1 = llhd.constant_time <1ns, 0d, 0e>
@@ -280,7 +280,7 @@ hw.module @delayedIdentityConcatDrive(in %init : i6, out out : i6) {
   %c0_i3 = hw.constant 0 : i3
   %c0_i5 = hw.constant 0 : i5
   %true = hw.constant true
-  %out = llhd.sig %init : i6
+  %out = llhd.sig %init : <i6>
   %0 = llhd.prb %out : i6
   %1 = comb.extract %0 from 1 : (i6) -> i5
   %2 = comb.concat %1, %true : i5, i1
@@ -301,7 +301,7 @@ hw.module @delayedIdentityConcatDrive(in %init : i6, out out : i6) {
 hw.module @delayedSelfDrive(in %init : i8, out out : i8) {
   %time = llhd.constant_time <1ns, 0d, 0e>
   %c1_i8 = hw.constant 1 : i8
-  %sig = llhd.sig %init : i8
+  %sig = llhd.sig %init : <i8>
   %0 = llhd.prb %sig : i8
   %1 = comb.add %0, %c1_i8 : i8
   llhd.drv %sig, %1 after %time : i8
@@ -313,7 +313,7 @@ hw.module @delayedSelfDrive(in %init : i8, out out : i8) {
 // CHECK-LABEL: hw.module @overlappingConcatDrivers
 // CHECK-NEXT: [[EPSILON:%.+]] = llhd.constant_time <0ns, 0d, 1e>
 // CHECK-NEXT: [[LATER:%.+]] = llhd.constant_time <1ns, 0d, 0e>
-// CHECK-NEXT: [[SIG:%.+]] = llhd.sig %init : i2
+// CHECK-NEXT: [[SIG:%.+]] = llhd.sig %init : <i2>
 // CHECK-NEXT: [[FIRST:%.+]] = comb.concat %a, %b : i1, i1
 // CHECK-NEXT: [[SECOND:%.+]] = comb.concat %c, %d : i1, i1
 // CHECK-NEXT: llhd.drv [[SIG]], [[FIRST]] after [[EPSILON]] : i2
@@ -323,7 +323,7 @@ hw.module @delayedSelfDrive(in %init : i8, out out : i8) {
 hw.module @overlappingConcatDrivers(in %init : i2, in %a : i1, in %b : i1, in %c : i1, in %d : i1, out out : i2) {
   %epsilon = llhd.constant_time <0ns, 0d, 1e>
   %later = llhd.constant_time <1ns, 0d, 0e>
-  %sig = llhd.sig %init : i2
+  %sig = llhd.sig %init : <i2>
   %first = comb.concat %a, %b : i1, i1
   %second = comb.concat %c, %d : i1, i1
   llhd.drv %sig, %first after %epsilon : i2
@@ -346,9 +346,9 @@ hw.module @clockedFeedback(in %clk : i1, out count : i8) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i8 = hw.constant 0 : i8
   %false = hw.constant false
-  %clk_0 = llhd.sig name "clk" %false : i1
+  %clk_0 = llhd.sig name "clk" %false : <i1>
   %1 = llhd.prb %clk_0 : i1
-  %count = llhd.sig %c0_i8 : i8
+  %count = llhd.sig %c0_i8 : <i8>
   %2 = comb.add %4, %c1_i8 : i8
   %3 = seq.to_clock %1
   %count_1 = seq.firreg %2 clock %3 {name = "count"} : i8
@@ -375,7 +375,7 @@ hw.module @instanceFeedback(in %clk : !seq.clock, out out : i8) {
   %eps = llhd.constant_time <0ns, 0d, 1e>
   %c0_i8 = hw.constant 0 : i8
   %c1_i8 = hw.constant 1 : i8
-  %s = llhd.sig %c0_i8 : i8
+  %s = llhd.sig %c0_i8 : <i8>
   %q = hw.instance "u" @feedbackReg(clk: %clk: !seq.clock, d: %next: i8) -> (q: i8)
   %next = comb.add %p, %c1_i8 : i8
   llhd.drv %s, %q after %eps : i8
