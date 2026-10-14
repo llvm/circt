@@ -326,96 +326,6 @@ struct ESItoHWPass : public circt::esi::impl::LowerESItoHWBase<ESItoHWPass> {
 } // anonymous namespace
 
 namespace {
-/// Lower a `wrap.iface` to `wrap.vr` by extracting the wires then feeding the
-/// new `wrap.vr`.
-struct WrapInterfaceLower : public OpConversionPattern<WrapSVInterfaceOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(WrapSVInterfaceOp wrap, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final;
-};
-} // anonymous namespace
-
-LogicalResult
-WrapInterfaceLower::matchAndRewrite(WrapSVInterfaceOp wrap, OpAdaptor adaptor,
-                                    ConversionPatternRewriter &rewriter) const {
-  auto operands = adaptor.getOperands();
-  if (operands.size() != 1)
-    return rewriter.notifyMatchFailure(wrap, [&operands](Diagnostic &d) {
-      d << "wrap.iface has 1 argument. Got " << operands.size() << "operands";
-    });
-  auto sinkModport = dyn_cast<GetModportOp>(operands[0].getDefiningOp());
-  if (!sinkModport)
-    return failure();
-  auto ifaceInstance =
-      dyn_cast<InterfaceInstanceOp>(sinkModport.getIface().getDefiningOp());
-  if (!ifaceInstance)
-    return failure();
-
-  auto loc = wrap.getLoc();
-  auto validSignal = ReadInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
-                                                   ESIHWBuilder::validStr);
-  Value dataSignal;
-  dataSignal = ReadInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
-                                             ESIHWBuilder::dataStr);
-  auto wrapVR =
-      WrapValidReadyOp::create(rewriter, loc, dataSignal, validSignal);
-  AssignInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
-                                  ESIHWBuilder::readyStr, wrapVR.getReady());
-  rewriter.replaceOp(wrap, {wrapVR.getChanOutput()});
-  return success();
-}
-
-namespace {
-/// Lower an unwrap interface to just extract the wires and feed them into an
-/// `unwrap.vr`.
-struct UnwrapInterfaceLower : public OpConversionPattern<UnwrapSVInterfaceOp> {
-public:
-  UnwrapInterfaceLower(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(UnwrapSVInterfaceOp wrap, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final;
-};
-} // anonymous namespace
-
-LogicalResult UnwrapInterfaceLower::matchAndRewrite(
-    UnwrapSVInterfaceOp unwrap, OpAdaptor adaptor,
-    ConversionPatternRewriter &rewriter) const {
-  auto operands = adaptor.getOperands();
-  if (operands.size() != 2)
-    return rewriter.notifyMatchFailure(unwrap, [&operands](Diagnostic &d) {
-      d << "Unwrap.iface has 2 arguments. Got " << operands.size()
-        << "operands";
-    });
-
-  auto sourceModport = dyn_cast<GetModportOp>(operands[1].getDefiningOp());
-  if (!sourceModport)
-    return failure();
-  auto ifaceInstance =
-      dyn_cast<InterfaceInstanceOp>(sourceModport.getIface().getDefiningOp());
-  if (!ifaceInstance)
-    return failure();
-
-  auto loc = unwrap.getLoc();
-  auto readySignal = ReadInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
-                                                   ESIHWBuilder::readyStr);
-  auto unwrapVR =
-      UnwrapValidReadyOp::create(rewriter, loc, operands[0], readySignal);
-  AssignInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
-                                  ESIHWBuilder::validStr, unwrapVR.getValid());
-
-  AssignInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
-                                  ESIHWBuilder::dataStr,
-                                  unwrapVR.getRawOutput());
-  rewriter.eraseOp(unwrap);
-  return success();
-}
-
-namespace {
 /// Lower `CosimEndpointOp` ops to a SystemVerilog extern module and a Capnp
 /// gasket op.
 struct CosimToHostLowering : public OpConversionPattern<CosimToHostEndpointOp> {
@@ -876,7 +786,6 @@ void ESItoHWPass::runOnOperation() {
                          WrapWindow, UnwrapWindow>();
   pass1Target.addLegalOp<SnoopTransactionOp, SnoopValidReadyOp>();
 
-  pass1Target.addIllegalOp<WrapSVInterfaceOp, UnwrapSVInterfaceOp>();
   pass1Target.addIllegalOp<PipelineStageOp>();
   pass1Target.addIllegalOp<CompressedManifestOp>();
 
@@ -884,8 +793,6 @@ void ESItoHWPass::runOnOperation() {
   ESIHWBuilder esiBuilder(top);
   RewritePatternSet pass1Patterns(ctxt);
   pass1Patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
-  pass1Patterns.insert<WrapInterfaceLower>(ctxt);
-  pass1Patterns.insert<UnwrapInterfaceLower>(ctxt);
   pass1Patterns.insert<CosimToHostLowering>(esiBuilder);
   pass1Patterns.insert<CosimFromHostLowering>(esiBuilder);
   pass1Patterns.insert<NullSourceOpLowering>(ctxt);

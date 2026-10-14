@@ -13,8 +13,6 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/SV/SVOps.h"
-#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/Builders.h"
@@ -283,63 +281,6 @@ LogicalResult UnwrapValidOnlyOp::inferReturnTypes(
   inferredResulTypes.push_back(
       IntegerType::get(context, 1, IntegerType::Signless));
   return success();
-}
-
-/// If 'iface' looks like an ESI interface, return the inner data type.
-static Type getEsiDataType(circt::sv::InterfaceOp iface) {
-  using namespace circt::sv;
-  if (!iface.lookupSymbol<InterfaceSignalOp>("valid"))
-    return Type();
-  if (!iface.lookupSymbol<InterfaceSignalOp>("ready"))
-    return Type();
-  auto dataSig = iface.lookupSymbol<InterfaceSignalOp>("data");
-  if (!dataSig)
-    return Type();
-  return dataSig.getType();
-}
-
-/// Verify that the modport type of 'modportArg' points to an interface which
-/// looks like an ESI interface and the inner data from said interface matches
-/// the chan type's inner data type.
-static LogicalResult verifySVInterface(Operation *op,
-                                       circt::sv::ModportType modportType,
-                                       ChannelType chanType) {
-  auto modport =
-      SymbolTable::lookupNearestSymbolFrom<circt::sv::InterfaceModportOp>(
-          op, modportType.getModport());
-  if (!modport)
-    return op->emitError("Could not find modport ")
-           << modportType.getModport() << " in symbol table.";
-  auto iface = cast<circt::sv::InterfaceOp>(modport->getParentOp());
-  Type esiDataType = getEsiDataType(iface);
-  if (!esiDataType)
-    return op->emitOpError("Interface is not a valid ESI interface.");
-  if (esiDataType != chanType.getInner())
-    return op->emitOpError("Operation specifies ")
-           << chanType << " but type inside doesn't match interface data type "
-           << esiDataType << ".";
-  return success();
-}
-
-LogicalResult WrapSVInterfaceOp::verify() {
-  auto modportType = cast<circt::sv::ModportType>(getInterfaceSink().getType());
-  auto chanType = cast<ChannelType>(getOutput().getType());
-  return verifySVInterface(*this, modportType, chanType);
-}
-
-circt::esi::ChannelType WrapSVInterfaceOp::channelType() {
-  return cast<circt::esi::ChannelType>(getOutput().getType());
-}
-
-LogicalResult UnwrapSVInterfaceOp::verify() {
-  auto modportType =
-      cast<circt::sv::ModportType>(getInterfaceSource().getType());
-  auto chanType = cast<ChannelType>(getChanInput().getType());
-  return verifySVInterface(*this, modportType, chanType);
-}
-
-circt::esi::ChannelType UnwrapSVInterfaceOp::channelType() {
-  return cast<circt::esi::ChannelType>(getChanInput().getType());
 }
 
 LogicalResult WrapWindow::verify() {

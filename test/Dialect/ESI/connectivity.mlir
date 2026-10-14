@@ -51,42 +51,6 @@ hw.module @test(in %clk: !seq.clock, in %rst: i1) {
   // CHECK-NEXT:  hw.instance "nullRcvr" @Reciever(a: [[NULLI1]]: !esi.channel<i1>) -> ()
 }
 
-hw.module.extern @IFaceSender(in %x: !sv.modport<@IData::@Source>)
-hw.module.extern @IFaceRcvr(in %x: !sv.modport<@IData::@Sink>)
-sv.interface @IData {
-  sv.interface.signal @data : i32
-  sv.interface.signal @valid : i1
-  sv.interface.signal @ready : i1
-  sv.interface.modport @Source (input @data, input @valid, output @ready)
-  sv.interface.modport @Sink (output @data, output @valid, input @ready)
-}
-hw.module @testIfaceWrap() {
-  %ifaceOut = sv.interface.instance : !sv.interface<@IData>
-  %ifaceOutSource = sv.modport.get %ifaceOut @Source : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
-  hw.instance "ifaceSender" @IFaceSender (x: %ifaceOutSource: !sv.modport<@IData::@Source>) -> ()
-  %ifaceOutSink = sv.modport.get %ifaceOut @Sink: !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
-  %idataChanOut = esi.wrap.iface %ifaceOutSink: !sv.modport<@IData::@Sink> -> !esi.channel<i32>
-
-  // CHECK-LABEL:  hw.module @testIfaceWrap() {
-  // CHECK-NEXT:     %ifaceOut = sv.interface.instance : !sv.interface<@IData>
-  // CHECK-NEXT:     %[[#modport0:]] = sv.modport.get %ifaceOut @Source : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
-  // CHECK-NEXT:     hw.instance "ifaceSender" @IFaceSender(x: %[[#modport0:]]: !sv.modport<@IData::@Source>) -> ()
-  // CHECK-NEXT:     %[[#modport1:]] = sv.modport.get %ifaceOut @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
-  // CHECK-NEXT:     %[[#esiport0:]] = esi.wrap.iface %[[#modport1:]] : !sv.modport<@IData::@Sink> -> !esi.channel<i32>
-
-  %ifaceIn = sv.interface.instance : !sv.interface<@IData>
-  %ifaceInSink = sv.modport.get %ifaceIn @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
-  hw.instance "ifaceRcvr" @IFaceRcvr (x: %ifaceInSink: !sv.modport<@IData::@Sink>) -> ()
-  %ifaceInSource = sv.modport.get %ifaceIn @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
-  esi.unwrap.iface %idataChanOut into %ifaceInSource : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
-
-  // CHECK-NEXT:     %ifaceIn = sv.interface.instance : !sv.interface<@IData>
-  // CHECK-NEXT:     %[[#modport2:]] = sv.modport.get %ifaceIn @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
-  // CHECK-NEXT:     hw.instance "ifaceRcvr" @IFaceRcvr(x: %[[#modport2]]: !sv.modport<@IData::@Sink>) -> ()
-  // CHECK-NEXT:     %[[#modport3:]] = sv.modport.get %ifaceIn @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
-  // CHECK-NEXT:     esi.unwrap.iface %2 into %4 : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
-}
-
 // CHECK-LABEL: hw.module @i0Typed(in %a : !esi.channel<i0>, in %clk : !seq.clock, in %rst : i1, out x : !esi.channel<i0>) {
 // CHECK-NEXT:    %0 = esi.buffer %clk, %rst, %a  : !esi.channel<i0> -> !esi.channel<i0>
 // CHECK-NEXT:    %1 = esi.stage %clk, %rst, %0  : !esi.channel<i0>
