@@ -22,8 +22,8 @@ sv.interface @foo {
 
 // -----
 
-hw.module @Aliasing(inout %a : i42, inout %b : i42,
-                      inout %c : i42) {
+hw.module @Aliasing(in %a : !hw.inout<i42>, in %b : !hw.inout<i42>,
+                      in %c : !hw.inout<i42>) {
 
   // ok
   sv.alias %a, %b     : !hw.inout<i42>, !hw.inout<i42>

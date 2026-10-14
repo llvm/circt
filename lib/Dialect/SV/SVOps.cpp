@@ -2230,15 +2230,9 @@ SmallVector<hw::PortInfo> SVVerbatimModuleOp::getPortList() {
     DictionaryAttr attrs = portAttrs && i < portAttrs->size()
                                ? cast<DictionaryAttr>((*portAttrs)[i])
                                : DictionaryAttr::get(getContext());
-    hw::PortInfo::Direction dir =
-        port.dir == hw::ModulePort::Direction::Input
-            ? hw::PortInfo::Direction::Input
-            : (port.dir == hw::ModulePort::Direction::Output
-                   ? hw::PortInfo::Direction::Output
-                   : hw::PortInfo::Direction::InOut);
     size_t argNum = moduleType.isOutput(i) ? moduleType.getOutputIdForPortId(i)
                                            : moduleType.getInputIdForPortId(i);
-    ports.push_back({{port.name, port.type, dir}, argNum, attrs, loc});
+    ports.push_back({{port.name, port.type, port.dir}, argNum, attrs, loc});
   }
   return ports;
 }

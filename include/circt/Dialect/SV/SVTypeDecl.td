@@ -218,7 +218,9 @@ def ModportDirection : I32EnumAttr<"ModportDirection",
 }
 
 def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,
-  "modport_direction">;
+  "modport_direction"> {
+  let assemblyFormat = "$value";
+}
 
 class SV_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
     : AttrDef<SVDialect, attrName, traits> {
@@ -372,13 +374,7 @@ def SVVerbatimModuleOp
       SmallVector<hw::ModulePort> modulePorts;
       SmallVector<Attribute> portAttrs, portLocs;
       for (const auto &port : ports) {
-        Type portType = port.type;
-        hw::ModulePort::Direction portDir = port.dir;
-        if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
-          portType = inoutType.getElementType();
-          portDir = hw::ModulePort::Direction::InOut;
-        }
-        modulePorts.push_back({port.name, portType, portDir});
+        modulePorts.push_back({port.name, port.type, port.dir});
         portAttrs.push_back(port.attrs ? port.attrs : $_builder.getDictionaryAttr({}));
         portLocs.push_back(port.loc ? static_cast<Location>(port.loc) : $_builder.getUnknownLoc());
       }
@@ -422,7 +418,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
-      return build($_builder, $_state, result, mlir::ValueRange());
+      $_state.addTypes(result);
     }]>
   ];
 

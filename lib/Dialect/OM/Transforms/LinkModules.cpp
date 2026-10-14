@@ -33,7 +33,6 @@ namespace om {
 using namespace circt;
 using namespace om;
 using namespace mlir;
-using namespace llvm;
 
 namespace {
 // A map from a pair of enclosing module op and old symbol to a new symbol.

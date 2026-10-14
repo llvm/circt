@@ -657,6 +657,8 @@ static void hostmemTest(AcceleratorConnection *conn, Accelerator *acc,
   hostmem->start();
   auto scratchRegion = hostmem->allocate(/*size(bytes)=*/1024 * 1024,
                                          /*memOpts=*/{.writeable = true});
+  if (!scratchRegion)
+    throw std::runtime_error("hostmem test: failed to allocate host memory");
   uint64_t *dataPtr = static_cast<uint64_t *>(scratchRegion->getPtr());
   conn->getLogger().info("esitester",
                          "Running host memory test with region size " +
@@ -1338,6 +1340,9 @@ static void hostmemBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
   hostmemSvc->start();
   auto region = hostmemSvc->allocate(/*size(bytes)=*/1024 * 1024 * 1024,
                                      /*memOpts=*/{.writeable = true});
+  if (!region)
+    throw std::runtime_error(
+        "hostmem bandwidth test: failed to allocate host memory");
   for (uint32_t w : widths) {
     if (write)
       hostmemWriteBandwidthTest(conn, acc, *region, w, xferCount);
@@ -1587,6 +1592,9 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,
       u.isRead = doRead;
       u.isWrite = doWrite;
       u.region = hostmemSvc->allocate(regionBytes, {.writeable = true});
+      if (!u.region)
+        throw std::runtime_error(
+            "hostmem bandwidth test: failed to allocate host memory");
       // Init pattern.
       uint64_t *ptr = static_cast<uint64_t *>(u.region->getPtr());
       size_t words = u.region->getSize() / 8;

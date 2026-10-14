@@ -176,11 +176,6 @@ hw.module @signed_arrays(in %arg0: si8, out out: !hw.array<2xsi8>) {
   hw.output %result : !hw.array<2xsi8>
 }
 
-// Check that we pass the verifier that the module's function type matches
-// the block argument types when using InOutTypes.
-// CHECK: hw.module @InOutPort(inout %arg0 : i1)
-hw.module @InOutPort(inout %arg0: i1) { }
-
 /// Port names that aren't valid MLIR identifiers are handled with `argNames`
 /// attribute being explicitly printed.
 // https://github.com/llvm/circt/issues/1822

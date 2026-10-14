@@ -12,6 +12,8 @@
 include "mlir/IR/OpBase.td"
 
 def PIRDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "pir";
   let summary = "Property IR ingress dialect, used to encode SystemVerilog Assertion properties and sequences.";
   let useDefaultTypePrinterParser = 1;

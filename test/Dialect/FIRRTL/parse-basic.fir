@@ -51,7 +51,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   extmodule IntegerParamsModule :
     ; CHECK-SAME: a: ui32 = 1
     parameter a = 1
-    ; CHECK-SAME: b: ui40 = 4294967296
+    ; CHECK-SAME: b: ui64 = 4294967296
     parameter b = 4294967296
 
   ; Module to test type parsing.
@@ -1371,15 +1371,14 @@ circuit RadixEncodedIntegerLiterals:
     ; CHECK-NEXT: firrtl.connect %ou, %[[c_constCast]]
     ou <= UInt(0o052)
 
-    ; Note: this creates a second constant because the width of a parsed
-    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ; Decimal literals use a wider constant than the other radices.
     ;
     ; CHECK:      %[[c42_ui8:[-a-zA-Z_0-9]+]] = firrtl.constant 42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
     ; CHECK-NEXT: firrtl.connect %du0, %[[c_constCast]]
     du0 <= UInt(42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
     ; CHECK-NEXT: firrtl.connect %du1, %[[c_constCast]]
     du1 <= UInt(0d42)
 
@@ -1396,15 +1395,14 @@ circuit RadixEncodedIntegerLiterals:
     ; CHECK-NEXT: firrtl.connect %os, %[[c_constCast]]
     os <= SInt(-0o52)
 
-    ; Note: this creates a second constant because the width of a parsed
-    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ; Decimal literals use a wider constant than the other radices.
     ;
     ; CHECK:      %[[cn42_si8:[-a-zA-Z_0-9]+]] = firrtl.constant -42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
     ; CHECK-NEXT: firrtl.connect %dus0, %[[c_constCast]]
     dus0 <= SInt(-42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
     ; CHECK-NEXT: firrtl.connect %dus1, %[[c_constCast]]
     dus1 <= SInt(-0d42)
 
@@ -1698,6 +1696,43 @@ circuit IntegerArithmetic :
     ; CHECK: [[F:%.+]] = firrtl.integer.shl %a, %b
     ; CHECK: firrtl.propassign %f, [[F]]
     propassign f, integer_shl(a, b)
+
+;// -----
+FIRRTL version 7.0.0
+
+; CHECK-LABEL: firrtl.circuit "IntegerBitwise"
+circuit IntegerBitwise :
+  public module IntegerBitwise :
+    input a : Integer
+    input b : Integer
+    input c : Integer
+    output andResult : Integer
+    output orResult : Integer
+    output notResult : Integer
+    output nestedResult : Integer
+    output literalResult : Integer
+
+    ; CHECK: [[AND:%.+]] = firrtl.integer.and %a, %b
+    ; CHECK: firrtl.propassign %andResult, [[AND]]
+    propassign andResult, integer_and(a, b)
+
+    ; CHECK: [[OR:%.+]] = firrtl.integer.or %a, %b
+    ; CHECK: firrtl.propassign %orResult, [[OR]]
+    propassign orResult, integer_or(a, b)
+
+    ; CHECK: [[NOT:%.+]] = firrtl.integer.not %c
+    ; CHECK: firrtl.propassign %notResult, [[NOT]]
+    propassign notResult, integer_not(c)
+
+    ; CHECK: [[NEST_OR:%.+]] = firrtl.integer.or %a, %b
+    ; CHECK: [[NEST_NOT:%.+]] = firrtl.integer.not %c
+    ; CHECK: [[NEST_AND:%.+]] = firrtl.integer.and [[NEST_OR]], [[NEST_NOT]]
+    ; CHECK: firrtl.propassign %nestedResult, [[NEST_AND]]
+    propassign nestedResult, integer_and(integer_or(a, b), integer_not(c))
+
+    ; CHECK: [[LITERAL:%.+]] = firrtl.integer.and %{{.+}}, %{{.+}}
+    ; CHECK: firrtl.propassign %literalResult, [[LITERAL]]
+    propassign literalResult, integer_and(Integer(5), Integer(-2))
 
 ;// -----
 FIRRTL version 4.0.0

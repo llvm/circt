@@ -327,6 +327,15 @@ om.class @IntegerArithmetic() {
   // CHECK: om.integer.shl %0, %1 : !om.integer
   %5 = om.integer.shl %0, %1 : !om.integer
 
+  // CHECK: om.integer.bitand %0, %1 : !om.integer
+  %6 = om.integer.bitand %0, %1 : !om.integer
+
+  // CHECK: om.integer.bitor %0, %1 : !om.integer
+  %7 = om.integer.bitor %0, %1 : !om.integer
+
+  // CHECK: om.integer.bitnot %0 : !om.integer
+  %8 = om.integer.bitnot %0 : !om.integer
+
   om.class.fields
 }
 

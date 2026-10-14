@@ -21,7 +21,6 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
-using namespace llvm;
 using namespace circt;
 
 LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
@@ -564,7 +563,7 @@ public:
 
   llvm::cl::opt<bool> disableLayerSink{"disable-layer-sink",
                                        llvm::cl::desc("Disable layer sink"),
-                                       cl::init(false)};
+                                       llvm::cl::init(false)};
 
   llvm::cl::opt<bool> disableOptimization{
       "disable-opt",

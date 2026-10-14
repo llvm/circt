@@ -25,7 +25,6 @@
 using namespace circt;
 using namespace arc;
 using namespace hw;
-using llvm::MapVector;
 using llvm::SmallSetVector;
 using mlir::ConversionConfig;
 

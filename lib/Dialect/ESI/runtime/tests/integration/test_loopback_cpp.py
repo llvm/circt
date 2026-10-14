@@ -28,6 +28,7 @@ LOOPBACK_PROBES = [
      ["odd_struct_func ok: a=2749 b=-20 p=10 q=-5 r0=4 r1=6"]),
     ("array_func", ["array_func ok: -3 -2"]),
     ("serial_coord_translate", ["serial_coord_translate ok"]),
+    ("serial_coord_translate_hostmem", ["serial_coord_translate_hostmem ok"]),
 ]
 
 LOOPBACK_TYPED_PROBES = [

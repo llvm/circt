@@ -51,7 +51,9 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
       return emitError(module->getLoc(), "module parameters not supported yet");
 
     auto ports = module.getPortList();
-    if (llvm::any_of(ports, [](auto &port) { return port.isInOut(); }))
+    if (llvm::any_of(ports, [](auto &port) {
+          return type_isa<hw::InOutType>(port.type);
+        }))
       return emitError(module->getLoc(), "inout arguments not supported yet");
 
     // Create the SystemC module.

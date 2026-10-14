@@ -57,7 +57,6 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
   nb::enum_<HWModulePortDirection>(m, "ModulePortDirection")
       .value("INPUT", HWModulePortDirection::Input)
       .value("OUTPUT", HWModulePortDirection::Output)
-      .value("INOUT", HWModulePortDirection::InOut)
       .export_values();
 
   nb::class_<HWModulePort>(m, "ModulePort")

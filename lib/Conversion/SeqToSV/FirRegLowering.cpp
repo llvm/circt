@@ -19,7 +19,6 @@
 using namespace circt;
 using namespace hw;
 using namespace seq;
-using llvm::MapVector;
 
 #define DEBUG_TYPE "lower-seq-firreg"
 

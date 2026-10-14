@@ -22,7 +22,6 @@ namespace moore {
 
 using namespace circt;
 using namespace moore;
-using namespace llvm;
 using namespace mlir;
 
 namespace {

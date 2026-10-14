@@ -4,7 +4,12 @@
 
 import pytest
 
-from esiaccel.bsp.common import ChannelMMIO
+from pycde import Module
+
+from esiaccel.bsp.common import (ChannelEngineService, ChannelMMIO,
+                                 HostMemReadReqSplitter)
+from esiaccel.bsp.cosim import CosimBSP
+from esiaccel.bsp.dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
 
 class _Bundle:
@@ -73,3 +78,61 @@ def test_channel_mmio_rejects_address_overflow(monkeypatch):
   monkeypatch.setattr(ChannelMMIO, "initial_offset", 0xFFFF_FFF8)
   with pytest.raises(ValueError, match="exceeds the 32-bit space"):
     ChannelMMIO.build_table(_Bundles(_Bundle("read", {"size": 8})))
+
+
+def test_cosim_bsp_rejects_conflicting_channel_services():
+
+  class Top(Module):
+    pass
+
+  engines = (OneItemBuffersToHost, OneItemBuffersFromHost)
+  channel_service = ChannelEngineService(*engines)
+  with pytest.raises(ValueError, match="dma_engine_pair and channel_service"):
+    CosimBSP(Top, dma_engine_pair=engines, channel_service=channel_service)
+
+
+@pytest.mark.parametrize("max_outstanding", [1, 2, 64])
+@pytest.mark.parametrize("word_bits", [64, 256])
+def test_read_req_splitter_generates(tmp_path, word_bits, max_outstanding):
+  """Build and compile `HostMemReadReqSplitter` for a range of word widths
+  and outstanding-request limits (no simulation)."""
+  from pycde import Clock, Input, Module, Output, Reset, System, generator
+  from pycde.types import Bits, Channel, StructType, UInt
+
+  req_t = Channel(
+      StructType([("address", UInt(64)), ("length", UInt(32)),
+                  ("tag", UInt(8))]))
+  resp_t = Channel(
+      StructType([("tag", UInt(8)), ("data", Bits(word_bits)),
+                  ("last", Bits(1))]))
+  splitter = HostMemReadReqSplitter(req_t, resp_t, 256, max_outstanding)
+
+  class Top(Module):
+    clk = Clock()
+    rst = Reset()
+    req_in = Input(req_t)
+    resp_in = Input(resp_t)
+    req_out = Output(req_t)
+    resp_out = Output(splitter.resp_out.type)
+
+    @generator
+    def build(ports):
+      s = splitter(clk=ports.clk,
+                   rst=ports.rst,
+                   req_in=ports.req_in,
+                   resp_in=ports.resp_in)
+      ports.req_out = s.req_out
+      ports.resp_out = s.resp_out
+
+  System(Top, output_directory=str(tmp_path)).compile()
+
+
+def test_read_req_splitter_rejects_zero_outstanding():
+  from pycde.types import Bits, Channel, StructType, UInt
+  req_t = Channel(
+      StructType([("address", UInt(64)), ("length", UInt(32)),
+                  ("tag", UInt(8))]))
+  resp_t = Channel(
+      StructType([("tag", UInt(8)), ("data", Bits(64)), ("last", Bits(1))]))
+  with pytest.raises(AssertionError):
+    HostMemReadReqSplitter(req_t, resp_t, 256, 0)

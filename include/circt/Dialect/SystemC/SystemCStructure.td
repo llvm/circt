@@ -96,10 +96,6 @@ def SCModuleOp : SystemCOp<"module", [
     PortDirectionRange getOutputPorts() {
       return getPortsOfDirection(hw::ModulePort::Direction::Output);
     }
-    PortDirectionRange getInOutPorts() {
-      return getPortsOfDirection(hw::ModulePort::Direction::InOut);
-    }
-
     // Return the Ctor operation in this module's body or create one if none
     // exists yet.
     systemc::CtorOp getOrCreateCtor(OpBuilder &builder);

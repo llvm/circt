@@ -620,6 +620,7 @@ def InjectDUTHierarchyAnnotation : NoTargetAnnotation {
   let className = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
   let members = (ins
     Doc<StringParam, "The name of the module containing original DUT logic">:$name,
+    Doc<Optional<StringParam>, "The name of the child instance containing original DUT logic">:$instanceName,
     Doc<Optional<BooleanParam, "false">, "If true, then treat the newly created module as the DUT">:$moveDut
   );
   let description = [{
@@ -634,6 +635,13 @@ def InjectDUTHierarchyAnnotation : NoTargetAnnotation {
     `MarkDUTAnnotation` will be moved to this module. If this field is false,
     then the design-under-test will not be changed.
 
+    If the `instanceName` field is present, it specifies the name of the
+    child instance containing the original DUT logic. Otherwise, the instance
+    name defaults to the name of the module containing that logic. When
+    `moveDut` is true, this is an instance of the original DUT module inside
+    the newly created module with the specified `name`; existing parent
+    instance names are unchanged.
+
     This annotation should only appear zero or once.
 
     Example:
@@ -641,6 +649,7 @@ def InjectDUTHierarchyAnnotation : NoTargetAnnotation {
     {
       "class": "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
       "name": "Logic",
+      "instanceName": "logic_inst",
       "moveDut": false
     }
     ```
@@ -942,14 +951,16 @@ def ExtractClockGatesFileAnnotation : NoTargetAnnotation {
   let className = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation";
   let members = (ins
     Doc<StringParam, "Output file to be filled with the applied hierarchy changes">:$filename,
-    Doc<Optional<StringParam>, "Name of an optional wrapper module under which to group extracted instances">:$group
+    Doc<Optional<StringParam>, "Name of an optional wrapper module under which to group extracted instances">:$group,
+    Doc<Optional<StringParam>, "Name of the instance of the wrapper module">:$instanceName
   );
   let description = [{
     This annotation causes the `ExtractInstances` pass to move instances of
     extmodules whose defnames end in `EICG_wrapper` upwards in the hierarchy,
     either out of the DUT if `group` is omitted or empty, or into a submodule of
     the DUT with the name given in `group`. The wiring prefix is hard-coded to
-    `clock_gate`.
+    `clock_gate`. If `instanceName` is present, it specifies the instance name
+    of the wrapper module; otherwise, the instance name defaults to `group`.
 
     Applies to the circuit.
 
@@ -958,7 +969,8 @@ def ExtractClockGatesFileAnnotation : NoTargetAnnotation {
     {
       "class": "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation",
       "filename": "clock_gates.txt",
-      "group": "ClockGates"
+      "group": "ClockGates",
+      "instanceName": "clock_gates_inst"
     }
     ```
   }];
@@ -968,13 +980,16 @@ def ExtractSeqMemsFileAnnotation : NoTargetAnnotation {
   let className = "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation";
   let members = (ins
     Doc<StringParam, "Output file to be filled with the applied hierarchy changes">:$filename,
-    Doc<Optional<StringParam>, "Name of an optional wrapper module under which to group extracted instances">:$group
+    Doc<Optional<StringParam>, "Name of an optional wrapper module under which to group extracted instances">:$group,
+    Doc<Optional<StringParam>, "Name of the instance of the wrapper module">:$instanceName
   );
   let description = [{
     This annotation causes the `ExtractInstances` pass to move memory instances
     upwards in the hierarchy, either out of the DUT if `group` is omitted or
     empty, or into a submodule of the DUT with the name given in `group`. The
-    wiring prefix is hard-coded to `mem_wiring`.
+    wiring prefix is hard-coded to `mem_wiring`. If `instanceName` is present,
+    it specifies the instance name of the wrapper module; otherwise, the
+    instance name defaults to `group`.
 
     Applies to the circuit.
 
@@ -983,7 +998,8 @@ def ExtractSeqMemsFileAnnotation : NoTargetAnnotation {
     {
       "class": "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation",
       "filename": "seq_mems.txt",
-      "group": "Memories"
+      "group": "Memories",
+      "instanceName": "memories_inst"
     }
     ```
   }];

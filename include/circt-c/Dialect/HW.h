@@ -39,7 +39,7 @@ struct HWUnionFieldInfo {
 };
 typedef struct HWUnionFieldInfo HWUnionFieldInfo;
 
-enum HWModulePortDirection { Input, Output, InOut };
+enum HWModulePortDirection { Input, Output };
 typedef enum HWModulePortDirection HWModulePortDirection;
 
 struct HWModulePort {

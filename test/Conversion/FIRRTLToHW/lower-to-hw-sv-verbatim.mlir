@@ -292,7 +292,7 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.source
   //
-  // CHECK:       sv.verbatim.module @AnalogBlackBox(inout %bus : i32)
+  // CHECK:       sv.verbatim.module @AnalogBlackBox(in %bus : !hw.inout<i32>)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @AnalogBlackBox.v
   // CHECK-SAME:      verilogName = "AnalogBlackBox"
