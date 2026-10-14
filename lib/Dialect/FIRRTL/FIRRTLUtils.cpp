@@ -1097,7 +1097,7 @@ Type circt::firrtl::lowerType(
 
   auto width = firType.getBitWidthOrSentinel();
 
-  if (width >= 0 && width > IntegerType::kMaxWidth) {
+  if (width >= 0 && static_cast<unsigned>(width) > IntegerType::kMaxWidth) {
     Location errLoc = loc.value_or(UnknownLoc::get(type.getContext()));
     emitError(errLoc, "integer width ")
         << width << " exceeds the maximum supported width of "
