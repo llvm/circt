@@ -98,6 +98,11 @@ private:
   // This is necessary, as we need to wait for the `next` operation to
   // have been converted to btor2 before we can emit the transition.
   SmallVector<Operation *> regOps;
+  // Similarly to registers, memories should also be finalized at the end of the
+  // pass this can only be done after all of the ports have been emitted.
+  // In the case of memories, the generated state LID is often used, so it is
+  // worth storing it to save an additional lookup.
+  SmallVector<std::pair<Operation *, size_t>> memoryOps;
 
   // Used to perform a DFS search through the module to declare all operands
   // before they are used
@@ -108,7 +113,7 @@ private:
 
   // Constants used during the conversion
   static constexpr size_t noLID = -1UL;
-  [[maybe_unused]] static constexpr int64_t noWidth = -1L;
+  static constexpr int64_t noWidth = -1L;
   static constexpr auto SPACE = " ";
   static constexpr auto NEWLINE = "\n";
 
@@ -229,8 +234,8 @@ private:
   /// returns the generated sort id
   size_t genBVSort(size_t width) {
     // Check that the sort wasn't already declared
-    if (getBVSortLID(width) != noLID) {
-      return noLID; // If it has already been declared then return -1
+    if (auto sid = getBVSortLID(width) != noLID) {
+      return sid; // If it has already been declared then return it
     }
 
     size_t sortlid = setBVSortLID(width);
@@ -248,8 +253,8 @@ private:
   /// returns the final generated sort id
   size_t genArrSort(size_t idxW, size_t elemW) {
     // Check that the sort wasn't already declared
-    if (getArrSortLID(idxW, elemW) != noLID)
-      return noLID;
+    if (auto sid = getArrSortLID(idxW, elemW) != noLID)
+      return sid;
 
     // Attribute an LID to the new sort
     size_t sortLID = setArrSortLID(idxW, elemW);
@@ -569,16 +574,15 @@ private:
   }
 
   /// Generates a state instruction given a width and a name
-  void genState(Operation *srcop, int64_t width, StringRef name) {
+  size_t genState(Operation *srcop, size_t sid, StringRef name) {
     // Register the source operation with the current line id
     size_t opLID = getOpLID(srcop);
-
-    // Retrieve the lid associated with the sort (sid)
-    size_t sid = bvSortToLIDMap.at(width);
 
     // Build and return the state instruction
     os << opLID << SPACE << "state" << SPACE << sid << SPACE
        << symbolNamespace.newName(name) << NEWLINE;
+
+    return opLID;
   }
 
   /// Generates a next instruction, given a width, a state LID, and a next
@@ -1104,7 +1108,7 @@ public:
     int64_t w = requireSort(type);
 
     // Generate state instruction (represents the register declaration)
-    genState(reg, w, regName);
+    genState(reg, bvSortToLIDMap.at(w), regName);
 
     // Record the operation for future `next` instruction generation
     // This is required to model transitions between states (i.e. how a
@@ -1166,13 +1170,13 @@ public:
       handledOps.insert(initialConstant);
 
       // Now we can declare the state
-      genState(reg, w, regName);
+      genState(reg, bvSortToLIDMap.at(w), regName);
 
       // Finally generate the init statement
       genInit(reg, initialConstant, w);
     } else {
       // Just generate state instruction (represents the register declaration)
-      genState(reg, w, regName);
+      genState(reg, bvSortToLIDMap.at(w), regName);
     }
 
     // Record the operation for future `next` instruction generation
@@ -1186,10 +1190,32 @@ public:
   /// ports, which should be generated *after* the state is generated, so to
   /// enforce this we generate all of that here. These also generate "array"
   /// sorts which themselves may require generating bitvec sorts.
-  void visit(seq::FirMemOp op) {
-    // TODO
-    op->emitOpError("is an unsupported operation");
-    return signalPassFailure();
+  /// Read-under-write and write-under-write behaviors are assumed to be modeled
+  /// explicitly at this point and will not be taken into account here.
+  /// It is also assumed that port latencies have been reduced to 0 and 1.
+  void visit(seq::FirMemOp mem) {
+    // Retrieve name for later
+    StringRef name = mem.getName().value();
+
+    // Extract the index width (depth) and element width (width) from the type
+    auto type = mem.getType();
+    size_t idxW = type.getDepth();
+    size_t elemW = type.getWidth();
+
+    // Generate an array sort for our type
+    size_t sid = genArrSort(idxW, elemW);
+
+    // Generate the state declaration for our memory
+    size_t stateLID = genState(mem, sid, name);
+
+    // We don't handle memory initialization in btor2, but this shouldn't be an
+    // error imo.
+    if (mem.getInit().has_value())
+      mem->emitWarning("Memory initialization is not supported in BTOR2. "
+                       "Ignoring init information...");
+
+    // Record the memory operation for the finalization process
+    memoryOps.push_back(std::pair(mem, stateLID));
   }
 
   void visit(seq::FromClockOp op) {
@@ -1357,12 +1383,14 @@ public:
 
   /// Clear all data structures to allow for pass reuse
   void clearData() {
+    arrSortToLIDMap.clear();
     bvSortToLIDMap.clear();
     constToLIDMap.clear();
-    opLIDMap.clear();
-    inputLIDs.clear();
-    regOps.clear();
     handledOps.clear();
+    inputLIDs.clear();
+    memoryOps.clear();
+    opLIDMap.clear();
+    regOps.clear();
     worklist.clear();
   }
 
