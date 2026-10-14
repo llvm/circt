@@ -329,16 +329,20 @@ def SubOfSelf : Pat <
   [(KnownWidth $x)]>;
 
 // sub((pad a, n), b) -> pad(sub(a, b), n)
+// Only valid when the padded operand is signed: a negative unsigned difference
+// would be zero-extended instead of sign-extended. Both sub operands share a
+// signedness, so checking a is enough.
 def SubOfPadL : Pat <
   (SubPrimOp:$old (PadPrimOp $a, $m), $b),
   (MoveNameHint $old, (PadPrimOp (SubPrimOp $a, $b), (TypeWidth32 $old))),
-  [(KnownWidth $a), (KnownWidth $b)]>;
+  [(KnownWidth $a), (KnownWidth $b), (SIntType $a)]>;
 
 // sub(b, (pad a, n)) -> pad(sub(b, a), n)
+// Only valid when the padded operand is signed, see SubOfPadL.
 def SubOfPadR : Pat <
   (SubPrimOp:$old $b, (PadPrimOp $a, $m)),
   (MoveNameHint $old, (PadPrimOp (SubPrimOp $b, $a), (TypeWidth32 $old))),
-  [(KnownWidth $a), (KnownWidth $b)]>;
+  [(KnownWidth $a), (KnownWidth $b), (SIntType $a)]>;
 
 // and(x, 0) -> 0, fold can't handle all cases
 def AndOfZero : Pat <
