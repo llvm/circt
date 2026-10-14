@@ -74,7 +74,7 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
   void tap(hw::WireOp wireOp) {
     if (auto name = wireOp.getName(); name && tapWires) {
       OpBuilder builder(wireOp);
-      buildTap(builder, wireOp.getLoc(), wireOp, *name);
+      buildTap(builder, wireOp.getLoc(), wireOp.getResult(), *name);
     }
     wireOp.getResult().replaceAllUsesWith(wireOp.getInput());
     wireOp->erase();
