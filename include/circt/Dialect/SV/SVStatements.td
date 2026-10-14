@@ -667,23 +667,6 @@ def BindOp : SVOp<"bind",
   }];
 }
 
-def BindInterfaceOp : SVOp<"bind.interface",
-    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
-  let summary = "indirectly instantiate an interface";
-  let description = [{
-    Indirectly instantiate an interface in the context of another module. This
-    operation must pair with a `sv.interface.instance`.
-  }];
-  let arguments = (ins InnerRefAttr:$instance);
-  let results = (outs);
-
-  let assemblyFormat = "$instance attr-dict";
-  let extraClassDeclaration = [{
-    sv::InterfaceInstanceOp
-    getReferencedInstance(const hw::HWSymbolCache *cache = nullptr);
-  }];
-}
-
 //===----------------------------------------------------------------------===//
 // Simulation Control Tasks
 //===----------------------------------------------------------------------===//

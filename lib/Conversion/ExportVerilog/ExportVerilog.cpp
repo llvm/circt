@@ -205,13 +205,6 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
       .Case<PackageExternOp>([](PackageExternOp op) {
         return op.getVerilogName().value_or(op.getSymName());
       })
-      .Case<InterfaceOp>([&](InterfaceOp op) {
-        return getVerilogModuleNameAttr(op).getValue();
-      })
-      .Case<InterfaceSignalOp>(
-          [&](InterfaceSignalOp op) { return op.getSymName(); })
-      .Case<InterfaceModportOp>(
-          [&](InterfaceModportOp op) { return op.getSymName(); })
       .Case<GenerateOp>([](GenerateOp op) { return op.getSymName(); })
       .Default([&](Operation *op) {
         if (auto attr = op->getAttrOfType<StringAttr>("name"))
@@ -297,7 +290,7 @@ static void getTypeDims(
     return getTypeDims(dims, uarray.getElementType(), loc, errorHandler);
   if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc, errorHandler);
-  if (hw::type_isa<InterfaceType, StructType, EnumType, UnionType>(type))
+  if (hw::type_isa<StructType, EnumType, UnionType>(type))
     return;
 
   errorHandler(loc) << "value has an unsupported verilog type " << type;
@@ -731,10 +724,6 @@ static bool isOkToBitSelectFrom(Value v) {
   // Aggregate access can be inlined.
   if (isa_and_nonnull<StructExtractOp, UnionExtractOp, ArrayGetOp>(
           v.getDefiningOp()))
-    return true;
-
-  // Interface signal can be inlined.
-  if (v.getDefiningOp<ReadInterfaceSignalOp>())
     return true;
 
   // TODO: We could handle concat and other operators here.
@@ -1491,7 +1480,6 @@ public:
   // Statements.
   void emitStatement(Operation *op);
   void emitBind(BindOp op);
-  void emitBindInterface(BindInterfaceOp op);
 
   void emitSVAttributes(Operation *op);
 
@@ -1612,10 +1600,6 @@ static StringRef getVerilogDeclWord(Operation *op,
     return "wire";
   if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
     return "localparam";
-
-  // Interfaces instances use the name of the declared interface.
-  if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
-    return interface.getInterfaceType().getInterface().getValue();
 
   // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
   // fall through to default.
@@ -1890,13 +1874,6 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         return true;
       })
 
-      .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
-      .Case<ModportType>([&](ModportType modportType) {
-        auto modportAttr = modportType.getModport();
-        os << modportAttr.getRootReference().getValue() << "."
-           << modportAttr.getNestedReferences().front().getValue();
-        return true;
-      })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";
         emitter.emitError(loc, "Unexpected unpacked array in packed type ")
@@ -1971,11 +1948,6 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
       .Case<sv::UnpackedOpenArrayType>([&](auto arrayType) {
         os << "[]";
         printUnpackedTypePostfix(arrayType.getElementType(), os);
-      })
-      .Case<InterfaceType>([&](auto) {
-        // Interface instantiations have parentheses like a module with no
-        // ports.
-        os << "()";
       });
 }
 // NOLINTEND(misc-no-recursion)
@@ -2387,9 +2359,7 @@ private:
   void printConstantAggregate(Attribute attr, Type type, Operation *op);
 
   using sv::Visitor<ExprEmitter, SubExprInfo>::visitSV;
-  SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(SystemFunctionOp op);
-  SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(XMROp op);
   SubExprInfo visitSV(SFormatFOp op);
   SubExprInfo visitSV(XMRRefOp op);
@@ -2890,16 +2860,6 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
-  auto decl = op.getReferencedDecl(state.symbolCache);
-  ps << PPExtString(getVerilogValueName(op.getIface())) << "."
-     << PPExtString(getSymOpName(decl));
-  return {Selection, IsUnsigned};
-}
-
 SubExprInfo ExprEmitter::visitSV(SystemFunctionOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
@@ -2912,17 +2872,6 @@ SubExprInfo ExprEmitter::visitSV(SystemFunctionOp op) {
     ps << ")";
   });
   return {Symbol, IsUnsigned};
-}
-
-SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
-  auto decl = op.getReferencedDecl(state.symbolCache);
-
-  ps << PPExtString(getVerilogValueName(op.getIface())) << "."
-     << PPExtString(getSymOpName(decl));
-  return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(XMROp op) {
@@ -4104,8 +4053,7 @@ void NameCollector::collectNames(Block &block) {
     // Instances have an instance name to recognize but we don't need to look
     // at the result values since wires used by instances should be traversed
     // anyway.
-    if (isa<InstanceOp, InterfaceInstanceOp, FuncCallProceduralOp, FuncCallOp>(
-            op))
+    if (isa<InstanceOp, FuncCallProceduralOp, FuncCallOp>(op))
       continue;
     if (isa<ltl::LTLDialect, debug::DebugDialect>(op.getDialect()))
       continue;
@@ -4207,7 +4155,6 @@ private:
   LogicalResult visitSV(ForceOp op);
   LogicalResult visitSV(ReleaseOp op);
   LogicalResult visitSV(AliasOp op);
-  LogicalResult visitSV(InterfaceInstanceOp op);
   LogicalResult emitOutputLikeOp(Operation *op, const ModulePortInfo &ports);
   LogicalResult visitStmt(OutputOp op);
 
@@ -4305,11 +4252,7 @@ private:
   LogicalResult visitSV(CoverPropertyOp op);
 
   LogicalResult visitSV(BindOp op);
-  LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(sv::SVVerbatimSourceOp op);
-  LogicalResult visitSV(InterfaceSignalOp op);
-  LogicalResult visitSV(InterfaceModportOp op);
-  LogicalResult visitSV(AssignInterfaceSignalOp op);
   LogicalResult visitSV(MacroErrorOp op);
   LogicalResult visitSV(MacroDefOp op);
 
@@ -4492,43 +4435,6 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
   });
   ps.addCallback({op, false});
   emitLocationInfoAndNewLine(ops);
-  return success();
-}
-
-LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
-  auto doNotPrint = op.getDoNotPrint();
-  if (doNotPrint && !state.options.emitBindComments)
-    return success();
-
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
-  startStatement();
-  StringRef prefix = "";
-  ps.addCallback({op, true});
-  if (doNotPrint) {
-    prefix = "// ";
-    ps << "// This interface is elsewhere emitted as a bind statement."
-       << PP::newline;
-  }
-
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-
-  auto *interfaceOp = op.getReferencedInterface(&state.symbolCache);
-  assert(interfaceOp && "InterfaceInstanceOp has invalid symbol that does not "
-                        "point to an interface");
-
-  auto verilogName = getSymOpName(interfaceOp);
-  if (!prefix.empty())
-    ps << PPExtString(prefix);
-  ps << PPExtString(verilogName)
-     << PP::nbsp /* don't break, may be comment line */
-     << PPExtString(op.getName()) << "();";
-
-  ps.addCallback({op, false});
-  emitLocationInfoAndNewLine(ops);
-
   return success();
 }
 
@@ -5982,24 +5888,6 @@ LogicalResult StmtEmitter::visitSV(BindOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
-  emitComment(op.getCommentAttr());
-  // Emit SV attributes.
-  emitSVAttributes(op);
-  // TODO: source info!
-  startStatement();
-  ps.addCallback({op, true});
-  ps << "interface " << PPExtString(getSymOpName(op)) << ";";
-  setPendingNewline();
-  // FIXME: Don't emit the body of this as general statements, they aren't!
-  emitStatementBlock(*op.getBodyBlock());
-  startStatement();
-  ps << "endinterface" << PP::newline;
-  ps.addCallback({op, false});
-  setPendingNewline();
-  return success();
-}
-
 LogicalResult StmtEmitter::visitSV(sv::SVVerbatimSourceOp op) {
   emitSVAttributes(op);
   startStatement();
@@ -6007,62 +5895,6 @@ LogicalResult StmtEmitter::visitSV(sv::SVVerbatimSourceOp op) {
 
   ps << op.getContent();
 
-  ps.addCallback({op, false});
-  setPendingNewline();
-  return success();
-}
-
-LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
-  // Emit SV attributes.
-  emitSVAttributes(op);
-  startStatement();
-  ps.addCallback({op, true});
-  if (isZeroBitType(op.getType()))
-    ps << PP::neverbox << "// ";
-  ps.invokeWithStringOS([&](auto &os) {
-    emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op->getLoc(),
-                            Type(), false);
-  });
-  ps << PP::nbsp << PPExtString(getSymOpName(op));
-  ps.invokeWithStringOS(
-      [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
-  ps << ";";
-  if (isZeroBitType(op.getType()))
-    ps << PP::end; // Close never-break group.
-  ps.addCallback({op, false});
-  setPendingNewline();
-  return success();
-}
-
-LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
-  startStatement();
-  ps.addCallback({op, true});
-  ps << "modport " << PPExtString(getSymOpName(op)) << "(";
-
-  // TODO: revisit, better breaks/grouping.
-  llvm::interleaveComma(op.getPorts(), ps, [&](const Attribute &portAttr) {
-    auto port = cast<ModportStructAttr>(portAttr);
-    ps << PPExtString(stringifyEnum(port.getDirection().getValue())) << " ";
-    auto *signalDecl = state.symbolCache.getDefinition(port.getSignal());
-    ps << PPExtString(getSymOpName(signalDecl));
-  });
-
-  ps << ");";
-  ps.addCallback({op, false});
-  setPendingNewline();
-  return success();
-}
-
-LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
-  startStatement();
-  ps.addCallback({op, true});
-  SmallPtrSet<Operation *, 8> emitted;
-  // TODO: emit like emitAssignLike does, maybe refactor.
-  ps << "assign ";
-  emitExpression(op.getIface(), emitted);
-  ps << "." << PPExtString(op.getSignalName()) << " = ";
-  emitExpression(op.getRhs(), emitted);
-  ps << ";";
   ps.addCallback({op, false});
   setPendingNewline();
   return success();
@@ -6594,23 +6426,6 @@ void ModuleEmitter::emitBind(BindOp op) {
   setPendingNewline();
 }
 
-void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
-  auto instance = op.getReferencedInstance(&state.symbolCache);
-  auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
-  auto *interface = op->getParentOfType<ModuleOp>().lookupSymbol(
-      instance.getInterfaceType().getInterface());
-  startStatement();
-  ps.addCallback({op, true});
-  ps << "bind " << PPExtString(instantiator) << PP::nbsp
-     << PPExtString(cast<InterfaceOp>(*interface).getSymName()) << PP::nbsp
-     << PPExtString(getSymOpName(instance)) << " (.*);" << PP::newline;
-  ps.addCallback({op, false});
-  setPendingNewline();
-}
-
 void ModuleEmitter::emitParameters(Operation *module, ArrayAttr params) {
   if (params.empty())
     return;
@@ -6780,22 +6595,13 @@ void ModuleEmitter::emitPortList(Operation *module,
         break;
       }
       size_t startOfNamePos = direction.size() + portDecl.size() + maxTypeWidth;
-      // Modport-typed ports (e.g., MyBundle.sink) already encode their
-      // direction in the interface modport definition, so we suppress the
-      // direction and wire keywords for them.
-      if (!isa<ModportType>(portType)) {
-        ps << direction;
-        if (!portDecl.empty())
-          ps << portDecl;
-        if (!portTypeStrings[portIdx].empty())
-          ps << portTypeStrings[portIdx];
-        if (portTypeStrings[portIdx].size() < maxTypeWidth)
-          ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
-      } else {
+      ps << direction;
+      if (!portDecl.empty())
+        ps << portDecl;
+      if (!portTypeStrings[portIdx].empty())
         ps << portTypeStrings[portIdx];
-        if (portTypeStrings[portIdx].size() < startOfNamePos)
-          ps.nbsp(startOfNamePos - portTypeStrings[portIdx].size());
-      }
+      if (portTypeStrings[portIdx].size() < maxTypeWidth)
+        ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
 
       // Emit the name.
       ps << PPExtString(portInfo.at(portIdx).getVerilogName());
@@ -6968,8 +6774,6 @@ void FileEmitter::emit(Block *block) {
         .Case<VerbatimOp, IfDefOp, MacroDefOp, sv::FuncDPIImportOp>(
             [&](auto op) { ModuleEmitter(state).emitStatement(op); })
         .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
-        .Case<BindInterfaceOp>(
-            [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })
         .Case<TypeScopeOp>([&](auto typedecls) {
           ModuleEmitter(state).emitStatement(typedecls);
         })
@@ -7181,22 +6985,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
               rootFile.ops.push_back(info);
           }
         })
-        .Case<InterfaceOp>([&](InterfaceOp intf) {
-          // Build the IR cache.
-          symbolCache.addDefinition(intf.getNameAttr(), intf);
-          // Populate the symbolCache with all operations that can define a
-          // symbol.
-          for (auto &op : *intf.getBodyBlock())
-            if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-              if (auto name = symOp.getNameAttr())
-                symbolCache.addDefinition(name, symOp);
-
-          // Emit into a separate file named after the interface.
-          if (attr || separateModules)
-            separateFile(intf, intf.getSymName() + ".sv");
-          else
-            rootFile.ops.push_back(info);
-        })
         .Case<PackageOp>([&](PackageOp package) {
           // Build the IR cache.
           auto sym = package.getSymNameAttr();
@@ -7368,7 +7156,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
-      .Case<InterfaceOp, VerbatimOp, IfDefOp, sv::SVVerbatimSourceOp>(
+      .Case<VerbatimOp, IfDefOp, sv::SVVerbatimSourceOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp, PackageOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);

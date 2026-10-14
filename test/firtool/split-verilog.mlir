@@ -3,7 +3,6 @@
 // RUN: firtool %s --format=mlir -split-verilog -o=%t
 // RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/foo.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-BAR < %t/bar.sv
-// RUN: FileCheck %s --check-prefix=VERILOG-USB < %t/usb.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-INOUT-3 < %t/inout_3.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-CUSTOM-1 < %t/custom1.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-CUSTOM-2 < %t/custom2.sv
@@ -28,10 +27,6 @@ hw.module @foo(in %a: i1, out b : i1) {
 hw.module @bar(in %x : i1, out y : i1) {
   hw.output %x : i1
 }
-sv.interface @usb {
-  sv.interface.signal @valid : i1
-  sv.interface.signal @ready : i1
-}
 hw.module.extern @pll ()
 
 hw.module @inout(in %inout: i1, out out : i1) {
@@ -49,7 +44,6 @@ sv.verbatim "// Bar" {output_file = #hw.output_file<"custom2.sv", excludeFromFil
 
 // LIST:      {{^}}foo.sv{{$}}
 // LIST-NEXT: {{^}}bar.sv{{$}}
-// LIST-NEXT: {{^}}usb.sv{{$}}
 // LIST-NEXT: {{^}}inout_3.sv{{$}}
 // LIST-NEXT: {{^}}custom1.sv{{$}}
 // LIST-NOT:  custom2.sv
@@ -73,16 +67,6 @@ sv.verbatim "// Bar" {output_file = #hw.output_file<"custom2.sv", excludeFromFil
 // VERILOG-BAR:       typedef logic foo;
 // VERILOG-BAR-LABEL: module bar
 // VERILOG-BAR:       endmodule
-
-// VERILOG-USB:       // I'm everywhere
-// VERILOG-USB-NEXT:  `ifdef VERILATOR
-// VERILOG-USB-NEXT:    // Hello
-// VERILOG-USB-NEXT:  `else
-// VERILOG-USB-NEXT:    // World
-// VERILOG-USB-NEXT:  `endif
-// VERILOG-USB:       typedef logic foo;
-// VERILOG-USB-LABEL: interface usb;
-// VERILOG-USB:       endinterface
 
 // VERILOG-INOUT-3:       // I'm everywhere
 // VERILOG-INOUT-3-NEXT:  `ifdef VERILATOR
@@ -108,8 +92,6 @@ sv.verbatim "// Bar" {output_file = #hw.output_file<"custom2.sv", excludeFromFil
 // VERILOG:       endmodule
 // VERILOG-LABEL: module bar
 // VERILOG:       endmodule
-// VERILOG-LABEL: interface usb;
-// VERILOG:       endinterface
 // VERILOG-NOT:   module pll
 // VERILOG-NOT:   module inout_0
 // VERILOG-NOT:   module inout_1

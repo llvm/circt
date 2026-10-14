@@ -280,10 +280,6 @@ firrtl.circuit "Simple" {
   // CHECK: hw.module.extern @MRead_ext(in %R0_addr : i4, in %R0_en : i1, in %R0_clk : i1, out R0_data : i42) attributes {verilogName = "MRead_ext"}
   firrtl.memmodule @MRead_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.uint<1>, out R0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, writeLatency = 1 : ui32}
 
-  // The following operations should be passed through without an error.
-  // CHECK: sv.interface @SVInterface
-  sv.interface @SVInterface { }
-
   // DontTouch on ports becomes symbol.
   // CHECK-LABEL: hw.module.extern private @PortDT
   // CHECK-SAME: (in %a : i1 {hw.exportPort = #hw<innerSym@__PortDT__DONTTOUCH__0__a>}, in %hassym : i1 {hw.exportPort = #hw<innerSym@hassym>},

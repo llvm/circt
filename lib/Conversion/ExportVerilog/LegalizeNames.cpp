@@ -119,7 +119,7 @@ std::string FieldNameResolver::getEnumFieldName(hw::EnumFieldAttr attr,
 
 namespace circt {
 namespace ExportVerilog {
-/// This class keeps track of modules and interfaces that need to be renamed, as
+/// This class keeps track of modules that need to be renamed, as
 /// well as module ports, parameters, declarations and verif labels that need to
 /// be renamed. This can happen either due to conflicts between them or due to
 /// a conflict with a Verilog keyword.
@@ -128,7 +128,7 @@ namespace ExportVerilog {
 class GlobalNameResolver {
 public:
   /// Construct a GlobalNameResolver and perform name legalization of the
-  /// module/interfaces, port/parameter and declaration names.
+  /// module, port/parameter and declaration names.
   GlobalNameResolver(mlir::ModuleOp topLevel, const LoweringOptions &options);
 
   GlobalNameTable takeGlobalNameTable() { return std::move(globalNameTable); }
@@ -138,7 +138,6 @@ private:
   /// keywords or themselves.  If so, add the replacement names to
   /// globalNameTable.
   void legalizeModuleNames(HWModuleOp module);
-  void legalizeInterfaceNames(InterfaceOp interface);
   template <typename Package>
   void legalizePackageNames(Package package);
   void legalizeFunctionNames(FuncOp func);
@@ -222,8 +221,7 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
         nameResolver.insertUsedName(
             op->getAttrOfType<StringAttr>(verilogNameAttr));
       } else if (isa<sv::WireOp, hw::WireOp, VarOp, RegOp, LogicOp,
-                     LocalParamOp, hw::InstanceOp, sv::InterfaceInstanceOp,
-                     sv::GenerateOp>(op)) {
+                     LocalParamOp, hw::InstanceOp, sv::GenerateOp>(op)) {
         // Otherwise, get a verilog name via `getSymOpName`.
         nameEntries.emplace_back(
             op, StringAttr::get(op->getContext(), getSymOpName(op)));
@@ -267,12 +265,12 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
 }
 
 /// Construct a GlobalNameResolver and do the initial scan to populate and
-/// unique the module/interfaces and port/parameter names.
+/// unique the module and port/parameter names.
 GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
                                        const LoweringOptions &options)
     : globalNameResolver(options), options(options) {
   // Register the names of external declarations which we cannot rename. This
-  // has to occur in a first pass separate from the modules, interfaces and
+  // has to occur in a first pass separate from the modules and
   // packages which we are actually allowed to rename, in order to ensure that
   // we don't accidentally rename a declaration that later collides with an
   // external one.
@@ -295,17 +293,10 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
     }
   }
 
-  // Legalize module and interface names.
+  // Legalize module and package names.
   for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
       legalizeModuleNames(module);
-      continue;
-    }
-
-    // Legalize the name of the interface itself, as well as any signals and
-    // modports within it.
-    if (auto interface = dyn_cast<InterfaceOp>(op)) {
-      legalizeInterfaceNames(interface);
       continue;
     }
 
@@ -396,25 +387,6 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
   }
 }
 
-void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
-  MLIRContext *ctxt = interface.getContext();
-  auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
-  auto newName = globalNameResolver.getLegalName(interface.getName());
-  if (newName != interface.getName())
-    interface->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
-
-  NameCollisionResolver localNames(options);
-  // Rename signals and modports.
-  for (auto &op : *interface.getBodyBlock()) {
-    if (isa<InterfaceSignalOp, InterfaceModportOp>(op)) {
-      auto name = SymbolTable::getSymbolName(&op).getValue();
-      auto newName = localNames.getLegalName(name);
-      if (newName != name)
-        op.setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
-    }
-  }
-}
-
 void GlobalNameResolver::legalizeFunctionNames(FuncOp func) {
   MLIRContext *ctxt = func.getContext();
   if (auto verilogName = func.getVerilogName()) {
@@ -431,7 +403,7 @@ void GlobalNameResolver::legalizeFunctionNames(FuncOp func) {
 // Public interface
 //===----------------------------------------------------------------------===//
 
-/// Rewrite module names and interfaces to not conflict with each other or with
+/// Rewrite module and package names to not conflict with each other or with
 /// Verilog keywords.
 GlobalNameTable
 ExportVerilog::legalizeGlobalNames(ModuleOp topLevel,

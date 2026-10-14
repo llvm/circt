@@ -52,33 +52,8 @@ bool sv::is2StateExpression(Value v) {
 
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
-  return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, ConstantStrOp,
-             MacroRefExprOp, MacroRefExprSEOp>(op);
-}
-
-/// Returns the operation registered with the given symbol name with the regions
-/// of 'symbolTableOp'. recurse through nested regions which don't contain the
-/// symboltable trait. Returns nullptr if no valid symbol was found.
-static Operation *lookupSymbolInNested(Operation *symbolTableOp,
-                                       StringRef symbol) {
-  Region &region = symbolTableOp->getRegion(0);
-  if (region.empty())
-    return nullptr;
-
-  // Look for a symbol with the given name.
-  for (Block &block : region)
-    for (Operation &nestedOp : block) {
-      if (auto symbolOp = dyn_cast<mlir::SymbolOpInterface>(&nestedOp);
-          symbolOp && symbolOp.getName() == symbol)
-        return &nestedOp;
-      if (!nestedOp.hasTrait<OpTrait::SymbolTable>() &&
-          nestedOp.getNumRegions()) {
-        if (auto *nop = lookupSymbolInNested(&nestedOp, symbol))
-          return nop;
-      }
-    }
-  return nullptr;
+  return isa<VerbatimExprOp, VerbatimExprSEOp, ConstantXOp, ConstantZOp,
+             ConstantStrOp, MacroRefExprOp, MacroRefExprSEOp>(op);
 }
 
 /// Verifies symbols referenced by macro identifiers.
@@ -805,7 +780,6 @@ void AlwaysOp::build(OpBuilder &builder, OperationState &result,
     bodyCtor();
 }
 
-/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult AlwaysOp::verify() {
   if (getEvents().size() != getNumOperands())
     return emitError("different number of operands and events");
@@ -1578,251 +1552,6 @@ LogicalResult BPAssignOp::canonicalize(BPAssignOp op,
 }
 
 //===----------------------------------------------------------------------===//
-// TypeDecl operations
-//===----------------------------------------------------------------------===//
-
-void InterfaceOp::build(OpBuilder &builder, OperationState &result,
-                        StringRef sym_name, std::function<void()> body) {
-  OpBuilder::InsertionGuard guard(builder);
-
-  result.addAttribute(InterfaceOp::getSymNameAttrName(result.name),
-                      builder.getStringAttr(sym_name));
-  builder.createBlock(result.addRegion());
-  if (body)
-    body();
-}
-
-ModportType InterfaceOp::getModportType(StringRef modportName) {
-  assert(lookupSymbol<InterfaceModportOp>(modportName) &&
-         "Modport symbol not found.");
-  auto *ctxt = getContext();
-  return ModportType::get(
-      getContext(),
-      SymbolRefAttr::get(ctxt, getSymName(),
-                         {SymbolRefAttr::get(ctxt, modportName)}));
-}
-
-Type InterfaceOp::getSignalType(StringRef signalName) {
-  InterfaceSignalOp signal = lookupSymbol<InterfaceSignalOp>(signalName);
-  assert(signal && "Interface signal symbol not found.");
-  return signal.getType();
-}
-
-static ParseResult parseModportStructs(OpAsmParser &parser,
-                                       ArrayAttr &portsAttr) {
-
-  auto *context = parser.getBuilder().getContext();
-
-  SmallVector<Attribute, 8> ports;
-  auto parseElement = [&]() -> ParseResult {
-    auto direction = ModportDirectionAttr::parse(parser, {});
-    if (!direction)
-      return failure();
-
-    FlatSymbolRefAttr signal;
-    if (parser.parseAttribute(signal))
-      return failure();
-
-    ports.push_back(ModportStructAttr::get(
-        context, cast<ModportDirectionAttr>(direction), signal));
-    return success();
-  };
-  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                     parseElement))
-    return failure();
-
-  portsAttr = ArrayAttr::get(context, ports);
-  return success();
-}
-
-static void printModportStructs(OpAsmPrinter &p, Operation *,
-                                ArrayAttr portsAttr) {
-  p << "(";
-  llvm::interleaveComma(portsAttr, p, [&](Attribute attr) {
-    auto port = cast<ModportStructAttr>(attr);
-    p << stringifyEnum(port.getDirection().getValue());
-    p << ' ';
-    p.printSymbolName(port.getSignal().getRootReference().getValue());
-  });
-  p << ')';
-}
-
-void InterfaceSignalOp::build(mlir::OpBuilder &builder,
-                              ::mlir::OperationState &state, StringRef name,
-                              mlir::Type type) {
-  build(builder, state, name, /*sym_visibility=*/{}, mlir::TypeAttr::get(type));
-}
-
-void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
-                               StringRef name, ArrayRef<StringRef> inputs,
-                               ArrayRef<StringRef> outputs) {
-  auto *ctxt = builder.getContext();
-  SmallVector<Attribute, 8> directions;
-  auto inputDir = ModportDirectionAttr::get(ctxt, ModportDirection::input);
-  auto outputDir = ModportDirectionAttr::get(ctxt, ModportDirection::output);
-  for (auto input : inputs)
-    directions.push_back(ModportStructAttr::get(
-        ctxt, inputDir, SymbolRefAttr::get(ctxt, input)));
-  for (auto output : outputs)
-    directions.push_back(ModportStructAttr::get(
-        ctxt, outputDir, SymbolRefAttr::get(ctxt, output)));
-  build(builder, state, name, /*sym_visibility=*/{},
-        ArrayAttr::get(ctxt, directions));
-}
-
-std::optional<size_t> InterfaceInstanceOp::getTargetResultIndex() {
-  // Inner symbols on instance operations target the op not any result.
-  return std::nullopt;
-}
-
-/// Suggest a name for each result value based on the saved result names
-/// attribute.
-void InterfaceInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
-}
-
-/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-LogicalResult InterfaceInstanceOp::verify() {
-  if (getName().empty())
-    return emitOpError("requires non-empty name");
-  return success();
-}
-
-LogicalResult
-InterfaceInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *symtable = SymbolTable::getNearestSymbolTable(*this);
-  if (!symtable)
-    return emitError("sv.interface.instance must exist within a region "
-                     "which has a symbol table.");
-  auto ifaceTy = getType();
-  auto *referencedOp =
-      symbolTable.lookupSymbolIn(symtable, ifaceTy.getInterface());
-  if (!referencedOp)
-    return emitError("Symbol not found: ") << ifaceTy.getInterface() << ".";
-  if (!isa<InterfaceOp>(referencedOp))
-    return emitError("Symbol ")
-           << ifaceTy.getInterface() << " is not an InterfaceOp.";
-  return success();
-}
-
-/// Ensure that the symbol being instantiated exists and is an
-/// InterfaceModportOp.
-LogicalResult
-GetModportOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *symtable = SymbolTable::getNearestSymbolTable(*this);
-  if (!symtable)
-    return emitError("sv.interface.instance must exist within a region "
-                     "which has a symbol table.");
-
-  auto ifaceTy = getType();
-  auto *referencedOp =
-      symbolTable.lookupSymbolIn(symtable, ifaceTy.getModport());
-  if (!referencedOp)
-    return emitError("Symbol not found: ") << ifaceTy.getModport() << ".";
-  if (!isa<InterfaceModportOp>(referencedOp))
-    return emitError("Symbol ")
-           << ifaceTy.getModport() << " is not an InterfaceModportOp.";
-  return success();
-}
-
-void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
-                         StringRef field) {
-  auto ifaceTy = dyn_cast<InterfaceType>(value.getType());
-  assert(ifaceTy && "GetModportOp expects an InterfaceType.");
-  auto fieldAttr = SymbolRefAttr::get(builder.getContext(), field);
-  auto modportSym =
-      SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(), fieldAttr);
-  build(builder, state, ModportType::get(builder.getContext(), modportSym),
-        value, fieldAttr);
-}
-
-/// Lookup the op for the modport declaration.  This returns null on invalid
-/// IR.
-InterfaceModportOp
-GetModportOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
-  return dyn_cast_or_null<InterfaceModportOp>(
-      cache.getDefinition(getFieldAttr()));
-}
-
-void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
-                                  Value iface, StringRef signalName) {
-  auto ifaceTy = dyn_cast<InterfaceType>(iface.getType());
-  assert(ifaceTy && "ReadInterfaceSignalOp expects an InterfaceType.");
-  auto fieldAttr = SymbolRefAttr::get(builder.getContext(), signalName);
-  InterfaceOp ifaceDefOp = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
-      iface.getDefiningOp(), ifaceTy.getInterface());
-  assert(ifaceDefOp &&
-         "ReadInterfaceSignalOp could not resolve an InterfaceOp.");
-  build(builder, state, ifaceDefOp.getSignalType(signalName), iface, fieldAttr);
-}
-
-/// Lookup the op for the signal declaration.  This returns null on invalid
-/// IR.
-InterfaceSignalOp
-ReadInterfaceSignalOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
-  return dyn_cast_or_null<InterfaceSignalOp>(
-      cache.getDefinition(getSignalNameAttr()));
-}
-
-ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
-                                    FlatSymbolRefAttr &signalName) {
-  SymbolRefAttr fullSym;
-  if (p.parseAttribute(fullSym) || fullSym.getNestedReferences().size() != 1)
-    return failure();
-
-  auto *ctxt = p.getBuilder().getContext();
-  ifaceTy = InterfaceType::get(
-      ctxt, FlatSymbolRefAttr::get(fullSym.getRootReference()));
-  signalName = FlatSymbolRefAttr::get(fullSym.getLeafReference());
-  return success();
-}
-
-void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
-                             FlatSymbolRefAttr signalName) {
-  InterfaceType ifaceTy = dyn_cast<InterfaceType>(type);
-  assert(ifaceTy && "Expected an InterfaceType");
-  auto sym = SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(),
-                                {signalName});
-  p << sym;
-}
-
-LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
-  auto ifaceTy = dyn_cast<InterfaceType>(ifaceVal.getType());
-  if (!ifaceTy)
-    return failure();
-  InterfaceOp iface = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
-      ifaceVal.getDefiningOp(), ifaceTy.getInterface());
-  if (!iface)
-    return failure();
-  InterfaceSignalOp signal = iface.lookupSymbol<InterfaceSignalOp>(signalName);
-  if (!signal)
-    return failure();
-  return success();
-}
-
-Operation *
-InterfaceInstanceOp::getReferencedInterface(const hw::HWSymbolCache *cache) {
-  FlatSymbolRefAttr interface = getInterfaceType().getInterface();
-  if (cache)
-    if (auto *result = cache->getDefinition(interface))
-      return result;
-
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
-
-  return topLevelModuleOp.lookupSymbol(interface);
-}
-
-LogicalResult AssignInterfaceSignalOp::verify() {
-  return verifySignalExists(getIface(), getSignalNameAttr());
-}
-
-LogicalResult ReadInterfaceSignalOp::verify() {
-  return verifySignalExists(getIface(), getSignalNameAttr());
-}
-
-//===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//
 
@@ -2097,7 +1826,7 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
                                                    hwModule.getBodyBlock());
 }
 
-/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
+/// Ensure that the referenced instance exists and is marked as doNotPrint.
 LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto module = (*this)->getParentOfType<mlir::ModuleOp>();
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
@@ -2405,51 +2134,6 @@ SVVerbatimModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// BindInterfaceOp
-//===----------------------------------------------------------------------===//
-
-sv::InterfaceInstanceOp
-BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
-  // If we have a cache, directly look up the referenced instance.
-  if (cache) {
-    auto result = cache->getInnerDefinition(getInstance());
-    return cast<sv::InterfaceInstanceOp>(result.getOp());
-  }
-
-  // Otherwise, resolve the instance by looking up the module ...
-  auto *symbolTable = SymbolTable::getNearestSymbolTable(*this);
-  if (!symbolTable)
-    return {};
-  auto *parentOp =
-      lookupSymbolInNested(symbolTable, getInstance().getModule().getValue());
-  if (!parentOp)
-    return {};
-
-  // ... then look up the instance within it.
-  return findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
-      getInstance().getName(), &parentOp->getRegion(0).front());
-}
-
-/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-LogicalResult
-BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *parentOp =
-      symbolTable.lookupNearestSymbolFrom(*this, getInstance().getModule());
-  if (!parentOp)
-    return emitError("Referenced module doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getName();
-
-  auto inst = findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
-      getInstance().getName(), &parentOp->getRegion(0).front());
-  if (!inst)
-    return emitError("Referenced interface doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getName();
-  if (!inst.getDoNotPrint())
-    return emitError("Referenced interface isn't marked as doNotPrint");
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // XMROp
 //===----------------------------------------------------------------------===//
 
@@ -2753,12 +2437,6 @@ void GenerateForOp::getAsmBlockArgumentNames(
   auto *block = &region.front();
   if (auto attr = getInductionVarNameAttr())
     setNameFn(block->getArgument(0), attr);
-}
-
-ModportStructAttr ModportStructAttr::get(MLIRContext *context,
-                                         ModportDirection direction,
-                                         FlatSymbolRefAttr signal) {
-  return get(context, ModportDirectionAttr::get(context, direction), signal);
 }
 
 //===----------------------------------------------------------------------===//

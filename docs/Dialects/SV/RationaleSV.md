@@ -34,9 +34,7 @@ own operations for combinational logic, modules, or other common functionality.
 Like the HW dialect, the SV dialect is designed to tolerate unknown types where
 possible, allowing other dialects to mix in with it.  In addition to these
 external types, and the types used by the HW dialect, the SV dialect defines
-types for SystemVerilog interfaces.
-
-TODO: Describe interface types, modports, etc.
+types for procedural variables, nets, and strings.
 
 ## Overview of `sv` dialect operations
 

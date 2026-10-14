@@ -419,10 +419,6 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
       isa<sv::IndexedPartSelectInOutOp>(op) || isa<sv::ReadInOutOp>(op))
     return true;
 
-  // An SV interface modport is a symbolic name that is always inlined.
-  if (isa<sv::GetModportOp>(op) || isa<sv::ReadInterfaceSignalOp>(op))
-    return true;
-
   // XMRs can't be spilled if they are on the lhs.  Conservatively never spill
   // them.
   if (isa<sv::XMROp, sv::XMRRefOp>(op))
