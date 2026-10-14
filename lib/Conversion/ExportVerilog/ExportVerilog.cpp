@@ -4201,6 +4201,7 @@ private:
                       PPExtString postSyntax = PPExtString(";"),
                       std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   LogicalResult visitSV(AssignOp op);
+  LogicalResult visitSV(VarAssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
   LogicalResult visitSV(ForceOp op);
@@ -4416,6 +4417,11 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   // Emit SV attributes. See Spec 12.3.
   emitSVAttributes(op);
 
+  return emitAssignLike(op, PPExtString("="), PPExtString("assign"));
+}
+
+LogicalResult StmtEmitter::visitSV(VarAssignOp op) {
+  emitSVAttributes(op);
   return emitAssignLike(op, PPExtString("="), PPExtString("assign"));
 }
 

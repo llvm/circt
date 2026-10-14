@@ -425,6 +425,18 @@ def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
   let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($src))";
 }
 
+def VarAssignOp : SVOp<"var_assign", [VarTypeConstraint<"src", "dest">,
+                                 NonProceduralOp]> {
+  let summary = "Continuous assignment for single driver variable";
+  let description = [{
+    A SystemVerilog continuous assignment statement 'x = y;' to a variable.
+    These occur in module scope.  See SV Spec 10.3.2.
+  }];
+  let arguments = (ins VarType:$dest, VarElementType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($src))";
+}
+
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
                                    ProceduralOp]> {
   let summary = "Blocking procedural assignment";
