@@ -391,9 +391,48 @@ endmodule
 
 // -----
 
-module unsupported_prim(inout A, inout B);
-    // expected-error @below {{unsupported instance of primitive `tran`}}
-    tran u1 (A, B);
+module unsupported_tranif0_prim(inout A, inout B, input C);
+    // expected-error @below {{tranif0 with multiple driven terminals is not yet supported}}
+    tranif0 u1 (A, B, C);
+endmodule
+
+// -----
+
+module unsupported_tranif1_prim(inout A, inout B, input C);
+    // expected-error @below {{tranif1 with multiple driven terminals is not yet supported}}
+    tranif1 u1 (A, B, C);
+endmodule
+
+// -----
+
+module unsupported_tran_wide_terminal(output o);
+    wire [1:0] a, b;
+    // expected-error @below {{tran switch terminals must be 1 bit}}
+    tran(a, b);
+    assign o = a[0];
+endmodule
+
+// -----
+
+module unsupported_tran_terminal(output o);
+    wire [1:0] v;
+    wire b;
+    // expected-error @below {{tran is only supported between simple net references for now}}
+    tran (v[0], b);
+    assign o = b;
+endmodule
+
+// -----
+
+// Classic bus-mux pattern: two tranif1 instances alternately drive a
+// shared bus, so each side has an external driver from the other's
+// perspective and direction can't be resolved statically.
+module unsupported_tranif1_bus_mux(inout a, inout b, input sel, output bus);
+    wire n_sel;
+    assign n_sel = ~sel;
+    // expected-error @below {{tranif1 with multiple driven terminals is not yet supported}}
+    tranif1 t0 (bus, a, sel);
+    tranif1 t1 (bus, b, n_sel);
 endmodule
 
 // -----
