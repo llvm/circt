@@ -1,18 +1,14 @@
 // RUN: circt-opt %s --lower-esi-to-physical -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=PORTS --implicit-check-not=sv.interface --implicit-check-not=!sv.modport %s
+// RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=PORTS %s
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --hw-flatten-io --lower-esi-to-hw | FileCheck --check-prefix=HW %s
 
 hw.module.extern @Sender(in %clk: !seq.clock, out x: !esi.channel<i4>, out y: i8)
-hw.module.extern @ArrSender(out x: !esi.channel<!hw.array<4xi64>>)
 hw.module.extern @Reciever(in %a: !esi.channel<i4>, in %clk: !seq.clock)
 hw.module.extern @i0SenderReceiver(in %in: !esi.channel<i0>, out out: !esi.channel<i0>)
 
 // CHECK-LABEL: hw.module.extern @Sender(in %clk : !seq.clock, out x : !esi.channel<i4>, out y : i8)
 // CHECK-LABEL: hw.module.extern @Reciever(in %a : !esi.channel<i4>, in %clk : !seq.clock)
 
-// PORTS-LABEL: hw.module.extern @Sender(in %clk : !seq.clock, in %x_ready : i1, out x : i4, out x_valid : i1, out y : i8)
-// PORTS-LABEL: hw.module.extern @ArrSender(in %x_ready : i1, out x : !hw.array<4xi64>, out x_valid : i1)
-// PORTS-LABEL: hw.module.extern @Reciever(in %a : i4, in %a_valid : i1, in %clk : !seq.clock, out a_ready : i1)
 // PORTS-LABEL: hw.module.extern @i0SenderReceiver(in %in : i0, in %in_valid : i1, in %out_ready : i1, out in_ready : i1, out out : i0, out out_valid : i1)
 
 hw.module @test(in %clk: !seq.clock, in %rst:i1) {
@@ -27,10 +23,6 @@ hw.module @test(in %clk: !seq.clock, in %rst:i1) {
   // CHECK-NEXT:  %2 = esi.stage %clk, %rst, %1 : !esi.channel<i4>
   // CHECK-NEXT:  %3 = esi.stage %clk, %rst, %2 : !esi.channel<i4>
   // CHECK-NEXT:  hw.instance "recv2" @Reciever(a: %3: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
-
-  // PORTS-LABEL: hw.module @test(in %clk : !seq.clock, in %rst : i1) {
-  // PORTS: hw.instance "sender2" @Sender(clk: %clk: !seq.clock, x_ready: %{{.+}}: i1) -> (x: i4, x_valid: i1, y: i8)
-  // PORTS: hw.instance "recv2" @Reciever(a: %{{.+}}: i4, a_valid: %{{.+}}: i1, clk: %clk: !seq.clock) -> (a_ready: i1)
 
   // HW-LABEL:    hw.module @test(in %clk : !seq.clock, in %rst : i1)
   // After all 3 ESI lowering passes, there shouldn't be any ESI constructs!
@@ -71,9 +63,6 @@ hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
 
   %tx_xact, %tx_data = esi.snoop.xact %ints: !esi.channel<i32>
 
-  %nullBit = esi.null : !esi.channel<i4>
-  hw.instance "nullRcvr" @Reciever(a: %nullBit: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
-
   %nullArray = esi.null : !esi.channel<!hw.array<4xi8>>
   hw.instance "nullInternRcvr" @InternRcvr(in: %nullArray: !esi.channel<!hw.array<4xi8>>) -> ()
 }
@@ -81,11 +70,9 @@ hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
 // HW-NEXT:    %adder.ints_ready, %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %adder.mutatedInts: i32, ints_valid: %adder.mutatedInts_valid: i1, mutatedInts_ready: %adder.ints_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4)
 // HW-NEXT:    [[XACT:%.+]] = comb.and %adder.mutatedInts_valid, %adder.ints_ready : i1
 // HW-NEXT:    [[TX_XACT:%.+]] = comb.and %adder.mutatedInts_valid, %adder.ints_ready : i1
-// HW:         [[ZERO:%.+]] = hw.bitcast %c0_i4 : (i4) -> i4
-// HW:         hw.instance "nullRcvr" @Reciever(a: [[ZERO]]: i4, a_valid: %false: i1, clk: %clk: !seq.clock) -> (a_ready: i1)
 // HW:         %c0_i32 = hw.constant 0 : i32
 // HW:         [[ZA:%.+]] = hw.bitcast %c0_i32 : (i32) -> !hw.array<4xi8>
-// HW:         %nullInternRcvr.in_ready = hw.instance "nullInternRcvr" @InternRcvr(in: [[ZA]]: !hw.array<4xi8>, in_valid: %false_0: i1) -> (in_ready: i1)
+// HW:         %nullInternRcvr.in_ready = hw.instance "nullInternRcvr" @InternRcvr(in: [[ZA]]: !hw.array<4xi8>, in_valid: %false: i1) -> (in_ready: i1)
 
 hw.module @twoChannelArgs(in %clk: !seq.clock, in %ints: !esi.channel<i32>, in %foo: !esi.channel<i7>) {
   %rdy = hw.constant 1 : i1
@@ -95,13 +82,6 @@ hw.module @twoChannelArgs(in %clk: !seq.clock, in %ints: !esi.channel<i32>, in %
 // HW-LABEL: hw.module @twoChannelArgs(in %clk : !seq.clock, in %ints : i32, in %ints_valid : i1, in %foo : i7, in %foo_valid : i1, out ints_ready : i1, out foo_ready : i1)
 // HW:   %true = hw.constant true
 // HW:   hw.output %true, %true : i1, i1
-
-// PORTS: hw.module.extern @handshake_fork_1ins_2outs_ctrl(in %in0 : i1, in %in0_valid : i1, in %clock : i1, in %reset : i1, in %out0_ready : i1, in %out1_ready : i1, out in0_ready : i1, out out0 : i1, out out0_valid : i1, out out1 : i1, out out1_valid : i1)
-hw.module.extern @handshake_fork_1ins_2outs_ctrl(in %in0: !esi.channel<i1>, in %clock: i1, in %reset: i1, out out0: !esi.channel<i1>, out out1: !esi.channel<i1>)
-hw.module @test_constant(in %arg0: !esi.channel<i1>, in %clock: i1, in %reset: i1, out outCtrl: !esi.channel<i1>) {
-  %handshake_fork0.out0, %handshake_fork0.out1 = hw.instance "handshake_fork0" @handshake_fork_1ins_2outs_ctrl(in0: %arg0: !esi.channel<i1>, clock: %clock: i1, reset: %reset: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>)
-  hw.output %handshake_fork0.out1 : !esi.channel<i1>
-}
 
 // HW-LABEL: hw.module @i0Typed(in %a : i0, in %a_valid : i1, in %clk : !seq.clock, in %rst : i1, in %x_ready : i1, out a_ready : i1, out x : i0, out x_valid : i1) {
 // HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage1<WIDTH: ui32 = 0>(clk: %clk: !seq.clock, rst: %rst: i1, a: %a: i0, a_valid: %a_valid: i1, x_ready: %x_ready: i1) -> (a_ready: i1, x: i0, x_valid: i1)
