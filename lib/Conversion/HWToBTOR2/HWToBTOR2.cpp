@@ -43,8 +43,8 @@ using namespace circt;
 using namespace hw;
 
 namespace {
-// The goal here is to traverse the operations in order and convert them one by
-// one into btor2
+/// The goal here is to traverse the operations in order and convert them one by
+/// one into btor2
 struct ConvertHWToBTOR2Pass
     : public circt::impl::ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
       public comb::CombinationalVisitor<ConvertHWToBTOR2Pass>,
@@ -55,7 +55,7 @@ public:
   using verif::Visitor<ConvertHWToBTOR2Pass>::visitVerif;
 
   ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
-  // Executes the pass
+  /// Executes the pass
   void runOnOperation() override;
 
 private:
@@ -69,10 +69,15 @@ private:
   // Create maps to keep track of lid associations
   // We need these in order to reference results as operands in btor2
 
-  // Keeps track of the ids associated to each declared sort
+  // Keeps track of the ids associated to each declared bitvec sort
   // This is used in order to guarantee that sorts are unique and to allow for
   // instructions to reference the given sorts (key: width, value: LID)
-  DenseMap<size_t, size_t> sortToLIDMap;
+  DenseMap<size_t, size_t> bvSortToLIDMap;
+  // Keeps track of the ids associated to each declared array sort
+  // This is used in order to guarantee that sorts are unique and to allow for
+  // instructions to reference the given sorts (key: (idxSID, elemSID), value:
+  // LID)
+  DenseMap<std::pair<size_t, size_t>, size_t> arrSortToLIDMap;
   // Keeps track of {constant, width} -> LID mappings
   // This is used in order to avoid duplicating constant declarations
   // in the output btor2. It is also useful when tracking
@@ -96,7 +101,7 @@ private:
 
   // Used to perform a DFS search through the module to declare all operands
   // before they are used
-  llvm::SmallMapVector<Operation *, OperandRange::iterator, 16> worklist;
+  SmallMapVector<Operation *, OperandRange::iterator, 16> worklist;
 
   // Keeps track of operations that have been declared
   DenseSet<Operation *> handledOps;
@@ -104,15 +109,17 @@ private:
   // Constants used during the conversion
   static constexpr size_t noLID = -1UL;
   [[maybe_unused]] static constexpr int64_t noWidth = -1L;
+  static constexpr auto SPACE = " ";
+  static constexpr auto NEWLINE = "\n";
 
   // Tracks symbols in use to avoid naming conflicts
   Namespace symbolNamespace;
 
   /// Field helper functions
 public:
-  // Checks if an operation was declared
-  // If so, its lid will be returned
-  // Otherwise a new lid will be assigned to the op
+  /// Checks if an operation was declared
+  /// If so, its lid will be returned
+  /// Otherwise a new lid will be assigned to the op
   size_t getOpLID(Operation *op) {
     // Look for the original operation declaration
     // Make sure that wires are considered when looking for an lid
@@ -125,17 +132,17 @@ public:
     return f;
   }
 
-  // Associates the current lid to an operation
-  // The LID is then incremented to maintain uniqueness
+  /// Associates the current lid to an operation
+  /// The LID is then incremented to maintain uniqueness
   size_t setOpLID(Operation *op) {
     size_t oplid = lid++;
     opLIDMap[op] = oplid;
     return oplid;
   }
 
-  // Checks if an operation was declared
-  // If so, its lid will be returned
-  // Otherwise -1 will be returned
+  /// Checks if an operation was declared
+  /// If so, its lid will be returned
+  /// Otherwise -1 will be returned
   size_t getOpLID(Value value) {
     Operation *defOp = value.getDefiningOp();
 
@@ -158,28 +165,48 @@ public:
   }
 
 private:
-  // Checks if a sort was declared with the given width
-  // If so, its lid will be returned
-  // Otherwise -1 will be returned
-  size_t getSortLID(size_t w) {
-    if (auto it = sortToLIDMap.find(w); it != sortToLIDMap.end())
+  /// Checks if a sort was declared with the given width
+  /// If so, its lid will be returned
+  /// Otherwise -1 will be returned
+  size_t getBVSortLID(size_t w) {
+    if (auto it = bvSortToLIDMap.find(w); it != bvSortToLIDMap.end())
       return it->second;
 
     // If no lid was found return -1
     return noLID;
   }
 
-  // Associate the sort with a new lid
-  size_t setSortLID(size_t w) {
+  /// Associate the sort with a new lid
+  size_t setBVSortLID(size_t w) {
     size_t sortlid = lid;
     // Add the width to the declared sorts along with the associated line id
-    sortToLIDMap[w] = lid++;
+    bvSortToLIDMap[w] = lid++;
     return sortlid;
   }
 
-  // Checks if a constant of a given size has been declared.
-  // If so, its lid will be returned.
-  // Otherwise -1 will be returned.
+  /// Checks if a sort was declared with the given index/elem width pair.
+  /// If so, its lid will be returned
+  /// Otherwise -1 will be returned
+  size_t getArrSortLID(size_t idxW, size_t elemW) {
+    if (auto it = arrSortToLIDMap.find(std::pair(idxW, elemW));
+        it != arrSortToLIDMap.end())
+      return it->second;
+
+    // If no lid was found return -1
+    return noLID;
+  }
+
+  /// Associate the array sort with a new lid
+  size_t setArrSortLID(size_t idxW, size_t elemW) {
+    size_t sortlid = lid;
+    // Add the width to the declared sorts along with the associated line id
+    arrSortToLIDMap[std::pair(idxW, elemW)] = lid++;
+    return sortlid;
+  }
+
+  /// Checks if a constant of a given size has been declared.
+  /// If so, its lid will be returned.
+  /// Otherwise -1 will be returned.
   size_t getConstLID(int64_t val, size_t w) {
     if (auto it = constToLIDMap.find(APInt(w, val)); it != constToLIDMap.end())
       return it->second;
@@ -188,7 +215,7 @@ private:
     return noLID;
   }
 
-  // Associates a constant declaration to a new lid
+  /// Associates a constant declaration to a new lid
   size_t setConstLID(int64_t val, size_t w) {
     size_t constlid = lid;
     // Keep track of this value in a constant declaration tracker
@@ -198,48 +225,75 @@ private:
 
   /// String generation helper functions
 
-  // Generates a sort declaration instruction given a type ("bitvec" or array)
-  // and a width.
-  void genSort(StringRef type, size_t width) {
+  /// Generates a "bitvec" sort declaration instruction given a width.
+  /// returns the generated sort id
+  size_t genBVSort(size_t width) {
     // Check that the sort wasn't already declared
-    if (getSortLID(width) != noLID) {
-      return; // If it has already been declared then return an empty string
+    if (getBVSortLID(width) != noLID) {
+      return noLID; // If it has already been declared then return -1
     }
 
-    size_t sortlid = setSortLID(width);
+    size_t sortlid = setBVSortLID(width);
 
     // Build and return a sort declaration
-    os << sortlid << " "
-       << "sort"
-       << " " << type << " " << width << "\n";
+    os << sortlid << SPACE << "sort" << SPACE << "bitvec" << SPACE << width
+       << NEWLINE;
+
+    return sortlid;
   }
 
-  // Generates an input declaration given a sort lid and a name.
+  /// Generates an "array" sort declaration instruction given
+  /// an index width and an element width.
+  /// The associated SIDs for for the arguments wil be looked-up here.
+  /// returns the final generated sort id
+  size_t genArrSort(size_t idxW, size_t elemW) {
+    // Check that the sort wasn't already declared
+    if (getArrSortLID(idxW, elemW) != noLID)
+      return noLID;
+
+    // Attribute an LID to the new sort
+    size_t sortLID = setArrSortLID(idxW, elemW);
+
+    // Fetch the associated BV SIDs
+    size_t idxSID = -1, elemSID = -1;
+    if ((idxSID = getBVSortLID(idxW)) == noLID)
+      // If the requested index sort doesn't exists, create it
+      idxSID = genBVSort(idxW);
+
+    // Same case for the element SID
+    if ((elemSID = getBVSortLID(idxSID)) == noLID)
+      elemSID = genBVSort(elemW);
+
+    // Build and emit the array sort declaration
+    os << sortLID << SPACE << "sort" << SPACE << "array" << SPACE << idxSID
+       << SPACE << "elemSID" << NEWLINE;
+
+    return sortLID;
+  }
+
+  /// Generates an input declaration given a sort lid and a name.
   void genInput(size_t inlid, size_t width, StringRef name) {
     // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
     // Generate input declaration
-    os << inlid << " "
-       << "input"
-       << " " << sid << " " << name << "\n";
+    os << inlid << SPACE << "input" << SPACE << sid << SPACE << name << NEWLINE;
   }
 
-  // Generates a constant declaration given a value, a width and a name.
+  /// Generates a constant declaration given a value, a width and a name.
   void genConst(APInt value, size_t width, Operation *op) {
     // For now we're going to assume that the name isn't taken, given that hw
     // is already in SSA form
     size_t opLID = getOpLID(op);
 
     // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
-    os << opLID << " "
-       << "constd"
-       << " " << sid << " " << value << "\n";
+    os << opLID << SPACE << "constd" << SPACE << sid << SPACE << value
+       << NEWLINE;
   }
 
-  // Generates a zero constant expression
+  /// Generates a zero constant expression
   size_t genZero(size_t width) {
     // Check if the constant has been created yet
     size_t zlid = getConstLID(0, width);
@@ -247,42 +301,39 @@ private:
       return zlid;
 
     // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
     // Associate an lid to the new constant
     size_t constlid = setConstLID(0, width);
 
     // Build and return the zero btor instruction
-    os << constlid << " "
-       << "zero"
-       << " " << sid << "\n";
+    os << constlid << SPACE << "zero" << SPACE << sid << NEWLINE;
     return constlid;
   }
 
-  // Generates an init statement, which allows for the use of initial values
-  // operands in compreg registers
+  /// Generates an init statement, which allows for the use of initial values
+  /// operands in compreg registers
   void genInit(Operation *reg, Value initVal, int64_t width) {
     // Retrieve the various identifiers we require for this
     size_t regLID = getOpLID(reg);
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
     size_t initValLID = getOpLID(initVal);
 
     // Build and emit the string (the lid here doesn't need to be associated
     // to an op as it won't be used)
-    os << lid++ << " "
-       << "init"
-       << " " << sid << " " << regLID << " " << initValLID << "\n";
+    os << lid++ << SPACE << "init" << SPACE << sid << SPACE << regLID << SPACE
+       << initValLID << NEWLINE;
   }
 
-  // Generates a binary operation instruction given an op name, two operands
-  // and a result width.
+  /// Generates a binary operation instruction given an op name, two operands
+  /// and a result width.
   void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
                 size_t width) {
     // Set the LID for this operation
     size_t opLID = getOpLID(binop);
 
     // Find the sort's lid
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
     // Assuming that the operands were already emitted
     // Find the LIDs associated to the operands
@@ -290,14 +341,14 @@ private:
     size_t op2LID = getOpLID(op2);
 
     // Build and return the string
-    os << opLID << " " << inst << " " << sid << " " << op1LID << " " << op2LID
-       << "\n";
+    os << opLID << SPACE << inst << SPACE << sid << SPACE << op1LID << SPACE
+       << op2LID << NEWLINE;
   }
 
-  // Expands a variadic operation into multiple binary operation instructions
+  /// Expands a variadic operation into multiple binary operation instructions
   void genVariadicOp(StringRef inst, Operation *op, size_t width) {
     auto operands = op->getOperands();
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
     if (operands.size() == 0) {
       op->emitError("variadic operations with no operands are not supported");
@@ -332,14 +383,14 @@ private:
         // For concat, the sort width increases with each operand
         currentWidth += operand.getType().getIntOrFloatBitWidth();
         // Ensure that the sort exists
-        genSort("bitvec", currentWidth);
+        genBVSort(currentWidth);
       }
 
       auto thisLid = lid++;
       auto thisOperandLID = getOpLID(operand);
-      os << thisLid << " " << inst << " "
-         << (isConcat ? sortToLIDMap.at(currentWidth) : sid) << " "
-         << prevOperandLID << " " << thisOperandLID << "\n";
+      os << thisLid << SPACE << inst << SPACE
+         << (isConcat ? bvSortToLIDMap.at(currentWidth) : sid) << SPACE
+         << prevOperandLID << SPACE << thisOperandLID << NEWLINE;
       prevOperandLID = thisLid;
     }
 
@@ -347,23 +398,21 @@ private:
     opLIDMap[op] = prevOperandLID;
   }
 
-  // Generates a slice instruction given an operand, the lowbit, and the width
+  /// Generates a slice instruction given an operand, the lowbit, and the width
   void genSlice(Operation *srcop, Value op0, size_t lowbit, int64_t width) {
     // Assign a LID to this operation
     size_t opLID = getOpLID(srcop);
 
     // Find the sort's associated lid in order to use it in the instruction
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
     // Assuming that the operand has already been emitted
     // Find the LID associated to the operand
     size_t op0LID = getOpLID(op0);
 
     // Build and return the slice instruction
-    os << opLID << " "
-       << "slice"
-       << " " << sid << " " << op0LID << " " << (lowbit + width - 1) << " "
-       << lowbit << "\n";
+    os << opLID << SPACE << "slice" << SPACE << sid << SPACE << op0LID << SPACE
+       << (lowbit + width - 1) << SPACE << lowbit << NEWLINE;
   }
 
   /// Generates a chain of concats to represent a replicate op
@@ -375,13 +424,12 @@ private:
     for (size_t i = 1; i < count; ++i) {
       currentWidth += inputWidth;
       // Ensure that the sort exists
-      genSort("bitvec", currentWidth);
+      genBVSort(currentWidth);
 
       auto thisLid = lid++;
-      os << thisLid << " "
-         << "concat"
-         << " " << sortToLIDMap.at(currentWidth) << " " << prevOperandLID << " "
-         << getOpLID(op0) << "\n";
+      os << thisLid << SPACE << "concat" << SPACE
+         << bvSortToLIDMap.at(currentWidth) << SPACE << prevOperandLID << SPACE
+         << getOpLID(op0) << NEWLINE;
       prevOperandLID = thisLid;
     }
 
@@ -389,73 +437,71 @@ private:
     opLIDMap[srcop] = prevOperandLID;
   }
 
-  // Generates a constant declaration given a value, a width and a name
+  /// Generates a constant declaration given a value, a width and a name
   void genUnaryOp(Operation *srcop, Operation *op0, StringRef inst,
                   size_t width) {
     // Register the source operation with the current line id
     size_t opLID = getOpLID(srcop);
 
     // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
     // Assuming that the operand has already been emitted
     // Find the LID associated to the operand
     size_t op0LID = getOpLID(op0);
 
-    os << opLID << " " << inst << " " << sid << " " << op0LID << "\n";
+    os << opLID << SPACE << inst << SPACE << sid << SPACE << op0LID << NEWLINE;
   }
 
-  // Generates a constant declaration given a value, a width and a name and
-  // returns the LID associated to it
+  /// Generates a constant declaration given a value, a width and a name and
+  /// returns the LID associated to it
   void genUnaryOp(Operation *srcop, Value op0, StringRef inst, size_t width) {
     genUnaryOp(srcop, op0.getDefiningOp(), inst, width);
   }
 
-  // Generates a constant declaration given a operand lid, a width and a name
+  /// Generates a constant declaration given a operand lid, a width and a name
   size_t genUnaryOp(size_t op0LID, StringRef inst, size_t width) {
     // Register the source operation with the current line id
     size_t curLid = lid++;
 
     // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
-    os << curLid << " " << inst << " " << sid << " " << op0LID << "\n";
+    os << curLid << SPACE << inst << SPACE << sid << SPACE << op0LID << NEWLINE;
     return curLid;
   }
 
-  // Generates a constant declaration given a value, a width and a name
+  /// Generates a constant declaration given a value, a width and a name
   size_t genUnaryOp(Operation *op0, StringRef inst, size_t width) {
     return genUnaryOp(getOpLID(op0), inst, width);
   }
 
-  // Generates a constant declaration given a value, a width and a name and
-  // returns the LID associated to it
+  /// Generates a constant declaration given a value, a width and a name and
+  /// returns the LID associated to it
   size_t genUnaryOp(Value op0, StringRef inst, size_t width) {
     return genUnaryOp(getOpLID(op0), inst, width);
   }
 
-  // Generate a btor2 assertion given an assertion operation
-  // Note that a predicate inversion must have already been generated at this
-  // point
+  /// Generate a btor2 assertion given an assertion operation
+  /// Note that a predicate inversion must have already been generated at this
+  /// point
   void genBad(Operation *assertop) {
     // Start by finding the expression lid
     size_t assertLID = getOpLID(assertop);
     genBad(assertLID);
   }
 
-  // Generate a btor2 assertion given an assertion operation's LID
-  // Note that a predicate inversion must have already been generated at this
-  // point
+  /// Generate a btor2 assertion given an assertion operation's LID
+  /// Note that a predicate inversion must have already been generated at this
+  /// point
   void genBad(size_t assertLID) {
     // Build and return the btor2 string
     // Also update the lid as this instruction is not associated to an mlir op
-    os << lid++ << " "
-       << "bad"
-       << " " << assertLID << "\n";
+    os << lid++ << SPACE << "bad" << SPACE << assertLID << NEWLINE;
   }
 
-  // Generate a btor2 constraint given an expression from an assumption
-  // operation
+  /// Generate a btor2 constraint given an expression from an assumption
+  /// operation
   void genConstraint(Value expr) {
     // Start by finding the expression lid
     size_t exprLID = getOpLID(expr);
@@ -463,18 +509,16 @@ private:
     genConstraint(exprLID);
   }
 
-  // Generate a btor2 constraint given an expression from an assumption
-  // operation
+  /// Generate a btor2 constraint given an expression from an assumption
+  /// operation
   void genConstraint(size_t exprLID) {
     // Build and return the btor2 string
     // Also update the lid as this instruction is not associated to an mlir op
-    os << lid++ << " "
-       << "constraint"
-       << " " << exprLID << "\n";
+    os << lid++ << SPACE << "constraint" << SPACE << exprLID << NEWLINE;
   }
 
-  // Generate an ite instruction (if then else) given a predicate, two values
-  // and a res width
+  /// Generate an ite instruction (if then else) given a predicate, two values
+  /// and a res width
   void genIte(Operation *srcop, Value cond, Value t, Value f, int64_t width) {
     // Retrieve the operand lids, assuming they were emitted
     size_t condLID = getOpLID(cond);
@@ -484,23 +528,22 @@ private:
     genIte(srcop, condLID, tLID, fLID, width);
   }
 
-  // Generate an ite instruction (if then else) given a predicate, two values
-  // and a res width
+  /// Generate an ite instruction (if then else) given a predicate, two values
+  /// and a res width
   void genIte(Operation *srcop, size_t condLID, size_t tLID, size_t fLID,
               int64_t width) {
     // Register the source operation with the current line id
     size_t opLID = getOpLID(srcop);
 
     // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
     // Build and return the ite instruction
-    os << opLID << " "
-       << "ite"
-       << " " << sid << " " << condLID << " " << tLID << " " << fLID << "\n";
+    os << opLID << SPACE << "ite" << SPACE << sid << SPACE << condLID << SPACE
+       << tLID << SPACE << fLID << NEWLINE;
   }
 
-  // Generate a logical implication given a lhs and a rhs
+  /// Generate a logical implication given a lhs and a rhs
   size_t genImplies(Operation *srcop, Value lhs, Value rhs) {
     // Retrieve LIDs for the lhs and rhs
     size_t lhsLID = getOpLID(lhs);
@@ -509,7 +552,7 @@ private:
     return genImplies(srcop, lhsLID, rhsLID);
   }
 
-  // Generate a logical implication given a lhs and a rhs
+  /// Generate a logical implication given a lhs and a rhs
   size_t genImplies(Operation *srcop, size_t lhsLID, size_t rhsLID) {
     // Register the source operation with the current line id
     size_t opLID = getOpLID(srcop);
@@ -518,33 +561,31 @@ private:
 
   size_t genImplies(size_t opLID, size_t lhsLID, size_t rhsLID) {
     // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(1);
+    size_t sid = bvSortToLIDMap.at(1);
     // Build and emit the implies operation
-    os << opLID << " "
-       << "implies"
-       << " " << sid << " " << lhsLID << " " << rhsLID << "\n";
+    os << opLID << SPACE << "implies" << SPACE << sid << SPACE << lhsLID
+       << SPACE << rhsLID << NEWLINE;
     return opLID;
   }
 
-  // Generates a state instruction given a width and a name
+  /// Generates a state instruction given a width and a name
   void genState(Operation *srcop, int64_t width, StringRef name) {
     // Register the source operation with the current line id
     size_t opLID = getOpLID(srcop);
 
     // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
     // Build and return the state instruction
-    os << opLID << " "
-       << "state"
-       << " " << sid << " " << symbolNamespace.newName(name) << "\n";
+    os << opLID << SPACE << "state" << SPACE << sid << SPACE
+       << symbolNamespace.newName(name) << NEWLINE;
   }
 
-  // Generates a next instruction, given a width, a state LID, and a next
-  // value LID
+  /// Generates a next instruction, given a width, a state LID, and a next
+  /// value LID
   void genNext(Value next, Operation *reg, int64_t width) {
     // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(width);
+    size_t sid = bvSortToLIDMap.at(width);
 
     // Retrieve the LIDs associated to reg and next
     size_t regLID = getOpLID(reg);
@@ -552,23 +593,20 @@ private:
 
     // Build and return the next instruction
     // Also update the lid as this instruction is not associated to an mlir op
-    os << lid++ << " "
-       << "next"
-       << " " << sid << " " << regLID << " " << nextLID << "\n";
+    os << lid++ << SPACE << "next" << SPACE << sid << SPACE << regLID << SPACE
+       << nextLID << NEWLINE;
   }
 
-  // Generates a delimiter comment to mark the start or end of a module given a
-  // module symbol
+  /// Generates a delimiter comment to mark the start or end of a module given a
+  /// module symbol
   void genModuleComment(StringRef name, bool end = false) {
-    os << "; **************************************"
-       << "\n"
-       << "; " << (end ? "END" : "START") << " OF MODULE: " << name << "\n"
-       << "; **************************************"
-       << "\n";
+    os << "; **************************************" << NEWLINE << "; "
+       << (end ? "END" : "START") << " OF MODULE: " << name << NEWLINE
+       << "; **************************************" << NEWLINE;
   }
 
-  // Verifies that the sort required for the given operation's btor2 emission
-  // has been generated
+  /// Verifies that the sort required for the given operation's btor2 emission
+  /// has been generated
   int64_t requireSort(mlir::Type type) {
     // Start by figuring out what sort needs to be generated
     int64_t width = hw::getBitWidth(type);
@@ -580,15 +618,15 @@ private:
 
     // Generate the sort regardles of resulting width (nothing will be added
     // if the sort already exists)
-    genSort("bitvec", width);
+    genBVSort(width);
     return width;
   }
 
-  // Calls the right function to fetch `next` operand
+  /// Calls the right function to fetch `next` operand
   Value extractRegNext(seq::CompRegOp reg) const { return reg.getInput(); }
   Value extractRegNext(seq::FirRegOp reg) const { return reg.getNext(); }
 
-  // Extracts the arguments from a given register op
+  /// Extracts the arguments from a given register op
   template <typename RegT>
   void extractRegArgs(RegT reg, int64_t &width, Value &next, Value &reset,
                       Value &resetVal, Value &clk) const {
@@ -601,8 +639,8 @@ private:
     next = extractRegNext(reg);
   }
 
-  // Generates the transitions required to finalize the register to state
-  // transition system conversion
+  /// Generates the transitions required to finalize the register to state
+  /// transition system conversion
   void finalizeRegVisit(Operation *op) {
     int64_t width;
     Value next, reset, resetVal, clk;
@@ -632,7 +670,7 @@ private:
       foundClock = clk;
     }
 
-    genSort("bitvec", width);
+    genBVSort(width);
 
     // Next should already be associated to an LID at this point
     // As we are going to override it, we need to keep track of the original
@@ -702,16 +740,16 @@ private:
   }
 
 public:
-  // Ignore all other explicitly mentioned operations
-  // ** Purposefully left empty **
+  /// Ignore all other explicitly mentioned operations
+  /// ** Purposefully left empty **
   void ignore(Operation *op) {}
 
   /// Visitor Methods used later on for pattern matching
 
-  // Visitor for the inputs of the module.
-  // This will generate additional sorts and input declaration explicitly for
-  // btor2 Note that outputs are ignored in btor2 as they do not contribute to
-  // the final assertions
+  /// Visitor for the inputs of the module.
+  /// This will generate additional sorts and input declaration explicitly for
+  /// btor2 Note that outputs are ignored in btor2 as they do not contribute to
+  /// the final assertions
   void visit(hw::PortInfo &port) {
     // Separate the inputs from outputs and generate the first btor2 lines for
     // input declaration. We only consider ports with an explicit bit-width (so
@@ -738,9 +776,9 @@ public:
     }
   }
 
-  // Emits the associated btor2 operation for a constant. Note that for
-  // simplicity, we will only emit `constd` in order to avoid bit-string
-  // conversions
+  /// Emits the associated btor2 operation for a constant. Note that for
+  /// simplicity, we will only emit `constd` in order to avoid bit-string
+  /// conversions
   void visitTypeOp(hw::ConstantOp op) {
     // Make sure the constant hasn't already been created
     if (handledOps.contains(op))
@@ -754,7 +792,7 @@ public:
     genConst(op.getValue(), w, op);
   }
 
-  // Wires should have been removed in PrepareForFormal
+  /// Wires should have been removed in PrepareForFormal
   void visit(hw::WireOp op) {
     op->emitError("Wires are not supported in btor!");
     return signalPassFailure();
@@ -762,14 +800,14 @@ public:
 
   void visitTypeOp(Operation *op) { visitInvalidTypeOp(op); }
 
-  // Handles non-hw operations
+  /// Handles non-hw operations
   void visitInvalidTypeOp(Operation *op) {
     // Try comb ops
     dispatchCombinationalVisitor(op);
   }
 
-  // Binary operations are all emitted the same way, so we can group them into
-  // a single method.
+  /// Binary operations are all emitted the same way, so we can group them into
+  /// a single method.
   template <typename Op>
   void visitBinOp(Op op, StringRef inst) {
     // Generate the sort
@@ -792,7 +830,7 @@ public:
     genVariadicOp(inst, op, w);
   }
 
-  // Visitors for the binary ops
+  /// Visitors for the binary ops
   void visitComb(comb::AddOp op) { visitVariadicOp(op, "add"); }
   void visitComb(comb::SubOp op) { visitBinOp(op, "sub"); }
   void visitComb(comb::MulOp op) { visitVariadicOp(op, "mul"); }
@@ -807,8 +845,8 @@ public:
   void visitComb(comb::XorOp op) { visitVariadicOp(op, "xor"); }
   void visitComb(comb::ConcatOp op) { visitVariadicOp(op, "concat"); }
 
-  // Extract ops translate to a slice operation in btor2 in a one-to-one
-  // manner
+  /// Extract ops translate to a slice operation in btor2 in a one-to-one
+  /// manner
   void visitComb(comb::ExtractOp op) {
     int64_t w = requireSort(op.getType());
 
@@ -821,9 +859,9 @@ public:
     genSlice(op, op0, lb, w);
   }
 
-  // Btor2 uses similar syntax as hw for its comparisons
-  // So we simply need to emit the cmpop name and check for corner cases
-  // where the namings differ.
+  /// Btor2 uses similar syntax as hw for its comparisons
+  /// So we simply need to emit the cmpop name and check for corner cases
+  /// where the namings differ.
   void visitComb(comb::ICmpOp op) {
     Value lhs = op.getOperand(0);
     Value rhs = op.getOperand(1);
@@ -845,14 +883,14 @@ public:
       pred = "sgte";
 
     // Width of result is always 1 for comparison
-    genSort("bitvec", 1);
+    genBVSort(1);
 
     // With the special cases out of the way, the emission is the same as that
     // of a binary op
     genBinOp(pred, op, lhs, rhs, 1);
   }
 
-  // Muxes generally convert to an ite statement
+  /// Muxes generally convert to an ite statement
   void visitComb(comb::MuxOp op) {
     // Extract predicate, true and false values
     Value pred = op.getCond();
@@ -867,7 +905,7 @@ public:
     genIte(op, pred, tval, fval, w);
   }
 
-  // Replicate ops are expanded as a series of concats
+  /// Replicate ops are expanded as a series of concats
   void visitComb(comb::ReplicateOp op) {
     Value op0 = op.getOperand();
     auto count = op.getMultiple();
@@ -879,16 +917,16 @@ public:
 
   void visitComb(Operation *op) { visitInvalidComb(op); }
 
-  // Try sv ops when comb is done
+  /// Try sv ops when comb is done
   void visitInvalidComb(Operation *op) { dispatchSVVisitor(op); }
 
-  // Assertions are negated then converted to a btor2 bad instruction
+  /// Assertions are negated then converted to a btor2 bad instruction
   void visitSV(sv::AssertOp op) {
     // Expression is what we will try to invert for our assertion
     Value expr = op.getExpression();
 
     // This sort is for assertion inversion and potential implies
-    genSort("bitvec", 1);
+    genBVSort(1);
 
     // Check for an overaching enable
     // In our case the sv.if operation will probably only be used when
@@ -910,14 +948,15 @@ public:
     // Generate the bad btor2 instruction
     genBad(op);
   }
-  // Assumptions are converted to a btor2 constraint instruction
+
+  /// Assumptions are converted to a btor2 constraint instruction
   void visitSV(sv::AssumeOp op) {
     // Extract the expression that we want our constraint to be about
     Value expr = op.getExpression();
     genConstraint(expr);
   }
 
-  // Our only concern with an AlwaysOp is that it follows clocking constraints
+  /// Our only concern with an AlwaysOp is that it follows clocking constraints
   void visitSV(sv::AlwaysOp op) {
     if (op.getEvents().size() > 1) {
       op->emitError("Multiple events in sv.always are not supported.");
@@ -954,7 +993,7 @@ public:
 
   void visitSV(Operation *op) { visitInvalidSV(op); }
 
-  // Once SV Ops are visited, we need to check for seq ops
+  /// Once SV Ops are visited, we need to check for seq ops
   void visitInvalidSV(Operation *op) { dispatchVerifVisitor(op); }
 
   template <typename Op>
@@ -964,7 +1003,7 @@ public:
     Value en = op.getEnable();
 
     // This sort is for assertion inversion and potential implies
-    genSort("bitvec", 1);
+    genBVSort(1);
 
     size_t assertLID = noLID;
     // Check for a related enable signal
@@ -993,7 +1032,7 @@ public:
     // Check for a related enable signal
     if (en) {
       // This sort is for assertion inversion and potential implies
-      genSort("bitvec", 1);
+      genBVSort(1);
       // Generate the implication
       assumeLID = genImplies(op, en, prop);
     }
@@ -1002,20 +1041,20 @@ public:
     genConstraint(assumeLID);
   }
 
-  // Folds the enable signal into the property and converts the result into a
-  // bad instruction.
+  /// Folds the enable signal into the property and converts the result into a
+  /// bad instruction.
   void visitVerif(verif::AssertOp op) { visitAssertLike(op); }
   void visitVerif(verif::ClockedAssertOp op) { visitAssertLike(op); }
 
-  // Fold the enable into the property and convert the assumption into a
-  // constraint instruction.
+  /// Fold the enable into the property and convert the assumption into a
+  /// constraint instruction.
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
   void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
-  // Symbolic values get handled the same way as block arguments.
-  // The one difference if that we treat them as regular opertions rather than
-  // block arguments, i.e. we don't need to special case store these inputLIDs
-  // and can simply store them in opLIDs like the other operations.
+  /// Symbolic values get handled the same way as block arguments.
+  /// The one difference if that we treat them as regular opertions rather than
+  /// block arguments, i.e. we don't need to special case store these inputLIDs
+  /// and can simply store them in opLIDs like the other operations.
   void visitVerif(verif::SymbolicValueOp op) {
     // Retrieve name, make sure it's unique
     auto name = symbolNamespace.newName(op.getName().value_or(""));
@@ -1031,17 +1070,17 @@ public:
     genInput(inlid, w, name);
   }
 
-  // Error out on most unhandled verif ops
+  /// Error out on most unhandled verif ops
   void visitUnhandledVerif(Operation *op) {
     op->emitError("not supported in btor2!");
     return signalPassFailure();
   }
 
-  // Dispatch next visitors
+  /// Dispatch next visitors
   void visitInvalidVerif(Operation *op) { visit(op); }
 
-  // Seq operation visitor, that dispatches to other seq ops
-  // Also handles all remaining operations that should be explicitly ignored
+  /// Seq operation visitor, that dispatches to other seq ops
+  /// Also handles all remaining operations that should be explicitly ignored
   void visit(Operation *op) {
     // Typeswitch is used here because other seq types will be supported
     // like all operations relating to memories and CompRegs
@@ -1051,9 +1090,9 @@ public:
         .Default([&](auto expr) { visitUnsupportedOp(op); });
   }
 
-  // Firrtl registers generate a state instruction
-  // The final update is also used to generate a set of next btor
-  // instructions
+  /// Firrtl registers generate a state instruction
+  /// The final update is also used to generate a set of next btor
+  /// instructions
   void visit(seq::FirRegOp reg) {
     // Start by retrieving the register's name and width
     StringRef regName = reg.getName();
@@ -1073,7 +1112,7 @@ public:
     regOps.push_back(reg);
   }
 
-  // Compregs behave in a similar way as firregs for btor2 emission
+  /// Compregs behave in a similar way as firregs for btor2 emission
   void visit(seq::CompRegOp reg) {
     // Start by retrieving the register's name and width
     StringRef regName = reg.getName().value();
@@ -1168,8 +1207,8 @@ public:
       }
   }
 
-  // Tail method that handles all operations that weren't handled by previous
-  // visitors. Here we simply make the pass fail or ignore the op
+  /// Tail method that handles all operations that weren't handled by previous
+  /// visitors. Here we simply make the pass fail or ignore the op
   void visitUnsupportedOp(Operation *op) {
     // Check for explicitly ignored ops vs unsupported ops (which cause a
     // failure)
@@ -1307,7 +1346,7 @@ public:
 
   /// Clear all data structures to allow for pass reuse
   void clearData() {
-    sortToLIDMap.clear();
+    bvSortToLIDMap.clear();
     constToLIDMap.clear();
     opLIDMap.clear();
     inputLIDs.clear();
