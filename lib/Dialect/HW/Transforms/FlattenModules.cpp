@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/Builders.h"
@@ -60,7 +61,7 @@ private:
 struct PrefixingInliner : public InlinerInterface {
   StringRef prefix;
   InnerSymbolNamespace *ns;
-  HWModuleOp parentModule;
+  Operation *parentModule;
   HWModuleOp sourceModule;
   DenseMap<StringAttr, StringAttr> *symMapping;
   mlir::AttrTypeReplacer *replacer;
@@ -68,7 +69,7 @@ struct PrefixingInliner : public InlinerInterface {
   hw::InnerRefAttr instanceRef;
 
   PrefixingInliner(MLIRContext *context, StringRef prefix,
-                   InnerSymbolNamespace *ns, HWModuleOp parentModule,
+                   InnerSymbolNamespace *ns, Operation *parentModule,
                    HWModuleOp sourceModule,
                    DenseMap<StringAttr, StringAttr> *symMapping,
                    mlir::AttrTypeReplacer *replacer, HierPathTable *pathsTable,
@@ -225,7 +226,7 @@ void FlattenModulesPass::runOnOperation() {
 
   // Cache InnerSymbolNamespace objects per parent module to avoid
   // recreating them for each instance in the same parent.
-  DenseMap<HWModuleOp, std::unique_ptr<InnerSymbolNamespace>> nsCache;
+  DenseMap<Operation *, std::unique_ptr<InnerSymbolNamespace>> nsCache;
 
   // Iterate over all instances in the instance graph. This ensures we visit
   // every module, even private top modules (private and never instantiated).
@@ -281,8 +282,9 @@ void FlattenModulesPass::runOnOperation() {
 
         bool isLastModuleUse = --numUsesLeft == 0;
 
-        // Get the parent module
-        HWModuleOp parentModule = inst->getParentOfType<HWModuleOp>();
+        // Get the parent module, only accept hw::HWModuleOp or verif::FormalOp
+        Operation *parentModule =
+            inst->getParentOfType<hw::HWModuleOp, verif::FormalOp>();
 
         // Get or create the InnerSymbolNamespace for the parent module
         auto &nsPtr = nsCache[parentModule];
@@ -307,8 +309,16 @@ void FlattenModulesPass::runOnOperation() {
               if (it == oldToNewInnerSyms.end())
                 return {attr, WalkResult::skip()};
 
-              auto newAttr = InnerRefAttr::get(parentModule.getModuleNameAttr(),
-                                               it->second);
+              InnerRefAttr newAttr;
+              // Extract module name if hw.module
+              if (auto hwmodule = dyn_cast<hw::HWModuleOp>(parentModule))
+                newAttr =
+                    InnerRefAttr::get(hwmodule.getModuleNameAttr(), it->second);
+              // Use symbol name if it's a verif.formal
+              else if (auto formal = dyn_cast<verif::FormalOp>(parentModule))
+                newAttr =
+                    InnerRefAttr::get(formal.getSymNameAttr(), it->second);
+
               return {newAttr, WalkResult::skip()};
             });
 
