@@ -64,7 +64,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   SpecializeOption.cpp
   StripDomains.cpp
   VBToBV.cpp
-  Vectorization.cpp
 
   DEPENDS
   CIRCTFIRRTLTransformsIncGen
