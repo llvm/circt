@@ -91,6 +91,82 @@ def test_cosim_bsp_rejects_conflicting_channel_services():
     CosimBSP(Top, dma_engine_pair=engines, channel_service=channel_service)
 
 
+def test_channel_engine_service_connects_read_list(tmp_path):
+  """An engine with a `hostmem_read_list` port gets a burst-read connection
+  to HostMem: the design compiles only if the service wires that port."""
+  from pycde import (Clock, Input, InputChannel, OutputChannel, Reset, System,
+                     esi, generator)
+  from pycde.types import Bits, Bundle, BundledChannel, Channel, ChannelDirection
+
+  word = Bits(64)
+  read_list_type = Bundle([
+      BundledChannel("req", ChannelDirection.FROM,
+                     esi.HostMem.read_req_burst_type(16)),
+      BundledChannel("resp", ChannelDirection.TO,
+                     esi.HostMem.read_window(word, 1)),
+  ])
+
+  def to_host(client_type):
+
+    class ToHost(esi.EngineModule):
+
+      @property
+      def TypeName(self):
+        return "ReadListTestToHost"
+
+      clk = Clock()
+      rst = Reset()
+      input_channel = InputChannel(client_type)
+
+      @generator
+      def build(ports):
+        pass
+
+    return ToHost
+
+  def from_host(client_type):
+
+    class FromHost(esi.EngineModule):
+
+      @property
+      def TypeName(self):
+        return "ReadListTestFromHost"
+
+      clk = Clock()
+      rst = Reset()
+      hostmem_read_list = Input(read_list_type)
+      output_channel = OutputChannel(client_type)
+
+      @generator
+      def build(ports):
+        # Read one word at address 0 forever and forward each word.
+        req_type = esi.HostMem.read_req_burst_type(16)
+        req, _ = Channel(req_type).wrap(
+            req_type({
+                "address": 0,
+                "tag": 0,
+                "length": 1
+            }),
+            Bits(1)(1))
+        resp = ports.hostmem_read_list.unpack(req=req)["resp"]
+        ports.output_channel = resp.transform(
+            lambda w: w.unwrap()["data"][0].bitcast(client_type))
+
+    return FromHost
+
+  class Top(Module):
+    clk = Clock()
+    rst = Reset()
+
+    @generator
+    def build(ports):
+      words = esi.ChannelService.from_host(esi.AppID("words"), word)
+      esi.ChannelService.to_host(esi.AppID("echo"), words)
+
+  bsp = CosimBSP(Top, channel_service=ChannelEngineService(to_host, from_host))
+  System(bsp, output_directory=str(tmp_path)).compile()
+
+
 @pytest.mark.parametrize("max_outstanding", [1, 2, 64])
 @pytest.mark.parametrize("word_bits", [64, 256])
 def test_read_req_splitter_generates(tmp_path, word_bits, max_outstanding):
