@@ -66,4 +66,3 @@ hw.module @var_declarations() {
     %alias_value = sv.var : !sv.var<!hw.typealias<@var_types::@byte_t, i8>>
     %alias_unpacked = sv.var :  !sv.var<!hw.uarray<2x!hw.typealias<@var_types::@byte_t, i8>>>
 }
-
