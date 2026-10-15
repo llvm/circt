@@ -426,10 +426,10 @@ def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
 }
 
 def VarAssignOp : SVOp<"var_assign", [VarTypeConstraint<"src", "dest">,
-                                 NonProceduralOp]> {
+                                      NonProceduralOp]> {
   let summary = "Continuous assignment for a single driver variable";
   let description = [{
-    A SystemVerilog assignment statement 'x = y;' to a variable.
+    A SystemVerilog assignment statement 'assign x = y;' to a variable.
     These occur in module scope.  See SV Spec 10.3.2.
   }];
   let arguments = (ins VarType:$dest, VarElementType:$src);
