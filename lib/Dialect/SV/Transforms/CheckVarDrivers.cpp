@@ -22,9 +22,6 @@
 // var/net migration lands, drop the legacy handling (see the TODOs below) and
 // convert the tests to sv.var/sv.var_assign.
 //
-// Package variables, ref ports/aliasing, the always_comb/always_ff
-// single-writer-process rule, and ifdef/generate guard filtering are out of
-// scope for this pass; see the SV var/net RFC.
 //
 //===----------------------------------------------------------------------===//
 
