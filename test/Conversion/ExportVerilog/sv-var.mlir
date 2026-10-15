@@ -79,3 +79,4 @@ hw.module @var_assignments(in %a: i32, in %b: i8) {
   sv.var_assign %v, %a : i32
   sv.var_assign %w, %b : i8
 }
+
