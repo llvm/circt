@@ -66,3 +66,16 @@ hw.module @var_declarations() {
     %alias_value = sv.var : !sv.var<!hw.typealias<@var_types::@byte_t, i8>>
     %alias_unpacked = sv.var :  !sv.var<!hw.uarray<2x!hw.typealias<@var_types::@byte_t, i8>>>
 }
+
+// VARLOGIC-LABEL: module var_assignments(
+// VARLOGIC:         var logic [31:0] v;
+// VARLOGIC:         var logic [7:0]  w;
+// VARLOGIC:         assign v = a;
+// VARLOGIC-NEXT:    assign w = b;
+
+hw.module @var_assignments(in %a: i32, in %b: i8) {
+  %v = sv.var : !sv.var<i32>
+  %w = sv.var : !sv.var<i8>
+  sv.var_assign %v, %a : i32
+  sv.var_assign %w, %b : i8
+}
