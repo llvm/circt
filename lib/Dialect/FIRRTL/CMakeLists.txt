@@ -46,6 +46,7 @@ add_circt_dialect_library(CIRCTFIRRTL
 
   LINK_LIBS PUBLIC
   CIRCTSupport
+  CIRCTDebug
   CIRCTHW
   CIRCTOM
   CIRCTSeq
