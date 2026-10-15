@@ -33,10 +33,6 @@ constexpr uint64_t esiApiVersion = 1;
 
 void registerESIPasses();
 
-/// Name of dialect attribute which governs whether or not to bundle (i.e. use
-/// SystemVerilog interfaces) channel signal wires on external modules.
-constexpr StringRef extModBundleSignalsAttrName = "esi.bundle";
-
 /// Name of dialect attribute which governs whether or not to flatten struct
 /// ports into a bunch of individual 'data' wires.
 constexpr StringRef extModPortFlattenStructsAttrName = "esi.portFlattenStructs";

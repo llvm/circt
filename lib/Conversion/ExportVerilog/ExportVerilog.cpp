@@ -4201,6 +4201,7 @@ private:
                       PPExtString postSyntax = PPExtString(";"),
                       std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   LogicalResult visitSV(AssignOp op);
+  LogicalResult visitSV(VarAssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
   LogicalResult visitSV(ForceOp op);
@@ -4413,6 +4414,13 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   if (emitter.assignsInlined.count(op))
     return success();
 
+  // Emit SV attributes. See Spec 12.3.
+  emitSVAttributes(op);
+
+  return emitAssignLike(op, PPExtString("="), PPExtString("assign"));
+}
+
+LogicalResult StmtEmitter::visitSV(VarAssignOp op) {
   // Emit SV attributes. See Spec 12.3.
   emitSVAttributes(op);
 
@@ -6759,15 +6767,26 @@ void ModuleEmitter::emitPortList(Operation *module,
           break;
         }
       }
-      StringRef wire = state.options.emitWireInPorts ? "wire " : "";
-      size_t startOfNamePos = direction.size() + wire.size() + maxTypeWidth;
+      StringRef portDecl;
+      switch (state.options.emitPortType) {
+      case circt::LoweringOptions::EmitPortType::emitWire:
+        portDecl = "wire ";
+        break;
+      case circt::LoweringOptions::EmitPortType::emitVarLogic:
+        if (!hasExplicitDataType(portType))
+          portDecl = emitAsTwoStateType ? "var " : "var logic ";
+        break;
+      case circt::LoweringOptions::EmitPortType::emitNone:
+        break;
+      }
+      size_t startOfNamePos = direction.size() + portDecl.size() + maxTypeWidth;
       // Modport-typed ports (e.g., MyBundle.sink) already encode their
       // direction in the interface modport definition, so we suppress the
       // direction and wire keywords for them.
       if (!isa<ModportType>(portType)) {
         ps << direction;
-        if (!wire.empty())
-          ps << wire;
+        if (!portDecl.empty())
+          ps << portDecl;
         if (!portTypeStrings[portIdx].empty())
           ps << portTypeStrings[portIdx];
         if (portTypeStrings[portIdx].size() < maxTypeWidth)
