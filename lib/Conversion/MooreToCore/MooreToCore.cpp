@@ -12,7 +12,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/LLHD/LLHDOps.h"
-#include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/Sim/SimOps.h"
@@ -35,7 +34,6 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/RegionUtils.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
 
 namespace circt {
@@ -3513,6 +3511,18 @@ struct StringToUpperOpConversion : public OpConversionPattern<StringToUpperOp> {
   }
 };
 
+struct StringSubstrOpConversion : public OpConversionPattern<StringSubstrOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringSubstrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringSubstrOp>(
+        op, adaptor.getStr(), adaptor.getStart(), adaptor.getEnd());
+    return success();
+  }
+};
+
 struct ReadMemBIOpConversion : public OpConversionPattern<ReadMemBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -4165,6 +4175,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     StringICompareOpConversion,
     StringToLowerOpConversion,
     StringToUpperOpConversion,
+    StringSubstrOpConversion,
+
     // Queue operations
     QueueSizeBIOpConversion,
     QueuePushBackOpConversion,

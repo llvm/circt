@@ -898,6 +898,26 @@ def StringToUpperOp: SimOp<"string.toupper", [Pure]> {
 
   let assemblyFormat = "$input attr-dict";
 }
+
+def StringSubstrOp : SimOp<"string.substr", [Pure]> {
+  let summary = "Extract a substring";
+
+  let description = [{
+    Returns the characters from the start through end indices inclusive, or
+    the empty string if the range is invalid.
+  }];
+
+  let arguments = (ins
+    DynamicStringType:$str,
+    I32:$start,
+    I32:$end
+  );
+
+  let results = (outs DynamicStringType:$result);
+
+  let assemblyFormat = "$str `[` $start `:` $end `]` attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Queues
 //===----------------------------------------------------------------------===//
