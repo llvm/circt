@@ -217,3 +217,32 @@ firrtl.circuit "ForceOutputPort" {
         !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
   }
 }
+
+// -----
+
+// A field force through a probe wire cannot use whole-target force control.
+firrtl.circuit "ForceFieldThroughProbeWire" {
+  firrtl.module @ForceFieldThroughProbeWire(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<8>, b: uint<8>>, !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
+    // expected-note @below {{target is reached through this op}}
+    %sub = firrtl.ref.sub %w_ref[0] : !firrtl.rwprobe<bundle<a: uint<8>, b: uint<8>>>
+    %pw = firrtl.wire : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %pw, %sub : !firrtl.rwprobe<uint<8>>
+    // expected-error @below {{unsupported force/release: cannot route force control to the target through this probe}}
+    firrtl.ref.force %clock, %en, %pw, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// A cycle of probe wires has no target.
+firrtl.circuit "ForceProbeWireCycle" {
+  firrtl.module @ForceProbeWireCycle(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>) {
+    %a = firrtl.wire : !firrtl.rwprobe<uint<8>>
+    %b = firrtl.wire : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %a, %b : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %b, %a : !firrtl.rwprobe<uint<8>>
+    // expected-error @below {{unsupported force/release: unable to determine the target}}
+    firrtl.ref.force %clock, %en, %a, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}

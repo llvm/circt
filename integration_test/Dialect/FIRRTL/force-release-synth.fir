@@ -104,6 +104,36 @@ circuit top :
     force(clock, en, rwprobe(r), v)
     release(clock, rel, rwprobe(r))
 
+  ; Test force/release through a probe wire, used before its define.
+  module ProbeWireForce :
+    input clock : Clock
+    input en : UInt<1>
+    input rel : UInt<1>
+    input d : UInt<8>
+    output o : UInt<8>
+
+    wire w : UInt<8>
+    connect w, d
+    connect o, w
+    wire pw : RWProbe<UInt<8>>
+    force(clock, en, pw, UInt<8>(0hAA))
+    release(clock, rel, pw)
+    define pw = rwprobe(w)
+
+  ; Test a local force through an exported port combined with a parent force.
+  module SelfPortForce :
+    input clock : Clock
+    input en : UInt<1>
+    input d : UInt<8>
+    output o : UInt<8>
+    output p : RWProbe<UInt<8>>
+
+    wire w : UInt<8>
+    connect w, d
+    connect o, w
+    define p = rwprobe(w)
+    force(clock, en, p, UInt<8>(0hA1))
+
   public module top :
     input clk : Clock
     input rst : UInt<1>
@@ -170,18 +200,31 @@ circuit top :
     connect selfIncrementingReg.rel, eq(cycle, UInt<8>(7))
     connect selfIncrementingReg.v, UInt<8>(0h10)
 
-    ; CHECK: idle clockedWire={{0*}}00 concurrentForce={{0*}}00 priorityForces={{0*}}00 resettableReg={{0*}}00 parentChildForce={{0*}}00 bundleA={{0*}}00 bundleB={{0*}}01 selfIncrementingReg={{0*}}00
-    printf(clk, and(nreset, eq(cycle, UInt<8>(0))), "idle clockedWire=%x concurrentForce=%x priorityForces=%x resettableReg=%x parentChildForce=%x bundleA=%x bundleB=%x selfIncrementingReg=%x\n", clockedWire.o, concurrentForce.o, priorityForces.o, resettableReg.o, parentChildForce.o, bundleField.oa, bundleField.ob, selfIncrementingReg.o)
-    ; CHECK: forced clockedWire={{0*}}aa concurrentForce={{0*}}00 priorityForces={{0*}}a1 resettableReg={{0*}}aa parentChildForce={{0*}}a1 bundleA={{0*}}aa bundleB={{0*}}01 selfIncrementingReg={{0*}}10
-    printf(clk, and(nreset, eq(cycle, UInt<8>(2))), "forced clockedWire=%x concurrentForce=%x priorityForces=%x resettableReg=%x parentChildForce=%x bundleA=%x bundleB=%x selfIncrementingReg=%x\n", clockedWire.o, concurrentForce.o, priorityForces.o, resettableReg.o, parentChildForce.o, bundleField.oa, bundleField.ob, selfIncrementingReg.o)
+    inst probeWire of ProbeWireForce
+    connect probeWire.clock, clk
+    connect probeWire.en, eq(cycle, UInt<8>(1))
+    connect probeWire.rel, eq(cycle, UInt<8>(7))
+    connect probeWire.d, d
+
+    inst selfPort of SelfPortForce
+    connect selfPort.clock, clk
+    connect selfPort.en, eq(cycle, UInt<8>(1))
+    connect selfPort.d, d
+    force(clk, eq(cycle, UInt<8>(3)), selfPort.p, UInt<8>(0hA2))
+    release(clk, eq(cycle, UInt<8>(7)), selfPort.p)
+
+    ; CHECK: idle clockedWire={{0*}}00 concurrentForce={{0*}}00 priorityForces={{0*}}00 resettableReg={{0*}}00 parentChildForce={{0*}}00 bundleA={{0*}}00 bundleB={{0*}}01 selfIncrementingReg={{0*}}00 probeWire={{0*}}00 selfPort={{0*}}00
+    printf(clk, and(nreset, eq(cycle, UInt<8>(0))), "idle clockedWire=%x concurrentForce=%x priorityForces=%x resettableReg=%x parentChildForce=%x bundleA=%x bundleB=%x selfIncrementingReg=%x probeWire=%x selfPort=%x\n", clockedWire.o, concurrentForce.o, priorityForces.o, resettableReg.o, parentChildForce.o, bundleField.oa, bundleField.ob, selfIncrementingReg.o, probeWire.o, selfPort.o)
+    ; CHECK: forced clockedWire={{0*}}aa concurrentForce={{0*}}00 priorityForces={{0*}}a1 resettableReg={{0*}}aa parentChildForce={{0*}}a1 bundleA={{0*}}aa bundleB={{0*}}01 selfIncrementingReg={{0*}}10 probeWire={{0*}}aa selfPort={{0*}}a1
+    printf(clk, and(nreset, eq(cycle, UInt<8>(2))), "forced clockedWire=%x concurrentForce=%x priorityForces=%x resettableReg=%x parentChildForce=%x bundleA=%x bundleB=%x selfIncrementingReg=%x probeWire=%x selfPort=%x\n", clockedWire.o, concurrentForce.o, priorityForces.o, resettableReg.o, parentChildForce.o, bundleField.oa, bundleField.ob, selfIncrementingReg.o, probeWire.o, selfPort.o)
     ; CHECK: live clockedWire={{0*}}bb resettableReg={{0*}}aa bundleA={{0*}}bb bundleB={{0*}}01
     printf(clk, and(nreset, eq(cycle, UInt<8>(3))), "live clockedWire=%x resettableReg=%x bundleA=%x bundleB=%x\n", clockedWire.o, resettableReg.o, bundleField.oa, bundleField.ob)
-    ; CHECK: priority priorityForces={{0*}}a2 parentChildForce={{0*}}a2
-    printf(clk, and(nreset, eq(cycle, UInt<8>(4))), "priority priorityForces=%x parentChildForce=%x\n", priorityForces.o, parentChildForce.o)
+    ; CHECK: priority priorityForces={{0*}}a2 parentChildForce={{0*}}a2 selfPort={{0*}}a2
+    printf(clk, and(nreset, eq(cycle, UInt<8>(4))), "priority priorityForces=%x parentChildForce=%x selfPort=%x\n", priorityForces.o, parentChildForce.o, selfPort.o)
     ; CHECK: priority2 priorityForces={{0*}}a2 parentChildForce={{0*}}c1
     printf(clk, and(nreset, eq(cycle, UInt<8>(6))), "priority2 priorityForces=%x parentChildForce=%x\n", priorityForces.o, parentChildForce.o)
-    ; CHECK: released clockedWire={{0*}}00 resettableReg={{0*}}00 parentChildForce={{0*}}00 selfIncrementingReg={{0*}}11
-    printf(clk, and(nreset, eq(cycle, UInt<8>(8))), "released clockedWire=%x resettableReg=%x parentChildForce=%x selfIncrementingReg=%x\n", clockedWire.o, resettableReg.o, parentChildForce.o, selfIncrementingReg.o)
+    ; CHECK: released clockedWire={{0*}}00 resettableReg={{0*}}00 parentChildForce={{0*}}00 selfIncrementingReg={{0*}}11 probeWire={{0*}}00 selfPort={{0*}}00
+    printf(clk, and(nreset, eq(cycle, UInt<8>(8))), "released clockedWire=%x resettableReg=%x parentChildForce=%x selfIncrementingReg=%x probeWire=%x selfPort=%x\n", clockedWire.o, resettableReg.o, parentChildForce.o, selfIncrementingReg.o, probeWire.o, selfPort.o)
     ; CHECK: PASS
     printf(clk, and(nreset, eq(cycle, UInt<8>(10))), "PASS\n")
     stop(clk, and(nreset, eq(cycle, UInt<8>(10))), 0)

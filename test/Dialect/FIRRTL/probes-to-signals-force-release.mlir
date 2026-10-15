@@ -760,3 +760,28 @@ firrtl.circuit "InstanceControlInLayerblock" {
     // CHECK: firrtl.mux(%{{.+}}, %[[ONE]], %{{.+}})
   }
 }
+
+// -----
+// TEST 23: A force before the ref.define chain, through an identity cast.
+
+// CHECK-LABEL: firrtl.module @ForceBeforeDefine
+firrtl.circuit "ForceBeforeDefine" {
+  firrtl.module @ForceBeforeDefine(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, in %d: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    // CHECK: %w_forced = firrtl.wire : !firrtl.uint<8>
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %d : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %o, %w_forced
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    %pw = firrtl.wire : !firrtl.rwprobe<uint<8>>
+    %pw2 = firrtl.wire : !firrtl.rwprobe<uint<8>>
+    %pw3 = firrtl.wire : !firrtl.rwprobe<uint<8>>
+    %cast = firrtl.ref.cast %pw3 : (!firrtl.rwprobe<uint<8>>) -> !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %cast, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    firrtl.ref.define %pw3, %pw2 : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %pw2, %pw : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %pw, %w_ref : !firrtl.rwprobe<uint<8>>
+    // CHECK: %forced = firrtl.reg %clock
+    // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %v, %w)
+    // CHECK: firrtl.matchingconnect %w_forced, %[[OVR]]
+  }
+}
