@@ -27,6 +27,25 @@ using namespace seq;
 
 namespace {
 
+/// Delays all of the addresses in the given value range using the given delay
+/// and stores the delayed addresses in the given vector.
+static void delayAddresses(ConversionPatternRewriter &rewriter, Location loc,
+                           Value clk, Value ce, ValueRange addrs,
+                           IntegerAttr delayAttr,
+                           llvm::SmallVector<Value> &delayedAddrs) {
+
+  // My understanding is that when multiple addresses are given, the same
+  // data is written to each location. Therefore we must delay all of the
+  // addresses individually.
+  for (auto addr : addrs) {
+    // delay the addr
+    auto shiftreg = seq::ShiftRegOp::create(rewriter, loc, delayAttr, addr, clk,
+                                            ce, {}, {}, {}, {}, {});
+    // store new delayed addr
+    delayedAddrs.push_back(shiftreg);
+  }
+}
+
 /// Unrolling for the HLMem write ports. This reduces the latency attribute
 /// of the port to 1 and implements that latency as a delay of n-1 on its
 /// data and address inputs.
@@ -34,6 +53,7 @@ struct WritePortUnrolling : public OpConversionPattern<seq::WritePortOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
 
+public:
   LogicalResult
   matchAndRewrite(seq::WritePortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
@@ -56,17 +76,9 @@ public:
     Value ce =
         hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
 
-    // My understanding is that when multiple addresses are given, the same
-    // data is written to each location. Therefore we must delay all of the
-    // addresses individually.
-    for (size_t i = 0; i < addrs.size(); ++i) {
-      // delay the addr
-      auto shiftreg =
-          seq::ShiftRegOp::create(rewriter, op.getLoc(), delayAttr, addrs[i],
-                                  clk, ce, {}, {}, {}, {}, {});
-      // store new delayed addr
-      delayedAddrs.push_back(shiftreg);
-    }
+    // Delay all of the addresses
+    delayAddresses(rewriter, op.getLoc(), clk, ce, addrs, delayAttr,
+                   delayedAddrs);
 
     // delay the data
     auto delayedData = seq::ShiftRegOp::create(
@@ -91,6 +103,31 @@ public:
   LogicalResult
   matchAndRewrite(seq::ReadPortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+
+    // Compute the new latency attributes
+    IntegerAttr latencyAttr = adaptor.getLatencyAttr();
+    IntegerAttr zeroAttr = IntegerAttr::get(latencyAttr.getType(), 0);
+
+    // Retrieve all useful arguments
+    ValueRange addrs = adaptor.getAddresses();
+    Value clk = adaptor.getMemory().getDefiningOp()->getOperand(0);
+
+    // Stores the generated shiftregisters for the addresses.
+    llvm::SmallVector<Value> delayedAddrs;
+
+    // A global clock enable that is always true
+    Value ce =
+        hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
+
+    // Same as write port, delay all of the addresses
+    delayAddresses(rewriter, op.getLoc(), clk, ce, addrs, latencyAttr,
+                   delayedAddrs);
+
+    // Replace the old read port with the new one
+    rewriter.replaceOpWithNewOp<seq::ReadPortOp>(
+        op, op.getReadData().getType(), adaptor.getMemory(), delayedAddrs,
+        adaptor.getRdEn(), zeroAttr);
+
     return success();
   }
 };
