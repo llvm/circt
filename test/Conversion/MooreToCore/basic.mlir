@@ -1834,6 +1834,16 @@ func.func @StringIndexing(%arg0: !moore.string, %arg1: !moore.i32) {
   return
 }
 
+// CHECK-LABEL: func.func @StringSubstr
+// CHECK-SAME: %arg0: !sim.dstring
+// CHECK-SAME: %arg1: i32
+// CHECK-SAME: %arg2: i32
+func.func @StringSubstr(%arg0: !moore.string, %arg1: !moore.i32, %arg2: !moore.i32) {
+  // CHECK: sim.string.substr %arg0[%arg1 : %arg2]
+  %0 = moore.string.substr %arg0[%arg1 : %arg2]
+  return
+}
+
 // CHECK-LABEL func.func @QueueOperations
 func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
