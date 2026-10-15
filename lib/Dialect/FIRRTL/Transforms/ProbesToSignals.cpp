@@ -61,6 +61,7 @@
 #include "circt/Support/Debug.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 
@@ -294,13 +295,18 @@ private:
   /// Exported probe port, recorded before its argument type is rewritten.
   struct ExportedTarget {
     Value probeSrc;
-    Value hwSrc;
     Operation *define;
   };
   DenseMap<Value, ExportedTarget> exportedTargets;
 
   /// Probe paths through which force control cannot be routed.
   DenseMap<Value, Operation *> unsupportedForceDests;
+
+  /// Probes joined by `ref.define` and identity `ref.cast`.
+  llvm::EquivalenceClasses<Value> probeAliases;
+
+  /// Force/release accesses by probe, resolved after the body walk.
+  SmallVector<std::pair<Value, ForceReleaseAccess>> pendingAccesses;
 
   /// Forceable operations to demote.
   SmallVector<Forceable> forceables;
@@ -328,6 +334,7 @@ private:
     rwProbeTargetCache.try_emplace(target, data);
   }
 
+  Value resolveForceTarget(Value probe, Operation *&blocker);
   FailureOr<Value> resolveForceDest(Operation *access, Value dest);
 
   /// Reduce accesses at module-body end so all operands dominate.
@@ -421,6 +428,14 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
               [&](Operation *op) -> WalkResult { return dispatchVisitor(op); })
           .wasInterrupted())
     return failure();
+
+  // Resolve accesses in source order now that all aliases are known.
+  for (auto &[dest, access] : pendingAccesses) {
+    auto target = resolveForceDest(access.op, dest);
+    if (failed(target))
+      return failure();
+    targets[*target].accesses.push_back(access);
+  }
 
   // Update signature and argument types.
   if (portsToChange) {
@@ -857,7 +872,8 @@ LogicalResult ProbeVisitor::visitStmt(RefDefineOp op) {
 
   // Record exports before rewriting the port argument type.
   if (isa<BlockArgument>(op.getDest()))
-    exportedTargets[op.getDest()] = {op.getSrc(), newSrc, op};
+    exportedTargets[op.getDest()] = {op.getSrc(), op};
+  probeAliases.unionSets(op.getSrc(), op.getDest());
 
   // The source must dominate the destination for an equivalent connect.
   assert(!isa<BlockArgument>(newDest));
@@ -926,8 +942,7 @@ LogicalResult ProbeVisitor::visitExpr(RefCastOp op) {
   // Preserve identity mappings so force control remains keyed by the target.
   if (newType == input.getType()) {
     probeToHWMap[op.getResult()] = input;
-    if (auto *blocker = unsupportedForceDests.lookup(op.getInput()))
-      unsupportedForceDests[op.getResult()] = blocker;
+    probeAliases.unionSets(op.getInput(), op.getResult());
     return success();
   }
 
@@ -1147,19 +1162,24 @@ LogicalResult ProbeVisitor::collectExportedTargets(
 
     const auto &exported = exportIt->second;
     auto refDef = cast<RefDefineOp>(exported.define);
-    auto outSrc = exported.probeSrc;
 
-    if (auto *blocker = unsupportedForceDests.lookup(outSrc)) {
+    Operation *blocker;
+    Value target = resolveForceTarget(exported.probeSrc, blocker);
+    if (blocker) {
       auto diag = refDef.emitError(
           "forceable probe port cannot be lowered: force control cannot be "
           "routed to the target through this probe");
       attachForceDestBlockerNote(diag, blocker);
       return failure();
     }
+    if (!target)
+      return refDef.emitError(
+          "forceable probe port cannot be lowered: unable to determine the "
+          "target");
 
     // `rwProbePorts` is built in ascending port order, so appending preserves
     // port priority: a later port overrides an earlier port.
-    targets[exported.hwSrc].inboundCtrls.push_back(inbound);
+    targets[target].inboundCtrls.push_back(inbound);
   }
   return success();
 }
@@ -1237,15 +1257,30 @@ static LogicalResult checkForceReleaseNesting(Operation *op, StringRef what) {
   return success();
 }
 
+/// Return the hardware target of a probe's alias class. Returns null if there
+/// is none; `blocker` is set if the class root cannot route force control.
+Value ProbeVisitor::resolveForceTarget(Value probe, Operation *&blocker) {
+  Value root = probeAliases.getOrInsertLeaderValue(probe);
+  if ((blocker = unsupportedForceDests.lookup(root)))
+    return {};
+  // Port stand-ins and probe wires are aliases, not targets. A class rooted at
+  // one is undriven or a cycle.
+  auto wire = root.getDefiningOp<WireOp>();
+  if (isa<BlockArgument>(root) || (wire && wire.getDataRaw() == root))
+    return {};
+  return probeToHWMap.lookup(root);
+}
+
 FailureOr<Value> ProbeVisitor::resolveForceDest(Operation *access, Value dest) {
-  if (auto *blocker = unsupportedForceDests.lookup(dest)) {
+  Operation *blocker;
+  Value hwDest = resolveForceTarget(dest, blocker);
+  if (blocker) {
     auto diag = access->emitError(
         "unsupported force/release: cannot route force control to the target "
         "through this probe");
     attachForceDestBlockerNote(diag, blocker);
     return failure();
   }
-  Value hwDest = probeToHWMap.lookup(dest);
   if (!hwDest)
     return access->emitError(
         "unsupported force/release: unable to determine the target");
@@ -1256,11 +1291,8 @@ LogicalResult ProbeVisitor::visitStmt(RefForceOp op) {
   if (failed(checkForceReleaseNesting(op, "force")))
     return failure();
 
-  auto hwDest = resolveForceDest(op, op.getDest());
-  if (failed(hwDest))
-    return failure();
-  targets[*hwDest].accesses.push_back(
-      {op, op.getPredicate(), op.getSrc(), op.getClock()});
+  pendingAccesses.push_back(
+      {op.getDest(), {op, op.getPredicate(), op.getSrc(), op.getClock()}});
   toDelete.push_back(op);
   return success();
 }
@@ -1269,11 +1301,8 @@ LogicalResult ProbeVisitor::visitStmt(RefReleaseOp op) {
   if (failed(checkForceReleaseNesting(op, "release")))
     return failure();
 
-  auto hwDest = resolveForceDest(op, op.getDest());
-  if (failed(hwDest))
-    return failure();
-  targets[*hwDest].accesses.push_back(
-      {op, op.getPredicate(), std::nullopt, op.getClock()});
+  pendingAccesses.push_back(
+      {op.getDest(), {op, op.getPredicate(), std::nullopt, op.getClock()}});
   toDelete.push_back(op);
   return success();
 }
