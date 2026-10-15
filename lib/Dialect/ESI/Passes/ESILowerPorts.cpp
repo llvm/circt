@@ -11,10 +11,8 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/PortConverter.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
-#include "circt/Support/SymCache.h"
 
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -544,41 +542,15 @@ void ArrayChannelPort<Protocol>::mapOutputSignals(
 }
 
 namespace {
-/// Convert all the ESI ports on modules to some lower construct. SV
-/// interfaces for now on external modules, ready/valid to modules defined
-/// internally. In the future, it may be possible to select a different
-/// format.
+/// Lower ESI channel ports to their constituent wire-level signals.
 struct ESIPortsPass : public circt::esi::impl::LowerESIPortsBase<ESIPortsPass> {
   void runOnOperation() override;
-
-private:
-  bool updateFunc(HWModuleExternOp mod);
-  void updateInstance(HWModuleExternOp mod, InstanceOp inst);
-  ESIHWBuilder *build;
 };
 } // anonymous namespace
 
 /// Iterate through the `hw.module[.extern]`s and lower their ports.
 void ESIPortsPass::runOnOperation() {
   ModuleOp top = getOperation();
-  ESIHWBuilder b(top);
-  build = &b;
-
-  // Find all externmodules and try to modify them. Remember the modified
-  // ones.
-  DenseMap<SymbolRefAttr, HWModuleExternOp> externModsMutated;
-  for (auto mod : top.getOps<HWModuleExternOp>())
-    if (mod->hasAttrOfType<UnitAttr>(extModBundleSignalsAttrName) &&
-        updateFunc(mod))
-      externModsMutated[FlatSymbolRefAttr::get(mod)] = mod;
-
-  // Find all instances and update them.
-  top.walk([&externModsMutated, this](InstanceOp inst) {
-    auto mapIter = externModsMutated.find(inst.getModuleNameAttr());
-    if (mapIter != externModsMutated.end())
-      updateInstance(mapIter->second, inst);
-  });
-
   // Find all modules and run port conversion on them.
   circt::hw::InstanceGraph &instanceGraph =
       getAnalysis<circt::hw::InstanceGraph>();
@@ -588,244 +560,6 @@ void ESIPortsPass::runOnOperation() {
             PortConverter<ESIPortConversionBuilder>(instanceGraph, mod).run()))
       return signalPassFailure();
   }
-
-  build = nullptr;
-}
-
-/// Convert all input and output ChannelTypes into SV Interfaces. For inputs,
-/// just switch the type to `ModportType`. For outputs, append a `ModportType`
-/// to the inputs and remove the output channel from the results. Returns true
-/// if 'mod' was updated. Delay updating the instances to amortize the IR walk
-/// over all the module updates.
-bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
-  auto *ctxt = &getContext();
-
-  bool updated = false;
-
-  SmallVector<Attribute> newArgNames, newResultNames;
-  SmallVector<Location> newArgLocs, newResultLocs;
-
-  // Reconstruct the list of operand types, changing the type whenever an ESI
-  // port is found.
-  SmallVector<Type, 16> newArgTypes;
-  size_t nextArgNo = 0;
-  for (auto argTy : mod.getInputTypes()) {
-    auto chanTy = dyn_cast<ChannelType>(argTy);
-    newArgNames.push_back(mod.getInputNameAttr(nextArgNo));
-    newArgLocs.push_back(mod.getInputLoc(nextArgNo));
-    nextArgNo++;
-
-    if (!chanTy) {
-      newArgTypes.push_back(argTy);
-      continue;
-    }
-
-    // When we find one, construct an interface, and add the 'source' modport
-    // to the type list.
-    auto iface = build->getOrConstructInterface(chanTy);
-    newArgTypes.push_back(iface.getModportType(ESIHWBuilder::sourceStr));
-    updated = true;
-  }
-
-  // Iterate through the results and append to one of the two below lists. The
-  // first for non-ESI-ports. The second, ports which have been re-located to
-  // an operand.
-  SmallVector<Type, 8> newResultTypes;
-  SmallVector<DictionaryAttr, 4> newResultAttrs;
-  for (size_t resNum = 0, numRes = mod.getNumOutputPorts(); resNum < numRes;
-       ++resNum) {
-    Type resTy = mod.getOutputTypes()[resNum];
-    auto chanTy = dyn_cast<ChannelType>(resTy);
-    auto resNameAttr = mod.getOutputNameAttr(resNum);
-    auto resLocAttr = mod.getOutputLoc(resNum);
-    if (!chanTy) {
-      newResultTypes.push_back(resTy);
-      newResultNames.push_back(resNameAttr);
-      newResultLocs.push_back(resLocAttr);
-      continue;
-    }
-
-    // When we find one, construct an interface, and add the 'sink' modport to
-    // the type list.
-    sv::InterfaceOp iface = build->getOrConstructInterface(chanTy);
-    sv::ModportType sinkPort = iface.getModportType(ESIHWBuilder::sinkStr);
-    newArgTypes.push_back(sinkPort);
-    newArgNames.push_back(resNameAttr);
-    newArgLocs.push_back(resLocAttr);
-    updated = true;
-  }
-
-  mod->removeAttr(extModBundleSignalsAttrName);
-  if (!updated)
-    return false;
-
-  // Set the new types.
-  auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
-  auto newModType =
-      hw::detail::fnToMod(newFuncType, newArgNames, newResultNames);
-  mod.setHWModuleType(newModType);
-  mod.setInputLocs(newArgLocs);
-  mod.setOutputLocs(newResultLocs);
-  return true;
-}
-
-static StringRef getOperandName(Value operand) {
-  if (BlockArgument arg = dyn_cast<BlockArgument>(operand)) {
-    auto *op = arg.getParentBlock()->getParentOp();
-    if (HWModuleLike mod = dyn_cast_or_null<HWModuleLike>(op))
-      return mod.getInputName(arg.getArgNumber());
-  } else {
-    auto *srcOp = operand.getDefiningOp();
-    if (auto instOp = dyn_cast<InstanceOp>(srcOp))
-      return instOp.getInstanceName();
-
-    if (auto srcName = srcOp->getAttrOfType<StringAttr>("name"))
-      return srcName.getValue();
-  }
-  return "";
-}
-
-/// Create a reasonable name for a SV interface instance.
-static std::string &constructInstanceName(Value operand, sv::InterfaceOp iface,
-                                          std::string &name) {
-  llvm::raw_string_ostream s(name);
-  // Drop the "IValidReady_" part of the interface name.
-  s << llvm::toLower(iface.getSymName()[12]) << iface.getSymName().substr(13);
-
-  // Indicate to where the source is connected.
-  if (operand.hasOneUse()) {
-    Operation *dstOp = *operand.getUsers().begin();
-    if (auto instOp = dyn_cast<InstanceOp>(dstOp))
-      s << "To" << llvm::toUpper(instOp.getInstanceName()[0])
-        << instOp.getInstanceName().substr(1);
-    else if (auto dstName = dstOp->getAttrOfType<StringAttr>("name"))
-      s << "To" << dstName.getValue();
-  }
-
-  // Indicate to where the sink is connected.
-  StringRef operName = getOperandName(operand);
-  if (!operName.empty())
-    s << "From" << llvm::toUpper(operName[0]) << operName.substr(1);
-  return s.str();
-}
-
-/// Update an instance of an updated module by adding `esi.(un)wrap.iface`
-/// around the instance. Create a new instance at the end from the lists built
-/// up before.
-void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
-  using namespace circt::sv;
-  circt::ImplicitLocOpBuilder instBuilder(inst.getLoc(), inst);
-
-  // op counter for error reporting purposes.
-  size_t opNum = 0;
-  // List of new operands.
-  SmallVector<Value, 16> newOperands;
-
-  // Fill the new operand list with old plain operands and mutated ones.
-  std::string nameStringBuffer; // raw_string_ostream uses std::string.
-  for (auto op : inst.getOperands()) {
-    auto instChanTy = dyn_cast<ChannelType>(op.getType());
-    if (!instChanTy) {
-      newOperands.push_back(op);
-      ++opNum;
-      continue;
-    }
-
-    // Get the interface from the cache, and make sure it's the same one as
-    // being used in the module.
-    auto iface = build->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(ESIHWBuilder::sourceStr) !=
-        mod.getInputTypes()[opNum]) {
-      inst.emitOpError("ESI ChannelType (operand #")
-          << opNum << ") doesn't match module!";
-      ++opNum;
-      newOperands.push_back(op);
-      continue;
-    }
-    ++opNum;
-
-    // Build a gasket by instantiating an interface, connecting one end to an
-    // `esi.unwrap.iface` and the other end to the instance.
-    auto ifaceInst =
-        InterfaceInstanceOp::create(instBuilder, iface.getInterfaceType());
-    nameStringBuffer.clear();
-    ifaceInst->setAttr(
-        "name",
-        StringAttr::get(mod.getContext(),
-                        constructInstanceName(op, iface, nameStringBuffer)));
-    GetModportOp sinkModport =
-        GetModportOp::create(instBuilder, ifaceInst, ESIHWBuilder::sinkStr);
-    UnwrapSVInterfaceOp::create(instBuilder, op, sinkModport);
-    GetModportOp sourceModport =
-        GetModportOp::create(instBuilder, ifaceInst, ESIHWBuilder::sourceStr);
-    // Finally, add the correct modport to the list of operands.
-    newOperands.push_back(sourceModport);
-  }
-
-  // Go through the results and get both a list of the plain old values being
-  // produced and their types.
-  SmallVector<Value, 8> newResults;
-  SmallVector<Type, 8> newResultTypes;
-  for (size_t resNum = 0, numRes = inst.getNumResults(); resNum < numRes;
-       ++resNum) {
-    Value res = inst.getResult(resNum);
-    auto instChanTy = dyn_cast<ChannelType>(res.getType());
-    if (!instChanTy) {
-      newResults.push_back(res);
-      newResultTypes.push_back(res.getType());
-      continue;
-    }
-
-    // Get the interface from the cache, and make sure it's the same one as
-    // being used in the module.
-    auto iface = build->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(ESIHWBuilder::sinkStr) !=
-        mod.getInputTypes()[opNum]) {
-      inst.emitOpError("ESI ChannelType (result #")
-          << resNum << ", operand #" << opNum << ") doesn't match module!";
-      ++opNum;
-      newResults.push_back(res);
-      newResultTypes.push_back(res.getType());
-      continue;
-    }
-    ++opNum;
-
-    // Build a gasket by instantiating an interface, connecting one end to an
-    // `esi.wrap.iface` and the other end to the instance. Append it to the
-    // operand list.
-    auto ifaceInst =
-        InterfaceInstanceOp::create(instBuilder, iface.getInterfaceType());
-    nameStringBuffer.clear();
-    ifaceInst->setAttr(
-        "name",
-        StringAttr::get(mod.getContext(),
-                        constructInstanceName(res, iface, nameStringBuffer)));
-    GetModportOp sourceModport =
-        GetModportOp::create(instBuilder, ifaceInst, ESIHWBuilder::sourceStr);
-    auto newChannel =
-        WrapSVInterfaceOp::create(instBuilder, res.getType(), sourceModport);
-    // Connect all the old users of the output channel with the newly
-    // wrapped replacement channel.
-    res.replaceAllUsesWith(newChannel);
-    GetModportOp sinkModport =
-        GetModportOp::create(instBuilder, ifaceInst, ESIHWBuilder::sinkStr);
-    // And add the modport on the other side to the new operand list.
-    newOperands.push_back(sinkModport);
-  }
-
-  // Create the new instance!
-  auto newInst = hw::InstanceOp::create(
-      instBuilder, mod, inst.getInstanceNameAttr(), newOperands,
-      inst.getParameters(), inst.getInnerSymAttr());
-
-  // Go through the old list of non-ESI result values, and replace them with
-  // the new non-ESI results.
-  for (size_t resNum = 0, numRes = newResults.size(); resNum < numRes;
-       ++resNum) {
-    newResults[resNum].replaceAllUsesWith(newInst.getResult(resNum));
-  }
-  // Erase the old instance!
-  inst.erase();
 }
 
 std::unique_ptr<OperationPass<ModuleOp>>
