@@ -689,10 +689,10 @@ public:
     std::unique_ptr<HostMemRegion> ret(
         new (std::nothrow) CosimHostMemRegion(size, opts.alignment));
     if (!ret || !ret->getPtr()) {
-      acc.getLogger().error("HostMem", "Failed to allocate " +
-                                           std::to_string(size) +
-                                           " bytes with alignment " +
-                                           std::to_string(opts.alignment));
+      acc.getLogger().error(
+          "HostMem",
+          std::format("Failed to allocate {} bytes with alignment {}", size,
+                      opts.alignment));
       return nullptr;
     }
     acc.getLogger().debug(
@@ -709,8 +709,9 @@ public:
     if (opts.alignment &&
         (!std::has_single_bit(opts.alignment) ||
          reinterpret_cast<uintptr_t>(ptr) % opts.alignment != 0)) {
-      acc.getLogger().error("HostMem", "Cannot map memory with alignment " +
-                                           std::to_string(opts.alignment));
+      acc.getLogger().error(
+          "HostMem",
+          std::format("Cannot map memory with alignment {}", opts.alignment));
       return false;
     }
     return true;

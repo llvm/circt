@@ -26,7 +26,9 @@
   (`HostMemOptions.alignment` in Python) to a power-of-two byte alignment.
   Zero selects the backend's default. Both host and device addresses must
   satisfy the request; the region reports the requested size, which need not
-  be a multiple of the alignment. Invalid or unsatisfiable requests fail with
+  be a multiple of the alignment. XRT uses a padded allocation and a sub-buffer
+  when a common offset aligns both addresses.
+  Invalid or unsatisfiable requests fail with
   nullptr (`None` in Python). `mapMemory` / `map_memory` rejects an invalid
   alignment or existing addresses that do not satisfy it. Python regions
   expose the device-visible address as `device_ptr`.

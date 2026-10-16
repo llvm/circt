@@ -21,6 +21,7 @@
 #include <bit>
 #include <cassert>
 #include <cstdlib>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -354,9 +355,9 @@ public:
         new (std::nothrow) TraceHostMemRegion(size, opts.alignment, impl));
     if (!ret || !ret->getPtr()) {
       getConnection().getLogger().error(
-          "HostMem", "Failed to allocate " + std::to_string(size) +
-                         " bytes with alignment " +
-                         std::to_string(opts.alignment));
+          "HostMem",
+          std::format("Failed to allocate {} bytes with alignment {}", size,
+                      opts.alignment));
       return nullptr;
     }
     if (impl.isWriteable())
@@ -372,9 +373,9 @@ public:
     if (opts.alignment &&
         (!std::has_single_bit(opts.alignment) ||
          reinterpret_cast<uintptr_t>(ptr) % opts.alignment != 0)) {
-      getConnection().getLogger().error("HostMem",
-                                        "Cannot map memory with alignment " +
-                                            std::to_string(opts.alignment));
+      getConnection().getLogger().error(
+          "HostMem",
+          std::format("Cannot map memory with alignment {}", opts.alignment));
       return false;
     }
     if (impl.isWriteable())

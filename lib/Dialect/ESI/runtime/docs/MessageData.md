@@ -343,7 +343,12 @@ When a device requires aligned buffers, set `HostMemAllocator::Options::alignmen
 to the required power-of-two byte alignment. Zero uses the backend's default.
 Successful allocations align both `HostMemRegion::getPtr()` and
 `getDevicePtr()`, and `getSize()` reports the requested size even when that size
-is not a multiple of the alignment. Invalid alignments, unsupported alignments,
+is not a multiple of the alignment. Any padding in the backing allocation is
+internal and is not part of the returned region. XRT uses a padded buffer and
+a requested-size sub-buffer at a common aligned host/device offset. If the
+two base addresses require different offsets, the allocation fails rather
+than returning a region with only one aligned address.
+Invalid alignments, unsupported alignments,
 allocation failures and zero-size requests return nullptr. In Python, use
 `HostMemOptions.alignment` and check the result for `None`; the region exposes
 `ptr`, `device_ptr` and `size`. Mapping existing memory with `mapMemory` /

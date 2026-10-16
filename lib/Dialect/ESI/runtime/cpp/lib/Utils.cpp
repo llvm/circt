@@ -17,18 +17,40 @@
 
 #include <algorithm>
 #include <bit>
-#include <cstdlib>
 #include <limits>
 #include <new>
 
-void *esi::utils::alignedAlloc(size_t size, size_t alignment) {
+std::optional<size_t> esi::utils::getAlignedAllocationSize(size_t size,
+                                                           size_t alignment) {
   if (size == 0 || (alignment && !std::has_single_bit(alignment)))
-    return nullptr;
+    return std::nullopt;
+  size_t padding = alignment ? alignment - 1 : 0;
+  if (size > std::numeric_limits<size_t>::max() - padding)
+    return std::nullopt;
+  return size + padding;
+}
+
+std::optional<size_t> esi::utils::getAlignedOffset(uintptr_t hostAddress,
+                                                   uintptr_t deviceAddress,
+                                                   size_t alignment) {
   if (alignment == 0)
-    return std::malloc(size);
+    return 0;
+  if (!std::has_single_bit(alignment) ||
+      hostAddress % alignment != deviceAddress % alignment)
+    return std::nullopt;
+  size_t offset = (alignment - hostAddress % alignment) % alignment;
+  constexpr uintptr_t max = std::numeric_limits<uintptr_t>::max();
+  if (offset > max - hostAddress || offset > max - deviceAddress)
+    return std::nullopt;
+  return offset;
+}
+
+void *esi::utils::alignedAlloc(size_t size, size_t alignment) {
+  if (alignment && !std::has_single_bit(alignment))
+    return nullptr;
   alignment = std::max(alignment, alignof(std::max_align_t));
   // Aligned allocation implementations may round the requested size up.
-  if (size > std::numeric_limits<size_t>::max() - (alignment - 1))
+  if (!getAlignedAllocationSize(size, alignment))
     return nullptr;
   return ::operator new(size, std::align_val_t(alignment), std::nothrow);
 }
@@ -36,11 +58,8 @@ void *esi::utils::alignedAlloc(size_t size, size_t alignment) {
 void esi::utils::alignedFree(void *ptr, size_t alignment) {
   if (!ptr)
     return;
-  if (alignment == 0)
-    std::free(ptr);
-  else
-    ::operator delete(
-        ptr, std::align_val_t(std::max(alignment, alignof(std::max_align_t))));
+  ::operator delete(
+      ptr, std::align_val_t(std::max(alignment, alignof(std::max_align_t))));
 }
 
 static constexpr char Table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"

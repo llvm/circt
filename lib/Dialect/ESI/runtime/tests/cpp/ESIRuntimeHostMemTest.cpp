@@ -61,11 +61,57 @@ TEST(HostMemAllocationTest, InvalidAlignment) {
 
 TEST(HostMemAllocationTest, RoundingOverflow) {
   constexpr size_t max = std::numeric_limits<size_t>::max();
-  // Even small requested alignments are promoted to a platform-safe alignment.
-  for (size_t alignment : {1, 2, 8, 16, 32, 64, 4096, 8192})
+  // Default and small alignments use the same platform-safe allocation path.
+  for (size_t alignment : {0, 1, 2, 8, 16, 32, 64, 4096, 8192})
     EXPECT_EQ(utils::alignedAlloc(max, alignment), nullptr);
   EXPECT_EQ(utils::alignedAlloc(max - 15, 32), nullptr);
   EXPECT_EQ(utils::alignedAlloc(max - 4095, 8192), nullptr);
+}
+
+TEST(HostMemAllocationTest, PaddedAllocationSize) {
+  EXPECT_EQ(utils::getAlignedAllocationSize(33, 0), 33u);
+  EXPECT_EQ(utils::getAlignedAllocationSize(33, 1), 33u);
+  EXPECT_EQ(utils::getAlignedAllocationSize(33, 32), 64u);
+  EXPECT_EQ(utils::getAlignedAllocationSize(33, 8192), 8224u);
+  EXPECT_FALSE(utils::getAlignedAllocationSize(0, 32));
+  EXPECT_FALSE(utils::getAlignedAllocationSize(33, 3));
+
+  constexpr size_t max = std::numeric_limits<size_t>::max();
+  EXPECT_EQ(utils::getAlignedAllocationSize(max, 0), max);
+  EXPECT_EQ(utils::getAlignedAllocationSize(max - 31, 32), max);
+  EXPECT_FALSE(utils::getAlignedAllocationSize(max - 30, 32));
+  EXPECT_FALSE(utils::getAlignedAllocationSize(max, 8192));
+}
+
+TEST(HostMemAllocationTest, CommonAlignmentOffset) {
+  EXPECT_EQ(utils::getAlignedOffset(0x1003, 0x8007, 0), 0u);
+  EXPECT_EQ(utils::getAlignedOffset(0x1003, 0x8007, 1), 0u);
+  EXPECT_EQ(utils::getAlignedOffset(0x1000, 0x8000, 32), 0u);
+  EXPECT_EQ(utils::getAlignedOffset(0x1003, 0x8003, 32), 29u);
+  EXPECT_EQ(utils::getAlignedOffset(0x1000, 0x5000, 8192), 4096u);
+  EXPECT_FALSE(utils::getAlignedOffset(0x1000, 0x4000, 8192));
+  EXPECT_FALSE(utils::getAlignedOffset(0x1000, 0x8000, 3));
+
+  for (uintptr_t hostLow = 0; hostLow < 32; ++hostLow) {
+    for (uintptr_t deviceLow = 0; deviceLow < 32; ++deviceLow) {
+      auto offset =
+          utils::getAlignedOffset(0x1000 + hostLow, 0x8000 + deviceLow, 32);
+      ASSERT_EQ(offset.has_value(), hostLow == deviceLow);
+      if (offset) {
+        EXPECT_EQ((0x1000 + hostLow + *offset) % 32, 0u);
+        EXPECT_EQ((0x8000 + deviceLow + *offset) % 32, 0u);
+        EXPECT_LT(*offset, 32u);
+        EXPECT_LE(*offset + 33, *utils::getAlignedAllocationSize(33, 32));
+      }
+    }
+  }
+}
+
+TEST(HostMemAllocationTest, AlignmentOffsetOverflow) {
+  constexpr uintptr_t max = std::numeric_limits<uintptr_t>::max();
+  EXPECT_FALSE(utils::getAlignedOffset(max - 7, 0x1008, 16));
+  EXPECT_FALSE(utils::getAlignedOffset(0x1008, max - 7, 16));
+  EXPECT_EQ(utils::getAlignedOffset(max - 15, 0x1000, 16), 0u);
 }
 
 } // namespace

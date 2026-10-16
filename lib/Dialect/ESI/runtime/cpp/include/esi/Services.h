@@ -275,10 +275,12 @@ public:
   };
 
   /// Allocate a region of host memory in accelerator accessible address space.
-  /// The region reports the requested `size`, which need not be a multiple of
-  /// `opts.alignment`. Returns nullptr if the region cannot be allocated or the
-  /// alignment is invalid or cannot be satisfied for both addresses.
-  /// Implementations MUST return nullptr when `size` is 0.
+  /// Alignment constrains the starting addresses, not `size`: a size that is
+  /// not a multiple of `opts.alignment` is valid. Any backing allocation
+  /// padding is internal; the region's getSize() reports exactly the requested
+  /// `size`. Returns nullptr if the region cannot be allocated or the alignment
+  /// is invalid or cannot be satisfied for both addresses. Implementations MUST
+  /// return nullptr when `size` is 0.
   virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
                                                   Options opts) const = 0;
 };
