@@ -3977,6 +3977,23 @@ def StringLenOp : StringBuiltin<"len"> {
   let assemblyFormat = "$str attr-dict";
 }
 
+def StringExtractRefOp : StringBuiltin<"extract_ref", [
+    TypesMatchWith<"result must be a reference to an 8-bit integer",
+    "str", "result",
+    "RefType::get(IntType::getInt($_self.getContext(), 8))">
+  ]> {
+  let summary = "Extract a reference to a character in a string";
+  let description = [{
+    Extracts a reference to the character at the specified index in a string.
+    This is lowered by the SimplifyRefs pass when the reference is assigned to.
+  }];
+  let arguments = (ins StringRefType:$str, TwoValuedI32:$index);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $str `[` $index `]` attr-dict `:` type($str)
+  }];
+}
+
 def StringPutOp : StringBuiltin<"put"> {
   let summary = "Replace a character in a string";
   let description = [{

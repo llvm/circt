@@ -284,6 +284,34 @@ struct AssocArrayRefLowering
   }
 };
 
+struct StringRefLowering : public OpConversionPattern<StringExtractRefOp> {
+  using OpConversionPattern<StringExtractRefOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringExtractRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    for (auto *consumer : op->getUsers()) {
+      if (isa<BlockingAssignOp>(consumer)) {
+        auto assignOp = cast<BlockingAssignOp>(consumer);
+
+        rewriter.setInsertionPoint(consumer);
+        moore::StringPutOp::create(rewriter, op.getLoc(), op.getStr(),
+                                   op.getIndex(), assignOp.getSrc());
+
+        rewriter.eraseOp(assignOp);
+      } else {
+        return mlir::emitError(op.getLoc())
+               << "String element reference couldn't be reduced to setting "
+                  "the character at an index: consuming op "
+               << consumer << " is not supported";
+      }
+    }
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct SimplifyRefsPass
     : public circt::moore::impl::SimplifyRefsBase<SimplifyRefsPass> {
   void runOnOperation() override;
@@ -363,5 +391,14 @@ void SimplifyRefsPass::runOnOperation() {
   assocArrayRefPatterns.add<AssocArrayRefLowering>(&context);
   if (failed(applyPartialConversion(getOperation(), target,
                                     std::move(assocArrayRefPatterns))))
+    signalPassFailure();
+
+  // Rewrite string element references assigned through a blocking assignment to
+  // string.put.
+  RewritePatternSet stringRefPatterns(&context);
+  target.addIllegalOp<StringExtractRefOp>();
+  stringRefPatterns.add<StringRefLowering>(&context);
+  if (failed(applyPartialConversion(getOperation(), target,
+                                    std::move(stringRefPatterns))))
     signalPassFailure();
 }

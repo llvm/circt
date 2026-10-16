@@ -99,6 +99,9 @@ func.func @DynamicStrings(%idx: i32) {
   %concat = sim.string.concat (%str, %str)
   // CHECK: sim.string.get
   %char = sim.string.get %str[%idx]
+  %replacement = hw.constant 97 : i8
+  // CHECK: sim.string.put {{%.+}}{{\[}}{{%.+}}{{\]}}, {{%.+}} : !sim.dstring
+  %updated = sim.string.put %str[%idx], %replacement : !sim.dstring
   // CHECK: sim.string.string_to_int
   %int = sim.string.string_to_int %str : i32
   return

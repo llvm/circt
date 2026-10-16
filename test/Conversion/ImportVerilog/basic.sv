@@ -939,6 +939,8 @@ module Expressions;
     // String indexing with i32 index (no conversion needed)
     // CHECK: moore.string.get {{%.+}}[{{%.+}}]
     m = s1[c];
+    // CHECK: moore.string.put %s1[{{%.+}}], {{%.+}} : <string>
+    s1[c] = "w";
     // String indexing with logic index (conversion to i32 needed)
     // CHECK: [[M_READ:%.+]] = moore.read %m
     // CHECK: [[ZEXT:%.+]] = moore.zext [[M_READ]] : l4 -> l32
