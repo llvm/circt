@@ -212,21 +212,19 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
   // CHECK-NEXT: hw.array_slice %arg5[[[V24]]] : (!hw.array<5xi32>) -> !hw.array<2xi32>
   moore.dyn_extract %arg5 from %2 : !moore.array<5 x i32>, !moore.i32 -> !moore.array<2 x i32>
-  // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
-  // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i29
-  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i29
+  // An element select with an index wider than the address reads zero when the
+  // whole index is out of range (it used to saturate to the last element).
+  // CHECK-NEXT: [[SIZE:%.+]] = hw.constant 5 : i32
+  // CHECK-NEXT: [[IN_RANGE:%.+]] = comb.icmp ult %c2_i32, [[SIZE]] : i32
   // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
-  // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i3
-  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
-  // CHECK-NEXT: hw.array_get %arg5[[[V24]]] : !hw.array<5xi32>
+  // CHECK-NEXT: [[ELEM:%.+]] = hw.array_get %arg5[[[V23]]] : !hw.array<5xi32>
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i32
+  // CHECK-NEXT: comb.mux [[IN_RANGE]], [[ELEM]], [[ZERO]] : i32
   moore.dyn_extract %arg5 from %2 : !moore.array<5 x i32>, !moore.i32 -> !moore.i32
 
-  // CHECK-NEXT: [[V21:%.+]] = comb.extract %c0_i32 from 0 : (i32) -> i32
-  // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i32
-  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i32
-  // CHECK-NEXT: [[V23:%.+]] = comb.extract %c0_i32 from 0 : (i32) -> i0
-  // CHECK-NEXT: [[MAX:%.+]] = hw.constant 0 : i0
-  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i0
+  // The range check of a written element select is on the drive's enable (see
+  // @WideIndex), so only the narrowed index is made here.
+  // CHECK-NEXT: [[V24:%.+]] = hw.constant 0 : i0
   // CHECK-NEXT: llhd.sig.extract %arg6 from [[V24]] : <i1> -> <i1>
   moore.dyn_extract_ref %arg6 from %c0 : !moore.ref<!moore.i1>, !moore.i32 -> !moore.ref<!moore.i1>
   // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
@@ -237,12 +235,7 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
   // CHECK-NEXT: llhd.sig.array_slice %arg7 at [[V24]] : <!hw.array<5xi32>> -> <!hw.array<2xi32>>
   moore.dyn_extract_ref %arg7 from %2 : !moore.ref<!moore.array<5 x i32>>, !moore.i32 -> !moore.ref<!moore.array<2 x i32>>
-  // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
-  // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i29
-  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i29
-  // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
-  // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i3
-  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
+  // CHECK-NEXT: [[V24:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
   // CHECK-NEXT: llhd.sig.array_get %arg7[[[V24]]] : <!hw.array<5xi32>>
   moore.dyn_extract_ref %arg7 from %2 : !moore.ref<!moore.array<5 x i32>>, !moore.i32 -> !moore.ref<!moore.i32>
 
@@ -655,6 +648,94 @@ moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i
   %4 = moore.variable : <uarray<4 x uarray<8 x array<8 x i4>>>>
 
   moore.output %0 : !moore.i32
+}
+
+// An element select whose index is wider than the array's address must be
+// range checked against the whole index (IEEE 1800-2017 7.4.6): a read out of range
+// yields zero and a write out of range does nothing. Dropping or saturating
+// the high index bits would alias an element instead (and a one-element array
+// has a zero-bit index, so every index would name its only element).
+// CHECK-LABEL: hw.module @WideIndex
+moore.module @WideIndex(in %a1 : !moore.uarray<1 x i8>, in %a2 : !moore.uarray<2 x i8>, in %a5 : !moore.uarray<5 x i8>, in %a8 : !moore.uarray<8 x i8>, in %i1 : !moore.i1, in %i4 : !moore.i4, in %i3 : !moore.i3, in %d : !moore.i8, out o1 : !moore.i8, out o2 : !moore.i8, out o5 : !moore.i8, out o8 : !moore.i8, out o8e : !moore.i8) {
+  // N = 1, 1-bit index: the address has no bits, the range check is `i1 < 1`.
+  // CHECK: [[SIZE1:%.+]] = hw.constant true
+  // CHECK: [[IN1:%.+]] = comb.icmp ult %i1, [[SIZE1]] : i1
+  // CHECK: [[ELEM1:%.+]] = hw.array_get %a1[{{%.+}}] : !hw.array<1xi8>, i0
+  // CHECK: [[ZERO1:%.+]] = hw.constant 0 : i8
+  // CHECK: [[READ1:%.+]] = comb.mux [[IN1]], [[ELEM1]], [[ZERO1]] : i8
+  %0 = moore.dyn_extract %a1 from %i1 : !moore.uarray<1 x i8>, !moore.i1 -> !moore.i8
+  // N = 2, 4-bit index: one address bit, in range when the index is < 2.
+  // CHECK: [[SIZE2:%.+]] = hw.constant 2 : i4
+  // CHECK: [[IN2:%.+]] = comb.icmp ult %i4, [[SIZE2]] : i4
+  // CHECK: [[IDX2:%.+]] = comb.extract %i4 from 0 : (i4) -> i1
+  // CHECK: [[ELEM2:%.+]] = hw.array_get %a2[[[IDX2]]] : !hw.array<2xi8>, i1
+  // CHECK: [[ZERO2:%.+]] = hw.constant 0 : i8
+  // CHECK: [[READ2:%.+]] = comb.mux [[IN2]], [[ELEM2]], [[ZERO2]] : i8
+  %1 = moore.dyn_extract %a2 from %i4 : !moore.uarray<2 x i8>, !moore.i4 -> !moore.i8
+  // N = 5, 4-bit index: three address bits, 5..7 are in the address but not
+  // in the array, and 8..15 are not in the address.
+  // CHECK: [[SIZE5:%.+]] = hw.constant 5 : i4
+  // CHECK: [[IN5:%.+]] = comb.icmp ult %i4, [[SIZE5]] : i4
+  // CHECK: [[IDX5:%.+]] = comb.extract %i4 from 0 : (i4) -> i3
+  // CHECK: [[ELEM5:%.+]] = hw.array_get %a5[[[IDX5]]] : !hw.array<5xi8>, i3
+  // CHECK: [[ZERO5:%.+]] = hw.constant 0 : i8
+  // CHECK: [[READ5:%.+]] = comb.mux [[IN5]], [[ELEM5]], [[ZERO5]] : i8
+  %2 = moore.dyn_extract %a5 from %i4 : !moore.uarray<5 x i8>, !moore.i4 -> !moore.i8
+  // N = 8, 4-bit index: index 8..15 used to saturate to the last element.
+  // CHECK: [[SIZE8:%.+]] = hw.constant -8 : i4
+  // CHECK: [[IN8:%.+]] = comb.icmp ult %i4, [[SIZE8]] : i4
+  // CHECK: [[IDX8:%.+]] = comb.extract %i4 from 0 : (i4) -> i3
+  // CHECK: [[ELEM8:%.+]] = hw.array_get %a8[[[IDX8]]] : !hw.array<8xi8>, i3
+  // CHECK: [[ZERO8:%.+]] = hw.constant 0 : i8
+  // CHECK: [[READ8:%.+]] = comb.mux [[IN8]], [[ELEM8]], [[ZERO8]] : i8
+  %3 = moore.dyn_extract %a8 from %i4 : !moore.uarray<8 x i8>, !moore.i4 -> !moore.i8
+  // N = 8, 3-bit index: every index is in range, so there is no check.
+  // CHECK: [[EXACT:%.+]] = hw.array_get %a8[%i3] : !hw.array<8xi8>, i3
+  %4 = moore.dyn_extract %a8 from %i3 : !moore.uarray<8 x i8>, !moore.i3 -> !moore.i8
+
+  // CHECK: [[M1:%.+]] = llhd.sig {{%.+}} : <!hw.array<1xi8>>
+  // CHECK: [[M2:%.+]] = llhd.sig {{%.+}} : <!hw.array<2xi8>>
+  // CHECK: [[M5:%.+]] = llhd.sig {{%.+}} : <!hw.array<5xi8>>
+  // CHECK: [[M8:%.+]] = llhd.sig {{%.+}} : <!hw.array<8xi8>>
+  %m1 = moore.variable : <uarray<1 x i8>>
+  %m2 = moore.variable : <uarray<2 x i8>>
+  %m5 = moore.variable : <uarray<5 x i8>>
+  %m8 = moore.variable : <uarray<8 x i8>>
+
+  // The drive is enabled only when the whole index is in range.
+  // CHECK: [[REF1:%.+]] = llhd.sig.array_get [[M1]][{{%.+}}] : <!hw.array<1xi8>>
+  // CHECK: [[SIZE_W1:%.+]] = hw.constant 1 : i4
+  // CHECK: [[WIN1:%.+]] = comb.icmp ult %i4, [[SIZE_W1]] : i4
+  // CHECK: llhd.drv [[REF1]], %d after {{%.+}} if [[WIN1]] : i8
+  %r1 = moore.dyn_extract_ref %m1 from %i4 : !moore.ref<!moore.uarray<1 x i8>>, !moore.i4 -> !moore.ref<!moore.i8>
+  moore.assign %r1, %d : i8
+  // CHECK: [[REF2:%.+]] = llhd.sig.array_get [[M2]][{{%.+}}] : <!hw.array<2xi8>>
+  // CHECK: [[SIZE_W2:%.+]] = hw.constant 2 : i4
+  // CHECK: [[WIN2:%.+]] = comb.icmp ult %i4, [[SIZE_W2]] : i4
+  // CHECK: llhd.drv [[REF2]], %d after {{%.+}} if [[WIN2]] : i8
+  %r2 = moore.dyn_extract_ref %m2 from %i4 : !moore.ref<!moore.uarray<2 x i8>>, !moore.i4 -> !moore.ref<!moore.i8>
+  moore.assign %r2, %d : i8
+  // CHECK: [[REF5:%.+]] = llhd.sig.array_get [[M5]][{{%.+}}] : <!hw.array<5xi8>>
+  // CHECK: [[SIZE_W5:%.+]] = hw.constant 5 : i4
+  // CHECK: [[WIN5:%.+]] = comb.icmp ult %i4, [[SIZE_W5]] : i4
+  // CHECK: llhd.drv [[REF5]], %d after {{%.+}} if [[WIN5]] : i8
+  %r5 = moore.dyn_extract_ref %m5 from %i4 : !moore.ref<!moore.uarray<5 x i8>>, !moore.i4 -> !moore.ref<!moore.i8>
+  moore.assign %r5, %d : i8
+  // CHECK: [[REF8:%.+]] = llhd.sig.array_get [[M8]][{{%.+}}] : <!hw.array<8xi8>>
+  // CHECK: [[SIZE_W8:%.+]] = hw.constant -8 : i4
+  // CHECK: [[WIN8:%.+]] = comb.icmp ult %i4, [[SIZE_W8]] : i4
+  // CHECK: llhd.drv [[REF8]], %d after {{%.+}} if [[WIN8]] : i8
+  %r8 = moore.dyn_extract_ref %m8 from %i4 : !moore.ref<!moore.uarray<8 x i8>>, !moore.i4 -> !moore.ref<!moore.i8>
+  moore.assign %r8, %d : i8
+  // An index as wide as the address needs no check and no drive enable.
+  // CHECK: [[REF8E:%.+]] = llhd.sig.array_get [[M8]][%i3] : <!hw.array<8xi8>>
+  // CHECK-NEXT: llhd.constant_time
+  // CHECK-NEXT: llhd.drv [[REF8E]], %d after {{%.+}} : i8
+  %r8e = moore.dyn_extract_ref %m8 from %i3 : !moore.ref<!moore.uarray<8 x i8>>, !moore.i3 -> !moore.ref<!moore.i8>
+  moore.assign %r8e, %d : i8
+
+  // CHECK: hw.output [[READ1]], [[READ2]], [[READ5]], [[READ8]], [[EXACT]] : i8, i8, i8, i8, i8
+  moore.output %0, %1, %2, %3, %4 : !moore.i8, !moore.i8, !moore.i8, !moore.i8, !moore.i8
 }
 
 // CHECK-LABEL: hw.module private @QueueRefPort(out mem : !llhd.ref<!sim.queue<i8, 0>>)
