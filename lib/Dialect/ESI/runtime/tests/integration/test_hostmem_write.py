@@ -101,8 +101,9 @@ class TestHostMemWriteDefault:
 
   @pytest.mark.parametrize("invalid_width", [False, True])
   @pytest.mark.parametrize("direction", ["read", "write"])
-  def test_rejects_invalid_layout(self, conn: AcceleratorConnection,
-                                  invalid_width, direction):
+  def test_rejects_invalid_layout(self, host, port, invalid_width, direction):
+    # Do not reuse cached valid types from earlier tests in a Windows worker.
+    conn = esiaccel.Context().connect("cosim", f"{host}:{port}")
     manifest = json.loads(conn.sysinfo().json_manifest())
     names = (["tag", "data", "last"] if direction == "read" else
              ["address", "tag", "data", "data_size", "last"])
