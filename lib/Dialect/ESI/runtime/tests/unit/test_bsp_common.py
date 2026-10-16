@@ -7,8 +7,8 @@ import pytest
 from pycde import Module
 
 from esiaccel.bsp.common import (ChannelEngineService, ChannelMMIO,
-                                 HostMemReadReqSplitter)
-from esiaccel.bsp.cosim import CosimBSP
+                                 HostMemReadReqSplitter, TaggedWriteGearbox)
+from esiaccel.bsp.cosim import CosimBSP, CosimBSP_DMA
 from esiaccel.bsp.dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
 
@@ -168,8 +168,10 @@ def test_channel_engine_service_connects_read_list(tmp_path):
 
 
 @pytest.mark.parametrize("max_outstanding", [1, 2, 64])
-@pytest.mark.parametrize("word_bits", [64, 256])
-def test_read_req_splitter_generates(tmp_path, word_bits, max_outstanding):
+@pytest.mark.parametrize("word_bits", [8, 64, 256, 512, 2048, 4096])
+@pytest.mark.parametrize("round_read_lengths", [False, True])
+def test_read_req_splitter_generates(tmp_path, word_bits, max_outstanding,
+                                     round_read_lengths):
   """Build and compile `HostMemReadReqSplitter` for a range of word widths
   and outstanding-request limits (no simulation)."""
   from pycde import Clock, Input, Module, Output, Reset, System, generator
@@ -181,7 +183,8 @@ def test_read_req_splitter_generates(tmp_path, word_bits, max_outstanding):
   resp_t = Channel(
       StructType([("tag", UInt(8)), ("data", Bits(word_bits)),
                   ("last", Bits(1))]))
-  splitter = HostMemReadReqSplitter(req_t, resp_t, 256, max_outstanding)
+  splitter = HostMemReadReqSplitter(req_t, resp_t, max(256, word_bits // 8),
+                                    max_outstanding, round_read_lengths)
 
   class Top(Module):
     clk = Clock()
@@ -212,3 +215,61 @@ def test_read_req_splitter_rejects_zero_outstanding():
       StructType([("tag", UInt(8)), ("data", Bits(64)), ("last", Bits(1))]))
   with pytest.raises(AssertionError):
     HostMemReadReqSplitter(req_t, resp_t, 256, 0)
+
+
+@pytest.mark.parametrize("builder", [CosimBSP, CosimBSP_DMA])
+@pytest.mark.parametrize("width", [True, 64.0, "64", 0, -8, 1, 4, 7, 24, 72])
+def test_cosim_rejects_invalid_hostmem_width(builder, width):
+
+  class Top(Module):
+    pass
+
+  with pytest.raises(ValueError, match="power of two and at least 8"):
+    builder(Top, hostmem_width=width)
+
+
+@pytest.mark.parametrize("builder", [CosimBSP, CosimBSP_DMA])
+@pytest.mark.parametrize("width", [None, 8, 64, 256, 512, 2048, 4096])
+def test_cosim_forwards_hostmem_width(monkeypatch, builder, width):
+  import esiaccel.bsp.cosim as cosim
+
+  class Top(Module):
+    pass
+
+  channel_hostmem = cosim.ChannelHostMem
+  configurations = []
+
+  def capture(**kwargs):
+    configurations.append(kwargs)
+    return channel_hostmem(**kwargs)
+
+  monkeypatch.setattr(cosim, "ChannelHostMem", capture)
+  builder(Top, **({"hostmem_width": width} if width is not None else {}))
+  expected = width if width is not None else 64
+  assert configurations == [{
+      "read_width": expected,
+      "write_width": expected,
+      "max_read_request_bytes": max(256, expected // 8),
+      "max_write_payload_bytes": max(256, expected // 8),
+      "max_outstanding_reads": 4,
+      "round_read_lengths": False,
+  }]
+
+
+@pytest.mark.parametrize("width", [8, 64, 256, 512, 2048, 4096])
+def test_write_gearbox_generates(tmp_path, width):
+  from pycde import Clock, Input, Output, Reset, System, generator
+
+  gearbox = TaggedWriteGearbox(width * 3 + 13, width, max(256, width // 8))
+
+  class Top(Module):
+    clk = Clock()
+    rst = Reset()
+    req = Input(gearbox.in_.type)
+    resp = Output(gearbox.out.type)
+
+    @generator
+    def build(ports):
+      ports.resp = gearbox(clk=ports.clk, rst=ports.rst, in_=ports.req).out
+
+  System(Top, output_directory=str(tmp_path)).compile()
