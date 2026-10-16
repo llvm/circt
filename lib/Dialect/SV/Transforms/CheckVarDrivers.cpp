@@ -6,22 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass checks SystemVerilog Clause 6.5 / 10.3.2: it is illegal for a
-// variable to have more than one continuous driver, or to be driven by both
-// a continuous assignment and a procedural statement, on overlapping bits.
-// Each write's "longest static prefix" (Clause 11.5.3) is resolved and
-// flattened to a half-open bit interval [lo, hi) on the root variable; two
-// drivers conflict if their intervals overlap and at least one is
-// continuous. Procedural-vs-procedural overlap is always legal (the last
-// write wins).
-//
-// NOTE: sv.bpassign/sv.passign and the inout projection ops currently only
-// accept !hw.inout, so variables are checked through their legacy
-// declarations (sv.reg/sv.logic) and continuous drivers through sv.assign,
-// alongside sv.var/sv.var_assign. Nets (sv.wire) are never checked. Once the
-// var/net migration lands, drop the legacy handling (see the TODOs below) and
-// convert the tests to sv.var/sv.var_assign.
-//
+// This transformation pass checks if it is illegal for a variable to have
+// more than one continuous driver, or to be driven by both a continous
+// assignment and a procedural statement, on overlapping bits. Each write's
+// "longest static prefix" (see SV Spec 11.5.3) is resolved and flattened to a
+// half-open bit interval [low, high) on the root variable; two drivers
+// conflict if their intervals overlap and at least one is continuous.
 //
 //===----------------------------------------------------------------------===//
 
@@ -96,9 +86,9 @@ static std::optional<int64_t> getTypeBitWidth(Type type) {
   return width;
 }
 
-/// Returns the width in bits of the data held by `lvalue`.
-static std::optional<int64_t> getLvalueBitWidth(Value lvalue) {
-  return getTypeBitWidth(getLvalueElementType(lvalue.getType()));
+/// Returns the width in bits of the data held by handle
+static std::optional<int64_t> getLvalueBitWidth(Value handle) {
+  return getTypeBitWidth(getLvalueElementType(handle.getType()));
 }
 
 /// Returns true if `value` is the result of an op that declares a SystemVerilog
@@ -118,23 +108,16 @@ static bool isVariableRoot(Value value) {
 /// enclosing select as covering its whole parent.
 static std::optional<int64_t> getConstantIndex(Value value) {
   APInt constant;
-  // Indices are unsigned: the top bit of e.g. `1 : i1` is a value bit, not a
-  // sign.
   if (!mlir::matchPattern(value, mlir::m_ConstantInt(&constant)) ||
       constant.getActiveBits() > 63)
     return std::nullopt;
   return constant.getZExtValue();
 }
 
-/// Resolves the longest static prefix of an lvalue, per SV Clause 11.5.3:
-/// walks back through the projection ops (array index, indexed part-select,
-/// struct field) to the root variable, accumulating a bit offset. As soon as a
-/// dynamic (non-constant) index or base is found, the range collapses to the
-/// whole enclosing aggregate, since the spec defines the static prefix as
-/// ending there.
-///
-/// Returns std::nullopt if the chain does not end at a variable of known
-/// width. Callers must treat that as no information rather than as an error.
+/// Resolves the longest static prefix of a handle, it walks back through
+/// the projection ops to the root variable, accumulating a bit offset.
+/// As soon as a dynamic (non-constant) index or base is found, we collapse
+/// the range to whole enclosing aggregate.
 class StaticPrefixResolver {
 public:
   static std::optional<ResolvedRange> resolve(Value dest) {
@@ -145,8 +128,6 @@ public:
   }
 
 private:
-  // We walk back from `value` to the root variable, accumulating
-  // the `offset` each step of the way.
   std::optional<ResolvedRange> walk(Value value, int64_t selectedWidth) {
     while (true) {
       if (isVariableRoot(value))
@@ -200,9 +181,7 @@ private:
     return walk(parent, *width);
   }
 
-  /// Accumulates the offset contributed by a constant array index. Returns
-  /// failure if the index is dynamic or out of bounds (caller falls back to
-  /// the whole array) or if the offset would overflow.
+  /// Accumulates the offset contributed by a constant array index.
   LogicalResult stepArrayIndex(sv::ArrayIndexInOutOp idx) {
     Type parentType = getLvalueElementType(idx.getInput().getType());
     auto index = getConstantIndex(idx.getIndex());
@@ -216,9 +195,7 @@ private:
   }
 
   /// Accumulates the offset contributed by a constant-base indexed
-  /// part-select (`base +: width` or `base -: width`). Returns failure if
-  /// the base is dynamic or the range is out of bounds (caller falls back to
-  /// the whole parent) or if the offset would overflow.
+  /// part-select.
   LogicalResult stepPartSelect(sv::IndexedPartSelectInOutOp select) {
     Type parentType = getLvalueElementType(select.getInput().getType());
     auto base = getConstantIndex(select.getBase());
@@ -251,8 +228,7 @@ private:
   }
 
   /// Accumulates the offset contributed by a struct field select: the sum
-  /// of the widths of all fields declared after this one (fields are laid
-  /// out MSB-first, matching hw::StructType's element order).
+  /// of the widths of all fields declared after this one.
   LogicalResult stepStructField(sv::StructFieldInOutOp field) {
     Type parentType =
         hw::getCanonicalType(getLvalueElementType(field.getInput().getType()));
@@ -289,8 +265,7 @@ private:
 
 /// Sorts `drivers` by start offset and sweeps for overlaps, reporting an
 /// error on the first conflicting driver whose range overlaps a prior
-/// driver when at least one of the two is continuous. Returns true if any
-/// error was reported.
+/// driver when at least one of the two is continuous.
 static bool sweepForOverlaps(SmallVectorImpl<Driver> &drivers) {
   // We use llvm::stable_sort instead of llvm::sort to ensure that
   // drivers which happen to have identical ranges keep their program order
@@ -345,7 +320,7 @@ struct DriverInfo {
 /// Classifies `op` as a driver of a variable, or returns std::nullopt if it
 /// does not write to one.
 static std::optional<DriverInfo> classifyDriver(Operation *op) {
-  return TypeSwitch<Operation *, std::optional<DriverInfo>>(op)
+  return llvm::TypeSwitch<Operation *, std::optional<DriverInfo>>(op)
       // TODO: sv.assign will become the net assignment only, but it currently
       // acts as a stand-in for sv.var_assign while variables are still
       // declared with sv.reg/sv.logic. We only resolve SystemVerilog
