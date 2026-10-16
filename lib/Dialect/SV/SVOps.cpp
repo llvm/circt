@@ -1836,7 +1836,7 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
                           innerSym);
 
   odsState.addAttribute("name", name);
-  odsState.addTypes(InOutType::get(elementType));
+  odsState.addTypes(NetType::get(elementType));
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -2043,6 +2043,14 @@ LogicalResult AliasOp::verify() {
   // Must have at least two operands.
   if (getAliases().size() < 2)
     return emitOpError("alias must have at least two operands");
+
+  // Must have the same net element type.
+  auto elementType =
+      cast<NetType>(getAliases().front().getType()).getElementType();
+  for (auto alias : getAliases().drop_front())
+    if (cast<NetType>(alias.getType()).getElementType() != elementType)
+      return emitOpError(
+          "all aliased nets must have the same net element type");
 
   return success();
 }
