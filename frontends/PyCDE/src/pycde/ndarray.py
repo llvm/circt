@@ -287,7 +287,7 @@ class NDArray(np.ndarray):
     self.circt_output = build_subarray(np.flip(self))
 
     if create_wire:
-      wire = sv.WireOp.create(self.circt_output.type, self.name + "_wire")
+      wire = sv.WireOp(self.circt_output.type, self.name + "_wire")
       sv.AssignOp(wire, self.circt_output)
       self.circt_output = wire.read
 
