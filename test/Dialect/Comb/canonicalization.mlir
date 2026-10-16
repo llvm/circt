@@ -2206,3 +2206,98 @@ hw.module @shruOvershiftKnownBits(in %s: i4, out ne_zero: i1, out eq_zero: i1) {
   %2 = comb.icmp eq %0, %c0_i4 : i4
   hw.output %1, %2 : i1, i1
 }
+
+// Narrow comb.shl to the highest demanded bit when the dropped upper bits of
+// the shift amount are known zero.
+// CHECK-LABEL: hw.module @narrowShlZeroExtendedLhs(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i23
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %[[C0]], %s : i23, i5
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %x, %[[RHS]] : i28
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SHL]] from 1 : (i28) -> i27
+// CHECK-NEXT:    hw.output %[[RES]] : i27
+hw.module @narrowShlZeroExtendedLhs(in %x: i28, in %s: i5, out o: i27) {
+  %false = hw.constant false
+  %c0_i24 = hw.constant 0 : i24
+  %lhs = comb.concat %false, %x : i1, i28
+  %rhs = comb.concat %c0_i24, %s : i24, i5
+  %shl = comb.shl %lhs, %rhs : i29
+  %res = comb.extract %shl from 1 : (i29) -> i27
+  hw.output %res : i27
+}
+
+// Narrow comb.shl with a constant LHS and a non-zero lowBit extract (low bits
+// [10:0] must be kept because they can shift into [26:11]).
+// CHECK-LABEL: hw.module @narrowShlConstantLhs(
+// CHECK-DAG:     %[[MASK:.+]] = hw.constant -1 : i27
+// CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i22
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %[[C0]], %s : i22, i5
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %[[MASK]], %[[RHS]] : i27
+// CHECK-NEXT:    %[[EXT:.+]] = comb.extract %[[SHL]] from 11 : (i27) -> i16
+// CHECK-NEXT:    hw.output %[[EXT]] : i16
+hw.module @narrowShlConstantLhs(in %s: i5, out o: i16) {
+  %mask = hw.constant -1 : i28
+  %c0_i23 = hw.constant 0 : i23
+  %rhs = comb.concat %c0_i23, %s : i23, i5
+  %shl = comb.shl %mask, %rhs : i28
+  %ext = comb.extract %shl from 11 : (i28) -> i16
+  hw.output %ext : i16
+}
+
+// Narrow comb.shl across multiple extract users and preserve twoState (bin).
+// CHECK-LABEL: hw.module @narrowShlMultipleExtractsTwoState(
+// CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i8
+// CHECK-DAG:     %[[LHS:.+]] = comb.extract %x from 0 : (i16) -> i12
+// CHECK-DAG:     %[[RHS:.+]] = comb.concat %[[C0]], %s : i8, i4
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl bin %[[LHS]], %[[RHS]] : i12
+// CHECK-NEXT:    %[[HI:.+]] = comb.extract %[[SHL]] from 4 : (i12) -> i6
+// CHECK-NEXT:    hw.output %[[SHL]], %[[HI]] : i12, i6
+hw.module @narrowShlMultipleExtractsTwoState(in %x: i16, in %s: i4, out lo: i12, out hi: i6) {
+  %c0_i12 = hw.constant 0 : i12
+  %rhs = comb.concat %c0_i12, %s : i12, i4
+  %shl = comb.shl bin %x, %rhs : i16
+  %0 = comb.extract %shl from 0 : (i16) -> i12
+  %1 = comb.extract %shl from 4 : (i16) -> i6
+  hw.output %0, %1 : i12, i6
+}
+
+// Negative test: when the MSB of comb.shl is demanded, no narrowing occurs.
+// CHECK-LABEL: hw.module @narrowShlMsbDemandedNegative(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i12
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %[[C0]], %s : i12, i4
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %x, %[[RHS]] : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SHL]] from 1 : (i16) -> i15
+// CHECK-NEXT:    hw.output %[[RES]] : i15
+hw.module @narrowShlMsbDemandedNegative(in %x: i16, in %s: i4, out o: i15) {
+  %c0_i12 = hw.constant 0 : i12
+  %rhs = comb.concat %c0_i12, %s : i12, i4
+  %shl = comb.shl %x, %rhs : i16
+  %res = comb.extract %shl from 1 : (i16) -> i15
+  hw.output %res : i15
+}
+
+// Negative test: when the dropped upper bits of rhs are not known zero,
+// truncating rhs could change out-of-range shift behavior and must not fire.
+// CHECK-LABEL: hw.module @narrowShlUnknownRhsUpperBitsNegative(
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %x, %rhs : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SHL]] from 0 : (i16) -> i12
+// CHECK-NEXT:    hw.output %[[RES]] : i12
+hw.module @narrowShlUnknownRhsUpperBitsNegative(in %x: i16, in %rhs: i16, out o: i12) {
+  %shl = comb.shl %x, %rhs : i16
+  %res = comb.extract %shl from 0 : (i16) -> i12
+  hw.output %res : i12
+}
+
+// Ensure a single-bit extract from bit 0 of `shl(1, zext(s))` still folds to
+// an equality comparison rather than narrowing to a 1-bit `comb.shl`.
+// CHECK-LABEL: hw.module @narrowShlSingleBitExtractToICmp(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i4
+// CHECK-NEXT:    %[[CMP:.+]] = comb.icmp eq %s, %[[C0]] : i4
+// CHECK-NEXT:    hw.output %[[CMP]] : i1
+hw.module @narrowShlSingleBitExtractToICmp(in %s: i4, out o: i1) {
+  %c1_i8 = hw.constant 1 : i8
+  %c0_i4 = hw.constant 0 : i4
+  %rhs = comb.concat %c0_i4, %s : i4, i4
+  %shl = comb.shl %c1_i8, %rhs : i8
+  %res = comb.extract %shl from 0 : (i8) -> i1
+  hw.output %res : i1
+}
