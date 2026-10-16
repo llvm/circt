@@ -1322,13 +1322,29 @@ struct ProbesToSignalsPass
 void ProbesToSignalsPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
-  // Collect clocked roots before changing module signatures.
-  SmallVector<Operation *> gatedClockRoots;
+  // The gated-clock conversion below keeps this valid for RWProbe lookups: it
+  // only appends ports, rewrites declarations in place, and adds no inner
+  // symbols. Re-created instances are stale, but RWProbes cannot target them.
+  hw::InnerRefNamespace irn{getAnalysis<SymbolTable>(),
+                            getAnalysis<hw::InnerSymbolTableCollection>()};
+
+  // Collect clocked roots before changing module signatures: force/release ops,
+  // forceable registers, and registers targeted by an RWProbe.
+  SetVector<Operation *> gatedClockRoots;
   getOperation()->walk([&](Operation *op) {
     auto fop = dyn_cast<Forceable>(op);
     if (isa<RefForceOp, RefReleaseOp>(op) ||
-        (fop && isa<RegOp, RegResetOp>(op) && fop.isForceable()))
-      gatedClockRoots.push_back(op);
+        (fop && isa<RegOp, RegResetOp>(op) && fop.isForceable())) {
+      gatedClockRoots.insert(op);
+      return;
+    }
+    auto rwprobe = dyn_cast<RWProbeOp>(op);
+    if (!rwprobe)
+      return;
+    auto ref = getFieldRefForTarget(irn.lookup(rwprobe.getTarget()));
+    auto *defOp = ref.getValue().getDefiningOp();
+    if (isa_and_nonnull<RegOp, RegResetOp>(defOp))
+      gatedClockRoots.insert(defOp);
   });
 
   auto &instanceGraph = getAnalysis<InstanceGraph>();
@@ -1342,9 +1358,6 @@ void ProbesToSignalsPass::runOnOperation() {
     if (failed(tracer.run()))
       return signalPassFailure();
   }
-
-  hw::InnerRefNamespace irn{getAnalysis<SymbolTable>(),
-                            getAnalysis<hw::InnerSymbolTableCollection>()};
 
   // Instances derive control ports from the ABI, so modules are independent.
   SmallVector<FModuleLike> mods(getOperation().getOps<FModuleLike>());
