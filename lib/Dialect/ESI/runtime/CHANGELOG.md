@@ -4,6 +4,9 @@
 
 ### Breaking changes
 
+- **`HostMemAllocator::Options` includes an `alignment` field.** Code linking
+  against the runtime must be rebuilt. Allocator implementations must honor
+  a requested alignment for both host and device addresses or return nullptr.
 - **`HostMemRegion` is now defined at namespace scope** as
   `esi::services::HostMemRegion`. `services::HostMem::HostMemRegion` remains
   as an alias, so existing source compiles unchanged, but code linking against
@@ -19,6 +22,16 @@
 
 ### Added
 
+- **Aligned host memory allocation.** Set `HostMem::Options::alignment`
+  (`HostMemOptions.alignment` in Python) to a power-of-two byte alignment.
+  Zero selects the backend's default. Both host and device addresses must
+  satisfy the request; the region reports the requested size, which need not
+  be a multiple of the alignment. XRT uses a padded allocation and a sub-buffer
+  when a common offset aligns both addresses.
+  Invalid or unsatisfiable requests fail with
+  nullptr (`None` in Python). `mapMemory` / `map_memory` rejects an invalid
+  alignment or existing addresses that do not satisfy it. Python regions
+  expose the device-visible address as `device_ptr`.
 - **Multiple outstanding host memory reads per client.**
   `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
   (default `1`, which keeps the previous one-request-at-a-time behavior). With

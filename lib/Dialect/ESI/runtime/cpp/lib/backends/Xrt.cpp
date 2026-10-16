@@ -15,6 +15,7 @@
 
 #include "esi/backends/Xrt.h"
 #include "esi/Services.h"
+#include "esi/Utils.h"
 
 // XRT includes
 #include "experimental/xrt_bo.h"
@@ -22,9 +23,11 @@
 #include "experimental/xrt_ip.h"
 #include "experimental/xrt_xclbin.h"
 
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <stdexcept>
 
 using namespace esi;
 using namespace esi::services;
@@ -189,10 +192,29 @@ public:
   struct XrtHostMemRegion : public HostMemRegion {
     XrtHostMemRegion(::xrt::device &device, std::size_t size,
                      HostMem::Options opts, int32_t memoryGroup) {
-      bo = ::xrt::bo(device, size, ::xrt::bo::flags::host_only, memoryGroup);
+      auto allocationSize =
+          utils::getAlignedAllocationSize(size, opts.alignment);
+      if (!allocationSize)
+        throw std::invalid_argument(
+            "Invalid or overflowing aligned allocation");
+      bo = ::xrt::bo(device, *allocationSize, ::xrt::bo::flags::host_only,
+                     memoryGroup);
       // Map the buffer into application memory space so that the application
       // can use it just like any memory -- no need to use bo::write.
       ptr = bo.map();
+      if (!ptr)
+        throw std::runtime_error("Failed to map XRT host memory");
+      auto offset = utils::getAlignedOffset(reinterpret_cast<uintptr_t>(ptr),
+                                            bo.address(), opts.alignment);
+      if (!offset)
+        throw std::runtime_error(
+            "No common offset satisfies host and device alignment");
+      if (*allocationSize != size) {
+        // The sub-buffer retains its parent and applies the offset to map(),
+        // address() and sync(), while size() reports only the requested bytes.
+        bo = ::xrt::bo(bo, size, *offset);
+        ptr = bo.map();
+      }
     }
     virtual void *getPtr() const override { return ptr; }
     /// On XRT platforms, the pointer which the device sees is different from
@@ -213,12 +235,27 @@ public:
     if (size == 0)
       return nullptr;
     try {
-      return std::unique_ptr<HostMemRegion>(
-          new XrtHostMemRegion(device, size, opts, memoryGroup));
+      auto region =
+          std::make_unique<XrtHostMemRegion>(device, size, opts, memoryGroup);
+      if (!region->getPtr() ||
+          (opts.alignment &&
+           (reinterpret_cast<uintptr_t>(region->getPtr()) % opts.alignment !=
+                0 ||
+            reinterpret_cast<uintptr_t>(region->getDevicePtr()) %
+                    opts.alignment !=
+                0))) {
+        getConnection().getLogger().error(
+            "xrt_hostmem",
+            std::format("Cannot satisfy host and device alignment {}",
+                        opts.alignment));
+        return nullptr;
+      }
+      return region;
     } catch (const std::exception &e) {
       getConnection().getLogger().error(
-          "xrt_hostmem", "Failed to allocate " + std::to_string(size) +
-                             " bytes of host memory: " + e.what());
+          "xrt_hostmem",
+          std::format("Failed to allocate {} bytes with alignment {}: {}", size,
+                      opts.alignment, e.what()));
       return nullptr;
     }
   }

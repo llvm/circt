@@ -21,6 +21,7 @@
 #include "esi/backends/RpcClient.h"
 
 #include <array>
+#include <bit>
 #include <cstdlib>
 #include <cstring>
 #include <format>
@@ -665,27 +666,35 @@ public:
   }
 
   struct CosimHostMemRegion : public HostMemRegion {
-    CosimHostMemRegion(std::size_t size) : ptr(malloc(size)), size(size) {
+    CosimHostMemRegion(std::size_t size, std::size_t alignment)
+        : ptr(utils::alignedAlloc(size, alignment)), size(size),
+          alignment(alignment) {
       if (ptr)
         memset(ptr, 0xFF, size);
     }
-    virtual ~CosimHostMemRegion() { free(ptr); }
+    virtual ~CosimHostMemRegion() { utils::alignedFree(ptr, alignment); }
     virtual void *getPtr() const override { return ptr; }
     virtual std::size_t getSize() const override { return size; }
 
   private:
     void *ptr;
     std::size_t size;
+    std::size_t alignment;
   };
 
   virtual std::unique_ptr<HostMemRegion>
   allocate(std::size_t size, HostMem::Options opts) const override {
     if (size == 0)
       return nullptr;
-    std::unique_ptr<HostMemRegion> ret(new (std::nothrow)
-                                           CosimHostMemRegion(size));
-    if (!ret || !ret->getPtr())
+    std::unique_ptr<HostMemRegion> ret(
+        new (std::nothrow) CosimHostMemRegion(size, opts.alignment));
+    if (!ret || !ret->getPtr()) {
+      acc.getLogger().error(
+          "HostMem",
+          std::format("Failed to allocate {} bytes with alignment {}", size,
+                      opts.alignment));
       return nullptr;
+    }
     acc.getLogger().debug(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {
@@ -697,6 +706,14 @@ public:
   }
   virtual bool mapMemory(void *ptr, std::size_t size,
                          HostMem::Options opts) const override {
+    if (opts.alignment &&
+        (!std::has_single_bit(opts.alignment) ||
+         reinterpret_cast<uintptr_t>(ptr) % opts.alignment != 0)) {
+      acc.getLogger().error(
+          "HostMem",
+          std::format("Cannot map memory with alignment {}", opts.alignment));
+      return false;
+    }
     return true;
   }
   virtual void unmapMemory(void *ptr) const override {}

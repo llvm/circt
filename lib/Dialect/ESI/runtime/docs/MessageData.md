@@ -339,6 +339,22 @@ keeps its regions alive for its lifetime (e.g. by owning them as
 points at it via the non-owning `Segment::region`. Several segments may share a
 region (e.g. a header and a payload carved out of one allocation).
 
+When a device requires aligned buffers, set `HostMemAllocator::Options::alignment`
+to the required power-of-two byte alignment. Zero uses the backend's default.
+Successful allocations align both `HostMemRegion::getPtr()` and
+`getDevicePtr()`, and `getSize()` reports the requested size even when that size
+is not a multiple of the alignment. Any padding in the backing allocation is
+internal and is not part of the returned region. XRT uses a padded buffer and
+a requested-size sub-buffer at a common aligned host/device offset. If the
+two base addresses require different offsets, the allocation fails rather
+than returning a region with only one aligned address.
+Invalid alignments, unsupported alignments,
+allocation failures and zero-size requests return nullptr. In Python, use
+`HostMemOptions.alignment` and check the result for `None`; the region exposes
+`ptr`, `device_ptr` and `size`. Mapping existing memory with `mapMemory` /
+`map_memory` cannot realign it: an invalid alignment or an address that fails
+the requirement returns false without establishing a mapping.
+
 Zero-copy only needs the region to stay alive and be identifiable; handing
 ownership of it to the backend is optional. A message which owns its regions
 exclusively may override `take(segIdx)`, which a backend calls once it has

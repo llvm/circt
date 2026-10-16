@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <mutex>
@@ -31,6 +32,25 @@ namespace esi {
 namespace utils {
 // Very basic base64 encoding.
 void encodeBase64(const void *data, size_t size, std::string &out);
+
+/// Backing size with room to align a `size`-byte subregion. Zero alignment
+/// leaves the size unchanged. Returns nullopt for zero size, invalid
+/// power-of-two alignment or overflow.
+std::optional<size_t> getAlignedAllocationSize(size_t size, size_t alignment);
+
+/// Common offset which aligns both addresses, or nullopt if alignment is
+/// invalid, no common offset exists, or either adjusted address would overflow.
+/// Zero alignment returns zero.
+std::optional<size_t> getAlignedOffset(uintptr_t hostAddress,
+                                       uintptr_t deviceAddress,
+                                       size_t alignment);
+
+/// Allocate `size` bytes with the requested power-of-two alignment (zero uses
+/// alignof(std::max_align_t)). Returns nullptr for zero size, invalid
+/// alignment, overflow or allocation failure. Release with alignedFree and the
+/// same alignment argument.
+void *alignedAlloc(size_t size, size_t alignment);
+void alignedFree(void *ptr, size_t alignment);
 
 /// C++'s stdlib doesn't have a hash_combine function. This is a simple one.
 inline size_t hash_combine(size_t h1, size_t h2) {
