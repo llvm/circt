@@ -672,6 +672,37 @@ firrtl.circuit "ForceChildGatedClockRegister" {
 }
 
 // -----
+// TEST 20b: A non-forceable register on a gated clock, targeted by an RWProbe,
+// is converted to base-clock state and an observed-value hold mux.
+
+// CHECK-LABEL: firrtl.circuit "RWProbeGatedClockRegister"
+firrtl.circuit "RWProbeGatedClockRegister" {
+  // CHECK-LABEL: firrtl.module @RWProbeGatedClockRegister
+  firrtl.module @RWProbeGatedClockRegister(in %clock: !firrtl.clock, in %gateEn: !firrtl.uint<1>,
+                                           in %en: !firrtl.uint<1>, in %rel: !firrtl.uint<1>,
+                                           in %d: !firrtl.uint<8>, in %v: !firrtl.uint<8>,
+                                           out %o: !firrtl.uint<8>) {
+    %gated = firrtl.int.clock_gate %clock, %gateEn
+    // CHECK: %r = firrtl.reg sym @r %clock : !firrtl.clock, !firrtl.uint<8>
+    // CHECK: %r_forced = firrtl.wire : !firrtl.uint<8>
+    %r = firrtl.reg sym @r %gated : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %r : !firrtl.uint<8>
+
+    %p = firrtl.ref.rwprobe <@RWProbeGatedClockRegister::@r> : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    firrtl.ref.release %clock, %rel, %p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+
+    // CHECK: %[[HOLD:.+]] = firrtl.mux(%gateEn, %d, %r_forced)
+    // CHECK: firrtl.matchingconnect %r, %[[HOLD]]
+    // CHECK: firrtl.matchingconnect %o, %r_forced
+    // CHECK: %forced = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %[[OVR:.+]] = firrtl.mux(%forced, %v, %r)
+    // CHECK: firrtl.matchingconnect %r_forced, %[[OVR]]
+  }
+}
+
+// -----
 // TEST 21: Two exported control channels reach one target state.
 
 firrtl.circuit "TwoPortsBothForced" {
