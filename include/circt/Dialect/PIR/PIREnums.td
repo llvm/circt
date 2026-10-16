@@ -30,7 +30,7 @@ class I8EnumAttr<string name, string summary, list<I8EnumAttrCase> cases> :
 }
 
 //----------------------------------------------------------------------------//
-// Property S (always vs. initial)
+// Property Scope (always vs. initial)
 //----------------------------------------------------------------------------//
 
 /// Always refers to properties that must hold in all samples of a trace
@@ -38,7 +38,7 @@ def Always : I8EnumAttrCase<"Always", 1, "always">;
 /// Initial refers to proeprties that must only hold in the first step of a trace
 def Initial : I8EnumAttrCase<"Initial", 0, "initial">;
 
-def SamplingTypeAttr : I8EnumAttr<"SamplingTypeAttr", "Sampling stategy for a PIR property",
+def ScopeAttr : I8EnumAttr<"ScopeAttr", "Scope of a PIR property",
                                    [Always, Initial]>;
 } // namspace circt::pir
 
