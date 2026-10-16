@@ -237,10 +237,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
           {/*enableAggressiveMergin=*/!opt
                .shouldDisableAggressiveMergeConnections()}));
 
-  if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createVectorization());
-
   return success();
 }
 
