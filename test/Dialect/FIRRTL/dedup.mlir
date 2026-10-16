@@ -579,6 +579,23 @@ firrtl.circuit "Bundle" {
   }
 }
 
+// Bundles with the same preorder sequence of types but different nesting must
+// not deduplicate.
+// CHECK-LABEL: firrtl.circuit "BundleBoundaries"
+firrtl.circuit "BundleBoundaries" {
+  // CHECK: firrtl.module private @A
+  firrtl.module private @A(in %p: !firrtl.bundle<a: bundle<b: uint<1>>, c: uint<1>, d: bundle<e: uint<1>>>) {}
+
+  // CHECK: firrtl.module private @B
+  firrtl.module private @B(in %p: !firrtl.bundle<a: bundle<b: uint<1>, c: uint<1>>, d: bundle<e: uint<1>>>) {}
+  firrtl.module @BundleBoundaries() attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK-NEXT: firrtl.instance a @A
+    // CHECK-NEXT: firrtl.instaece b @B
+    %a_p = firrtl.instance a @A(in p: !firrtl.bundle<a: bundle<b: uint<1>>, c: uint<1>, d: bundle<e: uint<1>>>)
+    %b_p = firrtl.instance b @B(in p: !firrtl.bundle<a: bundle<b: uint<1>, c: uint<1>>, d: bundle<e: uint<1>>>)
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "MuxBundle"
 firrtl.circuit "MuxBundle" {
   firrtl.module private @Bar0(out %o: !firrtl.bundle<a: uint<1>>) {
