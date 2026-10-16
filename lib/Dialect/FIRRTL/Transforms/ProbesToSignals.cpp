@@ -27,6 +27,17 @@
 // machine; later ports have priority, and local control has priority over port
 // control.
 //
+// Priority differs from native force/release, where the last force executed
+// wins:
+// * Local accesses to one target, including through different probe wires or
+//   aliases, are prioritized by source order (later wins), matching native.
+// * Aliased ports: when several RWProbe ports of one module resolve to the same
+//   target, forces made through them are prioritized by port order (later port
+//   wins), not by source order in the parent, because a parent cannot know
+//   which ports alias (see `collectExportedTargets`).
+// * Local control in the target's module wins over any port control,
+//   regardless of source order.
+//
 // Gated clocks are converted first so synthesized state uses a free-running
 // clock.
 //
@@ -59,11 +70,11 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Support/Debug.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/StringSet.h"
 
 #define DEBUG_TYPE "firrtl-probes-to-signals"
 
@@ -82,20 +93,6 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 namespace {
-
-FModuleOp getParentModule(Value value) {
-  if (isa<BlockArgument>(value))
-    return cast<FModuleOp>(value.getParentBlock()->getParentOp());
-  return value.getDefiningOp()->getParentOfType<FModuleOp>();
-}
-
-Value getBundleField(ImplicitLocOpBuilder &builder, Value bundle,
-                     StringRef fieldName) {
-  auto bundleType = type_cast<BundleType>(bundle.getType());
-  auto idx = bundleType.getElementIndex(fieldName);
-  assert(idx && "field not found in bundle");
-  return SubfieldOp::create(builder, bundle, *idx);
-}
 
 struct ForceReleaseAccess {
   Operation *op;
@@ -118,58 +115,6 @@ struct ForceCtrl {
   CtrlGroup group;
   Value clk;
 };
-
-/// Build a `UInt<1>` constant at the builder's insertion point. Keep constants
-/// local because control may be materialized in a nested region.
-Value getU1Const(ImplicitLocOpBuilder &builder, bool value) {
-  return ConstantOp::create(builder, APSInt(APInt(1, value ? 1 : 0,
-                                                  /*isSigned=*/false),
-                                            /*isUnsigned=*/true));
-}
-
-BundleType createForceCtrlBundleType(FIRRTLBaseType probedType) {
-  auto *ctx = probedType.getContext();
-  auto u1Type = UIntType::get(ctx, 1);
-  auto clkType = ClockType::get(ctx);
-  SmallVector<BundleType::BundleElement> elements = {
-      {StringAttr::get(ctx, "forceActive"), /*isFlip=*/false, u1Type},
-      {StringAttr::get(ctx, "releaseActive"), /*isFlip=*/false, u1Type},
-      {StringAttr::get(ctx, "forcedValue"), /*isFlip=*/false, probedType},
-      {StringAttr::get(ctx, "clk"), /*isFlip=*/false, clkType},
-  };
-  return BundleType::get(ctx, elements);
-}
-
-/// Control input ports appended for forceable probe ports. Modules and their
-/// instances derive these independently, so this defines the ABI.
-template <typename PortOwnerT>
-SmallVector<std::pair<unsigned, PortInfo>> getForceCtrlPorts(
-    PortOwnerT op,
-    ArrayRef<std::pair<unsigned, FIRRTLBaseType>> forceablePorts) {
-  auto *ctx = op->getContext();
-  unsigned appendAt = op.getNumPorts();
-
-  llvm::StringSet<> taken;
-  for (unsigned idx = 0; idx != appendAt; ++idx)
-    taken.insert(op.getPortName(idx));
-
-  SmallVector<std::pair<unsigned, PortInfo>> ctrlPorts;
-  ctrlPorts.reserve(forceablePorts.size());
-  for (auto [idx, probedType] : forceablePorts) {
-    SmallString<64> name(op.getPortName(idx));
-    name += "_force_ctrl";
-    auto baseLen = name.size();
-    for (unsigned suffix = 0; !taken.insert(name).second; ++suffix) {
-      name.truncate(baseLen);
-      (Twine("_") + Twine(suffix)).toVector(name);
-    }
-    ctrlPorts.emplace_back(
-        appendAt, PortInfo(StringAttr::get(ctx, name),
-                           createForceCtrlBundleType(probedType), Direction::In,
-                           /*symName=*/StringAttr{}, op.getPortLocation(idx)));
-  }
-  return ctrlPorts;
-}
 
 class ProbeVisitor : public FIRRTLVisitor<ProbeVisitor, LogicalResult> {
 public:
@@ -350,12 +295,82 @@ private:
   LogicalResult buildStateMachineRegisters(Value data, const ForceCtrl &in);
 
   /// Override reads while leaving the target single-driven. Only ground types
-  /// are supported.
-  LogicalResult injectReadSideOverride(Value data, Value effForced,
+  /// are supported. `body` is the body of the module enclosing `data`.
+  LogicalResult injectReadSideOverride(Block *body, Value data, Value effForced,
                                        Value effValue);
 };
 
 } // end namespace
+
+//===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+/// Return the module enclosing `value`, or null if there is none. Handles
+/// block arguments of nested regions as well as module ports.
+static FModuleOp getParentModule(Value value) {
+  return value.getParentRegion()->getParentOfType<FModuleOp>();
+}
+
+static Value getBundleField(ImplicitLocOpBuilder &builder, Value bundle,
+                            StringRef fieldName) {
+  auto bundleType = type_cast<BundleType>(bundle.getType());
+  auto idx = bundleType.getElementIndex(fieldName);
+  assert(idx && "field not found in bundle");
+  return SubfieldOp::create(builder, bundle, *idx);
+}
+
+/// Build a `UInt<1>` constant at the builder's insertion point. Keep constants
+/// local because control may be materialized in a nested region.
+static Value getU1Const(ImplicitLocOpBuilder &builder, bool value) {
+  return ConstantOp::create(builder, APSInt(APInt(1, value ? 1 : 0,
+                                                  /*isSigned=*/false),
+                                            /*isUnsigned=*/true));
+}
+
+static BundleType createForceCtrlBundleType(FIRRTLBaseType probedType) {
+  auto *ctx = probedType.getContext();
+  auto u1Type = UIntType::get(ctx, 1);
+  auto clkType = ClockType::get(ctx);
+  SmallVector<BundleType::BundleElement> elements = {
+      {StringAttr::get(ctx, ProbeVisitor::forceActiveName), /*isFlip=*/false,
+       u1Type},
+      {StringAttr::get(ctx, ProbeVisitor::releaseActiveName), /*isFlip=*/false,
+       u1Type},
+      {StringAttr::get(ctx, ProbeVisitor::forcedValueName), /*isFlip=*/false,
+       probedType},
+      {StringAttr::get(ctx, ProbeVisitor::clockName), /*isFlip=*/false,
+       clkType},
+  };
+  return BundleType::get(ctx, elements);
+}
+
+/// Control input ports appended for forceable probe ports. Modules and their
+/// instances derive these independently from their own port lists, so this
+/// naming defines the ABI: `<port>_force_ctrl`, uniqued with `_<n>`.
+template <typename PortOwnerT>
+static SmallVector<std::pair<unsigned, PortInfo>> getForceCtrlPorts(
+    PortOwnerT op,
+    ArrayRef<std::pair<unsigned, FIRRTLBaseType>> forceablePorts) {
+  auto *ctx = op->getContext();
+  unsigned appendAt = op.getNumPorts();
+
+  Namespace portNamespace;
+  for (unsigned idx = 0; idx != appendAt; ++idx)
+    portNamespace.add(op.getPortName(idx));
+
+  SmallVector<std::pair<unsigned, PortInfo>> ctrlPorts;
+  ctrlPorts.reserve(forceablePorts.size());
+  for (auto [idx, probedType] : forceablePorts) {
+    auto name =
+        portNamespace.newName(Twine(op.getPortName(idx)) + "_force_ctrl");
+    ctrlPorts.emplace_back(
+        appendAt, PortInfo(StringAttr::get(ctx, name),
+                           createForceCtrlBundleType(probedType), Direction::In,
+                           /*symName=*/StringAttr{}, op.getPortLocation(idx)));
+  }
+  return ctrlPorts;
+}
 
 //===----------------------------------------------------------------------===//
 // Visitor: FModuleLike
@@ -617,7 +632,7 @@ LogicalResult ProbeVisitor::visitDecl(WireOp op) {
   return success();
 }
 
-CtrlGroup readCtrlGroup(ImplicitLocOpBuilder &builder, Value bundle) {
+static CtrlGroup readCtrlGroup(ImplicitLocOpBuilder &builder, Value bundle) {
   CtrlGroup group;
   group.forceActive =
       getBundleField(builder, bundle, ProbeVisitor::forceActiveName);
@@ -634,9 +649,9 @@ static Value readForceCtrlClock(ImplicitLocOpBuilder &builder, Value bundle) {
 
 /// Fill absent control fields; materialize `forcedValue` when the sink needs a
 /// driven value.
-CtrlGroup materializeCtrlGroup(ImplicitLocOpBuilder &builder,
-                               FIRRTLBaseType probedType, CtrlGroup group,
-                               bool tieOffValue) {
+static CtrlGroup materializeCtrlGroup(ImplicitLocOpBuilder &builder,
+                                      FIRRTLBaseType probedType,
+                                      CtrlGroup group, bool tieOffValue) {
   if (!group.forceActive)
     group.forceActive = getU1Const(builder, false);
   if (!group.releaseActive)
@@ -714,7 +729,8 @@ static void collectFanInCone(ArrayRef<Value> roots,
   }
 }
 
-LogicalResult ProbeVisitor::injectReadSideOverride(Value data, Value effForced,
+LogicalResult ProbeVisitor::injectReadSideOverride(Block *body, Value data,
+                                                   Value effForced,
                                                    Value effValue) {
   auto type = type_dyn_cast<FIRRTLBaseType>(data.getType());
   if (!type || !type.isGround())
@@ -726,7 +742,6 @@ LogicalResult ProbeVisitor::injectReadSideOverride(Value data, Value effForced,
   SmallPtrSet<Operation *, 16> skip;
   collectFanInCone({effForced, effValue}, skip);
 
-  auto *body = getParentModule(data).getBodyBlock();
   Location loc = data.getLoc();
 
   // Place the observed wire next to the target; control is emitted at block
@@ -811,7 +826,7 @@ LogicalResult ProbeVisitor::buildStateMachineRegisters(Value data,
                                 builder.createOrFold<MuxPrimOp>(
                                     group.releaseActive, cZero, forcedReg)));
 
-  return injectReadSideOverride(data, forcedReg, group.forcedValue);
+  return injectReadSideOverride(body, data, forcedReg, group.forcedValue);
 }
 
 LogicalResult ProbeVisitor::visitInstanceLike(FInstanceLike oldInst) {
@@ -1101,10 +1116,10 @@ static CtrlGroup reduceCtrlSources(ImplicitLocOpBuilder &builder,
 
 /// Merge inbound controls in port order, then apply local control at highest
 /// priority.
-CtrlGroup combineCtrlSources(ImplicitLocOpBuilder &builder,
-                             FIRRTLBaseType probedType,
-                             ArrayRef<CtrlGroup> inbound, CtrlGroup local,
-                             Value clk) {
+static CtrlGroup combineCtrlSources(ImplicitLocOpBuilder &builder,
+                                    FIRRTLBaseType probedType,
+                                    ArrayRef<CtrlGroup> inbound,
+                                    CtrlGroup local, Value clk) {
   SmallVector<CtrlGroup> sources(inbound.begin(), inbound.end());
   sources.push_back(
       materializeCtrlGroup(builder, probedType, local, /*tieOffValue=*/false));
@@ -1112,9 +1127,9 @@ CtrlGroup combineCtrlSources(ImplicitLocOpBuilder &builder,
 }
 
 /// Drive an instance control bundle, tying absent control off.
-void connectControlFields(ImplicitLocOpBuilder &builder, Value control,
-                          FIRRTLBaseType probedType, CtrlGroup group,
-                          Value clk) {
+static void connectControlFields(ImplicitLocOpBuilder &builder, Value control,
+                                 FIRRTLBaseType probedType, CtrlGroup group,
+                                 Value clk) {
   // An unforced target still needs a valid clock input.
   if (!clk)
     clk =
