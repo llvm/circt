@@ -590,7 +590,7 @@ firrtl.circuit "BundleBoundaries" {
   firrtl.module private @B(in %p: !firrtl.bundle<a: bundle<b: uint<1>, c: uint<1>>, d: bundle<e: uint<1>>>) {}
   firrtl.module @BundleBoundaries() attributes {convention = #firrtl<convention scalarized>} {
     // CHECK:      firrtl.instance a @A
-    // CHECK-NEXT: firrtl.instaece b @B
+    // CHECK-NEXT: firrtl.instance b @B
     %a_p = firrtl.instance a @A(in p: !firrtl.bundle<a: bundle<b: uint<1>>, c: uint<1>, d: bundle<e: uint<1>>>)
     %b_p = firrtl.instance b @B(in p: !firrtl.bundle<a: bundle<b: uint<1>, c: uint<1>>, d: bundle<e: uint<1>>>)
   }
