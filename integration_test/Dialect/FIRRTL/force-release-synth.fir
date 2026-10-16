@@ -6,6 +6,7 @@
 ; and probes.
 ; Test clocked force/release, release priority, reset interaction, and
 ; self-incrementing registers.
+; Test release of a forced register on a gated clock.
 
 FIRRTL version 4.0.0
 circuit top :
@@ -134,6 +135,23 @@ circuit top :
     define p = rwprobe(w)
     force(clock, en, p, UInt<8>(0hA1))
 
+  ; Test force/release of a register on a gated clock.
+  module GatedReg :
+    input clock : Clock
+    input reset : UInt<1>
+    output o : UInt<8>
+    regreset cyc : UInt<8>, clock, reset, UInt<8>(0)
+    connect cyc, add(cyc, UInt<1>(1))
+    node en = or(leq(cyc, UInt<8>(2)), geq(cyc, UInt<8>(10)))
+    node gclk = intrinsic(circt_clock_gate : Clock, clock, en)
+    reg r : UInt<8>, gclk
+    connect r, cyc
+    connect o, r
+    node fp = and(geq(cyc, UInt<8>(4)), leq(cyc, UInt<8>(5)))
+    node rp = eq(cyc, UInt<8>(7))
+    force(clock, fp, rwprobe(r), UInt<8>(170))
+    release(clock, rp, rwprobe(r))
+
   public module top :
     input clk : Clock
     input rst : UInt<1>
@@ -141,6 +159,11 @@ circuit top :
     regreset cycle : UInt<8>, clk, rst, UInt<8>(0)
     connect cycle, add(cycle, UInt<8>(1))
     node nreset = eq(rst, UInt<1>(0))
+
+    inst gatedReg of GatedReg
+    connect gatedReg.clock, clk
+    connect gatedReg.reset, rst
+
     ; Test force/release with a non-constant driver.
     node d = pad(rst, 8)
     node y = pad(nreset, 8)
@@ -217,14 +240,18 @@ circuit top :
     printf(clk, and(nreset, eq(cycle, UInt<8>(0))), "idle clockedWire=%x concurrentForce=%x priorityForces=%x resettableReg=%x parentChildForce=%x bundleA=%x bundleB=%x selfIncrementingReg=%x probeWire=%x selfPort=%x\n", clockedWire.o, concurrentForce.o, priorityForces.o, resettableReg.o, parentChildForce.o, bundleField.oa, bundleField.ob, selfIncrementingReg.o, probeWire.o, selfPort.o)
     ; CHECK: forced clockedWire={{0*}}aa concurrentForce={{0*}}00 priorityForces={{0*}}a1 resettableReg={{0*}}aa parentChildForce={{0*}}a1 bundleA={{0*}}aa bundleB={{0*}}01 selfIncrementingReg={{0*}}10 probeWire={{0*}}aa selfPort={{0*}}a1
     printf(clk, and(nreset, eq(cycle, UInt<8>(2))), "forced clockedWire=%x concurrentForce=%x priorityForces=%x resettableReg=%x parentChildForce=%x bundleA=%x bundleB=%x selfIncrementingReg=%x probeWire=%x selfPort=%x\n", clockedWire.o, concurrentForce.o, priorityForces.o, resettableReg.o, parentChildForce.o, bundleField.oa, bundleField.ob, selfIncrementingReg.o, probeWire.o, selfPort.o)
-    ; CHECK: live clockedWire={{0*}}bb resettableReg={{0*}}aa bundleA={{0*}}bb bundleB={{0*}}01
-    printf(clk, and(nreset, eq(cycle, UInt<8>(3))), "live clockedWire=%x resettableReg=%x bundleA=%x bundleB=%x\n", clockedWire.o, resettableReg.o, bundleField.oa, bundleField.ob)
+    ; CHECK: live clockedWire={{0*}}bb resettableReg={{0*}}aa bundleA={{0*}}bb bundleB={{0*}}01 gated o={{0*}}02
+    printf(clk, and(nreset, eq(cycle, UInt<8>(3))), "live clockedWire=%x resettableReg=%x bundleA=%x bundleB=%x gated o=%x\n", clockedWire.o, resettableReg.o, bundleField.oa, bundleField.ob, gatedReg.o)
     ; CHECK: priority priorityForces={{0*}}a2 parentChildForce={{0*}}a2 selfPort={{0*}}a2
     printf(clk, and(nreset, eq(cycle, UInt<8>(4))), "priority priorityForces=%x parentChildForce=%x selfPort=%x\n", priorityForces.o, parentChildForce.o, selfPort.o)
+    ; CHECK: forced gated o={{0*}}aa
+    printf(clk, and(nreset, eq(cycle, UInt<8>(5))), "forced gated o=%x\n", gatedReg.o)
     ; CHECK: priority2 priorityForces={{0*}}a2 parentChildForce={{0*}}c1
     printf(clk, and(nreset, eq(cycle, UInt<8>(6))), "priority2 priorityForces=%x parentChildForce=%x\n", priorityForces.o, parentChildForce.o)
-    ; CHECK: released clockedWire={{0*}}00 resettableReg={{0*}}00 parentChildForce={{0*}}00 selfIncrementingReg={{0*}}11 probeWire={{0*}}00 selfPort={{0*}}00
-    printf(clk, and(nreset, eq(cycle, UInt<8>(8))), "released clockedWire=%x resettableReg=%x parentChildForce=%x selfIncrementingReg=%x probeWire=%x selfPort=%x\n", clockedWire.o, resettableReg.o, parentChildForce.o, selfIncrementingReg.o, probeWire.o, selfPort.o)
+    ; CHECK: released clockedWire={{0*}}00 resettableReg={{0*}}00 parentChildForce={{0*}}00 selfIncrementingReg={{0*}}11 probeWire={{0*}}00 selfPort={{0*}}00 gated o={{0*}}aa
+    printf(clk, and(nreset, eq(cycle, UInt<8>(8))), "released clockedWire=%x resettableReg=%x parentChildForce=%x selfIncrementingReg=%x probeWire=%x selfPort=%x gated o=%x\n", clockedWire.o, resettableReg.o, parentChildForce.o, selfIncrementingReg.o, probeWire.o, selfPort.o, gatedReg.o)
+    ; CHECK: reassigned o={{0*}}0a
+    printf(clk, and(nreset, eq(cycle, UInt<8>(11))), "reassigned o=%x\n", gatedReg.o)
     ; CHECK: PASS
-    printf(clk, and(nreset, eq(cycle, UInt<8>(10))), "PASS\n")
-    stop(clk, and(nreset, eq(cycle, UInt<8>(10))), 0)
+    printf(clk, and(nreset, eq(cycle, UInt<8>(12))), "PASS\n")
+    stop(clk, and(nreset, eq(cycle, UInt<8>(12))), 0)
