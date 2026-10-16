@@ -397,6 +397,12 @@ struct Context {
   FailureOr<moore::SVModuleOp>
   convertUserDefinedPrimitiveDef(const slang::ast::PrimitiveSymbol &primitive);
 
+  FailureOr<moore::SVModuleOp> convertCombinationalUserDefinedPrimitiveDef(
+      moore::SVModuleOp moduleOp, const slang::ast::PrimitiveSymbol &primitive);
+
+  FailureOr<moore::SVModuleOp> convertSequentialUserDefinedPrimitiveDef(
+      moore::SVModuleOp moduleOp, const slang::ast::PrimitiveSymbol &primitive);
+
   LogicalResult convertUserDefinedPrimitiveInstance(
       const slang::ast::PrimitiveInstanceSymbol &prim);
 
