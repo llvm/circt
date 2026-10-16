@@ -59,18 +59,6 @@ static bool isPackedType(Type type) {
 }
 
 //===----------------------------------------------------------------------===//
-// InOut type logic.
-//===----------------------------------------------------------------------===//
-
-/// Return the element type of an InOutType or null if the operand isn't an
-/// InOut type.
-mlir::Type circt::sv::getInOutElementType(mlir::Type type) {
-  if (auto inout = dyn_cast_or_null<InOutType>(type))
-    return inout.getElementType();
-  return {};
-}
-
-//===----------------------------------------------------------------------===//
 // SV handle type logic.
 //===----------------------------------------------------------------------===//
 

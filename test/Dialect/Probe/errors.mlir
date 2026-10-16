@@ -1,9 +1,5 @@
 // RUN: circt-opt %s --verify-diagnostics --split-input-file
 
-// expected-error @below {{failed to verify 'elementType': type supported for probe observation}}
-hw.module @BadInOut(in %p: !probe.ref<!hw.inout<i1>>) {
-}
-
 // -----
 
 // expected-error @below {{failed to verify 'elementType': type supported for probe observation}}
