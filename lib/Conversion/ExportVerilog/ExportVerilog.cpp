@@ -2383,7 +2383,7 @@ private:
   template <typename OpenFunc, typename CloseFunc>
   void emitBracedList(ValueRange ops, OpenFunc openFn, CloseFunc closeFn) {
     return emitBracedList(
-+        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });;
+      ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });;
   }
 
   /// Emit braced list of values surrounded by `{` and `}`.
