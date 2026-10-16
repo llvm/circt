@@ -32,6 +32,7 @@ set(cosim_collateral
   Cosim_Endpoint.sv
   Cosim_Manifest.sv
   Cosim_CycleCount.sv
+  EsiDramModel.sv
 
   driver.sv
   driver.cpp
