@@ -785,6 +785,222 @@ LogicalResult SVReadMemOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// Variant ops
+//===----------------------------------------------------------------------===//
+
+/// Verify that `index` is a valid alternative index of `variantType` and, if
+/// `expectedType` is non-null, that the alternative's type matches it.
+static LogicalResult verifyAlternativeIndexAndType(Operation *op,
+                                                   VariantType variantType,
+                                                   unsigned index,
+                                                   Type expectedType) {
+  auto alternatives = variantType.getAlternatives();
+  if (index >= alternatives.size())
+    return op->emitOpError() << "alternative index " << index
+                             << " exceeds alternative count of variant type";
+
+  if (expectedType && alternatives[index].type != expectedType)
+    return op->emitOpError()
+           << "type " << alternatives[index].type
+           << " of accessed alternative at index " << index
+           << " does not match expected type " << expectedType;
+
+  return success();
+}
+
+/// Look up the alternative `name` of `variantType` and add its index to
+/// `result`. Reports an error at `nameLoc` if there is no such alternative.
+static FailureOr<VariantType::Alternative>
+addAlternativeIndex(OpAsmParser &parser, OperationState &result,
+                    llvm::SMLoc nameLoc, StringAttr name,
+                    VariantType variantType) {
+  auto index = variantType.getAlternativeIndex(name);
+  if (!index) {
+    parser.emitError(nameLoc, "cannot find variant alternative '")
+        << name.getValue() << '\'';
+    return failure();
+  }
+  result.addAttribute("alternativeIndex",
+                      parser.getBuilder().getI32IntegerAttr(*index));
+  return variantType.getAlternatives()[*index];
+}
+
+/// Parse `"name", %operand attr-dict : !sim.variant<...>`.
+static ParseResult
+parseVariantNameAndOperand(OpAsmParser &parser, OperationState &result,
+                           OpAsmParser::UnresolvedOperand &operand,
+                           VariantType &variantType,
+                           VariantType::Alternative &alternative) {
+  StringAttr name;
+  llvm::SMLoc nameLoc = parser.getCurrentLocation();
+  if (parser.parseAttribute(name) || parser.parseComma() ||
+      parser.parseOperand(operand) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(variantType))
+    return failure();
+
+  auto maybeAlternative =
+      addAlternativeIndex(parser, result, nameLoc, name, variantType);
+  if (failed(maybeAlternative))
+    return failure();
+  alternative = *maybeAlternative;
+  return success();
+}
+
+/// Print `"name", %operand attr-dict : !sim.variant<...>`.
+static void printVariantNameAndOperand(OpAsmPrinter &printer, Operation *op,
+                                       StringAttr name, Value operand,
+                                       VariantType variantType) {
+  printer << ' ';
+  printer.printAttributeWithoutType(name);
+  printer << ", ";
+  printer.printOperand(operand);
+  printer.printOptionalAttrDict(op->getAttrs(), {"alternativeIndex"});
+  printer << " : " << variantType;
+}
+
+//===----------------------------------------------------------------------===//
+// VariantCreateOp
+//===----------------------------------------------------------------------===//
+
+void VariantCreateOp::build(OpBuilder &builder, OperationState &odsState,
+                            Type variantType, StringAttr alternativeName,
+                            Value input) {
+  auto index =
+      cast<VariantType>(variantType).getAlternativeIndex(alternativeName);
+  assert(index.has_value() && "alternative name not found in variant type");
+  build(builder, odsState, variantType, *index, input);
+}
+
+LogicalResult VariantCreateOp::verify() {
+  return verifyAlternativeIndexAndType(
+      getOperation(), getType(), getAlternativeIndex(), getInput().getType());
+}
+
+ParseResult VariantCreateOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
+  OpAsmParser::UnresolvedOperand input;
+  VariantType variantType;
+  VariantType::Alternative alternative;
+  if (parseVariantNameAndOperand(parser, result, input, variantType,
+                                 alternative) ||
+      parser.resolveOperand(input, alternative.type, result.operands))
+    return failure();
+  result.addTypes(variantType);
+  return success();
+}
+
+void VariantCreateOp::print(OpAsmPrinter &printer) {
+  printVariantNameAndOperand(printer, *this, getAlternativeNameAttr(),
+                             getInput(), getType());
+}
+
+//===----------------------------------------------------------------------===//
+// VariantExtractOp
+//===----------------------------------------------------------------------===//
+
+void VariantExtractOp::build(OpBuilder &builder, OperationState &odsState,
+                             Value input, StringAttr alternativeName) {
+  auto variantType = cast<VariantType>(input.getType());
+  auto index = variantType.getAlternativeIndex(alternativeName);
+  assert(index.has_value() && "alternative name not found in variant type");
+  build(builder, odsState, variantType.getAlternatives()[*index].type, input,
+        *index);
+}
+
+LogicalResult VariantExtractOp::verify() {
+  return verifyAlternativeIndexAndType(getOperation(), getInput().getType(),
+                                       getAlternativeIndex(), getType());
+}
+
+ParseResult VariantExtractOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  OpAsmParser::UnresolvedOperand input;
+  StringAttr name;
+  VariantType variantType;
+  if (parser.parseOperand(input) || parser.parseLSquare())
+    return failure();
+
+  llvm::SMLoc nameLoc = parser.getCurrentLocation();
+  if (parser.parseAttribute(name) || parser.parseRSquare() ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(variantType))
+    return failure();
+
+  auto alternative =
+      addAlternativeIndex(parser, result, nameLoc, name, variantType);
+  if (failed(alternative) ||
+      parser.resolveOperand(input, variantType, result.operands))
+    return failure();
+  result.addTypes(alternative->type);
+  return success();
+}
+
+void VariantExtractOp::print(OpAsmPrinter &printer) {
+  printer << ' ';
+  printer.printOperand(getInput());
+  printer << '[';
+  printer.printAttributeWithoutType(getAlternativeNameAttr());
+  printer << ']';
+  printer.printOptionalAttrDict((*this)->getAttrs(), {"alternativeIndex"});
+  printer << " : " << getInput().getType();
+}
+
+LogicalResult VariantExtractOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto alternatives =
+      cast<VariantType>(adaptor.getInput().getType()).getAlternatives();
+  unsigned index = adaptor.getAlternativeIndex();
+  if (index >= alternatives.size()) {
+    if (loc)
+      mlir::emitError(*loc, "alternative index " + Twine(index) +
+                                " exceeds alternative count of variant type");
+    return failure();
+  }
+  results.push_back(alternatives[index].type);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// VariantContainsOp
+//===----------------------------------------------------------------------===//
+
+void VariantContainsOp::build(OpBuilder &builder, OperationState &odsState,
+                              Value input, StringAttr alternativeName) {
+  auto variantType = cast<VariantType>(input.getType());
+  auto index = variantType.getAlternativeIndex(alternativeName);
+  assert(index.has_value() && "alternative name not found in variant type");
+  build(builder, odsState, builder.getI1Type(), input, *index);
+}
+
+LogicalResult VariantContainsOp::verify() {
+  return verifyAlternativeIndexAndType(getOperation(), getInput().getType(),
+                                       getAlternativeIndex(),
+                                       /*expectedType=*/Type());
+}
+
+ParseResult VariantContainsOp::parse(OpAsmParser &parser,
+                                     OperationState &result) {
+  OpAsmParser::UnresolvedOperand input;
+  VariantType variantType;
+  VariantType::Alternative alternative;
+  if (parseVariantNameAndOperand(parser, result, input, variantType,
+                                 alternative) ||
+      parser.resolveOperand(input, variantType, result.operands))
+    return failure();
+  result.addTypes(parser.getBuilder().getI1Type());
+  return success();
+}
+
+void VariantContainsOp::print(OpAsmPrinter &printer) {
+  printVariantNameAndOperand(printer, *this, getAlternativeNameAttr(),
+                             getInput(), getInput().getType());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
