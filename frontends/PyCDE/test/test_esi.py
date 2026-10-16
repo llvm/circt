@@ -452,6 +452,56 @@ class HostMemListReq(Module):
     _ = HostMem.write(appid=AppID("host_mem_write_list"), req=write_frame)
 
 
+# The DRAM service mirrors HostMem and adds an optional per-byte 'byteenable'
+# mask on single-message writes. Each DRAM channel is its own declaration;
+# 'esi.Dram[i]' returns the same declaration every time it's called for
+# channel 'i'.
+# CHECK-LABEL:  hw.module @DramReq()
+# CHECK:          esi.service.req <@_Dram1::@read>(#esi.appid<"dram_read">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
+# CHECK:          esi.service.req <@_Dram1::@write>(#esi.appid<"dram_write">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: ui24, byteenable: i3>> from "req", !esi.channel<ui8> to "ackTag"]>
+# CHECK:          esi.service.req <@_Dram0::@read_list>(#esi.appid<"dram_read_list">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui16>> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<ui32>>, [<"", [<"tag">, <"data", 1>]>]>> to "resp"]>
+# CHECK-NOT:    esi.service.std.dram @_Dram1_
+# CHECK-DAG:    esi.service.std.dram @_Dram1{{$}}
+# CHECK-DAG:    esi.service.std.dram @_Dram0{{$}}
+# CHECK-NOT:    esi.service.std.dram @_Dram1_
+@unittestmodule(esi_sys=True)
+class DramReq(Module):
+
+  @generator
+  def build(ports):
+    u64 = UInt(64)(0)
+    c1 = Bits(1)(0)
+    dram1 = esi.Dram[1]
+
+    read_address, _ = Channel(dram1.ReadReqType).wrap(
+        dram1.ReadReqType({
+            "tag": 0,
+            "address": u64
+        }), c1)
+    _ = dram1.read(appid=AppID("dram_read"),
+                   req=read_address,
+                   data_type=UInt(256))
+
+    write_req, _ = dram1.wrap_write_req(tag=UInt(8)(0),
+                                        data=UInt(24)(0),
+                                        address=u64,
+                                        valid=c1,
+                                        byteenable=Bits(3)(5))
+    _ = esi.Dram[1].write(appid=AppID("dram_write"), req=write_req)
+
+    dram0 = esi.Dram[0]
+    burst_req, _ = Channel(dram0.read_req_burst_type(16)).wrap(
+        dram0.read_req_burst_type(16)({
+            "address": u64,
+            "tag": UInt(8)(0),
+            "length": UInt(16)(0),
+        }), c1)
+    _ = dram0.read_list(appid=AppID("dram_read_list"),
+                        req=burst_req,
+                        element_type=UInt(32),
+                        num_items=1)
+
+
 def Writer(type):
 
   class Writer(Module):
