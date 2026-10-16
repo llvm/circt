@@ -47,7 +47,7 @@ using llvm::KnownBits;
 /// that are guaranteed to always be zero, and the set of bits that are
 /// guaranteed to always be one (these must be exclusive!).  A bit that exists
 /// in neither set is unknown.
-KnownBits computeKnownBits(Value value);
+KnownBits computeKnownBits(Value value, unsigned maxDepth = 5);
 
 /// Return true when both operands are wider than the bitwidth threshold, have
 /// matching extension kinds (both zero-extended, both sign-extended, or
