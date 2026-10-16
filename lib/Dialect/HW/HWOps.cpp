@@ -2838,6 +2838,11 @@ OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
       auto indexVal = indexCst.getValue();
       if (indexVal.getBitWidth() < 64) {
         auto index = indexVal.getZExtValue();
+        // An index past the end of a non-power-of-two array is a legal value
+        // of the index type; the folder has no element to return for it, so
+        // leave the op alone rather than read past the attribute.
+        if (index >= inputCst.size())
+          return {};
         return inputCst[inputCst.size() - 1 - index];
       }
     }
