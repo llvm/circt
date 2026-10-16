@@ -52,7 +52,7 @@ def Top(bus_width):
 
     @generator
     def build(ports):
-      for width in [13, bus_width, bus_width + 24, 16384]:
+      for width in [13, bus_width, bus_width + 24, bus_width * 2 + 24, 16384]:
         Writer(width)(clk=ports.clk, rst=ports.rst, appid=AppID("wr", width))
 
       window = esi.HostMem.write_window(Bits(24), 1)

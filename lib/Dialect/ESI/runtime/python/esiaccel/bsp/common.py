@@ -1972,17 +1972,26 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
             client_data_padded[i * output_bitwidth:(i + 1) * output_bitwidth]
             for i in range(num_chunks)
         ]
-        chunk_regs = Array(Bits(output_bitwidth), num_chunks)([
+        chunk_regs = [
             c.reg(ports.clk, ce=client_xact, name=f"chunk_{idx}")
             for idx, c in enumerate(chunks)
-        ])
+        ]
         increment = Wire(Bits(1))
         clear = Wire(Bits(1))
         counter = Counter(num_chunks_idx_bitwidth)(clk=ports.clk,
                                                    rst=ports.rst,
                                                    increment=increment,
                                                    clear=clear)
-        upstream_data_bits = chunk_regs[counter.out]
+        # A tree of 2:1 muxes avoids dynamic wide packed-array selects, which
+        # crash Verilator 5.040 above its 2048-bit expansion limit.
+        mux_values = chunk_regs + [chunk_regs[-1]] * (
+            (1 << num_chunks_idx_bitwidth) - num_chunks)
+        for level in range(num_chunks_idx_bitwidth):
+          mux_values = [
+              Mux(counter.out.as_bits()[level], mux_values[i],
+                  mux_values[i + 1]) for i in range(0, len(mux_values), 2)
+          ]
+        upstream_data_bits = mux_values[0]
         upstream_valid = ControlReg(ports.clk, ports.rst, [client_xact],
                                     [clear])
         upstream_xact = upstream_valid & upstream_ready

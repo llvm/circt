@@ -26,7 +26,7 @@ def _run(conn: AcceleratorConnection, bus_width: int):
   acc = conn.build_accelerator()
   allocations = []
   writers = []
-  for width in [13, bus_width, bus_width + 24, 16384]:
+  for width in [13, bus_width, bus_width + 24, bus_width * 2 + 24, 16384]:
     dut = acc.children[esiaccel.AppID("wr", width)]
     req, ack, gate = [
         dut.ports[esiaccel.AppID(name)] for name in ("req", "ack", "gate")
