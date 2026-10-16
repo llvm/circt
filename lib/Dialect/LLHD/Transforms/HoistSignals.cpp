@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "ProjectionUtils.h"
 #include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "mlir/Analysis/Liveness.h"
@@ -277,6 +278,8 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
 namespace {
 /// The struct performing the hoisting of drives in a process.
 struct DriveHoister {
+  using RangedValue = std::pair<Value, std::optional<ProjectionRange>>;
+
   DriveHoister(ProcessOp processOp) : processOp(processOp) {}
   void hoist();
 
@@ -309,26 +312,58 @@ void DriveHoister::hoist() {
 /// cannot reason about.
 void DriveHoister::findHoistableSlots() {
   SmallPtrSet<Value, 8> seenSlots;
+  SmallDenseMap<Operation *, SmallVector<RangedValue>, 8> slotsByRoot;
+
   processOp.walk([&](DriveOp op) {
     auto slot = op.getSignal();
     if (!seenSlots.insert(slot).second)
       return;
 
-    // We can only hoist drives to slots declared by a `llhd.sig` op outside the
-    // current region.
-    if (!slot.getDefiningOp<llhd::SignalOp>())
+    // We can only hoist drives to slots that are either declared by a
+    // `llhd.sig` op or a projection of it.
+    auto [rootOp, range] = getRootSignalAndRange(slot);
+    if (!rootOp)
       return;
+    if (!rootOp->getParentRegion()->isProperAncestor(&processOp.getBody()))
+      return;
+
+    // We can only hoist drives that are not driving overlapping parts
+    // of the same signal.
+    auto &rootSlots = slotsByRoot[rootOp];
+    bool overlaps = false;
+    for (auto &[otherSlot, otherRange] : rootSlots) {
+      if (!range || !otherRange || !isProvablyDisjoint(*range, *otherRange)) {
+        slots.remove(otherSlot);
+        overlaps = true;
+      }
+    }
+    rootSlots.push_back({slot, range});
+    if (overlaps)
+      return;
+
+    // The entire projection chain has to be defined outside the current region.
     if (!slot.getParentRegion()->isProperAncestor(&processOp.getBody()))
       return;
 
-    // Ensure the slot is not used in any way we cannot reason about.
-    if (!llvm::all_of(slot.getUsers(), [&](auto *user) {
-          // Ignore uses outside of the region.
-          if (!processOp.getBody().isAncestor(user->getParentRegion()))
-            return true;
-          return isa<ProbeOp, DriveOp>(user);
-        }))
-      return;
+    // Ensure the root signal is not (transitively) used in any way we cannot
+    // reason about.
+    SmallVector<Value> worklist{rootOp->getResult(0)};
+    SmallPtrSet<Value, 8> seenProjections;
+    while (!worklist.empty()) {
+      for (auto *user : worklist.pop_back_val().getUsers()) {
+        if (isProjection(user)) {
+          if (seenProjections.insert(user->getResult(0)).second)
+            worklist.push_back(user->getResult(0));
+          continue;
+        }
+        // Ignore other uses outside of the region.
+        if (!processOp.getBody().isAncestor(user->getParentRegion()))
+          continue;
+        // Bail out on unwanted uses.
+        if (!isa<ProbeOp, DriveOp>(user))
+          return;
+      }
+    }
 
     // Skip slots with types for which we cannot materialize a default
     // constant (needed when yielding values across wait boundaries).
@@ -378,8 +413,8 @@ void DriveHoister::collectDriveSets() {
       }
 
       // Check if we can hoist drives to this signal.
-      if (!slots.contains(driveOp.getSignal()) ||
-          unhoistableSlots.contains(driveOp.getSignal())) {
+      auto slot = driveOp.getSignal();
+      if (!slots.contains(slot) || unhoistableSlots.contains(slot)) {
         LLVM_DEBUG(llvm::dbgs()
                    << "- Skipping (slot unhoistable): " << driveOp << "\n");
         continue;
@@ -391,12 +426,12 @@ void DriveHoister::collectDriveSets() {
         LLVM_DEBUG(llvm::dbgs()
                    << "- Aborting slot (drive across side-effect): " << driveOp
                    << "\n");
-        unhoistableSlots.insert(driveOp.getSignal());
+        unhoistableSlots.insert(slot);
         continue;
       }
 
       // Handle the case where we've seen a later drive to this slot.
-      auto &laterDrive = laterDrives[driveOp.getSignal()];
+      auto &laterDrive = laterDrives[slot];
       if (laterDrive) {
         // If there is a later drive with the same delay and enable condition,
         // we can simply ignore this drive.
@@ -412,7 +447,7 @@ void DriveHoister::collectDriveSets() {
         // drive.
         LLVM_DEBUG(llvm::dbgs()
                    << "- Aborting slot (multiple drives): " << driveOp << "\n");
-        unhoistableSlots.insert(driveOp.getSignal());
+        unhoistableSlots.insert(slot);
         continue;
       }
       laterDrive = driveOp;
@@ -424,7 +459,7 @@ void DriveHoister::collectDriveSets() {
           driveOp.getEnable() ? DriveValue(driveOp.getEnable())
                               : DriveValue(trueAttr),
       };
-      auto &driveSet = driveSets[driveOp.getSignal()];
+      auto &driveSet = driveSets[slot];
       driveSet.ops.insert(driveOp);
       driveSet.operands.insert({terminator, operands});
     }

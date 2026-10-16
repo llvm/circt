@@ -1016,9 +1016,11 @@ hw.module @CombCreateDynamicInject(in %u: i42, in %v: i10, in %q: i1) {
 }
 
 func.func private @use_i8(%arg0: i8)
+func.func private @use_i32(%arg0: i32)
 func.func private @use_i42(%arg0: i42)
 func.func private @use_ref_i42(%arg0: !llhd.ref<i42>)
 func.func private @use_array_i42(%arg0: !hw.array<4xi42>)
+func.func private @use_array_i8(%arg0: !hw.array<4xi8>)
 func.func private @use_union(%arg0: !hw.union<a: i8, b: i8>)
 
 // Regression test that verifies probe is inserted post use.
@@ -1410,9 +1412,12 @@ hw.module @UninitializedPartialDrive() {
     // CHECK-NEXT: [[HIGH:%.+]] = comb.extract [[INIT]] from 12 : (i32) -> i20
     // CHECK-NEXT: [[VALUE:%.+]] = comb.concat [[HIGH]], %c0_i12 : i20, i12
     %part = llhd.sig.extract %sig from %offset : <i32> -> <i12>
+    llhd.drv %part, %zero after %time : i12
+    // CHECK-NEXT: call @use_i32([[VALUE]])
+    %value = llhd.prb %sig : i32
+    func.call @use_i32(%value) : (i32) -> ()
     // CHECK-NEXT: llhd.constant_time
     // CHECK-NEXT: llhd.drv %[[SIG]], [[VALUE]]
-    llhd.drv %part, %zero after %time : i12
     cf.br ^bb2
   ^bb2:
     llhd.halt
@@ -1523,7 +1528,285 @@ hw.module @InitializedDelayedPartialDrive(in %u: !hw.array<4xi42>, in %v: i42, i
     %value = llhd.prb %sig : !hw.array<4xi42>
     // CHECK-NEXT: call @use_array_i42(%u)
     func.call @use_array_i42(%value) : (!hw.array<4xi42>) -> ()
+     // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Projection chains of slots, including any constants defined inside the
+// process, are moved out of the process.
+// CHECK-LABEL: @HoistSlotWithLocalConstants
+hw.module @HoistSlotWithLocalConstants(in %u: i1) {
+  %c0_i8 = hw.constant 0 : i8
+  %init = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
+  // CHECK: [[A:%.+]] = llhd.sig
+  %a = llhd.sig %init : <!hw.array<4xi8>>
+  // CHECK-NEXT: [[C1_I2:%.+]] = hw.constant 1 : i2
+  // CHECK-NEXT: [[ELEM:%.+]] = llhd.sig.array_get [[A]][[[C1_I2]]]
+  // CHECK-NEXT: [[C1_I3:%.+]] = hw.constant 1 : i3
+  // CHECK-NEXT: [[BIT:%.+]] = llhd.sig.extract [[ELEM]] from [[C1_I3]]
+  // CHECK-NEXT: llhd.process {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    %eps = llhd.constant_time <0ns, 0d, 1e>
+    %c1_i2 = hw.constant 1 : i2
+    %c1_i3 = hw.constant 1 : i3
+    %0 = llhd.sig.array_get %a[%c1_i2] : <!hw.array<4xi8>>
+    %1 = llhd.sig.extract %0 from %c1_i3 : <i8> -> <i1>
+    // CHECK: llhd.drv [[BIT]], %u
+    llhd.drv %1, %u after %eps : i1
+    llhd.wait ^bb1
+  }
+}
+
+// Constant projections into provably disjoint parts of a signal are promoted
+// as independent slots. Each projection becomes the slot and is hoisted out of
+// the process, and the parent signal is never probed or driven as a whole.
+// CHECK-LABEL: @DisjointProjectionsPromotedIndependently
+hw.module @DisjointProjectionsPromotedIndependently(in %u: !hw.array<4xi8>, in %v: i8, in %w: i8) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  // CHECK: %a = llhd.sig
+  %a = llhd.sig %u : <!hw.array<4xi8>>
+  // CHECK-DAG: [[A0:%.+]] = llhd.sig.array_get %a[%c0_i2]
+  // CHECK-DAG: [[A1:%.+]] = llhd.sig.array_get %a[%c1_i2]
+  // CHECK: llhd.process {
+  llhd.process {
+    // CHECK-NOT: llhd.prb
+    // CHECK-NOT: llhd.sig.array_get
+    %1 = llhd.sig.array_get %a[%c0_i2] : <!hw.array<4xi8>>
+    %2 = llhd.sig.array_get %a[%c1_i2] : <!hw.array<4xi8>>
+    llhd.drv %1, %v after %0 : i8
+    llhd.drv %2, %w after %0 : i8
+    %3 = llhd.prb %1 : i8
+    %4 = llhd.prb %2 : i8
+    // CHECK-NEXT: call @use_i8(%v)
+    // CHECK-NEXT: call @use_i8(%w)
+    func.call @use_i8(%3) : (i8) -> ()
+    func.call @use_i8(%4) : (i8) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-DAG: llhd.drv [[A0]], %v
+    // CHECK-DAG: llhd.drv [[A1]], %w
+    // CHECK-NOT: llhd.drv %a,
+    // CHECK: llhd.halt
+    llhd.halt
+  }
+}
+
+// A dynamic projection can alias any of its siblings, so the parent signal is
+// promoted as a whole even though the other projection has a constant index.
+// CHECK-LABEL: @DynamicProjectionPromotesParent
+hw.module @DynamicProjectionPromotesParent(in %u: !hw.array<4xi8>, in %v: i8, in %w: i8, in %i: i2) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i2 = hw.constant 0 : i2
+  %a = llhd.sig %u : <!hw.array<4xi8>>
+  // CHECK-NOT: llhd.sig.array_get
+  // CHECK: llhd.process {
+  llhd.process {
+    // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+    // CHECK-NOT: llhd.sig.array_get
+    %1 = llhd.sig.array_get %a[%c0_i2] : <!hw.array<4xi8>>
+    %2 = llhd.sig.array_get %a[%i] : <!hw.array<4xi8>>
+    // CHECK-NEXT: [[INJ1:%.+]] = hw.array_inject [[A]][%c0_i2], %v
+    llhd.drv %1, %v after %0 : i8
+    // CHECK-NEXT: [[INJ2:%.+]] = hw.array_inject [[INJ1]][%i], %w
+    llhd.drv %2, %w after %0 : i8
+    // The probe must observe the dynamic drive, which may have hit index 0.
+    // CHECK-NEXT: [[GET:%.+]] = hw.array_get [[INJ2]][%c0_i2]
+    %3 = llhd.prb %1 : i8
+    // CHECK-NEXT: call @use_i8([[GET]])
+    func.call @use_i8(%3) : (i8) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJ2]]
     // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Constant projections whose ranges overlap are not independent, so the parent
+// signal is promoted as a whole.
+// CHECK-LABEL: @OverlappingProjectionsPromoteParent
+hw.module @OverlappingProjectionsPromoteParent(in %u: i16, in %v: i8, in %w: i8) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i4 = hw.constant 0 : i4
+  %c4_i4 = hw.constant 4 : i4
+  %a = llhd.sig %u : <i16>
+  // CHECK-NOT: llhd.sig.extract
+  // CHECK: llhd.process {
+  llhd.process {
+    // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+    // CHECK-NOT: llhd.sig.extract
+    // Bits [0, 8) and [4, 12) overlap in [4, 8).
+    %1 = llhd.sig.extract %a from %c0_i4 : <i16> -> <i8>
+    %2 = llhd.sig.extract %a from %c4_i4 : <i16> -> <i8>
+    // CHECK-NEXT: [[HI:%.+]] = comb.extract [[A]] from 8
+    // CHECK-NEXT: [[DRV1:%.+]] = comb.concat [[HI]], %v
+    llhd.drv %1, %v after %0 : i8
+    // CHECK-NEXT: [[HI:%.+]] = comb.extract [[DRV1]] from 12
+    // CHECK-NEXT: [[LO:%.+]] = comb.extract [[DRV1]] from 0
+    // CHECK-NEXT: [[DRV2:%.+]] = comb.concat [[HI]], %w, [[LO]]
+    llhd.drv %2, %w after %0 : i8
+    // CHECK-NEXT: [[PRB:%.+]] = comb.extract [[DRV2]] from 0
+    %3 = llhd.prb %1 : i8
+    // CHECK-NEXT: call @use_i8([[PRB]])
+    func.call @use_i8(%3) : (i8) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[DRV2]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// A dynamic projection only forces its immediate parent to become the slot.
+// Here `%a[0]` is promoted as a whole because of the dynamic `[%i]` below it,
+// while the disjoint sibling `%a[1]` is still promoted independently.
+// CHECK-LABEL: @NestedDynamicProjectionPromotesIntermediate
+hw.module @NestedDynamicProjectionPromotesIntermediate(in %u: !hw.array<2xarray<4xi8>>, in %v: i8, in %w: !hw.array<4xi8>, in %i: i2) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %false = hw.constant false
+  %true = hw.constant true
+  // CHECK: %a = llhd.sig
+  %a = llhd.sig %u : <!hw.array<2xarray<4xi8>>>
+  // CHECK-DAG: [[A0:%.+]] = llhd.sig.array_get %a[%false]
+  // CHECK-DAG: [[A1:%.+]] = llhd.sig.array_get %a[%true]
+  // CHECK: llhd.process {
+  llhd.process {
+    // CHECK-NEXT: [[ROW:%.+]] = llhd.prb [[A0]]
+    // CHECK-NOT: llhd.sig.array_get
+    %1 = llhd.sig.array_get %a[%false] : <!hw.array<2xarray<4xi8>>>
+    %2 = llhd.sig.array_get %1[%i] : <!hw.array<4xi8>>
+    %3 = llhd.sig.array_get %a[%true] : <!hw.array<2xarray<4xi8>>>
+    // CHECK-NEXT: [[INJ:%.+]] = hw.array_inject [[ROW]][%i], %v
+    llhd.drv %2, %v after %0 : i8
+    llhd.drv %3, %w after %0 : !hw.array<4xi8>
+    %4 = llhd.prb %2 : i8
+    // CHECK-NEXT: call @use_i8(%v)
+    func.call @use_i8(%4) : (i8) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-DAG: llhd.drv [[A0]], [[INJ]]
+    // CHECK-DAG: llhd.drv [[A1]], %w
+    // CHECK-NOT: llhd.drv %a,
+    // CHECK: llhd.halt
+    llhd.halt
+  }
+}
+
+// Distinct struct fields occupy disjoint bit ranges and are promoted as
+// independent slots.
+// CHECK-LABEL: @DisjointStructFieldsPromotedIndependently
+hw.module @DisjointStructFieldsPromotedIndependently(in %u: !hw.struct<x: i8, y: i8>, in %v: i8, in %w: i8) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: %a = llhd.sig
+  %a = llhd.sig %u : <!hw.struct<x: i8, y: i8>>
+  // CHECK-DAG: [[X:%.+]] = llhd.sig.struct_extract %a["x"]
+  // CHECK-DAG: [[Y:%.+]] = llhd.sig.struct_extract %a["y"]
+  // CHECK: llhd.process {
+  llhd.process {
+    // CHECK-NOT: llhd.prb
+    // CHECK-NOT: llhd.sig.struct_extract
+    %1 = llhd.sig.struct_extract %a["x"] : <!hw.struct<x: i8, y: i8>>
+    %2 = llhd.sig.struct_extract %a["y"] : <!hw.struct<x: i8, y: i8>>
+    llhd.drv %1, %v after %0 : i8
+    llhd.drv %2, %w after %0 : i8
+    %3 = llhd.prb %1 : i8
+    %4 = llhd.prb %2 : i8
+    // CHECK-NEXT: call @use_i8(%v)
+    // CHECK-NEXT: call @use_i8(%w)
+    func.call @use_i8(%3) : (i8) -> ()
+    func.call @use_i8(%4) : (i8) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-DAG: llhd.drv [[X]], %v
+    // CHECK-DAG: llhd.drv [[Y]], %w
+    // CHECK-NOT: llhd.drv %a,
+    // CHECK: llhd.halt
+    llhd.halt
+  }
+}
+
+// Union fields all alias the same storage, so the parent signal is promoted as
+// a whole.
+// CHECK-LABEL: @UnionFieldsPromoteParent
+hw.module @UnionFieldsPromoteParent(in %u: !hw.union<x: i8, y: i8>, in %v: i8) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : <!hw.union<x: i8, y: i8>>
+  // CHECK-NOT: llhd.sig.struct_extract
+  // CHECK: llhd.process {
+  llhd.process {
+    // CHECK-NOT: llhd.sig.struct_extract
+    %1 = llhd.sig.struct_extract %a["x"] : <!hw.union<x: i8, y: i8>>
+    %2 = llhd.sig.struct_extract %a["y"] : <!hw.union<x: i8, y: i8>>
+    // CHECK-NEXT: [[INJ:%.+]] = hw.union_create "x", %v
+    llhd.drv %1, %v after %0 : i8
+    // CHECK-NEXT: [[Y:%.+]] = hw.union_extract [[INJ]]["y"]
+    %3 = llhd.prb %2 : i8
+    // CHECK-NEXT: call @use_i8([[Y]])
+    func.call @use_i8(%3) : (i8) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJ]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Disjoint projections do not help if the parent signal itself is accessed in
+// the region: the parent is promoted as a whole.
+// CHECK-LABEL: @DirectAccessPromotesParent
+hw.module @DirectAccessPromotesParent(in %u: !hw.array<4xi8>, in %v: i8, in %w: i8) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %a = llhd.sig %u : <!hw.array<4xi8>>
+  // CHECK-NOT: llhd.sig.array_get
+  // CHECK: llhd.process {
+  llhd.process {
+    // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+    // CHECK-NOT: llhd.sig.array_get
+    %1 = llhd.sig.array_get %a[%c0_i2] : <!hw.array<4xi8>>
+    %2 = llhd.sig.array_get %a[%c1_i2] : <!hw.array<4xi8>>
+    // CHECK-NEXT: [[INJ1:%.+]] = hw.array_inject [[A]][%c0_i2], %v
+    llhd.drv %1, %v after %0 : i8
+    // CHECK-NEXT: [[INJ2:%.+]] = hw.array_inject [[INJ1]][%c1_i2], %w
+    llhd.drv %2, %w after %0 : i8
+    %3 = llhd.prb %a : !hw.array<4xi8>
+    // CHECK-NEXT: call @use_array_i8([[INJ2]])
+    func.call @use_array_i8(%3) : (!hw.array<4xi8>) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJ2]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Blocking and delta drives to disjoint projections end up in separate slots,
+// so the mixed-delay restriction (see @MultiDelayProjectionDrive) does not
+// apply and both are promoted.
+// CHECK-LABEL: @MixedDelaysOnDisjointSlots
+hw.module @MixedDelaysOnDisjointSlots(in %v: i8, in %w: i8) {
+  %eps = llhd.constant_time <0ns, 0d, 1e>
+  %delta = llhd.constant_time <0ns, 1d, 0e>
+  %false = hw.constant false
+  %true = hw.constant true
+  %init = hw.aggregate_constant [0 : i8, 0 : i8] : !hw.array<2xi8>
+  // CHECK: %a = llhd.sig
+  %a = llhd.sig %init : <!hw.array<2xi8>>
+  // CHECK-DAG: [[A0:%.+]] = llhd.sig.array_get %a[%false]
+  // CHECK-DAG: [[A1:%.+]] = llhd.sig.array_get %a[%true]
+  // CHECK: llhd.process {
+  llhd.process {
+    // CHECK-NOT: llhd.prb
+    // CHECK-NOT: llhd.sig.array_get
+    %1 = llhd.sig.array_get %a[%false] : <!hw.array<2xi8>>
+    %2 = llhd.sig.array_get %a[%true] : <!hw.array<2xi8>>
+    llhd.drv %1, %v after %eps : i8
+    llhd.drv %2, %w after %delta : i8
+    %3 = llhd.prb %1 : i8
+    // CHECK-NEXT: call @use_i8(%v)
+    func.call @use_i8(%3) : (i8) -> ()
+    // CHECK-DAG: llhd.drv [[A1]], %w after {{%.+}} : i8
+    // CHECK-DAG: llhd.drv [[A0]], %v after {{%.+}} : i8
+    // CHECK: llhd.halt
     llhd.halt
   }
 }
