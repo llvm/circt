@@ -13,9 +13,9 @@ sv.ifdef  @RANDOMIZE_REG_INIT {
 hw.module @Foo(in %clock: !seq.clock, in %a: i4, out z: i4) {
   // CHECK-NEXT: [[REG:%.+]] = seq.compreg %a, %clock
   %0 = seq.firreg %a clock %clock : i4
-  %1 = sv.wire : !hw.inout<i4>
+  %1 = sv.wire : !sv.net<i4>
   sv.assign %1, %0 : i4
-  %2 = sv.read_inout %1 : !hw.inout<i4>
+  %2 = sv.read_inout %1 : !sv.net<i4>
   // CHECK-NEXT: hw.output [[REG]]
   hw.output %2 : i4
 }

@@ -111,8 +111,8 @@ hw.module @casts(in %in1: i64, out r1: !hw.array<5xi8>) {
 }
 
 hw.module @StructDecls() {
-  %reg1 = sv.reg : !hw.inout<struct<a: i1, b: i1>>
-  %reg2 = sv.reg : !hw.inout<array<8xstruct<a: i1, b: i1>>>
+  %reg1 = sv.var : !sv.var<!hw.struct<a: i1, b: i1>>
+  %reg2 = sv.var : !sv.var<!hw.array<8xstruct<a: i1, b: i1>>>
 }
 
 hw.module @UniformArrayCreate(out arr: !hw.array<5xi8>) {
@@ -122,5 +122,5 @@ hw.module @UniformArrayCreate(out arr: !hw.array<5xi8>) {
 }
 
 hw.module @RegisterOfUnpackedArrayOfStruct() {
-  %reg6 = sv.reg : !hw.inout<uarray<4xarray<8xstruct<a: i1, b: i1>>>>
+  %reg6 = sv.var : !sv.var<!hw.uarray<4xarray<8xstruct<a: i1, b: i1>>>>
 }

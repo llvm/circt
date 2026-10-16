@@ -9,20 +9,20 @@ hw.module @test(in %v: i1) {
   // DISALLOW-NEXT: wire x;
   // DISALLOW-NEXT: assign w = v;
   // DISALLOW-NEXT: assign u = v;
-  %w = sv.wire : !hw.inout<i1>
+  %w = sv.wire : !sv.net<i1>
   sv.assign %w, %v : i1
-  %u = sv.wire : !hw.inout<i1>
+  %u = sv.wire : !sv.net<i1>
   sv.assign %u, %v : i1
   // CHECK: initial begin
   sv.initial {
     // ALLOW:         automatic logic l = v;
     // DISALLOW:      automatic logic l;
     // DISALLOW-NEXT: l = v;
-    %l = sv.logic : !hw.inout<i1>
+    %l = sv.var : !sv.var<i1>
     sv.bpassign %l, %v : i1
   }
   // ALLOW:         wire x = v;
   // DISALLOW:      assign x = v;
-  %x = sv.wire : !hw.inout<i1>
+  %x = sv.wire : !sv.net<i1>
   sv.assign %x, %v : i1
 }

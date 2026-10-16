@@ -51,22 +51,6 @@ class InOutElementConstraint<string value, string inoutValue>
                    inoutValue, value, "sv::getInOutElementType($_self)">;
 
 //===----------------------------------------------------------------------===//
-// SV handle type and related helpers.
-//===----------------------------------------------------------------------===//
-
-
-/// A handle to either a SystemVerilog net or variable object kind.
-def SVHandleType : AnyTypeOf<[NetType, VarType]>;
-
-
-def SVHandleElementType : AnyTypeOf<[NetElementType, VarElementType]>;
-
-
-class SVHandleElementConstraint<string value, string handleElement>
- : TypesMatchWith<"type should be element of SV handle type",
-                  handleElement, value, "sv::getHandleElementType($_self)">;
-
-//===----------------------------------------------------------------------===//
 // Net type and related helpers.
 //===----------------------------------------------------------------------===//
 
@@ -147,6 +131,22 @@ class VarElementConstraint<string value, string varValue>
   : OptionalTypesMatchWith<"type should be var's element type",
                    varValue, value, "sv::getVarElementType($_self)">;
 
+//===----------------------------------------------------------------------===//
+// SV handle type and related helpers.
+//===----------------------------------------------------------------------===//
+
+
+/// A handle to either a SystemVerilog net or variable object kind.
+def SVHandleType : AnyTypeOf<[NetType, VarType]>;
+
+
+def SVHandleElementType : AnyTypeOf<[NetElementType, VarElementType]>;
+
+
+class SVHandleElementConstraint<string value, string handleElement>
+ : TypesMatchWith<"type should be element of SV handle type",
+                  handleElement, value, "sv::getHandleElementType($_self)">;
+                
 //===----------------------------------------------------------------------===//
 // UnpackedOpenArrayType type 
 //===----------------------------------------------------------------------===//

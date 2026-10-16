@@ -488,7 +488,7 @@ def ForceOp : SVOp<"force", [SVHandleElementConstraint<"src", "dest">,
   }];
   let arguments = (ins SVHandleType:$dest, SVHandleElementType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` src attr-dict `:` qualified(type(dest)) `,` type($src)";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($dest)) `,` type($src)";
 }
 
 def ReleaseOp : SVOp<"release", [ProceduralOp]> {
@@ -846,7 +846,7 @@ def DepositOp : SVOp<"nonstandard.deposit",
   }];
   let arguments = (ins SVHandleType:$dest, SVHandleElementType:$src);
   let results = (outs);
-  let assemblyFormat =  "$dest `,` src attr-dict `:` qualified(type(dest)) `,` type($src)";
+  let assemblyFormat =  "$dest `,` $src attr-dict `:` qualified(type($dest)) `,` type($src)";
 }
 
 

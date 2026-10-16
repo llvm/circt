@@ -13,6 +13,7 @@
 
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
@@ -113,6 +114,18 @@ struct LegalizeAnonEnums
     if (auto inoutType = dyn_cast<InOutType>(type)) {
       if (auto newType = processType(inoutType.getElementType()))
         return InOutType::get(newType);
+      return {};
+    }
+
+    if (auto netType = dyn_cast<sv::NetType>(type)) {
+      if (auto newType = processType(netType.getElementType()))
+        return sv::NetType::get(newType);
+      return {};
+    }
+
+    if (auto varType = dyn_cast<sv::VarType>(type)) {
+      if (auto newType = processType(varType.getElementType()))
+        return sv::VarType::get(newType);
       return {};
     }
 

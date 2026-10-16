@@ -17,6 +17,7 @@
 #include "circt/Dialect/HWArith/HWArithOps.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/Pass/Pass.h"
@@ -126,6 +127,10 @@ static bool isSignednessType(Type type) {
             });
           })
           .Case<hw::InOutType>(
+              [](auto type) { return isSignednessType(type.getElementType()); })
+          .Case<sv::NetType>(
+              [](auto type) { return isSignednessType(type.getElementType()); })
+          .Case<sv::VarType>(
               [](auto type) { return isSignednessType(type.getElementType()); })
           .Case<hw::TypeAliasType>(
               [](auto type) { return isSignednessType(type.getInnerType()); })
@@ -427,6 +432,12 @@ Type HWArithToHWTypeConverter::removeSignedness(Type type) {
           })
           .Case<hw::InOutType>([this](auto type) {
             return hw::InOutType::get(removeSignedness(type.getElementType()));
+          })
+          .Case<sv::NetType>([this](auto type) {
+            return sv::NetType::get(removeSignedness(type.getElementType()));
+          })
+          .Case<sv::VarType>([this](auto type) {
+            return sv::VarType::get(removeSignedness(type.getElementType()));
           })
           .Case<hw::TypeAliasType>([this](auto type) {
             return hw::TypeAliasType::get(

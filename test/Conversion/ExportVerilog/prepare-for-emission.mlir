@@ -18,11 +18,11 @@ hw.module @outOfOrderInoutOperations(in %a: i4, out c: i4) {
   // CHECK-NEXT: %2 = sv.array_index_inout %1[%false]
   // CHECK-NEXT: %3 = sv.read_inout %2
   %false = hw.constant false
-  %0 = sv.read_inout %3 : !hw.inout<i4>
-  %3 = sv.array_index_inout %2[%false] : !hw.inout<array<1xi4>>, i1
-  %2 = sv.array_index_inout %1[%false] : !hw.inout<array<1xarray<1xi4>>>, i1
-  %1 = sv.array_index_inout %wire[%false] : !hw.inout<array<1xarray<1xarray<1xi4>>>>, i1
-  %wire = sv.wire  : !hw.inout<array<1xarray<1xarray<1xi4>>>>
+  %0 = sv.read_inout %3 : !sv.net<i4>
+  %3 = sv.array_index_inout %2[%false] : !sv.net<!hw.array<1xi4>>, i1
+  %2 = sv.array_index_inout %1[%false] : !sv.net<!hw.array<1xarray<1xi4>>>, i1
+  %1 = sv.array_index_inout %wire[%false] : !sv.net<!hw.array<1xarray<1xarray<1xi4>>>>, i1
+  %wire = sv.wire  : !sv.net<!hw.array<1xarray<1xarray<1xi4>>>>
   hw.output %0: i4
 }
 
@@ -37,7 +37,7 @@ hw.module @twoState_variadic(in %a: i1, in %b: i1, in %c: i1, out d:i1){
 
 // CHECK-LABEL: @carryOverWireAttrs
 hw.module @carryOverWireAttrs(in %a: i1, out b: i1){
-  // CHECK-NEXT: %foo = sv.wire {magic, sv.attributes = []} : !hw.inout<i1>
+  // CHECK-NEXT: %foo = sv.wire {magic, sv.attributes = []} : !sv.net<i1>
   // CHECK-NEXT: sv.assign %foo, %a
   // CHECK-NEXT: [[TMP:%.+]] = sv.read_inout %foo
   // CHECK-NEXT: hw.output [[TMP]] : i1
@@ -50,9 +50,9 @@ hw.module @carryOverWireAttrs(in %a: i1, out b: i1){
 module {
   // CHECK-LABEL:  hw.module @SpillTemporaryInProceduralRegion
   hw.module @SpillTemporaryInProceduralRegion(in %a: i4, in %b: i4, in %fd: i32) {
-    // CHECK-NEXT: %r = sv.reg
+    // CHECK-NEXT: %r = sv.var
     // CHECK-NEXT: sv.initial {
-    // CHECK-NEXT:   %0 = sv.logic
+    // CHECK-NEXT:   %0 = sv.var
     // CHECK-NEXT:   %1 = comb.add %a, %b
     // CHECK-NEXT:   sv.bpassign %0, %1
     // CHECK-NEXT:   %2 = sv.read_inout %0
@@ -60,7 +60,7 @@ module {
     // CHECK-NEXT:   sv.passign %r, %3
     // CHECK-NEXT: }
     // CHECK-NEXT: hw.output
-    %r = sv.reg : !hw.inout<i1>
+    %r = sv.var : !sv.var<i1>
     sv.initial {
       %0 = comb.add %a, %b : i4
       %1 = comb.extract %0 from 3 : (i4) -> i1
@@ -74,8 +74,8 @@ module {
 module attributes {circt.loweringOptions = "disallowLocalVariables"} {
   // CHECK: @test_hoist
   hw.module @test_hoist(in %a: i3) {
-    // CHECK-NEXT: %reg = sv.reg
-    %reg = sv.reg : !hw.inout<i3>
+    // CHECK-NEXT: %reg = sv.var
+    %reg = sv.var : !sv.var<i3>
     // CHECK-NEXT: %0 = comb.add
     // CHECK-NEXT: sv.initial
     sv.initial {
@@ -99,7 +99,7 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
 
   // CHECK-LABEL:  hw.module @SpillTemporaryInProceduralRegion
   hw.module @SpillTemporaryInProceduralRegion(in %a: i4, in %b: i4, in %fd: i32) {
-    // CHECK-NEXT: %r = sv.reg
+    // CHECK-NEXT: %r = sv.var
     // CHECK-NEXT: %[[VAL:.+]] = comb.add %a, %b
     // CHECK-NEXT: %[[GEN:.+]] = sv.wire
     // CHECK-NEXT: sv.assign %[[GEN]], %[[VAL]]
@@ -109,7 +109,7 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     // CHECK-NEXT:   sv.passign %r, %3
     // CHECK-NEXT: }
     // CHECK-NEXT: hw.output
-    %r = sv.reg : !hw.inout<i1>
+    %r = sv.var : !sv.var<i1>
     sv.initial {
       %0 = comb.add %a, %b : i4
       %1 = comb.extract %0 from 3 : (i4) -> i1
@@ -191,10 +191,10 @@ module attributes {circt.loweringOptions =
   hw.module @mux(in %c: i1, in %b: i8, in %a: i8, out d: i8, out e: i8) {
     // CHECK:      %use_for_mux = sv.wire
     // CHECK-NEXT: sv.assign %use_for_mux, %0 : i8
-    // CHECK-NEXT: %[[read:.+]] = sv.read_inout %use_for_mux : !hw.inout<i8>
+    // CHECK-NEXT: %[[read:.+]] = sv.read_inout %use_for_mux : !sv.net<i8>
     // CHECK-NEXT: %[[add:.+]] = comb.add %[[read]], %a : i8
     %0 = comb.mux %c, %a, %b : i8
-    %use_for_mux = sv.wire : !hw.inout<i8>
+    %use_for_mux = sv.wire : !sv.net<i8>
     sv.assign %use_for_mux, %0 : i8
     %1 = comb.add %0, %a : i8
     // CHECK: %[[mux2:.+]] = comb.mux
@@ -305,8 +305,8 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     // CHECK: sv.alwayscomb
     sv.alwayscomb {
       // CHECK-NEXT: sv.xmr.ref
-      %0 = sv.xmr.ref @xmr : !hw.inout<i1>
-      sv.verbatim "{{0}}" (%0) : !hw.inout<i1>
+      %0 = sv.xmr.ref @xmr : !sv.var<i1>
+      sv.verbatim "{{0}}" (%0) : !sv.var<i1>
     }
   }
   hw.hierpath @xmr [@Foo::@a]
@@ -317,31 +317,31 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
 
 // CHECK-LABEL: @constantInitRegWithBackEdge
 hw.module @constantInitRegWithBackEdge() {
-  // CHECK: %reg = sv.reg init %false : !hw.inout<i1>
+  // CHECK: %reg = sv.var init %false : !sv.var<i1>
   // CHECK-NEXT: %false = hw.constant false
-  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %reg : !sv.var<i1>
   // CHECK-NEXT: %[[VAL_1:.*]] = comb.or %false, %[[VAL_0]] : i1
   %false = hw.constant false
   %0 = comb.or %false, %1 : i1
-  %reg = sv.reg init %false : !hw.inout<i1>
-  %1 = sv.read_inout %reg : !hw.inout<i1>
+  %reg = sv.var init %false : !sv.var<i1>
+  %1 = sv.read_inout %reg : !sv.var<i1>
 }
 
 // -----
 
 // CHECK-LABEL: @temporaryWireForReg
 hw.module @temporaryWireForReg() {
-  // CHECK: %[[WIRE:.*]] = sv.wire : !hw.inout<i1>
-  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %[[WIRE]]  : !hw.inout<i1>
-  // CHECK-NEXT: %b = sv.reg init %[[VAL_0]] : !hw.inout<i1>
-  // CHECK-NEXT: %[[VAL_1:.*]] = sv.read_inout %b : !hw.inout<i1>
-  // CHECK-NEXT: %a = sv.reg init %[[VAL_1]] : !hw.inout<i1>
-  // CHECK-NEXT: %[[VAL_2:.*]] = sv.read_inout %a : !hw.inout<i1>
+  // CHECK: %[[WIRE:.*]] = sv.wire : !sv.net<i1>
+  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %[[WIRE]]  : !sv.net<i1>
+  // CHECK-NEXT: %b = sv.var init %[[VAL_0]] : !sv.var<i1>
+  // CHECK-NEXT: %[[VAL_1:.*]] = sv.read_inout %b : !sv.var<i1>
+  // CHECK-NEXT: %a = sv.var init %[[VAL_1]] : !sv.var<i1>
+  // CHECK-NEXT: %[[VAL_2:.*]] = sv.read_inout %a : !sv.var<i1>
   // CHECK-NEXT: sv.assign %[[WIRE]], %[[VAL_2]] : i1
-  %0 = sv.read_inout %a : !hw.inout<i1>
-  %1 = sv.read_inout %b : !hw.inout<i1>
-  %b = sv.reg init %0 : !hw.inout<i1>
-  %a = sv.reg init %1 : !hw.inout<i1>
+  %0 = sv.read_inout %a : !sv.var<i1>
+  %1 = sv.read_inout %b : !sv.var<i1>
+  %b = sv.var init %0 : !sv.var<i1>
+  %a = sv.var init %1 : !sv.var<i1>
 }
 
 // -----

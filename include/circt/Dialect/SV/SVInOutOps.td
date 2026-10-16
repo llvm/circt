@@ -57,7 +57,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return getResult().getType()).getElementType();
+      return getResult().getType().getElementType();
     }
   }];
 }

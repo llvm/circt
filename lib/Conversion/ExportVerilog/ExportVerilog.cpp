@@ -178,7 +178,7 @@ static bool isDuplicatableExpression(Operation *op) {
     if (auto read = dyn_cast<ReadInOutOp>(indexOp)) {
       auto *readSrc = read.getInput().getDefiningOp();
       // A port or wire is ok to duplicate reads.
-      return !readSrc || isa<sv::WireOp, LogicOp>(readSrc);
+      return !readSrc || isa<sv::WireOp, sv::VarOp>(readSrc);
     }
 
     return false;
@@ -293,6 +293,10 @@ static void getTypeDims(
 
   if (auto inout = hw::type_dyn_cast<InOutType>(type))
     return getTypeDims(dims, inout.getElementType(), loc, errorHandler);
+  if (auto net = dyn_cast<sv::NetType>(type))
+    return getTypeDims(dims, net.getElementType(), loc, errorHandler);
+  if (auto var = dyn_cast<sv::VarType>(type))
+    return getTypeDims(dims, var.getElementType(), loc, errorHandler);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc, errorHandler);
   if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
@@ -363,8 +367,12 @@ static Type stripUnpackedTypes(Type type) {
 
 /// Return true if the type has a leading unpacked type.
 static bool hasLeadingUnpackedType(Type type) {
-  assert(isa<hw::InOutType>(type) && "inout type is expected");
-  auto elementType = cast<hw::InOutType>(type).getElementType();
+  Type elementType;
+  if (auto inoutType = dyn_cast<hw::InOutType>(type))
+    elementType = inoutType.getElementType();
+  else
+    elementType = sv::getHandleElementType(type);
+  assert(elementType && "net or variable handle type is expected");
   return stripUnpackedTypes(elementType) != elementType;
 }
 
@@ -372,7 +380,7 @@ static bool hasLeadingUnpackedType(Type type) {
 /// (struct, union, enum or typedef), so that no "logic" prefix is allowed.
 static bool hasStructType(Type type) {
   return TypeSwitch<Type, bool>(type)
-      .Case<InOutType, VarType, UnpackedArrayType, ArrayType>(
+      .Case<InOutType, NetType, VarType, UnpackedArrayType, ArrayType>(
           [](auto parentType) {
             return hasStructType(parentType.getElementType());
           })
@@ -830,7 +838,8 @@ static bool isExpressionUnableToInline(Operation *op,
       auto read = dyn_cast<ReadInOutOp>(op);
       if (!read)
         return true;
-      if (!isa_and_nonnull<sv::WireOp, RegOp>(read.getInput().getDefiningOp()))
+      if (!isa_and_nonnull<sv::WireOp, sv::VarOp>(
+              read.getInput().getDefiningOp()))
         return true;
     }
   }
@@ -1403,7 +1412,7 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
 
   } else if (auto *op = expr.getDefiningOp()) {
     // Uses of a wire, register or logic can be done inline.
-    if (isa<sv::WireOp, RegOp, LogicOp>(op)) {
+    if (isa<sv::WireOp, sv::VarOp>(op)) {
       StringRef name = getSymOpName(op);
       result = StringAttr::get(expr.getContext(), name);
 
@@ -1596,8 +1605,25 @@ static StringRef getVerilogDeclWord(Operation *op,
     return "reg";
   }
 
+  // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
+  // fall through to default.
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+
+  // If this decl is within a function, "automatic" is not needed because
+  // "automatic" is added to its definition.
+  bool stripAutomatic = isa_and_nonnull<FuncOp>(emitter.currentModuleOp);
+
   if (auto var = dyn_cast<VarOp>(op)) {
     bool hasExplicitType = hasExplicitDataType(var.getElementType());
+    // A var defined in a procedural region is emitted as 'automatic'. If the
+    // type has a struct, 'logic' is already emitted within the struct type
+    // definition (e.g. struct packed {logic foo;}), so don't emit it again.
+    // A var carrying `sv.no_automatic` (i.e. one that used to be an `sv.reg`)
+    // keeps the regular declaration style even in a procedural region.
+    if (isProcedural && !stripAutomatic && !var->hasAttr("sv.no_automatic"))
+      return hasStructType(var.getElementType()) ? "automatic"
+                                                 : "automatic logic";
+    // Otherwise follow the configured declaration style.
     switch (emitter.state.options.varOpDeclStyle) {
     case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
       return hasExplicitType ? "var" : "var logic";
@@ -1616,25 +1642,6 @@ static StringRef getVerilogDeclWord(Operation *op,
   // Interfaces instances use the name of the declared interface.
   if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
     return interface.getInterfaceType().getInterface().getValue();
-
-  // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
-  // fall through to default.
-  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
-
-  // If this decl is within a function, "automatic" is not needed because
-  // "automatic" is added to its definition.
-  bool stripAutomatic = isa_and_nonnull<FuncOp>(emitter.currentModuleOp);
-
-  if (isa<LogicOp>(op)) {
-    // If the logic op is defined in a procedural region, add 'automatic'
-    // keyword. If the op has a struct type, 'logic' keyword is already emitted
-    // within a struct type definition (e.g. struct packed {logic foo;}). So we
-    // should not emit extra 'logic'.
-    bool hasStruct = hasStructType(op->getResult(0).getType());
-    if (isProcedural && !stripAutomatic)
-      return hasStruct ? "automatic" : "automatic logic";
-    return hasStruct ? "" : "logic";
-  }
 
   if (!isProcedural)
     return "wire";
@@ -1787,6 +1794,18 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<InOutType>([&](InOutType inoutType) {
         return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+                                   implicitIntType, singleBitDefaultType,
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
+      })
+      .Case<sv::NetType>([&](NetType netType) {
+        return printPackedTypeImpl(netType.getElementType(), os, loc, dims,
+                                   implicitIntType, singleBitDefaultType,
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
+      })
+      .Case<sv::VarType>([&](VarType varType) {
+        return printPackedTypeImpl(varType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
                                    emitter, /*optionalAliasType=*/{},
                                    emitAsTwoStateType);
@@ -1958,7 +1977,7 @@ bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
 // NOLINTBEGIN(misc-no-recursion)
 void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
-      .Case<InOutType, VarType>([&](auto valueType) {
+      .Case<InOutType, NetType, VarType>([&](auto valueType) {
         printUnpackedTypePostfix(valueType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
@@ -2369,8 +2388,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -6168,13 +6186,13 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
 
       // Reject struct_field_inout/array_index_inout for now because it's
       // necessary to consider aliasing inout operations.
-      if (!isa<RegOp, LogicOp>(defOp))
+      if (!isa<VarOp>(defOp))
         return false;
 
       // It's safe to inline if all users are read op, passign or assign.
       // If the op is a logic op whose single assignment is inlined into
       // declaration, we can inline the read.
-      if (isa<LogicOp>(defOp) &&
+      if (isa<VarOp>(defOp) &&
           stmtEmitter.emitter.expressionsEmittedIntoDecl.count(defOp))
         continue;
 
@@ -6376,7 +6394,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining a blocking assignment to logic op declaration.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (!state.options.disallowDeclAssignments && isa<LogicOp>(op) &&
+    if (!state.options.disallowDeclAssignments && isa<VarOp>(op) &&
         op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignment which might be possible to inline.

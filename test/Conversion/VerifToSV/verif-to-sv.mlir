@@ -5,7 +5,7 @@ hw.module @HasBeenResetAsync(in %clock: i1, in %reset: i1, out out: i1) {
   %0 = verif.has_been_reset %clock, async %reset
   hw.output %0 : i1
 
-  // CHECK:      %hasBeenResetReg = sv.reg : !hw.inout<i1>
+  // CHECK:      %hasBeenResetReg = sv.var : !sv.var<i1>
 
   // CHECK-NEXT: sv.initial {
   // CHECK-NEXT:   sv.if %reset {
@@ -35,7 +35,7 @@ hw.module @HasBeenResetSync(in %clock: i1, in %reset: i1, out out: i1) {
   %0 = verif.has_been_reset %clock, sync %reset
   hw.output %0 : i1
 
-  // CHECK:      %hasBeenResetReg = sv.reg : !hw.inout<i1>
+  // CHECK:      %hasBeenResetReg = sv.var : !sv.var<i1>
 
   // CHECK-NEXT: sv.initial {
   // CHECK-NEXT:   sv.bpassign %hasBeenResetReg, %x_i1 : i1

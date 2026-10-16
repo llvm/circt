@@ -58,9 +58,9 @@ hw.module @testTypeAlias(
 // CHECK-LABEL: module testRegOp
 hw.module @testRegOp() {
   // CHECK: foo {{.+}};
-  %r1 = sv.reg : !hw.inout<!hw.typealias<@__hw_typedecls::@foo,i1>>
+  %r1 = sv.var : !sv.var<!hw.typealias<@__hw_typedecls::@foo,i1>>
   // CHECK: foo[2:0] {{.+}};
-  %r2 = sv.reg : !hw.inout<!hw.array<3xtypealias<@__hw_typedecls::@foo,i1>>>
+  %r2 = sv.var : !sv.var<!hw.array<3xtypealias<@__hw_typedecls::@foo,i1>>>
 }
 
 // Check that sv.reg omits the "reg" keyword for typealias types wrapped in
@@ -69,19 +69,19 @@ hw.module @testRegOp() {
 hw.module @testRegOpUnpackedArrayTypealias() {
   // CHECK-NOT: reg
   // CHECK: foo{{.*}}[0:7]
-  %r1 = sv.reg : !hw.inout<uarray<8xtypealias<@__hw_typedecls::@foo, i1>>>
+  %r1 = sv.var : !sv.var<!hw.uarray<8xtypealias<@__hw_typedecls::@foo, i1>>>
 
   // CHECK-NOT: reg
   // CHECK: foo{{.*}}[0:3][0:7]
-  %r2 = sv.reg : !hw.inout<uarray<4xuarray<8xtypealias<@__hw_typedecls::@foo, i1>>>>
+  %r2 = sv.var : !sv.var<!hw.uarray<4xuarray<8xtypealias<@__hw_typedecls::@foo, i1>>>>
 
   // CHECK-NOT: reg
   // CHECK: bar{{.*}}[0:7]
-  %r3 = sv.reg : !hw.inout<uarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>
+  %r3 = sv.var : !sv.var<!hw.uarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>
 
   // CHECK-NOT: reg
   // CHECK: bar[7:0]{{.*}}[0:3]
-  %r4 = sv.reg : !hw.inout<uarray<4xarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>>
+  %r4 = sv.var : !sv.var<!hw.uarray<4xarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>>
 }
 
 // CHECK-LABEL: module testAggregateCreate
@@ -105,13 +105,13 @@ hw.module @testAggregateInout(in %i: i1, out out1: i8, out out2: i1) {
   // CHECK-NEXT: wire bar str;
   // CHECK-NEXT: assign out1 = array[4'h0];
   // CHECK-NEXT: assign out2 = str.a;
-  %array = sv.wire : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>
-  %str = sv.wire : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+  %array = sv.wire : !sv.net<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>
+  %str = sv.wire : !sv.net<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
   %c0_i4 = hw.constant 0 : i4
-  %0 = sv.array_index_inout %array[%c0_i4] : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>, i4
-  %1 = sv.struct_field_inout %str["a"] : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
-  %2 = sv.read_inout %0 : !hw.inout<i8>
-  %3 = sv.read_inout %1 : !hw.inout<i1>
+  %0 = sv.array_index_inout %array[%c0_i4] : !sv.net<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>, i4
+  %1 = sv.struct_field_inout %str["a"] : !sv.net<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+  %2 = sv.read_inout %0 : !sv.net<i8>
+  %3 = sv.read_inout %1 : !sv.net<i1>
   hw.output %2, %3 : i8, i1
 }
 
@@ -122,22 +122,22 @@ hw.module @testEnumOps(out out1: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum
   hw.output %0 : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
 }
 
-// Declarations of aliased types must not get a "logic" keyword.
+// Declarations of aliased types must not get a "logic" keyword (only "var").
 // CHECK-LABEL: module testAliasLocalDecls
 hw.module @testAliasLocalDecls(in %clk: i1, in %s: !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>, in %f: !hw.typealias<@__hw_typedecls::@foo, i1>) {
-  // CHECK:      {{^}}  bar{{ +}}m;
-  // CHECK-NEXT: {{^}}  myEnum{{ +}}e;
-  %m = sv.logic : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
-  %e = sv.logic : !hw.inout<!hw.typealias<@__hw_typedecls::@myEnum, !hw.enum<A, B, C>>>
+  // CHECK:      {{^}}  var bar{{ +}}m;
+  // CHECK-NEXT: {{^}}  var myEnum{{ +}}e;
+  %m = sv.var : !sv.var<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+  %e = sv.var : !sv.var<!hw.typealias<@__hw_typedecls::@myEnum, !hw.enum<A, B, C>>>
   // CHECK:      always @(posedge clk) begin
   // CHECK-NEXT:   automatic bar{{ +}}l = s;
   // CHECK-NEXT:   automatic foo{{ +}}lf = f;
   sv.always posedge %clk {
-    %l = sv.logic : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+    %l = sv.var : !sv.var<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
     sv.bpassign %l, %s : !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>
-    %lf = sv.logic : !hw.inout<!hw.typealias<@__hw_typedecls::@foo, i1>>
+    %lf = sv.var : !sv.var<!hw.typealias<@__hw_typedecls::@foo, i1>>
     sv.bpassign %lf, %f : !hw.typealias<@__hw_typedecls::@foo, i1>
-    %v = sv.read_inout %l : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+    %v = sv.read_inout %l : !sv.var<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
     sv.passign %m, %v : !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>
   }
 }
@@ -145,12 +145,12 @@ hw.module @testAliasLocalDecls(in %clk: i1, in %s: !hw.typealias<@__hw_typedecls
 // Unions and enums are keyword types too.
 // CHECK-LABEL: module testUnionLocalDecls
 hw.module @testUnionLocalDecls(in %clk: i1, in %u: !hw.union<a: i4, b: i4>) {
-  // CHECK:      {{^}}  union packed {logic [3:0] a;logic [3:0] b;} mu;
-  %mu = sv.logic : !hw.inout<!hw.union<a: i4, b: i4>>
+  // CHECK:      {{^}}  var union packed {logic [3:0] a;logic [3:0] b;} mu;
+  %mu = sv.var : !sv.var<!hw.union<a: i4, b: i4>>
   // CHECK:      always @(posedge clk) begin
   // CHECK-NEXT:   automatic union packed {logic [3:0] a;logic [3:0] b;} l = u;
   sv.always posedge %clk {
-    %l = sv.logic : !hw.inout<!hw.union<a: i4, b: i4>>
+    %l = sv.var : !sv.var<!hw.union<a: i4, b: i4>>
     sv.bpassign %l, %u : !hw.union<a: i4, b: i4>
   }
 }
