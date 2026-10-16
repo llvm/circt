@@ -1619,7 +1619,7 @@ static StringRef getVerilogDeclWord(Operation *op,
     // type has a struct, 'logic' is already emitted within the struct type
     // definition (e.g. struct packed {logic foo;}), so don't emit it again.
     // A var carrying `sv.no_automatic` (i.e. one that used to be an `sv.reg`)
-    // keeps the regular declaration style even in a procedural region.
+    // keeps the regular decl aration style even in a procedural region.
     if (isProcedural && !stripAutomatic && !var->hasAttr("sv.no_automatic"))
       return hasStructType(var.getElementType()) ? "automatic"
                                                  : "automatic logic";
@@ -2383,12 +2383,13 @@ private:
   template <typename OpenFunc, typename CloseFunc>
   void emitBracedList(ValueRange ops, OpenFunc openFn, CloseFunc closeFn) {
     return emitBracedList(
-        ops, openFn, [&](Value v) { emitSubExprIBox2(v); }, closeFn);
++        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });;
   }
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(
+        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
