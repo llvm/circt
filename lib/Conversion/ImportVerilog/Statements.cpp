@@ -19,6 +19,7 @@
 #include "slang/ast/expressions/MiscExpressions.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -600,26 +601,24 @@ struct StmtVisitor {
     // Once the core dialects start supporting four-state values we may want to
     // tuck this behind an import option that is on by default, since it does
     // not preserve semantics.
+    //
+    // Exhaustiveness is decided by the set of distinct constant label values,
+    // not by the number of labels: labels may repeat within or across items
+    // (`3'd6, 3'd6` or the same value in two items), and a repeated label does
+    // not cover a new value. Only labels that are constants of the case
+    // expression's width without x/z bits count, so a label that can never
+    // match two-state values does not make the case look full.
     auto twoStateExhaustive = false;
     if (auto intType = dyn_cast<moore::IntType>(caseExpr.getType());
-        intType && intType.getWidth() < 32 &&
-        itemConsts.size() == (1 << intType.getWidth())) {
-      // Sort the constants by value.
-      llvm::sort(itemConsts, [](auto a, auto b) {
-        return a.getValue().getRawValue().ult(b.getValue().getRawValue());
-      });
-
-      // Ensure that every possible value of the case expression is present. Do
-      // this by starting at 0 and iterating over all sorted items. Each item
-      // must be the previous item + 1. At the end, the addition must exactly
-      // overflow and take us back to zero.
-      auto nextValue = FVInt::getZero(intType.getWidth());
-      for (auto value : itemConsts) {
-        if (value.getValue() != nextValue)
-          break;
-        nextValue += 1;
+        intType && intType.getWidth() < 32) {
+      llvm::SmallDenseSet<uint64_t> coveredValues;
+      for (auto constAttr : itemConsts) {
+        const FVInt &fv = constAttr.getValue();
+        if (fv.getBitWidth() != intType.getWidth() || fv.hasUnknown())
+          continue;
+        coveredValues.insert(fv.getRawValue().getZExtValue());
       }
-      twoStateExhaustive = nextValue.isZero();
+      twoStateExhaustive = coveredValues.size() == (1ull << intType.getWidth());
     }
 
     // If the case statement is exhaustive assuming two-state values, don't
