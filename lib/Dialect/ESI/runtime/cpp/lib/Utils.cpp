@@ -15,6 +15,34 @@
 
 #include "esi/Utils.h"
 
+#include <algorithm>
+#include <bit>
+#include <cstdlib>
+#include <limits>
+#include <new>
+
+void *esi::utils::alignedAlloc(size_t size, size_t alignment) {
+  if (size == 0 || (alignment && !std::has_single_bit(alignment)))
+    return nullptr;
+  if (alignment == 0)
+    return std::malloc(size);
+  alignment = std::max(alignment, alignof(std::max_align_t));
+  // Aligned allocation implementations may round the requested size up.
+  if (size > std::numeric_limits<size_t>::max() - (alignment - 1))
+    return nullptr;
+  return ::operator new(size, std::align_val_t(alignment), std::nothrow);
+}
+
+void esi::utils::alignedFree(void *ptr, size_t alignment) {
+  if (!ptr)
+    return;
+  if (alignment == 0)
+    std::free(ptr);
+  else
+    ::operator delete(
+        ptr, std::align_val_t(std::max(alignment, alignof(std::max_align_t))));
+}
+
 static constexpr char Table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                 "abcdefghijklmnopqrstuvwxyz"
                                 "0123456789+/";

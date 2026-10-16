@@ -24,6 +24,7 @@
 #include "esi/Context.h"
 #include "esi/Ports.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <list>
 
@@ -268,11 +269,16 @@ public:
   struct Options {
     bool writeable = false;
     bool useLargePages = false;
+    /// Required alignment in bytes of both the host and device addresses.
+    /// Zero uses the backend's default; nonzero values must be powers of two.
+    std::size_t alignment = 0;
   };
 
   /// Allocate a region of host memory in accelerator accessible address space.
-  /// Returns nullptr if the region cannot be allocated. Implementations MUST
-  /// return nullptr when `size` is 0.
+  /// The region reports the requested `size`, which need not be a multiple of
+  /// `opts.alignment`. Returns nullptr if the region cannot be allocated or the
+  /// alignment is invalid or cannot be satisfied for both addresses.
+  /// Implementations MUST return nullptr when `size` is 0.
   virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
                                                   Options opts) const = 0;
 };
@@ -299,8 +305,10 @@ public:
   /// Try to make a region of host memory accessible to the accelerator. Returns
   /// 'false' on failure. It is optional for an accelerator backend to implement
   /// this, so client code needs to have a fallback for when this returns
-  /// 'false'. On success, it is the client's responsibility to ensure that the
-  /// memory eventually gets unmapped.
+  /// 'false'. The existing host and device addresses must satisfy
+  /// `opts.alignment`; an invalid or unsatisfied alignment returns false
+  /// without establishing a mapping. On success, it is the client's
+  /// responsibility to ensure that the memory eventually gets unmapped.
   virtual bool mapMemory(void *ptr, std::size_t size, Options opts) const {
     return false;
   }

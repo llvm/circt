@@ -18,6 +18,7 @@
 #include "esi/Services.h"
 #include "esi/Utils.h"
 
+#include <bit>
 #include <cassert>
 #include <cstdlib>
 #include <fstream>
@@ -326,12 +327,14 @@ public:
   TraceHostMem(TraceAccelerator &conn) : HostMem(conn), impl(conn.getImpl()) {}
 
   struct TraceHostMemRegion : public HostMemRegion {
-    TraceHostMemRegion(std::size_t size, TraceAccelerator::Impl &impl)
-        : ptr(malloc(size)), size(size), impl(impl) {}
+    TraceHostMemRegion(std::size_t size, std::size_t alignment,
+                       TraceAccelerator::Impl &impl)
+        : ptr(utils::alignedAlloc(size, alignment)), size(size),
+          alignment(alignment), impl(impl) {}
     virtual ~TraceHostMemRegion() {
       if (ptr && impl.isWriteable())
         impl.write("HostMem") << "free " << ptr << std::endl;
-      free(ptr);
+      utils::alignedFree(ptr, alignment);
     }
     virtual void *getPtr() const override { return ptr; }
     virtual std::size_t getSize() const override { return size; }
@@ -339,6 +342,7 @@ public:
   private:
     void *ptr;
     std::size_t size;
+    std::size_t alignment;
     TraceAccelerator::Impl &impl;
   };
 
@@ -346,25 +350,38 @@ public:
   allocate(std::size_t size, HostMem::Options opts) const override {
     if (size == 0)
       return nullptr;
-    std::unique_ptr<HostMemRegion> ret(new (std::nothrow)
-                                           TraceHostMemRegion(size, impl));
-    if (!ret || !ret->getPtr())
+    std::unique_ptr<HostMemRegion> ret(
+        new (std::nothrow) TraceHostMemRegion(size, opts.alignment, impl));
+    if (!ret || !ret->getPtr()) {
+      getConnection().getLogger().error(
+          "HostMem", "Failed to allocate " + std::to_string(size) +
+                         " bytes with alignment " +
+                         std::to_string(opts.alignment));
       return nullptr;
+    }
     if (impl.isWriteable())
       impl.write("HostMem 0x")
           << ret->getPtr() << " allocate " << size
           << " bytes. Writeable: " << opts.writeable
-          << ", useLargePages: " << opts.useLargePages << std::endl;
+          << ", useLargePages: " << opts.useLargePages
+          << ", alignment: " << opts.alignment << std::endl;
     return ret;
   }
   virtual bool mapMemory(void *ptr, std::size_t size,
                          HostMem::Options opts) const override {
-
+    if (opts.alignment &&
+        (!std::has_single_bit(opts.alignment) ||
+         reinterpret_cast<uintptr_t>(ptr) % opts.alignment != 0)) {
+      getConnection().getLogger().error("HostMem",
+                                        "Cannot map memory with alignment " +
+                                            std::to_string(opts.alignment));
+      return false;
+    }
     if (impl.isWriteable())
-      impl.write("HostMem")
-          << "map 0x" << ptr << " size " << size
-          << " bytes. Writeable: " << opts.writeable
-          << ", useLargePages: " << opts.useLargePages << std::endl;
+      impl.write("HostMem") << "map 0x" << ptr << " size " << size
+                            << " bytes. Writeable: " << opts.writeable
+                            << ", useLargePages: " << opts.useLargePages
+                            << ", alignment: " << opts.alignment << std::endl;
     return true;
   }
   virtual void unmapMemory(void *ptr) const override {

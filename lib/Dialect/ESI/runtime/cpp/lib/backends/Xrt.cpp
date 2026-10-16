@@ -22,6 +22,7 @@
 #include "experimental/xrt_ip.h"
 #include "experimental/xrt_xclbin.h"
 
+#include <bit>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -212,9 +213,27 @@ public:
   allocate(std::size_t size, HostMem::Options opts) const override {
     if (size == 0)
       return nullptr;
+    if (opts.alignment && !std::has_single_bit(opts.alignment)) {
+      getConnection().getLogger().error(
+          "xrt_hostmem", "Alignment must be zero or a power of two");
+      return nullptr;
+    }
     try {
-      return std::unique_ptr<HostMemRegion>(
-          new XrtHostMemRegion(device, size, opts, memoryGroup));
+      auto region =
+          std::make_unique<XrtHostMemRegion>(device, size, opts, memoryGroup);
+      if (!region->getPtr() ||
+          (opts.alignment &&
+           (reinterpret_cast<uintptr_t>(region->getPtr()) % opts.alignment !=
+                0 ||
+            reinterpret_cast<uintptr_t>(region->getDevicePtr()) %
+                    opts.alignment !=
+                0))) {
+        getConnection().getLogger().error(
+            "xrt_hostmem", "Cannot satisfy host and device alignment " +
+                               std::to_string(opts.alignment));
+        return nullptr;
+      }
+      return region;
     } catch (const std::exception &e) {
       getConnection().getLogger().error(
           "xrt_hostmem", "Failed to allocate " + std::to_string(size) +

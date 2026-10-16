@@ -280,20 +280,30 @@ NB_MODULE(esiCppAccel, m) {
                    [](services::HostMem::HostMemRegion &mem) {
                      return reinterpret_cast<uintptr_t>(mem.getPtr());
                    })
+      .def_prop_ro("device_ptr",
+                   [](services::HostMem::HostMemRegion &mem) {
+                     return reinterpret_cast<uintptr_t>(mem.getDevicePtr());
+                   })
       .def_prop_ro("size", &services::HostMem::HostMemRegion::getSize);
 
   nb::class_<services::HostMem::Options>(m, "HostMemOptions")
       .def(nb::init<>())
       .def_rw("writeable", &services::HostMem::Options::writeable)
       .def_rw("use_large_pages", &services::HostMem::Options::useLargePages)
+      .def_rw("alignment", &services::HostMem::Options::alignment,
+              "Required host and device address alignment in bytes: zero for "
+              "the backend default, or a power of two.")
       .def("__repr__", [](services::HostMem::Options &opts) {
-        std::string ret = "HostMemOptions(";
+        std::string fields;
         if (opts.writeable)
-          ret += "writeable ";
+          fields += "writeable ";
         if (opts.useLargePages)
-          ret += "use_large_pages";
-        ret += ")";
-        return ret;
+          fields += "use_large_pages ";
+        if (opts.alignment)
+          fields += "alignment=" + std::to_string(opts.alignment) + " ";
+        if (!fields.empty())
+          fields.pop_back();
+        return "HostMemOptions(" + fields + ")";
       });
 
   nb::class_<services::HostMem, services::Service>(m, "HostMem")
