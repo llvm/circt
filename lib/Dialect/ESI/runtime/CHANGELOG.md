@@ -38,6 +38,9 @@
   transports, including engines shared by multiple channels. The BSP satisfies
   the implementation's MMIO and HostMem requests. This option is mutually
   exclusive with the existing `dma_engine_pair` shorthand.
+- `ChannelEngineService` connects an engine's `hostmem_read_list` port to
+  HostMem as a burst (`read_list`) read, as it already does for `hostmem_read`
+  and `hostmem_write`. Engines can now read many host memory words per request.
 - **Zero-copy DMA from HostMem regions through segmented messages.** A
   `Segment` can point (non-owningly) at the `HostMemRegion` holding its bytes
   via the new `region` field, and `Segment::getDeviceAddress()` returns the

@@ -2507,6 +2507,11 @@ def ChannelEngineService(
               esi.AppID(idbase + ".hostmem_read"),
               engine_mod.hostmem_read.type,
               options=bundle.options)
+        if hasattr(engine_mod, "hostmem_read_list"):
+          eng_inputs["hostmem_read_list"] = esi.HostMem.read_list_from_bundle(
+              esi.AppID(idbase + ".hostmem_read_list"),
+              engine_mod.hostmem_read_list.type,
+              options=bundle.options)
         engine = engine_mod(appid=eng_appid, **eng_inputs)
         engine_rec = bundles.emit_engine(engine, details=eng_details)
         engine_rec.add_record(bundle, {bc.name: {}})
