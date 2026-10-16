@@ -212,6 +212,10 @@ SignalSlice ModuleContext::traceProjectionImpl(Value value) {
   // input aggregate. Instead, they adjust the offset and length of the slice of
   // bits or elements targeted by the input aggregate.
   if (auto op = value.getDefiningOp<SigExtractOp>()) {
+    // Aggregate slices are tracked in fields or elements, whereas sig.extract
+    // addresses bits. Do not mix these coordinate systems.
+    if (!isa<IntegerType>(op.getInput().getType().getNestedType()))
+      return {};
     auto slice = traceProjection(op.getInput());
     if (!slice)
       return {};
