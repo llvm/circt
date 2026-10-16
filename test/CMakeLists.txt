@@ -29,6 +29,7 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-ltl-test
   circt-capi-rtg-test
   circt-capi-rtgtest-test
+  circt-capi-sim-test
   circt-capi-support-test
   circt-capi-synth-test
   circt-as
