@@ -14,7 +14,7 @@
 #     host to check data, element counts and burst framing.
 #   * `accepted` (telemetry): number of read requests accepted by the BSP.
 #
-# Usage: hostmem_read.py <output_dir> <max_outstanding_reads>
+# Usage: hostmem_read.py <output_dir> <max_outstanding_reads> [hostmem_width]
 
 import sys
 
@@ -84,22 +84,52 @@ def HostMemReadDut(width: int):
   return HostMemReadDut
 
 
-class Top(Module):
-  clk = Clock()
-  rst = Reset()
+def SingleReadDut(width: int):
 
-  @generator
-  def build(ports):
-    for w in ELEMENT_WIDTHS:
-      HostMemReadDut(w)(clk=ports.clk,
-                        rst=ports.rst,
-                        appid=AppID("rd", w),
-                        instance_name=f"rd_{w}")
+  class SingleReadDut(Module):
+    clk = Clock()
+    rst = Reset()
+
+    @generator
+    def build(ports):
+      address = esi.ChannelService.from_host(AppID("req"), UInt(64))
+      req = address.transform(lambda addr: esi.HostMem.ReadReqType({
+          "address": addr,
+          "tag": 0,
+      }))
+      resp = esi.HostMem.read(AppID("host"), req, Bits(width))
+      esi.ChannelService.to_host(
+          AppID("resp"),
+          resp.transform(lambda r: r.data.as_uint((width + 7) // 8 * 8)))
+
+  return SingleReadDut
+
+
+def Top(bus_width: int):
+
+  class Top(Module):
+    clk = Clock()
+    rst = Reset()
+
+    @generator
+    def build(ports):
+      for w in ELEMENT_WIDTHS:
+        HostMemReadDut(w)(clk=ports.clk,
+                          rst=ports.rst,
+                          appid=AppID("rd", w),
+                          instance_name=f"rd_{w}")
+      for w in [13, bus_width, bus_width + 24, 16384]:
+        SingleReadDut(w)(clk=ports.clk, rst=ports.rst, appid=AppID("single", w))
+
+  return Top
 
 
 if __name__ == "__main__":
   max_outstanding = int(sys.argv[2])
-  s = System(CosimBSP(Top, max_outstanding_reads=max_outstanding),
+  bus_width = int(sys.argv[3]) if len(sys.argv) > 3 else 64
+  s = System(CosimBSP(Top(bus_width),
+                      max_outstanding_reads=max_outstanding,
+                      hostmem_width=bus_width),
              name="HostMemRead",
              output_directory=sys.argv[1])
   s.compile()

@@ -14,7 +14,9 @@ from pycde.constructs import Wire
 from pycde import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
-                     DesignResetController, ResetCycles, TelemetryMMIO)
+                     DEFAULT_MAX_READ_REQUEST_BYTES,
+                     DEFAULT_MAX_WRITE_PAYLOAD_BYTES, DesignResetController,
+                     ResetCycles, TelemetryMMIO)
 from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
 from pycde.circt import ir
@@ -30,6 +32,7 @@ def CosimBSP(
     dma_engine_pair: Optional[Tuple[Callable, Callable]] = None,
     channel_service: Optional[Type[esi.ServiceImplementation]] = None,
     max_outstanding_reads: int = 4,
+    hostmem_width: int = 64,
 ) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'.
@@ -51,7 +54,15 @@ def CosimBSP(
   requests in flight. The cosim host services each read request in order, so
   more than one is safe; the default of 4 keeps the multi-outstanding read path
   exercised in simulation.
+
+  'hostmem_width' is the upstream HostMem read and write width in bits. It must
+  be a power of two and at least 8. The host runtime discovers it automatically.
+  Wider beats reduce transport messages for wide transfers, without combining
+  separate narrow requests or changing completion semantics.
   """
+  if (type(hostmem_width) is not int or hostmem_width < 8 or
+      hostmem_width & (hostmem_width - 1)):
+    raise ValueError("hostmem_width must be a power of two and at least 8")
   if dma_engine_pair is not None and channel_service is not None:
     raise ValueError(
         "dma_engine_pair and channel_service are mutually exclusive")
@@ -68,13 +79,17 @@ def CosimBSP(
 
     mmio = Input(esi.MMIO.read_write.type)
 
-    # If this gets changed, update 'Cosim.cpp' in the runtime.
-    HostMemWidth = 64
+    HostMemWidth = hostmem_width
 
     ChannelHostMemModule = ChannelHostMem(
         read_width=HostMemWidth,
         write_width=HostMemWidth,
-        max_outstanding_reads=max_outstanding_reads)
+        max_read_request_bytes=max(DEFAULT_MAX_READ_REQUEST_BYTES,
+                                   HostMemWidth // 8),
+        max_write_payload_bytes=max(DEFAULT_MAX_WRITE_PAYLOAD_BYTES,
+                                    HostMemWidth // 8),
+        max_outstanding_reads=max_outstanding_reads,
+        round_read_lengths=False)
 
     hostmem_read = ChannelHostMemModule.read
     hostmem_write = ChannelHostMemModule.write
@@ -215,8 +230,11 @@ def CosimBSP(
 
 
 def CosimBSP_DMA(user_module: Type[Module],
-                 max_outstanding_reads: int = 4) -> Module:
+                 max_outstanding_reads: int = 4,
+                 hostmem_width: int = 64) -> Module:
+  """CosimBSP with one-item DMA engines; accepts the same HostMem widths."""
   return CosimBSP(user_module,
                   channel_service=ChannelEngineService(OneItemBuffersToHost,
                                                        OneItemBuffersFromHost),
-                  max_outstanding_reads=max_outstanding_reads)
+                  max_outstanding_reads=max_outstanding_reads,
+                  hostmem_width=hostmem_width)
