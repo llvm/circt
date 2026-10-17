@@ -13,12 +13,18 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FormatInteger.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/Support/Casting.h"
+#include <algorithm>
+#include <cstdint>
 
 using namespace mlir;
 using namespace circt;
@@ -697,22 +703,21 @@ OpFoldResult StringGetOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult StringSubstrOp::fold(FoldAdaptor adaptor) {
-  auto strAttr = cast_or_null<StringAttr>(adaptor.getStr());
-  auto startAttr = cast_or_null<IntegerAttr>(adaptor.getStart());
-  auto endAttr = cast_or_null<IntegerAttr>(adaptor.getEnd());
-  if (!strAttr || !startAttr || !endAttr)
-    return {};
+  auto str = llvm::cast<StringAttr>(adaptor.getStr()).getValue();
+  auto startAttr = llvm::cast<IntegerAttr>(adaptor.getStart());
+  auto start = std::max(int64_t(0), startAttr.getValue().getSExtValue());
 
-  llvm::StringRef str = strAttr.getValue();
-  auto len = static_cast<int64_t>(str.size());
-  int64_t i = startAttr.getValue().getSExtValue();
-  int64_t j = endAttr.getValue().getSExtValue();
+  if (!adaptor.getEnd())
+    return StringAttr::get(getContext(), str.substr(start));
 
-  // OOB returns an empty string per IEEE 1800-2023 § 6.16.8
-  if (i < 0 || j < i || j > len)
-    return StringAttr::get(getContext(), "");
+  auto endAttr = llvm::cast<IntegerAttr>(adaptor.getEnd());
+  auto end = endAttr.getValue().getSExtValue();
 
-  return StringAttr::get(getContext(), str.substr(i, j - i));
+  // IEEE 1800-2023 § 6.16.8 specifies we return an empty
+  // string on all OOB, but we ignore this in favour of
+  // clamping
+  return StringAttr::get(getContext(),
+                         str.substr(start, std::max(int64_t(0), end - start)));
 }
 
 //===----------------------------------------------------------------------===//

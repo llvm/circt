@@ -902,20 +902,20 @@ def StringToUpperOp: SimOp<"string.toupper", [Pure]> {
 def StringSubstrOp : SimOp<"string.substr", [Pure]> {
   let summary = "Extract a substring";
   let description = [{
-    Returns the characters from the start through end indices inclusive, or
-    the empty string if the range is invalid.
+    Returns the characters in the range `[start,end)`, clamping to avoid OOB.
+    If `end` is omitted, returns the rest of the characters from `start`.
   }];
 
   let arguments = (ins
     DynamicStringType:$str,
     I32:$start,
-    I32:$end
+    Optional<I32>:$end
   );
   let results = (outs DynamicStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$str `[` $start `:` $end `]` attr-dict";
+  let assemblyFormat = "$str `[` $start (`:` $end^)? `]` attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
