@@ -103,10 +103,13 @@ def VarOp : SVOp<"var", [
 def RegOp : SVOp<"reg", [
           DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
           DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
-  let summary = "Define a new `reg` in SystemVerilog";
+  let summary = "Define a new `reg` in SystemVerilog (deprecated)";
    let description = [{
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
+
+     **Deprecated:** use `sv.var`, which produces an `!sv.var<T>` handle,
+     instead. This op will be removed in a future release.
    }];
   let arguments = (ins
     StrAttr:$name,
@@ -127,6 +130,7 @@ def RegOp : SVOp<"reg", [
     (`init` $init^)? (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
     custom<ImplicitInitType>(ref(type($result)),ref($init), type($init))
+    custom<WarnDeprecatedReg>(ref(type($result)))
   }];
   let hasCanonicalizeMethod = true;
 
@@ -289,10 +293,13 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
 def LogicOp : SVOp<"logic", [
       DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
       DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
-  let summary = "Define a logic";
+  let summary = "Define a logic (deprecated)";
   let description = [{
     Declare a SystemVerilog Variable Declaration of 'logic' type.
     See SV Spec 6.8, pp100.
+
+    **Deprecated:** use `sv.var`, which produces an `!sv.var<T>` handle,
+    instead. This op will be removed in a future release.
     }];
 
   let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
@@ -312,6 +319,7 @@ def LogicOp : SVOp<"logic", [
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
+    custom<WarnDeprecatedLogic>(ref(type($result)))
   }];
 
   let extraClassDeclaration = [{

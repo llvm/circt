@@ -778,7 +778,7 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   if (!conditions.empty())
     regConditionTable.emplace_or_assign(svReg.reg, conditions);
 
-  // For clock-typed registers the lowered sv.reg holds i1, but any remaining
+  // For clock-typed registers the lowered sv.var holds i1, but any remaining
   // users of the original !seq.clock result (e.g. seq.from_clock, hw.wire)
   // still expect that type.  Bridge the gap with a seq.to_clock so that those
   // users stay type-correct until applyPartialConversion resolves them via
@@ -925,8 +925,7 @@ void FirRegLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, []() {}, []() {});
+        insideIfOp = sv::IfOp::create(builder, reset, []() {}, []() {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};

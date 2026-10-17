@@ -55,31 +55,32 @@ hw.module @testTypeAlias(
   hw.output %0 : !hw.typealias<@__hw_typedecls::@foo, i1>
 }
 
-// CHECK-LABEL: module testRegOp
-hw.module @testRegOp() {
+// CHECK-LABEL: module testVarOp
+hw.module @testVarOp() {
   // CHECK: foo {{.+}};
   %r1 = sv.var : !sv.var<!hw.typealias<@__hw_typedecls::@foo,i1>>
   // CHECK: foo[2:0] {{.+}};
   %r2 = sv.var : !sv.var<!hw.array<3xtypealias<@__hw_typedecls::@foo,i1>>>
 }
 
-// Check that sv.reg omits the "reg" keyword for typealias types wrapped in
-// unpacked arrays, matching the behaviour for StructType in the same position.
-// CHECK-LABEL: module testRegOpUnpackedArrayTypealias
-hw.module @testRegOpUnpackedArrayTypealias() {
-  // CHECK-NOT: reg
+// Check that sv.var omits the "var logic" keyword for typealias types 
+// wrapped in unpacked arrays, matching the behaviour for StructType in the 
+// same position.
+// CHECK-LABEL: module testVarOpUnpackedArrayTypealias
+hw.module @testVarOpUnpackedArrayTypealias() {
+  // CHECK-NOT: var logic
   // CHECK: foo{{.*}}[0:7]
   %r1 = sv.var : !sv.var<!hw.uarray<8xtypealias<@__hw_typedecls::@foo, i1>>>
 
-  // CHECK-NOT: reg
+  // CHECK-NOT: var logic
   // CHECK: foo{{.*}}[0:3][0:7]
   %r2 = sv.var : !sv.var<!hw.uarray<4xuarray<8xtypealias<@__hw_typedecls::@foo, i1>>>>
 
-  // CHECK-NOT: reg
+  // CHECK-NOT: var logic
   // CHECK: bar{{.*}}[0:7]
   %r3 = sv.var : !sv.var<!hw.uarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>
 
-  // CHECK-NOT: reg
+  // CHECK-NOT: var logic
   // CHECK: bar[7:0]{{.*}}[0:3]
   %r4 = sv.var : !sv.var<!hw.uarray<4xarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>>
 }

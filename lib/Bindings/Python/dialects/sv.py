@@ -10,6 +10,7 @@ from ..ir import ArrayAttr, Attribute, FlatSymbolRefAttr, OpView, StringAttr
 from ._sv_ops_gen import *
 from ._sv_ops_gen import _Dialect
 
+import warnings
 from typing import List, Optional
 
 
@@ -67,6 +68,37 @@ class WireOp(WireOp):
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
+class RegOp(RegOp):
+  """Deprecated: use `sv.VarOp`, which produces an `!sv.var<T>` handle."""
+
+  def __init__(self,
+               data_type,
+               name,
+               *,
+               sym_name=None,
+               svAttributes=None,
+               loc=None,
+               ip=None):
+    warnings.warn("sv.RegOp is deprecated; use sv.VarOp instead",
+                  DeprecationWarning,
+                  stacklevel=2)
+    attributes = {"name": StringAttr.get(name)}
+    if sym_name is not None:
+      attributes["inner_sym"] = hw.InnerSymAttr.get(StringAttr.get(sym_name))
+    if svAttributes is not None:
+      attributes["svAttributes"] = ArrayAttr.get(svAttributes)
+    OpView.__init__(
+        self,
+        self.build_generic(attributes=attributes,
+                           results=[data_type],
+                           operands=[],
+                           successors=None,
+                           regions=0,
+                           loc=loc,
+                           ip=ip))
+
+
+@_ods_cext.register_operation(_Dialect, replace=True)
 class VarOp(VarOp):
 
   def __init__(self,
@@ -104,7 +136,14 @@ class AssignOp(AssignOp):
 
   @staticmethod
   def create(dest, src):
-    return sv.AssignOp(dest=dest, src=src)
+    return AssignOpsv.(dest=dest, src=src)
+
+@_ods_cext.register_operation(_Dialect, replace=True)
+class VarAssignOp(VarAssignOp):
+
+  @staticmethod
+  def create(dest, src):
+    return sv.VarAssignOp(dest=dest, src=src)
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
