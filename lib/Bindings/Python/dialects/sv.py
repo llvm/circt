@@ -136,7 +136,7 @@ class AssignOp(AssignOp):
 
   @staticmethod
   def create(dest, src):
-    return AssignOpsv.(dest=dest, src=src)
+    return sv.AssignOp(dest=dest, src=src)
 
 @_ods_cext.register_operation(_Dialect, replace=True)
 class VarAssignOp(VarAssignOp):
