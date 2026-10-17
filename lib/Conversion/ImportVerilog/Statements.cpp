@@ -1015,7 +1015,7 @@ struct StmtVisitor {
     if (auto *disableIff =
             propertySpec->as_if<slang::ast::DisableIffAssertionExpr>()) {
       // Lower disableIff by negating it and passing as the "enable" operand
-      // to the verif.assert/verif.assume instructions.
+      // to the verif.assert/verif.assume/verif.cover instructions.
       auto disableCond = context.convertRvalueExpression(disableIff->condition);
       auto enableCond = moore::NotOp::create(builder, loc, disableCond);
 
@@ -1044,6 +1044,10 @@ struct StmtVisitor {
         return success();
       case slang::ast::AssertionKind::Assume:
         verif::AssumeOp::create(builder, loc, property, enable, StringAttr{});
+        return success();
+      case slang::ast::AssertionKind::CoverProperty:
+      case slang::ast::AssertionKind::CoverSequence:
+        verif::CoverOp::create(builder, loc, property, enable, StringAttr{});
         return success();
       default:
         break;
