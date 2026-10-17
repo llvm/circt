@@ -59,14 +59,28 @@ static bool isPackedType(Type type) {
 }
 
 //===----------------------------------------------------------------------===//
-// InOut type logic.
+// SV handle type logic.
 //===----------------------------------------------------------------------===//
 
-/// Return the element type of an InOutType or null if the operand isn't an
-/// InOut type.
-mlir::Type circt::sv::getInOutElementType(mlir::Type type) {
-  if (auto inout = dyn_cast_or_null<InOutType>(type))
-    return inout.getElementType();
+/// Return the element type of an SV handle type  or null if the operand is not
+// an SV handle (NetType or VarType).
+mlir::Type circt::sv::getHandleElementType(mlir::Type type) {
+  if (auto net = dyn_cast_or_null<NetType>(type))
+    return net.getElementType();
+  if (auto var = dyn_cast_or_null<VarType>(type))
+    return var.getElementType();
+  return {};
+}
+
+/// Return a handle of the same kind (NetType or VarType) as `handleType`,
+/// wrapping `elementType` instead. Returns null if `handleType` isn't a
+/// NetType or VarType.
+mlir::Type circt::sv::getHandleOfElementType(mlir::Type handleType,
+                                             mlir::Type elementType) {
+  if (isa_and_present<NetType>(handleType))
+    return NetType::get(elementType);
+  if (isa_and_present<VarType>(handleType))
+    return VarType::get(elementType);
   return {};
 }
 

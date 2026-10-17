@@ -18,8 +18,8 @@
 
 // CHECK-IR-LABEL:   hw.module @A_B(
 // CHECK-IR-SAME:              in %[[VAL_0:.*]] : i1, in %[[VAL_1:.*]] : i1, out p_out : i1) {
-// CHECK-IR:           %[[VAL_2:.*]] = sv.reg : !hw.inout<i1>
-// CHECK-IR:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_2]] : !hw.inout<i1>
+// CHECK-IR:           %[[VAL_2:.*]] = sv.var : !sv.var<i1>
+// CHECK-IR:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_2]] : !sv.var<i1>
 // CHECK-IR:           sv.alwaysff(posedge %[[VAL_0]]) {
 // CHECK-IR:             sv.passign %[[VAL_2]], %[[VAL_1]] : i1
 // CHECK-IR:           }

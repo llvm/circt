@@ -68,7 +68,7 @@ TODO.
 
 ## Declarations
 
-TODO: Describe `sv.wire`, `sv.reg`, 
+TODO: Describe `sv.wire`, `sv.var`, 
 
 ## Expressions
 

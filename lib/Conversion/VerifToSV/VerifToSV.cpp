@@ -9,7 +9,6 @@
 // This is the main Verif to SV Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
-
 #include "circt/Conversion/VerifToSV.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
@@ -71,7 +70,7 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
     auto constX = sv::ConstantXOp::create(rewriter, op.getLoc(), i1);
 
     // Declare the register that will track the reset state.
-    auto reg = sv::RegOp::create(rewriter, op.getLoc(), i1,
+    auto reg = sv::VarOp::create(rewriter, op.getLoc(), i1,
                                  rewriter.getStringAttr("hasBeenResetReg"));
 
     auto clock = operands.getClock();

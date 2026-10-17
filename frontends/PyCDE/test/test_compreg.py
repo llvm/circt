@@ -13,11 +13,11 @@ from pycde.module import generator
 import sys
 
 # CHECK: (* dont_merge *)
-# CHECK: reg [7:0] [[NAME:reg_.+]];
+# CHECK: var logic [7:0] [[NAME:reg_.+]];
 # CHECK: always_ff @(posedge clk)
 # CHECK: [[NAME]] <= {{.+}}
 
-# CHECK: reg [7:0] [[NAME2:reg_.+]];
+# CHECK: var logic [7:0] [[NAME2:reg_.+]];
 # CHECK: always_ff @(posedge clk) begin
 # CHECK:   if (rst)
 # CHECK:     [[NAME2]] <= 8'h0;

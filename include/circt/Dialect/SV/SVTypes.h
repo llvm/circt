@@ -24,9 +24,15 @@ namespace circt {
 namespace sv {
 using InOutType = circt::hw::InOutType;
 
-/// Return the element type of an InOutType or null if the operand isn't an
-/// InOut type.
-mlir::Type getInOutElementType(mlir::Type type);
+/// Return the element type of an SV handle type or null if the operand is not
+/// an SV lvalue (NetType or VarType).
+mlir::Type getHandleElementType(mlir::Type type);
+
+/// Return a handle of the same kind (NetType or VarType) as `handleType`,
+/// wrapping `elementType` instead. Returns null if `handleType` isn't a
+/// NetType or VarType.
+mlir::Type getHandleOfElementType(mlir::Type handleType,
+                                  mlir::Type elementType);
 
 /// Return the element type of a NetType or null if the operand isn't a Net
 /// type.

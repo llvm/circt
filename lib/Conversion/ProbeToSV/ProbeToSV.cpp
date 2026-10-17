@@ -306,7 +306,7 @@ LogicalResult LowerProbeToSVPass::rewrite(LoweringState &state) {
                                               resolution.read.getLoc());
     auto ref = FlatSymbolRefAttr::get(hierPath.getSymNameAttr());
     auto xmr = sv::XMRRefOp::create(
-        builder, hw::InOutType::get(resolution.read.getResult().getType()), ref,
+        builder, sv::NetType::get(resolution.read.getResult().getType()), ref,
         builder.getStringAttr(""));
     auto value = sv::ReadInOutOp::create(builder, xmr);
     resolution.read.replaceAllUsesWith(value.getResult());

@@ -151,8 +151,10 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
     return Type.__new__(UnionType, type)
   if isinstance(type, hw.TypeAliasType):
     return Type.__new__(TypeAlias, type, incl_cls_in_key=False)
-  if isinstance(type, hw.InOutType):
-    return Type.__new__(InOut, type)
+  if isinstance(type, sv.NetType):
+    return Type.__new__(Net, type)
+  if isinstance(type, sv.VarType):
+    return Type.__new__(Var, type)
   if isinstance(type, ir.IntegerType):
     if type.is_signed:
       return Type.__new__(SInt, type)
@@ -175,10 +177,11 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
   return Type(type)
 
 
-class InOut(Type):
+class Net(Type):
+  """An SV net handle type (`!sv.net<T>`)."""
 
   def __new__(cls, element_type: Type):
-    return super(InOut, cls).__new__(cls, hw.InOutType.get(element_type._type))
+    return super(Net, cls).__new__(cls, sv.NetType.get(element_type._type))
 
   @property
   def element_type(self) -> Type:
@@ -189,11 +192,33 @@ class InOut(Type):
     return True
 
   def _get_value_class(self):
-    from .signals import InOutSignal
-    return InOutSignal
+    from .signals import NetSignal
+    return NetSignal
 
   def __repr__(self):
-    return f"InOut<{repr(self.element_type)}"
+    return f"Net<{repr(self.element_type)}>"
+
+
+class Var(Type):
+  """An SV variable handle type (`!sv.var<T>`)."""
+
+  def __new__(cls, element_type: Type):
+    return super(Var, cls).__new__(cls, sv.VarType.get(element_type._type))
+
+  @property
+  def element_type(self) -> Type:
+    return _FromCirctType(self._type.element_type)
+
+  @property
+  def is_hw_type(self) -> bool:
+    return True
+
+  def _get_value_class(self):
+    from .signals import VarSignal
+    return VarSignal
+
+  def __repr__(self):
+    return f"Var<{repr(self.element_type)}>"
 
 
 class TypeAlias(Type):
