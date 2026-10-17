@@ -138,6 +138,7 @@ class AssignOp(AssignOp):
   def create(dest, src):
     return sv.AssignOp(dest=dest, src=src)
 
+
 @_ods_cext.register_operation(_Dialect, replace=True)
 class VarAssignOp(VarAssignOp):
 
