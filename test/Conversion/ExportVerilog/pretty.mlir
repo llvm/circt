@@ -1,9 +1,5 @@
 // RUN: circt-opt -export-verilog --split-input-file %s | FileCheck %s --strict-whitespace --match-full-lines
 
-sv.interface @IValidReady_Struct  {
-  sv.interface.signal @data : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
-}
-
 // CHECK-LABEL:module structs({{.*}}
 //      CHECK:  assign _GEN =
 // CHECK-NEXT:    '{foo: ({_GEN_1, _GEN_0}),
@@ -24,8 +20,8 @@ sv.interface @IValidReady_Struct  {
 // CHECK-NEXT:          _GEN_0,
 // CHECK-NEXT:          _GEN_0})};{{.*}}
 hw.module @structs(in %clk: i1, in %rstn: i1) {
-  %0 = sv.interface.instance name "iface" : !sv.interface<@IValidReady_Struct>
-  sv.interface.signal.assign %0(@IValidReady_Struct::@data) = %s : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
+  %data = sv.wire : !hw.inout<struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>>
+  sv.assign %data, %s : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
   %c0 = hw.constant 0 : i8
   %c64 = hw.constant 100000 : i64
   %16 = hw.bitcast %c64 : (i64) -> !hw.array<64xi1>

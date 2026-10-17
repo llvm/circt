@@ -203,24 +203,6 @@ hw.module @verbatim_renames(in %a: i1 {hw.exportPort = #hw<innerSym@asym>}) {
   sv.verbatim "// VERB Instance : {{0}} {{1}} {{2}}" {symbols = [#hw.innerNameRef<@verbatim_renames::@struct>, #hw.innerNameRef<@verbatim_renames::@wire1>, #hw.innerNameRef<@verbatim_renames::@asym>]}
 }
 
-// CHECK-LABEL: interface output_0;
-sv.interface @output {
-  // CHECK-NEXT: logic input_0;
-  sv.interface.signal @input : i1
-  // CHECK-NEXT: logic wire_0;
-  sv.interface.signal @wire : i1
-  // CHECK-NEXT: modport always_0(input input_0, output wire_0);
-  sv.interface.modport @always (input @input, output @wire)
-}
-
-// Renaming the above interface declarations needs to rename their use in the
-// following types.
-// CHECK-LABEL: module InterfaceAsInstance();
-hw.module @InterfaceAsInstance () {
-  // CHECK: output_0 myOutput();
-  %myOutput = sv.interface.instance : !sv.interface<@output>
-}
-
 // CHECK-LABEL: module VarOpNameConflicts();
 hw.module @VarOpNameConflicts() {
   // CHECK: var logic v;

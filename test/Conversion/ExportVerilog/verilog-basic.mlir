@@ -685,10 +685,10 @@ hw.module.extern @VerbatimModuleExtern(in %foo: i1 {hw.exportPort = #hw<innerSym
 hw.module @VerbatimModule(in %signed: i1 {hw.exportPort = #hw<innerSym@symA>}, out unsigned: i1 {hw.exportPort = #hw<innerSym@symB>}) {
   %parameter = sv.wire sym @symC : !hw.inout<i4>
   %localparam = sv.reg sym @symD : !hw.inout<i4>
-  %shortint = sv.interface.instance sym @symE : !sv.interface<@Interface>
+  %shortint = sv.wire sym @symE : !hw.inout<i1>
   // CHECK: wire [3:0] parameter_0;
   // CHECK: reg  [3:0] localparam_0;
-  // CHECK: Interface shortint();
+  // CHECK: wire       shortint_0;
   hw.output %signed : i1
 }
 sv.verbatim "VERB: module symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symA>]}
@@ -767,15 +767,6 @@ hw.module @SiFive_MulDiv(in %clock: i1, in %reset: i1, out io_req_ready: i1) {
   // CHECK-NEXT: );
 }
 
-emit.file "BindTest/BindInterface.sv" {
-  sv.bind.interface <@BindInterface::@__Interface__>
-}
-
-sv.interface @Interface {
-  sv.interface.signal @a : i1
-  sv.interface.signal @b : i1
-}
-
 hw.module.extern @W422_Bar(out clock: i1, out reset: i1)
 
 hw.module.extern @W422_Baz(out q: i1)
@@ -852,16 +843,8 @@ hw.module @PrecedenceEqualityRelational(in %a: i4, in %b: i4, in %c: i1,
   hw.output %out_eq, %out_ne, %out_ceq, %out_cne, %out_weq, %out_wne : i1, i1, i1, i1, i1, i1
 }
 
-hw.module @BindInterface() {
-  %bar = sv.interface.instance sym @__Interface__ {doNotPrint} : !sv.interface<@Interface>
-  hw.output
-}
-
 // CHECK-LABEL: FILE "BindTest{{[/\]}}BindEmissionInstance.sv"
 // CHECK: bind BindEmission BindEmissionInstance BindEmissionInstance ();
-
-// CHECK-LABEL: FILE "BindTest{{[/\]}}BindInterface.sv"
-// CHECK: bind BindInterface Interface bar (.*);
 
 sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-LABEL: bind SiFive_MulDiv bind_rename_port InvisibleBind_assert

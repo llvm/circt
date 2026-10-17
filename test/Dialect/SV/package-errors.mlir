@@ -53,7 +53,7 @@ hw.typedecl @unscoped : i8
 
 // -----
 
-sv.interface @not_a_type_scope {
+module @not_a_type_scope {
   // expected-error @+1 {{expects parent op to be a type scope, such as 'hw.type_scope' or 'sv.package'}}
   hw.typedecl @unscoped : i8
 }
