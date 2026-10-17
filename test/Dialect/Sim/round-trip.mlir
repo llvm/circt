@@ -90,7 +90,7 @@ func.func @FormatStrings() {
 }
 
 // CHECK-LABEL: func.func @DynamicStrings
-func.func @DynamicStrings(%idx: i32) {
+func.func @DynamicStrings(%idx: i32, %jdx: i32) {
   // CHECK: sim.string.literal "Hello"
   %str = sim.string.literal "Hello"
   // CHECK: sim.string.length
@@ -101,6 +101,8 @@ func.func @DynamicStrings(%idx: i32) {
   %char = sim.string.get %str[%idx]
   // CHECK: sim.string.string_to_int
   %int = sim.string.string_to_int %str : i32
+  // CHECK: sim.string.substr
+  %substr = sim.string.substr %str[%idx:%jdx]
   return
 }
 

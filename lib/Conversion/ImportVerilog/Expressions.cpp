@@ -3983,13 +3983,11 @@ Value Context::convertSystemCall(
   }
 
   if (nameId == ksn::Substr) {
-    // Slang already checks the arity of string methods.
-    assert(numArgs == 3 && "`substr` takes 3 arguments");
     auto stringType = moore::StringType::get(getContext());
     auto str = convertRvalueExpression(*args[0], stringType);
     auto start = convertRvalueExpression(*args[1]);
     auto end = convertRvalueExpression(*args[2]);
-    if (!str || !start || !end)
+    if (!str || !start)
       return {};
     return moore::StringSubstrOp::create(builder, loc, str, start, end);
   }

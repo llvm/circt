@@ -22,6 +22,9 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/Support/Casting.h"
+#include <algorithm>
+#include <cstdint>
 
 using namespace mlir;
 using namespace circt;
@@ -693,6 +696,28 @@ OpFoldResult StringGetOp::fold(FoldAdaptor adaptor) {
   // Return the character at the specified index
   uint8_t ch = static_cast<uint8_t>(str[index]);
   return IntegerAttr::get(getType(), ch);
+}
+
+//===----------------------------------------------------------------------===//
+// StringSubstrOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StringSubstrOp::fold(FoldAdaptor adaptor) {
+  auto str = llvm::cast<StringAttr>(adaptor.getStr()).getValue();
+  auto startAttr = llvm::cast<IntegerAttr>(adaptor.getStart());
+  auto start = std::max(int64_t(0), startAttr.getValue().getSExtValue());
+
+  if (!adaptor.getEnd())
+    return StringAttr::get(getContext(), str.substr(start));
+
+  auto endAttr = llvm::cast<IntegerAttr>(adaptor.getEnd());
+  auto end = endAttr.getValue().getSExtValue();
+
+  // IEEE 1800-2023 § 6.16.8 specifies we return an empty
+  // string on all OOB, but we ignore this in favour of
+  // clamping
+  return StringAttr::get(getContext(),
+                         str.substr(start, std::max(int64_t(0), end - start)));
 }
 
 //===----------------------------------------------------------------------===//
