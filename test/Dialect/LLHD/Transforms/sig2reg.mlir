@@ -93,6 +93,8 @@ hw.module @aliasStatic(in %init : i4, in %in0 : i1, in %in1 : i1, out out: i4) {
   hw.output %5 : i4
 }
 
+// The nested dynamic extracts have a conservative maximum offset of 4. Start
+// the second slice at bit 5 so the computed write intervals are disjoint.
 // CHECK-LABEL: hw.module @aliasDynamicSuccess
 hw.module @aliasDynamicSuccess(in %init : i8, in %in0 : i1, in %in1 : i1, in %idx0 : i2, in %idx1 : i1, out out: i8) {
   // CHECK-NEXT: [[C1_I8:%.+]] = hw.constant 1 : i8
@@ -110,8 +112,8 @@ hw.module @aliasDynamicSuccess(in %init : i8, in %in0 : i1, in %in1 : i1, in %id
   // CHECK-NEXT: [[V7:%.+]] = comb.concat [[C0_I7]], %in0 : i7, i1
   // CHECK-NEXT: [[V8:%.+]] = comb.shl [[V7]], [[V3]] : i8
   // CHECK-NEXT: [[V9:%.+]] = comb.or [[V8]], [[V6]] : i8
-  // CHECK-NEXT: [[C4_I8:%.+]] = hw.constant 4 : i8
-  // CHECK-NEXT: [[V10:%.+]] = comb.add [[V0]], [[C4_I8]] : i8
+  // CHECK-NEXT: [[C5_I8:%.+]] = hw.constant 5 : i8
+  // CHECK-NEXT: [[V10:%.+]] = comb.add [[V0]], [[C5_I8]] : i8
   // CHECK-NEXT: [[V11:%.+]] = comb.shl [[C1_I8]], [[V10]] : i8
   // CHECK-NEXT: [[V12:%.+]] = comb.xor [[V11]], [[C_1_I8]] : i8
   // CHECK-NEXT: [[V13:%.+]] = comb.and [[V9]], [[V12]] : i8
@@ -121,14 +123,14 @@ hw.module @aliasDynamicSuccess(in %init : i8, in %in0 : i1, in %in1 : i1, in %id
   // CHECK-NEXT: hw.output [[V16]] : i8
 
   %0 = llhd.constant_time <0ns, 0d, 1e>
-  %c4_c3 = hw.constant 4 : i3
+  %c5_c3 = hw.constant 5 : i3
   %c0_c3 = hw.constant 0 : i3
   %out = llhd.sig %init : <i8>
   %3 = llhd.sig.extract %out from %c0_c3 : <i8> -> <i4>
-  %4 = llhd.sig.extract %out from %c4_c3 : <i8> -> <i4>
+  %4 = llhd.sig.extract %out from %c5_c3 : <i8> -> <i3>
   %5 = llhd.sig.extract %3 from %idx0 : <i4> -> <i2>
   %6 = llhd.sig.extract %5 from %idx1 : <i2> -> <i1>
-  %7 = llhd.sig.extract %4 from %idx0 : <i4> -> <i1>
+  %7 = llhd.sig.extract %4 from %idx0 : <i3> -> <i1>
   llhd.drv %6, %in0 after %0 : i1
   llhd.drv %7, %in1 after %0 : i1
   %8 = llhd.prb %out : i8
@@ -190,4 +192,193 @@ hw.module @UninitializedFullDrive(in %value : i4, out out : i4) {
   %read = llhd.prb %sig : i4
   // CHECK: hw.output %value : i4
   hw.output %read : i4
+}
+
+// The drive writes bits 5..1 back unchanged and sets bit 0. The unchanged part
+// is dropped, so the signal is promoted.
+// CHECK-LABEL: hw.module @identityConcatDrive
+hw.module @identityConcatDrive(in %init : i6, out out : i6) {
+  // CHECK: [[MASK:%.+]] = hw.constant -2 : i6
+  // CHECK: [[AND:%.+]] = comb.and %init, [[MASK]] : i6
+  // CHECK: [[ONE:%.+]] = hw.constant 1 : i6
+  // CHECK: [[OR:%.+]] = comb.or [[AND]], [[ONE]] : i6
+  // CHECK: hw.output [[OR]] : i6
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %true = hw.constant true
+  %out = llhd.sig %init : <i6>
+  %1 = llhd.prb %out : i6
+  %2 = comb.extract %1 from 1 : (i6) -> i5
+  %3 = comb.concat %2, %true : i5, i1
+  llhd.drv %out, %3 after %0 : i6
+  hw.output %1 : i6
+}
+
+// Same, but the unchanged part sits inside a nested concat.
+// CHECK-LABEL: hw.module @nestedIdentityConcatDrive
+hw.module @nestedIdentityConcatDrive(in %init : i6, out out : i6) {
+  // CHECK: [[MASK0:%.+]] = hw.constant -2 : i6
+  // CHECK: [[AND0:%.+]] = comb.and %init, [[MASK0]] : i6
+  // CHECK: [[MASK1:%.+]] = hw.constant -3 : i6
+  // CHECK: [[AND1:%.+]] = comb.and [[AND0]], [[MASK1]] : i6
+  // CHECK: [[TWO:%.+]] = hw.constant 2 : i6
+  // CHECK: [[OR:%.+]] = comb.or [[AND1]], [[TWO]] : i6
+  // CHECK: hw.output [[OR]] : i6
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %true = hw.constant true
+  %false = hw.constant false
+  %out = llhd.sig %init : <i6>
+  %1 = llhd.prb %out : i6
+  %2 = comb.extract %1 from 2 : (i6) -> i4
+  %3 = comb.concat %2, %true : i4, i1
+  %4 = comb.concat %3, %false : i5, i1
+  llhd.drv %out, %4 after %0 : i6
+  hw.output %1 : i6
+}
+
+// Not promoted: `out[in] = 1` with a variable index becomes a masked
+// read-modify-write, which reads the signal it drives. Only concats can be
+// split, so nothing can be dropped here.
+// CHECK-LABEL: hw.module @maskedSelfReferentialDrive
+hw.module @maskedSelfReferentialDrive(in %init : i6, in %in : i1, out out : i6) {
+  // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NEXT: [[C0_I5:%.+]] = hw.constant 0 : i5
+  // CHECK-NEXT: [[C1_I6:%.+]] = hw.constant 1 : i6
+  // CHECK-NEXT: [[C_1_I6:%.+]] = hw.constant -1 : i6
+  // CHECK-NEXT: [[OUT:%.+]] = llhd.sig %init : <i6>
+  // CHECK-NEXT: [[PRB:%.+]] = llhd.prb [[OUT]] : i6
+  // CHECK-NEXT: [[IDX:%.+]] = comb.concat [[C0_I5]], %in : i5, i1
+  // CHECK-NEXT: [[MASK:%.+]] = comb.shl [[C1_I6]], [[IDX]] : i6
+  // CHECK-NEXT: [[INV:%.+]] = comb.xor [[MASK]], [[C_1_I6]] : i6
+  // CHECK-NEXT: [[AND:%.+]] = comb.and [[PRB]], [[INV]] : i6
+  // CHECK-NEXT: [[OR:%.+]] = comb.or [[AND]], [[MASK]] : i6
+  // CHECK-NEXT: llhd.drv [[OUT]], [[OR]] after [[TIME]] : i6
+  // CHECK-NEXT: hw.output [[PRB]] : i6
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i5 = hw.constant 0 : i5
+  %c1_i6 = hw.constant 1 : i6
+  %c-1_i6 = hw.constant -1 : i6
+  %out = llhd.sig %init : <i6>
+  %1 = llhd.prb %out : i6
+  %2 = comb.concat %c0_i5, %in : i5, i1
+  %3 = comb.shl %c1_i6, %2 : i6
+  %4 = comb.xor %3, %c-1_i6 : i6
+  %5 = comb.and %1, %4 : i6
+  %6 = comb.or %5, %3 : i6
+  llhd.drv %out, %6 after %0 : i6
+  hw.output %1 : i6
+}
+
+// A delayed drive captures bits 5..1 at the time of the probe. They cannot be
+// dropped as identity fragments: another drive updates part of them before this
+// one takes effect, so the delayed drive must restore the captured value.
+// CHECK-LABEL: hw.module @delayedIdentityConcatDrive
+// CHECK: [[OUT:%.+]] = llhd.sig %init : <i6>
+// CHECK: llhd.drv [[OUT]],
+hw.module @delayedIdentityConcatDrive(in %init : i6, out out : i6) {
+  %time1 = llhd.constant_time <1ns, 0d, 0e>
+  %time2 = llhd.constant_time <2ns, 0d, 0e>
+  %c0_i3 = hw.constant 0 : i3
+  %c0_i5 = hw.constant 0 : i5
+  %true = hw.constant true
+  %out = llhd.sig %init : <i6>
+  %0 = llhd.prb %out : i6
+  %1 = comb.extract %0 from 1 : (i6) -> i5
+  %2 = comb.concat %1, %true : i5, i1
+  llhd.drv %out, %2 after %time2 : i6
+  %3 = llhd.sig.extract %out from %c0_i3 : <i6> -> <i5>
+  llhd.drv %3, %c0_i5 after %time1 : i5
+  hw.output %0 : i6
+}
+
+// A delayed drive that reads the signal it drives is still promoted: `promote`
+// wraps the driven value in an `llhd.delay`, so the feedback runs through the
+// delay instead of becoming a combinational cycle.
+// CHECK-LABEL: hw.module @delayedSelfDrive
+// CHECK-NEXT: [[ONE:%.+]] = hw.constant 1 : i8
+// CHECK-NEXT: [[DELAY:%.+]] = llhd.delay [[ADD:%.+]] by <1ns, 0d, 0e> : i8
+// CHECK-NEXT: [[ADD]] = comb.add [[DELAY]], [[ONE]] : i8
+// CHECK-NEXT: hw.output [[DELAY]] : i8
+hw.module @delayedSelfDrive(in %init : i8, out out : i8) {
+  %time = llhd.constant_time <1ns, 0d, 0e>
+  %c1_i8 = hw.constant 1 : i8
+  %sig = llhd.sig %init : <i8>
+  %0 = llhd.prb %sig : i8
+  %1 = comb.add %0, %c1_i8 : i8
+  llhd.drv %sig, %1 after %time : i8
+  hw.output %0 : i8
+}
+
+// Splitting the immediate concat must not hide overlapping drives. Its one-bit
+// intervals overlap both endpoints of the delayed two-bit interval.
+// CHECK-LABEL: hw.module @overlappingConcatDrivers
+// CHECK-NEXT: [[EPSILON:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+// CHECK-NEXT: [[LATER:%.+]] = llhd.constant_time <1ns, 0d, 0e>
+// CHECK-NEXT: [[SIG:%.+]] = llhd.sig %init : <i2>
+// CHECK-NEXT: [[FIRST:%.+]] = comb.concat %a, %b : i1, i1
+// CHECK-NEXT: [[SECOND:%.+]] = comb.concat %c, %d : i1, i1
+// CHECK-NEXT: llhd.drv [[SIG]], [[FIRST]] after [[EPSILON]] : i2
+// CHECK-NEXT: llhd.drv [[SIG]], [[SECOND]] after [[LATER]] : i2
+// CHECK-NEXT: [[PROBE:%.+]] = llhd.prb [[SIG]] : i2
+// CHECK-NEXT: hw.output [[PROBE]] : i2
+hw.module @overlappingConcatDrivers(in %init : i2, in %a : i1, in %b : i1, in %c : i1, in %d : i1, out out : i2) {
+  %epsilon = llhd.constant_time <0ns, 0d, 1e>
+  %later = llhd.constant_time <1ns, 0d, 0e>
+  %sig = llhd.sig %init : <i2>
+  %first = comb.concat %a, %b : i1, i1
+  %second = comb.concat %c, %d : i1, i1
+  llhd.drv %sig, %first after %epsilon : i2
+  llhd.drv %sig, %second after %later : i2
+  %probe = llhd.prb %sig : i2
+  hw.output %probe : i2
+}
+
+// A drive fed by a register is not a combinational loop: the register breaks
+// the feedback in time, so the signal is promoted and the register ends up
+// driving itself.
+// CHECK-LABEL: hw.module @clockedFeedback
+// CHECK-NEXT: [[ONE:%.+]] = hw.constant 1 : i8
+// CHECK-NEXT: [[ADD:%.+]] = comb.add [[REG:%.+]], [[ONE]] : i8
+// CHECK-NEXT: [[CLK:%.+]] = seq.to_clock %clk
+// CHECK-NEXT: [[REG]] = seq.firreg [[ADD]] clock [[CLK]] : i8
+// CHECK-NEXT: hw.output [[REG]] : i8
+hw.module @clockedFeedback(in %clk : i1, out count : i8) {
+  %c1_i8 = hw.constant 1 : i8
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i8 = hw.constant 0 : i8
+  %false = hw.constant false
+  %clk_0 = llhd.sig name "clk" %false : <i1>
+  %1 = llhd.prb %clk_0 : i1
+  %count = llhd.sig %c0_i8 : <i8>
+  %2 = comb.add %4, %c1_i8 : i8
+  %3 = seq.to_clock %1
+  %count_1 = seq.firreg %2 clock %3 {name = "count"} : i8
+  llhd.drv %count, %count_1 after %0 : i8
+  llhd.drv %clk_0, %clk after %0 : i1
+  %4 = llhd.prb %count : i8
+  hw.output %4 : i8
+}
+
+hw.module @feedbackReg(in %clk : !seq.clock, in %d : i8, out q : i8) {
+  %r = seq.firreg %d clock %clk : i8
+  hw.output %r : i8
+}
+
+// Same feedback, but the register sits inside a submodule. The pass cannot see
+// into the instance, so it does not treat it as a combinational path: the
+// signal is promoted and the instance ends up feeding itself.
+// CHECK-LABEL: hw.module @instanceFeedback
+// CHECK-NEXT: [[ONE:%.+]] = hw.constant 1 : i8
+// CHECK-NEXT: [[Q:%.+]] = hw.instance "u" @feedbackReg(clk: %clk: !seq.clock, d: [[ADD:%.+]]: i8) -> (q: i8)
+// CHECK-NEXT: [[ADD]] = comb.add [[Q]], [[ONE]] : i8
+// CHECK-NEXT: hw.output [[Q]] : i8
+hw.module @instanceFeedback(in %clk : !seq.clock, out out : i8) {
+  %eps = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i8 = hw.constant 0 : i8
+  %c1_i8 = hw.constant 1 : i8
+  %s = llhd.sig %c0_i8 : <i8>
+  %q = hw.instance "u" @feedbackReg(clk: %clk: !seq.clock, d: %next: i8) -> (q: i8)
+  %next = comb.add %p, %c1_i8 : i8
+  llhd.drv %s, %q after %eps : i8
+  %p = llhd.prb %s : i8
+  hw.output %p : i8
 }

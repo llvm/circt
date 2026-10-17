@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/LLHD/LLHDPasses.h"
+#include "circt/Dialect/Seq/SeqOpInterfaces.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "llhd-sig2reg"
@@ -118,8 +119,8 @@ public:
                 if (bw <= 0)
                   return failure();
 
-                intervals.emplace_back(offset, bw, driveOp.getValue(),
-                                       timeOp.getValueAttr());
+                addDriveIntervals(offset, bw, driveOp.getValue(),
+                                  timeOp.getValueAttr());
                 return success();
               })
               .Case<llhd::SigExtractOp>([&](llhd::SigExtractOp extractOp) {
@@ -201,20 +202,44 @@ public:
   bool isPromotable() {
     if (!sigOp.getInit()) {
       auto bw = hw::getBitWidth(sigOp.getType().getNestedType());
-      return intervals.size() == 1 && intervals.front().low.isStatic() &&
-             intervals.front().low.min == 0 &&
-             intervals.front().bitwidth == bw &&
-             isImmediate(intervals.front().delay);
+      if (intervals.size() != 1 || !intervals.front().low.isStatic() ||
+          intervals.front().low.min != 0 || intervals.front().bitwidth != bw ||
+          !isImmediate(intervals.front().delay)) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  - Uninitialized, not fully driven, skipping...\n\n");
+        return false;
+      }
     }
     for (unsigned i = 0; i < intervals.size(); ++i) {
       if (i >= intervals.size() - 1)
         break;
 
-      if (intervals[i].low.max + intervals[i].bitwidth - 1 >
+      // The upper endpoint is inclusive, so equality also means overlap.
+      if (intervals[i].low.max + intervals[i].bitwidth - 1 >=
           intervals[i + 1].low.min) {
         LLVM_DEBUG({
           llvm::dbgs() << "  - Potentially overlapping drives, skipping...\n\n";
         });
+        return false;
+      }
+    }
+
+    // Reject drives that read the signal they drive. Promotion replaces the
+    // probe with the driven value, turning the feedback into a combinational
+    // cycle that `comb` cannot represent.
+    DenseSet<Value> reads;
+    for (const auto &interval : readIntervals)
+      reads.insert(interval.value);
+
+    for (const auto &interval : intervals) {
+      // A delayed drive is wrapped in an `llhd.delay` by `promote`, which keeps
+      // the feedback out of the combinational cycle.
+      if (interval.delay.getTime() > 0 || interval.delay.getDelta() > 0)
+        continue;
+
+      if (dependsOnReads(interval.value, reads)) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  - Self-referential drive, skipping...\n\n");
         return false;
       }
     }
@@ -311,6 +336,78 @@ public:
   }
 
 private:
+  /// Record the interval written by a drive of 'value' covering 'bitwidth' bits
+  /// at 'offset'. A `comb.concat` is split into one interval per operand, and
+  /// an operand that reads the signal at the exact bits it is written back to
+  /// is dropped: it changes nothing, and keeping it would make the drive look
+  /// self-referential.
+  void addDriveIntervals(const Offset &offset, int64_t bitwidth, Value value,
+                         llhd::TimeAttr delay) {
+    auto concatOp = value.getDefiningOp<comb::ConcatOp>();
+    if (concatOp && isImmediate(delay) && offset.isStatic() &&
+        llvm::all_of(concatOp.getInputs(), [](Value input) {
+          return hw::getBitWidth(input.getType()) > 0;
+        })) {
+      // `comb.concat` lists its operands most significant first.
+      uint64_t highBit = offset.min + bitwidth;
+      for (auto input : concatOp.getInputs()) {
+        auto inputBw = hw::getBitWidth(input.getType());
+        highBit -= inputBw;
+        if (!isIdentityDrive(input, highBit, inputBw))
+          addDriveIntervals(Offset(highBit), inputBw, input, delay);
+      }
+      return;
+    }
+
+    intervals.emplace_back(offset, bitwidth, value, delay);
+  }
+
+  /// Returns true if 'value' is a probe of the signal covering exactly bits
+  /// [lowBit, lowBit + bitwidth), so driving it back is a no-op.
+  bool isIdentityDrive(Value value, uint64_t lowBit, int64_t bitwidth) {
+    // The whole signal probed and driven straight back.
+    if (auto probeOp = value.getDefiningOp<llhd::ProbeOp>())
+      return probeOp.getSignal() == sigOp.getResult() && lowBit == 0 &&
+             bitwidth == hw::getBitWidth(sigOp.getType().getNestedType());
+
+    // A slice of a whole-signal probe driven back at the offset it came from.
+    if (auto extractOp = value.getDefiningOp<comb::ExtractOp>()) {
+      auto probeOp = extractOp.getInput().getDefiningOp<llhd::ProbeOp>();
+      return probeOp && probeOp.getSignal() == sigOp.getResult() &&
+             extractOp.getLowBit() == lowBit &&
+             bitwidth == hw::getBitWidth(extractOp.getType());
+    }
+
+    return false;
+  }
+
+  /// Returns true if 'value' reaches any of 'reads', the signal's probe
+  /// results, through combinational logic. Registers break the loop, so paths
+  /// through them are not reported. Instances stop the walk as well: the pass
+  /// cannot look inside them, and a real loop through a submodule is caught
+  /// after flattening.
+  static bool dependsOnReads(Value value, const DenseSet<Value> &reads) {
+    SmallVector<Value> worklist{value};
+    DenseSet<Value> seen;
+
+    while (!worklist.empty()) {
+      auto curr = worklist.pop_back_val();
+      if (!seen.insert(curr).second)
+        continue;
+      if (reads.contains(curr))
+        return true;
+
+      auto *defOp = curr.getDefiningOp();
+      if (!defOp || isa<seq::Clocked, hw::HWInstanceLike>(defOp))
+        continue;
+
+      // Graph regions allow operand cycles; 'seen' guarantees termination.
+      worklist.append(defOp->operand_begin(), defOp->operand_end());
+    }
+
+    return false;
+  }
+
   /// Given a static offset and a list of dynamic offset values, materialize an
   /// SSA value that adds all these offsets together and is an integer with the
   /// given 'width'.
