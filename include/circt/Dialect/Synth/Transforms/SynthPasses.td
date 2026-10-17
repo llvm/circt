@@ -20,7 +20,7 @@ def TestPriorityCuts : Pass<"synth-test-priority-cuts", "hw::HWModuleOp"> {
   let summary = "Test priority cuts for synthesis";
   let options = [
     Option<"maxCutsPerRoot", "max-cuts-per-root", "int", "6",
-           "Maximum number of cuts to maintain per node">,
+           "Maximum number of non-trivial cuts to maintain per node">,
     Option<"maxCutInputSize", "max-cut-input-size", "int", "6",
            "Maximum number of cut inputs to consider">,
   ];
@@ -29,7 +29,7 @@ def TestPriorityCuts : Pass<"synth-test-priority-cuts", "hw::HWModuleOp"> {
 class CutRewriterPassBase<string name, string op> : Pass<name, op> {
   list<Option> baseOptions = [
     Option<"maxCutsPerRoot", "max-cuts-per-root", "int", "6",
-           "Maximum number of cuts to maintain per node">,
+           "Maximum number of non-trivial cuts to maintain per node">,
     Option<"strategy", "strategy", "synth::OptimizationStrategy",
            /*default=*/"synth::OptimizationStrategyTiming",
            "Optimization strategy (area vs. timing)",
