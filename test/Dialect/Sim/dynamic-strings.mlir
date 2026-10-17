@@ -106,7 +106,7 @@ hw.module @convert_int_to_string_4(out res: !sim.dstring) {
 }
 
 // CHECK-LABEL: hw.module @string_substr_1
-// CHECK: sim.string.literal ""
+// CHECK: sim.string.literal "Hel"
 hw.module @string_substr_1(out res: !sim.dstring) {
   %str = sim.string.literal "Hello World"
   %i = hw.constant -1 : i32
@@ -126,7 +126,7 @@ hw.module @string_substr_2(out res: !sim.dstring) {
 }
 
 // CHECK-LABEL: hw.module @string_substr_3
-// CHECK: sim.string.literal ""
+// CHECK: sim.string.literal "llo World"
 hw.module @string_substr_3(out res: !sim.dstring) {
   %str = sim.string.literal "Hello World"
   %i = hw.constant 2 : i32
@@ -142,5 +142,14 @@ hw.module @string_substr_4(out res: !sim.dstring) {
   %i = hw.constant 2 : i32
   %j = hw.constant 4 : i32
   %sub = sim.string.substr %str[%i : %j]
+  hw.output %sub : !sim.dstring
+}
+
+// CHECK-LABEL: hw.module @string_substr_5
+// CHECK: sim.string.literal "lo World"
+hw.module @string_substr_5(out res: !sim.dstring) {
+  %str = sim.string.literal "Hello World"
+  %i = hw.constant 3 : i32
+  %sub = sim.string.substr %str[%i]
   hw.output %sub : !sim.dstring
 }
