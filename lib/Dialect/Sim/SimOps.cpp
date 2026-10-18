@@ -703,19 +703,22 @@ OpFoldResult StringGetOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult StringSubstrOp::fold(FoldAdaptor adaptor) {
-  auto str = llvm::cast<StringAttr>(adaptor.getStr()).getValue();
-  auto startAttr = llvm::cast<IntegerAttr>(adaptor.getStart());
+  auto strAttr = cast_if_present<StringAttr>(adaptor.getStr());
+  auto startAttr = cast_if_present<IntegerAttr>(adaptor.getStart());
+  if (!strAttr || !startAttr)
+    return {};
+
+  auto str = strAttr.getValue();
   auto start = std::max(int64_t(0), startAttr.getValue().getSExtValue());
 
   if (!adaptor.getEnd())
     return StringAttr::get(getContext(), str.substr(start));
 
-  auto endAttr = llvm::cast<IntegerAttr>(adaptor.getEnd());
+  auto endAttr = cast_if_present<IntegerAttr>(adaptor.getEnd());
   auto end = endAttr.getValue().getSExtValue();
 
-  // IEEE 1800-2023 § 6.16.8 specifies we return an empty
-  // string on all OOB, but we ignore this in favour of
-  // clamping
+  // IEEE 1800-2023 § 6.16.8 specifies we return an empty string on all OOB, but
+  // we ignore this in favour of clamping
   return StringAttr::get(getContext(),
                          str.substr(start, std::max(int64_t(0), end - start)));
 }
