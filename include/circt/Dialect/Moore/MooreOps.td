@@ -4042,19 +4042,19 @@ def StringICompareOp : StringCompareOpBase<"icompare"> {
 def StringSubstrOp : StringBuiltin<"substr"> {
   let summary = "Extract a substring";
   let description = [{
-    Returns the characters in the range `[start,end)`, clamping to avoid OOB.
-    If `end` is omitted, returns the rest of the characters from `start`.
+    Returns the characters from the start through end indices inclusive, or
+    the empty string if the range is invalid.
   }];
 
   let arguments = (ins
     StringType:$str,
     TwoValuedI32:$start,
-    Optional<TwoValuedI32>:$end
+    TwoValuedI32:$end
   );
   let results = (outs StringType:$result);
 
   let assemblyFormat = [{
-    $str `[` $start (`:` $end^)? `]` attr-dict
+    $str `[` $start `:` $end `]` attr-dict
   }];
 }
 
