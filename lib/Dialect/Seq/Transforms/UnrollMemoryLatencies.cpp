@@ -240,7 +240,7 @@ public:
 
     // Find all of the relevant ports and update them
     for (auto user : mem->getUsers()) {
-      // Figure out what type of port it is
+      // Figure out what type of port it is an unroll it
       TypeSwitch<Operation *, void>(user)
           .Case<seq::FirMemWriteOp>([&](auto port) {
             unrollFirMemWritePort(mem, port, delayAttr, oneAttr, ce, rewriter);
@@ -275,7 +275,6 @@ void UnrollMemoryLatenciesPass::runOnOperation() {
   MLIRContext &ctxt = getContext();
   ConversionTarget target(ctxt);
 
-  target.addLegalDialect<seq::SeqDialect, hw::HWDialect>();
   RewritePatternSet patterns(&ctxt);
   patterns.add<WritePortUnrolling, ReadPortUnrolling, FirMemUnrolling>(&ctxt);
 

@@ -155,7 +155,7 @@ def InferClockPorts : Pass<"seq-infer-clock-ports", "mlir::ModuleOp"> {
   ];
 }
 
-def UnrollMemoryLatencies : Pass<"seq-unroll-mem-latency"> {
+def UnrollMemoryLatencies : Pass<"seq-unroll-mem-latency", "hw::HWModuleOp"> {
   let summary = "Unrolls memory port latencies into registers";
   let description = [{
     Converts all memory port latencies, for both `seq.firmem` and `seq.hlmem`,
@@ -172,7 +172,7 @@ def UnrollMemoryLatencies : Pass<"seq-unroll-mem-latency"> {
     data and address inputs with a shift-register of depth n-1.
   }];
 
-  let dependentDialects = ["circt::hw::HWDialect"];
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
 }
 
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES
