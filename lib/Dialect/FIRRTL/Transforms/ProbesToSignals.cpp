@@ -38,6 +38,11 @@
 // * Local control in the target's module wins over any port control,
 //   regardless of source order.
 //
+// Timing differs from native force/release: the event is sampled at the clock
+// edge and the override is visible from the next cycle. Native blocking
+// force/release are visible immediately to later statements in the same always
+// block, so such reads can differ.
+//
 // Gated clocks are converted first so synthesized state uses a free-running
 // clock.
 //
@@ -1139,10 +1144,10 @@ static void connectControlFields(ImplicitLocOpBuilder &builder, Value control,
                                /*tieOffValue=*/true);
   auto dst = readCtrlGroup(builder, control);
   Value clkField = readForceCtrlClock(builder, control);
-  MatchingConnectOp::create(builder, dst.forceActive, group.forceActive);
-  MatchingConnectOp::create(builder, dst.releaseActive, group.releaseActive);
-  MatchingConnectOp::create(builder, dst.forcedValue, group.forcedValue);
-  MatchingConnectOp::create(builder, clkField, clk);
+  emitConnect(builder, dst.forceActive, group.forceActive);
+  emitConnect(builder, dst.releaseActive, group.releaseActive);
+  emitConnect(builder, dst.forcedValue, group.forcedValue);
+  emitConnect(builder, clkField, clk);
 }
 
 ForceCtrl ProbeVisitor::reduceAccesses(ImplicitLocOpBuilder &builder,
