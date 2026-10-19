@@ -21,6 +21,7 @@
 #include "esi/Utils.h"
 #include "esi/backends/RpcClient.h"
 
+#include <algorithm>
 #include <bit>
 #include <cstdlib>
 #include <cstring>
@@ -439,24 +440,26 @@ uint64_t getBits(const uint8_t *buf, size_t bitOff, size_t width) {
   return val;
 }
 
-const StructType &getHostMemPayload(const Type *type, size_t fieldCount,
+const StructType &getHostMemPayload(const Type *type,
                                     std::string_view direction) {
-  while (dynamic_cast<const TypeAliasType *>(type) ||
-         dynamic_cast<const ChannelType *>(type)) {
-    if (auto *alias = dynamic_cast<const TypeAliasType *>(type))
-      type = alias->getInnerType();
-    else if (auto *channel = dynamic_cast<const ChannelType *>(type))
-      type = channel->getInner();
-  }
-  auto *payload = dynamic_cast<const StructType *>(type);
-  if (!payload || payload->getFields().size() != fieldCount)
+  auto *payload = getUnwrappedAs<StructType>(type);
+  if (!payload)
     throw std::runtime_error(
         std::format("Invalid HostMem {} channel layout", direction));
   return *payload;
 }
 
-size_t getHostMemDataBytes(const Type *type, std::string_view direction) {
-  auto width = type->getBitWidth();
+size_t getHostMemDataBytes(const StructType &payload,
+                           std::string_view direction) {
+  const auto &fields = payload.getFields();
+  auto data = std::find_if(fields.begin(), fields.end(), [](const auto &field) {
+    return field.first == "data";
+  });
+  if (data == fields.end() ||
+      !dynamic_cast<const BitVectorType *>(data->second))
+    throw std::runtime_error(
+        std::format("Invalid HostMem {} field: data", direction));
+  auto width = data->second->getBitWidth();
   if (width < 8 || !std::has_single_bit(static_cast<uint64_t>(width)))
     throw std::runtime_error(std::format(
         "HostMem {} width must be a power of two and at least 8", direction));
@@ -467,6 +470,9 @@ void validateHostMemFields(
     const StructType &payload,
     std::initializer_list<std::pair<std::string_view, size_t>> expected,
     std::string_view direction) {
+  if (payload.getFields().size() != expected.size())
+    throw std::runtime_error(
+        std::format("Invalid HostMem {} channel layout", direction));
   auto field = payload.getFields().begin();
   for (auto [name, width] : expected) {
     if (field->first != name ||
@@ -563,9 +569,8 @@ public:
       return *type;
     };
     const esi::Type *writeReqType = channelType(writeArg);
-    const auto &writePayload = getHostMemPayload(writeReqType, 5, "write");
-    writeDataBytes =
-        getHostMemDataBytes(writePayload.getFields()[2].second, "write");
+    const auto &writePayload = getHostMemPayload(writeReqType, "write");
+    writeDataBytes = getHostMemDataBytes(writePayload, "write");
     writeSizeWidth = std::countr_zero(writeDataBytes);
     validateHostMemFields(writePayload,
                           {{"address", 64},
@@ -579,9 +584,8 @@ public:
 
     // Setup the read side callback.
     const esi::Type *readRespType = channelType(readResp);
-    const auto &readPayload = getHostMemPayload(readRespType, 3, "read");
-    readDataBytes =
-        getHostMemDataBytes(readPayload.getFields()[1].second, "read");
+    const auto &readPayload = getHostMemPayload(readRespType, "read");
+    readDataBytes = getHostMemDataBytes(readPayload, "read");
     validateHostMemFields(
         readPayload, {{"tag", 8}, {"data", readDataBytes * 8}, {"last", 1}},
         "read");

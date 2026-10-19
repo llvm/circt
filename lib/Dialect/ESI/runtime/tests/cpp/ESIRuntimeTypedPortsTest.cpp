@@ -19,6 +19,40 @@ using namespace esi;
 
 namespace {
 
+TEST(TypedPortsTest, UnwrapTypeAlias) {
+  BitsType bits("i8", 8);
+  TypeAliasType alias("alias", "Alias", &bits);
+  TypeAliasType nested("nested", "Nested", &alias);
+  ChannelType channel("channel", &nested);
+  TypeAliasType channelAlias("channelAlias", "ChannelAlias", &channel);
+
+  EXPECT_EQ(unwrapTypeAlias(nullptr), nullptr);
+  EXPECT_EQ(unwrapTypeAlias(&bits), &bits);
+  EXPECT_EQ(unwrapTypeAlias(&nested), &bits);
+  EXPECT_EQ(unwrapTypeAlias(&channelAlias), &channel);
+}
+
+TEST(TypedPortsTest, GetUnwrappedAs) {
+  BitsType bits("i8", 8);
+  StructType payload("payload", {{"data", &bits}});
+  TypeAliasType alias("alias", "Alias", &payload);
+  TypeAliasType nestedAlias("nestedAlias", "NestedAlias", &alias);
+  ChannelType channel("channel", &nestedAlias);
+  TypeAliasType channelAlias("channelAlias", "ChannelAlias", &channel);
+  ChannelType outerChannel("outerChannel", &channelAlias);
+  ArrayType array("array", &payload, 2);
+
+  EXPECT_EQ(getUnwrappedAs<StructType>(nullptr), nullptr);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&payload), &payload);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&nestedAlias), &payload);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&channel), &payload);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&channelAlias), &payload);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&outerChannel), &payload);
+  EXPECT_EQ(getUnwrappedAs<BitVectorType>(&outerChannel), nullptr);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&array), nullptr);
+  EXPECT_EQ(getUnwrappedAs<ArrayType>(&array), &array);
+}
+
 //===----------------------------------------------------------------------===//
 // verifyTypeCompatibility tests
 //===----------------------------------------------------------------------===//

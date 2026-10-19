@@ -99,9 +99,17 @@ class TestHostMemWriteDefault:
   def test_writes(self, conn: AcceleratorConnection):
     _run(conn, 64)
 
-  @pytest.mark.parametrize("invalid_width", [False, True])
+  @pytest.mark.parametrize("invalid_layout", [
+      "width",
+      "field_name",
+      "missing_data",
+      "missing_field",
+      "extra_field",
+      "field_order",
+      "data_type",
+  ])
   @pytest.mark.parametrize("direction", ["read", "write"])
-  def test_rejects_invalid_layout(self, host, port, invalid_width, direction):
+  def test_rejects_invalid_layout(self, host, port, invalid_layout, direction):
     # Do not reuse cached valid types from earlier tests in a Windows worker.
     conn = esiaccel.Context().connect("cosim", f"{host}:{port}")
     manifest = json.loads(conn.sysinfo().json_manifest())
@@ -114,13 +122,34 @@ class TestHostMemWriteDefault:
         if
         [f["name"]
          for f in channel["type"].get("inner", {}).get("fields", [])] == names)
-    if invalid_width:
-      layout["fields"][names.index("data")]["type"].update(id="i24",
-                                                           hwBitwidth=24)
+    fields = layout["fields"]
+    data = next(field for field in fields if field["name"] == "data")
+    message = f"Invalid HostMem {direction} field"
+    if invalid_layout == "width":
+      data["type"].update(id="i24", hwBitwidth=24)
       message = f"{direction} width must be a power of two"
-    else:
-      layout["fields"][0]["name"] = "invalid_address"
-      message = f"Invalid HostMem {direction} field"
+    elif invalid_layout == "field_name":
+      fields[0]["name"] = "invalid_address"
+    elif invalid_layout == "missing_data":
+      fields.remove(data)
+      message += ": data"
+    elif invalid_layout == "missing_field":
+      fields.pop()
+      message = f"Invalid HostMem {direction} channel layout"
+    elif invalid_layout == "extra_field":
+      fields.append({"name": "extra", "type": fields[0]["type"]})
+      message = f"Invalid HostMem {direction} channel layout"
+    elif invalid_layout == "field_order":
+      fields.reverse()
+    elif invalid_layout == "data_type":
+      data["type"] = {
+          "id": "invalid_data_struct",
+          "mnemonic": "struct",
+          "fields": [{
+              "name": "bits",
+              "type": data["type"]
+          }],
+      }
     cpp.Manifest(conn.ctxt.cpp_ctxt, json.dumps(manifest))
     with pytest.raises(RuntimeError, match=message):
       conn.get_service_hostmem().start()
