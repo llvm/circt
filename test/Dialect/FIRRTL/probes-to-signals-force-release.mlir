@@ -816,3 +816,37 @@ firrtl.circuit "ForceBeforeDefine" {
     // CHECK: firrtl.matchingconnect %w_forced, %[[OVR]]
   }
 }
+
+// -----
+// TEST 24: A force with const predicate and value drives the non-const child
+// control bundle through const casts.
+
+// CHECK-LABEL: firrtl.circuit "ConstForce"
+firrtl.circuit "ConstForce" {
+  firrtl.module @ConstChild(out %probe_out: !firrtl.rwprobe<uint<8>>) {
+    %target, %target_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    %c42 = firrtl.constant 42 : !firrtl.uint<8>
+    firrtl.matchingconnect %target, %c42 : !firrtl.uint<8>
+    firrtl.ref.define %probe_out, %target_ref : !firrtl.rwprobe<uint<8>>
+  }
+
+  // CHECK: firrtl.module @ConstForce
+  firrtl.module @ConstForce(in %clock: !firrtl.clock) {
+    // CHECK: %c_probe_out, %c_probe_out_force_ctrl = firrtl.instance c @ConstChild
+    %c_probe = firrtl.instance c @ConstChild(out probe_out: !firrtl.rwprobe<uint<8>>)
+    %true = firrtl.constant 1 : !firrtl.const.uint<1>
+    %value = firrtl.constant 238 : !firrtl.const.uint<8>
+    firrtl.ref.force %clock, %true, %c_probe, %value : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.const.uint<8>
+
+    // CHECK: %[[FA:.+]] = firrtl.subfield %c_probe_out_force_ctrl[forceActive]
+    // CHECK-NEXT: %[[RA:.+]] = firrtl.subfield %c_probe_out_force_ctrl[releaseActive]
+    // CHECK-NEXT: %[[FV:.+]] = firrtl.subfield %c_probe_out_force_ctrl[forcedValue]
+    // CHECK-NEXT: %[[CLK:.+]] = firrtl.subfield %c_probe_out_force_ctrl[clk]
+    // CHECK-NEXT: %[[FACAST:.+]] = firrtl.constCast %{{.+}} : (!firrtl.const.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %[[FA]], %[[FACAST]]
+    // CHECK-NEXT: firrtl.matchingconnect %[[RA]], %{{.+}}
+    // CHECK-NEXT: %[[FVCAST:.+]] = firrtl.constCast %{{.+}} : (!firrtl.const.uint<8>) -> !firrtl.uint<8>
+    // CHECK-NEXT: firrtl.matchingconnect %[[FV]], %[[FVCAST]]
+    // CHECK-NEXT: firrtl.matchingconnect %[[CLK]], %clock
+  }
+}
