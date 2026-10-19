@@ -199,6 +199,29 @@ hw.module @andCancel(in %a: i4, in %b : i4, out o1: i4, out o2: i4) {
   hw.output %1, %2 : i4, i4
 }
 
+// CHECK-LABEL: @orCancel
+hw.module @orCancel(in %a: i4, in %b : i4, out o1: i4, out o2: i4) {
+// CHECK-NEXT: %c-1_i4 = hw.constant -1 : i4
+// CHECK-NEXT: hw.output %c-1_i4, %c-1_i4 : i4, i4
+  %c1 = hw.constant 15 : i4
+  %anot = comb.xor %a, %c1 : i4
+  %1 = comb.or %a, %anot : i4
+  %2 = comb.or %b, %a, %b, %anot, %b : i4
+  hw.output %1, %2 : i4, i4
+}
+
+// CHECK-LABEL: @xorCancel
+hw.module @xorCancel(in %a: i4, out o1: i4, out o2: i4) {
+// CHECK-NEXT: %c-1_i4 = hw.constant -1 : i4
+// CHECK-NEXT: hw.output %c-1_i4, %c-1_i4 : i4, i4
+  %c1 = hw.constant 15 : i4
+  %anot = comb.xor %a, %c1 : i4
+  %1 = comb.xor %a, %anot : i4
+  %2 = comb.xor %anot, %a : i4
+  hw.output %1, %2 : i4, i4
+}
+
+
 
 // CHECK-LABEL: hw.module @idempotentDeduped1
 hw.module @idempotentDeduped1(in %arg0 : i7, in %arg1 : i7, out resAnd: i7, out resOr: i7) {
