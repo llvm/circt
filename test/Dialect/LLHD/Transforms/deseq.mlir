@@ -1305,3 +1305,60 @@ hw.module @ClockExtractedFromAliasedStructExtractPosEdge(in %st: !hw.typealias<@
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
+
+
+// CHECK-LABEL: @PresetFromInitialDrive
+hw.module @PresetFromInitialDrive(in %clock: i1, in %d: i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %c123_i42 = hw.constant 123 : i42
+  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %e = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NOT: shouldBeErased
+  // CHECK: seq.firreg
+  // CHECK-SAME: preset 123
+  // CHECK-NOT: shouldBeErased
+  %1, %2 = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i42, %false : i42, i1)
+  ^bb1(%3: i42, %4: i1):
+    llhd.wait yield (%3, %4 : i42, i1), (%clock : i1), ^bb2(%clock : i1)
+  ^bb2(%5: i1):
+    %6 = comb.xor bin %5, %true : i1
+    %7 = comb.and bin %6, %clock : i1  // posedge clock
+    cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
+  }
+  %3 = llhd.sig : <i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
+  // Two initial drives of the same value should be both merged
+  llhd.drv %3, %c123_i42 after %e {testAttr = "shouldBeErased"} : i42
+  llhd.drv %3, %c123_i42 after %e {testAttr = "shouldBeErased"} : i42
+}
+
+// CHECK-LABEL: @FalseInitialDrives
+hw.module @FalseInitialDrives(in %clock: i1, in %d: i42, in %c: i1) {
+  %c0_i42 = hw.constant 0 : i42
+  // CHECK: [[CST123:%.+]] = hw.constant 123 : i42
+  %c123_i42 = hw.constant 123 : i42
+  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %e = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NOT: seq.firreg {{.*}} preset
+  %1, %2 = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i42, %false : i42, i1)
+  ^bb1(%3: i42, %4: i1):
+    llhd.wait yield (%3, %4 : i42, i1), (%clock : i1), ^bb2(%clock : i1)
+  ^bb2(%5: i1):
+    %6 = comb.xor bin %5, %true : i1
+    %7 = comb.and bin %6, %clock : i1  // posedge clock
+    cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
+  }
+  %3 = llhd.sig : <i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
+  // CHECK-COUNT-2: llhd.drv %{{.*}}, [[CST123]]
+  // Don't initialize from conditional drive
+  llhd.drv %3, %c123_i42 after %e if %c : i42
+  // Don't initialize from drive at different time
+  llhd.drv %3, %c123_i42 after %0 : i42
+}

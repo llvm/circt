@@ -1179,6 +1179,21 @@ hw.module @array_get0(in %index : i2, out r0: i2) {
   hw.output %result : i2
 }
 
+// A constant index past the end of a non-power-of-two constant array is a
+// legal value of the index type; the folder must leave the get alone instead
+// of reading past the end of the element list (it used to abort here).
+// CHECK-LABEL: hw.module @array_get_const_oob
+// CHECK-NEXT:    %0 = hw.aggregate_constant [1 : i4, 2 : i4, 3 : i4] : !hw.array<3xi4>
+// CHECK-NEXT:    %c-1_i2 = hw.constant -1 : i2
+// CHECK-NEXT:    %1 = hw.array_get %0[%c-1_i2] : !hw.array<3xi4>, i2
+// CHECK-NEXT:    hw.output %1 : i4
+hw.module @array_get_const_oob(out r0: i4) {
+  %rom = hw.aggregate_constant [1 : i4, 2 : i4, 3 : i4] : !hw.array<3xi4>
+  %idx = hw.constant 3 : i2
+  %g = hw.array_get %rom[%idx] : !hw.array<3xi4>, i2
+  hw.output %g : i4
+}
+
 // CHECK-LABEL: hw.module @array_get1
 // CHECK-NEXT:    hw.output %a0 : i3
 hw.module @array_get1(in %a0: i3, in %a1: i3, in %a2: i3, out r0: i3) {

@@ -301,48 +301,6 @@ def UnwrapValidOnlyOp : ESI_Op<"unwrap.vo", [
   }];
 }
 
-def ModportType:
-  Type<CPred<"llvm::isa<::circt::sv::ModportType>($_self)">, "sv.interface">;
-
-def WrapSVInterfaceOp: ESI_Op<"wrap.iface", [
-    DeclareOpInterfaceMethods<ChannelOpInterface>
-  ]> {
-  let summary = "Wrap an SV interface into an ESI port";
-  let description = [{
-    Wrap a SystemVerilog interface into an ESI channel. Interface MUST look
-    like an interface produced by ESI meaning it MUST contain valid, ready,
-    and data signals. Any other signals will be discarded.
-  }];
-
-  let arguments = (ins ModportType:$interfaceSink);
-  let results = (outs ChannelType:$output);
-
-  let assemblyFormat = [{
-    $interfaceSink attr-dict `:` qualified(type($interfaceSink)) `->` qualified(type($output))
-  }];
-
-  let hasVerifier = 1;
-}
-
-def UnwrapSVInterfaceOp : ESI_Op<"unwrap.iface", [
-    DeclareOpInterfaceMethods<ChannelOpInterface>
-  ]> {
-  let summary = "Unwrap an SV interface from an ESI port";
-  let description = [{
-    Unwrap an ESI channel into a SystemVerilog interface containing valid,
-    ready, and data signals.
-  }];
-
-  let arguments = (ins ChannelType:$chanInput, ModportType:$interfaceSource);
-  let results = (outs);
-
-  let assemblyFormat = [{
-    $chanInput `into` $interfaceSource attr-dict `:` `(` qualified(type($chanInput)) `,` qualified(type($interfaceSource)) `)`
-  }];
-
-  let hasVerifier = 1;
-}
-
 //===----------------------------------------------------------------------===//
 // Channel bundles
 //===----------------------------------------------------------------------===//
