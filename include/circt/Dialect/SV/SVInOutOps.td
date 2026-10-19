@@ -130,7 +130,6 @@ def RegOp : SVOp<"reg", [
     (`init` $init^)? (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
     custom<ImplicitInitType>(ref(type($result)),ref($init), type($init))
-    custom<WarnDeprecatedReg>(ref(type($result)))
   }];
   let hasCanonicalizeMethod = true;
 
@@ -319,7 +318,6 @@ def LogicOp : SVOp<"logic", [
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
-    custom<WarnDeprecatedLogic>(ref(type($result)))
   }];
 
   let extraClassDeclaration = [{

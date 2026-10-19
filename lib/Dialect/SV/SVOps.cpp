@@ -431,15 +431,6 @@ std::optional<size_t> VarOp::getTargetResultIndex() { return 0; }
 // RegOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseWarnDeprecatedReg(OpAsmParser &p, mlir::Type) {
-  mlir::emitWarning(p.getEncodedSourceLoc(p.getCurrentLocation()))
-      << "'sv.reg' is deprecated; use 'sv.var' instead";
-  return success();
-}
-
-static void printWarnDeprecatedReg(OpAsmPrinter &p, Operation *op, mlir::Type) {
-}
-
 static ParseResult
 parseImplicitInitType(OpAsmParser &p, mlir::Type regType,
                       std::optional<OpAsmParser::UnresolvedOperand> &initValue,
@@ -511,15 +502,6 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 // LogicOp
 //===----------------------------------------------------------------------===//
-
-static ParseResult parseWarnDeprecatedLogic(OpAsmParser &p, mlir::Type) {
-  mlir::emitWarning(p.getEncodedSourceLoc(p.getCurrentLocation()))
-      << "'sv.logic' is deprecated; use 'sv.var' instead";
-  return success();
-}
-
-static void printWarnDeprecatedLogic(OpAsmPrinter &p, Operation *op,
-                                     mlir::Type) {}
 
 void LogicOp::build(OpBuilder &builder, OperationState &odsState,
                     Type elementType, StringAttr name,
