@@ -59,13 +59,6 @@ public:
 // Helpers: unwrap TypeAliasType and width-aware serialization.
 //===----------------------------------------------------------------------===//
 
-/// Unwrap TypeAliasType (possibly recursively) to get the underlying type.
-inline const Type *unwrapTypeAlias(const Type *t) {
-  while (auto *alias = dynamic_cast<const TypeAliasType *>(t))
-    t = alias->getInnerType();
-  return t;
-}
-
 /// Compute the wire byte count for a port type. Returns 0 if not a
 /// BitVectorType (meaning sizeof(T) should be used instead).
 /// Wire format info for a port type, cached at connect() time.

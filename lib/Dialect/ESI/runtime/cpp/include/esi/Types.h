@@ -189,6 +189,24 @@ private:
   const Type *innerType;
 };
 
+/// Unwrap TypeAliasType (possibly recursively) to get the underlying type.
+inline const Type *unwrapTypeAlias(const Type *type) {
+  while (auto *alias = dynamic_cast<const TypeAliasType *>(type))
+    type = alias->getInnerType();
+  return type;
+}
+
+/// Unwrap aliases and channels, then cast the payload to T. Returns nullptr
+/// for a null input or a payload that is not a T. Other containers are
+/// retained.
+template <typename T>
+const T *getUnwrappedAs(const Type *type) {
+  type = unwrapTypeAlias(type);
+  while (auto *channel = dynamic_cast<const ChannelType *>(type))
+    type = unwrapTypeAlias(channel->getInner());
+  return dynamic_cast<const T *>(type);
+}
+
 /// Bit vectors include signed, unsigned, and signless integers.
 class BitVectorType : public Type {
 public:
