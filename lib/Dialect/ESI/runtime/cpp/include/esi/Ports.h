@@ -204,7 +204,7 @@ public:
   /// threads. If the user wants to provide their own threads, they need to call
   /// this on each port occasionally. This is also called from the 'master' poll
   /// method in the Accelerator class.
-  virtual bool poll() {
+  bool poll() {
     if (isConnected())
       return pollImpl();
     return false;
@@ -333,9 +333,6 @@ public:
     return mode != Mode::Disconnected;
   }
 
-  /// Poll the backend and, in callback mode, make progress on async writes.
-  bool poll() override;
-
   //===--------------------------------------------------------------------===//
   // Sync mode: connect without a callback to use write(), tryWrite(), and
   // flush(). These throw in callback mode.
@@ -405,9 +402,12 @@ public:
   /// reported via the callback passed to connect(). Throws if the port is not
   /// connected in callback mode or if `msg` is null. If the port is
   /// disconnected or destroyed before the message is written, the callback is
-  /// invoked with an error. If a windowed message fails after some of its
-  /// frames were sent, the receiver is left partway through a message, so all
-  /// subsequent writes fail until the port is disconnected and reconnected.
+  /// invoked with an error. If a multi-frame message fails after some of its
+  /// frames may have been sent, the receiver may be left partway through a
+  /// message, so all subsequent writes fail until the port is disconnected and
+  /// reconnected. Reconnecting clears the fault but does not reset the
+  /// receiver: the caller must first restore the receiver's framing (e.g. by
+  /// resetting the accelerator).
   ///
   /// Default implementation: if no async writes are queued or in flight (and
   /// no other thread is processing them), the message is written immediately
@@ -424,6 +424,12 @@ public:
   virtual void writeAsync(std::unique_ptr<SegmentedMessageData> msg);
 
 protected:
+  /// In callback mode, make progress on async writes. Subclasses which override
+  /// this must call it (first, so that they can immediately send whatever it
+  /// hands them) and should then check isConnected(), since a writeAsync()
+  /// callback may disconnect the port.
+  bool pollImpl() override;
+
   /// Indicates the current mode of the channel.
   enum Mode { Disconnected, Sync, Callback };
   std::atomic<Mode> mode = Mode::Disconnected;
@@ -469,6 +475,8 @@ protected:
 private:
   /// Throw if the port is connected in callback mode.
   void requireNotCallbackMode(const char *method) const;
+  /// Throw if the port's destructor is running.
+  void requireNotDestroying() const;
   /// Set up translation and call connectImpl(). Shared by both modes.
   void connectCommon(const ConnectOptions &options);
   /// tryWrite() and flush() without the mode check.
@@ -517,6 +525,9 @@ private:
   std::recursive_mutex asyncPollMutex;
   /// The async write currently being processed, if any.
   std::optional<PendingAsyncWrite> asyncInFlight;
+  /// Set by the destructor so that cancellation callbacks cannot reconnect the
+  /// partially destroyed port.
+  std::atomic<bool> destroying = false;
   /// True while pollAsyncWrites() is invoking the callback. Only accessed by
   /// the thread holding `asyncPollMutex`.
   bool inAsyncCallback = false;

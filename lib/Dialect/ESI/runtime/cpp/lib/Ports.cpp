@@ -704,10 +704,17 @@ WriteChannelPort::~WriteChannelPort() {
   // state before notifying callbacks to prevent them from starting new writes.
   {
     std::lock_guard<std::mutex> lock(asyncQueueMutex);
+    destroying = true;
     mode = Mode::Disconnected;
   }
   failAsyncWrites("WriteChannelPort: port destroyed before async write "
                   "completed");
+}
+
+void WriteChannelPort::requireNotDestroying() const {
+  if (destroying)
+    throw std::runtime_error(
+        "Cannot connect a write channel which is being destroyed");
 }
 
 void WriteChannelPort::requireNotCallbackMode(const char *method) const {
@@ -729,6 +736,7 @@ void WriteChannelPort::connectCommon(const ConnectOptions &options) {
 }
 
 void WriteChannelPort::connect(const ConnectOptions &options) {
+  requireNotDestroying();
   if (mode == Mode::Callback)
     throw std::runtime_error("Channel already connected in callback mode");
   connectCommon(options);
@@ -739,6 +747,7 @@ void WriteChannelPort::connect(WriteCallback callback,
                                const ConnectOptions &options) {
   if (!callback)
     throw std::invalid_argument("WriteChannelPort::connect: null callback");
+  requireNotDestroying();
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
   translationBuffer.clear();
@@ -760,22 +769,18 @@ void WriteChannelPort::disconnect() {
     std::lock_guard<std::mutex> lock(asyncQueueMutex);
     mode = Mode::Disconnected;
   }
+  std::shared_ptr<const WriteCallback> callback = snapshotWriteCallback();
   failAsyncWrites("WriteChannelPort: port disconnected before async write "
                   "completed");
+  // A cancellation callback may have reconnected the port with a new callback.
+  // Only clear the one belonging to the connection being torn down.
   std::lock_guard<std::mutex> lock(callbackMutex);
-  writeCallback.reset();
+  if (writeCallback == callback)
+    writeCallback.reset();
 }
 
-bool WriteChannelPort::poll() {
-  if (!isConnected())
-    return false;
-  // Make progress on async writes first so that the backend's pollImpl() can
-  // immediately send anything they enqueued.
-  bool progress = mode == Mode::Callback && pollAsyncWrites();
-  // A callback may have disconnected the port.
-  if (!isConnected())
-    return progress;
-  return pollImpl() || progress;
+bool WriteChannelPort::pollImpl() {
+  return mode == Mode::Callback && pollAsyncWrites();
 }
 
 bool WriteChannelPort::tryWriteInternal(const MessageData &data) {
@@ -918,20 +923,32 @@ bool WriteChannelPort::pollAsyncWrites() {
         progress = true;
       }
       // Windowed messages may have frames left to send.
-      if (!flushInternal())
+      size_t framesSentBefore = translationBufferIdx;
+      if (!flushInternal()) {
+        progress |= translationBufferIdx != framesSentBefore;
         break;
+      }
     } catch (...) {
       error = std::current_exception();
-      // If some of a windowed message's frames were sent, the receiver is
+      // If some of a multi-frame message's frames were sent, the receiver is
       // now partway through a message, so sending anything else would corrupt
       // its framing. Fail all subsequent writes until the port is reconnected.
-      if (translationBufferIdx > 0) {
+      std::string partialSend;
+      if (translationBufferIdx > 0)
+        partialSend = "after " + std::to_string(translationBufferIdx) + " of " +
+                      std::to_string(translationBuffer.size()) +
+                      " frames were sent";
+      // Backends split untranslated messages into frames themselves and may
+      // have sent some before throwing. We can't tell, so assume they did.
+      else if (!translateMessages && !pending.accepted &&
+               pending.msg->totalSize() > getFrameSizeBytes())
+        partialSend = "and may have been partially sent";
+      if (!partialSend.empty()) {
         std::lock_guard<std::mutex> lock(asyncQueueMutex);
         asyncFault = std::make_exception_ptr(std::runtime_error(
-            "WriteChannelPort: a previous windowed message failed after " +
-            std::to_string(translationBufferIdx) + " of " +
-            std::to_string(translationBuffer.size()) +
-            " frames were sent, so the channel's framing is corrupt. "
+            "WriteChannelPort: a previous multi-frame message failed " +
+            partialSend +
+            ", so the channel's framing is corrupt. Reset the receiver, then "
             "disconnect() and reconnect the port to recover."));
       }
       translationBuffer.clear();
@@ -973,6 +990,10 @@ void WriteChannelPort::failAsyncWrites(const std::string &reason) {
   std::shared_ptr<const WriteCallback> callback = snapshotWriteCallback();
   std::exception_ptr error =
       std::make_exception_ptr(std::runtime_error(reason));
+  // Writes issued from these callbacks are queued rather than written inline.
+  bool wasInCallback = inAsyncCallback;
+  inAsyncCallback = true;
   for (size_t i = 0; i < numFailed; ++i)
     callWriteCallback(callback, error);
+  inAsyncCallback = wasInCallback;
 }

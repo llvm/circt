@@ -32,9 +32,13 @@
   nothing is queued; otherwise (or under backpressure) it queues messages and
   writes them via `tryWrite()` in FIFO order as the port is polled (e.g. by
   the accelerator service thread via `addPoll()`). `disconnect()` and
-  destruction fail its outstanding writes. `TypedWritePort`
-  gained matching `connect()` and `writeAsync()` overloads.
-  `ChannelPort::poll()` is now virtual.
+  destruction fail its outstanding writes. If a multi-frame message fails
+  after some of its frames may have been sent, all subsequent async writes
+  fail until the port is reconnected; the caller must reset the receiver
+  before reconnecting. `TypedWritePort`
+  gained matching `connect()` and `writeAsync()` overloads. Write port
+  backends which override `pollImpl()` must call `WriteChannelPort::pollImpl()`
+  for the default `writeAsync()` to make progress.
 - **Multiple outstanding host memory reads per client.**
   `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
   (default `1`, which keeps the previous one-request-at-a-time behavior). With
