@@ -46,6 +46,9 @@ public:
   std::atomic<int> acceptBudget = -1;
   /// Number of pollImpl() calls.
   std::atomic<int> pollImplCount = 0;
+  /// Like the cosim backend, split each message into frames and send them one
+  /// at a time; `throwAfter` then counts frames.
+  bool splitFrames = false;
 
 protected:
   void writeImpl(const MessageData &data) override {
@@ -61,15 +64,26 @@ protected:
       --rejectCount;
       return false;
     }
+    if (!splitFrames) {
+      send(data);
+      return true;
+    }
+    for (const MessageData &frame : getMessageFrames(data))
+      send(frame);
+    return true;
+  }
+  void send(const MessageData &data) {
     if (throwAfter >= 0 && throwAfter-- == 0)
       throw std::out_of_range("injected failure");
     std::lock_guard<std::mutex> lock(mutex);
     writtenMsgs.push_back(data.getData());
-    return true;
   }
   bool pollImpl() override {
+    bool progress = WriteChannelPort::pollImpl();
+    if (!isConnected())
+      return progress;
     ++pollImplCount;
-    return false;
+    return progress;
   }
 
 private:
@@ -151,6 +165,20 @@ struct TwoFrameWindow {
   BitsType lowered{"lowered", 16};
   WindowType window{
       "window", "window", &into, &lowered, {{"f0", {{"a"}}}, {"f1", {{"b"}}}}};
+};
+
+/// A three-frame window over a struct of three ui16s.
+struct ThreeFrameWindow {
+  UIntType ui16{"ui16", 16};
+  StructType into{"into",
+                  {{"a", &ui16}, {"b", &ui16}, {"c", &ui16}},
+                  /*reverse=*/false};
+  BitsType lowered{"lowered", 16};
+  WindowType window{"window",
+                    "window",
+                    &into,
+                    &lowered,
+                    {{"f0", {{"a"}}}, {"f1", {{"b"}}}, {"f2", {{"c"}}}}};
 };
 
 /// Feed the frames a write port produced into a translating read port of the
@@ -416,12 +444,17 @@ TEST(WriteAsyncTest, DestructorCallbacksCannotStartWrites) {
   UIntType ui8("ui8", 8);
   WriteChannelPort *port = nullptr;
   bool sawConnected = false;
-  int retriesRejected = 0;
+  int retriesRejected = 0, reconnectsRejected = 0;
   Recorder recorder;
   recorder.onResult = [&](size_t) {
-    // The derived port has already been destroyed, so a retry must not reach
-    // the backend.
+    // The derived port has already been destroyed, so neither a retry nor a
+    // reconnect may reach the backend.
     sawConnected |= port->isConnected();
+    try {
+      port->connect([](std::exception_ptr) {});
+    } catch (const std::runtime_error &) {
+      ++reconnectsRejected;
+    }
     try {
       port->writeAsync(makeMsg({2}));
     } catch (const std::runtime_error &) {
@@ -437,6 +470,7 @@ TEST(WriteAsyncTest, DestructorCallbacksCannotStartWrites) {
   }
   EXPECT_EQ(recorder.size(), 1u);
   EXPECT_FALSE(sawConnected);
+  EXPECT_EQ(reconnectsRejected, 1);
   EXPECT_EQ(retriesRejected, 1);
 }
 
@@ -600,7 +634,8 @@ TEST(WriteAsyncTest, WindowedFailureMidMessageFaultsStream) {
   EXPECT_TRUE(recorder[2]);
   EXPECT_EQ(port.written().size(), 1u);
 
-  // Reconnecting clears the fault.
+  // Reconnecting clears the fault. (A real caller must first reset the
+  // receiver, which still holds the partial {1, 2}.)
   port.disconnect();
   port.connect(recorder.callback(), opts);
   port.writeAsync(makeMsg({5, 6, 7, 8}));
@@ -608,6 +643,91 @@ TEST(WriteAsyncTest, WindowedFailureMidMessageFaultsStream) {
   EXPECT_FALSE(recorder[3]);
   EXPECT_EQ(port.written(),
             (std::vector<std::vector<uint8_t>>{{1, 2}, {5, 6}, {7, 8}}));
+}
+
+TEST(WriteAsyncTest, ReconnectFromCancellationCallback) {
+  UIntType ui8("ui8", 8);
+  RecordingWritePort port(&ui8);
+  Recorder oldRecorder, newRecorder;
+  // Recover from the first cancellation by reconnecting with a new callback.
+  oldRecorder.onResult = [&](size_t idx) {
+    if (idx != 0)
+      return;
+    port.disconnect();
+    port.connect(newRecorder.callback());
+  };
+  port.connect(oldRecorder.callback());
+  port.rejectAll = true;
+  for (uint8_t i = 0; i < 3; ++i)
+    port.writeAsync(makeMsg({i}));
+
+  port.disconnect();
+  // Every cancelled write is reported to the old callback...
+  ASSERT_EQ(oldRecorder.size(), 3u);
+  for (size_t i = 0; i < 3; ++i)
+    EXPECT_TRUE(oldRecorder[i]);
+  // ...and the new connection survives the outer disconnect().
+  EXPECT_TRUE(port.isConnected());
+  port.rejectAll = false;
+  port.writeAsync(makeMsg({9}));
+  EXPECT_TRUE(newRecorder.allSucceeded(1));
+  EXPECT_EQ(oldRecorder.size(), 3u);
+  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{9}}));
+}
+
+TEST(WriteAsyncTest, PollReportsProgressOnRemainingFrames) {
+  ThreeFrameWindow types;
+  RecordingWritePort port(&types.window);
+  Recorder recorder;
+  port.connect(recorder.callback(),
+               ChannelPort::ConnectOptions(std::nullopt, true));
+
+  // The first frame is sent immediately, then backpressure.
+  port.acceptBudget = 1;
+  port.writeAsync(makeMsg({1, 2, 3, 4, 5, 6}));
+  EXPECT_EQ(port.written().size(), 1u);
+
+  // Sending the second frame is progress, even though the third is stuck.
+  port.acceptBudget = 1;
+  EXPECT_TRUE(port.poll());
+  EXPECT_EQ(port.written().size(), 2u);
+  EXPECT_EQ(recorder.size(), 0u);
+  EXPECT_FALSE(port.poll());
+
+  port.acceptBudget = -1;
+  EXPECT_TRUE(port.poll());
+  EXPECT_TRUE(recorder.allSucceeded(1));
+  EXPECT_EQ(receive(&types.window, port.written()),
+            (std::vector<std::vector<uint8_t>>{{1, 2, 3, 4, 5, 6}}));
+}
+
+TEST(WriteAsyncTest, UntranslatedMultiFrameFailureFaultsStream) {
+  TwoFrameWindow types;
+  RecordingWritePort port(&types.window);
+  port.splitFrames = true;
+  Recorder recorder;
+  ChannelPort::ConnectOptions opts(std::nullopt, /*translateMessage=*/false);
+  port.connect(recorder.callback(), opts);
+
+  // Single-frame messages which fail don't fault the stream.
+  port.throwAfter = 0;
+  port.writeAsync(makeMsg({1, 2}));
+  port.writeAsync(makeMsg({3, 4}));
+  ASSERT_EQ(recorder.size(), 2u);
+  EXPECT_EQ(errorMessage<std::out_of_range>(recorder[0]), "injected failure");
+  EXPECT_FALSE(recorder[1]);
+
+  // The backend sends the first of two frames, then fails.
+  port.throwAfter = 1;
+  port.writeAsync(makeMsg({5, 6, 7, 8}));
+  port.writeAsync(makeMsg({9, 10, 11, 12}));
+  ASSERT_EQ(recorder.size(), 4u);
+  EXPECT_EQ(errorMessage<std::out_of_range>(recorder[2]), "injected failure");
+  EXPECT_NE(
+      errorMessage<std::runtime_error>(recorder[3]).find("framing is corrupt"),
+      std::string::npos);
+  EXPECT_EQ(port.written(),
+            (std::vector<std::vector<uint8_t>>{{3, 4}, {5, 6}}));
 }
 
 TEST(WriteAsyncTest, DrivenByServiceThread) {

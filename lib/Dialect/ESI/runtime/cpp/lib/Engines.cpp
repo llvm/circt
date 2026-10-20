@@ -453,6 +453,13 @@ bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
 }
 
 bool OneItemBuffersFromHostWritePort::pollImpl() {
+  // Make progress on async writes first so that anything they enqueue can be
+  // sent below.
+  bool progress = WriteChannelPort::pollImpl();
+  // A writeAsync() callback may have disconnected the port.
+  if (!isConnected())
+    return progress;
+
   Logger &logger = engine->conn.getLogger();
 
   // Check to see if the device is ready.
@@ -460,7 +467,7 @@ bool OneItemBuffersFromHostWritePort::pollImpl() {
   uint8_t *completion =
       reinterpret_cast<uint8_t *>(completion_buffer->getPtr());
   if (*completion == 0)
-    return false;
+    return progress;
 
   std::lock_guard<std::mutex> lock(bufferMutex);
 
@@ -468,7 +475,7 @@ bool OneItemBuffersFromHostWritePort::pollImpl() {
   const uint8_t *src;
   size_t sendSize;
   if (pendingFrames.empty())
-    return false;
+    return progress;
 
   MessageData frame = std::move(pendingFrames.front());
   pendingFrames.pop();
