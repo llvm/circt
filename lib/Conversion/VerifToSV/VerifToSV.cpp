@@ -9,6 +9,7 @@
 // This is the main Verif to SV Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
+
 #include "circt/Conversion/VerifToSV.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
