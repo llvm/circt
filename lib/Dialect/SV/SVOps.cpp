@@ -1891,9 +1891,9 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     // If no write and only reads, then replace with ZOp.
     // SV 6.6: "If no driver is connected to a net, its
     // value shall be high-impedance (z) unless the net is a trireg"
-    connected = ConstantZOp::create(
-        rewriter, wire.getLoc(),
-        cast<InOutType>(wire.getResult().getType()).getElementType());
+    connected =
+        ConstantZOp::create(rewriter, wire.getLoc(),
+                            getHandleElementType(wire.getResult().getType()));
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
     connected = write.getSrc();
   else
@@ -1925,13 +1925,17 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
 // A helper function to infer a return type of IndexedPartSelectInOutOp.
 static Type getElementTypeOfWidth(Type type, int32_t width) {
-  auto elemTy = cast<hw::InOutType>(type).getElementType();
-  if (isa<IntegerType>(elemTy))
-    return hw::InOutType::get(IntegerType::get(type.getContext(), width));
-  if (isa<hw::ArrayType>(elemTy))
-    return hw::InOutType::get(hw::ArrayType::get(
-        cast<hw::ArrayType>(elemTy).getElementType(), width));
-  return {};
+  auto elemType = getHandleElementType(type);
+  if (!elemType)
+    return {};
+  Type newElem;
+  if (hw::type_isa<IntegerType>(elemType))
+    newElem = IntegerType::get(type.getContext(), width);
+  else if (auto array = hw::type_dyn_cast<hw::ArrayType>(elemType))
+    newElem = hw::ArrayType::get(array.getElementType(), width);
+  else
+    return {};
+  return getHandleOfElementType(type, newElem);
 }
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
@@ -1942,30 +1946,35 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
   auto width = adaptor.getWidthAttr();
   if (!width)
     return failure();
-
-  auto typ = getElementTypeOfWidth(operands[0].getType(),
-                                   width.getValue().getZExtValue());
-  if (!typ)
+  auto inputType = operands[0].getType();
+  if (!inputType)
     return failure();
-  results.push_back(typ);
+  auto elemType = getHandleElementType(inputType);
+  if (!elemType)
+    return failure();
+  auto resultType =
+      getElementTypeOfWidth(inputType, width.getValue().getZExtValue());
+  if (!resultType)
+    return failure();
+  results.push_back(resultType);
   return success();
 }
 
 LogicalResult IndexedPartSelectInOutOp::verify() {
   unsigned inputWidth = 0, resultWidth = 0;
   auto opWidth = getWidth();
-  auto inputElemTy = cast<InOutType>(getInput().getType()).getElementType();
-  auto resultElemTy = cast<InOutType>(getType()).getElementType();
-  if (auto i = dyn_cast<IntegerType>(inputElemTy))
+  auto inputElemTy = getHandleElementType(getInput().getType());
+  auto resultElemTy = getHandleElementType(getType());
+  if (auto i = hw::type_dyn_cast<IntegerType>(inputElemTy))
     inputWidth = i.getWidth();
-  else if (auto i = hw::type_cast<hw::ArrayType>(inputElemTy))
+  else if (auto i = hw::type_dyn_cast<hw::ArrayType>(inputElemTy))
     inputWidth = i.getNumElements();
   else
     return emitError("input element type must be Integer or Array");
 
-  if (auto resType = dyn_cast<IntegerType>(resultElemTy))
+  if (auto resType = hw::type_dyn_cast<IntegerType>(resultElemTy))
     resultWidth = resType.getWidth();
-  else if (auto resType = hw::type_cast<hw::ArrayType>(resultElemTy))
+  else if (auto resType = hw::type_dyn_cast<hw::ArrayType>(resultElemTy))
     resultWidth = resType.getNumElements();
   else
     return emitError("result element type must be Integer or Array");
@@ -2025,13 +2034,14 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
   auto field = adaptor.getFieldAttr();
   if (!field)
     return failure();
+  auto handleType = operands[0].getType();
   auto structType =
-      hw::type_cast<hw::StructType>(getInOutElementType(operands[0].getType()));
+      hw::type_cast<hw::StructType>(getHandleElementType(handleType));
   auto resultType = structType.getFieldType(field);
   if (!resultType)
     return failure();
 
-  results.push_back(hw::InOutType::get(resultType));
+  results.push_back(getHandleOfElementType(handleType, resultType));
   return success();
 }
 

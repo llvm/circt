@@ -156,12 +156,13 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
             return false;
 
         // Skip index ops with unpacked arrays.
-        auto inout = indexOp.getInput().getType();
-        if (hw::type_isa<hw::UnpackedArrayType>(inout.getElementType()))
+        auto handle = indexOp.getInput().getType();
+        Type elementType = sv::getHandleElementType(handle);
+        if (hw::type_isa<hw::UnpackedArrayType>(elementType))
           return false;
 
         // Generate case value element lookups.
-        auto ty = hw::type_cast<hw::ArrayType>(inout.getElementType());
+        auto ty = hw::type_cast<hw::ArrayType>(elementType);
         OpBuilder builder(&op);
         auto loc = op.getLoc();
         const auto indexValues = createIndexValuePairs<sv::ArrayIndexInOutOp>(
