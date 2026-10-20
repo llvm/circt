@@ -645,6 +645,28 @@ public:
     return inner->tryWrite(toMessageData(data, wireInfo_));
   }
 
+  /// Non-blocking write by taking ownership. On success, `data` is consumed
+  /// (left null) and true is returned. On failure, `data` is left untouched so
+  /// the caller can retry. If T is a SegmentedMessageData, this hands the
+  /// message directly to the port's segmented tryWrite path.
+  bool tryWrite(std::unique_ptr<T> &data) {
+    if (!data)
+      throw std::runtime_error("TypedWritePort::tryWrite: null unique_ptr");
+    if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
+      std::unique_ptr<SegmentedMessageData> msg(data.release());
+      bool written = inner->tryWrite(msg);
+      // On failure, the port did not take ownership; hand it back.
+      if (!written)
+        data.reset(static_cast<T *>(msg.release()));
+      return written;
+    } else {
+      if (!tryWrite(*data))
+        return false;
+      data.reset();
+      return true;
+    }
+  }
+
   bool flush() { return inner->flush(); }
   void disconnect() { inner->disconnect(); }
   bool isConnected() const { return inner && inner->isConnected(); }

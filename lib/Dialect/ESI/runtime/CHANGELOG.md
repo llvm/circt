@@ -19,6 +19,14 @@
 
 ### Added
 
+- **Non-blocking segmented writes.** `WriteChannelPort` gains a virtual
+  `bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg)` and
+  `TypedWritePort<T>` gains `bool tryWrite(std::unique_ptr<T> &data)`. They
+  take ownership of the message (leaving the pointer null) only when they
+  return true; on false the caller keeps the message and can retry. The
+  default implementation flattens the message and calls the existing
+  `tryWrite(const MessageData &)`; backends may override it for
+  scatter-gather support.
 - **Multiple outstanding host memory reads per client.**
   `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
   (default `1`, which keeps the previous one-request-at-a-time behavior). With
