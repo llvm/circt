@@ -58,7 +58,8 @@ void LowerFirMemPass::runOnOperation() {
 
   // Group the list of memories that we need to update per HW module. This will
   // allow us to parallelize across HW modules.
-  MapVector<HWModuleOp, SmallVector<FirMemLowering::MemoryConfig>> memsByModule;
+  llvm::MapVector<HWModuleOp, SmallVector<FirMemLowering::MemoryConfig>>
+      memsByModule;
   for (auto &[config, memOps] : uniqueMems) {
     // Create the `HWModuleGeneratedOp`s for each unique configuration.
     auto genOp = lowering.createMemoryModule(config, memOps);

@@ -99,7 +99,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     op.remove();
     (*blockIter)->push_back(&op);
   }
-  MapVector<Value, Value> argMap;
+  llvm::MapVector<Value, Value> argMap;
   // Move function arguments to the block that will stay in the function
   for (unsigned argIndex = 0; argIndex < frontBlock->getNumArguments();
        ++argIndex) {

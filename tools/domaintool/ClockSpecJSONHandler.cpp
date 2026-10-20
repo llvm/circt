@@ -284,7 +284,7 @@ private:
   SmallVector<Clock> clocks;
   SmallVector<StringAttr> asyncPorts;
   SmallVector<StringAttr> staticPorts;
-  MapVector<StringAttr, SynchronousData> syncPorts;
+  llvm::MapVector<StringAttr, SynchronousData> syncPorts;
 
   /// Map from a domain name to its recorded source relationship (source name +
   /// kind).  Populated during handle() when a domain declares a non-empty

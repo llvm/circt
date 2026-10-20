@@ -982,7 +982,7 @@ Emitter::Emitter(Operation *module, const EmitHGLDDOptions &options)
   // don't have an emitted file path annotated are collected in a separate
   // group. That group, with a null `StringAttr` key, is emitted into a separate
   // "global.dd" file.
-  MapVector<StringAttr, FileEmitter> groups;
+  llvm::MapVector<StringAttr, FileEmitter> groups;
   for (auto [moduleName, module] : state.di.moduleNodes) {
     StringAttr hdlFile;
     if (module->op)

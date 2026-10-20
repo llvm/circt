@@ -676,7 +676,8 @@ struct FullResetRunner {
 
   /// The reset domain for a module. In case of conflicting domain membership,
   /// the vector for a module contains multiple elements.
-  MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePath>, 1>>
+  llvm::MapVector<FModuleOp,
+                  SmallVector<std::pair<ResetDomain, InstancePath>, 1>>
       domains;
 
   /// Cache of modules symbols

@@ -246,7 +246,7 @@ struct SetStorage : CachableStorage {
 
 /// Storage object for an '!rtg.bag<T>'.
 struct BagStorage {
-  BagStorage(MapVector<ElaboratorValue, uint64_t> &&bag, Type type)
+  BagStorage(llvm::MapVector<ElaboratorValue, uint64_t> &&bag, Type type)
       : hashcode(llvm::hash_combine(
             type, llvm::hash_combine_range(bag.begin(), bag.end()))),
         bag(std::move(bag)), type(type) {}
@@ -261,7 +261,7 @@ struct BagStorage {
 
   // Stores the elaborated values contained in the bag with their number of
   // occurences.
-  const MapVector<ElaboratorValue, uint64_t> bag;
+  const llvm::MapVector<ElaboratorValue, uint64_t> bag;
 
   // Store the bag type such that we can materialize this evaluated value
   // also in the case where the bag is empty.
@@ -955,7 +955,7 @@ struct TestState {
   StringAttr name;
 
   /// The context switches registered for this test.
-  MapVector<
+  llvm::MapVector<
       std::pair<ContextResourceAttrInterface, ContextResourceAttrInterface>,
       SequenceStorage *>
       contextSwitches;
@@ -1749,7 +1749,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(SetConvertToBagOp op) {
     auto set = get<SetStorage *>(op.getInput())->set;
-    MapVector<ElaboratorValue, uint64_t> bag;
+    llvm::MapVector<ElaboratorValue, uint64_t> bag;
     for (auto val : set)
       bag.insert({val, 1});
     state[op.getResult()] = sharedState.internalizer.internalize<BagStorage>(
@@ -1758,7 +1758,7 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(BagCreateOp op) {
-    MapVector<ElaboratorValue, uint64_t> bag;
+    llvm::MapVector<ElaboratorValue, uint64_t> bag;
     for (auto [val, multiple] :
          llvm::zip(op.getElements(), op.getMultiples())) {
       // If the multiple is not stored as an AttributeValue, the elaboration
@@ -1801,7 +1801,7 @@ public:
     auto original = get<BagStorage *>(op.getOriginal())->bag;
     auto diff = get<BagStorage *>(op.getDiff())->bag;
 
-    MapVector<ElaboratorValue, uint64_t> result;
+    llvm::MapVector<ElaboratorValue, uint64_t> result;
     for (const auto &el : original) {
       if (!diff.contains(el.first)) {
         result.insert(el);
@@ -1824,7 +1824,7 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(BagUnionOp op) {
-    MapVector<ElaboratorValue, uint64_t> result;
+    llvm::MapVector<ElaboratorValue, uint64_t> result;
     for (auto bag : op.getBags()) {
       auto val = get<BagStorage *>(bag)->bag;
       for (auto [el, multiple] : val)

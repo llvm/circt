@@ -74,7 +74,7 @@ struct ModuleLoweringState {
     sv::InitialOp svInitialOp = {};
     // A mapping from a dummy immutable value to the actual initial value
     // defined in SV initial op.
-    MapVector<mlir::TypedValue<seq::ImmutableType>, Value> mapping;
+    llvm::MapVector<mlir::TypedValue<seq::ImmutableType>, Value> mapping;
 
     hw::HWModuleOp module;
   } immutableValueLowering;
@@ -120,7 +120,7 @@ ModuleLoweringState::ImmutableValueLowering::lower(seq::InitialOp initialOp) {
             ->getResult(0);
     result.replaceAllUsesWith(placeholder);
     mapping.insert(
-        {cast<mlir::TypedValue<seq ::ImmutableType>>(placeholder), operand});
+        {cast<mlir::TypedValue<seq::ImmutableType>>(placeholder), operand});
   }
 
   svInitialOp.getBodyBlock()->getOperations().splice(
@@ -137,9 +137,10 @@ ModuleLoweringState::ImmutableValueLowering::lower(seq::InitialOp initialOp) {
 template <typename OpTy>
 class CompRegLower : public OpConversionPattern<OpTy> {
 public:
-  CompRegLower(
-      TypeConverter &typeConverter, MLIRContext *context, bool lowerToAlwaysFF,
-      const MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates)
+  CompRegLower(TypeConverter &typeConverter, MLIRContext *context,
+               bool lowerToAlwaysFF,
+               const llvm::MapVector<StringAttr, ModuleLoweringState>
+                   &moduleLoweringStates)
       : OpConversionPattern<OpTy>(typeConverter, context),
         lowerToAlwaysFF(lowerToAlwaysFF),
         moduleLoweringStates(moduleLoweringStates) {}
@@ -229,7 +230,7 @@ public:
 
 private:
   bool lowerToAlwaysFF;
-  const MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates;
+  const llvm::MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates;
 };
 
 /// Create the assign.
@@ -252,9 +253,9 @@ void CompRegLower<CompRegClockEnabledOp>::createAssign(
 /// Lower FromImmutable to `sv.reg` and `sv.initial`.
 class FromImmutableLowering : public OpConversionPattern<FromImmutableOp> {
 public:
-  FromImmutableLowering(
-      TypeConverter &typeConverter, MLIRContext *context,
-      const MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates)
+  FromImmutableLowering(TypeConverter &typeConverter, MLIRContext *context,
+                        const llvm::MapVector<StringAttr, ModuleLoweringState>
+                            &moduleLoweringStates)
       : OpConversionPattern<FromImmutableOp>(typeConverter, context),
         moduleLoweringStates(moduleLoweringStates) {}
 
@@ -290,7 +291,7 @@ public:
   }
 
 private:
-  const MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates;
+  const llvm::MapVector<StringAttr, ModuleLoweringState> &moduleLoweringStates;
 };
 // Lower seq.clock_gate to a fairly standard clock gate implementation.
 //
@@ -589,7 +590,8 @@ void SeqToSVPass::runOnOperation() {
 
   // Identify memories and group them by module.
   auto uniqueMems = memLowering.collectMemories(modules);
-  MapVector<HWModuleOp, SmallVector<FirMemLowering::MemoryConfig>> memsByModule;
+  llvm::MapVector<HWModuleOp, SmallVector<FirMemLowering::MemoryConfig>>
+      memsByModule;
   SmallVector<HWModuleGeneratedOp> generatedModules;
   for (auto &[config, memOps] : uniqueMems) {
     // Create the `HWModuleGeneratedOp`s for each unique configuration.
@@ -613,7 +615,7 @@ void SeqToSVPass::runOnOperation() {
   std::atomic<bool> needsRegRandomization = false;
   std::atomic<bool> needsMemRandomization = false;
 
-  MapVector<StringAttr, ModuleLoweringState> moduleLoweringStates;
+  llvm::MapVector<StringAttr, ModuleLoweringState> moduleLoweringStates;
   for (auto module : circuit.getOps<HWModuleOp>())
     moduleLoweringStates.try_emplace(module.getModuleNameAttr(),
                                      ModuleLoweringState(module));

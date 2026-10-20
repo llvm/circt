@@ -70,7 +70,7 @@ FirMemLowering::collectMemories(ArrayRef<HWModuleOp> modules) {
   });
 
   // Group the gathered memories by unique `FirMemConfig` details.
-  MapVector<FirMemConfig, SmallVector<FirMemOp, 1>> grouped;
+  llvm::MapVector<FirMemConfig, SmallVector<FirMemOp, 1>> grouped;
   for (auto [module, moduleMemories] : llvm::zip(modules, memories))
     for (auto [summary, memOp] : moduleMemories)
       grouped[summary].push_back(memOp);

@@ -2473,7 +2473,7 @@ private:
       SmallVector<FInstanceLike> instances;
       bool nameIsUnique = true;
     };
-    MapVector<StringAttr, InstanceGroup> instanceGroups;
+    llvm::MapVector<StringAttr, InstanceGroup> instanceGroups;
     for (auto module : modules) {
       SmallDenseMap<StringAttr, unsigned> nameCounts;
       module.walk([&](FInstanceLike instOp) {

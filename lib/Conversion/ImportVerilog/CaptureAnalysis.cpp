@@ -106,8 +106,8 @@ struct CaptureWalker
   /// Inverse call graph: maps each callee to the set of callers that call it.
   /// Used to propagate captures from callees to their callers. Uses MapVector
   /// for deterministic iteration order during propagation.
-  MapVector<const SubroutineSymbol *,
-            SmallSetVector<const SubroutineSymbol *, 4>>
+  llvm::MapVector<const SubroutineSymbol *,
+                  SmallSetVector<const SubroutineSymbol *, 4>>
       callers;
 
   /// For each (function, captured symbol) pair, the instance through wich
