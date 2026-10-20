@@ -346,3 +346,17 @@ hw.module @ProbeIsNonPure(in %in : i1, out out : i1) {
   %2 = comb.and %in, %1 : i1
   hw.output %2 : i1
 }
+
+// A register reset by another register that is converted in the same batch of
+// shuffling arcs: the reset operand must refer to the converted register's new
+// value, not to a stale/erased reference.
+// CHECK-LABEL: hw.module @ResetFromRegister(
+hw.module @ResetFromRegister(in %clock: !seq.clock, in %in: i1, in %rst: i1, out out: i1) {
+  // CHECK-DAG: [[RST_D:%.+]] = arc.state @{{.+}}(%rst) clock %clock latency 1
+  // CHECK-DAG: [[DATA:%.+]] = arc.state @{{.+}}(%in) clock %clock reset [[RST_D]] latency 1
+  // CHECK: hw.output [[DATA]]
+  %false = hw.constant false
+  %rst_d = seq.compreg %rst, %clock : i1
+  %data = seq.compreg %in, %clock reset %rst_d, %false : i1
+  hw.output %data : i1
+}
