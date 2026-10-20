@@ -194,6 +194,16 @@ move storage out of it, or leave it untouched for retry.
     virtual void write(std::unique_ptr<SegmentedMessageData> msg) {
       write(msg->toMessageData());
     }
+
+    /// Non-blocking write of a multi-segment message. Takes ownership (and
+    /// nulls `msg`) only on success; on failure `msg` is left untouched so
+    /// the caller can retry. Default flattens and calls tryWrite().
+    virtual bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg) {
+      if (!tryWrite(msg->toMessageData()))
+        return false;
+      msg.reset();
+      return true;
+    }
   };
 
 ```
@@ -319,13 +329,16 @@ backend keeps the `unique_ptr` and uses the embedded cursor to resume.
     void write(std::unique_ptr<SampleBatch> p) {
       port.write(std::move(p));
     }
+    bool tryWrite(std::unique_ptr<SampleBatch> &p);  // consumes p on success
   };
 ```
 
 The typed overload takes ownership via `unique_ptr`, matching the
 `WriteChannelPort::write(unique_ptr<SegmentedMessageData>)` overload.
 The generated specialization casts the owned `SampleBatch` up to
-`SegmentedMessageData` implicitly on the move.
+`SegmentedMessageData` implicitly on the move. The non-blocking
+`tryWrite(unique_ptr<T> &)` only takes ownership if it returns true, so a
+rejected message can be retried without rebuilding it.
 
 ### Zero-copy from HostMem regions
 
