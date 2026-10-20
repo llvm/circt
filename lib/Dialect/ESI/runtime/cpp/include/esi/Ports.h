@@ -21,8 +21,12 @@
 #include "esi/Utils.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <condition_variable>
+#include <deque>
+#include <exception>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <queue>
@@ -304,27 +308,43 @@ protected:
   virtual void connectImpl(const ConnectOptions &options) {}
 };
 
-/// A ChannelPort which sends data to the accelerator.
+/// A ChannelPort which sends data to the accelerator. It has two modes: Sync
+/// and Callback, which cannot be used at the same time. The mode is set at
+/// connect() time. To change the mode, disconnect() and then connect() again.
 class WriteChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
+  /// Fails any async writes which have not completed.
+  ~WriteChannelPort() override;
 
-  virtual void connect(const ConnectOptions &options = {}) override {
-    translateMessages = options.translateMessage && translationInfo;
-    if (translationInfo) {
-      translationInfo->precomputeFrameInfo();
-      if (translateMessages)
-        translationInfo->requireTranslationSupported();
-    }
-    connectImpl(options);
-    connected = true;
+  /// Callback mode completion callback. Invoked exactly once per writeAsync()
+  /// message, in the order the messages were written: with a null
+  /// exception_ptr once the whole message has been handed to the backend (the
+  /// same guarantee as a write() returning), or with the exception which caused
+  /// the write to fail.
+  using WriteCallback = std::function<void(std::exception_ptr)>;
+
+  /// Disconnect the port. In callback mode, fails any async writes which have
+  /// not completed. May block until a concurrent poll() (including the
+  /// callbacks it invokes) returns. Subclasses which override this must call
+  /// it.
+  virtual void disconnect() override;
+  virtual bool isConnected() const override {
+    return mode != Mode::Disconnected;
   }
-  virtual void disconnect() override { connected = false; }
-  virtual bool isConnected() const override { return connected; }
+
+  //===--------------------------------------------------------------------===//
+  // Sync mode: connect without a callback to use write(), tryWrite(), and
+  // flush(). These throw in callback mode.
+  //===--------------------------------------------------------------------===//
+
+  /// Connect in sync mode. Throws if connected in callback mode.
+  virtual void connect(const ConnectOptions &options = {}) override;
 
   /// A very basic blocking write API. Will likely change for performance
   /// reasons.
   void write(const MessageData &data) {
+    requireNotCallbackMode("write");
     if (translateMessages) {
       assert(translationBuffer.empty() &&
              "Cannot call write() with pending translated messages");
@@ -355,36 +375,69 @@ public:
   /// invalid for backends to always return false (i.e. backends must eventually
   /// ensure that writes may succeed).
   bool tryWrite(const MessageData &data) {
-    if (translateMessages) {
-      // Do not accept a new message if there are pending messages to flush.
-      if (!flush())
-        return false;
-      assert(translationBuffer.empty() &&
-             "Translation buffer should be empty after successful flush");
-      translateOutgoing(data);
-      flush();
-      return true;
-    } else {
-      return tryWriteImpl(maybePadEmptyMessage(data));
-    }
+    requireNotCallbackMode("tryWrite");
+    return tryWriteInternal(data);
   }
   /// Flush any buffered data. Returns true if all data was flushed.
   ///
   /// If `translateMessages` is false, calling `flush()` will immediately return
   /// true and perform no action, as there is no buffered data to flush.
   bool flush() {
-    while (translationBufferIdx < translationBuffer.size()) {
-      if (!tryWriteImpl(
-              maybePadEmptyMessage(translationBuffer[translationBufferIdx])))
-        return false;
-      ++translationBufferIdx;
-    }
-    translationBuffer.clear();
-    translationBufferIdx = 0;
-    return true;
+    requireNotCallbackMode("flush");
+    return flushInternal();
   }
 
+  //===--------------------------------------------------------------------===//
+  // Callback mode: connect with a callback to use writeAsync(). The callback
+  // reports the completion of each message. It must not throw and should
+  // return quickly. It may call writeAsync() and disconnect().
+  //===--------------------------------------------------------------------===//
+
+  /// Connect in callback mode. Throws if already connected or if `callback` is
+  /// null.
+  virtual void connect(WriteCallback callback,
+                       const ConnectOptions &options = {});
+
+  /// Non-blocking write which takes ownership of the message. Completion is
+  /// reported via the callback passed to connect(). Throws if the port is not
+  /// connected in callback mode or if `msg` is null. If the port is
+  /// disconnected or destroyed before the message is written, the callback is
+  /// invoked with an error. If a multi-frame message fails after some of its
+  /// frames may have been sent, the receiver may be left partway through a
+  /// message, so all subsequent writes fail until the port is disconnected and
+  /// reconnected. Reconnecting clears the fault but does not reset the
+  /// receiver: the caller must first restore the receiver's framing (e.g. by
+  /// resetting the accelerator).
+  ///
+  /// Default implementation: if no async writes are queued or in flight (and
+  /// no other thread is processing them), the message is written immediately
+  /// via tryWrite() on the calling thread, in which case the callback may be
+  /// invoked before writeAsync() returns. Otherwise -- or if the backend
+  /// backpressures -- the message is queued and written in FIFO order by
+  /// poll(), so progress requires polling (typically by the accelerator's
+  /// service thread via `AcceleratorServiceThread::addPoll()`) and the callback
+  /// runs on the polling thread. So do not call writeAsync() while holding a
+  /// lock which the callback acquires. Backends may override this (e.g. for
+  /// scatter-gather DMA). Overrides must uphold the WriteCallback contract,
+  /// invoke it via invokeWriteCallback(), and fail their outstanding writes
+  /// upon disconnect.
+  virtual void writeAsync(std::unique_ptr<SegmentedMessageData> msg);
+
 protected:
+  /// In callback mode, make progress on async writes. Subclasses which override
+  /// this must call it (first, so that they can immediately send whatever it
+  /// hands them) and should then check isConnected(), since a writeAsync()
+  /// callback may disconnect the port.
+  bool pollImpl() override;
+
+  /// Indicates the current mode of the channel.
+  enum Mode { Disconnected, Sync, Callback };
+  std::atomic<Mode> mode = Mode::Disconnected;
+
+  /// Invoke the callback registered at connect() (if any) with the result of
+  /// an async write. Exceptions thrown by the callback are swallowed.
+  void invokeWriteCallback(std::exception_ptr error);
+
   /// Pad an empty payload with a single zero byte if the port type has a
   /// zero-width logical width (e.g. `VoidType`). Transports (DMA engines,
   /// cosim, etc.) require every message to carry at least one byte.
@@ -398,8 +451,6 @@ protected:
   /// reference outlives the call.
   inline static const MessageData transportPad0Bytes = MessageData({0});
 
-public:
-protected:
   /// Implementation for write(). Subclasses must implement this.
   virtual void writeImpl(const MessageData &) = 0;
 
@@ -422,7 +473,64 @@ protected:
   void translateOutgoing(const MessageData &data);
 
 private:
-  volatile bool connected = false;
+  /// Throw if the port is connected in callback mode.
+  void requireNotCallbackMode(const char *method) const;
+  /// Throw if the port's destructor is running.
+  void requireNotDestroying() const;
+  /// Set up translation and call connectImpl(). Shared by both modes.
+  void connectCommon(const ConnectOptions &options);
+  /// tryWrite() and flush() without the mode check.
+  bool tryWriteInternal(const MessageData &data);
+  bool flushInternal();
+
+  //===--------------------------------------------------------------------===//
+  // Callback mode state.
+  //===--------------------------------------------------------------------===//
+
+  struct PendingAsyncWrite {
+    std::unique_ptr<SegmentedMessageData> msg;
+    /// Flattened copy of `msg`, if it isn't already a MessageData.
+    std::optional<MessageData> flattened;
+    /// True once tryWrite() has accepted the message. Windowed messages may
+    /// still have frames left to flush().
+    bool accepted = false;
+  };
+
+  /// Try to complete queued async writes. Returns true if progress was made.
+  bool pollAsyncWrites();
+  /// Fail all async writes which have not completed with `reason`.
+  void failAsyncWrites(const std::string &reason);
+  /// Get the callback registered at connect(), if any.
+  std::shared_ptr<const WriteCallback> snapshotWriteCallback();
+  /// Invoke `callback` (if non-null), swallowing any exception it throws.
+  static void
+  callWriteCallback(const std::shared_ptr<const WriteCallback> &callback,
+                    std::exception_ptr error);
+
+  /// The callback registered at connect(). Shared so that it can be invoked
+  /// without holding `callbackMutex` while disconnect() clears it.
+  std::shared_ptr<const WriteCallback> writeCallback;
+  /// Protects `writeCallback`.
+  std::mutex callbackMutex;
+
+  /// Protects `asyncQueue` and synchronizes writeAsync() with mode changes.
+  std::mutex asyncQueueMutex;
+  std::deque<PendingAsyncWrite> asyncQueue;
+  /// Set when a windowed message fails after some of its frames were sent,
+  /// leaving the receiver mid-message. All subsequent async writes fail with
+  /// it until the port is reconnected. Protected by `asyncQueueMutex`.
+  std::exception_ptr asyncFault;
+  /// Serializes processing of async writes (and owns `asyncInFlight`).
+  /// Recursive so that callbacks may call disconnect().
+  std::recursive_mutex asyncPollMutex;
+  /// The async write currently being processed, if any.
+  std::optional<PendingAsyncWrite> asyncInFlight;
+  /// Set by the destructor so that cancellation callbacks cannot reconnect the
+  /// partially destroyed port.
+  std::atomic<bool> destroying = false;
+  /// True while pollAsyncWrites() is invoking the callback. Only accessed by
+  /// the thread holding `asyncPollMutex`.
+  bool inAsyncCallback = false;
 };
 
 /// Instantiated when a backend does not know how to create a write channel.
@@ -432,6 +540,10 @@ public:
       : WriteChannelPort(type), errmsg(errmsg) {}
 
   void connect(const ConnectOptions &options = {}) override {
+    throw std::runtime_error(errmsg);
+  }
+  void connect(WriteCallback callback,
+               const ConnectOptions &options = {}) override {
     throw std::runtime_error(errmsg);
   }
 

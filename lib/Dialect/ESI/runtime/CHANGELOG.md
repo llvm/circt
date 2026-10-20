@@ -19,6 +19,26 @@
 
 ### Added
 
+- **Callback mode for `WriteChannelPort`, with `writeAsync()`.** Mirroring
+  `ReadChannelPort`, connecting a write port with a callback
+  (`connect(WriteCallback, options)`) puts it in callback mode, in which
+  `writeAsync()` performs non-blocking writes which take ownership of a
+  `SegmentedMessageData`. The callback is invoked exactly once per message, in
+  order, with a null `std::exception_ptr` on success or the exception which
+  caused the failure. `write()`/`tryWrite()`/`flush()` throw in callback mode,
+  and `writeAsync()` throws otherwise. `writeAsync()` is virtual so backends
+  may override it (e.g. for scatter-gather DMA). The default implementation
+  writes a message immediately via `tryWrite()` on the calling thread when
+  nothing is queued; otherwise (or under backpressure) it queues messages and
+  writes them via `tryWrite()` in FIFO order as the port is polled (e.g. by
+  the accelerator service thread via `addPoll()`). `disconnect()` and
+  destruction fail its outstanding writes. If a multi-frame message fails
+  after some of its frames may have been sent, all subsequent async writes
+  fail until the port is reconnected; the caller must reset the receiver
+  before reconnecting. `TypedWritePort`
+  gained matching `connect()` and `writeAsync()` overloads. Write port
+  backends which override `pollImpl()` must call `WriteChannelPort::pollImpl()`
+  for the default `writeAsync()` to make progress.
 - **Multiple outstanding host memory reads per client.**
   `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
   (default `1`, which keeps the previous one-request-at-a-time behavior). With

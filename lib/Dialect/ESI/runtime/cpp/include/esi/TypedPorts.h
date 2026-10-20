@@ -626,6 +626,19 @@ public:
     inner->connect(opts);
   }
 
+  /// Connect in callback mode to use writeAsync(). See
+  /// WriteChannelPort::connect(WriteCallback, const ConnectOptions &).
+  void connect(WriteChannelPort::WriteCallback callback,
+               const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) {
+    if (!inner)
+      throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+    if (!SkipTypeCheck)
+      verifyTypeCompatibility<T>(inner);
+    wireInfo_ = getWireInfo(inner->getType());
+    inner->connect(std::move(callback), opts);
+  }
+
   void write(const T &data) { inner->write(toMessageData(data, wireInfo_)); }
 
   /// Write by taking ownership. If T is a SegmentedMessageData, this hands
@@ -643,6 +656,26 @@ public:
 
   bool tryWrite(const T &data) {
     return inner->tryWrite(toMessageData(data, wireInfo_));
+  }
+
+  /// Non-blocking write. Requires callback mode. See
+  /// WriteChannelPort::writeAsync().
+  void writeAsync(const T &data) {
+    inner->writeAsync(std::make_unique<MessageData>(
+        toMessageData(data, wireInfo_).takeData()));
+  }
+
+  /// Non-blocking write which takes ownership. If T is a SegmentedMessageData,
+  /// this hands the message directly to the port. Requires callback mode. See
+  /// WriteChannelPort::writeAsync().
+  void writeAsync(std::unique_ptr<T> data) {
+    if (!data)
+      throw std::invalid_argument(
+          "TypedWritePort::writeAsync: null unique_ptr");
+    if constexpr (std::is_base_of_v<SegmentedMessageData, T>)
+      inner->writeAsync(std::move(data));
+    else
+      writeAsync(*data);
   }
 
   bool flush() { return inner->flush(); }
@@ -673,6 +706,17 @@ public:
     inner->connect(opts);
   }
 
+  /// Connect in callback mode to use writeAsync(). See
+  /// WriteChannelPort::connect(WriteCallback, const ConnectOptions &).
+  void connect(WriteChannelPort::WriteCallback callback,
+               const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) {
+    if (!inner)
+      throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+    verifyTypeCompatibility<void>(inner->getType());
+    inner->connect(std::move(callback), opts);
+  }
+
   void write() {
     uint8_t zero = 0;
     inner->write(MessageData(&zero, 1));
@@ -681,6 +725,12 @@ public:
   bool tryWrite() {
     uint8_t zero = 0;
     return inner->tryWrite(MessageData(&zero, 1));
+  }
+
+  /// Non-blocking write. Requires callback mode. See
+  /// WriteChannelPort::writeAsync().
+  void writeAsync() {
+    inner->writeAsync(std::make_unique<MessageData>(std::vector<uint8_t>{0}));
   }
 
   bool flush() { return inner->flush(); }
