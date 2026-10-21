@@ -41,12 +41,12 @@ hw.module @test_case_stmts() {
   }
 
   // Case expr pattern
-  %foo = sv.wire : !hw.inout<i1>
-  %bar = sv.wire : !hw.inout<i1>
-  // CHECK: [[FOO:%.*]] = sv.read_inout %foo : !hw.inout<i1>
-  // CHECK: [[BAR:%.*]] = sv.read_inout %bar : !hw.inout<i1>
-  %2 = sv.read_inout %foo : !hw.inout<i1>
-  %3 = sv.read_inout %bar : !hw.inout<i1>
+  %foo = sv.wire : !sv.net<i1>
+  %bar = sv.wire : !sv.net<i1>
+  // CHECK: [[FOO:%.*]] = sv.read_inout %foo : !sv.net<i1>
+  // CHECK: [[BAR:%.*]] = sv.read_inout %bar : !sv.net<i1>
+  %2 = sv.read_inout %foo : !sv.net<i1>
+  %3 = sv.read_inout %bar : !sv.net<i1>
   // CHECK-NEXT: sv.initial {
   // CHECK-NEXT:   sv.case [[COND]] : i1
   // CHECK-NEXT:   case [[FOO]]: {

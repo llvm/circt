@@ -59,9 +59,9 @@ addressing, meaning that this operation sets / reads the entire value.
 - **initialValue**: An initial value for registers. This represents a system power-on value in FPGA.
 - **name**: A name for the register, defaults to `""`. Inferred from the textual
 SSA value name, or passed explicitly in builder APIs. The name will be passed to
-the `sv.reg` during lowering.
+the `sv.var` during lowering.
 - **innerSym**: An optional symbol to refer to the register. The symbol will be
-passed to the `sv.reg` during lowering if present.
+passed to the `sv.var` during lowering if present.
 
 ```mlir
 %q = seq.compreg %input, %clk [ reset %reset, %resetValue ] [initial %initial] : $type(input)
@@ -110,9 +110,9 @@ register and lower it to SystemVerilog.
 - **input**: Value to set the register to on the positive edge of the clock
 signal.
 - **clk**: Clock signal driving the register.
-- **name**: A name for the register, passed directly to the `sv.reg`.
+- **name**: A name for the register, passed directly to the `sv.var`.
 - **inner_sym**: A optional symbol for the register, passed directly to the
-`sv.reg`. Is a symbol is not specified and the register is randomised, one is
+`sv.var`. Is a symbol is not specified and the register is randomised, one is
 created during the lowering to SV. Registers without symbols can be removed
 from the design.
 - **reset**: Signal to trigger the reset.

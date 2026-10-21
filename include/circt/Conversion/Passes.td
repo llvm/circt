@@ -853,7 +853,7 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
     Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
            "Place assignments to registers into `always_ff` blocks if possible">,
     Option<"emitPresetAsInlineInit", "emit-preset-as-inline-init", "bool", "true",
-           "Emit register preset values as inline `sv.reg` initializers instead "
+           "Emit register preset values as inline `sv.var` initializers instead "
            "of a guarded `initial` block">
   ];
   let statistics = [

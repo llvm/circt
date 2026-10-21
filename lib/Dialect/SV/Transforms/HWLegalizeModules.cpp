@@ -156,12 +156,14 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
             return false;
 
         // Skip index ops with unpacked arrays.
-        auto inout = indexOp.getInput().getType();
-        if (hw::type_isa<hw::UnpackedArrayType>(inout.getElementType()))
+        auto handle = indexOp.getInput().getType();
+        if (hw::type_isa<hw::UnpackedArrayType>(
+                sv::getHandleElementType(handle)))
           return false;
 
         // Generate case value element lookups.
-        auto ty = hw::type_cast<hw::ArrayType>(inout.getElementType());
+        auto ty =
+            hw::type_cast<hw::ArrayType>(sv::getHandleElementType(handle));
         OpBuilder builder(&op);
         auto loc = op.getLoc();
         const auto indexValues = createIndexValuePairs<sv::ArrayIndexInOutOp>(
@@ -183,8 +185,8 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
       .Case<sv::PAssignOp>([&](sv::PAssignOp assignOp) {
         // Transform array assignment into individual assignments for each array
         // element.
-        auto inout = assignOp.getDest().getType();
-        auto ty = hw::type_dyn_cast<hw::ArrayType>(inout.getElementType());
+        auto var = assignOp.getDest().getType();
+        auto ty = hw::type_dyn_cast<hw::ArrayType>(var.getElementType());
         if (!ty)
           return false;
 
@@ -201,7 +203,7 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         // Remove original assignment.
         return true;
       })
-      .Case<sv::RegOp>([&](sv::RegOp regOp) {
+      .Case<sv::VarOp>([&](sv::VarOp regOp) {
         // Transform array reg into individual regs for each array element.
         auto ty = hw::type_dyn_cast<hw::ArrayType>(regOp.getElementType());
         if (!ty)
@@ -212,7 +214,7 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         SmallVector<Value> elements;
         for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
           auto loc = op.getLoc();
-          auto element = sv::RegOp::create(builder, loc, ty.getElementType());
+          auto element = sv::VarOp::create(builder, loc, ty.getElementType());
           if (auto nameAttr = regOp->getAttrOfType<StringAttr>(name)) {
             element.setNameAttr(
                 StringAttr::get(regOp.getContext(), nameAttr.getValue()));
@@ -281,7 +283,7 @@ Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
   // Create the wire for the result of the casez in the
   // hw.module.
   OpBuilder builder(&op);
-  auto theWire = sv::RegOp::create(builder, op.getLoc(), elementType,
+  auto theWire = sv::VarOp::create(builder, op.getLoc(), elementType,
                                    builder.getStringAttr("casez_tmp"));
   builder.setInsertionPoint(&op);
 

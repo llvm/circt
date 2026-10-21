@@ -88,7 +88,7 @@ def type_to_pytype(t) -> ir.Type:
   if t.__class__ != ir.Type:
     return t
 
-  from .dialects import esi, hw, seq, rtg, rtgtest
+  from .dialects import esi, hw, seq, rtg, rtgtest, sv
   if isinstance(t, ir.IntegerType):
     return ir.IntegerType(t)
   if isinstance(t, ir.NoneType):
@@ -105,6 +105,10 @@ def type_to_pytype(t) -> ir.Type:
     return hw.TypeAliasType(t)
   if hw.InOutType.isinstance(t):
     return hw.InOutType(t)
+  if sv.NetType.isinstance(t):
+    return sv.NetType(t)
+  if sv.VarType.isinstance(t):
+    return sv.VarType(t)
   if seq.ClockType.isinstance(t):
     return seq.ClockType(t)
   if esi.ChannelType.isinstance(t):

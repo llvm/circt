@@ -50,7 +50,7 @@ class HWMemSimImpl {
   bool disableRegRandomization;
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
 
-  SmallVector<sv::RegOp> registers;
+  SmallVector<sv::VarOp> registers;
 
   Value addPipelineStages(ImplicitLocOpBuilder &b,
                           hw::InnerSymbolNamespace &moduleNamespace,
@@ -113,8 +113,9 @@ static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
   // If we don't want to add mux pragmas, just return the read value.
   if (!addMuxPragmas ||
       cast<hw::UnpackedArrayType>(
-          cast<hw::InOutType>(memory.getType()).getElementType())
+          cast<sv::VarType>(memory.getType()).getElementType())
               .getNumElements() <= 1)
+
     return slot;
   circt::sv::setSVAttributes(
       slot, sv::SVAttributeAttr::get(b.getContext(), "cadence map_to_mux",
@@ -150,12 +151,12 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
 
   // Add the necessary registers.
   auto savedIP = b.saveInsertionPoint();
-  SmallVector<sv::RegOp> regs;
+  SmallVector<sv::VarOp> regs;
   b.setInsertionPoint(alwaysOp);
   for (unsigned i = 0; i < stages; ++i) {
     auto regName =
         b.getStringAttr(moduleNamespace.newName("_" + name + "_d" + Twine(i)));
-    auto reg = sv::RegOp::create(b, data.getType(), regName,
+    auto reg = sv::VarOp::create(b, data.getType(), regName,
                                  hw::InnerSymAttr::get(regName));
     regs.push_back(reg);
     registers.push_back(reg);
@@ -199,8 +200,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       mem.numReadPorts + mem.numWritePorts + mem.numReadWritePorts;
 
   // Create registers for the memory.
-  sv::RegOp reg =
-      sv::RegOp::create(b, UnpackedArrayType::get(dataType, mem.depth),
+  sv::VarOp reg =
+      sv::VarOp::create(b, UnpackedArrayType::get(dataType, mem.depth),
                         b.getStringAttr("Memory"));
 
   if (addVivadoRAMAddressConflictSynthesisBugWorkaround) {
@@ -571,23 +572,23 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
   constexpr unsigned randomWidth = 32;
   sv::IfDefOp::create(b, "ENABLE_INITIAL_MEM_", [&]() {
-    sv::RegOp randReg;
-    SmallVector<sv::RegOp> randRegs;
+    sv::VarOp randReg;
+    SmallVector<sv::VarOp> randRegs;
     if (!disableRegRandomization) {
       sv::IfDefOp::create(b, "RANDOMIZE_REG_INIT", [&]() {
         signed totalWidth = 0;
-        for (sv::RegOp &reg : registers)
+        for (sv::VarOp &reg : registers)
           totalWidth += reg.getElementType().getIntOrFloatBitWidth();
         while (totalWidth > 0) {
           auto name = b.getStringAttr(moduleNamespace.newName("_RANDOM"));
           auto innerSym = hw::InnerSymAttr::get(name);
-          randRegs.push_back(sv::RegOp::create(b, b.getIntegerType(randomWidth),
+          randRegs.push_back(sv::VarOp::create(b, b.getIntegerType(randomWidth),
                                                name, innerSym));
           totalWidth -= randomWidth;
         }
       });
     }
-    auto randomMemReg = sv::RegOp::create(
+    auto randomMemReg = sv::VarOp::create(
         b,
         b.getIntegerType(llvm::divideCeil(mem.dataWidth, randomWidth) *
                          randomWidth),
@@ -655,13 +656,13 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       if (!disableRegRandomization) {
         sv::IfDefProceduralOp::create(b, "RANDOMIZE_REG_INIT", [&]() {
           unsigned bits = randomWidth;
-          for (sv::RegOp &reg : randRegs)
+          for (sv::VarOp &reg : randRegs)
             sv::VerbatimOp::create(
                 b, b.getStringAttr("{{0}} = {`RANDOM};"), ValueRange{},
                 b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
                                                      reg.getInnerNameAttr())));
           auto randRegIdx = 0;
-          for (sv::RegOp &reg : registers) {
+          for (sv::VarOp &reg : registers) {
             SmallVector<std::pair<Attribute, std::pair<size_t, size_t>>> values;
             auto width = reg.getElementType().getIntOrFloatBitWidth();
             auto widthRemaining = width;

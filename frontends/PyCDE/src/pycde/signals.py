@@ -244,7 +244,18 @@ class ClockSignal(Signal):
     return BitsSignal(clk_i1, Bits(1))
 
 
-class InOutSignal(Signal):
+class NetSignal(Signal):
+  # Maintain a caching of the read value.
+  read_value = None
+
+  @property
+  def read(self):
+    if self.read_value is None:
+      self.read_value = _FromCirctValue(sv.ReadInOutOp.create(self).results[0])
+    return self.read_value
+
+
+class VarSignal(Signal):
   # Maintain a caching of the read value.
   read_value = None
 

@@ -29,6 +29,7 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
@@ -1002,7 +1003,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     } else {
       // If the port is an inout bundle or contains an analog type, then it is
       // implicitly inout.
-      hwPort.type = hw::InOutType::get(hwPort.type);
+      hwPort.type = sv::NetType::get(hwPort.type);
       hwPort.dir = hw::ModulePort::Direction::Input;
       hwPort.argNum = numArgs++;
     }
@@ -1452,7 +1453,7 @@ static Value tryEliminatingAttachesToAnalogValue(Value value,
   attach.erase();
 
   ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
-  return castFromFIRRTLType(attachedValue, hw::InOutType::get(loweredType),
+  return castFromFIRRTLType(attachedValue, sv::NetType::get(loweredType),
                             builder);
 }
 
@@ -2510,7 +2511,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 
   // If we got an inout value, implicitly read it.  FIRRTL allows direct use
   // of wires and other things that lower to inout type.
-  if (isa<hw::InOutType>(result.getType()))
+  if (sv::getHandleElementType(result.getType()))
     return getReadValue(result);
 
   return result;
@@ -3479,7 +3480,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
   // otherwise hw::ArrayGetOp.
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (sv::getHandleElementType(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, iIdx);
   else
     result = builder.createOrFold<hw::ArrayGetOp>(input, iIdx);
@@ -3503,7 +3504,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
   // otherwise, lower the op to array indexing.
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (sv::getHandleElementType(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, valueIdx);
   else
     result = createArrayIndexing(input, valueIdx);
@@ -3524,7 +3525,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
   auto field = firrtl::type_cast<BundleType>(op.getInput().getType())
                    .getElementName(op.getFieldIndex());
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (sv::getHandleElementType(input.getType()))
     result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
   else
     result = builder.createOrFold<hw::StructExtractOp>(input, field);
@@ -3755,7 +3756,7 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
   auto resultTy = lowerType(op.getType());
   if (!resultTy)
     return failure();
-  resultTy = sv::InOutType::get(op.getContext(), resultTy);
+  resultTy = sv::NetType::get(op.getContext(), resultTy);
 
   SmallVector<Value, 4> operands;
   operands.reserve(op.getSubstitutions().size());
@@ -5189,8 +5190,10 @@ LogicalResult FIRRTLLowering::visitExpr(XMRRefOp op) {
   else
     xmrType = lowerType(baseType);
 
-  return setLoweringTo<sv::XMRRefOp>(op, sv::InOutType::get(xmrType),
-                                     op.getRef(), op.getVerbatimSuffixAttr());
+  // The referenced object is not known here, so assume a net, which is what
+  // wires and ports lower to. A probe of a register would be a variable.
+  return setLoweringTo<sv::XMRRefOp>(op, sv::NetType::get(xmrType), op.getRef(),
+                                     op.getVerbatimSuffixAttr());
 }
 
 LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
@@ -5202,7 +5205,8 @@ LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
   else
     xmrType = lowerType(op.getType());
 
-  auto xmr = sv::XMRRefOp::create(builder, sv::InOutType::get(xmrType),
+  // See visitExpr(XMRRefOp): the referenced object is assumed to be a net.
+  auto xmr = sv::XMRRefOp::create(builder, sv::NetType::get(xmrType),
                                   op.getRef(), op.getVerbatimSuffixAttr());
   auto readXmr = getReadValue(xmr);
   if (!isa<ClockType>(op.getType()))
@@ -5283,8 +5287,9 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!isa<hw::InOutType>(destVal.getType()))
-    return op.emitError("destination isn't an inout type");
+  // sv.assign only drives nets.
+  if (!isa<sv::NetType>(destVal.getType()))
+    return op.emitError("destination isn't a net handle type");
 
   sv::AssignOp::create(builder, destVal, srcVal);
   return success();
@@ -5311,8 +5316,9 @@ LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!isa<hw::InOutType>(destVal.getType()))
-    return op.emitError("destination isn't an inout type");
+  // sv.assign only drives nets.
+  if (!isa<sv::NetType>(destVal.getType()))
+    return op.emitError("destination isn't a net handle type");
 
   sv::AssignOp::create(builder, destVal, srcVal);
   return success();
@@ -5330,8 +5336,8 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
   if (!destVal)
     return failure();
 
-  if (!isa<hw::InOutType>(destVal.getType()))
-    return op.emitError("destination isn't an inout type");
+  if (!sv::getHandleElementType(destVal.getType()))
+    return op.emitError("destination isn't a net or variable handle type");
 
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
@@ -6029,8 +6035,8 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       continue;
     }
 
-    if (!isa<hw::InOutType>(inoutValues.back().getType()))
-      return op.emitError("operand isn't an inout type");
+    if (!isa<sv::NetType>(inoutValues.back().getType()))
+      return op.emitError("operand isn't a net handle type");
   }
 
   if (inoutValues.size() < 2)

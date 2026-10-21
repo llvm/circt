@@ -85,16 +85,17 @@ hw.module private @invalidInout(in %arg0: !hw.inout<tensor<*xf32>>) { }
 // -----
 
 hw.module @inout(in %a: i42) {
-  // expected-error @+1 {{'input' must be InOutType, but got 'i42'}}
+  // expected-error @+1 {{'input' must be SystemVerilog net handle or SystemVerilog variable handle, but got 'i42'}}
   %aget = sv.read_inout %a: i42
 }
 
 // -----
 
 hw.module @wire(in %a: i42) {
-  // expected-error @+1 {{'sv.wire' op result #0 must be InOutType, but got 'i42'}}
+  // expected-error @+1 {{'sv.wire' op result #0 must be SystemVerilog net handle, but got 'i42'}}
   %aget = sv.wire: i42
 }
+
 
 // -----
 

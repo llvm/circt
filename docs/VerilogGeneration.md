@@ -273,7 +273,7 @@ change the name to avoid the conflict.
 
 ### Ops with explicit names
 
-The `sv.reg` operation, `sv.wire` operation, and the various instance operations
+The `sv.var` operation, `sv.wire` operation, and the various instance operations
 in the hw dialect have a `name` attribute which gets used.
 
 ### Out-of-line expressions ("temporaries")

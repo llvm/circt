@@ -40,8 +40,8 @@ hw.module @Consumer(
     in %otherWord: !hw.typealias<@other::@word, i16>,
     out result: !hw.typealias<@types::@word, i8>) {
   // CHECK: types_0::stateAlias state;
-  %state = sv.reg : !hw.inout<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>
-  %value = sv.read_inout %state : !hw.inout<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>
+  %state = sv.var : !sv.var<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>
+  %value = sv.read_inout %state : !sv.var<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>
   %idle = hw.enum.constant Idle : !hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>
   %busy = hw.enum.constant Busy : !hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>
   // CHECK: case (state)
