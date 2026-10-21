@@ -130,6 +130,12 @@ public:
           .Case<InstanceOp>([&](auto inst) { handleInstanceOp(inst); })
           .Case<InstanceChoiceOp>(
               [&](auto inst) { handleInstanceChoiceOp(inst); })
+          .Case<ObjectCreateOp>([](auto) {
+            // An object reference does not depend on evaluating its fields.
+            // Object-model graphs can contain mutually referencing objects;
+            // treating construction as all-to-all combinational dataflow
+            // would incorrectly report these references as hardware loops.
+          })
           .Case<SubindexOp>([&](SubindexOp sub) {
             recordValueRefersToFieldRef(
                 sub.getInput(),

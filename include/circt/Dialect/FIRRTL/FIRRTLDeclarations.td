@@ -750,6 +750,44 @@ def ObjectOp :  FIRRTLOp<"object", [
   }];
 }
 
+def ObjectCreateOp : FIRRTLOp<"object.create", [
+    Pure,
+    ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
+    DeclareOpInterfaceMethods<FObjectLike>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getReferencedModuleSlow"
+    ]>,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]> {
+  let summary = "Create an object from its input values";
+  let description = [{
+    This is the value-like form of `firrtl.object`. The operands supply the
+    class's input ports, in declaration order, rather than exposing those ports
+    as assignment destinations. Output ports can be read with
+    `firrtl.object.subfield`. Input ports are not accessible through the result.
+
+    The FIRRTL importer continues to produce `firrtl.object`. The
+    `firrtl-lower-objects` pass converts those declarations and their input
+    assignments to this operation after parsing.
+
+    Example:
+    ```mlir
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Foo(in str: !firrtl.string, out result: !firrtl.string)>
+    ```
+  }];
+  let arguments = (ins StrAttr:$name, Variadic<PropertyType>:$inputs);
+  let results = (outs ClassType:$result);
+  let builders = [
+    OpBuilder<(ins "ClassLike":$klass, "StringRef":$name, "ValueRange":$inputs)>
+  ];
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    `(` $inputs `)` `` custom<ImplicitSSAName>(attr-dict) `:`
+    functional-type($inputs, $result)
+  }];
+}
+
 def DomainCreateAnonOp
     : FIRRTLOp<"domain.anon",
                [ParentOneOf<["firrtl::ContractOp", "firrtl::FModuleOp",
