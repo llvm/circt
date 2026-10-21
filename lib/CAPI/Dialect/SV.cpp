@@ -51,3 +51,23 @@ bool svSVAttributeAttrGetEmitAsComment(MlirAttribute attribute) {
       .getEmitAsComment()
       .getValue();
 }
+
+bool svTypeIsANet(MlirType type) { return llvm::isa<NetType>(unwrap(type)); }
+
+MlirType svNetTypeGet(MlirType element) {
+  return wrap(NetType::get(unwrap(element)));
+}
+
+MlirType svNetTypeGetElementType(MlirType type) {
+  return wrap(llvm::cast<NetType>(unwrap(type)).getElementType());
+}
+
+bool svTypeIsAVar(MlirType type) { return llvm::isa<VarType>(unwrap(type)); }
+
+MlirType svVarTypeGet(MlirType element) {
+  return wrap(VarType::get(unwrap(element)));
+}
+
+MlirType svVarTypeGetElementType(MlirType type) {
+  return wrap(llvm::cast<VarType>(unwrap(type)).getElementType());
+}

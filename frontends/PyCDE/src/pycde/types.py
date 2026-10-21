@@ -153,6 +153,10 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
     return Type.__new__(TypeAlias, type, incl_cls_in_key=False)
   if isinstance(type, hw.InOutType):
     return Type.__new__(InOut, type)
+  if isinstance(type, sv.NetType):
+    return Type.__new__(Net, type)
+  if isinstance(type, sv.VarType):
+    return Type.__new__(Var, type)
   if isinstance(type, ir.IntegerType):
     if type.is_signed:
       return Type.__new__(SInt, type)
@@ -175,10 +179,15 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
   return Type(type)
 
 
-class InOut(Type):
+class SVHandle(Type):
+  """Base class for SystemVerilog handle types."""
+
+  _circt_type = None
+  _signal_class = None
+  _name = None
 
   def __new__(cls, element_type: Type):
-    return super(InOut, cls).__new__(cls, hw.InOutType.get(element_type._type))
+    return super().__new__(cls, cls._circt_type.get(element_type._type))
 
   @property
   def element_type(self) -> Type:
@@ -189,11 +198,33 @@ class InOut(Type):
     return True
 
   def _get_value_class(self):
-    from .signals import InOutSignal
-    return InOutSignal
+    from . import signals
+    return getattr(signals, self._signal_class)
 
   def __repr__(self):
-    return f"InOut<{repr(self.element_type)}"
+    return f"{self._name}<{self.element_type!r}>"
+
+
+class InOut(SVHandle):
+  _circt_type = hw.InOutType
+  _signal_class = "InOutSignal"
+  _name = "InOut"
+
+
+class Net(SVHandle):
+  """An SV net handle type (`!sv.net<T>`)."""
+
+  _circt_type = sv.NetType
+  _signal_class = "NetSignal"
+  _name = "Net"
+
+
+class Var(SVHandle):
+  """An SV variable handle type (`!sv.var<T>`)."""
+
+  _circt_type = sv.VarType
+  _signal_class = "VarSignal"
+  _name = "Var"
 
 
 class TypeAlias(Type):
