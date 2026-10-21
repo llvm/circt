@@ -1410,6 +1410,87 @@ hw.module @extractShift(in %arg0 : i4, out o1 : i1, out o2: i1, out o3: i1, out 
   hw.output %3, %4, %5, %6: i1, i1, i1, i1
 }
 
+// CHECK-LABEL: hw.module @extractAddCarryAllOnesTwoState
+hw.module @extractAddCarryAllOnesTwoState(in %x : i8, out o : i1) {
+  // CHECK-NEXT: %[[ZERO:.+]] = hw.constant 0 : i8
+  // CHECK-NEXT: %[[CMP:.+]] = comb.icmp bin ne %x, %[[ZERO]] {sv.namehint = "carry_out"} : i8
+  // CHECK-NEXT: hw.output %[[CMP]] : i1
+  %false = hw.constant false
+  %c255_i9 = hw.constant 255 : i9
+  %lhs = comb.concat %false, %x : i1, i8
+  %add = comb.add bin %lhs, %c255_i9 : i9
+  %res = comb.extract %add from 8 {sv.namehint = "carry_out"} : (i9) -> i1
+  hw.output %res : i1
+}
+
+// CHECK-LABEL: hw.module @extractAddCarryGeneralConstant
+hw.module @extractAddCarryGeneralConstant(in %x : i8, out o : i1) {
+  // CHECK-NEXT: %[[C117:.+]] = hw.constant 117 : i8
+  // CHECK-NEXT: %[[CMP:.+]] = comb.icmp ugt %x, %[[C117]] : i8
+  // CHECK-NEXT: hw.output %[[CMP]] : i1
+  %false = hw.constant false
+  %c138_i9 = hw.constant 138 : i9
+  %lhs = comb.concat %false, %x : i1, i8
+  %add = comb.add %lhs, %c138_i9 : i9
+  %res = comb.extract %add from 8 : (i9) -> i1
+  hw.output %res : i1
+}
+
+// CHECK-LABEL: hw.module @extractAddBorrowParityFlip
+hw.module @extractAddBorrowParityFlip(in %x : i8, out o1 : i1, out o2 : i1) {
+  // CHECK-DAG: %[[C5:.+]] = hw.constant 5 : i8
+  // CHECK-DAG: %[[C0:.+]] = hw.constant 0 : i8
+  // CHECK-NEXT: %[[CMP1:.+]] = comb.icmp ult %x, %[[C5]] : i8
+  // CHECK-NEXT: %[[CMP2:.+]] = comb.icmp eq %x, %[[C0]] : i8
+  // CHECK-NEXT: hw.output %[[CMP1]], %[[CMP2]] : i1, i1
+  %false = hw.constant false
+  %c5_i9 = hw.constant 5 : i9
+  %c_neg1_i9 = hw.constant -1 : i9
+  %lhs = comb.concat %false, %x : i1, i8
+  %sub = comb.sub %lhs, %c5_i9 : i9
+  %e1 = comb.extract %sub from 8 : (i9) -> i1
+  %add = comb.add %lhs, %c_neg1_i9 : i9
+  %e2 = comb.extract %add from 8 : (i9) -> i1
+  hw.output %e1, %e2 : i1, i1
+}
+
+// CHECK-LABEL: hw.module @extractAddCarryNegative
+hw.module @extractAddCarryNegative(in %x : i8, in %y : i8, in %a : i9, out o1 : i1, out o2 : i8, out o3 : i1, out o4 : i1, out o5 : i1) {
+  %false = hw.constant false
+  %c255_i9 = hw.constant 255 : i9
+  %zx = comb.concat %false, %x : i1, i8
+  %zy = comb.concat %false, %y : i1, i8
+
+  // Multi-use add (both carry bit [8] and low bits [7:0] are extracted).
+  // CHECK: %[[ADD1:.+]] = comb.add %{{.+}}, %c255_i9 : i9
+  // CHECK-NEXT: %[[E1:.+]] = comb.extract %[[ADD1]] from 8 : (i9) -> i1
+  // CHECK-NEXT: %[[E2:.+]] = comb.extract %[[ADD1]] from 0 : (i9) -> i8
+  %add1 = comb.add %zx, %c255_i9 : i9
+  %e1 = comb.extract %add1 from 8 : (i9) -> i1
+  %e2 = comb.extract %add1 from 0 : (i9) -> i8
+
+  // Bit 8 of %a is unknown.
+  // CHECK-NEXT: %[[ADD2:.+]] = comb.add %a, %c255_i9 : i9
+  // CHECK-NEXT: %[[E3:.+]] = comb.extract %[[ADD2]] from 8 : (i9) -> i1
+  %add2 = comb.add %a, %c255_i9 : i9
+  %e3 = comb.extract %add2 from 8 : (i9) -> i1
+
+  // Neither operand has constant low bits.
+  // CHECK-NEXT: %[[ADD3:.+]] = comb.add %{{.+}}, %{{.+}} : i9
+  // CHECK-NEXT: %[[E4:.+]] = comb.extract %[[ADD3]] from 8 : (i9) -> i1
+  %add3 = comb.add %zx, %zy : i9
+  %e4 = comb.extract %add3 from 8 : (i9) -> i1
+
+  // Variadic 3-operand add.
+  // CHECK-NEXT: %[[ADD4:.+]] = comb.add %{{.+}}, %{{.+}}, %c255_i9 : i9
+  // CHECK-NEXT: %[[E5:.+]] = comb.extract %[[ADD4]] from 8 : (i9) -> i1
+  %add4 = comb.add %zx, %zy, %c255_i9 : i9
+  %e5 = comb.extract %add4 from 8 : (i9) -> i1
+
+  // CHECK-NEXT: hw.output %[[E1]], %[[E2]], %[[E3]], %[[E4]], %[[E5]]
+  hw.output %e1, %e2, %e3, %e4, %e5 : i1, i8, i1, i1, i1
+}
+
 // CHECK-LABEL: hw.module @moduloZeroDividend
 hw.module @moduloZeroDividend(in %arg0 : i32, out o1: i32, out o2: i32) {
   // CHECK: [[ZERO:%.*]] = hw.constant 0 : i32

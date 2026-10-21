@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -645,6 +646,46 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
   return false;
 }
 
+/// Fold a single-bit extract of a two-operand add into an icmp when bit
+/// `bitIdx` is known in both operands and the low `bitIdx` bits of one operand
+/// are a known constant `c`:
+///   extract(bitIdx, add(x, c)) -> icmp ugt/ule x[bitIdx-1:0], ~c[bitIdx-1:0]
+/// Bit `bitIdx` of `lhs + rhs` is `lhs[bitIdx] ^ rhs[bitIdx] ^ carry`, and the
+/// low `bitIdx` bits carry into bit `bitIdx` iff `x[bitIdx-1:0] >_u ~c`.
+/// Returns true if `op` was replaced, false otherwise.
+static bool extractFromAdd(ExtractOp op, AddOp add, PatternRewriter &rewriter) {
+  unsigned bitIdx = op.getLowBit();
+  if (cast<IntegerType>(op.getType()).getWidth() != 1 || bitIdx == 0 ||
+      add.getInputs().size() != 2 || !add->hasOneUse())
+    return false;
+
+  Value lhs = add.getInputs()[0];
+  Value rhs = add.getInputs()[1];
+  KnownBits rhsKnown = computeKnownBits(rhs);
+  if (!rhsKnown.Zero[bitIdx] && !rhsKnown.One[bitIdx])
+    return false;
+  KnownBits lhsKnown = computeKnownBits(lhs);
+  if (!lhsKnown.Zero[bitIdx] && !lhsKnown.One[bitIdx])
+    return false;
+
+  KnownBits rhsLow = rhsKnown.trunc(bitIdx);
+  if (!rhsLow.isConstant()) {
+    rhsLow = lhsKnown.trunc(bitIdx);
+    if (!rhsLow.isConstant())
+      return false;
+    lhs = rhs;
+  }
+
+  bool carrySetsBit = lhsKnown.One[bitIdx] == rhsKnown.One[bitIdx];
+  Value lowLhs = rewriter.createOrFold<ExtractOp>(op.getLoc(), lhs, 0, bitIdx);
+  Value invCst =
+      hw::ConstantOp::create(rewriter, op.getLoc(), ~rhsLow.getConstant());
+  replaceOpWithNewOpAndCopyNamehint<ICmpOp>(
+      rewriter, op, carrySetsBit ? ICmpPredicate::ugt : ICmpPredicate::ule,
+      lowLhs, invCst, add.getTwoState());
+  return true;
+}
+
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (isOpTriviallyRecursive(op))
     return failure();
@@ -740,6 +781,11 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
             return success();
           }
     }
+
+  // `extract(bitIdx, add(x, c))` -> `icmp ugt/ule x[bitIdx-1:0], ~c`
+  if (auto addOp = dyn_cast_or_null<AddOp>(inputOp))
+    if (extractFromAdd(op, addOp, rewriter))
+      return success();
 
   return failure();
 }
