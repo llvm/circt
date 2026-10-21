@@ -36,7 +36,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
     }];
 
   let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs InOutType:$result);
+  let results = (outs AnyTypeOf<[InOutType, NetType], "InOutType">:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
