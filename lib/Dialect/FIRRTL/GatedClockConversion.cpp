@@ -536,6 +536,18 @@ void GatedClockConversion::rewriteRoot(const Root &root, Value baseClk,
         Value newRhs = b.createOrFold<MuxPrimOp>(
             getDominatingValue(write, enable), write.getSrc(), reg.getData());
         write->setOperand(1, newRhs);
+
+        // A synchronous reset only takes effect on a gated clock edge, so it
+        // must be held off while the gate is closed too. An asynchronous reset
+        // does not depend on the clock and is left alone.
+        if (auto regReset = dyn_cast<RegResetOp>(reg.getOperation())) {
+          Value resetSignal = regReset.getResetSignal();
+          if (type_isa<UIntType>(resetSignal.getType())) {
+            ImplicitLocOpBuilder rb(regReset.getLoc(), regReset);
+            regReset.getResetSignalMutable().assign(rb.createOrFold<AndPrimOp>(
+                resetSignal, getDominatingValue(regReset, enable)));
+          }
+        }
       })
       .Default([](Operation *) {
         llvm_unreachable("rejected by addRoot() or checkRoots()");

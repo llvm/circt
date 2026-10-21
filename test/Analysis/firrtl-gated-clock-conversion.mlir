@@ -41,6 +41,32 @@ firrtl.circuit "WireAlias" {
 
 // -----
 
+// A synchronous reset only acts on a gated clock edge, so it is gated by the
+// enable too; an asynchronous reset is left alone.
+// CHECK-LABEL: firrtl.module @ResetRegs
+firrtl.circuit "ResetRegs" {
+  firrtl.module @ResetRegs(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>,
+                           in %srst: !firrtl.uint<1>,
+                           in %arst: !firrtl.asyncreset,
+                           in %d: !firrtl.uint<8>, in %init: !firrtl.uint<8>) {
+    %g = firrtl.int.clock_gate %clk, %en
+    // CHECK: %[[RST:.+]] = firrtl.and %srst, %en
+    // CHECK: %[[S:.+]] = firrtl.regreset %clk, %[[RST]], %init
+    // CHECK: %[[SMUX:.+]] = firrtl.mux(%en, %d, %[[S]])
+    // CHECK: firrtl.matchingconnect %[[S]], %[[SMUX]]
+    %s = firrtl.regreset %g, %srst, %init : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.matchingconnect %s, %d : !firrtl.uint<8>
+    // CHECK-NOT: firrtl.and %arst
+    // CHECK: %[[A:.+]] = firrtl.regreset %clk, %arst, %init
+    // CHECK: %[[AMUX:.+]] = firrtl.mux(%en, %d, %[[A]])
+    // CHECK: firrtl.matchingconnect %[[A]], %[[AMUX]]
+    %a = firrtl.regreset %g, %arst, %init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.matchingconnect %a, %d : !firrtl.uint<8>
+  }
+}
+
+// -----
+
 // An ungated register is left alone.
 // CHECK-LABEL: firrtl.module @NoGate
 firrtl.circuit "NoGate" {
@@ -469,7 +495,8 @@ firrtl.circuit "OutputCascadeAfterRoot" {
     // CHECK: %[[EN_WIRE:.+]] = firrtl.wire : !firrtl.uint<1>
     // CHECK: %[[CLK_WIRE:.+]] = firrtl.wire : !firrtl.clock
     %w = firrtl.wire : !firrtl.clock
-    // CHECK: %r = firrtl.regreset %[[CLK_WIRE]], %e1, %d
+    // CHECK: %[[RST:.+]] = firrtl.and %e1, %[[EN_WIRE]]
+    // CHECK: %r = firrtl.regreset %[[CLK_WIRE]], %[[RST]], %d
     // CHECK: %[[MUX:.+]] = firrtl.mux(%[[EN_WIRE]], %d, %r)
     // CHECK: firrtl.matchingconnect %r, %[[MUX]]
     %r = firrtl.regreset %w, %e1, %d : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
