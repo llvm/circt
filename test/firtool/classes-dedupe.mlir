@@ -12,12 +12,17 @@ firrtl.circuit "ClassDedup" {
   firrtl.class private @Foo() {}
   firrtl.class private @Bar() {}
 
-  // CHECK: @ClassDedup()
-  firrtl.module @ClassDedup() {
-    // CHECK-NEXT: firrtl.object @Foo()
-    // CHECK-OFF-NEXT: firrtl.object @Bar()
-    // CHECK-ON-NEXT: firrtl.object @Foo()
+  // CHECK: @ClassDedup(
+  firrtl.module @ClassDedup(out %a: !firrtl.anyref, out %b: !firrtl.anyref) {
+    // CHECK-NEXT: firrtl.object.create() : () -> !firrtl.class<@Foo()>
+    // CHECK-OFF-NEXT: firrtl.object.create() : () -> !firrtl.class<@Bar()>
+    // CHECK-ON-NEXT: firrtl.object.create() : () -> !firrtl.class<@Foo()>
     %obj1 = firrtl.object @Foo()
     %obj2 = firrtl.object @Bar()
+    // Keep the value-like objects live through optimization.
+    %ref1 = firrtl.object.anyref_cast %obj1 : !firrtl.class<@Foo()>
+    %ref2 = firrtl.object.anyref_cast %obj2 : !firrtl.class<@Bar()>
+    firrtl.propassign %a, %ref1 : !firrtl.anyref
+    firrtl.propassign %b, %ref2 : !firrtl.anyref
   }
 }

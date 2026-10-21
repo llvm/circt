@@ -746,6 +746,18 @@ def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
 }
 
+def LowerObjects : Pass<"firrtl-lower-objects", "firrtl::CircuitOp"> {
+  let summary = "Convert object declarations to value-like object creation";
+  let description = [{
+    Replace each `firrtl.object` and the assignments to its input ports with a
+    `firrtl.object.create` whose operands are the assigned values, in input port
+    declaration order. Output field accesses and other uses of the object are
+    preserved. Missing or multiply assigned inputs and cyclic object
+    dependencies are diagnosed. This pass runs immediately after parsing in
+    the firtool preprocessing pipeline; the FIRRTL importer is unchanged.
+  }];
+}
+
 def LowerClasses : Pass<"firrtl-lower-classes", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL classes and objects to OM classes and objects";
   let description = [{
