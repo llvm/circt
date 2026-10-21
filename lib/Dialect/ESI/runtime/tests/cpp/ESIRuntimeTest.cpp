@@ -7,16 +7,67 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Types.h"
+#include "esi/Utils.h"
 #include "esi/Values.h"
 #include "gtest/gtest.h"
 #include <any>
+#include <chrono>
 #include <cstdint>
+#include <future>
 #include <map>
+#include <stdexcept>
 #include <vector>
 
 using namespace esi;
 
 namespace {
+
+TEST(ESIUtilsTest, ReadyFuture) {
+  std::future<void> f = utils::readyFuture();
+  EXPECT_EQ(f.wait_for(std::chrono::seconds(0)), std::future_status::ready);
+  EXPECT_NO_THROW(f.get());
+}
+
+TEST(ESIUtilsTest, WhenAll) {
+  using namespace std::chrono_literals;
+  // All ready: the result is too.
+  std::vector<std::future<void>> ready;
+  ready.push_back(utils::readyFuture());
+  ready.push_back(utils::readyFuture());
+  std::future<void> all = utils::whenAll(std::move(ready));
+  EXPECT_EQ(all.wait_for(0s), std::future_status::ready);
+  all.get();
+
+  // Not ready until the last one is, and doesn't block meanwhile.
+  std::promise<void> a, b;
+  std::vector<std::future<void>> pending;
+  pending.push_back(a.get_future());
+  pending.push_back(b.get_future());
+  all = utils::whenAll(std::move(pending));
+  a.set_value();
+  EXPECT_EQ(all.wait_for(20ms), std::future_status::timeout);
+  b.set_value();
+  EXPECT_EQ(all.wait_for(10s), std::future_status::ready);
+  all.get();
+
+  // Failures propagate.
+  std::promise<void> c, d;
+  std::vector<std::future<void>> failing;
+  failing.push_back(c.get_future());
+  failing.push_back(d.get_future());
+  all = utils::whenAll(std::move(failing));
+  c.set_exception(std::make_exception_ptr(std::runtime_error("boom")));
+  d.set_value();
+  EXPECT_EQ(all.wait_for(10s), std::future_status::ready);
+  EXPECT_THROW(all.get(), std::runtime_error);
+
+  // Empty.
+  EXPECT_NO_THROW(utils::whenAll({}).get());
+}
+
+// Test VoidType serialization and deserialization
+
+// Test VoidType serialization and deserialization
 
 // Test VoidType serialization and deserialization
 TEST(ESITypesTest, VoidTypeSerialization) {

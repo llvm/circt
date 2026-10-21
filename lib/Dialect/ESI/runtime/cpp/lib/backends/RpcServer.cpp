@@ -252,10 +252,10 @@ public:
 
   /// Polling-mode connect: force the internal queue to be unbounded
   /// (`bufferSize == 0`) regardless of what the caller asked for.
-  void connect(const ConnectOptions &options = {}) override {
+  std::future<void> connect(const ConnectOptions &options = {}) override {
     ConnectOptions forced = options;
     forced.bufferSize = 0;
-    ReadChannelPort::connect(forced);
+    return ReadChannelPort::connect(forced);
   }
 
   /// Hand one inbound frame to the user callback. Returns `false` only when

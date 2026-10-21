@@ -320,6 +320,34 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<services::TelemetryService, services::Service>(m,
                                                             "TelemetryService");
 
+  // Returned by `connect()`: ready once the accelerator end of the channel(s)
+  // is connected too. `get()` rethrows if that will never happen.
+  nb::class_<std::future<void>>(m, "ConnectFuture")
+      .def("valid", [](std::future<void> &f) { return f.valid(); })
+      .def("done",
+           [](std::future<void> &f) {
+             return f.valid() && f.wait_for(std::chrono::seconds(0)) ==
+                                     std::future_status::ready;
+           })
+      .def(
+          "wait",
+          [](std::future<void> &f, std::optional<double> timeout) -> bool {
+            nb::gil_scoped_release release{};
+            if (!timeout) {
+              f.wait();
+              return true;
+            }
+            return f.wait_for(std::chrono::duration<double>(*timeout)) ==
+                   std::future_status::ready;
+          },
+          nb::arg("timeout").none() = nb::none(),
+          "Wait (optionally up to `timeout` seconds). Returns whether it's "
+          "ready.")
+      .def("get", [](std::future<void> &f) {
+        nb::gil_scoped_release release{};
+        f.get();
+      });
+
   nb::class_<std::future<MessageData>>(m, "MessageDataFuture")
       .def("valid", [](std::future<MessageData> &f) { return f.valid(); })
       .def("wait",
@@ -349,7 +377,8 @@ NB_MODULE(esiCppAccel, m) {
 
   nb::class_<ChannelPort>(m, "ChannelPort")
       .def("connect", &ChannelPort::connect, nb::arg("options"),
-           "Connect with specified options")
+           "Connect with specified options. Returns a ConnectFuture which is "
+           "ready once the accelerator end is connected too.")
       .def("disconnect", &ChannelPort::disconnect)
       .def_prop_ro("type", &ChannelPort::getType, nb::rv_policy::reference)
       .def_prop_ro("windowType", &ChannelPort::getWindowType,
@@ -404,7 +433,8 @@ NB_MODULE(esiCppAccel, m) {
              MessageData data(dataVec);
              return self.call(data);
            })
-      .def("connect", [](FuncService::Function &self) { self.connect(); });
+      .def("connect",
+           [](FuncService::Function &self) { return self.connect(); });
 
   nb::class_<CallService::Callback, ServicePort>(m, "Callback")
       .def("connect", [](CallService::Callback &self,
@@ -412,7 +442,8 @@ NB_MODULE(esiCppAccel, m) {
         // TODO: Under certain conditions this will cause python to crash. I
         // don't remember how to replicate these crashes, but IIRC they are
         // deterministic.
-        self.connect([pyCallback](const MessageData &req) -> MessageData {
+        return self.connect([pyCallback](
+                                const MessageData &req) -> MessageData {
           nb::gil_scoped_acquire acquire{};
           std::vector<uint8_t> arg(req.getBytes(),
                                    req.getBytes() + req.getSize());

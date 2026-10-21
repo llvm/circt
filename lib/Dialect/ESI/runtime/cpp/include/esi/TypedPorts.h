@@ -616,14 +616,14 @@ public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  std::future<void> connect(const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
     if (!SkipTypeCheck)
       verifyTypeCompatibility<T>(inner);
     wireInfo_ = getWireInfo(inner->getType());
-    inner->connect(opts);
+    return inner->connect(opts);
   }
 
   void write(const T &data) { inner->write(toMessageData(data, wireInfo_)); }
@@ -687,12 +687,12 @@ public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  std::future<void> connect(const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
-    inner->connect(opts);
+    return inner->connect(opts);
   }
 
   void write() {
@@ -749,8 +749,8 @@ public:
   ///
   /// The port installs an internal typed output queue. `read()` and
   /// `readAsync()` consume from that queue.
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  std::future<void> connect(const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     prepareConnect();
@@ -758,8 +758,9 @@ public:
     emplaceDeserializer([this](std::unique_ptr<T> &value) -> bool {
       return pollingState->enqueue(value);
     });
+    std::future<void> otherEnd;
     try {
-      inner->connect(
+      otherEnd = inner->connect(
           [this](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
             assert(deserializer && "Deserializer should be connected");
             return deserializer->push(msg);
@@ -770,18 +771,21 @@ public:
       throw;
     }
     mode = Mode::Polling;
+    return otherEnd;
   }
 
   /// Connect a non-owning typed callback.
   ///
   /// The callback sees the decoded value by reference. Returning `false`
   /// requests that the same decoded value be retried later.
-  void connect(std::function<bool(const T &)> callback,
-               const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
-    connect([cb = std::move(callback)](
-                std::unique_ptr<T> &value) -> bool { return cb(*value); },
-            opts);
+  std::future<void> connect(std::function<bool(const T &)> callback,
+                            const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
+    return connect(
+        [cb = std::move(callback)](std::unique_ptr<T> &value) -> bool {
+          return cb(*value);
+        },
+        opts);
   }
 
   /// Connect an owning typed callback.
@@ -789,15 +793,16 @@ public:
   /// This is the typed analogue of `ReadChannelPort::ReadCallback`: the
   /// callback may take ownership of the decoded value or return `false` to
   /// retry delivery later with the same object.
-  void connect(detail::TypedReadOwnedCallback<T> callback,
-               const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  std::future<void> connect(detail::TypedReadOwnedCallback<T> callback,
+                            const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     prepareConnect();
     emplaceDeserializer(std::move(callback));
+    std::future<void> otherEnd;
     try {
-      inner->connect(
+      otherEnd = inner->connect(
           [this](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
             assert(deserializer && "Deserializer should be connected");
             return deserializer->push(msg);
@@ -810,6 +815,7 @@ public:
     // TODO: Hook callback-mode custom-deserializer poke() retries into the
     // existing periodic poll/background-worker path.
     mode = Mode::Callback;
+    return otherEnd;
   }
 
   /// Blocking typed read in polling mode.
@@ -920,21 +926,21 @@ public:
       disconnect();
   }
 
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  std::future<void> connect(const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
-    inner->connect(opts);
+    return inner->connect(opts);
   }
 
-  void connect(std::function<bool()> callback,
-               const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  std::future<void> connect(std::function<bool()> callback,
+                            const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
-    inner->connect(
+    return inner->connect(
         [cb = std::move(callback)](MessageData) -> bool { return cb(); }, opts);
   }
 
@@ -1036,7 +1042,7 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
+  std::future<void> connect() {
     if (!inner)
       detail::throwNullFunction();
     if (argPort)
@@ -1044,8 +1050,10 @@ public:
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    std::vector<std::future<void>> otherEnds;
+    otherEnds.push_back(argPort->connect(opts));
+    otherEnds.push_back(resultPort->connect(opts));
+    return utils::whenAll(std::move(otherEnds));
   }
 
   std::future<ResultT> call(const ArgT &arg) {
@@ -1099,7 +1107,7 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
+  std::future<void> connect() {
     if (!inner)
       detail::throwNullFunction();
     if (argPort)
@@ -1107,8 +1115,10 @@ public:
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    std::vector<std::future<void>> otherEnds;
+    otherEnds.push_back(argPort->connect(opts));
+    otherEnds.push_back(resultPort->connect(opts));
+    return utils::whenAll(std::move(otherEnds));
   }
 
   std::future<ResultT> call() {
@@ -1141,7 +1151,7 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
+  std::future<void> connect() {
     if (!inner)
       detail::throwNullFunction();
     if (argPort)
@@ -1149,8 +1159,10 @@ public:
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    std::vector<std::future<void>> otherEnds;
+    otherEnds.push_back(argPort->connect(opts));
+    otherEnds.push_back(resultPort->connect(opts));
+    return utils::whenAll(std::move(otherEnds));
   }
 
   std::future<void> call(const ArgT &arg) {
@@ -1199,7 +1211,7 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
+  std::future<void> connect() {
     if (!inner)
       detail::throwNullFunction();
     if (argPort)
@@ -1207,8 +1219,10 @@ public:
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    std::vector<std::future<void>> otherEnds;
+    otherEnds.push_back(argPort->connect(opts));
+    otherEnds.push_back(resultPort->connect(opts));
+    return utils::whenAll(std::move(otherEnds));
   }
 
   std::future<void> call() {
@@ -1289,8 +1303,8 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<ResultT(const ArgT &)> callback,
-               bool quick = false) {
+  std::future<void> connect(std::function<ResultT(const ArgT &)> callback,
+                            bool quick = false) {
     (void)quick; // See class header.
     if (!inner)
       detail::throwNullCallback();
@@ -1299,18 +1313,22 @@ public:
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    std::future<void> resultConnected = resultPort->connect(opts);
     userCallback = std::move(callback);
     // The TypedReadPort callback runs on the read-channel callback thread
     // for every decoded ArgT. We forward to the user's callback and then
     // serialize the result through the TypedWritePort.
-    argPort->connect(
+    std::future<void> argConnected = argPort->connect(
         [this](const ArgT &arg) -> bool {
           ResultT result = userCallback(arg);
           resultPort->write(result);
           return true;
         },
         opts);
+    std::vector<std::future<void>> otherEnds;
+    otherEnds.push_back(std::move(argConnected));
+    otherEnds.push_back(std::move(resultConnected));
+    return utils::whenAll(std::move(otherEnds));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1332,7 +1350,8 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<ResultT()> callback, bool quick = false) {
+  std::future<void> connect(std::function<ResultT()> callback,
+                            bool quick = false) {
     (void)quick;
     if (!inner)
       detail::throwNullCallback();
@@ -1341,15 +1360,19 @@ public:
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    std::future<void> resultConnected = resultPort->connect(opts);
     userCallback = std::move(callback);
-    argPort->connect(
+    std::future<void> argConnected = argPort->connect(
         [this]() -> bool {
           ResultT result = userCallback();
           resultPort->write(result);
           return true;
         },
         opts);
+    std::vector<std::future<void>> otherEnds;
+    otherEnds.push_back(std::move(argConnected));
+    otherEnds.push_back(std::move(resultConnected));
+    return utils::whenAll(std::move(otherEnds));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1371,7 +1394,8 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<void(const ArgT &)> callback, bool quick = false) {
+  std::future<void> connect(std::function<void(const ArgT &)> callback,
+                            bool quick = false) {
     (void)quick;
     if (!inner)
       detail::throwNullCallback();
@@ -1380,15 +1404,19 @@ public:
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    std::future<void> resultConnected = resultPort->connect(opts);
     userCallback = std::move(callback);
-    argPort->connect(
+    std::future<void> argConnected = argPort->connect(
         [this](const ArgT &arg) -> bool {
           userCallback(arg);
           resultPort->write();
           return true;
         },
         opts);
+    std::vector<std::future<void>> otherEnds;
+    otherEnds.push_back(std::move(argConnected));
+    otherEnds.push_back(std::move(resultConnected));
+    return utils::whenAll(std::move(otherEnds));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1410,7 +1438,8 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<void()> callback, bool quick = false) {
+  std::future<void> connect(std::function<void()> callback,
+                            bool quick = false) {
     (void)quick;
     if (!inner)
       detail::throwNullCallback();
@@ -1419,15 +1448,19 @@ public:
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    std::future<void> resultConnected = resultPort->connect(opts);
     userCallback = std::move(callback);
-    argPort->connect(
+    std::future<void> argConnected = argPort->connect(
         [this]() -> bool {
           userCallback();
           resultPort->write();
           return true;
         },
         opts);
+    std::vector<std::future<void>> otherEnds;
+    otherEnds.push_back(std::move(argConnected));
+    otherEnds.push_back(std::move(resultConnected));
+    return utils::whenAll(std::move(otherEnds));
   }
 
   services::CallService::Callback &raw() { return *inner; }

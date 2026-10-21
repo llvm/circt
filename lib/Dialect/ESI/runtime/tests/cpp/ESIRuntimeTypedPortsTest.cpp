@@ -270,9 +270,9 @@ class MockWritePort : public WriteChannelPort {
 public:
   MockWritePort(const Type *type) : WriteChannelPort(type) {}
 
-  void connect(const ConnectOptions &opts = {}) override {
-    connectImpl(opts);
+  std::future<void> connect(const ConnectOptions &opts = {}) override {
     connected = true;
+    return connectImpl(opts);
   }
   void disconnect() override { connected = false; }
   bool isConnected() const override { return connected; }
@@ -386,11 +386,15 @@ class MockReadPort : public ReadChannelPort {
 public:
   MockReadPort(const Type *type) : ReadChannelPort(type) {}
 
-  void connect(std::function<bool(MessageData)>,
-               const ConnectOptions & = {}) override {
+  std::future<void> connect(std::function<bool(MessageData)>,
+                            const ConnectOptions & = {}) override {
     mode = Mode::Callback;
+    return utils::readyFuture();
   }
-  void connect(const ConnectOptions & = {}) override { mode = Mode::Polling; }
+  std::future<void> connect(const ConnectOptions & = {}) override {
+    mode = Mode::Polling;
+    return utils::readyFuture();
+  }
 
   void read(MessageData &outData) override { outData = nextResponse; }
   std::future<MessageData> readAsync() override {

@@ -581,6 +581,8 @@ class Port:
     self.type = _get_esi_type(cpp_port.type)
     win = cpp_port.windowType
     self.window_type = _get_esi_type(win) if win is not None else None
+    # Set by `connect()`: done once the accelerator end is connected too.
+    self.connected_future: Optional[ConnectFuture] = None
 
   def connect(self, buffer_size: Optional[int] = None):
     (supports_host, reason) = self.type.supports_host
@@ -589,7 +591,8 @@ class Port:
 
     opts = cpp.ConnectOptions()
     opts.buffer_size = buffer_size
-    self.cpp_port.connect(opts)
+    # Returns `self` (rather than the future) so calls can be chained.
+    self.connected_future = ConnectFuture(self.cpp_port.connect(opts))
     return self
 
   def disconnect(self):
@@ -674,6 +677,49 @@ class BundlePort:
     return ReadPort(self, self.cpp_port.getRead(channel_name))
 
 
+class ConnectFuture(Future):
+  """Returned by `connect()`. Done once the accelerator end of the channel(s)
+  is connected too. Writes before then are held and backpressured, not lost,
+  so most code needn't wait on it."""
+
+  def __init__(self, cpp_future: cpp.ConnectFuture):
+    super().__init__()
+    self.cpp_future = cpp_future
+    self._retrieved = False
+    self._error: Optional[BaseException] = None
+
+  def running(self) -> bool:
+    return not self.done()
+
+  def done(self) -> bool:
+    return self._retrieved or self.cpp_future.done()
+
+  def result(self, timeout: Optional[Union[int, float]] = None) -> None:
+    if not self._retrieved:
+      if not self.cpp_future.wait(timeout):
+        raise TimeoutError("accelerator end of the channel not connected")
+      self._retrieved = True
+      try:
+        self.cpp_future.get()
+      except Exception as e:
+        self._error = e
+    if self._error is not None:
+      raise self._error
+    return None
+
+  def exception(self, timeout: Optional[Union[int, float]] = None):
+    try:
+      self.result(timeout)
+    except TimeoutError:
+      raise
+    except Exception as e:
+      return e
+    return None
+
+  def add_done_callback(self, fn):
+    raise NotImplementedError("ConnectFuture doesn't support callbacks")
+
+
 class MessageFuture(Future):
   """A specialization of `Future` for ESI messages. Wraps the cpp object and
   deserializes the result.  Hopefully overrides all the methods necessary for
@@ -737,9 +783,12 @@ class FunctionPort(BundlePort):
     self.result_window_type = result_port.window_type
     self.connected = False
 
-  def connect(self):
-    self.cpp_port.connect()
+  def connect(self) -> ConnectFuture:
+    """Connect. Doesn't wait for the accelerator end: returns a future which
+    is done once that's connected too."""
+    future = ConnectFuture(self.cpp_port.connect())
     self.connected = True
+    return future
 
   def call(self, *args: Any, **kwargs: Any) -> Future:
     """Call the function with the given argument and returns a future of the
@@ -800,8 +849,10 @@ class CallbackPort(BundlePort):
         traceback.print_exception(e)
         return None
 
-    self.cpp_port.connect(lambda x: type_convert_wrapper(cb=cb, msg=x))
+    future = ConnectFuture(
+        self.cpp_port.connect(lambda x: type_convert_wrapper(cb=cb, msg=x)))
     self.connected = True
+    return future
 
 
 class MetricPort(BundlePort):
@@ -813,9 +864,12 @@ class MetricPort(BundlePort):
     super().__init__(owner, cpp_port)
     self.connected = False
 
-  def connect(self):
-    self.cpp_port.connect()
+  def connect(self) -> ConnectFuture:
+    """Connect. Doesn't wait for the accelerator end: returns a future which
+    is done once that's connected too."""
+    future = ConnectFuture(self.cpp_port.connect())
     self.connected = True
+    return future
 
   def read(self) -> Future:
     cpp_future = self.cpp_port.read()
@@ -832,9 +886,12 @@ class ToHostPort(BundlePort):
     self.data_window_type = data_port.window_type
     self.connected = False
 
-  def connect(self):
-    self.cpp_port.connect()
+  def connect(self) -> ConnectFuture:
+    """Connect. Doesn't wait for the accelerator end: returns a future which
+    is done once that's connected too."""
+    future = ConnectFuture(self.cpp_port.connect())
     self.connected = True
+    return future
 
   def read(self) -> Future:
     """Read a value from the channel. Returns a future."""
@@ -852,9 +909,12 @@ class FromHostPort(BundlePort):
     self.data_window_type = data_port.window_type
     self.connected = False
 
-  def connect(self):
-    self.cpp_port.connect()
+  def connect(self) -> ConnectFuture:
+    """Connect. Doesn't wait for the accelerator end: returns a future which
+    is done once that's connected too."""
+    future = ConnectFuture(self.cpp_port.connect())
     self.connected = True
+    return future
 
   def write(self, data: Any) -> None:
     """Write a value to the channel."""

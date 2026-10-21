@@ -137,8 +137,8 @@ bool ReadChannelPort::invokeCallback(
   }
 }
 
-void ReadChannelPort::connect(ReadCallback callback,
-                              const ConnectOptions &options) {
+std::future<void> ReadChannelPort::connect(ReadCallback callback,
+                                           const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
@@ -168,19 +168,20 @@ void ReadChannelPort::connect(ReadCallback callback,
   } else {
     this->callback = callback;
   }
-  connectImpl(options);
+  std::future<void> otherEnd = connectImpl(options);
   mode = Mode::Callback;
+  return otherEnd;
 }
 
-void ReadChannelPort::connect(FlatReadCallback callback,
-                              const ConnectOptions &options) {
-  connect(
+std::future<void> ReadChannelPort::connect(FlatReadCallback callback,
+                                           const ConnectOptions &options) {
+  return connect(
       [cb = std::move(callback)](std::unique_ptr<SegmentedMessageData> &data)
           -> bool { return cb(data->toMessageData()); },
       options);
 }
 
-void ReadChannelPort::connect(const ConnectOptions &options) {
+std::future<void> ReadChannelPort::connect(const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
@@ -218,8 +219,9 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
     translatedMessage.reset();
     return true;
   };
-  connectImpl(options);
+  std::future<void> otherEnd = connectImpl(options);
   mode = Mode::Polling;
+  return otherEnd;
 }
 
 std::future<MessageData> ReadChannelPort::readAsync() {
