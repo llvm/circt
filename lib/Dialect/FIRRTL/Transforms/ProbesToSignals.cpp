@@ -45,7 +45,8 @@
 //
 // Gated clocks are converted first so synthesized state uses a free-running
 // clock. All accesses to one target, including through aliased ports, must be
-// in one clock domain.
+// in one clock domain. A parent drives that clock on every aliased port, even
+// ports it does not force.
 //
 // Pre-requisites for complete conversion:
 // * LowerOpenAggs
@@ -123,6 +124,10 @@ struct ForceCtrl {
   Value clk;
 };
 
+/// For modules exporting one target through several forceable probe ports,
+/// the lowest port exporting the same target, indexed by port number.
+using PortAliasLeaders = DenseMap<StringAttr, SmallVector<unsigned>>;
+
 class ProbeVisitor : public FIRRTLVisitor<ProbeVisitor, LogicalResult> {
 public:
   static constexpr StringRef forceActiveName = "forceActive";
@@ -130,7 +135,9 @@ public:
   static constexpr StringRef forcedValueName = "forcedValue";
   static constexpr StringRef clockName = "clk";
 
-  ProbeVisitor(hw::InnerRefNamespace &irn) : irn(irn) {}
+  ProbeVisitor(hw::InnerRefNamespace &irn,
+               const PortAliasLeaders &portAliasLeaders)
+      : irn(irn), portAliasLeaders(portAliasLeaders) {}
 
   /// Entrypoint.
   LogicalResult visit(FModuleLike mod);
@@ -269,10 +276,16 @@ private:
   /// Inner-ref namespace for resolving inner refs.
   hw::InnerRefNamespace &irn;
 
+  /// Aliased forceable probe ports of each module, read-only.
+  const PortAliasLeaders &portAliasLeaders;
+
   /// Per-target force state, keyed by hardware value.
   struct TargetState {
     SmallVector<ForceReleaseAccess> accesses;
     Value instanceCtrl;
+    /// For an instance result whose port aliases other ports, the result of
+    /// the lowest aliased port.
+    Value aliasLeader;
     SmallVector<Value, 1> inboundCtrls;
   };
 
@@ -855,6 +868,14 @@ LogicalResult ProbeVisitor::visitInstanceLike(FInstanceLike oldInst) {
   auto newInst = oldInst.cloneWithInsertedPorts(
       getForceCtrlPorts(oldInst, forceablePorts));
 
+  // Aliased ports were recorded before conversion, so this does not inspect
+  // the callee either.
+  ArrayRef<unsigned> aliasLeaders;
+  if (auto inst = dyn_cast<InstanceOp>(oldInst.getOperation()))
+    if (auto it = portAliasLeaders.find(inst.getReferencedModuleNameAttr());
+        it != portAliasLeaders.end())
+      aliasLeaders = it->second;
+
   unsigned ctrlIdx = oldInst->getNumResults();
   for (auto [idx, newType] : llvm::enumerate(newTypes)) {
     auto oldResult = oldInst->getOpResult(idx);
@@ -872,7 +893,10 @@ LogicalResult ProbeVisitor::visitInstanceLike(FInstanceLike oldInst) {
       continue;
 
     // Keep each forceable result as an independent control channel.
-    targets[newResult].instanceCtrl = newInst->getOpResult(ctrlIdx++);
+    auto &state = targets[newResult];
+    state.instanceCtrl = newInst->getOpResult(ctrlIdx++);
+    if (!aliasLeaders.empty())
+      state.aliasLeader = newInst->getOpResult(aliasLeaders[idx]);
   }
   assert(ctrlIdx == newInst->getNumResults() && "unconsumed control ports");
 
@@ -1209,6 +1233,41 @@ LogicalResult ProbeVisitor::collectExportedTargets(
 LogicalResult ProbeVisitor::materializeForceControl(FModuleLike mod) {
   auto *block = getBodyBlock(mod);
 
+  // The callee clocks the state of aliased ports by the lowest of them, so
+  // every aliased port carries the clock of the alias class, even if it is not
+  // accessed here. Prefer a local access: an inbound clock is constant when
+  // the parent does not force. The inbound clocks of one class are equal, as
+  // the parent clocks the ports they come from as one class.
+  struct AliasClock {
+    Value local;
+    Value inboundCtrl;
+  };
+  DenseMap<Value, AliasClock> aliasClocks;
+  for (auto &[hwVal, state] : targets) {
+    if (!state.aliasLeader)
+      continue;
+    auto &clock = aliasClocks[state.aliasLeader];
+    if (!clock.local && !state.accesses.empty())
+      clock.local = state.accesses.front().clock;
+    if (!clock.inboundCtrl && !state.inboundCtrls.empty())
+      clock.inboundCtrl = state.inboundCtrls.front();
+  }
+  auto getClock = [&](ImplicitLocOpBuilder &builder, const TargetState &state,
+                      Value localClk) -> Value {
+    if (localClk)
+      return localClk;
+    AliasClock alias;
+    if (state.aliasLeader)
+      alias = aliasClocks.lookup(state.aliasLeader);
+    if (alias.local)
+      return alias.local;
+    if (!state.inboundCtrls.empty())
+      return readForceCtrlClock(builder, state.inboundCtrls.front());
+    if (alias.inboundCtrl)
+      return readForceCtrlClock(builder, alias.inboundCtrl);
+    return {};
+  };
+
   for (auto &[hwVal, state] : targets) {
     auto probedType = type_cast<FIRRTLBaseType>(hwVal.getType());
 
@@ -1230,10 +1289,7 @@ LogicalResult ProbeVisitor::materializeForceControl(FModuleLike mod) {
       for (Value ctrl : state.inboundCtrls)
         inboundGroups.push_back(readCtrlGroup(builder, ctrl));
 
-      Value clk = local.clk;
-      if (!clk)
-        clk = readForceCtrlClock(builder, state.inboundCtrls.front());
-
+      Value clk = getClock(builder, state, local.clk);
       CtrlGroup group = combineCtrlSources(builder, probedType, inboundGroups,
                                            local.group, clk);
 
@@ -1253,7 +1309,7 @@ LogicalResult ProbeVisitor::materializeForceControl(FModuleLike mod) {
       ImplicitLocOpBuilder builder(state.instanceCtrl.getLoc(), ctrlBlock,
                                    ctrlBlock->end());
       connectControlFields(builder, state.instanceCtrl, probedType, local.group,
-                           local.clk);
+                           getClock(builder, state, local.clk));
       continue;
     }
 
@@ -1351,10 +1407,12 @@ struct ExportedPort {
 
 /// A target's state has one clock, so reject targets accessed from different
 /// clock domains. Ports exporting one target are joined at each instance, so
-/// accesses through aliased ports are checked in the parent.
-static LogicalResult checkForceClockDomains(
-    InstanceGraph &ig, hw::InnerRefNamespace &irn,
-    const GatedClockConversion::ClockAliasAnalysis &aliases) {
+/// accesses through aliased ports are checked in the parent. Record such ports
+/// in `portAliasLeaders` so that parents can clock them together.
+static LogicalResult
+checkForceClockDomains(InstanceGraph &ig, hw::InnerRefNamespace &irn,
+                       const GatedClockConversion::ClockAliasAnalysis &aliases,
+                       PortAliasLeaders &portAliasLeaders) {
   DenseMap<Value, ExportedPort> exports;
   return ig.walkPostOrder([&](igraph::InstanceGraphNode &node) {
     auto mod = dyn_cast_or_null<FModuleOp>(node.getModule());
@@ -1422,15 +1480,23 @@ static LogicalResult checkForceClockDomains(
     }
 
     DenseMap<Value, unsigned> leaders;
+    SmallVector<unsigned> portLeaders;
     for (BlockArgument arg : mod.getArguments()) {
       auto refType = type_dyn_cast<RefType>(arg.getType());
       if (!refType || !refType.getForceable())
         continue;
       Value target = targets.getOrInsertLeaderValue(arg);
-      exports[arg] = {
-          leaders.try_emplace(target, arg.getArgNumber()).first->second,
-          firstAccess.lookup(target)};
+      unsigned idx = arg.getArgNumber();
+      unsigned leader = leaders.try_emplace(target, idx).first->second;
+      exports[arg] = {leader, firstAccess.lookup(target)};
+      if (leader == idx)
+        continue;
+      if (portLeaders.empty())
+        llvm::append_range(portLeaders, llvm::seq(mod.getNumPorts()));
+      portLeaders[idx] = leader;
     }
+    if (!portLeaders.empty())
+      portAliasLeaders[mod.getModuleNameAttr()] = std::move(portLeaders);
     return success();
   });
 }
@@ -1477,22 +1543,24 @@ void ProbesToSignalsPass::runOnOperation() {
 
   auto &instanceGraph = getAnalysis<InstanceGraph>();
 
-  // The conversion mutates signatures, so run it sequentially.
+  // The conversion mutates signatures, so run it sequentially. Without any
+  // force or release there is no clock to share, so no aliases are needed.
+  PortAliasLeaders portAliasLeaders;
   if (!gatedClockRoots.empty()) {
     GatedClockConversion tracer(instanceGraph);
     for (auto *op : gatedClockRoots)
       if (failed(tracer.addRoot(op)))
         return signalPassFailure();
     if (failed(tracer.run()) ||
-        failed(checkForceClockDomains(instanceGraph, irn,
-                                      tracer.getClockAliases())))
+        failed(checkForceClockDomains(
+            instanceGraph, irn, tracer.getClockAliases(), portAliasLeaders)))
       return signalPassFailure();
   }
 
   // Instances derive control ports from the ABI, so modules are independent.
   SmallVector<FModuleLike> mods(getOperation().getOps<FModuleLike>());
   auto result = failableParallelForEach(&getContext(), mods, [&](auto mod) {
-    ProbeVisitor visitor(irn);
+    ProbeVisitor visitor(irn, portAliasLeaders);
     return visitor.visit(mod);
   });
 
