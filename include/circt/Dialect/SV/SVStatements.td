@@ -365,7 +365,9 @@ def ValidationQualifierTypeEnum: I32EnumAttr<"ValidationQualifierTypeEnum", "val
   let cppNamespace = "::circt::sv";
 }
 
-def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier">;
+def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier"> {
+  let assemblyFormat = "$value";
+}
 
 def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
                            ProceduralRegion, ProceduralOp]> {
@@ -419,6 +421,18 @@ def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
     These occur in module scope.  See SV Spec 10.3.2.
   }];
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($src))";
+}
+
+def VarAssignOp : SVOp<"var_assign", [VarTypeConstraint<"src", "dest">,
+                                      NonProceduralOp]> {
+  let summary = "Continuous assignment for a single driver variable";
+  let description = [{
+    A SystemVerilog assignment statement 'assign x = y;' to a variable.
+    These occur in module scope.  See SV Spec 10.3.2.
+  }];
+  let arguments = (ins VarType:$dest, VarElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($src))";
 }
@@ -1025,7 +1039,9 @@ def IncludeStyle
   let genSpecializedAttr = 0;
 }
 
-def IncludeStyleAttr : EnumAttr<SVDialect, IncludeStyle, "include_style">;
+def IncludeStyleAttr : EnumAttr<SVDialect, IncludeStyle, "include_style"> {
+  let assemblyFormat = "$value";
+}
 
 def IncludeOp : SVOp<"include"> {
   let summary = "preprocessor `include directive";

@@ -10,7 +10,6 @@
 
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/SymbolTable.h"
@@ -21,7 +20,6 @@ using namespace circt;
 using namespace circt::esi;
 using namespace circt::esi::detail;
 using namespace circt::hw;
-using namespace circt::sv;
 
 StringAttr circt::esi::detail::getTypeID(Type t) {
   std::string typeID;
@@ -40,12 +38,6 @@ uint64_t circt::esi::detail::getWidth(Type t) {
 //===----------------------------------------------------------------------===//
 // ESI custom op builder.
 //===----------------------------------------------------------------------===//
-
-// C++ requires this for showing it what object file it should store these
-// symbols in. They should be inline but that feature wasn't added until C++17.
-constexpr char ESIHWBuilder::dataStr[], ESIHWBuilder::validStr[],
-    ESIHWBuilder::readyStr[], ESIHWBuilder::sourceStr[],
-    ESIHWBuilder::sinkStr[];
 
 ESIHWBuilder::ESIHWBuilder(Operation *top)
     : ImplicitLocOpBuilder(UnknownLoc::get(top->getContext()), top),
@@ -95,34 +87,6 @@ static StringAttr constructUniqueSymbol(Operation *tableOp,
   }
 
   return StringAttr::get(tableOp->getContext(), proposedName);
-}
-
-StringAttr ESIHWBuilder::constructInterfaceName(ChannelType port) {
-  Operation *tableOp =
-      getInsertionPoint()->getParentWithTrait<mlir::OpTrait::SymbolTable>();
-
-  // Get a name based on the type.
-  std::string portTypeName;
-  llvm::raw_string_ostream nameOS(portTypeName);
-  TypeSwitch<Type>(port.getInner())
-      .Case([&](hw::ArrayType arr) {
-        nameOS << "ArrayOf" << arr.getNumElements() << 'x'
-               << arr.getElementType();
-      })
-      .Case([&](hw::StructType t) { nameOS << "Struct"; })
-      .Default([&](Type t) { nameOS << port.getInner(); });
-
-  // Don't allow the name to end with '_'.
-  ssize_t i = portTypeName.size() - 1;
-  while (i >= 0 && portTypeName[i] == '_') {
-    --i;
-  }
-  portTypeName = portTypeName.substr(0, i + 1);
-
-  // All stage names start with this.
-  SmallString<64> proposedName("IValidReady_");
-  proposedName.append(portTypeName);
-  return constructUniqueSymbol(tableOp, proposedName);
 }
 
 /// Return a parameter list for the stage module with the specified value.
@@ -228,36 +192,6 @@ ESIHWBuilder::declareCosimEndpointFromHostModule(Operation *symTable) {
       *this, constructUniqueSymbol(symTable, "Cosim_Endpoint_FromHost"), ports,
       "Cosim_Endpoint_FromHost", ArrayAttr::get(getContext(), params));
   return *declaredCosimEndpointFromHostModule;
-}
-
-/// Return the InterfaceType which corresponds to an ESI port type. If it
-/// doesn't exist in the cache, build the InterfaceOp and the corresponding
-/// type.
-InterfaceOp ESIHWBuilder::getOrConstructInterface(ChannelType t) {
-  auto ifaceIter = portTypeLookup.find(t);
-  if (ifaceIter != portTypeLookup.end())
-    return ifaceIter->second;
-  auto iface = constructInterface(t);
-  portTypeLookup[t] = iface;
-  return iface;
-}
-
-InterfaceOp ESIHWBuilder::constructInterface(ChannelType chan) {
-  return InterfaceOp::create(
-      *this, constructInterfaceName(chan).getValue(), [&]() {
-        InterfaceSignalOp::create(*this, validStr, getI1Type());
-        InterfaceSignalOp::create(*this, readyStr, getI1Type());
-        InterfaceSignalOp::create(*this, dataStr, chan.getInner());
-        llvm::SmallVector<StringRef> validDataStrs;
-        validDataStrs.push_back(validStr);
-        validDataStrs.push_back(dataStr);
-        InterfaceModportOp::create(*this, sinkStr,
-                                   /*inputs=*/ArrayRef<StringRef>{readyStr},
-                                   /*outputs=*/validDataStrs);
-        InterfaceModportOp::create(*this, sourceStr,
-                                   /*inputs=*/validDataStrs,
-                                   /*outputs=*/ArrayRef<StringRef>{readyStr});
-      });
 }
 
 Type ESIHWBuilder::getClockType() { return seq::ClockType::get(getContext()); }

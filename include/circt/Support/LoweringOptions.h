@@ -156,9 +156,20 @@ struct LoweringOptions {
   /// into the array index.
   bool mitigateVivadoArrayIndexConstPropBug = false;
 
-  /// If true, emit `wire` in port lists rather than nothing. Used in cases
-  /// where `default_nettype is not set to wire.
-  bool emitWireInPorts = false;
+  /// Controls the port declaration syntax for module ports.
+  ///
+  /// - emitVarLogic: Emits `var logic` in the port lists rather than nothing,
+  /// i.e., default plain (non-handle) ports to a variable (`input var logic
+  /// ...`, `output var logic ...`).
+  /// - emitWire: Emits 'wire' in port lists rather than nothing. Used in cases
+  /// where `default_nettype` is not set to wire.
+  /// - emitNone: Omits both `var logic` and `wire` in port lists; relies
+  /// on standard SystemVerilog implicit net-kind port declaration.
+  enum class EmitPortType {
+    emitVarLogic,
+    emitWire,
+    emitNone,
+  } emitPortType = EmitPortType::emitNone;
 
   /// If true, emit a comment wherever an instance wasn't printed, because
   /// it's emitted elsewhere as a bind.
@@ -192,6 +203,25 @@ struct LoweringOptions {
   /// If true, always emit begin/end blocks around if/else/always bodies, even
   /// when there is only a single statement.
   bool alwaysEmitBeginEnd = false;
+
+  /// Controls the declaration syntax emitted for `sv.var`.
+  ///
+  /// - VarLogic: Always emits the `var` keyword. Integer vectors print as `var
+  /// logic [3:0] x`; types that supply their own data type (structs, unions,
+  /// enums, typedefs) print as `var my_struct x`.
+  /// - Logic: Omits the `var` keyword, Integer vectors print as `logic [3:0]
+  /// x`; types that supply their own data type print with no prefix (`my_struct
+  /// x`).
+  /// - Reg: Omits the `var` keyword, Integer vectors print as `reg [3:0] x`;
+  /// types that supply their own data type print with no prefix (`my_struct
+  /// x`).
+  ///
+  /// All there styles are equivalent in meaning and differ only in spelling.
+  enum class VarOpDeclStyle {
+    VarLogic,
+    Logic,
+    Reg,
+  } varOpDeclStyle = VarOpDeclStyle::VarLogic;
 };
 } // namespace circt
 

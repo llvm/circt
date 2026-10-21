@@ -112,7 +112,8 @@ class _IVerilogHandler:
   """ Class for handling icarus-verilog specific commands and patching."""
 
   def __init__(self):
-    # Ensure that iverilog is available in path and it is at least iverilog v11
+    # Ensure that iverilog is available in path and it is at least iverilog v12.
+    # Icarus Verilog 11 cannot use structs declared in SystemVerilog packages.
     try:
       out = subprocess.check_output(["iverilog", "-V"])
     except subprocess.CalledProcessError:
@@ -125,8 +126,8 @@ class _IVerilogHandler:
     if ver_match is None:
       raise Exception("Could not find Icarus Verilog version")
     ver = ver_match.group(1)
-    if float(ver) < 11:
-      raise Exception(f"Icarus Verilog version must be >= 11, got {ver}")
+    if float(ver) < 12:
+      raise Exception(f"Icarus Verilog version must be >= 12, got {ver}")
 
   def extra_compile_args(self, pycde_system: System):
     # If no timescale is defined in the source code, icarus assumes a
@@ -179,6 +180,16 @@ def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
     ]
     test_files = sys.mod_files.union(
         set(sum([f() for f in extra_files_funcs], [])))
+    # ExportVerilog's filelist contains everything it emitted in the order in
+    # which it must be compiled, including files which aren't in `mod_files`
+    # (e.g. packages). Any remaining module or extra files are added after it.
+    filelist = Path(sys.hw_output_dir, "filelist.f")
+    verilog_sources = [
+        Path(sys.hw_output_dir, line.strip())
+        for line in filelist.read_text().splitlines()
+        if line.strip()
+    ]
+    verilog_sources += [f for f in test_files if Path(f) not in verilog_sources]
 
     # Find functions with the testbench flag set.
     testbench_funcs = [
@@ -203,7 +214,7 @@ def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
         module=testmodule,
         toplevel=pycde_mod.__name__,
         toplevel_lang="verilog",
-        verilog_sources=list(test_files),
+        verilog_sources=verilog_sources,
         work_dir=sys.output_directory,
         **kwargs)
 

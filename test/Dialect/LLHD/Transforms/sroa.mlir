@@ -10,7 +10,7 @@ hw.module @struct(in %init : !hw.struct<a: i32, b: i32>, in %v1 : i32, in %v2 : 
   // CHECK-NEXT: [[V2:%.+]] = hw.struct_extract %init["b"] : !hw.struct<a: i32, b: i32>
   // CHECK-NEXT: [[V3:%.+]] = llhd.sig{{ }}
   // CHECK-SAME: [[V2]]
-  %sig = llhd.sig %init : !hw.struct<a: i32, b: i32>
+  %sig = llhd.sig %init : <!hw.struct<a: i32, b: i32>>
 
   // CHECK-NEXT: [[V4:%.+]] = llhd.prb [[V1]]
   // CHECK-NEXT: [[V5:%.+]] = llhd.prb [[V3]]
@@ -25,8 +25,8 @@ hw.module @struct(in %init : !hw.struct<a: i32, b: i32>, in %v1 : i32, in %v2 : 
   llhd.drv %a, %v1 after %time : i32
   llhd.drv %b, %v2 after %time : i32
 
-  // CHECK-NEXT: [[V7:%.+]] = llhd.sig %init : !hw.struct<a: i32, b: i32>
-  %sig2 = llhd.sig %init : !hw.struct<a: i32, b: i32>
+  // CHECK-NEXT: [[V7:%.+]] = llhd.sig %init : <!hw.struct<a: i32, b: i32>>
+  %sig2 = llhd.sig %init : <!hw.struct<a: i32, b: i32>>
 
   // CHECK-NEXT: [[V11:%.+]] = llhd.prb [[V7]] : !hw.struct<a: i32, b: i32>
   %prb2 = llhd.prb %sig2 : !hw.struct<a: i32, b: i32>
@@ -50,7 +50,7 @@ hw.module @array(in %init : !hw.array<2xi32>, in %v1 : i32, in %v2 : i32, out ou
   //      CHECK: [[V2:%.+]] = hw.array_get %init[%true
   // CHECK-NEXT: [[V3:%.+]] = llhd.sig
   // CHECK-SAME: [[V2]]
-  %sig = llhd.sig %init : !hw.array<2xi32>
+  %sig = llhd.sig %init : <!hw.array<2xi32>>
 
   // CHECK-NEXT: [[V4:%.+]] = llhd.prb [[V1]]
   // CHECK-NEXT: [[V5:%.+]] = llhd.prb [[V3]]
@@ -65,8 +65,8 @@ hw.module @array(in %init : !hw.array<2xi32>, in %v1 : i32, in %v2 : i32, out ou
   llhd.drv %a, %v1 after %time : i32
   llhd.drv %b, %v2 after %time : i32
 
-  // CHECK-NEXT: [[V7:%.+]] = llhd.sig %init : !hw.array<2xi32>
-  %sig2 = llhd.sig %init : !hw.array<2xi32>
+  // CHECK-NEXT: [[V7:%.+]] = llhd.sig %init : <!hw.array<2xi32>>
+  %sig2 = llhd.sig %init : <!hw.array<2xi32>>
 
   // CHECK-NEXT: [[V11:%.+]] = llhd.prb [[V7]] : !hw.array<2xi32>
   %prb2 = llhd.prb %sig2 : !hw.array<2xi32>
@@ -91,7 +91,7 @@ hw.module @arrayDynamicAccess(in %init : !hw.array<2xi32>, in %v1 : i32, in %idx
   // CHECK-NEXT: llhd.drv [[V2]], %v1 after
   // CHECK-NEXT: llhd.drv [[V3]], %v1 after
   // CHECK-NEXT: hw.output [[V1]]
-  %sig = llhd.sig %init : !hw.array<2xi32>
+  %sig = llhd.sig %init : <!hw.array<2xi32>>
   %prb = llhd.prb %sig : !hw.array<2xi32>
   %a = llhd.sig.array_get %sig[%false] : !llhd.ref<!hw.array<2xi32>>
   %b = llhd.sig.array_get %sig[%idx] : !llhd.ref<!hw.array<2xi32>>
@@ -121,7 +121,7 @@ hw.module @nested(in %init : !hw.array<2x!hw.struct<a: i32, b: i32>>, out out : 
   // CHECK: [[V8:%.+]] = hw.struct_extract [[V5]]["b"]
   // CHECK: [[V9:%.+]] = llhd.sig{{ }}
   // CHECK-SAME: [[V8]]
-  %sig = llhd.sig %init : !hw.array<2x!hw.struct<a: i32, b: i32>>
+  %sig = llhd.sig %init : <!hw.array<2x!hw.struct<a: i32, b: i32>>>
 
   // CHECK: [[V10:%.+]] = llhd.prb [[V2]]
   // CHECK: [[V11:%.+]] = llhd.prb [[V4]]
@@ -152,4 +152,14 @@ hw.module @nested(in %init : !hw.array<2x!hw.struct<a: i32, b: i32>>, out out : 
 
   // CHECK: hw.output [[V16]] : !hw.array<2xstruct<a: i32, b: i32>>
   hw.output %0 : !hw.array<2x!hw.struct<a: i32, b: i32>>
+}
+
+// CHECK-LABEL: hw.module @uninitialized
+hw.module @uninitialized(out a: i32) {
+  // CHECK: [[A:%.+]] = llhd.sig : <i32>
+  %sig = llhd.sig : <!hw.struct<a: i32, b: i32>>
+  %a = llhd.sig.struct_extract %sig["a"] : !llhd.ref<!hw.struct<a: i32, b: i32>>
+  %value = llhd.prb %a : i32
+  // CHECK: llhd.prb [[A]] : i32
+  hw.output %value : i32
 }

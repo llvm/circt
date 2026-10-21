@@ -17,6 +17,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 
 namespace mlir {
 class MLIRContext;
@@ -76,8 +77,6 @@ enum class CompanionMode {
 
 /// The mode for the InferDomains pass.
 enum class InferDomainsMode {
-  /// Erase domains from the input circuit.
-  Strip,
   /// Check domains without inference.
   Check,
   /// Check domains with inference for private modules.
@@ -91,6 +90,11 @@ void runCombMemsToRegOfVec(FModuleOp mod, bool ignoreReadEnable,
 LogicalResult runFullReset(CircuitOp circuit, InstanceGraph &ig,
                            InstanceInfo &instanceInfo,
                            bool convertAsyncDomainMems = false);
+
+/// Strip domains whose names match the predicate from a circuit.
+LogicalResult
+stripDomainsFromCircuit(CircuitOp circuit,
+                        llvm::function_ref<bool(StringAttr)> shouldStripDomain);
 
 #define GEN_PASS_DECL
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

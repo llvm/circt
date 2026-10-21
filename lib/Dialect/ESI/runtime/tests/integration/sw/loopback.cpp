@@ -8,6 +8,7 @@
 #include "esi/TypedPorts.h"
 
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <random>
 #include <stdexcept>
@@ -176,33 +177,69 @@ static_assert(sizeof(SerialCoordData) == sizeof(SerialCoordHeader),
 // Note: this application is intended to test hardware. As such, we need
 // to be able to send batches. So this is not the typical way one would define a
 // message struct. It's closer to a streaming style.
+//
+// If constructed with a HostMemAllocator, the coordinates are stored in a
+// HostMem region (owned by the message) which backends can DMA directly from
+// and take() once sent.
 struct SerialCoordInput : SegmentedMessageData {
 private:
   SerialCoordHeader header;
   std::vector<SerialCoordData> coords;
   SerialCoordHeader footer;
+  // Set iff the coordinates live in a HostMem region rather than `coords`.
+  bool coordsInRegion = false;
+  // Null after the region has been taken.
+  std::unique_ptr<services::HostMemRegion> coordsRegion;
+  size_t coordsBytes;
 
 public:
   SerialCoordInput(uint32_t xTrans, uint32_t yTrans,
-                   std::vector<SerialCoordData> &coords)
-      : coords(coords) {
+                   std::vector<SerialCoordData> &coords,
+                   services::HostMemAllocator *allocator = nullptr)
+      : coordsBytes(coords.size() * sizeof(SerialCoordData)) {
     header.coordsCount = (uint16_t)coords.size();
     header.xTranslation = xTrans;
     header.yTranslation = yTrans;
     footer.coordsCount = 0;
+    if (allocator && coordsBytes > 0)
+      coordsRegion = allocator->allocate(coordsBytes, {});
+    if (coordsRegion) {
+      std::memcpy(coordsRegion->getPtr(), coords.data(), coordsBytes);
+      coordsRegion->flush();
+      coordsInRegion = true;
+    } else {
+      // No allocator, or the allocation failed: keep the data in the vector.
+      this->coords = coords;
+    }
   }
 
   size_t numSegments() const override { return 3; }
   Segment segment(size_t idx) const override {
     if (idx == 0)
       return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};
-    else if (idx == 1)
-      return {reinterpret_cast<const uint8_t *>(coords.data()),
-              coords.size() * sizeof(SerialCoordData)};
-    else if (idx == 2)
+    else if (idx == 1) {
+      if (!coordsInRegion)
+        return {reinterpret_cast<const uint8_t *>(coords.data()), coordsBytes};
+      if (!coordsRegion)
+        throw std::runtime_error(
+            "SerialCoordInput: coordinates segment has been taken");
+      return {static_cast<const uint8_t *>(coordsRegion->getPtr()), coordsBytes,
+              coordsRegion.get()};
+    } else if (idx == 2)
       return {reinterpret_cast<const uint8_t *>(&footer), sizeof(footer)};
     else
       throw std::out_of_range("SerialCoordInput: invalid segment index");
+  }
+
+  std::unique_ptr<services::HostMemRegion> take(size_t segIdx) override {
+    if (segIdx >= numSegments())
+      throw std::out_of_range("SerialCoordInput: invalid segment index");
+    if (segIdx != 1 || !coordsInRegion)
+      return nullptr;
+    if (!coordsRegion)
+      throw std::runtime_error(
+          "SerialCoordInput: coordinates segment has been taken");
+    return std::move(coordsRegion);
   }
 };
 
@@ -222,7 +259,9 @@ union SerialCoordOutputFrame {
 #pragma pack(pop)
 static_assert(sizeof(SerialCoordOutputFrame) == 8, "Size mismatch");
 
-static int serialCoordTranslateTest(Accelerator *accel) {
+static int serialCoordTranslate(Accelerator *accel,
+                                services::HostMemAllocator *allocator,
+                                const char *probeName) {
   size_t numCoords = 100;
   uint32_t xTrans = 10, yTrans = 20;
 
@@ -271,7 +310,20 @@ static int serialCoordTranslateTest(Accelerator *accel) {
   std::vector<SerialCoordData> coords;
   for (auto &c : inputCoords)
     coords.emplace_back(c.x, c.y);
-  SerialCoordInput batch(xTrans, yTrans, coords);
+  auto batch =
+      std::make_unique<SerialCoordInput>(xTrans, yTrans, coords, allocator);
+  if (allocator) {
+    // The coordinates segment should reference the HostMem region holding it.
+    Segment coordsSeg = batch->segment(1);
+    if (!coordsSeg.region || !coordsSeg.getDeviceAddress())
+      throw std::runtime_error(
+          "Serial coord translate test: coordinates not in a HostMem region");
+    if (batch->take(0) != nullptr)
+      throw std::runtime_error(
+          "Serial coord translate test: header segment has a region");
+  }
+  // Transfers ownership of the batch (and any HostMem region it owns) to the
+  // port; `batch` must not be used afterwards.
   argPort.write(batch);
 
   // The bulk-list reply is one header frame + numCoords data frames + one
@@ -280,8 +332,58 @@ static int serialCoordTranslateTest(Accelerator *accel) {
   MessageData drained;
   for (size_t i = 0; i < numCoords + 2; ++i)
     rawResult.read(drained);
-  std::cout << "serial_coord_translate ok\n";
+  std::cout << probeName << " ok\n";
   return 0;
+}
+
+// Check HostMemAllocator failure and SerialCoordInput::take() semantics on a
+// message which is never sent.
+static void checkHostMemTake(services::HostMemAllocator &allocator) {
+  if (allocator.allocate(0, {}) != nullptr)
+    throw std::runtime_error("HostMem take test: allocate(0) should fail");
+
+  std::vector<SerialCoordData> coords = {{1, 2}, {3, 4}, {5, 6}};
+  SerialCoordInput msg(10, 20, coords, &allocator);
+  Segment coordsSeg = msg.segment(1);
+  if (!coordsSeg.region)
+    throw std::runtime_error(
+        "HostMem take test: coordinates not in a HostMem region");
+
+  // Take the region from the message (as a DMA engine would once the segment
+  // has been transmitted, to re-use it or return it to a pool).
+  std::unique_ptr<services::HostMemRegion> region = msg.take(1);
+  if (region.get() != coordsSeg.region)
+    throw std::runtime_error("HostMem take test: take() returned the wrong "
+                             "region");
+  if (std::memcmp(region->getPtr(), coords.data(),
+                  coords.size() * sizeof(SerialCoordData)) != 0)
+    throw std::runtime_error("HostMem take test: region contents corrupted");
+
+  // The taken segment is no longer accessible.
+  auto throws = [](auto fn) {
+    try {
+      fn();
+    } catch (const std::runtime_error &) {
+      return true;
+    }
+    return false;
+  };
+  if (!throws([&] { msg.segment(1); }) || !throws([&] { msg.take(1); }))
+    throw std::runtime_error(
+        "HostMem take test: taken segment is still accessible");
+  if (msg.segment(0).size != sizeof(SerialCoordHeader))
+    throw std::runtime_error("HostMem take test: header segment inaccessible");
+}
+
+static int serialCoordTranslateTest(Accelerator *accel) {
+  return serialCoordTranslate(accel, nullptr, "serial_coord_translate");
+}
+
+// Same as above, but the coordinates are allocated in HostMem.
+static int serialCoordTranslateHostMemTest(Accelerator *accel) {
+  auto *hostmem = esi_test::probeConnection->getService<services::HostMem>();
+  checkHostMemTake(*hostmem);
+  return serialCoordTranslate(accel, hostmem, "serial_coord_translate_hostmem");
 }
 
 static int runDepthConstant(Accelerator *) {
@@ -291,11 +393,10 @@ static int runDepthConstant(Accelerator *) {
   return 0;
 }
 
-ESI_PROBE_REGISTRY("loopback-cpp",
-                   "Loopback cosim test using generated ESI headers.",
-                   {"depth_constant", &runDepthConstant},
-                   {"loopback_i8", &runLoopbackI8},
-                   {"struct_func", &runStructFunc},
-                   {"odd_struct_func", &runOddStructFunc},
-                   {"array_func", &runArrayFunc},
-                   {"serial_coord_translate", &serialCoordTranslateTest}, );
+ESI_PROBE_REGISTRY(
+    "loopback-cpp", "Loopback cosim test using generated ESI headers.",
+    {"depth_constant", &runDepthConstant}, {"loopback_i8", &runLoopbackI8},
+    {"struct_func", &runStructFunc}, {"odd_struct_func", &runOddStructFunc},
+    {"array_func", &runArrayFunc},
+    {"serial_coord_translate", &serialCoordTranslateTest},
+    {"serial_coord_translate_hostmem", &serialCoordTranslateHostMemTest}, );

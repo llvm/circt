@@ -53,10 +53,12 @@ struct LoweringOptionsOption
                 "wireSpillingNamehintTermLimit=<n>, "
                 "disallowExpressionInliningInPorts, disallowMuxInlining, "
                 "mitigateVivadoArrayIndexConstPropBug, "
-                "emitWireInPorts, emitBindComments, omitVersionComment, "
+                "svPortDeclStyle={varLogic, wire, none}, "
+                "emitBindComments, omitVersionComment, "
                 "caseInsensitiveKeywords, emitVerilogLocations, "
                 "fixUpEmptyModules, disallowClockedAssertions, "
-                "disallowDeclAssignments"),
+                "disallowDeclAssignments, "
+                "svVarDeclStyle={varLogic,logic,reg}"),
             llvm::cl::cat(cat), llvm::cl::value_desc("option")} {}
 };
 

@@ -19,7 +19,7 @@ from .circt.dialects import msft as raw_msft
 from .tracer import get_var_name
 
 import typing
-from typing import List, Optional, Union
+from typing import Callable, List, Optional, Union
 
 
 def NamedWire(type_or_value: Union[Type, Signal], name: str):
@@ -233,6 +233,32 @@ def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]) -> Signal:
 
   m.name = f"mux_{sel.name}_" + "_".join(input_names)
   return m
+
+
+def If(sel: BitVectorSignal, true_value: Union[Signal, Callable[[], Signal]],
+       false_value: Union[Signal, Callable[[], Signal]]) -> Signal:
+  """Create a two-way mux, selecting true_value when sel is high.
+
+  Branches may be signals or zero-argument callables that produce signals.
+  Callables are evaluated during elaboration; selection happens in hardware.
+  """
+  if callable(true_value):
+    true_value = true_value()
+  if callable(false_value):
+    false_value = false_value()
+
+  if sel.type.width != 1:
+    raise TypeError("'Sel' bit width must be clog2 of number of inputs")
+  if true_value.type != false_value.type:
+    raise TypeError("All data inputs must have the same type")
+
+  input_names = [
+      value.name if value.name is not None else f"in{idx}"
+      for idx, value in enumerate((false_value, true_value))
+  ]
+  result = comb.MuxOp(sel, true_value, false_value)
+  result.name = f"mux_{sel.name}_" + "_".join(input_names)
+  return result
 
 
 def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):

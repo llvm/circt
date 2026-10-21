@@ -3,7 +3,7 @@
 // CHECK-LABEL: @SimpleProbesInProcessOp
 hw.module @SimpleProbesInProcessOp() {
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.sig
   // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
   // CHECK-NEXT: llhd.process
@@ -26,7 +26,7 @@ hw.module @SimpleProbesInProcessOp() {
 // CHECK-LABEL: @SimpleProbesInCombinationalOp
 hw.module @SimpleProbesInCombinationalOp() {
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.sig
   // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
   // CHECK-NEXT: llhd.combinational -> i42
@@ -44,7 +44,7 @@ hw.module @SimpleProbesInCombinationalOp() {
 hw.module @DontHoistProbesAcrossSideEffects() {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.drv
@@ -70,7 +70,7 @@ hw.module @DontHoistProbesAcrossSideEffects() {
 // CHECK-LABEL: @DontHoistProbesIfLeakingAcrossWait
 hw.module @DontHoistProbesIfLeakingAcrossWait() {
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
@@ -104,7 +104,7 @@ hw.module @DontHoistLocalSignals() {
   %c0_i42 = hw.constant 0 : i42
   // CHECK: llhd.process
   llhd.process {
-    %a = llhd.sig %c0_i42 : i42
+    %a = llhd.sig %c0_i42 : <i42>
     llhd.wait ^bb1
   ^bb1:
     // CHECK: ^bb1:
@@ -123,10 +123,10 @@ hw.module @SimpleDrives(in %u: i42, in %v: i42, in %w: i42) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   %1 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
-  %b = llhd.sig %c0_i42 : i42
-  %c = llhd.sig %c0_i42 : i42
-  %d = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
+  %b = llhd.sig %c0_i42 : <i42>
+  %c = llhd.sig %c0_i42 : <i42>
+  %d = llhd.sig %c0_i42 : <i42>
   // CHECK: [[RES:%.+]]:7 = llhd.process -> i42, i42, i42, i42, !llhd.time, i42, i1 {
   %2 = llhd.process -> i42 {
     // CHECK-NEXT: cf.br ^bb1
@@ -166,7 +166,7 @@ hw.module @SimpleDrives(in %u: i42, in %v: i42, in %w: i42) {
 hw.module @DontHoistDrivesAcrossSideEffects() {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.drv %a
@@ -181,8 +181,8 @@ hw.module @DontHoistDrivesAcrossSideEffects() {
 hw.module @DontHoistDrivesOfSlotsWithUnsavoryUsers(in %c: !llhd.ref<i42>) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
-  %b = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
+  %b = llhd.sig %c0_i42 : <i42>
   // Unsavory uses outside of process don't affect hoistability.
   // CHECK: call @use_inout_i42(%a)
   func.call @use_inout_i42(%a) : (!llhd.ref<i42>) -> ()
@@ -215,8 +215,8 @@ hw.module @DontHoistDrivesOfSlotsWithUnsavoryUsers(in %c: !llhd.ref<i42>) {
 hw.module @OnlyHoistLastDrive(in %u: i42, in %v: i42) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
-  %a = llhd.sig %c0_i42 : i42
-  %b = llhd.sig %c0_i42 : i42
+  %a = llhd.sig %c0_i42 : <i42>
+  %b = llhd.sig %c0_i42 : <i42>
   // CHECK: [[RES:%.+]]:2 = llhd.process -> i42, i42
   llhd.process {
     // CHECK-NEXT: llhd.drv %a, %u
@@ -237,7 +237,7 @@ hw.module @OnlyHoistLastDrive(in %u: i42, in %v: i42) {
 // CHECK-LABEL: @HoistProbesOutOfIf
 hw.module @HoistProbesOutOfIf(in %u: i42, in %v: i1) {
   // CHECK: llhd.sig
-  %a = llhd.sig %u : i42
+  %a = llhd.sig %u : <i42>
   // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
   // CHECK-NEXT: scf.if
   scf.if %v {
@@ -259,7 +259,7 @@ hw.module @HoistProbesOutOfIf(in %u: i42, in %v: i1) {
 hw.module @NonUniformDelayValues(in %b : i42) {
   %0 = llhd.constant_time <1ns, 0d, 0e>
   %1 = llhd.constant_time <2ns, 0d, 0e>
-  %a = llhd.sig %b : i42
+  %a = llhd.sig %b : <i42>
   // CHECK: [[RES:%.+]]:3 = llhd.process -> i42, !llhd.time, i1
   // CHECK: llhd.drv %a, [[RES]]#0 after [[RES]]#1 if [[RES]]#2 : i42
   llhd.process {
@@ -278,7 +278,7 @@ hw.module @NonUniformDelayValues(in %b : i42) {
 hw.module @DontHoistMultipleDrivesWithDifferentDelays(in %v0: i42, in %v1: i42, in %v2: i42) {
   %0 = llhd.constant_time <5ns, 0d, 0e>
   %1 = llhd.constant_time <10ns, 0d, 0e>
-  %a = llhd.sig %v0 : i42
+  %a = llhd.sig %v0 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.drv %a, %v1
@@ -293,7 +293,7 @@ hw.module @DontHoistMultipleDrivesWithDifferentDelays(in %v0: i42, in %v1: i42, 
 // CHECK-LABEL: @DontHoistAcrossSideEffects
 hw.module @DontHoistAcrossSideEffects(in %v0: i42, in %v1: i42, in %v2: i42) {
   %0 = llhd.constant_time <1ns, 0d, 0e>
-  %a = llhd.sig %v0 : i42
+  %a = llhd.sig %v0 : <i42>
   llhd.process {
     // CHECK: llhd.drv %a, %v1
     llhd.drv %a, %v1 after %0 : i42
@@ -315,7 +315,7 @@ hw.module @DontHoistAcrossSideEffects(in %v0: i42, in %v1: i42, in %v2: i42) {
 hw.module @RealSignalDriveAcrossWait(in %v : f64) {
   %0 = llhd.constant_time <1ns, 0d, 0e>
   %cst = arith.constant 0.0 : f64
-  %a = llhd.sig %cst : f64
+  %a = llhd.sig %cst : <f64>
   // CHECK: llhd.process -> f64
   // CHECK: llhd.drv %a
   llhd.process {
@@ -332,7 +332,7 @@ hw.module @RealSignalDriveAcrossWait(in %v : f64) {
 hw.module @UnsupportedTypeNotHoisted(in %v : index) {
   %0 = llhd.constant_time <1ns, 0d, 0e>
   %c0 = arith.constant 0 : index
-  %a = llhd.sig %c0 : index
+  %a = llhd.sig %c0 : <index>
   // CHECK: llhd.process
   llhd.process {
     // CHECK: llhd.drv %a, %v after
@@ -352,8 +352,8 @@ hw.module @DriveOnlyInNonSuspendBlock(in %v : f64, in %w : i42, in %c : i1) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %cst = arith.constant 0.0 : f64
   %c0 = hw.constant 0 : i42
-  %a = llhd.sig %cst : f64
-  %b = llhd.sig %c0 : i42
+  %a = llhd.sig %cst : <f64>
+  %b = llhd.sig %c0 : <i42>
   // CHECK: llhd.process
   llhd.process {
     // This f64 drive is only in ^bb0 (ends with cond_br, not halt/wait).
@@ -368,6 +368,134 @@ hw.module @DriveOnlyInNonSuspendBlock(in %v : f64, in %w : i42, in %c : i1) {
     llhd.halt
   }
 }
+
+// A drive to a projection of a signal declared outside the process can be
+// hoisted, as long as the projection itself is defined outside the process.
+// CHECK-LABEL: @HoistProjectionDrive
+hw.module @HoistProjectionDrive(in %x : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i1 = hw.constant 0 : i1
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  // CHECK: [[ELT:%.+]] = llhd.sig.array_get %sig
+  %elt = llhd.sig.array_get %sig[%c0_i1] : <!hw.array<2xi5>>
+  // CHECK: [[TMP:%.+]] = llhd.process -> i5 {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK-NOT: llhd.drv
+    // CHECK: llhd.wait yield (%x : i5), ^bb1
+    llhd.drv %elt, %x after %0 : i5
+    llhd.wait ^bb1
+  }
+  // CHECK: llhd.drv [[ELT]], [[TMP]] after
+}
+
+// Drives to provably disjoint projections of the same signal are independent
+// and can be hoisted separately.
+// CHECK-LABEL: @HoistDisjointProjectionDrives
+hw.module @HoistDisjointProjectionDrives(in %x : i5, in %y : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i1 = hw.constant 0 : i1
+  %c1_i1 = hw.constant 1 : i1
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  // CHECK: [[E0:%.+]] = llhd.sig.array_get %sig
+  // CHECK: [[E1:%.+]] = llhd.sig.array_get %sig
+  %e0 = llhd.sig.array_get %sig[%c0_i1] : <!hw.array<2xi5>>
+  %e1 = llhd.sig.array_get %sig[%c1_i1] : <!hw.array<2xi5>>
+  // CHECK: [[TMP:%.+]]:2 = llhd.process -> i5, i5 {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK-NOT: llhd.drv
+    // CHECK: llhd.wait yield (%x, %y : i5, i5), ^bb1
+    llhd.drv %e0, %x after %0 : i5
+    llhd.drv %e1, %y after %0 : i5
+    llhd.wait ^bb1
+  }
+  // CHECK: llhd.drv [[E0]], [[TMP]]#0 after
+  // CHECK: llhd.drv [[E1]], [[TMP]]#1 after
+}
+
+// A drive to a projection and a drive to the signal it projects into overlap.
+// Hoisting them into separate drives would lose their relative order, so
+// neither may be hoisted.
+// CHECK-LABEL: @NoHoistProjectionAliasingRoot
+hw.module @NoHoistProjectionAliasingRoot(in %x : !hw.array<2xi5>, in %y : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i1 = hw.constant 0 : i1
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  %elt = llhd.sig.array_get %sig[%c0_i1] : <!hw.array<2xi5>>
+  // CHECK: llhd.process {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK: llhd.drv %sig, %x after
+    // CHECK: llhd.drv {{%.+}}, %y after
+    llhd.drv %sig, %x after %0 : !hw.array<2xi5>
+    llhd.drv %elt, %y after %0 : i5
+    llhd.wait ^bb1
+  }
+}
+
+// Partially overlapping projections of the same signal must not be hoisted.
+// CHECK-LABEL: @NoHoistOverlappingProjections
+hw.module @NoHoistOverlappingProjections(in %x : i5, in %y : i10) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i4 = hw.constant 0 : i4
+  %sig = llhd.sig : <i10>
+  %lo = llhd.sig.extract %sig from %c0_i4 : <i10> -> <i5>
+  // CHECK: llhd.process {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK: llhd.drv %sig, %y after
+    // CHECK: llhd.drv {{%.+}}, %x after
+    llhd.drv %sig, %y after %0 : i10
+    llhd.drv %lo, %x after %0 : i5
+    llhd.wait ^bb1
+  }
+}
+
+// Projections with a dynamic index may alias each other, so drives to two of
+// them must not be hoisted.
+// CHECK-LABEL: @NoHoistDynamicProjections
+hw.module @NoHoistDynamicProjections(in %i : i1, in %j : i1, in %x : i5, in %y : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  %ei = llhd.sig.array_get %sig[%i] : <!hw.array<2xi5>>
+  %ej = llhd.sig.array_get %sig[%j] : <!hw.array<2xi5>>
+  // CHECK: llhd.process {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK: llhd.drv {{%.+}}, %x after
+    // CHECK: llhd.drv {{%.+}}, %y after
+    llhd.drv %ei, %x after %0 : i5
+    llhd.drv %ej, %y after %0 : i5
+    llhd.wait ^bb1
+  }
+}
+
+// A single dynamically indexed projection is the only slot of its root signal,
+// so all drives through it target the same storage and can be hoisted.
+// CHECK-LABEL: @HoistSingleDynamicProjection
+hw.module @HoistSingleDynamicProjection(in %i : i1, in %x : i5) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %sig = llhd.sig : <!hw.array<2xi5>>
+  // CHECK: [[ELT:%.+]] = llhd.sig.array_get %sig
+  %ei = llhd.sig.array_get %sig[%i] : <!hw.array<2xi5>>
+  // CHECK: [[TMP:%.+]] = llhd.process -> i5 {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK-NOT: llhd.drv
+    // CHECK: llhd.wait yield (%x : i5), ^bb1
+    llhd.drv %ei, %x after %0 : i5
+    llhd.wait ^bb1
+  }
+  // CHECK: llhd.drv [[ELT]], [[TMP]] after
+}
+
 
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !llhd.ref<i42>)

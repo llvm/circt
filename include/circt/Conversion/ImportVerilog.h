@@ -179,6 +179,10 @@ struct LlhdToCorePipelineOptions
       *this, "detect-memories",
       llvm::cl::desc("Detect memories and lower them to `seq.firmem`"),
       llvm::cl::init(true)};
+  Option<bool> inferClockPorts{
+      *this, "infer-clock-ports",
+      llvm::cl::desc("Retype `i1` ports used as clocks to `!seq.clock`"),
+      llvm::cl::init(true)};
   Option<bool> sroa{
       *this, "sroa",
       llvm::cl::desc("Destructure arrays and structs into individual signals. "

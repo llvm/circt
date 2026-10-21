@@ -7,6 +7,7 @@ add_circt_library(CIRCTSupport
   CustomDirectiveImpl.cpp
   Debug.cpp
   FVInt.cpp
+  FieldInfo.cpp
   FieldRef.cpp
   InstanceGraph.cpp
   JSON.cpp

@@ -18,6 +18,7 @@
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/Pass/Pass.h"
 
 #include "mlir/Transforms/DialectConversion.h"
@@ -176,11 +177,38 @@ struct ConstantOpLowering : public OpConversionPattern<ConstantOp> {
   LogicalResult
   matchAndRewrite(ConstantOp constOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp,
-                                                constOp.getConstantValue());
+    // The result may be a type alias, which is retained with a signless inner
+    // type.
+    Type resultType = getTypeConverter()->convertType(constOp.getType());
+    if (!resultType)
+      return failure();
+    auto valueAttr = rewriter.getIntegerAttr(
+        hw::type_cast<IntegerType>(resultType), constOp.getConstantValue());
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp, resultType, valueAttr);
     return success();
   }
 };
+
+struct AggregateConstantOpLowering
+    : public OpConversionPattern<hw::AggregateConstantOp> {
+  using OpConversionPattern<hw::AggregateConstantOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::AggregateConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto fields = op.getFieldsAttr().replace([&](IntegerType type) {
+      return getTypeConverter()->convertType(type);
+    });
+    if (!fields)
+      return rewriter.notifyMatchFailure(op,
+                                         "attribute type conversion failed");
+    rewriter.modifyOpInPlace(
+        op, [&] { op.setFieldsAttr(cast<ArrayAttr>(fields)); });
+    return doTypeConversion(op, adaptor.getOperands(), rewriter,
+                            getTypeConverter());
+  }
+};
+
 struct DivOpLowering : public OpConversionPattern<DivOp> {
   using OpConversionPattern<DivOp>::OpConversionPattern;
 
@@ -440,8 +468,8 @@ HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
 
 void circt::populateHWArithToHWConversionPatterns(
     HWArithToHWTypeConverter &typeConverter, RewritePatternSet &patterns) {
-  patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
-               BinaryOpLowering<AddOp, comb::AddOp>,
+  patterns.add<ConstantOpLowering, AggregateConstantOpLowering, CastOpLowering,
+               ICmpOpLowering, BinaryOpLowering<AddOp, comb::AddOp>,
                BinaryOpLowering<SubOp, comb::SubOp>,
                BinaryOpLowering<MulOp, comb::MulOp>, DivOpLowering>(
       typeConverter, patterns.getContext());

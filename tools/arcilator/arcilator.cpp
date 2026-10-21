@@ -27,6 +27,7 @@
 #include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/LLHD/LLHDDialect.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -669,9 +670,9 @@ static LogicalResult processBuffer(
           llvm::errs() << "invalid integer argument: '" << val << "'\n";
           return failure();
         }
-        if (apVal.getBitWidth() > width) {
+        if (apVal.getActiveBits() > width) {
           llvm::errs() << "integer argument '" << val << "' (required width "
-                       << apVal.getBitWidth() << ") is too large for type '"
+                       << apVal.getActiveBits() << ") is too large for type '"
                        << type << "'\n";
           return failure();
         }
@@ -793,6 +794,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     emit::EmitDialect,
     hw::HWDialect,
     llhd::LLHDDialect,
+    ltl::LTLDialect,
     mlir::arith::ArithDialect,
     mlir::cf::ControlFlowDialect,
     mlir::DLTIDialect,

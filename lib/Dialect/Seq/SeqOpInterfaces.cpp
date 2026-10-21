@@ -16,7 +16,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 
 using namespace mlir;
-using namespace llvm;
 using namespace circt::seq;
 
 #include "circt/Dialect/Seq/SeqOpInterfaces.cpp.inc"

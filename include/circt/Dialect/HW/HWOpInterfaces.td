@@ -27,8 +27,9 @@ def TypeScopeLike : OpInterface<"TypeScopeLike", [Symbol]> {
     reference.
 
     This allows type declarations to be shared between containers with
-    different emission semantics, such as `hw.type_scope` and `sv.package`,
-    without the HW dialect depending on the dialect that defines them.
+    different emission semantics, such as `hw.type_scope`, `sv.package`, and
+    `sv.package.extern`, without the HW dialect depending on the dialect that
+    defines them.
   }];
 
   let verify = [{

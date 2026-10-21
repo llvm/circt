@@ -13,3 +13,43 @@ hw.module @tooManyOps() {
   // expected-error @+1 {{expected 2 operands but got 3}}
   %0 = hwarith.add %c1_1, %c1_1, %c1_1: (ui1, ui1, ui1) -> ui2
 }
+
+// -----
+
+hw.type_scope @ns {
+  hw.typedecl @t : i4
+}
+
+hw.module @signlessAliasConstant() {
+  // expected-error @+1 {{'hwarith.constant' op result #0 must be an arbitrary precision integer with signedness semantics or a type alias of one}}
+  %0 = hwarith.constant 1 : !hw.typealias<@ns::@t, i4>
+}
+
+// -----
+
+hw.type_scope @ns {
+  hw.typedecl @t : si4
+}
+
+hw.module @aliasConstantTypeMismatch() {
+  // expected-error @+1 {{'hwarith.constant' op value type 'ui4' doesn't match the canonical result type 'si4'}}
+  %0 = "hwarith.constant"() <{rawValue = 1 : ui4}> : () -> !hw.typealias<@ns::@t, si4>
+}
+
+// -----
+
+hw.type_scope @ns {
+  hw.typedecl @t : si4
+}
+
+hw.module @signedAliasConstantOutOfRange() {
+  // expected-error @+1 {{constant out of range for type '!hw.typealias<@ns::@t, si4>'}}
+  %0 = hwarith.constant 8 : !hw.typealias<@ns::@t, si4>
+}
+
+// -----
+
+hw.module @negativeUnsignedConstant() {
+  // expected-error @+1 {{constant out of range for type 'ui4'}}
+  %0 = hwarith.constant -1 : ui4
+}

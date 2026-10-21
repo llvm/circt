@@ -51,6 +51,13 @@ class Type:
     return self
 
   @property
+  def canonical_type(self) -> Type:
+    """Return this type with all nested type aliases removed."""
+    canonical_type = hw.get_canonical_type(self._type)
+    return self if canonical_type == self._type else _FromCirctType(
+        canonical_type)
+
+  @property
   def bitwidth(self) -> int | None:
     bw = hw.get_bitwidth(self._type)
     return bw if bw >= 0 else None
@@ -71,10 +78,23 @@ class Type:
     assert not isinstance(
         obj, ir.Value
     ), "Not intended to be called on CIRCT Values, only Python objects."
+    from .signals import Signal
+    if not isinstance(obj, Signal):
+      self._check_insertion_point()
     v = self._from_obj_or_sig(obj)
     if name is not None:
       v.name = name
     return v
+
+  def _check_insertion_point(self):
+    """Signals are built from ops which must be inserted into a block (e.g. in
+    a generator). Detached ops are destroyed when the Python objects which own
+    them are, which aborts if they still have uses."""
+    try:
+      ir.InsertionPoint.current
+    except ValueError:
+      raise RuntimeError(f"Cannot create a signal of type '{self}' outside of "
+                         "a generator or other insertion point") from None
 
   def _from_obj_or_sig(self,
                        obj,
@@ -208,44 +228,44 @@ class TypeAlias(Type):
       return self.inner_type.fields
     raise AttributeError("Only struct and union type aliases have fields")
 
+  def __getattr__(self, attrname: str):
+    return getattr(self.inner_type, attrname)
+
   @staticmethod
-  def declare_aliases(mod):
+  def declare_aliases(mod, package_name: typing.Optional[str] = None):
+    """Declare all of the registered type aliases in the `sv.package` with the
+    symbol `TYPE_SCOPE`. If that package does not exist, it is created at the
+    start of `mod` so that it is emitted before any of its users; an existing
+    one is assumed to already be correctly placed. If `package_name` is given,
+    the package is emitted with that name in SystemVerilog."""
     if TypeAlias.RegisteredAliases is None:
       return
 
-    guard_name = "__PYCDE_TYPES__"
     type_scope_attr = ir.StringAttr.get(TypeAlias.TYPE_SCOPE)
-    type_scopes = list()
-    for op in mod.body.operations:
-      if isinstance(op, hw.TypeScopeOp) and op.sym_name == type_scope_attr:
-        type_scopes.append(op)
-        continue
-      if isinstance(op, sv.IfDefOp):
-        if len(op.elseRegion.blocks) == 0:
-          continue
-        for else_block_op in op.elseRegion.blocks[0]:
-          if isinstance(
-              else_block_op,
-              hw.TypeScopeOp) and else_block_op.sym_name == type_scope_attr:
-            type_scopes.append(else_block_op)
+    type_scopes = [
+        op for op in mod.body.operations
+        if isinstance(op, (sv.PackageOp,
+                           hw.TypeScopeOp)) and op.sym_name == type_scope_attr
+    ]
 
     assert len(type_scopes) <= 1
     if len(type_scopes) == 1:
       type_scope = type_scopes[0]
+      type_scope_body = type_scope.regions[0].blocks[0]
     else:
       with ir.InsertionPoint.at_block_begin(mod.body):
-        sv.VerbatimOp(ir.StringAttr.get("`ifndef " + guard_name), [],
-                      symbols=ir.ArrayAttr.get([]))
-        sv.VerbatimOp(ir.StringAttr.get("`define " + guard_name), [],
-                      symbols=ir.ArrayAttr.get([]))
-        type_scope = hw.TypeScopeOp.create(TypeAlias.TYPE_SCOPE)
-        sv.VerbatimOp(ir.StringAttr.get("`endif // " + guard_name), [],
-                      symbols=ir.ArrayAttr.get([]))
+        type_scope = sv.PackageOp(type_scope_attr)
+      type_scope_body = type_scope.body.blocks.append()
 
-    with ir.InsertionPoint(type_scope.body):
+    # The type aliases reference the package by its `TYPE_SCOPE` symbol, so
+    # only the emitted name can be changed.
+    if package_name is not None and isinstance(type_scope, sv.PackageOp):
+      type_scope.attributes["hw.verilogName"] = ir.StringAttr.get(package_name)
+
+    with ir.InsertionPoint(type_scope_body):
       for (name, type) in TypeAlias.RegisteredAliases.items():
         declared_aliases = [
-            op for op in type_scope.body.operations
+            op for op in type_scope_body.operations
             if isinstance(op, hw.TypedeclOp) and
             ir.StringAttr(op.sym_name).value == name
         ]
@@ -260,6 +280,10 @@ class TypeAlias(Type):
   @property
   def inner_type(self):
     return _FromCirctType(self._type.inner_type)
+
+  @property
+  def width(self):
+    return self.inner_type.width
 
   def __repr__(self):
     return f"TypeAlias<'{self.name}', {repr(self.inner_type)}"
@@ -423,6 +447,7 @@ class RegisteredStruct(TypeAlias):
     return inst
 
   def __call__(self, **kwargs):
+    self._check_insertion_point()
     return self._from_obj_or_sig(kwargs)
 
   def _get_value_class(self):

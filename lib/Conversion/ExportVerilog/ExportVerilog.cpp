@@ -202,6 +202,9 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
       .Case<SVVerbatimSourceOp>([](SVVerbatimSourceOp op) {
         return op.getVerilogNameAttr().getValue();
       })
+      .Case<PackageExternOp>([](PackageExternOp op) {
+        return op.getVerilogName().value_or(op.getSymName());
+      })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
       })
@@ -321,6 +324,10 @@ bool ExportVerilog::isZeroBitType(Type type) {
     return intType.getWidth() == 0;
   if (auto inout = dyn_cast<hw::InOutType>(type))
     return isZeroBitType(inout.getElementType());
+  if (auto net = dyn_cast<sv::NetType>(type))
+    return isZeroBitType(net.getElementType());
+  if (auto var = dyn_cast<sv::VarType>(type))
+    return isZeroBitType(var.getElementType());
   if (auto uarray = dyn_cast<hw::UnpackedArrayType>(type))
     return uarray.getNumElements() == 0 ||
            isZeroBitType(uarray.getElementType());
@@ -345,8 +352,8 @@ bool ExportVerilog::isZeroBitType(Type type) {
 // NOLINTBEGIN(misc-no-recursion)
 static Type stripUnpackedTypes(Type type) {
   return TypeSwitch<Type, Type>(type)
-      .Case<InOutType>([](InOutType inoutType) {
-        return stripUnpackedTypes(inoutType.getElementType());
+      .Case<InOutType, NetType, VarType>([](auto valueType) {
+        return stripUnpackedTypes(valueType.getElementType());
       })
       .Case<UnpackedArrayType, sv::UnpackedOpenArrayType>([](auto arrayType) {
         return stripUnpackedTypes(arrayType.getElementType());
@@ -361,13 +368,16 @@ static bool hasLeadingUnpackedType(Type type) {
   return stripUnpackedTypes(elementType) != elementType;
 }
 
-/// Return true if type has a struct type as a subtype.
+/// Return true if the element type is emitted as a type name or a keyword
+/// (struct, union, enum or typedef), so that no "logic" prefix is allowed.
 static bool hasStructType(Type type) {
   return TypeSwitch<Type, bool>(type)
-      .Case<InOutType, UnpackedArrayType, ArrayType>([](auto parentType) {
-        return hasStructType(parentType.getElementType());
-      })
-      .Case<StructType>([](auto) { return true; })
+      .Case<InOutType, VarType, UnpackedArrayType, ArrayType>(
+          [](auto parentType) {
+            return hasStructType(parentType.getElementType());
+          })
+      .Case<StructType, UnionType, EnumType, TypeAliasType>(
+          [](auto) { return true; })
       .Default([](auto) { return false; });
 }
 // NOLINTEND(misc-no-recursion)
@@ -1549,6 +1559,19 @@ public:
 
 } // end anonymous namespace
 
+/// Returns true if `type` prints its own SystemVerilog `data_type`, so
+/// its declaration must not be prefixed with `logic` or `reg`. Integer types
+/// are the exception: they print only a packed range like `[3:0]`, so the
+/// declaration must supply `logic` or `reg`. Packed and unpacked arrays
+/// inherit this property from their elememt type. See SV Spec 6.8.
+static bool hasExplicitDataType(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<UnpackedArrayType, ArrayType>(
+          [](auto t) { return hasExplicitDataType(t.getElementType()); })
+      .Case<IntegerType>([](auto) { return false; })
+      .Default([](auto) { return true; });
+}
+
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 /// If `stripAutomatic` is true, "automatic" is not used even for a declaration
 /// in a non-procedural region.
@@ -1572,6 +1595,19 @@ static StringRef getVerilogDeclWord(Operation *op,
 
     return "reg";
   }
+
+  if (auto var = dyn_cast<VarOp>(op)) {
+    bool hasExplicitType = hasExplicitDataType(var.getElementType());
+    switch (emitter.state.options.varOpDeclStyle) {
+    case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
+      return hasExplicitType ? "var" : "var logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Logic:
+      return hasExplicitType ? "" : "logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Reg:
+      return hasExplicitType ? "" : "reg";
+    }
+  }
+
   if (isa<sv::WireOp>(op))
     return "wire";
   if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
@@ -1806,6 +1842,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         }
 
         int64_t unionWidth = hw::getBitWidth(unionType);
+        assert(unionWidth > 0 &&
+               "SV packed union must have known positive bitwidth");
         os << "union packed {";
         for (auto &element : unionType.getElements()) {
           if (isZeroBitType(element.type)) {
@@ -1814,12 +1852,16 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             continue;
           }
           int64_t elementWidth = hw::getBitWidth(element.type);
-          bool needsPadding = elementWidth < unionWidth || element.offset > 0;
+          // Members share the LSB of the union and are moved towards the MSB
+          // by their offset.
+          auto elementOffset = static_cast<int64_t>(element.offset);
+          bool needsPadding = elementWidth < unionWidth || elementOffset > 0;
+          int64_t prePadding = unionWidth - (elementWidth + elementOffset);
           if (needsPadding) {
             os << " struct packed {";
-            if (element.offset) {
+            if (prePadding > 0) {
               os << (emitAsTwoStateType ? "bit" : "logic") << " ["
-                 << element.offset - 1 << ":0] "
+                 << prePadding - 1 << ":0] "
                  << "__pre_padding_" << element.name.getValue() << "; ";
             }
           }
@@ -1834,9 +1876,9 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           os << ";";
 
           if (needsPadding) {
-            if (elementWidth + (int64_t)element.offset < unionWidth) {
+            if (elementOffset > 0) {
               os << " " << (emitAsTwoStateType ? "bit" : "logic") << " ["
-                 << unionWidth - (elementWidth + element.offset) - 1 << ":0] "
+                 << elementOffset - 1 << ":0] "
                  << "__post_padding_" << element.name.getValue() << ";";
             }
             os << "} " << emitter.getVerilogStructFieldName(element.name)
@@ -1872,7 +1914,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           return false;
         }
 
-        if (auto package = dyn_cast<PackageOp>(typedecl->getParentOp())) {
+        if (auto *package = typedecl->getParentOp();
+            isa<PackageOp, PackageExternOp>(package)) {
           if (package != emitter.currentPackage)
             os << getSymOpName(package) << "::";
         }
@@ -1915,8 +1958,8 @@ bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
 // NOLINTBEGIN(misc-no-recursion)
 void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
-      .Case<InOutType>([&](InOutType inoutType) {
-        printUnpackedTypePostfix(inoutType.getElementType(), os);
+      .Case<InOutType, VarType>([&](auto valueType) {
+        printUnpackedTypePostfix(valueType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         auto loc = currentModuleOp ? currentModuleOp->getLoc()
@@ -3044,7 +3087,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
     return {Unary, IsUnsigned};
   }
 
-  return printConstantScalar(value, cast<IntegerType>(op.getType()));
+  return printConstantScalar(value, hw::type_cast<IntegerType>(op.getType()));
 }
 
 void ExprEmitter::printConstantArray(ArrayAttr elementValues, Type elementType,
@@ -3504,17 +3547,20 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
     return {Unary, IsUnsigned};
   }
 
-  // Emit the value as a bitconcat, supplying 0 for the padding bits.
+  // Emit the value as a bitconcat, supplying 0 for the padding bits. The
+  // member shares the LSB of the union, moved towards the MSB by its offset.
+  auto elementOffset = static_cast<int64_t>(element.offset);
+  int64_t prePadding = unionWidth - elementWidth - elementOffset;
   ps << "{";
   ps.scopedBox(PP::ibox0, [&]() {
-    if (auto prePadding = element.offset) {
+    if (prePadding > 0) {
       ps.addAsString(prePadding);
       ps << "'h0," << PP::space;
     }
     emitSubExpr(op.getInput(), Selection);
-    if (auto postPadding = unionWidth - elementWidth - element.offset) {
+    if (elementOffset > 0) {
       ps << "," << PP::space;
-      ps.addAsString(postPadding);
+      ps.addAsString(elementOffset);
       ps << "'h0";
     }
     ps << "}";
@@ -4142,6 +4188,7 @@ private:
   LogicalResult visitInvalidVerif(Operation *op) { return failure(); }
 
   LogicalResult visitSV(sv::WireOp op) { return emitDeclaration(op); }
+  LogicalResult visitSV(VarOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(RegOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LogicOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LocalParamOp op) { return emitDeclaration(op); }
@@ -4154,6 +4201,7 @@ private:
                       PPExtString postSyntax = PPExtString(";"),
                       std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   LogicalResult visitSV(AssignOp op);
+  LogicalResult visitSV(VarAssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
   LogicalResult visitSV(ForceOp op);
@@ -4366,6 +4414,13 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   if (emitter.assignsInlined.count(op))
     return success();
 
+  // Emit SV attributes. See Spec 12.3.
+  emitSVAttributes(op);
+
+  return emitAssignLike(op, PPExtString("="), PPExtString("assign"));
+}
+
+LogicalResult StmtEmitter::visitSV(VarAssignOp op) {
   // Emit SV attributes. See Spec 12.3.
   emitSVAttributes(op);
 
@@ -6273,6 +6328,16 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       });
     }
 
+    if (auto varOp = dyn_cast<VarOp>(op)) {
+      if (auto initValue = varOp.getInit()) {
+        ps << PP::space << "=" << PP::space;
+        ps.scopedBox(PP::ibox0, [&]() {
+          emitExpression(initValue, opsForLocation, LowestPrecedence,
+                         /*isAssignmentLikeContext=*/true);
+        });
+      }
+    }
+
     if (auto regOp = dyn_cast<RegOp>(op)) {
       if (auto initValue = regOp.getInit()) {
         ps << PP::space << "=" << PP::space;
@@ -6686,27 +6751,42 @@ void ModuleEmitter::emitPortList(Operation *module,
       }
 
       // Emit the port direction and optional wire keyword.
-      auto thisPortDirection = portInfo.at(portIdx).dir;
-      size_t startOfNamePos = (hasOutputs ? 7 : 6) +
-                              (state.options.emitWireInPorts ? 5 : 0) +
-                              maxTypeWidth;
+      auto thisPortInfo = portInfo.at(portIdx);
+      auto thisPortDirection = thisPortInfo.dir;
+      bool isInOut = isa<InOutType, sv::NetType>(portType);
+      StringRef direction;
+      if (isInOut) {
+        direction = hasOutputs ? "inout  " : "inout ";
+      } else {
+        switch (thisPortDirection) {
+        case ModulePort::Direction::Output:
+          direction = "output ";
+          break;
+        case ModulePort::Direction::Input:
+          direction = hasOutputs ? "input  " : "input ";
+          break;
+        }
+      }
+      StringRef portDecl;
+      switch (state.options.emitPortType) {
+      case circt::LoweringOptions::EmitPortType::emitWire:
+        portDecl = "wire ";
+        break;
+      case circt::LoweringOptions::EmitPortType::emitVarLogic:
+        if (!hasExplicitDataType(portType))
+          portDecl = emitAsTwoStateType ? "var " : "var logic ";
+        break;
+      case circt::LoweringOptions::EmitPortType::emitNone:
+        break;
+      }
+      size_t startOfNamePos = direction.size() + portDecl.size() + maxTypeWidth;
       // Modport-typed ports (e.g., MyBundle.sink) already encode their
       // direction in the interface modport definition, so we suppress the
       // direction and wire keywords for them.
       if (!isa<ModportType>(portType)) {
-        switch (thisPortDirection) {
-        case ModulePort::Direction::Output:
-          ps << "output ";
-          break;
-        case ModulePort::Direction::Input:
-          ps << (hasOutputs ? "input  " : "input ");
-          break;
-        case ModulePort::Direction::InOut:
-          ps << (hasOutputs ? "inout  " : "inout ");
-          break;
-        }
-        if (state.options.emitWireInPorts)
-          ps << "wire ";
+        ps << direction;
+        if (!portDecl.empty())
+          ps << portDecl;
         if (!portTypeStrings[portIdx].empty())
           ps << portTypeStrings[portIdx];
         if (portTypeStrings[portIdx].size() < maxTypeWidth)
@@ -6745,11 +6825,16 @@ void ModuleEmitter::emitPortList(Operation *module,
 
       ++portIdx;
 
-      // If we have any more ports with the same types and the same
-      // direction, emit them in a list one per line. Optionally skip this
-      // behavior when requested by user.
+      // If we have any more ports with the same types, the same direction,
+      // and the same emitted kind (plain/net), emit them in a list one
+      // per line. Optionally skip this behavior when requested by user. This
+      // kind of check is important because two ports can share a direction and
+      // an (unwrapped) element type, emitting completely different keywords.
+      // Thus we must ensure they are not folded into one shared declaration.
       if (!state.options.disallowPortDeclSharing) {
         while (portIdx != e && portInfo.at(portIdx).dir == thisPortDirection &&
+               isInOut ==
+                   isa<InOutType, sv::NetType>(portInfo.at(portIdx).type) &&
                stripUnpackedTypes(portType) ==
                    stripUnpackedTypes(portInfo.at(portIdx).type)) {
           auto port = portInfo.at(portIdx);
@@ -7134,6 +7219,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
+        .Case<PackageExternOp>([&](PackageExternOp package) {
+          symbolCache.addDefinition(package.getSymNameAttr(), package);
+        })
         .Case<sv::SVVerbatimSourceOp>([&](sv::SVVerbatimSourceOp op) {
           symbolCache.addDefinition(op.getNameAttr(), op);
           separateFile(op, op.getOutputFile().getFilename().getValue());
@@ -7272,9 +7360,10 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
 static void emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
-      .Case<HWModuleExternOp, sv::SVVerbatimModuleOp>([&](auto op) {
-        // External modules are _not_ emitted.
-      })
+      .Case<HWModuleExternOp, sv::SVVerbatimModuleOp, PackageExternOp>(
+          [&](auto op) {
+            // External declarations are _not_ emitted.
+          })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })

@@ -23,6 +23,11 @@ from pycde.support import clog2
 from pycde.types import (Array, Bits, Channel, ChannelSignaling, StructType,
                          UInt, Window)
 
+# Default for `wide_fanin`: above this many inputs, register per-input `ready`
+# and use one-hot loop selections. Measured at 356 bits: +10 MHz at 35 inputs,
+# -12 MHz at 5-8. A proxy -- the `ready` fan-out scales with `num_inputs * width`.
+_WIDE_FANIN_THRESHOLD = 16
+
 
 def _select_reg_levels(num_inputs: int,
                        mux_pipeline_levels: Optional[int]) -> List[int]:
@@ -124,17 +129,22 @@ def _build_grant_state(
   `grant == i`."""
   gw = clog2(num_inputs)
   grant = next_grant.reg(clk, rst, name="grant")
+  next_grant_oh_bits = [(next_grant == Bits(gw)(i)) for i in range(num_inputs)]
   grant_oh = BitsSignal.concat([
-      (next_grant == Bits(gw)(i)).reg(clk,
-                                      rst,
-                                      rst_value=(1 if i == 0 else 0),
-                                      name=f"grant_oh_{i}")
+      next_grant_oh_bits[i].reg(clk,
+                                rst,
+                                rst_value=(1 if i == 0 else 0),
+                                name=f"grant_oh_{i}")
       for i in reversed(range(num_inputs))
   ])
   busy = next_busy.reg(clk, rst, name="busy")
   ports.grant = grant
   ports.grant_oh = grant_oh
   ports.busy = busy
+  # Next-state values for the datapath's registered `ready`. Always exported:
+  # they already feed the flops above, so this costs no logic.
+  ports.next_grant_oh = BitsSignal.concat(list(reversed(next_grant_oh_bits)))
+  ports.next_busy = next_busy
   return grant, grant_oh, busy
 
 
@@ -175,6 +185,9 @@ def GrantSchedulerMod(num_inputs: int, queue_depth: int):
     busy = Output(Bits(1))
     # High on cycles the grant is (re)loaded from the queue; telemetry only.
     switch = Output(Bits(1))
+    # Next-state `grant_oh`/`busy`; used only when `wide_fanin`.
+    next_grant_oh = Output(Bits(num_inputs))
+    next_busy = Output(Bits(1))
 
     @generator
     def build(ports) -> None:
@@ -334,6 +347,9 @@ def RoundRobinControlMod(num_inputs: int):
     grant_oh = Output(Bits(num_inputs))
     busy = Output(Bits(1))
     switch = Output(Bits(1))
+    # Next-state `grant_oh`/`busy`; used only when `wide_fanin`.
+    next_grant_oh = Output(Bits(num_inputs))
+    next_busy = Output(Bits(1))
 
     @generator
     def build(ports) -> None:
@@ -382,15 +398,22 @@ def RoundRobinControlMod(num_inputs: int):
 
 
 @modparams
-def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
-                      output_fifo_depth: int, buffer_inputs: bool,
-                      telemetry: bool, mux_pipeline_levels: Optional[int],
-                      pipelined_scheduler: bool, grant_queue_depth: int):
+def ChannelArbiterMod(channel_type: Channel,
+                      num_inputs: int,
+                      output_fifo_depth: int,
+                      buffer_inputs: bool,
+                      telemetry: bool,
+                      mux_pipeline_levels: Optional[int],
+                      pipelined_scheduler: bool,
+                      grant_queue_depth: int,
+                      wide_fanin: Optional[bool] = None):
   """Build a pipelined, list-aware N:1 channel multiplexer module. See the
   `ChannelArbiter` convenience function for the user-facing entry point and
   `docs/components/ChannelArbiter.md` for the design."""
 
   assert num_inputs >= 2, "ChannelArbiterMod requires at least two inputs"
+  if wide_fanin is None:
+    wide_fanin = num_inputs > _WIDE_FANIN_THRESHOLD
   inner = channel_type.inner_type
 
   # Determine the bit width of the datapath and whether the payload is a list
@@ -480,9 +503,15 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
       grant = Wire(Bits(gw), "grant")
       grant_oh = Wire(Bits(num_inputs), "grant_oh")
       busy = Wire(Bits(1), "busy")
+      if wide_fanin:
+        next_grant_oh = Wire(Bits(num_inputs), "next_grant_oh")
+        next_busy = Wire(Bits(1), "next_busy_dp")
+        next_credit_gt0 = Wire(Bits(1), "next_credit_gt0")
       credit = Reg(UInt(cw), clk, rst, rst_value=depth, name="credit")
 
       credit_gt0 = credit > UInt(cw)(0)
+      if wide_fanin:
+        credit_gt1 = credit > UInt(cw)(1)
 
       # ---- Inputs: optional skid buffer, then unwrap with a local ready. ----
       valids: List[BitsSignal] = []
@@ -494,15 +523,33 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
           chan = chan.buffer(clk, rst, stages=1)
         # ready[i]: consume only the granted input, and only when a credit is
         # available. Independent of valid, so no combinational ready loop.
-        ready_i = busy & grant_oh[i] & credit_gt0
+        # With `wide_fanin` it is registered per input from next-state values
+        # (bit-identical), so the shared terms drive `num_inputs` flops rather
+        # than `num_inputs * width` skid-buffer enables.
+        if wide_fanin:
+          ready_i = (next_busy & next_grant_oh[i] & next_credit_gt0).reg(
+              clk, rst, rst_value=0, name=f"ready_{i}")
+        else:
+          ready_i = busy & grant_oh[i] & credit_gt0
         data_i, valid_i = chan.unwrap(ready_i)
         valids.append(valid_i)
         last_bits.append(flit_last(data_i))
         data_bits.append(to_bits(data_i))
 
       # ---- Select the granted input. ----
-      sel_valid = Mux(grant, *valids)
-      sel_last = Mux(grant, *last_bits)
+      # `launch`/`msg_end` sit inside the `grant -> grant` loop. With
+      # `wide_fanin`, select by one-hot reduction against `grant_oh` (equal to
+      # `valids[grant]`, since `grant_oh[i]` is exactly `grant == i`): the ANDs
+      # fold into the OR tree and `msg_end` no longer stacks on `launch`.
+      if wide_fanin:
+        go = busy & credit_gt0
+        sel_valid = Or(*[valids[i] & grant_oh[i] for i in range(num_inputs)])
+        sel_valid_last = Or(
+            *
+            [valids[i] & last_bits[i] & grant_oh[i] for i in range(num_inputs)])
+      else:
+        sel_valid = Mux(grant, *valids)
+        sel_last = Mux(grant, *last_bits)
       if width == 0:
         sel_bits = Bits(0)(0)
       else:
@@ -510,8 +557,12 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
 
       # A beat is launched into the pipeline when the granted input is valid and
       # a credit is available.
-      launch = busy & sel_valid & credit_gt0
-      msg_end = launch & sel_last
+      if wide_fanin:
+        launch = go & sel_valid
+        msg_end = go & sel_valid_last
+      else:
+        launch = busy & sel_valid & credit_gt0
+        msg_end = launch & sel_last
 
       # ---- Output stage (feed-forward, no backpressure). ----
       # `pop` returns to the arbiter only through the registered credit counter,
@@ -548,6 +599,12 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
       next_credit = ((credit + pop.as_uint(cw)).as_uint(cw) -
                      launch.as_uint(cw)).as_uint(cw)
       credit.assign(next_credit)
+      if wide_fanin:
+        # `next_credit > 0` by cases, so it does not wait on the credit adder:
+        # credit moves by at most one per cycle.
+        next_credit_gt0.assign(
+            Mux(pop ^ launch, credit_gt0, Mux(pop, credit_gt1,
+                                              Bits(1)(1))))
 
       # ---- Arbitration. ----
       # Either grant-control strategy presents the same ports, so the only
@@ -563,6 +620,9 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
       grant.assign(ctrl.grant)
       grant_oh.assign(ctrl.grant_oh)
       busy.assign(ctrl.busy)
+      if wide_fanin:
+        next_grant_oh.assign(ctrl.next_grant_oh)
+        next_busy.assign(ctrl.next_busy)
       arb_switch = ctrl.switch
 
       # ---- Telemetry. ----
@@ -625,6 +685,7 @@ def ChannelArbiter(input_channels: List[ChannelSignal],
                    mux_pipeline_levels: Optional[int] = None,
                    pipelined_scheduler: bool = False,
                    grant_queue_depth: int = 4,
+                   wide_fanin: Optional[bool] = None,
                    telemetry: bool = True) -> ChannelSignal:
   """Build a pipelined, list-aware N:1 channel multiplexer.
 
@@ -662,6 +723,9 @@ def ChannelArbiter(input_channels: List[ChannelSignal],
       refill bubble. This is not a fairness knob; a newly-valid input's wait
       also scales with the number of concurrently active inputs (see
       `GrantSchedulerMod`).
+    wide_fanin: timing structures for large fan-in (registered per-input
+      `ready`, one-hot loop selections); behaviour is unchanged. `None`
+      (default) enables them above `_WIDE_FANIN_THRESHOLD` inputs.
     telemetry: emit telemetry (selected channel, list-length stats, etc.).
 
   See `docs/components/ChannelArbiter.md`."""
@@ -693,9 +757,11 @@ def ChannelArbiter(input_channels: List[ChannelSignal],
   if pipelined_scheduler and grant_queue_depth < 2:
     raise ValueError(f"grant_queue_depth must be >= 2, got {grant_queue_depth}")
 
+  if wide_fanin is None:  # resolve here too, for a canonical module name
+    wide_fanin = num_inputs > _WIDE_FANIN_THRESHOLD
   mod = ChannelArbiterMod(channel_type, num_inputs, output_fifo_depth,
                           buffer_inputs, telemetry, mux_pipeline_levels,
-                          pipelined_scheduler, grant_queue_depth)
+                          pipelined_scheduler, grant_queue_depth, wide_fanin)
   inputs_array = Array(channel_type, num_inputs)(input_channels)
   inst = mod(clk=clk, rst=rst, inputs=inputs_array, appid=appid)
   return inst.output

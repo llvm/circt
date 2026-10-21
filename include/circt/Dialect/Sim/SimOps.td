@@ -870,7 +870,7 @@ def StringCompareOp: SimOp<"string.compare", [Pure]> {
 }
 
 def StringToLowerOp: SimOp<"string.tolower", [Pure]> {
-  let summary = "Convert a string to lowercase"; 
+  let summary = "Convert a string to lowercase";
 
   let description = [{
     Returns a new string with all characters in lowercase.
@@ -885,7 +885,7 @@ def StringToLowerOp: SimOp<"string.tolower", [Pure]> {
 }
 
 def StringToUpperOp: SimOp<"string.toupper", [Pure]> {
-  let summary = "Convert a string to uppercase"; 
+  let summary = "Convert a string to uppercase";
 
   let description = [{
     Returns a new string with all characters in uppercase.

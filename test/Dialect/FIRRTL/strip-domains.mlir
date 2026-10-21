@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{mode=strip}))' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-strip-domains))' %s | FileCheck %s
 
 firrtl.circuit "StripDomains" {
   firrtl.module @StripDomains() {}

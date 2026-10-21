@@ -49,22 +49,25 @@ hw.module @sigUnionExtract(in %arg0 : !llhd.ref<!hw.union<foo: i1, bar: i2, baz:
 hw.module @checkSigInst() {
   // CHECK: %[[CI1:.*]] = hw.constant
   %cI1 = hw.constant 0 : i1
-  // CHECK-NEXT: %sigI1 = llhd.sig %[[CI1]] : i1
-  %sigI1 = llhd.sig %cI1 : i1
+  // CHECK-NEXT: %sigI1 = llhd.sig %[[CI1]] : <i1>
+  %sigI1 = llhd.sig %cI1 : <i1>
   // CHECK-NEXT: %[[CI64:.*]] = hw.constant
   %cI64 = hw.constant 0 : i64
-  // CHECK-NEXT: %sigI64 = llhd.sig %[[CI64]] : i64
-  %sigI64 = llhd.sig %cI64 : i64
+  // CHECK-NEXT: %sigI64 = llhd.sig %[[CI64]] : <i64>
+  %sigI64 = llhd.sig %cI64 : <i64>
 
   // CHECK-NEXT: %[[TUP:.*]] = hw.struct_create
   %tup = hw.struct_create (%cI1, %cI64) : !hw.struct<foo: i1, bar: i64>
-  // CHECK-NEXT: %sigTup = llhd.sig %[[TUP]] : !hw.struct<foo: i1, bar: i64>
-  %sigTup = llhd.sig %tup : !hw.struct<foo: i1, bar: i64>
+  // CHECK-NEXT: %sigTup = llhd.sig %[[TUP]] : <!hw.struct<foo: i1, bar: i64>>
+  %sigTup = llhd.sig %tup : <!hw.struct<foo: i1, bar: i64>>
 
   // CHECK-NEXT: %[[ARRAY:.*]] = hw.array_create
   %array = hw.array_create %cI1, %cI1 : i1
-  // CHECK-NEXT: %sigArray = llhd.sig %[[ARRAY]] : !hw.array<2xi1>
-  %sigArray = llhd.sig %array : !hw.array<2xi1>
+  // CHECK-NEXT: %sigArray = llhd.sig %[[ARRAY]] : <!hw.array<2xi1>>
+  %sigArray = llhd.sig %array : <!hw.array<2xi1>>
+
+  // CHECK-NEXT: %uninit = llhd.sig : <i8>
+  %uninit = llhd.sig : <i8>
 }
 
 // CHECK-LABEL: @checkPrb

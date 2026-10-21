@@ -38,6 +38,11 @@ if(NOT ESI_RUNTIME_LIB)
 endif()
 
 add_executable(codegen_harness codegen_harness.cpp)
+if(MSVC)
+  # Match the packaged runtime's release CRT even when the harness is Debug.
+  set_property(TARGET codegen_harness PROPERTY
+    MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
+endif()
 target_include_directories(codegen_harness PRIVATE
   "${CODEGEN_HARNESS_GENERATED_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/../../cpp/include")

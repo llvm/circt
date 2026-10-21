@@ -133,34 +133,37 @@ def IntToTimeOp : LLHDOp<"int_to_time", [Pure]> {
 def SignalOp : LLHDOp<"sig", [
   DeclareOpInterfaceMethods<DestructurableAllocationOpInterface>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-  TypeMatchesRefNestedType<"init", "result">,
+  OptionalTypesMatchWith<"initial value and signal types match",
+    "result", "init", "cast<RefType>($_self).getNestedType()">,
 ]> {
   let summary = "Create a signal.";
   let description = [{
-    The `llhd.sig` instruction introduces a new signal in the IR. The input
-    operand determines the initial value carried by the signal, while the
-    result type will always be a signal carrying the type of the init operand.
+    The `llhd.sig` instruction introduces a new signal in the IR. The optional
+    input operand determines the initial value carried by the signal. If no
+    operand is present, the signal has no specified initial value. The result
+    type is a reference to the signal's value type.
     A signal defines a unique name within the entity it resides in.
 
     Example:
 
     ```mlir
     %c123_i64 = hw.constant 123 : i64
-    %foo = llhd.sig %c123_i64 : i64
-    %0 = llhd.sig name "foo" %c123_i64 : i64
+    %foo = llhd.sig %c123_i64 : <i64>
+    %0 = llhd.sig name "foo" %c123_i64 : <i64>
+    %bar = llhd.sig : <i64>
     ```
 
     This example creates a new signal named "foo", carrying an `i64` type with
-    initial value of 123.
+    initial value of 123, and another signal without an initial value.
   }];
   let arguments = (ins
     OptionalAttr<StrAttr>:$name,
-    AnyType:$init
+    Optional<AnyType>:$init
   );
   let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $init attr-dict
-    `:` type($init)
+    `` custom<ImplicitSSAName>($name) ($init^)? attr-dict
+    `:` type($result)
   }];
 }
 
@@ -183,7 +186,7 @@ def ProbeOp : LLHDOp<"prb", [
 
     ```mlir
     %true = hw.constant true
-    %sig_i1 = llhd.sig %true : i1
+    %sig_i1 = llhd.sig %true : <i1>
     %prbd = llhd.prb %sig_i1 : i1
     ```
   }];
@@ -214,7 +217,7 @@ def DriveOp : LLHDOp<"drv", [
     %true = hw.constant true
     %false = hw.constant false
     %time = llhd.constant_time <1ns, 0d, 0e>
-    %sig = llhd.sig %true : i1
+    %sig = llhd.sig %true : <i1>
 
     llhd.drv %sig, %false after %time : i1
     llhd.drv %sig, %false after %time if %true : i1
@@ -258,7 +261,7 @@ def OutputOp : LLHDOp<"output", [
 
     %value = hw.constant true
     %time = llhd.constant_time <1ns, 0d, 0e>
-    %sig = llhd.sig "sigName" %value : i1
+    %sig = llhd.sig name "sigName" %value : <i1>
     llhd.drv %sig, %value after %time : i1
     ```
   }];

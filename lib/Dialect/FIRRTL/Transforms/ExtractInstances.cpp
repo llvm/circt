@@ -67,6 +67,8 @@ struct ExtractionInfo {
   StringRef prefix;
   /// Optional name of the wrapper module that will hold the moved instance.
   StringRef wrapperModule;
+  /// Optional name of the instance of the wrapper module.
+  StringRef wrapperInstanceName;
   /// Whether the extraction should stop at the root of the DUT instead of going
   /// past that and extracting into the test harness.
   bool stopAtDUT;
@@ -259,6 +261,7 @@ void ExtractInstancesPass::collectAnnos() {
   // Grab the clock gate extraction annotation on the circuit.
   StringRef clkgateFileName;
   StringRef clkgateWrapperModule;
+  StringRef clkgateWrapperInstanceName;
   AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
     if (!anno.isClass(extractClockGatesFileAnnoClass))
       return false;
@@ -266,6 +269,7 @@ void ExtractInstancesPass::collectAnnos() {
                << "Clock gate extraction config: " << anno.getDict() << "\n");
     auto filenameAttr = anno.getMember<StringAttr>("filename");
     auto groupAttr = anno.getMember<StringAttr>("group");
+    auto instanceNameAttr = anno.getMember<StringAttr>("instanceName");
     if (!filenameAttr) {
       circuit.emitError("missing `filename` attribute in `")
           << anno.getClass() << "` annotation";
@@ -283,12 +287,15 @@ void ExtractInstancesPass::collectAnnos() {
     clkgateFileName = filenameAttr.getValue();
     if (groupAttr)
       clkgateWrapperModule = groupAttr.getValue();
+    if (instanceNameAttr)
+      clkgateWrapperInstanceName = instanceNameAttr.getValue();
     return true;
   });
 
   // Grab the memory extraction annotation on the circuit.
   StringRef memoryFileName;
   StringRef memoryWrapperModule;
+  StringRef memoryWrapperInstanceName;
   AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
     if (!anno.isClass(extractSeqMemsFileAnnoClass))
       return false;
@@ -296,6 +303,7 @@ void ExtractInstancesPass::collectAnnos() {
                << "Memory extraction config: " << anno.getDict() << "\n");
     auto filenameAttr = anno.getMember<StringAttr>("filename");
     auto groupAttr = anno.getMember<StringAttr>("group");
+    auto instanceNameAttr = anno.getMember<StringAttr>("instanceName");
     if (!filenameAttr) {
       circuit.emitError("missing `filename` attribute in `")
           << anno.getClass() << "` annotation";
@@ -313,6 +321,8 @@ void ExtractInstancesPass::collectAnnos() {
     memoryFileName = filenameAttr.getValue();
     if (groupAttr)
       memoryWrapperModule = groupAttr.getValue();
+    if (instanceNameAttr)
+      memoryWrapperInstanceName = instanceNameAttr.getValue();
     return true;
   });
 
@@ -390,6 +400,7 @@ void ExtractInstancesPass::collectAnnos() {
       info.traceFilename = clkgateFileName;
       info.prefix = "clock_gate"; // TODO: Don't hardcode this
       info.wrapperModule = clkgateWrapperModule;
+      info.wrapperInstanceName = clkgateWrapperInstanceName;
       for (auto *instRecord : instanceGraph->lookup(module)->uses()) {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
@@ -426,6 +437,7 @@ void ExtractInstancesPass::collectAnnos() {
       info.traceFilename = memoryFileName;
       info.prefix = "mem_wiring"; // TODO: Don't hardcode this
       info.wrapperModule = memoryWrapperModule;
+      info.wrapperInstanceName = memoryWrapperInstanceName;
       for (auto *instRecord : instanceGraph->lookup(module)->uses()) {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
@@ -885,16 +897,20 @@ void ExtractInstancesPass::extractInstances() {
 /// only occurs for instances that had the corresponding `dest` field of the
 /// annotation set.
 void ExtractInstancesPass::groupInstances() {
-  // Group the extracted instances by their wrapper module name and their parent
-  // module. Note that we cannot group instances that landed in different parent
-  // modules into the same submodule, so we use that parent module as a grouping
-  // key.
-  llvm::MapVector<std::pair<Operation *, StringRef>, SmallVector<InstanceOp>>
-      instsByWrapper;
+  // Group extracted instances by their wrapper module, requested instance name,
+  // and parent module. Instances in different parent modules cannot share a
+  // wrapper submodule.
+  using WrapperKey = std::tuple<Operation *, StringRef, StringRef>;
+  llvm::MapVector<WrapperKey, SmallVector<InstanceOp>> instsByWrapper;
   for (auto &[inst, info] : extractedInstances) {
-    if (!info.wrapperModule.empty())
-      instsByWrapper[{inst->getParentOfType<FModuleOp>(), info.wrapperModule}]
-          .push_back(inst);
+    if (info.wrapperModule.empty())
+      continue;
+    auto instanceName = info.wrapperInstanceName.empty()
+                            ? info.wrapperModule
+                            : info.wrapperInstanceName;
+    instsByWrapper[{inst->getParentOfType<FModuleOp>(), info.wrapperModule,
+                    instanceName}]
+        .push_back(inst);
   }
   if (instsByWrapper.empty())
     return;
@@ -904,8 +920,8 @@ void ExtractInstancesPass::groupInstances() {
   SmallVector<PortInfo> ports;
   auto &nlaTable = getAnalysis<NLATable>();
 
-  for (auto &[parentAndWrapperName, insts] : instsByWrapper) {
-    auto [parentOp, wrapperName] = parentAndWrapperName;
+  for (auto &[wrapperKey, insts] : instsByWrapper) {
+    auto [parentOp, wrapperName, requestedInstanceName] = wrapperKey;
     auto parent = cast<FModuleOp>(parentOp);
     LLVM_DEBUG(llvm::dbgs() << "- Wrapper `" << wrapperName << "` in `"
                             << parent.getModuleName() << "` with "
@@ -915,8 +931,8 @@ void ExtractInstancesPass::groupInstances() {
     // Uniquify the wrapper name.
     auto wrapperModuleName =
         builder.getStringAttr(circuitNamespace.newName(wrapperName));
-    auto wrapperInstName =
-        builder.getStringAttr(getModuleNamespace(parent).newName(wrapperName));
+    auto wrapperInstName = builder.getStringAttr(
+        getModuleNamespace(parent).newName(requestedInstanceName));
 
     // Assemble a list of ports for the wrapper module, which is basically just
     // a concatenation of the wrapped instance ports. Also keep track of the
@@ -998,7 +1014,7 @@ void ExtractInstancesPass::groupInstances() {
     // This will essentially disconnect the extracted instances.
     builder.setInsertionPointToStart(parent.getBodyBlock());
     auto wrapperInst = InstanceOp::create(
-        builder, wrapper.getLoc(), wrapper, wrapperName,
+        builder, wrapper.getLoc(), wrapper, requestedInstanceName,
         NameKindEnum::DroppableName, ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/false,
         /*doNotPrint=*/false, hw::InnerSymAttr::get(wrapperInstName));

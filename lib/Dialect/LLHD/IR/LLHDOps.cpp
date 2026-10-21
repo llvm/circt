@@ -202,8 +202,11 @@ DenseMap<Attribute, MemorySlot> SignalOp::destructure(
   llvm::sort(indices, [](auto a, auto b) { return a.first < b.first; });
 
   for (auto [index, type] : indices) {
-    Value init = getValueAtIndex(builder, getLoc(), getInit(), index, type);
-    auto sigOp = SignalOp::create(builder, getLoc(), getNameAttr(), init);
+    Value init =
+        getInit() ? getValueAtIndex(builder, getLoc(), getInit(), index, type)
+                  : Value{};
+    auto sigOp = SignalOp::create(builder, getLoc(), RefType::get(type),
+                                  getNameAttr(), init);
     newAllocators.push_back(sigOp);
     slotMap.try_emplace<MemorySlot>(
         IntegerAttr::get(IndexType::get(getContext()), index),
@@ -566,7 +569,7 @@ bool ProbeOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.valueType);
 }
 
 DeletionKind ProbeOp::rewire(const DestructurableMemorySlot &slot,
@@ -648,7 +651,7 @@ bool DriveOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.valueType);
 }
 
 DeletionKind DriveOp::rewire(const DestructurableMemorySlot &slot,

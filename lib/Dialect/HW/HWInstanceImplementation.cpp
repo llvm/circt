@@ -369,19 +369,14 @@ SmallVector<PortInfo> instance_like_impl::getPortList(Operation *instanceOp) {
 
   ports.reserve(argTypes.size() + resultTypes.size());
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto type = argTypes[i];
-    auto direction = ModulePort::Direction::Input;
-
-    if (auto inout = dyn_cast<InOutType>(type)) {
-      type = inout.getElementType();
-      direction = ModulePort::Direction::InOut;
-    }
-
     LocationAttr loc;
     if (argLocs)
       loc = cast<LocationAttr>(argLocs[i]);
-    ports.push_back(
-        {{cast<StringAttr>(argNames[i]), type, direction}, i, emptyDict, loc});
+    ports.push_back({{cast<StringAttr>(argNames[i]), argTypes[i],
+                      ModulePort::Direction::Input},
+                     i,
+                     emptyDict,
+                     loc});
   }
 
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {

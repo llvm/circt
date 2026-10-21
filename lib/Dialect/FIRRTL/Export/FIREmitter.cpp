@@ -226,6 +226,24 @@ struct Emitter {
     emitPrimExpr("bool_xor", op);
   }
 
+  void emitExpression(IntegerAndOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "integer and")))
+      return;
+    emitPrimExpr("integer_and", op);
+  }
+
+  void emitExpression(IntegerOrOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "integer or")))
+      return;
+    emitPrimExpr("integer_or", op);
+  }
+
+  void emitExpression(IntegerNotOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "integer not")))
+      return;
+    emitPrimExpr("integer_not", op);
+  }
+
   // Attributes
   void emitAttribute(MemDirAttr attr);
   void emitAttribute(RUWBehaviorAttr attr);
@@ -1584,8 +1602,8 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp, StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp,
-          BoolXorOp,
+          UnknownValueOp, IntegerAndOp, IntegerOrOp, IntegerNotOp,
+          StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions

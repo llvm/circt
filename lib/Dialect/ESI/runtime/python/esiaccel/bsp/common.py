@@ -16,13 +16,14 @@ from pycde.system import System
 from pycde.types import (Array, Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, StructType, Type, UInt, Window)
 
+from pycde.seq import FIFO as SeqFIFO
 from ..components import ChannelArbiter, MaxOutstandingLimiter
 
 from typing import Callable, Dict, List, Optional, Tuple
 import typing
 
 MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
-VersionNumber = 0  # Version 0: format subject to change
+VersionNumber = 1  # Keep in sync with circt::esi::esiApiVersion.
 
 IndirectionMagicNumber = 0x312bf0cc_E5100E51  # random + ESI__ESI
 IndirectionVersionNumber = 0  # Version 0: format subject to change
@@ -602,7 +603,7 @@ class ChannelMMIO(esi.ServiceImplementation):
   Implementation-defined MMIO layout:
     - 0x0: 0 constant
     - 0x8: Magic number (0x207D98E5_E5100E51)
-    - 0x12: ESI version number (0)
+    - 0x10: ESI version number (1)
     - 0x18: Location of the manifest ROM (absolute address)
 
     - 0x100: Start of MMIO space for requests. Mapping is contained in the
@@ -968,7 +969,7 @@ def SliceReadGearbox(input_bitwidth: int,
     raise ValueError("SliceReadGearbox requires 0 < output <= input")
 
   in_bytes = input_bitwidth // 8
-  vb_width = clog2(in_bytes)
+  vb_width = max(1, clog2(in_bytes))
 
   class SliceReadGearboxImpl(Module):
     clk = Clock()
@@ -1020,7 +1021,7 @@ def ConcatReadGearbox(input_bitwidth: int,
     raise ValueError("ConcatReadGearbox requires output > input")
 
   in_bytes = input_bitwidth // 8
-  vb_width = clog2(in_bytes)
+  vb_width = max(1, clog2(in_bytes))
 
   class ConcatReadGearboxImpl(Module):
     clk = Clock()
@@ -1128,7 +1129,7 @@ def DepackReadGearbox(input_bitwidth: int,
 
   in_bytes = input_bitwidth // 8
   # 'valid_bytes' is the real byte count minus 1; a word always has >= 1 byte.
-  vb_width = clog2(in_bytes)
+  vb_width = max(1, clog2(in_bytes))
   count_width = clog2(in_bytes + 1)
   parts = input_bitwidth // output_bitwidth
   elem_bytes = output_bitwidth // 8
@@ -1237,7 +1238,7 @@ def ShiftReadGearbox(input_bitwidth: int,
   buf_bytes = stride_bytes + in_bytes
   buf_bits = buf_bytes * 8
   # 'valid_bytes' is the real byte count minus 1; a word always has >= 1 byte.
-  vb_width = clog2(in_bytes)
+  vb_width = max(1, clog2(in_bytes))
   cnt_width = clog2(buf_bytes + 1)
   # The append offset is only ever in [0, stride_bytes] (has_room), so the shift
   # index needs fewer bits than the full count -- see `build`.
@@ -1388,10 +1389,13 @@ DEFAULT_MAX_WRITE_PAYLOAD_BYTES = 256
 
 @modparams
 def HostMemReadReqSplitter(req_channel_type: Channel,
-                           resp_channel_type: Channel, max_chunk_bytes: int):
+                           resp_channel_type: Channel,
+                           max_chunk_bytes: int,
+                           max_outstanding: int = 1,
+                           round_read_lengths: bool = True):
   """Split oversized host memory read requests into request-sized chunks before
   arbitration and reassemble the per-chunk responses into a single logical
-  burst.
+  burst per request.
 
   A burst read (`read_list`) can request many more bytes than a single upstream
   read request can carry. This module breaks such a request into
@@ -1402,23 +1406,41 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   monopolize host memory bandwidth.
 
   On the response path the per-chunk end-of-list markers are dropped and a
-  single burst-final `last` is re-derived from the total transfer length, so the
-  gearbox and client see one contiguous response stream identical to an unsplit
-  read.
+  single burst-final `last` (plus the final word's `valid_bytes`) is re-derived
+  from each logical request's length, so the gearbox and client see one
+  contiguous response stream per request, identical to an unsplit read.
 
-  Only one logical request is in flight at a time (matching the read processor's
-  one-outstanding-transaction-per-client model): a new request is not accepted
-  until the current burst's chunks have all been issued and its responses have
-  fully drained. This will be a performance limiter.
-  TODO: make this able to issue >1 one read at a time.
+  Up to `max_outstanding` logical requests may be in flight at once. On accept,
+  each request's {word count, final-word valid bytes} is queued in a metadata
+  FIFO (depth `max_outstanding`); the response path frames each burst from the
+  head of that FIFO. This **requires the upstream to return response words in
+  request order** (no interleaving of different requests' words) -- the
+  response `tag` is passed through from `resp_in` and is not used for matching.
+  A new request is accepted whenever the chunk emitter is free (or is issuing
+  its final chunk this cycle) and fewer than `max_outstanding` requests are in
+  flight; draining responses does not block accepting. Throughput: a
+  single-chunk request can be accepted every cycle, chunks are issued one per
+  cycle, and responses flow one word per cycle with no bubble between bursts.
+  No latency is added over the single-request version. There is no
+  combinational path from `resp_in` to `req_in`'s ready; with
+  `max_outstanding` > 1, `req_out`'s ready feeds `req_in`'s ready.
+
+  Zero-length requests are not supported.
 
   req_channel_type:  channel of the upstream read request {address, length
     (bytes), tag}.
   resp_channel_type: channel of the upstream response {tag, data, last}.
   max_chunk_bytes:   largest per-chunk byte count; must be > 0 and a multiple of
     the response word size.
+  max_outstanding:   maximum number of logical requests in flight (accepted
+    but whose final response word has not yet been delivered). The default of 1
+    serializes requests.
+  round_read_lengths: round chunk lengths up to a whole response word for
+    transports requiring word-granular reads. Disable for byte-granular
+    transports such as cosim, which zero-pad a partial final response word.
   """
   assert max_chunk_bytes > 0
+  assert max_outstanding >= 1
 
   req_struct = req_channel_type.inner_type
   resp_struct = resp_channel_type.inner_type
@@ -1432,7 +1454,7 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   # The response is augmented with a per-word 'valid_bytes': the number of real
   # bytes in the (possibly partial) final word, biased by -1. A burst word
   # always has >= 1 real byte, so encoding count-1 fits in one fewer bit.
-  vb_width = clog2(word_bytes)
+  vb_width = max(1, clog2(word_bytes))
   resp_fields = dict(resp_struct.fields)
   resp_out_struct = StructType([
       ("tag", resp_fields["tag"]),
@@ -1441,6 +1463,16 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
       ("last", Bits(1)),
   ])
   resp_out_channel_type = Channel(resp_out_struct)
+
+  # Per-request response metadata, computed on accept. 'words_m1' is the
+  # request's word count minus one, 'final_vb' the valid bytes in its final
+  # word (biased by -1) and 'single' flags a one-word request.
+  meta_struct = StructType([
+      ("words_m1", UInt(words_width)),
+      ("final_vb", UInt(vb_width)),
+      ("single", Bits(1)),
+  ])
+  inflight_width = clog2(max_outstanding + 1)
 
   class HostMemReadReqSplitterImpl(Module):
     clk = Clock()
@@ -1455,33 +1487,25 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
       clk = ports.clk
       rst = ports.rst
 
-      # Burst state shared by the request-splitting and response-reassembly
-      # FSMs. One logical request is processed at a time.
+      # --- Request intake and splitting ---
       emit_busy = Wire(Bits(1), name="emit_busy")  # issuing chunk requests
-      resp_busy = Wire(Bits(1), name="resp_busy")  # responses still draining
       cur_addr = Wire(UInt(addr_width), name="cur_addr")
       remaining = Wire(UInt(length_width), name="remaining")  # req bytes left
+      # Registered 'remaining <= max_chunk': the chunk being issued is the
+      # request's last.
+      last_chunk = Wire(Bits(1), name="last_chunk")
       tag_reg = Wire(tag_type, name="tag_reg")
-      words_left = Wire(UInt(words_width), name="words_left")  # resp words left
-
-      idle = (~emit_busy) & (~resp_busy)
-
-      # --- Request intake and splitting ---
-      req_ready = Wire(Bits(1))
-      req_payload, req_valid = ports.req_in.unwrap(req_ready)
-      accept = idle & req_valid
-      req_ready.assign(accept)
+      inflight_full = Wire(Bits(1), name="inflight_full")
 
       max_chunk = UInt(length_width)(max_chunk_bytes)
-      chunk_len = Mux(remaining > max_chunk, remaining, max_chunk)
-      last_chunk = remaining <= max_chunk
+      chunk_len = Mux(last_chunk, max_chunk, remaining)
 
       # Round the emitted read length up to a whole word. The reader response
       # is word-granular and 'valid_bytes' still carries the real trailing byte
-      # count, so total_words and the reassembled element count are unchanged;
-      # this just keeps every read word-aligned for single-flit HostMem
-      # transports that reject sub-word read lengths.
-      if word_shift == 0:
+      # count, so the reassembled element count is unchanged; this just keeps
+      # every read word-aligned for single-flit HostMem transports that reject
+      # sub-word read lengths.
+      if word_shift == 0 or not round_read_lengths:
         chunk_len_out = chunk_len
       else:
         chunk_words = (chunk_len + UInt(length_width)(word_bytes - 1)
@@ -1497,52 +1521,100 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
           }), emit_busy)
       ports.req_out = req_out_ch
       chunk_xact = emit_busy & req_out_ready
+      emit_done = chunk_xact & last_chunk
+
+      # With more than one request allowed in flight, accept the next request
+      # in the cycle the current one issues its final chunk so single-chunk
+      # requests stream at one per cycle. (With one, 'inflight_full' blocks
+      # that case anyway.)
+      if max_outstanding > 1:
+        emitter_free = ~emit_busy | emit_done
+      else:
+        emitter_free = ~emit_busy
+      req_ready = Wire(Bits(1))
+      req_payload, req_valid = ports.req_in.unwrap(req_ready)
+      req_ready.assign(emitter_free & ~inflight_full)
+      accept = req_valid & req_ready
 
       emit_busy.assign(
-          ControlReg(clk,
-                     rst, [accept], [chunk_xact & last_chunk],
-                     name="emit_busy_reg"))
+          ControlReg(clk, rst, [accept], [emit_done], name="emit_busy_reg"))
 
-      # cur_addr: load base on accept, advance by the chunk on each issue.
+      # cur_addr / remaining: load on accept; on each non-final chunk advance by
+      # a full chunk. (After the final chunk they are dead until the next
+      # accept, so the constant-step update is exact.) Datapath only: no reset.
       cur_addr_incr = (cur_addr +
-                       chunk_len.as_uint(addr_width)).as_uint(addr_width)
+                       UInt(addr_width)(max_chunk_bytes)).as_uint(addr_width)
       cur_addr.assign(
-          Mux(accept, Mux(chunk_xact, cur_addr, cur_addr_incr),
+          Mux(accept, cur_addr_incr,
               req_payload.address).reg(clk,
-                                       rst,
-                                       rst_value=0,
                                        ce=accept | chunk_xact,
                                        name="cur_addr_reg"))
-
-      # remaining: load length on accept, subtract each issued chunk.
-      remaining_dec = (remaining - chunk_len).as_uint(length_width)
+      remaining_dec = (remaining - max_chunk).as_uint(length_width)
       remaining.assign(
-          Mux(accept, Mux(chunk_xact, remaining, remaining_dec),
+          Mux(accept, remaining_dec,
               req_payload.length).reg(clk,
-                                      rst,
-                                      rst_value=0,
                                       ce=accept | chunk_xact,
                                       name="remaining_reg"))
+      # The next chunk is the last iff what is left after this one fits in a
+      # chunk: remaining - max_chunk <= max_chunk.
+      two_chunks = min(2 * max_chunk_bytes, (1 << length_width) - 1)
+      last_chunk.assign(
+          Mux(accept, remaining <= UInt(length_width)(two_chunks),
+              req_payload.length <= max_chunk).reg(clk,
+                                                   ce=accept | chunk_xact,
+                                                   name="last_chunk_reg"))
+      tag_reg.assign(req_payload.tag.reg(clk, ce=accept, name="tag_reg_r"))
 
-      tag_reg.assign(req_payload.tag.reg(clk, rst, ce=accept, name="tag_reg_r"))
+      # --- Per-request response metadata. Elements need not tile evenly into
+      # words: with len_m1 = length - 1, the request spans (len_m1 >> shift) + 1
+      # words and its final word holds (len_m1 % word_bytes) + 1 bytes. ---
+      len_m1 = (req_payload.length -
+                UInt(length_width)(1)).as_uint(length_width)
+      if word_shift == 0:
+        words_m1 = len_m1.as_uint(words_width)
+        final_vb = UInt(vb_width)(0)
+      else:
+        words_m1 = len_m1.as_bits()[word_shift:].as_uint(words_width)
+        final_vb = len_m1.as_bits()[:word_shift].as_uint(vb_width)
+      meta_in = meta_struct({
+          "words_m1": words_m1,
+          "final_vb": final_vb,
+          "single": req_payload.length <= UInt(length_width)(word_bytes),
+      })
 
-      # --- Response reassembly: re-derive the burst-final 'last' and the byte
-      # count of the (possibly partial) final word. Elements need not tile
-      # evenly into words, so count words with ceil(length / word_bytes). ---
-      total_words = ((req_payload.length + UInt(length_width)(word_bytes - 1)
-                     ).as_bits()[word_shift:]).as_uint(words_width)
-      # Bytes valid in the final word = length - (total_words - 1) * word_bytes.
-      words_before_last = (total_words -
-                           UInt(words_width)(1)).as_uint(words_width)
-      bytes_before_last = BitsSignal.concat(
-          [words_before_last.as_bits(),
-           Bits(word_shift)(0)]).as_uint(length_width)
-      final_valid_bytes = (req_payload.length - bytes_before_last -
-                           UInt(length_width)(1)).as_uint(vb_width).reg(
-                               clk, rst, ce=accept, name="final_valid_bytes")
+      # Metadata store between accept and the response framer. A request
+      # accepted while the store is empty and the framer is free bypasses the
+      # store (see 'bypass' below).
+      meta_push = Wire(Bits(1), name="meta_push")
+      meta_pop = Wire(Bits(1), name="meta_pop")
+      if max_outstanding == 1:
+        # At most one request in flight: a single holding register suffices.
+        meta_head = meta_in.reg(clk, ce=meta_push, name="meta_reg")
+        meta_empty = ~ControlReg(
+            clk, rst, [meta_push], [meta_pop], name="meta_valid")
+      else:
+        meta_fifo = SeqFIFO(meta_struct, max_outstanding, clk, rst)
+        meta_fifo.push(meta_in, meta_push)
+        meta_head = meta_fifo.pop(meta_pop)
+        meta_empty = meta_fifo.empty
+
+      # --- Response framing: re-derive the burst-final 'last' and the byte
+      # count of the (possibly partial) final word. The current burst's
+      # metadata is held in registers loaded from the metadata store head:
+      # 'cur_words' counts the words after the current one and 'cur_last'
+      # flags the current word as the burst's final word. ---
+      cur_valid = Wire(Bits(1), name="cur_valid")
+      cur_words = Wire(UInt(words_width), name="cur_words")
+      cur_last = Wire(Bits(1), name="cur_last")
+      cur_vb = Wire(UInt(vb_width), name="cur_vb")
+
+      # The response handshake is not gated on 'cur_valid': a request's
+      # metadata is in the framer by the cycle its first chunk is issued, so
+      # no response word can precede it. Leaving 'resp_in' ready untouched
+      # also keeps an idle splitter ready, which `esi.TaggedDemux` (whose input
+      # ready is the AND of every output's ready) relies on.
       resp_ready = Wire(Bits(1))
       resp_payload, resp_valid = ports.resp_in.unwrap(resp_ready)
-      is_final_word = words_left == UInt(words_width)(1)
       resp_out_ch, resp_out_ready = resp_out_channel_type.wrap(
           resp_out_struct({
               "tag":
@@ -1550,29 +1622,55 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
               "data":
                   resp_payload.data,
               "valid_bytes":
-                  Mux(is_final_word,
-                      UInt(vb_width)(word_bytes - 1), final_valid_bytes),
+                  Mux(cur_last,
+                      UInt(vb_width)(word_bytes - 1), cur_vb),
               "last":
-                  is_final_word,
+                  cur_last,
           }), resp_valid)
       ports.resp_out = resp_out_ch
       resp_ready.assign(resp_out_ready)
       resp_xact = resp_valid & resp_out_ready
+      burst_done = resp_xact & cur_last
 
-      # words_left: load total on accept, decrement per received word.
-      words_dec = (words_left - UInt(words_width)(1)).as_uint(words_width)
-      words_left.assign(
-          Mux(accept, Mux(resp_xact, words_left, words_dec),
-              total_words).reg(clk,
-                               rst,
-                               rst_value=0,
-                               ce=accept | resp_xact,
-                               name="words_left_reg"))
+      # Load the next burst's metadata when idle or as the current burst ends,
+      # so back-to-back bursts need no bubble: from the store head if it holds
+      # anything, otherwise straight from a request accepted this cycle.
+      framer_free = ~cur_valid | burst_done
+      load_head = ~meta_empty & framer_free
+      bypass = accept & meta_empty & framer_free
+      load = load_head | bypass
+      meta_pop.assign(load_head)
+      meta_push.assign(accept & ~bypass)
+      next_meta = Mux(load_head, meta_in, meta_head)
+      cur_valid.assign(
+          ControlReg(clk, rst, [load], [burst_done], name="cur_valid_reg"))
+      cur_words_dec = (cur_words - UInt(words_width)(1)).as_uint(words_width)
+      cur_words.assign(
+          Mux(load, cur_words_dec,
+              next_meta["words_m1"]).reg(clk,
+                                         ce=load | resp_xact,
+                                         name="cur_words_reg"))
+      cur_last.assign(
+          Mux(load, cur_words == UInt(words_width)(1),
+              next_meta["single"]).reg(clk,
+                                       ce=load | resp_xact,
+                                       name="cur_last_reg"))
+      cur_vb.assign(next_meta["final_vb"].reg(clk, ce=load, name="cur_vb_reg"))
 
-      resp_busy.assign(
-          ControlReg(clk,
-                     rst, [accept], [resp_xact & is_final_word],
-                     name="resp_busy_reg"))
+      # --- In-flight request accounting: accepted, final word not yet
+      # delivered. 'inflight_full' is registered so 'req_in' ready has no
+      # combinational dependence on the response path. ---
+      inflight = Wire(UInt(inflight_width), name="inflight")
+      one = UInt(inflight_width)(1)
+      inflight_inc = (inflight + one).as_uint(inflight_width)
+      inflight_dec = (inflight - one).as_uint(inflight_width)
+      inflight_next = Mux(accept, Mux(burst_done, inflight, inflight_dec),
+                          Mux(burst_done, inflight_inc, inflight))
+      inflight.assign(
+          inflight_next.reg(clk, rst, rst_value=0, name="inflight_reg"))
+      inflight_full.assign(
+          (inflight_next == UInt(inflight_width)(max_outstanding)).reg(
+              clk, rst, rst_value=0, name="inflight_full_reg"))
 
   return HostMemReadReqSplitterImpl
 
@@ -1581,11 +1679,17 @@ def HostmemReadProcessor(
     read_width: int,
     hostmem_module,
     reqs: List[esi._OutputBundleSetter],
-    max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES):
+    max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES,
+    max_outstanding_reads: int = 1,
+    round_read_lengths: bool = True):
   """Construct a host memory read request module to orchestrate the the read
   connections. Responsible for both gearboxing the data, multiplexing the
   requests, reassembling out-of-order responses and routing the responses to the
   correct clients.
+
+  `max_outstanding_reads` bounds the number of logical read requests each
+  client may have in flight (see `HostMemReadReqSplitter`). Values above 1
+  require the upstream to return each client's responses in request order.
 
   Generate this module dynamically to allow for multiple read clients of
   multiple types to be directly accomodated."""
@@ -1652,9 +1756,10 @@ def HostmemReadProcessor(
 
         # TODO: Should responses come back out-of-order (interleaved tags),
         # re-order them here so the gearbox doesn't get confused. (Longer term.)
-        # For now, only support one outstanding transaction at a time.  This has
-        # the additional benefit of letting the upstream tag be the client
-        # identifier. TODO: Implement the gating logic here.
+        # For now, each client's responses must come back in request order
+        # (the splitter frames bursts in order, allowing up to
+        # `max_outstanding_reads` in flight). This has the additional benefit
+        # of letting the upstream tag be the client identifier.
         client_type = resp_type.inner_type
         is_list = isinstance(client_type, Window)
 
@@ -1735,11 +1840,12 @@ def HostmemReadProcessor(
               }))
 
         splitter = HostMemReadReqSplitter(
-            logical_req.type, demuxed_upstream_channel.type,
-            max_chunk_bytes)(clk=ports.clk,
-                             rst=ports.rst,
-                             req_in=logical_req,
-                             resp_in=demuxed_upstream_channel)
+            logical_req.type, demuxed_upstream_channel.type, max_chunk_bytes,
+            max_outstanding_reads,
+            round_read_lengths)(clk=ports.clk,
+                                rst=ports.rst,
+                                req_in=logical_req,
+                                resp_in=demuxed_upstream_channel)
         splitter_resp.assign(splitter.resp_out)
         tagged_client_req = splitter.req_out
 
@@ -1757,7 +1863,10 @@ def HostmemReadProcessor(
       # depth otherwise grows as log2(num_clients); the added latency is
       # absorbed by the arbiter's output FIFO / credit counter.
       # TODO: Don't release a request until the client is ready to accept
-      # the response otherwise the system could deadlock.
+      # the response otherwise the system could deadlock. A stalled client
+      # blocks the shared response demux for every other client; with
+      # `max_outstanding_reads` > 1 each client can have more reads in flight,
+      # so more response data can be queued behind a stalled client.
       muxed_client_reqs = ChannelArbiter(tagged_client_reqs,
                                          ports.clk,
                                          ports.rst,
@@ -1788,6 +1897,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
   if input_bitwidth % 8 != 0:
     input_pad_bits = 8 - (input_bitwidth % 8)
   input_padded_bitwidth = input_bitwidth + input_pad_bits
+  valid_bytes_type = Bits(clog2(output_bitwidth // 8 + 1))
 
   # Number of engine words per capped transaction (0 = uncapped).
   max_burst_words = (max_burst_bytes //
@@ -1810,7 +1920,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
             ("address", UInt(64)),
             ("tag", esi.HostMem.TagType),
             ("data", Bits(output_bitwidth)),
-            ("valid_bytes", Bits(8)),
+            ("valid_bytes", valid_bytes_type),
             ("last", Bits(1)),
         ]))
 
@@ -1836,7 +1946,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
         ready_for_client.assign(upstream_ready)
         tag = client_tag_and_data.tag
         address = client_tag_and_data.address
-        valid_bytes = Bits(8)(input_bitwidth_bytes)
+        valid_bytes = valid_bytes_type(input_bitwidth_bytes)
         last = Bits(1)(1)
       elif output_bitwidth > input_padded_bitwidth:
         upstream_data_bits = client_data.as_bits(output_bitwidth)
@@ -1844,7 +1954,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
         ready_for_client.assign(upstream_ready)
         tag = client_tag_and_data.tag
         address = client_tag_and_data.address
-        valid_bytes = Bits(8)(input_bitwidth_bytes)
+        valid_bytes = valid_bytes_type(input_bitwidth_bytes)
         last = Bits(1)(1)
       else:
         # Create registers equal to the number of upstream transactions needed
@@ -1862,17 +1972,26 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
             client_data_padded[i * output_bitwidth:(i + 1) * output_bitwidth]
             for i in range(num_chunks)
         ]
-        chunk_regs = Array(Bits(output_bitwidth), num_chunks)([
+        chunk_regs = [
             c.reg(ports.clk, ce=client_xact, name=f"chunk_{idx}")
             for idx, c in enumerate(chunks)
-        ])
+        ]
         increment = Wire(Bits(1))
         clear = Wire(Bits(1))
         counter = Counter(num_chunks_idx_bitwidth)(clk=ports.clk,
                                                    rst=ports.rst,
                                                    increment=increment,
                                                    clear=clear)
-        upstream_data_bits = chunk_regs[counter.out]
+        # A tree of 2:1 muxes avoids dynamic wide packed-array selects, which
+        # crash Verilator 5.040 above its 2048-bit expansion limit.
+        mux_values = chunk_regs + [chunk_regs[-1]] * (
+            (1 << num_chunks_idx_bitwidth) - num_chunks)
+        for level in range(num_chunks_idx_bitwidth):
+          mux_values = [
+              Mux(counter.out.as_bits()[level], mux_values[i],
+                  mux_values[i + 1]) for i in range(0, len(mux_values), 2)
+          ]
+        upstream_data_bits = mux_values[0]
         upstream_valid = ControlReg(ports.clk, ports.rst, [client_xact],
                                     [clear])
         upstream_xact = upstream_valid & upstream_ready
@@ -1894,9 +2013,9 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
         address = (addr_reg + counter_bytes).as_uint(64)
         tag = tag_reg
         elem_end = counter.out == (num_chunks - 1)
-        valid_bytes = Mux(elem_end,
-                          Bits(8)(output_bitwidth_bytes),
-                          Bits(8)((output_bitwidth - padding_numbits) // 8))
+        valid_bytes = Mux(
+            elem_end, valid_bytes_type(output_bitwidth_bytes),
+            valid_bytes_type((output_bitwidth - padding_numbits) // 8))
         if max_burst_words and num_chunks > max_burst_words:
           # Max-payload-size cap: end the upstream write transaction at the
           # element end OR every max_burst_words engine words, whichever comes
@@ -1904,7 +2023,8 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
           # transactions. Each word keeps its own sequential address; only the
           # transaction-framing 'last' changes.
           burst_shift = clog2(max_burst_words)
-          burst_end = counter.out.as_bits()[:burst_shift].and_reduce()
+          burst_end = (counter.out.as_bits()[:burst_shift].and_reduce()
+                       if burst_shift else Bits(1)(1))
           last = elem_end | burst_end
         else:
           last = elem_end
@@ -2121,7 +2241,7 @@ def HostMemWriteProcessor(
                         idx,
                     "data":
                         m.data,
-                    "data_size": (m.valid_bytes.as_uint() - UInt(8)
+                    "data_size": (m.valid_bytes.as_uint() - UInt(size_width + 1)
                                   (1)).as_bits()[:size_width],
                     "last":
                         m.last,
@@ -2161,8 +2281,15 @@ def ChannelHostMem(
     read_width: int,
     write_width: int,
     max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES,
-    max_write_payload_bytes: int = DEFAULT_MAX_WRITE_PAYLOAD_BYTES
-) -> typing.Type['ChannelHostMemImpl']:
+    max_write_payload_bytes: int = DEFAULT_MAX_WRITE_PAYLOAD_BYTES,
+    max_outstanding_reads: int = 1,
+    round_read_lengths: bool = True) -> typing.Type['ChannelHostMemImpl']:
+  """HostMem service multiplexing every client onto one read and one write
+  bundle. `max_outstanding_reads` is the per-client limit on logical read
+  requests in flight (see `HostMemReadReqSplitter`); values above 1 require the
+  upstream to return each client's read responses in request order.
+  `round_read_lengths` selects word-granular upstream reads (the default);
+  byte-granular transports can disable it to avoid reading padding bytes."""
 
   class ChannelHostMemImpl(esi.ServiceImplementation):
     """Builds a HostMem service which multiplexes multiple HostMem clients into
@@ -2213,7 +2340,9 @@ def ChannelHostMem(
           if req.port in ('read', 'read_list')
       ]
       read_proc_module = HostmemReadProcessor(read_width, ChannelHostMemImpl,
-                                              read_reqs, max_read_request_bytes)
+                                              read_reqs, max_read_request_bytes,
+                                              max_outstanding_reads,
+                                              round_read_lengths)
       read_proc = read_proc_module(clk=ports.clk, rst=ports.rst)
       ports.read = read_proc.upstream
       for req in read_reqs:
@@ -2398,6 +2527,11 @@ def ChannelEngineService(
           eng_inputs["hostmem_read"] = esi.HostMem.read_from_bundle(
               esi.AppID(idbase + ".hostmem_read"),
               engine_mod.hostmem_read.type,
+              options=bundle.options)
+        if hasattr(engine_mod, "hostmem_read_list"):
+          eng_inputs["hostmem_read_list"] = esi.HostMem.read_list_from_bundle(
+              esi.AppID(idbase + ".hostmem_read_list"),
+              engine_mod.hostmem_read_list.type,
               options=bundle.options)
         engine = engine_mod(appid=eng_appid, **eng_inputs)
         engine_rec = bundles.emit_engine(engine, details=eng_details)

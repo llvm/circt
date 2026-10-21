@@ -16,6 +16,8 @@
 include "mlir/IR/DialectBase.td"
 
 def RTGDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "rtg";
 
   let summary = "types and operations for random test generation";

@@ -2638,6 +2638,26 @@ firrtl.module @LHSTypes() {
 
 // -----
 
+firrtl.circuit "DomainInOpenBundle" {
+  firrtl.domain @D
+  firrtl.module @DomainInOpenBundle() {
+    // expected-error @below {{bundle element "domain" cannot have a domain type}}
+    builtin.unrealized_conversion_cast to !firrtl.openbundle<domain: domain<@D()>>
+  }
+}
+
+// -----
+
+firrtl.circuit "DomainInOpenVector" {
+  firrtl.domain @D
+  firrtl.module @DomainInOpenVector() {
+    // expected-error @below {{vector cannot have a domain type}}
+    builtin.unrealized_conversion_cast to !firrtl.openvector<domain<@D()>, 1>
+  }
+}
+
+// -----
+
 firrtl.circuit "LHSTypes" {
 firrtl.module @LHSTypes() {
   // expected-error @below {{lhs type cannot contain an AnalogType}}
@@ -3558,5 +3578,53 @@ firrtl.circuit "PropAssertFalseInModule" {
     %msg = firrtl.string "module invariant violated"
     // expected-error @below {{property assertion is statically false}}
     firrtl.property_assert %false, %msg : !firrtl.bool
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerAndWrongType" {
+  firrtl.module @IntegerAndWrongType(
+      in %lhs: !firrtl.integer, in %rhs: !firrtl.string) {
+    // expected-error @+1 {{'firrtl.integer.and' op operand #1 must be integer type}}
+    %0 = "firrtl.integer.and"(%lhs, %rhs) : (!firrtl.integer, !firrtl.string) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerOrWrongType" {
+  firrtl.module @IntegerOrWrongType(
+      in %lhs: !firrtl.uint<8>, in %rhs: !firrtl.integer) {
+    // expected-error @+1 {{'firrtl.integer.or' op operand #0 must be integer type}}
+    %0 = "firrtl.integer.or"(%lhs, %rhs) : (!firrtl.uint<8>, !firrtl.integer) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerNotWrongType" {
+  firrtl.module @IntegerNotWrongType(in %input: !firrtl.string) {
+    // expected-error @+1 {{'firrtl.integer.not' op operand #0 must be integer type}}
+    %0 = "firrtl.integer.not"(%input) : (!firrtl.string) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerAndWrongArity" {
+  firrtl.module @IntegerAndWrongArity(in %input: !firrtl.integer) {
+    // expected-error @+1 {{'firrtl.integer.and' op expected 2 operands, but found 1}}
+    %0 = "firrtl.integer.and"(%input) : (!firrtl.integer) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerNotWrongArity" {
+  firrtl.module @IntegerNotWrongArity(
+      in %lhs: !firrtl.integer, in %rhs: !firrtl.integer) {
+    // expected-error @+1 {{'firrtl.integer.not' op requires a single operand}}
+    %0 = "firrtl.integer.not"(%lhs, %rhs) : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   }
 }

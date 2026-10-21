@@ -21,10 +21,14 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
     assert mem1.size == 1024
     print(f"mem1: {mem1.ptr} size {mem1.size}")
     mem1 = None
+    assert hostmem.allocate(0) is None
+    # Enabling host memory service is idempotent.
+    hostmem.start()
+    hostmem.start()
 
-  assert conn.sysinfo().esi_version() == 0
+  assert conn.sysinfo().esi_version() == 1
   m = conn.manifest()
-  assert m.api_version == 0
+  assert m.api_version == 1
 
   for esiType in m.type_table:
     print(f"{esiType}")

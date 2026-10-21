@@ -649,7 +649,10 @@ firrtl.circuit "Foo" {
                             out %stringeq : !firrtl.bool,
                             out %booland : !firrtl.bool,
                             out %boolor : !firrtl.bool,
-                            out %boolxor : !firrtl.bool) {
+                            out %boolxor : !firrtl.bool,
+                            out %integerand : !firrtl.integer,
+                            out %integeror : !firrtl.integer,
+                            out %integernot : !firrtl.integer) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
@@ -657,6 +660,20 @@ firrtl.circuit "Foo" {
     // CHECK: propassign integer, Integer(99)
     %1 = firrtl.integer 99
     firrtl.propassign %integer, %1 : !firrtl.integer
+
+    %intA = firrtl.integer 5
+    %intB = firrtl.integer -2
+    // CHECK: propassign integerand, integer_and(Integer(5), Integer(-2))
+    %and = firrtl.integer.and %intA, %intB : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    firrtl.propassign %integerand, %and : !firrtl.integer
+
+    // CHECK: propassign integeror, integer_or(Integer(5), Integer(-2))
+    %or = firrtl.integer.or %intA, %intB : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    firrtl.propassign %integeror, %or : !firrtl.integer
+
+    // CHECK: propassign integernot, integer_not(Integer(-2))
+    %not = firrtl.integer.not %intB : (!firrtl.integer) -> !firrtl.integer
+    firrtl.propassign %integernot, %not : !firrtl.integer
 
     // CHECK: propassign bool, Bool(true)
     %true = firrtl.bool true

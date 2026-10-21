@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Common.h"
+#include "esi/Services.h"
 
 #include <iostream>
 #include <sstream>
@@ -73,21 +74,40 @@ MessageData SegmentedMessageData::toMessageData() const {
 }
 
 //===----------------------------------------------------------------------===//
+// Segment
+//===----------------------------------------------------------------------===//
+
+std::optional<uint64_t> Segment::getDeviceAddress() const {
+  if (!region)
+    return std::nullopt;
+  return region->getDeviceAddress(data, size);
+}
+
+std::unique_ptr<services::HostMemRegion>
+SegmentedMessageData::take(size_t segIdx) {
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // SegmentedMessageDataCursor
 //===----------------------------------------------------------------------===//
 
 std::span<const uint8_t> SegmentedMessageDataCursor::remaining() const {
+  return remainingSegment().span();
+}
+
+Segment SegmentedMessageDataCursor::remainingSegment() const {
   // Scan forward past empty segments without mutating cursor state.
   size_t idx = segIdx;
   size_t off = offset;
   while (idx < msg.numSegments()) {
     Segment seg = msg.segment(idx);
     if (seg.size > off)
-      return {seg.data + off, seg.size - off};
+      return {seg.data + off, seg.size - off, seg.region};
     ++idx;
     off = 0;
   }
-  return {};
+  return {nullptr, 0};
 }
 
 void SegmentedMessageDataCursor::advance(size_t n) {
@@ -112,9 +132,4 @@ void SegmentedMessageDataCursor::advance(size_t n) {
 
 bool SegmentedMessageDataCursor::done() const {
   return segIdx >= msg.numSegments();
-}
-
-void SegmentedMessageDataCursor::reset() {
-  segIdx = 0;
-  offset = 0;
 }

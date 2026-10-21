@@ -88,6 +88,10 @@ elaboration-time bug; double assignment raises.
   Prefer a multi-input `Mux(state_wire, in_s0, in_s1, in_s2, in_s3)` over
   cascaded `Mux(a, Mux(b, ...))` when the selection is naturally
   state-indexed — it reads better and lowers to a flat case.
+- `If(sel, true_value, false_value)` is a two-input mux with conventional
+  true/false argument order. Either branch may be a signal or a
+  zero-argument callable; callables are evaluated during elaboration and
+  their resulting signals are selected in hardware.
 - `ControlReg(clk, rst, asserts=[...], resets=[...], name=...)` returns a
   `BitsSignal(1)` backed by a register: an `assert` pulse causes the
   output to go high on the **next** cycle, and a `reset` pulse causes the

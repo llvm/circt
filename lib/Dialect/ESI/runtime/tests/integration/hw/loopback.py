@@ -243,7 +243,7 @@ if __name__ == "__main__":
 # CPP-TEST: odd struct func ok: a=2749 b=-20 p=10 q=-5 r0=4 r1=6
 # CPP-TEST: array func ok: -3 -2
 
-# QUERY-INFO: API version: 0
+# QUERY-INFO: API version: 1
 # QUERY-INFO: ********************************
 # QUERY-INFO: * Module information
 # QUERY-INFO: ********************************

@@ -17,6 +17,9 @@ pip install pycde --pre
 
 or [compile it yourself](compiling.md) (not recommended).
 
+See the [PyCDE changelog](https://github.com/llvm/circt/blob/main/frontends/PyCDE/CHANGELOG.md)
+for release notes and breaking changes.
+
 ## Hello world!
 
 The following example demonstrates a simple module that ors two integers:

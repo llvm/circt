@@ -28,16 +28,20 @@ def ConstantOp : HWArithOp<"constant",
     [ConstantLike, Pure, FirstAttrDerivedResultType]> {
   let summary = "Produce a constant value";
   let description = [{
-    The constant operation produces a sign-aware constant value.
+    The constant operation produces a sign-aware constant value. The result
+    may also be a type alias of a sign-aware integer type, in which case the
+    value has the aliased integer type.
     ```
       %result = hwarith.constant 42 : t1
+      %aliased = hwarith.constant 42 : !hw.typealias<@ns::@t2, ui8>
     ```
     }];
 
   let arguments = (ins APIntAttr:$rawValue);
-  let results = (outs HWArithIntegerType:$result);
+  let results = (outs HWArithIntegerOrAliasType:$result);
 
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     APSInt getConstantValue();

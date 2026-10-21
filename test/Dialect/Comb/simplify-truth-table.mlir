@@ -98,3 +98,53 @@ hw.module @truth_table_with_extract_operations(in %c: i3, out out: i1) {
   %3 = comb.truth_table %2, %0, %1 -> [false, false, false, false, true, true, true, true]
   hw.output %3 : i1
 }
+
+// CHECK-LABEL: @truth_table_no_input_true
+hw.module @truth_table_no_input_true(out out: i1) {
+  // Truth table with no inputs is a constant
+  // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+  // CHECK-NEXT: hw.output [[TRUE]]
+  %0 = comb.truth_table -> [true]
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: @truth_table_no_input_false
+hw.module @truth_table_no_input_false(out out: i1) {
+  // Truth table with no inputs is a constant
+  // CHECK-NEXT: [[FALSE:%.+]] = hw.constant false
+  // CHECK-NEXT: hw.output [[FALSE]]
+  %0 = comb.truth_table -> [false]
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: @truth_table_single_input_constant_true
+hw.module @truth_table_single_input_constant_true(in %a: i1, out out: i1) {
+  // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+  // CHECK-NEXT: hw.output [[TRUE]]
+  %0 = comb.truth_table %a -> [true, true]
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: @truth_table_single_input_constant_false
+hw.module @truth_table_single_input_constant_false(in %a: i1, out out: i1) {
+  // CHECK-NEXT: [[FALSE:%.+]] = hw.constant false
+  // CHECK-NEXT: hw.output [[FALSE]]
+  %0 = comb.truth_table %a -> [false, false]
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: @truth_table_single_input_identity
+hw.module @truth_table_single_input_identity(in %a: i1, out out: i1) {
+  // CHECK-NEXT: hw.output %a
+  %0 = comb.truth_table %a -> [false, true]
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: @truth_table_single_input_inverted
+hw.module @truth_table_single_input_inverted(in %a: i1, out out: i1) {
+  // Single-input negation is already in its simplest form and is kept
+  // CHECK-NEXT: [[NOT:%.+]] = comb.truth_table %a -> [true, false]
+  // CHECK-NEXT: hw.output [[NOT]]
+  %0 = comb.truth_table %a -> [true, false]
+  hw.output %0 : i1
+}

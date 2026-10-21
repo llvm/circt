@@ -25,7 +25,6 @@
 using namespace circt;
 using namespace arc;
 using namespace hw;
-using llvm::MapVector;
 using llvm::SmallSetVector;
 using mlir::ConversionConfig;
 
@@ -436,6 +435,11 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     }
 
   unsigned numMappedRegs = 0;
+  // The reset values in the `regsByInput` keys may be results of registers
+  // that are themselves converted in this loop. Defer replacing and erasing the
+  // registers until all shuffling arcs exist, so that no key refers to an
+  // erased value when it is assigned as a reset operand.
+  SmallVector<std::pair<seq::CompRegOp, Value>> regReplacements;
   for (auto [clockAndResetAndOp, regOps] : regsByInput) {
     numMappedRegs += regOps.size();
     OpBuilder builder(module);
@@ -497,11 +501,13 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
           return !cast<StringAttr>(name).getValue().empty();
         }))
       arcOp->setAttr("names", builder.getArrayAttr(names));
-    for (auto [reg, resultIdx] : llvm::zip(regOps, regToOutputMapping)) {
-      reg.replaceAllUsesWith(arcOp.getResult(resultIdx));
-      reg.erase();
-    }
+    for (auto [reg, resultIdx] : llvm::zip(regOps, regToOutputMapping))
+      regReplacements.push_back({reg, arcOp.getResult(resultIdx)});
   }
+  for (auto [reg, arcResult] : regReplacements)
+    reg.replaceAllUsesWith(arcResult);
+  for (auto [reg, arcResult] : regReplacements)
+    reg.erase();
 
   if (numMappedRegs > 0)
     LLVM_DEBUG(llvm::dbgs() << "- Mapped " << numMappedRegs << " regs to "

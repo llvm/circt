@@ -2171,3 +2171,38 @@ hw.module @paritySingleBit(in %a: i1, out o: i1) {
   %0 = comb.parity %a : i1
   hw.output %0 : i1
 }
+
+// Ensure known-bits analysis on comb.shl and comb.shru accounts for shift
+// amounts >= bitWidth producing zero, rather than folding icmp against zero.
+// No IR change is the expected behavior here (https://github.com/llvm/circt/pull/11259).
+// CHECK-LABEL: hw.module @shlOvershiftKnownBits(
+// CHECK-DAG:     %[[C_NEG1:.+]] = hw.constant -1 : i4
+// CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i4
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %[[C_NEG1]], %s : i4
+// CHECK-NEXT:    %[[NE:.+]] = comb.icmp ne %[[SHL]], %[[C0]] : i4
+// CHECK-NEXT:    %[[EQ:.+]] = comb.icmp eq %[[SHL]], %[[C0]] : i4
+// CHECK-NEXT:    hw.output %[[NE]], %[[EQ]] : i1, i1
+hw.module @shlOvershiftKnownBits(in %s: i4, out ne_zero: i1, out eq_zero: i1) {
+  %c-1_i4 = hw.constant -1 : i4
+  %c0_i4 = hw.constant 0 : i4
+  %0 = comb.shl %c-1_i4, %s : i4
+  %1 = comb.icmp ne %0, %c0_i4 : i4
+  %2 = comb.icmp eq %0, %c0_i4 : i4
+  hw.output %1, %2 : i1, i1
+}
+
+// CHECK-LABEL: hw.module @shruOvershiftKnownBits(
+// CHECK-DAG:     %[[C_NEG1:.+]] = hw.constant -1 : i4
+// CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i4
+// CHECK-NEXT:    %[[SHRU:.+]] = comb.shru %[[C_NEG1]], %s : i4
+// CHECK-NEXT:    %[[NE:.+]] = comb.icmp ne %[[SHRU]], %[[C0]] : i4
+// CHECK-NEXT:    %[[EQ:.+]] = comb.icmp eq %[[SHRU]], %[[C0]] : i4
+// CHECK-NEXT:    hw.output %[[NE]], %[[EQ]] : i1, i1
+hw.module @shruOvershiftKnownBits(in %s: i4, out ne_zero: i1, out eq_zero: i1) {
+  %c-1_i4 = hw.constant -1 : i4
+  %c0_i4 = hw.constant 0 : i4
+  %0 = comb.shru %c-1_i4, %s : i4
+  %1 = comb.icmp ne %0, %c0_i4 : i4
+  %2 = comb.icmp eq %0, %c0_i4 : i4
+  hw.output %1, %2 : i1, i1
+}

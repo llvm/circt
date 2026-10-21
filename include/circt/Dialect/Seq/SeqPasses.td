@@ -127,4 +127,32 @@ def RegOfVecToMem : Pass<"seq-reg-of-vec-to-mem", "hw::HWModuleOp"> {
   }];
 }
 
+def InferClockPorts : Pass<"seq-infer-clock-ports", "mlir::ModuleOp"> {
+  let summary = "Infer `!seq.clock` types for `i1` ports used as clocks";
+  let description = [{
+    Walks backwards from every `seq.to_clock` through the instance hierarchy
+    and retypes the `i1` module and instance ports it passes through to
+    `!seq.clock`. Input ports are promoted whenever they are used as a clock;
+    output ports only if they are driven by a clock, so combinational logic on
+    a clock path (e.g. a gated clock) stays `i1`. Remaining non-clock uses of a
+    promoted value are rewired through a single `seq.from_clock`.
+  }];
+  let dependentDialects = [
+    "circt::hw::HWDialect",
+    "circt::seq::SeqDialect"
+  ];
+  let options = [
+    Option<"promotePublicPorts", "promote-public-ports", "bool", "true",
+           "Also retype ports of publicly visible modules">
+  ];
+  let statistics = [
+    Statistic<"numInputPortsPromoted", "num-input-ports-promoted",
+      "Number of input ports retyped to !seq.clock">,
+    Statistic<"numOutputPortsPromoted", "num-output-ports-promoted",
+      "Number of output ports retyped to !seq.clock">,
+    Statistic<"numCastsRemoved", "num-casts-removed",
+      "Number of seq.to_clock casts eliminated">
+  ];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

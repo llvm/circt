@@ -135,7 +135,7 @@ firrtl.circuit "Simple" {
     firrtl.connect %ip1_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module private @Analog(inout %a1 : i1, out outClock : !seq.clock) {
+  // CHECK-LABEL: hw.module private @Analog(in %a1 : !hw.inout<i1>, out outClock : !seq.clock) {
   // CHECK-NEXT:    [[READ:%.+]] = sv.read_inout %a1 : !hw.inout<i1>
   // CHECK-NEXT:    [[CLK:%.+]] = seq.to_clock [[READ]]
   // CHECK-NEXT:    hw.output [[CLK]] : !seq.clock
@@ -244,7 +244,7 @@ firrtl.circuit "Simple" {
   }
 
   // https://github.com/llvm/circt/issues/690
-  // CHECK-LABEL: hw.module private @bar690(inout %led_0 : i1) {
+  // CHECK-LABEL: hw.module private @bar690(in %led_0 : !hw.inout<i1>) {
   firrtl.module private @bar690(in %led_0: !firrtl.analog<1>) {
   }
   // CHECK-LABEL: hw.module private @foo690()
@@ -253,14 +253,14 @@ firrtl.circuit "Simple" {
     // CHECK: hw.instance "fpga" @bar690(led_0: %.led_0.wire: !hw.inout<i1>) -> ()
     %result = firrtl.instance fpga @bar690(in led_0: !firrtl.analog<1>)
   }
-  // CHECK-LABEL: hw.module private @foo690a(inout %a : i1) {
+  // CHECK-LABEL: hw.module private @foo690a(in %a : !hw.inout<i1>) {
   firrtl.module private @foo690a(in %a: !firrtl.analog<1>) {
     %result = firrtl.instance fpga @bar690(in led_0: !firrtl.analog<1>)
     firrtl.attach %result, %a: !firrtl.analog<1>, !firrtl.analog<1>
   }
 
   // https://github.com/llvm/circt/issues/740
-  // CHECK-LABEL: hw.module private @foo740(inout %led_0 : i1) {
+  // CHECK-LABEL: hw.module private @foo740(in %led_0 : !hw.inout<i1>) {
   // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %led_0: !hw.inout<i1>) -> ()
   firrtl.extmodule private @bar740(in led_0: !firrtl.analog<1>)
   firrtl.module private @foo740(in %led_0: !firrtl.analog<1>) {
@@ -270,7 +270,7 @@ firrtl.circuit "Simple" {
 
   firrtl.extmodule private @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
   firrtl.module @Example(out %port: !firrtl.analog<8>) {
-    // CHECK-LABEL: hw.module @Example(inout %port : i8)
+    // CHECK-LABEL: hw.module @Example(in %port : !hw.inout<i8>)
     // CHECK-NEXT: hw.instance "a2b" @UIntToAnalog_8(a: %port: !hw.inout<i8>, b: %port: !hw.inout<i8>)
     %a2b_a, %a2b_b = firrtl.instance a2b  @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
     firrtl.attach %port, %a2b_b, %a2b_a : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>

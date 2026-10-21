@@ -498,7 +498,17 @@ circuit RefSubaccess:
     input sel : UInt<2>
     output out : UInt<1>
 
-    connect out, read(probe(in)[sel]) ; expected-error {{expected ')' in 'read'}}
+    connect out, read(probe(in)[sel]) ; expected-error {{subaccess not allowed here}}
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit RefSubfieldUnknown:
+  public module RefSubfieldUnknown:
+    input agg : { a : UInt<1> }
+    output out : UInt<1>
+
+    connect out, read(probe(agg).nosuchfield) ; expected-error {{unknown field 'nosuchfield' in type '!firrtl.probe<bundle<a: uint<1>>>'}}
 
 ;// -----
 
@@ -1087,6 +1097,38 @@ circuit Top:
     output c : Integer
     ; expected-error @below {{Integer arithmetic expressions are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.1.0}}
     propassign c, integer_shl(a, b)
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit Top:
+  public module Top:
+    input a : Integer
+    input b : Integer
+    output c : Integer
+    ; expected-error @below {{Integers are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassign c, integer_and(a, b)
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit Top:
+  public module Top:
+    input a : Integer
+    input b : Integer
+    output c : Integer
+    ; expected-error @below {{Integers are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassign c, integer_or(a, b)
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit Top:
+  public module Top:
+    input a : Integer
+    output c : Integer
+    ; expected-error @below {{Integers are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassign c, integer_not(a)
 
 ;// -----
 FIRRTL version 4.0.0
@@ -1808,6 +1850,24 @@ circuit Domains:
   public module Domains:
     ; expected-error @below {{domains are a FIRRTL 7.0.0+ feature}}
     input a: UInt<1> domains [A]
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit DomainInAggregate:
+  domain D:
+  public module DomainInAggregate:
+    ; expected-error @below {{bundle element "domain" cannot have a domain type}}
+    input agg: {domain: Domain of D}
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit DomainVector:
+  domain D:
+  public module DomainVector:
+    ; expected-error @below {{vector cannot have a domain type}}
+    input vec: Domain of D[2]
 
 ;// -----
 

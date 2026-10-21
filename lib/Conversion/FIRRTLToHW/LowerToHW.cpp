@@ -1002,7 +1002,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
       // If the port is an inout bundle or contains an analog type, then it is
       // implicitly inout.
       hwPort.type = hw::InOutType::get(hwPort.type);
-      hwPort.dir = hw::ModulePort::Direction::InOut;
+      hwPort.dir = hw::ModulePort::Direction::Input;
       hwPort.argNum = numArgs++;
     }
     hwPort.loc = firrtlPort.loc;
@@ -3573,7 +3573,7 @@ LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   // firrtl.mem lowering lowers some SubfieldOps.  Zero-width can leave
   // invalid subfield accesses
-  if (getLoweredValue(op) || !op.getInput())
+  if (getLoweredValue(op) || op->getNumOperands() == 0)
     return success();
 
   if (isZeroBitFIRRTLType(op.getType()))
@@ -4755,7 +4755,8 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SizeOfIntrinsicOp op) {
-  op.emitError("SizeOf should have been resolved.");
+  op.emitError("sizeof intrinsic should have been resolved by the "
+               "LowerSizeOf pass.");
   return failure();
 }
 

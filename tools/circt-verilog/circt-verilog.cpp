@@ -22,6 +22,7 @@
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
@@ -146,6 +147,11 @@ struct CLOptions {
   cl::opt<bool> detectMemories{
       "detect-memories",
       cl::desc("Detect memories and lower them to `seq.firmem`"),
+      cl::init(true), cl::cat(cat)};
+
+  cl::opt<bool> inferClockPorts{
+      "infer-clock-ports",
+      cl::desc("Retype `i1` ports used as clocks to `!seq.clock`"),
       cl::init(true), cl::cat(cat)};
 
   cl::opt<bool> sroa{
@@ -330,6 +336,7 @@ static void populatePasses(PassManager &pm) {
     return;
   LlhdToCorePipelineOptions options;
   options.detectMemories = opts.detectMemories;
+  options.inferClockPorts = opts.inferClockPorts;
   options.sroa = opts.sroa;
   populateLlhdToCorePipeline(pm, options);
 }
@@ -547,6 +554,7 @@ int main(int argc, char **argv) {
   // Register any pass manager command line options.
   llhd::registerPasses();
   moore::registerPasses();
+  seq::registerPasses();
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();

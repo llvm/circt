@@ -57,9 +57,11 @@ repair-wheel-command = "delvewheel repair --ignore-existing -w {dest_dir} {wheel
 name = "pycde"
 dynamic = ["version"]
 description = "Python CIRCT Design Entry"
+readme = "README.md"
 authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
 dependencies = ['numpy', 'executing']
 requires-python = ">=3.10"
 
 [project.urls]
 "Homepage" = "https://circt.llvm.org/docs/PyCDE/"
+"Changelog" = "https://github.com/llvm/circt/blob/main/frontends/PyCDE/CHANGELOG.md"

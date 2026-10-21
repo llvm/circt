@@ -226,6 +226,7 @@ private:
   // NOLINTNEXTLINE(misc-no-recursion)
   void update(BundleType type) {
     update(type.getTypeID());
+    update(type.getNumElements());
     for (auto &element : type.getElements()) {
       update(element.isFlip);
       update(element.type);

@@ -326,6 +326,31 @@ class TestCompileCommands:
     assert simulator.macro_definitions == {"FOO": "BAR", "BAZ": None}
 
 
+def test_source_files_add_dir_uses_filelist_order(tmp_path):
+  # Files named in `filelist.f` come first, in the listed order, then any
+  # other RTL files sorted by name. Nothing is added twice.
+  for name in ("A.sv", "zPkg.sv", "B.v", "notes.txt"):
+    (tmp_path / name).touch()
+  (tmp_path / "sub").mkdir()
+  (tmp_path / "sub" / "C.sv").touch()
+  (tmp_path / "filelist.f").write_text("zPkg.sv\n\nB.v\nmissing.sv\n")
+
+  sources = SourceFiles("TestTop")
+  sources.add_dir(tmp_path)
+  assert sources.user == [
+      tmp_path / "zPkg.sv", tmp_path / "B.v", tmp_path / "A.sv",
+      tmp_path / "sub" / "C.sv"
+  ]
+
+
+def test_source_files_add_dir_without_filelist(tmp_path):
+  for name in ("b.sv", "A.sv"):
+    (tmp_path / name).touch()
+  sources = SourceFiles("TestTop")
+  sources.add_dir(tmp_path)
+  assert sources.user == [tmp_path / "A.sv", tmp_path / "b.sv"]
+
+
 def test_esi_cosim_macro_definitions(tmp_path):
   script = (Path(__file__).parents[2] / "cosim_dpi_server" / "esi-cosim.py")
   script_globals = runpy.run_path(str(script))

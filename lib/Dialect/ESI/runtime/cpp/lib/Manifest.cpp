@@ -259,6 +259,12 @@ Manifest::Impl::Impl(Context &ctxt, const std::string &manifestStr)
     : ctxt(ctxt) {
   manifestJson = nlohmann::ordered_json::parse(manifestStr);
 
+  const auto &version = manifestJson.at("apiVersion");
+  if (!version.is_number_unsigned() || version != ExpectedVersionNumber)
+    throw std::runtime_error("Unsupported ESI ABI version: " + version.dump() +
+                             " (expected " +
+                             std::to_string(ExpectedVersionNumber) + ")");
+
   try {
     // Populate the types table first since anything else might need it.
     populateTypes(manifestJson.at("types"));
@@ -274,8 +280,6 @@ Manifest::Impl::Impl(Context &ctxt, const std::string &manifestStr)
     }
   } catch (const std::exception &e) {
     std::string msg = "malformed manifest: " + std::string(e.what());
-    if (manifestJson.at("apiVersion") == 0)
-      msg += " (schema version 0 is not considered stable)";
     throw std::runtime_error(msg);
   }
 }
@@ -722,8 +726,6 @@ Accelerator *Manifest::buildAccelerator(AcceleratorConnection &acc) const {
     return acc.takeOwnership(impl->buildAccelerator(acc));
   } catch (const std::exception &e) {
     std::string msg = "malformed manifest: " + std::string(e.what());
-    if (getApiVersion() == 0)
-      msg += " (schema version 0 is not considered stable)";
     throw std::runtime_error(msg);
   }
 }

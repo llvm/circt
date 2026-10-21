@@ -19,6 +19,7 @@
 #include <any>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -108,6 +109,9 @@ using HWClientDetails = std::vector<HWClientDetail>;
 using ServiceImplDetails = std::map<std::string, std::any>;
 
 class MessageData;
+namespace services {
+struct HostMemRegion;
+} // namespace services
 
 //===----------------------------------------------------------------------===//
 // SegmentedMessageData -- multi-segment message support.
@@ -118,8 +122,18 @@ class MessageData;
 struct Segment {
   const uint8_t *data;
   size_t size;
+  /// The HostMem region (from services::HostMem::allocate()) which holds
+  /// [data, data + size), if any. Several segments may share a region.
+  /// Non-owning: the SegmentedMessageData keeps the region alive; backends may
+  /// be able to obtain ownership via SegmentedMessageData::take().
+  services::HostMemRegion *region = nullptr;
+
   std::span<const uint8_t> span() const { return {data, size}; }
   bool empty() const { return size == 0; }
+
+  /// Device address of this segment's bytes, if `region` is set and contains
+  /// them; std::nullopt otherwise.
+  std::optional<uint64_t> getDeviceAddress() const;
 };
 
 /// Abstract multi-segment message. Generated types subclass this to expose
@@ -129,15 +143,43 @@ struct Segment {
 /// interface. Other subclasses represent naturally segmented layouts.
 ///
 /// Subclasses MUST own all data that their segments point to. Read and write
-/// APIs can hold the message across async boundaries / retries.
+/// APIs can hold the message across async boundaries / retries. Subclasses
+/// which hold data in HostMem regions must keep those regions alive for the
+/// lifetime of the message (e.g. by owning them as unique_ptr<HostMemRegion>)
+/// and point their segments' `region` at them. Subclasses which own their
+/// regions exclusively may override take() to hand them to the backend.
 class SegmentedMessageData {
 public:
   virtual ~SegmentedMessageData() = default;
 
   /// Number of segments in the message.
   virtual size_t numSegments() const = 0;
-  /// Get a segment by index.
+  /// Get a segment by index. Throws if the segment has been take()n.
   virtual Segment segment(size_t idx) const = 0;
+
+  /// Optionally called by a backend once it has transmitted segment `segIdx`,
+  /// to obtain ownership of the HostMem region backing it (e.g. to re-use the
+  /// region or return it to a pool).
+  ///
+  /// Returns nullptr, leaving the segment accessible, if the segment isn't
+  /// backed by a region or the message doesn't transfer region ownership.
+  /// Otherwise, marks the segment as taken -- after which segment(segIdx) (and
+  /// thus anything which reads the whole message, such as toMessageData()) and
+  /// further calls to take(segIdx) throw -- and returns the region if no other
+  /// untaken segment references it, or nullptr if some still do. Since several
+  /// segments may share a region, a backend which calls take() on each segment
+  /// as it is transmitted receives each region exactly once, after the last
+  /// segment using it.
+  ///
+  /// Since SegmentedMessageDataCursor reads segments via segment(), a backend
+  /// must not take a segment which a cursor over the message can still reach,
+  /// and must not take a segment it may need to retransmit. Any cursor
+  /// (including one created after the take()) throws when it reaches a taken
+  /// segment. Segment copies of a taken segment obtained before the take() are
+  /// invalid: their `data` may point into a region which has been re-used.
+  ///
+  /// The default implementation returns nullptr.
+  virtual std::unique_ptr<services::HostMemRegion> take(size_t segIdx);
 
   /// Total size across all segments.
   size_t totalSize() const;
@@ -220,6 +262,11 @@ private:
 /// Tracks position across segment boundaries. Backends store this alongside
 /// a unique_ptr<SegmentedMessageData> for partial writes.
 ///
+/// The cursor reads segments through SegmentedMessageData::segment() on every
+/// access and caches nothing, so it throws upon reaching a segment which has
+/// been take()n -- regardless of whether it was created before or after the
+/// take().
+///
 /// Deliberately a separate class (not embedded in SegmentedMessageData) so
 /// that generated types have no hidden members — their layout matches the
 /// hardware wire format exactly.
@@ -230,14 +277,15 @@ public:
   /// Contiguous span from current position to end of current segment.
   std::span<const uint8_t> remaining() const;
 
+  /// The unconsumed part of the current segment, with its `region`. `data` and
+  /// `size` match remaining().
+  Segment remainingSegment() const;
+
   /// Advance by `n` bytes, crossing segment boundaries as needed.
   void advance(size_t n);
 
   /// True when all segments have been consumed.
   bool done() const;
-
-  /// Reset to the beginning.
-  void reset();
 
 private:
   const SegmentedMessageData &msg;

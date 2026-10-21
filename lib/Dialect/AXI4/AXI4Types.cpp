@@ -33,6 +33,13 @@ LogicalResult PortType::verify(function_ref<InFlightDiagnostic()> emitError,
     return emitError() << "port 'data_width' must be a power of two between 8 "
                           "and 1024, got "
                        << data_width;
+  // Verify window addresses fit within address width
+  if (addr_width < 64)
+    for (WindowAttr window : windows.getWindows())
+      if (window.getLast() >> addr_width)
+        return emitError() << "port window " << window
+                           << " does not fit in an 'addr_width' of "
+                           << addr_width;
   if (write_id_width > 32)
     return emitError() << "port 'write_id_width' must be at most 32, got "
                        << write_id_width;

@@ -2361,16 +2361,17 @@ firrtl.module @adds_narrow(out %out1: !firrtl.sint<7>, out %out2: !firrtl.sint<7
   firrtl.matchingconnect %out3, %add3 : !firrtl.sint<7>
 }
 
+// Unsigned subtraction must not be narrowed: a negative difference would be
+// zero-extended and lose its high bits.
 // CHECK-LABEL: @sub_narrow
-// CHECK-NEXT: %[[add1:.+]] = firrtl.sub %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5>
-// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7>
-// CHECK-NEXT: %[[add2:.+]] = firrtl.sub %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5>
-// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7>
-// CHECK-NEXT: %[[add3:.+]] = firrtl.sub %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5>
-// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7>
-// CHECK-NEXT: firrtl.matchingconnect %out1, %[[pad1]]
-// CHECK-NEXT: firrtl.matchingconnect %out2, %[[pad2]]
-// CHECK-NEXT: firrtl.matchingconnect %out3, %[[pad3]]
+// CHECK-NEXT: %[[t1:.+]] = firrtl.pad %in1, 6 : (!firrtl.uint<4>) -> !firrtl.uint<6>
+// CHECK-NEXT: %[[t2:.+]] = firrtl.pad %in2, 6 : (!firrtl.uint<2>) -> !firrtl.uint<6>
+// CHECK-NEXT: %[[add1:.+]] = firrtl.sub %[[t1]], %[[t2]] : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<7>
+// CHECK-NEXT: %[[add2:.+]] = firrtl.sub %in1, %[[t2]] : (!firrtl.uint<4>, !firrtl.uint<6>) -> !firrtl.uint<7>
+// CHECK-NEXT: %[[add3:.+]] = firrtl.sub %[[t1]], %in2 : (!firrtl.uint<6>, !firrtl.uint<2>) -> !firrtl.uint<7>
+// CHECK-NEXT: firrtl.matchingconnect %out1, %[[add1]]
+// CHECK-NEXT: firrtl.matchingconnect %out2, %[[add2]]
+// CHECK-NEXT: firrtl.matchingconnect %out3, %[[add3]]
 firrtl.module @sub_narrow(out %out1: !firrtl.uint<7>, out %out2: !firrtl.uint<7>, out %out3: !firrtl.uint<7>, in %in1: !firrtl.uint<4>, in %in2: !firrtl.uint<2>) {
   %t1 = firrtl.pad %in1, 6 : (!firrtl.uint<4>) -> !firrtl.uint<6>
   %t2 = firrtl.pad %in2, 6 : (!firrtl.uint<2>) -> !firrtl.uint<6>
@@ -2678,6 +2679,49 @@ firrtl.module @issue1142(in %cond: !firrtl.uint<1>, out %z: !firrtl.uint) {
   firrtl.connect %z, %1 : !firrtl.uint, !firrtl.uint
   firrtl.connect %z, %3 : !firrtl.uint, !firrtl.uint
   firrtl.connect %z, %4 : !firrtl.uint, !firrtl.uint
+}
+
+// CHECK-LABEL: firrtl.module @MuxConstantSelectAggregate
+firrtl.module @MuxConstantSelectAggregate(
+  in %va: !firrtl.vector<uint<8>, 2>,
+  in %vb: !firrtl.vector<uint<8>, 2>,
+  in %ba: !firrtl.bundle<a: uint<1>, b: uint<8>>,
+  in %bb: !firrtl.bundle<a: uint<1>, b: uint<8>>,
+  out %v0: !firrtl.vector<uint<8>, 2>,
+  out %v1: !firrtl.vector<uint<8>, 2>,
+  out %b0: !firrtl.bundle<a: uint<1>, b: uint<8>>,
+  out %b1: !firrtl.bundle<a: uint<1>, b: uint<8>>
+) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.mux
+  // CHECK: firrtl.matchingconnect %v0, %vb
+  // CHECK: firrtl.matchingconnect %v1, %va
+  // CHECK: firrtl.matchingconnect %b0, %bb
+  // CHECK: firrtl.matchingconnect %b1, %ba
+  %0 = firrtl.mux(%c0_ui1, %va, %vb) : (!firrtl.uint<1>, !firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<8>, 2>) -> !firrtl.vector<uint<8>, 2>
+  %1 = firrtl.mux(%c1_ui1, %va, %vb) : (!firrtl.uint<1>, !firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<8>, 2>) -> !firrtl.vector<uint<8>, 2>
+  %2 = firrtl.mux(%c0_ui1, %ba, %bb) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: uint<8>>, !firrtl.bundle<a: uint<1>, b: uint<8>>) -> !firrtl.bundle<a: uint<1>, b: uint<8>>
+  %3 = firrtl.mux(%c1_ui1, %ba, %bb) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: uint<8>>, !firrtl.bundle<a: uint<1>, b: uint<8>>) -> !firrtl.bundle<a: uint<1>, b: uint<8>>
+  firrtl.matchingconnect %v0, %0 : !firrtl.vector<uint<8>, 2>
+  firrtl.matchingconnect %v1, %1 : !firrtl.vector<uint<8>, 2>
+  firrtl.matchingconnect %b0, %2 : !firrtl.bundle<a: uint<1>, b: uint<8>>
+  firrtl.matchingconnect %b1, %3 : !firrtl.bundle<a: uint<1>, b: uint<8>>
+}
+
+// CHECK-LABEL: firrtl.module @MuxConstantSelectAggregateUnknownWidth
+firrtl.module @MuxConstantSelectAggregateUnknownWidth(
+  in %a: !firrtl.vector<uint, 2>,
+  in %b: !firrtl.vector<uint, 2>,
+  out %z: !firrtl.vector<uint, 2>
+) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+  // Don't fold away constant selects if any leaf width is unknown.
+  // CHECK: %0 = firrtl.mux(%c0_ui1, %a, %b)
+  %0 = firrtl.mux(%c0_ui1, %a, %b) : (!firrtl.uint<1>, !firrtl.vector<uint, 2>, !firrtl.vector<uint, 2>) -> !firrtl.vector<uint, 2>
+  firrtl.connect %z, %0 : !firrtl.vector<uint, 2>, !firrtl.vector<uint, 2>
 }
 
 // CHECK-LABEL: firrtl.module @PadMuxOperands
@@ -3599,6 +3643,15 @@ firrtl.module @AggregateCreateConst(
   // CHECK-DAG: firrtl.matchingconnect %bundle_out, %[[BUNDLE]] : !firrtl.bundle<a: uint<1>, b: uint<1>>
 }
 
+// Aggregate create ops have no side effects, so unused ones are erased.
+// CHECK-LABEL: firrtl.module @AggregateCreateUnused(
+firrtl.module @AggregateCreateUnused(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
+  // CHECK-NOT: firrtl.vectorcreate
+  // CHECK-NOT: firrtl.bundlecreate
+  %vector = firrtl.vectorcreate %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
+  %bundle = firrtl.bundlecreate %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+}
+
 
 // CHECK-LABEL: firrtl.module private @RWProbeUnused
 firrtl.module private @RWProbeUnused(in %in: !firrtl.uint<4>, in %clk: !firrtl.clock, out %out: !firrtl.uint) {
@@ -3903,6 +3956,60 @@ firrtl.class @PropertyArithmetic(in %in: !firrtl.integer, out %out0: !firrtl.int
   firrtl.propassign %out1, %4 : !firrtl.integer
   firrtl.propassign %out2, %5 : !firrtl.integer
   firrtl.propassign %out3, %6 : !firrtl.integer
+}
+
+// CHECK-LABEL: firrtl.class @IntegerBitwiseFold
+firrtl.class @IntegerBitwiseFold(out %outAndEqual: !firrtl.integer,
+    out %outOrEqual: !firrtl.integer, out %outAndMixed: !firrtl.integer,
+    out %outOrMixed: !firrtl.integer, out %outAndWideNeg: !firrtl.integer,
+    out %outOrWideNeg: !firrtl.integer, out %outNotZero: !firrtl.integer,
+    out %outNotNegative: !firrtl.integer) {
+  %neg2 = firrtl.integer -2
+  %one = firrtl.integer 1
+  %five = firrtl.integer 5
+  %sixteen = firrtl.integer 16
+  %negativeSixteen = firrtl.integer -16
+  %zero = firrtl.integer 0
+
+  // Equal-width values (-2 and 1 both need two signed bits).
+  // CHECK-DAG: [[C0:%.+]] = firrtl.integer 0
+  %andEqual = firrtl.integer.and %neg2, %one : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  // CHECK-DAG: [[CNEG1:%.+]] = firrtl.integer -1
+  %orEqual = firrtl.integer.or %neg2, %one : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  // A narrower negative operand must sign-extend. Zero extension would make
+  // this AND produce zero instead of 16.
+  // CHECK-DAG: [[C16:%.+]] = firrtl.integer 16
+  %andMixed = firrtl.integer.and %neg2, %sixteen : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  // CHECK-DAG: [[CNEG2:%.+]] = firrtl.integer -2
+  %orMixed = firrtl.integer.or %neg2, %sixteen : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  // A narrower positive operand with a wider negative operand.
+  %andWideNeg = firrtl.integer.and %negativeSixteen, %five : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  %orWideNeg = firrtl.integer.or %negativeSixteen, %five : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  // NOT uses arbitrary-precision signed two's-complement semantics.
+  %notZero = firrtl.integer.not %zero : (!firrtl.integer) -> !firrtl.integer
+  %notNegative = firrtl.integer.not %neg2 : (!firrtl.integer) -> !firrtl.integer
+
+  // CHECK-DAG: [[CNEG11:%.+]] = firrtl.integer -11
+  // CHECK-DAG: [[C1:%.+]] = firrtl.integer 1
+  // CHECK: firrtl.propassign %outAndEqual, [[C0]]
+  firrtl.propassign %outAndEqual, %andEqual : !firrtl.integer
+  // CHECK: firrtl.propassign %outOrEqual, [[CNEG1]]
+  firrtl.propassign %outOrEqual, %orEqual : !firrtl.integer
+  // CHECK: firrtl.propassign %outAndMixed, [[C16]]
+  firrtl.propassign %outAndMixed, %andMixed : !firrtl.integer
+  // CHECK: firrtl.propassign %outOrMixed, [[CNEG2]]
+  firrtl.propassign %outOrMixed, %orMixed : !firrtl.integer
+  // CHECK: firrtl.propassign %outAndWideNeg, [[C0]]
+  firrtl.propassign %outAndWideNeg, %andWideNeg : !firrtl.integer
+  // CHECK: firrtl.propassign %outOrWideNeg, [[CNEG11]]
+  firrtl.propassign %outOrWideNeg, %orWideNeg : !firrtl.integer
+  // CHECK: firrtl.propassign %outNotZero, [[CNEG1]]
+  firrtl.propassign %outNotZero, %notZero : !firrtl.integer
+  // CHECK: firrtl.propassign %outNotNegative, [[C1]]
+  firrtl.propassign %outNotNegative, %notNegative : !firrtl.integer
 }
 
 // CHECK-LABEL: firrtl.module private @LayerBlocks
@@ -4228,4 +4335,22 @@ firrtl.module @ZeroResetForwardsInitial(in %clock: !firrtl.clock, out %q: !firrt
   %r = firrtl.regreset %clock, %zero, %c0 {initial = 4 : ui8} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
   firrtl.matchingconnect %q, %r : !firrtl.uint<8>
 }
+
+// Ensure reg initial is considered by the canonicalizer.
+// CHECK-LABEL: firrtl.module @RegInitial
+firrtl.module @RegInitial(in %clock: !firrtl.clock, out %q: !firrtl.uint<1>, out %q2: !firrtl.uint<1>) {
+  // CHECK: %r = firrtl.reg %clock {initial = 0 : ui1}
+  // CHECK: firrtl.matchingconnect %r, %c1_ui1
+  %r = firrtl.reg %clock {initial = 0 : ui1} : !firrtl.clock, !firrtl.uint<1>
+  %c1 = firrtl.constant 1 : !firrtl.uint<1>
+  firrtl.matchingconnect %r, %c1 : !firrtl.uint<1>
+  firrtl.matchingconnect %q, %r : !firrtl.uint<1>
+  firrtl.matchingconnect %q2, %r : !firrtl.uint<1>
+  // CHECK-NOT: %r2 = firrtl.reg
+  %r2 = firrtl.reg %clock {initial = 1 : ui1} : !firrtl.clock, !firrtl.uint<1>
+  firrtl.matchingconnect %r2, %c1 : !firrtl.uint<1>
+  firrtl.matchingconnect %q2, %r2 : !firrtl.uint<1>
+}
+
+
 }

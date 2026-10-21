@@ -50,6 +50,26 @@ parseWireSpillingHeuristic(StringRef option) {
       .Default(std::nullopt);
 }
 
+static std::optional<LoweringOptions::VarOpDeclStyle>
+parseVarOpDeclStyle(StringRef option) {
+  return llvm::StringSwitch<std::optional<LoweringOptions::VarOpDeclStyle>>(
+             option)
+      .Case("varLogic", LoweringOptions::VarOpDeclStyle::VarLogic)
+      .Case("logic", LoweringOptions::VarOpDeclStyle::Logic)
+      .Case("reg", LoweringOptions::VarOpDeclStyle::Reg)
+      .Default(std::nullopt);
+}
+
+static std::optional<LoweringOptions::EmitPortType>
+parseEmitPortType(StringRef option) {
+  return llvm::StringSwitch<std::optional<LoweringOptions::EmitPortType>>(
+             option)
+      .Case("varLogic", LoweringOptions::EmitPortType::emitVarLogic)
+      .Case("wire", LoweringOptions::EmitPortType::emitWire)
+      .Case("none", LoweringOptions::EmitPortType::emitNone)
+      .Default(std::nullopt);
+}
+
 void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
   while (!text.empty()) {
     // Remove the first option from the text.
@@ -110,14 +130,24 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       } else {
         errorHandler("expected ''spillLargeTermsWithNamehints'");
       }
+    } else if (option.consume_front("svVarDeclStyle=")) {
+      if (auto style = parseVarOpDeclStyle(option)) {
+        varOpDeclStyle = *style;
+      } else {
+        errorHandler("expected 'varLogic', 'logic', or 'reg'");
+      }
     } else if (option.consume_front("wireSpillingNamehintTermLimit=")) {
       if (option.getAsInteger(10, wireSpillingNamehintTermLimit)) {
         errorHandler(
             "expected integer for number of namehint heurstic term limit");
         wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
       }
-    } else if (option == "emitWireInPorts") {
-      emitWireInPorts = true;
+    } else if (option.consume_front("svPortDeclStyle=")) {
+      if (auto style = parseEmitPortType(option)) {
+        emitPortType = *style;
+      } else {
+        errorHandler("expected 'varLogic', 'wire', or 'none'");
+      }
     } else if (option == "emitBindComments") {
       emitBindComments = true;
     } else if (option == "omitVersionComment") {
@@ -171,6 +201,10 @@ std::string LoweringOptions::toString() const {
   if (isWireSpillingHeuristicEnabled(
           WireSpillingHeuristic::SpillLargeTermsWithNamehints))
     options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";
+  if (varOpDeclStyle == VarOpDeclStyle::Logic)
+    options += "svVarDeclStyle=logic,";
+  else if (varOpDeclStyle == VarOpDeclStyle::Reg)
+    options += "svVarDeclStyle=reg,";
   if (disallowExpressionInliningInPorts)
     options += "disallowExpressionInliningInPorts,";
   if (disallowMuxInlining)
@@ -183,8 +217,10 @@ std::string LoweringOptions::toString() const {
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
-  if (emitWireInPorts)
-    options += "emitWireInPorts,";
+  if (emitPortType == EmitPortType::emitWire)
+    options += "svPortDeclStyle=wire,";
+  else if (emitPortType == EmitPortType::emitVarLogic)
+    options += "svPortDeclStyle=varLogic,";
   if (emitBindComments)
     options += "emitBindComments,";
   if (omitVersionComment)

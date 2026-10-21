@@ -417,10 +417,22 @@ void circt::om::ClassOp::updateFields(
   // Extract the locations per field.
   SmallVector<Location> locations;
   if (auto fl = dyn_cast<FusedLoc>(fieldOpLoc)) {
-    auto metadataArr = dyn_cast<ArrayAttr>(fl.getMetadata());
-    assert(metadataArr && "Expected the metadata for the fused location");
-    auto r = metadataArr.getAsRange<LocationAttr>();
-    locations.append(r.begin(), r.end());
+    if (auto metadataArr = dyn_cast_or_null<ArrayAttr>(fl.getMetadata())) {
+      if (names.size() == metadataArr.size()) {
+        auto r = metadataArr.getAsRange<LocationAttr>();
+        locations.append(r.begin(), r.end());
+      } else {
+        locations.append(names.size(), fieldOpLoc);
+      }
+    } else {
+      auto fieldLocs = fieldsOp.getFieldLocs();
+      if (fieldLocs.has_value() && names.size() == fieldLocs.value().size()) {
+        auto r = fieldLocs.value().getAsRange<LocationAttr>();
+        locations.append(r.begin(), r.end());
+      } else {
+        locations.append(names.size(), fieldOpLoc);
+      }
+    }
   } else {
     // Assume same loc for every field.
     locations.append(names.size(), fieldOpLoc);
@@ -852,6 +864,40 @@ OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
         // Extend lhs to lhsWidth + shiftAmt bits so no bits are truncated.
         return success(lhs.extend(lhs.getBitWidth() + shiftAmt) << shiftAmt);
       });
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerBitAndOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntegerBitAndOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(
+      adaptor.getLhs(), adaptor.getRhs(),
+      [](const APSInt &lhs, const APSInt &rhs) { return success(lhs & rhs); });
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerBitOrOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntegerBitOrOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(
+      adaptor.getLhs(), adaptor.getRhs(),
+      [](const APSInt &lhs, const APSInt &rhs) { return success(lhs | rhs); });
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerBitNotOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntegerBitNotOp::fold(FoldAdaptor adaptor) {
+  auto input = dyn_cast_or_null<circt::om::IntegerAttr>(adaptor.getInput());
+  if (!input)
+    return {};
+
+  APSInt result = ~getAPSIntForOMIntegerAttr(input);
+  return circt::om::IntegerAttr::get(
+      getContext(), mlir::IntegerAttr::get(getContext(), result));
 }
 
 //===----------------------------------------------------------------------===//

@@ -103,7 +103,15 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
   if (auto shlOp = dyn_cast<ShlOp>(op)) {
     auto lhs = computeKnownBits(shlOp.getOperand(0), depth + 1);
     auto rhs = computeKnownBits(shlOp.getOperand(1), depth + 1);
+    unsigned width = lhs.getBitWidth();
+    if (rhs.getMinValue().uge(width))
+      return KnownBits::makeConstant(APInt::getZero(width));
     auto res = KnownBits::shl(lhs, rhs);
+    // llvm::KnownBits::shl treats shifts >= bitWidth as UB/poison, whereas
+    // comb.shl produces zero on overshift. If the shift amount may be
+    // >= bitWidth, the result may be zero, so no bit can be known-one.
+    if (rhs.getMaxValue().uge(width))
+      res.One.clearAllBits();
     return res;
   }
 
@@ -111,7 +119,15 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
   if (auto shrOp = dyn_cast<ShrUOp>(op)) {
     auto lhs = computeKnownBits(shrOp.getOperand(0), depth + 1);
     auto rhs = computeKnownBits(shrOp.getOperand(1), depth + 1);
+    unsigned width = lhs.getBitWidth();
+    if (rhs.getMinValue().uge(width))
+      return KnownBits::makeConstant(APInt::getZero(width));
     auto res = KnownBits::lshr(lhs, rhs);
+    // llvm::KnownBits::lshr treats shifts >= bitWidth as UB/poison, whereas
+    // comb.shru produces zero on overshift. If the shift amount may be
+    // >= bitWidth, the result may be zero, so no bit can be known-one.
+    if (rhs.getMaxValue().uge(width))
+      res.One.clearAllBits();
     return res;
   }
 

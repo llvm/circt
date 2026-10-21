@@ -16,7 +16,6 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 
-using namespace llvm;
 using namespace mlir;
 using namespace circt;
 using namespace arc;

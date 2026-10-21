@@ -15,6 +15,5 @@
 #include "mlir/IR/BuiltinTypes.h"
 
 using namespace mlir;
-using namespace llvm;
 
 #include "circt/Dialect/Emit/EmitOpInterfaces.cpp.inc"

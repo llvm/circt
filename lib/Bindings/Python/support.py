@@ -202,6 +202,14 @@ def attribute_to_var(attr):
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
 
 
+def get_canonical_type(mlir_type):
+  """Return `mlir_type` with all type aliases stripped."""
+  from .dialects import hw
+  if hw.TypeAliasType.isinstance(mlir_type):
+    return hw.TypeAliasType(mlir_type).canonical_type
+  return mlir_type
+
+
 def get_self_or_inner(mlir_type):
   from .dialects import hw
   if type(mlir_type) is ir.Type:
