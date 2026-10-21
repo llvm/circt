@@ -394,29 +394,44 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   if (isOpTriviallyRecursive(op))
     return failure();
 
+  unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
+
   // ShlOp(x, cst) -> Concat(Extract(x), zeros)
   APInt value;
-  if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
+  if (matchPattern(op.getRhs(), m_ConstantInt(&value))) {
+    if (value.ugt(width))
+      value = width;
+    unsigned shift = value.getZExtValue();
+
+    // This case is handled by fold.
+    if (width <= shift || shift == 0)
+      return failure();
+
+    auto zeros =
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt::getZero(shift));
+
+    // Remove the high bits which would be removed by the Shl.
+    auto extract =
+        ExtractOp::create(rewriter, op.getLoc(), op.getLhs(), 0, width - shift);
+
+    replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, extract, zeros);
+    return success();
+  }
+
+  // extract(shl(lhs, rhs)) -> extract(shl(extract(lhs), extract(rhs))) when
+  // only the low bits of the result are used and the dropped high bits of rhs
+  // are known zero (so truncating rhs does not alter the shift amount).
+  // Narrowing down to 1 bit is skipped so `extract(0, shl(1, x))` in
+  // ExtractOp::canonicalize can fold to `icmp eq x, 0` instead of `shl : i1`.
+  auto [lowestBit, highestBit] = getLowestBitAndHighestBitRequired(
+      op, /*narrowTrailingBits=*/false, width);
+  size_t newWidth = highestBit + 1;
+  if (newWidth < 2 || newWidth >= width)
     return failure();
-
-  unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
-  if (value.ugt(width))
-    value = width;
-  unsigned shift = value.getZExtValue();
-
-  // This case is handled by fold.
-  if (width <= shift || shift == 0)
+  if (computeKnownBits(op.getRhs(), /*maxDepth=*/2).countMinLeadingZeros() <
+      width - newWidth)
     return failure();
-
-  auto zeros =
-      hw::ConstantOp::create(rewriter, op.getLoc(), APInt::getZero(shift));
-
-  // Remove the high bits which would be removed by the Shl.
-  auto extract =
-      ExtractOp::create(rewriter, op.getLoc(), op.getLhs(), 0, width - shift);
-
-  replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, extract, zeros);
-  return success();
+  return success(narrowOperationWidth(op, lowestBit, highestBit, rewriter));
 }
 
 OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
