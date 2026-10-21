@@ -635,6 +635,172 @@ hw.module @narrowSubExtractFromNoneZero(in %x: i8, in %y: i8, out z0: i4) {
   hw.output %1 : i4
 }
 
+// Narrow trailing bits of comb.add when the unused low bits cannot carry into
+// the lowest demanded bit.
+// CHECK-LABEL: hw.module @narrowAddTrailingZerosConstant(
+// CHECK-DAG:     %[[FALSE:.+]] = hw.constant false
+// CHECK-DAG:     %[[C1:.+]] = hw.constant 1 : i25
+// CHECK-NEXT:    %[[X_HI:.+]] = comb.extract %x from 3 : (i27) -> i24
+// CHECK-NEXT:    %[[LHS:.+]] = comb.concat %[[FALSE]], %[[X_HI]] : i1, i24
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add %[[LHS]], %[[C1]] : i25
+// CHECK-NEXT:    hw.output %[[ADD]] : i25
+hw.module @narrowAddTrailingZerosConstant(in %x: i27, out o: i25) {
+  %false = hw.constant false
+  %c8_i28 = hw.constant 8 : i28
+  %lhs = comb.concat %false, %x : i1, i27
+  %add = comb.add %lhs, %c8_i28 : i28
+  %res = comb.extract %add from 3 : (i28) -> i25
+  hw.output %res : i25
+}
+
+// Narrow both upper and trailing bits of comb.add across multiple extract users
+// and preserve twoState (bin).
+// CHECK-LABEL: hw.module @narrowAddTrailingZerosMultiExtractTwoState(
+// CHECK-DAG:     %[[FALSE:.+]] = hw.constant false
+// CHECK-DAG:     %[[X_SLICE:.+]] = comb.extract %x from 3 : (i16) -> i9
+// CHECK-DAG:     %[[Y_SLICE:.+]] = comb.extract %y from 0 : (i12) -> i8
+// CHECK-DAG:     %[[RHS_SLICE:.+]] = comb.concat %[[Y_SLICE]], %[[FALSE]] : i8, i1
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add bin %[[X_SLICE]], %[[RHS_SLICE]] : i9
+// CHECK-NEXT:    %[[E0:.+]] = comb.extract %[[ADD]] from 0 : (i9) -> i4
+// CHECK-NEXT:    %[[E1:.+]] = comb.extract %[[ADD]] from 3 : (i9) -> i6
+// CHECK-NEXT:    hw.output %[[E0]], %[[E1]] : i4, i6
+hw.module @narrowAddTrailingZerosMultiExtractTwoState(in %x: i16, in %y: i12, out o0: i4, out o1: i6) {
+  %c0_i4 = hw.constant 0 : i4
+  %rhs = comb.concat %y, %c0_i4 : i12, i4
+  %add = comb.add bin %x, %rhs : i16
+  %e0 = comb.extract %add from 3 : (i16) -> i4
+  %e1 = comb.extract %add from 6 : (i16) -> i6
+  hw.output %e0, %e1 : i4, i6
+}
+
+// Narrow trailing bits of comb.add when multiple operands have non-zero low
+// bits whose maximum possible sum (2 + 1 = 3 < 8) still fits without carrying
+// into bit 3.
+// CHECK-LABEL: hw.module @narrowAddBoundedLowBitsSum(
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add %x, %y : i13
+// CHECK-NEXT:    hw.output %[[ADD]] : i13
+hw.module @narrowAddBoundedLowBitsSum(in %x: i13, in %y: i13, in %s: i1, in %t: i1, out o: i13) {
+  %false = hw.constant false
+  %c0_i2 = hw.constant 0 : i2
+  %lhs = comb.concat %x, %false, %s, %false : i13, i1, i1, i1
+  %rhs = comb.concat %y, %c0_i2, %t : i13, i2, i1
+  %add = comb.add %lhs, %rhs : i16
+  %res = comb.extract %add from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Negative test: when trailing zeros cover fewer bits than the lowest demanded
+// bit (3 < 4), bit 3 can still carry into bit 4 and must not be dropped.
+// CHECK-LABEL: hw.module @narrowAddPartialTrailingZerosNegative(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i3
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %y, %[[C0]] : i13, i3
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add %x, %[[RHS]] : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[ADD]] from 4 : (i16) -> i12
+// CHECK-NEXT:    hw.output %[[RES]] : i12
+hw.module @narrowAddPartialTrailingZerosNegative(in %x: i16, in %y: i13, out o: i12) {
+  %c0_i3 = hw.constant 0 : i3
+  %rhs = comb.concat %y, %c0_i3 : i13, i3
+  %add = comb.add %x, %rhs : i16
+  %res = comb.extract %add from 4 : (i16) -> i12
+  hw.output %res : i12
+}
+
+// Negative test: variadic 3-input add where two operands have unknown low bits
+// can still carry into bit 3 even if the third operand's low bits are zero.
+// CHECK-LABEL: hw.module @narrowAddVariadicOverflowLowBitsNegative(
+// CHECK-NEXT:    %[[C8:.+]] = hw.constant 8 : i16
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add %x, %y, %[[C8]] : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[ADD]] from 3 : (i16) -> i13
+// CHECK-NEXT:    hw.output %[[RES]] : i13
+hw.module @narrowAddVariadicOverflowLowBitsNegative(in %x: i16, in %y: i16, out o: i13) {
+  %c8_i16 = hw.constant 8 : i16
+  %add = comb.add %x, %y, %c8_i16 : i16
+  %res = comb.extract %add from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Narrow trailing bits of comb.sub when rhs has known-zero low bits (cannot
+// borrow from bit 3).
+// CHECK-LABEL: hw.module @narrowSubRhsTrailingZeros(
+// CHECK-NEXT:    %[[X_HI:.+]] = comb.extract %x from 3 : (i16) -> i13
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub %[[X_HI]], %y : i13
+// CHECK-NEXT:    hw.output %[[SUB]] : i13
+hw.module @narrowSubRhsTrailingZeros(in %x: i16, in %y: i13, out o: i13) {
+  %c0_i3 = hw.constant 0 : i3
+  %rhs = comb.concat %y, %c0_i3 : i13, i3
+  %sub = comb.sub %x, %rhs : i16
+  %res = comb.extract %sub from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Narrow both upper and trailing bits of comb.sub when lhs has known-one low
+// bits (cannot borrow from bit 3) across multiple extract users and preserve
+// twoState (bin).
+// CHECK-LABEL: hw.module @narrowSubLhsTrailingOnesMultiExtractTwoState(
+// CHECK-DAG:     %[[TRUE:.+]] = hw.constant true
+// CHECK-DAG:     %[[X_SLICE:.+]] = comb.extract %x from 0 : (i12) -> i8
+// CHECK-DAG:     %[[LHS_SLICE:.+]] = comb.concat %[[X_SLICE]], %[[TRUE]] : i8, i1
+// CHECK-DAG:     %[[Y_SLICE:.+]] = comb.extract %y from 3 : (i16) -> i9
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub bin %[[LHS_SLICE]], %[[Y_SLICE]] : i9
+// CHECK-NEXT:    %[[E0:.+]] = comb.extract %[[SUB]] from 0 : (i9) -> i4
+// CHECK-NEXT:    %[[E1:.+]] = comb.extract %[[SUB]] from 3 : (i9) -> i6
+// CHECK-NEXT:    hw.output %[[E0]], %[[E1]] : i4, i6
+hw.module @narrowSubLhsTrailingOnesMultiExtractTwoState(in %x: i12, in %y: i16, out o0: i4, out o1: i6) {
+  %c-1_i4 = hw.constant -1 : i4
+  %lhs = comb.concat %x, %c-1_i4 : i12, i4
+  %sub = comb.sub bin %lhs, %y : i16
+  %e0 = comb.extract %sub from 3 : (i16) -> i4
+  %e1 = comb.extract %sub from 6 : (i16) -> i6
+  hw.output %e0, %e1 : i4, i6
+}
+
+// Narrow trailing bits of comb.sub when min(lhs[2:0]) = 4 >= max(rhs[2:0]) = 3
+// guarantees no borrow into bit 3.
+// CHECK-LABEL: hw.module @narrowSubBoundedLowBitsNoBorrow(
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub %x, %y : i13
+// CHECK-NEXT:    hw.output %[[SUB]] : i13
+hw.module @narrowSubBoundedLowBitsNoBorrow(in %x: i13, in %y: i13, in %s: i1, in %t: i2, out o: i13) {
+  %true = hw.constant true
+  %false = hw.constant false
+  %lhs = comb.concat %x, %true, %s, %false : i13, i1, i1, i1
+  %rhs = comb.concat %y, %false, %t : i13, i1, i2
+  %sub = comb.sub %lhs, %rhs : i16
+  %res = comb.extract %sub from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Negative test (asymmetry): trailing zeros on lhs (0 - y[2:0]) can borrow from
+// bit 3 when y[2:0] != 0 and must not be dropped.
+// CHECK-LABEL: hw.module @narrowSubLhsTrailingZerosNegative(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i3
+// CHECK-NEXT:    %[[LHS:.+]] = comb.concat %x, %[[C0]] : i13, i3
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub %[[LHS]], %y : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SUB]] from 3 : (i16) -> i13
+// CHECK-NEXT:    hw.output %[[RES]] : i13
+hw.module @narrowSubLhsTrailingZerosNegative(in %x: i13, in %y: i16, out o: i13) {
+  %c0_i3 = hw.constant 0 : i3
+  %lhs = comb.concat %x, %c0_i3 : i13, i3
+  %sub = comb.sub %lhs, %y : i16
+  %res = comb.extract %sub from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Negative test (asymmetry): trailing ones on rhs (x[2:0] - 3'b111) can borrow
+// from bit 3 when x[2:0] != 3'b111 and must not be dropped.
+// CHECK-LABEL: hw.module @narrowSubRhsTrailingOnesNegative(
+// CHECK-NEXT:    %[[ONES:.+]] = hw.constant -1 : i3
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %y, %[[ONES]] : i13, i3
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub %x, %[[RHS]] : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SUB]] from 3 : (i16) -> i13
+// CHECK-NEXT:    hw.output %[[RES]] : i13
+hw.module @narrowSubRhsTrailingOnesNegative(in %x: i16, in %y: i13, out o: i13) {
+  %c-1_i3 = hw.constant -1 : i3
+  %rhs = comb.concat %y, %c-1_i3 : i13, i3
+  %sub = comb.sub %x, %rhs : i16
+  %res = comb.extract %sub from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
 // Validates that subtraction narrowing retains the lower bits when not extracting from
 // zero.
 // CHECK-LABEL: hw.module @narrowMulExtractFromNoneZero
