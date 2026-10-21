@@ -135,16 +135,13 @@ class VarElementConstraint<string value, string varValue>
 // SV handle type and related helpers.
 //===----------------------------------------------------------------------===//
 
-
 /// A handle to either a SystemVerilog net or variable object kind.
 /// Note: InOutType to be removed. The summary stays "InOutType" so that
 /// diagnostics do not need changing.
 def SVHandleType : AnyTypeOf<[NetType, InOutType, VarType], "InOutType">;
 
-
 def SVHandleElementType : AnyTypeOf<[InOutElementType, NetElementType,
                                      VarElementType]>;
-
 
 class SVHandleElementConstraint<string value, string handleElement>
  : TypesMatchWith<"type should be element of SV handle type",
