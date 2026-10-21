@@ -196,11 +196,11 @@ endmodule
 
 // -----
 module Foo;
-  int inp[];
-  int tmp[];
+  string inp;
+  int n;
   initial begin
     // expected-error @below {{unsupported system call `$size`}}
-    tmp = new[$size(inp)];
+    n = $size(inp, 1);
   end
 endmodule
 
