@@ -418,7 +418,7 @@ jobs:
         if: inputs.run_tests
         run: |
           ${{ steps.setup-windows.outputs.setup }}
-          ninja -C build check-circt check-circt-unit
+          ninja -C build check-circt check-circt-unit circt-doc
       - name: Integration Test CIRCT
         if: inputs.run_integration_tests
         run: |
