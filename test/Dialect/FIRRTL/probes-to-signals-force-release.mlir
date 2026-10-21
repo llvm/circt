@@ -912,3 +912,125 @@ firrtl.circuit "ClockDomainPerInstance" {
   }
 }
 
+// -----
+
+// The child clocks aliased ports by the lowest one, so forcing only a later
+// port must still clock the lowest one.
+// CHECK-LABEL: firrtl.circuit "ForceNonFirstAliasedPort"
+firrtl.circuit "ForceNonFirstAliasedPort" {
+  // CHECK: firrtl.module private @Child
+  firrtl.module private @Child(in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %p1: !firrtl.rwprobe<uint<8>>, out %p2: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p2, %w_ref : !firrtl.rwprobe<uint<8>>
+    // CHECK: %[[CLK:.+]] = firrtl.subfield %p1_force_ctrl[clk]
+    // CHECK: firrtl.reg %[[CLK]]
+  }
+  // CHECK: firrtl.module @ForceNonFirstAliasedPort
+  firrtl.module @ForceNonFirstAliasedPort(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    %c_v, %c_o, %c_p1, %c_p2 = firrtl.instance c @Child(in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p1: !firrtl.rwprobe<uint<8>>, out p2: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+    // CHECK: %[[CLK1:.+]] = firrtl.subfield %c_p1_force_ctrl[clk]
+    // CHECK: firrtl.matchingconnect %[[CLK1]], %clock
+    // CHECK: %[[CLK2:.+]] = firrtl.subfield %c_p2_force_ctrl[clk]
+    // CHECK: firrtl.matchingconnect %[[CLK2]], %clock
+    firrtl.ref.force %clock, %en, %c_p2, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Aliasing is visible through a forwarding module, so the top drives the clock
+// of the unforced port.
+// CHECK-LABEL: firrtl.circuit "ForwardNonFirstAliasedPort"
+firrtl.circuit "ForwardNonFirstAliasedPort" {
+  firrtl.module private @Child(in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %p1: !firrtl.rwprobe<uint<8>>, out %p2: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p2, %w_ref : !firrtl.rwprobe<uint<8>>
+  }
+  // CHECK: firrtl.module private @Mid
+  firrtl.module private @Mid(in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %q1: !firrtl.rwprobe<uint<8>>, out %q2: !firrtl.rwprobe<uint<8>>) {
+    %c_v, %c_o, %c_p1, %c_p2 = firrtl.instance c @Child(in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p1: !firrtl.rwprobe<uint<8>>, out p2: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+    firrtl.ref.define %q1, %c_p1 : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %q2, %c_p2 : !firrtl.rwprobe<uint<8>>
+    // CHECK: %[[Q1CLK:.+]] = firrtl.subfield %q1_force_ctrl[clk]
+    // CHECK: %[[P1CLK:.+]] = firrtl.subfield %c_p1_force_ctrl[clk]
+    // CHECK: firrtl.matchingconnect %[[P1CLK]], %[[Q1CLK]]
+  }
+  // CHECK: firrtl.module @ForwardNonFirstAliasedPort
+  firrtl.module @ForwardNonFirstAliasedPort(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    %m_v, %m_o, %m_q1, %m_q2 = firrtl.instance m @Mid(in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out q1: !firrtl.rwprobe<uint<8>>, out q2: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %m_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %m_o : !firrtl.uint<8>
+    // CHECK: %[[CLK1:.+]] = firrtl.subfield %m_q1_force_ctrl[clk]
+    // CHECK: firrtl.matchingconnect %[[CLK1]], %clock
+    firrtl.ref.force %clock, %en, %m_q2, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// A module that forwards only a later aliased port clocks the lowest one from
+// the forwarded port's control.
+// CHECK-LABEL: firrtl.circuit "ForwardOneAliasedPort"
+firrtl.circuit "ForwardOneAliasedPort" {
+  firrtl.module private @Child(in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %p1: !firrtl.rwprobe<uint<8>>, out %p2: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p2, %w_ref : !firrtl.rwprobe<uint<8>>
+  }
+  // CHECK: firrtl.module private @Mid
+  firrtl.module private @Mid(in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %q: !firrtl.rwprobe<uint<8>>) {
+    %c_v, %c_o, %c_p1, %c_p2 = firrtl.instance c @Child(in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p1: !firrtl.rwprobe<uint<8>>, out p2: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+    firrtl.ref.define %q, %c_p2 : !firrtl.rwprobe<uint<8>>
+    // CHECK: %[[QCLK:.+]] = firrtl.subfield %q_force_ctrl[clk]
+    // CHECK: %[[P1CLK:.+]] = firrtl.subfield %c_p1_force_ctrl[clk]
+    // CHECK: firrtl.matchingconnect %[[P1CLK]], %[[QCLK]]
+    // CHECK: %[[P2CLK:.+]] = firrtl.subfield %c_p2_force_ctrl[clk]
+    // CHECK: firrtl.matchingconnect %[[P2CLK]], %[[QCLK]]
+  }
+  firrtl.module @ForwardOneAliasedPort(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    %m_v, %m_o, %m_q = firrtl.instance m @Mid(in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out q: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %m_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %m_o : !firrtl.uint<8>
+    firrtl.ref.force %clock, %en, %m_q, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// A local access clocks aliased ports, not an inbound clock, which is constant
+// unless the parent forces.
+// CHECK-LABEL: firrtl.circuit "LocalAliasClockOverInbound"
+firrtl.circuit "LocalAliasClockOverInbound" {
+  firrtl.module private @Child(in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %p1: !firrtl.rwprobe<uint<8>>, out %p2: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p2, %w_ref : !firrtl.rwprobe<uint<8>>
+  }
+  // CHECK: firrtl.module @LocalAliasClockOverInbound
+  firrtl.module @LocalAliasClockOverInbound(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %q: !firrtl.rwprobe<uint<8>>) {
+    %c_v, %c_o, %c_p1, %c_p2 = firrtl.instance c @Child(in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p1: !firrtl.rwprobe<uint<8>>, out p2: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+    firrtl.ref.define %q, %c_p1 : !firrtl.rwprobe<uint<8>>
+    // CHECK-NOT: firrtl.subfield %q_force_ctrl[clk]
+    // CHECK: %[[P1CLK:.+]] = firrtl.subfield %c_p1_force_ctrl[clk]
+    // CHECK: firrtl.matchingconnect %[[P1CLK]], %clock
+    firrtl.ref.force %clock, %en, %c_p2, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
