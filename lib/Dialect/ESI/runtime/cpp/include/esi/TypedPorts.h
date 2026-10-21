@@ -131,6 +131,13 @@ T fromMessageData(const MessageData &msg, const Type *portType) {
 
 namespace detail {
 
+/// Pass the exception being handled to `onConnected`. For use in the `catch`
+/// blocks of `noexcept` `connect()` methods.
+inline void failConnect(const ChannelPort::ConnectCallback &onConnected) {
+  if (onConnected)
+    onConnected(std::current_exception());
+}
+
 /// Owning callback used by typed read deserializers.
 ///
 /// Returning `false` means the callee did not accept the object and wants the
@@ -616,14 +623,29 @@ public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
-    if (!inner)
-      throw AcceleratorMismatchError("TypedWritePort: null port pointer");
-    if (!SkipTypeCheck)
-      verifyTypeCompatibility<T>(inner);
-    wireInfo_ = getWireInfo(inner->getType());
-    inner->connect(opts);
+  void connect(ChannelPort::ConnectCallback onConnected,
+               const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) noexcept {
+    try {
+      if (!inner)
+        throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+      if (!SkipTypeCheck)
+        verifyTypeCompatibility<T>(inner);
+      wireInfo_ = getWireInfo(inner->getType());
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
+    inner->connect(std::move(onConnected), opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), opts);
+    return std::move(future);
   }
 
   void write(const T &data) { inner->write(toMessageData(data, wireInfo_)); }
@@ -687,12 +709,27 @@ public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
-    if (!inner)
-      throw AcceleratorMismatchError("TypedWritePort: null port pointer");
-    verifyTypeCompatibility<void>(inner->getType());
-    inner->connect(opts);
+  void connect(ChannelPort::ConnectCallback onConnected,
+               const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) noexcept {
+    try {
+      if (!inner)
+        throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+      verifyTypeCompatibility<void>(inner->getType());
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
+    inner->connect(std::move(onConnected), opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), opts);
+    return std::move(future);
   }
 
   void write() {
@@ -749,39 +786,60 @@ public:
   ///
   /// The port installs an internal typed output queue. `read()` and
   /// `readAsync()` consume from that queue.
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
-    if (!inner)
-      throw AcceleratorMismatchError("TypedReadPort: null port pointer");
-    prepareConnect();
-    pollingState.emplace(maxDataQueueMsgs);
-    emplaceDeserializer([this](std::unique_ptr<T> &value) -> bool {
-      return pollingState->enqueue(value);
-    });
+  void connect(ChannelPort::ConnectCallback onConnected,
+               const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) noexcept {
     try {
-      inner->connect(
-          [this](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
-            assert(deserializer && "Deserializer should be connected");
-            return deserializer->push(msg);
-          },
-          opts);
+      if (!inner)
+        throw AcceleratorMismatchError("TypedReadPort: null port pointer");
+      prepareConnect();
+      pollingState.emplace(maxDataQueueMsgs);
+      emplaceDeserializer([this](std::unique_ptr<T> &value) -> bool {
+        return pollingState->enqueue(value);
+      });
     } catch (...) {
-      resetConnectState();
-      throw;
+      if (mode == Mode::Disconnected)
+        resetConnectState();
+      detail::failConnect(onConnected);
+      return;
     }
-    mode = Mode::Polling;
+    if (connectInner(std::move(onConnected), opts))
+      mode = Mode::Polling;
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), opts);
+    return std::move(future);
   }
 
   /// Connect a non-owning typed callback.
   ///
   /// The callback sees the decoded value by reference. Returning `false`
   /// requests that the same decoded value be retried later.
-  void connect(std::function<bool(const T &)> callback,
+  void connect(ChannelPort::ConnectCallback onConnected,
+               std::function<bool(const T &)> callback,
                const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
-    connect([cb = std::move(callback)](
-                std::unique_ptr<T> &value) -> bool { return cb(*value); },
+                                                          false}) noexcept {
+    connect(std::move(onConnected),
+            detail::TypedReadOwnedCallback<T>(
+                [cb = std::move(callback)](std::unique_ptr<T> &value) -> bool {
+                  return cb(*value);
+                }),
             opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(std::function<bool(const T &)> callback,
+                            const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), std::move(callback), opts);
+    return std::move(future);
   }
 
   /// Connect an owning typed callback.
@@ -789,27 +847,36 @@ public:
   /// This is the typed analogue of `ReadChannelPort::ReadCallback`: the
   /// callback may take ownership of the decoded value or return `false` to
   /// retry delivery later with the same object.
-  void connect(detail::TypedReadOwnedCallback<T> callback,
+  void connect(ChannelPort::ConnectCallback onConnected,
+               detail::TypedReadOwnedCallback<T> callback,
                const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
-    if (!inner)
-      throw AcceleratorMismatchError("TypedReadPort: null port pointer");
-    prepareConnect();
-    emplaceDeserializer(std::move(callback));
+                                                          false}) noexcept {
     try {
-      inner->connect(
-          [this](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
-            assert(deserializer && "Deserializer should be connected");
-            return deserializer->push(msg);
-          },
-          opts);
+      if (!inner)
+        throw AcceleratorMismatchError("TypedReadPort: null port pointer");
+      prepareConnect();
+      emplaceDeserializer(std::move(callback));
     } catch (...) {
-      resetConnectState();
-      throw;
+      if (mode == Mode::Disconnected)
+        resetConnectState();
+      detail::failConnect(onConnected);
+      return;
     }
+    if (!connectInner(std::move(onConnected), opts))
+      return;
     // TODO: Hook callback-mode custom-deserializer poke() retries into the
     // existing periodic poll/background-worker path.
     mode = Mode::Callback;
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(detail::TypedReadOwnedCallback<T> callback,
+                            const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), std::move(callback), opts);
+    return std::move(future);
   }
 
   /// Blocking typed read in polling mode.
@@ -879,6 +946,24 @@ private:
     }
   }
 
+  /// Connect `inner` to feed `deserializer`. Returns whether that worked; if
+  /// not, `onConnected` has been given the error and the state is reset.
+  bool connectInner(ChannelPort::ConnectCallback onConnected,
+                    const ChannelPort::ConnectOptions &opts) {
+    bool wasConnected = inner->isConnected();
+    inner->connect(
+        std::move(onConnected),
+        [this](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
+          assert(deserializer && "Deserializer should be connected");
+          return deserializer->push(msg);
+        },
+        opts);
+    if (!wasConnected && inner->isConnected())
+      return true;
+    resetConnectState();
+    return false;
+  }
+
   void prepareConnect() {
     if (mode != Mode::Disconnected)
       throw std::runtime_error("Channel already connected");
@@ -920,22 +1005,54 @@ public:
       disconnect();
   }
 
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
-    if (!inner)
-      throw AcceleratorMismatchError("TypedReadPort: null port pointer");
-    verifyTypeCompatibility<void>(inner->getType());
-    inner->connect(opts);
+  void connect(ChannelPort::ConnectCallback onConnected,
+               const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) noexcept {
+    try {
+      if (!inner)
+        throw AcceleratorMismatchError("TypedReadPort: null port pointer");
+      verifyTypeCompatibility<void>(inner->getType());
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
+    inner->connect(std::move(onConnected), opts);
   }
 
-  void connect(std::function<bool()> callback,
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), opts);
+    return std::move(future);
+  }
+
+  void connect(ChannelPort::ConnectCallback onConnected,
+               std::function<bool()> callback,
                const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
-    if (!inner)
-      throw AcceleratorMismatchError("TypedReadPort: null port pointer");
-    verifyTypeCompatibility<void>(inner->getType());
+                                                          false}) noexcept {
+    try {
+      if (!inner)
+        throw AcceleratorMismatchError("TypedReadPort: null port pointer");
+      verifyTypeCompatibility<void>(inner->getType());
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
     inner->connect(
+        std::move(onConnected),
         [cb = std::move(callback)](MessageData) -> bool { return cb(); }, opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(std::function<bool()> callback,
+                            const ChannelPort::ConnectOptions &opts = {
+                                std::nullopt, false}) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), std::move(callback), opts);
+    return std::move(future);
   }
 
   void read() {
@@ -1036,16 +1153,32 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
-    if (!inner)
-      detail::throwNullFunction();
-    if (argPort)
-      detail::throwAlreadyConnected();
-    argPort.emplace(&inner->getRawWrite("arg"));
-    resultPort.emplace(&inner->getRawRead("result"));
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::ConnectCallback`).
+  void connect(ChannelPort::ConnectCallback onConnected) noexcept {
+    try {
+      if (!inner)
+        detail::throwNullFunction();
+      if (argPort)
+        detail::throwAlreadyConnected();
+      argPort.emplace(&inner->getRawWrite("arg"));
+      resultPort.emplace(&inner->getRawRead("result"));
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    argPort->connect(std::move(parts[0]), opts);
+    resultPort->connect(std::move(parts[1]), opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect() {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected));
+    return std::move(future);
   }
 
   std::future<ResultT> call(const ArgT &arg) {
@@ -1099,16 +1232,32 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
-    if (!inner)
-      detail::throwNullFunction();
-    if (argPort)
-      detail::throwAlreadyConnected();
-    argPort.emplace(&inner->getRawWrite("arg"));
-    resultPort.emplace(&inner->getRawRead("result"));
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::ConnectCallback`).
+  void connect(ChannelPort::ConnectCallback onConnected) noexcept {
+    try {
+      if (!inner)
+        detail::throwNullFunction();
+      if (argPort)
+        detail::throwAlreadyConnected();
+      argPort.emplace(&inner->getRawWrite("arg"));
+      resultPort.emplace(&inner->getRawRead("result"));
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    argPort->connect(std::move(parts[0]), opts);
+    resultPort->connect(std::move(parts[1]), opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect() {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected));
+    return std::move(future);
   }
 
   std::future<ResultT> call() {
@@ -1141,16 +1290,32 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
-    if (!inner)
-      detail::throwNullFunction();
-    if (argPort)
-      detail::throwAlreadyConnected();
-    argPort.emplace(&inner->getRawWrite("arg"));
-    resultPort.emplace(&inner->getRawRead("result"));
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::ConnectCallback`).
+  void connect(ChannelPort::ConnectCallback onConnected) noexcept {
+    try {
+      if (!inner)
+        detail::throwNullFunction();
+      if (argPort)
+        detail::throwAlreadyConnected();
+      argPort.emplace(&inner->getRawWrite("arg"));
+      resultPort.emplace(&inner->getRawRead("result"));
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    argPort->connect(std::move(parts[0]), opts);
+    resultPort->connect(std::move(parts[1]), opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect() {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected));
+    return std::move(future);
   }
 
   std::future<void> call(const ArgT &arg) {
@@ -1199,16 +1364,32 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
-    if (!inner)
-      detail::throwNullFunction();
-    if (argPort)
-      detail::throwAlreadyConnected();
-    argPort.emplace(&inner->getRawWrite("arg"));
-    resultPort.emplace(&inner->getRawRead("result"));
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::ConnectCallback`).
+  void connect(ChannelPort::ConnectCallback onConnected) noexcept {
+    try {
+      if (!inner)
+        detail::throwNullFunction();
+      if (argPort)
+        detail::throwAlreadyConnected();
+      argPort.emplace(&inner->getRawWrite("arg"));
+      resultPort.emplace(&inner->getRawRead("result"));
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    argPort->connect(std::move(parts[0]), opts);
+    resultPort->connect(std::move(parts[1]), opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect() {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected));
+    return std::move(future);
   }
 
   std::future<void> call() {
@@ -1289,28 +1470,47 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<ResultT(const ArgT &)> callback,
-               bool quick = false) {
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::ConnectCallback`).
+  void connect(ChannelPort::ConnectCallback onConnected,
+               std::function<ResultT(const ArgT &)> callback,
+               bool quick = false) noexcept {
     (void)quick; // See class header.
-    if (!inner)
-      detail::throwNullCallback();
-    if (argPort)
-      detail::throwCallbackAlreadyConnected();
-    argPort.emplace(&inner->getRawRead("arg"));
-    resultPort.emplace(&inner->getRawWrite("result"));
+    try {
+      if (!inner)
+        detail::throwNullCallback();
+      if (argPort)
+        detail::throwCallbackAlreadyConnected();
+      argPort.emplace(&inner->getRawRead("arg"));
+      resultPort.emplace(&inner->getRawWrite("result"));
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    resultPort->connect(std::move(parts[0]), opts);
     userCallback = std::move(callback);
     // The TypedReadPort callback runs on the read-channel callback thread
     // for every decoded ArgT. We forward to the user's callback and then
     // serialize the result through the TypedWritePort.
     argPort->connect(
+        std::move(parts[1]),
         [this](const ArgT &arg) -> bool {
           ResultT result = userCallback(arg);
           resultPort->write(result);
           return true;
         },
         opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(std::function<ResultT(const ArgT &)> callback,
+                            bool quick = false) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), std::move(callback), quick);
+    return std::move(future);
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1332,24 +1532,42 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<ResultT()> callback, bool quick = false) {
+  /// See above for `onConnected`.
+  void connect(ChannelPort::ConnectCallback onConnected,
+               std::function<ResultT()> callback, bool quick = false) noexcept {
     (void)quick;
-    if (!inner)
-      detail::throwNullCallback();
-    if (argPort)
-      detail::throwCallbackAlreadyConnected();
-    argPort.emplace(&inner->getRawRead("arg"));
-    resultPort.emplace(&inner->getRawWrite("result"));
+    try {
+      if (!inner)
+        detail::throwNullCallback();
+      if (argPort)
+        detail::throwCallbackAlreadyConnected();
+      argPort.emplace(&inner->getRawRead("arg"));
+      resultPort.emplace(&inner->getRawWrite("result"));
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    resultPort->connect(std::move(parts[0]), opts);
     userCallback = std::move(callback);
     argPort->connect(
+        std::move(parts[1]),
         [this]() -> bool {
           ResultT result = userCallback();
           resultPort->write(result);
           return true;
         },
         opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(std::function<ResultT()> callback,
+                            bool quick = false) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), std::move(callback), quick);
+    return std::move(future);
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1371,24 +1589,43 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<void(const ArgT &)> callback, bool quick = false) {
+  /// See above for `onConnected`.
+  void connect(ChannelPort::ConnectCallback onConnected,
+               std::function<void(const ArgT &)> callback,
+               bool quick = false) noexcept {
     (void)quick;
-    if (!inner)
-      detail::throwNullCallback();
-    if (argPort)
-      detail::throwCallbackAlreadyConnected();
-    argPort.emplace(&inner->getRawRead("arg"));
-    resultPort.emplace(&inner->getRawWrite("result"));
+    try {
+      if (!inner)
+        detail::throwNullCallback();
+      if (argPort)
+        detail::throwCallbackAlreadyConnected();
+      argPort.emplace(&inner->getRawRead("arg"));
+      resultPort.emplace(&inner->getRawWrite("result"));
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    resultPort->connect(std::move(parts[0]), opts);
     userCallback = std::move(callback);
     argPort->connect(
+        std::move(parts[1]),
         [this](const ArgT &arg) -> bool {
           userCallback(arg);
           resultPort->write();
           return true;
         },
         opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(std::function<void(const ArgT &)> callback,
+                            bool quick = false) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), std::move(callback), quick);
+    return std::move(future);
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1410,24 +1647,42 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<void()> callback, bool quick = false) {
+  /// See above for `onConnected`.
+  void connect(ChannelPort::ConnectCallback onConnected,
+               std::function<void()> callback, bool quick = false) noexcept {
     (void)quick;
-    if (!inner)
-      detail::throwNullCallback();
-    if (argPort)
-      detail::throwCallbackAlreadyConnected();
-    argPort.emplace(&inner->getRawRead("arg"));
-    resultPort.emplace(&inner->getRawWrite("result"));
+    try {
+      if (!inner)
+        detail::throwNullCallback();
+      if (argPort)
+        detail::throwCallbackAlreadyConnected();
+      argPort.emplace(&inner->getRawRead("arg"));
+      resultPort.emplace(&inner->getRawWrite("result"));
+    } catch (...) {
+      detail::failConnect(onConnected);
+      return;
+    }
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    resultPort->connect(std::move(parts[0]), opts);
     userCallback = std::move(callback);
     argPort->connect(
+        std::move(parts[1]),
         [this]() -> bool {
           userCallback();
           resultPort->write();
           return true;
         },
         opts);
+  }
+
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(std::function<void()> callback,
+                            bool quick = false) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), std::move(callback), quick);
+    return std::move(future);
   }
 
   services::CallService::Callback &raw() { return *inner; }

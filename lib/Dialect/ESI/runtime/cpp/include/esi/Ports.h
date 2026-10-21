@@ -187,8 +187,32 @@ public:
         : bufferSize(bufferSize), translateMessage(translateMessage) {}
   };
 
-  /// Set up a connection to the accelerator.
-  virtual void connect(const ConnectOptions &options = ConnectOptions()) = 0;
+  /// Passed to `connect()`. Called exactly once: with nullptr once the other
+  /// (accelerator) end of the channel is connected too, or with an exception
+  /// if connecting failed or it never will be (e.g. the connection to the
+  /// accelerator is lost, or this port is disconnected first). `connect()`
+  /// never throws; it reports every error this way. Backends may call it from
+  /// any thread, including from within `connect()`, so it must be quick, must
+  /// not block, must not throw, and must not call back into the port.
+  ///
+  /// `connect()` never blocks waiting for the accelerator side; each form
+  /// which takes a `ConnectCallback` has a counterpart which returns a
+  /// `std::future<void>` instead, which also never throws. Data written before
+  /// the other end is connected is held and backpressures the writer, never
+  /// dropped.
+  using ConnectCallback = std::function<void(std::exception_ptr)>;
+
+  /// Set up a connection to the accelerator. `onConnected` is called once the
+  /// accelerator end is connected too; see `ConnectCallback`.
+  virtual void connect(ConnectCallback onConnected,
+                       const ConnectOptions &options = {}) noexcept = 0;
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(const ConnectOptions &options = {}) {
+    auto [onConnected, future] = utils::promiseCallback();
+    connect(std::move(onConnected), options);
+    return std::move(future);
+  }
   virtual void disconnect() = 0;
   virtual bool isConnected() const = 0;
 
@@ -300,23 +324,39 @@ protected:
   virtual bool pollImpl() { return false; }
 
   /// Called by all connect methods to let backends initiate the underlying
-  /// connections.
-  virtual void connectImpl(const ConnectOptions &options) {}
+  /// connections. Must not block, and must arrange for `onConnected` (if
+  /// non-null) to be called exactly once. Alternatively, it may throw if it
+  /// has neither called nor kept `onConnected`, in which case `connect()`
+  /// passes the exception to `onConnected`. The default, for backends whose
+  /// other end is always connected, calls it immediately.
+  virtual void connectImpl(ConnectCallback onConnected,
+                           const ConnectOptions &options) {
+    if (onConnected)
+      onConnected(nullptr);
+  }
 };
 
 /// A ChannelPort which sends data to the accelerator.
 class WriteChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
+  using ChannelPort::connect;
 
-  virtual void connect(const ConnectOptions &options = {}) override {
-    translateMessages = options.translateMessage && translationInfo;
-    if (translationInfo) {
-      translationInfo->precomputeFrameInfo();
-      if (translateMessages)
-        translationInfo->requireTranslationSupported();
+  virtual void connect(ConnectCallback onConnected,
+                       const ConnectOptions &options = {}) noexcept override {
+    try {
+      translateMessages = options.translateMessage && translationInfo;
+      if (translationInfo) {
+        translationInfo->precomputeFrameInfo();
+        if (translateMessages)
+          translationInfo->requireTranslationSupported();
+      }
+      connectImpl(onConnected, options);
+    } catch (...) {
+      if (onConnected)
+        onConnected(std::current_exception());
+      return;
     }
-    connectImpl(options);
     connected = true;
   }
   virtual void disconnect() override { connected = false; }
@@ -448,8 +488,11 @@ public:
   UnknownWriteChannelPort(const Type *type, std::string errmsg)
       : WriteChannelPort(type), errmsg(errmsg) {}
 
-  void connect(const ConnectOptions &options = {}) override {
-    throw std::runtime_error(errmsg);
+  using WriteChannelPort::connect;
+  void connect(ConnectCallback onConnected,
+               const ConnectOptions &options = {}) noexcept override {
+    if (onConnected)
+      onConnected(std::make_exception_ptr(std::runtime_error(errmsg)));
   }
 
 protected:
@@ -504,13 +547,21 @@ public:
   // wait, and be notified.
   //===--------------------------------------------------------------------===//
 
-  virtual void connect(ReadCallback callback,
-                       const ConnectOptions &options = {});
+  /// `onConnected` is called once the accelerator end is connected too; see
+  /// `ConnectCallback`.
+  virtual void connect(ConnectCallback onConnected, ReadCallback callback,
+                       const ConnectOptions &options = {}) noexcept;
+  /// As above, but returns a future which is ready once the accelerator end
+  /// is connected too, or holds the error if connecting failed.
+  std::future<void> connect(ReadCallback callback,
+                            const ConnectOptions &options = {});
 
   /// Connect a compatibility callback which receives flattened `MessageData`
   /// objects. This adapts the primary segmented callback path.
-  virtual void connect(FlatReadCallback callback,
-                       const ConnectOptions &options = {});
+  virtual void connect(ConnectCallback onConnected, FlatReadCallback callback,
+                       const ConnectOptions &options = {}) noexcept;
+  std::future<void> connect(FlatReadCallback callback,
+                            const ConnectOptions &options = {});
 
   //===--------------------------------------------------------------------===//
   // Polling mode methods: To use futures or blocking reads, connect without any
@@ -520,8 +571,12 @@ public:
   /// Default max data queue size set at connect time.
   static constexpr uint64_t DefaultMaxDataQueueMsgs = 32;
 
-  /// Connect to the channel in polling mode.
-  virtual void connect(const ConnectOptions &options = {}) override;
+  /// Connect to the channel in polling mode. `onConnected` is called once the
+  /// accelerator end is connected too; see `ConnectCallback`. The overload
+  /// returning a future is inherited from `ChannelPort`.
+  using ChannelPort::connect;
+  virtual void connect(ConnectCallback onConnected,
+                       const ConnectOptions &options = {}) noexcept override;
 
   /// Asynchronous polling read.
   ///
@@ -603,16 +658,21 @@ public:
   UnknownReadChannelPort(const Type *type, std::string errmsg)
       : ReadChannelPort(type), errmsg(errmsg) {}
 
-  void connect(ReadCallback callback,
-               const ConnectOptions &options = ConnectOptions()) override {
-    throw std::runtime_error(errmsg);
+  using ReadChannelPort::connect;
+  void connect(ConnectCallback onConnected, ReadCallback callback,
+               const ConnectOptions &options = {}) noexcept override {
+    if (onConnected)
+      onConnected(std::make_exception_ptr(std::runtime_error(errmsg)));
   }
-  void connect(FlatReadCallback callback,
-               const ConnectOptions &options = ConnectOptions()) override {
-    throw std::runtime_error(errmsg);
+  void connect(ConnectCallback onConnected, FlatReadCallback callback,
+               const ConnectOptions &options = {}) noexcept override {
+    if (onConnected)
+      onConnected(std::make_exception_ptr(std::runtime_error(errmsg)));
   }
-  void connect(const ConnectOptions &options = ConnectOptions()) override {
-    throw std::runtime_error(errmsg);
+  void connect(ConnectCallback onConnected,
+               const ConnectOptions &options = {}) noexcept override {
+    if (onConnected)
+      onConnected(std::make_exception_ptr(std::runtime_error(errmsg)));
   }
   std::future<MessageData> readAsync() override {
     throw std::runtime_error(errmsg);

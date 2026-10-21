@@ -270,18 +270,26 @@ class MockWritePort : public WriteChannelPort {
 public:
   MockWritePort(const Type *type) : WriteChannelPort(type) {}
 
-  void connect(const ConnectOptions &opts = {}) override {
-    connectImpl(opts);
-    connected = true;
-  }
   void disconnect() override { connected = false; }
   bool isConnected() const override { return connected; }
 
   MessageData lastWritten;
   /// When false, tryWriteImpl() rejects writes (simulates a full buffer).
   bool acceptTryWrites = true;
+  /// When true, `connect()`'s callback is stored in `pendingConnected`
+  /// (simulates the accelerator end not being connected yet).
+  bool deferConnected = false;
+  ConnectCallback pendingConnected;
 
 protected:
+  void connectImpl(ConnectCallback onConnected,
+                   const ConnectOptions &) override {
+    connected = true;
+    if (deferConnected)
+      pendingConnected = std::move(onConnected);
+    else
+      onConnected(nullptr);
+  }
   void writeImpl(const MessageData &data) override { lastWritten = data; }
   bool tryWriteImpl(const MessageData &data) override {
     if (!acceptTryWrites)
@@ -298,7 +306,7 @@ TEST(TypedPortsTest, TypedWritePortConnectThrowsOnMismatch) {
   UIntType uint32("ui32", 32);
   MockWritePort mock(&uint32);
   TypedWritePort<int32_t> typed(mock); // int32_t expects SIntType
-  EXPECT_THROW(typed.connect(), AcceleratorMismatchError);
+  EXPECT_THROW(typed.connect().get(), AcceleratorMismatchError);
 }
 
 TEST(TypedPortsTest, TypedWritePortConnectSucceeds) {
@@ -307,6 +315,46 @@ TEST(TypedPortsTest, TypedWritePortConnectSucceeds) {
   TypedWritePort<int32_t> typed(mock);
   EXPECT_NO_THROW(typed.connect());
   EXPECT_TRUE(typed.isConnected());
+}
+
+TEST(TypedPortsTest, TypedWritePortConnectCallback) {
+  SIntType sint31("si31", 31);
+  MockWritePort mock(&sint31);
+  mock.deferConnected = true;
+  TypedWritePort<int32_t> typed(mock);
+  int calls = 0;
+  std::exception_ptr seen;
+  typed.connect([&](std::exception_ptr e) {
+    ++calls;
+    seen = e;
+  });
+  EXPECT_TRUE(typed.isConnected());
+  EXPECT_EQ(calls, 0);
+  ASSERT_TRUE(mock.pendingConnected);
+  mock.pendingConnected(nullptr);
+  EXPECT_EQ(calls, 1);
+  EXPECT_FALSE(seen);
+}
+
+TEST(TypedPortsTest, TypedWritePortConnectFuture) {
+  SIntType sint31("si31", 31);
+  MockWritePort mock(&sint31);
+  mock.deferConnected = true;
+  TypedWritePort<int32_t> typed(mock);
+  std::future<void> f = typed.connect();
+  EXPECT_EQ(f.wait_for(std::chrono::seconds(0)), std::future_status::timeout);
+  ASSERT_TRUE(mock.pendingConnected);
+  mock.pendingConnected(nullptr);
+  ASSERT_EQ(f.wait_for(std::chrono::seconds(0)), std::future_status::ready);
+  EXPECT_NO_THROW(f.get());
+
+  // Failures surface through the future.
+  MockWritePort failing(&sint31);
+  failing.deferConnected = true;
+  std::future<void> failed = failing.connect();
+  failing.pendingConnected(
+      std::make_exception_ptr(std::runtime_error("never connected")));
+  EXPECT_THROW(failed.get(), std::runtime_error);
 }
 
 TEST(TypedPortsTest, TypedWritePortRoundTrip) {
@@ -386,12 +434,6 @@ class MockReadPort : public ReadChannelPort {
 public:
   MockReadPort(const Type *type) : ReadChannelPort(type) {}
 
-  void connect(std::function<bool(MessageData)>,
-               const ConnectOptions & = {}) override {
-    mode = Mode::Callback;
-  }
-  void connect(const ConnectOptions & = {}) override { mode = Mode::Polling; }
-
   void read(MessageData &outData) override { outData = nextResponse; }
   std::future<MessageData> readAsync() override {
     std::promise<MessageData> p;
@@ -411,7 +453,7 @@ TEST(TypedPortsTest, TypedReadPortCustomDeserializerVerifiesESIID) {
   StructType mismatchType("OtherModule.OtherStruct", {});
   MockReadPort mismatch(&mismatchType);
   TypedReadPort<DeserializerWithESIID> bad(mismatch);
-  EXPECT_THROW(bad.connect(), AcceleratorMismatchError);
+  EXPECT_THROW(bad.connect().get(), AcceleratorMismatchError);
 }
 
 class CallbackDrivenMockReadPort : public ReadChannelPort {
@@ -767,7 +809,7 @@ TEST(TypedPortsTest,
 TEST(TypedPortsTest, TypedFunctionNullThrowsAtConnect) {
   // Null is accepted at construction but throws at connect().
   TypedFunction<uint32_t, uint16_t> typed(nullptr);
-  EXPECT_THROW(typed.connect(), AcceleratorMismatchError);
+  EXPECT_THROW(typed.connect().get(), AcceleratorMismatchError);
 }
 
 TEST(TypedPortsTest, TypedFunctionCallBeforeConnectThrows) {
@@ -798,7 +840,7 @@ TEST(TypedPortsTest, TypedFunctionDoubleConnectThrows) {
 
   TypedFunction<int32_t, uint16_t> typed(func);
   typed.connect();
-  EXPECT_THROW(typed.connect(), std::runtime_error);
+  EXPECT_THROW(typed.connect().get(), std::runtime_error);
   delete func;
 }
 
@@ -848,7 +890,7 @@ TEST(TypedPortsTest, TypedFunctionConnectRejectsArgMismatch) {
 
   // int32_t (signed) against UIntType — should fail at connect.
   TypedFunction<int32_t, uint16_t> typed(func);
-  EXPECT_THROW(typed.connect(), AcceleratorMismatchError);
+  EXPECT_THROW(typed.connect().get(), AcceleratorMismatchError);
   delete func;
 }
 
@@ -1033,7 +1075,39 @@ TEST(TypedPortsTest, ReadChannelPortPollingConnectRejectsReconnect) {
   CallbackDrivenMockReadPort mock(&uint32);
 
   mock.connect();
-  EXPECT_THROW(mock.connect(), std::runtime_error);
+  EXPECT_THROW(mock.connect().get(), std::runtime_error);
+}
+
+TEST(TypedPortsTest, ConnectReportsErrorsThroughCallback) {
+  UIntType uint32("ui32", 32);
+  int calls = 0;
+  std::exception_ptr seen;
+  auto onConnected = [&](std::exception_ptr e) {
+    ++calls;
+    seen = e;
+  };
+  ChannelPort::ConnectCallback cb;
+  ChannelPort::ConnectOptions opts;
+
+  CallbackDrivenMockReadPort raw(&uint32);
+  static_assert(noexcept(raw.connect(std::move(cb), opts)));
+  raw.connect();
+  raw.connect(onConnected);
+  EXPECT_EQ(calls, 1);
+  ASSERT_TRUE(seen);
+  EXPECT_THROW(std::rethrow_exception(seen), std::runtime_error);
+  EXPECT_TRUE(raw.isConnected());
+
+  calls = 0;
+  seen = nullptr;
+  MockWritePort mock(&uint32);
+  TypedWritePort<int32_t> typed(mock); // int32_t expects SIntType
+  static_assert(noexcept(typed.connect(std::move(cb), opts)));
+  typed.connect(onConnected);
+  EXPECT_EQ(calls, 1);
+  ASSERT_TRUE(seen);
+  EXPECT_THROW(std::rethrow_exception(seen), AcceleratorMismatchError);
+  EXPECT_FALSE(mock.isConnected());
 }
 
 TEST(TypedPortsTest, ReadChannelPortDisconnectRevokesCallback) {

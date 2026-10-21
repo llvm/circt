@@ -247,15 +247,29 @@ ChannelService::ToHost *ChannelService::ToHost::get(AppID id,
   return new ToHost(id, type, {{std::string("data"), data}});
 }
 
-void ChannelService::ToHost::connect() {
-  if (connected)
-    throw std::runtime_error("ToHost channel is already connected");
-  if (channels.size() != 1)
-    throw std::runtime_error("ChannelService ToHost must have exactly one "
-                             "channel");
-  dataPort = &getRawRead("data");
-  dataPort->connect();
-  connected = true;
+void ChannelService::ToHost::connect(
+    ChannelPort::ConnectCallback onConnected) noexcept {
+  try {
+    if (connected)
+      throw std::runtime_error("ToHost channel is already connected");
+    if (channels.size() != 1)
+      throw std::runtime_error("ChannelService ToHost must have exactly one "
+                               "channel");
+    dataPort = &getRawRead("data");
+  } catch (...) {
+    if (onConnected)
+      onConnected(std::current_exception());
+    return;
+  }
+  bool wasConnected = dataPort->isConnected();
+  dataPort->connect(std::move(onConnected));
+  connected = !wasConnected && dataPort->isConnected();
+}
+
+std::future<void> ChannelService::ToHost::connect() {
+  auto [onConnected, future] = utils::promiseCallback();
+  connect(std::move(onConnected));
+  return std::move(future);
 }
 
 std::future<MessageData> ChannelService::ToHost::read() {
@@ -271,15 +285,29 @@ ChannelService::FromHost::get(AppID id, const BundleType *type,
   return new FromHost(id, type, {{std::string("data"), data}});
 }
 
-void ChannelService::FromHost::connect() {
-  if (connected)
-    throw std::runtime_error("FromHost channel is already connected");
-  if (channels.size() != 1)
-    throw std::runtime_error("ChannelService FromHost must have exactly one "
-                             "channel");
-  dataPort = &getRawWrite("data");
-  dataPort->connect();
-  connected = true;
+void ChannelService::FromHost::connect(
+    ChannelPort::ConnectCallback onConnected) noexcept {
+  try {
+    if (connected)
+      throw std::runtime_error("FromHost channel is already connected");
+    if (channels.size() != 1)
+      throw std::runtime_error("ChannelService FromHost must have exactly one "
+                               "channel");
+    dataPort = &getRawWrite("data");
+  } catch (...) {
+    if (onConnected)
+      onConnected(std::current_exception());
+    return;
+  }
+  bool wasConnected = dataPort->isConnected();
+  dataPort->connect(std::move(onConnected));
+  connected = !wasConnected && dataPort->isConnected();
+}
+
+std::future<void> ChannelService::FromHost::connect() {
+  auto [onConnected, future] = utils::promiseCallback();
+  connect(std::move(onConnected));
+  return std::move(future);
 }
 
 void ChannelService::FromHost::write(const MessageData &data) {
@@ -314,16 +342,32 @@ FuncService::Function *FuncService::Function::get(AppID id, BundleType *type,
 }
 
 void FuncService::Function::connect(
-    const ChannelPort::ConnectOptions &options) {
-  if (connected)
-    throw std::runtime_error("Function is already connected");
-  if (channels.size() != 2)
-    throw std::runtime_error("FuncService must have exactly two channels");
-  arg = &getRawWrite("arg");
-  arg->connect(options);
-  result = &getRawRead("result");
-  result->connect(options);
-  connected = true;
+    ChannelPort::ConnectCallback onConnected,
+    const ChannelPort::ConnectOptions &options) noexcept {
+  try {
+    if (connected)
+      throw std::runtime_error("Function is already connected");
+    if (channels.size() != 2)
+      throw std::runtime_error("FuncService must have exactly two channels");
+    arg = &getRawWrite("arg");
+    result = &getRawRead("result");
+  } catch (...) {
+    if (onConnected)
+      onConnected(std::current_exception());
+    return;
+  }
+  bool wasConnected = arg->isConnected() || result->isConnected();
+  auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+  arg->connect(std::move(parts[0]), options);
+  result->connect(std::move(parts[1]), options);
+  connected = !wasConnected && arg->isConnected() && result->isConnected();
+}
+
+std::future<void>
+FuncService::Function::connect(const ChannelPort::ConnectOptions &options) {
+  auto [onConnected, future] = utils::promiseCallback();
+  connect(std::move(onConnected), options);
+  return std::move(future);
 }
 
 std::future<MessageData>
@@ -363,29 +407,52 @@ CallService::Callback *CallService::Callback::get(AcceleratorConnection &acc,
 }
 
 void CallService::Callback::connect(
+    ChannelPort::ConnectCallback onConnected,
     std::function<MessageData(const MessageData &)> callback, bool quick,
-    const ChannelPort::ConnectOptions &options) {
-  if (channels.size() != 2)
-    throw std::runtime_error("CallService must have exactly two channels");
-  result = &getRawWrite("result");
-  result->connect(options);
-  arg = &getRawRead("arg");
+    const ChannelPort::ConnectOptions &options) noexcept {
+  AcceleratorServiceThread *serviceThread = nullptr;
+  try {
+    if (channels.size() != 2)
+      throw std::runtime_error("CallService must have exactly two channels");
+    result = &getRawWrite("result");
+    arg = &getRawRead("arg");
+    if (!quick)
+      serviceThread = acc.getServiceThread();
+  } catch (...) {
+    if (onConnected)
+      onConnected(std::current_exception());
+    return;
+  }
+  auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+  result->connect(std::move(parts[0]), options);
   if (quick) {
     // If it's quick, we can just call the callback directly.
-    arg->connect([this, callback](MessageData argMsg) -> bool {
-      MessageData resultMsg = callback(std::move(argMsg));
-      this->result->write(std::move(resultMsg));
-      return true;
-    });
+    arg->connect(std::move(parts[1]),
+                 [this, callback](MessageData argMsg) -> bool {
+                   MessageData resultMsg = callback(std::move(argMsg));
+                   this->result->write(std::move(resultMsg));
+                   return true;
+                 });
   } else {
     // If it's not quick, we need to use the service thread.
-    arg->connect(options);
-    acc.getServiceThread()->addListener(
+    bool wasConnected = arg->isConnected();
+    arg->connect(std::move(parts[1]), options);
+    if (wasConnected || !arg->isConnected())
+      return;
+    serviceThread->addListener(
         {arg}, [this, callback](ReadChannelPort *, MessageData argMsg) -> void {
           MessageData resultMsg = callback(std::move(argMsg));
           this->result->write(std::move(resultMsg));
         });
   }
+}
+
+std::future<void> CallService::Callback::connect(
+    std::function<MessageData(const MessageData &)> callback, bool quick,
+    const ChannelPort::ConnectOptions &options) {
+  auto [onConnected, future] = utils::promiseCallback();
+  connect(std::move(onConnected), std::move(callback), quick, options);
+  return std::move(future);
 }
 
 TelemetryService::TelemetryService(AppIDPath idPath,
@@ -478,11 +545,27 @@ TelemetryService::Metric::Metric(AppID id, const BundleType *type,
       mmio(nullptr), offset(offset) {}
 
 /// Connect to a particular telemetry port. Offset should be non-nullopt.
-void TelemetryService::Metric::connect() {
-  if (!offset.has_value())
-    throw std::runtime_error("Telemetry offset not found for " + id.toString());
-  mmio = telemetryService->getMMIORegion();
-  assert(mmio && "TelemetryService: MMIO region not found");
+void TelemetryService::Metric::connect(
+    ChannelPort::ConnectCallback onConnected) noexcept {
+  try {
+    if (!offset.has_value())
+      throw std::runtime_error("Telemetry offset not found for " +
+                               id.toString());
+    mmio = telemetryService->getMMIORegion();
+    assert(mmio && "TelemetryService: MMIO region not found");
+  } catch (...) {
+    if (onConnected)
+      onConnected(std::current_exception());
+    return;
+  }
+  if (onConnected)
+    onConnected(nullptr);
+}
+
+std::future<void> TelemetryService::Metric::connect() {
+  auto [onConnected, future] = utils::promiseCallback();
+  connect(std::move(onConnected));
+  return std::move(future);
 }
 
 std::future<MessageData> TelemetryService::Metric::read() {

@@ -327,7 +327,11 @@ public:
   public:
     static ToHost *get(AppID id, const BundleType *type,
                        ReadChannelPort &dataPort);
-    void connect();
+    /// See `ChannelPort::ConnectCallback` for `onConnected`.
+    void connect(ChannelPort::ConnectCallback onConnected) noexcept;
+    /// As above, but returns a future which is ready once the accelerator
+    /// end is connected too, or holds the error if connecting failed.
+    std::future<void> connect();
     std::future<MessageData> read();
 
     virtual std::optional<std::string>
@@ -351,7 +355,11 @@ public:
   public:
     static FromHost *get(AppID id, const BundleType *type,
                          WriteChannelPort &dataPort);
-    void connect();
+    /// See `ChannelPort::ConnectCallback` for `onConnected`.
+    void connect(ChannelPort::ConnectCallback onConnected) noexcept;
+    /// As above, but returns a future which is ready once the accelerator
+    /// end is connected too, or holds the error if connecting failed.
+    std::future<void> connect();
     void write(const MessageData &data);
 
     virtual std::optional<std::string>
@@ -390,7 +398,13 @@ public:
     static Function *get(AppID id, BundleType *type, WriteChannelPort &arg,
                          ReadChannelPort &result);
 
-    void connect(const ChannelPort::ConnectOptions &options = {});
+    /// Connect both channels. `onConnected` is called once the other ends of
+    /// both are connected (see `ChannelPort::ConnectCallback`).
+    void connect(ChannelPort::ConnectCallback onConnected,
+                 const ChannelPort::ConnectOptions &options = {}) noexcept;
+    /// As above, but returns a future which is ready once the accelerator
+    /// end is connected too, or holds the error if connecting failed.
+    std::future<void> connect(const ChannelPort::ConnectOptions &options = {});
     std::future<MessageData> call(const MessageData &arg);
 
     const esi::Type *getArgType() const {
@@ -448,9 +462,19 @@ public:
     /// invokes the callback. The 'quick' flag indicates that the callback is
     /// sufficiently fast that it could be called in the same thread as the
     /// port callback.
-    void connect(std::function<MessageData(const MessageData &)> callback,
+    ///
+    /// `onConnected` is called once the other ends of both channels are
+    /// connected (see `ChannelPort::ConnectCallback`).
+    void connect(ChannelPort::ConnectCallback onConnected,
+                 std::function<MessageData(const MessageData &)> callback,
                  bool quick = false,
-                 const ChannelPort::ConnectOptions &options = {});
+                 const ChannelPort::ConnectOptions &options = {}) noexcept;
+    /// As above, but returns a future which is ready once the accelerator
+    /// end is connected too, or holds the error if connecting failed.
+    std::future<void>
+    connect(std::function<MessageData(const MessageData &)> callback,
+            bool quick = false,
+            const ChannelPort::ConnectOptions &options = {});
 
     const esi::Type *getArgType() const {
       return dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
@@ -506,7 +530,11 @@ public:
            std::optional<uint64_t> offset);
 
   public:
-    void connect();
+    /// Metrics are read over MMIO, so `onConnected` is called immediately.
+    void connect(ChannelPort::ConnectCallback onConnected) noexcept;
+    /// As above, but returns a future which is ready once the accelerator
+    /// end is connected too, or holds the error if connecting failed.
+    std::future<void> connect();
     std::future<MessageData> read();
     uint64_t readInt();
 

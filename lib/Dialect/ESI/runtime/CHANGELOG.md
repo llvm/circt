@@ -4,6 +4,37 @@
 
 ### Breaking changes
 
+- **`connect()` can report when the accelerator end is connected.** Every
+  channel port `connect()` (`ChannelPort`, `ReadChannelPort`,
+  `WriteChannelPort`, the typed ports) and every service port `connect()`
+  (`FuncService::Function`, `CallService::Callback`,
+  `ChannelService::ToHost`/`FromHost`, `TelemetryService::Metric`, and their
+  typed wrappers) now comes in two forms: one taking a
+  `ChannelPort::ConnectCallback onConnected` as its first parameter, and one
+  returning a `std::future<void>` (otherwise taking the same parameters as
+  before). Either is completed once the accelerator end of the channel(s) is
+  connected too, or with an exception if connecting failed or it never will
+  be.
+- **`connect()` never throws.** The callback forms are `noexcept` and the
+  future forms report errors only through the future, so errors which
+  `connect()` used to throw (e.g. "already connected", a type mismatch, or a
+  channel in the wrong direction) are silently lost by callers which ignore
+  the future. Existing call sites compile unchanged but should check it. Nor
+  does `connect()` block waiting for the accelerator end.
+- **Backends overriding `connect()` or `connectImpl()` must be updated.** The
+  callback forms of `connect()` are still virtual; overrides must take the new
+  parameters, be `noexcept`, and should add `using Base::connect;` to keep
+  the future forms visible. `connectImpl()` is now
+  `connectImpl(ConnectCallback onConnected, const ConnectOptions &options)`
+  and must arrange for `onConnected` to be called (all in-tree backends
+  currently call it immediately). It may instead throw, if it has neither
+  called nor kept `onConnected`; `connect()` passes the exception on.
+  `utils::fanInCallbacks()` combines the callbacks of several channels and
+  `utils::promiseCallback()` turns one into a future.
+- **Python `connect()` errors are raised by its `ConnectFuture`.** Service
+  ports' `connect()` returns a `ConnectFuture`; channel `Port.connect()` still
+  returns the port (for chaining) and stores it in `Port.connected_future`.
+  Errors are raised by the future's `result()`, not by `connect()`.
 - **`HostMemRegion` is now defined at namespace scope** as
   `esi::services::HostMemRegion`. `services::HostMem::HostMemRegion` remains
   as an alias, so existing source compiles unchanged, but code linking against

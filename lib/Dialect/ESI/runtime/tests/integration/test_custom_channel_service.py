@@ -3,8 +3,11 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
+
+import pytest
 
 import esiaccel
 from esiaccel.accelerator import AcceleratorConnection
@@ -43,8 +46,20 @@ def test_custom_channel_service(conn: AcceleratorConnection,
   acc = conn.build_accelerator()
   inputs = [acc.ports[esiaccel.AppID(f"loopback_in_{i}")] for i in range(2)]
   outputs = [acc.ports[esiaccel.AppID(f"loopback_out_{i}")] for i in range(2)]
-  for port in inputs + outputs:
-    port.connect()
+  connected = [port.connect() for port in inputs + outputs]
+
+  # Connect futures may be waited on from several threads, repeatedly.
+  with ThreadPoolExecutor(4) as pool:
+    assert list(pool.map(lambda f: f.result(timeout=10),
+                         connected * 2)) == [None] * 8
+  for future in connected:
+    assert future.done()
+    assert not future.cancel()
+    assert not future.cancelled()
+    assert future.exception() is None
+  # Connect errors are reported through the future.
+  with pytest.raises(RuntimeError, match="already connected"):
+    inputs[0].connect().result(timeout=10)
 
   # Distinct data in every 64-bit word detects routing and gearbox errors.
   for iteration in range(8):

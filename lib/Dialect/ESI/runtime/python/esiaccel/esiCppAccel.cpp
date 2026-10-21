@@ -15,6 +15,8 @@
 
 #include "esi/backends/Cosim.h"
 
+#include <chrono>
+#include <future>
 #include <ranges>
 #include <sstream>
 
@@ -320,6 +322,42 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<services::TelemetryService, services::Service>(m,
                                                             "TelemetryService");
 
+  // Returned by `connect()`: done once the accelerator end of the channel(s)
+  // is connected too. `get()` raises if connecting failed or never will
+  // happen. A `shared_future`, so it may be waited on and retrieved from
+  // several threads, any number of times. Each call works on its own copy
+  // (made while holding the GIL), as concurrent use of one object isn't safe.
+  nb::class_<std::shared_future<void>>(m, "ConnectFuture")
+      .def("done",
+           [](const std::shared_future<void> &f) {
+             return f.wait_for(std::chrono::seconds(0)) ==
+                    std::future_status::ready;
+           })
+      .def(
+          "wait",
+          [](const std::shared_future<void> &f,
+             std::optional<double> timeoutSec) {
+            std::shared_future<void> copy = f;
+            nb::gil_scoped_release release;
+            if (!timeoutSec) {
+              copy.wait();
+              return true;
+            }
+            return copy.wait_for(std::chrono::duration<double>(*timeoutSec)) ==
+                   std::future_status::ready;
+          },
+          nb::arg("timeout").none() = nb::none(),
+          "Wait (optionally up to `timeout` seconds). Returns whether it's "
+          "done.")
+      .def(
+          "get",
+          [](const std::shared_future<void> &f) {
+            std::shared_future<void> copy = f;
+            nb::gil_scoped_release release;
+            copy.get();
+          },
+          "Wait, then raise if connecting failed or never will happen.");
+
   nb::class_<std::future<MessageData>>(m, "MessageDataFuture")
       .def("valid", [](std::future<MessageData> &f) { return f.valid(); })
       .def("wait",
@@ -348,8 +386,14 @@ NB_MODULE(esiCppAccel, m) {
               &ChannelPort::ConnectOptions::translateMessage);
 
   nb::class_<ChannelPort>(m, "ChannelPort")
-      .def("connect", &ChannelPort::connect, nb::arg("options"),
-           "Connect with specified options")
+      .def(
+          "connect",
+          [](ChannelPort &p, const ChannelPort::ConnectOptions &options) {
+            return p.connect(options).share();
+          },
+          nb::arg("options"),
+          "Connect with specified options. Returns a ConnectFuture which is "
+          "done once the accelerator end is connected too.")
       .def("disconnect", &ChannelPort::disconnect)
       .def_prop_ro("type", &ChannelPort::getType, nb::rv_policy::reference)
       .def_prop_ro("windowType", &ChannelPort::getWindowType,
@@ -404,7 +448,8 @@ NB_MODULE(esiCppAccel, m) {
              MessageData data(dataVec);
              return self.call(data);
            })
-      .def("connect", [](FuncService::Function &self) { self.connect(); });
+      .def("connect",
+           [](FuncService::Function &self) { return self.connect().share(); });
 
   nb::class_<CallService::Callback, ServicePort>(m, "Callback")
       .def("connect", [](CallService::Callback &self,
@@ -412,33 +457,42 @@ NB_MODULE(esiCppAccel, m) {
         // TODO: Under certain conditions this will cause python to crash. I
         // don't remember how to replicate these crashes, but IIRC they are
         // deterministic.
-        self.connect([pyCallback](const MessageData &req) -> MessageData {
-          nb::gil_scoped_acquire acquire{};
-          std::vector<uint8_t> arg(req.getBytes(),
-                                   req.getBytes() + req.getSize());
-          nb::bytes argObj((const char *)arg.data(), arg.size());
-          auto ret = pyCallback(argObj);
-          if (ret.is_none())
-            return MessageData();
-          nb::bytearray retBytes = nb::cast<nb::bytearray>(ret);
-          std::vector<uint8_t> dataVec((const uint8_t *)retBytes.c_str(),
-                                       (const uint8_t *)retBytes.c_str() +
-                                           retBytes.size());
-          return MessageData(dataVec);
-        });
+        return self
+            .connect(
+                [pyCallback](const MessageData &req) -> MessageData {
+                  nb::gil_scoped_acquire acquire{};
+                  std::vector<uint8_t> arg(req.getBytes(),
+                                           req.getBytes() + req.getSize());
+                  nb::bytes argObj((const char *)arg.data(), arg.size());
+                  auto ret = pyCallback(argObj);
+                  if (ret.is_none())
+                    return MessageData();
+                  nb::bytearray retBytes = nb::cast<nb::bytearray>(ret);
+                  std::vector<uint8_t> dataVec(
+                      (const uint8_t *)retBytes.c_str(),
+                      (const uint8_t *)retBytes.c_str() + retBytes.size());
+                  return MessageData(dataVec);
+                },
+                /*quick=*/false)
+            .share();
       });
 
   nb::class_<TelemetryService::Metric, ServicePort>(m, "Metric")
-      .def("connect", &TelemetryService::Metric::connect)
+      .def(
+          "connect",
+          [](TelemetryService::Metric &self) { return self.connect().share(); })
       .def("read", &TelemetryService::Metric::read)
       .def("readInt", &TelemetryService::Metric::readInt);
 
   nb::class_<ChannelService::ToHost, ServicePort>(m, "ToHostChannel")
-      .def("connect", &ChannelService::ToHost::connect)
+      .def("connect",
+           [](ChannelService::ToHost &self) { return self.connect().share(); })
       .def("read", &ChannelService::ToHost::read);
 
   nb::class_<ChannelService::FromHost, ServicePort>(m, "FromHostChannel")
-      .def("connect", &ChannelService::FromHost::connect)
+      .def(
+          "connect",
+          [](ChannelService::FromHost &self) { return self.connect().share(); })
       .def(
           "write",
           [](ChannelService::FromHost &self, nb::bytearray data) {

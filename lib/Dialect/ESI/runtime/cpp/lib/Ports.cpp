@@ -137,88 +137,120 @@ bool ReadChannelPort::invokeCallback(
   }
 }
 
-void ReadChannelPort::connect(ReadCallback callback,
-                              const ConnectOptions &options) {
-  if (mode != Mode::Disconnected)
-    throw std::runtime_error("Channel already connected");
+void ReadChannelPort::connect(ConnectCallback onConnected,
+                              ReadCallback callback,
+                              const ConnectOptions &options) noexcept {
+  try {
+    if (mode != Mode::Disconnected)
+      throw std::runtime_error("Channel already connected");
 
-  resetTranslationState();
+    resetTranslationState();
 
-  if (translationInfo)
-    translationInfo->precomputeFrameInfo();
+    if (translationInfo)
+      translationInfo->precomputeFrameInfo();
 
-  if (options.translateMessage && translationInfo) {
-    translationInfo->requireTranslationSupported();
-    this->callback = [this, cb = std::move(callback)](
-                         std::unique_ptr<SegmentedMessageData> &data) {
-      if (!translatedMessage) {
-        MessageData flat = data->toMessageData();
-        if (!translateIncoming(flat))
-          return true;
-        translatedMessage =
-            std::make_unique<MessageData>(std::move(translationBuffer));
+    if (options.translateMessage && translationInfo) {
+      translationInfo->requireTranslationSupported();
+      this->callback = [this, cb = std::move(callback)](
+                           std::unique_ptr<SegmentedMessageData> &data) {
+        if (!translatedMessage) {
+          MessageData flat = data->toMessageData();
+          if (!translateIncoming(flat))
+            return true;
+          translatedMessage =
+              std::make_unique<MessageData>(std::move(translationBuffer));
+        }
+
+        if (!cb(translatedMessage))
+          return false;
+
+        translatedMessage.reset();
+        return true;
+      };
+    } else {
+      this->callback = callback;
+    }
+    connectImpl(onConnected, options);
+  } catch (...) {
+    if (onConnected)
+      onConnected(std::current_exception());
+    return;
+  }
+  mode = Mode::Callback;
+}
+
+std::future<void> ReadChannelPort::connect(ReadCallback callback,
+                                           const ConnectOptions &options) {
+  auto [onConnected, future] = utils::promiseCallback();
+  connect(std::move(onConnected), std::move(callback), options);
+  return std::move(future);
+}
+
+void ReadChannelPort::connect(ConnectCallback onConnected,
+                              FlatReadCallback callback,
+                              const ConnectOptions &options) noexcept {
+  connect(
+      std::move(onConnected),
+      ReadCallback([cb = std::move(callback)](
+                       std::unique_ptr<SegmentedMessageData> &data) -> bool {
+        return cb(data->toMessageData());
+      }),
+      options);
+}
+
+std::future<void> ReadChannelPort::connect(FlatReadCallback callback,
+                                           const ConnectOptions &options) {
+  auto [onConnected, future] = utils::promiseCallback();
+  connect(std::move(onConnected), std::move(callback), options);
+  return std::move(future);
+}
+
+void ReadChannelPort::connect(ConnectCallback onConnected,
+                              const ConnectOptions &options) noexcept {
+  try {
+    if (mode != Mode::Disconnected)
+      throw std::runtime_error("Channel already connected");
+
+    if (options.bufferSize.has_value())
+      maxDataQueueMsgs = options.bufferSize.value();
+    pollingState.emplace(maxDataQueueMsgs);
+
+    resetTranslationState();
+
+    if (translationInfo)
+      translationInfo->precomputeFrameInfo();
+
+    bool translate = options.translateMessage && translationInfo;
+    if (translate)
+      translationInfo->requireTranslationSupported();
+    this->callback = [this,
+                      translate](std::unique_ptr<SegmentedMessageData> &msg) {
+      MessageData data;
+      if (translate) {
+        if (!translatedMessage) {
+          MessageData flat = msg->toMessageData();
+          if (!translateIncoming(flat))
+            return true;
+          translatedMessage =
+              std::make_unique<MessageData>(std::move(translationBuffer));
+        }
+        data = translatedMessage->toMessageData();
+      } else {
+        data = msg->toMessageData();
       }
 
-      if (!cb(translatedMessage))
+      if (!pollingState->enqueue(data))
         return false;
 
       translatedMessage.reset();
       return true;
     };
-  } else {
-    this->callback = callback;
+    connectImpl(onConnected, options);
+  } catch (...) {
+    if (onConnected)
+      onConnected(std::current_exception());
+    return;
   }
-  connectImpl(options);
-  mode = Mode::Callback;
-}
-
-void ReadChannelPort::connect(FlatReadCallback callback,
-                              const ConnectOptions &options) {
-  connect(
-      [cb = std::move(callback)](std::unique_ptr<SegmentedMessageData> &data)
-          -> bool { return cb(data->toMessageData()); },
-      options);
-}
-
-void ReadChannelPort::connect(const ConnectOptions &options) {
-  if (mode != Mode::Disconnected)
-    throw std::runtime_error("Channel already connected");
-
-  if (options.bufferSize.has_value())
-    maxDataQueueMsgs = options.bufferSize.value();
-  pollingState.emplace(maxDataQueueMsgs);
-
-  resetTranslationState();
-
-  if (translationInfo)
-    translationInfo->precomputeFrameInfo();
-
-  bool translate = options.translateMessage && translationInfo;
-  if (translate)
-    translationInfo->requireTranslationSupported();
-  this->callback = [this,
-                    translate](std::unique_ptr<SegmentedMessageData> &msg) {
-    MessageData data;
-    if (translate) {
-      if (!translatedMessage) {
-        MessageData flat = msg->toMessageData();
-        if (!translateIncoming(flat))
-          return true;
-        translatedMessage =
-            std::make_unique<MessageData>(std::move(translationBuffer));
-      }
-      data = translatedMessage->toMessageData();
-    } else {
-      data = msg->toMessageData();
-    }
-
-    if (!pollingState->enqueue(data))
-      return false;
-
-    translatedMessage.reset();
-    return true;
-  };
-  connectImpl(options);
   mode = Mode::Polling;
 }
 
