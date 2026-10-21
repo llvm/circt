@@ -246,3 +246,73 @@ firrtl.circuit "ForceProbeWireCycle" {
     firrtl.ref.force %clock, %en, %a, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
   }
 }
+
+// -----
+
+// One target may not be forced or released from two clock domains, even
+// through aliasing probes.
+firrtl.circuit "ForceTwoClockDomains" {
+  firrtl.module @ForceTwoClockDomains(in %c1: !firrtl.clock, in %c2: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    %p = firrtl.wire : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    // expected-note @below {{other access here}}
+    firrtl.ref.force %c1, %en, %w_ref, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    // expected-error @below {{target is forced or released from different clock domains}}
+    firrtl.ref.release %c2, %en, %p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+  }
+}
+
+// -----
+
+// Aliased ports stay aliased when re-exported through a module.
+firrtl.circuit "ForceForwardedPortsTwoClockDomains" {
+  firrtl.module private @Child(in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %p1: !firrtl.rwprobe<uint<8>>, out %p2: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p2, %w_ref : !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module private @Mid(in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %q1: !firrtl.rwprobe<uint<8>>, out %q2: !firrtl.rwprobe<uint<8>>) {
+    %c_v, %c_o, %c_p1, %c_p2 = firrtl.instance c @Child(in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p1: !firrtl.rwprobe<uint<8>>, out p2: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+    firrtl.ref.define %q1, %c_p1 : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %q2, %c_p2 : !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module @ForceForwardedPortsTwoClockDomains(in %c1: !firrtl.clock, in %c2: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    %m_v, %m_o, %m_q1, %m_q2 = firrtl.instance m @Mid(in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out q1: !firrtl.rwprobe<uint<8>>, out q2: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %m_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %m_o : !firrtl.uint<8>
+    // expected-note @below {{other access here}}
+    firrtl.ref.force %c1, %en, %m_q1, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    // expected-error @below {{target is forced or released from different clock domains}}
+    firrtl.ref.release %c2, %en, %m_q2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+  }
+}
+
+// -----
+
+// A local access and an access through a port are checked against each other.
+firrtl.circuit "ForceLocalAndPortTwoClockDomains" {
+  firrtl.module private @Child(in %ck: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<8>>
+    // expected-note @below {{other access here}}
+    firrtl.ref.release %ck, %en, %w_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module @ForceLocalAndPortTwoClockDomains(in %c1: !firrtl.clock, in %c2: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    %c_ck, %c_en, %c_v, %c_o, %c_p = firrtl.instance c @Child(in ck: !firrtl.clock, in en: !firrtl.uint<1>, in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_ck, %c1 : !firrtl.clock
+    firrtl.matchingconnect %c_en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %c_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+    // expected-error @below {{target is forced or released from different clock domains}}
+    firrtl.ref.force %c2, %en, %c_p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}

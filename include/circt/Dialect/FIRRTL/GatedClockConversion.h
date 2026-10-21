@@ -95,6 +95,9 @@ public:
     Value getBaseClock(Value v) const;
     /// Empty if untracked.
     SmallVector<Value> aliasSet(Value v) const;
+    /// `v`, a clock of the module `inst` instantiates, as seen at `inst`: the
+    /// result for a port that `v` aliases, or `v` if it aliases no port.
+    Value atInstance(Value v, InstanceOp inst) const;
     void print(llvm::raw_ostream &os) const;
 
   private:
