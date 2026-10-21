@@ -64,15 +64,35 @@ public:
   /// List all channels available on the server.
   std::vector<ChannelDesc> listChannels() const;
 
+  /// Default maximum number of frames sent to a server-bound channel which
+  /// the simulation has not yet consumed.
+  static constexpr unsigned DefaultToServerMaxInFlight = 16;
+  /// Default maximum number of frames in flight (queued in the simulator or
+  /// sent but not yet consumed by the client) on a client-bound channel.
+  static constexpr unsigned DefaultToClientMaxInFlight = 32;
+
   /// Ask the server to report when the simulation has connected its end of a
   /// server-bound channel. Doesn't block: returns a future which becomes ready
   /// then (immediately if it already is), or holds an exception if the
-  /// connection is lost first. Frames sent before then are held by the
-  /// server, not dropped.
+  /// connection is lost first. Frames sent before then are held by the server
+  /// and backpressured, not dropped.
   std::future<void> connectToServer(const std::string &channelName);
 
-  /// Send a message to a server-bound channel.
+  /// Send a message to a server-bound channel. Blocks while the channel's
+  /// in-flight limit is reached. Throws if the connection is lost.
   void writeToServer(const std::string &channelName, const MessageData &data);
+
+  /// Non-blocking send of one message, split into `frames`, to a server-bound
+  /// channel. If the channel is below its in-flight limit, sends all of them
+  /// (possibly overshooting the limit by `frames.size() - 1`)
+  /// and returns true. Otherwise sends nothing and returns false.
+  bool tryWriteToServer(const std::string &channelName,
+                        const std::vector<MessageData> &frames);
+
+  /// Set the maximum number of unconsumed frames on a server-bound channel.
+  /// Zero means unbounded.
+  void setToServerMaxInFlight(const std::string &channelName,
+                              unsigned maxInFlight);
 
   /// Callback type for receiving messages from a client-bound channel.
   /// Return true if the message was consumed, false to retry the same owning
@@ -94,10 +114,14 @@ public:
   };
 
   /// Connect to a client-bound channel and receive messages via callback.
-  /// Doesn't block; see `ReadChannelConnection::subscribed()`. Returns a
-  /// handle that disconnects when destroyed.
+  /// Doesn't block; see `ReadChannelConnection::subscribed()`.
+  /// `maxInFlight` is the maximum number of frames the simulator may have in
+  /// flight for this channel; zero means unbounded. A frame stops counting
+  /// once `callback` returns true for it. Returns a handle that disconnects
+  /// when destroyed.
   std::unique_ptr<ReadChannelConnection>
-  connectClientReceiver(const std::string &channelName, ReadCallback callback);
+  connectClientReceiver(const std::string &channelName, ReadCallback callback,
+                        unsigned maxInFlight = DefaultToClientMaxInFlight);
 
   /// Hide the implementation details from this header file.
   class Impl;
