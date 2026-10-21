@@ -850,3 +850,65 @@ firrtl.circuit "ConstForce" {
     // CHECK-NEXT: firrtl.matchingconnect %[[CLK]], %clock
   }
 }
+
+// -----
+
+// Aliased ports may be accessed from one clock domain; unforced ports are
+// ignored.
+// CHECK-LABEL: firrtl.circuit "AliasedPortsOneClockDomain"
+firrtl.circuit "AliasedPortsOneClockDomain" {
+  // CHECK: firrtl.module private @Child
+  firrtl.module private @Child(in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %p1: !firrtl.rwprobe<uint<8>>, out %p2: !firrtl.rwprobe<uint<8>>, out %p3: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p2, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p3, %w_ref : !firrtl.rwprobe<uint<8>>
+    // CHECK: %[[CLK:.+]] = firrtl.subfield %p1_force_ctrl[clk]
+    // CHECK: firrtl.reg %[[CLK]]
+  }
+  firrtl.module @AliasedPortsOneClockDomain(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    %c_v, %c_o, %c_p1, %c_p2, %c_p3 = firrtl.instance c @Child(in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p1: !firrtl.rwprobe<uint<8>>, out p2: !firrtl.rwprobe<uint<8>>, out p3: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+    %n = firrtl.node %clock : !firrtl.clock
+    firrtl.ref.force %clock, %en, %c_p1, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    firrtl.ref.release %n, %en, %c_p2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+  }
+}
+
+// -----
+
+// Each instance may use its own clock domain, which a local access shares
+// through a port.
+// CHECK-LABEL: firrtl.circuit "ClockDomainPerInstance"
+firrtl.circuit "ClockDomainPerInstance" {
+  // CHECK: firrtl.module private @Child
+  firrtl.module private @Child(in %ck: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o: !firrtl.uint<8>, out %p1: !firrtl.rwprobe<uint<8>>, out %p2: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<8>
+    firrtl.ref.define %p1, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p2, %w_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.release %ck, %en, %w_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+    // CHECK: firrtl.reg %ck
+  }
+  firrtl.module @ClockDomainPerInstance(in %c1: !firrtl.clock, in %c2: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<8>, out %o1: !firrtl.uint<8>, out %o2: !firrtl.uint<8>) {
+    %a_ck, %a_en, %a_v, %a_o, %a_p1, %a_p2 = firrtl.instance a @Child(in ck: !firrtl.clock, in en: !firrtl.uint<1>, in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p1: !firrtl.rwprobe<uint<8>>, out p2: !firrtl.rwprobe<uint<8>>)
+    %b_ck, %b_en, %b_v, %b_o, %b_p1, %b_p2 = firrtl.instance b @Child(in ck: !firrtl.clock, in en: !firrtl.uint<1>, in v: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p1: !firrtl.rwprobe<uint<8>>, out p2: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %a_ck, %c1 : !firrtl.clock
+    firrtl.matchingconnect %b_ck, %c2 : !firrtl.clock
+    firrtl.matchingconnect %a_en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %b_en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %a_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %b_v, %v : !firrtl.uint<8>
+    firrtl.matchingconnect %o1, %a_o : !firrtl.uint<8>
+    firrtl.matchingconnect %o2, %b_o : !firrtl.uint<8>
+    firrtl.ref.force %c1, %en, %a_p1, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    firrtl.ref.release %c1, %en, %a_p2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %c2, %en, %b_p1, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+    firrtl.ref.release %c2, %en, %b_p2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>
+  }
+}
+

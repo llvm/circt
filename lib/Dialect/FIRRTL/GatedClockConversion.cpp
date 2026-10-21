@@ -676,6 +676,14 @@ SmallVector<Value> ClockAliasAnalysis::aliasSet(Value v) const {
                              [&](unsigned m) { return nodes[m].value; });
 }
 
+Value ClockAliasAnalysis::atInstance(Value v, InstanceOp inst) const {
+  // Aliases within a module hold in every instance of it.
+  for (BlockArgument arg : getParentModule(v).getArguments())
+    if (alias(v, arg))
+      return inst.getResult(arg.getArgNumber());
+  return v;
+}
+
 void ClockAliasAnalysis::setBaseClocks(ArrayRef<Value> baseClks) {
   for (Value base : baseClks)
     classBaseClock.try_emplace(find(track(base)), base);

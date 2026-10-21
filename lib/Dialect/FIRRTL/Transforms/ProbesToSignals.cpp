@@ -44,7 +44,8 @@
 // block, so such reads can differ.
 //
 // Gated clocks are converted first so synthesized state uses a free-running
-// clock.
+// clock. All accesses to one target, including through aliased ports, must be
+// in one clock domain.
 //
 // Pre-requisites for complete conversion:
 // * LowerOpenAggs
@@ -80,6 +81,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #define DEBUG_TYPE "firrtl-probes-to-signals"
 
@@ -1328,6 +1330,112 @@ LogicalResult ProbeVisitor::visitStmt(RefReleaseOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// Clock domain check
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// A force or release, with its clock as seen in the module being checked.
+struct ClockedAccess {
+  Value clock;
+  Operation *op = nullptr;
+};
+
+/// What a forceable probe port shows its instances.
+struct ExportedPort {
+  /// The lowest port exporting the same target.
+  unsigned leader;
+  /// An access to the target from within the module, if any.
+  ClockedAccess access;
+};
+} // namespace
+
+/// A target's state has one clock, so reject targets accessed from different
+/// clock domains. Ports exporting one target are joined at each instance, so
+/// accesses through aliased ports are checked in the parent.
+static LogicalResult checkForceClockDomains(
+    InstanceGraph &ig, hw::InnerRefNamespace &irn,
+    const GatedClockConversion::ClockAliasAnalysis &aliases) {
+  DenseMap<Value, ExportedPort> exports;
+  return ig.walkPostOrder([&](igraph::InstanceGraphNode &node) {
+    auto mod = dyn_cast_or_null<FModuleOp>(node.getModule());
+    if (!mod)
+      return success();
+
+    // Join the probes of each target, as `ProbeVisitor` does.
+    llvm::EquivalenceClasses<Value> targets;
+    DenseMap<FieldRef, Value> probeOfTarget;
+    auto joinTarget = [&](FieldRef target, Value probe) {
+      targets.unionSets(probeOfTarget.try_emplace(target, probe).first->second,
+                        probe);
+    };
+    SmallVector<std::pair<Value, ClockedAccess>> accesses;
+    mod.walk([&](Operation *op) {
+      TypeSwitch<Operation *>(op)
+          .Case<RefDefineOp>(
+              [&](auto op) { targets.unionSets(op.getSrc(), op.getDest()); })
+          .Case<RefCastOp>([&](auto op) {
+            if (op.getInput().getType().getType() == op.getType().getType())
+              targets.unionSets(op.getInput(), op.getResult());
+          })
+          .Case<RWProbeOp>([&](auto op) {
+            joinTarget(getFieldRefForTarget(irn.lookup(op.getTarget())),
+                       op.getResult());
+          })
+          .Case<Forceable>([&](auto op) {
+            if (op.isForceable())
+              joinTarget(FieldRef(op.getData(), 0), op.getDataRef());
+          })
+          .Case<RefForceOp, RefReleaseOp>([&](auto op) {
+            accesses.push_back({op.getDest(), {op.getClock(), op}});
+          })
+          .Case<InstanceOp>([&](auto inst) {
+            auto child = dyn_cast<FModuleOp>(inst.getReferencedModule(ig));
+            if (!child)
+              return;
+            for (OpResult result : inst->getResults()) {
+              auto it =
+                  exports.find(child.getArgument(result.getResultNumber()));
+              if (it == exports.end())
+                continue;
+              auto [leader, access] = it->second;
+              targets.unionSets(inst.getResult(leader), result);
+              if (access.op)
+                accesses.push_back(
+                    {result,
+                     {aliases.atInstance(access.clock, inst), access.op}});
+            }
+          });
+    });
+
+    // Every access to a target must share the first access's clock.
+    DenseMap<Value, ClockedAccess> firstAccess;
+    for (auto [probe, access] : accesses) {
+      auto [it, inserted] = firstAccess.try_emplace(
+          targets.getOrInsertLeaderValue(probe), access);
+      if (inserted || aliases.alias(it->second.clock, access.clock))
+        continue;
+      auto diag = access.op->emitError(
+          "unsupported force/release: target is forced or released from "
+          "different clock domains");
+      diag.attachNote(it->second.op->getLoc()) << "other access here";
+      return failure();
+    }
+
+    DenseMap<Value, unsigned> leaders;
+    for (BlockArgument arg : mod.getArguments()) {
+      auto refType = type_dyn_cast<RefType>(arg.getType());
+      if (!refType || !refType.getForceable())
+        continue;
+      Value target = targets.getOrInsertLeaderValue(arg);
+      exports[arg] = {
+          leaders.try_emplace(target, arg.getArgNumber()).first->second,
+          firstAccess.lookup(target)};
+    }
+    return success();
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
@@ -1375,7 +1483,9 @@ void ProbesToSignalsPass::runOnOperation() {
     for (auto *op : gatedClockRoots)
       if (failed(tracer.addRoot(op)))
         return signalPassFailure();
-    if (failed(tracer.run()))
+    if (failed(tracer.run()) ||
+        failed(checkForceClockDomains(instanceGraph, irn,
+                                      tracer.getClockAliases())))
       return signalPassFailure();
   }
 
