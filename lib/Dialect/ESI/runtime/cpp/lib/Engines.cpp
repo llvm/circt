@@ -89,7 +89,8 @@ public:
   // Write the location of the buffer to the MMIO space.
   void writeBufferPtr();
   // Connect allocate a buffer and prime the pump.
-  void connectImpl(const ChannelPort::ConnectOptions &options) override;
+  void connectImpl(const ChannelPort::ConnectOptions &options,
+                   ConnectCallback onConnected) override;
   // Check for buffer fill.
   bool pollImpl() override;
 
@@ -199,7 +200,7 @@ void OneItemBuffersToHostReadPort::writeBufferPtr() {
 }
 
 void OneItemBuffersToHostReadPort::connectImpl(
-    const ChannelPort::ConnectOptions &options) {
+    const ChannelPort::ConnectOptions &options, ConnectCallback onConnected) {
   engine->connect();
   buffer = engine->hostMem->allocate(bufferSize, {true, false});
   if (!buffer)
@@ -207,6 +208,8 @@ void OneItemBuffersToHostReadPort::connectImpl(
                              std::to_string(bufferSize) +
                              " bytes of host memory");
   writeBufferPtr();
+  if (onConnected)
+    onConnected(nullptr);
 }
 
 bool OneItemBuffersToHostReadPort::pollImpl() {
@@ -301,7 +304,8 @@ public:
         channelName(channelName) {}
 
   // Connect allocate a buffer and prime the pump.
-  void connectImpl(const ChannelPort::ConnectOptions &options) override;
+  void connectImpl(const ChannelPort::ConnectOptions &options,
+                   ConnectCallback onConnected) override;
 
   std::string identifier() const { return idPath.toStr() + "." + channelName; }
 
@@ -414,7 +418,7 @@ void OneItemBuffersFromHost::connect() {
 }
 
 void OneItemBuffersFromHostWritePort::connectImpl(
-    const ChannelPort::ConnectOptions &options) {
+    const ChannelPort::ConnectOptions &options, ConnectCallback onConnected) {
   engine->connect();
   data_buffer = engine->hostMem->allocate(
       std::max(getFrameSizeBytes(), (size_t)512), {false, false});
@@ -425,6 +429,8 @@ void OneItemBuffersFromHostWritePort::connectImpl(
   // Set the last byte to '1' to indicate that the buffer is ready to be filled
   // and sent to the device.
   *static_cast<uint8_t *>(completion_buffer->getPtr()) = 1;
+  if (onConnected)
+    onConnected(nullptr);
 }
 
 void OneItemBuffersFromHostWritePort::enqueueFrames(const MessageData &data) {

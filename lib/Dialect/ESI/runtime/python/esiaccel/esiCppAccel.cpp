@@ -15,6 +15,11 @@
 
 #include "esi/backends/Cosim.h"
 
+#include <chrono>
+#include <condition_variable>
+#include <exception>
+#include <memory>
+#include <mutex>
 #include <ranges>
 #include <sstream>
 
@@ -30,6 +35,7 @@
 #include <nanobind/stl/map.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/pair.h>
+#include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/unique_ptr.h>
@@ -42,6 +48,55 @@ namespace nb = nanobind;
 
 using namespace esi;
 using namespace esi::services;
+
+namespace {
+/// Exposes a `connect()` completion callback to Python as a pollable,
+/// waitable object. The callback (which may run on any thread) only touches
+/// C++ state, so it needs no GIL.
+class ConnectWaiter : public std::enable_shared_from_this<ConnectWaiter> {
+public:
+  ChannelPort::ConnectCallback callback() {
+    return [self = shared_from_this()](std::exception_ptr error) {
+      {
+        std::lock_guard<std::mutex> lock(self->mutex);
+        self->error = error;
+        self->done = true;
+      }
+      self->cv.notify_all();
+    };
+  }
+
+  bool isDone() {
+    std::lock_guard<std::mutex> lock(mutex);
+    return done;
+  }
+
+  /// Wait up to `timeoutSec` (forever if nullopt). Returns whether it's done.
+  bool wait(std::optional<double> timeoutSec) {
+    std::unique_lock<std::mutex> lock(mutex);
+    if (!timeoutSec) {
+      cv.wait(lock, [&] { return done; });
+      return true;
+    }
+    return cv.wait_for(lock, std::chrono::duration<double>(*timeoutSec),
+                       [&] { return done; });
+  }
+
+  /// Wait, then rethrow the failure, if any.
+  void get() {
+    wait(std::nullopt);
+    std::lock_guard<std::mutex> lock(mutex);
+    if (error)
+      std::rethrow_exception(error);
+  }
+
+private:
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool done = false;
+  std::exception_ptr error;
+};
+} // namespace
 
 namespace nanobind {
 namespace detail {
@@ -320,6 +375,17 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<services::TelemetryService, services::Service>(m,
                                                             "TelemetryService");
 
+  // Returned by `connect()`: done once the accelerator end of the channel(s)
+  // is connected too. `get()` rethrows if that will never happen.
+  nb::class_<ConnectWaiter>(m, "ConnectFuture")
+      .def("done", &ConnectWaiter::isDone)
+      .def("wait", &ConnectWaiter::wait, nb::arg("timeout").none() = nb::none(),
+           nb::call_guard<nb::gil_scoped_release>(),
+           "Wait (optionally up to `timeout` seconds). Returns whether it's "
+           "done.")
+      .def("get", &ConnectWaiter::get,
+           nb::call_guard<nb::gil_scoped_release>());
+
   nb::class_<std::future<MessageData>>(m, "MessageDataFuture")
       .def("valid", [](std::future<MessageData> &f) { return f.valid(); })
       .def("wait",
@@ -348,8 +414,16 @@ NB_MODULE(esiCppAccel, m) {
               &ChannelPort::ConnectOptions::translateMessage);
 
   nb::class_<ChannelPort>(m, "ChannelPort")
-      .def("connect", &ChannelPort::connect, nb::arg("options"),
-           "Connect with specified options")
+      .def(
+          "connect",
+          [](ChannelPort &p, const ChannelPort::ConnectOptions &options) {
+            auto waiter = std::make_shared<ConnectWaiter>();
+            p.connect(options, waiter->callback());
+            return waiter;
+          },
+          nb::arg("options"),
+          "Connect with specified options. Returns a ConnectFuture which is "
+          "done once the accelerator end is connected too.")
       .def("disconnect", &ChannelPort::disconnect)
       .def_prop_ro("type", &ChannelPort::getType, nb::rv_policy::reference)
       .def_prop_ro("windowType", &ChannelPort::getWindowType,
@@ -404,7 +478,11 @@ NB_MODULE(esiCppAccel, m) {
              MessageData data(dataVec);
              return self.call(data);
            })
-      .def("connect", [](FuncService::Function &self) { self.connect(); });
+      .def("connect", [](FuncService::Function &self) {
+        auto waiter = std::make_shared<ConnectWaiter>();
+        self.connect({}, waiter->callback());
+        return waiter;
+      });
 
   nb::class_<CallService::Callback, ServicePort>(m, "Callback")
       .def("connect", [](CallService::Callback &self,
@@ -412,33 +490,52 @@ NB_MODULE(esiCppAccel, m) {
         // TODO: Under certain conditions this will cause python to crash. I
         // don't remember how to replicate these crashes, but IIRC they are
         // deterministic.
-        self.connect([pyCallback](const MessageData &req) -> MessageData {
-          nb::gil_scoped_acquire acquire{};
-          std::vector<uint8_t> arg(req.getBytes(),
-                                   req.getBytes() + req.getSize());
-          nb::bytes argObj((const char *)arg.data(), arg.size());
-          auto ret = pyCallback(argObj);
-          if (ret.is_none())
-            return MessageData();
-          nb::bytearray retBytes = nb::cast<nb::bytearray>(ret);
-          std::vector<uint8_t> dataVec((const uint8_t *)retBytes.c_str(),
-                                       (const uint8_t *)retBytes.c_str() +
-                                           retBytes.size());
-          return MessageData(dataVec);
-        });
+        auto waiter = std::make_shared<ConnectWaiter>();
+        self.connect(
+            [pyCallback](const MessageData &req) -> MessageData {
+              nb::gil_scoped_acquire acquire{};
+              std::vector<uint8_t> arg(req.getBytes(),
+                                       req.getBytes() + req.getSize());
+              nb::bytes argObj((const char *)arg.data(), arg.size());
+              auto ret = pyCallback(argObj);
+              if (ret.is_none())
+                return MessageData();
+              nb::bytearray retBytes = nb::cast<nb::bytearray>(ret);
+              std::vector<uint8_t> dataVec((const uint8_t *)retBytes.c_str(),
+                                           (const uint8_t *)retBytes.c_str() +
+                                               retBytes.size());
+              return MessageData(dataVec);
+            },
+            /*quick=*/false, {}, waiter->callback());
+        return waiter;
       });
 
   nb::class_<TelemetryService::Metric, ServicePort>(m, "Metric")
-      .def("connect", &TelemetryService::Metric::connect)
+      .def("connect",
+           [](TelemetryService::Metric &self) {
+             auto waiter = std::make_shared<ConnectWaiter>();
+             self.connect(waiter->callback());
+             return waiter;
+           })
       .def("read", &TelemetryService::Metric::read)
       .def("readInt", &TelemetryService::Metric::readInt);
 
   nb::class_<ChannelService::ToHost, ServicePort>(m, "ToHostChannel")
-      .def("connect", &ChannelService::ToHost::connect)
+      .def("connect",
+           [](ChannelService::ToHost &self) {
+             auto waiter = std::make_shared<ConnectWaiter>();
+             self.connect(waiter->callback());
+             return waiter;
+           })
       .def("read", &ChannelService::ToHost::read);
 
   nb::class_<ChannelService::FromHost, ServicePort>(m, "FromHostChannel")
-      .def("connect", &ChannelService::FromHost::connect)
+      .def("connect",
+           [](ChannelService::FromHost &self) {
+             auto waiter = std::make_shared<ConnectWaiter>();
+             self.connect(waiter->callback());
+             return waiter;
+           })
       .def(
           "write",
           [](ChannelService::FromHost &self, nb::bytearray data) {

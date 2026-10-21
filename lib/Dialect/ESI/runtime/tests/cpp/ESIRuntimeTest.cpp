@@ -7,16 +7,62 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Types.h"
+#include "esi/Utils.h"
 #include "esi/Values.h"
 #include "gtest/gtest.h"
 #include <any>
 #include <cstdint>
+#include <exception>
 #include <map>
+#include <stdexcept>
 #include <vector>
 
 using namespace esi;
 
 namespace {
+
+TEST(ESIUtilsTest, FanInCallbacks) {
+  int calls = 0;
+  std::exception_ptr seen;
+  auto done = [&](std::exception_ptr e) {
+    ++calls;
+    seen = e;
+  };
+
+  // Called once, after every part.
+  auto parts = utils::fanInCallbacks(done, 3);
+  ASSERT_EQ(parts.size(), 3u);
+  parts[1](nullptr);
+  parts[0](nullptr);
+  EXPECT_EQ(calls, 0);
+  parts[2](nullptr);
+  EXPECT_EQ(calls, 1);
+  EXPECT_FALSE(seen);
+
+  // The first failure is reported.
+  calls = 0;
+  parts = utils::fanInCallbacks(done, 2);
+  parts[0](std::make_exception_ptr(std::runtime_error("first")));
+  parts[1](std::make_exception_ptr(std::runtime_error("second")));
+  EXPECT_EQ(calls, 1);
+  try {
+    std::rethrow_exception(seen);
+  } catch (const std::runtime_error &e) {
+    EXPECT_STREQ(e.what(), "first");
+  }
+
+  // No parts: called immediately.
+  calls = 0;
+  parts = utils::fanInCallbacks(done, 0);
+  EXPECT_TRUE(parts.empty());
+  EXPECT_EQ(calls, 1);
+
+  // No callback: null parts.
+  parts = utils::fanInCallbacks(nullptr, 2);
+  ASSERT_EQ(parts.size(), 2u);
+  EXPECT_FALSE(parts[0]);
+  EXPECT_FALSE(parts[1]);
+}
 
 // Test VoidType serialization and deserialization
 TEST(ESITypesTest, VoidTypeSerialization) {

@@ -616,14 +616,14 @@ public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt, false},
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
     if (!SkipTypeCheck)
       verifyTypeCompatibility<T>(inner);
     wireInfo_ = getWireInfo(inner->getType());
-    inner->connect(opts);
+    inner->connect(opts, std::move(onConnected));
   }
 
   void write(const T &data) { inner->write(toMessageData(data, wireInfo_)); }
@@ -687,12 +687,12 @@ public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt, false},
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
-    inner->connect(opts);
+    inner->connect(opts, std::move(onConnected));
   }
 
   void write() {
@@ -749,8 +749,8 @@ public:
   ///
   /// The port installs an internal typed output queue. `read()` and
   /// `readAsync()` consume from that queue.
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt, false},
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     prepareConnect();
@@ -764,7 +764,7 @@ public:
             assert(deserializer && "Deserializer should be connected");
             return deserializer->push(msg);
           },
-          opts);
+          opts, std::move(onConnected));
     } catch (...) {
       resetConnectState();
       throw;
@@ -777,11 +777,11 @@ public:
   /// The callback sees the decoded value by reference. Returning `false`
   /// requests that the same decoded value be retried later.
   void connect(std::function<bool(const T &)> callback,
-               const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+               const ChannelPort::ConnectOptions &opts = {std::nullopt, false},
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     connect([cb = std::move(callback)](
                 std::unique_ptr<T> &value) -> bool { return cb(*value); },
-            opts);
+            opts, std::move(onConnected));
   }
 
   /// Connect an owning typed callback.
@@ -790,8 +790,8 @@ public:
   /// callback may take ownership of the decoded value or return `false` to
   /// retry delivery later with the same object.
   void connect(detail::TypedReadOwnedCallback<T> callback,
-               const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+               const ChannelPort::ConnectOptions &opts = {std::nullopt, false},
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     prepareConnect();
@@ -802,7 +802,7 @@ public:
             assert(deserializer && "Deserializer should be connected");
             return deserializer->push(msg);
           },
-          opts);
+          opts, std::move(onConnected));
     } catch (...) {
       resetConnectState();
       throw;
@@ -920,22 +920,23 @@ public:
       disconnect();
   }
 
-  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt, false},
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
-    inner->connect(opts);
+    inner->connect(opts, std::move(onConnected));
   }
 
   void connect(std::function<bool()> callback,
-               const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+               const ChannelPort::ConnectOptions &opts = {std::nullopt, false},
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
     inner->connect(
-        [cb = std::move(callback)](MessageData) -> bool { return cb(); }, opts);
+        [cb = std::move(callback)](MessageData) -> bool { return cb(); }, opts,
+        std::move(onConnected));
   }
 
   void read() {
@@ -1036,7 +1037,9 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::connect()`).
+  void connect(ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       detail::throwNullFunction();
     if (argPort)
@@ -1044,8 +1047,9 @@ public:
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    argPort->connect(opts, std::move(parts[0]));
+    resultPort->connect(opts, std::move(parts[1]));
   }
 
   std::future<ResultT> call(const ArgT &arg) {
@@ -1099,7 +1103,9 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::connect()`).
+  void connect(ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       detail::throwNullFunction();
     if (argPort)
@@ -1107,8 +1113,9 @@ public:
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    argPort->connect(opts, std::move(parts[0]));
+    resultPort->connect(opts, std::move(parts[1]));
   }
 
   std::future<ResultT> call() {
@@ -1141,7 +1148,9 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::connect()`).
+  void connect(ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       detail::throwNullFunction();
     if (argPort)
@@ -1149,8 +1158,9 @@ public:
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    argPort->connect(opts, std::move(parts[0]));
+    resultPort->connect(opts, std::move(parts[1]));
   }
 
   std::future<void> call(const ArgT &arg) {
@@ -1199,7 +1209,9 @@ public:
   TypedFunction(const TypedFunction &) = delete;
   TypedFunction &operator=(const TypedFunction &) = delete;
 
-  void connect() {
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::connect()`).
+  void connect(ChannelPort::ConnectCallback onConnected = nullptr) {
     if (!inner)
       detail::throwNullFunction();
     if (argPort)
@@ -1207,8 +1219,9 @@ public:
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    argPort->connect(opts);
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    argPort->connect(opts, std::move(parts[0]));
+    resultPort->connect(opts, std::move(parts[1]));
   }
 
   std::future<void> call() {
@@ -1289,8 +1302,11 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
+  /// `onConnected` is called once the other ends of both channels are
+  /// connected (see `ChannelPort::connect()`).
   void connect(std::function<ResultT(const ArgT &)> callback,
-               bool quick = false) {
+               bool quick = false,
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     (void)quick; // See class header.
     if (!inner)
       detail::throwNullCallback();
@@ -1299,7 +1315,8 @@ public:
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    resultPort->connect(opts, std::move(parts[0]));
     userCallback = std::move(callback);
     // The TypedReadPort callback runs on the read-channel callback thread
     // for every decoded ArgT. We forward to the user's callback and then
@@ -1310,7 +1327,7 @@ public:
           resultPort->write(result);
           return true;
         },
-        opts);
+        opts, std::move(parts[1]));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1332,7 +1349,9 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<ResultT()> callback, bool quick = false) {
+  /// See above for `onConnected`.
+  void connect(std::function<ResultT()> callback, bool quick = false,
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     (void)quick;
     if (!inner)
       detail::throwNullCallback();
@@ -1341,7 +1360,8 @@ public:
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    resultPort->connect(opts, std::move(parts[0]));
     userCallback = std::move(callback);
     argPort->connect(
         [this]() -> bool {
@@ -1349,7 +1369,7 @@ public:
           resultPort->write(result);
           return true;
         },
-        opts);
+        opts, std::move(parts[1]));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1371,7 +1391,9 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<void(const ArgT &)> callback, bool quick = false) {
+  /// See above for `onConnected`.
+  void connect(std::function<void(const ArgT &)> callback, bool quick = false,
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     (void)quick;
     if (!inner)
       detail::throwNullCallback();
@@ -1380,7 +1402,8 @@ public:
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    resultPort->connect(opts, std::move(parts[0]));
     userCallback = std::move(callback);
     argPort->connect(
         [this](const ArgT &arg) -> bool {
@@ -1388,7 +1411,7 @@ public:
           resultPort->write();
           return true;
         },
-        opts);
+        opts, std::move(parts[1]));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1410,7 +1433,9 @@ public:
   TypedCallback(const TypedCallback &) = delete;
   TypedCallback &operator=(const TypedCallback &) = delete;
 
-  void connect(std::function<void()> callback, bool quick = false) {
+  /// See above for `onConnected`.
+  void connect(std::function<void()> callback, bool quick = false,
+               ChannelPort::ConnectCallback onConnected = nullptr) {
     (void)quick;
     if (!inner)
       detail::throwNullCallback();
@@ -1419,7 +1444,8 @@ public:
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
-    resultPort->connect(opts);
+    auto parts = utils::fanInCallbacks(std::move(onConnected), 2);
+    resultPort->connect(opts, std::move(parts[0]));
     userCallback = std::move(callback);
     argPort->connect(
         [this]() -> bool {
@@ -1427,7 +1453,7 @@ public:
           resultPort->write();
           return true;
         },
-        opts);
+        opts, std::move(parts[1]));
   }
 
   services::CallService::Callback &raw() { return *inner; }
