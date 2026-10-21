@@ -1433,6 +1433,40 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
 // Assignment statements
 //===----------------------------------------------------------------------===//
 
+/// Parse the assignment type suffix. The legacy form gives only the source
+/// element type and implies an inout destination.
+/// We need to supply an extended form for both the destination handle type
+/// and source type since we extend support for multiple handle types.
+/// TOOD: This shall be removed once migrated from.
+static ParseResult parseSVHandleAssignmentTypes(OpAsmParser &parser,
+                                                Type &destType, Type &srcType) {
+  Type firstType;
+  if (parser.parseType(firstType))
+    return failure();
+
+  if (isa<InOutType, NetType, VarType>(firstType)) {
+    destType = firstType;
+    if (parser.parseComma() || parser.parseType(srcType))
+      return failure();
+  } else {
+    destType = InOutType::get(firstType);
+    srcType = firstType;
+  }
+  return success();
+}
+
+static void printSVHandleAssignmentTypes(OpAsmPrinter &printer, Operation *,
+                                         Type destType, Type srcType) {
+  if (isa<InOutType>(destType)) {
+    printer.printType(srcType);
+    return;
+  }
+
+  printer.printType(destType);
+  printer << ", ";
+  printer.printType(srcType);
+}
+
 LogicalResult BPAssignOp::verify() {
   if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(

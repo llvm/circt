@@ -184,8 +184,9 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
       .Case<sv::PAssignOp>([&](sv::PAssignOp assignOp) {
         // Transform array assignment into individual assignments for each array
         // element.
-        auto inout = assignOp.getDest().getType();
-        auto ty = hw::type_dyn_cast<hw::ArrayType>(inout.getElementType());
+        auto destElementType =
+            sv::getHandleElementType(assignOp.getDest().getType());
+        auto ty = hw::type_dyn_cast<hw::ArrayType>(destElementType);
         if (!ty)
           return false;
 

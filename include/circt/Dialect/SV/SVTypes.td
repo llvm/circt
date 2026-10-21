@@ -142,7 +142,8 @@ class VarElementConstraint<string value, string varValue>
 def SVHandleType : AnyTypeOf<[NetType, InOutType, VarType], "InOutType">;
 
 
-def SVHandleElementType : AnyTypeOf<[NetElementType, VarElementType]>;
+def SVHandleElementType : AnyTypeOf<[InOutElementType, NetElementType,
+                                     VarElementType]>;
 
 
 class SVHandleElementConstraint<string value, string handleElement>
