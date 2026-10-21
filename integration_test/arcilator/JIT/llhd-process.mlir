@@ -17,8 +17,8 @@ hw.module @Foo(out x: i32) {
   %a = func.call @get_a() : () -> i32
   %c1_i32 = hw.constant 1 : i32
   %c2_i32 = hw.constant 2 : i32
-  %0 = llhd.constant_time <42000000fs, 0d, 0e>
-  %1 = llhd.constant_time <11000000fs, 0d, 0e>
+  %0 = llhd.constant_time <42000000fs, 0d>
+  %1 = llhd.constant_time <11000000fs, 0d>
   %2 = llhd.process -> i32 {
     llhd.wait yield (%c1_i32 : i32), delay %0, ^bb1
   ^bb1:

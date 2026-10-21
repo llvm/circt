@@ -1,14 +1,13 @@
 // RUN: circt-opt --llhd-sig2reg -cse %s | FileCheck %s
 
 func.func @getTime() -> !llhd.time {
-  %time = llhd.constant_time <1ns, 0d, 0e>
+  %time = llhd.constant_time <1ns, 0d>
   return %time : !llhd.time
 }
 
 hw.module @basic(in %init : i32, in %cond : i1, in %in0 : i32, in %in1 : i32, out prb1 : i32, out prb2 : i32, out prb3 : i32, out prb4 : i32, out prb5 : i32, out prb6 : i32, out prb7 : i32) {
   %opaque_time = func.call @getTime() : () -> !llhd.time
-  %epsilon = llhd.constant_time <0ns, 0d, 1e>
-  %delta = llhd.constant_time <0ns, 1d, 0e>
+  %delta = llhd.constant_time <0ns, 1d>
 
   // Promoted without delay op
   %sig1 = llhd.sig %init : <i32>
@@ -26,18 +25,18 @@ hw.module @basic(in %init : i32, in %cond : i1, in %in0 : i32, in %in1 : i32, ou
   // Not promoted because of multiple drivers
   %sig7 = llhd.sig %init : <i32>
 
-  llhd.drv %sig1, %in0 after %epsilon : i32
-  // CHECK: [[DELAY:%.+]] = llhd.delay %in0 by <0ns, 1d, 0e> : i32
+  llhd.assign %sig1, %in0 : i32
+  // CHECK: [[DELAY:%.+]] = llhd.delay %in0 by <0ns, 1d> : i32
   llhd.drv %sig2, %in0 after %delta : i32
   llhd.drv %sig3, %in0 after %opaque_time : i32
 
-  llhd.drv %sig5, %in0 after %epsilon if %cond : i32
+  llhd.assign %sig5, %in0 if %cond : i32
 
   scf.if %cond {
-    llhd.drv %sig6, %in0 after %epsilon : i32
+    llhd.assign %sig6, %in0 : i32
   }
   
-  llhd.drv %sig7, %in0 after %epsilon : i32
+  llhd.assign %sig7, %in0 : i32
   llhd.drv %sig7, %in1 after %delta : i32
 
   %prb1 = llhd.prb %sig1 : i32
@@ -76,7 +75,6 @@ hw.module @aliasStatic(in %init : i4, in %in0 : i1, in %in1 : i1, out out: i4) {
   // CHECK-NEXT: [[V9:%.+]] = comb.or [[V8]], [[V7]] : i4
   // CHECK-NEXT: hw.output [[V9]] : i4
 
-  %0 = llhd.constant_time <0ns, 0d, 1e>
   %true = hw.constant true
   %c1_c2 = hw.constant 1 : i2
   %c0_c2 = hw.constant 0 : i2
@@ -85,10 +83,10 @@ hw.module @aliasStatic(in %init : i4, in %in0 : i1, in %in1 : i1, out out: i4) {
   %3 = llhd.sig.extract %out from %c1_c2 : <i4> -> <i2>
   %6 = llhd.sig.extract %3 from %false : <i2> -> <i1>
   %7 = llhd.sig.extract %3 from %true : <i2> -> <i1>
-  llhd.drv %6, %in0 after %0 : i1
-  llhd.drv %7, %in1 after %0 : i1
+  llhd.assign %6, %in0 : i1
+  llhd.assign %7, %in1 : i1
   %4 = llhd.sig.extract %out from %c0_c2 : <i4> -> <i1>
-  llhd.drv %4, %in1 after %0 : i1
+  llhd.assign %4, %in1 : i1
   %5 = llhd.prb %out : i4
   hw.output %5 : i4
 }
@@ -120,7 +118,6 @@ hw.module @aliasDynamicSuccess(in %init : i8, in %in0 : i1, in %in1 : i1, in %id
   // CHECK-NEXT: [[V16:%.+]] = comb.or [[V15]], [[V13]] : i8
   // CHECK-NEXT: hw.output [[V16]] : i8
 
-  %0 = llhd.constant_time <0ns, 0d, 1e>
   %c4_c3 = hw.constant 4 : i3
   %c0_c3 = hw.constant 0 : i3
   %out = llhd.sig %init : <i8>
@@ -129,15 +126,14 @@ hw.module @aliasDynamicSuccess(in %init : i8, in %in0 : i1, in %in1 : i1, in %id
   %5 = llhd.sig.extract %3 from %idx0 : <i4> -> <i2>
   %6 = llhd.sig.extract %5 from %idx1 : <i2> -> <i1>
   %7 = llhd.sig.extract %4 from %idx0 : <i4> -> <i1>
-  llhd.drv %6, %in0 after %0 : i1
-  llhd.drv %7, %in1 after %0 : i1
+  llhd.assign %6, %in0 : i1
+  llhd.assign %7, %in1 : i1
   %8 = llhd.prb %out : i8
   hw.output %8 : i8
 }
 
 // CHECK-LABEL: hw.module @aliasDynamicFailure
 hw.module @aliasDynamicFailure(in %init : i4, in %in0 : i1, in %in1 : i1, in %idx0 : i1, in %idx1 : i1, out out: i4) {
-  // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
   // CHECK-NEXT: [[C_2_I2:%.+]] = hw.constant -2 : i2
   // CHECK-NEXT: [[C0_I2:%.+]] = hw.constant 0 : i2
   // CHECK-NEXT: [[OUT:%.+]] = llhd.sig %init : <i4>
@@ -146,13 +142,12 @@ hw.module @aliasDynamicFailure(in %init : i4, in %in0 : i1, in %in1 : i1, in %id
   // CHECK-NEXT: [[V3:%.+]] = llhd.sig.extract [[V1]] from %idx0 : <i2> -> <i1>
   // CHECK-NEXT: [[V4:%.+]] = llhd.sig.extract [[V2]] from %idx0 : <i2> -> <i1>
   // CHECK-NEXT: [[V5:%.+]] = llhd.sig.extract [[V2]] from %idx1 : <i2> -> <i1>
-  // CHECK-NEXT: llhd.drv [[V3]], %in0 after [[TIME]] : i1
-  // CHECK-NEXT: llhd.drv [[V4]], %in1 after [[TIME]] : i1
-  // CHECK-NEXT: llhd.drv [[V5]], %in0 after [[TIME]] : i1
+  // CHECK-NEXT: llhd.assign [[V3]], %in0 : i1
+  // CHECK-NEXT: llhd.assign [[V4]], %in1 : i1
+  // CHECK-NEXT: llhd.assign [[V5]], %in0 : i1
   // CHECK-NEXT: [[V6:%.+]] = llhd.prb [[OUT]] : i4
   // CHECK-NEXT: hw.output [[V6]] : i4
 
-  %0 = llhd.constant_time <0ns, 0d, 1e>
   %c2_c2 = hw.constant 2 : i2
   %c0_c2 = hw.constant 0 : i2
   %out = llhd.sig %init : <i4>
@@ -161,9 +156,9 @@ hw.module @aliasDynamicFailure(in %init : i4, in %in0 : i1, in %in1 : i1, in %id
   %5 = llhd.sig.extract %3 from %idx0 : <i2> -> <i1>
   %6 = llhd.sig.extract %4 from %idx0 : <i2> -> <i1>
   %7 = llhd.sig.extract %4 from %idx1 : <i2> -> <i1>
-  llhd.drv %5, %in0 after %0 : i1
-  llhd.drv %6, %in1 after %0 : i1
-  llhd.drv %7, %in0 after %0 : i1
+  llhd.assign %5, %in0 : i1
+  llhd.assign %6, %in1 : i1
+  llhd.assign %7, %in0 : i1
   %8 = llhd.prb %out : i4
   hw.output %8 : i4
 }
@@ -171,22 +166,20 @@ hw.module @aliasDynamicFailure(in %init : i4, in %in0 : i1, in %in1 : i1, in %id
 // CHECK-LABEL: @RemoveDriveOnlySignals
 hw.module @RemoveDriveOnlySignals(in %d: i42, in %e: i1) {
   %0 = hw.constant 0 : i42
-  %1 = llhd.constant_time <0ns, 0d, 1e>
   // CHECK-NOT: llhd.sig
   %a = llhd.sig %0 : <i42>
   %b = llhd.sig %0 : <i42>
   // CHECK-NOT: llhd.drv
-  llhd.drv %a, %d after %1 : i42
-  llhd.drv %b, %d after %1 if %e : i42
+  llhd.assign %a, %d : i42
+  llhd.assign %b, %d if %e : i42
   // CHECK: hw.output
 }
 
 // CHECK-LABEL: hw.module @UninitializedFullDrive
 hw.module @UninitializedFullDrive(in %value : i4, out out : i4) {
-  %time = llhd.constant_time <0ns, 0d, 1e>
   // CHECK-NOT: llhd.sig
   %sig = llhd.sig : <i4>
-  llhd.drv %sig, %value after %time : i4
+  llhd.assign %sig, %value : i4
   %read = llhd.prb %sig : i4
   // CHECK: hw.output %value : i4
   hw.output %read : i4

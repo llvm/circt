@@ -3,7 +3,7 @@
 // CHECK-LABEL: @ClockPosEdge(
 hw.module @ClockPosEdge(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] : i42
@@ -19,7 +19,7 @@ hw.module @ClockPosEdge(in %clock: i1, in %d: i42) {
     cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
   %3 = llhd.sig : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
@@ -29,7 +29,7 @@ hw.module @ClockPosEdge(in %clock: i1, in %d: i42) {
 hw.module @ClockPosEdgeExplicitInit(in %clock: i1, in %d: i42) {
   %zero = hw.constant 0 : i42
   %init = hw.constant 7 : i42
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] preset 7 {name = "sig"} : i42
@@ -45,14 +45,14 @@ hw.module @ClockPosEdgeExplicitInit(in %clock: i1, in %d: i42) {
     cf.cond_br %posedge, ^bb1(%d, %true : i42, i1), ^bb1(%zero, %false : i42, i1)
   }
   %sig = llhd.sig %init : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %value after %time if %enable : i42
 }
 
 // CHECK-LABEL: @ClockNegEdge(
 hw.module @ClockNegEdge(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[CLK_INV:%.+]] = seq.clock_inv [[CLK]]
@@ -69,14 +69,14 @@ hw.module @ClockNegEdge(in %clock: i1, in %d: i42) {
     cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
   %3 = llhd.sig : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockPosEdgeWithActiveLowReset(
 hw.module @ClockPosEdgeWithActiveLowReset(in %clock: i1, in %reset: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[RST_INV:%.+]] = comb.xor %reset, %true
@@ -99,14 +99,14 @@ hw.module @ClockPosEdgeWithActiveLowReset(in %clock: i1, in %reset: i1, in %d: i
     cf.cond_br %reset, ^bb1(%d, %true : i42, i1), ^bb1(%c42_i42, %true : i42, i1)
   }
   %3 = llhd.sig : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockNegEdgeWithActiveHighReset(
 hw.module @ClockNegEdgeWithActiveHighReset(in %clock: i1, in %reset: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[CLK_INV:%.+]] = seq.clock_inv [[CLK]]
@@ -129,14 +129,14 @@ hw.module @ClockNegEdgeWithActiveHighReset(in %clock: i1, in %reset: i1, in %d: 
     cf.cond_br %reset, ^bb1(%c42_i42, %true : i42, i1), ^bb1(%d, %true : i42, i1)
   }
   %3 = llhd.sig : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockWithEnable(
 hw.module @ClockWithEnable(in %clock: i1, in %d: i42, in %en: i1) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[ER:%.+]]:2 = llhd.combinational -> i42, i1 {
   // CHECK:   cf.cond_br %en, [[BB:\^.+]](%d, %true : i42, i1), [[BB]](%c0_i42, %false : i42, i1)
@@ -160,14 +160,14 @@ hw.module @ClockWithEnable(in %clock: i1, in %d: i42, in %en: i1) {
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockWithEnableAndReset(
 hw.module @ClockWithEnableAndReset(in %clock: i1, in %reset: i1, in %d: i42, in %en: i1) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[ER:%.+]]:2 = llhd.combinational -> i42, i1 {
   // CHECK:   cf.cond_br %en, [[BB:\^.+]](%d, %true : i42, i1), [[BB]](%c0_i42, %false : i42, i1)
@@ -197,14 +197,14 @@ hw.module @ClockWithEnableAndReset(in %clock: i1, in %reset: i1, in %d: i42, in 
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] reset async %reset, %c42_i42 : i42
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ChasePastValuesThroughControlFlow(
 hw.module @ChasePastValuesThroughControlFlow(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: seq.firreg
   %1, %2 = llhd.process -> i42, i1 {
@@ -227,7 +227,7 @@ hw.module @ChasePastValuesThroughControlFlow(in %clock: i1, in %d: i42) {
 // CHECK-LABEL: @AbortIfPastValueUnobserved(
 hw.module @AbortIfPastValueUnobserved(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK: llhd.process
   // CHECK-NOT: seq.compreg
   %1, %2 = llhd.process -> i42, i1 {
@@ -248,7 +248,7 @@ hw.module @AbortIfPastValueUnobserved(in %clock: i1, in %d: i42) {
 // CHECK-LABEL: @AbortIfPastValueNotI1(
 hw.module @AbortIfPastValueNotI1(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK: llhd.process
   // CHECK-NOT: seq.compreg
   %1, %2 = llhd.process -> i42, i1 {
@@ -269,7 +269,7 @@ hw.module @AbortIfPastValueNotI1(in %clock: i1, in %d: i42) {
 // CHECK-LABEL: @AbortIfPastValueLocal(
 hw.module @AbortIfPastValueLocal(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK: llhd.process
   // CHECK-NOT: seq.compreg
   %1, %2 = llhd.process -> i42, i1 {
@@ -290,7 +290,7 @@ hw.module @AbortIfPastValueLocal(in %clock: i1, in %d: i42) {
 // CHECK-LABEL: @AbortIfMultipleClocks(
 hw.module @AbortIfMultipleClocks(in %clock1: i1, in %clock2: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK: llhd.process
   // CHECK-NOT: seq.compreg
   %1, %2 = llhd.process -> i42, i1 {
@@ -314,7 +314,7 @@ hw.module @AbortIfMultipleClocks(in %clock1: i1, in %clock2: i1, in %d: i42) {
 // CHECK-LABEL: @AbortIfMultipleResets(
 hw.module @AbortIfMultipleResets(in %clock: i1, in %reset1: i1, in %reset2: i1, in %d: i42, in %en: i1) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK: llhd.process
   // CHECK-NOT: seq.compreg
   %1, %2 = llhd.process -> i42, i1 {
@@ -346,7 +346,7 @@ hw.module @AbortIfMultipleResets(in %clock: i1, in %reset1: i1, in %reset2: i1, 
 // CHECK-LABEL: @AbortOnAndOfMultipleEdges(
 hw.module @AbortOnAndOfMultipleEdges(in %clock: i1, in %reset: i1, in %d: i42, in %en: i1) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK: llhd.process
   // CHECK-NOT: seq.compreg
   %1, %2 = llhd.process -> i42, i1 {
@@ -373,7 +373,7 @@ hw.module @AbortOnAndOfMultipleEdges(in %clock: i1, in %reset: i1, in %d: i42, i
 // CHECK-LABEL: @AcceptMuxForReset(
 hw.module @AcceptMuxForReset(in %clock: i1, in %reset: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async %reset, %c42_i42 : i42
@@ -396,14 +396,14 @@ hw.module @AcceptMuxForReset(in %clock: i1, in %reset: i1, in %d: i42) {
     cf.br ^bb1(%12, %true : i42, i1)
   }
   %3 = llhd.sig : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ComplexControlFlow(
 hw.module @ComplexControlFlow(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[ER:%.+]]:2 = llhd.combinational -> i42, i1 {
   // CHECK:   cf.br ^bb1(%c0_i42, %false : i42, i1)
@@ -450,14 +450,14 @@ hw.module @ComplexControlFlow(in %clock: i1, in %d: i42) {
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockAndResetSameConst(
 hw.module @ClockAndResetSameConst(in %clock: i1, in %reset: i1) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[REG:%.+]] = seq.firreg %c42_i42 clock [[CLK]] reset async %reset, %c42_i42 : i42
@@ -479,14 +479,14 @@ hw.module @ClockAndResetSameConst(in %clock: i1, in %reset: i1) {
     cf.cond_br %reset, ^bb1(%c42_i42, %true : i42, i1), ^bb1(%c42_i42, %true : i42, i1)
   }
   %3 = llhd.sig : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockAndResetDifferentConst(
 hw.module @ClockAndResetDifferentConst(in %clock: i1, in %reset: i1) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[REG:%.+]] = seq.firreg %c42_i42 clock [[CLK]] reset async %reset, %c0_i42 : i42
@@ -508,14 +508,14 @@ hw.module @ClockAndResetDifferentConst(in %clock: i1, in %reset: i1) {
     cf.cond_br %reset, ^bb1(%c0_i42, %true : i42, i1), ^bb1(%c42_i42, %true : i42, i1)
   }
   %3 = llhd.sig : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @NonConstButStaticReset(
 hw.module @NonConstButStaticReset(in %clock: i1, in %reset: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   %1 = hw.struct_create (%c0_i42, %c0_i42) : !hw.struct<a: i42, b: i42>
   // CHECK: [[FIELD:%.+]] = hw.struct_extract {{%.+}}["a"]
   %2 = hw.struct_extract %1["a"] : !hw.struct<a: i42, b: i42>
@@ -539,7 +539,7 @@ hw.module @NonConstButStaticReset(in %clock: i1, in %reset: i1, in %d: i42) {
     cf.cond_br %reset, ^bb1(%2, %true : i42, i1), ^bb1(%d, %true : i42, i1)
   }
   %5 = llhd.sig : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %5, %3 after %0 if %4 : i42
 }
 
@@ -547,7 +547,7 @@ hw.module @NonConstButStaticReset(in %clock: i1, in %reset: i1, in %d: i42) {
 // runtime in a previous implementation of the deseq pass.
 // CHECK-LABEL: @LargeControlFlowRegression(
 hw.module @LargeControlFlowRegression(in %clk: i1, in %rstn: i1, in %a: i6, in %d0: i15, in %e0: i1, in %d1: i15, in %e1: i1) {
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   %true = hw.constant true
   %c-30_i6 = hw.constant -30 : i6
   %c-32_i6 = hw.constant -32 : i6
@@ -962,7 +962,7 @@ hw.module @LargeControlFlowRegression(in %clk: i1, in %rstn: i1, in %a: i6, in %
 // CHECK-LABEL: @OpOnConstantInputsMistakenlyPoison(
 hw.module @OpOnConstantInputsMistakenlyPoison(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[REG:%.+]] = seq.firreg {{%.+}} clock [[CLK]] : i42
@@ -983,7 +983,7 @@ hw.module @OpOnConstantInputsMistakenlyPoison(in %clock: i1, in %d: i42) {
     cf.cond_br %10, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
   %3 = llhd.sig : <i42>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
@@ -994,7 +994,7 @@ hw.module @OpOnConstantInputsMistakenlyPoison(in %clock: i1, in %d: i42) {
 // CHECK-LABEL: @ClockExtractedFromBusPosEdge(
 hw.module @ClockExtractedFromBusPosEdge(in %bus: i8, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock {{%.+}}
   // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
@@ -1014,7 +1014,7 @@ hw.module @ClockExtractedFromBusPosEdge(in %bus: i8, in %data: i4) {
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
@@ -1023,8 +1023,8 @@ hw.module @ProcessResultAsDriveTime(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
   %true = hw.constant true
   %false = hw.constant false
-  %zero = llhd.constant_time <0ns, 1d, 0e>
-  %one = llhd.constant_time <1ns, 0d, 0e>
+  %zero = llhd.constant_time <0ns, 1d>
+  %one = llhd.constant_time <1ns, 0d>
   // CHECK: llhd.process
   // CHECK-NOT: seq.firreg
   %value, %time, %enable = llhd.process -> i42, !llhd.time, i1 {
@@ -1044,7 +1044,7 @@ hw.module @ProcessResultAsDriveTime(in %clock: i1, in %d: i42) {
 // CHECK-LABEL: @ClockExtractedFromBusNegEdge(
 hw.module @ClockExtractedFromBusNegEdge(in %bus: i8, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock {{%.+}}
   // CHECK: [[CLK_INV:%.+]] = seq.clock_inv [[CLK]]
@@ -1065,7 +1065,7 @@ hw.module @ClockExtractedFromBusNegEdge(in %bus: i8, in %data: i4) {
     cf.cond_br %negedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
@@ -1076,7 +1076,7 @@ hw.module @ClockExtractedFromBusNegEdge(in %bus: i8, in %data: i4) {
 // CHECK-LABEL: @ClockExtractedFromChainedExtractPosEdge(
 hw.module @ClockExtractedFromChainedExtractPosEdge(in %bus: i16, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock {{%.+}}
   // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
@@ -1096,14 +1096,14 @@ hw.module @ClockExtractedFromChainedExtractPosEdge(in %bus: i16, in %data: i4) {
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
 // CHECK-LABEL: @ClockExtractedFromOverlappingExtractWidthsPosEdge(
 hw.module @ClockExtractedFromOverlappingExtractWidthsPosEdge(in %bus: i42, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock {{%.+}}
   // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
@@ -1123,7 +1123,7 @@ hw.module @ClockExtractedFromOverlappingExtractWidthsPosEdge(in %bus: i42, in %d
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
@@ -1131,7 +1131,7 @@ hw.module @ClockExtractedFromOverlappingExtractWidthsPosEdge(in %bus: i42, in %d
 hw.module @ClockExtractedFromArrayGetPosEdge(in %arr: !hw.array<4xi1>, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4
   %c2_i2 = hw.constant 2 : i2
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK_BIT:%.+]] = hw.array_get %arr[{{%c-?2_i2}}] : !hw.array<4xi1>, i2
   // CHECK: [[CLK:%.+]] = seq.to_clock [[CLK_BIT]]
@@ -1150,14 +1150,14 @@ hw.module @ClockExtractedFromArrayGetPosEdge(in %arr: !hw.array<4xi1>, in %data:
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
 // CHECK-LABEL: @ClockExtractedFromStructExtractPosEdge(
 hw.module @ClockExtractedFromStructExtractPosEdge(in %st: !hw.struct<a: i1, b: i1>, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK_BIT:%.+]] = hw.struct_extract %st["a"] : !hw.struct<a: i1, b: i1>
   // CHECK: [[CLK:%.+]] = seq.to_clock [[CLK_BIT]]
@@ -1176,7 +1176,7 @@ hw.module @ClockExtractedFromStructExtractPosEdge(in %st: !hw.struct<a: i1, b: i
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
@@ -1185,7 +1185,7 @@ hw.module @ClockExtractedFromArraySlicePosEdge(in %arr: !hw.array<8xi1>, in %dat
   %c0_i4 = hw.constant 0 : i4
   %c2_i3 = hw.constant 2 : i3
   %c1_i2 = hw.constant 1 : i2
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[SLICE:%.+]] = hw.array_slice %arr[%c2_i3] : (!hw.array<8xi1>) -> !hw.array<3xi1>
   // CHECK: [[CLK_BIT:%.+]] = hw.array_get [[SLICE]][%c1_i2] : !hw.array<3xi1>, i2
@@ -1207,7 +1207,7 @@ hw.module @ClockExtractedFromArraySlicePosEdge(in %arr: !hw.array<8xi1>, in %dat
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
@@ -1215,7 +1215,7 @@ hw.module @ClockExtractedFromArraySlicePosEdge(in %arr: !hw.array<8xi1>, in %dat
 hw.module @ClockExtractedFromArrayGetThenExtractPosEdge(in %arr: !hw.array<4xi8>, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4
   %c2_i2 = hw.constant 2 : i2
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[ELEM:%.+]] = hw.array_get %arr[{{%c-?2_i2}}] : !hw.array<4xi8>, i2
   // CHECK: [[CLK_SLICE:%.+]] = comb.extract [[ELEM]] from 4 : (i8) -> i4
@@ -1240,7 +1240,7 @@ hw.module @ClockExtractedFromArrayGetThenExtractPosEdge(in %arr: !hw.array<4xi8>
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
@@ -1248,7 +1248,7 @@ hw.module @ClockExtractedFromArrayGetThenExtractPosEdge(in %arr: !hw.array<4xi8>
 hw.module @ClockExtractedFromStructArrayGetThenExtractPosEdge(in %st: !hw.struct<clkarr: !hw.array<4xi8>, pad: i4>, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4
   %c2_i2 = hw.constant 2 : i2
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[ARR:%.+]] = hw.struct_extract %st["clkarr"] : !hw.struct<clkarr: !hw.array<4xi8>, pad: i4>
   // CHECK: [[ELEM:%.+]] = hw.array_get [[ARR]][{{%c-?2_i2}}] : !hw.array<4xi8>, i2
@@ -1276,14 +1276,14 @@ hw.module @ClockExtractedFromStructArrayGetThenExtractPosEdge(in %st: !hw.struct
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
 // CHECK-LABEL: @ClockExtractedFromAliasedStructExtractPosEdge(
 hw.module @ClockExtractedFromAliasedStructExtractPosEdge(in %st: !hw.typealias<@symbols::@my_struct, !hw.struct<a: i1, b: i1>>, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK_BIT:%.+]] = hw.struct_extract %st["a"] : !hw.typealias<@symbols::@my_struct, !hw.struct<a: i1, b: i1>>
   // CHECK: [[CLK:%.+]] = seq.to_clock [[CLK_BIT]]
@@ -1302,7 +1302,7 @@ hw.module @ClockExtractedFromAliasedStructExtractPosEdge(in %st: !hw.typealias<@
     cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
   }
   %sig = llhd.sig : <i4>
-  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
   llhd.drv %sig, %out after %time if %en : i4
 }
 
@@ -1311,8 +1311,7 @@ hw.module @ClockExtractedFromAliasedStructExtractPosEdge(in %st: !hw.typealias<@
 hw.module @PresetFromInitialDrive(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
   %c123_i42 = hw.constant 123 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
-  %e = llhd.constant_time <0ns, 0d, 1e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: shouldBeErased
   // CHECK: seq.firreg
   // CHECK-SAME: preset 123
@@ -1331,8 +1330,8 @@ hw.module @PresetFromInitialDrive(in %clock: i1, in %d: i42) {
   %3 = llhd.sig : <i42>
   llhd.drv %3, %1 after %0 if %2 : i42
   // Two initial drives of the same value should be both merged
-  llhd.drv %3, %c123_i42 after %e {testAttr = "shouldBeErased"} : i42
-  llhd.drv %3, %c123_i42 after %e {testAttr = "shouldBeErased"} : i42
+  llhd.assign %3, %c123_i42 {testAttr = "shouldBeErased"} : i42
+  llhd.assign %3, %c123_i42 {testAttr = "shouldBeErased"} : i42
 }
 
 // CHECK-LABEL: @FalseInitialDrives
@@ -1340,8 +1339,7 @@ hw.module @FalseInitialDrives(in %clock: i1, in %d: i42, in %c: i1) {
   %c0_i42 = hw.constant 0 : i42
   // CHECK: [[CST123:%.+]] = hw.constant 123 : i42
   %c123_i42 = hw.constant 123 : i42
-  %0 = llhd.constant_time <0ns, 1d, 0e>
-  %e = llhd.constant_time <0ns, 0d, 1e>
+  %0 = llhd.constant_time <0ns, 1d>
   // CHECK-NOT: seq.firreg {{.*}} preset
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
@@ -1356,9 +1354,10 @@ hw.module @FalseInitialDrives(in %clock: i1, in %d: i42, in %c: i1) {
   }
   %3 = llhd.sig : <i42>
   llhd.drv %3, %1 after %0 if %2 : i42
-  // CHECK-COUNT-2: llhd.drv %{{.*}}, [[CST123]]
+  // CHECK: llhd.assign %{{.*}}, [[CST123]] if
+  // CHECK: llhd.drv %{{.*}}, [[CST123]]
   // Don't initialize from conditional drive
-  llhd.drv %3, %c123_i42 after %e if %c : i42
+  llhd.assign %3, %c123_i42 if %c : i42
   // Don't initialize from drive at different time
   llhd.drv %3, %c123_i42 after %0 : i42
 }

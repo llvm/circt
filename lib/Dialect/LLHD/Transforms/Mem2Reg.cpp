@@ -38,46 +38,19 @@ using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
 using llvm::SpecificBumpPtrAllocator;
 
-/// Check whether a value is defined by `llhd.constant_time <0ns, 0d, 1e>`.
-static bool isEpsilonDelay(Value value) {
-  if (auto timeOp = value.getDefiningOp<ConstantTimeOp>()) {
-    auto t = timeOp.getValue();
-    return t.getTime() == 0 && t.getDelta() == 0 && t.getEpsilon() == 1;
-  }
-  return false;
-}
+/// Check whether an operation is an `llhd.assign`. This corresponds to a
+/// blocking assignment in Verilog.
+static bool isBlockingDrive(const Operation *op) { return isa<AssignOp>(op); }
 
-/// Check whether a value is defined by `llhd.constant_time <0ns, 0d, 0e>`.
-static bool isZeroDelay(Value value) {
-  if (auto timeOp = value.getDefiningOp<ConstantTimeOp>()) {
-    auto t = timeOp.getValue();
-    return t.getTime() == 0 && t.getDelta() == 0 && t.getEpsilon() == 0;
-  }
-  return false;
-}
-
-/// Check whether a value is defined by `llhd.constant_time <0ns, 1d, 0e>`.
-static bool isDeltaDelay(Value value) {
-  if (auto timeOp = value.getDefiningOp<ConstantTimeOp>()) {
-    auto t = timeOp.getValue();
-    return t.getTime() == 0 && t.getDelta() == 1 && t.getEpsilon() == 0;
-  }
-  return false;
-}
-
-/// Check whether an operation is a `llhd.drive` with an epsilon delay. This
-/// corresponds to a blocking assignment in Verilog.
-static bool isBlockingDrive(const Operation *op) {
-  if (auto driveOp = dyn_cast<DriveOp>(op))
-    return isEpsilonDelay(driveOp.getTime()) || isZeroDelay(driveOp.getTime());
-  return false;
-}
-
-/// Check whether an operation is a `llhd.drive` with a delta delay. This
+/// Check whether an operation is a `llhd.drv` with a delta delay. This
 /// corresponds to a non-blocking assignment in Verilog.
 static bool isDeltaDrive(const Operation *op) {
-  if (auto driveOp = dyn_cast<DriveOp>(op))
-    return isDeltaDelay(driveOp.getTime());
+  if (auto driveOp = dyn_cast<DriveOp>(op)) {
+    if (auto timeOp = driveOp.getTime().getDefiningOp<ConstantTimeOp>()) {
+      auto t = timeOp.getValue();
+      return t.getTime() == 0 && t.getDelta() == 1;
+    }
+  }
   return false;
 }
 
@@ -373,7 +346,7 @@ struct DriveNode : public OpNode {
   DefSlot slot;
   Def *def;
 
-  DriveNode(DriveOp op, Value slot, Def *def, LatticeValue *valueBefore,
+  DriveNode(DriveLikeOp op, Value slot, Def *def, LatticeValue *valueBefore,
             LatticeValue *valueAfter)
       : OpNode(Kind::Drive, op, valueBefore, valueAfter),
         slot(isDeltaDrive(op) ? delayedSlot(slot) : blockingSlot(slot)),
@@ -386,7 +359,7 @@ struct DriveNode : public OpNode {
   bool drivesProjection() const { return op->getOperand(0) != getSlot(slot); }
 
   /// Return the drive op.
-  DriveOp getDriveOp() const { return cast<DriveOp>(op); }
+  DriveLikeOp getDriveOp() const { return cast<DriveLikeOp>(op); }
 
   static bool classof(const LatticeNode *n) { return n->kind == Kind::Drive; }
 };
@@ -758,12 +731,12 @@ struct PromotionTree {
     }
     bool hasInRegionDrive(const Region &region) {
       return llvm::any_of(accesses(), [&](Access &access) {
-        return access->getParentRegion() == &region && isa<DriveOp>(access);
+        return access->getParentRegion() == &region && isa<DriveLikeOp>(access);
       });
     }
     bool hasInRegionProjectedDrive(const Region &region) {
       return llvm::any_of(foldedAccesses, [&](Access &access) {
-        return access->getParentRegion() == &region && isa<DriveOp>(access);
+        return access->getParentRegion() == &region && isa<DriveLikeOp>(access);
       });
     }
     bool hasProjection() const { return !foldedProjections.empty(); }
@@ -832,7 +805,7 @@ PromotionTree::Node *PromotionTree::buildFrom(Operation *signal,
         // Promote to slot if it's directly probed.
         curNode->isSlot |= inRegion;
         accesses.push_back(user);
-      } else if (isa<DriveOp>(user)) {
+      } else if (isa<DriveLikeOp>(user)) {
         // Bail out if we find an unsupported drive type.
         if (inRegion && !isDeltaDrive(user) && !isBlockingDrive(user))
           return nullptr;
@@ -978,10 +951,9 @@ struct Promoter {
   /// per-slot methods operate relative to this value.
   Value currentSlot;
 
-  /// One `llhd.constant_time` op per block, shared by every drive the pass
-  /// inserts at that block's terminator regardless of which slot triggered
-  /// the insertion.
-  DenseMap<Block *, ConstantTimeOp> blockingTimeCache;
+  /// One `llhd.constant_time` op per block, shared by every delayed drive the
+  /// pass inserts at that block's terminator regardless of which slot
+  /// triggered the insertion.
   DenseMap<Block *, ConstantTimeOp> delayedTimeCache;
 
   /// Lattice for the slot currently being promoted. Holds the needed-def
@@ -1343,7 +1315,7 @@ void Promoter::populateSlotOps() {
   for (auto &block : region) {
     for (auto &op : block.without_terminator()) {
       Value slot = TypeSwitch<Operation *, Value>(&op)
-                       .Case<ProbeOp, DriveOp>([&](auto op) {
+                       .Case<ProbeOp, DriveLikeOp>([&](auto op) {
                          if (promotable.contains(op.getSignal()))
                            return resolveSlot(op.getSignal());
                          return Value();
@@ -1405,12 +1377,13 @@ void Promoter::constructLattice() {
       }
 
       // Handle drives.
-      if (auto driveOp = dyn_cast<DriveOp>(op)) {
-        if (!isBlockingDrive(op) && !isDeltaDrive(op))
+      if (auto driveOp = dyn_cast<DriveLikeOp>(op)) {
+        if (!isBlockingDrive(driveOp) && !isDeltaDrive(driveOp))
           continue;
-        if (!promotable.contains(driveOp.getSignal()))
+        auto signal = driveOp.getSignal();
+        if (!promotable.contains(signal))
           continue;
-        if (resolveSlot(driveOp.getSignal()) != currentSlot)
+        if (resolveSlot(signal) != currentSlot)
           continue;
         auto condition = DriveCondition::always();
         if (auto enable = driveOp.getEnable())
@@ -1419,7 +1392,7 @@ void Promoter::constructLattice() {
         // definition for the slot. Drives to projections have their value
         // calculated later on.
         auto *def =
-            driveOp.getSignal() == currentSlot
+            signal == currentSlot
                 ? lattice->createDef(driveOp.getValue(), condition)
                 : lattice->createDef(driveOp->getBlock(),
                                      getStoredType(currentSlot), condition);
@@ -1980,11 +1953,11 @@ void Promoter::insertDrives(BlockExit *node) {
   // Reuse the cached `llhd.constant_time` op for this block, or create one
   // before the terminator on first use. Cached across slots so we end up
   // with one constant-time op per block exit, not one per promoted slot.
-  auto getTime = [&](bool delta) -> ConstantTimeOp {
-    auto &cached = (delta ? delayedTimeCache : blockingTimeCache)[node->block];
+  auto getDeltaTime = [&]() -> ConstantTimeOp {
+    auto &cached = delayedTimeCache[node->block];
     if (!cached)
       cached = ConstantTimeOp::create(builder, node->terminator->getLoc(), 0,
-                                      "ns", delta ? 1 : 0, delta ? 0 : 1);
+                                      "ns", 1);
     return cached;
   };
 
@@ -2000,13 +1973,16 @@ void Promoter::insertDrives(BlockExit *node) {
     LLVM_DEBUG(llvm::dbgs() << "- Inserting drive for " << currentSlot << " "
                             << (delayed ? "(delayed)" : "(blocking)")
                             << " before " << *node->terminator << "\n");
-    auto time = getTime(delayed);
     auto value = reachingDef->getValueOrPlaceholder();
     auto enable = reachingDef->condition.isConditional()
                       ? reachingDef->getConditionOrPlaceholder()
                       : Value{};
-    DriveOp::create(builder, currentSlot.getLoc(), currentSlot, value, time,
-                    enable);
+    if (delayed)
+      DriveOp::create(builder, currentSlot.getLoc(), currentSlot, value,
+                      getDeltaTime(), enable);
+    else
+      AssignOp::create(builder, currentSlot.getLoc(), currentSlot, value,
+                       enable);
   };
 
   insertDriveForSlot(/*delayed=*/false);
@@ -2316,8 +2292,8 @@ void Promoter::removeUnusedLocalSignal(SignalOp signalOp) {
   worklist.push_back(signalOp);
   while (!worklist.empty()) {
     auto *op = worklist.pop_back_val();
-    if (!isa<SignalOp, DriveOp, SigArrayGetOp, SigArraySliceOp, SigExtractOp,
-             SigStructExtractOp>(op))
+    if (!isa<SignalOp, DriveLikeOp, SigArrayGetOp, SigArraySliceOp,
+             SigExtractOp, SigStructExtractOp>(op))
       return;
     for (auto *user : op->getUsers())
       if (users.insert(user))

@@ -24,9 +24,8 @@ def LLHDTimeType : LLHDType<"Time"> {
   let summary = "time type";
   let description = [{
     Represents a simulation time value as a combination of a real time value in
-    seconds (or any smaller SI time unit), a delta value representing
-    infinitesimal time steps, and an epsilon value representing an absolute time
-    slot within a delta step (used to model SystemVerilog scheduling regions).
+    seconds (or any smaller SI time unit) and a delta value representing
+    infinitesimal time steps.
   }];
   let mnemonic = "time";
 }
@@ -80,7 +79,7 @@ def LLHDTimeAttr : AttrDef<LLHDDialect, "Time", []> {
   let description = [{
     Represents a value of the LLHD time type.
 
-    Example: `#llhd.time<0ns, 1d, 0e>`
+    Example: `#llhd.time<0ns, 1d>`
   }];
 
   let mnemonic = "time";
@@ -92,16 +91,14 @@ def LLHDTimeAttr : AttrDef<LLHDDialect, "Time", []> {
   let parameters = (ins AttributeSelfTypeParameter<"", "llhd::TimeType">:$type,
                         "uint64_t":$time,
                         StringRefParameter<"SI time unit">:$timeUnit,
-                        "unsigned":$delta,
-                        "unsigned":$epsilon);
+                        "unsigned":$delta);
 
   let skipDefaultBuilders = 1;
   let builders = [ AttrBuilder<(ins "uint64_t":$time,
                                     "llvm::StringRef":$timeUnit,
-                                    "unsigned":$delta,
-                                    "unsigned":$epsilon), [{
+                                    "unsigned":$delta), [{
     return $_get($_ctxt, llhd::TimeType::get($_ctxt),
-      time, timeUnit, delta, epsilon);
+      time, timeUnit, delta);
   }]>];
 }
 

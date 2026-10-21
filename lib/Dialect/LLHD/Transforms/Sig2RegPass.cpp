@@ -63,7 +63,8 @@ struct Interval {
   uint64_t bitwidth;
   // The value written to this interval or the OpResult of a read.
   Value value;
-  // The delay with which the value is written.
+  // The delay with which the value is written. Null if the value is assigned
+  // immediately.
   llhd::TimeAttr delay;
 };
 
@@ -120,6 +121,20 @@ public:
 
                 intervals.emplace_back(offset, bw, driveOp.getValue(),
                                        timeOp.getValueAttr());
+                return success();
+              })
+              .Case<llhd::AssignOp>([&](llhd::AssignOp assignOp) {
+                if (assignOp.getEnable()) {
+                  LLVM_DEBUG(llvm::dbgs()
+                             << "  - Conditional assignment, skipping...\n\n");
+                  return failure();
+                }
+
+                auto bw = hw::getBitWidth(assignOp.getValue().getType());
+                if (bw <= 0)
+                  return failure();
+
+                intervals.emplace_back(offset, bw, assignOp.getValue());
                 return success();
               })
               .Case<llhd::SigExtractOp>([&](llhd::SigExtractOp extractOp) {
@@ -188,7 +203,8 @@ public:
         os << llvm::indent(indent + 3) << idx << "\n";
 
       os << llvm::indent(indent + 3) << "value: " << interval.value << "\n";
-      os << llvm::indent(indent + 3) << "delay: " << interval.delay << "\n";
+      if (interval.delay)
+        os << llvm::indent(indent + 3) << "delay: " << interval.delay << "\n";
       os << llvm::indent(indent + 2) << ">,\n";
     }
     os << llvm::indent(indent) << "]\n";
@@ -203,8 +219,7 @@ public:
       auto bw = hw::getBitWidth(sigOp.getType().getNestedType());
       return intervals.size() == 1 && intervals.front().low.isStatic() &&
              intervals.front().low.min == 0 &&
-             intervals.front().bitwidth == bw &&
-             isImmediate(intervals.front().delay);
+             intervals.front().bitwidth == bw && !intervals.front().delay;
     }
     for (unsigned i = 0; i < intervals.size(); ++i) {
       if (i >= intervals.size() - 1)
@@ -270,7 +285,7 @@ public:
         }
 
         assignVal = builder.createOrFold<comb::ShlOp>(loc, assignVal, amt);
-        if (!isImmediate(interval.delay))
+        if (interval.delay)
           assignVal = builder.createOrFold<llhd::DelayOp>(loc, assignVal,
                                                           interval.delay);
         val = builder.createOrFold<comb::OrOp>(loc, assignVal, val);
@@ -331,11 +346,6 @@ private:
     return index;
   }
 
-  bool isImmediate(llhd::TimeAttr attr) const {
-    return attr.getTime() == 0 && attr.getDelta() == 0 &&
-           attr.getEpsilon() == 1;
-  }
-
   // The signal to be promoted.
   llhd::SignalOp sigOp;
   // Intervals written to.
@@ -362,7 +372,7 @@ void Sig2RegPass::runOnOperation() {
     // If the signal is only driven, but never read or used otherwise, remove
     // it.
     if (llvm::all_of(sigOp->getUses(), [](auto &use) {
-          return isa<llhd::DriveOp>(use.getOwner()) &&
+          return isa<llhd::DriveLikeOp>(use.getOwner()) &&
                  use.getOperandNumber() == 0;
         })) {
       LLVM_DEBUG(llvm::dbgs() << "  - Removing drive-only signal "

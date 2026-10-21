@@ -2,7 +2,6 @@
 
 // CHECK-LABEL: @struct
 hw.module @struct(in %init : !hw.struct<a: i32, b: i32>, in %v1 : i32, in %v2 : i32, out out1 : !hw.struct<a: i32, b: i32>, out out2 : !hw.struct<a: i32, b: i32>) {
-  %time = llhd.constant_time <0ns, 0d, 1e>
 
   //      CHECK: [[V0:%.+]] = hw.struct_extract %init["a"] : !hw.struct<a: i32, b: i32>
   // CHECK-NEXT: [[V1:%.+]] = llhd.sig{{ }}
@@ -20,10 +19,10 @@ hw.module @struct(in %init : !hw.struct<a: i32, b: i32>, in %v1 : i32, in %v2 : 
   %a = llhd.sig.struct_extract %sig["a"] : !llhd.ref<!hw.struct<a: i32, b: i32>>
   %b = llhd.sig.struct_extract %sig["b"] : !llhd.ref<!hw.struct<a: i32, b: i32>>
 
-  // CHECK-NEXT: llhd.drv [[V1]], %v1 after
-  // CHECK-NEXT: llhd.drv [[V3]], %v2 after
-  llhd.drv %a, %v1 after %time : i32
-  llhd.drv %b, %v2 after %time : i32
+  // CHECK-NEXT: llhd.assign [[V1]], %v1
+  // CHECK-NEXT: llhd.assign [[V3]], %v2
+  llhd.assign %a, %v1 : i32
+  llhd.assign %b, %v2 : i32
 
   // CHECK-NEXT: [[V7:%.+]] = llhd.sig %init : <!hw.struct<a: i32, b: i32>>
   %sig2 = llhd.sig %init : <!hw.struct<a: i32, b: i32>>
@@ -31,8 +30,8 @@ hw.module @struct(in %init : !hw.struct<a: i32, b: i32>, in %v1 : i32, in %v2 : 
   // CHECK-NEXT: [[V11:%.+]] = llhd.prb [[V7]] : !hw.struct<a: i32, b: i32>
   %prb2 = llhd.prb %sig2 : !hw.struct<a: i32, b: i32>
 
-  // CHECK-NEXT: llhd.drv [[V7]], %init after
-  llhd.drv %sig2, %init after %time : !hw.struct<a: i32, b: i32>
+  // CHECK-NEXT: llhd.assign [[V7]], %init
+  llhd.assign %sig2, %init : !hw.struct<a: i32, b: i32>
 
   // CHECK-NEXT: hw.output [[V6]], [[V11]] : !hw.struct<a: i32, b: i32>, !hw.struct<a: i32, b: i32>
   hw.output %prb, %prb2 : !hw.struct<a: i32, b: i32>, !hw.struct<a: i32, b: i32>
@@ -40,7 +39,6 @@ hw.module @struct(in %init : !hw.struct<a: i32, b: i32>, in %v1 : i32, in %v2 : 
 
 // CHECK-LABEL: @array
 hw.module @array(in %init : !hw.array<2xi32>, in %v1 : i32, in %v2 : i32, out out1 : !hw.array<2xi32>, out out2 : !hw.array<2xi32>) {
-  %time = llhd.constant_time <0ns, 0d, 1e>
   %false = hw.constant false
   %true = hw.constant true
 
@@ -60,10 +58,10 @@ hw.module @array(in %init : !hw.array<2xi32>, in %v1 : i32, in %v2 : i32, out ou
   %a = llhd.sig.array_get %sig[%false] : !llhd.ref<!hw.array<2xi32>>
   %b = llhd.sig.array_get %sig[%true] : !llhd.ref<!hw.array<2xi32>>
 
-  // CHECK-NEXT: llhd.drv [[V1]], %v1 after
-  // CHECK-NEXT: llhd.drv [[V3]], %v2 after
-  llhd.drv %a, %v1 after %time : i32
-  llhd.drv %b, %v2 after %time : i32
+  // CHECK-NEXT: llhd.assign [[V1]], %v1
+  // CHECK-NEXT: llhd.assign [[V3]], %v2
+  llhd.assign %a, %v1 : i32
+  llhd.assign %b, %v2 : i32
 
   // CHECK-NEXT: [[V7:%.+]] = llhd.sig %init : <!hw.array<2xi32>>
   %sig2 = llhd.sig %init : <!hw.array<2xi32>>
@@ -71,8 +69,8 @@ hw.module @array(in %init : !hw.array<2xi32>, in %v1 : i32, in %v2 : i32, out ou
   // CHECK-NEXT: [[V11:%.+]] = llhd.prb [[V7]] : !hw.array<2xi32>
   %prb2 = llhd.prb %sig2 : !hw.array<2xi32>
 
-  // CHECK-NEXT: llhd.drv [[V7]], %init after
-  llhd.drv %sig2, %init after %time : !hw.array<2xi32>
+  // CHECK-NEXT: llhd.assign [[V7]], %init
+  llhd.assign %sig2, %init : !hw.array<2xi32>
 
   // CHECK-NEXT: hw.output [[V6]], [[V11]] : !hw.array<2xi32>, !hw.array<2xi32>
   hw.output %prb, %prb2 : !hw.array<2xi32>, !hw.array<2xi32>
@@ -80,7 +78,6 @@ hw.module @array(in %init : !hw.array<2xi32>, in %v1 : i32, in %v2 : i32, out ou
 
 // CHECK-LABEL: @arrayDynamicAccess
 hw.module @arrayDynamicAccess(in %init : !hw.array<2xi32>, in %v1 : i32, in %idx : i1, out out : !hw.array<2xi32>) {
-  %time = llhd.constant_time <0ns, 0d, 1e>
   %false = hw.constant false
 
   // No SROA performed when array access indices are not statically known
@@ -88,22 +85,21 @@ hw.module @arrayDynamicAccess(in %init : !hw.array<2xi32>, in %v1 : i32, in %idx
   // CHECK-NEXT: [[V1:%.+]] = llhd.prb [[V0]]
   // CHECK-NEXT: [[V2:%.+]] = llhd.sig.array_get [[V0]][%false
   // CHECK-NEXT: [[V3:%.+]] = llhd.sig.array_get [[V0]][%idx
-  // CHECK-NEXT: llhd.drv [[V2]], %v1 after
-  // CHECK-NEXT: llhd.drv [[V3]], %v1 after
+  // CHECK-NEXT: llhd.assign [[V2]], %v1
+  // CHECK-NEXT: llhd.assign [[V3]], %v1
   // CHECK-NEXT: hw.output [[V1]]
   %sig = llhd.sig %init : <!hw.array<2xi32>>
   %prb = llhd.prb %sig : !hw.array<2xi32>
   %a = llhd.sig.array_get %sig[%false] : !llhd.ref<!hw.array<2xi32>>
   %b = llhd.sig.array_get %sig[%idx] : !llhd.ref<!hw.array<2xi32>>
-  llhd.drv %a, %v1 after %time : i32
-  llhd.drv %b, %v1 after %time : i32
+  llhd.assign %a, %v1 : i32
+  llhd.assign %b, %v1 : i32
 
   hw.output %prb : !hw.array<2xi32>
 }
 
 // CHECK-LABEL: @nested
 hw.module @nested(in %init : !hw.array<2x!hw.struct<a: i32, b: i32>>, out out : !hw.array<2x!hw.struct<a: i32, b: i32>>) {
-  %time = llhd.constant_time <0ns, 0d, 1e>
   %false = hw.constant false
   %true = hw.constant true
 
@@ -140,15 +136,15 @@ hw.module @nested(in %init : !hw.array<2x!hw.struct<a: i32, b: i32>>, out out : 
 
   // CHECK: [[V17:%.+]] = hw.array_get %init[%false
   // CHECK: [[V18:%.+]] = hw.struct_extract [[V17]]["a"]
-  // CHECK: llhd.drv [[V2]], [[V18]] after
+  // CHECK: llhd.assign [[V2]], [[V18]]
   // CHECK: [[V19:%.+]] = hw.struct_extract [[V17]]["b"]
-  // CHECK: llhd.drv [[V4]], [[V19]] after
+  // CHECK: llhd.assign [[V4]], [[V19]]
   // CHECK: [[V20:%.+]] = hw.array_get %init[%true
   // CHECK: [[V21:%.+]] = hw.struct_extract [[V20]]["a"]
-  // CHECK: llhd.drv [[V7]], [[V21]] after
+  // CHECK: llhd.assign [[V7]], [[V21]]
   // CHECK: [[V22:%.+]] = hw.struct_extract [[V20]]["b"]
-  // CHECK: llhd.drv [[V9]], [[V22]] after
-  llhd.drv %sig, %init after %time : !hw.array<2x!hw.struct<a: i32, b: i32>>
+  // CHECK: llhd.assign [[V9]], [[V22]]
+  llhd.assign %sig, %init : !hw.array<2x!hw.struct<a: i32, b: i32>>
 
   // CHECK: hw.output [[V16]] : !hw.array<2xstruct<a: i32, b: i32>>
   hw.output %0 : !hw.array<2x!hw.struct<a: i32, b: i32>>

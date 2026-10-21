@@ -65,7 +65,7 @@ struct ValueSlice {
 struct DriveSlice {
   /// The drive op assigning a value. This may be null if no current drive op
   /// exists.
-  DriveOp op;
+  DriveLikeOp op;
   /// The value being assigned. Usually this is equal to `op.getValue()`, but
   /// may hold something like a default signal value if this slice was created
   /// to fill a gap in drives and no drive op exists.
@@ -121,7 +121,7 @@ struct Signal {
   SmallVector<ValueSlice> slices;
   /// The drives that assign a single value to the entire signal. There may be
   /// multiple drives with different delay and enable operands.
-  SmallVector<DriveOp, 2> completeDrives;
+  SmallVector<DriveLikeOp, 2> completeDrives;
 
   /// Create a root signal.
   explicit Signal(Value root) : value(root) {}
@@ -326,7 +326,7 @@ void ModuleContext::aggregateDrives(Signal &signal) {
   // drives as separate vectors of drive slices.
   SmallMapVector<std::pair<Value, Value>, SmallVector<DriveSlice>, 2> drives;
   SmallPtrSet<Operation *, 8> knownDrives;
-  auto addDrive = [&](DriveOp op, unsigned offset, unsigned length) {
+  auto addDrive = [&](DriveLikeOp op, unsigned offset, unsigned length) {
     knownDrives.insert(op);
     drives[{op.getTime(), op.getEnable()}].push_back(
         DriveSlice{op, op.getValue(), offset, length});
@@ -347,7 +347,7 @@ void ModuleContext::aggregateDrives(Signal &signal) {
   // Gather all drives targeting this signal or slices of it directly.
   for (auto slice : signal.slices) {
     for (auto &use : slice.value.getUses()) {
-      auto driveOp = dyn_cast<DriveOp>(use.getOwner());
+      auto driveOp = dyn_cast<DriveLikeOp>(use.getOwner());
       if (driveOp && use.getOperandNumber() == 0 &&
           driveOp->getBlock() == slice.value.getParentBlock())
         addDrive(driveOp, slice.offset, slice.length);
@@ -365,7 +365,7 @@ void ModuleContext::aggregateDrives(Signal &signal) {
     for (auto *user : value.getUsers()) {
       if (isa<ProbeOp>(user))
         continue;
-      if (isa<DriveOp>(user) && knownDrives.contains(user))
+      if (isa<DriveLikeOp>(user) && knownDrives.contains(user))
         continue;
       if (isa<SigExtractOp, SigStructExtractOp, SigArrayGetOp, SigArraySliceOp>(
               user)) {
@@ -418,9 +418,9 @@ void ModuleContext::addDefaultDriveSlices(Signal &signal,
     }
     if (needSeparateFields) {
       for (auto idx = from; idx < to; ++idx)
-        gapSlices.push_back(DriveSlice{DriveOp{}, Value{}, idx, 0});
+        gapSlices.push_back(DriveSlice{DriveLikeOp{}, Value{}, idx, 0});
     } else {
-      gapSlices.push_back(DriveSlice{DriveOp{}, Value{}, from, to - from});
+      gapSlices.push_back(DriveSlice{DriveLikeOp{}, Value{}, from, to - from});
     }
   };
 
@@ -430,7 +430,7 @@ void ModuleContext::addDefaultDriveSlices(Signal &signal,
   // single slice defining the entire union's value.
   if (hw::type_isa<hw::UnionType>(type)) {
     if (slices.empty())
-      gapSlices.push_back(DriveSlice{DriveOp{}, Value{}, 0, 0});
+      gapSlices.push_back(DriveSlice{DriveLikeOp{}, Value{}, 0, 0});
   } else {
     unsigned expectedOffset = 0;
     for (auto slice : slices) {
@@ -562,8 +562,14 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
     return;
   }
   LLVM_DEBUG({
-    llvm::dbgs() << "- Aggregating " << signal << " drives (delay ";
-    driveDelay.printAsOperand(llvm::dbgs(), OpPrintingFlags().useLocalScope());
+    llvm::dbgs() << "- Aggregating " << signal << " drives (";
+    if (driveDelay) {
+      llvm::dbgs() << "delay ";
+      driveDelay.printAsOperand(llvm::dbgs(),
+                                OpPrintingFlags().useLocalScope());
+    } else {
+      llvm::dbgs() << "assign";
+    }
     if (driveEnable) {
       llvm::dbgs() << " if ";
       driveEnable.printAsOperand(llvm::dbgs(),
@@ -649,8 +655,12 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
 
   // Create the single drive with the aggregate result.
   assert(result);
-  auto driveOp =
-      DriveOp::create(builder, signal.value, result, driveDelay, driveEnable);
+  DriveLikeOp driveOp;
+  if (driveDelay)
+    driveOp =
+        DriveOp::create(builder, signal.value, result, driveDelay, driveEnable);
+  else
+    driveOp = AssignOp::create(builder, signal.value, result, driveEnable);
   signal.completeDrives.push_back(driveOp);
   LLVM_DEBUG(llvm::dbgs() << "  - Created " << driveOp << "\n");
 

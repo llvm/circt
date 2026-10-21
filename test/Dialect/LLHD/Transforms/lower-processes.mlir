@@ -253,7 +253,7 @@ hw.module @SkipIfEntryAndWaitConvergeWithSideEffectingOps(in %a : i42) {
 }
 
 hw.module @DelayedWaitsAreNotCombinational(in %v0: i1, in %v1: i1, in %v2: i1) {
-  %0 = llhd.constant_time <1ns, 0d, 0e>
+  %0 = llhd.constant_time <1ns, 0d>
   %false = hw.constant false
   %a = llhd.sig %false : <i1>
 
