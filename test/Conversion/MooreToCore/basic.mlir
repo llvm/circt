@@ -782,19 +782,16 @@ func.func @CaseXZ(%arg0: !moore.l8, %arg1: !moore.l8) {
 
   // CHECK: comb.icmp ceq %arg0, %arg1 : i8
   moore.casez_eq %arg0, %arg1 : l8
-  // CHECK: [[MASK:%.+]] = hw.constant -7 : i8
-  // CHECK: [[TMP1:%.+]] = comb.and %arg0, [[MASK]]
-  // CHECK: [[TMP2:%.+]] = hw.constant -120 : i8
-  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  // casez skips only Z bits. %1 and %0 have X bits outside them, and a
+  // non-constant operand has no X bit in the two-valued lowering, so these
+  // never match (IEEE 1800 12.5.1; they used to compare the X bits as 0).
+  // CHECK: hw.constant false
   moore.casez_eq %arg0, %1 : l8
-  // CHECK: [[MASK:%.+]] = hw.constant -4 : i8
-  // CHECK: [[TMP1:%.+]] = comb.and %arg1, [[MASK]]
-  // CHECK: [[TMP2:%.+]] = hw.constant -124 : i8
-  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  // CHECK: hw.constant false
   moore.casez_eq %0, %arg1 : l8
-  // CHECK: [[TMP1:%.+]] = hw.constant -128 : i8
-  // CHECK: [[TMP2:%.+]] = hw.constant -120 : i8
-  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  // Two constants compare exactly outside the skipped Z bits: bit 6 is 0 in %0
+  // and X in %1.
+  // CHECK: hw.constant false
   moore.casez_eq %0, %1 : l8
 
   // CHECK: comb.icmp ceq %arg0, %arg1 : i8
@@ -809,12 +806,59 @@ func.func @CaseXZ(%arg0: !moore.l8, %arg1: !moore.l8) {
   // CHECK: [[TMP2:%.+]] = hw.constant -124 : i8
   // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
   moore.casexz_eq %0, %arg1 : l8
-  // CHECK: [[TMP1:%.+]] = hw.constant -128 : i8
-  // CHECK: [[TMP2:%.+]] = hw.constant -120 : i8
-  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  // Outside the X and Z bits of both, bit 3 is 0 in %0 and 1 in %1.
+  // CHECK: hw.constant false
   moore.casexz_eq %0, %1 : l8
 
   return
+}
+
+// `===`, `!==`, `==?` and `!=?` against a constant with X and Z bits. The
+// two-valued lowering gives a non-constant operand no X or Z bit, so it is never
+// case-equal to such a constant; `==?` skips the right operand's X and Z bits.
+// These used to compare the X and Z bits as 0.
+// CHECK-LABEL: func.func @CaseEqUnknown(
+func.func @CaseEqUnknown(%arg0: !moore.l4, %arg1: !moore.l4) {
+  %0 = moore.constant b1X0Z : l4
+  %1 = moore.constant b1100 : l4
+  // CHECK: hw.constant -8 : i4
+  // CHECK: hw.constant false
+  moore.case_eq %arg0, %0 : l4
+  // CHECK: hw.constant true
+  moore.case_ne %0, %arg0 : l4
+  // CHECK: hw.constant true
+  moore.case_eq %0, %0 : l4
+  // CHECK: comb.icmp ceq %arg0, {{%.+}} : i4
+  moore.case_eq %arg0, %1 : l4
+  // CHECK: [[MASK:%.+]] = hw.constant -6 : i4
+  // CHECK: [[TMP:%.+]] = comb.and %arg0, [[MASK]] : i4
+  // CHECK: [[TMP2:%.+]] = hw.constant -8 : i4
+  // CHECK: comb.icmp weq [[TMP]], [[TMP2]] : i4
+  moore.wildcard_eq %arg0, %0 : l4 -> l1
+  // CHECK: [[MASK:%.+]] = hw.constant -6 : i4
+  // CHECK: [[TMP:%.+]] = comb.and %arg1, [[MASK]] : i4
+  // CHECK: [[TMP2:%.+]] = hw.constant -8 : i4
+  // CHECK: comb.icmp wne [[TMP]], [[TMP2]] : i4
+  moore.wildcard_ne %arg1, %0 : l4 -> l1
+  // CHECK: comb.icmp weq %arg0, %arg1 : i4
+  moore.wildcard_eq %arg0, %arg1 : l4 -> l1
+  return
+}
+
+// `a inside {8'b1???_0000}` is a `==?` against a constant with Z bits. Without
+// masking them out of both sides it was `a == 8'h80`, false for a = 8'h90,
+// where the standard (and Verilator) say true.
+// CHECK-LABEL: func.func @WildcardEquality
+func.func @WildcardEquality(%arg0: !moore.l8) -> !moore.l1 {
+  // 8'b1zzz_0000: bits 4..6 are wildcards.
+  %0 = moore.constant b1ZZZ0000 : l8
+  // CHECK: [[MASK:%.+]] = hw.constant -113 : i8
+  // CHECK-NEXT: [[LHS:%.+]] = comb.and %arg0, [[MASK]] : i8
+  // CHECK-NEXT: [[RHS:%.+]] = hw.constant -128 : i8
+  // CHECK-NEXT: [[EQ:%.+]] = comb.icmp weq [[LHS]], [[RHS]] : i8
+  %1 = moore.wildcard_eq %arg0, %0 : !moore.l8 -> !moore.l1
+  // CHECK: return [[EQ]]
+  return %1 : !moore.l1
 }
 
 // CHECK-LABEL: func.func @CmpReal
