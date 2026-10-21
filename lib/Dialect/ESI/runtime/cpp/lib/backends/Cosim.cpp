@@ -60,7 +60,9 @@ public:
     if (desc.dir != RpcClient::ChannelDirection::ToServer)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to server channel");
-    return utils::readyFuture();
+    // Ready once the simulation has connected its end. Writes before then are
+    // held by the server.
+    return client.connectToServer(name);
   }
 
 protected:
@@ -152,7 +154,8 @@ public:
 
           return consumed;
         });
-    return utils::readyFuture();
+    // Ready once the simulation has connected its end.
+    return connection->subscribed();
   }
 
   void disconnect() override {

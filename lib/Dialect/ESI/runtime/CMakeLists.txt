@@ -348,7 +348,7 @@ if(ESI_COSIM)
   find_package(ixwebsocket QUIET CONFIG)
   if (NOT ixwebsocket_FOUND)
     message("-- IXWebSocket not found locally, fetching from upstream")
-    # v3 of the cosim protocol is plaintext on localhost only. Disable
+    # The cosim protocol is plaintext on localhost only. Disable
     # TLS/zlib to keep IXWebSocket dependency-free and statically linkable
     # into CosimRpc.
     set(USE_TLS OFF CACHE BOOL "" FORCE)

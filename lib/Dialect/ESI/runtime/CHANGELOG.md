@@ -18,6 +18,19 @@
   several such futures without blocking. In Python, service ports' `connect()`
   returns a `ConnectFuture`; channel `Port.connect()` still returns the port
   (for chaining) and stores the future in `Port.connected_future`.
+- **Cosim protocol v4.** The cosim wire protocol is bumped to v4 and the
+  version is checked exactly in `hello`, so the runtime and the simulator's
+  DPI library must be rebuilt together. See `cosim-protocol.md`.
+  - Cosim ports' `connect()` futures now become ready once the simulator side
+    of the channel is connected (via a new `connect` request for host-to-sim
+    channels, and by holding the `subscribe` reply for sim-to-host ones).
+    `RpcServer` ports' futures become ready once the host side is.
+  - Frames sent to a simulator port which isn't connected are held and
+    handed over once it connects, rather than dropped.
+  - `RpcClient` gains `connectToServer()`, and
+    `RpcClient::ReadChannelConnection` gains `subscribed()`.
+    `connectClientReceiver()` no longer waits for the server to accept the
+    subscription, so errors arrive through `subscribed()`.
 - **`HostMemRegion` is now defined at namespace scope** as
   `esi::services::HostMemRegion`. `services::HostMem::HostMemRegion` remains
   as an alias, so existing source compiles unchanged, but code linking against

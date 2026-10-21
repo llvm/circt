@@ -20,6 +20,7 @@
 #include "esi/Common.h"
 
 #include <functional>
+#include <future>
 #include <memory>
 #include <string>
 #include <vector>
@@ -63,6 +64,13 @@ public:
   /// List all channels available on the server.
   std::vector<ChannelDesc> listChannels() const;
 
+  /// Ask the server to report when the simulation has connected its end of a
+  /// server-bound channel. Doesn't block: returns a future which becomes ready
+  /// then (immediately if it already is), or holds an exception if the
+  /// connection is lost first. Frames sent before then are held by the
+  /// server, not dropped.
+  std::future<void> connectToServer(const std::string &channelName);
+
   /// Send a message to a server-bound channel.
   void writeToServer(const std::string &channelName, const MessageData &data);
 
@@ -78,10 +86,16 @@ public:
   public:
     virtual ~ReadChannelConnection() = default;
     virtual void disconnect() = 0;
+    /// A future which becomes ready once the server has accepted the
+    /// subscription, i.e. once the simulation side of the channel is
+    /// connected. Holds an exception if the subscription fails. May only be
+    /// called once.
+    virtual std::future<void> subscribed() = 0;
   };
 
   /// Connect to a client-bound channel and receive messages via callback.
-  /// Returns a handle that disconnects when destroyed.
+  /// Doesn't block; see `ReadChannelConnection::subscribed()`. Returns a
+  /// handle that disconnects when destroyed.
   std::unique_ptr<ReadChannelConnection>
   connectClientReceiver(const std::string &channelName, ReadCallback callback);
 
