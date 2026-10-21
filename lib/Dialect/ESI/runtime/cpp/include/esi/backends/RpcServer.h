@@ -42,10 +42,20 @@ public:
   /// `connect()`'s `onConnected` is called once a client has connected the
   /// other end (sent `connect` or subscribed, respectively), or with an
   /// exception if the port is disconnected first.
+  ///
+  /// Write ports apply backpressure: `tryWrite()` returns false while the
+  /// channel's in-flight limit (messages queued here plus messages sent but
+  /// not yet consumed by the client) is reached. `write()` never blocks and
+  /// ignores the limit.
   ReadChannelPort &registerReadPort(const std::string &name,
                                     const std::string &type);
   WriteChannelPort &registerWritePort(const std::string &name,
                                       const std::string &type);
+
+  /// Report that the simulation has consumed one message read from `port`
+  /// (which must have been returned by `registerReadPort`). This returns a
+  /// credit to the client so it may send another message. Non-blocking.
+  void messageConsumed(ReadChannelPort &port);
 
   // Stop the RPC server.
   // The optional millisecond timeout is advisory; the WebSocket transport

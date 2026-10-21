@@ -196,6 +196,9 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
   }
   MessageData msg = f.get();
   f = port.readAsync();
+  // The message has now been handed to the simulation. Return its credit so
+  // the client may send another.
+  server->messageConsumed(port);
   log(endpointId, false, msg);
 
   // Do the validation only if there's a message available. Since the
@@ -242,7 +245,8 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
 }
 
 // Attempt to send data to a client.
-// - return 0 on success, negative on failure (unregistered EP).
+// - return 0 on success, negative on failure (unregistered EP), positive if
+//   the endpoint's queue is full (data not accepted; retry later).
 // - if dataSize is negative, attempt to dynamically determine the size of
 //   'data'.
 DPI int sv2cCosimserverEpTryPut(char *endpointId,
@@ -282,9 +286,12 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
     getLogger().error("cosim", "Endpoint not found in registry!");
     return -4;
   }
-  log(endpointId, true, *blob);
   WriteChannelPort &port = portIt->second;
-  port.write(*blob);
+  // Never block the simulator thread: if the channel is at its flow-control
+  // in-flight limit, tell the RTL to hold the data and retry.
+  if (!port.tryWrite(*blob))
+    return 1;
+  log(endpointId, true, *blob);
   return 0;
 }
 

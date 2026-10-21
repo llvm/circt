@@ -32,6 +32,22 @@
   - `RpcClient` gains `connectToServer()`, and `connectClientReceiver()` takes
     an `onSubscribed` callback. It no longer waits for the server to accept
     the subscription, so errors arrive through that callback.
+- **Cosim backpressure.** Cosim channels now apply credit-based flow control
+  in both directions (an addition to cosim protocol v4).
+  - Host→simulation: `WriteChannelPort::tryWrite()` now returns `false` while
+    16 frames (or `ConnectOptions::bufferSize`; `0` = unbounded) are
+    unconsumed by the simulation, and `write()` blocks until there's room.
+    Frames held for a simulator port which isn't connected count too.
+  - Simulation→host: `Cosim_Endpoint_ToHost` now deasserts `DataInReady` while
+    32 frames (or the read port's `ConnectOptions::bufferSize`; `0` =
+    unbounded) are queued or unconsumed by the host. Software which writes a
+    long burst before reading any results may now deadlock, as it would on
+    hardware. Connect such read ports with `bufferSize = 0`.
+  - The `cosim_ep_tryput` DPI call returns a positive value when the channel
+    is full and the message was not accepted.
+  - `RpcClient::connectClientReceiver()` takes a `maxInFlight` argument;
+    `RpcClient` gains `tryWriteToServer()` and `setToServerMaxInFlight()`, and
+    `RpcServer` gains `messageConsumed()`.
 - **`HostMemRegion` is now defined at namespace scope** as
   `esi::services::HostMemRegion`. `services::HostMem::HostMemRegion` remains
   as an alias, so existing source compiles unchanged, but code linking against
