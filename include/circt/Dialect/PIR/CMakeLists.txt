@@ -7,7 +7,7 @@
 ##===----------------------------------------------------------------------===//
 
 add_circt_dialect(PIR pir)
-add_circt_doc(PIROps Dialects/PIROps -gen-op-doc)
+add_circt_doc(PIROps Dialects/PIROps -gen-op-doc -dialect pir)
 add_circt_doc(PIRTypes Dialects/PIRTypes -gen-typedef-doc -dialect pir)
 
 set(LLVM_TARGET_DEFINITIONS PIREnums.td)
