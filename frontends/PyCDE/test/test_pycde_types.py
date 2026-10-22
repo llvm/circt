@@ -4,8 +4,9 @@ from pycde import dim, Input, Output, generator, System, Module
 from pycde.circt import ir
 from pycde.circt.dialects import hw
 from pycde.types import (Array, Bit, Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, ChannelSignaling, InOut, List, SInt,
-                         StructType, Type, TypeAlias, UnionType, UInt, Window)
+                         ChannelDirection, ChannelSignaling, InOut, Net, Var,
+                         List, SInt, StructType, Type, TypeAlias, UnionType,
+                         UInt, Window)
 from pycde.testing import unittestmodule
 from pycde.signals import Struct, UIntSignal
 
@@ -69,6 +70,14 @@ print(nested_union.canonical_type)
 canonical_inout = InOut(nested_alias).canonical_type
 assert isinstance(canonical_inout, InOut)
 assert canonical_inout.element_type == UInt(3)
+
+canonical_net = Net(nested_alias).canonical_type
+assert isinstance(canonical_net, Net)
+assert canonical_net.element_type == UInt(3)
+
+canonical_var = Var(nested_alias).canonical_type
+assert isinstance(canonical_var, Var)
+assert canonical_var.element_type == UInt(3)
 
 nested_channel = Channel(nested_alias, ChannelSignaling.FIFO, 2)
 canonical_channel = nested_channel.canonical_type

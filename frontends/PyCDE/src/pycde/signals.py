@@ -244,7 +244,7 @@ class ClockSignal(Signal):
     return BitsSignal(clk_i1, Bits(1))
 
 
-class InOutSignal(Signal):
+class SVHandleSignal(Signal):
   # Maintain a caching of the read value.
   read_value = None
 
@@ -253,6 +253,18 @@ class InOutSignal(Signal):
     if self.read_value is None:
       self.read_value = _FromCirctValue(sv.ReadInOutOp.create(self).results[0])
     return self.read_value
+
+
+class InOutSignal(SVHandleSignal):
+  pass
+
+
+class NetSignal(SVHandleSignal):
+  pass
+
+
+class VarSignal(SVHandleSignal):
+  pass
 
 
 def _validate_idx(size: int, idx: Union[int, BitVectorSignal]):
