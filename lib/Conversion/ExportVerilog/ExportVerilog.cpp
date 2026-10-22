@@ -50,7 +50,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/DXILABI.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Path.h"
@@ -370,7 +369,6 @@ static Type stripUnpackedTypes(Type type) {
 static bool hasLeadingUnpackedType(Type type) {
   auto elementType = sv::getHandleElementType(type);
   assert(elementType && "inout or SV handle type is expected");
-  ;
   return stripUnpackedTypes(elementType) != elementType;
 }
 
@@ -1791,20 +1789,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                    emitter, /*optionalAliasType=*/{},
                                    emitAsTwoStateType);
       })
-      .Case<InOutType>([&](InOutType inoutType) {
-        return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
-                                   implicitIntType, singleBitDefaultType,
-                                   emitter, /*optionalAliasType=*/{},
-                                   emitAsTwoStateType);
-      })
-      .Case<sv::NetType>([&](NetType netType) {
-        return printPackedTypeImpl(netType.getElementType(), os, loc, dims,
-                                   implicitIntType, singleBitDefaultType,
-                                   emitter, /*optionalAliasType=*/{},
-                                   emitAsTwoStateType);
-      })
-      .Case<sv::VarType>([&](VarType varType) {
-        return printPackedTypeImpl(varType.getElementType(), os, loc, dims,
+      .Case<InOutType, sv::NetType, sv::VarType>([&](auto handleType) {
+        return printPackedTypeImpl(handleType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
                                    emitter, /*optionalAliasType=*/{},
                                    emitAsTwoStateType);
