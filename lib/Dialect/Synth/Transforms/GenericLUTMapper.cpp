@@ -47,21 +47,23 @@ struct GenericLUT : public CutRewritePattern {
   GenericLUT(mlir::MLIRContext *context, unsigned k)
       : CutRewritePattern(context), k(k), cachedDelays(k, 1) {}
 
-  std::optional<MatchResult> match(CutEnumerator &enumerator,
-                                   const Cut &cut) const override {
+  std::optional<MatchResult> match(CutEnumerator &enumerator, const Cut &cut,
+                                   const MatchBinding &binding) const override {
     const auto &network = enumerator.getLogicNetwork();
+    (void)binding;
     // This pattern can implement any cut with at most k inputs
     if (cut.getInputSize() > k || cut.getOutputSize(network) != 1)
       return std::nullopt;
 
-    // Create match result with a reference to cached delays
+    // Create pattern match with a reference to cached delays.
     return MatchResult(
         1.0, ArrayRef<DelayType>(cachedDelays).take_front(cut.getInputSize()));
   }
 
   llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &rewriter,
                                        CutEnumerator &enumerator,
-                                       const Cut &cut) const override {
+                                       const Cut &cut,
+                                       const MatchedPattern &) const override {
     const auto &network = enumerator.getLogicNetwork();
     // NOTE: Don't use NPN since it's unnecessary.
     const auto &truthTableOpt = cut.getTruthTable();
@@ -121,6 +123,9 @@ struct GenericLUTMapperPass
     options.maxCutSizePerRoot = maxCutsPerRoot;
     options.allowNoMatch = false;
     options.attachDebugTiming = test;
+    options.additionalCutRankings.push_back({compareCutsByAreaFlow, 1});
+    options.additionalCutRankings.push_back(
+        {compareCutsByArea, static_cast<unsigned>(maxCutsPerRoot)});
 
     // Create the pattern for generic K-LUT
     SmallVector<std::unique_ptr<CutRewritePattern>, 4> patterns;
