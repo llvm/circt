@@ -32,20 +32,27 @@ struct DropNamesPass : public circt::firrtl::impl::DropNameBase<DropNamesPass> {
   enum ModAction { Drop, Keep, Demote };
 
   void runOnOperation() override {
+    auto moduleName = getOperation().getName();
+    bool isPreserved =
+        llvm::find_if(preserveModules, [moduleName](const std::string &name) {
+          return moduleName == name;
+        }) != preserveModules.end();
+    auto mode = isPreserved ? PreserveValues::Named : preserveMode;
+
     size_t namesDropped = 0;
     size_t namesChanged = 0;
-    if (preserveMode == PreserveValues::None) {
+    if (mode == PreserveValues::None) {
       // Drop all names.
       dropNamesIf(namesChanged, namesDropped, [](FNamableOp op) {
         if (isUselessName(op.getName()))
           return ModAction::Drop;
         return ModAction::Demote;
       });
-    } else if (preserveMode == PreserveValues::Strip) {
+    } else if (mode == PreserveValues::Strip) {
       // Strip all names.
       dropNamesIf(namesChanged, namesDropped,
                   [](FNamableOp op) { return ModAction::Drop; });
-    } else if (preserveMode == PreserveValues::Named) {
+    } else if (mode == PreserveValues::Named) {
       // Drop the name if it isn't considered meaningful.
       dropNamesIf(namesChanged, namesDropped, [](FNamableOp op) {
         auto name = op.getName();
@@ -55,7 +62,7 @@ struct DropNamesPass : public circt::firrtl::impl::DropNameBase<DropNamesPass> {
           return ModAction::Demote;
         return ModAction::Keep;
       });
-    } else if (preserveMode == PreserveValues::All) {
+    } else if (mode == PreserveValues::All) {
       // Drop the name if it isn't considered meaningful.
       dropNamesIf(namesChanged, namesDropped, [](FNamableOp op) {
         if (isUselessName(op.getName()))
