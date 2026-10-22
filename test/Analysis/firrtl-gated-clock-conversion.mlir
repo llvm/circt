@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -test-firrtl-gated-clock-conversion -split-input-file | FileCheck %s
 // RUN: circt-opt %s -test-firrtl-gated-clock-conversion -split-input-file -mlir-print-debuginfo -mlir-print-local-scope | FileCheck %s --check-prefix=LOC
+// RUN: circt-opt %s -test-firrtl-gated-clock-conversion=verify-clock-aliases -split-input-file -o /dev/null
 
 // Cascaded gates in one module: the enables are ANDed.
 // CHECK-LABEL: firrtl.module @Cascaded
