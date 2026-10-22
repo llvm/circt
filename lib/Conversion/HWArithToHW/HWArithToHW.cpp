@@ -392,16 +392,17 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
 } // namespace
 
 Type HWArithToHWTypeConverter::removeSignedness(Type type) {
-  AttrTypeReplacer replacer;
-  replacer.addReplacement([](IntegerType type) -> std::optional<Type> {
-    if (type.isSignless())
-      return std::nullopt;
-    return IntegerType::get(type.getContext(), type.getWidth());
-  });
-  return replacer.replace(type);
+  return signednessReplacer.replace(type);
 }
 
 HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
+  signednessReplacer.addReplacement(
+      [](IntegerType type) -> std::optional<Type> {
+        if (type.isSignless())
+          return std::nullopt;
+        return IntegerType::get(type.getContext(), type.getWidth());
+      });
+
   // Pass any type through the signedness remover.
   addConversion([this](Type type) { return removeSignedness(type); });
 
