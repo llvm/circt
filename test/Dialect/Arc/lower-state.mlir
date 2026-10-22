@@ -894,3 +894,129 @@ arc.coroutine.define @DummyCoroutine(%arg: i42) -> (i42, i1, i64) {
   %never = hw.constant -1 : i64
   arc.coroutine.halt %arg, %false, %never : i42, i1, i64
 }
+
+// CHECK-LABEL: arc.model @LLHDSignalInitial
+hw.module @LLHDSignalInitial() {
+  // CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i15>
+  // CHECK: arc.initial {
+  // CHECK: %[[INIT:.*]] = hw.constant 42 : i15
+  // CHECK: arc.state_write %[[SIGNAL]] = %[[INIT]] : <i15>
+  %init = hw.constant 42 : i15
+  %signal = llhd.sig %init : i15
+}
+
+// CHECK-LABEL: arc.model @LLHDSignalReadWrite
+hw.module @LLHDSignalReadWrite(out before: i1, out after: i1) {
+  // CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i1>
+  // CHECK: arc.initial {
+  // CHECK: %[[FALSE:.*]] = hw.constant false
+  // CHECK: arc.state_write %[[SIGNAL]] = %[[FALSE]] : <i1>
+  // CHECK: %[[TRUE:.*]] = hw.constant true
+  // CHECK: arc.state_write %[[SIGNAL]] = %[[TRUE]] : <i1>
+  // CHECK: %[[BEFORE:.*]] = arc.state_read %[[SIGNAL]] : <i1>
+  // CHECK: %[[AFTER:.*]] = arc.state_read %[[SIGNAL]] : <i1>
+  // CHECK: arc.state_write %out_before = %[[BEFORE]] : <i1>
+  // CHECK: arc.state_write %out_after = %[[AFTER]] : <i1>
+  %false = hw.constant false
+  %true = hw.constant true
+  %zero = llhd.constant_time <0fs, 0d, 0e>
+  %signal = llhd.sig %false : i1
+  %before = llhd.prb %signal : i1
+  llhd.drv %signal, %true after %zero : i1
+  %after = llhd.prb %signal : i1
+  hw.output %before, %after : i1, i1
+}
+
+// CHECK-LABEL: arc.model @LLHDSignalEnabledDrive
+// CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i1>
+// CHECK: %[[ENABLE:.*]] = arc.state_read %in_en : <i1>
+// CHECK: scf.if %[[ENABLE]] {
+// CHECK:   arc.state_write %[[SIGNAL]] = %{{.*}} : <i1>
+// CHECK: }
+hw.module @LLHDSignalEnabledDrive(in %en: i1) {
+  %false = hw.constant false
+  %true = hw.constant true
+  %zero = llhd.constant_time <0fs, 0d, 0e>
+  %signal = llhd.sig %false : i1
+  llhd.drv %signal, %true after %zero if %en : i1
+}
+
+// CHECK-LABEL: arc.model @LLHDSignalProbeOldValue
+// CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i42>
+// CHECK: %[[Q:.*]] = arc.alloc_state %arg0 {name = "q"} : (!arc.storage) -> !arc.state<i42>
+// CHECK: %[[OLD:.*]] = arc.state_read %[[SIGNAL]] : <i42>
+// CHECK-NEXT: arc.state_write %[[SIGNAL]] = %{{.*}} : <i42>
+// CHECK: scf.if {{.*}} {
+// CHECK:   %{{.*}} = arc.call @IdI42Arc(%[[OLD]]) : (i42) -> i42
+// CHECK:   arc.state_write %[[Q]] = %{{.*}} : <i42>
+hw.module @LLHDSignalProbeOldValue(in %clock: !seq.clock) {
+  %old = hw.constant 0 : i42
+  %new = hw.constant 42 : i42
+  %zero = llhd.constant_time <0fs, 0d, 0e>
+  %signal = llhd.sig %old : i42
+  llhd.drv %signal, %new after %zero : i42
+  %probe = llhd.prb %signal : i42
+  %q = arc.state @IdI42Arc(%probe) clock %clock latency 1 {names = ["q"]} : (i42) -> i42
+}
+
+// A reader appearing before both writers must see the entire assignment chain.
+// CHECK-LABEL: arc.model @LLHDSignalDependencyChain
+// CHECK: %[[A:.*]] = arc.alloc_state %arg0 {name = "a"} : (!arc.storage) -> !arc.state<i8>
+// CHECK: %[[B:.*]] = arc.alloc_state %arg0 {name = "b"} : (!arc.storage) -> !arc.state<i8>
+// CHECK: arc.state_write %[[A]] = %{{.*}} : <i8>
+// CHECK: arc.state_write %[[B]] = %{{.*}} : <i8>
+// CHECK: %[[VALUE:.*]] = arc.state_read %in_value : <i8>
+// CHECK: arc.state_write %[[A]] = %[[VALUE]] : <i8>
+// CHECK: %[[READ_A:.*]] = arc.state_read %[[A]] : <i8>
+// CHECK: arc.state_write %[[B]] = %[[READ_A]] : <i8>
+// CHECK: %[[READ_B:.*]] = arc.state_read %[[B]] : <i8>
+// CHECK: arc.state_write %out_out = %[[READ_B]] : <i8>
+hw.module @LLHDSignalDependencyChain(in %value: i8, out out: i8) {
+  %init = hw.constant 0 : i8
+  %zero = llhd.constant_time <0fs, 0d, 0e>
+  %a = llhd.sig %init : i8
+  %b = llhd.sig %init : i8
+  %read_b = llhd.prb %b : i8
+  %read_a = llhd.prb %a : i8
+  llhd.drv %b, %read_a after %zero : i8
+  llhd.drv %a, %value after %zero : i8
+  hw.output %read_b : i8
+}
+
+// Dependencies also include conditional writers, even if their enable is false
+// during a particular evaluation.
+// CHECK-LABEL: arc.model @LLHDSignalConditionalDependency
+// CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i8>
+// CHECK: %[[ENABLE:.*]] = arc.state_read %in_en : <i1>
+// CHECK: scf.if %[[ENABLE]] {
+// CHECK:   arc.state_write %[[SIGNAL]] = %{{.*}} : <i8>
+// CHECK: }
+// CHECK: %[[READ:.*]] = arc.state_read %[[SIGNAL]] : <i8>
+// CHECK: func.call @ConsumeI8(%[[READ]]) : (i8) -> ()
+hw.module @LLHDSignalConditionalDependency(in %value: i8, in %en: i1) {
+  %init = hw.constant 0 : i8
+  %zero = llhd.constant_time <0fs, 0d, 0e>
+  %signal = llhd.sig %init : i8
+  %read = llhd.prb %signal : i8
+  func.call @ConsumeI8(%read) : (i8) -> ()
+  llhd.drv %signal, %value after %zero if %en : i8
+}
+
+func.func private @ConsumeI8(i8)
+
+// Scheduling a probe must also schedule the coroutine supplying the drive.
+// CHECK-LABEL: arc.model @LLHDSignalCoroutineDependency
+// CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i42>
+// CHECK: arc.coroutine.call @DummyCoroutine
+// CHECK: arc.state_write %[[SIGNAL]] = %{{.*}} : <i42>
+// CHECK: %[[READ:.*]] = arc.state_read %[[SIGNAL]] : <i42>
+// CHECK: arc.coroutine.call @DummyCoroutine(%{{.*}}, %{{.*}}, %[[READ]])
+hw.module @LLHDSignalCoroutineDependency(in %value: i42) {
+  %init = hw.constant 0 : i42
+  %zero = llhd.constant_time <0fs, 0d, 0e>
+  %signal = llhd.sig %init : i42
+  %read = llhd.prb %signal : i42
+  %consumer = arc.coroutine.instance @DummyCoroutine(%read) sensitive [true] : (i42) -> i42
+  %producer = arc.coroutine.instance @DummyCoroutine(%value) sensitive [true] : (i42) -> i42
+  llhd.drv %signal, %producer after %zero : i42
+}
