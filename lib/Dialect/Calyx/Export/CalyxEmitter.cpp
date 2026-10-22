@@ -17,14 +17,17 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
-#include <bitset>
+
+#include <mlir/IR/Matchers.h>
 #include <string>
 
 using namespace circt;
@@ -471,6 +474,39 @@ private:
     } else {
       os << op.getStart();
     }
+  }
+
+  // Decides whether to skip assignment to seq_mem.write_en
+  bool shouldSkipAssignment(AssignOp op) {
+    auto *definingOp = op.getDest().getDefiningOp();
+
+    // Sanity
+    if (!definingOp)
+      return false;
+
+    if (CellInterface cell =
+            llvm::dyn_cast_or_null<CellInterface>(definingOp)) {
+      // Don't skip if it is not write_en
+      if (cell.portName(op.getDest()) != "write_en")
+        return false;
+    } else
+      return false;
+
+    definingOp = op.getSrc().getDefiningOp();
+
+    // Sanity
+    if (!definingOp)
+      return false;
+
+    if (auto constVal = llvm::dyn_cast_or_null<hw::ConstantOp>(definingOp)) {
+      APInt value = constVal.getValue();
+
+      // Skip if value is 0.
+      if (value == 0)
+        return true;
+    }
+
+    return false;
   }
 
   /// Emits the value of a guard or assignment.
@@ -1097,7 +1133,6 @@ void Emitter::emitLibraryFloatingPoint(Operation *op) {
 }
 
 void Emitter::emitAssignment(AssignOp op) {
-
   emitValue(op.getDest(), /*isIndented=*/true);
   os << space() << equals() << space();
   if (op.getGuard()) {
@@ -1143,7 +1178,10 @@ void Emitter::emitGroup(GroupInterface group) {
   auto emitGroupBody = [&]() {
     for (auto &&bodyOp : *group.getBody()) {
       TypeSwitch<Operation *>(&bodyOp)
-          .Case<AssignOp>([&](auto op) { emitAssignment(op); })
+          .Case<AssignOp>([&](auto op) {
+            if (!shouldSkipAssignment(op))
+              emitAssignment(op);
+          })
           .Case<GroupDoneOp>([&](auto op) { emitGroupPort(group, op, "done"); })
           .Case<GroupGoOp>([&](auto op) { emitGroupPort(group, op, "go"); })
           .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
