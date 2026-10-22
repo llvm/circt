@@ -326,7 +326,8 @@ public:
   /// Session `generation` closed.
   void retire(uint64_t generation) {
     std::lock_guard<std::mutex> lock(mutex);
-    retiredGeneration = std::max(retiredGeneration, generation);
+    // Parenthesized to avoid <windows.h>'s `max` macro.
+    retiredGeneration = (std::max)(retiredGeneration, generation);
     connected = false;
   }
 
@@ -534,7 +535,7 @@ public:
   void retireClient(uint64_t generation) {
     {
       std::lock_guard<std::mutex> lock(stateMutex);
-      retiredGeneration = std::max(retiredGeneration, generation);
+      retiredGeneration = (std::max)(retiredGeneration, generation);
     }
     clientEnd.retire(generation);
   }
