@@ -838,6 +838,7 @@ firrtl.circuit "ConstForce" {
     %value = firrtl.constant 238 : !firrtl.const.uint<8>
     firrtl.ref.force %clock, %true, %c_probe, %value : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.const.uint<8>
 
+    // CHECK: %[[FVCAST:.+]] = firrtl.constCast %{{.+}} : (!firrtl.const.uint<8>) -> !firrtl.uint<8>
     // CHECK: %[[FA:.+]] = firrtl.subfield %c_probe_out_force_ctrl[forceActive]
     // CHECK-NEXT: %[[RA:.+]] = firrtl.subfield %c_probe_out_force_ctrl[releaseActive]
     // CHECK-NEXT: %[[FV:.+]] = firrtl.subfield %c_probe_out_force_ctrl[forcedValue]
@@ -845,7 +846,6 @@ firrtl.circuit "ConstForce" {
     // CHECK-NEXT: %[[FACAST:.+]] = firrtl.constCast %{{.+}} : (!firrtl.const.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.matchingconnect %[[FA]], %[[FACAST]]
     // CHECK-NEXT: firrtl.matchingconnect %[[RA]], %{{.+}}
-    // CHECK-NEXT: %[[FVCAST:.+]] = firrtl.constCast %{{.+}} : (!firrtl.const.uint<8>) -> !firrtl.uint<8>
     // CHECK-NEXT: firrtl.matchingconnect %[[FV]], %[[FVCAST]]
     // CHECK-NEXT: firrtl.matchingconnect %[[CLK]], %clock
   }
@@ -1032,5 +1032,56 @@ firrtl.circuit "LocalAliasClockOverInbound" {
     // CHECK: %[[P1CLK:.+]] = firrtl.subfield %c_p1_force_ctrl[clk]
     // CHECK: firrtl.matchingconnect %[[P1CLK]], %clock
     firrtl.ref.force %clock, %en, %c_p2, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+// TEST 25: A const force value for a clock or asyncreset target is cast to
+// non-const before the read-side mux, whose type inference rejects a mix.
+
+// CHECK-LABEL: firrtl.circuit "ConstClockForce"
+firrtl.circuit "ConstClockForce" {
+  // CHECK: firrtl.module @ConstClockForce
+  firrtl.module @ConstClockForce(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, out %o: !firrtl.clock, out %a: !firrtl.asyncreset) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.clock, !firrtl.rwprobe<clock>
+    firrtl.connect %w, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %o, %w : !firrtl.clock, !firrtl.clock
+    %ar, %ar_ref = firrtl.wire forceable : !firrtl.asyncreset, !firrtl.rwprobe<asyncreset>
+    %c0 = firrtl.specialconstant 0 : !firrtl.const.asyncreset
+    %cc = firrtl.specialconstant 0 : !firrtl.const.clock
+    firrtl.connect %a, %ar : !firrtl.asyncreset, !firrtl.asyncreset
+    firrtl.ref.force %clock, %en, %w_ref, %cc : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<clock>, !firrtl.const.clock
+    firrtl.ref.force %clock, %en, %ar_ref, %c0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<asyncreset>, !firrtl.const.asyncreset
+    // CHECK-DAG: firrtl.constCast %{{.+}} : (!firrtl.const.clock) -> !firrtl.clock
+    // CHECK-DAG: firrtl.constCast %{{.+}} : (!firrtl.const.asyncreset) -> !firrtl.asyncreset
+    // CHECK-DAG: firrtl.mux(%forced, %{{.+}}, %w) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
+    // CHECK-DAG: firrtl.mux(%forced{{.*}}, %{{.+}}, %ar) : (!firrtl.uint<1>, !firrtl.asyncreset, !firrtl.asyncreset) -> !firrtl.asyncreset
+  }
+}
+
+// -----
+// TEST 26: Force and release through an extmodule RWProbe drive the
+// extmodule's force-control port.
+
+// CHECK-LABEL: firrtl.circuit "ExtForce"
+firrtl.circuit "ExtForce" {
+  // CHECK: firrtl.extmodule @ExtRW(out rw: !firrtl.uint<2>, in rw_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>)
+  firrtl.extmodule @ExtRW(out rw: !firrtl.rwprobe<uint<2>>)
+  // CHECK-LABEL: firrtl.module @ExtForce
+  firrtl.module @ExtForce(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %en2: !firrtl.uint<1>, in %v: !firrtl.uint<2>) {
+    // CHECK: %e_rw, %e_rw_force_ctrl = firrtl.instance e @ExtRW
+    %e_rw = firrtl.instance e @ExtRW(out rw: !firrtl.rwprobe<uint<2>>)
+    firrtl.ref.force %clock, %en, %e_rw, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<2>>, !firrtl.uint<2>
+    firrtl.ref.release %clock, %en2, %e_rw : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<2>>
+    // CHECK:      %[[NOTREL:.+]] = firrtl.not %en2
+    // CHECK-NEXT: %[[FORCE:.+]] = firrtl.and %en, %[[NOTREL]]
+    // CHECK-NEXT: %[[FA:.+]] = firrtl.subfield %e_rw_force_ctrl[forceActive]
+    // CHECK-NEXT: %[[RA:.+]] = firrtl.subfield %e_rw_force_ctrl[releaseActive]
+    // CHECK-NEXT: %[[FV:.+]] = firrtl.subfield %e_rw_force_ctrl[forcedValue]
+    // CHECK-NEXT: %[[CLK:.+]] = firrtl.subfield %e_rw_force_ctrl[clk]
+    // CHECK-NEXT: firrtl.matchingconnect %[[FA]], %[[FORCE]]
+    // CHECK-NEXT: firrtl.matchingconnect %[[RA]], %en2
+    // CHECK-NEXT: firrtl.matchingconnect %[[FV]], %v
+    // CHECK-NEXT: firrtl.matchingconnect %[[CLK]], %clock
   }
 }

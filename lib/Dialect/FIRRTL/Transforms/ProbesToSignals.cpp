@@ -1369,8 +1369,17 @@ LogicalResult ProbeVisitor::visitStmt(RefForceOp op) {
   if (failed(checkForceReleaseNesting(op, "force")))
     return failure();
 
+  // The force value is muxed with non-const values, and mux type inference
+  // rejects a const/non-const mix for non-integer types. Drop const here.
+  Value src = op.getSrc();
+  if (op.getSrc().getType().containsConst()) {
+    ImplicitLocOpBuilder builder(op.getLoc(), op);
+    src = ConstCastOp::create(
+        builder, op.getSrc().getType().getAllConstDroppedType(), src);
+  }
+
   pendingAccesses.push_back(
-      {op.getDest(), {op, op.getPredicate(), op.getSrc(), op.getClock()}});
+      {op.getDest(), {op, op.getPredicate(), src, op.getClock()}});
   toDelete.push_back(op);
   return success();
 }
@@ -1415,7 +1424,7 @@ checkForceClockDomains(InstanceGraph &ig, hw::InnerRefNamespace &irn,
                        PortAliasLeaders &portAliasLeaders) {
   DenseMap<Value, ExportedPort> exports;
   return ig.walkPostOrder([&](igraph::InstanceGraphNode &node) {
-    auto mod = dyn_cast_or_null<FModuleOp>(node.getModule());
+    auto mod = dyn_cast_or_null<FModuleOp>(node.getModule().getOperation());
     if (!mod)
       return success();
 
@@ -1446,8 +1455,8 @@ checkForceClockDomains(InstanceGraph &ig, hw::InnerRefNamespace &irn,
           .Case<RefForceOp, RefReleaseOp>([&](auto op) {
             accesses.push_back({op.getDest(), {op.getClock(), op}});
           })
-          .Case<InstanceOp>([&](auto inst) {
-            auto child = dyn_cast<FModuleOp>(inst.getReferencedModule(ig));
+          .Case<InstanceOp>([&](InstanceOp inst) {
+            auto child = inst.getReferencedModule<FModuleOp>(ig);
             if (!child)
               return;
             for (OpResult result : inst->getResults()) {
