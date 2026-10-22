@@ -40,14 +40,6 @@ public:
   // Returns true if any subtype in 'type' has signedness semantics.
   bool hasSignednessSemantics(mlir::Type type);
   bool hasSignednessSemantics(mlir::TypeRange types);
-
-private:
-  // Memoizations for signedness info and conversions.
-  struct ConvertedType {
-    mlir::Type type;
-    bool hadSignednessSemantics;
-  };
-  llvm::DenseMap<mlir::Type, ConvertedType> conversionCache;
 };
 
 /// Get the HWArith to HW conversion patterns.
