@@ -46,14 +46,6 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
-    }]>,
-    // Helper to let us build a wire with an !sv.net type.
-    OpBuilder<(ins "::circt::sv::NetType":$resultType,
-                   CArg<"StringAttr", "StringAttr()">:$name,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
-    OpBuilder<(ins "::circt::sv::NetType":$resultType, CArg<"StringRef">:$name), [{
-      return build($_builder, $_state, resultType,
-                   $_builder.getStringAttr(name));
     }]>
   ];
 

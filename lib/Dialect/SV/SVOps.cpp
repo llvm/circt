@@ -1873,16 +1873,12 @@ static void buildWire(OpBuilder &builder, OperationState &odsState,
   odsState.addTypes(resultType);
 }
 
-void WireOp::build(OpBuilder &builder, OperationState &odsState,
-                   Type elementType, StringAttr name,
-                   hw::InnerSymAttr innerSym) {
-  buildWire(builder, odsState, InOutType::get(elementType), name, innerSym);
-}
-
-void WireOp::build(OpBuilder &builder, OperationState &odsState,
-                   NetType resultType, StringAttr name,
-                   hw::InnerSymAttr innerSym) {
-  buildWire(builder, odsState, resultType, name, innerSym);
+void WireOp::build(OpBuilder &builder, OperationState &odsState, Type type,
+                   StringAttr name, hw::InnerSymAttr innerSym) {
+  if (isa<InOutType, NetType>(type))
+    buildWire(builder, odsState, type, name, innerSym);
+  else
+    buildWire(builder, odsState, InOutType::get(type), name, innerSym);
 }
 
 /// Suggest a name for each result value based on the saved result names
