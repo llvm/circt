@@ -183,7 +183,6 @@ class SVHandle(Type):
   """Base class for SystemVerilog handle types."""
 
   _circt_type = None
-  _signal_class = None
   _name = None
 
   def __new__(cls, element_type: Type):
@@ -197,34 +196,39 @@ class SVHandle(Type):
   def is_hw_type(self) -> bool:
     return True
 
-  def _get_value_class(self):
-    from . import signals
-    return getattr(signals, self._signal_class)
-
   def __repr__(self):
     return f"{self._name}<{self.element_type!r}>"
 
 
 class InOut(SVHandle):
   _circt_type = hw.InOutType
-  _signal_class = "InOutSignal"
   _name = "InOut"
+
+  def _get_value_class(self):
+    from .signals import InOutSignal
+    return InOutSignal
 
 
 class Net(SVHandle):
   """An SV net handle type (`!sv.net<T>`)."""
 
   _circt_type = sv.NetType
-  _signal_class = "NetSignal"
   _name = "Net"
+
+  def _get_value_class(self):
+    from .signals import NetSignal
+    return NetSignal
 
 
 class Var(SVHandle):
   """An SV variable handle type (`!sv.var<T>`)."""
 
   _circt_type = sv.VarType
-  _signal_class = "VarSignal"
   _name = "Var"
+
+  def _get_value_class(self):
+    from .signals import VarSignal
+    return VarSignal
 
 
 class TypeAlias(Type):
