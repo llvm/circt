@@ -1860,9 +1860,9 @@ LogicalResult ReadInterfaceSignalOp::verify() {
 // WireOp
 //===----------------------------------------------------------------------===//
 
-void WireOp::build(OpBuilder &builder, OperationState &odsState,
-                   Type elementType, StringAttr name,
-                   hw::InnerSymAttr innerSym) {
+static void buildWire(OpBuilder &builder, OperationState &odsState,
+                      Type resultType, StringAttr name,
+                      hw::InnerSymAttr innerSym) {
   if (!name)
     name = builder.getStringAttr("");
   if (innerSym)
@@ -1870,7 +1870,19 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
                           innerSym);
 
   odsState.addAttribute("name", name);
-  odsState.addTypes(InOutType::get(elementType));
+  odsState.addTypes(resultType);
+}
+
+void WireOp::build(OpBuilder &builder, OperationState &odsState,
+                   Type elementType, StringAttr name,
+                   hw::InnerSymAttr innerSym) {
+  buildWire(builder, odsState, InOutType::get(elementType), name, innerSym);
+}
+
+void WireOp::build(OpBuilder &builder, OperationState &odsState,
+                   NetType resultType, StringAttr name,
+                   hw::InnerSymAttr innerSym) {
+  buildWire(builder, odsState, resultType, name, innerSym);
 }
 
 /// Suggest a name for each result value based on the saved result names
