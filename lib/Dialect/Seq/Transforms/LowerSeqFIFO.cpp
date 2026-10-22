@@ -14,6 +14,7 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -34,7 +35,8 @@ public:
 
   // Every status output is a register, and every comparison is of a register
   // against a constant. The caller's enables, which usually arrive late, only
-  // select between values computed from registers. Reading while empty and
+  // select between values computed from registers, and the occupancy count,
+  // which is not an output, does not see them at all. Reading while empty and
   // writing while full are protocol violations, checked by assertions rather
   // than guarded against, so the enables are used as they are.
   LogicalResult
@@ -66,7 +68,7 @@ public:
       value.getDefiningOp()->setAttr("sv.namehint",
                                      rewriter.getStringAttr(name));
     };
-    auto makeReg = [&](Backedge next, Type type, uint64_t resetValue,
+    auto makeReg = [&](Value next, Type type, uint64_t resetValue,
                        StringRef name) -> Value {
       return seq::CompRegOp::create(rewriter, loc, next, clk, rst,
                                     constant(type, resetValue), name);
@@ -76,7 +78,7 @@ public:
     Backedge countNext = bb.get(countType);
     Backedge rdAddrNext = bb.get(ptrType);
     Backedge wrAddrNext = bb.get(ptrType);
-    Value count = makeReg(countNext, countType, 0, "fifo_count");
+    Value countLag = makeReg(countNext, countType, 0, "fifo_count_lag");
     seq::HLMemOp hlmem = seq::HLMemOp::create(
         rewriter, loc, clk, rst, "fifo_mem",
         llvm::SmallVector<int64_t>{static_cast<int64_t>(depth)}, eltType);
@@ -111,19 +113,45 @@ public:
     auto step = [&](Value current, Value afterUp, Value afterDown) -> Value {
       return mux(countUp, afterUp, mux(countDown, afterDown, current));
     };
-    auto countEq = [&](uint64_t value) -> Value {
-      return comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq, count,
-                                  constant(countType, value));
-    };
     Value trueValue = constant(i1Type, 1);
     Value falseValue = constant(i1Type, 0);
 
-    Value countPlus1 =
-        comb::AddOp::create(rewriter, loc, count, constant(countType, 1));
-    Value countMinus1 =
-        comb::SubOp::create(rewriter, loc, count, constant(countType, 1));
-    countNext.setValue(step(count, countPlus1, countMinus1));
-    setName(countNext, "fifo_count_next");
+    // The count register lags a cycle behind: it is stepped by registered
+    // copies of `countUp` and `countDown`, so the enables never reach its
+    // adder. The count this cycle is the register plus that step.
+    Value countUpLag = makeReg(countUp, i1Type, 0, "fifo_count_up");
+    Value countDownLag = makeReg(countDown, i1Type, 0, "fifo_count_down");
+    Value lagPlus1 =
+        comb::AddOp::create(rewriter, loc, countLag, constant(countType, 1));
+    Value lagMinus1 =
+        comb::SubOp::create(rewriter, loc, countLag, constant(countType, 1));
+    countNext.setValue(
+        mux(countUpLag, lagPlus1, mux(countDownLag, lagMinus1, countLag)));
+    setName(countNext, "fifo_count");
+
+    // Whether the count this cycle is `value`, without the adder: a compare of
+    // the register against `value` adjusted by the registered step. Values
+    // outside [0, depth] are never reached; comparing against them would wrap.
+    llvm::SmallDenseMap<int64_t, Value> lagEqs, countEqs;
+    auto lagEq = [&](int64_t value) -> Value {
+      if (value < 0 || value > static_cast<int64_t>(depth))
+        return falseValue;
+      Value &eq = lagEqs[value];
+      if (!eq)
+        eq = comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq,
+                                  countLag, constant(countType, value));
+      return eq;
+    };
+    auto countEq = [&](int64_t value) -> Value {
+      Value &eq = countEqs[value];
+      if (!eq) {
+        Value afterUp = lagEq(value - 1);
+        Value afterDown = lagEq(value + 1);
+        Value unchanged = lagEq(value);
+        eq = mux(countUpLag, afterUp, mux(countDownLag, afterDown, unchanged));
+      }
+      return eq;
+    };
 
     Backedge fullNext = bb.get(i1Type);
     Value full = makeReg(fullNext, i1Type, 0, "fifo_full");
