@@ -316,3 +316,17 @@ firrtl.circuit "ForceLocalAndPortTwoClockDomains" {
     firrtl.ref.force %c2, %en, %c_p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
   }
 }
+
+// -----
+
+// Accesses through an extmodule probe are checked for one clock domain.
+firrtl.circuit "ExtForceTwoClocks" {
+  firrtl.extmodule @ExtRW(out rw: !firrtl.rwprobe<uint<2>>)
+  firrtl.module @ExtForceTwoClocks(in %c1: !firrtl.clock, in %c2: !firrtl.clock, in %en: !firrtl.uint<1>, in %v: !firrtl.uint<2>) {
+    %e_rw = firrtl.instance e @ExtRW(out rw: !firrtl.rwprobe<uint<2>>)
+    // expected-note @below {{other access here}}
+    firrtl.ref.force %c1, %en, %e_rw, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<2>>, !firrtl.uint<2>
+    // expected-error @below {{target is forced or released from different clock domains}}
+    firrtl.ref.release %c2, %en, %e_rw : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<2>>
+  }
+}
