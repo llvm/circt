@@ -38,11 +38,11 @@ LogicalResult scheduleSimplex(Problem &prob, Operation *lastOp);
 /// \p prob does not include \p lastOp.
 LogicalResult scheduleSimplex(CyclicProblem &prob, Operation *lastOp);
 
-/// Solve the acyclic problem with shared operators using a linear
+/// Solve the acyclic problem with shared resources using a linear
 /// programming-based heuristic. The approach tries to minimize the start time
 /// of the given \p lastOp, but optimality is not guaranteed. Fails if the
 /// dependence graph contains cycles, or \p prob does not include \p lastOp.
-LogicalResult scheduleSimplex(SharedOperatorsProblem &prob, Operation *lastOp);
+LogicalResult scheduleSimplex(SharedResourcesProblem &prob, Operation *lastOp);
 
 /// Solve the modulo scheduling problem using a linear programming-based
 /// heuristic. The approach tries to determine the smallest feasible initiation
@@ -87,11 +87,11 @@ LogicalResult scheduleLP(Problem &prob, Operation *lastOp);
 /// \p lastOp.
 LogicalResult scheduleLP(CyclicProblem &prob, Operation *lastOp);
 
-/// Solve the acyclic problem with shared operators using constraint programming
+/// Solve the acyclic problem with shared resources using constraint programming
 /// and an external SAT solver. The objective is to minimize the start time of
 /// the given \p lastOp. Fails if the dependence graph contains cycles, or \p
 /// prob does not include \p lastOp.
-LogicalResult scheduleCPSAT(SharedOperatorsProblem &prob, Operation *lastOp);
+LogicalResult scheduleCPSAT(SharedResourcesProblem &prob, Operation *lastOp);
 
 } // namespace scheduling
 } // namespace circt

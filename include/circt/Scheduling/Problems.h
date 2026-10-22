@@ -480,16 +480,16 @@ public:
 /// accept new operands (coming from a distinct operation) in each time step.
 ///
 /// A solution to this problem is feasible iff the number of operations that use
-/// a certain limited operator type, and start in the same time step, does not
-/// exceed the operator type's limit. These constraints do not apply to operator
+/// a certain limited resource type, and start in the same time step, does not
+/// exceed the resource type's limit. These constraints do not apply to resource
 /// types without a limit (not set, or 0).
-class SharedOperatorsProblem : public virtual Problem {
+class SharedResourcesProblem : public virtual Problem {
 public:
-  static constexpr auto name = "SharedOperatorsProblem";
+  static constexpr auto name = "SharedResourcesProblem";
   using Problem::Problem;
 
 protected:
-  SharedOperatorsProblem() = default;
+  SharedResourcesProblem() = default;
 
 private:
   ResourceTypeProperty<unsigned> limit;
@@ -526,7 +526,7 @@ public:
 ///      and start in the same congruence class (= start time *mod* II), does
 ///      not exceed the operator type's limit.
 class ModuloProblem : public virtual CyclicProblem,
-                      public virtual SharedOperatorsProblem {
+                      public virtual SharedResourcesProblem {
 public:
   static constexpr auto name = "ModuloProblem";
   using CyclicProblem::CyclicProblem;
