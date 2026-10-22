@@ -61,7 +61,7 @@ class WireOp(WireOp):
 
   @staticmethod
   def create(data_type, name=None, sym_name=None):
-    if not isinstance(data_type, hw.InOutType):
+    if not isinstance(data_type, (hw.InOutType, sv.NetType)):
       data_type = hw.InOutType.get(data_type)
     return sv.WireOp(data_type, name, sym_name=sym_name)
 
