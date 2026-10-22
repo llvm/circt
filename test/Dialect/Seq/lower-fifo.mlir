@@ -11,7 +11,10 @@
 // current pointer.
 // CHECK-LABEL: hw.module @fifo1(
 // CHECK:         %fifo_count_lag = seq.compreg sym @fifo_count_lag [[COUNT:%.+]], %clk reset %rst, %c0_i2 : i2
-// CHECK-NEXT:    %fifo_mem = seq.hlmem @fifo_mem %clk, %rst : <3xi32>
+// The memory is not reset; the FIFO leaves reset empty, so nothing written
+// during reset is read.
+// CHECK-NEXT:    %false = hw.constant false
+// CHECK-NEXT:    %fifo_mem = seq.hlmem @fifo_mem %clk, %false : <3xi32>
 // CHECK-NEXT:    %fifo_rd_addr = seq.compreg sym @fifo_rd_addr [[RD_NEXT:%.+]], %clk reset %rst, %c0_i2 : i2
 // CHECK-NEXT:    %fifo_wr_addr = seq.compreg sym @fifo_wr_addr [[WR_NEXT:%.+]], %clk reset %rst, %c0_i2 : i2
 // CHECK-NEXT:    %fifo_mem_rdata = seq.read %fifo_mem[%fifo_rd_addr] rden %rdEn {latency = 0 : i64} : !seq.hlmem<3xi32>

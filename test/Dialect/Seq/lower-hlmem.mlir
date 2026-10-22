@@ -35,3 +35,22 @@ hw.module @d1(in %clk : !seq.clock, in %rst : i1) {
   %myMemory_rdata2 = seq.read %myMemory[%c0_i2] rden %c1_i1 { latency = 2} : !seq.hlmem<4xi32>
   hw.output
 }
+
+// A memory whose reset is constant low gets no reset on its write block.
+// CHECK-LABEL:   hw.module @noReset(
+// CHECK:           %[[MEM:.+]] = sv.var : !sv.var<!hw.uarray<4xi32>>
+// CHECK:           %[[CLK:.+]] = seq.from_clock %clk
+// CHECK-NEXT:      sv.alwaysff(posedge %[[CLK]]) {
+// CHECK-NEXT:        sv.if %wrEn {
+// CHECK-NEXT:          %[[LOC:.+]] = sv.array_index_inout %[[MEM]][%addr] : !sv.var<!hw.uarray<4xi32>>, i2
+// CHECK-NEXT:          sv.passign %[[LOC]], %data : !sv.var<i32>, i32
+// CHECK-NEXT:        }
+// CHECK-NEXT:      }
+// CHECK-NOT:       syncreset
+// CHECK:           hw.output
+hw.module @noReset(in %clk : !seq.clock, in %addr : i2, in %data : i32, in %wrEn : i1) {
+  %false = hw.constant false
+  %mem = seq.hlmem @mem %clk, %false : <4xi32>
+  seq.write %mem[%addr] %data wren %wrEn { latency = 1 } : !seq.hlmem<4xi32>
+  hw.output
+}
