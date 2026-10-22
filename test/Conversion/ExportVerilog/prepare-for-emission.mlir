@@ -147,6 +147,22 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
 }
 
 // -----
+module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
+  hw.module.extern @HandleSink(in %a: !hw.inout<i1>)
+  // CHECK-LABEL: hw.module @SpillHandleInstanceInput
+  hw.module @SpillHandleInstanceInput() {
+    %x = sv.xmr "a", "b" : !hw.inout<i1>
+    // CHECK: %[[WIRE:.+]] = sv.wire : !hw.inout<i1>
+    // CHECK: %[[SRC:.+]] = sv.xmr "a", "b" : !hw.inout<i1>
+    // CHECK: %[[READ:.+]] = sv.read_inout %[[SRC]] : !hw.inout<i1>
+    // CHECK-NEXT: sv.assign %[[WIRE]], %[[READ]] : i1
+    // CHECK-NOT: sv.read_inout %[[WIRE]]
+    // CHECK: hw.instance "sink" @HandleSink(a: %[[WIRE]]: !hw.inout<i1>) -> ()
+    hw.instance "sink" @HandleSink(a: %x: !hw.inout<i1>) -> ()
+  }
+}
+
+// -----
 
 module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
   // CHECK-LABEL: @ClockExpr(
