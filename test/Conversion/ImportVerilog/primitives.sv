@@ -692,3 +692,242 @@ module udp_comb_delayed_prim;
     wire A, B, Q;
     udp_comb_and #5 u1 (Q, A, B);
 endmodule
+
+// CHECK-LABEL: moore.module @udp_seq_dff(out q : !moore.l1, in %clk : !moore.l1, in %d : !moore.l1)
+// CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[CLK_CVT:%.+]] = moore.logic_to_int %clk : l1
+// CHECK: [[CLK_NET:%.+]] = moore.net wire [[CLK_CVT]] : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD:%.+]] = moore.read [[CLK_NET]] : <i1>
+// CHECK:     moore.detect_event posedge [[CLK_RD]] : i1
+// CHECK:   }
+// CHECK:   moore.nonblocking_assign [[Q_VAR]],
+// CHECK: }
+// CHECK: [[Q_RD:%.+]] = moore.read [[Q_VAR]] : <i1>
+// CHECK: [[Q_LOGIC:%.+]] = moore.int_to_logic [[Q_RD]] : i1
+// CHECK: moore.output [[Q_LOGIC]] : !moore.l1
+primitive udp_seq_dff(q, clk, d);
+    output reg q;
+    input clk, d;
+    table
+        (01) 0 : ? : 0 ;
+        (01) 1 : ? : 1 ;
+        (10) ? : ? : - ;
+        ?   (??): ? : - ;
+    endtable
+endprimitive
+
+// CHECK-LABEL: moore.module @udp_seq_dff_neg(out q : !moore.l1, in %clk : !moore.l1, in %d : !moore.l1)
+// CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[CLK_CVT:%.+]] = moore.logic_to_int %clk : l1
+// CHECK: [[CLK_NET:%.+]] = moore.net wire [[CLK_CVT]] : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD:%.+]] = moore.read [[CLK_NET]] : <i1>
+// CHECK:     moore.detect_event negedge [[CLK_RD]] : i1
+// CHECK:   }
+// CHECK:   moore.nonblocking_assign [[Q_VAR]],
+// CHECK: }
+// CHECK: [[Q_RD:%.+]] = moore.read [[Q_VAR]] : <i1>
+// CHECK: [[Q_LOGIC:%.+]] = moore.int_to_logic [[Q_RD]] : i1
+// CHECK: moore.output [[Q_LOGIC]] : !moore.l1
+primitive udp_seq_dff_neg(q, clk, d);
+    output reg q;
+    input clk, d;
+    table
+        (10) 0 : ? : 0 ;
+        (10) 1 : ? : 1 ;
+        (01) ? : ? : - ;
+        ?   (??): ? : - ;
+    endtable
+endprimitive
+
+// CHECK-LABEL: moore.module @udp_seq_dff_en(out q : !moore.l1, in %clk : !moore.l1, in %en : !moore.l1, in %d : !moore.l1)
+// CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[CLK_CVT:%.+]] = moore.logic_to_int %clk : l1
+// CHECK: [[CLK_NET:%.+]] = moore.net wire [[CLK_CVT]] : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD:%.+]] = moore.read [[CLK_NET]] : <i1>
+// CHECK:     moore.detect_event posedge [[CLK_RD]] : i1
+// CHECK:   }
+// CHECK:   [[COND:%.+]] = moore.to_builtin_int
+// CHECK:   cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
+// CHECK: ^[[BB1]]:
+// CHECK:   moore.nonblocking_assign [[Q_VAR]],
+// CHECK:   cf.br ^[[BB2]]
+// CHECK: ^[[BB2]]:
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: [[Q_RD:%.+]] = moore.read [[Q_VAR]] : <i1>
+// CHECK: [[Q_LOGIC:%.+]] = moore.int_to_logic [[Q_RD]] : i1
+// CHECK: moore.output [[Q_LOGIC]] : !moore.l1
+primitive udp_seq_dff_en(q, clk, en, d);
+    output reg q;
+    input clk, en, d;
+    table
+        (01) 1 0 : ? : 0 ;
+        (01) 1 1 : ? : 1 ;
+        (01) 0 ? : ? : - ;
+        (10) ? ? : ? : - ;
+        ?    ? (??): ? : - ;
+    endtable
+endprimitive
+
+// CHECK-LABEL: moore.module @udp_seq_dual_edge_dff(out q : !moore.l1, in %clk : !moore.l1, in %d : !moore.l1)
+// CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[CLK_NET:%.+]] = moore.net wire
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD:%.+]] = moore.read [[CLK_NET]] : <i1>
+// CHECK:     moore.detect_event edge [[CLK_RD]] : i1
+// CHECK:   }
+// CHECK:   moore.nonblocking_assign [[Q_VAR]],
+// CHECK: }
+// CHECK: [[Q_RD:%.+]] = moore.read [[Q_VAR]] : <i1>
+// CHECK: [[Q_LOGIC:%.+]] = moore.int_to_logic [[Q_RD]] : i1
+// CHECK: moore.output [[Q_LOGIC]] : !moore.l1
+primitive udp_seq_dual_edge_dff(q, clk, d);
+    output reg q;
+    input clk, d;
+    table
+        (01) 0 : ? : 0 ;
+        (01) 1 : ? : 1 ;
+        (10) 0 : ? : 0 ;
+        (10) 1 : ? : 1 ;
+    endtable
+endprimitive
+
+// CHECK-LABEL: moore.module @udp_seq_dual_edge_mux(out q : !moore.l1, in %clk : !moore.l1, in %da : !moore.l1, in %db : !moore.l1)
+// CHECK: [[AND1:%.+]] = moore.and
+// CHECK: [[NOT:%.+]] = moore.not
+// CHECK: [[AND2:%.+]] = moore.and
+// CHECK: [[OR:%.+]] = moore.or [[AND1]], [[AND2]]
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD:%.+]] = moore.read {{%.+}} : <i1>
+// CHECK:     moore.detect_event edge [[CLK_RD]] : i1
+// CHECK:   }
+// CHECK:   moore.nonblocking_assign {{%.+}}, [[OR]] : i1
+// CHECK: }
+primitive udp_seq_dual_edge_mux(q, clk, da, db);
+    output reg q;
+    input clk, da, db;
+    table
+        (01) 0 ? : ? : 0 ;
+        (01) 1 ? : ? : 1 ;
+        (10) ? 0 : ? : 0 ;
+        (10) ? 1 : ? : 1 ;
+    endtable
+endprimitive
+
+// Verify that async rows in a sequential UDP are skipped.
+// CHECK-LABEL: moore.module @udp_seq_dff_skip_async(out q : !moore.l1, in %clk : !moore.l1, in %d : !moore.l1)
+// CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[CLK_CVT:%.+]] = moore.logic_to_int %clk : l1
+// CHECK: [[CLK_NET:%.+]] = moore.net wire [[CLK_CVT]] : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD:%.+]] = moore.read [[CLK_NET]] : <i1>
+// CHECK:     moore.detect_event posedge [[CLK_RD]] : i1
+// CHECK:   }
+// CHECK:   moore.nonblocking_assign [[Q_VAR]],
+// CHECK: }
+// CHECK: [[Q_RD:%.+]] = moore.read [[Q_VAR]] : <i1>
+// CHECK: [[Q_LOGIC:%.+]] = moore.int_to_logic [[Q_RD]] : i1
+// CHECK: moore.output [[Q_LOGIC]] : !moore.l1
+primitive udp_seq_dff_skip_async(q, clk, d);
+    output reg q;
+    input clk, d;
+    table
+        1 0 : ? : 0 ;
+        (01) 0 : ? : 0 ;
+        (01) 1 : ? : 1 ;
+        (10) ? : ? : - ;
+    endtable
+endprimitive
+
+// CHECK-LABEL: moore.module @udp_seq_prim()
+// CHECK: [[CLK:%.+]] = moore.net wire : <l1>
+// CHECK: [[D:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_CLK:%.+]] = moore.read [[CLK]] : <l1>
+// CHECK: [[RD_D:%.+]] = moore.read [[D]] : <l1>
+// CHECK: [[INST:%.+]] = moore.instance "u2" @udp_seq_dff(clk: [[RD_CLK]]: !moore.l1, d: [[RD_D]]: !moore.l1) -> (q: !moore.l1)
+// CHECK: moore.assign [[Q]], [[INST]] : l1
+module udp_seq_prim;
+    wire CLK, D, Q;
+    udp_seq_dff u2 (Q, CLK, D);
+endmodule
+
+// CHECK-LABEL: moore.module @udp_seq_neg_prim()
+// CHECK: [[CLK:%.+]] = moore.net wire : <l1>
+// CHECK: [[D:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_CLK:%.+]] = moore.read [[CLK]] : <l1>
+// CHECK: [[RD_D:%.+]] = moore.read [[D]] : <l1>
+// CHECK: [[INST:%.+]] = moore.instance "u3" @udp_seq_dff_neg(clk: [[RD_CLK]]: !moore.l1, d: [[RD_D]]: !moore.l1) -> (q: !moore.l1)
+// CHECK: moore.assign [[Q]], [[INST]] : l1
+module udp_seq_neg_prim;
+    wire CLK, D, Q;
+    udp_seq_dff_neg u3 (Q, CLK, D);
+endmodule
+
+// CHECK-LABEL: moore.module @udp_seq_en_prim()
+// CHECK: [[CLK:%.+]] = moore.net wire : <l1>
+// CHECK: [[EN:%.+]] = moore.net wire : <l1>
+// CHECK: [[D:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_CLK:%.+]] = moore.read [[CLK]] : <l1>
+// CHECK: [[RD_EN:%.+]] = moore.read [[EN]] : <l1>
+// CHECK: [[RD_D:%.+]] = moore.read [[D]] : <l1>
+// CHECK: [[INST:%.+]] = moore.instance "u4" @udp_seq_dff_en(clk: [[RD_CLK]]: !moore.l1, en: [[RD_EN]]: !moore.l1, d: [[RD_D]]: !moore.l1) -> (q: !moore.l1)
+// CHECK: moore.assign [[Q]], [[INST]] : l1
+module udp_seq_en_prim;
+    wire CLK, EN, D, Q;
+    udp_seq_dff_en u4 (Q, CLK, EN, D);
+endmodule
+
+// CHECK-LABEL: moore.module @udp_seq_dual_edge_prim()
+// CHECK: [[CLK:%.+]] = moore.net wire : <l1>
+// CHECK: [[D:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_CLK:%.+]] = moore.read [[CLK]] : <l1>
+// CHECK: [[RD_D:%.+]] = moore.read [[D]] : <l1>
+// CHECK: [[INST:%.+]] = moore.instance "u5" @udp_seq_dual_edge_dff(clk: [[RD_CLK]]: !moore.l1, d: [[RD_D]]: !moore.l1) -> (q: !moore.l1)
+// CHECK: moore.assign [[Q]], [[INST]] : l1
+module udp_seq_dual_edge_prim;
+    wire CLK, D, Q;
+    udp_seq_dual_edge_dff u5 (Q, CLK, D);
+endmodule
+
+// CHECK-LABEL: moore.module @udp_seq_dual_edge_mux_prim()
+// CHECK: [[CLK:%.+]] = moore.net wire : <l1>
+// CHECK: [[DA:%.+]] = moore.net wire : <l1>
+// CHECK: [[DB:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_CLK:%.+]] = moore.read [[CLK]] : <l1>
+// CHECK: [[RD_DA:%.+]] = moore.read [[DA]] : <l1>
+// CHECK: [[RD_DB:%.+]] = moore.read [[DB]] : <l1>
+// CHECK: [[INST:%.+]] = moore.instance "u6" @udp_seq_dual_edge_mux(clk: [[RD_CLK]]: !moore.l1, da: [[RD_DA]]: !moore.l1, db: [[RD_DB]]: !moore.l1) -> (q: !moore.l1)
+// CHECK: moore.assign [[Q]], [[INST]] : l1
+module udp_seq_dual_edge_mux_prim;
+    wire CLK, DA, DB, Q;
+    udp_seq_dual_edge_mux u6 (Q, CLK, DA, DB);
+endmodule
+
+// CHECK-LABEL: moore.module @udp_seq_skip_async_prim()
+// CHECK: [[CLK:%.+]] = moore.net wire : <l1>
+// CHECK: [[D:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_CLK:%.+]] = moore.read [[CLK]] : <l1>
+// CHECK: [[RD_D:%.+]] = moore.read [[D]] : <l1>
+// CHECK: [[INST:%.+]] = moore.instance "u7" @udp_seq_dff_skip_async(clk: [[RD_CLK]]: !moore.l1, d: [[RD_D]]: !moore.l1) -> (q: !moore.l1)
+// CHECK: moore.assign [[Q]], [[INST]] : l1
+module udp_seq_skip_async_prim;
+    wire CLK, D, Q;
+    udp_seq_dff_skip_async u7 (Q, CLK, D);
+endmodule
+
+
