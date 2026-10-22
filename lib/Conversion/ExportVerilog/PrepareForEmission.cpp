@@ -48,14 +48,14 @@ using namespace hw;
 using namespace sv;
 using namespace ExportVerilog;
 
-// Check if the value is from read of a wire or reg or is a port.
+// Check if the value is from read of a handle (net, var, inout) or is a port. A
 bool ExportVerilog::isSimpleReadOrPort(Value v) {
   if (isa<BlockArgument>(v))
     return true;
   auto vOp = v.getDefiningOp();
   if (!vOp)
     return false;
-  if (sv::getHandleElementType(v.getType()) && isa<sv::WireOp>(vOp))
+  if (sv::getHandleElementType(v.getType()))
     return true;
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
@@ -63,7 +63,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
-  return isa<sv::WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
+  return isa<sv::WireOp, RegOp, LogicOp, VarOp, XMROp, XMRRefOp>(readSrc);
 }
 
 // Check if the value is deemed worth spilling into a wire.
@@ -101,29 +101,12 @@ static void spillWiresForInstanceInputs(HWInstanceLike op) {
     else
       nameTmp += std::to_string(opNum);
 
-    // If the operand is already a handle, wrap its element type instead of the
-    // handle itself, and pass the new wire directly to the instance.
-    Type elementType = src.getType();
-    bool isHandle = false;
-    if (auto handleElementType = sv::getHandleElementType(elementType)) {
-      elementType = handleElementType;
-      isHandle = true;
-    }
-    auto newWire = sv::WireOp::create(builder, elementType, nameTmp);
-    Value driver = src;
-    Value newOperand = newWire;
-    Operation *newRead;
-    if (isHandle) {
-      newRead = ReadInOutOp::create(builder, src);
-      driver = newRead->getResult(0);
-    } else {
-      newRead = ReadInOutOp::create(builder, newWire);
-      newOperand = newRead->getResult(0);
-    }
-    auto connect = AssignOp::create(builder, newWire, driver);
-    newRead->moveBefore(op);
+    auto newWire = sv::WireOp::create(builder, src.getType(), nameTmp);
+    auto newWireRead = ReadInOutOp::create(builder, newWire);
+    auto connect = AssignOp::create(builder, newWire, src);
+    newWireRead->moveBefore(op);
     connect->moveBefore(op);
-    op->setOperand(opNum, newOperand);
+    op->setOperand(opNum, newWireRead);
   }
 }
 
@@ -621,7 +604,7 @@ class EmittedExpressionStateManager
                          EmittedExpressionState> {
 public:
   EmittedExpressionStateManager(const LoweringOptions &options)
-      : options(options){};
+      : options(options) {};
 
   // Get or caluculate an emitted expression state.
   EmittedExpressionState getExpressionState(Value value);
