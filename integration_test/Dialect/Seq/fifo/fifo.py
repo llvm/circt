@@ -1,6 +1,7 @@
 import cocotb
 from cocotb.triggers import Timer
 import cocotb.clock
+import random
 
 
 async def clock(dut):
@@ -108,3 +109,37 @@ async def test_concurrent_read_write(dut):
     assert dut.full.value == 0
     assert dut.empty.value == 0
     counter += 1
+
+
+@cocotb.test()
+async def test_random(dut):
+  """Random reads and writes, which never read while empty or write while full,
+  at rates which change every so often so that the FIFO fills and drains. Every
+  output is checked against a model on every cycle."""
+
+  rng = random.Random(1)
+  dut.inp.value = 0
+  dut.rdEn.value = 0
+  dut.wrEn.value = 0
+  await initDut(dut)
+
+  model = []
+  for cycle in range(4000):
+    if cycle % 50 == 0:
+      wrRate, rdRate = rng.random(), rng.random()
+    assert int(dut.full.value) == int(len(model) == FIFO_DEPTH)
+    assert int(dut.empty.value) == int(len(model) == 0)
+    assert int(dut.almost_full.value) == int(len(model) >= FIFO_ALMOST_FULL)
+    assert int(dut.almost_empty.value) == int(len(model) <= FIFO_ALMOST_EMPTY)
+
+    wr = len(model) < FIFO_DEPTH and rng.random() < wrRate
+    rd = len(model) > 0 and rng.random() < rdRate
+    value = rng.getrandbits(32)
+    dut.inp.value = value
+    dut.wrEn.value = int(wr)
+    dut.rdEn.value = int(rd)
+    if rd:
+      assert int(await combRead(dut, dut.out.value)) == model.pop(0)
+    if wr:
+      model.append(value)
+    await clock(dut)

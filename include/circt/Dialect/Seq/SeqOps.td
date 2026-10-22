@@ -310,6 +310,10 @@ def FIFOOp : SeqOp<"fifo", [
     A popped entry's slot is free from the next cycle, whatever the read
     latency: `full` and `almostFull` count only the entries not yet popped.
 
+    `rdEn` must not be asserted while the FIFO is empty, nor `wrEn` while it is
+    full. The behavior of a FIFO that is read while empty or written while full
+    is undefined.
+
     Like `seq.hlmem` there are no guarantees that all possible fifo configuration
     are able to be lowered. Available lowering passes will pattern match on the
     requested fifo configuration and attempt to provide a legal lowering.
