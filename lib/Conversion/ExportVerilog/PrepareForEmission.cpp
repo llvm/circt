@@ -22,6 +22,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/ProceduralRegionTrait.h"
@@ -54,7 +55,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto vOp = v.getDefiningOp();
   if (!vOp)
     return false;
-  if (isa<sv::InOutType>(v.getType()) && isa<sv::WireOp>(vOp))
+  if (sv::getHandleElementType(v.getType()) && isa<sv::WireOp>(vOp))
     return true;
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
@@ -100,12 +101,29 @@ static void spillWiresForInstanceInputs(HWInstanceLike op) {
     else
       nameTmp += std::to_string(opNum);
 
-    auto newWire = sv::WireOp::create(builder, src.getType(), nameTmp);
-    auto newWireRead = ReadInOutOp::create(builder, newWire);
-    auto connect = AssignOp::create(builder, newWire, src);
-    newWireRead->moveBefore(op);
+    // If the operand is already a handle, wrap its element type instead of the
+    // handle itself, and pass the new wire directly to the instance.
+    Type elementType = src.getType();
+    bool isHandle = false;
+    if (auto handleElementType = sv::getHandleElementType(elementType)) {
+      elementType = handleElementType;
+      isHandle = true;
+    }
+    auto newWire = sv::WireOp::create(builder, elementType, nameTmp);
+    Value driver = src;
+    Value newOperand = newWire;
+    Operation *newRead;
+    if (isHandle) {
+      newRead = ReadInOutOp::create(builder, src);
+      driver = newRead->getResult(0);
+    } else {
+      newRead = ReadInOutOp::create(builder, newWire);
+      newOperand = newRead->getResult(0);
+    }
+    auto connect = AssignOp::create(builder, newWire, driver);
+    newRead->moveBefore(op);
     connect->moveBefore(op);
-    op->setOperand(opNum, newWireRead);
+    op->setOperand(opNum, newOperand);
   }
 }
 
@@ -242,6 +260,10 @@ static void lowerUsersToTemporaryWire(Operation &op,
     // If the result already is an InOut, make sure to not wrap it again
     if (auto inoutType = hw::type_dyn_cast<hw::InOutType>(result.getType())) {
       wireElementType = inoutType.getElementType();
+      isResultInOut = true;
+    } else if (auto handleElementType =
+                   sv::getHandleElementType(result.getType())) {
+      wireElementType = handleElementType;
       isResultInOut = true;
     }
 
@@ -516,7 +538,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   // never generate a temporary and in fact must always be emitted inline.
   if (isExpressionAlwaysInline(op) &&
       !(isa<sv::ReadInOutOp>(op) ||
-        isa<hw::InOutType>(op->getResult(0).getType())))
+        sv::getHandleElementType(op->getResult(0).getType())))
     return false;
 
   // Scan to the top of the region tree to find out where to move the op.
@@ -566,7 +588,8 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
   if (op->getNumResults() != 1 ||
-      !isa<InOutType, sv::InterfaceType>(op->getResult(0).getType()))
+      !(sv::getHandleElementType(op->getResult(0).getType()) ||
+        isa<sv::InterfaceType>(op->getResult(0).getType())))
     return false;
 
   // If all operands (e.g. init value) are constant, it is safe to move
@@ -598,7 +621,7 @@ class EmittedExpressionStateManager
                          EmittedExpressionState> {
 public:
   EmittedExpressionStateManager(const LoweringOptions &options)
-      : options(options){};
+      : options(options) {};
 
   // Get or caluculate an emitted expression state.
   EmittedExpressionState getExpressionState(Value value);
@@ -749,7 +772,7 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // Don't spill wires for inout operations and simple expressions such as read
   // or constant.
   if (op.getNumResults() == 0 ||
-      isa<hw::InOutType>(op.getResult(0).getType()) ||
+      sv::getHandleElementType(op.getResult(0).getType()) ||
       isa<ReadInOutOp, ConstantOp>(op))
     return false;
 

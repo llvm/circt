@@ -50,6 +50,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/DXILABI.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Path.h"
@@ -293,6 +294,10 @@ static void getTypeDims(
 
   if (auto inout = hw::type_dyn_cast<InOutType>(type))
     return getTypeDims(dims, inout.getElementType(), loc, errorHandler);
+  if (auto net = dyn_cast<sv::NetType>(type))
+    return getTypeDims(dims, net.getElementType(), loc, errorHandler);
+  if (auto var = dyn_cast<sv::VarType>(type))
+    return getTypeDims(dims, var.getElementType(), loc, errorHandler);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc, errorHandler);
   if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
@@ -363,8 +368,9 @@ static Type stripUnpackedTypes(Type type) {
 
 /// Return true if the type has a leading unpacked type.
 static bool hasLeadingUnpackedType(Type type) {
-  assert(isa<hw::InOutType>(type) && "inout type is expected");
-  auto elementType = cast<hw::InOutType>(type).getElementType();
+  auto elementType = sv::getHandleElementType(type);
+  assert(elementType && "inout or SV handle type is expected");
+  ;
   return stripUnpackedTypes(elementType) != elementType;
 }
 
@@ -1791,6 +1797,18 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                    emitter, /*optionalAliasType=*/{},
                                    emitAsTwoStateType);
       })
+      .Case<sv::NetType>([&](NetType netType) {
+        return printPackedTypeImpl(netType.getElementType(), os, loc, dims,
+                                   implicitIntType, singleBitDefaultType,
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
+      })
+      .Case<sv::VarType>([&](VarType varType) {
+        return printPackedTypeImpl(varType.getElementType(), os, loc, dims,
+                                   implicitIntType, singleBitDefaultType,
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
+      })
       .Case<EnumType>([&](EnumType enumType) {
         assert(enumType.getBitWidth().has_value() &&
                "enum type must have bitwidth");
@@ -1958,7 +1976,7 @@ bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
 // NOLINTBEGIN(misc-no-recursion)
 void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
-      .Case<InOutType, VarType>([&](auto valueType) {
+      .Case<InOutType, NetType, VarType>([&](auto valueType) {
         printUnpackedTypePostfix(valueType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
