@@ -72,9 +72,9 @@ public:
     // Stores the generated shiftregisters for the addresses.
     llvm::SmallVector<Value> delayedAddrs;
 
-    // A global clock enable that is always true
-    Value ce =
-        hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
+    // A global clock enable for all ports that is always true
+    Value ce = rewriter.createOrFold<hw::ConstantOp>(op.getLoc(),
+                                                     rewriter.getI1Type(), 1);
 
     // Delay all of the addresses
     delayAddresses(rewriter, op.getLoc(), clk, ce, addrs, delayAttr,
@@ -115,9 +115,9 @@ public:
     // Stores the generated shiftregisters for the addresses.
     llvm::SmallVector<Value> delayedAddrs;
 
-    // A global clock enable that is always true
-    Value ce =
-        hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
+    // A global clock enable for all ports that is always true
+    Value ce = rewriter.createOrFold<hw::ConstantOp>(op.getLoc(),
+                                                     rewriter.getI1Type(), 1);
 
     // Same as write port, delay all of the addresses
     delayAddresses(rewriter, op.getLoc(), clk, ce, addrs, latencyAttr,
@@ -169,7 +169,7 @@ private:
 
   /// Performs the latency unrolling of an individual read port
   void unrollFirMemReadPort(seq::FirMemOp mem, seq::FirMemReadOp &op,
-                            IntegerAttr rdLatency, IntegerAttr zeroAttr,
+                            IntegerAttr delayRdAttr, IntegerAttr zeroAttr,
                             Value ce,
                             ConversionPatternRewriter &rewriter) const {
     // Retrieve all of the relevant arguments
@@ -177,7 +177,7 @@ private:
     Value clk = op.getClk();
 
     auto delayedAddr = seq::ShiftRegOp::create(
-        rewriter, op.getLoc(), rdLatency, addr, clk, ce, {}, {}, {}, {}, {});
+        rewriter, op.getLoc(), delayRdAttr, addr, clk, ce, {}, {}, {}, {}, {});
 
     // Replace the current port with a delayed port
     rewriter.replaceOpWithNewOp<seq::FirMemReadOp>(
@@ -188,7 +188,7 @@ private:
   /// These are annoying as they require implementing both the read and write
   /// unrolling and then muxing the two delays using the mode as a selector.
   void unrollFirMemReadWritePort(seq::FirMemOp mem, seq::FirMemReadWriteOp &op,
-                                 IntegerAttr delayAttr, IntegerAttr rdLatency,
+                                 IntegerAttr delayAttr, IntegerAttr delayRdAttr,
                                  IntegerAttr zeroAttr, IntegerAttr oneAttr,
                                  Value ce,
                                  ConversionPatternRewriter &rewriter) const {
@@ -201,7 +201,7 @@ private:
     // Create two versions of the delayed address, one using the write latency,
     // one using the read latency
     auto delayedReadAddr = seq::ShiftRegOp::create(
-        rewriter, op.getLoc(), rdLatency, addr, clk, ce, {}, {}, {}, {}, {});
+        rewriter, op.getLoc(), delayRdAttr, addr, clk, ce, {}, {}, {}, {}, {});
 
     auto delayedWriteAddr = seq::ShiftRegOp::create(
         rewriter, op.getLoc(), delayAttr, addr, clk, ce, {}, {}, {}, {}, {});
@@ -229,14 +229,14 @@ public:
     // Retrieve read and write latencies
     IntegerAttr wrLatency = mem.getWriteLatencyAttr();
     IntegerAttr rdLatency = mem.getReadLatencyAttr();
-    IntegerAttr delayAttr =
-        IntegerAttr::get(wrLatency.getType(), wrLatency.getInt() - 1);
-    IntegerAttr zeroAttr = IntegerAttr::get(rdLatency.getType(), 0);
-    IntegerAttr oneAttr = IntegerAttr::get(wrLatency.getType(), 1);
+    IntegerAttr delayRdAttr = rewriter.getI64IntegerAttr(rdLatency.getInt());
+    IntegerAttr delayAttr = rewriter.getI64IntegerAttr(wrLatency.getInt() - 1);
+    IntegerAttr zeroAttr = rewriter.getI32IntegerAttr(0);
+    IntegerAttr oneAttr = rewriter.getI32IntegerAttr(1);
 
     // A global clock enable for all ports that is always true
-    Value ce =
-        hw::ConstantOp::create(rewriter, mem.getLoc(), rewriter.getI1Type(), 1);
+    Value ce = rewriter.createOrFold<hw::ConstantOp>(mem.getLoc(),
+                                                     rewriter.getI1Type(), 1);
 
     // Find all of the relevant ports and update them
     for (auto user : mem->getUsers()) {
@@ -246,11 +246,12 @@ public:
             unrollFirMemWritePort(mem, port, delayAttr, oneAttr, ce, rewriter);
           })
           .Case<seq::FirMemReadOp>([&](auto port) {
-            unrollFirMemReadPort(mem, port, rdLatency, zeroAttr, ce, rewriter);
+            unrollFirMemReadPort(mem, port, delayRdAttr, zeroAttr, ce,
+                                 rewriter);
           })
           .Case<seq::FirMemReadWriteOp>([&](auto port) {
-            unrollFirMemReadWritePort(mem, port, delayAttr, rdLatency, zeroAttr,
-                                      oneAttr, ce, rewriter);
+            unrollFirMemReadWritePort(mem, port, delayAttr, delayRdAttr,
+                                      zeroAttr, oneAttr, ce, rewriter);
           })
           .Default([](auto) { /*ignore non-port users*/ });
     }
@@ -274,6 +275,20 @@ struct UnrollMemoryLatenciesPass
 void UnrollMemoryLatenciesPass::runOnOperation() {
   MLIRContext &ctxt = getContext();
   ConversionTarget target(ctxt);
+
+  target.addLegalDialect<seq::SeqDialect, hw::HWDialect, comb::CombDialect>();
+
+  // resulting ports must have their latencies reset.
+  target.addDynamicallyLegalOp<seq::ReadPortOp>(
+      [](seq::ReadPortOp op) { return op.getLatencyAttr().getInt() == 0; });
+
+  target.addDynamicallyLegalOp<seq::WritePortOp>(
+      [](seq::WritePortOp op) { return op.getLatencyAttr().getInt() == 1; });
+
+  target.addDynamicallyLegalOp<seq::FirMemOp>([](seq::FirMemOp op) {
+    return op.getReadLatencyAttr().getInt() == 0 &&
+           op.getWriteLatencyAttr().getInt() == 1;
+  });
 
   RewritePatternSet patterns(&ctxt);
   patterns.add<WritePortUnrolling, ReadPortUnrolling, FirMemUnrolling>(&ctxt);
