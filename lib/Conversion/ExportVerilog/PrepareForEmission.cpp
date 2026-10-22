@@ -621,7 +621,7 @@ class EmittedExpressionStateManager
                          EmittedExpressionState> {
 public:
   EmittedExpressionStateManager(const LoweringOptions &options)
-      : options(options) {};
+      : options(options){};
 
   // Get or caluculate an emitted expression state.
   EmittedExpressionState getExpressionState(Value value);
