@@ -553,7 +553,7 @@ void RpcClient::Impl::handleEvent(const json &frame) {
     {
       std::lock_guard<std::mutex> lock(cred.mutex);
       // Clamp: credits for frames sent by a previous client are possible.
-      cred.outstanding -= std::min(cred.outstanding, count);
+      cred.outstanding -= (std::min)(cred.outstanding, count);
     }
     cred.cv.notify_all();
   }

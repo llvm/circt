@@ -1121,20 +1121,26 @@ def TaggedDemux(num_clients: int,
       upstream_data, upstream_valid = ports.in_.unwrap(upstream_ready_wire)
       upstream_data_type = upstream_data.type
 
-      upstream_ready = Bits(1)(1)
+      if isinstance(upstream_data_type, StructType):
+        tag = upstream_data.tag
+      elif isinstance(upstream_data_type, UInt):
+        tag = upstream_data
+      else:
+        raise TypeError("TaggedDemux input must be a struct or UInt.")
+
+      # The input is consumed exactly when the selected output accepts it.
+      # Messages whose tag selects no output are dropped.
+      upstream_ready = Bits(1)(0)
+      any_selected = Bits(1)(0)
       for idx in range(num_clients):
-        if isinstance(upstream_data_type, StructType):
-          tag = upstream_data.tag
-        elif isinstance(upstream_data_type, UInt):
-          tag = upstream_data
-        else:
-          raise TypeError("TaggedDemux input must be a struct or UInt.")
-        output_valid = upstream_valid & (tag == UInt(8)(idx))
+        selected = tag == UInt(8)(idx)
+        output_valid = upstream_valid & selected
         output_ch, output_ready = channel_type.wrap(upstream_data, output_valid)
         setattr(ports, TaggedDemuxImpl.output_names[idx], output_ch)
-        upstream_ready = upstream_ready & output_ready
+        upstream_ready = upstream_ready | (selected & output_ready)
+        any_selected = any_selected | selected
 
-      upstream_ready_wire.assign(upstream_ready)
+      upstream_ready_wire.assign(upstream_ready | ~any_selected)
 
   return TaggedDemuxImpl
 

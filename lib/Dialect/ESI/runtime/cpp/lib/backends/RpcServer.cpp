@@ -587,7 +587,7 @@ public:
   void ack(uint64_t count) {
     uint64_t cur = unacked.load();
     // Clamp at zero: a late ack can arrive after an unsubscribe reset.
-    while (!unacked.compare_exchange_weak(cur, cur - std::min(cur, count)))
+    while (!unacked.compare_exchange_weak(cur, cur - (std::min)(cur, count)))
       ;
   }
 
