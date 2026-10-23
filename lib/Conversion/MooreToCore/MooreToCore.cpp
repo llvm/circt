@@ -3600,6 +3600,18 @@ struct StringToUpperOpConversion : public OpConversionPattern<StringToUpperOp> {
   }
 };
 
+struct StringSubstrOpConversion : public OpConversionPattern<StringSubstrOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringSubstrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringSubstrOp>(
+        op, adaptor.getStr(), adaptor.getStart(), adaptor.getEnd());
+    return success();
+  }
+};
+
 struct ReadMemBIOpConversion : public OpConversionPattern<ReadMemBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -4252,6 +4264,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     StringICompareOpConversion,
     StringToLowerOpConversion,
     StringToUpperOpConversion,
+    StringSubstrOpConversion,
+
     // Queue operations
     QueueSizeBIOpConversion,
     QueuePushBackOpConversion,
