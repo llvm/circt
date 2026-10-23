@@ -15,6 +15,7 @@
 #define CIRCT_CONVERSION_HWARITHTOHW_HWARITHTOHW_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include <memory>
 
@@ -42,12 +43,7 @@ public:
   bool hasSignednessSemantics(mlir::TypeRange types);
 
 private:
-  // Memoizations for signedness info and conversions.
-  struct ConvertedType {
-    mlir::Type type;
-    bool hadSignednessSemantics;
-  };
-  llvm::DenseMap<mlir::Type, ConvertedType> conversionCache;
+  mlir::AttrTypeReplacer signednessReplacer;
 };
 
 /// Get the HWArith to HW conversion patterns.

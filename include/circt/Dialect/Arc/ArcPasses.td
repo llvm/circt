@@ -463,4 +463,35 @@ def ResolveXMRRef : Pass<"arc-resolve-xmr", "mlir::ModuleOp"> {
   ];
 }
 
+def OutlineArcsPass : Pass<"arc-outline", "mlir::ModuleOp"> {
+  let summary = "Outline side-effect-free ops into arcs";
+  let description = [{
+    Outline all side-effect-free operations in `hw.module`s into separate
+    `arc.define`s and replace the original operations with `arc.call`s to the
+    outlined arcs.
+
+    The pass colors operations according to which operands on side-effecting
+    operations they contribute to, and uses this color to group the operations
+    into the largest arcs possible while not introducing additional cycles.
+  }];
+  let dependentDialects = ["circt::arc::ArcDialect", "circt::hw::HWDialect"];
+  let statistics = [
+    Statistic<"numUpdates", "color-updates", "Total op color updates">,
+    Statistic<"numFixups", "color-fixups", "Lattice-based op color fixups">,
+    Statistic<
+      "numVacuousUpdates", "vacuous-updates",
+      "Updates that did not change an op's color"
+    >,
+    Statistic<"numArcs", "arcs-created", "Number of arcs created">,
+    Statistic<
+      "numForwardRefs", "forward-refs",
+      "Cyclical forward references within arcs"
+    >,
+    Statistic<
+      "numClonedConstants", "consts-cloned",
+      "Constants cloned into arcs"
+    >,
+  ];
+}
+
 #endif // CIRCT_DIALECT_ARC_ARCPASSES_TD
