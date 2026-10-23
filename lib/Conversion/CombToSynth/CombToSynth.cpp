@@ -406,13 +406,18 @@ lowerSignedDivRem(OpBuilder &builder, Location loc, Value lhs, Value rhs) {
       builder.createOrFold<comb::ExtractOp>(loc, lhs, width - 1, 1);
   Value rhsNegative =
       builder.createOrFold<comb::ExtractOp>(loc, rhs, width - 1, 1);
-  auto [quotient, remainder] = lowerUnsignedDivRem(
-      builder, loc, negateIf(lhs, lhsNegative), negateIf(rhs, rhsNegative));
+  // Materialize the magnitudes in a fixed order; the order in which function
+  // arguments are evaluated is unspecified.
+  Value lhsMagnitude = negateIf(lhs, lhsNegative);
+  Value rhsMagnitude = negateIf(rhs, rhsNegative);
+  auto [quotient, remainder] =
+      lowerUnsignedDivRem(builder, loc, lhsMagnitude, rhsMagnitude);
 
   Value quotientNegative =
       builder.createOrFold<comb::XorOp>(loc, lhsNegative, rhsNegative, true);
-  return {negateIf(quotient, quotientNegative),
-          negateIf(remainder, lhsNegative)};
+  Value signedQuotient = negateIf(quotient, quotientNegative);
+  Value signedRemainder = negateIf(remainder, lhsNegative);
+  return {signedQuotient, signedRemainder};
 }
 
 //===----------------------------------------------------------------------===//
