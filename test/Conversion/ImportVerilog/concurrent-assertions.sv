@@ -30,6 +30,13 @@ module LabeledAssume(input logic clk, input logic a, input logic b);
   my_assume: assume property (@(posedge clk) a |-> b);
 endmodule
 
+// CHECK-LABEL: moore.module @LabeledCover
+// CHECK-NOT: moore.procedure
+// CHECK: verif.cover
+module LabeledCover(input logic clk, input logic a, input logic b);
+  my_cover: cover property (@(posedge clk) a && b);
+endmodule
+
 // Several labeled assertions in one module all land in the module body.
 // CHECK-LABEL: moore.module @ManyLabeled
 // CHECK-NOT: moore.procedure
