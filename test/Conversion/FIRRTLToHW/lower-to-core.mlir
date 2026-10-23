@@ -66,8 +66,8 @@ firrtl.circuit "LowerToCore" {
     firrtl.skip
   }
 
-  // CHECK-LABEL: hw.module @AttachToPort(in %a : !hw.inout<i8>)
-  // CHECK-NEXT: hw.instance "sink" @AnalogSink(a: %a: !hw.inout<i8>) -> ()
+  // CHECK-LABEL: hw.module @AttachToPort(in %a : !sv.net<i8>)
+  // CHECK-NEXT: hw.instance "sink" @AnalogSink(a: %a: !sv.net<i8>) -> ()
   // CHECK-NEXT: hw.output
   // CHECK-NOT: sv.
   firrtl.module @AttachToPort(out %a: !firrtl.analog<8>) {
