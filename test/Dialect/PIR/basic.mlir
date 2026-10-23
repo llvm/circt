@@ -15,6 +15,9 @@ pir.cell @test {} {
   // CHECK: %clk_s, %clk_p = pir.input : !pir.clocked_sequence, !pir.clocked_property
   %clk_s, %clk_p = pir.input : !pir.clocked_sequence, !pir.clocked_property
 
+  // CHECK: %clock, %clk_val, %clk_def = pir.input : !seq.clock, i1, i1
+  %clock, %clk_val, %clk_def = pir.input : !seq.clock, i1, i1
+
   //===----------------------------------------------------------------------===//
   // Type Conversions
   //===----------------------------------------------------------------------===//
@@ -108,4 +111,34 @@ pir.cell @test {} {
   pir.restrict %clk_p disable iff %b on %b : !pir.clocked_property
   pir.restrict %clk_p always disable iff %b on %b : !pir.clocked_property
 
+  //===---------------------------------------------------------------------===//
+  // Clocking Ops
+  //===----------------------------------------------------------------------===//
+
+  // CHECK: {{%.+}} = pir.gclk_sample posedge %clk_val, %clk_def 
+  // CHECK: {{%.+}} = pir.gclk_sample negedge %clk_val, %clk_def 
+  // CHECK: {{%.+}} = pir.gclk_sample edge %clk_val, %clk_def 
+  %gclk_clk_r = pir.gclk_sample posedge %clk_val, %clk_def 
+  %gclk_clk_f = pir.gclk_sample negedge %clk_val, %clk_def 
+  %gclk_clk_c = pir.gclk_sample edge %clk_val, %clk_def 
+
+  // CHECK: {{%.+}} = pir.gclk_sample posedge %clk_val 
+  // CHECK: {{%.+}} = pir.gclk_sample negedge %clk_val 
+  // CHECK: {{%.+}} = pir.gclk_sample edge %clk_val 
+  %gclk_clk_r_ = pir.gclk_sample posedge %clk_val 
+  %gclk_clk_f_ = pir.gclk_sample negedge %clk_val 
+  %gclk_clk_c_ = pir.gclk_sample edge %clk_val 
+
+  // CHECK: {{%.+}} = pir.gclk_future %clk_val
+  %gclk_future = pir.gclk_future %clk_val
+
+  // CHECK: {{%.+}} = pir.clocked %clock, %clk_p : !seq.clock, !pir.clocked_property
+  // CHECK: {{%.+}} = pir.clocked %clock, %clk_s : !seq.clock, !pir.clocked_sequence
+  %clocked_clk_p = pir.clocked %clock, %clk_p : !seq.clock, !pir.clocked_property
+  %clocked_clk_s = pir.clocked %clock, %clk_s : !seq.clock, !pir.clocked_sequence
+
+  // CHECK: {{%.+}} = pir.clocked %clk_val, %clk_p : i1, !pir.clocked_property
+  // CHECK: {{%.+}} = pir.clocked %clk_val, %clk_s : i1, !pir.clocked_sequence
+  %clocked_i1_clk_p = pir.clocked %clk_val, %clk_p : i1, !pir.clocked_property
+  %clocked_i1_clk_s = pir.clocked %clk_val, %clk_s : i1, !pir.clocked_sequence
 }
