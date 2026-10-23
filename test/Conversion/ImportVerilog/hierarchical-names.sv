@@ -13,7 +13,7 @@ module Foo;
   // CHECK: [[RD_SA_SB_Y:%.+]] = moore.read %subA.subB.y : <i32>
   int s = subA.subB.y;
   // CHECK: [[RD_R:%.+]] = moore.read %r : <i32>
-  // CHECK: moore.assign %subA.subB.x, [[RD_R]] : i32
+  // CHECK: moore.assign %subA.subB.x, [[RD_R]] : !moore.ref<i32>
   assign subA.subB.x = r;
 endmodule
 
@@ -23,7 +23,7 @@ module SubA;
   // CHECK: %subB.y, %subB.x = moore.instance "subB" @SubB(Foo.r: %Foo.r: !moore.ref<i32>, subA.a: %a: !moore.ref<i32>) -> (y: !moore.ref<i32>, x: !moore.ref<i32>)
   SubB subB();
   // CHECK: [[RD_SB_Y:%.+]] = moore.read %subB.y : <i32>
-  // CHECK: moore.assign %a, [[RD_SB_Y]] : i32
+  // CHECK: moore.assign %a, [[RD_SB_Y]] : !moore.ref<i32>
   assign a = subB.y;
   // CHECK: moore.output %subB.y, %subB.x : !moore.ref<i32>, !moore.ref<i32>
 endmodule
@@ -32,9 +32,9 @@ endmodule
 module SubB;
   int x, y, z;
   // CHECK: [[RD_FOO_R:%.+]] = moore.read %Foo.r : <i32>
-  // CHECK: moore.assign %y, [[RD_FOO_R]] : i32
+  // CHECK: moore.assign %y, [[RD_FOO_R]] : !moore.ref<i32>
   // CHECK: [[RD_SA_A:%.+]] = moore.read %subA.a : <i32>
-  // CHECK: moore.assign %z, [[RD_SA_A]] : i32
+  // CHECK: moore.assign %z, [[RD_SA_A]] : !moore.ref<i32>
   assign y = Foo.r;
   assign z = Foo.subA.a;
   // CHECK: moore.output %y, %x : !moore.ref<i32>, !moore.ref<i32>
@@ -66,7 +66,7 @@ module SubD;
   int z;
   int w;
   // CHECK: [[RD_Z:%.+]] = moore.read %z : <i32>
-  // CHECK: moore.assign %w, [[RD_Z]] : i32
+  // CHECK: moore.assign %w, [[RD_Z]] : !moore.ref<i32>
   assign SubD.w = SubD.z;
 endmodule
 
@@ -102,7 +102,7 @@ endmodule
 // CHECK: [[READ:%.+]] = moore.read [[INSTRES]] : <l8>
 // CHECK: [[C1:%.+]] = moore.constant 1 : l8
 // CHECK: [[ADD:%.+]] = moore.add [[READ]], [[C1]] : l8
-// CHECK: moore.assign %a, [[ADD]] : l8
+// CHECK: moore.assign %a, [[ADD]] : !moore.ref<l8>
 
 module SubExpr;
   SubF subF();
