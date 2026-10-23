@@ -4936,7 +4936,8 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   if (type_isa<AnalogType>(op.getType()))
     // This is a locally visible, private wire created by the compiler, so do
     // not attach a symbol name.
-    return setLoweringTo<sv::WireOp>(op, sv::NetType::get(resultTy), ".invalid_analog");
+    return setLoweringTo<sv::WireOp>(op, sv::NetType::get(resultTy),
+                                     ".invalid_analog");
 
   // We don't allow aggregate values which contain values of analog types.
   if (type_cast<FIRRTLBaseType>(op.getType()).containsAnalog())
