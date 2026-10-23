@@ -506,10 +506,7 @@ private:
     size_t iteLID;
     // If this is being generated as reset logic, we update the register input
     // mapping instead of the op LID mapping
-    if (forReset)
-      iteLID = getRegInputLID(srcop);
-    else
-      iteLID = getOpLID(srcop);
+    iteLID = forReset ? getRegInputLID(srcop) : getOpLID(srcop);
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
