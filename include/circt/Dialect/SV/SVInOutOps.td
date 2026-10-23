@@ -57,7 +57,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return llvm::cast<InOutType>(getResult().getType()).getElementType();
+      return getHandleElementType(getResult().getType());
     }
   }];
 }
