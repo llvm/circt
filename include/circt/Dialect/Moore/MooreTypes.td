@@ -441,6 +441,39 @@ def RefType : MooreTypeDef<"Ref", [
 }
 
 //===----------------------------------------------------------------------===//
+// Net type wrapper
+//===----------------------------------------------------------------------===//
+
+def NetType : MooreTypeDef<"Net", [], "moore::UnpackedType">{
+  let mnemonic = "net";
+  let summary = "a net type";
+  let description = [{
+    A net with a certain associated datatype. Please note that this does not
+    correspond to the net types defined in IEEE 1800-2023 § 6.6, but is the
+    type associated with nets which in SystemVerilog have both a nettype and
+    a datatype.
+  }];
+  let parameters = (ins "UnpackedType":$nestedType);
+  let assemblyFormat = [{
+    `<` $nestedType `>`
+  }];
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "UnpackedType":$nestedType), [{
+      return $_get(nestedType.getContext(), nestedType);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    Domain getDomain() { return getNestedType().getDomain(); }
+    std::optional<unsigned> getBitSize() {
+      return getNestedType().getBitSize();
+    };
+    std::optional<uint32_t> getFieldIndex(StringAttr nameField);
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Format String
 //===----------------------------------------------------------------------===//
 
