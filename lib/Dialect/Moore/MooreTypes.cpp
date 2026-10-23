@@ -356,6 +356,14 @@ std::optional<uint32_t> RefType::getFieldIndex(StringAttr nameField) {
       .Default([](auto) { return std::nullopt; });
 }
 
+std::optional<uint32_t> NetType::getFieldIndex(StringAttr nameField) {
+  return TypeSwitch<Type, std::optional<uint32_t>>(getNestedType())
+      .Case<StructType, UnpackedStructType>([&nameField](auto &type) {
+        return getFieldAllIndex(type.getMembers(), nameField);
+      })
+      .Default([](auto) { return std::nullopt; });
+}
+
 //===----------------------------------------------------------------------===//
 // Generated logic
 //===----------------------------------------------------------------------===//
