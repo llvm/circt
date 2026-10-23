@@ -29,6 +29,7 @@ class AssocArrayType;
 class ChandleType;
 class EventType;
 class IntType;
+class NetType;
 class OpenArrayType;
 class OpenUnpackedArrayType;
 class PackedType;
@@ -105,7 +106,7 @@ public:
     return llvm::isa<PackedType, StringType, ChandleType, EventType, RealType,
                      UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
                      QueueType, UnpackedStructType, UnpackedUnionType, RefType,
-                     ClassHandleType>(type);
+                     NetType, ClassHandleType>(type);
   }
 
   /// Get the value domain of this type.
