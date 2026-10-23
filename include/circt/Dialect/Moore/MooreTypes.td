@@ -446,6 +446,7 @@ def RefType : MooreTypeDef<"Ref", [
 
 def NetType : MooreTypeDef<"Net", [], "moore::UnpackedType">{
   let mnemonic = "net";
+  let summary = "a net type";
   let description = [{
     A net with a certain associated datatype. Please note that this does not
     correspond to the net types defined in IEEE 1800-2023 § 6.6, but is the
