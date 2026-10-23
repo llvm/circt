@@ -83,6 +83,9 @@ private:
   // with their most recent expression. Btor uses unique identifiers for each
   // instruction, so we need to have an association between those and MLIR Ops.
   DenseMap<Operation *, size_t> opLIDMap;
+  // Map from register operations to the LIDs representing their direct inputs,
+  // including reset behaviour that we've made explicit
+  DenseMap<Operation *, size_t> regToInputLIDMap;
   // Stores the LID of the associated input.
   // This holds a similar function as the opLIDMap but keeps
   // track of block argument index -> LID mappings
@@ -155,6 +158,16 @@ public:
 
     // Return -1 if no LID was found
     return noLID;
+  }
+
+  // Fetches the LID corresponding to a register input (including reset logic)
+  size_t getRegInputLID(Operation *regOp) {
+    auto &f = regToInputLIDMap[regOp];
+
+    // If the op isn't associated to an lid, assign it a new one
+    if (!f)
+      f = lid++;
+    return f;
   }
 
 private:
@@ -475,26 +488,34 @@ private:
 
   // Generate an ite instruction (if then else) given a predicate, two values
   // and a res width
-  void genIte(Operation *srcop, Value cond, Value t, Value f, int64_t width) {
+  void genIte(Operation *srcop, Value cond, Value t, Value f, int64_t width,
+              bool forReset = false) {
     // Retrieve the operand lids, assuming they were emitted
     size_t condLID = getOpLID(cond);
     size_t tLID = getOpLID(t);
     size_t fLID = getOpLID(f);
 
-    // Register the source operation with the current line id
-    size_t opLID = getOpLID(srcop);
-    genIte(opLID, condLID, tLID, fLID, width);
+    genIte(srcop, condLID, tLID, fLID, width, forReset);
   }
 
   // Generate an ite instruction (if then else) given a predicate, two values
   // and a res width
-  void genIte(size_t opLID, size_t condLID, size_t tLID, size_t fLID,
-              int64_t width) {
+  void genIte(Operation *srcop, size_t condLID, size_t tLID, size_t fLID,
+              int64_t width, bool forReset = false) {
+    // Register the source operation with the current line id
+    size_t iteLID;
+    // If this is being generated as reset logic, we update the register input
+    // mapping instead of the op LID mapping
+    if (forReset)
+      iteLID = getRegInputLID(srcop);
+    else
+      iteLID = getOpLID(srcop);
+
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
     // Build and return the ite instruction
-    os << opLID << " "
+    os << iteLID << " "
        << "ite"
        << " " << sid << " " << condLID << " " << tLID << " " << fLID << "\n";
   }
@@ -539,14 +560,14 @@ private:
        << " " << sid << " " << symbolNamespace.newName(name) << "\n";
   }
 
-  // Generates a next instruction, given a width, a state LID, and a next
-  // value LID
-  void genNext(size_t nextLID, Operation *reg, int64_t width) {
+  // Generates a next instruction, given a width and a register op
+  void genNext(Operation *reg, int64_t width) {
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Retrieve the LID associated to reg
+    // Retrieve the LIDs associated to reg and next
     size_t regLID = getOpLID(reg);
+    size_t nextLID = getRegInputLID(reg);
 
     // Build and return the next instruction
     // Also update the lid as this instruction is not associated to an mlir op
@@ -682,9 +703,7 @@ private:
 
       // Generate the ite for the register update reset condition
       // i.e. reg <= reset ? 0 : next
-      size_t iteLID = lid++;
-      genIte(iteLID, resetLID, resetValLID, nextLID, width);
-      nextLID = iteLID;
+      genIte(op, resetLID, resetValLID, nextLID, width, /*forReset=*/true);
     } else {
       // Sanity check: next should have been assigned
       if (nextLID == noLID) {
@@ -692,10 +711,12 @@ private:
             "Register input does not point to a valid op!");
         return;
       }
+      // Associate the register with an input LID
+      regToInputLIDMap[op] = nextLID;
     }
 
     // Finally generate the next statement
-    genNext(nextLID, op, width);
+    genNext(op, width);
   }
 
 public:
