@@ -1405,6 +1405,18 @@ OpFoldResult XorOp::fold(FoldAdaptor adaptor) {
       if (intAttr.getValue().isZero())
         return getInputs()[0];
 
+  // xor(x, ~x) -> -1
+  if (size == 2) {
+    Value subExpr;
+    if ((matchPattern(getInputs()[0], m_Complement(m_Any(&subExpr))) &&
+         subExpr == getInputs()[1]) ||
+        (matchPattern(getInputs()[1], m_Complement(m_Any(&subExpr))) &&
+         subExpr == getInputs()[0]))
+      return getIntAttr(
+          APInt::getAllOnes(cast<IntegerType>(getType()).getWidth()),
+          getContext());
+  }
+
   // xor(xor(x,1),1) -> x
   // but not self loop
   Value subExpr;
