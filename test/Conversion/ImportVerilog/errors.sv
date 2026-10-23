@@ -398,13 +398,13 @@ endmodule
 
 // -----
 
-// expected-error @below {{sequential user-defined primitives are not supported yet}}
-primitive udp_seq(q, clk, d);
+// expected-error @below {{sequential UDP `udp_multi_clk` with multiple distinct clock signals is not supported}}
+primitive udp_multi_clk(q, clk1, clk2, d);
   output reg q;
-  input clk, d;
+  input clk1, clk2, d;
   table
-    (01) 0 : ? : 0 ;
-    (01) 1 : ? : 1 ;
+    (01) ? 0 : ? : 0 ;
+    ? (01) 1 : ? : 1 ;
   endtable
 endprimitive
 
