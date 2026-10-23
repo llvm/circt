@@ -567,8 +567,8 @@ LogicalResult ManifestRomLowering::createRomModule(
       hw::UnpackedArrayType::get(rewriter.getI64Type(), words.size()),
       rewriter.getArrayAttr(wordAttrs));
   auto manifestReg =
-      sv::RegOp::create(rewriter, loc, manifestConstant.getType());
-  sv::AssignOp::create(rewriter, loc, manifestReg, manifestConstant);
+      sv::VarOp::create(rewriter, loc, manifestConstant.getType());
+  sv::VarAssignOp::create(rewriter, loc, manifestReg, manifestConstant);
 
   // Slim down the address, register it, do the lookup, and register the output.
   size_t addrBits = llvm::Log2_64_Ceil(words.size());
@@ -651,8 +651,8 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
             hw::ArrayType::get(rewriter.getI8Type(), bytes.size()),
             rewriter.getArrayAttr(bytes));
         auto manifestLogic =
-            sv::LogicOp::create(rewriter, loc, manifestConstant.getType());
-        sv::AssignOp::create(rewriter, loc, manifestLogic, manifestConstant);
+            sv::VarOp::create(rewriter, loc, manifestConstant.getType());
+        sv::VarAssignOp::create(rewriter, loc, manifestLogic, manifestConstant);
         auto manifest = sv::ReadInOutOp::create(rewriter, loc, manifestLogic);
 
         // Then instantiate the external module.

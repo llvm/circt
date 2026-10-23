@@ -258,7 +258,7 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
   hw::UnpackedArrayType memType =
       hw::UnpackedArrayType::get(ramDecl.getInnerType(), ramDecl.getDepth());
   auto mem =
-      sv::RegOp::create(b, memType, implReq.getServiceSymbolAttr().getAttr())
+      sv::VarOp::create(b, memType, implReq.getServiceSymbolAttr().getAttr())
           .getResult();
 
   // Do everything which doesn't actually write to the memory, store the signals
