@@ -42,6 +42,6 @@ module InterfaceProceduralAssign(input logic clk, output logic y);
   // CHECK:   moore.return
   // CHECK: }
   // CHECK: %[[SAMPLED_READ:.+]] = moore.read %[[SAMPLED]] : <l1>
-  // CHECK: moore.assign %[[INNER_CLK]], %[[CLK]] : l1
+  // CHECK: moore.assign %[[INNER_CLK]], %[[CLK]] : !moore.ref<l1>
   // CHECK: moore.output %[[SAMPLED_READ]] : !moore.l1
 endmodule

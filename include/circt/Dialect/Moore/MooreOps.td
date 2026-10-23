@@ -523,7 +523,7 @@ def GetGlobalVariableOp : MooreOp<"get_global_variable", [
 // Assignments
 //===----------------------------------------------------------------------===//
 
-class AssignOpBase<string mnemonic, list<Trait> traits = []> :
+class ProceduralAssignOpBase<string mnemonic, list<Trait> traits = []> :
     MooreOp<mnemonic, traits # [TypesMatchWith<"src and dst types match",
     "src", "dst", "RefType::get(cast<UnpackedType>($_self))">]> {
   let arguments = (ins RefType:$dst, UnpackedType:$src);
@@ -532,17 +532,19 @@ class AssignOpBase<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
-class DelayedAssignOpBase<string mnemonic, list<Trait> traits = []> :
-    AssignOpBase<mnemonic, traits> {
-  let arguments = (ins RefType:$dst, UnpackedType:$src, TimeType:$delay);
+// Continuous assignment
+
+class ContinuousAssignOpBase<string mnemonic, list<Trait> traits = []> :
+    MooreOp<mnemonic, traits # [TypesMatchWith<"src and dst types match",
+    "dst", "src", "cast<WrapperType>($_self).getNestedType()">]> {
+  let arguments = (ins WrapperType:$dst, UnpackedType:$src);
   let assemblyFormat = [{
-    $dst `,` $src `,` $delay attr-dict `:` type($src)
+    $dst `,` $src attr-dict `:` qualified(type($dst))
   }];
 }
 
-// Continuous assignment
-
-def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
+def ContinuousAssignOp :
+    ContinuousAssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
   let summary = "Continuous assignment within a module";
   let description = [{
     A continuous assignment in module scope, such as `assign x = y;`, which
@@ -554,7 +556,7 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
 }
 
 def DelayedContinuousAssignOp :
-    DelayedAssignOpBase<"delayed_assign", [HasParent<"SVModuleOp">]> {
+    ContinuousAssignOpBase<"delayed_assign", [HasParent<"SVModuleOp">]> {
   let summary = "Delayed continuous assignment within a module";
   let description = [{
     A continuous assignment with a delay.
@@ -562,11 +564,19 @@ def DelayedContinuousAssignOp :
     See the `moore.assign` op.
     See IEEE 1800-2017 § 10.3 "Continuous assignments".
   }];
+  let arguments = (ins
+    WrapperType:$dst,
+    UnpackedType:$src,
+    TimeType:$delay
+  );
+  let assemblyFormat = [{
+    $dst `,` $src `,` $delay attr-dict `:` qualified(type($dst))
+  }];
 }
 
 // Blocking assignment
 
-def BlockingAssignOp : AssignOpBase<"blocking_assign", [
+def BlockingAssignOp : ProceduralAssignOpBase<"blocking_assign", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>
 ]> {
   let summary = "Blocking procedural assignment";
@@ -585,7 +595,7 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign", [
 
 // Non-blocking assignment
 
-def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
+def NonBlockingAssignOp : ProceduralAssignOpBase<"nonblocking_assign"> {
   let summary = "Nonblocking procedural assignment";
   let description = [{
     A nonblocking procedural assignment in a sequential block, such as `x <= y;`
@@ -599,13 +609,17 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
 }
 
 def DelayedNonBlockingAssignOp :
-    DelayedAssignOpBase<"delayed_nonblocking_assign"> {
+    ProceduralAssignOpBase<"delayed_nonblocking_assign"> {
   let summary = "Delayed nonblocking procedural assignment";
   let description = [{
     A nonblocking procedural assignment with an intra-assignment delay control.
 
     See the `moore.nonblocking_assign` op.
     See IEEE 1800-2017 § 9.4.5 "Intra-assignment timing controls".
+  }];
+  let arguments = (ins RefType:$dst, UnpackedType:$src, TimeType:$delay);
+  let assemblyFormat = [{
+    $dst `,` $src `,` $delay attr-dict `:` type($src)
   }];
 }
 

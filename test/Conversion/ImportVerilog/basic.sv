@@ -153,7 +153,7 @@ module Basic;
   bit b2 = b1;
 
   // CHECK-DAG: [[TMP1:%.+]] = moore.read %v2
-  // CHECK-DAG: moore.assign %v1, [[TMP1]] : i32
+  // CHECK-DAG: moore.assign %v1, [[TMP1]] : !moore.ref<i32>
   assign v1 = v2;
 
   // CHECK-DAG: %pkgType0 = moore.variable : <l42>
@@ -176,7 +176,7 @@ module Basic;
   // CHECK-DAG: [[VAR_S1:%.+]] = moore.variable : <string>
   // CHECK-DAG: [[STR_HELLO:%.+]] = moore.constant_string "Hello World" : i88
   // CHECK-DAG: [[CONV_HELLO:%.+]] = moore.int_to_string [[STR_HELLO]] : i88
-  // CHECK-DAG: moore.assign [[VAR_S1]], [[CONV_HELLO]] : string
+  // CHECK-DAG: moore.assign [[VAR_S1]], [[CONV_HELLO]] : !moore.ref<string>
   string s1;
   assign s1 = "Hello World";
 
@@ -1983,7 +1983,7 @@ module PortsTop;
   // CHECK-SAME: d: !moore.l1
   // CHECK-SAME: e: !moore.l1
   // CHECK-SAME: )
-  // CHECK: moore.assign %y4, [[D_VALUE]] : l1
+  // CHECK: moore.assign %y4, [[D_VALUE]] : !moore.ref<l1>
   PortsUnconnected p4(.a(), .b(x4), .c(), .d(y4), .e());
 endmodule
 
@@ -2005,12 +2005,12 @@ module PortsAnsi(
   // CHECK: [[D_INT:%.+]] = moore.variable name "d" : <l1>
 
   // Mapping ports to local declarations.
-  // CHECK: moore.assign [[A_INT]], %a : l1
+  // CHECK: moore.assign [[A_INT]], %a : !moore.ref<l1>
   // CHECK: [[B_READ:%.+]] = moore.read %b
   // CHECK: [[C_READ:%.+]] = moore.read %c
-  // CHECK: moore.assign [[C_INT]], [[C_READ]] : l1
+  // CHECK: moore.assign [[C_INT]], [[C_READ]] : !moore.ref<l1>
   // CHECK: [[D_READ:%.+]] = moore.read %d
-  // CHECK: moore.assign [[D_INT]], [[D_READ]] : l1
+  // CHECK: moore.assign [[D_INT]], [[D_READ]] : !moore.ref<l1>
   // CHECK: moore.output [[B_READ]] : !moore.l1
 endmodule
 
@@ -2109,8 +2109,8 @@ module PortsUnconnected(
   // CHECK: [[E_INT:%.+]] = moore.net wire : <l1>
   
   // Mapping ports to local declarations.
-  // CHECK: moore.assign [[A_INT]], %a : l1
-  // CHECK: moore.assign [[B_INT]], %b : l1
+  // CHECK: moore.assign [[A_INT]], %a : !moore.ref<l1>
+  // CHECK: moore.assign [[B_INT]], %b : !moore.ref<l1>
   // CHECK: [[D_READ:%.+]] = moore.read [[D_INT]]
   // CHECK: [[E_READ:%.+]] = moore.read [[E_INT]]
   // CHECK: moore.output [[D_READ]], [[E_READ]] : !moore.l1, !moore.l1
@@ -3317,7 +3317,7 @@ module PortCastA;
   // CHECK: [[TMP2:%.+]] = moore.sbv_to_packed [[TMP1]] : array<1 x i32>
   // CHECK: [[TMP3:%.+]] = moore.instance "sub" @PortCastB(a: [[TMP2]]: !moore.array<1 x i32>)
   // CHECK: [[TMP4:%.+]] = moore.packed_to_sbv [[TMP3]] : array<1 x i32>
-  // CHECK: moore.assign %b, [[TMP4]] : i32
+  // CHECK: moore.assign %b, [[TMP4]] : !moore.ref<i32>
   PortCastB sub(a, b);
 endmodule
 
@@ -4263,8 +4263,8 @@ endfunction // testStrLiteralReturn
 // CHECK:    [[VVAR:%.*]] = moore.variable : <i1>
 // CHECK:    [[READU:%.*]] = moore.read [[UVAR]] : <i1>
 // CHECK:    [[CALLBAR:%.*]] = func.call @bar([[READU]]) : (!moore.i1) -> !moore.i1
-// CHECK:    moore.assign [[VVAR]], [[CALLBAR]] : i1
-// CHECK:    moore.assign [[UVAR]], %u : i1
+// CHECK:    moore.assign [[VVAR]], [[CALLBAR]] : !moore.ref<i1>
+// CHECK:    moore.assign [[UVAR]], %u : !moore.ref<i1>
 // CHECK:    [[READV:%.*]] = moore.read [[VVAR]] : <i1>
 // CHECK:    moore.output [[READV]] : !moore.i1
 // CHECK:  }
@@ -4438,7 +4438,7 @@ endmodule
 // CHECK:           [[NULL5:%.+]] = moore.null
 // CHECK:           [[CNE0:%.+]] = moore.handle_case_ne [[A_R3]], [[NULL5]] : !moore.chandle, !moore.null
 // CHECK:           [[OR2:%.+]] = moore.or [[OR1]], [[CNE0]] : i1
-// CHECK:           moore.assign [[C]], [[OR2]] : i1
+// CHECK:           moore.assign [[C]], [[OR2]] : !moore.ref<i1>
 // CHECK:           [[B_R0:%.+]] = moore.read [[B]] : <class<@nullableClass>>
 // CHECK:           [[NULL6:%.+]] = moore.null
 // CHECK:           [[EQ1:%.+]] = moore.handle_eq [[B_R0]], [[NULL6]] : !moore.class<@nullableClass> : !moore.null -> i1
@@ -4454,7 +4454,7 @@ endmodule
 // CHECK:           [[NULL9:%.+]] = moore.null
 // CHECK:           [[CNE1:%.+]] = moore.handle_case_ne [[B_R3]], [[NULL9]] : !moore.class<@nullableClass>, !moore.null
 // CHECK:           [[OR5:%.+]] = moore.or [[OR4]], [[CNE1]] : i1
-// CHECK:           moore.assign [[D]], [[OR5]] : i1
+// CHECK:           moore.assign [[D]], [[OR5]] : !moore.ref<i1>
 // CHECK:           moore.output
 // CHECK:         }
 
@@ -5063,9 +5063,9 @@ endmodule
 // CHECK:         [[D:%.+]] = moore.variable name "d" : <l1>
 // CHECK:         [[RB:%.+]] = moore.read [[B]] : <l1>
 // CHECK:         [[RC:%.+]] = moore.read %c : <l1>
-// CHECK:         moore.assign [[C]], [[RC]] : l1
+// CHECK:         moore.assign [[C]], [[RC]] : !moore.ref<l1>
 // CHECK:         [[RD:%.+]] = moore.read %d : <l1>
-// CHECK:         moore.assign [[D]], [[RD]] : l1
+// CHECK:         moore.assign [[D]], [[RD]] : !moore.ref<l1>
 // CHECK:         moore.output [[RB]] : !moore.l1
 // CHECK:       }
 module InOutRefUnconnected(
@@ -5133,8 +5133,8 @@ endmodule
 // CHECK:         %ifc_data = moore.variable : <l8>
 // CHECK:         %ifc_valid = moore.variable : <l1>
 // CHECK:         %sub.bus_data, %sub.bus_valid = moore.instance "sub" @HasModport() -> (bus_data: !moore.l8, bus_valid: !moore.l1)
-// CHECK:         moore.assign %ifc_data, %sub.bus_data : l8
-// CHECK:         moore.assign %ifc_valid, %sub.bus_valid : l1
+// CHECK:         moore.assign %ifc_data, %sub.bus_data : !moore.ref<l8>
+// CHECK:         moore.assign %ifc_valid, %sub.bus_valid : !moore.ref<l1>
 // CHECK:         moore.output
 // CHECK:       }
 module TopModport;
@@ -5203,7 +5203,7 @@ endmodule
 // CHECK:         %ia_x = moore.variable : <l8>
 // CHECK:         %ib_y = moore.variable : <l1>
 // CHECK:         %dut.a_x = moore.instance "dut" @MultiIfacePorts(b_y: [[BY:%.+]]: !moore.l1) -> (a_x: !moore.l8)
-// CHECK:         moore.assign %ia_x, %dut.a_x : l8
+// CHECK:         moore.assign %ia_x, %dut.a_x : !moore.ref<l8>
 // CHECK:         moore.output
 // CHECK:       }
 module TopMultiIface;
@@ -5247,10 +5247,10 @@ endmodule
 // CHECK:         %i2_data = moore.variable : <l8>
 // CHECK:         %i2_valid = moore.variable : <l1>
 // CHECK:         %dut.a_data, %dut.a_valid, %dut.b_data, %dut.b_valid = moore.instance "dut" @TwoPortsSameType() -> (a_data: !moore.l8, a_valid: !moore.l1, b_data: !moore.l8, b_valid: !moore.l1)
-// CHECK:         moore.assign %i1_data, %dut.a_data : l8
-// CHECK:         moore.assign %i1_valid, %dut.a_valid : l1
-// CHECK:         moore.assign %i2_data, %dut.b_data : l8
-// CHECK:         moore.assign %i2_valid, %dut.b_valid : l1
+// CHECK:         moore.assign %i1_data, %dut.a_data : !moore.ref<l8>
+// CHECK:         moore.assign %i1_valid, %dut.a_valid : !moore.ref<l1>
+// CHECK:         moore.assign %i2_data, %dut.b_data : !moore.ref<l8>
+// CHECK:         moore.assign %i2_valid, %dut.b_valid : !moore.ref<l1>
 // CHECK:         moore.output
 // CHECK:       }
 module TopTwoPorts;
@@ -5473,19 +5473,19 @@ module ArrayInstTop(input [3:0] a, output [3:0] y);
   // CHECK: [[A0:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
   // CHECK: [[Y0:%.+]] = moore.extract_ref %y from 0 : <l4> -> <l1>
   // CHECK: [[R0:%.+]] = moore.instance "u_0" @ArrayInstSub(a: [[A0]]: !moore.l1) -> (y: !moore.l1)
-  // CHECK: moore.assign [[Y0]], [[R0]] : l1
+  // CHECK: moore.assign [[Y0]], [[R0]] : !moore.ref<l1>
   // CHECK: [[A1:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
   // CHECK: [[Y1:%.+]] = moore.extract_ref %y from 1 : <l4> -> <l1>
   // CHECK: [[R1:%.+]] = moore.instance "u_1" @ArrayInstSub(a: [[A1]]: !moore.l1) -> (y: !moore.l1)
-  // CHECK: moore.assign [[Y1]], [[R1]] : l1
+  // CHECK: moore.assign [[Y1]], [[R1]] : !moore.ref<l1>
   // CHECK: [[A2:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
   // CHECK: [[Y2:%.+]] = moore.extract_ref %y from 2 : <l4> -> <l1>
   // CHECK: [[R2:%.+]] = moore.instance "u_2" @ArrayInstSub(a: [[A2]]: !moore.l1) -> (y: !moore.l1)
-  // CHECK: moore.assign [[Y2]], [[R2]] : l1
+  // CHECK: moore.assign [[Y2]], [[R2]] : !moore.ref<l1>
   // CHECK: [[A3:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
   // CHECK: [[Y3:%.+]] = moore.extract_ref %y from 3 : <l4> -> <l1>
   // CHECK: [[R3:%.+]] = moore.instance "u_3" @ArrayInstSub(a: [[A3]]: !moore.l1) -> (y: !moore.l1)
-  // CHECK: moore.assign [[Y3]], [[R3]] : l1
+  // CHECK: moore.assign [[Y3]], [[R3]] : !moore.ref<l1>
   ArrayInstSub u [3:0] (.a(a), .y(y));
 endmodule
 
@@ -5504,10 +5504,10 @@ endmodule
 module ArrayGateTop(input [3:0] a, input [3:0] b, output [3:0] y);
   // CHECK: [[G0:%.+]] = moore.extract_ref %y from 0 : <l4> -> <l1>
   // CHECK: [[GA0:%.+]] = moore.and
-  // CHECK: moore.assign [[G0]], [[GA0]] : l1
+  // CHECK: moore.assign [[G0]], [[GA0]] : !moore.ref<l1>
   // CHECK: [[G3:%.+]] = moore.extract_ref %y from 3 : <l4> -> <l1>
   // CHECK: [[GA3:%.+]] = moore.and
-  // CHECK: moore.assign [[G3]], [[GA3]] : l1
+  // CHECK: moore.assign [[G3]], [[GA3]] : !moore.ref<l1>
   and g [3:0] (y, a, b);
 endmodule
 

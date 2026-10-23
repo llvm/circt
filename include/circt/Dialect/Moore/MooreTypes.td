@@ -500,6 +500,9 @@ def PackedType : MooreType<CPred<"llvm::isa<moore::PackedType>($_self)">,
 def UnpackedType : MooreType<CPred<"llvm::isa<moore::UnpackedType>($_self)">,
   "unpacked type", "moore::UnpackedType">;
 
+def WrapperType : MooreType<CPred<"llvm::isa<moore::WrapperType>($_self)">,
+  "ref or net type", "moore::WrapperType">;
+
 /// A packed type with a known bit size.
 def PackedTypeWithKnownSize : MooreType<CPred<[{
     llvm::isa<moore::PackedType>($_self) &&
