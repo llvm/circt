@@ -24,12 +24,14 @@
 #include <ixwebsocket/IXWebSocketServer.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <format>
 #include <map>
 #include <mutex>
@@ -161,13 +163,35 @@ private:
     RpcServerWritePort *writePort = nullptr;
   };
 
+  // Locking rules. IXWebSocket may invoke the close callback (`onClose`)
+  // synchronously from inside a send on a dead socket, on whichever thread is
+  // sending. So:
+  //  - Never send while holding `channelsMutex`, `sessionMutex` or a port's
+  //    `connectMutex`; `onClose` takes the first two.
+  //  - Sending while holding a session's `subscribedMutex` is allowed (it
+  //    orders data frames against the unsubscribe-ack), so never wait for
+  //    `subscribedMutex` while holding any other lock.
+  //  - Senders hold a `shared_ptr` to the session, which owns the socket,
+  //    so `onClose` never has to wait for them. Since `onClose` can't take
+  //    `subscribedMutex` either, per-port client state is tagged with the
+  //    session's generation, and `onClose` retires the generation so late
+  //    updates from in-progress requests are ignored.
+  //  - Ports' `stateMutex` and `ClientEndState`'s mutex are leaf locks.
   struct ClientSession {
-    ix::WebSocket *ws;
-    // The set of `to_client` channel ids the client subscribed to.
+    std::shared_ptr<ix::WebSocket> ws;
+    // The set of `to_client` channel ids the client subscribed to, and
+    // subscribe requests waiting for the simulator side to connect (channel
+    // id -> request id). Both guarded by `subscribedMutex`.
     std::mutex subscribedMutex;
     std::unordered_set<uint64_t> subscribed;
+    std::unordered_map<uint64_t, uint64_t> pendingSubscribes;
     // True once `hello` has been answered.
-    bool helloDone = false;
+    std::atomic<bool> helloDone = false;
+    // Set once the client has disconnected.
+    std::atomic<bool> closed = false;
+    // Distinguishes this session from earlier ones, so a deferred reply to an
+    // earlier client's request can't reach this one.
+    uint64_t generation = 0;
   };
 
   Context &ctxt;
@@ -189,10 +213,27 @@ private:
   std::unordered_map<std::string, uint64_t> idByName;
   uint64_t nextChannelId = 0;
 
-  // Session state. v3 of the protocol allows a single concurrent client.
+  // Session state. v4 of the protocol allows a single concurrent client.
   std::mutex sessionMutex;
-  std::unique_ptr<ClientSession> session;
+  std::shared_ptr<ClientSession> session;
+  uint64_t nextSessionGeneration = 1;
 
+  /// The active session, if any. The returned pointer stays valid after the
+  /// client disconnects; sends on it then just fail.
+  std::shared_ptr<ClientSession> getSession() {
+    std::lock_guard<std::mutex> lock(sessionMutex);
+    return session;
+  }
+
+public:
+  /// Reply `result: {}` to request `requestId` of session `generation`, if
+  /// that session is still the active one. Callable from any thread.
+  void sendDeferredResult(uint64_t generation, uint64_t requestId);
+  /// The simulator side of to-client channel `channelId` connected: answer
+  /// the client's parked `subscribe`, if any. Callable from any thread.
+  void completePendingSubscribe(uint64_t channelId);
+
+private:
   // Transport thread; drains `readyIds` and dispatches per channel id.
   std::thread transportThread;
 
@@ -201,10 +242,10 @@ private:
   int boundPort = -1;
 
   // Connection callbacks.
-  void onClientMessage(std::shared_ptr<ix::ConnectionState> state,
+  void onClientMessage(const std::weak_ptr<ix::WebSocket> &wsWeak,
                        ix::WebSocket &ws, const ix::WebSocketMessagePtr &msg);
-  void onOpen(ix::WebSocket &ws);
-  void onClose();
+  void onOpen(const std::weak_ptr<ix::WebSocket> &wsWeak);
+  void onClose(ix::WebSocket &ws);
   void handleBinaryFrame(const std::string &data);
   void handleControlFrame(ix::WebSocket &ws, const std::string &text);
   void handleHello(ix::WebSocket &ws, uint64_t requestId, const json &params);
@@ -212,11 +253,24 @@ private:
                        const json &params);
   void handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
                          const json &params);
+  void handleConnect(ix::WebSocket &ws, uint64_t requestId, const json &params);
+  /// Look up a channel. If it doesn't exist or doesn't have direction `dir`,
+  /// reply with an error and return nullopt.
+  std::optional<ChannelInfo> findChannel(ix::WebSocket &ws, uint64_t requestId,
+                                         uint64_t channelId,
+                                         ChannelDirection dir);
+  /// Make `channelId` subscribed in `s` and acknowledge `requestId`. Caller
+  /// holds `s.subscribedMutex`.
+  void subscribeLocked(ClientSession &s, RpcServerWritePort &port,
+                       uint64_t channelId, uint64_t requestId);
   void sendResult(ix::WebSocket &ws, uint64_t requestId, const json &result);
   void sendError(ix::WebSocket &ws, uint64_t requestId, const std::string &code,
                  const std::string &message);
 
   void transportLoop();
+  /// Forget all per-channel state belonging to client session `generation`,
+  /// which has disconnected.
+  void retireSession(uint64_t generation);
 
   // Cross-thread fault propagation out of the IX network thread. See
   // FaultStash docs in RpcWire.h.
@@ -234,6 +288,56 @@ using Impl = esi::cosim::RpcServer::Impl;
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// Tracks whether the client's end of a channel is connected, and hands out
+/// futures which become ready once it is. Futures already handed out stay
+/// ready if the client later goes away; new ones wait for the next client.
+///
+/// Updates carry the client session's generation. Once a session has been
+/// retired (closed), late updates from it are ignored, so a request which was
+/// still being handled when its client disconnected can't mark the channel
+/// connected again.
+class ClientEndState {
+public:
+  std::future<void> future() {
+    std::promise<void> p;
+    std::future<void> f = p.get_future();
+    std::lock_guard<std::mutex> lock(mutex);
+    if (connected)
+      p.set_value();
+    else
+      waiters.push_back(std::move(p));
+    return f;
+  }
+
+  void set(bool isConnected, uint64_t generation) {
+    std::vector<std::promise<void>> ready;
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      if (generation <= retiredGeneration)
+        return;
+      connected = isConnected;
+      if (isConnected)
+        ready.swap(waiters);
+    }
+    for (auto &p : ready)
+      p.set_value();
+  }
+
+  /// Session `generation` closed.
+  void retire(uint64_t generation) {
+    std::lock_guard<std::mutex> lock(mutex);
+    // Parenthesized to avoid <windows.h>'s `max` macro.
+    retiredGeneration = (std::max)(retiredGeneration, generation);
+    connected = false;
+  }
+
+private:
+  std::mutex mutex;
+  bool connected = false;
+  uint64_t retiredGeneration = 0;
+  std::vector<std::promise<void>> waiters;
+};
+
 /// Read port for "to server" channels.
 ///
 /// The cosim transport hands inbound frames synchronously from the IX
@@ -246,44 +350,201 @@ namespace {
 /// `invokeCallback` is guaranteed non-blocking. The unbounded queue mirrors
 /// the existing `to_client` write queue and is acceptable for a cosim
 /// driver.
+///
+/// Frames which arrive while the port is not connected are parked here, in
+/// order, and handed over when it connects, rather than dropped.
+///
+/// `connect()` returns a future which becomes ready once the client has
+/// connected its end (sent `connect` for this channel).
 class RpcServerReadPort : public ReadChannelPort {
 public:
-  using ReadChannelPort::ReadChannelPort;
+  RpcServerReadPort(Type *type, Impl &impl, uint64_t channelId)
+      : ReadChannelPort(type), impl(impl), channelId(channelId) {}
 
   /// Polling-mode connect: force the internal queue to be unbounded
   /// (`bufferSize == 0`) regardless of what the caller asked for.
   std::future<void> connect(const ConnectOptions &options = {}) override {
     ConnectOptions forced = options;
     forced.bufferSize = 0;
-    return ReadChannelPort::connect(forced);
+    std::future<void> clientConnected = ReadChannelPort::connect(forced);
+    markConnected();
+    return clientConnected;
+  }
+  std::future<void> connect(ReadCallback callback,
+                            const ConnectOptions &options = {}) override {
+    std::future<void> clientConnected =
+        ReadChannelPort::connect(std::move(callback), options);
+    markConnected();
+    return clientConnected;
+  }
+  using ReadChannelPort::connect;
+
+  /// Client session `generation` closed: futures from later `connect()`s
+  /// wait for the next client.
+  void clientDisconnected(uint64_t generation) { clientEnd.retire(generation); }
+
+  void disconnect() override {
+    {
+      std::lock_guard<std::mutex> lock(connectMutex);
+      connected = false;
+    }
+    ReadChannelPort::disconnect();
   }
 
-  /// Hand one inbound frame to the user callback. Returns `false` only when
-  /// the port is disconnected (typically during shutdown), in which case the
-  /// caller should drop the frame.
+  /// The client connected its end (`requestId` of session `generation`).
+  /// Answer once this port is connected too; immediately if it already is.
+  /// Never blocks.
+  void clientConnecting(uint64_t generation, uint64_t requestId) {
+    clientEnd.set(true, generation);
+    {
+      std::lock_guard<std::mutex> lock(connectMutex);
+      if (!connected) {
+        pendingConnects.emplace_back(generation, requestId);
+        return;
+      }
+    }
+    impl.sendDeferredResult(generation, requestId);
+  }
+
+  /// Hand one inbound frame to the simulation, or park it if the port isn't
+  /// connected (or earlier frames are still parked). Returns `false` only if
+  /// a connected callback-mode consumer refused the frame, in which case the
+  /// caller should drop it.
   bool deliver(const MessageData &data) {
+    {
+      std::lock_guard<std::mutex> lock(connectMutex);
+      if (!connected || !parked.empty()) {
+        parked.push_back(data);
+        return true;
+      }
+    }
+    if (handOver(data))
+      return true;
+    // Lost a race with `disconnect()`: park it at the front, since it arrived
+    // before anything parked since.
+    std::lock_guard<std::mutex> lock(connectMutex);
+    if (connected)
+      return false;
+    parked.push_front(data);
+    return true;
+  }
+
+protected:
+  std::future<void> connectImpl(const ConnectOptions &) override {
+    return clientEnd.future();
+  }
+
+private:
+  /// Pass one frame to the base class's callback / polling queue.
+  bool handOver(const MessageData &data) {
     std::unique_ptr<SegmentedMessageData> msg =
         std::make_unique<MessageData>(data);
     return invokeCallback(msg);
   }
+
+  /// Called after the base class has finished connecting (so inbound frames
+  /// will be accepted). Flushes parked frames in order, then answers any
+  /// parked `connect` requests.
+  void markConnected() {
+    std::unique_lock<std::mutex> lock(connectMutex);
+    connected = true;
+    // `deliver()` keeps appending to `parked` (rather than delivering
+    // directly) until it's empty, which preserves ordering while we flush
+    // without holding the lock across the callback.
+    while (!parked.empty()) {
+      MessageData front = parked.front();
+      lock.unlock();
+      bool ok = handOver(front);
+      lock.lock();
+      if (!ok)
+        break; // Disconnected again (or refused); leave it parked.
+      parked.pop_front();
+    }
+    std::vector<std::pair<uint64_t, uint64_t>> waiting;
+    waiting.swap(pendingConnects);
+    lock.unlock();
+    for (auto [generation, requestId] : waiting)
+      impl.sendDeferredResult(generation, requestId);
+  }
+
+  Impl &impl;
+  uint64_t channelId;
+
+  std::mutex connectMutex;
+  bool connected = false;
+  // Frames received while not connected, oldest first.
+  std::deque<MessageData> parked;
+  // Parked `connect` requests: (session generation, request id).
+  std::vector<std::pair<uint64_t, uint64_t>> pendingConnects;
+  ClientEndState clientEnd;
 };
 
 /// Write queue for "to client" channels. Writes go into the per-port TSQueue;
 /// the queue's notifier hook rings the transport doorbell so the transport
 /// thread wakes up and drains across the WebSocket. DPI threads must never
 /// block on I/O, so this path is strictly non-blocking.
+///
+/// A client's `subscribe` is answered only once this port is connected.
+/// `connect()` returns a future which becomes ready once a client has
+/// subscribed.
 class RpcServerWritePort : public WriteChannelPort {
 public:
   RpcServerWritePort(Type *type, Impl &impl, uint64_t channelId)
-      : WriteChannelPort(type), channelId(channelId),
+      : WriteChannelPort(type), channelId(channelId), impl(impl),
         writeQueue([&impl, channelId] { impl.readyIds.markReady(channelId); }) {
+  }
+
+  std::future<void> connect(const ConnectOptions &options = {}) override {
+    std::future<void> clientSubscribed = WriteChannelPort::connect(options);
+    simConnected.store(true);
+    // Answer any subscribe which arrived first. Done after setting
+    // `simConnected` so a concurrent `handleSubscribe` either sees it or
+    // parks its request where this finds it.
+    impl.completePendingSubscribe(channelId);
+    return clientSubscribed;
+  }
+  void disconnect() override {
+    simConnected.store(false);
+    WriteChannelPort::disconnect();
+  }
+
+  bool isSimConnected() const { return simConnected.load(); }
+  /// Record whether client session `generation` is subscribed. Called under
+  /// that session's `subscribedMutex`, which orders it against other
+  /// subscribes and unsubscribes.
+  void setClientSubscribed(bool subscribed, uint64_t generation) {
+    clientEnd.set(subscribed, generation);
   }
 
   uint64_t getChannelId() const { return channelId; }
   uint64_t channelId;
   utils::TSQueue<MessageData> writeQueue;
 
+  /// Pop the next queued message for sending to client session
+  /// `generation`. Returns nullopt once that session is retired, so nothing
+  /// is sent to a client which has gone away.
+  std::optional<MessageData> popForSend(uint64_t generation) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (generation <= retiredGeneration)
+      return std::nullopt;
+    return writeQueue.pop();
+  }
+
+  /// Client session `generation` closed: ignore anything else which arrives
+  /// on its behalf.
+  void retireClient(uint64_t generation) {
+    {
+      std::lock_guard<std::mutex> lock(stateMutex);
+      retiredGeneration = (std::max)(retiredGeneration, generation);
+    }
+    clientEnd.retire(generation);
+  }
+
 protected:
+  std::future<void> connectImpl(const ConnectOptions &) override {
+    return clientEnd.future();
+  }
+
   // TODO: TSQueue is unbounded so if there's no client subscibed it'll fill up
   // memory. We should add some backpressure mechanism here to avoid that.
   void writeImpl(const MessageData &data) override { writeQueue.push(data); }
@@ -291,6 +552,14 @@ protected:
     writeImpl(data);
     return true;
   }
+
+private:
+  Impl &impl;
+  std::atomic<bool> simConnected{false};
+  ClientEndState clientEnd;
+  // Guards `retiredGeneration`. A leaf lock.
+  std::mutex stateMutex;
+  uint64_t retiredGeneration = 0;
 };
 } // namespace
 
@@ -319,10 +588,20 @@ Impl::Impl(Context &ctxt, int port) : ctxt(ctxt) {
   server = std::make_unique<ix::WebSocketServer>(requestedPort, host);
   server->disablePerMessageDeflate();
 
-  server->setOnClientMessageCallback(
-      [this](std::shared_ptr<ix::ConnectionState> state, ix::WebSocket &ws,
-             const ix::WebSocketMessagePtr &msg) {
-        onClientMessage(std::move(state), ws, msg);
+  // Use the connection callback (rather than the simpler client-message one)
+  // because it hands us an owning reference to the socket, which the session
+  // holds so senders on other threads can't outlive it.
+  server->setOnConnectionCallback(
+      [this](std::weak_ptr<ix::WebSocket> wsWeak,
+             std::shared_ptr<ix::ConnectionState> /*state*/) {
+        std::shared_ptr<ix::WebSocket> ws = wsWeak.lock();
+        if (!ws)
+          return;
+        ix::WebSocket *raw = ws.get();
+        ws->setOnMessageCallback(
+            [this, wsWeak, raw](const ix::WebSocketMessagePtr &msg) {
+              onClientMessage(wsWeak, *raw, msg);
+            });
       });
 
   auto res = server->listen();
@@ -379,7 +658,7 @@ ReadChannelPort &Impl::registerReadPort(const std::string &name,
   faultStash.check();
   std::lock_guard<std::mutex> lock(channelsMutex);
   uint64_t id = nextChannelId++;
-  auto port = std::make_unique<RpcServerReadPort>(new Type(type));
+  auto port = std::make_unique<RpcServerReadPort>(new Type(type), *this, id);
   RpcServerReadPort *raw = port.get();
   readPorts.emplace(name, std::move(port));
 
@@ -428,9 +707,10 @@ void Impl::stop(uint32_t /*timeoutMS*/) {
     server.reset();
   }
 
+  std::shared_ptr<ClientSession> old;
   {
     std::lock_guard<std::mutex> lock(sessionMutex);
-    session.reset();
+    old.swap(session);
   }
 
   // Surface any fault the IX network thread caught while we were running.
@@ -442,34 +722,13 @@ void Impl::stop(uint32_t /*timeoutMS*/) {
 // Impl - WebSocket message dispatch
 //===----------------------------------------------------------------------===//
 
-void Impl::onClientMessage(std::shared_ptr<ix::ConnectionState> /*state*/,
+void Impl::onClientMessage(const std::weak_ptr<ix::WebSocket> &wsWeak,
                            ix::WebSocket &ws,
                            const ix::WebSocketMessagePtr &msg) {
   switch (msg->type) {
-  case ix::WebSocketMessageType::Open: {
-    // Single-client model: if a session is already active, send an unsolicited
-    // JSON error frame so the new client gets an actionable, application-level
-    // reason, then close with 1013 ("Try Again Later") rather than 1011
-    // ("Internal Error") -- the latter falsely implies a server-side bug.
-    std::lock_guard<std::mutex> lock(sessionMutex);
-    if (session) {
-      ctxt.getLogger().warning(
-          "cosim", "Rejecting additional client; one already connected");
-      json err;
-      err["type"] = "error";
-      err["error"] = {{"code", "server_busy"},
-                      {"message", "cosim server allows only one client at a "
-                                  "time; another client is already connected"}};
-      ws.sendUtf8Text(err.dump());
-      // 1013 = Try Again Later (RFC 6455 §7.4).
-      ws.close(1013, "cosim server busy: another client is already connected");
-      return;
-    }
-    session = std::make_unique<ClientSession>();
-    session->ws = &ws;
-    ctxt.getLogger().debug("cosim", "Client connected");
+  case ix::WebSocketMessageType::Open:
+    onOpen(wsWeak);
     return;
-  }
   case ix::WebSocketMessageType::Close:
   case ix::WebSocketMessageType::Error: {
     ctxt.getLogger().debug(
@@ -477,7 +736,7 @@ void Impl::onClientMessage(std::shared_ptr<ix::ConnectionState> /*state*/,
                              msg->type == ix::WebSocketMessageType::Error
                                  ? msg->errorInfo.reason
                                  : msg->closeInfo.reason));
-    onClose();
+    onClose(ws);
     return;
   }
   case ix::WebSocketMessageType::Message:
@@ -498,9 +757,59 @@ void Impl::onClientMessage(std::shared_ptr<ix::ConnectionState> /*state*/,
   }
 }
 
-void Impl::onClose() {
-  std::lock_guard<std::mutex> lock(sessionMutex);
-  session.reset();
+void Impl::onOpen(const std::weak_ptr<ix::WebSocket> &wsWeak) {
+  std::shared_ptr<ix::WebSocket> ws = wsWeak.lock();
+  if (!ws)
+    return;
+  {
+    std::lock_guard<std::mutex> lock(sessionMutex);
+    if (!session) {
+      session = std::make_shared<ClientSession>();
+      session->ws = ws;
+      session->generation = nextSessionGeneration++;
+      ctxt.getLogger().debug("cosim", "Client connected");
+      return;
+    }
+  }
+  // Single-client model: a session is already active. Send an unsolicited
+  // JSON error frame so the new client gets an actionable, application-level
+  // reason, then close with 1013 ("Try Again Later") rather than 1011
+  // ("Internal Error") -- the latter falsely implies a server-side bug.
+  ctxt.getLogger().warning(
+      "cosim", "Rejecting additional client; one already connected");
+  json err;
+  err["type"] = "error";
+  err["error"] = {{"code", "server_busy"},
+                  {"message", "cosim server allows only one client at a "
+                              "time; another client is already connected"}};
+  ws->sendUtf8Text(err.dump());
+  // 1013 = Try Again Later (RFC 6455 §7.4).
+  ws->close(1013, "cosim server busy: another client is already connected");
+}
+
+void Impl::onClose(ix::WebSocket &ws) {
+  std::shared_ptr<ClientSession> old;
+  {
+    std::lock_guard<std::mutex> lock(sessionMutex);
+    // A rejected second client closing must not tear down the active one.
+    if (!session || session->ws.get() != &ws)
+      return;
+    old.swap(session);
+  }
+  old->closed.store(true);
+  // Must not wait for in-progress sends: this may be running inside one (see
+  // the locking rules on ClientSession). Senders hold their own reference.
+  // Requests from this session still being handled are fenced off by
+  // generation instead.
+  retireSession(old->generation);
+}
+
+void Impl::retireSession(uint64_t generation) {
+  std::lock_guard<std::mutex> lock(channelsMutex);
+  for (auto &[name, port] : writePorts)
+    port->retireClient(generation);
+  for (auto &[name, port] : readPorts)
+    port->clientDisconnected(generation);
 }
 
 void Impl::handleBinaryFrame(const std::string &data) {
@@ -533,13 +842,13 @@ void Impl::handleBinaryFrame(const std::string &data) {
   MessageData payload(payloadBytes, payloadSize);
   // RpcServerReadPort always has an unbounded internal queue so `deliver` is
   // non-blocking: it enqueues into `ReadChannelPort`'s internal polling buffer
-  // and returns. A `false` return means the port has been disconnected
-  // (shutdown); just drop the frame in that case.
+  // (or parks the frame until the port connects) and returns. A `false`
+  // return means a callback-mode consumer refused it; drop the frame.
   if (!port->deliver(payload))
-    ctxt.getLogger().debug(
-        "cosim",
-        std::format("Dropped {} bytes for channel id {}: port not connected",
-                    payload.getSize(), channelId));
+    ctxt.getLogger().warning(
+        "cosim", std::format("Dropped {} bytes for channel id {}: refused by "
+                             "the simulator-side consumer",
+                             payload.getSize(), channelId));
 }
 
 void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
@@ -592,6 +901,8 @@ void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
     handleSubscribe(ws, requestId, params);
   else if (method == "unsubscribe")
     handleUnsubscribe(ws, requestId, params);
+  else if (method == "connect")
+    handleConnect(ws, requestId, params);
   else
     sendError(ws, requestId, "protocol_error", "Unknown method: " + method);
 }
@@ -601,7 +912,18 @@ void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
 //===----------------------------------------------------------------------===//
 
 void Impl::handleHello(ix::WebSocket &ws, uint64_t requestId,
-                       const json & /*params*/) {
+                       const json &params) {
+  auto verIt = params.find("client_protocol_version");
+  if (verIt == params.end() || !verIt->is_number_unsigned() ||
+      verIt->get<uint64_t>() != kProtocolVersion) {
+    std::string got = verIt == params.end() ? "none" : verIt->dump();
+    sendError(ws, requestId, "unsupported_version",
+              std::format("Server speaks cosim protocol v{}; client requested "
+                          "{}. Update the ESI runtime on both sides.",
+                          kProtocolVersion, got));
+    return;
+  }
+
   // Block until the manifest has been set. This replaces the gRPC-era poll
   // loop on the client side.
   {
@@ -610,7 +932,7 @@ void Impl::handleHello(ix::WebSocket &ws, uint64_t requestId,
   }
 
   json result;
-  result["protocol_version"] = 3;
+  result["protocol_version"] = kProtocolVersion;
   {
     std::lock_guard<std::mutex> lock(manifestMutex);
     result["esi_version"] = esiVersion;
@@ -640,11 +962,8 @@ void Impl::handleHello(ix::WebSocket &ws, uint64_t requestId,
   }
   result["channels"] = std::move(channelsJson);
 
-  {
-    std::lock_guard<std::mutex> lock(sessionMutex);
-    if (session)
-      session->helloDone = true;
-  }
+  if (std::shared_ptr<ClientSession> s = getSession())
+    s->helloDone = true;
 
   sendResult(ws, requestId, result);
 }
@@ -659,43 +978,73 @@ void Impl::handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
   }
   uint64_t channelId = chIdIt->get<uint64_t>();
 
-  {
-    std::lock_guard<std::mutex> chLock(channelsMutex);
-    auto it = channelById.find(channelId);
-    if (it == channelById.end()) {
-      sendError(ws, requestId, "unknown_channel",
-                std::format("No channel with id {}", channelId));
-      return;
-    }
-    if (it->second.direction != ChannelDirection::ToClient) {
-      sendError(
-          ws, requestId, "wrong_direction",
-          std::format("Channel id {} is not a to-client channel", channelId));
-      return;
-    }
-
-    std::lock_guard<std::mutex> sLock(sessionMutex);
-    if (!session) {
-      sendError(ws, requestId, "internal", "No active session");
-      return;
-    }
-    std::lock_guard<std::mutex> subLock(session->subscribedMutex);
-    session->subscribed.insert(channelId);
+  std::optional<ChannelInfo> info =
+      findChannel(ws, requestId, channelId, ChannelDirection::ToClient);
+  if (!info)
+    return;
+  std::shared_ptr<ClientSession> s = getSession();
+  if (!s) {
+    sendError(ws, requestId, "internal", "No active session");
+    return;
   }
+  {
+    std::lock_guard<std::mutex> subLock(s->subscribedMutex);
+    if (s->subscribed.count(channelId) ||
+        s->pendingSubscribes.count(channelId)) {
+      sendError(ws, requestId, "protocol_error",
+                std::format("Channel id {} is already subscribed", channelId));
+      return;
+    }
+    // Must not block here (this is IX's network thread). If the simulator
+    // side isn't connected yet, park the request; the port's `connect()`
+    // completes it. See `RpcServerWritePort::connect` for why checking under
+    // `subscribedMutex` can't miss that.
+    if (!info->writePort->isSimConnected()) {
+      s->pendingSubscribes[channelId] = requestId;
+      return;
+    }
+    subscribeLocked(*s, *info->writePort, channelId, requestId);
+  }
+  // Kick the transport thread: if the port already has queued data (typical
+  // for accelerator-startup writes that landed before the client
+  // subscribed), this is what flushes it.
+  readyIds.markReady(channelId);
+}
 
+void Impl::subscribeLocked(ClientSession &s, RpcServerWritePort &port,
+                           uint64_t channelId, uint64_t requestId) {
+  s.subscribed.insert(channelId);
+  port.setClientSubscribed(true, s.generation);
   // Send the subscribe-ack BEFORE waking the transport thread. IXWebSocket
   // queues sends in FIFO order on a given connection, so as long as the ack
   // is enqueued first, any data frames the transport thread emits next will
-  // arrive after it. This spares clients from having to tolerate data on a
-  // channel before they've seen the ack confirming the subscription.
-  sendResult(ws, requestId, json::object());
+  // arrive after it. Holding `subscribedMutex` keeps the transport thread
+  // from sending on this channel before the ack, too.
+  sendResult(*s.ws, requestId, json::object());
+}
 
-  // Now kick the transport thread: if the port already has queued data
-  // (typical for accelerator-startup writes that landed before the client
-  // subscribed), this is what flushes it; if the queue is empty, the
-  // transport thread will just see nothing to drain and go back to sleep.
-  // The dirty-set semantics of `readyIds` dedupe any concurrent doorbell
-  // from a DPI write.
+void Impl::completePendingSubscribe(uint64_t channelId) {
+  std::shared_ptr<ClientSession> s = getSession();
+  if (!s)
+    return;
+  RpcServerWritePort *port = nullptr;
+  {
+    std::lock_guard<std::mutex> chLock(channelsMutex);
+    auto it = channelById.find(channelId);
+    if (it != channelById.end())
+      port = it->second.writePort;
+  }
+  if (!port)
+    return;
+  {
+    std::lock_guard<std::mutex> subLock(s->subscribedMutex);
+    auto it = s->pendingSubscribes.find(channelId);
+    if (it == s->pendingSubscribes.end())
+      return;
+    uint64_t requestId = it->second;
+    s->pendingSubscribes.erase(it);
+    subscribeLocked(*s, *port, channelId, requestId);
+  }
   readyIds.markReady(channelId);
 }
 
@@ -709,19 +1058,101 @@ void Impl::handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
   }
   uint64_t channelId = chIdIt->get<uint64_t>();
 
-  std::lock_guard<std::mutex> sLock(sessionMutex);
-  if (!session) {
+  RpcServerWritePort *writePort = nullptr;
+  {
+    std::lock_guard<std::mutex> chLock(channelsMutex);
+    auto it = channelById.find(channelId);
+    if (it != channelById.end())
+      writePort = it->second.writePort;
+  }
+
+  std::shared_ptr<ClientSession> s = getSession();
+  if (!s) {
     sendError(ws, requestId, "internal", "No active session");
     return;
   }
-  std::lock_guard<std::mutex> subLock(session->subscribedMutex);
-  auto removed = session->subscribed.erase(channelId);
-  if (!removed) {
-    sendError(ws, requestId, "not_subscribed",
-              std::format("Channel id {} is not subscribed", channelId));
+  // Holding `subscribedMutex` across the ack keeps the transport thread from
+  // sending another data frame on this channel before it.
+  {
+    std::lock_guard<std::mutex> subLock(s->subscribedMutex);
+    if (auto it = s->pendingSubscribes.find(channelId);
+        it != s->pendingSubscribes.end()) {
+      // Never completed: fail the subscribe, then acknowledge.
+      sendError(ws, it->second, "canceled",
+                std::format("Subscription to channel id {} canceled by "
+                            "unsubscribe",
+                            channelId));
+      s->pendingSubscribes.erase(it);
+      sendResult(ws, requestId, json::object());
+      return;
+    }
+    auto removed = s->subscribed.erase(channelId);
+    if (!removed) {
+      sendError(ws, requestId, "not_subscribed",
+                std::format("Channel id {} is not subscribed", channelId));
+      return;
+    }
+    if (writePort)
+      writePort->setClientSubscribed(false, s->generation);
+    sendResult(ws, requestId, json::object());
+  }
+}
+
+void Impl::handleConnect(ix::WebSocket &ws, uint64_t requestId,
+                         const json &params) {
+  auto chIdIt = params.find("channel_id");
+  if (chIdIt == params.end() || !chIdIt->is_number_unsigned()) {
+    sendError(ws, requestId, "protocol_error",
+              "connect requires unsigned \"channel_id\"");
     return;
   }
-  sendResult(ws, requestId, json::object());
+  uint64_t channelId = chIdIt->get<uint64_t>();
+
+  std::optional<ChannelInfo> info =
+      findChannel(ws, requestId, channelId, ChannelDirection::ToServer);
+  if (!info)
+    return;
+  std::shared_ptr<ClientSession> s = getSession();
+  if (!s) {
+    sendError(ws, requestId, "internal", "No active session");
+    return;
+  }
+  // Must not block here: this is IX's network thread, which also carries
+  // every other channel's traffic. Park the request on the port instead.
+  info->readPort->clientConnecting(s->generation, requestId);
+}
+
+std::optional<Impl::ChannelInfo> Impl::findChannel(ix::WebSocket &ws,
+                                                   uint64_t requestId,
+                                                   uint64_t channelId,
+                                                   ChannelDirection dir) {
+  std::optional<ChannelInfo> info;
+  {
+    std::lock_guard<std::mutex> chLock(channelsMutex);
+    auto it = channelById.find(channelId);
+    if (it != channelById.end())
+      info = it->second;
+  }
+  if (!info) {
+    sendError(ws, requestId, "unknown_channel",
+              std::format("No channel with id {}", channelId));
+    return std::nullopt;
+  }
+  if (info->direction != dir) {
+    sendError(ws, requestId, "wrong_direction",
+              std::format("Channel id {} is not a {} channel", channelId,
+                          dir == ChannelDirection::ToServer ? "to-server"
+                                                            : "to-client"));
+    return std::nullopt;
+  }
+  return info;
+}
+
+void Impl::sendDeferredResult(uint64_t generation, uint64_t requestId) {
+  std::shared_ptr<ClientSession> s = getSession();
+  if (!s || s->generation != generation)
+    return;
+  sendResult(*s->ws, requestId, json::object());
 }
 
 void Impl::sendResult(ix::WebSocket &ws, uint64_t requestId,
@@ -730,9 +1161,8 @@ void Impl::sendResult(ix::WebSocket &ws, uint64_t requestId,
   resp["type"] = "response";
   resp["request_id"] = requestId;
   resp["result"] = result;
-  // IXWebSocket serializes concurrent send calls internally; we don't need
-  // sessionMutex here, and taking it would deadlock with handlers that hold
-  // sessionMutex while replying (e.g. handleUnsubscribe).
+  // IXWebSocket serializes concurrent send calls internally. Callers must
+  // follow the locking rules on ClientSession.
   ws.sendUtf8Text(resp.dump());
 }
 
@@ -769,30 +1199,31 @@ void Impl::transportLoop() {
 
       // Only drain if a client is subscribed; otherwise data stays in the
       // queue until subscription (handleSubscribe fires markReady). We
-      // re-acquire `sessionMutex` + `subscribedMutex` on every iteration so
+      // re-acquire `subscribedMutex` on every iteration so
       // `handleUnsubscribe` can interpose between frames: once it erases the
       // subscription and sends the unsubscribe-ack, the next iteration here
       // sees the channel as not subscribed and breaks, guaranteeing the ack
       // is the last `to_client` frame on that channel (as the protocol spec
-      // requires). Holding the locks across the actual `sendBinary` also
-      // keeps `session->ws` valid against a concurrent `onClose()`.
+      // requires). Our reference to the session keeps its socket alive
+      // against a concurrent `onClose()`.
+      std::shared_ptr<ClientSession> s = getSession();
+      if (!s)
+        continue;
       while (true) {
         if (readyIds.isShutdown())
           return;
-        std::lock_guard<std::mutex> sLock(sessionMutex);
-        if (!session)
+        if (s->closed.load())
           break;
-        std::lock_guard<std::mutex> subLock(session->subscribedMutex);
-        if (!session->subscribed.count(id))
+        std::lock_guard<std::mutex> subLock(s->subscribedMutex);
+        if (!s->subscribed.count(id))
           break;
-        std::optional<MessageData> msg = writePort->writeQueue.pop();
+        std::optional<MessageData> msg = writePort->popForSend(s->generation);
         if (!msg)
           break;
         std::string frame = buildDataFrame(id, msg->getBytes(), msg->getSize());
         // IXWebSocket serializes concurrent send calls internally and queues
-        // them in FIFO order on the WS; no extra mutex is needed for that,
-        // but we keep `sessionMutex` to guard the `ws` pointer's lifetime.
-        session->ws->sendBinary(frame);
+        // them in FIFO order on the WS.
+        s->ws->sendBinary(frame);
       }
     }
   }

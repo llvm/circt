@@ -32,6 +32,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -64,6 +65,7 @@ public:
                       RpcClient::ChannelDesc &desc) const;
   std::vector<RpcClient::ChannelDesc> listChannels() const;
 
+  std::future<void> connectToServer(const std::string &channelName);
   void writeToServer(const std::string &channelName, const MessageData &data);
 
   std::unique_ptr<RpcClient::ReadChannelConnection>
@@ -75,6 +77,12 @@ public:
   void unregisterCallback(uint64_t channelId);
 
 private:
+  // Completion of an RPC request. Called exactly once, on IX's network thread
+  // or the thread that fails the request, with either the result or an
+  // exception. Must not block.
+  using Completion =
+      std::function<void(const json *result, std::exception_ptr error)>;
+
   struct ChannelMeta {
     uint64_t id;
     std::string name;
@@ -91,8 +99,22 @@ private:
   // ---- request/response plumbing ----
 
   /// Issue a JSON-RPC style request and synchronously await the response.
-  /// Throws on error (transport or server-reported).
-  json call(const std::string &method, json params);
+  /// Throws on error (transport or server-reported) or once `timeout` passes
+  /// without a response. With no timeout, waits until a response arrives or
+  /// the connection is lost.
+  json
+  call(const std::string &method, json params,
+       std::optional<std::chrono::seconds> timeout = std::chrono::seconds(30));
+  /// Issue a request without waiting. `done` runs once the response arrives
+  /// or the request fails (possibly before this returns).
+  void callAsync(const std::string &method, json params, Completion done);
+  /// `callAsync` returning a future which is ready once the request succeeds.
+  std::future<void> callAsyncVoid(const std::string &method, json params);
+
+  /// Look up a to-server channel by name, throwing if it isn't one.
+  const ChannelMeta &getToServerChannel(const std::string &channelName) const;
+  /// Send one data frame. Throws on a transport failure.
+  void sendFrame(const ChannelMeta &meta, const MessageData &data);
 
   std::string host;
   Logger &logger;
@@ -104,10 +126,14 @@ private:
   std::unordered_map<std::string, ChannelMeta> channelsByName;
   std::unordered_map<uint64_t, ChannelMeta> channelsById;
 
+  // Set (under `pendingMutex`) once the connection is lost, so no new
+  // request can be left pending forever.
+  std::atomic<bool> connectionLost{false};
+
   // Pending control-plane requests, keyed by id.
   std::mutex pendingMutex;
   std::atomic<uint64_t> nextRequestId{1};
-  std::unordered_map<uint64_t, std::shared_ptr<std::promise<json>>> pending;
+  std::unordered_map<uint64_t, Completion> pending;
 
   // Per-channel read state. Connection-time `subscribe` registers; the
   // ReadChannelConnection destructor unregisters and sends `unsubscribe`.
@@ -181,9 +207,18 @@ private:
 namespace {
 class ReadChannelConnectionImpl : public RpcClient::ReadChannelConnection {
 public:
-  ReadChannelConnectionImpl(RpcClient::Impl *impl, uint64_t channelId)
-      : impl(impl), channelId(channelId) {}
+  ReadChannelConnectionImpl(RpcClient::Impl *impl, uint64_t channelId,
+                            std::future<void> subscribedFuture)
+      : impl(impl), channelId(channelId),
+        subscribedFuture(std::move(subscribedFuture)) {}
   ~ReadChannelConnectionImpl() override { disconnect(); }
+
+  std::future<void> subscribed() override {
+    if (!subscribedFuture.valid())
+      throw std::runtime_error("ReadChannelConnection::subscribed() may only "
+                               "be called once");
+    return std::move(subscribedFuture);
+  }
 
   void disconnect() override {
     if (disconnected.exchange(true))
@@ -204,6 +239,7 @@ public:
 private:
   RpcClient::Impl *impl;
   uint64_t channelId;
+  std::future<void> subscribedFuture;
   std::atomic<bool> disconnected{false};
 };
 } // namespace
@@ -222,7 +258,8 @@ RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
     throw std::runtime_error(
         "RpcClient: ix::initNetSystem() failed (WSAStartup)");
 
-  ws.setUrl("ws://" + host + ":" + std::to_string(port) + "/esi/cosim/v3");
+  ws.setUrl("ws://" + host + ":" + std::to_string(port) + "/esi/cosim/v" +
+            std::to_string(::esi::cosim::kProtocolVersion));
   ws.disablePerMessageDeflate();
   ws.disableAutomaticReconnection();
 
@@ -241,7 +278,15 @@ RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
   }
 
   // Send `hello`; the server blocks the response until its manifest is ready.
-  json result = call("hello", {{"client_protocol_version", 3}});
+  json result = call(
+      "hello", {{"client_protocol_version", ::esi::cosim::kProtocolVersion}});
+  auto verIt = result.find("protocol_version");
+  if (verIt == result.end() || !verIt->is_number_unsigned() ||
+      verIt->get<uint64_t>() != ::esi::cosim::kProtocolVersion)
+    throw std::runtime_error(
+        "RpcClient: server speaks an unsupported cosim protocol version (" +
+        (verIt == result.end() ? std::string("none") : verIt->dump()) +
+        "); expected " + std::to_string(::esi::cosim::kProtocolVersion));
 
   // Cache manifest blob.
   if (auto it = result.find("esi_version"); it != result.end())
@@ -411,42 +456,34 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
     return;
   uint64_t requestId = idIt->get<uint64_t>();
 
-  std::shared_ptr<std::promise<json>> promise;
+  Completion done;
   {
     std::lock_guard<std::mutex> lock(pendingMutex);
     auto it = pending.find(requestId);
     if (it == pending.end())
       return;
-    promise = it->second;
+    done = std::move(it->second);
     // Erase under the lock so a concurrent `failAllPending` won't also
-    // try to fulfill the same promise.
+    // complete the same request.
     pending.erase(it);
   }
 
-  try {
-    if (auto errIt = resp.find("error"); errIt != resp.end()) {
-      std::string code = errIt->value("code", std::string("internal"));
-      std::string message = errIt->value("message", std::string());
-      promise->set_exception(std::make_exception_ptr(
-          std::runtime_error("Server error [" + code + "]: " + message)));
-    } else if (auto resultIt = resp.find("result"); resultIt != resp.end()) {
-      promise->set_value(*resultIt);
-    } else {
-      // Per the wire spec, a `type=response` frame MUST carry either
-      // `result` (success) or `error` (failure). Surface the protocol
-      // violation to the caller instead of pretending it succeeded.
-      promise->set_exception(std::make_exception_ptr(std::runtime_error(
-          "Server response missing both \"result\" and \"error\" fields "
-          "(protocol violation) for request_id=" +
-          std::to_string(requestId))));
-    }
-  } catch (const std::exception &e) {
-    // Promise might be already satisfied if we raced with a shutdown that
-    // already fulfilled it via failAllPending. Benign, but log so unexpected
-    // duplicate responses from the server don't go entirely unnoticed.
-    logger.debug("cosim",
-                 std::string("failed to fulfill promise for request_id=") +
-                     std::to_string(requestId) + ": " + e.what());
+  if (auto errIt = resp.find("error"); errIt != resp.end()) {
+    std::string code = errIt->value("code", std::string("internal"));
+    std::string message = errIt->value("message", std::string());
+    done(nullptr, std::make_exception_ptr(std::runtime_error(
+                      "Server error [" + code + "]: " + message)));
+  } else if (auto resultIt = resp.find("result"); resultIt != resp.end()) {
+    done(&*resultIt, nullptr);
+  } else {
+    // Per the wire spec, a `type=response` frame MUST carry either
+    // `result` (success) or `error` (failure). Surface the protocol
+    // violation to the caller instead of pretending it succeeded.
+    done(nullptr,
+         std::make_exception_ptr(std::runtime_error(
+             "Server response missing both \"result\" and \"error\" fields "
+             "(protocol violation) for request_id=" +
+             std::to_string(requestId))));
   }
 }
 
@@ -482,34 +519,34 @@ void RpcClient::Impl::handleBinaryFrame(const std::string &data) {
 }
 
 void RpcClient::Impl::failAllPending(const std::string &reason) {
-  std::lock_guard<std::mutex> lock(pendingMutex);
-  for (auto &[id, pr] : pending) {
-    try {
-      pr->set_exception(std::make_exception_ptr(std::runtime_error(reason)));
-    } catch (const std::exception &e) {
-      // Already-satisfied promise; benign but log it in case a real bug is
-      // racing with shutdown.
-      logger.debug("cosim", std::string("failAllPending: request_id=") +
-                                std::to_string(id) +
-                                " already satisfied: " + e.what());
-    }
+  std::unordered_map<uint64_t, Completion> failed;
+  {
+    std::lock_guard<std::mutex> lock(pendingMutex);
+    connectionLost.store(true);
+    failed.swap(pending);
   }
-  pending.clear();
+  auto error = std::make_exception_ptr(std::runtime_error(reason));
+  for (auto &[id, done] : failed)
+    done(nullptr, error);
 }
 
 //===----------------------------------------------------------------------===//
 // RpcClient::Impl - request/response, sends
 //===----------------------------------------------------------------------===//
 
-json RpcClient::Impl::call(const std::string &method, json params) {
-  faultStash.check();
+void RpcClient::Impl::callAsync(const std::string &method, json params,
+                                Completion done) {
   uint64_t requestId = nextRequestId.fetch_add(1);
-  std::future<json> future;
   {
     std::lock_guard<std::mutex> lock(pendingMutex);
-    auto promise = std::make_shared<std::promise<json>>();
-    future = promise->get_future();
-    pending.emplace(requestId, std::move(promise));
+    // Checked under the lock `failAllPending` sets it under, so a request
+    // can't slip in after the connection's pending requests were failed.
+    if (connectionLost.load()) {
+      done(nullptr, std::make_exception_ptr(std::runtime_error(
+                        "RpcClient: connection to cosim server lost")));
+      return;
+    }
+    pending.emplace(requestId, std::move(done));
   }
 
   json req;
@@ -524,45 +561,96 @@ json RpcClient::Impl::call(const std::string &method, json params) {
   // call (no header+body splits).
   auto info = ws.sendUtf8Text(text);
   if (!info.success) {
-    std::lock_guard<std::mutex> plock(pendingMutex);
-    pending.erase(requestId);
-    throw std::runtime_error("RpcClient: failed to send " + method);
+    Completion failed;
+    {
+      std::lock_guard<std::mutex> plock(pendingMutex);
+      auto it = pending.find(requestId);
+      if (it == pending.end())
+        return; // Already failed by `failAllPending`.
+      failed = std::move(it->second);
+      pending.erase(it);
+    }
+    failed(nullptr, std::make_exception_ptr(std::runtime_error(
+                        "RpcClient: failed to send " + method)));
   }
+}
+
+std::future<void> RpcClient::Impl::callAsyncVoid(const std::string &method,
+                                                 json params) {
+  auto promise = std::make_shared<std::promise<void>>();
+  std::future<void> future = promise->get_future();
+  callAsync(method, std::move(params),
+            [promise](const json *, std::exception_ptr error) {
+              if (error)
+                promise->set_exception(error);
+              else
+                promise->set_value();
+            });
+  return future;
+}
+
+json RpcClient::Impl::call(const std::string &method, json params,
+                           std::optional<std::chrono::seconds> timeout) {
+  faultStash.check();
+  auto promise = std::make_shared<std::promise<json>>();
+  std::future<json> future = promise->get_future();
+  callAsync(method, std::move(params),
+            [promise](const json *result, std::exception_ptr error) {
+              if (error)
+                promise->set_exception(error);
+              else
+                promise->set_value(*result);
+            });
 
   // Bounded wait so callers cannot hang forever on a missing/lost response.
   // On WS close or error, `failAllPending()` fires and the future becomes
   // ready immediately. The timeout only matters if the server stays
-  // connected but never replies (server bug, lost control frame).
-  constexpr auto kCallTimeout = std::chrono::seconds(30);
-  if (future.wait_for(kCallTimeout) != std::future_status::ready) {
-    // Drop the pending entry so a late response doesn't fulfill a
-    // destroyed promise (with shared_ptr it's still safe, but it would
-    // otherwise leak the slot forever).
-    std::lock_guard<std::mutex> plock(pendingMutex);
-    pending.erase(requestId);
+  // connected but never replies (server bug, lost control frame). A late
+  // response then completes the abandoned promise harmlessly.
+  if (!timeout)
+    future.wait();
+  else if (future.wait_for(*timeout) != std::future_status::ready)
     throw std::runtime_error("RpcClient: timed out waiting for response to " +
                              method);
-  }
   return future.get();
 }
 
-void RpcClient::Impl::writeToServer(const std::string &channelName,
-                                    const MessageData &data) {
-  faultStash.check();
+const RpcClient::Impl::ChannelMeta &
+RpcClient::Impl::getToServerChannel(const std::string &channelName) const {
   auto it = channelsByName.find(channelName);
   if (it == channelsByName.end())
     throw std::runtime_error("Unknown channel '" + channelName + "'");
   if (it->second.direction != RpcClient::ChannelDirection::ToServer)
     throw std::runtime_error("Channel '" + channelName +
                              "' is not a to-server channel");
+  return it->second;
+}
 
-  std::string frame = esi::cosim::buildDataFrame(it->second.id, data.getBytes(),
-                                                 data.getSize());
+void RpcClient::Impl::sendFrame(const ChannelMeta &meta,
+                                const MessageData &data) {
+  std::string frame =
+      esi::cosim::buildDataFrame(meta.id, data.getBytes(), data.getSize());
   // IXWebSocket serializes sends internally; no extra mutex needed.
   auto info = ws.sendBinary(frame);
   if (!info.success)
-    throw std::runtime_error("Failed to send data on channel '" + channelName +
+    throw std::runtime_error("Failed to send data on channel '" + meta.name +
                              "'");
+}
+
+std::future<void>
+RpcClient::Impl::connectToServer(const std::string &channelName) {
+  faultStash.check();
+  const ChannelMeta &meta = getToServerChannel(channelName);
+  // The server answers only once the simulation side connects its port,
+  // which may legitimately take arbitrarily long. A lost connection fails
+  // the future.
+  return callAsyncVoid("connect", {{"channel_id", meta.id}});
+}
+
+void RpcClient::Impl::writeToServer(const std::string &channelName,
+                                    const MessageData &data) {
+  faultStash.check();
+  sendFrame(getToServerChannel(channelName), data);
 }
 
 //===----------------------------------------------------------------------===//
@@ -611,23 +699,39 @@ RpcClient::Impl::connectClientReceiver(const std::string &channelName,
 
   // Register the callback first so any racing inbound binary frame after the
   // server's subscribe-ack has somewhere to land.
+  auto entry = std::make_shared<ReadCallbackEntry>(
+      channelId, [this, channelId] { readyIds.markReady(channelId); });
+  entry->callback = std::move(callback);
   {
     std::lock_guard<std::mutex> lock(readCallbacksMutex);
-    auto entry = std::make_shared<ReadCallbackEntry>(
-        channelId, [this, channelId] { readyIds.markReady(channelId); });
-    entry->callback = std::move(callback);
-    readCallbacks[channelId] = std::move(entry);
+    readCallbacks[channelId] = entry;
   }
 
-  try {
-    call("subscribe", {{"channel_id", channelId}});
-  } catch (...) {
-    std::lock_guard<std::mutex> lock(readCallbacksMutex);
-    readCallbacks.erase(channelId);
-    throw;
-  }
+  // Don't wait for the reply: the server answers only once the simulation
+  // side of the channel is connected, which may take arbitrarily long.
+  auto promise = std::make_shared<std::promise<void>>();
+  std::future<void> subscribedFuture = promise->get_future();
+  std::weak_ptr<ReadCallbackEntry> weakEntry = entry;
+  callAsync("subscribe", {{"channel_id", channelId}},
+            [this, channelId, weakEntry, promise](const json *,
+                                                  std::exception_ptr error) {
+              if (!error) {
+                promise->set_value();
+                return;
+              }
+              // Unregister our entry, unless it was already replaced or
+              // removed (e.g. the connection was disconnected).
+              {
+                std::lock_guard<std::mutex> lock(readCallbacksMutex);
+                auto it = readCallbacks.find(channelId);
+                if (it != readCallbacks.end() && it->second == weakEntry.lock())
+                  readCallbacks.erase(it);
+              }
+              promise->set_exception(error);
+            });
 
-  return std::make_unique<ReadChannelConnectionImpl>(this, channelId);
+  return std::make_unique<ReadChannelConnectionImpl>(
+      this, channelId, std::move(subscribedFuture));
 }
 
 void RpcClient::Impl::unsubscribe(uint64_t channelId) {
@@ -740,6 +844,10 @@ bool RpcClient::getChannelDesc(const std::string &channelName,
 
 std::vector<RpcClient::ChannelDesc> RpcClient::listChannels() const {
   return impl->listChannels();
+}
+
+std::future<void> RpcClient::connectToServer(const std::string &channelName) {
+  return impl->connectToServer(channelName);
 }
 
 void RpcClient::writeToServer(const std::string &channelName,
