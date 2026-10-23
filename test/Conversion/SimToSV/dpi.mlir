@@ -29,8 +29,8 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
   // CHECK-NEXT:  sv.always posedge %[[CLK]] {
   // CHECK-NEXT:    sv.if %enable {
   // CHECK-NEXT:      %[[RESULT:.+]]:2 = sv.func.call.procedural @dpi(%in) : (i1) -> (i1, i1)
-  // CHECK-NEXT:      sv.passign %{{.+}}, %[[RESULT]]#0 : i1
-  // CHECK-NEXT:      sv.passign %{{.+}}, %[[RESULT]]#1 : i1
+  // CHECK-NEXT:      sv.passign %{{.+}}, %[[RESULT]]#0 : !sv.var<i1>, i1
+  // CHECK-NEXT:      sv.passign %{{.+}}, %[[RESULT]]#1 : !sv.var<i1>, i1
   // CHECK-NEXT:    }
   // CHECK-NEXT:  }
   // VERILOG:     always @(posedge clock) begin
@@ -45,8 +45,8 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
   // CHECK: %[[CLK:.+]] = seq.from_clock %clock
   // CHECK-NEXT:  sv.always posedge %[[CLK]] {
   // CHECK-NEXT:    %[[RESULT:.+]]:2 = sv.func.call.procedural @dpi(%in) : (i1) -> (i1, i1)
-  // CHECK-NEXT:    sv.passign %{{.+}}, %[[RESULT]]#0 : i1
-  // CHECK-NEXT:    sv.passign %{{.+}}, %[[RESULT]]#1 : i1
+  // CHECK-NEXT:    sv.passign %{{.+}}, %[[RESULT]]#0 : !sv.var<i1>, i1
+  // CHECK-NEXT:    sv.passign %{{.+}}, %[[RESULT]]#1 : !sv.var<i1>, i1
   // CHECK-NEXT:  }
   // VERILOG:     always @(posedge clock) begin
   // VERILOG-NEXT:   dpi([[TMP_RESULT_0:.+]], in, [[TMP_RESULT_1:.+]]);
@@ -58,13 +58,13 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
   // CHECK:       sv.alwayscomb {
   // CHECK-NEXT:    sv.if %enable {
   // CHECK-NEXT:      %[[RESULT:.+]]:2 = sv.func.call.procedural @dpi(%in) : (i1) -> (i1, i1)
-  // CHECK-NEXT:      sv.bpassign %{{.+}}, %[[RESULT]]#0 : i1
-  // CHECK-NEXT:      sv.bpassign %{{.+}}, %[[RESULT]]#1 : i1
+  // CHECK-NEXT:      sv.bpassign %{{.+}}, %[[RESULT]]#0 : !sv.var<i1>, i1
+  // CHECK-NEXT:      sv.bpassign %{{.+}}, %[[RESULT]]#1 : !sv.var<i1>, i1
   // CHECK-NEXT:    } else {
   // CHECK-NEXT:      %[[X:.+]] = sv.constantX
-  // CHECK-NEXT:      sv.bpassign %{{.+}}, %[[X]] : i1
+  // CHECK-NEXT:      sv.bpassign %{{.+}}, %[[X]] : !sv.var<i1>, i1
   // CHECK-NEXT:      %[[X:.+]] = sv.constantX
-  // CHECK-NEXT:      sv.bpassign %{{.+}}, %[[X]] : i1
+  // CHECK-NEXT:      sv.bpassign %{{.+}}, %[[X]] : !sv.var<i1>, i1
   // CHECK-NEXT:    }
   // CHECK-NEXT:  }
   // VERILOG:      always_comb begin
@@ -80,8 +80,8 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
   %6, %7 = sim.func.dpi.call @dpi(%in) : (i1) -> (i1, i1)
   // CHECK:       sv.alwayscomb {
   // CHECK-NEXT:    %[[RESULT:.+]]:2 = sv.func.call.procedural @dpi(%in) : (i1) -> (i1, i1)
-  // CHECK-NEXT:    sv.bpassign %{{.+}}, %[[RESULT]]#0 : i1
-  // CHECK-NEXT:    sv.bpassign %{{.+}}, %[[RESULT]]#1 : i1
+  // CHECK-NEXT:    sv.bpassign %{{.+}}, %[[RESULT]]#0 : !sv.var<i1>, i1
+  // CHECK-NEXT:    sv.bpassign %{{.+}}, %[[RESULT]]#1 : !sv.var<i1>, i1
   // CHECK-NEXT:  }
   // VERILOG:      always_comb begin
   // VERILOG-NEXT:   dpi([[RESULT_6:.+]], in, [[RESULT_7:.+]]);
