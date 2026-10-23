@@ -214,3 +214,21 @@ func.func @variant_type_roundtrip(
 ) {
   return
 }
+
+// CHECK-LABEL: hw.module @Variant
+hw.module @Variant(in %var: !sim.variant<a: i32, b: i8>, in %val: i32) {
+  // CHECK: sim.variant_create "a", %val : !sim.variant<a: i32, b: i8>
+  %0 = sim.variant_create "a", %val : !sim.variant<a: i32, b: i8>
+  // CHECK: sim.variant_extract %var["b"] : !sim.variant<a: i32, b: i8>
+  %1 = sim.variant_extract %var["b"] : !sim.variant<a: i32, b: i8>
+  // CHECK: sim.variant_contains "a", %var : !sim.variant<a: i32, b: i8>
+  %2 = sim.variant_contains "a", %var : !sim.variant<a: i32, b: i8>
+  // CHECK: sim.variant_is_valueless %var : !sim.variant<a: i32, b: i8>
+  %3 = sim.variant_is_valueless %var : !sim.variant<a: i32, b: i8>
+  // CHECK: %[[NONE:.+]] = sim.valueless_variant : !sim.variant<a: i32, b: i8>
+  %4 = sim.valueless_variant : !sim.variant<a: i32, b: i8>
+  // CHECK: sim.variant_is_valueless %[[NONE]] : !sim.variant<a: i32, b: i8>
+  %5 = sim.variant_is_valueless %4 : !sim.variant<a: i32, b: i8>
+  // CHECK: sim.valueless_variant : !sim.variant<>
+  %6 = sim.valueless_variant : !sim.variant<>
+}

@@ -1593,4 +1593,151 @@ def FlushOp : SimOp<"flush", [ProceduralOp]> {
   let assemblyFormat = "$stream attr-dict";
 }
 
+//===----------------------------------------------------------------------===//
+// Varaint Ops
+//===----------------------------------------------------------------------===//
+
+def VariantCreateOp : SimOp<"variant_create", [Pure]> {
+  let summary = "Create a variant value from the operand.";
+  let description = [{
+    Populate a variant value with one of its possible alternatives.
+    The returned variant contains a value equal to the operand value and the
+    discriminator indicating the variant's selected alternative.
+
+    ```
+      %v = sim.variant_create "bar", %x : !sim.variant<bar: i3, baz: i8>
+    ```
+  }];
+
+  let arguments = (ins I32Attr:$alternativeIndex, AnyType:$input);
+  let results = (outs VariantType:$result);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "Type":$variantType, "StringAttr":$alternativeName,
+                   "Value":$input)>,
+    OpBuilder<(ins "Type":$variantType, "StringRef":$alternativeName,
+                   "Value":$input), [{
+      build($_builder, $_state, variantType,
+            $_builder.getStringAttr(alternativeName), input);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the name attribute of the selected alternative.
+    StringAttr getAlternativeNameAttr() {
+      return getType().getAlternatives()[getAlternativeIndex()].name;
+    }
+
+    /// Return the name of the selected alternative.
+    StringRef getAlternativeName() {
+      return getAlternativeNameAttr().getValue();
+    }
+  }];
+}
+
+def ValuelessVariantOp : SimOp<"valueless_variant", [Pure]>  {
+  let summary = "Creates a valueless variant.";
+  let description = [{
+    Returns a variant value with no active alternative. Extracting from a
+    valuless variant will always produce an undefined value.
+
+    This is the only possible value for the "empty" !sim.variant<> type.
+  }];
+
+  let results = (outs VariantType:$result);
+  let assemblyFormat = " attr-dict `:` qualified(type($result))";
+}
+
+def VariantExtractOp : SimOp<"variant_extract", [Pure,
+    DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
+  ]> {
+  let summary = "Extract a value from a variant.";
+  let description = [{
+    Attempt to retrieve a value of the given alternative from the variant value.
+    If the alternative is the same as the one the variant was created with, the
+    returned value matches the value the variant was created from. If the
+    variant was created with a different alternative, or if the variant is
+    valueless, the returned value is undefined.
+
+    ```
+      %x = sim.variant_extract %v["bar"] : !sim.variant<bar: i3, baz: i8>
+    ```
+  }];
+
+  let arguments = (ins VariantType:$input, I32Attr:$alternativeIndex);
+  let results = (outs AnyType:$result);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringAttr":$alternativeName)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$alternativeName), [{
+      build($_builder, $_state, input,
+            $_builder.getStringAttr(alternativeName));
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the name attribute of the accessed alternative.
+    StringAttr getAlternativeNameAttr() {
+      return getInput().getType().getAlternatives()[getAlternativeIndex()].name;
+    }
+
+    /// Return the name of the accessed alternative.
+    StringRef getAlternativeName() {
+      return getAlternativeNameAttr().getValue();
+    }
+  }];
+}
+
+def VariantContainsOp : SimOp<"variant_contains", [Pure]> {
+  let summary = "Check if a varaint contains a specific alternative.";
+  let description = [{
+    Returns `true` if the given variant value was created with the given
+    alternative and `false` otherwise. Returns `false` if the variant is
+    valueless.
+
+    ```
+      %b = sim.variant_contains "bar", %v : !sim.variant<bar: i3, baz: i8>
+    ```
+  }];
+
+  let arguments = (ins VariantType:$input, I32Attr:$alternativeIndex);
+  let results = (outs I1:$result);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringAttr":$alternativeName)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$alternativeName), [{
+      build($_builder, $_state, input,
+            $_builder.getStringAttr(alternativeName));
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the name attribute of the queried alternative.
+    StringAttr getAlternativeNameAttr() {
+      return getInput().getType().getAlternatives()[getAlternativeIndex()].name;
+    }
+
+    /// Return the name of the queried alternative.
+    StringRef getAlternativeName() {
+      return getAlternativeNameAttr().getValue();
+    }
+  }];
+}
+def VariantIsValuelessOp : SimOp<"variant_is_valueless", [Pure]> {
+  let summary = "Check if a variant is valueless.";
+  let description = [{
+    Returns `true` if the given variant is valuless and `false` otherwise.
+  }];
+
+  let arguments = (ins VariantType:$variant);
+  let results = (outs I1:$result);
+  let assemblyFormat = "$variant attr-dict `:` qualified(type($variant))";
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
