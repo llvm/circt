@@ -187,8 +187,14 @@ public:
         : bufferSize(bufferSize), translateMessage(translateMessage) {}
   };
 
-  /// Set up a connection to the accelerator.
-  virtual void connect(const ConnectOptions &options = ConnectOptions()) = 0;
+  /// Set up a connection to the accelerator. Never blocks waiting for the
+  /// accelerator side. Returns a future which becomes ready once the other end
+  /// of the channel is connected too, or holds an exception if it never will
+  /// be (e.g. the connection to the accelerator is lost). Data written before
+  /// then is held and backpressures the writer, never dropped. Most backends
+  /// return an already-ready future; it's fine to ignore it.
+  virtual std::future<void>
+  connect(const ConnectOptions &options = ConnectOptions()) = 0;
   virtual void disconnect() = 0;
   virtual bool isConnected() const = 0;
 
@@ -300,8 +306,10 @@ protected:
   virtual bool pollImpl() { return false; }
 
   /// Called by all connect methods to let backends initiate the underlying
-  /// connections.
-  virtual void connectImpl(const ConnectOptions &options) {}
+  /// connections. Must not block; returns the future `connect()` returns.
+  virtual std::future<void> connectImpl(const ConnectOptions &options) {
+    return utils::readyFuture();
+  }
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -309,15 +317,17 @@ class WriteChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
 
-  virtual void connect(const ConnectOptions &options = {}) override {
+  virtual std::future<void>
+  connect(const ConnectOptions &options = {}) override {
     translateMessages = options.translateMessage && translationInfo;
     if (translationInfo) {
       translationInfo->precomputeFrameInfo();
       if (translateMessages)
         translationInfo->requireTranslationSupported();
     }
-    connectImpl(options);
+    std::future<void> otherEnd = connectImpl(options);
     connected = true;
+    return otherEnd;
   }
   virtual void disconnect() override { connected = false; }
   virtual bool isConnected() const override { return connected; }
@@ -448,7 +458,7 @@ public:
   UnknownWriteChannelPort(const Type *type, std::string errmsg)
       : WriteChannelPort(type), errmsg(errmsg) {}
 
-  void connect(const ConnectOptions &options = {}) override {
+  std::future<void> connect(const ConnectOptions &options = {}) override {
     throw std::runtime_error(errmsg);
   }
 
@@ -504,13 +514,13 @@ public:
   // wait, and be notified.
   //===--------------------------------------------------------------------===//
 
-  virtual void connect(ReadCallback callback,
-                       const ConnectOptions &options = {});
+  virtual std::future<void> connect(ReadCallback callback,
+                                    const ConnectOptions &options = {});
 
   /// Connect a compatibility callback which receives flattened `MessageData`
   /// objects. This adapts the primary segmented callback path.
-  virtual void connect(FlatReadCallback callback,
-                       const ConnectOptions &options = {});
+  virtual std::future<void> connect(FlatReadCallback callback,
+                                    const ConnectOptions &options = {});
 
   //===--------------------------------------------------------------------===//
   // Polling mode methods: To use futures or blocking reads, connect without any
@@ -521,7 +531,8 @@ public:
   static constexpr uint64_t DefaultMaxDataQueueMsgs = 32;
 
   /// Connect to the channel in polling mode.
-  virtual void connect(const ConnectOptions &options = {}) override;
+  virtual std::future<void>
+  connect(const ConnectOptions &options = {}) override;
 
   /// Asynchronous polling read.
   ///
@@ -603,15 +614,18 @@ public:
   UnknownReadChannelPort(const Type *type, std::string errmsg)
       : ReadChannelPort(type), errmsg(errmsg) {}
 
-  void connect(ReadCallback callback,
-               const ConnectOptions &options = ConnectOptions()) override {
+  std::future<void>
+  connect(ReadCallback callback,
+          const ConnectOptions &options = ConnectOptions()) override {
     throw std::runtime_error(errmsg);
   }
-  void connect(FlatReadCallback callback,
-               const ConnectOptions &options = ConnectOptions()) override {
+  std::future<void>
+  connect(FlatReadCallback callback,
+          const ConnectOptions &options = ConnectOptions()) override {
     throw std::runtime_error(errmsg);
   }
-  void connect(const ConnectOptions &options = ConnectOptions()) override {
+  std::future<void>
+  connect(const ConnectOptions &options = ConnectOptions()) override {
     throw std::runtime_error(errmsg);
   }
   std::future<MessageData> readAsync() override {

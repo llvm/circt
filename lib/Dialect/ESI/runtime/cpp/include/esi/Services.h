@@ -327,7 +327,8 @@ public:
   public:
     static ToHost *get(AppID id, const BundleType *type,
                        ReadChannelPort &dataPort);
-    void connect();
+    /// See `ChannelPort::connect()` for the returned future.
+    std::future<void> connect();
     std::future<MessageData> read();
 
     virtual std::optional<std::string>
@@ -351,7 +352,8 @@ public:
   public:
     static FromHost *get(AppID id, const BundleType *type,
                          WriteChannelPort &dataPort);
-    void connect();
+    /// See `ChannelPort::connect()` for the returned future.
+    std::future<void> connect();
     void write(const MessageData &data);
 
     virtual std::optional<std::string>
@@ -390,7 +392,9 @@ public:
     static Function *get(AppID id, BundleType *type, WriteChannelPort &arg,
                          ReadChannelPort &result);
 
-    void connect(const ChannelPort::ConnectOptions &options = {});
+    /// Connect both channels. The future is ready once both of their other
+    /// ends are (see `ChannelPort::connect()`).
+    std::future<void> connect(const ChannelPort::ConnectOptions &options = {});
     std::future<MessageData> call(const MessageData &arg);
 
     const esi::Type *getArgType() const {
@@ -448,9 +452,13 @@ public:
     /// invokes the callback. The 'quick' flag indicates that the callback is
     /// sufficiently fast that it could be called in the same thread as the
     /// port callback.
-    void connect(std::function<MessageData(const MessageData &)> callback,
-                 bool quick = false,
-                 const ChannelPort::ConnectOptions &options = {});
+    ///
+    /// Returns a future which is ready once the other ends of both channels
+    /// are connected (see `ChannelPort::connect()`).
+    std::future<void>
+    connect(std::function<MessageData(const MessageData &)> callback,
+            bool quick = false,
+            const ChannelPort::ConnectOptions &options = {});
 
     const esi::Type *getArgType() const {
       return dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
@@ -506,7 +514,8 @@ public:
            std::optional<uint64_t> offset);
 
   public:
-    void connect();
+    /// Always returns a ready future: metrics are read over MMIO.
+    std::future<void> connect();
     std::future<MessageData> read();
     uint64_t readInt();
 

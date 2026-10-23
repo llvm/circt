@@ -55,10 +55,12 @@ public:
         name(std::move(name)) {}
   ~WriteCosimChannelPort() = default;
 
-  void connectImpl(const ChannelPort::ConnectOptions &options) override {
+  std::future<void>
+  connectImpl(const ChannelPort::ConnectOptions &options) override {
     if (desc.dir != RpcClient::ChannelDirection::ToServer)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to server channel");
+    return utils::readyFuture();
   }
 
 protected:
@@ -112,7 +114,8 @@ public:
 
   ~ReadCosimChannelPort() = default;
 
-  void connectImpl(const ChannelPort::ConnectOptions &options) override {
+  std::future<void>
+  connectImpl(const ChannelPort::ConnectOptions &options) override {
     if (desc.dir != RpcClient::ChannelDirection::ToClient)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to client channel");
@@ -149,6 +152,7 @@ public:
 
           return consumed;
         });
+    return utils::readyFuture();
   }
 
   void disconnect() override {

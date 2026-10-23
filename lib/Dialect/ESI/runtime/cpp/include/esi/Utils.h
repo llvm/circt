@@ -20,12 +20,16 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <exception>
 #include <functional>
+#include <future>
 #include <mutex>
 #include <optional>
 #include <queue>
 #include <string>
+#include <thread>
 #include <unordered_set>
+#include <vector>
 
 namespace esi {
 namespace utils {
@@ -227,6 +231,51 @@ private:
   std::unordered_set<ID> ready;
   bool shutdown = false;
 };
+
+/// An already-satisfied `std::future<void>`.
+inline std::future<void> readyFuture() {
+  std::promise<void> p;
+  p.set_value();
+  return p.get_future();
+}
+
+/// A future which becomes ready once all of `futures` are, carrying the first
+/// exception (in order) if any of them fails. Never blocks: if some aren't
+/// ready yet, a detached helper thread waits for them. That thread holds only
+/// the futures' shared states, so it is safe for it to outlive the caller; it
+/// lingers only as long as one of the futures remains unsatisfied.
+inline std::future<void> whenAll(std::vector<std::future<void>> futures) {
+  bool allReady = true;
+  for (auto &f : futures)
+    if (f.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+      allReady = false;
+
+  auto collect = [](std::vector<std::future<void>> &fs, std::promise<void> &p) {
+    std::exception_ptr first;
+    for (auto &f : fs) {
+      try {
+        f.get();
+      } catch (...) {
+        if (!first)
+          first = std::current_exception();
+      }
+    }
+    if (first)
+      p.set_exception(first);
+    else
+      p.set_value();
+  };
+
+  std::promise<void> p;
+  std::future<void> result = p.get_future();
+  if (allReady)
+    collect(futures, p);
+  else
+    std::thread([fs = std::move(futures), p = std::move(p), collect]() mutable {
+      collect(fs, p);
+    }).detach();
+  return result;
+}
 
 /// Compute ceil(bits/8).
 inline uint64_t bitsToBytes(uint64_t bits) { return (bits + 7) / 8; }

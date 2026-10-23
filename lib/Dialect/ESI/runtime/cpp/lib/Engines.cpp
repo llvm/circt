@@ -89,7 +89,8 @@ public:
   // Write the location of the buffer to the MMIO space.
   void writeBufferPtr();
   // Connect allocate a buffer and prime the pump.
-  void connectImpl(const ChannelPort::ConnectOptions &options) override;
+  std::future<void>
+  connectImpl(const ChannelPort::ConnectOptions &options) override;
   // Check for buffer fill.
   bool pollImpl() override;
 
@@ -198,7 +199,7 @@ void OneItemBuffersToHostReadPort::writeBufferPtr() {
                       reinterpret_cast<uint64_t>(buffer->getDevicePtr()));
 }
 
-void OneItemBuffersToHostReadPort::connectImpl(
+std::future<void> OneItemBuffersToHostReadPort::connectImpl(
     const ChannelPort::ConnectOptions &options) {
   engine->connect();
   buffer = engine->hostMem->allocate(bufferSize, {true, false});
@@ -207,6 +208,7 @@ void OneItemBuffersToHostReadPort::connectImpl(
                              std::to_string(bufferSize) +
                              " bytes of host memory");
   writeBufferPtr();
+  return utils::readyFuture();
 }
 
 bool OneItemBuffersToHostReadPort::pollImpl() {
@@ -301,7 +303,8 @@ public:
         channelName(channelName) {}
 
   // Connect allocate a buffer and prime the pump.
-  void connectImpl(const ChannelPort::ConnectOptions &options) override;
+  std::future<void>
+  connectImpl(const ChannelPort::ConnectOptions &options) override;
 
   std::string identifier() const { return idPath.toStr() + "." + channelName; }
 
@@ -413,7 +416,7 @@ void OneItemBuffersFromHost::connect() {
   connected = true;
 }
 
-void OneItemBuffersFromHostWritePort::connectImpl(
+std::future<void> OneItemBuffersFromHostWritePort::connectImpl(
     const ChannelPort::ConnectOptions &options) {
   engine->connect();
   data_buffer = engine->hostMem->allocate(
@@ -425,6 +428,7 @@ void OneItemBuffersFromHostWritePort::connectImpl(
   // Set the last byte to '1' to indicate that the buffer is ready to be filled
   // and sent to the device.
   *static_cast<uint8_t *>(completion_buffer->getPtr()) = 1;
+  return utils::readyFuture();
 }
 
 void OneItemBuffersFromHostWritePort::enqueueFrames(const MessageData &data) {

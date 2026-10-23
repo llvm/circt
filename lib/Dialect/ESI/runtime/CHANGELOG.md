@@ -4,6 +4,20 @@
 
 ### Breaking changes
 
+- **`connect()` returns a `std::future<void>`.** Every channel port
+  `connect()` overload (`ChannelPort`, `ReadChannelPort`, `WriteChannelPort`,
+  the typed ports), every service port `connect()` (`FuncService::Function`,
+  `CallService::Callback`, `ChannelService::ToHost`/`FromHost`,
+  `TelemetryService::Metric`, and their typed wrappers), and
+  `ChannelPort::connectImpl()` now return a future. It becomes ready once the
+  accelerator end of the channel is connected too, or holds an exception if it
+  never will be. `connect()` must not block waiting for it. All in-tree
+  backends currently return an already-ready future (`utils::readyFuture()`),
+  and callers may ignore it. Code which overrides `connect()` or
+  `connectImpl()` must update its signature. `utils::whenAll()` combines
+  several such futures without blocking. In Python, service ports' `connect()`
+  returns a `ConnectFuture`; channel `Port.connect()` still returns the port
+  (for chaining) and stores the future in `Port.connected_future`.
 - **`HostMemRegion` is now defined at namespace scope** as
   `esi::services::HostMemRegion`. `services::HostMem::HostMemRegion` remains
   as an alias, so existing source compiles unchanged, but code linking against
