@@ -12,7 +12,7 @@
 // CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
 // CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
 // CHECK: [[AND:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
-// CHECK: moore.assign [[Q]], [[AND]] : l1
+// CHECK: moore.assign [[Q]], [[AND]] : !moore.ref<l1>
 
 module and_prim;
     wire A, B, Q;
@@ -26,7 +26,7 @@ endmodule
 // CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
 // CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
 // CHECK: [[OR:%.+]] = moore.or [[RD_A]], [[RD_B]] : l1
-// CHECK: moore.assign [[Q]], [[OR]] : l1
+// CHECK: moore.assign [[Q]], [[OR]] : !moore.ref<l1>
 
 module or_prim;
     wire A, B, Q;
@@ -40,7 +40,7 @@ endmodule
 // CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
 // CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
 // CHECK: [[XOR:%.+]] = moore.xor [[RD_A]], [[RD_B]] : l1
-// CHECK: moore.assign [[Q]], [[XOR]] : l1
+// CHECK: moore.assign [[Q]], [[XOR]] : !moore.ref<l1>
 
 module xor_prim;
     wire A, B, Q;
@@ -60,7 +60,7 @@ endmodule
 // CHECK: [[AND0:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
 // CHECK: [[AND1:%.+]] = moore.and [[AND0]], [[RD_C]] : l1
 // CHECK: [[AND2:%.+]] = moore.and [[AND1]], [[RD_D]] : l1
-// CHECK: moore.assign [[Q]], [[AND2]] : l1
+// CHECK: moore.assign [[Q]], [[AND2]] : !moore.ref<l1>
 
 module multi_and_prim;
     wire A, B, C, D, Q;
@@ -75,7 +75,7 @@ endmodule
 // CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
 // CHECK: [[AND:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
 // CHECK: [[NOT_AND:%.+]] = moore.not [[AND]] : l1
-// CHECK: moore.assign [[Q]], [[NOT_AND]] : l1
+// CHECK: moore.assign [[Q]], [[NOT_AND]] : !moore.ref<l1>
 
 module nand_prim;
     wire A, B, Q;
@@ -90,7 +90,7 @@ endmodule
 // CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
 // CHECK: [[OR:%.+]] = moore.or [[RD_A]], [[RD_B]] : l1
 // CHECK: [[NOT_OR:%.+]] = moore.not [[OR]] : l1
-// CHECK: moore.assign [[Q]], [[NOT_OR]] : l1
+// CHECK: moore.assign [[Q]], [[NOT_OR]] : !moore.ref<l1>
 
 module nor_prim;
     wire A, B, Q;
@@ -105,7 +105,7 @@ endmodule
 // CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
 // CHECK: [[XOR:%.+]] = moore.xor [[RD_A]], [[RD_B]] : l1
 // CHECK: [[NOT_XOR:%.+]] = moore.not [[XOR]] : l1
-// CHECK: moore.assign [[Q]], [[NOT_XOR]] : l1
+// CHECK: moore.assign [[Q]], [[NOT_XOR]] : !moore.ref<l1>
 
 module xnor_prim;
     wire A, B, Q;
@@ -126,7 +126,7 @@ endmodule
 // CHECK: [[AND1:%.+]] = moore.and [[AND0]], [[RD_C]] : l1
 // CHECK: [[AND2:%.+]] = moore.and [[AND1]], [[RD_D]] : l1
 // CHECK: [[NOT_AND:%.+]] = moore.not [[AND2]] : l1
-// CHECK: moore.assign [[Q]], [[NOT_AND]] : l1
+// CHECK: moore.assign [[Q]], [[NOT_AND]] : !moore.ref<l1>
 
 module multi_nand_prim;
     wire A, B, C, D, Q;
@@ -142,7 +142,7 @@ endmodule
 // CHECK: [[AND:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
 // CHECK: [[NOT_AND:%.+]] = moore.not [[AND]] : l1
 // CHECK: [[DELAYCONST:%.+]] = moore.constant_time 5000000 fs
-// CHECK: moore.delayed_assign [[Q]], [[NOT_AND]], [[DELAYCONST]] : l1
+// CHECK: moore.delayed_assign [[Q]], [[NOT_AND]], [[DELAYCONST]] : !moore.ref<l1>
 
 module delayed_nand_prim;
     wire A, B, Q;
@@ -158,7 +158,7 @@ endmodule
 // CHECK: [[AND:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
 // CHECK: [[NOT_AND:%.+]] = moore.not [[AND]] : l1
 // CHECK: [[DELAYCONST:%.+]] = moore.constant_time 5000000 fs
-// CHECK: moore.delayed_assign [[Q]], [[NOT_AND]], [[DELAYCONST]] : l1
+// CHECK: moore.delayed_assign [[Q]], [[NOT_AND]], [[DELAYCONST]] : !moore.ref<l1>
 
 module delayed3_nand_prim;
     wire A, B, Q;
@@ -170,7 +170,7 @@ endmodule
 // CHECK: [[Q:%.+]] = moore.net wire : <l1>
 // CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
 // CHECK: [[NOT:%.+]] = moore.not [[RD_A]] : l1
-// CHECK: moore.assign [[Q]], [[NOT]] : l1
+// CHECK: moore.assign [[Q]], [[NOT]] : !moore.ref<l1>
 
 module not_prim;
     wire A, Q;
@@ -183,8 +183,8 @@ endmodule
 // CHECK: [[Q1:%.+]] = moore.net wire : <l1>
 // CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
 // CHECK: [[NOT:%.+]] = moore.not [[RD_A]] : l1
-// CHECK: moore.assign [[Q0]], [[NOT]] : l1
-// CHECK: moore.assign [[Q1]], [[NOT]] : l1
+// CHECK: moore.assign [[Q0]], [[NOT]] : !moore.ref<l1>
+// CHECK: moore.assign [[Q1]], [[NOT]] : !moore.ref<l1>
 
 module multi_not_prim;
     wire A, Q0, Q1;
@@ -196,7 +196,7 @@ endmodule
 // CHECK: [[Q:%.+]] = moore.net wire : <l1>
 // CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
 // CHECK: [[NOT:%.+]] = moore.bool_cast [[RD_A]] : l1
-// CHECK: moore.assign [[Q]], [[NOT]] : l1
+// CHECK: moore.assign [[Q]], [[NOT]] : !moore.ref<l1>
 
 module buf_prim;
     wire A, Q;
@@ -209,7 +209,7 @@ endmodule
 // CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
 // CHECK: [[NOT:%.+]] = moore.bool_cast [[RD_A]] : l1
 // CHECK: [[DELAYCONST:%.+]] = moore.constant_time 5000000 fs
-// CHECK: moore.delayed_assign [[Q]], [[NOT]], [[DELAYCONST]] : l1
+// CHECK: moore.delayed_assign [[Q]], [[NOT]], [[DELAYCONST]] : !moore.ref<l1>
 
 
 module delayed_buf_prim;
@@ -223,7 +223,7 @@ endmodule
 // CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
 // CHECK: [[NOT:%.+]] = moore.bool_cast [[RD_A]] : l1
 // CHECK: [[DELAYCONST:%.+]] = moore.constant_time 5000000 fs
-// CHECK: moore.delayed_assign [[Q]], [[NOT]], [[DELAYCONST]] : l1
+// CHECK: moore.delayed_assign [[Q]], [[NOT]], [[DELAYCONST]] : !moore.ref<l1>
 
 module delayed3_buf_prim;
     wire A, Q;
@@ -234,7 +234,7 @@ endmodule
 // CHECK-LABEL: moore.module @pullup_prim()
 // CHECK: [[A:%.+]] = moore.net wire : <l1>
 // CHECK: [[ONE:%.+]] = moore.constant 1 : l1
-// CHECK: moore.assign [[A]], [[ONE]] : l1
+// CHECK: moore.assign [[A]], [[ONE]] : !moore.ref<l1>
 
 module pullup_prim;
     wire A;
@@ -244,7 +244,7 @@ endmodule
 // CHECK-LABEL: moore.module @pulldown_prim()
 // CHECK: [[A:%.+]] = moore.net wire : <l1>
 // CHECK: [[ZERO:%.+]] = moore.constant 0 : l1
-// CHECK: moore.assign [[A]], [[ZERO]] : l1
+// CHECK: moore.assign [[A]], [[ZERO]] : !moore.ref<l1>
 
 module pulldown_prim;
     wire A;
@@ -254,7 +254,7 @@ endmodule
 // CHECK-LABEL: moore.module @wide_pullup_prim()
 // CHECK: [[A:%.+]] = moore.net wire : <l4>
 // CHECK: [[ONES:%.+]] = moore.constant -1 : l4
-// CHECK: moore.assign [[A]], [[ONES]] : l4
+// CHECK: moore.assign [[A]], [[ONES]] : !moore.ref<l4>
 
 module wide_pullup_prim;
     wire [3:0] A;
@@ -284,7 +284,7 @@ module TestBufif0(
   // CHECK: moore.yield [[INNERX]] : l1
   // CHECK: moore.yield [[IN]] : l1
   // CHECK: moore.yield [[INNERRESULT]] : l1
-  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : !moore.ref<l1>
   bufif0 bufif0_inst(data_out, data_in, en_n);
 
 endmodule
@@ -312,7 +312,7 @@ module TestBufif1(
   // CHECK: moore.yield [[INNERX]] : l1
   // CHECK: moore.yield [[IN]] : l1
   // CHECK: moore.yield [[INNERRESULT]] : l1
-  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : !moore.ref<l1>
   bufif1 bufif1_inst(data_out, data_in, en_n);
 
 endmodule
@@ -341,7 +341,7 @@ module TestNotif0(
   // CHECK: moore.yield [[INNERX]] : l1
   // CHECK: moore.yield [[NOT_IN]] : l1
   // CHECK: moore.yield [[INNERRESULT]] : l1
-  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : !moore.ref<l1>
   notif0 notif0_inst(data_out, data_in, en_n);
 
 endmodule
@@ -370,7 +370,7 @@ module TestNotif1(
   // CHECK: moore.yield [[INNERX]] : l1
   // CHECK: moore.yield [[NOT_IN]] : l1
   // CHECK: moore.yield [[INNERRESULT]] : l1
-  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : !moore.ref<l1>
   notif1 notif1_inst(data_out, data_in, en_n);
 
 endmodule
@@ -570,7 +570,7 @@ module TestDelayedPmos(input wire data_in, input wire en, output wire data_out);
 // CHECK: %[[DATA_OUT:.*]] = moore.net wire : <l1>
 // CHECK: %[[RESULT:.*]] = moore.conditional
 // CHECK: %[[DELAY:.*]] = moore.constant_time 5000000 fs
-// CHECK: moore.delayed_assign %[[DATA_OUT]], %[[RESULT]], %[[DELAY]] : l1
+// CHECK: moore.delayed_assign %[[DATA_OUT]], %[[RESULT]], %[[DELAY]] : !moore.ref<l1>
 pmos #5 p0(data_out, data_in, en);
 endmodule
 
@@ -583,7 +583,7 @@ module TestDelayedCmos(input wire data_in, input wire n_en, input wire p_en,
 // CHECK: %[[AGREE:.*]] = moore.case_eq %[[NRESULT]], %[[PRESULT]] : l1
 // CHECK: %[[RESULT:.*]] = moore.conditional %[[AGREE]] : i1 -> l1
 // CHECK: %[[DELAY:.*]] = moore.constant_time 5000000 fs
-// CHECK: moore.delayed_assign %[[DATA_OUT]], %[[RESULT]], %[[DELAY]] : l1
+// CHECK: moore.delayed_assign %[[DATA_OUT]], %[[RESULT]], %[[DELAY]] : !moore.ref<l1>
 cmos #5 c0(data_out, data_in, n_en, p_en);
 endmodule
 
@@ -649,7 +649,7 @@ module TestBufif1WideEnable(
   // CHECK: moore.yield [[INNERX]] : l1
   // CHECK: moore.yield [[IN]] : l1
   // CHECK: moore.yield [[INNERRESULT]] : l1
-  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : l1
+  // CHECK: moore.assign [[DATA_OUT]], [[RESULT]] : !moore.ref<l1>
   bufif1 bufif1_inst(data_out, data_in, en);
 endmodule
 
@@ -673,7 +673,7 @@ endprimitive
 // CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
 // CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
 // CHECK: [[INST:%.+]] = moore.instance "u1" @udp_comb_and(a: [[RD_A]]: !moore.l1, b: [[RD_B]]: !moore.l1) -> (out: !moore.l1)
-// CHECK: moore.assign [[Q]], [[INST]] : l1
+// CHECK: moore.assign [[Q]], [[INST]] : !moore.ref<l1>
 module udp_comb_prim;
     wire A, B, Q;
     udp_comb_and u1 (Q, A, B);
@@ -687,7 +687,7 @@ endmodule
 // CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
 // CHECK: [[INST:%.+]] = moore.instance "u1" @udp_comb_and(a: [[RD_A]]: !moore.l1, b: [[RD_B]]: !moore.l1) -> (out: !moore.l1)
 // CHECK: [[DELAYCONST:%.+]] = moore.constant_time 5000000 fs
-// CHECK: moore.delayed_assign [[Q]], [[INST]], [[DELAYCONST]] : l1
+// CHECK: moore.delayed_assign [[Q]], [[INST]], [[DELAYCONST]] : !moore.ref<l1>
 module udp_comb_delayed_prim;
     wire A, B, Q;
     udp_comb_and #5 u1 (Q, A, B);

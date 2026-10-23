@@ -875,7 +875,7 @@ module SampleValueBuiltinsDefaultClocking #() (
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
   // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
   // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
-  // CHECK-NEXT: moore.assign {{%.+}}, [[PAST_LOGIC]] : l8
+  // CHECK-NEXT: moore.assign {{%.+}}, [[PAST_LOGIC]] : !moore.ref<l8>
   logic [7:0] assign_past;
   assign assign_past = $past(data_i);
 

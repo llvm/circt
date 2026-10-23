@@ -14,10 +14,10 @@
     // CHECK: %[[C_READ:.+]] = moore.read %c : <i9002>
     %1 = moore.read %c : <i9002>
     // CHECK: %[[TMP1:.+]] = moore.extract %[[C_READ]] from 42 : i9002 -> i8960
-    // CHECK: moore.assign %a, %[[TMP1]] : i8960
+    // CHECK: moore.assign %a, %[[TMP1]] : !moore.ref<i8960>
     // CHECK: %[[TMP2:.+]] = moore.extract %[[C_READ]] from 0 : i9002 -> i42
-    // CHECK: moore.assign %b, %[[TMP2]] : i42
-    moore.assign %0, %1 : i9002
+    // CHECK: moore.assign %b, %[[TMP2]] : !moore.ref<i42>
+    moore.assign %0, %1 : !moore.ref<i9002>
     moore.procedure always {
       // CHECK-NOT: moore.concat_ref %u, %v
       %2 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> <l9002>

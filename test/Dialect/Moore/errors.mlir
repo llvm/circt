@@ -253,3 +253,11 @@ func.func @ReadMemBadDest(%arg0: !moore.string, %arg1: !moore.ref<i8>) {
   moore.builtin.readmem hex %arg0, %arg1 {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<i8>
   return
 }
+
+// -----
+
+func.func @ProceduralAssignToNet(%arg0: !moore.net<i42>, %arg1: !moore.i42) {
+  // expected-error @below {{'moore.blocking_assign' op operand #0 must be a reference to a variable, but got '!moore.net<i42>'}}
+  "moore.blocking_assign"(%arg0, %arg1) : (!moore.net<i42>, !moore.i42) -> ()
+  return
+}
