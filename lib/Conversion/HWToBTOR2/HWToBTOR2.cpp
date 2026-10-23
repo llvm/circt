@@ -688,9 +688,12 @@ private:
       }
 
       // Check for a reset value, if none exists assume it's zero
-      if (resetVal)
-        resetValLID = getOpLID(resetVal.getDefiningOp());
-      else
+      if (resetVal) {
+        if (auto resetValArg = dyn_cast<BlockArgument>(resetVal))
+          resetValLID = inputLIDs[resetValArg.getArgNumber()];
+        else
+          resetValLID = getOpLID(resetVal.getDefiningOp());
+      } else
         resetValLID = genZero(width);
 
       // Sanity check: at this point the next operation should have had it's
