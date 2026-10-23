@@ -165,7 +165,7 @@ def UnrollMemoryLatencies : Pass<"seq-unroll-mem-latency", "hw::HWModuleOp"> {
     
     This means that if at cycle 10 a read port with latency 2 has address 0 
     and is enabled, then the read data port will yield the data from address 0 
-    at cycle 12. This can be modeled by padding the read-address port with a 
+    at cycle 12. This is modeled by padding the read-address port with a 
     shift-register of depth equal to the latency of that port.
 
     For writes, the default latency is 1, therefore we can pad the write port's 

@@ -27,7 +27,7 @@ hw.module @hlmem(in %clk : !seq.clock, in %rst : i1, out "rd": i32) {
 }
 
 // CHECK-LABEL: hw.module @hlmemManyAddr
-// CHECK: %mem = seq.hlmem @mem %clk, %rst : <4xi32>
+// CHECK: %mem = seq.hlmem @mem %clk, %rst : <4x4x4xi32>
 // CHECK: [[T:%.+]] = hw.constant true
 // CHECK: [[C42:%.+]] = hw.constant 42 : i32
 // CHECK: [[T0:%.+]] = hw.constant true
@@ -35,21 +35,21 @@ hw.module @hlmem(in %clk : !seq.clock, in %rst : i1, out "rd": i32) {
 // CHECK: [[SADDR1:%.+]] = seq.shiftreg[68] %addr1, %clk, [[T0]] : i2  
 // CHECK: [[SADDR2:%.+]] = seq.shiftreg[68] %addr2, %clk, [[T0]] : i2  
 // CHECK: [[S1:%.+]] = seq.shiftreg[68] [[C42]], %clk, [[T0]] : i32  
-// CHECK: seq.write %mem[[[SADDR0]], [[SADDR1]], [[SADDR2]]] [[S1]] wren [[T]] {latency = 1 : i64} : !seq.hlmem<4xi32>
+// CHECK: seq.write %mem[[[SADDR0]], [[SADDR1]], [[SADDR2]]] [[S1]] wren [[T]] {latency = 1 : i64} : !seq.hlmem<4x4x4xi32>
 // CHECK: [[T1:%.+]] = hw.constant true
-// CHECK: [[SADDR3:%.+]] = seq.shiftreg[42] %addr0, %clk, [[T0]] : i2  
-// CHECK: [[SADDR4:%.+]] = seq.shiftreg[42] %addr1, %clk, [[T0]] : i2  
-// CHECK: [[SADDR5:%.+]] = seq.shiftreg[42] %addr2, %clk, [[T0]] : i2   
-// CHECK: [[RD_DATA:%.+]] = seq.read %mem[[[SADDR3]], [[SADDR4]], [[SADDR5]]] rden [[T]] {latency = 0 : i64} : !seq.hlmem<4xi32>
+// CHECK: [[SADDR3:%.+]] = seq.shiftreg[42] %addr0, %clk, [[T1]] : i2  
+// CHECK: [[SADDR4:%.+]] = seq.shiftreg[42] %addr1, %clk, [[T1]] : i2  
+// CHECK: [[SADDR5:%.+]] = seq.shiftreg[42] %addr2, %clk, [[T1]] : i2   
+// CHECK: [[RD_DATA:%.+]] = seq.read %mem[[[SADDR3]], [[SADDR4]], [[SADDR5]]] rden [[T]] {latency = 0 : i64} : !seq.hlmem<4x4x4xi32>
 // CHECK: hw.output [[RD_DATA]] : i32
 hw.module @hlmemManyAddr(in %clk : !seq.clock, in %rst : i1, in %addr0 : i2, in %addr1 : i2, in %addr2 : i2, out "rd": i32) {
-  %mem = seq.hlmem @mem %clk, %rst : <4xi32>
+  %mem = seq.hlmem @mem %clk, %rst : !seq.hlmem<4x4x4xi32>
 
   %c1_i1 = hw.constant 1 : i1
   %c42_i32 = hw.constant 42 : i32
   
-  seq.write %mem[%addr0, %addr1, %addr2] %c42_i32 wren %c1_i1 { latency = 69 } : !seq.hlmem<4xi32>
-  %rddata = seq.read %mem[%addr0, %addr1, %addr2] rden %c1_i1 { latency = 42 } : !seq.hlmem<4xi32>
+  seq.write %mem[%addr0, %addr1, %addr2] %c42_i32 wren %c1_i1 { latency = 69 } : !seq.hlmem<4x4x4xi32>
+  %rddata = seq.read %mem[%addr0, %addr1, %addr2] rden %c1_i1 { latency = 42 } : !seq.hlmem<4x4x4xi32>
   hw.output %rddata : i32
 }
 

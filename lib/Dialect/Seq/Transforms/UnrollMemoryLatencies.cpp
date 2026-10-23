@@ -10,7 +10,6 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
-#include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -188,9 +187,9 @@ private:
   /// These are annoying as they require implementing both the read and write
   /// unrolling and then muxing the two delays using the mode as a selector.
   void unrollFirMemReadWritePort(seq::FirMemOp mem, seq::FirMemReadWriteOp &op,
-                                 IntegerAttr delayAttr, IntegerAttr delayRdAttr,
-                                 IntegerAttr zeroAttr, IntegerAttr oneAttr,
-                                 Value ce,
+                                 IntegerAttr delayWrAttr,
+                                 IntegerAttr delayRdAttr, IntegerAttr zeroAttr,
+                                 IntegerAttr oneAttr, Value ce,
                                  ConversionPatternRewriter &rewriter) const {
     // Retrieve all of the relevant arguments
     Value addr = op.getAddress();
@@ -204,12 +203,12 @@ private:
         rewriter, op.getLoc(), delayRdAttr, addr, clk, ce, {}, {}, {}, {}, {});
 
     auto delayedWriteAddr = seq::ShiftRegOp::create(
-        rewriter, op.getLoc(), delayAttr, addr, clk, ce, {}, {}, {}, {}, {});
+        rewriter, op.getLoc(), delayWrAttr, addr, clk, ce, {}, {}, {}, {}, {});
 
     // Delay the write data, this will only be used in case of read so no need
     // for a second mux.
     auto delayedWriteData = seq::ShiftRegOp::create(
-        rewriter, op.getLoc(), delayAttr, data, clk, ce, {}, {}, {}, {}, {});
+        rewriter, op.getLoc(), delayWrAttr, data, clk, ce, {}, {}, {}, {}, {});
 
     // Select which delayed version we want based on the mode
     auto selectAddr = comb::MuxOp::create(rewriter, op.getLoc(), mode,
@@ -230,7 +229,8 @@ public:
     IntegerAttr wrLatency = mem.getWriteLatencyAttr();
     IntegerAttr rdLatency = mem.getReadLatencyAttr();
     IntegerAttr delayRdAttr = rewriter.getI64IntegerAttr(rdLatency.getInt());
-    IntegerAttr delayAttr = rewriter.getI64IntegerAttr(wrLatency.getInt() - 1);
+    IntegerAttr delayWrAttr =
+        rewriter.getI64IntegerAttr(wrLatency.getInt() - 1);
     IntegerAttr zeroAttr = rewriter.getI32IntegerAttr(0);
     IntegerAttr oneAttr = rewriter.getI32IntegerAttr(1);
 
@@ -243,14 +243,15 @@ public:
       // Figure out what type of port it is an unroll it
       TypeSwitch<Operation *, void>(user)
           .Case<seq::FirMemWriteOp>([&](auto port) {
-            unrollFirMemWritePort(mem, port, delayAttr, oneAttr, ce, rewriter);
+            unrollFirMemWritePort(mem, port, delayWrAttr, oneAttr, ce,
+                                  rewriter);
           })
           .Case<seq::FirMemReadOp>([&](auto port) {
             unrollFirMemReadPort(mem, port, delayRdAttr, zeroAttr, ce,
                                  rewriter);
           })
           .Case<seq::FirMemReadWriteOp>([&](auto port) {
-            unrollFirMemReadWritePort(mem, port, delayAttr, delayRdAttr,
+            unrollFirMemReadWritePort(mem, port, delayWrAttr, delayRdAttr,
                                       zeroAttr, oneAttr, ce, rewriter);
           })
           .Default([](auto) { /*ignore non-port users*/ });
