@@ -889,7 +889,7 @@ static Value createZeroValue(Type type, Location loc,
   // Handle time values.
   if (isa<llhd::TimeType>(type)) {
     auto timeAttr =
-        llhd::TimeAttr::get(type.getContext(), 0U, llvm::StringRef("ns"), 0, 0);
+        llhd::TimeAttr::get(type.getContext(), 0U, llvm::StringRef("ns"), 0);
     return llhd::ConstantTimeOp::create(rewriter, loc, timeAttr);
   }
 
@@ -1185,11 +1185,7 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
         op, resultType, op.getNameAttr(), init);
 
     if (auto assignedValue = adaptor.getAssignment()) {
-      auto timeAttr = llhd::TimeAttr::get(resultType.getContext(), 0U,
-                                          llvm::StringRef("ns"), 0, 1);
-      auto time = llhd::ConstantTimeOp::create(rewriter, loc, timeAttr);
-      llhd::DriveOp::create(rewriter, loc, signal, assignedValue, time,
-                            Value{});
+      llhd::AssignOp::create(rewriter, loc, signal, assignedValue, Value{});
     }
 
     return success();
@@ -1280,7 +1276,7 @@ struct ConstantTimeOpConv : public OpConversionPattern<ConstantTimeOp> {
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<llhd::ConstantTimeOp>(
         op, llhd::TimeAttr::get(op->getContext(), op.getValue(),
-                                StringRef("fs"), 0, 0));
+                                StringRef("fs"), 0));
     return success();
   }
 };
@@ -2545,12 +2541,6 @@ struct AssignedVariableOpConversion
   }
 };
 
-// Blocking and continuous assignments get a 0ns 0d 1e delay.
-static llhd::TimeAttr
-getBlockingOrContinuousAssignDelay(mlir::MLIRContext *context) {
-  return llhd::TimeAttr::get(context, 0U, "ns", 0, 1);
-}
-
 template <typename OpTy>
 struct AssignOpConversion : public OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;
@@ -2559,26 +2549,28 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
   LogicalResult
   matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Determine the delay for the assignment.
-    Value delay;
+    // Blocking and continuous assignments take effect immediately.
     if constexpr (std::is_same_v<OpTy, ContinuousAssignOp> ||
                   std::is_same_v<OpTy, BlockingAssignOp>) {
-      delay = llhd::ConstantTimeOp::create(
-          rewriter, op->getLoc(),
-          getBlockingOrContinuousAssignDelay(op->getContext()));
-    } else if constexpr (std::is_same_v<OpTy, NonBlockingAssignOp>) {
-      // Non-blocking assignments get a 0ns 1d 0e delay.
-      delay = llhd::ConstantTimeOp::create(
-          rewriter, op->getLoc(),
-          llhd::TimeAttr::get(op->getContext(), 0U, "ns", 1, 0));
+      rewriter.replaceOpWithNewOp<llhd::AssignOp>(op, adaptor.getDst(),
+                                                  adaptor.getSrc(), Value{});
+      return success();
     } else {
-      // Delayed assignments have a delay operand.
-      delay = adaptor.getDelay();
-    }
+      Value delay;
+      if constexpr (std::is_same_v<OpTy, NonBlockingAssignOp>) {
+        // Non-blocking assignments get a 0ns 1d delay.
+        delay = llhd::ConstantTimeOp::create(
+            rewriter, op->getLoc(),
+            llhd::TimeAttr::get(op->getContext(), 0U, "ns", 1));
+      } else {
+        // Delayed assignments have a delay operand.
+        delay = adaptor.getDelay();
+      }
 
-    rewriter.replaceOpWithNewOp<llhd::DriveOp>(
-        op, adaptor.getDst(), adaptor.getSrc(), delay, Value{});
-    return success();
+      rewriter.replaceOpWithNewOp<llhd::DriveOp>(
+          op, adaptor.getDst(), adaptor.getSrc(), delay, Value{});
+      return success();
+    }
   }
 };
 
@@ -2909,23 +2901,18 @@ struct DynQueueExtractOpConversion
 
 // Given a reference `ref` to some Moore type, this function emits a
 // `ProbeOp` to read the contained value, then passes it to the function `func`.
-// It finally emits a `DriveOp` to write the result of the function back to
+// It finally emits an `AssignOp` to write the result of the function back to
 // the referenced signal.
 //
 // This is useful for converting impure operations (such as the Moore ops for
 // manipulating queues) into pure operations. (Which do not mutate the source
 // value, instead returning a modified value.)
-static void
-probeRefAndDriveWithResult(OpBuilder &builder, Location loc, Value ref,
-                           const std::function<Value(Value)> &func) {
+static void probeRefAndAssignResult(OpBuilder &builder, Location loc, Value ref,
+                                    const std::function<Value(Value)> &func) {
 
   Value v = llhd::ProbeOp::create(builder, loc, ref);
 
-  // Drive using the same delay as a blocking assignment
-  Value delay = llhd::ConstantTimeOp::create(
-      builder, loc, getBlockingOrContinuousAssignDelay(builder.getContext()));
-
-  llhd::DriveOp::create(builder, loc, ref, func(v), delay, Value{});
+  llhd::AssignOp::create(builder, loc, ref, func(v), Value{});
 }
 
 struct QueuePushBackOpConversion : public OpConversionPattern<QueuePushBackOp> {
@@ -2934,7 +2921,7 @@ struct QueuePushBackOpConversion : public OpConversionPattern<QueuePushBackOp> {
   LogicalResult
   matchAndRewrite(QueuePushBackOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    probeRefAndDriveWithResult(
+    probeRefAndAssignResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           return sim::QueuePushBackOp::create(rewriter, op->getLoc(), queue,
                                               adaptor.getElement());
@@ -2953,7 +2940,7 @@ struct QueuePushFrontOpConversion
   matchAndRewrite(QueuePushFrontOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    probeRefAndDriveWithResult(
+    probeRefAndAssignResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           return sim::QueuePushFrontOp::create(rewriter, op->getLoc(), queue,
                                                adaptor.getElement());
@@ -2971,7 +2958,7 @@ struct QueuePopBackOpConversion : public OpConversionPattern<QueuePopBackOp> {
   matchAndRewrite(QueuePopBackOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Value popped;
-    probeRefAndDriveWithResult(
+    probeRefAndAssignResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto popBack =
               sim::QueuePopBackOp::create(rewriter, op->getLoc(), queue);
@@ -2991,7 +2978,7 @@ struct QueuePopFrontOpConversion : public OpConversionPattern<QueuePopFrontOp> {
   matchAndRewrite(QueuePopFrontOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Value popped;
-    probeRefAndDriveWithResult(
+    probeRefAndAssignResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto popFront =
               sim::QueuePopFrontOp::create(rewriter, op->getLoc(), queue);
@@ -3016,12 +3003,8 @@ struct QueueClearOpConversion : public OpConversionPattern<QueueClearOp> {
         sim::QueueEmptyOp::create(rewriter, op->getLoc(), queueType);
 
     // Replace with an assignment to an empty queue
-    Value delay = llhd::ConstantTimeOp::create(
-        rewriter, op.getLoc(),
-        getBlockingOrContinuousAssignDelay(rewriter.getContext()));
-
-    llhd::DriveOp::create(rewriter, op.getLoc(), adaptor.getQueue(), emptyQueue,
-                          delay, Value{});
+    llhd::AssignOp::create(rewriter, op.getLoc(), adaptor.getQueue(),
+                           emptyQueue, Value{});
 
     rewriter.eraseOp(op);
     return success();
@@ -3034,7 +3017,7 @@ struct QueueInsertOpConversion : public OpConversionPattern<QueueInsertOp> {
   LogicalResult
   matchAndRewrite(QueueInsertOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    probeRefAndDriveWithResult(
+    probeRefAndAssignResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto insert =
               sim::QueueInsertOp::create(rewriter, op->getLoc(), queue,
@@ -3054,7 +3037,7 @@ struct QueueDeleteOpConversion : public OpConversionPattern<QueueDeleteOp> {
   LogicalResult
   matchAndRewrite(QueueDeleteOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    probeRefAndDriveWithResult(
+    probeRefAndAssignResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto delOp = sim::QueueDeleteOp::create(rewriter, op->getLoc(), queue,
                                                   adaptor.getIndex());
@@ -3086,7 +3069,7 @@ struct QueueSetOpConversion : public OpConversionPattern<QueueSetOp> {
   LogicalResult
   matchAndRewrite(QueueSetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    probeRefAndDriveWithResult(
+    probeRefAndAssignResult(
         rewriter, op->getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto setOp =
               sim::QueueSetOp::create(rewriter, op.getLoc(), queue,
@@ -3268,7 +3251,7 @@ struct AssocArraySetOpConversion : public OpConversionPattern<AssocArraySetOp> {
   LogicalResult
   matchAndRewrite(AssocArraySetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    probeRefAndDriveWithResult(
+    probeRefAndAssignResult(
         rewriter, op.getLoc(), adaptor.getAssocArray(), [&](Value array) {
           return sim::AssocArraySetOp::create(rewriter, op.getLoc(), array,
                                               adaptor.getIndex(),
@@ -3286,7 +3269,7 @@ struct AssocArrayDeleteOpConversion
   LogicalResult
   matchAndRewrite(AssocArrayDeleteOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    probeRefAndDriveWithResult(
+    probeRefAndAssignResult(
         rewriter, op.getLoc(), adaptor.getAssocArray(), [&](Value array) {
           return sim::AssocArrayDeleteOp::create(rewriter, op.getLoc(), array,
                                                  adaptor.getIndex())
@@ -3306,11 +3289,8 @@ struct AssocArrayClearOpConversion
     auto refType = cast<llhd::RefType>(adaptor.getAssocArray().getType());
     Value emptyArray = sim::AssocArrayEmptyOp::create(rewriter, op->getLoc(),
                                                       refType.getNestedType());
-    Value delay = llhd::ConstantTimeOp::create(
-        rewriter, op.getLoc(),
-        getBlockingOrContinuousAssignDelay(rewriter.getContext()));
-    llhd::DriveOp::create(rewriter, op.getLoc(), adaptor.getAssocArray(),
-                          emptyArray, delay, Value{});
+    llhd::AssignOp::create(rewriter, op.getLoc(), adaptor.getAssocArray(),
+                           emptyArray, Value{});
     rewriter.eraseOp(op);
     return success();
   }
@@ -3362,11 +3342,8 @@ struct AssocArrayEndpointOpConversion : public OpConversionPattern<MooreOpTy> {
     Value newIndex =
         comb::MuxOp::create(rewriter, op.getLoc(), foundBit,
                             endpointOp->getResult(1), curIndex, false);
-    Value delay = llhd::ConstantTimeOp::create(
-        rewriter, op.getLoc(),
-        getBlockingOrContinuousAssignDelay(rewriter.getContext()));
-    llhd::DriveOp::create(rewriter, op.getLoc(), adaptor.getIndex(), newIndex,
-                          delay, Value{});
+    llhd::AssignOp::create(rewriter, op.getLoc(), adaptor.getIndex(), newIndex,
+                           Value{});
     rewriter.replaceOp(op, endpointOp->getResult(0));
     return success();
   }
@@ -3384,11 +3361,8 @@ struct AssocArrayStepOpConversion : public OpConversionPattern<MooreOpTy> {
     Value curIndex =
         llhd::ProbeOp::create(rewriter, op.getLoc(), adaptor.getIndex());
     auto stepOp = SimOpTy::create(rewriter, op.getLoc(), array, curIndex);
-    Value delay = llhd::ConstantTimeOp::create(
-        rewriter, op.getLoc(),
-        getBlockingOrContinuousAssignDelay(rewriter.getContext()));
-    llhd::DriveOp::create(rewriter, op.getLoc(), adaptor.getIndex(),
-                          stepOp->getResult(1), delay, Value{});
+    llhd::AssignOp::create(rewriter, op.getLoc(), adaptor.getIndex(),
+                           stepOp->getResult(1), Value{});
     rewriter.replaceOp(op, stepOp->getResult(0));
     return success();
   }
@@ -3614,11 +3588,8 @@ struct ReadMemBIOpConversion : public OpConversionPattern<ReadMemBIOp> {
         adaptor.getStartAddr(), adaptor.getFinishAddr(), adaptor.getSliceLeft(),
         adaptor.getSliceRight(), op.getDimLowsAttr(), op.getDimDescendingAttr(),
         op.getEnumValuesAttr());
-    Value delay = llhd::ConstantTimeOp::create(
-        rewriter, loc,
-        llhd::TimeAttr::get(rewriter.getContext(), 0U, "ns", 0, 1));
-    rewriter.replaceOpWithNewOp<llhd::DriveOp>(op, adaptor.getDest(), loaded,
-                                               delay, Value{});
+    rewriter.replaceOpWithNewOp<llhd::AssignOp>(op, adaptor.getDest(), loaded,
+                                                Value{});
     return success();
   }
 };
@@ -3707,14 +3678,10 @@ static LogicalResult convert(UrandomRangeBIOp op,
       rewriter, loc, fn,
       ValueRange{adaptor.getMinval(), adaptor.getMaxval(), seedPtr});
 
-  // Drive the potentially mutated seed back with an epsilon time delta.
+  // Assign the potentially mutated seed back.
   if (adaptor.getSeed()) {
     auto newSeed = LLVM::LoadOp::create(rewriter, loc, i32Ty, seedPtr);
-    auto epsilon = llhd::ConstantTimeOp::create(
-        rewriter, loc,
-        llhd::TimeAttr::get(rewriter.getContext(), 0, "ns", 0, 1));
-    llhd::DriveOp::create(rewriter, loc, adaptor.getSeed(), newSeed, epsilon,
-                          Value{});
+    llhd::AssignOp::create(rewriter, loc, adaptor.getSeed(), newSeed, Value{});
   }
 
   rewriter.replaceOp(op, call.getResult(0));

@@ -239,7 +239,8 @@ private:
   explicit DriveValue(Data data) : data(data) {}
 };
 
-/// The operands of an `llhd.drv`, represented as `DriveValue`s.
+/// The operands of an `llhd.drv` or `llhd.assign`, represented as
+/// `DriveValue`s. The delay is null for `llhd.assign` ops.
 struct DriveOperands {
   DriveValue value;
   DriveValue delay;
@@ -250,6 +251,9 @@ struct DriveOperands {
 /// of the drive before each terminator, and which operands have a uniform
 /// value.
 struct DriveSet {
+  /// Whether the drive operations are immediate `llhd.assign` ops, as opposed
+  /// to delayed `llhd.drv` ops. All drives in a set are of the same kind.
+  bool isAssign = false;
   /// The drive operations covered by the information in this struct.
   SmallPtrSet<Operation *, 2> ops;
   /// The drive operands at each terminator.
@@ -314,7 +318,7 @@ void DriveHoister::findHoistableSlots() {
   SmallPtrSet<Value, 8> seenSlots;
   SmallDenseMap<Operation *, SmallVector<RangedValue>, 8> slotsByRoot;
 
-  processOp.walk([&](DriveOp op) {
+  processOp.walk([&](DriveLikeOp op) {
     auto slot = op.getSignal();
     if (!seenSlots.insert(slot).second)
       return;
@@ -360,7 +364,7 @@ void DriveHoister::findHoistableSlots() {
         if (!processOp.getBody().isAncestor(user->getParentRegion()))
           continue;
         // Bail out on unwanted uses.
-        if (!isa<ProbeOp, DriveOp>(user))
+        if (!isa<ProbeOp, DriveLikeOp>(user))
           return;
       }
     }
@@ -386,7 +390,7 @@ void DriveHoister::findHoistableSlots() {
 /// Also populates `suspendOps` with all `llhd.wait` and `llhd.halt` ops.
 void DriveHoister::collectDriveSets() {
   SmallPtrSet<Value, 8> unhoistableSlots;
-  SmallDenseMap<Value, DriveOp, 8> laterDrives;
+  SmallDenseMap<Value, DriveLikeOp, 8> laterDrives;
 
   auto trueAttr = BoolAttr::get(processOp.getContext(), true);
   for (auto &block : processOp.getBody()) {
@@ -401,7 +405,7 @@ void DriveHoister::collectDriveSets() {
 
     for (auto &op : llvm::make_early_inc_range(
              llvm::reverse(block.without_terminator()))) {
-      auto driveOp = dyn_cast<DriveOp>(op);
+      auto driveOp = dyn_cast<DriveLikeOp>(op);
 
       // We can only hoist drives that have no side-effecting ops between
       // themselves and the terminator of the block. If we see a side-effecting
@@ -411,6 +415,8 @@ void DriveHoister::collectDriveSets() {
           beyondSideEffect = true;
         continue;
       }
+
+      bool isAssign = isa<AssignOp>(op);
 
       // Check if we can hoist drives to this signal.
       auto slot = driveOp.getSignal();
@@ -452,15 +458,27 @@ void DriveHoister::collectDriveSets() {
       }
       laterDrive = driveOp;
 
+      // Drives and assigns to the same slot cannot be merged into a single
+      // hoisted op.
+      auto &driveSet = driveSets[slot];
+      if (!driveSet.ops.empty() && driveSet.isAssign != isAssign) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Aborting slot (mixed drives and assigns): " << driveOp
+                   << "\n");
+        unhoistableSlots.insert(slot);
+        continue;
+      }
+      driveSet.isAssign = isAssign;
+
       // Add the operands of this drive to the drive set for the driven slot.
       auto operands = DriveOperands{
           driveOp.getValue(),
-          driveOp.getTime(),
+          isAssign ? DriveValue::dontCare(TimeType::get(processOp.getContext()))
+                   : DriveValue(driveOp.getTime()),
           driveOp.getEnable() ? DriveValue(driveOp.getEnable())
                               : DriveValue(trueAttr),
       };
-      auto &driveSet = driveSets[slot];
-      driveSet.ops.insert(driveOp);
+      driveSet.ops.insert(&op);
       driveSet.operands.insert({terminator, operands});
     }
   }
@@ -589,7 +607,7 @@ void DriveHoister::hoistDrives() {
         .Case<Type>([&](auto type) -> Value {
           // TODO: This should probably create something like a `llhd.dontcare`.
           if (isa<TimeType>(type)) {
-            auto attr = TimeAttr::get(builder.getContext(), 0, "ns", 0, 0);
+            auto attr = TimeAttr::get(builder.getContext(), 0, "ns", 0);
             auto &slot = materializedConstants[attr];
             if (!slot)
               slot = ConstantTimeOp::create(builder, processOp.getLoc(), attr);
@@ -633,7 +651,8 @@ void DriveHoister::hoistDrives() {
       auto &driveSet = driveSets[slot];
       auto operands = driveSet.operands.lookup(suspendOp);
       addYieldOperand(driveSet.uniform.value, operands.value);
-      addYieldOperand(driveSet.uniform.delay, operands.delay);
+      if (!driveSet.isAssign)
+        addYieldOperand(driveSet.uniform.delay, operands.delay);
       addYieldOperand(driveSet.uniform.enable, operands.enable);
     }
   }
@@ -649,7 +668,8 @@ void DriveHoister::hoistDrives() {
     auto &driveSet = driveSets[slot];
     auto operands = driveSet.operands.begin()->second;
     addResultType(driveSet.uniform.value, operands.value);
-    addResultType(driveSet.uniform.delay, operands.delay);
+    if (!driveSet.isAssign)
+      addResultType(driveSet.uniform.delay, operands.delay);
     addResultType(driveSet.uniform.enable, operands.enable);
   }
   auto newProcessOp =
@@ -686,17 +706,22 @@ void DriveHoister::hoistDrives() {
 
     // Create the new drive outside of the process.
     auto value = useResultValue(driveSet.uniform.value);
-    auto delay = useResultValue(driveSet.uniform.delay);
+    auto delay =
+        driveSet.isAssign ? Value{} : useResultValue(driveSet.uniform.delay);
     auto enable = driveSet.uniform.enable != DriveValue(trueAttr)
                       ? useResultValue(driveSet.uniform.enable)
                       : Value{};
-    [[maybe_unused]] auto newDrive =
-        DriveOp::create(builder, slot.getLoc(), slot, value, delay, enable);
-    LLVM_DEBUG(llvm::dbgs() << "- Add " << newDrive << "\n");
+    [[maybe_unused]] Operation *newDrive;
+    if (driveSet.isAssign)
+      newDrive = AssignOp::create(builder, slot.getLoc(), slot, value, enable);
+    else
+      newDrive =
+          DriveOp::create(builder, slot.getLoc(), slot, value, delay, enable);
+    LLVM_DEBUG(llvm::dbgs() << "- Add " << *newDrive << "\n");
 
     // Remove the old drives inside of the process.
     for (auto *oldOp : driveSet.ops) {
-      auto oldDrive = cast<DriveOp>(oldOp);
+      auto oldDrive = cast<DriveLikeOp>(oldOp);
       LLVM_DEBUG(llvm::dbgs() << "- Remove " << oldDrive << "\n");
       auto delay = oldDrive.getTime();
       auto enable = oldDrive.getEnable();

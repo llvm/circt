@@ -20,8 +20,7 @@ def generate(n: int) -> str:
   w(f"// Stress test with {n} signals and {num_diamonds} if/else diamonds.")
   w("")
   w(f"hw.module @Scaling{n}(in %u: i42, in %cond: i1) {{")
-  w("  %td = llhd.constant_time <0ns, 1d, 0e>")
-  w("  %tb = llhd.constant_time <0ns, 0d, 1e>")
+  w("  %td = llhd.constant_time <0ns, 1d>")
   for i in range(n):
     w(f"  %a{i} = llhd.sig %u : <i42>")
   w("  llhd.process {")
@@ -32,7 +31,7 @@ def generate(n: int) -> str:
   w("    cf.cond_br %cond, ^t0, ^e0")
   for d in range(num_diamonds):
     w(f"  ^t{d}:")
-    w(f"    llhd.drv %a{2 * d}, %u after %tb : i42")
+    w(f"    llhd.assign %a{2 * d}, %u : i42")
     w(f"    cf.br ^j{d}")
     w(f"  ^e{d}:")
     w(f"    llhd.drv %a{2 * d + 1}, %u after %td : i42")

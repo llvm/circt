@@ -32,7 +32,7 @@
 hw.module @Foo() {
   // Driver process producing a/b values that change over time.
   %a, %b = llhd.process -> i17, i42 {
-    %d10 = llhd.constant_time <10fs, 0d, 0e>
+    %d10 = llhd.constant_time <10fs, 0d>
     %a0 = hw.constant 0 : i17
     %b0 = hw.constant 0 : i42
     llhd.wait yield (%a0, %b0 : i17, i42), delay %d10, ^step1
@@ -78,7 +78,7 @@ hw.module @Foo() {
     llhd.wait (%a, %b : i17, i42), ^wait_ab
   ^wait_ab:
     func.call @report(%i3, %nowi, %a, %b) : (i32, i64, i17, i42) -> ()
-    %d3 = llhd.constant_time <3fs, 0d, 0e>
+    %d3 = llhd.constant_time <3fs, 0d>
     llhd.wait delay %d3, (%a, %b : i17, i42), ^wait_delay
   ^wait_delay:
     func.call @report(%i4, %nowi, %a, %b) : (i32, i64, i17, i42) -> ()
