@@ -25,6 +25,31 @@ func.func @lower_assume(%arg0: i1) {
   return
 }
 
+// CHECK: func.func @lower_assert_enabled([[ARG0:%.+]]: i1, [[ARG1:%.+]]: i1)
+// CHECK:   [[PROP:%.+]] = smt.eq
+// CHECK:   [[EN:%.+]] = smt.eq
+// CHECK:   [[IMP:%.+]] = smt.implies [[EN]], [[PROP]]
+// CHECK:   [[NIMP:%.+]] = smt.not [[IMP]]
+// CHECK:   smt.assert [[NIMP]]
+// CHECK:   return
+
+func.func @lower_assert_enabled(%arg0: i1, %arg1: i1) {
+  verif.assert %arg0 if %arg1 : i1
+  return
+}
+
+// CHECK: func.func @lower_assume_enabled([[ARG0:%.+]]: i1, [[ARG1:%.+]]: i1)
+// CHECK:   [[PROP:%.+]] = smt.eq
+// CHECK:   [[EN:%.+]] = smt.eq
+// CHECK:   [[IMP:%.+]] = smt.implies [[EN]], [[PROP]]
+// CHECK:   smt.assert [[IMP]]
+// CHECK:   return
+
+func.func @lower_assume_enabled(%arg0: i1, %arg1: i1) {
+  verif.assume %arg0 if %arg1 : i1
+  return
+}
+
 // CHECK-LABEL: func @test_lec
 // CHECK-SAME:  ([[ARG0:%.+]]: !smt.bv<1>)
 func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {

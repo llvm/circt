@@ -327,7 +327,8 @@ hw.module @Mul3(in %a: i2, in %b: i2, out z: i4) {
 // CHECK-NEXT:    [[TMP9:%.+]] = comb.mux bin [[TMP7]], [[TMP3]], [[TMP8]] : i2
 // CHECK-NEXT:    [[REG]] = seq.firreg [[TMP9]] clock [[TMP5]] reset sync [[TMP4]], [[TMP3]] {firrtl.random_init_start = 0 : ui64} : i2
 // CHECK-NEXT:    [[TMP10:%.+]] = comb.icmp bin ne [[REG]], [[TMP0]] : i2
-// CHECK-NEXT:    verif.clocked_assert [[TMP10]], posedge [[TMP6]] : i1
+// CHECK-NEXT:    [[TMP11:%.+]] = verif.has_been_reset [[TMP6]], sync [[TMP4]]
+// CHECK-NEXT:    verif.clocked_assert [[TMP10]] if [[TMP11]], posedge [[TMP6]] : i1
 // CHECK-NEXT: }
 
 hw.module @Counter(in %in : i2, out out : i2, in %clock : !seq.clock, in %reset : i1) {
@@ -347,4 +348,29 @@ hw.module @Counter(in %in : i2, out out : i2, in %clock : !seq.clock, in %reset 
     verif.ensure %7 if %6 : !ltl.sequence
   }
   hw.output %4 : i2
+}
+
+// CHECK-LABEL: hw.module @EnabledClauses
+// CHECK:         [[RES:%.+]] = verif.symbolic_value : i8
+// CHECK:         [[REQ:%.+]] = comb.icmp ne %a, %c0_i8 : i8
+// CHECK-NEXT:    verif.assert [[REQ]] if %en : i1
+// CHECK-NEXT:    [[ENS:%.+]] = comb.icmp uge [[RES]], %a : i8
+// CHECK-NEXT:    verif.assume [[ENS]] if %en : i1
+// CHECK-NEXT:    hw.output [[RES]] : i8
+
+// CHECK-LABEL: verif.formal @EnabledClauses_CheckContract_0
+// CHECK:         [[A:%.+]] = verif.symbolic_value : i8
+// CHECK-NEXT:    [[EN:%.+]] = verif.symbolic_value : i1
+// CHECK-NEXT:    [[REQ:%.+]] = comb.icmp ne [[A]], %c0_i8 : i8
+// CHECK-NEXT:    verif.assume [[REQ]] if [[EN]] : i1
+
+hw.module @EnabledClauses(in %a: i8, in %en: i1, out z: i8) {
+  %0 = verif.contract %a : i8 {
+    %c0_i8 = hw.constant 0 : i8
+    %1 = comb.icmp ugt %a, %c0_i8 : i8
+    verif.require %1 if %en : i1
+    %2 = comb.icmp uge %0, %a : i8
+    verif.ensure %2 if %en : i1
+  }
+  hw.output %0 : i8
 }
