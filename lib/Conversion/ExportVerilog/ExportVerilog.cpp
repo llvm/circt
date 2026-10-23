@@ -1600,18 +1600,6 @@ static StringRef getVerilogDeclWord(Operation *op,
     return "reg";
   }
 
-  if (auto var = dyn_cast<VarOp>(op)) {
-    bool hasExplicitType = hasExplicitDataType(var.getElementType());
-    switch (emitter.state.options.varOpDeclStyle) {
-    case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
-      return hasExplicitType ? "var" : "var logic";
-    case circt::LoweringOptions::VarOpDeclStyle::Logic:
-      return hasExplicitType ? "" : "logic";
-    case circt::LoweringOptions::VarOpDeclStyle::Reg:
-      return hasExplicitType ? "" : "reg";
-    }
-  }
-
   if (isa<sv::WireOp>(op))
     return "wire";
   if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
@@ -1628,6 +1616,27 @@ static StringRef getVerilogDeclWord(Operation *op,
   // If this decl is within a function, "automatic" is not needed because
   // "automatic" is added to its definition.
   bool stripAutomatic = isa_and_nonnull<FuncOp>(emitter.currentModuleOp);
+
+  if (auto var = dyn_cast<VarOp>(op)) {
+    bool hasExplicitType = hasExplicitDataType(var.getElementType());
+    // A var defined in a procedural region is emitted as 'automatic'. If the
+    // type has a struct, 'logic' is already emitted within the struct type
+    // definition (e.g. struct packed {logic foo;}), so don't emit it again.
+    // A var carrying `sv.no_automatic` (i.e. one that used to be an `sv.reg`)
+    // keeps the regular declaration style even in a procedural region.
+    if (isProcedural && !stripAutomatic && !var->hasAttr("sv.no_automatic"))
+      return hasStructType(var.getElementType()) ? "automatic"
+                                                 : "automatic logic";
+
+    switch (emitter.state.options.varOpDeclStyle) {
+    case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
+      return hasExplicitType ? "var" : "var logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Logic:
+      return hasExplicitType ? "" : "logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Reg:
+      return hasExplicitType ? "" : "reg";
+    }
+  }
 
   if (isa<LogicOp>(op)) {
     // If the logic op is defined in a procedural region, add 'automatic'
