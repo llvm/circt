@@ -63,7 +63,8 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
               argValues.push_back(ports.getInput(name));
               break;
             case calyx::Direction::Output:
-              auto wire = sv::WireOp::create(b, component.getLoc(), type, name);
+              auto wire = sv::WireOp::create(b, component.getLoc(),
+                                             sv::NetType::get(type), name);
               auto wireRead =
                   sv::ReadInOutOp::create(b, component.getLoc(), wire);
               argValues.push_back(wireRead);
@@ -411,14 +412,14 @@ private:
 
   ReadInOutOp wireIn(Value source, StringRef instanceName, StringRef portName,
                      ImplicitLocOpBuilder &b) const {
-    auto wire = sv::WireOp::create(b, source.getType(),
+    auto wire = sv::WireOp::create(b, sv::NetType::get(source.getType()),
                                    createName(instanceName, portName));
     return ReadInOutOp::create(b, wire);
   }
 
   ReadInOutOp wireOut(Value source, StringRef instanceName, StringRef portName,
                       ImplicitLocOpBuilder &b) const {
-    auto wire = sv::WireOp::create(b, source.getType(),
+    auto wire = sv::WireOp::create(b, sv::NetType::get(source.getType()),
                                    createName(instanceName, portName));
     sv::AssignOp::create(b, wire, source);
     return ReadInOutOp::create(b, wire);

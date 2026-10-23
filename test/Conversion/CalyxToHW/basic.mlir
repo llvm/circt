@@ -102,7 +102,7 @@
 
       // CHECK-DAG:  %[[FALSE_1:.+]] = hw.constant false
       // CHECK-DAG:  %[[BUF_CLK_IN:.+]] = comb.mux %[[TRUE]], %clk, %[[FALSE_1]]
-      // CHECK-DAG:  sv.assign %buf_clk, %[[BUF_CLK_IN]] : i1
+      // CHECK-DAG:  sv.assign %buf_clk, %[[BUF_CLK_IN]] : !sv.net<i1>, i1
       calyx.assign %buf.clk = %true ? %clk : i1
 
       // CHECK-DAG:  %[[C0_I32_3:.+]] = hw.constant 0
