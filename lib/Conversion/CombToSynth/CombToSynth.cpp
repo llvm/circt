@@ -27,14 +27,17 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthDialect.h"
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Support/LLVM.h"
 #include "circt/Support/Naming.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/PointerUnion.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/DivisionByConstantInfo.h"
 #include <array>
+#include <utility>
 
 #define DEBUG_TYPE "comb-to-synth"
 
@@ -338,6 +341,83 @@ static Value lowerSignedDivByConstant(OpBuilder &builder, Location loc,
   Value signBit = builder.createOrFold<comb::ExtractOp>(loc, q, width - 1, 1);
   Value signPadded = comb::createZExt(builder, loc, signBit, width);
   return builder.createOrFold<comb::AddOp>(loc, q, signPadded);
+}
+
+/// Lower an unsigned division with a non-constant divisor to a combinational
+/// restoring array divider. Returns the quotient and the remainder.
+///
+/// The divider processes the dividend from MSB to LSB. In every step the
+/// partial remainder is shifted left by one, the next dividend bit is shifted
+/// in, and the divisor is trially subtracted. If the subtraction does not
+/// borrow, the quotient bit is one and the difference becomes the new partial
+/// remainder; otherwise the quotient bit is zero and the partial remainder is
+/// restored. The partial remainder is kept `width + 1` bits wide so the borrow
+/// can be read off the MSB of the difference.
+///
+/// Division by zero yields an all-ones quotient and the dividend as remainder.
+static std::pair<Value, Value>
+lowerUnsignedDivRem(OpBuilder &builder, Location loc, Value lhs, Value rhs) {
+  unsigned width = lhs.getType().getIntOrFloatBitWidth();
+  unsigned remWidth = width + 1;
+  Value wideRhs = comb::createZExt(builder, loc, rhs, remWidth);
+
+  SmallVector<Value> lhsBits = extractBits(builder, lhs);
+
+  // Partial remainder, `width + 1` bits wide.
+  Value remainder =
+      hw::ConstantOp::create(builder, loc, APInt::getZero(remWidth));
+  // Quotient bits, produced MSB first (the order `comb.concat` expects).
+  SmallVector<Value> quotientBits;
+  quotientBits.reserve(width);
+  for (Value lhsBit : llvm::reverse(lhsBits)) {
+    // remainder = (remainder << 1) | lhsBit
+    Value shifted =
+        builder.createOrFold<comb::ExtractOp>(loc, remainder, 0, remWidth - 1);
+    remainder = builder.createOrFold<comb::ConcatOp>(loc, shifted, lhsBit);
+    // Trial subtraction. The MSB of the difference is set iff it borrowed.
+    Value diff = builder.createOrFold<comb::SubOp>(loc, remainder, wideRhs);
+    Value borrow =
+        builder.createOrFold<comb::ExtractOp>(loc, diff, remWidth - 1, 1);
+    quotientBits.push_back(comb::createOrFoldNot(builder, loc, borrow));
+    remainder = builder.createOrFold<comb::MuxOp>(loc, borrow, remainder, diff);
+  }
+
+  Value quotient = builder.createOrFold<comb::ConcatOp>(loc, quotientBits);
+  Value finalRemainder =
+      builder.createOrFold<comb::ExtractOp>(loc, remainder, 0, width);
+  return {quotient, finalRemainder};
+}
+
+/// Lower a signed division with a non-constant divisor to a restoring array
+/// divider operating on the magnitudes of the operands. Returns the quotient
+/// and the remainder, rounded towards zero like `comb.divs` / `comb.mods`: the
+/// quotient is negative iff the signs of the operands differ, and the
+/// remainder takes the sign of the dividend.
+static std::pair<Value, Value>
+lowerSignedDivRem(OpBuilder &builder, Location loc, Value lhs, Value rhs) {
+  unsigned width = lhs.getType().getIntOrFloatBitWidth();
+  Value zero = hw::ConstantOp::create(builder, loc, APInt::getZero(width));
+  auto negateIf = [&](Value value, Value shouldNegate) {
+    Value negated = builder.createOrFold<comb::SubOp>(loc, zero, value);
+    return builder.createOrFold<comb::MuxOp>(loc, shouldNegate, negated, value);
+  };
+
+  Value lhsNegative =
+      builder.createOrFold<comb::ExtractOp>(loc, lhs, width - 1, 1);
+  Value rhsNegative =
+      builder.createOrFold<comb::ExtractOp>(loc, rhs, width - 1, 1);
+  // Materialize the magnitudes in a fixed order; the order in which function
+  // arguments are evaluated is unspecified.
+  Value lhsMagnitude = negateIf(lhs, lhsNegative);
+  Value rhsMagnitude = negateIf(rhs, rhsNegative);
+  auto [quotient, remainder] =
+      lowerUnsignedDivRem(builder, loc, lhsMagnitude, rhsMagnitude);
+
+  Value quotientNegative =
+      builder.createOrFold<comb::XorOp>(loc, lhsNegative, rhsNegative, true);
+  Value signedQuotient = negateIf(quotient, quotientNegative);
+  Value signedRemainder = negateIf(remainder, lhsNegative);
+  return {signedQuotient, signedRemainder};
 }
 
 //===----------------------------------------------------------------------===//
@@ -1096,14 +1176,23 @@ struct CombDivUOpConversion : DivModOpConversionBase<DivUOp> {
 
     // When rhs is not power of two and the number of unknown bits are small,
     // create a mux tree that emulates all possible cases.
-    return emulateBinaryOpForUnknownBits(
-        rewriter, maxEmulationUnknownBits, op,
-        [](const APInt &lhs, const APInt &rhs) {
-          // Division by zero is undefined, just return zero.
-          if (rhs.isZero())
-            return APInt::getZero(rhs.getBitWidth());
-          return lhs.udiv(rhs);
-        });
+    if (succeeded(emulateBinaryOpForUnknownBits(
+            rewriter, maxEmulationUnknownBits, op,
+            [](const APInt &lhs, const APInt &rhs) {
+              // Division by zero is undefined, just return zero.
+              if (rhs.isZero())
+                return APInt::getZero(rhs.getBitWidth());
+              return lhs.udiv(rhs);
+            })))
+      return success();
+
+    // Otherwise, build a restoring array divider.
+    replaceOpAndCopyNamehint(rewriter, op,
+                             lowerUnsignedDivRem(rewriter, op.getLoc(),
+                                                 adaptor.getLhs(),
+                                                 adaptor.getRhs())
+                                 .first);
+    return success();
   }
 };
 
@@ -1140,14 +1229,23 @@ struct CombModUOpConversion : DivModOpConversionBase<ModUOp> {
 
     // When rhs is not power of two and the number of unknown bits are small,
     // create a mux tree that emulates all possible cases.
-    return emulateBinaryOpForUnknownBits(
-        rewriter, maxEmulationUnknownBits, op,
-        [](const APInt &lhs, const APInt &rhs) {
-          // Division by zero is undefined, just return zero.
-          if (rhs.isZero())
-            return APInt::getZero(rhs.getBitWidth());
-          return lhs.urem(rhs);
-        });
+    if (succeeded(emulateBinaryOpForUnknownBits(
+            rewriter, maxEmulationUnknownBits, op,
+            [](const APInt &lhs, const APInt &rhs) {
+              // Division by zero is undefined, just return zero.
+              if (rhs.isZero())
+                return APInt::getZero(rhs.getBitWidth());
+              return lhs.urem(rhs);
+            })))
+      return success();
+
+    // Otherwise, build a restoring array divider.
+    replaceOpAndCopyNamehint(rewriter, op,
+                             lowerUnsignedDivRem(rewriter, op.getLoc(),
+                                                 adaptor.getLhs(),
+                                                 adaptor.getRhs())
+                                 .second);
+    return success();
   }
 };
 
@@ -1191,14 +1289,25 @@ struct CombDivSOpConversion : DivModOpConversionBase<DivSOp> {
       return success();
     }
 
-    return emulateBinaryOpForUnknownBits(
-        rewriter, maxEmulationUnknownBits, op,
-        [](const APInt &lhs, const APInt &rhs) {
-          // Division by zero is undefined, just return zero.
-          if (rhs.isZero())
-            return APInt::getZero(rhs.getBitWidth());
-          return lhs.sdiv(rhs);
-        });
+    // When the number of unknown bits are small, create a mux tree that
+    // emulates all possible cases.
+    if (succeeded(emulateBinaryOpForUnknownBits(
+            rewriter, maxEmulationUnknownBits, op,
+            [](const APInt &lhs, const APInt &rhs) {
+              // Division by zero is undefined, just return zero.
+              if (rhs.isZero())
+                return APInt::getZero(rhs.getBitWidth());
+              return lhs.sdiv(rhs);
+            })))
+      return success();
+
+    // Otherwise, build a restoring array divider.
+    replaceOpAndCopyNamehint(rewriter, op,
+                             lowerSignedDivRem(rewriter, op.getLoc(),
+                                               adaptor.getLhs(),
+                                               adaptor.getRhs())
+                                 .first);
+    return success();
   }
 };
 
@@ -1228,14 +1337,25 @@ struct CombModSOpConversion : DivModOpConversionBase<ModSOp> {
       return success();
     }
 
-    return emulateBinaryOpForUnknownBits(
-        rewriter, maxEmulationUnknownBits, op,
-        [](const APInt &lhs, const APInt &rhs) {
-          // Division by zero is undefined, just return zero.
-          if (rhs.isZero())
-            return APInt::getZero(rhs.getBitWidth());
-          return lhs.srem(rhs);
-        });
+    // When the number of unknown bits are small, create a mux tree that
+    // emulates all possible cases.
+    if (succeeded(emulateBinaryOpForUnknownBits(
+            rewriter, maxEmulationUnknownBits, op,
+            [](const APInt &lhs, const APInt &rhs) {
+              // Division by zero is undefined, just return zero.
+              if (rhs.isZero())
+                return APInt::getZero(rhs.getBitWidth());
+              return lhs.srem(rhs);
+            })))
+      return success();
+
+    // Otherwise, build a restoring array divider.
+    replaceOpAndCopyNamehint(rewriter, op,
+                             lowerSignedDivRem(rewriter, op.getLoc(),
+                                               adaptor.getLhs(),
+                                               adaptor.getRhs())
+                                 .second);
+    return success();
   }
 };
 
