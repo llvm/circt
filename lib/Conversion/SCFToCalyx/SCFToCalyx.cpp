@@ -1990,7 +1990,8 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
         auto memOp = calyx::SeqMemoryOp::create(
             rewriter, funcOp.getLoc(), memName,
             memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
-        // we don't set the memory to "external", which implies it's a reference
+        // Explicitly set "is_ref" to mark this memory as a reference interface.
+        memOp->setAttr("is_ref", rewriter.getUnitAttr());
 
         compState->registerMemoryInterface(arg.value(),
                                            calyx::MemoryInterface(memOp));
