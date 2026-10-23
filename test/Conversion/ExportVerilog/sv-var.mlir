@@ -16,7 +16,7 @@ hw.type_scope @var_types {
 // VARLOGIC: var logic [2:0][3:0] packed_unpacked[0:1];
 // VARLOGIC: var struct packed {logic a; logic [2:0] b; } struct_value
 // VARLOGIC: var union packed {{.*}}union_value;
-// VARLOGIC: var enum {{.*}}enum_value;
+// VARLOGIC: var enum{{.*}} enum_value;
 // VARLOGIC: var mode_t mode_alias_value;
 // VARLOGIC: var byte_t alias_value;
 // VARLOGIC: var byte_t alias_unpacked[0:1];
@@ -29,7 +29,7 @@ hw.type_scope @var_types {
 // LOGIC: logic [2:0][3:0] packed_unpacked[0:1];
 // LOGIC: struct packed {logic a; logic [2:0] b; } struct_value
 // LOGIC: union packed {{.*}}union_value;
-// LOGIC: enum {{.*}}enum_value;
+// LOGIC: enum{{.*}} enum_value;
 // LOGIC: mode_t mode_alias_value;
 // LOGIC: byte_t alias_value;
 // LOGIC: byte_t alias_unpacked[0:1];
@@ -42,7 +42,7 @@ hw.type_scope @var_types {
 // REG: reg [2:0][3:0] packed_unpacked[0:1];
 // REG: struct packed {logic a; logic [2:0] b; } struct_value
 // REG: union packed {{.*}}union_value;
-// REG: enum {{.*}}enum_value;
+// REG: enum{{.*}} enum_value;
 // REG: mode_t mode_alias_value;
 // REG: byte_t alias_value;
 // REG: byte_t alias_unpacked[0:1];
