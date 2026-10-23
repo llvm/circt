@@ -12,6 +12,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Target/DebugInfo.h"
 #include "mlir/IR/Threading.h"
@@ -212,8 +213,8 @@ struct EmittedType {
   EmittedType(StringRef name) : name(name) {}
   EmittedType(Type type) {
     type = hw::getCanonicalType(type);
-    if (auto inoutType = dyn_cast<hw::InOutType>(type))
-      type = hw::getCanonicalType(inoutType.getElementType());
+    if (auto handleType = sv::getHandleElementType(type))
+      type = hw::getCanonicalType(handleType);
     if (hw::isHWIntegerType(type)) {
       name = "logic";
       addPackedDim(hw::getBitWidth(type));
@@ -697,7 +698,7 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
   auto *op = result.getOwner();
 
   // If the operation is a named signal in the output Verilog, use that name.
-  if (isa<hw::WireOp, sv::WireOp, sv::RegOp, sv::LogicOp>(op)) {
+  if (isa<hw::WireOp, sv::WireOp, sv::RegOp, sv::LogicOp, sv::VarOp>(op)) {
     auto name = op->getAttrOfType<StringAttr>("hw.verilogName");
     if (!name || name.empty())
       name = op->getAttrOfType<StringAttr>("name");
@@ -946,6 +947,10 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
     if (auto assignOp = dyn_cast<sv::AssignOp>(user))
       if (assignOp.getSrc() == result)
         return emitExpression(assignOp.getDest());
+    // Use name of `sv.var_assign` destination that is assigned this value.
+    if (auto varAssignOp = dyn_cast<sv::VarAssignOp>(user))
+      if (varAssignOp.getSrc() == result)
+        return emitExpression(varAssignOp.getDest());
     // Use module output port name that carries this value.
     if (isa<hw::OutputOp>(user)) {
       auto mod = cast<hw::HWModuleLike>(user->getParentOp());
