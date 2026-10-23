@@ -273,10 +273,337 @@ void FIRRTLInstanceInfoPass::runOnOperation() {
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// A brute-force oracle for `ClockAliasAnalysis`: trace every clock back to
+/// its source along every instance path, and check that each claimed alias
+/// holds on every pair of paths that the claim relates.
+class ClockAliasOracle {
+public:
+  ClockAliasOracle(firrtl::CircuitOp circuit, firrtl::InstanceGraph &ig,
+                   const firrtl::GatedClockConversion::ClockAliasAnalysis &aa)
+      : circuit(circuit), ig(ig), aa(aa) {}
+
+  /// Returns the number of violations found, each reported as an error.
+  unsigned verify();
+
+private:
+  // An instance path, interned. Path 0..numRoots-1 are the root modules.
+  struct Path {
+    unsigned parent;         // ~0u for a root.
+    firrtl::InstanceOp inst; // null for a root.
+    firrtl::FModuleOp mod;   // The module this path instantiates.
+    unsigned depth;
+  };
+  // (value, path) pairs identify a concrete signal.
+  using Signal = std::pair<Value, unsigned>;
+
+  unsigned extend(unsigned parent, firrtl::InstanceOp inst,
+                  firrtl::FModuleOp mod);
+  void enumeratePaths();
+  std::optional<Signal> step(Signal s);
+  Signal source(Signal s);
+  /// The prefix of path `p` that ends at module `d`, or ~0u.
+  unsigned prefixAt(unsigned p, firrtl::FModuleOp d) const;
+  /// Modules on every path of `mod`, in path order.
+  SmallVector<firrtl::FModuleOp> dominators(firrtl::FModuleOp mod) const;
+  firrtl::FModuleOp moduleOf(Value v) const;
+  std::string name(Value v) const;
+  unsigned checkPair(Value a, Value b);
+
+  firrtl::CircuitOp circuit;
+  firrtl::InstanceGraph &ig;
+  const firrtl::GatedClockConversion::ClockAliasAnalysis &aa;
+
+  SmallVector<Path> paths;
+  DenseMap<std::pair<unsigned, Operation *>, unsigned> pathIds;
+  DenseMap<Operation *, SmallVector<unsigned>> pathsOf;
+  DenseMap<Signal, Signal> sources;
+  bool truncated = false;
+};
+} // namespace
+
+unsigned ClockAliasOracle::extend(unsigned parent, firrtl::InstanceOp inst,
+                                  firrtl::FModuleOp mod) {
+  auto [it, inserted] = pathIds.try_emplace({parent, inst}, paths.size());
+  if (inserted) {
+    paths.push_back({parent, inst, mod, paths[parent].depth + 1});
+    pathsOf[mod].push_back(it->second);
+  }
+  return it->second;
+}
+
+void ClockAliasOracle::enumeratePaths() {
+  SmallVector<unsigned> worklist;
+  for (auto *node : ig)
+    if (node->noUses())
+      if (auto mod = dyn_cast_or_null<firrtl::FModuleOp>(
+              node->getModule().getOperation())) {
+        paths.push_back({~0u, {}, mod, 0});
+        pathsOf[mod].push_back(paths.size() - 1);
+        worklist.push_back(paths.size() - 1);
+      }
+  while (!worklist.empty()) {
+    unsigned p = worklist.pop_back_val();
+    if (paths.size() > 20000) {
+      truncated = true;
+      return;
+    }
+    firrtl::FModuleOp mod = paths[p].mod;
+    mod.walk([&](firrtl::InstanceOp inst) {
+      auto child = dyn_cast_or_null<firrtl::FModuleOp>(
+          inst.getReferencedModule(ig).getOperation());
+      if (child)
+        worklist.push_back(extend(p, inst, child));
+    });
+  }
+}
+
+static Value driverOf(Value v) {
+  for (auto *user : v.getUsers())
+    if (auto connect = dyn_cast<firrtl::FConnectLike>(user))
+      if (connect.getDest() == v)
+        return connect.getSrc();
+  return Value();
+}
+
+std::optional<ClockAliasOracle::Signal> ClockAliasOracle::step(Signal s) {
+  auto [v, p] = s;
+  if (auto arg = dyn_cast<BlockArgument>(v)) {
+    auto mod = dyn_cast<firrtl::FModuleOp>(arg.getOwner()->getParentOp());
+    if (!mod)
+      return std::nullopt;
+    if (mod.getPortDirection(arg.getArgNumber()) == firrtl::Direction::In) {
+      if (paths[p].parent == ~0u)
+        return std::nullopt;
+      return Signal{paths[p].inst.getResult(arg.getArgNumber()),
+                    paths[p].parent};
+    }
+    if (Value d = driverOf(v))
+      return Signal{d, p};
+    return std::nullopt;
+  }
+  Operation *op = v.getDefiningOp();
+  if (auto inst = dyn_cast<firrtl::InstanceOp>(op)) {
+    unsigned idx = cast<OpResult>(v).getResultNumber();
+    if (inst.getPortDirection(idx) == firrtl::Direction::Out) {
+      auto child = dyn_cast_or_null<firrtl::FModuleOp>(
+          inst.getReferencedModule(ig).getOperation());
+      if (!child)
+        return std::nullopt;
+      auto it = pathIds.find({p, inst});
+      if (it == pathIds.end())
+        return std::nullopt;
+      return Signal{child.getBodyBlock()->getArgument(idx), it->second};
+    }
+    if (Value d = driverOf(v))
+      return Signal{d, p};
+    return std::nullopt;
+  }
+  if (isa<firrtl::WireOp>(op)) {
+    if (Value d = driverOf(v))
+      return Signal{d, p};
+    return std::nullopt;
+  }
+  if (auto node = dyn_cast<firrtl::NodeOp>(op))
+    return Signal{node.getInput(), p};
+  if (isa<firrtl::AsUIntPrimOp, firrtl::AsSIntPrimOp, firrtl::AsClockPrimOp,
+          firrtl::AsAsyncResetPrimOp>(op))
+    return Signal{op->getOperand(0), p};
+  if (auto gate = dyn_cast<firrtl::ClockGateIntrinsicOp>(op))
+    return Signal{gate.getInput(), p};
+  return std::nullopt;
+}
+
+ClockAliasOracle::Signal ClockAliasOracle::source(Signal s) {
+  SmallVector<Signal> chain;
+  DenseMap<Signal, unsigned> onChain;
+  Signal cur = s;
+  Signal result;
+  while (true) {
+    if (auto it = sources.find(cur); it != sources.end()) {
+      result = it->second;
+      break;
+    }
+    auto [it, inserted] = onChain.try_emplace(cur, chain.size());
+    if (!inserted) {
+      // A loop: every signal on it is the same; pick a canonical one.
+      result = cur;
+      for (unsigned i = it->second; i < chain.size(); ++i)
+        if (std::make_pair(chain[i].first.getAsOpaquePointer(),
+                           chain[i].second) <
+            std::make_pair(result.first.getAsOpaquePointer(), result.second))
+          result = chain[i];
+      break;
+    }
+    chain.push_back(cur);
+    auto next = step(cur);
+    if (!next) {
+      result = cur;
+      break;
+    }
+    cur = *next;
+  }
+  for (Signal c : chain)
+    sources[c] = result;
+  return result;
+}
+
+firrtl::FModuleOp ClockAliasOracle::moduleOf(Value v) const {
+  if (auto arg = dyn_cast<BlockArgument>(v))
+    return dyn_cast<firrtl::FModuleOp>(arg.getOwner()->getParentOp());
+  return v.getDefiningOp()->getParentOfType<firrtl::FModuleOp>();
+}
+
+unsigned ClockAliasOracle::prefixAt(unsigned p, firrtl::FModuleOp d) const {
+  for (; p != ~0u; p = paths[p].parent)
+    if (paths[p].mod == d)
+      return p;
+  return ~0u;
+}
+
+SmallVector<firrtl::FModuleOp>
+ClockAliasOracle::dominators(firrtl::FModuleOp mod) const {
+  auto it = pathsOf.find(mod);
+  if (it == pathsOf.end() || it->second.empty())
+    return {};
+  auto modulesOn = [&](unsigned p) {
+    SmallVector<firrtl::FModuleOp> mods;
+    for (; p != ~0u; p = paths[p].parent)
+      mods.push_back(paths[p].mod);
+    std::reverse(mods.begin(), mods.end());
+    return mods;
+  };
+  SmallVector<firrtl::FModuleOp> result = modulesOn(it->second.front());
+  for (unsigned p : it->second) {
+    auto mods = modulesOn(p);
+    DenseSet<Operation *> on;
+    for (auto m : mods)
+      on.insert(m);
+    llvm::erase_if(result, [&](firrtl::FModuleOp m) { return !on.count(m); });
+  }
+  return result;
+}
+
+std::string ClockAliasOracle::name(Value v) const {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  os << moduleOf(v).getModuleName() << ".";
+  if (auto arg = dyn_cast<BlockArgument>(v))
+    os << moduleOf(v).getPortName(arg.getArgNumber());
+  else
+    v.printAsOperand(os, OpPrintingFlags());
+  return s;
+}
+
+unsigned ClockAliasOracle::checkPair(Value a, Value b) {
+  firrtl::FModuleOp ma = moduleOf(a), mb = moduleOf(b);
+  if (!ma || !mb)
+    return 0;
+  // The deepest module that dominates both.
+  auto domA = dominators(ma), domB = dominators(mb);
+  DenseSet<Operation *> inB;
+  for (auto m : domB)
+    inB.insert(m);
+  firrtl::FModuleOp d;
+  for (auto m : domA)
+    if (inB.count(m))
+      d = m;
+  if (!d)
+    return 0;
+  // Group the paths of each module by their instance of `d`.
+  DenseMap<unsigned, SmallVector<unsigned>> byPrefixB;
+  for (unsigned q : pathsOf.lookup(mb))
+    byPrefixB[prefixAt(q, d)].push_back(q);
+  for (unsigned p : pathsOf.lookup(ma)) {
+    unsigned prefix = prefixAt(p, d);
+    for (unsigned q : byPrefixB.lookup(prefix)) {
+      Signal sa = source({a, p}), sb = source({b, q});
+      if (sa != sb) {
+        mlir::emitError(a.getLoc())
+            << "clock alias oracle: " << name(a) << " and " << name(b)
+            << " are claimed to alias but come from " << name(sa.first)
+            << " and " << name(sb.first);
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+unsigned ClockAliasOracle::verify() {
+  enumeratePaths();
+  if (truncated)
+    return 0;
+  unsigned errors = 0;
+
+  // Every value of the IR, to catch a tracked value that no longer exists.
+  DenseSet<Value> live;
+  SmallVector<Value> tracked;
+  circuit.walk([&](Operation *op) {
+    for (Region &region : op->getRegions())
+      for (Block &block : region)
+        for (BlockArgument arg : block.getArguments())
+          live.insert(arg);
+    for (Value result : op->getResults())
+      live.insert(result);
+  });
+  circuit.walk([&](Operation *op) {
+    for (Region &region : op->getRegions())
+      for (Block &block : region)
+        for (BlockArgument arg : block.getArguments())
+          if (aa.isTracked(arg))
+            tracked.push_back(arg);
+    for (Value result : op->getResults())
+      if (aa.isTracked(result))
+        tracked.push_back(result);
+  });
+
+  // Group by representative and check the class API is consistent.
+  llvm::MapVector<Value, SmallVector<Value>> classes;
+  for (Value v : tracked) {
+    Value rep = aa.getRepresentative(v);
+    if (!rep || !aa.isTracked(rep) || !aa.alias(v, rep) || !live.count(rep)) {
+      mlir::emitError(v.getLoc()) << "clock alias oracle: bad representative";
+      ++errors;
+      continue;
+    }
+    classes[rep].push_back(v);
+  }
+  for (auto &[rep, members] : classes) {
+    auto set = aa.aliasSet(rep);
+    for (Value m : set)
+      if (!live.count(m)) {
+        mlir::emitError(rep.getLoc())
+            << "clock alias oracle: class contains a value not in the IR";
+        ++errors;
+      }
+    if (set.size() != members.size()) {
+      mlir::emitError(rep.getLoc())
+          << "clock alias oracle: aliasSet has " << set.size()
+          << " members, but " << members.size() << " IR values map to it";
+      ++errors;
+    }
+    Value base = aa.getBaseClock(rep);
+    if (base && !aa.alias(base, rep)) {
+      mlir::emitError(rep.getLoc())
+          << "clock alias oracle: base clock is not in its class";
+      ++errors;
+    }
+    for (unsigned i = 0; i < members.size(); ++i)
+      for (unsigned j = i + 1; j < members.size(); ++j)
+        errors += checkPair(members[i], members[j]);
+  }
+  return errors;
+}
+
+namespace {
 struct FIRRTLGatedClockConversionPass
     : public PassWrapper<FIRRTLGatedClockConversionPass,
                          OperationPass<firrtl::CircuitOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FIRRTLGatedClockConversionPass)
+
+  FIRRTLGatedClockConversionPass() = default;
+  FIRRTLGatedClockConversionPass(const FIRRTLGatedClockConversionPass &other)
+      : PassWrapper(other) {}
 
   void runOnOperation() override;
   StringRef getArgument() const override {
@@ -286,6 +613,15 @@ struct FIRRTLGatedClockConversionPass
     return "Run firrtl::GatedClockConversion utility and show the results.  "
            "This pass is intended to be used for testing purposes only.";
   }
+
+  Option<bool> printClockAliases{
+      *this, "print-clock-aliases",
+      llvm::cl::desc("Print the clock alias classes after the conversion"),
+      llvm::cl::init(false)};
+  Option<bool> verifyClockAliases{
+      *this, "verify-clock-aliases",
+      llvm::cl::desc("Check every clock alias against a brute-force oracle"),
+      llvm::cl::init(false)};
 };
 } // namespace
 
@@ -305,6 +641,15 @@ void FIRRTLGatedClockConversionPass::runOnOperation() {
 
   // Run the conversion
   if (failed(converter.run()))
+    return signalPassFailure();
+
+  if (printClockAliases && converter.hasClockAliases()) {
+    llvm::outs() << "clock-aliases @" << circuit.getName() << "\n";
+    converter.getClockAliases().print(llvm::outs());
+  }
+  if (verifyClockAliases && converter.hasClockAliases() &&
+      ClockAliasOracle(circuit, instanceGraph, converter.getClockAliases())
+          .verify())
     return signalPassFailure();
 }
 
