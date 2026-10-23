@@ -150,7 +150,7 @@ hw.module @testSingleWithExt(in %arg0: i32, in %ext1: i32, in %go : i1, in %clk:
 // CHECK:           %[[VAL_6:.*]] = sv.read_inout %[[VAL_5]] : !sv.net<i32>
 // CHECK:           %[[VAL_7:.*]] = comb.add %[[VAL_6]], %[[VAL_0]] : i32
 // CHECK:           %[[VAL_8:.*]] = seq.compreg.ce %[[VAL_7]], %[[CLOCK]], %[[VAL_1]] reset %[[VAL_3]], %[[VAL_4]]  : i32
-// CHECK:           sv.assign %[[VAL_5]], %[[VAL_8]] : i32
+// CHECK:           sv.assign %[[VAL_5]], %[[VAL_8]] : !sv.net<i32>, i32
 // CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage0_reg0 %[[VAL_8]], %[[CLOCK]] : i32
 // CHECK:           %[[VAL_10:.*]] = hw.constant false
 // CHECK:           %[[VAL_11:.*]] = seq.compreg sym @p0_stage1_enable  %[[VAL_1]], %[[CLOCK]] reset %[[VAL_3]], %[[VAL_10]]  : i1
