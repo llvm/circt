@@ -1932,6 +1932,20 @@ hw.module @MuxOfArrays(in %cond: i1, in %a0: i1, in %a1: i1, in %a2: i1, in %b0:
   hw.output %array : !hw.array<3xi1>
 }
 
+// CHECK-LABEL: @MuxOfArraysMixedTwoState
+hw.module @MuxOfArraysMixedTwoState(in %cond: i1, in %a0: i1, in %a1: i1, in %b0: i1, in %b1: i1, out res: !hw.array<2xi1>) {
+  %mux0 = comb.mux %cond, %a0, %b0 : i1
+  %mux1 = comb.mux bin %cond, %a1, %b1 : i1
+  %array = hw.array_create %mux0, %mux1 : i1
+
+  // CHECK:      [[TRUE:%.+]] = hw.array_create %a0, %a1 : i1
+  // CHECK-NEXT: [[FALSE:%.+]] = hw.array_create %b0, %b1 : i1
+  // CHECK-NEXT: [[RESULT:%.+]] = comb.mux %cond, [[TRUE]], [[FALSE]] : !hw.array<2xi1>
+  // CHECK-NEXT: hw.output [[RESULT]] : !hw.array<2xi1>
+
+  hw.output %array : !hw.array<2xi1>
+}
+
 // CHECK-LABEL: @MuxOfUniformArray
 hw.module @MuxOfUniformArray(in %cond: i1, in %a: i1, in %b: i1, out res: !hw.array<3xi1>) {
   %array_a = hw.array_create %a, %a, %a : i1
