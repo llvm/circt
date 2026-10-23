@@ -100,5 +100,7 @@ module {
 
     //CHECK:    [[NID30:[0-9]+]] ite [[NID6]] [[NID1]] [[NID11]] [[NID23]]
     //CHECK:    [[NID31:[0-9]+]] next [[NID6]] [[NID12]] [[NID30]]
+    //CHECK:    [[REG2ITE:[0-9]+]] ite [[NID6]] [[NID1]] [[NID11]] [[NID23]]
+    //CHECK:    {{[0-9]+}} next [[NID6]] [[REG2NID]] [[REG2ITE]]
   }
 }
