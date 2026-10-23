@@ -162,10 +162,10 @@ hw.module @parameterizedTypes<param: i32>
 // CHECK-SAME: out c : !hw.int<#hw.param.decl.ref<"param">>)
   out c: !hw.int<#hw.param.decl.ref<"param">>) {
 
-  // CHECK: %paramWire = sv.wire : !hw.inout<int<#hw.param.decl.ref<"param">>>
-  %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"param">>>
-  // CHECK: %0 = sv.read_inout %paramWire : !hw.inout<int<#hw.param.decl.ref<"param">>>
-  %0 = sv.read_inout %paramWire : !hw.inout<!hw.int<#hw.param.decl.ref<"param">>>
+  // CHECK: %paramWire = sv.wire : !sv.net<!hw.int<#hw.param.decl.ref<"param">>>
+  %paramWire = sv.wire : !sv.net<!hw.int<#hw.param.decl.ref<"param">>>
+  // CHECK: %0 = sv.read_inout %paramWire : !sv.net<!hw.int<#hw.param.decl.ref<"param">>>
+  %0 = sv.read_inout %paramWire : !sv.net<!hw.int<#hw.param.decl.ref<"param">>>
   // CHECK: hw.output %0 : !hw.int<#hw.param.decl.ref<"param">>
   hw.output %0 : !hw.int<#hw.param.decl.ref<"param">>
 }
