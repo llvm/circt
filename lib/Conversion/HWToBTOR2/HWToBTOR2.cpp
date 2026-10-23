@@ -481,16 +481,15 @@ private:
     size_t tLID = getOpLID(t);
     size_t fLID = getOpLID(f);
 
-    genIte(srcop, condLID, tLID, fLID, width);
+    // Register the source operation with the current line id
+    size_t opLID = getOpLID(srcop);
+    genIte(opLID, condLID, tLID, fLID, width);
   }
 
   // Generate an ite instruction (if then else) given a predicate, two values
   // and a res width
-  void genIte(Operation *srcop, size_t condLID, size_t tLID, size_t fLID,
+  void genIte(size_t opLID, size_t condLID, size_t tLID, size_t fLID,
               int64_t width) {
-    // Register the source operation with the current line id
-    size_t opLID = getOpLID(srcop);
-
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
@@ -542,13 +541,12 @@ private:
 
   // Generates a next instruction, given a width, a state LID, and a next
   // value LID
-  void genNext(Value next, Operation *reg, int64_t width) {
+  void genNext(size_t nextLID, Operation *reg, int64_t width) {
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Retrieve the LIDs associated to reg and next
+    // Retrieve the LID associated to reg
     size_t regLID = getOpLID(reg);
-    size_t nextLID = getOpLID(next);
 
     // Build and return the next instruction
     // Also update the lid as this instruction is not associated to an mlir op
@@ -677,9 +675,6 @@ private:
       else
         resetValLID = genZero(width);
 
-      // Assign a new LID to next
-      setOpLID(next.getDefiningOp());
-
       // Sanity check: at this point the next operation should have had it's
       // btor2 counterpart emitted if not then something terrible must have
       // happened.
@@ -687,7 +682,9 @@ private:
 
       // Generate the ite for the register update reset condition
       // i.e. reg <= reset ? 0 : next
-      genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
+      size_t iteLID = lid++;
+      genIte(iteLID, resetLID, resetValLID, nextLID, width);
+      nextLID = iteLID;
     } else {
       // Sanity check: next should have been assigned
       if (nextLID == noLID) {
@@ -698,7 +695,7 @@ private:
     }
 
     // Finally generate the next statement
-    genNext(next, op, width);
+    genNext(nextLID, op, width);
   }
 
 public:
