@@ -28,8 +28,8 @@ Each WebSocket frame is one of two kinds. The WebSocket opcode itself
 discriminates between them, so no extra envelope or pairing is required.
 
 1. **Control frame** — WebSocket *text* frame containing one JSON object.
-   Used for `hello`, `connect`, `subscribe`, `unsubscribe`, and their
-   replies.
+   Used for `hello`, `connect`, `subscribe`, `unsubscribe`, their replies,
+   and flow-control events.
 2. **Data frame** — WebSocket *binary* frame containing exactly one ESI
    message:
 
@@ -89,8 +89,8 @@ Symbolic error codes used in v4:
 | `not_subscribed`      | Tried to unsubscribe from a channel we weren't subscribed to. |
 | `protocol_error`      | Malformed frame, missing required field, etc.    |
 | `unsupported_version` | `hello` requested a protocol version the server does not speak. |
-| `canceled`            | A `subscribe` still waiting for the simulator side was canceled by `unsubscribe`. |
 | `server_busy`         | Server rejected the connection (e.g. another client is already attached). Sent only as an unsolicited `error` frame (see below) right before the server closes the WebSocket. |
+| `canceled`            | A `subscribe` still waiting for the simulator side was canceled by `unsubscribe`. |
 | `internal`            | Catch-all for server-side failures.              |
 
 ### Unsolicited error (server → client)
@@ -112,6 +112,16 @@ that only recognise `type="response"` will simply ignore it (and still get
 the close code, which carries a coarser hint).
 
 ## Methods
+
+### Event (either direction)
+
+```json
+{ "type": "event", "event": "<event-name>", "params": { ... } }
+```
+
+Events are one-way notifications: they carry no `request_id` and are never
+answered. Receivers ignore unknown event names. The only event in v4 is
+`consumed`; see [Flow control](#flow-control).
 
 ### `hello` (client → server, exactly once and first)
 
@@ -166,9 +176,9 @@ so the client never observes an "empty manifest" state. The reply is:
   reply may be delayed indefinitely; the server keeps handling other
   requests and frames meanwhile. Clients should not time this request out.
 - Clients need not wait for the reply before sending data frames: the
-  server holds frames for an unconnected simulator port (see
-  [Data frames](#data-frames)). The reply lets a client find out that the
-  simulator side is ready. (The C++ runtime sends `connect` from
+  server holds frames for an unconnected port and they count as in flight,
+  so the client is backpressured at its limit. The reply lets a client find
+  out that the simulator side is ready. (The C++ runtime sends `connect` from
   `WriteChannelPort::connect()` without waiting; the future that returns
   becomes ready on the reply.)
 - Errors: `unknown_channel`, `wrong_direction`.
@@ -177,10 +187,12 @@ so the client never observes an "empty manifest" state. The reply is:
 
 ```json
 { "type": "request", "request_id": N, "method": "subscribe",
-  "params": { "channel_id": <uint64> } }
+  "params": { "channel_id": <uint64>, "max_in_flight": <uint64> } }
 ```
 
 - Channel must have `direction == "to_client"`.
+- `max_in_flight` (optional, default 32) sets the channel's in-flight
+  limit; `0` means unbounded. See [Flow control](#flow-control-new-in-v4).
 - Like `connect`, the server replies only once the simulator side of the
   channel is connected (immediately if it already is), and the reply may be
   delayed indefinitely. The subscription takes effect when the reply is
@@ -203,6 +215,9 @@ so the client never observes an "empty manifest" state. The reply is:
 ```
 
 - After `result: {}`, the server stops sending frames for that channel.
+  Frames the client had received but not consumed are discarded; the
+  server stops counting them as in flight, and the channel's in-flight
+  limit reverts to the default.
 - Errors: `not_subscribed`.
 
 ## Data frames
@@ -213,23 +228,82 @@ eight-byte `channel_id` prefix described above. The byte stream after the
 prefix is the unmodified ESI message payload (`MessageData::getBytes()`).
 
 The receiver of a data frame for an unknown or wrong-direction channel logs
-the event and discards the frame. There is no per-message ack.
+the event and discards the frame. Frames are acknowledged in batches via
+`consumed` events (below), never individually.
 
-Frames on a `to_server` channel whose simulator-side port is not connected
-are held by the server, in order, and handed over once it connects. Likewise,
-messages the simulation writes on a `to_client` channel before the client
-subscribes are queued until it does.
+## Flow control (new in v4)
+
+Each channel has an *in-flight limit*: the maximum number of frames which may
+be between the producer and the final consumer at once. A frame is in flight
+from when the producer hands it to the transport until the receiving side
+reports it consumed. Both directions use the same `consumed` event to report
+this:
+
+```json
+{ "type": "event", "event": "consumed",
+  "params": { "channels": [ { "channel_id": <uint64>, "count": <uint64> }, ... ] } }
+```
+
+Each entry means `count` more frames on `channel_id` are no longer in flight.
+Senders batch entries for several channels into one event; they never send
+an entry with `count == 0`.
+
+Usually a frame leaves flight because the final consumer took it. It also
+leaves flight when the consuming port discards it, which happens only when
+that port is disconnected while holding frames. Frames are never discarded
+for want of a consumer: the producer is backpressured instead. The two
+directions behave the same way:
+
+| Situation | `to_server` (client → simulation) | `to_client` (simulation → client) |
+| --- | --- | --- |
+| Consumer not connected yet | Server holds frames until the simulator port connects | Server holds messages until the client subscribes |
+| Producer at the limit | `tryWrite()` fails, `write()` blocks | `cosim_ep_tryput` reports full; `DataInReady` deasserts |
+| Consumer disconnects | Frames the simulator port held are discarded; the server reports them `consumed` | Frames the client held are discarded; the server stops counting them (`unsubscribe`) |
+| Frames still in transit | Server holds them until the port reconnects | Server keeps queued messages for the next subscriber |
+
+### `to_server` channels (client → simulation)
+
+- The client chooses the limit (the C++ runtime uses the write port's
+  `ConnectOptions::bufferSize`, defaulting to 16; `0` means unbounded).
+- The client counts frames it has sent but which have not been reported
+  consumed. It sends a frame only if that count is below the limit.
+  `tryWrite()` fails and `write()` blocks while the limit is reached.
+- The server sends `consumed` when the simulation takes a frame (the
+  `cosim_ep_tryget` DPI call), or when the simulator port discards frames
+  on disconnect.
+- The server does not enforce the limit; it trusts the client. A client
+  MAY admit a multi-frame message while it is below the limit, briefly
+  overshooting it.
+
+### `to_client` channels (simulation → client)
+
+- The limit comes from `subscribe`'s `max_in_flight` (the C++ runtime uses
+  the read port's `ConnectOptions::bufferSize`, defaulting to 32). Without a
+  subscriber, the default of 32 applies.
+- The server counts frames queued for sending plus frames sent but not yet
+  reported consumed. While that count is at the limit, the simulator-side
+  port refuses new messages: `cosim_ep_tryput` returns a positive value and
+  `Cosim_Endpoint_ToHost` deasserts `DataInReady` until there is room.
+- The client sends `consumed` once its read port accepts frames (the
+  user callback returns true, or the polling queue takes them). It does not
+  report frames it discards: those for a channel it has unsubscribed from, or
+  frames left in its queue on `unsubscribe`. The server instead stops counting
+  them, as below.
+- On `unsubscribe` or disconnect, the server forgets frames sent but not
+  acknowledged. It ignores `consumed` counts beyond the number in flight
+  (for example, a late `consumed` which crossed an `unsubscribe`).
 
 ## Lifecycle
 
 - **Open:** TCP + WS handshake → client sends `hello` → server replies once
   `setManifest` has been called.
-- **Steady state:** bidirectional binary data frames plus occasional
-  `connect`/`subscribe`/`unsubscribe` requests.
+- **Steady state:** bidirectional binary data frames, `consumed` events,
+  and occasional `connect`/`subscribe`/`unsubscribe` requests.
 - **Shutdown:** either side sends a WebSocket Close frame. The server treats a
   client close as implicit unsubscribe-all + cleanup. The client treats a
-  server close as connection loss: pending request promises fail and
-  registered read callbacks are signaled to terminate.
+  server close as connection loss: pending request promises fail, writers
+  blocked at an in-flight limit throw, and registered read callbacks are
+  signaled to terminate.
 
 ## Reserved / future
 
@@ -237,26 +311,11 @@ These are *not* part of v4; they are listed here so a v4 implementation can
 ignore them safely and a future protocol revision can add them without
 breaking the channel-id namespace.
 
-- Event push (server → client without a `request_id`): reserved
-  `{ "type": "event", "event": "...", "params": { ... } }`.
 - Per-message flags on data frames: would be added under `protocol_version`
   bump as either a prefixed byte or an explicit JSON header.
 - TLS (`wss://`) and bearer-token auth via `hello` params.
 - Multi-client servers.
 
-
-## Future improvements
-
-### Backpressure
-
-In both directions, we current use unbounded queues to buffer data which could
-easily lead to a huge memory usage, especially if the client doesn't subscribe
-to a channel. It is also unrealistic since cosim ports never present "not ready"
-signals to the accelerator, and when the client sends data it always succeeds.
-
-In the to_client direction, add a mechanism for the RPC server to signal the
-"not ready" state of a channel to the cosim RTL module. In the to_server
-direction, add a credit-control mechanism to this protocol.
 
 
 # History of cosim RPC protocol versions
@@ -293,9 +352,12 @@ maintain the protocol ourselves. This, however, has turned out to be minimal. It
 also has the advantage of being (theoretically) easier to debug as we own all of
 the code.
 
-## v4 -- Connection readiness
+## v4 -- Connection readiness and flow control
 
 This one. Same transport and framing as v3. Adds the `connect` method, holds
 `subscribe` replies until the simulator side of the channel is connected,
 holds frames for unconnected simulator ports rather than dropping them, and
-checks the protocol version exactly in `hello`.
+checks the protocol version exactly in `hello`. Also adds credit-based flow
+control in both directions via `consumed` events and the `max_in_flight`
+subscribe parameter. In v3 every queue was unbounded: the client could flood
+the simulator, and cosim never deasserted ready to the accelerator.
