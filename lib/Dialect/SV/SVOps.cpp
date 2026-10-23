@@ -1433,6 +1433,40 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
 // Assignment statements
 //===----------------------------------------------------------------------===//
 
+/// Parse the assignment type suffix. The legacy form gives only the source
+/// element type and implies an inout destination.
+/// We need to supply an extended form for both the destination handle type
+/// and source type since we extend support for multiple handle types.
+/// TOOD: This shall be removed once migrated from.
+static ParseResult parseSVHandleAssignmentTypes(OpAsmParser &parser,
+                                                Type &destType, Type &srcType) {
+  Type firstType;
+  if (parser.parseType(firstType))
+    return failure();
+
+  if (isa<InOutType, NetType, VarType>(firstType)) {
+    destType = firstType;
+    if (parser.parseComma() || parser.parseType(srcType))
+      return failure();
+  } else {
+    destType = InOutType::get(firstType);
+    srcType = firstType;
+  }
+  return success();
+}
+
+static void printSVHandleAssignmentTypes(OpAsmPrinter &printer, Operation *,
+                                         Type destType, Type srcType) {
+  if (isa<InOutType>(destType)) {
+    printer.printType(srcType);
+    return;
+  }
+
+  printer.printType(destType);
+  printer << ", ";
+  printer.printType(srcType);
+}
+
 LogicalResult BPAssignOp::verify() {
   if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
@@ -1826,9 +1860,9 @@ LogicalResult ReadInterfaceSignalOp::verify() {
 // WireOp
 //===----------------------------------------------------------------------===//
 
-void WireOp::build(OpBuilder &builder, OperationState &odsState,
-                   Type elementType, StringAttr name,
-                   hw::InnerSymAttr innerSym) {
+static void buildWire(OpBuilder &builder, OperationState &odsState,
+                      Type resultType, StringAttr name,
+                      hw::InnerSymAttr innerSym) {
   if (!name)
     name = builder.getStringAttr("");
   if (innerSym)
@@ -1836,7 +1870,15 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
                           innerSym);
 
   odsState.addAttribute("name", name);
-  odsState.addTypes(InOutType::get(elementType));
+  odsState.addTypes(resultType);
+}
+
+void WireOp::build(OpBuilder &builder, OperationState &odsState, Type type,
+                   StringAttr name, hw::InnerSymAttr innerSym) {
+  if (isa<InOutType, NetType>(type))
+    buildWire(builder, odsState, type, name, innerSym);
+  else
+    buildWire(builder, odsState, InOutType::get(type), name, innerSym);
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -1891,9 +1933,9 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     // If no write and only reads, then replace with ZOp.
     // SV 6.6: "If no driver is connected to a net, its
     // value shall be high-impedance (z) unless the net is a trireg"
-    connected = ConstantZOp::create(
-        rewriter, wire.getLoc(),
-        cast<InOutType>(wire.getResult().getType()).getElementType());
+    connected =
+        ConstantZOp::create(rewriter, wire.getLoc(),
+                            getHandleElementType(wire.getResult().getType()));
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
     connected = write.getSrc();
   else
@@ -1925,13 +1967,17 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
 // A helper function to infer a return type of IndexedPartSelectInOutOp.
 static Type getElementTypeOfWidth(Type type, int32_t width) {
-  auto elemTy = cast<hw::InOutType>(type).getElementType();
-  if (isa<IntegerType>(elemTy))
-    return hw::InOutType::get(IntegerType::get(type.getContext(), width));
-  if (isa<hw::ArrayType>(elemTy))
-    return hw::InOutType::get(hw::ArrayType::get(
-        cast<hw::ArrayType>(elemTy).getElementType(), width));
-  return {};
+  auto elemType = getHandleElementType(type);
+  if (!elemType)
+    return {};
+  Type newElem;
+  if (hw::type_isa<IntegerType>(elemType))
+    newElem = IntegerType::get(type.getContext(), width);
+  else if (auto array = hw::type_dyn_cast<hw::ArrayType>(elemType))
+    newElem = hw::ArrayType::get(array.getElementType(), width);
+  else
+    return {};
+  return getHandleOfElementType(type, newElem);
 }
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
@@ -1942,30 +1988,35 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
   auto width = adaptor.getWidthAttr();
   if (!width)
     return failure();
-
-  auto typ = getElementTypeOfWidth(operands[0].getType(),
-                                   width.getValue().getZExtValue());
-  if (!typ)
+  auto inputType = operands[0].getType();
+  if (!inputType)
     return failure();
-  results.push_back(typ);
+  auto elemType = getHandleElementType(inputType);
+  if (!elemType)
+    return failure();
+  auto resultType =
+      getElementTypeOfWidth(inputType, width.getValue().getZExtValue());
+  if (!resultType)
+    return failure();
+  results.push_back(resultType);
   return success();
 }
 
 LogicalResult IndexedPartSelectInOutOp::verify() {
   unsigned inputWidth = 0, resultWidth = 0;
   auto opWidth = getWidth();
-  auto inputElemTy = cast<InOutType>(getInput().getType()).getElementType();
-  auto resultElemTy = cast<InOutType>(getType()).getElementType();
-  if (auto i = dyn_cast<IntegerType>(inputElemTy))
+  auto inputElemTy = getHandleElementType(getInput().getType());
+  auto resultElemTy = getHandleElementType(getType());
+  if (auto i = hw::type_dyn_cast<IntegerType>(inputElemTy))
     inputWidth = i.getWidth();
-  else if (auto i = hw::type_cast<hw::ArrayType>(inputElemTy))
+  else if (auto i = hw::type_dyn_cast<hw::ArrayType>(inputElemTy))
     inputWidth = i.getNumElements();
   else
     return emitError("input element type must be Integer or Array");
 
-  if (auto resType = dyn_cast<IntegerType>(resultElemTy))
+  if (auto resType = hw::type_dyn_cast<IntegerType>(resultElemTy))
     resultWidth = resType.getWidth();
-  else if (auto resType = hw::type_cast<hw::ArrayType>(resultElemTy))
+  else if (auto resType = hw::type_dyn_cast<hw::ArrayType>(resultElemTy))
     resultWidth = resType.getNumElements();
   else
     return emitError("result element type must be Integer or Array");
@@ -2025,13 +2076,14 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
   auto field = adaptor.getFieldAttr();
   if (!field)
     return failure();
+  auto handleType = operands[0].getType();
   auto structType =
-      hw::type_cast<hw::StructType>(getInOutElementType(operands[0].getType()));
+      hw::type_cast<hw::StructType>(getHandleElementType(handleType));
   auto resultType = structType.getFieldType(field);
   if (!resultType)
     return failure();
 
-  results.push_back(hw::InOutType::get(resultType));
+  results.push_back(getHandleOfElementType(handleType, resultType));
   return success();
 }
 

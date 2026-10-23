@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -13,6 +14,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -215,26 +217,24 @@ getLowestBitAndHighestBitRequired(Operation *op, bool narrowTrailingBits,
 }
 
 template <class OpTy>
-static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
+static bool narrowOperationWidth(OpTy op, size_t lowestBit, size_t highestBit,
                                  PatternRewriter &rewriter) {
   IntegerType opType = dyn_cast<IntegerType>(op.getResult().getType());
   if (!opType)
     return false;
 
-  auto range = getLowestBitAndHighestBitRequired(op, narrowTrailingBits,
-                                                 opType.getWidth());
-  if (range.second + 1 == opType.getWidth() && range.first == 0)
+  if (highestBit + 1 == opType.getWidth() && lowestBit == 0)
     return false;
 
   SmallVector<Value> args;
-  auto newType = rewriter.getIntegerType(range.second - range.first + 1);
+  auto newType = rewriter.getIntegerType(highestBit - lowestBit + 1);
   for (auto inop : op.getOperands()) {
     // deal with muxes here
     if (inop.getType() != op.getType())
       args.push_back(inop);
     else
       args.push_back(rewriter.createOrFold<ExtractOp>(inop.getLoc(), newType,
-                                                      inop, range.first));
+                                                      inop, lowestBit));
   }
   typename OpTy::Properties properties{};
   OpTy::populateDefaultProperties(
@@ -246,20 +246,32 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
     newop.setTwoState(true);
 
   Value newResult = newop.getResult();
-  if (range.first)
+  if (lowestBit)
     newResult = rewriter.createOrFold<ConcatOp>(
         op.getLoc(), newResult,
         hw::ConstantOp::create(rewriter, op.getLoc(),
-                               APInt::getZero(range.first)));
-  if (range.second + 1 < opType.getWidth())
+                               APInt::getZero(lowestBit)));
+  if (highestBit + 1 < opType.getWidth())
     newResult = rewriter.createOrFold<ConcatOp>(
         op.getLoc(),
         hw::ConstantOp::create(
             rewriter, op.getLoc(),
-            APInt::getZero(opType.getWidth() - range.second - 1)),
+            APInt::getZero(opType.getWidth() - highestBit - 1)),
         newResult);
   rewriter.replaceOp(op, newResult);
   return true;
+}
+
+template <class OpTy>
+static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
+                                 PatternRewriter &rewriter) {
+  IntegerType opType = dyn_cast<IntegerType>(op.getResult().getType());
+  if (!opType)
+    return false;
+
+  auto [lowestBit, highestBit] = getLowestBitAndHighestBitRequired(
+      op, narrowTrailingBits, opType.getWidth());
+  return narrowOperationWidth(op, lowestBit, highestBit, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
@@ -383,29 +395,44 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   if (isOpTriviallyRecursive(op))
     return failure();
 
+  unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
+
   // ShlOp(x, cst) -> Concat(Extract(x), zeros)
   APInt value;
-  if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
+  if (matchPattern(op.getRhs(), m_ConstantInt(&value))) {
+    if (value.ugt(width))
+      value = width;
+    unsigned shift = value.getZExtValue();
+
+    // This case is handled by fold.
+    if (width <= shift || shift == 0)
+      return failure();
+
+    auto zeros =
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt::getZero(shift));
+
+    // Remove the high bits which would be removed by the Shl.
+    auto extract =
+        ExtractOp::create(rewriter, op.getLoc(), op.getLhs(), 0, width - shift);
+
+    replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, extract, zeros);
+    return success();
+  }
+
+  // extract(shl(lhs, rhs)) -> extract(shl(extract(lhs), extract(rhs))) when
+  // only the low bits of the result are used and the dropped high bits of rhs
+  // are known zero (so truncating rhs does not alter the shift amount).
+  // Narrowing down to 1 bit is skipped so `extract(0, shl(1, x))` in
+  // ExtractOp::canonicalize can fold to `icmp eq x, 0` instead of `shl : i1`.
+  auto [lowestBit, highestBit] = getLowestBitAndHighestBitRequired(
+      op, /*narrowTrailingBits=*/false, width);
+  size_t newWidth = highestBit + 1;
+  if (newWidth < 2 || newWidth >= width)
     return failure();
-
-  unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
-  if (value.ugt(width))
-    value = width;
-  unsigned shift = value.getZExtValue();
-
-  // This case is handled by fold.
-  if (width <= shift || shift == 0)
+  if (computeKnownBits(op.getRhs(), /*maxDepth=*/2).countMinLeadingZeros() <
+      width - newWidth)
     return failure();
-
-  auto zeros =
-      hw::ConstantOp::create(rewriter, op.getLoc(), APInt::getZero(shift));
-
-  // Remove the high bits which would be removed by the Shl.
-  auto extract =
-      ExtractOp::create(rewriter, op.getLoc(), op.getLhs(), 0, width - shift);
-
-  replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, extract, zeros);
-  return success();
+  return success(narrowOperationWidth(op, lowestBit, highestBit, rewriter));
 }
 
 OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
@@ -619,6 +646,46 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
   return false;
 }
 
+/// Fold a single-bit extract of a two-operand add into an icmp when bit
+/// `bitIdx` is known in both operands and the low `bitIdx` bits of one operand
+/// are a known constant `c`:
+///   extract(bitIdx, add(x, c)) -> icmp ugt/ule x[bitIdx-1:0], ~c[bitIdx-1:0]
+/// Bit `bitIdx` of `lhs + rhs` is `lhs[bitIdx] ^ rhs[bitIdx] ^ carry`, and the
+/// low `bitIdx` bits carry into bit `bitIdx` iff `x[bitIdx-1:0] >_u ~c`.
+/// Returns true if `op` was replaced, false otherwise.
+static bool extractFromAdd(ExtractOp op, AddOp add, PatternRewriter &rewriter) {
+  unsigned bitIdx = op.getLowBit();
+  if (cast<IntegerType>(op.getType()).getWidth() != 1 || bitIdx == 0 ||
+      add.getInputs().size() != 2 || !add->hasOneUse())
+    return false;
+
+  Value lhs = add.getInputs()[0];
+  Value rhs = add.getInputs()[1];
+  KnownBits rhsKnown = computeKnownBits(rhs);
+  if (!rhsKnown.Zero[bitIdx] && !rhsKnown.One[bitIdx])
+    return false;
+  KnownBits lhsKnown = computeKnownBits(lhs);
+  if (!lhsKnown.Zero[bitIdx] && !lhsKnown.One[bitIdx])
+    return false;
+
+  KnownBits rhsLow = rhsKnown.trunc(bitIdx);
+  if (!rhsLow.isConstant()) {
+    rhsLow = lhsKnown.trunc(bitIdx);
+    if (!rhsLow.isConstant())
+      return false;
+    lhs = rhs;
+  }
+
+  bool carrySetsBit = lhsKnown.One[bitIdx] == rhsKnown.One[bitIdx];
+  Value lowLhs = rewriter.createOrFold<ExtractOp>(op.getLoc(), lhs, 0, bitIdx);
+  Value invCst =
+      hw::ConstantOp::create(rewriter, op.getLoc(), ~rhsLow.getConstant());
+  replaceOpWithNewOpAndCopyNamehint<ICmpOp>(
+      rewriter, op, carrySetsBit ? ICmpPredicate::ugt : ICmpPredicate::ule,
+      lowLhs, invCst, add.getTwoState());
+  return true;
+}
+
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (isOpTriviallyRecursive(op))
     return failure();
@@ -714,6 +781,11 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
             return success();
           }
     }
+
+  // `extract(bitIdx, add(x, c))` -> `icmp ugt/ule x[bitIdx-1:0], ~c`
+  if (auto addOp = dyn_cast_or_null<AddOp>(inputOp))
+    if (extractFromAdd(op, addOp, rewriter))
+      return success();
 
   return failure();
 }
@@ -1499,6 +1571,17 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+/// Returns true if subtracting the low `numBits` bits of `rhs` from those of
+/// `lhs` can never borrow from bit `numBits`: the smallest possible value of
+/// lhs's low bits must be at least the largest possible value of rhs's.
+static bool subLowBitsCannotBorrow(Value lhs, Value rhs, unsigned numBits) {
+  APInt lhsMin =
+      computeKnownBits(lhs, /*maxDepth=*/2).trunc(numBits).getMinValue();
+  APInt rhsMax =
+      computeKnownBits(rhs, /*maxDepth=*/2).trunc(numBits).getMaxValue();
+  return lhsMin.uge(rhsMax);
+}
+
 LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
   if (isOpTriviallyRecursive(op))
     return failure();
@@ -1513,7 +1596,15 @@ LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
   }
 
   // extracts only of sub(...) -> sub(extract()...)
-  if (narrowOperationWidth(op, false, rewriter))
+  // Unused low bits are dropped too when they can never borrow from the bits
+  // that are used.
+  unsigned width = op.getType().getIntOrFloatBitWidth();
+  auto [lowestBit, highestBit] =
+      getLowestBitAndHighestBitRequired(op, /*narrowTrailingBits=*/true, width);
+  if (lowestBit > 0 &&
+      !subLowBitsCannotBorrow(op.getLhs(), op.getRhs(), lowestBit))
+    lowestBit = 0;
+  if (narrowOperationWidth(op, lowestBit, highestBit, rewriter))
     return success();
 
   return failure();
@@ -1531,6 +1622,22 @@ OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
 
   // Constant fold constant operands.
   return constFoldAssociativeOp(adaptor.getOperands(), hw::PEO::Add);
+}
+
+/// Returns true if adding the low `numBits` bits of all `operands` can never
+/// carry into bit `numBits`: the largest possible sum of those bits (every bit
+/// not known to be zero taken as one) must still fit in `numBits` bits.
+static bool addLowBitsCannotCarry(ValueRange operands, unsigned numBits) {
+  APInt maxSum = APInt::getZero(numBits);
+  for (Value operand : operands) {
+    bool overflow;
+    APInt operandMax =
+        computeKnownBits(operand, /*maxDepth=*/2).trunc(numBits).getMaxValue();
+    maxSum = maxSum.uadd_ov(operandMax, overflow);
+    if (overflow)
+      return false;
+  }
+  return true;
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
@@ -1617,7 +1724,14 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
     return success();
 
   // extracts only of add(...) -> add(extract()...)
-  if (narrowOperationWidth(op, false, rewriter))
+  // Unused low bits are dropped too when they can never carry into the bits
+  // that are used.
+  unsigned width = op.getType().getIntOrFloatBitWidth();
+  auto [lowestBit, highestBit] =
+      getLowestBitAndHighestBitRequired(op, /*narrowTrailingBits=*/true, width);
+  if (lowestBit > 0 && !addLowBitsCannotCarry(inputs, lowestBit))
+    lowestBit = 0;
+  if (narrowOperationWidth(op, lowestBit, highestBit, rewriter))
     return success();
 
   // add(add(x, c1), c2) -> add(x, c1 + c2)

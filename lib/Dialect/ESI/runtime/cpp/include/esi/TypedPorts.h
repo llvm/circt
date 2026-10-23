@@ -59,13 +59,6 @@ public:
 // Helpers: unwrap TypeAliasType and width-aware serialization.
 //===----------------------------------------------------------------------===//
 
-/// Unwrap TypeAliasType (possibly recursively) to get the underlying type.
-inline const Type *unwrapTypeAlias(const Type *t) {
-  while (auto *alias = dynamic_cast<const TypeAliasType *>(t))
-    t = alias->getInnerType();
-  return t;
-}
-
 /// Compute the wire byte count for a port type. Returns 0 if not a
 /// BitVectorType (meaning sizeof(T) should be used instead).
 /// Wire format info for a port type, cached at connect() time.
@@ -650,6 +643,28 @@ public:
 
   bool tryWrite(const T &data) {
     return inner->tryWrite(toMessageData(data, wireInfo_));
+  }
+
+  /// Non-blocking write by taking ownership. On success, `data` is consumed
+  /// (left null) and true is returned. On failure, `data` is left untouched so
+  /// the caller can retry. If T is a SegmentedMessageData, this hands the
+  /// message directly to the port's segmented tryWrite path.
+  bool tryWrite(std::unique_ptr<T> &data) {
+    if (!data)
+      throw std::runtime_error("TypedWritePort::tryWrite: null unique_ptr");
+    if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
+      std::unique_ptr<SegmentedMessageData> msg(data.release());
+      bool written = inner->tryWrite(msg);
+      // On failure, the port did not take ownership; hand it back.
+      if (!written)
+        data.reset(static_cast<T *>(msg.release()));
+      return written;
+    } else {
+      if (!tryWrite(*data))
+        return false;
+      data.reset();
+      return true;
+    }
   }
 
   bool flush() { return inner->flush(); }
