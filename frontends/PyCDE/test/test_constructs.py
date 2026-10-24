@@ -14,9 +14,9 @@ I8 = Bits(8)
 # CHECK:         [[r0:%.+]] = comb.extract %In from 0 {sv.namehint = "In_0upto7"} : (i8) -> i7
 # CHECK:         [[r1:%.+]] = comb.extract %In from 7 {sv.namehint = "In_7upto8"} : (i8) -> i1
 # CHECK:         [[r2:%.+]] = comb.concat [[r1]], [[r0]] {sv.namehint = "w1"} : i1, i7
-# CHECK:         %in = sv.wire sym @in : !hw.inout<i8>
-# CHECK:         {{%.+}} = sv.read_inout %in {sv.namehint = "in"} : !hw.inout<i8>
-# CHECK:         sv.assign %in, %In : i8
+# CHECK:         %in = sv.wire sym @in : !sv.net<i8>
+# CHECK:         {{%.+}} = sv.read_inout %in {sv.namehint = "in"} : !sv.net<i8>
+# CHECK:         sv.assign %in, %In : !sv.net<i8>, i8
 # CHECK:         %r1__reg1 = seq.compreg sym @r1__reg1 %In, %clk : i8
 # CHECK:         %c0_i8{{.*}} = hw.constant 0 : i8
 # CHECK:         %r_rst__reg1 = seq.compreg sym @r_rst__reg1 %In, %clk reset %rst, %c0_i8{{.*}}  : i8
@@ -64,8 +64,8 @@ class WireAndRegTest(Module):
 
 
 # CHECK-LABEL: hw.module @SystolicArrayTest(in %clk : i1, in %col_data : !hw.array<2xi8>, in %row_data : !hw.array<3xi8>, out out : !hw.array<3xarray<2xi8>>)
-# CHECK:         %sum__reg1_0_0 = sv.reg sym @sum__reg1  : !hw.inout<i8>
-# CHECK:         sv.read_inout %sum__reg1_0_0 : !hw.inout<i8>
+# CHECK:         %sum__reg1_0_0 = sv.var sym @sum__reg1  : !sv.var<i8>
+# CHECK:         sv.read_inout %sum__reg1_0_0 : !sv.var<i8>
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
 class SystolicArrayTest(Module):
   clk = Clock()
