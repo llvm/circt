@@ -123,16 +123,14 @@ LowerObjectsPass::lowerObject(ObjectOp object,
     worklist.emplace_back(op, true);
     for (auto operand : llvm::reverse(operands)) {
       auto *def = operand.getDefiningOp();
-      // Module arguments are always available. Do not pull dependencies out
-      // of nested regions.
-      if (!def) {
-        if (cast<BlockArgument>(operand).getOwner() != object->getBlock())
-          return success();
+      // Module arguments are always available. Only top-level producers have
+      // positions; do not pull dependencies out of nested regions.
+      if (!def)
         continue;
-      }
-      if (def->getBlock() != object->getBlock())
+      auto it = positions.find(def);
+      if (it == positions.end())
         return success();
-      if (positions.lookup(def) < position)
+      if (it->second < position)
         continue;
       worklist.emplace_back(def, false);
     }
