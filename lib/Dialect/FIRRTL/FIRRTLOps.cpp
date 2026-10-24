@@ -4143,6 +4143,43 @@ void ObjectOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// ObjectCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ObjectCreateOp::verify() {
+  unsigned inputIndex = 0;
+  for (auto element : getType().getElements()) {
+    if (element.direction != Direction::In)
+      continue;
+    if (inputIndex >= getInputs().size())
+      return emitOpError("missing operand for class input ") << element.name;
+    auto inputType = getInputs()[inputIndex].getType();
+    if (inputType != element.type)
+      return emitOpError("class input ")
+             << element.name << " expects " << element.type << ", but operand "
+             << inputIndex << " has type " << inputType;
+    ++inputIndex;
+  }
+  if (inputIndex != getInputs().size())
+    return emitOpError("expected ")
+           << inputIndex << " input operands, but got " << getInputs().size();
+  return success();
+}
+
+LogicalResult
+ObjectCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyObjectSymbolUses(*this, symbolTable);
+}
+
+StringRef ObjectCreateOp::getInstanceName() { return getName(); }
+
+StringAttr ObjectCreateOp::getInstanceNameAttr() { return getNameAttr(); }
+
+void ObjectCreateOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
+}
+
+//===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
 
