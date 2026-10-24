@@ -722,9 +722,7 @@ def ContractOp : FIRRTLOp<"contract", [
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
-      "getReferencedModuleSlow"
-    ]>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [
       "getAsmResultNames"
     ]>
