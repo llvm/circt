@@ -261,9 +261,9 @@ private:
     // Like instance ops, don't use object ops' result types since they might be
     // replaced by dedup. Record the class names and lazily combine their hashes
     // using the same mechanism as instances and modules.
-    if (auto objectOp = dyn_cast<ObjectOp>(result.getOwner())) {
+    if (auto object = dyn_cast<FObjectLike>(result.getOwner())) {
       hasSeenSymbol = true;
-      referredModuleNames.push_back(objectOp.getType().getNameAttr().getAttr());
+      referredModuleNames.push_back(object.getClassNameAttr());
       return;
     }
 
@@ -1115,10 +1115,9 @@ private:
       if (auto instOp = dyn_cast<InstanceOp>(*inst)) {
         instOp.setModuleNameAttr(toModuleRef);
         instOp.setPortNamesAttr(toModule.getPortNamesAttr());
-      } else if (auto objectOp = dyn_cast<ObjectOp>(*inst)) {
+      } else if (auto object = dyn_cast<FObjectLike>(*inst)) {
         auto classLike = cast<ClassLike>(*toNode->getModule());
-        ClassType classType = detail::getInstanceTypeForClassLike(classLike);
-        objectOp.getResult().setType(classType);
+        object.getResult().setType(classLike.getInstanceType());
       } else if (auto instanceChoiceOp = dyn_cast<InstanceChoiceOp>(*inst)) {
         auto fromModuleName = fromNode->getModule().getModuleNameAttr();
         SmallVector<Attribute> newModules;

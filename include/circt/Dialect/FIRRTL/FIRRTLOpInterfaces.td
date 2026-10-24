@@ -441,6 +441,61 @@ def ClassLike : OpInterface<"ClassLike", [FModuleLike]> {
   ];
 }
 
+def FObjectLike
+    : OpInterface<"FObjectLike", [InstanceGraphInstanceOpInterface]> {
+  let cppNamespace = "circt::firrtl";
+  let description = [{
+    Provide common class and symbol information for FIRRTL object values.
+  }];
+
+  let methods = [
+    InterfaceMethod<"Get the class type of the object",
+      "ClassType", "getClassType", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getResult().getType();
+      }]>,
+    InterfaceMethod<"Get the object result",
+      "Value", "getResult", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getResult();
+      }]>,
+    InterfaceMethod<"Get the class symbol attribute",
+      "FlatSymbolRefAttr", "getClassSymbolAttr", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getClassType().getNameAttr();
+      }]>,
+    InterfaceMethod<"Get the object class name attribute",
+      "StringAttr", "getClassNameAttr", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getClassType().getNameAttr().getAttr();
+      }]>,
+    InterfaceMethod<"Get the object class name",
+      "StringRef", "getClassName", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getClassType().getName();
+      }]>,
+    InterfaceMethod<"Get the referenced class",
+      "ClassLike", "getReferencedClass",
+      (ins "const SymbolTable &":$symbolTable), [{}],
+      /*defaultImplementation=*/[{
+        return symbolTable.lookup<ClassLike>(
+            $_op.getClassType().getNameAttr().getAttr());
+      }]>,
+    InterfaceMethod<"Get the referenced operation",
+      "Operation *", "getReferencedOperation",
+      (ins "const SymbolTable &":$symbolTable), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getReferencedClass(symbolTable);
+      }]>,
+    InterfaceMethod<"Get the referenced module name attribute",
+      "StringAttr", "getReferencedModuleNameAttr", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getClassNameAttr();
+      }]>
+  ];
+
+}
+
 def FConnectLike : OpInterface<"FConnectLike"> {
   let cppNamespace = "circt::firrtl";
   let description = "Provide common connection information.";

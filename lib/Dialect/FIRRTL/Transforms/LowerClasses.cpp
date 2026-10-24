@@ -1346,6 +1346,34 @@ void LowerClassesPass::lowerClassExtern(om::ClassExternOp classExternOp,
   // Port erasure for the `moduleLike` is handled centrally in `runOnOperation`.
 }
 
+// Create the OM object and replace its FIRRTL counterpart after collecting
+// its input values from either declaration-style or value-style FIRRTL IR.
+static LogicalResult
+lowerObjectInClass(FObjectLike firrtlObject, ArrayRef<Value> args,
+                   firrtl::PathOp containingModuleRef,
+                   SmallVectorImpl<RtlPortsInfo> &rtlPortsToCreate,
+                   std::mutex &intraPassMutex,
+                   SmallVectorImpl<Operation *> &opsToErase) {
+  auto basePath = firrtlObject->getBlock()->getArgument(0);
+  auto classType = om::ClassType::get(firrtlObject->getContext(),
+                                      firrtlObject.getClassSymbolAttr());
+  OpBuilder builder(firrtlObject.getOperation());
+  auto object = om::ObjectOp::create(builder, firrtlObject->getLoc(), classType,
+                                     firrtlObject.getClassNameAttr(), args);
+
+  if (containingModuleRef) {
+    std::lock_guard<std::mutex> guard(intraPassMutex);
+    rtlPortsToCreate.push_back({containingModuleRef, basePath, object});
+  }
+
+  auto cast = UnrealizedConversionCastOp::create(builder, object.getLoc(),
+                                                 firrtlObject.getClassType(),
+                                                 object.getResult());
+  firrtlObject.getResult().replaceAllUsesWith(cast.getResult(0));
+  opsToErase.push_back(firrtlObject.getOperation());
+  return success();
+}
+
 // Helper to update an Object instantiation. FIRRTL Object instances are
 // converted to OM Object instances.
 static LogicalResult updateObjectInClass(
@@ -1438,31 +1466,9 @@ static LogicalResult updateObjectInClass(
              << "uninitialized input port " << element.name;
   }
 
-  // Convert the FIRRTL Class type to an OM Class type.
-  auto className = firrtlObject.getType().getNameAttr();
-  auto classType = om::ClassType::get(firrtlObject->getContext(), className);
-
-  // Create the new Object op.
-  OpBuilder builder(firrtlObject);
-
-  auto object = om::ObjectOp::create(builder, firrtlObject.getLoc(), classType,
-                                     firrtlObject.getClassNameAttr(), args);
-
-  // If there is a 'containingModule', track that we need to add 'ports'.
-  if (containingModuleRef) {
-    std::lock_guard<std::mutex> guard(intraPassMutex);
-    rtlPortsToCreate.push_back({containingModuleRef, basePath, object});
-  }
-
-  // Replace uses of the FIRRTL Object with the OM Object. The later dialect
-  // conversion will take care of converting the types.
-  auto cast = UnrealizedConversionCastOp::create(
-      builder, object.getLoc(), firrtlObject.getType(), object.getResult());
-  firrtlObject.replaceAllUsesWith(cast.getResult(0));
-
-  // Erase the original Object, now that we're done with it.
-  opsToErase.push_back(firrtlObject);
-  return success();
+  return lowerObjectInClass(cast<FObjectLike>(firrtlObject.getOperation()),
+                            args, containingModuleRef, rtlPortsToCreate,
+                            intraPassMutex, opsToErase);
 }
 
 // Helper to update a Module instantiation in a Class. Module instances within a

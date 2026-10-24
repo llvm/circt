@@ -318,7 +318,6 @@ struct IMConstPropPass
   void markAggregateConstantOp(AggregateConstantOp constant);
   void markInstanceLike(FInstanceLike instance);
   void markInstanceTarget(FInstanceLike instance, Operation *op);
-  void markObjectOp(ObjectOp object);
   template <typename OpTy>
   void markConstantValueOp(OpTy op);
 
@@ -514,7 +513,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
         .Case<InvalidValueOp>(
             [&](auto invalid) { markInvalidValueOp(invalid); })
         .Case<FInstanceLike>([&](auto instance) { markInstanceLike(instance); })
-        .Case<ObjectOp>([&](auto obj) { markObjectOp(obj); })
+        .Case<FObjectLike>([&](auto obj) { markOverdefined(obj.getResult()); })
         .Case<MemOp>([&](auto mem) { markMemOp(mem); })
         .Case<LayerBlockOp>(
             [&](auto layer) { markBlockExecutable(layer.getBody(0)); })
@@ -668,11 +667,6 @@ void IMConstPropPass::markInstanceTarget(FInstanceLike instance,
     // it here.
     mergeLatticeValue(instancePortVal, modulePortVal);
   }
-}
-
-void IMConstPropPass::markObjectOp(ObjectOp obj) {
-  // Mark overdefined for now, not supported.
-  markOverdefined(obj);
 }
 
 static std::optional<uint64_t>
