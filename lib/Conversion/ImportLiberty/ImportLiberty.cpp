@@ -14,6 +14,8 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/Synth/SynthAttributes.h"
 #include "circt/Dialect/Synth/SynthDialect.h"
 #include "mlir/IR/Attributes.h"
@@ -1003,7 +1005,7 @@ LogicalResult LibertyParser::collectPorts(
         builder.getNamedAttr("synth.liberty.pin", libertyAttrs));
     mlir::Type portType = builder.getI1Type();
     if (isInOut)
-      portType = hw::InOutType::get(portType);
+      portType = sv::NetType::get(portType);
 
     hw::PortInfo port;
     port.name = pinName;
@@ -1243,6 +1245,7 @@ void registerImportLibertyTranslation() {
         LibertyParser parser(sourceMgr, context, module);
         // Load required dialects
         context->loadDialect<hw::HWDialect>();
+        context->loadDialect<sv::SVDialect>();
         context->loadDialect<comb::CombDialect>();
         context->loadDialect<synth::SynthDialect>();
 
@@ -1252,6 +1255,7 @@ void registerImportLibertyTranslation() {
       },
       [](DialectRegistry &registry) {
         registry.insert<HWDialect>();
+        registry.insert<sv::SVDialect>();
         registry.insert<comb::CombDialect>();
         registry.insert<synth::SynthDialect>();
       });
