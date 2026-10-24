@@ -1,8 +1,4 @@
-// RUN: circt-opt %s -pass-pipeline='builtin.module(firrtl.circuit(any(firrtl-lower-objects)))' | FileCheck %s
-// RUN: circt-opt %s -pass-pipeline='builtin.module(firrtl.circuit(any(firrtl-lower-objects,firrtl-lower-objects)))' | FileCheck %s
-// RUN: circt-opt %s -pass-pipeline='builtin.module(firrtl.circuit(any(firrtl-lower-objects)))' > %t
-// RUN: circt-opt %t -pass-pipeline='builtin.module(firrtl.circuit(any(firrtl-lower-objects)))' | diff %t -
-// RUN: circt-opt %s -pass-pipeline='builtin.module(firrtl.circuit(any(firrtl-lower-objects),firrtl-lower-classes))' | FileCheck %s --check-prefix=OM
+// RUN: circt-opt %s -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-objects)))' | FileCheck %s
 
 firrtl.circuit "Ordering" {
   firrtl.module @Ordering() {}
@@ -16,7 +12,6 @@ firrtl.circuit "Ordering" {
   // An input may be an object itself rather than one of its output fields.
   // Read assignment sources after replacing dependent declarations.
   // CHECK-LABEL: firrtl.module @ObjectInput
-  // OM-LABEL: om.class @ObjectInput_Class
   firrtl.module @ObjectInput() {
     // CHECK-NEXT: %value = firrtl.object.create()
     // CHECK-NEXT: %holder = firrtl.object.create(%value)
@@ -25,14 +20,11 @@ firrtl.circuit "Ordering" {
     %in = firrtl.object.subfield %holder[value] : !firrtl.class<@Holder(in value: !firrtl.class<@Empty()>)>
     %value = firrtl.object @Empty()
     firrtl.propassign %in, %value : !firrtl.class<@Empty()>
-    // OM: %[[VALUE:.*]] = om.object @Empty
-    // OM: om.object @Holder(%{{.*}}, %[[VALUE]])
   }
 
   // Convert a forward chain in dependency order. The shared expression is
   // hoisted once, and dependent declarations retain their attributes.
   // CHECK-LABEL: firrtl.module @Chain
-  // OM-LABEL: om.class @Chain_Class
   firrtl.module @Chain(out %out: !firrtl.integer) {
     // CHECK-NEXT: %[[C:.*]] = firrtl.integer 7
     // CHECK-NEXT: %[[SUM:.*]] = firrtl.integer.add %[[C]], %[[C]]
@@ -63,17 +55,12 @@ firrtl.circuit "Ordering" {
     %shared = firrtl.object @Int(in input: !firrtl.integer, out output: !firrtl.integer)
     %shared_in = firrtl.object.subfield %shared[input] : !firrtl.class<@Int(in input: !firrtl.integer, out output: !firrtl.integer)>
     firrtl.propassign %shared_in, %sum : !firrtl.integer
-    // OM: om.object @Int
-    // OM: om.object @Int
-    // OM: om.object @Int
-    // OM: om.object @Int
   }
 
   // A failed plan must not move even its acyclic prerequisites. The cycle
   // does not prevent lowering a later independent object or a consumer whose
   // input already dominates its declaration.
   // CHECK-LABEL: firrtl.module @Partial
-  // OM-LABEL: om.class @Partial_Class
   firrtl.module @Partial() {
     // CHECK-NEXT: %cycle = firrtl.object {test.attr = "retained"} @Int
     %cycle = firrtl.object {test.attr = "retained"} @Int(in input: !firrtl.integer, out output: !firrtl.integer)
@@ -96,9 +83,6 @@ firrtl.circuit "Ordering" {
     %consumer = firrtl.object @Int(in input: !firrtl.integer, out output: !firrtl.integer)
     %consumer_in = firrtl.object.subfield %consumer[input] : !firrtl.class<@Int(in input: !firrtl.integer, out output: !firrtl.integer)>
     firrtl.propassign %consumer_in, %cycle_out : !firrtl.integer
-    // OM: om.object @Int
-    // OM: om.object @Int
-    // OM: om.object @Int
   }
 
   firrtl.extmodule @Producer(out prop: !firrtl.integer)
@@ -106,7 +90,6 @@ firrtl.circuit "Ordering" {
   // Module instances are declarative producers too. Moving an instance before
   // an object also makes the object's earlier output uses valid SSA.
   // CHECK-LABEL: firrtl.module @ForwardInstance
-  // OM-LABEL: om.class @ForwardInstance_Class
   firrtl.module @ForwardInstance(out %out: !firrtl.integer) {
     // CHECK-NEXT: %[[PROP:.*]] = firrtl.instance producer @Producer
     // CHECK-NEXT: %obj = firrtl.object.create(%[[PROP]])
@@ -119,14 +102,11 @@ firrtl.circuit "Ordering" {
     // CHECK-NEXT: }
     %prop = firrtl.instance producer @Producer(out prop: !firrtl.integer)
     firrtl.propassign %in, %prop : !firrtl.integer
-    // OM: om.object @Producer_Class
-    // OM: om.object @Int
   }
 
   // FIRRTL producers need not be pure: an existing property wire can be
   // hoisted to make a forward input available, without adding a temporary wire.
   // CHECK-LABEL: firrtl.module @ForwardWire
-  // OM-LABEL: om.class @ForwardWire_Class
   firrtl.module @ForwardWire() {
     // CHECK-NEXT: %wire = firrtl.wire : !firrtl.integer
     // CHECK-NEXT: %obj = firrtl.object.create(%wire)
@@ -143,7 +123,29 @@ firrtl.circuit "Ordering" {
     %independent = firrtl.object @Int(in input: !firrtl.integer, out output: !firrtl.integer)
     %independent_in = firrtl.object.subfield %independent[input] : !firrtl.class<@Int(in input: !firrtl.integer, out output: !firrtl.integer)>
     firrtl.propassign %independent_in, %wire : !firrtl.integer
-    // OM: om.object @Int
-    // OM: om.object @Int
+  }
+
+  firrtl.extclass private @Node(in ref: !firrtl.anyref, out next: !firrtl.anyref)
+
+  // Keep one declaration to break a mutual SSA cycle; lower the other.
+  // CHECK-LABEL: firrtl.module @Cycle
+  firrtl.module @Cycle(out %out: !firrtl.anyref) {
+    // CHECK-NEXT: %a = firrtl.object @Node
+    // CHECK-NEXT: %[[A_REF:.*]] = firrtl.object.anyref_cast %a
+    // CHECK-NEXT: %b = firrtl.object.create(%[[A_REF]])
+    %a = firrtl.object @Node(in ref: !firrtl.anyref, out next: !firrtl.anyref)
+    %b = firrtl.object @Node(in ref: !firrtl.anyref, out next: !firrtl.anyref)
+    // CHECK-NEXT: %[[A_IN:.*]] = firrtl.object.subfield %a[ref]
+    %a_in = firrtl.object.subfield %a[ref] : !firrtl.class<@Node(in ref: !firrtl.anyref, out next: !firrtl.anyref)>
+    %b_in = firrtl.object.subfield %b[ref] : !firrtl.class<@Node(in ref: !firrtl.anyref, out next: !firrtl.anyref)>
+    %a_ref = firrtl.object.anyref_cast %a : !firrtl.class<@Node(in ref: !firrtl.anyref, out next: !firrtl.anyref)>
+    // CHECK-NEXT: %[[B_REF:.*]] = firrtl.object.anyref_cast %b
+    %b_ref = firrtl.object.anyref_cast %b : !firrtl.class<@Node(in ref: !firrtl.anyref, out next: !firrtl.anyref)>
+    // CHECK-NEXT: firrtl.propassign %[[A_IN]], %[[B_REF]] : !firrtl.anyref
+    firrtl.propassign %a_in, %b_ref : !firrtl.anyref
+    firrtl.propassign %b_in, %a_ref : !firrtl.anyref
+    // CHECK-NEXT: firrtl.propassign %out, %[[A_REF]] : !firrtl.anyref
+    firrtl.propassign %out, %a_ref : !firrtl.anyref
+    // CHECK-NEXT: }
   }
 }

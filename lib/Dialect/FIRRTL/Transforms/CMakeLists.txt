@@ -83,7 +83,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   CIRCTSim
   CIRCTSV
   CIRCTSupport
-  MLIRAnalysis
   MLIRIR
   MLIRPass
   MLIRTransformUtils

@@ -749,26 +749,14 @@ def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
 def LowerObjects : Pass<"firrtl-lower-objects", "firrtl::FModuleOp"> {
   let summary = "Convert object declarations to value-like object creation";
   let description = [{
-    In `firrtl.module`, convert `firrtl.object` declarations to
-    `firrtl.object.create` without temporary object wires. Operands are supplied
-    in input port declaration order. Hoist regionless input dependencies within
-    the block, converting dependent objects as needed, without requiring
-    producers to be pure. If an object's dependencies are cyclic or cannot be
-    hoisted with valid SSA dominance, leave its declaration and input
-    assignments intact and continue lowering other objects. Remove converted
-    objects' input assignments and input field accesses. Objects in classes
-    remain in declaration form. Output field accesses and other uses of objects
-    are preserved. Missing or multiply assigned inputs and misuses of input
-    fields are diagnosed. This pass runs immediately after parsing in the
-    firtool preprocessing pipeline; the FIRRTL importer is unchanged.
+    Convert `firrtl.object` declarations in modules to `firrtl.object.create`,
+    using input assignments as operands in port order. Hoist dependencies as
+    needed and remove input assignments and accesses. Leave objects with cyclic
+    or unhoistable dependencies unchanged.
   }];
   let statistics = [
     Statistic<"numObjectsConverted", "num-objects-converted",
               "Number of object declarations converted to object.create">,
-    Statistic<"numInputAssignmentsRemoved", "num-input-assignments-removed",
-              "Number of input assignments removed">,
-    Statistic<"numInputFieldsRemoved", "num-input-fields-removed",
-              "Number of input subfields removed">,
     Statistic<"numRemoved", "num-removed", "Number of operations erased">
   ];
 }

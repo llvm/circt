@@ -9,7 +9,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/Dominance.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 
@@ -36,7 +35,7 @@ struct LowerObjectsPass
 
 private:
   LogicalResult collectInputs(ObjectOp object, ObjectInputs &inputs);
-  LogicalResult lowerObject(ObjectOp object, DominanceInfo &dominance,
+  LogicalResult lowerObject(ObjectOp object,
                             DenseMap<Operation *, size_t> &positions,
                             DenseSet<Operation *> &converted);
 };
@@ -78,7 +77,7 @@ LogicalResult LowerObjectsPass::collectInputs(ObjectOp object,
 }
 
 LogicalResult
-LowerObjectsPass::lowerObject(ObjectOp object, DominanceInfo &dominance,
+LowerObjectsPass::lowerObject(ObjectOp object,
                               DenseMap<Operation *, size_t> &positions,
                               DenseSet<Operation *> &converted) {
   auto position = positions.lookup(object);
@@ -124,13 +123,15 @@ LowerObjectsPass::lowerObject(ObjectOp object, DominanceInfo &dominance,
     worklist.emplace_back(op, true);
     for (auto operand : llvm::reverse(operands)) {
       auto *def = operand.getDefiningOp();
-      if (!def || def->getBlock() != object->getBlock()) {
-        if (dominance.properlyDominates(operand, object))
-          continue;
-        // In particular, do not pull values out of nested regions or move
-        // operations across block boundaries.
-        return success();
+      // Module arguments are always available. Do not pull dependencies out
+      // of nested regions.
+      if (!def) {
+        if (cast<BlockArgument>(operand).getOwner() != object->getBlock())
+          return success();
+        continue;
       }
+      if (def->getBlock() != object->getBlock())
+        return success();
       if (positions.lookup(def) < position)
         continue;
       worklist.emplace_back(def, false);
@@ -162,13 +163,11 @@ LowerObjectsPass::lowerObject(ObjectOp object, DominanceInfo &dominance,
       if (assign) {
         positions.erase(assign);
         assign.erase();
-        ++numInputAssignmentsRemoved;
         ++numRemoved;
       }
     for (auto field : info.fields) {
       positions.erase(field);
       field.erase();
-      ++numInputFieldsRemoved;
       ++numRemoved;
     }
     declaration.replaceAllUsesWith(create.getResult());
@@ -182,30 +181,25 @@ LowerObjectsPass::lowerObject(ObjectOp object, DominanceInfo &dominance,
 }
 
 void LowerObjectsPass::runOnOperation() {
-  DominanceInfo dominance;
-  auto result = getOperation()->walk([&](Block *block) {
-    // A plan may also convert declarations later in the block. Snapshot the
-    // original declarations and check the converted set before dereferencing
-    // them, since those operations may already have been erased.
-    SmallVector<ObjectOp> objects(block->getOps<ObjectOp>());
-    if (objects.empty())
-      return WalkResult::advance();
+  auto *block = getOperation().getBodyBlock();
+  // A plan may also convert later declarations. Snapshot them and track erased
+  // objects so that they are not processed again.
+  SmallVector<ObjectOp> objects(block->getOps<ObjectOp>());
+  if (objects.empty())
+    return;
 
-    // Stable positions avoid recomputing MLIR's whole-block operation order
-    // after every hoist. Declarations are processed in original block order;
-    // anything hoisted to an earlier declaration dominates all later ones.
-    DenseMap<Operation *, size_t> positions;
-    for (auto [index, op] : llvm::enumerate(*block))
-      positions[&op] = index;
-    DenseSet<Operation *> converted;
-    for (auto object : objects) {
-      if (converted.contains(object.getOperation()))
-        continue;
-      if (failed(lowerObject(object, dominance, positions, converted)))
-        return WalkResult::interrupt();
+  // Stable positions avoid recomputing the block's operation order after each
+  // hoist. Anything hoisted to an earlier object dominates all later ones.
+  DenseMap<Operation *, size_t> positions;
+  for (auto [index, op] : llvm::enumerate(*block))
+    positions[&op] = index;
+  DenseSet<Operation *> converted;
+  for (auto object : objects) {
+    if (converted.contains(object.getOperation()))
+      continue;
+    if (failed(lowerObject(object, positions, converted))) {
+      signalPassFailure();
+      return;
     }
-    return WalkResult::advance();
-  });
-  if (result.wasInterrupted())
-    signalPassFailure();
+  }
 }
