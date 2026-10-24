@@ -721,6 +721,7 @@ def ContractOp : FIRRTLOp<"contract", [
 
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
+    DeclareOpInterfaceMethods<FObjectLike>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [
@@ -742,19 +743,6 @@ def ObjectOp :  FIRRTLOp<"object", [
   let builders = [
     OpBuilder<(ins "ClassLike":$klass, "StringRef":$name)>
   ];
-  let extraClassDeclaration = [{
-    /// Lookup the module or extmodule for the symbol.  This returns null on
-    /// invalid IR.
-    ClassLike getReferencedClass(const SymbolTable &symbolTable);
-
-    StringAttr getClassNameAttr();
-    StringRef getClassName();
-
-    Operation *getReferencedOperation(const SymbolTable &symtbl);
-
-    // Required by InstanceGraphInstanceOpInterface default implementation
-    StringAttr getReferencedModuleNameAttr();
-  }];
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>(attr-dict) custom<ClassInterface>(type($result))
   }];
