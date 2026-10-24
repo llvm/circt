@@ -41,6 +41,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerLayers.cpp
   LowerMatches.cpp
   LowerMemory.cpp
+  LowerObjects.cpp
   LowerOpenAggs.cpp
   LowerSignatures.cpp
   LowerSizeOf.cpp
@@ -82,6 +83,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   CIRCTSim
   CIRCTSV
   CIRCTSupport
+  MLIRAnalysis
   MLIRIR
   MLIRPass
   MLIRTransformUtils

@@ -21,10 +21,17 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
+#include <cstdlib>
+
 using namespace circt;
 
 LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
                                                     const FirtoolOptions &opt) {
+  // Keep a simple environment-variable escape hatch to compare pipelines
+  // with and without object lowering on large designs.
+  if (!std::getenv("CIRCT_DISABLE_LOWER_OBJECTS"))
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createLowerObjects());
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createCheckRecursiveInstantiation());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckLayers());
