@@ -14,9 +14,9 @@ firrtl.circuit "ClassDedup" {
 
   // CHECK: @ClassDedup()
   firrtl.module @ClassDedup() {
-    // CHECK-NEXT: firrtl.object @Foo()
-    // CHECK-OFF-NEXT: firrtl.object @Bar()
-    // CHECK-ON-NEXT: firrtl.object @Foo()
+    // CHECK-NEXT: %obj1 = firrtl.object.create() : () -> !firrtl.class<@Foo()>
+    // CHECK-OFF-NEXT: %obj2 = firrtl.object.create() : () -> !firrtl.class<@Bar()>
+    // CHECK-ON-NEXT: %obj2 = firrtl.object.create() : () -> !firrtl.class<@Foo()>
     %obj1 = firrtl.object @Foo()
     %obj2 = firrtl.object @Bar()
   }
