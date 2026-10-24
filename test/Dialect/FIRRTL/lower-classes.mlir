@@ -936,3 +936,17 @@ firrtl.circuit "AltBasePathMultiParent" {
     firrtl.instance foo @Foo()
   }
 }
+
+// Lower value-like object creation to an OM object.
+// CHECK-LABEL: firrtl.circuit "Create"
+firrtl.circuit "Create" {
+  firrtl.extclass @Class(in arg: !firrtl.string, out result: !firrtl.string)
+  // CHECK: om.class @Create_Class
+  firrtl.module @Create(in %arg: !firrtl.string, out %out: !firrtl.string) {
+    // CHECK: %[[OBJ:.*]] = om.object @Class(
+    %obj = firrtl.object.create(%arg) : (!firrtl.string) -> !firrtl.class<@Class(in arg: !firrtl.string, out result: !firrtl.string)>
+    // CHECK: om.object.field %[[OBJ]]["result"]
+    %result = firrtl.object.subfield %obj[result] : !firrtl.class<@Class(in arg: !firrtl.string, out result: !firrtl.string)>
+    firrtl.propassign %out, %result : !firrtl.string
+  }
+}

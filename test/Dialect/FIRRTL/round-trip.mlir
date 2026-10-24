@@ -237,6 +237,25 @@ firrtl.module @UnknownValueOp() {
   %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
 }
 
+firrtl.extclass @ObjectCreateTarget(
+  in first: !firrtl.string,
+  in second: !firrtl.integer,
+  out result: !firrtl.string
+)
+
+// CHECK-LABEL: firrtl.module @ObjectCreate
+firrtl.module @ObjectCreate(
+  in %first: !firrtl.string,
+  in %second: !firrtl.integer,
+  out %output: !firrtl.string
+) {
+  // CHECK: %obj = firrtl.object.create(%first, %second) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  %obj = firrtl.object.create(%first, %second) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  // CHECK: %0 = firrtl.object.subfield %obj[result] : !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  %result = firrtl.object.subfield %obj[result] : !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  firrtl.propassign %output, %result : !firrtl.string
+}
+
 firrtl.formal @myFormalTestA, @Top {}
 firrtl.formal @myFormalTestB, @Top {bound = 42 : i19}
 firrtl.formal @myFormalTestC, @Top {} attributes {foo}
