@@ -130,6 +130,9 @@ public:
           .Case<InstanceOp>([&](auto inst) { handleInstanceOp(inst); })
           .Case<InstanceChoiceOp>(
               [&](auto inst) { handleInstanceChoiceOp(inst); })
+          .Case<ObjectCreateOp>([](auto) {
+            // Creating an object reference does not evaluate its fields.
+          })
           .Case<SubindexOp>([&](SubindexOp sub) {
             recordValueRefersToFieldRef(
                 sub.getInput(),

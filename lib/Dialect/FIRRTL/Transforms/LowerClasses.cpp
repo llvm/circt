@@ -1471,6 +1471,36 @@ static LogicalResult updateObjectInClass(
                             intraPassMutex, opsToErase);
 }
 
+// Value-like objects already carry their actual parameters as operands.
+static LogicalResult updateObjectInClass(
+    firrtl::ObjectCreateOp firrtlObject, const PathInfoTable &pathInfoTable,
+    SmallVectorImpl<RtlPortsInfo> &rtlPortsToCreate, std::mutex &intraPassMutex,
+    SmallVectorImpl<Operation *> &opsToErase) {
+  auto basePath = firrtlObject->getBlock()->getArgument(0);
+  auto firrtlClassType = firrtlObject.getType();
+  SmallVector<Value> args{basePath};
+  pathInfoTable.collectAltBasePaths(firrtlObject,
+                                    firrtlObject.getClassNameAttr(), args);
+  llvm::append_range(args, firrtlObject.getInputs());
+
+  firrtl::PathOp containingModuleRef;
+  unsigned inputIndex = 0;
+  for (auto element : firrtlClassType.getElements()) {
+    if (element.direction != Direction::In)
+      continue;
+    auto input = firrtlObject.getInputs()[inputIndex++];
+    if (element.name.strref().contains(kContainingModuleName)) {
+      assert(!containingModuleRef && "expected exactly one containingModule");
+      containingModuleRef = input.getDefiningOp<firrtl::PathOp>();
+      assert(containingModuleRef && "expected containingModule to be a PathOp");
+    }
+  }
+
+  return lowerObjectInClass(cast<FObjectLike>(firrtlObject.getOperation()),
+                            args, containingModuleRef, rtlPortsToCreate,
+                            intraPassMutex, opsToErase);
+}
+
 // Helper to update a Module instantiation in a Class. Module instances within a
 // Class are converted to OM Object instances of the Class derived from the
 // Module.
@@ -1603,7 +1633,7 @@ updateInstancesInModule(FModuleOp moduleOp, InstanceGraph &instanceGraph,
                         SmallVectorImpl<Operation *> &opsToErase) {
   OpBuilder builder(moduleOp);
   for (auto &op : moduleOp->getRegion(0).getOps()) {
-    if (auto objectOp = dyn_cast<firrtl::ObjectOp>(op)) {
+    if (isa<firrtl::FObjectLike>(op)) {
       assert(0 && "should be no objects in modules");
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       if (failed(updateInstanceInModule(instanceOp, instanceGraph, opsToErase)))
@@ -1623,6 +1653,10 @@ static LogicalResult updateObjectsAndInstancesInClass(
   auto it = classState.paths.begin();
   for (auto &op : classOp->getRegion(0).getOps()) {
     if (auto objectOp = dyn_cast<firrtl::ObjectOp>(op)) {
+      if (failed(updateObjectInClass(objectOp, pathInfoTable, rtlPortsToCreate,
+                                     intraPassMutex, opsToErase)))
+        return failure();
+    } else if (auto objectOp = dyn_cast<firrtl::ObjectCreateOp>(op)) {
       if (failed(updateObjectInClass(objectOp, pathInfoTable, rtlPortsToCreate,
                                      intraPassMutex, opsToErase)))
         return failure();

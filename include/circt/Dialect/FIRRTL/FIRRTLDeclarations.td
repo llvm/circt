@@ -723,9 +723,7 @@ def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<FObjectLike>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
-      "getReferencedModuleSlow"
-    ]>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [
       "getAsmResultNames"
     ]>
@@ -747,6 +745,32 @@ def ObjectOp :  FIRRTLOp<"object", [
   ];
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>(attr-dict) custom<ClassInterface>(type($result))
+  }];
+}
+
+def ObjectCreateOp : FIRRTLOp<"object.create", [
+    ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
+    DeclareOpInterfaceMethods<FObjectLike>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]> {
+  let summary = "Create an object from its input values";
+  let description = [{
+    Create an object by providing values for its class inputs as operands in
+    declaration order. Only output fields can be accessed through the result.
+
+    Example:
+    ```mlir
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Foo(in str: !firrtl.string, out result: !firrtl.string)>
+    ```
+  }];
+  let arguments = (ins StrAttr:$name, Variadic<PropertyType>:$inputs);
+  let results = (outs ClassType:$result);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    `(` $inputs `)` `` custom<ImplicitSSAName>(attr-dict) `:`
+    functional-type($inputs, $result)
   }];
 }
 
