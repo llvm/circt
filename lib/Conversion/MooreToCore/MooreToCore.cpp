@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/MooreToCore.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -21,6 +22,7 @@
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Arith/IR/ArithAttributes.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -3606,8 +3608,34 @@ struct StringSubstrOpConversion : public OpConversionPattern<StringSubstrOp> {
   LogicalResult
   matchAndRewrite(StringSubstrOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::StringSubstrOp>(
-        op, adaptor.getStr(), adaptor.getStart(), adaptor.getEnd());
+    Location loc = op.getLoc();
+    Value str = adaptor.getStr();
+    Value start = adaptor.getStart();
+    Value end = adaptor.getEnd();
+
+    Value zero = createZeroValue(rewriter.getI32Type(), loc, rewriter);
+    Value emptyString = createZeroValue(str.getType(), loc, rewriter);
+    Value len = sim::StringLengthOp::create(rewriter, loc, str);
+    Value endI64 =
+        comb::createOrFoldSExt(rewriter, loc, end, rewriter.getI64Type());
+
+    Value startGeZero = arith::CmpIOp::create(
+        rewriter, loc, arith::CmpIPredicate::sge, start, zero);
+    Value endGeStart = arith::CmpIOp::create(
+        rewriter, loc, arith::CmpIPredicate::sge, end, start);
+    Value endLeLen = arith::CmpIOp::create(
+        rewriter, loc, arith::CmpIPredicate::sle, endI64, len);
+
+    Value isWithinBounds = arith::AndIOp::create(
+        rewriter, loc, endLeLen,
+        arith::AndIOp::create(rewriter, loc, startGeZero, endGeStart));
+
+    Value subStr = sim::StringSubstrOp::create(
+        rewriter, loc, str, adaptor.getStart(), adaptor.getEnd());
+
+    rewriter.replaceOpWithNewOp<arith::SelectOp>(op, isWithinBounds, subStr,
+                                                 emptyString);
+
     return success();
   }
 };
