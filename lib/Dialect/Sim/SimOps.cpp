@@ -22,7 +22,6 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/Support/Casting.h"
 #include <algorithm>
 #include <cstdint>
 
