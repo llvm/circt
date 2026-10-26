@@ -243,6 +243,111 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
     if (elemWidth < 0)
       return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
 
+    // Handle trivial cases.
+    if (elemWidth == 0) {
+      rewriter.replaceOp(op, adaptor.getInput());
+      return success();
+    }
+    if (numElements == 1) {
+      rewriter.replaceOp(op, adaptor.getElement());
+      return success();
+    }
+
+    // Special case for when the index is a constant.
+    APInt constantIndex;
+    if (matchPattern(adaptor.getIndex(), m_ConstantInt(&constantIndex))) {
+      uint64_t targetIdx = constantIndex.getZExtValue();
+      return emitConstantInject(targetIdx, op, adaptor, rewriter);
+    }
+
+    // If the 2D array would create an integer type that MLIR cannot handle,
+    // fall back to a linear mux chain. Allow a user override to force a linear
+    // mux chain for testing purposes.
+    uint64_t twoDimensionalArrayBitwidth =
+        numElements * numElements * elemWidth;
+    uint64_t maxBitwidth = IntegerType::kMaxWidth;
+    bool useLinearChain = twoDimensionalArrayBitwidth > maxBitwidth ||
+                          op->hasAttr("force_linear_chain");
+    if (useLinearChain)
+      return emitLinearMuxChainInject(op, adaptor, rewriter);
+
+    return emit2DArrayInject(op, adaptor, rewriter);
+  }
+
+  // Emits a constant index inject with two extracts and one concat.
+  LogicalResult emitConstantInject(uint64_t targetIdx, hw::ArrayInjectOp op,
+                                   OpAdaptor adaptor,
+                                   ConversionPatternRewriter &rewriter) const {
+    auto arrayType = cast<hw::ArrayType>(op.getInput().getType());
+    auto elemType = arrayType.getElementType();
+    auto numElements = arrayType.getNumElements();
+    auto elemWidth = hw::getBitWidth(elemType);
+    if (elemWidth < 0)
+      return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
+
+    uint64_t totalWidth = numElements * elemWidth;
+    uint64_t bitOffset = targetIdx * elemWidth;
+    uint64_t upperBits = totalWidth - bitOffset - elemWidth;
+    SmallVector<Value, 3> concatOperands;
+    if (upperBits > 0)
+      concatOperands.push_back(rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), adaptor.getInput(), bitOffset + elemWidth, upperBits));
+    concatOperands.push_back(adaptor.getElement());
+    if (bitOffset > 0)
+      concatOperands.push_back(rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), adaptor.getInput(), 0, bitOffset));
+    Value result =
+        rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), concatOperands);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+
+  // Emits a linear mux chain inject with a series of extracts and concats.
+  LogicalResult
+  emitLinearMuxChainInject(hw::ArrayInjectOp op, OpAdaptor adaptor,
+                           ConversionPatternRewriter &rewriter) const {
+    auto arrayType = cast<hw::ArrayType>(op.getInput().getType());
+    Value index = adaptor.getIndex();
+    Location loc = op.getLoc();
+    size_t numElements = arrayType.getNumElements();
+    int64_t elemWidth = hw::getBitWidth(arrayType.getElementType());
+    if (elemWidth < 0)
+      return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
+
+    // Extract all elements from the input array
+    SmallVector<Value> originalElements;
+    for (size_t i = 0; i < numElements; ++i) {
+      originalElements.push_back(rewriter.createOrFold<comb::ExtractOp>(
+          loc, adaptor.getInput(), i * elemWidth, elemWidth));
+    }
+
+    SmallVector<Value> rowElements;
+    rowElements.reserve(numElements);
+    for (int originalIdx = numElements - 1; originalIdx >= 0; --originalIdx) {
+      Value idxCst =
+          hw::ConstantOp::create(rewriter, loc, index.getType(), originalIdx);
+      Value cond = comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq,
+                                        index, idxCst);
+      rowElements.push_back(comb::MuxOp::create(rewriter, loc, cond,
+                                                adaptor.getElement(),
+                                                originalElements[originalIdx]));
+    }
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, rowElements);
+    return success();
+  }
+
+  // Emits a 2D array inject with an ArrayGetOp. Each row of the 2D array
+  // represents what the array would look like if injection happened at that
+  // specific index.
+  LogicalResult emit2DArrayInject(hw::ArrayInjectOp op, OpAdaptor adaptor,
+                                  ConversionPatternRewriter &rewriter) const {
+    auto arrayType = cast<hw::ArrayType>(op.getInput().getType());
+    auto elemType = arrayType.getElementType();
+    auto numElements = arrayType.getNumElements();
+    auto elemWidth = hw::getBitWidth(elemType);
+    if (elemWidth < 0)
+      return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
+
     Location loc = op.getLoc();
 
     // Extract all elements from the input array
@@ -284,7 +389,6 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
     // Create array_get operation to select the row
     auto arrayGetOp =
         hw::ArrayGetOp::create(rewriter, loc, array2D, adaptor.getIndex());
-
     rewriter.replaceOp(op, arrayGetOp);
     return success();
   }
