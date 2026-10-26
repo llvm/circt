@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-synth{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux},cse))" | FileCheck %s
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-synth{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.add},cse))" | FileCheck %s --check-prefix=ALLOW_ADD
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-synth{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.icmp}))" | FileCheck %s --check-prefix=ALLOW_ICMP
-// RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-synth{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.add,comb.mul,comb.sub},cse))" | FileCheck %s --check-prefix=ALLOW_ARITH
+// RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-synth{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.add,comb.mul,comb.sub max-emulation-unknown-bits=7},cse))" | FileCheck %s --check-prefix=ALLOW_ARITH
 
 // CHECK-LABEL: @parity
 hw.module @parity(in %arg0: i4, out out: i1) {
@@ -681,30 +681,30 @@ hw.module @const_divmod_mods_neg1_i3(in %lhs: i3, out out: i3) {
 // ALLOW_ARITH-NOT: comb.divu
 // ALLOW_ARITH-NOT: comb.modu
 // ALLOW_ARITH: %[[FALSE:.+]] = hw.constant false
-// ALLOW_ARITH: %[[WIDE_RHS:.+]] = comb.concat %[[FALSE]], %rhs : i1, i8
-// ALLOW_ARITH-DAG: %[[LHS0:.+]] = comb.extract %lhs from 0 : (i8) -> i1
-// ALLOW_ARITH-DAG: %[[LHS7:.+]] = comb.extract %lhs from 7 : (i8) -> i1
-// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i8
-// ALLOW_ARITH: %[[REM0:.+]] = comb.concat %[[C0]], %[[LHS7]] : i8, i1
-// ALLOW_ARITH: %[[DIFF0:.+]] = comb.sub %[[REM0]], %[[WIDE_RHS]] : i9
-// ALLOW_ARITH: %[[BORROW0:.+]] = comb.extract %[[DIFF0]] from 8 : (i9) -> i1
+// ALLOW_ARITH: %[[WIDE_RHS:.+]] = comb.concat %[[FALSE]], %rhs : i1, i4
+// ALLOW_ARITH-DAG: %[[LHS0:.+]] = comb.extract %lhs from 0 : (i4) -> i1
+// ALLOW_ARITH-DAG: %[[LHS3:.+]] = comb.extract %lhs from 3 : (i4) -> i1
+// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i4
+// ALLOW_ARITH: %[[REM0:.+]] = comb.concat %[[C0]], %[[LHS3]] : i4, i1
+// ALLOW_ARITH: %[[DIFF0:.+]] = comb.sub %[[REM0]], %[[WIDE_RHS]] : i5
+// ALLOW_ARITH: %[[BORROW0:.+]] = comb.extract %[[DIFF0]] from 4 : (i5) -> i1
 // ALLOW_ARITH: %[[TRUE:.+]] = hw.constant true
-// ALLOW_ARITH: %[[Q7:.+]] = comb.xor %[[BORROW0]], %[[TRUE]] : i1
-// ALLOW_ARITH: %[[REM1:.+]] = comb.mux %[[BORROW0]], %[[REM0]], %[[DIFF0]] : i9
-// ALLOW_ARITH: %[[REM1_LO:.+]] = comb.extract %[[REM1]] from 0 : (i9) -> i8
-// ALLOW_ARITH: comb.concat %[[REM1_LO]], %{{.+}} : i8, i1
-// ALLOW_ARITH: %[[REM7:.+]] = comb.concat %{{.+}}, %[[LHS0]] : i8, i1
-// ALLOW_ARITH: %[[DIFF7:.+]] = comb.sub %[[REM7]], %[[WIDE_RHS]] : i9
-// ALLOW_ARITH: %[[BORROW7:.+]] = comb.extract %[[DIFF7]] from 8 : (i9) -> i1
-// ALLOW_ARITH: %[[Q0:.+]] = comb.xor %[[BORROW7]], %[[TRUE]] : i1
-// ALLOW_ARITH: %[[REM8:.+]] = comb.mux %[[BORROW7]], %[[REM7]], %[[DIFF7]] : i9
-// ALLOW_ARITH: %[[Q:.+]] = comb.concat %[[Q7]], %{{.+}}, %[[Q0]] : i1, i1, i1, i1, i1, i1, i1, i1
-// ALLOW_ARITH: %[[REM:.+]] = comb.extract %[[REM8]] from 0 : (i9) -> i8
-// ALLOW_ARITH: hw.output %[[Q]], %[[REM]] : i8, i8
-hw.module @divmodu_dynamic(in %lhs: i8, in %rhs: i8, out out_div: i8, out out_mod: i8) {
-  %div = comb.divu %lhs, %rhs : i8
-  %mod = comb.modu %lhs, %rhs : i8
-  hw.output %div, %mod : i8, i8
+// ALLOW_ARITH: %[[Q3:.+]] = comb.xor %[[BORROW0]], %[[TRUE]] : i1
+// ALLOW_ARITH: %[[REM1:.+]] = comb.mux %[[BORROW0]], %[[REM0]], %[[DIFF0]] : i5
+// ALLOW_ARITH: %[[REM1_LO:.+]] = comb.extract %[[REM1]] from 0 : (i5) -> i4
+// ALLOW_ARITH: comb.concat %[[REM1_LO]], %{{.+}} : i4, i1
+// ALLOW_ARITH: %[[REM3:.+]] = comb.concat %{{.+}}, %[[LHS0]] : i4, i1
+// ALLOW_ARITH: %[[DIFF3:.+]] = comb.sub %[[REM3]], %[[WIDE_RHS]] : i5
+// ALLOW_ARITH: %[[BORROW3:.+]] = comb.extract %[[DIFF3]] from 4 : (i5) -> i1
+// ALLOW_ARITH: %[[Q0:.+]] = comb.xor %[[BORROW3]], %[[TRUE]] : i1
+// ALLOW_ARITH: %[[REM4:.+]] = comb.mux %[[BORROW3]], %[[REM3]], %[[DIFF3]] : i5
+// ALLOW_ARITH: %[[Q:.+]] = comb.concat %[[Q3]], %{{.+}}, %[[Q0]] : i1, i1, i1, i1
+// ALLOW_ARITH: %[[REM:.+]] = comb.extract %[[REM4]] from 0 : (i5) -> i4
+// ALLOW_ARITH: hw.output %[[Q]], %[[REM]] : i4, i4
+hw.module @divmodu_dynamic(in %lhs: i4, in %rhs: i4, out out_div: i4, out out_mod: i4) {
+  %div = comb.divu %lhs, %rhs : i4
+  %mod = comb.modu %lhs, %rhs : i4
+  hw.output %div, %mod : i4, i4
 }
 
 // Signed division divides the magnitudes with the unsigned divider and then
@@ -717,27 +717,27 @@ hw.module @divmodu_dynamic(in %lhs: i8, in %rhs: i8, out out_div: i8, out out_mo
 // ALLOW_ARITH-LABEL: @divmods_dynamic
 // ALLOW_ARITH-NOT: comb.divs
 // ALLOW_ARITH-NOT: comb.mods
-// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i8
-// ALLOW_ARITH: %[[LHS_NEG:.+]] = comb.extract %lhs from 7 : (i8) -> i1
-// ALLOW_ARITH: %[[RHS_NEG:.+]] = comb.extract %rhs from 7 : (i8) -> i1
-// ALLOW_ARITH: %[[LHS_NEGATED:.+]] = comb.sub %[[C0]], %lhs : i8
-// ALLOW_ARITH: %[[LHS_ABS:.+]] = comb.mux %[[LHS_NEG]], %[[LHS_NEGATED]], %lhs : i8
-// ALLOW_ARITH: %[[RHS_NEGATED:.+]] = comb.sub %[[C0]], %rhs : i8
-// ALLOW_ARITH: %[[RHS_ABS:.+]] = comb.mux %[[RHS_NEG]], %[[RHS_NEGATED]], %rhs : i8
+// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i4
+// ALLOW_ARITH: %[[LHS_NEG:.+]] = comb.extract %lhs from 3 : (i4) -> i1
+// ALLOW_ARITH: %[[RHS_NEG:.+]] = comb.extract %rhs from 3 : (i4) -> i1
+// ALLOW_ARITH: %[[LHS_NEGATED:.+]] = comb.sub %[[C0]], %lhs : i4
+// ALLOW_ARITH: %[[LHS_ABS:.+]] = comb.mux %[[LHS_NEG]], %[[LHS_NEGATED]], %lhs : i4
+// ALLOW_ARITH: %[[RHS_NEGATED:.+]] = comb.sub %[[C0]], %rhs : i4
+// ALLOW_ARITH: %[[RHS_ABS:.+]] = comb.mux %[[RHS_NEG]], %[[RHS_NEGATED]], %rhs : i4
 // ALLOW_ARITH: %[[FALSE:.+]] = hw.constant false
-// ALLOW_ARITH: %[[WIDE_RHS:.+]] = comb.concat %[[FALSE]], %[[RHS_ABS]] : i1, i8
-// ALLOW_ARITH: comb.extract %[[LHS_ABS]] from 0 : (i8) -> i1
-// ALLOW_ARITH: comb.sub %{{.+}}, %[[WIDE_RHS]] : i9
-// ALLOW_ARITH: %[[Q:.+]] = comb.concat %{{.+}} : i1, i1, i1, i1, i1, i1, i1, i1
-// ALLOW_ARITH: %[[REM:.+]] = comb.extract %{{.+}} from 0 : (i9) -> i8
+// ALLOW_ARITH: %[[WIDE_RHS:.+]] = comb.concat %[[FALSE]], %[[RHS_ABS]] : i1, i4
+// ALLOW_ARITH: comb.extract %[[LHS_ABS]] from 0 : (i4) -> i1
+// ALLOW_ARITH: comb.sub %{{.+}}, %[[WIDE_RHS]] : i5
+// ALLOW_ARITH: %[[Q:.+]] = comb.concat %{{.+}} : i1, i1, i1, i1
+// ALLOW_ARITH: %[[REM:.+]] = comb.extract %{{.+}} from 0 : (i5) -> i4
 // ALLOW_ARITH: %[[Q_NEG:.+]] = comb.xor bin %[[LHS_NEG]], %[[RHS_NEG]] : i1
-// ALLOW_ARITH: %[[Q_NEGATED:.+]] = comb.sub %[[C0]], %[[Q]] : i8
-// ALLOW_ARITH: %[[Q_SIGNED:.+]] = comb.mux %[[Q_NEG]], %[[Q_NEGATED]], %[[Q]] : i8
-// ALLOW_ARITH: %[[REM_NEGATED:.+]] = comb.sub %[[C0]], %[[REM]] : i8
-// ALLOW_ARITH: %[[REM_SIGNED:.+]] = comb.mux %[[LHS_NEG]], %[[REM_NEGATED]], %[[REM]] : i8
-// ALLOW_ARITH: hw.output %[[Q_SIGNED]], %[[REM_SIGNED]] : i8, i8
-hw.module @divmods_dynamic(in %lhs: i8, in %rhs: i8, out out_div: i8, out out_mod: i8) {
-  %div = comb.divs %lhs, %rhs : i8
-  %mod = comb.mods %lhs, %rhs : i8
-  hw.output %div, %mod : i8, i8
+// ALLOW_ARITH: %[[Q_NEGATED:.+]] = comb.sub %[[C0]], %[[Q]] : i4
+// ALLOW_ARITH: %[[Q_SIGNED:.+]] = comb.mux %[[Q_NEG]], %[[Q_NEGATED]], %[[Q]] : i4
+// ALLOW_ARITH: %[[REM_NEGATED:.+]] = comb.sub %[[C0]], %[[REM]] : i4
+// ALLOW_ARITH: %[[REM_SIGNED:.+]] = comb.mux %[[LHS_NEG]], %[[REM_NEGATED]], %[[REM]] : i4
+// ALLOW_ARITH: hw.output %[[Q_SIGNED]], %[[REM_SIGNED]] : i4, i4
+hw.module @divmods_dynamic(in %lhs: i4, in %rhs: i4, out out_div: i4, out out_mod: i4) {
+  %div = comb.divs %lhs, %rhs : i4
+  %mod = comb.mods %lhs, %rhs : i4
+  hw.output %div, %mod : i4, i4
 }
