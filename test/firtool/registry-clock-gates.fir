@@ -1,10 +1,10 @@
-; RUN: firtool %s -domain-mode=check -output-final-mlir %t.mlir -o /dev/null
+; RUN: firtool %s -domain-mode=check -strip-domain=false -output-final-mlir %t.mlir -o /dev/null
 ; RUN: domaintool --module Foo \
 ; RUN:     --domain ClockDomain,A,,synchronous \
 ; RUN:     --domain ClockDomain,B,A,synchronous \
 ; RUN:     --assign 0 --assign 1 \
 ; RUN:     %t.mlir | FileCheck %s --check-prefix=FOO
-; RUN: firtool %s -domain-mode=strip -o /dev/null
+; RUN: firtool %s -domain-mode=check -strip-domain=true -o /dev/null
 
 ; Multi-domain, multi-depth Registry clockGates through firtool + domaintool.
 ;

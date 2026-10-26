@@ -61,8 +61,10 @@ stripModuleImpl(FModuleLike op,
                 return WalkResult::advance();
               }
               // A stripped DomainSubfield may have been replaced by an unknown
-              // value before this operation is visited.
-              if (isa<RegistryType>(op.getDest().getType()))
+              // value before this operation is visited. DomainInsert stores
+              // the domain value and field name separately, so its destination
+              // type remains DomainType rather than RegistryType.
+              if (shouldStripType(op.getDest().getType()))
                 op.erase();
               return WalkResult::advance();
             })
