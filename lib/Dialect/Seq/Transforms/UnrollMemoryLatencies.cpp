@@ -83,10 +83,15 @@ public:
     auto delayedData = seq::ShiftRegOp::create(
         rewriter, op.getLoc(), delayAttr, data, clk, ce, {}, {}, {}, {}, {});
 
+    // delay the write enable
+    auto delayedWrEn =
+        seq::ShiftRegOp::create(rewriter, op.getLoc(), delayAttr,
+                                adaptor.getWrEn(), clk, ce, {}, {}, {}, {}, {});
+
     // Replace the old write port with the new one
     rewriter.replaceOpWithNewOp<seq::WritePortOp>(op, adaptor.getMemory(),
                                                   delayedAddrs, delayedData,
-                                                  adaptor.getWrEn(), oneAttr);
+                                                  delayedWrEn, oneAttr);
 
     return success();
   }
@@ -122,10 +127,15 @@ public:
     delayAddresses(rewriter, op.getLoc(), clk, ce, addrs, latencyAttr,
                    delayedAddrs);
 
+    // delay the read enable
+    auto delayedRdEn =
+        seq::ShiftRegOp::create(rewriter, op.getLoc(), latencyAttr,
+                                adaptor.getRdEn(), clk, ce, {}, {}, {}, {}, {});
+
     // Replace the old read port with the new one
     rewriter.replaceOpWithNewOp<seq::ReadPortOp>(
         op, op.getReadData().getType(), adaptor.getMemory(), delayedAddrs,
-        adaptor.getRdEn(), zeroAttr);
+        delayedRdEn, zeroAttr);
 
     return success();
   }
@@ -144,7 +154,7 @@ public:
 
 private:
   /// Performs the latency unrolling of an individual write port
-  void unrollFirMemWritePort(seq::FirMemOp mem, seq::FirMemWriteOp &op,
+  void unrollFirMemWritePort(seq::FirMemOp &mem, seq::FirMemWriteOp &op,
                              IntegerAttr delayAttr, IntegerAttr oneAttr,
                              Value ce,
                              ConversionPatternRewriter &rewriter) const {
@@ -153,40 +163,48 @@ private:
     Value addr = op.getAddress();
     Value data = op.getData();
     Value clk = op.getClk();
+    Value en = op.getEnable();
 
-    // Delay the address and data inputs
+    // Delay the address, data, and enable inputs
     auto delayedData = seq::ShiftRegOp::create(
         rewriter, op.getLoc(), delayAttr, data, clk, ce, {}, {}, {}, {}, {});
 
     auto delayedAddr = seq::ShiftRegOp::create(
         rewriter, op.getLoc(), delayAttr, addr, clk, ce, {}, {}, {}, {}, {});
 
+    auto delayedEn = seq::ShiftRegOp::create(rewriter, op.getLoc(), delayAttr,
+                                             en, clk, ce, {}, {}, {}, {}, {});
+
     // Replace the current port with a delayed port
     rewriter.replaceOpWithNewOp<seq::FirMemWriteOp>(
-        op, mem, delayedAddr, clk, op.getEnable(), delayedData, op.getMask());
+        op, mem, delayedAddr, clk, delayedEn, delayedData, op.getMask());
   }
 
   /// Performs the latency unrolling of an individual read port
-  void unrollFirMemReadPort(seq::FirMemOp mem, seq::FirMemReadOp &op,
+  void unrollFirMemReadPort(seq::FirMemOp &mem, seq::FirMemReadOp &op,
                             IntegerAttr delayRdAttr, IntegerAttr zeroAttr,
                             Value ce,
                             ConversionPatternRewriter &rewriter) const {
     // Retrieve all of the relevant arguments
     Value addr = op.getAddress();
     Value clk = op.getClk();
+    Value en = op.getEnable();
 
     auto delayedAddr = seq::ShiftRegOp::create(
         rewriter, op.getLoc(), delayRdAttr, addr, clk, ce, {}, {}, {}, {}, {});
 
+    auto delayedEn = seq::ShiftRegOp::create(rewriter, op.getLoc(), delayRdAttr,
+                                             en, clk, ce, {}, {}, {}, {}, {});
+
     // Replace the current port with a delayed port
     rewriter.replaceOpWithNewOp<seq::FirMemReadOp>(
-        op, op.getResult().getType(), mem, delayedAddr, clk, op.getEnable());
+        op, op.getResult().getType(), mem, delayedAddr, clk, delayedEn);
   }
 
   /// Performs the latency unrolling of a read-write port.
   /// These are annoying as they require implementing both the read and write
   /// unrolling and then muxing the two delays using the mode as a selector.
-  void unrollFirMemReadWritePort(seq::FirMemOp mem, seq::FirMemReadWriteOp &op,
+  void unrollFirMemReadWritePort(seq::FirMemOp &mem, seq::FirMemReadWriteOp &op,
                                  IntegerAttr delayWrAttr,
                                  IntegerAttr delayRdAttr, IntegerAttr zeroAttr,
                                  IntegerAttr oneAttr, Value ce,
@@ -196,6 +214,7 @@ private:
     Value data = op.getWriteData();
     Value mode = op.getMode();
     Value clk = op.getClk();
+    Value en = op.getEnable();
 
     // Create two versions of the delayed address, one using the write latency,
     // one using the read latency
@@ -205,19 +224,44 @@ private:
     auto delayedWriteAddr = seq::ShiftRegOp::create(
         rewriter, op.getLoc(), delayWrAttr, addr, clk, ce, {}, {}, {}, {}, {});
 
-    // Delay the write data, this will only be used in case of read so no need
+    // Delay the write data, this will only be used in case of write so no need
     // for a second mux.
     auto delayedWriteData = seq::ShiftRegOp::create(
         rewriter, op.getLoc(), delayWrAttr, data, clk, ce, {}, {}, {}, {}, {});
 
+    // Delay mode to match read and write inputs
+    // Select the delay sucht that mode = mux(
+    //  mode.dealy(min(rd_lat, wr_lat)),
+    //  mode.delay(wr_lat), mode.delay(rd_lat)
+    // )
+    // This makes sure that we always select the correct address using the
+    // relevant mode
+
+    auto delayedModeWr = seq::ShiftRegOp::create(
+        rewriter, op.getLoc(), delayWrAttr, mode, clk, ce, {}, {}, {}, {}, {});
+
+    auto delayedModeRd = seq::ShiftRegOp::create(
+        rewriter, op.getLoc(), delayRdAttr, mode, clk, ce, {}, {}, {}, {}, {});
+
+    // We reuse the smallest delayed mode to avoid creating a duplicate shiftreg
+    auto selectMode = comb::MuxOp::create(
+        rewriter, op.getLoc(),
+        delayWrAttr.getInt() < delayRdAttr.getInt() ? delayedModeWr
+                                                    : delayedModeRd,
+        delayedModeWr, delayedModeRd);
+
     // Select which delayed version we want based on the mode
-    auto selectAddr = comb::MuxOp::create(rewriter, op.getLoc(), mode,
+    auto selectAddr = comb::MuxOp::create(rewriter, op.getLoc(), selectMode,
                                           delayedWriteAddr, delayedReadAddr);
+
+    // Finally also delay the enable signal
+    auto delayedEn = seq::ShiftRegOp::create(rewriter, op.getLoc(), delayWrAttr,
+                                             en, clk, ce, {}, {}, {}, {}, {});
 
     // Replace the current port with a delayed port
     rewriter.replaceOpWithNewOp<seq::FirMemReadWriteOp>(
-        op, op.getResult().getType(), mem, selectAddr, clk, op.getEnable(),
-        delayedWriteData, mode, op.getMask());
+        op, op.getResult().getType(), mem, selectAddr, clk, delayedEn,
+        delayedWriteData, selectMode, op.getMask());
   }
 
 public:
