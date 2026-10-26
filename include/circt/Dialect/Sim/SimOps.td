@@ -703,11 +703,11 @@ def StringConstantOp : SimOp<"string.literal", [Pure, ConstantLike]> {
 def StringLengthOp : SimOp<"string.length", [Pure]> {
   let summary = "Length of a string";
   let description = [{
-    Returns the length of a dynamic string as an `i64` value.
+    Returns the length of a dynamic string as an `i32` value.
   }];
 
   let arguments = (ins DynamicStringType:$input);
-  let results = (outs I64:$result);
+  let results = (outs I32:$result);
 
   let hasFolder = true;
 
