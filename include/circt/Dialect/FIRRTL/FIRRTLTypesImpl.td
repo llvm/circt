@@ -578,7 +578,7 @@ def ListImpl : PropImplType<"List"> {
   let typeName = "firrtl.propList";
 }
 
-def RegistryImpl : PropImplType<"Registry"> {
+def RegistryImpl : FIRRTLImplType<"Registry", [], "::circt::firrtl::FIRRTLType"> {
   let summary = [{
     An unordered mutable collection of property values for domain asset tracking.
 
@@ -591,7 +591,7 @@ def RegistryImpl : PropImplType<"Registry"> {
                                       "element type">:$elementType);
   let genStorageClass = true;
   let genAccessors = true;
-  let typeName = "firrtl.propRegistry";
+  let typeName = "firrtl.registry";
 }
 
 def PathImpl : PropImplType<"Path"> {

@@ -6071,11 +6071,15 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
       break;
 
     StringAttr fieldName;
-    PropertyType type;
+    FIRRTLType type;
     if (parseId(fieldName, "field name") ||
-        parseToken(FIRToken::colon, "expected ':' after field name") ||
-        parsePropertyType(type, "field type") || info.parseOptionalInfo())
+        parseToken(FIRToken::colon, "expected ':' after field name"))
       return failure();
+    auto fieldTypeLoc = getToken().getLoc();
+    if (parseType(type, "field type") || info.parseOptionalInfo())
+      return failure();
+    if (!isa<PropertyType, RegistryType>(type))
+      return emitError(fieldTypeLoc) << "expected property or registry type";
 
     fields.push_back(
         DomainFieldAttr::get(circuit.getContext(), fieldName, type));
