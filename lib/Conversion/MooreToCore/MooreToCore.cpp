@@ -3615,15 +3615,13 @@ struct StringSubstrOpConversion : public OpConversionPattern<StringSubstrOp> {
     Value zero = createZeroValue(rewriter.getI32Type(), loc, rewriter);
     Value emptyString = createZeroValue(str.getType(), loc, rewriter);
     Value len = sim::StringLengthOp::create(rewriter, loc, str);
-    Value endI64 =
-        comb::createOrFoldSExt(rewriter, loc, end, rewriter.getI64Type());
 
     Value startGeZero = arith::CmpIOp::create(
         rewriter, loc, arith::CmpIPredicate::sge, start, zero);
     Value endGeStart = arith::CmpIOp::create(
         rewriter, loc, arith::CmpIPredicate::sge, end, start);
-    Value endLeLen = arith::CmpIOp::create(
-        rewriter, loc, arith::CmpIPredicate::sle, endI64, len);
+    Value endLeLen = arith::CmpIOp::create(rewriter, loc,
+                                           arith::CmpIPredicate::sle, end, len);
 
     Value isWithinBounds = arith::AndIOp::create(
         rewriter, loc, endLeLen,

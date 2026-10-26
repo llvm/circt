@@ -1840,10 +1840,10 @@ func.func @StringIndexing(%arg0: !moore.string, %arg1: !moore.i32) {
 // CHECK-SAME: %arg2: i32
 func.func @StringSubstr(%arg0: !moore.string, %arg1: !moore.i32, %arg2: !moore.i32) {
   // CHECK:      [[EMPTY:%.+]] = sim.string.literal ""
-  // CHECK:      [[LEN:%.+]] = sim.string.length %arg0
-  // CHECK:      [[STARTGE0:%.+]]   = arith.cmpi sge, %arg1, {{%.+}} : i32
+  // CHECK-NEXT: [[LEN:%.+]] = sim.string.length %arg0
+  // CHECK-NEXT: [[STARTGE0:%.+]]   = arith.cmpi sge, %arg1, {{%.+}} : i32
   // CHECK-NEXT: [[ENDGESTART:%.+]] = arith.cmpi sge, %arg2, %arg1 : i32
-  // CHECK-NEXT: [[ENDLELEN:%.+]]   = arith.cmpi sle, {{%.+}}, [[LEN]] : i64
+  // CHECK-NEXT: [[ENDLELEN:%.+]]   = arith.cmpi sle, %arg2, [[LEN]] : i32
   // CHECK-NEXT: [[AND0:%.+]] = arith.andi [[STARTGE0]], [[ENDGESTART]] : i1 
   // CHECK-NEXT: [[AND1:%.+]] = arith.andi [[ENDLELEN]], [[AND0]] : i1 
   // CHECK-NEXT: [[SUBSTR:%.+]] = sim.string.substr %arg0[%arg1 : %arg2]
