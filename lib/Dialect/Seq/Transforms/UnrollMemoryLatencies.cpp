@@ -28,10 +28,10 @@ namespace {
 
 /// Delays all of the addresses in the given value range using the given delay
 /// and stores the delayed addresses in the given vector.
-static void delayAddresses(ConversionPatternRewriter &rewriter, Location loc,
-                           Value clk, Value ce, ValueRange addrs,
-                           IntegerAttr delayAttr,
-                           llvm::SmallVector<Value> &delayedAddrs) {
+void delayAddresses(ConversionPatternRewriter &rewriter, Location loc,
+                    Value clk, Value ce, ValueRange addrs,
+                    IntegerAttr delayAttr,
+                    llvm::SmallVector<Value> &delayedAddrs) {
 
   // My understanding is that when multiple addresses are given, the same
   // data is written to each location. Therefore we must delay all of the
