@@ -310,3 +310,15 @@ hw.module private @union_array(in %arr: !hw.array<2x!hw.union<a: i4, b: i2 offse
   %b = hw.union_extract %e["b"] : !hw.union<a: i4, b: i2 offset 1>
   hw.output %b : i2
 }
+
+// CHECK-LABEL: @struct_inject(
+hw.module private @struct_inject(in %s: !hw.struct<a: i3, b: i4, c: i5>, in %val: i4, out out: !hw.struct<a: i3, b: i4, c: i5>) {
+  // CHECK-NEXT: %[[IN:.+]] = hw.bitcast %s : (!hw.struct<a: i3, b: i4, c: i5>) -> i12
+  // CHECK-NEXT: %[[HI:.+]] = comb.extract %[[IN]] from 9 : (i12) -> i3
+  // CHECK-NEXT: %[[LO:.+]] = comb.extract %[[IN]] from 0 : (i12) -> i5
+  // CHECK-NEXT: %[[CAT:.+]] = comb.concat %[[HI]], %val, %[[LO]] : i3, i4, i5
+  // CHECK-NEXT: %[[OUT:.+]] = hw.bitcast %[[CAT]] : (i12) -> !hw.struct<a: i3, b: i4, c: i5>
+  // CHECK-NEXT: hw.output %[[OUT]]
+  %0 = hw.struct_inject %s["b"], %val : !hw.struct<a: i3, b: i4, c: i5>
+  hw.output %0 : !hw.struct<a: i3, b: i4, c: i5>
+}

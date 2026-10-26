@@ -303,6 +303,24 @@ struct HWStructCreateOpConversion : OpConversionPattern<hw::StructCreateOp> {
   }
 };
 
+static int64_t getFieldBitOffset(hw::StructType structType, size_t fieldIndex) {
+  int64_t totalBitWidth = hw::getBitWidth(structType);
+  if (totalBitWidth < 0)
+    return -1;
+
+  // Compute the bit offset from the MSB by summing the widths of all preceding fields. The first field occupies the MSBs.
+  int64_t consumedBits = 0;
+  for (size_t i = 0; i < fieldIndex; ++i) {
+    int64_t fieldWidth = hw::getBitWidth(structType.getElements()[i].type);
+    assert(fieldWidth >= 0 &&
+           "must be failed before if field width is unknown");
+    consumedBits += fieldWidth;
+  }
+
+  int64_t fieldWidth = hw::getBitWidth(structType.getElements()[fieldIndex].type);
+  return totalBitWidth - consumedBits - fieldWidth;
+}
+
 struct HWStructExtractOpConversion : OpConversionPattern<hw::StructExtractOp> {
   using OpConversionPattern<hw::StructExtractOp>::OpConversionPattern;
 
@@ -313,28 +331,59 @@ struct HWStructExtractOpConversion : OpConversionPattern<hw::StructExtractOp> {
     auto fieldIndex = op.getFieldIndex();
     auto elements = structType.getElements();
 
-    int64_t totalBitWidth = hw::getBitWidth(structType);
-    if (totalBitWidth < 0)
+    int64_t bitOffset = getFieldBitOffset(structType, fieldIndex);
+    if (bitOffset < 0)
       return rewriter.notifyMatchFailure(op.getLoc(), "unknown struct width");
-
-    // Compute the bit offset from the MSB by summing the widths of all
-    // preceding fields. The first field occupies the MSBs.
-    int64_t consumedBits = 0;
-    for (size_t i = 0; i < fieldIndex; ++i) {
-      int64_t fieldWidth = hw::getBitWidth(elements[i].type);
-      assert(fieldWidth >= 0 &&
-             "must be failed before if field width is unknown");
-      consumedBits += fieldWidth;
-    }
 
     int64_t fieldWidth = hw::getBitWidth(elements[fieldIndex].type);
     assert(fieldWidth >= 0 &&
            "must be failed before if field width is unknown");
 
     // Extract the field using comb.extract. Offset is from LSB.
-    int64_t bitOffset = totalBitWidth - consumedBits - fieldWidth;
     rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, adaptor.getInput(),
                                                  bitOffset, fieldWidth);
+    return success();
+  }
+};
+
+struct HWStructInjectOpConversion : OpConversionPattern<hw::StructInjectOp> {
+  using OpConversionPattern<hw::StructInjectOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::StructInjectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto structType = cast<hw::StructType>(op.getInput().getType());
+    auto fieldIndex = op.getFieldIndex();
+    auto elements = structType.getElements();
+
+    int64_t bitOffset = getFieldBitOffset(structType, fieldIndex);
+    if (bitOffset < 0)
+      return rewriter.notifyMatchFailure(op.getLoc(), "unknown struct width");
+
+    int64_t fieldWidth = hw::getBitWidth(elements[fieldIndex].type);
+    assert(fieldWidth >= 0 &&
+           "must be failed before if field width is unknown");
+
+    if (fieldWidth == 0) {
+      rewriter.replaceOp(op, adaptor.getInput());
+      return success();
+    }
+
+    int64_t totalBitWidth = hw::getBitWidth(structType);
+    int64_t upperBits = totalBitWidth - bitOffset - fieldWidth;
+
+    SmallVector<Value, 3> concatOperands;
+    if (upperBits > 0)
+      concatOperands.push_back(rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), adaptor.getInput(), bitOffset + fieldWidth, upperBits));
+    concatOperands.push_back(adaptor.getNewValue());
+    if (bitOffset > 0)
+      concatOperands.push_back(rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), adaptor.getInput(), 0, bitOffset));
+
+    Value result =
+        rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), concatOperands);
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
@@ -432,7 +481,7 @@ static void populateHWAggregateToCombOpConversionPatterns(
       HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
       HWAggregateConstantOpConversion, HWArraySliceOpConversion,
       HWArrayInjectOpConversion, HWStructCreateOpConversion,
-      HWStructExtractOpConversion, HWUnionCreateOpConversion,
+      HWStructExtractOpConversion, HWStructInjectOpConversion, HWUnionCreateOpConversion,
       HWUnionExtractOpConversion, BitcastOpConversion, MuxOpConversion>(
       typeConverter, patterns.getContext());
 }
@@ -451,7 +500,7 @@ void HWAggregateToCombPass::runOnOperation() {
   target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
                       hw::AggregateConstantOp, hw::ArrayInjectOp,
                       hw::ArraySliceOp, hw::StructCreateOp, hw::StructExtractOp,
-                      hw::UnionCreateOp, hw::UnionExtractOp>();
+                      hw::StructInjectOp, hw::UnionCreateOp, hw::UnionExtractOp>();
   target.addLegalDialect<hw::HWDialect, comb::CombDialect>();
 
   RewritePatternSet patterns(&getContext());
