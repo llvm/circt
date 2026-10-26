@@ -11,11 +11,15 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWEnums.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/PIR/PIRDialect.h"
 #include "circt/Dialect/PIR/PIREnums.h"
 #include "circt/Dialect/PIR/PIRTypes.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
 #define GET_OP_CLASSES
