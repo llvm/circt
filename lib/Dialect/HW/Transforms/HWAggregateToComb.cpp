@@ -308,7 +308,8 @@ static int64_t getFieldBitOffset(hw::StructType structType, size_t fieldIndex) {
   if (totalBitWidth < 0)
     return -1;
 
-  // Compute the bit offset from the MSB by summing the widths of all preceding fields. The first field occupies the MSBs.
+  // Compute the bit offset from the MSB by summing the widths of all preceding
+  // fields. The first field occupies the MSBs.
   int64_t consumedBits = 0;
   for (size_t i = 0; i < fieldIndex; ++i) {
     int64_t fieldWidth = hw::getBitWidth(structType.getElements()[i].type);
@@ -317,7 +318,8 @@ static int64_t getFieldBitOffset(hw::StructType structType, size_t fieldIndex) {
     consumedBits += fieldWidth;
   }
 
-  int64_t fieldWidth = hw::getBitWidth(structType.getElements()[fieldIndex].type);
+  int64_t fieldWidth =
+      hw::getBitWidth(structType.getElements()[fieldIndex].type);
   return totalBitWidth - consumedBits - fieldWidth;
 }
 
@@ -476,14 +478,15 @@ public:
 
 static void populateHWAggregateToCombOpConversionPatterns(
     RewritePatternSet &patterns, AggregateTypeConverter &typeConverter) {
-  patterns.add<
-      HWArrayGetOpConversion, HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
-      HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
-      HWAggregateConstantOpConversion, HWArraySliceOpConversion,
-      HWArrayInjectOpConversion, HWStructCreateOpConversion,
-      HWStructExtractOpConversion, HWStructInjectOpConversion, HWUnionCreateOpConversion,
-      HWUnionExtractOpConversion, BitcastOpConversion, MuxOpConversion>(
-      typeConverter, patterns.getContext());
+  patterns.add<HWArrayGetOpConversion,
+               HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
+               HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
+               HWAggregateConstantOpConversion, HWArraySliceOpConversion,
+               HWArrayInjectOpConversion, HWStructCreateOpConversion,
+               HWStructExtractOpConversion, HWStructInjectOpConversion,
+               HWUnionCreateOpConversion, HWUnionExtractOpConversion,
+               BitcastOpConversion, MuxOpConversion>(typeConverter,
+                                                     patterns.getContext());
 }
 
 namespace {
@@ -500,7 +503,8 @@ void HWAggregateToCombPass::runOnOperation() {
   target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
                       hw::AggregateConstantOp, hw::ArrayInjectOp,
                       hw::ArraySliceOp, hw::StructCreateOp, hw::StructExtractOp,
-                      hw::StructInjectOp, hw::UnionCreateOp, hw::UnionExtractOp>();
+                      hw::StructInjectOp, hw::UnionCreateOp,
+                      hw::UnionExtractOp>();
   target.addLegalDialect<hw::HWDialect, comb::CombDialect>();
 
   RewritePatternSet patterns(&getContext());
