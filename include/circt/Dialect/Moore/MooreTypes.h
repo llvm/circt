@@ -180,6 +180,21 @@ protected:
 };
 
 //===----------------------------------------------------------------------===//
+// Wrapper Type
+//===----------------------------------------------------------------------===//
+
+class WrapperType : public UnpackedType {
+public:
+  static bool classof(Type type) { return llvm::isa<RefType, NetType>(type); }
+
+  /// Get the wrapped type.
+  UnpackedType getNestedType() const;
+
+protected:
+  using UnpackedType::UnpackedType;
+};
+
+//===----------------------------------------------------------------------===//
 // Struct Members
 //===----------------------------------------------------------------------===//
 
