@@ -241,11 +241,17 @@ LogicalResult LowerProbeToSVPass::validate(LoweringState &state) {
       return failure();
   }
 
-  for (auto send : state.sendOps)
-    if (!hw::isHWValueType(send.getInput().getType()))
+  for (auto send : state.sendOps) {
+    auto payloadType = send.getInput().getType();
+    if (!hw::isHWValueType(payloadType))
       return send.emitOpError(
                  "Probe-to-SV lowering requires an HW value payload, but got ")
-             << send.getInput().getType();
+             << payloadType;
+    if (!sv::isValidNetElementType(payloadType))
+      return send.emitOpError("Probe-to-SV lowering requires a payload that "
+                              "is valid as an sv.net element type, but got ")
+             << payloadType;
+  }
 
   for (auto read : readOps) {
     auto resolution = resolveRead(read, state);
