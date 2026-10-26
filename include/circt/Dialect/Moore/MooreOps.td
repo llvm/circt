@@ -4045,14 +4045,12 @@ def StringSubstrOp : StringBuiltin<"substr"> {
     Returns the characters from the start through end indices inclusive, or
     the empty string if the range is invalid.
   }];
-
   let arguments = (ins
     StringType:$str,
     TwoValuedI32:$start,
     TwoValuedI32:$end
   );
   let results = (outs StringType:$result);
-
   let assemblyFormat = [{
     $str `[` $start `:` $end `]` attr-dict
   }];
