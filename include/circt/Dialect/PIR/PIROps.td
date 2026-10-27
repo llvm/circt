@@ -381,29 +381,10 @@ def InitialOp : PIRInnerOp<"initial", [Pure]> {
 /// as their inputs.
 class PIRAnyClockingOp<string mnemonic, list<Trait> traits = [
   Pure,
-  InferTypeOpInterface, 
-  DeclareOpInterfaceMethods<InferTypeOpInterface>
+  SameOperandsAndResultType
 ]> : PIRInnerOp<mnemonic, traits # [Pure]> {}
 
-/// Operations that take as inputs a sequence/property + a range
-class PIRAnyRangedClockingOp<string mnemonic> 
-  : PIRAnyClockingOp<mnemonic> {
-  let arguments = (ins
-    PIRAnySequenceType:$input,
-    I64Attr:$base, 
-    OptionalAttr<I64Attr>:$more
-  );
-
-  let results = (outs
-    PIRAnySequenceType:$result
-  );
-
-  let assemblyFormat = [{
-    `[` $base  (`:``+` $more^)? `]` $input attr-dict `:` type($input)
-  }];
-}
-
-def RepeatOp : PIRAnyRangedClockingOp<"repeat"> {
+def RepeatOp : PIRAnyClockingOp<"repeat"> {
   let summary = "A sequence repeating a possibly unbounded number of times.";
   let description = [{
     A sequence, either simple or clocked, is repeated a given number of times 
@@ -421,12 +402,26 @@ def RepeatOp : PIRAnyRangedClockingOp<"repeat"> {
     %r0 = pir.repeat[42 :+ 27] %s : !pir.clocked_sequence
     ```
   }];
+
+  let arguments = (ins
+    PIRAnySequenceType:$input,
+    I64Attr:$base, 
+    OptionalAttr<I64Attr>:$more
+  );
+
+  let results = (outs
+    PIRAnySequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    `[` $base  (`:``+` $more^)? `]` $input attr-dict `:` type($input)
+  }];
 }
 
-def DelayOp : PIRAnyRangedClockingOp<"delay"> {
-  let summary = "A sequence is delayed by a given number of timesteps";
+def DelayOp : PIRInnerOp<"delay", [Pure]> {
+  let summary = "A clocked sequence is delayed by a given number of timesteps";
   let description = [{
-    A sequence, either simple or clocked, is delayed a given number of times 
+    A clocked sequence is delayed by a given number of timesteps
     defined by a, possibly unbouded, inclusive range [m:n]. For this to hold, 
     the sequence must have held repeatidly between m and n times before the 
     current time step. If n is omitted, then the range is considered unbounded. 
@@ -439,6 +434,20 @@ def DelayOp : PIRAnyRangedClockingOp<"delay"> {
     // Equivalent to ##[42:69]s in SV.
     %d0 = pir.delay[42 :+ 27] %s : !pir.clocked_sequence
     ```
+  }];
+
+  let arguments = (ins
+    PIRClockedSequenceType:$input,
+    I64Attr:$base, 
+    OptionalAttr<I64Attr>:$more
+  );
+
+  let results = (outs
+    PIRClockedSequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    `[` $base  (`:``+` $more^)? `]` $input attr-dict
   }];
 }
 

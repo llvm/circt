@@ -280,21 +280,3 @@ ClockedOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
 //===----------------------------------------------------------------------===//
 // Sequences
 //===----------------------------------------------------------------------===//
-
-LogicalResult
-RepeatOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
-                           ValueRange operands, DictionaryAttr attributes,
-                           PropertyRef properties, RegionRange regions,
-                           SmallVectorImpl<Type> &inferredReturnTypes) {
-  return inferSameReturnTypes<ClockedSequenceType, SequenceType>(
-      0, context, operands, inferredReturnTypes);
-}
-
-LogicalResult
-DelayOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
-                          ValueRange operands, DictionaryAttr attributes,
-                          PropertyRef properties, RegionRange regions,
-                          SmallVectorImpl<Type> &inferredReturnTypes) {
-  return inferSameReturnTypes<ClockedSequenceType, SequenceType>(
-      0, context, operands, inferredReturnTypes);
-}

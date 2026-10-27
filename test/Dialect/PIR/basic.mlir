@@ -159,15 +159,10 @@ pir.cell @test {} {
   %r2 = pir.repeat [69] %clk_s : !pir.clocked_sequence
   %r3 = pir.repeat [69] %s : !pir.sequence
 
-  // CHECK: {{%.+}} = pir.delay[42 : + 27] %clk_s : !pir.clocked_sequence
-  // CHECK: {{%.+}} = pir.delay[42 : + 27] %s : !pir.sequence
-  %d0 = pir.delay [42 :+ 27] %clk_s : !pir.clocked_sequence
-  %d1 = pir.delay [42 :+ 27] %s : !pir.sequence
-
-  // CHECK: {{%.+}} = pir.delay[69] %clk_s : !pir.clocked_sequence
-  // CHECK: {{%.+}} = pir.delay[69] %s : !pir.sequence
-  %d2 = pir.delay [69] %clk_s : !pir.clocked_sequence
-  %d3 = pir.delay [69] %s : !pir.sequence
+  // CHECK: {{%.+}} = pir.delay[42 : + 27] %clk_s
+  // CHECK: {{%.+}} = pir.delay[69] %clk_s
+  %d0 = pir.delay [42 :+ 27] %clk_s
+  %d1 = pir.delay [69] %clk_s
 
   // CHECK: %s1, %s2, %s3 = pir.input : !pir.sequence, !pir.sequence, !pir.sequence
   // CHECK: %cs1, %cs2, %cs3 = pir.input : !pir.clocked_sequence, !pir.clocked_sequence, !pir.clocked_sequence
