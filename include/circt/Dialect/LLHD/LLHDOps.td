@@ -514,6 +514,7 @@ def SigExtractOp : LLHDOp<"sig.extract", [
     unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
   }];
   let hasFolder = true;
+  let hasCanonicalizeMethod = true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -612,6 +613,7 @@ def SigArrayGetOp : LLHDOp<"sig.array_get", [
       );
     }
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -654,6 +656,7 @@ def SigStructExtractOp : LLHDOp<"sig.struct_extract", [
       );
     }
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 //===----------------------------------------------------------------------===//

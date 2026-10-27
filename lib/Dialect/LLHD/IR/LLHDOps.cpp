@@ -11,6 +11,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -234,6 +235,71 @@ void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// Signal Projections
+//===----------------------------------------------------------------------===//
+
+/// Hoist a signal projection out of the procedural region it is nested in. A
+/// projection is a pure computation on the signal it projects into, so as long
+/// as nothing it uses is defined inside that region it computes the same value
+/// outside of it.
+static LogicalResult hoistProjection(Operation *op, PatternRewriter &rewriter) {
+  auto *parentOp = op->getParentOp();
+  if (!parentOp || !parentOp->hasTrait<ProceduralRegion>())
+    return failure();
+
+  auto *parentRegion = op->getParentRegion();
+  auto isDefinedInside = [&](Value operand) {
+    return parentRegion->isAncestor(operand.getParentRegion());
+  };
+  auto isConstant = [](Value operand) {
+    auto *defOp = operand.getDefiningOp();
+    return defOp && defOp->getNumOperands() == 0 &&
+           defOp->getNumResults() == 1 && matchPattern(defOp, m_Constant());
+  };
+  if (llvm::any_of(op->getOperands(), [&](Value operand) {
+        return isDefinedInside(operand) && !isConstant(operand);
+      }))
+    return failure();
+
+  // Reuse an already existing equivalent projection of the same signal if it
+  // is found in front of the region.
+  auto isSameOperand = [](Value a, Value b) {
+    if (a == b)
+      return true;
+    Attribute attrA, attrB;
+    return matchPattern(a, m_Constant(&attrA)) &&
+           matchPattern(b, m_Constant(&attrB)) && attrA == attrB;
+  };
+  auto isEquivalent = [&](Operation *other) {
+    bool isInFrontOfRegion = other != op &&
+                             other->getBlock() == parentOp->getBlock() &&
+                             other->isBeforeInBlock(parentOp);
+    return other->getName() == op->getName() &&
+           other->getAttrDictionary() == op->getAttrDictionary() &&
+           other->getResultTypes() == op->getResultTypes() &&
+           llvm::all_of_zip(other->getOperands(), op->getOperands(),
+                            isSameOperand) &&
+           isInFrontOfRegion;
+  };
+  auto users = op->getOperand(0).getUsers();
+  if (auto it = llvm::find_if(users, isEquivalent); it != users.end()) {
+    rewriter.replaceOp(op, (*it)->getResults());
+    return success();
+  }
+
+  // Otherwise create a new one in the parent.
+  rewriter.moveOpBefore(op, parentOp);
+  for (auto &operand : op->getOpOperands()) {
+    if (!isDefinedInside(operand.get()))
+      continue;
+    rewriter.setInsertionPoint(op);
+    auto *constOp = rewriter.clone(*operand.get().getDefiningOp());
+    rewriter.modifyOpInPlace(op, [&] { operand.set(constOp->getResult(0)); });
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // SigExtractOp
 //===----------------------------------------------------------------------===//
 
@@ -253,6 +319,11 @@ static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
 
 OpFoldResult llhd::SigExtractOp::fold(FoldAdaptor adaptor) {
   return foldSigPtrExtractOp(*this, adaptor.getOperands());
+}
+
+LogicalResult llhd::SigExtractOp::canonicalize(llhd::SigExtractOp op,
+                                               PatternRewriter &rewriter) {
+  return hoistProjection(op, rewriter);
 }
 
 // Returns the number of elements that overlap between [a1, a2) and [b1, b2).
@@ -434,7 +505,9 @@ static LogicalResult canonicalizeSigPtrArraySliceOp(Op op,
 
 LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
                                                   PatternRewriter &rewriter) {
-  return canonicalizeSigPtrArraySliceOp(op, rewriter);
+  if (succeeded(canonicalizeSigPtrArraySliceOp(op, rewriter)))
+    return success();
+  return hoistProjection(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
@@ -480,6 +553,11 @@ LogicalResult SigArrayGetOp::ensureOnlySafeAccesses(
     const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
     const DataLayout &dataLayout) {
   return success();
+}
+
+LogicalResult llhd::SigArrayGetOp::canonicalize(llhd::SigArrayGetOp op,
+                                                PatternRewriter &rewriter) {
+  return hoistProjection(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
@@ -569,6 +647,12 @@ LogicalResult SigStructExtractOp::ensureOnlySafeAccesses(
     const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
     const DataLayout &dataLayout) {
   return success();
+}
+
+LogicalResult
+llhd::SigStructExtractOp::canonicalize(llhd::SigStructExtractOp op,
+                                       PatternRewriter &rewriter) {
+  return hoistProjection(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
