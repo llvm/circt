@@ -3,7 +3,7 @@ module {
   om.class @B(%arg: i2) {
     om.class.fields
   }
-  om.class @Conflict(){
+  om.class private @Conflict(){
     om.class.fields
   }
   hw.module.extern @hello()

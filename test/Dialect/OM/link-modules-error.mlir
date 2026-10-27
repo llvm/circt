@@ -26,14 +26,16 @@ module {
   }
   module {
     // expected-note @+1 {{class "A" is defined here}}
-    om.class @A() {
-      om.class.fields
+    om.class @A() -> (a: i1) {
+      %0 = om.constant false
+      om.class.fields %0 : i1
     }
   }
   module {
     // expected-note @+1 {{class "A" is defined here}}
-    om.class @A() {
-      om.class.fields
+    om.class @A() -> (a: i1) {
+      %0 = om.constant true
+      om.class.fields %0 : i1
     }
   }
 }
@@ -102,5 +104,22 @@ module {
       %0 = om.constant false
       om.class.fields %0 : i1
     }
+  }
+}
+
+// -----
+
+// Deduplicated definitions must still match external declarations.
+module {
+  module {
+    // expected-error @+1 {{failed to link class "C" since declaration doesn't match the definition: 0-th argument type is not equal, 'i1' vs 'i2'}}
+    om.class.extern @C(%x: i2) -> (x: i2) {}
+  }
+  module {
+    // expected-note @+1 {{definition is here}}
+    om.class @C(%x: i1) -> (x: i1) { om.class.fields %x : i1 }
+  }
+  module {
+    om.class @C(%x: i1) -> (x: i1) { om.class.fields %x : i1 }
   }
 }

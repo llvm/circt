@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --verify-diagnostics -pass-pipeline='builtin.module(om-link-modules)' --split-input-file -allow-unregistered-dialect | FileCheck %s
+// RUN: circt-opt %s --verify-diagnostics -pass-pipeline='builtin.module(om-link-modules)' --split-input-file -allow-unregistered-dialect | FileCheck %s --implicit-check-not=om.class.extern
 
 module {
   // CHECK-LABEL: module
@@ -84,5 +84,73 @@ module {
     om.class @Bar() {
       om.class.fields
     }
+  }
+}
+
+// -----
+
+// Deduplicate equivalent definitions, including recursive container types.
+// CHECK-LABEL: om.class @A(
+// CHECK-SAME: !om.list<!om.class.type<@B>>
+// CHECK-LABEL: om.class @B(
+// CHECK-SAME: !om.class.type<@A>
+// CHECK-NOT: om.class @
+module {
+  module {
+    om.class @A(%b: !om.list<!om.class.type<@B>>) -> (b: !om.list<!om.class.type<@B>>) {
+      om.class.fields %b : !om.list<!om.class.type<@B>>
+    }
+    om.class @B(%a: !om.class.type<@A>) -> (a: !om.class.type<@A>) { om.class.fields %a : !om.class.type<@A> }
+  }
+  module {
+    om.class @A(%b: !om.list<!om.class.type<@B>>) -> (b: !om.list<!om.class.type<@B>>) {
+      om.class.fields %b : !om.list<!om.class.type<@B>>
+    }
+    om.class @B(%a: !om.class.type<@A>) -> (a: !om.class.type<@A>) { om.class.fields %a : !om.class.type<@A> }
+  }
+  module {
+    om.class.extern @A(%b: !om.list<!om.class.type<@B>>) -> (b: !om.list<!om.class.type<@B>>) {}
+  }
+}
+
+// -----
+
+// Keep different field mappings and their users separate.
+// CHECK-LABEL: om.class @Mapping_A
+// CHECK-LABEL: om.class @User_A
+// CHECK-SAME: !om.class.type<@Mapping_A>
+// CHECK-LABEL: om.class @Mapping_B
+// CHECK-LABEL: om.class @User_B
+// CHECK-SAME: !om.class.type<@Mapping_B>
+module {
+  module attributes {om.namespace = "A"} {
+    om.class @Mapping(%x: i1, %y: i1) -> (value: i1) { om.class.fields %x : i1 }
+    om.class @User(%obj: !om.class.type<@Mapping>) -> (obj: !om.class.type<@Mapping>) {
+      om.class.fields %obj : !om.class.type<@Mapping>
+    }
+  }
+  module attributes {om.namespace = "B"} {
+    om.class @Mapping(%x: i1, %y: i1) -> (value: i1) { om.class.fields %y : i1 }
+    om.class @User(%obj: !om.class.type<@Mapping>) -> (obj: !om.class.type<@Mapping>) {
+      om.class.fields %obj : !om.class.type<@Mapping>
+    }
+  }
+}
+
+// -----
+
+// Classes referencing a unique computational definition can be deduplicated.
+// CHECK-LABEL: om.class @Holder(
+// CHECK-SAME: !om.class.type<@Helper>
+// CHECK-LABEL: om.class private @Helper()
+// CHECK-NOT: om.class @Holder
+module {
+  module {
+    om.class @Holder(%obj: !om.class.type<@Helper>) { om.class.fields }
+    om.class private @Helper() -> (x: i1) { %x = om.constant false om.class.fields %x : i1 }
+  }
+  module {
+    om.class.extern private @Helper() -> (x: i1) {}
+    om.class @Holder(%obj: !om.class.type<@Helper>) { om.class.fields }
   }
 }

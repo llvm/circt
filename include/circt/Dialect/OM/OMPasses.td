@@ -21,7 +21,8 @@ def FreezePaths: Pass<"om-freeze-paths", "mlir::ModuleOp"> {
 def LinkModules: Pass<"om-link-modules", "mlir::ModuleOp"> {
   let summary = "Link separated OM modules into a single module";
   let description = [{
-    Flatten nested modules and resolve external classes.
+    Flatten nested modules and resolve external classes. Deduplicate equivalent
+    public classes whose bodies contain only `om.class.fields`.
   }];
 }
 

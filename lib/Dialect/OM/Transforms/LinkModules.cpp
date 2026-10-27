@@ -19,6 +19,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
@@ -38,6 +39,7 @@ namespace {
 // A map from a pair of enclosing module op and old symbol to a new symbol.
 using SymMappingTy =
     llvm::DenseMap<std::pair<ModuleOp, StringAttr>, StringAttr>;
+using ClassMap = llvm::MapVector<StringAttr, SmallVector<ClassLike>>;
 
 struct ModuleInfo {
   ModuleInfo(mlir::ModuleOp module) : module(module) {
@@ -47,8 +49,10 @@ struct ModuleInfo {
   // Populate `symbolToClasses`.
   LogicalResult initialize();
 
-  // Update symbols based on the mapping and erase external classes.
-  void postProcess(const SymMappingTy &symMapping);
+  // Update symbols based on the mapping and erase external and duplicate
+  // classes.
+  void postProcess(const SymMappingTy &symMapping,
+                   const DenseSet<Operation *> &duplicateClasses);
 
   // A map from symbols to classes.
   llvm::DenseMap<StringAttr, ClassLike> symbolToClasses;
@@ -80,7 +84,8 @@ LogicalResult ModuleInfo::initialize() {
   return success();
 }
 
-void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
+void ModuleInfo::postProcess(const SymMappingTy &symMapping,
+                             const DenseSet<Operation *> &duplicateClasses) {
   AttrTypeReplacer replacer;
   replacer.addReplacement(
       // Update class types when their symbols were renamed.
@@ -95,10 +100,9 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
       });
 
   module.walk<WalkOrder::PreOrder>([&](Operation *op) {
-    // External modules must be erased.
-    if (isa<ClassExternOp>(op)) {
+    // External classes and equivalent duplicate definitions must be erased.
+    if (isa<ClassExternOp>(op) || duplicateClasses.contains(op)) {
       op->erase();
-      // ClassExternFieldOp will be deleted as well.
       return WalkResult::skip();
     }
 
@@ -128,11 +132,77 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
   });
 }
 
-// Return a failure if classes cannot be resolved. Return true if
-// it's necessary to rename symbols.
+// Only compare public classes with no body operations except om.class.fields.
+static bool haveEquivalentDefinitions(ClassOp lhs, ClassOp rhs) {
+  if (!lhs.isPublic() || !rhs.isPublic() ||
+      !llvm::hasSingleElement(lhs.getBodyBlock()->getOperations()) ||
+      !llvm::hasSingleElement(rhs.getBodyBlock()->getOperations()) ||
+      lhs->getAttrDictionary() != rhs->getAttrDictionary() ||
+      !llvm::equal(lhs.getBodyBlock()->getArgumentTypes(),
+                   rhs.getBodyBlock()->getArgumentTypes()) ||
+      lhs.getFieldsOp()->getAttrDictionary() !=
+          rhs.getFieldsOp()->getAttrDictionary())
+    return false;
+  return llvm::all_of_zip(lhs.getFieldsOp().getFields(),
+                          rhs.getFieldsOp().getFields(), [](Value l, Value r) {
+                            return cast<BlockArgument>(l).getArgNumber() ==
+                                   cast<BlockArgument>(r).getArgNumber();
+                          });
+}
+
+// Check that referenced class types resolve to equivalent definitions.
+static bool haveCompatibleClassTypes(ClassOp classOp,
+                                     const ClassMap &symbolToClasses,
+                                     DenseSet<StringAttr> &visited) {
+  if (!visited.insert(classOp.getSymNameAttr()).second)
+    return true;
+
+  AttrTypeWalker walker;
+  walker.addWalk([&](ClassType type) {
+    auto it = symbolToClasses.find(type.getClassName().getAttr());
+    if (it == symbolToClasses.end())
+      return WalkResult::interrupt();
+
+    ClassOp definition;
+    unsigned countDefinition = 0;
+    for (auto op : it->second) {
+      auto next = dyn_cast<ClassOp>(op.getOperation());
+      if (!next)
+        continue;
+      if (definition && !haveEquivalentDefinitions(definition, next))
+        return WalkResult::interrupt();
+      if (!definition)
+        definition = next;
+      ++countDefinition;
+    }
+    if (!definition ||
+        (countDefinition > 1 &&
+         !haveCompatibleClassTypes(definition, symbolToClasses, visited)))
+      return WalkResult::interrupt();
+    return WalkResult::advance();
+  });
+
+  auto walkAttributes = [&](Operation *op) {
+    return walker.walk(op->getAttrDictionary());
+  };
+  auto walkArgumentTypes = [&](Block *block) {
+    for (auto type : block->getArgumentTypes())
+      if (walker.walk(type).wasInterrupted())
+        return WalkResult::interrupt();
+    return WalkResult::advance();
+  };
+  return !classOp.walk(walkAttributes).wasInterrupted() &&
+         !classOp.walk(walkArgumentTypes).wasInterrupted();
+}
+
+// Return a failure if classes cannot be resolved. Otherwise record equivalent
+// duplicate definitions and return whether the symbols need to be renamed.
 static FailureOr<bool> resolveClasses(StringAttr name,
-                                      ArrayRef<ClassLike> classes) {
+                                      ArrayRef<ClassLike> classes,
+                                      const ClassMap &symbolToClasses,
+                                      DenseSet<Operation *> &duplicateClasses) {
   bool existExternalClass = false;
+  bool canDeduplicate = true;
   size_t countDefinition = 0;
   ClassOp classOp;
 
@@ -140,14 +210,24 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     if (isa<ClassExternOp>(op))
       existExternalClass = true;
     else {
-      classOp = cast<ClassOp>(op);
+      auto definition = cast<ClassOp>(op);
+      if (classOp)
+        canDeduplicate &= haveEquivalentDefinitions(classOp, definition);
+      else
+        classOp = definition;
       ++countDefinition;
     }
   }
+  if (countDefinition > 1 && canDeduplicate) {
+    DenseSet<StringAttr> visited;
+    canDeduplicate =
+        haveCompatibleClassTypes(classOp, symbolToClasses, visited);
+  }
 
   // There must be exactly one definition if the symbol was referred by an
-  // external class.
-  if (existExternalClass && countDefinition != 1) {
+  // external class, unless the definitions are structurally equivalent.
+  if (existExternalClass &&
+      (countDefinition == 0 || (countDefinition != 1 && !canDeduplicate))) {
     SmallVector<Location> classExternLocs;
     SmallVector<Location> classLocs;
     for (auto op : classes)
@@ -169,10 +249,7 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     return failure();
   }
 
-  if (!existExternalClass)
-    return countDefinition != 1;
-
-  assert(classOp && countDefinition == 1);
+  assert(classOp);
 
   // Raise errors if linked external modules are not compatible with the
   // definition.
@@ -185,7 +262,7 @@ static FailureOr<bool> resolveClasses(StringAttr name,
   };
 
   for (auto op : classes) {
-    if (op == classOp)
+    if (isa<ClassOp>(op))
       continue;
 
     if (classOp.getBodyBlock()->getNumArguments() !=
@@ -232,7 +309,11 @@ static FailureOr<bool> resolveClasses(StringAttr name,
         return emitError(op) << "definition has a field " << fieldName
                              << " but not found in this declaration";
   }
-  return false;
+  if (canDeduplicate)
+    for (auto op : classes)
+      if (isa<ClassOp>(op) && op != classOp)
+        duplicateClasses.insert(op.getOperation());
+  return !existExternalClass && countDefinition != 1 && !canDeduplicate;
 }
 
 void LinkModulesPass::runOnOperation() {
@@ -256,8 +337,9 @@ void LinkModulesPass::runOnOperation() {
       })))
     return signalPassFailure();
 
-  // 2. Symbol resolution. Check that there is exactly single definition for
-  //    public symbols and rename private symbols if necessary.
+  // 2. Symbol resolution. Deduplicate equivalent field-only definitions,
+  // resolve
+  //    external symbols, and rename other colliding symbols if necessary.
 
   // Global namespace to get unique names to symbols.
   Namespace nameSpace;
@@ -265,7 +347,7 @@ void LinkModulesPass::runOnOperation() {
   SymMappingTy symMapping;
 
   // Construct a global map from symbols to class operations.
-  llvm::MapVector<StringAttr, SmallVector<ClassLike>> symbolToClasses;
+  ClassMap symbolToClasses;
   for (const auto &info : modules)
     for (auto &[name, op] : info.symbolToClasses) {
       symbolToClasses[name].push_back(op);
@@ -273,14 +355,12 @@ void LinkModulesPass::runOnOperation() {
       (void)nameSpace.newName(name.getValue());
     }
 
-  // Resolve symbols. We consider a symbol used as an external module to be
-  // "public" thus we cannot rename such symbols when there is collision. We
-  // require a public symbol to have exactly one definition so otherwise raise
-  // an error.
+  DenseSet<Operation *> duplicateClasses;
   for (auto &[name, classes] : symbolToClasses) {
     // Check if it's legal to link classes. `resolveClasses` returns true if
     // it's necessary to rename symbols.
-    auto result = resolveClasses(name, classes);
+    auto result =
+        resolveClasses(name, classes, symbolToClasses, duplicateClasses);
     if (failed(result))
       return signalPassFailure();
 
@@ -298,11 +378,11 @@ void LinkModulesPass::runOnOperation() {
       }
   }
 
-  // 3. Post-processing. Update class names and erase external classes.
-
-  // Rename private symbols and remove external classes.
-  parallelForEach(&getContext(), modules,
-                  [&](auto &info) { info.postProcess(symMapping); });
+  // 3. Post-processing. Update class names and erase external and duplicate
+  //    classes.
+  parallelForEach(&getContext(), modules, [&](auto &info) {
+    info.postProcess(symMapping, duplicateClasses);
+  });
 
   // Finally move operations to the toplevel module.
   auto *block = toplevelModule.getBody();
