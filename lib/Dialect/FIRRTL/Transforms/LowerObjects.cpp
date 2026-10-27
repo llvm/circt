@@ -25,6 +25,7 @@ using namespace circt::firrtl;
 
 namespace {
 struct ObjectInputs {
+  // Non-null input drivers in port declaration order.
   SmallVector<PropAssignOp> assignments;
   SmallVector<ObjectSubfieldOp> fields;
 };
@@ -47,7 +48,7 @@ private:
 LogicalResult LowerObjectsPass::collectInputs(ObjectOp object,
                                               ObjectInputs &inputs) {
   auto type = object.getType();
-  inputs.assignments.resize(type.getNumElements());
+  SmallVector<PropAssignOp> assignments(type.getNumElements());
   for (auto *user : object->getUsers()) {
     auto field = dyn_cast<ObjectSubfieldOp>(user);
     if (!field || type.getElement(field.getIndex()).direction == Direction::Out)
@@ -58,7 +59,7 @@ LogicalResult LowerObjectsPass::collectInputs(ObjectOp object,
       if (!assign || use.getOperandNumber() != 0)
         return field.emitOpError("input port may only be used as an assignment "
                                  "destination");
-      auto &previous = inputs.assignments[field.getIndex()];
+      auto &previous = assignments[field.getIndex()];
       if (previous) {
         auto diag = assign.emitError("input port ")
                     << type.getElement(field.getIndex()).name
@@ -70,9 +71,14 @@ LogicalResult LowerObjectsPass::collectInputs(ObjectOp object,
     }
   }
 
-  for (auto [index, element] : llvm::enumerate(type.getElements()))
-    if (element.direction == Direction::In && !inputs.assignments[index])
+  for (auto [index, element] : llvm::enumerate(type.getElements())) {
+    if (element.direction != Direction::In)
+      continue;
+    auto assign = assignments[index];
+    if (!assign)
       return object.emitError("uninitialized input port ") << element.name;
+    inputs.assignments.push_back(assign);
+  }
   return success();
 }
 
@@ -112,8 +118,7 @@ LowerObjectsPass::lowerObject(ObjectOp object,
       if (failed(collectInputs(dependency, inputs)))
         return failure();
       for (auto assign : inputs.assignments)
-        if (assign)
-          operands.push_back(assign.getSrc());
+        operands.push_back(assign.getSrc());
     } else {
       if (op->getNumRegions())
         return success();
@@ -150,19 +155,17 @@ LowerObjectsPass::lowerObject(ObjectOp object,
     SmallVector<Value> inputs;
     // Read the sources now: a preceding replacement may have updated them.
     for (auto assign : info.assignments)
-      if (assign)
-        inputs.push_back(assign.getSrc());
+      inputs.push_back(assign.getSrc());
     auto create = ObjectCreateOp::create(builder, declaration.getLoc(),
                                          declaration.getType(),
                                          declaration.getNameAttr(), inputs);
     create->setDiscardableAttrs(declaration->getDiscardableAttrDictionary());
     positions[create] = position;
-    for (auto assign : info.assignments)
-      if (assign) {
-        positions.erase(assign);
-        assign.erase();
-        ++numRemoved;
-      }
+    for (auto assign : info.assignments) {
+      positions.erase(assign);
+      assign.erase();
+      ++numRemoved;
+    }
     for (auto field : info.fields) {
       positions.erase(field);
       field.erase();
