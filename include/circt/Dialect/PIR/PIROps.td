@@ -362,6 +362,118 @@ def GlobalClockFutureOp : PIRInnerOp <"gclk_future", [Pure]> {
 // Sequences
 //===----------------------------------------------------------------------===//
 
+def InitialOp : PIRInnerOp<"initial", [Pure]> {
+  let summary = "A signal that is only high on the first clock cycle.";
+  let description = [{
+    Primitive op that defines a special signal that is only high on the first 
+    time step of either the global clock or any other clock that is associated 
+    with it.
+  }];
+
+  let results = (outs
+    I1:$result
+  );
+
+  let assemblyFormat = [{ attr-dict }];
+}
+
+/// Operations that accept both clocked and simple properties/sequences
+/// as their inputs.
+class PIRAnyClockingOp<string mnemonic, list<Trait> traits = [
+  Pure,
+  InferTypeOpInterface, 
+  DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> : PIRInnerOp<mnemonic, traits # [Pure]> {}
+
+/// Operations that take as inputs a sequence/property + a range
+class PIRAnyRangedClockingOp<string mnemonic> 
+  : PIRAnyClockingOp<mnemonic> {
+  let arguments = (ins
+    PIRAnySequenceType:$input,
+    I64Attr:$base, 
+    OptionalAttr<I64Attr>:$more
+  );
+
+  let results = (outs
+    PIRAnySequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    `[` $base  (`:``+` $more^)? `]` $input attr-dict `:` type($input)
+  }];
+}
+
+def RepeatOp : PIRAnyRangedClockingOp<"repeat"> {
+  let summary = "A sequence repeating a possibly unbounded number of times.";
+  let description = [{
+    A sequence, either simple or clocked, is repeated a given number of times 
+    defined by a, possibly unbouded, inclusive range [m:n]. For this to hold, 
+    the sequence must hold repeatidly between m and n times for m <= n. If n 
+    is omitted, then the range is considered unbounded. This follows `s[*m:n]` 
+    repitition from the SystemVerilog 2023 specification §16.9.2. In order to 
+    avoid needing to verify that m <= n, the bounds given here follow the logic 
+    of `m = $base` and `n = $base + $more`, e.g.,
+
+    ```
+    %s = pir.input : !pir.clocked_sequence
+
+    // Equivalent to s[*42:69] in SV.
+    %r0 = pir.repeat[42 :+ 27] %s : !pir.clocked_sequence
+    ```
+  }];
+}
+
+def DelayOp : PIRAnyRangedClockingOp<"delay"> {
+  let summary = "A sequence is delayed by a given number of timesteps";
+  let description = [{
+    A sequence, either simple or clocked, is delayed a given number of times 
+    defined by a, possibly unbouded, inclusive range [m:n]. For this to hold, 
+    the sequence must have held repeatidly between m and n times before the 
+    current time step. If n is omitted, then the range is considered unbounded. 
+    This follows `##[*m:n] s` ranged delays from the SystemVerilog 2023 specification 
+    §16.7. In order to avoid needing to verify that m <= n, the bounds given here 
+    follow the logic of `m = $base` and `n = $base + $more`, e.g.,
+    ```
+    %s = pir.input : !pir.clocked_sequence
+
+    // Equivalent to ##[42:69]s in SV.
+    %d0 = pir.delay[42 :+ 27] %s : !pir.clocked_sequence
+    ```
+  }];
+}
+
+def ConcatOp : PIRInnerOp<"concat", [
+  Pure,
+  SameTypeOperands, 
+  SameOperandsAndResultType
+]> {
+  let summary = "Non-overlapping concatenation of a series of sequences.";
+  let description = [{
+    Non-overlapping concatenation of a series of either clocked or simple 
+    sequences, e.g.
+    ```
+    %s1, %s2, %s3 = pir.input : !pir.sequence
+
+    // equivalent to `s1 ##1 s2 ##1 s3` in SV
+    %c = pir.concat %s1, %s2, %s3 : !pir.sequence
+    ```
+
+    All operands must be of the same type, i.e. all must either be clocked or 
+    all must be simple sequences, there can not be a mixture of both.
+  }];
+
+  let arguments = (ins
+    Variadic<PIRAnySequenceType>:$inputs
+  );
+
+  let results = (outs
+    PIRAnySequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    $inputs attr-dict `:` qualified(type($result))
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Properties
