@@ -88,11 +88,12 @@ LowerObjectsPass::lowerObject(ObjectOp object,
                               DenseSet<Operation *> &converted) {
   auto position = positions.lookup(object);
   // Find the operations that must move before this object.
-  // Only move operations in this block that have no regions.
-  // FIRRTL allows these operations to move even if they have side effects.
   DenseMap<Operation *, ObjectInputs> objectInputs;
+  // Visit state: false = in progress, true = done.
   DenseMap<Operation *, bool> visited;
+  // Pending visits: false = start, true = finish.
   SmallVector<std::pair<Operation *, bool>> worklist{{object, false}};
+  // Operations in a topological order.
   SmallVector<Operation *> order;
   while (!worklist.empty()) {
     auto [op, exiting] = worklist.pop_back_val();
@@ -128,7 +129,8 @@ LowerObjectsPass::lowerObject(ObjectOp object,
       if (!def)
         continue;
       auto it = positions.find(def);
-      // Skip lowering if a value comes from a nested region.
+
+      // Skip lowering the order is not given.
       if (it == positions.end())
         return success();
       if (it->second < position)
