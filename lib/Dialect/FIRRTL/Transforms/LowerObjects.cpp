@@ -54,9 +54,11 @@ LogicalResult LowerObjectsPass::collectInputs(ObjectOp object,
     inputs.fields.push_back(field);
     for (auto &use : field->getUses()) {
       auto assign = dyn_cast<PropAssignOp>(use.getOwner());
-      if (!assign || use.getOperandNumber() != 0)
+      if (!assign)
         return field.emitOpError("input port may only be used as an assignment "
                                  "destination");
+      assert(use.getOperandNumber() == 0 &&
+             "input port cannot be an assignment source");
       auto &previous = assignments[field.getIndex()];
       if (previous) {
         auto diag = assign.emitError("input port ")
