@@ -26,8 +26,10 @@ func.func @lower_assume(%arg0: i1) {
 }
 
 // CHECK: func.func @lower_assert_enabled([[ARG0:%.+]]: i1, [[ARG1:%.+]]: i1)
-// CHECK:   [[PROP:%.+]] = smt.eq
-// CHECK:   [[EN:%.+]] = smt.eq
+// CHECK-DAG:   [[PROP_CAST:%.+]] = builtin.unrealized_conversion_cast [[ARG0]] : i1 to !smt.bv<1>
+// CHECK-DAG:   [[EN_CAST:%.+]] = builtin.unrealized_conversion_cast [[ARG1]] : i1 to !smt.bv<1>
+// CHECK-DAG:   [[PROP:%.+]] = smt.eq [[PROP_CAST]], {{%.+}}
+// CHECK-DAG:   [[EN:%.+]] = smt.eq [[EN_CAST]], {{%.+}}
 // CHECK:   [[IMP:%.+]] = smt.implies [[EN]], [[PROP]]
 // CHECK:   [[NIMP:%.+]] = smt.not [[IMP]]
 // CHECK:   smt.assert [[NIMP]]
@@ -39,8 +41,10 @@ func.func @lower_assert_enabled(%arg0: i1, %arg1: i1) {
 }
 
 // CHECK: func.func @lower_assume_enabled([[ARG0:%.+]]: i1, [[ARG1:%.+]]: i1)
-// CHECK:   [[PROP:%.+]] = smt.eq
-// CHECK:   [[EN:%.+]] = smt.eq
+// CHECK-DAG:   [[PROP_CAST:%.+]] = builtin.unrealized_conversion_cast [[ARG0]] : i1 to !smt.bv<1>
+// CHECK-DAG:   [[EN_CAST:%.+]] = builtin.unrealized_conversion_cast [[ARG1]] : i1 to !smt.bv<1>
+// CHECK-DAG:   [[PROP:%.+]] = smt.eq [[PROP_CAST]], {{%.+}}
+// CHECK-DAG:   [[EN:%.+]] = smt.eq [[EN_CAST]], {{%.+}}
 // CHECK:   [[IMP:%.+]] = smt.implies [[EN]], [[PROP]]
 // CHECK:   smt.assert [[IMP]]
 // CHECK:   return
