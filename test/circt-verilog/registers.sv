@@ -110,3 +110,39 @@ module MultiInitPreset
   always @(posedge clock)
     r <= d;
 endmodule
+
+// `Deseq` cannot see through loop-carried values, so loops in `always_ff`
+// blocks must be unrolled before it runs to detect the reset scheme.
+// CHECK-LABEL: hw.module @LoopInReset(in %clock : !seq.clock,
+module LoopInReset
+    (input logic clock,
+     input logic reset,
+     input logic [3:0] d,
+     output logic [3:0] q);
+  // CHECK-NOT: llhd.process
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock %clock reset async %reset, %c0_i4 : i4
+  // CHECK: hw.output [[REG]]
+  always_ff @(posedge clock, posedge reset)
+    if (reset)
+      for (int i = 0; i < 4; i++)
+        q[i] <= 1'b0;
+    else
+      q <= d;
+endmodule
+
+// CHECK-LABEL: hw.module @LoopAroundReset(in %clock : !seq.clock,
+module LoopAroundReset
+    (input logic clock,
+     input logic reset,
+     input logic [3:0] d,
+     output logic [3:0] q);
+  // CHECK-NOT: llhd.process
+  // CHECK: [[REG:%.+]] = seq.firreg {{%.+}} clock %clock reset async %reset, %c0_i4 : i4
+  // CHECK: hw.output [[REG]]
+  always_ff @(posedge clock, posedge reset)
+    for (int i = 0; i < 4; i++)
+      if (reset)
+        q[i] <= 1'b0;
+      else
+        q[i] <= d[i];
+endmodule
