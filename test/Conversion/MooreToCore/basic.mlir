@@ -1834,6 +1834,25 @@ func.func @StringIndexing(%arg0: !moore.string, %arg1: !moore.i32) {
   return
 }
 
+// CHECK-LABEL: func.func @StringSubstr
+// CHECK-SAME: %arg0: !sim.dstring
+// CHECK-SAME: %arg1: i32
+// CHECK-SAME: %arg2: i32
+func.func @StringSubstr(%arg0: !moore.string, %arg1: !moore.i32, %arg2: !moore.i32) {
+  // CHECK:      [[ZERO:%.+]] = hw.constant 0 : i32
+  // CHECK-NEXT: [[EMPTY:%.+]] = sim.string.literal ""
+  // CHECK-NEXT: [[LEN:%.+]] = sim.string.length %arg0
+  // CHECK-NEXT: [[STARTGE0:%.+]]   = arith.cmpi sge, %arg1, [[ZERO]] : i32
+  // CHECK-NEXT: [[ENDGESTART:%.+]] = arith.cmpi sge, %arg2, %arg1 : i32
+  // CHECK-NEXT: [[ENDLELEN:%.+]]   = arith.cmpi sle, %arg2, [[LEN]] : i32
+  // CHECK-NEXT: [[AND0:%.+]] = arith.andi [[STARTGE0]], [[ENDGESTART]] : i1 
+  // CHECK-NEXT: [[AND1:%.+]] = arith.andi [[ENDLELEN]], [[AND0]] : i1 
+  // CHECK-NEXT: [[SUBSTR:%.+]] = sim.string.substr %arg0[%arg1 : %arg2]
+  // CHECK-NEXT: arith.select [[AND1]], [[SUBSTR]], [[EMPTY]] : !sim.dstring
+  %0 = moore.string.substr %arg0[%arg1 : %arg2]
+  return
+}
+
 // CHECK-LABEL func.func @QueueOperations
 func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
