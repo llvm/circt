@@ -241,7 +241,7 @@ def CoroutineOp : MooreOp<"coroutine", [
     ```mlir
     moore.coroutine private @waitForClk(%clk: !moore.ref<l1>) {
       moore.wait_event {
-        %0 = moore.read %clk : <l1>
+        %0 = moore.read %clk : !moore.ref<l1>
         moore.detect_event posedge %0 : l1
       }
       moore.return
@@ -459,7 +459,7 @@ def AssignedVariableOp : MooreOp<"assigned_variable", [
 def ReadOp : MooreOp<"read", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>,
   TypesMatchWith<"input and result types match",
-    "input", "result", "cast<RefType>($_self).getNestedType()">
+    "input", "result", "cast<WrapperType>($_self).getNestedType()">
 ]> {
   let summary = "Read the current value of a declaration";
   let description = [{
@@ -467,10 +467,10 @@ def ReadOp : MooreOp<"read", [
     exact point at which declarations that can be targeted by all possible 
     expressions are read. It's similar to llvm.load.
   }];
-  let arguments = (ins Arg<RefType, "", [MemRead]>:$input);
+  let arguments = (ins Arg<WrapperType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input attr-dict `:` type($input)
+    $input attr-dict `:` qualified(type($input))
   }];
 }
 
@@ -658,9 +658,9 @@ def WaitEventOp : MooreOp<"wait_event", [
     Example corresponding to the SystemVerilog `@(posedge x, negedge y iff z)`:
     ```
     moore.wait_event {
-      %0 = moore.read %x : <i1>
-      %1 = moore.read %y : <i1>
-      %2 = moore.read %z : <i1>
+      %0 = moore.read %x : !moore.ref<i1>
+      %1 = moore.read %y : !moore.ref<i1>
+      %2 = moore.read %z : !moore.ref<i1>
       moore.detect_event posedge %0 : i1
       moore.detect_event negedge %1 if %2 : i1
     }
@@ -670,9 +670,9 @@ def WaitEventOp : MooreOp<"wait_event", [
     conditions. For example, the SV `@(posedge ~x iff i == 42)`:
     ```
     moore.wait_event {
-      %0 = moore.read %x : <i1>
+      %0 = moore.read %x : !moore.ref<i1>
       %1 = moore.not %0 : i1
-      %2 = moore.read %i : <i19>
+      %2 = moore.read %i : !moore.ref<i19>
       %3 = moore.constant 42 : i19
       %4 = moore.eq %2, %3 : i19
       moore.detect_event posedge %0 if %4 : i1

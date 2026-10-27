@@ -9,7 +9,7 @@ func.func @Basic() -> !moore.i42 {
   %0 = moore.constant 9001 : i42
   %1 = moore.variable : <i42>
   moore.blocking_assign %1, %0 : i42
-  %2 = moore.read %1 : <i42>
+  %2 = moore.read %1 : !moore.ref<i42>
   // CHECK: return [[TMP]] : !moore.i42
   return %2 : !moore.i42
 }
@@ -30,7 +30,7 @@ func.func @ControlFlow(%arg0: i1, %arg1: !moore.l8) -> !moore.l8 {
   // CHECK: ^[[BB2]]([[TMP:%.+]]: !moore.l8):
   // CHECK-NOT: moore.read
   // CHECK: return [[TMP]]
-  %1 = moore.read %0 : <l8>
+  %1 = moore.read %0 : !moore.ref<l8>
   return %1 : !moore.l8
 }
 
@@ -42,7 +42,7 @@ func.func @InitialValueDoesNotDominateDefault() {
   %1 = moore.variable %0 : <i32>
   cf.br ^bb2
 ^bb2:
-  %2 = moore.read %1 : <i32>
+  %2 = moore.read %1 : !moore.ref<i32>
   moore.blocking_assign %1, %2 : i32
   cf.br ^bb1
 }
@@ -53,6 +53,6 @@ func.func @InitialValueDoesNotDominateDefault() {
 // CHECK-NEXT: return [[PACKED]] : !moore.struct<{a: l8, b: l16}>
 func.func @StructDefaultValue() -> !moore.struct<{a: l8, b: l16}> {
   %0 = moore.variable : <struct<{a: l8, b: l16}>>
-  %1 = moore.read %0 : <struct<{a: l8, b: l16}>>
+  %1 = moore.read %0 : !moore.ref<struct<{a: l8, b: l16}>>
   return %1 : !moore.struct<{a: l8, b: l16}>
 }

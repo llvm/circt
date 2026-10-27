@@ -14,10 +14,10 @@ module LetConstruct;
 
   initial begin
     // CHECK: moore.procedure initial
-    // CHECK:   [[A:%.+]] = moore.read {{%.+}} : <l4>
-    // CHECK:   [[B:%.+]] = moore.read {{%.+}} : <l4>
+    // CHECK:   [[A:%.+]] = moore.read {{%.+}} : !moore.ref<l4>
+    // CHECK:   [[B:%.+]] = moore.read {{%.+}} : !moore.ref<l4>
     // CHECK:   [[OR:%.+]] = moore.or [[A]], [[B]] : l4
-    // CHECK:   [[C:%.+]] = moore.read {{%.+}} : <l4>
+    // CHECK:   [[C:%.+]] = moore.read {{%.+}} : !moore.ref<l4>
     // CHECK:   [[AND:%.+]] = moore.and [[OR]], [[C]] : l4
     // CHECK:   [[REDUCE:%.+]] = moore.reduce_or [[AND]] : l4 -> l1
     // CHECK:   moore.blocking_assign {{%.+}}, [[REDUCE]] : l1

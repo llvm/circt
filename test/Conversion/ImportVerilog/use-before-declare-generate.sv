@@ -13,7 +13,7 @@ module ForwardNamedGenerateStorage(output int out);
     // CHECK-DAG: %g.a = moore.variable : <i32>
     // CHECK-DAG: %g.b = moore.variable {{.*}} : <i32>
     // CHECK: moore.procedure initial {
-    // CHECK:   moore.read %g.b : <i32>
+    // CHECK:   moore.read %g.b : !moore.ref<i32>
     // CHECK:   moore.blocking_assign %g.a, {{.*}} : i32
     // CHECK: }
     initial a = b;
@@ -21,7 +21,7 @@ module ForwardNamedGenerateStorage(output int out);
     int a;
     int b = 7;
 
-    // CHECK: moore.read %g.a : <i32>
+    // CHECK: moore.read %g.a : !moore.ref<i32>
     // CHECK: moore.output {{.*}} : !moore.i32
     assign out = a;
   end
