@@ -710,7 +710,7 @@ OpFoldResult StringSubstrOp::fold(FoldAdaptor adaptor) {
   auto str = strAttr.getValue();
   auto start = std::max(int64_t(0), startAttr.getValue().getSExtValue());
 
-  if (adaptor.getOperands().size() == 2)
+  if (!getEnd())
     return StringAttr::get(getContext(), str.substr(start));
 
   auto endAttr = cast_if_present<IntegerAttr>(adaptor.getEnd());
