@@ -141,4 +141,11 @@ pir.cell @test {} {
   // CHECK: {{%.+}} = pir.clocked %clk_val, %clk_s : i1, !pir.clocked_sequence
   %clocked_i1_clk_p = pir.clocked %clk_val, %clk_p : i1, !pir.clocked_property
   %clocked_i1_clk_s = pir.clocked %clk_val, %clk_s : i1, !pir.clocked_sequence
+
+  //===----------------------------------------------------------------------===//
+  // Clocked Sequences
+  //===----------------------------------------------------------------------===//
+  
+  // CHECK: {{%.+}} = pir.initial
+  %init = pir.initial
 }
