@@ -355,6 +355,6 @@ hw.module private @array_inject_linear(in %in: !hw.array<3xi2>, in %sel: i2, in 
   // CHECK-NEXT: %[[CAT:.+]] = comb.concat %[[MUX_2]], %[[MUX_1]], %[[MUX_0]] : i2, i2, i2
   // CHECK-NEXT: %[[OUT:.+]] = hw.bitcast %[[CAT]] : (i6) -> !hw.array<3xi2>
   // CHECK-NEXT: hw.output %[[OUT]]
-  %0 = hw.array_inject %in[%sel], %val {force_linear_chain} : !hw.array<3xi2>, i2
+  %0 = hw.array_inject %in[%sel], %val {hw.force_linear_chain} : !hw.array<3xi2>, i2
   hw.output %0 : !hw.array<3xi2>
 }

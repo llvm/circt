@@ -260,14 +260,12 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
       return emitConstantInject(targetIdx, op, adaptor, rewriter);
     }
 
-    // If the 2D array would create an integer type that MLIR cannot handle,
-    // fall back to a linear mux chain. Allow a user override to force a linear
-    // mux chain for testing purposes.
-    uint64_t twoDimensionalArrayBitwidth =
-        numElements * numElements * elemWidth;
-    uint64_t maxBitwidth = IntegerType::kMaxWidth;
-    bool useLinearChain = twoDimensionalArrayBitwidth > maxBitwidth ||
-                          op->hasAttr("force_linear_chain");
+    // The 2D array algorithm takes O(1) time but O(n^2) space. The linear mux
+    // chain takes O(n) time and O(n) space. Heuristically choose the linear mux
+    // chain for large arrays or when the user requests it.
+    const int64_t kLargeBitwidth = 64;
+    bool useLinearChain =
+        elemWidth >= kLargeBitwidth || op->hasAttr("hw.force_linear_chain");
     if (useLinearChain)
       return emitLinearMuxChainInject(op, adaptor, rewriter);
 
@@ -281,13 +279,16 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
     auto arrayType = cast<hw::ArrayType>(op.getInput().getType());
     auto elemType = arrayType.getElementType();
     auto numElements = arrayType.getNumElements();
+    if (targetIdx >= numElements)
+      return rewriter.notifyMatchFailure(op.getLoc(), "out of bounds index");
+
     auto elemWidth = hw::getBitWidth(elemType);
     if (elemWidth < 0)
       return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
 
-    uint64_t totalWidth = numElements * elemWidth;
-    uint64_t bitOffset = targetIdx * elemWidth;
-    uint64_t upperBits = totalWidth - bitOffset - elemWidth;
+    int64_t totalWidth = numElements * elemWidth;
+    int64_t bitOffset = targetIdx * elemWidth;
+    int64_t upperBits = totalWidth - bitOffset - elemWidth;
     SmallVector<Value, 3> concatOperands;
     if (upperBits > 0)
       concatOperands.push_back(rewriter.createOrFold<comb::ExtractOp>(
