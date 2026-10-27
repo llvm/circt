@@ -138,6 +138,7 @@ public:
   bool shouldReplaceSequentialMemories() const { return replSeqMem; }
   bool shouldDisableLayerSink() const { return disableLayerSink; }
   bool shouldDisableOptimization() const { return disableOptimization; }
+  bool shouldDisableObjectPromotion() const { return disableObjectPromotion; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
@@ -240,6 +241,11 @@ public:
 
   FirtoolOptions &setDisableOptimization(bool value) {
     disableOptimization = value;
+    return *this;
+  }
+
+  FirtoolOptions &setDisableObjectPromotion(bool value) {
+    disableObjectPromotion = value;
     return *this;
   }
 
@@ -444,6 +450,7 @@ private:
   BuildMode buildMode;
   bool disableLayerSink;
   bool disableOptimization;
+  bool disableObjectPromotion;
   bool vbToBV;
   bool noDedup;
   firrtl::CompanionMode companionMode;
