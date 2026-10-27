@@ -743,6 +743,21 @@ def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
 }
 
+def PromoteObjects : Pass<"firrtl-promote-objects", "firrtl::FModuleOp"> {
+  let summary = "Promote eligible object declarations to value-like object creation";
+  let description = [{
+    Promote eligible `firrtl.object` declarations in modules to
+    `firrtl.object.create`, using input assignments as operands in port order.
+    Hoist dependencies as needed and remove input assignments and accesses.
+    Leave objects with cyclic or unhoistable dependencies unchanged.
+  }];
+  let statistics = [
+    Statistic<"numObjectsConverted", "num-objects-converted",
+              "Number of object declarations converted to object.create">,
+    Statistic<"numRemoved", "num-removed", "Number of operations erased">
+  ];
+}
+
 def LowerClasses : Pass<"firrtl-lower-classes", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL classes and objects to OM classes and objects";
   let description = [{
