@@ -330,3 +330,41 @@ firrtl.circuit "ExtForceTwoClocks" {
     firrtl.ref.release %c2, %en, %e_rw : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<2>>
   }
 }
+
+// -----
+
+// Forcing a clock would mux the clock path, so a force and a release of a
+// clock are each rejected, even when the clock is gated.
+firrtl.circuit "ForceGatedClock" {
+  firrtl.module @ForceGatedClock(in %clk: !firrtl.clock, in %gateEn: !firrtl.uint<1>, in %en: !firrtl.uint<1>, in %rel: !firrtl.uint<1>, in %d: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    %cw = firrtl.wire sym @cw : !firrtl.clock
+    %g = firrtl.int.clock_gate %clk, %gateEn
+    firrtl.matchingconnect %cw, %g : !firrtl.clock
+    %r = firrtl.reg %cw : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %r : !firrtl.uint<8>
+    %cw_ref = firrtl.ref.rwprobe <@ForceGatedClock::@cw> : !firrtl.rwprobe<clock>
+    %zero = firrtl.specialconstant 0 : !firrtl.clock
+    // expected-error @below {{unsupported force/release of a clock: the synthesized override would mux the clock}}
+    firrtl.ref.force %clk, %en, %cw_ref, %zero : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<clock>, !firrtl.clock
+    // expected-error @below {{unsupported force/release of a clock: the synthesized override would mux the clock}}
+    firrtl.ref.release %clk, %rel, %cw_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<clock>
+  }
+}
+
+// -----
+
+// A public forceable probe port of a clock could be forced from outside the
+// circuit, so it is rejected; a private one is forced only from inside.
+firrtl.circuit "PublicClockProbePort" {
+  firrtl.module private @Child(in %clk: !firrtl.clock sym @clk, out %p: !firrtl.rwprobe<clock>) {
+    %0 = firrtl.ref.rwprobe <@Child::@clk> : !firrtl.rwprobe<clock>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<clock>
+  }
+  // expected-error @below {{unsupported forceable probe of a clock on public module port "clockProbe": it could be forced from outside the circuit, which would mux the clock}}
+  firrtl.module @PublicClockProbePort(in %clock: !firrtl.clock, out %clockProbe: !firrtl.rwprobe<clock>) {
+    %c_clk, %c_p = firrtl.instance c @Child(in clk: !firrtl.clock, out p: !firrtl.rwprobe<clock>)
+    firrtl.matchingconnect %c_clk, %clock : !firrtl.clock
+    firrtl.ref.define %clockProbe, %c_p : !firrtl.rwprobe<clock>
+  }
+}
