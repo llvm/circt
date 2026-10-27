@@ -25,7 +25,7 @@ using namespace circt::firrtl;
 
 namespace {
 struct ObjectInputs {
-  // Non-null input drivers in port declaration order.
+  // Input assignments in port order; none are null.
   SmallVector<PropAssignOp> assignments;
   SmallVector<ObjectSubfieldOp> fields;
 };
@@ -42,9 +42,7 @@ private:
 };
 } // namespace
 
-/// Collect input assignments before changing the IR. A field may have several
-/// subfield operations, so detect multiple drivers by field index rather than
-/// by the SSA value of an individual subfield.
+/// Check drivers by port index, since a port can have multiple accesses.
 LogicalResult LowerObjectsPass::collectInputs(ObjectOp object,
                                               ObjectInputs &inputs) {
   auto type = object.getType();
@@ -87,11 +85,9 @@ LowerObjectsPass::lowerObject(ObjectOp object,
                               DenseMap<Operation *, size_t> &positions,
                               DenseSet<Operation *> &converted) {
   auto position = positions.lookup(object);
-  // Plan a local topological order before mutating the IR. Object declarations
-  // have virtual dependencies on their input drivers. Other dependencies must
-  // be regionless operations in the same block. FIRRTL's declarative semantics
-  // allow reordering these producers without requiring them to be pure.
-  // Values that already dominate the declaration require no changes.
+  // Find the operations that must move before this object.
+  // Only move operations in this block that have no regions.
+  // FIRRTL allows these operations to move even if they have side effects.
   DenseMap<Operation *, ObjectInputs> objectInputs;
   DenseMap<Operation *, bool> visited;
   SmallVector<std::pair<Operation *, bool>> worklist{{object, false}};
@@ -105,8 +101,7 @@ LowerObjectsPass::lowerObject(ObjectOp object,
     }
     auto [it, inserted] = visited.try_emplace(op, false);
     if (!inserted) {
-      // Encountering an active node means that creating this object would
-      // introduce an SSA cycle. Leave this entire plan untouched.
+      // Skip lowering if there is a cycle.
       if (!it->second)
         return success();
       continue;
@@ -128,11 +123,10 @@ LowerObjectsPass::lowerObject(ObjectOp object,
     worklist.emplace_back(op, true);
     for (auto operand : llvm::reverse(operands)) {
       auto *def = operand.getDefiningOp();
-      // Module arguments are always available. Only top-level producers have
-      // positions; do not pull dependencies out of nested regions.
       if (!def)
         continue;
       auto it = positions.find(def);
+      // Skip lowering if a value comes from a nested region.
       if (it == positions.end())
         return success();
       if (it->second < position)
@@ -141,8 +135,6 @@ LowerObjectsPass::lowerObject(ObjectOp object,
     }
   }
 
-  // The plan is valid. Materialize its dependencies before the declaration,
-  // then replace it directly with the value-like object, without a wire.
   OpBuilder builder(object);
   for (auto *op : order) {
     auto declaration = dyn_cast<ObjectOp>(op);
@@ -153,7 +145,7 @@ LowerObjectsPass::lowerObject(ObjectOp object,
     }
     auto &info = objectInputs[op];
     SmallVector<Value> inputs;
-    // Read the sources now: a preceding replacement may have updated them.
+    // Earlier replacements may have changed the sources.
     for (auto assign : info.assignments)
       inputs.push_back(assign.getSrc());
     auto create = ObjectCreateOp::create(builder, declaration.getLoc(),
@@ -183,14 +175,12 @@ LowerObjectsPass::lowerObject(ObjectOp object,
 
 void LowerObjectsPass::runOnOperation() {
   auto *block = getOperation().getBodyBlock();
-  // A plan may also convert later declarations. Snapshot them and track erased
-  // objects so that they are not processed again.
+  // Keep the original object list; lowering may erase later objects.
   SmallVector<ObjectOp> objects(block->getOps<ObjectOp>());
   if (objects.empty())
     return;
 
-  // Stable positions avoid recomputing the block's operation order after each
-  // hoist. Anything hoisted to an earlier object dominates all later ones.
+  // Use the original order to check which values are already available.
   DenseMap<Operation *, size_t> positions;
   for (auto [index, op] : llvm::enumerate(*block))
     positions[&op] = index;
