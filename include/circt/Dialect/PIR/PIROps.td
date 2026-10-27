@@ -358,7 +358,7 @@ def GlobalClockFutureOp : PIRInnerOp <"gclk_future", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
-// Sequences
+// Primitive
 //===----------------------------------------------------------------------===//
 
 def InitialOp : PIRInnerOp<"initial", [Pure]> {
@@ -375,6 +375,10 @@ def InitialOp : PIRInnerOp<"initial", [Pure]> {
 
   let assemblyFormat = [{ attr-dict }];
 }
+
+//===----------------------------------------------------------------------===//
+// Simple (and clocked) Sequences
+//===----------------------------------------------------------------------===//
 
 /// Operations that accept both clocked and simple properties/sequences
 /// as their inputs.
@@ -500,6 +504,56 @@ def FusionOp : ConcatLikeOp<"fusion"> {
     all must be simple sequences, there can not be a mixture of both.
   }];
 }
+
+def OrOp : ConcatLikeOp<"or"> {
+  let summary = "Concurrent disjunction between a series of sequences.";
+  let description = [{
+    Concurrent disjunction between a series of sequences.
+    At least one of the argument sequences needs to match in order to produce 
+    a match in a given time step. The set of matches of the sequence is the 
+    union of the matches of argument sequences.
+
+    All operands must be of the same type, i.e. all must either be clocked or 
+    all must be simple sequences, there can not be a mixture of both.
+  }];
+}
+
+def IntersectOp : ConcatLikeOp<"intersect"> {
+  let summary = "Concurrent conjunction between a series of sequences.";
+  let description = [{
+    Concurrent conjunction between a series of sequences.
+    All argument sequences need to match and have the same start point and end point.
+
+    All operands must be of the same type, i.e. all must either be clocked or 
+    all must be simple sequences, there can not be a mixture of both.
+  }];
+}
+
+def FirstMatchOp : PIRAnyClockingOp<"first_match"> {
+  let summary = "Sequence containing only the first match of a given sequence.";
+  let description = [{
+    Sequence containing only the first match of a given sequence.
+    Only considers the first match of an evaluation attempt of a given clocked, 
+    or simple, sequence, all other matches are discarded. The first match is 
+    the match with the earliest end point.
+  }];
+
+  let arguments = (ins
+    PIRAnySequenceType:$input
+  );
+
+  let results = (outs
+    PIRAnySequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    $input attr-dict `:` qualified(type($result))
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Only Clocked Sequences
+//===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
 // Properties

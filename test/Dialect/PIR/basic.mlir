@@ -178,4 +178,19 @@ pir.cell @test {} {
   // CHECK: {{%.+}} = pir.fusion %cs1, %cs2, %cs3 : !pir.clocked_sequence
   %fuse_s = pir.fusion %s1, %s2, %s3 : !pir.sequence
   %fuse_cs = pir.fusion %cs1, %cs2, %cs3 : !pir.clocked_sequence
+
+  // CHECK: {{%.+}} = pir.or %s1, %s2, %s3 : !pir.sequence
+  // CHECK: {{%.+}} = pir.or %cs1, %cs2, %cs3 : !pir.clocked_sequence
+  %or_s = pir.or %s1, %s2, %s3 : !pir.sequence
+  %or_cs = pir.or %cs1, %cs2, %cs3 : !pir.clocked_sequence
+
+  // CHECK: {{%.+}} = pir.intersect %s1, %s2, %s3 : !pir.sequence
+  // CHECK: {{%.+}} = pir.intersect %cs1, %cs2, %cs3 : !pir.clocked_sequence
+  %intersect_s = pir.intersect %s1, %s2, %s3 : !pir.sequence
+  %intersect_cs = pir.intersect %cs1, %cs2, %cs3 : !pir.clocked_sequence
+
+  // CHECK: {{%.+}} = pir.first_match %s : !pir.sequence
+  // CHECK: {{%.+}} = pir.first_match %clk_s : !pir.clocked_sequence
+  %fm_s = pir.first_match %s : !pir.sequence
+  %fm_cs = pir.first_match %clk_s : !pir.clocked_sequence  
 }
