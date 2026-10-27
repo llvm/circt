@@ -155,7 +155,6 @@ LowerObjectsPass::lowerObject(ObjectOp object,
     auto create = ObjectCreateOp::create(builder, declaration.getLoc(),
                                          declaration.getType(),
                                          declaration.getNameAttr(), inputs);
-    create->setDiscardableAttrs(declaration->getDiscardableAttrDictionary());
     positions[create] = position;
     for (auto assign : info.assignments) {
       positions.erase(assign);
