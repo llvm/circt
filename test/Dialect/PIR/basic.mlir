@@ -148,4 +148,14 @@ pir.cell @test {} {
   
   // CHECK: {{%.+}} = pir.initial
   %init = pir.initial
+
+  // CHECK: {{%.+}} = pir.repeat %clk_s[42 : + 27] : !pir.clocked_sequence
+  // CHECK: {{%.+}} = pir.repeat %s[42 : + 27] : !pir.sequence
+  %r0 = pir.repeat %clk_s [42 :+ 27] : !pir.clocked_sequence
+  %r1 = pir.repeat %s [42 :+ 27] : !pir.sequence
+
+  // CHECK: {{%.+}} = pir.repeat %clk_s[69] : !pir.clocked_sequence
+  // CHECK: {{%.+}} = pir.repeat %s[69] : !pir.sequence
+  %r2 = pir.repeat %clk_s [69] : !pir.clocked_sequence
+  %r3 = pir.repeat %s [69] : !pir.sequence
 }

@@ -265,3 +265,21 @@ ClockedOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
   }
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// Sequences
+//===----------------------------------------------------------------------===//
+
+// Return type is always the same as the input sequence type
+LogicalResult
+RepeatOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
+                           ValueRange operands, DictionaryAttr attributes,
+                           PropertyRef properties, RegionRange regions,
+                           SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (isa<ClockedSequenceType>(operands[0].getType())) {
+    inferredReturnTypes.push_back(ClockedSequenceType::get(context));
+  } else {
+    inferredReturnTypes.push_back(SequenceType::get(context));
+  }
+  return success();
+}
