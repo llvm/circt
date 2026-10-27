@@ -252,34 +252,49 @@ ClockedSeqToClockedPropOp::canonicalize(ClockedSeqToClockedPropOp op,
 // Clocking Ops
 //===----------------------------------------------------------------------===//
 
+/// For cases where return type is always the same as the input type and they
+/// can only be 2 types, e.g. clocked and simple versions of a type.
+/// Type A is the clocked version of a type and type B is the simple version.
+template <typename ClkT, typename T>
+LogicalResult inferSameReturnTypes(int opIdx, MLIRContext *context,
+                                   ValueRange operands,
+                                   SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (isa<ClkT>(operands[opIdx].getType())) {
+    inferredReturnTypes.push_back(ClkT::get(context));
+  } else {
+    inferredReturnTypes.push_back(T::get(context));
+  }
+  return success();
+}
+
 /// Result type is always the same as the input property/sequence
 LogicalResult
 ClockedOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
                             ValueRange operands, DictionaryAttr attributes,
                             PropertyRef properties, RegionRange regions,
                             SmallVectorImpl<Type> &inferredReturnTypes) {
-  if (isa<ClockedPropertyType>(operands[1].getType())) {
-    inferredReturnTypes.push_back(ClockedPropertyType::get(context));
-  } else {
-    inferredReturnTypes.push_back(ClockedSequenceType::get(context));
-  }
-  return success();
+  return inferSameReturnTypes<ClockedPropertyType, ClockedSequenceType>(
+      1, context, operands, inferredReturnTypes);
 }
 
 //===----------------------------------------------------------------------===//
 // Sequences
 //===----------------------------------------------------------------------===//
 
-// Return type is always the same as the input sequence type
 LogicalResult
 RepeatOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
                            ValueRange operands, DictionaryAttr attributes,
                            PropertyRef properties, RegionRange regions,
                            SmallVectorImpl<Type> &inferredReturnTypes) {
-  if (isa<ClockedSequenceType>(operands[0].getType())) {
-    inferredReturnTypes.push_back(ClockedSequenceType::get(context));
-  } else {
-    inferredReturnTypes.push_back(SequenceType::get(context));
-  }
-  return success();
+  return inferSameReturnTypes<ClockedSequenceType, SequenceType>(
+      0, context, operands, inferredReturnTypes);
+}
+
+LogicalResult
+DelayOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
+                          ValueRange operands, DictionaryAttr attributes,
+                          PropertyRef properties, RegionRange regions,
+                          SmallVectorImpl<Type> &inferredReturnTypes) {
+  return inferSameReturnTypes<ClockedSequenceType, SequenceType>(
+      0, context, operands, inferredReturnTypes);
 }
