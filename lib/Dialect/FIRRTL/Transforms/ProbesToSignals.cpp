@@ -43,6 +43,8 @@
 // force/release are visible immediately to later statements in the same always
 // block, so such reads can differ.
 //
+// Forcing a clock is rejected, as is a public forceable probe port of a clock.
+//
 // Gated clocks are converted first so synthesized state uses a free-running
 // clock. All accesses to one target, including through aliased ports, must be
 // in one clock domain. A parent drives that clock on every aliased port, even
@@ -330,6 +332,15 @@ private:
 /// block arguments of nested regions as well as module ports.
 static FModuleOp getParentModule(Value value) {
   return value.getParentRegion()->getParentOfType<FModuleOp>();
+}
+
+/// Return true if the probed type of `refType` contains a clock.
+static bool containsClock(RefType refType) {
+  bool found = false;
+  walkGroundTypes(refType.getType(), [&](uint64_t, FIRRTLBaseType leaf, bool) {
+    found |= type_isa<ClockType>(leaf);
+  });
+  return found;
 }
 
 static Value getBundleField(ImplicitLocOpBuilder &builder, Value bundle,
@@ -1533,22 +1544,51 @@ void ProbesToSignalsPass::runOnOperation() {
 
   // Collect clocked roots before changing module signatures: force/release ops,
   // forceable registers, and registers targeted by an RWProbe.
+  //
+  // Also reject clock forces before anything is converted. Reject every force
+  // or release of a clock, and every public forceable probe port of a clock,
+  // which could be forced from outside the circuit. Each is reported.
+  bool clockForced = false;
   SetVector<Operation *> gatedClockRoots;
   getOperation()->walk([&](Operation *op) {
-    auto fop = dyn_cast<Forceable>(op);
-    if (isa<RefForceOp, RefReleaseOp>(op) ||
-        (fop && isa<RegOp, RegResetOp>(op) && fop.isForceable())) {
-      gatedClockRoots.insert(op);
-      return;
-    }
-    auto rwprobe = dyn_cast<RWProbeOp>(op);
-    if (!rwprobe)
-      return;
-    auto ref = getFieldRefForTarget(irn.lookup(rwprobe.getTarget()));
-    auto *defOp = ref.getValue().getDefiningOp();
-    if (isa_and_nonnull<RegOp, RegResetOp>(defOp))
-      gatedClockRoots.insert(defOp);
+    TypeSwitch<Operation *>(op)
+        .Case<RefForceOp, RefReleaseOp>([&](auto op) {
+          gatedClockRoots.insert(op);
+          if (!containsClock(type_cast<RefType>(op.getDest().getType())))
+            return;
+          op.emitError("unsupported force/release of a clock: the synthesized "
+                       "override would mux the clock");
+          clockForced = true;
+        })
+        .Case<RegOp, RegResetOp>([&](auto op) {
+          if (op.isForceable())
+            gatedClockRoots.insert(op);
+        })
+        .Case<RWProbeOp>([&](auto op) {
+          auto ref = getFieldRefForTarget(irn.lookup(op.getTarget()));
+          auto *defOp = ref.getValue().getDefiningOp();
+          if (isa_and_nonnull<RegOp, RegResetOp>(defOp))
+            gatedClockRoots.insert(defOp);
+        })
+        .Case<FModuleOp>([&](auto mod) {
+          if (!mod.isPublic())
+            return;
+          for (auto [idx, type] : llvm::enumerate(mod.getPortTypes())) {
+            auto refType = dyn_cast<RefType>(cast<TypeAttr>(type).getValue());
+            if (!refType || !refType.getForceable() || !containsClock(refType))
+              continue;
+            mlir::emitError(mod.getPortLocation(idx))
+                << "unsupported forceable probe of a clock on public module "
+                   "port "
+                << mod.getPortNameAttr(idx)
+                << ": it could be forced from outside the circuit, which "
+                   "would mux the clock";
+            clockForced = true;
+          }
+        });
   });
+  if (clockForced)
+    return signalPassFailure();
 
   auto &instanceGraph = getAnalysis<InstanceGraph>();
 

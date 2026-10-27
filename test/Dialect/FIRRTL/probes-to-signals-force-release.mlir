@@ -1036,26 +1036,43 @@ firrtl.circuit "LocalAliasClockOverInbound" {
 }
 
 // -----
-// TEST 25: A const force value for a clock or asyncreset target is cast to
-// non-const before the read-side mux, whose type inference rejects a mix.
+// TEST 25: A const force value for an asyncreset target is cast to non-const
+// before the read-side mux, whose type inference rejects a mix.
 
-// CHECK-LABEL: firrtl.circuit "ConstClockForce"
-firrtl.circuit "ConstClockForce" {
-  // CHECK: firrtl.module @ConstClockForce
-  firrtl.module @ConstClockForce(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, out %o: !firrtl.clock, out %a: !firrtl.asyncreset) {
-    %w, %w_ref = firrtl.wire forceable : !firrtl.clock, !firrtl.rwprobe<clock>
-    firrtl.connect %w, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %o, %w : !firrtl.clock, !firrtl.clock
+// CHECK-LABEL: firrtl.circuit "ConstAsyncResetForce"
+firrtl.circuit "ConstAsyncResetForce" {
+  // CHECK: firrtl.module @ConstAsyncResetForce
+  firrtl.module @ConstAsyncResetForce(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, out %a: !firrtl.asyncreset) {
     %ar, %ar_ref = firrtl.wire forceable : !firrtl.asyncreset, !firrtl.rwprobe<asyncreset>
     %c0 = firrtl.specialconstant 0 : !firrtl.const.asyncreset
-    %cc = firrtl.specialconstant 0 : !firrtl.const.clock
     firrtl.connect %a, %ar : !firrtl.asyncreset, !firrtl.asyncreset
-    firrtl.ref.force %clock, %en, %w_ref, %cc : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<clock>, !firrtl.const.clock
     firrtl.ref.force %clock, %en, %ar_ref, %c0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<asyncreset>, !firrtl.const.asyncreset
-    // CHECK-DAG: firrtl.constCast %{{.+}} : (!firrtl.const.clock) -> !firrtl.clock
-    // CHECK-DAG: firrtl.constCast %{{.+}} : (!firrtl.const.asyncreset) -> !firrtl.asyncreset
-    // CHECK-DAG: firrtl.mux(%forced, %{{.+}}, %w) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
-    // CHECK-DAG: firrtl.mux(%forced{{.*}}, %{{.+}}, %ar) : (!firrtl.uint<1>, !firrtl.asyncreset, !firrtl.asyncreset) -> !firrtl.asyncreset
+    // CHECK: firrtl.constCast %{{.+}} : (!firrtl.const.asyncreset) -> !firrtl.asyncreset
+    // CHECK: firrtl.mux(%forced, %{{.+}}, %ar) : (!firrtl.uint<1>, !firrtl.asyncreset, !firrtl.asyncreset) -> !firrtl.asyncreset
+  }
+}
+
+// -----
+// TEST 25b: A private forceable probe port of a clock that is only read is
+// accepted: nothing inside the circuit forces it, so its control is tied off.
+
+// CHECK-LABEL: firrtl.circuit "ReadClockProbe"
+firrtl.circuit "ReadClockProbe" {
+  // CHECK: firrtl.module private @Child(in %clk: !firrtl.clock, out %p: !firrtl.clock, in %p_force_ctrl:
+  firrtl.module private @Child(in %clk: !firrtl.clock, out %p: !firrtl.rwprobe<clock>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.clock, !firrtl.rwprobe<clock>
+    firrtl.matchingconnect %w, %clk : !firrtl.clock
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<clock>
+  }
+  // CHECK-LABEL: firrtl.module @ReadClockProbe
+  firrtl.module @ReadClockProbe(in %clock: !firrtl.clock, out %o: !firrtl.clock) {
+    %c_clk, %c_p = firrtl.instance c @Child(in clk: !firrtl.clock, out p: !firrtl.rwprobe<clock>)
+    firrtl.matchingconnect %c_clk, %clock : !firrtl.clock
+    %r = firrtl.ref.resolve %c_p : !firrtl.rwprobe<clock>
+    firrtl.matchingconnect %o, %r : !firrtl.clock
+    // CHECK: %[[ZERO:.+]] = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: %[[FA:.+]] = firrtl.subfield %c_p_force_ctrl[forceActive]
+    // CHECK: firrtl.matchingconnect %[[FA]], %[[ZERO]]
   }
 }
 
