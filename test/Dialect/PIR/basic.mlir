@@ -173,4 +173,9 @@ pir.cell @test {} {
   // CHECK: {{%.+}} = pir.concat %cs1, %cs2, %cs3 : !pir.clocked_sequence
   %concat_s = pir.concat %s1, %s2, %s3 : !pir.sequence
   %concat_cs = pir.concat %cs1, %cs2, %cs3 : !pir.clocked_sequence
+
+  // CHECK: {{%.+}} = pir.fusion %s1, %s2, %s3 : !pir.sequence
+  // CHECK: {{%.+}} = pir.fusion %cs1, %cs2, %cs3 : !pir.clocked_sequence
+  %fuse_s = pir.fusion %s1, %s2, %s3 : !pir.sequence
+  %fuse_cs = pir.fusion %cs1, %cs2, %cs3 : !pir.clocked_sequence
 }

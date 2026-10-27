@@ -27,9 +27,8 @@ include "mlir/IR/SymbolInterfaces.td"
 class PIROp<string mnemonic, list<Trait> traits = []> :
   Op<PIRDialect, mnemonic, traits>;
 
-class PIRInnerOp<string mnemonic, list<Trait> traits = [
-  HasParent<"pir::CellOp">
-]> : PIROp<mnemonic, traits>;
+class PIRInnerOp<string mnemonic, list<Trait> traits = []> : 
+  PIROp<mnemonic, traits # [HasParent<"pir::CellOp">]>;
 
 //===----------------------------------------------------------------------===//
 // Top-level operations
@@ -96,9 +95,9 @@ def InputOp : PIRInnerOp<"input", [
 // Assertions
 //===----------------------------------------------------------------------===//
 
-class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = [
-  AttrSizedOperandSegments,
-]> : PIRInnerOp<mnemonic, traits> {
+class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = []> : 
+  PIRInnerOp<mnemonic, traits # [AttrSizedOperandSegments]> {
+
   let arguments = (ins 
     PIRClockedPropertyType:$property,
     OptionalAttr<ScopeAttr>:$scope,
@@ -158,8 +157,8 @@ def CoverPropertyOp : AssertPropertyLikeOp<"cover_property"> {
 // Type Conversions
 //===----------------------------------------------------------------------===//
 
-class ConversionOp<string mnemonic, list<Trait> traits = [Pure]> :
-  PIRInnerOp<mnemonic, traits> {
+class ConversionOp<string mnemonic, list<Trait> traits = []> :
+  PIRInnerOp<mnemonic, traits # [Pure]> {
     let assemblyFormat = [{
       $input attr-dict
     }];
@@ -379,10 +378,8 @@ def InitialOp : PIRInnerOp<"initial", [Pure]> {
 
 /// Operations that accept both clocked and simple properties/sequences
 /// as their inputs.
-class PIRAnyClockingOp<string mnemonic, list<Trait> traits = [
-  Pure,
-  SameOperandsAndResultType
-]> : PIRInnerOp<mnemonic, traits # [Pure]> {}
+class PIRAnyClockingOp<string mnemonic, list<Trait> traits = []> : 
+  PIRInnerOp<mnemonic, traits # [Pure, SameOperandsAndResultType]>;
 
 def RepeatOp : PIRAnyClockingOp<"repeat"> {
   let summary = "A sequence repeating a possibly unbounded number of times.";
@@ -451,11 +448,26 @@ def DelayOp : PIRInnerOp<"delay", [Pure]> {
   }];
 }
 
-def ConcatOp : PIRInnerOp<"concat", [
-  Pure,
-  SameTypeOperands, 
-  SameOperandsAndResultType
-]> {
+class ConcatLikeOp<string mnemonic, list<Trait> traits = []> : 
+  PIRInnerOp<mnemonic, traits # [
+    Pure,
+    SameTypeOperands, 
+    SameOperandsAndResultType]> {
+
+  let arguments = (ins
+    Variadic<PIRAnySequenceType>:$inputs
+  );
+
+  let results = (outs
+    PIRAnySequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    $inputs attr-dict `:` qualified(type($result))
+  }];
+}
+
+def ConcatOp : ConcatLikeOp<"concat"> {
   let summary = "Non-overlapping concatenation of a series of sequences.";
   let description = [{
     Non-overlapping concatenation of a series of either clocked or simple 
@@ -470,17 +482,22 @@ def ConcatOp : PIRInnerOp<"concat", [
     All operands must be of the same type, i.e. all must either be clocked or 
     all must be simple sequences, there can not be a mixture of both.
   }];
+}
 
-  let arguments = (ins
-    Variadic<PIRAnySequenceType>:$inputs
-  );
+def FusionOp : ConcatLikeOp<"fusion"> {
+  let summary = "Overlapping concatenation of a series of sequences.";
+  let description = [{
+    Overlapping concatenation of any non-zero number of argument sequences. 
+    The last time step of each argument sequence coincides with the first 
+    time step of the subsequent argument sequence. E.g.,
+    ```
+    %s1, %s2, %s3 = pir.input : !pir.sequence
 
-  let results = (outs
-    PIRAnySequenceType:$result
-  );
-
-  let assemblyFormat = [{
-    $inputs attr-dict `:` qualified(type($result))
+    // equivalent to `s1 ##0 s2 ##0 s3` in SV
+    %c = pir.concat %s1, %s2, %s3 : !pir.sequence
+    ```
+    All operands must be of the same type, i.e. all must either be clocked or 
+    all must be simple sequences, there can not be a mixture of both.
   }];
 }
 
