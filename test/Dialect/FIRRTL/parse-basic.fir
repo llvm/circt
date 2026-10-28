@@ -1791,6 +1791,34 @@ circuit PropEqVersionError :
 ;// -----
 FIRRTL version 7.0.0
 
+; CHECK-LABEL: firrtl.circuit "ListContains"
+circuit ListContains :
+  public module ListContains :
+    input strings : List<String>
+    input string : String
+    input integers : List<Integer>
+    input integer : Integer
+    input booleans : List<Bool>
+    input boolean : Bool
+    output stringFound : Bool
+    output integerFound : Bool
+    output booleanFound : Bool
+
+    ; CHECK: [[STRING_FOUND:%.+]] = firrtl.list.contains %strings, %string : !firrtl.list<string>{{$}}
+    ; CHECK: firrtl.propassign %stringFound, [[STRING_FOUND]]
+    propassign stringFound, list_contains(strings, string)
+
+    ; CHECK: [[INTEGER_FOUND:%.+]] = firrtl.list.contains %integers, %integer : !firrtl.list<integer>{{$}}
+    ; CHECK: firrtl.propassign %integerFound, [[INTEGER_FOUND]]
+    propassign integerFound, list_contains(integers, integer)
+
+    ; CHECK: [[BOOLEAN_FOUND:%.+]] = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>{{$}}
+    ; CHECK: firrtl.propassign %booleanFound, [[BOOLEAN_FOUND]]
+    propassign booleanFound, list_contains(booleans, boolean)
+
+;// -----
+FIRRTL version 7.0.0
+
 ; CHECK-LABEL: firrtl.circuit "BoolBinaryOps"
 circuit BoolBinaryOps :
   public module BoolBinaryOps :

@@ -2050,6 +2050,7 @@ private:
   ParseResult parseCatExp(Value &result);
   ParseResult parseStringConcatExp(Value &result);
   ParseResult parsePropEqExp(Value &result);
+  ParseResult parseListContainsExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
   ParseResult parseUnknownProperty(Value &result);
 
@@ -2455,6 +2456,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_prop_eq:
     if (requireFeature({6, 0, 0}, "property equality") ||
         parsePropEqExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_list_contains:
+    if (requireFeature(missingSpecFIRVersion, "list contains") ||
+        parseListContainsExp(result))
       return failure();
     break;
 
@@ -2963,6 +2970,39 @@ ParseResult FIRStmtParser::parsePropEqExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = PropEqOp::create(builder, lhs, rhs);
+  return success();
+}
+
+/// list-contains-exp ::= 'list_contains' '(' exp ',' exp ')'
+ParseResult FIRStmtParser::parseListContainsExp(Value &result) {
+  consumeToken(FIRToken::lp_list_contains);
+
+  auto loc = getToken().getLoc();
+  Value list, element;
+  locationProcessor.setLoc(loc);
+  if (parseExp(list, "expected list expression in list_contains expression") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(element,
+               "expected element expression in list_contains expression") ||
+      parseToken(FIRToken::r_paren, "expected ')'"))
+    return failure();
+
+  auto listType = dyn_cast<ListType>(list.getType());
+  if (!listType)
+    return emitError(loc, "first operand of list_contains must be a List");
+
+  auto elementType = listType.getElementType();
+  if (element.getType() != elementType)
+    return emitError(loc, "list_contains element type ")
+           << element.getType() << " does not match list element type "
+           << elementType;
+
+  if (!isa<StringType, FIntegerType, BoolType>(elementType))
+    return emitError(loc, "list_contains does not support elements of type ")
+           << elementType;
+
+  locationProcessor.setLoc(loc);
+  result = ListContainsOp::create(builder, list, element);
   return success();
 }
 

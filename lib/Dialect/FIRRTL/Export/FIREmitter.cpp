@@ -208,6 +208,12 @@ struct Emitter {
     emitPrimExpr("prop_eq", op);
   }
 
+  void emitExpression(ListContainsOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "list contains")))
+      return;
+    emitPrimExpr("list_contains", op);
+  }
+
   void emitExpression(BoolAndOp op) {
     if (failed(requireVersion({6, 0, 0}, op, "boolean and")))
       return;
@@ -1603,7 +1609,8 @@ void Emitter::emitExpression(Value value) {
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
           UnknownValueOp, IntegerAndOp, IntegerOrOp, IntegerNotOp,
-          StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp, BoolXorOp,
+          StringConcatOp, PropEqOp, ListContainsOp, BoolAndOp, BoolOrOp,
+          BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions

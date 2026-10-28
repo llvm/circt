@@ -275,6 +275,7 @@ TOK_LPKEYWORD_PRIM(integer_not, IntegerNotOp, 1, 0, missingSpecFIRVersion,
                    "Integers")
 TOK_LPKEYWORD(string_concat)
 TOK_LPKEYWORD(prop_eq)
+TOK_LPKEYWORD(list_contains)
 TOK_LPKEYWORD_PRIM(bool_and, BoolAndOp, 2, 0, missingSpecFIRVersion, "Boolean and")
 TOK_LPKEYWORD_PRIM(bool_or,  BoolOrOp,  2, 0, missingSpecFIRVersion, "Boolean or")
 TOK_LPKEYWORD_PRIM(bool_xor, BoolXorOp, 2, 0, missingSpecFIRVersion, "Boolean xor")

@@ -1167,6 +1167,92 @@ circuit Top :
     propassign c, list_concat()
 
 ;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsNotList:
+  public module ListContainsNotList:
+    input value : Integer
+    ; expected-error @below {{first operand of list_contains must be a List}}
+    propassert list_contains(value, Integer(1)), "not a list"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsMismatchedTypes:
+  public module ListContainsMismatchedTypes:
+    input values : List<Integer>
+    ; expected-error @below {{list_contains element type '!firrtl.string' does not match list element type '!firrtl.integer'}}
+    propassert list_contains(values, String("wrong")), "type mismatch"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsUnsupportedType:
+  public module ListContainsUnsupportedType:
+    input values : List<Double>
+    input value : Double
+    ; expected-error @below {{list_contains does not support elements of type '!firrtl.double'}}
+    propassert list_contains(values, value), "unsupported type"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsNoOperands:
+  public module ListContainsNoOperands:
+    ; expected-error @below {{expected list expression in list_contains expression}}
+    propassert list_contains(), "missing operands"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsMissingFirst:
+  public module ListContainsMissingFirst:
+    ; expected-error @below {{expected list expression in list_contains expression}}
+    propassert list_contains(, Integer(1)), "missing list"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsMissingSecond:
+  public module ListContainsMissingSecond:
+    ; expected-error @below {{expected element expression in list_contains expression}}
+    propassert list_contains(List<Integer>(Integer(1)), ), "missing element"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsExtraOperand:
+  public module ListContainsExtraOperand:
+    ; expected-error @below {{expected ')'}}
+    propassert list_contains(List<Integer>(), Integer(1), Integer(2)), "extra operand"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsMissingComma:
+  public module ListContainsMissingComma:
+    ; expected-error @below {{expected ','}}
+    propassert list_contains(List<Integer>() Integer(1)), "missing comma"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsMissingParen:
+  public module ListContainsMissingParen:
+    ; expected-error @below {{expected ')'}}
+    propassert list_contains(List<Integer>(), Integer(1), "missing paren"
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit ListContainsVersionError:
+  public module ListContainsVersionError:
+    input values : List<Integer>
+    input value : Integer
+    ; expected-error @below {{list contains are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassert list_contains(values, value), "version gate"
+
+;// -----
 FIRRTL version 6.0.0
 
 circuit Top:
