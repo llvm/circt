@@ -1858,6 +1858,19 @@ struct StringConcatOpConversion
   }
 };
 
+struct ListContainsOpConversion
+    : public OpConversionPattern<firrtl::ListContainsOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::ListContainsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::ListContainsOp>(op, adaptor.getList(),
+                                                    adaptor.getElement());
+    return success();
+  }
+};
+
 struct PropEqOpConversion : public OpConversionPattern<firrtl::PropEqOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2355,6 +2368,7 @@ static void populateRewritePatterns(
   patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
   patterns.add<StringConcatOpConversion>(converter, patterns.getContext());
+  patterns.add<ListContainsOpConversion>(converter, patterns.getContext());
   patterns.add<PropEqOpConversion>(converter, patterns.getContext());
   patterns.add(binaryOpConversion<firrtl::BoolAndOp, om::IntegerAndOp>);
   patterns.add(binaryOpConversion<firrtl::BoolOrOp, om::IntegerOrOp>);
