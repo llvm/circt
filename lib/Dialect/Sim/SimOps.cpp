@@ -710,10 +710,13 @@ OpFoldResult StringSubstrOp::fold(FoldAdaptor adaptor) {
   auto str = strAttr.getValue();
   auto start = std::max(int64_t(0), startAttr.getValue().getSExtValue());
 
-  if (!adaptor.getEnd())
+  if (!getEnd())
     return StringAttr::get(getContext(), str.substr(start));
 
   auto endAttr = cast_if_present<IntegerAttr>(adaptor.getEnd());
+  if (!endAttr)
+    return {};
+
   auto end = endAttr.getValue().getSExtValue();
 
   // IEEE 1800-2023 § 6.16.8 specifies we return an empty string on all OOB, but
