@@ -188,10 +188,11 @@ public:
       auto usedMinus1 = comb::SubOp::create(rewriter, loc, used, countTc1);
       auto usedDecMux =
           comb::MuxOp::create(rewriter, loc, decUsed, usedMinus1, used);
-      nextUsed.setValue(
-          comb::MuxOp::create(rewriter, loc, incUsed, usedPlus1, usedDecMux));
-      static_cast<Value>(nextUsed).getDefiningOp()->setAttr(
-          "sv.namehint", rewriter.getStringAttr("fifo_used_next"));
+      auto usedNextMux =
+          comb::MuxOp::create(rewriter, loc, incUsed, usedPlus1, usedDecMux);
+      usedNextMux->setAttr("sv.namehint",
+                           rewriter.getStringAttr("fifo_used_next"));
+      nextUsed.setValue(usedNextMux);
     }
 
     // ====== Result values ======
