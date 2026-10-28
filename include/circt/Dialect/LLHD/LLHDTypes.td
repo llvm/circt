@@ -14,7 +14,19 @@ include "circt/Dialect/LLHD/LLHDDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
-class LLHDType<string name> : TypeDef<LLHDDialect, name> { }
+class LLHDType<string name, string baseCppClass = "::mlir::Type">
+    : TypeDef<LLHDDialect, name, [], baseCppClass> { }
+
+// Common pieces of wrappers around a nested type.
+class LLHDWrapperType<string name> : LLHDType<name, "llhd::WrapperType"> {
+  let parameters = (ins "Type":$nestedType);
+  let assemblyFormat = "`<` $nestedType `>`";
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "Type":$nestedType), [{
+      return $_get(nestedType.getContext(), nestedType);
+    }]>
+  ];
+}
 
 //===----------------------------------------------------------------------===//
 // Type declarations
@@ -31,20 +43,22 @@ def LLHDTimeType : LLHDType<"Time"> {
   let mnemonic = "time";
 }
 
-def RefType : LLHDType<"Ref"> {
+def RefType : LLHDWrapperType<"Ref"> {
   let summary = "a reference to a signal or variable";
   let description = [{
     Represents a reference to a value. Signals return a reference to the
     underlying value, which allows them to be probed or driven.
   }];
   let mnemonic = "ref";
-  let parameters = (ins "Type":$nestedType);
-  let assemblyFormat = "`<` $nestedType `>`";
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "Type":$nestedType), [{
-      return $_get(nestedType.getContext(), nestedType);
-    }]>
-  ];
+}
+
+def NetType : LLHDWrapperType<"Net"> {
+  let summary = "A net value";
+  let description = [{
+    Represents a net-typed value, which has a data-type and
+    follows some resolution function for multiple drivers.
+  }];
+  let mnemonic = "net";
 }
 
 //===----------------------------------------------------------------------===//

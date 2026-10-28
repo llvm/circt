@@ -4,6 +4,8 @@
 builtin.unrealized_conversion_cast to !llhd.time
 // CHECK: to !llhd.ref<i42>
 builtin.unrealized_conversion_cast to !llhd.ref<i42>
+// CHECK: to !llhd.net<i42>
+builtin.unrealized_conversion_cast to !llhd.net<i42>
 // CHECK: to !llhd.ref<!llhd.time>
 builtin.unrealized_conversion_cast to !llhd.ref<!llhd.time>
 

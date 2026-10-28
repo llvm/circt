@@ -27,6 +27,15 @@ using namespace mlir;
 #include "circt/Dialect/LLHD/LLHDAttributes.cpp.inc"
 
 //===----------------------------------------------------------------------===//
+// Wrapper Type
+//===----------------------------------------------------------------------===//
+
+Type WrapperType::getNestedType() const {
+  return TypeSwitch<WrapperType, Type>(*this).Case<RefType, NetType>(
+      [](auto type) { return type.getNestedType(); });
+}
+
+//===----------------------------------------------------------------------===//
 // Time Attribute
 //===----------------------------------------------------------------------===//
 
