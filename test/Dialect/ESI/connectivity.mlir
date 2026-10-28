@@ -78,3 +78,8 @@ hw.module @fifoWrapUnwrap() {
   %out = hw.instance "foo" @i1Fifo(in: %in: !esi.channel<i1, FIFO>) -> (out: !esi.channel<i1, FIFO>)
   %data, %empty = esi.unwrap.fifo %out, %rden : !esi.channel<i1, FIFO>
 }
+
+// Non-zero data delays round-trip for all signaling kinds, including the
+// default ValidReady.
+// CHECK-LABEL: hw.module.extern @DataDelayTypes(in %a : !esi.channel<i8, ValidReady(2)>, in %b : !esi.channel<i8, ValidOnly(1)>, out x : !esi.channel<i8, FIFO(3)>)
+hw.module.extern @DataDelayTypes(in %a: !esi.channel<i8, ValidReady(2)>, in %b: !esi.channel<i8, ValidOnly(1)>, out x: !esi.channel<i8, FIFO(3)>)

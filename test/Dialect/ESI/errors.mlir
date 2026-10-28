@@ -191,3 +191,9 @@ hw.module @BadReadListLength(in %req : !esi.channel<!hw.struct<address: ui64, ta
   %resp = esi.bundle.unpack %req from %bundle : !badReadListReq
   hw.output %resp : !esi.channel<!respWin, ValidReady>
 }
+
+// -----
+
+// The signaling is required.
+// expected-error @+1 {{expected ','}}
+hw.module.extern @MissingSignaling(in %a: !esi.channel<i8>)
