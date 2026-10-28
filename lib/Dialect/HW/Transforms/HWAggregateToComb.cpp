@@ -260,16 +260,7 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
       return emitConstantInject(targetIdx, op, adaptor, rewriter);
     }
 
-    // The 2D array algorithm takes O(1) time but O(n^2) space. The linear mux
-    // chain takes O(n) time and O(n) space. Heuristically choose the linear mux
-    // chain for large arrays or when the user requests it.
-    const int64_t kLargeBitwidth = 64;
-    bool useLinearChain =
-        elemWidth >= kLargeBitwidth || op->hasAttr("hw.force_linear_chain");
-    if (useLinearChain)
-      return emitLinearMuxChainInject(op, adaptor, rewriter);
-
-    return emit2DArrayInject(op, adaptor, rewriter);
+    return emitLinearMuxChainInject(op, adaptor, rewriter);
   }
 
   // Emits a constant index inject with two extracts and one concat.
@@ -334,63 +325,6 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
                                                 originalElements[originalIdx]));
     }
     rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, rowElements);
-    return success();
-  }
-
-  // Emits a 2D array inject with an ArrayGetOp. Each row of the 2D array
-  // represents what the array would look like if injection happened at that
-  // specific index.
-  LogicalResult emit2DArrayInject(hw::ArrayInjectOp op, OpAdaptor adaptor,
-                                  ConversionPatternRewriter &rewriter) const {
-    auto arrayType = cast<hw::ArrayType>(op.getInput().getType());
-    auto elemType = arrayType.getElementType();
-    auto numElements = arrayType.getNumElements();
-    auto elemWidth = hw::getBitWidth(elemType);
-    if (elemWidth < 0)
-      return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
-
-    Location loc = op.getLoc();
-
-    // Extract all elements from the input array
-    SmallVector<Value> originalElements;
-    auto inputArray = adaptor.getInput();
-    for (size_t i = 0; i < numElements; ++i) {
-      originalElements.push_back(rewriter.createOrFold<comb::ExtractOp>(
-          loc, inputArray, i * elemWidth, elemWidth));
-    }
-
-    // Create 2D array: each row represents what the array would look like
-    // if injection happened at that specific index
-    SmallVector<Value> arrayRows;
-    arrayRows.reserve(numElements);
-    for (int injectIdx = numElements - 1; injectIdx >= 0; --injectIdx) {
-      SmallVector<Value> rowElements;
-      rowElements.reserve(numElements);
-
-      // Build the row: array[n-1], array[n-2], ..., but replace element at
-      // injectIdx with newVal
-      for (int originalIdx = numElements - 1; originalIdx >= 0; --originalIdx) {
-        if (originalIdx == injectIdx) {
-          rowElements.push_back(adaptor.getElement());
-        } else {
-          rowElements.push_back(originalElements[originalIdx]);
-        }
-      }
-
-      // Concatenate elements to form this row
-      Value row = hw::ArrayCreateOp::create(rewriter, loc, rowElements);
-      arrayRows.push_back(row);
-    }
-
-    // Create the 2D array by concatenating all rows
-    // arrayRows[0] corresponds to injection at index 0
-    // arrayRows[1] corresponds to injection at index 1, etc.
-    Value array2D = hw::ArrayCreateOp::create(rewriter, loc, arrayRows);
-
-    // Create array_get operation to select the row
-    auto arrayGetOp =
-        hw::ArrayGetOp::create(rewriter, loc, array2D, adaptor.getIndex());
-    rewriter.replaceOp(op, arrayGetOp);
     return success();
   }
 };
