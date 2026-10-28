@@ -212,7 +212,7 @@ moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42,
   // CHECK: dbg.variable "a", %a : !moore.i42
   moore.assign %a, %u : ref<i42>
   %a = moore.variable : <i42>
-  %3 = moore.read %a : <i42>
+  %3 = moore.read %a : !moore.ref<i42>
   dbg.variable "a", %3 : !moore.i42
 
   // Continuous assignments to variables should override the initial value.
@@ -224,7 +224,7 @@ moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42,
   moore.assign %b, %v : ref<i42>
   %0 = moore.constant 9001 : i42
   %b = moore.variable %0 : <i42>
-  %4 = moore.read %b : <i42>
+  %4 = moore.read %b : !moore.ref<i42>
   dbg.variable "b", %4 : !moore.i42
 
   // Unique continuous assignments to nets should remove the `ref<T>`
@@ -235,7 +235,7 @@ moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42,
   // CHECK: dbg.variable "c", %c : !moore.i42
   moore.assign %c, %w : ref<i42>
   %c = moore.net wire : <i42>
-  %5 = moore.read %c : <i42>
+  %5 = moore.read %c : !moore.ref<i42>
   dbg.variable "c", %5 : !moore.i42
 
   // Variables without names should not create an `assigned_variable`.
@@ -245,7 +245,7 @@ moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42,
   // CHECK: dbg.variable "d", %u : !moore.i42
   moore.assign %1, %u : ref<i42>
   %1 = moore.variable : <i42>
-  %6 = moore.read %1 : <i42>
+  %6 = moore.read %1 : !moore.ref<i42>
   dbg.variable "d", %6 : !moore.i42
 
   // Nets without names should not create an `assigned_variable`.
@@ -255,7 +255,7 @@ moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42,
   // CHECK: dbg.variable "e", %v : !moore.i42
   moore.assign %2, %v : ref<i42>
   %2 = moore.net wire : <i42>
-  %7 = moore.read %2 : <i42>
+  %7 = moore.read %2 : !moore.ref<i42>
   dbg.variable "e", %7 : !moore.i42
 }
 
@@ -272,7 +272,7 @@ moore.module @DontOptimizeVarsWithMultipleAssigns() {
   %a = moore.variable : <i42>
   moore.assign %a, %0 : ref<i42>
   moore.assign %a, %1 : ref<i42>
-  %2 = moore.read %a : <i42>
+  %2 = moore.read %a : !moore.ref<i42>
   dbg.variable "a", %2 : !moore.i42
 
   // CHECK: %b = moore.net
@@ -283,7 +283,7 @@ moore.module @DontOptimizeVarsWithMultipleAssigns() {
   %b = moore.net wire : <i42>
   moore.assign %b, %0 : ref<i42>
   moore.assign %b, %1 : ref<i42>
-  %3 = moore.read %b : <i42>
+  %3 = moore.read %b : !moore.ref<i42>
   dbg.variable "b", %3 : !moore.i42
 
   // CHECK: %c = moore.net
@@ -292,7 +292,7 @@ moore.module @DontOptimizeVarsWithMultipleAssigns() {
   // CHECK: dbg.variable "c", [[TMP]]
   %c = moore.net wire %0 : <i42>
   moore.assign %c, %1 : ref<i42>
-  %4 = moore.read %c : <i42>
+  %4 = moore.read %c : !moore.ref<i42>
   dbg.variable "c", %4 : !moore.i42
 }
 
@@ -306,7 +306,7 @@ moore.module @DontOptimizeVarsWithNonReadUses(in %u: !moore.i42, in %v: !moore.i
   %a = moore.variable : <i42>
   moore.assign %a, %u : ref<i42>
   func.call @useRef(%a) : (!moore.ref<i42>) -> ()
-  %2 = moore.read %a : <i42>
+  %2 = moore.read %a : !moore.ref<i42>
   dbg.variable "a", %2 : !moore.i42
 
   // CHECK: %b = moore.net wire %u
@@ -317,7 +317,7 @@ moore.module @DontOptimizeVarsWithNonReadUses(in %u: !moore.i42, in %v: !moore.i
   %b = moore.net wire %u : <i42>
   moore.assign %b, %v : ref<i42>
   func.call @useRef(%b) : (!moore.ref<i42>) -> ()
-  %3 = moore.read %b : <i42>
+  %3 = moore.read %b : !moore.ref<i42>
   dbg.variable "b", %3 : !moore.i42
 
   // Unique continuous assigns should be folded into net definitions even if the
@@ -484,6 +484,6 @@ func.func @convertReal(%arg0: !moore.f32) -> !moore.f32 {
 moore.module @SelfAssignNet() {
   // CHECK: %w = moore.assigned_variable %w : l1
   %w = moore.net wire : <l1>
-  %0 = moore.read %w : <l1>
+  %0 = moore.read %w : !moore.ref<l1>
   moore.assign %w, %0 : ref<l1>
 }

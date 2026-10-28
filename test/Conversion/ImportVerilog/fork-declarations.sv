@@ -19,10 +19,10 @@ module ForkBlockDeclarations;
 endmodule
 
 // CHECK: moore.procedure initial
-// CHECK:   [[I:%.+]] = moore.read {{%.+}} : <i32>
+// CHECK:   [[I:%.+]] = moore.read {{%.+}} : !moore.ref<i32>
 // CHECK:   [[K:%.+]] = moore.variable [[I]] : <i32>
 // CHECK:   moore.fork join_none {
-// CHECK:     [[K_VALUE:%.+]] = moore.read [[K]] : <i32>
+// CHECK:     [[K_VALUE:%.+]] = moore.read [[K]] : !moore.ref<i32>
 // CHECK:     moore.blocking_assign {{%.+}}, [[K_VALUE]] : i32
 // CHECK:     moore.complete
 

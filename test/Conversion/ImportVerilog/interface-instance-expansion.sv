@@ -37,11 +37,11 @@ module InterfaceProceduralAssign(input logic clk, output logic y);
   // CHECK: %[[INNER_CLK:.+]] = moore.net name "clk" wire : <l1>
   // CHECK: %[[SAMPLED:.+]] = moore.variable : <l1>
   // CHECK: moore.procedure always_comb {
-  // CHECK:   %[[CLK_READ:.+]] = moore.read %[[INNER_CLK]] : <l1>
+  // CHECK:   %[[CLK_READ:.+]] = moore.read %[[INNER_CLK]] : !moore.ref<l1>
   // CHECK:   moore.blocking_assign %[[SAMPLED]], %[[CLK_READ]] : l1
   // CHECK:   moore.return
   // CHECK: }
-  // CHECK: %[[SAMPLED_READ:.+]] = moore.read %[[SAMPLED]] : <l1>
+  // CHECK: %[[SAMPLED_READ:.+]] = moore.read %[[SAMPLED]] : !moore.ref<l1>
   // CHECK: moore.assign %[[INNER_CLK]], %[[CLK]] : ref<l1>
   // CHECK: moore.output %[[SAMPLED_READ]] : !moore.l1
 endmodule

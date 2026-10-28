@@ -12,7 +12,7 @@ module ForwardProceduralUse;
   // CHECK-DAG: %a = moore.variable : <i32>
   // CHECK-DAG: %b = moore.variable : <i32>
   // CHECK: moore.procedure initial {
-  // CHECK:   moore.read %b : <i32>
+  // CHECK:   moore.read %b : !moore.ref<i32>
   // CHECK:   moore.blocking_assign %a, {{.*}} : i32
   // CHECK: }
   initial a = b;
@@ -25,8 +25,8 @@ endmodule
 module ForwardVariableInitializers(output int out);
   // CHECK-DAG: %[[A:[[:alnum:]_]+]] = moore.variable %[[AINIT:[[:alnum:]_]+]] : <i32>
   // CHECK-DAG: %[[B:[[:alnum:]_]+]] = moore.variable {{.*}} : <i32>
-  // CHECK-DAG: %[[AREAD:[[:alnum:]_]+]] = moore.read %[[A]] : <i32>
-  // CHECK-DAG: %[[BREAD:[[:alnum:]_]+]] = moore.read %[[B]] : <i32>
+  // CHECK-DAG: %[[AREAD:[[:alnum:]_]+]] = moore.read %[[A]] : !moore.ref<i32>
+  // CHECK-DAG: %[[BREAD:[[:alnum:]_]+]] = moore.read %[[B]] : !moore.ref<i32>
   // CHECK-DAG: %[[AINIT]] = moore.add %[[BREAD]]
   // CHECK: moore.output %[[AREAD]] : !moore.i32
   int a = b + 1;

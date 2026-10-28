@@ -25,7 +25,7 @@ endmodule
 // CHECK-LABEL: moore.module @TopModportBodyUse() {
 // CHECK:         %ifc_x = moore.variable : <l8>
 // CHECK:         %ifc_y = moore.assigned_variable %dut.bus_y : l8
-// CHECK:         [[X:%.+]] = moore.read %ifc_x : <l8>
+// CHECK:         [[X:%.+]] = moore.read %ifc_x : !moore.ref<l8>
 // CHECK:         %dut.bus_y = moore.instance "dut" @ModportBodyUse(bus_x: [[X]]: !moore.l8) -> (bus_y: !moore.l8)
 // CHECK:         moore.output
 // CHECK:       }

@@ -24,12 +24,12 @@ module ForwardInterfaceDirectMember(output logic y);
   // CHECK: %value = moore.variable : <i1>
   // CHECK: %bus_sig = moore.variable : <l1>
   // CHECK: moore.procedure initial {
-  // CHECK:   moore.read %value : <i1>
+  // CHECK:   moore.read %value : !moore.ref<i1>
   // CHECK:   moore.blocking_assign %bus_sig
   // CHECK: }
   initial bus.sig = value;
 
-  // CHECK: moore.read %bus_sig : <l1>
+  // CHECK: moore.read %bus_sig : !moore.ref<l1>
   // CHECK: moore.output {{.*}} : !moore.l1
   assign y = bus.sig;
 
@@ -58,12 +58,12 @@ module ForwardInterfaceGenerate(output logic y);
     // CHECK: %g.value = moore.variable : <i1>
     // CHECK: %g.bus_sig = moore.variable : <l1>
     // CHECK: moore.procedure initial {
-    // CHECK:   moore.read %g.value : <i1>
+    // CHECK:   moore.read %g.value : !moore.ref<i1>
     // CHECK:   moore.blocking_assign %g.bus_sig
     // CHECK: }
     initial bus.sig = value;
 
-    // CHECK: moore.read %g.bus_sig : <l1>
+    // CHECK: moore.read %g.bus_sig : !moore.ref<l1>
     assign y = bus.sig;
 
     simple_if bus(clk);

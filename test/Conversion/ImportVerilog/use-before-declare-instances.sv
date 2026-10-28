@@ -29,12 +29,12 @@ module ForwardHierarchicalInstanceWrite(output int out);
   // CHECK-DAG: %data = moore.variable {{.*}} : <i32>
   // CHECK-DAG: %u.value = moore.instance "u" @Storage
   // CHECK: moore.procedure initial {
-  // CHECK:   moore.read %data : <i32>
+  // CHECK:   moore.read %data : !moore.ref<i32>
   // CHECK:   moore.blocking_assign %u.value, {{.*}} : i32
   // CHECK: }
   initial u.value = data;
 
-  // CHECK: moore.read %u.value : <i32>
+  // CHECK: moore.read %u.value : !moore.ref<i32>
   assign out = u.value;
 
   Storage u();
@@ -44,11 +44,11 @@ endmodule
 // CHECK-LABEL: moore.module @ForwardHierarchicalInstanceInput(
 module ForwardHierarchicalInstanceInput(output int out);
   // CHECK-DAG: %src = moore.variable {{.*}} : <i32>
-  // CHECK: moore.read %src : <i32>
+  // CHECK: moore.read %src : !moore.ref<i32>
   // CHECK: moore.instance "u" @Leaf
   // CHECK-SAME: in:
   // CHECK: moore.procedure initial {
-  // CHECK:   moore.read %u.value_0 : <i32>
+  // CHECK:   moore.read %u.value_0 : !moore.ref<i32>
   // CHECK:   moore.blocking_assign %out, {{.*}} : i32
   // CHECK: }
   initial out = u.value;
@@ -62,7 +62,7 @@ module ForwardGenerateInstance(output int out);
   if (1) begin : g
     // CHECK: %g.u.value, %g.u.value_0 = moore.instance "g.u" @ConstLeaf
     // CHECK: moore.procedure initial {
-    // CHECK:   moore.read %g.u.value_0 : <i32>
+    // CHECK:   moore.read %g.u.value_0 : !moore.ref<i32>
     // CHECK:   moore.blocking_assign %out, {{.*}} : i32
     // CHECK: }
     initial out = u.value;
