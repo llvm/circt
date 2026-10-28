@@ -406,29 +406,21 @@ def UnpackedUnionType : StructLikeType<
 }
 
 //===----------------------------------------------------------------------===//
-// Reference type wrapper
+// Wrapper types
 //===----------------------------------------------------------------------===//
 
-def RefType : MooreTypeDef<"Ref", [
-  DeclareTypeInterfaceMethods<DestructurableTypeInterface
->], "moore::UnpackedType">{
-  let mnemonic = "ref";
-  let description = [{
-    A wrapper is used to wrap any SystemVerilog type. It's aimed to work for
-    'moore.variable', 'moore.blocking_assign', and 'moore.read', which are
-    related to memory, like alloca/write/read.
-  }];
+// Common pieces of wrappers around datatypes that specify access.
+class MooreWrapperType<string name, list<Trait> traits = []> :
+    MooreTypeDef<name, traits, "moore::WrapperType"> {
   let parameters = (ins "UnpackedType":$nestedType);
   let assemblyFormat = [{
     `<` $nestedType `>`
   }];
-
   let builders = [
     AttrBuilderWithInferredContext<(ins "UnpackedType":$nestedType), [{
       return $_get(nestedType.getContext(), nestedType);
     }]>
   ];
-
   let extraClassDeclaration = [{
     Domain getDomain() { return getNestedType().getDomain(); }
     std::optional<unsigned> getBitSize() {
@@ -437,6 +429,30 @@ def RefType : MooreTypeDef<"Ref", [
     std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
     Type getTypeAtIndex(Attribute index);
     std::optional<uint32_t> getFieldIndex(StringAttr nameField);
+  }];
+}
+
+def RefType : MooreWrapperType<"Ref", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface>
+]> {
+  let mnemonic = "ref";
+  let description = [{
+    A wrapper is used to wrap any SystemVerilog type. It's aimed to work for
+    'moore.variable', 'moore.blocking_assign', and 'moore.read', which are
+    related to memory, like alloca/write/read.
+  }];
+}
+
+def NetType : MooreWrapperType<"Net", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface>
+]> {
+  let mnemonic = "net";
+  let summary = "a net type";
+  let description = [{
+    A net with a certain associated datatype. Please note that this does not
+    correspond to the net types defined in IEEE 1800-2023 § 6.6, but is the
+    type associated with nets which in SystemVerilog have both a nettype and
+    a datatype.
   }];
 }
 
