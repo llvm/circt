@@ -90,9 +90,9 @@ moore.module @Module() {
   moore.procedure always_ff { moore.return }
 
   // CHECK: %[[TMP1:.+]] = moore.read %v2
-  // CHECK: moore.assign %v1, %[[TMP1]] : !moore.ref<i1>
+  // CHECK: moore.assign %v1, %[[TMP1]] : ref<i1>
   %2 = moore.read %v2 : <i1>
-  moore.assign %v1, %2 : !moore.ref<i1>
+  moore.assign %v1, %2 : ref<i1>
 
   moore.procedure always {
     // CHECK: %a = moore.variable : <i32>
@@ -108,14 +108,14 @@ moore.module @ContinuousAssignments(
   in %arg2: !moore.time,
   in %arg3: !moore.net<i42>
 ) {
-  // CHECK: moore.assign %arg0, %arg1 : !moore.ref<i42>
-  moore.assign %arg0, %arg1 : !moore.ref<i42>
-  // CHECK: moore.delayed_assign %arg0, %arg1, %arg2 : !moore.ref<i42>
-  moore.delayed_assign %arg0, %arg1, %arg2 : !moore.ref<i42>
-  // CHECK: moore.assign %arg3, %arg1 : !moore.net<i42>
-  moore.assign %arg3, %arg1 : !moore.net<i42>
-  // CHECK: moore.delayed_assign %arg3, %arg1, %arg2 : !moore.net<i42>
-  moore.delayed_assign %arg3, %arg1, %arg2 : !moore.net<i42>
+  // CHECK: moore.assign %arg0, %arg1 : ref<i42>
+  moore.assign %arg0, %arg1 : ref<i42>
+  // CHECK: moore.delayed_assign %arg0, %arg1, %arg2 : ref<i42>
+  moore.delayed_assign %arg0, %arg1, %arg2 : ref<i42>
+  // CHECK: moore.assign %arg3, %arg1 : net<i42>
+  moore.assign %arg3, %arg1 : net<i42>
+  // CHECK: moore.delayed_assign %arg3, %arg1, %arg2 : net<i42>
+  moore.delayed_assign %arg3, %arg1, %arg2 : net<i42>
 }
 
 // CHECK-LABEL: func.func @ProceduralAssignments

@@ -539,7 +539,7 @@ class ContinuousAssignOpBase<string mnemonic, list<Trait> traits = []> :
     "dst", "src", "cast<WrapperType>($_self).getNestedType()">]> {
   let arguments = (ins WrapperType:$dst, UnpackedType:$src);
   let assemblyFormat = [{
-    $dst `,` $src attr-dict `:` qualified(type($dst))
+    $dst `,` $src attr-dict `:` type($dst)
   }];
 }
 
@@ -570,7 +570,7 @@ def DelayedContinuousAssignOp :
     TimeType:$delay
   );
   let assemblyFormat = [{
-    $dst `,` $src `,` $delay attr-dict `:` qualified(type($dst))
+    $dst `,` $src `,` $delay attr-dict `:` type($dst)
   }];
 }
 
