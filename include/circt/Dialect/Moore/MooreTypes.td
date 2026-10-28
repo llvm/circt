@@ -436,6 +436,7 @@ def RefType : MooreWrapperType<"Ref", [
   DeclareTypeInterfaceMethods<DestructurableTypeInterface>
 ]> {
   let mnemonic = "ref";
+  let summary = "a reference to a variable";
   let description = [{
     A wrapper is used to wrap any SystemVerilog type. It's aimed to work for
     'moore.variable', 'moore.blocking_assign', and 'moore.read', which are
