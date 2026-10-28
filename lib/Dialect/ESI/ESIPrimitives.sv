@@ -82,7 +82,7 @@ module ESI_PipelineStage # (
 
   // Occupancy. This is the state that has to survive a reset correctly, and it
   // is two bits wide.
-  always @(posedge clk) begin
+  always_ff @(posedge clk) begin
     if (rst) begin
       l_valid <= 1'b0;
       x_valid_reg <= 1'b0;
@@ -117,7 +117,7 @@ module ESI_PipelineStage # (
 
   // Payload. Deliberately *not* under `if (rst)`: only control signals are
   // reset, payload is allowed to hold its value across resets.
-  always @(posedge clk) begin
+  always_ff @(posedge clk) begin
     if (xmit && !l_valid) begin
       x_reg <= a;
     end else if (xmit && l_valid) begin
