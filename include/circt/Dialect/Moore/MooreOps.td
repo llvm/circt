@@ -470,7 +470,7 @@ def ReadOp : MooreOp<"read", [
   let arguments = (ins Arg<WrapperType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input attr-dict `:` qualified(type($input))
+    $input attr-dict `:` type($input)
   }];
 }
 
