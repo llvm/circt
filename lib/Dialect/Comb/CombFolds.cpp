@@ -2386,7 +2386,11 @@ static Value extractOperandFromFullyAssociative(Operation *fullyAssoc,
     return fullyAssoc->getResult(0);
   }
 
-  // Form the new operation with the operands that remain.
+  // Form the new operation with the operands that remain at the original op's
+  // position so the replacement still dominates all existing users in SSACFG
+  // regions.
+  OpBuilder::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPoint(fullyAssoc);
   SmallVector<Value> operands;
   operands.append(fullyAssoc->getOperands().begin(),
                   fullyAssoc->getOperands().begin() + operandNo);
