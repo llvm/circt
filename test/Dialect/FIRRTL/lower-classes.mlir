@@ -460,6 +460,28 @@ firrtl.circuit "StringCat" {
     firrtl.propassign %eq, %0 : !firrtl.bool
   }
 
+  // CHECK-LABEL: om.class @ListContainsClass
+  firrtl.class @ListContainsClass(
+      in %strings: !firrtl.list<string>, in %string: !firrtl.string,
+      in %integers: !firrtl.list<integer>, in %integer: !firrtl.integer,
+      in %booleans: !firrtl.list<bool>, in %boolean: !firrtl.bool,
+      out %stringFound: !firrtl.bool, out %integerFound: !firrtl.bool,
+      out %booleanFound: !firrtl.bool) {
+    // CHECK: %[[STRING_FOUND:.+]] = om.list_contains %strings, %string : <!om.string>{{$}}
+    %string_found = firrtl.list.contains %strings, %string : !firrtl.list<string>
+    firrtl.propassign %stringFound, %string_found : !firrtl.bool
+
+    // CHECK: %[[INTEGER_FOUND:.+]] = om.list_contains %integers, %integer : <!om.integer>{{$}}
+    %integer_found = firrtl.list.contains %integers, %integer : !firrtl.list<integer>
+    firrtl.propassign %integerFound, %integer_found : !firrtl.bool
+
+    // CHECK: %[[BOOLEAN_FOUND:.+]] = om.list_contains %booleans, %boolean : <i1>{{$}}
+    %boolean_found = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>
+    firrtl.propassign %booleanFound, %boolean_found : !firrtl.bool
+
+    // CHECK: om.class.fields %[[STRING_FOUND]], %[[INTEGER_FOUND]], %[[BOOLEAN_FOUND]] : i1, i1, i1
+  }
+
   // CHECK-LABEL: om.class @BoolAndClass
   firrtl.class @BoolAndClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %out: !firrtl.bool) {
     // CHECK: %[[AND:.+]] = om.integer.and %a, %b : i1
