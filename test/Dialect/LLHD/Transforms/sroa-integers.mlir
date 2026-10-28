@@ -2,7 +2,6 @@
 
 // CHECK-LABEL: @integers
 hw.module @integers(in %in : i4, in %v2 : i2, out out : i4) {
-  %time = llhd.constant_time <0ns, 0d, 1e>
 
   // CHECK-NOT: llhd.sig{{.*}} : i4
   // CHECK: %[[SIG0:.*]] = llhd.sig {{.*}} : <i1>
@@ -18,12 +17,12 @@ hw.module @integers(in %in : i4, in %v2 : i2, out out : i4) {
   %prb = llhd.prb %sig : i4
 
   // CHECK: %[[EXT0:.*]] = comb.extract %in from 0
-  // CHECK: llhd.drv %[[SIG0]], %[[EXT0]]
+  // CHECK: llhd.assign %[[SIG0]], %[[EXT0]]
   // CHECK: %[[EXT1:.*]] = comb.extract %in from 1
-  // CHECK: llhd.drv %[[SIG1]], %[[EXT1]]
+  // CHECK: llhd.assign %[[SIG1]], %[[EXT1]]
   // CHECK: %[[EXT3:.*]] = comb.extract %in from 3
-  // CHECK: llhd.drv %[[SIG3]], %[[EXT3]]
-  llhd.drv %sig, %in after %time : i4
+  // CHECK: llhd.assign %[[SIG3]], %[[EXT3]]
+  llhd.assign %sig, %in : i4
 
   // Slice extract (middle 2 bits: 1 and 2)
   // CHECK-NOT: llhd.sig.extract
@@ -32,8 +31,8 @@ hw.module @integers(in %in : i4, in %v2 : i2, out out : i4) {
 
   // Writing to slice
   // CHECK: %[[V2_0:.*]] = comb.extract %v2 from 0
-  // CHECK: llhd.drv %[[SIG1]], %[[V2_0]]
-  llhd.drv %slice, %v2 after %time : i2
+  // CHECK: llhd.assign %[[SIG1]], %[[V2_0]]
+  llhd.assign %slice, %v2 : i2
 
   // Reading from slice
   // CHECK: %[[SLICE_PRB0:.*]] = llhd.prb %[[SIG1]]
