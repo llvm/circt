@@ -335,7 +335,7 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: [[RES:%.+]] = scf.if %arg1 -> (i6) {
   // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 0 : i6
   // CHECK:        %var_l6 = llhd.sig
-  // CHECK:        llhd.drv %var_l6, [[TMP]] after
+  // CHECK:        llhd.assign %var_l6, [[TMP]]
   // CHECK-NEXT:   scf.yield [[TMP]] : i6
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 19 : i6
@@ -394,10 +394,9 @@ func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man
 func.func @Statements(%arg0: !moore.i42) {
   // CHECK: %x = llhd.sig
   %x = moore.variable : <i42>
-  // CHECK: [[TMP:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: llhd.drv %x, %arg0 after [[TMP]] : i42
+  // CHECK: llhd.assign %x, %arg0 : i42
   moore.blocking_assign %x, %arg0 : i42
-  // CHECK: [[TMP:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK: [[TMP:%.+]] = llhd.constant_time <0ns, 1d>
   // CHECK: llhd.drv %x, %arg0 after [[TMP]] : i42
   moore.nonblocking_assign %x, %arg0 : i42
   // CHECK-NEXT: return
@@ -566,8 +565,7 @@ moore.module @Variable() {
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
 
-  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: llhd.drv %a, [[TMP2]] after [[TIME]] : i32
+  // CHECK: llhd.assign %a, [[TMP2]] : i32
   moore.assign %a, %3 : ref<i32>
 
   // CHECK: [[TMP:%.+]] = llvm.mlir.zero : !llvm.ptr
@@ -605,14 +603,12 @@ moore.module @Net() {
 
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
   // CHECK: %b = llhd.sig [[TMP]] : <i32>
-  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: llhd.drv %b, [[PRB]] after [[TIME]] : i32
+  // CHECK: llhd.assign %b, [[PRB]] : i32
   %b = moore.net wire %0 : <i32>
 
   // CHECK: [[TMP:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
-  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: llhd.drv %a, [[TMP]] after [[TIME]] : i32
+  // CHECK: llhd.assign %a, [[TMP]] : i32
   moore.assign %a, %3 : ref<i32>
 }
 
@@ -752,19 +748,16 @@ moore.module @UnpackedStruct() {
     // CHECK: %[[STRUCT_0:.*]] = hw.struct_create (%[[C0_32]], %[[C1_32]]) : !hw.struct<a: i32, b: i32>
     %2 = moore.struct_create %1, %0 : !moore.i32, !moore.i32 -> ustruct<{a: i32, b: i32}>
 
-    // CHECK: %[[TIME_0:.*]] = llhd.constant_time <0ns, 0d, 1e>
-    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_0]] after %[[TIME_0]] : !hw.struct<a: i32, b: i32>
+    // CHECK: llhd.assign %[[USTRUCT]], %[[STRUCT_0]] : !hw.struct<a: i32, b: i32>
     moore.blocking_assign %ms, %2 : ustruct<{a: i32, b: i32}>
 
     // CHECK: %[[STRUCT_1:.*]] = hw.struct_create (%[[C1_32]], %[[C1_32]]) : !hw.struct<a: i32, b: i32>
     %3 = moore.struct_create %0, %0 : !moore.i32, !moore.i32 -> ustruct<{a: i32, b: i32}>
 
-    // CHECK: %[[TIME_1:.*]] = llhd.constant_time <0ns, 0d, 1e>
-    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_1]] after %[[TIME_1]] : !hw.struct<a: i32, b: i32>
+    // CHECK: llhd.assign %[[USTRUCT]], %[[STRUCT_1]] : !hw.struct<a: i32, b: i32>
     moore.blocking_assign %ms, %3 : ustruct<{a: i32, b: i32}>
 
-    // CHECK: %[[TIME_2:.*]] = llhd.constant_time <0ns, 0d, 1e>
-    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_1]] after %[[TIME_2]] : !hw.struct<a: i32, b: i32>
+    // CHECK: llhd.assign %[[USTRUCT]], %[[STRUCT_1]] : !hw.struct<a: i32, b: i32>
     moore.blocking_assign %ms, %3 : ustruct<{a: i32, b: i32}>
 
     // CHECK: llhd.halt
@@ -1318,7 +1311,7 @@ moore.module @EmptyWaitEvent(out out : !moore.l32) {
 // CHECK-LABEL: hw.module @WaitDelay
 moore.module @WaitDelay(in %d: !moore.time) {
   // CHECK: llhd.process {
-  // CHECK:   [[TMP:%.+]] = llhd.constant_time <1000000fs, 0d, 0e>
+  // CHECK:   [[TMP:%.+]] = llhd.constant_time <1000000fs, 0d>
   // CHECK:   func.call @dummyA()
   // CHECK:   llhd.wait delay [[TMP]], ^[[RESUME1:.+]]
   // CHECK: ^[[RESUME1]]:
@@ -1568,7 +1561,7 @@ moore.module @StringAssignInAlwaysComb(in %cond: !moore.i1) {
 // CHECK-LABEL: @Time
 // CHECK-SAME: (%arg0: !llhd.time) -> (!llhd.time, !llhd.time)
 func.func @Time(%arg0: !moore.time) -> (!moore.time, !moore.time) {
-  // CHECK-NEXT: [[TMP:%.+]] = llhd.constant_time <1234000fs, 0d, 0e>
+  // CHECK-NEXT: [[TMP:%.+]] = llhd.constant_time <1234000fs, 0d>
   %0 = moore.constant_time 1234000 fs
   // CHECK-NEXT: return %arg0, [[TMP]] : !llhd.time, !llhd.time
   return %arg0, %0 : !moore.time, !moore.time
@@ -1658,8 +1651,7 @@ moore.module @MultiDimensionalSlice(in %in : !moore.array<2 x array<2 x l2>>, ou
 // CHECK-SAME: in %b : i42
 // CHECK-SAME: in %c : !llhd.time
 moore.module @ContinuousAssignment(in %a: !moore.ref<i42>, in %b: !moore.i42, in %c: !moore.time) {
-  // CHECK-NEXT: [[DELTA:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK-NEXT: llhd.drv %a, %b after [[DELTA]]
+  // CHECK-NEXT: llhd.assign %a, %b
   moore.assign %a, %b : ref<i42>
   // CHECK-NEXT: llhd.drv %a, %b after %c
   moore.delayed_assign %a, %b, %c : ref<i42>
@@ -1670,7 +1662,7 @@ moore.module @ContinuousAssignment(in %a: !moore.ref<i42>, in %b: !moore.i42, in
 // CHECK-SAME: %arg1: i42
 // CHECK-SAME: %arg2: !llhd.time
 func.func @NonBlockingAssignment(%arg0: !moore.ref<i42>, %arg1: !moore.i42, %arg2: !moore.time) {
-  // CHECK-NEXT: [[DELTA:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NEXT: [[DELTA:%.+]] = llhd.constant_time <0ns, 1d>
   // CHECK-NEXT: llhd.drv %arg0, %arg1 after [[DELTA]]
   moore.nonblocking_assign %arg0, %arg1 : i42
   // CHECK-NEXT: llhd.drv %arg0, %arg1 after %arg2
@@ -1860,44 +1852,44 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   %q = moore.variable : <!moore.queue<i32, 10>>
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]] = sim.queue.push_back %arg0 into [[QR]] : <i32, 10>
-  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  // CHECK: llhd.assign [[Q]], [[NEWQ]]
   moore.push_back %arg0 into %q : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]] = sim.queue.push_front %arg0 into [[QR]] : <i32, 10>
-  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  // CHECK: llhd.assign [[Q]], [[NEWQ]]
   moore.push_front %arg0 into %q : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]], [[POPPED:%.+]] = sim.queue.pop_back from [[QR]] : <i32, 10>
-  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  // CHECK: llhd.assign [[Q]], [[NEWQ]]
   moore.pop_back from %q : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]], [[POPPED:%.+]] = sim.queue.pop_front from [[QR]] : <i32, 10>
-  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  // CHECK: llhd.assign [[Q]], [[NEWQ]]
   moore.pop_front from %q : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]] = sim.queue.delete index %arg0 of [[QR]] : <i32, 10>
-  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  // CHECK: llhd.assign [[Q]], [[NEWQ]]
   moore.queue.delete index %arg0 of %q : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]] = sim.queue.insert %arg0 into [[QR]] at %arg1 : <i32, 10>
-  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  // CHECK: llhd.assign [[Q]], [[NEWQ]]
   moore.queue.insert %arg0 into %q at %arg1 : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]] = sim.queue.set [[QR]][%arg1] = %arg0 : <i32, 10>
-  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  // CHECK: llhd.assign [[Q]], [[NEWQ]]
   moore.queue.set %q[%arg1] = %arg0 : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   %qr = moore.read %q : ref<!moore.queue<i32, 10>>
 
   // CHECK: [[NEWQ:%.+]] = sim.queue.empty : <i32, 10>
-  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  // CHECK: llhd.assign [[Q]], [[NEWQ]]
   moore.queue.clear %q : <!moore.queue<i32, 10>>
 
   // CHECK: sim.queue.size [[QR]]
@@ -1969,16 +1961,16 @@ func.func @AssocArrayOperations(%arg0: !moore.i32, %arg1: !moore.i8) {
 
   // CHECK: [[AAR2:%.+]] = llhd.prb [[AA]]
   // CHECK: [[NEWAA:%.+]] = sim.assoc_array.set [[AAR2]][%arg0] = %arg1 : <i8, i32>
-  // CHECK: llhd.drv [[AA]], [[NEWAA]]
+  // CHECK: llhd.assign [[AA]], [[NEWAA]]
   moore.assoc_array.set %aa[%arg0] = %arg1 : <!moore.assoc_array<i8, i32>>
 
   // CHECK: [[AAR3:%.+]] = llhd.prb [[AA]]
   // CHECK: [[NEWAA2:%.+]] = sim.assoc_array.delete index %arg0 of [[AAR3]] : <i8, i32>
-  // CHECK: llhd.drv [[AA]], [[NEWAA2]]
+  // CHECK: llhd.assign [[AA]], [[NEWAA2]]
   moore.assoc_array.delete index %arg0 from %aa : <!moore.assoc_array<i8, i32>>
 
   // CHECK: [[NEWAA3:%.+]] = sim.assoc_array.empty : <i8, i32>
-  // CHECK: llhd.drv [[AA]], [[NEWAA3]]
+  // CHECK: llhd.assign [[AA]], [[NEWAA3]]
   moore.assoc_array.clear %aa : <!moore.assoc_array<i8, i32>>
 
   // CHECK: [[AAR4:%.+]] = llhd.prb [[AA]]
@@ -2029,7 +2021,7 @@ moore.module @GlobalFooUse() {
     %0 = moore.get_global_variable @GlobalFoo : <i42>
     // CHECK: [[TMP:%.+]] = llhd.prb [[REF]]
     %1 = moore.read %0 : ref<i42>
-    // CHECK: llhd.drv [[REF]], [[TMP]]
+    // CHECK: llhd.assign [[REF]], [[TMP]]
     moore.blocking_assign %0, %1 : i42
     moore.return
   }
@@ -2154,7 +2146,7 @@ moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, o
 func.func @QueuePopBack() -> !moore.i16 {
   %q = moore.variable : <queue<i16, 0>>
   // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_back from
-  // CHECK: llhd.drv %q, [[QUEUE]] after
+  // CHECK: llhd.assign %q, [[QUEUE]]
   %v = moore.pop_back from %q : <queue<i16, 0>>
   // CHECK: return [[POPPED]] : i16
   return %v : !moore.i16
@@ -2164,7 +2156,7 @@ func.func @QueuePopBack() -> !moore.i16 {
 func.func @QueuePopFront() -> !moore.i16 {
   %q = moore.variable : <queue<i16, 0>>
   // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_front from
-  // CHECK: llhd.drv %q, [[QUEUE]] after
+  // CHECK: llhd.assign %q, [[QUEUE]]
   %v = moore.pop_front from %q : <queue<i16, 0>>
   // CHECK: return [[POPPED]] : i16
   return %v : !moore.i16
@@ -2263,31 +2255,31 @@ moore.module @ReadMem() {
     %finish = moore.constant 128 : i32
     // CHECK: [[M1:%.+]] = llhd.prb %mem
     // CHECK: [[L1:%.+]] = sim.sv.readmem %{{.+}}, [[M1]] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !hw.array<256xi8>
-    // CHECK: llhd.drv %mem, [[L1]] after %{{.+}}
+    // CHECK: llhd.assign %mem, [[L1]]
     moore.builtin.readmem hex %1, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
     // CHECK: [[M2:%.+]] = llhd.prb %mem
     // CHECK: [[L2:%.+]] = sim.sv.readmem %{{.+}}, [[M2]] start = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>, isBinary = true} : !hw.array<256xi8>
-    // CHECK: llhd.drv %mem, [[L2]] after %{{.+}}
+    // CHECK: llhd.assign %mem, [[L2]]
     moore.builtin.readmem bin %1, %mem start = %start {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
     // CHECK: [[M3:%.+]] = llhd.prb %mem
     // CHECK: [[L3:%.+]] = sim.sv.readmem %{{.+}}, [[M3]] start = %{{.+}} finish = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !hw.array<256xi8>
-    // CHECK: llhd.drv %mem, [[L3]] after %{{.+}}
+    // CHECK: llhd.assign %mem, [[L3]]
     moore.builtin.readmem hex %1, %mem start = %start finish = %finish {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
     // CHECK: [[M4:%.+]] = llhd.prb %mem
     // CHECK: [[L4:%.+]] = sim.sv.readmem %{{.+}}, [[M4]] slice[%{{.+}}, %{{.+}}] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !hw.array<256xi8>
-    // CHECK: llhd.drv %mem, [[L4]] after %{{.+}}
+    // CHECK: llhd.assign %mem, [[L4]]
     moore.builtin.readmem hex %1, %mem slice[%start, %finish] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
     // CHECK: [[M5:%.+]] = llhd.prb %mem3
     // CHECK: [[L5:%.+]] = sim.sv.readmem %{{.+}}, [[M5]] {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !hw.array<3xarray<5xarray<4xi32>>>
-    // CHECK: llhd.drv %mem3, [[L5]] after %{{.+}}
+    // CHECK: llhd.assign %mem3, [[L5]]
     moore.builtin.readmem hex %1, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !moore.ref<uarray<3 x uarray<5 x uarray<4 x l32>>>>
     // CHECK: [[M6:%.+]] = llhd.prb %qmem
     // CHECK: [[L6:%.+]] = sim.sv.readmem %{{.+}}, [[M6]] {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !sim.queue<i8, 0>
-    // CHECK: llhd.drv %qmem, [[L6]] after %{{.+}}
+    // CHECK: llhd.assign %qmem, [[L6]]
     moore.builtin.readmem hex %1, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
     // CHECK: [[M7:%.+]] = llhd.prb %emem
     // CHECK: [[L7:%.+]] = sim.sv.readmem %{{.+}}, [[M7]] {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !hw.array<8xi2>
-    // CHECK: llhd.drv %emem, [[L7]] after %{{.+}}
+    // CHECK: llhd.assign %emem, [[L7]]
     moore.builtin.readmem hex %1, %emem {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !moore.ref<uarray<8 x l2>>
     moore.return
   }
@@ -2310,8 +2302,7 @@ moore.module @StringArrayVariable() {
     // CHECK-NEXT: [[IDX:%.+]] = hw.constant false
     // CHECK-NEXT: [[ELEM:%.+]] = llhd.sig.array_get [[SIG]]{{\[}}[[IDX]]{{\]}} : <!hw.array<2x!sim.dstring>>
     %ref = moore.extract_ref %names from 0 : !moore.ref<!moore.uarray<2 x string>> -> !moore.ref<!moore.string>
-    // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-    // CHECK-NEXT: llhd.drv [[ELEM]], [[STR]] after [[TIME]] : !sim.dstring
+    // CHECK-NEXT: llhd.assign [[ELEM]], [[STR]] : !sim.dstring
     moore.blocking_assign %ref, %1 : string
 
     // CHECK-NEXT: [[READ:%.+]] = llhd.prb [[ELEM]] : !sim.dstring

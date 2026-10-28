@@ -323,9 +323,9 @@ func.func @ConstantTime() -> (!llhd.time, !llhd.time, !llhd.time) {
   // CHECK-DAG: llvm.mlir.constant(42 : i64) : i64
   // CHECK-DAG: llvm.mlir.constant(7000 : i64) : i64
   // CHECK-DAG: llvm.mlir.constant(10000000 : i64) : i64
-  %0 = llhd.constant_time <42fs, 0d, 0e>
-  %1 = llhd.constant_time <7ps, 0d, 0e>
-  %2 = llhd.constant_time <10ns, 0d, 0e>
+  %0 = llhd.constant_time <42fs, 0d>
+  %1 = llhd.constant_time <7ps, 0d>
+  %2 = llhd.constant_time <10ns, 0d>
   return %0, %1, %2 : !llhd.time, !llhd.time, !llhd.time
 }
 
