@@ -1845,8 +1845,8 @@ func.func @StringSubstr(%arg0: !moore.string, %arg1: !moore.i32, %arg2: !moore.i
   // CHECK-NEXT: [[STARTGE0:%.+]]   = arith.cmpi sge, %arg1, [[ZERO]] : i32
   // CHECK-NEXT: [[ENDGESTART:%.+]] = arith.cmpi sge, %arg2, %arg1 : i32
   // CHECK-NEXT: [[ENDLELEN:%.+]]   = arith.cmpi sle, %arg2, [[LEN]] : i32
-  // CHECK-NEXT: [[AND0:%.+]] = arith.andi [[STARTGE0]], [[ENDGESTART]] : i1 
-  // CHECK-NEXT: [[AND1:%.+]] = arith.andi [[ENDLELEN]], [[AND0]] : i1 
+  // CHECK-NEXT: [[AND0:%.+]] = arith.andi [[STARTGE0]], [[ENDGESTART]] : i1
+  // CHECK-NEXT: [[AND1:%.+]] = arith.andi [[ENDLELEN]], [[AND0]] : i1
   // CHECK-NEXT: [[SUBSTR:%.+]] = sim.string.substr %arg0[%arg1 : %arg2]
   // CHECK-NEXT: arith.select [[AND1]], [[SUBSTR]], [[EMPTY]] : !sim.dstring
   %0 = moore.string.substr %arg0[%arg1 : %arg2]

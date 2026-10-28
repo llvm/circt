@@ -84,8 +84,8 @@ def ConstantTimeOp : LLHDOp<"constant_time",
                    "unsigned":$epsilon)>
   ];
 
-  let arguments = (ins LLHDTimeAttr: $value);
-  let results = (outs LLHDTimeType: $result);
+  let arguments = (ins LLHDTimeAttr:$value);
+  let results = (outs LLHDTimeType:$result);
 
   let hasFolder = 1;
 }
@@ -225,11 +225,12 @@ def DriveOp : LLHDOp<"drv", [
     ```
   }];
 
-  let arguments = (ins Arg<RefType, "the signal to drive to",
-                           [MemWrite]>: $signal,
-                       AnyType: $value,
-                       LLHDTimeType: $time,
-                       Optional<I1>: $enable);
+  let arguments = (ins
+    Arg<RefType, "the signal to drive to", [MemWrite]>:$signal,
+    AnyType:$value,
+    LLHDTimeType:$time,
+    Optional<I1>:$enable
+  );
 
   let assemblyFormat = [{
     $signal `,` $value `after` $time ( `if` $enable^ )? attr-dict `:`
