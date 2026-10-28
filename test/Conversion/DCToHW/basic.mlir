@@ -1,8 +1,8 @@
 // RUN: circt-opt --lower-dc-to-hw %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @simple(
-// CHECK: in %[[VAL_0:.*]] "" : !esi.channel<i0>, in %[[VAL_1:.*]] "" : !esi.channel<i64>, in %[[VAL_2:.*]] "" : i1, in %[[VAL_3:.*]] "" : !esi.channel<i1>, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i64>,  out out2 : i1, out out3 : !esi.channel<i1>) {
-// CHECK:           hw.output %[[VAL_0]], %[[VAL_1]], %[[VAL_2]], %[[VAL_3]] : !esi.channel<i0>, !esi.channel<i64>, i1, !esi.channel<i1>
+// CHECK: in %[[VAL_0:.*]] "" : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] "" : !esi.channel<i64, ValidReady>, in %[[VAL_2:.*]] "" : i1, in %[[VAL_3:.*]] "" : !esi.channel<i1, ValidReady>, out out0 : !esi.channel<i0, ValidReady>, out out1 : !esi.channel<i64, ValidReady>,  out out2 : i1, out out3 : !esi.channel<i1, ValidReady>) {
+// CHECK:           hw.output %[[VAL_0]], %[[VAL_1]], %[[VAL_2]], %[[VAL_3]] : !esi.channel<i0, ValidReady>, !esi.channel<i64, ValidReady>, i1, !esi.channel<i1, ValidReady>
 // CHECK:         }
 hw.module @simple(in %0 "" : !dc.token, in %1 "" : !dc.value<i64>, in %2 "" : i1, in %3 : !dc.value<i1>,
         out out0: !dc.token, out out1: !dc.value<i64>, out out2: i1, out out3: !dc.value<i1>) {
@@ -10,35 +10,35 @@ hw.module @simple(in %0 "" : !dc.token, in %1 "" : !dc.value<i64>, in %2 "" : i1
 }
 
 // CHECK-LABEL:   hw.module @pack(
-// CHECK:                    in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : i64, out out0 : !esi.channel<i64>) {
+// CHECK:                    in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : i64, out out0 : !esi.channel<i64, ValidReady>) {
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_4:.*]] : i0
 // CHECK:           %[[VAL_5:.*]], %[[VAL_4]] = esi.wrap.vr %[[VAL_1]], %[[VAL_3]] : i64
-// CHECK:           hw.output %[[VAL_5]] : !esi.channel<i64>
+// CHECK:           hw.output %[[VAL_5]] : !esi.channel<i64, ValidReady>
 hw.module @pack(in %token : !dc.token, in %v1 : i64, out out0: !dc.value<i64>) {
     %out = dc.pack %token, %v1 : i64
     hw.output %out : !dc.value<i64>
 }
 
 // CHECK-LABEL:   hw.module @unpack(
-// CHECK:                      in %[[VAL_0:.*]] : !esi.channel<i64>, out out0 : !esi.channel<i0>, out out1 : i64) {
+// CHECK:                      in %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>, out out0 : !esi.channel<i0, ValidReady>, out out1 : i64) {
 // CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_3:.*]] : i64
 // CHECK:           %[[VAL_4:.*]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_5:.*]], %[[VAL_3]] = esi.wrap.vr %[[VAL_4]], %[[VAL_2]] : i0
-// CHECK:           hw.output %[[VAL_5]], %[[VAL_1]] : !esi.channel<i0>, i64
+// CHECK:           hw.output %[[VAL_5]], %[[VAL_1]] : !esi.channel<i0, ValidReady>, i64
 hw.module @unpack(in %v : !dc.value<i64>, out out0: !dc.token, out out1: i64) {
     %out:2 = dc.unpack %v : !dc.value<i64>
     hw.output %out#0, %out#1 : !dc.token, i64
 }
 
 // CHECK-LABEL:   hw.module @join(
-// CHECK:            in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i0>, out out0 : !esi.channel<i0>) {
+// CHECK:            in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i0, ValidReady>, out out0 : !esi.channel<i0, ValidReady>) {
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_4:.*]] : i0
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_4]] : i0
 // CHECK:           %[[VAL_7:.*]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.wrap.vr %[[VAL_7]], %[[VAL_10:.*]] : i0
 // CHECK:           %[[VAL_10]] = comb.and %[[VAL_3]], %[[VAL_6]] : i1
 // CHECK:           %[[VAL_4]] = comb.and %[[VAL_9]], %[[VAL_10]] : i1
-// CHECK:           hw.output %[[VAL_8]] : !esi.channel<i0>
+// CHECK:           hw.output %[[VAL_8]] : !esi.channel<i0, ValidReady>
 // CHECK:         }
 hw.module @join(in %t1 : !dc.token, in %t2 : !dc.token, out out0: !dc.token) {
     %out = dc.join %t1, %t2
@@ -46,7 +46,7 @@ hw.module @join(in %t1 : !dc.token, in %t2 : !dc.token, out out0: !dc.token) {
 }
 
 // CHECK-LABEL:   hw.module @fork(
-// CHECK:           in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !seq.clock {dc.clock}, in %[[VAL_2:.*]] : i1 {dc.reset}, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i0>) {
+// CHECK:           in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !seq.clock {dc.clock}, in %[[VAL_2:.*]] : i1 {dc.reset}, out out0 : !esi.channel<i0, ValidReady>, out out1 : !esi.channel<i0, ValidReady>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i0
 // CHECK:           %[[VAL_6:.*]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.wrap.vr %[[VAL_6]], %[[VAL_9:.*]] : i0
@@ -69,7 +69,7 @@ hw.module @join(in %t1 : !dc.token, in %t2 : !dc.token, out out0: !dc.token) {
 // CHECK:           %[[VAL_27:.*]] = comb.and %[[VAL_12]], %[[VAL_13]] : i1
 // CHECK:           %[[VAL_24]] = comb.or %[[VAL_27]], %[[VAL_25]] {sv.namehint = "done1"} : i1
 // CHECK:           %[[VAL_5]] = comb.and %[[VAL_18]], %[[VAL_24]] {sv.namehint = "allDone"} : i1
-// CHECK:           hw.output %[[VAL_7]], %[[VAL_11]] : !esi.channel<i0>, !esi.channel<i0>
+// CHECK:           hw.output %[[VAL_7]], %[[VAL_11]] : !esi.channel<i0, ValidReady>, !esi.channel<i0, ValidReady>
 // CHECK:         }
 hw.module @fork(in %t : !dc.token, in %clk : !seq.clock {"dc.clock"}, in %rst : i1 {"dc.reset"}, out out0 : !dc.token, out out1 : !dc.token) {
     %out:2 = dc.fork [2] %t
@@ -77,9 +77,9 @@ hw.module @fork(in %t : !dc.token, in %clk : !seq.clock {"dc.clock"}, in %rst : 
 }
 
 // CHECK-LABEL:   hw.module @bufferToken(
-// CHECK:              in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !seq.clock {dc.clock}, in %[[VAL_2:.*]] : i1 {dc.reset}, out out0 : !esi.channel<i0>) {
-// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : !esi.channel<i0> -> !esi.channel<i0>
-// CHECK:           hw.output %[[VAL_3]] : !esi.channel<i0>
+// CHECK:              in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !seq.clock {dc.clock}, in %[[VAL_2:.*]] : i1 {dc.reset}, out out0 : !esi.channel<i0, ValidReady>) {
+// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : !esi.channel<i0, ValidReady> -> !esi.channel<i0, ValidReady>
+// CHECK:           hw.output %[[VAL_3]] : !esi.channel<i0, ValidReady>
 // CHECK:         }
 hw.module @bufferToken(in %t1 : !dc.token, in %clk : !seq.clock {"dc.clock"}, in %rst : i1 {"dc.reset"}, out out0: !dc.token) {
     %out = dc.buffer [2] %t1 : !dc.token
@@ -87,12 +87,12 @@ hw.module @bufferToken(in %t1 : !dc.token, in %clk : !seq.clock {"dc.clock"}, in
 }
 
 // CHECK-LABEL:   hw.module @bufferValue(
-// CHECK-SAME:              in %[[VAL_0:.*]] : !esi.channel<i64>, 
+// CHECK-SAME:              in %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>, 
 // CHECK-SAME:              in %[[VAL_1:.*]] : !seq.clock {dc.clock}, 
 // CHECK-SAME:              in %[[VAL_2:.*]] : i1 {dc.reset},
-// CHECK-SAME:              out out0 : !esi.channel<i64>) {
-// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : !esi.channel<i64> -> !esi.channel<i64>
-// CHECK:           hw.output %[[VAL_3]] : !esi.channel<i64>
+// CHECK-SAME:              out out0 : !esi.channel<i64, ValidReady>) {
+// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : !esi.channel<i64, ValidReady> -> !esi.channel<i64, ValidReady>
+// CHECK:           hw.output %[[VAL_3]] : !esi.channel<i64, ValidReady>
 // CHECK:         }
 hw.module @bufferValue(in %v1 : !dc.value<i64>, in %clk : !seq.clock {"dc.clock"}, in %rst : i1 {"dc.reset"}, out out0: !dc.value<i64>) {
     %out = dc.buffer [2] %v1 : !dc.value<i64>
@@ -100,7 +100,7 @@ hw.module @bufferValue(in %v1 : !dc.value<i64>, in %clk : !seq.clock {"dc.clock"
 }
 
 // CHECK-LABEL:   hw.module @branch(
-// CHECK:                      in %[[VAL_0:.*]] : !esi.channel<i1>, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i0>) {
+// CHECK:                      in %[[VAL_0:.*]] : !esi.channel<i1, ValidReady>, out out0 : !esi.channel<i0, ValidReady>, out out1 : !esi.channel<i0, ValidReady>) {
 // CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_3:.*]] : i1
 // CHECK:           %[[VAL_4:.*]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.wrap.vr %[[VAL_4]], %[[VAL_7:.*]] : i0
@@ -112,7 +112,7 @@ hw.module @bufferValue(in %v1 : !dc.value<i64>, in %clk : !seq.clock {"dc.clock"
 // CHECK:           %[[VAL_11]] = comb.and %[[VAL_13]], %[[VAL_2]] : i1
 // CHECK:           %[[VAL_14:.*]] = comb.mux %[[VAL_1]], %[[VAL_6]], %[[VAL_10]] : i1
 // CHECK:           %[[VAL_3]] = comb.and %[[VAL_14]], %[[VAL_2]] : i1
-// CHECK:           hw.output %[[VAL_5]], %[[VAL_9]] : !esi.channel<i0>, !esi.channel<i0>
+// CHECK:           hw.output %[[VAL_5]], %[[VAL_9]] : !esi.channel<i0, ValidReady>, !esi.channel<i0, ValidReady>
 // CHECK:         }
 hw.module @branch(in %sel : !dc.value<i1>, out out0: !dc.token, out out1: !dc.token) {
     %true, %false = dc.branch %sel
@@ -120,7 +120,7 @@ hw.module @branch(in %sel : !dc.value<i1>, out out0: !dc.token, out out1: !dc.to
 }
 
 // CHECK-LABEL:   hw.module @select(
-// CHECK:               in %[[VAL_0:.*]] : !esi.channel<i1>, in %[[VAL_1:.*]] : !esi.channel<i0>, in %[[VAL_2:.*]] : !esi.channel<i0>, out out0 : !esi.channel<i0>) {
+// CHECK:               in %[[VAL_0:.*]] : !esi.channel<i1, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_2:.*]] : !esi.channel<i0, ValidReady>, out out0 : !esi.channel<i0, ValidReady>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i1
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_8:.*]] : i0
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_11:.*]] : i0
@@ -137,7 +137,7 @@ hw.module @branch(in %sel : !dc.value<i1>, out out0: !dc.token, out out1: !dc.to
 // CHECK:           %[[VAL_8]] = comb.and %[[VAL_21]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_22:.*]] = comb.extract %[[VAL_19]] from 1 : (i2) -> i1
 // CHECK:           %[[VAL_11]] = comb.and %[[VAL_22]], %[[VAL_5]] : i1
-// CHECK:           hw.output %[[VAL_13]] : !esi.channel<i0>
+// CHECK:           hw.output %[[VAL_13]] : !esi.channel<i0, ValidReady>
 // CHECK:         }
 hw.module @select(in %sel : !dc.value<i1>, in %true : !dc.token, in %false : !dc.token, out out0: !dc.token) {
     %0 = dc.select %sel, %true, %false
@@ -145,20 +145,20 @@ hw.module @select(in %sel : !dc.value<i1>, in %true : !dc.token, in %false : !dc
 }
 
 // CHECK-LABEL:   hw.module @to_from_esi_noop(
-// CHECK:               in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i1>, out token : !esi.channel<i0>, out value : !esi.channel<i1>) {
-// CHECK-NEXT:           hw.output %[[VAL_0]], %[[VAL_1]] : !esi.channel<i0>, !esi.channel<i1>
+// CHECK:               in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i1, ValidReady>, out token : !esi.channel<i0, ValidReady>, out value : !esi.channel<i1, ValidReady>) {
+// CHECK-NEXT:           hw.output %[[VAL_0]], %[[VAL_1]] : !esi.channel<i0, ValidReady>, !esi.channel<i1, ValidReady>
 // CHECK-NEXT:         }
-hw.module @to_from_esi_noop(in %token : !esi.channel<i0>, in %value : !esi.channel<i1>,
-    out token : !esi.channel<i0>, out value : !esi.channel<i1>) {
-    %token_dc = dc.from_esi %token : !esi.channel<i0>
-    %value_dc = dc.from_esi %value : !esi.channel<i1>
+hw.module @to_from_esi_noop(in %token : !esi.channel<i0, ValidReady>, in %value : !esi.channel<i1, ValidReady>,
+    out token : !esi.channel<i0, ValidReady>, out value : !esi.channel<i1, ValidReady>) {
+    %token_dc = dc.from_esi %token : !esi.channel<i0, ValidReady>
+    %value_dc = dc.from_esi %value : !esi.channel<i1, ValidReady>
     %token_esi = dc.to_esi %token_dc : !dc.token
     %value_esi = dc.to_esi %value_dc : !dc.value<i1>
-    hw.output %token_esi, %value_esi : !esi.channel<i0>, !esi.channel<i1>
+    hw.output %token_esi, %value_esi : !esi.channel<i0, ValidReady>, !esi.channel<i1, ValidReady>
 }
 
 // CHECK-LABEL:   hw.module @sink(in 
-// CHECK-SAME:                       %[[VAL_0:.*]] : !esi.channel<i0>) {
+// CHECK-SAME:                       %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>) {
 // CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_3:.*]] : i0
 // CHECK:           %[[VAL_3]] = hw.constant true
 // CHECK:           hw.output
@@ -167,11 +167,11 @@ hw.module @sink(in %token : !dc.token) {
     dc.sink %token
 }
 
-// CHECK-LABEL:   hw.module @source(out token : !esi.channel<i0>) {
+// CHECK-LABEL:   hw.module @source(out token : !esi.channel<i0, ValidReady>) {
 // CHECK:           %[[VAL_0:.*]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = esi.wrap.vr %[[VAL_0]], %[[VAL_3:.*]] : i0
 // CHECK:           %[[VAL_3]] = hw.constant true
-// CHECK:           hw.output %[[VAL_1]] : !esi.channel<i0>
+// CHECK:           hw.output %[[VAL_1]] : !esi.channel<i0, ValidReady>
 // CHECK:         }
 hw.module @source(out token : !dc.token) {
     %token = dc.source
@@ -179,8 +179,8 @@ hw.module @source(out token : !dc.token) {
 }
 
 // CHECK-LABEL:   hw.module @merge(in 
-// CHECK-SAME:                        %[[VAL_0:.*]] : !esi.channel<i0>, in
-// CHECK-SAME:                        %[[VAL_1:.*]] : !esi.channel<i0>, out token : !esi.channel<i1>) {
+// CHECK-SAME:                        %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in
+// CHECK-SAME:                        %[[VAL_1:.*]] : !esi.channel<i0, ValidReady>, out token : !esi.channel<i1, ValidReady>) {
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_4:.*]] : i0
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_7:.*]] : i0
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.wrap.vr %[[VAL_10:.*]], %[[VAL_11:.*]] : i1
@@ -190,7 +190,7 @@ hw.module @source(out token : !dc.token) {
 // CHECK:           %[[VAL_13:.*]] = comb.and %[[VAL_11]], %[[VAL_9]] : i1
 // CHECK:           %[[VAL_4]] = comb.and %[[VAL_13]], %[[VAL_3]] : i1
 // CHECK:           %[[VAL_7]] = comb.and %[[VAL_13]], %[[VAL_10]] : i1
-// CHECK:           hw.output %[[VAL_8]] : !esi.channel<i1>
+// CHECK:           hw.output %[[VAL_8]] : !esi.channel<i1, ValidReady>
 // CHECK:         }
 hw.module @merge(in %first : !dc.token, in %second : !dc.token, out token : !dc.value<i1>) {
     %selected = dc.merge %first, %second
@@ -200,7 +200,7 @@ hw.module @merge(in %first : !dc.token, in %second : !dc.token, out token : !dc.
 // CHECK:  hw.module.extern @ext(in %a : i32, out b : i32)
 hw.module.extern @ext(in %a : i32, out b : i32)
 
-// CHECK:  hw.module.extern @extDC(in %a : !esi.channel<i32>, out b : i32)
+// CHECK:  hw.module.extern @extDC(in %a : !esi.channel<i32, ValidReady>, out b : i32)
 hw.module.extern @extDC(in %a : !dc.value<i32>, out b : i32)
 
 // Regression test for https://github.com/llvm/circt/issues/7949

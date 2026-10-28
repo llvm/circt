@@ -3,36 +3,36 @@
 
 
 //CHECK-LABEL: hw.module.extern @__main_hw(
-// CHECK-SAME: in %arg0 : !esi.channel<i64>, 
-// CHECK-SAME: in %arg1 : !esi.channel<i64>, 
-// CHECK-SAME: in %v : !esi.channel<i32>, 
-// CHECK-SAME: in %mem_ld0.data : !esi.channel<i32>, 
-// CHECK-SAME: in %mem_st0.done : !esi.channel<i0>, 
-// CHECK-SAME: in %argCtrl : !esi.channel<i0>, 
+// CHECK-SAME: in %arg0 : !esi.channel<i64, ValidReady>, 
+// CHECK-SAME: in %arg1 : !esi.channel<i64, ValidReady>, 
+// CHECK-SAME: in %v : !esi.channel<i32, ValidReady>, 
+// CHECK-SAME: in %mem_ld0.data : !esi.channel<i32, ValidReady>, 
+// CHECK-SAME: in %mem_st0.done : !esi.channel<i0, ValidReady>, 
+// CHECK-SAME: in %argCtrl : !esi.channel<i0, ValidReady>, 
 // CHECK-SAME: in %clock : !seq.clock, 
 // CHECK-SAME: in %reset : i1, 
-// CHECK-SAME: out out0 : !esi.channel<i0>, 
-// CHECK-SAME: out mem_ld0.addr : !esi.channel<i4>, 
-// CHECK-SAME: out mem_st0 : !esi.channel<!hw.struct<address: i4, data: i32>>
+// CHECK-SAME: out out0 : !esi.channel<i0, ValidReady>, 
+// CHECK-SAME: out mem_ld0.addr : !esi.channel<i4, ValidReady>, 
+// CHECK-SAME: out mem_st0 : !esi.channel<!hw.struct<address: i4, data: i32>, ValidReady>
 // CHECK-SAME: )
 
 //CHECK-LABEL: esi.mem.ram @mem i32 x 10
 
 //CHECK-LABEL: hw.module @main_esi_wrapper(
-// CHECK-SAME: in %arg0 : !esi.channel<i64>, 
-// CHECK-SAME: in %arg1 : !esi.channel<i64>, 
-// CHECK-SAME: in %v : !esi.channel<i32>, 
-// CHECK-SAME: in %argCtrl : !esi.channel<i0>, 
+// CHECK-SAME: in %arg0 : !esi.channel<i64, ValidReady>, 
+// CHECK-SAME: in %arg1 : !esi.channel<i64, ValidReady>, 
+// CHECK-SAME: in %v : !esi.channel<i32, ValidReady>, 
+// CHECK-SAME: in %argCtrl : !esi.channel<i0, ValidReady>, 
 // CHECK-SAME: in %clock : !seq.clock, 
 // CHECK-SAME: in %reset : i1,
-// CHECK-SAME: out out0 : !esi.channel<i0>
+// CHECK-SAME: out out0 : !esi.channel<i0, ValidReady>
 // CHECK-SAME: ) {
-//CHECK-NEXT:   [[B0:%.+]] = esi.service.req <@mem::@read>(#esi.appid<"load"[1]>) : !esi.bundle<[!esi.channel<ui4> from "address", !esi.channel<i32> to "data"]>
-//CHECK-NEXT:   %data = esi.bundle.unpack %main.mem_ld0.addr from [[B0]] : !esi.bundle<[!esi.channel<ui4> from "address", !esi.channel<i32> to "data"]>
-//CHECK-NEXT:   [[B1:%.+]] = esi.service.req <@mem::@write>(#esi.appid<"store"[2]>) : !esi.bundle<[!esi.channel<!hw.struct<address: ui4, data: i32>> from "req", !esi.channel<i0> to "ack"]>
-//CHECK-NEXT:   %ack = esi.bundle.unpack %main.mem_st0 from [[B1]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui4, data: i32>> from "req", !esi.channel<i0> to "ack"]>
-//CHECK-NEXT:   %main.out0, %main.mem_ld0.addr, %main.mem_st0 = hw.instance "main" @__main_hw(arg0: %arg0: !esi.channel<i64>, arg1: %arg1: !esi.channel<i64>, v: %v: !esi.channel<i32>, mem_ld0.data: %data: !esi.channel<i32>, mem_st0.done: %ack: !esi.channel<i0>, argCtrl: %argCtrl: !esi.channel<i0>, clock: %clock: !seq.clock, reset: %reset: i1) -> (out0: !esi.channel<i0>, mem_ld0.addr: !esi.channel<i4>, mem_st0: !esi.channel<!hw.struct<address: i4, data: i32>>)
-//CHECK-NEXT:   hw.output %main.out0 : !esi.channel<i0>
+//CHECK-NEXT:   [[B0:%.+]] = esi.service.req <@mem::@read>(#esi.appid<"load"[1]>) : !esi.bundle<[!esi.channel<ui4, ValidReady> from "address", !esi.channel<i32, ValidReady> to "data"]>
+//CHECK-NEXT:   %data = esi.bundle.unpack %main.mem_ld0.addr from [[B0]] : !esi.bundle<[!esi.channel<ui4, ValidReady> from "address", !esi.channel<i32, ValidReady> to "data"]>
+//CHECK-NEXT:   [[B1:%.+]] = esi.service.req <@mem::@write>(#esi.appid<"store"[2]>) : !esi.bundle<[!esi.channel<!hw.struct<address: ui4, data: i32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>
+//CHECK-NEXT:   %ack = esi.bundle.unpack %main.mem_st0 from [[B1]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui4, data: i32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>
+//CHECK-NEXT:   %main.out0, %main.mem_ld0.addr, %main.mem_st0 = hw.instance "main" @__main_hw(arg0: %arg0: !esi.channel<i64, ValidReady>, arg1: %arg1: !esi.channel<i64, ValidReady>, v: %v: !esi.channel<i32, ValidReady>, mem_ld0.data: %data: !esi.channel<i32, ValidReady>, mem_st0.done: %ack: !esi.channel<i0, ValidReady>, argCtrl: %argCtrl: !esi.channel<i0, ValidReady>, clock: %clock: !seq.clock, reset: %reset: i1) -> (out0: !esi.channel<i0, ValidReady>, mem_ld0.addr: !esi.channel<i4, ValidReady>, mem_st0: !esi.channel<!hw.struct<address: i4, data: i32>, ValidReady>)
+//CHECK-NEXT:   hw.output %main.out0 : !esi.channel<i0, ValidReady>
 //CHECK-NEXT: }
 
 handshake.func @main(%arg0: index, %arg1: index, %v: i32, %mem : memref<10xi32>, %argCtrl: none) -> none {
@@ -45,7 +45,7 @@ handshake.func @main(%arg0: index, %arg1: index, %v: i32, %mem : memref<10xi32>,
   return %finCtrl : none
 }
 
-// LOWERED:   %main.out0, %main.mem_ld0.addr, %main.mem_st0 = hw.instance "main" @main(arg0: %arg0: !esi.channel<i64>, arg1: %arg1: !esi.channel<i64>, v: %v: !esi.channel<i32>, mem_ld0.data: %data: !esi.channel<i32>, mem_st0.done: %ack: !esi.channel<i0>, argCtrl: %argCtrl: !esi.channel<i0>, clock: %clock: !seq.clock, reset: %reset: i1) -> (out0: !esi.channel<i0>, mem_ld0.addr: !esi.channel<i4>, mem_st0: !esi.channel<!hw.struct<address: i4, data: i32>>)
+// LOWERED:   %main.out0, %main.mem_ld0.addr, %main.mem_st0 = hw.instance "main" @main(arg0: %arg0: !esi.channel<i64, ValidReady>, arg1: %arg1: !esi.channel<i64, ValidReady>, v: %v: !esi.channel<i32, ValidReady>, mem_ld0.data: %data: !esi.channel<i32, ValidReady>, mem_st0.done: %ack: !esi.channel<i0, ValidReady>, argCtrl: %argCtrl: !esi.channel<i0, ValidReady>, clock: %clock: !seq.clock, reset: %reset: i1) -> (out0: !esi.channel<i0, ValidReady>, mem_ld0.addr: !esi.channel<i4, ValidReady>, mem_st0: !esi.channel<!hw.struct<address: i4, data: i32>, ValidReady>)
 
 // -----
 

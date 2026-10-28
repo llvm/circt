@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
-// CHECK:   hw.module @handshake_sync_in_none_ui32_out_none_ui32(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i32>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i32>) {
+// CHECK:   hw.module @handshake_sync_in_none_ui32_out_none_ui32(in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i32, ValidReady>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0, ValidReady>, out out1 : !esi.channel<i32, ValidReady>) {
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i0
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_6]] : i32
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_4]], %[[VAL_11:.*]] : i0
@@ -24,7 +24,7 @@
 // CHECK:           %[[VAL_30:.*]] = comb.and %[[VAL_13]], %[[VAL_14]] : i1
 // CHECK:           %[[VAL_27]] = comb.or %[[VAL_30]], %[[VAL_28]] {sv.namehint = "done1"} : i1
 // CHECK:           %[[VAL_16]] = comb.and %[[VAL_21]], %[[VAL_27]] {sv.namehint = "allDone"} : i1
-// CHECK:           hw.output %[[VAL_9]], %[[VAL_12]] : !esi.channel<i0>, !esi.channel<i32>
+// CHECK:           hw.output %[[VAL_9]], %[[VAL_12]] : !esi.channel<i0, ValidReady>, !esi.channel<i32, ValidReady>
 // CHECK:         }
 
 handshake.func @test_sync(%arg0: none, %arg1: i32) -> (none, i32) {
@@ -34,8 +34,8 @@ handshake.func @test_sync(%arg0: none, %arg1: i32) -> (none, i32) {
 
 // -----
 
-// CHECK:   hw.module @handshake_sync_in_none_ui32_out_none_ui32(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i32>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i32>) {
-// CHECK:   hw.module @handshake_sync_in_none_none_ui32_out_none_none_ui32(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i0>, in %[[VAL_2:.*]] : !esi.channel<i32>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i0>, out out2 : !esi.channel<i32>) {
+// CHECK:   hw.module @handshake_sync_in_none_ui32_out_none_ui32(in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i32, ValidReady>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0, ValidReady>, out out1 : !esi.channel<i32, ValidReady>) {
+// CHECK:   hw.module @handshake_sync_in_none_none_ui32_out_none_none_ui32(in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_2:.*]] : !esi.channel<i32, ValidReady>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0, ValidReady>, out out1 : !esi.channel<i0, ValidReady>, out out2 : !esi.channel<i32, ValidReady>) {
 
 handshake.func @test_sync_naming(%arg0: none, %arg1: none, %arg2: i32) -> (none, none, i32) {
   %res:2 = sync %arg0, %arg2 : none, i32

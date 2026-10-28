@@ -2,12 +2,12 @@
 // RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=PORTS %s
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --hw-flatten-io --lower-esi-to-hw | FileCheck --check-prefix=HW %s
 
-hw.module.extern @Sender(in %clk: !seq.clock, out x: !esi.channel<i4>, out y: i8)
-hw.module.extern @Reciever(in %a: !esi.channel<i4>, in %clk: !seq.clock)
-hw.module.extern @i0SenderReceiver(in %in: !esi.channel<i0>, out out: !esi.channel<i0>)
+hw.module.extern @Sender(in %clk: !seq.clock, out x: !esi.channel<i4, ValidReady>, out y: i8)
+hw.module.extern @Reciever(in %a: !esi.channel<i4, ValidReady>, in %clk: !seq.clock)
+hw.module.extern @i0SenderReceiver(in %in: !esi.channel<i0, ValidReady>, out out: !esi.channel<i0, ValidReady>)
 
-// CHECK-LABEL: hw.module.extern @Sender(in %clk : !seq.clock, out x : !esi.channel<i4>, out y : i8)
-// CHECK-LABEL: hw.module.extern @Reciever(in %a : !esi.channel<i4>, in %clk : !seq.clock)
+// CHECK-LABEL: hw.module.extern @Sender(in %clk : !seq.clock, out x : !esi.channel<i4, ValidReady>, out y : i8)
+// CHECK-LABEL: hw.module.extern @Reciever(in %a : !esi.channel<i4, ValidReady>, in %clk : !seq.clock)
 
 // PORTS-LABEL: hw.module.extern @Sender(in %clk : !seq.clock, in %x_ready : i1, out x : i4, out x_valid : i1, out y : i8)
 // PORTS-LABEL: hw.module.extern @Reciever(in %a : i4, in %a_valid : i1, in %clk : !seq.clock, out a_ready : i1)
@@ -15,16 +15,16 @@ hw.module.extern @i0SenderReceiver(in %in: !esi.channel<i0>, out out: !esi.chann
 
 hw.module @test(in %clk: !seq.clock, in %rst:i1) {
 
-  %esiChan2, %0 = hw.instance "sender2" @Sender(clk: %clk: !seq.clock) -> (x: !esi.channel<i4>, y: i8)
-  %bufferedChan2 = esi.buffer %clk, %rst, %esiChan2 { stages = 4 } : !esi.channel<i4> -> !esi.channel<i4>
-  hw.instance "recv2" @Reciever (a: %bufferedChan2: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
+  %esiChan2, %0 = hw.instance "sender2" @Sender(clk: %clk: !seq.clock) -> (x: !esi.channel<i4, ValidReady>, y: i8)
+  %bufferedChan2 = esi.buffer %clk, %rst, %esiChan2 { stages = 4 } : !esi.channel<i4, ValidReady> -> !esi.channel<i4, ValidReady>
+  hw.instance "recv2" @Reciever (a: %bufferedChan2: !esi.channel<i4, ValidReady>, clk: %clk: !seq.clock) -> ()
 
-  // CHECK:      %sender2.x, %sender2.y = hw.instance "sender2" @Sender(clk: %clk: !seq.clock) -> (x: !esi.channel<i4>, y: i8)
-  // CHECK-NEXT:  %0 = esi.stage %clk, %rst, %sender2.x : !esi.channel<i4>
-  // CHECK-NEXT:  %1 = esi.stage %clk, %rst, %0 : !esi.channel<i4>
-  // CHECK-NEXT:  %2 = esi.stage %clk, %rst, %1 : !esi.channel<i4>
-  // CHECK-NEXT:  %3 = esi.stage %clk, %rst, %2 : !esi.channel<i4>
-  // CHECK-NEXT:  hw.instance "recv2" @Reciever(a: %3: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
+  // CHECK:      %sender2.x, %sender2.y = hw.instance "sender2" @Sender(clk: %clk: !seq.clock) -> (x: !esi.channel<i4, ValidReady>, y: i8)
+  // CHECK-NEXT:  %0 = esi.stage %clk, %rst, %sender2.x : !esi.channel<i4, ValidReady>
+  // CHECK-NEXT:  %1 = esi.stage %clk, %rst, %0 : !esi.channel<i4, ValidReady>
+  // CHECK-NEXT:  %2 = esi.stage %clk, %rst, %1 : !esi.channel<i4, ValidReady>
+  // CHECK-NEXT:  %3 = esi.stage %clk, %rst, %2 : !esi.channel<i4, ValidReady>
+  // CHECK-NEXT:  hw.instance "recv2" @Reciever(a: %3: !esi.channel<i4, ValidReady>, clk: %clk: !seq.clock) -> ()
 
   // HW-LABEL:    hw.module @test(in %clk : !seq.clock, in %rst : i1)
   // After all 3 ESI lowering passes, there shouldn't be any ESI constructs!
@@ -32,22 +32,22 @@ hw.module @test(in %clk: !seq.clock, in %rst:i1) {
 }
 
 // https://github.com/llvm/circt/issues/8295
-hw.module @bug8295(out x: !esi.channel<i4>, out sv: i1, out sr: i1, out sd: i4) {
-  %sv, %sr, %sd = esi.snoop.vr %x : !esi.channel<i4>
+hw.module @bug8295(out x: !esi.channel<i4, ValidReady>, out sv: i1, out sr: i1, out sd: i4) {
+  %sv, %sr, %sd = esi.snoop.vr %x : !esi.channel<i4, ValidReady>
   %data = hw.constant 0 : i4
   %valid = hw.constant 1 : i1
   %x, %ready = esi.wrap.vr %data, %valid : i4
-  hw.output %x, %sv, %sr, %sd : !esi.channel<i4>, i1, i1, i4
+  hw.output %x, %sv, %sr, %sd : !esi.channel<i4, ValidReady>, i1, i1, i4
 }
 
 
-hw.module @add11(in %clk: !seq.clock, in %ints: !esi.channel<i32>, out mutatedInts: !esi.channel<i32>, out c4: i4) {
+hw.module @add11(in %clk: !seq.clock, in %ints: !esi.channel<i32, ValidReady>, out mutatedInts: !esi.channel<i32, ValidReady>, out c4: i4) {
   %i, %i_valid = esi.unwrap.vr %ints, %rdy : i32
   %c11 = hw.constant 11 : i32
   %m = comb.add %c11, %i : i32
   %mutInts, %rdy = esi.wrap.vr %m, %i_valid : i32
   %c4 = hw.constant 0 : i4
-  hw.output %mutInts, %c4 : !esi.channel<i32>, i4
+  hw.output %mutInts, %c4 : !esi.channel<i32, ValidReady>, i4
 }
 // HW-LABEL: hw.module @add11(in %clk : !seq.clock, in %ints : i32, in %ints_valid : i1, in %mutatedInts_ready : i1, out ints_ready : i1, out mutatedInts : i32, out mutatedInts_valid : i1, out c4 : i4) {
 // HW:   %{{.+}} = hw.constant 11 : i32
@@ -55,18 +55,18 @@ hw.module @add11(in %clk: !seq.clock, in %ints: !esi.channel<i32>, out mutatedIn
 // HW:   %{{.+}} = hw.constant 0 : i4
 // HW:   hw.output %mutatedInts_ready, [[RES0]], %ints_valid, %{{.+}} : i1, i32, i1, i4
 
-hw.module @InternRcvr(in %in: !esi.channel<!hw.array<4xi8>>) {}
+hw.module @InternRcvr(in %in: !esi.channel<!hw.array<4xi8>, ValidReady>) {}
 
 hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
-  %ints, %c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %ints: !esi.channel<i32>) -> (mutatedInts: !esi.channel<i32>, c4: i4)
+  %ints, %c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %ints: !esi.channel<i32, ValidReady>) -> (mutatedInts: !esi.channel<i32, ValidReady>, c4: i4)
 
-  %valid, %ready, %data = esi.snoop.vr %ints: !esi.channel<i32>
+  %valid, %ready, %data = esi.snoop.vr %ints: !esi.channel<i32, ValidReady>
   %xact = comb.and %valid, %ready : i1
 
-  %tx_xact, %tx_data = esi.snoop.xact %ints: !esi.channel<i32>
+  %tx_xact, %tx_data = esi.snoop.xact %ints: !esi.channel<i32, ValidReady>
 
-  %nullArray = esi.null : !esi.channel<!hw.array<4xi8>>
-  hw.instance "nullInternRcvr" @InternRcvr(in: %nullArray: !esi.channel<!hw.array<4xi8>>) -> ()
+  %nullArray = esi.null : !esi.channel<!hw.array<4xi8>, ValidReady>
+  hw.instance "nullInternRcvr" @InternRcvr(in: %nullArray: !esi.channel<!hw.array<4xi8>, ValidReady>) -> ()
 }
 // HW-LABEL: hw.module @test2(in %clk : !seq.clock, in %rst : i1) {
 // HW-NEXT:    %adder.ints_ready, %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %adder.mutatedInts: i32, ints_valid: %adder.mutatedInts_valid: i1, mutatedInts_ready: %adder.ints_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4)
@@ -76,7 +76,7 @@ hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
 // HW:         [[ZA:%.+]] = hw.bitcast %c0_i32 : (i32) -> !hw.array<4xi8>
 // HW:         %nullInternRcvr.in_ready = hw.instance "nullInternRcvr" @InternRcvr(in: [[ZA]]: !hw.array<4xi8>, in_valid: %false: i1) -> (in_ready: i1)
 
-hw.module @twoChannelArgs(in %clk: !seq.clock, in %ints: !esi.channel<i32>, in %foo: !esi.channel<i7>) {
+hw.module @twoChannelArgs(in %clk: !seq.clock, in %ints: !esi.channel<i32, ValidReady>, in %foo: !esi.channel<i7, ValidReady>) {
   %rdy = hw.constant 1 : i1
   %i, %i_valid = esi.unwrap.vr %ints, %rdy : i32
   %i2, %i2_valid = esi.unwrap.vr %foo, %rdy : i7
@@ -89,15 +89,15 @@ hw.module @twoChannelArgs(in %clk: !seq.clock, in %ints: !esi.channel<i32>, in %
 // HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage1<WIDTH: ui32 = 0>(clk: %clk: !seq.clock, rst: %rst: i1, a: %a: i0, a_valid: %a_valid: i1, x_ready: %x_ready: i1) -> (a_ready: i1, x: i0, x_valid: i1)
 // HW:         hw.output %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid : i1, i0, i1
 // HW:       }
-hw.module @i0Typed(in %a: !esi.channel<i0>, in %clk: !seq.clock, in %rst: i1, out x: !esi.channel<i0>) {
-  %0 = esi.buffer %clk, %rst, %a  : !esi.channel<i0> -> !esi.channel<i0>
+hw.module @i0Typed(in %a: !esi.channel<i0, ValidReady>, in %clk: !seq.clock, in %rst: i1, out x: !esi.channel<i0, ValidReady>) {
+  %0 = esi.buffer %clk, %rst, %a  : !esi.channel<i0, ValidReady> -> !esi.channel<i0, ValidReady>
   %i0Value, %valid = esi.unwrap.vr %0, %ready : i0
   %chanOutput, %ready = esi.wrap.vr %i0Value, %valid : i0
-  hw.output %chanOutput : !esi.channel<i0>
+  hw.output %chanOutput : !esi.channel<i0, ValidReady>
 }
 
 // PORTS: hw.module @HandshakeToESIWrapper(in %clock : i1, in %reset : i1, in %in_ctrl : i0, in %in_ctrl_valid : i1, in %in0_ld_data0 : i32, in %in0_ld_data0_valid : i1, in %in1_ld_data0 : i32, in %in1_ld_data0_valid : i1, in %out_ctrl_ready : i1, in %in0_ld_addr0_ready : i1, in %in1_ld_addr0_ready : i1, in %out0_ready : i1, out in_ctrl_ready : i1, out in0_ld_data0_ready : i1, out in1_ld_data0_ready : i1, out out_ctrl : i0, out out_ctrl_valid : i1, out in0_ld_addr0 : i64, out in0_ld_addr0_valid : i1, out in1_ld_addr0 : i64, out in1_ld_addr0_valid : i1, out out0 : i32, out out0_valid : i1)
-hw.module @HandshakeToESIWrapper(in %clock : i1, in %reset : i1, in %in_ctrl : !esi.channel<i0>, in %in0_ld_data0: !esi.channel<i32>, in %in1_ld_data0: !esi.channel<i32>, out out_ctrl: !esi.channel<i0>, out in0_ld_addr0: !esi.channel<i64>, out in1_ld_addr0: !esi.channel<i64>, out out0: !esi.channel<i32>) {
+hw.module @HandshakeToESIWrapper(in %clock : i1, in %reset : i1, in %in_ctrl : !esi.channel<i0, ValidReady>, in %in0_ld_data0: !esi.channel<i32, ValidReady>, in %in1_ld_data0: !esi.channel<i32, ValidReady>, out out_ctrl: !esi.channel<i0, ValidReady>, out in0_ld_addr0: !esi.channel<i64, ValidReady>, out in1_ld_addr0: !esi.channel<i64, ValidReady>, out out0: !esi.channel<i32, ValidReady>) {
   %i0 = hw.constant 0 : i0
   %c1 = hw.constant 1 : i1
   %c32 = hw.constant 1 : i32
@@ -106,13 +106,13 @@ hw.module @HandshakeToESIWrapper(in %clock : i1, in %reset : i1, in %in_ctrl : !
   %chanOutput_2, %ready_3 = esi.wrap.vr %c64, %c1 : i64
   %chanOutput_6, %ready_7 = esi.wrap.vr %c64, %c1 : i64
   %chanOutput_8, %ready_9 = esi.wrap.vr %c32, %c1 : i32
-  hw.output %chanOutput, %chanOutput_2, %chanOutput_6, %chanOutput_8 : !esi.channel<i0>, !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i32>
+  hw.output %chanOutput, %chanOutput_2, %chanOutput_6, %chanOutput_8 : !esi.channel<i0, ValidReady>, !esi.channel<i64, ValidReady>, !esi.channel<i64, ValidReady>, !esi.channel<i32, ValidReady>
 }
 
 // PORTS: hw.module @ServiceWrapper(in %clock : i1, in %reset : i1, in %ctrl : i0, in %ctrl_valid : i1, in %port0 : i32, in %port0_valid : i1, in %port1 : i32, in %port1_valid : i1, in %ctrl_ready : i1, in %port0_ready : i1, in %port1_ready : i1, out ctrl_ready : i1, out port0_ready : i1, out port1_ready : i1, out ctrl : i0, out ctrl_valid : i1, out port0 : i64, out port0_valid : i1, out port1 : i64, out port1_valid : i1)
-hw.module @ServiceWrapper(in %clock: i1, in %reset: i1, in %ctrl: !esi.channel<i0>, in %port0: !esi.channel<i32>, in %port1: !esi.channel<i32>, out ctrl: !esi.channel<i0>, out port0: !esi.channel<i64>, out port1: !esi.channel<i64>) {
-  %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0, %HandshakeToESIWrapper.out0 = hw.instance "HandshakeToESIWrapper" @HandshakeToESIWrapper(clock: %clock: i1, reset: %reset: i1, in_ctrl: %ctrl: !esi.channel<i0>, in0_ld_data0: %port0: !esi.channel<i32>, in1_ld_data0: %port1: !esi.channel<i32>) -> (out_ctrl: !esi.channel<i0>, in0_ld_addr0: !esi.channel<i64>, in1_ld_addr0: !esi.channel<i64>, out0: !esi.channel<i32>)
-  hw.output %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0 : !esi.channel<i0>, !esi.channel<i64>, !esi.channel<i64>
+hw.module @ServiceWrapper(in %clock: i1, in %reset: i1, in %ctrl: !esi.channel<i0, ValidReady>, in %port0: !esi.channel<i32, ValidReady>, in %port1: !esi.channel<i32, ValidReady>, out ctrl: !esi.channel<i0, ValidReady>, out port0: !esi.channel<i64, ValidReady>, out port1: !esi.channel<i64, ValidReady>) {
+  %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0, %HandshakeToESIWrapper.out0 = hw.instance "HandshakeToESIWrapper" @HandshakeToESIWrapper(clock: %clock: i1, reset: %reset: i1, in_ctrl: %ctrl: !esi.channel<i0, ValidReady>, in0_ld_data0: %port0: !esi.channel<i32, ValidReady>, in1_ld_data0: %port1: !esi.channel<i32, ValidReady>) -> (out_ctrl: !esi.channel<i0, ValidReady>, in0_ld_addr0: !esi.channel<i64, ValidReady>, in1_ld_addr0: !esi.channel<i64, ValidReady>, out0: !esi.channel<i32, ValidReady>)
+  hw.output %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0 : !esi.channel<i0, ValidReady>, !esi.channel<i64, ValidReady>, !esi.channel<i64, ValidReady>
 }
 
 // PORTS-LABEL:  hw.module @i1FifoLoopback(in %in : i3, in %in_empty : i1, in %out_rden : i1, out in_rden : i1, out out : i3, out out_empty : i1)
@@ -169,10 +169,10 @@ hw.module @i1FifoDelay1Loopback(in %in: !esi.channel<i3, FIFO(1)>, out out: !esi
 // PORTS-NEXT:    %chanOutput, %ready = esi.wrap.vr %in, %in_good : i3
 // PORTS-NEXT:    %rawOutput, %valid = esi.unwrap.vr %chanOutput, %out_letErRip : i3
 // PORTS-NEXT:    hw.output %ready, %rawOutput, %valid : i1, i3, i1
-hw.module @i3LoopbackOddNames(in %in: !esi.channel<i3>, out out: !esi.channel<i3>)
+hw.module @i3LoopbackOddNames(in %in: !esi.channel<i3, ValidReady>, out out: !esi.channel<i3, ValidReady>)
     attributes {esi.portFlattenStructs, esi.portValidSuffix="_good",
                 esi.portReadySuffix="_letErRip", esi.portOutSuffix="_out"} {
-  hw.output %in : !esi.channel<i3>
+  hw.output %in : !esi.channel<i3, ValidReady>
 }
 
 // CHECK-LABEL:  hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : !esi.channel<i32, FIFO>, out out : !esi.channel<i32, FIFO(2)>) {
@@ -189,7 +189,7 @@ hw.module @fifo1(in %clk: !seq.clock, in %rst: i1, in %in: !esi.channel<i32, FIF
   hw.output %fifo : !esi.channel<i32, FIFO(2)>
 }
 
-// CHECK-LABEL:  hw.module @fifoValidReadyInput(in %clk : !seq.clock, in %rst : i1, in %in : !esi.channel<i32>, out out : !esi.channel<i32, FIFO(2)>) {
+// CHECK-LABEL:  hw.module @fifoValidReadyInput(in %clk : !seq.clock, in %rst : i1, in %in : !esi.channel<i32, ValidReady>, out out : !esi.channel<i32, FIFO(2)>) {
 // CHECK-NEXT:     %true = hw.constant true
 // CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %in, [[InputEN:%.+]] : i32
 // CHECK-NEXT:     %true_0 = hw.constant true
@@ -208,7 +208,7 @@ hw.module @fifoValidReadyInput(
   hw.output %fifo : !esi.channel<i32, FIFO(2)>
 }
 
-// CHECK-LABEL:  hw.module @fifoValidReadyOutput(in %clk : !seq.clock, in %rst : i1, in %in : !esi.channel<i32, FIFO>, out out : !esi.channel<i32>) {
+// CHECK-LABEL:  hw.module @fifoValidReadyOutput(in %clk : !seq.clock, in %rst : i1, in %in : !esi.channel<i32, FIFO>, out out : !esi.channel<i32, ValidReady>) {
 // CHECK-NEXT:     %true = hw.constant true
 // CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %in, [[InputEN:%.+]] : !esi.channel<i32, FIFO>
 // CHECK-NEXT:     %out, %full, %empty_0 = seq.fifo depth 12   in %data rdEn [[OutputRdEn:%.+]] wrEn [[InputEN]] clk %clk rst %rst : i32
@@ -219,7 +219,7 @@ hw.module @fifoValidReadyInput(
 // CHECK-NEXT:     [[R3:%.+]] = comb.xor bin %empty_0, %true_1 : i1
 // CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %out, [[R3]] : i32
 // CHECK-NEXT:     [[OutputRdEn]] = comb.and [[R3]], %ready {sv.namehint = "outputRdEn"} : i1
-// CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i32>
+// CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i32, ValidReady>
 hw.module @fifoValidReadyOutput(
     in %clk: !seq.clock, in %rst: i1,
     in %in: !esi.channel<i32, FIFO>,
@@ -229,7 +229,7 @@ hw.module @fifoValidReadyOutput(
 }
 
 // CHECK-LABEL:  hw.module @testConversion(in %clk : !seq.clock, in %rst : i1) {
-// CHECK-NEXT:     [[R0:%.+]] = esi.stage %clk, %rst, [[R4:%.+]] : !esi.channel<i4>
+// CHECK-NEXT:     [[R0:%.+]] = esi.stage %clk, %rst, [[R4:%.+]] : !esi.channel<i4, ValidReady>
 // CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr [[R0]], %rden : i4
 // CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %rawOutput, [[R1:%.+]] : !esi.channel<i4, FIFO>
 // CHECK-NEXT:     %true = hw.constant true
@@ -239,22 +239,22 @@ hw.module @fifoValidReadyOutput(
 // CHECK-NEXT:     [[R2]] = comb.and %ready, [[R3]] : i1
 // CHECK-NEXT:     %true_1 = hw.constant true
 // CHECK-NEXT:     [[R3]] = comb.xor %empty, %true_1 : i1
-// CHECK-NEXT:     [[R4]] = esi.stage %clk, %rst, %chanOutput_0 : !esi.channel<i4>
+// CHECK-NEXT:     [[R4]] = esi.stage %clk, %rst, %chanOutput_0 : !esi.channel<i4, ValidReady>
 
 hw.module @testConversion(in %clk: !seq.clock, in %rst:i1) {
-  %intsFifo = esi.buffer %clk, %rst, %intsVR : !esi.channel<i4> -> !esi.channel<i4, FIFO>
-  %intsVR = esi.buffer %clk, %rst, %intsFifo : !esi.channel<i4, FIFO> -> !esi.channel<i4>
+  %intsFifo = esi.buffer %clk, %rst, %intsVR : !esi.channel<i4, ValidReady> -> !esi.channel<i4, FIFO>
+  %intsVR = esi.buffer %clk, %rst, %intsFifo : !esi.channel<i4, FIFO> -> !esi.channel<i4, ValidReady>
 }
 
-hw.module @testSnoopTx(in %clk: !seq.clock, in %rst:i1, in %input: !esi.channel<i32, FIFO>, out output: !esi.channel<i32>, out fifo_xact: i1, out vr_xact: i1) {
+hw.module @testSnoopTx(in %clk: !seq.clock, in %rst:i1, in %input: !esi.channel<i32, FIFO>, out output: !esi.channel<i32, ValidReady>, out fifo_xact: i1, out vr_xact: i1) {
   // Test FIFO signaling
   %fifo_tx_xact, %fifo_tx_data = esi.snoop.xact %input : !esi.channel<i32, FIFO>
 
   // Test ValidReady signaling
-  %vrChan = esi.buffer %clk, %rst, %input : !esi.channel<i32, FIFO> -> !esi.channel<i32>
-  %vr_tx_xact, %vr_tx_data = esi.snoop.xact %vrChan : !esi.channel<i32>
+  %vrChan = esi.buffer %clk, %rst, %input : !esi.channel<i32, FIFO> -> !esi.channel<i32, ValidReady>
+  %vr_tx_xact, %vr_tx_data = esi.snoop.xact %vrChan : !esi.channel<i32, ValidReady>
 
-  hw.output %vrChan, %fifo_tx_xact, %vr_tx_xact : !esi.channel<i32>, i1, i1
+  hw.output %vrChan, %fifo_tx_xact, %vr_tx_xact : !esi.channel<i32, ValidReady>, i1, i1
 }
 // HW-LABEL:   hw.module @testSnoopTx(in %clk : !seq.clock, in %rst : i1, in %input : i32, in %input_empty : i1, in %output_ready : i1, out input_rden : i1, out output : i32, out output_valid : i1, out fifo_xact : i1, out vr_xact : i1) {
 // HW:         [[NOT_EMPTY1:%.+]] = comb.xor %input_empty, %true : i1
@@ -266,18 +266,18 @@ hw.module @testSnoopTx(in %clk: !seq.clock, in %rst:i1, in %input: !esi.channel<
 // HW:         hw.output [[R2]], %pipelineStage.x, %pipelineStage.x_valid, [[FIFO_XACT]], [[VR_XACT]] : i1, i32, i1, i1, i1
 
 // Test snoop on a channel passed through a module (tests channels at module boundaries)
-hw.module @SnoopPassthrough(in %chan_in: !esi.channel<i32>, out chan_out: !esi.channel<i32>, out snoop_valid: i1, out snoop_ready: i1, out snoop_data: i32) {
-  %valid, %ready, %data = esi.snoop.vr %chan_in : !esi.channel<i32>
-  hw.output %chan_in, %valid, %ready, %data : !esi.channel<i32>, i1, i1, i32
+hw.module @SnoopPassthrough(in %chan_in: !esi.channel<i32, ValidReady>, out chan_out: !esi.channel<i32, ValidReady>, out snoop_valid: i1, out snoop_ready: i1, out snoop_data: i32) {
+  %valid, %ready, %data = esi.snoop.vr %chan_in : !esi.channel<i32, ValidReady>
+  hw.output %chan_in, %valid, %ready, %data : !esi.channel<i32, ValidReady>, i1, i1, i32
 }
 // HW-LABEL: hw.module @SnoopPassthrough(in %chan_in : i32, in %chan_in_valid : i1, in %chan_out_ready : i1, out chan_in_ready : i1, out chan_out : i32, out chan_out_valid : i1, out snoop_valid : i1, out snoop_ready : i1, out snoop_data : i32) {
 // HW:         hw.output %chan_out_ready, %chan_in, %chan_in_valid, %chan_in_valid, %chan_out_ready, %chan_in : i1, i32, i1, i1, i1, i32
 
-hw.module @SnoopWithInstanceConsumer(in %in_data: i32, in %in_valid: i1, out out: !esi.channel<i32>, out snoop_valid: i1, out snoop_ready: i1, out snoop_data: i32) {
+hw.module @SnoopWithInstanceConsumer(in %in_data: i32, in %in_valid: i1, out out: !esi.channel<i32, ValidReady>, out snoop_valid: i1, out snoop_ready: i1, out snoop_data: i32) {
   %chan, %ready_out = esi.wrap.vr %in_data, %in_valid : i32
-  %valid, %ready_snoop, %data = esi.snoop.vr %chan : !esi.channel<i32>
-  %out, %pt_snoop_valid, %pt_snoop_ready, %pt_snoop_data = hw.instance "passthrough" @SnoopPassthrough(chan_in: %chan: !esi.channel<i32>) -> (chan_out: !esi.channel<i32>, snoop_valid: i1, snoop_ready: i1, snoop_data: i32)
-  hw.output %out, %valid, %ready_snoop, %data : !esi.channel<i32>, i1, i1, i32
+  %valid, %ready_snoop, %data = esi.snoop.vr %chan : !esi.channel<i32, ValidReady>
+  %out, %pt_snoop_valid, %pt_snoop_ready, %pt_snoop_data = hw.instance "passthrough" @SnoopPassthrough(chan_in: %chan: !esi.channel<i32, ValidReady>) -> (chan_out: !esi.channel<i32, ValidReady>, snoop_valid: i1, snoop_ready: i1, snoop_data: i32)
+  hw.output %out, %valid, %ready_snoop, %data : !esi.channel<i32, ValidReady>, i1, i1, i32
 }
 // HW-LABEL: hw.module @SnoopWithInstanceConsumer(in %in_data : i32, in %in_valid : i1, in %out_ready : i1, out out : i32, out out_valid : i1, out snoop_valid : i1, out snoop_ready : i1, out snoop_data : i32) {
 // HW:         %passthrough.chan_in_ready, %passthrough.chan_out, %passthrough.chan_out_valid, %passthrough.snoop_valid, %passthrough.snoop_ready, %passthrough.snoop_data = hw.instance "passthrough" @SnoopPassthrough(chan_in: %in_data: i32, chan_in_valid: %in_valid: i1, chan_out_ready: %out_ready: i1) -> (chan_in_ready: i1, chan_out: i32, chan_out_valid: i1, snoop_valid: i1, snoop_ready: i1, snoop_data: i32)
@@ -339,8 +339,8 @@ hw.module @voLoopbackTop() {
 // CHECK:          %rawOutput_{{.+}}, %valid_{{.+}} = esi.unwrap.vo %{{.+}} : !esi.channel<i4, ValidOnly>
 // CHECK:          %chanOutput{{.*}}, %ready{{.*}} = esi.wrap.vr %rawOutput_{{.+}}, %valid_{{.+}} : i4
 hw.module @voBufferConversion(in %clk: !seq.clock, in %rst:i1) {
-  %intsVO = esi.buffer %clk, %rst, %intsVR : !esi.channel<i4> -> !esi.channel<i4, ValidOnly>
-  %intsVR = esi.buffer %clk, %rst, %intsVO : !esi.channel<i4, ValidOnly> -> !esi.channel<i4>
+  %intsVO = esi.buffer %clk, %rst, %intsVR : !esi.channel<i4, ValidReady> -> !esi.channel<i4, ValidOnly>
+  %intsVR = esi.buffer %clk, %rst, %intsVO : !esi.channel<i4, ValidOnly> -> !esi.channel<i4, ValidReady>
 }
 
 // --- Full HW lowering: ValidOnly add11 (wrap/unwrap elimination) ---
@@ -386,7 +386,7 @@ hw.module @voSnoopXactPassthrough(in %chan_in: !esi.channel<i32, ValidOnly>, out
 //===----------------------------------------------------------------------===//
 // Arrays of channels
 //
-// An `!hw.array<N x !esi.channel<T>>` port lowers into parallel arrays of the
+// An `!hw.array<N x !esi.channel<T, ValidReady>>` port lowers into parallel arrays of the
 // constituent wire signals: one array element per channel.
 //===----------------------------------------------------------------------===//
 
@@ -402,18 +402,18 @@ hw.module @voSnoopXactPassthrough(in %chan_in: !esi.channel<i32, ValidOnly>, out
 // HW-DAG:   hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
 // HW-DAG:   hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
 // HW:       hw.output %{{.+}}, %{{.+}}, %{{.+}} : !hw.array<4xi1>, !hw.array<4xi8>, !hw.array<4xi1>
-hw.module @arrSwizzleVR(in %in: !hw.array<4 x !esi.channel<i8>>, out out: !hw.array<4 x !esi.channel<i8>>) {
+hw.module @arrSwizzleVR(in %in: !hw.array<4 x !esi.channel<i8, ValidReady>>, out out: !hw.array<4 x !esi.channel<i8, ValidReady>>) {
   %c0 = hw.constant 0 : i2
   %c1 = hw.constant 1 : i2
   %c2 = hw.constant 2 : i2
   %c3 = hw.constant 3 : i2
-  %ch0 = hw.array_get %in[%c0] : !hw.array<4 x !esi.channel<i8>>, i2
-  %ch1 = hw.array_get %in[%c1] : !hw.array<4 x !esi.channel<i8>>, i2
-  %ch2 = hw.array_get %in[%c2] : !hw.array<4 x !esi.channel<i8>>, i2
-  %ch3 = hw.array_get %in[%c3] : !hw.array<4 x !esi.channel<i8>>, i2
+  %ch0 = hw.array_get %in[%c0] : !hw.array<4 x !esi.channel<i8, ValidReady>>, i2
+  %ch1 = hw.array_get %in[%c1] : !hw.array<4 x !esi.channel<i8, ValidReady>>, i2
+  %ch2 = hw.array_get %in[%c2] : !hw.array<4 x !esi.channel<i8, ValidReady>>, i2
+  %ch3 = hw.array_get %in[%c3] : !hw.array<4 x !esi.channel<i8, ValidReady>>, i2
   // array_create operand 0 lands at the highest index, so this reverses.
-  %swizzled = hw.array_create %ch0, %ch1, %ch2, %ch3 : !esi.channel<i8>
-  hw.output %swizzled : !hw.array<4 x !esi.channel<i8>>
+  %swizzled = hw.array_create %ch0, %ch1, %ch2, %ch3 : !esi.channel<i8, ValidReady>
+  hw.output %swizzled : !hw.array<4 x !esi.channel<i8, ValidReady>>
 }
 
 // De-swizzle around the instance: the instance reverses the channels, so
@@ -486,19 +486,19 @@ hw.module @arrSwizzleVR(in %in: !hw.array<4 x !esi.channel<i8>>, out out: !hw.ar
 // HW-DAG:  %[[OUT:.+]] = hw.array_create %[[O0]], %[[O1]], %[[O2]], %[[O3]] : i8
 // HW-DAG:  %[[OUTV:.+]] = hw.array_create %[[OV0]], %[[OV1]], %[[OV2]], %[[OV3]] : i1
 // HW-DAG:  hw.output %[[INRDY]], %[[OUT]], %[[OUTV]] : !hw.array<4xi1>, !hw.array<4xi8>, !hw.array<4xi1>
-hw.module @arrSwizzleVRTop(in %in: !hw.array<4 x !esi.channel<i8>>, out out: !hw.array<4 x !esi.channel<i8>>) {
-  %foo.out = hw.instance "foo" @arrSwizzleVR(in: %in: !hw.array<4 x !esi.channel<i8>>) -> (out: !hw.array<4 x !esi.channel<i8>>)
+hw.module @arrSwizzleVRTop(in %in: !hw.array<4 x !esi.channel<i8, ValidReady>>, out out: !hw.array<4 x !esi.channel<i8, ValidReady>>) {
+  %foo.out = hw.instance "foo" @arrSwizzleVR(in: %in: !hw.array<4 x !esi.channel<i8, ValidReady>>) -> (out: !hw.array<4 x !esi.channel<i8, ValidReady>>)
   %c0 = hw.constant 0 : i2
   %c1 = hw.constant 1 : i2
   %c2 = hw.constant 2 : i2
   %c3 = hw.constant 3 : i2
-  %o0 = hw.array_get %foo.out[%c0] : !hw.array<4 x !esi.channel<i8>>, i2
-  %o1 = hw.array_get %foo.out[%c1] : !hw.array<4 x !esi.channel<i8>>, i2
-  %o2 = hw.array_get %foo.out[%c2] : !hw.array<4 x !esi.channel<i8>>, i2
-  %o3 = hw.array_get %foo.out[%c3] : !hw.array<4 x !esi.channel<i8>>, i2
+  %o0 = hw.array_get %foo.out[%c0] : !hw.array<4 x !esi.channel<i8, ValidReady>>, i2
+  %o1 = hw.array_get %foo.out[%c1] : !hw.array<4 x !esi.channel<i8, ValidReady>>, i2
+  %o2 = hw.array_get %foo.out[%c2] : !hw.array<4 x !esi.channel<i8, ValidReady>>, i2
+  %o3 = hw.array_get %foo.out[%c3] : !hw.array<4 x !esi.channel<i8, ValidReady>>, i2
   // Reverse again to undo the swizzle.
-  %deswizzled = hw.array_create %o0, %o1, %o2, %o3 : !esi.channel<i8>
-  hw.output %deswizzled : !hw.array<4 x !esi.channel<i8>>
+  %deswizzled = hw.array_create %o0, %o1, %o2, %o3 : !esi.channel<i8, ValidReady>
+  hw.output %deswizzled : !hw.array<4 x !esi.channel<i8, ValidReady>>
 }
 
 // --- FIFO array: data + empty (forward) + rden (backward) arrays ---
@@ -524,15 +524,15 @@ hw.module @arrLoopbackVO(in %in: !hw.array<4 x !esi.channel<i8, ValidOnly>>, out
 // HW-LABEL:  hw.module @arrLoopbackN1(in %in : !hw.array<1xi8>, in %in_valid : !hw.array<1xi1>, in %out_ready : !hw.array<1xi1>, out in_ready : !hw.array<1xi1>, out out : !hw.array<1xi8>, out out_valid : !hw.array<1xi1>)
 // The single-element array uses a 1-bit index.
 // HW:          hw.array_get %in[%{{.+}}] : !hw.array<1xi8>, i1
-hw.module @arrLoopbackN1(in %in: !hw.array<1 x !esi.channel<i8>>, out out: !hw.array<1 x !esi.channel<i8>>) {
-  hw.output %in : !hw.array<1 x !esi.channel<i8>>
+hw.module @arrLoopbackN1(in %in: !hw.array<1 x !esi.channel<i8, ValidReady>>, out out: !hw.array<1 x !esi.channel<i8, ValidReady>>) {
+  hw.output %in : !hw.array<1 x !esi.channel<i8, ValidReady>>
 }
 
 // --- External modules with array-of-channel ports are lowered too. ---
 // HW-LABEL:  hw.module.extern @arrExtern(in %in : !hw.array<2xi8>, in %in_valid : !hw.array<2xi1>, in %out_ready : !hw.array<2xi1>, out in_ready : !hw.array<2xi1>, out out : !hw.array<2xi8>, out out_valid : !hw.array<2xi1>)
-hw.module.extern @arrExtern(in %in: !hw.array<2 x !esi.channel<i8>>, out out: !hw.array<2 x !esi.channel<i8>>)
+hw.module.extern @arrExtern(in %in: !hw.array<2 x !esi.channel<i8, ValidReady>>, out out: !hw.array<2 x !esi.channel<i8, ValidReady>>)
 // HW-LABEL:  hw.module @arrExternTop()
 // HW:          hw.instance "foo" @arrExtern(in: %{{.+}}: !hw.array<2xi8>, in_valid: %{{.+}}: !hw.array<2xi1>, out_ready: %{{.+}}: !hw.array<2xi1>) -> (in_ready: !hw.array<2xi1>, out: !hw.array<2xi8>, out_valid: !hw.array<2xi1>)
 hw.module @arrExternTop() {
-  %chan = hw.instance "foo" @arrExtern(in: %chan: !hw.array<2 x !esi.channel<i8>>) -> (out: !hw.array<2 x !esi.channel<i8>>)
+  %chan = hw.instance "foo" @arrExtern(in: %chan: !hw.array<2 x !esi.channel<i8, ValidReady>>) -> (out: !hw.array<2 x !esi.channel<i8, ValidReady>>)
 }

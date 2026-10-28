@@ -9,24 +9,24 @@ hw.module @testFifoTypes(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i
 // -----
 
 esi.service.decl @HostComms {
-  esi.service.port @Send : !esi.bundle<[!esi.channel<i16> from "send"]>
+  esi.service.port @Send : !esi.bundle<[!esi.channel<i16, ValidReady> from "send"]>
 }
 
 hw.module @Loopback (in %clk: i1) {
   // expected-error @+2 {{Request channel type does not match service port bundle channel type}}
-  // expected-note @+1 {{Service port 'send' type: '!esi.channel<i16>'}}
-  %dataIn = esi.service.req <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !esi.bundle<[!esi.channel<i8> from "send"]>
+  // expected-note @+1 {{Service port 'send' type: '!esi.channel<i16, ValidReady>'}}
+  %dataIn = esi.service.req <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !esi.bundle<[!esi.channel<i8, ValidReady> from "send"]>
 }
 
 // -----
 
 esi.service.decl @HostComms {
-  esi.service.port @Send : !esi.bundle<[!esi.channel<i16> from "send"]>
+  esi.service.port @Send : !esi.bundle<[!esi.channel<i16, ValidReady> from "send"]>
 }
 
 hw.module @Loopback (in %clk: i1) {
   // expected-error @+1 {{Request port bundle channel count does not match service port bundle channel count}}
-  %dataIn = esi.service.req<@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !esi.bundle<[!esi.channel<i8> to "send", !esi.channel<i3> to "foo"]>
+  %dataIn = esi.service.req<@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !esi.bundle<[!esi.channel<i8, ValidReady> to "send", !esi.channel<i3, ValidReady> to "foo"]>
 }
 
 // -----
@@ -36,19 +36,19 @@ esi.service.decl @HostComms {
 
 hw.module @Loopback (in %clk: i1) {
   // expected-error @+1 {{'esi.service.req' op Could not locate port "Recv"}}
-  %dataIn = esi.service.req <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) : !esi.bundle<[!esi.channel<i1> from "foo"]>
+  %dataIn = esi.service.req <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) : !esi.bundle<[!esi.channel<i1, ValidReady> from "foo"]>
 }
 
 // -----
 
 hw.module @Loopback (in %clk: i1) {
   // expected-error @+1 {{'esi.service.req' op Could not find service declaration @HostComms}}
-  %dataIn = esi.service.req <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) : !esi.bundle<[!esi.channel<i1> from "foo"]>
+  %dataIn = esi.service.req <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) : !esi.bundle<[!esi.channel<i1, ValidReady> from "foo"]>
 }
 
 // -----
 
-!reqResp = !esi.bundle<[!esi.channel<i16> from "req", !esi.channel<i8> to "resp"]>
+!reqResp = !esi.bundle<[!esi.channel<i16, ValidReady> from "req", !esi.channel<i8, ValidReady> to "resp"]>
 esi.service.decl @HostComms {
   esi.service.port @ReqResp : !reqResp
 }
@@ -114,21 +114,21 @@ hw.module.extern @TypeAModuleDst(in %windowed: !TypeAwin1)
 
 // -----
 
-hw.module.extern @Source(out a: !esi.channel<i1>)
-hw.module.extern @Sink(in %a: !esi.channel<i1>)
+hw.module.extern @Source(out a: !esi.channel<i1, ValidReady>)
+hw.module.extern @Sink(in %a: !esi.channel<i1, ValidReady>)
 
 hw.module @Top() {
   // expected-error @+1 {{channels must have at most one consumer}}
-  %a = hw.instance "src" @Source() -> (a: !esi.channel<i1>)
+  %a = hw.instance "src" @Source() -> (a: !esi.channel<i1, ValidReady>)
   // expected-note @+1 {{channel used here}}
-  hw.instance "sink1" @Sink(a: %a: !esi.channel<i1>) -> ()
+  hw.instance "sink1" @Sink(a: %a: !esi.channel<i1, ValidReady>) -> ()
   // expected-note @+1 {{channel used here}}
-  hw.instance "sink2" @Sink(a: %a: !esi.channel<i1>) -> ()
+  hw.instance "sink2" @Sink(a: %a: !esi.channel<i1, ValidReady>) -> ()
 }
 
 // -----
 
-!bundleType = !esi.bundle<[!esi.channel<i32> to addr]>
+!bundleType = !esi.bundle<[!esi.channel<i32, ValidReady> to addr]>
 
 hw.module.extern @Source(out a: !bundleType)
 hw.module.extern @Sink(in %a: !bundleType)
@@ -144,7 +144,7 @@ hw.module @Top() {
 
 // -----
 
-!bundleType = !esi.bundle<[!esi.channel<i32> to addr]>
+!bundleType = !esi.bundle<[!esi.channel<i32, ValidReady> to addr]>
 
 hw.module.extern @Source(out a: !bundleType)
 hw.module.extern @Sink(in %a: !bundleType)
@@ -184,10 +184,16 @@ hw.module @wrap_vo_multi_unwrap(in %a_data: i8, in %a_valid: i1) {
 // integer (of any width).
 esi.service.std.hostmem @hostmem
 !respWin = !esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"", [<"tag">, <"data", 4>]>]>
-!badReadListReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: i32>> from "req", !esi.channel<!respWin> to "resp"]>
-hw.module @BadReadListLength(in %req : !esi.channel<!hw.struct<address: ui64, tag: ui8, length: i32>>, out resp : !esi.channel<!respWin>) {
+!badReadListReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: i32>, ValidReady> from "req", !esi.channel<!respWin, ValidReady> to "resp"]>
+hw.module @BadReadListLength(in %req : !esi.channel<!hw.struct<address: ui64, tag: ui8, length: i32>, ValidReady>, out resp : !esi.channel<!respWin, ValidReady>) {
   // expected-error @+1 {{'read_list' request 'length' must be an unsigned integer, got 'i32'}}
   %bundle = esi.service.req <@hostmem::@read_list> (#esi.appid<"badReadList">) : !badReadListReq
   %resp = esi.bundle.unpack %req from %bundle : !badReadListReq
-  hw.output %resp : !esi.channel<!respWin>
+  hw.output %resp : !esi.channel<!respWin, ValidReady>
 }
+
+// -----
+
+// The signaling is required.
+// expected-error @+1 {{expected ','}}
+hw.module.extern @MissingSignaling(in %a: !esi.channel<i8>)

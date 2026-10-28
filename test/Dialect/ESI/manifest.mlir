@@ -9,9 +9,9 @@ hw.type_scope @__hw_typedecls {
 }
 !alias = !hw.typealias<@__hw_typedecls::@foo, i1>
 
-!sendI8 = !esi.bundle<[!esi.channel<i8> from "send"]>
-!recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
-!sendI0 = !esi.bundle<[!esi.channel<i0> from "send"]>
+!sendI8 = !esi.bundle<[!esi.channel<i8, ValidReady> from "send"]>
+!recvI8 = !esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>
+!sendI0 = !esi.bundle<[!esi.channel<i0, ValidReady> from "send"]>
 
 esi.service.decl @HostComms {
   esi.service.port @Send : !sendI8
@@ -37,10 +37,10 @@ esi.manifest.constants @Loopback {depth=5:ui32}
 
 esi.service.std.func @funcs
 
-// CONN-LABEL:   hw.module @CallableFunc1(in %func1 : !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) {
-// CONN-NEXT:      esi.manifest.req #esi.appid<"func1">, <@funcs::@call> std "esi.service.std.func", toClient, !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
-// CONN-NEXT:      %arg = esi.bundle.unpack %arg from %func1 : !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
-!func1Signature = !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+// CONN-LABEL:   hw.module @CallableFunc1(in %func1 : !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>) {
+// CONN-NEXT:      esi.manifest.req #esi.appid<"func1">, <@funcs::@call> std "esi.service.std.func", toClient, !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
+// CONN-NEXT:      %arg = esi.bundle.unpack %arg from %func1 : !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
+!func1Signature = !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
 hw.module @CallableFunc1() {
   %call = esi.service.req <@funcs::@call> (#esi.appid<"func1">) : !func1Signature
   %arg = esi.bundle.unpack %arg from %call : !func1Signature
@@ -54,7 +54,7 @@ hw.module @CallableFunc1() {
     <"DataFrame", [<"data">]>
   ]>
 
-!windowBundle = !esi.bundle<[!esi.channel<!WindowDef> to "window_in"]>
+!windowBundle = !esi.bundle<[!esi.channel<!WindowDef, ValidReady> to "window_in"]>
 
 esi.service.decl @WindowService {
   esi.service.port @WindowPort : !windowBundle
@@ -76,7 +76,7 @@ hw.module @WindowConsumer() {
     <"DataFrame", [<"data", 4>]>
   ]>
 
-!listWindowBundle = !esi.bundle<[!esi.channel<!ListWindowDef> to "bulk_in"]>
+!listWindowBundle = !esi.bundle<[!esi.channel<!ListWindowDef, ValidReady> to "bulk_in"]>
 
 esi.service.decl @ListWindowService {
   esi.service.port @BulkPort : !listWindowBundle
@@ -101,35 +101,35 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HIER-LABEL:  esi.manifest.compressed <"{{.+}}">
 // HIER-LABEL:  esi.manifest.hier_root @top {
 // HIER-NEXT:     esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" engine with {} {
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) channels {recv = {name = "loopback_inst[0].loopback_tohw.recv", type = "cosim"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) channels {send = {name = "loopback_inst[0].loopback_fromhw.send", type = "cosim"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) channels {send = {name = "loopback_inst[0].loopback_fromhw_i0.send", type = "cosim"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) channels {recv = {name = "loopback_inst[1].loopback_tohw.recv", type = "cosim"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) channels {send = {name = "loopback_inst[1].loopback_fromhw.send", type = "cosim"}}
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) channels {send = {name = "loopback_inst[1].loopback_fromhw_i0.send", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>) channels {recv = {name = "loopback_inst[0].loopback_tohw.recv", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8, ValidReady> from "send"]>) channels {send = {name = "loopback_inst[0].loopback_fromhw.send", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0, ValidReady> from "send"]>) channels {send = {name = "loopback_inst[0].loopback_fromhw_i0.send", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>) channels {recv = {name = "loopback_inst[1].loopback_tohw.recv", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8, ValidReady> from "send"]>) channels {send = {name = "loopback_inst[1].loopback_fromhw.send", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0, ValidReady> from "send"]>) channels {send = {name = "loopback_inst[1].loopback_fromhw_i0.send", type = "cosim"}}
 // HIER-NEXT:     }
 // HIER-NEXT:     esi.manifest.service_impl #esi.appid<"window_svc"> svc @WindowService by "cosim" engine with {} {
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"window_consumer_inst">, #esi.appid<"window_consumer">] req <@WindowService::@WindowPort>(!esi.bundle<[!esi.channel<!esi.window<"TestWindow", !hw.struct<header: i8, data: i16>, [<"HeaderFrame", [<"header">]>, <"DataFrame", [<"data">]>]>> to "window_in"]>) channels {window_in = {name = "window_consumer_inst.window_consumer.window_in", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"window_consumer_inst">, #esi.appid<"window_consumer">] req <@WindowService::@WindowPort>(!esi.bundle<[!esi.channel<!esi.window<"TestWindow", !hw.struct<header: i8, data: i16>, [<"HeaderFrame", [<"header">]>, <"DataFrame", [<"data">]>]>, ValidReady> to "window_in"]>) channels {window_in = {name = "window_consumer_inst.window_consumer.window_in", type = "cosim"}}
 // HIER-NEXT:     }
 // HIER-NEXT:     esi.manifest.service_impl #esi.appid<"list_window_svc"> svc @ListWindowService by "cosim" engine with {} {
-// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"list_window_consumer_inst">, #esi.appid<"bulk_consumer">] req <@ListWindowService::@BulkPort>(!esi.bundle<[!esi.channel<!esi.window<"BulkTransferWindow", !hw.struct<address: i32, data: !esi.list<i64>>, [<"HeaderFrame", [<"address">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>> to "bulk_in"]>) channels {bulk_in = {name = "list_window_consumer_inst.bulk_consumer.bulk_in", type = "cosim"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"list_window_consumer_inst">, #esi.appid<"bulk_consumer">] req <@ListWindowService::@BulkPort>(!esi.bundle<[!esi.channel<!esi.window<"BulkTransferWindow", !hw.struct<address: i32, data: !esi.list<i64>>, [<"HeaderFrame", [<"address">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>, ValidReady> to "bulk_in"]>) channels {bulk_in = {name = "list_window_consumer_inst.bulk_consumer.bulk_in", type = "cosim"}}
 // HIER-NEXT:     }
 // HIER-NEXT:     esi.manifest.hier_node #esi.appid<"loopback_inst"[0]> mod @Loopback {
-// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, !esi.bundle<[!esi.channel<i8> to "recv"]>
-// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, !esi.bundle<[!esi.channel<i8> from "send"]>
-// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, !esi.bundle<[!esi.channel<i0> from "send"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, !esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, !esi.bundle<[!esi.channel<i8, ValidReady> from "send"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, !esi.bundle<[!esi.channel<i0, ValidReady> from "send"]>
 // HIER-NEXT:     }
 // HIER-NEXT:     esi.manifest.hier_node #esi.appid<"loopback_inst"[1]> mod @Loopback {
-// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, !esi.bundle<[!esi.channel<i8> to "recv"]>
-// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, !esi.bundle<[!esi.channel<i8> from "send"]>
-// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, !esi.bundle<[!esi.channel<i0> from "send"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, !esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, !esi.bundle<[!esi.channel<i8, ValidReady> from "send"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, !esi.bundle<[!esi.channel<i0, ValidReady> from "send"]>
 // HIER-NEXT:     }
-// HIER-NEXT:     esi.manifest.req #esi.appid<"func1">, <@funcs::@call> std "esi.service.std.func", !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+// HIER-NEXT:     esi.manifest.req #esi.appid<"func1">, <@funcs::@call> std "esi.service.std.func", !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
 // HIER-NEXT:     esi.manifest.hier_node #esi.appid<"window_consumer_inst"> mod @WindowConsumer {
-// HIER-NEXT:       esi.manifest.req #esi.appid<"window_consumer">, <@WindowService::@WindowPort>, !esi.bundle<[!esi.channel<!esi.window<"TestWindow", !hw.struct<header: i8, data: i16>, [<"HeaderFrame", [<"header">]>, <"DataFrame", [<"data">]>]>> to "window_in"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"window_consumer">, <@WindowService::@WindowPort>, !esi.bundle<[!esi.channel<!esi.window<"TestWindow", !hw.struct<header: i8, data: i16>, [<"HeaderFrame", [<"header">]>, <"DataFrame", [<"data">]>]>, ValidReady> to "window_in"]>
 // HIER-NEXT:     }
 // HIER-NEXT:     esi.manifest.hier_node #esi.appid<"list_window_consumer_inst"> mod @ListWindowConsumer {
-// HIER-NEXT:       esi.manifest.req #esi.appid<"bulk_consumer">, <@ListWindowService::@BulkPort>, !esi.bundle<[!esi.channel<!esi.window<"BulkTransferWindow", !hw.struct<address: i32, data: !esi.list<i64>>, [<"HeaderFrame", [<"address">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>> to "bulk_in"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"bulk_consumer">, <@ListWindowService::@BulkPort>, !esi.bundle<[!esi.channel<!esi.window<"BulkTransferWindow", !hw.struct<address: i32, data: !esi.list<i64>>, [<"HeaderFrame", [<"address">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>, ValidReady> to "bulk_in"]>
 // HIER-NEXT:     }
 // HIER-NEXT:   }
 
@@ -162,7 +162,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:          "appID": {
 // CHECK-NEXT:            "name": "func1"
 // CHECK-NEXT:          },
-// CHECK-NEXT:          "typeID": "!esi.bundle<[!esi.channel<i16> to \"arg\", !esi.channel<i16> from \"result\"]>",
+// CHECK-NEXT:          "typeID": "!esi.bundle<[!esi.channel<i16, ValidReady> to \"arg\", !esi.channel<i16, ValidReady> from \"result\"]>",
 // CHECK-NEXT:          "servicePort": {
 // CHECK-NEXT:            "port": "call",
 // CHECK-NEXT:            "serviceName": "@funcs"
@@ -378,7 +378,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "appID": {
 // CHECK-NEXT:                "name": "loopback_tohw"
 // CHECK-NEXT:              },
-// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>",
+// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i8, ValidReady> to \"recv\"]>",
 // CHECK-NEXT:              "servicePort": {
 // CHECK-NEXT:                "port": "Recv",
 // CHECK-NEXT:                "serviceName": "@HostComms"
@@ -388,7 +388,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "appID": {
 // CHECK-NEXT:                "name": "loopback_fromhw"
 // CHECK-NEXT:              },
-// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i8> from \"send\"]>",
+// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i8, ValidReady> from \"send\"]>",
 // CHECK-NEXT:              "servicePort": {
 // CHECK-NEXT:                "port": "Send",
 // CHECK-NEXT:                "serviceName": "@HostComms"
@@ -398,7 +398,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "appID": {
 // CHECK-NEXT:                "name": "loopback_fromhw_i0"
 // CHECK-NEXT:              },
-// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i0> from \"send\"]>",
+// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i0, ValidReady> from \"send\"]>",
 // CHECK-NEXT:              "servicePort": {
 // CHECK-NEXT:                "port": "SendI0",
 // CHECK-NEXT:                "serviceName": "@HostComms"
@@ -418,7 +418,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "appID": {
 // CHECK-NEXT:                "name": "loopback_tohw"
 // CHECK-NEXT:              },
-// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>",
+// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i8, ValidReady> to \"recv\"]>",
 // CHECK-NEXT:              "servicePort": {
 // CHECK-NEXT:                "port": "Recv",
 // CHECK-NEXT:                "serviceName": "@HostComms"
@@ -428,7 +428,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "appID": {
 // CHECK-NEXT:                "name": "loopback_fromhw"
 // CHECK-NEXT:              },
-// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i8> from \"send\"]>",
+// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i8, ValidReady> from \"send\"]>",
 // CHECK-NEXT:              "servicePort": {
 // CHECK-NEXT:                "port": "Send",
 // CHECK-NEXT:                "serviceName": "@HostComms"
@@ -438,7 +438,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "appID": {
 // CHECK-NEXT:                "name": "loopback_fromhw_i0"
 // CHECK-NEXT:              },
-// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i0> from \"send\"]>",
+// CHECK-NEXT:              "typeID": "!esi.bundle<[!esi.channel<i0, ValidReady> from \"send\"]>",
 // CHECK-NEXT:              "servicePort": {
 // CHECK-NEXT:                "port": "SendI0",
 // CHECK-NEXT:                "serviceName": "@HostComms"
@@ -494,15 +494,15 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        "ports": [
 // CHECK-NEXT:          {
 // CHECK-NEXT:            "name": "Send",
-// CHECK-NEXT:            "typeID": "!esi.bundle<[!esi.channel<i8> from \"send\"]>"
+// CHECK-NEXT:            "typeID": "!esi.bundle<[!esi.channel<i8, ValidReady> from \"send\"]>"
 // CHECK-NEXT:          },
 // CHECK-NEXT:          {
 // CHECK-NEXT:            "name": "Recv",
-// CHECK-NEXT:            "typeID": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>"
+// CHECK-NEXT:            "typeID": "!esi.bundle<[!esi.channel<i8, ValidReady> to \"recv\"]>"
 // CHECK-NEXT:          },
 // CHECK-NEXT:          {
 // CHECK-NEXT:            "name": "SendI0",
-// CHECK-NEXT:            "typeID": "!esi.bundle<[!esi.channel<i0> from \"send\"]>"
+// CHECK-NEXT:            "typeID": "!esi.bundle<[!esi.channel<i0, ValidReady> from \"send\"]>"
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ]
 // CHECK-NEXT:      },
@@ -512,7 +512,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        "ports": [
 // CHECK-NEXT:          {
 // CHECK-NEXT:            "name": "call",
-// CHECK-NEXT:            "typeID": "!esi.bundle<[!esi.channel<!esi.any> to \"arg\", !esi.channel<!esi.any> from \"result\"]>"
+// CHECK-NEXT:            "typeID": "!esi.bundle<[!esi.channel<!esi.any, ValidReady> to \"arg\", !esi.channel<!esi.any, ValidReady> from \"result\"]>"
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ]
 // CHECK-NEXT:      },
@@ -569,7 +569,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "dialect": "esi",
 // CHECK-NEXT:              "hwBitwidth": 16,
-// CHECK-NEXT:              "id": "!esi.channel<i16>",
+// CHECK-NEXT:              "id": "!esi.channel<i16, ValidReady>",
 // CHECK-NEXT:              "inner": {
 // CHECK-NEXT:                "dialect": "builtin",
 // CHECK-NEXT:                "hwBitwidth": 16,
@@ -586,7 +586,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "dialect": "esi",
 // CHECK-NEXT:              "hwBitwidth": 16,
-// CHECK-NEXT:              "id": "!esi.channel<i16>",
+// CHECK-NEXT:              "id": "!esi.channel<i16, ValidReady>",
 // CHECK-NEXT:              "inner": {
 // CHECK-NEXT:                "dialect": "builtin",
 // CHECK-NEXT:                "hwBitwidth": 16,
@@ -600,7 +600,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
 // CHECK-NEXT:        "hwBitwidth": 36,
-// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i16> to \"arg\", !esi.channel<i16> from \"result\"]>",
+// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i16, ValidReady> to \"arg\", !esi.channel<i16, ValidReady> from \"result\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
 // CHECK-NEXT:      {
@@ -611,7 +611,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "dialect": "esi",
 // CHECK-NEXT:              "hwBitwidth": 8,
-// CHECK-NEXT:              "id": "!esi.channel<i8>",
+// CHECK-NEXT:              "id": "!esi.channel<i8, ValidReady>",
 // CHECK-NEXT:              "inner": {
 // CHECK-NEXT:                "dialect": "builtin",
 // CHECK-NEXT:                "hwBitwidth": 8,
@@ -625,7 +625,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
 // CHECK-NEXT:        "hwBitwidth": 10,
-// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>",
+// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i8, ValidReady> to \"recv\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
 // CHECK-NEXT:      {
@@ -636,7 +636,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "dialect": "esi",
 // CHECK-NEXT:              "hwBitwidth": 8,
-// CHECK-NEXT:              "id": "!esi.channel<i8>",
+// CHECK-NEXT:              "id": "!esi.channel<i8, ValidReady>",
 // CHECK-NEXT:              "inner": {
 // CHECK-NEXT:                "dialect": "builtin",
 // CHECK-NEXT:                "hwBitwidth": 8,
@@ -650,7 +650,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
 // CHECK-NEXT:        "hwBitwidth": 10,
-// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i8> from \"send\"]>",
+// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i8, ValidReady> from \"send\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
 // CHECK-NEXT:      {
@@ -661,7 +661,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "dialect": "esi",
 // CHECK-NEXT:              "hwBitwidth": 0,
-// CHECK-NEXT:              "id": "!esi.channel<i0>",
+// CHECK-NEXT:              "id": "!esi.channel<i0, ValidReady>",
 // CHECK-NEXT:              "inner": {
 // CHECK-NEXT:                "dialect": "builtin",
 // CHECK-NEXT:                "hwBitwidth": 0,
@@ -675,7 +675,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
 // CHECK-NEXT:        "hwBitwidth": 2,
-// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i0> from \"send\"]>",
+// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i0, ValidReady> from \"send\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
 // CHECK-NEXT:      {
@@ -686,7 +686,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "dialect": "esi",
 // CHECK-NEXT:              "hwBitwidth": 16,
-// CHECK-NEXT:              "id": "!esi.channel<!esi.window<\"TestWindow\", !hw.struct<header: i8, data: i16>, [<\"HeaderFrame\", [<\"header\">]>, <\"DataFrame\", [<\"data\">]>]>>",
+// CHECK-NEXT:              "id": "!esi.channel<!esi.window<\"TestWindow\", !hw.struct<header: i8, data: i16>, [<\"HeaderFrame\", [<\"header\">]>, <\"DataFrame\", [<\"data\">]>]>, ValidReady>",
 // CHECK-NEXT:              "inner": {
 // CHECK-NEXT:                "dialect": "esi",
 // CHECK-NEXT:                "frames": [
@@ -796,7 +796,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
 // CHECK-NEXT:        "hwBitwidth": 18,
-// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<!esi.window<\"TestWindow\", !hw.struct<header: i8, data: i16>, [<\"HeaderFrame\", [<\"header\">]>, <\"DataFrame\", [<\"data\">]>]>> to \"window_in\"]>",
+// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<!esi.window<\"TestWindow\", !hw.struct<header: i8, data: i16>, [<\"HeaderFrame\", [<\"header\">]>, <\"DataFrame\", [<\"data\">]>]>, ValidReady> to \"window_in\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
 
@@ -809,7 +809,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "dialect": "esi",
 // CHECK-NEXT:              "hwBitwidth": 256,
-// CHECK-NEXT:              "id": "!esi.channel<!esi.window<\"BulkTransferWindow\", !hw.struct<address: i32, data: !esi.list<i64>>, [<\"HeaderFrame\", [<\"address\">, <\"data\" countWidth 8>]>, <\"DataFrame\", [<\"data\", 4>]>]>>",
+// CHECK-NEXT:              "id": "!esi.channel<!esi.window<\"BulkTransferWindow\", !hw.struct<address: i32, data: !esi.list<i64>>, [<\"HeaderFrame\", [<\"address\">, <\"data\" countWidth 8>]>, <\"DataFrame\", [<\"data\", 4>]>]>, ValidReady>",
 // CHECK-NEXT:              "inner": {
 // CHECK-NEXT:                "dialect": "esi",
 // CHECK-NEXT:                "frames": [
@@ -945,7 +945,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
 // CHECK-NEXT:        "hwBitwidth": 258,
-// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<!esi.window<\"BulkTransferWindow\", !hw.struct<address: i32, data: !esi.list<i64>>, [<\"HeaderFrame\", [<\"address\">, <\"data\" countWidth 8>]>, <\"DataFrame\", [<\"data\", 4>]>]>> to \"bulk_in\"]>",
+// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<!esi.window<\"BulkTransferWindow\", !hw.struct<address: i32, data: !esi.list<i64>>, [<\"HeaderFrame\", [<\"address\">, <\"data\" countWidth 8>]>, <\"DataFrame\", [<\"data\", 4>]>]>, ValidReady> to \"bulk_in\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
 // CHECK-NEXT:      {
@@ -955,7 +955,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "name": "arg",
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "dialect": "esi",
-// CHECK-NEXT:              "id": "!esi.channel<!esi.any>",
+// CHECK-NEXT:              "id": "!esi.channel<!esi.any, ValidReady>",
 // CHECK-NEXT:              "inner": {
 // CHECK-NEXT:                "dialect": "esi",
 // CHECK-NEXT:                "id": "!esi.any",
@@ -969,7 +969,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "name": "result",
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "dialect": "esi",
-// CHECK-NEXT:              "id": "!esi.channel<!esi.any>",
+// CHECK-NEXT:              "id": "!esi.channel<!esi.any, ValidReady>",
 // CHECK-NEXT:              "inner": {
 // CHECK-NEXT:                "dialect": "esi",
 // CHECK-NEXT:                "id": "!esi.any",
@@ -980,7 +980,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
-// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<!esi.any> to \"arg\", !esi.channel<!esi.any> from \"result\"]>",
+// CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<!esi.any, ValidReady> to \"arg\", !esi.channel<!esi.any, ValidReady> from \"result\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
 // CHECK-NEXT:      {

@@ -1,7 +1,7 @@
 // RUN: circt-opt -lower-handshake-to-hw --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @handshake_buffer_in_none_out_none_3slots_seq_1ins_1outs_ctrl(in 
-// CHECK-SAME:            %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i0>) {
+// CHECK-SAME:            %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i0, ValidReady>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i0
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : i0
 // CHECK:           %[[VAL_10:.*]] = hw.constant 0 : i0
@@ -63,7 +63,7 @@
 // CHECK:           %[[VAL_8]] = comb.mux %[[VAL_57]], %[[VAL_63]], %[[VAL_56]] : i0
 // CHECK:           %[[VAL_65:.*]] = comb.mux %[[VAL_60]], %[[VAL_56]], %[[VAL_63]] : i0
 // CHECK:           %[[VAL_64]] = comb.mux %[[VAL_62]], %[[VAL_50]], %[[VAL_65]] : i0
-// CHECK:           hw.output %[[VAL_6]] : !esi.channel<i0>
+// CHECK:           hw.output %[[VAL_6]] : !esi.channel<i0, ValidReady>
 // CHECK:         }
 
 handshake.func @test_buffer_none(%arg0: none, %arg1: none, ...) -> (none, none) {
@@ -74,7 +74,7 @@ handshake.func @test_buffer_none(%arg0: none, %arg1: none, ...) -> (none, none) 
 // -----
 
 // CHECK-LABEL:   hw.module @handshake_buffer_in_ui64_out_ui64_2slots_seq(in 
-// CHECK-SAME:               %[[VAL_0:.*]] : !esi.channel<i64>, in %[[VAL_1:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i64>) {
+// CHECK-SAME:               %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_1:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i64, ValidReady>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : i64
 // CHECK:           %[[VAL_10:.*]] = hw.constant 0 : i64
@@ -116,7 +116,7 @@ handshake.func @test_buffer_none(%arg0: none, %arg1: none, ...) -> (none, none) 
 // CHECK:           %[[VAL_8]] = comb.mux %[[VAL_37]], %[[VAL_43]], %[[VAL_36]] : i64
 // CHECK:           %[[VAL_45:.*]] = comb.mux %[[VAL_40]], %[[VAL_36]], %[[VAL_43]] : i64
 // CHECK:           %[[VAL_44]] = comb.mux %[[VAL_42]], %[[VAL_10]], %[[VAL_45]] : i64
-// CHECK:           hw.output %[[VAL_6]] : !esi.channel<i64>
+// CHECK:           hw.output %[[VAL_6]] : !esi.channel<i64, ValidReady>
 // CHECK:         }
 
 handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none) {
@@ -127,10 +127,10 @@ handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none
 // -----
 
 // CHECK-LABEL: hw.module @handshake_buffer_in_tuple_ui32_ui32_out_tuple_ui32_ui32_2slots_seq(
-// CHECK-SAME: in %in0 : !esi.channel<!hw.struct<field0: i32, field1: i32>>, 
+// CHECK-SAME: in %in0 : !esi.channel<!hw.struct<field0: i32, field1: i32>, ValidReady>, 
 // CHECK-SAME: in %clock : !seq.clock, 
 // CHECK-SAME: in %reset : i1,
-// CHECK-SAME: out out0 : !esi.channel<!hw.struct<field0: i32, field1: i32>>
+// CHECK-SAME: out out0 : !esi.channel<!hw.struct<field0: i32, field1: i32>, ValidReady>
 // CHECK-SAME: ) {
 // CHECK:         %[[CZERO:.*]] = hw.struct_create (%c0_i32, %c0_i32) : !hw.struct<field0: i32, field1: i32>
 // CHECK:         %data0_reg = seq.compreg sym @data0_reg %4, %clock reset %reset, %[[CZERO]]  : !hw.struct<field0: i32, field1: i32>
