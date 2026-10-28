@@ -2,12 +2,7 @@
 
 FIRRTL version 6.0.0
 
-circuit Test : %[[
-{
-  "class": "firrtl.transforms.MustDeduplicateAnnotation",
-  "modules": ["~Test|CPU_1", "~Test|CPU_2"]
-}
-]]
+circuit Test :
   ; CHECK: hw.hierpath private [[NLA1:@.+]] [@CPU_1::[[SYM1:@.+]]]
   ; CHECK: hw.hierpath private [[NLA2:@.+]] [@CPU_1::[[SYM2:@.+]], @Fetch_1::[[SYM3:@.+]]]
   public module Test :
@@ -42,7 +37,7 @@ circuit Test : %[[
     connect fetch_2.in, in
     connect out, fetch_1.out
 
-  ; CHECK-NOT: CPU_2
+  ; CHECK-LABEL: hw.module private @CPU_2
   module CPU_2 :
     input in : UInt<1>
     output out : UInt<1>
@@ -89,7 +84,7 @@ circuit Test : %[[
     output out_baz : Integer
     propassign out_baz, Integer(1)
 
-  ; CHECK-LABEL: om.class private @OM_1(%basepath: !om.basepath) -> (out_foo_1: !om.class.type<@Foo_1>, out_foo_2: !om.class.type<@Foo_2>, out_foo_3: !om.class.type<@Foo_3>, out_foo_4: !om.class.type<@Foo_3>, out_1: !om.path, out_2: !om.path)
+  ; CHECK-LABEL: om.class private @OM_1(%basepath: !om.basepath) -> (out_foo_1: !om.class.type<@Foo_1>, out_foo_2: !om.class.type<@Foo_2>, out_foo_3: !om.class.type<@Foo_3>, out_foo_4: !om.class.type<@Foo_4>, out_1: !om.path, out_2: !om.path)
   class OM_1 :
     output out_1 : Path
     output out_2 : Path
@@ -110,7 +105,7 @@ circuit Test : %[[
     object foo_3 of Foo_3
     propassign out_foo_3, foo_3
 
-    ; CHECK: [[FOO_4:%.+]] = om.object @Foo_3
+    ; CHECK: [[FOO_4:%.+]] = om.object @Foo_4
     object foo_4 of Foo_4
     propassign out_foo_4, foo_4
 
@@ -119,9 +114,9 @@ circuit Test : %[[
     ; CHECK: om.path_create reference %basepath [[NLA2]]
     propassign out_2, path("OMReferenceTarget:~Test|CPU_1/fetch_1:Fetch_1>foo")
 
-    ; CHECK: om.class.fields [[FOO_1]], [[FOO_2]], [[FOO_3]], [[FOO_4]], %4, %5 : !om.class.type<@Foo_1>, !om.class.type<@Foo_2>, !om.class.type<@Foo_3>, !om.class.type<@Foo_3>, !om.path, !om.path
+    ; CHECK: om.class.fields [[FOO_1]], [[FOO_2]], [[FOO_3]], [[FOO_4]], %4, %5 : !om.class.type<@Foo_1>, !om.class.type<@Foo_2>, !om.class.type<@Foo_3>, !om.class.type<@Foo_4>, !om.path, !om.path
 
-  ; CHECK-NOT: OM_2
+  ; CHECK-LABEL: om.class private @OM_2
   class OM_2 :
     output out_1 : Path
     output out_2 : Path

@@ -57,11 +57,6 @@ static bool canRemoveModule(mlir::SymbolOpInterface symbol) {
   // If the symbol is not private, it cannot be removed.
   if (!symbol.isPrivate())
     return false;
-  // Classes may be referenced in object types, so can not normally be removed
-  // if we can't find any symbol uses. Since we know that dedup will update the
-  // types of instances appropriately, we can ignore that and return true here.
-  if (isa<ClassLike>(*symbol))
-    return true;
   // If module can not be removed even if no uses can be found, we can not
   // delete it. The implication is that there are hidden symbol uses that dedup
   // will not properly update.
@@ -234,41 +229,13 @@ private:
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  void update(ClassType type) {
-    update(type.getTypeID());
-    // Don't hash the class name directly, since it may be replaced during
-    // dedup. Record the class name instead and lazily combine their hashes
-    // using the same mechanism as instances and modules.
-    hasSeenSymbol = true;
-    referredModuleNames.push_back(type.getNameAttr().getAttr());
-    for (auto &element : type.getElements()) {
-      update(element.name.getAsOpaquePointer());
-      update(element.type);
-      update(static_cast<unsigned>(element.direction));
-    }
-  }
-
-  // NOLINTNEXTLINE(misc-no-recursion)
   void update(Type type) {
     if (auto bundle = type_dyn_cast<BundleType>(type))
       return update(bundle);
-    if (auto klass = type_dyn_cast<ClassType>(type))
-      return update(klass);
     update(type.getAsOpaquePointer());
   }
 
-  void update(OpResult result) {
-    // Like instance ops, don't use object ops' result types since they might be
-    // replaced by dedup. Record the class names and lazily combine their hashes
-    // using the same mechanism as instances and modules.
-    if (auto objectOp = dyn_cast<ObjectOp>(result.getOwner())) {
-      hasSeenSymbol = true;
-      referredModuleNames.push_back(objectOp.getType().getNameAttr().getAttr());
-      return;
-    }
-
-    update(result.getType());
-  }
+  void update(OpResult result) { update(result.getType()); }
 
   /// Hash the top level attribute dictionary of the operation.  This function
   /// has special handling for inner symbols, ports, and referenced modules.
@@ -281,11 +248,8 @@ private:
       // sure we revisit this op after dedup and update any symbols.
       value.walk([&](FlatSymbolRefAttr) { hasSeenSymbol = true; });
 
-      // Skip names and annotations, except in certain cases.
-      // Names of ports are load bearing for classes, so we do hash those.
-      bool isClassPortNames =
-          isa<ClassLike>(op) && name == constants.portNamesAttr;
-      if (constants.nonessentialAttributes.contains(name) && !isClassPortNames)
+      // Skip names and annotations.
+      if (constants.nonessentialAttributes.contains(name))
         continue;
 
       // Hash the attribute name (an interned pointer).
@@ -1115,10 +1079,6 @@ private:
       if (auto instOp = dyn_cast<InstanceOp>(*inst)) {
         instOp.setModuleNameAttr(toModuleRef);
         instOp.setPortNamesAttr(toModule.getPortNamesAttr());
-      } else if (auto objectOp = dyn_cast<ObjectOp>(*inst)) {
-        auto classLike = cast<ClassLike>(*toNode->getModule());
-        ClassType classType = detail::getInstanceTypeForClassLike(classLike);
-        objectOp.getResult().setType(classType);
       } else if (auto instanceChoiceOp = dyn_cast<InstanceChoiceOp>(*inst)) {
         auto fromModuleName = fromNode->getModule().getModuleNameAttr();
         SmallVector<Attribute> newModules;
@@ -1828,8 +1788,8 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
               ext && !ext.getDefname().has_value())
             return success();
 
-          // Only dedup classes if enabled.
-          if (isa<ClassOp>(*module) && !dedupClasses)
+          // Classes are nominally typed and must never be deduplicated.
+          if (isa<ClassOp>(*module))
             return success();
 
           StructuralHasher hasher(hasherConstants);
