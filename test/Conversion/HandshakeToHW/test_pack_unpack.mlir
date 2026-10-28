@@ -1,16 +1,16 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @handshake_pack_in_ui64_ui32_out_tuple_ui64_ui32(
-// CHECK-SAME:      in %[[VAL_0:.*]] : !esi.channel<i64>,
-// CHECK-SAME:      in %[[VAL_1:.*]] : !esi.channel<i32>,
-// CHECK-SAME:      out out0 : !esi.channel<!hw.struct<field0: i64, field1: i32>>) {
+// CHECK-SAME:      in %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>,
+// CHECK-SAME:      in %[[VAL_1:.*]] : !esi.channel<i32, ValidReady>,
+// CHECK-SAME:      out out0 : !esi.channel<!hw.struct<field0: i64, field1: i32>, ValidReady>) {
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_4:.*]] : i64
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_4]] : i32
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.wrap.vr %[[VAL_9:.*]], %[[VAL_10:.*]] : !hw.struct<field0: i64, field1: i32>
 // CHECK:           %[[VAL_10]] = comb.and %[[VAL_3]], %[[VAL_6]] : i1
 // CHECK:           %[[VAL_4]] = comb.and %[[VAL_8]], %[[VAL_10]] : i1
 // CHECK:           %[[VAL_9]] = hw.struct_create (%[[VAL_2]], %[[VAL_5]]) : !hw.struct<field0: i64, field1: i32>
-// CHECK:           hw.output %[[VAL_7]] : !esi.channel<!hw.struct<field0: i64, field1: i32>>
+// CHECK:           hw.output %[[VAL_7]] : !esi.channel<!hw.struct<field0: i64, field1: i32>, ValidReady>
 // CHECK:         }
 
 handshake.func @test_pack(%arg0: i64, %arg1: i32, %ctrl: none, ...) -> (tuple<i64, i32>, none) {
@@ -21,11 +21,11 @@ handshake.func @test_pack(%arg0: i64, %arg1: i32, %ctrl: none, ...) -> (tuple<i6
 // -----
 
 // CHECK-LABEL:   hw.module @handshake_unpack_in_tuple_ui64_ui32_out_ui64_ui32(
-// CHECK-SAME:       in %[[VAL_0:.*]] : !esi.channel<!hw.struct<field0: i64, field1: i32>>,
+// CHECK-SAME:       in %[[VAL_0:.*]] : !esi.channel<!hw.struct<field0: i64, field1: i32>, ValidReady>,
 // CHECK-SAME:       in %[[CLOCK:.*]] : !seq.clock,
 // CHECK-SAME:       in %[[VAL_2:.*]] : i1,
-// CHECK-SAME:      out out0 : !esi.channel<i64>, 
-// CHECK-SAME:      out out1 : !esi.channel<i32>) {
+// CHECK-SAME:      out out0 : !esi.channel<i64, ValidReady>, 
+// CHECK-SAME:      out out1 : !esi.channel<i32, ValidReady>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : !hw.struct<field0: i64, field1: i32>
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : i64
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.wrap.vr %[[VAL_12:.*]], %[[VAL_13:.*]] : i32
@@ -47,7 +47,7 @@ handshake.func @test_pack(%arg0: i64, %arg1: i32, %ctrl: none, ...) -> (tuple<i6
 // CHECK:           %[[VAL_24]] = comb.or %[[VAL_27]], %[[VAL_25]] {sv.namehint = "done1"} : i1
 // CHECK:           %[[VAL_5]] = comb.and %[[VAL_18]], %[[VAL_24]] {sv.namehint = "allDone"} : i1
 // CHECK:           %[[VAL_8]], %[[VAL_12]] = hw.struct_explode %[[VAL_3]] : !hw.struct<field0: i64, field1: i32>
-// CHECK:           hw.output %[[VAL_6]], %[[VAL_10]] : !esi.channel<i64>, !esi.channel<i32>
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_10]] : !esi.channel<i64, ValidReady>, !esi.channel<i32, ValidReady>
 // CHECK:         }
 
 handshake.func @test_unpack(%arg0: tuple<i64, i32>, %ctrl: none, ...) -> (i64, i32, none) {

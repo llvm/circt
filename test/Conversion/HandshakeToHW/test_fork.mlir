@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
-// CHECK:   hw.module @handshake_fork_in_none_out_none_none_1ins_2outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i0>) {
+// CHECK:   hw.module @handshake_fork_in_none_out_none_none_1ins_2outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i0, ValidReady>, out out1 : !esi.channel<i0, ValidReady>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i0
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : i0
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : i0
@@ -21,7 +21,7 @@
 // CHECK:           %[[VAL_25:.*]] = comb.and %[[VAL_10]], %[[VAL_11]] : i1
 // CHECK:           %[[VAL_22]] = comb.or %[[VAL_25]], %[[VAL_23]] {sv.namehint = "done1"} : i1
 // CHECK:           %[[VAL_5]] = comb.and %[[VAL_16]], %[[VAL_22]] {sv.namehint = "allDone"} : i1
-// CHECK:           hw.output %[[VAL_6]], %[[VAL_9]] : !esi.channel<i0>, !esi.channel<i0>
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_9]] : !esi.channel<i0, ValidReady>, !esi.channel<i0, ValidReady>
 // CHECK:         }
 
 handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
@@ -31,7 +31,7 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 
 // -----
 
-// CHECK:   hw.module @handshake_fork_in_ui64_out_ui64_ui64(in %[[VAL_0:.*]] : !esi.channel<i64>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i64>, out out1 : !esi.channel<i64>) {
+// CHECK:   hw.module @handshake_fork_in_ui64_out_ui64_ui64(in %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i64, ValidReady>, out out1 : !esi.channel<i64, ValidReady>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : i64
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : i64
@@ -52,7 +52,7 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 // CHECK:           %[[VAL_25:.*]] = comb.and %[[VAL_10]], %[[VAL_11]] : i1
 // CHECK:           %[[VAL_22]] = comb.or %[[VAL_25]], %[[VAL_23]] {sv.namehint = "done1"} : i1
 // CHECK:           %[[VAL_5]] = comb.and %[[VAL_16]], %[[VAL_22]] {sv.namehint = "allDone"} : i1
-// CHECK:           hw.output %[[VAL_6]], %[[VAL_9]] : !esi.channel<i64>, !esi.channel<i64>
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_9]] : !esi.channel<i64, ValidReady>, !esi.channel<i64, ValidReady>
 // CHECK:         }
 
 handshake.func @test_fork_data(%arg0: index, %arg1: none, ...) -> (index, index, none) {

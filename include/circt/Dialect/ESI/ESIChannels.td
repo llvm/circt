@@ -60,6 +60,7 @@ def ChannelTypeImpl : ESI_Type<"Channel", [
 
     Parameters:
       signaling: the style of the control signals (valid/ready vs FIFO).
+      Always required in the assembly format.
       dataDelay: the number of cycles data takes to arrive after the control
       indicates a transaction has occured. For instance, on a FIFO without read
       ahead, this would be 1. Defaults to 0.
@@ -67,21 +68,19 @@ def ChannelTypeImpl : ESI_Type<"Channel", [
     Example:
 
     ```mlir
-    hw.module.extern @Sender() -> (%x: !esi.channel<i1>)
-    hw.module @Reciever(%a: !esi.channel<hw.array<5xi16>>) { }
+    hw.module.extern @Sender(out x: !esi.channel<i1, ValidReady>)
+    hw.module.extern @Reciever(in %a: !esi.channel<!hw.array<5xi16>, FIFO(1)>)
     ```
   }];
 
   let mnemonic = "channel";
   let parameters = (ins
       "Type":$inner,
-      DefaultValuedParameter<
-        "::circt::esi::ChannelSignaling",
-        "::circt::esi::ChannelSignaling::ValidReady">:$signaling,
+      "::circt::esi::ChannelSignaling":$signaling,
       DefaultValuedParameter<"uint64_t", "0">:$dataDelay);
 
   let assemblyFormat = [{
-    `<` $inner (`,` $signaling^ ( `(` $dataDelay^ `)` )? )? `>`
+    `<` $inner `,` $signaling ( `(` $dataDelay^ `)` )? `>`
   }];
 
   let builders = [
@@ -585,10 +584,10 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     Example:
 
     ```mlir
-    %esiChan = hw.instance "sender" @Sender () : () -> (!esi.channel<i1>)
+    %esiChan = hw.instance "sender" @Sender () : () -> (!esi.channel<i1, ValidReady>)
     // Allow automatic selection of options.
     %bufferedChan = esi.buffer %esiChan : i1
-    hw.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1>) -> ()
+    hw.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1, ValidReady>) -> ()
 
     // Alternatively, specify the number of stages.
     %fourStageBufferedChan = esi.buffer %esiChan { stages = 4 } : i1
