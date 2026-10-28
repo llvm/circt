@@ -34,8 +34,13 @@ circt::esi::ChannelType ChannelBufferOp::channelType() {
 LogicalResult ChannelBufferOp::verify() {
   if (getInput().getType().getInner() != getOutput().getType().getInner())
     return emitOpError("input and output data types must match");
-  if (getOutput().getType().getDataDelay() != 0)
-    return emitOpError("currently only supports channels with zero data delay");
+  ChannelType outType = getOutput().getType();
+  if (getInput().getType().getDataDelay() != outType.getDataDelay())
+    return emitOpError("input and output data delays must match");
+  if (outType.getSignaling() == ChannelSignaling::ValidOnly &&
+      outType.getDataDelay() != 0)
+    return emitOpError(
+        "does not support data delay on valid-only output channels");
   return success();
 }
 
@@ -96,6 +101,12 @@ LogicalResult FIFOOp::verify() {
 
 circt::esi::ChannelType PipelineStageOp::channelType() {
   return cast<circt::esi::ChannelType>(getInput().getType());
+}
+
+LogicalResult PipelineStageOp::verify() {
+  if (getInput().getType().getSignaling() != ChannelSignaling::ValidReady)
+    return emitOpError("only supports valid-ready signaling");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

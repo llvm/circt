@@ -82,7 +82,10 @@ struct ValidReadyProtocol {
   static std::pair<Value, Value> wrap(OpBuilder &b, Location loc,
                                       ChannelType chanTy, Value data,
                                       Value validity) {
-    auto wrap = WrapValidReadyOp::create(b, loc, data, validity);
+    assert(chanTy.getInner() == data.getType() &&
+           "channel inner type must match the data type");
+    auto wrap =
+        WrapValidReadyOp::create(b, loc, chanTy, b.getI1Type(), data, validity);
     return {wrap.getChanOutput(), wrap.getReady()};
   }
   static std::pair<Value, Value> unwrap(OpBuilder &b, Location loc, Value chan,

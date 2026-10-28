@@ -581,6 +581,10 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     A `name` attribute may be provided to assigned a name to a buffered
     connection.
 
+    The input and output channels must have the same data delay. A ValidOnly
+    output must have zero data delay, since `esi.wrap.vo` can't yet produce a
+    delayed channel (#11410).
+
     Example:
 
     ```mlir
@@ -616,6 +620,9 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
     ChannelBuffer ('buffer'), though can be inserted anywhere to add an
     additional pipeline stage. Adding individually could be useful for
     late-pass latency balancing.
+
+    Only supports ValidReady signaling. The channel may have a non-zero data
+    delay, which applies to both the input and the output.
   }];
 
   let arguments = (ins ClockType:$clk, I1:$rst, ChannelType:$input);
@@ -624,6 +631,7 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
     $clk `,` $rst `,` $input attr-dict
       `:` qualified(type($input))
   }];
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
