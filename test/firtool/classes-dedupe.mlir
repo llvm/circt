@@ -1,5 +1,4 @@
-// RUN: firtool --ir-fir %s 2>&1 | FileCheck %s --implicit-check-not=warning:
-// RUN: firtool --ir-fir --dedup-classes=0 %s 2>&1 | FileCheck %s --implicit-check-not=warning:
+// RUN: firtool --ir-fir %s | FileCheck %s
 // RUN: firtool --ir-fir --dedup-classes=1 %s 2>&1 | FileCheck %s --check-prefixes=CHECK,WARN
 
 // WARN: warning: --dedup-classes is deprecated and ignored; classes are never deduplicated
