@@ -52,10 +52,10 @@ The value which the channel is carrying must be (un)wrapped to access it:
 
 ```mlir
 hw.module @add11(%clk: i1, %ints: !esi.channel<i32, ValidReady>) -> (mutatedInts: !esi.channel<i32, ValidReady>) {
-  %i, %i_valid = esi.unwrap.vr %ints, %rdy
+  %i, %i_valid = esi.unwrap.vr %ints, %rdy : !esi.channel<i32, ValidReady>
   %c11 = hw.constant 11
   %m = comb.add %c11, %i
-  %mutInts, %rdy = esi.wrap.vr %m, %i_valid
+  %mutInts, %rdy = esi.wrap.vr %m, %i_valid : !esi.channel<i32, ValidReady>
   hw.output %mutInts
 }
 ```

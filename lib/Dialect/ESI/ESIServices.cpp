@@ -273,7 +273,8 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
 
       // Construct the response channel.
       auto doneValid = bb.get(i1);
-      auto ackChannel = WrapValidReadyOp::create(b, none, doneValid);
+      auto ackChannel =
+          WrapValidReadyOp::create(b, none, doneValid, /*dataDelay=*/0);
 
       auto pack =
           PackBundleOp::create(b, implReq.getLoc(), req.getToClient().getType(),
@@ -306,7 +307,8 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
       // Construct the response channel.
       auto dataValid = bb.get(i1);
       auto data = bb.get(ramDecl.getInnerType());
-      auto dataChannel = WrapValidReadyOp::create(b, data, dataValid);
+      auto dataChannel =
+          WrapValidReadyOp::create(b, data, dataValid, /*dataDelay=*/0);
 
       auto pack =
           PackBundleOp::create(b, implReq.getLoc(), req.getToClient().getType(),

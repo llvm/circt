@@ -34,13 +34,9 @@ circt::esi::ChannelType ChannelBufferOp::channelType() {
 LogicalResult ChannelBufferOp::verify() {
   if (getInput().getType().getInner() != getOutput().getType().getInner())
     return emitOpError("input and output data types must match");
-  ChannelType outType = getOutput().getType();
-  if (getInput().getType().getDataDelay() != outType.getDataDelay())
+  if (getInput().getType().getDataDelay() !=
+      getOutput().getType().getDataDelay())
     return emitOpError("input and output data delays must match");
-  if (outType.getSignaling() == ChannelSignaling::ValidOnly &&
-      outType.getDataDelay() != 0)
-    return emitOpError(
-        "does not support data delay on valid-only output channels");
   return success();
 }
 
@@ -113,75 +109,31 @@ LogicalResult PipelineStageOp::verify() {
 // Wrap / unwrap.
 //===----------------------------------------------------------------------===//
 
-ParseResult WrapValidReadyOp::parse(OpAsmParser &parser,
-                                    OperationState &result) {
-  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
-
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> opList;
-  Type innerOutputType;
-  if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(innerOutputType))
+/// Wrap ops print only their channel type, from which the data type is derived.
+static ParseResult parseWrapChannelType(OpAsmParser &p, Type &dataType,
+                                        Type &chanOutputType) {
+  ChannelType chanType;
+  if (p.parseType(chanType))
     return failure();
-
-  auto boolType = parser.getBuilder().getI1Type();
-  auto outputType =
-      ChannelType::get(parser.getBuilder().getContext(), innerOutputType);
-  result.addTypes({outputType, boolType});
-  if (parser.resolveOperands(opList, {innerOutputType, boolType},
-                             inputOperandsLoc, result.operands))
-    return failure();
+  dataType = chanType.getInner();
+  chanOutputType = chanType;
   return success();
 }
 
-void WrapValidReadyOp::print(OpAsmPrinter &p) {
-  p << " " << getRawInput() << ", " << getValid();
-  p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << innerType();
-}
-
-void WrapValidReadyOp::build(OpBuilder &b, OperationState &state, Value data,
-                             Value valid) {
-  build(b, state, ChannelType::get(state.getContext(), data.getType()),
-        b.getI1Type(), data, valid);
+static void printWrapChannelType(OpAsmPrinter &p, Operation *, Type,
+                                 Type chanOutputType) {
+  p << chanOutputType;
 }
 
 LogicalResult WrapValidReadyOp::verify() {
   mlir::TypedValue<ChannelType> chanOut = getChanOutput();
   if (chanOut.getType().getSignaling() != ChannelSignaling::ValidReady)
     return emitOpError("only supports valid-ready signaling");
+  if (chanOut.getType().getInner() != getRawInput().getType())
+    return emitOpError("input and output types must match");
   if (failed(ChannelType::verifyChannel(chanOut)))
     return failure();
   return success();
-}
-
-ParseResult UnwrapValidReadyOp::parse(OpAsmParser &parser,
-                                      OperationState &result) {
-  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
-
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> opList;
-  Type outputType;
-  if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(outputType))
-    return failure();
-
-  auto inputType =
-      ChannelType::get(parser.getBuilder().getContext(), outputType);
-
-  auto boolType = parser.getBuilder().getI1Type();
-
-  result.addTypes({inputType.getInner(), boolType});
-  if (parser.resolveOperands(opList, {inputType, boolType}, inputOperandsLoc,
-                             result.operands))
-    return failure();
-  return success();
-}
-
-void UnwrapValidReadyOp::print(OpAsmPrinter &p) {
-  p << " " << getChanInput() << ", " << getReady();
-  p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << getRawOutput().getType();
 }
 
 LogicalResult UnwrapValidReadyOp::verify() {
@@ -190,14 +142,18 @@ LogicalResult UnwrapValidReadyOp::verify() {
   return success();
 }
 
-circt::esi::ChannelType WrapValidReadyOp::channelType() {
-  return cast<circt::esi::ChannelType>(getChanOutput().getType());
+LogicalResult UnwrapValidReadyOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location>, ValueRange operands,
+    DictionaryAttr, mlir::PropertyRef, mlir::RegionRange,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  inferredReturnTypes.push_back(
+      cast<ChannelType>(operands[0].getType()).getInner());
+  inferredReturnTypes.push_back(IntegerType::get(context, 1));
+  return success();
 }
 
-void UnwrapValidReadyOp::build(OpBuilder &b, OperationState &state,
-                               Value inChan, Value ready) {
-  auto inChanType = cast<ChannelType>(inChan.getType());
-  build(b, state, inChanType.getInner(), b.getI1Type(), inChan, ready);
+circt::esi::ChannelType WrapValidReadyOp::channelType() {
+  return cast<circt::esi::ChannelType>(getChanOutput().getType());
 }
 
 circt::esi::ChannelType UnwrapValidReadyOp::channelType() {
@@ -208,27 +164,11 @@ circt::esi::ChannelType WrapFIFOOp::channelType() {
   return cast<circt::esi::ChannelType>(getChanOutput().getType());
 }
 
-ParseResult parseWrapFIFOType(OpAsmParser &p, Type &dataType,
-                              Type &chanInputType) {
-  auto loc = p.getCurrentLocation();
-  ChannelType chType;
-  if (p.parseType(chType))
-    return failure();
-  if (chType.getSignaling() != ChannelSignaling::FIFO)
-    return p.emitError(loc, "can only wrap into FIFO type");
-  dataType = chType.getInner();
-  chanInputType = chType;
-  return success();
-}
-
-void printWrapFIFOType(OpAsmPrinter &p, WrapFIFOOp wrap, Type dataType,
-                       Type chanType) {
-  p << chanType;
-}
-
 LogicalResult WrapFIFOOp::verify() {
   if (getChanOutput().getType().getSignaling() != ChannelSignaling::FIFO)
     return emitOpError("only supports FIFO signaling");
+  if (getChanOutput().getType().getInner() != getData().getType())
+    return emitOpError("input and output types must match");
   return success();
 }
 
@@ -262,14 +202,12 @@ circt::esi::ChannelType WrapValidOnlyOp::channelType() {
   return cast<circt::esi::ChannelType>(getChanOutput().getType());
 }
 
-LogicalResult
-WrapValidOnlyOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
-                                  ValueRange operands, DictionaryAttr,
-                                  mlir::PropertyRef, mlir::RegionRange,
-                                  SmallVectorImpl<Type> &inferredResulTypes) {
-  auto chanType = ChannelType::get(context, operands[0].getType(),
-                                   ChannelSignaling::ValidOnly, 0);
-  inferredResulTypes.push_back(chanType);
+LogicalResult WrapValidOnlyOp::verify() {
+  ChannelType chanType = getChanOutput().getType();
+  if (chanType.getSignaling() != ChannelSignaling::ValidOnly)
+    return emitOpError("only supports valid-only signaling");
+  if (chanType.getInner() != getRawInput().getType())
+    return emitOpError("input and output types must match");
   return success();
 }
 

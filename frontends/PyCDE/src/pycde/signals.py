@@ -873,8 +873,7 @@ class ChannelSignal(Signal):
         raise ValueError(
             "ValidReady channels require a 'ready' signal to unwrap.")
       ready = Bit(readyOrRden)
-      unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, Bit, self.value,
-                                         ready.value)
+      unwrap_op = esi.UnwrapValidReadyOp(self.value, ready.value)
       return unwrap_op[0], unwrap_op[1]
     elif signaling == ChannelSignaling.FIFO:
       if readyOrRden is None:

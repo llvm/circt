@@ -826,7 +826,7 @@ class Channel(Type):
         raise TypeError(
             f"Expected signal of type {self.inner_type}, got {value.type}")
       valid = Bits(1)(valid_or_empty)
-      wrap_op = esi.WrapValidOnlyOp(value.value, valid.value)
+      wrap_op = esi.WrapValidOnlyOp(self._type, value.value, valid.value)
       # ValidOnly has no backpressure — return a constant true ready signal.
       # wrap_op is a single-result op that PyCDE auto-coerces to ChannelSignal.
       return wrap_op, Bits(1)(1)

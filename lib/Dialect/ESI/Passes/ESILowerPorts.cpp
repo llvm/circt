@@ -128,7 +128,8 @@ struct ValidOnlyProtocol {
   static std::pair<Value, Value> wrap(OpBuilder &b, Location loc,
                                       ChannelType chanTy, Value data,
                                       Value validity) {
-    auto wrap = WrapValidOnlyOp::create(b, loc, data, validity);
+    auto wrap =
+        WrapValidOnlyOp::create(b, loc, data, validity, chanTy.getDataDelay());
     return {wrap.getChanOutput(), Value()};
   }
   static std::pair<Value, Value> unwrap(OpBuilder &b, Location loc, Value chan,

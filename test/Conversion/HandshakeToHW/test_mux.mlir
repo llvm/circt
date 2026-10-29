@@ -1,10 +1,10 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
 // CHECK:   hw.module @handshake_mux_in_ui64_ui64_ui64_out_ui64(in %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_2:.*]] : !esi.channel<i64, ValidReady>, out out0 : !esi.channel<i64, ValidReady>) {
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_8:.*]] : i64
-// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_11:.*]] : i64
-// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = esi.wrap.vr %[[VAL_14:.*]], %[[VAL_15:.*]] : i64
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_8:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_11:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = esi.wrap.vr %[[VAL_14:.*]], %[[VAL_15:.*]] : !esi.channel<i64, ValidReady>
 // CHECK:           %[[VAL_16:.*]] = comb.extract %[[VAL_3]] from 0 : (i64) -> i1
 // CHECK:           %[[VAL_17:.*]] = hw.constant false
 // CHECK:           %[[VAL_18:.*]] = comb.concat %[[VAL_17]], %[[VAL_16]] : i1, i1
@@ -29,11 +29,11 @@ handshake.func @test_mux(%arg0: index, %arg1: index, %arg2: index, %arg3: none, 
 // -----
 
 // CHECK:   hw.module @handshake_mux_in_ui64_ui64_ui64_ui64_out_ui64(in %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_2:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_3:.*]] : !esi.channel<i64, ValidReady>, out out0 : !esi.channel<i64, ValidReady>) {
-// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i64
-// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : i64
-// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_12:.*]] : i64
-// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = esi.unwrap.vr %[[VAL_3]], %[[VAL_15:.*]] : i64
-// CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = esi.wrap.vr %[[VAL_18:.*]], %[[VAL_19:.*]] : i64
+// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_12:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = esi.unwrap.vr %[[VAL_3]], %[[VAL_15:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = esi.wrap.vr %[[VAL_18:.*]], %[[VAL_19:.*]] : !esi.channel<i64, ValidReady>
 // CHECK:           %[[VAL_20:.*]] = comb.extract %[[VAL_4]] from 0 : (i64) -> i2
 // CHECK:           %[[VAL_21:.*]] = hw.constant false
 // CHECK:           %[[VAL_22:.*]] = comb.concat %[[VAL_21]], %[[VAL_20]] : i1, i2

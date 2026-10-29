@@ -27,7 +27,7 @@ hw.module @Loopback (in %clk: !seq.clock) {
 
   %c0_0 = hw.constant 0 : i0
   %c0_1 = hw.constant 0 : i1
-  %sendi0_channel, %ready = esi.wrap.vr %c0_0, %c0_1 : i0
+  %sendi0_channel, %ready = esi.wrap.vr %c0_0, %c0_1 : !esi.channel<i0, ValidReady>
   esi.bundle.unpack %sendi0_channel from %sendi0_bundle : !sendI0
   %sendi0_bundle = esi.service.req <@HostComms::@SendI0> (#esi.appid<"loopback_fromhw_i0">) : !sendI0
 }

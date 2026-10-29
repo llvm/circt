@@ -4,10 +4,10 @@
 
 // CHECK-LABEL:   hw.module @handshake_control_merge_in_none_none_out_none_ui64_2ins_2outs_ctrl(in 
 // CHECK-SAME:             %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_2:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out dataOut : !esi.channel<i0, ValidReady>, out index : !esi.channel<i64, ValidReady>) {
-// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i0
-// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : i0
-// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.wrap.vr %[[VAL_12:.*]], %[[VAL_13:.*]] : i0
-// CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = esi.wrap.vr %[[VAL_16:.*]], %[[VAL_17:.*]] : i64
+// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : !esi.channel<i0, ValidReady>
+// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : !esi.channel<i0, ValidReady>
+// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.wrap.vr %[[VAL_12:.*]], %[[VAL_13:.*]] : !esi.channel<i0, ValidReady>
+// CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = esi.wrap.vr %[[VAL_16:.*]], %[[VAL_17:.*]] : !esi.channel<i64, ValidReady>
 // CHECK:           %[[VAL_18:.*]] = hw.constant 0 : i2
 // CHECK:           %[[VAL_19:.*]] = hw.constant false
 // CHECK:           %[[VAL_20:.*]] = seq.compreg sym @won_reg %[[VAL_21:.*]], %[[VAL_2]] reset %[[VAL_3]], %[[VAL_18]]  : i2
@@ -61,11 +61,11 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
 
 // CHECK-LABEL:   hw.module @handshake_control_merge_in_ui64_ui64_ui64_out_ui64_ui64(in 
 // CHECK-SAME:         %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_1:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_2:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_3:.*]] : !seq.clock, in %[[VAL_4:.*]] : i1, out dataOut : !esi.channel<i64, ValidReady>, out index : !esi.channel<i64, ValidReady>) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_7:.*]] : i64
-// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_10:.*]] : i64
-// CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_13:.*]] : i64
-// CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = esi.wrap.vr %[[VAL_16:.*]], %[[VAL_17:.*]] : i64
-// CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]] = esi.wrap.vr %[[VAL_20:.*]], %[[VAL_21:.*]] : i64
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_7:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_10:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_13:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = esi.wrap.vr %[[VAL_16:.*]], %[[VAL_17:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]] = esi.wrap.vr %[[VAL_20:.*]], %[[VAL_21:.*]] : !esi.channel<i64, ValidReady>
 // CHECK:           %[[VAL_22:.*]] = hw.constant 0 : i3
 // CHECK:           %[[VAL_23:.*]] = hw.constant false
 // CHECK:           %[[VAL_24:.*]] = seq.compreg sym @won_reg %[[VAL_25:.*]], %[[VAL_3]] reset %[[VAL_4]], %[[VAL_22]]  : i3

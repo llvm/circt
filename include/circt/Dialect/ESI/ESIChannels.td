@@ -184,16 +184,26 @@ def WrapValidReadyOp : ESI_Op<"wrap.vr", [
 
   let arguments = (ins AnyType:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput, I1:$ready);
-  let hasCustomAssemblyFormat = 1;
   let hasCanonicalizeMethod = 1;
   let hasVerifier = 1;
+  let assemblyFormat = [{
+    $rawInput `,` $valid attr-dict `:`
+      custom<WrapChannelType>(type($rawInput), type($chanOutput))
+  }];
 
   let builders = [
-    OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid)>
+    OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid,
+                   CArg<"uint64_t", "0">:$dataDelay), [{
+      build($_builder, $_state,
+            ChannelType::get($_builder.getContext(), data.getType(),
+                             ChannelSignaling::ValidReady, dataDelay),
+            $_builder.getI1Type(), data, valid);
+    }]>
   ];
 }
 
 def UnwrapValidReadyOp : ESI_Op<"unwrap.vr", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface>,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Unwrap a value from an ESI port";
@@ -205,13 +215,11 @@ def UnwrapValidReadyOp : ESI_Op<"unwrap.vr", [
 
   let arguments = (ins ChannelType:$chanInput, I1:$ready);
   let results = (outs AnyType:$rawOutput, I1:$valid);
-  let hasCustomAssemblyFormat = 1;
   let hasCanonicalizeMethod = 1;
   let hasVerifier = 1;
-
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
-  ];
+  let assemblyFormat = [{
+    $chanInput `,` $ready attr-dict `:` qualified(type($chanInput))
+  }];
 
   let extraClassDeclaration = [{
     static LogicalResult mergeAndErase(UnwrapValidReadyOp, WrapValidReadyOp,
@@ -231,7 +239,7 @@ def WrapFIFOOp : ESI_Op<"wrap.fifo", [
 
   let assemblyFormat = [{
     $data `,` $empty attr-dict `:`
-      custom<WrapFIFOType>(type($data), type($chanOutput))
+      custom<WrapChannelType>(type($data), type($chanOutput))
   }];
 }
 
@@ -256,7 +264,6 @@ def UnwrapFIFOOp : ESI_Op<"unwrap.fifo", [
 }
 
 def WrapValidOnlyOp : ESI_Op<"wrap.vo", [
-    DeclareOpInterfaceMethods<InferTypeOpInterface>,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Wrap a value into an ESI port with valid-only signaling";
@@ -269,10 +276,22 @@ def WrapValidOnlyOp : ESI_Op<"wrap.vo", [
   let arguments = (ins AnyType:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput);
   let hasCanonicalizeMethod = 1;
+  let hasVerifier = 1;
 
   let assemblyFormat = [{
-    $rawInput `,` $valid attr-dict `:` type($rawInput)
+    $rawInput `,` $valid attr-dict `:`
+      custom<WrapChannelType>(type($rawInput), type($chanOutput))
   }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid,
+                   CArg<"uint64_t", "0">:$dataDelay), [{
+      build($_builder, $_state,
+            ChannelType::get($_builder.getContext(), data.getType(),
+                             ChannelSignaling::ValidOnly, dataDelay),
+            data, valid);
+    }]>
+  ];
 }
 
 def UnwrapValidOnlyOp : ESI_Op<"unwrap.vo", [
@@ -581,9 +600,7 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     A `name` attribute may be provided to assigned a name to a buffered
     connection.
 
-    The input and output channels must have the same data delay. A ValidOnly
-    output must have zero data delay, since `esi.wrap.vo` can't yet produce a
-    delayed channel (#11410).
+    The input and output channels must have the same data delay.
 
     Example:
 
