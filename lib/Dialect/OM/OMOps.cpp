@@ -712,8 +712,8 @@ OpFoldResult circt::om::ListCreateOp::fold(FoldAdaptor adaptor) {
   if (!llvm::all_of(inputs, [](Attribute attr) { return attr; }))
     return {};
 
-  auto elements = ArrayAttr::get(getContext(), inputs);
-  return ListAttr::get(getContext(), getType().getElementType(), elements);
+  return ListAttr::get(getContext(), getType().getElementType(),
+                       ArrayAttr::get(getContext(), inputs));
 }
 
 void circt::om::ListCreateOp::print(OpAsmPrinter &p) {
