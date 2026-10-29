@@ -707,6 +707,15 @@ OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
 // ListCreateOp
 //===----------------------------------------------------------------------===//
 
+OpFoldResult circt::om::ListCreateOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInputs();
+  if (!llvm::all_of(inputs, [](Attribute attr) { return attr; }))
+    return {};
+
+  return ListAttr::get(getContext(), getType().getElementType(),
+                       ArrayAttr::get(getContext(), inputs));
+}
+
 void circt::om::ListCreateOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printOperands(getInputs());
@@ -729,6 +738,27 @@ ParseResult circt::om::ListCreateOp::parse(OpAsmParser &parser,
     if (parser.resolveOperand(operand, elemType, result.operands))
       return failure();
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ListConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult circt::om::ListConcatOp::fold(FoldAdaptor adaptor) {
+  auto subLists = adaptor.getSubLists();
+  if (subLists.size() == 1)
+    return getSubLists().front();
+
+  SmallVector<Attribute> elements;
+  for (Attribute attr : subLists) {
+    auto listAttr = dyn_cast_or_null<ListAttr>(attr);
+    if (!listAttr)
+      return {};
+    llvm::append_range(elements, listAttr.getElements());
+  }
+
+  return ListAttr::get(getContext(), getType().getElementType(),
+                       ArrayAttr::get(getContext(), elements));
 }
 
 //===----------------------------------------------------------------------===//
