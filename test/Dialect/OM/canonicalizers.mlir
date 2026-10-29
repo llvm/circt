@@ -235,3 +235,46 @@ om.class @IntegerBitwiseFold(%b: i8) -> (out1: i8, out2: i8, out3: i8,
   // CHECK: om.class.fields [[ZERO]], [[ONES]], [[ONES]], [[ZERO]], [[AND]], [[OR]], [[XOR]], %b
   om.class.fields %0, %1, %2, %3, %4, %5, %6, %7 : i8, i8, i8, i8, i8, i8, i8, i8
 }
+
+// CHECK-LABEL: @ListCreateFold
+// CHECK-SAME: (%0: !om.integer)
+om.class @ListCreateFold(%0: !om.integer) -> (
+    strings: !om.list<!om.string>, booleans: !om.list<i1>,
+    integers: !om.list<!om.integer>, empty: !om.list<!om.string>,
+    dynamic: !om.list<!om.integer>, mixed: !om.list<!om.integer>) {
+  // Integer lists preserve arbitrary-precision signed values and types.
+  %1 = om.constant #om.integer<-36755551979133953793 : si66> : !om.integer
+  %2 = om.constant #om.integer<36755551979133953793 : si66> : !om.integer
+  // CHECK: [[NEGATIVE:%[0-9]+]] = om.constant #om.integer<-36755551979133953793 : si66> : !om.integer
+  // CHECK: [[INTEGERS:%[0-9]+]] = om.constant #om.list<!om.integer, [#om.integer<-36755551979133953793 : si66> : !om.integer, #om.integer<36755551979133953793 : si66> : !om.integer]> : !om.list<!om.integer>
+  %3 = om.list_create %1, %2 : !om.integer
+
+  // String lists fold to a list attribute.
+  %4 = om.constant "a" : !om.string
+  %5 = om.constant "b" : !om.string
+  // CHECK: [[STRINGS:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string]> : !om.list<!om.string>
+  %6 = om.list_create %4, %5 : !om.string
+
+  // Boolean lists fold to a list attribute.
+  %7 = om.constant true
+  %8 = om.constant false
+  // CHECK: [[BOOLEANS:%[0-9]+]] = om.constant #om.list<i1, [true, false]> : !om.list<i1>
+  %9 = om.list_create %7, %8 : i1
+
+  // Empty string lists fold to an empty list attribute.
+  // CHECK: [[EMPTY:%[0-9]+]] = om.constant #om.list<!om.string, []> : !om.list<!om.string>
+  %10 = om.list_create : !om.string
+
+  // Nonconstant list elements keep the list_create operation.
+  // CHECK: [[DYNAMIC:%[0-9]+]] = om.list_create [[ARG:%_0]] : !om.integer
+  %11 = om.list_create %0 : !om.integer
+
+  // Mixed constant and nonconstant inputs do not fold.
+  // CHECK: [[MIXED:%[0-9]+]] = om.list_create [[NEGATIVE]], [[ARG]] : !om.integer
+  %12 = om.list_create %1, %0 : !om.integer
+
+  // CHECK: om.class.fields [[STRINGS]], [[BOOLEANS]], [[INTEGERS]], [[EMPTY]], [[DYNAMIC]], [[MIXED]]
+  om.class.fields %6, %9, %3, %10, %11, %12 :
+      !om.list<!om.string>, !om.list<i1>, !om.list<!om.integer>,
+      !om.list<!om.string>, !om.list<!om.integer>, !om.list<!om.integer>
+}

@@ -707,6 +707,15 @@ OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
 // ListCreateOp
 //===----------------------------------------------------------------------===//
 
+OpFoldResult circt::om::ListCreateOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInputs();
+  if (!llvm::all_of(inputs, [](Attribute attr) { return attr; }))
+    return {};
+
+  auto elements = ArrayAttr::get(getContext(), inputs);
+  return ListAttr::get(getContext(), getType().getElementType(), elements);
+}
+
 void circt::om::ListCreateOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printOperands(getInputs());

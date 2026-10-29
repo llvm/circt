@@ -14,14 +14,10 @@ om.class @StringOps() -> (str: !om.string, concat: !om.string) {
   om.class.fields %hello, %concat : !om.string, !om.string
 }
 
-// Test list creation.
-// Note that this is currently not folded because list_create doesn't have a folder.
-// Even when it had a folder we cannot fully evaluate list_concat since objects cannot be
-// representable with attributes.
+// Constant primitive lists are folded to attributes; lists of objects cannot
+// be represented as attributes and therefore remain list_create operations.
 // CHECK-LABEL: om.class @SimpleList() -> (result: !om.list<!om.integer>) {
-// CHECK-DAG:   %[[C1:.+]] = om.constant #om.integer<1 : si8> : !om.integer
-// CHECK-DAG:   %[[C2:.+]] = om.constant #om.integer<2 : si8> : !om.integer
-// CHECK:   %[[LIST:.+]] = om.list_create %[[C1]], %[[C2]]
+// CHECK:   %[[LIST:.+]] = om.constant #om.list<!om.integer, [#om.integer<1 : si8> : !om.integer, #om.integer<2 : si8> : !om.integer]> : !om.list<!om.integer>
 // CHECK:   om.class.fields %[[LIST]] : !om.list<!om.integer>
 // CHECK: }
 om.class @SimpleList() -> (result: !om.list<!om.integer>) {

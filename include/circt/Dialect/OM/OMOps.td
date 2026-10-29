@@ -304,6 +304,7 @@ def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
   );
 
   let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
 }
 
 def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
