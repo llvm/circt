@@ -27,45 +27,47 @@ using namespace mlir;
 #include "circt/Dialect/LLHD/LLHDAttributes.cpp.inc"
 
 //===----------------------------------------------------------------------===//
+// Wrapper Type
+//===----------------------------------------------------------------------===//
+
+Type WrapperType::getNestedType() const {
+  return TypeSwitch<WrapperType, Type>(*this).Case<RefType, NetType>(
+      [](auto type) { return type.getNestedType(); });
+}
+
+//===----------------------------------------------------------------------===//
 // Time Attribute
 //===----------------------------------------------------------------------===//
 
 /// Parse a time attribute.
-/// Syntax: timeattr ::= #llhd.time<[time][timeUnit], [delta]d, [epsilon]e>
+/// Syntax: timeattr ::= #llhd.time<[time][timeUnit], [delta]d>
 Attribute TimeAttr::parse(AsmParser &p, Type type) {
   llvm::StringRef timeUnit;
   uint64_t time = 0;
   unsigned delta = 0;
-  unsigned eps = 0;
 
   // parse the time value
   if (p.parseLess() || p.parseInteger(time) || p.parseKeyword(&timeUnit))
     return {};
 
   // parse the delta step value
-  if (p.parseComma() || p.parseInteger(delta) || p.parseKeyword("d"))
-    return {};
-
-  // parse the epsilon value
-  if (p.parseComma() || p.parseInteger(eps) || p.parseKeyword("e") ||
+  if (p.parseComma() || p.parseInteger(delta) || p.parseKeyword("d") ||
       p.parseGreater())
     return {};
 
   // return a new instance of time attribute
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
   return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
-                    p.getContext(), time, timeUnit, delta, eps);
+                    p.getContext(), time, timeUnit, delta);
 }
 
 void TimeAttr::print(AsmPrinter &p) const {
-  p << "<" << getTime() << getTimeUnit() << ", " << getDelta() << "d, "
-    << getEpsilon() << "e>";
+  p << "<" << getTime() << getTimeUnit() << ", " << getDelta() << "d>";
 }
 
 LogicalResult TimeAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                                TimeType type, uint64_t time,
-                               llvm::StringRef timeUnit, unsigned delta,
-                               unsigned epsilon) {
+                               llvm::StringRef timeUnit, unsigned delta) {
   // Check the time unit is a legal SI unit
   std::vector<std::string> legalUnits{"ys", "zs", "as", "fs", "ps",
                                       "ns", "us", "ms", "s"};

@@ -1,12 +1,12 @@
 // RUN: circt-opt %s --verify-diagnostics --split-input-file
 
-!bundleType = !esi.channel<i8>
+!bundleType = !esi.channel<i8, ValidReady>
 
-hw.module @Receiver(in %foo: !bundleType, out data: !esi.channel<i8>) {
-  %ack = esi.null : !esi.channel<none>
+hw.module @Receiver(in %foo: !bundleType, out data: !esi.channel<i8, ValidReady>) {
+  %ack = esi.null : !esi.channel<none, ValidReady>
   // expected-error @+1 {{custom op 'esi.bundle.unpack' invalid kind of type specified}}
   %data = esi.bundle.unpack %ack from %foo : !bundleType
-  hw.output %data : !esi.channel<i8>
+  hw.output %data : !esi.channel<i8, ValidReady>
 }
 
 // -----

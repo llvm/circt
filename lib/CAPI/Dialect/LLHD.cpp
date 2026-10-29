@@ -58,10 +58,8 @@ bool llhdAttrIsATimeAttr(MlirAttribute attr) {
 
 /// Create a time attribute.
 MlirAttribute llhdTimeAttrGet(MlirContext ctx, MlirStringRef timeUnit,
-                              uint64_t seconds, uint64_t delta,
-                              uint64_t epsilon) {
-  return wrap(
-      TimeAttr::get(unwrap(ctx), seconds, unwrap(timeUnit), delta, epsilon));
+                              uint64_t seconds, uint64_t delta) {
+  return wrap(TimeAttr::get(unwrap(ctx), seconds, unwrap(timeUnit), delta));
 }
 
 /// Get the time unit of a time attribute.
@@ -77,9 +75,4 @@ uint64_t llhdTimeAttrGetSeconds(MlirAttribute attr) {
 /// Get the delta component of a time attribute.
 uint64_t llhdTimeAttrGetDelta(MlirAttribute attr) {
   return cast<TimeAttr>(unwrap(attr)).getDelta();
-}
-
-/// Get the epsilon component of a time attribute.
-uint64_t llhdTimeAttrGetEpsilon(MlirAttribute attr) {
-  return cast<TimeAttr>(unwrap(attr)).getEpsilon();
 }

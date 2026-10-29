@@ -1045,6 +1045,9 @@ struct StmtVisitor {
       case slang::ast::AssertionKind::Assume:
         verif::AssumeOp::create(builder, loc, property, enable, StringAttr{});
         return success();
+      case slang::ast::AssertionKind::CoverProperty:
+        verif::CoverOp::create(builder, loc, property, enable, StringAttr{});
+        return success();
       default:
         break;
       }

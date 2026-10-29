@@ -647,6 +647,9 @@ firrtl.circuit "Foo" {
                             out %unknownString : !firrtl.string,
                             out %stringcat : !firrtl.string,
                             out %stringeq : !firrtl.bool,
+                            out %stringcontains : !firrtl.bool,
+                            out %integercontains : !firrtl.bool,
+                            out %boolcontains : !firrtl.bool,
                             out %booland : !firrtl.bool,
                             out %boolor : !firrtl.bool,
                             out %boolxor : !firrtl.bool,
@@ -708,6 +711,24 @@ firrtl.circuit "Foo" {
     // CHECK: propassign stringeq, prop_eq(String("hello"), String("world"))
     %streq = firrtl.prop.eq %str0, %str1 : !firrtl.string
     firrtl.propassign %stringeq, %streq : !firrtl.bool
+
+    // CHECK: propassign stringcontains,
+    // CHECK: list_contains(List<String>(String("hello"), String("world")),
+    // CHECK: String("world"))
+    %string_list = firrtl.list.create %str0, %str1 : !firrtl.list<string>
+    %string_contains = firrtl.list.contains %string_list, %str1 : !firrtl.list<string>
+    firrtl.propassign %stringcontains, %string_contains : !firrtl.bool
+
+    // CHECK: propassign integercontains,
+    // CHECK: list_contains(List<Integer>(Integer(5), Integer(-2)), Integer(5))
+    %integer_list = firrtl.list.create %intA, %intB : !firrtl.list<integer>
+    %integer_contains = firrtl.list.contains %integer_list, %intA : !firrtl.list<integer>
+    firrtl.propassign %integercontains, %integer_contains : !firrtl.bool
+
+    // CHECK: propassign boolcontains, list_contains(List<Bool>(Bool(true)), Bool(true))
+    %bool_list = firrtl.list.create %true : !firrtl.list<bool>
+    %bool_contains = firrtl.list.contains %bool_list, %true : !firrtl.list<bool>
+    firrtl.propassign %boolcontains, %bool_contains : !firrtl.bool
 
     // CHECK: propassign booland, bool_and(Bool(true), Bool(true))
     %booland_val = firrtl.bool.and %true, %true

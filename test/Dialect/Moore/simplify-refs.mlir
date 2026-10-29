@@ -11,22 +11,22 @@
 
     // CHECK-NOT: moore.concat_ref %a, %b
     %0 = moore.concat_ref %a, %b : (!moore.ref<i8960>, !moore.ref<i42>) -> <i9002>
-    // CHECK: %[[C_READ:.+]] = moore.read %c : <i9002>
-    %1 = moore.read %c : <i9002>
+    // CHECK: %[[C_READ:.+]] = moore.read %c : ref<i9002>
+    %1 = moore.read %c : ref<i9002>
     // CHECK: %[[TMP1:.+]] = moore.extract %[[C_READ]] from 42 : i9002 -> i8960
-    // CHECK: moore.assign %a, %[[TMP1]] : i8960
+    // CHECK: moore.assign %a, %[[TMP1]] : ref<i8960>
     // CHECK: %[[TMP2:.+]] = moore.extract %[[C_READ]] from 0 : i9002 -> i42
-    // CHECK: moore.assign %b, %[[TMP2]] : i42
-    moore.assign %0, %1 : i9002
+    // CHECK: moore.assign %b, %[[TMP2]] : ref<i42>
+    moore.assign %0, %1 : ref<i9002>
     moore.procedure always {
       // CHECK-NOT: moore.concat_ref %u, %v
       %2 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> <l9002>
-      // CHECK: %[[W_READ:.+]] = moore.read %w : <l9002>
+      // CHECK: %[[W_READ:.+]] = moore.read %w : ref<l9002>
       // CHECK: %[[TMP1:.+]] = moore.extract %[[W_READ]] from 42 : l9002 -> l8960
       // CHECK: moore.blocking_assign %u, %[[TMP1]] : l8960
       // CHECK: %[[TMP2:.+]] = moore.extract %[[W_READ]] from 0 : l9002 -> l42
       // CHECK: moore.blocking_assign %v, %[[TMP2]] : l42
-      %3 = moore.read %w : <l9002>
+      %3 = moore.read %w : ref<l9002>
       moore.blocking_assign %2, %3 : l9002
 
       %4 = moore.constant 1 : i32
@@ -35,8 +35,8 @@
       scf.if %6 {
         // CHECK-NOT: moore.concat_ref %u, %v
         %7 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> <l9002>
-        // CHECK: %[[W_READ:.+]] = moore.read %w : <l9002>
-        %8 = moore.read %w : <l9002>
+        // CHECK: %[[W_READ:.+]] = moore.read %w : ref<l9002>
+        %8 = moore.read %w : ref<l9002>
         // CHECK: %[[TMP1:.+]] = moore.extract %[[W_READ]] from 42 : l9002 -> l8960
         // CHECK: moore.nonblocking_assign %u, %[[TMP1]] : l8960
         // CHECK: %[[TMP2:.+]] = moore.extract %[[W_READ]] from 0 : l9002 -> l42
@@ -55,7 +55,7 @@ moore.module @Nested() {
   %z = moore.variable : <i32>
   moore.procedure always {
     // CHECK: %[[Z_READ:.+]] = moore.read %z
-    %4 = moore.read %z : <i32>
+    %4 = moore.read %z : ref<i32>
     // CHECK: %[[TMP2:.+]] = moore.zext %[[Z_READ]] : i32 -> i96
     %6 = moore.zext %4 : !moore.i32 -> !moore.i96
 
@@ -137,7 +137,7 @@ func.func @InFunction(%arg0: !moore.i32) -> !moore.i32 {
   %0 = moore.concat_ref %imm : (!moore.ref<i32>) -> <i32>
   // CHECK: moore.blocking_assign %imm, %{{.+}} : i32
   moore.blocking_assign %0, %arg0 : i32
-  %1 = moore.read %imm : <i32>
+  %1 = moore.read %imm : ref<i32>
   return %1 : !moore.i32
 }
 
@@ -149,7 +149,7 @@ moore.module @DelayedAssigns() {
   moore.procedure always {
     // CHECK-NOT: moore.concat_ref
     %0 = moore.concat_ref %a, %b : (!moore.ref<i16>, !moore.ref<i16>) -> <i32>
-    %1 = moore.read %c : <i32>
+    %1 = moore.read %c : ref<i32>
     %2 = moore.constant_time 3000000 fs
     // CHECK: [[EXTR1:%.+]] = moore.extract %{{.+}} from 16 : i32 -> i16
     // CHECK: moore.delayed_nonblocking_assign %a, [[EXTR1]], [[DELAY:%.+]] : i16

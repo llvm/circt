@@ -208,6 +208,24 @@ firrtl.module @PropertyListOps() {
   %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
 }
 
+// CHECK-LABEL: firrtl.module @PropertyListContains
+firrtl.module @PropertyListContains() {
+  %string = firrtl.string "foo"
+  %strings = firrtl.list.create %string : !firrtl.list<string>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<string>{{$}}
+  %string_found = firrtl.list.contains %strings, %string : !firrtl.list<string>
+
+  %integer = firrtl.integer 42
+  %integers = firrtl.list.create %integer : !firrtl.list<integer>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<integer>{{$}}
+  %integer_found = firrtl.list.contains %integers, %integer : !firrtl.list<integer>
+
+  %boolean = firrtl.bool true
+  %booleans = firrtl.list.create %boolean : !firrtl.list<bool>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<bool>{{$}}
+  %boolean_found = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>
+}
+
 firrtl.class @UnknownValueChild() {}
 // CHECK-LABEL: firrtl.module @UnknownValueOp
 firrtl.module @UnknownValueOp() {

@@ -38,11 +38,12 @@ rather, they speak to the signaling.
 ## Channels
 
 ESI "channels" are streaming connections upon which *messages* can be sent and
-received.  They are expressed by wrapping the type (e.g. `!esi.channel<i5>`) and
-using it like any other value type.
+received.  They are expressed by wrapping the type and specifying the
+signaling protocol (e.g. `!esi.channel<i5, ValidReady>`) and using it like any
+other value type.
 
 ```mlir
-hw.module @add11(%clk: i1, %ints: !esi.channel<i32>) -> (%outs: !esi.channel<i32> ) {
+hw.module @add11(%clk: i1, %ints: !esi.channel<i32, ValidReady>) -> (%outs: !esi.channel<i32, ValidReady> ) {
   hw.output %ints
 }
 ```
@@ -50,7 +51,7 @@ hw.module @add11(%clk: i1, %ints: !esi.channel<i32>) -> (%outs: !esi.channel<i32
 The value which the channel is carrying must be (un)wrapped to access it:
 
 ```mlir
-hw.module @add11(%clk: i1, %ints: !esi.channel<i32>) -> (mutatedInts: !esi.channel<i32>) {
+hw.module @add11(%clk: i1, %ints: !esi.channel<i32, ValidReady>) -> (mutatedInts: !esi.channel<i32, ValidReady>) {
   %i, %i_valid = esi.unwrap.vr %ints, %rdy
   %c11 = hw.constant 11
   %m = comb.add %c11, %i

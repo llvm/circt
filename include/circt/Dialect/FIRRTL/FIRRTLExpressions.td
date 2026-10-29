@@ -1342,6 +1342,29 @@ def ListConcatOp : FIRRTLOp<"list.concat", [Pure, SameOperandsAndResultType]> {
   let assemblyFormat = "$subLists attr-dict `:` type($result)";
 }
 
+def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
+    TypesMatchWith<"list element type should match search element type",
+                   "list", "element",
+                   "type_cast<ListType>($_self).getElementType()">]> {
+  let summary = "Test whether a list contains a property value";
+  let description = [{
+    Returns true if the list contains an element equal to the specified value.
+    Elements can only be those that support equality via `prop.eq`: strings,
+    integers, or booleans.
+
+    Example:
+    ```mlir
+    %found = firrtl.list.contains %list, %element : !firrtl.list<string>
+    ```
+  }];
+
+  let arguments = (ins ListType:$list,
+                       AnyTypeOf<[StringType, BoolType, FIntegerType]>:$element);
+  let results = (outs BoolType:$result);
+
+  let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
+}
+
 def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
   let summary = "Produce a constant boolean value";
   let description = [{

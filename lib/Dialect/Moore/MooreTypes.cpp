@@ -120,6 +120,15 @@ void UnpackedType::print(mlir::AsmPrinter &printer) const {
 }
 
 //===----------------------------------------------------------------------===//
+// Wrapper Type
+//===----------------------------------------------------------------------===//
+
+UnpackedType WrapperType::getNestedType() const {
+  return TypeSwitch<WrapperType, UnpackedType>(*this).Case<RefType, NetType>(
+      [](auto type) { return type.getNestedType(); });
+}
+
+//===----------------------------------------------------------------------===//
 // Packed Type
 //===----------------------------------------------------------------------===//
 
@@ -251,14 +260,16 @@ LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
 // Interfaces for destructurable
 //===----------------------------------------------------------------------===//
 
+template <typename WrapperTy = RefType>
 static std::optional<DenseMap<Attribute, Type>>
 getAllSubelementIndexMap(ArrayRef<StructLikeMember> members) {
   DenseMap<Attribute, Type> destructured;
   for (const auto &member : members)
-    destructured.insert({member.name, RefType::get(member.type)});
+    destructured.insert({member.name, WrapperTy::get(member.type)});
   return destructured;
 }
 
+template <typename WrapperTy = RefType>
 static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
                               Attribute index) {
   auto indexAttr = cast<StringAttr>(index);
@@ -266,7 +277,7 @@ static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
     return {};
   for (const auto &member : members) {
     if (member.name == indexAttr) {
-      return RefType::get(member.type);
+      return WrapperTy::get(member.type);
     }
   }
   return Type();
@@ -349,6 +360,31 @@ Type RefType::getTypeAtIndex(Attribute index) {
 }
 
 std::optional<uint32_t> RefType::getFieldIndex(StringAttr nameField) {
+  return TypeSwitch<Type, std::optional<uint32_t>>(getNestedType())
+      .Case<StructType, UnpackedStructType>([&nameField](auto &type) {
+        return getFieldAllIndex(type.getMembers(), nameField);
+      })
+      .Default([](auto) { return std::nullopt; });
+}
+
+std::optional<DenseMap<Attribute, Type>> NetType::getSubelementIndexMap() {
+  return TypeSwitch<Type, std::optional<DenseMap<Attribute, Type>>>(
+             getNestedType())
+      .Case<StructType, UnpackedStructType>([](auto &type) {
+        return getAllSubelementIndexMap<NetType>(type.getMembers());
+      })
+      .Default([](auto) { return std::nullopt; });
+}
+
+Type NetType::getTypeAtIndex(Attribute index) {
+  return TypeSwitch<Type, Type>(getNestedType())
+      .Case<StructType, UnpackedStructType>([&index](auto &type) {
+        return getTypeAtAllIndex<NetType>(type.getMembers(), index);
+      })
+      .Default([](auto) { return Type(); });
+}
+
+std::optional<uint32_t> NetType::getFieldIndex(StringAttr nameField) {
   return TypeSwitch<Type, std::optional<uint32_t>>(getNestedType())
       .Case<StructType, UnpackedStructType>([&nameField](auto &type) {
         return getFieldAllIndex(type.getMembers(), nameField);

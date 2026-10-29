@@ -29,6 +29,7 @@ class AssocArrayType;
 class ChandleType;
 class EventType;
 class IntType;
+class NetType;
 class OpenArrayType;
 class OpenUnpackedArrayType;
 class PackedType;
@@ -105,7 +106,7 @@ public:
     return llvm::isa<PackedType, StringType, ChandleType, EventType, RealType,
                      UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
                      QueueType, UnpackedStructType, UnpackedUnionType, RefType,
-                     ClassHandleType>(type);
+                     NetType, ClassHandleType>(type);
   }
 
   /// Get the value domain of this type.
@@ -173,6 +174,21 @@ public:
   /// Check if this is a `TimeType`, or an aggregate that contains a nested
   /// `TimeType`.
   bool containsTimeType() const;
+
+protected:
+  using UnpackedType::UnpackedType;
+};
+
+//===----------------------------------------------------------------------===//
+// Wrapper Type
+//===----------------------------------------------------------------------===//
+
+class WrapperType : public UnpackedType {
+public:
+  static bool classof(Type type) { return llvm::isa<RefType, NetType>(type); }
+
+  /// Get the wrapped type.
+  UnpackedType getNestedType() const;
 
 protected:
   using UnpackedType::UnpackedType;

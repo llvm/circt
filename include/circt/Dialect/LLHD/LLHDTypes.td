@@ -14,7 +14,19 @@ include "circt/Dialect/LLHD/LLHDDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
-class LLHDType<string name> : TypeDef<LLHDDialect, name> { }
+class LLHDType<string name, string baseCppClass = "::mlir::Type">
+    : TypeDef<LLHDDialect, name, [], baseCppClass> { }
+
+// Common pieces of wrappers around a nested type.
+class LLHDWrapperType<string name> : LLHDType<name, "llhd::WrapperType"> {
+  let parameters = (ins "Type":$nestedType);
+  let assemblyFormat = "`<` $nestedType `>`";
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "Type":$nestedType), [{
+      return $_get(nestedType.getContext(), nestedType);
+    }]>
+  ];
+}
 
 //===----------------------------------------------------------------------===//
 // Type declarations
@@ -24,27 +36,28 @@ def LLHDTimeType : LLHDType<"Time"> {
   let summary = "time type";
   let description = [{
     Represents a simulation time value as a combination of a real time value in
-    seconds (or any smaller SI time unit), a delta value representing
-    infinitesimal time steps, and an epsilon value representing an absolute time
-    slot within a delta step (used to model SystemVerilog scheduling regions).
+    seconds (or any smaller SI time unit) and a delta value representing
+    infinitesimal time steps.
   }];
   let mnemonic = "time";
 }
 
-def RefType : LLHDType<"Ref"> {
+def RefType : LLHDWrapperType<"Ref"> {
   let summary = "a reference to a signal or variable";
   let description = [{
     Represents a reference to a value. Signals return a reference to the
     underlying value, which allows them to be probed or driven.
   }];
   let mnemonic = "ref";
-  let parameters = (ins "Type":$nestedType);
-  let assemblyFormat = "`<` $nestedType `>`";
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "Type":$nestedType), [{
-      return $_get(nestedType.getContext(), nestedType);
-    }]>
-  ];
+}
+
+def NetType : LLHDWrapperType<"Net"> {
+  let summary = "A net value";
+  let description = [{
+    Represents a net-typed value, which has a data-type and
+    follows some resolution function for multiple drivers.
+  }];
+  let mnemonic = "net";
 }
 
 //===----------------------------------------------------------------------===//
@@ -80,7 +93,7 @@ def LLHDTimeAttr : AttrDef<LLHDDialect, "Time", []> {
   let description = [{
     Represents a value of the LLHD time type.
 
-    Example: `#llhd.time<0ns, 1d, 0e>`
+    Example: `#llhd.time<0ns, 1d>`
   }];
 
   let mnemonic = "time";
@@ -92,16 +105,14 @@ def LLHDTimeAttr : AttrDef<LLHDDialect, "Time", []> {
   let parameters = (ins AttributeSelfTypeParameter<"", "llhd::TimeType">:$type,
                         "uint64_t":$time,
                         StringRefParameter<"SI time unit">:$timeUnit,
-                        "unsigned":$delta,
-                        "unsigned":$epsilon);
+                        "unsigned":$delta);
 
   let skipDefaultBuilders = 1;
   let builders = [ AttrBuilder<(ins "uint64_t":$time,
                                     "llvm::StringRef":$timeUnit,
-                                    "unsigned":$delta,
-                                    "unsigned":$epsilon), [{
+                                    "unsigned":$delta), [{
     return $_get($_ctxt, llhd::TimeType::get($_ctxt),
-      time, timeUnit, delta, epsilon);
+      time, timeUnit, delta);
   }]>];
 }
 

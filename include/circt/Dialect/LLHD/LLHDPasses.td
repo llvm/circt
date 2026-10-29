@@ -32,10 +32,24 @@ def InlineCallsPass : Pass<"llhd-inline-calls", "ModuleOp"> {
   ];
 }
 
-def Sig2Reg : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
-  let summary = "promote LLHD signals to SSA values";
+def Sig2RegPass : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
+  let summary = "Promote LLHD signals to SSA values.";
+  let description = [{
+    Replace probes of singly-driven signals with the driven value, and remove
+    unprobed signals.
 
-  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+    This pass assumes that CombineDrives has already done the heavy lifting of
+    combining multiple partial drives into single whole-signal drives.
+  }];
+  let dependentDialects = ["circt::hw::HWDialect"];
+  let statistics = [
+    Statistic<"numPromoted", "promoted",
+      "Number of signals promoted to values">,
+    Statistic<"numUnused", "unused-removed",
+      "Number of removed signals because they were unprobed">,
+    Statistic<"numSkipped", "unpromotable",
+      "Number of signals that could not be promoted">,
+  ];
 }
 
 def Mem2RegPass : Pass<"llhd-mem2reg"> {

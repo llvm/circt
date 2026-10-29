@@ -62,8 +62,8 @@ class HostComms:
 
 # CHECK-LABEL: hw.module @LoopbackInOutTop(in %clk : !seq.clock, in %rst : i1)
 # CHECK:         esi.service.instance #esi.appid<"cosim"[0]> svc @HostComms impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
-# CHECK:         [[B0:%.+]] = esi.service.req <@HostComms::@req_resp>(#esi.appid<"loopback_inout"[0]>) : !esi.bundle<[!esi.channel<i16> from "resp", !esi.channel<i24> to "req"]>
-# CHECK:         %req = esi.bundle.unpack %chanOutput from [[B0]] : !esi.bundle<[!esi.channel<i16> from "resp", !esi.channel<i24> to "req"]>
+# CHECK:         [[B0:%.+]] = esi.service.req <@HostComms::@req_resp>(#esi.appid<"loopback_inout"[0]>) : !esi.bundle<[!esi.channel<i16, ValidReady> from "resp", !esi.channel<i24, ValidReady> to "req"]>
+# CHECK:         %req = esi.bundle.unpack %chanOutput from [[B0]] : !esi.bundle<[!esi.channel<i16, ValidReady> from "resp", !esi.channel<i24, ValidReady> to "req"]>
 # CHECK:         %rawOutput, %valid = esi.unwrap.vr %req, %ready : i24
 # CHECK:         [[R0:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
 # CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid {sv.namehint = "loopback"} : i16
@@ -107,10 +107,10 @@ CallBundle = Bundle([
 ])
 
 
-# CHECK-LABEL: hw.module @LoopbackCoercedCall(in %clk : !seq.clock, in %rst : i1, out call : !esi.bundle<[!esi.channel<i16> from "renamed_result", !esi.channel<i24> to "args"]>)
-# CHECK:         [[REQ:%.+]] = esi.service.req <@_FuncService::@call>(#esi.appid<"loopback_coerced">) : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
-# CHECK:         %arg = esi.bundle.unpack %renamed_result from [[REQ]] : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
-# CHECK:         %bundle, %renamed_result = esi.bundle.pack %arg : !esi.bundle<[!esi.channel<i16> from "renamed_result", !esi.channel<i24> to "args"]>
+# CHECK-LABEL: hw.module @LoopbackCoercedCall(in %clk : !seq.clock, in %rst : i1, out call : !esi.bundle<[!esi.channel<i16, ValidReady> from "renamed_result", !esi.channel<i24, ValidReady> to "args"]>)
+# CHECK:         [[REQ:%.+]] = esi.service.req <@_FuncService::@call>(#esi.appid<"loopback_coerced">) : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
+# CHECK:         %arg = esi.bundle.unpack %renamed_result from [[REQ]] : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
+# CHECK:         %bundle, %renamed_result = esi.bundle.pack %arg : !esi.bundle<[!esi.channel<i16, ValidReady> from "renamed_result", !esi.channel<i24, ValidReady> to "args"]>
 @unittestmodule()
 class LoopbackCoercedCall(Module):
   clk = Clock()
@@ -124,9 +124,9 @@ class LoopbackCoercedCall(Module):
 
 
 # CHECK-LABEL:  hw.module @LoopbackCall(in %clk : !seq.clock, in %rst : i1) attributes {output_file = #hw.output_file<"LoopbackCall.sv", includeReplicatedOps>} {
-# CHECK-NEXT:     [[R2:%.+]] = esi.buffer %clk, %rst, %chanOutput {stages = 1 : i64} : !esi.channel<i16> -> !esi.channel<i16, FIFO>
-# CHECK-NEXT:     [[R0:%.+]] = esi.service.req <@_FuncService::@call>(#esi.appid<"loopback">) : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16, FIFO> from "result"]>
-# CHECK-NEXT:     %arg = esi.bundle.unpack [[R2]] from [[R0]] : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16, FIFO> from "result"]>
+# CHECK-NEXT:     [[R2:%.+]] = esi.buffer %clk, %rst, %chanOutput {stages = 1 : i64} : !esi.channel<i16, ValidReady> -> !esi.channel<i16, FIFO>
+# CHECK-NEXT:     [[R0:%.+]] = esi.service.req <@_FuncService::@call>(#esi.appid<"loopback">) : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, FIFO> from "result"]>
+# CHECK-NEXT:     %arg = esi.bundle.unpack [[R2]] from [[R0]] : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, FIFO> from "result"]>
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %arg, %ready : i24
 # CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid {sv.namehint = "loopback_src"} : i16
@@ -201,10 +201,10 @@ print(Bundle1)
 print(Bundle1.resp)
 
 
-# CHECK-LABEL:  hw.module @SendBundleTest(in %clk : !seq.clock, in %rst : i1, in %s1_in : !esi.channel<i32>, out b_send : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, out i1_out : !esi.channel<i1>) attributes {output_file = #hw.output_file<"SendBundleTest.sv", includeReplicatedOps>} {
-# CHECK-NEXT:     [[B0:%.+]] = esi.buffer %clk, %rst, %s1_in {stages = 4 : i64} : !esi.channel<i32> -> !esi.channel<i32>
-# CHECK-NEXT:     %bundle, %resp = esi.bundle.pack [[B0]] : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
-# CHECK-NEXT:     hw.output %bundle, %resp : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, !esi.channel<i1>
+# CHECK-LABEL:  hw.module @SendBundleTest(in %clk : !seq.clock, in %rst : i1, in %s1_in : !esi.channel<i32, ValidReady>, out b_send : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>, out i1_out : !esi.channel<i1, ValidReady>) attributes {output_file = #hw.output_file<"SendBundleTest.sv", includeReplicatedOps>} {
+# CHECK-NEXT:     [[B0:%.+]] = esi.buffer %clk, %rst, %s1_in {stages = 4 : i64} : !esi.channel<i32, ValidReady> -> !esi.channel<i32, ValidReady>
+# CHECK-NEXT:     %bundle, %resp = esi.bundle.pack [[B0]] : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>
+# CHECK-NEXT:     hw.output %bundle, %resp : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>, !esi.channel<i1, ValidReady>
 @unittestmodule()
 class SendBundleTest(Module):
   clk = Clock()
@@ -220,9 +220,9 @@ class SendBundleTest(Module):
     self.i1_out = from_chans.resp
 
 
-# CHECK-LABEL:  hw.module @RecvBundleTest(in %b_recv : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, in %i1_in : !esi.channel<i1>, out s1_out : !esi.channel<i32>) attributes {output_file = #hw.output_file<"RecvBundleTest.sv", includeReplicatedOps>} {
-# CHECK-NEXT:     %req = esi.bundle.unpack %i1_in from %b_recv : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
-# CHECK-NEXT:     hw.output %req : !esi.channel<i32>
+# CHECK-LABEL:  hw.module @RecvBundleTest(in %b_recv : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>, in %i1_in : !esi.channel<i1, ValidReady>, out s1_out : !esi.channel<i32, ValidReady>) attributes {output_file = #hw.output_file<"RecvBundleTest.sv", includeReplicatedOps>} {
+# CHECK-NEXT:     %req = esi.bundle.unpack %i1_in from %b_recv : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>
+# CHECK-NEXT:     hw.output %req : !esi.channel<i32, ValidReady>
 @unittestmodule()
 class RecvBundleTest(Module):
   b_recv = RecvBundle(Bundle1)
@@ -248,9 +248,9 @@ class ListTest(Module):
     self.lst_out = self.lst_in
 
 
-# CHECK-LABEL:  hw.module @ChannelTransform(in %clk : !seq.clock, in %s1_in : !esi.channel<i32>, out s2_out : !esi.channel<i8>)
-# CHECK-NEXT:     %valid, %ready, %data = esi.snoop.vr %s1_in : !esi.channel<i32>
-# CHECK-NEXT:     %transaction, [[SNOOP_DATA:%.+]] = esi.snoop.xact %s1_in : !esi.channel<i32>
+# CHECK-LABEL:  hw.module @ChannelTransform(in %clk : !seq.clock, in %s1_in : !esi.channel<i32, ValidReady>, out s2_out : !esi.channel<i8, ValidReady>)
+# CHECK-NEXT:     %valid, %ready, %data = esi.snoop.vr %s1_in : !esi.channel<i32, ValidReady>
+# CHECK-NEXT:     %transaction, [[SNOOP_DATA:%.+]] = esi.snoop.xact %s1_in : !esi.channel<i32, ValidReady>
 # CHECK-NEXT:     [[CLK_I1:%.+]] = seq.from_clock %clk
 # CHECK-NEXT:     sv.alwaysff(posedge [[CLK_I1]]) {
 # CHECK-NEXT:       sv.if %transaction {
@@ -260,7 +260,7 @@ class ListTest(Module):
 # CHECK-NEXT:     %rawOutput, [[VALID2:%.+]] = esi.unwrap.vr %s1_in, [[READY2:%.+]] : i32
 # CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
 # CHECK-NEXT:     %chanOutput, [[READY2]] = esi.wrap.vr [[R0]], [[VALID2]] : i8
-# CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i8>
+# CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i8, ValidReady>
 @unittestmodule()
 class ChannelTransform(Module):
   clk = Clock()
@@ -292,10 +292,10 @@ class ValidOnlyTransform(Module):
     self.s2_out = self.s1_in.transform(lambda x: x[0:8])
 
 
-# CHECK-LABEL:  hw.module @CoerceBundle(in %b_in : !esi.bundle<[!esi.channel<i8> from "resp", !esi.channel<i32> to "req"]>, out b_out : !esi.bundle<[!esi.channel<i8> from "result", !esi.channel<i32> to "arg"]>)
-# CHECK-NEXT:     %req = esi.bundle.unpack %result from %b_in : !esi.bundle<[!esi.channel<i8> from "resp", !esi.channel<i32> to "req"]>
-# CHECK-NEXT:     %bundle, %result = esi.bundle.pack %req : !esi.bundle<[!esi.channel<i8> from "result", !esi.channel<i32> to "arg"]>
-# CHECK-NEXT:     hw.output %bundle : !esi.bundle<[!esi.channel<i8> from "result", !esi.channel<i32> to "arg"]>
+# CHECK-LABEL:  hw.module @CoerceBundle(in %b_in : !esi.bundle<[!esi.channel<i8, ValidReady> from "resp", !esi.channel<i32, ValidReady> to "req"]>, out b_out : !esi.bundle<[!esi.channel<i8, ValidReady> from "result", !esi.channel<i32, ValidReady> to "arg"]>)
+# CHECK-NEXT:     %req = esi.bundle.unpack %result from %b_in : !esi.bundle<[!esi.channel<i8, ValidReady> from "resp", !esi.channel<i32, ValidReady> to "req"]>
+# CHECK-NEXT:     %bundle, %result = esi.bundle.pack %req : !esi.bundle<[!esi.channel<i8, ValidReady> from "result", !esi.channel<i32, ValidReady> to "arg"]>
+# CHECK-NEXT:     hw.output %bundle : !esi.bundle<[!esi.channel<i8, ValidReady> from "result", !esi.channel<i32, ValidReady> to "arg"]>
 @unittestmodule()
 class CoerceBundle(Module):
   b_in = Input(
@@ -314,16 +314,16 @@ class CoerceBundle(Module):
     ports.b_out = ports.b_in.coerce(CoerceBundle.b_out.type)
 
 
-# CHECK-LABEL:  hw.module @CoerceBundleTransform(in %b_in : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i8> from "resp"]>, out b_out : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>)
+# CHECK-LABEL:  hw.module @CoerceBundleTransform(in %b_in : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i8, ValidReady> from "resp"]>, out b_out : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>)
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %result, %ready : i16
 # CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i16) -> i8
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i8
-# CHECK-NEXT:     %req = esi.bundle.unpack %chanOutput from %b_in : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i8> from "resp"]>
+# CHECK-NEXT:     %req = esi.bundle.unpack %chanOutput from %b_in : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i8, ValidReady> from "resp"]>
 # CHECK-NEXT:     %rawOutput_0, %valid_1 = esi.unwrap.vr %req, %ready_3 : i32
 # CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput_0 from 0 : (i32) -> i24
 # CHECK-NEXT:     %chanOutput_2, %ready_3 = esi.wrap.vr [[R1]], %valid_1 : i24
-# CHECK-NEXT:     %bundle, %result = esi.bundle.pack %chanOutput_2 : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
-# CHECK-NEXT:     hw.output %bundle : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
+# CHECK-NEXT:     %bundle, %result = esi.bundle.pack %chanOutput_2 : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
+# CHECK-NEXT:     hw.output %bundle : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
 @unittestmodule()
 class CoerceBundleTransform(Module):
   b_in = Input(
@@ -346,9 +346,9 @@ class CoerceBundleTransform(Module):
 # CHECK-LABEL:  hw.module @MMIOReq()
 # CHECK-NEXT:     %c0_i64 = hw.constant 0 : i64
 # CHECK-NEXT:     %false = hw.constant false
-# CHECK-NEXT:     [[B:%.+]] = esi.service.req <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
+# CHECK-NEXT:     [[B:%.+]] = esi.service.req <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<ui32, ValidReady> to "offset", !esi.channel<i64, ValidReady> from "data"]>
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i64, %false : i64
-# CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
+# CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<ui32, ValidReady> to "offset", !esi.channel<i64, ValidReady> from "data"]>
 @unittestmodule(esi_sys=True)
 class MMIOReq(Module):
 
@@ -369,13 +369,13 @@ class MMIOReq(Module):
 # CHECK-NEXT:     [[R2:%.+]] = hwarith.constant 0 : ui8
 # CHECK-NEXT:     [[R3:%.+]] = hw.struct_create ([[R0]], [[R2]]) : !hw.struct<address: ui64, tag: ui8>
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R3]], %false : !hw.struct<address: ui64, tag: ui8>
-# CHECK-NEXT:     [[R1:%.+]] = esi.service.req <@_HostMem::@read>(#esi.appid<"host_mem_read_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
-# CHECK-NEXT:     %resp = esi.bundle.unpack %chanOutput from [[R1]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>> to "resp"]>
+# CHECK-NEXT:     [[R1:%.+]] = esi.service.req <@_HostMem::@read>(#esi.appid<"host_mem_read_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>, ValidReady> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>, ValidReady> to "resp"]>
+# CHECK-NEXT:     %resp = esi.bundle.unpack %chanOutput from [[R1]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>, ValidReady> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>, ValidReady> to "resp"]>
 # CHECK-NEXT:     [[R4:%.+]] = hwarith.constant 0 : ui8
 # CHECK-NEXT:     [[R5:%.+]] = hwarith.constant 0 : ui256
 # CHECK-NEXT:     [[R6:%.+]] = hw.struct_create ([[R0]], [[R4]], [[R5]]) : !hw.struct<address: ui64, tag: ui8, data: ui256>
 # CHECK-NEXT:     %chanOutput_0, %ready_1 = esi.wrap.vr [[R6]], %false : !hw.struct<address: ui64, tag: ui8, data: ui256>
-# CHECK-NEXT:     [[R7:%.+]] = esi.service.req <@_HostMem::@write>(#esi.appid<"host_mem_write_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: ui256>> from "req", !esi.channel<ui8> to "ackTag"]>
+# CHECK-NEXT:     [[R7:%.+]] = esi.service.req <@_HostMem::@write>(#esi.appid<"host_mem_write_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: ui256>, ValidReady> from "req", !esi.channel<ui8, ValidReady> to "ackTag"]>
 # CHECK:        esi.service.std.hostmem @_HostMem
 @unittestmodule(esi_sys=True)
 class HostMemReq(Module):
@@ -408,10 +408,10 @@ class HostMemReq(Module):
 # 'parallel' (default) framing: a single frame carrying 'num_items' items.
 # CHECK-LABEL:  hw.module @HostMemListReq()
 # read_list: {address, tag, length} request, parallel windowed list response.
-# CHECK:          esi.service.req <@_HostMem::@read_list>(#esi.appid<"host_mem_read_list">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui64>> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<ui256>>, [<"", [<"tag">, <"data", 4>]>]>> to "resp"]>
+# CHECK:          esi.service.req <@_HostMem::@read_list>(#esi.appid<"host_mem_read_list">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui64>, ValidReady> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<ui256>>, [<"", [<"tag">, <"data", 4>]>]>, ValidReady> to "resp"]>
 # write with a list: wrap a parallel write window and send it on the 'write' port.
 # CHECK:          esi.window.wrap %{{.+}} : !esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<ui256>>, [<"", [<"address">, <"tag">, <"data", 4>]>]>
-# CHECK:          esi.service.req <@_HostMem::@write>(#esi.appid<"host_mem_write_list">) : !esi.bundle<[!esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<ui256>>, [<"", [<"address">, <"tag">, <"data", 4>]>]>> from "req", !esi.channel<ui8> to "ackTag"]>
+# CHECK:          esi.service.req <@_HostMem::@write>(#esi.appid<"host_mem_write_list">) : !esi.bundle<[!esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<ui256>>, [<"", [<"address">, <"tag">, <"data", 4>]>]>, ValidReady> from "req", !esi.channel<ui8, ValidReady> to "ackTag"]>
 # CHECK:        esi.service.std.hostmem @_HostMem
 @unittestmodule(esi_sys=True)
 class HostMemListReq(Module):
@@ -464,13 +464,13 @@ def Writer(type):
 
 # CHECK:  hw.module @Ram1(in %clk : !seq.clock, in %rst : i1)
 # CHECK:    esi.service.instance #esi.appid<"ram"> svc @ram impl as "sv"(%clk, %rst) : (!seq.clock, i1) -> ()
-# CHECK:    [[WR:%.+]] = esi.service.req <@ram::@write>(#esi.appid<"ram_writer"[0]>) : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: i32>> from "req", !esi.channel<i0> to "ack"]>
+# CHECK:    [[WR:%.+]] = esi.service.req <@ram::@write>(#esi.appid<"ram_writer"[0]>) : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: i32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>
 # CHECK:    %rawOutput, %valid = esi.unwrap.vr %req, %ready : !hw.struct<address: ui3, data: ui32>
 # CHECK:    [[CASTED:%.+]] = hw.bitcast %rawOutput : (!hw.struct<address: ui3, data: ui32>) -> !hw.struct<address: ui3, data: i32>
 # CHECK:    %chanOutput, %ready = esi.wrap.vr [[CASTED]], %valid : !hw.struct<address: ui3, data: i32>
-# CHECK:    %ack = esi.bundle.unpack %chanOutput from [[WR]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: i32>> from "req", !esi.channel<i0> to "ack"]>
-# CHECK:    %bundle, %req = esi.bundle.pack %ack : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>> from "req", !esi.channel<i0> to "ack"]>
-# CHECK:    hw.instance "Writer" sym @Writer @Writer(clk: %clk: !seq.clock, rst: %rst: i1, cmd: %bundle: !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>> from "req", !esi.channel<i0> to "ack"]>) -> ()
+# CHECK:    %ack = esi.bundle.unpack %chanOutput from [[WR]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: i32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>
+# CHECK:    %bundle, %req = esi.bundle.pack %ack : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>
+# CHECK:    hw.instance "Writer" sym @Writer @Writer(clk: %clk: !seq.clock, rst: %rst: i1, cmd: %bundle: !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>) -> ()
 
 
 @unittestmodule()
@@ -487,10 +487,10 @@ class Ram1(Module):
     Writer(mem_write.type)(clk=ports.clk, rst=ports.rst, cmd=mem_write)
 
 
-# CHECK-LABEL: hw.module @UTurn(in %clk : !seq.clock, in %rst : i1, out out1 : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, out out2 : !esi.bundle<[!esi.channel<i32> from "req", !esi.channel<i1> to "resp"]>)
-# CHECK-NEXT:      %bundle, %resp = esi.bundle.pack %req : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
-# CHECK-NEXT:      %bundle_0, %req = esi.bundle.pack %resp : !esi.bundle<[!esi.channel<i32> from "req", !esi.channel<i1> to "resp"]>
-# CHECK-NEXT:      hw.output %bundle, %bundle_0 : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, !esi.bundle<[!esi.channel<i32> from "req", !esi.channel<i1> to "resp"]>
+# CHECK-LABEL: hw.module @UTurn(in %clk : !seq.clock, in %rst : i1, out out1 : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>, out out2 : !esi.bundle<[!esi.channel<i32, ValidReady> from "req", !esi.channel<i1, ValidReady> to "resp"]>)
+# CHECK-NEXT:      %bundle, %resp = esi.bundle.pack %req : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>
+# CHECK-NEXT:      %bundle_0, %req = esi.bundle.pack %resp : !esi.bundle<[!esi.channel<i32, ValidReady> from "req", !esi.channel<i1, ValidReady> to "resp"]>
+# CHECK-NEXT:      hw.output %bundle, %bundle_0 : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>, !esi.bundle<[!esi.channel<i32, ValidReady> from "req", !esi.channel<i1, ValidReady> to "resp"]>
 @unittestmodule()
 class UTurn(Module):
   clk = Clock()
@@ -533,17 +533,17 @@ def transform_truncate_half(data):
   return data_bits[0:half_width]
 
 
-# CHECK-LABEL:   hw.module @TestBundleTransformBasic(in %clk : !seq.clock, in %rst : i1, in %bundle_in : !esi.bundle<[!esi.channel<i8> to "req", !esi.channel<i24> from "resp"]>, out bundle_out : !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i48> from "resp"]>) attributes {output_file = #hw.output_file<"TestBundleTransformBasic.sv", includeReplicatedOps>} {
-# CHECK-NEXT:      %req = esi.bundle.unpack %chanOutput_2 from %bundle_in : !esi.bundle<[!esi.channel<i8> to "req", !esi.channel<i24> from "resp"]>
+# CHECK-LABEL:   hw.module @TestBundleTransformBasic(in %clk : !seq.clock, in %rst : i1, in %bundle_in : !esi.bundle<[!esi.channel<i8, ValidReady> to "req", !esi.channel<i24, ValidReady> from "resp"]>, out bundle_out : !esi.bundle<[!esi.channel<i16, ValidReady> to "req", !esi.channel<i48, ValidReady> from "resp"]>) attributes {output_file = #hw.output_file<"TestBundleTransformBasic.sv", includeReplicatedOps>} {
+# CHECK-NEXT:      %req = esi.bundle.unpack %chanOutput_2 from %bundle_in : !esi.bundle<[!esi.channel<i8, ValidReady> to "req", !esi.channel<i24, ValidReady> from "resp"]>
 # CHECK-NEXT:      %rawOutput, %valid = esi.unwrap.vr %req, %ready : i8
 # CHECK-NEXT:      %c0_i8 = hw.constant 0 : i8
 # CHECK-NEXT:      [[R0:%.+]] = comb.concat %c0_i8, %rawOutput : i8, i8
 # CHECK-NEXT:      %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i16
-# CHECK-NEXT:      %bundle, %resp = esi.bundle.pack %chanOutput : !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i48> from "resp"]>
+# CHECK-NEXT:      %bundle, %resp = esi.bundle.pack %chanOutput : !esi.bundle<[!esi.channel<i16, ValidReady> to "req", !esi.channel<i48, ValidReady> from "resp"]>
 # CHECK-NEXT:      %rawOutput_0, %valid_1 = esi.unwrap.vr %resp, %ready_3 : i48
 # CHECK-NEXT:      [[R1:%.+]] = comb.extract %rawOutput_0 from 0 : (i48) -> i24
 # CHECK-NEXT:      %chanOutput_2, %ready_3 = esi.wrap.vr [[R1]], %valid_1 : i24
-# CHECK-NEXT:      hw.output %bundle : !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i48> from "resp"]>
+# CHECK-NEXT:      hw.output %bundle : !esi.bundle<[!esi.channel<i16, ValidReady> to "req", !esi.channel<i48, ValidReady> from "resp"]>
 @unittestmodule()
 class TestBundleTransformBasic(Module):
   """Test basic bundle transform functionality with bidirectional bundle."""

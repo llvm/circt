@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_LLHD_LLHDOPS_TD
 
 include "circt/Dialect/LLHD/LLHDDialect.td"
+include "circt/Dialect/LLHD/LLHDInterfaces.td"
 include "circt/Dialect/LLHD/LLHDTypes.td"
 include "circt/Support/ProceduralRegionTrait.td"
 include "mlir/IR/EnumAttr.td"
@@ -59,33 +60,20 @@ class SmallerOrEqualResultTypeWidthConstraint<string result, string input>
 // Constants
 //===----------------------------------------------------------------------===//
 
-def ConstantTimeOp : LLHDOp<"constant_time",
-                                  [ConstantLike, Pure]> {
-  let summary = "Introduce a new time constant.";
-  let description = [{
-    The `llhd.constant_time` instruction introduces a new constant time value as
-    an SSA-operator.
-
-    Example:
-
-    ```mlir
-    %1 = llhd.constant_time #llhd.time<1ns, 2d, 3d>
-    ```
-  }];
-
+def ConstantTimeOp : LLHDOp<"constant_time", [ConstantLike, Pure]> {
+  let summary = "Produce a constant time";
   let assemblyFormat = "$value attr-dict";
 
   let builders = [
-    /// Build a ConstantTimeOp from an ArrayRef with three values
-    /// (real-time, delta, epsilon) and a string for the real-time unit.
+    /// Build a ConstantTimeOp from a real-time value, a string for the
+    /// real-time unit, and a delta value.
     OpBuilder<(ins "uint64_t":$time,
                    "const StringRef &":$timeUnit,
-                   "unsigned":$delta,
-                   "unsigned":$epsilon)>
+                   "unsigned":$delta)>
   ];
 
-  let arguments = (ins LLHDTimeAttr: $value);
-  let results = (outs LLHDTimeType: $result);
+  let arguments = (ins LLHDTimeAttr:$value);
+  let results = (outs LLHDTimeType:$result);
 
   let hasFolder = 1;
 }
@@ -199,41 +187,71 @@ def ProbeOp : LLHDOp<"prb", [
 }
 
 def DriveOp : LLHDOp<"drv", [
+  DriveLikeOp,
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
   TypeMatchesRefNestedType<"value", "signal">,
 ]> {
   let summary = "Drive a value into a signal.";
   let description = [{
-    The `llhd.drv` operation drives a new value onto a signal. A time
-    operand also has to be passed, which specifies the frequency at which
-    the drive will be performed. An optional enable value can be passed as
-    last argument. In this case the drive will only be performed if the
-    value is 1. In case no enable signal is passed the drive will always be
-    performed. This operation does not define any new SSA operands.
+    The `llhd.drv` operation drives a new value onto a signal after a delay. A
+    time operand specifies the delay with which the new value takes effect. An
+    optional enable value can be passed as last argument. In this case the
+    drive will only be performed if the value is 1. In case no enable signal is
+    passed the drive will always be performed.
+
+    Use `llhd.assign` to update a signal without any delay.
 
     Example:
-
     ```mlir
-    %true = hw.constant true
-    %false = hw.constant false
-    %time = llhd.constant_time <1ns, 0d, 0e>
-    %sig = llhd.sig %true : <i1>
-
-    llhd.drv %sig, %false after %time : i1
-    llhd.drv %sig, %false after %time if %true : i1
+    llhd.drv %signal, %value after %delay : i42
+    llhd.drv %signal, %value after %delay if %enable : i9001
     ```
   }];
 
-  let arguments = (ins Arg<RefType, "the signal to drive to",
-                           [MemWrite]>: $signal,
-                       AnyType: $value,
-                       LLHDTimeType: $time,
-                       Optional<I1>: $enable);
+  let arguments = (ins
+    Arg<RefType, "the signal to drive to", [MemWrite]>:$signal,
+    AnyType:$value,
+    LLHDTimeType:$time,
+    Optional<I1>:$enable
+  );
 
   let assemblyFormat = [{
     $signal `,` $value `after` $time ( `if` $enable^ )? attr-dict `:`
     type($value)
+  }];
+
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
+def AssignOp : LLHDOp<"assign", [
+  DriveLikeOp,
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  TypeMatchesRefNestedType<"value", "signal">,
+]> {
+  let summary = "Assign a value to a signal without delay.";
+  let description = [{
+    The `llhd.assign` operation updates a signal with a new value immediately,
+    without any delay. This corresponds to a blocking or continuous assignment
+    in SystemVerilog. An optional enable makes the assignment conditional.
+
+    Example:
+    ```mlir
+    llhd.assign %signal, %value : i42
+    llhd.assign %signal, %value if %enable : i9001
+    ```
+  }];
+
+  let arguments = (ins
+    Arg<RefType, "the signal to assign to", [MemWrite]>:$signal,
+    AnyType:$value,
+    Optional<I1>:$enable
+  );
+
+  let assemblyFormat = [{
+    $signal `,` $value ( `if` $enable^ )? attr-dict `:` type($value)
   }];
 
   let hasFolder = 1;
@@ -255,13 +273,13 @@ def OutputOp : LLHDOp<"output", [
 
     ```mlir
     %value = hw.constant true
-    %time = llhd.constant_time <1ns, 0d, 0e>
+    %time = llhd.constant_time <1ns, 0d>
     %sig = llhd.output "sigName" %value after %time : i1
 
     // is equivalent to
 
     %value = hw.constant true
-    %time = llhd.constant_time <1ns, 0d, 0e>
+    %time = llhd.constant_time <1ns, 0d>
     %sig = llhd.sig name "sigName" %value : <i1>
     llhd.drv %sig, %value after %time : i1
     ```
