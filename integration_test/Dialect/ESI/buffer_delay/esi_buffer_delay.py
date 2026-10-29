@@ -43,7 +43,7 @@ async def init(dut):
     else:
       getattr(dut, f"{p}_out_ready").value = 0
 
-  cocotb.start_soon(Clock(dut.clk, 2, unit="ns").start())
+  cocotb.start_soon(Clock(dut.clk, 2, units="ns").start())
   dut.rst.value = 1
   for _ in range(5):
     await RisingEdge(dut.clk)
