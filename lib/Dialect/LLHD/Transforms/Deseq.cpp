@@ -1354,16 +1354,20 @@ static LogicalResult inferRegisterPreset(seq::FirRegOp regOp,
   };
 
   // Find other unconditional concurrent constant drivers on the signal.
-  for (auto *user : drive.op.getSignal().getUsers()) {
-    if (user == drive.op || user->getBlock() != drive.op->getBlock())
+  for (auto &use : drive.op.getSignal().getUses()) {
+    auto driveUser = dyn_cast<DriveLikeOp>(use.getOwner());
+    if (!driveUser || driveUser == drive.op ||
+        use != driveUser.getSignalMutable()[0])
       continue;
-    if (auto driveUser = dyn_cast<DriveLikeOp>(user)) {
-      if (driveUser.getEnable() || !isConcurrent(driveUser))
-        continue;
-      IntegerAttr driveCst;
-      if (matchPattern(driveUser.getValue(), m_Constant(&driveCst)))
-        constantDrives.push_back({driveUser, driveCst});
-    }
+
+    bool isSameBlock = driveUser->getBlock() == drive.op->getBlock();
+    bool isUnconditional = !driveUser.getEnable();
+    if (!(isSameBlock && isUnconditional && isConcurrent(driveUser)))
+      continue;
+
+    IntegerAttr driveCst;
+    if (matchPattern(driveUser.getValue(), m_Constant(&driveCst)))
+      constantDrives.push_back({driveUser, driveCst});
   }
 
   IntegerAttr preset;
