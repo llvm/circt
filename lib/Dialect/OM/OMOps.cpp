@@ -757,8 +757,8 @@ OpFoldResult circt::om::ListConcatOp::fold(FoldAdaptor adaptor) {
     llvm::append_range(elements, listAttr.getElements());
   }
 
-  auto elementsAttr = ArrayAttr::get(getContext(), elements);
-  return ListAttr::get(getContext(), getType().getElementType(), elementsAttr);
+  return ListAttr::get(getContext(), getType().getElementType(),
+                       ArrayAttr::get(getContext(), elements));
 }
 
 //===----------------------------------------------------------------------===//
