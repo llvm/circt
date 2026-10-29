@@ -86,7 +86,7 @@ hw.module @twoChannelArgs(in %clk: !seq.clock, in %ints: !esi.channel<i32, Valid
 // HW:   hw.output %true, %true : i1, i1
 
 // HW-LABEL: hw.module @i0Typed(in %a : i0, in %a_valid : i1, in %clk : !seq.clock, in %rst : i1, in %x_ready : i1, out a_ready : i1, out x : i0, out x_valid : i1) {
-// HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage1<WIDTH: ui32 = 0>(clk: %clk: !seq.clock, rst: %rst: i1, a: %a: i0, a_valid: %a_valid: i1, x_ready: %x_ready: i1) -> (a_ready: i1, x: i0, x_valid: i1)
+// HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage1<WIDTH: ui32 = 0, DATA_DELAY: ui32 = 0>(clk: %clk: !seq.clock, rst: %rst: i1, a: %a: i0, a_valid: %a_valid: i1, x_ready: %x_ready: i1) -> (a_ready: i1, x: i0, x_valid: i1)
 // HW:         hw.output %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid : i1, i0, i1
 // HW:       }
 hw.module @i0Typed(in %a: !esi.channel<i0, ValidReady>, in %clk: !seq.clock, in %rst: i1, out x: !esi.channel<i0, ValidReady>) {
@@ -261,7 +261,7 @@ hw.module @testSnoopTx(in %clk: !seq.clock, in %rst:i1, in %input: !esi.channel<
 // HW:         [[FIFO_XACT:%.+]] = comb.and [[NOT_EMPTY1]], [[R2:%.+]] : i1
 // HW:         [[R2]] = comb.and %pipelineStage.a_ready, [[NOT_EMPTY2:%.+]] : i1
 // HW:         [[NOT_EMPTY2]] = comb.xor %input_empty, %true_0 : i1
-// HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage2<WIDTH: ui32 = 32>(clk: %clk: !seq.clock, rst: %rst: i1, a: %input: i32, a_valid: %3: i1, x_ready: %output_ready: i1) -> (a_ready: i1, x: i32, x_valid: i1)
+// HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage2<WIDTH: ui32 = 32, DATA_DELAY: ui32 = 0>(clk: %clk: !seq.clock, rst: %rst: i1, a: %input: i32, a_valid: %3: i1, x_ready: %output_ready: i1) -> (a_ready: i1, x: i32, x_valid: i1)
 // HW:         [[VR_XACT:%.+]] = comb.and %pipelineStage.x_valid, %output_ready : i1
 // HW:         hw.output [[R2]], %pipelineStage.x, %pipelineStage.x_valid, [[FIFO_XACT]], [[VR_XACT]] : i1, i32, i1, i1, i1
 

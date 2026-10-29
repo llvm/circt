@@ -57,6 +57,11 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 
   ChannelType inputType = buffer.getInput().getType();
   Value stageInput = buffer.getInput();
+  // The stages carry the data delay, which is the same on the input and the
+  // output.
+  auto stageType =
+      ChannelType::get(rewriter.getContext(), inputType.getInner(),
+                       ChannelSignaling::ValidReady, inputType.getDataDelay());
 
   // FIFO signaling must be converted to ValidReady.
   if (inputType.getSignaling() == ChannelSignaling::FIFO) {
@@ -66,7 +71,8 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 
     auto unwrap = UnwrapFIFOOp::create(rewriter, loc, stageInput, rdEn);
     auto wrap =
-        WrapValidReadyOp::create(rewriter, loc, unwrap.getData(), valid);
+        WrapValidReadyOp::create(rewriter, loc, stageType, rewriter.getI1Type(),
+                                 unwrap.getData(), valid);
     stageInput = wrap.getChanOutput();
 
     // rdEn = valid && ready
@@ -80,8 +86,9 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
   // ValidOnly signaling must be converted to ValidReady (always ready).
   if (inputType.getSignaling() == ChannelSignaling::ValidOnly) {
     auto unwrap = UnwrapValidOnlyOp::create(rewriter, loc, stageInput);
-    auto wrap = WrapValidReadyOp::create(rewriter, loc, unwrap.getRawOutput(),
-                                         unwrap.getValid());
+    auto wrap =
+        WrapValidReadyOp::create(rewriter, loc, stageType, rewriter.getI1Type(),
+                                 unwrap.getRawOutput(), unwrap.getValid());
     stageInput = wrap.getChanOutput();
   }
 

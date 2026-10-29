@@ -197,3 +197,24 @@ hw.module @BadReadListLength(in %req : !esi.channel<!hw.struct<address: ui64, ta
 // The signaling is required.
 // expected-error @+1 {{expected ','}}
 hw.module.extern @MissingSignaling(in %a: !esi.channel<i8>)
+
+// -----
+
+hw.module @stageFIFO(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, FIFO>) {
+  // expected-error @+1 {{only supports valid-ready signaling}}
+  %0 = esi.stage %clk, %rst, %a : !esi.channel<i8, FIFO>
+}
+
+// -----
+
+hw.module @bufferDelayMismatch(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, FIFO(1)>) {
+  // expected-error @+1 {{input and output data delays must match}}
+  %0 = esi.buffer %clk, %rst, %a : !esi.channel<i8, FIFO(1)> -> !esi.channel<i8, ValidReady>
+}
+
+// -----
+
+hw.module @bufferValidOnlyOutputDelay(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, ValidReady(1)>) {
+  // expected-error @+1 {{does not support data delay on valid-only output channels}}
+  %0 = esi.buffer %clk, %rst, %a : !esi.channel<i8, ValidReady(1)> -> !esi.channel<i8, ValidOnly(1)>
+}

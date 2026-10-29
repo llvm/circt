@@ -72,8 +72,9 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 
   size_t width = circt::hw::getBitWidth(chPort.getInner());
 
-  ArrayAttr stageParams =
-      builder.getStageParameterList(rewriter.getUI32IntegerAttr(width));
+  ArrayAttr stageParams = builder.getStageParameterList(
+      rewriter.getUI32IntegerAttr(width),
+      rewriter.getUI32IntegerAttr(chPort.getDataDelay()));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet,
   // so create a temp value and replace it later. Give this constant an

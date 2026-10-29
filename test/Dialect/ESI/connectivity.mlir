@@ -83,3 +83,11 @@ hw.module @fifoWrapUnwrap() {
 // default ValidReady.
 // CHECK-LABEL: hw.module.extern @DataDelayTypes(in %a : !esi.channel<i8, ValidReady(2)>, in %b : !esi.channel<i8, ValidOnly(1)>, out x : !esi.channel<i8, FIFO(3)>)
 hw.module.extern @DataDelayTypes(in %a: !esi.channel<i8, ValidReady(2)>, in %b: !esi.channel<i8, ValidOnly(1)>, out x: !esi.channel<i8, FIFO(3)>)
+
+// CHECK-LABEL:  hw.module @stageDataDelay(in %clk : !seq.clock, in %rst : i1, in %a : !esi.channel<i8, ValidReady(2)>, out x : !esi.channel<i8, ValidReady(2)>)
+// CHECK-NEXT:     %0 = esi.stage %clk, %rst, %a : !esi.channel<i8, ValidReady(2)>
+// CHECK-NEXT:     hw.output %0 : !esi.channel<i8, ValidReady(2)>
+hw.module @stageDataDelay(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, ValidReady(2)>, out x: !esi.channel<i8, ValidReady(2)>) {
+  %staged = esi.stage %clk, %rst, %a : !esi.channel<i8, ValidReady(2)>
+  hw.output %staged : !esi.channel<i8, ValidReady(2)>
+}
