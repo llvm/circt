@@ -497,4 +497,32 @@ def EventuallyOp : LTLOp<"eventually", [Pure]> {
   }];
 }
 
+def AcceptOnOp : LTLOp<"accept_on", [Pure]> {
+  let arguments = (ins
+    LTLAnyPropertyType:$input,
+    I1:$condition,
+    UnitAttr:$sync
+  );
+  let results = (outs LTLPropertyType:$result);
+  let assemblyFormat = [{
+    $input `,` $condition (`sync` $sync^)? attr-dict `:` type($input)
+  }];
+
+  let summary = "Property that holds if aborted by a condition.";
+  let description = [{
+    Evaluates the `$input` property, but aborts the evaluation and considers the
+    property to hold as soon as the `$condition` becomes true. This corresponds
+    to the `accept_on` operator in SystemVerilog (IEEE 1800-2023 16.12.14).
+
+    If the `sync` keyword is present, the operation corresponds to
+    `sync_accept_on`: the `$condition` is only evaluated at the ticks of the
+    enclosing clock, using sampled values. Otherwise, the `$condition` is
+    evaluated asynchronously, at every time step. When every time step is a tick
+    of a single clock, the two variants are equivalent.
+
+    The dual `reject_on` operator (`sync_reject_on`) can be expressed as
+    `not(accept_on(not p, c))`.
+  }];
+}
+
 #endif // CIRCT_DIALECT_LTL_LTLOPS_TD
