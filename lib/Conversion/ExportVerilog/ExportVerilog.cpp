@@ -3695,6 +3695,9 @@ private:
   EmittedProperty visitLTL(ltl::ImplicationOp op);
   EmittedProperty visitLTL(ltl::UntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
+  EmittedProperty visitLTL(ltl::AcceptOnOp op);
+  EmittedProperty emitAcceptRejectOn(StringRef mnemonic, Value condition,
+                                     Value input);
   EmittedProperty visitLTL(ltl::ClockOp op);
   EmittedProperty visitLTL(ltl::WeakOp op);
   EmittedProperty visitLTL(ltl::StrongOp op);
@@ -3984,6 +3987,13 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {
+  // Emit `not(accept_on(not(X), c))` as `reject_on (c) X` by duality, and
+  // likewise for the `sync` variants.
+  if (auto accept = op.getInput().getDefiningOp<ltl::AcceptOnOp>())
+    if (auto innerNot = accept.getInput().getDefiningOp<ltl::NotOp>())
+      return emitAcceptRejectOn(accept.getSync() ? "sync_reject_on"
+                                                 : "reject_on",
+                                accept.getCondition(), innerNot.getInput());
   // Emit `not (s_eventually X)` as `always ...` by duality, pulling the
   // quantifier to the top and cancelling any inner negation.
   if (auto ev = op.getInput().getDefiningOp<ltl::EventuallyOp>()) {
@@ -4043,6 +4053,24 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
   ps << "s_eventually" << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Qualifier);
   return {PropertyPrecedence::Qualifier};
+}
+
+EmittedProperty PropertyEmitter::emitAcceptRejectOn(StringRef mnemonic,
+                                                    Value condition,
+                                                    Value input) {
+  ps << mnemonic << PP::nbsp << "(";
+  ps.scopedBox(PP::ibox0, [&] {
+    emitNestedProperty(condition, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+  ps << PP::space;
+  emitNestedProperty(input, PropertyPrecedence::Qualifier);
+  return {PropertyPrecedence::Qualifier};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::AcceptOnOp op) {
+  return emitAcceptRejectOn(op.getSync() ? "sync_accept_on" : "accept_on",
+                            op.getCondition(), op.getInput());
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {

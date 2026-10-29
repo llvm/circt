@@ -302,6 +302,149 @@ hw.module @Precedence(in %a: i1, in %b: i1) {
   sv.assert_property %ag11 : !ltl.property
 }
 
+// CHECK-LABEL: module AbortOperators
+hw.module @AbortOperators(in %a: i1, in %b: i1, in %c: i1) {
+  // CHECK: assert property (accept_on (c) a);
+  // CHECK: assert property (sync_accept_on (c) a);
+  %0 = ltl.accept_on %a, %c : i1
+  %1 = ltl.accept_on %a, %c sync : i1
+  sv.assert_property %0 : !ltl.property
+  sv.assert_property %1 : !ltl.property
+
+  // Emit `not(accept_on(not(x), c))` as `reject_on (c) x`.
+  // CHECK: assert property (reject_on (c) a);
+  // CHECK: assert property (sync_reject_on (c) a);
+  %na = ltl.not %a : i1
+  %2 = ltl.accept_on %na, %c : !ltl.property
+  %3 = ltl.not %2 : !ltl.property
+  %4 = ltl.accept_on %na, %c sync : !ltl.property
+  %5 = ltl.not %4 : !ltl.property
+  sv.assert_property %3 : !ltl.property
+  sv.assert_property %5 : !ltl.property
+
+  // No fold if the inner property is not a negation.
+  // CHECK: assert property (not (accept_on (c) a));
+  // CHECK: assert property (not (sync_accept_on (c) a));
+  %6 = ltl.not %0 : !ltl.property
+  %7 = ltl.not %1 : !ltl.property
+  sv.assert_property %6 : !ltl.property
+  sv.assert_property %7 : !ltl.property
+
+  // Nesting inside other property operators.
+  // CHECK: assert property (a |-> (accept_on (c) b));
+  %8 = ltl.accept_on %b, %c : i1
+  %9 = ltl.implication %a, %8 : i1, !ltl.property
+  sv.assert_property %9 : !ltl.property
+
+  // CHECK: assert property (s_eventually accept_on (c) a);
+  %11 = ltl.eventually %0 : !ltl.property
+  sv.assert_property %11 : !ltl.property
+
+  // CHECK: assert property (always accept_on (c) a);
+  %12 = ltl.not %0 : !ltl.property
+  %13 = ltl.eventually %12 : !ltl.property
+  %14 = ltl.not %13 : !ltl.property
+  sv.assert_property %14 : !ltl.property
+
+  // CHECK: assert property ((accept_on (c) a) and b);
+  // CHECK: assert property ((accept_on (c) a) until b);
+  %15 = ltl.and %0, %b : !ltl.property, i1
+  %16 = ltl.until %0, %b : !ltl.property, i1
+  sv.assert_property %15 : !ltl.property
+  sv.assert_property %16 : !ltl.property
+
+  // CHECK: assert property (accept_on (c) a |-> b);
+  // CHECK: assert property (accept_on (c) a & b);
+  // CHECK: assert property (accept_on (c) accept_on (b) a);
+  // CHECK: assert property (accept_on (c) always a);
+  %ab = ltl.implication %a, %b : i1, i1
+  %17 = ltl.accept_on %ab, %c : !ltl.property
+  %aab = comb.and %a, %b : i1
+  %18 = ltl.accept_on %aab, %c : i1
+  %19 = ltl.accept_on %a, %b : i1
+  %20 = ltl.accept_on %19, %c : !ltl.property
+  %21 = ltl.eventually %na : !ltl.property
+  %22 = ltl.not %21 : !ltl.property
+  %23 = ltl.accept_on %22, %c : !ltl.property
+  sv.assert_property %17 : !ltl.property
+  sv.assert_property %18 : !ltl.property
+  sv.assert_property %20 : !ltl.property
+  sv.assert_property %23 : !ltl.property
+
+  // Boolean conditions are emitted as plain expressions.
+  // CHECK: assert property (accept_on (a & b) c);
+  %24 = comb.and %a, %b : i1
+  %25 = ltl.accept_on %c, %24 : i1
+  sv.assert_property %25 : !ltl.property
+
+  // CHECK: assert property (a |-> (reject_on (c) b));
+  // CHECK: assert property (not (reject_on (c) a));
+  // CHECK: assert property (reject_on (c) reject_on (c) a);
+  %nb = ltl.not %b : i1
+  %26 = ltl.accept_on %nb, %c : !ltl.property
+  %27 = ltl.not %26 : !ltl.property
+  %28 = ltl.implication %a, %27 : i1, !ltl.property
+  sv.assert_property %28 : !ltl.property
+  %29 = ltl.not %3 : !ltl.property
+  sv.assert_property %29 : !ltl.property
+  %30 = ltl.accept_on %29, %c : !ltl.property
+  %31 = ltl.not %30 : !ltl.property
+  sv.assert_property %31 : !ltl.property
+}
+
+// CHECK-LABEL: module AbortOperatorsMore
+hw.module @AbortOperatorsMore(in %clk: i1, in %a: i1, in %b: i1, in %c: i1) {
+  // Multiple uses: the fold applies to the `not` while the plain `accept_on`
+  // remains available to its other users.
+  // CHECK: assert property (reject_on (c) a);
+  // CHECK: assert property (accept_on (c) not a);
+  %na = ltl.not %a : i1
+  %0 = ltl.accept_on %na, %c : !ltl.property
+  %1 = ltl.not %0 : !ltl.property
+  sv.assert_property %1 : !ltl.property
+  sv.assert_property %0 : !ltl.property
+
+  // Sequence operands.
+  // CHECK: assert property (reject_on (c) a ##1 b);
+  // CHECK: assert property (sync_accept_on (c) a ##1 b);
+  %d = ltl.delay %b, 1, 0 : i1
+  %seq = ltl.concat %a, %d : i1, !ltl.sequence
+  %nseq = ltl.not %seq : !ltl.sequence
+  %2 = ltl.accept_on %nseq, %c : !ltl.property
+  %3 = ltl.not %2 : !ltl.property
+  sv.assert_property %3 : !ltl.property
+  %4 = ltl.accept_on %seq, %c sync : !ltl.sequence
+  sv.assert_property %4 : !ltl.property
+
+  // Interaction with clocking.
+  // CHECK: assert property (@(posedge clk) accept_on (c) a);
+  // CHECK: assert property (accept_on (c) (@(posedge clk) a));
+  %5 = ltl.accept_on %a, %c : i1
+  %6 = ltl.clock %5, posedge %clk : !ltl.property
+  sv.assert_property %6 : !ltl.property
+  %7 = ltl.clock %a, posedge %clk : i1
+  %8 = ltl.accept_on %7, %c : !ltl.sequence
+  sv.assert_property %8 : !ltl.property
+
+  // Other operators and mixed sync/async nesting.
+  // CHECK: assert property ((accept_on (c) a) or b);
+  // CHECK: assert property (b until (sync_accept_on (c) a));
+  // CHECK: assert property (sync_accept_on (c) accept_on (b) a);
+  // CHECK: assert property (b |-> (sync_reject_on (c) a));
+  %9 = ltl.or %5, %b : !ltl.property, i1
+  sv.assert_property %9 : !ltl.property
+  %10 = ltl.accept_on %a, %c sync : i1
+  %11 = ltl.until %b, %10 : i1, !ltl.property
+  sv.assert_property %11 : !ltl.property
+  %12 = ltl.accept_on %a, %b : i1
+  %13 = ltl.accept_on %12, %c sync : !ltl.property
+  sv.assert_property %13 : !ltl.property
+  %14 = ltl.accept_on %na, %c sync : !ltl.property
+  %15 = ltl.not %14 : !ltl.property
+  %16 = ltl.implication %b, %15 : i1, !ltl.property
+  sv.assert_property %16 : !ltl.property
+}
+
 // CHECK-LABEL: module WeakAndStrongSequences
 hw.module @WeakAndStrongSequences(in %a: i1, in %b: i1, in %c: i1, in %d: i1) {
   // CHECK: assert property (weak (a ##1 b ##0 c ##1 d));
