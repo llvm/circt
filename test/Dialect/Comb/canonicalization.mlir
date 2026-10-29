@@ -1642,9 +1642,9 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1, in %cond3: i1,
   %and = comb.and %arg0, %arg1, %arg2 : i32
   %o4 = comb.mux %cond, %arg0, %and : i32
 
-  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[OR1:%.*]] = comb.or %arg1, %arg2, %arg3 : i32
   // CHECK: [[ORRESULT:%.*]] = comb.or [[OR1]], %arg0 : i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[MASKED_OR:%.*]] = comb.and [[CONDEXT]], [[OR1]] : i32
   // CHECK: [[O5:%.*]] = comb.or [[MASKED_OR]], %arg0 : i32
   %orResult = comb.or %arg0, %arg1, %arg2, %arg3 : i32
@@ -1686,6 +1686,25 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1, in %cond3: i1,
   // CHECK: [[O6]], [[O7]], [[O8]], [[O9]], [[O10]]
   hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7, %o8, %o9, %o10, %o11, %o12, %o13
     : i32, i32, i32, i32, i32, i32, i32, i32, i1, i32, i32, i1, i32, i32
+}
+
+// Regression check for SSACFG dominance when splitting a multi-use variadic
+// associative op in foldCommonMuxValue.
+// CHECK-LABEL: func.func @muxCommonMultiUseDominance(
+// CHECK-NEXT:    %[[TRUE:.+]] = hw.constant true
+// CHECK-NEXT:    %[[SUB:.+]] = comb.and %arg0, %arg1 : i10
+// CHECK-NEXT:    %[[FULL:.+]] = comb.and %[[SUB]], %arg2 : i10
+// CHECK-NEXT:    call @use_i10(%[[FULL]]) : (i10) -> ()
+// CHECK-NEXT:    %[[NOT:.+]] = comb.xor %arg3, %[[TRUE]] : i1
+// CHECK-NEXT:    %[[REPL:.+]] = comb.replicate %[[NOT]] : (i1) -> i10
+// CHECK-NEXT:    %[[MASK:.+]] = comb.or %[[REPL]], %[[SUB]] : i10
+// CHECK-NEXT:    %[[RES:.+]] = comb.and %[[MASK]], %arg2 : i10
+// CHECK-NEXT:    return %[[RES]] : i10
+func.func @muxCommonMultiUseDominance(%arg0: i10, %arg1: i10, %arg2: i10, %arg3: i1) -> i10 {
+  %0 = comb.and %arg0, %arg1, %arg2 : i10
+  call @use_i10(%0) : (i10) -> ()
+  %1 = comb.mux %arg3, %0, %arg2 : i10
+  return %1 : i10
 }
 
 // CHECK-LABEL: @flatten_multi_use_and
