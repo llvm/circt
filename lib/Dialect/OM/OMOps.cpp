@@ -741,6 +741,27 @@ ParseResult circt::om::ListCreateOp::parse(OpAsmParser &parser,
 }
 
 //===----------------------------------------------------------------------===//
+// ListConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult circt::om::ListConcatOp::fold(FoldAdaptor adaptor) {
+  auto subLists = adaptor.getSubLists();
+  if (subLists.size() == 1)
+    return getSubLists().front();
+
+  SmallVector<Attribute> elements;
+  for (Attribute attr : subLists) {
+    auto listAttr = dyn_cast_or_null<ListAttr>(attr);
+    if (!listAttr)
+      return {};
+    llvm::append_range(elements, listAttr.getElements());
+  }
+
+  auto elementsAttr = ArrayAttr::get(getContext(), elements);
+  return ListAttr::get(getContext(), getType().getElementType(), elementsAttr);
+}
+
+//===----------------------------------------------------------------------===//
 // BasePathCreateOp
 //===----------------------------------------------------------------------===//
 

@@ -278,3 +278,49 @@ om.class @ListCreateFold(%0: !om.integer) -> (
       !om.list<!om.string>, !om.list<i1>, !om.list<!om.integer>,
       !om.list<!om.string>, !om.list<!om.integer>, !om.list<!om.integer>
 }
+
+// List concatenation folds constant operands and preserves identity for a
+// single operand. This test uses list attributes directly, independently of
+// the list_create folder.
+// CHECK-LABEL: @ListConcatFold
+om.class @ListConcatFold(
+    %0: !om.list<!om.string>, %1: !om.list<!om.string>) -> (
+    joined: !om.list<!om.string>, empty: !om.list<!om.string>,
+    single_constant: !om.list<!om.string>, single_dynamic: !om.list<!om.string>,
+    nested: !om.list<!om.string>, dynamic: !om.list<!om.string>) {
+  // Concatenating multiple constants folds to one list constant.
+  %2 = om.constant #om.list<!om.string, ["a" : !om.string]>
+      : !om.list<!om.string>
+  %3 = om.constant #om.list<!om.string, ["b" : !om.string]>
+      : !om.list<!om.string>
+  %4 = om.constant #om.list<!om.string, ["c" : !om.string]>
+      : !om.list<!om.string>
+  // CHECK: [[LIST_A:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string]> : !om.list<!om.string>{{$}}
+  // CHECK: [[JOINED:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string, "c" : !om.string]> : !om.list<!om.string>{{$}}
+  %5 = om.list_concat %2, %3, %4 : !om.list<!om.string>
+
+  // Concatenating two empty lists folds to an empty list.
+  %6 = om.constant #om.list<!om.string, []> : !om.list<!om.string>
+  %7 = om.constant #om.list<!om.string, []> : !om.list<!om.string>
+  // CHECK: [[EMPTY:%[0-9]+]] = om.constant #om.list<!om.string, []> : !om.list<!om.string>{{$}}
+  %8 = om.list_concat %6, %7 : !om.list<!om.string>
+
+  // A single constant operand is an identity.
+  %9 = om.list_concat %2 : !om.list<!om.string>
+
+  // A single dynamic operand is an identity.
+  %10 = om.list_concat %0 : !om.list<!om.string>
+
+  // Nested constant concatenations fold to the same list constant.
+  %11 = om.list_concat %2, %3 : !om.list<!om.string>
+  %12 = om.list_concat %11, %4 : !om.list<!om.string>
+
+  // Multiple dynamic operands remain unfurled.
+  // CHECK: [[DYNAMIC_CONCAT:%[0-9]+]] = om.list_concat [[ARG0:%_0]], [[ARG1:%_1]] : <!om.string>{{$}}
+  %13 = om.list_concat %0, %1 : !om.list<!om.string>
+
+  // CHECK: om.class.fields [[JOINED]], [[EMPTY]], [[LIST_A]], [[ARG0]], [[JOINED]], [[DYNAMIC_CONCAT]]
+  om.class.fields %5, %8, %9, %10, %12, %13 :
+      !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
+      !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>
+}
