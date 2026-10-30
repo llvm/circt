@@ -54,14 +54,20 @@ std::exception_ptr disconnectedBeforeConnected(const std::string &name) {
 // WriteCosimChannelPort
 //===----------------------------------------------------------------------===//
 
-/// Cosim client implementation of a write channel port.
+/// Cosim client implementation of a write channel port. Applies the cosim
+/// protocol's credit-based flow control: while the number of frames not yet
+/// consumed by the simulation is at the in-flight limit, `tryWrite()` fails
+/// and `write()` blocks. The limit is `ConnectOptions::bufferSize`
+/// (0 = unbounded) if specified,
+/// else `defaultMaxInFlight`.
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
-  WriteCosimChannelPort(AcceleratorConnection &conn, RpcClient &client,
-                        const RpcClient::ChannelDesc &desc, const Type *type,
-                        std::string name)
+  WriteCosimChannelPort(
+      AcceleratorConnection &conn, RpcClient &client,
+      const RpcClient::ChannelDesc &desc, const Type *type, std::string name,
+      unsigned defaultMaxInFlight = RpcClient::DefaultToServerMaxInFlight)
       : WriteChannelPort(type), conn(conn), client(client), desc(desc),
-        name(std::move(name)) {}
+        name(std::move(name)), defaultMaxInFlight(defaultMaxInFlight) {}
   ~WriteCosimChannelPort() { failPendingConnect(); }
 
   void connectImpl(const ChannelPort::ConnectOptions &options,
@@ -69,9 +75,11 @@ public:
     if (desc.dir != RpcClient::ChannelDirection::ToServer)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to server channel");
+    client.setToServerMaxInFlight(
+        name, options.bufferSize.value_or(defaultMaxInFlight));
     // Called once the simulation has connected its end. Writes before then
-    // are held by the server. Guarded so it fires exactly once even if this
-    // port is disconnected first.
+    // are held by the server and backpressured. Guarded so it fires exactly
+    // once even if this port is disconnected first.
     auto guarded =
         std::make_shared<utils::OnceCallback>(std::move(onConnected));
     pendingConnect = guarded;
@@ -85,29 +93,33 @@ public:
   }
 
 protected:
+  void traceWrite(const MessageData &data) {
+    conn.getLogger().trace(
+        [this,
+         &data](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_write";
+          msg = "Writing message to channel '" + name + "'";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          (*details)["channel"] = name;
+          (*details)["data_size"] = data.getSize();
+          (*details)["message_data"] = data.toHex();
+        });
+  }
+
   void writeImpl(const MessageData &data) override {
     auto frames = getMessageFrames(data);
     for (const auto &frame : frames) {
-      conn.getLogger().trace(
-          [this,
-           &data](std::string &subsystem, std::string &msg,
-                  std::unique_ptr<std::map<std::string, std::any>> &details) {
-            subsystem = "cosim_write";
-            msg = "Writing message to channel '" + name + "'";
-            details = std::make_unique<std::map<std::string, std::any>>();
-            (*details)["channel"] = name;
-            (*details)["data_size"] = data.getSize();
-            (*details)["message_data"] = data.toHex();
-          });
-
+      traceWrite(data);
       client.writeToServer(name, frame);
     }
   }
   bool tryWriteImpl(const MessageData &data) override {
-    // For simplicity, this implementation does not support backpressure and
-    // always returns true. A more complex implementation could track pending
-    // messages and return false if there are too many.
-    writeImpl(data);
+    auto frames = getMessageFrames(data);
+    if (!client.tryWriteToServer(name, frames))
+      return false;
+    for (size_t i = 0; i < frames.size(); ++i)
+      traceWrite(data);
     return true;
   }
 
@@ -121,6 +133,7 @@ private:
   RpcClient &client;
   RpcClient::ChannelDesc desc;
   std::string name;
+  unsigned defaultMaxInFlight;
   std::shared_ptr<utils::OnceCallback> pendingConnect;
 };
 
@@ -187,7 +200,8 @@ public:
 
           return consumed;
         },
-        [guarded](std::exception_ptr error) { (*guarded)(error); });
+        [guarded](std::exception_ptr error) { (*guarded)(error); },
+        options.bufferSize.value_or(RpcClient::DefaultToClientMaxInFlight));
   }
 
   void disconnect() override {
@@ -638,10 +652,13 @@ public:
     const esi::Type *readReqType = channelType(readArg);
 
     // Get ports. Unfortunately, we can't model this as a callback since there
-    // will sometimes be multiple responses per request.
+    // will sometimes be multiple responses per request. Like PCIe read
+    // completions, responses are not flow controlled: the requester must
+    // already have room for them, so give them no in-flight limit.
     readRespPort = std::make_unique<WriteCosimChannelPort>(
         conn, *rpcClient, readResp, readRespType,
-        "__cosim_hostmem_read_resp.data");
+        "__cosim_hostmem_read_resp.data", /*defaultMaxInFlight=*/0);
+    readRespPort->connect();
     readReqPort = std::make_unique<ReadCosimChannelPort>(
         conn, *rpcClient, readArg, readReqType,
         "__cosim_hostmem_read_req.data");
@@ -651,10 +668,11 @@ public:
     // Setup the write side callback.
     const esi::Type *writeRespType = channelType(writeResp);
 
-    // Get ports, create the function, then connect to it.
+    // Get ports, create the function, then connect to it. Write completions
+    // are unbounded for the same reason as read responses.
     writeRespPort = std::make_unique<WriteCosimChannelPort>(
         conn, *rpcClient, writeResp, writeRespType,
-        "__cosim_hostmem_write.result");
+        "__cosim_hostmem_write.result", /*defaultMaxInFlight=*/0);
     writeReqPort = std::make_unique<ReadCosimChannelPort>(
         conn, *rpcClient, writeArg, writeReqType, "__cosim_hostmem_write.arg");
     auto *bundleType = new BundleType(

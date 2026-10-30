@@ -325,8 +325,11 @@ NB_MODULE(esiCppAccel, m) {
       .def_prop_ro("base", [](MMIO::RegionDescriptor &r) { return r.base; })
       .def_prop_ro("size", [](MMIO::RegionDescriptor &r) { return r.size; });
   nb::class_<services::MMIO, services::Service>(m, "MMIO")
-      .def("read", &services::MMIO::read)
-      .def("write", &services::MMIO::write)
+      // These can block (e.g. on cosim backpressure); yield the GIL meanwhile.
+      .def("read", &services::MMIO::read,
+           nb::call_guard<nb::gil_scoped_release>())
+      .def("write", &services::MMIO::write,
+           nb::call_guard<nb::gil_scoped_release>())
       .def_prop_ro("regions", &services::MMIO::getRegions,
                    nb::rv_policy::reference);
 
@@ -435,6 +438,9 @@ NB_MODULE(esiCppAccel, m) {
              std::vector<uint8_t> dataVec((const uint8_t *)data.c_str(),
                                           (const uint8_t *)data.c_str() +
                                               data.size());
+             // Blocks under backpressure. Yield the GIL so python callbacks
+             // on other threads can make progress meanwhile.
+             nb::gil_scoped_release release{};
              p.write(dataVec);
            })
       .def("tryWrite", [](WriteChannelPort &p, nb::bytearray data) {
@@ -465,8 +471,11 @@ NB_MODULE(esiCppAccel, m) {
 
   nb::class_<MMIO::MMIORegion, ServicePort>(m, "MMIORegion")
       .def_prop_ro("descriptor", &MMIO::MMIORegion::getDescriptor)
-      .def("read", &MMIO::MMIORegion::read)
-      .def("write", &MMIO::MMIORegion::write);
+      // These can block (e.g. on cosim backpressure); yield the GIL meanwhile.
+      .def("read", &MMIO::MMIORegion::read,
+           nb::call_guard<nb::gil_scoped_release>())
+      .def("write", &MMIO::MMIORegion::write,
+           nb::call_guard<nb::gil_scoped_release>());
 
   nb::class_<FuncService::Function, ServicePort>(m, "Function")
       .def("call",
@@ -476,6 +485,8 @@ NB_MODULE(esiCppAccel, m) {
                                           (const uint8_t *)msg.c_str() +
                                               msg.size());
              MessageData data(dataVec);
+             // Sending the argument can block on backpressure.
+             nb::gil_scoped_release release{};
              return self.call(data);
            })
       .def("connect", [](FuncService::Function &self) {
@@ -542,6 +553,8 @@ NB_MODULE(esiCppAccel, m) {
             std::vector<uint8_t> dataVec((const uint8_t *)data.c_str(),
                                          (const uint8_t *)data.c_str() +
                                              data.size());
+            // Blocks under backpressure; yield the GIL meanwhile.
+            nb::gil_scoped_release release{};
             self.write(MessageData(dataVec));
           },
           nb::arg("data"));
