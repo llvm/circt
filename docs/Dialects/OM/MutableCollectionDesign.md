@@ -129,9 +129,11 @@ mutation state should have explicit per-call lifetime instead of relying on this
 [`ElaborateObject.cpp`](../../../lib/Dialect/OM/Transforms/ElaborateObject.cpp)
 clones constructor bodies, substitutes parameters, produces elaborated objects,
 folds field access, and runs greedy rewrites. Strict result verification has a
-fixed whitelist of legal residual operations. Adding the push canonicalization
-to its pattern set folds contributions into allocations as soon as inlining
-exposes them. Pushes remain only when they target a class parameter.
+fixed whitelist of legal residual operations. The `CollectionCreateOp`
+canonicalizer folds all pushes targeting an allocation into its initial elements
+as soon as inlining exposes them. A separate `CollectionPushOp` canonicalizer
+drops contributions to unknown destinations. Pushes remain only when they target
+a class parameter.
 
 `UnknownPropagationPattern` rewrites pure OM operations. Allocation and push
 must not be pure, or optimization can erase identity or contributions; in

@@ -9,8 +9,24 @@ om.class @Mismatch(%items: !om.collection<!om.integer>, %value: !om.string) {
 // -----
 
 om.class @InitialMismatch(%value: !om.string) {
-  // expected-error @+1 {{element type '!om.string' does not match collection element type '!om.integer'}}
+  // expected-error @+1 {{element types must match the collection element type}}
   %items = "om.collection"(%value) : (!om.string) -> !om.collection<!om.integer>
+  om.class.fields
+}
+
+// -----
+
+om.class @MixedInitialTypes(%integer: !om.integer, %string: !om.string) {
+  // expected-error @+1 {{element types must match the collection element type}}
+  %items = "om.collection"(%integer, %string) : (!om.integer, !om.string) -> !om.collection<!om.integer>
+  om.class.fields
+}
+
+// -----
+
+om.class @InvalidResultType(%value: !om.integer) {
+  // expected-error @+1 {{result #0 must be}}
+  %items = "om.collection"(%value) : (!om.integer) -> !om.list<!om.integer>
   om.class.fields
 }
 

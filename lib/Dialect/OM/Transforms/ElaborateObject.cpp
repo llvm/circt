@@ -285,6 +285,8 @@ struct ElaborateObjectPass
     patterns.add<EvaluateObjectField>(classOp.getContext(), symTable,
                                       fieldIndexes);
     patterns.add<UnknownPropagationPattern>(classOp.getContext());
+    CollectionCreateOp::getCanonicalizationPatterns(patterns,
+                                                    classOp.getContext());
     CollectionPushOp::getCanonicalizationPatterns(patterns,
                                                   classOp.getContext());
     GreedyRewriteConfig config;

@@ -290,7 +290,11 @@ def ConstantOp : OMOp<"constant",
 }
 
 def CollectionCreateOp : OMOp<"collection", [MemoryEffects<[MemAlloc]>,
-    HasParent<"ClassOp">]> {
+    HasParent<"ClassOp">,
+    PredOpTrait<"element types must match the collection element type",
+      CPred<"::llvm::all_of($elements.getTypes(), [&](::mlir::Type type) { "
+            "return type == ::llvm::cast<CollectionType>($result.getType())"
+            ".getElementType(); })">>]> {
   let summary = "Allocate a fresh collection";
   let description = [{
     Allocates a collection with fresh identity for each object instantiation,
@@ -310,7 +314,7 @@ def CollectionCreateOp : OMOp<"collection", [MemoryEffects<[MemAlloc]>,
     }]>
   ];
   let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 def CollectionPushOp : OMOp<"collection_push", [MemoryEffects<[MemWrite]>,
