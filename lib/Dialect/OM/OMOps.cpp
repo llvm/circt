@@ -698,9 +698,31 @@ void circt::om::ConstantOp::build(::mlir::OpBuilder &odsBuilder,
   return build(odsBuilder, odsState, constVal.getType(), constVal);
 }
 
+LogicalResult circt::om::ConstantOp::verify() {
+  bool containsCollection = false;
+  getType().walk(
+      [&](Type type) { containsCollection |= isa<CollectionType>(type); });
+  if (containsCollection)
+    return emitOpError("collection handles cannot be constants");
+  return success();
+}
+
 OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// CollectionPushOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult circt::om::CollectionPushOp::verify() {
+  auto elementType = getCollection().getType().getElementType();
+  if (getElement().getType() != elementType)
+    return emitOpError("element type ")
+           << getElement().getType()
+           << " does not match collection element type " << elementType;
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

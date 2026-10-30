@@ -36,6 +36,67 @@ void testTypes(MlirContext ctx) {
           mlirTypeIDEqual(stringTypeID, actualStringTypeID));
 }
 
+void testCollection(MlirContext ctx) {
+  MlirType elementType = mlirIntegerTypeGet(ctx, 64);
+  MlirType type = omCollectionTypeGet(elementType);
+  // CHECK: collection type: 1, element type: 1, type ID: 1
+  fprintf(
+      stderr, "collection type: %d, element type: %d, type ID: %d\n",
+      omTypeIsACollectionType(type),
+      mlirTypeEqual(omCollectionTypeGetElementType(type), elementType),
+      mlirTypeIDEqual(omCollectionTypeGetTypeID(), mlirTypeGetTypeID(type)));
+
+  const char *ir =
+      "module {"
+      "  om.class @Source() -> (items: !om.collection<i64>) {"
+      "    %items = om.collection : !om.collection<i64>"
+      "    %value = om.constant 42 : i64"
+      "    om.collection_push %items, %value : !om.collection<i64>, i64"
+      "    om.collection_push %items, %value : !om.collection<i64>, i64"
+      "    om.class.fields %items : !om.collection<i64>"
+      "  }"
+      "  om.class @Append(%items: !om.collection<i64>) -> (items: "
+      "!om.collection<i64>) {"
+      "    %value = om.constant 43 : i64"
+      "    om.collection_push %items, %value : !om.collection<i64>, i64"
+      "    om.class.fields %items : !om.collection<i64>"
+      "  }"
+      "}";
+  MlirModule module =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(ir));
+  OMEvaluator evaluator = omEvaluatorNew(module);
+  MlirAttribute sourceName =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("Source"));
+  OMEvaluatorValue source = omEvaluatorInstantiate(evaluator, sourceName, 0, 0);
+  MlirAttribute fieldName =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("items"));
+  OMEvaluatorValue items = omEvaluatorObjectGetField(source, fieldName);
+  // CHECK: collection value: 1, count: 2
+  fprintf(stderr, "collection value: %d, count: %ld\n",
+          omEvaluatorValueIsACollection(items),
+          omEvaluatorCollectionGetNumElements(items));
+  OMEvaluatorValue element = omEvaluatorCollectionGetElement(items, 0);
+  // CHECK: collection element: 42
+  fprintf(stderr, "collection element: %ld\n",
+          mlirIntegerAttrGetValueInt(omEvaluatorValueGetPrimitive(element)));
+
+  MlirAttribute appendName =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("Append"));
+  OMEvaluatorValue appended =
+      omEvaluatorInstantiate(evaluator, appendName, 1, &items);
+  OMEvaluatorValue copy = omEvaluatorObjectGetField(appended, fieldName);
+  // CHECK: original collection count: 2, snapshot count: 3
+  fprintf(stderr, "original collection count: %ld, snapshot count: %ld\n",
+          omEvaluatorCollectionGetNumElements(items),
+          omEvaluatorCollectionGetNumElements(copy));
+  OMEvaluatorValue unknown = omEvaluatorUnknownGet(ctx, type);
+  // CHECK: unknown collection: 1, unknown membership: 1
+  fprintf(stderr, "unknown collection: %d, unknown membership: %d\n",
+          omEvaluatorValueIsACollection(unknown),
+          omEvaluatorValueIsUnknown(unknown));
+  mlirModuleDestroy(module);
+}
+
 void testListAttr(MlirContext ctx) {
   // Test creating ListAttr with integer elements
   MlirType i64Type = mlirIntegerTypeGet(ctx, 64);
@@ -277,6 +338,7 @@ int main(void) {
                               mlirDialectHandleGetNamespace(omDialectHandle));
 
   testTypes(ctx);
+  testCollection(ctx);
   testListAttr(ctx);
   testEvaluator(ctx);
   testPropertyAssert(ctx);

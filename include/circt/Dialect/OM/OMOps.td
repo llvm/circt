@@ -285,7 +285,36 @@ def ConstantOp : OMOp<"constant",
     $value attr-dict
   }];
 
+  let hasVerifier = 1;
   let hasFolder = true;
+}
+
+def CollectionCreateOp : OMOp<"collection", [MemoryEffects<[MemAlloc]>,
+    HasParent<"ClassOp">]> {
+  let summary = "Allocate a fresh empty collection";
+  let description = [{
+    Allocates a collection with fresh identity for each object instantiation.
+    The collection remains open until evaluation of the entire instantiated
+    graph completes. Equal types or contents do not imply shared identity.
+  }];
+  let results = (outs CollectionType:$result);
+  let assemblyFormat = "attr-dict `:` qualified(type($result))";
+}
+
+def CollectionPushOp : OMOp<"collection_push", [MemoryEffects<[MemWrite]>,
+    HasParent<"ClassOp">]> {
+  let summary = "Contribute one element to a collection";
+  let description = [{
+    Contributes an element reference exactly once per instantiated operation.
+    Contributions are unordered and preserve duplicates. This operation has
+    no results and is executed by the evaluator, not object elaboration.
+  }];
+  let arguments = (ins CollectionType:$collection, AnyType:$element);
+  let assemblyFormat = [{
+    $collection `,` $element attr-dict `:` qualified(type($collection)) `,`
+      qualified(type($element))
+  }];
+  let hasVerifier = 1;
 }
 
 def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {

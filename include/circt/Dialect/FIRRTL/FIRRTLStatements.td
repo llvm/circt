@@ -370,6 +370,22 @@ def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
   }];
 }
 
+def CollectionPushOp : FIRRTLOp<"prop.push", [MemoryEffects<[MemWrite]>,
+    ParentOneOf<["FModuleOp", "ClassOp"]>]> {
+  let summary = "Contribute an element to a mutable collection";
+  let description = [{
+    Contributes one element reference to the shared collection. Contributions
+    are unordered and preserve duplicates. This consumes a collection handle;
+    it does not assign to the property port holding that handle.
+  }];
+  let arguments = (ins MutableCollectionType:$collection, PropertyType:$element);
+  let assemblyFormat = [{
+    $collection `,` $element attr-dict `:` qualified(type($collection)) `,`
+      qualified(type($element))
+  }];
+  let hasVerifier = 1;
+}
+
 def PropertyAssertOp : FIRRTLOp<"property_assert",
     [ParentOneOf<["FModuleOp", "ClassOp"]>]> {
   let summary = "Assert that a boolean property holds";

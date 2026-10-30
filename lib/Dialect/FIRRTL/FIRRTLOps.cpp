@@ -5019,6 +5019,15 @@ void ListCreateOp::print(OpAsmPrinter &p) {
   p << " : " << getType();
 }
 
+LogicalResult CollectionPushOp::verify() {
+  auto elementType = getCollection().getType().getElementType();
+  if (getElement().getType() != elementType)
+    return emitOpError("element type ")
+           << getElement().getType()
+           << " does not match collection element type " << elementType;
+  return success();
+}
+
 LogicalResult ListCreateOp::verify() {
   if (getElements().empty())
     return success();

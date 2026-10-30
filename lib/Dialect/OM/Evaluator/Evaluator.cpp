@@ -31,6 +31,24 @@ using namespace circt::om;
 
 namespace {
 
+/// Find runtime collection capabilities even when they are hidden by !om.any.
+bool containsCollection(const EvaluatorValuePtr &value,
+                        SmallPtrSetImpl<evaluator::EvaluatorValue *> &visited) {
+  if (!value || !visited.insert(value.get()).second)
+    return false;
+  if (isa<evaluator::CollectionValue>(value.get()))
+    return true;
+  if (auto *object = dyn_cast<evaluator::ObjectValue>(value.get()))
+    for (auto &[name, field] : object->getFields())
+      if (containsCollection(field, visited))
+        return true;
+  if (auto *list = dyn_cast<evaluator::ListValue>(value.get()))
+    for (auto &element : list->getElements())
+      if (containsCollection(element, visited))
+        return true;
+  return false;
+}
+
 LogicalResult verifyActualParameters(ClassLike classLike,
                                      ArrayRef<EvaluatorValuePtr> actualParams) {
   auto formalParamNames =
@@ -128,6 +146,7 @@ private:
 
   SmallVector<Attribute> wrapperArgNames;
   SmallVector<EvaluatorValuePtr> wrapperActualParams;
+  SmallVector<bool> wrapperCollectionCapabilities;
 };
 
 FailureOr<ScratchIRBuilder::InstantiationInfo>
@@ -152,6 +171,11 @@ ScratchIRBuilder::run(ArrayRef<EvaluatorValuePtr> actualParams) {
   // Update wrapper class after materializing actual parameters.
   wrapperClass->setAttr(wrapperClass.getFormalParamNamesAttrName(),
                         builder.getArrayAttr(wrapperArgNames));
+  // Let elaboration distinguish primitive opaque inputs from hidden collection
+  // capabilities before it discards an unresolved external constructor's args.
+  wrapperClass->setAttr(
+      "om.evaluator.collection_args",
+      builder.getDenseBoolArrayAttr(wrapperCollectionCapabilities));
 
   wrapperClass.updateFields(
       {rootLoc},
@@ -321,6 +345,8 @@ ScratchIRBuilder::createWrapperArgument(EvaluatorValuePtr value, Location loc,
   wrapperArgNames.push_back(
       builder.getStringAttr(Twine("arg") + Twine(wrapperArgNames.size())));
   wrapperActualParams.push_back(value);
+  SmallPtrSet<evaluator::EvaluatorValue *, 8> visited;
+  wrapperCollectionCapabilities.push_back(containsCollection(value, visited));
   return wrapperClass.getBodyBlock()->addArgument(argType, loc);
 }
 
@@ -349,6 +375,8 @@ Type circt::om::evaluator::EvaluatorValue::getType() const {
       .Case<AttributeValue>([](auto *attr) -> Type { return attr->getType(); })
       .Case<ObjectValue>([](auto *object) { return object->getObjectType(); })
       .Case<ListValue>([](auto *list) { return list->getListType(); })
+      .Case<CollectionValue>(
+          [](auto *collection) { return collection->getCollectionType(); })
       .Case<BasePathValue>(
           [this](auto *tuple) { return FrozenBasePathType::get(ctx); })
       .Case<PathValue>(
@@ -364,6 +392,11 @@ circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
           .Case([&](circt::om::ListType type) {
             evaluator::EvaluatorValuePtr result =
                 std::make_shared<evaluator::ListValue>(type, loc);
+            return success(result);
+          })
+          .Case([&](circt::om::CollectionType type) {
+            evaluator::EvaluatorValuePtr result =
+                std::make_shared<evaluator::CollectionValue>(type, loc);
             return success(result);
           })
           .Case([&](circt::om::ClassType type)
@@ -436,9 +469,10 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case<ListCreateOp, ListConcatOp>([&](auto op) {
-                  return getPartiallyEvaluatedValue(op.getType(), loc);
-                })
+                .Case<CollectionCreateOp, ListCreateOp, ListConcatOp>(
+                    [&](auto op) {
+                      return getPartiallyEvaluatedValue(op.getType(), loc);
+                    })
                 .Case<ElaboratedObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
                 })
@@ -537,7 +571,35 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     fields[cast<StringAttr>(name)] = result.value();
   }
 
-  // If it's external call, just allocate new ObjectValue.
+  // Resultless effects are not visited by the value loops above. Handles and
+  // object fields are ready now, including forward references and references
+  // back to the collection itself. Every collection reachable here is owned by
+  // this instantiation (inputs are copied on import), so a failure part way
+  // through never exposes a partially populated collection.
+  for (auto op : cls.getOps<CollectionPushOp>()) {
+    auto target = evaluateValue(op.getCollection(), actualParams, op.getLoc());
+    if (failed(target))
+      return failure();
+    auto element = evaluateValue(op.getElement(), actualParams, op.getLoc());
+    if (failed(element))
+      return failure();
+    if (!isa<evaluator::CollectionValue>(target.value().get()))
+      return op.emitError("destination is not a collection value");
+    auto collection =
+        std::static_pointer_cast<evaluator::CollectionValue>(*target);
+    if (collection->isUnknown())
+      continue;
+    if (!element.value()->isFullyEvaluated())
+      return op.emitError("collection element is not structurally evaluated");
+    // !om.any carries a concrete runtime value after an explicit upcast.
+    if (!isa<AnyType>(collection->getCollectionType().getElementType()) &&
+        element.value()->getType() !=
+            collection->getCollectionType().getElementType())
+      return op.emitError("runtime collection element type does not match");
+    collection->append(*element);
+  }
+
+  // Allocate the completed root object.
   evaluator::EvaluatorValuePtr result =
       std::make_shared<evaluator::ObjectValue>(cls, fields, loc);
   // Object is already fully evaluated when created with fields.
@@ -566,8 +628,27 @@ circt::om::Evaluator::instantiate(
   if (failed(verifyActualParameters(rootClass, actualParams)))
     return failure();
 
+  objects.clear();
+  llvm::scope_exit clearInstantiation([&] { objects.clear(); });
+
+  // Clone collection-bearing inputs once for the entire call. Opaque any-typed
+  // values and concrete inputs must refer to the same transaction-local copies.
+  DenseMap<evaluator::EvaluatorValue *, EvaluatorValuePtr> copies;
+  SmallVector<EvaluatorValuePtr> importedParams;
+  for (auto &param : actualParams) {
+    SmallPtrSet<evaluator::EvaluatorValue *, 8> visited;
+    if (!containsCollection(param, visited)) {
+      importedParams.push_back(param);
+      continue;
+    }
+    auto copy = copyInputValue(param, copies);
+    if (failed(copy))
+      return failure();
+    importedParams.push_back(*copy);
+  }
+
   ScratchIRBuilder scratchBuilder(getModule(), symbolTable, rootClass);
-  auto transformedInstantiation = scratchBuilder.run(actualParams);
+  auto transformedInstantiation = scratchBuilder.run(importedParams);
   if (failed(transformedInstantiation))
     return failure();
 
@@ -581,6 +662,70 @@ circt::om::Evaluator::instantiate(
   if (failed(root))
     return failure();
   return root.value();
+}
+
+FailureOr<EvaluatorValuePtr> circt::om::Evaluator::copyInputValue(
+    const EvaluatorValuePtr &value,
+    DenseMap<evaluator::EvaluatorValue *, EvaluatorValuePtr> &copies) {
+  using namespace circt::om::evaluator;
+  if (!value)
+    return emitError(UnknownLoc::get(getModule().getContext()),
+                     "cannot import null OM evaluator value");
+  if (auto it = copies.find(value.get()); it != copies.end())
+    return it->second;
+
+  auto loc = value->getLoc();
+  if (auto *source = dyn_cast<CollectionValue>(value.get())) {
+    auto copy =
+        std::make_shared<CollectionValue>(source->getCollectionType(), loc);
+    copies[value.get()] = copy;
+    if (source->isUnknown())
+      copy->markUnknown();
+    else
+      for (auto &element : source->getElements()) {
+        auto elementCopy = copyInputValue(element, copies);
+        if (failed(elementCopy))
+          return failure();
+        copy->append(*elementCopy);
+      }
+    return EvaluatorValuePtr(copy);
+  }
+  if (auto *source = dyn_cast<ObjectValue>(value.get())) {
+    auto copy = std::make_shared<ObjectValue>(source->getClassOp(), loc);
+    copies[value.get()] = copy;
+    if (source->isUnknown()) {
+      copy->markUnknown();
+      return EvaluatorValuePtr(copy);
+    }
+    ObjectFields fields;
+    for (auto &[name, field] : source->getFields()) {
+      auto fieldCopy = copyInputValue(field, copies);
+      if (failed(fieldCopy))
+        return failure();
+      fields[name] = *fieldCopy;
+    }
+    copy->setFields(std::move(fields));
+    return EvaluatorValuePtr(copy);
+  }
+  if (auto *source = dyn_cast<ListValue>(value.get())) {
+    auto copy = std::make_shared<ListValue>(source->getListType(), loc);
+    copies[value.get()] = copy;
+    if (source->isUnknown()) {
+      copy->markUnknown();
+      return EvaluatorValuePtr(copy);
+    }
+    SmallVector<EvaluatorValuePtr> elements;
+    for (auto &element : source->getElements()) {
+      auto elementCopy = copyInputValue(element, copies);
+      if (failed(elementCopy))
+        return failure();
+      elements.push_back(*elementCopy);
+    }
+    copy->setElements(std::move(elements));
+    return EvaluatorValuePtr(copy);
+  }
+  copies[value.get()] = value;
+  return value;
 }
 
 FailureOr<std::shared_ptr<evaluator::EvaluatorValue>>
@@ -617,7 +762,10 @@ circt::om::Evaluator::instantiateImpl(
 FailureOr<evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
                                     Location loc) {
-  auto evaluatorValue = getOrCreateValue(value, actualParams, loc).value();
+  auto result = getOrCreateValue(value, actualParams, loc);
+  if (failed(result))
+    return failure();
+  auto evaluatorValue = result.value();
 
   LLVM_DEBUG(dbgs() << "- eval: " << value << "\n");
 
@@ -863,6 +1011,9 @@ circt::om::Evaluator::createUnknownValue(Type type, Location loc) {
   // Create an unknown value of the appropriate type by switching on the type
   auto result =
       TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(type)
+          .Case([&](CollectionType type) -> FailureOr<EvaluatorValuePtr> {
+            return getPartiallyEvaluatedValue(type, loc);
+          })
           .Case([&](ListType type) -> FailureOr<EvaluatorValuePtr> {
             // Create an empty list
             return success(std::make_shared<ListValue>(type, loc));
@@ -1080,6 +1231,8 @@ circt::om::evaluator::AttributeValue::get(Type type, LocationAttr loc) {
   // AttributeValue objects.
   if (auto listType = dyn_cast<circt::om::ListType>(type))
     return std::make_shared<evaluator::ListValue>(listType, loc);
+  if (auto collectionType = dyn_cast<circt::om::CollectionType>(type))
+    return std::make_shared<evaluator::CollectionValue>(collectionType, loc);
   // Create the AttributeValue with the private tag
   return std::shared_ptr<AttributeValue>(
       new AttributeValue(PrivateTag{}, type, loc));

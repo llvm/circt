@@ -1293,6 +1293,15 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     moduleBody->getArgument(input.index).replaceAllUsesWith(arg);
   }
 
+  // Collection output ports name handles, not storage. Replace their uses with
+  // the assigned handle before erasing the ports, so a push can target an
+  // output field directly. Preserve each assignment's destination until field
+  // gathering.
+  for (auto assign : classBody->getOps<PropAssignOp>())
+    if (isa<BlockArgument>(assign.getDest()) &&
+        isa<MutableCollectionType>(assign.getDest().getType()))
+      assign.getDest().replaceAllUsesExcept(assign.getSrc(), assign);
+
   llvm::SmallVector<mlir::Location> fieldLocs;
   llvm::SmallVector<mlir::Value> fieldValues;
   for (Operation &op :
@@ -1758,6 +1767,35 @@ struct StringConstantOpConversion
     auto stringType = om::StringType::get(op.getContext());
     rewriter.replaceOpWithNewOp<om::ConstantOp>(
         op, stringType, StringAttr::get(op.getValue(), stringType));
+    return success();
+  }
+};
+
+struct CollectionCreateOpConversion
+    : public OpConversionPattern<firrtl::CollectionCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::CollectionCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto type =
+        getTypeConverter()->convertType<om::CollectionType>(op.getType());
+    if (!type)
+      return failure();
+    rewriter.replaceOpWithNewOp<om::CollectionCreateOp>(op, type);
+    return success();
+  }
+};
+
+struct CollectionPushOpConversion
+    : public OpConversionPattern<firrtl::CollectionPushOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::CollectionPushOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::CollectionPushOp>(
+        op, adaptor.getCollection(), adaptor.getElement());
     return success();
   }
 };
@@ -2279,10 +2317,10 @@ static void populateTypeConverter(TypeConverter &converter) {
 
   // Convert FIRRTL List type to OM List type.
   auto convertListType = [&converter](auto type) -> std::optional<mlir::Type> {
-    // If the element type is already in the OM dialect, there's nothing to do.
-    if (isa<om::OMDialect>(type.getElementType().getDialect()))
-      return type;
-    auto elementType = converter.convertType(type.getElementType());
+    Type elementType = type.getElementType();
+    if (isa<FIRRTLDialect>(elementType.getDialect()) ||
+        isa<om::ListType, om::CollectionType>(elementType))
+      elementType = converter.convertType(elementType);
     if (!elementType)
       return {};
     return om::ListType::get(elementType);
@@ -2299,6 +2337,23 @@ static void populateTypeConverter(TypeConverter &converter) {
         // Convert any firrtl.list<firrtl> -> om.list<om>
         return convertListType(type);
       });
+
+  auto convertCollectionType = [&converter](auto type) -> std::optional<Type> {
+    Type elementType = type.getElementType();
+    if (isa<FIRRTLDialect>(elementType.getDialect()) ||
+        isa<om::ListType, om::CollectionType>(elementType))
+      elementType = converter.convertType(elementType);
+    if (!elementType)
+      return {};
+    return om::CollectionType::get(elementType);
+  };
+  converter.addConversion(
+      [convertCollectionType](firrtl::MutableCollectionType type) {
+        return convertCollectionType(type);
+      });
+  converter.addConversion([convertCollectionType](om::CollectionType type) {
+    return convertCollectionType(type);
+  });
 
   // Convert FIRRTL Bool type to OM
   converter.addConversion(
@@ -2345,6 +2400,8 @@ static void populateRewritePatterns(
                                                  patterns.getContext());
   patterns.add<ObjectOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectFieldOpConversion>(converter, patterns.getContext());
+  patterns.add<CollectionCreateOpConversion, CollectionPushOpConversion>(
+      converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
   patterns.add<ListConcatOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());

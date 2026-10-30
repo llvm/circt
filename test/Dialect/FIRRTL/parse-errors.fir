@@ -1965,10 +1965,10 @@ circuit Domains:
 
 ;// -----
 FIRRTL version 6.0.0
-circuit RegistryType:
-  public module RegistryType:
-    ; expected-error @below {{Registries are a FIRRTL 7.0.0+ feature}}
-    input clockGates: Registry<Path>
+circuit MutableCollections:
+  public module MutableCollections:
+    ; expected-error @below {{Mutable collections are a FIRRTL 7.0.0+ feature}}
+    input clockGates: MutableCollection<Path>
 
 ;// -----
 

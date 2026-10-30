@@ -578,20 +578,19 @@ def ListImpl : PropImplType<"List"> {
   let typeName = "firrtl.propList";
 }
 
-def RegistryImpl : PropImplType<"Registry"> {
-  let summary = [{
-    An unordered mutable collection of property values for domain asset tracking.
-
-    Registry types may only appear as fields of domain definitions. Values are
-    accumulated with `firrtl.domain.insert` rather than normal property
-    assignment. Downstream consumers must treat registry contents as
-    order-independent.
+def MutableCollectionImpl : PropImplType<"MutableCollection"> {
+  let summary = "An unordered, append-only collection of property values.";
+  let description = [{
+    Values of this type are shared collection handles, not immutable lists.
+    `firrtl.prop.collection` allocates an empty collection and `firrtl.prop.push`
+    contributes an element. Property programs may transport handles but cannot
+    inspect their contents. Contributions preserve multiplicity, not order.
   }];
   let parameters = (ins TypeParameter<"circt::firrtl::PropertyType",
                                       "element type">:$elementType);
   let genStorageClass = true;
   let genAccessors = true;
-  let typeName = "firrtl.propRegistry";
+  let typeName = "firrtl.propMutableCollection";
 }
 
 def PathImpl : PropImplType<"Path"> {

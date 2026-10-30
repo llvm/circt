@@ -61,6 +61,18 @@ MLIR_CAPI_EXPORTED MlirTypeID omListTypeGetTypeID(void);
 // Return a element type of a ListType.
 MLIR_CAPI_EXPORTED MlirType omListTypeGetElementType(MlirType type);
 
+/// Is the Type a CollectionType.
+MLIR_CAPI_EXPORTED bool omTypeIsACollectionType(MlirType type);
+
+/// Get the TypeID for a CollectionType.
+MLIR_CAPI_EXPORTED MlirTypeID omCollectionTypeGetTypeID(void);
+
+/// Get a CollectionType with the given element type.
+MLIR_CAPI_EXPORTED MlirType omCollectionTypeGet(MlirType elementType);
+
+/// Get the element type of a CollectionType.
+MLIR_CAPI_EXPORTED MlirType omCollectionTypeGetElementType(MlirType type);
+
 /// Is the Type a StringType.
 MLIR_CAPI_EXPORTED bool omTypeIsAStringType(MlirType type);
 
@@ -180,6 +192,20 @@ omEvaluatorListGetNumElements(OMEvaluatorValue evaluatorValue);
 /// Get an element of the list.
 MLIR_CAPI_EXPORTED OMEvaluatorValue
 omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
+
+/// Query if the EvaluatorValue is a collection.
+MLIR_CAPI_EXPORTED bool
+omEvaluatorValueIsACollection(OMEvaluatorValue evaluatorValue);
+
+/// Get the element count of a collection with known membership.
+/// Enumeration order is unspecified; duplicate contributions are preserved.
+MLIR_CAPI_EXPORTED intptr_t
+omEvaluatorCollectionGetNumElements(OMEvaluatorValue evaluatorValue);
+
+/// Get an element of a collection with known membership. The index must
+/// be within the collection's element count. This does not expose IR reads.
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorCollectionGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
 
 /// Query if the EvaluatorValue is a BasePath.
 MLIR_CAPI_EXPORTED bool

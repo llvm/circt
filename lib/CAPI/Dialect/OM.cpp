@@ -77,6 +77,22 @@ MlirType omListTypeGetElementType(MlirType type) {
   return wrap(cast<ListType>(unwrap(type)).getElementType());
 }
 
+bool omTypeIsACollectionType(MlirType type) {
+  return isa<CollectionType>(unwrap(type));
+}
+
+MlirTypeID omCollectionTypeGetTypeID(void) {
+  return wrap(CollectionType::getTypeID());
+}
+
+MlirType omCollectionTypeGet(MlirType elementType) {
+  return wrap(CollectionType::get(unwrap(elementType)));
+}
+
+MlirType omCollectionTypeGetElementType(MlirType type) {
+  return wrap(cast<CollectionType>(unwrap(type)).getElementType());
+}
+
 /// Is the Type a StringType.
 bool omTypeIsAStringType(MlirType type) {
   return isa<StringType>(unwrap(type));
@@ -277,6 +293,26 @@ OMEvaluatorValue omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue,
                                            intptr_t pos) {
   return wrap(cast<evaluator::ListValue>(unwrap(evaluatorValue).get())
                   ->getElements()[pos]);
+}
+
+bool omEvaluatorValueIsACollection(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::CollectionValue>(unwrap(evaluatorValue).get());
+}
+
+intptr_t omEvaluatorCollectionGetNumElements(OMEvaluatorValue evaluatorValue) {
+  return cast<evaluator::CollectionValue>(unwrap(evaluatorValue).get())
+      ->getElements()
+      .size();
+}
+
+OMEvaluatorValue
+omEvaluatorCollectionGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos) {
+  const auto &elements =
+      cast<evaluator::CollectionValue>(unwrap(evaluatorValue).get())
+          ->getElements();
+  assert(pos >= 0 && static_cast<size_t>(pos) < elements.size() &&
+         "collection index out of bounds");
+  return wrap(elements[pos]);
 }
 
 bool omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue) {
