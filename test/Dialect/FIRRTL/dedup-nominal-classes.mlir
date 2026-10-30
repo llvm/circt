@@ -1,4 +1,4 @@
-// RUN: circt-opt --firrtl-dedup=dedup-classes=0 %s | FileCheck %s
+// RUN: circt-opt --firrtl-dedup %s | FileCheck %s
 
 // CHECK-LABEL: "DontDedupClasses"
 firrtl.circuit "DontDedupClasses" {
