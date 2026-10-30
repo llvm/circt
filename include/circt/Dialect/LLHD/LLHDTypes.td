@@ -90,6 +90,11 @@ class TypeMatchesNetNestedType<string type, string netType> : TypesMatchWith<
 
 >;
 
+class NetNestedTypeMatchesType<string netType, string type> : TypesMatchWith<
+  netType # " net element type must match " # type # " type",
+  netType, type, "cast<NetType>($_self).getNestedType()"
+>;
+
 //===----------------------------------------------------------------------===//
 // Attribute declarations
 //===----------------------------------------------------------------------===//
