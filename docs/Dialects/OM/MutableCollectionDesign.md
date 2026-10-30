@@ -33,8 +33,8 @@ inputs and external constructor effects. Recommended initial choices are:
 
 1. Each public `instantiate` call is an isolated evaluation transaction. Imported
    collections are copied into that transaction, preserving aliases within it.
-2. Reject unresolved external constructor calls that could mutate a collection,
-   rather than silently reporting incomplete contents.
+2. Treat unresolved external constructors as today: they become unknown
+   objects, and any contributions they might make are not represented.
 
 ## 1. Requirements and scope
 
@@ -203,19 +203,14 @@ This differs intentionally from existing lists, which become unknown when an
 element is unknown. Collection unknown status describes membership, not the
 presence of an unknown element.
 
-Elaboration currently replaces unresolved external object constructors with
-`om.unknown`, discarding parameters. If a constructor could mutate a known
-collection parameter, this would silently discard effects.
-
-Initially reject unresolved external constructor calls with collection-bearing
-actual parameters, including capabilities reachable through objects, lists,
-and opaque inputs. Check before discarding the operands. Account for recursive
-types and opaque scratch parameters. If static resolution is insufficient,
-preserve the call for evaluator preflight or conservatively reject it.
-
-Primitive-only external classes retain existing behavior. A future effect
-summary or retained unknown-contribution operation could instead mark reachable
-collections' membership unknown.
+Elaboration replaces unresolved external object constructors with `om.unknown`,
+discarding parameters. Collections passed to such a constructor keep their
+known contributions; whatever the external class would contribute is not
+represented. This keeps external classes uniform with existing behavior and
+avoids a capability analysis over objects, lists, and opaque inputs. Linking
+external classes before evaluation (`om-linker`) resolves the common case. A
+future effect summary or retained unknown-contribution operation could instead
+mark reachable collections' membership unknown.
 
 ## 4. Proposed IR
 
@@ -250,7 +245,9 @@ push has two operands and no results. Operations are limited
 to supported module/class bodies, not hardware `when` regions.
 
 Push consumes a mutation-capable handle; it is not a property-port assignment.
-Do not apply property-assignment sink-flow checks to its destination.
+Its collection operand is read like any other property source, so it must have
+source or duplex flow: push through a local wire or an input, not through an
+output port. This keeps `LowerClasses` free of special output-port handling.
 
 Allocation has an allocation effect and is neither pure nor constant-like.
 Push has a write effect and is not pure. Start with conservative effects that
@@ -328,8 +325,8 @@ instantiate scratch wrapper:
 ```
 
 Elaboration puts instantiated bodies in one block, and the wrapper never has
-collection parameters, so no push can survive elaboration; the evaluator
-diagnoses one defensively. Exactly-once contribution is a property of the
+collection-typed parameters, so no push survives elaboration and the evaluator
+needs no knowledge of pushes. Exactly-once contribution is a property of the
 rewrite: each instantiated push becomes one operand. Failure discards the
 scratch IR and its values, so partial results are never published.
 
@@ -347,9 +344,9 @@ Policy: **copy on import; alias within the instantiation**.
   back-references resolve to the same copy.
 - Concrete objects/lists are already materialized as IR, so they reference the
   copies without modifying the caller's graph.
-- Any-typed inputs that contain collections are materialized with their
-  concrete type and cast to `!om.any`, so direct and opaque references to the
-  same source collection share one copy. Other any-typed inputs stay opaque.
+- Any-typed inputs stay opaque, as for every other value. Since OM programs
+  cannot downcast `!om.any`, they cannot push through an opaque reference, so
+  they keep referring to the caller's (unmodified) original.
 - Keep existing cyclic object-input restrictions.
 
 Across calls, completed inputs are snapshots. Persistent mutation would need a
@@ -362,8 +359,7 @@ requirements still apply. Scratch wrapper cleanup is a separate issue.
 ### 5.4 Elaboration boundary
 
 Elaboration clones operations and substitutes operands, folds handle-valued
-field access, folds pushes into allocations, and checks unsupported external
-capabilities. It never replaces collections with list construction or
+field access, and folds pushes into allocations. It never replaces collections with list construction or
 concatenation. Allocations and pushes into class parameters are legal residuals.
 
 ## 6. FIRRTL lowering and paths
@@ -440,7 +436,7 @@ In that prototype:
 | Accumulation | Bottom-up list-output plumbing | Shared runtime identity and exactly-once contributions |
 | Generated interface | Extra output per registry field | Collection-valued fields/parameters |
 | Runtime changes | No new mutable OM value | New value kind and consumer APIs |
-| External inputs | Ordinary lowered-list behavior | Explicit capability/unknown-membership policy |
+| External inputs | Ordinary lowered-list behavior | Ordinary unknown-object behavior |
 
 ### 7.3 Why the implementations differ
 
@@ -487,7 +483,7 @@ Implement in reviewable stages:
 2. `LowerClasses` conversion, effect-only class discovery, elaboration
    preservation, and path freezing. FIRRTL text syntax can follow separately.
 3. Initial-element allocation, push folding, runtime value, import aliasing,
-   and external-capability checks.
+   and the FIRRTL push flow check.
 4. C/Python consumer APIs and end-to-end tests. Domain Registry integration is
    independent follow-up work.
 
@@ -509,8 +505,8 @@ field transport and forward references; repeated object access without replay;
 and an object registered in a collection referenced by its own fields.
 
 Also cover repeated and failed instantiation isolation; imported aliases across
-parameters, nested containers, and opaque inputs;
-unknown elements versus unknown membership; external-effect diagnostics; push
+parameters and nested containers;
+unknown elements versus unknown membership; push
 folding and pushes into parameters; operation reordering without changed membership;
 per-instance frozen paths; firtool/linker/bytecode preservation; and read-only
 consumer APIs.
@@ -525,8 +521,8 @@ Use `unittests/Dialect/OM/Evaluator/EvaluatorTests.cpp`,
 
 1. Is copy-on-import acceptable across evaluator calls, or is mutation of a
    previously instantiated domain object essential?
-2. Can unresolved constructors with collection capabilities be rejected
-   initially, or must unknown contributions be represented immediately?
+2. Is ignoring contributions from unresolved external constructors acceptable,
+   or must unknown contributions be represented?
 3. Should domain Registry retain pure-list lowering or become a client of the
    generic facility in a later change?
 

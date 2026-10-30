@@ -10,7 +10,7 @@ circuit Objects:
   ; IMPORT-LABEL: firrtl.module @Objects
   ; IMPORT: firrtl.prop.collection : !firrtl.mutable_collection<anyref>
   ; IMPORT: firrtl.object.anyref_cast
-  ; IMPORT: firrtl.prop.push %items,
+  ; IMPORT: firrtl.prop.push %local,
   ; LOWER-LABEL: om.class @Objects_Class
   ; LOWER: %[[ITEMS:.*]] = om.collection : !om.collection<!om.any>
   ; LOWER: %[[OBJECT:.*]] = om.object @Item
@@ -19,6 +19,8 @@ circuit Objects:
   ; LOWER: om.class.fields %[[ITEMS]] : !om.collection<!om.any>
   public module Objects:
     output items: MutableCollection<AnyRef>
-    propassign items, MutableCollection<AnyRef>()
+    wire local: MutableCollection<AnyRef>
+    propassign local, MutableCollection<AnyRef>()
+    propassign items, local
     object item of Item
-    push items, item
+    push local, item

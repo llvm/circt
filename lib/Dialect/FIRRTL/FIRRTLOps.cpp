@@ -5020,6 +5020,10 @@ void ListCreateOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult CollectionPushOp::verify() {
+  // A push reads the handle; it does not assign to the value holding it.
+  if (!isValidSrc(foldFlow(getCollection())))
+    return emitOpError("collection has ") << toString(foldFlow(getCollection()))
+                                          << ", expected source or duplex flow";
   auto elementType = getCollection().getType().getElementType();
   if (getElement().getType() != elementType)
     return emitOpError("element type ")

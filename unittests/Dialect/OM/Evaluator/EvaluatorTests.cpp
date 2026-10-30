@@ -948,35 +948,6 @@ om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
   ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
 }
 
-TEST_F(EvaluatorTests, CollectionCapabilitiesInOpaqueExternalInputs) {
-  auto mod = parseModule(R"MLIR(
-    om.class.extern @External(%value: !om.any) {}
-    om.class @Use(%value: !om.any) -> (external: !om.class.type<@External>) {
-      %external = om.object @External(%value) : (!om.any) -> !om.class.type<@External>
-      om.class.fields %external : !om.class.type<@External>
-    }
-    om.class @Source() -> (items: !om.collection<!om.integer>) {
-      %items = om.collection : !om.collection<!om.integer>
-      om.class.fields %items : !om.collection<!om.integer>
-    }
-  )MLIR");
-  ASSERT_TRUE(mod);
-  Evaluator evaluator(*mod);
-  auto primitive = evaluator.instantiate(StringAttr::get(&context, "Use"),
-                                         {makeIntegerValue(&context, 1)});
-  ASSERT_TRUE(succeeded(primitive));
-  EXPECT_TRUE(getField(*primitive, "external")->isUnknown());
-  auto source = evaluator.instantiate(StringAttr::get(&context, "Source"), {});
-  ASSERT_TRUE(succeeded(source));
-  ScopedDiagnosticHandler handler(&context, [&](Diagnostic &diag) {
-    EXPECT_EQ(
-        diag.str(),
-        "cannot evaluate external constructor with collection capabilities");
-  });
-  EXPECT_TRUE(failed(evaluator.instantiate(StringAttr::get(&context, "Use"),
-                                           {getField(*source, "items")})));
-}
-
 TEST_F(EvaluatorTests, CollectionDistinctConstructorAllocations) {
   auto mod = parseModule(R"MLIR(
     !items = !om.collection<!om.integer>
@@ -1111,7 +1082,7 @@ TEST_F(EvaluatorTests, CollectionUnknownElementsAndMembership) {
   EXPECT_TRUE(missing->isUnknown());
 }
 
-TEST_F(EvaluatorTests, CollectionImportedSnapshotsAndOpaqueAliases) {
+TEST_F(EvaluatorTests, CollectionImportedSnapshotsAndAliases) {
   auto mod = parseModule(R"MLIR(
     !items = !om.collection<!om.integer>
     om.class @Source() -> (items: !items, list: !om.list<!items>) {
@@ -1121,7 +1092,7 @@ TEST_F(EvaluatorTests, CollectionImportedSnapshotsAndOpaqueAliases) {
       %list = om.list_create %items : !items
       om.class.fields %items, %list : !items, !om.list<!items>
     }
-    om.class @Use(%a: !items, %b: !items, %object: !om.class.type<@Source>, %opaque: !om.any) -> (a: !items, b: !items, object: !om.class.type<@Source>, opaque: !om.any) {
+    om.class @Use(%a: !items, %b: !items, %object: !om.class.type<@Source>) -> (a: !items, b: !items, object: !om.class.type<@Source>) {
       %two = om.constant #om.integer<2 : si8> : !om.integer
       %three = om.constant #om.integer<3 : si8> : !om.integer
       %four = om.constant #om.integer<4 : si8> : !om.integer
@@ -1129,7 +1100,7 @@ TEST_F(EvaluatorTests, CollectionImportedSnapshotsAndOpaqueAliases) {
       om.collection_push %a, %two : !items, !om.integer
       om.collection_push %b, %three : !items, !om.integer
       om.collection_push %field, %four : !items, !om.integer
-      om.class.fields %a, %b, %object, %opaque : !items, !items, !om.class.type<@Source>, !om.any
+      om.class.fields %a, %b, %object : !items, !items, !om.class.type<@Source>
     }
   )MLIR");
   ASSERT_TRUE(mod);
@@ -1137,17 +1108,16 @@ TEST_F(EvaluatorTests, CollectionImportedSnapshotsAndOpaqueAliases) {
   auto source = evaluator.instantiate(StringAttr::get(&context, "Source"), {});
   ASSERT_TRUE(succeeded(source));
   auto original = getField(*source, "items");
-  SmallVector<EvaluatorValuePtr> params{original, original, *source, *source};
+  SmallVector<EvaluatorValuePtr> params{original, original, *source};
   auto result = evaluator.instantiate(StringAttr::get(&context, "Use"), params);
   ASSERT_TRUE(succeeded(result));
   auto copied = getField(*result, "a");
   EXPECT_NE(original.get(), copied.get());
   EXPECT_EQ(copied.get(), getField(*result, "b").get());
   EXPECT_EQ(copied.get(), getField(getField(*result, "object"), "items").get());
-  EXPECT_EQ(copied.get(), getField(getField(*result, "opaque"), "items").get());
   EXPECT_EQ(
       copied.get(),
-      getListElements(getField(getField(*result, "opaque"), "list"))[0].get());
+      getListElements(getField(getField(*result, "object"), "list"))[0].get());
   EXPECT_EQ(getCollectionIntegers(copied), (SmallVector<int64_t>{1, 2, 3, 4}));
   EXPECT_EQ(getCollectionIntegers(original), (SmallVector<int64_t>{1}));
 
@@ -1194,21 +1164,19 @@ TEST_F(EvaluatorTests, CollectionImportsExternallyCreatedInput) {
 
 TEST_F(EvaluatorTests, CollectionImportsBackReference) {
   auto mod = parseModule(R"MLIR(
-    !items = !om.collection<!om.any>
+    !items = !om.collection<!om.class.type<@Node>>
     om.class @Node(%items: !items) -> (items: !items) {
       om.class.fields %items : !items
     }
     om.class @Top() -> (items: !items) {
       %items = om.collection : !items
       %node = om.object @Node(%items) : (!items) -> !om.class.type<@Node>
-      %any = om.any_cast %node : (!om.class.type<@Node>) -> !om.any
-      om.collection_push %items, %any : !items, !om.any
+      om.collection_push %items, %node : !items, !om.class.type<@Node>
       om.class.fields %items : !items
     }
     om.class @Use(%items: !items) -> (items: !items) {
-      %one = om.constant #om.integer<1 : si8> : !om.integer
-      %any = om.any_cast %one : (!om.integer) -> !om.any
-      om.collection_push %items, %any : !items, !om.any
+      %node = om.object @Node(%items) : (!items) -> !om.class.type<@Node>
+      om.collection_push %items, %node : !items, !om.class.type<@Node>
       om.class.fields %items : !items
     }
   )MLIR");
@@ -1225,56 +1193,8 @@ TEST_F(EvaluatorTests, CollectionImportsBackReference) {
   EXPECT_EQ(getCollection(original)->getElements().size(), 1u);
   auto &elements = getCollection(copied)->getElements();
   ASSERT_EQ(elements.size(), 2u);
-  auto node = llvm::find_if(elements, [](const EvaluatorValuePtr &element) {
-    return isa<evaluator::ObjectValue>(element.get());
-  });
-  ASSERT_NE(node, elements.end());
-  EXPECT_EQ(getField(*node, "items").get(), copied.get());
-}
-
-TEST_F(EvaluatorTests, CollectionFailedInstantiationDoesNotModifyInputs) {
-  auto mod = parseModule(R"MLIR(
-    !items = !om.collection<!om.integer>
-    om.class @Source() -> (items: !items) {
-      %items = om.collection : !items
-      %one = om.constant #om.integer<1 : si8> : !om.integer
-      om.collection_push %items, %one : !items, !om.integer
-      om.class.fields %items : !items
-    }
-    om.class.extern @External(%items: !items) {}
-    om.class @Fail(%items: !items) {
-      %two = om.constant #om.integer<2 : si8> : !om.integer
-      om.collection_push %items, %two : !items, !om.integer
-      %external = om.object @External(%items) : (!items) -> !om.class.type<@External>
-      om.class.fields
-    }
-    om.class @Use(%items: !items) -> (items: !items) {
-      %two = om.constant #om.integer<2 : si8> : !om.integer
-      om.collection_push %items, %two : !items, !om.integer
-      om.class.fields %items : !items
-    }
-  )MLIR");
-  ASSERT_TRUE(mod);
-  Evaluator evaluator(*mod);
-  auto source = evaluator.instantiate(StringAttr::get(&context, "Source"), {});
-  ASSERT_TRUE(succeeded(source));
-  auto items = getField(*source, "items");
-  {
-    ScopedDiagnosticHandler handler(&context, [&](Diagnostic &diag) {
-      EXPECT_EQ(
-          diag.str(),
-          "cannot evaluate external constructor with collection capabilities");
-    });
-    EXPECT_TRUE(failed(
-        evaluator.instantiate(StringAttr::get(&context, "Fail"), {items})));
-  }
-  EXPECT_EQ(getCollectionIntegers(items), (SmallVector<int64_t>{1}));
-  auto success =
-      evaluator.instantiate(StringAttr::get(&context, "Use"), {items});
-  ASSERT_TRUE(succeeded(success));
-  EXPECT_EQ(getCollectionIntegers(getField(*success, "items")),
-            (SmallVector<int64_t>{1, 2}));
-  EXPECT_EQ(getCollectionIntegers(items), (SmallVector<int64_t>{1}));
+  for (auto &element : elements)
+    EXPECT_EQ(getField(element, "items").get(), copied.get());
 }
 
 TEST_F(EvaluatorTests, CollectionNestedHandles) {

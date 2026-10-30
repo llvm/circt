@@ -25,7 +25,6 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Support/WalkResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/LogicalResult.h"
 
@@ -44,76 +43,16 @@ namespace {
 // A map from (class name, field name) to field index.
 using FieldIndex = DenseMap<std::pair<StringAttr, StringAttr>, unsigned>;
 
-/// Conservatively identify collection capabilities exposed by a value's type.
-/// An opaque !om.any may hide a collection; an explicit any_cast can be
-/// unwrapped by the caller to establish a more precise type.
-bool mayContainCollection(Type type, const SymbolTable &symTable,
-                          SmallPtrSetImpl<Operation *> &visited) {
-  if (isa<CollectionType, AnyType>(type))
-    return true;
-  if (auto list = dyn_cast<ListType>(type))
-    return mayContainCollection(list.getElementType(), symTable, visited);
-  if (auto classType = dyn_cast<ClassType>(type)) {
-    auto cls = symTable.lookup<ClassLike>(classType.getClassName().getAttr());
-    if (cls && visited.insert(cls.getOperation()).second)
-      for (auto name : cls.getFieldNames())
-        if (mayContainCollection(*cls.getFieldType(cast<StringAttr>(name)),
-                                 symTable, visited))
-          return true;
-  }
-  return false;
-}
-
-/// Prefer actual field/element operands to conservative type information when
-/// available. A missing answer defers the external call until its object/field
-/// operands have been elaborated. This avoids rejecting primitive !om.any
-/// inputs.
-std::optional<bool>
-mayContainCollection(Value value, const SymbolTable &symTable,
-                     llvm::SmallDenseSet<Value, 8> &visited) {
-  if (!visited.insert(value).second)
-    return false;
-  if (auto cast = value.getDefiningOp<AnyCastOp>())
-    return mayContainCollection(cast.getInput(), symTable, visited);
-  // The evaluator imports collection-bearing inputs as IR, so its wrapper
-  // class parameters never hide collections.
-  if (auto arg = dyn_cast<BlockArgument>(value))
-    if (arg.getOwner()->getParentOp()->hasAttr(
-            "om.evaluator.collection_free_args"))
-      return false;
-  auto *op = value.getDefiningOp();
-  if (isa_and_nonnull<ObjectOp, ObjectFieldOp>(op))
-    return std::nullopt;
-  if (isa_and_nonnull<ElaboratedObjectOp, ListCreateOp, ListConcatOp>(op)) {
-    bool deferred = false;
-    for (Value operand : op->getOperands()) {
-      auto capability = mayContainCollection(operand, symTable, visited);
-      if (capability && *capability)
-        return true;
-      deferred |= !capability.has_value();
-    }
-    if (deferred)
-      return std::nullopt;
-    return false;
-  }
-  SmallPtrSet<Operation *, 8> visitedClasses;
-  return mayContainCollection(value.getType(), symTable, visitedClasses);
-}
-
 /// Pattern to inline ObjectOp instances by cloning the class body and
 /// replacing them with ElaboratedObjectOp.
 struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
   ObjectOpInliningPattern(MLIRContext *context, SymbolTable &symTable,
-                          bool replaceExternalWithUnknown,
-                          bool &unsupportedEffects)
+                          bool replaceExternalWithUnknown)
       : OpRewritePattern<ObjectOp>(context), symTable(symTable),
-        replaceExternalWithUnknown(replaceExternalWithUnknown),
-        unsupportedEffects(unsupportedEffects) {}
+        replaceExternalWithUnknown(replaceExternalWithUnknown) {}
 
   LogicalResult matchAndRewrite(ObjectOp objOp,
                                 PatternRewriter &rewriter) const override {
-    if (unsupportedEffects)
-      return failure();
     auto classLike =
         symTable.lookup<ClassLike>(objOp.getClassNameAttr().getAttr());
     assert(classLike);
@@ -122,18 +61,6 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
     if (isa<ClassExternOp>(classLike)) {
       if (!replaceExternalWithUnknown)
         return failure();
-      for (Value param : objOp.getActualParams()) {
-        llvm::SmallDenseSet<Value, 8> visited;
-        auto capability = mayContainCollection(param, symTable, visited);
-        if (!capability)
-          return failure();
-        if (*capability) {
-          objOp.emitError("cannot evaluate external constructor with "
-                          "collection capabilities");
-          unsupportedEffects = true;
-          return failure();
-        }
-      }
       rewriter.replaceOpWithNewOp<UnknownValueOp>(objOp, objOp.getType());
       return success();
     }
@@ -182,7 +109,6 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
 
   const SymbolTable &symTable;
   bool replaceExternalWithUnknown;
-  bool &unsupportedEffects;
 };
 
 /// Pattern to fold ObjectFieldOp on ElaboratedObjectOp by directly accessing
@@ -257,9 +183,9 @@ struct UnknownPropagationPattern : RewritePattern {
   }
 };
 
-// Operations supported as residual IR after elaboration. Collection pushes
-// only remain when they target a class parameter.
-bool isSupportedResidual(Operation *op) {
+// Check if an operation can be evaluated at compile time and is valid to
+// remain in the IR after elaboration.
+bool isFullyEvaluated(Operation *op) {
   return isa<
       // Structure.
       ClassOp, ClassFieldsOp, ElaboratedObjectOp, AnyCastOp,
@@ -267,8 +193,10 @@ bool isSupportedResidual(Operation *op) {
       ConstantOp, UnknownValueOp,
       // Path.
       FrozenBasePathCreateOp, FrozenPathCreateOp, FrozenEmptyPathOp,
-      // Containers.
-      ListCreateOp, ListConcatOp, CollectionCreateOp, CollectionPushOp>(op);
+      // List.
+      ListCreateOp, ListConcatOp,
+      // Collection. Pushes remain only when they target a class parameter.
+      CollectionCreateOp, CollectionPushOp>(op);
 }
 
 LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
@@ -326,7 +254,7 @@ LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
       return emitError(op->getLoc(), "failed to evaluate assertion condition");
     }
 
-    if (!isSupportedResidual(op)) {
+    if (!isFullyEvaluated(op)) {
       if (allowUnevaluated)
         return success();
       return emitError(op->getLoc()) << "failed to evaluate " << op->getName();
@@ -351,10 +279,9 @@ struct ElaborateObjectPass
     // using a greedy pattern rewriter. NOTE: The conversion framework is not
     // suitable here because inlining patterns need to be applied recursively to
     // fully evaluate nested object instantiations.
-    bool unsupportedEffects = false;
     RewritePatternSet patterns(classOp.getContext());
-    patterns.add<ObjectOpInliningPattern>(
-        classOp.getContext(), symTable, !allowUnevaluated, unsupportedEffects);
+    patterns.add<ObjectOpInliningPattern>(classOp.getContext(), symTable,
+                                          !allowUnevaluated);
     patterns.add<EvaluateObjectField>(classOp.getContext(), symTable,
                                       fieldIndexes);
     patterns.add<UnknownPropagationPattern>(classOp.getContext());
@@ -366,8 +293,6 @@ struct ElaborateObjectPass
     if (failed(applyPatternsGreedily(classOp, std::move(patterns), config)))
       return failure();
 
-    if (unsupportedEffects)
-      return failure();
     // Check if elaboration succeeded after saturation.
     return verifyResult(classOp, allowUnevaluated);
   }

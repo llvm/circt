@@ -1293,15 +1293,6 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     moduleBody->getArgument(input.index).replaceAllUsesWith(arg);
   }
 
-  // Collection output ports name handles, not storage. Replace their uses with
-  // the assigned handle before erasing the ports, so a push can target an
-  // output field directly. Preserve each assignment's destination until field
-  // gathering.
-  for (auto assign : classBody->getOps<PropAssignOp>())
-    if (isa<BlockArgument>(assign.getDest()) &&
-        isa<MutableCollectionType>(assign.getDest().getType()))
-      assign.getDest().replaceAllUsesExcept(assign.getSrc(), assign);
-
   llvm::SmallVector<mlir::Location> fieldLocs;
   llvm::SmallVector<mlir::Value> fieldValues;
   for (Operation &op :
@@ -2317,10 +2308,10 @@ static void populateTypeConverter(TypeConverter &converter) {
 
   // Convert FIRRTL List type to OM List type.
   auto convertListType = [&converter](auto type) -> std::optional<mlir::Type> {
-    Type elementType = type.getElementType();
-    if (isa<FIRRTLDialect>(elementType.getDialect()) ||
-        isa<om::ListType, om::CollectionType>(elementType))
-      elementType = converter.convertType(elementType);
+    // If the element type is already in the OM dialect, there's nothing to do.
+    if (isa<om::OMDialect>(type.getElementType().getDialect()))
+      return type;
+    auto elementType = converter.convertType(type.getElementType());
     if (!elementType)
       return {};
     return om::ListType::get(elementType);
@@ -2338,22 +2329,15 @@ static void populateTypeConverter(TypeConverter &converter) {
         return convertListType(type);
       });
 
-  auto convertCollectionType = [&converter](auto type) -> std::optional<Type> {
-    Type elementType = type.getElementType();
-    if (isa<FIRRTLDialect>(elementType.getDialect()) ||
-        isa<om::ListType, om::CollectionType>(elementType))
-      elementType = converter.convertType(elementType);
-    if (!elementType)
-      return {};
-    return om::CollectionType::get(elementType);
-  };
+  // Convert FIRRTL MutableCollection type to OM Collection type.
+  converter.addConversion([](om::CollectionType type) { return type; });
   converter.addConversion(
-      [convertCollectionType](firrtl::MutableCollectionType type) {
-        return convertCollectionType(type);
+      [&converter](firrtl::MutableCollectionType type) -> std::optional<Type> {
+        auto elementType = converter.convertType(type.getElementType());
+        if (!elementType)
+          return {};
+        return om::CollectionType::get(elementType);
       });
-  converter.addConversion([convertCollectionType](om::CollectionType type) {
-    return convertCollectionType(type);
-  });
 
   // Convert FIRRTL Bool type to OM
   converter.addConversion(

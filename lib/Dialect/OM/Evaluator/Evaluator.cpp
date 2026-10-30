@@ -31,24 +31,6 @@ using namespace circt::om;
 
 namespace {
 
-/// Find runtime collection capabilities even when they are hidden by !om.any.
-bool containsCollection(const EvaluatorValuePtr &value,
-                        SmallPtrSetImpl<evaluator::EvaluatorValue *> &visited) {
-  if (!value || !visited.insert(value.get()).second)
-    return false;
-  if (isa<evaluator::CollectionValue>(value.get()))
-    return true;
-  if (auto *object = dyn_cast<evaluator::ObjectValue>(value.get()))
-    for (auto &[name, field] : object->getFields())
-      if (containsCollection(field, visited))
-        return true;
-  if (auto *list = dyn_cast<evaluator::ListValue>(value.get()))
-    for (auto &element : list->getElements())
-      if (containsCollection(element, visited))
-        return true;
-  return false;
-}
-
 LogicalResult verifyActualParameters(ClassLike classLike,
                                      ArrayRef<EvaluatorValuePtr> actualParams) {
   auto formalParamNames =
@@ -174,10 +156,6 @@ ScratchIRBuilder::run(ArrayRef<EvaluatorValuePtr> actualParams) {
   // Update wrapper class after materializing actual parameters.
   wrapperClass->setAttr(wrapperClass.getFormalParamNamesAttrName(),
                         builder.getArrayAttr(wrapperArgNames));
-  // Collection-bearing inputs are always materialized as IR, so elaboration
-  // may pass opaque wrapper parameters to unresolved external constructors.
-  wrapperClass->setAttr("om.evaluator.collection_free_args",
-                        builder.getUnitAttr());
 
   wrapperClass.updateFields(
       {rootLoc},
@@ -240,19 +218,9 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
     return emitError(loc, "cannot import OM evaluator value without an "
                           "expected type");
 
-  // Keep any-typed values opaque at the wrapper boundary, unless they contain
-  // collections. Collections have identity and must be imported as IR so that
-  // all references to the same input share one fresh allocation.
-  if (isa<AnyType>(expectedType)) {
-    SmallPtrSet<evaluator::EvaluatorValue *, 8> visited;
-    if (!containsCollection(value, visited))
-      return createWrapperArgument(value, loc, expectedType);
-    auto concrete = materializeInput(value, loc, value->getType());
-    if (failed(concrete))
-      return failure();
-    OpBuilder builder(wrapperClass.getFieldsOp());
-    return AnyCastOp::create(builder, loc, *concrete).getResult();
-  }
+  // Keep any-typed values opaque at the wrapper boundary.
+  if (isa<AnyType>(expectedType))
+    return createWrapperArgument(value, loc, expectedType);
 
   if (auto it = importedValues.find(value.get()); it != importedValues.end())
     return it->second;
@@ -323,9 +291,9 @@ FailureOr<Value> ScratchIRBuilder::materializeCollectionInput(
     return emitError(loc,
                      "cannot import partially evaluated OM collection value");
 
-  // Each instantiation gets a fresh copy, so inputs are snapshots and
-  // previously returned values are never modified. Register the allocation
-  // before importing elements so that back-references resolve to the same copy.
+  // Each instantiation gets a fresh copy, so pushes never modify previously
+  // returned values. Register the allocation before importing elements so that
+  // back-references resolve to the same copy.
   auto type = collectionValue->getCollectionType();
   OpBuilder builder(wrapperClass.getFieldsOp());
   auto result = CollectionCreateOp::create(builder, loc, type);
@@ -611,14 +579,7 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     fields[cast<StringAttr>(name)] = result.value();
   }
 
-  // Elaboration folds every contribution into its collection's allocation.
-  // The wrapper never has collection parameters, so none can remain.
-  auto pushes = cls.getOps<CollectionPushOp>();
-  if (!pushes.empty())
-    return (*pushes.begin())
-        .emitError("unable to evaluate collection contribution");
-
-  // Allocate the completed root object.
+  // If it's external call, just allocate new ObjectValue.
   evaluator::EvaluatorValuePtr result =
       std::make_shared<evaluator::ObjectValue>(cls, fields, loc);
   // Object is already fully evaluated when created with fields.
@@ -646,9 +607,6 @@ circt::om::Evaluator::instantiate(
     return symbolTable.getOp()->emitError("unknown class name ") << className;
   if (failed(verifyActualParameters(rootClass, actualParams)))
     return failure();
-
-  objects.clear();
-  llvm::scope_exit clearInstantiation([&] { objects.clear(); });
 
   ScratchIRBuilder scratchBuilder(getModule(), symbolTable, rootClass);
   auto transformedInstantiation = scratchBuilder.run(actualParams);
@@ -701,10 +659,7 @@ circt::om::Evaluator::instantiateImpl(
 FailureOr<evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
                                     Location loc) {
-  auto result = getOrCreateValue(value, actualParams, loc);
-  if (failed(result))
-    return failure();
-  auto evaluatorValue = result.value();
+  auto evaluatorValue = getOrCreateValue(value, actualParams, loc).value();
 
   LLVM_DEBUG(dbgs() << "- eval: " << value << "\n");
 
@@ -980,9 +935,6 @@ circt::om::Evaluator::createUnknownValue(Type type, Location loc) {
   // Create an unknown value of the appropriate type by switching on the type
   auto result =
       TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(type)
-          .Case([&](CollectionType type) -> FailureOr<EvaluatorValuePtr> {
-            return getPartiallyEvaluatedValue(type, loc);
-          })
           .Case([&](ListType type) -> FailureOr<EvaluatorValuePtr> {
             // Create an empty list
             return success(std::make_shared<ListValue>(type, loc));

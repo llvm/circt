@@ -411,7 +411,6 @@ private:
   /// Evaluator value storage for the current instantiation.
   DenseMap<Value, std::shared_ptr<evaluator::EvaluatorValue>> objects;
 
-
 #ifndef NDEBUG
   /// Current nesting depth for debug output indentation.
   unsigned debugNesting = 0;

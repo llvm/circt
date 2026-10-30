@@ -29,17 +29,6 @@ firrtl.circuit "Collections" {
     firrtl.prop.push %items, %one : !firrtl.mutable_collection<integer>, !firrtl.integer
   }
 
-  // LOWER-LABEL: om.class private @OutputHandle
-  // LOWER: %[[HANDLE:.*]] = om.collection : !om.collection<!om.integer>
-  // LOWER: om.collection_push %[[HANDLE]],
-  // LOWER: om.class.fields %[[HANDLE]] : !om.collection<!om.integer>
-  firrtl.class private @OutputHandle(out %items: !firrtl.mutable_collection<integer>) {
-    %handle = firrtl.prop.collection : !firrtl.mutable_collection<integer>
-    firrtl.propassign %items, %handle : !firrtl.mutable_collection<integer>
-    %one = firrtl.integer 1
-    firrtl.prop.push %items, %one : !firrtl.mutable_collection<integer>, !firrtl.integer
-  }
-
   // LOWER-LABEL: om.class private @Nested
   // LOWER-SAME: !om.collection<!om.list<!om.collection<i1>>>
   // LOWER: om.collection : !om.collection<!om.list<!om.collection<i1>>>
