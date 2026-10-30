@@ -221,7 +221,7 @@ class SendBundleTest(Module):
 
 
 # CHECK-LABEL:  hw.module @BufferDataDelayTest(
-# CHECK:          esi.buffer %clk, %rst, %in_ {stages = 1 : i64} : !esi.channel<i8, FIFO(2)> -> !esi.channel<i8, ValidReady(3)>
+# CHECK:          esi.buffer %clk, %rst, %in_ {stages = 1 : i64} : !esi.channel<i8, FIFO(2)> -> !esi.channel<i8, ValidReady>
 # CHECK:          esi.buffer %clk, %rst, %in_ {stages = 2 : i64} : !esi.channel<i8, FIFO(2)> -> !esi.channel<i8, FIFO(3)>
 # CHECK:          esi.buffer %clk, %rst, %in_ {stages = 1 : i64} : !esi.channel<i8, FIFO(2)> -> !esi.channel<i8, ValidOnly(2)>
 @unittestmodule()
@@ -229,7 +229,7 @@ class BufferDataDelayTest(Module):
   clk = Clock()
   rst = Reset()
   in_ = Input(Channel(Bits(8), ChannelSignaling.FIFO, data_delay=2))
-  vr_out = Output(Channel(Bits(8), data_delay=3))
+  vr_out = OutputChannel(Bits(8))
   fifo_out = Output(Channel(Bits(8), ChannelSignaling.FIFO, data_delay=3))
   vo_out = Output(Channel(Bits(8), ChannelSignaling.ValidOnly, data_delay=2))
 
@@ -239,7 +239,7 @@ class BufferDataDelayTest(Module):
                                   self.rst,
                                   1,
                                   ChannelSignaling.ValidReady,
-                                  output_data_delay=3)
+                                  output_data_delay=0)
     self.fifo_out = self.in_.buffer(self.clk, self.rst, 2, output_data_delay=3)
     self.vo_out = self.in_.buffer(self.clk, self.rst, 1,
                                   ChannelSignaling.ValidOnly)

@@ -86,3 +86,46 @@ hw.module @bufferIncreaseDelayFIFO(in %clk: !seq.clock, in %rst: i1, in %in: !es
   hw.output %0 : !esi.channel<i16, FIFO(1)>
 }
 
+// A smaller ValidOnly output delay delays the valid.
+
+// CHECK-LABEL:  hw.module @bufferDecreaseDelayVO(
+// CHECK:          [[STAGE:%.+]] = esi.stage %clk, %rst, %chanOutput {name = "buf_stage0"} : !esi.channel<i16, ValidReady(2)>
+// CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
+// CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr [[STAGE]], [[TRUE]] : !esi.channel<i16, ValidReady(2)>
+// CHECK-NEXT:     %false = hw.constant false
+// CHECK-NEXT:     %buf_valid_dly0 = seq.compreg %valid, %clk reset %rst, %false : i1
+// CHECK-NEXT:     %buf_valid_dly1 = seq.compreg %buf_valid_dly0, %clk reset %rst, %false : i1
+// CHECK-NEXT:     [[OUT:%.+]] = esi.wrap.vo %rawOutput, %buf_valid_dly1 : !esi.channel<i16, ValidOnly>
+// CHECK-NEXT:     hw.output [[OUT]] : !esi.channel<i16, ValidOnly>
+hw.module @bufferDecreaseDelayVO(in %clk: !seq.clock, in %rst: i1, in %in: !esi.channel<i16, FIFO(2)>, out out: !esi.channel<i16, ValidOnly>) {
+  %0 = esi.buffer %clk, %rst, %in {name = "buf"} : !esi.channel<i16, FIFO(2)> -> !esi.channel<i16, ValidOnly>
+  hw.output %0 : !esi.channel<i16, ValidOnly>
+}
+
+// A smaller ValidReady or FIFO output delay holds the tokens in a FIFO, which
+// accepts input data with a delay.
+
+// CHECK-LABEL:  hw.module @bufferDecreaseDelayVR(
+// CHECK:          [[STAGE:%.+]] = esi.stage %clk, %rst, %chanOutput : !esi.channel<i16, ValidReady(2)>
+// CHECK:          %rawOutput, %valid = esi.unwrap.vr [[STAGE]], [[INPUT_EN:%.+]] : !esi.channel<i16, ValidReady(2)>
+// CHECK:          %inputEn_dly0 = seq.compreg [[INPUT_EN]], %clk reset %rst, %false : i1
+// CHECK-NEXT:     %inputEn_dly1 = seq.compreg %inputEn_dly0, %clk reset %rst, %false : i1
+// CHECK-NEXT:     %out, %full, %empty_2, %almostFull = seq.fifo depth 4 rd_latency 1 almost_full 2 in %rawOutput rdEn {{%.+}} wrEn %inputEn_dly1 clk %clk rst %rst : i16
+// CHECK:          [[NOT_FULL:%.+]] = comb.xor %almostFull, %true_0 {sv.namehint = "seqFifoNotFull"} : i1
+// CHECK-NEXT:     [[INPUT_EN]] = comb.and {{%.+}}, [[NOT_FULL]] {sv.namehint = "inputEn"} : i1
+// CHECK:          %chanOutput_4, %ready_5 = esi.wrap.vr %out, {{%.+}} : !esi.channel<i16, ValidReady(1)>
+// CHECK:          hw.output %chanOutput_4 : !esi.channel<i16, ValidReady(1)>
+hw.module @bufferDecreaseDelayVR(in %clk: !seq.clock, in %rst: i1, in %in: !esi.channel<i16, FIFO(2)>, out out: !esi.channel<i16, ValidReady(1)>) {
+  %0 = esi.buffer %clk, %rst, %in : !esi.channel<i16, FIFO(2)> -> !esi.channel<i16, ValidReady(1)>
+  hw.output %0 : !esi.channel<i16, ValidReady(1)>
+}
+
+// CHECK-LABEL:  hw.module @bufferDecreaseDelayFIFO(
+// CHECK:          %inputEn_dly0 = seq.compreg
+// CHECK-NEXT:     %out, %full, %empty, %almostFull = seq.fifo depth 3 almost_full 2 in %rawOutput rdEn %rden wrEn %inputEn_dly0 clk %clk rst %rst : i16
+// CHECK:          %chanOutput, %rden = esi.wrap.fifo %out, %empty : !esi.channel<i16, FIFO>
+// CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i16, FIFO>
+hw.module @bufferDecreaseDelayFIFO(in %clk: !seq.clock, in %rst: i1, in %in: !esi.channel<i16, ValidReady(1)>, out out: !esi.channel<i16, FIFO>) {
+  %0 = esi.buffer %clk, %rst, %in : !esi.channel<i16, ValidReady(1)> -> !esi.channel<i16, FIFO>
+  hw.output %0 : !esi.channel<i16, FIFO>
+}

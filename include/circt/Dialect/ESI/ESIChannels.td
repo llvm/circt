@@ -600,9 +600,11 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     A `name` attribute may be provided to assigned a name to a buffered
     connection.
 
-    The input and output channels may use different signaling. The output data
-    delay may be larger than the input's, in which case the data is delayed by
-    a register chain. It may not (yet) be smaller.
+    The input and output channels may use different signaling and different
+    data delays. If the output data delay is larger than the input's, the data
+    is delayed by a register chain. If it is smaller, tokens are held until
+    their data arrives: with ValidOnly output, by delaying the valid signal;
+    with ValidReady or FIFO output, by an `esi.fifo` after the stages.
 
     Example:
 

@@ -34,10 +34,6 @@ circt::esi::ChannelType ChannelBufferOp::channelType() {
 LogicalResult ChannelBufferOp::verify() {
   if (getInput().getType().getInner() != getOutput().getType().getInner())
     return emitOpError("input and output data types must match");
-  if (getInput().getType().getDataDelay() >
-      getOutput().getType().getDataDelay())
-    return emitOpError("output data delay must not be less than the input "
-                       "data delay");
   return success();
 }
 

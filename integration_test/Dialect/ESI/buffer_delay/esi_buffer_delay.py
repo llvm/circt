@@ -25,27 +25,40 @@ FIFO_PORTS = {
     "fifo21": 2,
     "fifo22": 2,
     "fifo1vr3": 1,
+    "fifo2vr0": 2,
+    "fifo2fifo1": 2,
+    "fifo2vo1": 2,
 }
 VR_PORTS = {
     "vr1": 1,
     "vr2": 2,
     "vr3": 3,
+    "vr3vr1": 3,
     "vr0vr2": 0,
+    "vr2fifo0": 2,
     "vr1fifo3": 1,
+    "vr2vo0": 2,
     "vr0vo2": 0,
 }
-VO_PORTS = {"vo1": 1, "vo0vr1": 0}
+VO_PORTS = {"vo1": 1, "vo2vo0": 2, "vo0vr1": 0}
 # Output data delays which differ from the input data delay.
 OUT_DELAYS = {
     "fifo1vr3": 3,
+    "fifo2vr0": 0,
+    "fifo2fifo1": 1,
+    "fifo2vo1": 1,
+    "vr3vr1": 1,
     "vr0vr2": 2,
+    "vr2fifo0": 0,
     "vr1fifo3": 3,
+    "vr2vo0": 0,
     "vr0vo2": 2,
+    "vo2vo0": 0,
     "vo0vr1": 1,
 }
 # Outputs which use FIFO or ValidOnly signaling. All others are ValidReady.
-FIFO_OUTPUTS = {"fifo21", "vr1fifo3"}
-VO_OUTPUTS = {"vr0vo2"}
+FIFO_OUTPUTS = {"fifo21", "fifo2fifo1", "vr2fifo0", "vr1fifo3"}
+VO_OUTPUTS = {"fifo2vo1", "vr2vo0", "vr0vo2", "vo2vo0"}
 
 
 def junk() -> int:
