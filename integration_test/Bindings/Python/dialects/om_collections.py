@@ -31,15 +31,15 @@ with Context() as ctx, Location.unknown():
   }
   """)
   evaluator = om.Evaluator(module)
-  source = evaluator.instantiate("Source", [])
+  source = evaluator.instantiate("Source")
   # Collections are exposed as lists; element order is unspecified.
   assert isinstance(source.items, om.List)
   assert len(source.items) == 2
   assert sorted(source.items) == [1, 1]
-  appended = evaluator.instantiate("Append", [source.items])
+  appended = evaluator.instantiate("Append", source.items)
   assert sorted(appended.items) == [1, 1, 2]
   assert sorted(source.items) == [1, 1]
-  unknowns = evaluator.instantiate("Unknowns", [])
+  unknowns = evaluator.instantiate("Unknowns")
   assert len(unknowns.items) == 1
   assert isinstance(unknowns.items[0], om.Unknown)
   assert isinstance(unknowns.missing, om.Unknown)

@@ -540,6 +540,49 @@ elements remain visible. Only the IR type gets new C/Python bindings
 (`CollectionType` and its element type). Unknown values of collection type are
 created as lists.
 
+### 8.1 Python example with ordinary classes
+
+[`collection_class.py`](../../../integration_test/Bindings/Python/dialects/collection_class.py)
+is a runnable example using ordinary OM classes, with no domains or domain
+lowering. `Catalog` allocates an empty collection of `Component` objects in its
+constructor. `Assembly` instantiates two components and two fieldless `Register`
+objects, whose pushes target the catalog's `components` field. The registration
+objects' unused results do not discard their contributions.
+
+The Python consumer uses the normal evaluator and object/list APIs:
+
+```python
+evaluator = om.Evaluator(module)
+catalog = evaluator.instantiate("Catalog", "example")
+assembly = evaluator.instantiate("Assembly", catalog)
+components = sorted((component.name, component.id)
+                    for component in assembly.catalog.components)
+assert components == [("alu", 1), ("cache", 2)]
+assert len(catalog.components) == 0
+```
+
+The populated catalog is returned through `assembly.catalog`; the input catalog
+remains unchanged. A second evaluation with the same input produces the same
+contents, not accumulated state from the first call. Collection membership is
+unordered, so the example sorts only when comparing or displaying results.
+
+With [Python bindings enabled](../../PythonBindings.md) in a unified build, run
+from the repository root:
+
+```sh
+ninja -C build CIRCTPythonModules
+PYTHONPATH="$PWD/build/tools/circt/python_packages/circt_core" \
+  python3 integration_test/Bindings/Python/dialects/collection_class.py
+```
+
+Expected output:
+
+```text
+Catalog: example
+Components: [('alu', 1), ('cache', 2)]
+Input catalog: []
+```
+
 ## 9. Implementation and validation
 
 Implement in reviewable stages:
