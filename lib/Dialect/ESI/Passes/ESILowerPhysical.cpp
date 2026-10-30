@@ -174,9 +174,7 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
   auto c1 = hw::ConstantOp::create(rewriter, loc, rewriter.getI1Type(),
                                    rewriter.getBoolAttr(true));
   mlir::TypedValue<ChannelType> chanInput = op.getInput();
-  if (chanInput.getType().getDataDelay() != 0)
-    return op.emitOpError(
-        "currently only supports input channels with zero data delay");
+  uint64_t inputDelay = chanInput.getType().getDataDelay();
 
   Backedge inputEn = bb.get(i1);
   Value rawData;
@@ -207,17 +205,35 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
         op, "only supports ValidReady, FIFO, and ValidOnly signaling");
   }
 
+  // With an input data delay of N, the data for an accepted token arrives N
+  // cycles later, so delay the write to match. Since up to N writes may be in
+  // flight, only accept input while more than N slots are free.
+  Value wrEn = inputEn;
+  Type almostFullType;
+  IntegerAttr almostFullThreshold;
+  if (inputDelay > 0) {
+    Value false_ = hw::ConstantOp::create(rewriter, loc, i1, 0);
+    for (uint64_t i = 0; i < inputDelay; ++i)
+      wrEn = seq::CompRegOp::create(rewriter, loc, wrEn, op.getClk(),
+                                    op.getRst(), false_,
+                                    "inputEn_dly" + Twine(i), InnerSymAttr());
+    almostFullType = i1;
+    almostFullThreshold =
+        rewriter.getI64IntegerAttr(op.getDepth() - inputDelay);
+  }
+
   Backedge outputRdEn = bb.get(i1);
   auto seqFifo = seq::FIFOOp::create(
-      rewriter, loc, outputType.getInner(), i1, i1, Type(), Type(), rawData,
-      outputRdEn, inputEn, op.getClk(), op.getRst(), op.getDepthAttr(),
-      rewriter.getI64IntegerAttr(outputType.getDataDelay()), IntegerAttr(),
-      IntegerAttr());
+      rewriter, loc, outputType.getInner(), i1, i1, almostFullType, Type(),
+      rawData, outputRdEn, wrEn, op.getClk(), op.getRst(), op.getDepthAttr(),
+      rewriter.getI64IntegerAttr(outputType.getDataDelay()),
+      almostFullThreshold, IntegerAttr());
   auto inputNotEmpty = comb::XorOp::create(rewriter, loc, dataNotAvailable, c1);
   inputNotEmpty->setAttr("sv.namehint",
                          rewriter.getStringAttr("inputNotEmpty"));
-  auto seqFifoNotFull =
-      comb::XorOp::create(rewriter, loc, seqFifo.getFull(), c1);
+  auto seqFifoNotFull = comb::XorOp::create(
+      rewriter, loc,
+      inputDelay > 0 ? seqFifo.getAlmostFull() : seqFifo.getFull(), c1);
   seqFifoNotFull->setAttr("sv.namehint",
                           rewriter.getStringAttr("seqFifoNotFull"));
   inputEn.setValue(

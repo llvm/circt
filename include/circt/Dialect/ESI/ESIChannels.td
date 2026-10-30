@@ -659,8 +659,13 @@ def FIFOOp : ESI_Physical_Op<"fifo", []> {
   let summary = "A FIFO with ESI channel connections";
   let description = [{
     A FIFO is a first-in-first-out buffer. This operation is a simple FIFO
-    which can be used to connect two ESI channels. The ESI channels MUST have
-    FIFO signaling semantics.
+    which can be used to connect two ESI channels of any signaling.
+
+    The input and output channels may have different data delays. The output
+    data delay sets the read latency of the FIFO. An input data delay of N
+    delays the write by N cycles; to make room for those in-flight writes,
+    input is only accepted while there are more than N free slots, so `depth`
+    must be greater than N.
   }];
 
   let arguments = (ins

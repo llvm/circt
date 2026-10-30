@@ -88,6 +88,9 @@ LogicalResult SnoopTransactionOp::inferReturnTypes(
 LogicalResult FIFOOp::verify() {
   if (getOutput().getType().getInner() != getInput().getType().getInner())
     return emitOpError("input and output types must match");
+  // Space for each in-flight write must be reserved when it is accepted.
+  if (getDepth() <= getInput().getType().getDataDelay())
+    return emitOpError("depth must be greater than the input data delay");
   return success();
 }
 
