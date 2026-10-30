@@ -600,7 +600,9 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     A `name` attribute may be provided to assigned a name to a buffered
     connection.
 
-    The input and output channels must have the same data delay.
+    The input and output channels may use different signaling. The output data
+    delay may be larger than the input's, in which case the data is delayed by
+    a register chain. It may not (yet) be smaller.
 
     Example:
 

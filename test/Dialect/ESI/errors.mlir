@@ -236,8 +236,8 @@ hw.module @stageFIFO(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, F
 
 // -----
 
-hw.module @bufferDelayMismatch(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, FIFO(1)>) {
-  // expected-error @+1 {{input and output data delays must match}}
+hw.module @bufferDelayDecrease(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, FIFO(1)>) {
+  // expected-error @+1 {{output data delay must not be less than the input data delay}}
   %0 = esi.buffer %clk, %rst, %a : !esi.channel<i8, FIFO(1)> -> !esi.channel<i8, ValidReady>
 }
 

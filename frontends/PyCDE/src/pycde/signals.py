@@ -893,16 +893,21 @@ class ChannelSignal(Signal):
       reset: BitsSignal,
       stages: int,
       output_signaling: Optional[ChannelSignaling] = None,
+      output_data_delay: Optional[int] = None,
   ) -> ChannelSignal:
     """Insert a channel buffer with `stages` stages on the channel. Return the
-    output of that buffer."""
+    output of that buffer. The output signaling and data delay default to those
+    of the input channel."""
     from .types import Channel
 
-    if output_signaling is None:
+    if output_signaling is None and output_data_delay is None:
       res_type = self.type
     else:
-      inner_type = self.type.inner
-      res_type = Channel(inner_type, output_signaling, self.type.data_delay)
+      if output_signaling is None:
+        output_signaling = self.type.signaling
+      if output_data_delay is None:
+        output_data_delay = self.type.data_delay
+      res_type = Channel(self.type.inner, output_signaling, output_data_delay)
 
     from .dialects import esi
     return ChannelSignal(

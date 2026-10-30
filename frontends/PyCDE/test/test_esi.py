@@ -220,6 +220,31 @@ class SendBundleTest(Module):
     self.i1_out = from_chans.resp
 
 
+# CHECK-LABEL:  hw.module @BufferDataDelayTest(
+# CHECK:          esi.buffer %clk, %rst, %in_ {stages = 1 : i64} : !esi.channel<i8, FIFO(2)> -> !esi.channel<i8, ValidReady(3)>
+# CHECK:          esi.buffer %clk, %rst, %in_ {stages = 2 : i64} : !esi.channel<i8, FIFO(2)> -> !esi.channel<i8, FIFO(3)>
+# CHECK:          esi.buffer %clk, %rst, %in_ {stages = 1 : i64} : !esi.channel<i8, FIFO(2)> -> !esi.channel<i8, ValidOnly(2)>
+@unittestmodule()
+class BufferDataDelayTest(Module):
+  clk = Clock()
+  rst = Reset()
+  in_ = Input(Channel(Bits(8), ChannelSignaling.FIFO, data_delay=2))
+  vr_out = Output(Channel(Bits(8), data_delay=3))
+  fifo_out = Output(Channel(Bits(8), ChannelSignaling.FIFO, data_delay=3))
+  vo_out = Output(Channel(Bits(8), ChannelSignaling.ValidOnly, data_delay=2))
+
+  @generator
+  def build(self):
+    self.vr_out = self.in_.buffer(self.clk,
+                                  self.rst,
+                                  1,
+                                  ChannelSignaling.ValidReady,
+                                  output_data_delay=3)
+    self.fifo_out = self.in_.buffer(self.clk, self.rst, 2, output_data_delay=3)
+    self.vo_out = self.in_.buffer(self.clk, self.rst, 1,
+                                  ChannelSignaling.ValidOnly)
+
+
 # CHECK-LABEL:  hw.module @RecvBundleTest(in %b_recv : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>, in %i1_in : !esi.channel<i1, ValidReady>, out s1_out : !esi.channel<i32, ValidReady>) attributes {output_file = #hw.output_file<"RecvBundleTest.sv", includeReplicatedOps>} {
 # CHECK-NEXT:     %req = esi.bundle.unpack %i1_in from %b_recv : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i1, ValidReady> from "resp"]>
 # CHECK-NEXT:     hw.output %req : !esi.channel<i32, ValidReady>
