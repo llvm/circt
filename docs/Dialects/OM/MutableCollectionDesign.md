@@ -503,9 +503,32 @@ top.A_out.domainInfo_out.clockGates_out
 
 The input `A` itself is unchanged; the populated domain is reported through the
 existing `ClockDomain_out` object (unit test `CollectionDomainRegistry`).
-Remaining follow-up: `domaintool` only passes string/integer domain arguments,
-so it needs to pass an empty list for collection fields and to read the
-collection back when generating collateral.
+`domaintool` initializes collection constructor fields to typed empty lists;
+these fields do not consume command-line arguments. For example, the FIRRTL
+above can be evaluated and emitted as Clock Spec JSON with:
+
+```sh
+firtool domain-collections.fir -output-final-mlir - -o /dev/null \
+  -domain-mode=check -strip-domain=false |
+  domaintool --module Top --domain ClockDomain,A --assign 0
+```
+
+The clock's `clock_gates` array is read from the returned domain's
+`clockGates_out` field, not the unchanged input domain. It contains full OM
+reference-target strings, sorted for deterministic output while preserving
+multiplicity:
+
+```json
+"clock_gates": [
+  "OMReferenceTarget:~Top|Top/g0:ClockGate>gated",
+  "OMReferenceTarget:~Top|Top/g1:ClockGate>gated"
+]
+```
+
+Domains with an empty registry emit `"clock_gates": []`; domains without the
+field retain the existing JSON format. `source` and `relationship` remain
+supported but are optional, allowing the name-only domain above to describe an
+inferred clock relationship.
 
 ## 8. Consumer APIs
 

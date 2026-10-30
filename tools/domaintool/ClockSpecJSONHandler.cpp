@@ -64,6 +64,7 @@ struct Relationship {
 struct Clock {
   StringAttr namePattern;
   SmallVector<Relationship> relationships;
+  std::optional<SmallVector<StringAttr>> clockGates;
 };
 
 struct SynchronousData {
@@ -91,23 +92,56 @@ public:
     // errors before finally exiting.
     bool failed = false;
     for (auto &[objectValue, associations] : objectMap) {
-      auto name = cast<StringAttr>(cast<om::evaluator::AttributeValue>(
-                                       objectValue->getField("name_out")->get())
-                                       ->getAttr());
+      auto nameValue = getStringField(objectValue, "name_out");
+      auto sourceValue = getStringField(objectValue, "source_out", true);
+      auto relationshipValue =
+          getStringField(objectValue, "relationship_out", true);
+      if (mlir::failed(nameValue) || mlir::failed(sourceValue) ||
+          mlir::failed(relationshipValue)) {
+        failed = true;
+        continue;
+      }
+      auto name = *nameValue;
+      auto source = *sourceValue;
+      auto relationship = *relationshipValue;
+
+      // Read the registry from the returned domain, not the input domain:
+      // evaluation imports collections as fresh contents and leaves inputs
+      // unchanged. Collections are exposed as ordinary lists by the evaluator.
+      std::optional<SmallVector<StringAttr>> clockGates;
+      auto gatesIt = objectValue->getFields().find(
+          StringAttr::get(objectValue->getContext(), "clockGates_out"));
+      if (gatesIt != objectValue->getFields().end()) {
+        auto *gates = dyn_cast<om::evaluator::ListValue>(gatesIt->second.get());
+        if (!gates || gates->isUnknown()) {
+          emitError(gatesIt->second->getLoc())
+              << "expected clockGates_out to be a known list of paths";
+          failed = true;
+          continue;
+        }
+        clockGates.emplace();
+        for (auto &gate : gates->getElements()) {
+          auto *path = dyn_cast<om::evaluator::PathValue>(gate.get());
+          if (!path || path->isUnknown()) {
+            emitError(gate->getLoc()) << "expected clockGates_out element to "
+                                         "be a known path, but got "
+                                      << gate->getType();
+            failed = true;
+            continue;
+          }
+          clockGates->push_back(path->getAsString());
+        }
+        // Collection order is unspecified. Sort for stable collateral, while
+        // preserving duplicate contributions.
+        llvm::sort(*clockGates, [](StringAttr lhs, StringAttr rhs) {
+          return lhs.getValue() < rhs.getValue();
+        });
+      }
 
       // Insert this domain into its own equivalence class.  Then, if this
       // domain specifies a "source" relationship (either synchronous or
       // rational), merge it into the same equivalence class as its source.
       syncEquivalenceClasses.insert(name);
-
-      auto source =
-          cast<StringAttr>(cast<om::evaluator::AttributeValue>(
-                               objectValue->getField("source_out")->get())
-                               ->getAttr());
-      auto relationship =
-          cast<StringAttr>(cast<om::evaluator::AttributeValue>(
-                               objectValue->getField("relationship_out")->get())
-                               ->getAttr());
 
       // Track the relationship kind for this domain.
       RelationshipKind kind = RelationshipKind::Inferred;
@@ -167,7 +201,8 @@ public:
       // Otherwise, this is a normal clock association.  Add the clock and
       // populate the associations.
       clocks.push_back({/*namePattern=*/name,
-                        /*relationships=*/{}});
+                        /*relationships=*/{},
+                        /*clockGates=*/std::move(clockGates)});
 
       for (auto &association : associations) {
         if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
@@ -202,6 +237,11 @@ public:
             json.attribute("name_pattern", name);
             json.attribute("define_period",
                            (Twine(name.upper()) + "_PERIOD").str());
+            if (clock.clockGates)
+              json.attributeArray("clock_gates", [&] {
+                for (auto gate : *clock.clockGates)
+                  json.value(gate.getValue());
+              });
             json.attributeArray("clock_relationships", [&] {
               for (auto &rel : clock.relationships) {
                 json.object([&] {
@@ -254,6 +294,26 @@ public:
   };
 
 private:
+  /// Read a string field, defaulting an absent optional field to empty.
+  static FailureOr<StringAttr>
+  getStringField(om::evaluator::ObjectValue *object, StringRef field,
+                 bool optional = false) {
+    auto it =
+        object->getFields().find(StringAttr::get(object->getContext(), field));
+    if (it == object->getFields().end()) {
+      if (optional)
+        return StringAttr::get(object->getContext(), "");
+      return emitError(object->getLoc())
+             << "missing clock domain field " << field;
+    }
+    auto *value = dyn_cast<om::evaluator::AttributeValue>(it->second.get());
+    if (value && !value->isUnknown())
+      if (auto str = dyn_cast<StringAttr>(value->getAttr()))
+        return str;
+    return emitError(it->second->getLoc()) << "expected clock domain field "
+                                           << field << " to be a known string";
+  }
+
   /// Populate clock relationships based on equivalence class leaders.  If a
   /// domain's leader is not itself, it has a sync (or rational, treated the
   /// same in output) relationship to the leader.

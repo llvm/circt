@@ -1,4 +1,5 @@
 ; RUN: firtool %s -output-final-mlir - -o /dev/null -domain-mode=check -strip-domain=false | FileCheck %s
+; RUN: firtool %s -output-final-mlir - -o /dev/null -domain-mode=check -strip-domain=false | domaintool --module Top --domain ClockDomain,A --assign 0 | FileCheck %s --check-prefix=JSON
 
 ; A domain field can be a MutableCollection. Every module associated with the
 ; domain contributes to the same collection through the domain's handle, which
@@ -57,3 +58,19 @@ circuit Top:
 ; CHECK-LABEL: om.class @ClockDomain
 ; CHECK-SAME:    (%basepath: !om.frozenbasepath, %name_in: !om.string, %clockGates_in: !om.collection<!om.frozenpath>)
 ; CHECK-SAME:    -> (name_out: !om.string, clockGates_out: !om.collection<!om.frozenpath>)
+
+; The domain tool supplies the initial empty collection and emits the populated
+; registry from A_out.domainInfo_out, including each gate's instance path.
+; JSON:      "name_pattern": "A",
+; JSON-NEXT: "define_period": "A_PERIOD",
+; JSON-NEXT: "clock_gates": [
+; JSON-NEXT:   "OMReferenceTarget:~Top|Top/g0:ClockGate>gated",
+; JSON-NEXT:   "OMReferenceTarget:~Top|Top/g1:ClockGate>gated"
+; JSON-NEXT: ],
+; JSON-NEXT: "clock_relationships": []
+; JSON:      "port_patterns": [
+; JSON-NEXT:   "clock",
+; JSON-NEXT:   "en",
+; JSON-NEXT:   "gated0",
+; JSON-NEXT:   "gated1"
+; JSON-NEXT: ]

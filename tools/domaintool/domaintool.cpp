@@ -50,7 +50,8 @@ cl::opt<std::string> inputFilename{cl::Positional, cl::desc("<input file>"),
 cl::list<std::string> domains{
     "domain",
     cl::desc("a domain name to instantiate and arguments to instantiate it, "
-             "e.g., '--domain ClockDomain,clockA,42'"),
+             "e.g., '--domain ClockDomain,clockA,42'. Collection fields are "
+             "initialized to empty lists and do not take arguments."),
     cl::Prefix, cl::cat(cat)};
 cl::list<std::string> assign{
     "assign",
@@ -87,6 +88,9 @@ cl::opt<bool> splitInputFile("split-input-file",
 /// parameters "Foo" and 42:
 ///
 ///     ClockDomain,Foo,42
+///
+/// Collection fields are initialized to typed empty lists and are omitted from
+/// the command-line arguments.
 ///
 /// TODO: Improve this format to be something less brittle.
 class Domain {
@@ -126,7 +130,27 @@ public:
   /// Instantiate a domain based on the arguments provided or fail.
   FailureOr<om::evaluator::EvaluatorValuePtr>
   instantiate(om::Evaluator &evaluator) {
-    return evaluator.instantiate(name, parameters);
+    auto classOp = evaluator.getModule().lookupSymbol<om::ClassLike>(name);
+    if (!classOp)
+      return evaluator.instantiate(name, parameters);
+
+    // Collections cross the evaluator API boundary as lists. Fill them in
+    // from the formal types, without consuming scalar command-line arguments.
+    SmallVector<om::evaluator::EvaluatorValuePtr> actualParameters;
+    auto nextParameter = parameters.begin();
+    for (auto type : classOp.getBodyBlock()->getArgumentTypes()) {
+      if (auto collection = dyn_cast<om::CollectionType>(type)) {
+        actualParameters.push_back(std::make_shared<om::evaluator::ListValue>(
+            om::ListType::get(collection.getElementType()),
+            SmallVector<om::evaluator::EvaluatorValuePtr>{},
+            UnknownLoc::get(type.getContext())));
+      } else if (nextParameter != parameters.end()) {
+        actualParameters.push_back(*nextParameter++);
+      }
+    }
+    // Preserve excess arguments so the evaluator diagnoses a count mismatch.
+    actualParameters.append(nextParameter, parameters.end());
+    return evaluator.instantiate(name, actualParameters);
   }
 
 private:
