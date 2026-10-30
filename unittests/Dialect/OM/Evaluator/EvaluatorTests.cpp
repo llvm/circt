@@ -1243,6 +1243,74 @@ TEST_F(EvaluatorTests, CollectionFrozenPathsInDistinctInstances) {
                        "OMReferenceTarget:~Top|Top/b:Child>wire"}));
 }
 
+/// The OM produced by firtool for test/firtool/domain-collections.fir: two
+/// clock gates register themselves in their clock domain's collection.
+TEST_F(EvaluatorTests, CollectionDomainRegistry) {
+  auto mod = parseModule(R"MLIR(
+    om.class @Top_Class(%basepath: !om.frozenbasepath, %A: !om.class.type<@ClockDomain>) -> (A_out: !om.class.type<@ClockDomain_out>) {
+      %0 = om.elaborated_object @ClockDomain_out(%A, %5) : (!om.class.type<@ClockDomain>, !om.list<!om.frozenpath>) -> !om.class.type<@ClockDomain_out>
+      %1 = om.frozenpath_create reference %basepath "Top>clock"
+      %2 = om.frozenpath_create reference %basepath "Top>en"
+      %3 = om.frozenpath_create reference %basepath "Top>gated0"
+      %4 = om.frozenpath_create reference %basepath "Top>gated1"
+      %5 = om.list_create %1, %2, %3, %4 : !om.frozenpath
+      %6 = om.frozenbasepath_create %basepath "Top/g0"
+      %7 = om.object.field %A["clockGates_out"] : (!om.class.type<@ClockDomain>) -> !om.collection<!om.frozenpath>
+      %8 = om.frozenpath_create reference %6 "ClockGate>gated"
+      om.collection_push %7, %8 : !om.collection<!om.frozenpath>, !om.frozenpath
+      %9 = om.frozenbasepath_create %basepath "Top/g1"
+      %10 = om.object.field %A["clockGates_out"] : (!om.class.type<@ClockDomain>) -> !om.collection<!om.frozenpath>
+      %11 = om.frozenpath_create reference %9 "ClockGate>gated"
+      om.collection_push %10, %11 : !om.collection<!om.frozenpath>, !om.frozenpath
+      om.class.fields %0 : !om.class.type<@ClockDomain_out>
+    }
+    om.class @ClockDomain(%basepath: !om.frozenbasepath, %name_in: !om.string, %clockGates_in: !om.collection<!om.frozenpath>) -> (name_out: !om.string, clockGates_out: !om.collection<!om.frozenpath>) {
+      om.class.fields %name_in, %clockGates_in : !om.string, !om.collection<!om.frozenpath>
+    }
+    om.class @ClockDomain_out(%basepath: !om.frozenbasepath, %domainInfo_in: !om.class.type<@ClockDomain>, %associations_in: !om.list<!om.frozenpath>) -> (domainInfo_out: !om.class.type<@ClockDomain>, associations_out: !om.list<!om.frozenpath>) {
+      om.class.fields %domainInfo_in, %associations_in : !om.class.type<@ClockDomain>, !om.list<!om.frozenpath>
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  auto base = std::make_shared<evaluator::BasePathValue>(&context);
+
+  // Create the domain as a domain tool would: a name and no clock gates yet.
+  auto domain = evaluator.instantiate(
+      StringAttr::get(&context, "ClockDomain"),
+      {base,
+       evaluator::AttributeValue::get(
+           StringAttr::get("A", StringType::get(&context))),
+       std::make_shared<evaluator::ListValue>(
+           ListType::get(FrozenPathType::get(&context)),
+           SmallVector<EvaluatorValuePtr>{}, UnknownLoc::get(&context))});
+  ASSERT_TRUE(succeeded(domain));
+
+  auto top = evaluator.instantiate(StringAttr::get(&context, "Top_Class"),
+                                   {base, *domain});
+  ASSERT_TRUE(succeeded(top));
+
+  // The domain reported by the design lists every registered clock gate.
+  auto info = getField(getField(*top, "A_out"), "domainInfo_out");
+  EXPECT_EQ(getString(getField(info, "name_out")), "A");
+  SmallVector<std::string> paths;
+  for (auto &element :
+       getCollection(getField(info, "clockGates_out"))->getElements())
+    paths.push_back(cast<evaluator::PathValue>(element.get())
+                        ->getAsString()
+                        .getValue()
+                        .str());
+  llvm::sort(paths);
+  EXPECT_EQ(paths, (SmallVector<std::string>{
+                       "OMReferenceTarget:~Top|Top/g0:ClockGate>gated",
+                       "OMReferenceTarget:~Top|Top/g1:ClockGate>gated"}));
+
+  // The input domain is a value and is not modified.
+  EXPECT_TRUE(getCollection(getField(*domain, "clockGates_out"))
+                  ->getElements()
+                  .empty());
+}
+
 TEST_F(EvaluatorTests, ListConcat) {
   StringRef mod = R"MLIR(
 om.class @ListConcat() -> (result: !om.list<!om.integer>) {

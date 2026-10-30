@@ -454,12 +454,58 @@ The PR discussion values removing effects inside FIRRTL
 ([review comment][registry-review]). The generic facility deliberately trades
 that guarantee for composability and reduced hierarchy-specific output plumbing.
 
-Removing the initial Registry type is not a migration of the complete PR.
-A future domain Registry frontend could lower to a collection-valued field and
-push on its handle, but that changes generated interfaces, input handling,
-unknown semantics, and `domaintool`. Evaluate it separately once the generic
-mechanism is tested. The reusable concepts are typed append-only construction,
-read prohibition, preserved multiplicity, and unordered semantics.
+Removing the initial Registry type is not a migration of the complete PR. The
+reusable concepts are typed append-only construction, read prohibition,
+preserved multiplicity, and unordered semantics.
+
+### 7.4 Example: a clock-gate registry on a domain
+
+A domain field can already be a `MutableCollection`, so the Registry use case
+needs no domain-specific mechanism. See
+[`domain-collections.fir`](../../../test/firtool/domain-collections.fir):
+
+```firrtl
+domain ClockDomain:
+  name: String
+  clockGates: MutableCollection<Path>
+
+module ClockGate:
+  input D: Domain of ClockDomain
+  input clock: Clock domains [D]
+  output gated: Clock domains [D]
+  connect gated, clock
+  push D.clockGates, path("OMReferenceTarget:~Top|ClockGate>gated")
+
+public module Top:
+  input A: Domain of ClockDomain
+  ; ...
+  inst g0 of ClockGate
+  domain_define g0.D = A
+  inst g1 of ClockGate
+  domain_define g1.D = A
+```
+
+`LowerDomains` turns the domain into an `@ClockDomain` class with a
+`clockGates` collection field, and `D.clockGates` into a field access on the
+domain object. firtool's elaboration inlines both gates into `Top_Class`, each
+pushing a path under its own base path (`Top/g0`, `Top/g1`). No registry output
+ports or parent concatenation are generated.
+
+The pushes target the domain parameter, so they remain in `Top_Class` until
+evaluation. A consumer creates the domain with an empty list and passes it in:
+
+```text
+A   = instantiate ClockDomain(basepath, "A", [])
+top = instantiate Top_Class(basepath, A)
+top.A_out.domainInfo_out.clockGates_out
+  == [~Top|Top/g0:ClockGate>gated, ~Top|Top/g1:ClockGate>gated]   (unordered)
+```
+
+The input `A` itself is unchanged; the populated domain is reported through the
+existing `ClockDomain_out` object (unit test `CollectionDomainRegistry`).
+Remaining follow-up: `domaintool` only passes string/integer domain arguments,
+so it needs to pass an empty list for collection fields and to read the
+collection back when generating collateral.
 
 ## 8. Consumer APIs
 
