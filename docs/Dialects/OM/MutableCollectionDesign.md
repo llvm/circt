@@ -536,9 +536,9 @@ inferred clock relationship.
 
 Evaluated collections use the existing list APIs in C++, C, and Python.
 Unknown membership maps to an unknown list (`Unknown` in Python); unknown
-elements remain visible. Only the IR type gets new C/Python bindings
-(`CollectionType` and its element type). Unknown values of collection type are
-created as lists.
+elements remain visible. No collection-specific C/Python type or value bindings
+are needed. IR collection types can be parsed through the generic MLIR type
+APIs, and unknown values of collection type are created as lists.
 
 ### 8.1 Python example with ordinary classes
 
@@ -593,8 +593,8 @@ Implement in reviewable stages:
    preservation, and path freezing. FIRRTL text syntax can follow separately.
 3. Initial-element allocation, push folding, runtime value, import aliasing,
    and the FIRRTL push flow check.
-4. C/Python type bindings and end-to-end tests. Domain Registry integration is
-   independent follow-up work.
+4. C/Python list API and end-to-end tests, including the domain Registry
+   example.
 
 Principal files:
 
@@ -622,8 +622,8 @@ inputs at collection parameters.
 
 Assert multiset membership and alias identity, not fixed element order.
 Use `unittests/Dialect/OM/Evaluator/EvaluatorTests.cpp`,
-`test/Dialect/{OM,FIRRTL}`, `test/CAPI/om.c`, and
-`integration_test/Bindings/Python/dialects/om.py`. Run
+`test/Dialect/{OM,FIRRTL}`, and
+`integration_test/Bindings/Python/dialects/om_collections.py`. Run
 `ninja -C build check-circt`; enable Python bindings when testing Python APIs.
 
 ## 10. Remaining semantic questions

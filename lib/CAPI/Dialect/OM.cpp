@@ -77,22 +77,6 @@ MlirType omListTypeGetElementType(MlirType type) {
   return wrap(cast<ListType>(unwrap(type)).getElementType());
 }
 
-bool omTypeIsACollectionType(MlirType type) {
-  return isa<CollectionType>(unwrap(type));
-}
-
-MlirTypeID omCollectionTypeGetTypeID(void) {
-  return wrap(CollectionType::getTypeID());
-}
-
-MlirType omCollectionTypeGet(MlirType elementType) {
-  return wrap(CollectionType::get(unwrap(elementType)));
-}
-
-MlirType omCollectionTypeGetElementType(MlirType type) {
-  return wrap(cast<CollectionType>(unwrap(type)).getElementType());
-}
-
 /// Is the Type a StringType.
 bool omTypeIsAStringType(MlirType type) {
   return isa<StringType>(unwrap(type));

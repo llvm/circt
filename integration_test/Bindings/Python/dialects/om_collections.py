@@ -43,7 +43,10 @@ with Context() as ctx, Location.unknown():
   assert len(unknowns.items) == 1
   assert isinstance(unknowns.items[0], om.Unknown)
   assert isinstance(unknowns.missing, om.Unknown)
-  ty = om.CollectionType(Type.parse("!om.collection<!om.integer>"))
-  assert str(ty.element_type) == "!om.integer"
+  # A collection type can be parsed as a generic MLIR type when supplying an
+  # unknown input; no collection-specific type binding is required.
+  ty = Type.parse("!om.collection<!om.integer>")
+  unknown_input = evaluator.instantiate("Append", om.Unknown(ty))
+  assert isinstance(unknown_input.items, om.Unknown)
   # CHECK: Collection tests passed
   print("Collection tests passed")

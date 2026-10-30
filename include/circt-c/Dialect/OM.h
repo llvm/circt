@@ -61,18 +61,6 @@ MLIR_CAPI_EXPORTED MlirTypeID omListTypeGetTypeID(void);
 // Return a element type of a ListType.
 MLIR_CAPI_EXPORTED MlirType omListTypeGetElementType(MlirType type);
 
-/// Is the Type a CollectionType.
-MLIR_CAPI_EXPORTED bool omTypeIsACollectionType(MlirType type);
-
-/// Get the TypeID for a CollectionType.
-MLIR_CAPI_EXPORTED MlirTypeID omCollectionTypeGetTypeID(void);
-
-/// Get a CollectionType with the given element type.
-MLIR_CAPI_EXPORTED MlirType omCollectionTypeGet(MlirType elementType);
-
-/// Get the element type of a CollectionType.
-MLIR_CAPI_EXPORTED MlirType omCollectionTypeGetElementType(MlirType type);
-
 /// Is the Type a StringType.
 MLIR_CAPI_EXPORTED bool omTypeIsAStringType(MlirType type);
 
