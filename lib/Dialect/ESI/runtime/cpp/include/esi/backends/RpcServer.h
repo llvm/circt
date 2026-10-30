@@ -38,7 +38,10 @@ public:
   void setManifest(int esiVersion,
                    const std::vector<uint8_t> &compressedManifest);
 
-  /// Register a read or write port which communicates over RPC.
+  /// Register a read or write port which communicates over RPC. Their
+  /// `connect()`'s `onConnected` is called once a client has connected the
+  /// other end (sent `connect` or subscribed, respectively), or with an
+  /// exception if the port is disconnected first.
   ReadChannelPort &registerReadPort(const std::string &name,
                                     const std::string &type);
   WriteChannelPort &registerWritePort(const std::string &name,
@@ -46,7 +49,7 @@ public:
 
   // Stop the RPC server.
   // The optional millisecond timeout is advisory; the WebSocket transport
-  // closes connections promptly, so the value is unused in v3 of the
+  // closes connections promptly, so the value is unused in v4 of the
   // protocol.
   void stop(uint32_t timeoutMS = 0);
 

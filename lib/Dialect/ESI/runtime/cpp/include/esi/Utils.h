@@ -272,6 +272,34 @@ fanInCallbacks(std::function<void(std::exception_ptr)> done, size_t n) {
   return parts;
 }
 
+/// Holds a callback which must be invoked at most once, from whichever of
+/// several racing paths gets there first (e.g. a reply versus a disconnect).
+/// Thread safe.
+class OnceCallback {
+public:
+  explicit OnceCallback(std::function<void(std::exception_ptr)> callback)
+      : callback(std::move(callback)) {}
+
+  /// Invoke the callback with `error`, unless it already has been (or there
+  /// is none). Returns whether this call invoked it.
+  bool operator()(std::exception_ptr error) {
+    std::function<void(std::exception_ptr)> taken;
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      taken = std::move(callback);
+      callback = nullptr;
+    }
+    if (!taken)
+      return false;
+    taken(error);
+    return true;
+  }
+
+private:
+  std::mutex mutex;
+  std::function<void(std::exception_ptr)> callback;
+};
+
 /// Compute ceil(bits/8).
 inline uint64_t bitsToBytes(uint64_t bits) { return (bits + 7) / 8; }
 

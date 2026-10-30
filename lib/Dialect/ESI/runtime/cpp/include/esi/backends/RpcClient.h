@@ -20,6 +20,7 @@
 #include "esi/Common.h"
 
 #include <functional>
+#include <future>
 #include <memory>
 #include <string>
 #include <vector>
@@ -63,6 +64,19 @@ public:
   /// List all channels available on the server.
   std::vector<ChannelDesc> listChannels() const;
 
+  /// Called once with nullptr when a request completes, or with an exception
+  /// if it fails. Runs on the client's network thread (or inline, if the
+  /// connection is already lost), so it must be quick and must not block.
+  using CompletionCallback = std::function<void(std::exception_ptr)>;
+
+  /// Ask the server to report when the simulation has connected its end of a
+  /// server-bound channel. Doesn't block: `onConnected` is called then
+  /// (as soon as the server replies, if it already is), or with an exception
+  /// if the connection is lost first. Frames sent before then are held by the
+  /// server, not dropped.
+  void connectToServer(const std::string &channelName,
+                       CompletionCallback onConnected);
+
   /// Send a message to a server-bound channel.
   void writeToServer(const std::string &channelName, const MessageData &data);
 
@@ -81,9 +95,13 @@ public:
   };
 
   /// Connect to a client-bound channel and receive messages via callback.
-  /// Returns a handle that disconnects when destroyed.
+  /// Doesn't block: `onSubscribed` (if given) is called once the server has
+  /// accepted the subscription, i.e. once the simulation side of the channel
+  /// is connected, or with an exception if the subscription fails. Returns a
+  /// handle that disconnects when destroyed.
   std::unique_ptr<ReadChannelConnection>
-  connectClientReceiver(const std::string &channelName, ReadCallback callback);
+  connectClientReceiver(const std::string &channelName, ReadCallback callback,
+                        CompletionCallback onSubscribed = nullptr);
 
   /// Hide the implementation details from this header file.
   class Impl;
