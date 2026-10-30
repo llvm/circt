@@ -80,10 +80,6 @@ struct ModuleInfo {
   std::array<uint8_t, 32> structuralHash;
   // Module names referred by instance op in the module.
   std::vector<StringAttr> referredModuleNames;
-  // The operations that contain references to symbols that may be changed by
-  // dedup. These need a fixup pass after dedup. This is just an optimization
-  // and does not factor into the hash or the equality between `ModuleInfo`s.
-  std::vector<Operation *> symbolSensitiveOps;
 };
 
 static bool operator==(const ModuleInfo &lhs, const ModuleInfo &rhs) {
@@ -133,8 +129,7 @@ struct StructuralHasher {
   ModuleInfo getModuleInfo(FModuleLike module) {
     populateInnerSymIDTable(module);
     update(&(*module));
-    return {sha.final(), std::move(referredModuleNames),
-            std::move(symbolSensitiveOps)};
+    return {sha.final(), std::move(referredModuleNames)};
   }
 
 private:
@@ -244,10 +239,6 @@ private:
       auto name = namedAttr.getName();
       auto value = namedAttr.getValue();
 
-      // Check whether this attribute contains a nested symbol, just to make
-      // sure we revisit this op after dedup and update any symbols.
-      value.walk([&](FlatSymbolRefAttr) { hasSeenSymbol = true; });
-
       // Skip names and annotations.
       if (constants.nonessentialAttributes.contains(name))
         continue;
@@ -337,17 +328,11 @@ private:
 
     // This happens after the numbering above, as it uses blockarg numbering
     // for inner symbols.
-    hasSeenSymbol = false;
     update(op, op->getAttrDictionary());
 
     // Record any op results (types).
     for (auto result : op->getResults())
       update(result);
-
-    // If any of the operands, attributes, or results depended on symbols,
-    // remember this op for later adjustment.
-    if (hasSeenSymbol)
-      symbolSensitiveOps.push_back(op);
 
     // Incorporate the hash of uses we have already built.
     update(finalizeID(op));
@@ -374,11 +359,6 @@ private:
 
   // The index of the current op. Increment after handling each op.
   size_t position = 0;
-
-  // The operations that contain references to symbols that may be changed by
-  // dedup. These need a fixup pass after dedup.
-  bool hasSeenSymbol = false;
-  std::vector<Operation *> symbolSensitiveOps;
 };
 
 /// A reference to a `ModuleInfo` that compares and hashes like it. This is used
@@ -1602,98 +1582,42 @@ static void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
   }
 }
 
-/// Adjust the symbol references in an op. This includes updating its attributes
-/// and types.
-static void
-fixupSymbolSensitiveOp(Operation *op, InstanceGraph &instanceGraph,
-                       const DenseMap<Attribute, StringAttr> &dedupMap) {
-  // If this is an instance op, dedup may have subtly changed the port types.
-  // For example, structurally different bundles may still dedup. In this case
-  // we now have an instance op that produces result values of the old type, but
-  // the port info on the instantiated module already represents the new type.
-  // Fix this up by going through an intermediate wire.
-  if (auto instOp = dyn_cast<InstanceOp>(op)) {
-    ImplicitLocOpBuilder builder(instOp.getLoc(), instOp->getContext());
-    builder.setInsertionPointAfter(instOp);
-    auto module = instanceGraph.lookup(instOp.getModuleNameAttr().getAttr())
-                      ->getModule<FModuleLike>();
-    for (auto [index, result] : llvm::enumerate(instOp.getResults())) {
-      auto newType = module.getPortType(index);
-      auto oldType = result.getType();
-      // If the type has not changed, we don't have to fix up anything.
-      if (newType == oldType)
-        continue;
-      LLVM_DEBUG(llvm::dbgs()
-                 << "- Updating instance port \"" << instOp.getInstanceName()
-                 << "." << instOp.getPortName(index) << "\" from " << oldType
-                 << " to " << newType << "\n");
-
-      // If the type changed we transform it back to the old type with an
-      // intermediate wire.
-      auto wire = WireOp::create(builder, oldType, instOp.getPortName(index))
-                      .getResult();
-      result.replaceAllUsesWith(wire);
-      result.setType(newType);
-      if (instOp.getPortDirection(index) == Direction::Out)
-        fixupConnect(builder, wire, result);
-      else
-        fixupConnect(builder, result, wire);
-    }
-  }
-
-  // Use an attribute/type replacer to look for references to old symbols that
-  // need to be replaced with new symbols.
-  mlir::AttrTypeReplacer replacer;
-  replacer.addReplacement([&](FlatSymbolRefAttr symRef) {
-    auto oldName = symRef.getAttr();
-    auto newName = dedupMap.lookup(oldName);
-    if (newName && newName != oldName) {
-      auto newSymRef = FlatSymbolRefAttr::get(newName);
-      LLVM_DEBUG(llvm::dbgs()
-                 << "- Updating " << symRef << " to " << newSymRef << " in "
-                 << op->getName() << " at " << op->getLoc() << "\n");
-      return newSymRef;
-    }
-    return symRef;
-  });
-
-  // Update attributes.
-  op->setAttrs(cast<DictionaryAttr>(replacer.replace(op->getAttrDictionary())));
-
-  // Update the argument types.
-  for (auto &region : op->getRegions())
-    for (auto &block : region)
-      for (auto arg : block.getArguments())
-        arg.setType(replacer.replace(arg.getType()));
-
-  // Update result types.
-  for (auto result : op->getResults())
-    result.setType(replacer.replace(result.getType()));
-}
-
-/// Adjust the symbol references in ops marked as sensitive to them. This
-/// includes updating their attributes and types.
-static void fixupSymbolSensitiveOps(
-    InstanceGraph &instanceGraph,
-    const DenseMap<Operation *, ModuleInfoRef> &moduleToModuleInfo,
-    const DenseMap<Attribute, StringAttr> &dedupMap) {
+/// Adjust instance result types to match the deduplicated module's port types.
+/// Bundle field names may have changed, so preserve the old types for users by
+/// going through intermediate wires. Delay this until after deduplication to
+/// avoid introducing differences between otherwise equivalent parent modules.
+static void fixupInstanceTypes(InstanceGraph &instanceGraph) {
   for (auto *node : instanceGraph) {
-    // Look up the module info for this module, which contains the list of ops
-    // that need to be updated.
     auto module = node->getModule<FModuleLike>();
-    auto it = moduleToModuleInfo.find(module);
-    if (it == moduleToModuleInfo.end())
-      continue;
+    for (auto *use : node->uses()) {
+      auto instOp = dyn_cast<InstanceOp>(*use->getInstance());
+      if (!instOp)
+        continue;
+      ImplicitLocOpBuilder builder(instOp.getLoc(), instOp->getContext());
+      builder.setInsertionPointAfter(instOp);
+      for (auto [index, result] : llvm::enumerate(instOp.getResults())) {
+        auto newType = module.getPortType(index);
+        auto oldType = result.getType();
+        // If the type has not changed, we don't have to fix up anything.
+        if (newType == oldType)
+          continue;
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Updating instance port \"" << instOp.getInstanceName()
+                   << "." << instOp.getPortName(index) << "\" from " << oldType
+                   << " to " << newType << "\n");
 
-    // Update each symbol-sensitive op individually.
-    auto &ops = it->second.info->symbolSensitiveOps;
-    if (ops.empty())
-      continue;
-    LLVM_DEBUG(llvm::dbgs()
-               << "- Updating " << ops.size() << " symbol-sensitive ops in "
-               << module.getModuleNameAttr() << "\n");
-    for (auto *op : ops)
-      fixupSymbolSensitiveOp(op, instanceGraph, dedupMap);
+        // If the type changed we transform it back to the old type with an
+        // intermediate wire.
+        auto wire = WireOp::create(builder, oldType, instOp.getPortName(index))
+                        .getResult();
+        result.replaceAllUsesWith(wire);
+        result.setType(newType);
+        if (instOp.getPortDirection(index) == Direction::Out)
+          fixupConnect(builder, wire, result);
+        else
+          fixupConnect(builder, result, wire);
+      }
+    }
   }
 }
 
@@ -1728,7 +1652,6 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
 
     // A map of all the module moduleInfo that we have calculated so far.
     DenseMap<ModuleInfoRef, Operation *> moduleInfoToModule;
-    DenseMap<Operation *, ModuleInfoRef> moduleToModuleInfo;
 
     // We track the name of the module that each module is deduped into, so that
     // we can make sure all modules which are marked "must dedup" with each
@@ -1831,7 +1754,6 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
       }
 
       auto &moduleInfo = maybeModuleInfo.value();
-      moduleToModuleInfo.try_emplace(module, &moduleInfo);
 
       // Replace module names referred in the module with new names.
       for (auto &referredModule : moduleInfo.referredModuleNames)
@@ -1954,9 +1876,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
     for (auto module : circuit.getOps<FModuleLike>())
       module->removeDiscardableAttr(dedupGroupAttrName);
 
-    // Fixup all operations that we've found to be sensitive to symbol names.
-    // This includes module and class instances, wires, connects, etc.
-    fixupSymbolSensitiveOps(instanceGraph, moduleToModuleInfo, dedupMap);
+    fixupInstanceTypes(instanceGraph);
 
     markAnalysesPreserved<NLATable>();
     if (!anythingChanged)
