@@ -49,7 +49,8 @@ public:
 
 /// Since as of now the only construct supported by the StageOp, we convert FIFO
 /// signaling to/from ValidReady signaling. This will be done opposite way when
-/// we implement FIFO-based buffers.
+/// we implement FIFO-based buffers. Changes in data delay are made after the
+/// stages.
 LogicalResult ChannelBufferLowering::matchAndRewrite(
     ChannelBufferOp buffer, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
@@ -57,8 +58,7 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 
   ChannelType inputType = buffer.getInput().getType();
   Value stageInput = buffer.getInput();
-  // The stages carry the data delay, which is the same on the input and the
-  // output.
+  // The stages carry the input data delay.
   auto stageType =
       ChannelType::get(rewriter.getContext(), inputType.getInner(),
                        ChannelSignaling::ValidReady, inputType.getDataDelay());
@@ -114,13 +114,40 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 
   ChannelType outputType = buffer.getOutput().getType();
   Value output = stageInput;
+  uint64_t inDelay = inputType.getDataDelay();
+  uint64_t outDelay = outputType.getDataDelay();
+  auto i1 = rewriter.getI1Type();
+  auto regName = [&](StringRef suffix, uint64_t i) -> std::string {
+    std::string name = (suffix + Twine(i)).str();
+    if (bufferName)
+      name = (bufferName.getValue() + "_" + name).str();
+    return name;
+  };
+
+  if (outDelay > inDelay) {
+    // Delay the data so that it arrives 'outDelay' cycles after the transfer.
+    BackedgeBuilder bb(rewriter, loc);
+    Backedge ready = bb.get(i1);
+    auto unwrap = UnwrapValidReadyOp::create(rewriter, loc, output, ready);
+    Value data = unwrap.getRawOutput();
+    // TODO: it outDelay >>> inDelay it might make sense to use a FIFO with
+    // rd_latency.
+    for (uint64_t i = 0; i < outDelay - inDelay; ++i)
+      data = seq::CompRegOp::create(rewriter, loc, data, buffer.getClk(),
+                                    regName("data_dly", i), InnerSymAttr());
+    auto wrap = WrapValidReadyOp::create(rewriter, loc, data, unwrap.getValid(),
+                                         outDelay);
+    ready.setValue(wrap.getReady());
+    output = wrap.getChanOutput();
+  }
+
   // If the output is FIFO, we need to wrap it back into a FIFO from ValidReady.
   if (outputType.getSignaling() == ChannelSignaling::FIFO) {
     BackedgeBuilder bb(rewriter, loc);
     Backedge ready = bb.get(rewriter.getI1Type());
     Backedge empty = bb.get(rewriter.getI1Type());
 
-    auto unwrap = UnwrapValidReadyOp::create(rewriter, loc, stageInput, ready);
+    auto unwrap = UnwrapValidReadyOp::create(rewriter, loc, output, ready);
     auto wrap = WrapFIFOOp::create(rewriter, loc,
                                    TypeRange{outputType, rewriter.getI1Type()},
                                    unwrap.getRawOutput(), empty);

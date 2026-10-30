@@ -1,7 +1,7 @@
 """Test `esi.buffer` with channels which have a non-zero data delay.
 
-The input and output of each buffer have the same data delay: the data for a
-transfer is on the data signal that many cycles after the handshake.
+The data for a transfer is on the data signal 'data delay' cycles after the
+handshake. Some buffers have different input and output data delays.
 
 All inputs are driven, and all outputs sampled, on the falling clock edge. That
 is unambiguous since every control output of the DUT which the testbench reads
@@ -18,12 +18,34 @@ from cocotb.triggers import FallingEdge, RisingEdge
 NUM_ITEMS = 200
 MAX_CYCLES = 20 * NUM_ITEMS
 
-# Port name prefix -> data delay.
-FIFO_PORTS = {"fifo11": 1, "fifo12": 1, "fifo21": 2, "fifo22": 2}
-VR_PORTS = {"vr1": 1, "vr2": 2, "vr3": 3}
-VO_PORTS = {"vo1": 1}
-# Outputs which use FIFO signaling. All others are ValidReady.
-FIFO_OUTPUTS = {"fifo21"}
+# Port name prefix -> input data delay.
+FIFO_PORTS = {
+    "fifo11": 1,
+    "fifo12": 1,
+    "fifo21": 2,
+    "fifo22": 2,
+    "fifo1vr3": 1,
+}
+VR_PORTS = {
+    "vr1": 1,
+    "vr2": 2,
+    "vr3": 3,
+    "vr0vr2": 0,
+    "vr1fifo3": 1,
+    "vr0vo2": 0,
+}
+VO_PORTS = {"vo1": 1, "vo0vr1": 0}
+# Output data delays which differ from the input data delay.
+OUT_DELAYS = {
+    "fifo1vr3": 3,
+    "vr0vr2": 2,
+    "vr1fifo3": 3,
+    "vr0vo2": 2,
+    "vo0vr1": 1,
+}
+# Outputs which use FIFO or ValidOnly signaling. All others are ValidReady.
+FIFO_OUTPUTS = {"fifo21", "vr1fifo3"}
+VO_OUTPUTS = {"vr0vo2"}
 
 
 def junk() -> int:
@@ -40,7 +62,7 @@ async def init(dut):
   for p in list(FIFO_PORTS) + list(VR_PORTS) + list(VO_PORTS):
     if p in FIFO_OUTPUTS:
       getattr(dut, f"{p}_out_rden").value = 0
-    else:
+    elif p not in VO_OUTPUTS:
       getattr(dut, f"{p}_out_ready").value = 0
 
   cocotb.start_soon(Clock(dut.clk, 2, units="ns").start())
@@ -85,26 +107,34 @@ async def delayed_source(dut, prefix: str, delay: int, values: List[int],
     data.value = scheduled.pop(cycle, junk())
     if i < len(values) and random.random() < valid_prob:
       valid.value = 1
+      if delay == 0:
+        data.value = values[i]
       if ready is None or ready.value == 1:
-        scheduled[cycle + delay] = values[i]
+        if delay > 0:
+          scheduled[cycle + delay] = values[i]
         i += 1
     else:
       valid.value = 0
     cycle += 1
+  await FallingEdge(dut.clk)
+  valid.value = 0
 
 
 class Sink:
-  """Consume a ValidReady or FIFO output, recording the transfer cycles and
-  reading each transfer's data `delay` cycles later."""
+  """Consume a ValidReady, FIFO, or ValidOnly output, recording the transfer
+  cycles and reading each transfer's data `delay` cycles later."""
 
   def __init__(self, dut, prefix: str, delay: int, ready_prob: float):
     self.dut = dut
     name = f"{prefix}_out"
     self.data = getattr(dut, name)
     self.fifo = prefix in FIFO_OUTPUTS
+    self.valid_only = prefix in VO_OUTPUTS
     if self.fifo:
       self.empty = getattr(dut, f"{name}_empty")
       self.rden = getattr(dut, f"{name}_rden")
+    elif self.valid_only:
+      self.valid = getattr(dut, f"{name}_valid")
     else:
       self.valid = getattr(dut, f"{name}_valid")
       self.ready = getattr(dut, f"{name}_ready")
@@ -126,12 +156,17 @@ class Sink:
         # FIFO signaling: only read when not empty.
         xfer = want and self.empty.value == 0
         self.rden.value = int(xfer)
+      elif self.valid_only:
+        xfer = self.valid.value == 1
       else:
         self.ready.value = int(want)
         xfer = want and self.valid.value == 1
       if xfer:
         self.cycles.append(cycle)
-        pending.append(cycle + self.delay)
+        if self.delay == 0:
+          self.received.append(int(self.data.value))
+        else:
+          pending.append(cycle + self.delay)
       cycle += 1
 
 
@@ -142,18 +177,18 @@ async def run_all(dut, src_prob: float, sink_prob: float):
   for p, delay in FIFO_PORTS.items():
     sent[p] = [junk() for _ in range(NUM_ITEMS)]
     cocotb.start_soon(fifo_source(dut, p, sent[p], src_prob))
-    sinks[p] = Sink(dut, p, delay, sink_prob)
+    sinks[p] = Sink(dut, p, OUT_DELAYS.get(p, delay), sink_prob)
   for p, delay in VR_PORTS.items():
     sent[p] = [junk() for _ in range(NUM_ITEMS)]
     cocotb.start_soon(
         delayed_source(dut, p, delay, sent[p], src_prob, has_ready=True))
-    sinks[p] = Sink(dut, p, delay, sink_prob)
+    sinks[p] = Sink(dut, p, OUT_DELAYS.get(p, delay), sink_prob)
   for p, delay in VO_PORTS.items():
     sent[p] = [junk() for _ in range(NUM_ITEMS)]
     cocotb.start_soon(
         delayed_source(dut, p, delay, sent[p], src_prob, has_ready=False))
     # ValidOnly has no backpressure, so the sink must always be ready.
-    sinks[p] = Sink(dut, p, delay, 1.0)
+    sinks[p] = Sink(dut, p, OUT_DELAYS.get(p, delay), 1.0)
   for s in sinks.values():
     cocotb.start_soon(s.run())
 
