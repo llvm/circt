@@ -748,6 +748,70 @@ AssignOp::ensureOnlySafeAccesses(const MemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
+// AssignNetOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::AssignNetOp::fold(FoldAdaptor adaptor,
+                                      SmallVectorImpl<OpFoldResult> &result) {
+  if (!getEnable())
+    return failure();
+
+  if (matchPattern(getEnable(), m_One())) {
+    getEnableMutable().clear();
+    return success();
+  }
+
+  return failure();
+}
+
+LogicalResult llhd::AssignNetOp::canonicalize(llhd::AssignNetOp op,
+                                              PatternRewriter &rewriter) {
+  if (!op.getEnable())
+    return failure();
+
+  if (matchPattern(op.getEnable(), m_Zero())) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
+bool AssignNetOp::canRewire(const DestructurableMemorySlot &slot,
+                            SmallPtrSetImpl<Attribute> &usedIndices,
+                            SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                            const DataLayout &dataLayout) {
+  for (auto [key, _] : slot.subelementTypes)
+    usedIndices.insert(key);
+
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.valueType);
+}
+
+DeletionKind AssignNetOp::rewire(const DestructurableMemorySlot &slot,
+                                 DenseMap<Attribute, MemorySlot> &subslots,
+                                 OpBuilder &builder,
+                                 const DataLayout &dataLayout) {
+  SmallVector<std::pair<unsigned, Value>> assigned;
+  getSortedPtrs(subslots, assigned);
+
+  for (auto [idx, sig] : assigned) {
+    Type nestedType = cast<NetType>(sig.getType()).getNestedType();
+    AssignNetOp::create(
+        builder, getLoc(), sig,
+        getValueAtIndex(builder, getLoc(), getValue(), idx, nestedType),
+        getEnable());
+  }
+
+  return DeletionKind::Delete;
+}
+
+LogicalResult AssignNetOp::ensureOnlySafeAccesses(
+    const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ProcessOp
 //===----------------------------------------------------------------------===//
 
