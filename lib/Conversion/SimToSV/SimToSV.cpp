@@ -129,7 +129,7 @@ public:
     auto loc = op.getLoc();
     auto resultType = rewriter.getIntegerType(1);
     auto str = sv::ConstantStrOp::create(rewriter, loc, op.getFormatString());
-    auto reg = sv::RegOp::create(rewriter, loc, resultType,
+    auto reg = sv::VarOp::create(rewriter, loc, resultType,
                                  rewriter.getStringAttr("_pargs"));
     sv::InitialOp::create(rewriter, loc, [&] {
       auto call = sv::SystemFunctionOp::create(
@@ -156,9 +156,9 @@ public:
     auto i1ty = rewriter.getIntegerType(1);
     auto type = op.getResult().getType();
 
-    auto wirev = sv::WireOp::create(rewriter, loc, type,
+    auto wirev = sv::WireOp::create(rewriter, loc, sv::NetType::get(type),
                                     rewriter.getStringAttr("_pargs_v"));
-    auto wiref = sv::WireOp::create(rewriter, loc, i1ty,
+    auto wiref = sv::WireOp::create(rewriter, loc, sv::NetType::get(i1ty),
                                     rewriter.getStringAttr("_pargs_f"));
 
     state.usedSynthesisMacro = true;
@@ -179,9 +179,9 @@ public:
         },
         [&]() {
           auto i32ty = rewriter.getIntegerType(32);
-          auto regf = sv::RegOp::create(rewriter, loc, i32ty,
+          auto regf = sv::VarOp::create(rewriter, loc, i32ty,
                                         rewriter.getStringAttr("_found"));
-          auto regv = sv::RegOp::create(rewriter, loc, type,
+          auto regv = sv::VarOp::create(rewriter, loc, type,
                                         rewriter.getStringAttr("_value"));
           sv::InitialOp::create(rewriter, loc, [&] {
             auto str =
@@ -339,11 +339,11 @@ public:
     bool isClockedCall = !!op.getClock();
     bool hasEnable = !!op.getEnable();
 
-    SmallVector<sv::RegOp> temporaries;
+    SmallVector<sv::VarOp> temporaries;
     SmallVector<Value> reads;
     for (auto [type, result] :
          llvm::zip(op.getResultTypes(), op.getResults())) {
-      temporaries.push_back(sv::RegOp::create(rewriter, op.getLoc(), type));
+      temporaries.push_back(sv::VarOp::create(rewriter, op.getLoc(), type));
       reads.push_back(
           sv::ReadInOutOp::create(rewriter, op.getLoc(), temporaries.back()));
     }
