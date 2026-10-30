@@ -876,6 +876,13 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   connectPairWise(classIn);
   connectPairWise(classOut);
 
+  // Same-named domains in separately compiled artifacts describe the same
+  // nominal type. Carry their ODR contract through FIRRTL class lowering so
+  // the OM linker coalesces both the domain information and association
+  // classes.
+  classIn.setLinkonceOdr(true);
+  classOut.setLinkonceOdr(true);
+
   classes.insert({name, {classIn, classOut}});
   instanceGraph.addModule(classIn);
   instanceGraph.addModule(classOut);

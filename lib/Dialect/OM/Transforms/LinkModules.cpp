@@ -100,7 +100,7 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping,
       });
 
   module.walk<WalkOrder::PreOrder>([&](Operation *op) {
-    // External classes and equivalent duplicate definitions must be erased.
+    // External classes and duplicate linkonce_odr definitions must be erased.
     if (isa<ClassExternOp>(op) || duplicateClasses.contains(op)) {
       op->erase();
       return WalkResult::skip();
@@ -132,100 +132,39 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping,
   });
 }
 
-// Only compare public classes with no body operations except om.class.fields.
-static bool haveEquivalentDefinitions(ClassOp lhs, ClassOp rhs) {
-  if (!lhs.isPublic() || !rhs.isPublic() ||
-      !llvm::hasSingleElement(lhs.getBodyBlock()->getOperations()) ||
-      !llvm::hasSingleElement(rhs.getBodyBlock()->getOperations()) ||
-      lhs->getAttrDictionary() != rhs->getAttrDictionary() ||
-      !llvm::equal(lhs.getBodyBlock()->getArgumentTypes(),
-                   rhs.getBodyBlock()->getArgumentTypes()) ||
-      lhs.getFieldsOp()->getAttrDictionary() !=
-          rhs.getFieldsOp()->getAttrDictionary())
-    return false;
-  return llvm::all_of_zip(lhs.getFieldsOp().getFields(),
-                          rhs.getFieldsOp().getFields(), [](Value l, Value r) {
-                            return cast<BlockArgument>(l).getArgNumber() ==
-                                   cast<BlockArgument>(r).getArgNumber();
-                          });
-}
-
-// Check that referenced class types resolve to equivalent definitions.
-static bool haveCompatibleClassTypes(ClassOp classOp,
-                                     const ClassMap &symbolToClasses,
-                                     DenseSet<StringAttr> &visited) {
-  if (!visited.insert(classOp.getSymNameAttr()).second)
-    return true;
-
-  AttrTypeWalker walker;
-  walker.addWalk([&](ClassType type) {
-    auto it = symbolToClasses.find(type.getClassName().getAttr());
-    if (it == symbolToClasses.end())
-      return WalkResult::interrupt();
-
-    ClassOp definition;
-    unsigned countDefinition = 0;
-    for (auto op : it->second) {
-      auto next = dyn_cast<ClassOp>(op.getOperation());
-      if (!next)
-        continue;
-      if (definition && !haveEquivalentDefinitions(definition, next))
-        return WalkResult::interrupt();
-      if (!definition)
-        definition = next;
-      ++countDefinition;
-    }
-    if (!definition ||
-        (countDefinition > 1 &&
-         !haveCompatibleClassTypes(definition, symbolToClasses, visited)))
-      return WalkResult::interrupt();
-    return WalkResult::advance();
-  });
-
-  auto walkAttributes = [&](Operation *op) {
-    return walker.walk(op->getAttrDictionary());
-  };
-  auto walkArgumentTypes = [&](Block *block) {
-    for (auto type : block->getArgumentTypes())
-      if (walker.walk(type).wasInterrupted())
-        return WalkResult::interrupt();
-    return WalkResult::advance();
-  };
-  return !classOp.walk(walkAttributes).wasInterrupted() &&
-         !classOp.walk(walkArgumentTypes).wasInterrupted();
-}
-
-// Return a failure if classes cannot be resolved. Otherwise record equivalent
-// duplicate definitions and return whether the symbols need to be renamed.
+// Return a failure if classes cannot be resolved. Otherwise record duplicate
+// linkonce_odr definitions and return whether the symbols need to be renamed.
 static FailureOr<bool> resolveClasses(StringAttr name,
                                       ArrayRef<ClassLike> classes,
-                                      const ClassMap &symbolToClasses,
                                       DenseSet<Operation *> &duplicateClasses) {
   bool existExternalClass = false;
-  bool canDeduplicate = true;
   size_t countDefinition = 0;
   ClassOp classOp;
 
   for (auto op : classes) {
-    if (isa<ClassExternOp>(op))
+    if (isa<ClassExternOp>(op)) {
       existExternalClass = true;
-    else {
-      auto definition = cast<ClassOp>(op);
-      if (classOp)
-        canDeduplicate &= haveEquivalentDefinitions(classOp, definition);
-      else
-        classOp = definition;
-      ++countDefinition;
+      continue;
     }
-  }
-  if (countDefinition > 1 && canDeduplicate) {
-    DenseSet<StringAttr> visited;
-    canDeduplicate =
-        haveCompatibleClassTypes(classOp, symbolToClasses, visited);
+    auto definition = cast<ClassOp>(op);
+    if (!classOp)
+      classOp = definition;
+    else if (classOp.getLinkonceOdr() != definition.getLinkonceOdr()) {
+      auto diag = definition.emitError()
+                  << "cannot link class " << name
+                  << " with inconsistent linkonce_odr attributes";
+      diag.attachNote(classOp.getLoc()) << "previous definition is here";
+      return failure();
+    }
+    ++countDefinition;
   }
 
-  // There must be exactly one definition if the symbol was referred by an
-  // external class, unless the definitions are structurally equivalent.
+  // linkonce_odr is a producer contract, not a structural equivalence test.
+  // Definitions with this attribute must have public visibility.
+  bool canDeduplicate = classOp && classOp.getLinkonceOdr();
+
+  // There must be exactly one definition if the symbol was referred to by an
+  // external class, unless all definitions have the linkonce_odr attribute.
   if (existExternalClass &&
       (countDefinition == 0 || (countDefinition != 1 && !canDeduplicate))) {
     SmallVector<Location> classExternLocs;
@@ -337,9 +276,8 @@ void LinkModulesPass::runOnOperation() {
       })))
     return signalPassFailure();
 
-  // 2. Symbol resolution. Deduplicate equivalent field-only definitions,
-  // resolve
-  //    external symbols, and rename other colliding symbols if necessary.
+  // 2. Symbol resolution. Coalesce linkonce_odr definitions, resolve external
+  //    symbols, and rename other colliding symbols if necessary.
 
   // Global namespace to get unique names to symbols.
   Namespace nameSpace;
@@ -359,8 +297,7 @@ void LinkModulesPass::runOnOperation() {
   for (auto &[name, classes] : symbolToClasses) {
     // Check if it's legal to link classes. `resolveClasses` returns true if
     // it's necessary to rename symbols.
-    auto result =
-        resolveClasses(name, classes, symbolToClasses, duplicateClasses);
+    auto result = resolveClasses(name, classes, duplicateClasses);
     if (failed(result))
       return signalPassFailure();
 
