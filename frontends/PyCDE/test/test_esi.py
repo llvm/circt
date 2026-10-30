@@ -64,9 +64,9 @@ class HostComms:
 # CHECK:         esi.service.instance #esi.appid<"cosim"[0]> svc @HostComms impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
 # CHECK:         [[B0:%.+]] = esi.service.req <@HostComms::@req_resp>(#esi.appid<"loopback_inout"[0]>) : !esi.bundle<[!esi.channel<i16, ValidReady> from "resp", !esi.channel<i24, ValidReady> to "req"]>
 # CHECK:         %req = esi.bundle.unpack %chanOutput from [[B0]] : !esi.bundle<[!esi.channel<i16, ValidReady> from "resp", !esi.channel<i24, ValidReady> to "req"]>
-# CHECK:         %rawOutput, %valid = esi.unwrap.vr %req, %ready : i24
+# CHECK:         %rawOutput, %valid = esi.unwrap.vr %req, %ready : !esi.channel<i24, ValidReady>
 # CHECK:         [[R0:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
-# CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid {sv.namehint = "loopback"} : i16
+# CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid {sv.namehint = "loopback"} : !esi.channel<i16, ValidReady>
 @unittestmodule(print=True)
 class LoopbackInOutTop(Module):
   clk = Clock()
@@ -127,9 +127,9 @@ class LoopbackCoercedCall(Module):
 # CHECK-NEXT:     [[R2:%.+]] = esi.buffer %clk, %rst, %chanOutput {stages = 1 : i64} : !esi.channel<i16, ValidReady> -> !esi.channel<i16, FIFO>
 # CHECK-NEXT:     [[R0:%.+]] = esi.service.req <@_FuncService::@call>(#esi.appid<"loopback">) : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, FIFO> from "result"]>
 # CHECK-NEXT:     %arg = esi.bundle.unpack [[R2]] from [[R0]] : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, FIFO> from "result"]>
-# CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %arg, %ready : i24
+# CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %arg, %ready : !esi.channel<i24, ValidReady>
 # CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
-# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid {sv.namehint = "loopback_src"} : i16
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid {sv.namehint = "loopback_src"} : !esi.channel<i16, ValidReady>
 # CHECK-NEXT:     hw.output
 # CHECK-NEXT:   }
 # CHECK-NEXT:   esi.service.std.func @_FuncService
@@ -257,9 +257,9 @@ class ListTest(Module):
 # CHECK-NEXT:         sv.info.procedural "Pre-transform: %p"([[SNOOP_DATA]]) : i32
 # CHECK-NEXT:       }
 # CHECK-NEXT:     }
-# CHECK-NEXT:     %rawOutput, [[VALID2:%.+]] = esi.unwrap.vr %s1_in, [[READY2:%.+]] : i32
+# CHECK-NEXT:     %rawOutput, [[VALID2:%.+]] = esi.unwrap.vr %s1_in, [[READY2:%.+]] : !esi.channel<i32, ValidReady>
 # CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
-# CHECK-NEXT:     %chanOutput, [[READY2]] = esi.wrap.vr [[R0]], [[VALID2]] : i8
+# CHECK-NEXT:     %chanOutput, [[READY2]] = esi.wrap.vr [[R0]], [[VALID2]] : !esi.channel<i8, ValidReady>
 # CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i8, ValidReady>
 @unittestmodule()
 class ChannelTransform(Module):
@@ -279,7 +279,7 @@ class ChannelTransform(Module):
 # CHECK-LABEL: hw.module @ValidOnlyTransform(in %s1_in : !esi.channel<i32, ValidOnly>, out s2_out : !esi.channel<i8, ValidOnly>)
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vo %s1_in : !esi.channel<i32, ValidOnly>
 # CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
-# CHECK-NEXT:     [[R1:%.+]] = esi.wrap.vo [[R0]], %valid : i8
+# CHECK-NEXT:     [[R1:%.+]] = esi.wrap.vo [[R0]], %valid : !esi.channel<i8, ValidOnly>
 # CHECK-NEXT:     %true = hw.constant true
 # CHECK-NEXT:     hw.output [[R1]] : !esi.channel<i8, ValidOnly>
 @unittestmodule()
@@ -315,13 +315,13 @@ class CoerceBundle(Module):
 
 
 # CHECK-LABEL:  hw.module @CoerceBundleTransform(in %b_in : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i8, ValidReady> from "resp"]>, out b_out : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>)
-# CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %result, %ready : i16
+# CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %result, %ready : !esi.channel<i16, ValidReady>
 # CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i16) -> i8
-# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i8
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : !esi.channel<i8, ValidReady>
 # CHECK-NEXT:     %req = esi.bundle.unpack %chanOutput from %b_in : !esi.bundle<[!esi.channel<i32, ValidReady> to "req", !esi.channel<i8, ValidReady> from "resp"]>
-# CHECK-NEXT:     %rawOutput_0, %valid_1 = esi.unwrap.vr %req, %ready_3 : i32
+# CHECK-NEXT:     %rawOutput_0, %valid_1 = esi.unwrap.vr %req, %ready_3 : !esi.channel<i32, ValidReady>
 # CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput_0 from 0 : (i32) -> i24
-# CHECK-NEXT:     %chanOutput_2, %ready_3 = esi.wrap.vr [[R1]], %valid_1 : i24
+# CHECK-NEXT:     %chanOutput_2, %ready_3 = esi.wrap.vr [[R1]], %valid_1 : !esi.channel<i24, ValidReady>
 # CHECK-NEXT:     %bundle, %result = esi.bundle.pack %chanOutput_2 : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
 # CHECK-NEXT:     hw.output %bundle : !esi.bundle<[!esi.channel<i24, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
 @unittestmodule()
@@ -347,7 +347,7 @@ class CoerceBundleTransform(Module):
 # CHECK-NEXT:     %c0_i64 = hw.constant 0 : i64
 # CHECK-NEXT:     %false = hw.constant false
 # CHECK-NEXT:     [[B:%.+]] = esi.service.req <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<ui32, ValidReady> to "offset", !esi.channel<i64, ValidReady> from "data"]>
-# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i64, %false : i64
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i64, %false : !esi.channel<i64, ValidReady>
 # CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<ui32, ValidReady> to "offset", !esi.channel<i64, ValidReady> from "data"]>
 @unittestmodule(esi_sys=True)
 class MMIOReq(Module):
@@ -368,13 +368,13 @@ class MMIOReq(Module):
 # CHECK-NEXT:     %false = hw.constant false
 # CHECK-NEXT:     [[R2:%.+]] = hwarith.constant 0 : ui8
 # CHECK-NEXT:     [[R3:%.+]] = hw.struct_create ([[R0]], [[R2]]) : !hw.struct<address: ui64, tag: ui8>
-# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R3]], %false : !hw.struct<address: ui64, tag: ui8>
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R3]], %false : !esi.channel<!hw.struct<address: ui64, tag: ui8>, ValidReady>
 # CHECK-NEXT:     [[R1:%.+]] = esi.service.req <@_HostMem::@read>(#esi.appid<"host_mem_read_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>, ValidReady> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>, ValidReady> to "resp"]>
 # CHECK-NEXT:     %resp = esi.bundle.unpack %chanOutput from [[R1]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>, ValidReady> from "req", !esi.channel<!hw.struct<tag: ui8, data: ui256>, ValidReady> to "resp"]>
 # CHECK-NEXT:     [[R4:%.+]] = hwarith.constant 0 : ui8
 # CHECK-NEXT:     [[R5:%.+]] = hwarith.constant 0 : ui256
 # CHECK-NEXT:     [[R6:%.+]] = hw.struct_create ([[R0]], [[R4]], [[R5]]) : !hw.struct<address: ui64, tag: ui8, data: ui256>
-# CHECK-NEXT:     %chanOutput_0, %ready_1 = esi.wrap.vr [[R6]], %false : !hw.struct<address: ui64, tag: ui8, data: ui256>
+# CHECK-NEXT:     %chanOutput_0, %ready_1 = esi.wrap.vr [[R6]], %false : !esi.channel<!hw.struct<address: ui64, tag: ui8, data: ui256>, ValidReady>
 # CHECK-NEXT:     [[R7:%.+]] = esi.service.req <@_HostMem::@write>(#esi.appid<"host_mem_write_req">) : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: ui256>, ValidReady> from "req", !esi.channel<ui8, ValidReady> to "ackTag"]>
 # CHECK:        esi.service.std.hostmem @_HostMem
 @unittestmodule(esi_sys=True)
@@ -465,9 +465,9 @@ def Writer(type):
 # CHECK:  hw.module @Ram1(in %clk : !seq.clock, in %rst : i1)
 # CHECK:    esi.service.instance #esi.appid<"ram"> svc @ram impl as "sv"(%clk, %rst) : (!seq.clock, i1) -> ()
 # CHECK:    [[WR:%.+]] = esi.service.req <@ram::@write>(#esi.appid<"ram_writer"[0]>) : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: i32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>
-# CHECK:    %rawOutput, %valid = esi.unwrap.vr %req, %ready : !hw.struct<address: ui3, data: ui32>
+# CHECK:    %rawOutput, %valid = esi.unwrap.vr %req, %ready : !esi.channel<!hw.struct<address: ui3, data: ui32>, ValidReady>
 # CHECK:    [[CASTED:%.+]] = hw.bitcast %rawOutput : (!hw.struct<address: ui3, data: ui32>) -> !hw.struct<address: ui3, data: i32>
-# CHECK:    %chanOutput, %ready = esi.wrap.vr [[CASTED]], %valid : !hw.struct<address: ui3, data: i32>
+# CHECK:    %chanOutput, %ready = esi.wrap.vr [[CASTED]], %valid : !esi.channel<!hw.struct<address: ui3, data: i32>, ValidReady>
 # CHECK:    %ack = esi.bundle.unpack %chanOutput from [[WR]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: i32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>
 # CHECK:    %bundle, %req = esi.bundle.pack %ack : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>
 # CHECK:    hw.instance "Writer" sym @Writer @Writer(clk: %clk: !seq.clock, rst: %rst: i1, cmd: %bundle: !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>, ValidReady> from "req", !esi.channel<i0, ValidReady> to "ack"]>) -> ()
@@ -535,14 +535,14 @@ def transform_truncate_half(data):
 
 # CHECK-LABEL:   hw.module @TestBundleTransformBasic(in %clk : !seq.clock, in %rst : i1, in %bundle_in : !esi.bundle<[!esi.channel<i8, ValidReady> to "req", !esi.channel<i24, ValidReady> from "resp"]>, out bundle_out : !esi.bundle<[!esi.channel<i16, ValidReady> to "req", !esi.channel<i48, ValidReady> from "resp"]>) attributes {output_file = #hw.output_file<"TestBundleTransformBasic.sv", includeReplicatedOps>} {
 # CHECK-NEXT:      %req = esi.bundle.unpack %chanOutput_2 from %bundle_in : !esi.bundle<[!esi.channel<i8, ValidReady> to "req", !esi.channel<i24, ValidReady> from "resp"]>
-# CHECK-NEXT:      %rawOutput, %valid = esi.unwrap.vr %req, %ready : i8
+# CHECK-NEXT:      %rawOutput, %valid = esi.unwrap.vr %req, %ready : !esi.channel<i8, ValidReady>
 # CHECK-NEXT:      %c0_i8 = hw.constant 0 : i8
 # CHECK-NEXT:      [[R0:%.+]] = comb.concat %c0_i8, %rawOutput : i8, i8
-# CHECK-NEXT:      %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i16
+# CHECK-NEXT:      %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : !esi.channel<i16, ValidReady>
 # CHECK-NEXT:      %bundle, %resp = esi.bundle.pack %chanOutput : !esi.bundle<[!esi.channel<i16, ValidReady> to "req", !esi.channel<i48, ValidReady> from "resp"]>
-# CHECK-NEXT:      %rawOutput_0, %valid_1 = esi.unwrap.vr %resp, %ready_3 : i48
+# CHECK-NEXT:      %rawOutput_0, %valid_1 = esi.unwrap.vr %resp, %ready_3 : !esi.channel<i48, ValidReady>
 # CHECK-NEXT:      [[R1:%.+]] = comb.extract %rawOutput_0 from 0 : (i48) -> i24
-# CHECK-NEXT:      %chanOutput_2, %ready_3 = esi.wrap.vr [[R1]], %valid_1 : i24
+# CHECK-NEXT:      %chanOutput_2, %ready_3 = esi.wrap.vr [[R1]], %valid_1 : !esi.channel<i24, ValidReady>
 # CHECK-NEXT:      hw.output %bundle : !esi.bundle<[!esi.channel<i16, ValidReady> to "req", !esi.channel<i48, ValidReady> from "resp"]>
 @unittestmodule()
 class TestBundleTransformBasic(Module):
@@ -714,9 +714,9 @@ class TestListWindowToSerialZeroWidth(Module):
 # property the module exists for: no input's `ready` is a function of any
 # sibling's `valid`, so there is no combinational coupling between the inputs.
 # If arbitration ever creeps back in, these three stop matching.
-# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
-# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
-# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : !esi.channel<i8, ValidReady>
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : !esi.channel<i8, ValidReady>
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : !esi.channel<i8, ValidReady>
 # `valid` is a single OR-reduce over the inputs' valids, and the payload is a
 # list select on a binary encode of that same vector -- never an OR of masked
 # payloads, so only one input's data can reach the output even if the caller
@@ -760,8 +760,8 @@ class TestChannelMergeOneValid(Module):
 # is what makes every input's `ready` a flop output, which is the whole point
 # of the option. With two inputs the select is a single `valid` bit, so the
 # array is indexed directly by it with no encode in between.
-# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
-# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i8
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : !esi.channel<i8, ValidReady>
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : !esi.channel<i8, ValidReady>
 # CHECK:         comb.or bin %{{.+}}, %{{.+}} : i1
 # CHECK:         hw.array_get %{{.+}}[%{{.+}}] {{.*}}: !hw.array<2xi8>, i1
 # CHECK:         esi.wrap.vr
@@ -786,11 +786,11 @@ class TestChannelMergeOneValidRegistered(Module):
 # CHECK-LABEL: hw.module @ChannelMergeOneValidImpl_{{.*}}esi_channel_i0{{.*}}register_outputFalse
 # Zero-width payload: there is nothing to select, so the merge degenerates to
 # the `valid` OR-reduce and no payload select is built at all.
-# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i0
-# CHECK:         esi.unwrap.vr %{{.+}}, %ready : i0
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : !esi.channel<i0, ValidReady>
+# CHECK:         esi.unwrap.vr %{{.+}}, %ready : !esi.channel<i0, ValidReady>
 # CHECK-NOT:     hw.array_get
 # CHECK:         comb.or bin %{{.+}}, %{{.+}} : i1
-# CHECK:         esi.wrap.vr %{{.+}}, %{{.+}} {{.*}}: i0
+# CHECK:         esi.wrap.vr %{{.+}}, %{{.+}} {{.*}}: !esi.channel<i0, ValidReady>
 @unittestmodule()
 class TestChannelMergeOneValidZeroWidth(Module):
   """Zero-width payloads (pure tokens) take the no-mux path."""

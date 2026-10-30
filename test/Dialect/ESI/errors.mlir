@@ -158,12 +158,12 @@ hw.module @Top() {
 
 hw.module @wrap_multi_unwrap(in %a_data: i8, in %a_valid: i1, out a_ready: i1) {
   // expected-error @+1 {{'esi.wrap.vr' op channels must have at most one consumer}}
-  %a_chan, %a_ready = esi.wrap.vr %a_data, %a_valid : i8
+  %a_chan, %a_ready = esi.wrap.vr %a_data, %a_valid : !esi.channel<i8, ValidReady>
   %true = hw.constant true
   // expected-note @+1 {{channel used here}}
-  %ap_data, %ap_valid = esi.unwrap.vr %a_chan, %true : i8
+  %ap_data, %ap_valid = esi.unwrap.vr %a_chan, %true : !esi.channel<i8, ValidReady>
   // expected-note @+1 {{channel used here}}
-  %ab_data, %ab_valid = esi.unwrap.vr %a_chan, %true : i8
+  %ab_data, %ab_valid = esi.unwrap.vr %a_chan, %true : !esi.channel<i8, ValidReady>
   hw.output %a_ready : i1
 }
 
@@ -171,11 +171,40 @@ hw.module @wrap_multi_unwrap(in %a_data: i8, in %a_valid: i1, out a_ready: i1) {
 
 hw.module @wrap_vo_multi_unwrap(in %a_data: i8, in %a_valid: i1) {
   // expected-error @+1 {{'esi.wrap.vo' op channels must have at most one consumer}}
-  %a_chan = esi.wrap.vo %a_data, %a_valid : i8
+  %a_chan = esi.wrap.vo %a_data, %a_valid : !esi.channel<i8, ValidOnly>
   // expected-note @+1 {{channel used here}}
   %ap_data, %ap_valid = esi.unwrap.vo %a_chan : !esi.channel<i8, ValidOnly>
   // expected-note @+1 {{channel used here}}
   %ab_data, %ab_valid = esi.unwrap.vo %a_chan : !esi.channel<i8, ValidOnly>
+}
+
+// -----
+
+hw.module @wrap_vr_type_mismatch(in %data: i16, in %valid: i1) {
+  // expected-error @+1 {{'esi.wrap.vr' op input and output types must match}}
+  %chan, %ready = "esi.wrap.vr"(%data, %valid) : (i16, i1) -> (!esi.channel<i8, ValidReady>, i1)
+}
+
+// -----
+
+hw.module @wrap_vo_type_mismatch(in %data: i16, in %valid: i1) {
+  // expected-error @+1 {{'esi.wrap.vo' op input and output types must match}}
+  %chan = "esi.wrap.vo"(%data, %valid) : (i16, i1) -> !esi.channel<i8, ValidOnly>
+}
+
+// -----
+
+hw.module @unwrap_vr_type_mismatch(in %chan: !esi.channel<i8, ValidReady>, in %ready: i1) {
+  // expected-error @+2 {{'esi.unwrap.vr' op inferred type(s) 'i8', 'i1' are incompatible with return type(s) of operation 'i16', 'i1'}}
+  // expected-error @+1 {{'esi.unwrap.vr' op failed to infer returned types}}
+  %data, %valid = "esi.unwrap.vr"(%chan, %ready) : (!esi.channel<i8, ValidReady>, i1) -> (i16, i1)
+}
+
+// -----
+
+hw.module @wrap_fifo_type_mismatch(in %data: i16, in %empty: i1) {
+  // expected-error @+1 {{'esi.wrap.fifo' op input and output types must match}}
+  %chan, %rden = "esi.wrap.fifo"(%data, %empty) : (i16, i1) -> (!esi.channel<i8, FIFO>, i1)
 }
 
 // -----
@@ -210,11 +239,4 @@ hw.module @stageFIFO(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, F
 hw.module @bufferDelayMismatch(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, FIFO(1)>) {
   // expected-error @+1 {{input and output data delays must match}}
   %0 = esi.buffer %clk, %rst, %a : !esi.channel<i8, FIFO(1)> -> !esi.channel<i8, ValidReady>
-}
-
-// -----
-
-hw.module @bufferValidOnlyOutputDelay(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, ValidReady(1)>) {
-  // expected-error @+1 {{does not support data delay on valid-only output channels}}
-  %0 = esi.buffer %clk, %rst, %a : !esi.channel<i8, ValidReady(1)> -> !esi.channel<i8, ValidOnly(1)>
 }

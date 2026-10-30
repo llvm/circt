@@ -2,8 +2,8 @@
 
 // CHECK-LABEL:   hw.module @handshake_buffer_in_none_out_none_3slots_seq_1ins_1outs_ctrl(in 
 // CHECK-SAME:            %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[VAL_1:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i0, ValidReady>) {
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i0
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : i0
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : !esi.channel<i0, ValidReady>
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : !esi.channel<i0, ValidReady>
 // CHECK:           %[[VAL_10:.*]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_11:.*]] = hw.constant false
 // CHECK:           %[[VAL_12:.*]] = seq.compreg sym @valid0_reg %[[VAL_13:.*]], %[[VAL_1]] reset %[[VAL_2]], %[[VAL_11]]  : i1
@@ -75,8 +75,8 @@ handshake.func @test_buffer_none(%arg0: none, %arg1: none, ...) -> (none, none) 
 
 // CHECK-LABEL:   hw.module @handshake_buffer_in_ui64_out_ui64_2slots_seq(in 
 // CHECK-SAME:               %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>, in %[[VAL_1:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i64, ValidReady>) {
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : i64
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : !esi.channel<i64, ValidReady>
 // CHECK:           %[[VAL_10:.*]] = hw.constant 0 : i64
 // CHECK:           %[[VAL_11:.*]] = hw.constant false
 // CHECK:           %[[VAL_12:.*]] = seq.compreg sym @valid0_reg %[[VAL_13:.*]], %[[VAL_1]] reset %[[VAL_2]], %[[VAL_11]]  : i1

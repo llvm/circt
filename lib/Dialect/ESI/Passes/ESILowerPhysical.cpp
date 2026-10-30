@@ -139,8 +139,9 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
         hw::ConstantOp::create(rewriter, loc, rewriter.getI1Type(), 1);
     auto unwrap =
         UnwrapValidReadyOp::create(rewriter, loc, output, alwaysReady);
-    auto wrap = WrapValidOnlyOp::create(rewriter, loc, unwrap.getRawOutput(),
-                                        unwrap.getValid());
+    auto wrap =
+        WrapValidOnlyOp::create(rewriter, loc, unwrap.getRawOutput(),
+                                unwrap.getValid(), outputType.getDataDelay());
     output = wrap.getChanOutput();
   }
 
@@ -247,8 +248,8 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
     // data is available (no backpressure).
     auto notEmpty = comb::createOrFoldNot(rewriter, loc, seqFifo.getEmpty(),
                                           /*twoState=*/true);
-    auto wrap =
-        WrapValidOnlyOp::create(rewriter, loc, seqFifo.getOutput(), notEmpty);
+    auto wrap = WrapValidOnlyOp::create(rewriter, loc, seqFifo.getOutput(),
+                                        notEmpty, outputType.getDataDelay());
     output = wrap.getChanOutput();
     // Always read when not empty since there's no backpressure.
     outputRdEn.setValue(notEmpty);

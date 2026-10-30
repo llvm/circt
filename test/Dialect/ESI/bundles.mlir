@@ -63,5 +63,5 @@ hw.module @BundleTest(in %s1_in : !esi.channel<i32, ValidReady>, out b_send : !e
 hw.module @TestNullFold() {
   %c0_i0 = hw.constant 0 : i0
   %false = hw.constant false
-  %chanOutput, %ready = esi.wrap.vr %c0_i0, %false: i0
+  %chanOutput, %ready = esi.wrap.vr %c0_i0, %false: !esi.channel<i0, ValidReady>
 }
