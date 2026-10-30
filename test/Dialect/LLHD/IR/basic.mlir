@@ -107,7 +107,9 @@ hw.module @checkDrv(
   in %arg5 : !llhd.ref<!hw.array<3xi8>>,
   in %arg6 : !llhd.ref<!hw.struct<foo: i1, bar: i2, baz: i4>>,
   in %arg7 : !hw.array<3xi8>,
-  in %arg8 : !hw.struct<foo: i1, bar: i2, baz: i4>
+  in %arg8 : !hw.struct<foo: i1, bar: i2, baz: i4>,
+  in %arg9 : !llhd.net<i1>,
+  in %arg10 : !llhd.net<i64>
 ) {
   %t = llhd.constant_time <0ns, 1d>
   // CHECK: llhd.drv %arg0, %arg2 after %{{.*}} : i1
@@ -124,6 +126,10 @@ hw.module @checkDrv(
   llhd.drv %arg5, %arg7 after %t : !hw.array<3xi8>
   // CHECK-NEXT: llhd.drv %arg6, %arg8 after %{{.*}} : !hw.struct<foo: i1, bar: i2, baz: i4>
   llhd.drv %arg6, %arg8 after %t : !hw.struct<foo: i1, bar: i2, baz: i4>
+  // CHECK-NEXT: llhd.assign_net %arg9, %arg2 : i1
+  llhd.assign_net %arg9, %arg2 : i1
+  // CHECK-NEXT: llhd.assign_net %arg10, %arg3 if %arg2 : i64
+  llhd.assign_net %arg10, %arg3 if %arg2 : i64
 }
 
 // CHECK-LABEL: @check_wait_0
