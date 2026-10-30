@@ -398,18 +398,6 @@ endmodule
 
 // -----
 
-// expected-error @below {{sequential user-defined primitives are not supported yet}}
-primitive udp_seq(q, clk, d);
-  output reg q;
-  input clk, d;
-  table
-    (01) 0 : ? : 0 ;
-    (01) 1 : ? : 1 ;
-  endtable
-endprimitive
-
-// -----
-
 module ReadMemAssoc;
   logic [7:0] amem[int];
   initial begin
@@ -492,3 +480,121 @@ module Foo;
   // expected-error @below {{ref argument `p` expects '!moore.ref<struct<{x: i1, y: i1}>>' but call provides '!moore.ref<i2>'}}
   initial useRef(z);
 endmodule
+
+// -----
+
+// expected-error @below {{sequential UDP `udp_mixed_latch` specifies input `clk` with both edge and level sensitivity; mixed latch/flip-flop models are not supported}}
+primitive udp_mixed_latch(q, clk, d);
+  output reg q;
+  input clk, d;
+  table
+    1 0 : ? : 0 ;
+    (01) 0 : ? : 0 ;
+    (01) 1 : ? : 1 ;
+  endtable
+endprimitive
+
+module TestMixedLatch(input logic clk, input logic d, output logic q);
+  udp_mixed_latch u_latch (q, clk, d);
+endmodule
+
+// -----
+
+// expected-error @below {{sequential UDP `udp_multi_clock` with multiple distinct edge-sensitive signals is not supported}}
+primitive udp_multi_clock(q, clk1, clk2, d);
+  output reg q;
+  input clk1, clk2, d;
+  table
+    (01) ? 0 : ? : 0 ;
+    ? (01) 1 : ? : 1 ;
+  endtable
+endprimitive
+
+module TestMultiClock(input logic clk1, input logic clk2, input logic d, output logic q);
+  udp_multi_clock u_mc (q, clk1, clk2, d);
+endmodule
+
+// -----
+
+// expected-error @below {{sequential UDP `udp_async_state_dep` specifies asynchronous row depending on internal state; feedback loops in asynchronous control are not supported}}
+primitive udp_async_state_dep(q, clk, rst, d);
+  output reg q;
+  input clk, rst, d;
+  table
+    ? 1 ? : 1 : 0 ;
+    (01) 0 0 : ? : 0 ;
+    (01) 0 1 : ? : 1 ;
+  endtable
+endprimitive
+
+module TestAsyncStateDep(input logic clk, input logic rst, input logic d, output logic q);
+  udp_async_state_dep u_asd (q, clk, rst, d);
+endmodule
+
+// -----
+
+// expected-error @below {{sequential UDP `udp_async_on_data` specifies asynchronous control on data input port; only dedicated reset/preset lines are supported}}
+primitive udp_async_on_data(q, clk, d);
+  output reg q;
+  input clk, d;
+  table
+    ?    1 : ? : 0 ;
+    (01) 0 : ? : 0 ;
+    (01) 1 : ? : 1 ;
+  endtable
+endprimitive
+
+module TestAsyncOnData(input logic clk, input logic d, output logic q);
+  udp_async_on_data u_aod (q, clk, d);
+endmodule
+
+// -----
+
+// expected-error @below {{sequential UDP `udp_sync_on_active_async` defines synchronous transitions conditioned on active asynchronous reset/set}}
+primitive udp_sync_on_active_async(q, clk, rst, d);
+  output reg q;
+  input clk, rst, d;
+  table
+    ?    1 ? : ? : 0 ;
+    (01) 1 0 : ? : 0 ;
+    (01) 1 1 : ? : 1 ;
+  endtable
+endprimitive
+
+module TestSyncOnActiveAsync(input logic clk, input logic rst, input logic d, output logic q);
+  udp_sync_on_active_async u_soaa (q, clk, rst, d);
+endmodule
+
+// -----
+
+// expected-error @below {{sequential UDP `udp_without_clock` without clock edge is not supported}}
+primitive udp_without_clock(q, d);
+  output reg q;
+  input d;
+  table
+    ? : ? : - ;
+  endtable
+endprimitive
+
+module TestWithoutClock(input logic d, output logic q);
+  udp_without_clock u_wc (q, d);
+endmodule
+
+// -----
+
+// expected-error @below {{dual-edge sequential UDP `udp_dual_edge_state_dep` depending on internal state is not supported}}
+primitive udp_dual_edge_state_dep(q, clk, d);
+  output reg q;
+  input clk, d;
+  table
+    (01) 0 : 0 : 1 ;
+    (01) 0 : 1 : 0 ;
+    (10) 0 : ? : 0 ;
+  endtable
+endprimitive
+
+module TestDualEdgeStateDep(input logic clk, input logic d, output logic q);
+  udp_dual_edge_state_dep u_ded (q, clk, d);
+endmodule
+
+
