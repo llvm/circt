@@ -156,6 +156,51 @@ def SignalOp : LLHDOp<"sig", [
   }];
 }
 
+def NetKindAttr : I32EnumAttr<"NetKind", "Net type kind", [
+    I32EnumAttrCase<"Supply0", 0, "supply0">,
+    I32EnumAttrCase<"Supply1", 1, "supply1">,
+    I32EnumAttrCase<"Tri", 2, "tri">,
+    I32EnumAttrCase<"TriAnd", 3, "triand">,
+    I32EnumAttrCase<"TriOr", 4, "trior">,
+    I32EnumAttrCase<"TriReg", 5, "trireg">,
+    I32EnumAttrCase<"Tri0", 6, "tri0">,
+    I32EnumAttrCase<"Tri1", 7, "tri1">,
+    I32EnumAttrCase<"UWire", 8, "uwire">,
+    I32EnumAttrCase<"Wire", 9, "wire">,
+    I32EnumAttrCase<"WAnd", 10, "wand">,
+    I32EnumAttrCase<"WOr", 11, "wor">,
+    I32EnumAttrCase<"Interconnect", 12, "interconnect">,
+    I32EnumAttrCase<"UserDefined", 13, "userdefined">,
+    I32EnumAttrCase<"Unknown", 14, "unknown">,
+  ]> {
+  let cppNamespace = "::circt::llhd";
+}
+
+def NetOp : LLHDOp<"net", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+]> {
+  let summary = "Create a net.";
+  let description = [{
+    Creates a new net with a specified net type, which determines how the value
+    resolves multiple drivers.
+
+    Example:
+
+    ```mlir
+    %foo = llhd.net wire : <i64>
+    ```
+  }];
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$name,
+    NetKindAttr:$kind
+  );
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) $kind attr-dict
+    `:` type($result)
+  }];
+}
+
 def ProbeOp : LLHDOp<"prb", [
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
