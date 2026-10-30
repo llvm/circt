@@ -1083,7 +1083,9 @@ TEST_F(EvaluatorTests, CollectionUnknownElementsAndMembership) {
   EXPECT_TRUE(missing->isUnknown());
 }
 
-TEST_F(EvaluatorTests, CollectionImportedSnapshotsAndAliases) {
+// Collections are values at the API boundary: every collection-typed use of an
+// input list receives its own copy, and inputs are never modified.
+TEST_F(EvaluatorTests, CollectionInputsAreValues) {
   auto mod = parseModule(R"MLIR(
     !items = !om.collection<!om.integer>
     om.class @Source() -> (items: !items, list: !om.list<!items>) {
@@ -1112,22 +1114,23 @@ TEST_F(EvaluatorTests, CollectionImportedSnapshotsAndAliases) {
   SmallVector<EvaluatorValuePtr> params{original, original, *source};
   auto result = evaluator.instantiate(StringAttr::get(&context, "Use"), params);
   ASSERT_TRUE(succeeded(result));
-  auto copied = getField(*result, "a");
-  EXPECT_NE(original.get(), copied.get());
-  EXPECT_EQ(copied.get(), getField(*result, "b").get());
-  EXPECT_EQ(copied.get(), getField(getField(*result, "object"), "items").get());
-  EXPECT_EQ(
-      copied.get(),
-      getListElements(getField(getField(*result, "object"), "list"))[0].get());
-  EXPECT_EQ(getCollectionIntegers(copied), (SmallVector<int64_t>{1, 2, 3, 4}));
+  auto object = getField(*result, "object");
+  EXPECT_EQ(getCollectionIntegers(getField(*result, "a")),
+            (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getCollectionIntegers(getField(*result, "b")),
+            (SmallVector<int64_t>{1, 3}));
+  EXPECT_EQ(getCollectionIntegers(getField(object, "items")),
+            (SmallVector<int64_t>{1, 4}));
+  EXPECT_EQ(getCollectionIntegers(getListElements(getField(object, "list"))[0]),
+            (SmallVector<int64_t>{1}));
   EXPECT_EQ(getCollectionIntegers(original), (SmallVector<int64_t>{1}));
 
   auto again = evaluator.instantiate(StringAttr::get(&context, "Use"), params);
   ASSERT_TRUE(succeeded(again));
-  EXPECT_NE(copied.get(), getField(*again, "a").get());
   EXPECT_EQ(getCollectionIntegers(getField(*again, "a")),
-            (SmallVector<int64_t>{1, 2, 3, 4}));
-  EXPECT_EQ(getCollectionIntegers(copied), (SmallVector<int64_t>{1, 2, 3, 4}));
+            (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getCollectionIntegers(getField(*result, "a")),
+            (SmallVector<int64_t>{1, 2}));
 }
 
 TEST_F(EvaluatorTests, CollectionAcceptsListInput) {
@@ -1155,7 +1158,9 @@ TEST_F(EvaluatorTests, CollectionAcceptsListInput) {
   EXPECT_EQ(getCollectionIntegers(input), (SmallVector<int64_t>{2}));
 }
 
-TEST_F(EvaluatorTests, CollectionImportsBackReference) {
+// A collection referring back to itself is a cyclic input, which is rejected
+// like other mutually referential inputs.
+TEST_F(EvaluatorTests, CollectionRejectsCyclicInput) {
   auto mod = parseModule(R"MLIR(
     !items = !om.collection<!om.class.type<@Node>>
     om.class @Node(%items: !items) -> (items: !items) {
@@ -1167,27 +1172,21 @@ TEST_F(EvaluatorTests, CollectionImportsBackReference) {
       om.collection_push %items, %node : !items, !om.class.type<@Node>
       om.class.fields %items : !items
     }
-    om.class @Use(%items: !items) -> (items: !items) {
-      %node = om.object @Node(%items) : (!items) -> !om.class.type<@Node>
-      om.collection_push %items, %node : !items, !om.class.type<@Node>
-      om.class.fields %items : !items
+    om.class @Use(%items: !items) {
+      om.class.fields
     }
   )MLIR");
   ASSERT_TRUE(mod);
   Evaluator evaluator(*mod);
   auto top = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
   ASSERT_TRUE(succeeded(top));
-  auto original = getField(*top, "items");
-  auto result =
-      evaluator.instantiate(StringAttr::get(&context, "Use"), {original});
-  ASSERT_TRUE(succeeded(result));
-  auto copied = getField(*result, "items");
-  EXPECT_NE(original.get(), copied.get());
-  EXPECT_EQ(getCollection(original)->getElements().size(), 1u);
-  auto &elements = getCollection(copied)->getElements();
-  ASSERT_EQ(elements.size(), 2u);
-  for (auto &element : elements)
-    EXPECT_EQ(getField(element, "items").get(), copied.get());
+  SmallVector<std::string> diagnostics;
+  ScopedDiagnosticHandler handler(
+      &context, [&](Diagnostic &diag) { diagnostics.push_back(diag.str()); });
+  EXPECT_TRUE(failed(evaluator.instantiate(StringAttr::get(&context, "Use"),
+                                           {getField(*top, "items")})));
+  ASSERT_EQ(diagnostics.size(), 1u);
+  EXPECT_EQ(diagnostics[0], "cannot import mutually referential OM objects");
 }
 
 TEST_F(EvaluatorTests, CollectionNestedHandles) {

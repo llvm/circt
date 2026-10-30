@@ -31,24 +31,6 @@ using namespace circt::om;
 
 namespace {
 
-/// Collections are exposed as lists at the API boundary, so accept a list
-/// wherever a collection with a compatible element type is expected.
-bool isCompatibleType(Type actual, Type formal) {
-  if (actual == formal)
-    return true;
-  auto actualList = dyn_cast<ListType>(actual);
-  if (!actualList)
-    return false;
-  Type formalElement;
-  if (auto list = dyn_cast<ListType>(formal))
-    formalElement = list.getElementType();
-  else if (auto collection = dyn_cast<CollectionType>(formal))
-    formalElement = collection.getElementType();
-  else
-    return false;
-  return isCompatibleType(actualList.getElementType(), formalElement);
-}
-
 LogicalResult verifyActualParameters(ClassLike classLike,
                                      ArrayRef<EvaluatorValuePtr> actualParams) {
   auto formalParamNames =
@@ -86,7 +68,14 @@ LogicalResult verifyActualParameters(ClassLike classLike,
     Type actualParamType = actualParam->getType();
     assert(actualParamType && "actualParamType must be non-null!");
 
-    if (!isCompatibleType(actualParamType, formalParamType)) {
+    // Collections are exposed as lists at the API boundary.
+    auto formalCollection = dyn_cast<CollectionType>(formalParamType);
+    auto actualList = dyn_cast<ListType>(actualParamType);
+    if (formalCollection && actualList &&
+        formalCollection.getElementType() == actualList.getElementType())
+      continue;
+
+    if (actualParamType != formalParamType) {
       auto error = classLike.emitError("actual parameter for ")
                    << formalParamName << " has invalid type";
       error.attachNote() << "actual parameter: " << *actualParam;
@@ -122,10 +111,13 @@ private:
   /// inputs and rejecting runtime references/cycles.
   FailureOr<Value> materializeInput(const EvaluatorValuePtr &value,
                                     Location loc, Type expectedType);
-  /// Convert a fully evaluated list value into scratch IR. A list imported as
-  /// a collection becomes a fresh allocation.
+  /// Convert a fully evaluated list value into scratch IR.
   FailureOr<Value> materializeListInput(evaluator::ListValue *listValue,
-                                        Location loc, Type expectedType);
+                                        Location loc);
+  /// Convert a list value into a fresh collection allocation.
+  FailureOr<Value> materializeCollectionInput(const EvaluatorValuePtr &value,
+                                              Location loc,
+                                              CollectionType type);
   /// Convert a fully evaluated object value into scratch IR.
   FailureOr<Value> materializeObjectInput(evaluator::ObjectValue *objectValue,
                                           Location loc);
@@ -137,10 +129,9 @@ private:
   SymbolTable &symbolTable;
   ClassLike rootClass;
   ClassOp wrapperClass;
-  // A mapping from evaluator input values and their expected types to the
-  // corresponding imported IR values. The type is part of the key because a
-  // list may be imported both as a list and as a collection.
-  DenseMap<std::pair<evaluator::EvaluatorValue *, Type>, Value> importedValues;
+  // A mapping from evaluator input values to their corresponding imported IR
+  // values.
+  DenseMap<evaluator::EvaluatorValue *, Value> importedValues;
 
   // A set of object values that have been imported into the scratch IR, used to
   // detect mutual references in the inputs.
@@ -238,14 +229,18 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
   if (isa<AnyType>(expectedType))
     return createWrapperArgument(value, loc, expectedType);
 
-  auto key = std::make_pair(value.get(), expectedType);
-  if (auto it = importedValues.find(key); it != importedValues.end())
+  // Collections are lists at the API boundary. Every collection-typed use gets
+  // its own allocation, so it is never memoized.
+  if (auto collectionType = dyn_cast<CollectionType>(expectedType))
+    return materializeCollectionInput(value, loc, collectionType);
+
+  if (auto it = importedValues.find(value.get()); it != importedValues.end())
     return it->second;
 
   if (value->isUnknown()) {
     OpBuilder builder(wrapperClass.getFieldsOp());
     auto result = UnknownValueOp::create(builder, loc, expectedType);
-    importedValues[key] = result.getResult();
+    importedValues[value.get()] = result.getResult();
     return result.getResult();
   }
 
@@ -259,11 +254,11 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
 
         OpBuilder builder(wrapperClass.getFieldsOp());
         auto result = ConstantOp::create(builder, loc, cast<TypedAttr>(attr));
-        importedValues[key] = result.getResult();
+        importedValues[value.get()] = result.getResult();
         return result.getResult();
       })
       .Case([&](evaluator::ListValue *listValue) {
-        return materializeListInput(listValue, loc, expectedType);
+        return materializeListInput(listValue, loc);
       })
       .Case([&](evaluator::ObjectValue *objectValue) {
         return materializeObjectInput(objectValue, loc);
@@ -271,48 +266,57 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
       .Default([&](evaluator::EvaluatorValue *) -> FailureOr<Value> {
         auto result = createWrapperArgument(value, loc, expectedType);
         if (succeeded(result))
-          importedValues[key] = *result;
+          importedValues[value.get()] = *result;
         return result;
       });
 }
 
 FailureOr<Value>
 ScratchIRBuilder::materializeListInput(evaluator::ListValue *listValue,
-                                       Location loc, Type expectedType) {
+                                       Location loc) {
   if (!listValue->isFullyEvaluated())
     return emitError(loc, "cannot import partially evaluated OM list value");
 
-  // A collection gets a fresh allocation per instantiation, so pushes never
-  // modify the caller's value. Register it before importing elements so that
-  // back-references resolve to the same allocation.
-  OpBuilder builder(wrapperClass.getFieldsOp());
-  std::pair<evaluator::EvaluatorValue *, Type> key{listValue, expectedType};
-  CollectionCreateOp collection;
-  Type elementType;
-  if (auto collectionType = dyn_cast<CollectionType>(expectedType)) {
-    collection = CollectionCreateOp::create(builder, loc, collectionType);
-    importedValues[key] = collection.getResult();
-    elementType = collectionType.getElementType();
-  } else {
-    elementType = cast<ListType>(expectedType).getElementType();
-  }
-
+  auto listType = listValue->getListType();
   SmallVector<Value> elementValues;
   elementValues.reserve(listValue->getElements().size());
   for (const auto &elementValue : listValue->getElements()) {
-    auto materializedElement = materializeInput(elementValue, loc, elementType);
+    auto materializedElement =
+        materializeInput(elementValue, loc, listType.getElementType());
     if (failed(materializedElement))
       return failure();
     elementValues.push_back(*materializedElement);
   }
 
-  if (collection) {
-    collection.getElementsMutable().assign(elementValues);
-    return collection.getResult();
-  }
-  auto result = ListCreateOp::create(builder, loc, expectedType, elementValues);
-  importedValues[key] = result.getResult();
+  OpBuilder builder(wrapperClass.getFieldsOp());
+  auto result = ListCreateOp::create(builder, loc, listType, elementValues);
+  importedValues[listValue] = result.getResult();
   return result.getResult();
+}
+
+FailureOr<Value> ScratchIRBuilder::materializeCollectionInput(
+    const EvaluatorValuePtr &value, Location loc, CollectionType type) {
+  OpBuilder builder(wrapperClass.getFieldsOp());
+  if (value->isUnknown())
+    return UnknownValueOp::create(builder, loc, type).getResult();
+
+  auto *listValue = dyn_cast<evaluator::ListValue>(value.get());
+  if (!listValue || !listValue->isFullyEvaluated())
+    return emitError(loc, "cannot import OM evaluator value as a collection");
+
+  // The fresh allocation is initialized with the list's elements, so pushes
+  // never modify the caller's value.
+  SmallVector<Value> elementValues;
+  elementValues.reserve(listValue->getElements().size());
+  for (const auto &elementValue : listValue->getElements()) {
+    auto materializedElement =
+        materializeInput(elementValue, loc, type.getElementType());
+    if (failed(materializedElement))
+      return failure();
+    elementValues.push_back(*materializedElement);
+  }
+  return CollectionCreateOp::create(builder, loc, type, elementValues)
+      .getResult();
 }
 
 FailureOr<Value>
@@ -347,7 +351,7 @@ ScratchIRBuilder::materializeObjectInput(evaluator::ObjectValue *objectValue,
   OpBuilder builder(wrapperClass.getFieldsOp());
   auto result =
       ElaboratedObjectOp::create(builder, loc, classLike, fieldValues);
-  importedValues[{objectValue, result.getType()}] = result.getResult();
+  importedValues[objectValue] = result.getResult();
   return result.getResult();
 }
 

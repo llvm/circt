@@ -331,25 +331,24 @@ scratch IR and its values, so partial results are never published.
 
 ### 5.3 API inputs and repeated instantiation
 
-Inputs follow value semantics: **copy on import; alias within the
-instantiation**. This is why a collection passed to `instantiate` is never
-mutated by the call, and why exposing it as a list is sufficient.
+Inputs follow value semantics: a list passed where a collection is expected
+supplies its **initial contents**. This is why a collection passed to
+`instantiate` is never mutated by the call, and why exposing it as a list is
+sufficient.
 
-- Accept a list value wherever a collection with a compatible element type is
-  expected, including nested in list types.
-- Materialize each list imported at a collection type as a fresh
-  `om.collection` whose operands are its imported elements. Import memoization
-  is keyed by value and expected type, so the same list can be passed both as a
-  list and as a collection, and preserves aliases across parameters and nested
-  values.
-- Register the allocation before importing its elements so that
-  back-references resolve to the same copy.
+- Accept a list value for a collection parameter with the same element type.
+- Materialize every collection-typed use of a list, whether a parameter or a
+  nested object field/list element, as a fresh `om.collection` whose operands
+  are the imported elements. These allocations are not memoized, so two uses
+  of the same input list are independent collections, exactly as if two list
+  values had been passed. The import memoization table is unchanged.
 - Concrete objects/lists are already materialized as IR, so they reference the
   copies without modifying the caller's graph.
 - Any-typed inputs stay opaque, as for every other value. Since OM programs
   cannot downcast `!om.any`, they cannot push through an opaque reference, so
   they keep referring to the caller's (unmodified) original.
-- Keep existing cyclic object-input restrictions.
+- Keep existing cyclic object-input restrictions. A collection containing an
+  object that refers back to it is such a cycle and is rejected on import.
 
 Across calls, completed inputs are snapshots. Persistent mutation would need a
 separate lifecycle, rollback, and concurrency design.
@@ -500,8 +499,8 @@ allocations under CSE; shared versus independent child handles; unused writers;
 field transport and forward references; repeated object access without replay;
 and an object registered in a collection referenced by its own fields.
 
-Also cover repeated and failed instantiation isolation; imported aliases across
-parameters and nested containers;
+Also cover repeated and failed instantiation isolation; independent copies of
+imported lists across parameters and nested containers; cyclic-input rejection;
 unknown elements versus unknown membership; push
 folding and pushes into parameters; operation reordering without changed membership;
 per-instance frozen paths; firtool/linker/bytecode preservation; and list
