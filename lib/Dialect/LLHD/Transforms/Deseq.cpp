@@ -202,7 +202,8 @@ static ValueField getValueField(Value value) {
 
 /// The work horse promoting processes into concrete registers.
 struct Deseq {
-  Deseq(ProcessOp process) : process(process) {}
+  Deseq(ProcessOp process)
+      : process(process), domInfo(process.getOperation()) {}
   LogicalResult deseq();
 
   bool analyzeProcess();
@@ -239,6 +240,9 @@ struct Deseq {
 
   /// The process we are desequentializing.
   ProcessOp process;
+  /// Dominance info for the process body, used to skip loop back edges when
+  /// computing block conditions.
+  DominanceInfo domInfo;
   /// The single wait op of the process.
   WaitOp wait;
   /// The boolean values observed by the wait. These trigger the process and
@@ -269,6 +273,8 @@ struct Deseq {
   /// The condition under which control flow reaches a block. The block
   /// immediately following the wait op has this set to true; any further
   /// conditional branches will refine the condition of successor blocks.
+  SmallPtrSet<Block *, 16> computingBlockConditions;
+  SmallPtrSet<BlockOperand *, 16> computingSuccessorConditions;
   DenseMap<Block *, TruthTable> blockConditionLattice;
   /// The condition under which control flows along a terminator's block operand
   /// to its destination.
@@ -840,9 +846,18 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
   // Return a memoized result if one exists. Otherwise insert a default result
   // as recursion breaker.
   if (auto it = blockConditionLattice.find(block);
-      it != blockConditionLattice.end())
+      it != blockConditionLattice.end()) {
+    VERBOSE_DEBUG({
+      llvm::dbgs() << "[CFG TRACE] block cache "
+                   << (computingBlockConditions.contains(block)
+                           ? "INFLIGHT " : "COMPLETE ");
+      block->printAsOperand(llvm::dbgs());
+      llvm::dbgs() << " = " << it->second << "\n";
+    });
     return it->second;
+  }
   blockConditionLattice[block] = getConstBoolean(false);
+  computingBlockConditions.insert(block);
 
   // Actually compute the block condition by combining all incoming control flow
   // conditions.
@@ -850,6 +865,15 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
   SmallPtrSet<Block *, 4> seen;
   for (auto *predecessor : block->getPredecessors()) {
     if (!seen.insert(predecessor).second)
+      continue;
+    // Skip loop back edges. If `block` dominates `predecessor` and lies after
+    // the wait's resume point, every wait-free path from the resume point to
+    // `predecessor` already passes through `block`, so the edge cannot widen
+    // `block`'s condition. Following it only re-enters `block` while it is in
+    // flight, and the provisional `false` returned there gets memoized into
+    // the loop body (whose blocks then look unreachable).
+    if (domInfo.dominates(wait.getDest(), block) &&
+        domInfo.dominates(block, predecessor))
       continue;
     for (auto &operand : predecessor->getTerminator()->getBlockOperands()) {
       if (operand.get() != block)
@@ -869,6 +893,7 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
     llvm::dbgs() << ": " << result << "\n";
   });
   blockConditionLattice[block] = result;
+  computingBlockConditions.erase(block);
   return result;
 }
 
@@ -886,9 +911,19 @@ TruthTable Deseq::computeSuccessorCondition(BlockOperand &blockOperand) {
   // Return a memoized result if one exists. Otherwise insert a default result
   // as recursion breaker.
   if (auto it = successorConditionLattice.find(&blockOperand);
-      it != successorConditionLattice.end())
+      it != successorConditionLattice.end()) {
+    VERBOSE_DEBUG({
+      llvm::dbgs() << "[CFG TRACE] edge cache "
+                   << (computingSuccessorConditions.contains(&blockOperand)
+                           ? "INFLIGHT " : "COMPLETE ");
+      blockOperand.getOwner()->getBlock()->printAsOperand(llvm::dbgs());
+      llvm::dbgs() << "#succ" << blockOperand.getOperandNumber()
+                   << " = " << it->second << "\n";
+    });
     return it->second;
+  }
   successorConditionLattice[&blockOperand] = getConstBoolean(false);
+  computingSuccessorConditions.insert(&blockOperand);
 
   // Actually compute the condition under which control flows along the given
   // block operand.
@@ -916,6 +951,7 @@ TruthTable Deseq::computeSuccessorCondition(BlockOperand &blockOperand) {
     llvm::dbgs() << " = " << result << "\n";
   });
   successorConditionLattice[&blockOperand] = result;
+  computingSuccessorConditions.erase(&blockOperand);
   return result;
 }
 
