@@ -1610,9 +1610,7 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
 
       # The response handshake is not gated on 'cur_valid': a request's
       # metadata is in the framer by the cycle its first chunk is issued, so
-      # no response word can precede it. Leaving 'resp_in' ready untouched
-      # also keeps an idle splitter ready, which `esi.TaggedDemux` (whose input
-      # ready is the AND of every output's ready) relies on.
+      # no response word can precede it.
       resp_ready = Wire(Bits(1))
       resp_payload, resp_valid = ports.resp_in.unwrap(resp_ready)
       resp_out_ch, resp_out_ready = resp_out_channel_type.wrap(
