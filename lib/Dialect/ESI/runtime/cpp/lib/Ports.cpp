@@ -138,7 +138,8 @@ bool ReadChannelPort::invokeCallback(
 }
 
 void ReadChannelPort::connect(ReadCallback callback,
-                              const ConnectOptions &options) {
+                              const ConnectOptions &options,
+                              ConnectCallback onConnected) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
@@ -168,19 +169,21 @@ void ReadChannelPort::connect(ReadCallback callback,
   } else {
     this->callback = callback;
   }
-  connectImpl(options);
+  connectImpl(options, std::move(onConnected));
   mode = Mode::Callback;
 }
 
 void ReadChannelPort::connect(FlatReadCallback callback,
-                              const ConnectOptions &options) {
+                              const ConnectOptions &options,
+                              ConnectCallback onConnected) {
   connect(
       [cb = std::move(callback)](std::unique_ptr<SegmentedMessageData> &data)
           -> bool { return cb(data->toMessageData()); },
-      options);
+      options, std::move(onConnected));
 }
 
-void ReadChannelPort::connect(const ConnectOptions &options) {
+void ReadChannelPort::connect(const ConnectOptions &options,
+                              ConnectCallback onConnected) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
@@ -218,7 +221,7 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
     translatedMessage.reset();
     return true;
   };
-  connectImpl(options);
+  connectImpl(options, std::move(onConnected));
   mode = Mode::Polling;
 }
 

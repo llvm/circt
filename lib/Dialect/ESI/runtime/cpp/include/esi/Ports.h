@@ -187,8 +187,21 @@ public:
         : bufferSize(bufferSize), translateMessage(translateMessage) {}
   };
 
-  /// Set up a connection to the accelerator.
-  virtual void connect(const ConnectOptions &options = ConnectOptions()) = 0;
+  /// Called once the other (accelerator) end of a channel is connected too:
+  /// with nullptr on success, or with an exception if it never will be (e.g.
+  /// the connection to the accelerator is lost, or this port is disconnected
+  /// first). Backends may call it from any thread, including from within
+  /// `connect()` if the other end is already connected, so it must be quick,
+  /// must not block, and must not call back into the port.
+  using ConnectCallback = std::function<void(std::exception_ptr)>;
+
+  /// Set up a connection to the accelerator. Never blocks waiting for the
+  /// accelerator side. If `onConnected` is given and `connect()` returns
+  /// normally, it is called exactly once; see `ConnectCallback`. Data written
+  /// before the other end is connected is held and backpressures the writer,
+  /// never dropped.
+  virtual void connect(const ConnectOptions &options = ConnectOptions(),
+                       ConnectCallback onConnected = nullptr) = 0;
   virtual void disconnect() = 0;
   virtual bool isConnected() const = 0;
 
@@ -300,8 +313,14 @@ protected:
   virtual bool pollImpl() { return false; }
 
   /// Called by all connect methods to let backends initiate the underlying
-  /// connections.
-  virtual void connectImpl(const ConnectOptions &options) {}
+  /// connections. Must not block, and must arrange for `onConnected` (if
+  /// non-null) to be called exactly once. The default, for backends whose
+  /// other end is always connected, calls it immediately.
+  virtual void connectImpl(const ConnectOptions &options,
+                           ConnectCallback onConnected) {
+    if (onConnected)
+      onConnected(nullptr);
+  }
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -309,14 +328,15 @@ class WriteChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
 
-  virtual void connect(const ConnectOptions &options = {}) override {
+  virtual void connect(const ConnectOptions &options = {},
+                       ConnectCallback onConnected = nullptr) override {
     translateMessages = options.translateMessage && translationInfo;
     if (translationInfo) {
       translationInfo->precomputeFrameInfo();
       if (translateMessages)
         translationInfo->requireTranslationSupported();
     }
-    connectImpl(options);
+    connectImpl(options, std::move(onConnected));
     connected = true;
   }
   virtual void disconnect() override { connected = false; }
@@ -448,7 +468,8 @@ public:
   UnknownWriteChannelPort(const Type *type, std::string errmsg)
       : WriteChannelPort(type), errmsg(errmsg) {}
 
-  void connect(const ConnectOptions &options = {}) override {
+  void connect(const ConnectOptions &options = {},
+               ConnectCallback onConnected = nullptr) override {
     throw std::runtime_error(errmsg);
   }
 
@@ -505,12 +526,14 @@ public:
   //===--------------------------------------------------------------------===//
 
   virtual void connect(ReadCallback callback,
-                       const ConnectOptions &options = {});
+                       const ConnectOptions &options = {},
+                       ConnectCallback onConnected = nullptr);
 
   /// Connect a compatibility callback which receives flattened `MessageData`
   /// objects. This adapts the primary segmented callback path.
   virtual void connect(FlatReadCallback callback,
-                       const ConnectOptions &options = {});
+                       const ConnectOptions &options = {},
+                       ConnectCallback onConnected = nullptr);
 
   //===--------------------------------------------------------------------===//
   // Polling mode methods: To use futures or blocking reads, connect without any
@@ -521,7 +544,8 @@ public:
   static constexpr uint64_t DefaultMaxDataQueueMsgs = 32;
 
   /// Connect to the channel in polling mode.
-  virtual void connect(const ConnectOptions &options = {}) override;
+  virtual void connect(const ConnectOptions &options = {},
+                       ConnectCallback onConnected = nullptr) override;
 
   /// Asynchronous polling read.
   ///
@@ -604,14 +628,17 @@ public:
       : ReadChannelPort(type), errmsg(errmsg) {}
 
   void connect(ReadCallback callback,
-               const ConnectOptions &options = ConnectOptions()) override {
+               const ConnectOptions &options = ConnectOptions(),
+               ConnectCallback onConnected = nullptr) override {
     throw std::runtime_error(errmsg);
   }
   void connect(FlatReadCallback callback,
-               const ConnectOptions &options = ConnectOptions()) override {
+               const ConnectOptions &options = ConnectOptions(),
+               ConnectCallback onConnected = nullptr) override {
     throw std::runtime_error(errmsg);
   }
-  void connect(const ConnectOptions &options = ConnectOptions()) override {
+  void connect(const ConnectOptions &options = ConnectOptions(),
+               ConnectCallback onConnected = nullptr) override {
     throw std::runtime_error(errmsg);
   }
   std::future<MessageData> readAsync() override {

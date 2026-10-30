@@ -4,6 +4,21 @@
 
 ### Breaking changes
 
+- **`connect()` can report when the accelerator end is connected.** Every
+  channel port `connect()` overload (`ChannelPort`, `ReadChannelPort`,
+  `WriteChannelPort`, the typed ports) and every service port `connect()`
+  (`FuncService::Function`, `CallService::Callback`,
+  `ChannelService::ToHost`/`FromHost`, `TelemetryService::Metric`, and their
+  typed wrappers) takes an optional trailing `ChannelPort::ConnectCallback
+  onConnected`. It is called once the accelerator end of the channel(s) is
+  connected too, or with an exception if it never will be. `connect()` must
+  not block waiting for that. Existing callers are unaffected; backends which
+  override `connect()` or `connectImpl()` must add the parameter, and
+  `connectImpl()` must arrange for `onConnected` to be called (all in-tree
+  backends currently call it immediately). `utils::fanInCallbacks()` combines
+  the callbacks of several channels. In Python, service ports' `connect()`
+  returns a `ConnectFuture`; channel `Port.connect()` still returns the port
+  (for chaining) and stores it in `Port.connected_future`.
 - **`HostMemRegion` is now defined at namespace scope** as
   `esi::services::HostMemRegion`. `services::HostMem::HostMemRegion` remains
   as an alias, so existing source compiles unchanged, but code linking against

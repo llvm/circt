@@ -20,12 +20,15 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <exception>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <queue>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace esi {
 namespace utils {
@@ -227,6 +230,47 @@ private:
   std::unordered_set<ID> ready;
   bool shutdown = false;
 };
+
+/// Split `done` into `n` callbacks, one per parallel operation. Each of them
+/// must be called exactly once. `done` is called exactly once, after all of
+/// them have been, with the first non-null exception any of them was passed
+/// (or nullptr). If `done` is null, returns null callbacks; if `n` is zero,
+/// calls `done` immediately.
+inline std::vector<std::function<void(std::exception_ptr)>>
+fanInCallbacks(std::function<void(std::exception_ptr)> done, size_t n) {
+  std::vector<std::function<void(std::exception_ptr)>> parts(n);
+  if (!done)
+    return parts;
+  if (n == 0) {
+    done(nullptr);
+    return parts;
+  }
+  struct State {
+    std::mutex mutex;
+    size_t remaining;
+    std::exception_ptr first;
+    std::function<void(std::exception_ptr)> done;
+  };
+  auto state = std::make_shared<State>();
+  state->remaining = n;
+  state->done = std::move(done);
+  for (auto &part : parts)
+    part = [state](std::exception_ptr error) {
+      std::function<void(std::exception_ptr)> done;
+      std::exception_ptr first;
+      {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        if (error && !state->first)
+          state->first = error;
+        if (--state->remaining != 0)
+          return;
+        done = std::move(state->done);
+        first = state->first;
+      }
+      done(first);
+    };
+  return parts;
+}
 
 /// Compute ceil(bits/8).
 inline uint64_t bitsToBytes(uint64_t bits) { return (bits + 7) / 8; }
