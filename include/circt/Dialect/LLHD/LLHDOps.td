@@ -231,6 +231,34 @@ def ProbeOp : LLHDOp<"prb", [
   let assemblyFormat = "$signal attr-dict `:` type($result)";
 }
 
+def ProbeNetOp : LLHDOp<"prb_net", [
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+  TypeMatchesNetNestedType<"result", "signal">,
+  NetNestedTypeMatchesType<"signal", "result">,
+]> {
+  let summary = "Probe a net.";
+  let description = [{
+    This operation probes a net and returns the value it
+    currently carries as a new SSA operand. The result type is always
+    the type carried by the signal. In SSACFG regions, the operation has a read
+    side effect on the signal operand. In graph regions, the operation is
+    memory-effect free.
+
+    Example:
+
+    ```mlir
+    %net_i1 = llhd.net wire : <i1>
+    %prbd = llhd.prb_net %net_i1 : i1
+    ```
+  }];
+
+  let arguments = (ins NetType:$signal);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "$signal attr-dict `:` type($result)";
+}
+
 def DriveOp : LLHDOp<"drv", [
   DriveLikeOp,
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
