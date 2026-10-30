@@ -17,6 +17,8 @@ Introduce an identity-bearing, append-only property collection:
   elaboration inlines constructors and folds field accesses until every push
   reaches its allocation. The evaluator then treats `om.collection` like any
   other value-producing operation and has no effect phase.
+- Identity only matters inside one elaboration. At the evaluator API boundary
+  a collection is an ordinary list value with unordered elements.
 
 **Confirmed decisions:** the name is `MutableCollection`, and collection order
 is unspecified. This proposal preserves multiplicity, like Registry, and needs
@@ -56,7 +58,7 @@ In scope:
 - Contributions from objects whose results are otherwise unused.
 - Fresh allocations for distinct instances and evaluator calls.
 - Duplicate elements, unknown values, and graph-region forward references.
-- Read-only completed-result access through C++, C, and Python APIs.
+- Completed-result access through the existing list APIs in C++, C, and Python.
 
 Out of scope initially:
 
@@ -169,8 +171,8 @@ cannot inspect contents or derive computations/assertions from them. No
 `collection_get`, `collection_size`, or `collection_to_list` IR operations are
 introduced.
 
-Post-evaluation APIs enumerate collections without mutation. Preserve
-`!om.collection<T>` as the public type; do not implicitly convert it to a list.
+Post-evaluation, a collection is exposed as a list value whose element order is
+unspecified. In IR, `!om.collection<T>` remains distinct from `!om.list<T>`.
 
 ### 3.3 Explicitly unordered
 
@@ -298,21 +300,18 @@ results must not remove the contributions. After elaboration, `Top` contains
 
 ### 5.1 Runtime value and readiness
 
-Add `EvaluatorValue::Kind::Collection` and `evaluator::CollectionValue`, shaped
-like `ListValue` but with a distinct kind and unordered semantics:
+No new runtime value kind is needed. Once elaboration has folded every push, a
+collection is fully described by its allocation's operands, and nothing can
+observe its identity across `instantiate` calls (inputs are copied). The
+evaluator therefore produces a `ListValue` of `!om.list<T>` for each
+`om.collection` of `!om.collection<T>`.
 
-```text
-CollectionType type
-vector<EvaluatorValuePtr> elements
-membership-unknown state
-```
-
-`getOrCreateValue` allocates a placeholder handle once per `om.collection`
+`getOrCreateValue` allocates a placeholder list once per `om.collection`
 result; `evaluateValue` sets its elements from the operand handles, without
 forcing their evaluation, as `om.elaborated_object` does for fields. This
-permits transport through objects/lists and registering an object in a
-collection referenced by its own fields. Update type dispatch, unknown
-factories, and diagnostic printing. No append API exists.
+permits registering an object in a collection referenced by its own fields.
+Unlike `om.list_create`, an unknown element does not make the collection
+unknown; an `om.unknown` collection is an unknown list.
 
 ### 5.2 No effect phase
 
@@ -332,14 +331,17 @@ scratch IR and its values, so partial results are never published.
 
 ### 5.3 API inputs and repeated instantiation
 
-Passing a collection as an opaque wrapper argument would let pushes reach the
-caller's storage and modify previously returned results.
+Inputs follow value semantics: **copy on import; alias within the
+instantiation**. This is why a collection passed to `instantiate` is never
+mutated by the call, and why exposing it as a list is sufficient.
 
-Policy: **copy on import; alias within the instantiation**.
-
-- Materialize each distinct imported collection as a fresh `om.collection`
-  whose operands are its imported elements. The existing import memoization
-  table preserves aliases across parameters and nested values.
+- Accept a list value wherever a collection with a compatible element type is
+  expected, including nested in list types.
+- Materialize each list imported at a collection type as a fresh
+  `om.collection` whose operands are its imported elements. Import memoization
+  is keyed by value and expected type, so the same list can be passed both as a
+  list and as a collection, and preserves aliases across parameters and nested
+  values.
 - Register the allocation before importing its elements so that
   back-references resolve to the same copy.
 - Concrete objects/lists are already materialized as IR, so they reference the
@@ -435,7 +437,7 @@ In that prototype:
 | Effect lifetime | Eliminated in FIRRTL `LowerDomains` | Folded into the allocation during OM elaboration |
 | Accumulation | Bottom-up list-output plumbing | Shared runtime identity and exactly-once contributions |
 | Generated interface | Extra output per registry field | Collection-valued fields/parameters |
-| Runtime changes | No new mutable OM value | New value kind and consumer APIs |
+| Runtime changes | No new mutable OM value | None; evaluated collections are lists |
 | External inputs | Ordinary lowered-list behavior | Ordinary unknown-object behavior |
 
 ### 7.3 Why the implementations differ
@@ -462,17 +464,11 @@ read prohibition, preserved multiplicity, and unordered semantics.
 
 ## 8. Consumer APIs
 
-Add separate collection APIs alongside list APIs:
-
-- C++: collection type/identity and read-only enumeration.
-- C: type/element-type predicates, runtime-kind predicate, count, and element
-  lookup using existing evaluator-value ownership conventions.
-- Python: read-only completed-collection length/index/iteration; no append.
-  Unknown membership maps to `Unknown`; unknown elements remain visible.
-
-These are external APIs, not property IR reads. Preserve `CollectionType` during
-actual-parameter validation, diagnostics, and unknown-value creation. Do not
-create an attribute value with a collection type but no collection storage.
+Evaluated collections use the existing list APIs in C++, C, and Python.
+Unknown membership maps to an unknown list (`Unknown` in Python); unknown
+elements remain visible. Only the IR type gets new C/Python bindings
+(`CollectionType` and its element type). Unknown values of collection type are
+created as lists.
 
 ## 9. Implementation and validation
 
@@ -484,7 +480,7 @@ Implement in reviewable stages:
    preservation, and path freezing. FIRRTL text syntax can follow separately.
 3. Initial-element allocation, push folding, runtime value, import aliasing,
    and the FIRRTL push flow check.
-4. C/Python consumer APIs and end-to-end tests. Domain Registry integration is
+4. C/Python type bindings and end-to-end tests. Domain Registry integration is
    independent follow-up work.
 
 Principal files:
@@ -508,8 +504,8 @@ Also cover repeated and failed instantiation isolation; imported aliases across
 parameters and nested containers;
 unknown elements versus unknown membership; push
 folding and pushes into parameters; operation reordering without changed membership;
-per-instance frozen paths; firtool/linker/bytecode preservation; and read-only
-consumer APIs.
+per-instance frozen paths; firtool/linker/bytecode preservation; and list
+inputs at collection parameters.
 
 Assert multiset membership and alias identity, not fixed element order.
 Use `unittests/Dialect/OM/Evaluator/EvaluatorTests.cpp`,

@@ -47,7 +47,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 class EvaluatorValue : public std::enable_shared_from_this<EvaluatorValue> {
 public:
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Collection, BasePath, Path };
+  enum class Kind { Attr, Object, List, BasePath, Path };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
       : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
@@ -176,44 +176,6 @@ public:
 
 private:
   om::ListType type;
-  SmallVector<EvaluatorValuePtr> elements;
-};
-
-/// An unordered collection with shared identity. Its contents are the initial
-/// elements of its `om.collection` allocation, into which elaboration folds all
-/// contributions.
-class CollectionValue : public EvaluatorValue {
-public:
-  CollectionValue(om::CollectionType type,
-                  SmallVector<EvaluatorValuePtr> elements, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Collection, loc), type(type),
-        elements(std::move(elements)) {
-    markFullyEvaluated();
-  }
-
-  // Partially evaluated value.
-  CollectionValue(om::CollectionType type, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Collection, loc), type(type) {}
-
-  void setElements(SmallVector<EvaluatorValuePtr> newElements) {
-    elements = std::move(newElements);
-    markFullyEvaluated();
-  }
-
-  /// Return the elements in unspecified order, preserving duplicates.
-  const auto &getElements() const {
-    assert(!isUnknown() && "collection contents are not available");
-    return elements;
-  }
-
-  om::CollectionType getCollectionType() const { return type; }
-
-  static bool classof(const EvaluatorValue *value) {
-    return value->getKind() == Kind::Collection;
-  }
-
-private:
-  om::CollectionType type;
   SmallVector<EvaluatorValuePtr> elements;
 };
 
@@ -443,9 +405,6 @@ operator<<(mlir::Diagnostic &diag,
     diag << "Object(" << object->getType() << ")";
   else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
     diag << "List(" << list->getType() << ")";
-  else if (auto *collection =
-               llvm::dyn_cast<evaluator::CollectionValue>(&evaluatorValue))
-    diag << "Collection(" << collection->getType() << ")";
   else if (llvm::isa<evaluator::BasePathValue>(&evaluatorValue))
     diag << "BasePath()";
   else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))

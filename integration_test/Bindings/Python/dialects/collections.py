@@ -32,17 +32,10 @@ with Context() as ctx, Location.unknown():
   """)
   evaluator = om.Evaluator(module)
   source = evaluator.instantiate("Source", [])
-  assert isinstance(source.items, om.MutableCollection)
-  assert not hasattr(source.items, "append")
+  # Collections are exposed as lists; element order is unspecified.
+  assert isinstance(source.items, om.List)
   assert len(source.items) == 2
   assert sorted(source.items) == [1, 1]
-  assert source.items[-1] == 1
-  try:
-    source.items[2]
-    raise AssertionError("expected IndexError")
-  except IndexError:
-    pass
-
   appended = evaluator.instantiate("Append", [source.items])
   assert sorted(appended.items) == [1, 1, 2]
   assert sorted(source.items) == [1, 1]
@@ -52,5 +45,5 @@ with Context() as ctx, Location.unknown():
   assert isinstance(unknowns.missing, om.Unknown)
   ty = om.CollectionType(Type.parse("!om.collection<!om.integer>"))
   assert str(ty.element_type) == "!om.integer"
-  # CHECK: MutableCollection tests passed
-  print("MutableCollection tests passed")
+  # CHECK: Collection tests passed
+  print("Collection tests passed")

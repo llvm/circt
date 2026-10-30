@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, OMIntegerAttr, Unknown, CollectionType, MutableCollection as BaseMutableCollection
+from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, OMIntegerAttr, Unknown, CollectionType
 
 from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType
 from ..support import attribute_to_var, var_to_attribute
@@ -31,9 +31,6 @@ def wrap_mlir_object(value):
   if isinstance(value, BaseList):
     return List(value)
 
-  if isinstance(value, BaseMutableCollection):
-    return MutableCollection(value)
-
   if isinstance(value, BaseBasePath):
     return BasePath(value)
 
@@ -55,9 +52,6 @@ def unwrap_python_object(value):
   # Check if the value is any of our container or custom types.
   if isinstance(value, List):
     return BaseList(value)
-
-  if isinstance(value, MutableCollection):
-    return BaseMutableCollection(value)
 
   if isinstance(value, BasePath):
     return BaseBasePath(value)
@@ -85,20 +79,6 @@ class List(BaseList):
   def __iter__(self):
     for i in range(0, self.__len__()):
       yield self.__getitem__(i)
-
-
-class MutableCollection(BaseMutableCollection):
-  """Read-only view of a completed, unordered property collection."""
-
-  def __init__(self, obj: BaseMutableCollection) -> None:
-    super().__init__(obj)
-
-  def __getitem__(self, i):
-    return wrap_mlir_object(super().__getitem__(i))
-
-  def __iter__(self):
-    for i in range(len(self)):
-      yield self[i]
 
 
 class BasePath(BaseBasePath):

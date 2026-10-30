@@ -26,7 +26,6 @@ using namespace mlir::python::nanobind_adaptors;
 namespace {
 
 struct List;
-struct MutableCollection;
 struct Object;
 struct BasePath;
 struct Path;
@@ -52,8 +51,8 @@ using PythonPrimitive = std::variant<nb::int_, nb::float_, nb::str, nb::bool_,
 /// MlirAttribute and the upstream MLIR type casters.  If the MlirAttribute
 /// is tried first, then we can hit an assert inside the MLIR codebase.
 struct None {};
-using PythonValue = std::variant<None, Object, List, MutableCollection,
-                                 BasePath, Path, Unknown, PythonPrimitive>;
+using PythonValue =
+    std::variant<None, Object, List, BasePath, Path, Unknown, PythonPrimitive>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
@@ -76,21 +75,6 @@ struct List {
 
 private:
   // The underlying CAPI value.
-  OMEvaluatorValue value;
-};
-
-/// Read-only view of a completed, unordered collection. There is deliberately
-/// no public append operation; contributions are only made by the evaluator.
-struct MutableCollection {
-  MutableCollection(OMEvaluatorValue value) : value(value) {}
-
-  intptr_t getNumElements() {
-    return omEvaluatorCollectionGetNumElements(value);
-  }
-  PythonValue getElement(intptr_t i);
-  OMEvaluatorValue getValue() const { return value; }
-
-private:
   OMEvaluatorValue value;
 };
 
@@ -259,16 +243,6 @@ private:
   intptr_t nextIndex = 0;
 };
 
-PythonValue MutableCollection::getElement(intptr_t i) {
-  auto size = getNumElements();
-  if (i < 0)
-    i += size;
-  if (i < 0 || i >= size)
-    throw nb::index_error("collection index out of range");
-  return omEvaluatorValueToPythonValue(
-      omEvaluatorCollectionGetElement(value, i));
-}
-
 PythonValue List::getElement(intptr_t i) {
   return omEvaluatorValueToPythonValue(omEvaluatorListGetElement(value, i));
 }
@@ -391,9 +365,6 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsAList(result))
     return List(result);
 
-  if (omEvaluatorValueIsACollection(result))
-    return MutableCollection(result);
-
   // If the field was a base path, return a new BasePath.
   if (omEvaluatorValueIsABasePath(result))
     return BasePath(result);
@@ -414,9 +385,6 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
                                                MlirContext ctx) {
   if (auto *list = std::get_if<List>(&result))
     return list->getValue();
-
-  if (auto *collection = std::get_if<MutableCollection>(&result))
-    return collection->getValue();
 
   if (auto *basePath = std::get_if<BasePath>(&result))
     return basePath->getValue();
@@ -454,11 +422,6 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
       .def(nb::init<List>(), nb::arg("list"))
       .def("__getitem__", &List::getElement)
       .def("__len__", &List::getNumElements);
-
-  nb::class_<MutableCollection>(m, "MutableCollection")
-      .def(nb::init<MutableCollection>(), nb::arg("collection"))
-      .def("__getitem__", &MutableCollection::getElement)
-      .def("__len__", &MutableCollection::getNumElements);
 
   // Add the BasePath class definition.
   nb::class_<BasePath>(m, "BasePath")

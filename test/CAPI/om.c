@@ -71,11 +71,11 @@ void testCollection(MlirContext ctx) {
   MlirAttribute fieldName =
       mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("items"));
   OMEvaluatorValue items = omEvaluatorObjectGetField(source, fieldName);
-  // CHECK: collection value: 1, count: 2
-  fprintf(stderr, "collection value: %d, count: %ld\n",
-          omEvaluatorValueIsACollection(items),
-          omEvaluatorCollectionGetNumElements(items));
-  OMEvaluatorValue element = omEvaluatorCollectionGetElement(items, 0);
+  // Collections are exposed as lists.
+  // CHECK: collection value is a list: 1, count: 2
+  fprintf(stderr, "collection value is a list: %d, count: %ld\n",
+          omEvaluatorValueIsAList(items), omEvaluatorListGetNumElements(items));
+  OMEvaluatorValue element = omEvaluatorListGetElement(items, 0);
   // CHECK: collection element: 42
   fprintf(stderr, "collection element: %ld\n",
           mlirIntegerAttrGetValueInt(omEvaluatorValueGetPrimitive(element)));
@@ -87,13 +87,12 @@ void testCollection(MlirContext ctx) {
   OMEvaluatorValue copy = omEvaluatorObjectGetField(appended, fieldName);
   // CHECK: original collection count: 2, snapshot count: 3
   fprintf(stderr, "original collection count: %ld, snapshot count: %ld\n",
-          omEvaluatorCollectionGetNumElements(items),
-          omEvaluatorCollectionGetNumElements(copy));
+          omEvaluatorListGetNumElements(items),
+          omEvaluatorListGetNumElements(copy));
   OMEvaluatorValue unknown = omEvaluatorUnknownGet(ctx, type);
-  // CHECK: unknown collection: 1, unknown membership: 1
-  fprintf(stderr, "unknown collection: %d, unknown membership: %d\n",
-          omEvaluatorValueIsACollection(unknown),
-          omEvaluatorValueIsUnknown(unknown));
+  // CHECK: unknown collection is a list: 1, unknown membership: 1
+  fprintf(stderr, "unknown collection is a list: %d, unknown membership: %d\n",
+          omEvaluatorValueIsAList(unknown), omEvaluatorValueIsUnknown(unknown));
   mlirModuleDestroy(module);
 }
 

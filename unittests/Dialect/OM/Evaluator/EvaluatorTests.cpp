@@ -100,8 +100,9 @@ getListElements(const evaluator::EvaluatorValuePtr &value) {
   return llvm::cast<evaluator::ListValue>(value.get())->getElements();
 }
 
-evaluator::CollectionValue *getCollection(const EvaluatorValuePtr &value) {
-  return cast<evaluator::CollectionValue>(value.get());
+/// Collections are exposed as lists with unordered elements.
+evaluator::ListValue *getCollection(const EvaluatorValuePtr &value) {
+  return cast<evaluator::ListValue>(value.get());
 }
 
 SmallVector<int64_t> getCollectionIntegers(const EvaluatorValuePtr &value) {
@@ -1129,37 +1130,29 @@ TEST_F(EvaluatorTests, CollectionImportedSnapshotsAndAliases) {
   EXPECT_EQ(getCollectionIntegers(copied), (SmallVector<int64_t>{1, 2, 3, 4}));
 }
 
-TEST_F(EvaluatorTests, CollectionImportsExternallyCreatedInput) {
+TEST_F(EvaluatorTests, CollectionAcceptsListInput) {
   auto mod = parseModule(R"MLIR(
-    om.class @Use(%items: !om.collection<!om.integer>) -> (items: !om.collection<!om.integer>) {
+    om.class @Use(%items: !om.collection<!om.integer>, %list: !om.list<!om.integer>) -> (items: !om.collection<!om.integer>, list: !om.list<!om.integer>) {
       %one = om.constant #om.integer<1 : si8> : !om.integer
       om.collection_push %items, %one : !om.collection<!om.integer>, !om.integer
-      om.class.fields %items : !om.collection<!om.integer>
+      om.class.fields %items, %list : !om.collection<!om.integer>, !om.list<!om.integer>
     }
   )MLIR");
   ASSERT_TRUE(mod);
   Evaluator evaluator(*mod);
-  auto type = CollectionType::get(OMIntegerType::get(&context));
-  auto input = std::make_shared<evaluator::CollectionValue>(
-      type, SmallVector<EvaluatorValuePtr>{makeIntegerValue(&context, 2)},
+  // The same list may be passed both as a collection and as a list.
+  auto input = std::make_shared<evaluator::ListValue>(
+      ListType::get(OMIntegerType::get(&context)),
+      SmallVector<EvaluatorValuePtr>{makeIntegerValue(&context, 2)},
       UnknownLoc::get(&context));
   auto result =
-      evaluator.instantiate(StringAttr::get(&context, "Use"), {input});
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {input, input});
   ASSERT_TRUE(succeeded(result));
   EXPECT_EQ(getCollectionIntegers(getField(*result, "items")),
             (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getCollectionIntegers(getField(*result, "list")),
+            (SmallVector<int64_t>{2}));
   EXPECT_EQ(getCollectionIntegers(input), (SmallVector<int64_t>{2}));
-
-  auto partial = std::make_shared<evaluator::CollectionValue>(
-      type, UnknownLoc::get(&context));
-  SmallVector<std::string> diagnostics;
-  ScopedDiagnosticHandler handler(
-      &context, [&](Diagnostic &diag) { diagnostics.push_back(diag.str()); });
-  EXPECT_TRUE(failed(
-      evaluator.instantiate(StringAttr::get(&context, "Use"), {partial})));
-  ASSERT_EQ(diagnostics.size(), 1u);
-  EXPECT_EQ(diagnostics[0],
-            "cannot import partially evaluated OM collection value");
 }
 
 TEST_F(EvaluatorTests, CollectionImportsBackReference) {

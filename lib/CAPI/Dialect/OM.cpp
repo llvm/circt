@@ -295,26 +295,6 @@ OMEvaluatorValue omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue,
                   ->getElements()[pos]);
 }
 
-bool omEvaluatorValueIsACollection(OMEvaluatorValue evaluatorValue) {
-  return isa<evaluator::CollectionValue>(unwrap(evaluatorValue).get());
-}
-
-intptr_t omEvaluatorCollectionGetNumElements(OMEvaluatorValue evaluatorValue) {
-  return cast<evaluator::CollectionValue>(unwrap(evaluatorValue).get())
-      ->getElements()
-      .size();
-}
-
-OMEvaluatorValue
-omEvaluatorCollectionGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos) {
-  const auto &elements =
-      cast<evaluator::CollectionValue>(unwrap(evaluatorValue).get())
-          ->getElements();
-  assert(pos >= 0 && static_cast<size_t>(pos) < elements.size() &&
-         "collection index out of bounds");
-  return wrap(elements[pos]);
-}
-
 bool omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue) {
   return isa<evaluator::BasePathValue>(unwrap(evaluatorValue).get());
 }
