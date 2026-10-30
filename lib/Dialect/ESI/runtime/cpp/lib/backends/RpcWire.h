@@ -25,6 +25,10 @@
 namespace esi {
 namespace cosim {
 
+/// Wire protocol version. Both ends must agree exactly; see `hello` in
+/// cosim-protocol.md.
+inline constexpr uint64_t kProtocolVersion = 4;
+
 /// Pack a cosim binary data frame: `[u64 LE channel_id][payload]`.
 inline std::string buildDataFrame(uint64_t channelId, const uint8_t *bytes,
                                   size_t size) {

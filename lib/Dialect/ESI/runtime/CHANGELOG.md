@@ -19,6 +19,19 @@
   the callbacks of several channels. In Python, service ports' `connect()`
   returns a `ConnectFuture`; channel `Port.connect()` still returns the port
   (for chaining) and stores it in `Port.connected_future`.
+- **Cosim protocol v4.** The cosim wire protocol is bumped to v4 and the
+  version is checked exactly in `hello`, so the runtime and the simulator's
+  DPI library must be rebuilt together. See `cosim-protocol.md`.
+  - Cosim ports' `onConnected` callbacks are now called once the simulator
+    side of the channel is connected (via a new `connect` request for
+    host-to-sim channels, and by holding the `subscribe` reply for sim-to-host
+    ones), or with an exception if the port is disconnected or the connection
+    is lost first. `RpcServer` ports' are called once the host side is.
+  - Frames sent to a simulator port which isn't connected are held and
+    handed over once it connects, rather than dropped.
+  - `RpcClient` gains `connectToServer()`, and `connectClientReceiver()` takes
+    an `onSubscribed` callback. It no longer waits for the server to accept
+    the subscription, so errors arrive through that callback.
 - **`HostMemRegion` is now defined at namespace scope** as
   `esi::services::HostMemRegion`. `services::HostMem::HostMemRegion` remains
   as an alias, so existing source compiles unchanged, but code linking against

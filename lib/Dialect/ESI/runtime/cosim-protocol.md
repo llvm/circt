@@ -1,4 +1,4 @@
-# ESI cosim wire protocol (v3)
+# ESI cosim wire protocol (v4)
 
 The cosim runtime uses a WebSocket connection with a JSON control plane and
 binary data frames. The C++ runtime contains both ends of the protocol
@@ -9,14 +9,14 @@ that an out-of-tree client (e.g. a Python harness) can be written against it.
 ## Transport
 
 - Single WebSocket connection per client, established at
-  `ws://<host>:<port>/esi/cosim/v3`.
-- The server allows at most one connected client at a time in v3. When an
+  `ws://<host>:<port>/esi/cosim/v4`.
+- The server allows at most one connected client at a time in v4. When an
   additional client connects, the server first sends an unsolicited control
   frame `{"type":"error","error":{"code":"server_busy","message":...}}` to
   give the client a human-readable reason, then closes the WebSocket with
   code 1013 ("Try Again Later", RFC 6455 §7.4). Clients SHOULD surface that
   error message verbatim and MAY retry after a back-off.
-- TLS / `wss://` is not used in v3; both ends are expected to run on the same
+- TLS / `wss://` is not used in v4; both ends are expected to run on the same
   host. The transport already supports `wss://` for future remote use.
 - The server writes its bound port to `cosim.cfg` in its working directory
   (format: `port: <number>`), so callers that ask the OS to pick the port
@@ -28,7 +28,8 @@ Each WebSocket frame is one of two kinds. The WebSocket opcode itself
 discriminates between them, so no extra envelope or pairing is required.
 
 1. **Control frame** — WebSocket *text* frame containing one JSON object.
-   Used for `hello`, `subscribe`, `unsubscribe`, and their replies.
+   Used for `hello`, `connect`, `subscribe`, `unsubscribe`, and their
+   replies.
 2. **Data frame** — WebSocket *binary* frame containing exactly one ESI
    message:
 
@@ -79,14 +80,16 @@ Error:
 }
 ```
 
-Symbolic error codes used in v3:
+Symbolic error codes used in v4:
 
 | Code                  | Meaning                                          |
 | --------------------- | ------------------------------------------------ |
 | `unknown_channel`     | Referenced channel id is not in the table.       |
-| `wrong_direction`     | Tried to subscribe to a `to_server` channel.     |
+| `wrong_direction`     | Channel has the wrong direction for the method (e.g. `subscribe` to a `to_server` channel). |
 | `not_subscribed`      | Tried to unsubscribe from a channel we weren't subscribed to. |
 | `protocol_error`      | Malformed frame, missing required field, etc.    |
+| `unsupported_version` | `hello` requested a protocol version the server does not speak. |
+| `canceled`            | A `subscribe` still waiting for the simulator side was canceled by `unsubscribe`. |
 | `server_busy`         | Server rejected the connection (e.g. another client is already attached). Sent only as an unsolicited `error` frame (see below) right before the server closes the WebSocket. |
 | `internal`            | Catch-all for server-side failures.              |
 
@@ -117,9 +120,13 @@ the close code, which carries a coarser hint).
   "type":       "request",
   "request_id": <uint64>,
   "method":     "hello",
-  "params":     { "client_protocol_version": 3 }
+  "params":     { "client_protocol_version": 4 }
 }
 ```
+
+The protocol version must match exactly. If it does not, the server replies
+with an `unsupported_version` error. Likewise, the client rejects a reply whose
+`protocol_version` differs from its own.
 
 The server holds the response until `RpcServer::setManifest` has been called,
 so the client never observes an "empty manifest" state. The reply is:
@@ -129,7 +136,7 @@ so the client never observes an "empty manifest" state. The reply is:
   "type":       "response",
   "request_id": <uint64>,
   "result": {
-    "protocol_version":        3,
+    "protocol_version":        4,
     "esi_version":             <int32>,
     "compressed_manifest_b64": "<base64>",
     "channels": [
@@ -146,6 +153,26 @@ so the client never observes an "empty manifest" state. The reply is:
   lifetime of the connection. The client uses `channel_id` on the wire and
   names in its public C++ API.
 
+### `connect` (client → server)
+
+```json
+{ "type": "request", "request_id": N, "method": "connect",
+  "params": { "channel_id": <uint64> } }
+```
+
+- Channel must have `direction == "to_server"`.
+- The server replies `result: {}` once the simulator side of the channel is
+  connected and will accept frames, or immediately if it already is. The
+  reply may be delayed indefinitely; the server keeps handling other
+  requests and frames meanwhile. Clients should not time this request out.
+- Clients need not wait for the reply before sending data frames: the
+  server holds frames for an unconnected simulator port (see
+  [Data frames](#data-frames)). The reply lets a client find out that the
+  simulator side is ready. (The C++ runtime sends `connect` from
+  `WriteChannelPort::connect()` without waiting, and calls its `onConnected`
+  callback on the reply.)
+- Errors: `unknown_channel`, `wrong_direction`.
+
 ### `subscribe` (client → server)
 
 ```json
@@ -154,10 +181,19 @@ so the client never observes an "empty manifest" state. The reply is:
 ```
 
 - Channel must have `direction == "to_client"`.
+- Like `connect`, the server replies only once the simulator side of the
+  channel is connected (immediately if it already is), and the reply may be
+  delayed indefinitely. The subscription takes effect when the reply is
+  sent. (The C++ runtime doesn't wait for it in `ReadChannelPort::connect()`;
+  it calls the `onConnected` callback on the reply.)
 - After `result: {}`, the server begins emitting binary data frames for that
   channel id. Any data the server had queued for the channel before
   subscription is flushed first.
-- Errors: `unknown_channel`, `wrong_direction`.
+- An `unsubscribe` while the reply is still pending cancels the request: it
+  fails with `canceled`, and the `unsubscribe` succeeds.
+- Errors: `unknown_channel`, `wrong_direction`, `canceled`, and
+  `protocol_error` if the channel is already subscribed (or a subscription
+  is pending).
 
 ### `unsubscribe` (client → server)
 
@@ -179,12 +215,17 @@ prefix is the unmodified ESI message payload (`MessageData::getBytes()`).
 The receiver of a data frame for an unknown or wrong-direction channel logs
 the event and discards the frame. There is no per-message ack.
 
+Frames on a `to_server` channel whose simulator-side port is not connected
+are held by the server, in order, and handed over once it connects. Likewise,
+messages the simulation writes on a `to_client` channel before the client
+subscribes are queued until it does.
+
 ## Lifecycle
 
 - **Open:** TCP + WS handshake → client sends `hello` → server replies once
   `setManifest` has been called.
 - **Steady state:** bidirectional binary data frames plus occasional
-  `subscribe`/`unsubscribe` requests.
+  `connect`/`subscribe`/`unsubscribe` requests.
 - **Shutdown:** either side sends a WebSocket Close frame. The server treats a
   client close as implicit unsubscribe-all + cleanup. The client treats a
   server close as connection loss: pending request promises fail and
@@ -192,7 +233,7 @@ the event and discards the frame. There is no per-message ack.
 
 ## Reserved / future
 
-These are *not* part of v3; they are listed here so a v3 implementation can
+These are *not* part of v4; they are listed here so a v4 implementation can
 ignore them safely and a future protocol revision can add them without
 breaking the channel-id namespace.
 
@@ -247,7 +288,14 @@ dependencies on abseil but different versions.
 
 ## v3 -- Custom WebSocket + JSON protocol
 
-This one. Should be much quicker to compile but the downside is that we have to
+Should be much quicker to compile but the downside is that we have to
 maintain the protocol ourselves. This, however, has turned out to be minimal. It
 also has the advantage of being (theoretically) easier to debug as we own all of
 the code.
+
+## v4 -- Connection readiness
+
+This one. Same transport and framing as v3. Adds the `connect` method, holds
+`subscribe` replies until the simulator side of the channel is connected,
+holds frames for unconnected simulator ports rather than dropping them, and
+checks the protocol version exactly in `hello`.

@@ -33,6 +33,7 @@
 #include <new>
 #include <set>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace esi;
@@ -40,6 +41,14 @@ using namespace esi::services;
 using namespace esi::backends::cosim;
 
 namespace {
+
+/// Exception passed to a pending `onConnected` when its port is disconnected
+/// before the simulator end connected.
+std::exception_ptr disconnectedBeforeConnected(const std::string &name) {
+  return std::make_exception_ptr(std::runtime_error(
+      "Channel '" + name +
+      "' was disconnected before the simulator end connected"));
+}
 
 //===----------------------------------------------------------------------===//
 // WriteCosimChannelPort
@@ -53,15 +62,26 @@ public:
                         std::string name)
       : WriteChannelPort(type), conn(conn), client(client), desc(desc),
         name(std::move(name)) {}
-  ~WriteCosimChannelPort() = default;
+  ~WriteCosimChannelPort() { failPendingConnect(); }
 
   void connectImpl(const ChannelPort::ConnectOptions &options,
                    ConnectCallback onConnected) override {
     if (desc.dir != RpcClient::ChannelDirection::ToServer)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to server channel");
-    if (onConnected)
-      onConnected(nullptr);
+    // Called once the simulation has connected its end. Writes before then
+    // are held by the server. Guarded so it fires exactly once even if this
+    // port is disconnected first.
+    auto guarded =
+        std::make_shared<utils::OnceCallback>(std::move(onConnected));
+    pendingConnect = guarded;
+    client.connectToServer(
+        name, [guarded](std::exception_ptr error) { (*guarded)(error); });
+  }
+
+  void disconnect() override {
+    failPendingConnect();
+    WriteChannelPort::disconnect();
   }
 
 protected:
@@ -92,10 +112,16 @@ protected:
   }
 
 private:
+  void failPendingConnect() {
+    if (auto pending = std::exchange(pendingConnect, nullptr))
+      (*pending)(disconnectedBeforeConnected(name));
+  }
+
   AcceleratorConnection &conn;
   RpcClient &client;
   RpcClient::ChannelDesc desc;
   std::string name;
+  std::shared_ptr<utils::OnceCallback> pendingConnect;
 };
 
 //===----------------------------------------------------------------------===//
@@ -113,7 +139,7 @@ public:
       : ReadChannelPort(type), conn(conn), client(client), desc(desc),
         name(std::move(name)) {}
 
-  ~ReadCosimChannelPort() = default;
+  ~ReadCosimChannelPort() { failPendingConnect(); }
 
   void connectImpl(const ChannelPort::ConnectOptions &options,
                    ConnectCallback onConnected) override {
@@ -121,9 +147,17 @@ public:
       throw std::runtime_error("Channel '" + name +
                                "' is not a to client channel");
 
+    // Called once the simulation has connected its end (the server accepts
+    // the subscription). Guarded so it fires exactly once even if this port
+    // is disconnected first.
+    auto guarded =
+        std::make_shared<utils::OnceCallback>(std::move(onConnected));
+    pendingConnect = guarded;
+
     // Connect to the channel and set up callback.
     connection = client.connectClientReceiver(
-        name, [this](std::unique_ptr<SegmentedMessageData> &data) {
+        name,
+        [this](std::unique_ptr<SegmentedMessageData> &data) {
           // Add trace logging for the received message.
           conn.getLogger().trace(
               [this, &data](
@@ -152,13 +186,13 @@ public:
           }
 
           return consumed;
-        });
-    if (onConnected)
-      onConnected(nullptr);
+        },
+        [guarded](std::exception_ptr error) { (*guarded)(error); });
   }
 
   void disconnect() override {
     conn.getLogger().debug("cosim_read", "Disconnecting channel " + name);
+    failPendingConnect();
     if (connection) {
       connection->disconnect();
       connection.reset();
@@ -167,11 +201,17 @@ public:
   }
 
 private:
+  void failPendingConnect() {
+    if (auto pending = std::exchange(pendingConnect, nullptr))
+      (*pending)(disconnectedBeforeConnected(name));
+  }
+
   AcceleratorConnection &conn;
   RpcClient &client;
   RpcClient::ChannelDesc desc;
   std::string name;
   std::unique_ptr<RpcClient::ReadChannelConnection> connection;
+  std::shared_ptr<utils::OnceCallback> pendingConnect;
 };
 
 } // anonymous namespace
