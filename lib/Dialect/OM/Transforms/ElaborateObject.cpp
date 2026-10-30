@@ -75,12 +75,12 @@ mayContainCollection(Value value, const SymbolTable &symTable,
     return false;
   if (auto cast = value.getDefiningOp<AnyCastOp>())
     return mayContainCollection(cast.getInput(), symTable, visited);
+  // The evaluator imports collection-bearing inputs as IR, so its wrapper
+  // class parameters never hide collections.
   if (auto arg = dyn_cast<BlockArgument>(value))
-    if (auto capabilities =
-            arg.getOwner()->getParentOp()->getAttrOfType<DenseBoolArrayAttr>(
-                "om.evaluator.collection_args"))
-      if (arg.getArgNumber() < capabilities.size())
-        return capabilities.asArrayRef()[arg.getArgNumber()];
+    if (arg.getOwner()->getParentOp()->hasAttr(
+            "om.evaluator.collection_free_args"))
+      return false;
   auto *op = value.getDefiningOp();
   if (isa_and_nonnull<ObjectOp, ObjectFieldOp>(op))
     return std::nullopt;
@@ -257,8 +257,8 @@ struct UnknownPropagationPattern : RewritePattern {
   }
 };
 
-// Operations supported as residual IR after elaboration, including collection
-// effects that are deliberately deferred to the evaluator.
+// Operations supported as residual IR after elaboration. Collection pushes
+// only remain when they target a class parameter.
 bool isSupportedResidual(Operation *op) {
   return isa<
       // Structure.
@@ -267,7 +267,7 @@ bool isSupportedResidual(Operation *op) {
       ConstantOp, UnknownValueOp,
       // Path.
       FrozenBasePathCreateOp, FrozenPathCreateOp, FrozenEmptyPathOp,
-      // Containers and evaluator-executed effects.
+      // Containers.
       ListCreateOp, ListConcatOp, CollectionCreateOp, CollectionPushOp>(op);
 }
 
@@ -358,6 +358,8 @@ struct ElaborateObjectPass
     patterns.add<EvaluateObjectField>(classOp.getContext(), symTable,
                                       fieldIndexes);
     patterns.add<UnknownPropagationPattern>(classOp.getContext());
+    CollectionPushOp::getCanonicalizationPatterns(patterns,
+                                                  classOp.getContext());
     GreedyRewriteConfig config;
     // Disable iteration limit to allow full recursive inlining.
     config.setMaxIterations(GreedyRewriteConfig::kNoLimit);
@@ -366,8 +368,7 @@ struct ElaborateObjectPass
 
     if (unsupportedEffects)
       return failure();
-    // Check if elaboration succeeded after saturation. Collections remain as
-    // runtime residuals; this pass does not execute their contributions.
+    // Check if elaboration succeeded after saturation.
     return verifyResult(classOp, allowUnevaluated);
   }
 

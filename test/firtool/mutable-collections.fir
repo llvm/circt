@@ -9,8 +9,10 @@ circuit Collections:
 
   ; CHECK-LABEL: om.class @Collections_Class
   ; CHECK-SAME: items: !om.collection<!om.integer>
-  ; CHECK: om.collection : !om.collection<!om.integer>
-  ; CHECK-COUNT-2: om.collection_push
+  ; CHECK-DAG: om.constant #om.integer<1 : si32>
+  ; CHECK-DAG: om.constant #om.integer<2 : si32>
+  ; CHECK: om.collection %{{.+}}, %{{.+}} : !om.collection<!om.integer>
+  ; CHECK-NOT: om.collection_push
   ; CHECK-NOT: om.object @Writer
   ; CHECK: om.class.fields
   public module Collections:

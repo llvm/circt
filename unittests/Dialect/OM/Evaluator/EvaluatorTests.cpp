@@ -1171,13 +1171,65 @@ TEST_F(EvaluatorTests, CollectionImportsExternallyCreatedInput) {
   Evaluator evaluator(*mod);
   auto type = CollectionType::get(OMIntegerType::get(&context));
   auto input = std::make_shared<evaluator::CollectionValue>(
-      type, UnknownLoc::get(&context));
+      type, SmallVector<EvaluatorValuePtr>{makeIntegerValue(&context, 2)},
+      UnknownLoc::get(&context));
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "Use"), {input});
   ASSERT_TRUE(succeeded(result));
   EXPECT_EQ(getCollectionIntegers(getField(*result, "items")),
-            (SmallVector<int64_t>{1}));
-  EXPECT_TRUE(getCollection(input)->getElements().empty());
+            (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getCollectionIntegers(input), (SmallVector<int64_t>{2}));
+
+  auto partial = std::make_shared<evaluator::CollectionValue>(
+      type, UnknownLoc::get(&context));
+  SmallVector<std::string> diagnostics;
+  ScopedDiagnosticHandler handler(
+      &context, [&](Diagnostic &diag) { diagnostics.push_back(diag.str()); });
+  EXPECT_TRUE(failed(
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {partial})));
+  ASSERT_EQ(diagnostics.size(), 1u);
+  EXPECT_EQ(diagnostics[0],
+            "cannot import partially evaluated OM collection value");
+}
+
+TEST_F(EvaluatorTests, CollectionImportsBackReference) {
+  auto mod = parseModule(R"MLIR(
+    !items = !om.collection<!om.any>
+    om.class @Node(%items: !items) -> (items: !items) {
+      om.class.fields %items : !items
+    }
+    om.class @Top() -> (items: !items) {
+      %items = om.collection : !items
+      %node = om.object @Node(%items) : (!items) -> !om.class.type<@Node>
+      %any = om.any_cast %node : (!om.class.type<@Node>) -> !om.any
+      om.collection_push %items, %any : !items, !om.any
+      om.class.fields %items : !items
+    }
+    om.class @Use(%items: !items) -> (items: !items) {
+      %one = om.constant #om.integer<1 : si8> : !om.integer
+      %any = om.any_cast %one : (!om.integer) -> !om.any
+      om.collection_push %items, %any : !items, !om.any
+      om.class.fields %items : !items
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  auto top = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
+  ASSERT_TRUE(succeeded(top));
+  auto original = getField(*top, "items");
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {original});
+  ASSERT_TRUE(succeeded(result));
+  auto copied = getField(*result, "items");
+  EXPECT_NE(original.get(), copied.get());
+  EXPECT_EQ(getCollection(original)->getElements().size(), 1u);
+  auto &elements = getCollection(copied)->getElements();
+  ASSERT_EQ(elements.size(), 2u);
+  auto node = llvm::find_if(elements, [](const EvaluatorValuePtr &element) {
+    return isa<evaluator::ObjectValue>(element.get());
+  });
+  ASSERT_NE(node, elements.end());
+  EXPECT_EQ(getField(*node, "items").get(), copied.get());
 }
 
 TEST_F(EvaluatorTests, CollectionFailedInstantiationDoesNotModifyInputs) {

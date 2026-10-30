@@ -29,8 +29,6 @@
 namespace circt {
 namespace om {
 
-class Evaluator;
-
 namespace evaluator {
 class EvaluatorValue;
 
@@ -181,34 +179,40 @@ private:
   SmallVector<EvaluatorValuePtr> elements;
 };
 
-/// An unordered, append-only collection with shared identity. Its handle is
-/// ready immediately. Contributions are only appended by the evaluator within
-/// the instantiation that owns the collection, so contents are complete once
-/// the collection is observable outside the evaluator.
+/// An unordered collection with shared identity. Its contents are the initial
+/// elements of its `om.collection` allocation, into which elaboration folds all
+/// contributions.
 class CollectionValue : public EvaluatorValue {
 public:
-  CollectionValue(om::CollectionType type, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Collection, loc), type(type) {
+  CollectionValue(om::CollectionType type,
+                  SmallVector<EvaluatorValuePtr> elements, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Collection, loc), type(type),
+        elements(std::move(elements)) {
     markFullyEvaluated();
   }
 
-  om::CollectionType getCollectionType() const { return type; }
+  // Partially evaluated value.
+  CollectionValue(om::CollectionType type, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Collection, loc), type(type) {}
+
+  void setElements(SmallVector<EvaluatorValuePtr> newElements) {
+    elements = std::move(newElements);
+    markFullyEvaluated();
+  }
+
+  /// Return the elements in unspecified order, preserving duplicates.
   const auto &getElements() const {
     assert(!isUnknown() && "collection contents are not available");
     return elements;
   }
+
+  om::CollectionType getCollectionType() const { return type; }
 
   static bool classof(const EvaluatorValue *value) {
     return value->getKind() == Kind::Collection;
   }
 
 private:
-  friend class ::circt::om::Evaluator;
-  void append(EvaluatorValuePtr element) {
-    assert(!isUnknown() && "cannot contribute to this collection");
-    elements.push_back(std::move(element));
-  }
-
   om::CollectionType type;
   SmallVector<EvaluatorValuePtr> elements;
 };
@@ -382,6 +386,9 @@ private:
   FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
+  FailureOr<EvaluatorValuePtr>
+  evaluateCollectionCreate(CollectionCreateOp op, ActualParameters actualParams,
+                           Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateBasePathCreate(FrozenBasePathCreateOp op,
                          ActualParameters actualParams, Location loc);
@@ -396,12 +403,6 @@ private:
 
   FailureOr<evaluator::EvaluatorValuePtr> createUnknownValue(Type type,
                                                              Location loc);
-
-  /// Copy collection-bearing API inputs into this instantiation, preserving
-  /// aliases without modifying previously returned values.
-  FailureOr<EvaluatorValuePtr> copyInputValue(
-      const EvaluatorValuePtr &value,
-      DenseMap<evaluator::EvaluatorValue *, EvaluatorValuePtr> &copies);
 
   /// The symbol table for the IR module the Evaluator was constructed with.
   /// Used to look up class definitions.

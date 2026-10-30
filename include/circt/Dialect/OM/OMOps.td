@@ -291,14 +291,26 @@ def ConstantOp : OMOp<"constant",
 
 def CollectionCreateOp : OMOp<"collection", [MemoryEffects<[MemAlloc]>,
     HasParent<"ClassOp">]> {
-  let summary = "Allocate a fresh empty collection";
+  let summary = "Allocate a fresh collection";
   let description = [{
-    Allocates a collection with fresh identity for each object instantiation.
-    The collection remains open until evaluation of the entire instantiated
-    graph completes. Equal types or contents do not imply shared identity.
+    Allocates a collection with fresh identity for each object instantiation,
+    initially containing the given elements. Further elements may be
+    contributed with `om.collection_push`. Equal types or contents do not imply
+    shared identity.
+
+    ```
+    %items = om.collection %a, %b : !om.collection<!om.integer>
+    ```
   }];
+  let arguments = (ins Variadic<AnyType>:$elements);
   let results = (outs CollectionType:$result);
-  let assemblyFormat = "attr-dict `:` qualified(type($result))";
+  let builders = [
+    OpBuilder<(ins "CollectionType":$type), [{
+      build($_builder, $_state, type, ::mlir::ValueRange());
+    }]>
+  ];
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def CollectionPushOp : OMOp<"collection_push", [MemoryEffects<[MemWrite]>,
@@ -306,8 +318,11 @@ def CollectionPushOp : OMOp<"collection_push", [MemoryEffects<[MemWrite]>,
   let summary = "Contribute one element to a collection";
   let description = [{
     Contributes an element reference exactly once per instantiated operation.
-    Contributions are unordered and preserve duplicates. This operation has
-    no results and is executed by the evaluator, not object elaboration.
+    Contributions are unordered and preserve duplicates. A push into a
+    collection allocated in the same class is canonicalized into the
+    allocation's initial elements, and a push into an unknown collection is
+    dropped. After object elaboration every contribution is therefore part of
+    an `om.collection` operation unless the collection is a class parameter.
   }];
   let arguments = (ins CollectionType:$collection, AnyType:$element);
   let assemblyFormat = [{
@@ -315,6 +330,7 @@ def CollectionPushOp : OMOp<"collection_push", [MemoryEffects<[MemWrite]>,
       qualified(type($element))
   }];
   let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {

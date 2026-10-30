@@ -713,6 +713,42 @@ OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// CollectionCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult circt::om::CollectionCreateOp::verify() {
+  auto elementType = getType().getElementType();
+  for (auto element : getElements())
+    if (element.getType() != elementType)
+      return emitOpError("element type ")
+             << element.getType() << " does not match collection element type "
+             << elementType;
+  return success();
+}
+
+void circt::om::CollectionCreateOp::print(OpAsmPrinter &p) {
+  if (!getElements().empty()) {
+    p << " ";
+    p.printOperands(getElements());
+  }
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << getType();
+}
+
+ParseResult circt::om::CollectionCreateOp::parse(OpAsmParser &parser,
+                                                 OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 16> operands;
+  CollectionType type;
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+  result.addTypes(type);
+  return parser.resolveOperands(operands, type.getElementType(),
+                                result.operands);
+}
+
+//===----------------------------------------------------------------------===//
 // CollectionPushOp
 //===----------------------------------------------------------------------===//
 
@@ -723,6 +759,54 @@ LogicalResult circt::om::CollectionPushOp::verify() {
            << getElement().getType()
            << " does not match collection element type " << elementType;
   return success();
+}
+
+namespace {
+/// Rewrite contributions as initial elements of the collection's allocation.
+/// Both operations belong to the same class body, so each instantiation of
+/// the class performs the allocation and every contribution exactly once.
+/// Contributions to an unknown collection are unobservable and are dropped.
+struct FoldCollectionPush : OpRewritePattern<CollectionPushOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(CollectionPushOp op,
+                                PatternRewriter &rewriter) const override {
+    auto collection = op.getCollection();
+    if (collection.getDefiningOp<UnknownValueOp>()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    auto create = collection.getDefiningOp<CollectionCreateOp>();
+    if (!create)
+      return failure();
+
+    // Fold every contribution to this collection at once. Membership is
+    // unordered, but keep block order for deterministic output.
+    SmallVector<CollectionPushOp> pushes;
+    for (auto *user : collection.getUsers())
+      if (auto push = dyn_cast<CollectionPushOp>(user))
+        if (push.getCollection() == collection)
+          pushes.push_back(push);
+    llvm::sort(pushes, [](CollectionPushOp a, CollectionPushOp b) {
+      return a->isBeforeInBlock(b);
+    });
+
+    SmallVector<Value> elements(create.getElements());
+    for (auto push : pushes)
+      elements.push_back(push.getElement());
+    rewriter.modifyOpInPlace(
+        create, [&] { create.getElementsMutable().assign(elements); });
+    for (auto push : pushes)
+      rewriter.eraseOp(push);
+    return success();
+  }
+};
+} // namespace
+
+void CollectionPushOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                   MLIRContext *context) {
+  results.insert<FoldCollectionPush>(context);
 }
 
 //===----------------------------------------------------------------------===//

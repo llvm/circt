@@ -8,12 +8,15 @@ Introduce an identity-bearing, append-only property collection:
 
 - FIRRTL: `MutableCollection<T>`, represented by `!firrtl.mutable_collection<T>`.
 - OM: `!om.collection<T>`.
-- Allocation creates an empty collection with fresh identity.
+- Allocation creates a collection with fresh identity, optionally with initial
+  elements: `om.collection %a, %b : !om.collection<T>`.
 - A resultless push contributes one element to that collection.
 - Property/OM programs can transport the handle, but cannot inspect contents.
-- The OM **evaluator** executes pushes and publishes completed collections.
-  Object elaboration may clone and simplify surrounding IR, but must not execute
-  pushes or replace collections with statically assembled lists.
+- Pushes are resolved by **rewriting**: a push into a collection allocated in
+  the same class body is folded into the allocation's initial elements. Object
+  elaboration inlines constructors and folds field accesses until every push
+  reaches its allocation. The evaluator then treats `om.collection` like any
+  other value-producing operation and has no effect phase.
 
 **Confirmed decisions:** the name is `MutableCollection`, and collection order
 is unspecified. This proposal preserves multiplicity, like Registry, and needs
@@ -38,8 +41,8 @@ inputs and external constructor effects. Recommended initial choices are:
 `task.md` originally describes `MutableArray`, an allocation resembling
 `firrtl.prop.array()`, and a push resembling `firrtl.prop.push(%array, %a)`.
 The agreed name for that construct is now `MutableCollection`. Equivalent OM
-operations are required, and mutation happens in the evaluator, not the
-elaboration transform.
+operations are required. Mutation is modeled as a rewrite into the allocation,
+which preserves identity; collections are never replaced by lists.
 
 Interpret the prohibition on reads as a restriction on **property/OM
 construction programs**. Post-evaluation collateral consumers can enumerate the
@@ -93,8 +96,8 @@ The scratch importer materializes primitives as constants, lists as
 are opaque wrapper parameters. It memoizes imported runtime values and rejects
 mutually referential concrete object inputs.
 
-Runtime collections therefore do not require abandoning elaboration: retain
-allocation and push operations through elaboration, then interpret them.
+Elaboration already inlines every constructor into the wrapper class, so every
+push ends up in the same block as its allocation and can be folded into it.
 
 ### 2.2 Runtime evaluation is value-oriented
 
@@ -105,14 +108,12 @@ attributes, objects, lists, base paths, and paths.
 
 Important consequences:
 
-- **Resultless pushes are skipped today.** Both operation loops iterate over
-  `op.getResults()`. Adding a case to `evaluateValue` cannot execute a push.
-- **Expression caching is not effect caching.** Evaluating a collection handle
-  must not replay contributions. Each instantiated push needs exactly-once
-  execution independently of handle access.
+- **Resultless pushes are skipped.** Both operation loops iterate over
+  `op.getResults()`. Rather than adding an effect phase, pushes are folded into
+  their allocation before evaluation, so contents are an ordinary operand list.
 - **Readiness is structural, not necessarily deep.** Elaborated objects install
   references to field placeholders without recursively completing all fields.
-  Collection identity and completed membership also need distinct states.
+  Collections do the same for their elements, which permits back-references.
 
 `ListValue::setElements` finishes an immutable list once; it is not an append API.
 Use a separate runtime value rather than changing list value semantics.
@@ -121,20 +122,22 @@ The current `objects` map belongs to the `Evaluator` and is not cleared by
 `instantiate`. Fresh scratch wrappers provide separate IR identities, but new
 mutation state should have explicit per-call lifetime instead of relying on this.
 
-### 2.3 Elaboration must preserve residual effects
+### 2.3 Elaboration resolves effects
 
 [`ElaborateObject.cpp`](../../../lib/Dialect/OM/Transforms/ElaborateObject.cpp)
 clones constructor bodies, substitutes parameters, produces elaborated objects,
 folds field access, and runs greedy rewrites. Strict result verification has a
-fixed whitelist in `isFullyEvaluated`; new operations must be accepted as legal
-runtime residuals.
+fixed whitelist of legal residual operations. Adding the push canonicalization
+to its pattern set folds contributions into allocations as soon as inlining
+exposes them. Pushes remain only when they target a class parameter.
 
 `UnknownPropagationPattern` rewrites pure OM operations. Allocation and push
-must not be pure, or optimization can erase identity or contributions.
+must not be pure, or optimization can erase identity or contributions; in
+particular an unknown initial element must not make the collection unknown.
 
 firtool finalization and `om-linker` also run elaboration ahead of the evaluator,
-using `all-public-classes` and `allow-unevaluated`. Preservation must work there,
-not only in scratch-wrapper instantiation.
+using `all-public-classes` and `allow-unevaluated`. Folding is valid there too,
+since it never crosses a class boundary.
 
 ## 3. Semantic contract
 
@@ -154,13 +157,12 @@ aliases must not replay its constructor effects.
 
 ### 3.2 Construction and observation
 
-Collections accept contributions throughout an evaluation transaction and are
-complete once all contributions in the instantiated graph are processed.
-Completing one object does not complete its collection fields; other objects
-may still contribute. Because contributions are executed in a single sweep at
-the end of the transaction and construction programs cannot read contents, no
-explicit open/sealed state is needed: a collection is only observable outside
-the evaluator after its transaction has finished.
+A collection's contents are the contributions of the entire instantiated graph,
+not just of the object that allocates it; other objects may contribute through
+shared handles. Because construction programs cannot read contents, folding
+pushes into the allocation is semantics-preserving, and no explicit
+open/sealed state is needed: once elaboration has folded every push, the
+allocation lists the complete membership.
 
 Construction programs can allocate, push, transport, and export handles. They
 cannot inspect contents or derive computations/assertions from them. No
@@ -182,8 +184,8 @@ accumulation fits this model without effect tokens, ordering keys, or constructo
 sequencing. Memory effects are still needed to preserve contributions.
 
 Use-list order, hash-map iteration, greedy rewrite visitation, and final block
-order are not observable ordering guarantees. Resolve handles first, then
-collect pushes in any traversal order, exactly once per instantiated push.
+order are not observable ordering guarantees. Folding may therefore gather
+pushes in any order, as long as each instantiated push is folded exactly once.
 
 ### 3.4 Unknown values and external effects
 
@@ -192,7 +194,8 @@ Distinguish unknown elements from unknown membership:
 - Pushing an unknown `T` into a known collection contributes one unknown element.
   Known contributions and multiplicity remain visible.
 - An unknown collection remains unknown. A push to that destination cannot
-  identify a concrete collection and must not affect a known collection.
+  identify a concrete collection and must not affect a known collection; it is
+  dropped by canonicalization.
 - Unknown membership is not an empty collection. Enumeration must fail or map
   to the existing Python `Unknown` representation.
 
@@ -219,7 +222,7 @@ collections' membership unknown.
 | Construct | FIRRTL | OM |
 | --- | --- | --- |
 | Type | `!firrtl.mutable_collection<T>` | `!om.collection<T>` |
-| Empty allocation | `firrtl.prop.collection` | `om.collection` |
+| Allocation | `firrtl.prop.collection` | `om.collection` |
 | Push an element | `firrtl.prop.push` | `om.collection_push` |
 
 Illustrative syntax:
@@ -230,6 +233,9 @@ firrtl.prop.push %items, %value : !firrtl.mutable_collection<string>, !firrtl.st
 
 %items = om.collection : !om.collection<!om.string>
 om.collection_push %items, %value : !om.collection<!om.string>, !om.string
+
+// Canonical form of the two OM operations above.
+%items = om.collection %value : !om.collection<!om.string>
 ```
 
 FIRRTL `MutableCollectionType` is a non-hardware `PropertyType` parameterized by
@@ -237,9 +243,10 @@ a property element type. OM `CollectionType` is distinct from `ListType` and has
 an MLIR element type. Lowering recursively converts the element type; never
 retain a FIRRTL outer container just because its element already has an OM type.
 
-Verify exact push element/destination element-type agreement. Explicit existing
-`AnyRef`/`Any` casts can supply upcasts. Allocation has no operands and one
-collection result; push has two operands and no results. Operations are limited
+Verify exact push element/destination element-type agreement, and likewise for
+initial elements. Explicit existing `AnyRef`/`Any` casts can supply upcasts.
+OM allocation takes variadic initial elements and has one collection result;
+push has two operands and no results. Operations are limited
 to supported module/class bodies, not hardware `when` regions.
 
 Push consumes a mutation-capable handle; it is not a property-port assignment.
@@ -253,6 +260,8 @@ Optimization must not merge allocations, merge identical pushes, remove pushes
 because they have no results, or remove unused constructor instances with effects.
 Cloning two constructor instances clones contributions twice; accessing one
 instance twice does not. Audit instance elimination/duplication, not just pushes.
+An unused allocation may be removed, together with pushes already folded into
+it, since its contents are unobservable.
 
 ### Example: contributions through an object field
 
@@ -285,13 +294,15 @@ om.class @Top() -> (owner: !om.class.type<@Owner>, items: !items) {
 
 `Top.items` and `Top.owner.items` are the same runtime collection, containing
 one contribution of `1` and one of `2`, in unspecified order. Unused writer
-results must not remove the contributions.
+results must not remove the contributions. After elaboration, `Top` contains
+`om.collection %one, %two : !items` and no push.
 
 ## 5. Evaluator design
 
 ### 5.1 Runtime value and readiness
 
-Add `EvaluatorValue::Kind::Collection` and `evaluator::CollectionValue`:
+Add `EvaluatorValue::Kind::Collection` and `evaluator::CollectionValue`, shaped
+like `ListValue` but with a distinct kind and unordered semantics:
 
 ```text
 CollectionType type
@@ -299,71 +310,47 @@ vector<EvaluatorValuePtr> elements
 membership-unknown state
 ```
 
-Provide an internal append method and public read-only enumeration. Update type dispatch, unknown factories, and diagnostic printing.
-Append must not be exposed through C/Python bindings.
+`getOrCreateValue` allocates a placeholder handle once per `om.collection`
+result; `evaluateValue` sets its elements from the operand handles, without
+forcing their evaluation, as `om.elaborated_object` does for fields. This
+permits transport through objects/lists and registering an object in a
+collection referenced by its own fields. Update type dispatch, unknown
+factories, and diagnostic printing. No append API exists.
 
-An allocated handle is immediately structurally ready; `isFullyEvaluated()` is
-true while contributions are still pending. This permits transport through
-objects/lists and registering an object in a collection referenced by its fields.
-There is no separate sealed state: every collection reachable during a
-transaction is owned by it (fresh allocations or imported copies), and only the
-evaluator can append, so contents are complete whenever a client can see them.
-
-Do not recursively demand completion of the entire reachable graph before
-append. Validate structural readiness and use visited sets for whole-graph
-checks, since objects can have back-references.
-
-### 5.2 Value phase, then effect phase
-
-The value cache is per-instantiation state. Collections need no additional
-transaction-level bookkeeping.
+### 5.2 No effect phase
 
 ```text
 instantiate scratch wrapper:
-  1. Prepare transaction-local imported values.
-  2. Allocate all result placeholders, including fresh collection handles.
-  3. Evaluate ordinary results; establish object fields and handle aliases.
-  4. Visit every retained collection_push, regardless of result count.
-     Resolve target/element, validate, and append one contribution.
-  5. Return the root object (or fail, discarding all transaction-local values).
+  1. Import API inputs as IR, including fresh allocations for collections.
+  2. Elaborate; every push is folded into its allocation.
+  3. Allocate all result placeholders and evaluate them as usual.
+  4. Return the root object.
 ```
 
-Elaboration puts instantiated bodies in one block, so one effect sweep suffices.
-Do not discover effects by traversing public fields: that misses effect-only
-instances and may revisit aliased instances.
-
-`getOrCreateValue` allocates a handle once per allocation result.
-`evaluateValue` never executes pushes. Add explicit resultless operation dispatch
-returning `LogicalResult`. A single sweep enforces exactly-once execution;
-if a worklist is later needed, key its execution set by instantiated operations,
-not original class-definition operations.
-
-No staging is needed to avoid partial publication: on failure the transaction's
-collections are discarded and the caller's inputs were never mutated.
-Forward-referenced operands are resolved after placeholders and ordinary values. Diagnose unavailable operands rather than
-silently dropping a contribution.
-
-Existing property assertions remain checked by elaboration; there is no need to
-move every resultless operation into the interpreter.
+Elaboration puts instantiated bodies in one block, and the wrapper never has
+collection parameters, so no push can survive elaboration; the evaluator
+diagnoses one defensively. Exactly-once contribution is a property of the
+rewrite: each instantiated push becomes one operand. Failure discards the
+scratch IR and its values, so partial results are never published.
 
 ### 5.3 API inputs and repeated instantiation
 
-Leaving a collection in the importer's default opaque-argument case would reuse
-the caller's original storage and mutate previously returned results.
+Passing a collection as an opaque wrapper argument would let pushes reach the
+caller's storage and modify previously returned results.
 
-Proposed policy: **copy on transaction import; alias within the transaction**.
+Policy: **copy on import; alias within the instantiation**.
 
-- Accept collections as snapshots with their existing elements.
-- Allocate one fresh copy per distinct imported collection identity.
-- Use one memoization table across all parameters and nested values.
-- Copy/rebind enclosing objects/lists so they reference transaction-local copies
-  without modifying the caller's graph.
-- Pass runtime collection copies as typed opaque wrapper parameters; no
-  collection constant or static-list materialization is needed.
-- Handle any-typed inputs consistently: direct and opaque references to the same
-  source collection must not receive separate copies.
-- Keep existing cyclic concrete-input restrictions and avoid unbounded
-  recursive traversal.
+- Materialize each distinct imported collection as a fresh `om.collection`
+  whose operands are its imported elements. The existing import memoization
+  table preserves aliases across parameters and nested values.
+- Register the allocation before importing its elements so that
+  back-references resolve to the same copy.
+- Concrete objects/lists are already materialized as IR, so they reference the
+  copies without modifying the caller's graph.
+- Any-typed inputs that contain collections are materialized with their
+  concrete type and cast to `!om.any`, so direct and opaque references to the
+  same source collection share one copy. Other any-typed inputs stay opaque.
+- Keep existing cyclic object-input restrictions.
 
 Across calls, completed inputs are snapshots. Persistent mutation would need a
 separate lifecycle, rollback, and concurrency design.
@@ -374,15 +361,10 @@ requirements still apply. Scratch wrapper cleanup is a separate issue.
 
 ### 5.4 Elaboration boundary
 
-Accept allocation and push as legal runtime residuals in strict elaboration.
-Consider renaming its `isFullyEvaluated` whitelist helper to describe residual
-support rather than suggesting effects have executed.
-
 Elaboration clones operations and substitutes operands, folds handle-valued
-field access, preserves effects, and checks unsupported external capabilities.
-It never appends, gathers contributions from use lists, or replaces collections
-with list construction/concatenation. Repeated elaboration must not itself add
-runtime elements.
+field access, folds pushes into allocations, and checks unsupported external
+capabilities. It never replaces collections with list construction or
+concatenation. Allocations and pushes into class parameters are legal residuals.
 
 ## 6. FIRRTL lowering and paths
 
@@ -454,10 +436,10 @@ In that prototype:
 | Element type | Property-typed; examples emphasize paths | Supported property/OM element types |
 | Program reads | Content reads disallowed | Content reads disallowed; handle transport allowed |
 | Order/multiplicity | Unordered; duplicates preserved | Unordered; duplicates preserved |
-| Effect lifetime | Eliminated in FIRRTL `LowerDomains` | Retained through OM elaboration; executed by evaluator |
+| Effect lifetime | Eliminated in FIRRTL `LowerDomains` | Folded into the allocation during OM elaboration |
 | Accumulation | Bottom-up list-output plumbing | Shared runtime identity and exactly-once contributions |
 | Generated interface | Extra output per registry field | Collection-valued fields/parameters |
-| Runtime changes | No new mutable OM value | New value kind, effect phase, and consumer APIs |
+| Runtime changes | No new mutable OM value | New value kind and consumer APIs |
 | External inputs | Ordinary lowered-list behavior | Explicit capability/unknown-membership policy |
 
 ### 7.3 Why the implementations differ
@@ -469,7 +451,7 @@ A generic collection can be shared through class fields/parameters in an object
 graph unrelated to module hierarchy. Identifying the destination instance depends
 on actual parameters and aliases. Static removal would require whole-instance
 resolution or restricted ownership/alias analysis, rather than copying Registry's
-lowering. It also contradicts this task's evaluator-execution requirement.
+lowering. Folding within the elaborated OM object graph avoids that analysis.
 
 The PR discussion values removing effects inside FIRRTL
 ([review comment][registry-review]). The generic facility deliberately trades
@@ -504,8 +486,8 @@ Implement in reviewable stages:
    remove the initial Registry definition and its obsolete tests.
 2. `LowerClasses` conversion, effect-only class discovery, elaboration
    preservation, and path freezing. FIRRTL text syntax can follow separately.
-3. Runtime value, resultless-effect sweep, import aliasing, and
-   external-capability checks.
+3. Initial-element allocation, push folding, runtime value, import aliasing,
+   and external-capability checks.
 4. C/Python consumer APIs and end-to-end tests. Domain Registry integration is
    independent follow-up work.
 
@@ -528,8 +510,8 @@ and an object registered in a collection referenced by its own fields.
 
 Also cover repeated and failed instantiation isolation; imported aliases across
 parameters, nested containers, and opaque inputs;
-unknown elements versus unknown membership; external-effect diagnostics; repeated
-elaboration without execution; operation reordering without changed membership;
+unknown elements versus unknown membership; external-effect diagnostics; push
+folding and pushes into parameters; operation reordering without changed membership;
 per-instance frozen paths; firtool/linker/bytecode preservation; and read-only
 consumer APIs.
 

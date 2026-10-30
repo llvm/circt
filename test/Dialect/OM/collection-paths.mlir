@@ -11,6 +11,8 @@ om.class @Paths(%input: !om.collection<!om.path>) -> (items: !om.collection<!om.
   om.collection_push %input, %path : !om.collection<!om.path>, !om.path
   // CHECK: om.collection_push %[[ITEMS]], %[[PATH]] : !om.collection<!om.frozenpath>, !om.frozenpath
   om.collection_push %items, %path : !om.collection<!om.path>, !om.path
+  // CHECK: om.collection %[[PATH]] : !om.collection<!om.frozenpath>
+  %initial = om.collection %path : !om.collection<!om.path>
   // CHECK: %[[NESTED:.*]] = om.collection : !om.collection<!om.list<!om.collection<!om.frozenpath>>>
   %nested = om.collection : !om.collection<!om.list<!om.collection<!om.path>>>
   // CHECK: %[[LIST:.*]] = om.list_create %[[ITEMS]] : !om.collection<!om.frozenpath>

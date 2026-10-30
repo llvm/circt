@@ -55,10 +55,11 @@ def ListType : TypeDef<OMDialect, "List", []> {
 def CollectionType : TypeDef<OMDialect, "Collection", []> {
   let summary = "An unordered, append-only collection handle.";
   let description = [{
-    Collections have identity and are shared by reference. Elements may only be
-    contributed with `om.collection_push`; their contents cannot be inspected
-    by OM programs. The evaluator publishes completed, read-only collections.
-    Duplicate contributions are preserved, but their order is unspecified.
+    Collections have identity and are shared by reference. Elements are
+    provided when allocated with `om.collection` or contributed with
+    `om.collection_push`; their contents cannot be inspected by OM programs.
+    The evaluator publishes completed, read-only collections. Duplicate
+    contributions are preserved, but their order is unspecified.
   }];
   let mnemonic = "collection";
   let parameters = (ins "mlir::Type":$elementType);
