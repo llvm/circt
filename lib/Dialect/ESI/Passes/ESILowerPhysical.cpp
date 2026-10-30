@@ -139,10 +139,34 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
                                          outDelay);
     ready.setValue(wrap.getReady());
     output = wrap.getChanOutput();
+  } else if (outDelay < inDelay &&
+             outputType.getSignaling() == ChannelSignaling::ValidOnly) {
+    // With no backpressure, tokens never wait. Delay the valid so that the
+    // data arrives 'outDelay' cycles after it.
+    auto alwaysReady = hw::ConstantOp::create(rewriter, loc, i1, 1);
+    auto unwrap =
+        UnwrapValidReadyOp::create(rewriter, loc, output, alwaysReady);
+    Value valid = unwrap.getValid();
+    Value false_ = hw::ConstantOp::create(rewriter, loc, i1, 0);
+    for (uint64_t i = 0; i < inDelay - outDelay; ++i)
+      valid = seq::CompRegOp::create(rewriter, loc, valid, buffer.getClk(),
+                                     buffer.getRst(), false_,
+                                     regName("valid_dly", i), InnerSymAttr());
+    output = WrapValidOnlyOp::create(rewriter, loc, unwrap.getRawOutput(),
+                                     valid, outDelay)
+                 .getChanOutput();
+  } else if (outDelay < inDelay) {
+    // Tokens must wait until their data arrives, so hold them in a FIFO. This
+    // depth sustains one transfer per cycle.
+    uint64_t depth = inDelay + std::max<uint64_t>(outDelay, 1) + 1;
+    output = FIFOOp::create(rewriter, loc, outputType, buffer.getClk(),
+                            buffer.getRst(), output,
+                            rewriter.getI64IntegerAttr(depth));
   }
 
   // If the output is FIFO, we need to wrap it back into a FIFO from ValidReady.
-  if (outputType.getSignaling() == ChannelSignaling::FIFO) {
+  if (output.getType() != outputType &&
+      outputType.getSignaling() == ChannelSignaling::FIFO) {
     BackedgeBuilder bb(rewriter, loc);
     Backedge ready = bb.get(rewriter.getI1Type());
     Backedge empty = bb.get(rewriter.getI1Type());
@@ -160,7 +184,8 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
   }
 
   // If the output is ValidOnly, convert back from ValidReady.
-  if (outputType.getSignaling() == ChannelSignaling::ValidOnly) {
+  if (output.getType() != outputType &&
+      outputType.getSignaling() == ChannelSignaling::ValidOnly) {
     // Always ready since ValidOnly has no backpressure.
     auto alwaysReady =
         hw::ConstantOp::create(rewriter, loc, rewriter.getI1Type(), 1);
