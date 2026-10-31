@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --verify-diagnostics -pass-pipeline='builtin.module(om-link-modules)' --split-input-file -allow-unregistered-dialect | FileCheck %s
+// RUN: circt-opt %s --verify-diagnostics -pass-pipeline='builtin.module(om-link-modules)' --split-input-file -allow-unregistered-dialect | FileCheck %s --implicit-check-not=om.class.extern
 
 module {
   // CHECK-LABEL: module
@@ -84,5 +84,70 @@ module {
     om.class @Bar() {
       om.class.fields
     }
+  }
+}
+
+// -----
+
+// Coalescing relies on the ODR contract, not structural equivalence.
+// CHECK-LABEL: om.class @Compute
+// CHECK-SAME: attributes {linkonce_odr}
+// CHECK-NEXT: om.class.fields %x : !om.integer
+// CHECK-NOT: om.class @Compute
+// CHECK-NOT: om.integer.add
+module {
+  module {
+    om.class @Compute(%x: !om.integer) -> (value: !om.integer) attributes {linkonce_odr} {
+      om.class.fields %x : !om.integer
+    }
+  }
+  module {
+    om.class @Compute(%x: !om.integer) -> (value: !om.integer) attributes {linkonce_odr} {
+      %zero = om.constant #om.integer<0>
+      %result = om.integer.add %x, %zero : !om.integer
+      om.class.fields %result : !om.integer
+    }
+  }
+  module {
+    om.class.extern @Compute(%x: !om.integer) -> (value: !om.integer) {}
+  }
+}
+
+// -----
+
+// Public linkonce_odr classes coalesce without external declarations, while
+// private classes without the attribute are renamed on collision.
+// CHECK-LABEL: om.class @Shared()
+// CHECK-SAME: attributes {linkonce_odr}
+// CHECK-LABEL: om.class private @Local_A()
+// CHECK-LABEL: om.class private @Local_B()
+// CHECK-NOT: om.class{{[ ]}}
+module {
+  module attributes {om.namespace = "A"} {
+    om.class @Shared() attributes {linkonce_odr} { om.class.fields }
+    om.class private @Local() { om.class.fields }
+  }
+  module attributes {om.namespace = "B"} {
+    om.class @Shared() attributes {linkonce_odr} { om.class.fields }
+    om.class private @Local() { om.class.fields }
+  }
+}
+
+// -----
+
+// A private definition without linkonce_odr can resolve an external class.
+// CHECK-LABEL: om.class @Caller()
+// CHECK-NEXT: om.object @PrivateDefinition()
+// CHECK-LABEL: om.class private @PrivateDefinition()
+module {
+  module {
+    om.class.extern @PrivateDefinition() {}
+    om.class @Caller() {
+      %0 = om.object @PrivateDefinition() : () -> !om.class.type<@PrivateDefinition>
+      om.class.fields
+    }
+  }
+  module {
+    om.class private @PrivateDefinition() { om.class.fields }
   }
 }

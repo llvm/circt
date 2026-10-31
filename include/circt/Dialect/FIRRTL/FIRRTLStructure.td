@@ -343,13 +343,17 @@ def ClassOp : FIRRTLModuleLike<"class", [
 
     A class may only have property ports, and its body may only be ops that act
     on properties, such as propassign ops.
+
+    The `linkonce_odr` attribute marks public classes with interchangeable
+    same-named definitions for coalescing by the OM linker.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        OptionalAttr<StrAttr>:$sym_visibility,
                        DenseBoolArrayAttr:$portDirections,
                        ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
                        ArrayRefAttr:$portSymbols, ArrayRefAttr:$portLocations,
-                       DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo);
+                       DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo,
+                       UnitAttr:$linkonce_odr);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 

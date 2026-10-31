@@ -49,7 +49,8 @@ firrtl.circuit "Component" {
 
   // CHECK-LABEL: om.class @ReadOutputPort(%basepath: !om.basepath)
   // CHECK-SAME: -> (output: !om.integer)
-  firrtl.class @ReadOutputPort(out %output : !firrtl.integer) {
+  // CHECK-SAME: attributes {linkonce_odr}
+  firrtl.class @ReadOutputPort(out %output : !firrtl.integer) attributes {linkonce_odr} {
     // CHECK: %[[OBJ:.+]] = om.object @Class_1(%basepath) : (!om.basepath) -> !om.class.type<@Class_1>
     // CHECK: %[[FIELD:.+]] = om.object.field %[[OBJ]]["someInt"] : (!om.class.type<@Class_1>) -> !om.integer
     // CHECK: om.class.fields %[[FIELD]] : !om.integer

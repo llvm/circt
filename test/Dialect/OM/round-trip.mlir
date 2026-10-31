@@ -56,6 +56,12 @@ om.class @ElaboratedWidget() -> (widget: !om.class.type<@Widget>, blue: i8) {
   om.class.fields %2, %3 : !om.class.type<@Widget>, i8
 }
 
+// CHECK-LABEL: om.class @LinkOnce
+// CHECK-SAME: attributes {linkonce_odr}
+om.class @LinkOnce() attributes {linkonce_odr} {
+  om.class.fields
+}
+
 // CHECK-LABEL: om.class @DiscardableAttrs
 // CHECK-SAME: attributes {foo.bar = "baz"}
 om.class @DiscardableAttrs() attributes {foo.bar="baz"} {
