@@ -148,6 +148,19 @@ struct EvaluateObjectField : OpRewritePattern<ObjectFieldOp> {
   const FieldIndex &fieldIndexes;
 };
 
+/// Inserting into an unknown registry leaves its contents unknown.
+struct EraseUnknownRegistryInsertion : OpRewritePattern<RegistryInsertOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(RegistryInsertOp op,
+                                PatternRewriter &rewriter) const override {
+    if (!op.getRegistry().getDefiningOp<UnknownValueOp>())
+      return failure();
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 /// Pattern to propagate UnknownValueOp through pure OM operations.
 /// If any operand is unknown, all results become unknown.
 struct UnknownPropagationPattern : RewritePattern {
@@ -194,7 +207,9 @@ bool isFullyEvaluated(Operation *op) {
       // Path.
       FrozenBasePathCreateOp, FrozenPathCreateOp, FrozenEmptyPathOp,
       // List.
-      ListCreateOp, ListConcatOp>(op);
+      ListCreateOp, ListConcatOp,
+      // Registry.
+      RegistryCreateOp>(op);
 }
 
 LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
@@ -315,7 +330,8 @@ struct ElaborateObjectPass
     RewritePatternSet patterns(context);
     patterns.add<ObjectOpInliningPattern>(context, symTable, !allowUnevaluated);
     patterns.add<EvaluateObjectField>(context, symTable, fieldIndexes);
-    patterns.add<UnknownPropagationPattern>(context);
+    patterns.add<UnknownPropagationPattern, EraseUnknownRegistryInsertion>(
+        context);
     for (auto op : context->getRegisteredOperations())
       if (isa<OMDialect>(op.getDialect()))
         op.getCanonicalizationPatterns(patterns, context);

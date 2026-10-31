@@ -704,6 +704,22 @@ OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// RegistryInsertOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult RegistryInsertOp::canonicalize(RegistryInsertOp op,
+                                             PatternRewriter &rewriter) {
+  auto allocation = op.getRegistry().getDefiningOp<RegistryCreateOp>();
+  if (!allocation)
+    return failure();
+  rewriter.modifyOpInPlace(allocation, [&] {
+    allocation.getElementsMutable().append(op.getElement());
+  });
+  rewriter.eraseOp(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ListCreateOp
 //===----------------------------------------------------------------------===//
 

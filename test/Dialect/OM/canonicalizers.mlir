@@ -359,3 +359,13 @@ om.class @ListContainsFold() -> (
   om.class.fields %string_found, %string_absent, %bool_found, %bool_absent,
       %integer_found, %integer_absent, %empty : i1, i1, i1, i1, i1, i1, i1
 }
+
+// CHECK-LABEL: om.class @RegistryEffects
+// CHECK: %[[ITEMS:.+]] = om.registry_create %initial, %value, %value : !om.registry<!om.integer>
+// CHECK-NEXT: om.class.fields %[[ITEMS]]
+om.class @RegistryEffects(%initial: !om.integer, %value: !om.integer) -> (items: !om.registry<!om.integer>) {
+  %items = om.registry_create %initial : !om.registry<!om.integer>
+  om.registry_insert %items, %value : !om.registry<!om.integer>
+  om.registry_insert %items, %value : !om.registry<!om.integer>
+  om.class.fields %items : !om.registry<!om.integer>
+}

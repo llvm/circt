@@ -98,3 +98,11 @@ om.class @CompoundMessage() {
   om.property_assert %false, %foobar : i1
   om.class.fields
 }
+
+// -----
+
+om.class @RegistryParameter(%items: !om.registry<!om.integer>, %value: !om.integer) {
+  // expected-error @below {{failed to evaluate om.registry_insert}}
+  om.registry_insert %items, %value : !om.registry<!om.integer>
+  om.class.fields
+}

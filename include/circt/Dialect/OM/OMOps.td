@@ -328,6 +328,7 @@ def RegistryInsertOp : OMOp<"registry_insert", [MemoryEffects<[MemWrite]>,
   let assemblyFormat = [{
     $registry `,` $element attr-dict `:` qualified(type($registry))
   }];
+  let hasCanonicalizeMethod = 1;
 }
 
 def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
