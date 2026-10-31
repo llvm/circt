@@ -23,6 +23,7 @@ set(PYTHON_BINDINGS_SOURCES
   PipelineModule.cpp
   RTGModule.cpp
   SeqModule.cpp
+  SimModule.cpp
   SupportModule.cpp
   SVModule.cpp
   SynthModule.cpp

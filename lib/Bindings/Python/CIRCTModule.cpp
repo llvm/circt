@@ -232,6 +232,8 @@ NB_MODULE(_circt, m) {
   circt::python::populateDialectHWSubmodule(hw);
   nb::module_ seq = m.def_submodule("_seq", "Seq API");
   circt::python::populateDialectSeqSubmodule(seq);
+  nb::module_ sim = m.def_submodule("_sim", "Sim API");
+  circt::python::populateDialectSimSubmodule(sim);
   nb::module_ om = m.def_submodule("_om", "OM API");
   circt::python::populateDialectOMSubmodule(om);
   nb::module_ pipeline = m.def_submodule("_pipeline", "Pipeline API");
