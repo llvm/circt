@@ -749,3 +749,70 @@ firrtl.circuit "UnsafeDomainCastWithWire" {
     %0 = firrtl.unsafe_domain_cast %a domains[%wire] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain(source: !firrtl.string)>]
   }
 }
+
+// -----
+
+firrtl.circuit "LocalRegistry" {
+  // CHECK-LABEL: firrtl.class @ClockDomain()
+  // CHECK-LABEL: firrtl.class @ClockDomain_out
+  // CHECK-SAME:    in %domainInfo_in: !firrtl.class<@ClockDomain()>
+  // CHECK-SAME:    out %domainInfo_out: !firrtl.class<@ClockDomain()>
+  // CHECK-SAME:    in %associations_in: !firrtl.list<path>
+  // CHECK-SAME:    out %associations_out: !firrtl.list<path>
+  firrtl.domain @ClockDomain [
+    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+  ]
+
+  // CHECK-LABEL: firrtl.module @LocalRegistry(
+  // CHECK-SAME:    in %A: !firrtl.class<@ClockDomain()>
+  // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
+  // CHECK-SAME:    out %A_registry_clockGates: !firrtl.list<path>
+  firrtl.module @LocalRegistry(
+    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+  ) {
+    // CHECK: %[[path:.+]] = firrtl.unresolved_path "OMReferenceTarget:~LocalRegistry|LocalRegistry>cg"
+    // CHECK: %[[list:.+]] = firrtl.list.create %[[path]] : !firrtl.list<path>
+    // CHECK: firrtl.propassign %A_registry_clockGates, %[[list]]
+    %path = firrtl.unresolved_path "OMReferenceTarget:~LocalRegistry|LocalRegistry>cg"
+    firrtl.domain.insert %A["clockGates"], %path : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>, !firrtl.path
+  }
+}
+
+// -----
+
+firrtl.circuit "HierRegistry" {
+  firrtl.domain @ClockDomain [
+    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+  ]
+
+  // CHECK-LABEL: firrtl.module @Bar(
+  firrtl.module @Bar(
+    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+  ) {
+    // CHECK: %[[path:.+]] = firrtl.unresolved_path "OMReferenceTarget:~HierRegistry|Bar>cg"
+    // CHECK: %[[list:.+]] = firrtl.list.create %[[path]] : !firrtl.list<path>
+    // CHECK: firrtl.propassign %A_registry_clockGates, %[[list]]
+    %path = firrtl.unresolved_path "OMReferenceTarget:~HierRegistry|Bar>cg"
+    firrtl.domain.insert %A["clockGates"], %path : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>, !firrtl.path
+  }
+
+  // CHECK-LABEL: firrtl.module @HierRegistry(
+  firrtl.module @HierRegistry(
+    in %A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+  ) {
+    // CHECK: %bar1_A, %bar1_A_out, %bar1_A_registry_clockGates = firrtl.instance bar1 @Bar
+    // CHECK: %bar2_A, %bar2_A_out, %bar2_A_registry_clockGates = firrtl.instance bar2 @Bar
+    %bar1_A = firrtl.instance bar1 @Bar(
+      in A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+    )
+    %bar2_A = firrtl.instance bar2 @Bar(
+      in A: !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+    )
+    firrtl.domain.define %bar1_A, %A : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+    firrtl.domain.define %bar2_A, %A : !firrtl.domain<@ClockDomain(clockGates: !firrtl.registry<path>)>
+
+    // CHECK: %[[local:.+]] = firrtl.list.create : !firrtl.list<path>
+    // CHECK: %[[all:.+]] = firrtl.list.concat %[[local]], %bar1_A_registry_clockGates, %bar2_A_registry_clockGates
+    // CHECK: firrtl.propassign %A_registry_clockGates, %[[all]]
+  }
+}

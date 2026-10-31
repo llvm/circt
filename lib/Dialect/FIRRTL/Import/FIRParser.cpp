@@ -2138,6 +2138,7 @@ private:
   ParseResult parseMatch(unsigned matchIndent);
   ParseResult parseDomainInstantiation();
   ParseResult parseDomainDefine();
+  ParseResult parseDomainInsert();
   ParseResult parseRefDefine();
   ParseResult parseRefForce();
   ParseResult parseRefForceInitial();
@@ -2432,7 +2433,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
   case FIRToken::lp_path:
     if (isLeadingStmt)
-      return emitError("unexpected path() as start of statement");
+      return emitError("unexpected path expression as start of statement");
     if (requireFeature({6, 0, 0}, "Paths") || parsePathExp(result))
       return failure();
     break;
@@ -3154,7 +3155,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 /// stmt ::= instance
 ///      ::= cmem | smem | mem
 ///      ::= node | wire
-///      ::= register
+///      ::= insert
 ///      ::= contract
 ///
 ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
@@ -3221,6 +3222,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseDomainInstantiation();
   case FIRToken::kw_domain_define:
     return parseDomainDefine();
+  case FIRToken::kw_insert:
+    return parseDomainInsert();
   case FIRToken::kw_define:
     return parseRefDefine();
   case FIRToken::lp_force:
@@ -4328,6 +4331,50 @@ ParseResult FIRStmtParser::parseDomainDefine() {
   return success();
 }
 
+/// insert ::= 'insert' domain_exp '.' field_id ',' property_exp info?
+ParseResult FIRStmtParser::parseDomainInsert() {
+  auto startTok = consumeToken(FIRToken::kw_insert);
+  auto startLoc = startTok.getLoc();
+  locationProcessor.setLoc(startLoc);
+
+  if (requireFeature(missingSpecFIRVersion, "domain registries", startLoc))
+    return failure();
+
+  // Parse the domain expression without materializing its registry subfield.
+  // The field name is carried by domain.insert itself.
+  Value domain, target;
+  auto domainLoc = getToken().getLoc();
+  SymbolValueEntry entry;
+  StringRef id;
+  if (parseId(id, "expected domain expression") ||
+      moduleContext.lookupSymbolEntry(entry, id, domainLoc))
+    return failure();
+
+  // An unbundled instance reference requires one field to resolve it to the
+  // domain value (e.g. child.A). A regular domain value (e.g. A) is already
+  // resolved and goes directly to the registry field name below.
+  if (moduleContext.resolveSymbolEntry(domain, entry, domainLoc, false)) {
+    StringRef field;
+    if (parseToken(FIRToken::period, "expected '.' in domain expression") ||
+        parseFieldId(field, "expected domain field name") ||
+        moduleContext.resolveSymbolEntry(domain, entry, field, domainLoc))
+      return failure();
+  }
+
+  StringRef fieldName;
+  if (parseToken(FIRToken::period, "expected '.' before registry field") ||
+      parseFieldId(fieldName, "expected registry field name") ||
+      parseToken(FIRToken::comma, "expected ',' after registry field") ||
+      parseExp(target, "expected registry element expression") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startLoc);
+  DomainInsertOp::create(builder, domain, target,
+                         builder.getStringAttr(fieldName));
+  return success();
+}
+
 /// define ::= 'define' static_reference '=' ref_expr info?
 ParseResult FIRStmtParser::parseRefDefine() {
   auto startTok = consumeToken(FIRToken::kw_define);
@@ -5375,9 +5422,13 @@ ParseResult FIRStmtParser::parseWire() {
   StringRef id;
   FIRRTLType type;
   if (parseId(id, "expected wire name") ||
-      parseToken(FIRToken::colon, "expected ':' in wire") ||
-      parseType(type, "expected wire type"))
+      parseToken(FIRToken::colon, "expected ':' in wire"))
     return failure();
+  auto typeLoc = getToken().getLoc();
+  if (parseType(type, "expected wire type"))
+    return failure();
+  if (type_isa<RegistryType>(type))
+    return emitError(typeLoc, "Registry types are only valid as domain fields");
 
   // Parse optional domain associations
   SmallVector<Value> domains;
@@ -5931,9 +5982,14 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     FIRRTLType type;
     LocWithInfo info(getToken().getLoc(), this);
     if (parseId(name, "expected port name") ||
-        parseToken(FIRToken::colon, "expected ':' in port definition") ||
-        parseType(type, "expected a type in port declaration"))
+        parseToken(FIRToken::colon, "expected ':' in port definition"))
       return failure();
+    auto typeLoc = getToken().getLoc();
+    if (parseType(type, "expected a type in port declaration"))
+      return failure();
+    if (type_isa<RegistryType>(type))
+      return emitError(typeLoc,
+                       "Registry types are only valid as domain fields");
     Attribute domainInfoElement = {};
     size_t portIdx = resultPorts.size();
     if (auto domainType = dyn_cast<DomainType>(type)) {
@@ -6111,11 +6167,15 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
       break;
 
     StringAttr fieldName;
-    PropertyType type;
+    FIRRTLType type;
     if (parseId(fieldName, "field name") ||
-        parseToken(FIRToken::colon, "expected ':' after field name") ||
-        parsePropertyType(type, "field type") || info.parseOptionalInfo())
+        parseToken(FIRToken::colon, "expected ':' after field name"))
       return failure();
+    auto fieldTypeLoc = getToken().getLoc();
+    if (parseType(type, "field type") || info.parseOptionalInfo())
+      return failure();
+    if (!isa<PropertyType, RegistryType>(type))
+      return emitError(fieldTypeLoc) << "expected property or registry type";
 
     fields.push_back(
         DomainFieldAttr::get(circuit.getContext(), fieldName, type));
