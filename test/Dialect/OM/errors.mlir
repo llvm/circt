@@ -208,3 +208,20 @@ om.class@A() -> () {
   %0 = om.unknown : !om.class.type<@NonExistant>
   om.class.fields
 }
+
+// -----
+
+om.class @CollectionPushMismatch(%items: !om.collection<!om.integer>, %value: !om.string) {
+  // expected-error @+1 {{element type must match the collection element type}}
+  om.collection_push %items, %value : !om.collection<!om.integer>, !om.string
+  om.class.fields
+}
+
+// -----
+
+// Check every initial element, not just the first one's type.
+om.class @CollectionInitialMismatch(%integer: !om.integer, %string: !om.string) {
+  // expected-error @+1 {{element types must match the collection element type}}
+  %items = "om.collection"(%integer, %string) : (!om.integer, !om.string) -> !om.collection<!om.integer>
+  om.class.fields
+}

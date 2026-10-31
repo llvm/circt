@@ -348,6 +348,9 @@ private:
   FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
+  FailureOr<EvaluatorValuePtr>
+  evaluateCollectionCreate(CollectionCreateOp op, ActualParameters actualParams,
+                           Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateBasePathCreate(FrozenBasePathCreateOp op,
                          ActualParameters actualParams, Location loc);

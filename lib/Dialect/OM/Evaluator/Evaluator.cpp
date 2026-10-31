@@ -31,6 +31,14 @@ using namespace circt::om;
 
 namespace {
 
+/// Collections are exposed as lists at the evaluator API boundary. Only the
+/// outer type changes; element types retain their IR representation.
+Type getRuntimeType(Type type) {
+  if (auto collection = dyn_cast<CollectionType>(type))
+    return ListType::get(collection.getElementType());
+  return type;
+}
+
 LogicalResult verifyActualParameters(ClassLike classLike,
                                      ArrayRef<EvaluatorValuePtr> actualParams) {
   auto formalParamNames =
@@ -68,7 +76,8 @@ LogicalResult verifyActualParameters(ClassLike classLike,
     Type actualParamType = actualParam->getType();
     assert(actualParamType && "actualParamType must be non-null!");
 
-    if (actualParamType != formalParamType) {
+    if (actualParamType != formalParamType &&
+        actualParamType != getRuntimeType(formalParamType)) {
       auto error = classLike.emitError("actual parameter for ")
                    << formalParamName << " has invalid type";
       error.attachNote() << "actual parameter: " << *actualParam;
@@ -104,9 +113,9 @@ private:
   /// inputs and rejecting runtime references/cycles.
   FailureOr<Value> materializeInput(const EvaluatorValuePtr &value,
                                     Location loc, Type expectedType);
-  /// Convert a fully evaluated list value into scratch IR.
-  FailureOr<Value> materializeListInput(evaluator::ListValue *listValue,
-                                        Location loc);
+  /// Import a fully evaluated list as a list or fresh collection allocation.
+  FailureOr<Value> materializeContainerInput(evaluator::ListValue *listValue,
+                                             Location loc, Type type);
   /// Convert a fully evaluated object value into scratch IR.
   FailureOr<Value> materializeObjectInput(evaluator::ObjectValue *objectValue,
                                           Location loc);
@@ -218,15 +227,23 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
   if (isa<AnyType>(expectedType))
     return createWrapperArgument(value, loc, expectedType);
 
-  if (auto it = importedValues.find(value.get()); it != importedValues.end())
-    return it->second;
+  // Every collection-typed use gets its own allocation, so it is never
+  // memoized.
+  bool isCollection = isa<CollectionType>(expectedType);
+  if (!isCollection)
+    if (auto it = importedValues.find(value.get()); it != importedValues.end())
+      return it->second;
 
   if (value->isUnknown()) {
     OpBuilder builder(wrapperClass.getFieldsOp());
     auto result = UnknownValueOp::create(builder, loc, expectedType);
-    importedValues[value.get()] = result.getResult();
+    if (!isCollection)
+      importedValues[value.get()] = result.getResult();
     return result.getResult();
   }
+
+  if (isCollection && !isa<evaluator::ListValue>(value.get()))
+    return emitError(loc, "cannot import OM evaluator value as a collection");
 
   return llvm::TypeSwitch<evaluator::EvaluatorValue *, FailureOr<Value>>(
              value.get())
@@ -242,7 +259,9 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
         return result.getResult();
       })
       .Case([&](evaluator::ListValue *listValue) {
-        return materializeListInput(listValue, loc);
+        return materializeContainerInput(
+            listValue, loc,
+            isCollection ? expectedType : listValue->getListType());
       })
       .Case([&](evaluator::ObjectValue *objectValue) {
         return materializeObjectInput(objectValue, loc);
@@ -256,12 +275,12 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
 }
 
 FailureOr<Value>
-ScratchIRBuilder::materializeListInput(evaluator::ListValue *listValue,
-                                       Location loc) {
+ScratchIRBuilder::materializeContainerInput(evaluator::ListValue *listValue,
+                                            Location loc, Type type) {
   if (!listValue->isFullyEvaluated())
     return emitError(loc, "cannot import partially evaluated OM list value");
 
-  auto listType = listValue->getListType();
+  auto listType = cast<ListType>(getRuntimeType(type));
   SmallVector<Value> elementValues;
   elementValues.reserve(listValue->getElements().size());
   for (const auto &elementValue : listValue->getElements()) {
@@ -273,6 +292,12 @@ ScratchIRBuilder::materializeListInput(evaluator::ListValue *listValue,
   }
 
   OpBuilder builder(wrapperClass.getFieldsOp());
+  // Collection inputs supply initial contents, never mutable caller storage.
+  if (auto collectionType = dyn_cast<CollectionType>(type))
+    return CollectionCreateOp::create(builder, loc, collectionType,
+                                      elementValues)
+        .getResult();
+
   auto result = ListCreateOp::create(builder, loc, listType, elementValues);
   importedValues[listValue] = result.getResult();
   return result.getResult();
@@ -360,7 +385,8 @@ circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
   using namespace circt::om::evaluator;
 
   auto result =
-      TypeSwitch<mlir::Type, FailureOr<evaluator::EvaluatorValuePtr>>(type)
+      TypeSwitch<mlir::Type, FailureOr<evaluator::EvaluatorValuePtr>>(
+          getRuntimeType(type))
           .Case([&](circt::om::ListType type) {
             evaluator::EvaluatorValuePtr result =
                 std::make_shared<evaluator::ListValue>(type, loc);
@@ -436,9 +462,10 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case<ListCreateOp, ListConcatOp>([&](auto op) {
-                  return getPartiallyEvaluatedValue(op.getType(), loc);
-                })
+                .Case<CollectionCreateOp, ListCreateOp, ListConcatOp>(
+                    [&](auto op) {
+                      return getPartiallyEvaluatedValue(op.getType(), loc);
+                    })
                 .Case<ElaboratedObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
                 })
@@ -646,6 +673,9 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](ListConcatOp op) {
               return evaluateListConcat(op, actualParams, loc);
             })
+            .Case([&](CollectionCreateOp op) {
+              return evaluateCollectionCreate(op, actualParams, loc);
+            })
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams, loc);
             })
@@ -799,6 +829,35 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
     list.value()->markUnknown();
 
   return list;
+}
+
+/// Evaluator dispatch function for collection allocation.
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateCollectionCreate(CollectionCreateOp op,
+                                               ActualParameters actualParams,
+                                               Location loc) {
+  auto collection = getOrCreateValue(op, actualParams, loc);
+  if (failed(collection))
+    return failure();
+  if (collection.value()->isFullyEvaluated())
+    return collection;
+
+  // Like object fields, elements are references. Use their handles without
+  // forcing evaluation so that elements may refer back to the collection;
+  // every value in the class body is evaluated by the caller.
+  SmallVector<evaluator::EvaluatorValuePtr> elements;
+  elements.reserve(op.getElements().size());
+  for (auto element : op.getElements()) {
+    auto result = getOrCreateValue(element, actualParams, loc);
+    if (failed(result))
+      return failure();
+    elements.push_back(result.value());
+  }
+  // Unlike om.list_create, an unknown element does not make the collection
+  // unknown.
+  cast<evaluator::ListValue>(collection.value().get())
+      ->setElements(std::move(elements));
+  return collection;
 }
 
 FailureOr<evaluator::EvaluatorValuePtr>
@@ -1076,9 +1135,8 @@ circt::om::evaluator::AttributeValue::get(Type type, LocationAttr loc) {
   if (!loc)
     loc = UnknownLoc::get(context);
 
-  // Special handling for ListType to create proper ListValue objects instead of
-  // AttributeValue objects.
-  if (auto listType = dyn_cast<circt::om::ListType>(type))
+  // Lists and completed collections share the same runtime representation.
+  if (auto listType = dyn_cast<ListType>(getRuntimeType(type)))
     return std::make_shared<evaluator::ListValue>(listType, loc);
   // Create the AttributeValue with the private tag
   return std::shared_ptr<AttributeValue>(

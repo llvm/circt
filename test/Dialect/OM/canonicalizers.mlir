@@ -324,3 +324,23 @@ om.class @ListConcatFold(
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>
 }
+
+// Canonicalization/CSE preserve allocation identity and all pushes, including
+// pushes to unknown destinations. Only elaboration resolves contributions.
+// CHECK-LABEL: om.class @CollectionEffects
+// CHECK: %[[FIRST:.+]] = om.collection %value : !om.collection<!om.integer>
+// CHECK-NEXT: %[[SECOND:.+]] = om.collection %value : !om.collection<!om.integer>
+// CHECK-NEXT: %[[MISSING:.+]] = om.unknown : !om.collection<!om.integer>
+// CHECK-NEXT: om.collection_push %[[FIRST]], %value
+// CHECK-NEXT: om.collection_push %[[FIRST]], %value
+// CHECK-NEXT: om.collection_push %[[MISSING]], %value
+// CHECK-NEXT: om.class.fields %[[FIRST]], %[[SECOND]]
+om.class @CollectionEffects(%value: !om.integer) -> (a: !om.collection<!om.integer>, b: !om.collection<!om.integer>) {
+  %first = om.collection %value : !om.collection<!om.integer>
+  %second = om.collection %value : !om.collection<!om.integer>
+  %missing = om.unknown : !om.collection<!om.integer>
+  om.collection_push %first, %value : !om.collection<!om.integer>, !om.integer
+  om.collection_push %first, %value : !om.collection<!om.integer>, !om.integer
+  om.collection_push %missing, %value : !om.collection<!om.integer>, !om.integer
+  om.class.fields %first, %second : !om.collection<!om.integer>, !om.collection<!om.integer>
+}

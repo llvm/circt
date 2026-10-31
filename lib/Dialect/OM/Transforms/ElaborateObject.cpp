@@ -148,6 +148,52 @@ struct EvaluateObjectField : OpRewritePattern<ObjectFieldOp> {
   const FieldIndex &fieldIndexes;
 };
 
+/// Resolve each contribution as soon as elaboration exposes its destination.
+/// Appending directly avoids rescanning users or rebuilding the operand list;
+/// ordering is deferred until the greedy rewriter has finished.
+struct FoldCollectionContributions : OpRewritePattern<CollectionPushOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(CollectionPushOp op,
+                                PatternRewriter &rewriter) const override {
+    auto destination = op.getCollection();
+    if (auto allocation = destination.getDefiningOp<CollectionCreateOp>()) {
+      rewriter.modifyOpInPlace(allocation, [&] {
+        allocation.getElementsMutable().append(op.getElement());
+      });
+    } else if (!destination.getDefiningOp<UnknownValueOp>()) {
+      return failure();
+    }
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+/// Order collection operands once using the final IR order of their values.
+/// The block's operation order is now stable, so isBeforeInBlock can reuse its
+/// order cache. Arguments precede operation results.
+void sortCollectionElements(ClassOp classOp) {
+  for (auto allocation : classOp.getOps<CollectionCreateOp>()) {
+    SmallVector<Value> elements(allocation.getElements());
+    llvm::sort(elements, [](Value lhs, Value rhs) {
+      if (lhs == rhs)
+        return false;
+      if (auto lhsArg = dyn_cast<BlockArgument>(lhs)) {
+        auto rhsArg = dyn_cast<BlockArgument>(rhs);
+        return !rhsArg || lhsArg.getArgNumber() < rhsArg.getArgNumber();
+      }
+      if (isa<BlockArgument>(rhs))
+        return false;
+      auto lhsResult = cast<OpResult>(lhs);
+      auto rhsResult = cast<OpResult>(rhs);
+      if (lhsResult.getOwner() == rhsResult.getOwner())
+        return lhsResult.getResultNumber() < rhsResult.getResultNumber();
+      return lhsResult.getOwner()->isBeforeInBlock(rhsResult.getOwner());
+    });
+    allocation.getElementsMutable().assign(elements);
+  }
+}
+
 /// Pattern to propagate UnknownValueOp through pure OM operations.
 /// If any operand is unknown, all results become unknown.
 struct UnknownPropagationPattern : RewritePattern {
@@ -194,7 +240,9 @@ bool isFullyEvaluated(Operation *op) {
       // Path.
       FrozenBasePathCreateOp, FrozenPathCreateOp, FrozenEmptyPathOp,
       // List.
-      ListCreateOp, ListConcatOp>(op);
+      ListCreateOp, ListConcatOp,
+      // Collection. Pushes may still depend on class parameters.
+      CollectionCreateOp, CollectionPushOp>(op);
 }
 
 LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
@@ -282,14 +330,17 @@ struct ElaborateObjectPass
                                           !allowUnevaluated);
     patterns.add<EvaluateObjectField>(classOp.getContext(), symTable,
                                       fieldIndexes);
-    patterns.add<UnknownPropagationPattern>(classOp.getContext());
+    patterns.add<UnknownPropagationPattern, FoldCollectionContributions>(
+        classOp.getContext());
     GreedyRewriteConfig config;
     // Disable iteration limit to allow full recursive inlining.
     config.setMaxIterations(GreedyRewriteConfig::kNoLimit);
     if (failed(applyPatternsGreedily(classOp, std::move(patterns), config)))
       return failure();
 
-    // Check if elaboration succeeded after saturation.
+    sortCollectionElements(classOp);
+
+    // Check if elaboration succeeded after saturation and operand ordering.
     return verifyResult(classOp, allowUnevaluated);
   }
 
