@@ -530,6 +530,15 @@ def ClassImpl : PropImplType<"Class", [
     FlatSymbolRefAttr getNameAttr() const;
 
     ArrayRef<ClassElement> getElements() const;
+
+    /// Return the input elements in declaration order.
+    auto getInputElements() const {
+      return llvm::make_filter_range(getElements(),
+                                     [](const ClassElement &element) {
+                                       return element.direction == Direction::In;
+                                     });
+    }
+
     size_t getNumElements() const { return getElements().size(); }
     const ClassElement &getElement(IntegerAttr index) const;
     const ClassElement &getElement(size_t index) const;
