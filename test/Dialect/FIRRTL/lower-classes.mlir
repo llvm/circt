@@ -966,3 +966,37 @@ firrtl.circuit "Create" {
     firrtl.propassign %out, %result : !firrtl.string
   }
 }
+
+firrtl.circuit "Registries" {
+  // CHECK-LABEL: om.class @Registries_Class(%basepath: !om.basepath, %items: !om.registry<!om.integer>)
+  // CHECK-SAME: -> (result: !om.registry<!om.integer>)
+  // CHECK: %[[LOCAL:.*]] = om.registry_create : !om.registry<!om.integer>
+  // CHECK-COUNT-2: om.registry_insert
+  // CHECK: om.class.fields %items : !om.registry<!om.integer>
+  firrtl.module @Registries(in %items: !firrtl.registry<integer>, out %result: !firrtl.registry<integer>) {
+    %local = firrtl.prop.registry : !firrtl.registry<integer>
+    %one = firrtl.integer 1
+    firrtl.prop.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.prop.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.propassign %result, %items : !firrtl.registry<integer>
+  }
+
+  // Effect-only usage must create a class even without property ports.
+  // CHECK-LABEL: om.class private @RegistryEffectOnly_Class
+  // CHECK: om.registry_create : !om.registry<!om.integer>
+  // CHECK: om.registry_insert
+  firrtl.module private @RegistryEffectOnly() {
+    %items = firrtl.prop.registry : !firrtl.registry<integer>
+    %one = firrtl.integer 1
+    firrtl.prop.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
+  }
+
+  // Recursively convert registry/list element types.
+  // CHECK-LABEL: om.class private @RegistryNested
+  // CHECK-SAME: !om.registry<!om.list<!om.registry<i1>>>
+  // CHECK: om.registry_create : !om.registry<!om.list<!om.registry<i1>>>
+  firrtl.class private @RegistryNested(out %result: !firrtl.registry<list<registry<bool>>>) {
+    %items = firrtl.prop.registry : !firrtl.registry<list<registry<bool>>>
+    firrtl.propassign %result, %items : !firrtl.registry<list<registry<bool>>>
+  }
+}
