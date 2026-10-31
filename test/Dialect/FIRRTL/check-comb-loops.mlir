@@ -1039,18 +1039,17 @@ firrtl.circuit "UnrealizedConversionCast" {
 // Check RWProbeOp + force doesn't crash.
 // No loop here.
 firrtl.circuit "Issue6820" {
-  firrtl.module private @Foo(in %clock: !firrtl.clock sym @sym, out %clockProbe_bore: !firrtl.rwprobe<clock>) {
-    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<clock>
-    firrtl.ref.define %clockProbe_bore, %0 : !firrtl.rwprobe<clock>
+  firrtl.module private @Foo(in %x: !firrtl.uint<1> sym @sym, out %probe_bore: !firrtl.rwprobe<uint<1>>) {
+    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %probe_bore, %0 : !firrtl.rwprobe<uint<1>>
   }
-  firrtl.module @Issue6820(in %clock: !firrtl.clock, out %clockProbe: !firrtl.rwprobe<clock>) attributes {convention = #firrtl<convention scalarized>} {
-    %foo_clock, %foo_clockProbe_bore = firrtl.instance foo @Foo(in clock: !firrtl.clock, out clockProbe_bore: !firrtl.rwprobe<clock>)
-    firrtl.matchingconnect %foo_clock, %clock : !firrtl.clock
-    firrtl.ref.define %clockProbe, %foo_clockProbe_bore : !firrtl.rwprobe<clock>
+  firrtl.module @Issue6820(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>, out %probe: !firrtl.rwprobe<uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
+    %foo_x, %foo_probe_bore = firrtl.instance foo @Foo(in x: !firrtl.uint<1>, out probe_bore: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %foo_x, %x : !firrtl.uint<1>
+    firrtl.ref.define %probe, %foo_probe_bore : !firrtl.rwprobe<uint<1>>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.asClock %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
-    firrtl.ref.force %clock, %c1_ui1, %clockProbe, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<clock>, !firrtl.clock
+    firrtl.ref.force %clock, %c1_ui1, %probe, %c0_ui1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
   }
 }
 
@@ -1212,5 +1211,610 @@ firrtl.circuit "InstanceChoiceLoopAlt" {
     } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.matchingconnect %inst_in, %y : !firrtl.uint<8>
     firrtl.matchingconnect %y, %inst_out : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Forcing a register is not combinational, so forcing it from its own output
+// is not a loop, in the same module or through an instance.
+// CHECK: firrtl.circuit "ForceableRegInChild"
+firrtl.circuit "ForceableRegInChild" {
+  firrtl.module @Child(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
+                       in %d: !firrtl.uint<8>, out %o: !firrtl.uint<8>,
+                       out %p: !firrtl.rwprobe<uint<8>>) {
+    %r, %r_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %r : !firrtl.uint<8>
+    firrtl.ref.define %p, %r_ref : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %p, %o : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+  firrtl.module @ForceableRegInChild(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
+                                     in %d: !firrtl.uint<8>, out %o: !firrtl.uint<8>) {
+    %c_clock, %c_en, %c_d, %c_o, %c_p = firrtl.instance c @Child(in clock: !firrtl.clock, in en: !firrtl.uint<1>, in d: !firrtl.uint<8>, out o: !firrtl.uint<8>, out p: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %c_en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<8>
+    firrtl.ref.force %clock, %en, %c_p, %c_o : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Forcing a register through a RWProbeOp from its own output must not create a
+// combinational loop.
+// CHECK: firrtl.circuit "ForceRegisterDoesNotCreateCombLoop"
+firrtl.circuit "ForceRegisterDoesNotCreateCombLoop" {
+  firrtl.module @ForceRegisterDoesNotCreateCombLoop(
+      in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+      in %enable: !firrtl.uint<1>, out %reg_out: !firrtl.uint<1>,
+      out %regreset_out: !firrtl.uint<1>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %reg = firrtl.reg sym @reg %clock : !firrtl.clock, !firrtl.uint<1>
+    %regreset = firrtl.regreset sym @regreset %clock, %reset, %zero : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %reg_ref = firrtl.ref.rwprobe <@ForceRegisterDoesNotCreateCombLoop::@reg> : !firrtl.rwprobe<uint<1>>
+    %regreset_ref = firrtl.ref.rwprobe <@ForceRegisterDoesNotCreateCombLoop::@regreset> : !firrtl.rwprobe<uint<1>>
+    firrtl.matchingconnect %reg_out, %reg : !firrtl.uint<1>
+    firrtl.matchingconnect %regreset_out, %regreset : !firrtl.uint<1>
+    firrtl.ref.force %clock, %enable, %reg_ref, %reg_out : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+    firrtl.ref.force %clock, %enable, %regreset_ref, %regreset_out : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Check simple RWProbeOp + read loop.
+firrtl.circuit "RWProbeOpReadLoop" {
+  firrtl.module private @Foo(in %x: !firrtl.uint<1> sym @sym,
+                             out %probe_bore: !firrtl.rwprobe<uint<1>>) {
+    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %probe_bore, %0 : !firrtl.rwprobe<uint<1>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RWProbeOpReadLoop.{foo.probe_bore <- foo.x <- ... <- foo.probe_bore}}}
+  firrtl.module @RWProbeOpReadLoop(in %x: !firrtl.uint<1>) {
+    %foo_x, %foo_probe_bore = firrtl.instance foo @Foo(in x: !firrtl.uint<1>, out probe_bore: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %foo_x, %x : !firrtl.uint<1>
+    %read = firrtl.ref.resolve %foo_probe_bore : !firrtl.rwprobe<uint<1>>
+    firrtl.matchingconnect %foo_x, %read : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Check RWProbeOp + force cycles are detected, when the force comes before the
+// ref.define of the forced probe.
+firrtl.circuit "RWProbeOpForceBeforeDefine" {
+  firrtl.module private @Foo(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %clockProbe_bore: !firrtl.rwprobe<uint<1>>) {
+    %1 = firrtl.wire sym @sym: !firrtl.uint<1>
+    firrtl.matchingconnect %1, %x: !firrtl.uint<1>
+    firrtl.matchingconnect %y, %1: !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %clockProbe_bore, %0 : !firrtl.rwprobe<uint<1>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RWProbeOpForceBeforeDefine.{foo.clockProbe_bore <- foo.y <- foo.clockProbe_bore}}}
+  firrtl.module @RWProbeOpForceBeforeDefine(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>, out %clockProbe: !firrtl.rwprobe<uint<1>>) {
+    %foo_x, %foo_y, %foo_bore = firrtl.instance foo @Foo(in x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out clockProbe_bore: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %foo_x, %x : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1_ui1, %clockProbe, %foo_y : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+    firrtl.ref.define %clockProbe, %foo_bore : !firrtl.rwprobe<uint<1>>
+  }
+}
+
+// -----
+
+// RWProbeOp on a field that does not drive the output, no loop.
+// CHECK: firrtl.circuit "RWProbeOpSubfieldNoLoop"
+firrtl.circuit "RWProbeOpSubfieldNoLoop" {
+  firrtl.module private @Foo(in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out %y: !firrtl.uint<1>, out %p: !firrtl.rwprobe<uint<1>>) {
+    %w = firrtl.wire sym [<@sym,2,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %w, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %y, %w_a : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @RWProbeOpSubfieldNoLoop(in %clock: !firrtl.clock, in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    %foo_x, %foo_y, %foo_p = firrtl.instance foo @Foo(in x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out y: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %foo_x, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1_ui1, %foo_p, %foo_y : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// RWProbeOp on a field that drives the output, loop.
+firrtl.circuit "RWProbeOpSubfieldLoop" {
+  firrtl.module private @Foo(in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out %y: !firrtl.uint<1>, out %p: !firrtl.rwprobe<uint<1>>) {
+    %w = firrtl.wire sym [<@sym,1,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %w, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %y, %w_a : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RWProbeOpSubfieldLoop.{foo.p <- foo.y <- foo.p}}}
+  firrtl.module @RWProbeOpSubfieldLoop(in %clock: !firrtl.clock, in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    %foo_x, %foo_y, %foo_p = firrtl.instance foo @Foo(in x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out y: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %foo_x, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1_ui1, %foo_p, %foo_y : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// RWProbeOp of an aggregate, with a loop only through the whole aggregate.
+firrtl.circuit "RWProbeOpAggregateReadLoop" {
+  firrtl.module private @Foo(in %x: !firrtl.bundle<a: uint<1>, b: uint<1>> sym @sym,
+                             out %p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>) {
+    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RWProbeOpAggregateReadLoop.{foo.p <- foo.x <- ... <- foo.p}}}
+  firrtl.module @RWProbeOpAggregateReadLoop() {
+    %foo_x, %foo_p = firrtl.instance foo @Foo(in x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>)
+    %read = firrtl.ref.resolve %foo_p : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    %bits = firrtl.bitcast %read : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<2>
+    %back = firrtl.bitcast %bits : (!firrtl.uint<2>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %foo_x, %back : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+}
+
+// -----
+
+// A cast RWProbe refers to the same data as its input.
+firrtl.circuit "ForceThroughRefCast" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: ForceThroughRefCast.{w <- w}}}
+  firrtl.module @ForceThroughRefCast(in %clock: !firrtl.clock, out %p: !firrtl.rwprobe<uint<1>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    %cast = firrtl.ref.cast %w_ref : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p, %cast : !firrtl.rwprobe<uint<1>>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1_ui1, %p, %w : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe of a field refers to the same field of the data.
+firrtl.circuit "ForceThroughRefSub" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: ForceThroughRefSub.{w.a <- w.a}}}
+  firrtl.module @ForceThroughRefSub(in %clock: !firrtl.clock, out %p: !firrtl.rwprobe<uint<1>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    %s = firrtl.ref.sub %w_ref[0] : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    firrtl.ref.define %p, %s : !firrtl.rwprobe<uint<1>>
+    %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1_ui1, %p, %w_a : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe port of a field drives the ports driven by that field.
+firrtl.circuit "ForceExportedRefSub" {
+  firrtl.module private @Child(in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                               out %o: !firrtl.uint<1>,
+                               out %p: !firrtl.rwprobe<uint<1>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    firrtl.matchingconnect %w, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %o, %w_a : !firrtl.uint<1>
+    %s = firrtl.ref.sub %w_ref[0] : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    firrtl.ref.define %p, %s : !firrtl.rwprobe<uint<1>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: ForceExportedRefSub.{c.o <- c.p <- c.o}}}
+  firrtl.module @ForceExportedRefSub(in %clock: !firrtl.clock, in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    %c_x, %c_o, %c_p = firrtl.instance c @Child(in x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1_ui1, %c_p, %c_o : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe port of an output port. Forcing the RWProbe from the output port
+// is a loop.
+firrtl.circuit "RWProbeOfOutputPortForceLoop" {
+  firrtl.module private @Child(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1> sym @o,
+                               out %p: !firrtl.rwprobe<uint<1>>) {
+    firrtl.matchingconnect %o, %x : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RWProbeOfOutputPortForceLoop.{c.o <- c.o}}}
+  firrtl.module @RWProbeOfOutputPortForceLoop(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>) {
+    %c_x, %c_o, %c_p = firrtl.instance c @Child(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.uint<1>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %c_p, %c_o : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe port of an output port has paths to and from it, but no loop.
+// CHECK: firrtl.circuit "RWProbeOfOutputPortNoLoop"
+firrtl.circuit "RWProbeOfOutputPortNoLoop" {
+  firrtl.module private @Child(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1> sym @o,
+                               out %p: !firrtl.rwprobe<uint<1>>) {
+    firrtl.matchingconnect %o, %x : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @RWProbeOfOutputPortNoLoop(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
+    %c_x, %c_o, %c_p = firrtl.instance c @Child(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %c_o : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe re-exported through an intermediate module. Forcing it from the
+// output driven by the probed wire is a loop.
+firrtl.circuit "ReexportedRWProbeForceLoop" {
+  firrtl.module private @Child(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1>,
+                               out %p: !firrtl.rwprobe<uint<1>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    firrtl.matchingconnect %w, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %w : !firrtl.uint<1>
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module private @Mid(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1>,
+                             out %p: !firrtl.rwprobe<uint<1>>) {
+    %c_x, %c_o, %c_p = firrtl.instance c @Child(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<1>
+    firrtl.ref.define %p, %c_p : !firrtl.rwprobe<uint<1>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: ReexportedRWProbeForceLoop.{m.o <- m.p <- m.o}}}
+  firrtl.module @ReexportedRWProbeForceLoop(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>) {
+    %m_x, %m_o, %m_p = firrtl.instance m @Mid(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %m_x, %x : !firrtl.uint<1>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %m_p, %m_o : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Force of an aggregate through a RWProbeOp, with a loop only through a field.
+// force w = y, where y.b = w.b.
+firrtl.circuit "RWProbeOpForceAggregateFieldLoop" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RWProbeOpForceAggregateFieldLoop.{w.b <- y.b <- w.b}}}
+  firrtl.module @RWProbeOpForceAggregateFieldLoop(in %clock: !firrtl.clock, in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    %w = firrtl.wire sym @w : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %w, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %y = firrtl.wire : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %w_b = firrtl.subfield %w[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %y_a = firrtl.subfield %y[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %y_b = firrtl.subfield %y[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %y_a, %w_b : !firrtl.uint<1>
+    firrtl.matchingconnect %y_b, %w_b : !firrtl.uint<1>
+    %p = firrtl.ref.rwprobe <@RWProbeOpForceAggregateFieldLoop::@w> : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %p, %y : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+}
+
+// -----
+
+// Force of a forceable aggregate wire, with a loop only through a field.
+firrtl.circuit "ForceableForceAggregateFieldLoop" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: ForceableForceAggregateFieldLoop.{w.b <- y.b <- w.b}}}
+  firrtl.module @ForceableForceAggregateFieldLoop(in %clock: !firrtl.clock, in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    firrtl.matchingconnect %w, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %y = firrtl.wire : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %w_b = firrtl.subfield %w[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %y_a = firrtl.subfield %y[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %y_b = firrtl.subfield %y[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %y_a, %w_b : !firrtl.uint<1>
+    firrtl.matchingconnect %y_b, %w_b : !firrtl.uint<1>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %w_ref, %y : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+}
+
+// -----
+
+// Force a field of an exported aggregate RWProbe port, from the output driven
+// by the same field.
+firrtl.circuit "RefSubOfRWProbePortForceLoop" {
+  firrtl.module private @Child(in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                               out %o: !firrtl.uint<1>,
+                               out %p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    firrtl.matchingconnect %w, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.matchingconnect %o, %w_a : !firrtl.uint<1>
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RefSubOfRWProbePortForceLoop.{c.o <- c.p.a <- c.o}}}
+  firrtl.module @RefSubOfRWProbePortForceLoop(in %clock: !firrtl.clock, in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    %c_x, %c_o, %c_p = firrtl.instance c @Child(in x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %s = firrtl.ref.sub %c_p[0] : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %s, %c_o : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Forcing a register with a read of its own RWProbe is not a loop.
+// CHECK: firrtl.circuit "ForceRegisterWithOwnProbeRead"
+firrtl.circuit "ForceRegisterWithOwnProbeRead" {
+  firrtl.module @ForceRegisterWithOwnProbeRead(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
+                       in %d: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %r, %r_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.ref.define %p, %r_ref : !firrtl.rwprobe<uint<8>>
+    %rd = firrtl.ref.resolve %p : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %p, %rd : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Same as above, through an instance.
+// CHECK: firrtl.circuit "ForceRegisterPortWithOwnProbeRead"
+firrtl.circuit "ForceRegisterPortWithOwnProbeRead" {
+  firrtl.module private @Child(in %clock: !firrtl.clock, in %d: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %r, %r_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.ref.define %p, %r_ref : !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module @ForceRegisterPortWithOwnProbeRead(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %c_clock, %c_d, %c_p = firrtl.instance c @Child(in clock: !firrtl.clock, in d: !firrtl.uint<8>, out p: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
+    %rd = firrtl.ref.resolve %c_p : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %c_p, %rd : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Same as above, through an intermediate module.
+// CHECK: firrtl.circuit "ForceReexportedRegisterProbe"
+firrtl.circuit "ForceReexportedRegisterProbe" {
+  firrtl.module private @Child(in %clock: !firrtl.clock, in %d: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %r, %r_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.ref.define %p, %r_ref : !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module private @Mid(in %clock: !firrtl.clock, in %d: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %c_clock, %c_d, %c_p = firrtl.instance c @Child(in clock: !firrtl.clock, in d: !firrtl.uint<8>, out p: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
+    firrtl.ref.define %p, %c_p : !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module @ForceReexportedRegisterProbe(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %m_clock, %m_d, %m_p = firrtl.instance m @Mid(in clock: !firrtl.clock, in d: !firrtl.uint<8>, out p: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %m_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %m_d, %d : !firrtl.uint<8>
+    %rd = firrtl.ref.resolve %m_p : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %m_p, %rd : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Same as above, for a field of the RWProbe port.
+// CHECK: firrtl.circuit "ForceRefSubOfRegisterProbePort"
+firrtl.circuit "ForceRefSubOfRegisterProbePort" {
+  firrtl.module private @Child(in %clock: !firrtl.clock, in %d: !firrtl.bundle<a: uint<1>, b: uint<1>>, out %p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>) {
+    %r, %r_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    firrtl.matchingconnect %r, %d : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.ref.define %p, %r_ref : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+  }
+  firrtl.module @ForceRefSubOfRegisterProbePort(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    %c_clock, %c_d, %c_p = firrtl.instance c @Child(in clock: !firrtl.clock, in d: !firrtl.bundle<a: uint<1>, b: uint<1>>, out p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>)
+    firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %c_d, %d : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %s = firrtl.ref.sub %c_p[0] : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    %rd = firrtl.ref.resolve %s : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.force %clock, %en, %s, %rd : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe of a register in only one alternative, forcing it with its own
+// read is a loop through the other alternative.
+firrtl.circuit "InstanceChoiceRegisterProbeOneAltLoop" {
+  firrtl.option @Opt { firrtl.option_case @B }
+  firrtl.module private @A(in %clock: !firrtl.clock, in %d: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %r, %r_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.ref.define %p, %r_ref : !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module private @B(in %clock: !firrtl.clock, in %d: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %w, %d : !firrtl.uint<8>
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<8>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: InstanceChoiceRegisterProbeOneAltLoop.{c.p <- ... <- c.p}}}
+  firrtl.module @InstanceChoiceRegisterProbeOneAltLoop(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %c_clock, %c_d, %c_p = firrtl.instance_choice c @A alternatives @Opt { @B -> @B } (in clock: !firrtl.clock, in d: !firrtl.uint<8>, out p: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
+    %rd = firrtl.ref.resolve %c_p : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %c_p, %rd : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// A RWProbe of a register in all the alternatives, no loop.
+// CHECK: firrtl.circuit "InstanceChoiceRegisterProbeAllAlts"
+firrtl.circuit "InstanceChoiceRegisterProbeAllAlts" {
+  firrtl.option @Opt { firrtl.option_case @B }
+  firrtl.module private @A(in %clock: !firrtl.clock, in %d: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %r, %r_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<8>, !firrtl.rwprobe<uint<8>>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    firrtl.ref.define %p, %r_ref : !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module private @B(in %clock: !firrtl.clock, in %d: !firrtl.uint<8>, out %p: !firrtl.rwprobe<uint<8>>) {
+    %r = firrtl.reg sym @r %clock : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    %0 = firrtl.ref.rwprobe <@B::@r> : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<8>>
+  }
+  firrtl.module @InstanceChoiceRegisterProbeAllAlts(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %c_clock, %c_d, %c_p = firrtl.instance_choice c @A alternatives @Opt { @B -> @B } (in clock: !firrtl.clock, in d: !firrtl.uint<8>, out p: !firrtl.rwprobe<uint<8>>)
+    firrtl.matchingconnect %c_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
+    %rd = firrtl.ref.resolve %c_p : !firrtl.rwprobe<uint<8>>
+    firrtl.ref.force %clock, %en, %c_p, %rd : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<8>>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Multiple RWProbe ports of an output port, no loop.
+// CHECK: firrtl.circuit "MultipleRWProbesOfOutputPortNoLoop"
+firrtl.circuit "MultipleRWProbesOfOutputPortNoLoop" {
+  firrtl.module private @Child(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1> sym @o,
+                               out %p1: !firrtl.rwprobe<uint<1>>, out %p2: !firrtl.rwprobe<uint<1>>) {
+    firrtl.matchingconnect %o, %x : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p1, %0 : !firrtl.rwprobe<uint<1>>
+    %1 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p2, %1 : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @MultipleRWProbesOfOutputPortNoLoop(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
+    %c_x, %c_o, %c_p1, %c_p2 = firrtl.instance c @Child(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p1: !firrtl.rwprobe<uint<1>>, out p2: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %c_o : !firrtl.uint<1>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %c_p2, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Multiple RWProbe ports of an output port. Forcing one of them from the output
+// port is a loop.
+firrtl.circuit "MultipleRWProbesOfOutputPortLoop" {
+  firrtl.module private @Child(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1> sym @o,
+                               out %p1: !firrtl.rwprobe<uint<1>>, out %p2: !firrtl.rwprobe<uint<1>>) {
+    firrtl.matchingconnect %o, %x : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p1, %0 : !firrtl.rwprobe<uint<1>>
+    %1 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p2, %1 : !firrtl.rwprobe<uint<1>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: MultipleRWProbesOfOutputPortLoop.{c.o <- ... <- c.o}}}
+  firrtl.module @MultipleRWProbesOfOutputPortLoop(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>) {
+    %c_x, %c_o, %c_p1, %c_p2 = firrtl.instance c @Child(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p1: !firrtl.rwprobe<uint<1>>, out p2: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.uint<1>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    %n = firrtl.not %c_o : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %c_p2, %n : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe port of an aggregate output port. Forcing a field from another
+// field is not a loop.
+// CHECK: firrtl.circuit "RWProbeOfAggregateOutputPortFieldNoLoop"
+firrtl.circuit "RWProbeOfAggregateOutputPortFieldNoLoop" {
+  firrtl.module private @Child(in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out %o: !firrtl.bundle<a: uint<1>, b: uint<1>> sym @o,
+                               out %p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>) {
+    firrtl.matchingconnect %o, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %0 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+  }
+  firrtl.module @RWProbeOfAggregateOutputPortFieldNoLoop(in %clock: !firrtl.clock, in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    %c_x, %c_o, %c_p = firrtl.instance c @Child(in x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out o: !firrtl.bundle<a: uint<1>, b: uint<1>>, out p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    %s = firrtl.ref.sub %c_p[1] : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    %o_a = firrtl.subfield %c_o[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.ref.force %clock, %c1, %s, %o_a : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe port of an aggregate output port. Forcing a field from the same
+// field is a loop.
+firrtl.circuit "RWProbeOfAggregateOutputPortFieldLoop" {
+  firrtl.module private @Child(in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out %o: !firrtl.bundle<a: uint<1>, b: uint<1>> sym @o,
+                               out %p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>) {
+    firrtl.matchingconnect %o, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %0 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RWProbeOfAggregateOutputPortFieldLoop.{c.o.b <- ... <- c.o.b}}}
+  firrtl.module @RWProbeOfAggregateOutputPortFieldLoop(in %clock: !firrtl.clock, in %x: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    %c_x, %c_o, %c_p = firrtl.instance c @Child(in x: !firrtl.bundle<a: uint<1>, b: uint<1>>, out o: !firrtl.bundle<a: uint<1>, b: uint<1>>, out p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    %s = firrtl.ref.sub %c_p[1] : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
+    %o_b = firrtl.subfield %c_o[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %n = firrtl.not %o_b : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %s, %n : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe of an output port, re-exported with the output port through an
+// intermediate module. Forcing it from the output port is a loop.
+firrtl.circuit "ReexportedRWProbeOfOutputPortLoop" {
+  firrtl.module private @Child(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1> sym @o,
+                               out %p: !firrtl.rwprobe<uint<1>>) {
+    firrtl.matchingconnect %o, %x : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module private @Mid(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1>, out %p: !firrtl.rwprobe<uint<1>>) {
+    %c_x, %c_o, %c_p = firrtl.instance c @Child(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<1>
+    firrtl.ref.define %p, %c_p : !firrtl.rwprobe<uint<1>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: ReexportedRWProbeOfOutputPortLoop.{m.o <- m.p <- m.o}}}
+  firrtl.module @ReexportedRWProbeOfOutputPortLoop(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>) {
+    %m_x, %m_o, %m_p = firrtl.instance m @Mid(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %m_x, %x : !firrtl.uint<1>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %m_p, %m_o : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A RWProbe of an output port, re-exported with the output port through an
+// intermediate module, no loop.
+// CHECK: firrtl.circuit "ReexportedRWProbeOfOutputPortNoLoop"
+firrtl.circuit "ReexportedRWProbeOfOutputPortNoLoop" {
+  firrtl.module private @Child(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1> sym @o,
+                               out %p: !firrtl.rwprobe<uint<1>>) {
+    firrtl.matchingconnect %o, %x : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Child::@o> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module private @Mid(in %x: !firrtl.uint<1>, out %o: !firrtl.uint<1>, out %p: !firrtl.rwprobe<uint<1>>) {
+    %c_x, %c_o, %c_p = firrtl.instance c @Child(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %c_x, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %c_o : !firrtl.uint<1>
+    firrtl.ref.define %p, %c_p : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @ReexportedRWProbeOfOutputPortNoLoop(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
+    %m_x, %m_o, %m_p = firrtl.instance m @Mid(in x: !firrtl.uint<1>, out o: !firrtl.uint<1>, out p: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %m_x, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %m_o : !firrtl.uint<1>
+    %c1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1, %m_p, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
   }
 }
