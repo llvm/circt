@@ -359,3 +359,41 @@ om.class @ListContainsFold() -> (
   om.class.fields %string_found, %string_absent, %bool_found, %bool_absent,
       %integer_found, %integer_absent, %empty : i1, i1, i1, i1, i1, i1, i1
 }
+
+// Fold insertions into local registries. Keep duplicates, attributes, and
+// separate allocations. Leave insertions into unknown values or arguments.
+// CHECK-LABEL: om.class @RegistryEffects
+// CHECK: %[[FIRST:.+]] = om.registry_create %value, %value, %value {test = "keep"} : !om.registry<!om.integer>
+// CHECK-NEXT: %[[SECOND:.+]] = om.registry_create %value {test = "keep"} : !om.registry<!om.integer>
+// CHECK-NEXT: %[[MISSING:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-NEXT: om.registry_insert %[[MISSING]], %value
+// CHECK-NEXT: om.registry_insert %external, %value
+// CHECK-NEXT: om.registry_insert %external, %value
+// CHECK-NEXT: om.class.fields %[[FIRST]], %[[SECOND]]
+om.class @RegistryEffects(%value: !om.integer, %external: !om.registry<!om.integer>) -> (a: !om.registry<!om.integer>, b: !om.registry<!om.integer>) {
+  %first = om.registry_create %value {test = "keep"} : !om.registry<!om.integer>
+  %second = om.registry_create %value {test = "keep"} : !om.registry<!om.integer>
+  %missing = om.unknown : !om.registry<!om.integer>
+  om.registry_insert %first, %value : !om.registry<!om.integer>, !om.integer
+  om.registry_insert %first, %value : !om.registry<!om.integer>, !om.integer
+  om.registry_insert %missing, %value : !om.registry<!om.integer>, !om.integer
+  om.registry_insert %external, %value : !om.registry<!om.integer>, !om.integer
+  om.registry_insert %external, %value : !om.registry<!om.integer>, !om.integer
+  om.class.fields %first, %second : !om.registry<!om.integer>, !om.registry<!om.integer>
+}
+
+// Keep unknown elements and fold insertions into nested registries.
+// CHECK-LABEL: om.class @RegistryNested
+// CHECK: %[[UNKNOWN:.+]] = om.unknown : !om.integer
+// CHECK-NEXT: %[[INNER:.+]] = om.registry_create %[[UNKNOWN]] : !om.registry<!om.integer>
+// CHECK-NEXT: %[[OUTER:.+]] = om.registry_create %[[INNER]] : !om.registry<!om.registry<!om.integer>>
+// CHECK-NOT: om.registry_insert
+// CHECK: om.class.fields %[[OUTER]]
+om.class @RegistryNested() -> (items: !om.registry<!om.registry<!om.integer>>) {
+  %unknown = om.unknown : !om.integer
+  %inner = om.registry_create : !om.registry<!om.integer>
+  %outer = om.registry_create : !om.registry<!om.registry<!om.integer>>
+  om.registry_insert %inner, %unknown : !om.registry<!om.integer>, !om.integer
+  om.registry_insert %outer, %inner : !om.registry<!om.registry<!om.integer>>, !om.registry<!om.integer>
+  om.class.fields %outer : !om.registry<!om.registry<!om.integer>>
+}

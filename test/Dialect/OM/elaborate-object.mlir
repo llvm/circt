@@ -1,6 +1,7 @@
 // RUN: circt-opt -om-elaborate-object='target-class=Top' %s | FileCheck %s --check-prefix=TOP
 // RUN: circt-opt -om-elaborate-object='target-class=UseExtern' %s | FileCheck %s --check-prefix=STRICT-EXTERN
-// RUN: circt-opt -om-elaborate-object='all-public-classes=true allow-unevaluated=true' %s | FileCheck %s --check-prefixes=CHECK,PUBLIC
+// RUN: circt-opt -om-elaborate-object='all-public-classes=true allow-unevaluated=true' %s | FileCheck %s --check-prefixes=CHECK,PUBLIC,REGISTRY,FOLD
+// RUN: circt-opt -om-elaborate-object='target-class=RegistryTop' %s | FileCheck %s --check-prefix=REGISTRY
 
 // CHECK-LABEL: om.class @StringOps() -> (str: !om.string, concat: !om.string) {
 // CHECK-DAG:   %[[HELLO:.+]] = om.constant "hello" : !om.string
@@ -296,4 +297,93 @@ om.class private @PrivateModeTop() -> (value: !om.integer) {
   %helper = om.object @PublicModeHelper() : () -> !om.class.type<@PublicModeHelper>
   %value = om.object.field %helper["value"] : (!om.class.type<@PublicModeHelper>) -> !om.integer
   om.class.fields %value : !om.integer
+}
+
+!items = !om.registry<!om.integer>
+
+om.class private @RegistryOwner() -> (items: !items) {
+  %items = om.registry_create : !items
+  om.class.fields %items : !items
+}
+
+// Keep the insertion even when the writer's result is unused.
+om.class private @RegistryWriter(%items: !items, %value: !om.integer) {
+  om.registry_insert %items, %value : !items, !om.integer
+  om.class.fields
+}
+
+// REGISTRY-LABEL: om.class @RegistryTop()
+// Constant folding can change definition order; sort by the final order.
+// REGISTRY: %[[TWO:.+]] = om.constant #om.integer<2 : si8>
+// REGISTRY-NEXT: %[[ONE:.+]] = om.constant #om.integer<1 : si8>
+// REGISTRY-NEXT: %[[ITEMS:.+]] = om.registry_create %[[TWO]], %[[TWO]], %[[ONE]] : !om.registry<!om.integer>
+// REGISTRY-NEXT: %[[OTHER:.+]] = om.registry_create : !om.registry<!om.integer>
+// REGISTRY-NOT: om.registry_insert
+// REGISTRY-NOT: om.object @RegistryWriter
+// REGISTRY: om.class.fields %[[ITEMS]], %[[OTHER]]
+om.class @RegistryTop() -> (items: !items, independent: !items) {
+  %owner = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
+  %items = om.object.field %owner["items"] : (!om.class.type<@RegistryOwner>) -> !items
+  %other = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
+  %independent = om.object.field %other["items"] : (!om.class.type<@RegistryOwner>) -> !items
+  %one = om.constant #om.integer<1 : si8> : !om.integer
+  %two = om.constant #om.integer<2 : si8> : !om.integer
+  %a = om.object @RegistryWriter(%items, %two) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
+  %b = om.object @RegistryWriter(%items, %one) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
+  om.registry_insert %items, %two : !items, !om.integer
+  om.class.fields %items, %independent : !items, !items
+}
+
+// Sort elements by their final IR order, keeping duplicates and attributes.
+// FOLD-LABEL: om.class @RegistryContributions
+// FOLD-NOT: om.registry_insert
+// FOLD: %[[FIRST:.+]] = om.registry_create %seed, %first, %second, %second {test = "keep"}
+// FOLD-NEXT: %[[OTHER:.+]] = om.registry_create %seed, %first, %second, %second {test = "keep"}
+// FOLD-NEXT: %[[EMPTY:.+]] = om.registry_create : !om.registry<!om.integer>
+// FOLD-NOT: om.registry_insert
+// FOLD: om.class.fields %[[FIRST]], %[[OTHER]], %[[EMPTY]]
+om.class @RegistryContributions(%seed: !om.integer, %first: !om.integer, %second: !om.integer) -> (
+  items: !om.registry<!om.integer>,
+  other: !om.registry<!om.integer>,
+  empty: !om.registry<!om.integer>
+) {
+  om.registry_insert %items, %second : !om.registry<!om.integer>, !om.integer
+  %items = om.registry_create %seed {test = "keep"} : !om.registry<!om.integer>
+  %other = om.registry_create %seed, %second, %first, %second {test = "keep"} : !om.registry<!om.integer>
+  %empty = om.registry_create : !om.registry<!om.integer>
+  %writer = om.object @RegistryWriter(%items, %first) : (!om.registry<!om.integer>, !om.integer) -> !om.class.type<@RegistryWriter>
+  om.registry_insert %items, %second : !om.registry<!om.integer>, !om.integer
+  om.class.fields %items, %other, %empty : !om.registry<!om.integer>, !om.registry<!om.integer>, !om.registry<!om.integer>
+}
+
+// Keep unknown elements, but drop insertions into unknown registries.
+// FOLD-LABEL: om.class @RegistryUnknowns
+// FOLD: %[[UNKNOWN:.+]] = om.unknown : !om.integer
+// FOLD: %[[ITEMS:.+]] = om.registry_create %value, %[[UNKNOWN]]
+// FOLD: %[[MISSING:.+]] = om.unknown : !om.registry<!om.integer>
+// FOLD-NOT: om.registry_insert
+// FOLD: om.class.fields %[[ITEMS]], %[[MISSING]]
+om.class @RegistryUnknowns(%value: !om.integer) -> (
+  items: !om.registry<!om.integer>, missing: !om.registry<!om.integer>
+) {
+  %unknown = om.unknown : !om.integer
+  %items = om.registry_create %value : !om.registry<!om.integer>
+  %missing = om.unknown : !om.registry<!om.integer>
+  om.registry_insert %items, %unknown : !om.registry<!om.integer>, !om.integer
+  om.registry_insert %missing, %value : !om.registry<!om.integer>, !om.integer
+  om.registry_insert %missing, %unknown : !om.registry<!om.integer>, !om.integer
+  om.class.fields %items, %missing : !om.registry<!om.integer>, !om.registry<!om.integer>
+}
+
+// Remove unused registries after folding their insertions.
+// FOLD-LABEL: om.class @RegistryUnused
+// FOLD-NOT: om.registry_create
+// FOLD-NOT: om.constant
+// FOLD: om.class.fields
+om.class @RegistryUnused() {
+  %empty = om.registry_create : !om.registry<!om.integer>
+  %items = om.registry_create : !om.registry<!om.integer>
+  %one = om.constant #om.integer<1 : si8> : !om.integer
+  om.registry_insert %items, %one : !om.registry<!om.integer>, !om.integer
+  om.class.fields
 }

@@ -330,6 +330,7 @@ def RegistryInsertOp : OMOp<"registry_insert", [MemoryEffects<[MemWrite]>,
     $registry `,` $element attr-dict `:` qualified(type($registry)) `,`
       qualified(type($element))
   }];
+  let hasCanonicalizer = 1;
 }
 
 def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
