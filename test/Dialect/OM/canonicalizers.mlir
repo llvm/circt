@@ -324,3 +324,38 @@ om.class @ListConcatFold(
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>
 }
+
+// CHECK-LABEL: @ListContainsFold
+om.class @ListContainsFold() -> (
+    string_found: i1, string_absent: i1, bool_found: i1, bool_absent: i1,
+    integer_found: i1, integer_absent: i1, empty: i1) {
+  %string_list = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string]> : !om.list<!om.string>
+  %string_found_value = om.constant "b" : !om.string
+  %string_absent_value = om.constant "absent" : !om.string
+  %string_found = om.list_contains %string_list, %string_found_value : !om.list<!om.string>
+  %string_absent = om.list_contains %string_list, %string_absent_value : !om.list<!om.string>
+
+  %bool_list = om.constant #om.list<i1, [true]> : !om.list<i1>
+  %true = om.constant true
+  %false = om.constant false
+  %bool_found = om.list_contains %bool_list, %true : !om.list<i1>
+  %bool_absent = om.list_contains %bool_list, %false : !om.list<i1>
+
+  %integer_list = om.constant #om.list<!om.integer, [#om.integer<42 : si64>]> : !om.list<!om.integer>
+  %integer_found_value = om.constant #om.integer<42 : si64> : !om.integer
+  %integer_absent_value = om.constant #om.integer<0 : si64> : !om.integer
+  %integer_found = om.list_contains %integer_list, %integer_found_value : !om.list<!om.integer>
+  %integer_absent = om.list_contains %integer_list, %integer_absent_value : !om.list<!om.integer>
+
+  %empty_list = om.constant #om.list<!om.string, []> : !om.list<!om.string>
+  %empty_search = om.constant "a" : !om.string
+  %empty = om.list_contains %empty_list, %empty_search : !om.list<!om.string>
+
+  // CHECK-NOT: om.list_contains
+  // CHECK-DAG: [[TRUE:%[0-9]+]] = om.constant true
+  // CHECK-DAG: [[FALSE:%[0-9]+]] = om.constant false
+  // CHECK-NOT: om.list_contains
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[FALSE]] : i1, i1, i1, i1, i1, i1, i1
+  om.class.fields %string_found, %string_absent, %bool_found, %bool_absent,
+      %integer_found, %integer_absent, %empty : i1, i1, i1, i1, i1, i1, i1
+}

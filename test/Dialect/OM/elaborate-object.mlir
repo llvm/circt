@@ -27,6 +27,117 @@ om.class @SimpleList() -> (result: !om.list<!om.integer>) {
   om.class.fields %list : !om.list<!om.integer>
 }
 
+// Test direct list membership folding across list construction, concatenation,
+// and constant list attributes.
+// CHECK-LABEL: om.class @ContainsTests
+// CHECK:   %[[TRUE:.+]] = om.constant true
+// CHECK-NEXT:   %[[FALSE:.+]] = om.constant false
+// CHECK-NEXT:   om.class.fields %[[TRUE]], %[[TRUE]], %[[FALSE]], %[[FALSE]], %[[TRUE]], %[[TRUE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]] : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+// CHECK: }
+om.class @ContainsTests(%identity: !om.string) -> (
+    strStart: i1, strMiddle: i1, strAbsent: i1, emptyResult: i1,
+    concatEnd: i1, constantResult: i1, intFound: i1, intAbsent: i1,
+    boolFound: i1, boolAbsent: i1, identityResult: i1) {
+  %sA = om.constant "a" : !om.string
+  %sB = om.constant "b" : !om.string
+  %sAbsent = om.constant "absent" : !om.string
+  %strings = om.list_create %sA, %sB, %sB : !om.string
+  %strStart = om.list_contains %strings, %sA : !om.list<!om.string>
+  %strMiddle = om.list_contains %strings, %sB : !om.list<!om.string>
+  %strAbsent = om.list_contains %strings, %sAbsent : !om.list<!om.string>
+  %empty = om.list_create : !om.string
+  %emptyResult = om.list_contains %empty, %sA : !om.list<!om.string>
+  %head = om.list_create %sA : !om.string
+  %tail = om.list_create %sB : !om.string
+  %joined = om.list_concat %head, %tail : !om.list<!om.string>
+  %concatEnd = om.list_contains %joined, %sB : !om.list<!om.string>
+  %bigA = om.constant #om.integer<36755551979133953793 : si66> : !om.integer
+  %bigB = om.constant #om.integer<36755551979133953793 : si67> : !om.integer
+  %bigOther = om.constant #om.integer<36755551979133953794 : si67> : !om.integer
+  %integers = om.list_create %bigA : !om.integer
+  %intFound = om.list_contains %integers, %bigB : !om.list<!om.integer>
+  %listConstant = om.constant #om.list<!om.integer, [#om.integer<36755551979133953793 : si66>]> : !om.list<!om.integer>
+  %constantResult = om.list_contains %listConstant, %bigB : !om.list<!om.integer>
+  %intAbsent = om.list_contains %integers, %bigOther : !om.list<!om.integer>
+
+  %true = om.constant true
+  %false = om.constant false
+  %bools = om.list_create %true : i1
+  %boolFound = om.list_contains %bools, %true : !om.list<i1>
+  %boolAbsent = om.list_contains %bools, %false : !om.list<i1>
+  %identityList = om.list_create %identity : !om.string
+  %identityResult = om.list_contains %identityList, %identity :
+      !om.list<!om.string>
+  om.class.fields %strStart, %strMiddle, %strAbsent, %emptyResult, %concatEnd,
+      %constantResult, %intFound, %intAbsent, %boolFound, %boolAbsent,
+      %identityResult : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+}
+
+// Class arguments become constants through object inlining before the folder
+// retries membership.
+om.class @ContainsParameter(%values: !om.list<!om.integer>,
+                            %element: !om.integer) -> (found: i1) {
+  %found = om.list_contains %values, %element : !om.list<!om.integer>
+  om.class.fields %found : i1
+}
+
+// CHECK-LABEL: om.class @ContainsParameterTop() -> (found: i1) {
+// CHECK:   %[[TRUE:.+]] = om.constant true
+// CHECK-NEXT:   om.class.fields %[[TRUE]] : i1
+// CHECK: }
+om.class @ContainsParameterTop() -> (found: i1) {
+  %one = om.constant #om.integer<1 : si8> : !om.integer
+  %two = om.constant #om.integer<2 : si8> : !om.integer
+  %values = om.list_create %one, %two : !om.integer
+  %child = om.object @ContainsParameter(%values, %two) :
+      (!om.list<!om.integer>, !om.integer) -> !om.class.type<@ContainsParameter>
+  %found = om.object.field %child["found"] :
+      (!om.class.type<@ContainsParameter>) -> i1
+  om.class.fields %found : i1
+}
+
+// Unknown inputs use the existing pure-op propagation policy.
+// CHECK-LABEL: om.class @ContainsUnknown() -> (elementResult: i1, listResult: i1) {
+// CHECK:   %0 = om.unknown : !om.string
+// CHECK-NEXT:   %1 = om.unknown : i1
+// CHECK-NEXT:   %2 = om.unknown : !om.list<!om.string>
+// CHECK-NEXT:   %3 = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %1, %3 : i1, i1
+// CHECK: }
+om.class @ContainsUnknown() -> (elementResult: i1, listResult: i1) {
+  %unknownElement = om.unknown : !om.string
+  %list = om.list_create : !om.string
+  %unknownElementResult = om.list_contains %list, %unknownElement :
+      !om.list<!om.string>
+  %unknownList = om.unknown : !om.list<!om.string>
+  %knownElement = om.constant "value" : !om.string
+  %unknownListResult = om.list_contains %unknownList, %knownElement :
+      !om.list<!om.string>
+  om.class.fields %unknownElementResult, %unknownListResult : i1, i1
+}
+
+// Same-SSA membership matches fold even when the directly constructed list
+// also contains an explicit unknown value; the nonmatching result propagates.
+// Keep the input unknown distinct from the propagated result unknown.
+// CHECK-LABEL: om.class @ContainsUnknownMembers() -> (foo: i1, bar: i1, baz: i1) {
+// CHECK:   %[[TRUE:.+]] = om.constant true
+// CHECK-NEXT:   %1 = om.unknown : i1
+// CHECK-NEXT:   %2 = om.unknown : !om.list<i1>
+// CHECK-NEXT:   %3 = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %[[TRUE]], %3, %[[TRUE]] : i1, i1, i1
+// CHECK: }
+om.class @ContainsUnknownMembers() -> (foo: i1, bar: i1, baz: i1) {
+  %0 = om.unknown : i1
+  %1 = om.constant false
+  %2 = om.constant true
+  %3 = om.list_create %0, %1 : i1
+  %4 = om.list_contains %3, %1 : !om.list<i1>
+  %5 = om.list_contains %3, %2 : !om.list<i1>
+  %6 = om.list_create %1, %0 : i1
+  %7 = om.list_contains %6, %1 : !om.list<i1>
+  om.class.fields %4, %5, %7 : i1, i1, i1
+}
+
 // Test integer operations (add, mul, shr, shl)
 // CHECK-LABEL: om.class @IntegerOps() -> (sum: !om.integer, product: !om.integer, shr: !om.integer, shl: !om.integer) {
 // CHECK-DAG:   %[[SUM:.+]] = om.constant #om.integer<7 : si4> : !om.integer

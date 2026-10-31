@@ -1124,6 +1124,34 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ListContainsOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ListContainsOp::fold(FoldAdaptor adaptor) {
+  // Fold membership based on SSA identity for a directly constructed list.
+  if (auto listCreate = getList().getDefiningOp<ListCreateOp>();
+      listCreate && llvm::is_contained(listCreate.getInputs(), getElement()))
+    return mlir::IntegerAttr::get(getResult().getType(), 1);
+
+  auto listAttr = dyn_cast_or_null<ListAttr>(adaptor.getList());
+  Attribute elementAttr = adaptor.getElement();
+  // Both the list and element must fold to constant attributes. Even an empty
+  // list requires a constant element.
+  if (!listAttr || !elementAttr)
+    return {};
+
+  bool found = false;
+  for (Attribute candidate : listAttr.getElements()) {
+    auto equality = evaluateBinaryEquality(candidate, elementAttr);
+    if (failed(equality))
+      return {};
+    found |= !cast<mlir::IntegerAttr>(*equality).getValue().isZero();
+  }
+
+  return mlir::IntegerAttr::get(getResult().getType(), found);
+}
+
+//===----------------------------------------------------------------------===//
 // IntegerAndOp / IntegerOrOp / IntegerXorOp
 //===----------------------------------------------------------------------===//
 
