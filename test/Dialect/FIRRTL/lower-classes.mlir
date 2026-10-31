@@ -914,3 +914,37 @@ firrtl.circuit "AltBasePathMultiParent" {
     firrtl.instance foo @Foo()
   }
 }
+
+firrtl.circuit "Collections" {
+  // CHECK-LABEL: om.class @Collections_Class(%basepath: !om.basepath, %items: !om.collection<!om.integer>)
+  // CHECK-SAME: -> (result: !om.collection<!om.integer>)
+  // CHECK: %[[LOCAL:.*]] = om.collection : !om.collection<!om.integer>
+  // CHECK-COUNT-2: om.collection_push
+  // CHECK: om.class.fields %items : !om.collection<!om.integer>
+  firrtl.module @Collections(in %items: !firrtl.mutable_collection<integer>, out %result: !firrtl.mutable_collection<integer>) {
+    %local = firrtl.prop.collection : !firrtl.mutable_collection<integer>
+    %one = firrtl.integer 1
+    firrtl.prop.push %items, %one : !firrtl.mutable_collection<integer>, !firrtl.integer
+    firrtl.prop.push %local, %one : !firrtl.mutable_collection<integer>, !firrtl.integer
+    firrtl.propassign %result, %items : !firrtl.mutable_collection<integer>
+  }
+
+  // Effect-only usage must create a class even without property ports.
+  // CHECK-LABEL: om.class private @CollectionEffectOnly_Class
+  // CHECK: om.collection : !om.collection<!om.integer>
+  // CHECK: om.collection_push
+  firrtl.module private @CollectionEffectOnly() {
+    %items = firrtl.prop.collection : !firrtl.mutable_collection<integer>
+    %one = firrtl.integer 1
+    firrtl.prop.push %items, %one : !firrtl.mutable_collection<integer>, !firrtl.integer
+  }
+
+  // Recursively convert collection/list element types.
+  // CHECK-LABEL: om.class private @CollectionNested
+  // CHECK-SAME: !om.collection<!om.list<!om.collection<i1>>>
+  // CHECK: om.collection : !om.collection<!om.list<!om.collection<i1>>>
+  firrtl.class private @CollectionNested(out %result: !firrtl.mutable_collection<list<mutable_collection<bool>>>) {
+    %items = firrtl.prop.collection : !firrtl.mutable_collection<list<mutable_collection<bool>>>
+    firrtl.propassign %result, %items : !firrtl.mutable_collection<list<mutable_collection<bool>>>
+  }
+}
