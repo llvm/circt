@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -verify-diagnostics --mlir-print-local-scope --mlir-print-debuginfo | circt-opt --mlir-print-local-scope --mlir-print-debuginfo -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --emit-bytecode | circt-opt --mlir-print-local-scope --mlir-print-debuginfo | FileCheck %s
 
 // CHECK-LABEL: om.class private @Thingy
 // CHECK-SAME: (%blue_1: i8, %blue_2: i32) -> (widget: !om.class.type<@Widget>, gadget: !om.class.type<@Gadget>, blue_1: i8, blue_2: i8)
@@ -390,4 +391,18 @@ om.class @PropertyAssert(%basepath: !om.basepath, %cond: i1) {
   %0 = om.constant "invariant must hold" : !om.string
   om.property_assert %cond, %0 : i1
   om.class.fields
+}
+
+// CHECK-LABEL: @Collection
+om.class @Collection(%value: !om.integer) -> (empty: !om.collection<!om.integer>, items: !om.collection<!om.integer>, nested: !om.collection<!om.collection<!om.integer>>) {
+  // CHECK: %[[EMPTY:.+]] = om.collection : !om.collection<!om.integer>
+  %empty = om.collection : !om.collection<!om.integer>
+  // CHECK: %[[ITEMS:.+]] = om.collection %value, %value {test = "keep"} : !om.collection<!om.integer>
+  %items = om.collection %value, %value {test = "keep"} : !om.collection<!om.integer>
+  // CHECK: om.collection_push %[[ITEMS]], %value : !om.collection<!om.integer>, !om.integer
+  om.collection_push %items, %value : !om.collection<!om.integer>, !om.integer
+  // CHECK: %[[NESTED:.+]] = om.collection %[[ITEMS]] : !om.collection<!om.collection<!om.integer>>
+  %nested = om.collection %items : !om.collection<!om.collection<!om.integer>>
+  // CHECK: om.class.fields %[[EMPTY]], %[[ITEMS]], %[[NESTED]]
+  om.class.fields %empty, %items, %nested : !om.collection<!om.integer>, !om.collection<!om.integer>, !om.collection<!om.collection<!om.integer>>
 }

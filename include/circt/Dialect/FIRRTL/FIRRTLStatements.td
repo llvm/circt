@@ -370,6 +370,25 @@ def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
   }];
 }
 
+def CollectionPushOp : FIRRTLOp<"prop.push", [MemoryEffects<[MemWrite]>,
+    ParentOneOf<["FModuleOp", "ClassOp"]>,
+    TypesMatchWith<"element type must match the collection element type",
+      "collection", "element",
+      "::llvm::cast<MutableCollectionType>($_self).getElementType()">]> {
+  let summary = "Add an element to a mutable collection";
+  let description = [{
+    Adds a value to the collection. Its type must match the collection's
+    element type. Values have no defined order, and duplicates are kept.
+    The collection handle must be readable (have source or duplex flow).
+  }];
+  let arguments = (ins MutableCollectionType:$collection, PropertyType:$element);
+  let assemblyFormat = [{
+    $collection `,` $element attr-dict `:` qualified(type($collection)) `,`
+      qualified(type($element))
+  }];
+  let hasVerifier = 1;
+}
+
 def PropertyAssertOp : FIRRTLOp<"property_assert",
     [ParentOneOf<["FModuleOp", "ClassOp"]>]> {
   let summary = "Assert that a boolean property holds";

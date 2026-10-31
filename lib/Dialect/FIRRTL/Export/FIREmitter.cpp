@@ -94,6 +94,8 @@ struct Emitter {
   void emitStatement(MatchingConnectOp op);
   void emitStatement(PropertyAssertOp op);
   void emitStatement(PropAssignOp op);
+  void emitStatement(CollectionPushOp op);
+  void emitStatement(CollectionCreateOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(InstanceChoiceOp op);
   void emitStatement(AttachOp op);
@@ -143,6 +145,7 @@ struct Emitter {
   void emitExpression(BoolConstantOp op);
   void emitExpression(DoubleConstantOp op);
   void emitExpression(ListCreateOp op);
+  void emitExpression(CollectionCreateOp op);
   void emitExpression(UnresolvedPathOp op);
   void emitExpression(GenericIntrinsicOp op);
   void emitExpression(CatPrimOp op);
@@ -438,7 +441,7 @@ private:
     valueNames.insert({value, it.first->getKey()});
   }
   void addForceable(Forceable op, StringAttr attr) {
-    addValueName(op.getData(), attr);
+    addValueName(op.getDataRaw(), attr);
     if (op.isForceable()) {
       SmallString<32> rwName;
       (Twine("rwprobe(") + attr.strref() + ")").toVector(rwName);
@@ -832,13 +835,12 @@ void Emitter::emitFormalLike(Operation *op, StringRef keyword,
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
 static bool isEmittedInline(Operation *op) {
-  // FIRRTL expressions are statically classified as always inlineable.
-  // InvalidValueOp never is inlined, and is handled specially.
-  // GenericIntrinsicOp is inlined if has exactly one use (only emit once)
-  // that is not emitted inline.  This is to ensure it is emitted inline
-  // in common cases, but only inspect one level deep.
-  return (isExpression(op) && !isa<InvalidValueOp>(op)) ||
-         (isa<GenericIntrinsicOp>(op) && op->hasOneUse() &&
+  // Most FIRRTL expressions are always inlineable. InvalidValueOp is handled
+  // specially. Allocation and generic intrinsics must only be emitted once:
+  // inline them only into a single user that is not itself emitted inline.
+  // This handles common cases while inspecting only one level of users.
+  return (isExpression(op) && !isa<InvalidValueOp, CollectionCreateOp>(op)) ||
+         (isa<GenericIntrinsicOp, CollectionCreateOp>(op) && op->hasOneUse() &&
           !isEmittedInline(*op->getUsers().begin()));
 }
 
@@ -852,12 +854,13 @@ void Emitter::emitStatementsInBlock(Block &block) {
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, FPrintFOp, FFlushOp, AssertOp, AssumeOp, CoverOp,
               ConnectOp, MatchingConnectOp, PropertyAssertOp, PropAssignOp,
-              InstanceOp, InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp,
-              SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
-              MemoryPortAccessOp, DomainDefineOp, RefDefineOp, RefForceOp,
-              RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-              LayerBlockOp, GenericIntrinsicOp, DomainCreateAnonOp,
-              DomainCreateOp>([&](auto op) { emitStatement(op); })
+              CollectionPushOp, CollectionCreateOp, InstanceOp,
+              InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp,
+              CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
+              DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
+              RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
+              GenericIntrinsicOp, DomainCreateAnonOp, DomainCreateOp>(
+            [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -1250,6 +1253,36 @@ void Emitter::emitStatement(PropertyAssertOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitStatement(CollectionCreateOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Mutable collections")))
+    return;
+  // A multiply-used allocation needs a binding: emitting the literal at each
+  // use would replace shared identity with independent collections.
+  auto name = circuitNamespace.newName("_collection");
+  addValueName(op.getResult(), name);
+  startStatement();
+  ps << "wire " << PPExtString(name) << " : ";
+  emitType(op.getType());
+  emitLocationAndNewLine(op);
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "propassign " << PPExtString(name) << "," << PP::space;
+    emitLiteralExpression(op.getType(), ValueRange{});
+  });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(CollectionPushOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Mutable collections")))
+    return;
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "push" << PP::space;
+    interleaveComma(op.getOperands());
+  });
+  emitLocationAndNewLine(op);
+}
+
 void Emitter::emitStatement(PropAssignOp op) {
   if (failed(requireVersion(FIRVersion(3, 1, 0), op, "properties")))
     return;
@@ -1607,10 +1640,10 @@ void Emitter::emitExpression(Value value) {
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
-          UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp, IntegerAndOp, IntegerOrOp, IntegerNotOp,
-          StringConcatOp, PropEqOp, ListContainsOp, BoolAndOp, BoolOrOp,
-          BoolXorOp,
+          CollectionCreateOp, UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp,
+          UnsafeDomainCastOp, UnknownValueOp, IntegerAndOp, IntegerOrOp,
+          IntegerNotOp, StringConcatOp, PropEqOp, ListContainsOp, BoolAndOp,
+          BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1801,6 +1834,12 @@ void Emitter::emitExpression(StringConstantOp op) {
   ps << "String(";
   ps.writeQuotedEscaped(op.getValue());
   ps << ")";
+}
+
+void Emitter::emitExpression(CollectionCreateOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Mutable collections")))
+    return;
+  emitLiteralExpression(op.getType(), ValueRange{});
 }
 
 void Emitter::emitExpression(ListCreateOp op) {
@@ -2002,8 +2041,8 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getElementType());
         ps << ">";
       })
-      .Case<RegistryType>([&](RegistryType type) {
-        ps << "Registry<";
+      .Case<MutableCollectionType>([&](MutableCollectionType type) {
+        ps << "MutableCollection<";
         emitType(type.getElementType());
         ps << ">";
       })

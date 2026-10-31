@@ -29,7 +29,8 @@ def ElaborateObject: Pass<"om-elaborate-object", "mlir::ModuleOp"> {
   let summary = "Perform elaboration of OM objects";
   let description = [{
     Performs evaluation of a specified OM class by inlining all object
-    instantiations and folding field accesses.
+    instantiations and folding field accesses. Collection pushes are folded
+    into the initial elements of their `om.collection` allocation.
 
     The pass requires either the `target-class` option to specify which class to
     elaborate, or the `all-public-classes` option to elaborate all public

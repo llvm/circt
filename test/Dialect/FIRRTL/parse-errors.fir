@@ -1965,10 +1965,10 @@ circuit Domains:
 
 ;// -----
 FIRRTL version 6.0.0
-circuit RegistryType:
-  public module RegistryType:
-    ; expected-error @below {{Registries are a FIRRTL 7.0.0+ feature}}
-    input clockGates: Registry<Path>
+circuit MutableCollections:
+  public module MutableCollections:
+    ; expected-error @below {{Mutable collections are a FIRRTL 7.0.0+ feature}}
+    input clockGates: MutableCollection<Path>
 
 ;// -----
 
@@ -2124,3 +2124,30 @@ circuit PropertyAssertNonStringMessage:
   public module PropertyAssertNonStringMessage:
     ; expected-error @below {{propassert message must be a string type}}
     propassert Bool(true), Integer(42)
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit CollectionWrongElement:
+  public module CollectionWrongElement:
+    input items: MutableCollection<Integer>
+    ; expected-error @+1 {{push element type does not match collection element type}}
+    push items, String("wrong")
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit CollectionWrongTarget:
+  public module CollectionWrongTarget:
+    input items: Integer
+    ; expected-error @+1 {{push requires a MutableCollection handle}}
+    push items, Integer(1)
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit CollectionNotEmpty:
+  public module CollectionNotEmpty:
+    output items: MutableCollection<Integer>
+    ; expected-error @+1 {{expected ')' in empty MutableCollection expression}}
+    propassign items, MutableCollection<Integer>(Integer(1))

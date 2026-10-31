@@ -100,6 +100,15 @@ getListElements(const evaluator::EvaluatorValuePtr &value) {
   return llvm::cast<evaluator::ListValue>(value.get())->getElements();
 }
 
+/// Compare collections as unordered lists of integers.
+SmallVector<int64_t> getCollectionIntegers(const EvaluatorValuePtr &value) {
+  SmallVector<int64_t> values;
+  for (const auto &element : getListElements(value))
+    values.push_back(getInteger(element));
+  llvm::sort(values);
+  return values;
+}
+
 class EvaluatorTests : public ::testing::Test {
 protected:
   OwningOpRef<ModuleOp> parseModule(StringRef moduleText) {
@@ -934,6 +943,256 @@ om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
 
   ASSERT_TRUE(succeeded(result));
   ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
+}
+
+TEST_F(EvaluatorTests, CollectionIdentityAndAliasing) {
+  auto mod = parseModule(R"MLIR(
+    !items = !om.collection<!om.integer>
+    om.class @Owner() -> (items: !items) {
+      %items = om.collection : !items
+      om.class.fields %items : !items
+    }
+    om.class @Writer(%items: !items, %value: !om.integer) {
+      om.collection_push %items, %value : !items, !om.integer
+      om.class.fields
+    }
+    om.class @Top() -> (owner: !om.class.type<@Owner>, items: !items, alias: !items, independent: !items) {
+      %a = om.object @Writer(%items, %one) : (!items, !om.integer) -> !om.class.type<@Writer>
+      %b = om.object @Writer(%alias, %two) : (!items, !om.integer) -> !om.class.type<@Writer>
+      %owner = om.object @Owner() : () -> !om.class.type<@Owner>
+      %items = om.object.field %owner["items"] : (!om.class.type<@Owner>) -> !items
+      %alias = om.object.field %owner["items"] : (!om.class.type<@Owner>) -> !items
+      %other = om.object @Owner() : () -> !om.class.type<@Owner>
+      %independent = om.object.field %other["items"] : (!om.class.type<@Owner>) -> !items
+      %one = om.constant #om.integer<1 : si8> : !om.integer
+      %two = om.constant #om.integer<2 : si8> : !om.integer
+      om.collection_push %items, %one : !items, !om.integer
+      om.class.fields %owner, %items, %alias, %independent : !om.class.type<@Owner>, !items, !items, !items
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
+  ASSERT_TRUE(succeeded(result));
+  auto items = getField(*result, "items");
+  EXPECT_EQ(items.get(), getField(*result, "alias").get());
+  EXPECT_EQ(items.get(), getField(getField(*result, "owner"), "items").get());
+  EXPECT_EQ(getCollectionIntegers(items), (SmallVector<int64_t>{1, 1, 2}));
+  auto independent = getField(*result, "independent");
+  EXPECT_TRUE(getListElements(independent).empty());
+  EXPECT_NE(items.get(), independent.get());
+
+  auto again = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
+  ASSERT_TRUE(succeeded(again));
+  EXPECT_NE(items.get(), getField(*again, "items").get());
+  EXPECT_EQ(getCollectionIntegers(getField(*again, "items")),
+            (SmallVector<int64_t>{1, 1, 2}));
+}
+
+TEST_F(EvaluatorTests, CollectionObjectBackReference) {
+  auto mod = parseModule(R"MLIR(
+    !items = !om.collection<!om.class.type<@Node>>
+    om.class @Node(%items: !items) -> (items: !items) {
+      om.class.fields %items : !items
+    }
+    om.class @Top() -> (items: !items) {
+      %items = om.collection : !items
+      %node = om.object @Node(%items) : (!items) -> !om.class.type<@Node>
+      om.collection_push %items, %node : !items, !om.class.type<@Node>
+      om.class.fields %items : !items
+    }
+    om.class @Use(%items: !items) {
+      om.class.fields
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
+  ASSERT_TRUE(succeeded(result));
+  auto items = getField(*result, "items");
+  auto elements = getListElements(items);
+  ASSERT_EQ(elements.size(), 1u);
+  EXPECT_EQ(getField(elements.front(), "items").get(), items.get());
+
+  // Existing concrete-object input import rejects this cyclic graph.
+  SmallVector<std::string> diagnostics;
+  ScopedDiagnosticHandler handler(
+      &context, [&](Diagnostic &diag) { diagnostics.push_back(diag.str()); });
+  EXPECT_TRUE(
+      failed(evaluator.instantiate(StringAttr::get(&context, "Use"), {items})));
+  ASSERT_EQ(diagnostics.size(), 1u);
+  EXPECT_EQ(diagnostics[0], "cannot import mutually referential OM objects");
+}
+
+TEST_F(EvaluatorTests, CollectionUnknownElementsAndMembership) {
+  auto mod = parseModule(R"MLIR(
+    !items = !om.collection<!om.integer>
+    om.class @Top() -> (items: !items, missing: !items) {
+      %items = om.collection : !items
+      %missing = om.unknown : !items
+      %one = om.constant #om.integer<1 : si8> : !om.integer
+      %unknown = om.unknown : !om.integer
+      om.collection_push %items, %one : !items, !om.integer
+      om.collection_push %items, %unknown : !items, !om.integer
+      om.collection_push %missing, %one : !items, !om.integer
+      om.class.fields %items, %missing : !items, !items
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
+  ASSERT_TRUE(succeeded(result));
+  auto items = getField(*result, "items");
+  EXPECT_FALSE(items->isUnknown());
+  auto elements = getListElements(items);
+  ASSERT_EQ(elements.size(), 2u);
+  EXPECT_EQ(llvm::count_if(
+                elements, [](const auto &value) { return value->isUnknown(); }),
+            1);
+  auto missing = getField(*result, "missing");
+  EXPECT_TRUE(missing->isUnknown());
+}
+
+// Collections are values at the API boundary: every collection-typed use of an
+// input list receives its own copy, and inputs are never modified.
+TEST_F(EvaluatorTests, CollectionInputsAreValues) {
+  auto mod = parseModule(R"MLIR(
+    !items = !om.collection<!om.integer>
+    om.class @Source() -> (items: !items, list: !om.list<!items>) {
+      %items = om.collection : !items
+      %one = om.constant #om.integer<1 : si8> : !om.integer
+      om.collection_push %items, %one : !items, !om.integer
+      %list = om.list_create %items : !items
+      om.class.fields %items, %list : !items, !om.list<!items>
+    }
+    om.class @Use(%a: !items, %b: !items, %object: !om.class.type<@Source>) -> (a: !items, b: !items, object: !om.class.type<@Source>) {
+      %two = om.constant #om.integer<2 : si8> : !om.integer
+      %three = om.constant #om.integer<3 : si8> : !om.integer
+      %four = om.constant #om.integer<4 : si8> : !om.integer
+      %field = om.object.field %object["items"] : (!om.class.type<@Source>) -> !items
+      om.collection_push %a, %two : !items, !om.integer
+      om.collection_push %b, %three : !items, !om.integer
+      om.collection_push %field, %four : !items, !om.integer
+      om.class.fields %a, %b, %object : !items, !items, !om.class.type<@Source>
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  auto source = evaluator.instantiate(StringAttr::get(&context, "Source"), {});
+  ASSERT_TRUE(succeeded(source));
+  auto original = getField(*source, "items");
+  SmallVector<EvaluatorValuePtr> params{original, original, *source};
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Use"), params);
+  ASSERT_TRUE(succeeded(result));
+  auto object = getField(*result, "object");
+  EXPECT_EQ(getCollectionIntegers(getField(*result, "a")),
+            (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getCollectionIntegers(getField(*result, "b")),
+            (SmallVector<int64_t>{1, 3}));
+  EXPECT_EQ(getCollectionIntegers(getField(object, "items")),
+            (SmallVector<int64_t>{1, 4}));
+  EXPECT_EQ(getCollectionIntegers(getListElements(getField(object, "list"))[0]),
+            (SmallVector<int64_t>{1}));
+  EXPECT_EQ(getCollectionIntegers(original), (SmallVector<int64_t>{1}));
+
+  auto again = evaluator.instantiate(StringAttr::get(&context, "Use"), params);
+  ASSERT_TRUE(succeeded(again));
+  EXPECT_EQ(getCollectionIntegers(getField(*again, "a")),
+            (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getCollectionIntegers(getField(*result, "a")),
+            (SmallVector<int64_t>{1, 2}));
+}
+
+TEST_F(EvaluatorTests, CollectionAcceptsListInput) {
+  auto mod = parseModule(R"MLIR(
+    om.class @Use(%items: !om.collection<!om.integer>, %list: !om.list<!om.integer>) -> (items: !om.collection<!om.integer>, list: !om.list<!om.integer>) {
+      %one = om.constant #om.integer<1 : si8> : !om.integer
+      om.collection_push %items, %one : !om.collection<!om.integer>, !om.integer
+      om.class.fields %items, %list : !om.collection<!om.integer>, !om.list<!om.integer>
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  // The same list may be passed both as a collection and as a list.
+  auto input = std::make_shared<evaluator::ListValue>(
+      ListType::get(OMIntegerType::get(&context)),
+      SmallVector<EvaluatorValuePtr>{makeIntegerValue(&context, 2)},
+      UnknownLoc::get(&context));
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {input, input});
+  ASSERT_TRUE(succeeded(result));
+  EXPECT_EQ(getCollectionIntegers(getField(*result, "items")),
+            (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getCollectionIntegers(getField(*result, "list")),
+            (SmallVector<int64_t>{2}));
+  EXPECT_EQ(getCollectionIntegers(input), (SmallVector<int64_t>{2}));
+}
+
+TEST_F(EvaluatorTests, CollectionUnknownAndPartialInputs) {
+  auto mod = parseModule(R"MLIR(
+    om.class @Use(%items: !om.collection<!om.integer>) -> (items: !om.collection<!om.integer>) {
+      %one = om.constant #om.integer<1 : si8> : !om.integer
+      om.collection_push %items, %one : !om.collection<!om.integer>, !om.integer
+      om.class.fields %items : !om.collection<!om.integer>
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  auto listType = ListType::get(OMIntegerType::get(&context));
+  auto unknown = evaluator::AttributeValue::get(
+      CollectionType::get(OMIntegerType::get(&context)),
+      UnknownLoc::get(&context));
+  EXPECT_EQ(unknown->getType(), listType);
+  unknown->markUnknown();
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {unknown});
+  ASSERT_TRUE(succeeded(result));
+  EXPECT_TRUE(getField(*result, "items")->isUnknown());
+  EXPECT_EQ(getField(*result, "items")->getType(), listType);
+
+  auto partial = std::make_shared<evaluator::ListValue>(
+      listType, UnknownLoc::get(&context));
+  SmallVector<std::string> diagnostics;
+  ScopedDiagnosticHandler handler(
+      &context, [&](Diagnostic &diag) { diagnostics.push_back(diag.str()); });
+  EXPECT_TRUE(failed(
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {partial})));
+  ASSERT_EQ(diagnostics.size(), 1u);
+  EXPECT_EQ(diagnostics[0], "cannot import partially evaluated OM list value");
+}
+
+TEST_F(EvaluatorTests, CollectionFrozenPathsInDistinctInstances) {
+  auto mod = parseModule(R"MLIR(
+    !items = !om.collection<!om.frozenpath>
+    om.class @Writer(%items: !items, %base: !om.frozenbasepath) {
+      %path = om.frozenpath_create reference %base "Child>wire"
+      om.collection_push %items, %path : !items, !om.frozenpath
+      om.class.fields
+    }
+    om.class @Top(%base: !om.frozenbasepath) -> (items: !items) {
+      %items = om.collection : !items
+      %a_base = om.frozenbasepath_create %base "Top/a"
+      %b_base = om.frozenbasepath_create %base "Top/b"
+      %a = om.object @Writer(%items, %a_base) : (!items, !om.frozenbasepath) -> !om.class.type<@Writer>
+      %b = om.object @Writer(%items, %b_base) : (!items, !om.frozenbasepath) -> !om.class.type<@Writer>
+      om.class.fields %items : !items
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  auto base = std::make_shared<evaluator::BasePathValue>(&context);
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {base});
+  ASSERT_TRUE(succeeded(result));
+  SmallVector<std::string> paths;
+  for (auto &element : getListElements(getField(*result, "items")))
+    paths.push_back(cast<evaluator::PathValue>(element.get())
+                        ->getAsString()
+                        .getValue()
+                        .str());
+  llvm::sort(paths);
+  EXPECT_EQ(paths, (SmallVector<std::string>{
+                       "OMReferenceTarget:~Top|Top/a:Child>wire",
+                       "OMReferenceTarget:~Top|Top/b:Child>wire"}));
 }
 
 TEST_F(EvaluatorTests, ListConcat) {

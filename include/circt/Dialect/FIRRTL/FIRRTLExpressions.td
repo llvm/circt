@@ -1307,6 +1307,18 @@ def PathOp : FIRRTLOp<"path", [Pure]> {
   let assemblyFormat = "$targetKind $target attr-dict";
 }
 
+def CollectionCreateOp : FIRRTLOp<"prop.collection", [
+    ParentOneOf<["FModuleOp", "ClassOp"]>]> {
+  let summary = "Create an empty mutable collection";
+  let description = [{
+    Creates an empty collection and returns a handle to it. Each collection is
+    distinct. The handle can be shared, but property programs cannot read the
+    collection's contents.
+  }];
+  let results = (outs Res<MutableCollectionType, "", [MemAlloc]>:$result);
+  let assemblyFormat = "attr-dict `:` qualified(type($result))";
+}
+
 def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {
   let summary = "Produce a list value";
   let description = [{

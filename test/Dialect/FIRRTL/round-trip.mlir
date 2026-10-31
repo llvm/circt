@@ -317,13 +317,6 @@ firrtl.domain @PowerDomain [
   #firrtl.domain.field<"alwaysOn", !firrtl.bool>
 ]
 
-// CHECK-LABEL: firrtl.domain @RegistryDomain [
-// CHECK-SAME:    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
-// CHECK-SAME:  ]
-firrtl.domain @RegistryDomain [
-  #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
-]
-
 firrtl.module @DomainsSubmodule(
   in %A: !firrtl.domain<@ClockDomain()>,
   in %a: !firrtl.uint<1> domains [%A]
@@ -511,6 +504,17 @@ firrtl.module @RegInitial(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
   %t = firrtl.reg %clock {initial = -1 : si8} : !firrtl.clock, !firrtl.sint<8>
 
   firrtl.matchingconnect %q, %r : !firrtl.uint<8>
+}
+
+// CHECK-LABEL: firrtl.module @MutableCollections
+firrtl.module @MutableCollections(in %items: !firrtl.mutable_collection<integer>) {
+  // CHECK: %[[LOCAL:.*]] = firrtl.prop.collection {test = "keep"} : !firrtl.mutable_collection<integer>
+  %local = firrtl.prop.collection {test = "keep"} : !firrtl.mutable_collection<integer>
+  %one = firrtl.integer 1
+  // CHECK: firrtl.prop.push %items,
+  firrtl.prop.push %items, %one : !firrtl.mutable_collection<integer>, !firrtl.integer
+  // CHECK: firrtl.prop.push %[[LOCAL]],
+  firrtl.prop.push %local, %one : !firrtl.mutable_collection<integer>, !firrtl.integer
 }
 
 }

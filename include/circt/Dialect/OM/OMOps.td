@@ -288,6 +288,50 @@ def ConstantOp : OMOp<"constant",
   let hasFolder = true;
 }
 
+def CollectionCreateOp : OMOp<"collection", [HasParent<"ClassOp">,
+    TypesMatchWith<"element types must match the collection element type",
+      "result", "elements", "::llvm::cast<CollectionType>($_self).getElementType()",
+      "[](mlir::Type type, auto types) { return llvm::all_of(types, "
+      "[type](mlir::Type elementType) { return type == elementType; }); }">]> {
+  let summary = "Create a collection with initial elements";
+  let description = [{
+    Creates a new collection for each object, containing the given values.
+    Their types must match the collection's element type. Use
+    `om.collection_push` to add more values.
+
+    ```
+    %items = om.collection %a, %b : !om.collection<!om.integer>
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs Res<CollectionType, "", [MemAlloc]>:$result);
+  let builders = [
+    OpBuilder<(ins "CollectionType":$type), [{
+      build($_builder, $_state, type, ::mlir::ValueRange());
+    }]>
+  ];
+  let assemblyFormat = "($elements^)? attr-dict `:` qualified(type($result))";
+}
+
+def CollectionPushOp : OMOp<"collection_push", [MemoryEffects<[MemWrite]>,
+    HasParent<"ClassOp">,
+    TypesMatchWith<"element type must match the collection element type",
+      "collection", "element",
+      "::llvm::cast<CollectionType>($_self).getElementType()">]> {
+  let summary = "Add an element to a collection";
+  let description = [{
+    Adds a value to the collection each time the object is created. Its type
+    must match the collection's element type. Values have no defined order, and
+    duplicates are kept. An unknown value remains in the collection. Adding a
+    value to an unknown collection leaves the collection unknown.
+  }];
+  let arguments = (ins CollectionType:$collection, AnyType:$element);
+  let assemblyFormat = [{
+    $collection `,` $element attr-dict `:` qualified(type($collection)) `,`
+      qualified(type($element))
+  }];
+}
+
 def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
   let summary = "Create a list of values";
   let description = [{

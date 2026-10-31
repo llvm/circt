@@ -123,3 +123,33 @@ om.class @ObjectFieldTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pa
   // CHECK: om.class.fields [[SUBFIELD]] : !om.list<!om.list<!om.frozenpath>>
   om.class.fields %1 : !om.list<!om.list<!om.path>>
 }
+
+// Freeze arguments, initial elements, pushes, nested containers, and unknown
+// membership without discarding attributes or collection handles.
+// CHECK-LABEL: om.class @CollectionPaths(%input: !om.collection<!om.frozenpath>)
+// CHECK-SAME: -> (items: !om.collection<!om.frozenpath>, nested: !om.collection<!om.list<!om.collection<!om.frozenpath>>>, missing: !om.collection<!om.list<!om.collection<!om.frozenbasepath>>>)
+om.class @CollectionPaths(%input: !om.collection<!om.path>) -> (items: !om.collection<!om.path>, nested: !om.collection<!om.list<!om.collection<!om.path>>>, missing: !om.collection<!om.list<!om.collection<!om.basepath>>>) {
+  // CHECK: %[[PATH:.*]] = om.frozenpath_empty
+  %path = om.path_empty
+  // CHECK: %[[ITEMS:.*]] = om.collection %[[PATH]] {test = "keep"} : !om.collection<!om.frozenpath>
+  %items = om.collection %path {test = "keep"} : !om.collection<!om.path>
+  // CHECK: om.collection_push %input, %[[PATH]] : !om.collection<!om.frozenpath>, !om.frozenpath
+  om.collection_push %input, %path : !om.collection<!om.path>, !om.path
+  // CHECK: om.collection_push %[[ITEMS]], %[[PATH]] : !om.collection<!om.frozenpath>, !om.frozenpath
+  om.collection_push %items, %path : !om.collection<!om.path>, !om.path
+  // CHECK: %[[LIST:.*]] = om.list_create %[[ITEMS]] : !om.collection<!om.frozenpath>
+  %list = om.list_create %items : !om.collection<!om.path>
+  // CHECK: %[[NESTED:.*]] = om.collection %[[LIST]] : !om.collection<!om.list<!om.collection<!om.frozenpath>>>
+  %nested = om.collection %list : !om.collection<!om.list<!om.collection<!om.path>>>
+  // CHECK: %[[MISSING:.*]] = om.unknown {test = "keep"} : !om.collection<!om.list<!om.collection<!om.frozenbasepath>>>
+  %missing = om.unknown {test = "keep"} : !om.collection<!om.list<!om.collection<!om.basepath>>>
+  om.class.fields %items, %nested, %missing : !om.collection<!om.path>, !om.collection<!om.list<!om.collection<!om.path>>>, !om.collection<!om.list<!om.collection<!om.basepath>>>
+}
+
+// CHECK-LABEL: om.class @CollectionField
+// CHECK-SAME: -> (items: !om.collection<!om.frozenpath>)
+om.class @CollectionField(%object: !om.class.type<@CollectionPaths>) -> (items: !om.collection<!om.path>) {
+  // CHECK: %[[FIELD:.*]] = om.object.field %object["items"] {test = "keep"} : (!om.class.type<@CollectionPaths>) -> !om.collection<!om.frozenpath>
+  %items = om.object.field %object["items"] {test = "keep"} : (!om.class.type<@CollectionPaths>) -> !om.collection<!om.path>
+  om.class.fields %items : !om.collection<!om.path>
+}

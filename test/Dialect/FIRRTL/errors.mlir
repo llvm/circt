@@ -3661,3 +3661,29 @@ firrtl.circuit "IntegerNotWrongArity" {
     %0 = "firrtl.integer.not"(%lhs, %rhs) : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   }
 }
+
+// -----
+
+firrtl.circuit "CollectionMismatch" {
+  firrtl.module @CollectionMismatch(in %items: !firrtl.mutable_collection<integer>, in %value: !firrtl.string) {
+    // expected-error @+1 {{element type must match the collection element type}}
+    firrtl.prop.push %items, %value : !firrtl.mutable_collection<integer>, !firrtl.string
+  }
+}
+
+// -----
+
+firrtl.circuit "CollectionOutputPort" {
+  firrtl.module @CollectionOutputPort(out %items: !firrtl.mutable_collection<integer>) {
+    %one = firrtl.integer 1
+    // expected-error @+1 {{collection has sink flow, expected source or duplex flow}}
+    firrtl.prop.push %items, %one : !firrtl.mutable_collection<integer>, !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "CollectionConstant" {
+  // expected-error @+1 {{mutable collections cannot be const}}
+  firrtl.module @CollectionConstant(in %items: !firrtl.const.mutable_collection<integer>) {}
+}
