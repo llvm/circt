@@ -289,6 +289,27 @@ def CirctLTLClock : FIRRTLIntrinsic {
   }];
 }
 
+def CirctLTLClockedAtom : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.clocked_atom";
+  let description = [{
+    Associates a clock with an atomic boolean sequence. This is used to indicate
+    the clock domain in which a boolean atom is sampled.
+
+    | Parameter | Type   | Description                     |
+    | --------- | ------ | ------------------------------- |
+    | edge      | string | `posedge`, `negedge`, or `edge` |
+
+    | Argument | Type    | Description          |
+    | -------- | ------- | -------------------- |
+    | in       | UInt<1> | input boolean        |
+    | clock    | Clock   | clock for the atom   |
+
+    | Result | Type    | Description          |
+    | ------ | ------- | -------------------- |
+    | out    | UInt<1> | clocked atom         |
+  }];
+}
+
 def CirctLTLAnd : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.and";
   let converter = "CirctLTLBinaryConverter<LTLAndIntrinsicOp>";

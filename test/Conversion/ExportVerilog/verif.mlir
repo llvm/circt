@@ -182,6 +182,9 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (@(edge clk) @(posedge clk) ##4 b);
   %k5 = ltl.clock %cd3, edge %clk : !ltl.sequence
   sv.assert_property %k5 : !ltl.sequence
+  // CHECK: assert property (@(edge clk) a);
+  %k6 = ltl.clocked_atom %a, edge %clk : i1
+  sv.assert_property %k6 : !ltl.sequence
 }
 
 // CHECK-LABEL: module Properties

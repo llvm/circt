@@ -41,6 +41,26 @@ firrtl.circuit "InvalidLTLClockEdge" {
 }
 
 // -----
+    
+firrtl.circuit "MissingLTLClockedAtomEdge" {
+  firrtl.module @MissingLTLClockedAtomEdge(in %in: !firrtl.uint<1>, in %clk: !firrtl.clock) {
+    // expected-error @below {{circt_ltl_clocked_atom is missing parameter edge}}
+    // expected-error @below {{failed to legalize}}
+    %0 = firrtl.int.generic "circt_ltl_clocked_atom" %in, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidLTLClockedAtomEdge" {
+  firrtl.module @InvalidLTLClockedAtomEdge(in %in: !firrtl.uint<1>, in %clk: !firrtl.clock) {
+    // expected-error @below {{circt_ltl_clocked_atom has invalid edge parameter 'foo', expected one of [posedge, negedge, edge]}}
+    // expected-error @below {{failed to legalize}}
+    %0 = firrtl.int.generic "circt_ltl_clocked_atom" <edge: none = "foo"> %in, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  }
+}
+
+// -----
 
 firrtl.circuit "ViewNotBundle" {
   firrtl.module public @ViewNotBundle() {
