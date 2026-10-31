@@ -1044,6 +1044,7 @@ bool FIRRTLModuleLowering::handleForceNameAnnos(
     FModuleLike oldModule, AnnotationSet &annos,
     CircuitLoweringState &loweringState) {
   bool failed = false;
+  DenseSet<Attribute> usedNames;
   // Remove ForceNameAnnotations by generating verilogNames on instances.
   annos.removeAnnotations([&](Annotation anno) {
     if (!anno.isClass(forceNameAnnoClass))
@@ -1101,6 +1102,16 @@ bool FIRRTLModuleLowering::handleForceNameAnnos(
       failed = true;
       return false;
     }
+
+    if (!usedNames.insert(anno.getMember("name")).second) {
+      oldModule.emitError()
+          << "multiple ForceNameAnnotations require the name "
+          << anno.getMember("name") << " for different instances in module "
+          << inst.getModule();
+      failed = true;
+      return false;
+    }
+
     return true;
   });
   return failed;
