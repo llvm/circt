@@ -291,7 +291,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: [[VERB1:%.+]] = sv.verbatim.expr "MAGIC_CONSTANT" : () -> i42
     // CHECK: [[VERB2:%.+]] = sv.verbatim.expr "$bits({{[{][{]0[}][}]}}, {{[{][{]1[}][}]}})"([[VERB1]]) : (i42) -> i32 {symbols = [@Simple]}
-    // CHECK: [[VERB3:%.+]] = sv.verbatim.expr.se "$size({{[{][{]0[}][}]}}, {{[{][{]1[}][}]}})"([[VERB1]]) : (i42) -> !hw.inout<i32> {symbols = [@Simple]}
+    // CHECK: [[VERB3:%.+]] = sv.verbatim.expr.se "$size({{[{][{]0[}][}]}}, {{[{][{]1[}][}]}})"([[VERB1]]) : (i42) -> !sv.net<i32> {symbols = [@Simple]}
     // CHECK: [[VERB3READ:%.+]] = sv.read_inout [[VERB3]]
     // CHECK: [[VERB1EXT:%.+]] = comb.concat {{%.+}}, [[VERB1]] : i1, i42
     // CHECK: [[VERB2EXT:%.+]] = comb.concat {{%.+}}, [[VERB2]] : i11, i32
@@ -804,23 +804,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module private @Analog(in %a1 : !hw.inout<i1>, in %b1 : !hw.inout<i1>,
-  // CHECK:                          in %c1 : !hw.inout<i1>, out outClock : !seq.clock) {
-  // CHECK-NEXT:   %0 = sv.read_inout %c1 : !hw.inout<i1>
-  // CHECK-NEXT:   %1 = sv.read_inout %b1 : !hw.inout<i1>
-  // CHECK-NEXT:   %2 = sv.read_inout %a1 : !hw.inout<i1>
+  // CHECK-LABEL: hw.module private @Analog(in %a1 : !sv.net<i1>, in %b1 : !sv.net<i1>,
+  // CHECK:                          in %c1 : !sv.net<i1>, out outClock : !seq.clock) {
+  // CHECK-NEXT:   %0 = sv.read_inout %c1 : !sv.net<i1>
+  // CHECK-NEXT:   %1 = sv.read_inout %b1 : !sv.net<i1>
+  // CHECK-NEXT:   %2 = sv.read_inout %a1 : !sv.net<i1>
   // CHECK-NEXT:   sv.ifdef @SYNTHESIS {
-  // CHECK-NEXT:     sv.assign %a1, %1 : i1
-  // CHECK-NEXT:     sv.assign %a1, %0 : i1
-  // CHECK-NEXT:     sv.assign %b1, %2 : i1
-  // CHECK-NEXT:     sv.assign %b1, %0 : i1
-  // CHECK-NEXT:     sv.assign %c1, %2 : i1
-  // CHECK-NEXT:     sv.assign %c1, %1 : i1
+  // CHECK-NEXT:     sv.assign %a1, %1 : !sv.net<i1>, i1
+  // CHECK-NEXT:     sv.assign %a1, %0 : !sv.net<i1>, i1
+  // CHECK-NEXT:     sv.assign %b1, %2 : !sv.net<i1>, i1
+  // CHECK-NEXT:     sv.assign %b1, %0 : !sv.net<i1>, i1
+  // CHECK-NEXT:     sv.assign %c1, %2 : !sv.net<i1>, i1
+  // CHECK-NEXT:     sv.assign %c1, %1 : !sv.net<i1>, i1
   // CHECK-NEXT:    } else {
   // CHECK-NEXT:     sv.ifdef @VERILATOR {
   // CHECK-NEXT:       sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
   // CHECK-NEXT:     } else {
-  // CHECK-NEXT:       sv.alias %a1, %b1, %c1 : !hw.inout<i1>
+  // CHECK-NEXT:       sv.alias %a1, %b1, %c1 : !sv.net<i1>
   // CHECK-NEXT:     }
   // CHECK-NEXT:    }
   // CHECK-NEXT:    [[CLOCK:%.+]] = seq.to_clock %2
@@ -959,20 +959,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: IsInvalidIssue572
   // https://github.com/llvm/circt/issues/572
   firrtl.module private @IsInvalidIssue572(in %a: !firrtl.analog<1>) {
-    // CHECK-NEXT: %0 = sv.read_inout %a : !hw.inout<i1>
+    // CHECK-NEXT: %0 = sv.read_inout %a : !sv.net<i1>
 
-    // CHECK-NEXT: %.invalid_analog = sv.wire : !hw.inout<i1>
-    // CHECK-NEXT: %1 = sv.read_inout %.invalid_analog : !hw.inout<i1>
+    // CHECK-NEXT: %.invalid_analog = sv.wire : !sv.net<i1>
+    // CHECK-NEXT: %1 = sv.read_inout %.invalid_analog : !sv.net<i1>
     %0 = firrtl.invalidvalue : !firrtl.analog<1>
 
     // CHECK-NEXT: sv.ifdef @SYNTHESIS {
-    // CHECK-NEXT:   sv.assign %a, %1 : i1
-    // CHECK-NEXT:   sv.assign %.invalid_analog, %0 : i1
+    // CHECK-NEXT:   sv.assign %a, %1 : !sv.net<i1>, i1
+    // CHECK-NEXT:   sv.assign %.invalid_analog, %0 : !sv.net<i1>, i1
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.ifdef @VERILATOR {
     // CHECK-NEXT:     sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     sv.alias %a, %.invalid_analog : !hw.inout<i1>, !hw.inout<i1>
+    // CHECK-NEXT:     sv.alias %a, %.invalid_analog : !sv.net<i1>, !sv.net<i1>
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.attach %a, %0 : !firrtl.analog<1>, !firrtl.analog<1>
@@ -1017,9 +1017,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @Force
   firrtl.module private @Force(in %in: !firrtl.uint<42>) {
-    // CHECK: %foo = sv.verbatim.expr.se "foo" : () -> !hw.inout<i42>
+    // CHECK: %foo = sv.verbatim.expr.se "foo" : () -> !sv.net<i42>
     // CHECK: sv.initial {
-    // CHECK:   sv.force %foo, %in : i42
+    // CHECK:   sv.force %foo, %in : !sv.net<i42>, i42
     // CHECK: }
     %foo = firrtl.verbatim.wire "foo" : () -> !firrtl.uint<42>
     firrtl.force %foo, %in : !firrtl.uint<42>, !firrtl.uint<42>
@@ -1521,9 +1521,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.attach %result_iIn, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>
   }
   // CHECK-LABEL: hw.module @AnalogMergeTwo() {
-  // CHECK:         %.a.wire = sv.wire : !hw.inout<i8>
-  // CHECK:         hw.instance "iIn" @AnalogInModA(a: %.a.wire: !hw.inout<i8>) -> ()
-  // CHECK:         hw.instance "iOut" @AnalogOutModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK:         %.a.wire = sv.wire : !sv.net<i8>
+  // CHECK:         hw.instance "iIn" @AnalogInModA(a: %.a.wire: !sv.net<i8>) -> ()
+  // CHECK:         hw.instance "iOut" @AnalogOutModA(a: %.a.wire: !sv.net<i8>) -> ()
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
 
@@ -1535,10 +1535,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.attach %result_iInA, %result_iInB, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
   }
   // CHECK-LABEL: hw.module @AnalogMergeThree() {
-  // CHECK:         %.a.wire = sv.wire : !hw.inout<i8>
-  // CHECK:         hw.instance "iInA" @AnalogInModA(a: %.a.wire: !hw.inout<i8>) -> ()
-  // CHECK:         hw.instance "iInB" @AnalogInModB(a: %.a.wire: !hw.inout<i8>) -> ()
-  // CHECK:         hw.instance "iOut" @AnalogOutModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK:         %.a.wire = sv.wire : !sv.net<i8>
+  // CHECK:         hw.instance "iInA" @AnalogInModA(a: %.a.wire: !sv.net<i8>) -> ()
+  // CHECK:         hw.instance "iInB" @AnalogInModB(a: %.a.wire: !sv.net<i8>) -> ()
+  // CHECK:         hw.instance "iOut" @AnalogOutModA(a: %.a.wire: !sv.net<i8>) -> ()
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
 
@@ -1548,9 +1548,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %result_iOut = firrtl.instance iOut @AnalogOutModA(out a: !firrtl.analog<8>)
     firrtl.attach %a, %result_iIn, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
   }
-  // CHECK-LABEL: hw.module @AnalogMergeTwoWithPort(in %a : !hw.inout<i8>) {
-  // CHECK-NEXT:    hw.instance "iIn" @AnalogInModA(a: %a: !hw.inout<i8>) -> ()
-  // CHECK-NEXT:    hw.instance "iOut" @AnalogOutModA(a: %a: !hw.inout<i8>) -> ()
+  // CHECK-LABEL: hw.module @AnalogMergeTwoWithPort(in %a : !sv.net<i8>) {
+  // CHECK-NEXT:    hw.instance "iIn" @AnalogInModA(a: %a: !sv.net<i8>) -> ()
+  // CHECK-NEXT:    hw.instance "iOut" @AnalogOutModA(a: %a: !sv.net<i8>) -> ()
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
 
@@ -1588,22 +1588,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
   // CHECK-NEXT:  [[CLOCK:%.+]] = seq.from_clock %clock
   // CHECK-NEXT:  hw.instance "r" sym @xmr_sym @RefMe() -> ()
-  // CHECK-NEXT:  %[[XMR1:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
-  // CHECK-NEXT:  %[[XMR2:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
-  // CHECK-NEXT:  %[[XMR3:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
-  // CHECK-NEXT:  %[[XMR4:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
+  // CHECK-NEXT:  %[[XMR1:.+]] = sv.xmr.ref @xmrPath : !sv.net<i4>
+  // CHECK-NEXT:  %[[XMR2:.+]] = sv.xmr.ref @xmrPath : !sv.net<i4>
+  // CHECK-NEXT:  %[[XMR3:.+]] = sv.xmr.ref @xmrPath : !sv.net<i4>
+  // CHECK-NEXT:  %[[XMR4:.+]] = sv.xmr.ref @xmrPath : !sv.net<i4>
   // CHECK-NEXT:  sv.ifdef @SYNTHESIS {
   // CHECK-NEXT:  } else {
   // CHECK-NEXT:    sv.always posedge [[CLOCK]] {
   // CHECK-NEXT:      sv.if %c {
-  // CHECK-NEXT:        sv.force %[[XMR1]], %x : i4
-  // CHECK-NEXT:        sv.release %[[XMR3]] : !hw.inout<i4>
+  // CHECK-NEXT:        sv.force %[[XMR1]], %x : !sv.net<i4>, i4
+  // CHECK-NEXT:        sv.release %[[XMR3]] : !sv.net<i4>
   // CHECK-NEXT:      }
   // CHECK-NEXT:    }
   // CHECK-NEXT:    sv.initial {
   // CHECK-NEXT:      sv.if %c {
-  // CHECK-NEXT:        sv.force %[[XMR2]], %x : i4
-  // CHECK-NEXT:        sv.release %[[XMR4]] : !hw.inout<i4>
+  // CHECK-NEXT:        sv.force %[[XMR2]], %x : !sv.net<i4>, i4
+  // CHECK-NEXT:        sv.release %[[XMR4]] : !sv.net<i4>
   // CHECK-NEXT:      }
   // CHECK-NEXT:    }
   // CHECK-NEXT:  }
@@ -1657,18 +1657,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %mux2cell_in1 = hw.wire %v1 sym @{{.+}} : i32
     // CHECK-NEXT: %mux2cell_in2 = hw.wire %v0 sym @{{.+}} : i32
     // CHECK-NEXT: %0 = comb.mux bin %mux2cell_in0, %mux2cell_in1, %mux2cell_in2 {sv.attributes = [#sv.attribute<"cadence map_to_mux", emitAsComment>]} : i32
-    // CHECK-NEXT: %1 = sv.wire : !hw.inout<i32>
-    // CHECK-NEXT: sv.assign %1, %0 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : i32
-    // CHECK-NEXT: %2 = sv.read_inout %1 : !hw.inout<i32>
+    // CHECK-NEXT: %1 = sv.wire : !sv.net<i32>
+    // CHECK-NEXT: sv.assign %1, %0 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : !sv.net<i32>, i32
+    // CHECK-NEXT: %2 = sv.read_inout %1 : !sv.net<i32>
 
     %1 = firrtl.int.mux4cell(%sel2, %v3, %v2, %v1, %v0) : (!firrtl.uint<2>, !firrtl.uint<32>, !firrtl.uint<32>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
     firrtl.matchingconnect %out2, %1 : !firrtl.uint<32>
     // CHECK:      %mux4cell_in0 = hw.wire %3 sym @{{.+}} : !hw.array<4xi32>
     // CHECK-NEXT: %mux4cell_in1 = hw.wire %sel2 sym @{{.+}} : i2
     // CHECK-NEXT: %4 = hw.array_get %mux4cell_in0[%mux4cell_in1] {sv.attributes = [#sv.attribute<"cadence map_to_mux", emitAsComment>]} : !hw.array<4xi32>, i2
-    // CHECK-NEXT: %5 = sv.wire : !hw.inout<i32>
-    // CHECK-NEXT: sv.assign %5, %4 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : i32
-    // CHECK-NEXT: %6 = sv.read_inout %5 : !hw.inout<i32>
+    // CHECK-NEXT: %5 = sv.wire : !sv.net<i32>
+    // CHECK-NEXT: sv.assign %5, %4 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : !sv.net<i32>, i32
+    // CHECK-NEXT: %6 = sv.read_inout %5 : !sv.net<i32>
     // CHECK-NEXT: hw.output %2, %6 : i32, i32
   }
 
@@ -1802,7 +1802,7 @@ firrtl.circuit "RefXMRLowering" {
   hw.hierpath private @path [@RefXMRLowering::@dummy]
 
   firrtl.module @RefXMRLowering() {
-    // CHECK: sv.xmr.ref @path "test" : !hw.inout<i3>
+    // CHECK: sv.xmr.ref @path "test" : !sv.net<i3>
     firrtl.wire sym @dummy : !firrtl.uint<1>
     firrtl.xmr.ref @path, "test" : !firrtl.rwprobe<uint<3>>
   }
