@@ -325,6 +325,17 @@ def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
   let hasFolder = 1;
 }
 
+def ListContainsOp : OMOp<"list_contains", [Pure,
+    TypesMatchWith<"list element type should match search element type",
+                   "list", "element",
+                   "cast<ListType>($_self).getElementType()">]> {
+  let summary = "Check if a list contains a value";
+  let arguments = (ins ListType:$list,
+                       AnyTypeOf<[StringType, OMIntegerType, I1]>:$element);
+  let results = (outs I1:$result);
+  let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
+}
+
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,
       DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
