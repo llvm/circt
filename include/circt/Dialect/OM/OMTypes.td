@@ -52,6 +52,23 @@ def ListType : TypeDef<OMDialect, "List", []> {
   ];
 }
 
+def RegistryType : TypeDef<OMDialect, "Registry", []> {
+  let summary = "An unordered, append-only registry handle.";
+  let description = [{
+    Registries are shared by reference. `om.registry_create` creates a
+    registry, and `om.registry_insert` adds an element. OM programs cannot
+    read the contents. Duplicates are kept, and the order is unspecified.
+  }];
+  let mnemonic = "registry";
+  let parameters = (ins "mlir::Type":$elementType);
+  let assemblyFormat = "`<` $elementType `>`";
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::Type":$elementType), [{
+      return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
+}
+
 def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
   let summary = "A type that represents a reference to a flat symbol reference.";
 
