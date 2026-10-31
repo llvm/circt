@@ -4118,46 +4118,25 @@ void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
         StringAttr::get(builder.getContext(), name));
 }
 
-LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
-  auto classType = getType();
-  auto className = classType.getNameAttr();
-
-  // verify that the class exists.
+static LogicalResult
+verifyObjectSymbolUses(FObjectLike object, SymbolTableCollection &symbolTable) {
+  auto circuit = object->getParentOfType<CircuitOp>();
   auto classOp = dyn_cast_or_null<ClassLike>(
-      symbolTable.lookupSymbolIn(circuitOp, className));
+      symbolTable.lookupSymbolIn(circuit, object.getClassSymbolAttr()));
   if (!classOp)
-    return emitOpError() << "references unknown class " << className;
-
-  // verify that the result type agrees with the class definition.
-  if (failed(classOp.verifyType(classType, [&]() { return emitOpError(); })))
-    return failure();
-
-  return success();
+    return object->emitOpError("references unknown class ")
+           << object.getClassSymbolAttr();
+  return classOp.verifyType(object.getClassType(),
+                            [&]() { return object->emitOpError(); });
 }
 
-StringAttr ObjectOp::getClassNameAttr() {
-  return getType().getNameAttr().getAttr();
-}
-
-StringRef ObjectOp::getClassName() { return getType().getName(); }
-
-ClassLike ObjectOp::getReferencedClass(const SymbolTable &symbolTable) {
-  auto symRef = getType().getNameAttr();
-  return symbolTable.lookup<ClassLike>(symRef.getLeafReference());
-}
-
-Operation *ObjectOp::getReferencedOperation(const SymbolTable &symtbl) {
-  return getReferencedClass(symtbl);
+LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyObjectSymbolUses(*this, symbolTable);
 }
 
 StringRef ObjectOp::getInstanceName() { return getName(); }
 
 StringAttr ObjectOp::getInstanceNameAttr() { return getNameAttr(); }
-
-StringAttr ObjectOp::getReferencedModuleNameAttr() {
-  return getClassNameAttr();
-}
 
 void ObjectOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
