@@ -1,4 +1,5 @@
-// RUN: circt-opt -om-freeze-paths %s | FileCheck %s
+// RUN: circt-opt -om-freeze-paths %s | FileCheck %s --check-prefixes=CHECK,CONST
+// RUN: circt-opt --canonicalize -om-freeze-paths %s | FileCheck %s --check-prefixes=CONST,FOLDED
 hw.hierpath private @nla [@PathModule::@sym]
 hw.hierpath private @nla_0 [@PathModule::@sym_0]
 hw.hierpath private @nla_1 [@PathModule::@sym_1]
@@ -28,7 +29,7 @@ hw.module @PublicMiddle() {
 
 hw.module private @PublicLeaf() {}
 
-// CHECK-LABEL om.class @PathTest()
+// CHECK-LABEL: om.class @PathTest(%basepath: !om.frozenbasepath, %path: !om.frozenpath) {{{$}}
 om.class @PathTest(%basepath : !om.basepath, %path : !om.path) {
   // CHECK: om.frozenpath_create reference %basepath "PathModule>in"
   %0 = om.path_create reference %basepath @nla
@@ -75,8 +76,10 @@ om.class @PathTest(%basepath : !om.basepath, %path : !om.path) {
 // CHECK-LABEL: om.class @ListCreateTest
 // CHECK-SAME: -> (notpath: !om.list<i1>, basepath: !om.list<!om.frozenbasepath>, path: !om.list<!om.frozenpath>, nestedpath: !om.list<!om.list<!om.frozenpath>>, concatpath: !om.list<!om.list<!om.frozenpath>>)
 om.class @ListCreateTest(%notpath: i1, %basepath : !om.basepath, %path : !om.path) -> (notpath: !om.list<i1>, basepath: !om.list<!om.basepath>, path: !om.list<!om.path>, nestedpath: !om.list<!om.list<!om.path>>, concatpath: !om.list<!om.list<!om.path>>) {
-  // CHECK: [[NOT_PATH_LIST:%.+]] = om.list_create %notpath : i1
-  %0 = om.list_create %notpath : i1
+  // CHECK: [[FALSE:%.+]] = om.constant false{{$}}
+  %false = om.constant false
+  // CHECK: [[NOT_PATH_LIST:%.+]] = om.list_create %notpath, [[FALSE]] : i1
+  %0 = om.list_create %notpath, %false : i1
 
   // CHECK: [[BASE_PATH_LIST:%.+]] = om.list_create %basepath : !om.frozenbasepath
   %1 = om.list_create %basepath : !om.basepath
@@ -94,12 +97,12 @@ om.class @ListCreateTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pat
   om.class.fields %0, %1, %2, %3, %4 : !om.list<i1>, !om.list<!om.basepath>, !om.list<!om.path>, !om.list<!om.list<!om.path>>, !om.list<!om.list<!om.path>>
 }
 
-// CHECK-LABEL om.class @PathListClass(%pathList: !om.list<!om.frozenpath>) -> (pathList: !om.list<!om.path>
+// CHECK-LABEL: om.class @PathListClass(%pathList: !om.list<!om.frozenpath>) -> (pathList: !om.list<!om.frozenpath>) {{{$}}
 om.class @PathListClass(%pathList : !om.list<!om.path>) -> (pathList: !om.list<!om.path>) {
   om.class.fields %pathList : !om.list<!om.path>
 }
 
-// CHECK-LABEL om.class @PathListTest(%arg: !om.list<!om.frozenpath>)
+// CHECK-LABEL: om.class @PathListTest(%arg: !om.list<!om.frozenpath>) {{{$}}
 om.class @PathListTest(%arg : !om.list<!om.path>) {
   // CHECK: om.object @PathListClass(%arg) : (!om.list<!om.frozenpath>)
   om.object @PathListClass(%arg) : (!om.list<!om.path>) -> !om.class.type<@PathListClass>
@@ -122,4 +125,22 @@ om.class @ObjectFieldTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pa
 
   // CHECK: om.class.fields [[SUBFIELD]] : !om.list<!om.list<!om.frozenpath>>
   om.class.fields %1 : !om.list<!om.list<!om.path>>
+}
+
+// Check explicit constants, including types in a nonempty list's elements.
+// CONST-LABEL: om.class @ListConstants
+om.class @ListConstants() -> (path: !om.list<!om.path>, base: !om.list<!om.basepath>, nested: !om.list<!om.list<!om.path>>, folded: !om.list<!om.list<!om.path>>) {
+  // CONST-DAG: om.constant #om.list<!om.frozenpath, []> : !om.list<!om.frozenpath>{{$}}
+  %path = om.constant #om.list<!om.path, []> : !om.list<!om.path>
+  // CONST-DAG: om.constant #om.list<!om.frozenbasepath, []> : !om.list<!om.frozenbasepath>{{$}}
+  %base = om.constant #om.list<!om.basepath, []> : !om.list<!om.basepath>
+  // CONST-DAG: om.constant #om.list<!om.list<!om.frozenpath>, [#om.list<!om.frozenpath, []> : !om.list<!om.frozenpath>]> : !om.list<!om.list<!om.frozenpath>>{{$}}
+  %nested = om.constant #om.list<!om.list<!om.path>, [#om.list<!om.path, []> : !om.list<!om.path>]> : !om.list<!om.list<!om.path>>
+  // The two-element constant is distinct from every explicit constant above.
+  // FOLDED-DAG: om.constant #om.list<!om.list<!om.frozenpath>, [#om.list<!om.frozenpath, []> : !om.list<!om.frozenpath>, #om.list<!om.frozenpath, []> : !om.list<!om.frozenpath>]> : !om.list<!om.list<!om.frozenpath>>{{$}}
+  %created = om.list_create : !om.path
+  %inner = om.list_create %created : !om.list<!om.path>
+  %joined = om.list_concat %inner, %nested : !om.list<!om.list<!om.path>>
+  om.object @PathListClass(%created) : (!om.list<!om.path>) -> !om.class.type<@PathListClass>
+  om.class.fields %path, %base, %nested, %joined : !om.list<!om.path>, !om.list<!om.basepath>, !om.list<!om.list<!om.path>>, !om.list<!om.list<!om.path>>
 }
