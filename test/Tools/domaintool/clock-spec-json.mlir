@@ -1,8 +1,12 @@
-// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,B,synchronous --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
-// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,B,synchronous --assign 0 --assign 1 --sifive-clock-domain-async=A %s | FileCheck %s --check-prefixes=CHECK,ASYNC
-// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,B,synchronous --assign 0 --assign 1 --sifive-clock-domain-static=A %s | FileCheck %s --check-prefixes=CHECK,STATIC
-// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,A,synchronous --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,SYNC
-// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,A,rational --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,RATIONAL
+// RUN: split-file %s %t
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,B,synchronous --assign 0 --assign 1 %t/basic.mlir | FileCheck %s --check-prefixes=CHECK,DEFAULT
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,B,synchronous --assign 0 --assign 1 --sifive-clock-domain-async=A %t/basic.mlir | FileCheck %s --check-prefixes=CHECK,ASYNC
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,B,synchronous --assign 0 --assign 1 --sifive-clock-domain-static=A %t/basic.mlir | FileCheck %s --check-prefixes=CHECK,STATIC
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,A,synchronous --assign 0 --assign 1 %t/basic.mlir | FileCheck %s --check-prefixes=CHECK,SYNC
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,A,rational --assign 0 --assign 1 %t/basic.mlir | FileCheck %s --check-prefixes=CHECK,RATIONAL
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,A,rational --assign 0 --assign 1 %t/collections.mlir | FileCheck %s --check-prefix=GATES
+
+//--- basic.mlir
 
 om.class @ClockDomain(
   %basepath: !om.frozenbasepath,
@@ -214,3 +218,73 @@ om.class @Foo_Class(
 // RATIONAL-NEXT:  ]
 //
 // CHECK-NEXT:   }
+
+//--- collections.mlir
+
+// Collections are allocated in IR, not supplied or initialized by the CLI.
+om.class @ClockDomain(
+  %basepath: !om.frozenbasepath,
+  %name_in: !om.string,
+  %source_in: !om.string,
+  %relationship_in: !om.string
+) -> (
+  name_out: !om.string,
+  clockGates_out: !om.collection<!om.frozenpath>,
+  source_out: !om.string,
+  relationship_out: !om.string
+) {
+  %gates = om.collection : !om.collection<!om.frozenpath>
+  om.class.fields %name_in, %gates, %source_in, %relationship_in : !om.string, !om.collection<!om.frozenpath>, !om.string, !om.string
+}
+
+om.class @ClockDomain_out(
+  %domainInfo_in: !om.class.type<@ClockDomain>,
+  %associations_in: !om.list<!om.frozenpath>
+) -> (
+  domainInfo_out: !om.class.type<@ClockDomain>,
+  associations_out: !om.list<!om.frozenpath>
+) {
+  om.class.fields %domainInfo_in, %associations_in : !om.class.type<@ClockDomain>, !om.list<!om.frozenpath>
+}
+
+om.class @Foo_Class(
+  %basepath: !om.frozenbasepath,
+  %A: !om.class.type<@ClockDomain>,
+  %B: !om.class.type<@ClockDomain>
+) -> (A_out: !om.class.type<@ClockDomain_out>, B_out: !om.class.type<@ClockDomain_out>) {
+  %gates = om.object.field %A["clockGates_out"] : (!om.class.type<@ClockDomain>) -> !om.collection<!om.frozenpath>
+  %g1base = om.frozenbasepath_create %basepath "Foo/g1"
+  %g1 = om.frozenpath_create reference %g1base "Gate>clock"
+  %g0base = om.frozenbasepath_create %basepath "Foo/g0"
+  %g0 = om.frozenpath_create reference %g0base "Gate>clock"
+  // Sort unordered contents for stable output without deduplicating them.
+  om.collection_push %gates, %g1 : !om.collection<!om.frozenpath>, !om.frozenpath
+  om.collection_push %gates, %g0 : !om.collection<!om.frozenpath>, !om.frozenpath
+  om.collection_push %gates, %g0 : !om.collection<!om.frozenpath>, !om.frozenpath
+  %port = om.frozenpath_create reference %basepath "Foo>clock"
+  %associations = om.list_create %port : !om.frozenpath
+  %a = om.elaborated_object @ClockDomain_out(%A, %associations) : (!om.class.type<@ClockDomain>, !om.list<!om.frozenpath>) -> !om.class.type<@ClockDomain_out>
+  %b = om.elaborated_object @ClockDomain_out(%B, %associations) : (!om.class.type<@ClockDomain>, !om.list<!om.frozenpath>) -> !om.class.type<@ClockDomain_out>
+  om.class.fields %a, %b : !om.class.type<@ClockDomain_out>, !om.class.type<@ClockDomain_out>
+}
+
+// GATES:      "name_pattern": "A",
+// GATES-NEXT: "define_period": "A_PERIOD",
+// GATES-NEXT: "clock_gates": [
+// GATES-NEXT:   "OMReferenceTarget:~Foo|Foo/g0:Gate>clock",
+// GATES-NEXT:   "OMReferenceTarget:~Foo|Foo/g0:Gate>clock",
+// GATES-NEXT:   "OMReferenceTarget:~Foo|Foo/g1:Gate>clock"
+// GATES-NEXT: ],
+// GATES-NEXT: "clock_relationships": []
+// GATES:      "name_pattern": "B",
+// GATES-NEXT: "define_period": "B_PERIOD",
+// GATES-NEXT: "clock_gates": [],
+// GATES-NEXT: "clock_relationships": [
+// GATES-NEXT:   {
+// GATES-NEXT:     "name_pattern": "A",
+// GATES-NEXT:     "relationship": "sync"
+// GATES-NEXT:   }
+// GATES-NEXT: ]
+// GATES: "port_patterns": [
+// GATES-NEXT:   "clock"
+// GATES-NEXT: ]
