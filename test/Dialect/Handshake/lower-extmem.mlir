@@ -36,3 +36,25 @@ handshake.func @i0(%c : memref<1xi32>) {
   return
 }
 
+// Two memories where the first one is both read and written. Every memory that
+// has already been lowered shifts the argument list by (numPorts - 1), so
+// indexing it by the original argument index erased the wrong argument here -
+// which tripped "Cannot destroy a value that still has uses!".
+// CHECK-LABEL:   handshake.func @multiple_memories(
+// CHECK-SAME:        %[[A0:.*]]: index, %[[A1:.*]]: index, %[[V:.*]]: i32, %[[M0LD:.*]]: i32, %[[M0ST:.*]]: none, %[[M1LD:.*]]: i32, %[[CTRL:.*]]: none, ...) -> (none, i4, !hw.struct<address: i4, data: i32>, i4)
+// CHECK-SAME:    argNames = ["a0", "a1", "v", "m0_ld0.data", "m0_st0.done", "m1_ld0.data", "ctrl"]
+// CHECK-SAME:    resNames = ["out0", "m0_ld0.addr", "m0_st0", "m1_ld0.addr"]
+handshake.func @multiple_memories(%a0: index, %a1: index, %v: i32,
+                                  %m0: memref<10xi32>, %m1: memref<10xi32>,
+                                  %ctrl: none) -> none {
+  %ld0, %st0c, %ld0c = handshake.extmemory[ld=1, st=1](%m0 : memref<10xi32>)(%sd, %sa, %la0) {id = 0 : i32} : (i32, index, index) -> (i32, none, none)
+  %ld1, %ld1c = handshake.extmemory[ld=1, st=0](%m1 : memref<10xi32>)(%la1) {id = 1 : i32} : (index) -> (i32, none)
+  %f:3 = fork [3] %ctrl : none
+  %d0, %la0 = load [%a0] %ld0, %f#0 : index, i32
+  %sd, %sa = store [%a1] %v, %f#1 : index, i32
+  %d1, %la1 = load [%a0] %ld1, %f#2 : index, i32
+  sink %d0 : i32
+  sink %d1 : i32
+  %fin = join %st0c, %ld0c, %ld1c : none, none, none
+  return %fin : none
+}
