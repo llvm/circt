@@ -3674,11 +3674,30 @@ firrtl.circuit "ObjectCreateMissingOperand" {
 
 // -----
 
+firrtl.circuit "RegistryMismatch" {
+  firrtl.module @RegistryMismatch(in %items: !firrtl.registry<integer>, in %value: !firrtl.string) {
+    // expected-error @+1 {{element type must match the registry element type}}
+    firrtl.prop.insert %items, %value : !firrtl.registry<integer>, !firrtl.string
+  }
+}
+
+// -----
+
 firrtl.circuit "ObjectCreateWrongType" {
   firrtl.extclass @Class(in str: !firrtl.string)
   firrtl.module @ObjectCreateWrongType(in %int: !firrtl.integer) {
     // expected-error @below {{class input "str" expects '!firrtl.string', but operand 0 has type '!firrtl.integer'}}
     %obj = firrtl.object.create(%int) : (!firrtl.integer) -> !firrtl.class<@Class(in str: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "RegistryOutputPort" {
+  firrtl.module @RegistryOutputPort(out %items: !firrtl.registry<integer>) {
+    %one = firrtl.integer 1
+    // expected-error @+1 {{registry has sink flow, expected source or duplex flow}}
+    firrtl.prop.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
   }
 }
 
@@ -3712,4 +3731,11 @@ firrtl.circuit "ObjectCreateInputFlow" {
     // expected-error @below {{has no flow}}
     firrtl.propassign %input, %str : !firrtl.string
   }
+}
+
+// -----
+
+firrtl.circuit "RegistryConstant" {
+  // expected-error @+1 {{mutable registries cannot be const}}
+  firrtl.module @RegistryConstant(in %items: !firrtl.const.registry<integer>) {}
 }
