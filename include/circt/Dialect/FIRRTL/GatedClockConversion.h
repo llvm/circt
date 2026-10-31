@@ -11,6 +11,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "mlir/IR/Dominance.h"
 #include "llvm/ADT/MapVector.h"
 
 namespace circt {
@@ -20,350 +21,211 @@ namespace firrtl {
 // GatedClockConversion
 //===----------------------------------------------------------------------===//
 
-enum class EdgeKind { Alias, Gate, InstanceIn, InstanceOut };
+enum class EdgeKind { Gate, InstanceIn, InstanceOut };
 
+/// A clock flow graph edge. Both ends are driver-normal: wires, nodes and
+/// clock casts are already looked through. `op` is the gate, or the instance;
+/// an `InstanceIn` edge may come from an `instance_choice`, which
+/// `checkSelection()` rejects if the port needs a pair.
 struct ClockEdge {
   Value dst;
-  Operation *op; // null for Alias
+  Operation *op;
   EdgeKind kind;
 
-  // Checked views of `op`, so using the wrong one for a kind is a hard error.
   ClockGateIntrinsicOp gate() const { return cast<ClockGateIntrinsicOp>(op); }
-  InstanceOp instance() const { return cast<InstanceOp>(op); }
 };
 
 /// Sink gated-clock enables into ops across module boundaries.
 ///
-/// Backward traversal from each root's clock builds the clock flow graph, a
-/// forward pass *plans* the (base, AND-of-enables) pair of every clock value,
-/// and `applyPlan()` then materializes the whole plan in one shot.
+/// Every clock gets a (base clock, enable) pair; a module port carrying a
+/// gated clock gets a (base, enable) port pair. Each root is then clocked by
+/// its base clock, with the enable sunk into it. A port pair for port `p` is
+/// named `_gatedClock_baseClock_p` and `_gatedClock_enable_p`, with a suffix
+/// if a port of that name exists, and takes the location of `p`.
 ///
-/// Invariant: analysis and planning never mutate the IR, and no plan record is
-/// read after the mutation it describes happened. That is what makes stale
-/// value remapping structurally impossible; see `MatRef`.
+/// Only analysis can fail, and it runs before any mutation. Ports are inserted
+/// before any pair is computed, so no stored value is invalidated later.
 ///
 /// Preconditions: run after `firrtl-expand-whens`, so every clock net and
-/// register has a single driver. Clock loops are not diagnosed here; see
-/// `firrtl-check-comb-loops`.
+/// register has a single driver, after `firrtl-lower-types`, so registers are
+/// ground-typed, and after `firrtl-infer-resets`, so every reset is known to be
+/// sync or async. A clock driven by a clock loop has no base clock, so a root
+/// clocked by one, or a caller driving one into a port pair, is an error.
+///
+/// Public modules keep their interface: their ports are base clocks, so a gate
+/// driving one is left in place.
 ///
 /// NOT thread-safe: port insertion mutates module signatures globally.
 class GatedClockConversion {
 public:
   explicit GatedClockConversion(InstanceGraph &ig) : ig(ig) {}
 
+  /// Fails if `op` is not a supported root, or is a register that is not
+  /// ground-typed, has an uninferred reset, or does not have exactly one
+  /// connect to sink an enable into.
   LogicalResult addRoot(Operation *op);
 
+  /// Converts the added roots. All state, including the roots, is cleared on
+  /// return, whether or not it succeeds.
   LogicalResult run();
 
   void dump() const;
 
-private:
-  // -- The plan data model --------------------------------------------
-
-  /// Sentinel `EnableNode` index meaning "no enable at all".
-  static constexpr unsigned kNoEnable = ~0u;
-
-  /// A reference to a clock/enable value that can also name values which do not
-  /// exist yet (a planned port, a planned wire).
+  /// Must-alias analysis over every clock of the circuit, valid right after a
+  /// successful `run()`.
   ///
-  /// Inserting a port re-creates every instance of a module, so instance
-  /// results are the only values `applyPlan()` invalidates. Hence the rule this
-  /// class enforces: name them symbolically as `(instance, resultIndex)`, never
-  /// raw.
-  class MatRef {
+  /// Two values alias iff they are provably driven by the same base clock. A
+  /// gate aliases its input, and an appended base port aliases the port it
+  /// shadows. Muxes, `clock_div` and `clock_inv` start new base clocks. Values
+  /// of a module that alias do so in every instance of it. `false` means "not
+  /// proven equal", never "proven different".
+  class ClockAliasAnalysis {
   public:
-    enum class Kind {
-      None,        ///< Null reference, e.g. "no enable".
-      Direct,      ///< A `Value` that `applyPlan()` never invalidates.
-      InstResult,  ///< Result #index of an instance (existing or planned port).
-      ModuleArg,   ///< Block argument #index of a module (existing or planned).
-      PlannedWire, ///< Entry #index of `plannedWireValues`.
-      GateEnable,  ///< `gate.enable | gate.test_enable`, lowered on demand.
-    };
-
-    MatRef() = default;
-
-    static MatRef direct(Value v) {
-      assert(v && "use MatRef() for a null reference");
-      assert(!v.getDefiningOp<FInstanceLike>() &&
-             "instance results must be symbolic; use MatRef::instResult()");
-      MatRef r;
-      r.kind = Kind::Direct;
-      r.value = v;
-      return r;
+    bool alias(Value a, Value b) const {
+      if (a == b)
+        return true;
+      unsigned na = lookup(a), nb = lookup(b);
+      return na != kNoNode && nb != kNoNode && find(na) == find(nb);
     }
-    static MatRef instResult(FInstanceLike inst, unsigned index) {
-      return opRef(Kind::InstResult, inst, index);
-    }
-    static MatRef moduleArg(FModuleOp mod, unsigned index) {
-      return opRef(Kind::ModuleArg, mod, index);
-    }
-    static MatRef plannedWire(unsigned index) {
-      return opRef(Kind::PlannedWire, nullptr, index);
-    }
-    static MatRef gateEnable(ClockGateIntrinsicOp gate) {
-      return opRef(Kind::GateEnable, gate, 0);
-    }
-
-    /// Instance results become symbolic refs, every other value is stable.
-    static MatRef of(Value v) {
-      if (!v)
-        return MatRef();
-      if (auto inst = v.getDefiningOp<FInstanceLike>())
-        return instResult(inst, cast<OpResult>(v).getResultNumber());
-      return direct(v);
-    }
-
-    Kind getKind() const { return kind; }
-    Value getValue() const { return value; }
-    unsigned getIndex() const { return index; }
-    Operation *getOp() const { return op; }
-    ClockGateIntrinsicOp gate() const { return cast<ClockGateIntrinsicOp>(op); }
-
+    bool isTracked(Value v) const { return nodeOf.contains(v); }
+    /// Null if untracked.
+    Value getRepresentative(Value v) const;
+    /// Null if the class has no base clock, e.g. a port that different
+    /// instances drive with different clocks.
+    Value getBaseClock(Value v) const;
+    /// Empty if untracked.
+    SmallVector<Value> aliasSet(Value v) const;
+    /// `v`, a clock of the module `inst` instantiates, as seen at `inst`: the
+    /// result for a port that `v` aliases, or `v` if it aliases no port.
+    Value atInstance(Value v, InstanceOp inst) const;
     void print(llvm::raw_ostream &os) const;
 
   private:
-    static MatRef opRef(Kind kind, Operation *op, unsigned index) {
-      MatRef r;
-      r.kind = kind;
-      r.op = op;
-      r.index = index;
-      return r;
-    }
+    friend class GatedClockConversion;
 
-    Kind kind = Kind::None;
-    Value value;             ///< `Direct` only.
-    Operation *op = nullptr; ///< Instance / module / gate, by kind.
-    unsigned index = 0;      ///< Result, argument or wire index.
+    static constexpr unsigned kNoNode = ~0u;
+
+    struct Node {
+      Value value;
+      mutable unsigned parent;
+    };
+
+    /// `shadowPairs` relate the appended base ports to the ports they shadow,
+    /// which the IR alone does not when callers disagree.
+    void build(InstanceGraph &ig,
+               ArrayRef<std::pair<Value, Value>> shadowPairs);
+
+    unsigned lookup(Value v) const { return nodeOf.lookup_or(v, kNoNode); }
+    unsigned find(unsigned node) const;
+    unsigned track(Value v);
+    bool unionClocks(Value a, Value b);
+    bool unionNodes(unsigned a, unsigned b);
+    void closeOverInstances(InstanceGraph &ig);
+    void setBaseClocks(ArrayRef<Value> baseClks);
+    void clear();
+
+    SmallVector<Node> nodes;
+    DenseMap<Value, unsigned> nodeOf;
+    /// Keyed by class root.
+    DenseMap<unsigned, SmallVector<unsigned>> members;
+    /// Keyed by class root.
+    DenseMap<unsigned, Value> classBaseClock;
   };
 
-  /// Enable accumulation DAG node:
-  ///   value(id) = parent == kNoEnable ? term : (value(parent) & term)
-  /// Nodes are shared by every consumer of a pair, so a cascade of gates emits
-  /// one `and` per gate no matter how many roots it feeds.
-  struct EnableNode {
-    unsigned parent;
-    MatRef term;
-    /// Insert the `and` after this value.
-    MatRef anchor;
-    Location loc;
-  };
-
-  /// (baseClk, enable) pair planned for a clock value.
-  struct ClockPairPlan {
-    MatRef baseClk;
-    unsigned enableId = kNoEnable;
-  };
-
-  /// Root rewrite applied by `applyPlan()`: clock the op by `baseClk` and sink
-  /// `enableId` into it.
-  struct RootRewrite {
-    Operation *op;
-    MatRef baseClk;
-    unsigned enableId = kNoEnable;
-  };
-
-  /// (baseClock, enable) port pair to append to a module.
-  struct PortPairPlan {
-    FModuleOp mod;
-    /// Clock port this pair shadows (naming only).
-    unsigned gatedClkIndex;
-    Direction dir;
-    /// Final port indices, pre-assigned at planning time.
-    unsigned baseIdx, enIdx;
-    /// `dir == Out` only: values inside `mod` driving the new output ports.
-    MatRef outBaseClk = MatRef();
-    unsigned outEnableId = kNoEnable;
-  };
-
-  /// The `(module, clock port index)` key of a `PortPairPlan`.
-  using PortPlanKey = std::pair<FModuleOp, unsigned>;
-
-  /// Caller-side connects driving a planned *input* port pair.
-  struct InstanceDrive {
-    InstanceOp inst;
-    unsigned baseIdx, enIdx;
-    MatRef baseClk;
-    /// `kNoEnable` drives a constant 1.
-    unsigned enableId = kNoEnable;
-  };
-
-  /// Temporary (base clock, enable) carrier wires at the top of `mod`, standing
-  /// in for a wire/node alias of a gated clock.
-  /// Wires `2*i` / `2*i+1` of `plannedWireValues` belong to `wirePlans[i]`.
-  struct WirePairPlan {
-    FModuleOp mod;
-    MatRef baseClk;
-    unsigned enableId;
-    Location loc;
-  };
-
-  // -- Worklist analysis (no IR mutation) -------------------------------
-
-  // Fails on an undriven clock net, which this utility cannot plan around.
-  LogicalResult analyzeFrom(ArrayRef<Value> seeds);
-
-  // Mark every clock value downstream of a clock gate. This answers "does this
-  // module clock port need a (base, enable) pair?" before planning starts, so
-  // that planning never has to block on a sibling instance. Monotone, hence a
-  // single sweep suffices and a cycle saturates instead of diverging.
-  void computeGatedClocks();
-
-  // -- Planning (no IR mutation) ----------------------------------------
-
-  void plan();
-
-  // Plan one outgoing edge of `srcClk` and return the value to enqueue next:
-  // the destination, or null if it was already planned.
-  Value processEdge(const ClockEdge &edge, Value srcClk, FModuleOp srcMod,
-                    MatRef baseClk, unsigned enableId);
-
-  // Append an accumulation node and return its id. A node with no parent is a
-  // leaf: its value is `term` and the anchor is unused.
-  unsigned newEnableNode(unsigned parent, MatRef term, Location loc,
-                         MatRef anchor);
-  unsigned newEnableLeaf(MatRef term, Location loc) {
-    return newEnableNode(kNoEnable, term, loc, MatRef());
+  bool hasClockAliases() const { return aliasesBuilt; }
+  const ClockAliasAnalysis &getClockAliases() const {
+    assert(aliasesBuilt && "clock aliases are built by a successful run()");
+    return aliases;
   }
 
-  // -- Plan application (the only IR-mutating phase) --------------------
+private:
+  struct Root {
+    Operation *op;
+    Value clock;
+    /// `clockDriver(clock)`, set by `analyze()`.
+    Value key = {};
+    /// The single write of a register, which the enable is sunk into.
+    FConnectLike dataWrite = {};
+  };
 
-  LogicalResult applyPlan();
+  /// (base clock, enable); a null enable means ungated.
+  using ClockPair = std::pair<Value, Value>;
 
-  // Sweep A: create the planned carrier wires.
-  void createPlannedWires();
+  struct PortPair {
+    Direction dir;
+    unsigned baseIdx = 0, enIdx = 0;
+    /// Output pairs are driven once for all instances.
+    bool driven = false;
+  };
 
-  // Sweep B: append the planned ports and re-create every affected instance.
-  void insertPlannedPorts();
+  /// A module and the index of the clock port a `PortPair` shadows.
+  using PortKey = std::pair<FModuleOp, unsigned>;
 
-  // Sweep C: emit the planned expressions, connects and root rewrites.
-  LogicalResult emitPlannedIR();
+  LogicalResult analyze();
+  /// Fills `gated` and `portPairs` in one walk. Returns the clocks to
+  /// materialize, in BFS order.
+  SmallVector<Value> markGatedAndSelectPortPairs();
+  /// Rejects what `materialize()` cannot handle: clocks that are not reachable
+  /// from a base clock, and port pairs on modules with non-`InstanceOp` uses.
+  /// This is the only check for the latter, so each such use is reported once.
+  LogicalResult checkSelection();
+  void insertPorts();
+  void materialize(ArrayRef<Value> order);
+  void rewriteRoots();
+  void buildClockAliases();
+  void clear();
 
-  // Resolve a reference to the live value it names. Only valid once the sweep
-  // that creates the referenced value has run.
-  Value resolve(MatRef ref);
-
-  // Materialize the accumulated enable of a node, memoized per node so each
-  // node emits at most one `and`. Null for `kNoEnable`.
-  Value lower(unsigned enableId);
-
-  LogicalResult rewriteRoot(Operation *op, Value baseClk, Value enable);
-
-  // -- Helpers ----------------------------------------------------------
-
-  // Cached: returns `enable | test_enable` or just `enable`.
+  void rewriteRoot(const Root &root, Value baseClk, Value enable);
   Value gateEnableOf(ClockGateIntrinsicOp gate);
-
-  // Cached: a constant 1 at the top of `mod`, so it dominates every use.
+  /// `upstream & gateEn`, built right before `gate`. `gateEn` must dominate
+  /// `gate`.
+  Value andEnables(Value upstream, Value gateEn, ClockGateIntrinsicOp gate);
   Value getOrCreateConstU1One(FModuleOp mod);
-
-  void connectMaterializedToInstancePorts(InstanceOp inst,
-                                          unsigned clkPortIndex,
-                                          unsigned enPortIndex,
-                                          Value materializedClk,
-                                          Value materializedEn);
-
-  // Forward wire to source when exactly one writer dominates one reader.
-  void eliminateTemporaryWires();
-
-  // The live instance for `inst`, which `insertPlannedPorts()` may have
-  // re-created. A single lookup suffices: all of a module's port pairs are
-  // inserted in one call, so an instance is re-created at most once.
+  /// A null `en` drives a constant 1.
+  void drivePair(Location loc, Value dstClk, Value dstEn, Value clk, Value en);
+  /// `v`, or a bounce wire carrying it if `v` does not dominate `user`.
+  Value bounceValue(Operation *user, Value v);
+  /// Maps a value from before `insertPorts()` to the value it stands for now.
+  Value live(Value v) const;
   Operation *liveInstance(Operation *inst) const {
     auto *clone = instClones.lookup(inst);
     return clone ? clone : inst;
   }
 
-  void dumpPlan() const;
-
-  // -- plan() dispatched handlers ---------------------------------------
-
-  void planAlias(Value dstClk, FModuleOp srcMod, MatRef baseClk,
-                 unsigned enableId);
-
-  void planGate(ClockGateIntrinsicOp gate, Value dstClk, MatRef baseClk,
-                unsigned enableId);
-
-  void planInstancePort(Direction dir, InstanceOp inst, Value dstClk,
-                        Value srcClk, MatRef baseClk, unsigned enableId);
-
-  // Handle the 2nd-and-later callers of a multiply-instantiated module.
-  void planMultiplyInstantiatedInput(Value srcClk, MatRef baseClk,
-                                     unsigned enableId);
-
-  // Plan (or look up) the gated port pair of a child module, and record the
-  // drive of a planned input pair at `inst`.
-  std::pair<unsigned, unsigned>
-  planGatedPorts(InstanceOp inst, FModuleOp childMod, unsigned gatedClkIndex,
-                 Direction dir, MatRef baseClk, unsigned enableId);
-
-  void recordInstanceDrive(InstanceOp inst, const PortPairPlan &plan,
-                           MatRef baseClk, unsigned enableId);
-
   InstanceGraph &ig;
 
-  SmallVector<std::pair<Operation *, Value>> roots;
-
-  // -- Analysis state and output ----------------------------------------
-
-  DenseSet<Value> visited;
+  SmallVector<Root> roots;
 
   DenseMap<Value, SmallVector<ClockEdge>> srcToDstClocks;
 
   SmallVector<Value> baseClks;
 
-  // Every clock value downstream of a clock gate; see `computeGatedClocks()`.
-  DenseSet<Value> gatedClocks;
+  /// Every clock reachable from a base clock, mapped to whether it is gated.
+  DenseMap<Value, bool> gated;
 
-  DenseMap<Value, ClockPairPlan> clockEnablePairs;
+  llvm::MapVector<PortKey, PortPair> portPairs;
 
-  // -- The plan ---------------------------------------------------------
+  /// Keyed by pre-`insertPorts()` values; the pairs themselves are live.
+  DenseMap<Value, ClockPair> pairs;
 
-  SmallVector<EnableNode> enableNodes;
-
-  // Values of the wires created by `applyPlan()`, indexed by
-  // `MatRef::plannedWire`.
-  SmallVector<Value> plannedWireValues;
-
-  // Memoized result of `lower()`, indexed like `enableNodes`.
-  SmallVector<Value> loweredEnables;
-
-  SmallVector<RootRewrite> rootRewrites;
-
-  SmallVector<WirePairPlan> wirePlans;
-
-  // The gated port pairs to append, and the order in which each module's pairs
-  // are appended. `MapVector` keeps emission deterministic.
-  llvm::MapVector<PortPlanKey, PortPairPlan> portPlans;
-  llvm::MapVector<FModuleOp, SmallVector<PortPlanKey>> plansPerModule;
-
-  // Per-module port index allocator, seeded with the module's port count.
-  DenseMap<FModuleOp, unsigned> nextPortIdx;
-
-  // Keyed by `(caller instance, base port index)`, which de-duplicates repeated
-  // drives of the same port pair.
-  llvm::MapVector<std::pair<InstanceOp, unsigned>, InstanceDrive>
-      instanceDrives;
-
-  // -- applyPlan() state ------------------------------------------------
-
-  DenseMap<ClockGateIntrinsicOp, Value> gateEnableCache;
-
-  // Cache of constant 1 values per module
   DenseMap<FModuleOp, Value> constU1Cache;
 
-  // Old instance -> the instance re-created with the planned ports.
   DenseMap<Operation *, Operation *> instClones;
 
-  // Replaced instances, erased once nothing reads the plan any more.
+  /// Erased last: they are the keys of `pairs`.
   SmallVector<InstanceOp> deadInstances;
 
-  // Temporary carrier wires awaiting elimination.
-  SmallVector<WireOp> wireOps;
+  /// A value mapped to the bounce wire that carries it to earlier users.
+  DenseMap<Value, Value> bounceWires;
+
+  mlir::DominanceInfo domInfo;
 
   MLIRContext *context;
 
   Type clockType, u1Type;
+
+  ClockAliasAnalysis aliases;
+  bool aliasesBuilt = false;
 };
 
 } // namespace firrtl
