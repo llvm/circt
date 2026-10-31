@@ -3,8 +3,8 @@
 firrtl.circuit "Foo" {
   firrtl.module @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
     %0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // expected-error @below {{operand of type '!ltl.sequence' cannot be used as an integer}}
-    // expected-error @below {{couldn't handle this operation}}
+    // expected-error @+2 {{operand of type '!ltl.sequence' cannot be used as an integer}}
+    // expected-error @+1 {{couldn't handle this operation}}
     %1 = firrtl.and %0, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 }

@@ -186,4 +186,16 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
   // firrtl.wire sym [<@x,1,private>, <@w,2,public>, <@syh,4,public>]
 }
 
+//===----------------------------------------------------------------------===//
+// Type Helpers for RefType
+//===----------------------------------------------------------------------===//
+
+def HWRefType : DialectType<HWDialect,
+  CPred<"isa<::circt::hw::RefType>($_self)">,
+  "reference type", "::circt::hw::RefType">;
+
+def HWRWProbe : DialectType<HWDialect,
+  CPred<"isa<::circt::hw::RefType>($_self) && cast<::circt::hw::RefType>($_self).getForceable()">,
+   "rwprobe type", "::circt::hw::RefType">;
+
 #endif // CIRCT_DIALECT_HW_HWTYPES
