@@ -57,7 +57,8 @@ def RegistryType : TypeDef<OMDialect, "Registry", []> {
   let description = [{
     Registries are shared by reference. `om.registry_create` creates a
     registry, and `om.registry_insert` adds an element. OM programs cannot
-    read the contents. Duplicates are kept, and the order is unspecified.
+    read the contents, but the evaluator returns them as a list. Duplicates are
+    kept, and the order is unspecified.
   }];
   let mnemonic = "registry";
   let parameters = (ins "mlir::Type":$elementType);
