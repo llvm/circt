@@ -8,6 +8,7 @@
 
 #include "DebugInfoUtils.h"
 #include "circt/Analysis/DebugInfo.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/Support/FileSystem.h"
 
@@ -73,15 +74,23 @@ FileLineColLoc circt::findBestLocation(Location loc, bool emitted,
 }
 
 StringAttr circt::getVerilogModuleName(DIModule &module) {
-  if (auto *op = module.op)
+  if (auto *op = module.op) {
     if (auto attr = op->getAttrOfType<StringAttr>("verilogName"))
       return attr;
+    // A module merged by dedup shares the op of the module that replaced it.
+    if (auto hwModule = dyn_cast<hw::HWModuleLike>(op))
+      return hwModule.getModuleNameAttr();
+  }
   return module.name;
 }
 
 StringAttr circt::getVerilogInstanceName(DIInstance &inst) {
-  if (auto *op = inst.op)
+  if (auto *op = inst.op) {
     if (auto attr = op->getAttrOfType<StringAttr>("hw.verilogName"))
       return attr;
+    // The instance may have a source name other than its name in the IR.
+    if (auto instOp = dyn_cast<hw::HWInstanceLike>(op))
+      return instOp.getInstanceNameAttr();
+  }
   return inst.name;
 }
