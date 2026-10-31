@@ -72,6 +72,17 @@ hw.module @checkSigInst() {
   %uninit = llhd.sig : <i8>
 }
 
+// CHECK-LABEL: @checkNetInst
+hw.module @checkNetInst() {
+  // CHECK-NEXT: %netI1 = llhd.net wire : <i1>
+  %netI1 = llhd.net wire : <i1>
+  // CHECK-NEXT: %netI64 = llhd.net supply0 : <i64>
+  %netI64 = llhd.net supply0 : <i64>
+
+  // CHECK-NEXT: llhd.net tri : <!hw.array<2xi1>>
+  %netTup = llhd.net tri : <!hw.array<2xi1>>
+}
+
 // CHECK-LABEL: @checkPrb
 hw.module @checkPrb(
   in %arg0 : !llhd.ref<i1>,

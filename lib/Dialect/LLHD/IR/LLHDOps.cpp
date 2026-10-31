@@ -225,6 +225,15 @@ SignalOp::handleDestructuringComplete(const DestructurableMemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
+// NetOp
+//===----------------------------------------------------------------------===//
+
+void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  if (getName() && !getName()->empty())
+    setNameFn(getResult(), *getName());
+}
+
+//===----------------------------------------------------------------------===//
 // SigExtractOp
 //===----------------------------------------------------------------------===//
 
