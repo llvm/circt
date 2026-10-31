@@ -299,6 +299,7 @@ LogicalResult PathVisitor::process(ObjectFieldOp objectFieldOp) {
 }
 
 LogicalResult PathVisitor::run(ModuleOp module) {
+  auto constantReplacer = makeReplacer();
   auto updatePathType = [&](Value value) {
     if (hasPathType(value.getType()))
       value.setType(processType(value.getType()));
@@ -323,6 +324,10 @@ LogicalResult PathVisitor::run(ModuleOp module) {
       } else if (auto objectField = dyn_cast<ObjectFieldOp>(op)) {
         if (failed(process(objectField)))
           return WalkResult::interrupt();
+      } else if (isa<ConstantOp>(op)) {
+        constantReplacer.replaceElementsIn(op, /*replaceAttrs=*/true,
+                                           /*replaceLocs=*/false,
+                                           /*replaceTypes=*/true);
       }
       return WalkResult::advance();
     });
