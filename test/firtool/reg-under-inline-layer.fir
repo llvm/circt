@@ -1,4 +1,4 @@
-; RUN: firtool %s --split-input-file --strip-debug-info | FileCheck %s
+; RUN: firtool %s --split-input-file --strip-debug-info --lowering-options=svVarDeclStyle=reg | FileCheck %s
 
 ; Test for register under inline layer.
 
