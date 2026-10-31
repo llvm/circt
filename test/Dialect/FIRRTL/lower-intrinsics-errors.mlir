@@ -42,6 +42,26 @@ firrtl.circuit "InvalidLTLClockEdge" {
 
 // -----
 
+firrtl.circuit "InvalidLTLEdge" {
+  firrtl.module @InvalidLTLEdge(in %in: !firrtl.uint<1>, in %clk: !firrtl.clock) {
+    // expected-error @below {{circt_ltl_clocked_delay has invalid edge parameter 'foo', expected one of [posedge, negedge, edge]}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_ltl_clocked_delay" <delay: i64 = 1, edge: none = "foo"> %in, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "MissingLTLEdge" {
+  firrtl.module @MissingLTLEdge(in %in: !firrtl.uint<1>, in %clk: !firrtl.clock) {
+    // expected-error @below {{circt_ltl_clocked_delay is missing parameter edge}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_ltl_clocked_delay" <delay: i64 = 1> %in, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
 firrtl.circuit "ViewNotBundle" {
   firrtl.module public @ViewNotBundle() {
     // expected-error @below {{'info' must be augmented bundle}}
