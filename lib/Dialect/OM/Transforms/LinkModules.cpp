@@ -119,9 +119,9 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
           replacer.replaceElementsIn(objectLike, false, false, true);
         });
 
-    // Otherwise update om.class types.
+    // Update om.class types, including types nested in attributes.
     replacer.replaceElementsIn(op,
-                               /*replaceAttrs=*/false,
+                               /*replaceAttrs=*/true,
                                /*replaceLocs=*/false,
                                /*replaceTypes=*/true);
     return WalkResult::advance();
