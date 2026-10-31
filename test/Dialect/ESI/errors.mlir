@@ -240,3 +240,49 @@ hw.module @bufferDelayMismatch(in %clk: !seq.clock, in %rst: i1, in %a: !esi.cha
   // expected-error @+1 {{input and output data delays must match}}
   %0 = esi.buffer %clk, %rst, %a : !esi.channel<i8, FIFO(1)> -> !esi.channel<i8, ValidReady>
 }
+
+// -----
+
+// DRAM 'write' 'byteenable' must have one bit per byte of 'data'.
+esi.service.std.dram @dram
+!badBEReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i24, byteenable: i2>> from "req", !esi.channel<ui8> to "ackTag"]>
+hw.module @BadDramByteEnable(in %req : !esi.channel<!hw.struct<address: ui64, tag: ui8, data: i24, byteenable: i2>>, out ack : !esi.channel<ui8>) {
+  // expected-error @+1 {{'write' request 'byteenable' must be a signless integer with one bit per byte of 'data' (i3), got 'i2'}}
+  %bundle = esi.service.req <@dram::@write> (#esi.appid<"badBE">) : !badBEReq
+  %ack = esi.bundle.unpack %req from %bundle : !badBEReq
+  hw.output %ack : !esi.channel<ui8>
+}
+
+// -----
+
+// DRAM 'read_list' requires the request's 'length' field to be an unsigned
+// integer, just like HostMem.
+esi.service.std.dram @dram
+!respWin = !esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"", [<"tag">, <"data", 4>]>]>
+!badReadListReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: si16>> from "req", !esi.channel<!respWin> to "resp"]>
+hw.module @BadDramReadListLength(in %req : !esi.channel<!hw.struct<address: ui64, tag: ui8, length: si16>>, out resp : !esi.channel<!respWin>) {
+  // expected-error @+1 {{'read_list' request 'length' must be an unsigned integer, got 'si16'}}
+  %bundle = esi.service.req <@dram::@read_list> (#esi.appid<"badReadList">) : !badReadListReq
+  %resp = esi.bundle.unpack %req from %bundle : !badReadListReq
+  hw.output %resp : !esi.channel<!respWin>
+}
+
+// -----
+
+// A DRAM channel which the design does not implement is an error when its
+// requests reach the catch-all 'cosim' service implementation, rather than
+// being bridged to the host.
+esi.service.std.dram @dram
+!dramReadReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: i64>> to "resp"]>
+hw.module @DramClient(in %clk : !seq.clock, in %req : !esi.channel<!hw.struct<address: ui64, tag: ui8>>, out resp : !esi.channel<!hw.struct<tag: ui8, data: i64>>) {
+  // expected-error @+1 {{uses DRAM channel @dram, which this design does not implement (the 'cosim' service implementation cannot implement DRAM)}}
+  %bundle = esi.service.req <@dram::@read> (#esi.appid<"dramRead">) : !dramReadReq
+  %resp = esi.bundle.unpack %req from %bundle : !dramReadReq
+  hw.output %resp : !esi.channel<!hw.struct<tag: ui8, data: i64>>
+}
+hw.module @UnimplementedDramTop(in %clk : !seq.clock, in %rst : i1, in %req : !esi.channel<!hw.struct<address: ui64, tag: ui8>>, out resp : !esi.channel<!hw.struct<tag: ui8, data: i64>>) {
+  // expected-error @+1 {{failed to generate server}}
+  esi.service.instance #esi.appid<"cosim"> impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
+  %resp = hw.instance "client" @DramClient(clk: %clk: !seq.clock, req: %req: !esi.channel<!hw.struct<address: ui64, tag: ui8>>) -> (resp: !esi.channel<!hw.struct<tag: ui8, data: i64>>)
+  hw.output %resp : !esi.channel<!hw.struct<tag: ui8, data: i64>>
+}
