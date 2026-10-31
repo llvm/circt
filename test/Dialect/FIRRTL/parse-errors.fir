@@ -1965,8 +1965,8 @@ circuit Domains:
 
 ;// -----
 FIRRTL version 6.0.0
-circuit RegistryType:
-  public module RegistryType:
+circuit Registries:
+  public module Registries:
     ; expected-error @below {{Registries are a FIRRTL 7.0.0+ feature}}
     input clockGates: Registry<Path>
 
@@ -2124,3 +2124,47 @@ circuit PropertyAssertNonStringMessage:
   public module PropertyAssertNonStringMessage:
     ; expected-error @below {{propassert message must be a string type}}
     propassert Bool(true), Integer(42)
+
+;// -----
+
+FIRRTL version 6.0.0
+circuit RegistryPushOldVersion:
+  public module RegistryPushOldVersion:
+    ; expected-error @+1 {{Registries are a FIRRTL 7.0.0+ feature}}
+    registry_push Integer(1), Integer(2)
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryMissingComma:
+  public module RegistryMissingComma:
+    input items: Registry<Integer>
+    ; expected-error @+1 {{expected ',' in 'registry_push'}}
+    registry_push items Integer(1)
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryWrongElement:
+  public module RegistryWrongElement:
+    input items: Registry<Integer>
+    ; expected-error @+1 {{registry_push element type does not match registry element type}}
+    registry_push items, String("wrong")
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryWrongTarget:
+  public module RegistryWrongTarget:
+    input items: Integer
+    ; expected-error @+1 {{registry_push requires a Registry handle}}
+    registry_push items, Integer(1)
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit RegistryNotEmpty:
+  public module RegistryNotEmpty:
+    output items: Registry<Integer>
+    ; expected-error @+1 {{expected ')' in empty Registry expression}}
+    propassign items, Registry<Integer>(Integer(1))

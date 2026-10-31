@@ -1307,6 +1307,18 @@ def PathOp : FIRRTLOp<"path", [Pure]> {
   let assemblyFormat = "$targetKind $target attr-dict";
 }
 
+def RegistryCreateOp : FIRRTLOp<"prop.registry", [
+    ParentOneOf<["FModuleOp", "ClassOp"]>]> {
+  let summary = "Create an empty mutable registry";
+  let description = [{
+    Creates an empty registry and returns a handle to it. Each registry is
+    distinct. The handle can be shared, but property programs cannot read the
+    registry's contents.
+  }];
+  let results = (outs Res<RegistryType, "", [MemAlloc]>:$result);
+  let assemblyFormat = "attr-dict `:` qualified(type($result))";
+}
+
 def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {
   let summary = "Produce a list value";
   let description = [{

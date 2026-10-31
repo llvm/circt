@@ -2568,10 +2568,40 @@ circuit WireDomains:
 
 ;// -----
 FIRRTL version 7.0.0
-circuit RegistryType:
+circuit Registries:
   ; CHECK-LABEL: firrtl.domain @RegistryDomain
-  ; CHECK-SAME:    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+  ; CHECK-SAME: #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
   domain RegistryDomain:
     clockGates: Registry<Path>
 
-  public module RegistryType:
+  class RegistryItem:
+    output value: Integer
+    propassign value, Integer(1)
+
+  ; CHECK-LABEL: firrtl.module @Registries
+  ; CHECK-SAME: in %items: !firrtl.registry<integer>
+  ; CHECK-SAME: out %result: !firrtl.registry<integer>
+  ; CHECK-SAME: in %nested: !firrtl.registry<list<registry<bool>>>
+  public module Registries:
+    input items: Registry<Integer>
+    output result: Registry<Integer>
+    input nested: Registry <List<Registry<Bool>>>
+    output objects: Registry<AnyRef>
+    wire local: Registry<Integer>
+    ; CHECK: firrtl.prop.registry : !firrtl.registry<integer>
+    propassign local, Registry<Integer>()
+    ; CHECK: firrtl.prop.push %items,
+    registry_push items, Integer(1)
+    ; CHECK: firrtl.prop.push %local,
+    registry_push local, Integer(1)
+    propassign result, local
+    wire refs: Registry<AnyRef>
+    ; CHECK: firrtl.prop.registry : !firrtl.registry<anyref>
+    propassign refs, Registry<AnyRef>()
+    propassign objects, refs
+    object item of RegistryItem
+    ; CHECK: %[[ANY:.*]] = firrtl.object.anyref_cast
+    ; CHECK: firrtl.prop.push %refs, %[[ANY]]
+    registry_push refs, item
+    ; CHECK: %push = firrtl.wire
+    wire push: UInt<1>

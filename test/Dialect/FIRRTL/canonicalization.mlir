@@ -1,4 +1,5 @@
 // RUN: circt-opt -canonicalize='top-down=true region-simplify=aggressive' %s | FileCheck %s
+// RUN: circt-opt --canonicalize --cse %s | FileCheck %s --check-prefix=REGISTRY
 
 firrtl.circuit "Casts" {
 
@@ -4353,4 +4354,27 @@ firrtl.module @RegInitial(in %clock: !firrtl.clock, out %q: !firrtl.uint<1>, out
 }
 
 
+}
+
+firrtl.circuit "Registries" {
+  // Remove unused allocations without merging equal allocations or pushes.
+  // REGISTRY-LABEL: firrtl.module @Registries
+  // REGISTRY: %[[ONE:.*]] = firrtl.integer 1
+  // REGISTRY-NEXT: %[[FIRST:.*]] = firrtl.prop.registry : !firrtl.registry<integer>
+  // REGISTRY-NEXT: %[[SECOND:.*]] = firrtl.prop.registry : !firrtl.registry<integer>
+  // REGISTRY-NOT: firrtl.prop.registry
+  // REGISTRY: firrtl.prop.push %[[FIRST]], %[[ONE]]
+  // REGISTRY-NEXT: firrtl.prop.push %[[FIRST]], %[[ONE]]
+  // REGISTRY: firrtl.propassign %a, %[[FIRST]]
+  // REGISTRY: firrtl.propassign %b, %[[SECOND]]
+  firrtl.module @Registries(out %a: !firrtl.registry<integer>, out %b: !firrtl.registry<integer>) {
+    %first = firrtl.prop.registry : !firrtl.registry<integer>
+    %second = firrtl.prop.registry : !firrtl.registry<integer>
+    %unused = firrtl.prop.registry : !firrtl.registry<integer>
+    %one = firrtl.integer 1
+    firrtl.prop.push %first, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.prop.push %first, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.propassign %a, %first : !firrtl.registry<integer>
+    firrtl.propassign %b, %second : !firrtl.registry<integer>
+  }
 }
