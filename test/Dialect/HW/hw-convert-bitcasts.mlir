@@ -101,3 +101,13 @@ hw.module @mixedRoundtrip(in %raw: i32, out o : i32) {
   // CANON: hw.output %raw : i32
   hw.output %2 : i32
 }
+
+// CHECK-LABEL: hw.module @concatBitcastDirectArrayCreate
+hw.module @concatBitcastDirectArrayCreate(in %a0: i16, in %a1: i16, in %a2: i16, in %a3: i16, out o : !hw.array<4xi16>) {
+  // NOCANON-NOT: comb.extract
+  // CHECK: %[[OUT:.+]] = hw.array_create %a0, %a1, %a2, %a3 : i16
+  // CHECK: hw.output %[[OUT]]
+  %c = comb.concat %a0, %a1, %a2, %a3 : i16, i16, i16, i16
+  %o = hw.bitcast %c : (i64) -> !hw.array<4xi16>
+  hw.output %o : !hw.array<4xi16>
+}
