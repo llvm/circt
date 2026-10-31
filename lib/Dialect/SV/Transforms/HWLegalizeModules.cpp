@@ -52,6 +52,8 @@ private:
                            mlir::Type elementType,
                            SmallVector<Value> caseValues);
   bool processUsers(Operation &op, Value value, ArrayRef<Value> mapping);
+  template <typename DeclOp>
+  bool lowerArrayVar(DeclOp declOp);
   std::optional<std::pair<uint64_t, unsigned>>
   tryExtractIndexAndBitWidth(Value value);
   bool tryLoweringClockedAssertLike(Operation &op);
@@ -71,6 +73,31 @@ private:
   StringAttr lastParsedOptions;
 };
 } // end anonymous namespace
+
+/// Transform an array-typed sv.var or sv.reg into individual declarations
+/// of the same kind for each array element.
+template <typename DeclOp>
+bool HWLegalizeModulesPass::lowerArrayVar(DeclOp declOp) {
+  auto ty = hw::type_dyn_cast<hw::ArrayType>(declOp.getElementType());
+  if (!ty)
+    return false;
+
+  OpBuilder builder(declOp);
+  auto name = StringAttr::get(declOp.getContext(), "name");
+  SmallVector<Value> elements;
+  for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
+    auto loc = declOp.getLoc();
+    auto element = DeclOp::create(builder, loc, ty.getElementType());
+    if (auto nameAttr = declOp->template getAttrOfType<StringAttr>(name)) {
+      element.setNameAttr(
+          StringAttr::get(declOp.getContext(), nameAttr.getValue()));
+    }
+    elements.push_back(element);
+  }
+
+  // Fix users to refer to individual element decls.
+  return processUsers(*declOp, declOp.getResult(), elements);
+}
 
 bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
   return TypeSwitch<Operation *, bool>(&op)
@@ -203,32 +230,8 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         // Remove original assignment.
         return true;
       })
-      .Case<sv::RegOp>([&](sv::RegOp regOp) {
-        // Transform array reg into individual regs for each array element.
-        auto ty = hw::type_dyn_cast<hw::ArrayType>(regOp.getElementType());
-        if (!ty)
-          return false;
-
-        OpBuilder builder(regOp);
-        auto name = StringAttr::get(regOp.getContext(), "name");
-        SmallVector<Value> elements;
-        for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
-          auto loc = op.getLoc();
-          auto element = sv::RegOp::create(builder, loc, ty.getElementType());
-          if (auto nameAttr = regOp->getAttrOfType<StringAttr>(name)) {
-            element.setNameAttr(
-                StringAttr::get(regOp.getContext(), nameAttr.getValue()));
-          }
-          elements.push_back(element);
-        }
-
-        // Fix users to refer to individual element regs.
-        if (!processUsers(op, regOp.getResult(), elements))
-          return false;
-
-        // Remove original reg.
-        return true;
-      })
+      .Case<sv::VarOp>([&](sv::VarOp varOp) { return lowerArrayVar(varOp); })
+      .Case<sv::RegOp>([&](sv::RegOp regOp) { return lowerArrayVar(regOp); })
       .Case<comb::MuxOp>([&](comb::MuxOp muxOp) {
         // Transform array mux into individual element muxes.
         auto ty = hw::type_dyn_cast<hw::ArrayType>(muxOp.getType());
@@ -283,7 +286,7 @@ Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
   // Create the wire for the result of the casez in the
   // hw.module.
   OpBuilder builder(&op);
-  auto theWire = sv::RegOp::create(builder, op.getLoc(), elementType,
+  auto theWire = sv::VarOp::create(builder, op.getLoc(), elementType,
                                    builder.getStringAttr("casez_tmp"));
   builder.setInsertionPoint(&op);
 
