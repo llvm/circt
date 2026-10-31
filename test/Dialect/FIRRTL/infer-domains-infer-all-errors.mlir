@@ -261,3 +261,69 @@ firrtl.circuit "TraceThroughOutputPort" {
     firrtl.matchingconnect %a, %cg_a : !firrtl.uint<1>
   }
 }
+
+// An alias imported from a child must still participate in normal domain
+// crossing diagnostics when the parent assigns the child ports to different
+// domains.
+firrtl.circuit "AliasedChildDifferentDomain" {
+  firrtl.domain @ClockDomain
+
+  firrtl.module @AliasedChild(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %B: !firrtl.domain<@ClockDomain()>
+  ) {
+    firrtl.domain.define %B, %A : !firrtl.domain<@ClockDomain()>
+  }
+
+  firrtl.module @AliasedChildDifferentDomain(
+    // expected-note @below {{input module port D1 declared here}}
+    in %D1: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{input module port D2 declared here}}
+    in %D2: !firrtl.domain<@ClockDomain()>
+  ) {
+    %A, %B = firrtl.instance child @AliasedChild(
+      in A: !firrtl.domain<@ClockDomain()>,
+      out B: !firrtl.domain<@ClockDomain()>)
+    firrtl.domain.define %A, %D1 : !firrtl.domain<@ClockDomain()>
+    %X = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %X, %B : !firrtl.domain<@ClockDomain()>
+    // expected-note @below {{x has domains [D1 : ClockDomain]}}
+    %x = firrtl.wire domains[%X] : !firrtl.uint<1>
+        domains[!firrtl.domain<@ClockDomain()>]
+    // expected-note @below {{y has domains [D2 : ClockDomain]}}
+    %y = firrtl.wire domains[%D2] : !firrtl.uint<1>
+        domains[!firrtl.domain<@ClockDomain()>]
+    // expected-error @below {{illegal domain crossing}}
+    firrtl.matchingconnect %x, %y : !firrtl.uint<1>
+  }
+}
+
+// An external module publishes no internal alias relationship. Its output
+// must not be treated as an alias of its input.
+firrtl.circuit "ExternalAliasBoundary" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @ExternalAlias(
+    in A: !firrtl.domain<@ClockDomain()>,
+    out B: !firrtl.domain<@ClockDomain()>
+  )
+  firrtl.module @ExternalAliasBoundary(
+    // expected-note @below {{input module port D declared here}}
+    in %D: !firrtl.domain<@ClockDomain()>
+  ) {
+    // expected-note @below {{output instance port external.B declared here}}
+    %A, %B = firrtl.instance external @ExternalAlias(
+      in A: !firrtl.domain<@ClockDomain()>,
+      out B: !firrtl.domain<@ClockDomain()>)
+    firrtl.domain.define %A, %D : !firrtl.domain<@ClockDomain()>
+    %X = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %X, %B : !firrtl.domain<@ClockDomain()>
+    // expected-note @below {{x has domains [external.B : ClockDomain]}}
+    %x = firrtl.wire domains[%X] : !firrtl.uint<1>
+        domains[!firrtl.domain<@ClockDomain()>]
+    // expected-note @below {{y has domains [D : ClockDomain]}}
+    %y = firrtl.wire domains[%D] : !firrtl.uint<1>
+        domains[!firrtl.domain<@ClockDomain()>]
+    // expected-error @below {{illegal domain crossing}}
+    firrtl.matchingconnect %x, %y : !firrtl.uint<1>
+  }
+}
