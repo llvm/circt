@@ -1,6 +1,7 @@
 // REQUIRES: iverilog,cocotb
 
-// Test `esi.buffer` with channels which have a non-zero data delay.
+// Test `esi.buffer` with channels which have a non-zero data delay, including
+// buffers which change the data delay.
 
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --lower-seq-fifo --lower-seq-hlmem --lower-seq-to-sv --lower-verif-to-sv --canonicalize --prettify-verilog --export-verilog -o %t.hw.mlir > %t.sv
 // RUN: rm -rf %t.dir && mkdir %t.dir
@@ -43,6 +44,16 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     hw.output %full, %b : i1, !esi.channel<i16, ValidReady(2)>
   }
 
+  // Buffers which change the data delay. Named `FifoSrc<L>To<output>`.
+  hw.module @FifoSrc1ToVR3(in %clk: !seq.clock, in %rst: i1, in %din: i16,
+                           in %push: i1, out full: i1,
+                           out out: !esi.channel<i16, ValidReady(3)>) {
+    %d, %full, %empty = seq.fifo depth 32 rd_latency 1 in %din rdEn %rden wrEn %push clk %clk rst %rst : i16
+    %chan, %rden = esi.wrap.fifo %d, %empty : !esi.channel<i16, FIFO(1)>
+    %b = esi.buffer %clk, %rst, %chan {stages = 1 : i64} : !esi.channel<i16, FIFO(1)> -> !esi.channel<i16, ValidReady(3)>
+    hw.output %full, %b : i1, !esi.channel<i16, ValidReady(3)>
+  }
+
   hw.module @top(in %clk: !seq.clock, in %rst: i1,
       in %fifo11_din: i16, in %fifo11_push: i1,
       out fifo11_full: i1, out fifo11_out: !esi.channel<i16, ValidReady(1)>,
@@ -52,14 +63,24 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
       out fifo21_full: i1, out fifo21_out: !esi.channel<i16, FIFO(2)>,
       in %fifo22_din: i16, in %fifo22_push: i1,
       out fifo22_full: i1, out fifo22_out: !esi.channel<i16, ValidReady(2)>,
+      in %fifo1vr3_din: i16, in %fifo1vr3_push: i1,
+      out fifo1vr3_full: i1, out fifo1vr3_out: !esi.channel<i16, ValidReady(3)>,
       in %vr1_in: !esi.channel<i16, ValidReady(1)>,
       out vr1_out: !esi.channel<i16, ValidReady(1)>,
       in %vr2_in: !esi.channel<i16, ValidReady(2)>,
       out vr2_out: !esi.channel<i16, ValidReady(2)>,
       in %vr3_in: !esi.channel<i16, ValidReady(3)>,
       out vr3_out: !esi.channel<i16, ValidReady(3)>,
+      in %vr0vr2_in: !esi.channel<i16, ValidReady>,
+      out vr0vr2_out: !esi.channel<i16, ValidReady(2)>,
+      in %vr1fifo3_in: !esi.channel<i16, ValidReady(1)>,
+      out vr1fifo3_out: !esi.channel<i16, FIFO(3)>,
+      in %vr0vo2_in: !esi.channel<i16, ValidReady>,
+      out vr0vo2_out: !esi.channel<i16, ValidOnly(2)>,
       in %vo1_in: !esi.channel<i16, ValidOnly(1)>,
-      out vo1_out: !esi.channel<i16, ValidReady(1)>) {
+      out vo1_out: !esi.channel<i16, ValidReady(1)>,
+      in %vo0vr1_in: !esi.channel<i16, ValidOnly>,
+      out vo0vr1_out: !esi.channel<i16, ValidReady(1)>) {
     %f11Full, %f11Out = hw.instance "fifo11" @FifoSrc11(
         clk: %clk: !seq.clock, rst: %rst: i1, din: %fifo11_din: i16,
         push: %fifo11_push: i1) -> (full: i1, out: !esi.channel<i16, ValidReady(1)>)
@@ -72,17 +93,28 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     %f22Full, %f22Out = hw.instance "fifo22" @FifoSrc22(
         clk: %clk: !seq.clock, rst: %rst: i1, din: %fifo22_din: i16,
         push: %fifo22_push: i1) -> (full: i1, out: !esi.channel<i16, ValidReady(2)>)
+    %f1vr3Full, %f1vr3Out = hw.instance "fifo1vr3" @FifoSrc1ToVR3(
+        clk: %clk: !seq.clock, rst: %rst: i1, din: %fifo1vr3_din: i16,
+        push: %fifo1vr3_push: i1) -> (full: i1, out: !esi.channel<i16, ValidReady(3)>)
 
     %vr1 = esi.buffer %clk, %rst, %vr1_in {stages = 1 : i64} : !esi.channel<i16, ValidReady(1)> -> !esi.channel<i16, ValidReady(1)>
     %vr2 = esi.buffer %clk, %rst, %vr2_in {stages = 2 : i64} : !esi.channel<i16, ValidReady(2)> -> !esi.channel<i16, ValidReady(2)>
     %vr3 = esi.buffer %clk, %rst, %vr3_in {stages = 1 : i64} : !esi.channel<i16, ValidReady(3)> -> !esi.channel<i16, ValidReady(3)>
+    %vr0vr2 = esi.buffer %clk, %rst, %vr0vr2_in {stages = 2 : i64} : !esi.channel<i16, ValidReady> -> !esi.channel<i16, ValidReady(2)>
+    %vr1fifo3 = esi.buffer %clk, %rst, %vr1fifo3_in {stages = 1 : i64} : !esi.channel<i16, ValidReady(1)> -> !esi.channel<i16, FIFO(3)>
+    %vr0vo2 = esi.buffer %clk, %rst, %vr0vo2_in {stages = 1 : i64} : !esi.channel<i16, ValidReady> -> !esi.channel<i16, ValidOnly(2)>
     %vo1 = esi.buffer %clk, %rst, %vo1_in : !esi.channel<i16, ValidOnly(1)> -> !esi.channel<i16, ValidReady(1)>
+    %vo0vr1 = esi.buffer %clk, %rst, %vo0vr1_in : !esi.channel<i16, ValidOnly> -> !esi.channel<i16, ValidReady(1)>
 
     hw.output %f11Full, %f11Out, %f12Full, %f12Out, %f21Full, %f21Out,
-              %f22Full, %f22Out, %vr1, %vr2, %vr3, %vo1
+              %f22Full, %f22Out, %f1vr3Full, %f1vr3Out,
+              %vr1, %vr2, %vr3, %vr0vr2, %vr1fifo3, %vr0vo2, %vo1, %vo0vr1
       : i1, !esi.channel<i16, ValidReady(1)>, i1, !esi.channel<i16, ValidReady(1)>,
         i1, !esi.channel<i16, FIFO(2)>, i1, !esi.channel<i16, ValidReady(2)>,
+        i1, !esi.channel<i16, ValidReady(3)>,
         !esi.channel<i16, ValidReady(1)>, !esi.channel<i16, ValidReady(2)>,
-        !esi.channel<i16, ValidReady(3)>, !esi.channel<i16, ValidReady(1)>
+        !esi.channel<i16, ValidReady(3)>, !esi.channel<i16, ValidReady(2)>,
+        !esi.channel<i16, FIFO(3)>, !esi.channel<i16, ValidOnly(2)>,
+        !esi.channel<i16, ValidReady(1)>, !esi.channel<i16, ValidReady(1)>
   }
 }

@@ -1,8 +1,8 @@
 // RUN: circt-opt %s --lower-esi-to-physical | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --hw-flatten-io --lower-esi-to-hw | FileCheck --check-prefix=HW %s
 
-// Lowering of `esi.buffer` with data-delayed channels. The input and output
-// have the same data delay, which the stages carry through.
+// Lowering of `esi.buffer` with data-delayed channels. The stages carry the
+// input data delay.
 
 // CHECK-LABEL:  hw.module @bufferFifoDelay(
 // CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %in, [[RDEN:%.+]] : !esi.channel<i16, FIFO(2)>
@@ -57,3 +57,32 @@ hw.module @bufferVOOutputDelay(in %clk: !seq.clock, in %rst: i1, in %in: !esi.ch
   %0 = esi.buffer %clk, %rst, %in : !esi.channel<i16, ValidReady(1)> -> !esi.channel<i16, ValidOnly(1)>
   hw.output %0 : !esi.channel<i16, ValidOnly(1)>
 }
+
+// Changing the data delay. A larger output delay delays the data with
+// registers.
+
+// CHECK-LABEL:  hw.module @bufferIncreaseDelay(
+// CHECK:          [[STAGE:%.+]] = esi.stage %clk, %rst, %chanOutput {name = "buf_stage0"} : !esi.channel<i16, ValidReady(1)>
+// CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr [[STAGE]], [[READY:%.+]] : !esi.channel<i16, ValidReady(1)>
+// CHECK-NEXT:     %buf_data_dly0 = seq.compreg %rawOutput, %clk : i16
+// CHECK-NEXT:     %buf_data_dly1 = seq.compreg %buf_data_dly0, %clk : i16
+// CHECK-NEXT:     %chanOutput_0, [[READY]] = esi.wrap.vr %buf_data_dly1, %valid : !esi.channel<i16, ValidReady(3)>
+// CHECK-NEXT:     hw.output %chanOutput_0 : !esi.channel<i16, ValidReady(3)>
+hw.module @bufferIncreaseDelay(in %clk: !seq.clock, in %rst: i1, in %in: !esi.channel<i16, FIFO(1)>, out out: !esi.channel<i16, ValidReady(3)>) {
+  %0 = esi.buffer %clk, %rst, %in {name = "buf"} : !esi.channel<i16, FIFO(1)> -> !esi.channel<i16, ValidReady(3)>
+  hw.output %0 : !esi.channel<i16, ValidReady(3)>
+}
+
+// CHECK-LABEL:  hw.module @bufferIncreaseDelayFIFO(
+// CHECK-NEXT:     [[STAGE:%.+]] = esi.stage %clk, %rst, %in : !esi.channel<i16, ValidReady>
+// CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr [[STAGE]], %ready : !esi.channel<i16, ValidReady>
+// CHECK-NEXT:     %data_dly0 = seq.compreg %rawOutput, %clk : i16
+// CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %data_dly0, %valid : !esi.channel<i16, ValidReady(1)>
+// CHECK-NEXT:     %rawOutput_0, %valid_1 = esi.unwrap.vr %chanOutput, %rden : !esi.channel<i16, ValidReady(1)>
+// CHECK-NEXT:     %chanOutput_2, %rden = esi.wrap.fifo %rawOutput_0, {{%.+}} : !esi.channel<i16, FIFO(1)>
+// CHECK:          hw.output %chanOutput_2 : !esi.channel<i16, FIFO(1)>
+hw.module @bufferIncreaseDelayFIFO(in %clk: !seq.clock, in %rst: i1, in %in: !esi.channel<i16, ValidReady>, out out: !esi.channel<i16, FIFO(1)>) {
+  %0 = esi.buffer %clk, %rst, %in : !esi.channel<i16, ValidReady> -> !esi.channel<i16, FIFO(1)>
+  hw.output %0 : !esi.channel<i16, FIFO(1)>
+}
+
