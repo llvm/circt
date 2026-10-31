@@ -2963,7 +2963,7 @@ static bool foldArrayOfMuxes(hw::ArrayCreateOp op, PatternRewriter &rewriter) {
   SmallVector<Value> trues{first.getTrueValue()};
   SmallVector<Value> falses{first.getFalseValue()};
   SmallVector<Location> locs{first->getLoc()};
-  bool isTwoState = true;
+  bool isTwoState = first.getTwoState();
   for (size_t i = 1, n = inputs.size(); i < n; ++i) {
     auto input = inputs[i].getDefiningOp<comb::MuxOp>();
     trues.push_back(input.getTrueValue());
