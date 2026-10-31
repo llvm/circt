@@ -162,6 +162,32 @@ om.class @DupField(%0: i1) -> (foo: i1, foo: i1){
 
 // -----
 
+om.class @ListContainsTypeMismatch(%list: !om.list<!om.string>, %element: !om.integer) {
+  // expected-error @+1 {{failed to verify that list element type should match search element type}}
+  %0 = "om.list_contains"(%list, %element) : (!om.list<!om.string>, !om.integer) -> i1
+  om.class.fields
+}
+
+// -----
+
+om.class @ListContainsInferredTypeMismatch(%list: !om.list<!om.string>) {
+  %0 = om.list_contains %list, %element : !om.list<!om.string>
+  // expected-note @-1 {{previously used here with type '!om.string'}}
+  // expected-error @+1 {{definition of SSA value '%element#0' has type '!om.integer'}}
+  %element = om.constant #om.integer<0> : !om.integer
+  om.class.fields
+}
+
+// -----
+
+om.class @ListContainsUnsupportedType(%list: !om.list<i32>, %element: i32) {
+  // expected-error @+1 {{operand #1 must be A type that represents a string. or A type that represents an arbitrary width integer. or 1-bit signless integer, but got 'i32'}}
+  %0 = om.list_contains %list, %element : !om.list<i32>
+  om.class.fields
+}
+
+// -----
+
 om.class @UnknownClass(%arg: !om.class.type<@Unknwon>) {
   // expected-error @+1 {{class "Unknwon" was not found}}
   om.object.field %arg["unknown"]: (!om.class.type<@Unknwon>) -> i1
