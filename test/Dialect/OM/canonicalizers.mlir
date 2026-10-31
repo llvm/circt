@@ -324,3 +324,23 @@ om.class @ListConcatFold(
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>
 }
+
+// Canonicalization/CSE preserve allocation identity and all pushes, including
+// pushes to unknown destinations. Only elaboration resolves contributions.
+// CHECK-LABEL: om.class @RegistryEffects
+// CHECK: %[[FIRST:.+]] = om.registry %value : !om.registry<!om.integer>
+// CHECK-NEXT: %[[SECOND:.+]] = om.registry %value : !om.registry<!om.integer>
+// CHECK-NEXT: %[[MISSING:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-NEXT: om.registry_push %[[FIRST]], %value
+// CHECK-NEXT: om.registry_push %[[FIRST]], %value
+// CHECK-NEXT: om.registry_push %[[MISSING]], %value
+// CHECK-NEXT: om.class.fields %[[FIRST]], %[[SECOND]]
+om.class @RegistryEffects(%value: !om.integer) -> (a: !om.registry<!om.integer>, b: !om.registry<!om.integer>) {
+  %first = om.registry %value : !om.registry<!om.integer>
+  %second = om.registry %value : !om.registry<!om.integer>
+  %missing = om.unknown : !om.registry<!om.integer>
+  om.registry_push %first, %value : !om.registry<!om.integer>, !om.integer
+  om.registry_push %first, %value : !om.registry<!om.integer>, !om.integer
+  om.registry_push %missing, %value : !om.registry<!om.integer>, !om.integer
+  om.class.fields %first, %second : !om.registry<!om.integer>, !om.registry<!om.integer>
+}

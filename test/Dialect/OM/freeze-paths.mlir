@@ -123,3 +123,33 @@ om.class @ObjectFieldTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pa
   // CHECK: om.class.fields [[SUBFIELD]] : !om.list<!om.list<!om.frozenpath>>
   om.class.fields %1 : !om.list<!om.list<!om.path>>
 }
+
+// Freeze arguments, initial elements, pushes, nested containers, and unknown
+// membership without discarding attributes or registry handles.
+// CHECK-LABEL: om.class @RegistryPaths(%input: !om.registry<!om.frozenpath>)
+// CHECK-SAME: -> (items: !om.registry<!om.frozenpath>, nested: !om.registry<!om.list<!om.registry<!om.frozenpath>>>, missing: !om.registry<!om.list<!om.registry<!om.frozenbasepath>>>)
+om.class @RegistryPaths(%input: !om.registry<!om.path>) -> (items: !om.registry<!om.path>, nested: !om.registry<!om.list<!om.registry<!om.path>>>, missing: !om.registry<!om.list<!om.registry<!om.basepath>>>) {
+  // CHECK: %[[PATH:.*]] = om.frozenpath_empty
+  %path = om.path_empty
+  // CHECK: %[[ITEMS:.*]] = om.registry %[[PATH]] {test = "keep"} : !om.registry<!om.frozenpath>
+  %items = om.registry %path {test = "keep"} : !om.registry<!om.path>
+  // CHECK: om.registry_push %input, %[[PATH]] : !om.registry<!om.frozenpath>, !om.frozenpath
+  om.registry_push %input, %path : !om.registry<!om.path>, !om.path
+  // CHECK: om.registry_push %[[ITEMS]], %[[PATH]] : !om.registry<!om.frozenpath>, !om.frozenpath
+  om.registry_push %items, %path : !om.registry<!om.path>, !om.path
+  // CHECK: %[[LIST:.*]] = om.list_create %[[ITEMS]] : !om.registry<!om.frozenpath>
+  %list = om.list_create %items : !om.registry<!om.path>
+  // CHECK: %[[NESTED:.*]] = om.registry %[[LIST]] : !om.registry<!om.list<!om.registry<!om.frozenpath>>>
+  %nested = om.registry %list : !om.registry<!om.list<!om.registry<!om.path>>>
+  // CHECK: %[[MISSING:.*]] = om.unknown {test = "keep"} : !om.registry<!om.list<!om.registry<!om.frozenbasepath>>>
+  %missing = om.unknown {test = "keep"} : !om.registry<!om.list<!om.registry<!om.basepath>>>
+  om.class.fields %items, %nested, %missing : !om.registry<!om.path>, !om.registry<!om.list<!om.registry<!om.path>>>, !om.registry<!om.list<!om.registry<!om.basepath>>>
+}
+
+// CHECK-LABEL: om.class @RegistryField
+// CHECK-SAME: -> (items: !om.registry<!om.frozenpath>)
+om.class @RegistryField(%object: !om.class.type<@RegistryPaths>) -> (items: !om.registry<!om.path>) {
+  // CHECK: %[[FIELD:.*]] = om.object.field %object["items"] {test = "keep"} : (!om.class.type<@RegistryPaths>) -> !om.registry<!om.frozenpath>
+  %items = om.object.field %object["items"] {test = "keep"} : (!om.class.type<@RegistryPaths>) -> !om.registry<!om.path>
+  om.class.fields %items : !om.registry<!om.path>
+}

@@ -288,6 +288,50 @@ def ConstantOp : OMOp<"constant",
   let hasFolder = true;
 }
 
+def RegistryCreateOp : OMOp<"registry", [HasParent<"ClassOp">,
+    TypesMatchWith<"element types must match the registry element type",
+      "result", "elements", "::llvm::cast<RegistryType>($_self).getElementType()",
+      "[](mlir::Type type, auto types) { return llvm::all_of(types, "
+      "[type](mlir::Type elementType) { return type == elementType; }); }">]> {
+  let summary = "Create a registry with initial elements";
+  let description = [{
+    Creates a new registry for each object, containing the given values.
+    Their types must match the registry's element type. Use
+    `om.registry_push` to add more values.
+
+    ```
+    %items = om.registry %a, %b : !om.registry<!om.integer>
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs Res<RegistryType, "", [MemAlloc]>:$result);
+  let builders = [
+    OpBuilder<(ins "RegistryType":$type), [{
+      build($_builder, $_state, type, ::mlir::ValueRange());
+    }]>
+  ];
+  let assemblyFormat = "($elements^)? attr-dict `:` qualified(type($result))";
+}
+
+def RegistryPushOp : OMOp<"registry_push", [MemoryEffects<[MemWrite]>,
+    HasParent<"ClassOp">,
+    TypesMatchWith<"element type must match the registry element type",
+      "registry", "element",
+      "::llvm::cast<RegistryType>($_self).getElementType()">]> {
+  let summary = "Add an element to a registry";
+  let description = [{
+    Adds a value to the registry each time the object is created. Its type
+    must match the registry's element type. Values have no defined order, and
+    duplicates are kept. An unknown value remains in the registry. Adding a
+    value to an unknown registry leaves the registry unknown.
+  }];
+  let arguments = (ins RegistryType:$registry, AnyType:$element);
+  let assemblyFormat = [{
+    $registry `,` $element attr-dict `:` qualified(type($registry)) `,`
+      qualified(type($element))
+  }];
+}
+
 def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
   let summary = "Create a list of values";
   let description = [{
