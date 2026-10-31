@@ -334,6 +334,7 @@ def ListContainsOp : OMOp<"list_contains", [Pure,
                        AnyTypeOf<[StringType, OMIntegerType, I1]>:$element);
   let results = (outs I1:$result);
   let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
+  let hasFolder = 1;
 }
 
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,
