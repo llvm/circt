@@ -1019,6 +1019,13 @@ void LowerClassesPass::runOnOperation() {
                                          pathInfoTable);
                         });
 
+  // `lowerClass` reports an error and leaves the class without a body when the
+  // module cannot be lowered. Stop before touching the partial IR.
+  for (auto &[classLike, state] : loweringState.classLoweringStateTable)
+    if (auto classOp = dyn_cast<om::ClassOp>(classLike.getOperation()))
+      if (classOp->getRegion(0).empty())
+        return signalPassFailure();
+
   // Erase property ports from all modules that had classes created.  This must
   // be done separately because multiple modules can share the same class (e.g.,
   // external modules with the same defname).
@@ -1253,9 +1260,19 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     portsToErase.set(index);
   }
 
+  // A module without a body cannot be lowered to an OM class. Report an error
+  // instead of crashing; the class is left without a body, which
+  // `runOnOperation` detects to fail the pass.
+  Region &region = moduleLike->getRegion(0);
+  if (region.empty()) {
+    moduleLike->emitError(
+        "cannot lower module to an OM class: module has no body");
+    return;
+  }
+
   // Construct the OM Class body with block arguments for each input property,
   // updating the mapping to map from the input property to the block argument.
-  Block *moduleBody = &moduleLike->getRegion(0).front();
+  Block *moduleBody = &region.front();
   Block *classBody = &classOp->getRegion(0).emplaceBlock();
   // Every class created from a module gets a base path as its first parameter.
   auto basePathType = om::BasePathType::get(&getContext());
