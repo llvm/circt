@@ -52,6 +52,7 @@ struct LoweringOptionsOption
                 "wireSpillingHeuristic=<spillLargeTermsWithNamehints>, "
                 "wireSpillingNamehintTermLimit=<n>, "
                 "disallowExpressionInliningInPorts, disallowMuxInlining, "
+                "disallowReplicate, "
                 "mitigateVivadoArrayIndexConstPropBug, "
                 "svPortDeclStyle={varLogic, wire, none}, "
                 "emitBindComments, omitVersionComment, "

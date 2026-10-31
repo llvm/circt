@@ -94,6 +94,9 @@ The current set of "tool capability" Lowering Options is:
  * `disallowDeclAssignments` (default=`false`). If true, always emit assignments
    (both continuous and blocking) separately rather than inlining them in net and
    variable declarations.
+ * `disallowReplicate` (default=`false`). If true, expand `comb.replicate` into
+   an explicit concatenation instead of emitting the `{N{...}}` replication
+   operator (unsupported in some tools).
 
 The current set of "style" Lowering Options is:
 
@@ -166,6 +169,10 @@ Unlike LLVM, CIRCT doesn't use target triples to specify options. Instead,
 depending on the target you may use, you'll need to manually specify the
 appropriate options. Please refer [ToolsWorkarounds](./ToolsWorkarounds.md)
 for the more details of each issue.
+
+### OpenSTA / OpenROAD
+For OpenSTA/OpenROAD, use `disallowReplicate`: the `{N{...}}` replication
+operator is unsupported as of OpenSTA 3.0.0.
 
 ### Questa
 For Questa, we recommend using the `svPortDeclStyle=wire` option. This option is

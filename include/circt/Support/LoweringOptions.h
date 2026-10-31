@@ -128,6 +128,11 @@ struct LoweringOptions {
   /// If true, every mux expression is spilled to a wire.
   bool disallowMuxInlining = false;
 
+  /// If true, expand `comb.replicate` into an explicit concatenation instead
+  /// of emitting the `{N{...}}` replication operator (unsupported in some
+  /// tools).
+  bool disallowReplicate = false;
+
   /// This controls extra wire spilling performed in PrepareForEmission to
   /// improve readablitiy and debuggability.
   enum WireSpillingHeuristic : unsigned {
