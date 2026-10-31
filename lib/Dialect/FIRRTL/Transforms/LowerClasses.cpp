@@ -1762,6 +1762,34 @@ struct StringConstantOpConversion
   }
 };
 
+struct RegistryCreateOpConversion
+    : public OpConversionPattern<firrtl::RegistryCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::RegistryCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto type = getTypeConverter()->convertType<om::RegistryType>(op.getType());
+    if (!type)
+      return failure();
+    rewriter.replaceOpWithNewOp<om::RegistryCreateOp>(op, type);
+    return success();
+  }
+};
+
+struct RegistryPushOpConversion
+    : public OpConversionPattern<firrtl::RegistryPushOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::RegistryPushOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::RegistryPushOp>(op, adaptor.getRegistry(),
+                                                    adaptor.getElement());
+    return success();
+  }
+};
+
 struct ListCreateOpConversion
     : public OpConversionPattern<firrtl::ListCreateOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -2300,6 +2328,16 @@ static void populateTypeConverter(TypeConverter &converter) {
         return convertListType(type);
       });
 
+  // Convert FIRRTL Registry type to OM Registry type.
+  converter.addConversion([](om::RegistryType type) { return type; });
+  converter.addConversion(
+      [&converter](firrtl::RegistryType type) -> std::optional<Type> {
+        auto elementType = converter.convertType(type.getElementType());
+        if (!elementType)
+          return {};
+        return om::RegistryType::get(elementType);
+      });
+
   // Convert FIRRTL Bool type to OM
   converter.addConversion(
       [](BoolType type) { return IntegerType::get(type.getContext(), 1); });
@@ -2345,6 +2383,8 @@ static void populateRewritePatterns(
                                                  patterns.getContext());
   patterns.add<ObjectOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectFieldOpConversion>(converter, patterns.getContext());
+  patterns.add<RegistryCreateOpConversion, RegistryPushOpConversion>(
+      converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
   patterns.add<ListConcatOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
