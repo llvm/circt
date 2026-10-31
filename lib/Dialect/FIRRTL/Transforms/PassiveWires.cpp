@@ -54,6 +54,7 @@ void PassiveWiresPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   auto module = getOperation();
+  bool changed = false;
 
   // First, expand any connects to resolve flips.
   SmallVector<Operation *> worklist;
@@ -73,6 +74,7 @@ void PassiveWiresPass::runOnOperation() {
     // This will "blow out" a connect to passive pieces
     emitConnect(builder, op->getOperand(0), op->getOperand(1));
     op->erase();
+    changed = true;
     return WalkResult::advance();
   });
 
@@ -87,5 +89,9 @@ void PassiveWiresPass::runOnOperation() {
       worklist.push_back(users);
     // In-place updates is safe as consumers don't care about flip.
     r.setType(type_cast<FIRRTLBaseType>(r.getType()).getPassiveType());
+    changed = true;
   }
+
+  if (!changed)
+    markAllAnalysesPreserved();
 }
