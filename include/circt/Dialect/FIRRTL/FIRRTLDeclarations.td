@@ -760,6 +760,9 @@ def ObjectCreateOp : FIRRTLOp<"object.create", [
     Create an object by providing values for its class inputs as operands in
     declaration order. Only output fields can be accessed through the result.
 
+    This operation must not have the `Pure` trait: object identity is significant,
+    so creating objects with identical inputs must not be combined by CSE.
+
     Example:
     ```mlir
     %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Foo(in str: !firrtl.string, out result: !firrtl.string)>

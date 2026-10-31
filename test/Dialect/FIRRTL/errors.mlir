@@ -3684,6 +3684,16 @@ firrtl.circuit "ObjectCreateWrongType" {
 
 // -----
 
+firrtl.circuit "ObjectCreateExtraOperand" {
+  firrtl.extclass @Class(out result: !firrtl.string)
+  firrtl.module @ObjectCreateExtraOperand(in %str: !firrtl.string) {
+    // expected-error @below {{expected 0 input operands, but got 1}}
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Class(out result: !firrtl.string)>
+  }
+}
+
+// -----
+
 firrtl.circuit "ObjectCreateUnknownClass" {
   firrtl.module @ObjectCreateUnknownClass() {
     // expected-error @below {{references unknown class @Missing}}

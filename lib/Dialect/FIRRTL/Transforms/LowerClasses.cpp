@@ -1477,18 +1477,15 @@ static LogicalResult updateObjectInClass(
     SmallVectorImpl<RtlPortsInfo> &rtlPortsToCreate, std::mutex &intraPassMutex,
     SmallVectorImpl<Operation *> &opsToErase) {
   auto basePath = firrtlObject->getBlock()->getArgument(0);
-  auto firrtlClassType = firrtlObject.getType();
   SmallVector<Value> args{basePath};
   pathInfoTable.collectAltBasePaths(firrtlObject,
                                     firrtlObject.getClassNameAttr(), args);
   llvm::append_range(args, firrtlObject.getInputs());
 
   firrtl::PathOp containingModuleRef;
-  unsigned inputIndex = 0;
-  for (auto element : firrtlClassType.getElements()) {
-    if (element.direction != Direction::In)
-      continue;
-    auto input = firrtlObject.getInputs()[inputIndex++];
+  for (auto [inputIndex, element] :
+       llvm::enumerate(firrtlObject.getType().getInputElements())) {
+    auto input = firrtlObject.getInputs()[inputIndex];
     if (element.name.strref().contains(kContainingModuleName)) {
       assert(!containingModuleRef && "expected exactly one containingModule");
       containingModuleRef = input.getDefiningOp<firrtl::PathOp>();
@@ -1631,11 +1628,10 @@ updateInstanceInModule(InstanceOp firrtlInstance, InstanceGraph &instanceGraph,
 static LogicalResult
 updateInstancesInModule(FModuleOp moduleOp, InstanceGraph &instanceGraph,
                         SmallVectorImpl<Operation *> &opsToErase) {
-  OpBuilder builder(moduleOp);
   for (auto &op : moduleOp->getRegion(0).getOps()) {
-    if (isa<firrtl::FObjectLike>(op)) {
-      assert(0 && "should be no objects in modules");
-    } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
+    // Property-typed operations have already been moved to the OM class.
+    assert(!isa<firrtl::FObjectLike>(op) && "should be no objects in modules");
+    if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       if (failed(updateInstanceInModule(instanceOp, instanceGraph, opsToErase)))
         return failure();
     }

@@ -4148,9 +4148,7 @@ void ObjectOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 LogicalResult ObjectCreateOp::verify() {
   unsigned inputIndex = 0;
-  for (auto element : getType().getElements()) {
-    if (element.direction != Direction::In)
-      continue;
+  for (const auto &element : getType().getInputElements()) {
     if (inputIndex >= getInputs().size())
       return emitOpError("missing operand for class input ") << element.name;
     auto inputType = getInputs()[inputIndex].getType();
