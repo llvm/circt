@@ -308,3 +308,62 @@ om.class private @PrivateModeTop() -> (value: !om.integer) {
   %value = om.object.field %helper["value"] : (!om.class.type<@PublicModeHelper>) -> !om.integer
   om.class.fields %value : !om.integer
 }
+
+!items = !om.registry<!om.integer>
+
+om.class private @RegistryOwner() -> (items: !items) {
+  %items = om.registry_create : !items
+  om.class.fields %items : !items
+}
+
+// Keep the insertion even when the writer's result is unused.
+om.class private @RegistryWriter(%items: !items, %value: !om.integer) {
+  om.registry_insert %items, %value : !items
+  om.class.fields
+}
+
+// CHECK-LABEL: om.class @RegistryTop()
+// CHECK: %[[TWO:.+]] = om.constant #om.integer<2 : si8>
+// CHECK-NEXT: %[[ONE:.+]] = om.constant #om.integer<1 : si8>
+// CHECK-NEXT: %[[ITEMS:.+]] = om.registry_create %[[TWO]], %[[ONE]], %[[TWO]] : !om.registry<!om.integer>
+// CHECK-NEXT: %[[OTHER:.+]] = om.registry_create : !om.registry<!om.integer>
+// CHECK-NOT: om.registry_insert
+// CHECK-NOT: om.object @RegistryWriter
+// CHECK: om.class.fields %[[ITEMS]], %[[OTHER]]
+om.class @RegistryTop() -> (items: !items, independent: !items) {
+  %owner = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
+  %items = om.object.field %owner["items"] : (!om.class.type<@RegistryOwner>) -> !items
+  %other = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
+  %independent = om.object.field %other["items"] : (!om.class.type<@RegistryOwner>) -> !items
+  %one = om.constant #om.integer<1 : si8> : !om.integer
+  %two = om.constant #om.integer<2 : si8> : !om.integer
+  %a = om.object @RegistryWriter(%items, %two) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
+  %b = om.object @RegistryWriter(%items, %one) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
+  om.registry_insert %items, %two : !items
+  om.class.fields %items, %independent : !items, !items
+}
+
+// Keep unknown elements, but drop insertions into unknown registries.
+// CHECK-LABEL: om.class @RegistryUnknowns
+// CHECK: %[[UNKNOWN:.+]] = om.unknown : !om.integer
+// CHECK: %[[ITEMS:.+]] = om.registry_create %value, %[[UNKNOWN]]
+// CHECK: %[[MISSING:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-NOT: om.registry_insert
+// CHECK: om.class.fields %[[ITEMS]], %[[MISSING]]
+om.class @RegistryUnknowns(%value: !om.integer) -> (
+  items: !om.registry<!om.integer>, missing: !om.registry<!om.integer>
+) {
+  %unknown = om.unknown : !om.integer
+  %items = om.registry_create %value : !om.registry<!om.integer>
+  %missing = om.unknown : !om.registry<!om.integer>
+  om.registry_insert %items, %unknown : !om.registry<!om.integer>
+  om.registry_insert %missing, %value : !om.registry<!om.integer>
+  om.class.fields %items, %missing : !om.registry<!om.integer>, !om.registry<!om.integer>
+}
+
+// CHECK-LABEL: om.class @RegistryParameter
+// CHECK: om.registry_insert %items, %value : !om.registry<!om.integer>
+om.class @RegistryParameter(%items: !items, %value: !om.integer) {
+  om.registry_insert %items, %value : !items
+  om.class.fields
+}
