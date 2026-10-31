@@ -1392,7 +1392,7 @@ static LogicalResult updateObjectInClass(
   // Get any alternative base paths passing through this module.
   SmallVector<Value> altBasePaths;
   pathInfoTable.collectAltBasePaths(
-      firrtlObject, firrtlClassType.getNameAttr().getAttr(), altBasePaths);
+      firrtlObject, firrtlObject.getClassNameAttr(), altBasePaths);
 
   // Account for the default base path and any alternatives.
   unsigned nextArgIndex = 1 + altBasePaths.size();

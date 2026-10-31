@@ -467,19 +467,18 @@ def FObjectLike
     InterfaceMethod<"Get the object class name attribute",
       "StringAttr", "getClassNameAttr", (ins), [{}],
       /*defaultImplementation=*/[{
-        return $_op.getClassType().getNameAttr().getAttr();
+        return $_op.getClassSymbolAttr().getAttr();
       }]>,
     InterfaceMethod<"Get the object class name",
       "StringRef", "getClassName", (ins), [{}],
       /*defaultImplementation=*/[{
-        return $_op.getClassType().getName();
+        return $_op.getClassSymbolAttr().getValue();
       }]>,
     InterfaceMethod<"Get the referenced class",
       "ClassLike", "getReferencedClass",
       (ins "const SymbolTable &":$symbolTable), [{}],
       /*defaultImplementation=*/[{
-        return symbolTable.lookup<ClassLike>(
-            $_op.getClassType().getNameAttr().getAttr());
+        return symbolTable.lookup<ClassLike>($_op.getClassNameAttr());
       }]>,
     InterfaceMethod<"Get the referenced operation",
       "Operation *", "getReferencedOperation",

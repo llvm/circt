@@ -4122,10 +4122,10 @@ static LogicalResult
 verifyObjectSymbolUses(FObjectLike object, SymbolTableCollection &symbolTable) {
   auto circuit = object->getParentOfType<CircuitOp>();
   auto classOp = dyn_cast_or_null<ClassLike>(
-      symbolTable.lookupSymbolIn(circuit, object.getClassType().getNameAttr()));
+      symbolTable.lookupSymbolIn(circuit, object.getClassSymbolAttr()));
   if (!classOp)
     return object->emitOpError("references unknown class ")
-           << object.getClassType().getNameAttr();
+           << object.getClassSymbolAttr();
   return classOp.verifyType(object.getClassType(),
                             [&]() { return object->emitOpError(); });
 }
