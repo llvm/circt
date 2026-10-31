@@ -545,12 +545,25 @@ ltl.eventually %p : !ltl.property
 
 - **`p1 s_until_with p2`**: not really distinguishable from the weak version in CIRCT.
 
-> We don't yet support abort constructs but might in the future.  
-> - **`accept_on ( expr ) p`**   
-> - **`reject_on ( expr ) p`**  
-> - **`sync_accept_on ( expr ) p`**   
-> - **`sync_reject_on ( expr ) p`**   
-  
+- **`accept_on ( expr ) p`**:
+```mlir
+%1 = ltl.accept_on %p, %expr : !ltl.property
+```
+
+- **`sync_accept_on ( expr ) p`**: same as `accept_on`, with the `sync` keyword.
+```mlir
+%1 = ltl.accept_on %p, %expr sync : !ltl.property
+```
+
+- **`reject_on ( expr ) p`**: Equivalent to `not (accept_on ( expr ) (not p))`
+```mlir
+%np = ltl.not %p : !ltl.property
+%a = ltl.accept_on %np, %expr : !ltl.property
+%1 = ltl.not %a : !ltl.property
+```
+
+- **`sync_reject_on ( expr ) p`**: Same as `reject_on`, using `ltl.accept_on ... sync`.
+
 
 ## Representing the LTL Formalism
 
