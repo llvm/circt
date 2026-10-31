@@ -227,7 +227,8 @@ def FIntegerType : FIRRTLDialectTypeHelper<"FIntegerType", "integer type">,
 
 def ListType : FIRRTLDialectTypeHelper<"ListType", "list type">;
 
-def RegistryType : FIRRTLDialectTypeHelper<"RegistryType", "registry type">;
+def MutableCollectionType : FIRRTLDialectTypeHelper<
+  "MutableCollectionType", "mutable collection type">;
 
 def BoolType : FIRRTLDialectTypeHelper<"BoolType", "boolean type">,
   BuildableType<"::circt::firrtl::BoolType::get($_builder.getContext())">;

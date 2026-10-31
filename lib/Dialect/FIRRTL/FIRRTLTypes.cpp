@@ -153,9 +153,9 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(listType.getElementType(), os);
         os << '>';
       })
-      .Case<RegistryType>([&](auto registryType) {
-        os << "registry<";
-        printNestedType(registryType.getElementType(), os);
+      .Case<MutableCollectionType>([&](auto collectionType) {
+        os << "mutable_collection<";
+        printNestedType(collectionType.getElementType(), os);
         os << '>';
       })
       .Case<PathType>([&](auto pathType) { os << "path"; })
@@ -532,16 +532,17 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
     return success();
   }
-  if (name == "registry") {
+  if (name == "mutable_collection") {
     if (isConst) {
-      parser.emitError(parser.getNameLoc(), "registries cannot be const");
+      parser.emitError(parser.getNameLoc(),
+                       "mutable collections cannot be const");
       return failure();
     }
     PropertyType elementType;
     if (parser.parseLess() || parseNestedPropertyType(elementType, parser) ||
         parser.parseGreater())
       return failure();
-    result = RegistryType::get(context, elementType);
+    result = MutableCollectionType::get(context, elementType);
     if (!result)
       return failure();
     return success();

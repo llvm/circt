@@ -2568,10 +2568,31 @@ circuit WireDomains:
 
 ;// -----
 FIRRTL version 7.0.0
-circuit RegistryType:
-  ; CHECK-LABEL: firrtl.domain @RegistryDomain
-  ; CHECK-SAME:    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
-  domain RegistryDomain:
-    clockGates: Registry<Path>
+circuit MutableCollections:
+  class CollectionItem:
+    output value: Integer
+    propassign value, Integer(1)
 
-  public module RegistryType:
+  ; CHECK-LABEL: firrtl.module @MutableCollections
+  ; CHECK-SAME: in %items: !firrtl.mutable_collection<integer>
+  ; CHECK-SAME: out %result: !firrtl.mutable_collection<integer>
+  public module MutableCollections:
+    input items: MutableCollection<Integer>
+    output result: MutableCollection<Integer>
+    output objects: MutableCollection<AnyRef>
+    wire local: MutableCollection<Integer>
+    ; CHECK: firrtl.prop.collection : !firrtl.mutable_collection<integer>
+    propassign local, MutableCollection<Integer>()
+    ; CHECK: firrtl.prop.push %items,
+    push items, Integer(1)
+    ; CHECK: firrtl.prop.push %local,
+    push local, Integer(1)
+    propassign result, local
+    wire refs: MutableCollection<AnyRef>
+    ; CHECK: firrtl.prop.collection : !firrtl.mutable_collection<anyref>
+    propassign refs, MutableCollection<AnyRef>()
+    propassign objects, refs
+    object item of CollectionItem
+    ; CHECK: %[[ANY:.*]] = firrtl.object.anyref_cast
+    ; CHECK: firrtl.prop.push %refs, %[[ANY]]
+    push refs, item

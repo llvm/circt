@@ -284,7 +284,7 @@ struct FIRParser {
                               const Twine &message);
   ParseResult parseEnumType(FIRRTLType &result);
   ParseResult parseListType(FIRRTLType &result);
-  ParseResult parseRegistryType(FIRRTLType &result);
+  ParseResult parseMutableCollectionType(FIRRTLType &result);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
   // Parse a property type specifically.
   ParseResult parsePropertyType(PropertyType &result, const Twine &message);
@@ -925,17 +925,18 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
   return success();
 }
 
-/// registry-type ::= 'Registry' '<' type '>'
-ParseResult FIRParser::parseRegistryType(FIRRTLType &result) {
-  consumeToken(FIRToken::kw_Registry);
+/// collection-type ::= 'MutableCollection' '<' type '>'
+ParseResult FIRParser::parseMutableCollectionType(FIRRTLType &result) {
+  consumeToken(FIRToken::kw_MutableCollection);
 
   PropertyType elementType;
-  if (parseToken(FIRToken::less, "expected '<' in Registry type") ||
-      parsePropertyType(elementType, "expected Registry element type") ||
-      parseToken(FIRToken::greater, "expected '>' in Registry type"))
+  if (parseToken(FIRToken::less, "expected '<' in MutableCollection type") ||
+      parsePropertyType(elementType,
+                        "expected MutableCollection element type") ||
+      parseToken(FIRToken::greater, "expected '>' in MutableCollection type"))
     return failure();
 
-  result = RegistryType::get(getContext(), elementType);
+  result = MutableCollectionType::get(getContext(), elementType);
   return success();
 }
 
@@ -953,7 +954,7 @@ ParseResult FIRParser::parseRegistryType(FIRRTLType &result) {
 ///      ::= 'const' type
 ///      ::= 'String'
 ///      ::= list-type
-///      ::= registry-type
+///      ::= collection-type
 ///      ::= id
 ///
 /// field: 'flip'? fieldId ':' type
@@ -1276,25 +1277,25 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
   }
 
-  case FIRToken::kw_Registry:
-    if (requireFeature(missingSpecFIRVersion, "Registries") ||
-        parseRegistryType(result))
+  case FIRToken::kw_MutableCollection:
+    if (requireFeature(missingSpecFIRVersion, "Mutable collections") ||
+        parseMutableCollectionType(result))
       return failure();
     break;
 
-  case FIRToken::langle_Registry: {
-    // The '<' has already been consumed by the lexer, so we need to parse
-    // the element type and the trailing '>'.
-    if (requireFeature(missingSpecFIRVersion, "Registries"))
+  case FIRToken::langle_MutableCollection: {
+    // The '<' has already been consumed by the lexer.
+    if (requireFeature(missingSpecFIRVersion, "Mutable collections"))
       return failure();
     consumeToken();
 
     PropertyType elementType;
-    if (parsePropertyType(elementType, "expected Registry element type") ||
-        parseToken(FIRToken::greater, "expected '>' in Registry type"))
+    if (parsePropertyType(elementType,
+                          "expected MutableCollection element type") ||
+        parseToken(FIRToken::greater, "expected '>' in MutableCollection type"))
       return failure();
 
-    result = RegistryType::get(getContext(), elementType);
+    result = MutableCollectionType::get(getContext(), elementType);
     break;
   }
   }
@@ -2045,6 +2046,7 @@ private:
   ParseResult
   parseIntegerLiteralExp(Value &result, bool isSigned,
                          std::optional<int32_t> allocatedWidth = {});
+  ParseResult parseCollectionExp(Value &result);
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
   ParseResult parseCatExp(Value &result);
@@ -2147,6 +2149,7 @@ private:
   ParseResult parseProbe(Value &result);
   ParseResult parsePropAssert();
   ParseResult parsePropAssign();
+  ParseResult parseCollectionPush();
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
@@ -2421,6 +2424,16 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   }
+
+  case FIRToken::langle_MutableCollection:
+    if (requireFeature(missingSpecFIRVersion, "Mutable collections"))
+      return failure();
+    if (isLeadingStmt)
+      return emitError(
+          "unexpected MutableCollection<>() as start of statement");
+    if (parseCollectionExp(result))
+      return failure();
+    break;
 
   case FIRToken::lp_list_concat: {
     if (isLeadingStmt)
@@ -2781,6 +2794,25 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result, bool isSigned,
 
   locationProcessor.setLoc(loc);
   result = moduleContext.getCachedConstant(builder, attr, type, attr);
+  return success();
+}
+
+/// collection-exp ::= 'MutableCollection<' property-type '>' '(' ')'
+ParseResult FIRStmtParser::parseCollectionExp(Value &result) {
+  auto loc = getToken().getLoc();
+  consumeToken(FIRToken::langle_MutableCollection);
+  PropertyType elementType;
+  if (parsePropertyType(elementType,
+                        "expected MutableCollection element type") ||
+      parseToken(FIRToken::greater, "expected '>' in MutableCollection type") ||
+      parseToken(FIRToken::l_paren,
+                 "expected '(' in MutableCollection expression") ||
+      parseToken(FIRToken::r_paren,
+                 "expected ')' in empty MutableCollection expression"))
+    return failure();
+  locationProcessor.setLoc(loc);
+  result = CollectionCreateOp::create(
+      builder, MutableCollectionType::get(getContext(), elementType));
   return success();
 }
 
@@ -3194,6 +3226,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     if (requireFeature({3, 1, 0}, "properties"))
       return failure();
     return parsePropAssign();
+  case FIRToken::kw_push:
+    if (requireFeature(missingSpecFIRVersion, "Mutable collections"))
+      return failure();
+    return parseCollectionPush();
   case FIRToken::kw_invalidate:
     return parseInvalidate();
   case FIRToken::lp_printf:
@@ -4724,6 +4760,33 @@ ParseResult FIRStmtParser::parsePropAssert() {
 
   locationProcessor.setLoc(loc);
   PropertyAssertOp::create(builder, condition, message);
+  return success();
+}
+
+/// push ::= 'push' expr ',' expr info?
+ParseResult FIRStmtParser::parseCollectionPush() {
+  auto startTok = consumeToken(FIRToken::kw_push);
+  if (auto isExpr = parseExpWithLeadingKeyword(startTok))
+    return *isExpr;
+  Value collection, element;
+  if (parseExp(collection, "expected collection in 'push'") ||
+      parseToken(FIRToken::comma, "expected ',' in 'push'") ||
+      parseExp(element, "expected element in 'push'") || parseOptionalInfo())
+    return failure();
+  auto type = dyn_cast<MutableCollectionType>(collection.getType());
+  if (!type)
+    return emitError(startTok.getLoc(),
+                     "push requires a MutableCollection handle");
+  locationProcessor.setLoc(startTok.getLoc());
+  if (element.getType() != type.getElementType()) {
+    if (!isa<AnyRefType>(type.getElementType()) ||
+        !isa<ClassType>(element.getType()))
+      return emitError(
+          startTok.getLoc(),
+          "push element type does not match collection element type");
+    element = ObjectAnyRefCastOp::create(builder, element);
+  }
+  CollectionPushOp::create(builder, collection, element);
   return success();
 }
 

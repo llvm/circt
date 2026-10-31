@@ -5019,6 +5019,14 @@ void ListCreateOp::print(OpAsmPrinter &p) {
   p << " : " << getType();
 }
 
+LogicalResult CollectionPushOp::verify() {
+  // A push reads the handle; it does not assign to the value holding it.
+  if (!isValidSrc(foldFlow(getCollection())))
+    return emitOpError("collection has ") << toString(foldFlow(getCollection()))
+                                          << ", expected source or duplex flow";
+  return success();
+}
+
 LogicalResult ListCreateOp::verify() {
   if (getElements().empty())
     return success();
