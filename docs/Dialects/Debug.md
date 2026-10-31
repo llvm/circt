@@ -199,6 +199,11 @@ precisely listing field/element types and array dimensions if the need arises.
 [include "Dialects/DebugTypes.md"]
 
 
+## Attributes
+
+[include "Dialects/DebugAttributes.md"]
+
+
 ## Operations
 
 [include "Dialects/DebugOps.md"]
