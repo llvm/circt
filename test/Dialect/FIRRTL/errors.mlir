@@ -3294,7 +3294,17 @@ firrtl.circuit "Top" {
 
 // -----
 
-// The type of a domain field must be a PropertyType.
+// A Registry is not a PropertyType and cannot be nested in a ListType.
+firrtl.circuit "RegistryInList" {
+  firrtl.module @RegistryInList(
+    // expected-error @+1 {{expected property type, found '!firrtl.registry<integer>'}}
+    in %x: !firrtl.list<registry<integer>>
+  ) {}
+}
+
+// -----
+
+// The type of a domain field must be a PropertyType or RegistryType.
 firrtl.circuit "NonPropertyTypeInDomainField" {
   // expected-error @below {{an array of domain fields}}
   firrtl.domain @Foo ["bar", !firrtl.uint<1>]
