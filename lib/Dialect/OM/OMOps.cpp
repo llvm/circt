@@ -394,7 +394,7 @@ circt::om::ClassOp::getFieldType(mlir::StringAttr field) {
   return getClassLikeFieldType(*this, field);
 }
 
-void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer &replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
 }
 
@@ -526,7 +526,7 @@ circt::om::ClassExternOp::getFieldType(mlir::StringAttr field) {
   return getClassLikeFieldType(*this, field);
 }
 
-void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer &replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
 }
 
