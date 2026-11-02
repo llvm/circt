@@ -87,7 +87,6 @@ class RefNestedTypeMatchesType<string refType, string type> : TypesMatchWith<
 class TypeMatchesNetNestedType<string type, string netType> : TypesMatchWith<
   type # " type must match " # netType # " net element type",
   type, netType, "NetType::get($_self)"
-
 >;
 
 //===----------------------------------------------------------------------===//
