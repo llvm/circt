@@ -57,7 +57,7 @@ circuit Foo: %[[
   ; CHECK:   VerificationHelper helper ();
   ; CHECK: endmodule
 
-  ; CHECK FILE "testbench{{[/\]}}layers-Bar-Verification.sv"
+  ; CHECK: FILE "testbench{{[/\]}}layers-Bar-Verification.sv"
   ; CHECK: `ifndef layers_Bar_Verification
   ; CHECK:   `define layers_Bar_Verification
   ; CHECK:   bind Bar Bar_Verification verification ();

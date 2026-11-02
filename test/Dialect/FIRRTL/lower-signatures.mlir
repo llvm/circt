@@ -2,7 +2,7 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-signatures))' --mlir-print-debuginfo %s | FileCheck --check-prefixes=CHECK-LOC %s
 
 firrtl.circuit "Prop" {
-  // CHECK-LABEL @Prop(out %y: !firrtl.string)
+  // CHECK-LABEL: @Prop(out %y: !firrtl.string)
   firrtl.module @Prop(out %y: !firrtl.string) attributes {convention = #firrtl<convention scalarized>} {
     %0 = firrtl.string "test"
     // CHECK: firrtl.propassign
