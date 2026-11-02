@@ -106,10 +106,10 @@ hw.module @compare_do_nothing(in %a : i16, in %b : i16, in %c : i16, out res1 : 
   // CHECK-NEXT: %false = hw.constant false
   // CHECK-NEXT: %[[AEXT1:.+]] = comb.concat %false, %a : i1, i16
   // CHECK-NEXT: %[[BEXT1:.+]] = comb.concat %false, %b : i1, i16
-  // CHECK-NEXT %[[ADD:.+]] = comb.add %0, %1 {comb.nuw} : i17 
-  // CHECK-NEXT %[[CEXT:.+]] = comb.concat %false, %c : i1, i16
-  // CHECK-NEXT comb.icmp sgt %[[ADD]], %[[CEXT]] : i17
-  // CHECK-NEXT comb.icmp ult %a, %b : i16
+  // CHECK-NEXT: %[[ADD:.+]] = comb.add %0, %1 {comb.nuw} : i17 
+  // CHECK-NEXT: %[[CEXT:.+]] = comb.concat %false, %c : i1, i16
+  // CHECK-NEXT: comb.icmp sgt %[[ADD]], %[[CEXT]] : i17
+  // CHECK-NEXT: comb.icmp ult %a, %b : i16
   %false = hw.constant false
   %0 = comb.concat %false, %a : i1, i16
   %1 = comb.concat %false, %b : i1, i16
