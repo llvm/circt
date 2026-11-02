@@ -91,6 +91,23 @@ def CompRegOp : SeqOp<"compreg",
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
                    reset, rstValue, initialValue, hw::InnerSymAttr::get(nameAttr));
     }]>,
+    /// Create a named register with the given (possibly null) inner_sym.
+    OpBuilder<(ins "Value":$input, "Value":$clk, "StringAttrOrRef":$name,
+                   "hw::InnerSymAttr":$innerSym), [{
+      return build($_builder, $_state, input.getType(), input, clk,
+                   name.get($_builder.getContext()),
+                   /*reset*/ Value(), /*resetValue*/ Value(),
+                   /*initialValue*/ Value(), innerSym);
+    }]>,
+    /// Create a named register with a reset, the given (possibly null)
+    /// inner_sym, and optional power-on value.
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
+                   "StringAttrOrRef":$name, "hw::InnerSymAttr":$innerSym,
+                   CArg<"Value", "{}">:$initialValue), [{
+      return build($_builder, $_state, input.getType(), input, clk,
+                   name.get($_builder.getContext()), reset, rstValue,
+                   initialValue, innerSym);
+    }]>,
   ];
 }
 

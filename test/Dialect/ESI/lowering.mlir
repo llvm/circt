@@ -228,6 +228,50 @@ hw.module @fifoValidReadyOutput(
   hw.output %fifo : !esi.channel<i32, ValidReady>
 }
 
+// An input data delay delays the write and reserves space for in-flight writes.
+// CHECK-LABEL:  hw.module @fifoInputDataDelay(
+// CHECK:          %rawOutput, %valid = esi.unwrap.vr %in, [[InputEN:%.+]] : !esi.channel<i32, ValidReady(2)>
+// CHECK:          %out, %full, %empty, %almostFull = seq.fifo depth 12 almost_full 10 in %rawOutput rdEn {{%.+}} wrEn %inputEn_dly1 clk %clk rst %rst : i32
+// CHECK:          [[SeqFifoNotFull:%.+]] = comb.xor %almostFull, %true {sv.namehint = "seqFifoNotFull"} : i1
+// CHECK-NEXT:     [[InputEN]] = comb.and {{%.+}}, [[SeqFifoNotFull]] {sv.namehint = "inputEn"} : i1
+// CHECK-NEXT:     %false = hw.constant false
+// CHECK-NEXT:     %inputEn_dly0 = seq.compreg [[InputEN]], %clk reset %rst, %false : i1
+// CHECK-NEXT:     %inputEn_dly1 = seq.compreg %inputEn_dly0, %clk reset %rst, %false : i1
+hw.module @fifoInputDataDelay(
+    in %clk: !seq.clock, in %rst: i1,
+    in %in: !esi.channel<i32, ValidReady(2)>,
+    out out: !esi.channel<i32, ValidReady>) {
+  %fifo = esi.fifo in %in clk %clk rst %rst depth 12 : !esi.channel<i32, ValidReady(2)> -> !esi.channel<i32, ValidReady>
+  hw.output %fifo : !esi.channel<i32, ValidReady>
+}
+
+// A ValidOnly input can't be stalled, so every token is delayed and written,
+// even if the FIFO is full.
+// CHECK-LABEL:  hw.module @fifoValidOnlyInputDataDelay(
+// CHECK:          %out, %full, %empty = seq.fifo depth 2 in %rawOutput rdEn {{%.+}} wrEn %valid_dly1 clk %clk rst %rst : i32
+// CHECK-NEXT:     [[Valid:%.+]] = comb.xor {{%.+}}, %true {sv.namehint = "inputNotEmpty"} : i1
+// CHECK:          %valid_dly0 = seq.compreg [[Valid]], %clk reset %rst, %false : i1
+// CHECK-NEXT:     %valid_dly1 = seq.compreg %valid_dly0, %clk reset %rst, %false : i1
+hw.module @fifoValidOnlyInputDataDelay(
+    in %clk: !seq.clock, in %rst: i1,
+    in %in: !esi.channel<i32, ValidOnly(2)>,
+    out out: !esi.channel<i32, ValidOnly>) {
+  %fifo = esi.fifo in %in clk %clk rst %rst depth 2 : !esi.channel<i32, ValidOnly(2)> -> !esi.channel<i32, ValidOnly>
+  hw.output %fifo : !esi.channel<i32, ValidOnly>
+}
+
+// CHECK-LABEL:  hw.module @fifoValidOnlyInput(
+// CHECK:          %rawOutput, %valid = esi.unwrap.vo %in : !esi.channel<i32, ValidOnly>
+// CHECK:          %out, %full, %empty = seq.fifo depth 2 in %rawOutput rdEn {{%.+}} wrEn [[Valid:%.+]] clk %clk rst %rst : i32
+// CHECK-NEXT:     [[Valid]] = comb.xor {{%.+}}, %true {sv.namehint = "inputNotEmpty"} : i1
+hw.module @fifoValidOnlyInput(
+    in %clk: !seq.clock, in %rst: i1,
+    in %in: !esi.channel<i32, ValidOnly>,
+    out out: !esi.channel<i32, ValidReady>) {
+  %fifo = esi.fifo in %in clk %clk rst %rst depth 2 : !esi.channel<i32, ValidOnly> -> !esi.channel<i32, ValidReady>
+  hw.output %fifo : !esi.channel<i32, ValidReady>
+}
+
 // CHECK-LABEL:  hw.module @testConversion(in %clk : !seq.clock, in %rst : i1) {
 // CHECK-NEXT:     [[R0:%.+]] = esi.stage %clk, %rst, [[R4:%.+]] : !esi.channel<i4, ValidReady>
 // CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr [[R0]], %rden : !esi.channel<i4, ValidReady>

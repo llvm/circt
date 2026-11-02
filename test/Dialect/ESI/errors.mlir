@@ -240,3 +240,10 @@ hw.module @bufferDelayMismatch(in %clk: !seq.clock, in %rst: i1, in %a: !esi.cha
   // expected-error @+1 {{input and output data delays must match}}
   %0 = esi.buffer %clk, %rst, %a : !esi.channel<i8, FIFO(1)> -> !esi.channel<i8, ValidReady>
 }
+
+// -----
+
+hw.module @fifoDepthInputDelay(in %clk: !seq.clock, in %rst: i1, in %a: !esi.channel<i8, ValidReady(2)>) {
+  // expected-error @+1 {{depth must be greater than the input data delay}}
+  %0 = esi.fifo in %a clk %clk rst %rst depth 2 : !esi.channel<i8, ValidReady(2)> -> !esi.channel<i8, ValidReady>
+}
