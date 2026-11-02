@@ -1900,6 +1900,17 @@ def LTLNotIntrinsicOp : UnaryLTLIntrinsicOp<"not">;
 def LTLImplicationIntrinsicOp : BinaryLTLIntrinsicOp<"implication">;
 def LTLUntilIntrinsicOp : BinaryLTLIntrinsicOp<"until">;
 def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
+def LTLAcceptOnIntrinsicOp : LTLIntrinsicOp<"accept_on"> {
+  let arguments = (ins
+    NonConstUInt1Type:$input,
+    NonConstUInt1Type:$condition,
+    UnitAttr:$sync
+  );
+  let assemblyFormat = [{
+    $input `,` $condition (`sync` $sync^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
 
 // Past
 def LTLPastIntrinsicOp : LTLIntrinsicOp<"past"> {
