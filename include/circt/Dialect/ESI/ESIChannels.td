@@ -665,7 +665,8 @@ def FIFOOp : ESI_Physical_Op<"fifo", []> {
     data delay sets the read latency of the FIFO. An input data delay of N
     delays the write by N cycles; to make room for those in-flight writes,
     input is only accepted while there are more than N free slots, so `depth`
-    must be greater than N.
+    must be greater than N. A ValidOnly input can't be stalled, so (as with no
+    data delay) a token is dropped if the FIFO is full when it is written.
   }];
 
   let arguments = (ins
