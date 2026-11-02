@@ -130,7 +130,7 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     Backedge ready = bb.get(i1);
     auto unwrap = UnwrapValidReadyOp::create(rewriter, loc, output, ready);
     Value data = unwrap.getRawOutput();
-    // TODO: it outDelay >>> inDelay it might make sense to use a FIFO with
+    // TODO: if outDelay >>> inDelay it might make sense to use a FIFO with
     // rd_latency.
     for (uint64_t i = 0; i < outDelay - inDelay; ++i)
       data = seq::CompRegOp::create(rewriter, loc, data, buffer.getClk(),
