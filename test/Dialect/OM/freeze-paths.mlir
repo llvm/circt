@@ -123,3 +123,28 @@ om.class @ObjectFieldTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pa
   // CHECK: om.class.fields [[SUBFIELD]] : !om.list<!om.list<!om.frozenpath>>
   om.class.fields %1 : !om.list<!om.list<!om.path>>
 }
+
+// CHECK-LABEL: om.class @UnknownClass
+// CHECK-SAME: (%basepath: !om.frozenbasepath, %paths: !om.list<!om.frozenpath>) -> (paths: !om.list<!om.frozenpath>)
+om.class @UnknownClass(%basepath: !om.basepath, %paths: !om.list<!om.path>) -> (paths: !om.list<!om.path>) {
+  om.class.fields %paths : !om.list<!om.path>
+}
+
+// CHECK-LABEL: om.class @UnknownTest
+// CHECK-SAME: -> (obj: !om.class.type<@UnknownClass>, path: !om.frozenpath, notpath: !om.string)
+om.class @UnknownTest(%basepath: !om.basepath) -> (obj: !om.class.type<@UnknownClass>, path: !om.path, notpath: !om.string) {
+  // CHECK: [[PATHS:%.+]] = om.unknown : !om.list<!om.frozenpath>
+  %0 = om.unknown : !om.list<!om.path>
+
+  // CHECK: [[OBJ:%.+]] = om.object @UnknownClass(%basepath, [[PATHS]]) : (!om.frozenbasepath, !om.list<!om.frozenpath>) -> !om.class.type<@UnknownClass>
+  %1 = om.object @UnknownClass(%basepath, %0) : (!om.basepath, !om.list<!om.path>) -> !om.class.type<@UnknownClass>
+
+  // CHECK: [[PATH:%.+]] = om.unknown : !om.frozenpath
+  %2 = om.unknown : !om.path
+
+  // CHECK: [[NOT_PATH:%.+]] = om.unknown : !om.string
+  %3 = om.unknown : !om.string
+
+  // CHECK: om.class.fields [[OBJ]], [[PATH]], [[NOT_PATH]] : !om.class.type<@UnknownClass>, !om.frozenpath, !om.string
+  om.class.fields %1, %2, %3 : !om.class.type<@UnknownClass>, !om.path, !om.string
+}
