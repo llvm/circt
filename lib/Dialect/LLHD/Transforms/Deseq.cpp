@@ -868,16 +868,11 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
   for (auto *predecessor : block->getPredecessors()) {
     if (!seen.insert(predecessor).second)
       continue;
-    // Skip loop back edges. A block condition is the set of trigger values
-    // under which `block` is reached at least once during one activation. It
-    // does not count iterations or track loop-carried values; those are
-    // handled per edge by `computeBoolean` and `computeValue`, which still
-    // follow back edges. Triggers cannot change within an activation, so if
+    // Skip loop back edges. Triggers cannot change within an activation, so if
     // `block` dominates `predecessor` and lies after the wait's resume point,
     // every wait-free path to `predecessor` already passes through `block`
     // and the edge cannot widen `block`'s condition. Following it would only
-    // re-enter `block` while it is in flight. This breaks the cycles of
-    // natural (reducible) loops only.
+    // re-enter `block` while it is in flight.
     if (domInfo.dominates(wait.getDest(), block) &&
         domInfo.dominates(block, predecessor))
       continue;
