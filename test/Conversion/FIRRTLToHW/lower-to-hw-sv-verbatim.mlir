@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw %s -verify-diagnostics | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw=warn-on-unprocessed-annotations %s -verify-diagnostics | FileCheck %s
 
 firrtl.circuit "SVVerbatimTest" {
 
