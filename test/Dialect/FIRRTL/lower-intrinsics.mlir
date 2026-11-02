@@ -88,6 +88,9 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_ltl_clock" <edge: none = "edge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clock %in0, negedge %clk :
     firrtl.int.generic "circt_ltl_clock" <edge: none = "negedge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: firrtl.int.ltl.clocked_atom %in0, negedge %clk :
+    firrtl.int.generic "circt_ltl_clocked_atom" <edge: none = "negedge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @Verif(
