@@ -45,7 +45,7 @@ def ClassLike : OpInterface<"ClassLike"> {
     InterfaceMethod<"Get the class-like field names",
       "mlir::ArrayAttr", "getFieldNames", (ins)>,
     InterfaceMethod<"Replace field types dictionary attr",
-      "void", "replaceFieldTypes", (ins "mlir::AttrTypeReplacer":$replacer)>,
+      "void", "replaceFieldTypes", (ins "mlir::AttrTypeReplacer &":$replacer)>,
   ];
 }
 

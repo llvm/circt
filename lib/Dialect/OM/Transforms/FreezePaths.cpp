@@ -330,7 +330,8 @@ LogicalResult PathVisitor::run(ModuleOp module) {
       return failure();
 
     // Transform field types
-    classLike.replaceFieldTypes(makeReplacer());
+    auto replacer = makeReplacer();
+    classLike.replaceFieldTypes(replacer);
   }
   return success();
 }
