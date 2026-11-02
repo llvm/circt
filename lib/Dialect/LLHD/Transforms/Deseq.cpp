@@ -1284,21 +1284,6 @@ bool Deseq::matchDriveClockAndReset(
 /// other trigger (the reset) is inactive. This is what a process like
 /// `always @(posedge clk or negedge rst_n) if (!rst_n) ... else q <= d;`
 /// describes for a signal `q` that the reset branch never assigns.
-///
-/// Why one exactly-matched entry is enough:
-/// - The value table lists every trigger combination under which the drive
-///   fires. An exactly matched single entry represents a clock-edge update
-///   qualified by the reset's inactive level. Other trigger combinations do
-///   not contribute a drive in the computed value table.
-/// - `computeBoolean` folds every non-trigger boolean (enables, ports, data
-///   compares) into the one unknown term `x`, so an enable such as `en` or
-///   `start` shows up as the `0b01` bit, never as an extra literal.
-/// - The matched condition never mentions the past value of the reset, so
-///   holding the reset inactive in the past during specialization loses
-///   nothing.
-///
-/// The reset is recorded as `drive.clock.gate`; `implementRegister` ANDs its
-/// live inactive level into the register's enable.
 bool Deseq::matchDriveGatedClock(
     DriveInfo &drive, const std::pair<DNFTerm, ValueEntry> &entry) {
   // Try every assignment of clock and reset to the two triggers, and every
