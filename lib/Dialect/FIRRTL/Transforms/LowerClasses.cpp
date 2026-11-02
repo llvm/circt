@@ -1070,6 +1070,7 @@ void LowerClassesPass::runOnOperation() {
   markAnalysesPreserved<InstanceGraph>();
 
   // Reset pass state.
+  externalClassMap.clear();
   rtlPortsToCreate.clear();
 }
 
