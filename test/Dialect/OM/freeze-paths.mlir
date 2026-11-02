@@ -28,7 +28,7 @@ hw.module @PublicMiddle() {
 
 hw.module private @PublicLeaf() {}
 
-// CHECK-LABEL om.class @PathTest()
+// CHECK-LABEL: om.class @PathTest(
 om.class @PathTest(%basepath : !om.basepath, %path : !om.path) {
   // CHECK: om.frozenpath_create reference %basepath "PathModule>in"
   %0 = om.path_create reference %basepath @nla
@@ -42,7 +42,7 @@ om.class @PathTest(%basepath : !om.basepath, %path : !om.path) {
   // CHECK: om.frozenpath_create dont_touch %basepath "PathModule>wire"
   %4 = om.path_create dont_touch %basepath @nla_0
 
-  // CHECK: om.frozenpath_create reference %basepath "PathModule>array[0]" 
+  // CHECK: om.frozenpath_create reference %basepath "PathModule>array[0]"
   %5 = om.path_create reference %basepath @nla_1
 
   // CHECK: om.frozenpath_create reference %basepath "PathModule>struct.a"
@@ -94,12 +94,12 @@ om.class @ListCreateTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pat
   om.class.fields %0, %1, %2, %3, %4 : !om.list<i1>, !om.list<!om.basepath>, !om.list<!om.path>, !om.list<!om.list<!om.path>>, !om.list<!om.list<!om.path>>
 }
 
-// CHECK-LABEL om.class @PathListClass(%pathList: !om.list<!om.frozenpath>) -> (pathList: !om.list<!om.path>
+// CHECK-LABEL: om.class @PathListClass(%pathList: !om.list<!om.frozenpath>) -> (pathList: !om.list<!om.frozenpath>) {
 om.class @PathListClass(%pathList : !om.list<!om.path>) -> (pathList: !om.list<!om.path>) {
   om.class.fields %pathList : !om.list<!om.path>
 }
 
-// CHECK-LABEL om.class @PathListTest(%arg: !om.list<!om.frozenpath>)
+// CHECK-LABEL: om.class @PathListTest(%arg: !om.list<!om.frozenpath>)
 om.class @PathListTest(%arg : !om.list<!om.path>) {
   // CHECK: om.object @PathListClass(%arg) : (!om.list<!om.frozenpath>)
   om.object @PathListClass(%arg) : (!om.list<!om.path>) -> !om.class.type<@PathListClass>
