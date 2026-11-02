@@ -227,6 +227,7 @@ jobs:
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
       extra_cmake_args: ${{ matrix.generated.extra_cmake_args }}
+      build_pycde: false
 
   # --- end of build-circt job.
 
