@@ -243,6 +243,14 @@ struct ClockInfo {
   bool risingEdge;
   /// The optional value acting as an enable.
   Value enable;
+  /// An optional trigger that blocks clock updates while it is active. Set
+  /// when a process with clock and reset triggers never drives the signal on
+  /// reset: the drive becomes a register without reset that only updates on a
+  /// clock edge while the reset is inactive.
+  Value gate;
+  /// Whether `gate` is active (blocks updates) when high. Same convention as
+  /// `ResetInfo::activeHigh`.
+  bool gateActiveHigh = false;
 
   /// Check if this clock info is null.
   operator bool() const { return bool(clock); }

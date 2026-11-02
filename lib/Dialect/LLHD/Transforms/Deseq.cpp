@@ -228,6 +228,8 @@ struct Deseq {
   bool
   matchDriveClockAndReset(DriveInfo &drive,
                           ArrayRef<std::pair<DNFTerm, ValueEntry>> valueTable);
+  bool matchDriveGatedClock(DriveInfo &drive,
+                            const std::pair<DNFTerm, ValueEntry> &entry);
 
   Value materializeProjection(OpBuilder &builder, Location loc, Value value,
                               SmallDenseMap<Value, Value, 8> &cache);
@@ -866,12 +868,16 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
   for (auto *predecessor : block->getPredecessors()) {
     if (!seen.insert(predecessor).second)
       continue;
-    // Skip loop back edges. If `block` dominates `predecessor` and lies after
-    // the wait's resume point, every wait-free path from the resume point to
-    // `predecessor` already passes through `block`, so the edge cannot widen
-    // `block`'s condition. Following it only re-enters `block` while it is in
-    // flight, and the provisional `false` returned there gets memoized into
-    // the loop body (whose blocks then look unreachable).
+    // Skip loop back edges. A block condition is the set of trigger values
+    // under which `block` is reached at least once during one activation. It
+    // does not count iterations or track loop-carried values; those are
+    // handled per edge by `computeBoolean` and `computeValue`, which still
+    // follow back edges. Triggers cannot change within an activation, so if
+    // `block` dominates `predecessor` and lies after the wait's resume point,
+    // every wait-free path to `predecessor` already passes through `block`
+    // and the edge cannot widen `block`'s condition. Following it would only
+    // re-enter `block` while it is in flight. This breaks the cycles of
+    // natural (reducible) loops only.
     if (domInfo.dominates(wait.getDest(), block) &&
         domInfo.dominates(block, predecessor))
       continue;
@@ -1095,9 +1101,13 @@ bool Deseq::matchDrive(DriveInfo &drive) {
     return false;
   }
 
-  // If we have two triggers, one of them must be the reset.
-  if (triggers.size() == 2)
+  // If we have two triggers, one of them must be the reset. A single entry
+  // may be a clock update qualified by the reset; see `matchDriveGatedClock`.
+  if (triggers.size() == 2) {
+    if (valueTable.size() == 1)
+      return matchDriveGatedClock(drive, valueTable[0]);
     return matchDriveClockAndReset(drive, valueTable);
+  }
 
   // Otherwise we only have a single trigger, which is the clock.
   assert(triggers.size() == 1);
@@ -1266,6 +1276,78 @@ bool Deseq::matchDriveClockAndReset(
 
   // If we arrive here, none of the patterns we tried matched.
   LLVM_DEBUG(llvm::dbgs() << "- Aborting: unknown reset scheme\n");
+  return false;
+}
+
+/// Assuming there are two triggers and the value table has exactly one entry,
+/// detect a register without reset that only updates on a clock edge while the
+/// other trigger (the reset) is inactive. This is what a process like
+/// `always @(posedge clk or negedge rst_n) if (!rst_n) ... else q <= d;`
+/// describes for a signal `q` that the reset branch never assigns.
+///
+/// Why one exactly-matched entry is enough:
+/// - The value table lists every trigger combination under which the drive
+///   fires. An exactly matched single entry represents a clock-edge update
+///   qualified by the reset's inactive level. Other trigger combinations do
+///   not contribute a drive in the computed value table.
+/// - `computeBoolean` folds every non-trigger boolean (enables, ports, data
+///   compares) into the one unknown term `x`, so an enable such as `en` or
+///   `start` shows up as the `0b01` bit, never as an extra literal.
+/// - The matched condition never mentions the past value of the reset, so
+///   holding the reset inactive in the past during specialization loses
+///   nothing.
+///
+/// The reset is recorded as `drive.clock.gate`; `implementRegister` ANDs its
+/// live inactive level into the register's enable.
+bool Deseq::matchDriveGatedClock(
+    DriveInfo &drive, const std::pair<DNFTerm, ValueEntry> &entry) {
+  // Try every assignment of clock and reset to the two triggers, and every
+  // edge and level polarity. The entry must equal one of the two conditions
+  // below exactly, with no further literals.
+  for (unsigned variant = 0; variant < (1 << 3); ++variant) {
+    bool negClock = (variant >> 0) & 1;
+    bool negReset = (variant >> 1) & 1;
+    unsigned clockIdx = (variant >> 2) & 1;
+    unsigned resetIdx = 1 - clockIdx;
+
+    // Same bit patterns as in `matchDriveClockAndReset`.
+    uint32_t clockEdge = (negClock ? 0b1001 : 0b0110) << (clockIdx * 4 + 2);
+    uint32_t resetOff = (negReset ? 0b0100 : 0b1000) << (resetIdx * 4 + 2);
+    auto clockWithoutEnable = DNFTerm{clockEdge | resetOff};
+    auto clockWithEnable = DNFTerm{clockEdge | resetOff | 0b01};
+    if (entry.first != clockWithoutEnable && entry.first != clockWithEnable)
+      continue;
+
+    // Same value contract as the other matchers: an unknown entry means the
+    // driven value is recovered by specializing the process for this trigger
+    // combination in `implementRegister`.
+    drive.clock.clock = triggers[clockIdx].getProjected();
+    drive.clock.risingEdge = !negClock;
+    drive.clock.value = drive.op.getValue();
+    if (entry.first == clockWithEnable)
+      drive.clock.enable = drive.op.getEnable();
+    if (!entry.second.isUnknown())
+      drive.clock.value = entry.second.value;
+    drive.clock.gate = triggers[resetIdx].getProjected();
+    drive.clock.gateActiveHigh = !negReset;
+
+    LLVM_DEBUG({
+      llvm::dbgs() << "  - Matched " << (negClock ? "neg" : "pos")
+                   << "edge clock ";
+      drive.clock.clock.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      llvm::dbgs() << " -> " << entry.second;
+      if (drive.clock.enable)
+        llvm::dbgs() << " (with enable)";
+      llvm::dbgs() << ", updates only while active-"
+                   << (negReset ? "low" : "high") << " reset ";
+      drive.clock.gate.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      llvm::dbgs() << " is inactive\n";
+    });
+    return true;
+  }
+
+  // If we arrive here, none of the patterns we tried matched.
+  LLVM_DEBUG(llvm::dbgs() << "- Aborting: unknown gated clock scheme\n");
   return false;
 }
 
@@ -1538,10 +1620,36 @@ LogicalResult Deseq::implementRegister(DriveInfo &drive) {
   if (drive.reset)
     fixedValues.push_back(
         {drive.reset.reset, !drive.reset.activeHigh, !drive.reset.activeHigh});
+  // A gate is held at its inactive level in the past and the present, the same
+  // way the reset is during a regular clock edge. This only simplifies the
+  // value and enable computed below; the gate's live value is ANDed into the
+  // enable afterwards.
+  if (drive.clock.gate)
+    fixedValues.push_back({drive.clock.gate, !drive.clock.gateActiveHigh,
+                           !drive.clock.gateActiveHigh});
 
   value = specializeValue(value, fixedValues);
   if (enable)
     enable = specializeValue(enable, fixedValues);
+
+  // The register may only update while the gate is inactive. The specialized
+  // enable above assumed exactly that; this makes it hold in hardware.
+  if (drive.clock.gate) {
+    Value updateAllowed = materializeProjection(builder, loc, drive.clock.gate,
+                                                rematerialized);
+    if (drive.clock.gateActiveHigh) {
+      auto &inv = materializedInverters[updateAllowed];
+      if (!inv) {
+        auto one = hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
+        inv = comb::XorOp::create(builder, loc, updateAllowed, one);
+      }
+      updateAllowed = inv;
+    }
+    if (enable)
+      enable = comb::AndOp::create(builder, loc, enable, updateAllowed);
+    else
+      enable = updateAllowed;
+  }
 
   // Try to guess a name for the register.
   StringAttr name;
