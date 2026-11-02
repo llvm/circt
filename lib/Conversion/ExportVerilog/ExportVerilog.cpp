@@ -6736,6 +6736,16 @@ void ModuleEmitter::emitPortList(Operation *module,
   if (maxTypeWidth > 0) // add a space if any type exists
     maxTypeWidth += 1;
 
+  auto getPortSVAttrs = [](const PortInfo &port) -> ArrayAttr {
+    if (!port.attrs)
+      return {};
+    auto attrs = port.attrs.getAs<ArrayAttr>(
+        sv::SVAttributeAttr::getSVAttributesAttrName());
+    if (!attrs || attrs.empty())
+      return {};
+    return attrs;
+  };
+
   // Emit the port list.
   ps.scopedBox(PP::bbox2, [&]() {
     for (size_t portIdx = 0, e = portInfo.size(); portIdx != e;) {
@@ -6756,6 +6766,13 @@ void ModuleEmitter::emitPortList(Operation *module,
 
       // Emit the port direction and optional wire keyword.
       auto thisPortInfo = portInfo.at(portIdx);
+      auto svAttrs = getPortSVAttrs(thisPortInfo);
+      if (svAttrs && !isZeroWidth) {
+        emitSVAttributesImpl(ps, svAttrs, /*mayBreak=*/false);
+        ps << PP::newline;
+        if (hasZeroWidth)
+          ps << "   ";
+      }
       auto thisPortDirection = thisPortInfo.dir;
       bool isInOut = isa<InOutType, sv::NetType>(portType);
       StringRef direction;
@@ -6835,8 +6852,9 @@ void ModuleEmitter::emitPortList(Operation *module,
       // kind of check is important because two ports can share a direction and
       // an (unwrapped) element type, emitting completely different keywords.
       // Thus we must ensure they are not folded into one shared declaration.
-      if (!state.options.disallowPortDeclSharing) {
-        while (portIdx != e && portInfo.at(portIdx).dir == thisPortDirection &&
+      if (!state.options.disallowPortDeclSharing && !svAttrs) {
+        while (portIdx != e && !getPortSVAttrs(portInfo.at(portIdx)) &&
+               portInfo.at(portIdx).dir == thisPortDirection &&
                isInOut ==
                    isa<InOutType, sv::NetType>(portInfo.at(portIdx).type) &&
                stripUnpackedTypes(portType) ==
