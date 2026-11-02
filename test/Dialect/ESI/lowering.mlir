@@ -245,21 +245,31 @@ hw.module @fifoInputDataDelay(
   hw.output %fifo : !esi.channel<i32, ValidReady>
 }
 
-// A ValidOnly input can't be stalled, so every token is delayed and only
-// dropped if the FIFO is full when it is written.
+// A ValidOnly input can't be stalled, so every token is delayed and written,
+// even if the FIFO is full.
 // CHECK-LABEL:  hw.module @fifoValidOnlyInputDataDelay(
-// CHECK:          %out, %full, %empty = seq.fifo depth 2 in %rawOutput rdEn {{%.+}} wrEn [[WrEn:%.+]] clk %clk rst %rst : i32
+// CHECK:          %out, %full, %empty = seq.fifo depth 2 in %rawOutput rdEn {{%.+}} wrEn %valid_dly1 clk %clk rst %rst : i32
 // CHECK-NEXT:     [[Valid:%.+]] = comb.xor {{%.+}}, %true {sv.namehint = "inputNotEmpty"} : i1
-// CHECK-NEXT:     [[SeqFifoNotFull:%.+]] = comb.xor %full, %true {sv.namehint = "seqFifoNotFull"} : i1
 // CHECK:          %valid_dly0 = seq.compreg [[Valid]], %clk reset %rst, %false : i1
 // CHECK-NEXT:     %valid_dly1 = seq.compreg %valid_dly0, %clk reset %rst, %false : i1
-// CHECK-NEXT:     [[WrEn]] = comb.and %valid_dly1, [[SeqFifoNotFull]] : i1
 hw.module @fifoValidOnlyInputDataDelay(
     in %clk: !seq.clock, in %rst: i1,
     in %in: !esi.channel<i32, ValidOnly(2)>,
     out out: !esi.channel<i32, ValidOnly>) {
   %fifo = esi.fifo in %in clk %clk rst %rst depth 2 : !esi.channel<i32, ValidOnly(2)> -> !esi.channel<i32, ValidOnly>
   hw.output %fifo : !esi.channel<i32, ValidOnly>
+}
+
+// CHECK-LABEL:  hw.module @fifoValidOnlyInput(
+// CHECK:          %rawOutput, %valid = esi.unwrap.vo %in : !esi.channel<i32, ValidOnly>
+// CHECK:          %out, %full, %empty = seq.fifo depth 2 in %rawOutput rdEn {{%.+}} wrEn [[Valid:%.+]] clk %clk rst %rst : i32
+// CHECK-NEXT:     [[Valid]] = comb.xor {{%.+}}, %true {sv.namehint = "inputNotEmpty"} : i1
+hw.module @fifoValidOnlyInput(
+    in %clk: !seq.clock, in %rst: i1,
+    in %in: !esi.channel<i32, ValidOnly>,
+    out out: !esi.channel<i32, ValidReady>) {
+  %fifo = esi.fifo in %in clk %clk rst %rst depth 2 : !esi.channel<i32, ValidOnly> -> !esi.channel<i32, ValidReady>
+  hw.output %fifo : !esi.channel<i32, ValidReady>
 }
 
 // CHECK-LABEL:  hw.module @testConversion(in %clk : !seq.clock, in %rst : i1) {

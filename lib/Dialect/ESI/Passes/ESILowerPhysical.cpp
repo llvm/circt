@@ -208,8 +208,9 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
   // With an input data delay of N, the data for an accepted token arrives N
   // cycles later, so delay the write to match. Since up to N writes may be in
   // flight, only accept input while more than N slots are free. A ValidOnly
-  // sender can't be stalled though, so instead every token is delayed and only
-  // dropped if the FIFO is actually full when it is written.
+  // sender can't be stalled though, so instead every token is written. If the
+  // FIFO is full, it overflows, which the `seq.fifo` assertions catch in
+  // simulation.
   bool validOnlyInput =
       chanInput.getType().getSignaling() == ChannelSignaling::ValidOnly;
   bool reserveSlots = inputDelay > 0 && !validOnlyInput;
@@ -241,18 +242,15 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
   static_cast<Value>(inputEn).getDefiningOp()->setAttr(
       "sv.namehint", rewriter.getStringAttr("inputEn"));
 
-  bool delayValid = validOnlyInput && inputDelay > 0;
-  Value write = delayValid ? Value(inputNotEmpty) : Value(inputEn);
+  Value write = validOnlyInput ? Value(inputNotEmpty) : Value(inputEn);
   if (inputDelay > 0) {
     Value false_ = hw::ConstantOp::create(rewriter, loc, i1, 0);
     for (uint64_t i = 0; i < inputDelay; ++i)
       write = seq::CompRegOp::create(
           rewriter, loc, write, op.getClk(), op.getRst(), false_,
-          (delayValid ? "valid_dly" : "inputEn_dly") + Twine(i),
+          (validOnlyInput ? "valid_dly" : "inputEn_dly") + Twine(i),
           InnerSymAttr());
   }
-  if (delayValid)
-    write = comb::AndOp::create(rewriter, loc, write, seqFifoNotFull);
   wrEn.setValue(write);
 
   Value output;
