@@ -13,6 +13,7 @@
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/OM/OMUtils.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/SymbolTable.h"
@@ -701,6 +702,22 @@ void circt::om::ConstantOp::build(::mlir::OpBuilder &odsBuilder,
 OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
+}
+
+LogicalResult
+circt::om::ConstantOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  StringAttr className;
+  AttrTypeWalker walker;
+  walker.addWalk([&](ClassType type) {
+    className = type.getClassName().getAttr();
+    if (symbolTable.lookupNearestSymbolFrom<ClassLike>(*this, className))
+      return WalkResult::advance();
+    return WalkResult::interrupt();
+  });
+
+  if (walker.walk(getValueAttr()).wasInterrupted())
+    return emitOpError("refers to non-existant class (") << className << ')';
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
