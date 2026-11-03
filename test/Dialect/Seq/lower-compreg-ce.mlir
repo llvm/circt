@@ -21,5 +21,6 @@ hw.module @cetest(in %clk: !seq.clock, in %rst: i1, in %ce: i1, in %i: i32) {
   // CHECK-NEXT: %r1 = seq.compreg sym @withinitial [[TMP3]], %clk reset %rst, [[TMP0]] initial [[TMP1]] : i32
   %r1 = seq.compreg.ce sym @withinitial %i, %clk, %ce reset %rst, %rv initial %init : i32
 
-// CHECK-NEXT }
+// CHECK-NEXT: hw.output
+// CHECK-NEXT: }
 }
