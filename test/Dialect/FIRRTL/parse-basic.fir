@@ -1608,7 +1608,7 @@ circuit BasicProps :
     ; CHECK-NEXT: firrtl.propassign %a, %b : !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>
     propassign a, b
 
-  ; CHECK-LABEL firrtl.class private @OtherClient(in %a: !firrtl.string, out %b: !firrtl.string)
+  ; CHECK-LABEL: firrtl.class private @OtherClient(in %a: !firrtl.string, out %b: !firrtl.string)
   class OtherClient:
     input a : String
     output b : String
@@ -1616,7 +1616,7 @@ circuit BasicProps :
     ; TODO: This test needs to be fixed up once flow-checking for objects is implemented correctly.
     propassign b, o.b
 
-  ; CHECK-LABEL firrtl.extclass private @ExtClass(in in: !firrtl.string, out out: !firrtl.string)
+  ; CHECK-LABEL: firrtl.extclass @ExtClass(in in: !firrtl.string, out out: !firrtl.string)
   extclass ExtClass:
     input in : String
     output out : String
