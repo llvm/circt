@@ -135,9 +135,16 @@ async def delayed_source(dut, prefix: str, delay: int, values: List[int],
 
 class Sink:
   """Consume a ValidReady, FIFO, or ValidOnly output, recording the transfer
-  cycles and reading each transfer's data `delay` cycles later."""
+  cycles and reading each transfer's data `delay` cycles later. With
+  `stall_period`, the sink stalls 1 cycle in each period. `missed` records the
+  cycles on which it was ready but nothing transferred."""
 
-  def __init__(self, dut, prefix: str, delay: int, ready_prob: float):
+  def __init__(self,
+               dut,
+               prefix: str,
+               delay: int,
+               ready_prob: float,
+               stall_period: int = 0):
     self.dut = dut
     name = f"{prefix}_out"
     self.data = getattr(dut, name)
@@ -153,8 +160,10 @@ class Sink:
       self.ready = getattr(dut, f"{name}_ready")
     self.delay = delay
     self.ready_prob = ready_prob
+    self.stall_period = stall_period
     self.received: List[int] = []
     self.cycles: List[int] = []
+    self.missed: List[int] = []
 
   async def run(self):
     cycle = 0
@@ -164,7 +173,10 @@ class Sink:
       if pending and pending[0] == cycle:
         pending.pop(0)
         self.received.append(int(self.data.value))
-      want = random.random() < self.ready_prob
+      if self.stall_period:
+        want = cycle % self.stall_period != 0
+      else:
+        want = random.random() < self.ready_prob
       if self.fifo:
         # FIFO signaling: only read when not empty.
         xfer = want and self.empty.value == 0
@@ -180,22 +192,27 @@ class Sink:
           self.received.append(int(self.data.value))
         else:
           pending.append(cycle + self.delay)
+      elif want:
+        self.missed.append(cycle)
       cycle += 1
 
 
-async def run_all(dut, src_prob: float, sink_prob: float):
+async def run_all(dut,
+                  src_prob: float,
+                  sink_prob: float,
+                  stall_period: int = 0):
   await init(dut)
   sent = {}
   sinks = {}
   for p, delay in FIFO_PORTS.items():
     sent[p] = [junk() for _ in range(NUM_ITEMS)]
     cocotb.start_soon(fifo_source(dut, p, sent[p], src_prob))
-    sinks[p] = Sink(dut, p, OUT_DELAYS.get(p, delay), sink_prob)
+    sinks[p] = Sink(dut, p, OUT_DELAYS.get(p, delay), sink_prob, stall_period)
   for p, delay in VR_PORTS.items():
     sent[p] = [junk() for _ in range(NUM_ITEMS)]
     cocotb.start_soon(
         delayed_source(dut, p, delay, sent[p], src_prob, has_ready=True))
-    sinks[p] = Sink(dut, p, OUT_DELAYS.get(p, delay), sink_prob)
+    sinks[p] = Sink(dut, p, OUT_DELAYS.get(p, delay), sink_prob, stall_period)
   for p, delay in VO_PORTS.items():
     sent[p] = [junk() for _ in range(NUM_ITEMS)]
     cocotb.start_soon(
@@ -245,3 +262,19 @@ async def heavy_backpressure(dut):
   """Bursty source, mostly stalled sink: exercises the buffer being full."""
   random.seed(2)
   await run_all(dut, src_prob=0.95, sink_prob=0.2)
+
+
+@cocotb.test()
+async def periodic_stall(dut):
+  """Continuous source, sink stalled 1 cycle in 8: a transfer on every cycle
+  the sink is ready. Buffers which reduce the data delay must not run dry
+  after a stall."""
+  random.seed(3)
+  sinks = await run_all(dut, src_prob=1.0, sink_prob=1.0, stall_period=8)
+  # Skip warm-up and drain.
+  missed = {
+      p: [c for c in s.missed if s.cycles[0] < c < s.cycles[-1]]
+      for p, s in sinks.items()
+  }
+  missed = {p: m for p, m in missed.items() if m}
+  assert not missed, f"no transfer on these ready cycles: {missed}"
