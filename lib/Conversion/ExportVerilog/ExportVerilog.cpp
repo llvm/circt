@@ -2780,6 +2780,13 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 }
 
 SubExprInfo ExprEmitter::visitComb(ReplicateOp op) {
+  // The replication operator is unsupported in some tools, so expand it
+  // into an explicit concatenation when requested.
+  if (state.options.disallowReplicate) {
+    emitBracedList(SmallVector<Value>(op.getMultiple(), op.getOperand()));
+    return {Symbol, IsUnsigned};
+  }
+
   auto openFn = [&]() {
     ps << "{";
     ps.addAsString(op.getMultiple());
