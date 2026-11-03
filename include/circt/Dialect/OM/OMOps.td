@@ -486,6 +486,7 @@ def UnknownValueOp : OMOp<"unknown", [
   let arguments = (ins);
   let results = (outs AnyType:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
+  let hasCanonicalizeMethod = 1;
 }
 
 def AnyCastOp : OMOp<"any_cast", [Pure]> {

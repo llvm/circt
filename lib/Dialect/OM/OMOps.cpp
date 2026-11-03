@@ -1239,6 +1239,14 @@ OpFoldResult IntegerXorOp::fold(FoldAdaptor adaptor) {
 // UnknownValueOp
 //===----------------------------------------------------------------------===//
 
+LogicalResult UnknownValueOp::canonicalize(UnknownValueOp op,
+                                           PatternRewriter &rewriter) {
+  if (!op.getResult().use_empty())
+    return failure();
+  rewriter.eraseOp(op);
+  return success();
+}
+
 LogicalResult circt::om::UnknownValueOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
 

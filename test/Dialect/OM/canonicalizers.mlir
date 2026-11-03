@@ -21,6 +21,13 @@ om.class @FooWithAssert() {
   om.class.fields
 }
 
+// CHECK-LABEL: om.class @DeadUnknownCanonicalization
+// CHECK-NEXT: om.class.fields
+om.class @DeadUnknownCanonicalization() {
+  %unused = om.unknown : i8
+  om.class.fields
+}
+
 // An object instantiation of a class containing a property_assert must not be
 // canonicalized away, because the assert has observable side effects.
 // CHECK-LABEL: @ObjectWithAssertMustNotDCE
