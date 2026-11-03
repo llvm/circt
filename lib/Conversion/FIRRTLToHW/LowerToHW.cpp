@@ -582,6 +582,8 @@ void CircuitLoweringState::processRemainingAnnotations(
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
             blackBoxAnnoClass,
+            // This annotation is consumed when lowering verbatim extmodules.
+            verbatimBlackBoxAnnoClass,
             // This annotation is used by several GrandCentral passes.
             extractGrandCentralAnnoClass,
             // The following will be handled while lowering the verification
