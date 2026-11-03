@@ -5,18 +5,18 @@ sv.macro.decl @VERILATOR
 
 // CHECK-NOT: module ReservedName1(
 // CHECK-NOT:   input reservedName2{{$}}
-// CHECK-NOT:   reg reservedName3;
+// CHECK-NOT:   var logic reservedName3;
 sv.reserve_names ["ReservedName1", "reservedName2", "reservedName3"]
 hw.module @ReservedName1 (in %reservedName2 : i1) {
-  %reservedName3 = sv.reg : !hw.inout<i1>
+  %reservedName3 = sv.var : !sv.var<i1>
 }
 
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
 hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
-  %wire42 = sv.reg : !hw.inout<i42>
-  %forceWire = sv.wire sym @wire1 : !hw.inout<i1>
-  %partSelectReg = sv.reg : !hw.inout<i42>
+  %wire42 = sv.var : !sv.var<i42>
+  %forceWire = sv.wire sym @wire1 : !sv.net<i1>
+  %partSelectReg = sv.var : !sv.var<i42>
 
   %fd = hw.constant 0x80000002 : i32
 
@@ -30,9 +30,9 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
   // CHECK:        logic{{ *}} [7:0]{{ *}} logic_op;
   // CHECK-NEXT: struct packed {logic b; } logic_op_struct;
   // CHECK-NEXT: assign logic_op = val;
-  %logic_op = sv.logic : !hw.inout<i8>
-  %logic_op_struct = sv.logic : !hw.inout<struct<b: i1>>
-  sv.assign %logic_op, %val: i8
+  %logic_op = sv.var : !sv.var<i8>
+  %logic_op_struct = sv.var : !sv.var<!hw.struct<b: i1>>
+  sv.var_assign %logic_op, %val : i8
 
   // CHECK:           (* sv attr *)
   // CHECK-NEXT:      always @(posedge clock) begin
@@ -41,11 +41,11 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
     // CHECK-NEXT: automatic       struct packed {logic b; } logic_op_struct_procedural
 
     // CHECK: force forceWire = cond;
-    sv.force %forceWire, %cond : i1
-    %logic_op_procedural = sv.logic : !hw.inout<i8>
-    %logic_op_struct_procedural = sv.logic : !hw.inout<struct<b: i1>>
+    sv.force %forceWire, %cond : !sv.net<i1>, i1
+    %logic_op_procedural = sv.var : !sv.var<i8>
+    %logic_op_struct_procedural = sv.var : !sv.var<!hw.struct<b: i1>>
 
-    sv.bpassign %logic_op_procedural, %val: i8
+    sv.bpassign %logic_op_procedural, %val : !sv.var<i8>, i8
   // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural @SYNTHESIS {
     } else {
@@ -61,7 +61,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
       }
 
   // CHECK-NEXT: release forceWire;
-    sv.release %forceWire : !hw.inout<i1>
+    sv.release %forceWire : !sv.net<i1>
   // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // always @(posedge)
     }
@@ -123,19 +123,19 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
     sv.if %cond {
       %c42 = hw.constant 42 : i42
       // CHECK-NEXT: wire42 = 42'h2A;
-      sv.bpassign %wire42, %c42 : i42
+      sv.bpassign %wire42, %c42 : !sv.var<i42>, i42
       %c40 = hw.constant 42 : i40
 
       %c2_i3 = hw.constant 2 : i3
       // CHECK-NEXT: partSelectReg[3'h2 +: 40] = 40'h2A;
-      %a = sv.indexed_part_select_inout %partSelectReg[%c2_i3 : 40] : !hw.inout<i42>, i3
-      sv.bpassign %a, %c40 : i40
+      %a = sv.indexed_part_select_inout %partSelectReg[%c2_i3 : 40] : !sv.var<i42>, i3
+      sv.bpassign %a, %c40 : !sv.var<i40>, i40
       // CHECK-NEXT: partSelectReg[3'h2 -: 40] = 40'h2A;
-      %b = sv.indexed_part_select_inout %partSelectReg[%c2_i3 decrement: 40] : !hw.inout<i42>, i3
-      sv.bpassign %b, %c40 : i40
+      %b = sv.indexed_part_select_inout %partSelectReg[%c2_i3 decrement: 40] : !sv.var<i42>, i3
+      sv.bpassign %b, %c40 : !sv.var<i40>, i40
     } else {
       // CHECK: wire42 = param_y;
-      sv.bpassign %wire42, %param_y : i42
+      sv.bpassign %wire42, %param_y : !sv.var<i42>, i42
     }
 
     // CHECK-NEXT:   if (cond)
@@ -337,7 +337,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
     // CHECK:     `define THING
     %thing = sv.verbatim.expr "`THING" : () -> i42
     // CHECK-NEXT: wire42 = `THING;
-    sv.bpassign %wire42, %thing : i42
+    sv.bpassign %wire42, %thing : !sv.var<i42>, i42
 
     sv.ifdef.procedural @FOO {
       // CHECK-NEXT: `ifdef FOO
@@ -355,7 +355,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
     }
 
     // CHECK-NEXT: wire42 = `THING;
-    sv.bpassign %wire42, %thing : i42
+    sv.bpassign %wire42, %thing : !sv.var<i42>, i42
 
     // CHECK-NEXT: casez (val)
     sv.case casez %val : i8
@@ -482,7 +482,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
   %add = comb.add %val, %val : i8
 
   // CHECK-NEXT: `define STUFF "wire42 (8'(val + val))"
-  sv.verbatim "`define STUFF \"{{0}} ({{1}})\"" (%wire42, %add) : !hw.inout<i42>, i8
+  sv.verbatim "`define STUFF \"{{0}} ({{1}})\"" (%wire42, %add) : !sv.var<i42>, i8
 
   // CHECK-NEXT: `ifdef FOO
   sv.ifdef @FOO {
@@ -526,38 +526,38 @@ hw.module @reg_0(in %in4: i4, in %in8: i8, in %in8_2: i8, out a: i8, out b: i8) 
 
   // CHECK-EMPTY:
   // CHECK-NEXT: (* dont_merge *)
-  // CHECK-NEXT: reg [7:0]       myReg;
-  %myReg = sv.reg {sv.attributes = [#sv.attribute<"dont_merge">]} : !hw.inout<i8>
+  // CHECK-NEXT: var logic [7:0]       myReg;
+  %myReg = sv.var {sv.attributes = [#sv.attribute<"dont_merge">]} : !sv.var<i8>
 
   // CHECK-NEXT: (* dont_merge, dont_retime = true *)
   // CHECK-NEXT: /* comment_merge, comment_retime = true */
   // CHECK-NEXT: (* another_attr *)
-  // CHECK-NEXT: reg [41:0][7:0] myRegArray1;
-  %myRegArray1 = sv.reg {sv.attributes = [
+  // CHECK-NEXT: var logic [41:0][7:0] myRegArray1;
+  %myRegArray1 = sv.var {sv.attributes = [
     #sv.attribute<"dont_merge">,
     #sv.attribute<"dont_retime" = "true">,
     #sv.attribute<"comment_merge", emitAsComment>,
     #sv.attribute<"comment_retime" = "true", emitAsComment>,
     #sv.attribute<"another_attr">
-  ]} : !hw.inout<array<42 x i8>>
+  ]} : !sv.var<!hw.array<42 x i8>>
 
   // CHECK:      /* assign_attr */
   // CHECK-NEXT: assign myReg = in8;
-  sv.assign %myReg, %in8 {sv.attributes = [#sv.attribute<"assign_attr", emitAsComment>]} : i8
+  sv.var_assign %myReg, %in8 {sv.attributes = [#sv.attribute<"assign_attr", emitAsComment>]} : i8
 
-  %subscript1 = sv.array_index_inout %myRegArray1[%in4] : !hw.inout<array<42 x i8>>, i4
-  sv.assign %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
+  %subscript1 = sv.array_index_inout %myRegArray1[%in4] : !sv.var<!hw.array<42 x i8>>, i4
+  sv.var_assign %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
 
-  %regout = sv.read_inout %myReg : !hw.inout<i8>
+  %regout = sv.read_inout %myReg : !sv.var<i8>
 
-  %subscript2 = sv.array_index_inout %myRegArray1[%in4] : !hw.inout<array<42 x i8>>, i4
-  %memout = sv.read_inout %subscript2 : !hw.inout<i8>
+  %subscript2 = sv.array_index_inout %myRegArray1[%in4] : !sv.var<!hw.array<42 x i8>>, i4
+  %memout = sv.read_inout %subscript2 : !sv.var<i8>
 
   %unpacked_array = sv.unpacked_array_create %in8, %in8_2 : (i8, i8) -> !hw.uarray<2xi8>
-  %unpacked_wire = sv.wire : !hw.inout<uarray<2xi8>>
+  %unpacked_wire = sv.wire : !sv.net<!hw.uarray<2xi8>>
   // CHECK: wire [7:0] unpacked_wire[0:1];
   // CHECK-NEXT: assign unpacked_wire = '{in8_2, in8};
-  sv.assign %unpacked_wire, %unpacked_array: !hw.uarray<2xi8>
+  sv.assign %unpacked_wire, %unpacked_array : !sv.net<!hw.uarray<2xi8>>, !hw.uarray<2xi8>
 
   // CHECK-NEXT: assign a = myReg;
   // CHECK-NEXT: assign b = myRegArray1[in4];
@@ -567,19 +567,19 @@ hw.module @reg_0(in %in4: i4, in %in8: i8, in %in8_2: i8, out a: i8, out b: i8) 
 hw.module @reg_1(in %in4: i4, in %in8: i8, out a : i3, out b : i5) {
   // CHECK-LABEL: module reg_1(
 
-  // CHECK: reg [17:0] myReg2
-  %myReg2 = sv.reg : !hw.inout<i18>
+  // CHECK: var logic [17:0] myReg2
+  %myReg2 = sv.var : !sv.var<i18>
 
   // CHECK:      assign myReg2[4'h7 +: 8] = in8;
   // CHECK-NEXT: assign myReg2[4'h7 -: 8] = in8;
 
   %c2_i3 = hw.constant 7 : i4
-  %a1 = sv.indexed_part_select_inout %myReg2[%c2_i3 : 8] : !hw.inout<i18>, i4
-  sv.assign %a1, %in8 : i8
-  %b1 = sv.indexed_part_select_inout %myReg2[%c2_i3 decrement: 8] : !hw.inout<i18>, i4
-  sv.assign %b1, %in8 : i8
+  %a1 = sv.indexed_part_select_inout %myReg2[%c2_i3 : 8] : !sv.var<i18>, i4
+  sv.var_assign %a1, %in8 : i8
+  %b1 = sv.indexed_part_select_inout %myReg2[%c2_i3 decrement: 8] : !sv.var<i18>, i4
+  sv.var_assign %b1, %in8 : i8
   %c3_i3 = hw.constant 3 : i4
-  %r1 = sv.read_inout %myReg2 : !hw.inout<i18>
+  %r1 = sv.read_inout %myReg2 : !sv.var<i18>
   %c = sv.indexed_part_select %r1[%c3_i3 : 3] : i18,i4
   %d = sv.indexed_part_select %r1[%in4 decrement:5] :i18, i4
   // CHECK-NEXT: assign a = myReg2[4'h3 +: 3];
@@ -588,14 +588,14 @@ hw.module @reg_1(in %in4: i4, in %in8: i8, out a : i3, out b : i5) {
 }
 
 // CHECK-LABEL: module regWithInit(
-// CHECK:     reg        reg1 = 1'h0;
-// CHECK:     reg [31:0] reg2 = 32'(arg + arg);
+// CHECK:     var logic        reg1 = 1'h0;
+// CHECK:     var logic [31:0] reg2 = 32'(arg + arg);
 hw.module @regWithInit(in %arg : i32) {
   %c0_i1 = hw.constant 0 : i1
-  %reg1 = sv.reg init %c0_i1 : !hw.inout<i1>
+  %reg1 = sv.var init %c0_i1 : !sv.var<i1>
 
   %init = comb.add %arg, %arg : i32
-  %reg2 = sv.reg init %init : !hw.inout<i32>
+  %reg2 = sv.var init %init : !sv.var<i32>
 }
 
 // CHECK-LABEL: module struct_field_inout1(
@@ -621,13 +621,13 @@ hw.module @struct_field_inout2(in %a: !hw.inout<!hw.struct<b: !hw.struct<c: i1>>
 
 // CHECK-LABEL: module PartSelectInoutInline(
 hw.module @PartSelectInoutInline(in %v:i40) {
-  %r = sv.reg : !hw.inout<i42>
+  %r = sv.var : !sv.var<i42>
   %c2_i3 = hw.constant 2 : i3
-  %a = sv.indexed_part_select_inout %r[%c2_i3 : 40] : !hw.inout<i42>, i3
+  %a = sv.indexed_part_select_inout %r[%c2_i3 : 40] : !sv.var<i42>, i3
   // CHECK: initial
   // CHECK-NEXT:   r[3'h2 +: 40] = v;
   sv.initial {
-    sv.bpassign %a, %v : i40
+    sv.bpassign %a, %v : !sv.var<i40>, i40
   }
 }
 
@@ -775,7 +775,7 @@ hw.module @slice_inline_ports(in %arr: !hw.array<128xi1>, in %x: i3, in %y: i7,
 
 // CHECK-LABEL: if_multi_line_expr1
 hw.module @if_multi_line_expr1(in %clock: i1, in %reset: i1, in %really_long_port: i11) {
-  %tmp6 = sv.reg  : !hw.inout<i25>
+  %tmp6 = sv.var  : !sv.var<i25>
 
   // CHECK: if (reset)
   // CHECK-NEXT:   tmp6 <= 25'h0;
@@ -788,17 +788,17 @@ hw.module @if_multi_line_expr1(in %clock: i1, in %reset: i1, in %really_long_por
     %0 = comb.concat %signs, %really_long_port : i14, i11
     %c12345_i25 = hw.constant 12345 : i25
     %1 = comb.and %0, %c12345_i25 : i25
-    sv.passign %tmp6, %1 : i25
+    sv.passign %tmp6, %1 : !sv.var<i25>, i25
   }(syncreset : posedge %reset)  {
     %c0_i25 = hw.constant 0 : i25
-    sv.passign %tmp6, %c0_i25 : i25
+    sv.passign %tmp6, %c0_i25 : !sv.var<i25>, i25
   }
   hw.output
 }
 
 // CHECK-LABEL: if_multi_line_expr2
 hw.module @if_multi_line_expr2(in %clock: i1, in %reset: i1, in %really_long_port: i11) {
-  %tmp6 = sv.reg  : !hw.inout<i25>
+  %tmp6 = sv.var  : !sv.var<i25>
 
   %c12345_i25 = hw.constant 12345 : i25
   %sign = comb.extract %really_long_port from 10 : (i11) -> i1
@@ -811,10 +811,10 @@ hw.module @if_multi_line_expr2(in %clock: i1, in %reset: i1, in %really_long_por
   // CHECK-NEXT: else
   // CHECK-NEXT:   tmp6 <= {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
   sv.alwaysff(posedge %clock)  {
-    sv.passign %tmp6, %1 : i25
+    sv.passign %tmp6, %1 : !sv.var<i25>, i25
   }(syncreset : posedge %reset)  {
     %c0_i25 = hw.constant 0 : i25
-    sv.passign %tmp6, %c0_i25 : i25
+    sv.passign %tmp6, %c0_i25 : !sv.var<i25>, i25
   }
   hw.output
 }
@@ -939,16 +939,16 @@ hw.module @issue728ifdef(in %clock: i1, in %asdfasdfasdfasdfafa: i1, in %gasfdas
 
 // CHECK-LABEL: module alwayscombTest(
 hw.module @alwayscombTest(in %a: i1, out x: i1) {
-  // CHECK: reg combWire;
-  %combWire = sv.reg : !hw.inout<i1>
+  // CHECK: var logic combWire;
+  %combWire = sv.var : !sv.var<i1>
   // CHECK: always_comb
   sv.alwayscomb {
     // CHECK-NEXT: combWire <= a
-    sv.passign %combWire, %a : i1
+    sv.passign %combWire, %a : !sv.var<i1>, i1
   }
 
   // CHECK: assign x = combWire;
-  %out = sv.read_inout %combWire : !hw.inout<i1>
+  %out = sv.read_inout %combWire : !sv.var<i1>
   hw.output %out : i1
 }
 
@@ -956,20 +956,20 @@ hw.module @alwayscombTest(in %a: i1, out x: i1) {
 // https://github.com/llvm/circt/issues/838
 // CHECK-LABEL: module inlineProceduralWiresWithLongNames(
 hw.module @inlineProceduralWiresWithLongNames(in %clock: i1, in %in: i1) {
-  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !hw.inout<i1>
-  %0 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !hw.inout<i1>
-  %bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb = sv.wire  : !hw.inout<i1>
-  %1 = sv.read_inout %bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb : !hw.inout<i1>
-  %r = sv.reg  : !hw.inout<uarray<1xi1>>
-  %s = sv.reg  : !hw.inout<uarray<1xi1>>
-  %2 = sv.array_index_inout %r[%0] : !hw.inout<uarray<1xi1>>, i1
-  %3 = sv.array_index_inout %s[%1] : !hw.inout<uarray<1xi1>>, i1
+  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !sv.net<i1>
+  %0 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !sv.net<i1>
+  %bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb = sv.wire  : !sv.net<i1>
+  %1 = sv.read_inout %bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb : !sv.net<i1>
+  %r = sv.var  : !sv.var<!hw.uarray<1xi1>>
+  %s = sv.var  : !sv.var<!hw.uarray<1xi1>>
+  %2 = sv.array_index_inout %r[%0] : !sv.var<!hw.uarray<1xi1>>, i1
+  %3 = sv.array_index_inout %s[%1] : !sv.var<!hw.uarray<1xi1>>, i1
   // CHECK: always_ff
   sv.alwaysff(posedge %clock)  {
     // CHECK-NEXT: r[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] <= in;
-    sv.passign %2, %in : i1
+    sv.passign %2, %in : !sv.var<i1>, i1
     // CHECK-NEXT: s[bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb] <= in;
-    sv.passign %3, %in : i1
+    sv.passign %3, %in : !sv.var<i1>, i1
   }
 }
 
@@ -977,10 +977,10 @@ hw.module @inlineProceduralWiresWithLongNames(in %clock: i1, in %in: i1) {
 // CHECK-LABEL: module oooReg(
 hw.module @oooReg(in %in: i1, out result: i1) {
   // CHECK: wire abc = in;
-  %0 = sv.read_inout %abc : !hw.inout<i1>
+  %0 = sv.read_inout %abc : !sv.net<i1>
 
-  sv.assign %abc, %in : i1
-  %abc = sv.wire  : !hw.inout<i1>
+  sv.assign %abc, %in : !sv.net<i1>, i1
+  %abc = sv.wire  : !sv.net<i1>
 
   // CHECK: assign result = abc;
   hw.output %0 : i1
@@ -1001,16 +1001,16 @@ hw.module @ifdef_beginend(in %clock: i1, in %cond: i1, in %val: i8) {
 // CHECK-LABEL: module ConstResetValueMustBeInlined(
 hw.module @ConstResetValueMustBeInlined(in %clock: i1, in %reset: i1, in %d: i42, out q: i42) {
   %c0_i42 = hw.constant 0 : i42
-  %tmp = sv.reg : !hw.inout<i42>
+  %tmp = sv.var : !sv.var<i42>
   // CHECK: always_ff @(posedge clock or posedge reset) begin
   // CHECK-NEXT:   if (reset)
   // CHECK-NEXT:     tmp <= 42'h0;
   sv.alwaysff(posedge %clock) {
-    sv.passign %tmp, %d : i42
+    sv.passign %tmp, %d : !sv.var<i42>, i42
   } (asyncreset : posedge %reset)  {
-    sv.passign %tmp, %c0_i42 : i42
+    sv.passign %tmp, %c0_i42 : !sv.var<i42>, i42
   }
-  %1 = sv.read_inout %tmp : !hw.inout<i42>
+  %1 = sv.read_inout %tmp : !sv.var<i42>
   hw.output %1 : i42
 }
 
@@ -1024,7 +1024,7 @@ hw.module @OutOfLineConstantsInAlwaysSensitivity() {
 
 // CHECK-LABEL: module TooLongConstExpr
 hw.module @TooLongConstExpr() {
-  %myreg = sv.reg : !hw.inout<i4200>
+  %myreg = sv.var : !sv.var<i4200>
   // CHECK: always @*
   sv.always {
     // CHECK-NEXT: myreg <=
@@ -1032,19 +1032,19 @@ hw.module @TooLongConstExpr() {
     // CHECK-NEXT:         + 4200'h2323CB3A9903AD1D87D91023532E89D313E12BFCFCA2492A8561CADD94652CC4);
     %0 = hw.constant 15894191981981165163143546843135416146464164161464654561818646486465164684484 : i4200
     %1 = comb.add %0, %0 : i4200
-    sv.passign %myreg, %1 : i4200
+    sv.passign %myreg, %1 : !sv.var<i4200>, i4200
   }
 }
 
 // Constants defined before use should be emitted in-place.
 // CHECK-LABEL: module ConstantDefBeforeUse
 hw.module @ConstantDefBeforeUse() {
-  %myreg = sv.reg : !hw.inout<i32>
+  %myreg = sv.var : !sv.var<i32>
   // CHECK: always @*
   // CHECK-NEXT:   myreg <= 32'h2A;
   %0 = hw.constant 42 : i32
   sv.always {
-    sv.passign %myreg, %0 : i32
+    sv.passign %myreg, %0 : !sv.var<i32>, i32
   }
 }
 
@@ -1052,11 +1052,11 @@ hw.module @ConstantDefBeforeUse() {
 // top of the block.
 // CHECK-LABEL: module ConstantDefAfterUse
 hw.module @ConstantDefAfterUse() {
-  %myreg = sv.reg : !hw.inout<i32>
+  %myreg = sv.var : !sv.var<i32>
   // CHECK: always @*
   // CHECK-NEXT:   myreg <= 32'h2A;
   sv.always {
-    sv.passign %myreg, %0 : i32
+    sv.passign %myreg, %0 : !sv.var<i32>, i32
   }
   %0 = hw.constant 42 : i32
 }
@@ -1065,7 +1065,7 @@ hw.module @ConstantDefAfterUse() {
 // should be emitted at the top of their defining block.
 // CHECK-LABEL: module ConstantEmissionAtTopOfBlock
 hw.module @ConstantEmissionAtTopOfBlock() {
-  %myreg = sv.reg : !hw.inout<i32>
+  %myreg = sv.var : !sv.var<i32>
   // CHECK:      always @* begin
   // CHECK-NEXT:   if (1'h1)
   // CHECK-NEXT:     myreg <= 32'h2A;
@@ -1073,7 +1073,7 @@ hw.module @ConstantEmissionAtTopOfBlock() {
     %0 = hw.constant 42 : i32
     %1 = hw.constant 1 : i1
     sv.if %1 {
-      sv.passign %myreg, %0 : i32
+      sv.passign %myreg, %0 : !sv.var<i32>, i32
     }
   }
 }
@@ -1083,15 +1083,15 @@ hw.module @ConstantEmissionAtTopOfBlock() {
 hw.module @RegisterOfStructOrArrayOfStruct() {
   // CHECK-NOT: reg
   // CHECK: struct packed {logic a; logic b; }           reg1
-  %reg1 = sv.reg : !hw.inout<struct<a: i1, b: i1>>
+  %reg1 = sv.var : !sv.var<!hw.struct<a: i1, b: i1>>
 
   // CHECK-NOT: reg
   // CHECK: struct packed {logic a; logic b; }[7:0]      reg2
-  %reg2 = sv.reg : !hw.inout<array<8xstruct<a: i1, b: i1>>>
+  %reg2 = sv.var : !sv.var<!hw.array<8xstruct<a: i1, b: i1>>>
 
   // CHECK-NOT: reg
   // CHECK: struct packed {logic a; logic b; }[3:0][7:0] reg3
-  %reg3 = sv.reg : !hw.inout<array<4xarray<8xstruct<a: i1, b: i1>>>>
+  %reg3 = sv.var : !sv.var<!hw.array<4xarray<8xstruct<a: i1, b: i1>>>>
 }
 
 // See https://github.com/llvm/circt/issues/7733
@@ -1099,28 +1099,28 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
 hw.module @RegisterOfUnpackedArrayOfStruct() {
   // CHECK-NOT: reg
   // CHECK: struct packed {logic a; logic b; }{{.*}}reg4[0:7]
-  %reg4 = sv.reg : !hw.inout<uarray<8xstruct<a: i1, b: i1>>>
+  %reg4 = sv.var : !sv.var<!hw.uarray<8xstruct<a: i1, b: i1>>>
 
   // CHECK-NOT: reg
   // CHECK: struct packed {logic a; logic b; }{{.*}}reg5[0:3][0:7]
-  %reg5 = sv.reg : !hw.inout<uarray<4xuarray<8xstruct<a: i1, b: i1>>>>
+  %reg5 = sv.var : !sv.var<!hw.uarray<4xuarray<8xstruct<a: i1, b: i1>>>>
 
   // CHECK-NOT: reg
   // CHECK: struct packed {logic a; logic b; }[7:0]{{.*}}reg6[0:3]
-  %reg6 = sv.reg : !hw.inout<uarray<4xarray<8xstruct<a: i1, b: i1>>>>
+  %reg6 = sv.var : !sv.var<!hw.uarray<4xarray<8xstruct<a: i1, b: i1>>>>
 }
 
 // CHECK-LABEL: module MultiUseReadInOut(
 // Issue #1564
 hw.module @MultiUseReadInOut(in %auto_in_ar_bits_id : i2, out aa: i3, out bb: i3){
-  %a = sv.reg  : !hw.inout<i3>
-  %b = sv.reg  : !hw.inout<i3>
-  %c = sv.reg  : !hw.inout<i3>
-  %d = sv.reg  : !hw.inout<i3>
-  %123 = sv.read_inout %b : !hw.inout<i3>
-  %124 = sv.read_inout %a : !hw.inout<i3>
-  %125 = sv.read_inout %c : !hw.inout<i3>
-  %126 = sv.read_inout %d : !hw.inout<i3>
+  %a = sv.var  : !sv.var<i3>
+  %b = sv.var  : !sv.var<i3>
+  %c = sv.var  : !sv.var<i3>
+  %d = sv.var  : !sv.var<i3>
+  %123 = sv.read_inout %b : !sv.var<i3>
+  %124 = sv.read_inout %a : !sv.var<i3>
+  %125 = sv.read_inout %c : !sv.var<i3>
+  %126 = sv.read_inout %d : !sv.var<i3>
 
   // We should directly use a/b/c/d here instead of emitting temporary wires.
 
@@ -1136,8 +1136,8 @@ hw.module @MultiUseReadInOut(in %auto_in_ar_bits_id : i2, out aa: i3, out bb: i3
 
 // CHECK-LABEL: module DontDuplicateSideEffectingVerbatim(
 hw.module @DontDuplicateSideEffectingVerbatim() {
-  %a = sv.reg : !hw.inout<i42>
-  %b = sv.reg sym @regSym : !hw.inout<i42>
+  %a = sv.var : !sv.var<i42>
+  %b = sv.var sym @regSym : !sv.var<i42>
 
   sv.initial {
     // CHECK: automatic logic [41:0] _SIDEEFFECT = SIDEEFFECT;
@@ -1145,19 +1145,19 @@ hw.module @DontDuplicateSideEffectingVerbatim() {
     %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
     %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [#hw.innerNameRef<@DontDuplicateSideEffectingVerbatim::@regSym>]}
     // CHECK: a = _SIDEEFFECT;
-    sv.bpassign %a, %tmp : i42
+    sv.bpassign %a, %tmp : !sv.var<i42>, i42
     // CHECK: a = _SIDEEFFECT;
-    sv.bpassign %a, %tmp : i42
+    sv.bpassign %a, %tmp : !sv.var<i42>, i42
 
     // CHECK: a = _GEN;
-    sv.bpassign %a, %verb_tmp : i42
+    sv.bpassign %a, %verb_tmp : !sv.var<i42>, i42
     // CHECK: a = _GEN;
-    sv.bpassign %a, %verb_tmp : i42
+    sv.bpassign %a, %verb_tmp : !sv.var<i42>, i42
     %tmp2 = sv.verbatim.expr "NO_EFFECT_" : () -> i42
     // CHECK: a = NO_EFFECT_;
-    sv.bpassign %a, %tmp2 : i42
+    sv.bpassign %a, %tmp2 : !sv.var<i42>, i42
     // CHECK: a = NO_EFFECT_;
-    sv.bpassign %a, %tmp2 : i42
+    sv.bpassign %a, %tmp2 : !sv.var<i42>, i42
   }
 }
 
@@ -1166,13 +1166,13 @@ hw.module @DontDuplicateSideEffectingVerbatim() {
 hw.module @DontInlineAssignmentForUnpackedArrays(in %a: !hw.uarray<2xi1>) {
 // CHECK:      wire w[0:1];
 // CHECK-NEXT: assign w = a;
-   %w = sv.wire  : !hw.inout<uarray<2xi1>>
-   sv.assign %w, %a : !hw.uarray<2xi1>
+   %w = sv.wire  : !sv.net<!hw.uarray<2xi1>>
+   sv.assign %w, %a : !sv.net<!hw.uarray<2xi1>>, !hw.uarray<2xi1>
    // CHECK: logic u[0:1];
    // CHECK-NEXT: u = a;
    sv.initial {
-    %u = sv.logic  : !hw.inout<uarray<2xi1>>
-    sv.bpassign %u, %a : !hw.uarray<2xi1>
+    %u = sv.var  : !sv.var<!hw.uarray<2xi1>>
+    sv.bpassign %u, %a : !sv.var<!hw.uarray<2xi1>>, !hw.uarray<2xi1>
    }
 
    hw.output
@@ -1183,11 +1183,11 @@ hw.module.extern @verbatim_inout_2 ()
 // CHECK-LABEL: module verbatim_M1(
 hw.module @verbatim_M1(in %clock : i1, in %cond : i1, in %val : i8) {
   %c42 = hw.constant 42 : i8
-  %reg1 = sv.reg sym @verbatim_reg1: !hw.inout<i8>
-  %reg2 = sv.reg sym @verbatim_reg2: !hw.inout<i8>
+  %reg1 = sv.var sym @verbatim_reg1: !sv.var<i8>
+  %reg2 = sv.var sym @verbatim_reg2: !sv.var<i8>
   // CHECK:      (* dont_merge *)
   // CHECK-NEXT: wire [22:0] wire25
-  %wire25 = sv.wire sym @verbatim_wireSym1 {sv.attributes = [#sv.attribute<"dont_merge">]} : !hw.inout<i23>
+  %wire25 = sv.wire sym @verbatim_wireSym1 {sv.attributes = [#sv.attribute<"dont_merge">]} : !sv.net<i23>
   %add = comb.add %val, %c42 : i8
   %c42_2 = hw.constant 42 : i8
   %xor = comb.xor %val, %c42_2 : i8
@@ -1216,7 +1216,7 @@ hw.module @verbatim_M2(in %clock : i1, in %cond : i1, in %val : i8) {
 // CHECK-LABEL: module InlineAutomaticLogicInit(
 // Issue #1567: https://github.com/llvm/circt/issues/1567
 hw.module @InlineAutomaticLogicInit(in %a : i42, in %b: i42, in %really_really_long_port: i11) {
-  %regValue = sv.reg : !hw.inout<i42>
+  %regValue = sv.var : !sv.var<i42>
   // CHECK: initial begin
   sv.initial {
     // CHECK-DAG: automatic logic [63:0] [[_THING:.+]] = `THING;
@@ -1227,22 +1227,22 @@ hw.module @InlineAutomaticLogicInit(in %a : i42, in %b: i42, in %really_really_l
 
     // CHECK: regValue = _THING[44:3];
     %v = comb.extract %thing from 3 : (i64) -> i42
-    sv.bpassign %regValue, %v : i42
+    sv.bpassign %regValue, %v : !sv.var<i42>, i42
 
     // tmp is multi-use, so it needs an 'automatic logic'.  This can be emitted
     // inline because it just references ports.
     %tmp = comb.add %a, %a : i42
-    sv.bpassign %regValue, %tmp : i42
+    sv.bpassign %regValue, %tmp : !sv.var<i42>, i42
     // CHECK: regValue = [[GEN_0]];
 
     // tmp2 is as well.  This can be emitted inline because it just references
     // a port and an already-emitted-inline variable 'a'.
     %tmp2 = comb.add %tmp, %b : i42
-    sv.bpassign %regValue, %tmp2 : i42
+    sv.bpassign %regValue, %tmp2 : !sv.var<i42>, i42
     // CHECK: regValue = [[GEN_1]];
 
     %tmp3 = comb.add %tmp2, %b : i42
-    sv.bpassign %regValue, %tmp3 : i42
+    sv.bpassign %regValue, %tmp3 : !sv.var<i42>, i42
     // CHECK: regValue = 42'([[GEN_1]] + b);
 
     // CHECK: `ifdef FOO
@@ -1251,11 +1251,11 @@ hw.module @InlineAutomaticLogicInit(in %a : i42, in %b: i42, in %really_really_l
       // tmp is multi-use so it needs a temporary, but cannot be emitted inline
       // because it is in an ifdef.
       %tmp4 = comb.add %a, %a : i42
-      sv.bpassign %regValue, %tmp4 : i42
+      sv.bpassign %regValue, %tmp4 : !sv.var<i42>, i42
       // CHECK: regValue = [[GEN_2]];
 
       %tmp5 = comb.add %tmp4, %b : i42
-      sv.bpassign %regValue, %tmp5 : i42
+      sv.bpassign %regValue, %tmp5 : !sv.var<i42>, i42
       // CHECK: regValue = 42'([[GEN_2]] + b);
     }
   }
@@ -1290,15 +1290,15 @@ hw.module @InlineAutomaticLogicInit(in %a : i42, in %b: i42, in %really_really_l
                          %thing, %thing, %thing, %thing, %thing, %thing : i42
 
     // CHECK: regValue = [[THING]];
-    sv.bpassign %regValue, %thing : i42
+    sv.bpassign %regValue, %thing : !sv.var<i42>, i42
     // CHECK: regValue = [[THING3]];
-    sv.bpassign %regValue, %thing3 : i42
+    sv.bpassign %regValue, %thing3 : !sv.var<i42>, i42
     // CHECK: regValue = [[THING3]];
-    sv.bpassign %regValue, %thing3 : i42
+    sv.bpassign %regValue, %thing3 : !sv.var<i42>, i42
     // CHECK: regValue = [[MANYTHING]];
-    sv.bpassign %regValue, %manyThing : i42
+    sv.bpassign %regValue, %manyThing : !sv.var<i42>, i42
     // CHECK: regValue = [[MANYTHING]];
-    sv.bpassign %regValue, %manyThing : i42
+    sv.bpassign %regValue, %manyThing : !sv.var<i42>, i42
 
     // CHECK: `ifdef FOO
     sv.ifdef.procedural @FOO {
@@ -1309,7 +1309,7 @@ hw.module @InlineAutomaticLogicInit(in %a : i42, in %b: i42, in %really_really_l
                               %thing, %thing, %thing, %thing, %thing, %thing,
                               %thing, %thing, %thing, %thing, %thing, %thing,
                               %thing, %thing, %thing, %thing, %thing, %thing : i42
-        sv.bpassign %regValue, %manyMixed : i42
+        sv.bpassign %regValue, %manyMixed : !sv.var<i42>, i42
       }
     }
   }
@@ -1319,32 +1319,32 @@ hw.module @InlineAutomaticLogicInit(in %a : i42, in %b: i42, in %really_really_l
 hw.module @InlineNonProceduralContinuousNetAssignment(in %a: i1) {
   // CHECK:     wire  someWire = a;
   // CHECK-NOT: assign
-  %someWire = sv.wire {hw.verilogName = "someWire"} : !hw.inout<i1>
-  sv.assign %someWire, %a : i1
+  %someWire = sv.wire {hw.verilogName = "someWire"} : !sv.net<i1>
+  sv.assign %someWire, %a : !sv.net<i1>, i1
   // CHECK:      logic  someLogic;
   // CHECK-NEXT: assign someLogic = a;
-  %someLogic = sv.logic {hw.verilogName = "someLogic"} : !hw.inout<i1>
-  sv.assign %someLogic, %a : i1
-  // CHECK:      reg  someReg;
+  %someLogic = sv.var {hw.verilogName = "someLogic"} : !sv.var<i1>
+  sv.var_assign %someLogic, %a : i1
+  // CHECK:      var logic someReg;
   // CHECK-NEXT: assign someReg = a;
-  %someReg = sv.reg {hw.verilogName = "someReg"} : !hw.inout<i1>
-  sv.assign %someReg, %a : i1
+  %someReg = sv.var {hw.verilogName = "someReg"} : !sv.var<i1>
+  sv.var_assign %someReg, %a : i1
 }
 
 // Issue #2335: https://github.com/llvm/circt/issues/2335
 // CHECK-LABEL: module AggregateTemporay(
 hw.module @AggregateTemporay(in %clock: i1, in %foo: i1, in %bar: i25) {
-  %temp1 = sv.reg  : !hw.inout<!hw.struct<b: i1>>
-  %temp2 = sv.reg  : !hw.inout<!hw.array<5x!hw.array<5x!hw.struct<b: i1>>>>
+  %temp1 = sv.var  : !sv.var<!hw.struct<b: i1>>
+  %temp2 = sv.var  : !sv.var<!hw.array<5x!hw.array<5x!hw.struct<b: i1>>>>
   sv.always posedge %clock  {
     // CHECK: automatic struct packed {logic b; } [[T0:.+]];
     // CHECK: automatic struct packed {logic b; }[4:0][4:0] [[T1:.+]];
     %0 = hw.bitcast %foo : (i1) -> !hw.struct<b: i1>
-    sv.passign %temp1, %0 : !hw.struct<b: i1>
-    sv.passign %temp1, %0 : !hw.struct<b: i1>
+    sv.passign %temp1, %0 : !sv.var<!hw.struct<b: i1>>, !hw.struct<b: i1>
+    sv.passign %temp1, %0 : !sv.var<!hw.struct<b: i1>>, !hw.struct<b: i1>
     %1 = hw.bitcast %bar : (i25) -> !hw.array<5x!hw.array<5x!hw.struct<b: i1>>>
-    sv.passign %temp2, %1 : !hw.array<5x!hw.array<5x!hw.struct<b: i1>>>
-    sv.passign %temp2, %1 : !hw.array<5x!hw.array<5x!hw.struct<b: i1>>>
+    sv.passign %temp2, %1 : !sv.var<!hw.array<5x!hw.array<5x!hw.struct<b: i1>>>>, !hw.array<5x!hw.array<5x!hw.struct<b: i1>>>
+    sv.passign %temp2, %1 : !sv.var<!hw.array<5x!hw.array<5x!hw.struct<b: i1>>>>, !hw.array<5x!hw.array<5x!hw.struct<b: i1>>>
   }
 }
 
@@ -1367,7 +1367,7 @@ hw.module @XMR_src(in %a : i23, out aa: i3) {
 hw.hierpath private @ref [@wait_order::@bar, @XMRRef_Bar::@new]
 hw.hierpath private @ref2 [@wait_order::@baz]
 hw.module @XMRRef_Bar() {
-  %new = sv.wire sym @new : !hw.inout<i2>
+  %new = sv.wire sym @new : !sv.net<i2>
 }
 hw.module.extern @XMRRef_Baz(in %a: i2, in %b: i1)
 hw.module.extern @XMRRef_Qux(in %a: i2, in %b: i1)
@@ -1412,8 +1412,8 @@ hw.module @InlineBind(in %a_in: i8, out wire: i8){
   // CHECK-NEXT:     .out (wire_0)
   // CHECK-NEXT:   );
   // CHECK-NEXT: */
-  %0 = sv.wire : !hw.inout<i8>
-  %1 = sv.read_inout %0: !hw.inout<i8>
+  %0 = sv.wire : !sv.net<i8>
+  %1 = sv.read_inout %0: !sv.net<i8>
   %2 = comb.add %a_in, %1 : i8
   %3 = hw.instance "ext1" sym @foo1 @ExtModule(in: %2: i8) -> (out: i8) {doNotPrint}
   %4 = hw.instance "ext2" sym @foo2 @ExtModule(in: %3: i8) -> (out: i8) {doNotPrint}
@@ -1447,25 +1447,25 @@ hw.module @extInst2(in %signed: i1, in %_i: i1, in %_j: i1, in %_k: i1, in %_z :
 
 // CHECK-LABEL: module zeroWidthArrayIndex
 hw.module @zeroWidthArrayIndex(in %clock : i1, in %data : i64) {
-  %reg = sv.reg  : !hw.inout<uarray<1xi64>>
+  %reg = sv.var  : !sv.var<!hw.uarray<1xi64>>
   sv.alwaysff(posedge %clock) {
     %c0_i0_1 = hw.constant 0 : i0
     // CHECK: reg_0[/*Zero width*/ 1'b0] <= data;
-    %0 = sv.array_index_inout %reg[%c0_i0_1] : !hw.inout<uarray<1xi64>>, i0
-    sv.passign %0, %data : i64
+    %0 = sv.array_index_inout %reg[%c0_i0_1] : !sv.var<!hw.uarray<1xi64>>, i0
+    sv.passign %0, %data : !sv.var<i64>, i64
   }
 }
 
 // CHECK-LABEL: module remoteInstDut
 hw.module @remoteInstDut(in %i: i1, in %j: i1, in %z: i0) {
-  %mywire = sv.wire : !hw.inout<i1>
-  %mywire_rd = sv.read_inout %mywire : !hw.inout<i1>
-  %myreg = sv.reg : !hw.inout<i1>
-  %myreg_rd = sv.read_inout %myreg : !hw.inout<i1>
-  %signed = sv.wire  : !hw.inout<i1>
-  %mywire_rd1 = sv.read_inout %signed : !hw.inout<i1>
-  %output = sv.reg : !hw.inout<i1>
-  %myreg_rd1 = sv.read_inout %output: !hw.inout<i1>
+  %mywire = sv.wire : !sv.net<i1>
+  %mywire_rd = sv.read_inout %mywire : !sv.net<i1>
+  %myreg = sv.var : !sv.var<i1>
+  %myreg_rd = sv.read_inout %myreg : !sv.var<i1>
+  %signed = sv.wire  : !sv.net<i1>
+  %mywire_rd1 = sv.read_inout %signed : !sv.net<i1>
+  %output = sv.var : !sv.var<i1>
+  %myreg_rd1 = sv.read_inout %output: !sv.var<i1>
   %0 = hw.constant 1 : i1
   hw.instance "a1" sym @bindInst @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint}
   hw.instance "a2" sym @bindInst2 @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint}
@@ -1473,7 +1473,7 @@ hw.module @remoteInstDut(in %i: i1, in %j: i1, in %z: i0) {
 // CHECK:      wire mywire
 // CHECK-NEXT: myreg
 // CHECK-NEXT: wire signed_0
-// CHECK-NEXT: reg  output_0
+// CHECK-NEXT: var logic output_0
 // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst a1
 // CHECK: /* This instance is elsewhere emitted as a bind statement
@@ -1523,14 +1523,14 @@ hw.module @SimplyNestedElseIf(in %clock: i1, in %flag1 : i1, in %flag2: i1, in %
 // CHECK: else
 // CHECK: end
 hw.module @DoNotChainElseIf(in %clock: i1, in %flag1 : i1, in %flag2: i1) {
-  %wire = sv.reg : !hw.inout<i32>
+  %wire = sv.var : !sv.var<i32>
   %fd = hw.constant 0x80000002 : i32
 
   sv.always posedge %clock {
     sv.if %flag1 {
       sv.fwrite %fd, "A"
     } else {
-      sv.passign %wire, %fd : i32
+      sv.passign %wire, %fd : !sv.var<i32>, i32
       sv.if %flag2 {
         sv.fwrite %fd, "B"
       } else {
@@ -1619,23 +1619,23 @@ hw.module @ReuseExistingInOut(in %clock: i1, in %a: i1, out out1: i1) {
 
   // CHECK: wire [[WIRE1:.+]];
   // CHECK: wire [[WIRE2:.+]];
-  // CHECK: reg  [[REG:.+]];
-  %mywire = sv.wire : !hw.inout<i1>
-  %otherwire = sv.wire : !hw.inout<i1>
-  %myreg = sv.reg : !hw.inout<i1>
+  // CHECK: var logic [[REG:.+]];
+  %mywire = sv.wire : !sv.net<i1>
+  %otherwire = sv.wire : !sv.net<i1>
+  %myreg = sv.var : !sv.var<i1>
 
   // CHECK: assign [[WIRE1]] = [[INPUT]] | [[INPUT]];
-  sv.assign %mywire, %expr1 : i1
+  sv.assign %mywire, %expr1 : !sv.net<i1>, i1
 
   sv.always posedge %clock {
     // CHECK: [[REG]] <= [[WIRE1]];
-    sv.passign %myreg, %expr1 : i1
+    sv.passign %myreg, %expr1 : !sv.var<i1>, i1
   }
 
   %0 = comb.or %a, %expr2 : i1
 
   // CHECK: assign [[WIRE2]] = [[INPUT]] & [[INPUT]];
-  sv.assign %otherwire, %expr2 : i1
+  sv.assign %otherwire, %expr2 : !sv.net<i1>, i1
 
   // CHECK: assign [[OUTPUT]] = [[INPUT]] | [[WIRE2]];
   hw.output %0 : i1
@@ -1650,9 +1650,9 @@ hw.module @ProhibitReuseOfExistingInOut(in %a: i1, out out1: i1) {
   // CHECK-NEXT: `endif
   // CHECK-NEXT: assign out1 = [[GEN]];
   %0 = comb.or %a, %a : i1
-  %mywire = sv.wire  : !hw.inout<i1>
+  %mywire = sv.wire  : !sv.net<i1>
   sv.ifdef @FOO {
-    sv.assign %mywire, %0 : i1
+    sv.assign %mywire, %0 : !sv.net<i1>, i1
   }
   hw.output %0 : i1
 }
@@ -1680,18 +1680,18 @@ hw.module @Verilator3405(
 }
 
 hw.module @prohiditInline(in %a:i4, in %b:i1, in %c:i1, in %d: i4) {
-  %0 = sv.reg : !hw.inout<i4>
-  %1 = sv.reg : !hw.inout<i4>
-  %2 = sv.reg : !hw.inout<i2>
+  %0 = sv.var : !sv.var<i4>
+  %1 = sv.var : !sv.var<i4>
+  %2 = sv.var : !sv.var<i2>
   sv.always posedge %b {
     // CHECK: automatic logic [3:0][[GEN1:.+]];
     // CHECK: [[GEN2:_GEN.*]] = a;
-    sv.bpassign %0, %a: i4
+    sv.bpassign %0, %a : !sv.var<i4>, i4
     // CHECK-NEXT: [[GEN1]] = 4'([[GEN2]] + d);
-    %3 = sv.read_inout %0: !hw.inout<i4>
+    %3 = sv.read_inout %0: !sv.var<i4>
     %add =comb.add %3, %d: i4
     %extract = comb.extract %add from 1 : (i4) -> i2
-    sv.bpassign %2, %extract: i2
+    sv.bpassign %2, %extract : !sv.var<i2>, i2
   }
 }
 
@@ -1701,7 +1701,7 @@ hw.module @CollectNamesOrder(in %in: i1, out out: i1) {
   // CHECK: wire _GEN;
   %0 = comb.or %in, %in : i1
   %1 = comb.or %0, %0 : i1
-  %foo = sv.wire {hw.verilogName = "_GEN" } : !hw.inout<i1>
+  %foo = sv.wire {hw.verilogName = "_GEN" } : !sv.net<i1>
   hw.output %1 : i1
 }
 
@@ -1709,19 +1709,19 @@ hw.module @CollectNamesOrder(in %in: i1, out out: i1) {
 hw.module private @InlineReadInout() {
   %c0_i32 = hw.constant 0 : i32
   %false = hw.constant false
-  %r1 = sv.reg  : !hw.inout<i2>
+  %r1 = sv.var  : !sv.var<i2>
   sv.initial {
-    %_RANDOM = sv.logic  : !hw.inout<uarray<1xi32>>
-    %2 = sv.array_index_inout %_RANDOM[%c0_i32] : !hw.inout<uarray<1xi32>>, i32
+    %_RANDOM = sv.var  : !sv.var<!hw.uarray<1xi32>>
+    %2 = sv.array_index_inout %_RANDOM[%c0_i32] : !sv.var<!hw.uarray<1xi32>>, i32
     %RAMDOM = sv.verbatim.expr.se "`RAMDOM" : () -> i32 {symbols = []}
-    sv.bpassign %2, %RAMDOM : i32
-    %3 = sv.array_index_inout %_RANDOM[%c0_i32] : !hw.inout<uarray<1xi32>>, i32
-    %4 = sv.read_inout %3 : !hw.inout<i32>
+    sv.bpassign %2, %RAMDOM : !sv.var<i32>, i32
+    %3 = sv.array_index_inout %_RANDOM[%c0_i32] : !sv.var<!hw.uarray<1xi32>>, i32
+    %4 = sv.read_inout %3 : !sv.var<i32>
     // CHECK: automatic logic [31:0] _RANDOM[0:0];
     // CHECK: _RANDOM[32'h0] = `RAMDOM;
     // CHECK-NEXT: r1 = _RANDOM[32'h0][1:0];
     %5 = comb.extract %4 from 0 : (i32) -> i2
-    sv.bpassign %r1, %5 : i2
+    sv.bpassign %r1, %5 : !sv.var<i2>, i2
   }
 }
 
@@ -1738,11 +1738,11 @@ hw.module private @Dollar(in %cond: i1) {
 // CHECK-LABEL: IndexPartSelectInoutArray
 hw.module @IndexPartSelectInoutArray(in %a: !hw.array<2xi1>, in %c: i1, in %d: i1) {
   %c0_i2 = hw.constant 0 : i2
-  %r1 = sv.reg  : !hw.inout<array<3xi1>>
+  %r1 = sv.var  : !sv.var<!hw.array<3xi1>>
   sv.always posedge %d {
     // CHECK: r1[2'h0 +: 2] <= a;
-    %1 = sv.indexed_part_select_inout %r1[%c0_i2 : 2] : !hw.inout<array<3xi1>>, i2
-    sv.passign %1, %a : !hw.array<2xi1>
+    %1 = sv.indexed_part_select_inout %r1[%c0_i2 : 2] : !sv.var<!hw.array<3xi1>>, i2
+    sv.passign %1, %a : !sv.var<!hw.array<2xi1>>, !hw.array<2xi1>
   }
   hw.output
 }
@@ -1823,16 +1823,16 @@ sv.func @func_def(in %in_0 : i2, out out_0: i1, in %in_1: i2, out out_1 : i1 {sv
 sv.func @recurse_add(in %n : i32, out out : i32 {sv.func.explicitly_returned}) {
   %one = hw.constant 1 : i32
   %cond = comb.icmp bin ule %n, %one: i32
-  %result = sv.logic : !hw.inout<i32>
+  %result = sv.var : !sv.var<i32>
   sv.if %cond {
-    sv.bpassign %result, %n: i32
+    sv.bpassign %result, %n : !sv.var<i32>, i32
   } else {
     %n1 = comb.sub %n, %one: i32
     %v = sv.func.call.procedural @recurse_add(%n1) : (i32) -> i32
     %add = comb.add %n, %v: i32
-    sv.bpassign %result, %add: i32
+    sv.bpassign %result, %add : !sv.var<i32>, i32
   }
-  %read = sv.read_inout %result: !hw.inout<i32>
+  %read = sv.read_inout %result: !sv.var<i32>
   sv.return %read : i32
 }
 
@@ -1905,7 +1905,7 @@ sv.macro.decl @INIT_RANDOM
 
 // CHECK-LABEL: module ForStatement
 hw.module @ForStatement(in %a: i5) {
-  %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
+  %_RANDOM = sv.var : !sv.var<!hw.uarray<3xi32>>
   sv.initial {
     %c-2_i2 = hw.constant -2 : i2
     %c1_i2 = hw.constant 1 : i2
@@ -1916,8 +1916,8 @@ hw.module @ForStatement(in %a: i5) {
     // CHECK-NEXT: end
     sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
       %RANDOM = sv.macro.ref.expr.se @RANDOM() : ()->i32
-      %index = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
-      sv.bpassign %index, %RANDOM : i32
+      %index = sv.array_index_inout %_RANDOM[%i] : !sv.var<!hw.uarray<3xi32>>, i2
+      sv.bpassign %index, %RANDOM : !sv.var<i32>, i32
     }
   }
 }
@@ -1934,9 +1934,9 @@ hw.module @intrinsic(in %clk: i1, out io1: i1, out io2: i1, out io3: i1, out io4
   %2 = sv.system "test$plusargs"(%1) : (!hw.string) -> i1
   // CHECK: assign io2 = $test$plusargs("foo")
 
-  %_pargs = sv.wire  : !hw.inout<i5>
-  %3 = sv.read_inout %_pargs : !hw.inout<i5>
-  %4 = sv.system "value$plusargs"(%1, %_pargs) : (!hw.string, !hw.inout<i5>) -> i1
+  %_pargs = sv.wire  : !sv.net<i5>
+  %3 = sv.read_inout %_pargs : !sv.net<i5>
+  %4 = sv.system "value$plusargs"(%1, %_pargs) : (!hw.string, !sv.net<i5>) -> i1
   // CHECK: assign io3 = $value$plusargs("foo", [[tmp]])
   // CHECK: assign io4 = [[tmp]]
 
@@ -2074,11 +2074,11 @@ sv.bind #hw.innerNameRef<@InlineBind::@foo2>
 // CHECK-NEXT:  );
 
 // CHECK-LABEL:  hw.module @issue595
-// CHECK:     sv.wire  {hw.verilogName = "_GEN"} : !hw.inout<i32>
+// CHECK:     sv.wire  {hw.verilogName = "_GEN"} : !sv.net<i32>
 
 // CHECK-LABEL: hw.module @extInst2
 // CHECK-SAME: (in %signed : i1 {hw.verilogName = "signed_0"}
 
 // CHECK-LABEL:  hw.module @remoteInstDut
-// CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"} : !hw.inout<i1>
-// CHECK:    %output = sv.reg  {hw.verilogName = "output_0"} : !hw.inout<i1>
+// CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"} : !sv.net<i1>
+// CHECK:    %output = sv.var  {hw.verilogName = "output_0"} : !sv.var<i1>

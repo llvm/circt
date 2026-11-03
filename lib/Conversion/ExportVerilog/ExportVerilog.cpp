@@ -178,7 +178,7 @@ static bool isDuplicatableExpression(Operation *op) {
     if (auto read = dyn_cast<ReadInOutOp>(indexOp)) {
       auto *readSrc = read.getInput().getDefiningOp();
       // A port or wire is ok to duplicate reads.
-      return !readSrc || isa<sv::WireOp, LogicOp>(readSrc);
+      return !readSrc || isa<sv::WireOp, LogicOp, sv::VarOp>(readSrc);
     }
 
     return false;
@@ -376,7 +376,7 @@ static bool hasLeadingUnpackedType(Type type) {
 /// (struct, union, enum or typedef), so that no "logic" prefix is allowed.
 static bool hasStructType(Type type) {
   return TypeSwitch<Type, bool>(type)
-      .Case<InOutType, VarType, UnpackedArrayType, ArrayType>(
+      .Case<InOutType, NetType, VarType, UnpackedArrayType, ArrayType>(
           [](auto parentType) {
             return hasStructType(parentType.getElementType());
           })
@@ -834,7 +834,8 @@ static bool isExpressionUnableToInline(Operation *op,
       auto read = dyn_cast<ReadInOutOp>(op);
       if (!read)
         return true;
-      if (!isa_and_nonnull<sv::WireOp, RegOp>(read.getInput().getDefiningOp()))
+      if (!isa_and_nonnull<sv::WireOp, RegOp, sv::VarOp>(
+              read.getInput().getDefiningOp()))
         return true;
     }
   }
@@ -1407,7 +1408,7 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
 
   } else if (auto *op = expr.getDefiningOp()) {
     // Uses of a wire, register or logic can be done inline.
-    if (isa<sv::WireOp, RegOp, LogicOp>(op)) {
+    if (isa<sv::WireOp, RegOp, LogicOp, sv::VarOp>(op)) {
       StringRef name = getSymOpName(op);
       result = StringAttr::get(expr.getContext(), name);
 
@@ -1600,18 +1601,6 @@ static StringRef getVerilogDeclWord(Operation *op,
     return "reg";
   }
 
-  if (auto var = dyn_cast<VarOp>(op)) {
-    bool hasExplicitType = hasExplicitDataType(var.getElementType());
-    switch (emitter.state.options.varOpDeclStyle) {
-    case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
-      return hasExplicitType ? "var" : "var logic";
-    case circt::LoweringOptions::VarOpDeclStyle::Logic:
-      return hasExplicitType ? "" : "logic";
-    case circt::LoweringOptions::VarOpDeclStyle::Reg:
-      return hasExplicitType ? "" : "reg";
-    }
-  }
-
   if (isa<sv::WireOp>(op))
     return "wire";
   if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
@@ -1628,6 +1617,27 @@ static StringRef getVerilogDeclWord(Operation *op,
   // If this decl is within a function, "automatic" is not needed because
   // "automatic" is added to its definition.
   bool stripAutomatic = isa_and_nonnull<FuncOp>(emitter.currentModuleOp);
+
+  if (auto var = dyn_cast<VarOp>(op)) {
+    bool hasExplicitType = hasExplicitDataType(var.getElementType());
+    // A var defined in a procedural region is emitted as 'automatic'. If the
+    // type has a struct, 'logic' is already emitted within the struct type
+    // definition (e.g. struct packed {logic foo;}), so don't emit it again.
+    // A var carrying `sv.no_automatic` (i.e. one that used to be an `sv.reg`)
+    // keeps the regular declaration style even in a procedural region.
+    if (isProcedural && !stripAutomatic && !var->hasAttr("sv.no_automatic"))
+      return hasStructType(var.getElementType()) ? "automatic"
+                                                 : "automatic logic";
+
+    switch (emitter.state.options.varOpDeclStyle) {
+    case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
+      return hasExplicitType ? "var" : "var logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Logic:
+      return hasExplicitType ? "" : "logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Reg:
+      return hasExplicitType ? "" : "reg";
+    }
+  }
 
   if (isa<LogicOp>(op)) {
     // If the logic op is defined in a procedural region, add 'automatic'
@@ -6172,13 +6182,13 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
 
       // Reject struct_field_inout/array_index_inout for now because it's
       // necessary to consider aliasing inout operations.
-      if (!isa<RegOp, LogicOp>(defOp))
+      if (!isa<RegOp, LogicOp, sv::VarOp>(defOp))
         return false;
 
       // It's safe to inline if all users are read op, passign or assign.
       // If the op is a logic op whose single assignment is inlined into
       // declaration, we can inline the read.
-      if (isa<LogicOp>(defOp) &&
+      if (isa<LogicOp, sv::VarOp>(defOp) &&
           stmtEmitter.emitter.expressionsEmittedIntoDecl.count(defOp))
         continue;
 
@@ -6380,7 +6390,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining a blocking assignment to logic op declaration.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (!state.options.disallowDeclAssignments && isa<LogicOp>(op) &&
+    if (!state.options.disallowDeclAssignments && isa<LogicOp, sv::VarOp>(op) &&
         op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignment which might be possible to inline.

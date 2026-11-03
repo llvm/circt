@@ -390,41 +390,41 @@ hw.module @wires(in %in4: i4, in %in8: i8, out a: i4, out b: i8, out c: i8) {
 
   // Wires.
   // CHECK-NEXT: wire [3:0]            myWire = in4;
-  %myWire = sv.wire : !hw.inout<i4>
+  %myWire = sv.wire : !sv.net<i4>
 
   // Packed arrays.
 
   // CHECK-NEXT: wire [41:0][7:0]      myArray1;
-  %myArray1 = sv.wire : !hw.inout<array<42 x i8>>
+  %myArray1 = sv.wire : !sv.net<!hw.array<42 x i8>>
   // CHECK-NEXT: wire [2:0][41:0][3:0] myWireArray2;
-  %myWireArray2 = sv.wire : !hw.inout<array<3 x array<42 x i4>>>
+  %myWireArray2 = sv.wire : !sv.net<!hw.array<3 x !hw.array<42 x i4>>>
 
   // Unpacked arrays, and unpacked arrays of packed arrays.
 
   // CHECK-NEXT: wire [7:0]            myUArray1[0:41];
-  %myUArray1 = sv.wire : !hw.inout<uarray<42 x i8>>
+  %myUArray1 = sv.wire : !sv.net<!hw.uarray<42 x i8>>
 
   // CHECK-NEXT: wire [9:0][7:0]       myUArray2[0:13][0:11];
-  %myUArray2 = sv.wire : !hw.inout<uarray<14 x uarray<12 x array<10 x i8>>>>
+  %myUArray2 = sv.wire : !sv.net<!hw.uarray<14 x !hw.uarray<12 x !hw.array<10 x i8>>>>
 
   // Wires.
-  sv.assign %myWire, %in4 : i4
-  %wireout = sv.read_inout %myWire : !hw.inout<i4>
+  sv.assign %myWire, %in4 : !sv.net<i4>, i4
+  %wireout = sv.read_inout %myWire : !sv.net<i4>
 
   // Packed arrays.
 
-  %subscript = sv.array_index_inout %myArray1[%in4] : !hw.inout<array<42 x i8>>, i4
+  %subscript = sv.array_index_inout %myArray1[%in4] : !sv.net<!hw.array<42 x i8>>, i4
   // CHECK-NEXT: assign myArray1[in4] = in8;
-  sv.assign %subscript, %in8 : i8
+  sv.assign %subscript, %in8 : !sv.net<i8>, i8
 
-  %memout1 = sv.read_inout %subscript : !hw.inout<i8>
+  %memout1 = sv.read_inout %subscript : !sv.net<i8>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
-  %subscriptu = sv.array_index_inout %myUArray1[%in4] : !hw.inout<uarray<42 x i8>>, i4
+  %subscriptu = sv.array_index_inout %myUArray1[%in4] : !sv.net<!hw.uarray<42 x i8>>, i4
   // CHECK-NEXT: assign myUArray1[in4] = in8;
-  sv.assign %subscriptu, %in8 : i8
+  sv.assign %subscriptu, %in8 : !sv.net<i8>, i8
 
-  %memout2 = sv.read_inout %subscriptu : !hw.inout<i8>
+  %memout2 = sv.read_inout %subscriptu : !sv.net<i8>
 
   // CHECK-NEXT: assign a = myWire;
   // CHECK-NEXT: assign b = myArray1[in4];
@@ -434,7 +434,7 @@ hw.module @wires(in %in4: i4, in %in8: i8, out a: i4, out b: i8, out c: i8) {
 
 // CHECK-LABEL: module signs
 hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
-  %awire = sv.wire : !hw.inout<i4>
+  %awire = sv.wire : !sv.net<i4>
   // CHECK: wire [3:0] awire;
 
   // CHECK:      assign awire =
@@ -443,7 +443,7 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   %a1 = comb.divs %in1, %in2: i4
   %a2 = comb.divs %in3, %in4: i4
   %a3 = comb.divu %a1, %a2: i4
-  sv.assign %awire, %a3: i4
+  sv.assign %awire, %a3 : !sv.net<i4>, i4
 
   // CHECK:       assign awire =
   // CHECK-NEXT:    $unsigned($signed($signed(in1) / $signed(in2)) + $signed($signed(in1) / $signed(in2)))
@@ -455,14 +455,14 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   %b2 = comb.add %b1a, %b1b: i4
   %b3 = comb.mul %b1c, %b1d: i4
   %b4 = comb.divu %b2, %b3: i4
-  sv.assign %awire, %b4: i4
+  sv.assign %awire, %b4 : !sv.net<i4>, i4
 
   // https://github.com/llvm/circt/issues/369
   // CHECK: assign awire = $unsigned($signed(4'sh5 / -4'sh3));
   %c5_i4 = hw.constant 5 : i4
   %c-3_i4 = hw.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
-  sv.assign %awire, %divs: i4
+  sv.assign %awire, %divs : !sv.net<i4>, i4
 
   hw.output
 }
@@ -683,7 +683,7 @@ hw.module @longvariadic(in %a: i8, out b: i8) {
 // CHECK-NEXT:    input clock
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
-// CHECK-NEXT:   reg memory_r_en_pipe[0:0];
+// CHECK-NEXT:   var logic memory_r_en_pipe[0:0];
 // CHECK:        always_ff @(posedge clock)
 // CHECK-NEXT:     memory_r_en_pipe[1'h0] <= 1'h0;
 // CHECK-NEXT:   initial
@@ -691,13 +691,13 @@ hw.module @longvariadic(in %a: i8, out b: i8) {
 // CHECK-NEXT: endmodule
 hw.module @ArrayLHS(in %clock: i1) {
   %false = hw.constant false
-  %memory_r_en_pipe = sv.reg  : !hw.inout<uarray<1xi1>>
-  %3 = sv.array_index_inout %memory_r_en_pipe[%false] : !hw.inout<uarray<1xi1>>, i1
+  %memory_r_en_pipe = sv.var  : !sv.var<!hw.uarray<1xi1>>
+  %3 = sv.array_index_inout %memory_r_en_pipe[%false] : !sv.var<!hw.uarray<1xi1>>, i1
   sv.alwaysff(posedge %clock)  {
-    sv.passign %3, %false : i1
+    sv.passign %3, %false : !sv.var<i1>, i1
   }
   sv.initial  {
-    sv.bpassign %3, %false : i1
+    sv.bpassign %3, %false : !sv.var<i1>, i1
   }
 }
 
@@ -715,8 +715,8 @@ hw.module @noTemporaryIfReadInOutIsAfterUse(in %clock: i1, in %x: i1) {
   }
 
   // CHECK: end // always_ff @(posedge)
-  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !hw.inout<i1>
-  %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !hw.inout<i1>
+  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !sv.net<i1>
+  %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !sv.net<i1>
 }
 
 // CHECK-LABEL: module largeConstant
@@ -763,8 +763,8 @@ hw.module @StrurctExtractInline(in %a: !hw.struct<v: i1>, out b: i1, out c: i1) 
 hw.module @NoExtraTemporaryWireForAssign(in %a: i2, in %b: i4) {
   // CHECK: wire struct packed {logic [1:0] foo; logic [3:0] bar; } _GEN = '{foo: a, bar: b};
   %0 = hw.struct_create (%a, %b) : !hw.struct<foo: i2, bar: i4>
-  %1 = sv.wire : !hw.inout<!hw.struct<foo: i2, bar: i4>>
-  sv.assign %1, %0: !hw.struct<foo: i2, bar: i4>
+  %1 = sv.wire : !sv.net<!hw.struct<foo: i2, bar: i4>>
+  sv.assign %1, %0 : !sv.net<!hw.struct<foo: i2, bar: i4>>, !hw.struct<foo: i2, bar: i4>
 }
 
 hw.module.extern @DifferentResultMod(out out1: i1, out out2: i2)
@@ -791,11 +791,11 @@ hw.module @instance_result_reuse_wires(out b: i3) {
   // CHECK-NEXT:  .res (some_wire)
   // CHECK-NEXT:  );
   // CHECK-NEXT:  assign b = some_wire;
-  %some_wire = sv.wire : !hw.inout<i3>
-  %read = sv.read_inout %some_wire : !hw.inout<i3>
+  %some_wire = sv.wire : !sv.net<i3>
+  %read = sv.read_inout %some_wire : !sv.net<i3>
 
   %out1 = hw.instance "b1" @single_result() -> (res: i3)
-  sv.assign %some_wire, %out1 : i3
+  sv.assign %some_wire, %out1 : !sv.net<i3>, i3
 
   hw.output %read : i3
 }
@@ -1165,9 +1165,9 @@ hw.module @addParenthesesToSuccessiveOperators(in %a: i4, in %b: i1, in %c: i4, 
 hw.module @parameters<p1: i42 = 17, p2: i1>(in %arg0: i8, out out: i8) {
   // Local values should not conflict with output or parameter names.
   // CHECK: wire [3:0] p1_0;
-  %p1 = sv.wire : !hw.inout<i4>
+  %p1 = sv.wire : !sv.net<i4>
 
-  %out = sv.wire : !hw.inout<i4>
+  %out = sv.wire : !sv.net<i4>
   // CHECK: wire [3:0] out_0;
   hw.output %arg0 : i8
 }
@@ -1294,7 +1294,7 @@ hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
 
   // Check that the parameter name renamification propagates.
   // CHECK: wire [wire_0 - 1:0] paramWire;
-  %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"wire">>>
+  %paramWire = sv.wire : !sv.net<!hw.int<#hw.param.decl.ref<"wire">>>
 
 }
 
@@ -1503,7 +1503,7 @@ hw.module @Issue6275(out z: !hw.struct<a: !hw.array<2xstruct<b: i1>>>) {
 
 // CHECK-LABEL: module ArrayInjectStructural(
 hw.module @ArrayInjectStructural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2, out z: !hw.array<4xi42>) {
-  // CHECK: reg [3:0][41:0] [[TMP:.+]];
+  // CHECK: var logic [3:0][41:0] [[TMP:.+]];
   // CHECK-NEXT: always_comb begin
   // CHECK-NEXT:   [[TMP]] = a;
   // CHECK-NEXT:   [[TMP]][i] = b;
@@ -1515,8 +1515,8 @@ hw.module @ArrayInjectStructural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2,
 
 // CHECK-LABEL: module ArrayInjectProcedural(
 hw.module @ArrayInjectProcedural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2) {
-  // CHECK: reg [3:0][41:0] z;
-  %z = sv.reg : !hw.inout<array<4xi42>>
+  // CHECK: var logic [3:0][41:0] z;
+  %z = sv.var : !sv.var<!hw.array<4xi42>>
   // CHECK-NEXT: always_comb begin
   sv.alwayscomb {
     // CHECK-NEXT: automatic logic [3:0][41:0] [[TMP:.+]];
@@ -1524,7 +1524,7 @@ hw.module @ArrayInjectProcedural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2)
     // CHECK-NEXT: [[TMP]][i] = b;
     %0 = hw.array_inject %a[%i], %b : !hw.array<4xi42>, i2
     // CHECK-NEXT: z = [[TMP]];
-    sv.bpassign %z, %0 : !hw.array<4xi42>
+    sv.bpassign %z, %0 : !sv.var<!hw.array<4xi42>>, !hw.array<4xi42>
   }
   // CHECK-NEXT: end
 }
