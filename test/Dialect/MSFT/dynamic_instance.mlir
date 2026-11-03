@@ -1,6 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics
 // RUN: circt-opt %s --msft-lower-instances --verify-each | FileCheck %s
 // RUN: circt-opt %s --msft-lower-instances --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,reg --export-verilog -o %t.mlir | FileCheck %s --check-prefix=TCL
+// RUN: FileCheck --check-prefix=LOWER %s --input-file=%t.mlir
 
 msft.instance.hierarchy @deeper {
   msft.instance.dynamic @deeper::@branch {
@@ -57,7 +58,7 @@ hw.module @leaf () {
   hw.instance "module" sym @module @Foo() -> ()
   // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
   // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
-  // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
+  // LOWER{LITERAL}: sv.verbatim "proc {{0}}_foo_config
 }
 
 // TCL: Foo module_0
