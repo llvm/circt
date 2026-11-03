@@ -1268,7 +1268,7 @@ public:
     }
 
     for (auto [sourceResult, result] :
-         llvm::zip(sourceOp->getResults(), op->getResults()))
+         llvm::zip_equal(sourceOp->getResults(), op->getResults()))
       if (auto it = state.find(sourceResult); it != state.end())
         materializedValues[it->second] = result;
 
@@ -3015,12 +3015,14 @@ public:
       if (yieldedValues.size() != frame->call.getNumResults())
         return frame->call.emitOpError(
             "callee return values do not match call results");
+      assert(workStack.size() >= 2 &&
+             "function call frame must have a parent block frame");
       auto *parent = workStack[workStack.size() - 2]->getIf<BlockFrame>();
       if (!parent)
         return frame->call.emitOpError(
             "function call lost its parent block frame");
       for (auto [result, value] :
-           llvm::zip(frame->call.getResults(), yieldedValues))
+           llvm::zip_equal(frame->call.getResults(), yieldedValues))
         parent->environment[result] = value;
       workStack.pop_back();
       return success();
@@ -3075,8 +3077,11 @@ public:
               materializer.isInPlace(terminator)) {
             auto &builder = materializer.getBuilder();
             if (builder.getBlock() == terminator->getBlock() &&
-                builder.getInsertionPoint() == terminator->getIterator())
+                builder.getInsertionPoint() == terminator->getIterator()) {
+              // The builder stores its insertion point as a block iterator.
+              // Move it to the stable end iterator before erasing that node.
               builder.setInsertionPointToEnd(terminator->getBlock());
+            }
             terminator->erase();
           }
         }
