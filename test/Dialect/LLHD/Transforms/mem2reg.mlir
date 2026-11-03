@@ -104,7 +104,7 @@ hw.module @CompleteDefinitionOnSubset(in %u: i42, in %bool: i1) {
     cf.cond_br %bool, ^bb1, ^bb2
   ^bb1:
     // CHECK-NEXT: ^bb1:
-    // CHECK-NOT llhd.drv
+    // CHECK-NOT: llhd.drv
     llhd.assign %a, %u : i42
     // CHECK-NOT: llhd.prb
     %1 = llhd.prb %a : i42
@@ -133,7 +133,7 @@ hw.module @IncompleteDefinitionOnSubset(in %u: i42, in %bool: i1) {
     cf.cond_br %bool, ^bb1, ^bb2
   ^bb1:
     // CHECK-NEXT: ^bb1:
-    // CHECK-NOT llhd.drv
+    // CHECK-NOT: llhd.drv
     llhd.assign %a, %u : i42
     // CHECK-NEXT: cf.br ^bb2(%u, %true : i42, i1)
     cf.br ^bb2
