@@ -108,7 +108,7 @@ hw.module @bufferDecreaseDelayVO(in %clk: !seq.clock, in %rst: i1, in %in: !esi.
 // CHECK-LABEL:  hw.module @bufferDecreaseDelayVR(
 // CHECK:          [[STAGE:%.+]] = esi.stage %clk, %rst, %chanOutput : !esi.channel<i16, ValidReady(2)>
 // CHECK:          %rawOutput, %valid = esi.unwrap.vr [[STAGE]], [[INPUT_EN:%.+]] : !esi.channel<i16, ValidReady(2)>
-// CHECK:          %out, %full, %empty_2, %almostFull = seq.fifo depth 4 rd_latency 1 almost_full 2 in %rawOutput rdEn {{%.+}} wrEn %inputEn_dly1 clk %clk rst %rst : i16
+// CHECK:          %out, %full, %empty_2, %almostFull = seq.fifo depth 6 rd_latency 1 almost_full 4 in %rawOutput rdEn {{%.+}} wrEn %inputEn_dly1 clk %clk rst %rst : i16
 // CHECK:          [[NOT_FULL:%.+]] = comb.xor %almostFull, %true_0 {sv.namehint = "seqFifoNotFull"} : i1
 // CHECK-NEXT:     [[INPUT_EN]] = comb.and {{%.+}}, [[NOT_FULL]] {sv.namehint = "inputEn"} : i1
 // CHECK:          %inputEn_dly0 = seq.compreg [[INPUT_EN]], %clk reset %rst, %false : i1
@@ -121,7 +121,7 @@ hw.module @bufferDecreaseDelayVR(in %clk: !seq.clock, in %rst: i1, in %in: !esi.
 }
 
 // CHECK-LABEL:  hw.module @bufferDecreaseDelayFIFO(
-// CHECK:          %out, %full, %empty, %almostFull = seq.fifo depth 3 almost_full 2 in %rawOutput rdEn %rden wrEn %inputEn_dly0 clk %clk rst %rst : i16
+// CHECK:          %out, %full, %empty, %almostFull = seq.fifo depth 4 almost_full 3 in %rawOutput rdEn %rden wrEn %inputEn_dly0 clk %clk rst %rst : i16
 // CHECK:          %inputEn_dly0 = seq.compreg
 // CHECK:          %chanOutput, %rden = esi.wrap.fifo %out, %empty : !esi.channel<i16, FIFO>
 // CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i16, FIFO>

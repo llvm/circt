@@ -156,9 +156,10 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
                                      valid, outDelay)
                  .getChanOutput();
   } else if (outDelay < inDelay) {
-    // Tokens must wait until their data arrives, so hold them in a FIFO. This
-    // depth sustains one transfer per cycle.
-    uint64_t depth = inDelay + std::max<uint64_t>(outDelay, 1) + 1;
+    // Tokens must wait until their data arrives, so hold them in a FIFO. Its
+    // input reserves room for 'inDelay' writes in flight, so it needs that many
+    // extra entries to sustain one transfer per cycle after an output stall.
+    uint64_t depth = 2 * inDelay + std::max<uint64_t>(outDelay, 1) + 1;
     output = FIFOOp::create(rewriter, loc, outputType, buffer.getClk(),
                             buffer.getRst(), output,
                             rewriter.getI64IntegerAttr(depth));
