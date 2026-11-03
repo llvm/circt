@@ -3661,3 +3661,55 @@ firrtl.circuit "IntegerNotWrongArity" {
     %0 = "firrtl.integer.not"(%lhs, %rhs) : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   }
 }
+
+// -----
+
+firrtl.circuit "ObjectCreateMissingOperand" {
+  firrtl.extclass @Class(in str: !firrtl.string)
+  firrtl.module @ObjectCreateMissingOperand() {
+    // expected-error @below {{missing operand for class input "str"}}
+    %obj = firrtl.object.create() : () -> !firrtl.class<@Class(in str: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateWrongType" {
+  firrtl.extclass @Class(in str: !firrtl.string)
+  firrtl.module @ObjectCreateWrongType(in %int: !firrtl.integer) {
+    // expected-error @below {{class input "str" expects '!firrtl.string', but operand 0 has type '!firrtl.integer'}}
+    %obj = firrtl.object.create(%int) : (!firrtl.integer) -> !firrtl.class<@Class(in str: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateExtraOperand" {
+  firrtl.extclass @Class(out result: !firrtl.string)
+  firrtl.module @ObjectCreateExtraOperand(in %str: !firrtl.string) {
+    // expected-error @below {{expected 0 input operands, but got 1}}
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Class(out result: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateUnknownClass" {
+  firrtl.module @ObjectCreateUnknownClass() {
+    // expected-error @below {{references unknown class @Missing}}
+    %obj = firrtl.object.create() : () -> !firrtl.class<@Missing()>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateInputFlow" {
+  firrtl.extclass @Class(in str: !firrtl.string)
+  firrtl.module @ObjectCreateInputFlow(in %str: !firrtl.string) {
+    // expected-note @below {{the destination was defined here}}
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Class(in str: !firrtl.string)>
+    %input = firrtl.object.subfield %obj[str] : !firrtl.class<@Class(in str: !firrtl.string)>
+    // expected-error @below {{has no flow}}
+    firrtl.propassign %input, %str : !firrtl.string
+  }
+}

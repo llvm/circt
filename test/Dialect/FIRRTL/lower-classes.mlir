@@ -936,3 +936,33 @@ firrtl.circuit "AltBasePathMultiParent" {
     firrtl.instance foo @Foo()
   }
 }
+
+// Preserve the order of inputs when output fields are interleaved.
+// CHECK-LABEL: firrtl.circuit "CreateMixedInputs"
+firrtl.circuit "CreateMixedInputs" {
+  firrtl.extclass @Class(out result: !firrtl.string, in str: !firrtl.string, out unused: !firrtl.integer, in int: !firrtl.integer)
+  // CHECK: om.class @CreateMixedInputs_Class(%[[BASE:[^: ]+]]: !om.basepath, %[[STR:[^: ]+]]: !om.string, %[[INT:[^: ]+]]: !om.integer)
+  firrtl.module @CreateMixedInputs(in %str: !firrtl.string, in %int: !firrtl.integer, out %out: !firrtl.string) {
+    // CHECK: %[[OBJ:.*]] = om.object @Class(%[[BASE]], %[[STR]], %[[INT]]) : (!om.basepath, !om.string, !om.integer) -> !om.class.type<@Class>
+    %obj = firrtl.object.create(%str, %int) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@Class(out result: !firrtl.string, in str: !firrtl.string, out unused: !firrtl.integer, in int: !firrtl.integer)>
+    // CHECK: %[[RESULT:.*]] = om.object.field %[[OBJ]]["result"] : (!om.class.type<@Class>) -> !om.string
+    // CHECK: om.class.fields %[[RESULT]] : !om.string
+    %result = firrtl.object.subfield %obj[result] : !firrtl.class<@Class(out result: !firrtl.string, in str: !firrtl.string, out unused: !firrtl.integer, in int: !firrtl.integer)>
+    firrtl.propassign %out, %result : !firrtl.string
+  }
+}
+
+// Lower value-like object creation to an OM object.
+// CHECK-LABEL: firrtl.circuit "Create"
+firrtl.circuit "Create" {
+  firrtl.extclass @Class(in arg: !firrtl.string, out result: !firrtl.string)
+  // CHECK: om.class @Create_Class(%[[BASE:[^: ]+]]: !om.basepath, %[[ARG:[^: ]+]]: !om.string)
+  firrtl.module @Create(in %arg: !firrtl.string, out %out: !firrtl.string) {
+    // CHECK: %[[OBJ:.*]] = om.object @Class(%[[BASE]], %[[ARG]]) : (!om.basepath, !om.string) -> !om.class.type<@Class>
+    %obj = firrtl.object.create(%arg) : (!firrtl.string) -> !firrtl.class<@Class(in arg: !firrtl.string, out result: !firrtl.string)>
+    // CHECK: %[[RESULT:.*]] = om.object.field %[[OBJ]]["result"] : (!om.class.type<@Class>) -> !om.string
+    // CHECK: om.class.fields %[[RESULT]] : !om.string
+    %result = firrtl.object.subfield %obj[result] : !firrtl.class<@Class(in arg: !firrtl.string, out result: !firrtl.string)>
+    firrtl.propassign %out, %result : !firrtl.string
+  }
+}
