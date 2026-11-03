@@ -941,7 +941,7 @@ func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42,
     moore.builtin.acos %arg2 : f64
     // CHECK: math.atan %arg2 : f64
     moore.builtin.atan %arg2 : f64
-    // CHECK math.atan2 %arg2, %arg3 : f64
+    // CHECK: math.atan2 %arg2, %arg3 : f64
     moore.builtin.atan2 %arg2, %arg3  : f64
     // CHECK-DAG: [[V6:%.+]] = arith.mulf %arg2, %arg2 : f64
     // CHECK-DAG: [[V7:%.+]] = arith.mulf %arg3, %arg3 : f64
@@ -1845,7 +1845,7 @@ func.func @StringSubstr(%arg0: !moore.string, %arg1: !moore.i32, %arg2: !moore.i
   return
 }
 
-// CHECK-LABEL func.func @QueueOperations
+// CHECK-LABEL: func.func @QueueOperations
 func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
   // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : <!sim.queue<i32, 10>>
