@@ -299,11 +299,11 @@ LogicalResult PathVisitor::process(ObjectFieldOp objectFieldOp) {
 }
 
 LogicalResult PathVisitor::run(ModuleOp module) {
-  auto constantReplacer = makeReplacer();
   auto updatePathType = [&](Value value) {
     if (hasPathType(value.getType()))
       value.setType(processType(value.getType()));
   };
+  auto replacer = makeReplacer();
   for (auto classLike : module.getOps<ClassLike>()) {
     // Transform PathType block argument to FrozenPathType.
     for (auto arg : classLike.getBodyBlock()->getArguments())
@@ -325,9 +325,9 @@ LogicalResult PathVisitor::run(ModuleOp module) {
         if (failed(process(objectField)))
           return WalkResult::interrupt();
       } else if (isa<ConstantOp>(op)) {
-        constantReplacer.replaceElementsIn(op, /*replaceAttrs=*/true,
-                                           /*replaceLocs=*/false,
-                                           /*replaceTypes=*/true);
+        replacer.replaceElementsIn(op, /*replaceAttrs=*/true,
+                                   /*replaceLocs=*/false,
+                                   /*replaceTypes=*/true);
       }
       return WalkResult::advance();
     });
@@ -335,7 +335,6 @@ LogicalResult PathVisitor::run(ModuleOp module) {
       return failure();
 
     // Transform field types
-    auto replacer = makeReplacer();
     classLike.replaceFieldTypes(replacer);
   }
   return success();
