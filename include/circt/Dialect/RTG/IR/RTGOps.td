@@ -35,8 +35,7 @@ include "circt/Dialect/RTG/IR/RTGAttributes.td"
 // the RNG state should declare effects on this resource to prevent CSE and DCE.
 def RNGStateResource : Resource<"RNGStateResource">;
 
-// Abstract resource for RTG mutable-cell memory effects. Used both by the
-// effect handler ops (to anchor resume side effects) and the mutable-cell ops.
+// Abstract resource for RTG mutable-cell memory effects.
 def MutResource : Resource<"MutResource">;
 
 // Base class for the operation in this dialect.
@@ -51,12 +50,18 @@ def ConstantOp : RTGOp<"constant", [
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
 ]> {
   let summary = "create an SSA value from an attribute";
+  let description = [{
+    Mutable cells and continuations have identity and cannot be encoded as
+    constant attributes, including as aggregate elements. Empty containers
+    with these element types are allowed.
+  }];
 
   let arguments = (ins TypedAttrInterface:$value);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "$value attr-dict";
   let hasFolder = 1;
+  let hasVerifier = 1;
 }
 
 //===- Sequence Handling Operations ---------------------------------------===//
@@ -1224,6 +1229,80 @@ def SegmentOp : RTGISAOp<"segment", [
   let assemblyFormat = "$kind attr-dict-with-keyword $bodyRegion";
 }
 
+//===- Mutable Cell Operations -----------------------------------------------//
+
+def RTG_MutCreateOp : RTGOp<"mut_create", [
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+  TypesMatchWith<"ref element type must match initialValue type",
+                 "initialValue", "ref",
+                 "MutType::get($_self.getContext(), $_self)">,
+]> {
+  let summary = "create a mutable cell with an initial value";
+  let description = [{
+    Allocates a fresh mutable cell initialised to the given value.  Because
+    each call creates a *distinct* cell, `Allocate<MutResource>` prevents
+    CSE from merging two calls with the same operand.
+
+    Example:
+    ```mlir
+    %ref = rtg.mut_create %init : index
+    ```
+  }];
+
+  let arguments = (ins AnyType:$initialValue);
+  let results   = (outs RTG_MutType:$ref);
+
+  let assemblyFormat = "$initialValue attr-dict `:` type($initialValue)";
+  let hasVerifier = 1;
+}
+
+def RTG_MutReadOp : RTGOp<"mut_read", [
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+  TypesMatchWith<"result type must match ref element type",
+                 "ref", "value",
+                 "cast<MutType>($_self).getElementType()">,
+]> {
+  let summary = "read the current value of a mutable cell";
+  let description = [{
+    Returns the current content of the mutable cell.  `Read<MutResource>`
+    prevents hoisting above a `rtg.mut_write` to the same cell.
+
+    Example:
+    ```mlir
+    %v = rtg.mut_read %ref : !rtg.mut<index>
+    ```
+  }];
+
+  let arguments = (ins RTG_MutType:$ref);
+  let results   = (outs AnyType:$value);
+
+  let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
+  let hasVerifier = 1;
+}
+
+def RTG_MutWriteOp : RTGOp<"mut_write", [
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+  TypesMatchWith<"newValue type must match ref element type",
+                 "ref", "newValue",
+                 "cast<MutType>($_self).getElementType()">,
+]> {
+  let summary = "overwrite a mutable cell with a new value";
+  let description = [{
+    Stores a new value into the mutable cell.  `Write<MutResource>` prevents
+    DCE from removing a write whose cell is not otherwise read.
+
+    Example:
+    ```mlir
+    rtg.mut_write %ref, %new_val : !rtg.mut<index>
+    ```
+  }];
+
+  let arguments = (ins RTG_MutType:$ref, AnyType:$newValue);
+
+  let assemblyFormat = "$ref `,` $newValue attr-dict `:` qualified(type($ref))";
+  let hasVerifier = 1;
+}
+
 //===- Algebraic Effect Handler Operations --------------------------------===//
 
 def EffectOp : RTGOp<"effect", [
@@ -1295,13 +1374,14 @@ def WithHandlersOp : RTGOp<"with_handlers", [
 
 def PerformOp : RTGOp<"perform", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
 ]> {
   let summary = "perform an algebraic effect";
   let description = [{
     Suspends the current elaboration frame and dispatches to the innermost
     handler installed by an enclosing `rtg.with_handlers` for `$effect`.  If no
     handler is in scope, elaboration fails with a diagnostic.
+
+    Handlers may access any resource, so this operation has unknown side effects.
 
     Example:
     ```mlir
@@ -1317,14 +1397,12 @@ def PerformOp : RTGOp<"perform", [
   let hasCustomAssemblyFormat = 1;
 }
 
-def ResumeOp : RTGOp<"resume", [
-  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-]> {
+def ResumeOp : RTGOp<"resume", []> {
   let summary = "resume a continuation, optionally providing its return value";
   let description = [{
     Resumes the continuation `%k`, optionally passing a return value.
-    `Write<MutResource>` prevents DCE of a resume whose side effects are
-    the point of the operation.
+    The resumed computation may access any resource, so this operation has
+    unknown side effects.
 
     Example:
     ```mlir

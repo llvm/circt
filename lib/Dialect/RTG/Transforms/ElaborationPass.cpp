@@ -26,9 +26,11 @@
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMapInfoVariant.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Debug.h"
 #include <memory>
 #include <random>
+#include <type_traits>
 
 namespace circt {
 namespace rtg {
@@ -47,8 +49,8 @@ namespace {
 /// Helper class to generate random numbers supporting scopes of randomization.
 struct RngScope {
   RngScope() = delete;
-  RngScope(const RngScope &) = delete;
-  RngScope &operator=(const RngScope &) = delete;
+  RngScope(const RngScope &) = default;
+  RngScope &operator=(const RngScope &) = default;
 
   RngScope(RngScope &&) = default;
   RngScope &operator=(RngScope &&) = default;
@@ -110,6 +112,7 @@ struct SymbolicComputationWithIdentityStorage;
 struct SymbolicComputationWithIdentityValue;
 struct SymbolicComputationStorage;
 struct OpaqueExternalStorage;
+struct MutStorage;
 struct ContinuationStorage;
 
 /// The abstract base class for elaborated values.
@@ -121,7 +124,8 @@ using ElaboratorValue =
                  MemoryBlockStorage *, SymbolicComputationWithIdentityStorage *,
                  SymbolicComputationWithIdentityValue *,
                  SymbolicComputationStorage *, OpaqueExternalStorage *,
-                 ContinuationStorage *>;
+                 MutStorage *, ContinuationStorage *>;
+using LexicalEnvironment = DenseMap<Value, ElaboratorValue>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const ElaboratorValue &val) {
@@ -525,28 +529,171 @@ struct OpaqueExternalStorage : IdentityValue {
   OpaqueExternalStorage(Type type, Location loc) : IdentityValue(type, loc) {}
 };
 
+struct ContinuationBoundary {
+  uint64_t sequence = 0;
+  SmallVector<uint64_t> externalRegions;
+  uint64_t elaborator = 0;
+};
+
+/// Storage object for '!rtg.mut<T>' — a mutable elaboration-time cell.
+/// Each rtg.mut_create produces a unique cell (identity value).
+struct MutStorage : IdentityValue {
+  MutStorage(Type type, Location loc, ContinuationBoundary boundary)
+      : IdentityValue(type, loc), boundary(std::move(boundary)) {}
+
+  /// Boundaries whose lifetime contains this cell.
+  ContinuationBoundary boundary;
+};
+
 /// Maps effect names to their handler regions within a single rtg.handle op.
 struct HandlerFrame {
+  uint64_t promptToken = 0;
   DenseMap<StringAttr, Region *> handlers;
 };
 
-/// Storage object for '!rtg.continuation<T>' — a captured elaboration frame.
-/// Holds the ops to elaborate on resume and the handler-stack snapshot.
-struct ContinuationStorage : IdentityValue {
-  ContinuationStorage(SmallVector<Operation *> remainingOps,
-                      Value performResult,
-                      SmallVector<HandlerFrame> capturedHandlerStack,
-                      Type resumeType, Location loc)
-      : IdentityValue(ContinuationType::get(loc.getContext(), resumeType), loc),
-        remainingOps(std::move(remainingOps)), performResult(performResult),
-        capturedHandlerStack(std::move(capturedHandlerStack)) {}
+/// A block invocation owns its lexical bindings and instruction cursor.
+struct BlockFrame {
+  Block *block = nullptr;
+  Operation *nextOp = nullptr;
+  bool keepTerminator = false;
+  bool eraseTerminator = true;
+  bool replay = false;
+  LexicalEnvironment environment;
+};
 
-  /// Ops from the HandleOp body that appear after the rtg.perform.
-  SmallVector<Operation *> remainingOps;
+/// Completion frames make nested-region control flow explicit and replayable.
+class Elaborator;
+
+struct ScfIfFrame {
+  scf::IfOp op;
+  bool replay = false;
+
+  LogicalResult step(Elaborator &elaborator,
+                     ArrayRef<ElaboratorValue> yieldedValues);
+};
+
+struct ScfForFrame {
+  scf::ForOp op;
+  size_t nextIteration = 0;
+  size_t upperBound = 0;
+  size_t loopStep = 1;
+  bool replay = false;
+  bool completed = false;
+  LexicalEnvironment loopEnvironment;
+
+  LogicalResult step(Elaborator &elaborator,
+                     ArrayRef<ElaboratorValue> yieldedValues);
+};
+
+struct RandomScopeFrame {
+  RandomScopeOp op;
+  RngScope outerRng;
+  bool replay = false;
+
+  RandomScopeFrame(RandomScopeOp op, RngScope outerRng, bool replay)
+      : op(op), outerRng(std::move(outerRng)), replay(replay) {}
+};
+
+struct WithHandlersFrame {
+  WithHandlersOp op;
+  uint64_t promptId = 0;
+  bool replay = false;
+};
+
+struct HandlerClauseFrame {
+  PerformOp perform;
+};
+
+/// The materialized shell owns an external region while its block is visited.
+struct ExternalOpFrame {
+  Operation *originalOp = nullptr;
+  Operation *materializedOp = nullptr;
+  size_t nextRegion = 0;
+  uint64_t activeBoundary = 0;
+  bool replay = false;
+  LexicalEnvironment parentEnvironment;
+  OpBuilder::InsertPoint parentInsertionPoint;
+};
+
+/// Saves the handler and RNG context around one replay shot.
+struct ResumeFrame {
+  SmallVector<HandlerFrame> handlerStack;
+  RngScope rng;
+
+  ResumeFrame(SmallVector<HandlerFrame> handlerStack, RngScope rng)
+      : handlerStack(std::move(handlerStack)), rng(std::move(rng)) {}
+};
+
+using EvalFramePayload =
+    std::variant<BlockFrame, ScfIfFrame, ScfForFrame, RandomScopeFrame,
+                 WithHandlersFrame, HandlerClauseFrame, ExternalOpFrame,
+                 ResumeFrame>;
+
+struct EvalFrame {
+  EvalFramePayload payload;
+
+  template <typename FrameTy>
+  explicit EvalFrame(FrameTy &&frame) : payload(std::forward<FrameTy>(frame)) {}
+
+  EvalFrame(const EvalFrame &) = default;
+
+  std::unique_ptr<EvalFrame> clone() const {
+    return std::make_unique<EvalFrame>(*this);
+  }
+
+  template <typename FrameTy>
+  FrameTy *getIf() {
+    return std::get_if<FrameTy>(&payload);
+  }
+
+  template <typename FrameTy>
+  const FrameTy *getIf() const {
+    return std::get_if<FrameTy>(&payload);
+  }
+
+  template <typename FrameTy>
+  FrameTy &get() {
+    return std::get<FrameTy>(payload);
+  }
+
+  template <typename FrameTy>
+  bool holds() const {
+    return std::holds_alternative<FrameTy>(payload);
+  }
+};
+
+using EvalFrameStack = SmallVector<std::unique_ptr<EvalFrame>, 0>;
+
+/// Storage object for '!rtg.continuation<T>' — a captured elaboration frame.
+/// Holds a replayable lexical environment and evaluator frames to resume.
+struct ContinuationStorage : IdentityValue {
+  ContinuationStorage(EvalFrameStack capturedFrames, Value performResult,
+                      SmallVector<HandlerFrame> capturedHandlerStack,
+                      const LexicalEnvironment &capturedEnvironment,
+                      RngScope capturedRng, uint64_t promptToken,
+                      ContinuationBoundary boundary, Type resumeType,
+                      Location loc)
+      : IdentityValue(ContinuationType::get(loc.getContext(), resumeType), loc),
+        capturedFrames(std::move(capturedFrames)), performResult(performResult),
+        capturedHandlerStack(std::move(capturedHandlerStack)),
+        capturedEnvironment(capturedEnvironment),
+        capturedRng(std::move(capturedRng)), promptToken(promptToken),
+        boundary(std::move(boundary)) {}
+
+  /// Suspended evaluator frames from the perform site up to the handler prompt.
+  EvalFrameStack capturedFrames;
   /// The SSA result of the rtg.perform op (null for unit-result effects).
   Value performResult;
   /// Handler-stack snapshot at the point the perform was triggered.
   SmallVector<HandlerFrame> capturedHandlerStack;
+  /// SSA bindings at the perform site. Identity-bearing cells remain shared.
+  LexicalEnvironment capturedEnvironment;
+  /// RNG state at the perform site, restored independently for each shot.
+  RngScope capturedRng;
+  /// Dynamic handler installation that delimits this continuation.
+  uint64_t promptToken;
+  /// Dynamic boundaries that the captured ops must not outlive.
+  ContinuationBoundary boundary;
 };
 
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
@@ -554,6 +701,11 @@ struct ContinuationStorage : IdentityValue {
 /// deallocated and thus must not be accessed anymore.
 class Internalizer {
 public:
+  ~Internalizer() {
+    for (auto it = destructors.rbegin(); it != destructors.rend(); ++it)
+      it->second(it->first);
+  }
+
   /// Internalize a storage of type `StorageTy` constructed with arguments
   /// `args`. The pointers returned by this method can be used to compare
   /// objects when, e.g., computing set differences, uniquing the elements in a
@@ -569,9 +721,11 @@ public:
     auto existing = getInternSet<StorageTy>().insert_as(
         HashedStorage<StorageTy>(storage.hashcode), storage);
     StorageTy *&storagePtr = existing.first->storage;
-    if (existing.second)
+    if (existing.second) {
       storagePtr =
           new (allocator.Allocate<StorageTy>()) StorageTy(std::move(storage));
+      registerDestructor(storagePtr);
+    }
 
     return storagePtr;
   }
@@ -581,11 +735,21 @@ public:
     static_assert(std::is_base_of_v<IdentityValue, StorageTy> &&
                   "values with structural equivalence must be internalized");
 
-    return new (allocator.Allocate<StorageTy>())
+    StorageTy *storage = new (allocator.Allocate<StorageTy>())
         StorageTy(std::forward<Args>(args)...);
+    registerDestructor(storage);
+    return storage;
   }
 
 private:
+  template <typename StorageTy>
+  void registerDestructor(StorageTy *storage) {
+    if constexpr (!std::is_trivially_destructible_v<StorageTy>)
+      destructors.emplace_back(storage, [](void *ptr) {
+        static_cast<StorageTy *>(ptr)->~StorageTy();
+      });
+  }
+
   template <typename StorageTy>
   DenseSet<HashedStorage<StorageTy>, StorageKeyInfo<StorageTy>> &
   getInternSet() {
@@ -610,9 +774,14 @@ private:
                     "no intern set available for this storage type.");
   }
 
-  // This allocator allocates on the heap. It automatically deallocates all
-  // objects it allocated once the allocator itself is destroyed.
+  // This allocator allocates raw storage on the heap and releases it when
+  // destroyed. The registered destructors above handle object lifetimes.
   llvm::BumpPtrAllocator allocator;
+
+  /// BumpPtrAllocator releases raw storage but does not destroy objects placed
+  /// in it. Track non-trivial objects so their owned heap allocations are
+  /// freed.
+  SmallVector<std::pair<void *, void (*)(void *)>> destructors;
 
   // The sets holding the internalized objects. We use one set per storage type
   // such that we can have a simpler equality checking function (no need to
@@ -758,9 +927,13 @@ static void print(const OpaqueExternalStorage *val, llvm::raw_ostream &os) {
   os << "<opaque-external " << val->type << ">";
 }
 
+static void print(const MutStorage *val, llvm::raw_ostream &os) {
+  os << "<mut at " << val << ">";
+}
+
 static void print(const ContinuationStorage *val, llvm::raw_ostream &os) {
-  os << "<continuation with " << val->remainingOps.size() << " ops at " << val
-     << ">";
+  os << "<continuation with " << val->capturedFrames.size() << " frames at "
+     << val << ">";
 }
 
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -921,6 +1094,7 @@ private:
   VISIT_UNSUPPORTED(SymbolicComputationWithIdentityValue)
   VISIT_UNSUPPORTED(SymbolicComputationStorage)
   VISIT_UNSUPPORTED(OpaqueExternalStorage)
+  VISIT_UNSUPPORTED(MutStorage)
   VISIT_UNSUPPORTED(ContinuationStorage)
 
 #undef VISIT_UNSUPPORTED
@@ -941,10 +1115,16 @@ struct SharedState {
   SharedState(MLIRContext *ctxt, SymbolTable &table)
       : ctxt(ctxt), table(table) {}
 
+  uint64_t createBoundaryToken() { return nextBoundaryToken++; }
+
   MLIRContext *ctxt;
   SymbolTable &table;
   Namespace names;
   Internalizer internalizer;
+  DenseMap<MutStorage *, ElaboratorValue> mutableStore;
+
+private:
+  uint64_t nextBoundaryToken = 1;
 };
 
 /// A collection of state per RTG test.
@@ -1032,7 +1212,8 @@ public:
   /// deleted until `op` is reached. An error is returned if the operation is
   /// before the insertion point.
   LogicalResult materialize(Operation *op,
-                            DenseMap<Value, ElaboratorValue> &state) {
+                            DenseMap<Value, ElaboratorValue> &state,
+                            bool forceClone = false) {
     // Region-bearing ops must be elaborated away before reaching here (either
     // by a dedicated visitor, or by visitExternalOp which performs its own
     // structural rewrite). Routing them through this generic operand-only
@@ -1052,7 +1233,7 @@ public:
         return op->emitOpError(
             "ops with results that have uses are not supported");
 
-    if (isInPlace(op)) {
+    if (isInPlace(op) && !forceClone) {
       // We are doing in-place materialization, so mark all ops deleted until we
       // reach the one to be materialized and modify it in-place.
       deleteOpsUntil([&](auto iter) { return &*iter == op; });
@@ -1332,16 +1513,27 @@ private:
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> materialized;
     materialized.reserve(val->values.size());
-    for (auto v : val->values)
-      materialized.push_back(materialize(v, loc, emitError));
+    for (auto v : val->values) {
+      Value value = materialize(v, loc, emitError);
+      if (!value)
+        return {};
+      materialized.push_back(value);
+    }
     Value res = TupleCreateOp::create(builder, loc, materialized);
     materializedValues[val] = res;
     return res;
   }
 
+  Value visit(MutStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    emitError() << "mutable cell cannot escape into materialized IR";
+    return {};
+  }
+
   Value visit(ContinuationStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    emitError() << "continuation cannot be materialized into IR";
+    emitError() << "continuation cannot escape through materialized IR, "
+                   "a sequence, or an opaque external-region shell";
     return {};
   }
 
@@ -1457,12 +1649,13 @@ private:
 
 /// Used to signal to the elaboration driver whether the operation should be
 /// removed.
-enum class DeletionKind {
-  Keep,
-  Delete,
-  /// Stop iterating the current block; used when rtg.perform triggers a
-  /// handler that elaborates the continuation inline.
-  StopElaboration
+enum class DeletionKind { Keep, Delete };
+
+/// A perform yields control to the trampoline instead of recursively invoking
+/// its handler. The prompt identifies the matching dynamic handler frame.
+struct ControlTransfer {
+  uint64_t promptId;
+  PerformOp perform;
 };
 
 /// Interprets the IR to perform and lower the represented randomizations.
@@ -1473,9 +1666,12 @@ public:
 
   Elaborator(SharedState &sharedState, TestState &testState,
              Materializer &materializer,
-             ContextResourceAttrInterface currentContext = {})
+             ContextResourceAttrInterface currentContext = {},
+             uint64_t sequenceBoundaryToken = 0)
       : sharedState(sharedState), testState(testState),
         materializer(materializer), currentContext(currentContext),
+        sequenceBoundaryToken(sequenceBoundaryToken),
+        elaboratorBoundaryToken(sharedState.createBoundaryToken()),
         attrConverter(sharedState.internalizer),
         elabValConverter(sharedState.ctxt) {}
 
@@ -1492,93 +1688,8 @@ public:
   FailureOr<DeletionKind> visitExternalOp(Operation *op) {
     if (op->getNumRegions() == 0)
       return visitOpGeneric(op);
-
-    // Elaborate all regions of unknown external ops. Any op appearing inside
-    // an RTG test body with regions is expected to contain RTG constructs.
-    //
-    // The new op is a structural shell:
-    //   - Its operands are re-materialized from the elaborator state so that
-    //     references to RTG-elaborated values become the corresponding new
-    //     SSA values (and don't dangle after finalize() erases the old ops).
-    //   - Each region gets a fresh block whose arguments mirror the old
-    //     block's argument types/locations. Old block args are registered as
-    //     opaque IdentityValues mapped to the new block args, so RTG ops
-    //     inside the region can resolve them via state lookup.
-    //   - Each result is registered as an opaque IdentityValue mapped to the
-    //     corresponding new result, so downstream RTG ops consuming them
-    //     find them in state.
-    auto *newOp = op->cloneWithoutRegions();
-    materializer.getBuilder().insert(newOp);
-
-    // Re-map operands: substitute each operand with the SSA value
-    // corresponding to its current ElaboratorValue. Materialization of
-    // operands must happen *before* `newOp` so the defs dominate the use;
-    // anchor the builder at `newOp` (= immediately before it) for the
-    // duration of operand re-map, then advance past it.
-    materializer.getBuilder().setInsertionPoint(newOp);
-    for (auto &operand : newOp->getOpOperands()) {
-      auto emitError = [&]() {
-        auto diag = newOp->emitError();
-        diag.attachNote(newOp->getLoc())
-            << "while materializing operand#" << operand.getOperandNumber()
-            << " of external region op";
-        return diag;
-      };
-      auto elabVal = state.at(operand.get());
-      Value val = materializer.materialize(elabVal, newOp->getLoc(), emitError);
-      if (!val)
-        return failure();
-      operand.set(val);
-    }
-    materializer.getBuilder().setInsertionPointAfter(newOp);
-
-    // Register an old value as an opaque external value mapped to the
-    // corresponding new SSA value. RTG ops that consume `oldVal` will find the
-    // opaque value in `state` (it is treated as symbolic), and materializing it
-    // yields `newVal` directly via the materializer's cache.
-    auto mapOpaque = [&](Value oldVal, Value newVal) {
-      auto *storage = sharedState.internalizer.create<OpaqueExternalStorage>(
-          oldVal.getType(), oldVal.getLoc());
-      state[oldVal] = storage;
-      materializer.map(storage, newVal);
-    };
-
-    for (auto [oldRegion, newRegion] :
-         llvm::zip(op->getRegions(), newOp->getRegions())) {
-      if (oldRegion.empty())
-        continue;
-
-      // Give the new region a block whose arguments mirror the old block's
-      // argument types/locations, and register the old args as opaque values
-      // mapped to the new args so region-internal RTG ops can resolve them.
-      Block &oldBlock = oldRegion.front();
-      Block &newBlock = newRegion.emplaceBlock();
-      for (auto oldArg : oldBlock.getArguments()) {
-        Value newArg = newBlock.addArgument(oldArg.getType(), oldArg.getLoc());
-        mapOpaque(oldArg, newArg);
-      }
-
-      {
-        OpBuilder::InsertionGuard guard(materializer.getBuilder());
-        materializer.getBuilder().setInsertionPoint(&newBlock,
-                                                    newBlock.begin());
-        SmallVector<ElaboratorValue> unused;
-        // keepTerminator=true: the original terminator (rtg.yield, scf.yield,
-        // etc.) is cloned into the new block, preserving the op's expected
-        // terminator type.
-        if (failed(elaborate(oldRegion, {},
-                             /*keepTerminator=*/true, unused)))
-          return failure();
-      }
-    }
-
-    // Register each result as an opaque value mapped to the new op's result so
-    // downstream RTG ops consuming them find them in `state`.
-    for (auto [oldRes, newRes] :
-         llvm::zip(op->getResults(), newOp->getResults()))
-      mapOpaque(oldRes, newRes);
-
-    return DeletionKind::Delete;
+    return op->emitOpError(
+        "region-bearing operations must be scheduled by the evaluator");
   }
 
   FailureOr<DeletionKind> visitOp(GetSequenceOp op) {
@@ -1945,34 +2056,7 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(RandomScopeOp op) {
-    auto getNestedRng = [&]() -> RngScope {
-      if (op.getSeed())
-        return RngScope(op.getSeed()->getZExtValue());
-      return testState.rng.getNested();
-    };
-
-    RngScope nestedRng = getNestedRng();
-    std::swap(testState.rng, nestedRng);
-
-    // Elaborate the body region. The region has no arguments and yields values
-    // that become the results of this operation.
-    // We reuse the same elaborator for the nested region because we need access
-    // to the elaborated values outside the nested region (since it is not
-    // isolated from above) and we want to delete the random_scope operation
-    // entirely, thus don't need a new materializer instance.
-    SmallVector<ElaboratorValue> yieldedVals;
-    if (failed(elaborate(op.getBodyRegion(), {}, /*keepTerminator=*/false,
-                         yieldedVals)))
-      return failure();
-
-    // Restore the previous RNG scope.
-    std::swap(testState.rng, nestedRng);
-
-    // Map the results of the random_scope to the yielded values.
-    for (auto [res, out] : llvm::zip(op.getResults(), yieldedVals))
-      state[res] = out;
-
-    return DeletionKind::Delete;
+    return op->emitOpError("random_scope must be scheduled by the evaluator");
   }
 
   FailureOr<DeletionKind> visitOp(RandomNumberInRangeOp op) {
@@ -2101,124 +2185,132 @@ public:
     return DeletionKind::Delete;
   }
 
+  // Mutable cell ops
+  //===--------------------------------------------------------------------===//
+
+  FailureOr<DeletionKind> visitOp(MutCreateOp op) {
+    auto *mut = sharedState.internalizer.create<MutStorage>(
+        op.getRef().getType(), op.getLoc(),
+        ContinuationBoundary{sequenceBoundaryToken, externalRegionStack,
+                             elaboratorBoundaryToken});
+    sharedState.mutableStore[mut] = state.at(op.getInitialValue());
+    state[op.getRef()] = mut;
+    materializer.registerIdentityValue(mut);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<MutStorage *> getMutableCell(Value ref, Operation *op) {
+    auto it = state.find(ref);
+    if (it == state.end())
+      return op->emitOpError("mutable reference has no elaborated value");
+
+    auto *mut = std::get_if<MutStorage *>(&it->second);
+    if (!mut || !*mut || !sharedState.mutableStore.contains(*mut))
+      return op->emitOpError("invalid mutable cell reference");
+
+    return *mut;
+  }
+
+  void collectContinuations(ElaboratorValue value,
+                            SmallVectorImpl<ContinuationStorage *> &result,
+                            SmallPtrSetImpl<const void *> &visited) const {
+    if (auto *continuation = std::get_if<ContinuationStorage *>(&value)) {
+      result.push_back(*continuation);
+      return;
+    }
+
+    if (auto *mut = std::get_if<MutStorage *>(&value)) {
+      if (!visited.insert(*mut).second)
+        return;
+      auto it = sharedState.mutableStore.find(*mut);
+      if (it != sharedState.mutableStore.end())
+        collectContinuations(it->second, result, visited);
+      return;
+    }
+
+    auto collectRange = [&](auto &&range) {
+      for (auto nested : range)
+        collectContinuations(nested, result, visited);
+    };
+    if (auto *set = std::get_if<SetStorage *>(&value)) {
+      if (visited.insert(*set).second)
+        collectRange((*set)->set);
+    } else if (auto *bag = std::get_if<BagStorage *>(&value)) {
+      if (visited.insert(*bag).second)
+        for (const auto &entry : (*bag)->bag)
+          collectContinuations(entry.first, result, visited);
+    } else if (auto *array = std::get_if<ArrayStorage *>(&value)) {
+      if (visited.insert(*array).second)
+        collectRange((*array)->array);
+    } else if (auto *tuple = std::get_if<TupleStorage *>(&value)) {
+      if (visited.insert(*tuple).second)
+        collectRange((*tuple)->values);
+    } else if (auto *symbolic =
+                   std::get_if<SymbolicComputationStorage *>(&value)) {
+      if (visited.insert(*symbolic).second)
+        collectRange((*symbolic)->operands);
+    } else if (auto *symbolic =
+                   std::get_if<SymbolicComputationWithIdentityStorage *>(
+                       &value)) {
+      if (visited.insert(*symbolic).second)
+        collectRange((*symbolic)->operands);
+    } else if (auto *symbolic =
+                   std::get_if<SymbolicComputationWithIdentityValue *>(
+                       &value)) {
+      if (visited.insert(*symbolic).second)
+        collectRange((*symbolic)->storage->operands);
+    }
+  }
+
+  FailureOr<DeletionKind> visitOp(MutReadOp op) {
+    auto mut = getMutableCell(op.getRef(), op);
+    if (failed(mut))
+      return failure();
+    state[op.getValue()] = sharedState.mutableStore.at(*mut);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(MutWriteOp op) {
+    auto mut = getMutableCell(op.getRef(), op);
+    if (failed(mut))
+      return failure();
+
+    SmallVector<ContinuationStorage *> continuations;
+    SmallPtrSet<const void *, 16> visited;
+    collectContinuations(state.at(op.getNewValue()), continuations, visited);
+    for (auto *continuation : continuations) {
+      if (continuation->boundary.sequence != (*mut)->boundary.sequence)
+        return op->emitOpError("continuation cannot escape a sequence boundary "
+                               "through mutable storage");
+      if (continuation->boundary.elaborator != (*mut)->boundary.elaborator)
+        return op->emitOpError(
+            "continuation cannot escape its elaborator invocation through "
+            "mutable storage");
+      if (!llvm::equal(continuation->boundary.externalRegions,
+                       (*mut)->boundary.externalRegions))
+        return op->emitOpError("continuation cannot escape an opaque "
+                               "external-region shell through mutable storage");
+    }
+
+    sharedState.mutableStore[*mut] = state.at(op.getNewValue());
+    return DeletionKind::Delete;
+  }
+
   // Effect handler ops
   //===--------------------------------------------------------------------===//
 
   FailureOr<DeletionKind> visitOp(EffectOp op) { return DeletionKind::Keep; }
 
   FailureOr<DeletionKind> visitOp(WithHandlersOp op) {
-    // Build the handler frame for this with_handlers scope.
-    HandlerFrame frame;
-    for (auto [effectAttr, handlerRegion] :
-         llvm::zip(op.getEffects(), op.getHandlerRegions()))
-      frame.handlers[cast<FlatSymbolRefAttr>(effectAttr).getAttr()] =
-          &handlerRegion;
-    handlerStack.push_back(std::move(frame));
-
-    SmallVector<ElaboratorValue> unused;
-    if (failed(elaborate(op.getBody(), {}, /*keepTerminator=*/false, unused)))
-      return failure();
-
-    // Pop only if not already consumed by a StopElaboration return.
-    if (!handlerStack.empty())
-      handlerStack.pop_back();
-
-    return DeletionKind::Delete;
+    return op->emitOpError("with_handlers must be scheduled by the evaluator");
   }
 
   FailureOr<DeletionKind> visitOp(PerformOp op) {
-    StringAttr effectName = op.getEffectAttr().getAttr();
-
-    // Search innermost-first for a handler for this effect.
-    Region *handlerRegion = nullptr;
-    for (int i = (int)handlerStack.size() - 1; i >= 0; --i) {
-      auto it = handlerStack[i].handlers.find(effectName);
-      if (it != handlerStack[i].handlers.end()) {
-        handlerRegion = it->second;
-        break;
-      }
-    }
-    if (!handlerRegion)
-      return op->emitError("no handler for effect @") << effectName.getValue();
-
-    // Collect remaining ops after this perform (for the continuation).
-    SmallVector<Operation *> remaining;
-    auto *block = op->getBlock();
-    for (auto it = std::next(op->getIterator());
-         it != block->end() && !it->hasTrait<OpTrait::IsTerminator>(); ++it)
-      remaining.push_back(&*it);
-
-    // Determine the resume type (null Value → unit-result effect).
-    Value performResultSSAVal =
-        op.getNumResults() > 0 ? Value(op.getResult()) : Value();
-    Type resumeType = performResultSSAVal ? performResultSSAVal.getType()
-                                          : NoneType::get(op.getContext());
-
-    auto *cont = sharedState.internalizer.create<ContinuationStorage>(
-        std::move(remaining), performResultSSAVal,
-        SmallVector<HandlerFrame>(handlerStack), resumeType, op.getLoc());
-
-    // Build handler arguments: effect operands followed by the continuation.
-    SmallVector<ElaboratorValue> handlerArgs;
-    for (auto operand : op.getOperands())
-      handlerArgs.push_back(state.at(operand));
-    handlerArgs.push_back(cont);
-
-    // Pop the frame that owns this handler before entering the handler body
-    // so the handler itself doesn't see its own effect.
-    HandlerFrame savedFrame = handlerStack.back();
-    handlerStack.pop_back();
-
-    SmallVector<ElaboratorValue> unused;
-    if (failed(elaborate(*handlerRegion, handlerArgs,
-                         /*keepTerminator=*/false, unused)))
-      return failure();
-
-    handlerStack.push_back(std::move(savedFrame));
-
-    return DeletionKind::StopElaboration;
+    return op->emitOpError("perform must return a control transfer");
   }
 
   FailureOr<DeletionKind> visitOp(ResumeOp op) {
-    auto *cont =
-        std::get<ContinuationStorage *>(state.at(op.getContinuation()));
-
-    // If the perform had a result, map it to the resume value.
-    if (cont->performResult && op.getValue())
-      state[cont->performResult] = state.at(op.getValue());
-
-    // Temporarily restore the handler stack from when perform was triggered.
-    auto savedStack = std::move(handlerStack);
-    handlerStack = cont->capturedHandlerStack;
-
-    for (auto *contOp : cont->remainingOps) {
-      auto result = dispatchOpVisitor(contOp);
-      if (failed(result)) {
-        handlerStack = std::move(savedStack);
-        return failure();
-      }
-      if (*result == DeletionKind::StopElaboration)
-        break;
-      if (*result == DeletionKind::Keep)
-        if (failed(materializer.materialize(contOp, state))) {
-          handlerStack = std::move(savedStack);
-          return failure();
-        }
-      LLVM_DEBUG({
-        llvm::dbgs() << "Elaborated continuation op " << *contOp << " to\n[";
-        llvm::interleaveComma(contOp->getResults(), llvm::dbgs(),
-                              [&](auto res) {
-                                if (state.contains(res))
-                                  llvm::dbgs() << state.at(res);
-                                else
-                                  llvm::dbgs() << "unknown";
-                              });
-        llvm::dbgs() << "]\n\n";
-      });
-    }
-
-    handlerStack = std::move(savedStack);
-    return DeletionKind::Delete;
+    return op->emitOpError("resume must be scheduled by the evaluator");
   }
 
   //===--------------------------------------------------------------------===//
@@ -2241,68 +2333,11 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
-    bool cond = get<bool>(op.getCondition());
-    auto &toElaborate = cond ? op.getThenRegion() : op.getElseRegion();
-    if (toElaborate.empty())
-      return DeletionKind::Delete;
-
-    // Just reuse this elaborator for the nested region because we need access
-    // to the elaborated values outside the nested region (since it is not
-    // isolated from above) and we want to materialize the region inline, thus
-    // don't need a new materializer instance.
-    SmallVector<ElaboratorValue> yieldedVals;
-    if (failed(
-            elaborate(toElaborate, {}, /*keepTerminator=*/false, yieldedVals)))
-      return failure();
-
-    // Map the results of the 'scf.if' to the yielded values.
-    for (auto [res, out] : llvm::zip(op.getResults(), yieldedVals))
-      state[res] = out;
-
-    return DeletionKind::Delete;
+    return op->emitOpError("scf.if must be scheduled by the evaluator");
   }
 
   FailureOr<DeletionKind> visitOp(scf::ForOp op) {
-    if (!(std::holds_alternative<size_t>(state.at(op.getLowerBound())) &&
-          std::holds_alternative<size_t>(state.at(op.getStep())) &&
-          std::holds_alternative<size_t>(state.at(op.getUpperBound()))))
-      return op->emitOpError("can only elaborate index type iterator");
-
-    auto lowerBound = get<size_t>(op.getLowerBound());
-    auto step = get<size_t>(op.getStep());
-    auto upperBound = get<size_t>(op.getUpperBound());
-
-    // Prepare for first iteration by assigning the nested regions block
-    // arguments. We can just reuse this elaborator because we need access to
-    // values elaborated in the parent region anyway and materialize everything
-    // inline (i.e., don't need a new materializer).
-    state[op.getInductionVar()] = lowerBound;
-    for (auto [iterArg, initArg] :
-         llvm::zip(op.getRegionIterArgs(), op.getInitArgs()))
-      state[iterArg] = state.at(initArg);
-
-    // This loop performs the actual 'scf.for' loop iterations.
-    SmallVector<ElaboratorValue> yieldedVals;
-    for (size_t i = lowerBound; i < upperBound; i += step) {
-      yieldedVals.clear();
-      if (failed(elaborate(op.getBodyRegion(), {}, /*keepTerminator=*/false,
-                           yieldedVals)))
-        return failure();
-
-      // Prepare for the next iteration by updating the mapping of the nested
-      // regions block arguments
-      state[op.getInductionVar()] = i + step;
-      for (auto [iterArg, prevIterArg] :
-           llvm::zip(op.getRegionIterArgs(), yieldedVals))
-        state[iterArg] = prevIterArg;
-    }
-
-    // Transfer the previously yielded values to the for loop result values.
-    for (auto [res, iterArg] :
-         llvm::zip(op->getResults(), op.getRegionIterArgs()))
-      state[res] = state.at(iterArg);
-
-    return DeletionKind::Delete;
+    return op->emitOpError("scf.for must be scheduled by the evaluator");
   }
 
   FailureOr<DeletionKind> visitOp(arith::AddIOp op) {
@@ -2601,7 +2636,8 @@ public:
 
   bool supportsSymbolicValuesNonGenerically(Operation *op) {
     return isa<SubstituteSequenceOp, ArrayCreateOp, ArrayInjectOp,
-               TupleCreateOp, arith::SelectOp>(op);
+               TupleCreateOp, MutCreateOp, MutReadOp, MutWriteOp,
+               arith::SelectOp>(op);
   }
 
   FailureOr<DeletionKind> dispatchOpVisitor(Operation *op) {
@@ -2617,90 +2653,574 @@ public:
             index::AddOp, index::SubOp, index::MulOp, index::DivUOp,
             index::CeilDivUOp, index::RemUOp, index::AndOp, index::OrOp,
             index::XOrOp, index::ShlOp, index::ShrUOp, index::MaxUOp,
-            index::MinUOp, index::CmpOp,
-            // SCF ops
-            scf::IfOp, scf::ForOp>([&](auto op) { return visitOp(op); })
+            index::MinUOp, index::CmpOp>([&](auto op) { return visitOp(op); })
         .Default([&](Operation *op) { return RTGBase::dispatchOpVisitor(op); });
   }
 
-  // NOLINTNEXTLINE(misc-no-recursion)
-  LogicalResult elaborate(Region &region,
-                          ArrayRef<ElaboratorValue> regionArguments,
-                          bool keepTerminator,
-                          SmallVector<ElaboratorValue> &terminatorOperands) {
-    if (region.getBlocks().size() > 1)
+  LogicalResult pushRegionFrame(Region &region,
+                                ArrayRef<ElaboratorValue> regionArguments,
+                                bool keepTerminator, bool replay,
+                                LexicalEnvironment environment,
+                                bool eraseTerminator = true) {
+    if (region.getBlocks().size() != 1)
       return region.getParentOp()->emitOpError(
-          "regions with more than one block are not supported");
+          "regions with anything other than one block are not supported");
 
-    // Save any prior bindings for this region's block arguments so that a
-    // recursive re-entry of the same region (e.g. nested invocation of the
-    // same handler region during a multi-shot resume whose continuation body
-    // re-performs the handled effect) does not clobber the outer frame's
-    // bindings of those args. Without this, the outer handler's continuation
-    // SSA value is rebound to the inner frame's continuation, and the outer
-    // handler's subsequent `rtg.resume %k, ...` resumes the inner frame.
-    SmallVector<std::pair<Value, std::optional<ElaboratorValue>>> savedArgs;
-    savedArgs.reserve(region.getNumArguments());
-    for (auto arg : region.getArguments()) {
-      auto it = state.find(arg);
-      if (it != state.end())
-        savedArgs.emplace_back(arg, it->second);
-      else
-        savedArgs.emplace_back(arg, std::nullopt);
+    Block &block = region.front();
+    for (auto [arg, value] : llvm::zip(block.getArguments(), regionArguments))
+      environment[arg] = value;
+
+    BlockFrame frame;
+    frame.block = &block;
+    frame.nextOp = block.empty() ? nullptr : &block.front();
+    frame.keepTerminator = keepTerminator;
+    frame.eraseTerminator = eraseTerminator;
+    frame.replay = replay;
+    frame.environment = std::move(environment);
+    workStack.emplace_back(std::make_unique<EvalFrame>(std::move(frame)));
+    return success();
+  }
+
+  FailureOr<ControlTransfer> visitPerformTransfer(PerformOp op) {
+    StringAttr effectName = op.getEffectAttr().getAttr();
+    for (size_t i = handlerStack.size(); i > 0; --i) {
+      const HandlerFrame &frame = handlerStack[i - 1];
+      if (frame.handlers.contains(effectName))
+        return ControlTransfer{frame.promptToken, op};
     }
-    llvm::scope_exit restoreArgs([&] {
-      for (auto &[arg, prev] : savedArgs) {
-        if (prev.has_value())
-          state[arg] = *prev;
-        else
-          state.erase(arg);
+
+    auto diag = op->emitError("no handler for effect @")
+                << effectName.getValue();
+    if (sequenceBoundaryToken)
+      diag << "; effects cannot be handled across a sequence boundary";
+    return diag;
+  }
+
+  LogicalResult handleControlTransfer(ControlTransfer transfer) {
+    size_t handlerIndex = handlerStack.size();
+    Region *handlerRegion = nullptr;
+    StringAttr effectName = transfer.perform.getEffectAttr().getAttr();
+    for (size_t i = handlerStack.size(); i > 0; --i) {
+      auto it = handlerStack[i - 1].handlers.find(effectName);
+      if (it != handlerStack[i - 1].handlers.end()) {
+        handlerIndex = i - 1;
+        handlerRegion = it->second;
+        break;
       }
-    });
+    }
+    if (!handlerRegion || handlerIndex == handlerStack.size())
+      return transfer.perform->emitOpError(
+          "control transfer no longer has a matching handler");
 
-    for (auto [arg, elabArg] :
-         llvm::zip(region.getArguments(), regionArguments))
-      state[arg] = elabArg;
+    size_t promptIndex = workStack.size();
+    for (size_t i = 0; i < workStack.size(); ++i)
+      if (auto *frame = workStack[i]->getIf<WithHandlersFrame>();
+          frame && frame->promptId == transfer.promptId) {
+        promptIndex = i;
+        break;
+      }
+    if (promptIndex == workStack.size())
+      return transfer.perform->emitOpError(
+          "active handler prompt has no evaluator frame");
 
-    Block *block = &region.front();
-    auto iter = keepTerminator ? *block : block->without_terminator();
-    for (auto &op : iter) {
-      auto result = dispatchOpVisitor(&op);
-      if (failed(result))
+    for (size_t i = promptIndex + 1; i < workStack.size(); ++i)
+      if (workStack[i]->holds<ExternalOpFrame>())
+        return transfer.perform->emitError(
+            "effect handler cannot capture control across an opaque "
+            "external-region shell");
+
+    auto *activeBlock = workStack.back()->getIf<BlockFrame>();
+    if (!activeBlock)
+      return transfer.perform->emitOpError(
+          "perform is not executing in a block frame");
+    LexicalEnvironment performEnvironment = activeBlock->environment;
+    SmallVector<HandlerFrame> capturedHandlerStack(handlerStack);
+    RngScope capturedRng = testState.rng;
+    ContinuationBoundary capturedBoundary{
+        sequenceBoundaryToken, externalRegionStack, elaboratorBoundaryToken};
+    EvalFrameStack capturedFrames;
+
+    Value performResult = transfer.perform.getNumResults()
+                              ? Value(transfer.perform.getResult())
+                              : Value();
+    Type resumeType = performResult
+                          ? performResult.getType()
+                          : NoneType::get(transfer.perform.getContext());
+
+    while (workStack.size() > promptIndex) {
+      EvalFrame &frame = *workStack.back();
+      capturedFrames.push_back(frame.clone());
+      if (auto *randomScope = frame.getIf<RandomScopeFrame>()) {
+        testState.rng = randomScope->outerRng;
+      } else if (auto *external = frame.getIf<ExternalOpFrame>()) {
+        if (external->activeBoundary && !externalRegionStack.empty())
+          externalRegionStack.pop_back();
+        materializer.getBuilder().restoreInsertionPoint(
+            external->parentInsertionPoint);
+      } else if (auto *resume = frame.getIf<ResumeFrame>()) {
+        handlerStack = resume->handlerStack;
+        testState.rng = resume->rng;
+      }
+      workStack.pop_back();
+    }
+    std::reverse(capturedFrames.begin(), capturedFrames.end());
+    auto *continuation = sharedState.internalizer.create<ContinuationStorage>(
+        std::move(capturedFrames), performResult,
+        std::move(capturedHandlerStack), performEnvironment,
+        std::move(capturedRng), transfer.promptId, std::move(capturedBoundary),
+        resumeType, transfer.perform.getLoc());
+    materializer.registerIdentityValue(continuation);
+
+    SmallVector<ElaboratorValue> handlerArguments;
+    for (Value operand : transfer.perform.getOperands())
+      handlerArguments.push_back(performEnvironment.at(operand));
+    handlerArguments.push_back(continuation);
+
+    handlerStack.resize(handlerIndex);
+    state = performEnvironment;
+    workStack.emplace_back(
+        std::make_unique<EvalFrame>(HandlerClauseFrame{transfer.perform}));
+    return pushRegionFrame(*handlerRegion, handlerArguments,
+                           /*keepTerminator=*/false, /*replay=*/false,
+                           std::move(performEnvironment));
+  }
+
+  LogicalResult scheduleResume(ResumeOp op) {
+    auto stateIt = state.find(op.getContinuation());
+    if (stateIt == state.end())
+      return op->emitOpError("continuation has no elaborated value");
+    auto *continuation = std::get_if<ContinuationStorage *>(&stateIt->second);
+    if (!continuation || !*continuation)
+      return op->emitOpError(
+          "cannot resume a continuation that is not owned by the elaborator");
+
+    ContinuationStorage *cont = *continuation;
+    if (cont->boundary.sequence != sequenceBoundaryToken)
+      return op->emitError("continuation cannot escape a sequence boundary");
+    if (cont->boundary.elaborator != elaboratorBoundaryToken)
+      return op->emitError(
+          "continuation cannot escape its elaborator invocation");
+    if (!llvm::equal(cont->boundary.externalRegions, externalRegionStack))
+      return op->emitError(
+          "continuation cannot escape an opaque external-region shell");
+
+    std::optional<ElaboratorValue> resumeValue;
+    if (cont->performResult && op.getValue())
+      resumeValue = state.at(op.getValue());
+
+    auto *block = workStack.back()->getIf<BlockFrame>();
+    if (!block)
+      return op->emitOpError("resume is not executing in a block frame");
+    block->environment = state;
+
+    workStack.emplace_back(
+        std::make_unique<EvalFrame>(ResumeFrame(handlerStack, testState.rng)));
+    handlerStack = cont->capturedHandlerStack;
+    testState.rng = cont->capturedRng;
+
+    EvalFrameStack replayFrames;
+    for (const auto &prototype : cont->capturedFrames)
+      replayFrames.push_back(prototype->clone());
+    for (auto &framePtr : replayFrames) {
+      EvalFrame &frame = *framePtr;
+      if (auto *blockFrame = frame.getIf<BlockFrame>())
+        blockFrame->replay = true;
+      else if (auto *ifFrame = frame.getIf<ScfIfFrame>())
+        ifFrame->replay = true;
+      else if (auto *forFrame = frame.getIf<ScfForFrame>())
+        forFrame->replay = true;
+      else if (auto *scopeFrame = frame.getIf<RandomScopeFrame>())
+        scopeFrame->replay = true;
+      else if (auto *handlerFrame = frame.getIf<WithHandlersFrame>())
+        handlerFrame->replay = true;
+      else if (auto *externalFrame = frame.getIf<ExternalOpFrame>())
+        externalFrame->replay = true;
+    }
+    if (resumeValue) {
+      auto *performBlock = replayFrames.back()->getIf<BlockFrame>();
+      if (!performBlock)
+        return op->emitOpError(
+            "captured continuation does not end in a block frame");
+      performBlock->environment[cont->performResult] = *resumeValue;
+    }
+    for (auto &frame : replayFrames)
+      workStack.push_back(std::move(frame));
+    return success();
+  }
+
+  LogicalResult startExternalRegion(size_t frameIndex, bool &started) {
+    auto &frame = workStack[frameIndex]->get<ExternalOpFrame>();
+    RegionRange oldRegions = frame.originalOp->getRegions();
+    while (frame.nextRegion < oldRegions.size()) {
+      size_t regionIndex = frame.nextRegion++;
+      Region &oldRegion = *oldRegions[regionIndex];
+      if (oldRegion.empty())
+        continue;
+      if (oldRegion.getBlocks().size() != 1)
+        return frame.originalOp->emitOpError(
+            "regions with anything other than one block are not supported");
+
+      Region &newRegion = frame.materializedOp->getRegion(regionIndex);
+      Block &oldBlock = oldRegion.front();
+      Block &newBlock = newRegion.emplaceBlock();
+      LexicalEnvironment environment = frame.parentEnvironment;
+      for (auto oldArg : oldBlock.getArguments()) {
+        Value newArg = newBlock.addArgument(oldArg.getType(), oldArg.getLoc());
+        auto *storage = sharedState.internalizer.create<OpaqueExternalStorage>(
+            oldArg.getType(), oldArg.getLoc());
+        environment[oldArg] = storage;
+        materializer.map(storage, newArg);
+      }
+
+      uint64_t boundary = sharedState.createBoundaryToken();
+      frame.activeBoundary = boundary;
+      externalRegionStack.push_back(boundary);
+      materializer.getBuilder().setInsertionPoint(&newBlock, newBlock.begin());
+      started = true;
+      return pushRegionFrame(oldRegion, {}, /*keepTerminator=*/true,
+                             frame.replay, std::move(environment));
+    }
+    started = false;
+    return success();
+  }
+
+  LogicalResult startExternalOp(Operation *op, bool replay) {
+    auto &builder = materializer.getBuilder();
+    Operation *newOp = op->cloneWithoutRegions();
+    builder.insert(newOp);
+    builder.setInsertionPoint(newOp);
+    for (auto &operand : newOp->getOpOperands()) {
+      auto emitError = [&]() {
+        auto diag = newOp->emitError();
+        diag.attachNote(newOp->getLoc())
+            << "while materializing operand#" << operand.getOperandNumber()
+            << " of external region op";
+        return diag;
+      };
+      Value value = materializer.materialize(state.at(operand.get()),
+                                             newOp->getLoc(), emitError);
+      if (!value)
         return failure();
+      operand.set(value);
+    }
+    builder.setInsertionPointAfter(newOp);
 
-      // A perform op elaborated the continuation inline; remaining ops in this
-      // block will be deleted by finalizer.
-      if (*result == DeletionKind::StopElaboration)
+    ExternalOpFrame frame;
+    frame.originalOp = op;
+    frame.materializedOp = newOp;
+    frame.replay = replay;
+    frame.parentEnvironment = state;
+    frame.parentInsertionPoint = builder.saveInsertionPoint();
+    workStack.emplace_back(std::make_unique<EvalFrame>(std::move(frame)));
+    bool started = false;
+    if (failed(startExternalRegion(workStack.size() - 1, started)))
+      return failure();
+    if (!started)
+      return finishExternalOp(workStack.size() - 1);
+    return success();
+  }
+
+  LogicalResult finishExternalOp(size_t frameIndex) {
+    auto &frame = workStack[frameIndex]->get<ExternalOpFrame>();
+    auto *parent = workStack[frameIndex - 1]->getIf<BlockFrame>();
+    if (!parent)
+      return frame.originalOp->emitOpError(
+          "external region op lost its parent block frame");
+    for (auto [oldResult, newResult] :
+         llvm::zip(frame.originalOp->getResults(),
+                   frame.materializedOp->getResults())) {
+      auto *storage = sharedState.internalizer.create<OpaqueExternalStorage>(
+          oldResult.getType(), oldResult.getLoc());
+      parent->environment[oldResult] = storage;
+      materializer.map(storage, newResult);
+    }
+    workStack.pop_back();
+    return success();
+  }
+
+  LogicalResult startForIteration(size_t frameIndex) {
+    auto &frame = workStack[frameIndex]->get<ScfForFrame>();
+    if (frame.nextIteration >= frame.upperBound) {
+      auto *parent = workStack[frameIndex - 1]->getIf<BlockFrame>();
+      if (!parent)
+        return frame.op->emitOpError("scf.for lost its parent block frame");
+      for (auto [result, iterArg] :
+           llvm::zip(frame.op->getResults(), frame.op.getRegionIterArgs()))
+        parent->environment[result] = frame.loopEnvironment.at(iterArg);
+      frame.completed = true;
+      return success();
+    }
+
+    size_t iteration = frame.nextIteration;
+    frame.nextIteration += frame.loopStep;
+    LexicalEnvironment environment = frame.loopEnvironment;
+    environment[frame.op.getInductionVar()] = iteration;
+    return pushRegionFrame(frame.op.getBodyRegion(), {},
+                           /*keepTerminator=*/false, frame.replay,
+                           std::move(environment));
+  }
+
+  LogicalResult completeFrame(SmallVector<ElaboratorValue> yieldedValues) {
+    if (workStack.empty() || workStack.back()->holds<BlockFrame>())
+      return success();
+
+    if (auto *frame = workStack.back()->getIf<ScfIfFrame>()) {
+      if (failed(frame->step(*this, yieldedValues)))
+        return failure();
+      workStack.pop_back();
+      return success();
+    }
+
+    if (auto *frame = workStack.back()->getIf<ScfForFrame>()) {
+      if (failed(frame->step(*this, yieldedValues)))
+        return failure();
+      if (frame->completed)
+        workStack.pop_back();
+      return success();
+    }
+
+    if (auto *frame = workStack.back()->getIf<RandomScopeFrame>()) {
+      auto *parent = workStack[workStack.size() - 2]->getIf<BlockFrame>();
+      if (!parent)
+        return frame->op->emitOpError(
+            "random_scope lost its parent block frame");
+      for (auto [result, value] :
+           llvm::zip(frame->op.getResults(), yieldedValues))
+        parent->environment[result] = value;
+      testState.rng = frame->outerRng;
+      workStack.pop_back();
+      return success();
+    }
+
+    if (auto *frame = workStack.back()->getIf<WithHandlersFrame>()) {
+      if (handlerStack.empty() ||
+          handlerStack.back().promptToken != frame->promptId)
+        return frame->op->emitOpError(
+            "handler stack does not match completed scope");
+      handlerStack.pop_back();
+      workStack.pop_back();
+      return success();
+    }
+
+    if (workStack.back()->holds<HandlerClauseFrame>()) {
+      workStack.pop_back();
+      return success();
+    }
+
+    if (auto *frame = workStack.back()->getIf<ExternalOpFrame>()) {
+      if (frame->activeBoundary) {
+        assert(!externalRegionStack.empty() &&
+               externalRegionStack.back() == frame->activeBoundary);
+        externalRegionStack.pop_back();
+        frame->activeBoundary = 0;
+      }
+      materializer.getBuilder().restoreInsertionPoint(
+          frame->parentInsertionPoint);
+      bool started = false;
+      if (failed(startExternalRegion(workStack.size() - 1, started)))
+        return failure();
+      if (started)
         return success();
 
-      if (*result == DeletionKind::Keep)
-        if (failed(materializer.materialize(&op, state)))
+      return finishExternalOp(workStack.size() - 1);
+    }
+
+    if (auto *frame = workStack.back()->getIf<ResumeFrame>()) {
+      handlerStack = std::move(frame->handlerStack);
+      testState.rng = frame->rng;
+      workStack.pop_back();
+      return success();
+    }
+    llvm_unreachable("unknown evaluator frame");
+  }
+
+  LogicalResult runTrampoline(SmallVector<ElaboratorValue> &rootValues) {
+    while (!workStack.empty()) {
+      auto *frame = workStack.back()->getIf<BlockFrame>();
+      if (!frame) {
+        if (failed(completeFrame({})))
           return failure();
+        continue;
+      }
+
+      Operation *op = frame->nextOp;
+      if (!op ||
+          (!frame->keepTerminator && op->hasTrait<OpTrait::IsTerminator>())) {
+        SmallVector<ElaboratorValue> yieldedValues;
+        if (!frame->block->empty() &&
+            frame->block->back().hasTrait<OpTrait::IsTerminator>()) {
+          Operation *terminator = frame->block->getTerminator();
+          for (Value operand : terminator->getOperands())
+            yieldedValues.push_back(frame->environment.at(operand));
+          if (!frame->keepTerminator && frame->eraseTerminator &&
+              materializer.isInPlace(terminator))
+            terminator->erase();
+        }
+        workStack.pop_back();
+        if (workStack.empty()) {
+          rootValues = std::move(yieldedValues);
+          break;
+        }
+        if (failed(completeFrame(std::move(yieldedValues))))
+          return failure();
+        continue;
+      }
+
+      Operation *nextOp = op->getNextNode();
+      bool replay = frame->replay;
+      frame->nextOp = nextOp;
+      state = frame->environment;
+
+      if (isSymbolic(op) && !supportsSymbolicValuesNonGenerically(op)) {
+        auto result = visitOpGeneric(op);
+        if (failed(result))
+          return failure();
+        if (*result == DeletionKind::Keep &&
+            failed(materializer.materialize(op, state, replay)))
+          return failure();
+        workStack.back()->get<BlockFrame>().environment = state;
+        continue;
+      }
+
+      if (auto perform = dyn_cast<PerformOp>(op)) {
+        auto transfer = visitPerformTransfer(perform);
+        if (failed(transfer))
+          return failure();
+        workStack.back()->get<BlockFrame>().environment = state;
+        if (failed(handleControlTransfer(*transfer)))
+          return failure();
+        continue;
+      }
+
+      if (auto resume = dyn_cast<ResumeOp>(op)) {
+        if (failed(scheduleResume(resume)))
+          return failure();
+        continue;
+      }
+
+      if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
+        bool condition = get<bool>(ifOp.getCondition());
+        Region &region =
+            condition ? ifOp.getThenRegion() : ifOp.getElseRegion();
+        workStack.back()->get<BlockFrame>().environment = state;
+        if (region.empty())
+          continue;
+        workStack.emplace_back(
+            std::make_unique<EvalFrame>(ScfIfFrame{ifOp, replay}));
+        if (failed(pushRegionFrame(region, {}, /*keepTerminator=*/false, replay,
+                                   state)))
+          return failure();
+        continue;
+      }
+
+      if (auto forOp = dyn_cast<scf::ForOp>(op)) {
+        if (!(std::holds_alternative<size_t>(state.at(forOp.getLowerBound())) &&
+              std::holds_alternative<size_t>(state.at(forOp.getStep())) &&
+              std::holds_alternative<size_t>(state.at(forOp.getUpperBound()))))
+          return forOp->emitOpError("can only elaborate index type iterator");
+        size_t lower = get<size_t>(forOp.getLowerBound());
+        size_t step = get<size_t>(forOp.getStep());
+        size_t upper = get<size_t>(forOp.getUpperBound());
+        if (!step)
+          return forOp->emitOpError("loop step must be greater than zero");
+        LexicalEnvironment loopEnvironment = state;
+        for (auto [iterArg, initArg] :
+             llvm::zip(forOp.getRegionIterArgs(), forOp.getInitArgs()))
+          loopEnvironment[iterArg] = state.at(initArg);
+        workStack.back()->get<BlockFrame>().environment = state;
+        if (lower >= upper) {
+          for (auto [result, iterArg] :
+               llvm::zip(forOp->getResults(), forOp.getRegionIterArgs()))
+            workStack.back()->get<BlockFrame>().environment[result] =
+                loopEnvironment.at(iterArg);
+          continue;
+        }
+        workStack.emplace_back(std::make_unique<EvalFrame>(
+            ScfForFrame{forOp, lower, upper, step, replay, /*completed=*/false,
+                        std::move(loopEnvironment)}));
+        if (failed(startForIteration(workStack.size() - 1)))
+          return failure();
+        continue;
+      }
+
+      if (auto randomScope = dyn_cast<RandomScopeOp>(op)) {
+        RngScope outerRng = testState.rng;
+        testState.rng = randomScope.getSeed()
+                            ? RngScope(randomScope.getSeed()->getZExtValue())
+                            : testState.rng.getNested();
+        workStack.back()->get<BlockFrame>().environment = state;
+        workStack.emplace_back(std::make_unique<EvalFrame>(
+            RandomScopeFrame(randomScope, std::move(outerRng), replay)));
+        if (failed(pushRegionFrame(randomScope.getBodyRegion(), {},
+                                   /*keepTerminator=*/false, replay, state)))
+          return failure();
+        continue;
+      }
+
+      if (auto withHandlers = dyn_cast<WithHandlersOp>(op)) {
+        HandlerFrame handlerFrame;
+        handlerFrame.promptToken = sharedState.createBoundaryToken();
+        for (auto [effect, region] : llvm::zip(
+                 withHandlers.getEffects(), withHandlers.getHandlerRegions()))
+          handlerFrame.handlers[cast<FlatSymbolRefAttr>(effect).getAttr()] =
+              &region;
+        uint64_t promptId = handlerFrame.promptToken;
+        handlerStack.push_back(std::move(handlerFrame));
+        workStack.back()->get<BlockFrame>().environment = state;
+        workStack.emplace_back(std::make_unique<EvalFrame>(
+            WithHandlersFrame{withHandlers, promptId, replay}));
+        if (failed(pushRegionFrame(withHandlers.getBody(), {},
+                                   /*keepTerminator=*/false, replay, state)))
+          return failure();
+        continue;
+      }
+
+      if (op->getNumRegions() != 0) {
+        workStack.back()->get<BlockFrame>().environment = state;
+        if (failed(startExternalOp(op, replay)))
+          return failure();
+        continue;
+      }
+
+      auto result = dispatchOpVisitor(op);
+      if (failed(result))
+        return failure();
+      if (*result == DeletionKind::Keep &&
+          failed(materializer.materialize(op, state, replay)))
+        return failure();
+      workStack.back()->get<BlockFrame>().environment = state;
 
       LLVM_DEBUG({
-        llvm::dbgs() << "Elaborated " << op << " to\n[";
-
-        llvm::interleaveComma(op.getResults(), llvm::dbgs(), [&](auto res) {
+        llvm::dbgs() << "Elaborated " << *op << " to\n[";
+        llvm::interleaveComma(op->getResults(), llvm::dbgs(), [&](auto res) {
           if (state.contains(res))
             llvm::dbgs() << state.at(res);
           else
             llvm::dbgs() << "unknown";
         });
-
         llvm::dbgs() << "]\n\n";
       });
     }
-
-    if (!block->empty() && block->back().hasTrait<OpTrait::IsTerminator>()) {
-      auto *terminator = block->getTerminator();
-      for (auto val : terminator->getOperands())
-        terminatorOperands.push_back(state.at(val));
-
-      if (!keepTerminator && materializer.isInPlace(terminator))
-        terminator->erase();
-    }
-
     return success();
+  }
+
+  LogicalResult elaborate(Region &region,
+                          ArrayRef<ElaboratorValue> regionArguments,
+                          bool keepTerminator,
+                          SmallVector<ElaboratorValue> &terminatorOperands) {
+    if (!workStack.empty())
+      return region.getParentOp()->emitOpError(
+          "top-level elaboration cannot start with active evaluator frames");
+    LexicalEnvironment savedState = std::move(state);
+    LexicalEnvironment environment = savedState;
+    if (failed(pushRegionFrame(region, regionArguments, keepTerminator,
+                               /*replay=*/false, std::move(environment)))) {
+      state = std::move(savedState);
+      return failure();
+    }
+    bool failedEvaluation = failed(runTrampoline(terminatorOperands));
+    state = std::move(savedState);
+    return failedEvaluation ? failure() : success();
   }
 
 private:
@@ -2715,10 +3235,20 @@ private:
   Materializer &materializer;
 
   // A map from SSA values to a pointer of an interned elaborator value.
-  DenseMap<Value, ElaboratorValue> state;
+  LexicalEnvironment state;
 
   // The current context we are elaborating under.
   ContextResourceAttrInterface currentContext;
+
+  /// Dynamic sequence invocation enclosing this elaborator, or zero at module
+  /// scope.
+  uint64_t sequenceBoundaryToken;
+
+  /// Lifetime of this evaluator and the copyable frame executors it owns.
+  uint64_t elaboratorBoundaryToken;
+
+  /// Opaque external regions currently being interpreted.
+  SmallVector<uint64_t> externalRegionStack;
 
   // Allows us to convert attributes to ElaboratorValues.
   AttributeToElaboratorValueConverter attrConverter;
@@ -2728,7 +3258,31 @@ private:
 
   // Stack of handler frames for rtg.handle scopes, innermost last.
   SmallVector<HandlerFrame> handlerStack;
+
+  /// Cloneable evaluator state from the outermost block to the current step.
+  EvalFrameStack workStack;
+
+  friend struct ScfIfFrame;
+  friend struct ScfForFrame;
 };
+
+LogicalResult ScfIfFrame::step(Elaborator &elaborator,
+                               ArrayRef<ElaboratorValue> yieldedValues) {
+  auto *parent = elaborator.workStack[elaborator.workStack.size() - 2]
+                     ->getIf<BlockFrame>();
+  if (!parent)
+    return op->emitOpError("scf.if lost its parent block frame");
+  for (auto [result, value] : llvm::zip(op.getResults(), yieldedValues))
+    parent->environment[result] = value;
+  return success();
+}
+
+LogicalResult ScfForFrame::step(Elaborator &elaborator,
+                                ArrayRef<ElaboratorValue> yieldedValues) {
+  for (auto [iterArg, value] : llvm::zip(op.getRegionIterArgs(), yieldedValues))
+    loopEnvironment[iterArg] = value;
+  return elaborator.startForIteration(elaborator.workStack.size() - 1);
+}
 } // namespace
 
 SequenceOp
@@ -2753,7 +3307,8 @@ Materializer::elaborateSequence(const RandomizedSequenceStorage *seq,
 
   Materializer materializer(OpBuilder::atBlockBegin(seqOp.getBody()), testState,
                             sharedState, elabArgs);
-  Elaborator elaborator(sharedState, testState, materializer, seq->context);
+  Elaborator elaborator(sharedState, testState, materializer, seq->context,
+                        sharedState.createBoundaryToken());
   SmallVector<ElaboratorValue> yieldedVals;
   if (failed(elaborator.elaborate(familyOp.getBodyRegion(), seq->sequence->args,
                                   /*keepTerminator=*/false, yieldedVals)))
