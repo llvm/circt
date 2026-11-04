@@ -612,6 +612,25 @@ moore.module @Net() {
   moore.assign %a, %3 : ref<i32>
 }
 
+// FIXME: this can be merged with the above once moore.net ops emit moore.net
+// types
+// CHECK-LABEL: hw.module @NetType
+// CHECK-SAME: in [[I1NET:%.+]] : !llhd.net<i1>
+// CHECK-SAME: in [[STRUCTNET:%.+]] : !llhd.net<!hw.struct<a: i8, b: i8>>)
+moore.module @NetType(in %i1net : !moore.net<!moore.i1>, in %structnet : !moore.net<struct<{a: i8, b: i8}>>) {
+  %c0_i1 = moore.constant 0 : i1
+  %c0_i8 = moore.constant 0 : i8
+  // CHECK: llhd.prb_net [[I1NET]] : i1
+  %0 = moore.read %i1net : net<i1>
+  // CHECK: llhd.prb_net [[STRUCTNET]] : !hw.struct<a: i8, b: i8>
+  %1 = moore.read %structnet : net<struct<{a: i8, b: i8}>>
+  // CHECK: llhd.assign_net [[I1NET]], {{%.+}} : i1
+  moore.assign %i1net, %c0_i1 : net<i1>
+  // CHECK: llhd.assign_net [[STRUCTNET]], {{%.+}} : !hw.struct<a: i8, b: i8>
+  %2 = moore.struct_create %c0_i8, %c0_i8 : !moore.i8, !moore.i8 -> struct<{a: i8, b: i8}>
+  moore.assign %structnet, %2 : net<struct<{a: i8, b: i8}>>
+}
+
 // CHECK-LABEL: hw.module @UnpackedArray
 moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i1, out c : !moore.i32) {
   // CHECK: hw.array_get %arr[%sel] : !hw.array<2xi32>, i1

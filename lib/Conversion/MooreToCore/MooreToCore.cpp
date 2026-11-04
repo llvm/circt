@@ -2524,7 +2524,10 @@ struct ReadOpConversion : public OpConversionPattern<ReadOp> {
   LogicalResult
   matchAndRewrite(ReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<llhd::ProbeOp>(op, adaptor.getInput());
+    if (isa<llhd::NetType>(adaptor.getInput().getType()))
+      rewriter.replaceOpWithNewOp<llhd::ProbeNetOp>(op, adaptor.getInput());
+    else
+      rewriter.replaceOpWithNewOp<llhd::ProbeOp>(op, adaptor.getInput());
     return success();
   }
 };
@@ -2553,8 +2556,12 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
     // Blocking and continuous assignments take effect immediately.
     if constexpr (std::is_same_v<OpTy, ContinuousAssignOp> ||
                   std::is_same_v<OpTy, BlockingAssignOp>) {
-      rewriter.replaceOpWithNewOp<llhd::AssignOp>(op, adaptor.getDst(),
-                                                  adaptor.getSrc(), Value{});
+      if (isa<llhd::NetType>(adaptor.getDst().getType()))
+        rewriter.replaceOpWithNewOp<llhd::AssignNetOp>(
+            op, adaptor.getDst(), adaptor.getSrc(), Value{});
+      else
+        rewriter.replaceOpWithNewOp<llhd::AssignOp>(op, adaptor.getDst(),
+                                                    adaptor.getSrc(), Value{});
       return success();
     } else {
       Value delay;
@@ -3965,6 +3972,12 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return {};
   });
 
+  typeConverter.addConversion([&](NetType type) -> std::optional<Type> {
+    if (auto innerType = typeConverter.convertType(type.getNestedType()))
+      return llhd::NetType::get(innerType);
+    return {};
+  });
+
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
   typeConverter.addConversion([](FloatType type) { return type; });
@@ -3979,6 +3992,12 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](llhd::RefType type) -> std::optional<Type> {
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
       return llhd::RefType::get(innerType);
+    return {};
+  });
+
+  typeConverter.addConversion([&](llhd::NetType type) -> std::optional<Type> {
+    if (auto innerType = typeConverter.convertType(type.getNestedType()))
+      return llhd::NetType::get(innerType);
     return {};
   });
 
