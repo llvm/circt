@@ -628,6 +628,23 @@ void ProbeOp::getEffects(
 }
 
 //===----------------------------------------------------------------------===//
+// ProbeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ProbeNetOp::ensureOnlySafeAccesses(
+    const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return success();
+}
+
+void ProbeNetOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  if (mayHaveSSADominance(*getOperation()->getParentRegion()))
+    effects.emplace_back(MemoryEffects::Read::get(), &getSignalMutable());
+}
+
+//===----------------------------------------------------------------------===//
 // DriveOp
 //===----------------------------------------------------------------------===//
 

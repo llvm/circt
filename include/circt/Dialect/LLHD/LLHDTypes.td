@@ -89,6 +89,11 @@ class TypeMatchesNetNestedType<string type, string netType> : TypesMatchWith<
   type, netType, "NetType::get($_self)"
 >;
 
+class NetNestedTypeMatchesType<string netType, string type> : TypesMatchWith<
+  netType # " net element type must match " # type # " type",
+  netType, type, "cast<NetType>($_self).getNestedType()"
+>;
+
 //===----------------------------------------------------------------------===//
 // Attribute declarations
 //===----------------------------------------------------------------------===//
