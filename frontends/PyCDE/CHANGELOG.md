@@ -1,6 +1,17 @@
 # PyCDE changelog
 
-## Unreleased
+## 0.13.0
+
+### Breaking changes
+
+- **The ESI channel ASM format has changed.** Channel types now require an
+  explicit signaling protocol, for example `!esi.channel<i8, ValidReady>`
+  instead of `!esi.channel<i8>`. Older ASM exports containing `esi.channel`
+  types without this protocol cannot be imported by PyCDE 0.13.0.
+
+  **Migration:** Regenerate ASM exports with PyCDE 0.13.0 or newer before
+  importing them. When migrating existing ASM manually, add `, ValidReady`
+  to channel types that previously used the implicit valid/ready protocol.
 
 ### Fixed
 
