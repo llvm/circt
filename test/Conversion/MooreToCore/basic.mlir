@@ -612,7 +612,7 @@ moore.module @Net() {
   moore.assign %a, %3 : ref<i32>
 }
 
-// FIXME: this can be merged with the above once llhd.net ops emit llhd.net
+// FIXME: this can be merged with the above once moore.net ops emit moore.net
 // types
 // CHECK-LABEL: hw.module @NetType
 // CHECK-SAME: in [[I1NET:%.+]] : !llhd.net<i1>
