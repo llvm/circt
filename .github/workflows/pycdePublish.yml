@@ -89,6 +89,14 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install cibuildwheel twine
 
+      - name: sccache
+        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+        with:
+          key: pycde-publish-${{ runner.os }}-${{ matrix.python-env }}
+          max-size: 500M
+          variant: sccache
+          install: binary
+
       # Build CIRCT and run its tests using a Docker container with all the
       # integration testing prerequisite installed.
       - name: Build wheel
@@ -100,6 +108,12 @@ jobs:
           # The CIRCT and PyCDE tests are run once by the 'test' job instead of
           # in every wheel build.
           RUN_TESTS: False
+          # cibuildwheel mounts the host at /host; keep the cache on the host
+          # so the cache action can restore and save it.
+          COMPILER_LAUNCHER: /host/usr/local/bin/sccache
+          CIBW_ENVIRONMENT_LINUX: >-
+            SCCACHE_DIR=/host${{ github.workspace }}/.sccache
+            SCCACHE_CACHE_SIZE=500M
         run: |
           set -o errexit
           export PATH=$PATH:$HOME/.local/bin
@@ -162,6 +176,13 @@ jobs:
           python -m pip install cibuildwheel twine
           choco install ninja
 
+      - name: sccache
+        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+        with:
+          key: pycde-publish-${{ runner.os }}-${{ matrix.python-env }}
+          max-size: 500M
+          variant: sccache
+
       - name: Build wheel
         shell: cmd
         env:
@@ -169,6 +190,7 @@ jobs:
           CMAKE_GENERATOR: Ninja
           SETUPTOOLS_SCM_DEBUG: True
           BUILD_TYPE: Release
+          COMPILER_LAUNCHER: sccache
           # The CIRCT and PyCDE tests are run once by the 'test' job instead of
           # in every wheel build.
           RUN_TESTS: False
