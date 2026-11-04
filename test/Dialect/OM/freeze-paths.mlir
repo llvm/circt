@@ -1,4 +1,6 @@
 // RUN: circt-opt -om-freeze-paths %s | FileCheck %s
+// Ensure list folding before path freezing produces valid IR.
+// RUN: circt-opt --canonicalize -om-freeze-paths %s -o /dev/null
 hw.hierpath private @nla [@PathModule::@sym]
 hw.hierpath private @nla_0 [@PathModule::@sym_0]
 hw.hierpath private @nla_1 [@PathModule::@sym_1]
@@ -122,4 +124,17 @@ om.class @ObjectFieldTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pa
 
   // CHECK: om.class.fields [[SUBFIELD]] : !om.list<!om.list<!om.frozenpath>>
   om.class.fields %1 : !om.list<!om.list<!om.path>>
+}
+
+// Check constants in their post-canonicalization form, including types in nonempty list elements.
+// CHECK-LABEL: om.class @ListConstantTest() -> (path: !om.list<!om.frozenpath>, basepath: !om.list<!om.frozenbasepath>, nestedpath: !om.list<!om.list<!om.frozenpath>>) {{{$}}
+om.class @ListConstantTest() -> (path: !om.list<!om.path>, basepath: !om.list<!om.basepath>, nestedpath: !om.list<!om.list<!om.path>>) {
+  // CHECK: [[PATH:%.+]] = om.constant #om.list<!om.frozenpath, []> : !om.list<!om.frozenpath>{{$}}
+  %path = om.constant #om.list<!om.path, []> : !om.list<!om.path>
+  // CHECK: [[BASE_PATH:%.+]] = om.constant #om.list<!om.frozenbasepath, []> : !om.list<!om.frozenbasepath>{{$}}
+  %basepath = om.constant #om.list<!om.basepath, []> : !om.list<!om.basepath>
+  // CHECK: [[NESTED_PATH:%.+]] = om.constant #om.list<!om.list<!om.frozenpath>, [#om.list<!om.frozenpath, []> : !om.list<!om.frozenpath>]> : !om.list<!om.list<!om.frozenpath>>{{$}}
+  %nestedpath = om.constant #om.list<!om.list<!om.path>, [#om.list<!om.path, []> : !om.list<!om.path>]> : !om.list<!om.list<!om.path>>
+  // CHECK: om.class.fields [[PATH]], [[BASE_PATH]], [[NESTED_PATH]] : !om.list<!om.frozenpath>, !om.list<!om.frozenbasepath>, !om.list<!om.list<!om.frozenpath>>
+  om.class.fields %path, %basepath, %nestedpath : !om.list<!om.path>, !om.list<!om.basepath>, !om.list<!om.list<!om.path>>
 }
