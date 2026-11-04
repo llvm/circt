@@ -6,6 +6,7 @@ on:
     - cron: "0 13 * * *"
   pull_request:
     paths:
+      - ".github/workflows/testPycdeESI.yml"
       - "frontends/PyCDE/**"
       - "lib/Dialect/ESI/runtime/**"
 
