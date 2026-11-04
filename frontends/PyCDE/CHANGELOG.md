@@ -1,5 +1,16 @@
 # PyCDE changelog
 
+## Unreleased
+
+### Fixed
+
+- **`esi.TaggedDemux` duplicated messages under backpressure.** Its input was
+  ready only when *every* output was ready, yet each output saw `valid`
+  whenever the input's tag selected it. So if the selected output was ready
+  but another wasn't, the selected output received the same message every
+  cycle. The input is now consumed exactly when the selected output accepts it
+  (messages whose tag selects no output are dropped, as before).
+
 ## 0.12.1
 
 ### Breaking changes
