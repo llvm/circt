@@ -1,5 +1,9 @@
 name: Test PyCDE and the ESI runtime
 
+env:
+  # Match the simulator used by the former pycde-esi-test image.
+  verilator-version: "5.040"
+
 on:
   workflow_dispatch:
   schedule:
@@ -17,16 +21,12 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  #  Build and test Linux wheels. Run the CIRCT tests also.
+  #  Build and test CIRCT, PyCDE, and the ESI runtime on the Linux VM.
   # ---------------------------------------------------------------------------
 
   build-linux:
     name: Build and Test
     runs-on: ubuntu-24.04
-    container:
-      image: ghcr.io/circt/images/pycde-esi-test:latest
-      volumes:
-        - /mnt:/__w/circt
     strategy:
       # Keep the 'matrix' strategy with one data point to make it obvious that
       # this is one point in the overall matrix.
@@ -35,10 +35,20 @@ jobs:
         build-shared: [ON]
         build-type: [Release]
         compiler:
-          - cc: clang
-            cxx: clang++
+          - cc: clang-18
+            cxx: clang++-18
 
     steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          docker-images: true
+          large-packages: false
+          tool-cache: false
+
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
@@ -47,16 +57,57 @@ jobs:
           fetch-depth: 1
           submodules: true
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf bison build-essential clang-18 cmake curl flex help2man \
+            iverilog libffi-dev libfl-dev libssl-dev libsystemc-dev lld \
+            ninja-build python3-dev python3-venv valgrind zlib1g-dev
+
+      - name: Restore Verilator cache
+        id: cache-verilator
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/verilator
+          key: verilator-ubuntu-24.04-${{ runner.arch }}-${{ env.verilator-version }}
+
+      - name: Install Verilator
+        env:
+          VERILATOR_VERSION: ${{ env.verilator-version }}
+          CACHE_HIT: ${{ steps.cache-verilator.outputs.cache-hit }}
+        run: |
+          if [[ "$CACHE_HIT" != "true" ]]; then
+            mkdir -p "$RUNNER_TEMP/verilator-src"
+            curl --fail --location --retry 3 \
+              "https://github.com/verilator/verilator/archive/v$VERILATOR_VERSION.tar.gz" \
+              -o "$RUNNER_TEMP/verilator.tar.gz"
+            tar -xzf "$RUNNER_TEMP/verilator.tar.gz" \
+              -C "$RUNNER_TEMP/verilator-src" --strip-components=1
+            cd "$RUNNER_TEMP/verilator-src"
+            autoconf
+            ./configure --prefix="$RUNNER_TEMP/verilator"
+            make -j"$(nproc)"
+            make install
+          fi
+          echo "$RUNNER_TEMP/verilator/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/verilator/bin/verilator" --version | grep -F "Verilator $VERILATOR_VERSION "
+
+      - name: Save Verilator cache
+        if: github.event_name != 'pull_request' && steps.cache-verilator.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/verilator
+          key: verilator-ubuntu-24.04-${{ runner.arch }}-${{ env.verilator-version }}
+
       - name: Setup venv and install dependencies
         run: |
           set -o errexit
-          whoami
-          apt update
-          apt install -y python3-venv
           python3 -m venv venv
           . venv/bin/activate
           pip install --upgrade pip
           pip install -r frontends/PyCDE/python/requirements.txt
+          pip install pytest pybind11==2.11.2 click
 
       - name: sccache
         uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
@@ -95,6 +146,8 @@ jobs:
             -DLLVM_USE_SPLIT_DWARF=ON \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+            -DPython_EXECUTABLE="$(command -v python3)" \
+            -DPython3_EXECUTABLE="$(command -v python3)" \
             -DCIRCT_ENABLE_FRONTENDS=PyCDE \
             -DESI_RUNTIME=ON \
             -DLLVM_LIT_ARGS="-v --show-unsupported" \
