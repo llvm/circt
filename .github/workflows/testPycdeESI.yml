@@ -1,6 +1,13 @@
 name: Test PyCDE and the ESI runtime
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/testPycdeESI.yml"
+      - "frontends/PyCDE/**"
+      - "**/ESI/**"
   workflow_dispatch:
   schedule:
     - cron: "0 13 * * *"
