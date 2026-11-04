@@ -258,6 +258,38 @@ def AssignOp : LLHDOp<"assign", [
   let hasCanonicalizeMethod = 1;
 }
 
+def AssignNetOp : LLHDOp<"assign_net", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  TypeMatchesNetNestedType<"value", "net">,
+]> {
+  let summary = "Assign a value to a net without delay.";
+  let description = [{
+    The `llhd.assign_net` operation updates a net with a new value immediately,
+    without any delay. This corresponds to a blocking or continuous assignment
+    in SystemVerilog. An optional enable makes the assignment conditional.
+
+    Example:
+    ```mlir
+    llhd.assign_net %net, %value : i42
+    llhd.assign_net %net, %value if %enable : i9001
+    ```
+  }];
+
+  let arguments = (ins
+    Arg<NetType, "the net to assign to", [MemWrite]>:$net,
+    AnyType:$value,
+    Optional<I1>:$enable
+  );
+
+  let assemblyFormat = [{
+    $net `,` $value ( `if` $enable^ )? attr-dict `:` type($value)
+  }];
+
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
 def OutputOp : LLHDOp<"output", [
   TypeMatchesRefNestedType<"value", "result">,
 ]> {
