@@ -239,11 +239,10 @@ def ProbeNetOp : LLHDOp<"prb_net", [
 ]> {
   let summary = "Probe a net.";
   let description = [{
-    This operation probes a net and returns the value it
-    currently carries as a new SSA operand. The result type is always
-    the type carried by the signal. In SSACFG regions, the operation has a read
-    side effect on the signal operand. In graph regions, the operation is
-    memory-effect free.
+    This operation probes a net and returns the value it currently carries as a
+    new SSA operand. The result type is always the type carried by the signal.
+    In SSACFG regions, the operation has a read side effect on the signal
+    operand. In graph regions, the operation is memory-effect free.
 
     Example:
 
