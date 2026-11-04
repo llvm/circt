@@ -14,6 +14,17 @@ om.class @StringOps() -> (str: !om.string, concat: !om.string) {
   om.class.fields %hello, %concat : !om.string, !om.string
 }
 
+// CHECK-LABEL: om.class @StringCanonicalization
+// CHECK: %[[SUFFIX:.+]] = om.constant "bc" : !om.string
+// CHECK: %[[RESULT:.+]] = om.string.concat %arg, %[[SUFFIX]] : !om.string
+// CHECK: om.class.fields %[[RESULT]]
+om.class @StringCanonicalization(%arg: !om.string) -> (result: !om.string) {
+  %b = om.constant "b" : !om.string
+  %c = om.constant "c" : !om.string
+  %result = om.string.concat %arg, %b, %c : !om.string
+  om.class.fields %result : !om.string
+}
+
 // Constant primitive lists are folded to attributes; lists of objects cannot
 // be represented as attributes and therefore remain list_create operations.
 // CHECK-LABEL: om.class @SimpleList() -> (result: !om.list<!om.integer>) {
