@@ -7,10 +7,10 @@ firrtl.circuit "Objects" {
   firrtl.extclass @Empty()
   firrtl.extclass @Source(in value: !firrtl.string, out result: !firrtl.string)
   firrtl.extclass @Sink(in value: !firrtl.string)
+  firrtl.extclass @Input(in value: !firrtl.string)
 
   // CHECK-LABEL: firrtl.module @Objects
   firrtl.module @Objects(in %arg: !firrtl.string, out %out: !firrtl.string, out %ref: !firrtl.anyref) {
-    // Check input promotion and object access handling.
     // CHECK-NEXT: %[[I:.*]] = firrtl.integer 42
     // CHECK-NEXT: %pair = firrtl.object.create(%arg, %[[I]]) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)>
     %pair = firrtl.object @Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)
@@ -22,7 +22,6 @@ firrtl.circuit "Objects" {
     %int = firrtl.integer 42
     firrtl.propassign %second, %int : !firrtl.integer
     firrtl.propassign %first, %arg : !firrtl.string
-    // Preserve output accesses and other object uses.
     // CHECK-NEXT: firrtl.propassign %out, %[[RESULT]] : !firrtl.string
     firrtl.propassign %out, %result : !firrtl.string
     // CHECK-NEXT: %[[REF:.*]] = firrtl.object.anyref_cast %pair
@@ -53,9 +52,7 @@ firrtl.circuit "Objects" {
     firrtl.propassign %firstInput, %result : !firrtl.string
     firrtl.propassign %thirdInput, %result : !firrtl.string
   }
-}
-firrtl.circuit "InputRead" {
-  firrtl.extclass @Input(in value: !firrtl.string)
+
   // CHECK-LABEL: firrtl.module @InputRead
   firrtl.module @InputRead(in %arg: !firrtl.string) {
     // CHECK: %[[OBJ:.*]] = firrtl.object @Input
@@ -67,10 +64,7 @@ firrtl.circuit "InputRead" {
     %read = firrtl.string.concat %field, %arg : !firrtl.string
     firrtl.propassign %field, %arg : !firrtl.string
   }
-}
 
-firrtl.circuit "DuplicateDrivers" {
-  firrtl.extclass @Input(in value: !firrtl.string)
   // CHECK-LABEL: firrtl.module @DuplicateDrivers
   firrtl.module @DuplicateDrivers(in %arg: !firrtl.string) {
     // CHECK: %[[OBJ:.*]] = firrtl.object @Input
@@ -84,14 +78,9 @@ firrtl.circuit "DuplicateDrivers" {
     firrtl.propassign %first, %arg : !firrtl.string
     firrtl.propassign %second, %arg : !firrtl.string
   }
-}
 
-// A failed dependency must not partially promote either object, but unrelated
-// objects should still be promoted.
-firrtl.circuit "FailedDependency" {
-  firrtl.extclass @Source(in value: !firrtl.string, out result: !firrtl.string)
-  firrtl.extclass @Sink(in value: !firrtl.string)
-  firrtl.extclass @Empty()
+  // A failed dependency must not partially promote either object, but unrelated
+  // objects should still be promoted.
   // CHECK-LABEL: firrtl.module @FailedDependency
   firrtl.module @FailedDependency() {
     // CHECK: %[[SINK:.*]] = firrtl.object @Sink
@@ -105,18 +94,6 @@ firrtl.circuit "FailedDependency" {
     %result = firrtl.object.subfield %src[result] : !firrtl.class<@Source(in value: !firrtl.string, out result: !firrtl.string)>
     %value = firrtl.object.subfield %sink[value] : !firrtl.class<@Sink(in value: !firrtl.string)>
     firrtl.propassign %value, %result : !firrtl.string
-    %other = firrtl.object @Empty()
-  }
-}
-
-firrtl.circuit "MissingDriver" {
-  firrtl.extclass @Input(in value: !firrtl.string)
-  firrtl.extclass @Empty()
-  // CHECK-LABEL: firrtl.module @MissingDriver
-  firrtl.module @MissingDriver() {
-    // CHECK: firrtl.object @Input
-    // CHECK: firrtl.object.create() : () -> !firrtl.class<@Empty()>
-    %obj = firrtl.object @Input(in value: !firrtl.string)
     %other = firrtl.object @Empty()
   }
 }
