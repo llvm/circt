@@ -1,40 +1,39 @@
 // RUN: circt-opt %s -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-promote-objects)))' | FileCheck %s
 
+!pair = !firrtl.class<@Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)>
+!source = !firrtl.class<@Source(in value: !firrtl.string, out result: !firrtl.string)>
+!sink = !firrtl.class<@Sink(in value: !firrtl.string)>
+
 firrtl.circuit "Objects" {
   firrtl.class @Pair(in %first: !firrtl.string, out %result: !firrtl.string, in %second: !firrtl.integer) {
     firrtl.propassign %result, %first : !firrtl.string
   }
-  firrtl.extclass @Empty()
   firrtl.extclass @Source(in value: !firrtl.string, out result: !firrtl.string)
   firrtl.extclass @Sink(in value: !firrtl.string)
-  firrtl.extclass @Input(in value: !firrtl.string)
+  firrtl.extclass @Empty()
 
   // CHECK-LABEL: firrtl.module @Objects
   firrtl.module @Objects(in %arg: !firrtl.string, out %out: !firrtl.string, out %ref: !firrtl.anyref) {
     // CHECK-NEXT: %[[I:.*]] = firrtl.integer 42
-    // CHECK-NEXT: %pair = firrtl.object.create(%arg, %[[I]]) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)>
+    // CHECK-NEXT: %pair = firrtl.object.create(%arg, %[[I]])
     %pair = firrtl.object @Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)
-    %first = firrtl.object.subfield %pair[first] : !firrtl.class<@Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)>
-    %duplicate = firrtl.object.subfield %pair[first] : !firrtl.class<@Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)>
+    %first = firrtl.object.subfield %pair[first] : !pair
     // CHECK-NEXT: %[[RESULT:.*]] = firrtl.object.subfield %pair[result]
-    %result = firrtl.object.subfield %pair[result] : !firrtl.class<@Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)>
-    %second = firrtl.object.subfield %pair[second] : !firrtl.class<@Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)>
+    %result = firrtl.object.subfield %pair[result] : !pair
+    %second = firrtl.object.subfield %pair[second] : !pair
     %int = firrtl.integer 42
     firrtl.propassign %second, %int : !firrtl.integer
     firrtl.propassign %first, %arg : !firrtl.string
     // CHECK-NEXT: firrtl.propassign %out, %[[RESULT]] : !firrtl.string
     firrtl.propassign %out, %result : !firrtl.string
     // CHECK-NEXT: %[[REF:.*]] = firrtl.object.anyref_cast %pair
-    %cast = firrtl.object.anyref_cast %pair : !firrtl.class<@Pair(in first: !firrtl.string, out result: !firrtl.string, in second: !firrtl.integer)>
+    %cast = firrtl.object.anyref_cast %pair : !pair
     // CHECK-NEXT: firrtl.propassign %ref, %[[REF]] : !firrtl.anyref
-    firrtl.propassign %ref, %cast : !firrtl.anyref
-    // CHECK-NEXT: %empty = firrtl.object.create() : () -> !firrtl.class<@Empty()>
     // CHECK-NEXT: }
-    %empty = firrtl.object @Empty()
+    firrtl.propassign %ref, %cast : !firrtl.anyref
   }
 
-  // A later object and its output must be hoisted to feed the first object.
-  // The third object then uses the hoisted operations' shared position.
+  // Hoist a later object and its output, which are also used by a third object.
   // CHECK-LABEL: firrtl.module @Dependencies
   firrtl.module @Dependencies(in %arg: !firrtl.string) {
     // CHECK: %[[SRC:.*]] = firrtl.object.create(%arg)
@@ -44,55 +43,46 @@ firrtl.circuit "Objects" {
     %first = firrtl.object @Sink(in value: !firrtl.string)
     %src = firrtl.object @Source(in value: !firrtl.string, out result: !firrtl.string)
     %third = firrtl.object @Sink(in value: !firrtl.string)
-    %input = firrtl.object.subfield %src[value] : !firrtl.class<@Source(in value: !firrtl.string, out result: !firrtl.string)>
-    %result = firrtl.object.subfield %src[result] : !firrtl.class<@Source(in value: !firrtl.string, out result: !firrtl.string)>
-    %firstInput = firrtl.object.subfield %first[value] : !firrtl.class<@Sink(in value: !firrtl.string)>
-    %thirdInput = firrtl.object.subfield %third[value] : !firrtl.class<@Sink(in value: !firrtl.string)>
+    %input = firrtl.object.subfield %src[value] : !source
+    %result = firrtl.object.subfield %src[result] : !source
+    %firstInput = firrtl.object.subfield %first[value] : !sink
+    %thirdInput = firrtl.object.subfield %third[value] : !sink
     firrtl.propassign %input, %arg : !firrtl.string
     firrtl.propassign %firstInput, %result : !firrtl.string
     firrtl.propassign %thirdInput, %result : !firrtl.string
   }
 
-  // CHECK-LABEL: firrtl.module @InputRead
-  firrtl.module @InputRead(in %arg: !firrtl.string) {
-    // CHECK: %[[OBJ:.*]] = firrtl.object @Input
-    // CHECK: %[[FIELD:.*]] = firrtl.object.subfield %[[OBJ]][value]
-    // CHECK: firrtl.string.concat %[[FIELD]], %arg
-    // CHECK: firrtl.propassign %[[FIELD]], %arg
-    %obj = firrtl.object @Input(in value: !firrtl.string)
-    %field = firrtl.object.subfield %obj[value] : !firrtl.class<@Input(in value: !firrtl.string)>
-    %read = firrtl.string.concat %field, %arg : !firrtl.string
+  // CHECK-LABEL: firrtl.module @Unpromoted
+  firrtl.module @Unpromoted(in %arg: !firrtl.string) {
+    // Reading an input prevents promotion.
+    // CHECK: %[[READ:.*]] = firrtl.object @Sink
+    // CHECK-NEXT: %[[FIELD:.*]] = firrtl.object.subfield %[[READ]][value]
+    // CHECK-NEXT: firrtl.string.concat %[[FIELD]], %arg
+    // CHECK-NEXT: firrtl.propassign %[[FIELD]], %arg
+    %read = firrtl.object @Sink(in value: !firrtl.string)
+    %field = firrtl.object.subfield %read[value] : !sink
+    %use = firrtl.string.concat %field, %arg : !firrtl.string
     firrtl.propassign %field, %arg : !firrtl.string
-  }
 
-  // CHECK-LABEL: firrtl.module @DuplicateDrivers
-  firrtl.module @DuplicateDrivers(in %arg: !firrtl.string) {
-    // CHECK: %[[OBJ:.*]] = firrtl.object @Input
-    // CHECK: %[[FIRST:.*]] = firrtl.object.subfield %[[OBJ]][value]
-    // CHECK: %[[SECOND:.*]] = firrtl.object.subfield %[[OBJ]][value]
-    // CHECK: firrtl.propassign %[[FIRST]], %arg
-    // CHECK: firrtl.propassign %[[SECOND]], %arg
-    %obj = firrtl.object @Input(in value: !firrtl.string)
-    %first = firrtl.object.subfield %obj[value] : !firrtl.class<@Input(in value: !firrtl.string)>
-    %second = firrtl.object.subfield %obj[value] : !firrtl.class<@Input(in value: !firrtl.string)>
+    // Multiple drivers prevent promotion, even through different subfields.
+    // CHECK-NEXT: %multi = firrtl.object @Sink
+    %multi = firrtl.object @Sink(in value: !firrtl.string)
+    %first = firrtl.object.subfield %multi[value] : !sink
+    %second = firrtl.object.subfield %multi[value] : !sink
     firrtl.propassign %first, %arg : !firrtl.string
     firrtl.propassign %second, %arg : !firrtl.string
-  }
 
-  // A failed dependency must not partially promote either object, but unrelated
-  // objects should still be promoted.
-  // CHECK-LABEL: firrtl.module @FailedDependency
-  firrtl.module @FailedDependency() {
+    // A missing driver prevents promotion of both objects, but not unrelated ones.
     // CHECK: %[[SINK:.*]] = firrtl.object @Sink
-    // CHECK: %[[SRC:.*]] = firrtl.object @Source
-    // CHECK: firrtl.object.subfield %[[SRC]][result]
-    // CHECK: firrtl.object.subfield %[[SINK]][value]
-    // CHECK: firrtl.propassign
-    // CHECK: firrtl.object.create() : () -> !firrtl.class<@Empty()>
+    // CHECK-NEXT: %[[SRC:.*]] = firrtl.object @Source
+    // CHECK-NEXT: %[[RESULT:.*]] = firrtl.object.subfield %[[SRC]][result]
+    // CHECK-NEXT: %[[VALUE:.*]] = firrtl.object.subfield %[[SINK]][value]
+    // CHECK-NEXT: firrtl.propassign %[[VALUE]], %[[RESULT]]
+    // CHECK-NEXT: firrtl.object.create() : () -> !firrtl.class<@Empty()>
     %sink = firrtl.object @Sink(in value: !firrtl.string)
     %src = firrtl.object @Source(in value: !firrtl.string, out result: !firrtl.string)
-    %result = firrtl.object.subfield %src[result] : !firrtl.class<@Source(in value: !firrtl.string, out result: !firrtl.string)>
-    %value = firrtl.object.subfield %sink[value] : !firrtl.class<@Sink(in value: !firrtl.string)>
+    %result = firrtl.object.subfield %src[result] : !source
+    %value = firrtl.object.subfield %sink[value] : !sink
     firrtl.propassign %value, %result : !firrtl.string
     %other = firrtl.object @Empty()
   }
