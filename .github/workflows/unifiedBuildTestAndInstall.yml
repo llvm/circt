@@ -342,10 +342,9 @@ jobs:
           PYTHON_EXECUTABLE=$(python -c "import sys; print(sys.executable.replace('\\\\', '/'))")
 
           FRONTENDS="PyRTG"
-          if [[ "$BUILD_PYCDE" == "true" ]]; then
+          if [[ "${{ inputs.build_pycde }}" == "true" ]]; then
             FRONTENDS="$FRONTENDS;PyCDE"
             python -m pip install -r frontends/PyCDE/python/requirements.txt
-            echo pycde=true >> "$GITHUB_OUTPUT"
           fi
 
           # A statically-linked libstdc++ conflicts with Python extension
@@ -354,8 +353,6 @@ jobs:
           # symbols get interposed process-wide and corrupt the heap. So
           # disable it whenever the Python bindings are enabled.
           echo cmake="-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON -DCIRCT_ENABLE_FRONTENDS=\"$FRONTENDS\" -DLLVM_STATIC_LINK_CXX_STDLIB=OFF -DMLIR_PYTHON_STUBGEN_ENABLED=OFF -DPython3_EXECUTABLE=\"$PYTHON_EXECUTABLE\" -DPython_EXECUTABLE=\"$PYTHON_EXECUTABLE\"" >> "$GITHUB_OUTPUT"
-        env:
-          BUILD_PYCDE: ${{ inputs.build_pycde }}
       - name: Integration Test Setup (Generic)
         if: inputs.run_integration_tests
         run: |
@@ -451,7 +448,7 @@ jobs:
           ${{ steps.setup-windows.outputs.setup }}
           ninja -C build check-pyrtg
       - name: Test PyCDE
-        if: inputs.run_tests && steps.python-bindings-setup-generic.outputs.pycde == 'true'
+        if: inputs.run_tests && inputs.build_pycde && (runner.os != 'macOS' || runner.arch != 'X64')
         run: |
           ${{ steps.setup-windows.outputs.setup }}
           ninja -C build check-pycde
