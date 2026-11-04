@@ -749,7 +749,8 @@ def PromoteObjects : Pass<"firrtl-promote-objects", "firrtl::FModuleOp"> {
     Promote eligible `firrtl.object` declarations in modules to
     `firrtl.object.create`, using input assignments as operands in port order.
     Hoist dependencies as needed and remove input assignments and accesses.
-    Leave objects with cyclic or unhoistable dependencies unchanged.
+    Leave objects with unsupported input uses, missing or multiple drivers,
+    or cyclic or unhoistable dependencies unchanged.
   }];
   let statistics = [
     Statistic<"numObjectsConverted", "num-objects-converted",

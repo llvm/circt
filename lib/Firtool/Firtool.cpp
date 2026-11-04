@@ -26,7 +26,7 @@ using namespace circt;
 
 LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
                                                     const FirtoolOptions &opt) {
-  if (!opt.shouldDisableObjectPromotion())
+  if (opt.shouldEnableObjectPromotion())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createPromoteObjects());
   pm.nest<firrtl::CircuitOp>().addPass(
@@ -567,9 +567,9 @@ public:
       llvm::cl::desc("Disable optimizations"),
   };
 
-  llvm::cl::opt<bool> disableObjectPromotion{
-      "disable-object-promotion",
-      llvm::cl::desc("Disable promotion of object declarations to value-like "
+  llvm::cl::opt<bool> enableObjectPromotion{
+      "enable-object-promotion",
+      llvm::cl::desc("Enable promotion of object declarations to value-like "
                      "object creation"),
       llvm::cl::init(false)};
 
@@ -874,7 +874,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableLayerSink(false),
-      disableOptimization(false), disableObjectPromotion(false), vbToBV(false),
+      disableOptimization(false), enableObjectPromotion(false), vbToBV(false),
       noDedup(false), companionMode(firrtl::CompanionMode::Bind),
       noViews(false), disableAggressiveMergeConnections(false),
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
@@ -908,7 +908,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   buildMode = clOptions->buildMode;
   disableLayerSink = clOptions->disableLayerSink;
   disableOptimization = clOptions->disableOptimization;
-  disableObjectPromotion = clOptions->disableObjectPromotion;
+  enableObjectPromotion = clOptions->enableObjectPromotion;
   vbToBV = clOptions->vbToBV;
   noDedup = clOptions->noDedup;
   companionMode = clOptions->companionMode;

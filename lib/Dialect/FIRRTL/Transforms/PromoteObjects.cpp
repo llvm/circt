@@ -36,9 +36,8 @@ struct PromoteObjectsPass
 
 private:
   LogicalResult collectInputs(ObjectOp object, ObjectInputs &inputs);
-  LogicalResult promoteObject(ObjectOp object,
-                              DenseMap<Operation *, size_t> &positions,
-                              DenseSet<Operation *> &converted);
+  void promoteObject(ObjectOp object, DenseMap<Operation *, size_t> &positions,
+                     DenseSet<Operation *> &converted);
 };
 } // namespace
 
@@ -53,19 +52,11 @@ LogicalResult PromoteObjectsPass::collectInputs(ObjectOp object,
     inputs.fields.push_back(field);
     for (auto &use : field->getUses()) {
       auto assign = dyn_cast<PropAssignOp>(use.getOwner());
-      if (!assign)
-        return field.emitOpError("input port may only be used as an assignment "
-                                 "destination");
-      assert(use.getOperandNumber() == 0 &&
-             "input port cannot be an assignment source");
-      auto &previous = assignments[field.getIndex()];
-      if (previous) {
-        auto diag = assign.emitError("input port ")
-                    << type.getElement(field.getIndex()).name
-                    << " cannot be driven by multiple operations";
-        diag.attachNote(previous.getLoc()) << "other driver is here";
+      if (!assign || use.getOperandNumber() != 0)
         return failure();
-      }
+      auto &previous = assignments[field.getIndex()];
+      if (previous)
+        return failure();
       previous = assign;
     }
   }
@@ -75,16 +66,15 @@ LogicalResult PromoteObjectsPass::collectInputs(ObjectOp object,
       continue;
     auto assign = assignments[index];
     if (!assign)
-      return object.emitError("uninitialized input port ") << element.name;
+      return failure();
     inputs.assignments.push_back(assign);
   }
   return success();
 }
 
-LogicalResult
-PromoteObjectsPass::promoteObject(ObjectOp object,
-                                  DenseMap<Operation *, size_t> &positions,
-                                  DenseSet<Operation *> &converted) {
+void PromoteObjectsPass::promoteObject(ObjectOp object,
+                                       DenseMap<Operation *, size_t> &positions,
+                                       DenseSet<Operation *> &converted) {
   auto position = positions.lookup(object);
   // Find the operations that must move before this object.
   DenseMap<Operation *, ObjectInputs> objectInputs;
@@ -106,22 +96,25 @@ PromoteObjectsPass::promoteObject(ObjectOp object,
     if (!inserted) {
       // Revisiting an active DFS node indicates a cycle.
       if (!it->second)
-        return success();
+        return;
       continue;
     }
 
     SmallVector<Value> operands;
     if (auto dependency = dyn_cast<ObjectOp>(op)) {
-      auto &inputs = objectInputs[op];
+      ObjectInputs inputs;
       if (failed(collectInputs(dependency, inputs)))
-        return failure();
+        return;
       for (auto assign : inputs.assignments)
         operands.push_back(assign.getSrc());
+      // Do not retain references into the map across insertions, which can
+      // invalidate them when the map grows.
+      objectInputs.try_emplace(op, std::move(inputs));
     } else {
       // Abort if there is an operation with a region (usually there is no such
       // operation).
       if (op->getNumRegions())
-        return success();
+        return;
       llvm::append_range(operands, op->getOperands());
     }
 
@@ -135,7 +128,7 @@ PromoteObjectsPass::promoteObject(ObjectOp object,
 
       // Only hoist dependencies from this block.
       if (it == positions.end())
-        return success();
+        return;
       // Earlier definitions are already available at the insertion point.
       if (it->second < position)
         continue;
@@ -148,6 +141,8 @@ PromoteObjectsPass::promoteObject(ObjectOp object,
     auto declaration = dyn_cast<ObjectOp>(op);
     if (!declaration) {
       op->moveBefore(object);
+      // Equal positions are conservative: later searches may revisit these
+      // operations, but never assume they precede the insertion point.
       positions[op] = position;
       continue;
     }
@@ -177,7 +172,6 @@ PromoteObjectsPass::promoteObject(ObjectOp object,
     ++numObjectsConverted;
     ++numRemoved;
   }
-  return success();
 }
 
 void PromoteObjectsPass::runOnOperation() {
@@ -197,9 +191,6 @@ void PromoteObjectsPass::runOnOperation() {
     // dereference freed pointers.
     if (converted.contains(object.getOperation()))
       continue;
-    if (failed(promoteObject(object, positions, converted))) {
-      signalPassFailure();
-      return;
-    }
+    promoteObject(object, positions, converted);
   }
 }

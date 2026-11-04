@@ -5,6 +5,8 @@ firrtl.circuit "Objects" {
     firrtl.propassign %result, %first : !firrtl.string
   }
   firrtl.extclass @Empty()
+  firrtl.extclass @Source(in value: !firrtl.string, out result: !firrtl.string)
+  firrtl.extclass @Sink(in value: !firrtl.string)
 
   // CHECK-LABEL: firrtl.module @Objects
   firrtl.module @Objects(in %arg: !firrtl.string, out %out: !firrtl.string, out %ref: !firrtl.anyref) {
@@ -30,5 +32,25 @@ firrtl.circuit "Objects" {
     // CHECK-NEXT: %empty = firrtl.object.create() : () -> !firrtl.class<@Empty()>
     // CHECK-NEXT: }
     %empty = firrtl.object @Empty()
+  }
+
+  // A later object and its output must be hoisted to feed the first object.
+  // The third object then uses the hoisted operations' shared position.
+  // CHECK-LABEL: firrtl.module @Dependencies
+  firrtl.module @Dependencies(in %arg: !firrtl.string) {
+    // CHECK: %[[SRC:.*]] = firrtl.object.create(%arg)
+    // CHECK-NEXT: %[[RESULT:.*]] = firrtl.object.subfield %[[SRC]][result]
+    // CHECK-NEXT: firrtl.object.create(%[[RESULT]])
+    // CHECK-NEXT: firrtl.object.create(%[[RESULT]])
+    %first = firrtl.object @Sink(in value: !firrtl.string)
+    %src = firrtl.object @Source(in value: !firrtl.string, out result: !firrtl.string)
+    %third = firrtl.object @Sink(in value: !firrtl.string)
+    %input = firrtl.object.subfield %src[value] : !firrtl.class<@Source(in value: !firrtl.string, out result: !firrtl.string)>
+    %result = firrtl.object.subfield %src[result] : !firrtl.class<@Source(in value: !firrtl.string, out result: !firrtl.string)>
+    %firstInput = firrtl.object.subfield %first[value] : !firrtl.class<@Sink(in value: !firrtl.string)>
+    %thirdInput = firrtl.object.subfield %third[value] : !firrtl.class<@Sink(in value: !firrtl.string)>
+    firrtl.propassign %input, %arg : !firrtl.string
+    firrtl.propassign %firstInput, %result : !firrtl.string
+    firrtl.propassign %thirdInput, %result : !firrtl.string
   }
 }
