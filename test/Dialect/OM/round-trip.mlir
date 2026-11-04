@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -verify-diagnostics --mlir-print-local-scope --mlir-print-debuginfo | circt-opt --mlir-print-local-scope --mlir-print-debuginfo -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --emit-bytecode | circt-opt --mlir-print-local-scope --mlir-print-debuginfo | FileCheck %s
 
 // CHECK-LABEL: om.class private @Thingy
 // CHECK-SAME: (%blue_1: i8, %blue_2: i32) -> (widget: !om.class.type<@Widget>, gadget: !om.class.type<@Gadget>, blue_1: i8, blue_2: i8)
@@ -407,4 +408,18 @@ om.class @PropertyAssert(%basepath: !om.basepath, %cond: i1) {
   %0 = om.constant "invariant must hold" : !om.string
   om.property_assert %cond, %0 : i1
   om.class.fields
+}
+
+// CHECK-LABEL: @Registry
+om.class @Registry(%value: !om.integer) -> (empty: !om.registry<!om.integer>, items: !om.registry<!om.integer>, nested: !om.registry<!om.registry<!om.integer>>) {
+  // CHECK: %[[EMPTY:.+]] = om.registry_create : !om.registry<!om.integer>
+  %empty = om.registry_create : !om.registry<!om.integer>
+  // CHECK: %[[ITEMS:.+]] = om.registry_create %value, %value {test = "keep"} : !om.registry<!om.integer>
+  %items = om.registry_create %value, %value {test = "keep"} : !om.registry<!om.integer>
+  // CHECK: om.registry_insert %[[ITEMS]], %value : !om.registry<!om.integer>, !om.integer
+  om.registry_insert %items, %value : !om.registry<!om.integer>, !om.integer
+  // CHECK: %[[NESTED:.+]] = om.registry_create %[[ITEMS]] : !om.registry<!om.registry<!om.integer>>
+  %nested = om.registry_create %items : !om.registry<!om.registry<!om.integer>>
+  // CHECK: om.class.fields %[[EMPTY]], %[[ITEMS]], %[[NESTED]]
+  om.class.fields %empty, %items, %nested : !om.registry<!om.integer>, !om.registry<!om.integer>, !om.registry<!om.registry<!om.integer>>
 }

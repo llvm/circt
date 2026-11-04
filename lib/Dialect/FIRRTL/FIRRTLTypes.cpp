@@ -534,7 +534,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   }
   if (name == "registry") {
     if (isConst) {
-      parser.emitError(parser.getNameLoc(), "registries cannot be const");
+      parser.emitError(parser.getNameLoc(),
+                       "mutable registries cannot be const");
       return failure();
     }
     PropertyType elementType;

@@ -357,6 +357,10 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsNull(result))
     throw nb::value_error("unable to get field, see previous error(s)");
 
+  // Unknown values can also have object or list types.
+  if (omEvaluatorValueIsUnknown(result))
+    return Unknown(omEvaluatorValueGetType(result));
+
   // If the field was an Object, return a new Object.
   if (omEvaluatorValueIsAObject(result))
     return Object(result);
@@ -372,9 +376,6 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // If the field was a path, return a new Path.
   if (omEvaluatorValueIsAPath(result))
     return Path(result);
-
-  if (omEvaluatorValueIsUnknown(result))
-    return Unknown(omEvaluatorValueGetType(result));
 
   // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));

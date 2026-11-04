@@ -148,6 +148,43 @@ struct EvaluateObjectField : OpRewritePattern<ObjectFieldOp> {
   const FieldIndex &fieldIndexes;
 };
 
+/// Inserting into an unknown registry leaves its contents unknown.
+struct EraseUnknownRegistryInsertion : OpRewritePattern<RegistryInsertOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(RegistryInsertOp op,
+                                PatternRewriter &rewriter) const override {
+    if (!op.getRegistry().getDefiningOp<UnknownValueOp>())
+      return failure();
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+/// Sort registry elements by their final IR order for stable output.
+/// Arguments come before operation results.
+void sortRegistryElements(ClassOp classOp) {
+  for (auto allocation : classOp.getOps<RegistryCreateOp>()) {
+    SmallVector<Value> elements(allocation.getElements());
+    llvm::sort(elements, [](Value lhs, Value rhs) {
+      if (lhs == rhs)
+        return false;
+      if (auto lhsArg = dyn_cast<BlockArgument>(lhs)) {
+        auto rhsArg = dyn_cast<BlockArgument>(rhs);
+        return !rhsArg || lhsArg.getArgNumber() < rhsArg.getArgNumber();
+      }
+      if (isa<BlockArgument>(rhs))
+        return false;
+      auto lhsResult = cast<OpResult>(lhs);
+      auto rhsResult = cast<OpResult>(rhs);
+      if (lhsResult.getOwner() == rhsResult.getOwner())
+        return lhsResult.getResultNumber() < rhsResult.getResultNumber();
+      return lhsResult.getOwner()->isBeforeInBlock(rhsResult.getOwner());
+    });
+    allocation.getElementsMutable().assign(elements);
+  }
+}
+
 /// Pattern to propagate UnknownValueOp through pure OM operations.
 /// If any operand is unknown, all results become unknown.
 struct UnknownPropagationPattern : RewritePattern {
@@ -194,7 +231,9 @@ bool isFullyEvaluated(Operation *op) {
       // Path.
       FrozenBasePathCreateOp, FrozenPathCreateOp, FrozenEmptyPathOp,
       // List.
-      ListCreateOp, ListConcatOp>(op);
+      ListCreateOp, ListConcatOp,
+      // Registry. Insertions may still depend on class parameters.
+      RegistryCreateOp, RegistryInsertOp>(op);
 }
 
 LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
@@ -282,14 +321,19 @@ struct ElaborateObjectPass
                                           !allowUnevaluated);
     patterns.add<EvaluateObjectField>(classOp.getContext(), symTable,
                                       fieldIndexes);
-    patterns.add<UnknownPropagationPattern>(classOp.getContext());
+    patterns.add<UnknownPropagationPattern, EraseUnknownRegistryInsertion>(
+        classOp.getContext());
+    RegistryInsertOp::getCanonicalizationPatterns(patterns,
+                                                  classOp.getContext());
     GreedyRewriteConfig config;
     // Disable iteration limit to allow full recursive inlining.
     config.setMaxIterations(GreedyRewriteConfig::kNoLimit);
     if (failed(applyPatternsGreedily(classOp, std::move(patterns), config)))
       return failure();
 
-    // Check if elaboration succeeded after saturation.
+    sortRegistryElements(classOp);
+
+    // Check that elaboration completed.
     return verifyResult(classOp, allowUnevaluated);
   }
 

@@ -358,3 +358,49 @@ with Context() as ctx, Location.unknown():
   obj = evaluator.instantiate("AssertUnknown", om.Unknown(i1_type))
   # CHECK: AssertUnknown(unknown): passed
   print("AssertUnknown(unknown): passed")
+
+# Test registries containing objects and unknown values.
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  module = Module.parse("""
+  !items = !om.registry<!om.class.type<@Child>>
+  module {
+    om.class @Child(%value: !om.integer) -> (value: !om.integer) {
+      om.class.fields %value : !om.integer
+    }
+    om.class @Registry() -> (items: !items) {
+      %one = om.constant #om.integer<1 : si32> : !om.integer
+      %child = om.object @Child(%one) : (!om.integer) -> !om.class.type<@Child>
+      %items = om.registry_create %child : !items
+      om.class.fields %items : !items
+    }
+    om.class @Append(%items: !items, %child: !om.class.type<@Child>) -> (items: !items) {
+      om.registry_insert %items, %child : !items, !om.class.type<@Child>
+      om.class.fields %items : !items
+    }
+    om.class @UnknownRegistry(%missing: !om.registry<!om.integer>)
+        -> (items: !om.registry<!om.integer>, missing: !om.registry<!om.integer>) {
+      %unknown = om.unknown : !om.integer
+      %items = om.registry_create %unknown : !om.registry<!om.integer>
+      om.registry_insert %missing, %unknown : !om.registry<!om.integer>, !om.integer
+      om.class.fields %items, %missing : !om.registry<!om.integer>, !om.registry<!om.integer>
+    }
+  }
+  """)
+  evaluator = om.Evaluator(module)
+  items = evaluator.instantiate("Registry").items
+  assert isinstance(items, om.List)
+  assert isinstance(items[0], om.Object)
+  assert items[0].value == 1
+
+  appended = evaluator.instantiate("Append", items, items[0]).items
+  assert [child.value for child in appended] == [1, 1]
+  assert len(items) == 1  # Importing a registry does not modify the caller.
+
+  unknowns = evaluator.instantiate(
+      "UnknownRegistry", om.Unknown(Type.parse("!om.registry<!om.integer>")))
+  assert isinstance(unknowns.items, om.List)
+  assert len(unknowns.items) == 1
+  assert isinstance(unknowns.items[0], om.Unknown)
+  assert isinstance(unknowns.missing, om.Unknown)

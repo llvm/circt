@@ -704,6 +704,34 @@ OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// RegistryInsertOp
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Fold insertions into the allocation, keeping duplicates.
+struct FoldRegistryInsertion : OpRewritePattern<RegistryInsertOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(RegistryInsertOp op,
+                                PatternRewriter &rewriter) const override {
+    auto allocation = op.getRegistry().getDefiningOp<RegistryCreateOp>();
+    if (!allocation)
+      return failure();
+    rewriter.modifyOpInPlace(allocation, [&] {
+      allocation.getElementsMutable().append(op.getElement());
+    });
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+} // namespace
+
+void RegistryInsertOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                   MLIRContext *context) {
+  patterns.add<FoldRegistryInsertion>(context);
+}
+
+//===----------------------------------------------------------------------===//
 // ListCreateOp
 //===----------------------------------------------------------------------===//
 
