@@ -108,6 +108,21 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
 
 def ClassOp : OMClassLike<"class", [
       SingleBlockImplicitTerminator<"ClassFieldsOp">]> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrArrayAttr:$formalParamNames,
+    ArrayAttr:$fieldNames,
+    DictionaryAttr:$fieldTypes,
+    UnitAttr:$linkonce_odr
+  );
+
+  let summary = "An object model class definition";
+  let description = [{
+    Classes marked `linkonce_odr` must be public. All same-named definitions
+    must also be marked and interchangeable, including their referenced symbols.
+    The linker keeps one definition without comparing them.
+  }];
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     // This builds a ClassOp, and populates it with the CLassFieldOps.
