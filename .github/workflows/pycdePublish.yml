@@ -8,7 +8,40 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
-  #  Build and test Linux wheels. Run the CIRCT tests also.
+  #  Build CIRCT and PyCDE once per OS and run the CIRCT and PyCDE tests. The
+  #  configurations match the ones in buildAndTest.yml so that they reuse the
+  #  sccache populated by builds on main.
+  # ---------------------------------------------------------------------------
+
+  test:
+    name: ${{ matrix.name }}
+    strategy:
+      matrix:
+        include:
+          - name: Test (Linux)
+            runner: ubuntu-24.04
+            cmake_c_compiler: gcc
+            build_shared_libs: "ON"
+          - name: Test (Windows)
+            runner: windows-2022
+            cmake_c_compiler: cl
+            build_shared_libs: "OFF"
+    permissions:
+      contents: write
+      actions: write
+    uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
+    with:
+      runner: ${{ matrix.runner }}
+      cmake_build_type: release
+      build_shared_libs: ${{ matrix.build_shared_libs }}
+      llvm_enable_assertions: "ON"
+      run_tests: true
+      cmake_c_compiler: ${{ matrix.cmake_c_compiler }}
+      build_pycde: true
+
+  # ---------------------------------------------------------------------------
+  #  Build Linux wheels. The CIRCT and PyCDE tests are run by the 'test' job
+  #  above and the ESI runtime tests by the 'test-esi-runtime' job below.
   # ---------------------------------------------------------------------------
 
   build-linux:
@@ -73,7 +106,9 @@ jobs:
           CMAKE_GENERATOR: Ninja
           SETUPTOOLS_SCM_DEBUG: True
           BUILD_TYPE: Release
-          RUN_TESTS: True
+          # The CIRCT and PyCDE tests are run once by the 'test' job instead of
+          # in every wheel build.
+          RUN_TESTS: False
         run: |
           set -o errexit
           export PATH=$PATH:$HOME/.local/bin
@@ -97,7 +132,7 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  #  Build and test Windows wheels.
+  #  Build Windows wheels.
   # ---------------------------------------------------------------------------
 
   build-windows:
@@ -151,7 +186,8 @@ jobs:
           CMAKE_GENERATOR: Ninja
           SETUPTOOLS_SCM_DEBUG: True
           BUILD_TYPE: Release
-          # PyCDE integration tests are not yet implemented on Windows.
+          # The CIRCT and PyCDE tests are run once by the 'test' job instead of
+          # in every wheel build.
           RUN_TESTS: False
         run: |
           echo "Building wheel"
@@ -173,8 +209,29 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  #  If both the Linux and Windows builds are successful, push the wheels to
-  #  pypi. Only do this on the main branch or a tag.
+  #  Run the ESI runtime tests against the wheels built above, on Linux and
+  #  Windows, for every Python version we publish.
+  # ---------------------------------------------------------------------------
+
+  test-esi-runtime:
+    name: Test ESI runtime (Python ${{ matrix.python_version }})
+    needs:
+      - build-linux
+      - build-windows
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/testESIRuntime.yml
+    with:
+      python_version: ${{ matrix.python_version }}
+      pycde_from_artifacts: true
+
+  # ---------------------------------------------------------------------------
+  #  If the tests and both the Linux and Windows builds are successful, push the
+  #  wheels to pypi. Only do this on the main branch or a tag.
   # ---------------------------------------------------------------------------
 
   push_wheels:
@@ -182,6 +239,8 @@ jobs:
     runs-on: ubuntu-24.04
     if: github.repository == 'llvm/circt' && ( github.ref == 'refs/heads/main' || github.ref_type == 'tag' )
     needs:
+      - test
+      - test-esi-runtime
       - build-linux
       - build-windows
     environment:

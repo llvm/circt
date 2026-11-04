@@ -104,9 +104,10 @@ class CMakeBuild(build_py):
       os.remove(cmake_cache_file)
     print(f"Running: cmake {src_dir} {' '.join(cmake_args)}", file=sys.stderr)
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
-    targets = ["check-pycde"]
-    if "RUN_TESTS" in os.environ and os.environ["RUN_TESTS"] != "false":
-      targets.append("check-circt")
+    # Only build what the wheel needs unless tests were explicitly requested.
+    targets = ["PyCDE"]
+    if os.environ.get("RUN_TESTS", "").lower() in ("1", "true", "on", "yes"):
+      targets += ["check-pycde", "check-circt"]
     subprocess.check_call([
         "cmake",
         "--build",
