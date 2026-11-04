@@ -46,16 +46,7 @@ jobs:
 
   build-linux:
     name: Build
-    # Run on an internal MSFT subscription. Please DO NOT use this for any other
-    # workflows without talking to John Demme (john.demme@microsoft.com, GH
-    # teqdruid) first. We may lose funding for this if it ends up costing too
-    # much.
-    # If individual jobs fail due to timeouts or disconnects, please report to
-    # John and re-run the job.
-    runs-on:
-      - self-hosted
-      - 1ES.Pool=1ES-CIRCT-builds
-      - 1ES.ImageOverride=CIRCT-StdUbuntu2204
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         python-env:
@@ -98,6 +89,14 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install cibuildwheel twine
 
+      - name: sccache
+        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+        with:
+          key: pycde-publish-${{ runner.os }}-${{ matrix.python-env }}
+          max-size: 500M
+          variant: sccache
+          install: binary
+
       # Build CIRCT and run its tests using a Docker container with all the
       # integration testing prerequisite installed.
       - name: Build wheel
@@ -109,6 +108,12 @@ jobs:
           # The CIRCT and PyCDE tests are run once by the 'test' job instead of
           # in every wheel build.
           RUN_TESTS: False
+          # cibuildwheel mounts the host at /host; keep the cache on the host
+          # so the cache action can restore and save it.
+          COMPILER_LAUNCHER: /host/usr/local/bin/sccache
+          CIBW_ENVIRONMENT_LINUX: >-
+            SCCACHE_DIR=/host${{ github.workspace }}/.sccache
+            SCCACHE_CACHE_SIZE=500M
         run: |
           set -o errexit
           export PATH=$PATH:$HOME/.local/bin
@@ -137,16 +142,7 @@ jobs:
 
   build-windows:
     name: Build
-    # Run on an internal MSFT subscription. Please DO NOT use this for any other
-    # workflows without talking to John Demme (john.demme@microsoft.com, GH
-    # teqdruid) first. We may lose funding for this if it ends up costing too
-    # much.
-    # If individual jobs fail due to timeouts or disconnects, please report to
-    # John and re-run the job.
-    runs-on:
-      - self-hosted
-      - 1ES.Pool=1ES-CIRCT-builds
-      - 1ES.ImageOverride=1esMMSWindows2022
+    runs-on: windows-2022
     strategy:
       matrix:
         python-env:
@@ -161,6 +157,7 @@ jobs:
         shell: pwsh
         run: |
           & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib
+          "${env:VCPKG_INSTALLATION_ROOT}/installed/x64-windows/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Get CIRCT
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -179,6 +176,13 @@ jobs:
           python -m pip install cibuildwheel twine
           choco install ninja
 
+      - name: sccache
+        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+        with:
+          key: pycde-publish-${{ runner.os }}-${{ matrix.python-env }}
+          max-size: 500M
+          variant: sccache
+
       - name: Build wheel
         shell: cmd
         env:
@@ -186,6 +190,7 @@ jobs:
           CMAKE_GENERATOR: Ninja
           SETUPTOOLS_SCM_DEBUG: True
           BUILD_TYPE: Release
+          COMPILER_LAUNCHER: sccache
           # The CIRCT and PyCDE tests are run once by the 'test' job instead of
           # in every wheel build.
           RUN_TESTS: False
