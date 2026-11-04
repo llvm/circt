@@ -19,6 +19,7 @@
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -600,8 +601,10 @@ struct WithHandlersFrame {
   bool replay = false;
 };
 
-struct HandlerClauseFrame {
-  PerformOp perform;
+struct HandlerClauseFrame {};
+
+struct FunctionCallFrame {
+  func::CallOp call;
 };
 
 /// The materialized shell owns an external region while its block is visited.
@@ -626,8 +629,8 @@ struct ResumeFrame {
 
 using EvalFramePayload =
     std::variant<BlockFrame, ScfIfFrame, ScfForFrame, RandomScopeFrame,
-                 WithHandlersFrame, HandlerClauseFrame, ExternalOpFrame,
-                 ResumeFrame>;
+                 WithHandlersFrame, HandlerClauseFrame, FunctionCallFrame,
+                 ExternalOpFrame, ResumeFrame>;
 
 struct EvalFrame {
   EvalFramePayload payload;
@@ -1222,17 +1225,14 @@ public:
     if (op->getNumRegions() > 0)
       return op->emitOpError("ops with nested regions must be elaborated away");
 
-    // We don't support opaque values. If there is an SSA value that has a
-    // use-site it needs an equivalent ElaborationValue representation.
-    // NOTE: We could support cases where there is initially a use-site but that
-    // op is guaranteed to be deleted during elaboration. Or the use-sites are
-    // replaced with freshly materialized values from the ElaborationValue. But
-    // then, why can't we delete the value defining op?
+    // A retained operation's used results need an elaborated representation so
+    // later operations can rematerialize them at the rewritten call site.
     for (auto res : op->getResults())
-      if (!res.use_empty())
+      if (!res.use_empty() && !state.contains(res))
         return op->emitOpError(
             "ops with results that have uses are not supported");
 
+    Operation *sourceOp = op;
     if (isInPlace(op) && !forceClone) {
       // We are doing in-place materialization, so mark all ops deleted until we
       // reach the one to be materialized and modify it in-place.
@@ -1266,6 +1266,11 @@ public:
       state[val] = elabVal;
       operand.set(val);
     }
+
+    for (auto [sourceResult, result] :
+         llvm::zip_equal(sourceOp->getResults(), op->getResults()))
+      if (auto it = state.find(sourceResult); it != state.end())
+        materializedValues[it->second] = result;
 
     builder.setInsertionPointAfter(op);
     return success();
@@ -2637,7 +2642,7 @@ public:
   bool supportsSymbolicValuesNonGenerically(Operation *op) {
     return isa<SubstituteSequenceOp, ArrayCreateOp, ArrayInjectOp,
                TupleCreateOp, MutCreateOp, MutReadOp, MutWriteOp,
-               arith::SelectOp>(op);
+               arith::SelectOp, func::CallOp, func::CallIndirectOp>(op);
   }
 
   FailureOr<DeletionKind> dispatchOpVisitor(Operation *op) {
@@ -2778,8 +2783,7 @@ public:
 
     handlerStack.resize(handlerIndex);
     state = performEnvironment;
-    workStack.emplace_back(
-        std::make_unique<EvalFrame>(HandlerClauseFrame{transfer.perform}));
+    workStack.emplace_back(std::make_unique<EvalFrame>(HandlerClauseFrame{}));
     return pushRegionFrame(*handlerRegion, handlerArguments,
                            /*keepTerminator=*/false, /*replay=*/false,
                            std::move(performEnvironment));
@@ -3007,6 +3011,23 @@ public:
       return success();
     }
 
+    if (auto *frame = workStack.back()->getIf<FunctionCallFrame>()) {
+      if (yieldedValues.size() != frame->call.getNumResults())
+        return frame->call.emitOpError(
+            "callee return values do not match call results");
+      assert(workStack.size() >= 2 &&
+             "function call frame must have a parent block frame");
+      auto *parent = workStack[workStack.size() - 2]->getIf<BlockFrame>();
+      if (!parent)
+        return frame->call.emitOpError(
+            "function call lost its parent block frame");
+      for (auto [result, value] :
+           llvm::zip_equal(frame->call.getResults(), yieldedValues))
+        parent->environment[result] = value;
+      workStack.pop_back();
+      return success();
+    }
+
     if (auto *frame = workStack.back()->getIf<ExternalOpFrame>()) {
       if (frame->activeBoundary) {
         assert(!externalRegionStack.empty() &&
@@ -3053,8 +3074,16 @@ public:
           for (Value operand : terminator->getOperands())
             yieldedValues.push_back(frame->environment.at(operand));
           if (!frame->keepTerminator && frame->eraseTerminator &&
-              materializer.isInPlace(terminator))
+              materializer.isInPlace(terminator)) {
+            auto &builder = materializer.getBuilder();
+            if (builder.getBlock() == terminator->getBlock() &&
+                builder.getInsertionPoint() == terminator->getIterator()) {
+              // The builder stores its insertion point as a block iterator.
+              // Move it to the stable end iterator before erasing that node.
+              builder.setInsertionPointToEnd(terminator->getBlock());
+            }
             terminator->erase();
+          }
         }
         workStack.pop_back();
         if (workStack.empty()) {
@@ -3094,6 +3123,35 @@ public:
 
       if (auto resume = dyn_cast<ResumeOp>(op)) {
         if (failed(scheduleResume(resume)))
+          return failure();
+        continue;
+      }
+
+      if (isa<func::CallIndirectOp>(op))
+        return op->emitOpError("cannot elaborate indirect function call");
+
+      if (auto call = dyn_cast<func::CallOp>(op)) {
+        auto callee = sharedState.table.lookup<func::FuncOp>(call.getCallee());
+        if (!callee)
+          return call.emitOpError("cannot elaborate unresolved function call");
+        if (callee.isExternal())
+          return call.emitOpError("cannot elaborate external function call");
+        if (callee.getBody().getBlocks().size() != 1)
+          return call.emitOpError(
+              "RTG elaboration only supports single-block callees");
+
+        SmallVector<ElaboratorValue> arguments;
+        arguments.reserve(call.getNumOperands());
+        for (Value operand : call.getOperands())
+          arguments.push_back(state.at(operand));
+
+        workStack.back()->get<BlockFrame>().environment = state;
+        workStack.emplace_back(
+            std::make_unique<EvalFrame>(FunctionCallFrame{call}));
+        if (failed(pushRegionFrame(callee.getBody(), arguments,
+                                   /*keepTerminator=*/false, replay,
+                                   /*environment=*/{},
+                                   /*eraseTerminator=*/false)))
           return failure();
         continue;
       }
