@@ -111,10 +111,15 @@ jobs:
           set -o errexit
           . venv/bin/activate
 
+          # Point CMake at the venv's Python explicitly. Otherwise the
+          # Python3_ROOT_DIR that setup-python exports makes CMake pick the
+          # base interpreter, which doesn't have nanobind installed.
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_C_COMPILER=clang
+            -DCMAKE_C_COMPILER=clang \
+            -DPython_EXECUTABLE="$(command -v python3)" \
+            -DPython3_EXECUTABLE="$(command -v python3)"
           ninja -C build -j$(nproc)
 
           # Install the ESI C++ runtime into the esiaccel Python package tree
