@@ -23,6 +23,12 @@
   popped slot is now free at once, so `full` and `almost_full` no longer stay
   asserted while a pop's read data is in flight, as they did in 0.13.0.
 
+- **`seq.FIFO` depths one short of a power of two use a spare slot.** For a
+  depth of 2<sup>N</sup>-1 (N of 2 or more), the memory has 2<sup>N</sup>
+  entries and is written every cycle without a write enable, and the pointers
+  wrap without a compare. On FPGAs the extra entry is free: prefer, say, 2047
+  to 2048 for a block-RAM FIFO.
+
 ## 0.13.0
 
 ### Breaking changes
