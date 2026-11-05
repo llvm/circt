@@ -24,6 +24,7 @@
 #include <ixwebsocket/IXWebSocketServer.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <condition_variable>
@@ -39,6 +40,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
@@ -138,6 +140,7 @@ public:
                                     const std::string &type);
   WriteChannelPort &registerWritePort(const std::string &name,
                                       const std::string &type);
+  void messageConsumed(ReadChannelPort &port);
 
   void stop(uint32_t timeoutMS);
   int getPort() const { return boundPort; }
@@ -175,7 +178,12 @@ private:
   //    orders data frames against the unsubscribe-ack), so never wait for
   //    `subscribedMutex` while holding any other lock.
   //  - Senders hold a `shared_ptr` to the session, which owns the socket,
-  //    so `onClose` never has to wait for them.
+  //    so `onClose` never has to wait for them. Since `onClose` can't take
+  //    `subscribedMutex` either, per-port client state is tagged with the
+  //    session's generation, and `onClose` retires the generation so late
+  //    updates from in-progress requests are ignored.
+  //  - Within a port, only the write queue's and the doorbell's locks are
+  //    taken while holding its `stateMutex`.
   struct ClientSession {
     std::shared_ptr<ix::WebSocket> ws;
     // The set of `to_client` channel ids the client subscribed to. Guarded by
@@ -186,6 +194,10 @@ private:
     std::atomic<bool> helloDone = false;
     // Set once the client has disconnected.
     std::atomic<bool> closed = false;
+    // Distinguishes this session from earlier ones, so state belonging to an
+    // earlier client (e.g. credits for frames it sent) isn't given to this
+    // one.
+    uint64_t generation = 0;
   };
 
   Context &ctxt;
@@ -207,9 +219,10 @@ private:
   std::unordered_map<std::string, uint64_t> idByName;
   uint64_t nextChannelId = 0;
 
-  // Session state. v3 of the protocol allows a single concurrent client.
+  // Session state. v4 of the protocol allows a single concurrent client.
   std::mutex sessionMutex;
   std::shared_ptr<ClientSession> session;
+  uint64_t nextSessionGeneration = 1;
 
   /// The active session, if any. The returned pointer stays valid after the
   /// client disconnects; sends on it then just fail.
@@ -239,8 +252,9 @@ private:
                        ix::WebSocket &ws, const ix::WebSocketMessagePtr &msg);
   void onOpen(const std::weak_ptr<ix::WebSocket> &wsWeak);
   void onClose(ix::WebSocket &ws);
-  void handleBinaryFrame(const std::string &data);
+  void handleBinaryFrame(uint64_t generation, const std::string &data);
   void handleControlFrame(ix::WebSocket &ws, const std::string &text);
+  void handleEvent(uint64_t generation, const json &frame);
   void handleHello(ix::WebSocket &ws, uint64_t requestId, const json &params);
   void handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
                        const json &params);
@@ -256,6 +270,12 @@ private:
                  const std::string &message);
 
   void transportLoop();
+  /// Send a batched `consumed` event for any to-server messages the
+  /// simulation has consumed since the last call. Transport thread only.
+  void sendConsumedEvent(const std::unordered_set<uint64_t> &ids);
+  /// Forget all per-channel state belonging to client session `generation`,
+  /// which has disconnected.
+  void retireSession(uint64_t generation);
 
   // Cross-thread fault propagation out of the IX network thread. See
   // FaultStash docs in RpcWire.h.
@@ -284,10 +304,19 @@ namespace {
 /// `ReadChannelPort::pollingState` then acts as our buffer and
 /// `invokeCallback` is guaranteed non-blocking. The unbounded queue mirrors
 /// the existing `to_client` write queue and is acceptable for a cosim
-/// driver.
+/// driver. The client bounds how many messages it sends ahead of the
+/// simulation using credits which this port returns via `markConsumed()`.
 ///
 /// Frames which arrive while the port is not connected are parked here, in
-/// order, and handed over when it connects, rather than dropped.
+/// order, and handed over when it connects. They stay in flight until the
+/// simulation consumes them, so the client is backpressured rather than
+/// having its frames dropped.
+///
+/// Each frame's credit belongs to the client session which sent it. Frames
+/// outlive their session (in the base class's queue or parked here), so they
+/// are tracked by session, and credits for a session which has gone are
+/// dropped rather than handed to the next client: a new client starts with
+/// nothing in flight.
 class RpcServerReadPort : public ReadChannelPort {
 public:
   RpcServerReadPort(Type *type, Impl &impl, uint64_t channelId)
@@ -308,43 +337,129 @@ public:
   }
   using ReadChannelPort::connect;
 
+  /// Client session `generation` closed: its credits are dropped.
+  void clientDisconnected(uint64_t generation) {
+    std::lock_guard<std::recursive_mutex> lock(creditMutex);
+    retiredGeneration = (std::max)(retiredGeneration, generation);
+    if (unreportedGeneration <= generation)
+      unreported = 0;
+  }
+
   void disconnect() override {
     {
       std::lock_guard<std::mutex> lock(connectMutex);
       connected = false;
     }
+    // Held across the base class's disconnect so no frame is handed over and
+    // counted in `held` after its queue is torn down (see `handOver()`).
+    std::lock_guard<std::recursive_mutex> lock(creditMutex);
     ReadChannelPort::disconnect();
+    // The base class discarded whatever it had queued for the simulation.
+    // Return those frames' credits, like the server stops counting a client's
+    // unconsumed frames on `unsubscribe`.
+    for (auto [generation, count] : held)
+      credit(generation, count);
+    held.clear();
   }
 
-  /// Hand one inbound frame to the simulation, or park it if the port isn't
-  /// connected (or earlier frames are still parked). Returns `false` only if
-  /// a connected callback-mode consumer refused the frame, in which case the
-  /// caller should drop it.
-  bool deliver(const MessageData &data) {
+  /// Hand one inbound frame from client session `generation` to the
+  /// simulation, or park it if the port isn't connected (or earlier frames
+  /// are still parked). Returns `false` only if a connected callback-mode
+  /// consumer refused the frame, in which case the caller should drop it and
+  /// call `dropped()`.
+  bool deliver(uint64_t generation, const MessageData &data) {
     {
       std::lock_guard<std::mutex> lock(connectMutex);
       if (!connected || !parked.empty()) {
-        parked.push_back(data);
+        parked.emplace_back(generation, data);
         return true;
       }
     }
-    if (handOver(data))
+    if (handOver(generation, data))
       return true;
     // Lost a race with `disconnect()`: park it at the front, since it arrived
     // before anything parked since.
     std::lock_guard<std::mutex> lock(connectMutex);
     if (connected)
       return false;
-    parked.push_front(data);
+    parked.emplace_front(generation, data);
     return true;
   }
 
+  /// A frame from client session `generation` was dropped rather than handed
+  /// to the simulation. Return its credit.
+  void dropped(uint64_t generation) {
+    std::lock_guard<std::recursive_mutex> lock(creditMutex);
+    credit(generation, 1);
+  }
+
+  /// The simulation consumed the oldest frame handed to it. Return its credit
+  /// to the session which sent it.
+  void markConsumed() {
+    std::lock_guard<std::recursive_mutex> lock(creditMutex);
+    // Empty if its credit was already returned by `disconnect()`.
+    if (held.empty())
+      return;
+    auto &[generation, count] = held.front();
+    credit(generation, 1);
+    if (--count == 0)
+      held.pop_front();
+  }
+
+  /// Take (and zero) the credits not yet returned to client session
+  /// `generation`.
+  uint64_t takeConsumed(uint64_t generation) {
+    std::lock_guard<std::recursive_mutex> lock(creditMutex);
+    if (generation != unreportedGeneration)
+      return 0;
+    return std::exchange(unreported, 0);
+  }
+
 private:
-  /// Pass one frame to the base class's callback / polling queue.
-  bool handOver(const MessageData &data) {
+  /// Pass one frame from session `generation` to the base class's callback /
+  /// polling queue, counting it in `held` if that worked.
+  bool handOver(uint64_t generation, const MessageData &data) {
     std::unique_ptr<SegmentedMessageData> msg =
         std::make_unique<MessageData>(data);
-    return invokeCallback(msg);
+    // Held throughout, so `disconnect()` sees the frame either counted in
+    // `held` or not handed over at all. Counted first, since a callback-mode
+    // consumer may report it consumed from within the callback.
+    std::lock_guard<std::recursive_mutex> lock(creditMutex);
+    if (!held.empty() && held.back().first == generation)
+      ++held.back().second;
+    else
+      held.emplace_back(generation, 1);
+    bool ok = false;
+    try {
+      ok = invokeCallback(msg);
+    } catch (...) {
+      unhold();
+      throw;
+    }
+    if (!ok)
+      unhold();
+    return ok;
+  }
+
+  /// Undo the count of the frame `handOver()` failed to hand over.
+  void unhold() {
+    if (held.empty())
+      return;
+    if (--held.back().second == 0)
+      held.pop_back();
+  }
+
+  /// Return `count` credits to session `generation`, unless it has gone.
+  /// Caller holds `creditMutex`.
+  void credit(uint64_t generation, uint64_t count) {
+    if (generation <= retiredGeneration || generation < unreportedGeneration)
+      return;
+    if (generation != unreportedGeneration) {
+      unreportedGeneration = generation;
+      unreported = 0;
+    }
+    unreported += count;
+    impl.readyIds.markReady(channelId);
   }
 
   /// Called after the base class has finished connecting (so inbound frames
@@ -356,9 +471,9 @@ private:
     // directly) until it's empty, which preserves ordering while we flush
     // without holding the lock across the callback.
     while (!parked.empty()) {
-      MessageData front = parked.front();
+      auto [generation, front] = parked.front();
       lock.unlock();
-      bool ok = handOver(front);
+      bool ok = handOver(generation, front);
       lock.lock();
       if (!ok) {
         if (!connected)
@@ -367,6 +482,7 @@ private:
         // arrives while connected (see `deliver()`), rather than leave it
         // blocking everything after it.
         impl.logRefusedFrame(channelId, front.getSize());
+        dropped(generation);
       }
       parked.pop_front();
     }
@@ -375,18 +491,40 @@ private:
   Impl &impl;
   uint64_t channelId;
 
+  // Guards the credit state below. Also held while a frame is handed over
+  // (see `handOver()`), and recursive since a callback-mode consumer may
+  // report a frame consumed from within the callback.
+  std::recursive_mutex creditMutex;
+  // Frames handed to the base class and not yet consumed, oldest first, as
+  // runs of (client session generation, count).
+  std::deque<std::pair<uint64_t, uint64_t>> held;
+  // Credits not yet returned to session `unreportedGeneration`.
+  uint64_t unreported = 0;
+  uint64_t unreportedGeneration = 0;
+  // Sessions up to this one have closed; their credits are dropped.
+  uint64_t retiredGeneration = 0;
+
   std::mutex connectMutex;
   bool connected = false;
-  // Frames received while not connected, oldest first.
-  std::deque<MessageData> parked;
+  // Frames received while not connected, oldest first, with the generation
+  // of the session which sent them.
+  std::deque<std::pair<uint64_t, MessageData>> parked;
 };
 
 /// Write queue for "to client" channels. Writes go into the per-port TSQueue;
 /// the queue's notifier hook rings the transport doorbell so the transport
 /// thread wakes up and drains across the WebSocket. DPI threads must never
 /// block on I/O, so this path is strictly non-blocking.
+///
+/// Flow control: the port's in-flight count is the number of messages queued
+/// here plus the number sent to the client but not yet reported consumed.
+/// `tryWrite()` refuses new messages while that count is at the in-flight
+/// limit. The limit is set by the client on `subscribe` (0 means unbounded)
+/// and reverts to the default when there is no subscriber.
 class RpcServerWritePort : public WriteChannelPort {
 public:
+  using RpcClient = backends::cosim::RpcClient;
+
   RpcServerWritePort(Type *type, Impl &impl, uint64_t channelId)
       : WriteChannelPort(type), channelId(channelId), impl(impl),
         writeQueue([&impl, channelId] { impl.readyIds.markReady(channelId); }) {
@@ -396,17 +534,135 @@ public:
   uint64_t channelId;
   utils::TSQueue<MessageData> writeQueue;
 
+  /// Pop the next queued message for sending to client session
+  /// `generation`, accounting it as sent but unacknowledged. Returns nullopt
+  /// once that session is retired, so nothing is sent (and counted) for a
+  /// client which has gone away.
+  std::optional<MessageData> popForSend(uint64_t generation) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (generation <= retiredGeneration || generation != ownerGeneration)
+      return std::nullopt;
+    std::optional<MessageData> msg = writeQueue.pop();
+    if (!msg)
+      return std::nullopt;
+    // Increment `unacked` before decrementing `queued` so a concurrent
+    // `hasSpace()` never under-counts the in-flight total.
+    unacked.fetch_add(1);
+    queued.fetch_sub(1);
+    return msg;
+  }
+
+  /// Client session `generation` reported `count` messages consumed. Ignored
+  /// unless it owns the flow-control state (see `subscribed()`).
+  void ack(uint64_t count, uint64_t generation) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (generation <= retiredGeneration || generation != ownerGeneration)
+      return;
+    // Clamp at zero, just in case.
+    unacked.store(unacked.load() - (std::min)(unacked.load(), count));
+    spaceCv.notify_all();
+  }
+
+  /// Client session `generation` subscribed with in-flight limit `limit`. It
+  /// now owns the flow-control state; anything an earlier session had in
+  /// flight is gone. Ignored if that session is already retired.
+  void subscribed(uint64_t limit, uint64_t generation) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (generation <= retiredGeneration)
+      return;
+    if (generation != ownerGeneration) {
+      ownerGeneration = generation;
+      unacked.store(0);
+    }
+    maxInFlight.store(limit);
+    spaceCv.notify_all();
+  }
+
+  /// Client session `generation` unsubscribed: messages it had not
+  /// acknowledged are gone, so stop counting them.
+  void unsubscribed(uint64_t generation) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (generation == ownerGeneration)
+      resetFlowControlLocked();
+  }
+
+  /// Client session `generation` closed: forget its flow-control state (if a
+  /// later session hasn't already taken it over) and ignore anything else
+  /// which arrives on its behalf.
+  void retireClient(uint64_t generation) {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    retiredGeneration = (std::max)(retiredGeneration, generation);
+    if (ownerGeneration <= generation)
+      resetFlowControlLocked();
+  }
+
+  /// Wakes any `write()` blocked at the in-flight limit, which then throws.
+  void disconnect() override {
+    {
+      std::lock_guard<std::mutex> lock(stateMutex);
+      disconnected = true;
+    }
+    spaceCv.notify_all();
+    WriteChannelPort::disconnect();
+  }
+
 protected:
-  // TODO: TSQueue is unbounded so if there's no client subscibed it'll fill up
-  // memory. We should add some backpressure mechanism here to avoid that.
-  void writeImpl(const MessageData &data) override { writeQueue.push(data); }
+  void connectImpl(const ConnectOptions &) override {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    disconnected = false;
+  }
+
+  /// Blocks while the in-flight limit is reached. The simulation must not
+  /// call this, since the client may need it to make progress before it
+  /// consumes anything; it should use `tryWrite()`. Throws if the port is
+  /// disconnected meanwhile.
+  void writeImpl(const MessageData &data) override {
+    std::unique_lock<std::mutex> lock(stateMutex);
+    spaceCv.wait(lock, [&] { return disconnected || hasSpace(); });
+    if (disconnected)
+      throw std::runtime_error("Channel id " + std::to_string(channelId) +
+                               " disconnected while writing");
+    pushLocked(data);
+  }
   bool tryWriteImpl(const MessageData &data) override {
-    writeImpl(data);
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (!hasSpace())
+      return false;
+    pushLocked(data);
     return true;
   }
 
 private:
+  void pushLocked(const MessageData &data) {
+    queued.fetch_add(1);
+    writeQueue.push(data);
+  }
+
+  void resetFlowControlLocked() {
+    unacked.store(0);
+    maxInFlight.store(RpcClient::DefaultToClientMaxInFlight);
+    spaceCv.notify_all();
+  }
+
+  bool hasSpace() const {
+    uint64_t limit = maxInFlight.load();
+    return limit == 0 || queued.load() + unacked.load() < limit;
+  }
+
   Impl &impl;
+  std::atomic<uint64_t> queued{0};
+  std::atomic<uint64_t> unacked{0};
+  std::atomic<uint64_t> maxInFlight{RpcClient::DefaultToClientMaxInFlight};
+  // Guards the generations and `disconnected`, and orders flow-control
+  // updates against them. Only the write queue's and doorbell's locks are
+  // taken while holding it.
+  std::mutex stateMutex;
+  // Notified whenever room may have appeared, or the port disconnected.
+  std::condition_variable spaceCv;
+  bool disconnected = false;
+  uint64_t retiredGeneration = 0;
+  // The session which subscribed last, and so owns the flow-control state.
+  uint64_t ownerGeneration = 0;
 };
 } // namespace
 
@@ -515,6 +771,12 @@ ReadChannelPort &Impl::registerReadPort(const std::string &name,
   return *raw;
 }
 
+void Impl::messageConsumed(ReadChannelPort &port) {
+  // Only ports created by `registerReadPort` are handed out, so this cast is
+  // safe for any well-behaved caller.
+  static_cast<RpcServerReadPort &>(port).markConsumed();
+}
+
 WriteChannelPort &Impl::registerWritePort(const std::string &name,
                                           const std::string &type) {
   faultStash.check();
@@ -591,10 +853,13 @@ void Impl::onClientMessage(const std::weak_ptr<ix::WebSocket> &wsWeak,
     // Stash the first one so the next public RpcServer method rethrows it
     // on the user's thread.
     try {
-      if (msg->binary)
-        handleBinaryFrame(msg->str);
-      else
+      if (msg->binary) {
+        // Frames from a rejected additional client are ignored.
+        if (std::shared_ptr<ClientSession> s = sessionFor(ws))
+          handleBinaryFrame(s->generation, msg->str);
+      } else {
         handleControlFrame(ws, msg->str);
+      }
     } catch (...) {
       faultStash.record(std::current_exception());
     }
@@ -613,6 +878,7 @@ void Impl::onOpen(const std::weak_ptr<ix::WebSocket> &wsWeak) {
     if (!session) {
       session = std::make_shared<ClientSession>();
       session->ws = ws;
+      session->generation = nextSessionGeneration++;
       ctxt.getLogger().debug("cosim", "Client connected");
       return;
     }
@@ -642,12 +908,23 @@ void Impl::onClose(ix::WebSocket &ws) {
       return;
     old.swap(session);
   }
+  old->closed.store(true);
   // Must not wait for in-progress sends: this may be running inside one (see
   // the locking rules on ClientSession). Senders hold their own reference.
-  old->closed.store(true);
+  // Requests from this session still being handled are fenced off by
+  // generation instead.
+  retireSession(old->generation);
 }
 
-void Impl::handleBinaryFrame(const std::string &data) {
+void Impl::retireSession(uint64_t generation) {
+  std::lock_guard<std::mutex> lock(channelsMutex);
+  for (auto &[name, port] : writePorts)
+    port->retireClient(generation);
+  for (auto &[name, port] : readPorts)
+    port->clientDisconnected(generation);
+}
+
+void Impl::handleBinaryFrame(uint64_t generation, const std::string &data) {
   uint64_t channelId;
   const uint8_t *payloadBytes;
   size_t payloadSize;
@@ -678,9 +955,12 @@ void Impl::handleBinaryFrame(const std::string &data) {
   // RpcServerReadPort always has an unbounded internal queue so `deliver` is
   // non-blocking: it enqueues into `ReadChannelPort`'s internal polling buffer
   // (or parks the frame until the port connects) and returns. A `false`
-  // return means a callback-mode consumer refused it; drop the frame.
-  if (!port->deliver(payload))
+  // return means a callback-mode consumer refused it; drop the frame but
+  // still return the credit so the client's in-flight count doesn't leak.
+  if (!port->deliver(generation, payload)) {
     logRefusedFrame(channelId, payload.getSize());
+    port->dropped(generation);
+  }
 }
 
 void Impl::logRefusedFrame(uint64_t channelId, size_t size) {
@@ -704,6 +984,13 @@ void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
   }
 
   auto typeIt = req.find("type");
+  if (typeIt != req.end() && typeIt->is_string() &&
+      typeIt->get<std::string>() == "event") {
+    // Events from a rejected additional client are ignored.
+    if (std::shared_ptr<ClientSession> s = sessionFor(ws))
+      handleEvent(s->generation, req);
+    return;
+  }
   if (typeIt == req.end() || !typeIt->is_string() ||
       typeIt->get<std::string>() != "request") {
     sendError(ws, 0, "protocol_error",
@@ -748,8 +1035,76 @@ void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
 // Impl - control methods
 //===----------------------------------------------------------------------===//
 
+/// Parse the `channels` list of a `consumed` event into (channel_id, count)
+/// pairs. Returns false (with `err` set) on a malformed event.
+static bool parseConsumedEvent(const json &frame,
+                               std::vector<std::pair<uint64_t, uint64_t>> &out,
+                               std::string &err) {
+  auto paramsIt = frame.find("params");
+  if (paramsIt == frame.end() || !paramsIt->is_object()) {
+    err = "missing \"params\" object";
+    return false;
+  }
+  auto chIt = paramsIt->find("channels");
+  if (chIt == paramsIt->end() || !chIt->is_array()) {
+    err = "missing \"channels\" array";
+    return false;
+  }
+  for (const json &c : *chIt) {
+    auto idIt = c.find("channel_id");
+    auto countIt = c.find("count");
+    if (idIt == c.end() || !idIt->is_number_unsigned() || countIt == c.end() ||
+        !countIt->is_number_unsigned()) {
+      err = "entries need unsigned \"channel_id\" and \"count\"";
+      return false;
+    }
+    out.emplace_back(idIt->get<uint64_t>(), countIt->get<uint64_t>());
+  }
+  return true;
+}
+
+void Impl::handleEvent(uint64_t generation, const json &frame) {
+  std::string event = frame.value("event", std::string());
+  if (event != "consumed") {
+    // Events carry no request_id, so there's nobody to reply to. Ignore
+    // unknown events per the protocol's additive-evolution rule.
+    ctxt.getLogger().debug("cosim",
+                           "Ignoring unknown client event \"" + event + "\"");
+    return;
+  }
+  std::vector<std::pair<uint64_t, uint64_t>> acks;
+  std::string err;
+  if (!parseConsumedEvent(frame, acks, err)) {
+    ctxt.getLogger().warning("cosim", "Malformed consumed event: " + err);
+    return;
+  }
+  std::lock_guard<std::mutex> lock(channelsMutex);
+  for (auto [id, count] : acks) {
+    auto it = channelById.find(id);
+    if (it == channelById.end() || !it->second.writePort) {
+      ctxt.getLogger().warning(
+          "cosim",
+          std::format("consumed event for unknown to-client channel id {}",
+                      id));
+      continue;
+    }
+    it->second.writePort->ack(count, generation);
+  }
+}
+
 void Impl::handleHello(ix::WebSocket &ws, uint64_t requestId,
-                       const json & /*params*/) {
+                       const json &params) {
+  auto verIt = params.find("client_protocol_version");
+  if (verIt == params.end() || !verIt->is_number_unsigned() ||
+      verIt->get<uint64_t>() != kProtocolVersion) {
+    std::string got = verIt == params.end() ? "none" : verIt->dump();
+    sendError(ws, requestId, "unsupported_version",
+              std::format("Server speaks cosim protocol v{}; client requested "
+                          "{}. Update the ESI runtime on both sides.",
+                          kProtocolVersion, got));
+    return;
+  }
+
   // Block until the manifest has been set. This replaces the gRPC-era poll
   // loop on the client side.
   {
@@ -758,7 +1113,7 @@ void Impl::handleHello(ix::WebSocket &ws, uint64_t requestId,
   }
 
   json result;
-  result["protocol_version"] = 3;
+  result["protocol_version"] = kProtocolVersion;
   {
     std::lock_guard<std::mutex> lock(manifestMutex);
     result["esi_version"] = esiVersion;
@@ -803,6 +1158,15 @@ void Impl::handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
     return;
   }
   uint64_t channelId = chIdIt->get<uint64_t>();
+  uint64_t maxInFlight = backends::cosim::RpcClient::DefaultToClientMaxInFlight;
+  if (auto limitIt = params.find("max_in_flight"); limitIt != params.end()) {
+    if (!limitIt->is_number_unsigned()) {
+      sendError(ws, requestId, "protocol_error",
+                "\"max_in_flight\" must be an unsigned integer");
+      return;
+    }
+    maxInFlight = limitIt->get<uint64_t>();
+  }
 
   std::optional<ChannelInfo> info =
       findChannel(ws, requestId, channelId, ChannelDirection::ToClient);
@@ -821,6 +1185,7 @@ void Impl::handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
       return;
     }
     s->subscribed.insert(channelId);
+    info->writePort->subscribed(maxInFlight, s->generation);
     // Send the subscribe-ack BEFORE waking the transport thread. IXWebSocket
     // queues sends in FIFO order on a given connection, so as long as the ack
     // is enqueued first, any data frames the transport thread emits next will
@@ -844,6 +1209,14 @@ void Impl::handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
   }
   uint64_t channelId = chIdIt->get<uint64_t>();
 
+  RpcServerWritePort *writePort = nullptr;
+  {
+    std::lock_guard<std::mutex> chLock(channelsMutex);
+    auto it = channelById.find(channelId);
+    if (it != channelById.end())
+      writePort = it->second.writePort;
+  }
+
   std::shared_ptr<ClientSession> s = sessionFor(ws);
   if (!s) {
     sendError(ws, requestId, "internal", "No active session");
@@ -859,6 +1232,11 @@ void Impl::handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
                 std::format("Channel id {} is not subscribed", channelId));
       return;
     }
+    // The client drops anything it hasn't consumed once it unsubscribes.
+    // Reset under the same lock so the transport thread can't send (and
+    // count) another frame on this channel in between.
+    if (writePort)
+      writePort->unsubscribed(s->generation);
     sendResult(ws, requestId, json::object());
   }
 }
@@ -910,7 +1288,10 @@ void Impl::sendError(ix::WebSocket &ws, uint64_t requestId,
 }
 
 //===----------------------------------------------------------------------===//
-// Impl - transport thread (push model, `to_client` only)
+// Impl - transport thread
+//
+// Drains `to_client` write queues onto the WebSocket and returns credits for
+// consumed `to_server` messages.
 //===----------------------------------------------------------------------===//
 
 void Impl::transportLoop() {
@@ -918,6 +1299,7 @@ void Impl::transportLoop() {
     std::unordered_set<uint64_t> ids;
     if (!readyIds.waitDrain(ids))
       return;
+    sendConsumedEvent(ids);
     for (uint64_t id : ids) {
       RpcServerWritePort *writePort = nullptr;
       {
@@ -951,7 +1333,7 @@ void Impl::transportLoop() {
         std::lock_guard<std::mutex> subLock(s->subscribedMutex);
         if (!s->subscribed.count(id))
           break;
-        std::optional<MessageData> msg = writePort->writeQueue.pop();
+        std::optional<MessageData> msg = writePort->popForSend(s->generation);
         if (!msg)
           break;
         std::string frame = buildDataFrame(id, msg->getBytes(), msg->getSize());
@@ -961,6 +1343,35 @@ void Impl::transportLoop() {
       }
     }
   }
+}
+
+void Impl::sendConsumedEvent(const std::unordered_set<uint64_t> &ids) {
+  // Credits belong to the session which sent the frames, so are only
+  // returned to that one. With no client there's nobody holding any.
+  std::shared_ptr<ClientSession> s = getSession();
+  if (!s || !s->helloDone)
+    return;
+  std::vector<std::pair<uint64_t, RpcServerReadPort *>> ports;
+  {
+    std::lock_guard<std::mutex> chLock(channelsMutex);
+    for (uint64_t id : ids) {
+      auto it = channelById.find(id);
+      if (it != channelById.end() && it->second.readPort)
+        ports.emplace_back(id, it->second.readPort);
+    }
+  }
+  json channels = json::array();
+  for (auto [id, port] : ports)
+    if (uint64_t count = port->takeConsumed(s->generation))
+      channels.push_back({{"channel_id", id}, {"count", count}});
+  if (channels.empty())
+    return;
+
+  json event;
+  event["type"] = "event";
+  event["event"] = "consumed";
+  event["params"] = {{"channels", std::move(channels)}};
+  s->ws->sendUtf8Text(event.dump());
 }
 
 //===----------------------------------------------------------------------===//
@@ -989,6 +1400,12 @@ WriteChannelPort &RpcServer::registerWritePort(const std::string &name,
   if (!impl)
     throw std::runtime_error("Server not running");
   return impl->registerWritePort(name, type);
+}
+
+void RpcServer::messageConsumed(ReadChannelPort &port) {
+  if (!impl)
+    throw std::runtime_error("Server not running");
+  impl->messageConsumed(port);
 }
 
 void RpcServer::run(int port) {

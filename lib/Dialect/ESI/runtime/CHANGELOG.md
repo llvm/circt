@@ -4,6 +4,29 @@
 
 ### Breaking changes
 
+- **Cosim protocol v4: backpressure.** Cosim channels now apply credit-based
+  flow control in both directions. The cosim wire protocol is bumped to v4
+  and the version is checked exactly in `hello`, so the runtime and the
+  simulator's DPI library must be rebuilt together. See `cosim-protocol.md`.
+  - Host→simulation: `WriteChannelPort::tryWrite()` now returns `false` while
+    16 frames (or `ConnectOptions::bufferSize`; `0` = unbounded) are
+    unconsumed by the simulation, and `write()` blocks until there's room.
+    Frames held for a simulator port which isn't connected count too.
+  - Simulation→host: `Cosim_Endpoint_ToHost` now deasserts `DataInReady` while
+    32 frames (or the read port's `ConnectOptions::bufferSize`; `0` =
+    unbounded) are queued or unconsumed by the host. Software which writes a
+    long burst before reading any results may now deadlock, as it would on
+    hardware. Connect such read ports with `bufferSize = 0`.
+  - The `cosim_ep_tryput` DPI call returns a positive value when the channel
+    is full and the message was not accepted.
+  - For windowed (translated) ports, `WriteChannelPort::tryWrite()` now
+    returns `false`, keeping nothing for a later `flush()`, when the backend
+    doesn't accept the message's first frame. Previously it returned `true`
+    and left the whole message buffered.
+  - `RpcClient::connectClientReceiver()` takes a `maxInFlight` argument;
+    `RpcClient` gains `tryWriteToServer()` and `setToServerMaxInFlight()`, and
+    `RpcServer` gains `messageConsumed()`. `RpcServer` write ports'
+    `tryWrite()` fails, and `write()` blocks, at the in-flight limit.
 - **`HostMemRegion` is now defined at namespace scope** as
   `esi::services::HostMemRegion`. `services::HostMem::HostMemRegion` remains
   as an alias, so existing source compiles unchanged, but code linking against
