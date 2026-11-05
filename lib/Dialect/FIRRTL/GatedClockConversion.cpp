@@ -249,7 +249,9 @@ LogicalResult GatedClockConversion::analyze() {
       auto mod = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
       unsigned portIdx = blockArg.getArgNumber();
       auto *node = ig.lookup(mod);
-      if (node->noUses()) {
+      // A public module's interface cannot change, since it may also be
+      // instantiated outside the circuit, so its ports are base clocks.
+      if (node->noUses() || mod.isPublic()) {
         baseClks.push_back(clk);
       } else {
         // Every caller is traced, so whether the port is gated is known.
@@ -271,7 +273,7 @@ LogicalResult GatedClockConversion::analyze() {
     if (auto inst = dyn_cast<InstanceOp>(defOp)) {
       auto childMod = dyn_cast_or_null<FModuleOp>(
           inst.getReferencedModule(ig).getOperation());
-      if (childMod) {
+      if (childMod && !childMod.isPublic()) {
         unsigned portIdx = cast<OpResult>(clk).getResultNumber();
         addEdge(clk, childMod.getBodyBlock()->getArgument(portIdx), inst,
                 EdgeKind::InstanceOut);

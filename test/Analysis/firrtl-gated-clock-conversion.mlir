@@ -176,7 +176,7 @@ firrtl.circuit "CastOfInt" {
 // -----
 
 // Instances nested in layerblocks.
-// CHECK-LABEL: firrtl.module @DeepChild
+// CHECK-LABEL: firrtl.module private @DeepChild
 // CHECK-SAME:    in %[[DBASE:[A-Za-z0-9_]*_gatedClock_baseClock_clk]]: !firrtl.clock
 // CHECK-SAME:    in %[[DEN:[A-Za-z0-9_]*_gatedClock_enable_clk]]: !firrtl.uint<1>
 // CHECK:         %[[R:.+]] = firrtl.reg %[[DBASE]] : !firrtl.clock, !firrtl.uint<8>
@@ -189,7 +189,7 @@ firrtl.circuit "DeeplyNested" {
     firrtl.layer @B bind {}
   }
 
-  firrtl.module @DeepChild(in %clk: !firrtl.clock, in %data: !firrtl.uint<8>) {
+  firrtl.module private @DeepChild(in %clk: !firrtl.clock, in %data: !firrtl.uint<8>) {
     %r = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<8>
     firrtl.matchingconnect %r, %data : !firrtl.uint<8>
   }
@@ -290,7 +290,7 @@ firrtl.circuit "GateInLayerBlock" {
 
 // Each port gets a pair if any caller gates it; ungated callers drive a
 // constant 1 enable.
-// CHECK-LABEL: firrtl.module @FlexibleChild
+// CHECK-LABEL: firrtl.module private @FlexibleChild
 // CHECK-SAME:    in %clk1: !firrtl.clock
 // CHECK-SAME:    in %clk2: !firrtl.clock
 // CHECK-SAME:    in %data: !firrtl.uint<8>
@@ -307,7 +307,7 @@ firrtl.circuit "GateInLayerBlock" {
 
 // CHECK-LABEL: firrtl.module @DifferentGating
 firrtl.circuit "DifferentGating" {
-  firrtl.module @FlexibleChild(in %clk1: !firrtl.clock,
+  firrtl.module private @FlexibleChild(in %clk1: !firrtl.clock,
                                in %clk2: !firrtl.clock,
                                in %data: !firrtl.uint<8>) {
     %r1 = firrtl.reg %clk1 : !firrtl.clock, !firrtl.uint<8>
@@ -638,5 +638,52 @@ firrtl.circuit "UngatedOutputWithGatedInput" {
     // CHECK: %[[MUX:.+]] = firrtl.mux(%en2, %data, %[[REG]])
     // CHECK: firrtl.matchingconnect %[[REG]], %[[MUX]]
     firrtl.matchingconnect %r, %data : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// A public module keeps its interface, even if it is also instantiated: its
+// ports are base clocks, and the gates driving them are left in place.
+firrtl.circuit "PublicChild" {
+  // CHECK-LABEL: firrtl.module @PubIn(
+  // CHECK-NOT:     _gatedClock_
+  // CHECK-SAME:    ) {
+  // CHECK:         %[[R:.+]] = firrtl.reg %clk
+  // CHECK-NEXT:    firrtl.matchingconnect %[[R]], %d
+  firrtl.module @PubIn(in %clk: !firrtl.clock, in %d: !firrtl.uint<8>) {
+    %r = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @PubOut(
+  // CHECK-NOT:     _gatedClock_
+  // CHECK-SAME:    ) {
+  // CHECK:         %[[G:.+]] = firrtl.int.clock_gate %clk, %en
+  // CHECK:         firrtl.matchingconnect %o, %[[G]]
+  firrtl.module @PubOut(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>,
+                        out %o: !firrtl.clock) {
+    %g = firrtl.int.clock_gate %clk, %en
+    firrtl.matchingconnect %o, %g : !firrtl.clock
+  }
+
+  // CHECK-LABEL: firrtl.module @PublicChild
+  firrtl.module @PublicChild(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>,
+                             in %d: !firrtl.uint<8>) {
+    // CHECK: %[[G:.+]] = firrtl.int.clock_gate %clk, %en
+    %g = firrtl.int.clock_gate %clk, %en
+    // CHECK: %[[I_CLK:.+]], %[[I_D:.+]] = firrtl.instance i @PubIn(in clk: !firrtl.clock, in d: !firrtl.uint<8>)
+    // CHECK: firrtl.matchingconnect %[[I_CLK]], %[[G]]
+    %i_clk, %i_d = firrtl.instance i @PubIn(in clk: !firrtl.clock, in d: !firrtl.uint<8>)
+    firrtl.matchingconnect %i_clk, %g : !firrtl.clock
+    firrtl.matchingconnect %i_d, %d : !firrtl.uint<8>
+    // CHECK: %[[O_CLK:.+]], %[[O_EN:.+]], %[[O_O:.+]] = firrtl.instance o @PubOut(in clk: !firrtl.clock, in en: !firrtl.uint<1>, out o: !firrtl.clock)
+    %o_clk, %o_en, %o_o = firrtl.instance o @PubOut(in clk: !firrtl.clock, in en: !firrtl.uint<1>, out o: !firrtl.clock)
+    firrtl.matchingconnect %o_clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %o_en, %en : !firrtl.uint<1>
+    // CHECK: %[[R:.+]] = firrtl.reg %[[O_O]]
+    // CHECK-NEXT: firrtl.matchingconnect %[[R]], %d
+    %r = firrtl.reg %o_o : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
   }
 }

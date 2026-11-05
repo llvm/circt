@@ -49,6 +49,9 @@ struct ClockEdge {
 /// sync or async. A clock driven by a clock loop has no base clock, so a root
 /// clocked by one, or a caller driving one into a port pair, is an error.
 ///
+/// Public modules keep their interface: their ports are base clocks, so a gate
+/// driving one is left in place.
+///
 /// NOT thread-safe: port insertion mutates module signatures globally.
 class GatedClockConversion {
 public:
