@@ -64,6 +64,27 @@ def ConstantOp : RTGOp<"constant", [
   let hasVerifier = 1;
 }
 
+def StructDeclOp : RTGOp<"struct.decl", [
+  DeclareOpInterfaceMethods<Symbol, ["getVisibility", "setVisibility"]>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  SymbolName,
+  HasParent<"mlir::ModuleOp">
+]> {
+  let summary = "declare a named struct type";
+  let description = [{
+    Declares a struct with an ordered list of named fields. Each field has a
+    unique name and a type. A `!rtg.struct<@Name>` type refers to this
+    declaration.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, StrArrayAttr:$field_names,
+                        TypeArrayAttr:$field_types);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let extraClassDeclaration = [{
+    std::optional<unsigned> getFieldIndex(::llvm::StringRef name);
+  }];
+}
+
 //===- Sequence Handling Operations ---------------------------------------===//
 
 def SequenceOp : RTGOp<"sequence", [
@@ -743,6 +764,28 @@ def TupleExtractOp : RTGOp<"tuple_extract", [
   let assemblyFormat = [{
     $tuple `at` $index `:` qualified(type($tuple)) attr-dict
   }];
+}
+
+def StructCreateOp : RTGOp<"struct_create", [Pure]> {
+  let summary = "create a nominal struct value";
+  let arguments = (ins Variadic<AnyType>:$fields);
+  let results = (outs StructType:$result);
+  let assemblyFormat = [{
+    ($fields^ `:` `(` qualified(type($fields)) `)`)?
+    `->` qualified(type($result)) attr-dict
+  }];
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
+def StructExtractOp : RTGOp<"struct_extract", [Pure]> {
+  let summary = "extract a field from a nominal struct value";
+  let arguments = (ins StructType:$value, StrAttr:$fieldName);
+  let results = (outs AnyType:$result);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 //===- Integer Operations -------------------------------------------------===//

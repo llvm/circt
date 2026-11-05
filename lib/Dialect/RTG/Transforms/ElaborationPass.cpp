@@ -107,6 +107,7 @@ struct SetStorage;
 struct VirtualRegisterStorage;
 struct UniqueLabelStorage;
 struct TupleStorage;
+struct StructStorage;
 struct MemoryStorage;
 struct MemoryBlockStorage;
 struct SymbolicComputationWithIdentityStorage;
@@ -117,15 +118,14 @@ struct MutStorage;
 struct ContinuationStorage;
 
 /// The abstract base class for elaborated values.
-using ElaboratorValue =
-    std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
-                 RandomizedSequenceStorage *, InterleavedSequenceStorage *,
-                 SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 ArrayStorage *, TupleStorage *, MemoryStorage *,
-                 MemoryBlockStorage *, SymbolicComputationWithIdentityStorage *,
-                 SymbolicComputationWithIdentityValue *,
-                 SymbolicComputationStorage *, OpaqueExternalStorage *,
-                 MutStorage *, ContinuationStorage *>;
+using ElaboratorValue = std::variant<
+    TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
+    RandomizedSequenceStorage *, InterleavedSequenceStorage *, SetStorage *,
+    VirtualRegisterStorage *, UniqueLabelStorage *, ArrayStorage *,
+    TupleStorage *, StructStorage *, MemoryStorage *, MemoryBlockStorage *,
+    SymbolicComputationWithIdentityStorage *,
+    SymbolicComputationWithIdentityValue *, SymbolicComputationStorage *,
+    OpaqueExternalStorage *, MutStorage *, ContinuationStorage *>;
 using LexicalEnvironment = DenseMap<Value, ElaboratorValue>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
@@ -360,6 +360,24 @@ struct TupleStorage : CachableStorage {
   const unsigned hashcode;
 
   const SmallVector<ElaboratorValue> values;
+};
+
+/// Storage object for nominal struct values. The type is part of the identity
+/// because two struct families with equal fields are not interchangeable.
+struct StructStorage : CachableStorage {
+  StructStorage(StructType type, SmallVector<ElaboratorValue> &&fields)
+      : hashcode(llvm::hash_combine(
+            type, llvm::hash_combine_range(fields.begin(), fields.end()))),
+        type(type), fields(std::move(fields)) {}
+
+  bool isEqual(const StructStorage *other) const {
+    return hashcode == other->hashcode && type == other->type &&
+           fields == other->fields;
+  }
+
+  const unsigned hashcode;
+  const StructType type;
+  const SmallVector<ElaboratorValue> fields;
 };
 
 struct SymbolicComputationStorage {
@@ -770,6 +788,8 @@ private:
       return internedInterleavedSequences;
     else if constexpr (std::is_same_v<StorageTy, TupleStorage>)
       return internedTuples;
+    else if constexpr (std::is_same_v<StorageTy, StructStorage>)
+      return internedStructs;
     else if constexpr (std::is_same_v<StorageTy, SymbolicComputationStorage>)
       return internedSymbolicComputationWithIdentityValues;
     else
@@ -803,6 +823,8 @@ private:
       internedInterleavedSequences;
   DenseSet<HashedStorage<TupleStorage>, StorageKeyInfo<TupleStorage>>
       internedTuples;
+  DenseSet<HashedStorage<StructStorage>, StorageKeyInfo<StructStorage>>
+      internedStructs;
   DenseSet<HashedStorage<SymbolicComputationStorage>,
            StorageKeyInfo<SymbolicComputationStorage>>
       internedSymbolicComputationWithIdentityValues;
@@ -888,6 +910,13 @@ static void print(const TupleStorage *val, llvm::raw_ostream &os) {
   os << ")>";
 }
 
+static void print(const StructStorage *val, llvm::raw_ostream &os) {
+  os << "<struct " << val->type << " [";
+  llvm::interleaveComma(val->fields, os,
+                        [&](const ElaboratorValue &field) { os << field; });
+  os << "]>";
+}
+
 static void print(const MemoryStorage *val, llvm::raw_ostream &os) {
   os << "<memory {" << ElaboratorValue(val->memoryBlock)
      << ", size=" << val->size << ", alignment=" << val->alignment << "}>";
@@ -962,9 +991,11 @@ public:
       : internalizer(internalizer) {}
 
   /// Convert an attribute to an ElaboratorValue.
+  // NOLINTBEGIN(misc-no-recursion): Nested attributes are converted
+  // recursively.
   FailureOr<ElaboratorValue> convert(Attribute attr) {
     return llvm::TypeSwitch<Attribute, FailureOr<ElaboratorValue>>(attr)
-        .Case<IntegerAttr, SetAttr, TupleAttr>(
+        .Case<IntegerAttr, SetAttr, TupleAttr, StructAttr>(
             [&](auto attr) { return convert(attr); })
         .Case<TypedAttr>([&](auto typedAttr) -> FailureOr<ElaboratorValue> {
           return ElaboratorValue(typedAttr);
@@ -1010,6 +1041,21 @@ private:
     storage->attrCache = tupleAttr;
     return ElaboratorValue(storage);
   }
+
+  FailureOr<ElaboratorValue> convert(StructAttr structAttr) {
+    SmallVector<ElaboratorValue> fields;
+    for (auto field : structAttr.getFields()) {
+      auto converted = convert(field);
+      if (failed(converted))
+        return failure();
+      fields.push_back(*converted);
+    }
+    auto *storage = internalizer.internalize<StructStorage>(
+        structAttr.getType(), std::move(fields));
+    storage->attrCache = structAttr;
+    return ElaboratorValue(storage);
+  }
+  // NOLINTEND(misc-no-recursion)
 
   Internalizer &internalizer;
 };
@@ -1075,6 +1121,17 @@ private:
       elements.push_back(typedAttr);
     }
     return TupleAttr::get(context, elements);
+  }
+
+  TypedAttr visit(StructStorage *val) {
+    SmallVector<TypedAttr> fields;
+    for (auto field : val->fields) {
+      auto converted = convert(field);
+      if (!converted)
+        return {};
+      fields.push_back(converted);
+    }
+    return StructAttr::get(context, val->type, fields);
   }
 
   // Default implementation for storage types that cannot be converted to
@@ -1525,6 +1582,21 @@ private:
       materialized.push_back(value);
     }
     Value res = TupleCreateOp::create(builder, loc, materialized);
+    materializedValues[val] = res;
+    return res;
+  }
+
+  Value visit(StructStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    SmallVector<Value> fields;
+    fields.reserve(val->fields.size());
+    for (auto field : val->fields) {
+      Value value = materialize(field, loc, emitError);
+      if (!value)
+        return {};
+      fields.push_back(value);
+    }
+    Value res = StructCreateOp::create(builder, loc, val->type, fields);
     materializedValues[val] = res;
     return res;
   }
@@ -2250,6 +2322,9 @@ public:
     } else if (auto *tuple = std::get_if<TupleStorage *>(&value)) {
       if (visited.insert(*tuple).second)
         collectRange((*tuple)->values);
+    } else if (auto *structure = std::get_if<StructStorage *>(&value)) {
+      if (visited.insert(*structure).second)
+        collectRange((*structure)->fields);
     } else if (auto *symbolic =
                    std::get_if<SymbolicComputationStorage *>(&value)) {
       if (visited.insert(*symbolic).second)
@@ -2334,6 +2409,30 @@ public:
   FailureOr<DeletionKind> visitOp(TupleExtractOp op) {
     auto *tuple = get<TupleStorage *>(op.getTuple());
     state[op.getResult()] = tuple->values[op.getIndex().getZExtValue()];
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(StructCreateOp op) {
+    SmallVector<ElaboratorValue> fields;
+    fields.reserve(op.getFields().size());
+    for (Value field : op.getFields())
+      fields.push_back(state.at(field));
+    state[op.getResult()] = sharedState.internalizer.internalize<StructStorage>(
+        op.getResult().getType(), std::move(fields));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(StructExtractOp op) {
+    auto *structure = get<StructStorage *>(op.getValue());
+    auto declaration = SymbolTable::lookupNearestSymbolFrom<StructDeclOp>(
+        op, structure->type.getDeclaration());
+    if (!declaration)
+      return op.emitOpError("references an unknown struct declaration");
+    auto index = declaration.getFieldIndex(op.getFieldNameAttr().getValue());
+    if (!index)
+      return op.emitOpError() << "field '" << op.getFieldNameAttr().getValue()
+                              << "' is not declared by " << structure->type;
+    state[op.getResult()] = structure->fields[*index];
     return DeletionKind::Delete;
   }
 
@@ -2641,8 +2740,9 @@ public:
 
   bool supportsSymbolicValuesNonGenerically(Operation *op) {
     return isa<SubstituteSequenceOp, ArrayCreateOp, ArrayInjectOp,
-               TupleCreateOp, MutCreateOp, MutReadOp, MutWriteOp,
-               arith::SelectOp, func::CallOp, func::CallIndirectOp>(op);
+               TupleCreateOp, StructCreateOp, MutCreateOp, MutReadOp,
+               MutWriteOp, arith::SelectOp, func::CallOp, func::CallIndirectOp>(
+        op);
   }
 
   FailureOr<DeletionKind> dispatchOpVisitor(Operation *op) {

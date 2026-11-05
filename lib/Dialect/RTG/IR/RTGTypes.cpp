@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/RTG/IR/RTGTypes.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
+#include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringSet.h"
@@ -71,6 +72,15 @@ Type DictType::parse(AsmParser &p) {
   // checks in the parser here, but still get the errors reported at meaningful
   // locations.
   return getChecked(emitError, p.getContext(), entries);
+}
+
+LogicalResult
+StructType::verifySymbolUses(Operation *op,
+                             SymbolTableCollection &symbolTable) const {
+  if (!symbolTable.lookupNearestSymbolFrom<StructDeclOp>(op, getDeclaration()))
+    return op->emitOpError()
+           << "references unknown struct declaration " << getDeclaration();
+  return success();
 }
 
 void DictType::print(AsmPrinter &p) const {
