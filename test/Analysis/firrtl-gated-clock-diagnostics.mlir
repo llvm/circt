@@ -43,6 +43,20 @@ firrtl.circuit "TwoConnects" {
 
 // -----
 
+// Whether the enable must gate the reset depends on whether it is sync.
+firrtl.circuit "AbstractReset" {
+  firrtl.module @AbstractReset(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>,
+                               in %rst: !firrtl.reset, in %d: !firrtl.uint<8>,
+                               in %init: !firrtl.uint<8>) {
+    %g = firrtl.int.clock_gate %clk, %en
+    // expected-error @below {{register has an uninferred reset type (run after firrtl-infer-resets)}}
+    %r = firrtl.regreset %g, %rst, %init : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+}
+
+// -----
+
 // The enable cannot be sunk into an aggregate register.
 firrtl.circuit "AggregateReg" {
   firrtl.module @AggregateReg(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>,

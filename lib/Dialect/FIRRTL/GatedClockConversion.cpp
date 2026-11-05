@@ -185,6 +185,11 @@ LogicalResult GatedClockConversion::addRoot(Operation *op) {
       return op->emitError("gated clock conversion: expected a ground-typed "
                            "register (run after firrtl-lower-types); found ")
              << regData.getType();
+    // Whether the enable must gate the reset depends on whether it is sync.
+    if (auto regReset = dyn_cast<RegResetOp>(op);
+        regReset && type_isa<ResetType>(regReset.getResetSignal().getType()))
+      return op->emitError("gated clock conversion: register has an uninferred "
+                           "reset type (run after firrtl-infer-resets)");
     unsigned numWrites = 0;
     for (auto &use : regData.getUses()) {
       // Only count the destination operand, so a self-connect `connect r, r`
@@ -478,6 +483,21 @@ void GatedClockConversion::rewriteRoot(const Root &root, Value baseClk,
         Value newRhs = b.createOrFold<MuxPrimOp>(bounceValue(write, enable),
                                                  write.getSrc(), reg.getData());
         write->setOperand(1, newRhs);
+
+        // A synchronous reset only takes effect on a gated clock edge, so it
+        // must be held off while the gate is closed too. An asynchronous reset
+        // does not depend on the clock and is left alone. `addRoot()` rejected
+        // uninferred resets.
+        if (auto regReset = dyn_cast<RegResetOp>(reg.getOperation())) {
+          Value resetSignal = regReset.getResetSignal();
+          assert(!type_isa<ResetType>(resetSignal.getType()) &&
+                 "uninferred reset");
+          if (type_isa<UIntType>(resetSignal.getType())) {
+            ImplicitLocOpBuilder rb(regReset.getLoc(), regReset);
+            regReset.getResetSignalMutable().assign(rb.createOrFold<AndPrimOp>(
+                resetSignal, bounceValue(regReset, enable)));
+          }
+        }
       })
       .Default(
           [](Operation *) { llvm_unreachable("unsupported root operation"); });
