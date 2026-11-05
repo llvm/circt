@@ -656,9 +656,11 @@ LogicalResult LowerModule::lowerModule() {
           OpBuilder builder(wireOp);
           auto classIn =
               domainToClasses.at(domainType.getName().getAttr()).input;
-          auto classWire = cast<WireOp>(builder.clone(*wireOp));
-          classWire.getResult().setType(classIn.getInstanceType());
-          classWire->eraseOperands(0, classWire->getNumOperands());
+          auto classWire = WireOp::create(
+              builder, wireOp.getLoc(), classIn.getInstanceType(),
+              wireOp.getNameAttr(), wireOp.getNameKindAttr(),
+              wireOp.getAnnotationsAttr(), wireOp.getInnerSymAttr(),
+              wireOp.getForceableAttr());
 
           auto cast = UnrealizedConversionCastOp::create(
               builder, wireOp.getLoc(), {domainType}, {classWire.getResult()});
