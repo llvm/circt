@@ -62,7 +62,9 @@ static void collectIntegersRecursively(OpBuilder builder, Location loc,
                                        Value inputVal,
                                        SmallVectorImpl<Value> &accumulator) {
   // If input is defined by BitcastOp, unwrap it:
-  if (auto bitcast = inputVal.getDefiningOp<BitcastOp>()) {
+  if (auto bitcast = inputVal.getDefiningOp<BitcastOp>() &&
+                     HWConvertBitcastsPass::isTypeSupported(
+                         bitcast.getInput().getType())) {
     collectIntegersRecursively(builder, loc, bitcast.getInput(), accumulator);
     return;
   }
