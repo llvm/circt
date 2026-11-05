@@ -468,6 +468,10 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
   // Do final formal specific lowerings, e.g. inline wires eagerly
   mpm.addPass(circt::verif::createPrepareForFormalPass());
   pm.addPass(circt::hw::createFlattenModules());
+  // Dynamic FIRRTL indexing lowers to HW arrays. Legalize these to bitvector
+  // operations and mux trees before emission.
+  pm.addNestedPass<hw::HWModuleOp>(hw::createHWAggregateToComb());
+  pm.addNestedPass<hw::HWModuleOp>(mlir::createCanonicalizerPass());
   pm.addPass(circt::createConvertHWToBTOR2Pass(os));
   return success();
 }

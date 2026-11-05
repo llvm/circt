@@ -51,17 +51,16 @@ hw.module @PastIntegration(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT: 19 xor 1 4 16
 // CHECK-NEXT: 20 add 6 8 17
 // CHECK-NEXT: 21 ite 6 4 20 8
-// CHECK-NEXT: 22 constd 1 -1
-// CHECK-NEXT: 23 add 6 8 15
-// CHECK-NEXT: 24 eq 1 23 14
-// CHECK-NEXT: 25 not 1 24
-// CHECK-NEXT: 26 bad 25
-// CHECK-NEXT: 27 ite 1 2 16 19
-// CHECK-NEXT: 28 next 1 4 27
-// CHECK-NEXT: 29 ite 6 2 18 21
-// CHECK-NEXT: 30 next 6 8 29
-// CHECK-NEXT: 31 next 6 10 8
-// CHECK-NEXT: 32 next 6 11 10
-// CHECK-NEXT: 33 next 6 12 11
-// CHECK-NEXT: 34 next 6 13 12
-// CHECK-NEXT: 35 next 6 14 13
+// CHECK-NEXT: 22 add 6 8 15
+// CHECK-NEXT: 23 eq 1 22 14
+// CHECK-NEXT: 24 not 1 23
+// CHECK-NEXT: 25 bad 24
+// CHECK-NEXT: 26 ite 1 2 16 19
+// CHECK-NEXT: 27 next 1 4 26
+// CHECK-NEXT: 28 ite 6 2 18 21
+// CHECK-NEXT: 29 next 6 8 28
+// CHECK-NEXT: 30 next 6 10 8
+// CHECK-NEXT: 31 next 6 11 10
+// CHECK-NEXT: 32 next 6 12 11
+// CHECK-NEXT: 33 next 6 13 12
+// CHECK-NEXT: 34 next 6 14 13
