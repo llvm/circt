@@ -128,6 +128,11 @@ UnpackedType WrapperType::getNestedType() const {
       [](auto type) { return type.getNestedType(); });
 }
 
+WrapperType WrapperType::withNestedType(UnpackedType nestedType) const {
+  return TypeSwitch<WrapperType, WrapperType>(*this).Case<RefType, NetType>(
+      [&](auto type) { return decltype(type)::get(nestedType); });
+}
+
 //===----------------------------------------------------------------------===//
 // Packed Type
 //===----------------------------------------------------------------------===//
