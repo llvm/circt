@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --pass-pipeline='builtin.module(hw.module(comb-balance-mux{mux-chain-threshold=4}))' | FileCheck %s
 // RUN: circt-opt %s --pass-pipeline='builtin.module(hw.module(comb-balance-mux{mux-chain-threshold=2}))' | FileCheck %s --check-prefix=MIN2
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.module(comb-balance-mux{mux-chain-threshold=4 max-dense-index-width=0}))' | FileCheck %s --check-prefix=BINARYTREE
 
 // CHECK-LABEL: hw.module @priori_mux_false_side_chain
 hw.module @priori_mux_false_side_chain(in %cond0: i1, in %cond1: i1, in %cond2: i1, in %cond3: i1, in %cond4: i1, out output: i32) {
@@ -86,6 +87,7 @@ hw.module @test_duplicate(in %cond0: i1, in %cond1: i1, in %cond2: i1, in %cond3
 }
 
 // CHECK-LABEL: hw.module @test_index_comparison
+// BINARYTREE-LABEL: hw.module @test_index_comparison
 hw.module @test_index_comparison(in %index: i4, out output: i32) {
   %c0_i4 = hw.constant 0 : i4
   %c1_i4 = hw.constant 1 : i4
@@ -123,6 +125,11 @@ hw.module @test_index_comparison(in %index: i4, out output: i32) {
   // CHECK-NEXT: %[[OR:.*]] = comb.or bin %[[EXTRACT3]], %[[EXTRACT2]] : i1
   // CHECK-NEXT: %[[MUX3:.*]] = comb.mux %[[OR]], %c4_i32, %[[MUX2]] : i32
 
+  // When max-dense-index-width=0, binary search tree is used instead of bit extraction:
+  // BINARYTREE-NOT: comb.extract
+  // BINARYTREE:     %[[IS_RIGHT:.*]] = comb.icmp uge %index, %c2_i4 : i4
+  // BINARYTREE:     comb.mux %[[IS_RIGHT]]
+
   hw.output %mux1 : i32
 }
 
@@ -143,4 +150,29 @@ hw.module @test_min_conditions_2(in %cond0: i1, in %cond1: i1, in %cond2: i1, ou
   %mux1 = comb.mux %cond0, %c1_i32, %mux2 : i32
 
   hw.output %mux1 : i32
+}
+
+// CHECK-LABEL: hw.module @sparse_wide_mux_4way
+hw.module @sparse_wide_mux_4way(in %opcode: i32, in %vA: i16, in %vB: i16, in %vC: i16, in %vD: i16, in %vDef: i16, out res: i16) {
+  // Sparse 32-bit constants that cause dense table allocation to fail:
+  %c_100 = hw.constant 100 : i32
+  %c_250 = hw.constant 250 : i32
+  %c_500 = hw.constant 500 : i32
+  %c_999 = hw.constant 999 : i32
+
+  %cmpD = comb.icmp eq %opcode, %c_999 : i32
+  %mD = comb.mux %cmpD, %vD, %vDef : i16
+  %cmpC = comb.icmp eq %opcode, %c_500 : i32
+  %mC = comb.mux %cmpC, %vC, %mD : i16
+  %cmpB = comb.icmp eq %opcode, %c_250 : i32
+  %mB = comb.mux %cmpB, %vB, %mC : i16
+  %cmpA = comb.icmp eq %opcode, %c_100 : i32
+  %mA = comb.mux %cmpA, %vA, %mB : i16
+
+  // Balanced tree synthesis handles arbitrary bitwidths (i32) via median-split binary search:
+  // CHECK-NOT: comb.or
+  // CHECK:      %[[IS_RIGHT:.*]] = comb.icmp uge %opcode, %c500_i32 : i32
+  // CHECK:      %[[ROOT_SPARSE:.*]] = comb.mux %[[IS_RIGHT]],
+  // CHECK:      hw.output %[[ROOT_SPARSE]] : i16
+  hw.output %mA : i16
 }
