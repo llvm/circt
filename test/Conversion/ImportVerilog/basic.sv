@@ -949,9 +949,9 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.read %e
     // CHECK: moore.concat [[TMP1]], [[TMP2]] : (!moore.l32, !moore.l32) -> l64
     d = {d, e};
-    // CHECK: moore.concat_ref %a, %b, %c : (!moore.ref<i32>, !moore.ref<i32>, !moore.ref<i32>) -> <i96>
+    // CHECK: moore.concat_ref %a, %b, %c : (!moore.ref<i32>, !moore.ref<i32>, !moore.ref<i32>) -> ref<i96>
     {a, b, c} = a;
-    // CHECK: moore.concat_ref %d, %e : (!moore.ref<l32>, !moore.ref<l32>) -> <l64>
+    // CHECK: moore.concat_ref %d, %e : (!moore.ref<l32>, !moore.ref<l32>) -> ref<l64>
     {d, e} = d;
     // CHECK: [[TMP1:%.+]] = moore.read %j : ref<i32>
     // CHECK: moore.blocking_assign %a, [[TMP1]] : i32
@@ -1018,11 +1018,11 @@ module Expressions;
     // CHECK: [[TMP5:%.+]] = moore.zext [[TMP4]] : i96 -> i100
     // CHECK: moore.blocking_assign %dd, [[TMP5]] : i100
     dd = {>>{ a, b, c }};
-    // CHECK: [[TMP1:%.+]] = moore.concat_ref %a, %b, %c : (!moore.ref<i32>, !moore.ref<i32>, !moore.ref<i32>) -> <i96>
+    // CHECK: [[TMP1:%.+]] = moore.concat_ref %a, %b, %c : (!moore.ref<i32>, !moore.ref<i32>, !moore.ref<i32>) -> ref<i96>
     // CHECK: [[TMP2:%.+]] = moore.constant 1 : i96
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i96
     {>>{ a, b, c }} = 96'b1;
-    // CHECK: [[TMP1:%.+]] = moore.concat_ref %a, %b, %c : (!moore.ref<i32>, !moore.ref<i32>, !moore.ref<i32>) -> <i96>
+    // CHECK: [[TMP1:%.+]] = moore.concat_ref %a, %b, %c : (!moore.ref<i32>, !moore.ref<i32>, !moore.ref<i32>) -> ref<i96>
     // CHECK: [[TMP2:%.+]] = moore.constant 31 : i96
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i96
     {>>{ a, b, c }} = 100'b11111;
@@ -1030,7 +1030,7 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.extract_ref %a from 8 : ref<i32> -> ref<i8>
     // CHECK: [[TMP3:%.+]] = moore.extract_ref %a from 16 : ref<i32> -> ref<i8>
     // CHECK: [[TMP4:%.+]] = moore.extract_ref %a from 24 : ref<i32> -> ref<i8>
-    // CHECK: [[TMP5:%.+]] = moore.concat_ref [[TMP1]], [[TMP2]], [[TMP3]], [[TMP4]] : (!moore.ref<i8>, !moore.ref<i8>, !moore.ref<i8>, !moore.ref<i8>) -> <i32>
+    // CHECK: [[TMP5:%.+]] = moore.concat_ref [[TMP1]], [[TMP2]], [[TMP3]], [[TMP4]] : (!moore.ref<i8>, !moore.ref<i8>, !moore.ref<i8>, !moore.ref<i8>) -> ref<i32>
     // CHECK: [[TMP6:%.+]] = moore.constant 1 : i32
     // CHECK: moore.blocking_assign [[TMP5]], [[TMP6]] : i32
     {<< byte {a}} = 32'b1;
@@ -3636,7 +3636,7 @@ module PackedLvalue1(input logic [1023:0] x);
   // CHECK: [[A:%.+]] = moore.variable : <array<8 x l64>>
   // CHECK: [[B:%.+]] = moore.variable : <array<8 x l64>>
   logic [7:0][63:0] a, b;
-  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<array<8 x l64>>, !moore.ref<array<8 x l64>>) -> <l1024>
+  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<array<8 x l64>>, !moore.ref<array<8 x l64>>) -> ref<l1024>
   always_comb {a, b} = x;
 endmodule
 
@@ -3646,7 +3646,7 @@ module PackedLvalue2(input logic [1023:0] x);
   // CHECK: [[B:%.+]] = moore.variable : <array<8 x array<4 x l16>>>
 
   logic [7:0][3:0][15:0] a, b;
-  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<array<8 x array<4 x l16>>>, !moore.ref<array<8 x array<4 x l16>>>) -> <l1024>
+  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<array<8 x array<4 x l16>>>, !moore.ref<array<8 x array<4 x l16>>>) -> ref<l1024>
   always_comb {a, b} = x;
 endmodule
 
@@ -3655,7 +3655,7 @@ module PackedLvalue3(input logic [1023:0] x);
   // CHECK: [[A:%.+]] = moore.variable : <l512>
   // CHECK: [[B:%.+]] = moore.variable : <l512>
   logic [511:0] a, b;
-  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<l512>, !moore.ref<l512>) -> <l1024>
+  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<l512>, !moore.ref<l512>) -> ref<l1024>
   always_comb {a, b} = x;
 endmodule
 
@@ -3666,8 +3666,8 @@ module PackedLvalue4(input logic [1023:0] x);
   // CHECK: [[B:%.+]] = moore.variable : <l256>
   // CHECK: [[C:%.+]] = moore.variable : <l256>
   logic [255:0] b, c;
-  // CHECK: moore.concat_ref [[B]], [[C]] : (!moore.ref<l256>, !moore.ref<l256>) -> <l512>
-  // CHECK: moore.concat_ref [[A]], [[X:%.*]] : (!moore.ref<l512>, !moore.ref<l512>) -> <l1024>
+  // CHECK: moore.concat_ref [[B]], [[C]] : (!moore.ref<l256>, !moore.ref<l256>) -> ref<l512>
+  // CHECK: moore.concat_ref [[A]], [[X:%.*]] : (!moore.ref<l512>, !moore.ref<l512>) -> ref<l1024>
   always_comb {a, {b, c}} = x;
 endmodule
 

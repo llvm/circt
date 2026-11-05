@@ -190,6 +190,9 @@ public:
   /// Get the wrapped type.
   UnpackedType getNestedType() const;
 
+  /// Get a wrapper of the same kind around a different nested type.
+  WrapperType withNestedType(UnpackedType nestedType) const;
+
 protected:
   using UnpackedType::UnpackedType;
 };

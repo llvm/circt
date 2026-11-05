@@ -1764,9 +1764,9 @@ def ConcatOp : MooreOp<"concat", [
 def ConcatRefOp : MooreOp<"concat_ref", [
     Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>
 ]> {
-  let summary = "The copy of concat that explicitly works on the ref type.";
-  let arguments = (ins Variadic<RefType>:$values);
-  let results = (outs RefType:$result);
+  let summary = "The copy of concat that explicitly works on ref or net types.";
+  let arguments = (ins Variadic<WrapperType>:$values);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $values attr-dict `:` `(` type($values) `)` `->` type($result)
   }];

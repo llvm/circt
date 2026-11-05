@@ -72,7 +72,7 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
     // Disassemble assignments with the LHS is concatRef. And create new
     // corresponding assignments using non-concatRef LHS.
     for (auto operand : operands) {
-      auto type = cast<RefType>(operand.getType()).getNestedType();
+      auto type = cast<WrapperType>(operand.getType()).getNestedType();
       auto width = type.getBitSize().value();
 
       rewriter.setInsertionPoint(op);
