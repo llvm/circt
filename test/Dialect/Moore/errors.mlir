@@ -268,3 +268,9 @@ func.func @ProceduralAssignToNet(%arg0: !moore.net<i42>, %arg1: !moore.i42) {
 // expected-error @below {{failed to verify that all of {input, result} have same wrapper kind (ref or net)}}
 moore.extract_ref %0 from 0 : net<i32> -> ref<i1>
 
+// -----
+
+%0 = unrealized_conversion_cast to !moore.ref<i32>
+%1 = moore.constant 0 : i32
+// expected-error @below {{failed to verify that all of {input, result} have same wrapper kind (ref or net)}}
+moore.dyn_extract_ref %0 from %1 : ref<i32>, i32 -> net<i1>

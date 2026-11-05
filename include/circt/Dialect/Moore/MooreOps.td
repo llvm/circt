@@ -1972,12 +1972,14 @@ def ExtractRefOp : MooreOp<"extract_ref", [
   }];
 }
 
-def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
+def DynExtractRefOp : MooreOp<"dyn_extract_ref", [
+    Pure, SameWrapperKind<["input", "result"]>
+]> {
   let description = [{
-  The copy of dyn_extract that explicitly works on the ref type.
+  The copy of dyn_extract that explicitly works on ref or net types.
   }];
-  let arguments = (ins RefType:$input, UnpackedType:$lowBit);
-  let results = (outs RefType:$result);
+  let arguments = (ins WrapperType:$input, UnpackedType:$lowBit);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $input `from` $lowBit attr-dict `:`
     type($input) `,` type($lowBit) `->` type($result)
