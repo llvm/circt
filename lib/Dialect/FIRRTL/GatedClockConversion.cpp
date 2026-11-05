@@ -171,7 +171,38 @@ LogicalResult GatedClockConversion::addRoot(Operation *op) {
         "unsupported operation type for gated clock "
         "conversion; expected RefForceOp, RefReleaseOp, RegOp, "
         "RegResetOp or ClockGateIntrinsicOp");
-  roots.push_back({op, clk});
+  Root root{op, clk};
+
+  // The enable is sunk into the register's write, so there must be exactly one.
+  Value regData =
+      TypeSwitch<Operation *, Value>(op)
+          .Case<RegOp, RegResetOp>([](auto reg) { return reg.getData(); })
+          .Default([](auto) { return Value(); });
+  if (regData) {
+    // The enable is sunk as a mux over the whole register, which a field-wise
+    // write or a non-passive aggregate would not support.
+    if (!type_cast<FIRRTLType>(regData.getType()).isGround())
+      return op->emitError("gated clock conversion: expected a ground-typed "
+                           "register (run after firrtl-lower-types); found ")
+             << regData.getType();
+    unsigned numWrites = 0;
+    for (auto &use : regData.getUses()) {
+      // Only count the destination operand, so a self-connect `connect r, r`
+      // (which uses the register data twice) is one write, not two.
+      auto fconn = dyn_cast<FConnectLike>(use.getOwner());
+      if (fconn && use.get() == fconn.getDest() &&
+          use.getOperandNumber() == 0) {
+        ++numWrites;
+        root.dataWrite = fconn;
+      }
+    }
+    if (numWrites != 1)
+      return op->emitError("gated clock conversion: expected exactly one "
+                           "connect driving this register (run after "
+                           "firrtl-expand-whens); found ")
+             << numWrites;
+  }
+  roots.push_back(root);
   return success();
 }
 
@@ -440,32 +471,12 @@ void GatedClockConversion::rewriteRoot(const Root &root, Value baseClk,
               andEnables(enable, testEnable, gate));
       })
       .Case<RegOp, RegResetOp>([&](auto reg) {
-        // ExpandWhens leaves exactly one write per register. Rebinding the
-        // clock without sinking the enable would silently drop the gate, so
-        // bail out if that precondition does not hold.
-        Value regData = reg.getData();
-        FConnectLike write;
-        unsigned numWrites = 0;
-        for (auto &use : regData.getUses()) {
-          auto fconn = dyn_cast<FConnectLike>(use.getOwner());
-          if (fconn && fconn.getDest() == regData) {
-            ++numWrites;
-            write = fconn;
-          }
-        }
-        if (numWrites != 1) {
-          reg.emitWarning()
-              << "gated clock conversion: expected exactly one connect "
-                 "driving this register (run after firrtl-expand-whens); found "
-              << numWrites << "; leaving the gated clock in place";
-          return;
-        }
-
         // Hold the register while the gate is closed.
         reg.getClockValMutable().assign(bounceValue(reg, baseClk));
+        FConnectLike write = root.dataWrite;
         ImplicitLocOpBuilder b(write.getLoc(), write);
         Value newRhs = b.createOrFold<MuxPrimOp>(bounceValue(write, enable),
-                                                 write.getSrc(), regData);
+                                                 write.getSrc(), reg.getData());
         write->setOperand(1, newRhs);
       })
       .Default(

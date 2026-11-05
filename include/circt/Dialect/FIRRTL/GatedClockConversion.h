@@ -44,7 +44,8 @@ struct ClockEdge {
 /// before any pair is computed, so no stored value is invalidated later.
 ///
 /// Preconditions: run after `firrtl-expand-whens`, so every clock net and
-/// register has a single driver. Clock loops are not diagnosed here; see
+/// register has a single driver, and after `firrtl-lower-types`, so registers
+/// are ground-typed. Clock loops are not diagnosed here; see
 /// `firrtl-check-comb-loops`.
 ///
 /// NOT thread-safe: port insertion mutates module signatures globally.
@@ -52,7 +53,8 @@ class GatedClockConversion {
 public:
   explicit GatedClockConversion(InstanceGraph &ig) : ig(ig) {}
 
-  /// Fails if `op` is not a supported root.
+  /// Fails if `op` is not a supported root, or is a register that is not
+  /// ground-typed or does not have exactly one connect to sink an enable into.
   LogicalResult addRoot(Operation *op);
 
   /// Converts the added roots.
@@ -66,6 +68,8 @@ private:
     Value clock;
     /// `clockDriver(clock)`, set by `analyze()`.
     Value key = {};
+    /// The single write of a register, which the enable is sunk into.
+    FConnectLike dataWrite = {};
   };
 
   /// (base clock, enable); a null enable means ungated.
