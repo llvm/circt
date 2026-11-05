@@ -65,7 +65,8 @@ public:
   /// connect to sink an enable into.
   LogicalResult addRoot(Operation *op);
 
-  /// Converts the added roots.
+  /// Converts the added roots. All state, including the roots, is cleared on
+  /// return, whether or not it succeeds.
   LogicalResult run();
 
   void dump() const;
@@ -104,6 +105,7 @@ private:
   void insertPorts();
   void materialize(ArrayRef<Value> order);
   void rewriteRoots();
+  void clear();
 
   void rewriteRoot(const Root &root, Value baseClk, Value enable);
   Value gateEnableOf(ClockGateIntrinsicOp gate);

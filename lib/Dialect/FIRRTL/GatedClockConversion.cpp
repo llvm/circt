@@ -21,6 +21,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -589,7 +590,23 @@ void GatedClockConversion::rewriteRoots() {
 // Driver
 //===----------------------------------------------------------------------===//
 
+void GatedClockConversion::clear() {
+  roots.clear();
+  srcToDstClocks.clear();
+  baseClks.clear();
+  gated.clear();
+  portPairs.clear();
+  pairs.clear();
+  constU1Cache.clear();
+  instClones.clear();
+  deadInstances.clear();
+  bounceWires.clear();
+  domInfo.invalidate();
+}
+
 LogicalResult GatedClockConversion::run() {
+  // Every exit, including a failed analysis, leaves no state behind.
+  llvm::scope_exit clearOnExit([&] { clear(); });
   if (roots.empty())
     return success();
   context = roots[0].op->getContext();
@@ -607,8 +624,6 @@ LogicalResult GatedClockConversion::run() {
   rewriteRoots();
   for (auto oldInst : deadInstances)
     oldInst.erase();
-  deadInstances.clear();
-  roots.clear();
   return success();
 }
 
