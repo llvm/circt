@@ -735,10 +735,12 @@ def WaitLevelOp : MooreOp<"wait_level", [
     The `moore.wait_level` op suspends execution of the current process until
     its body signals that a given condition is true. Conceptually, the body of
     this op is executed once immediately, and again whenever any potentially
-    relevant signal has changed. If the contained `moore.detect_level` op determines
-    the condition is true, execution resumes after the `moore.wait_level` operation.
-    If the condition is false, the current process remains suspended until a signal
-    change causes the body to be run again.
+    relevant signal has changed. If any of the contained `moore.detect_level` ops
+    determines its condition is true, execution resumes after the
+    `moore.wait_level` operation. If all conditions are false, the current
+    process remains suspended until a signal change causes the body to be run
+    again. If the body contains no `moore.detect_level` ops, no condition can
+    ever become true and the process remains suspended forever.
 
     See IEEE 1800-2017 § 9.4.3 "Level-sensitive event control".
   }];
