@@ -42,8 +42,8 @@ class FifoTester:
     empty = int(dut.empty.value) == 1
     full = int(dut.full.value) == 1
     assert empty == (len(self.model) == 0), f"cycle {self.cycle}: empty"
-    # Popped slots stay reserved until their delayed read has happened.
-    expected_full = len(self.model) + len(self.pending) == FIFO_DEPTH
+    # A popped slot is free at once, even while its read data is in flight.
+    expected_full = len(self.model) == FIFO_DEPTH
     assert full == expected_full, f"cycle {self.cycle}: full"
 
     push = want_push and not full

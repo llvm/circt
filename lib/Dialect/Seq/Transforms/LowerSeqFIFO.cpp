@@ -69,25 +69,19 @@ public:
         rewriter, loc, wrAddrNext, clk, rst,
         hw::ConstantOp::create(rewriter, loc, ptrType, 0), "fifo_wr_addr");
 
-    // The memory read port only samples the read address 'rdLatency - 1'
-    // cycles after a pop. Until then the popped slot must not be overwritten,
-    // so track the number of slots which are either holding data or awaiting
-    // their delayed read, and use that to compute fullness. A slot is released
-    // on the same edge on which it is read.
+    // The memory is read in the cycle an entry is popped, with latency 1 at
+    // most; any further latency is registers on the read data. So a popped
+    // slot is free at once: no read of it is still to come when it is
+    // rewritten. Delaying the read address instead would also leave a RAM
+    // block's output register empty.
     uint64_t rdLatency = mem.getRdLatency();
-    uint64_t numInflightStages = rdLatency > 1 ? rdLatency - 1 : 0;
-    Value used = count;
-    Backedge nextUsed;
-    if (numInflightStages > 0) {
-      nextUsed = bb.get(countType);
-      used = seq::CompRegOp::create(
-          rewriter, loc, nextUsed, clk, rst,
-          hw::ConstantOp::create(rewriter, loc, countType, 0), "fifo_used");
-    }
-
     Value readData = seq::ReadPortOp::create(
         rewriter, loc, hlmem, llvm::SmallVector<Value>{rdAddr},
-        adaptor.getRdEn(), mem.getRdLatency());
+        adaptor.getRdEn(), std::min<uint64_t>(rdLatency, 1));
+    for (uint64_t i = 1; i < rdLatency; ++i)
+      readData = seq::CompRegOp::create(
+          rewriter, loc, readData, clk,
+          rewriter.getStringAttr("fifo_mem_rd_dly" + std::to_string(i)));
     seq::WritePortOp::create(rewriter, loc, hlmem,
                              llvm::SmallVector<Value>{wrAddr},
                              adaptor.getInput(), adaptor.getWrEn(),
@@ -95,7 +89,7 @@ public:
 
     // ====== some more constants =====
     comb::ICmpOp fifoFull = comb::ICmpOp::create(
-        rewriter, loc, comb::ICmpPredicate::eq, used, countTcFull);
+        rewriter, loc, comb::ICmpPredicate::eq, count, countTcFull);
     fifoFull->setAttr("sv.namehint", rewriter.getStringAttr("fifo_full"));
     comb::ICmpOp fifoEmpty = comb::ICmpOp::create(
         rewriter, loc, comb::ICmpPredicate::eq, count, countTc0);
@@ -167,34 +161,6 @@ public:
         .getDefiningOp()
         ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_rd_addr_next"));
 
-    // ====== In-flight reads ======
-    if (numInflightStages > 0) {
-      // Delay each pop until the edge on which its slot is read.
-      Value retire = rdAndNotEmpty;
-      Value false_ =
-          hw::ConstantOp::create(rewriter, loc, rewriter.getI1Type(), 0);
-      for (uint64_t i = 0; i < numInflightStages; ++i)
-        retire =
-            seq::CompRegOp::create(rewriter, loc, retire, clk, rst, false_,
-                                   "fifo_rd_inflight_dly" + std::to_string(i));
-
-      auto notRetire = comb::createOrFoldNot(rewriter, loc, retire);
-      auto notWrAndNotFull = comb::createOrFoldNot(rewriter, loc, wrAndNotFull);
-      Value incUsed =
-          comb::AndOp::create(rewriter, loc, wrAndNotFull, notRetire);
-      Value decUsed =
-          comb::AndOp::create(rewriter, loc, retire, notWrAndNotFull);
-      auto usedPlus1 = comb::AddOp::create(rewriter, loc, used, countTc1);
-      auto usedMinus1 = comb::SubOp::create(rewriter, loc, used, countTc1);
-      auto usedDecMux =
-          comb::MuxOp::create(rewriter, loc, decUsed, usedMinus1, used);
-      auto usedNextMux =
-          comb::MuxOp::create(rewriter, loc, incUsed, usedPlus1, usedDecMux);
-      usedNextMux->setAttr("sv.namehint",
-                           rewriter.getStringAttr("fifo_used_next"));
-      nextUsed.setValue(usedNextMux);
-    }
-
     // ====== Result values ======
     llvm::SmallVector<Value> results;
 
@@ -207,7 +173,7 @@ public:
 
     if (auto almostFull = mem.getAlmostFullThreshold()) {
       results.push_back(
-          comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::uge, used,
+          comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::uge, count,
                                hw::ConstantOp::create(rewriter, loc, countType,
                                                       almostFull.value())));
       static_cast<Value>(results.back())

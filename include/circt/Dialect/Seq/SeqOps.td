@@ -307,11 +307,8 @@ def FIFOOp : SeqOp<"fifo", [
     3. Almost full/empty thresholds (optional). If not provided, these will
        be asserted when the FIFO is full/empty.
 
-    A slot which has been read stays reserved until its read data has been
-    fetched from the underlying storage. Hence, when the read latency is
-    larger than 1, `full` (and `almostFull`) may be asserted while fewer than
-    `depth` entries are available to be read. Sustaining one push and one pop
-    per cycle requires `depth > max(rdLatency, 1)`.
+    A popped entry's slot is free from the next cycle, whatever the read
+    latency: `full` and `almostFull` count only the entries not yet popped.
 
     Like `seq.hlmem` there are no guarantees that all possible fifo configuration
     are able to be lowered. Available lowering passes will pattern match on the

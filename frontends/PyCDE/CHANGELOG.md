@@ -1,5 +1,16 @@
 # PyCDE changelog
 
+## Unreleased
+
+### Changes
+
+- **`seq.FIFO` read latency is on the read data.** With `rd_latency` 2 or
+  more, the memory is read in the cycle the entry is popped and the rest of the
+  latency is registers on the read data, rather than on the read address. On
+  FPGAs this lets the second register be the RAM block's output register. A
+  popped slot is now free at once, so `full` and `almost_full` no longer stay
+  asserted while a pop's read data is in flight, as they did in 0.13.0.
+
 ## 0.13.0
 
 ### Breaking changes
