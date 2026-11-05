@@ -40,7 +40,8 @@ struct ClockEdge {
 /// Every clock gets a (base clock, enable) pair; a module port carrying a
 /// gated clock gets a (base, enable) port pair. Each root is then clocked by
 /// its base clock, with the enable sunk into it. A port pair for port `p` is
-/// named `_gatedClock_baseClock_p` and `_gatedClock_enable_p`.
+/// named `_gatedClock_baseClock_p` and `_gatedClock_enable_p`, with a suffix
+/// if a port of that name exists, and takes the location of `p`.
 ///
 /// Only analysis can fail, and it runs before any mutation. Ports are inserted
 /// before any pair is computed, so no stored value is invalidated later.

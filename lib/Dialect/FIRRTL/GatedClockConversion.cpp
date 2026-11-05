@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/STLExtras.h"
@@ -42,14 +43,17 @@ static StringRef edgeKindName(EdgeKind kind) {
   return "?";
 }
 
-/// Build the (baseClock, gateEnable) PortInfo pair for the given direction.
+/// `ns` holds the module's port names, so the new names do not collide with
+/// them or with each other.
 static std::pair<PortInfo, PortInfo>
-makeGatedClockPortInfos(MLIRContext *ctx, StringRef tag, Direction dir,
-                        Location loc, Type clockType, Type u1Type) {
-  return {PortInfo(StringAttr::get(ctx, ("_gatedClock_baseClock_" + tag).str()),
-                   clockType, dir, /*symName=*/StringAttr(), loc),
-          PortInfo(StringAttr::get(ctx, ("_gatedClock_enable_" + tag).str()),
-                   u1Type, dir, /*symName=*/StringAttr(), loc)};
+makeGatedClockPortInfos(MLIRContext *ctx, Namespace &ns, StringRef tag,
+                        Direction dir, Location loc, Type clockType,
+                        Type u1Type) {
+  return {
+      PortInfo(StringAttr::get(ctx, ns.newName("_gatedClock_baseClock_" + tag)),
+               clockType, dir, /*symName=*/StringAttr(), loc),
+      PortInfo(StringAttr::get(ctx, ns.newName("_gatedClock_enable_" + tag)),
+               u1Type, dir, /*symName=*/StringAttr(), loc)};
 }
 
 static FModuleOp getParentModule(Value value) {
@@ -430,13 +434,16 @@ void GatedClockConversion::insertPorts() {
     // One call per module, so each instance is re-created once.
     llvm::sort(modPairs, llvm::less_first());
     const unsigned origNumPorts = mod.getNumPorts();
+    Namespace portNames;
+    for (auto name : mod.getPortNames())
+      portNames.add(cast<StringAttr>(name).getValue());
     SmallVector<std::pair<unsigned, PortInfo>> newPorts;
     for (auto [portIdx, portPair] : modPairs) {
       portPair->baseIdx = origNumPorts + newPorts.size();
       portPair->enIdx = portPair->baseIdx + 1;
       auto [baseInfo, enableInfo] = makeGatedClockPortInfos(
-          context, mod.getPortName(portIdx), portPair->dir, mod.getLoc(),
-          clockType, u1Type);
+          context, portNames, mod.getPortName(portIdx), portPair->dir,
+          mod.getPortLocation(portIdx), clockType, u1Type);
       newPorts.emplace_back(origNumPorts, baseInfo);
       newPorts.emplace_back(origNumPorts, enableInfo);
     }

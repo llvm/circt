@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -test-firrtl-gated-clock-conversion -split-input-file | FileCheck %s
+// RUN: circt-opt %s -test-firrtl-gated-clock-conversion -split-input-file -mlir-print-debuginfo -mlir-print-local-scope | FileCheck %s --check-prefix=LOC
 
 // Cascaded gates in one module: the enables are ANDed.
 // CHECK-LABEL: firrtl.module @Cascaded
@@ -685,6 +686,50 @@ firrtl.circuit "PublicChild" {
     // CHECK-NEXT: firrtl.matchingconnect %[[R]], %d
     %r = firrtl.reg %o_o : !firrtl.clock, !firrtl.uint<8>
     firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// The new ports are uniquified against the existing port names, and take the
+// location of the clock port they shadow.
+firrtl.circuit "PortNameCollision" {
+  // CHECK-LABEL: firrtl.module private @CollidingChild
+  // CHECK-SAME:    in %clk: !firrtl.clock
+  // CHECK-SAME:    in %_gatedClock_baseClock_clk: !firrtl.uint<1>
+  // CHECK-SAME:    in %_gatedClock_enable_clk: !firrtl.uint<1>
+  // CHECK-SAME:    in %d: !firrtl.uint<8>
+  // CHECK-SAME:    in %_gatedClock_baseClock_clk_0: !firrtl.clock
+  // CHECK-SAME:    in %_gatedClock_enable_clk_0: !firrtl.uint<1>
+  // CHECK:         %[[R:.+]] = firrtl.reg %_gatedClock_baseClock_clk_0
+  // CHECK:         firrtl.mux(%_gatedClock_enable_clk_0, %d, %[[R]])
+  // LOC-LABEL:   firrtl.module private @CollidingChild
+  // LOC-SAME:      in %_gatedClock_baseClock_clk_0: !firrtl.clock loc("Child.fir":1:2)
+  // LOC-SAME:      in %_gatedClock_enable_clk_0: !firrtl.uint<1> loc("Child.fir":1:2)
+  firrtl.module private @CollidingChild(
+      in %clk: !firrtl.clock loc("Child.fir":1:2),
+      in %_gatedClock_baseClock_clk: !firrtl.uint<1>,
+      in %_gatedClock_enable_clk: !firrtl.uint<1>,
+      in %d: !firrtl.uint<8>) {
+    %r = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @PortNameCollision
+  firrtl.module @PortNameCollision(in %clk: !firrtl.clock,
+                                   in %en: !firrtl.uint<1>,
+                                   in %d: !firrtl.uint<8>) {
+    %g = firrtl.int.clock_gate %clk, %en
+    // CHECK: %c_clk, %c__gatedClock_baseClock_clk, %c__gatedClock_enable_clk, %c_d, %c__gatedClock_baseClock_clk_0, %c__gatedClock_enable_clk_0 = firrtl.instance c @CollidingChild(
+    // CHECK-DAG: firrtl.matchingconnect %c__gatedClock_baseClock_clk, %en : !firrtl.uint<1>
+    // CHECK-DAG: firrtl.matchingconnect %c__gatedClock_enable_clk, %en : !firrtl.uint<1>
+    // CHECK-DAG: firrtl.matchingconnect %c__gatedClock_baseClock_clk_0, %clk : !firrtl.clock
+    // CHECK-DAG: firrtl.matchingconnect %c__gatedClock_enable_clk_0, %en : !firrtl.uint<1>
+    %c_clk, %c_b, %c_e, %c_d = firrtl.instance c @CollidingChild(in clk: !firrtl.clock, in _gatedClock_baseClock_clk: !firrtl.uint<1>, in _gatedClock_enable_clk: !firrtl.uint<1>, in d: !firrtl.uint<8>)
+    firrtl.matchingconnect %c_clk, %g : !firrtl.clock
+    firrtl.matchingconnect %c_b, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %c_e, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
   }
 }
 
