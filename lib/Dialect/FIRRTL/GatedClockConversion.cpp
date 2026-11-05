@@ -70,9 +70,17 @@ static Value clockOperandOf(Operation *op) {
 /// The driver of `clk` through wires, nodes, casts and the input ports of
 /// instances; null if undriven.
 static Value clockDriver(Value clk) {
-  return getModuleScopedDriver(clk, /*lookThroughWires=*/true,
-                               /*lookThroughNodes=*/true,
-                               /*lookThroughCasts=*/true);
+  // Look through casts; if that ends at a non-clock value, the clock is
+  // created by a cast, so stop at the first cast instead.
+  Value driver = getModuleScopedDriver(clk, /*lookThroughWires=*/true,
+                                       /*lookThroughNodes=*/true,
+                                       /*lookThroughCasts=*/true);
+  // `asClock(asUInt(clk))` is `clk`, but `asClock(u)` is a clock of its own.
+  if (driver && !type_isa<ClockType>(driver.getType()))
+    driver = getModuleScopedDriver(clk, /*lookThroughWires=*/true,
+                                   /*lookThroughNodes=*/true,
+                                   /*lookThroughCasts=*/false);
+  return driver;
 }
 
 //===----------------------------------------------------------------------===//

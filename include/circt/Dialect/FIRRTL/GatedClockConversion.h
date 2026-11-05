@@ -24,7 +24,7 @@ namespace firrtl {
 enum class EdgeKind { Gate, InstanceIn, InstanceOut };
 
 /// A clock flow graph edge. Both ends are driver-normal: wires, nodes and
-/// casts are already looked through. `op` is the gate, or the instance.
+/// clock casts are already looked through. `op` is the gate, or the instance.
 struct ClockEdge {
   Value dst;
   Operation *op;

@@ -197,6 +197,33 @@ firrtl.circuit "BaseAfterRoot" {
 
 // -----
 
+// `asClock(u)` is a base clock of its own, not an alias of `u`.
+// CHECK-LABEL: firrtl.circuit "CastOfInt"
+firrtl.circuit "CastOfInt" {
+  // CHECK: firrtl.module private @Child
+  firrtl.module private @Child(in %u: !firrtl.uint<1>, in %en: !firrtl.uint<1>,
+                               out %o: !firrtl.clock) {
+    // CHECK: %[[CAST:.+]] = firrtl.asClock %u
+    %c = firrtl.asClock %u : (!firrtl.uint<1>) -> !firrtl.clock
+    %n = firrtl.node %c : !firrtl.clock
+    %g = firrtl.int.clock_gate %n, %en
+    // CHECK: firrtl.matchingconnect %_gatedClock_baseClock_o, %[[CAST]] : !firrtl.clock
+    firrtl.matchingconnect %o, %g : !firrtl.clock
+  }
+  firrtl.module @CastOfInt(in %u: !firrtl.uint<1>, in %en: !firrtl.uint<1>,
+                           in %d: !firrtl.uint<8>) {
+    %c_u, %c_en, %c_o = firrtl.instance c @Child(in u: !firrtl.uint<1>,
+      in en: !firrtl.uint<1>, out o: !firrtl.clock)
+    firrtl.matchingconnect %c_u, %u : !firrtl.uint<1>
+    firrtl.matchingconnect %c_en, %en : !firrtl.uint<1>
+    // CHECK: firrtl.reg %c__gatedClock_baseClock_o
+    %r = firrtl.reg %c_o : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+}
+
+// -----
+
 //===----------------------------------------------------------------------===//
 // Cross-module: the clock is gated in the parent and flows INTO a child module
 // where the register lives.  A (base, enable) input-port pair is inserted on
