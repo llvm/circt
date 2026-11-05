@@ -24,7 +24,9 @@ namespace firrtl {
 enum class EdgeKind { Gate, InstanceIn, InstanceOut };
 
 /// A clock flow graph edge. Both ends are driver-normal: wires, nodes and
-/// casts are already looked through. `op` is the gate, or the instance.
+/// clock casts are already looked through. `op` is the gate, or the instance;
+/// an `InstanceIn` edge may come from an `instance_choice`, which
+/// `checkSelection()` rejects if the port needs a pair.
 struct ClockEdge {
   Value dst;
   Operation *op;
@@ -38,24 +40,33 @@ struct ClockEdge {
 /// Every clock gets a (base clock, enable) pair; a module port carrying a
 /// gated clock gets a (base, enable) port pair. Each root is then clocked by
 /// its base clock, with the enable sunk into it. A port pair for port `p` is
-/// named `_gatedClock_baseClock_p` and `_gatedClock_enable_p`.
+/// named `_gatedClock_baseClock_p` and `_gatedClock_enable_p`, with a suffix
+/// if a port of that name exists, and takes the location of `p`.
 ///
-/// Ports are inserted before any pair is computed, so no stored value is
-/// invalidated later.
+/// Only analysis can fail, and it runs before any mutation. Ports are inserted
+/// before any pair is computed, so no stored value is invalidated later.
 ///
 /// Preconditions: run after `firrtl-expand-whens`, so every clock net and
-/// register has a single driver. Clock loops are not diagnosed here; see
-/// `firrtl-check-comb-loops`.
+/// register has a single driver, after `firrtl-lower-types`, so registers are
+/// ground-typed, and after `firrtl-infer-resets`, so every reset is known to be
+/// sync or async. A clock driven by a clock loop has no base clock, so a root
+/// clocked by one, or a caller driving one into a port pair, is an error.
+///
+/// Public modules keep their interface: their ports are base clocks, so a gate
+/// driving one is left in place.
 ///
 /// NOT thread-safe: port insertion mutates module signatures globally.
 class GatedClockConversion {
 public:
   explicit GatedClockConversion(InstanceGraph &ig) : ig(ig) {}
 
-  /// Fails if `op` is not a supported root.
+  /// Fails if `op` is not a supported root, or is a register that is not
+  /// ground-typed, has an uninferred reset, or does not have exactly one
+  /// connect to sink an enable into.
   LogicalResult addRoot(Operation *op);
 
-  /// Converts the added roots.
+  /// Converts the added roots. All state, including the roots, is cleared on
+  /// return, whether or not it succeeds.
   LogicalResult run();
 
   void dump() const;
@@ -66,6 +77,8 @@ private:
     Value clock;
     /// `clockDriver(clock)`, set by `analyze()`.
     Value key = {};
+    /// The single write of a register, which the enable is sunk into.
+    FConnectLike dataWrite = {};
   };
 
   /// (base clock, enable); a null enable means ungated.
@@ -85,11 +98,16 @@ private:
   /// Fills `gated` and `portPairs` in one walk. Returns the clocks to
   /// materialize, in BFS order.
   SmallVector<Value> markGatedAndSelectPortPairs();
+  /// Rejects what `materialize()` cannot handle: clocks that are not reachable
+  /// from a base clock, and port pairs on modules with non-`InstanceOp` uses.
+  /// This is the only check for the latter, so each such use is reported once.
+  LogicalResult checkSelection();
   void insertPorts();
   void materialize(ArrayRef<Value> order);
-  LogicalResult rewriteRoots();
+  void rewriteRoots();
+  void clear();
 
-  LogicalResult rewriteRoot(const Root &root, Value baseClk, Value enable);
+  void rewriteRoot(const Root &root, Value baseClk, Value enable);
   Value gateEnableOf(ClockGateIntrinsicOp gate);
   /// `upstream & gateEn`, built right before `gate`. `gateEn` must dominate
   /// `gate`.
