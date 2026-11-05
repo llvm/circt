@@ -72,6 +72,12 @@
   data in HostMem) can accept a `HostMemAllocator` so callers can supply
   other allocators, such as pools.
 
+### Fixed
+
+- **Cosim no longer drops frames sent before the simulator connects.** Frames
+  sent to a simulator port which isn't connected yet are held by the server
+  and handed over, in order, once it connects.
+
 ## 0.8.0
 
 ### Breaking changes

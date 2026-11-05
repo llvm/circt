@@ -177,7 +177,9 @@ eight-byte `channel_id` prefix described above. The byte stream after the
 prefix is the unmodified ESI message payload (`MessageData::getBytes()`).
 
 The receiver of a data frame for an unknown or wrong-direction channel logs
-the event and discards the frame. There is no per-message ack.
+the event and discards the frame. The server holds `to_server` frames for a
+channel whose simulator-side port isn't connected, and hands them over in
+order once it connects. There is no per-message ack.
 
 ## Lifecycle
 

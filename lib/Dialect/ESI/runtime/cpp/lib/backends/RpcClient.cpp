@@ -610,20 +610,25 @@ RpcClient::Impl::connectClientReceiver(const std::string &channelName,
   uint64_t channelId = it->second.id;
 
   // Register the callback first so any racing inbound binary frame after the
-  // server's subscribe-ack has somewhere to land.
+  // server's subscribe-ack has somewhere to land. Refuse a second receiver
+  // here rather than letting it replace the first one's callback.
+  auto entry = std::make_shared<ReadCallbackEntry>(
+      channelId, [this, channelId] { readyIds.markReady(channelId); });
+  entry->callback = std::move(callback);
   {
     std::lock_guard<std::mutex> lock(readCallbacksMutex);
-    auto entry = std::make_shared<ReadCallbackEntry>(
-        channelId, [this, channelId] { readyIds.markReady(channelId); });
-    entry->callback = std::move(callback);
-    readCallbacks[channelId] = std::move(entry);
+    if (!readCallbacks.emplace(channelId, entry).second)
+      throw std::runtime_error("Channel '" + channelName +
+                               "' already has a receiver");
   }
 
   try {
     call("subscribe", {{"channel_id", channelId}});
   } catch (...) {
     std::lock_guard<std::mutex> lock(readCallbacksMutex);
-    readCallbacks.erase(channelId);
+    auto it = readCallbacks.find(channelId);
+    if (it != readCallbacks.end() && it->second == entry)
+      readCallbacks.erase(it);
     throw;
   }
 
