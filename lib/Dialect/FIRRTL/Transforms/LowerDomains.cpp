@@ -637,31 +637,33 @@ LogicalResult LowerModule::lowerModule() {
 
       // Handle WireOp.
       //
-      // For domain-typed wires, create a placeholder ObjectOp and replace all
-      // uses of the wire with a conversion cast wrapping the new object.  A
-      // placeholder is always used (even when the wire is driven) because the
-      // source of the define may not have been lowered to a conversion cast yet
-      // (it may appear later in the IR).  Any DomainDefineOps that drive the
-      // wire are handled when they are visited: per-field PropAssignOps connect
-      // the source object's output ports to the placeholder's input ports.  For
-      // cleaner output, this should rely on optimizations to remove these
-      // wires.
+      // For domain-typed wires, create a class-typed property wire and replace
+      // all uses of the original wire with a temporary conversion cast.  The
+      // driver may occur later in the IR, so DomainDefineOps are handled when
+      // visited.  Assigning the complete class reference preserves the source
+      // object's identity through chains of domain wires.
       //
       // For non-domain-typed wires, erase any domain associations.
       if (auto wireOp = dyn_cast<WireOp>(walkOp)) {
         // Handle domain-typed wires.
         if (auto domainType =
                 type_dyn_cast<DomainType>(wireOp.getResult().getType())) {
+          if (wireOp.getResult().use_empty()) {
+            conversionsToErase.insert(wireOp);
+            return WalkResult::advance();
+          }
+
           OpBuilder builder(wireOp);
           auto classIn =
               domainToClasses.at(domainType.getName().getAttr()).input;
-          auto object = ObjectOp::create(builder, wireOp.getLoc(), classIn,
-                                         wireOp.getNameAttr());
-          instanceGraph.lookup(op)->addInstance(object,
-                                                instanceGraph.lookup(classIn));
+          auto classWire = WireOp::create(
+              builder, wireOp.getLoc(), classIn.getInstanceType(),
+              wireOp.getNameAttr(), wireOp.getNameKindAttr(),
+              wireOp.getAnnotationsAttr(), wireOp.getInnerSymAttr(),
+              wireOp.getForceableAttr());
+
           auto cast = UnrealizedConversionCastOp::create(
-              builder, wireOp.getLoc(), {wireOp.getResult().getType()},
-              {object.getResult()});
+              builder, wireOp.getLoc(), {domainType}, {classWire.getResult()});
           wireOp.getResult().replaceAllUsesWith(cast.getResult(0));
           conversionsToErase.insert(cast);
           conversionsToErase.insert(wireOp);
@@ -687,10 +689,9 @@ LogicalResult LowerModule::lowerModule() {
       // source is _either_ (1) a conversion cast if the source is a module or
       // instance port or (2) an anonymous domain op or a domain create op.
       //
-      // When the destination wraps an ObjectOp (a wire placeholder), per-field
-      // connections are created from the source object's output ports to the
-      // destination object's input ports.  Otherwise, a single prop.assign
-      // connects the source to the destination.
+      // Domain wires lower to property wires, so a single prop.assign connects
+      // the complete source reference to the destination and preserves its
+      // identity.
       auto *src = defineOp.getSrc().getDefiningOp();
       auto dest = dyn_cast<UnrealizedConversionCastOp>(
           defineOp.getDest().getDefiningOp());
@@ -703,24 +704,8 @@ LogicalResult LowerModule::lowerModule() {
       if (auto srcCast = dyn_cast<UnrealizedConversionCastOp>(src)) {
         assert(srcCast.getNumOperands() == 1 && srcCast.getNumResults() == 1);
         OpBuilder builder(defineOp);
-        // If the destination wraps an ObjectOp (wire placeholder), create
-        // per-field connections.  A single prop.assign would fail because
-        // ObjectOp results have source flow, not sink flow.
-        if (dest.getOperand(0).getDefiningOp<ObjectOp>()) {
-          auto domainType =
-              firrtl::type_cast<DomainType>(defineOp.getDest().getType());
-          auto numFields = domainType.getNumFields();
-          for (size_t i = 0; i < numFields; ++i) {
-            auto destIn = ObjectSubfieldOp::create(builder, defineOp.getLoc(),
-                                                   dest.getOperand(0), i * 2);
-            auto srcOut = ObjectSubfieldOp::create(
-                builder, defineOp.getLoc(), srcCast.getOperand(0), i * 2 + 1);
-            PropAssignOp::create(builder, defineOp.getLoc(), destIn, srcOut);
-          }
-        } else {
-          PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
-                               srcCast.getOperand(0));
-        }
+        PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
+                             srcCast.getOperand(0));
       } else if (!isa<DomainCreateAnonOp, DomainCreateOp>(src)) {
         auto diag = defineOp.emitOpError()
                     << "has a source which cannot be lowered by 'LowerDomains'";
