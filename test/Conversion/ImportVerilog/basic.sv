@@ -1026,10 +1026,10 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.constant 31 : i96
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i96
     {>>{ a, b, c }} = 100'b11111;
-    // CHECK: [[TMP1:%.+]] = moore.extract_ref %a from 0 : <i32> -> <i8>
-    // CHECK: [[TMP2:%.+]] = moore.extract_ref %a from 8 : <i32> -> <i8>
-    // CHECK: [[TMP3:%.+]] = moore.extract_ref %a from 16 : <i32> -> <i8>
-    // CHECK: [[TMP4:%.+]] = moore.extract_ref %a from 24 : <i32> -> <i8>
+    // CHECK: [[TMP1:%.+]] = moore.extract_ref %a from 0 : ref<i32> -> ref<i8>
+    // CHECK: [[TMP2:%.+]] = moore.extract_ref %a from 8 : ref<i32> -> ref<i8>
+    // CHECK: [[TMP3:%.+]] = moore.extract_ref %a from 16 : ref<i32> -> ref<i8>
+    // CHECK: [[TMP4:%.+]] = moore.extract_ref %a from 24 : ref<i32> -> ref<i8>
     // CHECK: [[TMP5:%.+]] = moore.concat_ref [[TMP1]], [[TMP2]], [[TMP3]], [[TMP4]] : (!moore.ref<i8>, !moore.ref<i8>, !moore.ref<i8>, !moore.ref<i8>) -> <i32>
     // CHECK: [[TMP6:%.+]] = moore.constant 1 : i32
     // CHECK: moore.blocking_assign [[TMP5]], [[TMP6]] : i32
@@ -1093,11 +1093,11 @@ module Expressions;
     // CHECK: moore.dyn_extract [[TMP1]] from [[TMP2]] : l32, i32 -> l1
     y = vec_1[c];
 
-    // CHECK: [[TMP2:%.+]] = moore.extract_ref %v from 1 : <array<2 x i4>> -> <i4>
-    // CHECK: moore.extract_ref [[TMP2]] from 3 : <i4> -> <i1>
+    // CHECK: [[TMP2:%.+]] = moore.extract_ref %v from 1 : ref<array<2 x i4>> -> ref<i4>
+    // CHECK: moore.extract_ref [[TMP2]] from 3 : ref<i4> -> ref<i1>
     v[1][3] = x;
 
-    // CHECK: moore.extract_ref %vec_1 from 1 : <l32> -> <l2>
+    // CHECK: moore.extract_ref %vec_1 from 1 : ref<l32> -> ref<l2>
     vec_1[2:1] = y;
 
     // CHECK: [[X_READ:%.+]] = moore.read %x : ref<i1>
@@ -1105,7 +1105,7 @@ module Expressions;
     // CHECK: moore.dyn_extract_ref %vec_1 from [[X_ZEXT]] : <l32>, i5 -> <l1>
     vec_1[x] = y;
     
-    // CHECK: moore.extract_ref %vec_1 from 13 : <l32> -> <l3>
+    // CHECK: moore.extract_ref %vec_1 from 13 : ref<l32> -> ref<l3>
     vec_1[15-:3] = y;
 
     //===------------------------------------------------------------------===//
@@ -3486,9 +3486,9 @@ module rvalueAndLvalueElementSelect(
   output wire [63:0] result0
 );
   wire [0:1][31:0] arg0_unflattened;
-  // CHECK: moore.extract_ref {{.*}} from 1 : <array<2 x l32>> -> <l32>
+  // CHECK: moore.extract_ref {{.*}} from 1 : ref<array<2 x l32>> -> ref<l32>
   assign arg0_unflattened[0] = arg0[31:0];
-  // CHECK: moore.extract_ref {{.*}} from 0 : <array<2 x l32>> -> <l32>
+  // CHECK: moore.extract_ref {{.*}} from 0 : ref<array<2 x l32>> -> ref<l32>
   assign arg0_unflattened[1] = arg0[63:32];
 
   // CHECK: moore.extract {{.*}} from 0 : array<2 x l32> -> l32
@@ -3506,18 +3506,18 @@ function void rangeSelectLValue(
   // a[9:2] bit indices:  9 8 7 6 5 4 3 2
   // b[2:9] bit indices:  2 3 4 5 6 7 8 9
 
-  // CHECK: moore.extract_ref %arg0 from 2 : <i8> -> <i5>
-  // CHECK: moore.extract_ref %arg1 from 2 : <i8> -> <i5>
+  // CHECK: moore.extract_ref %arg0 from 2 : ref<i8> -> ref<i5>
+  // CHECK: moore.extract_ref %arg1 from 2 : ref<i8> -> ref<i5>
   a[8:4] = '0;  // bits[6:2]; offset = 2
   b[3:7] = '0;  // bits[6:2]; offset = 2
 
-  // CHECK: moore.extract_ref %arg0 from 2 : <i8> -> <i5>
-  // CHECK: moore.extract_ref %arg1 from 2 : <i8> -> <i5>
+  // CHECK: moore.extract_ref %arg0 from 2 : ref<i8> -> ref<i5>
+  // CHECK: moore.extract_ref %arg1 from 2 : ref<i8> -> ref<i5>
   a[4+:5] = '0;  // a[(4+5-1):4] = a[8:4] = bits[6:2]; offset = 2
   b[3+:5] = '0;  // b[3:(3+5-1)] = b[3:7] = bits[6:2]; offset = 2
 
-  // CHECK: moore.extract_ref %arg0 from 2 : <i8> -> <i5>
-  // CHECK: moore.extract_ref %arg1 from 2 : <i8> -> <i5>
+  // CHECK: moore.extract_ref %arg0 from 2 : ref<i8> -> ref<i5>
+  // CHECK: moore.extract_ref %arg1 from 2 : ref<i8> -> ref<i5>
   a[8-:5] = '0;  // a[8:(8-5+1)] = a[8:4] = bits[6:2]; offset = 2
   b[7-:5] = '0;  // b[(7-5+1):7] = b[3:7] = bits[6:2]; offset = 2
 
@@ -5471,19 +5471,19 @@ endmodule
 // CHECK-LABEL: moore.module @ArrayInstTop
 module ArrayInstTop(input [3:0] a, output [3:0] y);
   // CHECK: [[A0:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
-  // CHECK: [[Y0:%.+]] = moore.extract_ref %y from 0 : <l4> -> <l1>
+  // CHECK: [[Y0:%.+]] = moore.extract_ref %y from 0 : ref<l4> -> ref<l1>
   // CHECK: [[R0:%.+]] = moore.instance "u_0" @ArrayInstSub(a: [[A0]]: !moore.l1) -> (y: !moore.l1)
   // CHECK: moore.assign [[Y0]], [[R0]] : ref<l1>
   // CHECK: [[A1:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
-  // CHECK: [[Y1:%.+]] = moore.extract_ref %y from 1 : <l4> -> <l1>
+  // CHECK: [[Y1:%.+]] = moore.extract_ref %y from 1 : ref<l4> -> ref<l1>
   // CHECK: [[R1:%.+]] = moore.instance "u_1" @ArrayInstSub(a: [[A1]]: !moore.l1) -> (y: !moore.l1)
   // CHECK: moore.assign [[Y1]], [[R1]] : ref<l1>
   // CHECK: [[A2:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
-  // CHECK: [[Y2:%.+]] = moore.extract_ref %y from 2 : <l4> -> <l1>
+  // CHECK: [[Y2:%.+]] = moore.extract_ref %y from 2 : ref<l4> -> ref<l1>
   // CHECK: [[R2:%.+]] = moore.instance "u_2" @ArrayInstSub(a: [[A2]]: !moore.l1) -> (y: !moore.l1)
   // CHECK: moore.assign [[Y2]], [[R2]] : ref<l1>
   // CHECK: [[A3:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
-  // CHECK: [[Y3:%.+]] = moore.extract_ref %y from 3 : <l4> -> <l1>
+  // CHECK: [[Y3:%.+]] = moore.extract_ref %y from 3 : ref<l4> -> ref<l1>
   // CHECK: [[R3:%.+]] = moore.instance "u_3" @ArrayInstSub(a: [[A3]]: !moore.l1) -> (y: !moore.l1)
   // CHECK: moore.assign [[Y3]], [[R3]] : ref<l1>
   ArrayInstSub u [3:0] (.a(a), .y(y));
@@ -5502,10 +5502,10 @@ endmodule
 
 // CHECK-LABEL: moore.module @ArrayGateTop
 module ArrayGateTop(input [3:0] a, input [3:0] b, output [3:0] y);
-  // CHECK: [[G0:%.+]] = moore.extract_ref %y from 0 : <l4> -> <l1>
+  // CHECK: [[G0:%.+]] = moore.extract_ref %y from 0 : ref<l4> -> ref<l1>
   // CHECK: [[GA0:%.+]] = moore.and
   // CHECK: moore.assign [[G0]], [[GA0]] : ref<l1>
-  // CHECK: [[G3:%.+]] = moore.extract_ref %y from 3 : <l4> -> <l1>
+  // CHECK: [[G3:%.+]] = moore.extract_ref %y from 3 : ref<l4> -> ref<l1>
   // CHECK: [[GA3:%.+]] = moore.and
   // CHECK: moore.assign [[G3]], [[GA3]] : ref<l1>
   and g [3:0] (y, a, b);

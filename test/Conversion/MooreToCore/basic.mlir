@@ -360,7 +360,7 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
 // CHECK-LABEL: ExtractRefArrayElement
 func.func @ExtractRefArrayElement(%j: !moore.ref<array<1 x array<1 x l3>>>) -> (!moore.ref<array<1 x l3>>) {
   // CHECK: llhd.sig.array_get
-  %0 = moore.extract_ref %j from 0 : <array<1 x array<1 x l3>>> -> <array<1 x l3>>
+  %0 = moore.extract_ref %j from 0 : ref<array<1 x array<1 x l3>>> -> ref<array<1 x l3>>
   return %0 : !moore.ref<array<1 x l3>>
 }
 
@@ -1557,7 +1557,7 @@ moore.module @NoPredecessorBlockErasure(in %clk_i : !moore.l1, in %raddr_i : !mo
     %6 = moore.add %5, %1 : i32
     cf.br ^bb3(%6 : !moore.i32)
   ^bb7:  // no predecessors
-    %7 = moore.extract_ref %mem from 0 : <array<32 x l32>> -> <l32>
+    %7 = moore.extract_ref %mem from 0 : ref<array<32 x l32>> -> ref<l32>
     moore.nonblocking_assign %7, %0 : l32
     cf.br ^bb8
   ^bb8:  // 2 preds: ^bb3, ^bb7
