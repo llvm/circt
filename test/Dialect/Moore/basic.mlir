@@ -123,6 +123,13 @@ moore.module @ContinuousAssignments(
   moore.delayed_assign %arg3, %arg1, %arg2 : net<i42>
 }
 
+// CHECK-LABEL: func.func @RefOpsOnNets
+func.func @RefOpsOnNets(%arg0: !moore.net<i32>) {
+  // CHECK: moore.extract_ref %arg0 from 1 : net<i32> -> net<i2>
+  moore.extract_ref %arg0 from 1 : net<i32> -> net<i2>
+  return
+}
+
 // CHECK-LABEL: func.func @ProceduralAssignments
 func.func @ProceduralAssignments(
   %arg0: !moore.ref<i42>,

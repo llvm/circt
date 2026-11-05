@@ -43,6 +43,10 @@ class TypeDomainsMatch<list<string> values> :
     cast<moore::UnpackedType>($_self.getType()).getDomain()
   }], "domain">;
 
+class SameWrapperKind<list<string> values> :
+  AllMatchSameOperatorTrait<values, "$_self.getType().getTypeID()",
+    "wrapper kind (ref or net)">;
+
 class TypeIsSimpleBitVectorOf<string sbvType, string packedType> :
   TypesMatchWith<
     sbvType # " type is simple bit vector equivalent of " # packedType,
@@ -1953,12 +1957,14 @@ def DynExtractOp : MooreOp<"dyn_extract", [Pure]> {
   }];
 }
 
-def ExtractRefOp : MooreOp<"extract_ref", [Pure]> {
+def ExtractRefOp : MooreOp<"extract_ref", [
+    Pure, SameWrapperKind<["input", "result"]>
+]> {
   let description = [{
-  The copy of extract that explicitly works on the ref type.
+  The copy of extract that explicitly works on ref or net types.
   }];
-  let arguments = (ins RefType:$input, I32Attr:$lowBit);
-  let results = (outs RefType:$result);
+  let arguments = (ins WrapperType:$input, I32Attr:$lowBit);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
   }];
