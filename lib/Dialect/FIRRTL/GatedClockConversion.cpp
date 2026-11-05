@@ -20,6 +20,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -70,17 +71,32 @@ static Value clockOperandOf(Operation *op) {
 /// The driver of `clk` through wires, nodes, casts and the input ports of
 /// instances; null if undriven.
 static Value clockDriver(Value clk) {
-  // Look through casts; if that ends at a non-clock value, the clock is
-  // created by a cast, so stop at the first cast instead.
-  Value driver = getModuleScopedDriver(clk, /*lookThroughWires=*/true,
-                                       /*lookThroughNodes=*/true,
-                                       /*lookThroughCasts=*/true);
-  // `asClock(asUInt(clk))` is `clk`, but `asClock(u)` is a clock of its own.
-  if (driver && !type_isa<ClockType>(driver.getType()))
-    driver = getModuleScopedDriver(clk, /*lookThroughWires=*/true,
-                                   /*lookThroughNodes=*/true,
-                                   /*lookThroughCasts=*/false);
-  return driver;
+  SmallPtrSet<Value, 4> choicePorts;
+  while (true) {
+    // Look through casts; if that ends at a non-clock value, the clock is
+    // created by a cast, so stop at the first cast instead.
+    Value driver = getModuleScopedDriver(clk, /*lookThroughWires=*/true,
+                                         /*lookThroughNodes=*/true,
+                                         /*lookThroughCasts=*/true);
+    // `asClock(asUInt(clk))` is `clk`, but `asClock(u)` is a clock of its own.
+    if (driver && !type_isa<ClockType>(driver.getType()))
+      driver = getModuleScopedDriver(clk, /*lookThroughWires=*/true,
+                                     /*lookThroughNodes=*/true,
+                                     /*lookThroughCasts=*/false);
+    // `getModuleScopedDriver` looks through the input ports of an `InstanceOp`
+    // only, so continue from the connect driving an `instance_choice` input.
+    // A port reached twice is in a loop of wires, and is left as the driver.
+    auto result = dyn_cast_or_null<OpResult>(driver);
+    auto choice = result ? dyn_cast<InstanceChoiceOp>(result.getOwner())
+                         : InstanceChoiceOp();
+    if (!choice ||
+        choice.getPortDirection(result.getResultNumber()) != Direction::In ||
+        !choicePorts.insert(driver).second)
+      return driver;
+    clk = getDriverFromConnect(driver);
+    if (!clk)
+      return {};
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -254,13 +270,16 @@ LogicalResult GatedClockConversion::analyze() {
       if (node->noUses() || mod.isPublic()) {
         baseClks.push_back(clk);
       } else {
-        // Every caller is traced, so whether the port is gated is known.
+        // Every caller is traced, including an `instance_choice`, so whether
+        // the port is gated is known. `checkSelection()` rejects a port pair
+        // on a module that is not only used by `InstanceOp`s. An
+        // `instance_choice` is a use once per target, so trace it once.
+        SmallPtrSet<Operation *, 4> callers;
         for (auto *use : node->uses()) {
-          if (auto caller = dyn_cast<InstanceOp>(*use->getInstance()))
-            addEdge(clk, caller.getResult(portIdx), caller,
+          auto caller = cast<FInstanceLike>(use->getInstance().getOperation());
+          if (callers.insert(caller).second)
+            addEdge(clk, caller->getResult(portIdx), caller,
                     EdgeKind::InstanceIn);
-          else
-            use->getInstance()->emitError("can only handle InstanceOp");
         }
       }
       return;
@@ -367,13 +386,25 @@ LogicalResult GatedClockConversion::checkSelection() {
     result = failure();
   }
 
+  // Ports can only be added to the instances of a module if they are all
+  // `InstanceOp`s. This is the only place that checks it, so a module used by
+  // an `instance_choice` is only rejected if it needs a port pair, and each
+  // such use is reported once.
+  DenseSet<Operation *> reportedInsts;
   for (auto &[key, portPair] : portPairs) {
-    if (portPair.dir != Direction::In)
-      continue;
     auto [mod, portIdx] = key;
     for (auto *use : ig.lookup(mod)->uses()) {
-      auto inst = dyn_cast<InstanceOp>(use->getInstance().getOperation());
-      if (!inst || gated.contains(clockDriver(inst.getResult(portIdx))))
+      Operation *instOp = use->getInstance().getOperation();
+      auto inst = dyn_cast<InstanceOp>(instOp);
+      if (!inst) {
+        if (reportedInsts.insert(instOp).second) {
+          instOp->emitError("can only handle InstanceOp");
+          result = failure();
+        }
+        continue;
+      }
+      if (portPair.dir != Direction::In ||
+          gated.contains(clockDriver(inst.getResult(portIdx))))
         continue;
       inst.emitError("gated clock conversion: clock port ")
           << mod.getPortNameAttr(portIdx)

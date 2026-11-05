@@ -24,7 +24,9 @@ namespace firrtl {
 enum class EdgeKind { Gate, InstanceIn, InstanceOut };
 
 /// A clock flow graph edge. Both ends are driver-normal: wires, nodes and
-/// clock casts are already looked through. `op` is the gate, or the instance.
+/// clock casts are already looked through. `op` is the gate, or the instance;
+/// an `InstanceIn` edge may come from an `instance_choice`, which
+/// `checkSelection()` rejects if the port needs a pair.
 struct ClockEdge {
   Value dst;
   Operation *op;
@@ -95,7 +97,8 @@ private:
   /// materialize, in BFS order.
   SmallVector<Value> markGatedAndSelectPortPairs();
   /// Rejects what `materialize()` cannot handle: clocks that are not reachable
-  /// from a base clock.
+  /// from a base clock, and port pairs on modules with non-`InstanceOp` uses.
+  /// This is the only check for the latter, so each such use is reported once.
   LogicalResult checkSelection();
   void insertPorts();
   void materialize(ArrayRef<Value> order);

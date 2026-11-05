@@ -687,3 +687,37 @@ firrtl.circuit "PublicChild" {
     firrtl.matchingconnect %r, %d : !firrtl.uint<8>
   }
 }
+
+// -----
+
+// An instance_choice is fine when its module needs no port pair: the clock it
+// drives in is not gated, so nothing changes.
+firrtl.circuit "UngatedInstanceChoice" {
+  firrtl.option @Opt { firrtl.option_case @X }
+  // CHECK-LABEL: firrtl.module private @ChoiceChild(
+  // CHECK-NOT:     _gatedClock_
+  // CHECK-SAME:    ) {
+  // CHECK:         %[[R:.+]] = firrtl.reg %clk
+  // CHECK-NEXT:    firrtl.matchingconnect %[[R]], %d
+  firrtl.module private @ChoiceChild(in %clk: !firrtl.clock, in %d: !firrtl.uint<8>) {
+    %r = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @UngatedInstanceChoice
+  firrtl.module @UngatedInstanceChoice(in %clk: !firrtl.clock,
+                                       in %en: !firrtl.uint<1>,
+                                       in %d: !firrtl.uint<8>) {
+    // CHECK: %[[G:.+]] = firrtl.int.clock_gate %clk, %en
+    %g = firrtl.int.clock_gate %clk, %en
+    // CHECK: %[[C_CLK:.+]], %[[C_D:.+]] = firrtl.instance_choice c @ChoiceChild alternatives @Opt { @X -> @ChoiceChild } (in clk: !firrtl.clock, in d: !firrtl.uint<8>)
+    // CHECK: firrtl.matchingconnect %[[C_CLK]], %clk
+    %c_clk, %c_d = firrtl.instance_choice c @ChoiceChild alternatives @Opt { @X -> @ChoiceChild } (in clk: !firrtl.clock, in d: !firrtl.uint<8>)
+    firrtl.matchingconnect %c_clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
+    // CHECK: %[[R:.+]] = firrtl.reg %clk
+    // CHECK: firrtl.mux(%en, %d, %[[R]])
+    %r = firrtl.reg %g : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+}

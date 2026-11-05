@@ -59,6 +59,71 @@ firrtl.circuit "Top" {
 
 // -----
 
+// An output-only port pair cannot be added to an instance_choice.
+firrtl.circuit "Top" {
+  firrtl.option @Opt { firrtl.option_case @X }
+  firrtl.module private @Gen(in %u: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %o: !firrtl.clock) {
+    %c = firrtl.asClock %u : (!firrtl.uint<1>) -> !firrtl.clock
+    %g = firrtl.int.clock_gate %c, %en
+    firrtl.matchingconnect %o, %g : !firrtl.clock
+  }
+  firrtl.module @Top(in %u: !firrtl.uint<1>, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %i_u, %i_en, %i_o = firrtl.instance i @Gen(in u: !firrtl.uint<1>, in en: !firrtl.uint<1>, out o: !firrtl.clock)
+    firrtl.matchingconnect %i_u, %u : !firrtl.uint<1>
+    firrtl.matchingconnect %i_en, %en : !firrtl.uint<1>
+    %r = firrtl.reg %i_o : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    // expected-error @below {{can only handle InstanceOp}}
+    %c_u, %c_en, %c_o = firrtl.instance_choice c @Gen alternatives @Opt { @X -> @Gen } (in u: !firrtl.uint<1>, in en: !firrtl.uint<1>, out o: !firrtl.clock)
+    firrtl.matchingconnect %c_u, %u : !firrtl.uint<1>
+    firrtl.matchingconnect %c_en, %en : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// An input port pair cannot be added to an instance_choice. It is a use of
+// `@Child` once per target, and is reported once.
+firrtl.circuit "Top" {
+  firrtl.option @Opt { firrtl.option_case @X }
+  firrtl.module private @Child(in %clk: !firrtl.clock, in %d: !firrtl.uint<8>) {
+    %r = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+  firrtl.module @Top(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %g = firrtl.int.clock_gate %clk, %en
+    // expected-error @below {{can only handle InstanceOp}}
+    %c_clk, %c_d = firrtl.instance_choice c @Child alternatives @Opt { @X -> @Child } (in clk: !firrtl.clock, in d: !firrtl.uint<8>)
+    firrtl.matchingconnect %c_clk, %g : !firrtl.clock
+    firrtl.matchingconnect %c_d, %d : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// An instance_choice of a module with an output port pair is reported once,
+// even though `analyze()` also traces its input clock.
+firrtl.circuit "Top" {
+  firrtl.option @Opt { firrtl.option_case @X }
+  firrtl.module private @Gen(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, out %o: !firrtl.clock) {
+    %g = firrtl.int.clock_gate %clk, %en
+    firrtl.matchingconnect %o, %g : !firrtl.clock
+  }
+  firrtl.module @Top(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %i_clk, %i_en, %i_o = firrtl.instance i @Gen(in clk: !firrtl.clock, in en: !firrtl.uint<1>, out o: !firrtl.clock)
+    firrtl.matchingconnect %i_clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %i_en, %en : !firrtl.uint<1>
+    %r = firrtl.reg %i_o : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+    // expected-error @below {{can only handle InstanceOp}}
+    %c_clk, %c_en, %c_o = firrtl.instance_choice c @Gen alternatives @Opt { @X -> @Gen } (in clk: !firrtl.clock, in en: !firrtl.uint<1>, out o: !firrtl.clock)
+    firrtl.matchingconnect %c_clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %c_en, %en : !firrtl.uint<1>
+  }
+}
+
+// -----
+
 // An undriven clock is an error, raised before the IR is mutated.
 firrtl.circuit "Top" {
   firrtl.module private @Leaf(in %clk: !firrtl.clock, in %d: !firrtl.uint<8>) {
