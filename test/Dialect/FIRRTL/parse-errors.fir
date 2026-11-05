@@ -1940,6 +1940,56 @@ circuit Domains:
 ;// -----
 
 FIRRTL version 7.0.0
+circuit DomainTooManyFields:
+  domain D:
+    value: Integer
+  public module DomainTooManyFields:
+    ; expected-error @below {{too many field values for domain 'D': expected 1}}
+    domain d of D(Integer(1), Integer(2))
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit EmptyDomainTooManyFields:
+  domain D:
+  public module EmptyDomainTooManyFields:
+    ; expected-error @below {{too many field values for domain 'D': expected 0}}
+    domain d of D(Integer(1))
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit DomainTooFewFields:
+  domain D:
+    first: Integer
+    second: Integer
+  public module DomainTooFewFields:
+    ; expected-error @below {{not enough field values for domain 'D': expected 2, got 1}}
+    domain d of D(Integer(1))
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit DomainEmptyFieldValues:
+  domain D:
+    value: Integer
+  public module DomainEmptyFieldValues:
+    ; expected-error @below {{not enough field values for domain 'D': expected 1, got 0}}
+    domain d of D()
+
+;// -----
+
+FIRRTL version 7.0.0
+circuit DomainOmittedFieldValues:
+  domain D:
+    value: Integer
+  public module DomainOmittedFieldValues:
+    ; expected-error @below {{not enough field values for domain 'D': expected 1, got 0}}
+    domain d of D
+
+;// -----
+
+FIRRTL version 7.0.0
 circuit DomainInAggregate:
   domain D:
   public module DomainInAggregate:
