@@ -374,7 +374,7 @@ func.func @DynExtractArrayElement(%j: !moore.array<2 x array<1 x l3>>, %idx: !mo
 // CHECK-LABEL: DynExtractRefArrayElement
 func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %idx: !moore.l1) -> (!moore.ref<array<1 x l3>>) {
   // CHECK: llhd.sig.array_get
-  %0 = moore.dyn_extract_ref %j from %idx : <array<2 x array<1 x l3>>>, !moore.l1 -> <array<1 x l3>>
+  %0 = moore.dyn_extract_ref %j from %idx : ref<array<2 x array<1 x l3>>>, !moore.l1 -> ref<array<1 x l3>>
   return %0 : !moore.ref<array<1 x l3>>
 }
 

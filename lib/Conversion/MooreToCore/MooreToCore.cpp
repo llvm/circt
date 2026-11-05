@@ -1545,8 +1545,11 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // TODO: properly handle out-of-bounds accesses
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    Type inputType =
-        cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
+    auto inputRefType = dyn_cast<llhd::RefType>(adaptor.getInput().getType());
+    if (!inputRefType)
+      return op.emitOpError(
+          "extracts from a net which is not currently supported");
+    auto inputType = inputRefType.getNestedType();
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);

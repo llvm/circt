@@ -1102,7 +1102,7 @@ module Expressions;
 
     // CHECK: [[X_READ:%.+]] = moore.read %x : ref<i1>
     // CHECK: [[X_ZEXT:%.+]] = moore.zext [[X_READ]] : i1 -> i5
-    // CHECK: moore.dyn_extract_ref %vec_1 from [[X_ZEXT]] : <l32>, i5 -> <l1>
+    // CHECK: moore.dyn_extract_ref %vec_1 from [[X_ZEXT]] : ref<l32>, i5 -> ref<l1>
     vec_1[x] = y;
     
     // CHECK: moore.extract_ref %vec_1 from 13 : ref<l32> -> ref<l3>
@@ -3523,26 +3523,26 @@ function void rangeSelectLValue(
 
   // CHECK: [[TMP1:%.+]] = moore.constant 2 : i6
   // CHECK: [[TMP2:%.+]] = moore.sub %arg2, [[TMP1]] : i6
-  // CHECK: moore.dyn_extract_ref %arg0 from [[TMP2]] : <i8>, i6 -> <i5>
+  // CHECK: moore.dyn_extract_ref %arg0 from [[TMP2]] : ref<i8>, i6 -> ref<i5>
   a[i+:5] = '0;  // a[i+5-1:i] = a[i+4:i] = bits[(i+4)-2:i-2]; offset = i-2
 
   // CHECK: [[TMP1:%.+]] = moore.constant 4 : i6
   // CHECK: [[TMP2:%.+]] = moore.add %arg2, [[TMP1]] : i6
   // CHECK: [[TMP3:%.+]] = moore.constant 9 : i6
   // CHECK: [[TMP4:%.+]] = moore.sub [[TMP3]], [[TMP2]] : i6
-  // CHECK: moore.dyn_extract_ref %arg1 from [[TMP4]] : <i8>, i6 -> <i5>
+  // CHECK: moore.dyn_extract_ref %arg1 from [[TMP4]] : ref<i8>, i6 -> ref<i5>
   b[i+:5] = '0;  // b[i:i+5-1] = b[i:i+4] = bits[9-i:9-(i+4)]; offset = 9-(i+4)
 
   // CHECK: [[TMP1:%.+]] = moore.constant -4 : i6
   // CHECK: [[TMP2:%.+]] = moore.add %arg2, [[TMP1]] : i6
   // CHECK: [[TMP3:%.+]] = moore.constant 2 : i6
   // CHECK: [[TMP4:%.+]] = moore.sub [[TMP2]], [[TMP3]] : i6
-  // CHECK: moore.dyn_extract_ref %arg0 from [[TMP4]] : <i8>, i6 -> <i5>
+  // CHECK: moore.dyn_extract_ref %arg0 from [[TMP4]] : ref<i8>, i6 -> ref<i5>
   a[i-:5] = '0;  // a[i:i-5+1] = a[i:i-4] = bits[i-2:(i-4)-2]; offset = (i-4)-2
 
   // CHECK: [[TMP1:%.+]] = moore.constant 9 : i6
   // CHECK: [[TMP2:%.+]] = moore.sub [[TMP1]], %arg2 : i6
-  // CHECK: moore.dyn_extract_ref %arg1 from [[TMP2]] : <i8>, i6 -> <i5>
+  // CHECK: moore.dyn_extract_ref %arg1 from [[TMP2]] : ref<i8>, i6 -> ref<i5>
   b[i-:5] = '0;  // b[i-5+1:i] = b[i-4:i] = bits[9-(i-4):9-i]; offset = 9-i
 endfunction
 
