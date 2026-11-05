@@ -40,8 +40,8 @@ struct ClockEdge {
 /// its base clock, with the enable sunk into it. A port pair for port `p` is
 /// named `_gatedClock_baseClock_p` and `_gatedClock_enable_p`.
 ///
-/// Ports are inserted before any pair is computed, so no stored value is
-/// invalidated later.
+/// Only analysis can fail, and it runs before any mutation. Ports are inserted
+/// before any pair is computed, so no stored value is invalidated later.
 ///
 /// Preconditions: run after `firrtl-expand-whens`, so every clock net and
 /// register has a single driver. Clock loops are not diagnosed here; see
@@ -87,9 +87,9 @@ private:
   SmallVector<Value> markGatedAndSelectPortPairs();
   void insertPorts();
   void materialize(ArrayRef<Value> order);
-  LogicalResult rewriteRoots();
+  void rewriteRoots();
 
-  LogicalResult rewriteRoot(const Root &root, Value baseClk, Value enable);
+  void rewriteRoot(const Root &root, Value baseClk, Value enable);
   Value gateEnableOf(ClockGateIntrinsicOp gate);
   /// `upstream & gateEn`, built right before `gate`. `gateEn` must dominate
   /// `gate`.

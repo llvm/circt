@@ -414,15 +414,22 @@ void GatedClockConversion::materialize(ArrayRef<Value> order) {
   }
 }
 
-LogicalResult GatedClockConversion::rewriteRoot(const Root &root, Value baseClk,
-                                                Value enable) {
-  return TypeSwitch<Operation *, LogicalResult>(root.op)
+void GatedClockConversion::rewriteRoot(const Root &root, Value baseClk,
+                                       Value enable) {
+  TypeSwitch<Operation *>(root.op)
       .Case<RefForceOp, RefReleaseOp>([&](auto op) {
         op.getClockMutable().assign(bounceValue(op, baseClk));
         ImplicitLocOpBuilder b(op.getLoc(), op);
         op.getPredicateMutable().assign(b.createOrFold<AndPrimOp>(
             op.getPredicate(), bounceValue(op, enable)));
-        return success();
+      })
+      .Case<ClockGateIntrinsicOp>([&](auto gate) {
+        gate.getInputMutable().assign(bounceValue(gate, baseClk));
+        gate.getEnableMutable().assign(
+            andEnables(enable, gate.getEnable(), gate));
+        if (Value testEnable = gate.getTestEnable())
+          gate.getTestEnableMutable().assign(
+              andEnables(enable, testEnable, gate));
       })
       .Case<RegOp, RegResetOp>([&](auto reg) {
         // ExpandWhens leaves exactly one write per register. Rebinding the
@@ -443,7 +450,7 @@ LogicalResult GatedClockConversion::rewriteRoot(const Root &root, Value baseClk,
               << "gated clock conversion: expected exactly one connect "
                  "driving this register (run after firrtl-expand-whens); found "
               << numWrites << "; leaving the gated clock in place";
-          return success();
+          return;
         }
 
         // Hold the register while the gate is closed.
@@ -452,14 +459,12 @@ LogicalResult GatedClockConversion::rewriteRoot(const Root &root, Value baseClk,
         Value newRhs = b.createOrFold<MuxPrimOp>(bounceValue(write, enable),
                                                  write.getSrc(), regData);
         write->setOperand(1, newRhs);
-        return success();
       })
-      .Default([](Operation *op) {
-        return op->emitError("unsupported for gated clock conversion");
-      });
+      .Default(
+          [](Operation *) { llvm_unreachable("unsupported root operation"); });
 }
 
-LogicalResult GatedClockConversion::rewriteRoots() {
+void GatedClockConversion::rewriteRoots() {
   for (const Root &root : roots) {
     auto it = pairs.find(root.key);
     // A clock that no base clock reaches is driven by a clock loop, which is
@@ -472,10 +477,9 @@ LogicalResult GatedClockConversion::rewriteRoots() {
       continue;
     }
     auto [baseClk, enable] = it->second;
-    if (enable && failed(rewriteRoot(root, baseClk, enable)))
-      return failure();
+    if (enable)
+      rewriteRoot(root, baseClk, enable);
   }
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -495,8 +499,7 @@ LogicalResult GatedClockConversion::run() {
   SmallVector<Value> order = markGatedAndSelectPortPairs();
   insertPorts();
   materialize(order);
-  if (failed(rewriteRoots()))
-    return failure();
+  rewriteRoots();
   for (auto oldInst : deadInstances)
     oldInst.erase();
   deadInstances.clear();
