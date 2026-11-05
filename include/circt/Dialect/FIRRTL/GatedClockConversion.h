@@ -46,8 +46,8 @@ struct ClockEdge {
 /// Preconditions: run after `firrtl-expand-whens`, so every clock net and
 /// register has a single driver, after `firrtl-lower-types`, so registers are
 /// ground-typed, and after `firrtl-infer-resets`, so every reset is known to be
-/// sync or async. Clock loops are not diagnosed here; see
-/// `firrtl-check-comb-loops`.
+/// sync or async. A clock driven by a clock loop has no base clock, so a root
+/// clocked by one, or a caller driving one into a port pair, is an error.
 ///
 /// NOT thread-safe: port insertion mutates module signatures globally.
 class GatedClockConversion {
@@ -91,6 +91,9 @@ private:
   /// Fills `gated` and `portPairs` in one walk. Returns the clocks to
   /// materialize, in BFS order.
   SmallVector<Value> markGatedAndSelectPortPairs();
+  /// Rejects what `materialize()` cannot handle: clocks that are not reachable
+  /// from a base clock.
+  LogicalResult checkSelection();
   void insertPorts();
   void materialize(ArrayRef<Value> order);
   void rewriteRoots();

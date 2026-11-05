@@ -350,6 +350,39 @@ SmallVector<Value> GatedClockConversion::markGatedAndSelectPortPairs() {
   return order;
 }
 
+LogicalResult GatedClockConversion::checkSelection() {
+  // A clock missing from `gated` is not reachable from any base clock, so it is
+  // driven by a clock loop and has no pair. Nothing would rebase a root on such
+  // a clock, or drive a caller's half of an input port pair from it.
+  LogicalResult result = success();
+  DenseSet<Value> reportedClocks;
+  for (const Root &root : roots) {
+    if (gated.contains(root.key) || !reportedClocks.insert(root.key).second)
+      continue;
+    mlir::emitError(root.key.getLoc())
+        << "gated clock conversion: this clock is driven by a clock loop, and "
+           "is not reachable from any base clock";
+    result = failure();
+  }
+
+  for (auto &[key, portPair] : portPairs) {
+    if (portPair.dir != Direction::In)
+      continue;
+    auto [mod, portIdx] = key;
+    for (auto *use : ig.lookup(mod)->uses()) {
+      auto inst = dyn_cast<InstanceOp>(use->getInstance().getOperation());
+      if (!inst || gated.contains(clockDriver(inst.getResult(portIdx))))
+        continue;
+      inst.emitError("gated clock conversion: clock port ")
+          << mod.getPortNameAttr(portIdx)
+          << " of this instance is driven by a clock loop, and is not "
+             "reachable from any base clock";
+      result = failure();
+    }
+  }
+  return result;
+}
+
 //===----------------------------------------------------------------------===//
 // Mutation
 //===----------------------------------------------------------------------===//
@@ -505,17 +538,8 @@ void GatedClockConversion::rewriteRoot(const Root &root, Value baseClk,
 
 void GatedClockConversion::rewriteRoots() {
   for (const Root &root : roots) {
-    auto it = pairs.find(root.key);
-    // A clock that no base clock reaches is driven by a clock loop, which is
-    // invalid input. Skipping the rewrite is always safe.
-    if (it == pairs.end()) {
-      mlir::emitWarning(root.clock.getLoc())
-          << "gated clock conversion: this clock is not reachable from any "
-             "free-running base clock (clock feedback loop?); leaving the op "
-             "unchanged";
-      continue;
-    }
-    auto [baseClk, enable] = it->second;
+    // `checkSelection()` ensured every root clock is reachable.
+    auto [baseClk, enable] = pairs.at(root.key);
     if (enable)
       rewriteRoot(root, baseClk, enable);
   }
@@ -536,6 +560,8 @@ LogicalResult GatedClockConversion::run() {
     return failure();
   LLVM_DEBUG(dump());
   SmallVector<Value> order = markGatedAndSelectPortPairs();
+  if (failed(checkSelection()))
+    return failure();
   insertPorts();
   materialize(order);
   rewriteRoots();

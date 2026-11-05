@@ -1,5 +1,63 @@
 // RUN: circt-opt %s -test-firrtl-gated-clock-conversion -split-input-file -verify-diagnostics
 
+// A local clock loop has no base clock.
+firrtl.circuit "LocalClockFeedback" {
+  firrtl.module @LocalClockFeedback(in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %w = firrtl.wire : !firrtl.clock
+    // expected-error @below {{this clock is driven by a clock loop, and is not reachable from any base clock}}
+    %g = firrtl.int.clock_gate %w, %en
+    firrtl.matchingconnect %w, %g : !firrtl.clock
+    %r = firrtl.reg %g : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// A clock loop through two instances has no base clock.
+firrtl.circuit "Top" {
+  firrtl.module private @ClockGen(in %clk_in: !firrtl.clock, in %en: !firrtl.uint<1>, out %clk_out: !firrtl.clock) {
+    %g = firrtl.int.clock_gate %clk_in, %en
+    firrtl.matchingconnect %clk_out, %g : !firrtl.clock
+  }
+  firrtl.module @Top(in %clk: !firrtl.clock, in %e1: !firrtl.uint<1>, in %e2: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %a_i, %a_e, %a_o = firrtl.instance g1 @ClockGen(in clk_in: !firrtl.clock, in en: !firrtl.uint<1>, out clk_out: !firrtl.clock)
+    // expected-error @below {{this clock is driven by a clock loop, and is not reachable from any base clock}}
+    %b_i, %b_e, %b_o = firrtl.instance g2 @ClockGen(in clk_in: !firrtl.clock, in en: !firrtl.uint<1>, out clk_out: !firrtl.clock)
+    firrtl.matchingconnect %a_i, %b_o : !firrtl.clock
+    firrtl.matchingconnect %a_e, %e1 : !firrtl.uint<1>
+    firrtl.matchingconnect %b_i, %a_o : !firrtl.clock
+    firrtl.matchingconnect %b_e, %e2 : !firrtl.uint<1>
+    %r = firrtl.reg %b_o : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// A gated caller gives the child's clock port a port pair, which a caller
+// whose clock is in a clock loop cannot drive.
+firrtl.circuit "Top" {
+  firrtl.module private @Child(in %clk: !firrtl.clock, in %d: !firrtl.uint<8>) {
+    %r = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+  firrtl.module @Top(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    %w = firrtl.wire : !firrtl.clock
+    %loop = firrtl.int.clock_gate %w, %en
+    firrtl.matchingconnect %w, %loop : !firrtl.clock
+    // expected-error @below {{clock port "clk" of this instance is driven by a clock loop, and is not reachable from any base clock}}
+    %a_clk, %a_d = firrtl.instance a @Child(in clk: !firrtl.clock, in d: !firrtl.uint<8>)
+    firrtl.matchingconnect %a_clk, %loop : !firrtl.clock
+    firrtl.matchingconnect %a_d, %d : !firrtl.uint<8>
+    %g = firrtl.int.clock_gate %clk, %en
+    %b_clk, %b_d = firrtl.instance b @Child(in clk: !firrtl.clock, in d: !firrtl.uint<8>)
+    firrtl.matchingconnect %b_clk, %g : !firrtl.clock
+    firrtl.matchingconnect %b_d, %d : !firrtl.uint<8>
+  }
+}
+
+// -----
 
 // An undriven clock is an error, raised before the IR is mutated.
 firrtl.circuit "Top" {
