@@ -174,7 +174,7 @@ class Sink:
         pending.pop(0)
         self.received.append(int(self.data.value))
       if self.stall_period:
-        want = cycle % self.stall_period != 0
+        want = (cycle % self.stall_period) != 0
       else:
         want = random.random() < self.ready_prob
       if self.fifo:
@@ -272,9 +272,10 @@ async def periodic_stall(dut):
   random.seed(3)
   sinks = await run_all(dut, src_prob=1.0, sink_prob=1.0, stall_period=8)
   # Skip warm-up and drain.
-  missed = {
-      p: [c for c in s.missed if s.cycles[0] < c < s.cycles[-1]]
-      for p, s in sinks.items()
-  }
-  missed = {p: m for p, m in missed.items() if m}
+  missed = {}
+  for p, s in sinks.items():
+      cycles = [c for c in s.missed if s.cycles[0] < c < s.cycles[-1]]
+      if cycles:
+          missed[p] = cycles
+        
   assert not missed, f"no transfer on these ready cycles: {missed}"
