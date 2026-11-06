@@ -170,4 +170,14 @@ def SVMaskNonSynthesizable : Pass<"sv-mask-non-synthesizable",
   ];
 }
 
+def CheckVarDrivers : Pass<"sv-check-var-drivers", "hw::HWModuleOp"> {
+  let summary = "Check for overlapping continuous and procedural variable drivers";
+  let description = [{
+    Resolves each SystemVerilog variable driver's longest static lvalue
+    prefix, flattens it to a half-open interval, and reports an error for
+    overlapping continuous drivers, or for a continuous driver overlapping
+    a procedural one. See SV Spec 6.5, 10.3.2, and 11.5.3.
+  }];
+}
+
 #endif // CIRCT_DIALECT_SV_SVPASSES
