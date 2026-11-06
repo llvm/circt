@@ -2614,10 +2614,12 @@ def UnionExtractOp : MooreOp<"union_extract"> {
   let hasVerifier = 1;
 }
 
-def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
+def UnionExtractRefOp : MooreOp<"union_extract_ref", [
+  SameWrapperKind<["input", "result"]>
+]> {
   let summary = "Union Extract operation";
-  let arguments = (ins StrAttr:$fieldName, RefType:$input);
-  let results = (outs RefType:$result);
+  let arguments = (ins StrAttr:$fieldName, WrapperType:$input);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $input `,`   $fieldName  attr-dict `:`
     type($input) `->` type($result)

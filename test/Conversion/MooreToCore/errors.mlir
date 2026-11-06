@@ -61,3 +61,12 @@ func.func @StructExtractRefOnNet(%arg0: !moore.net<struct<{a: i32}>>) {
   %0 = moore.struct_extract_ref %arg0, "a" : net<struct<{a: i32}>> -> net<i32>
   return
 }
+
+// -----
+
+func.func @UnionExtractRefOnNet(%arg0: !moore.net<union<{a: i32}>>) {
+  // expected-error @below {{op extracts from a net which is not currently supported}}
+  // expected-error @below {{failed to legalize}}
+  %0 = moore.union_extract_ref %arg0, "a" : net<union<{a: i32}>> -> net<i32>
+  return
+}
