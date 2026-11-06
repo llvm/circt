@@ -96,13 +96,12 @@ om.class @ContainsParameterTop() -> (found: i1) {
   om.class.fields %found : i1
 }
 
-// Unknown inputs use the existing pure-op propagation policy.
+// Unknown inputs propagate through pure ops, and dead input unknowns are
+// removed afterward.
 // CHECK-LABEL: om.class @ContainsUnknown() -> (elementResult: i1, listResult: i1) {
-// CHECK:   %0 = om.unknown : !om.string
-// CHECK-NEXT:   %1 = om.unknown : i1
-// CHECK-NEXT:   %2 = om.unknown : !om.list<!om.string>
-// CHECK-NEXT:   %3 = om.unknown : i1
-// CHECK-NEXT:   om.class.fields %1, %3 : i1, i1
+// CHECK:   %[[ELEMENT_RESULT:.+]] = om.unknown : i1
+// CHECK-NEXT:   %[[LIST_RESULT:.+]] = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %[[ELEMENT_RESULT]], %[[LIST_RESULT]] : i1, i1
 // CHECK: }
 om.class @ContainsUnknown() -> (elementResult: i1, listResult: i1) {
   %unknownElement = om.unknown : !om.string
@@ -118,13 +117,11 @@ om.class @ContainsUnknown() -> (elementResult: i1, listResult: i1) {
 
 // Same-SSA membership matches fold even when the directly constructed list
 // also contains an explicit unknown value; the nonmatching result propagates.
-// Keep the input unknown distinct from the propagated result unknown.
+// Dead unknown inputs are removed after propagation.
 // CHECK-LABEL: om.class @ContainsUnknownMembers() -> (foo: i1, bar: i1, baz: i1) {
 // CHECK:   %[[TRUE:.+]] = om.constant true
-// CHECK-NEXT:   %1 = om.unknown : i1
-// CHECK-NEXT:   %2 = om.unknown : !om.list<i1>
-// CHECK-NEXT:   %3 = om.unknown : i1
-// CHECK-NEXT:   om.class.fields %[[TRUE]], %3, %[[TRUE]] : i1, i1, i1
+// CHECK-NEXT: %[[UNKNOWN:.+]] = om.unknown : i1
+// CHECK-NEXT: om.class.fields %[[TRUE]], %[[UNKNOWN]], %[[TRUE]] : i1, i1, i1
 // CHECK: }
 om.class @ContainsUnknownMembers() -> (foo: i1, bar: i1, baz: i1) {
   %0 = om.unknown : i1
