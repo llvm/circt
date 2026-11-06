@@ -177,9 +177,9 @@ class M1(Module):
 # CHECK:           %[[VAL_10:.*]] = hw.array_create %[[VAL_5]], %[[VAL_4]], %[[VAL_3]] : i32
 # CHECK:           %[[VAL_11:.*]] = hw.array_create %[[VAL_2]], %[[VAL_1]], %[[VAL_0]] : i32
 # CHECK:           %[[VAL_12:.*]] = hw.array_create %[[VAL_9]], %[[VAL_10]], %[[VAL_11]] : !hw.array<3xi32>
-# CHECK:           %[[VAL_13:.*]] = sv.wire  : !hw.inout<array<3xarray<3xi32>>>
-# CHECK:           sv.assign %[[VAL_13]], %[[VAL_12]] : !hw.array<3xarray<3xi32>>
-# CHECK:           %[[VAL_14:.*]] = sv.read_inout %[[VAL_13]] : !hw.inout<array<3xarray<3xi32>>>
+# CHECK:           %[[VAL_13:.*]] = sv.wire  : !sv.net<!hw.array<3xarray<3xi32>>>
+# CHECK:           sv.assign %[[VAL_13]], %[[VAL_12]] : !sv.net<!hw.array<3xarray<3xi32>>>, !hw.array<3xarray<3xi32>>
+# CHECK:           %[[VAL_14:.*]] = sv.read_inout %[[VAL_13]] : !sv.net<!hw.array<3xarray<3xi32>>>
 # CHECK:           hw.output %[[VAL_14]] : !hw.array<3xarray<3xi32>>
 # CHECK:         }
 
