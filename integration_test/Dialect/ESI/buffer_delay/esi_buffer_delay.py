@@ -105,7 +105,7 @@ async def fifo_source(dut, prefix: str, values: List[int], push_prob: float):
   push.value = 0
 
 
-async def delayed_source(dut, prefix: str, delay: int, values: List[int],
+async def delayed_source(dut: HierarchyObject, prefix: str, delay: int, values: List[int],
                          valid_prob: float, has_ready: bool):
   """Drive a ValidReady(delay) or ValidOnly(delay) channel. The data for a
   transfer is driven `delay` cycles after the handshake. Junk otherwise."""
@@ -140,7 +140,7 @@ class Sink:
   cycles on which it was ready but nothing transferred."""
 
   def __init__(self,
-               dut,
+               dut: HierarchyObject,
                prefix: str,
                delay: int,
                ready_prob: float,
