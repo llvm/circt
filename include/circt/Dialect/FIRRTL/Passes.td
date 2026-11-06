@@ -908,7 +908,10 @@ def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
     Due to differences in width and reset inference, it is suggested to run
     those first as well but not required.
 
-    RWProbes and related operations are not supported.
+    Force/release on an RWProbe is synthesized into one state machine per
+    target. Every forceable `rwprobe` port, including those of extmodules and
+    pass-through modules, gains an appended `<name>_force_ctrl` input port
+    whether or not a force exists.
   }];
 }
 
