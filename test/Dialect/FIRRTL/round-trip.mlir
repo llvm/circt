@@ -413,6 +413,12 @@ firrtl.module @DomainTypesWithFields(
   firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
 }
 
+// CHECK-LABEL: firrtl.module @DomainAnyRefCast(
+firrtl.module @DomainAnyRefCast(in %domain: !firrtl.domain<@ClockDomain()>) {
+  // CHECK-NEXT: %{{.+}} = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>{{$}}
+  %0 = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>
+}
+
 // CHECK-LABEL: firrtl.module @DomainDefine
 firrtl.module @DomainDefine(
   in  %x : !firrtl.domain<@ClockDomain()>,
