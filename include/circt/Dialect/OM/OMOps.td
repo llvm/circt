@@ -42,14 +42,6 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    OptionalAttr<StrAttr>:$sym_visibility,
-    StrArrayAttr:$formalParamNames,
-    ArrayAttr:$fieldNames,
-    DictionaryAttr:$fieldTypes
-  );
-
   let regions = (region
     SizedRegion<1>:$body
   );
@@ -108,6 +100,29 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
 
 def ClassOp : OMClassLike<"class", [
       SingleBlockImplicitTerminator<"ClassFieldsOp">]> {
+  let summary = "An object model class definition";
+  let description = [{
+    An OM class defines a named object template with formal parameters and
+    named, typed fields. Its body computes the field values from the parameters
+    and terminates with `om.class.fields`. An `om.object` instantiates the class
+    with actual parameters.
+
+    Classes marked `linkonce_odr` must be public. All same-named definitions
+    must also be marked and equivalent, including their referenced symbols.
+    When such a class is instantiated, one of its definitions is
+    non-deterministically chosen. Non-equivalent definitions violate the ODR
+    contract and may result in errors. The linker coalesces the definitions
+    without comparing them.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrArrayAttr:$formalParamNames,
+    ArrayAttr:$fieldNames,
+    DictionaryAttr:$fieldTypes,
+    UnitAttr:$linkonce_odr
+  );
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     // This builds a ClassOp, and populates it with the CLassFieldOps.
@@ -177,6 +192,14 @@ def ClassFieldsOp : OMOp<"class.fields", [Terminator, ReturnLike, Pure,
 //===----------------------------------------------------------------------===//
 
 def ClassExternOp : OMClassLike<"class.extern", [NoTerminator]> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrArrayAttr:$formalParamNames,
+    ArrayAttr:$fieldNames,
+    DictionaryAttr:$fieldTypes
+  );
+
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
 

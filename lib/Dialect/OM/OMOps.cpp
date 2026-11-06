@@ -345,7 +345,11 @@ void circt::om::ClassOp::print(OpAsmPrinter &printer) {
   printClassLike(*this, printer);
 }
 
-LogicalResult circt::om::ClassOp::verify() { return verifyClassLike(*this); }
+LogicalResult circt::om::ClassOp::verify() {
+  if (getLinkonceOdr() && !isPublic())
+    return emitOpError("linkonce_odr requires public visibility");
+  return verifyClassLike(*this);
+}
 
 LogicalResult circt::om::ClassOp::verifyRegions() {
   auto fieldsOp =
