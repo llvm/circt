@@ -215,3 +215,31 @@ rtg.test @constraintViolation() {
     rtgtest.add %0, %0, %0
   }
 }
+
+// -----
+
+rtg.test @nonConstantOperandForFolding() {
+  rtg.isa.segment text {
+    %0 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0]
+    %1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
+    %idx0 = rtg.isa.register_to_index %0 : !rtgtest.ireg
+    // expected-note @below {{operand value defined here}}
+    %idx1 = rtg.isa.register_to_index %1 : !rtgtest.ireg
+    // expected-error @below {{operand must be defined by a constant-like operation for folding, but got 'rtg.isa.register_to_index'}}
+    %sum = index.add %idx0, %idx1
+    rtgtest.add %0, %1, %1
+  }
+}
+
+// -----
+
+// expected-note @below {{operand value defined here}}
+rtg.test @blockArgumentForFolding(offset = %offset: index) {
+  rtg.isa.segment text {
+    %0 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0]
+    %idx0 = rtg.isa.register_to_index %0 : !rtgtest.ireg
+    // expected-error @below {{operand must be defined by a constant-like operation for folding, but is a block argument}}
+    %sum = index.add %idx0, %offset
+    rtgtest.add %0, %0, %0
+  }
+}
