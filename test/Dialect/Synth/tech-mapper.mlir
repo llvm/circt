@@ -19,8 +19,9 @@ hw.module @and_inv_nn(in %a : i1, in %b : i1, out result : i1) attributes {synth
 }
 
 // Delay is shorter than @and_inv + @and_inv_n_n. Area is (significantly) larger than @and_inv_n + @and_inv_n_n.
+// @and_inv_3 uses intrinsic 0 and sensitivity 1, so the unit-load delay is 1.
 // Check that we use @and_inv_3 if strategy = timing, and @and_inv_n + @and_inv_n_n if strategy = area.
-hw.module @and_inv_3(in %a : i1, in %b : i1, in %c : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 10.0 : f64, arcs = [#synth.linear_timing_arc<1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<1, 0, #synth.polarity<positive>>], input_caps = {}>} {
+hw.module @and_inv_3(in %a : i1, in %b : i1, in %c : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 10.0 : f64, arcs = [#synth.linear_timing_arc<0, 1, #synth.polarity<positive>>, #synth.linear_timing_arc<0, 1, #synth.polarity<positive>>, #synth.linear_timing_arc<0, 1, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv %a, %b : i1
     %1 = synth.aig.and_inv not %0, %c : i1
     hw.output %1 : i1
