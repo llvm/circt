@@ -1,0 +1,41 @@
+# Check FileCheck-based tests for misspelled directives, most of which
+# FileCheck silently ignores. Kept out of "Build and Test" so that a finding
+# blocks neither the build matrix nor the circt-tests dispatch waiting on it.
+name: FileCheck Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+# Cancel previous runs when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  filecheck-lint:
+    name: FileCheck Lint
+    runs-on: ubuntu-latest
+    steps:
+      # Do not clone the llvm submodule, only filecheck_lint.py is needed.
+      - name: Get CIRCT
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          submodules: "false"
+
+      # Fetch filecheck_lint.py at the LLVM commit the llvm submodule points to.
+      - name: Get filecheck_lint.py
+        run: |
+          LLVM_SHA=$(git rev-parse HEAD:llvm)
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/filecheck_lint.py" \
+            "https://raw.githubusercontent.com/llvm/llvm-project/$LLVM_SHA/llvm/utils/filecheck_lint/filecheck_lint.py"
+
+      - name: filecheck lint
+        run: FILECHECK_LINT="$RUNNER_TEMP/filecheck_lint.py" utils/run-filecheck-lint.sh
