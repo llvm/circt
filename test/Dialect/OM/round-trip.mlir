@@ -255,6 +255,13 @@ om.class @PropEq() {
   om.class.fields
 }
 
+// CHECK-LABEL: @ObjectEq(
+om.class @ObjectEq(%obj: !om.class.type<@Widget>, %ref: !om.any) {
+  // CHECK: %0 = om.object.eq %obj, %ref : !om.class.type<@Widget>, !om.any loc(
+  %0 = om.object.eq %obj, %ref : !om.class.type<@Widget>, !om.any
+  om.class.fields
+}
+
 // CHECK-LABEL: @LinkedList
 // CHECK-SAME: -> (prev: !om.class.type<@LinkedList>)
 om.class @LinkedList(%prev: !om.class.type<@LinkedList>) -> (prev: !om.class.type<@LinkedList>) {

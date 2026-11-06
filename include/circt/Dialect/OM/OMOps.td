@@ -691,6 +691,28 @@ def PropEqOp : BinaryEqualityOpBase<"prop.eq"> {
   let hasFolder = 1;
 }
 
+def ObjectEqOp : OMOp<"object.eq", [Pure]> {
+  let summary = "Compare two object references for identity equality";
+  let description = [{
+    Returns 1 if the operands refer to the same object, and 0 otherwise. This
+    compares object identity, not the structural equality of object fields.
+    Each operand can have a class type or `!om.any`, and the operands need not
+    have the same type. Operands of type `!om.any` must contain object references.
+    The `om.any_cast` operation preserves object identity.
+
+    Example:
+    ```mlir
+    %result = om.object.eq %lhs, %rhs : !om.class.type<@Foo>, !om.any
+    ```
+  }];
+
+  let arguments = (ins AnyTypeOf<[ClassType, OMAnyType]>:$lhs,
+                       AnyTypeOf<[ClassType, OMAnyType]>:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+}
+
 class IntegerBitwiseOpBase<string mnemonic, list<Trait> traits = []> :
     OMOp<mnemonic, [
       Pure,
