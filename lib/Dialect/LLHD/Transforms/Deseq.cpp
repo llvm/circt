@@ -1232,11 +1232,11 @@ bool Deseq::matchDriveGatedClock(
   // Try every assignment of clock and reset to the two triggers, and every
   // edge and level polarity. The entry must equal one of the two conditions
   // below exactly, with no further literals.
-  for (unsigned variant = 0; variant < (1 << 3); ++variant) {
-    bool negClock = (variant >> 0) & 1;
-    bool negReset = (variant >> 1) & 1;
-    unsigned clockIdx = (variant >> 2) & 1;
-    unsigned resetIdx = 1 - clockIdx;
+    for (unsigned variant = 0; variant < 8; ++variant) {
+      bool negClock = (variant >> 0) & 1;
+      bool negReset = (variant >> 1) & 1;
+      unsigned clockIdx = (variant >> 2) & 1;
+      unsigned resetIdx = 1 - clockIdx;
 
     // Same bit patterns as in `matchDriveClockAndReset`.
     uint32_t clockEdge = (negClock ? 0b1001 : 0b0110) << (clockIdx * 4 + 2);
