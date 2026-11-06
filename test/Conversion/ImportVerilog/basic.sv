@@ -50,8 +50,8 @@ endmodule
 module DedupA(input int a);
 endmodule
 
-// CHECK: moore.module private @DedupB(in %a : !moore.i32)
-// CHECK: moore.module private @DedupB_0(in %a : !moore.i16)
+// CHECK: moore.module private @DedupB(in %a : !moore.i32) attributes {hw.elaborated_params = [#hw.param.decl<"W": si32 = 32> : si32]}
+// CHECK: moore.module private @DedupB_0(in %a : !moore.i16) attributes {hw.elaborated_params = [#hw.param.decl<"W": si32 = 16> : si32], hw.orig_module_name = "DedupB"}
 // CHECK-NOT: @DedupB
 module DedupB #(parameter int W, parameter type T = bit [W-1:0])(input T a);
 endmodule
@@ -5512,8 +5512,11 @@ module ArrayGateTop(input [3:0] a, input [3:0] b, output [3:0] y);
 endmodule
 
 // CHECK-LABEL: moore.module @ModuleWithAttrs() attributes {sv.attributes = [#sv.attribute<"flag_attr">, #sv.attribute<"str_attr" = "\22hello \\\22world\\\22\22">, #sv.attribute<"int_attr" = "42">]} {
+// CHECK-NEXT:    moore.instance "u0" @Dummy() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">, #sv.attribute<"mark" = "\22val\22">, #sv.attribute<"weight" = "7">]}
 // CHECK-NEXT:    moore.output
 // CHECK-NEXT:  }
 (* flag_attr, str_attr = "hello \"world\"", int_attr = 42 *)
 module ModuleWithAttrs();
+  (* keep_hierarchy, mark = "val", weight = 7 *)
+  Dummy u0();
 endmodule

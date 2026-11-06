@@ -2360,3 +2360,16 @@ func.func @UArrayCmpElementFallback(
 moore.module @ModuleWithAttrs() attributes {sv.attributes = [#sv.attribute<"flag_attr">, #sv.attribute<"str_attr" = "\22hello\22">, #sv.attribute<"int_attr" = "42">]} {
   moore.output
 }
+
+// CHECK-LABEL: hw.module @InstanceWithAttrs()
+// CHECK-NEXT:    hw.instance "u0" @ModuleWithAttrs() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">, #sv.attribute<"mark" = "\22val\22">]}
+// CHECK-NEXT:    hw.output
+moore.module @InstanceWithAttrs() {
+  moore.instance "u0" @ModuleWithAttrs() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">, #sv.attribute<"mark" = "\22val\22">]}
+  moore.output
+}
+
+// CHECK-LABEL: hw.module private @ModuleWithElabParams() attributes {hw.elaborated_params = [#hw.param.decl<"W": si32 = 16> : si32], hw.orig_module_name = "OrigMod"}
+moore.module private @ModuleWithElabParams() attributes {hw.elaborated_params = [#hw.param.decl<"W": si32 = 16> : si32], hw.orig_module_name = "OrigMod"} {
+  moore.output
+}

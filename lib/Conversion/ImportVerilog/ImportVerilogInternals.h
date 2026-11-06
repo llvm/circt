@@ -242,6 +242,10 @@ struct Context {
   Type convertType(const slang::ast::Type &type, LocationAttr loc = {});
   Type convertType(const slang::ast::DeclaredType &type);
 
+  /// Convert Slang AST attributes on `symbol` into `sv::SVAttributeAttr`s and
+  /// attach them to `op`.
+  void convertAttributes(const slang::ast::Symbol &symbol, Operation *op);
+
   /// Convert hierarchy and structure AST nodes to MLIR ops.
   LogicalResult convertCompilation();
   /// Convert a module and its ports to an empty module op in the IR. Also adds
