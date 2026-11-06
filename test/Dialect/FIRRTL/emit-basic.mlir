@@ -1055,6 +1055,12 @@ firrtl.circuit "Foo" {
     #firrtl.domain.field<"alwaysOn", !firrtl.bool>
   ]
 
+  // CHECK-LABEL: domain DomainContainer :
+  // CHECK-NEXT:    source : AnyRef
+  firrtl.domain @DomainContainer [
+    #firrtl.domain.field<"source", !firrtl.anyref>
+  ]
+
   // CHECK-LABEL: domain RegistryDomain :
   // CHECK-NEXT:    clockGates : Registry<Path>
   firrtl.domain @RegistryDomain [
@@ -1158,6 +1164,15 @@ firrtl.circuit "Foo" {
     )
     // CHECK-NEXT: domain_define foo.A = my_clock
     firrtl.domain.define %foo_A, %my_clock : !firrtl.domain<@ClockDomain()>
+  }
+
+  // Domain-to-anyref casts have no FIRRTL syntax and are elided.
+  // CHECK-LABEL: module DomainAnyRef :
+  // CHECK-NEXT: input A : Domain of ClockDomain
+  firrtl.module @DomainAnyRef(in %A: !firrtl.domain<@ClockDomain()>) {
+    %0 = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    // CHECK: domain B of DomainContainer(A)
+    %B = firrtl.domain.create(%0) : !firrtl.domain<@DomainContainer(source: !firrtl.anyref)>
   }
 
 }

@@ -131,6 +131,7 @@ struct Emitter {
   void emitExpression(OpenSubfieldOp op);
   void emitExpression(DomainSubfieldOp op);
   void emitExpression(OpenSubindexOp op);
+  void emitExpression(DomainAnyRefCastOp op);
   void emitExpression(RefResolveOp op);
   void emitExpression(RefSendOp op);
   void emitExpression(RefSubOp op);
@@ -1608,9 +1609,9 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp, IntegerAndOp, IntegerOrOp, IntegerNotOp,
-          StringConcatOp, PropEqOp, ListContainsOp, BoolAndOp, BoolOrOp,
-          BoolXorOp,
+          DomainAnyRefCastOp, UnknownValueOp, IntegerAndOp, IntegerOrOp,
+          IntegerNotOp, StringConcatOp, PropEqOp, ListContainsOp, BoolAndOp,
+          BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1694,6 +1695,10 @@ void Emitter::emitExpression(OpenSubindexOp op) {
   ps << "[";
   ps.addAsString(op.getIndex());
   ps << "]";
+}
+
+void Emitter::emitExpression(DomainAnyRefCastOp op) {
+  emitExpression(op.getInput());
 }
 
 void Emitter::emitExpression(RefSendOp op) {

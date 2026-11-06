@@ -2815,12 +2815,18 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
           return failure();
 
         if (operand.getType() != elementType) {
-          if (!isa<AnyRefType>(elementType) ||
-              !isa<ClassType>(operand.getType()))
+          if (!isa<AnyRefType>(elementType))
             return emitError(loc, "unexpected expression of type ")
                    << operand.getType() << " in List expression of type "
                    << elementType;
-          operand = ObjectAnyRefCastOp::create(builder, operand);
+          if (isa<ClassType>(operand.getType()))
+            operand = ObjectAnyRefCastOp::create(builder, operand);
+          else if (isa<DomainType>(operand.getType()))
+            operand = DomainAnyRefCastOp::create(builder, operand);
+          else
+            return emitError(loc, "unexpected expression of type ")
+                   << operand.getType() << " in List expression of type "
+                   << elementType;
         }
 
         operands.push_back(operand);
@@ -4300,6 +4306,15 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
           Value value;
           if (parseExp(value, "expected field value expression"))
             return failure();
+
+          if (isa<AnyRefType>(cast<DomainFieldAttr>(fields[fieldValues.size()])
+                                  .getType())) {
+            if (isa<ClassType>(value.getType()))
+              value = ObjectAnyRefCastOp::create(builder, value);
+            else if (isa<DomainType>(value.getType()))
+              value = DomainAnyRefCastOp::create(builder, value);
+          }
+
           fieldValues.push_back(value);
           return success();
         }))
@@ -4750,14 +4765,19 @@ ParseResult FIRStmtParser::parsePropAssign() {
     return failure();
 
   auto lhsType = type_dyn_cast<PropertyType>(lhs.getType());
-  auto rhsType = type_dyn_cast<PropertyType>(rhs.getType());
-  if (!lhsType || !rhsType)
+  auto rhsType = rhs.getType();
+  if (!lhsType)
     return emitError(loc, "can only propassign property types");
   locationProcessor.setLoc(loc);
   if (lhsType != rhsType) {
-    // If the lhs is anyref, and the rhs is a ClassType, insert a cast.
+    // AnyRef accepts object and domain references through implicit casts that
+    // do not have a FIRRTL textual representation.
     if (isa<AnyRefType>(lhsType) && isa<ClassType>(rhsType))
       rhs = ObjectAnyRefCastOp::create(builder, rhs);
+    else if (isa<AnyRefType>(lhsType) && isa<DomainType>(rhsType))
+      rhs = DomainAnyRefCastOp::create(builder, rhs);
+    else if (!isa<PropertyType>(rhsType))
+      return emitError(loc, "can only propassign property types");
     else
       return emitError(loc, "cannot propassign non-equivalent type ")
              << rhsType << " to " << lhsType;
