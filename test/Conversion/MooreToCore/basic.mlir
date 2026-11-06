@@ -729,7 +729,7 @@ moore.module @Union(in %a : !moore.i32, in %arg0 : !moore.union<{x: i32, y: i32}
   %0 = moore.union_extract %arg0, "x" : !moore.union<{x: i32, y: i32}> -> !moore.i32
 
   // CHECK: llhd.sig.struct_extract %arg1["x"] : <!hw.union<x: i32, y: i32>>
-  %ref = moore.union_extract_ref %arg1, "x" : <union<{x: i32, y: i32}>> -> <i32>
+  %ref = moore.union_extract_ref %arg1, "x" : ref<union<{x: i32, y: i32}>> -> ref<i32>
   moore.assign %ref, %0 : ref<i32>
 
   // CHECK: hw.union_create "x", %a : !hw.union<x: i32, y: i32>
