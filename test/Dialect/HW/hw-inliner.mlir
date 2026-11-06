@@ -262,3 +262,31 @@ hw.module private @DontInlineModuleNLA(in %a: i4, out b: i4) {
   hw.output %0 : i4
 }
 
+// Test inlining where parent is verif.formal
+// CHECK-LABEL: verif.formal @InlineToFormal
+verif.formal @InlineToFormal {} {
+  // CHECK: %x = verif.symbolic_value : i4
+  // CHECK-NOT: hw.instance
+  // CHECK-NEXT: %[[V0:.+]] = comb.add %x, %x : i4
+  // CHECK-NEXT: %[[V1:.+]] = comb.mul %[[V0]], %[[V0]]
+  // CHECK-NEXT: %[[COND:.+]] = comb.icmp bin eq %[[V1]], %x : i4
+  // CHECK-NEXT: verif.assert %[[COND]] : i1
+  %x = verif.symbolic_value: i4
+  %0 = hw.instance "outer" @OuterModule0(a: %x: i4) -> (b: i4)
+  %cond = comb.icmp bin eq %0, %x : i4
+  verif.assert %cond : i1
+}
+
+// CHECK-NOT: hw.module private @OuterModule
+hw.module private @OuterModule0(in %a: i4, out b: i4) {
+  %0 = hw.instance "inner" @InnerModule0(x: %a: i4) -> (y: i4)
+  hw.output %0 : i4
+}
+// CHECK-NOT: hw.module private @InnerModule
+hw.module private @InnerModule0(in %x: i4, out y: i4) {
+  %0 = comb.add %x, %x : i4
+  %1 = comb.mul %0, %0 : i4
+  hw.output %1 : i4
+}
+
+
