@@ -41,7 +41,6 @@ using namespace firrtl;
 using circt::igraph::InstanceOpInterface;
 using circt::igraph::InstancePath;
 using circt::igraph::InstancePathCache;
-using llvm::MapVector;
 using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
 using mlir::FailureOr;

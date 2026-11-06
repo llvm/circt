@@ -1415,6 +1415,39 @@ firrtl.circuit "ListCreateNotList" {
 }
 
 // -----
+// Reject list.contains when the search value does not match the list type.
+firrtl.circuit "ListContainsMismatchedTypes" {
+  firrtl.module @ListContainsMismatchedTypes(
+      in %strings: !firrtl.list<string>, in %integer: !firrtl.integer) {
+    // expected-error @below {{'firrtl.list.contains' op failed to verify that list element type should match search element type}}
+    %found = "firrtl.list.contains"(%strings, %integer) : (!firrtl.list<string>, !firrtl.integer) -> !firrtl.bool
+  }
+}
+
+// -----
+// Reject custom list.contains syntax when the search value does not match the
+// element type inferred from the list.
+firrtl.circuit "ListContainsCustomMismatchedTypes" {
+  firrtl.module @ListContainsCustomMismatchedTypes(
+      in %strings: !firrtl.list<string>,
+      // expected-note @below {{prior use here}}
+      in %integer: !firrtl.integer) {
+    // expected-error @below {{use of value '%integer' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
+    %found = firrtl.list.contains %strings, %integer : !firrtl.list<string>
+  }
+}
+
+// -----
+// Reject list.contains for property types without equality semantics.
+firrtl.circuit "ListContainsUnsupportedType" {
+  firrtl.module @ListContainsUnsupportedType(
+      in %doubles: !firrtl.list<double>, in %double: !firrtl.double) {
+    // expected-error @below {{'firrtl.list.contains' op operand #1 must be string type or boolean type or integer type, but got '!firrtl.double'}}
+    %found = firrtl.list.contains %doubles, %double : !firrtl.list<double>
+  }
+}
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {
@@ -2638,6 +2671,26 @@ firrtl.module @LHSTypes() {
 
 // -----
 
+firrtl.circuit "DomainInOpenBundle" {
+  firrtl.domain @D
+  firrtl.module @DomainInOpenBundle() {
+    // expected-error @below {{bundle element "domain" cannot have a domain type}}
+    builtin.unrealized_conversion_cast to !firrtl.openbundle<domain: domain<@D()>>
+  }
+}
+
+// -----
+
+firrtl.circuit "DomainInOpenVector" {
+  firrtl.domain @D
+  firrtl.module @DomainInOpenVector() {
+    // expected-error @below {{vector cannot have a domain type}}
+    builtin.unrealized_conversion_cast to !firrtl.openvector<domain<@D()>, 1>
+  }
+}
+
+// -----
+
 firrtl.circuit "LHSTypes" {
 firrtl.module @LHSTypes() {
   // expected-error @below {{lhs type cannot contain an AnalogType}}
@@ -3558,5 +3611,105 @@ firrtl.circuit "PropAssertFalseInModule" {
     %msg = firrtl.string "module invariant violated"
     // expected-error @below {{property assertion is statically false}}
     firrtl.property_assert %false, %msg : !firrtl.bool
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerAndWrongType" {
+  firrtl.module @IntegerAndWrongType(
+      in %lhs: !firrtl.integer, in %rhs: !firrtl.string) {
+    // expected-error @+1 {{'firrtl.integer.and' op operand #1 must be integer type}}
+    %0 = "firrtl.integer.and"(%lhs, %rhs) : (!firrtl.integer, !firrtl.string) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerOrWrongType" {
+  firrtl.module @IntegerOrWrongType(
+      in %lhs: !firrtl.uint<8>, in %rhs: !firrtl.integer) {
+    // expected-error @+1 {{'firrtl.integer.or' op operand #0 must be integer type}}
+    %0 = "firrtl.integer.or"(%lhs, %rhs) : (!firrtl.uint<8>, !firrtl.integer) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerNotWrongType" {
+  firrtl.module @IntegerNotWrongType(in %input: !firrtl.string) {
+    // expected-error @+1 {{'firrtl.integer.not' op operand #0 must be integer type}}
+    %0 = "firrtl.integer.not"(%input) : (!firrtl.string) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerAndWrongArity" {
+  firrtl.module @IntegerAndWrongArity(in %input: !firrtl.integer) {
+    // expected-error @+1 {{'firrtl.integer.and' op expected 2 operands, but found 1}}
+    %0 = "firrtl.integer.and"(%input) : (!firrtl.integer) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "IntegerNotWrongArity" {
+  firrtl.module @IntegerNotWrongArity(
+      in %lhs: !firrtl.integer, in %rhs: !firrtl.integer) {
+    // expected-error @+1 {{'firrtl.integer.not' op requires a single operand}}
+    %0 = "firrtl.integer.not"(%lhs, %rhs) : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateMissingOperand" {
+  firrtl.extclass @Class(in str: !firrtl.string)
+  firrtl.module @ObjectCreateMissingOperand() {
+    // expected-error @below {{missing operand for class input "str"}}
+    %obj = firrtl.object.create() : () -> !firrtl.class<@Class(in str: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateWrongType" {
+  firrtl.extclass @Class(in str: !firrtl.string)
+  firrtl.module @ObjectCreateWrongType(in %int: !firrtl.integer) {
+    // expected-error @below {{class input "str" expects '!firrtl.string', but operand 0 has type '!firrtl.integer'}}
+    %obj = firrtl.object.create(%int) : (!firrtl.integer) -> !firrtl.class<@Class(in str: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateExtraOperand" {
+  firrtl.extclass @Class(out result: !firrtl.string)
+  firrtl.module @ObjectCreateExtraOperand(in %str: !firrtl.string) {
+    // expected-error @below {{expected 0 input operands, but got 1}}
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Class(out result: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateUnknownClass" {
+  firrtl.module @ObjectCreateUnknownClass() {
+    // expected-error @below {{references unknown class @Missing}}
+    %obj = firrtl.object.create() : () -> !firrtl.class<@Missing()>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateInputFlow" {
+  firrtl.extclass @Class(in str: !firrtl.string)
+  firrtl.module @ObjectCreateInputFlow(in %str: !firrtl.string) {
+    // expected-note @below {{the destination was defined here}}
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Class(in str: !firrtl.string)>
+    %input = firrtl.object.subfield %obj[str] : !firrtl.class<@Class(in str: !firrtl.string)>
+    // expected-error @below {{has no flow}}
+    firrtl.propassign %input, %str : !firrtl.string
   }
 }

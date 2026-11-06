@@ -64,6 +64,18 @@ firrtl.circuit "SimulationTest" {
 // -----
 
 // Non-literal expressions cause an error in FIRRTL < 7.0.0.
+firrtl.circuit "ListContains" {
+  firrtl.module @ListContains(in %list : !firrtl.list<string>,
+                               in %element : !firrtl.string,
+                               out %found : !firrtl.bool) {
+    // expected-error @below {{'firrtl.list.contains' op list contains requires FIRRTL 7.0.0}}
+    %contains = firrtl.list.contains %list, %element : !firrtl.list<string>
+    firrtl.propassign %found, %contains : !firrtl.bool
+  }
+}
+
+// -----
+
 firrtl.circuit "CompoundPropertyMessage" {
   firrtl.module @CompoundPropertyMessage() {
     %cond = firrtl.bool true

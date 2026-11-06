@@ -101,11 +101,29 @@ create a 16-bit constant of `i`.
 
 `UInt(width)`, `SInt(width)` math.
 
+### Type aliases
+
+`TypeAlias(Bits(8), "Byte")` creates a named type. Signals with an aliased
+integer type support the same operations as their underlying `Bits`, `UInt`,
+or `SInt` type. PyCDE unwraps aliases, including nested aliases, before bitwise
+operations, arithmetic, comparisons, casts, and bit slicing. The results have
+the underlying integer types, with the usual width and signedness rules.
+Use `result.bitcast(alias_type)` to explicitly restore an alias when needed.
+
+Operations that support aliases retain them: constants and registers keep
+their declared types, and muxes preserve the type of their data inputs. Aliased
+selectors are unwrapped before multiplexing or indexing an array.
+
 ### Arrays
 
 `Bits(32) * 10` creates an array of 32-bits of length 10.
 
 `Bits(32) * 10 * 12` creates an array of arrays.
+
+Dynamic array indexes and slice offsets accept `Bits`, `UInt`, or `SInt`
+signals, including aliases. Their bit patterns are interpreted as unsigned
+indexes and must be exactly `clog2(array_length)` bits wide; converting an index
+to signless bits does not change its width.
 
 ### Structs
 

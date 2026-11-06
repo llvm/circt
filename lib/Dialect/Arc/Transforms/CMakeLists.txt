@@ -24,6 +24,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   MergeIfs.cpp
   MergeTaps.cpp
   MuxToControlFlow.cpp
+  OutlineArcs.cpp
   PrintCostModel.cpp
   RemoveI0Types.cpp
   ResolveXMRRef.cpp

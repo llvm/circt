@@ -19,7 +19,6 @@
 #include "llvm/ADT/StringRef.h"
 
 using namespace mlir;
-using namespace llvm;
 using namespace circt::firrtl;
 
 static LogicalResult verifyNoInputProbes(FModuleLike module) {

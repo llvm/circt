@@ -5,7 +5,7 @@
 // Internal issue in Slang v3 about jump depending on uninitialised value.
 // UNSUPPORTED: valgrind
 
-// CHECK-LABEL: hw.module @Memory(
+// CHECK-LABEL: hw.module @Memory(in %clock : !seq.clock,
 module Memory(
   input  bit clock,
   input  bit [3:0] waddr,
@@ -14,13 +14,11 @@ module Memory(
   input  bit [3:0] raddr,
   output bit [41:0] rdata
 );
-  // CHECK-DAG: [[CLK:%.+]] = seq.to_clock %clock
-
   // MEMON-DAG: [[MEM:%.+]] = seq.firmem 0, 1, undefined, undefined : <16 x 42, mask 1>
   // MEMON-DAG: [[RDATA:%.+]] = seq.firmem.read_port [[MEM]][%raddr]
-  // MEMON-DAG: seq.firmem.write_port %mem[%waddr] = %wdata, clock [[CLK]] enable %wenable
+  // MEMON-DAG: seq.firmem.write_port %mem[%waddr] = %wdata, clock %clock enable %wenable
 
-  // MEMOFF-DAG: [[REG:%.+]] = seq.firreg [[NEXT:%.+]] clock [[CLK]] : !hw.array<16xi42>
+  // MEMOFF-DAG: [[REG:%.+]] = seq.firreg [[NEXT:%.+]] clock %clock : !hw.array<16xi42>
   // MEMOFF-DAG: [[TMP:%.+]] = hw.array_inject [[REG]][%waddr], %wdata
   // MEMOFF-DAG: [[NEXT]] = comb.mux bin %wenable, [[TMP]], [[REG]]
   // MEMOFF-DAG: [[RDATA:%.+]] = hw.array_get [[REG]][%raddr]

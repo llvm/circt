@@ -234,6 +234,17 @@ IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
       type, APInt(width, -1, /*isSigned=*/false, /*implicitTrunc=*/true));
 }
 
+/// Return true if replacing a register with `foldedValue` preserves the
+/// register's time-zero (`initial`) value.
+bool circt::firrtl::preservesInitial(IntegerAttr initial,
+                                     std::optional<APInt> foldedValue) {
+  if (!initial)
+    return true;
+  if (!foldedValue)
+    return false;
+  return initial.getValue() == *foldedValue;
+}
+
 /// Return the single assignment to a Property value. It is assumed that the
 /// single assigment invariant is enforced elsewhere.
 PropAssignOp circt::firrtl::getPropertyAssignment(FIRRTLPropertyValue value) {
@@ -603,7 +614,7 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
 
     auto *op = value.getDefiningOp();
     TypeSwitch<Operation *>(op)
-        .Case<ObjectOp>([&](ObjectOp op) {
+        .Case<FObjectLike>([&](auto op) {
           string += op.getInstanceName();
           value = nullptr;
         })
@@ -1096,6 +1107,15 @@ Type circt::firrtl::lowerType(
     return seq::ClockType::get(firType.getContext());
 
   auto width = firType.getBitWidthOrSentinel();
+
+  if (width >= 0 && static_cast<unsigned>(width) > IntegerType::kMaxWidth) {
+    Location errLoc = loc.value_or(UnknownLoc::get(type.getContext()));
+    emitError(errLoc, "integer width ")
+        << width << " exceeds the maximum supported width of "
+        << IntegerType::kMaxWidth;
+    return {};
+  }
+
   if (width >= 0) // IntType, analog with known width, clock, etc.
     return IntegerType::get(type.getContext(), width);
 

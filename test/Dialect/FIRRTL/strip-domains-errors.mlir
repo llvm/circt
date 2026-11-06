@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{mode=strip}))' --verify-diagnostics %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-strip-domains))' --verify-diagnostics %s
 
 firrtl.circuit "StripDomainErrors" {
   firrtl.module @StripDomainErrors() {

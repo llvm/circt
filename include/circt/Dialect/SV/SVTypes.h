@@ -28,6 +28,30 @@ using InOutType = circt::hw::InOutType;
 /// InOut type.
 mlir::Type getInOutElementType(mlir::Type type);
 
+/// Return the element type of an SV handle type or null if the operand is not
+/// an SV lvalue (NetType or VarType).
+mlir::Type getHandleElementType(mlir::Type type);
+
+/// Return a handle of the same kind (NetType or VarType) as `handleType`,
+/// wrapping `elementType` instead. Returns null if `handleType` isn't a
+/// NetType or VarType.
+mlir::Type getHandleOfElementType(mlir::Type handleType,
+                                  mlir::Type elementType);
+
+/// Return the element type of a NetType or null if the operand isn't a Net
+/// type.
+mlir::Type getNetElementType(mlir::Type type);
+
+/// Return true if a type is a valid element type of a NetType.
+bool isValidNetElementType(mlir::Type type);
+
+/// Return the element type of a VarType or null if the operand isn't a Var
+/// type.
+mlir::Type getVarElementType(mlir::Type type);
+
+/// Return true if a type is a valid element type of a VarType.
+bool isValidVarElementType(mlir::Type type);
+
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
 mlir::Type getAnyHWArrayElementType(mlir::Type type);

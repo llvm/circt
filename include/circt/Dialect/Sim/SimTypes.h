@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_SIM_SIMTYPES_H
 #define CIRCT_DIALECT_SIM_SIMTYPES_H
 
+#include "circt/Support/FieldInfo.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
@@ -77,6 +78,9 @@ struct DPIFunctionTypeStorage : public mlir::TypeStorage {
   llvm::SmallVector<size_t> resultToAbs;
   mlir::FunctionType cachedFuncType;
 };
+
+/// A single alternative of a variant type.
+using VariantAlternative = ::circt::FieldInfo;
 } // namespace detail
 
 } // namespace sim

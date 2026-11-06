@@ -131,13 +131,14 @@ static ParseResult parseClassFieldsList(OpAsmParser &parser,
                                         parseElt);
 }
 
+template <typename ClassTy>
 static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
   // Parse the optional symbol visibility.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, state.attributes);
 
   // Parse the Class symbol name.
   StringAttr symName;
-  if (parser.parseSymbolName(symName, mlir::SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(symName, ClassTy::getSymNameAttrName(state.name),
                              state.attributes))
     return failure();
 
@@ -192,7 +193,8 @@ static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
   printer << " ";
 
   // Print the optional symbol visibility.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility =
           classLike->getAttrOfType<StringAttr>(visibilityAttrName))
     printer << visibility.getValue() << ' ';
@@ -304,7 +306,7 @@ void replaceClassLikeFieldTypes(ClassLike classLike,
 
 ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
                                       OperationState &state) {
-  return parseClassLike(parser, state);
+  return parseClassLike<ClassOp>(parser, state);
 }
 
 circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
@@ -312,7 +314,7 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
     ArrayRef<StringRef> formalParamNames, ArrayRef<StringRef> fieldNames,
     ArrayRef<Type> fieldTypes) {
   circt::om::ClassOp classOp = circt::om::ClassOp::create(
-      odsBuilder, loc, odsBuilder.getStringAttr(name),
+      odsBuilder, loc, odsBuilder.getStringAttr(name), /*sym_visibility=*/{},
       odsBuilder.getStrArrayAttr(formalParamNames),
       odsBuilder.getStrArrayAttr(fieldNames),
       odsBuilder.getDictionaryAttr(llvm::map_to_vector(
@@ -343,7 +345,11 @@ void circt::om::ClassOp::print(OpAsmPrinter &printer) {
   printClassLike(*this, printer);
 }
 
-LogicalResult circt::om::ClassOp::verify() { return verifyClassLike(*this); }
+LogicalResult circt::om::ClassOp::verify() {
+  if (getLinkonceOdr() && !isPublic())
+    return emitOpError("linkonce_odr requires public visibility");
+  return verifyClassLike(*this);
+}
 
 LogicalResult circt::om::ClassOp::verifyRegions() {
   auto fieldsOp =
@@ -392,7 +398,7 @@ circt::om::ClassOp::getFieldType(mlir::StringAttr field) {
   return getClassLikeFieldType(*this, field);
 }
 
-void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer &replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
 }
 
@@ -415,10 +421,22 @@ void circt::om::ClassOp::updateFields(
   // Extract the locations per field.
   SmallVector<Location> locations;
   if (auto fl = dyn_cast<FusedLoc>(fieldOpLoc)) {
-    auto metadataArr = dyn_cast<ArrayAttr>(fl.getMetadata());
-    assert(metadataArr && "Expected the metadata for the fused location");
-    auto r = metadataArr.getAsRange<LocationAttr>();
-    locations.append(r.begin(), r.end());
+    if (auto metadataArr = dyn_cast_or_null<ArrayAttr>(fl.getMetadata())) {
+      if (names.size() == metadataArr.size()) {
+        auto r = metadataArr.getAsRange<LocationAttr>();
+        locations.append(r.begin(), r.end());
+      } else {
+        locations.append(names.size(), fieldOpLoc);
+      }
+    } else {
+      auto fieldLocs = fieldsOp.getFieldLocs();
+      if (fieldLocs.has_value() && names.size() == fieldLocs.value().size()) {
+        auto r = fieldLocs.value().getAsRange<LocationAttr>();
+        locations.append(r.begin(), r.end());
+      } else {
+        locations.append(names.size(), fieldOpLoc);
+      }
+    }
   } else {
     // Assume same loc for every field.
     locations.append(names.size(), fieldOpLoc);
@@ -483,7 +501,7 @@ mlir::Location circt::om::ClassOp::getFieldLocByIndex(size_t i) {
 
 ParseResult circt::om::ClassExternOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
-  return parseClassLike(parser, state);
+  return parseClassLike<ClassExternOp>(parser, state);
 }
 
 void circt::om::ClassExternOp::print(OpAsmPrinter &printer) {
@@ -512,7 +530,7 @@ circt::om::ClassExternOp::getFieldType(mlir::StringAttr field) {
   return getClassLikeFieldType(*this, field);
 }
 
-void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer &replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
 }
 
@@ -693,6 +711,15 @@ OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
 // ListCreateOp
 //===----------------------------------------------------------------------===//
 
+OpFoldResult circt::om::ListCreateOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInputs();
+  if (!llvm::all_of(inputs, [](Attribute attr) { return attr; }))
+    return {};
+
+  return ListAttr::get(getContext(), getType().getElementType(),
+                       ArrayAttr::get(getContext(), inputs));
+}
+
 void circt::om::ListCreateOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printOperands(getInputs());
@@ -715,6 +742,27 @@ ParseResult circt::om::ListCreateOp::parse(OpAsmParser &parser,
     if (parser.resolveOperand(operand, elemType, result.operands))
       return failure();
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ListConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult circt::om::ListConcatOp::fold(FoldAdaptor adaptor) {
+  auto subLists = adaptor.getSubLists();
+  if (subLists.size() == 1)
+    return getSubLists().front();
+
+  SmallVector<Attribute> elements;
+  for (Attribute attr : subLists) {
+    auto listAttr = dyn_cast_or_null<ListAttr>(attr);
+    if (!listAttr)
+      return {};
+    llvm::append_range(elements, listAttr.getElements());
+  }
+
+  return ListAttr::get(getContext(), getType().getElementType(),
+                       ArrayAttr::get(getContext(), elements));
 }
 
 //===----------------------------------------------------------------------===//
@@ -850,6 +898,40 @@ OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
         // Extend lhs to lhsWidth + shiftAmt bits so no bits are truncated.
         return success(lhs.extend(lhs.getBitWidth() + shiftAmt) << shiftAmt);
       });
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerBitAndOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntegerBitAndOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(
+      adaptor.getLhs(), adaptor.getRhs(),
+      [](const APSInt &lhs, const APSInt &rhs) { return success(lhs & rhs); });
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerBitOrOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntegerBitOrOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(
+      adaptor.getLhs(), adaptor.getRhs(),
+      [](const APSInt &lhs, const APSInt &rhs) { return success(lhs | rhs); });
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerBitNotOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntegerBitNotOp::fold(FoldAdaptor adaptor) {
+  auto input = dyn_cast_or_null<circt::om::IntegerAttr>(adaptor.getInput());
+  if (!input)
+    return {};
+
+  APSInt result = ~getAPSIntForOMIntegerAttr(input);
+  return circt::om::IntegerAttr::get(
+      getContext(), mlir::IntegerAttr::get(getContext(), result));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1043,6 +1125,34 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
     return {};
 
   return *result;
+}
+
+//===----------------------------------------------------------------------===//
+// ListContainsOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ListContainsOp::fold(FoldAdaptor adaptor) {
+  // Fold membership based on SSA identity for a directly constructed list.
+  if (auto listCreate = getList().getDefiningOp<ListCreateOp>();
+      listCreate && llvm::is_contained(listCreate.getInputs(), getElement()))
+    return mlir::IntegerAttr::get(getResult().getType(), 1);
+
+  auto listAttr = dyn_cast_or_null<ListAttr>(adaptor.getList());
+  Attribute elementAttr = adaptor.getElement();
+  // Both the list and element must fold to constant attributes. Even an empty
+  // list requires a constant element.
+  if (!listAttr || !elementAttr)
+    return {};
+
+  bool found = false;
+  for (Attribute candidate : listAttr.getElements()) {
+    auto equality = evaluateBinaryEquality(candidate, elementAttr);
+    if (failed(equality))
+      return {};
+    found |= !cast<mlir::IntegerAttr>(*equality).getValue().isZero();
+  }
+
+  return mlir::IntegerAttr::get(getResult().getType(), found);
 }
 
 //===----------------------------------------------------------------------===//

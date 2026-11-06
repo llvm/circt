@@ -45,7 +45,6 @@ using circt::igraph::InstanceOpInterface;
 using circt::igraph::InstancePath;
 using circt::igraph::InstancePathCache;
 using llvm::BumpPtrAllocator;
-using llvm::MapVector;
 using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
 using mlir::FailureOr;

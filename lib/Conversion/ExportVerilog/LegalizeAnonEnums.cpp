@@ -34,7 +34,8 @@ struct LegalizeAnonEnums
     auto topLevel = getOperation();
     if (!typeScope) {
       auto builder = OpBuilder::atBlockBegin(&topLevel.getRegion().front());
-      typeScope = TypeScopeOp::create(builder, topLevel.getLoc(), "Enums");
+      typeScope = TypeScopeOp::create(builder, topLevel.getLoc(), "Enums",
+                                      /*sym_visibility=*/{});
       typeScope.getBodyRegion().push_back(new Block());
       mlir::SymbolTable symbolTable(topLevel);
       symbolTable.insert(typeScope);
@@ -52,7 +53,8 @@ struct LegalizeAnonEnums
     auto typeScope = getTypeScope();
     auto builder = OpBuilder::atBlockEnd(&typeScope.getRegion().front());
     auto declName = StringAttr::get(context, "enum" + Twine(enumCount++));
-    TypedeclOp::create(builder, loc, declName, TypeAttr::get(type), nullptr);
+    TypedeclOp::create(builder, loc, declName, /*sym_visibility=*/{},
+                       TypeAttr::get(type), nullptr);
     auto symRef = SymbolRefAttr::get(typeScope.getSymNameAttr(),
                                      FlatSymbolRefAttr::get(declName));
     typeAlias = TypeAliasType::get(symRef, type);
@@ -111,6 +113,18 @@ struct LegalizeAnonEnums
     if (auto inoutType = dyn_cast<InOutType>(type)) {
       if (auto newType = processType(inoutType.getElementType()))
         return InOutType::get(newType);
+      return {};
+    }
+
+    if (auto netType = dyn_cast<sv::NetType>(type)) {
+      if (auto newType = processType(netType.getElementType()))
+        return sv::NetType::get(newType);
+      return {};
+    }
+
+    if (auto varType = dyn_cast<sv::VarType>(type)) {
+      if (auto newType = processType(varType.getElementType()))
+        return sv::VarType::get(newType);
       return {};
     }
 

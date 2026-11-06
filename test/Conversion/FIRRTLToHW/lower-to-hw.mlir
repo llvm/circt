@@ -804,8 +804,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module private @Analog(inout %a1 : i1, inout %b1 : i1,
-  // CHECK:                          inout %c1 : i1, out outClock : !seq.clock) {
+  // CHECK-LABEL: hw.module private @Analog(in %a1 : !hw.inout<i1>, in %b1 : !hw.inout<i1>,
+  // CHECK:                          in %c1 : !hw.inout<i1>, out outClock : !seq.clock) {
   // CHECK-NEXT:   %0 = sv.read_inout %c1 : !hw.inout<i1>
   // CHECK-NEXT:   %1 = sv.read_inout %b1 : !hw.inout<i1>
   // CHECK-NEXT:   %2 = sv.read_inout %a1 : !hw.inout<i1>
@@ -1548,7 +1548,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %result_iOut = firrtl.instance iOut @AnalogOutModA(out a: !firrtl.analog<8>)
     firrtl.attach %a, %result_iIn, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
   }
-  // CHECK-LABEL: hw.module @AnalogMergeTwoWithPort(inout %a : i8) {
+  // CHECK-LABEL: hw.module @AnalogMergeTwoWithPort(in %a : !hw.inout<i8>) {
   // CHECK-NEXT:    hw.instance "iIn" @AnalogInModA(a: %a: !hw.inout<i8>) -> ()
   // CHECK-NEXT:    hw.instance "iOut" @AnalogOutModA(a: %a: !hw.inout<i8>) -> ()
   // CHECK-NEXT:    hw.output

@@ -57,7 +57,8 @@ constexpr uint64_t MagicNumberHi = 0x207D98E5;
 constexpr uint64_t MagicNumber = MagicNumberLo | (MagicNumberHi << 32);
 constexpr uint64_t MagicNumberOffset = 0;
 
-constexpr uint32_t ExpectedVersionNumber = 0;
+/// Keep in sync with circt::esi::esiApiVersion and the PyCDE BSP.
+constexpr uint32_t ExpectedVersionNumber = 1;
 constexpr uint64_t VersionNumberOffset = 8;
 
 constexpr uint32_t ManifestPtrOffset = 0x10;

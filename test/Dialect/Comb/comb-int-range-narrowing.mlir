@@ -2,18 +2,18 @@
 
 // CHECK-LABEL: @basic_csa
 hw.module @basic_csa(in %a : i1, in %b : i1, in %c : i1, out add_abc : i3) {
-  // CHECK-NEXT %c0_i2 = hw.constant 0 : i2
-  // CHECK-NEXT %false = hw.constant false
-  // CHECK-NEXT %[[A_EXT:.+]] = comb.concat %false, %a : i1, i1
-  // CHECK-NEXT %[[B_EXT:.+]] = comb.concat %false, %b : i1, i1
-  // CHECK-NEXT %[[ADD_2:.+]] = comb.add %[[A_EXT]], %[[B_EXT]] : i2
-  // CHECK-NEXT %[[ADD_2_EXT:.+]] = comb.concat %false, %[[ADD_2]] : i1, i2
-  // CHECK-NEXT %[[C_EXT:.+]] = comb.concat %c0_i2, %c : i2, i1
-  // CHECK-NEXT %[[ADD_2_2:.+]] = comb.extract %[[ADD_2_EXT]] from 0 : (i3) -> i2
-  // CHECK-NEXT %[[C_2:.+]] = comb.extract %[[C_EXT]] from 0 : (i3) -> i2
-  // CHECK-NEXT %[[ADD_3:.+]] = comb.add %[[ADD_2_2]], %[[C_2]] : i2
-  // CHECK-NEXT %[[RES:.+]] = comb.concat %false, %[[ADD_3]] : i1, i2
-  // CHECK-NEXT hw.output %[[RES]] : i3
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %false = hw.constant false
+  // CHECK-NEXT: %[[A_EXT:.+]] = comb.concat %false, %a : i1, i1
+  // CHECK-NEXT: %[[B_EXT:.+]] = comb.concat %false, %b : i1, i1
+  // CHECK-NEXT: %[[ADD_2:.+]] = comb.add %[[A_EXT]], %[[B_EXT]] : i2
+  // CHECK-NEXT: %[[ADD_2_EXT:.+]] = comb.concat %false, %[[ADD_2]] : i1, i2
+  // CHECK-NEXT: %[[C_EXT:.+]] = comb.concat %c0_i2, %c : i2, i1
+  // CHECK-NEXT: %[[ADD_2_2:.+]] = comb.extract %[[ADD_2_EXT]] from 0 : (i3) -> i2
+  // CHECK-NEXT: %[[C_2:.+]] = comb.extract %[[C_EXT]] from 0 : (i3) -> i2
+  // CHECK-NEXT: %[[ADD_3:.+]] = comb.add %[[ADD_2_2]], %[[C_2]] : i2
+  // CHECK-NEXT: %[[RES:.+]] = comb.concat %false, %[[ADD_3]] : i1, i2
+  // CHECK-NEXT: hw.output %[[RES]] : i3
   %c0_i2 = hw.constant 0 : i2
   %false = hw.constant false
   %0 = comb.concat %false, %a : i1, i1
@@ -95,20 +95,24 @@ hw.module @do_nothing(in %a : i8, in %b : i9, in %c : i10, in %d : i16, out res 
   hw.output %6 : i18
 }
 
+// CHECK-LABEL: @logical_ops
 hw.module @logical_ops(in %a : i8, in %b : i9, in %c : i10, in %d : i16, out res : i18) {
-  // CHECK-NEXT %c0_i7 = hw.constant 0 : i7
-  // CHECK-NEXT %[[FALSE:.+]] = hw.constant false
-  // CHECK-NEXT %c0_i9 = hw.constant 0 : i9
-  // CHECK-NEXT %c0_i8 = hw.constant 0 : i8
-  // CHECK-NEXT %[[A_EXT:.+]] = comb.concat %c0_i9, %a : i9, i8
-  // CHECK-NEXT %[[B_EXT:.+]] = comb.concat %c0_i8, %b : i8, i9
-  // CHECK-NEXT %[[AND:.+]] = comb.and %[[A_EXT]], %[[B_EXT]] : i17
-  // CHECK-NEXT %[[C_EXT:.+]] = comb.concat %c0_i7, %c : i7, i10
-  // CHECK-NEXT %[[OR:.+]] = comb.or %[[AND]], %[[C_EXT]] : i17
-  // CHECK-NEXT %[[D_EXT:.+]] = comb.concat %[[FALSE]], %d : i1, i16
-  // CHECK-NEXT %[[ADD:.+]] = comb.add %[[OR]], %[[D_EXT]] : i17
-  // CHECK-NEXT %[[RES:.+]] = comb.concat %[[FALSE]], %[[ADD]] : i1, i17
-  // CHECK-NEXT hw.output %[[RES]] : i18
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %[[FALSE:.+]] = hw.constant false
+  // CHECK-NEXT: %c0_i9 = hw.constant 0 : i9
+  // CHECK-NEXT: %c0_i8 = hw.constant 0 : i8
+  // CHECK-NEXT: %[[A_EXT:.+]] = comb.concat %c0_i9, %a : i9, i8
+  // CHECK-NEXT: %[[B_EXT:.+]] = comb.concat %c0_i8, %b : i8, i9
+  // CHECK-NEXT: %[[AND:.+]] = comb.and %[[A_EXT]], %[[B_EXT]] : i17
+  // CHECK-NEXT: %[[AND_EXT:.+]] = comb.concat %[[FALSE]], %[[AND]] : i1, i17
+  // CHECK-NEXT: %[[C_EXT:.+]] = comb.concat %c0_i8, %c : i8, i10
+  // CHECK-NEXT: %[[OR:.+]] = comb.or %[[AND_EXT]], %[[C_EXT]] : i18
+  // CHECK-NEXT: %[[D_EXT:.+]] = comb.concat %c0_i2, %d : i2, i16
+  // CHECK-NEXT: %[[OR_17:.+]] = comb.extract %[[OR]] from 0 : (i18) -> i17
+  // CHECK-NEXT: %[[D_EXT_17:.+]] = comb.extract %[[D_EXT]] from 0 : (i18) -> i17
+  // CHECK-NEXT: %[[ADD:.+]] = comb.add %[[OR_17]], %[[D_EXT_17]] : i17
+  // CHECK-NEXT: %[[RES:.+]] = comb.concat %[[FALSE]], %[[ADD]] : i1, i17
+  // CHECK-NEXT: hw.output %[[RES]] : i18
   %c0_i2 = hw.constant 0 : i2
   %false = hw.constant false
   %c0_i9 = hw.constant 0 : i9

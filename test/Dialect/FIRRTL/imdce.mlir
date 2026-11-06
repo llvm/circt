@@ -700,3 +700,25 @@ firrtl.circuit "InstanceChoiceTest" {
     } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
   }
 }
+
+// -----
+
+// An aggregate create op with no live users must not keep its operands alive.
+// CHECK-LABEL: firrtl.circuit "DeadAggregateCreate"
+firrtl.circuit "DeadAggregateCreate" {
+  // CHECK-NOT: firrtl.module private @Child
+  firrtl.module private @Child(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
+    %vector = firrtl.vectorcreate %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
+    %bundle = firrtl.bundlecreate %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+
+  // CHECK-LABEL: firrtl.module @DeadAggregateCreate(
+  // CHECK-NEXT:    firrtl.matchingconnect %c, %a
+  // CHECK-NEXT:  }
+  firrtl.module @DeadAggregateCreate(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
+    %child_a, %child_b = firrtl.instance child @Child(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>)
+    firrtl.matchingconnect %child_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %child_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %c, %a : !firrtl.uint<1>
+  }
+}

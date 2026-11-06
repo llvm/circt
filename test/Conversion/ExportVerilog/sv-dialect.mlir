@@ -507,7 +507,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
 // CHECK-NEXT:                 b, //
 // CHECK-NEXT:                 c //
 // CHECK-NEXT:  );
-hw.module @Aliasing(inout %a : i42, inout %b : i42, inout %c : i42) {
+hw.module @Aliasing(in %a : !hw.inout<i42>, in %b : !hw.inout<i42>, in %c : !hw.inout<i42>) {
 
   // CHECK: alias a = b;
   sv.alias %a, %b     : !hw.inout<i42>, !hw.inout<i42>
@@ -601,7 +601,7 @@ hw.module @regWithInit(in %arg : i32) {
 // CHECK-LABEL: module struct_field_inout1(
 // CHECK-NEXT:   inout struct packed {logic b; } a
 // CHECK-NEXT:  );
-hw.module @struct_field_inout1(inout %a : !hw.struct<b: i1>) {
+hw.module @struct_field_inout1(in %a : !hw.inout<!hw.struct<b: i1>>) {
   // CHECK: assign a.b = 1'h1;
   %true = hw.constant true
   %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: i1>>
@@ -611,7 +611,7 @@ hw.module @struct_field_inout1(inout %a : !hw.struct<b: i1>) {
 // CHECK-LABEL: module struct_field_inout2(
 // CHECK-NEXT:    inout struct packed {struct packed {logic c; } b; } a
 // CHECK-NEXT:  );
-hw.module @struct_field_inout2(inout %a: !hw.struct<b: !hw.struct<c: i1>>) {
+hw.module @struct_field_inout2(in %a: !hw.inout<!hw.struct<b: !hw.struct<c: i1>>>) {
   // CHECK: assign a.b.c = 1'h1;
   %true = hw.constant true
   %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: !hw.struct<c: i1>>>

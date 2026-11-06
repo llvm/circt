@@ -163,7 +163,7 @@ std::optional<uint64_t> MMIOSysInfo::getCoreClockFrequency() const {
 
 std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
   uint64_t version = getEsiVersion();
-  if (version != 0)
+  if (version != ExpectedVersionNumber)
     throw std::runtime_error("Unsupported ESI header version: " +
                              std::to_string(version));
   uint64_t manifestPtr = mmio->read(MetadataOffset + ManifestPtrOffset);
@@ -182,6 +182,28 @@ std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
 }
 
 std::string HostMem::getServiceSymbol() const { return "__builtin_HostMem"; }
+
+std::optional<uint64_t>
+HostMemRegion::getDeviceAddress(const void *ptr, std::size_t size) const {
+  if (size == 0)
+    return std::nullopt;
+  uintptr_t base = reinterpret_cast<uintptr_t>(getPtr());
+  uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
+  std::size_t regionSize = getSize();
+  // Check bounds with subtractions only so nothing can overflow.
+  if (p < base)
+    return std::nullopt;
+  uintptr_t offset = p - base;
+  if (offset >= regionSize || size > regionSize - offset)
+    return std::nullopt;
+  uint64_t devBase = reinterpret_cast<uintptr_t>(getDevicePtr());
+  // The whole device range [devBase + offset, devBase + offset + size - 1]
+  // must be representable.
+  uint64_t devHeadroom = UINT64_MAX - devBase;
+  if (offset > devHeadroom || size - 1 > devHeadroom - offset)
+    return std::nullopt;
+  return devBase + offset;
+}
 
 CustomService::CustomService(AppIDPath idPath, AcceleratorConnection &conn,
                              const ServiceImplDetails &details,

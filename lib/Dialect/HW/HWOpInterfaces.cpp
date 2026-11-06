@@ -170,9 +170,6 @@ raw_ostream &circt::hw::operator<<(raw_ostream &printer, PortInfo port) {
   case ModulePort::Direction::Output:
     dirstr = "output";
     break;
-  case ModulePort::Direction::InOut:
-    dirstr = "inout";
-    break;
   }
   printer << dirstr << " " << port.name << " : " << port.type << " (argnum "
           << port.argNum << ", sym " << port.getSym() << ", loc " << port.loc

@@ -208,6 +208,12 @@ struct Emitter {
     emitPrimExpr("prop_eq", op);
   }
 
+  void emitExpression(ListContainsOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "list contains")))
+      return;
+    emitPrimExpr("list_contains", op);
+  }
+
   void emitExpression(BoolAndOp op) {
     if (failed(requireVersion({6, 0, 0}, op, "boolean and")))
       return;
@@ -224,6 +230,24 @@ struct Emitter {
     if (failed(requireVersion({6, 0, 0}, op, "boolean xor")))
       return;
     emitPrimExpr("bool_xor", op);
+  }
+
+  void emitExpression(IntegerAndOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "integer and")))
+      return;
+    emitPrimExpr("integer_and", op);
+  }
+
+  void emitExpression(IntegerOrOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "integer or")))
+      return;
+    emitPrimExpr("integer_or", op);
+  }
+
+  void emitExpression(IntegerNotOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "integer not")))
+      return;
+    emitPrimExpr("integer_not", op);
   }
 
   // Attributes
@@ -1584,7 +1608,8 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp, StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp,
+          UnknownValueOp, IntegerAndOp, IntegerOrOp, IntegerNotOp,
+          StringConcatOp, PropEqOp, ListContainsOp, BoolAndOp, BoolOrOp,
           BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,

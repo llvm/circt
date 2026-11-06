@@ -579,6 +579,23 @@ firrtl.circuit "Bundle" {
   }
 }
 
+// Bundles with the same preorder sequence of types but different nesting must
+// not deduplicate.
+// CHECK-LABEL: firrtl.circuit "BundleBoundaries"
+firrtl.circuit "BundleBoundaries" {
+  // CHECK: firrtl.module private @A
+  firrtl.module private @A(in %p: !firrtl.bundle<a: bundle<b: uint<1>>, c: uint<1>, d: bundle<e: uint<1>>>) {}
+
+  // CHECK: firrtl.module private @B
+  firrtl.module private @B(in %p: !firrtl.bundle<a: bundle<b: uint<1>, c: uint<1>>, d: bundle<e: uint<1>>>) {}
+  firrtl.module @BundleBoundaries() attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK:      firrtl.instance a @A
+    // CHECK-NEXT: firrtl.instance b @B
+    %a_p = firrtl.instance a @A(in p: !firrtl.bundle<a: bundle<b: uint<1>>, c: uint<1>, d: bundle<e: uint<1>>>)
+    %b_p = firrtl.instance b @B(in p: !firrtl.bundle<a: bundle<b: uint<1>, c: uint<1>>, d: bundle<e: uint<1>>>)
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "MuxBundle"
 firrtl.circuit "MuxBundle" {
   firrtl.module private @Bar0(out %o: !firrtl.bundle<a: uint<1>>) {
@@ -839,49 +856,43 @@ firrtl.circuit "NoDedupPublic" {
 
 // CHECK-LABEL: "UninstantiatedClasses"
 // Classes that are only used in `!firrtl.class` types without concrete
-// instances should still be properly hashed and deduplicated.
-firrtl.circuit "UninstantiatedClasses" attributes {annotations = [
-  {class = "firrtl.transforms.MustDeduplicateAnnotation", modules = [
-    "~UninstantiatedClasses|Foo",
-    "~UninstantiatedClasses|Bar"
-  ]}
-]} {
+// instances must not be deduplicated either.
+firrtl.circuit "UninstantiatedClasses" {
   // CHECK: @UninstantiatedClasses
   firrtl.module @UninstantiatedClasses() {
     // CHECK-NEXT: %x = firrtl.object @Foo
-    // CHECK-NEXT: %y = firrtl.object @Foo
+    // CHECK-NEXT: %y = firrtl.object @Bar
     %x = firrtl.object @Foo(out a: !firrtl.class<@Spam()>)
     %y = firrtl.object @Bar(out a: !firrtl.class<@Eggs()>)
   }
   // CHECK:     firrtl.class private @Foo
-  // CHECK-NOT: firrtl.class private @Bar
+  // CHECK:     firrtl.class private @Bar
   firrtl.class private @Foo(out %a: !firrtl.class<@Spam()>) {}
   firrtl.class private @Bar(out %a: !firrtl.class<@Eggs()>) {}
   // CHECK:     firrtl.class private @Spam
-  // CHECK-NOT: firrtl.class private @Eggs
+  // CHECK:     firrtl.class private @Eggs
   firrtl.class private @Spam() {}
   firrtl.class private @Eggs() {}
 }
 
-// CHECK-LABEL: "UpdateAttrsAndTypes"
-// Ops that contain references to symbols have to have the symbol references
-// updated after dedup.
-firrtl.circuit "UpdateAttrsAndTypes" {
+// CHECK-LABEL: "PreserveClassAttrsAndTypes"
+// Class references in attributes and types must remain unchanged.
+firrtl.circuit "PreserveClassAttrsAndTypes" {
   // CHECK: @Foo()
-  // CHECK-NOT: @Bar()
+  // CHECK: @Bar()
   firrtl.class private @Foo() {}
   firrtl.class private @Bar() {}
 
-  // CHECK: @UpdateAttrsAndTypes()
-  firrtl.module @UpdateAttrsAndTypes() {
+  // CHECK: @PreserveClassAttrsAndTypes()
+  firrtl.module @PreserveClassAttrsAndTypes() {
     // CHECK-NEXT: firrtl.wire : !firrtl.class<@Foo()>
-    // CHECK-NEXT: firrtl.wire : !firrtl.class<@Foo()>
+    // CHECK-NEXT: firrtl.wire : !firrtl.class<@Bar()>
     %wire1 = firrtl.wire : !firrtl.class<@Foo()>
     %wire2 = firrtl.wire : !firrtl.class<@Bar()>
 
     // Should work on attributes and types of arbitrary operations, too.
     // CHECK-NEXT: builtin.unrealized_conversion_cast to !firrtl.class<@Foo()> {a = @Foo, b = [@Foo]}
-    // CHECK-NEXT: builtin.unrealized_conversion_cast to !firrtl.class<@Foo()> {a = @Foo, b = [@Foo]}
+    // CHECK-NEXT: builtin.unrealized_conversion_cast to !firrtl.class<@Bar()> {a = @Bar, b = [@Bar]}
     %0 = builtin.unrealized_conversion_cast to !firrtl.class<@Foo()> {a = @Foo, b = [@Foo]}
     %1 = builtin.unrealized_conversion_cast to !firrtl.class<@Bar()> {a = @Bar, b = [@Bar]}
   }

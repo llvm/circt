@@ -72,7 +72,8 @@ def UndefLibOp: CalyxPrimitive<"undefined", []> {
   let arguments = (ins SymbolNameAttr:$sym_name);
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name, "::mlir::TypeRange":$resultTypes), [{
-      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
+      $_state.addAttribute(getSymNameAttrName($_state.name),
+                           $_builder.getStringAttr(sym_name));
       $_state.addTypes(resultTypes);
     }]>
   ];
@@ -109,13 +110,15 @@ def RegisterOp : CalyxPrimitive<"register", [
   let results = (outs AnyType:$in, I1:$write_en, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name, "size_t":$width), [{
-      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
+      $_state.addAttribute(getSymNameAttrName($_state.name),
+                           $_builder.getStringAttr(sym_name));
       Type i1Type = $_builder.getI1Type();
       Type widthType = $_builder.getIntegerType(width);
       $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});
     }]>,
     OpBuilder<(ins "StringRef":$sym_name, "Type":$type), [{
-      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
+      $_state.addAttribute(getSymNameAttrName($_state.name),
+                           $_builder.getStringAttr(sym_name));
       Type i1Type = $_builder.getI1Type();
       $_state.addTypes({type, i1Type, i1Type, i1Type, type, i1Type});
     }]>
@@ -290,7 +293,8 @@ class CalyxLibraryOp<string mnemonic, string prefix = "std_", list<Trait> traits
   let arguments = (ins SymbolNameAttr:$sym_name);
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name, "::mlir::TypeRange":$resultTypes), [{
-      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
+      $_state.addAttribute(getSymNameAttrName($_state.name),
+                           $_builder.getStringAttr(sym_name));
       $_state.addTypes(resultTypes);
     }]>
   ];
@@ -561,7 +565,8 @@ def WireLibOp : UnaryLibraryOp<"wire", "std_", [SameTypeConstraint<"in", "out">]
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name, "::mlir::Type":$wireType), [{
       llvm::SmallVector<mlir::Type> resultTypes = {wireType, wireType};
-      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
+      $_state.addAttribute(getSymNameAttrName($_state.name),
+                           $_builder.getStringAttr(sym_name));
       $_state.addTypes(resultTypes);
     }]>
   ];

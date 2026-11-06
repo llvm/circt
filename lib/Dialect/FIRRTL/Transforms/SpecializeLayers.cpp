@@ -494,7 +494,7 @@ struct SpecializeLayers {
     // have been specialized away.
     llvm::BitVector disabledPorts(oldTypeAttrs.size());
 
-    auto moduleName = moduleLike.getNameAttr();
+    auto moduleName = moduleLike.getModuleNameAttr();
     for (auto [index, typeAttr] :
          llvm::enumerate(oldTypeAttrs.getAsRange<TypeAttr>())) {
       // Specialize the type fo the port.
@@ -659,6 +659,18 @@ struct SpecializeLayers {
               .Case<FModuleOp, FExtModuleOp>(
                   [&](auto op) { return specializeModuleLike(op); });
         });
+
+    // Remove all simulation and formal test operations which target a module
+    // that was deleted.
+    for (auto &op : llvm::make_early_inc_range(*circuit.getBodyBlock())) {
+      FlatSymbolRefAttr target;
+      if (auto sim = dyn_cast<SimulationOp>(op))
+        target = sim.getModuleNameAttr();
+      else if (auto formal = dyn_cast<FormalOp>(op))
+        target = formal.getModuleNameAttr();
+      if (target && removedSyms.contains(target))
+        op.erase();
+    }
 
     // Remove all hierarchical path operations which reference deleted symbols,
     // and create a set of the removed paths operations.  We will have to remove

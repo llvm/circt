@@ -16,13 +16,14 @@ from pycde.system import System
 from pycde.types import (Array, Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, StructType, Type, UInt, Window)
 
+from pycde.seq import FIFO as SeqFIFO
 from ..components import ChannelArbiter, MaxOutstandingLimiter
 
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 import typing
 
 MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
-VersionNumber = 0  # Version 0: format subject to change
+VersionNumber = 1  # Keep in sync with circt::esi::esiApiVersion.
 
 IndirectionMagicNumber = 0x312bf0cc_E5100E51  # random + ESI__ESI
 IndirectionVersionNumber = 0  # Version 0: format subject to change
@@ -35,6 +36,8 @@ ResetMagicNumber = 0x00000E510000B007
 # Number of cycles to wait after a reset is requested before asserting it. This
 # gives in-flight transactions time to drain.
 ResetCycles = 8192
+
+MMIOWordBytes = esi.MMIODataType.width // 8
 
 
 class ESI_Manifest_ROM(Module):
@@ -371,6 +374,167 @@ def ChannelDemuxTree_HalfStage_ReadyBlocking(
   return ChannelDemuxTree
 
 
+def MMIOPrefixRouter(
+    regions: Tuple[Tuple[int, Optional[int]],
+                   ...]) -> type["MMIOPrefixRouterImpl"]:
+  """Build a pipelined address-prefix tree which routes MMIO commands.
+
+  Each ``(base, size)`` must describe a disjoint, power-of-two-aligned block.
+  The last region may pass ``size=None`` to claim every address at or above its
+  base; the manifest uses this since its size isn't known during generation.
+  Internal nodes test one address bit and register both outgoing paths. Leaves
+  replace the global address with the block-local low bits, so no subtractor is
+  needed (the open-ended region is the one exception).
+
+  For four 0x100-byte regions at 0x0/0x100/0x200/0x300 plus an open-ended
+  region at 0x400: the open-ended region is peeled off first, then each level
+  splits the remaining candidates in half, so depth is ``O(log N)`` rather than
+  one level per region::
+
+      cmd ──▶ addr[31:10]≠0 ──1──▶ @0x400  (open ended, offset -= 0x400)
+                    │
+                    0
+                    ▼
+                 addr[9]
+                 ╱      ╲
+                0        1
+               ▼          ▼
+            addr[8]     addr[8]
+            ╱    ╲      ╱    ╲
+           0      1    0      1
+           ▼      ▼    ▼      ▼
+         @0x0 @0x100 @0x200 @0x300
+
+  The four leaves all take their client-local offset as ``addr[7:0]``.
+  """
+
+  assert len(regions) > 1, "MMIO routing requires at least two regions"
+
+  # An open-ended final region matches anything with a bit set above the sized
+  # regions, so it needs no size and can never overflow its window.
+  open_ended_base: Optional[int] = None
+  sized_regions = regions
+  if regions[-1][1] is None:
+    open_ended_base = regions[-1][0]
+    assert open_ended_base > 0 and \
+        open_ended_base & (open_ended_base - 1) == 0, \
+        "an open-ended MMIO region must start at a power-of-two address"
+    sized_regions = regions[:-1]
+
+  for base, size in sized_regions:
+    assert size > 0 and size & (size - 1) == 0, \
+        "MMIO region sizes must be powers of two"
+    assert base % size == 0, "MMIO regions must be aligned to their size"
+  assert all(
+      a_base + a_size <= b_base
+      for (a_base, a_size), (b_base, _) in zip(sized_regions, regions[1:])), \
+      "MMIO regions must be sorted and disjoint"
+
+  entries = [(idx, base, size) for idx, (base, size) in enumerate(sized_regions)
+            ]
+
+  def build_tree(node_entries):
+    if len(node_entries) == 1:
+      return node_entries[0][0]
+
+    lowest_fixed_bit = max(size.bit_length() - 1 for _, _, size in node_entries)
+    candidates = []
+    for bit in range(31, lowest_fixed_bit - 1, -1):
+      zeros = [entry for entry in node_entries if not (entry[1] >> bit) & 1]
+      if zeros and len(zeros) != len(node_entries):
+        candidates.append(
+            (abs(len(node_entries) - 2 * len(zeros)), -bit, bit, zeros))
+    assert candidates, "unable to distinguish disjoint MMIO regions"
+    _, _, bit, zeros = min(candidates)
+    zero_indices = {entry[0] for entry in zeros}
+    ones = [entry for entry in node_entries if entry[0] not in zero_indices]
+    return bit, build_tree(zeros), build_tree(ones)
+
+  tree = build_tree(entries)
+
+  class MMIOPrefixRouterImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    inp = Input(Channel(esi.MMIOReadWriteCmdType))
+    for idx in range(len(regions)):
+      locals()[f"output_{idx}"] = Output(Channel(esi.MMIOReadWriteCmdType))
+
+    @generator
+    def build(ports):
+      """Route through one registered address-bit branch per tree level."""
+
+      def new_demux(command_channel: ChannelSignal, select, name: str):
+        Demux = ChannelDemuxN_HalfStage_ReadyBlocking(esi.MMIOReadWriteCmdType,
+                                                      num_outs=2,
+                                                      next_sel_width=0)
+        demux_input = command_channel.transform(
+            lambda cmd, _sel=select, _type=Demux.InPayloadType: _type({
+                "sel": _sel(cmd),
+                "next_sel": Bits(0)(0),
+                "data": cmd
+            }))
+        return Demux(clk=ports.clk,
+                     rst=ports.rst,
+                     inp=demux_input,
+                     instance_name=name)
+
+      def route(node, command_channel: ChannelSignal, path: str):
+        if isinstance(node, int):
+          _, size = regions[node]
+          local_width = size.bit_length() - 1
+
+          def localize(cmd):
+            local_offset = cmd.offset.as_bits()[:local_width].pad_or_truncate(
+                32).as_uint()
+            return esi.MMIOReadWriteCmdType({
+                "write": cmd.write,
+                "offset": local_offset,
+                "data": cmd.data
+            })
+
+          setattr(ports, f"output_{node}", command_channel.transform(localize))
+          return
+
+        bit, zero_node, one_node = node
+        demux = new_demux(command_channel,
+                          lambda cmd, _bit=bit: cmd.offset.as_bits()[_bit],
+                          f"prefix_{path}_bit{bit}")
+        route(zero_node,
+              demux.get_out(0).transform(lambda p: p.data), path + "0")
+        route(one_node,
+              demux.get_out(1).transform(lambda p: p.data), path + "1")
+
+      client_channel = ports.inp
+      if open_ended_base is not None:
+        # Peel off the open-ended region first: any address bit above the sized
+        # regions selects it. Its base isn't a bit slice away from the local
+        # offset (the region is unbounded), so subtract it explicitly.
+        split_bit = open_ended_base.bit_length() - 1
+        split = new_demux(
+            ports.inp, lambda cmd: cmd.offset.as_bits()[split_bit:].or_reduce(),
+            f"prefix_above_bit{split_bit}")
+
+        def localize_open_ended(payload):
+          cmd = payload.data
+          local_offset = (cmd.offset - UInt(32)(open_ended_base)).as_uint(32)
+          return esi.MMIOReadWriteCmdType({
+              "write": cmd.write,
+              "offset": local_offset,
+              "data": cmd.data
+          })
+
+        setattr(ports, f"output_{len(regions) - 1}",
+                split.get_out(1).transform(localize_open_ended))
+        client_channel = split.get_out(0).transform(lambda p: p.data)
+
+      route(tree, client_channel, "")
+
+    def get_out(self, index: int) -> ChannelSignal:
+      return getattr(self, f"output_{index}")
+
+  return MMIOPrefixRouterImpl
+
+
 @modparams
 def DesignResetController(
     delay_cycles: int) -> type["DesignResetControllerImpl"]:
@@ -439,12 +603,15 @@ class ChannelMMIO(esi.ServiceImplementation):
   Implementation-defined MMIO layout:
     - 0x0: 0 constant
     - 0x8: Magic number (0x207D98E5_E5100E51)
-    - 0x12: ESI version number (0)
+    - 0x10: ESI version number (1)
     - 0x18: Location of the manifest ROM (absolute address)
 
-    - 0x800: Start of MMIO space for requests. Mapping is contained in the
+    - 0x100: Start of MMIO space for requests. Mapping is contained in the
              manifest so can be dynamically queried.
 
+    - Directly above the last client allocation (rounded up to a power of two):
+      Start of the manifest ROM. It matches any address with a bit set above
+      the client space, so it is never truncated by its window.
     - addr(Manifest ROM) + 0: Size of compressed manifest
     - addr(Manifest ROM) + 8: Start of compressed manifest
 
@@ -462,17 +629,12 @@ class ChannelMMIO(esi.ServiceImplementation):
   # write to the header. Propagates up to the BSP which performs the reset.
   reset_request = Output(Bits(1))
 
-  # Amount of register space each client gets. This is a GIANT HACK and needs to
-  # be replaced by parameterizable services.
-  # TODO: make the amount of register space each client gets a parameter.
-  # Supporting this will require more address decode logic.
-
-  RegisterSpace = 0x800
-  RegisterSpaceBits = RegisterSpace.bit_length() - 1
-  AddressMask = RegisterSpace - 1
+  # Amount of MMIO space a client gets when it doesn't request a size. Must be
+  # at least large enough for the header block, which uses eight 64-bit slots.
+  DefaultRegionSpace = 0x100
 
   # Start at this address for assigning MMIO addresses to service requests.
-  initial_offset: int = RegisterSpace
+  initial_offset: int = DefaultRegionSpace
 
   @generator
   def generate(ports, bundles: esi._ServiceGeneratorBundles):
@@ -481,47 +643,76 @@ class ChannelMMIO(esi.ServiceImplementation):
     return True
 
   @staticmethod
-  def build_table(bundles) -> Tuple[Dict[int, AssignableSignal], int]:
+  def build_table(
+      bundles) -> Tuple[Dict[int, Tuple[Optional[int], AssignableSignal]], int]:
     """Build a table of read and write addresses to BundleSignals."""
+
+    def align(value: int, alignment: int) -> int:
+      return (value + alignment - 1) // alignment * alignment
+
     offset = ChannelMMIO.initial_offset
-    table: Dict[int, AssignableSignal] = {}
+    table: Dict[int, Tuple[Optional[int], AssignableSignal]] = {}
     for bundle in bundles.to_client_reqs:
+      requested_size = bundle.options.get("size",
+                                          ChannelMMIO.DefaultRegionSpace)
+      if isinstance(requested_size,
+                    bool) or not isinstance(requested_size, int):
+        raise ValueError("MMIO request option 'size' must be an integer")
+      if requested_size <= 0:
+        raise ValueError("MMIO request option 'size' must be positive")
+      # Round the allocation up to a power of two and align the base to it so
+      # that the address decode is a pure prefix match and the client-local
+      # offset is a bit slice.
+      size = 1 << (max(requested_size, MMIOWordBytes) - 1).bit_length()
+      offset = align(offset, size)
+      next_offset = offset + size
+      if next_offset >= 1 << 32:
+        raise ValueError("MMIO address allocation exceeds the 32-bit space")
+
       if bundle.port == 'read':
-        table[offset] = bundle
+        table[offset] = size, bundle
         bundle.add_record(details={
             "offset": offset,
-            "size": ChannelMMIO.RegisterSpace,
+            "size": size,
             "type": "ro"
         })
-        offset += ChannelMMIO.RegisterSpace
       elif bundle.port == 'read_write':
-        table[offset] = bundle
+        table[offset] = size, bundle
         bundle.add_record(details={
             "offset": offset,
-            "size": ChannelMMIO.RegisterSpace,
+            "size": size,
             "type": "rw"
         })
-        offset += ChannelMMIO.RegisterSpace
       else:
-        assert False, "Unrecognized port name."
+        raise ValueError(f"Unrecognized MMIO port name: {bundle.port}")
+      offset = next_offset
 
-    manifest_loc = offset
+    # The manifest sits directly above the clients and claims every address
+    # with a bit set above them. Its size isn't known until CIRCT builds the
+    # manifest ROM, so leaving the region open-ended keeps it from overflowing
+    # while letting the BAR be only as large as the manifest actually needs.
+    manifest_loc = 1 << max(offset - 1, 0).bit_length()
+    if manifest_loc >= 1 << 32:
+      raise ValueError(
+          "MMIO address allocation leaves no room for the manifest")
     return table, manifest_loc
 
   @staticmethod
-  def build_read(ports, manifest_loc: int, table: Dict[int, AssignableSignal]):
+  def build_read(ports, manifest_loc: int,
+                 table: Dict[int, Tuple[Optional[int], AssignableSignal]]):
     """Builds the read side of the MMIO service."""
 
     # Instantiate the header and manifest ROM. Fill in the read_table with
     # bundle wires to be assigned identically to the other MMIO clients.
     header_bundle_wire = Wire(esi.MMIO.read_write.type)
-    table[0] = header_bundle_wire
+    table[0] = ChannelMMIO.DefaultRegionSpace, header_bundle_wire
     header = HeaderMMIO(manifest_loc)(clk=ports.clk,
                                       rst=ports.rst,
                                       read=header_bundle_wire)
 
     mani_bundle_wire = Wire(esi.MMIO.read.type)
-    table[manifest_loc] = mani_bundle_wire
+    # 'None' size: the manifest claims every address above the clients.
+    table[manifest_loc] = None, mani_bundle_wire
     ESI_Manifest_ROM_Wrapper(clk=ports.clk, read=mani_bundle_wire)
 
     # Unpack the cmd bundle.
@@ -545,41 +736,25 @@ class ChannelMMIO(esi.ServiceImplementation):
                                         )
     cmd_channel = cmd_limiter.out
 
-    # Get the selection index and the address to hand off to the clients.
-    sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(
-        cmd_channel, len(table), manifest_loc)
-
-    # Build the demux/mux and assign the results of each appropriately.
-    read_clients_clog2 = clog2(len(table))
-    # Combine selection bits and command channel payload into a struct channel for the demux tree.
-    TreeInType = StructType([
-        ("sel", Bits(read_clients_clog2)),
-        ("data", client_cmd_chan.type.inner_type),
-    ])
-    sel_bits_truncated = sel_bits.pad_or_truncate(read_clients_clog2)
-    combined_cmd_chan = client_cmd_chan.transform(
-        lambda cmd, _sel=sel_bits_truncated: TreeInType({
-            "sel": _sel,
-            "data": cmd
-        }))
-    demux_inst = ChannelDemuxTree_HalfStage_ReadyBlocking(
-        client_cmd_chan.type.inner_type, len(table), branching_factor_log2=2)(
+    sorted_table = sorted(table.items())
+    command_router = MMIOPrefixRouter(
+        tuple((base, size) for base, (size, _) in sorted_table))(
             clk=ports.clk,
             rst=ports.rst,
-            inp=combined_cmd_chan,
-            instance_name="client_cmd_demux",
+            inp=cmd_channel,
+            instance_name="command_router",
         )
-    client_cmd_channels = [demux_inst.get_out(i) for i in range(len(table))]
+
     client_data_channels = []
-    for (idx, offset) in enumerate(sorted(table.keys())):
-      bundle_wire = table[offset]
+    for idx, (_, (_, bundle_wire)) in enumerate(sorted_table):
+      client_cmd_channel = command_router.get_out(idx)
       bundle_type = bundle_wire.type
       if bundle_type == esi.MMIO.read.type:
-        offset = client_cmd_channels[idx].transform(lambda cmd: cmd.offset)
+        offset = client_cmd_channel.transform(lambda cmd: cmd.offset)
         bundle, bundle_froms = esi.MMIO.read.type.pack(offset=offset)
       elif bundle_type == esi.MMIO.read_write.type:
         bundle, bundle_froms = esi.MMIO.read_write.type.pack(
-            cmd=client_cmd_channels[idx])
+            cmd=client_cmd_channel)
       else:
         assert False, "Unrecognized bundle type."
       bundle_wire.assign(bundle)
@@ -598,43 +773,100 @@ class ChannelMMIO(esi.ServiceImplementation):
     # number to slot 7. Propagate it up to the caller (the BSP).
     ports.reset_request = header.reset_request
 
-  @staticmethod
-  def build_addr_read(read_addr_chan: ChannelSignal, num_clients: int,
-                      manifest_loc: int) -> Tuple[BitsSignal, ChannelSignal]:
-    """Build a channel for the address read request. Returns the index to select
-    the client and a channel for the masked address to be passed to the
-    clients."""
 
-    # Decoding the selection bits is very simple as of now. This might need to
-    # change to support more flexibility in addressing. Not clear if what we're
-    # doing now it sufficient or not.
+class TelemetryMMIO(esi.ServiceImplementation):
+  """An ESI service implementation which provides telemetry data through an MMIO
+  region. Each client request is assigned a register in the MMIO space. When a
+  read request is received for the assigned address, it gets routed to the
+  assigned client. When a write request is received, it is discarded. The
+  assignment table is stored in the manifest.
 
-    manifest_loc_const = UInt(32)(manifest_loc)
+  **REQUIREMENTS.** Both are needed to make the response merge safe:
 
-    cmd_ready_wire = Wire(Bits(1))
-    cmd, cmd_valid = read_addr_chan.unwrap(cmd_ready_wire)
-    is_manifest_read = cmd.offset >= manifest_loc_const
-    sel_bits = NamedWire(Bits(32 - ChannelMMIO.RegisterSpaceBits), "sel_bits")
-    # If reading the manifest, override the selection to select the manifest instead.
-    sel_bits.assign(
-        Mux(is_manifest_read,
-            cmd.offset.as_bits()[ChannelMMIO.RegisterSpaceBits:],
-            Bits(32 - ChannelMMIO.RegisterSpaceBits)(num_clients - 1)))
-    regular_client_offset = (cmd.offset.as_bits() &
-                             Bits(32)(ChannelMMIO.AddressMask)).as_uint()
-    offset = Mux(is_manifest_read, regular_client_offset,
-                 (cmd.offset - manifest_loc_const).as_uint(32))
-    client_cmd = NamedWire(esi.MMIOReadWriteCmdType, "client_cmd")
-    client_cmd.assign(
-        esi.MMIOReadWriteCmdType({
-            "write": cmd.write,
-            "offset": offset,
-            "data": cmd.data
-        }))
-    client_addr_chan, client_addr_ready = Channel(
-        esi.MMIOReadWriteCmdType).wrap(client_cmd, cmd_valid)
+  1. The `MMIO` service implementation this connects to must not issue a read
+     command while a previous read's response is still outstanding.
+  2. Every telemetry client must assert its `data` channel's `valid` only in
+     response to a `get`. `Telemetry.report_signal` does this; a client which
+     holds `valid` high permanently -- legal ESI, and the natural way to
+     express an always-available counter -- does not.
+
+  Given both, each command is demuxed to exactly one client and at most one
+  client is offering a response at a time, so the responses can be merged with
+  `ChannelMergeOneValid` instead of arbitrated -- which keeps the response path
+  from building a combinational cone across every telemetry client.
+
+  Nothing here enforces either, and violating either loses responses. Note (2)
+  is not specific to this merge: `ChannelMux2` is fixed-priority, so under an
+  arbiter a permanently-valid client starves every client behind it."""
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def generate(ports, bundles: esi._ServiceGeneratorBundles) -> bool:
+    if len(bundles.to_client_reqs) == 0:
+      # No clients to connect to, so we don't need to do anything.
+      return True
+
+    # Assign each telemetry client a register offset in MMIO space.
+    offset = 0
+    table: Dict[int, AssignableSignal] = {}
+    for bundle in bundles.to_client_reqs:
+      # Only support 'report' port for telemetry.
+      if bundle.port == 'report':
+        table[offset] = bundle
+        bundle.add_record(details={"offset": offset, "type": "mmio"})
+        offset += MMIOWordBytes
+      else:
+        raise ValueError(f"Unrecognized port name: {bundle.port}")
+
+    # Request exactly the space the register table occupies rather than relying
+    # on the MMIO service's default allocation.
+    mmio_cmd = esi.MMIO.read_write(esi.AppID("__telemetry_mmio"),
+                                   options={"size": offset})
+
+    # Unpack the cmd bundle.
+    data_resp_channel = Wire(Channel(esi.MMIODataType), "telemetry_data_resp")
+    counted_output = Wire(Channel(esi.MMIODataType), "telemetry_counted_output")
+    cmd_channel = mmio_cmd.unpack(data=counted_output)["cmd"]
+    counted_output.assign(data_resp_channel)
+
+    # Decode the address to select the client.
+    cmd_ready_wire = Wire(Bits(1), "telemetry_cmd_ready")
+    cmd, cmd_valid = cmd_channel.unwrap(cmd_ready_wire)
+    client_addr_chan, client_addr_ready = Channel(Bits(0)).wrap(
+        Bits(0)(0), cmd_valid)
     cmd_ready_wire.assign(client_addr_ready)
-    return sel_bits, client_addr_chan
+
+    # Build the demux/mux and assign the results of each appropriately.
+    read_clients_clog2 = clog2(len(table))
+    chan_sel = cmd.offset.as_bits()[3:read_clients_clog2 + 3]
+    client_cmd_channels = esi.ChannelDemux(
+        sel=chan_sel,
+        input=client_addr_chan,
+        num_outs=len(table),
+        instance_name="telemetry_client_cmd_demux")
+    client_data_channels = []
+    for (idx, offset) in enumerate(sorted(table.keys())):
+      bundle_wire = table[offset]
+      bundle_type = bundle_wire.type
+      # For telemetry, the client expects a 'get' channel and returns 'data'.
+      offset_chan = client_cmd_channels[idx]
+      bundle, bundle_froms = bundle_type.pack(get=offset_chan)
+
+      bundle_wire.assign(bundle)
+      client_data_channels.append(
+          bundle_froms["data"].transform(lambda m: m.as_bits(64)))
+    # The demux above routes each command to exactly one client, so -- given
+    # both requirements in this class' docs -- at most one client is offering a
+    # response at a time and no arbitration is needed to merge them.
+    resp_channel = esi.ChannelMergeOneValid(
+        client_data_channels,
+        ports.clk,
+        ports.rst,
+        instance_name="telemetry_resp_merge")
+    data_resp_channel.assign(resp_channel)
+    return True
 
 
 class MMIOIndirection(Module):
@@ -737,7 +969,7 @@ def SliceReadGearbox(input_bitwidth: int,
     raise ValueError("SliceReadGearbox requires 0 < output <= input")
 
   in_bytes = input_bitwidth // 8
-  vb_width = clog2(in_bytes)
+  vb_width = max(1, clog2(in_bytes))
 
   class SliceReadGearboxImpl(Module):
     clk = Clock()
@@ -789,7 +1021,7 @@ def ConcatReadGearbox(input_bitwidth: int,
     raise ValueError("ConcatReadGearbox requires output > input")
 
   in_bytes = input_bitwidth // 8
-  vb_width = clog2(in_bytes)
+  vb_width = max(1, clog2(in_bytes))
 
   class ConcatReadGearboxImpl(Module):
     clk = Clock()
@@ -897,7 +1129,7 @@ def DepackReadGearbox(input_bitwidth: int,
 
   in_bytes = input_bitwidth // 8
   # 'valid_bytes' is the real byte count minus 1; a word always has >= 1 byte.
-  vb_width = clog2(in_bytes)
+  vb_width = max(1, clog2(in_bytes))
   count_width = clog2(in_bytes + 1)
   parts = input_bitwidth // output_bitwidth
   elem_bytes = output_bitwidth // 8
@@ -1006,7 +1238,7 @@ def ShiftReadGearbox(input_bitwidth: int,
   buf_bytes = stride_bytes + in_bytes
   buf_bits = buf_bytes * 8
   # 'valid_bytes' is the real byte count minus 1; a word always has >= 1 byte.
-  vb_width = clog2(in_bytes)
+  vb_width = max(1, clog2(in_bytes))
   cnt_width = clog2(buf_bytes + 1)
   # The append offset is only ever in [0, stride_bytes] (has_room), so the shift
   # index needs fewer bits than the full count -- see `build`.
@@ -1157,10 +1389,13 @@ DEFAULT_MAX_WRITE_PAYLOAD_BYTES = 256
 
 @modparams
 def HostMemReadReqSplitter(req_channel_type: Channel,
-                           resp_channel_type: Channel, max_chunk_bytes: int):
+                           resp_channel_type: Channel,
+                           max_chunk_bytes: int,
+                           max_outstanding: int = 1,
+                           round_read_lengths: bool = True):
   """Split oversized host memory read requests into request-sized chunks before
   arbitration and reassemble the per-chunk responses into a single logical
-  burst.
+  burst per request.
 
   A burst read (`read_list`) can request many more bytes than a single upstream
   read request can carry. This module breaks such a request into
@@ -1171,23 +1406,41 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   monopolize host memory bandwidth.
 
   On the response path the per-chunk end-of-list markers are dropped and a
-  single burst-final `last` is re-derived from the total transfer length, so the
-  gearbox and client see one contiguous response stream identical to an unsplit
-  read.
+  single burst-final `last` (plus the final word's `valid_bytes`) is re-derived
+  from each logical request's length, so the gearbox and client see one
+  contiguous response stream per request, identical to an unsplit read.
 
-  Only one logical request is in flight at a time (matching the read processor's
-  one-outstanding-transaction-per-client model): a new request is not accepted
-  until the current burst's chunks have all been issued and its responses have
-  fully drained. This will be a performance limiter.
-  TODO: make this able to issue >1 one read at a time.
+  Up to `max_outstanding` logical requests may be in flight at once. On accept,
+  each request's {word count, final-word valid bytes} is queued in a metadata
+  FIFO (depth `max_outstanding`); the response path frames each burst from the
+  head of that FIFO. This **requires the upstream to return response words in
+  request order** (no interleaving of different requests' words) -- the
+  response `tag` is passed through from `resp_in` and is not used for matching.
+  A new request is accepted whenever the chunk emitter is free (or is issuing
+  its final chunk this cycle) and fewer than `max_outstanding` requests are in
+  flight; draining responses does not block accepting. Throughput: a
+  single-chunk request can be accepted every cycle, chunks are issued one per
+  cycle, and responses flow one word per cycle with no bubble between bursts.
+  No latency is added over the single-request version. There is no
+  combinational path from `resp_in` to `req_in`'s ready; with
+  `max_outstanding` > 1, `req_out`'s ready feeds `req_in`'s ready.
+
+  Zero-length requests are not supported.
 
   req_channel_type:  channel of the upstream read request {address, length
     (bytes), tag}.
   resp_channel_type: channel of the upstream response {tag, data, last}.
   max_chunk_bytes:   largest per-chunk byte count; must be > 0 and a multiple of
     the response word size.
+  max_outstanding:   maximum number of logical requests in flight (accepted
+    but whose final response word has not yet been delivered). The default of 1
+    serializes requests.
+  round_read_lengths: round chunk lengths up to a whole response word for
+    transports requiring word-granular reads. Disable for byte-granular
+    transports such as cosim, which zero-pad a partial final response word.
   """
   assert max_chunk_bytes > 0
+  assert max_outstanding >= 1
 
   req_struct = req_channel_type.inner_type
   resp_struct = resp_channel_type.inner_type
@@ -1201,7 +1454,7 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   # The response is augmented with a per-word 'valid_bytes': the number of real
   # bytes in the (possibly partial) final word, biased by -1. A burst word
   # always has >= 1 real byte, so encoding count-1 fits in one fewer bit.
-  vb_width = clog2(word_bytes)
+  vb_width = max(1, clog2(word_bytes))
   resp_fields = dict(resp_struct.fields)
   resp_out_struct = StructType([
       ("tag", resp_fields["tag"]),
@@ -1210,6 +1463,16 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
       ("last", Bits(1)),
   ])
   resp_out_channel_type = Channel(resp_out_struct)
+
+  # Per-request response metadata, computed on accept. 'words_m1' is the
+  # request's word count minus one, 'final_vb' the valid bytes in its final
+  # word (biased by -1) and 'single' flags a one-word request.
+  meta_struct = StructType([
+      ("words_m1", UInt(words_width)),
+      ("final_vb", UInt(vb_width)),
+      ("single", Bits(1)),
+  ])
+  inflight_width = clog2(max_outstanding + 1)
 
   class HostMemReadReqSplitterImpl(Module):
     clk = Clock()
@@ -1224,33 +1487,25 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
       clk = ports.clk
       rst = ports.rst
 
-      # Burst state shared by the request-splitting and response-reassembly
-      # FSMs. One logical request is processed at a time.
+      # --- Request intake and splitting ---
       emit_busy = Wire(Bits(1), name="emit_busy")  # issuing chunk requests
-      resp_busy = Wire(Bits(1), name="resp_busy")  # responses still draining
       cur_addr = Wire(UInt(addr_width), name="cur_addr")
       remaining = Wire(UInt(length_width), name="remaining")  # req bytes left
+      # Registered 'remaining <= max_chunk': the chunk being issued is the
+      # request's last.
+      last_chunk = Wire(Bits(1), name="last_chunk")
       tag_reg = Wire(tag_type, name="tag_reg")
-      words_left = Wire(UInt(words_width), name="words_left")  # resp words left
-
-      idle = (~emit_busy) & (~resp_busy)
-
-      # --- Request intake and splitting ---
-      req_ready = Wire(Bits(1))
-      req_payload, req_valid = ports.req_in.unwrap(req_ready)
-      accept = idle & req_valid
-      req_ready.assign(accept)
+      inflight_full = Wire(Bits(1), name="inflight_full")
 
       max_chunk = UInt(length_width)(max_chunk_bytes)
-      chunk_len = Mux(remaining > max_chunk, remaining, max_chunk)
-      last_chunk = remaining <= max_chunk
+      chunk_len = Mux(last_chunk, max_chunk, remaining)
 
       # Round the emitted read length up to a whole word. The reader response
       # is word-granular and 'valid_bytes' still carries the real trailing byte
-      # count, so total_words and the reassembled element count are unchanged;
-      # this just keeps every read word-aligned for single-flit HostMem
-      # transports that reject sub-word read lengths.
-      if word_shift == 0:
+      # count, so the reassembled element count is unchanged; this just keeps
+      # every read word-aligned for single-flit HostMem transports that reject
+      # sub-word read lengths.
+      if word_shift == 0 or not round_read_lengths:
         chunk_len_out = chunk_len
       else:
         chunk_words = (chunk_len + UInt(length_width)(word_bytes - 1)
@@ -1266,52 +1521,98 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
           }), emit_busy)
       ports.req_out = req_out_ch
       chunk_xact = emit_busy & req_out_ready
+      emit_done = chunk_xact & last_chunk
+
+      # With more than one request allowed in flight, accept the next request
+      # in the cycle the current one issues its final chunk so single-chunk
+      # requests stream at one per cycle. (With one, 'inflight_full' blocks
+      # that case anyway.)
+      if max_outstanding > 1:
+        emitter_free = ~emit_busy | emit_done
+      else:
+        emitter_free = ~emit_busy
+      req_ready = Wire(Bits(1))
+      req_payload, req_valid = ports.req_in.unwrap(req_ready)
+      req_ready.assign(emitter_free & ~inflight_full)
+      accept = req_valid & req_ready
 
       emit_busy.assign(
-          ControlReg(clk,
-                     rst, [accept], [chunk_xact & last_chunk],
-                     name="emit_busy_reg"))
+          ControlReg(clk, rst, [accept], [emit_done], name="emit_busy_reg"))
 
-      # cur_addr: load base on accept, advance by the chunk on each issue.
+      # cur_addr / remaining: load on accept; on each non-final chunk advance by
+      # a full chunk. (After the final chunk they are dead until the next
+      # accept, so the constant-step update is exact.) Datapath only: no reset.
       cur_addr_incr = (cur_addr +
-                       chunk_len.as_uint(addr_width)).as_uint(addr_width)
+                       UInt(addr_width)(max_chunk_bytes)).as_uint(addr_width)
       cur_addr.assign(
-          Mux(accept, Mux(chunk_xact, cur_addr, cur_addr_incr),
+          Mux(accept, cur_addr_incr,
               req_payload.address).reg(clk,
-                                       rst,
-                                       rst_value=0,
                                        ce=accept | chunk_xact,
                                        name="cur_addr_reg"))
-
-      # remaining: load length on accept, subtract each issued chunk.
-      remaining_dec = (remaining - chunk_len).as_uint(length_width)
+      remaining_dec = (remaining - max_chunk).as_uint(length_width)
       remaining.assign(
-          Mux(accept, Mux(chunk_xact, remaining, remaining_dec),
+          Mux(accept, remaining_dec,
               req_payload.length).reg(clk,
-                                      rst,
-                                      rst_value=0,
                                       ce=accept | chunk_xact,
                                       name="remaining_reg"))
+      # The next chunk is the last iff what is left after this one fits in a
+      # chunk: remaining - max_chunk <= max_chunk.
+      two_chunks = min(2 * max_chunk_bytes, (1 << length_width) - 1)
+      last_chunk.assign(
+          Mux(accept, remaining <= UInt(length_width)(two_chunks),
+              req_payload.length <= max_chunk).reg(clk,
+                                                   ce=accept | chunk_xact,
+                                                   name="last_chunk_reg"))
+      tag_reg.assign(req_payload.tag.reg(clk, ce=accept, name="tag_reg_r"))
 
-      tag_reg.assign(req_payload.tag.reg(clk, rst, ce=accept, name="tag_reg_r"))
+      # --- Per-request response metadata. Elements need not tile evenly into
+      # words: with len_m1 = length - 1, the request spans (len_m1 >> shift) + 1
+      # words and its final word holds (len_m1 % word_bytes) + 1 bytes. ---
+      len_m1 = (req_payload.length -
+                UInt(length_width)(1)).as_uint(length_width)
+      if word_shift == 0:
+        words_m1 = len_m1.as_uint(words_width)
+        final_vb = UInt(vb_width)(0)
+      else:
+        words_m1 = len_m1.as_bits()[word_shift:].as_uint(words_width)
+        final_vb = len_m1.as_bits()[:word_shift].as_uint(vb_width)
+      meta_in = meta_struct({
+          "words_m1": words_m1,
+          "final_vb": final_vb,
+          "single": req_payload.length <= UInt(length_width)(word_bytes),
+      })
 
-      # --- Response reassembly: re-derive the burst-final 'last' and the byte
-      # count of the (possibly partial) final word. Elements need not tile
-      # evenly into words, so count words with ceil(length / word_bytes). ---
-      total_words = ((req_payload.length + UInt(length_width)(word_bytes - 1)
-                     ).as_bits()[word_shift:]).as_uint(words_width)
-      # Bytes valid in the final word = length - (total_words - 1) * word_bytes.
-      words_before_last = (total_words -
-                           UInt(words_width)(1)).as_uint(words_width)
-      bytes_before_last = BitsSignal.concat(
-          [words_before_last.as_bits(),
-           Bits(word_shift)(0)]).as_uint(length_width)
-      final_valid_bytes = (req_payload.length - bytes_before_last -
-                           UInt(length_width)(1)).as_uint(vb_width).reg(
-                               clk, rst, ce=accept, name="final_valid_bytes")
+      # Metadata store between accept and the response framer. A request
+      # accepted while the store is empty and the framer is free bypasses the
+      # store (see 'bypass' below).
+      meta_push = Wire(Bits(1), name="meta_push")
+      meta_pop = Wire(Bits(1), name="meta_pop")
+      if max_outstanding == 1:
+        # At most one request in flight: a single holding register suffices.
+        meta_head = meta_in.reg(clk, ce=meta_push, name="meta_reg")
+        meta_empty = ~ControlReg(
+            clk, rst, [meta_push], [meta_pop], name="meta_valid")
+      else:
+        meta_fifo = SeqFIFO(meta_struct, max_outstanding, clk, rst)
+        meta_fifo.push(meta_in, meta_push)
+        meta_head = meta_fifo.pop(meta_pop)
+        meta_empty = meta_fifo.empty
+
+      # --- Response framing: re-derive the burst-final 'last' and the byte
+      # count of the (possibly partial) final word. The current burst's
+      # metadata is held in registers loaded from the metadata store head:
+      # 'cur_words' counts the words after the current one and 'cur_last'
+      # flags the current word as the burst's final word. ---
+      cur_valid = Wire(Bits(1), name="cur_valid")
+      cur_words = Wire(UInt(words_width), name="cur_words")
+      cur_last = Wire(Bits(1), name="cur_last")
+      cur_vb = Wire(UInt(vb_width), name="cur_vb")
+
+      # The response handshake is not gated on 'cur_valid': a request's
+      # metadata is in the framer by the cycle its first chunk is issued, so
+      # no response word can precede it.
       resp_ready = Wire(Bits(1))
       resp_payload, resp_valid = ports.resp_in.unwrap(resp_ready)
-      is_final_word = words_left == UInt(words_width)(1)
       resp_out_ch, resp_out_ready = resp_out_channel_type.wrap(
           resp_out_struct({
               "tag":
@@ -1319,29 +1620,55 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
               "data":
                   resp_payload.data,
               "valid_bytes":
-                  Mux(is_final_word,
-                      UInt(vb_width)(word_bytes - 1), final_valid_bytes),
+                  Mux(cur_last,
+                      UInt(vb_width)(word_bytes - 1), cur_vb),
               "last":
-                  is_final_word,
+                  cur_last,
           }), resp_valid)
       ports.resp_out = resp_out_ch
       resp_ready.assign(resp_out_ready)
       resp_xact = resp_valid & resp_out_ready
+      burst_done = resp_xact & cur_last
 
-      # words_left: load total on accept, decrement per received word.
-      words_dec = (words_left - UInt(words_width)(1)).as_uint(words_width)
-      words_left.assign(
-          Mux(accept, Mux(resp_xact, words_left, words_dec),
-              total_words).reg(clk,
-                               rst,
-                               rst_value=0,
-                               ce=accept | resp_xact,
-                               name="words_left_reg"))
+      # Load the next burst's metadata when idle or as the current burst ends,
+      # so back-to-back bursts need no bubble: from the store head if it holds
+      # anything, otherwise straight from a request accepted this cycle.
+      framer_free = ~cur_valid | burst_done
+      load_head = ~meta_empty & framer_free
+      bypass = accept & meta_empty & framer_free
+      load = load_head | bypass
+      meta_pop.assign(load_head)
+      meta_push.assign(accept & ~bypass)
+      next_meta = Mux(load_head, meta_in, meta_head)
+      cur_valid.assign(
+          ControlReg(clk, rst, [load], [burst_done], name="cur_valid_reg"))
+      cur_words_dec = (cur_words - UInt(words_width)(1)).as_uint(words_width)
+      cur_words.assign(
+          Mux(load, cur_words_dec,
+              next_meta["words_m1"]).reg(clk,
+                                         ce=load | resp_xact,
+                                         name="cur_words_reg"))
+      cur_last.assign(
+          Mux(load, cur_words == UInt(words_width)(1),
+              next_meta["single"]).reg(clk,
+                                       ce=load | resp_xact,
+                                       name="cur_last_reg"))
+      cur_vb.assign(next_meta["final_vb"].reg(clk, ce=load, name="cur_vb_reg"))
 
-      resp_busy.assign(
-          ControlReg(clk,
-                     rst, [accept], [resp_xact & is_final_word],
-                     name="resp_busy_reg"))
+      # --- In-flight request accounting: accepted, final word not yet
+      # delivered. 'inflight_full' is registered so 'req_in' ready has no
+      # combinational dependence on the response path. ---
+      inflight = Wire(UInt(inflight_width), name="inflight")
+      one = UInt(inflight_width)(1)
+      inflight_inc = (inflight + one).as_uint(inflight_width)
+      inflight_dec = (inflight - one).as_uint(inflight_width)
+      inflight_next = Mux(accept, Mux(burst_done, inflight, inflight_dec),
+                          Mux(burst_done, inflight_inc, inflight))
+      inflight.assign(
+          inflight_next.reg(clk, rst, rst_value=0, name="inflight_reg"))
+      inflight_full.assign(
+          (inflight_next == UInt(inflight_width)(max_outstanding)).reg(
+              clk, rst, rst_value=0, name="inflight_full_reg"))
 
   return HostMemReadReqSplitterImpl
 
@@ -1350,11 +1677,17 @@ def HostmemReadProcessor(
     read_width: int,
     hostmem_module,
     reqs: List[esi._OutputBundleSetter],
-    max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES):
+    max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES,
+    max_outstanding_reads: int = 1,
+    round_read_lengths: bool = True):
   """Construct a host memory read request module to orchestrate the the read
   connections. Responsible for both gearboxing the data, multiplexing the
   requests, reassembling out-of-order responses and routing the responses to the
   correct clients.
+
+  `max_outstanding_reads` bounds the number of logical read requests each
+  client may have in flight (see `HostMemReadReqSplitter`). Values above 1
+  require the upstream to return each client's responses in request order.
 
   Generate this module dynamically to allow for multiple read clients of
   multiple types to be directly accomodated."""
@@ -1421,9 +1754,10 @@ def HostmemReadProcessor(
 
         # TODO: Should responses come back out-of-order (interleaved tags),
         # re-order them here so the gearbox doesn't get confused. (Longer term.)
-        # For now, only support one outstanding transaction at a time.  This has
-        # the additional benefit of letting the upstream tag be the client
-        # identifier. TODO: Implement the gating logic here.
+        # For now, each client's responses must come back in request order
+        # (the splitter frames bursts in order, allowing up to
+        # `max_outstanding_reads` in flight). This has the additional benefit
+        # of letting the upstream tag be the client identifier.
         client_type = resp_type.inner_type
         is_list = isinstance(client_type, Window)
 
@@ -1504,11 +1838,12 @@ def HostmemReadProcessor(
               }))
 
         splitter = HostMemReadReqSplitter(
-            logical_req.type, demuxed_upstream_channel.type,
-            max_chunk_bytes)(clk=ports.clk,
-                             rst=ports.rst,
-                             req_in=logical_req,
-                             resp_in=demuxed_upstream_channel)
+            logical_req.type, demuxed_upstream_channel.type, max_chunk_bytes,
+            max_outstanding_reads,
+            round_read_lengths)(clk=ports.clk,
+                                rst=ports.rst,
+                                req_in=logical_req,
+                                resp_in=demuxed_upstream_channel)
         splitter_resp.assign(splitter.resp_out)
         tagged_client_req = splitter.req_out
 
@@ -1526,7 +1861,10 @@ def HostmemReadProcessor(
       # depth otherwise grows as log2(num_clients); the added latency is
       # absorbed by the arbiter's output FIFO / credit counter.
       # TODO: Don't release a request until the client is ready to accept
-      # the response otherwise the system could deadlock.
+      # the response otherwise the system could deadlock. A stalled client
+      # blocks the shared response demux for every other client; with
+      # `max_outstanding_reads` > 1 each client can have more reads in flight,
+      # so more response data can be queued behind a stalled client.
       muxed_client_reqs = ChannelArbiter(tagged_client_reqs,
                                          ports.clk,
                                          ports.rst,
@@ -1557,6 +1895,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
   if input_bitwidth % 8 != 0:
     input_pad_bits = 8 - (input_bitwidth % 8)
   input_padded_bitwidth = input_bitwidth + input_pad_bits
+  valid_bytes_type = Bits(clog2(output_bitwidth // 8 + 1))
 
   # Number of engine words per capped transaction (0 = uncapped).
   max_burst_words = (max_burst_bytes //
@@ -1579,7 +1918,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
             ("address", UInt(64)),
             ("tag", esi.HostMem.TagType),
             ("data", Bits(output_bitwidth)),
-            ("valid_bytes", Bits(8)),
+            ("valid_bytes", valid_bytes_type),
             ("last", Bits(1)),
         ]))
 
@@ -1605,7 +1944,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
         ready_for_client.assign(upstream_ready)
         tag = client_tag_and_data.tag
         address = client_tag_and_data.address
-        valid_bytes = Bits(8)(input_bitwidth_bytes)
+        valid_bytes = valid_bytes_type(input_bitwidth_bytes)
         last = Bits(1)(1)
       elif output_bitwidth > input_padded_bitwidth:
         upstream_data_bits = client_data.as_bits(output_bitwidth)
@@ -1613,7 +1952,7 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
         ready_for_client.assign(upstream_ready)
         tag = client_tag_and_data.tag
         address = client_tag_and_data.address
-        valid_bytes = Bits(8)(input_bitwidth_bytes)
+        valid_bytes = valid_bytes_type(input_bitwidth_bytes)
         last = Bits(1)(1)
       else:
         # Create registers equal to the number of upstream transactions needed
@@ -1631,17 +1970,26 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
             client_data_padded[i * output_bitwidth:(i + 1) * output_bitwidth]
             for i in range(num_chunks)
         ]
-        chunk_regs = Array(Bits(output_bitwidth), num_chunks)([
+        chunk_regs = [
             c.reg(ports.clk, ce=client_xact, name=f"chunk_{idx}")
             for idx, c in enumerate(chunks)
-        ])
+        ]
         increment = Wire(Bits(1))
         clear = Wire(Bits(1))
         counter = Counter(num_chunks_idx_bitwidth)(clk=ports.clk,
                                                    rst=ports.rst,
                                                    increment=increment,
                                                    clear=clear)
-        upstream_data_bits = chunk_regs[counter.out]
+        # A tree of 2:1 muxes avoids dynamic wide packed-array selects, which
+        # crash Verilator 5.040 above its 2048-bit expansion limit.
+        mux_values = chunk_regs + [chunk_regs[-1]] * (
+            (1 << num_chunks_idx_bitwidth) - num_chunks)
+        for level in range(num_chunks_idx_bitwidth):
+          mux_values = [
+              Mux(counter.out.as_bits()[level], mux_values[i],
+                  mux_values[i + 1]) for i in range(0, len(mux_values), 2)
+          ]
+        upstream_data_bits = mux_values[0]
         upstream_valid = ControlReg(ports.clk, ports.rst, [client_xact],
                                     [clear])
         upstream_xact = upstream_valid & upstream_ready
@@ -1663,9 +2011,9 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
         address = (addr_reg + counter_bytes).as_uint(64)
         tag = tag_reg
         elem_end = counter.out == (num_chunks - 1)
-        valid_bytes = Mux(elem_end,
-                          Bits(8)(output_bitwidth_bytes),
-                          Bits(8)((output_bitwidth - padding_numbits) // 8))
+        valid_bytes = Mux(
+            elem_end, valid_bytes_type(output_bitwidth_bytes),
+            valid_bytes_type((output_bitwidth - padding_numbits) // 8))
         if max_burst_words and num_chunks > max_burst_words:
           # Max-payload-size cap: end the upstream write transaction at the
           # element end OR every max_burst_words engine words, whichever comes
@@ -1673,7 +2021,8 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
           # transactions. Each word keeps its own sequential address; only the
           # transaction-framing 'last' changes.
           burst_shift = clog2(max_burst_words)
-          burst_end = counter.out.as_bits()[:burst_shift].and_reduce()
+          burst_end = (counter.out.as_bits()[:burst_shift].and_reduce()
+                       if burst_shift else Bits(1)(1))
           last = elem_end | burst_end
         else:
           last = elem_end
@@ -1890,7 +2239,7 @@ def HostMemWriteProcessor(
                         idx,
                     "data":
                         m.data,
-                    "data_size": (m.valid_bytes.as_uint() - UInt(8)
+                    "data_size": (m.valid_bytes.as_uint() - UInt(size_width + 1)
                                   (1)).as_bits()[:size_width],
                     "last":
                         m.last,
@@ -1930,8 +2279,15 @@ def ChannelHostMem(
     read_width: int,
     write_width: int,
     max_read_request_bytes: int = DEFAULT_MAX_READ_REQUEST_BYTES,
-    max_write_payload_bytes: int = DEFAULT_MAX_WRITE_PAYLOAD_BYTES
-) -> typing.Type['ChannelHostMemImpl']:
+    max_write_payload_bytes: int = DEFAULT_MAX_WRITE_PAYLOAD_BYTES,
+    max_outstanding_reads: int = 1,
+    round_read_lengths: bool = True) -> typing.Type['ChannelHostMemImpl']:
+  """HostMem service multiplexing every client onto one read and one write
+  bundle. `max_outstanding_reads` is the per-client limit on logical read
+  requests in flight (see `HostMemReadReqSplitter`); values above 1 require the
+  upstream to return each client's read responses in request order.
+  `round_read_lengths` selects word-granular upstream reads (the default);
+  byte-granular transports can disable it to avoid reading padding bytes."""
 
   class ChannelHostMemImpl(esi.ServiceImplementation):
     """Builds a HostMem service which multiplexes multiple HostMem clients into
@@ -1982,7 +2338,9 @@ def ChannelHostMem(
           if req.port in ('read', 'read_list')
       ]
       read_proc_module = HostmemReadProcessor(read_width, ChannelHostMemImpl,
-                                              read_reqs, max_read_request_bytes)
+                                              read_reqs, max_read_request_bytes,
+                                              max_outstanding_reads,
+                                              round_read_lengths)
       read_proc = read_proc_module(clk=ports.clk, rst=ports.rst)
       ports.read = read_proc.upstream
       for req in read_reqs:
@@ -2161,10 +2519,18 @@ def ChannelEngineService(
         if hasattr(engine_mod, "hostmem_write"):
           eng_inputs["hostmem_write"] = esi.HostMem.write_from_bundle(
               esi.AppID(idbase + ".hostmem_write"),
-              engine_mod.hostmem_write.type)
+              engine_mod.hostmem_write.type,
+              options=bundle.options)
         if hasattr(engine_mod, "hostmem_read"):
           eng_inputs["hostmem_read"] = esi.HostMem.read_from_bundle(
-              esi.AppID(idbase + ".hostmem_read"), engine_mod.hostmem_read.type)
+              esi.AppID(idbase + ".hostmem_read"),
+              engine_mod.hostmem_read.type,
+              options=bundle.options)
+        if hasattr(engine_mod, "hostmem_read_list"):
+          eng_inputs["hostmem_read_list"] = esi.HostMem.read_list_from_bundle(
+              esi.AppID(idbase + ".hostmem_read_list"),
+              engine_mod.hostmem_read_list.type,
+              options=bundle.options)
         engine = engine_mod(appid=eng_appid, **eng_inputs)
         engine_rec = bundles.emit_engine(engine, details=eng_details)
         engine_rec.add_record(bundle, {bc.name: {}})

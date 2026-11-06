@@ -103,11 +103,15 @@ private:
         // accumulate right before the op
         builder.setInsertionPoint(defop);
 
-        auto andop =
-            comb::AndOp::create(builder, defop->getLoc(), condition, enable);
+        // An enabled assert-like only constrains its condition when the
+        // enable holds, so accumulate `!enable | condition`
+        Value notEnable =
+            comb::createOrFoldNot(builder, defop->getLoc(), enable);
+        auto orop =
+            comb::OrOp::create(builder, defop->getLoc(), notEnable, condition);
 
-        // We then only need to store the conjunction not the condition
-        conds[parent].push_back(andop);
+        // We then only need to store the implication not the condition
+        conds[parent].push_back(orop);
       } else {
         // If no enable is present, we can directly accumulate the condition
         conds[parent].push_back(condition);

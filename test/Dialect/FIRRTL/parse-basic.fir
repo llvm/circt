@@ -51,7 +51,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   extmodule IntegerParamsModule :
     ; CHECK-SAME: a: ui32 = 1
     parameter a = 1
-    ; CHECK-SAME: b: ui40 = 4294967296
+    ; CHECK-SAME: b: ui64 = 4294967296
     parameter b = 4294967296
 
   ; Module to test type parsing.
@@ -1099,6 +1099,36 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
    wire inst_rcoa_a : RWProbe<UInt<1>>
    define inst_rcoa_a = rwprobe(rcoa.in.a)
 
+  ; CHECK-LABEL: module private @RefsProbePostfix(
+  ; CHECK-SAME: in %agg: !firrtl.bundle<a: uint<1>, b: uint<2>> sym @[[AGG_SYM:[^,]+]],
+  module RefsProbePostfix :
+    input agg : { a : UInt<1>, b : UInt<2> }
+    input vec : UInt<3>[2]
+    output out_b : UInt<2>
+    output out_v : UInt<3>
+    output out_rw : UInt<2>
+    output p : Probe<UInt<2>>
+
+    ; CHECK-NEXT: %[[AGG_REF:.+]] = firrtl.ref.send %agg
+    ; CHECK-NEXT: %[[AGG_REF_B:.+]] = firrtl.ref.sub %[[AGG_REF]][1] : !firrtl.probe<
+    ; CHECK-NEXT: %[[READ_AGG_REF_B:.+]] = firrtl.ref.resolve %[[AGG_REF_B]]
+    ; CHECK-NEXT: firrtl.matchingconnect %out_b, %[[READ_AGG_REF_B]]
+    connect out_b, read(probe(agg).b)
+    ; CHECK-NEXT: %[[VEC_REF:.+]] = firrtl.ref.send %vec
+    ; CHECK-NEXT: %[[VEC_REF_0:.+]] = firrtl.ref.sub %[[VEC_REF]][0] : !firrtl.probe<
+    ; CHECK-NEXT: %[[READ_VEC_REF_0:.+]] = firrtl.ref.resolve %[[VEC_REF_0]]
+    ; CHECK-NEXT: firrtl.matchingconnect %out_v, %[[READ_VEC_REF_0]]
+    connect out_v, read(probe(vec)[0])
+    ; CHECK-NEXT: %[[AGG_RW:.+]] = firrtl.ref.rwprobe <@RefsProbePostfix::@[[AGG_SYM]]>
+    ; CHECK-NEXT: %[[AGG_RW_B:.+]] = firrtl.ref.sub %[[AGG_RW]][1] : !firrtl.rwprobe<
+    ; CHECK-NEXT: %[[READ_AGG_RW_B:.+]] = firrtl.ref.resolve %[[AGG_RW_B]]
+    ; CHECK-NEXT: firrtl.matchingconnect %out_rw, %[[READ_AGG_RW_B]]
+    connect out_rw, read(rwprobe(agg).b)
+    ; CHECK-NEXT: %[[AGG_REF2:.+]] = firrtl.ref.send %agg
+    ; CHECK-NEXT: %[[AGG_REF2_B:.+]] = firrtl.ref.sub %[[AGG_REF2]][1] : !firrtl.probe<
+    ; CHECK-NEXT: firrtl.ref.define %p, %[[AGG_REF2_B]]
+    define p = probe(agg).b
+
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :
     input in : UInt<1>
@@ -1341,15 +1371,14 @@ circuit RadixEncodedIntegerLiterals:
     ; CHECK-NEXT: firrtl.connect %ou, %[[c_constCast]]
     ou <= UInt(0o052)
 
-    ; Note: this creates a second constant because the width of a parsed
-    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ; Decimal literals use a wider constant than the other radices.
     ;
     ; CHECK:      %[[c42_ui8:[-a-zA-Z_0-9]+]] = firrtl.constant 42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
     ; CHECK-NEXT: firrtl.connect %du0, %[[c_constCast]]
     du0 <= UInt(42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
     ; CHECK-NEXT: firrtl.connect %du1, %[[c_constCast]]
     du1 <= UInt(0d42)
 
@@ -1366,15 +1395,14 @@ circuit RadixEncodedIntegerLiterals:
     ; CHECK-NEXT: firrtl.connect %os, %[[c_constCast]]
     os <= SInt(-0o52)
 
-    ; Note: this creates a second constant because the width of a parsed
-    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ; Decimal literals use a wider constant than the other radices.
     ;
     ; CHECK:      %[[cn42_si8:[-a-zA-Z_0-9]+]] = firrtl.constant -42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
     ; CHECK-NEXT: firrtl.connect %dus0, %[[c_constCast]]
     dus0 <= SInt(-42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
     ; CHECK-NEXT: firrtl.connect %dus1, %[[c_constCast]]
     dus1 <= SInt(-0d42)
 
@@ -1580,7 +1608,7 @@ circuit BasicProps :
     ; CHECK-NEXT: firrtl.propassign %a, %b : !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>
     propassign a, b
 
-  ; CHECK-LABEL firrtl.class private @OtherClient(in %a: !firrtl.string, out %b: !firrtl.string)
+  ; CHECK-LABEL: firrtl.class private @OtherClient(in %a: !firrtl.string, out %b: !firrtl.string)
   class OtherClient:
     input a : String
     output b : String
@@ -1588,7 +1616,7 @@ circuit BasicProps :
     ; TODO: This test needs to be fixed up once flow-checking for objects is implemented correctly.
     propassign b, o.b
 
-  ; CHECK-LABEL firrtl.extclass private @ExtClass(in in: !firrtl.string, out out: !firrtl.string)
+  ; CHECK-LABEL: firrtl.extclass @ExtClass(in in: !firrtl.string, out out: !firrtl.string)
   extclass ExtClass:
     input in : String
     output out : String
@@ -1670,6 +1698,43 @@ circuit IntegerArithmetic :
     propassign f, integer_shl(a, b)
 
 ;// -----
+FIRRTL version 7.0.0
+
+; CHECK-LABEL: firrtl.circuit "IntegerBitwise"
+circuit IntegerBitwise :
+  public module IntegerBitwise :
+    input a : Integer
+    input b : Integer
+    input c : Integer
+    output andResult : Integer
+    output orResult : Integer
+    output notResult : Integer
+    output nestedResult : Integer
+    output literalResult : Integer
+
+    ; CHECK: [[AND:%.+]] = firrtl.integer.and %a, %b
+    ; CHECK: firrtl.propassign %andResult, [[AND]]
+    propassign andResult, integer_and(a, b)
+
+    ; CHECK: [[OR:%.+]] = firrtl.integer.or %a, %b
+    ; CHECK: firrtl.propassign %orResult, [[OR]]
+    propassign orResult, integer_or(a, b)
+
+    ; CHECK: [[NOT:%.+]] = firrtl.integer.not %c
+    ; CHECK: firrtl.propassign %notResult, [[NOT]]
+    propassign notResult, integer_not(c)
+
+    ; CHECK: [[NEST_OR:%.+]] = firrtl.integer.or %a, %b
+    ; CHECK: [[NEST_NOT:%.+]] = firrtl.integer.not %c
+    ; CHECK: [[NEST_AND:%.+]] = firrtl.integer.and [[NEST_OR]], [[NEST_NOT]]
+    ; CHECK: firrtl.propassign %nestedResult, [[NEST_AND]]
+    propassign nestedResult, integer_and(integer_or(a, b), integer_not(c))
+
+    ; CHECK: [[LITERAL:%.+]] = firrtl.integer.and %{{.+}}, %{{.+}}
+    ; CHECK: firrtl.propassign %literalResult, [[LITERAL]]
+    propassign literalResult, integer_and(Integer(5), Integer(-2))
+
+;// -----
 FIRRTL version 4.0.0
 
 ; CHECK-LABEL: firrtl.circuit "PropertyListOps"
@@ -1722,6 +1787,34 @@ circuit PropEqVersionError :
 
     ; expected-error @+1 {{property equality are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
     propassign c, prop_eq(a, b)
+
+;// -----
+FIRRTL version 7.0.0
+
+; CHECK-LABEL: firrtl.circuit "ListContains"
+circuit ListContains :
+  public module ListContains :
+    input strings : List<String>
+    input string : String
+    input integers : List<Integer>
+    input integer : Integer
+    input booleans : List<Bool>
+    input boolean : Bool
+    output stringFound : Bool
+    output integerFound : Bool
+    output booleanFound : Bool
+
+    ; CHECK: [[STRING_FOUND:%.+]] = firrtl.list.contains %strings, %string : !firrtl.list<string>{{$}}
+    ; CHECK: firrtl.propassign %stringFound, [[STRING_FOUND]]
+    propassign stringFound, list_contains(strings, string)
+
+    ; CHECK: [[INTEGER_FOUND:%.+]] = firrtl.list.contains %integers, %integer : !firrtl.list<integer>{{$}}
+    ; CHECK: firrtl.propassign %integerFound, [[INTEGER_FOUND]]
+    propassign integerFound, list_contains(integers, integer)
+
+    ; CHECK: [[BOOLEAN_FOUND:%.+]] = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>{{$}}
+    ; CHECK: firrtl.propassign %booleanFound, [[BOOLEAN_FOUND]]
+    propassign booleanFound, list_contains(booleans, boolean)
 
 ;// -----
 FIRRTL version 7.0.0

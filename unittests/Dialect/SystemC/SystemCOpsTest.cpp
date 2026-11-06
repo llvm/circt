@@ -31,8 +31,8 @@ TEST(SCModuleOpTest, GetPortListArgNumIsDirectionRelative) {
       {{builder.getStringAttr("in0"), i1, ModulePort::Direction::Input}});
   ports.push_back(
       {{builder.getStringAttr("out0"), i1, ModulePort::Direction::Output}});
-  ports.push_back(
-      {{builder.getStringAttr("inout0"), i1, ModulePort::Direction::InOut}});
+  ports.push_back({{builder.getStringAttr("inout0"), hw::InOutType::get(i1),
+                    ModulePort::Direction::Input}});
   ports.push_back(
       {{builder.getStringAttr("in1"), i1, ModulePort::Direction::Input}});
   ports.push_back(
@@ -53,7 +53,7 @@ TEST(SCModuleOpTest, GetPortListArgNumIsDirectionRelative) {
   EXPECT_EQ(portList[1].argNum, 0u);
 
   EXPECT_EQ(portList[2].name, builder.getStringAttr("inout0"));
-  EXPECT_EQ(portList[2].dir, ModulePort::Direction::InOut);
+  EXPECT_EQ(portList[2].dir, ModulePort::Direction::Input);
   EXPECT_EQ(portList[2].argNum, 1u);
 
   EXPECT_EQ(portList[3].name, builder.getStringAttr("in1"));

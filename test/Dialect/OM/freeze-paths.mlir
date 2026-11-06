@@ -1,4 +1,6 @@
 // RUN: circt-opt -om-freeze-paths %s | FileCheck %s
+// Ensure list folding before path freezing produces valid IR.
+// RUN: circt-opt --canonicalize -om-freeze-paths %s -o /dev/null
 hw.hierpath private @nla [@PathModule::@sym]
 hw.hierpath private @nla_0 [@PathModule::@sym_0]
 hw.hierpath private @nla_1 [@PathModule::@sym_1]
@@ -28,7 +30,7 @@ hw.module @PublicMiddle() {
 
 hw.module private @PublicLeaf() {}
 
-// CHECK-LABEL om.class @PathTest()
+// CHECK-LABEL: om.class @PathTest(
 om.class @PathTest(%basepath : !om.basepath, %path : !om.path) {
   // CHECK: om.frozenpath_create reference %basepath "PathModule>in"
   %0 = om.path_create reference %basepath @nla
@@ -42,7 +44,7 @@ om.class @PathTest(%basepath : !om.basepath, %path : !om.path) {
   // CHECK: om.frozenpath_create dont_touch %basepath "PathModule>wire"
   %4 = om.path_create dont_touch %basepath @nla_0
 
-  // CHECK: om.frozenpath_create reference %basepath "PathModule>array[0]" 
+  // CHECK: om.frozenpath_create reference %basepath "PathModule>array[0]"
   %5 = om.path_create reference %basepath @nla_1
 
   // CHECK: om.frozenpath_create reference %basepath "PathModule>struct.a"
@@ -94,12 +96,12 @@ om.class @ListCreateTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pat
   om.class.fields %0, %1, %2, %3, %4 : !om.list<i1>, !om.list<!om.basepath>, !om.list<!om.path>, !om.list<!om.list<!om.path>>, !om.list<!om.list<!om.path>>
 }
 
-// CHECK-LABEL om.class @PathListClass(%pathList: !om.list<!om.frozenpath>) -> (pathList: !om.list<!om.path>
+// CHECK-LABEL: om.class @PathListClass(%pathList: !om.list<!om.frozenpath>) -> (pathList: !om.list<!om.frozenpath>) {
 om.class @PathListClass(%pathList : !om.list<!om.path>) -> (pathList: !om.list<!om.path>) {
   om.class.fields %pathList : !om.list<!om.path>
 }
 
-// CHECK-LABEL om.class @PathListTest(%arg: !om.list<!om.frozenpath>)
+// CHECK-LABEL: om.class @PathListTest(%arg: !om.list<!om.frozenpath>)
 om.class @PathListTest(%arg : !om.list<!om.path>) {
   // CHECK: om.object @PathListClass(%arg) : (!om.list<!om.frozenpath>)
   om.object @PathListClass(%arg) : (!om.list<!om.path>) -> !om.class.type<@PathListClass>
@@ -122,4 +124,17 @@ om.class @ObjectFieldTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pa
 
   // CHECK: om.class.fields [[SUBFIELD]] : !om.list<!om.list<!om.frozenpath>>
   om.class.fields %1 : !om.list<!om.list<!om.path>>
+}
+
+// Check constants in their post-canonicalization form, including types in nonempty list elements.
+// CHECK-LABEL: om.class @ListConstantTest() -> (path: !om.list<!om.frozenpath>, basepath: !om.list<!om.frozenbasepath>, nestedpath: !om.list<!om.list<!om.frozenpath>>) {{{$}}
+om.class @ListConstantTest() -> (path: !om.list<!om.path>, basepath: !om.list<!om.basepath>, nestedpath: !om.list<!om.list<!om.path>>) {
+  // CHECK: [[PATH:%.+]] = om.constant #om.list<!om.frozenpath, []> : !om.list<!om.frozenpath>{{$}}
+  %path = om.constant #om.list<!om.path, []> : !om.list<!om.path>
+  // CHECK: [[BASE_PATH:%.+]] = om.constant #om.list<!om.frozenbasepath, []> : !om.list<!om.frozenbasepath>{{$}}
+  %basepath = om.constant #om.list<!om.basepath, []> : !om.list<!om.basepath>
+  // CHECK: [[NESTED_PATH:%.+]] = om.constant #om.list<!om.list<!om.frozenpath>, [#om.list<!om.frozenpath, []> : !om.list<!om.frozenpath>]> : !om.list<!om.list<!om.frozenpath>>{{$}}
+  %nestedpath = om.constant #om.list<!om.list<!om.path>, [#om.list<!om.path, []> : !om.list<!om.path>]> : !om.list<!om.list<!om.path>>
+  // CHECK: om.class.fields [[PATH]], [[BASE_PATH]], [[NESTED_PATH]] : !om.list<!om.frozenpath>, !om.list<!om.frozenbasepath>, !om.list<!om.list<!om.frozenpath>>
+  om.class.fields %path, %basepath, %nestedpath : !om.list<!om.path>, !om.list<!om.basepath>, !om.list<!om.list<!om.path>>
 }

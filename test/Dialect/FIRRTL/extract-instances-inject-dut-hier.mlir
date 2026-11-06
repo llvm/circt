@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 // CHECK: firrtl.circuit "ExtractClockGatesMultigrouping"
-firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt", group = "ClockGatesGroup"}, {class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "InjectedSubmodule"}]} {
+firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt", group = "ClockGatesGroup", instanceName = "clock_gates_inst"}, {class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "InjectedSubmodule", instanceName = "logic_inst"}]} {
   firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   // CHECK-LABEL: firrtl.module private @SomeModule
   // Both instances of `SomeModule` see a `clock_gate_0` prefix, since the
@@ -35,8 +35,8 @@ firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{clas
     // CHECK-NOT: firrtl.instance gate @EICG_wrapper
     %inst0_clock, %inst0_en = firrtl.instance inst0 @SomeModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
     %inst1_clock, %inst1_en = firrtl.instance inst1 @SomeModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
-    // CHECK: firrtl.instance ClockGatesGroup sym [[CLKGRP_SYM:@.+]] @ClockGatesGroup
-    // CHECK: firrtl.instance InjectedSubmodule sym [[INJMOD_SYM:@.+]] @InjectedSubmodule
+    // CHECK: firrtl.instance clock_gates_inst sym [[CLKGRP_SYM:@.+]] @ClockGatesGroup
+    // CHECK: firrtl.instance logic_inst sym [[INJMOD_SYM:@.+]] @InjectedSubmodule
     firrtl.connect %inst0_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %inst1_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %inst0_en, %foo_en : !firrtl.uint<1>, !firrtl.uint<1>

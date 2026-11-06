@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
@@ -66,12 +67,10 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
     return nullptr;
 
   // Look for a symbol with the given name.
-  StringAttr symbolNameId = StringAttr::get(symbolTableOp->getContext(),
-                                            SymbolTable::getSymbolAttrName());
   for (Block &block : region)
     for (Operation &nestedOp : block) {
-      auto nameAttr = nestedOp.getAttrOfType<StringAttr>(symbolNameId);
-      if (nameAttr && nameAttr.getValue() == symbol)
+      if (auto symbolOp = dyn_cast<mlir::SymbolOpInterface>(&nestedOp);
+          symbolOp && symbolOp.getName() == symbol)
         return &nestedOp;
       if (!nestedOp.hasTrait<OpTrait::SymbolTable>() &&
           nestedOp.getNumRegions()) {
@@ -92,6 +91,32 @@ verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
   if (!isa<MacroDeclOp>(refOp))
     return op->emitError("must reference a macro declaration");
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// PackageOp and PackageExternOp
+//===----------------------------------------------------------------------===//
+
+template <typename Package>
+static LogicalResult verifyPackage(Package package) {
+  for (Operation &op : *package.getBodyBlock())
+    if (!isa<hw::TypedeclOp>(op))
+      return package.emitOpError(
+          "body may only contain hw.typedecl operations");
+  return success();
+}
+
+LogicalResult PackageOp::verify() { return verifyPackage(*this); }
+
+LogicalResult PackageExternOp::verify() {
+  if (auto name = getVerilogNameAttr()) {
+    if (name.getValue().empty())
+      return emitOpError("'verilogName' must be a non-empty string");
+  } else if (!isPublic()) {
+    return emitOpError("non-public packages require 'verilogName' to "
+                       "preserve their external name when renamed");
+  }
+  return verifyPackage(*this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -354,6 +379,53 @@ LogicalResult LocalParamOp::verify() {
   return hw::checkParameterInContext(
       getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
+
+//===----------------------------------------------------------------------===//
+// VarOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseImplicitVarInitType(
+    OpAsmParser &p, Type varType,
+    std::optional<OpAsmParser::UnresolvedOperand> &initValue, Type &initType) {
+  if (!initValue.has_value())
+    return success();
+
+  auto var = dyn_cast<VarType>(varType);
+  if (!var)
+    return p.emitError(p.getCurrentLocation(),
+                       "expected `!sv.var<T>` type for var");
+
+  initType = var.getElementType();
+  return success();
+}
+
+static void printImplicitVarInitType(OpAsmPrinter &p, Operation *op,
+                                     Type varType, Value initValue,
+                                     Type initType) {}
+
+void VarOp::build(OpBuilder &builder, OperationState &odsState,
+                  Type elementType, StringAttr name, hw::InnerSymAttr innerSym,
+                  Value initValue) {
+
+  auto &props = odsState.getOrAddProperties<Properties>();
+  props.name = name ? name : builder.getStringAttr("");
+  if (innerSym)
+    props.inner_sym = innerSym;
+  odsState.addTypes(VarType::get(elementType));
+  if (initValue)
+    odsState.addOperands(initValue);
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void VarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the var has an optional 'name' attribute, use it.
+  StringRef name = getName();
+  if (!name.empty())
+    setNameFn(getResult(), name);
+}
+
+std::optional<size_t> VarOp::getTargetResultIndex() { return 0; }
 
 //===----------------------------------------------------------------------===//
 // RegOp
@@ -1361,6 +1433,40 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
 // Assignment statements
 //===----------------------------------------------------------------------===//
 
+/// Parse the assignment type suffix. The legacy form gives only the source
+/// element type and implies an inout destination.
+/// We need to supply an extended form for both the destination handle type
+/// and source type since we extend support for multiple handle types.
+/// TOOD: This shall be removed once migrated from.
+static ParseResult parseSVHandleAssignmentTypes(OpAsmParser &parser,
+                                                Type &destType, Type &srcType) {
+  Type firstType;
+  if (parser.parseType(firstType))
+    return failure();
+
+  if (isa<InOutType, NetType, VarType>(firstType)) {
+    destType = firstType;
+    if (parser.parseComma() || parser.parseType(srcType))
+      return failure();
+  } else {
+    destType = InOutType::get(firstType);
+    srcType = firstType;
+  }
+  return success();
+}
+
+static void printSVHandleAssignmentTypes(OpAsmPrinter &printer, Operation *,
+                                         Type destType, Type srcType) {
+  if (isa<InOutType>(destType)) {
+    printer.printType(srcType);
+    return;
+  }
+
+  printer.printType(destType);
+  printer << ", ";
+  printer.printType(srcType);
+}
+
 LogicalResult BPAssignOp::verify() {
   if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
@@ -1513,7 +1619,7 @@ void InterfaceOp::build(OpBuilder &builder, OperationState &result,
                         StringRef sym_name, std::function<void()> body) {
   OpBuilder::InsertionGuard guard(builder);
 
-  result.addAttribute(::SymbolTable::getSymbolAttrName(),
+  result.addAttribute(InterfaceOp::getSymNameAttrName(result.name),
                       builder.getStringAttr(sym_name));
   builder.createBlock(result.addRegion());
   if (body)
@@ -1578,7 +1684,7 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
 void InterfaceSignalOp::build(mlir::OpBuilder &builder,
                               ::mlir::OperationState &state, StringRef name,
                               mlir::Type type) {
-  build(builder, state, name, mlir::TypeAttr::get(type));
+  build(builder, state, name, /*sym_visibility=*/{}, mlir::TypeAttr::get(type));
 }
 
 void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
@@ -1594,7 +1700,8 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
   for (auto output : outputs)
     directions.push_back(ModportStructAttr::get(
         ctxt, outputDir, SymbolRefAttr::get(ctxt, output)));
-  build(builder, state, name, ArrayAttr::get(ctxt, directions));
+  build(builder, state, name, /*sym_visibility=*/{},
+        ArrayAttr::get(ctxt, directions));
 }
 
 std::optional<size_t> InterfaceInstanceOp::getTargetResultIndex() {
@@ -1753,9 +1860,9 @@ LogicalResult ReadInterfaceSignalOp::verify() {
 // WireOp
 //===----------------------------------------------------------------------===//
 
-void WireOp::build(OpBuilder &builder, OperationState &odsState,
-                   Type elementType, StringAttr name,
-                   hw::InnerSymAttr innerSym) {
+static void buildWire(OpBuilder &builder, OperationState &odsState,
+                      Type resultType, StringAttr name,
+                      hw::InnerSymAttr innerSym) {
   if (!name)
     name = builder.getStringAttr("");
   if (innerSym)
@@ -1763,7 +1870,15 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
                           innerSym);
 
   odsState.addAttribute("name", name);
-  odsState.addTypes(InOutType::get(elementType));
+  odsState.addTypes(resultType);
+}
+
+void WireOp::build(OpBuilder &builder, OperationState &odsState, Type type,
+                   StringAttr name, hw::InnerSymAttr innerSym) {
+  if (isa<InOutType, NetType>(type))
+    buildWire(builder, odsState, type, name, innerSym);
+  else
+    buildWire(builder, odsState, InOutType::get(type), name, innerSym);
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -1818,9 +1933,9 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     // If no write and only reads, then replace with ZOp.
     // SV 6.6: "If no driver is connected to a net, its
     // value shall be high-impedance (z) unless the net is a trireg"
-    connected = ConstantZOp::create(
-        rewriter, wire.getLoc(),
-        cast<InOutType>(wire.getResult().getType()).getElementType());
+    connected =
+        ConstantZOp::create(rewriter, wire.getLoc(),
+                            getHandleElementType(wire.getResult().getType()));
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
     connected = write.getSrc();
   else
@@ -1852,13 +1967,17 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
 // A helper function to infer a return type of IndexedPartSelectInOutOp.
 static Type getElementTypeOfWidth(Type type, int32_t width) {
-  auto elemTy = cast<hw::InOutType>(type).getElementType();
-  if (isa<IntegerType>(elemTy))
-    return hw::InOutType::get(IntegerType::get(type.getContext(), width));
-  if (isa<hw::ArrayType>(elemTy))
-    return hw::InOutType::get(hw::ArrayType::get(
-        cast<hw::ArrayType>(elemTy).getElementType(), width));
-  return {};
+  auto elemType = getHandleElementType(type);
+  if (!elemType)
+    return {};
+  Type newElem;
+  if (hw::type_isa<IntegerType>(elemType))
+    newElem = IntegerType::get(type.getContext(), width);
+  else if (auto array = hw::type_dyn_cast<hw::ArrayType>(elemType))
+    newElem = hw::ArrayType::get(array.getElementType(), width);
+  else
+    return {};
+  return getHandleOfElementType(type, newElem);
 }
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
@@ -1869,30 +1988,35 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
   auto width = adaptor.getWidthAttr();
   if (!width)
     return failure();
-
-  auto typ = getElementTypeOfWidth(operands[0].getType(),
-                                   width.getValue().getZExtValue());
-  if (!typ)
+  auto inputType = operands[0].getType();
+  if (!inputType)
     return failure();
-  results.push_back(typ);
+  auto elemType = getHandleElementType(inputType);
+  if (!elemType)
+    return failure();
+  auto resultType =
+      getElementTypeOfWidth(inputType, width.getValue().getZExtValue());
+  if (!resultType)
+    return failure();
+  results.push_back(resultType);
   return success();
 }
 
 LogicalResult IndexedPartSelectInOutOp::verify() {
   unsigned inputWidth = 0, resultWidth = 0;
   auto opWidth = getWidth();
-  auto inputElemTy = cast<InOutType>(getInput().getType()).getElementType();
-  auto resultElemTy = cast<InOutType>(getType()).getElementType();
-  if (auto i = dyn_cast<IntegerType>(inputElemTy))
+  auto inputElemTy = getHandleElementType(getInput().getType());
+  auto resultElemTy = getHandleElementType(getType());
+  if (auto i = hw::type_dyn_cast<IntegerType>(inputElemTy))
     inputWidth = i.getWidth();
-  else if (auto i = hw::type_cast<hw::ArrayType>(inputElemTy))
+  else if (auto i = hw::type_dyn_cast<hw::ArrayType>(inputElemTy))
     inputWidth = i.getNumElements();
   else
     return emitError("input element type must be Integer or Array");
 
-  if (auto resType = dyn_cast<IntegerType>(resultElemTy))
+  if (auto resType = hw::type_dyn_cast<IntegerType>(resultElemTy))
     resultWidth = resType.getWidth();
-  else if (auto resType = hw::type_cast<hw::ArrayType>(resultElemTy))
+  else if (auto resType = hw::type_dyn_cast<hw::ArrayType>(resultElemTy))
     resultWidth = resType.getNumElements();
   else
     return emitError("result element type must be Integer or Array");
@@ -1952,13 +2076,14 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
   auto field = adaptor.getFieldAttr();
   if (!field)
     return failure();
+  auto handleType = operands[0].getType();
   auto structType =
-      hw::type_cast<hw::StructType>(getInOutElementType(operands[0].getType()));
+      hw::type_cast<hw::StructType>(getHandleElementType(handleType));
   auto resultType = structType.getFieldType(field);
   if (!resultType)
     return failure();
 
-  results.push_back(hw::InOutType::get(resultType));
+  results.push_back(getHandleOfElementType(handleType, resultType));
   return success();
 }
 
@@ -2056,7 +2181,8 @@ void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
 void SVVerbatimSourceOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
@@ -2066,8 +2192,8 @@ void SVVerbatimSourceOp::print(OpAsmPrinter &p) {
   circt::printOptionalParameterList(p, *this, getParameters());
 
   // Print attributes using the helper function
-  SmallVector<StringRef> omittedAttrs = {SymbolTable::getSymbolAttrName(),
-                                         "parameters", visibilityAttrName};
+  SmallVector<StringRef> omittedAttrs = {getSymNameAttrName(), "parameters",
+                                         visibilityAttrName};
 
   p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
 }
@@ -2076,7 +2202,8 @@ ParseResult SVVerbatimSourceOp::parse(OpAsmParser &parser,
                                       OperationState &result) {
 
   // parse optional visibility
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   StringRef visibility;
   if (succeeded(parser.parseOptionalKeyword(&visibility,
                                             {"public", "private", "nested"}))) {
@@ -2086,7 +2213,7 @@ ParseResult SVVerbatimSourceOp::parse(OpAsmParser &parser,
 
   // Parse the symbol name
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr, getSymNameAttrName(result.name),
                              result.attributes))
     return failure();
 
@@ -2155,15 +2282,9 @@ SmallVector<hw::PortInfo> SVVerbatimModuleOp::getPortList() {
     DictionaryAttr attrs = portAttrs && i < portAttrs->size()
                                ? cast<DictionaryAttr>((*portAttrs)[i])
                                : DictionaryAttr::get(getContext());
-    hw::PortInfo::Direction dir =
-        port.dir == hw::ModulePort::Direction::Input
-            ? hw::PortInfo::Direction::Input
-            : (port.dir == hw::ModulePort::Direction::Output
-                   ? hw::PortInfo::Direction::Output
-                   : hw::PortInfo::Direction::InOut);
     size_t argNum = moduleType.isOutput(i) ? moduleType.getOutputIdForPortId(i)
                                            : moduleType.getInputIdForPortId(i);
-    ports.push_back({{port.name, port.type, dir}, argNum, attrs, loc});
+    ports.push_back({{port.name, port.type, port.dir}, argNum, attrs, loc});
   }
   return ports;
 }
@@ -2241,7 +2362,8 @@ void SVVerbatimModuleOp::setAllPortNames(ArrayRef<Attribute> names) {
 void SVVerbatimModuleOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
@@ -2254,9 +2376,12 @@ void SVVerbatimModuleOp::print(OpAsmPrinter &p) {
       p, emptyRegion, getModuleType(), getAllPortAttrs(), getAllPortLocs());
 
   SmallVector<StringRef> omittedAttrs = {
-      SymbolTable::getSymbolAttrName(),   SymbolTable::getVisibilityAttrName(),
-      getModuleTypeAttrName().getValue(), getPerPortAttrsAttrName().getValue(),
-      getPortLocsAttrName().getValue(),   getParametersAttrName().getValue()};
+      getSymNameAttrName(),
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName(),
+      getModuleTypeAttrName().getValue(),
+      getPerPortAttrsAttrName().getValue(),
+      getPortLocsAttrName().getValue(),
+      getParametersAttrName().getValue()};
 
   mlir::function_interface_impl::printFunctionAttributes(p, *this,
                                                          omittedAttrs);
@@ -2272,7 +2397,7 @@ ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser,
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr, getSymNameAttrName(result.name),
                              result.attributes))
     return failure();
 
@@ -2699,7 +2824,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr, getSymNameAttrName(result.name),
                              result.attributes))
     return failure();
 
@@ -2893,12 +3018,11 @@ SmallVector<hw::PortInfo> FuncOp::getPortList(bool excludeExplicitReturn) {
 void FuncOp::print(OpAsmPrinter &p) {
   FuncOp op = *this;
   // Print the operation and the function name.
-  auto funcName =
-      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
-          .getValue();
+  auto funcName = op.getName();
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(funcName);

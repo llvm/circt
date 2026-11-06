@@ -431,19 +431,19 @@ function void SeverityBuiltinEdgeCase(string testStr);
   // CHECK: [[CONST:%.+]] = moore.constant 1234 : i32
   // CHECK-NEXT: [[INTVAR:%.+]] = moore.variable [[CONST]] : <i32>
   int val = 1234;
-  // CHECK-NEXT: [[INTVAL1:%.+]] = moore.read [[INTVAR]] : <i32>
+  // CHECK-NEXT: [[INTVAL1:%.+]] = moore.read [[INTVAR]] : ref<i32>
   // CHECK-NEXT: [[FMTINT1:%.+]] = moore.fmt.int binary [[INTVAL1]], align right, pad zero : i32
   // CHECK-NEXT: [[LINE1:%.+]] = moore.fmt.literal "\0A"
   // CHECK-NEXT: [[CONCAT1:%.+]] = moore.fmt.concat ([[FMTINT1]], [[LINE1]])
   // CHECK-NEXT: moore.builtin.display [[CONCAT1]]
   $displayb(val);
-  // CHECK-NEXT: [[INTVAL2:%.+]] = moore.read [[INTVAR]] : <i32>
+  // CHECK-NEXT: [[INTVAL2:%.+]] = moore.read [[INTVAR]] : ref<i32>
   // CHECK-NEXT: [[FMTINT2:%.+]] = moore.fmt.int octal [[INTVAL2]], align right, pad zero : i32
   // CHECK-NEXT: [[LINE2:%.+]] = moore.fmt.literal "\0A"
   // CHECK-NEXT: [[CONCAT2:%.+]] = moore.fmt.concat ([[FMTINT2]], [[LINE2]])
   // CHECK-NEXT: moore.builtin.display [[CONCAT2]]
   $displayo(val);
-  // CHECK-NEXT: [[INTVAL3:%.+]] = moore.read [[INTVAR]] : <i32>
+  // CHECK-NEXT: [[INTVAL3:%.+]] = moore.read [[INTVAR]] : ref<i32>
   // CHECK-NEXT: [[FMTINT3:%.+]] = moore.fmt.int hex_lower [[INTVAL3]], align right, pad zero : i32
   // CHECK-NEXT: [[LINE3:%.+]] = moore.fmt.literal "\0A"
   // CHECK-NEXT: [[CONCAT3:%.+]] = moore.fmt.concat ([[FMTINT3]], [[LINE3]])
@@ -468,38 +468,45 @@ module SampleValueBuiltins #() (
   // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
   // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
   // CHECK: [[DATABITWIRE:%.+]] = moore.net name "data_bit_i" wire : <i8>
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C_INT]] : i1
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[SAMPLED:%.+]] = ltl.sampled [[CURRENT]] : i1
+  // CHECK: [[DELAY:%.+]] = ltl.delay [[CB]], 1, 0 : i1
+  // CHECK: [[ANTECEDENT:%.+]] = ltl.concat [[DELAY]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[IMPL:%.+]] = ltl.implication [[ANTECEDENT]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[IMPL]], posedge {{%.+}} : !ltl.property
+  // CHECK: verif.assert [[PROP]] : !ltl.property
   sampled_clk: assert property (@(posedge clk_i) clk_i |=> $sampled(clk_i));
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C_INT]] : i1
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 clk [[CLK_I1]] : i1
   // CHECK-NEXT: [[ROSE:%.+]] = comb.icmp ult [[PAST]], [[CURRENT]] : i1
+  // CHECK: [[DELAY:%.+]] = ltl.delay [[CB]], 1, 0 : i1
+  // CHECK: [[ANTECEDENT:%.+]] = ltl.concat [[DELAY]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[IMPL:%.+]] = ltl.implication [[ANTECEDENT]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[IMPL]], posedge {{%.+}} : !ltl.property
+  // CHECK: verif.assert [[PROP]] : !ltl.property
   rising_clk: assert property (@(posedge clk_i) clk_i |=> $rose(clk_i));
   // Check that the output of rose can be used by non-LTL ops
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C1:%.+]] = moore.read [[CLKWIRE]] : <l1>
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C1:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 clk [[CLK_I1]] : i1
@@ -507,27 +514,34 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[ROSE_INT:%.+]] = moore.from_builtin_int [[ROSE]] : i1
   // CHECK-NEXT: [[ROSE_LOGIC:%.+]] = moore.int_to_logic [[ROSE_INT]] : i1
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[C1]], [[ROSE_LOGIC]] : l1 -> l1
+  // CHECK: [[EQ_INT:%.+]] = moore.logic_to_int [[EQ]] : l1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_I1]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   rose_eq: assert property (@(posedge clk_i) clk_i == $rose(clk_i));
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C_INT]] : i1
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 clk [[CLK_I1]] : i1
   // CHECK-NEXT: [[FELL:%.+]] = comb.icmp ugt [[PAST]], [[CURRENT]] : i1
+  // CHECK: [[DELAY:%.+]] = ltl.delay [[CB]], 1, 0 : i1
+  // CHECK: [[ANTECEDENT:%.+]] = ltl.concat [[DELAY]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[IMPL:%.+]] = ltl.implication [[ANTECEDENT]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[IMPL]], posedge {{%.+}} : !ltl.property
+  // CHECK: verif.assert [[PROP]] : !ltl.property
   falling_clk: assert property (@(posedge clk_i) clk_i |=> $fell(clk_i));
   // Check that the output of fell can be used by non-LTL ops
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C1:%.+]] = moore.read [[CLKWIRE]] : <l1>
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C1:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 clk [[CLK_I1]] : i1
@@ -535,27 +549,34 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[FELL_INT:%.+]] = moore.from_builtin_int [[FELL]] : i1
   // CHECK-NEXT: [[FELL_LOGIC:%.+]] = moore.int_to_logic [[FELL_INT]] : i1
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[C1]], [[FELL_LOGIC]] : l1 -> l1
+  // CHECK: [[EQ_INT:%.+]] = moore.logic_to_int [[EQ]] : l1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_I1]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   fell_eq: assert property (@(posedge clk_i) clk_i == $fell(clk_i));
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C_INT]] : i1
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 clk [[CLK_I1]] : i1
   // CHECK-NEXT: [[STABLE:%.+]] = comb.icmp eq [[PAST]], [[CURRENT]] : i1
+  // CHECK: [[DELAY:%.+]] = ltl.delay [[CB]], 1, 0 : i1
+  // CHECK: [[ANTECEDENT:%.+]] = ltl.concat [[DELAY]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[IMPL:%.+]] = ltl.implication [[ANTECEDENT]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[IMPL]], posedge {{%.+}} : !ltl.property
+  // CHECK: verif.assert [[PROP]] : !ltl.property
   stable_clk: assert property (@(posedge clk_i) clk_i |=> $stable(clk_i));
   // Check that the output of stable can be used by non-LTL ops
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C1:%.+]] = moore.read [[CLKWIRE]] : <l1>
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C1:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 clk [[CLK_I1]] : i1
@@ -563,27 +584,34 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[STABLE_INT:%.+]] = moore.from_builtin_int [[STABLE]] : i1
   // CHECK-NEXT: [[STABLE_LOGIC:%.+]] = moore.int_to_logic [[STABLE_INT]] : i1
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[C1]], [[STABLE_LOGIC]] : l1 -> l1
+  // CHECK: [[EQ_INT:%.+]] = moore.logic_to_int [[EQ]] : l1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_I1]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   stable_eq: assert property (@(posedge clk_i) clk_i == $stable(clk_i));
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C_INT]] : i1
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 clk [[CLK_I1]] : i1
   // CHECK-NEXT: [[CHANGED:%.+]] = comb.icmp ne [[PAST]], [[CURRENT]] : i1
+  // CHECK: [[DELAY:%.+]] = ltl.delay [[CB]], 1, 0 : i1
+  // CHECK: [[ANTECEDENT:%.+]] = ltl.concat [[DELAY]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[IMPL:%.+]] = ltl.implication [[ANTECEDENT]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[IMPL]], posedge {{%.+}} : !ltl.property
+  // CHECK: verif.assert [[PROP]] : !ltl.property
   changed_clk: assert property (@(posedge clk_i) clk_i |=> $changed(clk_i));
   // Check that the output of changed can be used by non-LTL ops
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C1:%.+]] = moore.read [[CLKWIRE]] : <l1>
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C1:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 clk [[CLK_I1]] : i1
@@ -591,58 +619,71 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[CHANGED_INT:%.+]] = moore.from_builtin_int [[CHANGED]] : i1
   // CHECK-NEXT: [[CHANGED_LOGIC:%.+]] = moore.int_to_logic [[CHANGED_INT]] : i1
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[C1]], [[CHANGED_LOGIC]] : l1 -> l1
+  // CHECK: [[EQ_INT:%.+]] = moore.logic_to_int [[EQ]] : l1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_I1]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   changed_eq: assert property (@(posedge clk_i) clk_i == $changed(clk_i));
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C_INT]] : i1
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 clk [[CLK_I1]] : i1
+  // CHECK: [[DELAY:%.+]] = ltl.delay [[CB]], 1, 0 : i1
+  // CHECK: [[ANTECEDENT:%.+]] = ltl.concat [[DELAY]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[IMPL:%.+]] = ltl.implication [[ANTECEDENT]], {{%.+}} : !ltl.sequence, i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[IMPL]], posedge {{%.+}} : !ltl.property
+  // CHECK: verif.assert [[PROP]] : !ltl.property
   past_clk: assert property (@(posedge clk_i) clk_i |=> $past(clk_i));
   // Check that the output of past can be used by non-LTL ops
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[C1:%.+]] = moore.read [[CLKWIRE]] : <l1>
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[C1:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CB]], 1 clk [[CLK_I1]] : i1
   // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i1
   // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i1
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[C1]], [[PAST_LOGIC]] : l1 -> l1
+  // CHECK: [[EQ_INT:%.+]] = moore.logic_to_int [[EQ]] : l1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_I1]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   past_eq: assert property (@(posedge clk_i) clk_i == $past(clk_i));
   // Test $past on wider bitvectors
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[D1:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK-NEXT: [[D2_INT:%.+]] = moore.logic_to_int [[D2]] : l8
   // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D2_INT]] : i8
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
   // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
   // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
+  // CHECK: [[EQ_INT:%.+]] = moore.logic_to_int [[EQ]] : l1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_I1]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   past_data: assert property (@(posedge clk_i) data_i == $past(data_i));
 
   // Test $past in a process
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: moore.wait_event {
-  // CHECK-NEXT:   [[CLKEDGE:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: moore.wait_event {
+  // CHECK-NEXT:   [[CLKEDGE:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT:   moore.detect_event posedge [[CLKEDGE]] : l1
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
   // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
@@ -652,17 +693,16 @@ module SampleValueBuiltins #() (
   logic [7:0] past_data_i;
   always @(posedge clk_i) past_data_i <= $past(data_i);
 
-  // CHECK: moore.procedure always {
-  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK: [[RED:%.+]] = moore.reduce_xor [[D]] : l8 -> l1
   // CHECK: [[X:%.+]] = moore.constant bX : l1
   // CHECK: [[CEQ:%.+]] = moore.case_eq [[RED]], [[X]] : l1
   // CHECK: [[CEQ_I1:%.+]] = moore.to_builtin_int [[CEQ]] : i1
-  // CHECK: ltl.clock [[CEQ_I1]]
+  // CHECK: [[PROP:%.+]] = ltl.clock [[CEQ_I1]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   isunknown_data: assert property (@(posedge clk_i) $isunknown(data_i));
 
-  // CHECK: moore.procedure always {
-  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK: [[RED:%.+]] = moore.reduce_xor [[D]] : l8 -> l1
   // CHECK: [[X:%.+]] = moore.constant bX : l1
   // CHECK: [[ISUNKNOWN:%.+]] = moore.case_eq [[RED]], [[X]] : l1
@@ -679,11 +719,11 @@ module SampleValueBuiltins #() (
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
   // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
-  // CHECK: ltl.clock [[RES_BUILTIN]]
+  // CHECK: [[PROP:%.+]] = ltl.clock [[RES_BUILTIN]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   onehot0_data: assert property (@(posedge clk_i) $onehot0(data_i));
 
-  // CHECK: moore.procedure always {
-  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK: [[RED:%.+]] = moore.reduce_xor [[D]] : l8 -> l1
   // CHECK: [[X:%.+]] = moore.constant bX : l1
   // CHECK: [[ISUNKNOWN:%.+]] = moore.case_eq [[RED]], [[X]] : l1
@@ -702,11 +742,11 @@ module SampleValueBuiltins #() (
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
   // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
-  // CHECK: ltl.clock [[RES_BUILTIN]]
+  // CHECK: [[PROP:%.+]] = ltl.clock [[RES_BUILTIN]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   onehot_data: assert property (@(posedge clk_i) $onehot(data_i));
 
-  // CHECK: moore.procedure always {
-  // CHECK: [[D:%.+]] = moore.read [[DATABITWIRE]] : <i8>
+  // CHECK: [[D:%.+]] = moore.read [[DATABITWIRE]] : ref<i8>
   // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D]] : i8
   // CHECK: [[ONE:%.+]] = hw.constant 1 : i8
   // CHECK: [[SUB:%.+]] = comb.sub [[DB]], [[ONE]] : i8
@@ -715,11 +755,11 @@ module SampleValueBuiltins #() (
   // CHECK: [[EQ:%.+]] = comb.icmp eq [[AND]], [[ZERO]] : i8
   // CHECK: [[EQ_INT:%.+]] = moore.from_builtin_int [[EQ]] : i1
   // CHECK: [[EQ_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
-  // CHECK: ltl.clock [[EQ_BUILTIN]]
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_BUILTIN]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   onehot0_bit_data: assert property (@(posedge clk_i) $onehot0(data_bit_i));
 
-  // CHECK: moore.procedure always {
-  // CHECK: [[D:%.+]] = moore.read [[DATABITWIRE]] : <i8>
+  // CHECK: [[D:%.+]] = moore.read [[DATABITWIRE]] : ref<i8>
   // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D]] : i8
   // CHECK: [[ONE:%.+]] = hw.constant 1 : i8
   // CHECK: [[SUB:%.+]] = comb.sub [[DB]], [[ONE]] : i8
@@ -730,11 +770,11 @@ module SampleValueBuiltins #() (
   // CHECK: [[AND2:%.+]] = comb.and [[EQ]], [[NE]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[AND2]] : i1
   // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
-  // CHECK: ltl.clock [[RES_BUILTIN]]
+  // CHECK: [[PROP:%.+]] = ltl.clock [[RES_BUILTIN]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   onehot_bit_data: assert property (@(posedge clk_i) $onehot(data_bit_i));
 
-  // CHECK: moore.procedure always {
-  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK: [[D_L2I:%.+]] = moore.logic_to_int [[D]] : l8
   // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D_L2I]] : i8
   // CHECK: [[Z3:%.+]] = hw.constant 0 : i3
@@ -746,11 +786,13 @@ module SampleValueBuiltins #() (
   // CHECK: [[SEXT:%.+]] = moore.zext [[RES_INT]] : i4 -> i32
   // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
   // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ]] : i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_I1]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   countones_data:
     assert property (@(posedge clk_i) $countones(data_i) == 0);
 
-  // CHECK: moore.procedure always {
-  // CHECK: [[D:%.+]] = moore.read [[DATABITWIRE]] : <i8>
+  // CHECK: [[D:%.+]] = moore.read [[DATABITWIRE]] : ref<i8>
   // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D]] : i8
   // CHECK: [[Z3:%.+]] = hw.constant 0 : i3
   // CHECK: [[B0:%.+]] = comb.extract [[DB]] from 0 : (i8) -> i1
@@ -762,6 +804,9 @@ module SampleValueBuiltins #() (
   // CHECK: [[SEXT:%.+]] = moore.zext [[RES_INT]] : i4 -> i32
   // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
   // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ]] : i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_I1]], posedge {{%.+}} : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   countones_bit_data:
     assert property (@(posedge clk_i) $countones(data_bit_i) == 0);
 endmodule
@@ -783,55 +828,63 @@ module SampleValueBuiltinsDefaultClocking #() (
   default clocking @(posedge clk_i); endclocking
 
   // Test default clocking inference for $past in an assertion
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[D1:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK-NEXT: [[D2_INT:%.+]] = moore.logic_to_int [[D2]] : l8
   // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D2_INT]] : i8
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
   // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
   // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
+  // CHECK: [[EQ_INT:%.+]] = moore.logic_to_int [[EQ]] : l1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
+  // CHECK: verif.assert [[EQ_I1]]
   assert_past: assert property (data_i == $past(data_i));
 
   // Test overriden clock in an assertion
-  // CHECK: moore.procedure always {
-  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLK2WIRE]] : <l1>
+  // CHECK: [[D1:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLK2WIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK-NEXT: [[D2_INT:%.+]] = moore.logic_to_int [[D2]] : l8
   // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D2_INT]] : i8
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
   // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
   // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
+  // CHECK: [[EQ_INT:%.+]] = moore.logic_to_int [[EQ]] : l1
+  // CHECK: [[EQ_I1:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
+  // CHECK: [[ACLK:%.+]] = moore.read [[CLK2WIRE]] : ref<l1>
+  // CHECK: [[ACLK_INT:%.+]] = moore.logic_to_int [[ACLK]] : l1
+  // CHECK: [[ACLK_I1:%.+]] = moore.to_builtin_int [[ACLK_INT]] : i1
+  // CHECK: [[PROP:%.+]] = ltl.clock [[EQ_I1]], posedge [[ACLK_I1]] : i1
+  // CHECK: verif.assert [[PROP]] : !ltl.sequence
   assert_past_clk2: assert property (@(posedge clk2_i) data_i == $past(data_i));
 
   // Test default clocking inference for $past in a continuous assignment
-  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
   // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
   // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
   // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
-  // CHECK-NEXT: moore.assign {{%.+}}, [[PAST_LOGIC]] : l8
+  // CHECK-NEXT: moore.assign {{%.+}}, [[PAST_LOGIC]] : ref<l8>
   logic [7:0] assign_past;
   assign assign_past = $past(data_i);
 
   // Test default clocking inference for $past in a combinational procedure
   // CHECK: moore.procedure always_comb {
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
   // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
@@ -844,13 +897,13 @@ module SampleValueBuiltinsDefaultClocking #() (
   // Test overriden clock for $past in a procedure
   // CHECK: moore.procedure always_ff {
   // CHECK-NEXT: moore.wait_event {
-  // CHECK-NEXT:   [[CLKEDGE:%.+]] = moore.read [[CLK2WIRE]] : <l1>
+  // CHECK-NEXT:   [[CLKEDGE:%.+]] = moore.read [[CLK2WIRE]] : ref<l1>
   // CHECK-NEXT:   moore.detect_event posedge [[CLKEDGE]] : l1
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLK2WIRE]] : <l1>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLK2WIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
   // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
@@ -875,10 +928,10 @@ module SampleValueBuiltinsDefaultClockingNoProcedure #() (
 
   default clocking @(posedge clk_i); endclocking
 
-  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
   // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
   // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
-  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
   // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
   // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
@@ -929,7 +982,7 @@ endfunction
 // CHECK-SAME: [[Other:%.+]]: !moore.string) {
 function void StringBuiltins(string string_in, int int_in, string other);
   // CHECK: [[VAR:%.+]] = moore.variable [[STR]] : <string>
-  // CHECK: [[READ:%.+]] = moore.read [[VAR]] : <string>
+  // CHECK: [[READ:%.+]] = moore.read [[VAR]] : ref<string>
   // CHECK: [[LEN:%.+]] = moore.string.len [[READ]]
   dummyA(string_in.len());
   // CHECK: moore.string.put [[VAR]]{{\[}}[[INT]]{{\]}}, {{%.+}} : <string>
@@ -1059,11 +1112,11 @@ function void FileIOBuiltins(int fd_int, integer fd_integer);
   // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = a_update
   fd = $fopen("f", "ab+");
 
-  // CHECK: [[FDVAL:%.+]] = moore.read {{%.+}} : <i32>
+  // CHECK: [[FDVAL:%.+]] = moore.read {{%.+}} : ref<i32>
   // CHECK-NEXT: moore.builtin.fclose [[FDVAL]]
   $fclose(fd);
 
-  // CHECK: [[FDVAL:%.+]] = moore.read {{%.+}} : <i32>
+  // CHECK: [[FDVAL:%.+]] = moore.read {{%.+}} : ref<i32>
   // CHECK-NEXT: moore.builtin.fflush [[FDVAL]]
   $fflush(fd);
 

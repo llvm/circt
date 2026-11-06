@@ -11,7 +11,6 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include <algorithm>
 
-using namespace llvm;
 using namespace circt;
 using namespace arc;
 using namespace std;

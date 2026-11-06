@@ -203,7 +203,7 @@ static ValueField getValueField(Value value) {
 /// The work horse promoting processes into concrete registers.
 struct Deseq {
   Deseq(ProcessOp process) : process(process) {}
-  void deseq();
+  LogicalResult deseq();
 
   bool analyzeProcess();
   Value tracePastValue(Value pastValue);
@@ -231,8 +231,8 @@ struct Deseq {
   Value materializeProjection(OpBuilder &builder, Location loc, Value value,
                               SmallDenseMap<Value, Value, 8> &cache);
 
-  void implementRegisters();
-  void implementRegister(DriveInfo &drive);
+  LogicalResult implementRegisters();
+  LogicalResult implementRegister(DriveInfo &drive);
 
   Value specializeValue(Value value, FixedValues fixedValues);
   ValueRange specializeProcess(FixedValues fixedValues);
@@ -258,8 +258,6 @@ struct Deseq {
   SmallDenseMap<Value, Value, 1> materializedClockInverters;
   /// A cache of `comb.xor` ops used as inverters.
   SmallDenseMap<Value, Value, 1> materializedInverters;
-  /// An `llhd.constant_time` op created to represent an epsilon delay.
-  ConstantTimeOp epsilonDelay;
   /// A map of operations that have been checked to be valid reset values.
   DenseMap<Operation *, bool> staticOps;
 
@@ -318,12 +316,12 @@ private:
 } // namespace
 
 /// Try to lower the process to a set of registers.
-void Deseq::deseq() {
+LogicalResult Deseq::deseq() {
   // Check whether the process meets the basic criteria for being replaced by a
   // register. This includes having only a single `llhd.wait` op and feeding
-  // only particular kinds of `llhd.drv` ops.
+  // only particular kinds of `llhd.drv` and `llhd.assign` ops.
   if (!analyzeProcess())
-    return;
+    return success();
   LLVM_DEBUG({
     llvm::dbgs() << "Desequentializing " << process.getLoc() << "\n";
     llvm::dbgs() << "- Feeds " << driveInfos.size() << " conditional drives\n";
@@ -341,15 +339,17 @@ void Deseq::deseq() {
   // them to drive a new value, and ensure that the behavior can be represented
   // by a register.
   if (!matchDrives())
-    return;
+    return success();
 
   // Make the drives unconditional and capture the conditional behavior as
   // register operations.
-  implementRegisters();
+  if (failed(implementRegisters()))
+    return failure();
 
   // At this point the process has been replaced with specialized versions of it
   // for the different triggers and can be removed.
   process.erase();
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -397,7 +397,7 @@ bool Deseq::analyzeProcess() {
   // Ensure that all process results lead to conditional drive operations.
   SmallPtrSet<Operation *, 8> seenDrives;
   for (auto &use : process->getUses()) {
-    auto driveOp = dyn_cast<DriveOp>(use.getOwner());
+    auto driveOp = dyn_cast<DriveLikeOp>(use.getOwner());
     if (!driveOp) {
       LLVM_DEBUG(llvm::dbgs()
                  << "Skipping " << process.getLoc() << ": feeds non-drive "
@@ -414,8 +414,9 @@ bool Deseq::analyzeProcess() {
 
     // We can only deal with the process result being used as drive value or
     // condition.
-    // `llhd.drv` operands are: signal (0), value (1), time (2), enable (3).
-    if (use.getOperandNumber() != 1 && use.getOperandNumber() != 3) {
+    if (&use != &driveOp.getValueMutable()[0] &&
+        !llvm::is_contained(
+            llvm::make_pointer_range(driveOp.getEnableMutable()), &use)) {
       LLVM_DEBUG(llvm::dbgs()
                  << "Skipping " << process.getLoc()
                  << ": feeds drive operand that is neither value nor enable: "
@@ -1325,11 +1326,86 @@ Value Deseq::materializeProjection(OpBuilder &builder, Location loc,
   return value;
 }
 
+/// Attempt to find and set an preset (initializer) value for the newly created
+/// register. This needs to be a constant value that is either used to
+/// initialize the signal itself, or is unconditionally driven to the signal
+/// at the same time the register op begins driving the signal. If such an
+/// initial drive is found, the constant drive operation(s) are erased.
+/// Returns failure if mutiple conflicting initial drivers are found, or if
+/// a non-constant value would be inferred from a signal initializer.
+static LogicalResult inferRegisterPreset(seq::FirRegOp regOp,
+                                         DriveInfo &drive) {
+  auto sigOp = drive.op.getSignal().getDefiningOp<SignalOp>();
+  SmallVector<std::pair<DriveLikeOp, IntegerAttr>> constantDrives;
+
+  // Check if a drive happens at the same time as the register drive. Immediate
+  // drives are concurrent with each other, and delayed drives are concurrent if
+  // they have the same delay.
+  TimeAttr driveTimeAttr;
+  if (drive.op.getTime())
+    matchPattern(drive.op.getTime(), m_Constant(&driveTimeAttr));
+  auto isConcurrent = [&](DriveLikeOp otherDrive) -> bool {
+    if (otherDrive.getTime() == drive.op.getTime())
+      return true;
+    TimeAttr timeCst;
+    return driveTimeAttr && otherDrive.getTime() &&
+           matchPattern(otherDrive.getTime(), m_Constant(&timeCst)) &&
+           timeCst == driveTimeAttr;
+  };
+
+  // Find other unconditional concurrent constant drivers on the signal.
+  for (auto &use : drive.op.getSignal().getUses()) {
+    auto driveUser = dyn_cast<DriveLikeOp>(use.getOwner());
+    if (!driveUser || driveUser == drive.op ||
+        use != driveUser.getSignalMutable()[0])
+      continue;
+
+    bool isSameBlock = driveUser->getBlock() == drive.op->getBlock();
+    bool isUnconditional = !driveUser.getEnable();
+    if (!(isSameBlock && isUnconditional && isConcurrent(driveUser)))
+      continue;
+
+    IntegerAttr driveCst;
+    if (matchPattern(driveUser.getValue(), m_Constant(&driveCst)))
+      constantDrives.push_back({driveUser, driveCst});
+  }
+
+  IntegerAttr preset;
+  // Initial drives take precedence over signal initializers as they occur
+  // later and thus overwrite the initializer.
+  if (!constantDrives.empty()) {
+    // One or more initial drivers found. Ensure they drive the same constant.
+    bool isConflicted = !llvm::all_equal(llvm::map_range(
+        constantDrives, [](auto drivePair) { return drivePair.second; }));
+    if (isConflicted)
+      return drive.op->emitError(
+          "inferred register has conflicting initial drivers.");
+    preset = constantDrives.front().second;
+    // `driveInfos` only contains conditional drives, so erasing unconditional
+    // drives on-the-fly should be safe.
+    for (auto [initDriveOp, _] : constantDrives)
+      initDriveOp->erase();
+  } else if (sigOp && sigOp.getInit()) {
+    // An integer register preset can only represent a constant initializer.
+    // Keep dynamic scalar initializers from silently becoming unconstrained
+    // register state.
+    if (!matchPattern(sigOp.getInit(), m_Constant(&preset)))
+      return sigOp->emitError("cannot lower a nonconstant signal initializer "
+                              "to a register preset");
+  }
+
+  if (preset)
+    regOp.setPresetAttr(preset);
+  return success();
+}
+
 /// Make all drives unconditional and implement the conditional behavior with
 /// register ops.
-void Deseq::implementRegisters() {
+LogicalResult Deseq::implementRegisters() {
+  bool anyFailed = false;
   for (auto &drive : driveInfos)
-    implementRegister(drive);
+    anyFailed |= failed(implementRegister(drive));
+  return llvm::success(!anyFailed);
 }
 
 /// Implement the conditional behavior of a drive with a `seq.firreg` op and
@@ -1339,7 +1415,7 @@ void Deseq::implementRegisters() {
 /// `specializeValue` and `specializeProcess` to convert the sequential
 /// `llhd.process` into a purely combinational `llhd.combinational` that is
 /// simplified by assuming that the clock edge occurs.
-void Deseq::implementRegister(DriveInfo &drive) {
+LogicalResult Deseq::implementRegister(DriveInfo &drive) {
   OpBuilder builder(drive.op);
   auto loc = drive.op.getLoc();
 
@@ -1435,13 +1511,13 @@ void Deseq::implementRegister(DriveInfo &drive) {
   StringAttr name;
   if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>())
     name = sigOp.getNameAttr();
-  if (!name)
+  else
     name = builder.getStringAttr("");
 
   // Create the register op.
   auto reg = seq::FirRegOp::create(builder, loc, value, clock, name,
-                                   hw::InnerSymAttr{},
-                                   /*preset=*/IntegerAttr{}, reset, resetValue,
+                                   hw::InnerSymAttr{}, /*preset=*/IntegerAttr{},
+                                   reset, resetValue,
                                    /*isAsync=*/reset != Value{});
 
   // If the register has an enable, insert a self-mux in front of the register.
@@ -1460,15 +1536,24 @@ void Deseq::implementRegister(DriveInfo &drive) {
   drive.op.getEnableMutable().clear();
 
   // If the original `llhd.drv` had a delta delay, turn it into an immediate
-  // drive since the delay behavior is now capture by the register op.
+  // `llhd.assign` since the delay behavior is now captured by the register op.
   TimeAttr attr;
-  if (matchPattern(drive.op.getTime(), m_Constant(&attr)) &&
-      attr.getTime() == 0 && attr.getDelta() == 1 && attr.getEpsilon() == 0) {
-    if (!epsilonDelay)
-      epsilonDelay =
-          ConstantTimeOp::create(builder, process.getLoc(), 0, "ns", 0, 1);
-    drive.op.getTimeMutable().assign(epsilonDelay);
+  if (drive.op.getTime() &&
+      matchPattern(drive.op.getTime(), m_Constant(&attr)) &&
+      attr.getTime() == 0 && attr.getDelta() == 1) {
+    auto assignOp =
+        AssignOp::create(builder, drive.op.getLoc(), drive.op.getSignal(),
+                         drive.op.getValue(), Value{});
+    drive.op.erase();
+    drive.op = assignOp;
   }
+
+  // Attempt to merge an initial value into the register op
+  if (isa<IntegerType>(reg.getType()))
+    if (failed(inferRegisterPreset(reg, drive)))
+      return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1706,5 +1791,8 @@ struct DeseqPass : public llhd::impl::DeseqPassBase<DeseqPass> {
 void DeseqPass::runOnOperation() {
   SmallVector<ProcessOp> processes(getOperation().getOps<ProcessOp>());
   for (auto process : processes)
-    Deseq(process).deseq();
+    if (failed(Deseq(process).deseq())) {
+      signalPassFailure();
+      return;
+    }
 }

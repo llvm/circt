@@ -200,6 +200,13 @@ def _build_harness_manifest():
                                                      ("big", _uint16)])
   union_two = types.TypeAlias("@UnionTwo", "UnionTwo", union_inner)
 
+  union_subbyte_inner = types.UnionType("@UnionSubByte::inner",
+                                        [("tiny", _uint3),
+                                         ("signed_small", _sint5),
+                                         ("cell", sb_cell), ("big", _uint12)])
+  union_subbyte = types.TypeAlias("@UnionSubByte", "UnionSubByte",
+                                  union_subbyte_inner)
+
   # Window helper with one static `tag` header field and a list of ui32.
   list_id = "!esi.list<ui32>"
   list_type = types.ListType(list_id, _uint32)
@@ -289,6 +296,28 @@ def _build_harness_manifest():
   small_list_window = types.TypeAlias("@SmallListWindow", "SmallListWindow",
                                       small_list_window_inner)
 
+  narrow_data_list = types.ListType("!esi.list<ui7>", _uint7)
+  narrow_data_arg = types.StructType("@NarrowDataWindow::arg",
+                                     [("tag", _uint16),
+                                      ("items", narrow_data_list)])
+  narrow_data_frame = types.StructType(
+      "@NarrowDataWindow::data",
+      [("items", types.ArrayType("!hw.array<1xui7>", _uint7, 1))])
+  narrow_data_lowered = types.UnionType("@NarrowDataWindow::lowered",
+                                        [("header", sw_header_inner),
+                                         ("data", narrow_data_frame)])
+  narrow_data_window_inner = types.WindowType(
+      '!esi.window<"NarrowDataWindow", @NarrowDataWindow::arg, '
+      '[<"header", [<"tag">, <"items" countWidth 2>]>, '
+      '<"data", [<"items", 1>]>]>',
+      "NarrowDataWindow",
+      narrow_data_arg,
+      narrow_data_lowered,
+      small_list_window_inner.frames,
+  )
+  narrow_data_window = types.TypeAlias("@NarrowDataWindow", "NarrowDataWindow",
+                                       narrow_data_window_inner)
+
   # View-class fields backed by `esi::MutableBitVector` /
   # `esi::Int` / `esi::UInt` from `esi/Values.h`. Covers BitsType at
   # both narrow and wide widths, plus signed/unsigned integers above
@@ -351,8 +380,9 @@ def _build_harness_manifest():
   return [
       std_u, std_s, odd_u, odd_s, sub_u, sub_s, bool_field, outer, misaligned,
       arr4, u3_arr, bits1_arr, s5_arr, u24_arr, sb_cell, sb_cell_arr, nested3,
-      nested_cell, union_two, list_window, small_list_window, wide_u, wide_s,
-      bits_field, wide_mis, arr_views, arr_views_mis
+      nested_cell, union_two, union_subbyte, list_window, small_list_window,
+      narrow_data_window, wide_u, wide_s, bits_field, wide_mis, arr_views,
+      arr_views_mis
   ]
 
 
@@ -393,7 +423,7 @@ def test_codegen_round_trip(tmp_path):
       str(_HARNESS_DIR),
       "-B",
       str(build_dir),
-      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_BUILD_TYPE=Debug",
       f"-DCODEGEN_HARNESS_GENERATED_DIR={generated_dir}",
       f"-DESI_RUNTIME_LIB={runtime_lib}",
   ]
@@ -412,7 +442,7 @@ def test_codegen_round_trip(tmp_path):
 
   build_cmd = [
       "cmake", "--build",
-      str(build_dir), "--target", "codegen_harness", "--config", "Release"
+      str(build_dir), "--target", "codegen_harness", "--config", "Debug"
   ]
   build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
   if build_proc.returncode != 0:

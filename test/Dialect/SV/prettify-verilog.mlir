@@ -247,7 +247,7 @@ hw.module @unary_sink_no_duplicate(in %arg0: i4, out result: i4) {
 }
 
 // CHECK-LABEL: hw.module private @ConnectToAllFields
-hw.module private @ConnectToAllFields(in %clock: i1, in %reset: i1, in %value: i2, inout %base: !hw.struct<a: i2>) {
+hw.module private @ConnectToAllFields(in %clock: i1, in %reset: i1, in %value: i2, in %base: !hw.inout<!hw.struct<a: i2>>) {
   %r = sv.reg : !hw.inout<!hw.struct<a: i2>>
   %val = sv.read_inout %r : !hw.inout<!hw.struct<a: i2>>
   sv.always posedge %clock {

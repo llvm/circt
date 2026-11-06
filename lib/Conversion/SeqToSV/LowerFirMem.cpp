@@ -24,7 +24,6 @@
 
 using namespace circt;
 using namespace hw;
-using llvm::MapVector;
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation

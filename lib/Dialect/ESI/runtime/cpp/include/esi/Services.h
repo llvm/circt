@@ -230,32 +230,39 @@ private:
   const MMIO *mmio;
 };
 
-class HostMem : public Service {
+/// RAII memory region for host memory in accelerator-accessible address space.
+/// Automatically frees the memory when deconstructed. Allocated via
+/// HostMem::allocate() and also available as HostMem::HostMemRegion. Defined at
+/// namespace scope so that Common.h can forward declare it.
+struct HostMemRegion {
+  virtual ~HostMemRegion() = default;
+  /// Get a pointer to the host memory.
+  virtual void *getPtr() const = 0;
+  /// Sometimes the pointer the device sees is different from the pointer the
+  /// host sees. Call this function to get the device pointer.
+  virtual void *getDevicePtr() const { return getPtr(); }
+  operator void *() const { return getPtr(); }
+  virtual std::size_t getSize() const = 0;
+  /// Device address of the host range [ptr, ptr + size) if that range lies
+  /// entirely inside this region; std::nullopt otherwise (including when
+  /// size == 0 or the range would overflow the host or device address space).
+  std::optional<uint64_t> getDeviceAddress(const void *ptr,
+                                           std::size_t size) const;
+  /// Flush the memory region to ensure that the device sees the latest
+  /// contents. Because some platforms require it before DMA transactions, it
+  /// is recommended to call this before any DMA on all platforms. On
+  /// platforms which don't require it, it is a cheap no-op virtual method
+  /// call.
+  virtual void flush() {}
+};
+
+/// Interface for anything which can allocate HostMemRegions. Implemented by the
+/// HostMem service; also lets code which only needs to allocate regions (e.g.
+/// message types which keep their data in HostMem) accept other allocators,
+/// such as pools.
+class HostMemAllocator {
 public:
-  static constexpr std::string_view StdName = "esi.service.std.hostmem";
-
-  using Service::Service;
-  virtual ~HostMem() = default;
-  virtual std::string getServiceSymbol() const override;
-
-  /// RAII memory region for host memory. Automatically frees the memory when
-  /// deconstructed.
-  struct HostMemRegion {
-    virtual ~HostMemRegion() = default;
-    /// Get a pointer to the host memory.
-    virtual void *getPtr() const = 0;
-    /// Sometimes the pointer the device sees is different from the pointer the
-    /// host sees. Call this functon to get the device pointer.
-    virtual void *getDevicePtr() const { return getPtr(); }
-    operator void *() const { return getPtr(); }
-    virtual std::size_t getSize() const = 0;
-    /// Flush the memory region to ensure that the device sees the latest
-    /// contents. Because some platforms require it before DMA transactions, it
-    /// is recommended to call this before any DMA on all platforms. On
-    /// platforms which don't require it, it is a cheap no-op virtual method
-    /// call.
-    virtual void flush() {}
-  };
+  virtual ~HostMemAllocator() = default;
 
   /// Options for allocating host memory.
   struct Options {
@@ -263,12 +270,31 @@ public:
     bool useLargePages = false;
   };
 
+  /// Allocate a region of host memory in accelerator accessible address space.
+  /// Returns nullptr if the region cannot be allocated. Implementations MUST
+  /// return nullptr when `size` is 0.
+  virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
+                                                  Options opts) const = 0;
+};
+
+class HostMem : public Service, public HostMemAllocator {
+public:
+  static constexpr std::string_view StdName = "esi.service.std.hostmem";
+
+  using Service::Service;
+  virtual ~HostMem() = default;
+  virtual std::string getServiceSymbol() const override;
+
+  /// RAII memory region for host memory. See services::HostMemRegion.
+  using HostMemRegion = services::HostMemRegion;
+
   /// In cases where necessary, enable host memory services.
   virtual void start() {}
 
   /// Allocate a region of host memory in accelerator accessible address space.
-  virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
-                                                  Options opts) const = 0;
+  /// Returns nullptr on failure, and always when `size` is 0.
+  virtual std::unique_ptr<HostMemRegion>
+  allocate(std::size_t size, Options opts) const override = 0;
 
   /// Try to make a region of host memory accessible to the accelerator. Returns
   /// 'false' on failure. It is optional for an accelerator backend to implement

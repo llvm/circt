@@ -42,7 +42,7 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
 
   Value enableValue;
   if (auto enable = op.getEnable())
-    enable = mapping.lookup(enable);
+    enableValue = mapping.lookupOrDefault(enable);
 
   auto loc = op.getLoc();
   auto property = mapping.lookup(op.getProperty());
@@ -230,9 +230,9 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     // Create verif.formal op
     auto name = mlirModuleBuilder.getStringAttr(
         hwModule.getNameAttr().getValue() + "_CheckContract_" + Twine(i));
-    auto formalOp =
-        verif::FormalOp::create(mlirModuleBuilder, contract.getLoc(), name,
-                                mlirModuleBuilder.getDictionaryAttr({}));
+    auto formalOp = verif::FormalOp::create(
+        mlirModuleBuilder, contract.getLoc(), name, /*sym_visibility=*/{},
+        mlirModuleBuilder.getDictionaryAttr({}));
 
     // Fill in verif.formal body
     OpBuilder formalBuilder(formalOp);

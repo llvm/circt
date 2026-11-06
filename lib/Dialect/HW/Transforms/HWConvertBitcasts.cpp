@@ -61,6 +61,21 @@ bool HWConvertBitcastsPass::isTypeSupported(Type ty) {
 static void collectIntegersRecursively(OpBuilder builder, Location loc,
                                        Value inputVal,
                                        SmallVectorImpl<Value> &accumulator) {
+  // If input is defined by BitcastOp, unwrap it:
+  if (auto bitcast = inputVal.getDefiningOp<BitcastOp>();
+      bitcast &&
+      HWConvertBitcastsPass::isTypeSupported(bitcast.getInput().getType())) {
+    collectIntegersRecursively(builder, loc, bitcast.getInput(), accumulator);
+    return;
+  }
+
+  // If input is defined by ConcatOp, unwrap its operands:
+  if (auto concat = inputVal.getDefiningOp<comb::ConcatOp>()) {
+    for (Value op : concat.getInputs())
+      collectIntegersRecursively(builder, loc, op, accumulator);
+    return;
+  }
+
   // End of recursion: Integer value
   if (isa<IntegerType>(inputVal.getType())) {
     accumulator.push_back(inputVal);
@@ -98,40 +113,58 @@ static void collectIntegersRecursively(OpBuilder builder, Location loc,
   assert(false && "Unsupported type");
 }
 
-// Convert integer to aggregate
+// Convert collected integer chunks (MSB to LSB) to aggregate
 // NOLINTNEXTLINE(misc-no-recursion)
 static Value constructAggregateRecursively(OpBuilder builder, Location loc,
-                                           Value rawInteger, Type targetType) {
-  auto numBits = getBitWidth(targetType);
-  assert(numBits >= 0 && "Bitwidth of target must be known");
-  assert(numBits == rawInteger.getType().getIntOrFloatBitWidth());
+                                           ArrayRef<Value> integers,
+                                           size_t &idx, size_t &bitOffset,
+                                           Type targetType) {
+  assert(getBitWidth(targetType) >= 0 && "Bitwidth of target must be known");
 
   // End of recursion: Integer value
-  if (isa<IntegerType>(targetType))
-    return rawInteger;
+  if (auto intTy = dyn_cast<IntegerType>(targetType)) {
+    size_t remaining = intTy.getWidth();
+    if (remaining == 0)
+      return ConstantOp::create(builder, loc, builder.getIntegerAttr(intTy, 0));
+
+    SmallVector<Value> pieces;
+    while (remaining > 0) {
+      assert(idx < integers.size() && "Not enough bits in input");
+      Value cur = integers[idx];
+      size_t curWidth = cur.getType().getIntOrFloatBitWidth();
+      if (curWidth == 0) {
+        ++idx;
+        continue;
+      }
+      size_t take = std::min(remaining, curWidth - bitOffset);
+      if (bitOffset == 0 && take == curWidth) {
+        pieces.push_back(cur);
+      } else {
+        auto sliceTy = builder.getIntegerType(take);
+        pieces.push_back(comb::ExtractOp::create(builder, loc, sliceTy, cur,
+                                                 curWidth - bitOffset - take));
+      }
+      remaining -= take;
+      if ((bitOffset += take) == curWidth) {
+        ++idx;
+        bitOffset = 0;
+      }
+    }
+    if (pieces.size() == 1)
+      return pieces.front();
+    return comb::ConcatOp::create(builder, loc, pieces);
+  }
 
   SmallVector<Value> elements;
 
   // Array Type
   if (auto arrayTy = type_dyn_cast<ArrayType>(targetType)) {
     auto numElements = arrayTy.getNumElements();
-    auto sliceWidth = getBitWidth(arrayTy.getElementType());
-    assert(sliceWidth >= 0);
-    auto sliceTy = builder.getIntegerType(sliceWidth);
     elements.reserve(numElements);
     for (unsigned i = 0; i < numElements; ++i) {
       // Process bits from MSB to LSB
-      auto offset = sliceWidth * (numElements - i - 1);
-      Value slice;
-      if (sliceWidth == 0)
-        slice = ConstantOp::create(builder, loc,
-                                   builder.getIntegerAttr(sliceTy, 0));
-      else
-        slice =
-            comb::ExtractOp::create(builder, loc, sliceTy, rawInteger, offset);
-      auto elt = constructAggregateRecursively(builder, loc, slice,
-                                               arrayTy.getElementType());
-      elements.push_back(elt);
+      elements.push_back(constructAggregateRecursively(
+          builder, loc, integers, idx, bitOffset, arrayTy.getElementType()));
     }
     // Array create reverses order:
     // Higher bits are added first and become high indices.
@@ -140,27 +173,13 @@ static Value constructAggregateRecursively(OpBuilder builder, Location loc,
 
   // Struct Type
   if (auto structTy = type_dyn_cast<StructType>(targetType)) {
-    auto numElements = structTy.getElements().size();
-    unsigned consumedBits = 0;
-    for (unsigned i = 0; i < numElements; ++i) {
-
-      auto eltBits = getBitWidth(structTy.getElements()[i].type);
-      assert(eltBits >= 0);
-      Value slice;
+    auto fields = structTy.getElements();
+    elements.reserve(fields.size());
+    for (const auto &field : fields) {
       // Process bits from MSB to LSB
-      if (eltBits == 0)
-        slice = ConstantOp::create(
-            builder, loc, builder.getIntegerAttr(builder.getIntegerType(0), 0));
-      else
-        slice = comb::ExtractOp::create(
-            builder, loc, builder.getIntegerType(eltBits), rawInteger,
-            numBits - consumedBits - eltBits);
-      auto elt = constructAggregateRecursively(builder, loc, slice,
-                                               structTy.getElements()[i].type);
-      elements.push_back(elt);
-      consumedBits += eltBits;
+      elements.push_back(constructAggregateRecursively(
+          builder, loc, integers, idx, bitOffset, field.type));
     }
-    assert(consumedBits == numBits);
     // Struct create does not reverse order:
     // Higher bits are added first and become low indices.
     return StructCreateOp::create(builder, loc, targetType, elements);
@@ -185,20 +204,16 @@ LogicalResult HWConvertBitcastsPass::convertBitcastOp(OpBuilder builder,
 
   builder.setInsertionPoint(bitcastOp);
 
-  // Convert input value to a packed integer
+  // Collect integer chunks from input value (MSB to LSB)
   SmallVector<Value> integers;
   collectIntegersRecursively(builder, bitcastOp.getLoc(), bitcastOp.getInput(),
                              integers);
-  Value concat;
-  if (integers.size() == 1)
-    concat = integers.front();
-  else
-    concat = comb::ConcatOp::create(builder, bitcastOp.getLoc(), integers)
-                 .getResult();
 
-  // Convert packed integer to the target type
-  auto result = constructAggregateRecursively(builder, bitcastOp.getLoc(),
-                                              concat, bitcastOp.getType());
+  // Convert collected integer chunks to the target type
+  size_t idx = 0, bitOffset = 0;
+  Value result =
+      constructAggregateRecursively(builder, bitcastOp.getLoc(), integers, idx,
+                                    bitOffset, bitcastOp.getType());
 
   // Replace operation
   bitcastOp.getResult().replaceAllUsesWith(result);

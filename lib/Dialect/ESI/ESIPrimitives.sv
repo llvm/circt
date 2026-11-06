@@ -9,6 +9,13 @@
 /// (x_ready) is fully pipelined. There is no combinational loop between a_valid
 /// and a_ready. Will not introduce pipeline bubbles. (And won't drop tokens.)
 ///
+/// DATA_DELAY is the data delay of both the input and output channels: `a`
+/// carries a token DATA_DELAY cycles after it is accepted (a_valid && a_ready)
+/// and `x` must carry it DATA_DELAY cycles after it is transmitted (x_valid &&
+/// x_ready). The control logic doesn't depend on it; the payload registers make
+/// the same moves as with no delay, just DATA_DELAY cycles later. The QoR
+/// numbers below are for DATA_DELAY == 0.
+///
 /// QoR -- Setup: virtual pin project with N of these modules daisy-chained
 /// targetting 800 MHz. VPP results are known to be unrealisitic since they have
 /// no routing or placement pressure. There is also a lot of placement/routing
@@ -36,7 +43,8 @@
 /// | --- | ----- | --------- | ------- | ------ | ------------------ |
 ///
 module ESI_PipelineStage # (
-  parameter WIDTH = 8
+  parameter WIDTH = 8,
+  parameter DATA_DELAY = 0
 ) (
   input logic clk,
   input logic rst,
@@ -80,7 +88,9 @@ module ESI_PipelineStage # (
   // Did we accept a token this cycle?
   wire a_rcv = a_ready && a_valid;
 
-  always @(posedge clk) begin
+  // Occupancy. This is the state that has to survive a reset correctly, and it
+  // is two bits wide.
+  always_ff @(posedge clk) begin
     if (rst) begin
       l_valid <= 1'b0;
       x_valid_reg <= 1'b0;
@@ -88,16 +98,13 @@ module ESI_PipelineStage # (
       // If we have an empty output reg due to a transmit and the lookaside is
       // also empty, load the input into the output reg.
       if (xmit && !l_valid) begin
-        x_reg <= a;
         x_valid_reg <= a_rcv;
 
       // If we have an empty output reg due to a transmit and the lookaside is
       // full, load the lookaside into the output reg and put the input in the
       // lookaside buffer.
-      end if (xmit && l_valid) begin
-        x_reg <= l;
+      end else if (xmit && l_valid) begin
         x_valid_reg <= 1'b1;
-        l <= a;
         l_valid <= a_rcv;
 
       // If we didn't transmit but we did accept a token:
@@ -107,14 +114,46 @@ module ESI_PipelineStage # (
         assert (~l_valid);
         // If the output reg is occupied, place it in the lookaside reg.
         if (x_valid_reg) begin
-          l <= a;
           l_valid <= 1'b1;
         // If the output reg is empty, put the input there.
         end else begin
-          x_reg <= a;
           x_valid_reg <= 1'b1;
         end
       end
     end
+  end
+
+  // The payload moves for this cycle's control decisions:
+  //   x_load: load x_reg, from l if x_from_l else from a.
+  //   l_load: load l from a.
+  wire x_load = xmit || (a_rcv && !x_valid_reg);
+  wire x_from_l = xmit && l_valid;
+  wire l_load = (xmit && l_valid) || (~xmit && a_rcv && x_valid_reg);
+
+  // The payload moves happen DATA_DELAY cycles later, when the data arrives.
+  // Delaying the decoded moves (rather than the raw control signals) means the
+  // payload mux selects and enables come straight from flops.
+  logic p_x_load, p_x_from_l, p_l_load;
+  generate
+    if (DATA_DELAY == 0) begin : gen_no_delay
+      assign {p_x_load, p_x_from_l, p_l_load} = {x_load, x_from_l, l_load};
+    end else begin : gen_delay
+      logic [2:0] moves_dly [DATA_DELAY];
+      always_ff @(posedge clk) begin
+        moves_dly[0] <= rst ? 3'b0 : {x_load, x_from_l, l_load};
+        for (int i = 1; i < DATA_DELAY; i++)
+          moves_dly[i] <= rst ? 3'b0 : moves_dly[i-1];
+      end
+      assign {p_x_load, p_x_from_l, p_l_load} = moves_dly[DATA_DELAY-1];
+    end
+  endgenerate
+
+  // Payload. Deliberately *not* under `if (rst)`: only control signals are
+  // reset, payload is allowed to hold its value across resets.
+  always_ff @(posedge clk) begin
+    if (p_x_load)
+      x_reg <= p_x_from_l ? l : a;
+    if (p_l_load)
+      l <= a;
   end
 endmodule

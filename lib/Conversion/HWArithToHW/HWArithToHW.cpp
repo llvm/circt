@@ -18,6 +18,7 @@
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/Pass/Pass.h"
 
 #include "mlir/Transforms/DialectConversion.h"
@@ -126,6 +127,10 @@ static bool isSignednessType(Type type) {
           })
           .Case<hw::InOutType>(
               [](auto type) { return isSignednessType(type.getElementType()); })
+          .Case<sv::NetType>(
+              [](auto type) { return isSignednessType(type.getElementType()); })
+          .Case<sv::VarType>(
+              [](auto type) { return isSignednessType(type.getElementType()); })
           .Case<hw::TypeAliasType>(
               [](auto type) { return isSignednessType(type.getInnerType()); })
           .Default([](auto type) { return false; });
@@ -176,11 +181,38 @@ struct ConstantOpLowering : public OpConversionPattern<ConstantOp> {
   LogicalResult
   matchAndRewrite(ConstantOp constOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp,
-                                                constOp.getConstantValue());
+    // The result may be a type alias, which is retained with a signless inner
+    // type.
+    Type resultType = getTypeConverter()->convertType(constOp.getType());
+    if (!resultType)
+      return failure();
+    auto valueAttr = rewriter.getIntegerAttr(
+        hw::type_cast<IntegerType>(resultType), constOp.getConstantValue());
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp, resultType, valueAttr);
     return success();
   }
 };
+
+struct AggregateConstantOpLowering
+    : public OpConversionPattern<hw::AggregateConstantOp> {
+  using OpConversionPattern<hw::AggregateConstantOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::AggregateConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto fields = op.getFieldsAttr().replace([&](IntegerType type) {
+      return getTypeConverter()->convertType(type);
+    });
+    if (!fields)
+      return rewriter.notifyMatchFailure(op,
+                                         "attribute type conversion failed");
+    rewriter.modifyOpInPlace(
+        op, [&] { op.setFieldsAttr(cast<ArrayAttr>(fields)); });
+    return doTypeConversion(op, adaptor.getOperands(), rewriter,
+                            getTypeConverter());
+  }
+};
+
 struct DivOpLowering : public OpConversionPattern<DivOp> {
   using OpConversionPattern<DivOp>::OpConversionPattern;
 
@@ -360,56 +392,17 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
 } // namespace
 
 Type HWArithToHWTypeConverter::removeSignedness(Type type) {
-  auto it = conversionCache.find(type);
-  if (it != conversionCache.end())
-    return it->second.type;
-
-  auto convertedType =
-      llvm::TypeSwitch<Type, Type>(type)
-          .Case<IntegerType>([](auto type) {
-            if (type.isSignless())
-              return type;
-            return IntegerType::get(type.getContext(), type.getWidth());
-          })
-          .Case<hw::ArrayType>([this](auto type) {
-            return hw::ArrayType::get(removeSignedness(type.getElementType()),
-                                      type.getNumElements());
-          })
-          .Case<hw::UnpackedArrayType>([this](auto type) {
-            return hw::UnpackedArrayType::get(
-                removeSignedness(type.getElementType()), type.getNumElements());
-          })
-          .Case<hw::StructType>([this](auto type) {
-            // Recursively convert each element.
-            llvm::SmallVector<hw::StructType::FieldInfo> convertedElements;
-            for (auto element : type.getElements()) {
-              convertedElements.push_back(
-                  {element.name, removeSignedness(element.type)});
-            }
-            return hw::StructType::get(type.getContext(), convertedElements);
-          })
-          .Case<hw::UnionType>([this](auto type) {
-            llvm::SmallVector<hw::UnionType::FieldInfo> convertedElements;
-            for (auto element : type.getElements()) {
-              convertedElements.push_back({element.name,
-                                           removeSignedness(element.type),
-                                           element.offset});
-            }
-            return hw::UnionType::get(type.getContext(), convertedElements);
-          })
-          .Case<hw::InOutType>([this](auto type) {
-            return hw::InOutType::get(removeSignedness(type.getElementType()));
-          })
-          .Case<hw::TypeAliasType>([this](auto type) {
-            return hw::TypeAliasType::get(
-                type.getRef(), removeSignedness(type.getInnerType()));
-          })
-          .Default([](auto type) { return type; });
-
-  return convertedType;
+  return signednessReplacer.replace(type);
 }
 
 HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
+  signednessReplacer.addReplacement(
+      [](IntegerType type) -> std::optional<Type> {
+        if (type.isSignless())
+          return std::nullopt;
+        return IntegerType::get(type.getContext(), type.getWidth());
+      });
+
   // Pass any type through the signedness remover.
   addConversion([this](Type type) { return removeSignedness(type); });
 
@@ -440,8 +433,8 @@ HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
 
 void circt::populateHWArithToHWConversionPatterns(
     HWArithToHWTypeConverter &typeConverter, RewritePatternSet &patterns) {
-  patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
-               BinaryOpLowering<AddOp, comb::AddOp>,
+  patterns.add<ConstantOpLowering, AggregateConstantOpLowering, CastOpLowering,
+               ICmpOpLowering, BinaryOpLowering<AddOp, comb::AddOp>,
                BinaryOpLowering<SubOp, comb::SubOp>,
                BinaryOpLowering<MulOp, comb::MulOp>, DivOpLowering>(
       typeConverter, patterns.getContext());

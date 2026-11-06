@@ -83,4 +83,49 @@ TEST(TypesTest, ReplaceStructAndUnionFieldTypes) {
   EXPECT_EQ(unionFields[1].offset, 42u);
 }
 
+TEST(TypesTest, CanonicalizeNestedAliases) {
+  MLIRContext context;
+  context.loadDialect<HWDialect>();
+  Builder builder(&context);
+
+  auto i8Type = builder.getIntegerType(8);
+  auto i16Type = builder.getIntegerType(16);
+  auto aliasRef = [&](StringRef name) {
+    return SymbolRefAttr::get(
+        builder.getStringAttr("types"),
+        {FlatSymbolRefAttr::get(builder.getStringAttr(name))});
+  };
+  auto innerAlias = TypeAliasType::get(aliasRef("inner"), i8Type);
+  auto arrayType = ArrayType::get(innerAlias, 3);
+  auto structType =
+      StructType::get(&context, {{builder.getStringAttr("array"), arrayType},
+                                 {builder.getStringAttr("plain"), i16Type}});
+  auto outerAlias = TypeAliasType::get(aliasRef("outer"), structType);
+  auto expectedStruct = StructType::get(
+      &context, {{builder.getStringAttr("array"), ArrayType::get(i8Type, 3)},
+                 {builder.getStringAttr("plain"), i16Type}});
+
+  EXPECT_EQ(getCanonicalType(i8Type), i8Type);
+  EXPECT_EQ(getCanonicalType(innerAlias), i8Type);
+  EXPECT_EQ(getCanonicalType(outerAlias), expectedStruct);
+  EXPECT_EQ(outerAlias.getCanonicalType(), expectedStruct);
+  EXPECT_EQ(getCanonicalType(structType), expectedStruct);
+  EXPECT_EQ(getCanonicalType(arrayType), ArrayType::get(i8Type, 3));
+  EXPECT_EQ(getCanonicalType(expectedStruct), expectedStruct);
+
+  auto unionType =
+      UnionType::get(&context, {{builder.getStringAttr("alias"), innerAlias, 7},
+                                {builder.getStringAttr("plain"), i16Type, 0}});
+  auto canonicalUnion = cast<UnionType>(getCanonicalType(unionType));
+  EXPECT_EQ(canonicalUnion.getElements()[0].type, i8Type);
+  EXPECT_EQ(canonicalUnion.getElements()[0].offset, 7u);
+  EXPECT_EQ(canonicalUnion.getElements()[1].type, i16Type);
+  auto unionAlias = TypeAliasType::get(aliasRef("union"), unionType);
+  EXPECT_EQ(unionAlias.getCanonicalType(), canonicalUnion);
+  EXPECT_EQ(getCanonicalType(InOutType::get(innerAlias)),
+            InOutType::get(i8Type));
+  EXPECT_EQ(getCanonicalType(UnpackedArrayType::get(innerAlias, 2)),
+            UnpackedArrayType::get(i8Type, 2));
+}
+
 } // namespace

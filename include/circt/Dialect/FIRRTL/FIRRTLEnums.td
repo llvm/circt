@@ -32,7 +32,9 @@ def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
   let genSpecializedAttr = 0;
 }
 
-def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
+def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind"> {
+  let assemblyFormat = "$value";
+}
 
 //===----------------------------------------------------------------------===//
 // Module Instantiation Conventions
@@ -44,7 +46,9 @@ def Convention : I32EnumAttr<"Convention", "lowering convention", [
   let genSpecializedAttr = 0;
 }
 
-def ConventionAttr : EnumAttr<FIRRTLDialect, Convention, "convention">;
+def ConventionAttr : EnumAttr<FIRRTLDialect, Convention, "convention"> {
+  let assemblyFormat = "$value";
+}
 
 //===----------------------------------------------------------------------===//
 // Layer Lowering Conventions
@@ -58,7 +62,9 @@ def LayerConvention : I32EnumAttr<"LayerConvention", "layer convention", [
   let genSpecializedAttr = 0;
 }
 
-def LayerConventionAttr : EnumAttr<FIRRTLDialect, LayerConvention, "layerconvention">;
+def LayerConventionAttr : EnumAttr<FIRRTLDialect, LayerConvention, "layerconvention"> {
+  let assemblyFormat = "$value";
+}
 
 //===----------------------------------------------------------------------===//
 // Layer Specialization
@@ -73,7 +79,9 @@ def LayerSpecialization :
 }
 
 def LayerSpecializationAttr :
-    EnumAttr<FIRRTLDialect, LayerSpecialization, "layerspecialization">;
+    EnumAttr<FIRRTLDialect, LayerSpecialization, "layerspecialization"> {
+  let assemblyFormat = "$value";
+}
 
 //===----------------------------------------------------------------------===//
 // Read Under Write Behavior
@@ -86,7 +94,9 @@ def RUWBehavior
   let genSpecializedAttr = 0;
 }
 
-def RUWBehaviorAttr : EnumAttr<FIRRTLDialect, RUWBehavior, "ruwbehavior">;
+def RUWBehaviorAttr : EnumAttr<FIRRTLDialect, RUWBehavior, "ruwbehavior"> {
+  let assemblyFormat = "$value";
+}
 
 //===----------------------------------------------------------------------===//
 // Memory Port Direction

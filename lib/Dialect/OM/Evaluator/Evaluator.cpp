@@ -162,15 +162,28 @@ ScratchIRBuilder::run(ArrayRef<EvaluatorValuePtr> actualParams) {
            .getResult()},
       {builder.getStringAttr("root")});
 
-  if (failed(verify(module)))
-    return failure();
-
+  // When this flag is present, skip the verifier for mlir::ModuleOp.
+  // Still verify the wrapper class.
+  auto skipGlobalVerifier =
+      module->getAttrOfType<UnitAttr>("om.evaluator_skip_global_verifier");
   PassManager pm(ctx);
   ElaborateObjectOptions options;
+  if (skipGlobalVerifier) {
+    if (failed(verify(wrapperClass)))
+      return failure();
+    pm.enableVerifier(false);
+  } else if (failed(verify(module)))
+    return failure();
+
   auto wrapperName = wrapperClass.getSymNameAttr();
   options.targetClass = wrapperName.getValue().str();
   pm.addPass(createElaborateObject(std::move(options)));
   if (failed(pm.run(module)))
+    return failure();
+
+  // If module verification was skipped, verify the wrapper class instead. The
+  // pass manager has already run the full verifier otherwise.
+  if (skipGlobalVerifier && failed(verify(wrapperClass)))
     return failure();
 
   return InstantiationInfo{wrapperName, std::move(wrapperActualParams)};

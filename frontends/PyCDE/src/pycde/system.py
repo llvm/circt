@@ -14,7 +14,7 @@ from .types import TypeAlias
 
 from . import circt
 from .circt import ir, passmanager
-from .circt.dialects import esi, hw, msft
+from .circt.dialects import esi, hw, msft, sv
 
 from contextvars import ContextVar
 from collections.abc import Iterable
@@ -177,7 +177,8 @@ class System:
                   importer: Optional[Callable] = None,
                   preprocess_op: Optional[Callable[[ir.OpView],
                                                    Optional[ir.OpView]]] = None,
-                  debug: bool = False) -> Dict[str, Any]:
+                  debug: bool = False,
+                  external_packages: bool = False) -> Dict[str, Any]:
     """Import mlir asm created elsewhere into our space. Exactly one of the
     arguments module_str or file must be provided.
     
@@ -192,6 +193,17 @@ class System:
       preprocess_op: Optional preprocessing function which takes an Operation and
                      returns a modified Operation or None to skip.
       debug: Whether to enable debug output for the import process.
+      external_packages: Convert imported sv.package operations to
+                         sv.package.extern, retaining their type declarations
+                         without emitting their SystemVerilog definitions.
+                         Defaults to False. Conversion preserves the operation's
+                         position and attributes, transferring hw.verilogName to
+                         verilogName. For non-public packages without an explicit
+                         name, verilogName is set to the symbol name.
+                         To select individual packages instead, return
+                         sv.package.extern operations from preprocess_op.
+                         Existing external packages are preserved regardless of
+                         this flag.
     """
 
     if module_str is not None:
@@ -248,12 +260,30 @@ class System:
       return None, None, None
 
     ret: Dict[str, Any] = {}
-    for op in compat_mod.body:
+    for op in list(compat_mod.body):
       if preprocess_op is not None:
         op = preprocess_op(op)
         if op is None:
           # If the op was preprocessed to None, skip it.
           continue
+
+      if external_packages and isinstance(op, sv.PackageOp):
+        external_op = sv.PackageExternOp(
+            op.sym_name,
+            loc=op.location,
+            ip=ir.InsertionPoint(op) if op.attached else False)
+        for attr_name in op.attributes:
+          external_op.attributes[attr_name] = op.attributes[attr_name]
+        if "hw.verilogName" in external_op.attributes:
+          external_op.verilogName = external_op.attributes["hw.verilogName"]
+          del external_op.attributes["hw.verilogName"]
+        if (op.sym_visibility is not None and
+            op.sym_visibility.value != "public" and
+            external_op.verilogName is None):
+          external_op.verilogName = op.sym_name
+        op.body.blocks[0].append_to(external_op.body)
+        op.erase()
+        op = external_op
 
       # TODO: handle symbolrefs pointing to potentially renamed symbols.
       imported_obj = None
@@ -432,7 +462,7 @@ class System:
       "builtin.module(verify-esi-connections)",
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
-      lambda sys: TypeAlias.declare_aliases(sys.mod),
+      lambda sys: TypeAlias.declare_aliases(sys.mod, sys.name + "Types"),
   ]
 
   # Pipeline dialect lowering passes

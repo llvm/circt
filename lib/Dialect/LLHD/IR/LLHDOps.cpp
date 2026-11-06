@@ -65,9 +65,9 @@ OpFoldResult llhd::ConstantTimeOp::fold(FoldAdaptor adaptor) {
 
 void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
                                  uint64_t time, const StringRef &timeUnit,
-                                 unsigned delta, unsigned epsilon) {
+                                 unsigned delta) {
   auto *ctx = builder.getContext();
-  auto attr = TimeAttr::get(ctx, time, timeUnit, delta, epsilon);
+  auto attr = TimeAttr::get(ctx, time, timeUnit, delta);
   return build(builder, result, TimeType::get(ctx), attr);
 }
 
@@ -125,9 +125,9 @@ getIntegerSubelementIndexMap(Type type, Value value) {
         continue;
       }
     }
-    if (isa<ProbeOp, DriveOp>(user)) {
-      // Probe and Drive require the entire interval but don't need to be
-      // bit-blasted.
+    if (isa<ProbeOp, DriveLikeOp>(user)) {
+      // Probe, drive, and assign require the entire interval but don't need to
+      // be bit-blasted.
       continue;
     }
     // Potentially dynamic start index.
@@ -202,8 +202,11 @@ DenseMap<Attribute, MemorySlot> SignalOp::destructure(
   llvm::sort(indices, [](auto a, auto b) { return a.first < b.first; });
 
   for (auto [index, type] : indices) {
-    Value init = getValueAtIndex(builder, getLoc(), getInit(), index, type);
-    auto sigOp = SignalOp::create(builder, getLoc(), getNameAttr(), init);
+    Value init =
+        getInit() ? getValueAtIndex(builder, getLoc(), getInit(), index, type)
+                  : Value{};
+    auto sigOp = SignalOp::create(builder, getLoc(), RefType::get(type),
+                                  getNameAttr(), init);
     newAllocators.push_back(sigOp);
     slotMap.try_emplace<MemorySlot>(
         IntegerAttr::get(IndexType::get(getContext()), index),
@@ -219,6 +222,15 @@ SignalOp::handleDestructuringComplete(const DestructurableMemorySlot &slot,
   assert(slot.ptr == getResult());
   this->erase();
   return std::nullopt;
+}
+
+//===----------------------------------------------------------------------===//
+// NetOp
+//===----------------------------------------------------------------------===//
+
+void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  if (getName() && !getName()->empty())
+    setNameFn(getResult(), *getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -282,10 +294,10 @@ bool SigExtractOp::canRewire(const DestructurableMemorySlot &slot,
     return false;
 
   // We rewire by pushing subslot values down to users, so we only support
-  // ProbeOp and DriveOp users as these can deal with the naked (non-ref) types
-  // produced by SROA.
+  // ProbeOp, DriveOp, and AssignOp users as these can deal with the naked
+  // (non-ref) types produced by SROA.
   for (Operation *user : getResult().getUsers()) {
-    if (!isa<ProbeOp, DriveOp>(user))
+    if (!isa<ProbeOp, DriveLikeOp>(user))
       return false;
   }
 
@@ -347,8 +359,11 @@ DeletionKind SigExtractOp::rewire(const DestructurableMemorySlot &slot,
       continue;
     }
 
-    // Decompose a DriveOp into one DriveOp per subslot.
-    auto driveOp = cast<DriveOp>(user);
+    // Decompose a DriveOp or AssignOp into one op per subslot.
+    auto driveLike = cast<DriveLikeOp>(user);
+    Value driven = driveLike.getValue();
+    Value time = driveLike.getTime();
+    Value enable = driveLike.getEnable();
     for (auto [start, sig] : elements) {
       int64_t subslotWidth =
           cast<RefType>(sig.getType()).getNestedType().getIntOrFloatBitWidth();
@@ -356,13 +371,14 @@ DeletionKind SigExtractOp::rewire(const DestructurableMemorySlot &slot,
           intervalOverlap(idxVal, idxVal + width, start, start + subslotWidth);
       if (overlap == 0)
         continue;
-      Value val =
-          comb::ExtractOp::create(builder, driveOp.getLoc(), driveOp.getValue(),
-                                  start - idxVal, subslotWidth);
-      DriveOp::create(builder, driveOp.getLoc(), sig, val, driveOp.getTime(),
-                      driveOp.getEnable());
+      Value val = comb::ExtractOp::create(builder, user->getLoc(), driven,
+                                          start - idxVal, subslotWidth);
+      if (time)
+        DriveOp::create(builder, user->getLoc(), sig, val, time, enable);
+      else
+        AssignOp::create(builder, user->getLoc(), sig, val, enable);
     }
-    driveOp.erase();
+    user->erase();
   }
 
   return DeletionKind::Delete;
@@ -566,7 +582,7 @@ bool ProbeOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.valueType);
 }
 
 DeletionKind ProbeOp::rewire(const DestructurableMemorySlot &slot,
@@ -612,6 +628,23 @@ void ProbeOp::getEffects(
 }
 
 //===----------------------------------------------------------------------===//
+// ProbeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ProbeNetOp::ensureOnlySafeAccesses(
+    const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return success();
+}
+
+void ProbeNetOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  if (mayHaveSSADominance(*getOperation()->getParentRegion()))
+    effects.emplace_back(MemoryEffects::Read::get(), &getSignalMutable());
+}
+
+//===----------------------------------------------------------------------===//
 // DriveOp
 //===----------------------------------------------------------------------===//
 
@@ -648,7 +681,7 @@ bool DriveOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.valueType);
 }
 
 DeletionKind DriveOp::rewire(const DestructurableMemorySlot &slot,
@@ -672,6 +705,135 @@ LogicalResult
 DriveOp::ensureOnlySafeAccesses(const MemorySlot &slot,
                                 SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                                 const DataLayout &dataLayout) {
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// AssignOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::AssignOp::fold(FoldAdaptor adaptor,
+                                   SmallVectorImpl<OpFoldResult> &result) {
+  if (!getEnable())
+    return failure();
+
+  if (matchPattern(getEnable(), m_One())) {
+    getEnableMutable().clear();
+    return success();
+  }
+
+  return failure();
+}
+
+LogicalResult llhd::AssignOp::canonicalize(llhd::AssignOp op,
+                                           PatternRewriter &rewriter) {
+  if (!op.getEnable())
+    return failure();
+
+  if (matchPattern(op.getEnable(), m_Zero())) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
+bool AssignOp::canRewire(const DestructurableMemorySlot &slot,
+                         SmallPtrSetImpl<Attribute> &usedIndices,
+                         SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                         const DataLayout &dataLayout) {
+  for (auto [key, _] : slot.subelementTypes)
+    usedIndices.insert(key);
+
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.valueType);
+}
+
+DeletionKind AssignOp::rewire(const DestructurableMemorySlot &slot,
+                              DenseMap<Attribute, MemorySlot> &subslots,
+                              OpBuilder &builder,
+                              const DataLayout &dataLayout) {
+  SmallVector<std::pair<unsigned, Value>> assigned;
+  getSortedPtrs(subslots, assigned);
+
+  for (auto [idx, sig] : assigned) {
+    Type nestedType = cast<RefType>(sig.getType()).getNestedType();
+    AssignOp::create(
+        builder, getLoc(), sig,
+        getValueAtIndex(builder, getLoc(), getValue(), idx, nestedType),
+        getEnable());
+  }
+
+  return DeletionKind::Delete;
+}
+
+LogicalResult
+AssignOp::ensureOnlySafeAccesses(const MemorySlot &slot,
+                                 SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                                 const DataLayout &dataLayout) {
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// AssignNetOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::AssignNetOp::fold(FoldAdaptor adaptor,
+                                      SmallVectorImpl<OpFoldResult> &result) {
+  if (!getEnable())
+    return failure();
+
+  if (matchPattern(getEnable(), m_One())) {
+    getEnableMutable().clear();
+    return success();
+  }
+
+  return failure();
+}
+
+LogicalResult llhd::AssignNetOp::canonicalize(llhd::AssignNetOp op,
+                                              PatternRewriter &rewriter) {
+  if (!op.getEnable())
+    return failure();
+
+  if (matchPattern(op.getEnable(), m_Zero())) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
+bool AssignNetOp::canRewire(const DestructurableMemorySlot &slot,
+                            SmallPtrSetImpl<Attribute> &usedIndices,
+                            SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                            const DataLayout &dataLayout) {
+  for (auto [key, _] : slot.subelementTypes)
+    usedIndices.insert(key);
+
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.valueType);
+}
+
+DeletionKind AssignNetOp::rewire(const DestructurableMemorySlot &slot,
+                                 DenseMap<Attribute, MemorySlot> &subslots,
+                                 OpBuilder &builder,
+                                 const DataLayout &dataLayout) {
+  SmallVector<std::pair<unsigned, Value>> assigned;
+  getSortedPtrs(subslots, assigned);
+
+  for (auto [idx, sig] : assigned) {
+    Type nestedType = cast<NetType>(sig.getType()).getNestedType();
+    AssignNetOp::create(
+        builder, getLoc(), sig,
+        getValueAtIndex(builder, getLoc(), getValue(), idx, nestedType),
+        getEnable());
+  }
+
+  return DeletionKind::Delete;
+}
+
+LogicalResult AssignNetOp::ensureOnlySafeAccesses(
+    const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
   return success();
 }
 
@@ -988,3 +1150,4 @@ CallCoroutineOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 #define GET_OP_CLASSES
 #include "circt/Dialect/LLHD/LLHD.cpp.inc"
 #include "circt/Dialect/LLHD/LLHDEnums.cpp.inc"
+#include "circt/Dialect/LLHD/LLHDInterfaces.cpp.inc"

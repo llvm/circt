@@ -184,8 +184,13 @@ struct BinaryOpConversion : OpConversionPattern<SourceOp> {
   matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    rewriter.replaceOpWithNewOp<TargetOp>(op, op.getResult().getType(),
-                                          adaptor.getOperands());
+    typename TargetOp::Properties properties{};
+    TargetOp::populateDefaultProperties(
+        OperationName(TargetOp::getOperationName(), rewriter.getContext()),
+        properties);
+    rewriter.replaceOpWithNewOp<TargetOp>(op,
+                                          TypeRange{op.getResult().getType()},
+                                          adaptor.getOperands(), properties);
     return success();
   }
 };

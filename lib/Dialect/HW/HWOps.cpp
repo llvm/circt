@@ -39,8 +39,6 @@ ModulePort::Direction hw::flip(ModulePort::Direction direction) {
     return ModulePort::Direction::Output;
   case ModulePort::Direction::Output:
     return ModulePort::Direction::Input;
-  case ModulePort::Direction::InOut:
-    return ModulePort::Direction::InOut;
   }
   llvm_unreachable("unknown PortDirection");
 }
@@ -269,26 +267,61 @@ namespace {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttribute(getValueAttr());
+  if (getType() == getValueAttr().getType()) {
+    p.printAttribute(getValueAttr());
+  } else {
+    // The result is a type alias of the value's type.
+    p.printAttributeWithoutType(getValueAttr());
+    p << " : " << getType();
+  }
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  IntegerAttr valueAttr;
-
-  if (parser.parseAttribute(valueAttr, "value", result.attributes) ||
-      parser.parseOptionalAttrDict(result.attributes))
+  auto loc = parser.getCurrentLocation();
+  APInt value;
+  Type type;
+  // Booleans may omit their type, in which case they are `i1`.
+  bool isTrue = succeeded(parser.parseOptionalKeyword("true"));
+  if (isTrue || succeeded(parser.parseOptionalKeyword("false"))) {
+    value = APInt(1, isTrue);
+    if (failed(parser.parseOptionalColon()))
+      type = parser.getBuilder().getI1Type();
+  } else if (parser.parseInteger(value) || parser.parseColon()) {
+    return failure();
+  }
+  if (!type && parser.parseType(type))
+    return failure();
+  if (parser.parseOptionalAttrDict(result.attributes))
     return failure();
 
-  result.addTypes(valueAttr.getType());
+  // The type may be a type alias of an integer type, which determines the
+  // value's type.
+  auto intType = type_dyn_cast<IntegerType>(type);
+  if (!intType)
+    return parser.emitError(loc, "expected an integer type, but got ") << type;
+  unsigned width = intType.getWidth();
+  if (value.isNegative() ? value.getSignificantBits() > width
+                         : value.getActiveBits() > width)
+    return parser.emitError(loc, "constant out of range for type ") << type;
+
+  result.addAttribute("value",
+                      IntegerAttr::get(intType, value.sextOrTrunc(width)));
+  result.addTypes(type);
   return success();
 }
 
 LogicalResult ConstantOp::verify() {
-  // If the result type has a bitwidth, then the attribute must match its width.
-  if (getValue().getBitWidth() != cast<IntegerType>(getType()).getWidth())
-    return emitError(
-        "hw.constant attribute bitwidth doesn't match return type");
+  // The result type may be a type alias of an integer type.
+  auto intType = type_dyn_cast<IntegerType>(getType());
+  if (!intType)
+    return emitError("hw.constant must have an integer result type");
+
+  // The result type must be the same as the attribute's type.
+  if (getValueAttr().getType() != intType)
+    return emitError("hw.constant attribute type ")
+           << getValueAttr().getType() << " doesn't match the result type "
+           << intType;
 
   return success();
 }
@@ -316,25 +349,32 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 /// an int64_t.  Use APInt's instead.
 void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
                        int64_t value) {
-  auto numBits = cast<IntegerType>(type).getWidth();
-  build(builder, result,
-        APInt(numBits, (uint64_t)value, /*isSigned=*/true,
-              /*implicitTrunc=*/true));
+  auto intType = type_cast<IntegerType>(type);
+  build(
+      builder, result, type,
+      builder.getIntegerAttr(intType, APInt(intType.getWidth(), (uint64_t)value,
+                                            /*isSigned=*/true,
+                                            /*implicitTrunc=*/true)));
 }
 
 void ConstantOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  auto intTy = getType();
+  Type intTy = getType();
   auto intCst = getValue();
 
   // Sugar i1 constants with 'true' and 'false'.
-  if (cast<IntegerType>(intTy).getWidth() == 1)
+  if (type_cast<IntegerType>(intTy).getWidth() == 1)
     return setNameFn(getResult(), intCst.isZero() ? "false" : "true");
 
-  // Otherwise, build a complex name with the value and type.
+  // Otherwise, build a complex name with the value and type, using the alias
+  // name for aliased types.
   SmallVector<char, 32> specialNameBuffer;
   llvm::raw_svector_ostream specialName(specialNameBuffer);
-  specialName << 'c' << intCst << '_' << intTy;
+  specialName << 'c' << intCst << '_';
+  if (auto alias = dyn_cast<TypeAliasType>(intTy))
+    specialName << alias.getRef().getLeafReference().getValue();
+  else
+    specialName << intTy;
   setNameFn(getResult(), specialName.str());
 }
 
@@ -553,7 +593,9 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
   if (nameAttr)
     return nameAttr;
 
-  return module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+  if (auto symbol = dyn_cast<mlir::SymbolOpInterface>(module))
+    return symbol.getNameAttr();
+  return {};
 }
 
 template <typename ModuleTy>
@@ -564,7 +606,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   using namespace mlir::function_interface_impl;
 
   // Add an attribute for the name.
-  result.addAttribute(SymbolTable::getSymbolAttrName(), name);
+  result.addAttribute(ModuleTy::getSymNameAttrName(result.name), name);
 
   SmallVector<Attribute> perPortAttrs;
   SmallVector<ModulePort> portTypes;
@@ -623,7 +665,6 @@ static void modifyModuleArgs(
   newArgAttrs.reserve(newArgCount);
   newArgLocs.reserve(newArgCount);
 
-  auto exportPortAttrName = StringAttr::get(context, "hw.exportPort");
   auto emptyDictAttr = DictionaryAttr::get(context, {});
   auto unknownLoc = UnknownLoc::get(context);
 
@@ -635,17 +676,9 @@ static void modifyModuleArgs(
     // Insert new ports at this position.
     while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
       auto port = insertArgs[0].second;
-      if (port.dir == ModulePort::Direction::InOut &&
-          !isa<InOutType>(port.type))
-        port.type = InOutType::get(port.type);
-      auto sym = port.getSym();
-      Attribute attr =
-          (sym && !sym.empty())
-              ? DictionaryAttr::get(context, {{exportPortAttrName, sym}})
-              : emptyDictAttr;
       newArgNames.push_back(port.name);
       newArgTypes.push_back(port.type);
-      newArgAttrs.push_back(attr);
+      newArgAttrs.push_back(port.attrs ? port.attrs : emptyDictAttr);
       insertArgs = insertArgs.drop_front();
       LocationAttr loc = port.loc ? port.loc : unknownLoc;
       newArgLocs.push_back(loc);
@@ -758,8 +791,6 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
   for (auto port : ports.getInputs()) {
     auto loc = port.loc ? Location(port.loc) : unknownLoc;
     auto type = port.type;
-    if (port.isInOut() && !isa<InOutType>(type))
-      type = InOutType::get(type);
     body->addArgument(type, loc);
   }
 
@@ -815,15 +846,14 @@ StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
   if (auto vName = getVerilogNameAttr())
     return vName;
 
-  return (*this)->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+  return getSymNameAttr();
 }
 
 StringAttr HWModuleGeneratedOp::getVerilogModuleNameAttr() {
   if (auto vName = getVerilogNameAttr()) {
     return vName;
   }
-  return (*this)->getAttrOfType<StringAttr>(
-      ::mlir::SymbolTable::getSymbolAttrName());
+  return getSymNameAttr();
 }
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
@@ -922,7 +952,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser,
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr,
+                             ModuleTy::getSymNameAttrName(result.name),
                              result.attributes))
     return failure();
 
@@ -1035,13 +1066,14 @@ template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   p << ' ';
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = mod.getOperation()->template getAttrOfType<StringAttr>(
           visibilityAttrName))
     p << visibility.getValue() << ' ';
 
   // Print the operation and the function name.
-  p.printSymbolName(SymbolTable::getSymbolName(mod.getOperation()).getValue());
+  p.printSymbolName(mod.getName());
   if (auto gen = dyn_cast<HWModuleGeneratedOp>(mod.getOperation())) {
     p << ", ";
     p.printSymbolName(gen.getGeneratorKind());
@@ -1053,6 +1085,7 @@ static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   module_like_impl::printModuleSignatureNew(p, mod);
 
   SmallVector<StringRef, 3> omittedAttrs;
+  omittedAttrs.push_back(mod.getSymNameAttrName());
   if (isa<HWModuleGeneratedOp>(mod.getOperation()))
     omittedAttrs.push_back("generatorKind");
   if constexpr (std::is_same_v<ModuleTy, HWModuleOp>)
@@ -2805,6 +2838,11 @@ OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
       auto indexVal = indexCst.getValue();
       if (indexVal.getBitWidth() < 64) {
         auto index = indexVal.getZExtValue();
+        // An index past the end of a non-power-of-two array is a legal value
+        // of the index type; the folder has no element to return for it, so
+        // leave the op alone rather than read past the attribute.
+        if (index >= inputCst.size())
+          return {};
         return inputCst[inputCst.size() - 1 - index];
       }
     }
@@ -3027,14 +3065,21 @@ void ArrayInjectOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 // TypedeclOp
 //===----------------------------------------------------------------------===//
 
+LogicalResult TypedeclOp::verify() {
+  if (!isa_and_nonnull<hw::TypeScopeLike>(getOperation()->getParentOp()))
+    return emitOpError("expects parent op to be a type scope, such as "
+                       "'hw.type_scope' or 'sv.package'");
+  return success();
+}
+
 StringRef TypedeclOp::getPreferredName() {
   return getVerilogName().value_or(getName());
 }
 
 Type TypedeclOp::getAliasType() {
-  auto parentScope = cast<hw::TypeScopeOp>(getOperation()->getParentOp());
+  auto parentScope = cast<hw::TypeScopeLike>(getOperation()->getParentOp());
   return hw::TypeAliasType::get(
-      SymbolRefAttr::get(parentScope.getSymNameAttr(),
+      SymbolRefAttr::get(parentScope.getNameAttr(),
                          {FlatSymbolRefAttr::get(*this)}),
       getType());
 }
@@ -3377,7 +3422,8 @@ void HierPathOp::print(OpAsmPrinter &p) {
   p << " ";
 
   // Print visibility if present.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility =
           getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
@@ -3396,7 +3442,7 @@ void HierPathOp::print(OpAsmPrinter &p) {
   p << "]";
   p.printOptionalAttrDict(
       (*this)->getAttrs(),
-      {SymbolTable::getSymbolAttrName(), "namepath", visibilityAttrName});
+      {getSymNameAttrName(), "namepath", visibilityAttrName});
 }
 
 ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -3405,7 +3451,7 @@ ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the symbol name.
   StringAttr symName;
-  if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(symName, getSymNameAttrName(result.name),
                              result.attributes))
     return failure();
 

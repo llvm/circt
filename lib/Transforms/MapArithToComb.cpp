@@ -42,7 +42,7 @@ public:
   }
 };
 
-template <typename TFrom, typename TTo, bool cloneAttrs = false>
+template <typename TFrom, typename TTo>
 class OneToOnePattern : public OpConversionPattern<TFrom> {
 public:
   using OpConversionPattern<TFrom>::OpConversionPattern;
@@ -51,9 +51,13 @@ public:
   LogicalResult
   matchAndRewrite(TFrom op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<TTo>(
-        op, adaptor.getOperands(),
-        cloneAttrs ? op->getAttrs() : ArrayRef<::mlir::NamedAttribute>());
+    typename TTo::Properties properties{};
+    TTo::populateDefaultProperties(
+        OperationName(TTo::getOperationName(), rewriter.getContext()),
+        properties);
+    auto newOp =
+        TTo::create(rewriter, op.getLoc(), adaptor.getOperands(), properties);
+    rewriter.replaceOp(op, newOp);
     return success();
   }
 };

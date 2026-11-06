@@ -5,6 +5,11 @@ moore.module @Empty() {
   // CHECK: moore.output
 }
 
+// CHECK-LABEL: moore.module @EmptyWithAttrs() attributes {sv.attributes = [#sv.attribute<"foo">]}
+moore.module @EmptyWithAttrs() attributes {sv.attributes = [#sv.attribute<"foo">]} {
+  // CHECK: moore.output
+}
+
 // CHECK-LABEL: moore.module @Ports
 moore.module @Ports(
   // CHECK-SAME: in %a : !moore.string
@@ -30,8 +35,8 @@ moore.module @Module() {
   // CHECK: moore.instance "ports" @Ports(a: %[[I1_READ]]: !moore.string, c: %[[I2_READ]]: !moore.event) -> (b: !moore.string, d: !moore.event)
   %i1 = moore.variable : <string>
   %i2 = moore.variable : <event>
-  %5 = moore.read %i1 : <string>
-  %6 = moore.read %i2 : <event>
+  %5 = moore.read %i1 : ref<string>
+  %6 = moore.read %i2 : ref<event>
   %o1, %o2 = moore.instance "ports" @Ports(a: %5: !moore.string, c: %6: !moore.event) -> (b: !moore.string, d: !moore.event)
 
   // CHECK: %v1 = moore.variable : <i1>
@@ -39,13 +44,13 @@ moore.module @Module() {
   %v2 = moore.variable : <i1>
   // CHECK: %[[TMP1:.+]] = moore.read %v2
   // CHECK: %[[TMP2:.+]] = moore.variable name "v1" %[[TMP1]] : <i1>
-  %0 = moore.read %v2 : <i1>
+  %0 = moore.read %v2 : ref<i1>
   moore.variable name "v1" %0 : <i1>
 
   // CHECK: %w0 = moore.net wire : <l1>
   %w0 = moore.net wire : <l1>
   // CHECK: %[[W0:.+]] = moore.read %w0
-  %1 = moore.read %w0 : <l1>
+  %1 = moore.read %w0 : ref<l1>
   // CHECK: %w1 = moore.net wire %[[W0]] : <l1>
   %w1 = moore.net wire %1 : <l1>
   // CHECK: %w2 = moore.net uwire %[[W0]] : <l1>
@@ -85,27 +90,48 @@ moore.module @Module() {
   moore.procedure always_ff { moore.return }
 
   // CHECK: %[[TMP1:.+]] = moore.read %v2
-  // CHECK: moore.assign %v1, %[[TMP1]] : i1
-  %2 = moore.read %v2 : <i1>
-  moore.assign %v1, %2 : i1
+  // CHECK: moore.assign %v1, %[[TMP1]] : ref<i1>
+  %2 = moore.read %v2 : ref<i1>
+  moore.assign %v1, %2 : ref<i1>
 
   moore.procedure always {
     // CHECK: %a = moore.variable : <i32>
     %a = moore.variable : <i32>
     moore.return
   }
+  
+  // CHECK: %[[N1:.+]] = builtin.unrealized_conversion_cast to !moore.net<i2>
+  // CHECK: moore.read %[[N1]]
+  %n1 = builtin.unrealized_conversion_cast to !moore.net<i2>
+  %7 = moore.read %n1 : net<i2>
 }
 
 // CHECK-LABEL: moore.module @ContinuousAssignments
 moore.module @ContinuousAssignments(
   in %arg0: !moore.ref<i42>,
   in %arg1: !moore.i42,
-  in %arg2: !moore.time
+  in %arg2: !moore.time,
+  in %arg3: !moore.net<i42>
 ) {
-  // CHECK: moore.assign %arg0, %arg1 : i42
-  moore.assign %arg0, %arg1 : i42
-  // CHECK: moore.delayed_assign %arg0, %arg1, %arg2 : i42
-  moore.delayed_assign %arg0, %arg1, %arg2 : i42
+  // CHECK: moore.assign %arg0, %arg1 : ref<i42>
+  moore.assign %arg0, %arg1 : ref<i42>
+  // CHECK: moore.delayed_assign %arg0, %arg1, %arg2 : ref<i42>
+  moore.delayed_assign %arg0, %arg1, %arg2 : ref<i42>
+  // CHECK: moore.assign %arg3, %arg1 : net<i42>
+  moore.assign %arg3, %arg1 : net<i42>
+  // CHECK: moore.delayed_assign %arg3, %arg1, %arg2 : net<i42>
+  moore.delayed_assign %arg3, %arg1, %arg2 : net<i42>
+}
+
+// CHECK-LABEL: func.func @RefOpsOnNets
+func.func @RefOpsOnNets(%arg0: !moore.net<i32>, %arg1: !moore.i32) {
+  // CHECK: moore.extract_ref %arg0 from 1 : net<i32> -> net<i2>
+  moore.extract_ref %arg0 from 1 : net<i32> -> net<i2>
+  // CHECK: moore.dyn_extract_ref %arg0 from %arg1 : net<i32>, i32 -> net<i1>
+  moore.dyn_extract_ref %arg0 from %arg1 : net<i32>, i32 -> net<i1>
+  // CHECK: moore.concat_ref %arg0, %arg0 : (!moore.net<i32>, !moore.net<i32>) -> net<i64>
+  moore.concat_ref %arg0, %arg0 : (!moore.net<i32>, !moore.net<i32>) -> net<i64>
+  return
 }
 
 // CHECK-LABEL: func.func @ProceduralAssignments
@@ -301,12 +327,12 @@ moore.module @Expressions(
   // CHECK: moore.concat [[C]], [[D]], [[C]] : (!moore.l32, !moore.l32, !moore.l32) -> l96
   moore.concat %c, %d, %c : (!moore.l32, !moore.l32, !moore.l32) -> l96
 
-  // CHECK: moore.concat_ref [[REF_A]] : (!moore.ref<i32>) -> <i32>
-  moore.concat_ref %refA : (!moore.ref<i32>) -> <i32>
-  // CHECK: moore.concat_ref [[REF_A]], [[REF_B]] : (!moore.ref<i32>, !moore.ref<i32>) -> <i64>
-  moore.concat_ref %refA, %refB : (!moore.ref<i32>, !moore.ref<i32>) -> <i64>
-  // CHECK: moore.concat_ref [[REF_C]], [[REF_D]], [[REF_C]] : (!moore.ref<l32>, !moore.ref<l32>, !moore.ref<l32>) -> <l96>
-  moore.concat_ref %refC, %refD, %refC : (!moore.ref<l32>, !moore.ref<l32>, !moore.ref<l32>) -> <l96>
+  // CHECK: moore.concat_ref [[REF_A]] : (!moore.ref<i32>) -> ref<i32>
+  moore.concat_ref %refA : (!moore.ref<i32>) -> ref<i32>
+  // CHECK: moore.concat_ref [[REF_A]], [[REF_B]] : (!moore.ref<i32>, !moore.ref<i32>) -> ref<i64>
+  moore.concat_ref %refA, %refB : (!moore.ref<i32>, !moore.ref<i32>) -> ref<i64>
+  // CHECK: moore.concat_ref [[REF_C]], [[REF_D]], [[REF_C]] : (!moore.ref<l32>, !moore.ref<l32>, !moore.ref<l32>) -> ref<l96>
+  moore.concat_ref %refC, %refD, %refC : (!moore.ref<l32>, !moore.ref<l32>, !moore.ref<l32>) -> ref<l96>
 
   // CHECK: moore.replicate [[X]] : i1 -> i4
   moore.replicate %x : i1 -> i4
@@ -318,12 +344,12 @@ moore.module @Expressions(
   // CHECK: moore.dyn_extract [[ARRAY1]] from [[A]] : uarray<4 x i8>, i32 -> i8
   moore.dyn_extract %array1 from %a : uarray<4 x i8>, i32 -> i8
 
-  // CHECK: moore.dyn_extract_ref [[REF_A]] from [[B]] : <i32>, i32 -> <i1>
-  moore.dyn_extract_ref %refA from %b : <i32>, i32 -> <i1>
-  // CHECK: moore.dyn_extract_ref [[REF_ARRAY2]] from [[A]] : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
-  moore.dyn_extract_ref %refArray2 from %a : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
-  // CHECK: moore.dyn_extract_ref [[REF_ARRAY1]] from [[A]] : <uarray<4 x i8>>, i32 -> <i8>
-  moore.dyn_extract_ref %refArray1 from %a : <uarray<4 x i8>>, i32 -> <i8>
+  // CHECK: moore.dyn_extract_ref [[REF_A]] from [[B]] : ref<i32>, i32 -> ref<i1>
+  moore.dyn_extract_ref %refA from %b : ref<i32>, i32 -> ref<i1>
+  // CHECK: moore.dyn_extract_ref [[REF_ARRAY2]] from [[A]] : ref<uarray<2 x uarray<4 x i8>>>, i32 -> ref<uarray<4 x i8>>
+  moore.dyn_extract_ref %refArray2 from %a : ref<uarray<2 x uarray<4 x i8>>>, i32 -> ref<uarray<4 x i8>>
+  // CHECK: moore.dyn_extract_ref [[REF_ARRAY1]] from [[A]] : ref<uarray<4 x i8>>, i32 -> ref<i8>
+  moore.dyn_extract_ref %refArray1 from %a : ref<uarray<4 x i8>>, i32 -> ref<i8>
 
   // CHECK: moore.conditional [[X]] : i1 -> i32 {
   // CHECK:   moore.yield [[A]] : i32
@@ -607,7 +633,7 @@ func.func @StringOperations(%arg0 : !moore.string, %arg1 : !moore.string) {
 moore.coroutine @myTask(%arg0: !moore.ref<l1>) {
   // CHECK: moore.wait_event
   moore.wait_event {
-    %0 = moore.read %arg0 : <l1>
+    %0 = moore.read %arg0 : ref<l1>
     moore.detect_event posedge %0 : l1
   }
   // CHECK: moore.return

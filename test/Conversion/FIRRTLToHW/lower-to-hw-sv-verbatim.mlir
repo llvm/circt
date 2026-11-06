@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw %s -verify-diagnostics | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw=warn-on-unprocessed-annotations %s -verify-diagnostics | FileCheck %s
 
 firrtl.circuit "SVVerbatimTest" {
 
@@ -292,7 +292,7 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.source
   //
-  // CHECK:       sv.verbatim.module @AnalogBlackBox(inout %bus : i32)
+  // CHECK:       sv.verbatim.module @AnalogBlackBox(in %bus : !hw.inout<i32>)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @AnalogBlackBox.v
   // CHECK-SAME:      verilogName = "AnalogBlackBox"

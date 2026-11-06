@@ -32,7 +32,7 @@ using namespace mlir;
 
 void SVModuleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                        llvm::StringRef name, hw::ModuleType type) {
-  state.addAttribute(SymbolTable::getSymbolAttrName(),
+  state.addAttribute(SVModuleOp::getSymNameAttrName(state.name),
                      builder.getStringAttr(name));
   state.addAttribute(getModuleTypeAttrName(state.name), TypeAttr::get(type));
   state.addRegion();
@@ -42,19 +42,19 @@ void SVModuleOp::print(OpAsmPrinter &p) {
   p << " ";
 
   // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
   p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
   hw::module_like_impl::printModuleSignatureNew(p, getBodyRegion(),
                                                 getModuleType(), {}, {});
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                     getAttributeNames());
   p << " ";
   p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/true);
-
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                     getAttributeNames());
 }
 
 ParseResult SVModuleOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -397,7 +397,7 @@ SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
 }
 
 Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
-  auto packedType = dyn_cast<PackedType>(slot.elemType);
+  auto packedType = dyn_cast<PackedType>(slot.valueType);
   if (!packedType)
     return {};
   auto bitWidth = packedType.getBitSize();
@@ -804,10 +804,15 @@ LogicalResult ConcatRefOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  if (operands.empty())
+    return emitOptionalError(loc, "requires at least one operand");
   Domain domain = Domain::TwoValued;
   unsigned width = 0;
   for (Value operand : operands) {
-    UnpackedType nestedType = cast<RefType>(operand.getType()).getNestedType();
+    if (operand.getType().getTypeID() != operands[0].getType().getTypeID())
+      return emitOptionalError(loc, "operands must all be refs or all be nets");
+    UnpackedType nestedType =
+        cast<WrapperType>(operand.getType()).getNestedType();
     PackedType packedType = dyn_cast<PackedType>(nestedType);
 
     if (!packedType) {
@@ -824,7 +829,8 @@ LogicalResult ConcatRefOp::inferReturnTypes(
     }
     width += *bitSize;
   }
-  results.push_back(RefType::get(IntType::get(context, width, domain)));
+  results.push_back(cast<WrapperType>(operands[0].getType())
+                        .withNestedType(IntType::get(context, width, domain)));
   return success();
 }
 
@@ -1326,7 +1332,7 @@ bool BlockingAssignOp::canUsesBeRemoved(
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getDst() == slot.ptr &&
-         getSrc() != slot.ptr && getSrc().getType() == slot.elemType;
+         getSrc() != slot.ptr && getSrc().getType() == slot.valueType;
 }
 
 DeletionKind BlockingAssignOp::removeBlockingUses(
@@ -1360,7 +1366,7 @@ bool ReadOp::canUsesBeRemoved(const MemorySlot &slot,
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getOperand() == slot.ptr &&
-         getResult().getType() == slot.elemType;
+         getResult().getType() == slot.valueType;
 }
 
 DeletionKind
@@ -1917,7 +1923,8 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr,
+                             DPIFuncOp::getSymNameAttrName(result.name),
                              result.attributes))
     return failure();
 
@@ -2069,7 +2076,8 @@ LogicalResult DPIFuncOp::verify() {
 void DPIFuncOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(getSymName());

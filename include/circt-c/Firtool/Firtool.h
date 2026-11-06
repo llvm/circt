@@ -228,6 +228,11 @@ MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetDomainMode(CirctFirtoolFirtoolOptions options,
                                  CirctFirtoolDomainMode);
 
+/// Erase all domain information after inference and checking.
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetStripDomain(CirctFirtoolFirtoolOptions options,
+                                  bool value);
+
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//

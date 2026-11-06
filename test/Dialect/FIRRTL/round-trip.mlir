@@ -140,6 +140,16 @@ firrtl.module @PropertyArithmetic() {
 
   // CHECK: firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   %5 = firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  // CHECK: firrtl.integer.and %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  %6 = firrtl.integer.and %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  // CHECK: firrtl.integer.or %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  %7 = firrtl.integer.or %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+  %negative = firrtl.integer -2
+  // CHECK: firrtl.integer.not %{{.+}} : (!firrtl.integer) -> !firrtl.integer
+  %8 = firrtl.integer.not %negative : (!firrtl.integer) -> !firrtl.integer
 }
 
 // CHECK-LABEL: firrtl.module @PropertyStringOps
@@ -198,6 +208,24 @@ firrtl.module @PropertyListOps() {
   %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
 }
 
+// CHECK-LABEL: firrtl.module @PropertyListContains
+firrtl.module @PropertyListContains() {
+  %string = firrtl.string "foo"
+  %strings = firrtl.list.create %string : !firrtl.list<string>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<string>{{$}}
+  %string_found = firrtl.list.contains %strings, %string : !firrtl.list<string>
+
+  %integer = firrtl.integer 42
+  %integers = firrtl.list.create %integer : !firrtl.list<integer>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<integer>{{$}}
+  %integer_found = firrtl.list.contains %integers, %integer : !firrtl.list<integer>
+
+  %boolean = firrtl.bool true
+  %booleans = firrtl.list.create %boolean : !firrtl.list<bool>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<bool>{{$}}
+  %boolean_found = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>
+}
+
 firrtl.class @UnknownValueChild() {}
 // CHECK-LABEL: firrtl.module @UnknownValueOp
 firrtl.module @UnknownValueOp() {
@@ -207,6 +235,25 @@ firrtl.module @UnknownValueOp() {
   %1 = firrtl.unknown : !firrtl.string
   // CHECK-NEXT: %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
   %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
+}
+
+firrtl.extclass @ObjectCreateTarget(
+  in first: !firrtl.string,
+  in second: !firrtl.integer,
+  out result: !firrtl.string
+)
+
+// CHECK-LABEL: firrtl.module @ObjectCreate
+firrtl.module @ObjectCreate(
+  in %first: !firrtl.string,
+  in %second: !firrtl.integer,
+  out %output: !firrtl.string
+) {
+  // CHECK: %obj = firrtl.object.create(%first, %second) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  %obj = firrtl.object.create(%first, %second) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  // CHECK: %0 = firrtl.object.subfield %obj[result] : !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  %result = firrtl.object.subfield %obj[result] : !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  firrtl.propassign %output, %result : !firrtl.string
 }
 
 firrtl.formal @myFormalTestA, @Top {}

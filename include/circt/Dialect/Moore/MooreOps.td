@@ -43,6 +43,10 @@ class TypeDomainsMatch<list<string> values> :
     cast<moore::UnpackedType>($_self.getType()).getDomain()
   }], "domain">;
 
+class SameWrapperKind<list<string> values> :
+  AllMatchSameOperatorTrait<values, "$_self.getType().getTypeID()",
+    "wrapper kind (ref or net)">;
+
 class TypeIsSimpleBitVectorOf<string sbvType, string packedType> :
   TypesMatchWith<
     sbvType # " type is simple bit vector equivalent of " # packedType,
@@ -57,7 +61,7 @@ class TypeIsSimpleBitVectorOf<string sbvType, string packedType> :
 def SVModuleOp : MooreOp<"module", [
   IsolatedFromAbove,
   RegionKindInterface,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
   SingleBlockImplicitTerminator<"OutputOp">,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
 ]> {
@@ -220,7 +224,7 @@ def UnreachableOp : MooreOp<"unreachable", [Terminator]> {
 def CoroutineOp : MooreOp<"coroutine", [
   IsolatedFromAbove,
   FunctionOpInterface,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
   RegionKindInterface,
   RecursiveMemoryEffects,
 ]> {
@@ -241,7 +245,7 @@ def CoroutineOp : MooreOp<"coroutine", [
     ```mlir
     moore.coroutine private @waitForClk(%clk: !moore.ref<l1>) {
       moore.wait_event {
-        %0 = moore.read %clk : <l1>
+        %0 = moore.read %clk : !moore.ref<l1>
         moore.detect_event posedge %0 : l1
       }
       moore.return
@@ -459,7 +463,7 @@ def AssignedVariableOp : MooreOp<"assigned_variable", [
 def ReadOp : MooreOp<"read", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>,
   TypesMatchWith<"input and result types match",
-    "input", "result", "cast<RefType>($_self).getNestedType()">
+    "input", "result", "cast<WrapperType>($_self).getNestedType()">
 ]> {
   let summary = "Read the current value of a declaration";
   let description = [{
@@ -467,7 +471,7 @@ def ReadOp : MooreOp<"read", [
     exact point at which declarations that can be targeted by all possible 
     expressions are read. It's similar to llvm.load.
   }];
-  let arguments = (ins Arg<RefType, "", [MemRead]>:$input);
+  let arguments = (ins Arg<WrapperType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
@@ -478,7 +482,7 @@ def GlobalVariableOp : MooreOp<"global_variable", [
   IsolatedFromAbove,
   NoRegionArguments,
   SingleBlock,
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
 ]> {
   let summary = "A global variable declaration";
   let description = [{
@@ -488,6 +492,7 @@ def GlobalVariableOp : MooreOp<"global_variable", [
   }];
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     TypeAttrOf<UnpackedType>:$type
   );
   let regions = (region MaxSizedRegion<1>:$initRegion);
@@ -522,7 +527,7 @@ def GetGlobalVariableOp : MooreOp<"get_global_variable", [
 // Assignments
 //===----------------------------------------------------------------------===//
 
-class AssignOpBase<string mnemonic, list<Trait> traits = []> :
+class ProceduralAssignOpBase<string mnemonic, list<Trait> traits = []> :
     MooreOp<mnemonic, traits # [TypesMatchWith<"src and dst types match",
     "src", "dst", "RefType::get(cast<UnpackedType>($_self))">]> {
   let arguments = (ins RefType:$dst, UnpackedType:$src);
@@ -531,17 +536,19 @@ class AssignOpBase<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
-class DelayedAssignOpBase<string mnemonic, list<Trait> traits = []> :
-    AssignOpBase<mnemonic, traits> {
-  let arguments = (ins RefType:$dst, UnpackedType:$src, TimeType:$delay);
+// Continuous assignment
+
+class ContinuousAssignOpBase<string mnemonic, list<Trait> traits = []> :
+    MooreOp<mnemonic, traits # [TypesMatchWith<"src and dst types match",
+    "dst", "src", "cast<WrapperType>($_self).getNestedType()">]> {
+  let arguments = (ins WrapperType:$dst, UnpackedType:$src);
   let assemblyFormat = [{
-    $dst `,` $src `,` $delay attr-dict `:` type($src)
+    $dst `,` $src attr-dict `:` type($dst)
   }];
 }
 
-// Continuous assignment
-
-def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
+def ContinuousAssignOp :
+    ContinuousAssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
   let summary = "Continuous assignment within a module";
   let description = [{
     A continuous assignment in module scope, such as `assign x = y;`, which
@@ -553,7 +560,7 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
 }
 
 def DelayedContinuousAssignOp :
-    DelayedAssignOpBase<"delayed_assign", [HasParent<"SVModuleOp">]> {
+    ContinuousAssignOpBase<"delayed_assign", [HasParent<"SVModuleOp">]> {
   let summary = "Delayed continuous assignment within a module";
   let description = [{
     A continuous assignment with a delay.
@@ -561,11 +568,19 @@ def DelayedContinuousAssignOp :
     See the `moore.assign` op.
     See IEEE 1800-2017 § 10.3 "Continuous assignments".
   }];
+  let arguments = (ins
+    WrapperType:$dst,
+    UnpackedType:$src,
+    TimeType:$delay
+  );
+  let assemblyFormat = [{
+    $dst `,` $src `,` $delay attr-dict `:` type($dst)
+  }];
 }
 
 // Blocking assignment
 
-def BlockingAssignOp : AssignOpBase<"blocking_assign", [
+def BlockingAssignOp : ProceduralAssignOpBase<"blocking_assign", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>
 ]> {
   let summary = "Blocking procedural assignment";
@@ -584,7 +599,7 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign", [
 
 // Non-blocking assignment
 
-def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
+def NonBlockingAssignOp : ProceduralAssignOpBase<"nonblocking_assign"> {
   let summary = "Nonblocking procedural assignment";
   let description = [{
     A nonblocking procedural assignment in a sequential block, such as `x <= y;`
@@ -598,13 +613,17 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
 }
 
 def DelayedNonBlockingAssignOp :
-    DelayedAssignOpBase<"delayed_nonblocking_assign"> {
+    ProceduralAssignOpBase<"delayed_nonblocking_assign"> {
   let summary = "Delayed nonblocking procedural assignment";
   let description = [{
     A nonblocking procedural assignment with an intra-assignment delay control.
 
     See the `moore.nonblocking_assign` op.
     See IEEE 1800-2017 § 9.4.5 "Intra-assignment timing controls".
+  }];
+  let arguments = (ins RefType:$dst, UnpackedType:$src, TimeType:$delay);
+  let assemblyFormat = [{
+    $dst `,` $src `,` $delay attr-dict `:` type($src)
   }];
 }
 
@@ -643,9 +662,9 @@ def WaitEventOp : MooreOp<"wait_event", [
     Example corresponding to the SystemVerilog `@(posedge x, negedge y iff z)`:
     ```
     moore.wait_event {
-      %0 = moore.read %x : <i1>
-      %1 = moore.read %y : <i1>
-      %2 = moore.read %z : <i1>
+      %0 = moore.read %x : !moore.ref<i1>
+      %1 = moore.read %y : !moore.ref<i1>
+      %2 = moore.read %z : !moore.ref<i1>
       moore.detect_event posedge %0 : i1
       moore.detect_event negedge %1 if %2 : i1
     }
@@ -655,9 +674,9 @@ def WaitEventOp : MooreOp<"wait_event", [
     conditions. For example, the SV `@(posedge ~x iff i == 42)`:
     ```
     moore.wait_event {
-      %0 = moore.read %x : <i1>
+      %0 = moore.read %x : !moore.ref<i1>
       %1 = moore.not %0 : i1
-      %2 = moore.read %i : <i19>
+      %2 = moore.read %i : !moore.ref<i19>
       %3 = moore.constant 42 : i19
       %4 = moore.eq %2, %3 : i19
       moore.detect_event posedge %0 if %4 : i1
@@ -720,10 +739,12 @@ def WaitLevelOp : MooreOp<"wait_level", [
     The `moore.wait_level` op suspends execution of the current process until
     its body signals that a given condition is true. Conceptually, the body of
     this op is executed once immediately, and again whenever any potentially
-    relevant signal has changed. If the contained `moore.detect_level` op determines
-    the condition is true, execution resumes after the `moore.wait_level` operation.
-    If the condition is false, the current process remains suspended until a signal
-    change causes the body to be run again.
+    relevant signal has changed. If any of the contained `moore.detect_level` ops
+    determines its condition is true, execution resumes after the
+    `moore.wait_level` operation. If all conditions are false, the current
+    process remains suspended until a signal change causes the body to be run
+    again. If the body contains no `moore.detect_level` ops, no condition can
+    ever become true and the process remains suspended forever.
 
     See IEEE 1800-2017 § 9.4.3 "Level-sensitive event control".
   }];
@@ -963,6 +984,12 @@ def LogicToIntOp : MooreOp<"logic_to_int", [
     "input", "result", "cast<IntType>($_self).getTwoValued()">
 ]> {
   let summary = "Convert a four-valued to a two-valued integer";
+  let description = [{
+    Casts a four-valued Moore integer to a two-valued Moore integer, keeping
+    `0` or `1` bits and casting unknown bits (`z` or `x`) to 0 (see IEEE
+    1800-2023 § 6.11.2 "2-state (two-value) and 4-state (four-value) data
+    types").
+  }];
   let arguments = (ins FourValuedIntType:$input);
   let results = (outs TwoValuedIntType:$result);
   let assemblyFormat = [{
@@ -1739,9 +1766,9 @@ def ConcatOp : MooreOp<"concat", [
 def ConcatRefOp : MooreOp<"concat_ref", [
     Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>
 ]> {
-  let summary = "The copy of concat that explicitly works on the ref type.";
-  let arguments = (ins Variadic<RefType>:$values);
-  let results = (outs RefType:$result);
+  let summary = "The copy of concat that explicitly works on ref or net types.";
+  let arguments = (ins Variadic<WrapperType>:$values);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $values attr-dict `:` `(` type($values) `)` `->` type($result)
   }];
@@ -1932,23 +1959,27 @@ def DynExtractOp : MooreOp<"dyn_extract", [Pure]> {
   }];
 }
 
-def ExtractRefOp : MooreOp<"extract_ref", [Pure]> {
+def ExtractRefOp : MooreOp<"extract_ref", [
+    Pure, SameWrapperKind<["input", "result"]>
+]> {
   let description = [{
-  The copy of extract that explicitly works on the ref type.
+  The copy of extract that explicitly works on ref or net types.
   }];
-  let arguments = (ins RefType:$input, I32Attr:$lowBit);
-  let results = (outs RefType:$result);
+  let arguments = (ins WrapperType:$input, I32Attr:$lowBit);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
   }];
 }
 
-def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
+def DynExtractRefOp : MooreOp<"dyn_extract_ref", [
+    Pure, SameWrapperKind<["input", "result"]>
+]> {
   let description = [{
-  The copy of dyn_extract that explicitly works on the ref type.
+  The copy of dyn_extract that explicitly works on ref or net types.
   }];
-  let arguments = (ins RefType:$input, UnpackedType:$lowBit);
-  let results = (outs RefType:$result);
+  let arguments = (ins WrapperType:$input, UnpackedType:$lowBit);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $input `from` $lowBit attr-dict `:`
     type($input) `,` type($lowBit) `->` type($result)
@@ -2431,6 +2462,22 @@ def OpenUArrayDeleteOp: MooreOp<"open_uarray_delete"> {
   let results = (outs VoidType);
   let assemblyFormat = [{
     $arr attr-dict `:` type($arr)
+  }];
+}
+
+def OpenUArrayFromUnpackedArrayOp: MooreOp<"open_uarray_from_uarray", 
+[Pure, TypesMatchWith<"input's elements type must match the result's elements type", "input",
+ "output", "OpenUnpackedArrayType::get($_self.getContext(), cast<UnpackedArrayType>($_self).getElementType())">]>{
+  let summary = "Create an open unpacked array from a fixed-size unpacked array";
+
+  let description = [{
+    Converts a fixed-size unpacked array into an open (dynamic) unpacked array.
+  }];
+  let arguments = (ins UnpackedArrayType:$input);
+  let results = (outs OpenUnpackedArrayType:$output);
+  
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($output)
   }];
 }
 
@@ -3641,13 +3688,17 @@ def QueueSizeBIOp : Builtin<"size"> {
 //===----------------------------------------------------------------------===//
 
 def ClassPropertyDeclOp
-    : MooreOp<"class.propertydecl", [Symbol, HasParent<"ClassDeclOp">]> {
+    : MooreOp<"class.propertydecl", [SymbolName, SymbolVisibility, Symbol,
+                                     HasParent<"ClassDeclOp">]> {
   let summary = "Declare a class property";
   let description = [{
   Declares a property within a class declaration.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttr:$type);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttr:$type);
 
   let results = (outs);
   let assemblyFormat = [{
@@ -3661,11 +3712,14 @@ def ClassPropertyDeclOp
 
 
 def ClassMethodDeclOp
-    : MooreOp<"class.methoddecl", [Symbol, HasParent<"ClassDeclOp">]> {
+    : MooreOp<"class.methoddecl", [SymbolName, SymbolVisibility, Symbol,
+                                    HasParent<"ClassDeclOp">]> {
   let summary = "Declare a class method";
-  let arguments = (ins SymbolNameAttr:$sym_name,
-      TypeAttrOf<FunctionType>:$function_type,
-      OptionalAttr<SymbolRefAttr>:$impl);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<SymbolRefAttr>:$impl);
   let results = (outs);
   let assemblyFormat = [{
       $sym_name (`->` $impl^)? `:` $function_type attr-dict
@@ -3673,12 +3727,17 @@ def ClassMethodDeclOp
 }
 
 def ClassDeclOp
-    : MooreOp<"class.classdecl", [Symbol, SymbolTable, IsolatedFromAbove,
-    NoTerminator, SingleBlock]> {
+    : MooreOp<"class.classdecl", [
+      SymbolName, SymbolVisibility, Symbol,
+      SymbolTable, IsolatedFromAbove,
+      NoTerminator, SingleBlock
+    ]> {
   let summary = "Class declaration";
-  let arguments = (ins SymbolNameAttr:$sym_name,
-      OptionalAttr<SymbolRefAttr>:$base,
-      OptionalAttr<SymbolRefArrayAttr>:$implementedInterfaces);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    OptionalAttr<SymbolRefAttr>:$base,
+    OptionalAttr<SymbolRefArrayAttr>:$implementedInterfaces);
   let results = (outs);
   let regions = (region AnyRegion:$body);
   let assemblyFormat = [{
@@ -3814,7 +3873,7 @@ def DPIArgDirection : I32EnumAttr<"DPIArgDirection",
 }
 
 def DPIFuncOp : MooreOp<"func.dpi",
-  [IsolatedFromAbove, Symbol, OpAsmOpInterface,
+  [IsolatedFromAbove, SymbolName, SymbolVisibility, Symbol, OpAsmOpInterface,
    DeclareOpInterfaceMethods<FunctionOpInterface,
      ["cloneTypeWith"]>]> {
   let summary = "A DPI-imported SystemVerilog function declaration";

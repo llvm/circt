@@ -36,6 +36,11 @@ namespace esi_test {
 using ProbeFn = int (*)(esi::Accelerator *);
 using ProbeEntry = std::pair<std::string, ProbeFn>;
 
+/// The connection the probes are running against, for probes which need
+/// connection-level services (e.g. HostMem). Set by runProbes(); valid only
+/// while probes run.
+inline esi::AcceleratorConnection *probeConnection = nullptr;
+
 inline void configureMsvcDebugReports() {
 #if defined(_MSC_VER) && defined(_DEBUG)
   _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
@@ -65,6 +70,7 @@ inline int runProbes(int argc, const char *argv[], const char *name,
 
   esi::Context &ctxt = cli.getContext();
   esi::AcceleratorConnection *conn = cli.connect();
+  probeConnection = conn;
   try {
     const auto &info = *conn->getService<esi::services::SysInfo>();
     esi::Manifest manifest(ctxt, info.getJsonManifest());

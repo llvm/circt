@@ -4,16 +4,18 @@ module {
     //CHECK:    [[NID0:[0-9]+]] sort bitvec 1
     //CHECK:    [[NID1:[0-9]+]] input [[NID0]] reset
     //CHECK:    [[NID2:[0-9]+]] input [[NID0]] en
-    hw.module @Counter(in %clock : !seq.clock, in %reset : i1, in %en : i1) {
+    //CHECK:    [[NID6:[0-9]+]] sort bitvec 32
+    //CHECK:    [[NIDRVAL:[0-9]+]] input [[NID6]] resetval
+    hw.module @Counter(in %clock : !seq.clock, in %reset : i1, in %en : i1, in %resetval : i32) {
     %0 = seq.from_clock %clock
     // Registers are all emitted before any other operation
-    //CHECK:    [[NID6:[0-9]+]] sort bitvec 32
     //CHECK:    [[INITCONST:[0-9]+]] constd [[NID6]] 0
     //CHECK:    [[NID12:[0-9]+]] state [[NID6]] count
     //CHECK:    [[INIT:[0-9]+]] init [[NID6]] [[NID12]] [[INITCONST]]
     //CHECK:    [[REG2NID:[0-9]+]] state [[NID6]] count2
     //CHECK-NOT: [[INITCONST]] constd [[NID6]] 0
     //CHECK:    [[INIT:[0-9]+]] init [[NID6]] [[REG2NID]] [[INITCONST]]
+    //CHECK:    [[REG3NID:[0-9]+]] state [[NID6]] count3
     // CHECK: {{[0-9]+}} state [[NID6]] my_reg
     // CHECK: {{[0-9]+}} state [[NID6]] my_reg_0
     // CHECK: {{[0-9]+}} state [[NID6]] my_reg_1
@@ -45,6 +47,7 @@ module {
 
     %count = seq.compreg %9, %clock reset %reset, %c0_i32 initial %init : i32
     %count2 = seq.compreg %9, %clock reset %reset, %c0_i32 initial %init : i32
+    %count3 = seq.compreg %9, %clock reset %reset, %resetval : i32
 
     // Check that compregs with the same name attribute have their symbols unique-ified
     %myreg1 = seq.compreg name "my_reg"  %9, %clock : i32
@@ -100,5 +103,9 @@ module {
 
     //CHECK:    [[NID30:[0-9]+]] ite [[NID6]] [[NID1]] [[NID11]] [[NID23]]
     //CHECK:    [[NID31:[0-9]+]] next [[NID6]] [[NID12]] [[NID30]]
+    //CHECK:    [[REG2ITE:[0-9]+]] ite [[NID6]] [[NID1]] [[NID11]] [[NID23]]
+    //CHECK:    {{[0-9]+}} next [[NID6]] [[REG2NID]] [[REG2ITE]]
+    //CHECK:    [[REG3ITE:[0-9]+]] ite [[NID6]] [[NID1]] [[NIDRVAL]] [[NID23]]
+    //CHECK:    {{[0-9]+}} next [[NID6]] [[REG3NID]] [[REG3ITE]]
   }
 }

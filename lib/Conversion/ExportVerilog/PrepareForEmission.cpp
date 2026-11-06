@@ -22,6 +22,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/ProceduralRegionTrait.h"
@@ -47,14 +48,14 @@ using namespace hw;
 using namespace sv;
 using namespace ExportVerilog;
 
-// Check if the value is from read of a wire or reg or is a port.
+// Check if the value is from read of a handle (net, var, inout) or is a port. A
 bool ExportVerilog::isSimpleReadOrPort(Value v) {
   if (isa<BlockArgument>(v))
     return true;
   auto vOp = v.getDefiningOp();
   if (!vOp)
     return false;
-  if (isa<sv::InOutType>(v.getType()) && isa<sv::WireOp>(vOp))
+  if (sv::getHandleElementType(v.getType()))
     return true;
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
@@ -62,7 +63,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
-  return isa<sv::WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
+  return isa<sv::WireOp, RegOp, LogicOp, VarOp, XMROp, XMRRefOp>(readSrc);
 }
 
 // Check if the value is deemed worth spilling into a wire.
@@ -242,6 +243,10 @@ static void lowerUsersToTemporaryWire(Operation &op,
     // If the result already is an InOut, make sure to not wrap it again
     if (auto inoutType = hw::type_dyn_cast<hw::InOutType>(result.getType())) {
       wireElementType = inoutType.getElementType();
+      isResultInOut = true;
+    } else if (auto handleElementType =
+                   sv::getHandleElementType(result.getType())) {
+      wireElementType = handleElementType;
       isResultInOut = true;
     }
 
@@ -516,7 +521,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   // never generate a temporary and in fact must always be emitted inline.
   if (isExpressionAlwaysInline(op) &&
       !(isa<sv::ReadInOutOp>(op) ||
-        isa<hw::InOutType>(op->getResult(0).getType())))
+        sv::getHandleElementType(op->getResult(0).getType())))
     return false;
 
   // Scan to the top of the region tree to find out where to move the op.
@@ -566,7 +571,8 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
   if (op->getNumResults() != 1 ||
-      !isa<InOutType, sv::InterfaceType>(op->getResult(0).getType()))
+      !(sv::getHandleElementType(op->getResult(0).getType()) ||
+        isa<sv::InterfaceType>(op->getResult(0).getType())))
     return false;
 
   // If all operands (e.g. init value) are constant, it is safe to move
@@ -749,7 +755,7 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // Don't spill wires for inout operations and simple expressions such as read
   // or constant.
   if (op.getNumResults() == 0 ||
-      isa<hw::InOutType>(op.getResult(0).getType()) ||
+      sv::getHandleElementType(op.getResult(0).getType()) ||
       isa<ReadInOutOp, ConstantOp>(op))
     return false;
 

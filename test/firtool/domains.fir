@@ -1,6 +1,9 @@
-; RUN: firtool %s -output-final-mlir - -o /dev/null                    | FileCheck %s -implicit-check-not om.frozenpath_create -implicit-check-not Domain
-; RUN: firtool %s -output-final-mlir - -domain-mode=check -o /dev/null | FileCheck %s -check-prefixes=CHECK,DOMAIN
-; RUN: firtool %s -output-final-mlir - -domain-mode=strip -o /dev/null | FileCheck %s -implicit-check-not om.frozenpath_create -implicit-check-not Domain
+; RUN: firtool %s -output-final-mlir - -o /dev/null | FileCheck %s -implicit-check-not om.frozenpath_create -implicit-check-not Domain
+; RUN: firtool %s -output-final-mlir - -domain-mode=check -strip-domain=false -o /dev/null | FileCheck %s -check-prefixes=CHECK,DOMAIN
+; RUN: firtool %s -output-final-mlir - -domain-mode=disable -strip-domain=false -o /dev/null | FileCheck %s -check-prefixes=CHECK,DOMAIN
+; RUN: firtool %s -output-final-mlir - -domain-mode=check -strip-domain=true -o /dev/null | FileCheck %s -implicit-check-not om.frozenpath_create -implicit-check-not Domain
+; RUN: firtool %s -output-final-mlir - -domain-mode=infer -strip-domain=true -o /dev/null | FileCheck %s -implicit-check-not om.frozenpath_create -implicit-check-not Domain
+; RUN: firtool %s -output-final-mlir - -domain-mode=infer-all -strip-domain=true -o /dev/null | FileCheck %s -implicit-check-not om.frozenpath_create -implicit-check-not Domain
 
 FIRRTL version 7.0.0
 circuit Foo :

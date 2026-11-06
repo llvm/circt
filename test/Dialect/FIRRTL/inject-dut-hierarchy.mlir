@@ -43,6 +43,32 @@ firrtl.circuit "Top" attributes {
 
 // -----
 
+// Test that a custom instance name with `moveDut=true` names the logic-holding
+// child, not the existing parent instance.
+//
+// CHECK-LABEL: firrtl.circuit "CustomInstanceNameMoveDut"
+firrtl.circuit "CustomInstanceNameMoveDut" attributes {
+    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo", instanceName = "logic_inst", moveDut = true}]
+  } {
+  // CHECK: hw.hierpath private @nla [@CustomInstanceNameMoveDut::@dut, @Foo::@logic_inst, @DUT]
+  hw.hierpath private @nla [@CustomInstanceNameMoveDut::@dut, @DUT]
+
+  // CHECK:      firrtl.module private @DUT()
+  // CHECK-SAME:   class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+  // CHECK:      firrtl.module private @Foo()
+  // CHECK-NEXT:   firrtl.instance logic_inst sym @logic_inst @DUT()
+  // CHECK-NEXT: }
+  firrtl.module private @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
+
+  // CHECK:      firrtl.module @CustomInstanceNameMoveDut()
+  // CHECK-NEXT:   firrtl.instance dut sym @dut @Foo()
+  firrtl.module @CustomInstanceNameMoveDut() {
+    firrtl.instance dut sym @dut @DUT()
+  }
+}
+
+// -----
+
 // Test renaming when `moveDut=false`.  (This is the default behavior and
 // doesn't need to be explicitly specified in the annotation.)
 //

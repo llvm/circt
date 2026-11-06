@@ -36,3 +36,19 @@ func.func @classNewWithString() {
 }
 
 // -----
+
+func.func @ExtractRefOnNet(%arg0: !moore.net<i32>) {
+  // expected-error @below {{op extracts from a net which is not currently supported}}
+  // expected-error @below {{failed to legalize}}
+  %0 = moore.extract_ref %arg0 from 1 : net<i32> -> net<i2>
+  return
+}
+
+// -----
+
+func.func @DynExtractRefOnNet(%arg0: !moore.net<i32>, %arg1: !moore.i32) {
+  // expected-error @below {{op extracts from a net which is not currently supported}}
+  // expected-error @below {{failed to legalize}}
+  %0 = moore.dyn_extract_ref %arg0 from %arg1 : net<i32>, i32 -> net<i1>
+  return
+}

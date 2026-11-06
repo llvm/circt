@@ -572,7 +572,7 @@ static SmallVector<Attribute> getFuncOpNames(Builder &builder, unsigned cnt,
 void handshake::FuncOp::build(OpBuilder &builder, OperationState &state,
                               StringRef name, FunctionType type,
                               ArrayRef<NamedAttribute> attrs) {
-  state.addAttribute(SymbolTable::getSymbolAttrName(),
+  state.addAttribute(FuncOp::getSymNameAttrName(state.name),
                      builder.getStringAttr(name));
   state.addAttribute(FuncOp::getFunctionTypeAttrName(state.name),
                      TypeAttr::get(type));
@@ -637,7 +637,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   // Parse signature
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr, FuncOp::getSymNameAttrName(result.name),
                              result.attributes) ||
       parseFuncOpArgs(parser, args, resTypes, resAttributes))
     return failure();

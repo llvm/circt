@@ -65,12 +65,24 @@ const char *ir = R"MLIR(
       // Shift constant by unknown amount
       %shl3 = comb.shl %c1_i8, %arg1 : i8                   // 00000001 << ?
 
+      // Shift all-ones by unknown amount (may overshift to 0)
+      %shl4 = comb.shl %c255_i8, %arg1 : i8                 // 11111111 << ? = ????????
+
+      // Shift by constant >= bitwidth - result is always zero
+      %shl5 = comb.shl %arg0, %c15_i8 : i8                  // ???????? << 15 = 00000000
+
       // === RIGHT SHIFT TESTS ===
       // Logical right shift constant by constant
       %shr1 = comb.shru %c170_i8, %c2_i8 : i8               // 10101010 >> 2 = 00101010
 
       // Shift unknown by constant - should know leading zeros
       %shr2 = comb.shru %arg0, %c3_i8 : i8                  // ???????? >> 3 = 000?????
+
+      // Shift all-ones by unknown amount (may overshift to 0)
+      %shr3 = comb.shru %c255_i8, %arg1 : i8                // 11111111 >> ? = ????????
+
+      // Shift by constant >= bitwidth - result is always zero
+      %shr4 = comb.shru %arg0, %c15_i8 : i8                 // ???????? >> 15 = 00000000
 
       // === AND TESTS ===
       // AND with all-zeros - result is always zero
@@ -165,19 +177,27 @@ TEST(KnownBitsTest, BasicTest) {
   auto shl1 = cast<comb::ShlOp>(*it++); // 01010101 << 2 = 01010100
   auto shl2 = cast<comb::ShlOp>(*it++); // ???????? << 3 = ?????000
   auto shl3 = cast<comb::ShlOp>(*it++); // 00000001 << ?
+  auto shl4 = cast<comb::ShlOp>(*it++); // 11111111 << ? = ????????
+  auto shl5 = cast<comb::ShlOp>(*it++); // ???????? << 15 = 00000000
   EXPECT_EQ(comb::computeKnownBits(shl1).Zero, APInt(8, 171));
   EXPECT_EQ(comb::computeKnownBits(shl1).One, APInt(8, 84));
   EXPECT_EQ(comb::computeKnownBits(shl2).Zero, APInt(8, 7));
   ASSERT_TRUE(comb::computeKnownBits(shl2).One.isZero());
   ASSERT_TRUE(comb::computeKnownBits(shl3).isUnknown());
+  ASSERT_TRUE(comb::computeKnownBits(shl4).isUnknown());
+  ASSERT_TRUE(comb::computeKnownBits(shl5).isZero());
 
   // === LOGICAL RIGHT SHIFT TESTS ===
   auto shr1 = cast<comb::ShrUOp>(*it++); // 10101010 >> 2 = 00101010
   auto shr2 = cast<comb::ShrUOp>(*it++); // ???????? >> 3 = 000?????
+  auto shr3 = cast<comb::ShrUOp>(*it++); // 11111111 >> ? = ????????
+  auto shr4 = cast<comb::ShrUOp>(*it++); // ???????? >> 15 = 00000000
   EXPECT_EQ(comb::computeKnownBits(shr1).Zero, APInt(8, 213));
   EXPECT_EQ(comb::computeKnownBits(shr1).One, APInt(8, 42));
   EXPECT_EQ(comb::computeKnownBits(shr2).Zero, APInt(8, 224));
   ASSERT_TRUE(comb::computeKnownBits(shr2).One.isZero());
+  ASSERT_TRUE(comb::computeKnownBits(shr3).isUnknown());
+  ASSERT_TRUE(comb::computeKnownBits(shr4).isZero());
 
   // === AND TESTS ===
   auto and1 = cast<comb::AndOp>(*it++); // ???????? & 00000000 = 00000000

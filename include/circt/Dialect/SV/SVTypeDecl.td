@@ -23,11 +23,97 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
+// Package operations
+//===----------------------------------------------------------------------===//
+
+class SVPackageOp<string mnemonic, list<Trait> traits = []> :
+    SVOp<mnemonic, traits # [
+    SymbolName, SymbolVisibility, Symbol, SymbolTable, TypeScopeLike,
+    SingleBlock, NoTerminator, NoRegionArguments, IsolatedFromAbove,
+    HasParent<"mlir::ModuleOp">
+]> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility
+  );
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name $body attr-dict";
+
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
+def PackageOp : SVPackageOp<"package", [Emittable]> {
+  let summary = "SystemVerilog package containing type declarations";
+  let description = [{
+    A named, top-level SystemVerilog package containing only `hw.typedecl`
+    operations. Its declarations are referenced using `hw.typealias` with a
+    symbol reference of the form `@package::@type`. Empty packages are allowed.
+
+    Use `sv.package.extern` when the package's SystemVerilog definition is
+    provided externally and should not be emitted.
+
+    The body is currently restricted to type declarations because the lookup,
+    legalization, and emission infrastructure for other declarations is not yet
+    prepared to handle them in a package's nested symbol table. This restriction
+    can be relaxed to support declarations such as functions and parameters as
+    that infrastructure is extended; it is not a limitation of SystemVerilog
+    packages.
+  }];
+}
+
+def PackageExternOp : SVPackageOp<"package.extern"> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    OptionalAttr<StrAttr>:$verilogName
+  );
+  let summary = "Externally defined SystemVerilog package";
+  let description = [{
+    A named, top-level SystemVerilog package whose implementation is provided
+    externally. Like `sv.package`, its body contains only `hw.typedecl`
+    operations, which are referenced using `hw.typealias` with a symbol
+    reference of the form `@package::@type`. Empty packages are allowed.
+
+    The declarations remain available for type resolution, but ExportVerilog
+    does not emit the package or create an output file for it. Like
+    `hw.module.extern`, it is not emittable and cannot be an `emit.ref` target.
+
+    The `verilogName` string attribute specifies the externally defined
+    SystemVerilog package name, independently of the MLIR symbol name. It is
+    required for non-public packages so that renaming their MLIR symbols does
+    not change references to the external package. For public packages it is
+    optional and defaults to the symbol name. The Verilog name must be valid
+    SystemVerilog and is not renamed.
+
+    Typedef and enum member names use the same legalization as `sv.package`,
+    including keyword avoidance, reserved names, and member-name collisions.
+    This allows a CIRCT-generated package to be represented by changing
+    `sv.package` to `sv.package.extern`, transferring its `hw.verilogName` to
+    `verilogName`, and using the same lowering options and reserved names.
+    Only the external package's own Verilog name remains fixed.
+
+    Example:
+
+    ```mlir
+    sv.package.extern @ExtTypes {
+      hw.typedecl @word : i8
+    }
+    hw.module.extern @ExtMod(in %arg: !hw.typealias<@ExtTypes::@word, i8>)
+    ```
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Interface operations
 //===----------------------------------------------------------------------===//
 
 def InterfaceOp : SVOp<"interface",
-    [SingleBlock, NoTerminator, Symbol, SymbolTable]> {
+    [SingleBlock, NoTerminator, SymbolName, SymbolVisibility, Symbol,
+     SymbolTable]> {
   let summary = "Operation to define a SystemVerilog interface";
 
   let description = [{
@@ -48,6 +134,7 @@ def InterfaceOp : SVOp<"interface",
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     OptionalAttr<StrAttr>:$comment
   );
 
@@ -73,8 +160,7 @@ def InterfaceOp : SVOp<"interface",
 
     // Get the interface's symbolic name as StringAttr.
     StringAttr getNameAttr() {
-      return (*this)->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName());
+      return getSymNameAttr();
     }
 
     // Get the interface's symbolic name.
@@ -93,7 +179,7 @@ def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/HW type"> {
 }
 
 def InterfaceSignalOp : SVOp<"interface.signal",
-    [Symbol, HasParent<"InterfaceOp">]> {
+    [SymbolName, SymbolVisibility, Symbol, HasParent<"InterfaceOp">]> {
   let summary = "Operation to define a SystemVerilog signal for interfaces";
 
   let description = [{
@@ -109,6 +195,7 @@ def InterfaceSignalOp : SVOp<"interface.signal",
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     SignalTypeAttr:$type
   );
 
@@ -131,7 +218,9 @@ def ModportDirection : I32EnumAttr<"ModportDirection",
 }
 
 def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,
-  "modport_direction">;
+  "modport_direction"> {
+  let assemblyFormat = "$value";
+}
 
 class SV_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
     : AttrDef<SVDialect, attrName, traits> {
@@ -154,7 +243,7 @@ def ModportStructArrayAttr : TypedArrayAttrBase<ModportStruct,
   "array of modport structs">;
 
 def InterfaceModportOp : SVOp<"interface.modport",
-    [Symbol, HasParent<"InterfaceOp">]> {
+    [SymbolName, SymbolVisibility, Symbol, HasParent<"InterfaceOp">]> {
   let summary = "Operation to define a SystemVerilog modport for interfaces";
 
   let description = [{
@@ -173,6 +262,7 @@ def InterfaceModportOp : SVOp<"interface.modport",
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
     ModportStructArrayAttr:$ports
   );
 
@@ -220,7 +310,8 @@ def ModportType : SVType<"Modport"> {
 //===----------------------------------------------------------------------===//
 
 def SVVerbatimSourceOp
-    : SVOp<"verbatim.source", [Symbol, HasParent<"mlir::ModuleOp">,
+    : SVOp<"verbatim.source", [SymbolName, SymbolVisibility, Symbol,
+                                HasParent<"mlir::ModuleOp">,
                                DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Verbatim verilog source";
   let description = [{
@@ -229,12 +320,14 @@ def SVVerbatimSourceOp
     are represented by a `hw.module.extern`.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
-      StrAttr:$content,
-      OutputFileAttr:$output_file,
-      ParamDeclArrayAttr:$parameters,
-      OptionalAttr<SymbolRefArrayAttr>:$additional_files,
-      StrAttr:$verilogName);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrAttr:$content,
+    OutputFileAttr:$output_file,
+    ParamDeclArrayAttr:$parameters,
+    OptionalAttr<SymbolRefArrayAttr>:$additional_files,
+    StrAttr:$verilogName);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -247,8 +340,9 @@ def SVVerbatimSourceOp
 
 def SVVerbatimModuleOp
     : SVOp<"verbatim.module", [DeclareOpInterfaceMethods<PortList>,
-                               DeclareOpInterfaceMethods<HWModuleLike>, Symbol,
+                               DeclareOpInterfaceMethods<HWModuleLike>,
                                DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+                               SymbolName, SymbolVisibility, Symbol,
                                HasParent<"mlir::ModuleOp">]> {
   let summary = "Verbatim verilog module";
   let description = [{
@@ -257,13 +351,15 @@ def SVVerbatimModuleOp
     that contains the actual verilog source code.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
-      TypeAttrOf<ModuleType>:$module_type,
-      OptionalAttr<DictArrayAttr>:$per_port_attrs,
-      OptionalAttr<LocationArrayAttr>:$port_locs,
-      ParamDeclArrayAttr:$parameters,
-      FlatSymbolRefAttr:$source,
-      OptionalAttr<StrAttr>:$verilogName);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<DictArrayAttr>:$per_port_attrs,
+    OptionalAttr<LocationArrayAttr>:$port_locs,
+    ParamDeclArrayAttr:$parameters,
+    FlatSymbolRefAttr:$source,
+    OptionalAttr<StrAttr>:$verilogName);
 
   let results = (outs);
 
@@ -278,18 +374,13 @@ def SVVerbatimModuleOp
       SmallVector<hw::ModulePort> modulePorts;
       SmallVector<Attribute> portAttrs, portLocs;
       for (const auto &port : ports) {
-        Type portType = port.type;
-        hw::ModulePort::Direction portDir = port.dir;
-        if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
-          portType = inoutType.getElementType();
-          portDir = hw::ModulePort::Direction::InOut;
-        }
-        modulePorts.push_back({port.name, portType, portDir});
+        modulePorts.push_back({port.name, port.type, port.dir});
         portAttrs.push_back(port.attrs ? port.attrs : $_builder.getDictionaryAttr({}));
         portLocs.push_back(port.loc ? static_cast<Location>(port.loc) : $_builder.getUnknownLoc());
       }
       auto moduleType = hw::ModuleType::get($_builder.getContext(), modulePorts);
-      build($_builder, $_state, name, TypeAttr::get(moduleType),
+      build($_builder, $_state, name, /*sym_visibility=*/{},
+            TypeAttr::get(moduleType),
             $_builder.getArrayAttr(portAttrs), $_builder.getArrayAttr(portLocs),
             parameters, source, verilogName);
     }]>
@@ -327,7 +418,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
-      return build($_builder, $_state, result, mlir::ValueRange());
+      $_state.addTypes(result);
     }]>
   ];
 

@@ -10,6 +10,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
@@ -50,4 +51,24 @@ bool svSVAttributeAttrGetEmitAsComment(MlirAttribute attribute) {
   return llvm::cast<SVAttributeAttr>(unwrap(attribute))
       .getEmitAsComment()
       .getValue();
+}
+
+bool svTypeIsANet(MlirType type) { return llvm::isa<NetType>(unwrap(type)); }
+
+MlirType svNetTypeGet(MlirType element) {
+  return wrap(NetType::get(unwrap(element)));
+}
+
+MlirType svNetTypeGetElementType(MlirType type) {
+  return wrap(llvm::cast<NetType>(unwrap(type)).getElementType());
+}
+
+bool svTypeIsAVar(MlirType type) { return llvm::isa<VarType>(unwrap(type)); }
+
+MlirType svVarTypeGet(MlirType element) {
+  return wrap(VarType::get(unwrap(element)));
+}
+
+MlirType svVarTypeGetElementType(MlirType type) {
+  return wrap(llvm::cast<VarType>(unwrap(type)).getElementType());
 }

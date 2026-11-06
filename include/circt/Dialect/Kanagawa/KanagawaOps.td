@@ -103,7 +103,6 @@ class InstanceOpBase<string mnemonic> : KanagawaOp<mnemonic, [
       return getTargetNameAttr().getName();
     }
 
-    // Operation* getReferencedModuleSlow();
     Operation* getReferencedModule(const hw::InnerRefNamespace &);
   }];
 
@@ -554,7 +553,7 @@ def PathOp : KanagawaOp<"path", [
 // ===---------------------------------------------------------------------===//
 
 def DesignOp : KanagawaOp<"design", [
-  Symbol,
+  SymbolName, SymbolVisibility, Symbol,
   SingleBlock,
   InnerSymbolTable,
   NoTerminator,
@@ -563,7 +562,9 @@ def DesignOp : KanagawaOp<"design", [
 ]> {
   let summary = "All Kanagawa containers must be inside this op";
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{

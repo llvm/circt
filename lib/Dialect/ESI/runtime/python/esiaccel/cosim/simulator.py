@@ -2,6 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import json
 import os
 import re
 import shutil
@@ -81,8 +82,20 @@ class SourceFiles:
       raise FileNotFoundError(f"File {file} does not exist")
 
   def add_dir(self, dir: Path):
-    """Add all the RTL files in a directory to the source list."""
-    for file in sorted(dir.iterdir()):
+    """Add all the RTL files in a directory to the source list. Files named in
+    the directory's `filelist.f` (as written by ExportVerilog) are added first,
+    in the listed order, since some simulators require dependencies such as
+    packages to be compiled before their users."""
+    listed: List[Path] = []
+    filelist = dir / "filelist.f"
+    if filelist.is_file():
+      for line in filelist.read_text().splitlines():
+        line = line.strip()
+        if line and (dir / line).is_file():
+          listed.append(dir / line)
+    for file in listed + sorted(dir.iterdir()):
+      if file in self.user:
+        continue
       if file.is_file() and (file.suffix == ".sv" or file.suffix == ".v"):
         self.user.append(file)
       elif file.is_dir():
@@ -202,7 +215,7 @@ class Simulator:
                compile_stdout_callback: Optional[Callable[[str], None]] = None,
                compile_stderr_callback: Optional[Callable[[str], None]] = None,
                make_default_logs: bool = True,
-               macro_definitions: Optional[Dict[str, str]] = None):
+               macro_definitions: Optional[Dict[str, Optional[str]]] = None):
     """Simulator base class.
 
     Optional sinks can be provided for capturing output. If not provided,
@@ -512,17 +525,82 @@ class Simulator:
         simProc.force_stop()
 
 
-def get_simulator(name: str,
-                  sources: SourceFiles,
-                  rundir: Path,
-                  debug: bool,
-                  save_waveform: bool = False) -> Simulator:
+def load_macro_definitions(path: Path) -> Dict[str, Optional[str]]:
+  """Read RTL macro definitions from a JSON file.
+
+  The file must hold an object mapping macro name to value, where null defines
+  the macro without assigning one::
+
+      {"SPB_256BIT_DATA": "1", "SYNTHESIS": null}
+
+  This lets a source generator that only discovers its macros while running --
+  a build system reading its own project description, for instance -- hand them
+  to the simulator without the caller having to know them up front.
+
+  Args:
+    path: The JSON file to read.
+
+  Returns:
+    The macro mapping, suitable for `get_simulator`'s `macro_definitions`.
+
+  Raises:
+    FileNotFoundError: If *path* does not exist.
+    ValueError: If *path* is not a JSON object of name/value pairs.
+  """
+  if not path.is_file():
+    raise FileNotFoundError(f"Macro definitions file not found: {path}")
+
+  try:
+    definitions = json.loads(path.read_text())
+  except ValueError as e:
+    raise ValueError(f"{path} is not valid JSON: {e}") from e
+
+  if not isinstance(definitions, dict):
+    raise ValueError(f"{path} must contain a JSON object mapping macro name "
+                     f"to value, got {type(definitions).__name__}")
+
+  macros: Dict[str, Optional[str]] = {}
+  for name, value in definitions.items():
+    if value is not None and not isinstance(value, (str, int, float, bool)):
+      raise ValueError(f"{path}: macro '{name}' has a "
+                       f"{type(value).__name__} value; expected a scalar or "
+                       f"null")
+    macros[str(name)] = None if value is None else str(value)
+  return macros
+
+
+def get_simulator(
+    name: str,
+    sources: SourceFiles,
+    rundir: Path,
+    debug: bool,
+    save_waveform: bool = False,
+    macro_definitions: Optional[Dict[str, Optional[str]]] = None) -> Simulator:
+  """Create a simulator backend.
+
+  Args:
+    name: Simulator backend name.
+    sources: SourceFiles describing RTL/DPI inputs.
+    rundir: Directory where build/run artifacts are placed.
+    debug: Enable cosim debug mode.
+    save_waveform: Save simulator waveforms when debug mode is enabled.
+    macro_definitions: Optional mapping of macro names to values. A value of
+      None defines the macro without assigning a value.
+  """
   name = name.lower()
   if name == "verilator":
     from .verilator import Verilator
-    return Verilator(sources, rundir, debug, save_waveform=save_waveform)
+    return Verilator(sources,
+                     rundir,
+                     debug,
+                     save_waveform=save_waveform,
+                     macro_definitions=macro_definitions)
   elif name == "questa":
     from .questa import Questa
-    return Questa(sources, rundir, debug, save_waveform=save_waveform)
+    return Questa(sources,
+                  rundir,
+                  debug,
+                  save_waveform=save_waveform,
+                  macro_definitions=macro_definitions)
   else:
     raise ValueError(f"Unknown simulator: {name}")

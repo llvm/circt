@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTHWArith
     ${srcs}
 
     DEPENDS
+    CIRCTHW
     MLIRHWArithIncGen
     MLIRHWArithEnumsIncGen
     MLIRHWArithCanonicalizationsIncGen
@@ -24,6 +25,7 @@ add_circt_dialect_library(CIRCTHWArith
     Support
 
     LINK_LIBS PUBLIC
+    CIRCTHW
     MLIRIR
     MLIRInferTypeOpInterface
 )

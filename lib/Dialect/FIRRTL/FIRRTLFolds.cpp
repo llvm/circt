@@ -994,6 +994,53 @@ OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+/// Fold bitwise operations on FIRRTL arbitrary precision signed integer
+/// properties. Integer constants may use different storage widths; sign-extend
+/// both operands to the wider storage width so the operation has signed
+/// two's-complement semantics without truncating its result.
+static IntegerAttr foldFIntegerBinaryBitwise(
+    MLIRContext *context, Attribute lhsAttr, Attribute rhsAttr,
+    const function_ref<APInt(const APInt &, const APInt &)> &evaluate) {
+  auto lhs = dyn_cast_or_null<IntegerAttr>(lhsAttr);
+  auto rhs = dyn_cast_or_null<IntegerAttr>(rhsAttr);
+  if (!lhs || !rhs || !lhs.getType().isSignedInteger() ||
+      !rhs.getType().isSignedInteger())
+    return {};
+
+  APSInt lhsValue = lhs.getAPSInt();
+  APSInt rhsValue = rhs.getAPSInt();
+  unsigned width = std::max(lhsValue.getBitWidth(), rhsValue.getBitWidth());
+  lhsValue = lhsValue.extend(width);
+  rhsValue = rhsValue.extend(width);
+
+  APSInt result(evaluate(lhsValue, rhsValue), /*isUnsigned=*/false);
+  auto resultType = IntegerType::get(context, width, IntegerType::Signed);
+  return IntegerAttr::get(resultType, result);
+}
+
+OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
+  return foldFIntegerBinaryBitwise(
+      getContext(), adaptor.getLhs(), adaptor.getRhs(),
+      [](const APInt &lhs, const APInt &rhs) { return lhs & rhs; });
+}
+
+OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
+  return foldFIntegerBinaryBitwise(
+      getContext(), adaptor.getLhs(), adaptor.getRhs(),
+      [](const APInt &lhs, const APInt &rhs) { return lhs | rhs; });
+}
+
+OpFoldResult IntegerNotOp::fold(FoldAdaptor adaptor) {
+  auto input = dyn_cast_or_null<IntegerAttr>(adaptor.getInput());
+  if (!input || !input.getType().isSignedInteger())
+    return {};
+
+  APSInt result(~input.getAPSInt(), /*isUnsigned=*/false);
+  auto resultType =
+      IntegerType::get(getContext(), result.getBitWidth(), IntegerType::Signed);
+  return IntegerAttr::get(resultType, result);
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
@@ -1829,7 +1876,7 @@ static OpFoldResult foldMux(OpTy op, typename OpTy::FoldAdaptor adaptor) {
   // The following folds require that the result has a known width. Otherwise
   // the mux requires an additional padding operation to be inserted, which is
   // not possible in a fold.
-  if (op.getType().getBitWidthOrSentinel() < 0)
+  if (op.getType().hasUninferredWidth())
     return {};
 
   // mux(0/1, x, y) -> x or y
@@ -2321,10 +2368,17 @@ static LogicalResult canonicalizeSingleSetConnect(MatchingConnectOp op,
   } else {
     // Constants/invalids in the same block are ok to forward, even through
     // reg's since the clocking doesn't matter for constants.
-    if (!isa<ConstantOp>(srcValueOp))
+    auto cnst = dyn_cast<ConstantOp>(srcValueOp);
+    if (!cnst)
       return failure();
     if (srcValueOp->getBlock() != declBlock)
       return failure();
+    // A register with a time-zero `initial` value only reaches the constant on
+    // the first edge; until then it holds `initial`.  Forwarding the constant
+    // would change its value at time zero, so bail unless the two agree.
+    if (auto reg = dyn_cast<RegOp>(connectedDecl))
+      if (!preservesInitial(reg.getInitialAttr(), cnst.getValue()))
+        return failure();
   }
 
   // Ok, we know we are doing the transformation.
@@ -2731,17 +2785,6 @@ OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
 }
 
 namespace {
-// Returns true if replacing a register that has an initial value with a
-// foldedValue does not change the initial behavior.
-bool preservesInitial(Operation *reg, IntegerAttr initial,
-                      std::optional<APInt> foldedValue = std::nullopt) {
-  if (!initial)
-    return true;
-  if (!foldedValue)
-    return false;
-  return initial.getValue() == *foldedValue;
-}
-
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
 struct FoldResetMux : public mlir::OpRewritePattern<RegResetOp> {
@@ -2785,7 +2828,7 @@ struct FoldResetMux : public mlir::OpRewritePattern<RegResetOp> {
 
     // Bail if replacing the register with the constant would change its
     // time-zero simulation value.
-    if (!preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
+    if (!preservesInitial(reg.getInitialAttr(), constOp.getValue()))
       return failure();
 
     // Make sure the constant dominates all users.
@@ -2821,9 +2864,9 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
   // Bail if replacing the register with the constant would change its
   // time-zero simulation value.
   if (auto constOp = dyn_cast_or_null<ConstantOp>(resetValue.getDefiningOp())) {
-    if (!preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
+    if (!preservesInitial(reg.getInitialAttr(), constOp.getValue()))
       return failure();
-  } else if (!preservesInitial(reg, reg.getInitialAttr())) {
+  } else if (!preservesInitial(reg.getInitialAttr())) {
     return failure();
   }
 
@@ -3679,8 +3722,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 
   // If we would fold the register to a constant, ensure the time-zero
   // simulation value is preserved.
-  if (constReg &&
-      !preservesInitial(reg, reg.getInitialAttr(), constOp.getValue()))
+  if (constReg && !preservesInitial(reg.getInitialAttr(), constOp.getValue()))
     return failure();
 
   // Make sure the constant dominates all users.

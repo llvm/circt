@@ -12,7 +12,7 @@ firrtl.circuit "Component" {
   // CHECK-LABEL: om.class private @Class_1
   // CHECK-SAME: -> (someInt: !om.integer)
   firrtl.class private @Class_1(out %someInt: !firrtl.integer) {
-    // CHECK: %[[C1:.+]] = om.constant #om.integer<1 : si4> : !om.integer
+    // CHECK: %[[C1:.+]] = om.constant #om.integer<1 : si64> : !om.integer
     %0 = firrtl.integer 1
     // CHECK: om.class.fields %[[C1]] : !om.integer
     firrtl.propassign %someInt, %0 : !firrtl.integer
@@ -61,8 +61,8 @@ firrtl.circuit "Component" {
   firrtl.class @TwoInputs(in %a: !firrtl.integer, in %b: !firrtl.integer) { }
 
   firrtl.class @AssignInputsInOrder() {
-    // CHECK: %0 = om.constant #om.integer<123 : si12> : !om.integer
-    // CHECK: %1 = om.constant #om.integer<456 : si12> : !om.integer
+    // CHECK: %0 = om.constant #om.integer<123 : si64> : !om.integer
+    // CHECK: %1 = om.constant #om.integer<456 : si64> : !om.integer
     // CHECK: %2 = om.object @TwoInputs(%basepath, %0, %1) : (!om.basepath, !om.integer, !om.integer) -> !om.class.type<@TwoInputs>
     %x = firrtl.integer 123
     %y = firrtl.integer 456
@@ -76,8 +76,8 @@ firrtl.circuit "Component" {
   }
 
   firrtl.class @AssignInputsOutOfOrder() {
-    // CHECK: %0 = om.constant #om.integer<123 : si12> : !om.integer
-    // CHECK: %1 = om.constant #om.integer<456 : si12> : !om.integer
+    // CHECK: %0 = om.constant #om.integer<123 : si64> : !om.integer
+    // CHECK: %1 = om.constant #om.integer<456 : si64> : !om.integer
     // CHECK: %2 = om.object @TwoInputs(%basepath, %0, %1) : (!om.basepath, !om.integer, !om.integer) -> !om.class.type<@TwoInputs>
     %x = firrtl.integer 123
     %y = firrtl.integer 456
@@ -240,7 +240,7 @@ firrtl.circuit "PathModule" {
     %0 = firrtl.integer 123
     %1 = firrtl.list.create %propIn, %0 : !firrtl.list<integer>
     firrtl.propassign %propOut, %1 : !firrtl.list<integer>
-    // CHECK:  %[[c0:.+]] = om.constant #om.integer<123 : si12> : !om.integer
+    // CHECK:  %[[c0:.+]] = om.constant #om.integer<123 : si64> : !om.integer
     // CHECK:  %[[c1:.+]] = om.list_create %propIn, %[[c0]] : !om.integer
     // CHECK:  om.class.fields %[[c1]] : !om.list<!om.integer>
   }
@@ -458,6 +458,28 @@ firrtl.circuit "StringCat" {
     %0 = firrtl.prop.eq %a, %b : !firrtl.integer
     // CHECK: om.class.fields %[[EQ]]
     firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @ListContainsClass
+  firrtl.class @ListContainsClass(
+      in %strings: !firrtl.list<string>, in %string: !firrtl.string,
+      in %integers: !firrtl.list<integer>, in %integer: !firrtl.integer,
+      in %booleans: !firrtl.list<bool>, in %boolean: !firrtl.bool,
+      out %stringFound: !firrtl.bool, out %integerFound: !firrtl.bool,
+      out %booleanFound: !firrtl.bool) {
+    // CHECK: %[[STRING_FOUND:.+]] = om.list_contains %strings, %string : <!om.string>{{$}}
+    %string_found = firrtl.list.contains %strings, %string : !firrtl.list<string>
+    firrtl.propassign %stringFound, %string_found : !firrtl.bool
+
+    // CHECK: %[[INTEGER_FOUND:.+]] = om.list_contains %integers, %integer : <!om.integer>{{$}}
+    %integer_found = firrtl.list.contains %integers, %integer : !firrtl.list<integer>
+    firrtl.propassign %integerFound, %integer_found : !firrtl.bool
+
+    // CHECK: %[[BOOLEAN_FOUND:.+]] = om.list_contains %booleans, %boolean : <i1>{{$}}
+    %boolean_found = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>
+    firrtl.propassign %booleanFound, %boolean_found : !firrtl.bool
+
+    // CHECK: om.class.fields %[[STRING_FOUND]], %[[INTEGER_FOUND]], %[[BOOLEAN_FOUND]] : i1, i1, i1
   }
 
   // CHECK-LABEL: om.class @BoolAndClass
@@ -912,5 +934,35 @@ firrtl.circuit "AltBasePathMultiParent" {
       annotations = [{class = "circt.tracker", id = distinct[0]<>}]
     } : !firrtl.uint<1>
     firrtl.instance foo @Foo()
+  }
+}
+
+// Preserve the order of inputs when output fields are interleaved.
+// CHECK-LABEL: firrtl.circuit "CreateMixedInputs"
+firrtl.circuit "CreateMixedInputs" {
+  firrtl.extclass @Class(out result: !firrtl.string, in str: !firrtl.string, out unused: !firrtl.integer, in int: !firrtl.integer)
+  // CHECK: om.class @CreateMixedInputs_Class(%[[BASE:[^: ]+]]: !om.basepath, %[[STR:[^: ]+]]: !om.string, %[[INT:[^: ]+]]: !om.integer)
+  firrtl.module @CreateMixedInputs(in %str: !firrtl.string, in %int: !firrtl.integer, out %out: !firrtl.string) {
+    // CHECK: %[[OBJ:.*]] = om.object @Class(%[[BASE]], %[[STR]], %[[INT]]) : (!om.basepath, !om.string, !om.integer) -> !om.class.type<@Class>
+    %obj = firrtl.object.create(%str, %int) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@Class(out result: !firrtl.string, in str: !firrtl.string, out unused: !firrtl.integer, in int: !firrtl.integer)>
+    // CHECK: %[[RESULT:.*]] = om.object.field %[[OBJ]]["result"] : (!om.class.type<@Class>) -> !om.string
+    // CHECK: om.class.fields %[[RESULT]] : !om.string
+    %result = firrtl.object.subfield %obj[result] : !firrtl.class<@Class(out result: !firrtl.string, in str: !firrtl.string, out unused: !firrtl.integer, in int: !firrtl.integer)>
+    firrtl.propassign %out, %result : !firrtl.string
+  }
+}
+
+// Lower value-like object creation to an OM object.
+// CHECK-LABEL: firrtl.circuit "Create"
+firrtl.circuit "Create" {
+  firrtl.extclass @Class(in arg: !firrtl.string, out result: !firrtl.string)
+  // CHECK: om.class @Create_Class(%[[BASE:[^: ]+]]: !om.basepath, %[[ARG:[^: ]+]]: !om.string)
+  firrtl.module @Create(in %arg: !firrtl.string, out %out: !firrtl.string) {
+    // CHECK: %[[OBJ:.*]] = om.object @Class(%[[BASE]], %[[ARG]]) : (!om.basepath, !om.string) -> !om.class.type<@Class>
+    %obj = firrtl.object.create(%arg) : (!firrtl.string) -> !firrtl.class<@Class(in arg: !firrtl.string, out result: !firrtl.string)>
+    // CHECK: %[[RESULT:.*]] = om.object.field %[[OBJ]]["result"] : (!om.class.type<@Class>) -> !om.string
+    // CHECK: om.class.fields %[[RESULT]] : !om.string
+    %result = firrtl.object.subfield %obj[result] : !firrtl.class<@Class(in arg: !firrtl.string, out result: !firrtl.string)>
+    firrtl.propassign %out, %result : !firrtl.string
   }
 }

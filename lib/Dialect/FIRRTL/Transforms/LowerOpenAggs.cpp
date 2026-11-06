@@ -10,7 +10,7 @@
 // aggregate types with hardware aggregates, with non-hardware fields
 // expanded out as with LowerTypes.
 //
-// This pass supports reference and property types.
+// This pass supports reference, property, and domain types.
 //
 //===----------------------------------------------------------------------===//
 
@@ -44,7 +44,7 @@ using namespace firrtl;
 
 namespace {
 
-/// Information on non-hw (ref/prop) elements.
+/// Information on non-hw (ref/property/domain) elements.
 struct NonHWField {
   /// Type of the field, not a hardware type.
   FIRRTLType type;
@@ -782,6 +782,10 @@ FailureOr<MappingInfo> Visitor::mapType(Type type, Location errorLoc,
               auto f = NonHWField{prop, fieldID, flip, {}};
               suffix.toVector(f.suffix);
               pi.fields.emplace_back(std::move(f));
+              return FIRRTLBaseType{};
+            })
+            .template Case<DomainType>([&](DomainType) {
+              llvm_unreachable("domain types cannot appear in open aggregates");
               return FIRRTLBaseType{};
             })
             .Default([&](auto _) {

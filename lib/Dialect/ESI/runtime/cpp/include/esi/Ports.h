@@ -368,6 +368,23 @@ public:
       return tryWriteImpl(maybePadEmptyMessage(data));
     }
   }
+
+  /// Non-blocking write of a multi-segment message. On success, takes
+  /// ownership of `msg` (leaving it null) and returns true. On failure, returns
+  /// false and leaves `msg` untouched so the caller can retry with the same
+  /// message. Same completion semantics as `tryWrite(const MessageData &)`.
+  /// Default flattens and calls the regular tryWrite(). Backends override for
+  /// scatter-gather / chunked-DMA support.
+  virtual bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg) {
+    if (!msg)
+      throw std::runtime_error(
+          "WriteChannelPort::tryWrite: null SegmentedMessageData");
+    if (!tryWrite(msg->toMessageData()))
+      return false;
+    msg.reset();
+    return true;
+  }
+
   /// Flush any buffered data. Returns true if all data was flushed.
   ///
   /// If `translateMessages` is false, calling `flush()` will immediately return

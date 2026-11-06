@@ -37,6 +37,10 @@ void registerHWPasses() { registerPasses(); }
 
 int64_t hwGetBitWidth(MlirType type) { return getBitWidth(unwrap(type)); }
 
+MlirType hwGetCanonicalType(MlirType type) {
+  return wrap(getCanonicalType(unwrap(type)));
+}
+
 bool hwTypeIsAValueType(MlirType type) { return isHWValueType(unwrap(type)); }
 
 bool hwTypeIsAArrayType(MlirType type) { return isa<ArrayType>(unwrap(type)); }
@@ -83,16 +87,13 @@ MlirType hwModuleTypeGet(MlirContext ctx, intptr_t numPorts,
   for (intptr_t i = 0; i < numPorts; ++i) {
     HWModulePort port = ports[i];
 
-    ModulePort::Direction dir;
+    hw::ModulePort::Direction dir;
     switch (port.dir) {
     case HWModulePortDirection::Input:
       dir = ModulePort::Direction::Input;
       break;
     case HWModulePortDirection::Output:
       dir = ModulePort::Direction::Output;
-      break;
-    case HWModulePortDirection::InOut:
-      dir = ModulePort::Direction::InOut;
       break;
     }
 
@@ -139,9 +140,6 @@ void hwModuleTypeGetPort(MlirType type, intptr_t index, HWModulePort *ret) {
     break;
   case ModulePort::Direction::Output:
     dir = HWModulePortDirection::Output;
-    break;
-  case ModulePort::Direction::InOut:
-    dir = HWModulePortDirection::InOut;
     break;
   }
 

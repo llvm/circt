@@ -108,6 +108,36 @@ om.class @IntegerBinaryArithmeticFold(%x: !om.integer) -> (out1: !om.integer, ou
   om.class.fields %0, %1, %2, %3, %4, %5 : !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer
 }
 
+// CHECK-LABEL: @IntegerBitwiseOpsFold
+om.class @IntegerBitwiseOpsFold(%x: !om.integer) -> (out1: !om.integer, out2: !om.integer,
+                                                     out3: !om.integer, out4: !om.integer,
+                                                     out5: !om.integer) {
+  %i3 = om.constant #om.integer<3 : si4> : !om.integer
+  %i5 = om.constant #om.integer<5 : si4> : !om.integer
+  %neg2 = om.constant #om.integer<-2 : si4> : !om.integer
+  %wide = om.constant #om.integer<16 : si6> : !om.integer
+  %zero = om.constant #om.integer<0 : si4> : !om.integer
+
+  // CHECK-DAG: [[AND:%.+]] = om.constant #om.integer<1 : si4> : !om.integer
+  // CHECK-DAG: [[OR:%.+]] = om.constant #om.integer<7 : si4> : !om.integer
+  // CHECK-DAG: [[NOT:%.+]] = om.constant #om.integer<-1 : si4> : !om.integer
+  // -2 is sign-extended to the 6-bit width of %wide before the operation.
+  // CHECK-DAG: [[WIDEOR:%.+]] = om.constant #om.integer<-2 : si6> : !om.integer
+  // CHECK: [[DYN:%.+]] = om.integer.bitand %x, %{{.+}} : !om.integer
+  %0 = om.integer.bitand %i3, %i5 : !om.integer
+  %1 = om.integer.bitor %i3, %i5 : !om.integer
+  %2 = om.integer.bitnot %zero : !om.integer
+
+  // Mixed bit widths should still fold after extending operands.
+  %3 = om.integer.bitor %neg2, %wide : !om.integer
+
+  // Non-constant operands should remain.
+  %4 = om.integer.bitand %x, %i3 : !om.integer
+
+  // CHECK: om.class.fields [[AND]], [[OR]], [[NOT]], [[WIDEOR]], [[DYN]]
+  om.class.fields %0, %1, %2, %3, %4 : !om.integer, !om.integer, !om.integer, !om.integer, !om.integer
+}
+
 // CHECK-LABEL: @PropEqFold
 om.class @PropEqFold(%str: !om.string, %b: i1, %n: !om.integer) -> (out1: i1, out2: i1,
                                                                      out3: i1, out4: i1,
@@ -204,4 +234,128 @@ om.class @IntegerBitwiseFold(%b: i8) -> (out1: i8, out2: i8, out3: i8,
 
   // CHECK: om.class.fields [[ZERO]], [[ONES]], [[ONES]], [[ZERO]], [[AND]], [[OR]], [[XOR]], %b
   om.class.fields %0, %1, %2, %3, %4, %5, %6, %7 : i8, i8, i8, i8, i8, i8, i8, i8
+}
+
+// CHECK-LABEL: @ListCreateFold
+// CHECK-SAME: (%0: !om.integer)
+om.class @ListCreateFold(%0: !om.integer) -> (
+    strings: !om.list<!om.string>, booleans: !om.list<i1>,
+    integers: !om.list<!om.integer>, empty: !om.list<!om.string>,
+    dynamic: !om.list<!om.integer>, mixed: !om.list<!om.integer>) {
+  // Integer lists preserve arbitrary-precision signed values and types.
+  %1 = om.constant #om.integer<-36755551979133953793 : si66> : !om.integer
+  %2 = om.constant #om.integer<36755551979133953793 : si66> : !om.integer
+  // CHECK: [[NEGATIVE:%[0-9]+]] = om.constant #om.integer<-36755551979133953793 : si66> : !om.integer
+  // CHECK: [[INTEGERS:%[0-9]+]] = om.constant #om.list<!om.integer, [#om.integer<-36755551979133953793 : si66> : !om.integer, #om.integer<36755551979133953793 : si66> : !om.integer]> : !om.list<!om.integer>
+  %3 = om.list_create %1, %2 : !om.integer
+
+  // String lists fold to a list attribute.
+  %4 = om.constant "a" : !om.string
+  %5 = om.constant "b" : !om.string
+  // CHECK: [[STRINGS:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string]> : !om.list<!om.string>
+  %6 = om.list_create %4, %5 : !om.string
+
+  // Boolean lists fold to a list attribute.
+  %7 = om.constant true
+  %8 = om.constant false
+  // CHECK: [[BOOLEANS:%[0-9]+]] = om.constant #om.list<i1, [true, false]> : !om.list<i1>
+  %9 = om.list_create %7, %8 : i1
+
+  // Empty string lists fold to an empty list attribute.
+  // CHECK: [[EMPTY:%[0-9]+]] = om.constant #om.list<!om.string, []> : !om.list<!om.string>
+  %10 = om.list_create : !om.string
+
+  // Nonconstant list elements keep the list_create operation.
+  // CHECK: [[DYNAMIC:%[0-9]+]] = om.list_create [[ARG:%_0]] : !om.integer
+  %11 = om.list_create %0 : !om.integer
+
+  // Mixed constant and nonconstant inputs do not fold.
+  // CHECK: [[MIXED:%[0-9]+]] = om.list_create [[NEGATIVE]], [[ARG]] : !om.integer
+  %12 = om.list_create %1, %0 : !om.integer
+
+  // CHECK: om.class.fields [[STRINGS]], [[BOOLEANS]], [[INTEGERS]], [[EMPTY]], [[DYNAMIC]], [[MIXED]]
+  om.class.fields %6, %9, %3, %10, %11, %12 :
+      !om.list<!om.string>, !om.list<i1>, !om.list<!om.integer>,
+      !om.list<!om.string>, !om.list<!om.integer>, !om.list<!om.integer>
+}
+
+// List concatenation folds constant operands and preserves identity for a
+// single operand. This test uses list attributes directly, independently of
+// the list_create folder.
+// CHECK-LABEL: @ListConcatFold
+om.class @ListConcatFold(
+    %0: !om.list<!om.string>, %1: !om.list<!om.string>) -> (
+    joined: !om.list<!om.string>, empty: !om.list<!om.string>,
+    single_constant: !om.list<!om.string>, single_dynamic: !om.list<!om.string>,
+    nested: !om.list<!om.string>, dynamic: !om.list<!om.string>) {
+  // Concatenating multiple constants folds to one list constant.
+  %2 = om.constant #om.list<!om.string, ["a" : !om.string]>
+      : !om.list<!om.string>
+  %3 = om.constant #om.list<!om.string, ["b" : !om.string]>
+      : !om.list<!om.string>
+  %4 = om.constant #om.list<!om.string, ["c" : !om.string]>
+      : !om.list<!om.string>
+  // CHECK: [[LIST_A:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string]> : !om.list<!om.string>{{$}}
+  // CHECK: [[JOINED:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string, "c" : !om.string]> : !om.list<!om.string>{{$}}
+  %5 = om.list_concat %2, %3, %4 : !om.list<!om.string>
+
+  // Concatenating two empty lists folds to an empty list.
+  %6 = om.constant #om.list<!om.string, []> : !om.list<!om.string>
+  %7 = om.constant #om.list<!om.string, []> : !om.list<!om.string>
+  // CHECK: [[EMPTY:%[0-9]+]] = om.constant #om.list<!om.string, []> : !om.list<!om.string>{{$}}
+  %8 = om.list_concat %6, %7 : !om.list<!om.string>
+
+  // A single constant operand is an identity.
+  %9 = om.list_concat %2 : !om.list<!om.string>
+
+  // A single dynamic operand is an identity.
+  %10 = om.list_concat %0 : !om.list<!om.string>
+
+  // Nested constant concatenations fold to the same list constant.
+  %11 = om.list_concat %2, %3 : !om.list<!om.string>
+  %12 = om.list_concat %11, %4 : !om.list<!om.string>
+
+  // Multiple dynamic operands remain unfurled.
+  // CHECK: [[DYNAMIC_CONCAT:%[0-9]+]] = om.list_concat [[ARG0:%_0]], [[ARG1:%_1]] : <!om.string>{{$}}
+  %13 = om.list_concat %0, %1 : !om.list<!om.string>
+
+  // CHECK: om.class.fields [[JOINED]], [[EMPTY]], [[LIST_A]], [[ARG0]], [[JOINED]], [[DYNAMIC_CONCAT]]
+  om.class.fields %5, %8, %9, %10, %12, %13 :
+      !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
+      !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>
+}
+
+// CHECK-LABEL: @ListContainsFold
+om.class @ListContainsFold() -> (
+    string_found: i1, string_absent: i1, bool_found: i1, bool_absent: i1,
+    integer_found: i1, integer_absent: i1, empty: i1) {
+  %string_list = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string]> : !om.list<!om.string>
+  %string_found_value = om.constant "b" : !om.string
+  %string_absent_value = om.constant "absent" : !om.string
+  %string_found = om.list_contains %string_list, %string_found_value : !om.list<!om.string>
+  %string_absent = om.list_contains %string_list, %string_absent_value : !om.list<!om.string>
+
+  %bool_list = om.constant #om.list<i1, [true]> : !om.list<i1>
+  %true = om.constant true
+  %false = om.constant false
+  %bool_found = om.list_contains %bool_list, %true : !om.list<i1>
+  %bool_absent = om.list_contains %bool_list, %false : !om.list<i1>
+
+  %integer_list = om.constant #om.list<!om.integer, [#om.integer<42 : si64>]> : !om.list<!om.integer>
+  %integer_found_value = om.constant #om.integer<42 : si64> : !om.integer
+  %integer_absent_value = om.constant #om.integer<0 : si64> : !om.integer
+  %integer_found = om.list_contains %integer_list, %integer_found_value : !om.list<!om.integer>
+  %integer_absent = om.list_contains %integer_list, %integer_absent_value : !om.list<!om.integer>
+
+  %empty_list = om.constant #om.list<!om.string, []> : !om.list<!om.string>
+  %empty_search = om.constant "a" : !om.string
+  %empty = om.list_contains %empty_list, %empty_search : !om.list<!om.string>
+
+  // CHECK-NOT: om.list_contains
+  // CHECK-DAG: [[TRUE:%[0-9]+]] = om.constant true
+  // CHECK-DAG: [[FALSE:%[0-9]+]] = om.constant false
+  // CHECK-NOT: om.list_contains
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[FALSE]] : i1, i1, i1, i1, i1, i1, i1
+  om.class.fields %string_found, %string_absent, %bool_found, %bool_absent,
+      %integer_found, %integer_absent, %empty : i1, i1, i1, i1, i1, i1, i1
 }

@@ -127,4 +127,52 @@ def RegOfVecToMem : Pass<"seq-reg-of-vec-to-mem", "hw::HWModuleOp"> {
   }];
 }
 
+def InferClockPorts : Pass<"seq-infer-clock-ports", "mlir::ModuleOp"> {
+  let summary = "Infer `!seq.clock` types for `i1` ports used as clocks";
+  let description = [{
+    Walks backwards from every `seq.to_clock` through the instance hierarchy
+    and retypes the `i1` module and instance ports it passes through to
+    `!seq.clock`. Input ports are promoted whenever they are used as a clock;
+    output ports only if they are driven by a clock, so combinational logic on
+    a clock path (e.g. a gated clock) stays `i1`. Remaining non-clock uses of a
+    promoted value are rewired through a single `seq.from_clock`.
+  }];
+  let dependentDialects = [
+    "circt::hw::HWDialect",
+    "circt::seq::SeqDialect"
+  ];
+  let options = [
+    Option<"promotePublicPorts", "promote-public-ports", "bool", "true",
+           "Also retype ports of publicly visible modules">
+  ];
+  let statistics = [
+    Statistic<"numInputPortsPromoted", "num-input-ports-promoted",
+      "Number of input ports retyped to !seq.clock">,
+    Statistic<"numOutputPortsPromoted", "num-output-ports-promoted",
+      "Number of output ports retyped to !seq.clock">,
+    Statistic<"numCastsRemoved", "num-casts-removed",
+      "Number of seq.to_clock casts eliminated">
+  ];
+}
+
+def UnrollMemoryLatencies : Pass<"seq-unroll-mem-latency", "hw::HWModuleOp"> {
+  let summary = "Unrolls memory port latencies into registers";
+  let description = [{
+    Converts all memory port latencies, for both `seq.firmem` and `seq.hlmem`,
+    into explicit latencies by padding ports with shift registers, such that 
+    for a latency of `n`, reads and writes occur `n` cycles after the data 
+    was made available. 
+    
+    This means that if at cycle 10 a read port with latency 2 has address 0 
+    and is enabled, then the read data port will yield the data from address 0 
+    at cycle 12. This is modeled by padding the read-address port with a 
+    shift-register of depth equal to the latency of that port.
+
+    For writes, the default latency is 1, therefore we can pad the write port's 
+    data and address inputs with a shift-register of depth n-1.
+  }];
+
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

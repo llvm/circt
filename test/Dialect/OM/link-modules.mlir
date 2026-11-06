@@ -86,3 +86,29 @@ module {
     }
   }
 }
+
+// -----
+
+// Check that class types nested in a list constant's attribute are renamed.
+module {
+  // CHECK-LABEL: om.class @Conflict_A()
+  // CHECK-LABEL: om.class @UseConflict()
+  // CHECK-SAME: -> (items: !om.list<!om.list<!om.class.type<@Conflict_A>>>)
+  // CHECK-NEXT: %{{.+}} = om.constant #om.list<!om.list<!om.class.type<@Conflict_A>>, [#om.list<!om.class.type<@Conflict_A>, []> : !om.list<!om.class.type<@Conflict_A>>]> : !om.list<!om.list<!om.class.type<@Conflict_A>>>{{$}}
+  // CHECK-NEXT: om.class.fields %{{.+}} : !om.list<!om.list<!om.class.type<@Conflict_A>>>
+
+  module attributes {om.namespace = "A"} {
+    om.class @Conflict() {
+      om.class.fields
+    }
+    om.class @UseConflict() -> (items: !om.list<!om.list<!om.class.type<@Conflict>>>) {
+      %items = om.constant #om.list<!om.list<!om.class.type<@Conflict>>, [#om.list<!om.class.type<@Conflict>, []> : !om.list<!om.class.type<@Conflict>>]> : !om.list<!om.list<!om.class.type<@Conflict>>>
+      om.class.fields %items : !om.list<!om.list<!om.class.type<@Conflict>>>
+    }
+  }
+  module attributes {om.namespace = "B"} {
+    om.class @Conflict() {
+      om.class.fields
+    }
+  }
+}

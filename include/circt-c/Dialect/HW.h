@@ -39,7 +39,7 @@ struct HWUnionFieldInfo {
 };
 typedef struct HWUnionFieldInfo HWUnionFieldInfo;
 
-enum HWModulePortDirection { Input, Output, InOut };
+enum HWModulePortDirection { Input, Output };
 typedef enum HWModulePortDirection HWModulePortDirection;
 
 struct HWModulePort {
@@ -66,6 +66,9 @@ MLIR_CAPI_EXPORTED void registerHWPasses(void);
 /// value of this type. Returns -1 if the type is not known or cannot be
 /// statically computed.
 MLIR_CAPI_EXPORTED int64_t hwGetBitWidth(MlirType);
+
+/// Recursively remove HW type aliases from a type and its subelements.
+MLIR_CAPI_EXPORTED MlirType hwGetCanonicalType(MlirType type);
 
 /// Return true if the specified type can be used as an HW value type, that is
 /// the set of types that can be composed together to represent synthesized,

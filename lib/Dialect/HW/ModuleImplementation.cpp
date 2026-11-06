@@ -267,8 +267,6 @@ static ParseResult parseDirection(OpAsmParser &p, ModulePort::Direction &dir) {
     dir = ModulePort::Direction::Input;
   else if (key == "out")
     dir = ModulePort::Direction::Output;
-  else if (key == "inout")
-    dir = ModulePort::Direction::InOut;
   else
     return p.emitError(p.getCurrentLocation(), "unknown port direction '")
            << key << "'";
@@ -370,8 +368,6 @@ ParseResult module_like_impl::parseModuleSignature(
     ports.push_back(
         {StringAttr::get(context, arg.rawName), arg.type, arg.direction});
     // rewrite type AFTER constructing ports.  This will be used in block args.
-    if (arg.direction == ModulePort::InOut)
-      arg.type = InOutType::get(arg.type);
     if (!arg.sourceLoc)
       arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
   }
@@ -385,8 +381,6 @@ static const char *directionAsString(ModulePort::Direction dir) {
     return "in";
   if (dir == ModulePort::Direction::Output)
     return "out";
-  if (dir == ModulePort::Direction::InOut)
-    return "inout";
   assert(0 && "Unknown port direction");
   abort();
   return "unknown";

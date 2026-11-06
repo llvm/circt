@@ -66,9 +66,9 @@ firrtl.circuit "Test" {
   // CHECK-NOT: firrtl.layer @GoodbyeCruelWorld
   firrtl.layer @GoodbyeCruelWorld bind {}
 
-  // CHECK-LABEL firrtl.module @WithLayerBlock
+  // CHECK-LABEL: firrtl.module @WithLayerBlock
   firrtl.module @WithLayerBlock() {
-    // CHECK-NOT firrtl.layerblock @GoodbyeCruelWorld
+    // CHECK-NOT: firrtl.layerblock @GoodbyeCruelWorld
     firrtl.layerblock @GoodbyeCruelWorld {
     }
   }

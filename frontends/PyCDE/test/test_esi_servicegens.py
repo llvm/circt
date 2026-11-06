@@ -1,3 +1,4 @@
+# REQUIRES: zlib
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 

@@ -960,6 +960,7 @@ ParseResult FIRParser::parseRegistryType(FIRRTLType &result) {
 ///
 // NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
+  auto typeLoc = getToken().getLoc();
   switch (getToken().getKind()) {
   default:
     return emitError(message), failure();
@@ -1174,8 +1175,13 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
             cast<BundleType::ElementType>(element.type)};
       });
       result = BundleType::get(getContext(), llvm::to_vector(bundleElements));
-    } else
-      result = OpenBundleType::get(getContext(), elements);
+    } else {
+      result = OpenBundleType::getChecked(
+          [&]() { return emitError(typeLoc); }, getContext(),
+          ArrayRef<OpenBundleType::BundleElement>(elements));
+      if (!result)
+        return failure();
+    }
     break;
   }
 
@@ -1307,8 +1313,12 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     auto baseType = type_dyn_cast<FIRRTLBaseType>(result);
     if (baseType)
       result = FVectorType::get(baseType, size);
-    else
-      result = OpenVectorType::get(result, size);
+    else {
+      result = OpenVectorType::getChecked([&]() { return emitError(typeLoc); },
+                                          result, size);
+      if (!result)
+        return failure();
+    }
   }
 
   return success();
@@ -2040,6 +2050,7 @@ private:
   ParseResult parseCatExp(Value &result);
   ParseResult parseStringConcatExp(Value &result);
   ParseResult parsePropEqExp(Value &result);
+  ParseResult parseListContainsExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
   ParseResult parseUnknownProperty(Value &result);
 
@@ -2445,6 +2456,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_prop_eq:
     if (requireFeature({6, 0, 0}, "property equality") ||
         parsePropEqExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_list_contains:
+    if (requireFeature(missingSpecFIRVersion, "list contains") ||
+        parseListContainsExp(result))
       return failure();
     break;
 
@@ -2953,6 +2970,39 @@ ParseResult FIRStmtParser::parsePropEqExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = PropEqOp::create(builder, lhs, rhs);
+  return success();
+}
+
+/// list-contains-exp ::= 'list_contains' '(' exp ',' exp ')'
+ParseResult FIRStmtParser::parseListContainsExp(Value &result) {
+  consumeToken(FIRToken::lp_list_contains);
+
+  auto loc = getToken().getLoc();
+  Value list, element;
+  locationProcessor.setLoc(loc);
+  if (parseExp(list, "expected list expression in list_contains expression") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(element,
+               "expected element expression in list_contains expression") ||
+      parseToken(FIRToken::r_paren, "expected ')'"))
+    return failure();
+
+  auto listType = dyn_cast<ListType>(list.getType());
+  if (!listType)
+    return emitError(loc, "first operand of list_contains must be a List");
+
+  auto elementType = listType.getElementType();
+  if (element.getType() != elementType)
+    return emitError(loc, "list_contains element type ")
+           << element.getType() << " does not match list element type "
+           << elementType;
+
+  if (!isa<StringType, FIntegerType, BoolType>(elementType))
+    return emitError(loc, "list_contains does not support elements of type ")
+           << elementType;
+
+  locationProcessor.setLoc(loc);
+  result = ListContainsOp::create(builder, list, element);
   return success();
 }
 
@@ -3891,14 +3941,20 @@ ParseResult FIRStmtParser::parseDomainExp(Value &result) {
   return success();
 }
 
-/// ref_expr ::= probe | rwprobe | static_reference
+/// ref_expr ::= 'probe' '(' static_reference ')'
+///          ::= 'rwprobe' '(' static_reference ')'
+///          ::= id
+///          ::= ref_expr '.' id
+///          ::= ref_expr '[' int ']'
 // NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
   auto token = getToken().getKind();
   if (token == FIRToken::lp_probe)
-    return parseProbe(result);
+    return failure(parseProbe(result) ||
+                   parseOptionalExpPostscript(result, /*allowDynamic=*/false));
   if (token == FIRToken::lp_rwprobe)
-    return parseRWProbe(result);
+    return failure(parseRWProbe(result) ||
+                   parseOptionalExpPostscript(result, /*allowDynamic=*/false));
 
   // Default to parsing as static reference expression.
   // Don't check token kind, we need to support literal_identifier and keywords,
@@ -4229,12 +4285,18 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
            << "unknown domain '" << domainKind.getValue() << "'";
 
   auto domainType = DomainType::getFromDomainOp(lookup->second);
+  auto fields = domainType.getFields();
 
   // Parse optional field values
   SmallVector<Value> fieldValues;
   if (consumeIf(FIRToken::l_paren)) {
     // Parse comma-separated list of expressions
     if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+          if (fieldValues.size() >= fields.size())
+            return emitError(getToken().getLoc())
+                   << "too many field values for domain '"
+                   << domainKind.getValue() << "': expected " << fields.size();
+
           Value value;
           if (parseExp(value, "expected field value expression"))
             return failure();
@@ -4246,6 +4308,11 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
 
   if (parseOptionalInfo())
     return failure();
+
+  if (fieldValues.size() < fields.size())
+    return emitError(startLoc)
+           << "not enough field values for domain '" << domainKind.getValue()
+           << "': expected " << fields.size() << ", got " << fieldValues.size();
 
   locationProcessor.setLoc(startLoc);
   auto result =
@@ -4313,8 +4380,7 @@ ParseResult FIRStmtParser::parseRefDefine() {
   return success();
 }
 
-/// read ::= '(' ref_expr ')'
-/// XXX: spec says static_reference, allow ref_expr anyway for read(probe(x)).
+/// read ::= 'read' '(' ref_expr ')'
 ParseResult FIRStmtParser::parseRefRead(Value &result) {
   auto startTok = consumeToken(FIRToken::lp_read);
 
@@ -6067,8 +6133,9 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   }
 
   auto builder = circuit.getBodyBuilder();
-  auto domainOp = DomainOp::create(builder, info.getLoc(), name,
-                                   builder.getArrayAttr(fields));
+  auto domainOp =
+      DomainOp::create(builder, info.getLoc(), name, /*sym_visibility=*/{},
+                       builder.getArrayAttr(fields));
 
   // Stash the domain name -> op in the constants, so we can resolve Domain
   // types.
@@ -6330,7 +6397,7 @@ ParseResult FIRCircuitParser::parseFormalLike(CircuitOp circuit,
     }
   }
 
-  Op::create(builder, info.getLoc(), id, moduleName,
+  Op::create(builder, info.getLoc(), id, /*sym_visibility=*/{}, moduleName,
              params.getDictionary(getContext()));
   return success();
 }
@@ -6435,7 +6502,8 @@ ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
     return failure();
 
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
-  auto optionOp = OptionOp::create(builder, info.getLoc(), id);
+  auto optionOp =
+      OptionOp::create(builder, info.getLoc(), id, /*sym_visibility=*/{});
   auto *block = new Block;
   optionOp.getBody().push_back(block);
   builder.setInsertionPointToEnd(block);
@@ -6504,8 +6572,8 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
       return failure();
     auto builder = OpBuilder::atBlockEnd(block);
     // Create the layer definition and give it an empty block.
-    auto layerOp =
-        LayerOp::create(builder, info.getLoc(), id, *layerConvention);
+    auto layerOp = LayerOp::create(builder, info.getLoc(), id,
+                                   /*sym_visibility=*/{}, *layerConvention);
     layerOp->getRegion(0).push_back(new Block());
     if (outputDir)
       layerOp->setAttr("output_file", outputDir);
@@ -6754,10 +6822,11 @@ DoneParsing:
     DenseMap<Attribute, Location> nameToOrigLoc;
     for (auto &op : *circuit.getBodyBlock()) {
       // Check for a symbol name attribute.
-      auto nameAttr =
-          op.getAttrOfType<StringAttr>(mlir::SymbolTable::getSymbolAttrName());
-      if (!nameAttr)
+      auto symbol = dyn_cast<mlir::SymbolOpInterface>(&op);
+      if (!symbol)
         continue;
+
+      auto nameAttr = symbol.getNameAttr();
 
       // Try to insert this symbol into the table.
       auto it = nameToOrigLoc.try_emplace(nameAttr, op.getLoc());

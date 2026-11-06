@@ -653,9 +653,9 @@ static int runChannelMultiBurstListWrite(Accelerator *accel) {
 // a static header field. The 2-bit count caps each burst at 3 items, so the
 // host serializer splits the 7-item list into three bursts (3 + 3 + 1). The
 // header content (ui16 tag + 2-bit count = 18 bits) does not fill the 32-bit
-// data frame, so this exercises the MSB-aligned, sub-byte frame layout
-// end-to-end: the generated facade must place the count at bits [15:14] and
-// the tag at bits [31:16] to match CIRCT's frame lowering, or the HW reads a
+// data frame, so this exercises the LSB-aligned, sub-byte frame layout
+// end-to-end: the generated facade must place the count at bits [1:0] and
+// the tag at bits [17:2] to match CIRCT's frame lowering, or the HW reads a
 // garbage count and never reports a match.
 //===----------------------------------------------------------------------===//
 static int runChannelNarrowCountListWrite(Accelerator *accel) {

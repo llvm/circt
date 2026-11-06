@@ -19,6 +19,40 @@ using namespace esi;
 
 namespace {
 
+TEST(TypedPortsTest, UnwrapTypeAlias) {
+  BitsType bits("i8", 8);
+  TypeAliasType alias("alias", "Alias", &bits);
+  TypeAliasType nested("nested", "Nested", &alias);
+  ChannelType channel("channel", &nested);
+  TypeAliasType channelAlias("channelAlias", "ChannelAlias", &channel);
+
+  EXPECT_EQ(unwrapTypeAlias(nullptr), nullptr);
+  EXPECT_EQ(unwrapTypeAlias(&bits), &bits);
+  EXPECT_EQ(unwrapTypeAlias(&nested), &bits);
+  EXPECT_EQ(unwrapTypeAlias(&channelAlias), &channel);
+}
+
+TEST(TypedPortsTest, GetUnwrappedAs) {
+  BitsType bits("i8", 8);
+  StructType payload("payload", {{"data", &bits}});
+  TypeAliasType alias("alias", "Alias", &payload);
+  TypeAliasType nestedAlias("nestedAlias", "NestedAlias", &alias);
+  ChannelType channel("channel", &nestedAlias);
+  TypeAliasType channelAlias("channelAlias", "ChannelAlias", &channel);
+  ChannelType outerChannel("outerChannel", &channelAlias);
+  ArrayType array("array", &payload, 2);
+
+  EXPECT_EQ(getUnwrappedAs<StructType>(nullptr), nullptr);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&payload), &payload);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&nestedAlias), &payload);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&channel), &payload);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&channelAlias), &payload);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&outerChannel), &payload);
+  EXPECT_EQ(getUnwrappedAs<BitVectorType>(&outerChannel), nullptr);
+  EXPECT_EQ(getUnwrappedAs<StructType>(&array), nullptr);
+  EXPECT_EQ(getUnwrappedAs<ArrayType>(&array), &array);
+}
+
 //===----------------------------------------------------------------------===//
 // verifyTypeCompatibility tests
 //===----------------------------------------------------------------------===//
@@ -244,10 +278,14 @@ public:
   bool isConnected() const override { return connected; }
 
   MessageData lastWritten;
+  /// When false, tryWriteImpl() rejects writes (simulates a full buffer).
+  bool acceptTryWrites = true;
 
 protected:
   void writeImpl(const MessageData &data) override { lastWritten = data; }
   bool tryWriteImpl(const MessageData &data) override {
+    if (!acceptTryWrites)
+      return false;
     lastWritten = data;
     return true;
   }
@@ -1092,6 +1130,86 @@ TEST(TypedPortsTest, TypedWritePortSegmentedMessageData) {
   EXPECT_EQ(gotItems[0], 1u);
   EXPECT_EQ(gotItems[1], 2u);
   EXPECT_EQ(gotItems[2], 3u);
+}
+
+TEST(TypedPortsTest, WriteChannelPortTryWriteSegmented) {
+  UIntType uint32("ui32", 32);
+  MockWritePort mock(&uint32);
+  mock.connect();
+
+  auto input = std::make_unique<TestSegmented>();
+  input->header.a = 0x12345678;
+  input->header.b = 0xABCD;
+  input->items = {1, 2, 3};
+  MessageData expected = input->toMessageData();
+  SegmentedMessageData *raw = input.get();
+  std::unique_ptr<SegmentedMessageData> msg = std::move(input);
+
+  // Rejected: the message must be left with the caller for a retry.
+  mock.acceptTryWrites = false;
+  EXPECT_FALSE(mock.tryWrite(msg));
+  ASSERT_NE(msg, nullptr);
+  EXPECT_EQ(msg.get(), raw);
+  EXPECT_EQ(mock.lastWritten.getSize(), 0u);
+
+  // Accepted: ownership is taken and the flattened bytes are written.
+  mock.acceptTryWrites = true;
+  EXPECT_TRUE(mock.tryWrite(msg));
+  EXPECT_EQ(msg, nullptr);
+  EXPECT_EQ(mock.lastWritten.getData(), expected.getData());
+
+  std::unique_ptr<SegmentedMessageData> null;
+  EXPECT_THROW(mock.tryWrite(null), std::runtime_error);
+}
+
+TEST(TypedPortsTest, TypedWritePortTryWriteSegmentedUniquePtr) {
+  UIntType uint32("ui32", 32);
+  MockWritePort mock(&uint32);
+
+  TypedWritePort<TestSegmented, true> typed(mock);
+  typed.connect();
+
+  auto msg = std::make_unique<TestSegmented>();
+  msg->header.a = 42;
+  msg->header.b = 7;
+  msg->items = {100, 200};
+  MessageData expected = msg->toMessageData();
+  TestSegmented *raw = msg.get();
+
+  mock.acceptTryWrites = false;
+  EXPECT_FALSE(typed.tryWrite(msg));
+  ASSERT_NE(msg, nullptr);
+  EXPECT_EQ(msg.get(), raw);
+  EXPECT_EQ(msg->items.size(), 2u);
+
+  mock.acceptTryWrites = true;
+  EXPECT_TRUE(typed.tryWrite(msg));
+  EXPECT_EQ(msg, nullptr);
+  EXPECT_EQ(mock.lastWritten.getData(), expected.getData());
+
+  std::unique_ptr<TestSegmented> null;
+  EXPECT_THROW(typed.tryWrite(null), std::runtime_error);
+}
+
+TEST(TypedPortsTest, TypedWritePortTryWriteNonSegmentedUniquePtr) {
+  UIntType uint32("ui32", 32);
+  MockWritePort mock(&uint32);
+
+  TypedWritePort<uint32_t> typed(mock);
+  typed.connect();
+
+  auto value = std::make_unique<uint32_t>(0xDEADBEEF);
+
+  mock.acceptTryWrites = false;
+  EXPECT_FALSE(typed.tryWrite(value));
+  ASSERT_NE(value, nullptr);
+  EXPECT_EQ(*value, 0xDEADBEEFu);
+
+  mock.acceptTryWrites = true;
+  EXPECT_TRUE(typed.tryWrite(value));
+  EXPECT_EQ(value, nullptr);
+  ASSERT_EQ(mock.lastWritten.getSize(), 4u);
+  EXPECT_EQ(*mock.lastWritten.as<uint32_t>(), 0xDEADBEEFu);
 }
 
 TEST(TypedPortsTest, TypedWritePortSegmentedNoTypeCheck) {

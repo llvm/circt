@@ -22,6 +22,8 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/MapVector.h"
+#include <algorithm>
+#include <cstdint>
 
 using namespace mlir;
 using namespace circt;
@@ -82,7 +84,8 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr,
+                             DPIFuncOp::getSymNameAttrName(result.name),
                              result.attributes))
     return failure();
 
@@ -152,7 +155,8 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
 void DPIFuncOp::print(OpAsmPrinter &p) {
   p << ' ';
 
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
   if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
   p.printSymbolName(getSymName());
@@ -691,6 +695,34 @@ OpFoldResult StringGetOp::fold(FoldAdaptor adaptor) {
   // Return the character at the specified index
   uint8_t ch = static_cast<uint8_t>(str[index]);
   return IntegerAttr::get(getType(), ch);
+}
+
+//===----------------------------------------------------------------------===//
+// StringSubstrOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StringSubstrOp::fold(FoldAdaptor adaptor) {
+  auto strAttr = cast_if_present<StringAttr>(adaptor.getStr());
+  auto startAttr = cast_if_present<IntegerAttr>(adaptor.getStart());
+  if (!strAttr || !startAttr)
+    return {};
+
+  auto str = strAttr.getValue();
+  auto start = std::max(int64_t(0), startAttr.getValue().getSExtValue());
+
+  if (!getEnd())
+    return StringAttr::get(getContext(), str.substr(start));
+
+  auto endAttr = cast_if_present<IntegerAttr>(adaptor.getEnd());
+  if (!endAttr)
+    return {};
+
+  auto end = endAttr.getValue().getSExtValue();
+
+  // IEEE 1800-2023 § 6.16.8 specifies we return an empty string on all OOB, but
+  // we ignore this in favour of clamping
+  return StringAttr::get(getContext(),
+                         str.substr(start, std::max(int64_t(0), end - start)));
 }
 
 //===----------------------------------------------------------------------===//

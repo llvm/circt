@@ -67,6 +67,8 @@ public:
             StringToASCIIArrayOp,
             // Misc ops
             CommentOp, ConstraintOp, RandomScopeOp,
+            // Mut ops
+            MutCreateOp, MutReadOp, MutWriteOp,
             // Effect handler ops
             EffectOp, WithHandlersOp, PerformOp, ResumeOp>(
             [&](auto expr) -> ResultType {
@@ -161,6 +163,9 @@ public:
   HANDLE(StringToLabelOp, Unhandled);
   HANDLE(StringToASCIIArrayOp, Unhandled);
   HANDLE(RandomScopeOp, Unhandled);
+  HANDLE(MutCreateOp, Unhandled);
+  HANDLE(MutReadOp, Unhandled);
+  HANDLE(MutWriteOp, Unhandled);
   HANDLE(EffectOp, Unhandled);
   HANDLE(WithHandlersOp, Unhandled);
   HANDLE(PerformOp, Unhandled);

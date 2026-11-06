@@ -4,7 +4,7 @@
 
 from ..dialects._ods_common import _cext as _ods_cext
 from ..ir import IntegerAttr, IntegerType
-from ..support import NamedValueOpView, get_value
+from ..support import NamedValueOpView, get_canonical_type, get_value
 from ._hwarith_ops_gen import *
 from ._hwarith_ops_gen import _Dialect
 
@@ -87,4 +87,7 @@ class ConstantOp(ConstantOp):
 
   @classmethod
   def create(cls, data_type, value):
-    return cls(IntegerAttr.get(data_type, value))
+    # `data_type` may be a type alias, in which case the value attribute has
+    # the aliased integer type.
+    attr = IntegerAttr.get(get_canonical_type(data_type), value)
+    return cls(attr, results=[data_type])

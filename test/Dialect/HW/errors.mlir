@@ -1,5 +1,15 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
+// expected-error @+1 {{expected exactly one nested reference in hw.typealias}}
+hw.module @missingTypeName(in %arg: !hw.typealias<@scope, i8>) {}
+
+// -----
+
+// expected-error @+1 {{expected exactly one nested reference in hw.typealias}}
+hw.module @tooManyNames(in %arg: !hw.typealias<@scope::@nested::@word, i8>) {}
+
+// -----
+
 hw.module private @test_extract(in %arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %a = comb.extract %arg0 from 6 : (i4) -> i3
@@ -554,4 +564,48 @@ hw.module @triggeredInTriggered(in %trigger : i1) {
     hw.triggered posedge %arg {
     }
   }
+}
+
+// -----
+
+hw.type_scope @ns {
+  hw.typedecl @t : !hw.array<2xi1>
+}
+
+hw.module @constantNonIntegerAlias() {
+  // expected-error @+1 {{expected an integer type, but got '!hw.typealias<@ns::@t, !hw.array<2xi1>>'}}
+  %0 = hw.constant 1 : !hw.typealias<@ns::@t, !hw.array<2xi1>>
+}
+
+// -----
+
+hw.type_scope @ns {
+  hw.typedecl @t : i4
+}
+
+hw.module @constantAliasOutOfRange() {
+  // expected-error @+1 {{constant out of range for type '!hw.typealias<@ns::@t, i4>'}}
+  %0 = hw.constant 16 : !hw.typealias<@ns::@t, i4>
+}
+
+// -----
+
+hw.type_scope @ns {
+  hw.typedecl @t : i4
+}
+
+hw.module @constantAliasTypeMismatch() {
+  // expected-error @+1 {{hw.constant attribute type 'ui4' doesn't match the result type 'i4'}}
+  %0 = "hw.constant"() <{value = 1 : ui4}> : () -> !hw.typealias<@ns::@t, i4>
+}
+
+// -----
+
+hw.type_scope @ns {
+  hw.typedecl @t : i4
+}
+
+hw.module @constantAliasWidthMismatch() {
+  // expected-error @+1 {{hw.constant attribute type 'i8' doesn't match the result type 'i4'}}
+  %0 = "hw.constant"() <{value = 1 : i8}> : () -> !hw.typealias<@ns::@t, i4>
 }

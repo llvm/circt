@@ -1117,9 +1117,14 @@ public:
       // Create TOut - it is assumed that TOut trivially
       // constructs from the input data signals of TIn.
       // To disambiguate ambiguous builders with default arguments (e.g.,
-      // twoState UnitAttr), specify attribute array explicitly.
-      return TOut::create(s.b, op.getLoc(), inputs,
-                          /* attributes */ ArrayRef<NamedAttribute>{});
+      // twoState UnitAttr), specify properties and discardable attributes.
+      typename TOut::Properties properties{};
+      TOut::populateDefaultProperties(
+          OperationName(TOut::getOperationName(), s.b.getContext()),
+          properties);
+      return TOut::create(s.b, op.getLoc(), inputs, properties,
+                          /* discardableAttributes */
+                          ArrayRef<NamedAttribute>{});
     });
   };
 };
@@ -1938,8 +1943,8 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       UnitRateConversionPattern<arith::AddIOp, comb::AddOp>,
       UnitRateConversionPattern<arith::SubIOp, comb::SubOp>,
       UnitRateConversionPattern<arith::MulIOp, comb::MulOp>,
-      UnitRateConversionPattern<arith::DivUIOp, comb::DivSOp>,
-      UnitRateConversionPattern<arith::DivSIOp, comb::DivUOp>,
+      UnitRateConversionPattern<arith::DivUIOp, comb::DivUOp>,
+      UnitRateConversionPattern<arith::DivSIOp, comb::DivSOp>,
       UnitRateConversionPattern<arith::RemUIOp, comb::ModUOp>,
       UnitRateConversionPattern<arith::RemSIOp, comb::ModSOp>,
       UnitRateConversionPattern<arith::AndIOp, comb::AndOp>,

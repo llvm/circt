@@ -34,3 +34,23 @@ hw.module @test1() {
   // CHECK: %13 = hwarith.icmp eq %5, %10 : ui2, si9
   %13 = hwarith.icmp eq %5, %10 : ui2, si9
 }
+
+// CHECK-LABEL: hw.type_scope @ns {
+// CHECK-NEXT:    hw.typedecl @uint_t : ui4
+// CHECK-NEXT:    hw.typedecl @sint_t : si4
+// CHECK-NEXT:  }
+hw.type_scope @ns {
+  hw.typedecl @uint_t : ui4
+  hw.typedecl @sint_t : si4
+}
+
+// CHECK-LABEL: @aliasedConstants
+!UIntAlias = !hw.typealias<@ns::@uint_t, ui4>
+!SIntAlias = !hw.typealias<@ns::@sint_t, si4>
+hw.module @aliasedConstants(out u: !UIntAlias, out s: !SIntAlias) {
+  // CHECK: %0 = hwarith.constant 15 : !hw.typealias<@ns::@uint_t, ui4>
+  // CHECK: %1 = hwarith.constant -2 : !hw.typealias<@ns::@sint_t, si4>
+  %0 = hwarith.constant 15 : !UIntAlias
+  %1 = hwarith.constant -2 : !SIntAlias
+  hw.output %0, %1 : !UIntAlias, !SIntAlias
+}

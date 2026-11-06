@@ -205,8 +205,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     assert(memrefShape.size() == 1 && "Only 1D memrefs are supported");
     unsigned memrefSize = memrefShape[0];
     auto memServiceDecl = esi::RandomAccessMemoryDeclOp::create(
-        b, loc, origPortInfo.name, TypeAttr::get(dataType),
-        b.getI64IntegerAttr(memrefSize));
+        b, loc, origPortInfo.name, /*sym_visibility=*/{},
+        TypeAttr::get(dataType), b.getI64IntegerAttr(memrefSize));
     esi::ServicePortInfo writePortInfo = memServiceDecl.writePortInfo();
     esi::ServicePortInfo readPortInfo = memServiceDecl.readPortInfo();
 

@@ -14,6 +14,8 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/Synth/SynthAttributes.h"
 #include "circt/Dialect/Synth/SynthDialect.h"
 #include "mlir/IR/Attributes.h"
@@ -955,6 +957,7 @@ LogicalResult LibertyParser::collectPorts(
     bool functionExist = false;
 
     // Track if this pin has a "function" attribute (only relevant for outputs).
+    bool isInOut = false;
     for (const auto &attr : sub->attrs) {
       if (attr.name == "direction") {
         auto val = dyn_cast<StringAttr>(attr.value);
@@ -964,9 +967,10 @@ LogicalResult LibertyParser::collectPorts(
           dir = hw::ModulePort::Direction::Input;
         else if (val.getValue() == "output")
           dir = hw::ModulePort::Direction::Output;
-        else if (val.getValue() == "inout")
-          dir = hw::ModulePort::Direction::InOut;
-        else
+        else if (val.getValue() == "inout") {
+          dir = hw::ModulePort::Direction::Input;
+          isInOut = true;
+        } else
           return emitError(sub->loc,
                            "pin direction must be input, output, or inout");
         continue;
@@ -999,10 +1003,13 @@ LogicalResult LibertyParser::collectPorts(
     auto libertyAttrs = builder.getDictionaryAttr(pinAttrs);
     auto attrs = builder.getDictionaryAttr(
         builder.getNamedAttr("synth.liberty.pin", libertyAttrs));
+    mlir::Type portType = builder.getI1Type();
+    if (isInOut)
+      portType = sv::NetType::get(portType);
 
     hw::PortInfo port;
     port.name = pinName;
-    port.type = builder.getI1Type();
+    port.type = portType;
     port.dir = *dir;
     port.attrs = attrs;
     ports.push_back(port);
@@ -1238,6 +1245,7 @@ void registerImportLibertyTranslation() {
         LibertyParser parser(sourceMgr, context, module);
         // Load required dialects
         context->loadDialect<hw::HWDialect>();
+        context->loadDialect<sv::SVDialect>();
         context->loadDialect<comb::CombDialect>();
         context->loadDialect<synth::SynthDialect>();
 
@@ -1247,6 +1255,7 @@ void registerImportLibertyTranslation() {
       },
       [](DialectRegistry &registry) {
         registry.insert<HWDialect>();
+        registry.insert<sv::SVDialect>();
         registry.insert<comb::CombDialect>();
         registry.insert<synth::SynthDialect>();
       });

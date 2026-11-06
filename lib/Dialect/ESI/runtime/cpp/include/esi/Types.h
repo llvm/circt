@@ -189,6 +189,24 @@ private:
   const Type *innerType;
 };
 
+/// Unwrap TypeAliasType (possibly recursively) to get the underlying type.
+inline const Type *unwrapTypeAlias(const Type *type) {
+  while (auto *alias = dynamic_cast<const TypeAliasType *>(type))
+    type = alias->getInnerType();
+  return type;
+}
+
+/// Unwrap aliases and channels, then cast the payload to T. Returns nullptr
+/// for a null input or a payload that is not a T. Other containers are
+/// retained.
+template <typename T>
+const T *getUnwrappedAs(const Type *type) {
+  type = unwrapTypeAlias(type);
+  while (auto *channel = dynamic_cast<const ChannelType *>(type))
+    type = unwrapTypeAlias(channel->getInner());
+  return dynamic_cast<const T *>(type);
+}
+
 /// Bit vectors include signed, unsigned, and signless integers.
 class BitVectorType : public Type {
 public:
@@ -350,9 +368,10 @@ private:
   std::vector<Frame> frames;
 };
 
-/// Unions are a tagged collection of fields where only one field is active
-/// at a time. All fields share the same bit range (the width is the max of
-/// all field widths, matching SystemVerilog packed-union semantics).
+/// Unions contain one active field without storing a tag. All fields start at
+/// bit zero, and the width is the maximum field width. Serialization zero-pads
+/// the high bits of narrower fields, matching the hw.union bitcast layout.
+/// Nonzero hw.union member offsets are rejected during manifest generation.
 class UnionType : public Type {
 public:
   using FieldVector = std::vector<std::pair<std::string, const Type *>>;

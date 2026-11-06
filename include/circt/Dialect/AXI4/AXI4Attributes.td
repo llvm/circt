@@ -109,6 +109,12 @@ def BurstSetAttr : AXI4AttrDef<"BurstSet"> {
       return $_get($_ctxt, merged);
     }]>
   ];
+
+  let extraClassDeclaration = [{
+    /// Whether every spec in `other` has a spec of its kind, and at least its
+    /// length, in this set
+    bool covers(BurstSetAttr other);
+  }];
 }
 
 def WindowAttr : AXI4AttrDef<"Window"> {
@@ -130,6 +136,11 @@ def WindowAttr : AXI4AttrDef<"Window"> {
   }];
 
   let genVerifyDecl = 1;
+
+  let extraClassDeclaration = [{
+    /// Whether this window and `other` share any address
+    bool overlaps(WindowAttr other);
+  }];
 }
 
 def WindowSetAttr : AXI4AttrDef<"WindowSet"> {
@@ -168,6 +179,9 @@ def WindowSetAttr : AXI4AttrDef<"WindowSet"> {
     /// ordered and uniqued set of disjoint windows
     static ::llvm::SmallVector<WindowAttr>
     normalize(::mlir::MLIRContext *ctx, ::llvm::ArrayRef<WindowAttr> windows);
+
+    /// Whether any window in this set overlaps any window in `other`
+    bool overlaps(WindowSetAttr other);
   }];
 }
 

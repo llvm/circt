@@ -47,10 +47,11 @@ using llvm::KnownBits;
 /// that are guaranteed to always be zero, and the set of bits that are
 /// guaranteed to always be one (these must be exclusive!).  A bit that exists
 /// in neither set is unknown.
-KnownBits computeKnownBits(Value value);
+KnownBits computeKnownBits(Value value, unsigned maxDepth = 5);
 
-/// Return true when both operands are wider than the bitwidth threshold and
-/// should use Booth encoding.
+/// Return true when both operands are wider than the bitwidth threshold, have
+/// matching extension kinds (both zero-extended, both sign-extended, or
+/// neither), and should use Booth encoding.
 bool shouldUseBoothEncoding(Value lhs, Value rhs, unsigned threshold = 16);
 
 /// Create the ops to zero-extend a value to an integer of equal or larger type.

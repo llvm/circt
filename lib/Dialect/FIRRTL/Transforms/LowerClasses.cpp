@@ -1006,7 +1006,8 @@ void LowerClassesPass::runOnOperation() {
 
       if (auto classLike =
               dyn_cast<firrtl::ClassLike>(moduleLike.getOperation()))
-        classTypeTable[classLike.getNameAttr()] = classLike.getInstanceType();
+        classTypeTable[classLike.getModuleNameAttr()] =
+            classLike.getInstanceType();
     }
   }
 
@@ -1069,6 +1070,7 @@ void LowerClassesPass::runOnOperation() {
   markAnalysesPreserved<InstanceGraph>();
 
   // Reset pass state.
+  externalClassMap.clear();
   rtlPortsToCreate.clear();
 }
 
@@ -1177,8 +1179,8 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
     formalParamNames.push_back(kPortsName);
 
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
-  StringRef className = moduleLike.getName();
-  StringAttr baseClassNameAttr = moduleLike.getNameAttr();
+  StringRef className = moduleLike.getModuleName();
+  StringAttr baseClassNameAttr = moduleLike.getModuleNameAttr();
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(moduleLike.getOperation())) {
@@ -1207,7 +1209,9 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
                                   formalParamNames, hasContainingModule);
   }
 
-  SymbolTable::setSymbolVisibility(loweredClassOp, moduleLike.getVisibility());
+  SymbolTable::setSymbolVisibility(
+      loweredClassOp,
+      cast<mlir::SymbolOpInterface>(moduleLike.getOperation()).getVisibility());
 
   return loweredClassOp;
 }
@@ -1343,6 +1347,34 @@ void LowerClassesPass::lowerClassExtern(om::ClassExternOp classExternOp,
   // Port erasure for the `moduleLike` is handled centrally in `runOnOperation`.
 }
 
+// Create the OM object and replace its FIRRTL counterpart after collecting
+// its input values from either declaration-style or value-style FIRRTL IR.
+static LogicalResult
+lowerObjectInClass(FObjectLike firrtlObject, ArrayRef<Value> args,
+                   firrtl::PathOp containingModuleRef,
+                   SmallVectorImpl<RtlPortsInfo> &rtlPortsToCreate,
+                   std::mutex &intraPassMutex,
+                   SmallVectorImpl<Operation *> &opsToErase) {
+  auto basePath = firrtlObject->getBlock()->getArgument(0);
+  auto classType = om::ClassType::get(firrtlObject->getContext(),
+                                      firrtlObject.getClassSymbolAttr());
+  OpBuilder builder(firrtlObject.getOperation());
+  auto object = om::ObjectOp::create(builder, firrtlObject->getLoc(), classType,
+                                     firrtlObject.getClassNameAttr(), args);
+
+  if (containingModuleRef) {
+    std::lock_guard<std::mutex> guard(intraPassMutex);
+    rtlPortsToCreate.push_back({containingModuleRef, basePath, object});
+  }
+
+  auto cast = UnrealizedConversionCastOp::create(builder, object.getLoc(),
+                                                 firrtlObject.getClassType(),
+                                                 object.getResult());
+  firrtlObject.getResult().replaceAllUsesWith(cast.getResult(0));
+  opsToErase.push_back(firrtlObject.getOperation());
+  return success();
+}
+
 // Helper to update an Object instantiation. FIRRTL Object instances are
 // converted to OM Object instances.
 static LogicalResult updateObjectInClass(
@@ -1361,7 +1393,7 @@ static LogicalResult updateObjectInClass(
   // Get any alternative base paths passing through this module.
   SmallVector<Value> altBasePaths;
   pathInfoTable.collectAltBasePaths(
-      firrtlObject, firrtlClassType.getNameAttr().getAttr(), altBasePaths);
+      firrtlObject, firrtlObject.getClassNameAttr(), altBasePaths);
 
   // Account for the default base path and any alternatives.
   unsigned nextArgIndex = 1 + altBasePaths.size();
@@ -1435,31 +1467,36 @@ static LogicalResult updateObjectInClass(
              << "uninitialized input port " << element.name;
   }
 
-  // Convert the FIRRTL Class type to an OM Class type.
-  auto className = firrtlObject.getType().getNameAttr();
-  auto classType = om::ClassType::get(firrtlObject->getContext(), className);
+  return lowerObjectInClass(cast<FObjectLike>(firrtlObject.getOperation()),
+                            args, containingModuleRef, rtlPortsToCreate,
+                            intraPassMutex, opsToErase);
+}
 
-  // Create the new Object op.
-  OpBuilder builder(firrtlObject);
+// Value-like objects already carry their actual parameters as operands.
+static LogicalResult updateObjectInClass(
+    firrtl::ObjectCreateOp firrtlObject, const PathInfoTable &pathInfoTable,
+    SmallVectorImpl<RtlPortsInfo> &rtlPortsToCreate, std::mutex &intraPassMutex,
+    SmallVectorImpl<Operation *> &opsToErase) {
+  auto basePath = firrtlObject->getBlock()->getArgument(0);
+  SmallVector<Value> args{basePath};
+  pathInfoTable.collectAltBasePaths(firrtlObject,
+                                    firrtlObject.getClassNameAttr(), args);
+  llvm::append_range(args, firrtlObject.getInputs());
 
-  auto object = om::ObjectOp::create(builder, firrtlObject.getLoc(), classType,
-                                     firrtlObject.getClassNameAttr(), args);
-
-  // If there is a 'containingModule', track that we need to add 'ports'.
-  if (containingModuleRef) {
-    std::lock_guard<std::mutex> guard(intraPassMutex);
-    rtlPortsToCreate.push_back({containingModuleRef, basePath, object});
+  firrtl::PathOp containingModuleRef;
+  for (auto [inputIndex, element] :
+       llvm::enumerate(firrtlObject.getType().getInputElements())) {
+    auto input = firrtlObject.getInputs()[inputIndex];
+    if (element.name.strref().contains(kContainingModuleName)) {
+      assert(!containingModuleRef && "expected exactly one containingModule");
+      containingModuleRef = input.getDefiningOp<firrtl::PathOp>();
+      assert(containingModuleRef && "expected containingModule to be a PathOp");
+    }
   }
 
-  // Replace uses of the FIRRTL Object with the OM Object. The later dialect
-  // conversion will take care of converting the types.
-  auto cast = UnrealizedConversionCastOp::create(
-      builder, object.getLoc(), firrtlObject.getType(), object.getResult());
-  firrtlObject.replaceAllUsesWith(cast.getResult(0));
-
-  // Erase the original Object, now that we're done with it.
-  opsToErase.push_back(firrtlObject);
-  return success();
+  return lowerObjectInClass(cast<FObjectLike>(firrtlObject.getOperation()),
+                            args, containingModuleRef, rtlPortsToCreate,
+                            intraPassMutex, opsToErase);
 }
 
 // Helper to update a Module instantiation in a Class. Module instances within a
@@ -1516,7 +1553,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
   auto referencedModule =
       firrtlInstance.getReferencedModule<FModuleLike>(instanceGraph);
 
-  StringRef moduleName = referencedModule.getName();
+  StringRef moduleName = referencedModule.getModuleName();
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(referencedModule.getOperation()))
@@ -1592,11 +1629,10 @@ updateInstanceInModule(InstanceOp firrtlInstance, InstanceGraph &instanceGraph,
 static LogicalResult
 updateInstancesInModule(FModuleOp moduleOp, InstanceGraph &instanceGraph,
                         SmallVectorImpl<Operation *> &opsToErase) {
-  OpBuilder builder(moduleOp);
   for (auto &op : moduleOp->getRegion(0).getOps()) {
-    if (auto objectOp = dyn_cast<firrtl::ObjectOp>(op)) {
-      assert(0 && "should be no objects in modules");
-    } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
+    // Property-typed operations have already been moved to the OM class.
+    assert(!isa<firrtl::FObjectLike>(op) && "should be no objects in modules");
+    if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       if (failed(updateInstanceInModule(instanceOp, instanceGraph, opsToErase)))
         return failure();
     }
@@ -1614,6 +1650,10 @@ static LogicalResult updateObjectsAndInstancesInClass(
   auto it = classState.paths.begin();
   for (auto &op : classOp->getRegion(0).getOps()) {
     if (auto objectOp = dyn_cast<firrtl::ObjectOp>(op)) {
+      if (failed(updateObjectInClass(objectOp, pathInfoTable, rtlPortsToCreate,
+                                     intraPassMutex, opsToErase)))
+        return failure();
+    } else if (auto objectOp = dyn_cast<firrtl::ObjectCreateOp>(op)) {
       if (failed(updateObjectInClass(objectOp, pathInfoTable, rtlPortsToCreate,
                                      intraPassMutex, opsToErase)))
         return failure();
@@ -1851,6 +1891,19 @@ struct StringConcatOpConversion
   matchAndRewrite(firrtl::StringConcatOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<om::StringConcatOp>(op, adaptor.getOperands());
+    return success();
+  }
+};
+
+struct ListContainsOpConversion
+    : public OpConversionPattern<firrtl::ListContainsOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::ListContainsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::ListContainsOp>(op, adaptor.getList(),
+                                                    adaptor.getElement());
     return success();
   }
 };
@@ -2352,6 +2405,7 @@ static void populateRewritePatterns(
   patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
   patterns.add<StringConcatOpConversion>(converter, patterns.getContext());
+  patterns.add<ListContainsOpConversion>(converter, patterns.getContext());
   patterns.add<PropEqOpConversion>(converter, patterns.getContext());
   patterns.add(binaryOpConversion<firrtl::BoolAndOp, om::IntegerAndOp>);
   patterns.add(binaryOpConversion<firrtl::BoolOrOp, om::IntegerOrOp>);

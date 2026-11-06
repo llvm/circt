@@ -31,6 +31,18 @@ MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetName(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute);
 MLIR_CAPI_EXPORTED bool svSVAttributeAttrGetEmitAsComment(MlirAttribute);
 
+//===----------------------------------------------------------------------===//
+// Type API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool svTypeIsANet(MlirType);
+MLIR_CAPI_EXPORTED MlirType svNetTypeGet(MlirType element);
+MLIR_CAPI_EXPORTED MlirType svNetTypeGetElementType(MlirType);
+
+MLIR_CAPI_EXPORTED bool svTypeIsAVar(MlirType);
+MLIR_CAPI_EXPORTED MlirType svVarTypeGet(MlirType element);
+MLIR_CAPI_EXPORTED MlirType svVarTypeGetElementType(MlirType);
+
 #ifdef __cplusplus
 }
 #endif

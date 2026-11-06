@@ -21,10 +21,14 @@ def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
     assert mem1.size == 1024
     print(f"mem1: {mem1.ptr} size {mem1.size}")
     mem1 = None
+    assert hostmem.allocate(0) is None
+    # Enabling host memory service is idempotent.
+    hostmem.start()
+    hostmem.start()
 
-  assert conn.sysinfo().esi_version() == 0
+  assert conn.sysinfo().esi_version() == 1
   m = conn.manifest()
-  assert m.api_version == 0
+  assert m.api_version == 1
 
   for esiType in m.type_table:
     print(f"{esiType}")
@@ -120,6 +124,8 @@ def test_cosim_loopback(conn: AcceleratorConnection) -> None:
 
 def test_cosim_loopback_make_fallback(monkeypatch) -> None:
   """Run the loopback test using the ``make`` fallback (no cmake/ninja)."""
+  if sys.platform == "win32":
+    pytest.skip("make fallback cannot link against MSVC-built runtime DLLs")
   if shutil.which("make") is None:
     pytest.skip("make fallback requires make on PATH")
   from esiaccel.cosim.verilator import Verilator
