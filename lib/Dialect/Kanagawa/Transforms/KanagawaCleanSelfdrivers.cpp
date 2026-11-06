@@ -179,7 +179,7 @@ struct InputPortOpConversionPattern : public OpConversionPattern<InputPortOp> {
         auto outputPort =
             OutputPortOp::create(rewriter, op.getLoc(), op.getInnerSym(),
                                  op.getType(), op.getNameAttr());
-        PortWriteOp::create(rewriter, op.getLoc(), outputPort, wire);
+        PortWriteOp::create(rewriter, op.getLoc(), outputPort, wire.getResult());
       }
     }
 

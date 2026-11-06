@@ -174,7 +174,7 @@ void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
         auto *var = createVariable();
         var->name = wireOp.getNameAttr();
         var->loc = wireOp.getLoc();
-        var->value = wireOp;
+        var->value = wireOp.getResult();
         module.variables.push_back(var);
         return;
       }
