@@ -28,7 +28,6 @@
 // `llhd-deseq-verbose` for additional prints that trace out concrete values
 // propagated across the IR.
 #define DEBUG_TYPE "llhd-deseq"
-#define VERBOSE_DEBUG(...) DEBUG_WITH_TYPE(DEBUG_TYPE "-verbose", __VA_ARGS__)
 
 namespace circt {
 namespace llhd {
@@ -202,7 +201,8 @@ static ValueField getValueField(Value value) {
 
 /// The work horse promoting processes into concrete registers.
 struct Deseq {
-  Deseq(ProcessOp process) : process(process) {}
+  Deseq(ProcessOp process)
+      : process(process), domInfo(process.getOperation()) {}
   LogicalResult deseq();
 
   bool analyzeProcess();
@@ -227,6 +227,8 @@ struct Deseq {
   bool
   matchDriveClockAndReset(DriveInfo &drive,
                           ArrayRef<std::pair<DNFTerm, ValueEntry>> valueTable);
+  bool matchDriveGatedClock(DriveInfo &drive,
+                            const std::pair<DNFTerm, ValueEntry> &entry);
 
   Value materializeProjection(OpBuilder &builder, Location loc, Value value,
                               SmallDenseMap<Value, Value, 8> &cache);
@@ -239,6 +241,9 @@ struct Deseq {
 
   /// The process we are desequentializing.
   ProcessOp process;
+  /// Dominance info for the process body, used to skip loop back edges when
+  /// computing block conditions.
+  DominanceInfo domInfo;
   /// The single wait op of the process.
   WaitOp wait;
   /// The boolean values observed by the wait. These trigger the process and
@@ -269,6 +274,8 @@ struct Deseq {
   /// The condition under which control flow reaches a block. The block
   /// immediately following the wait op has this set to true; any further
   /// conditional branches will refine the condition of successor blocks.
+  SmallPtrSet<Block *, 16> computingBlockConditions;
+  SmallPtrSet<BlockOperand *, 16> computingSuccessorConditions;
   DenseMap<Block *, TruthTable> blockConditionLattice;
   /// The condition under which control flows along a terminator's block operand
   /// to its destination.
@@ -647,11 +654,6 @@ TruthTable Deseq::computeBoolean(ValueField vf) {
           [&](auto value) { return computeBoolean(value); });
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Boolean ";
-    value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-    llvm::dbgs() << ": " << result << "\n";
-  });
   booleanLattice[vf] = result;
   return result;
 }
@@ -688,11 +690,6 @@ ValueTable Deseq::computeValue(Value value) {
           [&](auto value) { return computeValue(value); });
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Value ";
-    value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-    llvm::dbgs() << ": " << result << "\n";
-  });
   valueLattice[value] = result;
   return result;
 }
@@ -840,9 +837,11 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
   // Return a memoized result if one exists. Otherwise insert a default result
   // as recursion breaker.
   if (auto it = blockConditionLattice.find(block);
-      it != blockConditionLattice.end())
+      it != blockConditionLattice.end()) {
     return it->second;
+  }
   blockConditionLattice[block] = getConstBoolean(false);
+  computingBlockConditions.insert(block);
 
   // Actually compute the block condition by combining all incoming control flow
   // conditions.
@@ -850,6 +849,14 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
   SmallPtrSet<Block *, 4> seen;
   for (auto *predecessor : block->getPredecessors()) {
     if (!seen.insert(predecessor).second)
+      continue;
+    // Skip loop back edges. Triggers cannot change within an activation, so if
+    // `block` dominates `predecessor` and lies after the wait's resume point,
+    // every wait-free path to `predecessor` already passes through `block`
+    // and the edge cannot widen `block`'s condition. Following it would only
+    // re-enter `block` while it is in flight.
+    if (domInfo.dominates(wait.getDest(), block) &&
+        domInfo.dominates(block, predecessor))
       continue;
     for (auto &operand : predecessor->getTerminator()->getBlockOperands()) {
       if (operand.get() != block)
@@ -863,12 +870,8 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
   }
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Block condition ";
-    block->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << ": " << result << "\n";
-  });
   blockConditionLattice[block] = result;
+  computingBlockConditions.erase(block);
   return result;
 }
 
@@ -886,9 +889,11 @@ TruthTable Deseq::computeSuccessorCondition(BlockOperand &blockOperand) {
   // Return a memoized result if one exists. Otherwise insert a default result
   // as recursion breaker.
   if (auto it = successorConditionLattice.find(&blockOperand);
-      it != successorConditionLattice.end())
+      it != successorConditionLattice.end()) {
     return it->second;
+  }
   successorConditionLattice[&blockOperand] = getConstBoolean(false);
+  computingSuccessorConditions.insert(&blockOperand);
 
   // Actually compute the condition under which control flows along the given
   // block operand.
@@ -908,14 +913,8 @@ TruthTable Deseq::computeSuccessorCondition(BlockOperand &blockOperand) {
   }
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Successor condition ";
-    op->getBlock()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#succ" << destIdx << " -> ";
-    blockOperand.get()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << " = " << result << "\n";
-  });
   successorConditionLattice[&blockOperand] = result;
+  computingSuccessorConditions.erase(&blockOperand);
   return result;
 }
 
@@ -947,13 +946,6 @@ TruthTable Deseq::computeSuccessorBoolean(BlockOperand &blockOperand,
   }
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Successor boolean ";
-    op->getBlock()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#succ" << destIdx << " -> ";
-    blockOperand.get()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#arg" << argIdx << " = " << result << "\n";
-  });
   successorBooleanLattice[{&blockOperand, argIdx}] = result;
   return result;
 }
@@ -987,13 +979,6 @@ ValueTable Deseq::computeSuccessorValue(BlockOperand &blockOperand,
   }
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Successor value ";
-    op->getBlock()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#succ" << destIdx << " -> ";
-    blockOperand.get()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#arg" << argIdx << " = " << result << "\n";
-  });
   successorValueLattice[{&blockOperand, argIdx}] = result;
   return result;
 }
@@ -1059,9 +1044,13 @@ bool Deseq::matchDrive(DriveInfo &drive) {
     return false;
   }
 
-  // If we have two triggers, one of them must be the reset.
-  if (triggers.size() == 2)
+  // If we have two triggers, one of them must be the reset. A single entry
+  // may be a clock update qualified by the reset; see `matchDriveGatedClock`.
+  if (triggers.size() == 2) {
+    if (valueTable.size() == 1)
+      return matchDriveGatedClock(drive, valueTable[0]);
     return matchDriveClockAndReset(drive, valueTable);
+  }
 
   // Otherwise we only have a single trigger, which is the clock.
   assert(triggers.size() == 1);
@@ -1230,6 +1219,63 @@ bool Deseq::matchDriveClockAndReset(
 
   // If we arrive here, none of the patterns we tried matched.
   LLVM_DEBUG(llvm::dbgs() << "- Aborting: unknown reset scheme\n");
+  return false;
+}
+
+/// Assuming there are two triggers and the value table has exactly one entry,
+/// detect a register without reset that only updates on a clock edge while the
+/// other trigger (the reset) is inactive. This is what a process like
+/// `always @(posedge clk or negedge rst_n) if (!rst_n) ... else q <= d;`
+/// describes for a signal `q` that the reset branch never assigns.
+bool Deseq::matchDriveGatedClock(
+    DriveInfo &drive, const std::pair<DNFTerm, ValueEntry> &entry) {
+  // Try every assignment of clock and reset to the two triggers, and every
+  // edge and level polarity. The entry must equal one of the two conditions
+  // below exactly, with no further literals.
+    for (unsigned variant = 0; variant < 8; ++variant) {
+      bool negClock = (variant >> 0) & 1;
+      bool negReset = (variant >> 1) & 1;
+      unsigned clockIdx = (variant >> 2) & 1;
+      unsigned resetIdx = 1 - clockIdx;
+
+    // Same bit patterns as in `matchDriveClockAndReset`.
+    uint32_t clockEdge = (negClock ? 0b1001 : 0b0110) << (clockIdx * 4 + 2);
+    uint32_t resetOff = (negReset ? 0b0100 : 0b1000) << (resetIdx * 4 + 2);
+    auto clockWithoutEnable = DNFTerm{clockEdge | resetOff};
+    auto clockWithEnable = DNFTerm{clockEdge | resetOff | 0b01};
+    if (entry.first != clockWithoutEnable && entry.first != clockWithEnable)
+      continue;
+
+    // Same value contract as the other matchers: an unknown entry means the
+    // driven value is recovered by specializing the process for this trigger
+    // combination in `implementRegister`.
+    drive.clock.clock = triggers[clockIdx].getProjected();
+    drive.clock.risingEdge = !negClock;
+    drive.clock.value = drive.op.getValue();
+    if (entry.first == clockWithEnable)
+      drive.clock.enable = drive.op.getEnable();
+    if (!entry.second.isUnknown())
+      drive.clock.value = entry.second.value;
+    drive.clock.gate = triggers[resetIdx].getProjected();
+    drive.clock.gateActiveHigh = !negReset;
+
+    LLVM_DEBUG({
+      llvm::dbgs() << "  - Matched " << (negClock ? "neg" : "pos")
+                   << "edge clock ";
+      drive.clock.clock.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      llvm::dbgs() << " -> " << entry.second;
+      if (drive.clock.enable)
+        llvm::dbgs() << " (with enable)";
+      llvm::dbgs() << ", updates only while active-"
+                   << (negReset ? "low" : "high") << " reset ";
+      drive.clock.gate.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      llvm::dbgs() << " is inactive\n";
+    });
+    return true;
+  }
+
+  // If we arrive here, none of the patterns we tried matched.
+  LLVM_DEBUG(llvm::dbgs() << "- Aborting: unknown gated clock scheme\n");
   return false;
 }
 
@@ -1502,10 +1548,36 @@ LogicalResult Deseq::implementRegister(DriveInfo &drive) {
   if (drive.reset)
     fixedValues.push_back(
         {drive.reset.reset, !drive.reset.activeHigh, !drive.reset.activeHigh});
+  // A gate is held at its inactive level in the past and the present, the same
+  // way the reset is during a regular clock edge. This only simplifies the
+  // value and enable computed below; the gate's live value is ANDed into the
+  // enable afterwards.
+  if (drive.clock.gate)
+    fixedValues.push_back({drive.clock.gate, !drive.clock.gateActiveHigh,
+                           !drive.clock.gateActiveHigh});
 
   value = specializeValue(value, fixedValues);
   if (enable)
     enable = specializeValue(enable, fixedValues);
+
+  // The register may only update while the gate is inactive. The specialized
+  // enable above assumed exactly that; this makes it hold in hardware.
+  if (drive.clock.gate) {
+    Value updateAllowed = materializeProjection(builder, loc, drive.clock.gate,
+                                                rematerialized);
+    if (drive.clock.gateActiveHigh) {
+      auto &inv = materializedInverters[updateAllowed];
+      if (!inv) {
+        auto one = hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
+        inv = comb::XorOp::create(builder, loc, updateAllowed, one);
+      }
+      updateAllowed = inv;
+    }
+    if (enable)
+      enable = comb::AndOp::create(builder, loc, enable, updateAllowed);
+    else
+      enable = updateAllowed;
+  }
 
   // Try to guess a name for the register.
   StringAttr name;

@@ -1361,3 +1361,115 @@ hw.module @FalseInitialDrives(in %clock: i1, in %d: i42, in %c: i1) {
   // Don't initialize from drive at different time
   llhd.drv %3, %c123_i42 after %0 : i42
 }
+
+// A register in a clock+reset process that the reset branch never assigns
+// becomes a register without reset whose enable includes the reset being
+// inactive.
+// CHECK-LABEL: @GatedClockActiveLowReset(
+hw.module @GatedClockActiveLowReset(in %clock: i1, in %reset: i1, in %d: i42, in %en: i1) {
+  %c0_i42 = hw.constant 0 : i42
+  %0 = llhd.constant_time <0ns, 1d>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[ER:%.+]]:2 = llhd.combinational -> i42, i1 {
+  %1, %2 = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i42, %false : i42, i1)
+  ^bb1(%3: i42, %4: i1):
+    llhd.wait yield (%3, %4 : i42, i1), (%clock, %reset : i1, i1), ^bb2(%clock, %reset : i1, i1)
+  ^bb2(%5: i1, %6: i1):
+    %7 = comb.xor bin %5, %true : i1
+    %8 = comb.and bin %7, %clock : i1  // posedge clock
+    %9 = comb.xor bin %reset, %true : i1
+    %10 = comb.and bin %6, %9 : i1  // negedge reset
+    %11 = comb.or bin %8, %10 : i1
+    cf.cond_br %11, ^bb3, ^bb1(%c0_i42, %false : i42, i1)
+  ^bb3:
+    // Reset branch (reset low) does not assign the register.
+    cf.cond_br %reset, ^bb4, ^bb1(%c0_i42, %false : i42, i1)
+  ^bb4:
+    cf.cond_br %en, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
+  }
+  %3 = llhd.sig : <i42>
+  // CHECK: [[CLK:%.+]] = seq.to_clock %clock
+  // CHECK: [[EN:%.+]] = comb.and [[ER]]#1, %reset : i1
+  // CHECK: [[MUX:%.+]] = comb.mux bin [[EN]], [[ER]]#0, [[REG:%.+]] : i42
+  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
+  llhd.drv %3, %1 after %0 if %2 : i42
+}
+
+// CHECK-LABEL: @GatedClockActiveHighReset(
+hw.module @GatedClockActiveHighReset(in %clock: i1, in %reset: i1, in %d: i42, in %en: i1) {
+  %c0_i42 = hw.constant 0 : i42
+  %0 = llhd.constant_time <0ns, 1d>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[ER:%.+]]:2 = llhd.combinational -> i42, i1 {
+  %1, %2 = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i42, %false : i42, i1)
+  ^bb1(%3: i42, %4: i1):
+    llhd.wait yield (%3, %4 : i42, i1), (%clock, %reset : i1, i1), ^bb2(%clock, %reset : i1, i1)
+  ^bb2(%5: i1, %6: i1):
+    %7 = comb.xor bin %5, %true : i1
+    %8 = comb.and bin %7, %clock : i1  // posedge clock
+    %9 = comb.xor bin %6, %true : i1
+    %10 = comb.and bin %9, %reset : i1  // posedge reset
+    %11 = comb.or bin %8, %10 : i1
+    cf.cond_br %11, ^bb3, ^bb1(%c0_i42, %false : i42, i1)
+  ^bb3:
+    // Reset branch (reset high) does not assign the register.
+    cf.cond_br %reset, ^bb1(%c0_i42, %false : i42, i1), ^bb4
+  ^bb4:
+    cf.cond_br %en, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
+  }
+  %3 = llhd.sig : <i42>
+  // CHECK: [[CLK:%.+]] = seq.to_clock %clock
+  // CHECK: [[RST_INV:%.+]] = comb.xor %reset, {{%true[_0-9]*}}
+  // CHECK: [[EN:%.+]] = comb.and [[ER]]#1, [[RST_INV]] : i1
+  // CHECK: [[MUX:%.+]] = comb.mux bin [[EN]], [[ER]]#0, [[REG:%.+]] : i42
+  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
+  // CHECK: llhd.assign {{%.+}}, [[REG]] :
+  llhd.drv %3, %1 after %0 if %2 : i42
+}
+
+// One process, two registers: the first is reset, the second is not. The
+// second is gated by the reset being inactive and shares the clock.
+// CHECK-LABEL: @GatedClockMixedWithReset(
+hw.module @GatedClockMixedWithReset(in %clock: i1, in %reset: i1, in %d: i42, in %en: i1) {
+  %c0_i42 = hw.constant 0 : i42
+  %0 = llhd.constant_time <0ns, 1d>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[ER:%.+]]:4 = llhd.combinational -> i42, i1, i42, i1 {
+  %1:4 = llhd.process -> i42, i1, i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    %c42_i42 = hw.constant 42 : i42
+    cf.br ^bb1(%c0_i42, %false, %c0_i42, %false : i42, i1, i42, i1)
+  ^bb1(%2: i42, %3: i1, %4: i42, %5: i1):
+    llhd.wait yield (%2, %3, %4, %5 : i42, i1, i42, i1), (%clock, %reset : i1, i1), ^bb2(%clock, %reset : i1, i1)
+  ^bb2(%6: i1, %7: i1):
+    %8 = comb.xor bin %6, %true : i1
+    %9 = comb.and bin %8, %clock : i1  // posedge clock
+    %10 = comb.xor bin %reset, %true : i1
+    %11 = comb.and bin %7, %10 : i1  // negedge reset
+    %12 = comb.or bin %9, %11 : i1
+    cf.cond_br %12, ^bb3, ^bb1(%c0_i42, %false, %c0_i42, %false : i42, i1, i42, i1)
+  ^bb3:
+    // Reset branch assigns only the first register.
+    cf.cond_br %reset, ^bb4, ^bb1(%c42_i42, %true, %c0_i42, %false : i42, i1, i42, i1)
+  ^bb4:
+    cf.cond_br %en, ^bb1(%d, %true, %d, %true : i42, i1, i42, i1), ^bb1(%c0_i42, %false, %c0_i42, %false : i42, i1, i42, i1)
+  }
+  %13 = llhd.sig : <i42>
+  %14 = llhd.sig : <i42>
+  // CHECK: [[CLK:%.+]] = seq.to_clock %clock
+  // CHECK: [[RST_INV:%.+]] = comb.xor %reset, {{%true[_0-9]*}}
+  // CHECK: seq.firreg {{%.+}} clock [[CLK]] reset async [[RST_INV]], %c42_i42 : i42
+  // CHECK: [[EN:%.+]] = comb.and [[ER]]#3, %reset : i1
+  // CHECK: [[MUX:%.+]] = comb.mux bin [[EN]], [[ER]]#2, [[REG:%.+]] : i42
+  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
+  llhd.drv %13, %1#0 after %0 if %1#1 : i42
+  llhd.drv %14, %1#2 after %0 if %1#3 : i42
+}
