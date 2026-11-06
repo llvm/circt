@@ -241,3 +241,20 @@ om.class@A() -> () {
   %0 = om.unknown : !om.class.type<@NonExistant>
   om.class.fields
 }
+
+// -----
+
+om.class @RegistryInsertMismatch(%items: !om.registry<!om.integer>, %value: !om.string) {
+  // expected-error @+1 {{element type must match the registry element type}}
+  "om.registry_insert"(%items, %value) : (!om.registry<!om.integer>, !om.string) -> ()
+  om.class.fields
+}
+
+// -----
+
+// Check every initial element, not just the first one's type.
+om.class @RegistryInitialMismatch(%integer: !om.integer, %string: !om.string) {
+  // expected-error @+1 {{element types must match the registry element type}}
+  %items = "om.registry_create"(%integer, %string) : (!om.integer, !om.string) -> !om.registry<!om.integer>
+  om.class.fields
+}
