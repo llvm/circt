@@ -8,8 +8,10 @@ add_circt_conversion_library(CIRCTAXI4ToHW
   Core
 
   LINK_LIBS PUBLIC
+  CIRCTAXI4
   CIRCTHW
   CIRCTSeq
+  CIRCTSupport
   CIRCTSV
   MLIRIR
   MLIRPass
