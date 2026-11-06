@@ -34,7 +34,7 @@ public:
             SubfieldOp, SubindexOp, SubaccessOp, IsTagOp, SubtagOp,
             BundleCreateOp, VectorCreateOp, FEnumCreateOp, MultibitMuxOp,
             TagExtractOp, OpenSubfieldOp, OpenSubindexOp, ObjectSubfieldOp,
-            DomainSubfieldOp, ObjectAnyRefCastOp,
+            DomainSubfieldOp, ObjectAnyRefCastOp, DomainAnyRefCastOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -130,6 +130,7 @@ public:
   HANDLE(ObjectSubfieldOp, Unhandled);
   HANDLE(DomainSubfieldOp, Unhandled);
   HANDLE(ObjectAnyRefCastOp, Unhandled);
+  HANDLE(DomainAnyRefCastOp, Unhandled);
   HANDLE(CatPrimOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.

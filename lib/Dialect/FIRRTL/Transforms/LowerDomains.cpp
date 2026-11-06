@@ -598,6 +598,25 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
+      // Replace a domain-to-anyref cast with an object-to-anyref cast.
+      if (auto castOp = dyn_cast<DomainAnyRefCastOp>(walkOp)) {
+        auto conversionCast = dyn_cast_or_null<UnrealizedConversionCastOp>(
+            castOp.getInput().getDefiningOp());
+        if (!conversionCast || conversionCast.getNumOperands() != 1) {
+          castOp.emitOpError(
+              "has an input that is not a conversion cast with one operand");
+          return WalkResult::interrupt();
+        }
+
+        OpBuilder builder(castOp);
+        auto objectCast = ObjectAnyRefCastOp::create(
+            builder, castOp.getLoc(), conversionCast.getOperand(0));
+        conversionsToErase.insert(conversionCast);
+        castOp.replaceAllUsesWith(objectCast.getResult());
+        castOp.erase();
+        return WalkResult::advance();
+      }
+
       // Replace a domain subfield with an object subfield.
       if (auto subfieldOp = dyn_cast<DomainSubfieldOp>(walkOp)) {
         // The input should be a conversion cast wrapping an object or a class
