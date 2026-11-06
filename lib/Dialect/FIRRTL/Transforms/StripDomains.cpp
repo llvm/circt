@@ -77,6 +77,18 @@ stripModuleImpl(FModuleLike op,
               }
               return WalkResult::advance();
             })
+            .Case<DomainAnyRefCastOp>([&](DomainAnyRefCastOp op) {
+              if (shouldStripType(op.getInput().getType())) {
+                if (!op->use_empty()) {
+                  OpBuilder builder(op);
+                  op.replaceAllUsesWith(
+                      UnknownValueOp::create(builder, op.getLoc(), op.getType())
+                          .getResult());
+                }
+                op.erase();
+              }
+              return WalkResult::advance();
+            })
             .Case<UnsafeDomainCastOp>([&](UnsafeDomainCastOp op) {
               // Strip cast if any of the domains being cast should be
               // stripped.
