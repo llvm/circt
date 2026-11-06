@@ -3938,6 +3938,16 @@ Value Context::convertSystemCall(
     return moore::StringLenOp::create(builder, loc, value);
   }
 
+  if (nameId == ksn::Size) {
+    if (numArgs == 1 && args[0]->type->isString()) {
+      auto stringType = moore::StringType::get(getContext());
+      auto value = convertRvalueExpression(*args[0], stringType);
+      if (!value)
+        return {};
+      return moore::StringLenOp::create(builder, loc, value);
+    }
+  }
+
   if (nameId == ksn::Getc) {
     // Slang already checks the arity of string methods.
     assert(numArgs == 2 && "`getc` takes 2 arguments");
