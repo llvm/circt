@@ -291,7 +291,8 @@ def ObjectFieldOp : OMOp<"object.field", [
 //===----------------------------------------------------------------------===//
 
 def ConstantOp : OMOp<"constant",
-    [ConstantLike, Pure, AllTypesMatch<["value", "result"]>]> {
+    [ConstantLike, Pure, AllTypesMatch<["value", "result"]>,
+     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let arguments = (ins
     TypedAttrInterface:$value
   );

@@ -31,6 +31,26 @@ om.class @Class() {
 
 // -----
 
+om.class @MissingClassConstant() {
+  // expected-error @+1 {{'om.constant' op refers to non-existant class ("MissingClass")}}
+  %0 = om.constant #om.list<!om.list<!om.class.type<@MissingClass>>, [#om.list<!om.class.type<@MissingClass>, []> : !om.list<!om.class.type<@MissingClass>>]> : !om.list<!om.list<!om.class.type<@MissingClass>>>
+  om.class.fields
+}
+
+// -----
+
+hw.module @NotAClass() {
+  hw.output
+}
+
+om.class @NonClassConstantReference() {
+  // expected-error @+1 {{'om.constant' op refers to non-existant class ("NotAClass")}}
+  %0 = om.constant #om.list<!om.class.type<@NotAClass>, []> : !om.list<!om.class.type<@NotAClass>>
+  om.class.fields
+}
+
+// -----
+
 om.class @Foo() -> (bar: i1) {
   %0 = om.constant true
   om.class.fields %0 : i1
