@@ -75,7 +75,7 @@ public:
     hw::UnpackedArrayType memArrType =
         hw::UnpackedArrayType::get(memType.getElementType(), size);
     auto svMem =
-        sv::RegOp::create(rewriter, mem.getLoc(), memArrType, mem.getNameAttr())
+        sv::VarOp::create(rewriter, mem.getLoc(), memArrType, mem.getNameAttr())
             .getResult();
 
     // Create write ports by gathering up the write port inputs and
