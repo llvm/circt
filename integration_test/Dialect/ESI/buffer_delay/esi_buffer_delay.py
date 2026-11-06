@@ -14,7 +14,6 @@ from typing import Dict, List
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import FallingEdge, RisingEdge
-from cocotb.handle import HierarchyObject
 
 NUM_ITEMS = 200
 MAX_CYCLES = 20 * NUM_ITEMS
@@ -106,7 +105,7 @@ async def fifo_source(dut, prefix: str, values: List[int], push_prob: float):
   push.value = 0
 
 
-async def delayed_source(dut: HierarchyObject, prefix: str, delay: int, values: List[int],
+async def delayed_source(dut, prefix: str, delay: int, values: List[int],
                          valid_prob: float, has_ready: bool):
   """Drive a ValidReady(delay) or ValidOnly(delay) channel. The data for a
   transfer is driven `delay` cycles after the handshake. Junk otherwise."""
@@ -141,7 +140,7 @@ class Sink:
   cycles on which it was ready but nothing transferred."""
 
   def __init__(self,
-               dut: HierarchyObject,
+               dut,
                prefix: str,
                delay: int,
                ready_prob: float,
@@ -175,7 +174,7 @@ class Sink:
         pending.pop(0)
         self.received.append(int(self.data.value))
       if self.stall_period:
-        want = (cycle % self.stall_period) != 0
+        want = cycle % self.stall_period != 0
       else:
         want = random.random() < self.ready_prob
       if self.fifo:
@@ -273,10 +272,9 @@ async def periodic_stall(dut):
   random.seed(3)
   sinks = await run_all(dut, src_prob=1.0, sink_prob=1.0, stall_period=8)
   # Skip warm-up and drain.
-  missed = {}
-  for p, s in sinks.items():
-      cycles = [c for c in s.missed if s.cycles[0] < c < s.cycles[-1]]
-      if cycles:
-          missed[p] = cycles
-        
+  missed = {
+      p: [c for c in s.missed if s.cycles[0] < c < s.cycles[-1]]
+      for p, s in sinks.items()
+  }
+  missed = {p: m for p, m in missed.items() if m}
   assert not missed, f"no transfer on these ready cycles: {missed}"
