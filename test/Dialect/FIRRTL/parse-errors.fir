@@ -1253,6 +1253,68 @@ circuit ListContainsVersionError:
     propassert list_contains(values, value), "version gate"
 
 ;// -----
+FIRRTL version 7.0.0
+
+circuit ObjectEqInvalidLhs:
+  public module ObjectEqInvalidLhs:
+    input ref : AnyRef
+    ; expected-error @below {{lhs of object_eq must be Inst or AnyRef type}}
+    propassert object_eq(String(""), ref), ""
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ObjectEqInvalidRhs:
+  public module ObjectEqInvalidRhs:
+    input ref : AnyRef
+    ; expected-error @below {{rhs of object_eq must be Inst or AnyRef type}}
+    propassert object_eq(ref, UInt<1>(0)), ""
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ObjectEqNoOperands:
+  public module ObjectEqNoOperands:
+    ; expected-error @below {{expected lhs expression in object_eq expression}}
+    propassert object_eq(), ""
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ObjectEqMissingRhs:
+  public module ObjectEqMissingRhs:
+    input ref : AnyRef
+    ; expected-error @below {{expected rhs expression in object_eq expression}}
+    propassert object_eq(ref, ), ""
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ObjectEqExtraOperand:
+  public module ObjectEqExtraOperand:
+    input ref : AnyRef
+    ; expected-error @below {{expected ')'}}
+    propassert object_eq(ref, ref, ref), ""
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ObjectEqMissingComma:
+  public module ObjectEqMissingComma:
+    input ref : AnyRef
+    ; expected-error @below {{expected ','}}
+    propassert object_eq(ref ref), ""
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit ObjectEqVersionError:
+  public module ObjectEqVersionError:
+    input ref : AnyRef
+    ; expected-error @below {{object equality are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassert object_eq(ref, ref), ""
+
+;// -----
 FIRRTL version 6.0.0
 
 circuit Top:

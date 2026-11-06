@@ -1448,6 +1448,33 @@ firrtl.circuit "ListContainsUnsupportedType" {
 }
 
 // -----
+// Generic syntax exercises the ODS operand type constraints for each side.
+firrtl.circuit "ObjectEqInvalidLhs" {
+  firrtl.module @ObjectEqInvalidLhs(
+      in %invalid: !firrtl.string, in %ref: !firrtl.anyref) {
+    // expected-error @below {{'firrtl.object.eq' op operand #0 must be class type or any reference type, but got '!firrtl.string'}}
+    %eq = "firrtl.object.eq"(%invalid, %ref) : (!firrtl.string, !firrtl.anyref) -> !firrtl.bool
+  }
+}
+
+// -----
+firrtl.circuit "ObjectEqInvalidRhs" {
+  firrtl.module @ObjectEqInvalidRhs(
+      in %ref: !firrtl.anyref, in %invalid: !firrtl.integer) {
+    // expected-error @below {{'firrtl.object.eq' op operand #1 must be class type or any reference type, but got '!firrtl.integer'}}
+    %eq = "firrtl.object.eq"(%ref, %invalid) : (!firrtl.anyref, !firrtl.integer) -> !firrtl.bool
+  }
+}
+
+// -----
+firrtl.circuit "ObjectEqInvalidResult" {
+  firrtl.module @ObjectEqInvalidResult(in %ref: !firrtl.anyref) {
+    // expected-error @below {{'firrtl.object.eq' op result #0 must be boolean type, but got '!firrtl.integer'}}
+    %eq = "firrtl.object.eq"(%ref, %ref) : (!firrtl.anyref, !firrtl.anyref) -> !firrtl.integer
+  }
+}
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {

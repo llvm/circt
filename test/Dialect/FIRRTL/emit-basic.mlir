@@ -638,7 +638,9 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module Properties :
-  firrtl.module @Properties(out %string : !firrtl.string,
+  firrtl.module @Properties(in %refA : !firrtl.anyref,
+                            in %refB : !firrtl.anyref,
+                            out %string : !firrtl.string,
                             out %integer : !firrtl.integer,
                             out %bool : !firrtl.bool,
                             out %double : !firrtl.double,
@@ -647,6 +649,7 @@ firrtl.circuit "Foo" {
                             out %unknownString : !firrtl.string,
                             out %stringcat : !firrtl.string,
                             out %stringeq : !firrtl.bool,
+                            out %objecteq : !firrtl.bool,
                             out %stringcontains : !firrtl.bool,
                             out %integercontains : !firrtl.bool,
                             out %boolcontains : !firrtl.bool,
@@ -711,6 +714,10 @@ firrtl.circuit "Foo" {
     // CHECK: propassign stringeq, prop_eq(String("hello"), String("world"))
     %streq = firrtl.prop.eq %str0, %str1 : !firrtl.string
     firrtl.propassign %stringeq, %streq : !firrtl.bool
+
+    // CHECK: propassign objecteq, object_eq(refA, refB)
+    %objeq = firrtl.object.eq %refA, %refB : !firrtl.anyref, !firrtl.anyref
+    firrtl.propassign %objecteq, %objeq : !firrtl.bool
 
     // CHECK: propassign stringcontains,
     // CHECK: list_contains(List<String>(String("hello"), String("world")),

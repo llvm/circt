@@ -192,6 +192,15 @@ firrtl.module @PropertyPropEq() {
   %11 = firrtl.bool.xor %3, %4
 }
 
+firrtl.class @ObjectEqFoo() {}
+
+// CHECK-LABEL: firrtl.module @PropertyObjectEq
+firrtl.module @PropertyObjectEq(in %obj: !firrtl.class<@ObjectEqFoo()>,
+                               in %ref: !firrtl.anyref) {
+  // CHECK: firrtl.object.eq %obj, %ref : !firrtl.class<@ObjectEqFoo()>, !firrtl.anyref{{$}}
+  %eq = firrtl.object.eq %obj, %ref : !firrtl.class<@ObjectEqFoo()>, !firrtl.anyref
+}
+
 // CHECK-LABEL: firrtl.module @PropertyListOps
 firrtl.module @PropertyListOps() {
   %0 = firrtl.integer 0
