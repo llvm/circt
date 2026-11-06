@@ -1241,6 +1241,27 @@ def ObjectAnyRefCastOp : FIRRTLOp<"object.anyref_cast", [Pure]> {
      "$input attr-dict `:` type($input)";
 }
 
+def DomainAnyRefCastOp : FIRRTLOp<"domain.anyref_cast", [Pure]> {
+  let summary = "Cast domain reference to anyref.";
+  let description = [{
+    Cast a domain reference to AnyRef type.  This is primarily used for allowing
+    domain fields to refer to other domains.
+
+    Example
+    ```
+      %0 = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>
+    ```
+
+    Note: this has no FIRRTL textual representation, like `object.anyref_cast`,
+    and is created as needed during parsing and elided during emission.
+  }];
+
+  let arguments = (ins DomainType:$input);
+  let results = (outs AnyRefType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
+
 def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let summary = "Produce a constant string value";
   let description = [{

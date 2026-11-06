@@ -753,3 +753,19 @@ firrtl.circuit "UnsafeDomainCastWithWire" {
     %0 = firrtl.unsafe_domain_cast %a domains[%wire] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain(source: !firrtl.string)>]
   }
 }
+
+// -----
+
+// Domain references cast to AnyRef become object references.
+firrtl.circuit "DomainAnyRef" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @DomainAnyRef(
+  // CHECK-SAME:    in %A: !firrtl.class<@ClockDomain()>
+  firrtl.module @DomainAnyRef(
+      in %A: !firrtl.domain<@ClockDomain()>, out %ref: !firrtl.anyref) {
+    // CHECK: %[[CAST:.+]] = firrtl.object.anyref_cast %A : !firrtl.class<@ClockDomain()>
+    // CHECK: firrtl.propassign %ref, %[[CAST]] : !firrtl.anyref
+    %0 = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    firrtl.propassign %ref, %0 : !firrtl.anyref
+  }
+}

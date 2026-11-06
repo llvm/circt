@@ -2492,6 +2492,32 @@ circuit DomainCreateWithFields:
 
 ;// -----
 FIRRTL version 7.0.0
+circuit DomainAnyRef:
+  domain ClockDomain:
+  domain DomainContainer:
+    source: AnyRef
+
+  ; CHECK-LABEL: firrtl.module @DomainAnyRef
+  public module DomainAnyRef:
+    input A: Domain of ClockDomain
+    output ref: AnyRef
+    output refs: List<AnyRef>
+
+    ; CHECK: %[[CAST:.+]] = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    ; CHECK-NEXT: %B = firrtl.domain.create(%[[CAST]]) : !firrtl.domain<@DomainContainer(source: !firrtl.anyref)>
+    domain B of DomainContainer(A)
+
+    ; CHECK: %[[CAST:.+]] = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    ; CHECK-NEXT: firrtl.propassign %ref, %[[CAST]] : !firrtl.anyref
+    propassign ref, A
+
+    ; CHECK: %[[CAST:.+]] = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    ; CHECK-NEXT: %[[LIST:.+]] = firrtl.list.create %[[CAST]] : !firrtl.list<anyref>
+    ; CHECK-NEXT: firrtl.propassign %refs, %[[LIST]] : !firrtl.list<anyref>
+    propassign refs, List<AnyRef>(A)
+
+;// -----
+FIRRTL version 7.0.0
 circuit UnknownProperties:
   class Foo:
     skip
