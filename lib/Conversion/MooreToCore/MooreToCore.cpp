@@ -1745,6 +1745,9 @@ struct StructExtractRefOpConversion
   LogicalResult
   matchAndRewrite(StructExtractRefOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (!isa<llhd::RefType>(adaptor.getInput().getType()))
+      return op.emitOpError(
+          "extracts from a net which is not currently supported");
     rewriter.replaceOpWithNewOp<llhd::SigStructExtractOp>(
         op, adaptor.getInput(), adaptor.getFieldNameAttr());
     return success();

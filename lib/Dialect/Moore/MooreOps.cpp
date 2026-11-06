@@ -969,13 +969,13 @@ OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructExtractRefOp::verify() {
-  auto type = getStructFieldType(
-      cast<RefType>(getInput().getType()).getNestedType(), getFieldNameAttr());
+  auto type = getStructFieldType(getInput().getType().getNestedType(),
+                                 getFieldNameAttr());
   if (!type)
     return emitOpError() << "extracts field " << getFieldNameAttr()
                          << " which does not exist in " << getInput().getType();
   if (type != getType().getNestedType())
-    return emitOpError() << "result ref of type " << getType().getNestedType()
+    return emitOpError() << "result of type " << getType().getNestedType()
                          << " must match struct field type " << type;
   return success();
 }
