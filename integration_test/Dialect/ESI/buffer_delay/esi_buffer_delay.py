@@ -14,6 +14,7 @@ from typing import Dict, List
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import FallingEdge, RisingEdge
+from cocotb.handle import HierarchyObject
 
 NUM_ITEMS = 200
 MAX_CYCLES = 20 * NUM_ITEMS
