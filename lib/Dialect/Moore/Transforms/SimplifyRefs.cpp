@@ -111,14 +111,14 @@ static LogicalResult collectFields(Value structRef,
                                    SmallVector<FieldInfo> &fields,
                                    ConversionPatternRewriter &rewriter,
                                    uint32_t initialOffset = 0) {
-  auto structType =
-      cast<StructType>(cast<RefType>(structRef.getType()).getNestedType());
+  auto structRefType = cast<WrapperType>(structRef.getType());
+  auto structType = cast<StructType>(structRefType.getNestedType());
   uint32_t offset = initialOffset;
   // Visit fields in reverse order (declaration order is MSB-first)
   for (auto &member : llvm::reverse(structType.getMembers())) {
-    auto fieldRef = StructExtractRefOp::create(rewriter, structRef.getLoc(),
-                                               RefType::get(member.type),
-                                               member.name, structRef);
+    auto fieldRef = StructExtractRefOp::create(
+        rewriter, structRef.getLoc(), structRefType.withNestedType(member.type),
+        member.name, structRef);
 
     auto fieldSize = member.type.getBitSize();
     if (!fieldSize)
@@ -190,13 +190,14 @@ struct StructExtractLowering : public OpConversionPattern<OpTy> {
         uint32_t remainingInField = field.size - offsetInField;
         uint32_t sizeToExtract = std::min(remaining, remainingInField);
 
-        auto fieldType = cast<RefType>(field.field.getType()).getNestedType();
+        auto fieldRefType = cast<WrapperType>(field.field.getType());
+        auto fieldType = fieldRefType.getNestedType();
         auto extractType =
             IntType::get(rewriter.getContext(), sizeToExtract,
                          cast<PackedType>(fieldType).getDomain());
-        auto newLhs =
-            ExtractRefOp::create(rewriter, loc, RefType::get(extractType),
-                                 field.field, offsetInField);
+        auto newLhs = ExtractRefOp::create(
+            rewriter, loc, fieldRefType.withNestedType(extractType),
+            field.field, offsetInField);
         relevantFields.push_back(newLhs);
 
         offsetInStruct += sizeToExtract;
