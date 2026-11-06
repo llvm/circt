@@ -118,5 +118,5 @@ with Context() as ctx, Location.unknown():
   # CHECK: always @(posedge clk)
   # CHECK: my_reg <= {{.+}}
   # CHECK: (* no_merge *)
-  # CHECK: reg [31:0] reg1;
+  # CHECK: var logic [31:0] reg1;
   circt.export_verilog(m, sys.stdout)
