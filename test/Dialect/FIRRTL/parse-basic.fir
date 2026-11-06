@@ -1791,6 +1791,38 @@ circuit PropEqVersionError :
 ;// -----
 FIRRTL version 7.0.0
 
+; CHECK-LABEL: firrtl.circuit "ObjectEq"
+circuit ObjectEq :
+  class Foo:
+    skip
+
+  public module ObjectEq :
+    input obj : Inst<Foo>
+    input ref : AnyRef
+    output classClass : Bool
+    output classAnyRef : Bool
+    output anyRefClass : Bool
+    output anyRefAnyRef : Bool
+
+    ; CHECK: [[CLASS_CLASS:%.+]] = firrtl.object.eq %obj, %obj : !firrtl.class<@Foo()>, !firrtl.class<@Foo()>{{$}}
+    ; CHECK-NEXT: firrtl.propassign %classClass, [[CLASS_CLASS]] : !firrtl.bool{{$}}
+    propassign classClass, object_eq(obj, obj)
+
+    ; CHECK: [[CLASS_ANYREF:%.+]] = firrtl.object.eq %obj, %ref : !firrtl.class<@Foo()>, !firrtl.anyref{{$}}
+    ; CHECK-NEXT: firrtl.propassign %classAnyRef, [[CLASS_ANYREF]] : !firrtl.bool{{$}}
+    propassign classAnyRef, object_eq(obj, ref)
+
+    ; CHECK: [[ANYREF_CLASS:%.+]] = firrtl.object.eq %ref, %obj : !firrtl.anyref, !firrtl.class<@Foo()>{{$}}
+    ; CHECK-NEXT: firrtl.propassign %anyRefClass, [[ANYREF_CLASS]] : !firrtl.bool{{$}}
+    propassign anyRefClass, object_eq(ref, obj)
+
+    ; CHECK: [[ANYREF_ANYREF:%.+]] = firrtl.object.eq %ref, %ref : !firrtl.anyref, !firrtl.anyref{{$}}
+    ; CHECK-NEXT: firrtl.propassign %anyRefAnyRef, [[ANYREF_ANYREF]] : !firrtl.bool{{$}}
+    propassign anyRefAnyRef, object_eq(ref, ref)
+
+;// -----
+FIRRTL version 7.0.0
+
 ; CHECK-LABEL: firrtl.circuit "ListContains"
 circuit ListContains :
   public module ListContains :

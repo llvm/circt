@@ -2062,6 +2062,7 @@ private:
   ParseResult parseCatExp(Value &result);
   ParseResult parseStringConcatExp(Value &result);
   ParseResult parsePropEqExp(Value &result);
+  ParseResult parseObjectEqExp(Value &result);
   ParseResult parseListContainsExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
   ParseResult parseUnknownProperty(Value &result);
@@ -2468,6 +2469,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_prop_eq:
     if (requireFeature({6, 0, 0}, "property equality") ||
         parsePropEqExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_object_eq:
+    if (requireFeature(nextFIRVersion, "object equality") ||
+        parseObjectEqExp(result))
       return failure();
     break;
 
@@ -2979,6 +2986,29 @@ ParseResult FIRStmtParser::parsePropEqExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = PropEqOp::create(builder, lhs, rhs);
+  return success();
+}
+
+/// object_eq-exp ::= 'object_eq(' expr ',' expr ')'
+ParseResult FIRStmtParser::parseObjectEqExp(Value &result) {
+  consumeToken(FIRToken::lp_object_eq);
+
+  auto loc = getToken().getLoc();
+  Value lhs, rhs;
+  locationProcessor.setLoc(loc);
+  if (parseExp(lhs, "expected lhs expression in object_eq expression") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(rhs, "expected rhs expression in object_eq expression") ||
+      parseToken(FIRToken::r_paren, "expected ')'"))
+    return failure();
+
+  if (!isa<ClassType, AnyRefType>(lhs.getType()))
+    return emitError(loc, "lhs of object_eq must be Inst or AnyRef type");
+  if (!isa<ClassType, AnyRefType>(rhs.getType()))
+    return emitError(loc, "rhs of object_eq must be Inst or AnyRef type");
+
+  locationProcessor.setLoc(loc);
+  result = ObjectEqOp::create(builder, lhs, rhs);
   return success();
 }
 

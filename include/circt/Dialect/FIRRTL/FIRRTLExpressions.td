@@ -1595,6 +1595,28 @@ def PropEqOp : FIRRTLOp<"prop.eq", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
   let hasFolder = 1;
 }
 
+def ObjectEqOp : FIRRTLOp<"object.eq", [Pure]> {
+  let summary = "Compare two object references for identity equality";
+  let description = [{
+    Returns true if the operands refer to the same object, and false otherwise.
+    This compares object identity, not the structural equality of object fields.
+    Each operand can be a class type or AnyRef, and the operands need not have
+    the same type. Property assignments and conversion to AnyRef preserve object
+    identity.
+
+    Example:
+    ```mlir
+    %result = firrtl.object.eq %lhs, %rhs : !firrtl.class<@Foo()>, !firrtl.anyref
+    ```
+  }];
+
+  let arguments = (ins AnyTypeOf<[ClassType, AnyRefType]>:$lhs,
+                       AnyTypeOf<[ClassType, AnyRefType]>:$rhs);
+  let results = (outs BoolType:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+}
+
 class BoolBinaryPrimOp<string mnemonic, list<Trait> traits = []> :
     BinaryPrimOp<mnemonic, BoolType, BoolType, BoolType,
                  [Pure, SameOperandsAndResultType] # traits> {
