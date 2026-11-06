@@ -20,3 +20,19 @@ handshake.func @main() -> () {
   %0 = source
   return
 }
+
+// -----
+
+// This lowering materializes constants as hw.constant, which only exists
+// for integer types, so a floating-point constant has to be rejected.
+// Before it was, the failed IntegerAttr cast was dereferenced unchecked
+// and the pass segfaulted.
+
+// expected-error @+1 {{'handshake.func' op error during conversion}}
+handshake.func @float_constant(%arg0: none, ...) -> (f32, none) {
+  %0:2 = fork [2] %arg0 : none
+  // expected-error @+2 {{lowering to HW only supports integer constants, got '0.000000e+00 : f32'}}
+  // expected-error @+1 {{failed to legalize operation 'handshake.constant' that was explicitly marked illegal}}
+  %1 = constant %0#0 {value = 0.000000e+00 : f32} : f32
+  return %1, %0#1 : f32, none
+}
