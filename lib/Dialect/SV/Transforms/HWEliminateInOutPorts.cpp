@@ -93,7 +93,7 @@ LogicalResult HWInOutPortConversion::init() {
     else if (auto write = dyn_cast<sv::AssignOp>(user))
       writers.push_back(write);
     else
-      return user->emitOpError() << "uses hw.inout port " << origPort.name
+      return user->emitOpError() << "uses sv.net port " << origPort.name
                                  << " but the operation itself is unsupported.";
   }
 
@@ -180,9 +180,9 @@ public:
         writeSuffix(writeSuffix) {}
 
   FailureOr<std::unique_ptr<PortConversion>> build(hw::PortInfo port) override {
-    if (auto inout = type_dyn_cast<hw::InOutType>(port.type))
+    if (auto net = type_dyn_cast<sv::NetType>(port.type))
       return {std::make_unique<HWInOutPortConversion>(
-          converter, port, inout.getElementType(), readSuffix, writeSuffix)};
+          converter, port, net.getElementType(), readSuffix, writeSuffix)};
     return PortConversionBuilder::build(port);
   }
 
