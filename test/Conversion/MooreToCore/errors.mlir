@@ -52,3 +52,12 @@ func.func @DynExtractRefOnNet(%arg0: !moore.net<i32>, %arg1: !moore.i32) {
   %0 = moore.dyn_extract_ref %arg0 from %arg1 : net<i32>, i32 -> net<i1>
   return
 }
+
+// -----
+
+func.func @StructExtractRefOnNet(%arg0: !moore.net<struct<{a: i32}>>) {
+  // expected-error @below {{op extracts from a net which is not currently supported}}
+  // expected-error @below {{failed to legalize}}
+  %0 = moore.struct_extract_ref %arg0, "a" : net<struct<{a: i32}>> -> net<i32>
+  return
+}

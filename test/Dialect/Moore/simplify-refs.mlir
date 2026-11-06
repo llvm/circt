@@ -171,8 +171,8 @@ moore.module @PackedStructExtract() {
   moore.procedure initial {
     %0 = moore.constant 1 : i1
 
-    // CHECK: [[TMP0:%.+]] = moore.struct_extract_ref %aa, "b" : <struct<{a: i32, b: i32}>> -> <i32>
-    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %aa, "a" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[TMP0:%.+]] = moore.struct_extract_ref %aa, "b" : ref<struct<{a: i32, b: i32}>> -> ref<i32>
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %aa, "a" : ref<struct<{a: i32, b: i32}>> -> ref<i32>
     // CHECK: [[LHS:%.+]] = moore.extract_ref [[TMP0]] from 0 : ref<i32> -> ref<i1>
     // CHECK: moore.blocking_assign [[LHS]], %0 : i1
     %el = moore.extract_ref %aa from 0 : ref<struct<{a: i32, b: i32}>> -> ref<i1>
@@ -195,10 +195,10 @@ moore.module @PackedStructExtractRange() {
   moore.procedure initial {
     %0 = moore.constant 0 : i3
 
-    // CHECK: [[D:%.+]] = moore.struct_extract_ref %aa, "d" : <struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> <i32>
-    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %aa, "inner" : <struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> <struct<{a: i32, b: i32}>>
-    // CHECK: [[INNER_B:%.+]] = moore.struct_extract_ref [[TMP1]], "b" : <struct<{a: i32, b: i32}>> -> <i32>
-    // CHECK: [[INNER_A:%.+]] = moore.struct_extract_ref [[TMP1]], "a" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[D:%.+]] = moore.struct_extract_ref %aa, "d" : ref<struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> ref<i32>
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %aa, "inner" : ref<struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> ref<struct<{a: i32, b: i32}>>
+    // CHECK: [[INNER_B:%.+]] = moore.struct_extract_ref [[TMP1]], "b" : ref<struct<{a: i32, b: i32}>> -> ref<i32>
+    // CHECK: [[INNER_A:%.+]] = moore.struct_extract_ref [[TMP1]], "a" : ref<struct<{a: i32, b: i32}>> -> ref<i32>
     // CHECK: [[LHS2:%.+]] = moore.extract_ref [[D]] from 30 : ref<i32> -> ref<i2>
     // CHECK: [[LHS1:%.+]] = moore.extract_ref [[INNER_B]] from 0 : ref<i32> -> ref<i1>
     // CHECK: [[RHS1:%.+]] = moore.extract %0 from 2 : i3 -> i1
@@ -220,4 +220,27 @@ moore.module @NetConcat(in %a: !moore.net<i8>, in %b: !moore.net<i4>, in %v: !mo
   // CHECK: moore.assign %b, [[TMP2]] : net<i4>
   %0 = moore.concat_ref %a, %b : (!moore.net<i8>, !moore.net<i4>) -> net<i12>
   moore.assign %0, %v : net<i12>
+}
+
+// CHECK-LABEL: moore.module @NetStructExtract
+moore.module @NetStructExtract(in %a: !moore.net<struct<{x: i8, y: i8}>>, in %v: !moore.i4) {
+  // CHECK: [[Y:%.+]] = moore.struct_extract_ref %a, "y" : net<struct<{x: i8, y: i8}>> -> net<i8>
+  // CHECK: [[LHS:%.+]] = moore.extract_ref [[Y]] from 2 : net<i8> -> net<i4>
+  // CHECK: moore.assign [[LHS]], %v : net<i4>
+  %0 = moore.extract_ref %a from 2 : net<struct<{x: i8, y: i8}>> -> net<i4>
+  moore.assign %0, %v : net<i4>
+}
+
+// CHECK-LABEL: moore.module @NetStructExtractAcrossFields
+moore.module @NetStructExtractAcrossFields(in %a: !moore.net<struct<{x: i8, y: i8}>>, in %v: !moore.i4) {
+  // CHECK: [[Y:%.+]] = moore.struct_extract_ref %a, "y" : net<struct<{x: i8, y: i8}>> -> net<i8>
+  // CHECK: [[X:%.+]] = moore.struct_extract_ref %a, "x" : net<struct<{x: i8, y: i8}>> -> net<i8>
+  // CHECK: [[LHS2:%.+]] = moore.extract_ref [[Y]] from 6 : net<i8> -> net<i2>
+  // CHECK: [[LHS1:%.+]] = moore.extract_ref [[X]] from 0 : net<i8> -> net<i2>
+  // CHECK: [[RHS1:%.+]] = moore.extract %v from 2 : i4 -> i2
+  // CHECK: moore.assign [[LHS1]], [[RHS1]] : net<i2>
+  // CHECK: [[RHS2:%.+]] = moore.extract %v from 0 : i4 -> i2
+  // CHECK: moore.assign [[LHS2]], [[RHS2]] : net<i2>
+  %0 = moore.extract_ref %a from 6 : net<struct<{x: i8, y: i8}>> -> net<i4>
+  moore.assign %0, %v : net<i4>
 }

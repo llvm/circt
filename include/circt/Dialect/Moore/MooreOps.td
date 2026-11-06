@@ -2509,11 +2509,12 @@ def StructExtractOp : MooreOp<"struct_extract", [Pure]> {
 
 def StructExtractRefOp : MooreOp<"struct_extract_ref", [
   Pure,
+  SameWrapperKind<["input", "result"]>,
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
 ]> {
-  let summary = "Create a reference to a struct field";
-  let arguments = (ins StrAttr:$fieldName, AnyStructRefType:$input);
-  let results = (outs RefType:$result);
+  let summary = "Create a ref or net to a struct field";
+  let arguments = (ins StrAttr:$fieldName, AnyStructWrapperType:$input);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $input `,` $fieldName attr-dict `:` type($input) `->` type($result)
   }];

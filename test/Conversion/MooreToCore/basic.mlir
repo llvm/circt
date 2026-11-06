@@ -696,7 +696,7 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   %0 = moore.struct_extract %arg0, "exp_bits" : !moore.struct<{exp_bits: i32, man_bits: i32}> -> i32
 
   // CHECK: llhd.sig.struct_extract %arg1["exp_bits"] : <!hw.struct<exp_bits: i32, man_bits: i32>>
-  %ref = moore.struct_extract_ref %arg1, "exp_bits" : <!moore.struct<{exp_bits: i32, man_bits: i32}>> -> <i32>
+  %ref = moore.struct_extract_ref %arg1, "exp_bits" : ref<!moore.struct<{exp_bits: i32, man_bits: i32}>> -> ref<i32>
   moore.assign %ref, %0 : ref<i32>
 
   // CHECK: [[INIT:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.struct<exp_bits: i32, man_bits: i32>
