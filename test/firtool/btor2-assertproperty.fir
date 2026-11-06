@@ -27,21 +27,21 @@ circuit Counter :
 ; CHECK:  5 constd 1 0
 ; CHECK:  6 state 1 hbr
 ; CHECK:  7 init 1 6 5
-; CHECK:  8 constd 3 1
-; CHECK:  9 constd 3 10
-; CHECK:  10 constd 3 22
-; CHECK:  11 constd 3 0
-; CHECK:  12 eq 1 4 10
-; CHECK:  13 add 3 4 8
-; CHECK:  14 ite 3 12 11 13
-; CHECK:  15 neq 1 4 9
-; CHECK:  16 constd 1 -1
+; CHECK:  8 constd 1 -1
+; CHECK:  9 constd 3 1
+; CHECK:  10 constd 3 10
+; CHECK:  11 constd 3 22
+; CHECK:  12 constd 3 0
+; CHECK:  13 eq 1 4 11
+; CHECK:  14 add 3 4 9
+; CHECK:  15 ite 3 13 12 14
+; CHECK:  16 neq 1 4 10
 ; CHECK:  17 or 1 2 6
-; CHECK:  18 xor 1 2 16
+; CHECK:  18 xor 1 2 8
 ; CHECK:  19 and 1 6 18
-; CHECK:  20 implies 1 19 15
+; CHECK:  20 implies 1 19 16
 ; CHECK:  21 not 1 20
 ; CHECK:  22 bad 21
-; CHECK:  23 ite 3 2 11 14
+; CHECK:  23 ite 3 2 12 15
 ; CHECK:  24 next 3 4 23
 ; CHECK:  25 next 1 6 17
