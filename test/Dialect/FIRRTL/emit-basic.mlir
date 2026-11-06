@@ -1166,13 +1166,21 @@ firrtl.circuit "Foo" {
     firrtl.domain.define %foo_A, %my_clock : !firrtl.domain<@ClockDomain()>
   }
 
-  // Domain-to-anyref casts have no FIRRTL syntax and are elided.
+  // Domain-to-anyref casts have no FIRRTL syntax and are elided in domain
+  // creation and property assignments.
   // CHECK-LABEL: module DomainAnyRef :
-  // CHECK-NEXT: input A : Domain of ClockDomain
-  firrtl.module @DomainAnyRef(in %A: !firrtl.domain<@ClockDomain()>) {
+  firrtl.module @DomainAnyRef(
+    // CHECK-NEXT: input A : Domain of ClockDomain
+    // CHECK-NEXT: output ref : AnyRef
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %ref: !firrtl.anyref
+  ) {
     %0 = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
-    // CHECK: domain B of DomainContainer(A)
+    // CHECK-EMPTY:
+    // CHECK-NEXT: domain B of DomainContainer(A)
     %B = firrtl.domain.create(%0) : !firrtl.domain<@DomainContainer(source: !firrtl.anyref)>
+    // CHECK-NEXT: propassign ref, A
+    firrtl.propassign %ref, %0 : !firrtl.anyref
   }
 
 }
