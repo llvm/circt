@@ -28,7 +28,6 @@
 // `llhd-deseq-verbose` for additional prints that trace out concrete values
 // propagated across the IR.
 #define DEBUG_TYPE "llhd-deseq"
-#define VERBOSE_DEBUG(...) DEBUG_WITH_TYPE(DEBUG_TYPE "-verbose", __VA_ARGS__)
 
 namespace circt {
 namespace llhd {
@@ -655,11 +654,6 @@ TruthTable Deseq::computeBoolean(ValueField vf) {
           [&](auto value) { return computeBoolean(value); });
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Boolean ";
-    value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-    llvm::dbgs() << ": " << result << "\n";
-  });
   booleanLattice[vf] = result;
   return result;
 }
@@ -696,11 +690,6 @@ ValueTable Deseq::computeValue(Value value) {
           [&](auto value) { return computeValue(value); });
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Value ";
-    value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-    llvm::dbgs() << ": " << result << "\n";
-  });
   valueLattice[value] = result;
   return result;
 }
@@ -849,13 +838,6 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
   // as recursion breaker.
   if (auto it = blockConditionLattice.find(block);
       it != blockConditionLattice.end()) {
-    VERBOSE_DEBUG({
-      llvm::dbgs() << "[CFG TRACE] block cache "
-                   << (computingBlockConditions.contains(block)
-                           ? "INFLIGHT " : "COMPLETE ");
-      block->printAsOperand(llvm::dbgs());
-      llvm::dbgs() << " = " << it->second << "\n";
-    });
     return it->second;
   }
   blockConditionLattice[block] = getConstBoolean(false);
@@ -888,11 +870,6 @@ TruthTable Deseq::computeBlockCondition(Block *block) {
   }
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Block condition ";
-    block->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << ": " << result << "\n";
-  });
   blockConditionLattice[block] = result;
   computingBlockConditions.erase(block);
   return result;
@@ -913,14 +890,6 @@ TruthTable Deseq::computeSuccessorCondition(BlockOperand &blockOperand) {
   // as recursion breaker.
   if (auto it = successorConditionLattice.find(&blockOperand);
       it != successorConditionLattice.end()) {
-    VERBOSE_DEBUG({
-      llvm::dbgs() << "[CFG TRACE] edge cache "
-                   << (computingSuccessorConditions.contains(&blockOperand)
-                           ? "INFLIGHT " : "COMPLETE ");
-      blockOperand.getOwner()->getBlock()->printAsOperand(llvm::dbgs());
-      llvm::dbgs() << "#succ" << blockOperand.getOperandNumber()
-                   << " = " << it->second << "\n";
-    });
     return it->second;
   }
   successorConditionLattice[&blockOperand] = getConstBoolean(false);
@@ -944,13 +913,6 @@ TruthTable Deseq::computeSuccessorCondition(BlockOperand &blockOperand) {
   }
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Successor condition ";
-    op->getBlock()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#succ" << destIdx << " -> ";
-    blockOperand.get()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << " = " << result << "\n";
-  });
   successorConditionLattice[&blockOperand] = result;
   computingSuccessorConditions.erase(&blockOperand);
   return result;
@@ -984,13 +946,6 @@ TruthTable Deseq::computeSuccessorBoolean(BlockOperand &blockOperand,
   }
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Successor boolean ";
-    op->getBlock()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#succ" << destIdx << " -> ";
-    blockOperand.get()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#arg" << argIdx << " = " << result << "\n";
-  });
   successorBooleanLattice[{&blockOperand, argIdx}] = result;
   return result;
 }
@@ -1024,13 +979,6 @@ ValueTable Deseq::computeSuccessorValue(BlockOperand &blockOperand,
   }
 
   // Memoize the result.
-  VERBOSE_DEBUG({
-    llvm::dbgs() << "- Successor value ";
-    op->getBlock()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#succ" << destIdx << " -> ";
-    blockOperand.get()->printAsOperand(llvm::dbgs());
-    llvm::dbgs() << "#arg" << argIdx << " = " << result << "\n";
-  });
   successorValueLattice[{&blockOperand, argIdx}] = result;
   return result;
 }
