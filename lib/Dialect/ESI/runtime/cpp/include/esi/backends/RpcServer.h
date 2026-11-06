@@ -38,7 +38,8 @@ public:
   void setManifest(int esiVersion,
                    const std::vector<uint8_t> &compressedManifest);
 
-  /// Register a read or write port which communicates over RPC.
+  /// Register a read or write port which communicates over RPC. Frames which
+  /// arrive for a read port before it's connected are held until it is.
   ReadChannelPort &registerReadPort(const std::string &name,
                                     const std::string &type);
   WriteChannelPort &registerWritePort(const std::string &name,
