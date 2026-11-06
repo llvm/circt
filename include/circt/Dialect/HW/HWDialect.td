@@ -28,6 +28,7 @@ def HWDialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
+  let hasOperationAttrVerify = 1;
   let useDefaultTypePrinterParser = 1;
 
   let extraClassDeclaration = [{

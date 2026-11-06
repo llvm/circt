@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -119,6 +120,87 @@ TEST(HWModuleOpTest, AddInputs) {
   EXPECT_EQ(ports[1].name, builder.getStringAttr("f"));
   EXPECT_EQ(ports[1].dir, ModulePort::Direction::Input);
   EXPECT_EQ(ports[1].type, tyF);
+}
+
+TEST(HWSpecializationAttrTest, VerifyAndHelpers) {
+  MLIRContext context;
+  context.loadDialect<HWDialect>();
+  std::string capturedMsg;
+  auto captureEmit = [&]() -> InFlightDiagnostic {
+    capturedMsg.clear();
+    return context.getDiagEngine().emit(UnknownLoc::get(&context),
+                                        DiagnosticSeverity::Error);
+  };
+  ScopedDiagnosticHandler handler(&context, [&](Diagnostic &diag) {
+    capturedMsg = diag.str();
+    return success();
+  });
+
+  StringAttr origName = StringAttr::get(&context, "Orig");
+  IntegerType i32Ty = IntegerType::get(&context, 32);
+  IntegerType i16Ty = IntegerType::get(&context, 16);
+  NoneType noneTy = NoneType::get(&context);
+
+  // Valid attribute round-trips through getSpecialization / setSpecialization.
+  auto validParam = ParamDeclAttr::get(StringAttr::get(&context, "W"),
+                                       IntegerAttr::get(i32Ty, 16));
+  auto validSpec = SpecializationAttr::getChecked(
+      captureEmit, &context, origName, ArrayRef<ParamDeclAttr>{validParam},
+      /*boundaryAltered=*/true);
+  ASSERT_TRUE(static_cast<bool>(validSpec));
+  EXPECT_EQ(validSpec.getOrigName(), origName);
+  EXPECT_TRUE(validSpec.getBoundaryAltered());
+
+  // Null operation handling in helpers.
+  EXPECT_FALSE(getSpecialization(nullptr));
+  setSpecialization(nullptr, validSpec);
+
+  Location loc = UnknownLoc::get(&context);
+  OwningOpRef<ModuleOp> root(ModuleOp::create(loc));
+  auto builder = ImplicitLocOpBuilder::atBlockEnd(loc, root->getBody());
+  auto mod = HWModuleOp::create(builder, StringAttr::get(&context, "M"),
+                                ArrayRef<PortInfo>{});
+  setSpecialization(mod, validSpec);
+  EXPECT_EQ(getSpecialization(mod), validSpec);
+  setSpecialization(mod, SpecializationAttr());
+  EXPECT_FALSE(getSpecialization(mod));
+
+  // Unreachable-from-parser verifier branches.
+  EXPECT_FALSE(SpecializationAttr::getChecked(
+      captureEmit, &context, StringAttr(), ArrayRef<ParamDeclAttr>{},
+      /*boundaryAltered=*/false));
+  EXPECT_EQ(capturedMsg,
+            "specialization original module name must not be empty");
+
+  EXPECT_FALSE(SpecializationAttr::getChecked(
+      captureEmit, &context, origName, ArrayRef<ParamDeclAttr>{ParamDeclAttr()},
+      /*boundaryAltered=*/false));
+  EXPECT_EQ(capturedMsg, "specialization parameter entry must not be null");
+
+  auto nullNameParam =
+      ParamDeclAttr::get(&context, StringAttr(), noneTy, Attribute());
+  EXPECT_FALSE(SpecializationAttr::getChecked(
+      captureEmit, &context, origName, ArrayRef<ParamDeclAttr>{nullNameParam},
+      /*boundaryAltered=*/false));
+  EXPECT_EQ(capturedMsg, "specialization parameter name must not be empty");
+
+  auto untypedValParam =
+      ParamDeclAttr::get(&context, StringAttr::get(&context, "U"), noneTy,
+                         UnitAttr::get(&context));
+  EXPECT_FALSE(SpecializationAttr::getChecked(
+      captureEmit, &context, origName, ArrayRef<ParamDeclAttr>{untypedValParam},
+      /*boundaryAltered=*/false));
+  EXPECT_NE(capturedMsg.find("must have a typed value, got"),
+            std::string::npos);
+
+  auto mismatchedTypeParam =
+      ParamDeclAttr::get(&context, StringAttr::get(&context, "M"), i32Ty,
+                         IntegerAttr::get(i16Ty, 1));
+  EXPECT_FALSE(SpecializationAttr::getChecked(
+      captureEmit, &context, origName,
+      ArrayRef<ParamDeclAttr>{mismatchedTypeParam}, /*boundaryAltered=*/false));
+  EXPECT_NE(capturedMsg.find("must have type 'i32', got 'i16'"),
+            std::string::npos);
 }
 
 } // namespace

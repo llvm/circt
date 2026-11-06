@@ -13,6 +13,10 @@
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
+namespace mlir {
+class Operation;
+} // namespace mlir
+
 namespace circt {
 namespace hw {
 class PEOAttr;
@@ -40,5 +44,19 @@ bool isParametricType(mlir::Type t);
 
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/HW/HWAttributes.h.inc"
+
+namespace circt {
+namespace hw {
+
+/// Return the `hw.specialization` attribute attached to `op`, or null if `op`
+/// is null or no attribute is present.
+SpecializationAttr getSpecialization(mlir::Operation *op);
+
+/// Attach or remove the `hw.specialization` attribute on `op`. Passing a null
+/// attribute removes any existing attribute; passing a null `op` is a no-op.
+void setSpecialization(mlir::Operation *op, SpecializationAttr attr);
+
+} // namespace hw
+} // namespace circt
 
 #endif // CIRCT_DIALECT_HW_ATTRIBUTES_H

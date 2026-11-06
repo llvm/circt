@@ -7,11 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/FVInt.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
+#include "slang/ast/symbols/ParameterSymbols.h"
+#include "slang/ast/types/AllTypes.h"
 #include "slang/syntax/AllSyntax.h"
+#include "slang/syntax/SyntaxKind.h"
 #include "slang/syntax/SyntaxVisitor.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -20,6 +25,81 @@ using namespace circt;
 using namespace ImportVerilog;
 
 static constexpr StringLiteral dpiExportAttrName = "circt.dpi.export";
+
+/// Convert an elaborated Slang value parameter into a `hw::ParamDeclAttr`.
+/// Values that cannot be expressed as a typed literal (4-state integers with
+/// X/Z bits, unpacked aggregates, unbounded `$`, etc.) fall back to
+/// `hw::ParamVerbatimAttr`. Bad/empty constant values produce an unvalued
+/// `ParamDeclAttr` so elaboration never fails on valid SystemVerilog.
+static hw::ParamDeclAttr
+convertParameterDecl(MLIRContext *ctx,
+                     const slang::ast::ParameterSymbol &param) {
+  auto nameAttr = StringAttr::get(ctx, param.name);
+  const slang::ConstantValue &constant = param.getValue();
+  if (constant.bad())
+    return hw::ParamDeclAttr::get(nameAttr, NoneType::get(ctx));
+
+  if (constant.isInteger()) {
+    const slang::SVInt &svint = constant.integer();
+    if (svint.hasUnknown()) {
+      std::string text =
+          constant.toString(/*abbreviateThresholdBits=*/slang::SVInt::MAX_BITS,
+                            /*exactUnknowns=*/true);
+      return hw::ParamDeclAttr::get(
+          nameAttr, hw::ParamVerbatimAttr::get(StringAttr::get(ctx, text)));
+    }
+    if (param.isImplicitString({})) {
+      // `convertToStr()` follows IEEE 1800 §6.16 byte packing and drops zero
+      // (NUL) bytes when decoding untyped string-literal parameters.
+      slang::ConstantValue strVal = constant.convertToStr();
+      if (strVal.isString())
+        return hw::ParamDeclAttr::get(nameAttr,
+                                      StringAttr::get(ctx, strVal.str()));
+    }
+    if (svint.getBitWidth() == 0)
+      return hw::ParamDeclAttr::get(nameAttr, NoneType::get(ctx));
+    unsigned numWords = svint.getNumWords();
+    APInt apInt(svint.getBitWidth(),
+                ArrayRef<uint64_t>(svint.getRawPtr(), numWords));
+    IntegerType intType =
+        IntegerType::get(ctx, svint.getBitWidth(),
+                         param.getType().isSigned() ? IntegerType::Signed
+                                                    : IntegerType::Unsigned);
+    return hw::ParamDeclAttr::get(nameAttr, IntegerAttr::get(intType, apInt));
+  }
+  if (constant.isReal())
+    return hw::ParamDeclAttr::get(
+        nameAttr,
+        FloatAttr::get(mlir::Float64Type::get(ctx), constant.real().v));
+  if (constant.isShortReal())
+    return hw::ParamDeclAttr::get(
+        nameAttr,
+        FloatAttr::get(mlir::Float32Type::get(ctx), constant.shortReal().v));
+  if (constant.isString())
+    return hw::ParamDeclAttr::get(nameAttr,
+                                  StringAttr::get(ctx, constant.str()));
+
+  std::string text =
+      constant.toString(/*abbreviateThresholdBits=*/slang::SVInt::MAX_BITS,
+                        /*exactUnknowns=*/true,
+                        /*useAssignmentPatterns=*/true);
+  return hw::ParamDeclAttr::get(
+      nameAttr, hw::ParamVerbatimAttr::get(StringAttr::get(ctx, text)));
+}
+
+/// Return whether `type` (or any array element type beneath it) is declared
+/// inside a module/interface/program instance scope. Slang prints such types
+/// using a hierarchical path (`Top.local_t`), which is not legal SystemVerilog
+/// type-parameter override syntax outside the defining instance.
+static bool hasInstanceScopedType(const slang::ast::Type &type) {
+  for (const slang::ast::Type *cur = &type; cur;
+       cur = cur->getArrayElementType()) {
+    if (const slang::ast::Scope *scope = cur->getParentScope())
+      if (scope->getContainingInstance())
+        return true;
+  }
+  return false;
+}
 
 //===----------------------------------------------------------------------===//
 // Utilities
@@ -762,6 +842,7 @@ struct ModuleVisitor : public BaseVisitor {
         builder.getStringAttr(instName),
         FlatSymbolRefAttr::get(module.getSymNameAttr()), inputValues,
         inputNames, outputNames);
+    context.convertAttributes(instNode, inst);
 
     // An alias belongs to this instance if the body containing its symbol is
     // nested anywhere under the instance in the elaborated tree.
@@ -1386,6 +1467,34 @@ LogicalResult Context::convertCompilation() {
   return success();
 }
 
+void Context::convertAttributes(const slang::ast::Symbol &symbol,
+                                Operation *op) {
+  SmallVector<sv::SVAttributeAttr> svAttrs;
+  for (const slang::ast::AttributeSymbol *attr :
+       compilation.getAttributes(symbol)) {
+    StringAttr exprAttr;
+    if (const slang::syntax::SyntaxNode *syntax = attr->getSyntax()) {
+      const auto &spec = syntax->as<slang::syntax::AttributeSpecSyntax>();
+      if (spec.value) {
+        if (spec.value->expr->kind ==
+            slang::syntax::SyntaxKind::StringLiteralExpression) {
+          exprAttr = builder.getStringAttr(
+              spec.value->expr->as<slang::syntax::LiteralExpressionSyntax>()
+                  .literal.rawText());
+        } else {
+          exprAttr = builder.getStringAttr(attr->getValue().toString(
+              /*abbreviateThresholdBits=*/slang::SVInt::MAX_BITS));
+        }
+      }
+    }
+    svAttrs.push_back(sv::SVAttributeAttr::get(
+        getContext(), builder.getStringAttr(attr->name), exprAttr,
+        /*emitAsComment=*/false));
+  }
+  if (!svAttrs.empty())
+    sv::setSVAttributes(op, svAttrs);
+}
+
 ModuleLowering *
 Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::ArgumentDirection;
@@ -1428,6 +1537,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 
   // It's used to tag where a hierarchical name is on the port list.
   unsigned int outputIdx = 0, inputIdx = 0;
+  bool boundaryAltered = false;
   for (auto *symbol : module->getPortList()) {
     auto handlePort = [&](const PortSymbol &port) {
       auto portLoc = convertLocation(port.location);
@@ -1539,11 +1649,13 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       if (failed(handlePort(*port)))
         return {};
     } else if (const auto *multiPort = symbol->as_if<MultiPortSymbol>()) {
+      boundaryAltered = true;
       for (auto *port : multiPort->ports)
         if (failed(handlePort(*port)))
           return {};
     } else if (const auto *ifacePort =
                    symbol->as_if<slang::ast::InterfacePortSymbol>()) {
+      boundaryAltered = true;
       if (failed(handleIfacePort(*ifacePort)))
         return {};
     } else {
@@ -1566,6 +1678,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       return {};
 
     if (auto hierName = hierPath.hierName) {
+      boundaryAltered = true;
       // The type of all hierarchical names are marked as the "RefType".
       hierType = moore::RefType::get(cast<moore::UnpackedType>(hierType));
       if (hierPath.direction == ArgumentDirection::Out) {
@@ -1594,35 +1707,49 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // Create an empty module that corresponds to this module.
   auto moduleOp =
       moore::SVModuleOp::create(builder, loc, module->name, moduleType);
-  SmallVector<sv::SVAttributeAttr> svAttrs;
-  for (const auto *attr : compilation.getAttributes(module->getDefinition())) {
-    StringAttr exprAttr;
-    if (const auto *syntax = attr->getSyntax()) {
-      const auto &spec = syntax->as<slang::syntax::AttributeSpecSyntax>();
-      if (spec.value) {
-        if (spec.value->expr->kind ==
-            slang::syntax::SyntaxKind::StringLiteralExpression) {
-          exprAttr = builder.getStringAttr(
-              spec.value->expr->as<slang::syntax::LiteralExpressionSyntax>()
-                  .literal.rawText());
-        } else {
-          exprAttr = builder.getStringAttr(attr->getValue().toString());
-        }
-      }
-    }
-    svAttrs.push_back(sv::SVAttributeAttr::get(
-        getContext(), builder.getStringAttr(attr->name), exprAttr,
-        /*emitAsComment=*/false));
-  }
-  if (!svAttrs.empty())
-    sv::setSVAttributes(moduleOp, svAttrs);
+  convertAttributes(module->getDefinition(), moduleOp);
   orderedRootOps.insert(it, {key, moduleOp});
   moduleOp.getBodyRegion().push_back(block.release());
   lowering.op = moduleOp;
 
   // Add the module to the symbol table of the MLIR module, which uniquifies its
   // name as we'd expect.
+  StringRef origName = module->name;
   symbolTable.insert(moduleOp);
+
+  // Optionally record specialization provenance (pre-uniquified module name,
+  // elaborated parameters, and whether the lowered port boundary differs from
+  // the source module declaration).
+  if (options.recordSpecialization && !origName.empty()) {
+    SmallVector<hw::ParamDeclAttr> elaboratedParams;
+    for (const slang::ast::ParameterSymbolBase *paramBase :
+         module->getParameters()) {
+      if (paramBase->isLocalParam())
+        continue;
+      if (const auto *param = paramBase->symbol.as_if<ParameterSymbol>()) {
+        if (param->name.empty())
+          continue;
+        elaboratedParams.push_back(convertParameterDecl(getContext(), *param));
+      } else if (const auto *typeParam =
+                     paramBase->symbol.as_if<TypeParameterSymbol>()) {
+        if (!typeParam->isOverridden() || typeParam->name.empty())
+          continue;
+        StringAttr nameAttr = StringAttr::get(getContext(), typeParam->name);
+        const slang::ast::Type &targetTy = typeParam->targetType.getType();
+        if (targetTy.isError() || hasInstanceScopedType(targetTy)) {
+          elaboratedParams.push_back(
+              hw::ParamDeclAttr::get(nameAttr, NoneType::get(getContext())));
+        } else {
+          elaboratedParams.push_back(hw::ParamDeclAttr::get(
+              nameAttr, hw::ParamVerbatimAttr::get(StringAttr::get(
+                            getContext(), targetTy.toString()))));
+        }
+      }
+    }
+    hw::setSpecialization(moduleOp, hw::SpecializationAttr::get(
+                                        builder.getStringAttr(origName),
+                                        elaboratedParams, boundaryAltered));
+  }
 
   // Schedule the body to be lowered.
   moduleWorklist.push(module);

@@ -56,6 +56,10 @@ struct ImportVerilogOptions {
   /// Generate debug information in the form of debug dialect ops in the IR.
   bool debugInfo = false;
 
+  /// Record `#hw.specialization` provenance (pre-uniquified module name and
+  /// elaborated parameter values) on imported `moore.module` operations.
+  bool recordSpecialization = false;
+
   /// Interpret `always @(*)` as `always_comb`.
   bool lowerAlwaysAtStarAsComb = true;
 

@@ -139,6 +139,12 @@ struct CLOptions {
   cl::opt<bool> debugInfo{"g", cl::desc("Generate debug information"),
                           cl::cat(cat)};
 
+  cl::opt<bool> recordSpecialization{
+      "record-specialization",
+      cl::desc("Record `#hw.specialization` provenance (original module name "
+               "and elaborated parameters) on imported modules"),
+      cl::init(false), cl::cat(cat)};
+
   cl::opt<bool> lowerAlwaysAtStarAsComb{
       "always-at-star-as-comb",
       cl::desc("Interpret `always @(*)` as `always_comb`"), cl::init(true),
@@ -361,6 +367,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
   else if (opts.loweringMode == LoweringMode::OnlyImport)
     options.mode = ImportVerilogOptions::Mode::OnlyImport;
   options.debugInfo = opts.debugInfo;
+  options.recordSpecialization = opts.recordSpecialization;
   options.lowerAlwaysAtStarAsComb = opts.lowerAlwaysAtStarAsComb;
 
   options.includeDirs = opts.includeDirs;

@@ -609,3 +609,100 @@ hw.module @constantAliasWidthMismatch() {
   // expected-error @+1 {{hw.constant attribute type 'i8' doesn't match the result type 'i4'}}
   %0 = "hw.constant"() <{value = 1 : i8}> : () -> !hw.typealias<@ns::@t, i4>
 }
+
+// -----
+
+// Reject wrong attribute value type under `hw.specialization`.
+// expected-error @+1 {{'hw.module' op expected 'hw.specialization' attribute to be a #hw.specialization attribute}}
+hw.module @badSpecAttrType() attributes {hw.specialization = "Foo"} {}
+
+// -----
+
+// Reject `hw.specialization` on external module declarations.
+// expected-error @+1 {{'hw.module.extern' op 'hw.specialization' attribute is only valid on 'hw.module' or 'moore.module' definitions}}
+hw.module.extern @badSpecOp() attributes {hw.specialization = #hw.specialization<"Foo">}
+
+// -----
+
+// Reject empty original module name.
+hw.module @specEmptyOrigName() attributes {
+  // expected-error @+1 {{specialization original module name must not be empty}}
+  hw.specialization = #hw.specialization<"">
+} {}
+
+// -----
+
+// Reject duplicate parameter names inside `hw.specialization`.
+hw.module @specDuplicateParam() attributes {
+  // expected-error @+1 {{duplicate specialization parameter "W"}}
+  hw.specialization = #hw.specialization<"Foo", [#hw.param.decl<"W": i32 = 1> : i32, #hw.param.decl<"W": i32 = 2> : i32]>
+} {}
+
+// -----
+
+// Reject empty parameter name inside `hw.specialization`.
+hw.module @specEmptyParamName() attributes {
+  // expected-error @+1 {{specialization parameter name must not be empty}}
+  hw.specialization = #hw.specialization<"Foo", [#hw.param.decl<"": i32 = 1> : i32]>
+} {}
+
+// -----
+
+// Reject `hw.specialization` attached to `hw.instance`.
+hw.module @specCallee() {}
+hw.module @specOnInstance() {
+  // expected-error @+1 {{'hw.instance' op 'hw.specialization' attribute is only valid on 'hw.module' or 'moore.module' definitions}}
+  hw.instance "u" @specCallee() -> () {hw.specialization = #hw.specialization<"specCallee">}
+}
+
+// -----
+
+// Reject non-`ParamDeclAttr` element inside the parameter list.
+hw.module @specNonParamDeclElement() attributes {
+  // expected-error @+1 {{invalid kind of attribute specified}}
+  hw.specialization = #hw.specialization<"Foo", [42 : i32]>
+} {}
+
+// -----
+
+// Reject non-string original module name during parsing.
+hw.module @specNonStringOrigName() attributes {
+  // expected-error @+1 {{invalid kind of attribute specified}}
+  hw.specialization = #hw.specialization<42>
+} {}
+
+// -----
+
+// Reject unknown keyword immediately after original module name.
+hw.module @specBadKeyword() attributes {
+  // expected-error @+1 {{expected '['}}
+  hw.specialization = #hw.specialization<"Foo", bad>
+} {}
+
+// -----
+
+// Reject unknown trailing keyword after parameter list.
+hw.module @specBadTrailingKeyword() attributes {
+  // expected-error @+1 {{expected 'boundaryAltered'}}
+  hw.specialization = #hw.specialization<"Foo", [], bad>
+} {}
+
+// -----
+
+// Reject trailing comma with no following parameter list or flag.
+hw.module @specTrailingComma() attributes {
+  // expected-error @+1 {{expected '['}}
+  hw.specialization = #hw.specialization<"Foo", >
+} {}
+
+// -----
+
+// Reject `hw.specialization` attached to `moore.instance`.
+moore.module @specMooreCallee() {
+  moore.output
+}
+moore.module @specOnMooreInstance() {
+  // expected-error @+1 {{'moore.instance' op 'hw.specialization' attribute is only valid on 'hw.module' or 'moore.module' definitions}}
+  moore.instance "u" @specMooreCallee() -> () {hw.specialization = #hw.specialization<"specMooreCallee">}
+  moore.output
+}

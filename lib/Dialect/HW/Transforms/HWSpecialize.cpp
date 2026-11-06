@@ -22,6 +22,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -299,6 +300,30 @@ static LogicalResult specializeModule(
   target = HWModuleOp::create(
       builder, source.getLoc(),
       StringAttr::get(ctx, generateModuleName(ns, source, parameters)), ports);
+
+  // Record specialization provenance linking this monomorphized copy back to
+  // the unspecialized source module and parameter bindings.
+  SmallVector<ParamDeclAttr> specParams;
+  StringAttr origName = source.getSymNameAttr();
+  bool boundaryAltered = false;
+  if (SpecializationAttr parentSpec = getSpecialization(source)) {
+    origName = parentSpec.getOrigName();
+    boundaryAltered = parentSpec.getBoundaryAltered();
+    specParams.append(parentSpec.getParameters().begin(),
+                      parentSpec.getParameters().end());
+  }
+  for (Attribute attr : parameters) {
+    auto param = cast<ParamDeclAttr>(attr);
+    auto it = llvm::find_if(specParams, [&](ParamDeclAttr existing) {
+      return existing.getName() == param.getName();
+    });
+    if (it != specParams.end())
+      *it = param;
+    else
+      specParams.push_back(param);
+  }
+  setSpecialization(
+      target, SpecializationAttr::get(origName, specParams, boundaryAltered));
 
   // Erase the default created hw.output op - we'll copy the correct operation
   // during body elaboration.

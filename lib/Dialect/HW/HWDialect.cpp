@@ -150,3 +150,22 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                           Type type, Location loc) {
   return hw::materializeConstant(builder, value, type, loc);
 }
+
+LogicalResult HWDialect::verifyOperationAttribute(Operation *op,
+                                                  NamedAttribute attr) {
+  if (attr.getName() == SpecializationAttr::getAttrName()) {
+    if (!isa<SpecializationAttr>(attr.getValue()))
+      return op->emitOpError("expected '")
+             << SpecializationAttr::getAttrName()
+             << "' attribute to be a #hw.specialization attribute, got "
+             << attr.getValue();
+    // Match `moore.module` by mnemonic because `HW` cannot depend on `Moore`
+    // without introducing a circular dialect dependency.
+    if (!isa<HWModuleOp>(op) && op->getName().getStringRef() != "moore.module")
+      return op->emitOpError("'")
+             << SpecializationAttr::getAttrName()
+             << "' attribute is only valid on 'hw.module' or 'moore.module' "
+                "definitions";
+  }
+  return success();
+}

@@ -2570,3 +2570,37 @@ func.func @UArrayCmpElementFallback(
 moore.module @ModuleWithAttrs() attributes {sv.attributes = [#sv.attribute<"flag_attr">, #sv.attribute<"str_attr" = "\22hello\22">, #sv.attribute<"int_attr" = "42">]} {
   moore.output
 }
+
+// CHECK-LABEL: hw.module @InstanceWithAttrs()
+// CHECK-NEXT:    hw.instance "u0" @ModuleWithAttrs() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">, #sv.attribute<"mark" = "\22val\22">]}
+// CHECK-NEXT:    hw.output
+moore.module @InstanceWithAttrs() {
+  moore.instance "u0" @ModuleWithAttrs() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">, #sv.attribute<"mark" = "\22val\22">]}
+  moore.output
+}
+
+// Exercise `InstanceOpConversion` and `HWInstanceOpConversion` with non-core
+// `moore` port types so `sv.attributes` propagation through both patterns is
+// verified.
+// CHECK-LABEL: hw.module private @TypedChild(in %in : i1, out out : i1)
+moore.module private @TypedChild(in %in : !moore.l1, out out : !moore.l1) {
+  moore.output %in : !moore.l1
+}
+
+// CHECK-LABEL: hw.module @TypedInstanceWithAttrs(in %a : i1, out y : i1)
+// CHECK-NEXT:    %u0.out = hw.instance "u0" @TypedChild(in: %a: i1) -> (out: i1) {sv.attributes = [#sv.attribute<"keep_hierarchy">]}
+// CHECK-NEXT:    hw.output %u0.out : i1
+moore.module @TypedInstanceWithAttrs(in %a : !moore.l1, out y : !moore.l1) {
+  %y = moore.instance "u0" @TypedChild(in: %a: !moore.l1) -> (out: !moore.l1) {sv.attributes = [#sv.attribute<"keep_hierarchy">]}
+  moore.output %y : !moore.l1
+}
+
+// CHECK-LABEL: hw.module private @ModuleWithSpecialization() attributes {hw.specialization = #hw.specialization<"OrigMod", [#hw.param.decl<"W": si32 = 16> : si32, #hw.param.decl<"X": none = #hw.param.verbatim<"4'b10x1">>], boundaryAltered>}
+moore.module private @ModuleWithSpecialization() attributes {hw.specialization = #hw.specialization<"OrigMod", [#hw.param.decl<"W": si32 = 16> : si32, #hw.param.decl<"X": none = #hw.param.verbatim<"4'b10x1">>], boundaryAltered>} {
+  moore.output
+}
+
+// CHECK-LABEL: hw.module private @ModuleWithPlainSpecialization() attributes {hw.specialization = #hw.specialization<"Plain">}
+moore.module private @ModuleWithPlainSpecialization() attributes {hw.specialization = #hw.specialization<"Plain">} {
+  moore.output
+}

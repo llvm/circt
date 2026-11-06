@@ -51,3 +51,18 @@ hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_l
 hw.module.generated @genmod1, @MEMORY(out FOOBAR: i1) attributes {write_latency=1, read_latency=1, ports=["read","write"]}
 // CHECK-LABEL: hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
 // CHECK-NEXT: hw.module.generated @genmod1, @MEMORY(out FOOBAR : i1) attributes {ports = ["read", "write"], read_latency = 1 : i64, write_latency = 1 : i64}
+
+hw.module @SpecPlain() attributes {hw.specialization = #hw.specialization<"Orig">} {}
+// CHECK-LABEL: hw.module @SpecPlain() attributes {hw.specialization = #hw.specialization<"Orig">}
+
+hw.module @SpecEmptyParams() attributes {hw.specialization = #hw.specialization<"Orig", []>} {}
+// CHECK-LABEL: hw.module @SpecEmptyParams() attributes {hw.specialization = #hw.specialization<"Orig">}
+
+hw.module @SpecAltered() attributes {hw.specialization = #hw.specialization<"Orig", boundaryAltered>} {}
+// CHECK-LABEL: hw.module @SpecAltered() attributes {hw.specialization = #hw.specialization<"Orig", boundaryAltered>}
+
+hw.module @SpecEmptyParamsAltered() attributes {hw.specialization = #hw.specialization<"Orig", [], boundaryAltered>} {}
+// CHECK-LABEL: hw.module @SpecEmptyParamsAltered() attributes {hw.specialization = #hw.specialization<"Orig", boundaryAltered>}
+
+hw.module @SpecParams() attributes {hw.specialization = #hw.specialization<"Orig", [#hw.param.decl<"W": si32 = 16> : si32, #hw.param.decl<"U": ui8 = 255> : ui8, #hw.param.decl<"R": f64 = 1.5> : f64, #hw.param.decl<"S": none = "hi">, #hw.param.decl<"V": none = #hw.param.verbatim<"4'b10x1">>, #hw.param.decl<"O": none>], boundaryAltered>} {}
+// CHECK-LABEL: hw.module @SpecParams() attributes {hw.specialization = #hw.specialization<"Orig", [#hw.param.decl<"W": si32 = 16> : si32, #hw.param.decl<"U": ui8 = 255> : ui8, #hw.param.decl<"R": f64 = 1.500000e+00> : f64, #hw.param.decl<"S": none = "hi">, #hw.param.decl<"V": none = #hw.param.verbatim<"4'b10x1">>, #hw.param.decl<"O": none>], boundaryAltered>}
