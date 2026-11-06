@@ -9,6 +9,7 @@
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Debug/DebugOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/LLHD/LLHDOps.h"
@@ -405,8 +406,14 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
 
     auto hwModuleOp = hw::HWModuleOp::create(rewriter, op.getLoc(),
                                              op.getSymNameAttr(), *portInfo);
-    if (auto svAttrs = sv::getSVAttributes(op))
+    if (ArrayAttr svAttrs = sv::getSVAttributes(op))
       sv::setSVAttributes(hwModuleOp, svAttrs);
+    if (auto origName =
+            op->getAttrOfType<StringAttr>(hw::origModuleNameAttrName))
+      hwModuleOp->setAttr(hw::origModuleNameAttrName, origName);
+    if (auto elabParams =
+            op->getAttrOfType<ArrayAttr>(hw::elaboratedParamsAttrName))
+      hwModuleOp->setAttr(hw::elaboratedParamsAttrName, elabParams);
     // Make hw.module have the same visibility as the moore.module.
     // The entry/top level module is public, otherwise is private.
     SymbolTable::setSymbolVisibility(hwModuleOp,
@@ -451,6 +458,8 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
         op.getInputs(), op.getInputNamesAttr(), op.getOutputNamesAttr(),
         /*Parameter*/ rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr,
         /*doNotPrint*/ nullptr);
+    if (ArrayAttr svAttrs = sv::getSVAttributes(op))
+      sv::setSVAttributes(instOp, svAttrs);
 
     // Replace uses chain and erase the original op.
     op.replaceAllUsesWith(instOp.getResults());
@@ -2365,11 +2374,14 @@ struct HWInstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
 
-    rewriter.replaceOpWithNewOp<hw::InstanceOp>(
+    ArrayAttr svAttrs = sv::getSVAttributes(op);
+    auto newInst = rewriter.replaceOpWithNewOp<hw::InstanceOp>(
         op, convResTypes, op.getInstanceName(), op.getModuleName(),
         adaptor.getOperands(), op.getArgNames(),
         op.getResultNames(), /*Parameter*/
         rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr);
+    if (svAttrs)
+      sv::setSVAttributes(newInst, svAttrs);
 
     return success();
   }

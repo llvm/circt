@@ -492,3 +492,23 @@ module Foo;
   // expected-error @below {{ref argument `p` expects '!moore.ref<struct<{x: i1, y: i1}>>' but call provides '!moore.ref<i2>'}}
   initial useRef(z);
 endmodule
+
+// -----
+
+module UnsupportedElaboratedParam #(
+  // expected-error @below {{unsupported elaborated parameter value for `P`}}
+  parameter logic [3:0] P = 4'b10x1
+);
+endmodule
+
+// -----
+
+module OverriddenTypeParamChild #(
+  // expected-error @below {{unsupported overridden type parameter `T`}}
+  parameter type T = int
+);
+endmodule
+
+module OverriddenTypeParamTop;
+  OverriddenTypeParamChild #(.T(byte)) u0();
+endmodule
