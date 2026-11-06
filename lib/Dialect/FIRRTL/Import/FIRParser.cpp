@@ -2016,6 +2016,18 @@ private:
   ParseResult parseExpLeadingStmt(Value &result, const Twine &message) {
     return parseExpImpl(result, message, /*isLeadingStmt:*/ true);
   }
+  /// Insert an implicit object- or domain-to-AnyRef cast if required by the
+  /// expected type. Leave other values unchanged for the caller to type-check.
+  Value emitImplicitAnyRefCast(Value value, Type expectedType) {
+    if (!isa<AnyRefType>(expectedType))
+      return value;
+    if (isa<ClassType>(value.getType()))
+      return ObjectAnyRefCastOp::create(builder, value);
+    if (isa<DomainType>(value.getType()))
+      return DomainAnyRefCastOp::create(builder, value);
+    return value;
+  }
+
   ParseResult parseEnumExp(Value &result);
   ParseResult parsePathExp(Value &result);
   ParseResult parseDomainExp(Value &result);
@@ -2814,20 +2826,11 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
         if (parseExp(operand, "expected expression in List expression"))
           return failure();
 
-        if (operand.getType() != elementType) {
-          if (!isa<AnyRefType>(elementType))
-            return emitError(loc, "unexpected expression of type ")
-                   << operand.getType() << " in List expression of type "
-                   << elementType;
-          if (isa<ClassType>(operand.getType()))
-            operand = ObjectAnyRefCastOp::create(builder, operand);
-          else if (isa<DomainType>(operand.getType()))
-            operand = DomainAnyRefCastOp::create(builder, operand);
-          else
-            return emitError(loc, "unexpected expression of type ")
-                   << operand.getType() << " in List expression of type "
-                   << elementType;
-        }
+        operand = emitImplicitAnyRefCast(operand, elementType);
+        if (operand.getType() != elementType)
+          return emitError(loc, "unexpected expression of type ")
+                 << operand.getType() << " in List expression of type "
+                 << elementType;
 
         operands.push_back(operand);
         return success();
@@ -4307,13 +4310,9 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
           if (parseExp(value, "expected field value expression"))
             return failure();
 
-          if (isa<AnyRefType>(cast<DomainFieldAttr>(fields[fieldValues.size()])
-                                  .getType())) {
-            if (isa<ClassType>(value.getType()))
-              value = ObjectAnyRefCastOp::create(builder, value);
-            else if (isa<DomainType>(value.getType()))
-              value = DomainAnyRefCastOp::create(builder, value);
-          }
+          value = emitImplicitAnyRefCast(
+              value,
+              cast<DomainFieldAttr>(fields[fieldValues.size()]).getType());
 
           fieldValues.push_back(value);
           return success();
@@ -4765,23 +4764,16 @@ ParseResult FIRStmtParser::parsePropAssign() {
     return failure();
 
   auto lhsType = type_dyn_cast<PropertyType>(lhs.getType());
-  auto rhsType = rhs.getType();
   if (!lhsType)
     return emitError(loc, "can only propassign property types");
   locationProcessor.setLoc(loc);
-  if (lhsType != rhsType) {
-    // AnyRef accepts object and domain references through implicit casts that
-    // do not have a FIRRTL textual representation.
-    if (isa<AnyRefType>(lhsType) && isa<ClassType>(rhsType))
-      rhs = ObjectAnyRefCastOp::create(builder, rhs);
-    else if (isa<AnyRefType>(lhsType) && isa<DomainType>(rhsType))
-      rhs = DomainAnyRefCastOp::create(builder, rhs);
-    else if (!isa<PropertyType>(rhsType))
-      return emitError(loc, "can only propassign property types");
-    else
-      return emitError(loc, "cannot propassign non-equivalent type ")
-             << rhsType << " to " << lhsType;
-  }
+  rhs = emitImplicitAnyRefCast(rhs, lhsType);
+  auto rhsType = type_dyn_cast<PropertyType>(rhs.getType());
+  if (!rhsType)
+    return emitError(loc, "can only propassign property types");
+  if (lhsType != rhsType)
+    return emitError(loc, "cannot propassign non-equivalent type ")
+           << rhsType << " to " << lhsType;
   PropAssignOp::create(builder, lhs, rhs);
   return success();
 }
