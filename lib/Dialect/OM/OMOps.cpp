@@ -17,6 +17,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 using namespace mlir;
 using namespace circt::om;
@@ -1125,6 +1126,33 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
     return {};
 
   return *result;
+}
+
+//===----------------------------------------------------------------------===//
+// ObjectEqOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ObjectEqOp::fold(FoldAdaptor adaptor) {
+  auto stripAnyCasts = [](Value value) {
+    SmallPtrSet<Operation *, 4> visited;
+    while (auto castOp = value.getDefiningOp<AnyCastOp>()) {
+      if (!visited.insert(castOp).second)
+        break;
+      value = castOp.getInput();
+    }
+    return value;
+  };
+  auto lhs = stripAnyCasts(getLhs());
+  auto rhs = stripAnyCasts(getRhs());
+
+  // Only compare known object identities. Unknown references must remain
+  // unknown, even when compared with themselves, and distinct parameters may
+  // alias.
+  if (!lhs.getDefiningOp<ElaboratedObjectOp>() ||
+      !rhs.getDefiningOp<ElaboratedObjectOp>())
+    return {};
+
+  return mlir::IntegerAttr::get(getResult().getType(), lhs == rhs);
 }
 
 //===----------------------------------------------------------------------===//

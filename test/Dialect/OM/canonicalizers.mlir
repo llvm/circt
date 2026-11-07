@@ -196,6 +196,45 @@ om.class @PropEqFold(%str: !om.string, %b: i1, %n: !om.integer) -> (out1: i1, ou
   om.class.fields %0, %1, %2, %3, %4, %5, %6, %7, %8, %9 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
 
+// CHECK-LABEL: @ObjectEqFold
+om.class @ObjectEqFold(%ref: !om.class.type<@Foo>, %other: !om.class.type<@Foo>,
+                       %any: !om.any) -> (
+    equal: i1, not_equal: i1, class_any: i1, any_class: i1,
+    any_equal: i1, any_not_equal: i1, parameter: i1, may_alias: i1,
+    opaque: i1, unknown: i1) {
+  %a = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %b = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %aAny = om.any_cast %a : (!om.class.type<@Foo>) -> !om.any
+  %aAnyAgain = om.any_cast %aAny : (!om.any) -> !om.any
+  %bAny = om.any_cast %b : (!om.class.type<@Foo>) -> !om.any
+
+  // Compare identities, not fields, and look through all any casts.
+  // CHECK-DAG: [[TRUE:%.+]] = om.constant true
+  // CHECK-DAG: [[FALSE:%.+]] = om.constant false
+  %equal = om.object.eq %a, %a : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %notEqual = om.object.eq %a, %b : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %classAny = om.object.eq %a, %aAnyAgain : !om.class.type<@Foo>, !om.any
+  %anyClass = om.object.eq %aAny, %a : !om.any, !om.class.type<@Foo>
+  %anyEqual = om.object.eq %aAny, %aAnyAgain : !om.any, !om.any
+  %anyNotEqual = om.object.eq %aAny, %bAny : !om.any, !om.any
+
+  // Parameters may be unknown or alias other references, so do not fold them.
+  // CHECK: [[PARAMETER:%.+]] = om.object.eq %ref, %ref : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %parameter = om.object.eq %ref, %ref : !om.class.type<@Foo>, !om.class.type<@Foo>
+  // CHECK: [[MAY_ALIAS:%.+]] = om.object.eq %ref, %other : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %mayAlias = om.object.eq %ref, %other : !om.class.type<@Foo>, !om.class.type<@Foo>
+  // CHECK: [[OPAQUE:%.+]] = om.object.eq %ref, %any : !om.class.type<@Foo>, !om.any
+  %opaque = om.object.eq %ref, %any : !om.class.type<@Foo>, !om.any
+
+  // Even the same SSA reference must not fold if it is unknown.
+  // CHECK: [[UNKNOWN_REF:%.+]] = om.unknown : !om.class.type<@Foo>
+  %unknown = om.unknown : !om.class.type<@Foo>
+  // CHECK: [[UNKNOWN:%.+]] = om.object.eq [[UNKNOWN_REF]], [[UNKNOWN_REF]] : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %unknownEqual = om.object.eq %unknown, %unknown : !om.class.type<@Foo>, !om.class.type<@Foo>
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[TRUE]], [[TRUE]], [[FALSE]], [[PARAMETER]], [[MAY_ALIAS]], [[OPAQUE]], [[UNKNOWN]] : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+  om.class.fields %equal, %notEqual, %classAny, %anyClass, %anyEqual, %anyNotEqual, %parameter, %mayAlias, %opaque, %unknownEqual : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+}
+
 // CHECK-LABEL: @IntegerBitwiseFold
 om.class @IntegerBitwiseFold(%b: i8) -> (out1: i8, out2: i8, out3: i8,
                                           out4: i8, out5: i8, out6: i8,
