@@ -9,6 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -187,7 +188,7 @@ macroNameForLayer(StringRef circuitName,
 
 /// Return true if values of this type cannot be captured by an XMR.
 static bool hasNoXMRRepresentation(Type type) {
-  return type_isa<FStringType>(type);
+  return type_isa<FStringType>(type) || isa<debug::ScopeType>(type);
 }
 
 //===----------------------------------------------------------------------===//
