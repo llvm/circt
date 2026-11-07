@@ -34,3 +34,33 @@ module TestCombUdpDelay(input logic sel, input logic a, input logic b, output lo
   udp_mux #5 u_mux_delay (out, sel, a, b);
 endmodule
 
+
+//===----------------------------------------------------------------------===//
+// Sequential UDP Primitives
+//===----------------------------------------------------------------------===//
+
+// Verify that level-sensitive latch lowers to llhd.sig and llhd.assign if %en end-to-end.
+// CHECK-LABEL: hw.module @udp_latch(
+// CHECK: [[SIG:%.+]] = llhd.sig {{%.+}} : <i1>
+// CHECK: llhd.assign [[SIG]], {{%.+}} if {{%.+}} : i1
+// CHECK: hw.output
+primitive udp_latch(q, en, d);
+  output reg q;
+  input en, d;
+  table
+    1 0 : ? : 0 ;
+    1 1 : ? : 1 ;
+    0 ? : ? : - ;
+  endtable
+endprimitive
+
+//===----------------------------------------------------------------------===//
+// Sequential UDP Instantiations
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: hw.module @TestSeqUdp(
+module TestSeqUdp(input logic en, input logic d, output logic q);
+  // CHECK: [[U_LATCH:%.+]] = hw.instance "u_latch" @udp_latch(en: %en: i1, d: %d: i1) -> (q: i1)
+  // CHECK: hw.output [[U_LATCH]]
+  udp_latch u_latch (q, en, d);
+endmodule
