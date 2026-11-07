@@ -398,23 +398,6 @@ endmodule
 
 // -----
 
-// expected-error @below {{edge-sensitive sequential user-defined primitives are not supported yet}}
-primitive udp_seq(q, clk, rst, d);
-  output reg q;
-  input clk, rst, d;
-  table
-    0    1 ? : ? : 0 ;
-    1    1 ? : ? : 0 ;
-    r    0 0 : ? : 0 ;
-    (0?) 0 1 : ? : 1 ;
-    f    ? ? : ? : - ;
-    *    ? ? : ? : - ;
-    (0x) ? ? : ? : - ;
-  endtable
-endprimitive
-
-// -----
-
 module ReadMemAssoc;
   logic [7:0] amem[int];
   initial begin
@@ -596,3 +579,22 @@ endprimitive
 module TestWithoutClock(input logic d, output logic q);
   udp_without_clock u_wc (q, d);
 endmodule
+
+// -----
+
+// expected-error @below {{dual-edge sequential UDP `udp_dual_edge` is not supported yet}}
+primitive udp_dual_edge(q, clk, d);
+  output reg q;
+  input clk, d;
+  table
+    (01) 0 : ? : 0 ;
+    (01) 1 : ? : 1 ;
+    (10) 0 : ? : 0 ;
+    (10) 1 : ? : 1 ;
+  endtable
+endprimitive
+
+module TestDualEdge(input logic clk, input logic d, output logic q);
+  udp_dual_edge u_de (q, clk, d);
+endmodule
+
