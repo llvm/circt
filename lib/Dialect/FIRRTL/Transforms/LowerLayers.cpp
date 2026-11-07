@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Utils.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -178,6 +179,15 @@ macroNameForLayer(StringRef circuitName,
     appendName(part, result, /*toLower=*/false,
                /*delimiter=*/Delimiter::InlineMacro);
   return result;
+}
+
+//===----------------------------------------------------------------------===//
+// Capture Helpers
+//===----------------------------------------------------------------------===//
+
+/// Return true if values of this type cannot be captured by an XMR.
+static bool hasNoXMRRepresentation(Type type) {
+  return type_isa<FStringType>(type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -444,14 +454,18 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     auto layerBlockOp = user->getParentOfType<LayerBlockOp>();
     localBuilder.setInsertionPointToStart(layerBlockOp.getBody());
 
-    // If the operand is "special", e.g., it has no XMR representation, then we
-    // need to clone it.
-    //
-    // TODO: Change this to recursively clone.  This will matter once FString
-    // operations have operands.
-    if (type_isa<FStringType>(value.getType())) {
+    // If the operand has no XMR representation, then we need to
+    // clone it.  Its operands are captured recursively.
+    if (hasNoXMRRepresentation(value.getType())) {
+      IRMapping mapping;
+      auto *definingOp = value.getDefiningOp();
+      for (auto operand : definingOp->getOperands())
+        mapping.map(operand, getReplacement(user, operand));
+
       localBuilder.setInsertionPoint(user);
-      replacement = localBuilder.clone(*value.getDefiningOp())->getResult(0);
+      replacement = localBuilder.clone(*definingOp, mapping)
+                        ->getResult(cast<OpResult>(value).getResultNumber());
+
       replacements.insert({value, replacement});
       return replacement;
     }
