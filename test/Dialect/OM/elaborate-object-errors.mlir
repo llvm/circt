@@ -77,6 +77,18 @@ om.class @DataflowCycle() -> (result: !om.integer) {
 
 // -----
 
+// Any casts in graph regions can be cyclic. Identity folding must terminate
+// without treating a cyclic cast chain as a known object.
+om.class @ObjectEqCastCycle() -> (result: i1) {
+  %a = om.any_cast %b : (!om.any) -> !om.any
+  %b = om.any_cast %a : (!om.any) -> !om.any
+  // expected-error @below {{failed to evaluate om.object.eq}}
+  %equal = om.object.eq %a, %b : !om.any, !om.any
+  om.class.fields %equal : i1
+}
+
+// -----
+
 om.class @UnevaluatedMessage() {
   // expected-note @below {{unevaluated message operation is here}}
   %0 = om.unknown : !om.string

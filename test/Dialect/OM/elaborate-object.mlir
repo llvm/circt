@@ -1,6 +1,7 @@
 // RUN: circt-opt -om-elaborate-object='target-class=Top' %s | FileCheck %s --check-prefix=TOP
 // RUN: circt-opt -om-elaborate-object='target-class=UseExtern' %s | FileCheck %s --check-prefix=STRICT-EXTERN
-// RUN: circt-opt -om-elaborate-object='all-public-classes=true allow-unevaluated=true' %s | FileCheck %s --check-prefixes=CHECK,PUBLIC
+// RUN: circt-opt -om-elaborate-object='target-class=ObjectEqTests' %s | FileCheck %s --check-prefix=OBJECT-EQ
+// RUN: circt-opt -om-elaborate-object='all-public-classes=true allow-unevaluated=true' %s | FileCheck %s --check-prefixes=CHECK,PUBLIC,OBJECT-EQ
 
 // CHECK-LABEL: om.class @StringOps() -> (str: !om.string, concat: !om.string) {
 // CHECK-DAG:   %[[HELLO:.+]] = om.constant "hello" : !om.string
@@ -138,6 +139,76 @@ om.class @ContainsUnknownMembers() -> (foo: i1, bar: i1, baz: i1) {
   om.class.fields %4, %5, %7 : i1, i1, i1
 }
 
+om.class private @ObjectEqValue() {
+  om.class.fields
+}
+
+om.class private @ObjectEqOtherValue() {
+  om.class.fields
+}
+
+// Compare identities after inlining, including a field-projected alias cast to
+// any. Distinct objects with identical fields are not equal.
+// OBJECT-EQ-LABEL: om.class @ObjectEqTests
+// OBJECT-EQ-NEXT:   %[[TRUE:.+]] = om.constant true
+// OBJECT-EQ-NEXT:   %[[FALSE:.+]] = om.constant false
+// OBJECT-EQ-NEXT:   om.class.fields %[[TRUE]], %[[FALSE]], %[[FALSE]], %[[TRUE]] : i1, i1, i1, i1
+// OBJECT-EQ-NEXT: }
+om.class @ObjectEqTests() -> (equal: i1, not_equal: i1, different_class: i1,
+                             field: i1) {
+  %a = om.object @ObjectEqValue() : () -> !om.class.type<@ObjectEqValue>
+  %b = om.object @ObjectEqValue() : () -> !om.class.type<@ObjectEqValue>
+  %c = om.object @ObjectEqOtherValue() : () -> !om.class.type<@ObjectEqOtherValue>
+  %box = om.object @ObjectEqBox(%a) : (!om.class.type<@ObjectEqValue>) -> !om.class.type<@ObjectEqBox>
+  %field = om.object.field %box["value"] : (!om.class.type<@ObjectEqBox>) -> !om.class.type<@ObjectEqValue>
+  %fieldAny = om.any_cast %field : (!om.class.type<@ObjectEqValue>) -> !om.any
+  %equal = om.object.eq %a, %a : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %notEqual = om.object.eq %a, %b : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %differentClass = om.object.eq %a, %c : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqOtherValue>
+  %fieldEqual = om.object.eq %a, %fieldAny : !om.class.type<@ObjectEqValue>, !om.any
+  om.class.fields %equal, %notEqual, %differentClass, %fieldEqual : i1, i1, i1, i1
+}
+
+om.class private @ObjectEqBox(%value: !om.class.type<@ObjectEqValue>) -> (value: !om.class.type<@ObjectEqValue>) {
+  om.class.fields %value : !om.class.type<@ObjectEqValue>
+}
+
+// Unknown references propagate on either side, even when comparing an unknown
+// with itself or looking through any casts.
+// CHECK-LABEL: om.class @ObjectEqUnknown
+// CHECK:   %[[LHS:.+]] = om.unknown : i1
+// CHECK-NEXT:   %[[RHS:.+]] = om.unknown : i1
+// CHECK-NEXT:   %[[SAME:.+]] = om.unknown : i1
+// CHECK-NEXT:   %[[ANY:.+]] = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %[[LHS]], %[[RHS]], %[[SAME]], %[[ANY]] : i1, i1, i1, i1
+// CHECK-NEXT: }
+om.class @ObjectEqUnknown() -> (lhs: i1, rhs: i1, same: i1, any: i1) {
+  %known = om.object @ObjectEqValue() : () -> !om.class.type<@ObjectEqValue>
+  %unknown = om.unknown : !om.class.type<@ObjectEqValue>
+  %unknownAny = om.any_cast %unknown : (!om.class.type<@ObjectEqValue>) -> !om.any
+  %lhs = om.object.eq %unknown, %known : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %rhs = om.object.eq %known, %unknown : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %same = om.object.eq %unknown, %unknown : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %any = om.object.eq %unknownAny, %unknownAny : !om.any, !om.any
+  om.class.fields %lhs, %rhs, %same, %any : i1, i1, i1, i1
+}
+
+// Unknown fields do not make an allocated object's identity unknown.
+// CHECK-LABEL: om.class @ObjectEqUnknownFields
+// CHECK-NEXT:   %[[FALSE:.+]] = om.constant false
+// CHECK-NEXT:   %[[TRUE:.+]] = om.constant true
+// CHECK-NOT: om.object.eq
+// CHECK:   om.class.fields %[[TRUE]], %[[FALSE]] : i1, i1
+// CHECK-NEXT: }
+om.class @ObjectEqUnknownFields() -> (equal: i1, not_equal: i1) {
+  %unknown = om.unknown : !om.class.type<@ObjectEqValue>
+  %a = om.object @ObjectEqBox(%unknown) : (!om.class.type<@ObjectEqValue>) -> !om.class.type<@ObjectEqBox>
+  %b = om.object @ObjectEqBox(%unknown) : (!om.class.type<@ObjectEqValue>) -> !om.class.type<@ObjectEqBox>
+  %equal = om.object.eq %a, %a : !om.class.type<@ObjectEqBox>, !om.class.type<@ObjectEqBox>
+  %notEqual = om.object.eq %a, %b : !om.class.type<@ObjectEqBox>, !om.class.type<@ObjectEqBox>
+  om.class.fields %equal, %notEqual : i1, i1
+}
+
 // Test integer operations (add, mul, shr, shl)
 // CHECK-LABEL: om.class @IntegerOps() -> (sum: !om.integer, product: !om.integer, shr: !om.integer, shl: !om.integer) {
 // CHECK-DAG:   %[[SUM:.+]] = om.constant #om.integer<7 : si4> : !om.integer
@@ -252,24 +323,28 @@ om.class @AssertUnknown() {
   om.class.fields
 }
 
-// Test external class instantiation (should be replaced with unknown)
+// External objects become unknown in strict mode and remain unevaluated in
+// best-effort mode. Even self-equality must not fold to true.
 om.class.extern @ExternalModule(%param: !om.integer) -> (output: !om.integer) {}
 
-// STRICT-EXTERN-LABEL: om.class @UseExtern() -> (result: !om.integer) {
+// STRICT-EXTERN-LABEL: om.class @UseExtern() -> (result: !om.integer, equal: i1) {
 // STRICT-EXTERN:   %[[UNKNOWN:.+]] = om.unknown : !om.integer
-// STRICT-EXTERN:   om.class.fields %[[UNKNOWN]]
-// STRICT-EXTERN: }
-// PUBLIC-LABEL: om.class @UseExtern() -> (result: !om.integer) {
+// STRICT-EXTERN-NEXT:   %[[EQUAL:.+]] = om.unknown : i1
+// STRICT-EXTERN-NEXT:   om.class.fields %[[UNKNOWN]], %[[EQUAL]] : !om.integer, i1
+// STRICT-EXTERN-NEXT: }
+// PUBLIC-LABEL: om.class @UseExtern() -> (result: !om.integer, equal: i1) {
 // PUBLIC:   %[[INPUT:.+]] = om.constant #om.integer<42 : si64> : !om.integer
 // PUBLIC:   %[[EXT:.+]] = om.object @ExternalModule(%[[INPUT]]) : (!om.integer) -> !om.class.type<@ExternalModule>
 // PUBLIC:   %[[RESULT:.+]] = om.object.field %[[EXT]]["output"] : (!om.class.type<@ExternalModule>) -> !om.integer
-// PUBLIC:   om.class.fields %[[RESULT]]
-// PUBLIC: }
-om.class @UseExtern() -> (result: !om.integer) {
+// PUBLIC:   %[[EQUAL:.+]] = om.object.eq %[[EXT]], %[[EXT]] : !om.class.type<@ExternalModule>, !om.class.type<@ExternalModule>
+// PUBLIC:   om.class.fields %[[RESULT]], %[[EQUAL]] : !om.integer, i1
+// PUBLIC-NEXT: }
+om.class @UseExtern() -> (result: !om.integer, equal: i1) {
   %input = om.constant #om.integer<42 : si64> : !om.integer
   %ext = om.object @ExternalModule(%input) : (!om.integer) -> !om.class.type<@ExternalModule>
   %result = om.object.field %ext["output"] : (!om.class.type<@ExternalModule>) -> !om.integer
-  om.class.fields %result : !om.integer
+  %equal = om.object.eq %ext, %ext : !om.class.type<@ExternalModule>, !om.class.type<@ExternalModule>
+  om.class.fields %result, %equal : !om.integer, i1
 }
 
 // Test all-public-classes mode elaborates public classes through private
