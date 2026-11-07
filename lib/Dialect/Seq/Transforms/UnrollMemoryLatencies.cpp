@@ -67,9 +67,6 @@ private:
 
     builder.setInsertionPointAfter(op);
 
-    // Stores the generated shiftregisters for the addresses.
-    llvm::SmallVector<Value> delayedAddrs;
-
     // A global clock enable for all ports that is always true
     Value ce = builder.createOrFold<hw::ConstantOp>(op.getLoc(),
                                                     builder.getI1Type(), 1);
@@ -104,9 +101,6 @@ private:
 
     builder.setInsertionPointAfter(op);
 
-    // Stores the generated shiftregisters for the addresses.
-    llvm::SmallVector<Value> delayedAddrs;
-
     // A global clock enable for all ports that is always true
     Value ce = builder.createOrFold<hw::ConstantOp>(op.getLoc(),
                                                     builder.getI1Type(), 1);
@@ -114,7 +108,7 @@ private:
     // Same as write port, delay all of the addresses
     delayAddresses(builder, op.getLoc(), clk, ce, addrs, latencyAttr);
 
-    // delay the read enable (for some reason there are multiple when mutable?)
+    // delay the read enable
     for (auto &rden : rdEn)
       rden.set(seq::ShiftRegOp::create(builder, op.getLoc(), latencyAttr,
                                        rden.get(), clk, ce, {}, {}, {}, {},
@@ -231,7 +225,6 @@ private:
                                      en.get(), clk, ce, {}, {}, {}, {}, {}));
   }
 
-public:
   void firMemOpUnrolling(seq::FirMemOp &mem, OpBuilder &builder) const {
 
     // Retrieve read and write latencies
