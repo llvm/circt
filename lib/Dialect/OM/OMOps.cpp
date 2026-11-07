@@ -15,11 +15,16 @@
 #include "circt/Dialect/OM/OMUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
 using namespace circt::om;
+
+namespace {
+#include "circt/Dialect/OM/OMCanonicalization.cpp.inc"
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Custom Printers and Parsers
@@ -1135,6 +1140,16 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
     return {};
 
   return *result;
+}
+
+//===----------------------------------------------------------------------===//
+// ObjectEqOp
+//===----------------------------------------------------------------------===//
+
+void ObjectEqOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<ObjectEqSame, ObjectEqDistinct, ObjectEqAnyCastLHS,
+                 ObjectEqAnyCastRHS>(context);
 }
 
 //===----------------------------------------------------------------------===//

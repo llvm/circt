@@ -149,6 +149,68 @@ om.class @ContainsUnknownMembers() -> (foo: i1, bar: i1, baz: i1) {
   om.class.fields %4, %5, %7 : i1, i1, i1
 }
 
+om.class private @ObjectEqValue() {
+  om.class.fields
+}
+
+// Compare identities after inlining, including a field-projected alias.
+// Distinct objects with identical fields are not equal.
+// CHECK-LABEL: om.class @ObjectEqTests
+// CHECK-DAG:   %[[TRUE:.+]] = om.constant true
+// CHECK-DAG:   %[[FALSE:.+]] = om.constant false
+// CHECK:   om.class.fields %[[FALSE]], %[[FALSE]], %[[TRUE]] : i1, i1, i1
+// CHECK-NEXT: }
+om.class @ObjectEqTests() -> (not_equal: i1, different_class: i1, field: i1) {
+  %a = om.object @ObjectEqValue() : () -> !om.class.type<@ObjectEqValue>
+  %b = om.object @ObjectEqValue() : () -> !om.class.type<@ObjectEqValue>
+  %box = om.object @ObjectEqBox(%a) : (!om.class.type<@ObjectEqValue>) -> !om.class.type<@ObjectEqBox>
+  %field = om.object.field %box["value"] : (!om.class.type<@ObjectEqBox>) -> !om.class.type<@ObjectEqValue>
+  %notEqual = om.object.eq %a, %b : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %differentClass = om.object.eq %a, %box : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqBox>
+  %fieldEqual = om.object.eq %a, %field : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  om.class.fields %notEqual, %differentClass, %fieldEqual : i1, i1, i1
+}
+
+om.class private @ObjectEqBox(%value: !om.class.type<@ObjectEqValue>) -> (value: !om.class.type<@ObjectEqValue>) {
+  om.class.fields %value : !om.class.type<@ObjectEqValue>
+}
+
+// Unknown references propagate on either side of a comparison with another
+// reference, but are equal to themselves, including when cast to any.
+// CHECK-LABEL: om.class @ObjectEqUnknown
+// CHECK-DAG:   %[[LHS:.+]] = om.unknown : i1
+// CHECK-DAG:   %[[RHS:.+]] = om.unknown : i1
+// CHECK-DAG:   %[[TRUE:.+]] = om.constant true
+// CHECK-DAG:   %[[DISTINCT:.+]] = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %[[LHS]], %[[RHS]], %[[TRUE]], %[[TRUE]], %[[DISTINCT]] : i1, i1, i1, i1, i1
+// CHECK-NEXT: }
+om.class @ObjectEqUnknown() -> (lhs: i1, rhs: i1, same: i1, any: i1,
+                               distinct: i1) {
+  %known = om.object @ObjectEqValue() : () -> !om.class.type<@ObjectEqValue>
+  %unknown = om.unknown : !om.class.type<@ObjectEqValue>
+  %unknownAny = om.any_cast %unknown : (!om.class.type<@ObjectEqValue>) -> !om.any
+  %lhs = om.object.eq %unknown, %known : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %rhs = om.object.eq %known, %unknown : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %same = om.object.eq %unknown, %unknown : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %any = om.object.eq %unknown, %unknownAny : !om.class.type<@ObjectEqValue>, !om.any
+  %otherUnknown = om.unknown : !om.class.type<@ObjectEqValue>
+  %distinct = om.object.eq %unknown, %otherUnknown : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  om.class.fields %lhs, %rhs, %same, %any, %distinct : i1, i1, i1, i1, i1
+}
+
+// Unknown fields do not make an allocated object's identity unknown.
+// CHECK-LABEL: om.class @ObjectEqUnknownFields
+// CHECK:   %[[FALSE:.+]] = om.constant false
+// CHECK:   om.class.fields %[[FALSE]] : i1
+// CHECK-NEXT: }
+om.class @ObjectEqUnknownFields() -> (not_equal: i1) {
+  %unknown = om.unknown : !om.class.type<@ObjectEqValue>
+  %a = om.object @ObjectEqBox(%unknown) : (!om.class.type<@ObjectEqValue>) -> !om.class.type<@ObjectEqBox>
+  %b = om.object @ObjectEqBox(%unknown) : (!om.class.type<@ObjectEqValue>) -> !om.class.type<@ObjectEqBox>
+  %notEqual = om.object.eq %a, %b : !om.class.type<@ObjectEqBox>, !om.class.type<@ObjectEqBox>
+  om.class.fields %notEqual : i1
+}
+
 // Test integer operations (add, mul, shr, shl)
 // CHECK-LABEL: om.class @IntegerOps() -> (sum: !om.integer, product: !om.integer, shr: !om.integer, shl: !om.integer) {
 // CHECK-DAG:   %[[SUM:.+]] = om.constant #om.integer<7 : si4> : !om.integer

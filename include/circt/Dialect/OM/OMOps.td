@@ -699,7 +699,9 @@ def ObjectEqOp : OMOp<"object.eq", [Pure]> {
     compares object identity, not the structural equality of object fields.
     Each operand can have a class type or `!om.any`, and the operands need not
     have the same type. Operands of type `!om.any` must contain object references.
-    The `om.any_cast` operation preserves object identity.
+    The `om.any_cast` operation preserves object identity. Comparing the same
+    SSA value with itself returns 1, even if the value is unknown. Otherwise,
+    comparisons involving unknown references remain unknown.
 
     Example:
     ```mlir
@@ -712,6 +714,7 @@ def ObjectEqOp : OMOp<"object.eq", [Pure]> {
   let results = (outs I1:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+  let hasCanonicalizer = 1;
 }
 
 class IntegerBitwiseOpBase<string mnemonic, list<Trait> traits = []> :

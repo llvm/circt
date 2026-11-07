@@ -28,6 +28,7 @@ add_circt_dialect_library(
   MLIROMIncGen
   MLIROMAttrIncGen
   MLIROMOpInterfacesIncGen
+  CIRCTOMCanonicalizationIncGen
 
   LINK_COMPONENTS
   Support
