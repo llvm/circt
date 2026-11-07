@@ -476,8 +476,8 @@ module attributes {calyx.entrypoint = "main"} {
     %true = hw.constant true
     %c1_i32 = hw.constant 1 : i32
     %func_1_instance.in0, %func_1_instance.in2, %func_1_instance.clk, %func_1_instance.reset, %func_1_instance.go, %func_1_instance.done = calyx.instance @func_1_instance of @func_1 : i32, i32, i1, i1, i1, i1
-    %arg_mem_1.addr0, %arg_mem_1.clk, %arg_mem_1.reset, %arg_mem_1.content_en, %arg_mem_1.write_en, %arg_mem_1.write_data, %arg_mem_1.read_data, %arg_mem_1.done = calyx.seq_mem @arg_mem_1 <[8] x 32> [3] : i3, i1, i1, i1, i1, i32, i32, i1
-    %arg_mem_0.addr0, %arg_mem_0.clk, %arg_mem_0.reset, %arg_mem_0.content_en, %arg_mem_0.write_en, %arg_mem_0.write_data, %arg_mem_0.read_data, %arg_mem_0.done = calyx.seq_mem @arg_mem_0 <[8] x 32> [3] : i3, i1, i1, i1, i1, i32, i32, i1
+    %arg_mem_1.addr0, %arg_mem_1.clk, %arg_mem_1.reset, %arg_mem_1.content_en, %arg_mem_1.write_en, %arg_mem_1.write_data, %arg_mem_1.read_data, %arg_mem_1.done = calyx.seq_mem @arg_mem_1 <[8] x 32> [3] {is_ref} : i3, i1, i1, i1, i1, i32, i32, i1
+    %arg_mem_0.addr0, %arg_mem_0.clk, %arg_mem_0.reset, %arg_mem_0.content_en, %arg_mem_0.write_en, %arg_mem_0.write_data, %arg_mem_0.read_data, %arg_mem_0.done = calyx.seq_mem @arg_mem_0 <[8] x 32> [3] {is_ref} : i3, i1, i1, i1, i1, i32, i32, i1
     calyx.wires {
       calyx.group @init_func_1_instance {
         calyx.assign %func_1_instance.reset = %true : i1
@@ -500,8 +500,8 @@ module attributes {calyx.entrypoint = "main"} {
     %true = hw.constant true
     %std_slice_1.in, %std_slice_1.out = calyx.std_slice @std_slice_1 : i32, i3
     %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i3
-    %arg_mem_1.addr0, %arg_mem_1.clk, %arg_mem_1.reset, %arg_mem_1.content_en, %arg_mem_1.write_en, %arg_mem_1.write_data, %arg_mem_1.read_data, %arg_mem_1.done = calyx.seq_mem @arg_mem_1 <[8] x 32> [3] : i3, i1, i1, i1, i1, i32, i32, i1
-    %arg_mem_0.addr0, %arg_mem_0.clk, %arg_mem_0.reset, %arg_mem_0.content_en, %arg_mem_0.write_en, %arg_mem_0.write_data, %arg_mem_0.read_data, %arg_mem_0.done = calyx.seq_mem @arg_mem_0 <[8] x 32> [3] : i3, i1, i1, i1, i1, i32, i32, i1
+    %arg_mem_1.addr0, %arg_mem_1.clk, %arg_mem_1.reset, %arg_mem_1.content_en, %arg_mem_1.write_en, %arg_mem_1.write_data, %arg_mem_1.read_data, %arg_mem_1.done = calyx.seq_mem @arg_mem_1 <[8] x 32> [3] {is_ref} : i3, i1, i1, i1, i1, i32, i32, i1
+    %arg_mem_0.addr0, %arg_mem_0.clk, %arg_mem_0.reset, %arg_mem_0.content_en, %arg_mem_0.write_en, %arg_mem_0.write_data, %arg_mem_0.read_data, %arg_mem_0.done = calyx.seq_mem @arg_mem_0 <[8] x 32> [3] {is_ref} : i3, i1, i1, i1, i1, i32, i32, i1
     calyx.wires {
       calyx.group @bb0_0 {
         calyx.assign %std_slice_1.in = %in2 : i32
