@@ -5517,3 +5517,38 @@ endmodule
 (* flag_attr, str_attr = "hello \"world\"", int_attr = 42 *)
 module ModuleWithAttrs();
 endmodule
+
+// Covergroup declarations are ignored.
+// CHECK-LABEL: moore.module @CovergroupDecl
+// CHECK-NEXT: [[CLK:%.+]] = moore.net name "clk" wire : <l1>
+// CHECK-NEXT: [[A:%.+]] = moore.net name "a" wire : <i1>
+// CHECK-NEXT: moore.assign [[CLK]], %clk : ref<l1>
+// CHECK-NEXT: moore.assign [[A]], %a : ref<i1>
+// CHECK-NEXT: moore.output
+// CHECK-NEXT: }
+module CovergroupDecl(input logic clk, input bit a);
+  covergroup cg @(posedge clk);
+    coverpoint a;
+  endgroup
+endmodule
+
+// Covergroup instances and their initializers do not produce IR.
+// CHECK-LABEL: moore.module @CovergroupInstances
+// CHECK-NEXT: [[CLK:%.+]] = moore.net name "clk" wire : <l1>
+// CHECK-NEXT: [[A:%.+]] = moore.net name "a" wire : <i1>
+// CHECK-NEXT: moore.assign [[CLK]], %clk : ref<l1>
+// CHECK-NEXT: moore.assign [[A]], %a : ref<i1>
+// CHECK-NEXT: moore.output
+// CHECK-NEXT: }
+module CovergroupInstances(input logic clk, input bit a);
+  covergroup cg @(posedge clk);
+    coverpoint a;
+  endgroup
+  cg uninitialized;
+  cg initialized = new;
+  typedef cg cg_alias;
+  cg_alias aliased = new;
+  if (1) begin : gen
+    cg generated = new;
+  end
+endmodule

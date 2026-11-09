@@ -806,6 +806,9 @@ struct ModuleVisitor : public BaseVisitor {
 
   // Handle variables.
   LogicalResult visit(const slang::ast::VariableSymbol &varNode) {
+    if (varNode.getType().isCovergroup())
+      return success();
+
     auto ref = context.valueSymbols.lookup(&varNode);
     if (!ref)
       return mlir::emitError(loc)
@@ -1003,6 +1006,10 @@ struct ModuleVisitor : public BaseVisitor {
   // expressions, which are lowered when the use site is imported.
   LogicalResult visit(const slang::ast::LetDeclSymbol &) { return success(); }
 
+  // Ignore covergroup declarations and their instance variables, which only
+  // describe functional coverage.
+  LogicalResult visit(const slang::ast::CovergroupType &) { return success(); }
+
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
     if (!context.declareFunction(subroutine))
@@ -1042,6 +1049,9 @@ struct ModulePredeclaration {
 
   LogicalResult declareVariable(const slang::ast::VariableSymbol &varNode,
                                 Location loc, StringRef blockNamePrefix) {
+    if (varNode.getType().isCovergroup())
+      return success();
+
     auto loweredType = context.convertType(*varNode.getDeclaredType());
     if (!loweredType)
       return failure();
