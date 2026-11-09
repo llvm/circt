@@ -600,7 +600,7 @@ void IMDeadCodeElimPass::visitValue(Value value) {
 
   // If the value is defined by an operation, mark its operands alive and any
   // nested blocks executable.
-  if (auto op = value.getDefiningOp()) {
+  if (auto *op = value.getDefiningOp()) {
     for (auto operand : op->getOperands())
       markAlive(operand);
     for (auto &region : op->getRegions())

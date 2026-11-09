@@ -1595,7 +1595,7 @@ void Emitter::emitExpression(Value value) {
     return;
   }
 
-  auto op = value.getDefiningOp();
+  auto *op = value.getDefiningOp();
   assert(op && "value must either be a block arg or the result of an op");
   TypeSwitch<Operation *>(op)
       .Case<
