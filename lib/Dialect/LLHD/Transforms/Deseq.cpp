@@ -477,7 +477,7 @@ bool Deseq::analyzeProcess() {
        llvm::zip(wait.getDestOperands(), wait.getDest()->getArguments())) {
     // Check if this dest operand is directly a trigger (projected clock case).
     auto operandVF = getValueField(operand);
-    auto it = llvm::find(triggers, operandVF);
+    const auto *it = llvm::find(triggers, operandVF);
     if (it != triggers.end()) {
       unsigned index = std::distance(triggers.begin(), it);
       pastValues.push_back(it->getProjected());
@@ -527,7 +527,7 @@ Value Deseq::tracePastValue(Value pastValue) {
 
     // If this is one of the observed values, we're done. Otherwise trace
     // block arguments backwards to their predecessors.
-    if (auto it = llvm::find(triggers, getValueField(value));
+    if (const auto *it = llvm::find(triggers, getValueField(value));
         it != triggers.end()) {
       distinctValues.insert(it->getProjected());
       continue;
@@ -1166,17 +1166,17 @@ bool Deseq::matchDriveClockAndReset(
     auto clockWithEnable = DNFTerm{clockEdge | resetOff | 0b01};
 
     // Find the entries corresponding to the above conditions.
-    auto resetIt = llvm::find_if(
+    const auto *resetIt = llvm::find_if(
         valueTable, [&](auto &pair) { return pair.first == reset; });
     if (resetIt == valueTable.end())
       continue;
 
-    auto clockWhileResetIt = llvm::find_if(
+    const auto *clockWhileResetIt = llvm::find_if(
         valueTable, [&](auto &pair) { return pair.first == clockWhileReset; });
     if (clockWhileResetIt == valueTable.end())
       continue;
 
-    auto clockIt = llvm::find_if(valueTable, [&](auto &pair) {
+    const auto *clockIt = llvm::find_if(valueTable, [&](auto &pair) {
       return pair.first == clockWithoutEnable || pair.first == clockWithEnable;
     });
     bool clockHolds = clockIt == valueTable.end();
