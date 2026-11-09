@@ -42,7 +42,7 @@ TEST(TypesTest, WalkVariantAlternatives) {
   // The alternative names are walked as well.
   SmallVector<StringAttr> visitedNames;
   outerType.walk([&](StringAttr name) { visitedNames.push_back(name); });
-  for (auto name : {"a", "b", "x", "y"})
+  for (const auto *name : {"a", "b", "x", "y"})
     EXPECT_TRUE(llvm::is_contained(visitedNames, builder.getStringAttr(name)));
 }
 
