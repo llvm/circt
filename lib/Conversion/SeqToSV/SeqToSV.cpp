@@ -206,9 +206,9 @@ public:
 
       Value initialValue = initial.lookupImmutableValue(init);
 
-      if (auto op = initialValue.getDefiningOp();
+      if (auto *op = initialValue.getDefiningOp();
           op && op->hasTrait<mlir::OpTrait::ConstantLike>()) {
-        auto clonedConstant = rewriter.clone(*op);
+        auto *clonedConstant = rewriter.clone(*op);
         rewriter.moveOpBefore(clonedConstant, svReg);
         svReg.getInitMutable().assign(clonedConstant->getResult(0));
       } else {

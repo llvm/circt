@@ -561,7 +561,7 @@ extractConcatToConcatExtract(ExtractOp op, ConcatOp innerCat,
   size_t beginOfFirst;
   if (!prefixWidths.empty()) {
     // O(log N) binary search path.
-    auto it =
+    const auto *it =
         std::upper_bound(prefixWidths.begin(), prefixWidths.end(), lowBit);
     assert(it != prefixWidths.end());
     firstIdx = it - prefixWidths.begin();

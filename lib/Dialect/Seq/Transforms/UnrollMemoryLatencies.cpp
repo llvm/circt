@@ -242,7 +242,7 @@ private:
                                                     builder.getI1Type(), 1);
 
     // Find all of the relevant ports and update them
-    for (auto user : mem->getUsers()) {
+    for (auto *user : mem->getUsers()) {
       // Figure out what type of port it is an unroll it
       TypeSwitch<Operation *, void>(user)
           .Case<seq::FirMemWriteOp>([&](auto port) {
