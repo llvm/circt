@@ -527,6 +527,7 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
 
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
+  let hasFolder = 1;
 }
 
 class IntegerBinaryOp<string mnemonic, list<Trait> traits = []> :
