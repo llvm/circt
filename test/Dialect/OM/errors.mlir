@@ -195,6 +195,31 @@ om.class @ListContainsUnsupportedType(%list: !om.list<i32>, %element: i32) {
 
 // -----
 
+// Generic syntax exercises the ODS operand and result type constraints.
+om.class @ObjectEqInvalidLhs(%invalid: !om.string, %ref: !om.any) {
+  // expected-error @+1 {{'om.object.eq' op operand #0 must be A type that represents a reference to a Class. or A type that represents any valid OM type., but got '!om.string'}}
+  %0 = "om.object.eq"(%invalid, %ref) : (!om.string, !om.any) -> i1
+  om.class.fields
+}
+
+// -----
+
+om.class @ObjectEqInvalidRhs(%ref: !om.any, %invalid: !om.integer) {
+  // expected-error @+1 {{'om.object.eq' op operand #1 must be A type that represents a reference to a Class. or A type that represents any valid OM type., but got '!om.integer'}}
+  %0 = "om.object.eq"(%ref, %invalid) : (!om.any, !om.integer) -> i1
+  om.class.fields
+}
+
+// -----
+
+om.class @ObjectEqInvalidResult(%ref: !om.any) {
+  // expected-error @+1 {{'om.object.eq' op result #0 must be 1-bit signless integer, but got 'i8'}}
+  %0 = "om.object.eq"(%ref, %ref) : (!om.any, !om.any) -> i8
+  om.class.fields
+}
+
+// -----
+
 om.class @UnknownClass(%arg: !om.class.type<@Unknwon>) {
   // expected-error @+1 {{class "Unknwon" was not found}}
   om.object.field %arg["unknown"]: (!om.class.type<@Unknwon>) -> i1
