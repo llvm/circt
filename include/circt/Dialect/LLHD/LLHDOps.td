@@ -194,7 +194,7 @@ def NetOp : LLHDOp<"net", [
     OptionalAttr<StrAttr>:$name,
     NetKindAttr:$kind
   );
-  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let results = (outs Res<NetType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) $kind attr-dict
     `:` type($result)
