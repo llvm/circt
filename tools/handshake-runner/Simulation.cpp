@@ -161,7 +161,7 @@ void printAnyValueWithType(llvm::raw_ostream &out, mlir::Type type,
 void scheduleIfNeeded(std::list<mlir::Operation *> &readyList,
                       llvm::DenseMap<mlir::Value, Any> & /*valueMap*/,
                       mlir::Operation *op) {
-  if (std::find(readyList.begin(), readyList.end(), op) == readyList.end()) {
+  if (llvm::find(readyList, op) == readyList.end()) {
     readyList.push_back(op);
   }
 }
