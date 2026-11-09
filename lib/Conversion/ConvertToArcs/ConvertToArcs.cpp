@@ -192,7 +192,7 @@ LogicalResult Converter::analyzeFanIn() {
     for (auto *user : op->getUsers()) {
       while (user->getParentOp() != op->getParentOp())
         user = user->getParentOp();
-      auto it = faninMasks.find(user);
+      auto *it = faninMasks.find(user);
       if (it != faninMasks.end())
         mask |= it->second;
     }

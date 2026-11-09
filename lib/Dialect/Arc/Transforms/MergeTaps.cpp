@@ -40,7 +40,7 @@ void MergeTapsPass::mergeTaps() {
   // module body, but will never erase the op currently visited.
   for (auto tapOp : getOperation().getBodyBlock()->getOps<arc::TapOp>()) {
     SmallVector<TapOp> aliasTaps;
-    for (auto user : tapOp.getOperand().getUsers()) {
+    for (auto *user : tapOp.getOperand().getUsers()) {
       if (user == tapOp)
         continue;
       if (auto otherTap = dyn_cast<arc::TapOp>(user)) {
