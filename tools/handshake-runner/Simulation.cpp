@@ -588,7 +588,7 @@ LogicalResult HandshakeExecuter::execute(mlir::CallOpInterface callOp,
                                          std::vector<Any> &in,
                                          std::vector<Any> &) {
   // implement function calls.
-  auto op = callOp.getOperation();
+  auto *op = callOp.getOperation();
   mlir::Operation *calledOp = callOp.resolveCallable();
   if (auto funcOp = dyn_cast<mlir::func::FuncOp>(calledOp)) {
     unsigned outputs = funcOp.getNumResults();

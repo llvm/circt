@@ -166,7 +166,7 @@ private:
             return failure();
 
         // Erase the ops
-        for (auto op : ops)
+        for (auto *op : ops)
           op->erase();
       }
     }
