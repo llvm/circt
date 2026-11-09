@@ -110,7 +110,7 @@ static LogicalResult verifyNotComplexSource(Op op) {
 
   // Currently, we use the Combinational dialect to perform logical operations
   // on wires, i.e. comb::AndOp, comb::OrOp, comb::XorOp.
-  if (auto dialect = definingOp->getDialect(); isa<comb::CombDialect>(dialect))
+  if (auto *dialect = definingOp->getDialect(); isa<comb::CombDialect>(dialect))
     return op->emitOpError("has source that is not a port or constant. "
                            "Complex logic should be conducted in the guard.");
 
@@ -225,7 +225,7 @@ LogicalResult calyx::verifyComponent(Operation *op) {
 }
 
 LogicalResult calyx::verifyCell(Operation *op) {
-  auto opParent = op->getParentOp();
+  auto *opParent = op->getParentOp();
   if (!isa<ComponentInterface>(opParent))
     return op->emitOpError()
            << "has parent: " << opParent << ", expected ComponentInterface.";
@@ -233,7 +233,7 @@ LogicalResult calyx::verifyCell(Operation *op) {
 }
 
 LogicalResult calyx::verifyControlLikeOp(Operation *op) {
-  auto parent = op->getParentOp();
+  auto *parent = op->getParentOp();
 
   if (isa<calyx::EnableOp>(op) &&
       !isa_and_nonnull<calyx::CalyxDialect>(parent->getDialect())) {
@@ -1136,7 +1136,7 @@ GroupGoOp GroupOp::getGoOp() {
 }
 
 GroupDoneOp GroupOp::getDoneOp() {
-  auto body = this->getBodyBlock();
+  auto *body = this->getBodyBlock();
   return cast<GroupDoneOp>(body->getTerminator());
 }
 
