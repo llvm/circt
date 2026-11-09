@@ -179,6 +179,25 @@ hw.module @MultiDimensionalArrays(in %a: i42, in %b: i42, in %c: i42, in %d: i42
   dbg.variable "array", %1 : !dbg.array
 }
 
+// Arrays whose elements emit to different types have no single element type
+// and get no value.
+// CHECK-LABEL: "obj_name": "MismatchedArrayElements"
+// CHECK:       "module_name": "MismatchedArrayElements"
+// CHECK:         "var_name": "mixed"
+// CHECK-NOT:     "value"
+// CHECK:         "var_name": "uniform"
+// CHECK:         "value": {"opcode":"'{","operands":[{"opcode":"'{","operands":[{"sig_name":"a"},{"sig_name":"b"}]},{"opcode":"'{","operands":[{"sig_name":"b"},{"sig_name":"a"}]}]}
+// CHECK:         "type_name": "logic"
+hw.module @MismatchedArrayElements(in %a: i42, in %b: i42) {
+  %0 = dbg.array [%a, %b] : i42
+  %1 = dbg.array [%a] : i42
+  %2 = dbg.array [%0, %1] : !dbg.array
+  dbg.variable "mixed", %2 : !dbg.array
+  %3 = dbg.array [%b, %a] : i42
+  %4 = dbg.array [%0, %3] : !dbg.array
+  dbg.variable "uniform", %4 : !dbg.array
+}
+
 // CHECK-LABEL: "module_name": "Expressions"
 hw.module @Expressions(in %a: i1, in %b: i1) {
   // CHECK-LABEL: "var_name": "blockArg"
