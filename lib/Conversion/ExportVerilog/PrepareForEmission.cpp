@@ -52,7 +52,7 @@ using namespace ExportVerilog;
 bool ExportVerilog::isSimpleReadOrPort(Value v) {
   if (isa<BlockArgument>(v))
     return true;
-  auto vOp = v.getDefiningOp();
+  auto *vOp = v.getDefiningOp();
   if (!vOp)
     return false;
   if (sv::getHandleElementType(v.getType()))
@@ -60,7 +60,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
     return false;
-  auto readSrc = read.getInput().getDefiningOp();
+  auto *readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
   return isa<sv::WireOp, RegOp, LogicOp, VarOp, XMROp, XMRRefOp>(readSrc);

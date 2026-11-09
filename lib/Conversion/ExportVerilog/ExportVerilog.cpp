@@ -1004,7 +1004,7 @@ StringRef getVerilogValueName(Value val) {
 
   if (auto port = dyn_cast<BlockArgument>(val)) {
     // If the value is defined by for op, use its associated verilog name.
-    auto parent = port.getParentBlock()->getParentOp();
+    auto *parent = port.getParentBlock()->getParentOp();
     if (isa<ForOp, GenerateForOp>(parent))
       return parent->getAttrOfType<StringAttr>("hw.verilogName");
     return getInputPortVerilogName(port.getParentBlock()->getParentOp(),
