@@ -507,6 +507,20 @@ firrtl.circuit "StringCat" {
   }
 }
 
+// CHECK-LABEL: firrtl.circuit "ObjectEq"
+firrtl.circuit "ObjectEq" {
+  firrtl.module @ObjectEq() {}
+  firrtl.class private @Value() {}
+
+  // CHECK-LABEL: om.class @ObjectEqClass
+  firrtl.class @ObjectEqClass(in %a: !firrtl.class<@Value()>, in %b: !firrtl.anyref, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.object.eq %a, %b : !om.class.type<@Value>, !om.any{{$}}
+    %0 = firrtl.object.eq %a, %b : !firrtl.class<@Value()>, !firrtl.anyref
+    // CHECK: om.class.fields %[[EQ]] : i1
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "AltBasePath"
 firrtl.circuit "AltBasePath" {
   // CHECK: hw.hierpath private [[FOO_NLA:@.+]] [@AltBasePath::[[FOO_SYM:@.+]]]
