@@ -196,6 +196,17 @@ om.class @PropEqFold(%str: !om.string, %b: i1, %n: !om.integer) -> (out1: i1, ou
   om.class.fields %0, %1, %2, %3, %4, %5, %6, %7, %8, %9 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
 
+// CHECK-LABEL: @AnyCastFold
+om.class @AnyCastFold(%ref: !om.class.type<@Foo>, %any: !om.any) -> (
+    concrete: !om.any, identity: !om.any, nested: !om.any) {
+  // CHECK-NEXT: [[CAST:%.+]] = om.any_cast %ref : (!om.class.type<@Foo>) -> !om.any
+  %cast = om.any_cast %ref : (!om.class.type<@Foo>) -> !om.any
+  %identity = om.any_cast %any : (!om.any) -> !om.any
+  %nested = om.any_cast %cast : (!om.any) -> !om.any
+  // CHECK-NEXT: om.class.fields [[CAST]], %any, [[CAST]] : !om.any, !om.any, !om.any
+  om.class.fields %cast, %identity, %nested : !om.any, !om.any, !om.any
+}
+
 // CHECK-LABEL: @IntegerBitwiseFold
 om.class @IntegerBitwiseFold(%b: i8) -> (out1: i8, out2: i8, out3: i8,
                                           out4: i8, out5: i8, out6: i8,

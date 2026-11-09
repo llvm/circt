@@ -792,6 +792,16 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// AnyCastOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AnyCastOp::fold(FoldAdaptor adaptor) {
+  if (getInput().getType() == getType() && getInput() != getResult())
+    return getInput();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // IntegerBinaryOp (arithmetic)
 //===----------------------------------------------------------------------===//
 
