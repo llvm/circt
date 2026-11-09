@@ -278,10 +278,10 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
 
           // Find the third bit of the full-adder that satisfies the delay
           // constraint
-          auto it = std::find_if(col.begin(), col.end(),
-                                 [targetDelay](const auto &pair) {
-                                   return pair.delay <= targetDelay;
-                                 });
+          auto *it = std::find_if(col.begin(), col.end(),
+                                  [targetDelay](const auto &pair) {
+                                    return pair.delay <= targetDelay;
+                                  });
 
           if (it != col.end()) {
             bit2 = *it;
