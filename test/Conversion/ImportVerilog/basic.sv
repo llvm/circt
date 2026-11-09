@@ -5517,3 +5517,28 @@ endmodule
 (* flag_attr, str_attr = "hello \"world\"", int_attr = 42 *)
 module ModuleWithAttrs();
 endmodule
+
+// Clocking and `disable iff` inside a named property.
+// CHECK-LABEL: moore.module @NamedPropertyDisableIff
+module NamedPropertyDisableIff(input logic clk, input bit rst, a, b);
+  property p;
+    @(posedge clk) disable iff (rst) a |-> b;
+  endproperty
+  property q;
+    disable iff (rst) a |-> b;
+  endproperty
+  // CHECK: [[RST:%.+]] = moore.read %rst
+  // CHECK: [[EN:%.+]] = moore.not [[RST]]
+  // CHECK: [[EN_I1:%.+]] = moore.to_builtin_int [[EN]] : i1
+  // CHECK: [[IMPL:%.+]] = ltl.implication
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[IMPL]], posedge
+  // CHECK: verif.assert [[CLK_OP]] if [[EN_I1]] : !ltl.property
+  assert property (p);
+  // CHECK: [[RST:%.+]] = moore.read %rst
+  // CHECK: [[EN:%.+]] = moore.not [[RST]]
+  // CHECK: [[EN_I1:%.+]] = moore.to_builtin_int [[EN]] : i1
+  // CHECK: [[IMPL:%.+]] = ltl.implication
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[IMPL]], posedge
+  // CHECK: verif.assert [[CLK_OP]] if [[EN_I1]] : !ltl.property
+  assert property (@(posedge clk) q);
+endmodule

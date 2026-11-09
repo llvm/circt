@@ -1001,16 +1001,33 @@ struct StmtVisitor {
     // Hence we only need to detect if the top level assertion expression has
     // type DisableIff. (or, if the top level expression is
     // ClockingAssertionExpr, check for DisableIff inside that).
+    // The clocking and `disable iff` may also be part of a named property:
+    // `property p; @(posedge clk) disable iff (rst) a |-> b; endproperty`
+    // asserted as `assert property (p)`. Look through such instances.
+    auto lookThroughInstances = [](const slang::ast::AssertionExpr *expr) {
+      while (auto *simple = expr->as_if<slang::ast::SimpleAssertionExpr>()) {
+        if (simple->repetition)
+          break;
+        auto *inst =
+            simple->expr.as_if<slang::ast::AssertionInstanceExpression>();
+        if (!inst || inst->isRecursiveProperty)
+          break;
+        expr = &inst->body;
+      }
+      return expr;
+    };
     Value enable;
     Value property;
     // Find the outermost propertySpec that isn't ClockingAssertionExpr
     const slang::ast::AssertionExpr *propertySpec;
+    const slang::ast::AssertionExpr *topSpec =
+        lookThroughInstances(&stmt.propertySpec);
     const slang::ast::ClockingAssertionExpr *clocking =
-        stmt.propertySpec.as_if<slang::ast::ClockingAssertionExpr>();
+        topSpec->as_if<slang::ast::ClockingAssertionExpr>();
     if (clocking)
-      propertySpec = &(clocking->expr);
+      propertySpec = lookThroughInstances(&clocking->expr);
     else
-      propertySpec = &(stmt.propertySpec);
+      propertySpec = topSpec;
 
     if (auto *disableIff =
             propertySpec->as_if<slang::ast::DisableIffAssertionExpr>()) {
