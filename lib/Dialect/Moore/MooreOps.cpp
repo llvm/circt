@@ -1918,7 +1918,7 @@ static StringRef stringifyDPIArgDir(DPIArgDirection dir) {
 
 ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   auto builder = parser.getBuilder();
-  auto ctx = builder.getContext();
+  auto *ctx = builder.getContext();
 
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
@@ -2118,7 +2118,7 @@ void DPIFuncOp::print(OpAsmPrinter &p) {
 
 LogicalResult
 FuncDPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto referencedOp =
+  auto *referencedOp =
       symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
   if (!referencedOp)
     return emitError("cannot find function declaration '")
