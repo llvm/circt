@@ -2246,10 +2246,10 @@ private:
 
     for (auto &group : compBlockScheduleables) {
       rewriter.setInsertionPointToEnd(parentCtrlBlock);
-      if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
+      if (auto *groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
         calyx::EnableOp::create(rewriter, groupPtr->getLoc(),
                                 groupPtr->getSymName());
-      } else if (auto whileSchedPtr = std::get_if<WhileScheduleable>(&group);
+      } else if (auto *whileSchedPtr = std::get_if<WhileScheduleable>(&group);
                  whileSchedPtr) {
         auto &whileOp = whileSchedPtr->whileOp;
 

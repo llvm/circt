@@ -104,7 +104,7 @@ struct PortInfo {
   /// otherwise std::nullopt.
   std::optional<Attribute> getAttribute(StringRef identifier) const {
     assert(attributes && "PortInfo::attributes should be instantiated.");
-    auto it = llvm::find_if(attributes, [&](auto idToAttribute) {
+    const auto *it = llvm::find_if(attributes, [&](auto idToAttribute) {
       return identifier == idToAttribute.getName();
     });
     if (it == attributes.end())
