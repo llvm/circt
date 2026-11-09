@@ -1434,8 +1434,7 @@ getControlTerminators(ArrayRef<Operation *> memOps) {
     Block *block = op->getBlock();
     // Identify the control terminator in the block
     auto term = getBlockControlTerminator(block);
-    if (std::find(terminators.begin(), terminators.end(), term) ==
-        terminators.end())
+    if (llvm::find(terminators, term) == terminators.end())
       terminators.push_back(term);
   }
   return terminators;

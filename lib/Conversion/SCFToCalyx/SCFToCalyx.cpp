@@ -2942,11 +2942,9 @@ private:
     /// function from the new one if the original top-level has `memref` in its
     /// argument
     auto funcOps = moduleOp.getOps<FuncOp>();
-    bool hasMemrefArgsInTopLevel =
-        std::any_of(funcOps.begin(), funcOps.end(), [&](auto funcOp) {
-          return funcOp.getName() == topLevelFunction &&
-                 hasMemrefArguments(funcOp);
-        });
+    bool hasMemrefArgsInTopLevel = llvm::any_of(funcOps, [&](auto funcOp) {
+      return funcOp.getName() == topLevelFunction && hasMemrefArguments(funcOp);
+    });
 
     if (hasMemrefArgsInTopLevel) {
       auto newTopLevelFunc = createNewTopLevelFn(moduleOp, topLevelFunction);
