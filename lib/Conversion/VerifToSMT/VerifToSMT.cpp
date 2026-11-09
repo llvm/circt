@@ -429,8 +429,7 @@ struct VerifBoundedModelCheckingOpConversion
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
 
-    if (std::find(propertylessBMCOps.begin(), propertylessBMCOps.end(), op) !=
-        propertylessBMCOps.end()) {
+    if (llvm::find(propertylessBMCOps, op) != propertylessBMCOps.end()) {
       // No properties to check, so we don't bother solving, we just return true
       // (without this we would incorrectly find violations, since the solver
       // will always return SAT)
