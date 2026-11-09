@@ -128,7 +128,7 @@ NamedValue ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
     return NamedValue{retVal, genValueName(retVal)};
   }
 
-  auto regIt = stageRegOrPassMap[stage].find(retVal);
+  auto *regIt = stageRegOrPassMap[stage].find(retVal);
   if (regIt != stageRegOrPassMap[stage].end()) {
     // 'v' is already routed through 'stage' - return the registered/passed
     // version.
@@ -242,7 +242,7 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
       if (predStageRegOrPassMap != stageRegOrPassMap.end()) {
         // Grab the value if passed through the predecessor stage, else,
         // use the raw value.
-        auto predRegIt = predStageRegOrPassMap->second.find(value);
+        auto *predRegIt = predStageRegOrPassMap->second.find(value);
         if (predRegIt != predStageRegOrPassMap->second.end()) {
           if (backedge.isReg) {
             regInsMap[value] = predRegIt->second.v;
