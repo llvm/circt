@@ -96,7 +96,6 @@ private:
 
   std::string host;
   Logger &logger;
-  ix::WebSocket ws;
 
   // Manifest + channel table cached from the `hello` response.
   uint32_t esiVersion = 0;
@@ -168,6 +167,11 @@ private:
   // Cross-thread fault propagation out of the IX network thread. See
   // FaultStash docs in RpcWire.h.
   ::esi::cosim::FaultStash faultStash;
+
+  // Declared last so it's destroyed first: its destructor stops IX's threads,
+  // whose callbacks use the members above. That matters when the constructor
+  // throws after starting it, since then `~Impl()` doesn't run.
+  ix::WebSocket ws;
 };
 
 //===----------------------------------------------------------------------===//
