@@ -75,9 +75,7 @@ struct ModuleTypeStorage : public TypeStorage {
   using KeyTy = ArrayRef<ModulePort>;
 
   /// Define the comparison function for the key type.
-  bool operator==(const KeyTy &key) const {
-    return std::equal(key.begin(), key.end(), ports.begin(), ports.end());
-  }
+  bool operator==(const KeyTy &key) const { return llvm::equal(key, ports); }
 
   /// Define a hash function for the key type.
   static llvm::hash_code hashKey(const KeyTy &key) {

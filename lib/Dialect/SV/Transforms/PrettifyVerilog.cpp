@@ -252,7 +252,7 @@ bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
     return false;
 
   // Emit the assignments in the order of the indices.
-  std::stable_sort(fields.begin(), fields.end(), [](auto l, auto r) {
+  llvm::stable_sort(fields, [](auto l, auto r) {
     return std::get<0>(l).ult(std::get<0>(r));
   });
 
