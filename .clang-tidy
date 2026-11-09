@@ -2,6 +2,7 @@
 # Local additions:
 # * google-global-names-in-headers
 # * misc-no-recursion
+# * identifier-naming exemptions for names required by LLVM/upstream.
 HeaderFilterRegex: ''
 Checks: >
         -*,
@@ -72,7 +73,7 @@ CheckOptions:
   - key:             readability-identifier-naming.FunctionCase
     value:           camelBack
   - key:             readability-identifier-naming.FunctionIgnoredRegexp
-    value:           "LLVMFuzzerTestOneInput"
+    value:           "^(LLVMFuzzerTestOneInput|hash_value|child_begin|child_end|nodes_begin|nodes_end|Profile)$"
   - key:             readability-identifier-naming.MemberCase
     value:           camelBack
   - key:             readability-identifier-naming.ParameterCase
