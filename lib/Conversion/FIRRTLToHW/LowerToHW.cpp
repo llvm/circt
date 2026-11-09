@@ -3192,7 +3192,7 @@ Backedge FIRRTLLowering::createBackedge(Value orig, Type type) {
 /// If the `from` value is in fact a backedge, record that the backedge will
 /// be replaced by the value.  Return true if the destination is a backedge.
 bool FIRRTLLowering::updateIfBackedge(Value dest, Value src) {
-  auto backedgeIt = backedges.find(dest);
+  auto *backedgeIt = backedges.find(dest);
   if (backedgeIt == backedges.end())
     return false;
   backedgeIt->second = src;

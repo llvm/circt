@@ -85,7 +85,7 @@ void PassiveWiresPass::runOnOperation() {
     auto r = op->getResult(0);
     if (!hasFlip(r.getType()))
       continue;
-    for (auto users : r.getUsers())
+    for (auto *users : r.getUsers())
       worklist.push_back(users);
     // In-place updates is safe as consumers don't care about flip.
     r.setType(type_cast<FIRRTLBaseType>(r.getType()).getPassiveType());

@@ -6963,7 +6963,7 @@ DoneParsing:
 mlir::OwningOpRef<mlir::ModuleOp>
 circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                              mlir::TimingScope &ts, FIRParserOptions options) {
-  auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  const auto *sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
   unsigned fileID = 1;
   for (unsigned e = options.numAnnotationFiles + 1; fileID < e; ++fileID)
