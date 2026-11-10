@@ -517,10 +517,10 @@ hw.module private @initStruct(in %clock: !seq.clock) {
 hw.module @issue1594(in %clock: !seq.clock, in %reset: i1, in %a: i1, out b: i1) {
   %true = hw.constant true
   %false = hw.constant false
-  %reset_n = sv.wire sym @__issue1594__reset_n  : !hw.inout<i1>
-  %0 = sv.read_inout %reset_n : !hw.inout<i1>
+  %reset_n = sv.wire sym @__issue1594__reset_n  : !sv.net<i1>
+  %0 = sv.read_inout %reset_n : !sv.net<i1>
   %1 = comb.xor %reset, %true : i1
-  sv.assign %reset_n, %1 : i1
+  sv.assign %reset_n, %1 : !sv.net<i1>, i1
   %r = seq.firreg %a clock %clock sym @__r__ reset sync %0, %false : i1
   // CHECK: sv.always posedge %clock
   // CHECK-NOT: sv.always
