@@ -1287,15 +1287,15 @@ static LogicalResult legalizeHWModule(Block &block,
     std::pair<Block *, Block::iterator> logicOpInsertionPoint =
         findLogicOpInsertionPoint(&block.front());
     for (auto &op : llvm::make_early_inc_range(block)) {
-      if (isa<LogicOp, VarOp>(op)) {
+      if (auto logic = dyn_cast<LogicOp>(&op)) {
         // If the logic op is already located at the given point, increment the
         // iterator to keep the order of logic operations in the block.
-        if (logicOpInsertionPoint.second == op.getIterator()) {
+        if (logicOpInsertionPoint.second == logic->getIterator()) {
           ++logicOpInsertionPoint.second;
           continue;
         }
         // Otherwise, move the op to the insertion point.
-        op.moveBefore(logicOpInsertionPoint.first,
+        logic->moveBefore(logicOpInsertionPoint.first,
                       logicOpInsertionPoint.second);
       }
     }
