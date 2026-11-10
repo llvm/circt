@@ -500,7 +500,7 @@ protected:
 
 private:
   /// Throw if the port is connected in callback mode (unless called by the
-  /// thread writing async messages).
+  /// async write path's own tryWrite()).
   void requireNotCallbackMode(const char *method) const;
   /// Set up translation and call connectImpl(). Shared by both modes.
   void connectCommon(const ConnectOptions &options);

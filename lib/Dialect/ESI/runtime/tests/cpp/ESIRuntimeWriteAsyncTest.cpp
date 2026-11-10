@@ -430,6 +430,47 @@ TEST(WriteAsyncTest, ModesAreExclusive) {
   EXPECT_EQ(recorder.size(), 0u);
 }
 
+TEST(WriteAsyncTest, SyncWritesThrowInCallbacks) {
+  UIntType ui8("ui8", 8);
+  RecordingWritePort port(&ui8);
+  MessageData data(std::vector<uint8_t>{9});
+  int syncCallsRejected = 0;
+  Recorder recorder;
+  recorder.onResult = [&](size_t) {
+    auto expectThrow = [&](auto &&fn) {
+      try {
+        fn();
+      } catch (const std::runtime_error &) {
+        ++syncCallsRejected;
+      }
+    };
+    expectThrow([&] { port.write(data); });
+    expectThrow([&] { port.write(makeMsg({9})); });
+    expectThrow([&] { port.tryWrite(data); });
+    expectThrow([&] {
+      std::unique_ptr<SegmentedMessageData> msg = makeMsg({9});
+      port.tryWrite(msg);
+    });
+    expectThrow([&] { port.flush(); });
+  };
+  port.connect(recorder.callback());
+
+  // A callback invoked by writeAsync() itself.
+  port.writeAsync(makeMsg({1}));
+  EXPECT_EQ(syncCallsRejected, 5);
+
+  // Callbacks invoked by poll(). The first message's callback must not be able
+  // to sneak a message in ahead of the second.
+  port.rejectAll = true;
+  port.writeAsync(makeMsg({2}));
+  port.writeAsync(makeMsg({3}));
+  port.rejectAll = false;
+  port.poll();
+  EXPECT_EQ(syncCallsRejected, 15);
+  EXPECT_TRUE(recorder.allSucceeded(3));
+  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{1}, {2}, {3}}));
+}
+
 TEST(WriteAsyncTest, DisconnectFailsPendingWrites) {
   UIntType ui8("ui8", 8);
   RecordingWritePort port(&ui8);

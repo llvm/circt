@@ -710,8 +710,12 @@ WriteChannelPort::~WriteChannelPort() {
                   "completed");
 }
 
+/// The port (if any) whose async write path is calling tryWrite() on this
+/// thread, which is exempt from the callback mode check.
+static thread_local const WriteChannelPort *asyncTryWritePort = nullptr;
+
 void WriteChannelPort::requireNotCallbackMode(const char *method) const {
-  if (mode == Mode::Callback && drainThread != std::this_thread::get_id())
+  if (mode == Mode::Callback && asyncTryWritePort != this)
     throw std::runtime_error(
         std::string("Cannot call `") + method +
         "()` on a write channel connected in callback mode. Use "
@@ -876,8 +880,17 @@ bool WriteChannelPort::drainAsyncWrites() {
       bool written = false;
       std::string partialSend;
       try {
-        if (msg && tryWrite(msg))
-          progress = true;
+        if (msg) {
+          // Exempt only this call from the callback mode check, not the
+          // completion callbacks below which run on the same thread.
+          struct Exempt {
+            const WriteChannelPort *saved = asyncTryWritePort;
+            Exempt(const WriteChannelPort *port) { asyncTryWritePort = port; }
+            ~Exempt() { asyncTryWritePort = saved; }
+          } exempt(this);
+          if (tryWrite(msg))
+            progress = true;
+        }
         // Once accepted (and thus null), flush any remaining frames.
         if (!msg) {
           size_t framesSentBefore = translationBufferIdx;
