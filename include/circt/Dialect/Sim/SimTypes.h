@@ -55,7 +55,8 @@ struct DPIFunctionTypeStorage : public mlir::TypeStorage {
   using KeyTy = llvm::ArrayRef<DPIArgument>;
 
   bool operator==(const KeyTy &key) const {
-    return llvm::equal(key, arguments);
+    return std::equal(key.begin(), key.end(), arguments.begin(),
+                      arguments.end());
   }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
