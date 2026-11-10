@@ -8,6 +8,7 @@
 
 #include "FirRegLowering.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Support/Utils.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -305,10 +306,10 @@ SmallVector<Value> FirRegLowering::createRandomizationVector(OpBuilder &builder,
   // Create randomization vector
   SmallVector<Value> randValues;
   auto numRandomCalls = (maxBit + 31) / 32;
-  auto logic = sv::LogicOp::create(
+  auto logic = sv::VarOp::create(
       builder, loc,
       hw::UnpackedArrayType::get(builder.getIntegerType(32), numRandomCalls),
-      "_RANDOM");
+      builder.getStringAttr("_RANDOM"));
   // Indvar's width must be equal to `ceil(log2(numRandomCalls +
   // 1))` to avoid overflow.
   auto inducionVariableWidth = llvm::Log2_64_Ceil(numRandomCalls + 1);
@@ -715,7 +716,7 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
       initValue = hw::BitcastOp::create(builder, loc, regTy, cst);
   }
 
-  svReg.reg = sv::RegOp::create(builder, loc, regTy, reg.getNameAttr(),
+  svReg.reg = sv::VarOp::create(builder, loc, regTy, reg.getNameAttr(),
                                 hw::InnerSymAttr(), initValue);
   svReg.width = hw::getBitWidth(regTy);
 
@@ -797,7 +798,7 @@ void FirRegLowering::initializeRegisterElements(Location loc,
                                                 OpBuilder &builder, Value reg,
                                                 Value randomSource,
                                                 unsigned &pos) {
-  auto type = cast<sv::InOutType>(reg.getType()).getElementType();
+  auto type = cast<sv::VarType>(reg.getType()).getElementType();
   if (auto intTy = hw::type_dyn_cast<IntegerType>(type)) {
     // Use randomSource[pos-1:pos-width] as a random value.
     pos -= intTy.getWidth();
@@ -823,7 +824,7 @@ void FirRegLowering::initializeRegisterElements(Location loc,
 }
 // NOLINTEND(misc-no-recursion)
 
-void FirRegLowering::buildRegConditions(OpBuilder &b, sv::RegOp reg) {
+void FirRegLowering::buildRegConditions(OpBuilder &b, sv::VarOp reg) {
   // If there are no conditions, just return the current insertion point.
   auto lookup = regConditionTable.find(reg);
   if (lookup == regConditionTable.end())

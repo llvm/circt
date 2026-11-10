@@ -1,4 +1,4 @@
-; RUN: firtool %s | FileCheck %s
+; RUN: firtool %s --lowering-options=svVarDeclStyle=reg | FileCheck %s
 
 FIRRTL version 4.0.0
 circuit Foo: %[[{"class": "firrtl.AttributeAnnotation",
