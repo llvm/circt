@@ -474,8 +474,22 @@ jobs:
           else
             DIFF_COMMIT="HEAD^"
           fi
+          # Skip code this build never compiles: clang-tidy won't know the right flags.
+          # ESI runtime and circt-standalone are separate CMake projects.
+          # Verilator compiles the integration test and circt-rtl-sim drivers.
+          # The rest need an option or dependency this build doesn't enable.
+          TIDY_EXCLUDE=(
+            ':(exclude)lib/Dialect/ESI/runtime'
+            ':(exclude)examples/circt-standalone'
+            ':(exclude)integration_test'
+            ':(exclude)tools/circt-rtl-sim/driver.cpp'
+            ':(exclude)lib/Bindings/Tcl'                            # CIRCT_BINDINGS_TCL_ENABLED
+            ':(exclude)lib/Dialect/Arc/Runtime/FSTTraceEncoder.cpp' # CIRCT_LIBFST_ENABLED
+            ':(exclude)lib/Scheduling/CPSATSchedulers.cpp'          # OR-Tools
+            ':(exclude)lib/Scheduling/LPSchedulers.cpp'             # OR-Tools
+          )
           # On tidy failure, print here and to step summary.
-          if ! git diff -U0 "$DIFF_COMMIT...HEAD" | \
+          if ! git diff -U0 "$DIFF_COMMIT...HEAD" -- . "${TIDY_EXCLUDE[@]}" | \
               python3 llvm/clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py \
                 -clang-tidy-binary ${{ steps.setup-linux.outputs.clang_tidy }} -path build -p1 -j"$(nproc)" -quiet \
                 -warnings-as-errors='*' > clang-tidy.log 2>&1; then
