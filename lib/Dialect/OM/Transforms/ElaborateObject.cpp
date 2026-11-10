@@ -277,12 +277,15 @@ struct ElaborateObjectPass
     // using a greedy pattern rewriter. NOTE: The conversion framework is not
     // suitable here because inlining patterns need to be applied recursively to
     // fully evaluate nested object instantiations.
-    RewritePatternSet patterns(classOp.getContext());
-    patterns.add<ObjectOpInliningPattern>(classOp.getContext(), symTable,
-                                          !allowUnevaluated);
-    patterns.add<EvaluateObjectField>(classOp.getContext(), symTable,
-                                      fieldIndexes);
-    patterns.add<UnknownPropagationPattern>(classOp.getContext());
+    MLIRContext *context = classOp.getContext();
+    RewritePatternSet patterns(context);
+    patterns.add<ObjectOpInliningPattern>(context, symTable, !allowUnevaluated);
+    patterns.add<EvaluateObjectField>(context, symTable, fieldIndexes);
+    patterns.add<UnknownPropagationPattern>(context);
+    for (RegisteredOperationName op : context->getRegisteredOperations())
+      if (isa<OMDialect>(op.getDialect()))
+        op.getCanonicalizationPatterns(patterns, context);
+
     GreedyRewriteConfig config;
     // Disable iteration limit to allow full recursive inlining.
     config.setMaxIterations(GreedyRewriteConfig::kNoLimit);
