@@ -8,7 +8,7 @@ hw.module @Foo() {
   // CHECK-YOSYS-NOT: verif.symbolic_value
 
   // CHECK-EXTMODULE: [[SYM:%.+]] = hw.instance {{.*}} @circt.symbolic_value.42<WIDTH: i32 = 42>
-  // CHECK-YOSYS: [[TMP:%.+]] = sv.wire {sv.attributes = [#sv.attribute<"anyseq">]} : !hw.inout<i42>
+  // CHECK-YOSYS: [[TMP:%.+]] = sv.wire {sv.attributes = [#sv.attribute<"anyseq">]} : !sv.net<i42>
   // CHECK-YOSYS: [[SYM:%.+]] = sv.read_inout [[TMP]]
   // CHECK: dbg.variable "x0", [[SYM]] : i42
   %0 = verif.symbolic_value : i42
@@ -16,7 +16,7 @@ hw.module @Foo() {
 
   // CHECK-EXTMODULE: [[TMP:%.+]] = hw.instance {{.*}} @circt.symbolic_value.12<WIDTH: i32 = 12>
   // CHECK-EXTMODULE: [[SYM:%.+]] = hw.bitcast [[TMP]] : (i12) -> !hw.array<4xi3>
-  // CHECK-YOSYS: [[TMP:%.+]] = sv.wire {sv.attributes = [#sv.attribute<"anyseq">]} : !hw.inout<array<4xi3>>
+  // CHECK-YOSYS: [[TMP:%.+]] = sv.wire {sv.attributes = [#sv.attribute<"anyseq">]} : !sv.net<!hw.array<4xi3>>
   // CHECK-YOSYS: [[SYM:%.+]] = sv.read_inout [[TMP]]
   // CHECK: dbg.variable "x1", [[SYM]] : !hw.array<4xi3>
   %1 = verif.symbolic_value : !hw.array<4xi3>
@@ -24,7 +24,7 @@ hw.module @Foo() {
 
   // Reuse existing extmodule for same i42 type.
   // CHECK-EXTMODULE: [[SYM:%.+]] = hw.instance {{.*}} @circt.symbolic_value.42<WIDTH: i32 = 42>
-  // CHECK-YOSYS: [[TMP:%.+]] = sv.wire {sv.attributes = [#sv.attribute<"anyseq">]} : !hw.inout<i42>
+  // CHECK-YOSYS: [[TMP:%.+]] = sv.wire {sv.attributes = [#sv.attribute<"anyseq">]} : !sv.net<i42>
   // CHECK-YOSYS: [[SYM:%.+]] = sv.read_inout [[TMP]]
   // CHECK: dbg.variable "x2", [[SYM]] : i42
   %2 = verif.symbolic_value : i42
@@ -33,7 +33,7 @@ hw.module @Foo() {
   // Reuse existing extmodule for same 42 bit types, cast to array<6 x i7>.
   // CHECK-EXTMODULE: [[TMP:%.+]] = hw.instance {{.*}} @circt.symbolic_value.42<WIDTH: i32 = 42>
   // CHECK-EXTMODULE: [[SYM:%.+]] = hw.bitcast [[TMP]] : (i42) -> !hw.array<6xi7>
-  // CHECK-YOSYS: [[TMP:%.+]] = sv.wire {sv.attributes = [#sv.attribute<"anyseq">]} : !hw.inout<array<6xi7>>
+  // CHECK-YOSYS: [[TMP:%.+]] = sv.wire {sv.attributes = [#sv.attribute<"anyseq">]} : !sv.net<!hw.array<6xi7>>
   // CHECK-YOSYS: [[SYM:%.+]] = sv.read_inout [[TMP]]
   // CHECK: dbg.variable "x3", [[SYM]] : !hw.array<6xi7>
   %3 = verif.symbolic_value : !hw.array<6xi7>

@@ -14,14 +14,21 @@ om.class @StringOps() -> (str: !om.string, concat: !om.string) {
   om.class.fields %hello, %concat : !om.string, !om.string
 }
 
-// Test list creation.
-// Note that this is currently not folded because list_create doesn't have a folder.
-// Even when it had a folder we cannot fully evaluate list_concat since objects cannot be
-// representable with attributes.
+// CHECK-LABEL: om.class @StringCanonicalization
+// CHECK: %[[SUFFIX:.+]] = om.constant "bc" : !om.string
+// CHECK: %[[RESULT:.+]] = om.string.concat %arg, %[[SUFFIX]] : !om.string
+// CHECK: om.class.fields %[[RESULT]]
+om.class @StringCanonicalization(%arg: !om.string) -> (result: !om.string) {
+  %b = om.constant "b" : !om.string
+  %c = om.constant "c" : !om.string
+  %result = om.string.concat %arg, %b, %c : !om.string
+  om.class.fields %result : !om.string
+}
+
+// Constant primitive lists are folded to attributes; lists of objects cannot
+// be represented as attributes and therefore remain list_create operations.
 // CHECK-LABEL: om.class @SimpleList() -> (result: !om.list<!om.integer>) {
-// CHECK-DAG:   %[[C1:.+]] = om.constant #om.integer<1 : si8> : !om.integer
-// CHECK-DAG:   %[[C2:.+]] = om.constant #om.integer<2 : si8> : !om.integer
-// CHECK:   %[[LIST:.+]] = om.list_create %[[C1]], %[[C2]]
+// CHECK:   %[[LIST:.+]] = om.constant #om.list<!om.integer, [#om.integer<1 : si8> : !om.integer, #om.integer<2 : si8> : !om.integer]> : !om.list<!om.integer>
 // CHECK:   om.class.fields %[[LIST]] : !om.list<!om.integer>
 // CHECK: }
 om.class @SimpleList() -> (result: !om.list<!om.integer>) {
@@ -29,6 +36,179 @@ om.class @SimpleList() -> (result: !om.list<!om.integer>) {
   %c2 = om.constant #om.integer<2 : si8> : !om.integer
   %list = om.list_create %c1, %c2 : !om.integer
   om.class.fields %list : !om.list<!om.integer>
+}
+
+// Test direct list membership folding across list construction, concatenation,
+// and constant list attributes.
+// CHECK-LABEL: om.class @ContainsTests
+// CHECK:   %[[TRUE:.+]] = om.constant true
+// CHECK-NEXT:   %[[FALSE:.+]] = om.constant false
+// CHECK-NEXT:   om.class.fields %[[TRUE]], %[[TRUE]], %[[FALSE]], %[[FALSE]], %[[TRUE]], %[[TRUE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]] : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+// CHECK: }
+om.class @ContainsTests(%identity: !om.string) -> (
+    strStart: i1, strMiddle: i1, strAbsent: i1, emptyResult: i1,
+    concatEnd: i1, constantResult: i1, intFound: i1, intAbsent: i1,
+    boolFound: i1, boolAbsent: i1, identityResult: i1) {
+  %sA = om.constant "a" : !om.string
+  %sB = om.constant "b" : !om.string
+  %sAbsent = om.constant "absent" : !om.string
+  %strings = om.list_create %sA, %sB, %sB : !om.string
+  %strStart = om.list_contains %strings, %sA : !om.list<!om.string>
+  %strMiddle = om.list_contains %strings, %sB : !om.list<!om.string>
+  %strAbsent = om.list_contains %strings, %sAbsent : !om.list<!om.string>
+  %empty = om.list_create : !om.string
+  %emptyResult = om.list_contains %empty, %sA : !om.list<!om.string>
+  %head = om.list_create %sA : !om.string
+  %tail = om.list_create %sB : !om.string
+  %joined = om.list_concat %head, %tail : !om.list<!om.string>
+  %concatEnd = om.list_contains %joined, %sB : !om.list<!om.string>
+  %bigA = om.constant #om.integer<36755551979133953793 : si66> : !om.integer
+  %bigB = om.constant #om.integer<36755551979133953793 : si67> : !om.integer
+  %bigOther = om.constant #om.integer<36755551979133953794 : si67> : !om.integer
+  %integers = om.list_create %bigA : !om.integer
+  %intFound = om.list_contains %integers, %bigB : !om.list<!om.integer>
+  %listConstant = om.constant #om.list<!om.integer, [#om.integer<36755551979133953793 : si66>]> : !om.list<!om.integer>
+  %constantResult = om.list_contains %listConstant, %bigB : !om.list<!om.integer>
+  %intAbsent = om.list_contains %integers, %bigOther : !om.list<!om.integer>
+
+  %true = om.constant true
+  %false = om.constant false
+  %bools = om.list_create %true : i1
+  %boolFound = om.list_contains %bools, %true : !om.list<i1>
+  %boolAbsent = om.list_contains %bools, %false : !om.list<i1>
+  %identityList = om.list_create %identity : !om.string
+  %identityResult = om.list_contains %identityList, %identity :
+      !om.list<!om.string>
+  om.class.fields %strStart, %strMiddle, %strAbsent, %emptyResult, %concatEnd,
+      %constantResult, %intFound, %intAbsent, %boolFound, %boolAbsent,
+      %identityResult : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+}
+
+// Class arguments become constants through object inlining before the folder
+// retries membership.
+om.class @ContainsParameter(%values: !om.list<!om.integer>,
+                            %element: !om.integer) -> (found: i1) {
+  %found = om.list_contains %values, %element : !om.list<!om.integer>
+  om.class.fields %found : i1
+}
+
+// CHECK-LABEL: om.class @ContainsParameterTop() -> (found: i1) {
+// CHECK:   %[[TRUE:.+]] = om.constant true
+// CHECK-NEXT:   om.class.fields %[[TRUE]] : i1
+// CHECK: }
+om.class @ContainsParameterTop() -> (found: i1) {
+  %one = om.constant #om.integer<1 : si8> : !om.integer
+  %two = om.constant #om.integer<2 : si8> : !om.integer
+  %values = om.list_create %one, %two : !om.integer
+  %child = om.object @ContainsParameter(%values, %two) :
+      (!om.list<!om.integer>, !om.integer) -> !om.class.type<@ContainsParameter>
+  %found = om.object.field %child["found"] :
+      (!om.class.type<@ContainsParameter>) -> i1
+  om.class.fields %found : i1
+}
+
+// Unknown inputs use the existing pure-op propagation policy.
+// CHECK-LABEL: om.class @ContainsUnknown() -> (elementResult: i1, listResult: i1) {
+// CHECK:   %0 = om.unknown : !om.string
+// CHECK-NEXT:   %1 = om.unknown : i1
+// CHECK-NEXT:   %2 = om.unknown : !om.list<!om.string>
+// CHECK-NEXT:   %3 = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %1, %3 : i1, i1
+// CHECK: }
+om.class @ContainsUnknown() -> (elementResult: i1, listResult: i1) {
+  %unknownElement = om.unknown : !om.string
+  %list = om.list_create : !om.string
+  %unknownElementResult = om.list_contains %list, %unknownElement :
+      !om.list<!om.string>
+  %unknownList = om.unknown : !om.list<!om.string>
+  %knownElement = om.constant "value" : !om.string
+  %unknownListResult = om.list_contains %unknownList, %knownElement :
+      !om.list<!om.string>
+  om.class.fields %unknownElementResult, %unknownListResult : i1, i1
+}
+
+// Same-SSA membership matches fold even when the directly constructed list
+// also contains an explicit unknown value; the nonmatching result propagates.
+// Keep the input unknown distinct from the propagated result unknown.
+// CHECK-LABEL: om.class @ContainsUnknownMembers() -> (foo: i1, bar: i1, baz: i1) {
+// CHECK:   %[[TRUE:.+]] = om.constant true
+// CHECK-NEXT:   %1 = om.unknown : i1
+// CHECK-NEXT:   %2 = om.unknown : !om.list<i1>
+// CHECK-NEXT:   %3 = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %[[TRUE]], %3, %[[TRUE]] : i1, i1, i1
+// CHECK: }
+om.class @ContainsUnknownMembers() -> (foo: i1, bar: i1, baz: i1) {
+  %0 = om.unknown : i1
+  %1 = om.constant false
+  %2 = om.constant true
+  %3 = om.list_create %0, %1 : i1
+  %4 = om.list_contains %3, %1 : !om.list<i1>
+  %5 = om.list_contains %3, %2 : !om.list<i1>
+  %6 = om.list_create %1, %0 : i1
+  %7 = om.list_contains %6, %1 : !om.list<i1>
+  om.class.fields %4, %5, %7 : i1, i1, i1
+}
+
+om.class private @ObjectEqValue() {
+  om.class.fields
+}
+
+// Compare identities after inlining, including a field-projected alias.
+// Distinct objects with identical fields are not equal.
+// CHECK-LABEL: om.class @ObjectEqTests
+// CHECK-DAG:   %[[TRUE:.+]] = om.constant true
+// CHECK-DAG:   %[[FALSE:.+]] = om.constant false
+// CHECK:   om.class.fields %[[FALSE]], %[[FALSE]], %[[TRUE]] : i1, i1, i1
+// CHECK-NEXT: }
+om.class @ObjectEqTests() -> (not_equal: i1, different_class: i1, field: i1) {
+  %a = om.object @ObjectEqValue() : () -> !om.class.type<@ObjectEqValue>
+  %b = om.object @ObjectEqValue() : () -> !om.class.type<@ObjectEqValue>
+  %box = om.object @ObjectEqBox(%a) : (!om.class.type<@ObjectEqValue>) -> !om.class.type<@ObjectEqBox>
+  %field = om.object.field %box["value"] : (!om.class.type<@ObjectEqBox>) -> !om.class.type<@ObjectEqValue>
+  %notEqual = om.object.eq %a, %b : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %differentClass = om.object.eq %a, %box : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqBox>
+  %fieldEqual = om.object.eq %a, %field : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  om.class.fields %notEqual, %differentClass, %fieldEqual : i1, i1, i1
+}
+
+om.class private @ObjectEqBox(%value: !om.class.type<@ObjectEqValue>) -> (value: !om.class.type<@ObjectEqValue>) {
+  om.class.fields %value : !om.class.type<@ObjectEqValue>
+}
+
+// Unknown references propagate on either side of a comparison with another
+// reference, but are equal to themselves, including when cast to any.
+// CHECK-LABEL: om.class @ObjectEqUnknown
+// CHECK-DAG:   %[[LHS:.+]] = om.unknown : i1
+// CHECK-DAG:   %[[RHS:.+]] = om.unknown : i1
+// CHECK-DAG:   %[[TRUE:.+]] = om.constant true
+// CHECK-DAG:   %[[DISTINCT:.+]] = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %[[LHS]], %[[RHS]], %[[TRUE]], %[[TRUE]], %[[DISTINCT]] : i1, i1, i1, i1, i1
+// CHECK-NEXT: }
+om.class @ObjectEqUnknown() -> (lhs: i1, rhs: i1, same: i1, any: i1,
+                               distinct: i1) {
+  %known = om.object @ObjectEqValue() : () -> !om.class.type<@ObjectEqValue>
+  %unknown = om.unknown : !om.class.type<@ObjectEqValue>
+  %unknownAny = om.any_cast %unknown : (!om.class.type<@ObjectEqValue>) -> !om.any
+  %lhs = om.object.eq %unknown, %known : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %rhs = om.object.eq %known, %unknown : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %same = om.object.eq %unknown, %unknown : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  %any = om.object.eq %unknown, %unknownAny : !om.class.type<@ObjectEqValue>, !om.any
+  %otherUnknown = om.unknown : !om.class.type<@ObjectEqValue>
+  %distinct = om.object.eq %unknown, %otherUnknown : !om.class.type<@ObjectEqValue>, !om.class.type<@ObjectEqValue>
+  om.class.fields %lhs, %rhs, %same, %any, %distinct : i1, i1, i1, i1, i1
+}
+
+// Unknown fields do not make an allocated object's identity unknown.
+// CHECK-LABEL: om.class @ObjectEqUnknownFields
+// CHECK:   %[[FALSE:.+]] = om.constant false
+// CHECK:   om.class.fields %[[FALSE]] : i1
+// CHECK-NEXT: }
+om.class @ObjectEqUnknownFields() -> (not_equal: i1) {
+  %unknown = om.unknown : !om.class.type<@ObjectEqValue>
+  %a = om.object @ObjectEqBox(%unknown) : (!om.class.type<@ObjectEqValue>) -> !om.class.type<@ObjectEqBox>
+  %b = om.object @ObjectEqBox(%unknown) : (!om.class.type<@ObjectEqValue>) -> !om.class.type<@ObjectEqBox>
+  %notEqual = om.object.eq %a, %b : !om.class.type<@ObjectEqBox>, !om.class.type<@ObjectEqBox>
+  om.class.fields %notEqual : i1
 }
 
 // Test integer operations (add, mul, shr, shl)

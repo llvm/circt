@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstring>
 #include <deque>
+#include <vector>
 
 using namespace esi;
 
@@ -293,6 +294,51 @@ protected:
 private:
   bool connected = false;
 };
+
+// A write port whose `tryWriteImpl()` accepts `credits` more frames. Unlike
+// `MockWritePort`, it uses the base `connect()`, so window translation works.
+class CreditedWritePort : public WriteChannelPort {
+public:
+  using WriteChannelPort::WriteChannelPort;
+
+  size_t credits = 0;
+  std::vector<MessageData> written;
+
+protected:
+  void writeImpl(const MessageData &data) override { written.push_back(data); }
+  bool tryWriteImpl(const MessageData &data) override {
+    if (credits == 0)
+      return false;
+    --credits;
+    written.push_back(data);
+    return true;
+  }
+};
+
+TEST(TypedPortsTest, TranslatedTryWriteKeepsNothingWhenRefused) {
+  UIntType u8("ui8", 8);
+  StructType into("into", {{"a", &u8}, {"b", &u8}});
+  // Two frames per message.
+  WindowType window("win", "win", &into, &into,
+                    {{"f0", {{"a"}}}, {"f1", {{"b"}}}});
+  CreditedWritePort port(&window);
+  port.connect();
+  MessageData data(std::vector<uint8_t>{1, 2});
+
+  // The first frame is refused: nothing is sent or kept for a later flush.
+  EXPECT_FALSE(port.tryWrite(data));
+  EXPECT_TRUE(port.flush());
+  EXPECT_TRUE(port.written.empty());
+
+  // Only the first frame fits: the rest waits for `flush()`.
+  port.credits = 1;
+  EXPECT_TRUE(port.tryWrite(data));
+  EXPECT_EQ(port.written.size(), 1u);
+  EXPECT_FALSE(port.flush());
+  port.credits = 1;
+  EXPECT_TRUE(port.flush());
+  EXPECT_EQ(port.written.size(), 2u);
+}
 
 TEST(TypedPortsTest, TypedWritePortConnectThrowsOnMismatch) {
   UIntType uint32("ui32", 32);

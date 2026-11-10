@@ -252,7 +252,7 @@ bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
     return false;
 
   // Emit the assignments in the order of the indices.
-  std::stable_sort(fields.begin(), fields.end(), [](auto l, auto r) {
+  llvm::stable_sort(fields, [](auto l, auto r) {
     return std::get<0>(l).ult(std::get<0>(r));
   });
 
@@ -293,13 +293,13 @@ bool PrettifyVerilogPass::splitAssignment(OpBuilder &builder, Value dst,
 void PrettifyVerilogPass::sinkOrCloneOpToUses(Operation *op) {
   assert(mlir::isMemoryEffectFree(op) &&
          "Op with side effects cannot be sunk to its uses.");
-  auto block = op->getBlock();
+  auto *block = op->getBlock();
   // This maps a block to the block local instance of the op.
   SmallDenseMap<Block *, Value, 8> blockLocalValues;
   for (auto &use : llvm::make_early_inc_range(op->getUses())) {
     // If the current use is in the same block as the operation, there is
     // nothing to do.
-    auto localBlock = use.getOwner()->getBlock();
+    auto *localBlock = use.getOwner()->getBlock();
     if (block == localBlock)
       continue;
     // Find the block local clone of the operation. If there is not one already,

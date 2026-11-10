@@ -10,7 +10,7 @@
 module {
   hw.module @top() {}
   esi.manifest.hier_root @top {}
-  esi.manifest.sym @top {payload = !esi.channel<!hw.union<small: i5 offset 20, wide: i16>>}
+  esi.manifest.sym @top {payload = !esi.channel<!hw.union<small: i5 offset 20, wide: i16>, ValidReady>}
 }
 
 // -----

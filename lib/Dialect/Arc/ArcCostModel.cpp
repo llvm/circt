@@ -76,7 +76,7 @@ OperationCosts ArcCostModel::getInputVectorsCost(VectorizeOp vecOp) {
   OperationCosts costs;
   for (auto inputVec : vecOp.getInputs()) {
     if (auto otherVecOp = inputVec[0].getDefiningOp<VectorizeOp>();
-        all_of(inputVec.begin(), inputVec.end(), [&](auto element) {
+        llvm::all_of(inputVec, [&](auto element) {
           return element.template getDefiningOp<VectorizeOp>() == otherVecOp;
         })) {
       // This means that they came from the same vector or

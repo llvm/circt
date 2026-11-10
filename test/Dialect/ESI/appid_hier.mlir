@@ -3,7 +3,7 @@
 hw.module @main(in %clk : !seq.clock, in %rst : i1) {
   hw.instance "Top" sym @Top @Top() -> () 
   esi.manifest.service_impl #esi.appid<"cosim"[0]> by "cosim" with {} {
-    esi.manifest.impl_conn [#esi.appid<"loopback_inout"[0]>] req <@HostComms::@req_resp>(!esi.bundle<[!esi.channel<i16> from "resp", !esi.channel<i24> to "req"]>) with {channel_assignments = {req = "loopback_inout[0].req", resp = "loopback_inout[0].resp"}}
+    esi.manifest.impl_conn [#esi.appid<"loopback_inout"[0]>] req <@HostComms::@req_resp>(!esi.bundle<[!esi.channel<i16, ValidReady> from "resp", !esi.channel<i24, ValidReady> to "req"]>) with {channel_assignments = {req = "loopback_inout[0].req", resp = "loopback_inout[0].resp"}}
   }
 }
 
@@ -13,16 +13,16 @@ hw.module @Top() {
 }
 
 hw.module @LoopbackInOutAdd7() {
-  esi.manifest.req #esi.appid<"loopback_inout"[0]>, <@HostComms::@req_resp>, !esi.bundle<[!esi.channel<i16> to "resp", !esi.channel<i24> from "req"]>
+  esi.manifest.req #esi.appid<"loopback_inout"[0]>, <@HostComms::@req_resp>, !esi.bundle<[!esi.channel<i16, ValidReady> to "resp", !esi.channel<i24, ValidReady> from "req"]>
 }
 
 hw.module @Bar () {}
 
 // CHECK-LABEL: esi.manifest.hier_root @main {
-// CHECK-NEXT:    esi.manifest.req #esi.appid<"loopback_inout"[0]>, <@HostComms::@req_resp>, !esi.bundle<[!esi.channel<i16> to "resp", !esi.channel<i24> from "req"]>
+// CHECK-NEXT:    esi.manifest.req #esi.appid<"loopback_inout"[0]>, <@HostComms::@req_resp>, !esi.bundle<[!esi.channel<i16, ValidReady> to "resp", !esi.channel<i24, ValidReady> from "req"]>
 // CHECK-NEXT:    esi.manifest.hier_node #esi.appid<"bar"[0]> mod @Bar {
 // CHECK-NEXT:    }
 // CHECK-NEXT:    esi.manifest.service_impl #esi.appid<"cosim"[0]> by "cosim" with {} {
-// CHECK-NEXT:      esi.manifest.impl_conn [#esi.appid<"loopback_inout"[0]>] req <@HostComms::@req_resp>(!esi.bundle<[!esi.channel<i16> from "resp", !esi.channel<i24> to "req"]>) with {channel_assignments = {req = "loopback_inout[0].req", resp = "loopback_inout[0].resp"}}
+// CHECK-NEXT:      esi.manifest.impl_conn [#esi.appid<"loopback_inout"[0]>] req <@HostComms::@req_resp>(!esi.bundle<[!esi.channel<i16, ValidReady> from "resp", !esi.channel<i24, ValidReady> to "req"]>) with {channel_assignments = {req = "loopback_inout[0].req", resp = "loopback_inout[0].resp"}}
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }

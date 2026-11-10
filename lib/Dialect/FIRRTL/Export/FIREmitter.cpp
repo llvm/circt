@@ -131,6 +131,7 @@ struct Emitter {
   void emitExpression(OpenSubfieldOp op);
   void emitExpression(DomainSubfieldOp op);
   void emitExpression(OpenSubindexOp op);
+  void emitExpression(DomainAnyRefCastOp op);
   void emitExpression(RefResolveOp op);
   void emitExpression(RefSendOp op);
   void emitExpression(RefSubOp op);
@@ -206,6 +207,18 @@ struct Emitter {
     if (failed(requireVersion({6, 0, 0}, op, "property equality")))
       return;
     emitPrimExpr("prop_eq", op);
+  }
+
+  void emitExpression(ObjectEqOp op) {
+    if (failed(requireVersion(nextFIRVersion, op, "object equality")))
+      return;
+    emitPrimExpr("object_eq", op);
+  }
+
+  void emitExpression(ListContainsOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "list contains")))
+      return;
+    emitPrimExpr("list_contains", op);
   }
 
   void emitExpression(BoolAndOp op) {
@@ -1582,7 +1595,7 @@ void Emitter::emitExpression(Value value) {
     return;
   }
 
-  auto op = value.getDefiningOp();
+  auto *op = value.getDefiningOp();
   assert(op && "value must either be a block arg or the result of an op");
   TypeSwitch<Operation *>(op)
       .Case<
@@ -1602,8 +1615,9 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp, IntegerAndOp, IntegerOrOp, IntegerNotOp,
-          StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp, BoolXorOp,
+          DomainAnyRefCastOp, UnknownValueOp, IntegerAndOp, IntegerOrOp,
+          IntegerNotOp, StringConcatOp, PropEqOp, ObjectEqOp, ListContainsOp,
+          BoolAndOp, BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1687,6 +1701,10 @@ void Emitter::emitExpression(OpenSubindexOp op) {
   ps << "[";
   ps.addAsString(op.getIndex());
   ps << "]";
+}
+
+void Emitter::emitExpression(DomainAnyRefCastOp op) {
+  emitExpression(op.getInput());
 }
 
 void Emitter::emitExpression(RefSendOp op) {

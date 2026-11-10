@@ -121,7 +121,7 @@ void BlackBoxReaderPass::runOnOperation() {
 
   instanceGraph = &getAnalysis<InstanceGraph>();
   instanceInfo = &getAnalysis<InstanceInfo>();
-  auto context = &getContext();
+  auto *context = &getContext();
 
   // If this pass has changed anything.
   bool anythingChanged = false;

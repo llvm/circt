@@ -135,8 +135,8 @@ firrtl.circuit "Simple" {
     firrtl.connect %ip1_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module private @Analog(in %a1 : !hw.inout<i1>, out outClock : !seq.clock) {
-  // CHECK-NEXT:    [[READ:%.+]] = sv.read_inout %a1 : !hw.inout<i1>
+  // CHECK-LABEL: hw.module private @Analog(in %a1 : !sv.net<i1>, out outClock : !seq.clock) {
+  // CHECK-NEXT:    [[READ:%.+]] = sv.read_inout %a1 : !sv.net<i1>
   // CHECK-NEXT:    [[CLK:%.+]] = seq.to_clock [[READ]]
   // CHECK-NEXT:    hw.output [[CLK]] : !seq.clock
   firrtl.module private @Analog(in %a1: !firrtl.analog<1>,
@@ -244,24 +244,24 @@ firrtl.circuit "Simple" {
   }
 
   // https://github.com/llvm/circt/issues/690
-  // CHECK-LABEL: hw.module private @bar690(in %led_0 : !hw.inout<i1>) {
+  // CHECK-LABEL: hw.module private @bar690(in %led_0 : !sv.net<i1>) {
   firrtl.module private @bar690(in %led_0: !firrtl.analog<1>) {
   }
   // CHECK-LABEL: hw.module private @foo690()
   firrtl.module private @foo690() {
     // CHECK: %.led_0.wire = sv.wire
-    // CHECK: hw.instance "fpga" @bar690(led_0: %.led_0.wire: !hw.inout<i1>) -> ()
+    // CHECK: hw.instance "fpga" @bar690(led_0: %.led_0.wire: !sv.net<i1>) -> ()
     %result = firrtl.instance fpga @bar690(in led_0: !firrtl.analog<1>)
   }
-  // CHECK-LABEL: hw.module private @foo690a(in %a : !hw.inout<i1>) {
+  // CHECK-LABEL: hw.module private @foo690a(in %a : !sv.net<i1>) {
   firrtl.module private @foo690a(in %a: !firrtl.analog<1>) {
     %result = firrtl.instance fpga @bar690(in led_0: !firrtl.analog<1>)
     firrtl.attach %result, %a: !firrtl.analog<1>, !firrtl.analog<1>
   }
 
   // https://github.com/llvm/circt/issues/740
-  // CHECK-LABEL: hw.module private @foo740(in %led_0 : !hw.inout<i1>) {
-  // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %led_0: !hw.inout<i1>) -> ()
+  // CHECK-LABEL: hw.module private @foo740(in %led_0 : !sv.net<i1>) {
+  // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %led_0: !sv.net<i1>) -> ()
   firrtl.extmodule private @bar740(in led_0: !firrtl.analog<1>)
   firrtl.module private @foo740(in %led_0: !firrtl.analog<1>) {
     %result = firrtl.instance fpga @bar740(in led_0: !firrtl.analog<1>)
@@ -270,8 +270,8 @@ firrtl.circuit "Simple" {
 
   firrtl.extmodule private @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
   firrtl.module @Example(out %port: !firrtl.analog<8>) {
-    // CHECK-LABEL: hw.module @Example(in %port : !hw.inout<i8>)
-    // CHECK-NEXT: hw.instance "a2b" @UIntToAnalog_8(a: %port: !hw.inout<i8>, b: %port: !hw.inout<i8>)
+    // CHECK-LABEL: hw.module @Example(in %port : !sv.net<i8>)
+    // CHECK-NEXT: hw.instance "a2b" @UIntToAnalog_8(a: %port: !sv.net<i8>, b: %port: !sv.net<i8>)
     %a2b_a, %a2b_b = firrtl.instance a2b  @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
     firrtl.attach %port, %a2b_b, %a2b_a : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
   }

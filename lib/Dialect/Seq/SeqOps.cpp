@@ -1204,7 +1204,7 @@ circt::seq::createConstantInitialValue(OpBuilder builder, Operation *op) {
          op->hasTrait<mlir::OpTrait::ConstantLike>());
   auto initial = seq::InitialOp::create(
       builder, op->getLoc(), op->getResultTypes(), [&]() {
-        auto clonedOp = builder.clone(*op);
+        auto *clonedOp = builder.clone(*op);
         seq::YieldOp::create(builder, op->getLoc(), clonedOp->getResults());
       });
   return cast<mlir::TypedValue<seq::ImmutableType>>(initial.getResult(0));

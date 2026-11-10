@@ -1637,7 +1637,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 LogicalResult
 Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   auto &lowering = *modules[module];
-  auto prevDefinition = currentDefinition;
+  const auto *prevDefinition = currentDefinition;
   currentDefinition = &module->getDefinition();
   llvm::scope_exit currentDefinitionGuard(
       [&] { currentDefinition = prevDefinition; });

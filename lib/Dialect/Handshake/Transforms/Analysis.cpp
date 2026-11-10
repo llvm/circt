@@ -173,7 +173,7 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
   // prints using "." between the dialect name and the op name. Replace uses of
   // "." with "_".
   std::string opDialectName = op->getName().getStringRef().str();
-  std::replace(opDialectName.begin(), opDialectName.end(), '.', '_');
+  llvm::replace(opDialectName, '.', '_');
   std::string opName = (instanceName + "." + opDialectName).str();
 
   // Follow the naming convention used in FIRRTL lowering.

@@ -1004,7 +1004,7 @@ StringRef getVerilogValueName(Value val) {
 
   if (auto port = dyn_cast<BlockArgument>(val)) {
     // If the value is defined by for op, use its associated verilog name.
-    auto parent = port.getParentBlock()->getParentOp();
+    auto *parent = port.getParentBlock()->getParentOp();
     if (isa<ForOp, GenerateForOp>(parent))
       return parent->getAttrOfType<StringAttr>("hw.verilogName");
     return getInputPortVerilogName(port.getParentBlock()->getParentOp(),
@@ -1600,18 +1600,6 @@ static StringRef getVerilogDeclWord(Operation *op,
     return "reg";
   }
 
-  if (auto var = dyn_cast<VarOp>(op)) {
-    bool hasExplicitType = hasExplicitDataType(var.getElementType());
-    switch (emitter.state.options.varOpDeclStyle) {
-    case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
-      return hasExplicitType ? "var" : "var logic";
-    case circt::LoweringOptions::VarOpDeclStyle::Logic:
-      return hasExplicitType ? "" : "logic";
-    case circt::LoweringOptions::VarOpDeclStyle::Reg:
-      return hasExplicitType ? "" : "reg";
-    }
-  }
-
   if (isa<sv::WireOp>(op))
     return "wire";
   if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
@@ -1628,6 +1616,27 @@ static StringRef getVerilogDeclWord(Operation *op,
   // If this decl is within a function, "automatic" is not needed because
   // "automatic" is added to its definition.
   bool stripAutomatic = isa_and_nonnull<FuncOp>(emitter.currentModuleOp);
+
+  if (auto var = dyn_cast<VarOp>(op)) {
+    bool hasExplicitType = hasExplicitDataType(var.getElementType());
+    // A var defined in a procedural region is emitted as 'automatic'. If the
+    // type has a struct, 'logic' is already emitted within the struct type
+    // definition (e.g. struct packed {logic foo;}), so don't emit it again.
+    // A var carrying `sv.no_automatic` (i.e. one that used to be an `sv.reg`)
+    // keeps the regular declaration style even in a procedural region.
+    if (isProcedural && !stripAutomatic && !var->hasAttr("sv.no_automatic"))
+      return hasStructType(var.getElementType()) ? "automatic"
+                                                 : "automatic logic";
+
+    switch (emitter.state.options.varOpDeclStyle) {
+    case circt::LoweringOptions::VarOpDeclStyle::VarLogic:
+      return hasExplicitType ? "var" : "var logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Logic:
+      return hasExplicitType ? "" : "logic";
+    case circt::LoweringOptions::VarOpDeclStyle::Reg:
+      return hasExplicitType ? "" : "reg";
+    }
+  }
 
   if (isa<LogicOp>(op)) {
     // If the logic op is defined in a procedural region, add 'automatic'
@@ -2780,6 +2789,13 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 }
 
 SubExprInfo ExprEmitter::visitComb(ReplicateOp op) {
+  // The replication operator is unsupported in some tools, so expand it
+  // into an explicit concatenation when requested.
+  if (state.options.disallowReplicate) {
+    emitBracedList(SmallVector<Value>(op.getMultiple(), op.getOperand()));
+    return {Symbol, IsUnsigned};
+  }
+
   auto openFn = [&]() {
     ps << "{";
     ps.addAsString(op.getMultiple());
@@ -3695,6 +3711,9 @@ private:
   EmittedProperty visitLTL(ltl::ImplicationOp op);
   EmittedProperty visitLTL(ltl::UntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
+  EmittedProperty visitLTL(ltl::AcceptOnOp op);
+  EmittedProperty emitAcceptRejectOn(StringRef mnemonic, Value condition,
+                                     Value input);
   EmittedProperty visitLTL(ltl::ClockOp op);
   EmittedProperty visitLTL(ltl::WeakOp op);
   EmittedProperty visitLTL(ltl::StrongOp op);
@@ -3984,6 +4003,13 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {
+  // Emit `not(accept_on(not(X), c))` as `reject_on (c) X` by duality, and
+  // likewise for the `sync` variants.
+  if (auto accept = op.getInput().getDefiningOp<ltl::AcceptOnOp>())
+    if (auto innerNot = accept.getInput().getDefiningOp<ltl::NotOp>())
+      return emitAcceptRejectOn(accept.getSync() ? "sync_reject_on"
+                                                 : "reject_on",
+                                accept.getCondition(), innerNot.getInput());
   // Emit `not (s_eventually X)` as `always ...` by duality, pulling the
   // quantifier to the top and cancelling any inner negation.
   if (auto ev = op.getInput().getDefiningOp<ltl::EventuallyOp>()) {
@@ -4043,6 +4069,24 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
   ps << "s_eventually" << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Qualifier);
   return {PropertyPrecedence::Qualifier};
+}
+
+EmittedProperty PropertyEmitter::emitAcceptRejectOn(StringRef mnemonic,
+                                                    Value condition,
+                                                    Value input) {
+  ps << mnemonic << PP::nbsp << "(";
+  ps.scopedBox(PP::ibox0, [&] {
+    emitNestedProperty(condition, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+  ps << PP::space;
+  emitNestedProperty(input, PropertyPrecedence::Qualifier);
+  return {PropertyPrecedence::Qualifier};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::AcceptOnOp op) {
+  return emitAcceptRejectOn(op.getSync() ? "sync_accept_on" : "accept_on",
+                            op.getCondition(), op.getInput());
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
@@ -6736,6 +6780,16 @@ void ModuleEmitter::emitPortList(Operation *module,
   if (maxTypeWidth > 0) // add a space if any type exists
     maxTypeWidth += 1;
 
+  auto getPortSVAttrs = [](const PortInfo &port) -> ArrayAttr {
+    if (!port.attrs)
+      return {};
+    auto attrs = port.attrs.getAs<ArrayAttr>(
+        sv::SVAttributeAttr::getSVAttributesAttrName());
+    if (!attrs || attrs.empty())
+      return {};
+    return attrs;
+  };
+
   // Emit the port list.
   ps.scopedBox(PP::bbox2, [&]() {
     for (size_t portIdx = 0, e = portInfo.size(); portIdx != e;) {
@@ -6756,6 +6810,13 @@ void ModuleEmitter::emitPortList(Operation *module,
 
       // Emit the port direction and optional wire keyword.
       auto thisPortInfo = portInfo.at(portIdx);
+      auto svAttrs = getPortSVAttrs(thisPortInfo);
+      if (svAttrs && !isZeroWidth) {
+        emitSVAttributesImpl(ps, svAttrs, /*mayBreak=*/false);
+        ps << PP::newline;
+        if (hasZeroWidth)
+          ps << "   ";
+      }
       auto thisPortDirection = thisPortInfo.dir;
       bool isInOut = isa<InOutType, sv::NetType>(portType);
       StringRef direction;
@@ -6835,8 +6896,9 @@ void ModuleEmitter::emitPortList(Operation *module,
       // kind of check is important because two ports can share a direction and
       // an (unwrapped) element type, emitting completely different keywords.
       // Thus we must ensure they are not folded into one shared declaration.
-      if (!state.options.disallowPortDeclSharing) {
-        while (portIdx != e && portInfo.at(portIdx).dir == thisPortDirection &&
+      if (!state.options.disallowPortDeclSharing && !svAttrs) {
+        while (portIdx != e && !getPortSVAttrs(portInfo.at(portIdx)) &&
+               portInfo.at(portIdx).dir == thisPortDirection &&
                isInOut ==
                    isa<InOutType, sv::NetType>(portInfo.at(portIdx).type) &&
                stripUnpackedTypes(portType) ==

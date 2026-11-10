@@ -55,7 +55,8 @@ ESIHWBuilder::ESIHWBuilder(Operation *top)
       dataIn(StringAttr::get(getContext(), "DataIn")),
       clk(StringAttr::get(getContext(), "clk")),
       rst(StringAttr::get(getContext(), "rst")),
-      width(StringAttr::get(getContext(), "WIDTH")) {
+      width(StringAttr::get(getContext(), "WIDTH")),
+      dataDelay(StringAttr::get(getContext(), "DATA_DELAY")) {
 
   auto regions = top->getRegions();
   if (regions.empty()) {
@@ -89,11 +90,15 @@ static StringAttr constructUniqueSymbol(Operation *tableOp,
   return StringAttr::get(tableOp->getContext(), proposedName);
 }
 
-/// Return a parameter list for the stage module with the specified value.
-ArrayAttr ESIHWBuilder::getStageParameterList(Attribute value) {
+/// Return a parameter list for the stage module with the specified values.
+ArrayAttr ESIHWBuilder::getStageParameterList(Attribute widthValue,
+                                              Attribute dataDelayValue) {
   auto type = IntegerType::get(width.getContext(), 32, IntegerType::Unsigned);
-  auto widthParam = ParamDeclAttr::get(width.getContext(), width, type, value);
-  return ArrayAttr::get(width.getContext(), widthParam);
+  return ArrayAttr::get(
+      width.getContext(),
+      {ParamDeclAttr::get(width.getContext(), width, type, widthValue),
+       ParamDeclAttr::get(width.getContext(), dataDelay, type,
+                          dataDelayValue)});
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
@@ -131,7 +136,7 @@ HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
 
   stageMod = HWModuleExternOp::create(
       *this, constructUniqueSymbol(symTable, "ESI_PipelineStage"), ports,
-      "ESI_PipelineStage", getStageParameterList({}));
+      "ESI_PipelineStage", getStageParameterList({}, {}));
   return stageMod;
 }
 

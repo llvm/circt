@@ -42,14 +42,6 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    OptionalAttr<StrAttr>:$sym_visibility,
-    StrArrayAttr:$formalParamNames,
-    ArrayAttr:$fieldNames,
-    DictionaryAttr:$fieldTypes
-  );
-
   let regions = (region
     SizedRegion<1>:$body
   );
@@ -108,6 +100,29 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
 
 def ClassOp : OMClassLike<"class", [
       SingleBlockImplicitTerminator<"ClassFieldsOp">]> {
+  let summary = "An object model class definition";
+  let description = [{
+    An OM class defines a named object template with formal parameters and
+    named, typed fields. Its body computes the field values from the parameters
+    and terminates with `om.class.fields`. An `om.object` instantiates the class
+    with actual parameters.
+
+    Classes marked `linkonce_odr` must be public. All same-named definitions
+    must also be marked and equivalent, including their referenced symbols.
+    When such a class is instantiated, one of its definitions is
+    non-deterministically chosen. Non-equivalent definitions violate the ODR
+    contract and may result in errors. The linker coalesces the definitions
+    without comparing them.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrArrayAttr:$formalParamNames,
+    ArrayAttr:$fieldNames,
+    DictionaryAttr:$fieldTypes,
+    UnitAttr:$linkonce_odr
+  );
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     // This builds a ClassOp, and populates it with the CLassFieldOps.
@@ -177,6 +192,14 @@ def ClassFieldsOp : OMOp<"class.fields", [Terminator, ReturnLike, Pure,
 //===----------------------------------------------------------------------===//
 
 def ClassExternOp : OMClassLike<"class.extern", [NoTerminator]> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    StrArrayAttr:$formalParamNames,
+    ArrayAttr:$fieldNames,
+    DictionaryAttr:$fieldTypes
+  );
+
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
 
@@ -304,6 +327,7 @@ def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
   );
 
   let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
 }
 
 def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
@@ -321,6 +345,19 @@ def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
   let results = (outs ListType:$result);
 
   let assemblyFormat = "$subLists attr-dict `:` type($result)";
+  let hasFolder = 1;
+}
+
+def ListContainsOp : OMOp<"list_contains", [Pure,
+    TypesMatchWith<"list element type should match search element type",
+                   "list", "element",
+                   "cast<ListType>($_self).getElementType()">]> {
+  let summary = "Check if a list contains a value";
+  let arguments = (ins ListType:$list,
+                       AnyTypeOf<[StringType, OMIntegerType, I1]>:$element);
+  let results = (outs I1:$result);
+  let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
+  let hasFolder = 1;
 }
 
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,
@@ -490,6 +527,7 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
 
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
+  let hasFolder = 1;
 }
 
 class IntegerBinaryOp<string mnemonic, list<Trait> traits = []> :
@@ -651,6 +689,31 @@ def PropEqOp : BinaryEqualityOpBase<"prop.eq"> {
 
   let results = (outs I1:$result);
 
+  let hasFolder = 1;
+}
+
+def ObjectEqOp : OMOp<"object.eq", [Pure]> {
+  let summary = "Compare two object references for identity equality";
+  let description = [{
+    Returns 1 if the operands refer to the same object, and 0 otherwise. This
+    compares object identity, not the structural equality of object fields.
+    Each operand can have a class type or `!om.any`, and the operands need not
+    have the same type. Operands of type `!om.any` must contain object references.
+    The `om.any_cast` operation preserves object identity. Comparing the same
+    SSA value with itself returns 1, even if the value is unknown. Otherwise,
+    comparisons involving unknown references remain unknown.
+
+    Example:
+    ```mlir
+    %result = om.object.eq %lhs, %rhs : !om.class.type<@Foo>, !om.any
+    ```
+  }];
+
+  let arguments = (ins AnyTypeOf<[ClassType, OMAnyType]>:$lhs,
+                       AnyTypeOf<[ClassType, OMAnyType]>:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
   let hasFolder = 1;
 }
 

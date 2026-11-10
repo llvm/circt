@@ -103,7 +103,6 @@ class InstanceOpBase<string mnemonic> : KanagawaOp<mnemonic, [
       return getTargetNameAttr().getName();
     }
 
-    // Operation* getReferencedModuleSlow();
     Operation* getReferencedModule(const hw::InnerRefNamespace &);
   }];
 

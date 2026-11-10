@@ -34,7 +34,7 @@ public:
             SubfieldOp, SubindexOp, SubaccessOp, IsTagOp, SubtagOp,
             BundleCreateOp, VectorCreateOp, FEnumCreateOp, MultibitMuxOp,
             TagExtractOp, OpenSubfieldOp, OpenSubindexOp, ObjectSubfieldOp,
-            DomainSubfieldOp, ObjectAnyRefCastOp,
+            DomainSubfieldOp, ObjectAnyRefCastOp, DomainAnyRefCastOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -56,8 +56,9 @@ public:
             LTLRepeatIntrinsicOp, LTLGoToRepeatIntrinsicOp,
             LTLNonConsecutiveRepeatIntrinsicOp, LTLNotIntrinsicOp,
             LTLImplicationIntrinsicOp, LTLUntilIntrinsicOp,
-            LTLEventuallyIntrinsicOp, LTLPastIntrinsicOp, LTLClockIntrinsicOp,
-            Mux2CellIntrinsicOp, Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
+            LTLEventuallyIntrinsicOp, LTLAcceptOnIntrinsicOp,
+            LTLPastIntrinsicOp, LTLClockIntrinsicOp, Mux2CellIntrinsicOp,
+            Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -67,10 +68,10 @@ public:
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
-            DoubleConstantOp, ListCreateOp, ListConcatOp, UnresolvedPathOp,
-            PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp, IntegerAndOp,
-            IntegerOrOp, IntegerNotOp, StringConcatOp, PropEqOp, BoolAndOp,
-            BoolOrOp, BoolXorOp, UnknownValueOp,
+            DoubleConstantOp, ListCreateOp, ListConcatOp, ListContainsOp,
+            UnresolvedPathOp, PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp,
+            IntegerAndOp, IntegerOrOp, IntegerNotOp, StringConcatOp, PropEqOp,
+            ObjectEqOp, BoolAndOp, BoolOrOp, BoolXorOp, UnknownValueOp,
             // Format String expressions
             TimeOp, HierarchicalModuleNameOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
@@ -129,6 +130,7 @@ public:
   HANDLE(ObjectSubfieldOp, Unhandled);
   HANDLE(DomainSubfieldOp, Unhandled);
   HANDLE(ObjectAnyRefCastOp, Unhandled);
+  HANDLE(DomainAnyRefCastOp, Unhandled);
   HANDLE(CatPrimOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.
@@ -191,6 +193,7 @@ public:
   HANDLE(LTLImplicationIntrinsicOp, Unhandled);
   HANDLE(LTLUntilIntrinsicOp, Unhandled);
   HANDLE(LTLEventuallyIntrinsicOp, Unhandled);
+  HANDLE(LTLAcceptOnIntrinsicOp, Unhandled);
   HANDLE(LTLPastIntrinsicOp, Unhandled);
   HANDLE(LTLClockIntrinsicOp, Unhandled);
   HANDLE(Mux4CellIntrinsicOp, Unhandled);
@@ -229,6 +232,7 @@ public:
   HANDLE(DoubleConstantOp, Unhandled);
   HANDLE(ListCreateOp, Unhandled);
   HANDLE(ListConcatOp, Unhandled);
+  HANDLE(ListContainsOp, Unhandled);
   HANDLE(PathOp, Unhandled);
   HANDLE(UnresolvedPathOp, Unhandled);
   HANDLE(IntegerAddOp, Unhandled);
@@ -239,6 +243,7 @@ public:
   HANDLE(IntegerNotOp, Unhandled);
   HANDLE(StringConcatOp, Unhandled);
   HANDLE(PropEqOp, Unhandled);
+  HANDLE(ObjectEqOp, Unhandled);
   HANDLE(BoolAndOp, Unhandled);
   HANDLE(BoolOrOp, Unhandled);
   HANDLE(BoolXorOp, Unhandled);
@@ -335,11 +340,12 @@ public:
   ResultType dispatchDeclVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<InstanceOp, InstanceChoiceOp, ObjectOp, MemOp, NodeOp,
-                       RegOp, RegResetOp, WireOp, VerbatimWireOp, ContractOp,
-                       DomainCreateOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitDecl(opNode, args...);
-        })
+        .template Case<InstanceOp, InstanceChoiceOp, ObjectOp, ObjectCreateOp,
+                       MemOp, NodeOp, RegOp, RegResetOp, WireOp, VerbatimWireOp,
+                       ContractOp, DomainCreateOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitDecl(opNode, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidDecl(op, args...);
         });
@@ -365,6 +371,7 @@ public:
   HANDLE(InstanceOp);
   HANDLE(InstanceChoiceOp);
   HANDLE(ObjectOp);
+  HANDLE(ObjectCreateOp);
   HANDLE(MemOp);
   HANDLE(NodeOp);
   HANDLE(RegOp);

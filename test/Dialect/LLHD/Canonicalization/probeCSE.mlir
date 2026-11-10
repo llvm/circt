@@ -3,7 +3,7 @@
 // CHECK-LABEL: @checkPrbDceAndCseIn
 hw.module @checkPrbDceAndCseIn(in %arg0: !llhd.ref<i32>, in %arg1: !llhd.ref<i32>, in %arg2: !llhd.ref<i32>) {
   // CHECK-NEXT: llhd.constant_time
-  %time = llhd.constant_time <0ns, 1d, 0e>
+  %time = llhd.constant_time <0ns, 1d>
 
   // CHECK-NEXT: [[P0:%.*]] = llhd.prb
   %1 = llhd.prb %arg0 : i32
@@ -22,7 +22,7 @@ hw.module @checkPrbDceButNotCse(in %arg0: !llhd.ref<i32>, in %arg1: !llhd.ref<i3
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.constant_time
-    %time = llhd.constant_time <0ns, 1d, 0e>
+    %time = llhd.constant_time <0ns, 1d>
 
     // CHECK-NEXT: [[P1:%.*]] = llhd.prb
     %1 = llhd.prb %arg0 : i32

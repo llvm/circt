@@ -5,7 +5,7 @@
 hw.module @SenderVO(out x: !esi.channel<i1, ValidOnly>) {
   %0 = arith.constant 0 : i1
   // Don't transmit any data.
-  %ch = esi.wrap.vo %0, %0 : i1
+  %ch = esi.wrap.vo %0, %0 : !esi.channel<i1, ValidOnly>
   hw.output %ch : !esi.channel<i1, ValidOnly>
 }
 
@@ -20,7 +20,7 @@ hw.module @ReceiverVO(in %a: !esi.channel<i1, ValidOnly>) {
 hw.module @StructSendVO(out x: !esi.channel<!FooStruct, ValidOnly>) {
   %v = arith.constant 1 : i1
   %cst = hw.aggregate_constant [0 : si4, [0 : ui4, 0 : ui4, 0 : ui4]] : !FooStruct
-  %ch = esi.wrap.vo %cst, %v : !FooStruct
+  %ch = esi.wrap.vo %cst, %v : !esi.channel<!FooStruct, ValidOnly>
   hw.output %ch : !esi.channel<!FooStruct, ValidOnly>
 }
 

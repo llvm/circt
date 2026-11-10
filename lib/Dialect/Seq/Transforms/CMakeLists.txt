@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTSeqTransforms
   LowerSeqFIFO.cpp
   LowerSeqShiftReg.cpp
   InferClockPorts.cpp
+  UnrollMemoryLatencies.cpp
 
   DEPENDS
   CIRCTSeqTransformsIncGen

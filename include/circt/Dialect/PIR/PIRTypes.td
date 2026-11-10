@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_PIR_PIRTYPES_TD
 
 include "circt/Dialect/PIR/PIRDialect.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 include "mlir/IR/AttrTypeBase.td"
 
 class PIRTypeDef<string name, string typeMnemonic> : TypeDef<PIRDialect, name> {
@@ -71,6 +72,9 @@ def PIRClockedSequenceType : PIRTypeDef<"ClockedSequence", "clocked_sequence"> {
 //===----------------------------------------------------------------------===//
 // Group Types
 //===----------------------------------------------------------------------===//
+
+// Any type capable of representing a clock
+def AnyClockType : AnyTypeOf<[ClockType, I1]>;
 
 // Accept any sequence, simple or clocked
 def PIRAnySequenceType : AnyTypeOf<[PIRSequenceType, PIRClockedSequenceType]>;

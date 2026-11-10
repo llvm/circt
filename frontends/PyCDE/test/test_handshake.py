@@ -5,9 +5,9 @@ from pycde.handshake import Func, cmerge, demux
 from pycde.testing import unittestmodule
 from pycde.types import Bits, Channel, StructType, TypeAlias
 
-# CHECK:  hw.module @Top(in %clk : !seq.clock, in %rst : i1, in %a : !esi.channel<i8>, in %b : !esi.channel<i8>, out x : !esi.channel<i8>)
-# CHECK:    %0:2 = handshake.esi_instance @TestFunc "TestFunc" clk %clk rst %rst(%a, %b) : (!esi.channel<i8>, !esi.channel<i8>) -> (!esi.channel<i8>, !esi.channel<i8>)
-# CHECK:    hw.output %0#0 : !esi.channel<i8>
+# CHECK:  hw.module @Top(in %clk : !seq.clock, in %rst : i1, in %a : !esi.channel<i8, ValidReady>, in %b : !esi.channel<i8, ValidReady>, out x : !esi.channel<i8, ValidReady>)
+# CHECK:    %0:2 = handshake.esi_instance @TestFunc "TestFunc" clk %clk rst %rst(%a, %b) : (!esi.channel<i8, ValidReady>, !esi.channel<i8, ValidReady>) -> (!esi.channel<i8, ValidReady>, !esi.channel<i8, ValidReady>)
+# CHECK:    hw.output %0#0 : !esi.channel<i8, ValidReady>
 
 # CHECK:  handshake.func @TestFunc(%arg0: i8, %arg1: i8, ...) -> (i8, i8)
 # CHECK:    %result, %index = control_merge %arg0, %arg1 : i8, i1

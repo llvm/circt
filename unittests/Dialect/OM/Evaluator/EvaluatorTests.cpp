@@ -1647,6 +1647,61 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
   }
 }
 
+TEST_F(EvaluatorTests, ObjectEqImportedIdentity) {
+  StringRef mod = R"MLIR(
+om.class @ObjectEqLeaf() {
+  om.class.fields
+}
+
+om.class @ObjectEqClassParams(%lhs: !om.class.type<@ObjectEqLeaf>,
+                             %rhs: !om.class.type<@ObjectEqLeaf>) -> (equal: i1) {
+  %equal = om.object.eq %lhs, %rhs : !om.class.type<@ObjectEqLeaf>, !om.class.type<@ObjectEqLeaf>
+  om.class.fields %equal : i1
+}
+)MLIR";
+
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
+  auto cls = owning->lookupSymbol<ClassLike>("ObjectEqLeaf");
+  ASSERT_TRUE(cls);
+  auto loc = UnknownLoc::get(&context);
+  auto first = std::make_shared<evaluator::ObjectValue>(
+      cls, evaluator::ObjectFields{}, loc);
+  auto second = std::make_shared<evaluator::ObjectValue>(
+      cls, evaluator::ObjectFields{}, loc);
+  auto className = StringAttr::get(&context, "ObjectEqClassParams");
+
+  // Importing the same runtime object twice must preserve aliasing.
+  auto same = evaluator.instantiate(className, {first, first});
+  ASSERT_TRUE(succeeded(same));
+  EXPECT_EQ(1ul, getBuiltinInteger(getField(same.value(), "equal")));
+
+  // Distinct runtime objects with identical fields must stay distinct.
+  auto distinct = evaluator.instantiate(className, {first, second});
+  ASSERT_TRUE(succeeded(distinct));
+  EXPECT_EQ(0ul, getBuiltinInteger(getField(distinct.value(), "equal")));
+
+  auto unknown = std::make_shared<evaluator::ObjectValue>(cls, loc);
+  unknown->markUnknown();
+  auto unknownResult = evaluator.instantiate(className, {unknown, first});
+  ASSERT_TRUE(succeeded(unknownResult));
+  EXPECT_TRUE(getField(unknownResult.value(), "equal")->isUnknown());
+
+  // Importing the same unknown runtime object preserves its SSA identity.
+  auto sameUnknown = evaluator.instantiate(className, {unknown, unknown});
+  ASSERT_TRUE(succeeded(sameUnknown));
+  EXPECT_EQ(1ul, getBuiltinInteger(getField(sameUnknown.value(), "equal")));
+
+  // Distinct unknown references are not necessarily equal or unequal.
+  auto otherUnknown = std::make_shared<evaluator::ObjectValue>(cls, loc);
+  otherUnknown->markUnknown();
+  auto distinctUnknown =
+      evaluator.instantiate(className, {unknown, otherUnknown});
+  ASSERT_TRUE(succeeded(distinctUnknown));
+  EXPECT_TRUE(getField(distinctUnknown.value(), "equal")->isUnknown());
+}
+
 TEST_F(EvaluatorTests, IntegerBitwiseTests) {
   StringRef mod = R"MLIR(
 om.class @IntegerBitwiseAnd(%a: i8, %b: i8) -> (result: i8) {

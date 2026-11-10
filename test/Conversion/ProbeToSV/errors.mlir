@@ -111,3 +111,14 @@ hw.module @DoNotPrintInstance(in %in: i8, out out: i8) {
   %read = probe.read %p : <i8>
   hw.output %read : i8
 }
+
+// -----
+
+hw.module @UnpackedInStruct(
+    in %in: !hw.struct<a: !hw.uarray<2xi8>>,
+    out out: !hw.struct<a: !hw.uarray<2xi8>>) {
+  // expected-error @+1 {{Probe-to-SV lowering requires a payload that is valid as an sv.net element type, but got '!hw.struct<a: !hw.uarray<2xi8>>'}}
+  %p = probe.send %in : !hw.struct<a: !hw.uarray<2xi8>>
+  %r = probe.read %p : <!hw.struct<a: !hw.uarray<2xi8>>>
+  hw.output %r : !hw.struct<a: !hw.uarray<2xi8>>
+}

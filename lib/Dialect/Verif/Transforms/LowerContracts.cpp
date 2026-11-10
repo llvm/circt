@@ -42,7 +42,7 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
 
   Value enableValue;
   if (auto enable = op.getEnable())
-    enable = mapping.lookup(enable);
+    enableValue = mapping.lookupOrDefault(enable);
 
   auto loc = op.getLoc();
   auto property = mapping.lookup(op.getProperty());

@@ -101,3 +101,40 @@ hw.module @mixedRoundtrip(in %raw: i32, out o : i32) {
   // CANON: hw.output %raw : i32
   hw.output %2 : i32
 }
+
+// CHECK-LABEL: hw.module @concatBitcastDirectArrayCreate
+hw.module @concatBitcastDirectArrayCreate(in %a0: i16, in %a1: i16, in %a2: i16, in %a3: i16, out o : !hw.array<4xi16>) {
+  // NOCANON-NOT: comb.extract
+  // CANON-NOT: comb.concat
+  // CHECK: %[[OUT:.+]] = hw.array_create %a0, %a1, %a2, %a3 : i16
+  // CHECK: hw.output %[[OUT]]
+  %c = comb.concat %a0, %a1, %a2, %a3 : i16, i16, i16, i16
+  %o = hw.bitcast %c : (i64) -> !hw.array<4xi16>
+  hw.output %o : !hw.array<4xi16>
+}
+
+// CHECK-LABEL: hw.module @concatBitcastSubElementChunks
+hw.module @concatBitcastSubElementChunks(in %a0: i8, in %a1: i8, in %a2: i8, in %a3: i8, out o : !hw.array<2xi16>) {
+  // NOCANON-NOT: comb.extract
+  // CHECK: %[[E1:.+]] = comb.concat %a0, %a1 : i8, i8
+  // CHECK: %[[E0:.+]] = comb.concat %a2, %a3 : i8, i8
+  // CHECK: %[[OUT:.+]] = hw.array_create %[[E1]], %[[E0]] : i16
+  // CHECK: hw.output %[[OUT]]
+  %c = comb.concat %a0, %a1, %a2, %a3 : i8, i8, i8, i8
+  %o = hw.bitcast %c : (i32) -> !hw.array<2xi16>
+  hw.output %o : !hw.array<2xi16>
+}
+
+// CHECK-LABEL: hw.module @concatBitcastMixedChunks
+hw.module @concatBitcastMixedChunks(in %a0: i32, in %a1: i8, in %a2: i24, out o : !hw.array<4xi16>) {
+  // CHECK: %[[E3:.+]] = comb.extract %a0 from 16 : (i32) -> i16
+  // CHECK: %[[E2:.+]] = comb.extract %a0 from 0 : (i32) -> i16
+  // CHECK: %[[E1_LO:.+]] = comb.extract %a2 from 16 : (i24) -> i8
+  // CHECK: %[[E1:.+]] = comb.concat %a1, %[[E1_LO]] : i8, i8
+  // CHECK: %[[E0:.+]] = comb.extract %a2 from 0 : (i24) -> i16
+  // CHECK: %[[OUT:.+]] = hw.array_create %[[E3]], %[[E2]], %[[E1]], %[[E0]] : i16
+  // CHECK: hw.output %[[OUT]]
+  %c = comb.concat %a0, %a1, %a2 : i32, i8, i24
+  %o = hw.bitcast %c : (i64) -> !hw.array<4xi16>
+  hw.output %o : !hw.array<4xi16>
+}

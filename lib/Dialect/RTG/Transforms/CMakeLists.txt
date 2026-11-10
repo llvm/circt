@@ -25,9 +25,9 @@ add_circt_dialect_library(CIRCTRTGTransforms
   CIRCTEmit
   CIRCTSupport
   MLIRArithDialect
+  MLIRFuncDialect
   MLIRIndexDialect
   MLIRIR
   MLIRPass
   MLIRSCFDialect
 )
-

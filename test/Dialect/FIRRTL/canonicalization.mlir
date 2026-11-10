@@ -3311,9 +3311,9 @@ firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, ou
   firrtl.int.unclocked_assume %p, %p, "assume_edged1" : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
-// COMMON-LABEL:  firrtl.module @MultibitMux
-// COMMON-NEXT:      %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
-// COMMON-NEXT:      firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+// CHECK-LABEL:  firrtl.module @MultibitMux
+// CHECK-NEXT:      %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
+// CHECK-NEXT:      firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
 firrtl.module @MultibitMux(in %a: !firrtl.vector<uint<1>, 3>, in %sel: !firrtl.uint<2>, out %b: !firrtl.uint<1>) {
   %0 = firrtl.subindex %a[2] : !firrtl.vector<uint<1>, 3>
   %1 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 3>
@@ -3451,7 +3451,7 @@ firrtl.module @RemoveUnusedInvalid() {
 
 // CHECK-LABEL: firrtl.module @PropInvalids
 firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint<4>, out %out1 : !firrtl.uint<1>) {
-  // CHECK-NOT firrtl.not
+  // CHECK-NOT: firrtl.not
   %inv = firrtl.invalidvalue : !firrtl.uint<4>
   %not = firrtl.not %inv : (!firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.matchingconnect %out, %not : !firrtl.uint<4>
@@ -3459,7 +3459,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.bits
+  // CHECK-NOT: firrtl.bits
   %inv2 = firrtl.invalidvalue : !firrtl.uint<5>
   %bits = firrtl.bits %inv2 3 to 0 : (!firrtl.uint<5>) -> !firrtl.uint<4>
   firrtl.matchingconnect %out, %bits : !firrtl.uint<4>
@@ -3467,7 +3467,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.head
+  // CHECK-NOT: firrtl.head
   %inv3 = firrtl.invalidvalue : !firrtl.uint<5>
   %head = firrtl.head %inv3, 4 : (!firrtl.uint<5>) -> !firrtl.uint<4>
   firrtl.matchingconnect %out, %head : !firrtl.uint<4>
@@ -3475,7 +3475,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.tail
+  // CHECK-NOT: firrtl.tail
   %inv4 = firrtl.invalidvalue : !firrtl.uint<5>
   %tail = firrtl.tail %inv4, 1 : (!firrtl.uint<5>) -> !firrtl.uint<4>
   firrtl.matchingconnect %out, %tail : !firrtl.uint<4>
@@ -3483,7 +3483,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.asSInt
+  // CHECK-NOT: firrtl.asSInt
   %inv5 = firrtl.invalidvalue : !firrtl.uint<4>
   %assint = firrtl.asSInt %inv5 : (!firrtl.uint<4>) -> !firrtl.sint<4>
   firrtl.matchingconnect %outs, %assint : !firrtl.sint<4>
@@ -3491,7 +3491,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.asUInt
+  // CHECK-NOT: firrtl.asUInt
   %inv6 = firrtl.invalidvalue : !firrtl.sint<4>
   %asuint = firrtl.asUInt %inv6 : (!firrtl.sint<4>) -> !firrtl.uint<4>
   firrtl.matchingconnect %out, %asuint : !firrtl.uint<4>
@@ -3499,7 +3499,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.subfield
+  // CHECK-NOT: firrtl.subfield
   %inv7 = firrtl.invalidvalue : !firrtl.bundle<a: uint<4>, b: uint<5>>
   %subfield = firrtl.subfield %inv7[a] : !firrtl.bundle<a: uint<4>, b: uint<5>>
   firrtl.matchingconnect %out, %subfield : !firrtl.uint<4>
@@ -3507,7 +3507,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.subindex
+  // CHECK-NOT: firrtl.subindex
   %inv8 = firrtl.invalidvalue : !firrtl.vector<uint<4>, 6 >
   %subindex = firrtl.subindex %inv8[2] : !firrtl.vector<uint<4>, 6 >
   firrtl.matchingconnect %out, %subindex : !firrtl.uint<4>
@@ -3515,7 +3515,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.bitcast
+  // CHECK-NOT: firrtl.bitcast
   %inv9 = firrtl.invalidvalue : !firrtl.vector<uint<4>, 1 >
   %bitcast = firrtl.bitcast %inv9 : (!firrtl.vector<uint<4>, 1 >) -> !firrtl.uint<4>
   firrtl.matchingconnect %out, %bitcast : !firrtl.uint<4>
@@ -3523,7 +3523,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.andr
+  // CHECK-NOT: firrtl.andr
   %inva = firrtl.invalidvalue : !firrtl.uint<4>
   %andr = firrtl.andr %inva : (!firrtl.uint<4>) -> !firrtl.uint<1>
   firrtl.matchingconnect %out1, %andr : !firrtl.uint<1>
@@ -3531,7 +3531,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.orr
+  // CHECK-NOT: firrtl.orr
   %invb = firrtl.invalidvalue : !firrtl.uint<4>
   %orr = firrtl.orr %invb : (!firrtl.uint<4>) -> !firrtl.uint<1>
   firrtl.matchingconnect %out1, %orr : !firrtl.uint<1>
@@ -3539,7 +3539,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.xorr
+  // CHECK-NOT: firrtl.xorr
   %invc = firrtl.invalidvalue : !firrtl.uint<4>
   %xorr = firrtl.xorr %invc : (!firrtl.uint<4>) -> !firrtl.uint<1>
   firrtl.matchingconnect %out1, %xorr : !firrtl.uint<1>
@@ -3548,14 +3548,14 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NEXT: firrtl.matchingconnect
 
   // This one depends on the folder
-  // CHECK-NOT firrtl.invalidvalue
-  // CHECK-NOT firrtl.xorr
+  // CHECK-NOT: firrtl.invalidvalue
+  // CHECK-NOT: firrtl.xorr
   %invd = firrtl.invalidvalue : !firrtl.uint<0>
   %zbits = firrtl.xorr %invd : (!firrtl.uint<0>) -> !firrtl.uint<1>
   firrtl.matchingconnect %out1, %zbits : !firrtl.uint<1>
   // CHECK: firrtl.matchingconnect %out1, %c0_ui1
 
-  // CHECK-NOT firrtl.cvt
+  // CHECK-NOT: firrtl.cvt
   %inve = firrtl.invalidvalue : !firrtl.uint<3>
   %cvtu = firrtl.cvt %inve : (!firrtl.uint<3>) -> !firrtl.sint<4>
   firrtl.matchingconnect %outs, %cvtu : !firrtl.sint<4>
@@ -3565,7 +3565,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NEXT: firrtl.asSInt
   // CHECK-NEXT: firrtl.matchingconnect
 
-  // CHECK-NOT firrtl.cvt
+  // CHECK-NOT: firrtl.cvt
   %invf = firrtl.invalidvalue : !firrtl.sint<4>
   %cvts = firrtl.cvt %invf : (!firrtl.sint<4>) -> !firrtl.sint<4>
   firrtl.matchingconnect %outs, %cvts : !firrtl.sint<4>

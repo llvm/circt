@@ -562,7 +562,7 @@ void circt::populateLlhdToCorePipeline(
 
   // Simplify module-level signals.
   modulePM.addPass(llhd::createCombineDrivesPass());
-  modulePM.addPass(llhd::createSig2Reg());
+  modulePM.addPass(llhd::createSig2RegPass());
   modulePM.addPass(mlir::createCSEPass());
   modulePM.addPass(mlir::createCanonicalizerPass());
 

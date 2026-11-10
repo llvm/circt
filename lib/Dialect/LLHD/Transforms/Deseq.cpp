@@ -258,8 +258,6 @@ struct Deseq {
   SmallDenseMap<Value, Value, 1> materializedClockInverters;
   /// A cache of `comb.xor` ops used as inverters.
   SmallDenseMap<Value, Value, 1> materializedInverters;
-  /// An `llhd.constant_time` op created to represent an epsilon delay.
-  ConstantTimeOp epsilonDelay;
   /// A map of operations that have been checked to be valid reset values.
   DenseMap<Operation *, bool> staticOps;
 
@@ -321,7 +319,7 @@ private:
 LogicalResult Deseq::deseq() {
   // Check whether the process meets the basic criteria for being replaced by a
   // register. This includes having only a single `llhd.wait` op and feeding
-  // only particular kinds of `llhd.drv` ops.
+  // only particular kinds of `llhd.drv` and `llhd.assign` ops.
   if (!analyzeProcess())
     return success();
   LLVM_DEBUG({
@@ -399,7 +397,7 @@ bool Deseq::analyzeProcess() {
   // Ensure that all process results lead to conditional drive operations.
   SmallPtrSet<Operation *, 8> seenDrives;
   for (auto &use : process->getUses()) {
-    auto driveOp = dyn_cast<DriveOp>(use.getOwner());
+    auto driveOp = dyn_cast<DriveLikeOp>(use.getOwner());
     if (!driveOp) {
       LLVM_DEBUG(llvm::dbgs()
                  << "Skipping " << process.getLoc() << ": feeds non-drive "
@@ -416,8 +414,9 @@ bool Deseq::analyzeProcess() {
 
     // We can only deal with the process result being used as drive value or
     // condition.
-    // `llhd.drv` operands are: signal (0), value (1), time (2), enable (3).
-    if (use.getOperandNumber() != 1 && use.getOperandNumber() != 3) {
+    if (&use != &driveOp.getValueMutable()[0] &&
+        !llvm::is_contained(
+            llvm::make_pointer_range(driveOp.getEnableMutable()), &use)) {
       LLVM_DEBUG(llvm::dbgs()
                  << "Skipping " << process.getLoc()
                  << ": feeds drive operand that is neither value nor enable: "
@@ -478,7 +477,7 @@ bool Deseq::analyzeProcess() {
        llvm::zip(wait.getDestOperands(), wait.getDest()->getArguments())) {
     // Check if this dest operand is directly a trigger (projected clock case).
     auto operandVF = getValueField(operand);
-    auto it = llvm::find(triggers, operandVF);
+    const auto *it = llvm::find(triggers, operandVF);
     if (it != triggers.end()) {
       unsigned index = std::distance(triggers.begin(), it);
       pastValues.push_back(it->getProjected());
@@ -528,7 +527,7 @@ Value Deseq::tracePastValue(Value pastValue) {
 
     // If this is one of the observed values, we're done. Otherwise trace
     // block arguments backwards to their predecessors.
-    if (auto it = llvm::find(triggers, getValueField(value));
+    if (const auto *it = llvm::find(triggers, getValueField(value));
         it != triggers.end()) {
       distinctValues.insert(it->getProjected());
       continue;
@@ -1167,17 +1166,17 @@ bool Deseq::matchDriveClockAndReset(
     auto clockWithEnable = DNFTerm{clockEdge | resetOff | 0b01};
 
     // Find the entries corresponding to the above conditions.
-    auto resetIt = llvm::find_if(
+    const auto *resetIt = llvm::find_if(
         valueTable, [&](auto &pair) { return pair.first == reset; });
     if (resetIt == valueTable.end())
       continue;
 
-    auto clockWhileResetIt = llvm::find_if(
+    const auto *clockWhileResetIt = llvm::find_if(
         valueTable, [&](auto &pair) { return pair.first == clockWhileReset; });
     if (clockWhileResetIt == valueTable.end())
       continue;
 
-    auto clockIt = llvm::find_if(valueTable, [&](auto &pair) {
+    const auto *clockIt = llvm::find_if(valueTable, [&](auto &pair) {
       return pair.first == clockWithoutEnable || pair.first == clockWithEnable;
     });
     bool clockHolds = clockIt == valueTable.end();
@@ -1331,37 +1330,44 @@ Value Deseq::materializeProjection(OpBuilder &builder, Location loc,
 /// register. This needs to be a constant value that is either used to
 /// initialize the signal itself, or is unconditionally driven to the signal
 /// at the same time the register op begins driving the signal. If such an
-/// initial drive is found, the constant DriveOp operation(s) are erased.
+/// initial drive is found, the constant drive operation(s) are erased.
 /// Returns failure if mutiple conflicting initial drivers are found, or if
 /// a non-constant value would be inferred from a signal initializer.
 static LogicalResult inferRegisterPreset(seq::FirRegOp regOp,
                                          DriveInfo &drive) {
-  auto sigOp = drive.op.getSignal().getDefiningOp<SignalOp>();
-  SmallVector<std::pair<DriveOp, IntegerAttr>> constantDrives;
+  auto sigOp = drive.op.getDriven().getDefiningOp<SignalOp>();
+  SmallVector<std::pair<DriveLikeOp, IntegerAttr>> constantDrives;
 
-  // Check if a drive happens at the same time as the register drive.
+  // Check if a drive happens at the same time as the register drive. Immediate
+  // drives are concurrent with each other, and delayed drives are concurrent if
+  // they have the same delay.
   TimeAttr driveTimeAttr;
-  matchPattern(drive.op.getTime(), m_Constant(&driveTimeAttr));
-  auto isConcurrent = [&](DriveOp otherDrive) -> bool {
+  if (drive.op.getTime())
+    matchPattern(drive.op.getTime(), m_Constant(&driveTimeAttr));
+  auto isConcurrent = [&](DriveLikeOp otherDrive) -> bool {
     if (otherDrive.getTime() == drive.op.getTime())
       return true;
     TimeAttr timeCst;
-    return driveTimeAttr &&
+    return driveTimeAttr && otherDrive.getTime() &&
            matchPattern(otherDrive.getTime(), m_Constant(&timeCst)) &&
            timeCst == driveTimeAttr;
   };
 
   // Find other unconditional concurrent constant drivers on the signal.
-  for (auto *user : drive.op.getSignal().getUsers()) {
-    if (user == drive.op || user->getBlock() != drive.op->getBlock())
+  for (auto &use : drive.op.getDriven().getUses()) {
+    auto driveUser = dyn_cast<DriveLikeOp>(use.getOwner());
+    if (!driveUser || driveUser == drive.op ||
+        use != driveUser.getDrivenMutable()[0])
       continue;
-    if (auto driveUser = dyn_cast<DriveOp>(user)) {
-      if (driveUser.getEnable() || !isConcurrent(driveUser))
-        continue;
-      IntegerAttr driveCst;
-      if (matchPattern(driveUser.getValue(), m_Constant(&driveCst)))
-        constantDrives.push_back({driveUser, driveCst});
-    }
+
+    bool isSameBlock = driveUser->getBlock() == drive.op->getBlock();
+    bool isUnconditional = !driveUser.getEnable();
+    if (!(isSameBlock && isUnconditional && isConcurrent(driveUser)))
+      continue;
+
+    IntegerAttr driveCst;
+    if (matchPattern(driveUser.getValue(), m_Constant(&driveCst)))
+      constantDrives.push_back({driveUser, driveCst});
   }
 
   IntegerAttr preset;
@@ -1503,7 +1509,7 @@ LogicalResult Deseq::implementRegister(DriveInfo &drive) {
 
   // Try to guess a name for the register.
   StringAttr name;
-  if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>())
+  if (auto sigOp = drive.op.getDriven().getDefiningOp<llhd::SignalOp>())
     name = sigOp.getNameAttr();
   else
     name = builder.getStringAttr("");
@@ -1530,14 +1536,16 @@ LogicalResult Deseq::implementRegister(DriveInfo &drive) {
   drive.op.getEnableMutable().clear();
 
   // If the original `llhd.drv` had a delta delay, turn it into an immediate
-  // drive since the delay behavior is now capture by the register op.
+  // `llhd.assign` since the delay behavior is now captured by the register op.
   TimeAttr attr;
-  if (matchPattern(drive.op.getTime(), m_Constant(&attr)) &&
-      attr.getTime() == 0 && attr.getDelta() == 1 && attr.getEpsilon() == 0) {
-    if (!epsilonDelay)
-      epsilonDelay =
-          ConstantTimeOp::create(builder, process.getLoc(), 0, "ns", 0, 1);
-    drive.op.getTimeMutable().assign(epsilonDelay);
+  if (drive.op.getTime() &&
+      matchPattern(drive.op.getTime(), m_Constant(&attr)) &&
+      attr.getTime() == 0 && attr.getDelta() == 1) {
+    auto assignOp =
+        AssignOp::create(builder, drive.op.getLoc(), drive.op.getDriven(),
+                         drive.op.getValue(), Value{});
+    drive.op.erase();
+    drive.op = assignOp;
   }
 
   // Attempt to merge an initial value into the register op

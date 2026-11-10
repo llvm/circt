@@ -321,11 +321,11 @@ hw.module @OpsWithRegions(in %a: i42, in %b: i42, in %c: i42, in %d: i42, out z:
 // CHECK-LABEL: arc.define @TimeOpsPassthrough_arc
 //       CHECK:   llhd.time_to_int
 // CHECK-LABEL: hw.module @TimeOpsPassthrough
-//   CHECK-DAG:   llhd.constant_time <42fs, 0d, 0e>
+//   CHECK-DAG:   llhd.constant_time <42fs, 0d>
 //   CHECK-DAG:   llhd.int_to_time
 //   CHECK-DAG:   llhd.current_time
 hw.module @TimeOpsPassthrough(in %a : i64, out t : i64) {
-  %0 = llhd.constant_time <42fs, 0d, 0e>
+  %0 = llhd.constant_time <42fs, 0d>
   %1 = llhd.int_to_time %a
   %2 = llhd.current_time
   %3 = llhd.time_to_int %0

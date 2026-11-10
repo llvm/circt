@@ -155,4 +155,24 @@ def InferClockPorts : Pass<"seq-infer-clock-ports", "mlir::ModuleOp"> {
   ];
 }
 
+def UnrollMemoryLatencies : Pass<"seq-unroll-mem-latency", "hw::HWModuleOp"> {
+  let summary = "Unrolls memory port latencies into registers";
+  let description = [{
+    Converts all memory port latencies, for both `seq.firmem` and `seq.hlmem`,
+    into explicit latencies by padding ports with shift registers, such that 
+    for a latency of `n`, reads and writes occur `n` cycles after the data 
+    was made available. 
+    
+    This means that if at cycle 10 a read port with latency 2 has address 0 
+    and is enabled, then the read data port will yield the data from address 0 
+    at cycle 12. This is modeled by padding the read-address port with a 
+    shift-register of depth equal to the latency of that port.
+
+    For writes, the default latency is 1, therefore we can pad the write port's 
+    data and address inputs with a shift-register of depth n-1.
+  }];
+
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES
