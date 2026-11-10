@@ -714,7 +714,7 @@ def ObjectEqOp : OMOp<"object.eq", [Pure]> {
   let results = (outs I1:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
-  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 class IntegerBitwiseOpBase<string mnemonic, list<Trait> traits = []> :

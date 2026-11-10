@@ -20,11 +20,6 @@ add_public_tablegen_target(MLIROMAttrIncGen)
 add_dependencies(circt-headers MLIROMAttrIncGen)
 add_circt_interface(OMOpInterfaces)
 
-set(LLVM_TARGET_DEFINITIONS OMCanonicalization.td)
-mlir_tablegen(OMCanonicalization.cpp.inc -gen-rewriters)
-add_public_tablegen_target(CIRCTOMCanonicalizationIncGen)
-add_dependencies(circt-headers CIRCTOMCanonicalizationIncGen)
-
 set(LLVM_TARGET_DEFINITIONS OMPasses.td)
 mlir_tablegen(OMPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTOMTransformsIncGen)

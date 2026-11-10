@@ -1,4 +1,5 @@
 // RUN: circt-opt --cse --canonicalize %s | FileCheck %s
+// RUN: circt-opt --cse --canonicalize='top-down=false' %s | FileCheck %s
 
 om.class @Foo() {
   om.class.fields
