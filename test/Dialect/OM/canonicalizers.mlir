@@ -1,4 +1,5 @@
 // RUN: circt-opt --cse --canonicalize %s | FileCheck %s
+// RUN: circt-opt --cse --canonicalize='top-down=false' %s | FileCheck %s
 
 om.class @Foo() {
   om.class.fields
@@ -205,6 +206,84 @@ om.class @AnyCastFold(%ref: !om.class.type<@Foo>, %any: !om.any) -> (
   %nested = om.any_cast %cast : (!om.any) -> !om.any
   // CHECK-NEXT: om.class.fields [[CAST]], %any, [[CAST]] : !om.any, !om.any, !om.any
   om.class.fields %cast, %identity, %nested : !om.any, !om.any, !om.any
+}
+
+// CHECK-LABEL: @ObjectEqFold
+om.class @ObjectEqFold(%ref: !om.class.type<@Foo>, %other: !om.class.type<@Foo>,
+                       %any: !om.any) -> (
+    equal: i1, not_equal: i1, class_any: i1, any_class: i1,
+    any_not_equal: i1, parameter: i1, may_alias: i1, opaque: i1,
+    unknown: i1, any_parameter: i1, unknown_alias: i1,
+    unknown_distinct: i1) {
+  %a = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %b = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %aAny = om.any_cast %a : (!om.class.type<@Foo>) -> !om.any
+  %bAny = om.any_cast %b : (!om.class.type<@Foo>) -> !om.any
+
+  // Compare identities, not fields, looking through any casts.
+  // CHECK-DAG: [[TRUE:%.+]] = om.constant true
+  // CHECK-DAG: [[FALSE:%.+]] = om.constant false
+  %equal = om.object.eq %a, %a : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %notEqual = om.object.eq %a, %b : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %classAny = om.object.eq %a, %aAny : !om.class.type<@Foo>, !om.any
+  %anyClass = om.object.eq %aAny, %a : !om.any, !om.class.type<@Foo>
+  %anyNotEqual = om.object.eq %aAny, %bAny : !om.any, !om.any
+
+  // Self-comparisons fold even when the parameter's identity is unknown.
+  %parameter = om.object.eq %ref, %ref : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %anyParameter = om.object.eq %any, %any : !om.any, !om.any
+
+  // Distinct parameters may alias other references, so do not fold them.
+  // CHECK: [[MAY_ALIAS:%.+]] = om.object.eq %ref, %other : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %mayAlias = om.object.eq %ref, %other : !om.class.type<@Foo>, !om.class.type<@Foo>
+  // CHECK: [[OPAQUE:%.+]] = om.object.eq %ref, %any : !om.class.type<@Foo>, !om.any
+  %opaque = om.object.eq %ref, %any : !om.class.type<@Foo>, !om.any
+
+  // Unknown references are equal to themselves, including through any casts.
+  // Distinct unknown SSA values may alias, so their comparison must not fold.
+  // CHECK: [[UNKNOWN_REF:%.+]] = om.unknown : !om.class.type<@Foo>
+  %unknown = om.unknown : !om.class.type<@Foo>
+  %unknownAny = om.any_cast %unknown : (!om.class.type<@Foo>) -> !om.any
+  %unknownEqual = om.object.eq %unknown, %unknown : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %unknownAlias = om.object.eq %unknown, %unknownAny : !om.class.type<@Foo>, !om.any
+  // CHECK: [[OTHER_UNKNOWN_REF:%.+]] = om.unknown : !om.class.type<@Foo>
+  %otherUnknown = om.unknown : !om.class.type<@Foo>
+  // CHECK: [[UNKNOWN_DISTINCT:%.+]] = om.object.eq [[UNKNOWN_REF]], [[OTHER_UNKNOWN_REF]] : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %unknownDistinct = om.object.eq %unknown, %otherUnknown : !om.class.type<@Foo>, !om.class.type<@Foo>
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[TRUE]], [[FALSE]], [[TRUE]], [[MAY_ALIAS]], [[OPAQUE]], [[TRUE]], [[TRUE]], [[TRUE]], [[UNKNOWN_DISTINCT]] : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+  om.class.fields %equal, %notEqual, %classAny, %anyClass, %anyNotEqual, %parameter, %mayAlias, %opaque, %unknownEqual, %anyParameter, %unknownAlias, %unknownDistinct : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+}
+
+// Strip casts from either operand even when equality cannot fold.
+// CHECK-LABEL: @ObjectEqAnyCast
+om.class @ObjectEqAnyCast(%ref: !om.class.type<@Foo>,
+                          %other: !om.class.type<@Foo>, %any: !om.any) -> (
+    lhs: i1, rhs: i1, both: i1) {
+  %cast = om.any_cast %ref : (!om.class.type<@Foo>) -> !om.any
+  %otherCast = om.any_cast %other : (!om.class.type<@Foo>) -> !om.any
+  // CHECK: [[LHS:%.+]] = om.object.eq %ref, %any : !om.class.type<@Foo>, !om.any
+  %lhs = om.object.eq %cast, %any : !om.any, !om.any
+  // CHECK: [[RHS:%.+]] = om.object.eq %any, %ref : !om.any, !om.class.type<@Foo>
+  %rhs = om.object.eq %any, %cast : !om.any, !om.any
+  // CHECK: [[BOTH:%.+]] = om.object.eq %ref, %other : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %both = om.object.eq %cast, %otherCast : !om.any, !om.any
+  // CHECK: om.class.fields [[LHS]], [[RHS]], [[BOTH]] : i1, i1, i1
+  om.class.fields %lhs, %rhs, %both : i1, i1, i1
+}
+
+// Cyclic any casts canonicalize to the same SSA reference. Self-equality folds
+// to true, but stripping casts from an opaque comparison must not loop.
+// CHECK-LABEL: @ObjectEqCastCycle
+om.class @ObjectEqCastCycle(%any: !om.any) -> (equal: i1, opaque: i1) {
+  // CHECK-DAG: [[TRUE:%.+]] = om.constant true
+  // CHECK-DAG: [[CAST:%.+]] = om.any_cast %{{.+}} : (!om.any) -> !om.any
+  %a = om.any_cast %b : (!om.any) -> !om.any
+  %b = om.any_cast %a : (!om.any) -> !om.any
+  %equal = om.object.eq %a, %b : !om.any, !om.any
+  // CHECK: [[OPAQUE:%.+]] = om.object.eq [[CAST]], %any : !om.any, !om.any
+  %opaque = om.object.eq %a, %any : !om.any, !om.any
+  // CHECK: om.class.fields [[TRUE]], [[OPAQUE]] : i1, i1
+  om.class.fields %equal, %opaque : i1, i1
 }
 
 // CHECK-LABEL: @IntegerBitwiseFold
