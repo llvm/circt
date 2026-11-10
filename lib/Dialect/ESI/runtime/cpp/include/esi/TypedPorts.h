@@ -617,7 +617,7 @@ public:
     inner->connect(opts);
   }
 
-  /// Connect in callback mode to use writeAsync(). See
+  /// Connect in callback mode to use tryWriteAsync(). See
   /// WriteChannelPort::connect(WriteCallback, const ConnectOptions &).
   void connect(WriteChannelPort::WriteCallback callback,
                const ChannelPort::ConnectOptions &opts = {std::nullopt,
@@ -671,24 +671,43 @@ public:
     }
   }
 
-  /// Non-blocking write. Requires callback mode. See
-  /// WriteChannelPort::writeAsync().
-  void writeAsync(const T &data) {
-    inner->writeAsync(std::make_unique<MessageData>(
-        toMessageData(data, wireInfo_).takeData()));
+  /// Non-blocking write with completion notification. Requires callback mode.
+  /// Returns false if the port backpressures. See
+  /// WriteChannelPort::tryWriteAsync().
+  bool tryWriteAsync(const T &data) {
+    std::unique_ptr<SegmentedMessageData> msg = std::make_unique<MessageData>(
+        toMessageData(data, wireInfo_).takeData());
+    return inner->tryWriteAsync(msg);
   }
 
-  /// Non-blocking write which takes ownership. If T is a SegmentedMessageData,
-  /// this hands the message directly to the port. Requires callback mode. See
-  /// WriteChannelPort::writeAsync().
-  void writeAsync(std::unique_ptr<T> data) {
+  /// Non-blocking write with completion notification, by taking ownership. On
+  /// success, `data` is consumed (left null) and true is returned. On failure,
+  /// `data` is left untouched so the caller can retry. If T is a
+  /// SegmentedMessageData, this hands the message directly to the port.
+  /// Requires callback mode. See WriteChannelPort::tryWriteAsync().
+  bool tryWriteAsync(std::unique_ptr<T> &data) {
     if (!data)
       throw std::invalid_argument(
-          "TypedWritePort::writeAsync: null unique_ptr");
-    if constexpr (std::is_base_of_v<SegmentedMessageData, T>)
-      inner->writeAsync(std::move(data));
-    else
-      writeAsync(*data);
+          "TypedWritePort::tryWriteAsync: null unique_ptr");
+    if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
+      std::unique_ptr<SegmentedMessageData> msg(data.release());
+      bool written;
+      try {
+        written = inner->tryWriteAsync(msg);
+      } catch (...) {
+        data.reset(static_cast<T *>(msg.release()));
+        throw;
+      }
+      // On failure, the port did not take ownership; hand it back.
+      if (!written)
+        data.reset(static_cast<T *>(msg.release()));
+      return written;
+    } else {
+      if (!tryWriteAsync(*data))
+        return false;
+      data.reset();
+      return true;
+    }
   }
 
   bool flush() { return inner->flush(); }
@@ -719,7 +738,7 @@ public:
     inner->connect(opts);
   }
 
-  /// Connect in callback mode to use writeAsync(). See
+  /// Connect in callback mode to use tryWriteAsync(). See
   /// WriteChannelPort::connect(WriteCallback, const ConnectOptions &).
   void connect(WriteChannelPort::WriteCallback callback,
                const ChannelPort::ConnectOptions &opts = {std::nullopt,
@@ -740,10 +759,13 @@ public:
     return inner->tryWrite(MessageData(&zero, 1));
   }
 
-  /// Non-blocking write. Requires callback mode. See
-  /// WriteChannelPort::writeAsync().
-  void writeAsync() {
-    inner->writeAsync(std::make_unique<MessageData>(std::vector<uint8_t>{0}));
+  /// Non-blocking write with completion notification. Requires callback mode.
+  /// Returns false if the port backpressures. See
+  /// WriteChannelPort::tryWriteAsync().
+  bool tryWriteAsync() {
+    std::unique_ptr<SegmentedMessageData> msg =
+        std::make_unique<MessageData>(std::vector<uint8_t>{0});
+    return inner->tryWriteAsync(msg);
   }
 
   bool flush() { return inner->flush(); }
