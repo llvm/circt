@@ -2,7 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
-from circt.dialects import hw
+from circt.dialects import hw, sv
 from circt.support import attribute_to_var
 
 from circt.ir import (Context, Location, InsertionPoint, IntegerType,
@@ -146,13 +146,13 @@ with Context() as ctx, Location.unknown():
       hw.ModulePort(StringAttr.get("out"), i1, hw.ModulePortDirection.OUTPUT),
       hw.ModulePort(StringAttr.get("in1"), i2, hw.ModulePortDirection.INPUT),
       hw.ModulePort(StringAttr.get("in2"), i32, hw.ModulePortDirection.INPUT),
-      hw.ModulePort(StringAttr.get("in3"), hw.InOutType.get(i32),
+      hw.ModulePort(StringAttr.get("in3"), sv.NetType.get(i32),
                     hw.ModulePortDirection.INPUT)
   ]
   module_type = hw.ModuleType.get(ports)
-  # CHECK: !hw.modty<output out : i1, input in1 : i2, input in2 : i32, input in3 : !hw.inout<i32>>
+  # CHECK: !hw.modty<output out : i1, input in1 : i2, input in2 : i32, input in3 : !sv.net<i32>>
   print(module_type)
-  # CHECK-NEXT:  [IntegerType(i2), IntegerType(i32), Type(!hw.inout<i32>)]
+  # CHECK-NEXT:  [IntegerType(i2), IntegerType(i32), Type(!sv.net<i32>)]
   print(module_type.input_types)
   # CHECK-NEXT:  [IntegerType(i1)]
   print(module_type.output_types)
