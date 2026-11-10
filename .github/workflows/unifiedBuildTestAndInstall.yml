@@ -117,6 +117,11 @@ on:
         required: false
         type: boolean
         default: false
+      allow_failure:
+        description: "Report failures of this build without failing the workflow run."
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       runner:
@@ -175,10 +180,16 @@ on:
         required: false
         type: boolean
         default: false
+      allow_failure:
+        description: "Report failures of this build without failing the calling workflow run."
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-test-and-install:
     runs-on: ${{ inputs.runner }}
+    continue-on-error: ${{ inputs.allow_failure }}
     permissions:
       contents: write # Upload assets to release.
     steps:
