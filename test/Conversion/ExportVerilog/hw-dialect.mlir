@@ -349,8 +349,8 @@ hw.module @shl(in %a: i1, out b: i1) {
 // CHECK-NEXT: endmodule
 
 
-hw.module @inout_0(in %a: !hw.inout<i42>, out out: i42) {
-  %aget = sv.read_inout %a: !hw.inout<i42>
+hw.module @inout_0(in %a: !sv.net<i42>, out out: i42) {
+  %aget = sv.read_inout %a: !sv.net<i42>
   hw.output %aget : i42
 }
 // CHECK-LABEL:  module inout_0(
@@ -805,8 +805,8 @@ hw.module @InternalDestMod(in %a: i1, in %b: i3, in %c: i1) {}
 // CHECK-LABEL: module ABC
 hw.module @ABC(in %a: i1, in %b: i2, out c: i4) {
   %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint}
-  %2 = sv.xmr "whatever", "a" : !hw.inout<i1>
-  %3 = sv.read_inout %2: !hw.inout<i1>
+  %2 = sv.xmr "whatever", "a" : !sv.net<i1>
+  %3 = sv.read_inout %2: !sv.net<i1>
   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3, c: %3: i1) -> () {doNotPrint}
   hw.output %1 : i4
 }
@@ -1092,8 +1092,8 @@ hw.module @renameKeyword(in %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: !h
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3,
 // CHECK-NEXT:                                                            r4
 // CHECK-NEXT:  );
-hw.module @useRenamedStruct(in %a: !hw.inout<!hw.struct<repeat: i1, repeat_0: i1>>, out r1: i1, out r2: i1, out r3: !hw.struct<repeat: i1, repeat_0: i1>, out r4: !hw.struct<repeat: i1, repeat_0: i1>) {
-  %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
+hw.module @useRenamedStruct(in %a: !sv.net<!hw.struct<repeat: i1, repeat_0: i1>>, out r1: i1, out r2: i1, out r3: !hw.struct<repeat: i1, repeat_0: i1>, out r4: !hw.struct<repeat: i1, repeat_0: i1>) {
+  %read = sv.read_inout %a : !sv.net<!hw.struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
   // CHECK:      renameKeyword inst1 (
@@ -1101,8 +1101,8 @@ hw.module @useRenamedStruct(in %a: !hw.inout<!hw.struct<repeat: i1, repeat_0: i1
   // CHECK-NEXT:   .r1 (r4)
   // CHECK-NEXT: )
 
-  %0 = sv.struct_field_inout %a["repeat"] : !hw.inout<struct<repeat: i1, repeat_0: i1>>
-  %1 = sv.read_inout %0 : !hw.inout<i1>
+  %0 = sv.struct_field_inout %a["repeat"] : !sv.net<!hw.struct<repeat: i1, repeat_0: i1>>
+  %1 = sv.read_inout %0 : !sv.net<i1>
   // CHECK: assign r1 = a.repeat_0;
   %2 = hw.struct_extract %read["repeat_0"] : !hw.struct<repeat: i1, repeat_0: i1>
   // CHECK: assign r2 = a.repeat_0_0
@@ -1377,7 +1377,7 @@ hw.module @ParamsParensPrecedence<param: i32>(out a:i32, out b:i32, out c:i32) {
 }
 
 // CHECK-LABEL: module ArrayGetInline
-hw.module @ArrayGetInline(in %a: !hw.array<4xstruct<a: i32>>, in %b: !hw.array<4xi1>, in %idx: i2, in %idx_port: !hw.inout<i2>,
+hw.module @ArrayGetInline(in %a: !hw.array<4xstruct<a: i32>>, in %b: !hw.array<4xi1>, in %idx: i2, in %idx_port: !sv.net<i2>,
                           out out: i32, out out2: i1, out out3: i1, out out4: i1, out out5: i1) {
   %c0_i2 = hw.constant 0 : i2
   %x = hw.array_get %a[%c0_i2] : !hw.array<4xstruct<a: i32>>, i2
@@ -1388,7 +1388,7 @@ hw.module @ArrayGetInline(in %a: !hw.array<4xstruct<a: i32>>, in %b: !hw.array<4
   // CHECK-NEXT: assign out4 = b[idx_port];
   // CHECK-NEXT: assign out5 = b[idx_port];
   %array_get_idx = hw.array_get %b[%idx] : !hw.array<4xi1>, i2
-  %read = sv.read_inout %idx_port : !hw.inout<i2>
+  %read = sv.read_inout %idx_port : !sv.net<i2>
   %array_get_idx_port = hw.array_get %b[%read] : !hw.array<4xi1>, i2
   hw.output %y, %array_get_idx, %array_get_idx, %array_get_idx_port, %array_get_idx_port : i32, i1, i1, i1, i1
 }

@@ -1117,6 +1117,8 @@ static LogicalResult legalizeHWModule(Block &block,
       Value decl;
       if (procedural)
         decl = sv::VarOp::create(builder, arrayInjectOp.getType());
+      else
+        decl = sv::VarOp::create(builder, arrayInjectOp.getType());
       for (auto &use : llvm::make_early_inc_range(arrayInjectOp->getUses()))
         use.set(ReadInOutOp::create(builder, decl));
 

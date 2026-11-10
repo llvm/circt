@@ -336,8 +336,8 @@ hw.module @Wires(in %a: i4, out x: i4, out y: i4) {
   // CHECK-DAG: symRef2(Wires.wire5);
   %wire5 = hw.wire %a sym @myWire : i4
   sv.verbatim "symRef1({{0}});" {symbols = [#hw.innerNameRef<@Wires::@myWire>]}
-  %2 = sv.xmr.ref @myWirePath : !hw.inout<i4>
-  %3 = sv.read_inout %2 : !hw.inout<i4>
+  %2 = sv.xmr.ref @myWirePath : !sv.net<i4>
+  %3 = sv.read_inout %2 : !sv.net<i4>
   sv.verbatim "symRef2({{0}});"(%3) : i4
 
   hw.output %wire1, %0 : i4, i4
@@ -350,8 +350,8 @@ hw.module @Vars() {
   // CHECK: var logic [3:0] v;
   // CHECK: symRef1(Vars.v);
   %v = sv.var sym @myVar : !sv.var<i4>
-  %xmr = sv.xmr.ref @myVarPath : !hw.inout<i4>
-  %value = sv.read_inout %xmr : !hw.inout<i4>
+  %xmr = sv.xmr.ref @myVarPath : !sv.var<i4>
+  %value = sv.read_inout %xmr : !sv.var<i4>
   sv.verbatim "symRef1({{0}});"(%value) : i4
 }
 
@@ -615,8 +615,8 @@ hw.module @ReadMemXMR() {
   // CHECK:      initial
   // CHECK-NEXT:   $readmemb("file3.txt", ReadMem.mem)
   sv.initial {
-    %xmr = sv.xmr.ref @ReadMemXMRPath {} : !hw.inout<uarray<8xi32>>
-    sv.readmem %xmr, "file3.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+    %xmr = sv.xmr.ref @ReadMemXMRPath {} : !sv.var<!hw.uarray<8xi32>>
+    sv.readmem %xmr, "file3.txt", MemBaseBin : !sv.var<!hw.uarray<8xi32>>
   }
 }
 
@@ -627,8 +627,8 @@ hw.module @ReadMemXMRHierPath() {
   // CHECK:      initial
   // CHECK-NEXT:   $readmemb("file4.txt", ReadMemXMRHierPath.ReadMemXMR.ReadMem.mem)
   sv.initial {
-    %xmr = sv.xmr.ref @ReadMem_path : !hw.inout<uarray<8xi32>>
-    sv.readmem %xmr, "file4.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+    %xmr = sv.xmr.ref @ReadMem_path : !sv.var<!hw.uarray<8xi32>>
+    sv.readmem %xmr, "file4.txt", MemBaseBin : !sv.var<!hw.uarray<8xi32>>
   }
 }
 

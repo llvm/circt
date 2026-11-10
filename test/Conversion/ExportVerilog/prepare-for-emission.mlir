@@ -148,16 +148,16 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
 
 // -----
 module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
-  hw.module.extern @HandleSink(in %a: !hw.inout<i1>)
+  hw.module.extern @HandleSink(in %a: !sv.net<i1>)
   // CHECK-LABEL: hw.module @HandleOperandNotSpilled
   hw.module @HandleOperandNotSpilled() {
-    %x = sv.xmr "a", "b" : !hw.inout<i1>
-    // CHECK: %[[SRC:.+]] = sv.xmr "a", "b" : !hw.inout<i1>
+    %x = sv.xmr "a", "b" : !sv.net<i1>
+    // CHECK: %[[SRC:.+]] = sv.xmr "a", "b" : !sv.net<i1>
     // CHECK-NOT: sv.wire
     // CHECK-NOT: sv.assign
     // CHECK-NOT: sv.read_inout
-    // CHECK-NEXT: hw.instance "sink" @HandleSink(a: %[[SRC]]: !hw.inout<i1>) -> ()
-    hw.instance "sink" @HandleSink(a: %x: !hw.inout<i1>) -> ()
+    // CHECK-NEXT: hw.instance "sink" @HandleSink(a: %[[SRC]]: !sv.net<i1>) -> ()
+    hw.instance "sink" @HandleSink(a: %x: !sv.net<i1>) -> ()
   }
 }
 
@@ -320,8 +320,8 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     // CHECK: sv.alwayscomb
     sv.alwayscomb {
       // CHECK-NEXT: sv.xmr.ref
-      %0 = sv.xmr.ref @xmr : !hw.inout<i1>
-      sv.verbatim "{{0}}" (%0) : !hw.inout<i1>
+      %0 = sv.xmr.ref @xmr : !sv.net<i1>
+      sv.verbatim "{{0}}" (%0) : !sv.net<i1>
     }
   }
   hw.hierpath @xmr [@Foo::@a]

@@ -507,12 +507,12 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
 // CHECK-NEXT:                 b, //
 // CHECK-NEXT:                 c //
 // CHECK-NEXT:  );
-hw.module @Aliasing(in %a : !hw.inout<i42>, in %b : !hw.inout<i42>, in %c : !hw.inout<i42>) {
+hw.module @Aliasing(in %a : !sv.net<i42>, in %b : !sv.net<i42>, in %c : !sv.net<i42>) {
 
   // CHECK: alias a = b;
-  sv.alias %a, %b     : !hw.inout<i42>, !hw.inout<i42>
+  sv.alias %a, %b     : !sv.net<i42>, !sv.net<i42>
   // CHECK: alias a = b = c;
-  sv.alias %a, %b, %c : !hw.inout<i42>, !hw.inout<i42>, !hw.inout<i42>
+  sv.alias %a, %b, %c : !sv.net<i42>, !sv.net<i42>, !sv.net<i42>
 }
 
 hw.module @reg_0(in %in4: i4, in %in8: i8, in %in8_2: i8, out a: i8, out b: i8) {
@@ -601,22 +601,22 @@ hw.module @regWithInit(in %arg : i32) {
 // CHECK-LABEL: module struct_field_inout1(
 // CHECK-NEXT:   inout struct packed {logic b; } a
 // CHECK-NEXT:  );
-hw.module @struct_field_inout1(in %a : !hw.inout<!hw.struct<b: i1>>) {
+hw.module @struct_field_inout1(in %a : !sv.net<!hw.struct<b: i1>>) {
   // CHECK: assign a.b = 1'h1;
   %true = hw.constant true
-  %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: i1>>
-  sv.assign %0, %true : i1
+  %0 = sv.struct_field_inout %a["b"] : !sv.net<!hw.struct<b: i1>>
+  sv.assign %0, %true : !sv.net<i1>, i1
 }
 
 // CHECK-LABEL: module struct_field_inout2(
 // CHECK-NEXT:    inout struct packed {struct packed {logic c; } b; } a
 // CHECK-NEXT:  );
-hw.module @struct_field_inout2(in %a: !hw.inout<!hw.struct<b: !hw.struct<c: i1>>>) {
+hw.module @struct_field_inout2(in %a: !sv.net<!hw.struct<b: !hw.struct<c: i1>>>) {
   // CHECK: assign a.b.c = 1'h1;
   %true = hw.constant true
-  %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: !hw.struct<c: i1>>>
-  %1 = sv.struct_field_inout %0["c"] : !hw.inout<struct<c: i1>>
-  sv.assign %1, %true : i1
+  %0 = sv.struct_field_inout %a["b"] : !sv.net<!hw.struct<b: !hw.struct<c: i1>>>
+  %1 = sv.struct_field_inout %0["c"] : !sv.net<!hw.struct<c: i1>>
+  sv.assign %1, %true : !sv.net<i1>, i1
 }
 
 // CHECK-LABEL: module PartSelectInoutInline(
@@ -1352,10 +1352,10 @@ hw.module @AggregateTemporay(in %clock: i1, in %foo: i1, in %bar: i25) {
 //CHECK: assign $root.a.b.c = a;
 //CHECK-NEXT: assign aa = d.e.f;
 hw.module @XMR_src(in %a : i23, out aa: i3) {
-  %xmr1 = sv.xmr isRooted a,b,c : !hw.inout<i23>
-  %xmr2 = sv.xmr "d",e,f : !hw.inout<i3>
-  %r = sv.read_inout %xmr2 : !hw.inout<i3>
-  sv.assign %xmr1, %a : i23
+  %xmr1 = sv.xmr isRooted a,b,c : !sv.net<i23>
+  %xmr2 = sv.xmr "d",e,f : !sv.net<i3>
+  %r = sv.read_inout %xmr2 : !sv.net<i3>
+  sv.assign %xmr1, %a : !sv.net<i23>, i23
   hw.output %r : i3
 }
 
@@ -1374,10 +1374,10 @@ hw.module.extern @XMRRef_Qux(in %a: i2, in %b: i1)
 // CHECK-LABEL: module wait_order
 hw.module @wait_order() {
   hw.instance "bar" sym @bar @XMRRef_Bar() -> ()
-  %xmr = sv.xmr.ref @ref : !hw.inout<i2>
-  %xmrRead = sv.read_inout %xmr : !hw.inout<i2>
-  %xmr2 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i1>
-  %xmr2Read = sv.read_inout %xmr2 : !hw.inout<i1>
+  %xmr = sv.xmr.ref @ref : !sv.net<i2>
+  %xmrRead = sv.read_inout %xmr : !sv.net<i2>
+  %xmr2 = sv.xmr.ref @ref2 ".x.y.z[42]" : !sv.net<i1>
+  %xmr2Read = sv.read_inout %xmr2 : !sv.net<i1>
   // CHECK:      /* This instance is elsewhere emitted as a bind statement.
   // CHECK-NEXT: XMRRef_Baz baz (
   // CHECK-NEXT:   .a (wait_order_0.bar.new_0),
