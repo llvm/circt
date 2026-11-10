@@ -107,6 +107,53 @@ primitive udp_dff_hold(q, clk, d);
   endtable
 endprimitive
 
+// Test dual-edge triggered flip-flop lowering to posedge and negedge registers with clock mux.
+// CHECK-LABEL: hw.module @udp_dual_edge_dff(out q : i1, in %clk : !seq.clock, in %d : i1)
+// CHECK-DAG: [[CLK_BOOL:%.+]] = seq.from_clock %clk
+// CHECK-DAG: [[Q_POS:%.+]] = seq.firreg %d clock %clk preset 0 : i1
+// CHECK-DAG: [[CLK_INV:%.+]] = seq.clock_inv %clk
+// CHECK-DAG: [[Q_NEG:%.+]] = seq.firreg %d clock [[CLK_INV]] preset 0 : i1
+// CHECK-DAG: [[TERM_POS:%.+]] = comb.and [[CLK_BOOL]], [[Q_POS]] : i1
+// CHECK-DAG: [[TRUE:%.+]] = hw.constant true
+// CHECK-DAG: [[NOT_CLK:%.+]] = comb.xor [[CLK_BOOL]], [[TRUE]] : i1
+// CHECK-DAG: [[TERM_NEG:%.+]] = comb.and [[NOT_CLK]], [[Q_NEG]] : i1
+// CHECK: [[Q_OUT:%.+]] = comb.or [[TERM_POS]], [[TERM_NEG]] : i1
+// CHECK: hw.output [[Q_OUT]] : i1
+primitive udp_dual_edge_dff(q, clk, d);
+  output reg q;
+  input clk, d;
+  table
+    (01) 0 : ? : 0 ;
+    (01) 1 : ? : 1 ;
+    (10) 0 : ? : 0 ;
+    (10) 1 : ? : 1 ;
+    (0x) 0 : 1 : 0 ; // Skipped: NotTwoState edge (must not set usesState)
+  endtable
+endprimitive
+
+// Test dual-edge multiplexer with distinct data inputs per active edge.
+// CHECK-LABEL: hw.module @udp_dual_edge_mux(out q : i1, in %clk : !seq.clock, in %da : i1, in %db : i1)
+// CHECK-DAG: [[CLK_BOOL:%.+]] = seq.from_clock %clk
+// CHECK-DAG: [[Q_POS:%.+]] = seq.firreg %da clock %clk preset 0 : i1
+// CHECK-DAG: [[CLK_INV:%.+]] = seq.clock_inv %clk
+// CHECK-DAG: [[Q_NEG:%.+]] = seq.firreg %db clock [[CLK_INV]] preset 0 : i1
+// CHECK-DAG: [[TERM_POS:%.+]] = comb.and [[CLK_BOOL]], [[Q_POS]] : i1
+// CHECK-DAG: [[TRUE:%.+]] = hw.constant true
+// CHECK-DAG: [[NOT_CLK:%.+]] = comb.xor [[CLK_BOOL]], [[TRUE]] : i1
+// CHECK-DAG: [[TERM_NEG:%.+]] = comb.and [[NOT_CLK]], [[Q_NEG]] : i1
+// CHECK: [[Q_OUT:%.+]] = comb.or [[TERM_POS]], [[TERM_NEG]] : i1
+// CHECK: hw.output [[Q_OUT]] : i1
+primitive udp_dual_edge_mux(q, clk, da, db);
+  output reg q;
+  input clk, da, db;
+  table
+    (01) 0 ? : ? : 0 ;
+    (01) 1 ? : ? : 1 ;
+    (10) ? 0 : ? : 0 ;
+    (10) ? 1 : ? : 1 ;
+  endtable
+endprimitive
+
 // Test asymmetric next-state boolean logic with don't-care condition synthesis.
 // CHECK-LABEL: hw.module @udp_dff_asym_cond(out q : i1, in %clk : !seq.clock, in %clr_n : i1, in %pre_n : i1, in %d : i1, in %n : i1)
 // CHECK-DAG: [[TRUE:%.+]] = hw.constant true
@@ -217,6 +264,50 @@ primitive udp_dff_init(q, clk, d);
     (01) 0 : ? : 0 ;
     (01) 1 : ? : 1 ;
     (10) ? : ? : - ;
+  endtable
+endprimitive
+
+// Verify that dual-edge flip-flop with initial q = 1 initializes both edge registers.
+// CHECK-LABEL: hw.module @udp_dual_edge_init(
+// CHECK-DAG: [[Q_POS:%.+]] = seq.firreg %d clock %clk preset 1 : i1
+// CHECK-DAG: [[Q_NEG:%.+]] = seq.firreg %d clock {{%.+}} preset 1 : i1
+// CHECK: hw.output
+primitive udp_dual_edge_init(q, clk, d);
+  output reg q;
+  input clk, d;
+  initial q = 1;
+  table
+    (01) 0 : ? : 0 ;
+    (01) 1 : ? : 1 ;
+    (10) 0 : ? : 0 ;
+    (10) 1 : ? : 1 ;
+  endtable
+endprimitive
+
+// Verify that dual-edge flip-flop with clock enable hold rows lowers to cross-register muxes end-to-end.
+// CHECK-LABEL: hw.module @udp_dual_edge_en(out q : i1, in %clk : !seq.clock, in %en : i1, in %d : i1)
+// CHECK-DAG: [[CLK_BOOL:%.+]] = seq.from_clock %clk
+// CHECK-DAG: [[MUX_POS:%.+]] = comb.mux %en, %d, [[Q_NEG:%.+]] : i1
+// CHECK-DAG: [[Q_POS:%.+]] = seq.firreg [[MUX_POS]] clock %clk preset 0 : i1
+// CHECK-DAG: [[MUX_NEG:%.+]] = comb.mux %en, %d, [[Q_POS]] : i1
+// CHECK-DAG: [[CLK_INV:%.+]] = seq.clock_inv %clk
+// CHECK-DAG: [[Q_NEG]] = seq.firreg [[MUX_NEG]] clock [[CLK_INV]] preset 0 : i1
+// CHECK-DAG: [[TERM_POS:%.+]] = comb.and [[CLK_BOOL]], [[Q_POS]] : i1
+// CHECK-DAG: [[TRUE:%.+]] = hw.constant true
+// CHECK-DAG: [[NOT_CLK:%.+]] = comb.xor [[CLK_BOOL]], [[TRUE]] : i1
+// CHECK-DAG: [[TERM_NEG:%.+]] = comb.and [[NOT_CLK]], [[Q_NEG]] : i1
+// CHECK: [[Q_OUT:%.+]] = comb.or [[TERM_POS]], [[TERM_NEG]] : i1
+// CHECK: hw.output [[Q_OUT]] : i1
+primitive udp_dual_edge_en(q, clk, en, d);
+  output reg q;
+  input clk, en, d;
+  table
+    (01) 1 0 : ? : 0 ;
+    (01) 1 1 : ? : 1 ;
+    (10) 1 0 : ? : 0 ;
+    (10) 1 1 : ? : 1 ;
+    (01) 0 ? : ? : - ;
+    (10) 0 ? : ? : - ;
   endtable
 endprimitive
 

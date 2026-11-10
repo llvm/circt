@@ -818,6 +818,94 @@ primitive udp_seq_dff_hold(q, clk, d);
     endtable
 endprimitive
 
+// Test dual-edge triggered flip-flop lowering with clock multiplexer.
+// CHECK-LABEL: moore.module @udp_seq_dual_edge_dff(out q : !moore.l1, in %clk : !moore.l1, in %d : !moore.l1)
+// CHECK: [[Q_POS_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[Q_NEG_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[CLK_CVT:%.+]] = moore.logic_to_int %clk : l1
+// CHECK: [[D_CVT:%.+]] = moore.logic_to_int %d : l1
+// CHECK: [[CLK_NET:%.+]] = moore.net wire [[CLK_CVT]] : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD:%.+]] = moore.read [[CLK_NET]] : {{ref<i1>|<i1>}}
+// CHECK:     moore.detect_event posedge [[CLK_RD]] : i1
+// CHECK:   }
+// CHECK:   moore.nonblocking_assign [[Q_POS_VAR]], [[D_CVT]] : i1
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: [[CLK_NET2:%.+]] = moore.net wire [[CLK_CVT]] : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD2:%.+]] = moore.read [[CLK_NET2]] : {{ref<i1>|<i1>}}
+// CHECK:     moore.detect_event negedge [[CLK_RD2]] : i1
+// CHECK:   }
+// CHECK:   moore.nonblocking_assign [[Q_NEG_VAR]], [[D_CVT]] : i1
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: [[Q_POS_RD:%.+]] = moore.read [[Q_POS_VAR]] : {{ref<i1>|<i1>}}
+// CHECK: [[Q_NEG_RD:%.+]] = moore.read [[Q_NEG_VAR]] : {{ref<i1>|<i1>}}
+// CHECK: [[TERM_POS:%.+]] = moore.and [[CLK_CVT]], [[Q_POS_RD]] : i1
+// CHECK: [[NOT_CLK:%.+]] = moore.not [[CLK_CVT]] : i1
+// CHECK: [[TERM_NEG:%.+]] = moore.and [[NOT_CLK]], [[Q_NEG_RD]] : i1
+// CHECK: [[OR:%.+]] = moore.or [[TERM_POS]], [[TERM_NEG]] : i1
+// CHECK: [[Q_LOGIC:%.+]] = moore.int_to_logic [[OR]] : i1
+// CHECK: moore.output [[Q_LOGIC]] : !moore.l1
+primitive udp_seq_dual_edge_dff(q, clk, d);
+    output reg q;
+    input clk, d;
+    table
+        (01) 0 : ? : 0 ;
+        (01) 1 : ? : 1 ;
+        (10) 0 : ? : 0 ;
+        (10) 1 : ? : 1 ;
+        (0x) 0 : 1 : 0 ; // Skipped: NotTwoState edge (must not set usesState)
+    endtable
+endprimitive
+
+// Test dual-edge multiplexer with distinct data inputs per active edge.
+// CHECK-LABEL: moore.module @udp_seq_dual_edge_mux(out q : !moore.l1, in %clk : !moore.l1, in %da : !moore.l1, in %db : !moore.l1)
+// CHECK: [[Q_POS_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[Q_NEG_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[CLK_CVT:%.+]] = moore.logic_to_int %clk : l1
+// CHECK: [[DA_CVT:%.+]] = moore.logic_to_int %da : l1
+// CHECK: [[DB_CVT:%.+]] = moore.logic_to_int %db : l1
+// CHECK: [[CLK_NET:%.+]] = moore.net wire [[CLK_CVT]] : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD:%.+]] = moore.read [[CLK_NET]] : {{ref<i1>|<i1>}}
+// CHECK:     moore.detect_event posedge [[CLK_RD]] : i1
+// CHECK:   }
+// CHECK:   moore.nonblocking_assign [[Q_POS_VAR]], [[DA_CVT]] : i1
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: [[CLK_NET2:%.+]] = moore.net wire [[CLK_CVT]] : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.wait_event {
+// CHECK:     [[CLK_RD2:%.+]] = moore.read [[CLK_NET2]] : {{ref<i1>|<i1>}}
+// CHECK:     moore.detect_event negedge [[CLK_RD2]] : i1
+// CHECK:   }
+// CHECK:   moore.nonblocking_assign [[Q_NEG_VAR]], [[DB_CVT]] : i1
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: [[Q_POS_RD:%.+]] = moore.read [[Q_POS_VAR]] : {{ref<i1>|<i1>}}
+// CHECK: [[Q_NEG_RD:%.+]] = moore.read [[Q_NEG_VAR]] : {{ref<i1>|<i1>}}
+// CHECK: [[TERM_POS:%.+]] = moore.and [[CLK_CVT]], [[Q_POS_RD]] : i1
+// CHECK: [[NOT_CLK:%.+]] = moore.not [[CLK_CVT]] : i1
+// CHECK: [[TERM_NEG:%.+]] = moore.and [[NOT_CLK]], [[Q_NEG_RD]] : i1
+// CHECK: [[OR:%.+]] = moore.or [[TERM_POS]], [[TERM_NEG]] : i1
+// CHECK: [[Q_LOGIC:%.+]] = moore.int_to_logic [[OR]] : i1
+// CHECK: moore.output [[Q_LOGIC]] : !moore.l1
+primitive udp_seq_dual_edge_mux(q, clk, da, db);
+    output reg q;
+    input clk, da, db;
+    table
+        (01) 0 ? : ? : 0 ;
+        (01) 1 ? : ? : 1 ;
+        (10) ? 0 : ? : 0 ;
+        (10) ? 1 : ? : 1 ;
+    endtable
+endprimitive
+
 // Test asymmetric next-state boolean logic with don't-care condition synthesis.
 // CHECK-LABEL: moore.module @udp_seq_asym_cond(out q : !moore.l1, in %clk : !moore.l1, in %clr_n : !moore.l1, in %pre_n : !moore.l1, in %d : !moore.l1, in %n : !moore.l1)
 // CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
@@ -1119,6 +1207,79 @@ primitive udp_seq_dff_init(q, clk, d);
         (01) 0 : ? : 0 ;
         (01) 1 : ? : 1 ;
         (10) ? : ? : - ;
+    endtable
+endprimitive
+
+// Test dual-edge flip-flop initial state variable initialization across both edge registers.
+// CHECK-LABEL: moore.module @udp_seq_dual_edge_init(out q : !moore.l1, in %clk : !moore.l1, in %d : !moore.l1)
+// CHECK: [[INIT_VAL:%.+]] = moore.constant 1 : i1
+// CHECK: [[Q_POS:%.+]] = moore.variable [[INIT_VAL]] : <i1>
+// CHECK: [[Q_NEG:%.+]] = moore.variable [[INIT_VAL]] : <i1>
+primitive udp_seq_dual_edge_init(q, clk, d);
+    output reg q; input clk, d;
+    initial q = 1;
+    table
+        (01) 0 : ? : 0 ;
+        (01) 1 : ? : 1 ;
+        (10) 0 : ? : 0 ;
+        (10) 1 : ? : 1 ;
+    endtable
+endprimitive
+
+// Test dual-edge flip-flop with asynchronous reset driving both edge registers.
+// CHECK-LABEL: moore.module @udp_seq_dual_edge_rst(out q : !moore.l1, in %clk : !moore.l1, in %rst : !moore.l1, in %d : !moore.l1)
+// CHECK: [[Q_POS:%.+]] = moore.variable : <i1>
+// CHECK: [[Q_NEG:%.+]] = moore.variable : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.detect_event posedge {{%.+}} : i1
+// CHECK:   moore.detect_event posedge {{%.+}} : i1
+// CHECK: }
+// CHECK: moore.procedure always {
+// CHECK:   moore.detect_event negedge {{%.+}} : i1
+// CHECK:   moore.detect_event posedge {{%.+}} : i1
+// CHECK: }
+primitive udp_seq_dual_edge_rst(q, clk, rst, d);
+    output reg q; input clk, rst, d;
+    table
+        ?    1 ? : ? : 0 ;
+        (01) 0 0 : ? : 0 ;
+        (01) 0 1 : ? : 1 ;
+        (10) 0 0 : ? : 0 ;
+        (10) 0 1 : ? : 1 ;
+    endtable
+endprimitive
+
+// Test dual-edge flip-flop with clock enable hold rows.
+// CHECK-LABEL: moore.module @udp_seq_dual_edge_en(out q : !moore.l1, in %clk : !moore.l1, in %en : !moore.l1, in %d : !moore.l1)
+// CHECK: [[Q_POS:%.+]] = moore.variable : <i1>
+// CHECK: [[Q_NEG:%.+]] = moore.variable : <i1>
+// CHECK: moore.procedure always {
+// CHECK:   moore.detect_event posedge {{%.+}} : i1
+// CHECK:   cf.cond_br {{%.+}}, ^[[TRUE_POS:.+]], ^[[FALSE_POS:.+]]
+// CHECK: ^[[TRUE_POS]]:
+// CHECK:   moore.nonblocking_assign [[Q_POS]], {{%.+}} : i1
+// CHECK: ^[[FALSE_POS]]:
+// CHECK:   [[Q_NEG_RD:%.+]] = moore.read [[Q_NEG]] : ref<i1>
+// CHECK:   moore.nonblocking_assign [[Q_POS]], [[Q_NEG_RD]] : i1
+// CHECK: }
+// CHECK: moore.procedure always {
+// CHECK:   moore.detect_event negedge {{%.+}} : i1
+// CHECK:   cf.cond_br {{%.+}}, ^[[TRUE_NEG:.+]], ^[[FALSE_NEG:.+]]
+// CHECK: ^[[TRUE_NEG]]:
+// CHECK:   moore.nonblocking_assign [[Q_NEG]], {{%.+}} : i1
+// CHECK: ^[[FALSE_NEG]]:
+// CHECK:   [[Q_POS_RD:%.+]] = moore.read [[Q_POS]] : ref<i1>
+// CHECK:   moore.nonblocking_assign [[Q_NEG]], [[Q_POS_RD]] : i1
+// CHECK: }
+primitive udp_seq_dual_edge_en(q, clk, en, d);
+    output reg q; input clk, en, d;
+    table
+        (01) 1 0 : ? : 0 ;
+        (01) 1 1 : ? : 1 ;
+        (10) 1 0 : ? : 0 ;
+        (10) 1 1 : ? : 1 ;
+        (01) 0 ? : ? : - ;
+        (10) 0 ? : ? : - ;
     endtable
 endprimitive
 

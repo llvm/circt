@@ -582,19 +582,17 @@ endmodule
 
 // -----
 
-// expected-error @below {{dual-edge sequential UDP `udp_dual_edge` is not supported yet}}
-primitive udp_dual_edge(q, clk, d);
+// expected-error @below {{dual-edge sequential UDP `udp_dual_edge_state_dep` depending on internal state is not supported}}
+primitive udp_dual_edge_state_dep(q, clk, d);
   output reg q;
   input clk, d;
   table
-    (01) 0 : ? : 0 ;
-    (01) 1 : ? : 1 ;
+    (01) 0 : 0 : 1 ;
+    (01) 0 : 1 : 0 ;
     (10) 0 : ? : 0 ;
-    (10) 1 : ? : 1 ;
   endtable
 endprimitive
 
-module TestDualEdge(input logic clk, input logic d, output logic q);
-  udp_dual_edge u_de (q, clk, d);
+module TestDualEdgeStateDep(input logic clk, input logic d, output logic q);
+  udp_dual_edge_state_dep u_ded (q, clk, d);
 endmodule
-

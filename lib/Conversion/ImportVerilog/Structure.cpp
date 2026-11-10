@@ -3453,7 +3453,7 @@ static Value createConditional(OpBuilder &builder, Location loc, Type type,
 static Value computeSyncNextState(OpBuilder &builder, Location loc,
                                   size_t clkIdx, ArrayRef<SyncRow> syncRows,
                                   const SequentialLoweringState &state,
-                                  Value qVar) {
+                                  Value holdVar) {
   // Fast-path for simple D or ~D pass-through when behavior is symmetric
   // across active edges and there is a single data input:
   // 1. No synchronous row depends on the current state ('?').
@@ -3502,7 +3502,7 @@ static Value computeSyncNextState(OpBuilder &builder, Location loc,
   // for stripped hold rows and unenumerated input combinations.
   size_t stateIdx = state.numInputs;
   Value qVal = state.usesState ? state.vars[stateIdx]
-                               : moore::ReadOp::create(builder, loc, qVar);
+                               : moore::ReadOp::create(builder, loc, holdVar);
   Value syncVal = qVal;
   Value zeroVal;
   Value oneVal;
@@ -3543,7 +3543,7 @@ static void emitSequentialEdgeSensitiveProcedure(
     Context &context, OpBuilder &builder, Location loc, size_t clkIdx,
     moore::Edge clkEdge, ArrayRef<SyncRow> syncRows,
     SequentialLoweringState state, const AsyncConditions &asyncConditions,
-    Value qVar) {
+    Value qVar, Value holdVar) {
   auto i1RefTy = cast<moore::RefType>(qVar.getType());
 
   // Collect non-clock and non-async input port indices.
@@ -3559,7 +3559,7 @@ static void emitSequentialEdgeSensitiveProcedure(
 
   // Construct synchronous next-state value expression.
   Value syncVal =
-      computeSyncNextState(builder, loc, clkIdx, syncRows, state, qVar);
+      computeSyncNextState(builder, loc, clkIdx, syncRows, state, holdVar);
 
   // Emit clock net (and async condition net, if present) and
   // `moore.procedure always`.
@@ -3597,6 +3597,28 @@ static void emitSequentialEdgeSensitiveProcedure(
       return;
     }
     Value syncEnI1 = context.convertToI1(syncEn);
+    if (qVar != holdVar) {
+      // In dual-edge UDPs, the hold value must be copied from the opposite
+      // edge's register when enable is false, so that the module-level clock
+      // multiplexer (clk ? q_pos : q_neg) reflects the current state rather
+      // than stale state from the previous cycle.
+      Block &syncTrueBlock = procOp.getBody().emplaceBlock();
+      Block &syncFalseBlock = procOp.getBody().emplaceBlock();
+      Block &syncExitBlock = procOp.getBody().emplaceBlock();
+      mlir::cf::CondBranchOp::create(builder, loc, syncEnI1, &syncTrueBlock,
+                                     &syncFalseBlock);
+      builder.setInsertionPointToEnd(&syncTrueBlock);
+      moore::NonBlockingAssignOp::create(builder, loc, qVar, syncVal);
+      mlir::cf::BranchOp::create(builder, loc, &syncExitBlock);
+
+      builder.setInsertionPointToEnd(&syncFalseBlock);
+      Value holdVal = moore::ReadOp::create(builder, loc, holdVar);
+      moore::NonBlockingAssignOp::create(builder, loc, qVar, holdVal);
+      mlir::cf::BranchOp::create(builder, loc, &syncExitBlock);
+
+      builder.setInsertionPointToEnd(&syncExitBlock);
+      return;
+    }
     Block &syncTrueBlock = procOp.getBody().emplaceBlock();
     Block &syncExitBlock = procOp.getBody().emplaceBlock();
     mlir::cf::CondBranchOp::create(builder, loc, syncEnI1, &syncTrueBlock,
@@ -3721,12 +3743,16 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
     }
   }
 
-  if (clkEdge.has_value() && *clkEdge == moore::Edge::BothEdges) {
-    return mlir::emitError(loc) << "dual-edge sequential UDP `"
-                                << primitive.name << "` is not supported yet";
+  // Dual-edge UDPs model state by splitting into posedge and negedge registers;
+  // state feedback across opposite edges is not supported.
+  if (clkEdge.has_value() && *clkEdge == moore::Edge::BothEdges &&
+      table.usesState) {
+    return mlir::emitError(loc)
+           << "dual-edge sequential UDP `" << primitive.name
+           << "` depending on internal state is not supported";
   }
 
-  // Instantiate the state variable.
+  // Instantiate the state variable(s).
   auto i1Ty = moore::IntType::getInt(getContext(), 1);
   auto i1RefTy = moore::RefType::get(cast<moore::UnpackedType>(i1Ty));
   Value initVal;
@@ -3737,8 +3763,20 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
                                           svInt == 1 ? 1 : 0, false);
   }
 
-  StringAttr qName = builder.getStringAttr(primitive.ports[0]->name);
-  auto qVar = moore::VariableOp::create(builder, loc, i1RefTy, qName, initVal);
+  moore::VariableOp qVar, qPosVar, qNegVar;
+  if (clkEdge.has_value() && *clkEdge == moore::Edge::BothEdges) {
+    StringAttr qPosName =
+        builder.getStringAttr(Twine(primitive.ports[0]->name) + "_pos");
+    StringAttr qNegName =
+        builder.getStringAttr(Twine(primitive.ports[0]->name) + "_neg");
+    qPosVar =
+        moore::VariableOp::create(builder, loc, i1RefTy, qPosName, initVal);
+    qNegVar =
+        moore::VariableOp::create(builder, loc, i1RefTy, qNegName, initVal);
+  } else {
+    StringAttr qName = builder.getStringAttr(primitive.ports[0]->name);
+    qVar = moore::VariableOp::create(builder, loc, i1RefTy, qName, initVal);
+  }
 
   SmallVector<Value> seqInputVals;
   seqInputVals.reserve(numInputs);
@@ -3772,20 +3810,58 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
   AsyncConditions asyncConditions =
       buildAsyncConditions(builder, loc, table.asyncRows, vars, i1Ty);
 
+  Value qOut;
   if (clkIdx.has_value()) {
-    emitSequentialEdgeSensitiveProcedure(*this, builder, loc, *clkIdx, *clkEdge,
-                                         table.syncRows, state, asyncConditions,
-                                         qVar);
+    if (*clkEdge == moore::Edge::BothEdges) {
+      SmallVector<SyncRow> posRows;
+      SmallVector<SyncRow> negRows;
+      for (const auto &srow : table.syncRows) {
+        if (srow.edgeKind == moore::Edge::PosEdge ||
+            srow.edgeKind == moore::Edge::BothEdges) {
+          posRows.push_back(SyncRow{.edgeIdx = srow.edgeIdx,
+                                    .edgeKind = moore::Edge::PosEdge,
+                                    .levels = srow.levels,
+                                    .output = srow.output});
+        }
+        if (srow.edgeKind == moore::Edge::NegEdge ||
+            srow.edgeKind == moore::Edge::BothEdges) {
+          negRows.push_back(SyncRow{.edgeIdx = srow.edgeIdx,
+                                    .edgeKind = moore::Edge::NegEdge,
+                                    .levels = srow.levels,
+                                    .output = srow.output});
+        }
+      }
+
+      emitSequentialEdgeSensitiveProcedure(*this, builder, loc, *clkIdx,
+                                           moore::Edge::PosEdge, posRows, state,
+                                           asyncConditions, qPosVar, qNegVar);
+      emitSequentialEdgeSensitiveProcedure(*this, builder, loc, *clkIdx,
+                                           moore::Edge::NegEdge, negRows, state,
+                                           asyncConditions, qNegVar, qPosVar);
+
+      Value qPos = moore::ReadOp::create(builder, loc, qPosVar);
+      Value qNeg = moore::ReadOp::create(builder, loc, qNegVar);
+      Value clkVal = seqInputVals[*clkIdx];
+      Value termPos = moore::AndOp::create(builder, loc, clkVal, qPos);
+      Value notClk = moore::NotOp::create(builder, loc, clkVal);
+      Value termNeg = moore::AndOp::create(builder, loc, notClk, qNeg);
+      qOut = moore::OrOp::create(builder, loc, termPos, termNeg);
+    } else {
+      emitSequentialEdgeSensitiveProcedure(*this, builder, loc, *clkIdx,
+                                           *clkEdge, table.syncRows, state,
+                                           asyncConditions, qVar, qVar);
+      qOut = moore::ReadOp::create(builder, loc, qVar);
+    }
+
   } else if (asyncConditions.asyncCond) {
     emitSequentialLevelSensitiveProcedure(*this, builder, loc,
                                           asyncConditions.asyncCond,
                                           asyncConditions.asyncVal, qVar);
+    qOut = moore::ReadOp::create(builder, loc, qVar);
   } else {
     return mlir::emitError(loc) << "sequential UDP `" << primitive.name
                                 << "` without clock edge is not supported";
   }
-
-  Value qOut = moore::ReadOp::create(builder, loc, qVar);
 
   auto l1Ty = moore::IntType::getLogic(getContext(), 1);
   Value converted = materializeConversion(l1Ty, qOut, false, loc);
