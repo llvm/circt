@@ -1335,7 +1335,7 @@ Value Deseq::materializeProjection(OpBuilder &builder, Location loc,
 /// a non-constant value would be inferred from a signal initializer.
 static LogicalResult inferRegisterPreset(seq::FirRegOp regOp,
                                          DriveInfo &drive) {
-  auto sigOp = drive.op.getSignal().getDefiningOp<SignalOp>();
+  auto sigOp = drive.op.getDriven().getDefiningOp<SignalOp>();
   SmallVector<std::pair<DriveLikeOp, IntegerAttr>> constantDrives;
 
   // Check if a drive happens at the same time as the register drive. Immediate
@@ -1354,10 +1354,10 @@ static LogicalResult inferRegisterPreset(seq::FirRegOp regOp,
   };
 
   // Find other unconditional concurrent constant drivers on the signal.
-  for (auto &use : drive.op.getSignal().getUses()) {
+  for (auto &use : drive.op.getDriven().getUses()) {
     auto driveUser = dyn_cast<DriveLikeOp>(use.getOwner());
     if (!driveUser || driveUser == drive.op ||
-        use != driveUser.getSignalMutable()[0])
+        use != driveUser.getDrivenMutable()[0])
       continue;
 
     bool isSameBlock = driveUser->getBlock() == drive.op->getBlock();
@@ -1509,7 +1509,7 @@ LogicalResult Deseq::implementRegister(DriveInfo &drive) {
 
   // Try to guess a name for the register.
   StringAttr name;
-  if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>())
+  if (auto sigOp = drive.op.getDriven().getDefiningOp<llhd::SignalOp>())
     name = sigOp.getNameAttr();
   else
     name = builder.getStringAttr("");
@@ -1542,7 +1542,7 @@ LogicalResult Deseq::implementRegister(DriveInfo &drive) {
       matchPattern(drive.op.getTime(), m_Constant(&attr)) &&
       attr.getTime() == 0 && attr.getDelta() == 1) {
     auto assignOp =
-        AssignOp::create(builder, drive.op.getLoc(), drive.op.getSignal(),
+        AssignOp::create(builder, drive.op.getLoc(), drive.op.getDriven(),
                          drive.op.getValue(), Value{});
     drive.op.erase();
     drive.op = assignOp;

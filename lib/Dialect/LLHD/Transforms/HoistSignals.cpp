@@ -319,7 +319,7 @@ void DriveHoister::findHoistableSlots() {
   SmallDenseMap<Operation *, SmallVector<RangedValue>, 8> slotsByRoot;
 
   processOp.walk([&](DriveLikeOp op) {
-    auto slot = op.getSignal();
+    auto slot = op.getDriven();
     if (!seenSlots.insert(slot).second)
       return;
 
@@ -419,7 +419,7 @@ void DriveHoister::collectDriveSets() {
       bool isAssign = isa<AssignOp>(op);
 
       // Check if we can hoist drives to this signal.
-      auto slot = driveOp.getSignal();
+      auto slot = driveOp.getDriven();
       if (!slots.contains(slot) || unhoistableSlots.contains(slot)) {
         LLVM_DEBUG(llvm::dbgs()
                    << "- Skipping (slot unhoistable): " << driveOp << "\n");
