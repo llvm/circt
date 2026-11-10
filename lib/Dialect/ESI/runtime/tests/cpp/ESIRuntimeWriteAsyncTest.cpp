@@ -1,4 +1,4 @@
-//===- ESIRuntimeWriteAsyncTest.cpp - WriteChannelPort::writeAsync tests --===//
+//===- ESIRuntimeWriteAsyncTest.cpp - WriteChannelPort::tryWriteAsync ---===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -44,11 +44,10 @@ public:
   std::atomic<int> throwAfter = -1;
   /// If non-negative, accept this many more tryWriteImpl() calls, then reject.
   std::atomic<int> acceptBudget = -1;
+  /// Reject every other tryWriteImpl() call.
+  std::atomic<bool> alternate = false;
   /// Number of pollWriteImpl() calls.
   std::atomic<int> pollImplCount = 0;
-  /// Like the cosim backend, split each message into frames and send them one
-  /// at a time; `throwAfter` then counts frames.
-  bool splitFrames = false;
 
 protected:
   void writeImpl(const MessageData &data) override {
@@ -56,7 +55,7 @@ protected:
       std::this_thread::yield();
   }
   bool tryWriteImpl(const MessageData &data) override {
-    if (rejectAll || acceptBudget == 0)
+    if (rejectAll || acceptBudget == 0 || (alternate && calls++ % 2))
       return false;
     if (acceptBudget > 0)
       --acceptBudget;
@@ -64,19 +63,11 @@ protected:
       --rejectCount;
       return false;
     }
-    if (!splitFrames) {
-      send(data);
-      return true;
-    }
-    for (const MessageData &frame : getMessageFrames(data))
-      send(frame);
-    return true;
-  }
-  void send(const MessageData &data) {
     if (throwAfter >= 0 && throwAfter-- == 0)
       throw std::out_of_range("injected failure");
     std::lock_guard<std::mutex> lock(mutex);
     writtenMsgs.push_back(data.getData());
+    return true;
   }
   bool pollWriteImpl() override {
     ++pollImplCount;
@@ -84,11 +75,12 @@ protected:
   }
 
 private:
+  std::atomic<unsigned> calls = 0;
   std::mutex mutex;
   std::vector<std::vector<uint8_t>> writtenMsgs;
 };
 
-/// Records the results of writeAsync() calls, in completion order.
+/// Records the completions of tryWriteAsync() calls, in order.
 struct Recorder {
   std::mutex mutex;
   std::vector<std::exception_ptr> results;
@@ -135,9 +127,17 @@ struct TwoSegmentMessage : public SegmentedMessageData {
   }
 };
 
-std::unique_ptr<MessageData> makeMsg(std::vector<uint8_t> bytes) {
+std::unique_ptr<SegmentedMessageData> makeMsg(std::vector<uint8_t> bytes) {
   return std::make_unique<MessageData>(std::move(bytes));
 }
+
+/// tryWriteAsync() a new message holding `bytes`.
+bool tryAsync(WriteChannelPort &port, std::vector<uint8_t> bytes) {
+  std::unique_ptr<SegmentedMessageData> msg = makeMsg(std::move(bytes));
+  return port.tryWriteAsync(msg);
+}
+
+using Frames = std::vector<std::vector<uint8_t>>;
 
 /// Rethrow `error` and return its message, checking that it is of type `E`.
 template <typename E>
@@ -205,7 +205,7 @@ receive(const Type *type, const std::vector<std::vector<uint8_t>> &frames) {
   return received;
 }
 
-TEST(WriteAsyncTest, WritesImmediatelyWhenIdle) {
+TEST(TryWriteAsyncTest, CompletesImmediately) {
   UIntType ui24("ui24", 24);
   RecordingWritePort port(&ui24);
   auto callerThread = std::this_thread::get_id();
@@ -216,12 +216,14 @@ TEST(WriteAsyncTest, WritesImmediatelyWhenIdle) {
   };
   port.connect(recorder.callback());
 
-  // With nothing queued, the message is written (and the callback invoked) on
-  // the calling thread before writeAsync() returns.
-  port.writeAsync(makeMsg({1, 2, 3}));
+  // The message is written, and the callback invoked on the calling thread,
+  // before tryWriteAsync() returns.
+  std::unique_ptr<SegmentedMessageData> msg = makeMsg({1, 2, 3});
+  EXPECT_TRUE(port.tryWriteAsync(msg));
+  EXPECT_FALSE(msg);
   EXPECT_TRUE(recorder.allSucceeded(1));
   EXPECT_EQ(callbackThread, callerThread);
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{1, 2, 3}}));
+  EXPECT_EQ(port.written(), (Frames{{1, 2, 3}}));
 
   // Nothing left for poll() to do, but the backend is still polled.
   EXPECT_FALSE(port.poll());
@@ -229,83 +231,62 @@ TEST(WriteAsyncTest, WritesImmediatelyWhenIdle) {
   EXPECT_EQ(recorder.size(), 1u);
 }
 
-TEST(WriteAsyncTest, BackpressuredWriteCompletesOnPoll) {
-  UIntType ui24("ui24", 24);
-  RecordingWritePort port(&ui24);
+TEST(TryWriteAsyncTest, BackpressureReturnsFalseWithoutQueueing) {
+  UIntType ui8("ui8", 8);
+  RecordingWritePort port(&ui8);
   Recorder recorder;
   port.connect(recorder.callback());
   port.rejectAll = true;
 
-  port.writeAsync(makeMsg({1, 2, 3}));
+  // Nothing is queued: the caller keeps the message and retries it.
+  std::unique_ptr<SegmentedMessageData> msg = makeMsg({1});
+  SegmentedMessageData *original = msg.get();
+  for (int i = 0; i < 100; ++i) {
+    EXPECT_FALSE(port.tryWriteAsync(msg));
+    EXPECT_EQ(msg.get(), original);
+  }
+  EXPECT_FALSE(port.poll());
   EXPECT_EQ(recorder.size(), 0u);
   EXPECT_TRUE(port.written().empty());
-  EXPECT_FALSE(port.poll());
 
   port.rejectAll = false;
-  EXPECT_TRUE(port.poll());
+  EXPECT_TRUE(port.tryWriteAsync(msg));
   EXPECT_TRUE(recorder.allSucceeded(1));
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{1, 2, 3}}));
+  EXPECT_EQ(port.written(), (Frames{{1}}));
 }
 
-TEST(WriteAsyncTest, FastPathPreservesOrder) {
+TEST(TryWriteAsyncTest, FailureThrowsAndKeepsMessage) {
   UIntType ui8("ui8", 8);
   RecordingWritePort port(&ui8);
   Recorder recorder;
   port.connect(recorder.callback());
+  port.throwAfter = 0;
 
-  // {1} is backpressured and stays in flight, so {2} must not bypass it even
-  // once the backend is ready again.
-  port.rejectCount = 1;
-  port.writeAsync(makeMsg({1}));
-  port.writeAsync(makeMsg({2}));
+  std::unique_ptr<SegmentedMessageData> msg = makeMsg({1});
+  EXPECT_THROW(port.tryWriteAsync(msg), std::out_of_range);
+  EXPECT_TRUE(msg);
   EXPECT_EQ(recorder.size(), 0u);
-  EXPECT_TRUE(port.written().empty());
 
-  port.poll();
-  EXPECT_TRUE(recorder.allSucceeded(2));
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{1}, {2}}));
-
-  // Idle again: the fast path is used.
-  port.writeAsync(makeMsg({3}));
-  EXPECT_TRUE(recorder.allSucceeded(3));
+  // The port remains usable.
+  EXPECT_TRUE(port.tryWriteAsync(msg));
+  EXPECT_TRUE(recorder.allSucceeded(1));
+  EXPECT_EQ(port.written(), (Frames{{1}}));
 }
 
-TEST(WriteAsyncTest, CallbackChainDoesNotRecurse) {
-  UIntType ui8("ui8", 8);
-  RecordingWritePort port(&ui8);
-  constexpr size_t numMsgs = 100000;
-  size_t depth = 0, maxDepth = 0;
-  Recorder recorder;
-  recorder.onResult = [&](size_t idx) {
-    ++depth;
-    maxDepth = std::max(maxDepth, depth);
-    // Write the next message upon completion of the previous one.
-    if (idx + 1 < numMsgs)
-      port.writeAsync(makeMsg({static_cast<uint8_t>(idx + 1)}));
-    --depth;
-  };
-  port.connect(recorder.callback());
-
-  port.writeAsync(makeMsg({0}));
-  EXPECT_TRUE(recorder.allSucceeded(numMsgs));
-  EXPECT_EQ(port.written().size(), numMsgs);
-  EXPECT_EQ(maxDepth, 1u);
-}
-
-TEST(WriteAsyncTest, SegmentedMessageIsFlattened) {
+TEST(TryWriteAsyncTest, SegmentedMessageIsFlattened) {
   BitsType bits40("i40", 40);
   RecordingWritePort port(&bits40);
   Recorder recorder;
   port.connect(recorder.callback());
 
-  port.writeAsync(std::make_unique<TwoSegmentMessage>());
-  port.poll();
+  std::unique_ptr<SegmentedMessageData> msg =
+      std::make_unique<TwoSegmentMessage>();
+  EXPECT_TRUE(port.tryWriteAsync(msg));
   EXPECT_TRUE(recorder.allSucceeded(1));
-  EXPECT_EQ(port.written(),
-            (std::vector<std::vector<uint8_t>>{{1, 2, 3, 4, 5}}));
+  EXPECT_EQ(port.written(), (Frames{{1, 2, 3, 4, 5}}));
 }
 
-TEST(WriteAsyncTest, UsesBackendSegmentedTryWrite) {
+TEST(TryWriteAsyncTest, UsesBackendSegmentedTryWrite) {
   // A backend with scatter-gather support, which takes segmented messages
   // as-is.
   struct ScatterGatherPort : public RecordingWritePort {
@@ -325,13 +306,14 @@ TEST(WriteAsyncTest, UsesBackendSegmentedTryWrite) {
   Recorder recorder;
   port.connect(recorder.callback());
 
-  auto msg = std::make_unique<TwoSegmentMessage>();
+  std::unique_ptr<SegmentedMessageData> msg =
+      std::make_unique<TwoSegmentMessage>();
   SegmentedMessageData *original = msg.get();
   port.rejectAll = true;
-  port.writeAsync(std::move(msg));
-  EXPECT_EQ(recorder.size(), 0u);
+  EXPECT_FALSE(port.tryWriteAsync(msg));
+  EXPECT_EQ(msg.get(), original);
   port.rejectAll = false;
-  port.poll();
+  EXPECT_TRUE(port.tryWriteAsync(msg));
   EXPECT_TRUE(recorder.allSucceeded(1));
   // The original message was handed over without being flattened.
   ASSERT_EQ(port.received.size(), 1u);
@@ -339,71 +321,29 @@ TEST(WriteAsyncTest, UsesBackendSegmentedTryWrite) {
   EXPECT_TRUE(port.written().empty());
 }
 
-TEST(WriteAsyncTest, FifoOrderAndBackpressure) {
+TEST(TryWriteAsyncTest, InvalidCallsThrow) {
   UIntType ui8("ui8", 8);
   RecordingWritePort port(&ui8);
-  Recorder recorder;
-  port.connect(recorder.callback());
-
-  // While backpressured, nothing completes.
-  port.rejectAll = true;
-  for (uint8_t i = 0; i < 8; ++i)
-    port.writeAsync(makeMsg({i}));
-  EXPECT_FALSE(port.poll());
-  EXPECT_FALSE(port.poll());
-  EXPECT_EQ(recorder.size(), 0u);
-
-  port.rejectAll = false;
-  port.rejectCount = 5;
-  for (int i = 0; i < 20; ++i)
-    port.poll();
-  EXPECT_TRUE(recorder.allSucceeded(8));
-  auto written = port.written();
-  ASSERT_EQ(written.size(), 8u);
-  for (uint8_t i = 0; i < 8; ++i)
-    EXPECT_EQ(written[i], std::vector<uint8_t>{i});
-}
-
-TEST(WriteAsyncTest, FailurePassesException) {
-  UIntType ui8("ui8", 8);
-  RecordingWritePort port(&ui8);
-  Recorder recorder;
-  port.connect(recorder.callback());
-  port.throwAfter = 0;
-
-  port.writeAsync(makeMsg({1}));
-  port.writeAsync(makeMsg({2}));
-  port.poll();
-
-  ASSERT_EQ(recorder.size(), 2u);
-  EXPECT_EQ(errorMessage<std::out_of_range>(recorder[0]), "injected failure");
-  // Subsequent writes are unaffected.
-  EXPECT_FALSE(recorder[1]);
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{2}}));
-}
-
-TEST(WriteAsyncTest, InvalidCallsThrow) {
-  UIntType ui8("ui8", 8);
-  RecordingWritePort port(&ui8);
-  EXPECT_THROW(port.writeAsync(makeMsg({1})), std::runtime_error);
+  EXPECT_THROW(tryAsync(port, {1}), std::runtime_error);
   EXPECT_THROW(port.connect(WriteChannelPort::WriteCallback()),
                std::invalid_argument);
   EXPECT_FALSE(port.isConnected());
 
   Recorder recorder;
   port.connect(recorder.callback());
-  EXPECT_THROW(port.writeAsync(nullptr), std::invalid_argument);
+  std::unique_ptr<SegmentedMessageData> null;
+  EXPECT_THROW(port.tryWriteAsync(null), std::invalid_argument);
 }
 
-TEST(WriteAsyncTest, ModesAreExclusive) {
+TEST(TryWriteAsyncTest, ModesAreExclusive) {
   UIntType ui8("ui8", 8);
   RecordingWritePort port(&ui8);
   Recorder recorder;
   MessageData data(std::vector<uint8_t>{1});
 
-  // Sync mode rejects writeAsync() and connecting with a callback.
+  // Sync mode rejects tryWriteAsync() and connecting with a callback.
   port.connect();
-  EXPECT_THROW(port.writeAsync(makeMsg({1})), std::runtime_error);
+  EXPECT_THROW(tryAsync(port, {1}), std::runtime_error);
   EXPECT_THROW(port.connect(recorder.callback()), std::runtime_error);
   port.write(data);
   EXPECT_TRUE(port.tryWrite(data));
@@ -430,185 +370,103 @@ TEST(WriteAsyncTest, ModesAreExclusive) {
   EXPECT_EQ(recorder.size(), 0u);
 }
 
-TEST(WriteAsyncTest, SyncWritesThrowInCallbacks) {
-  UIntType ui8("ui8", 8);
-  RecordingWritePort port(&ui8);
-  MessageData data(std::vector<uint8_t>{9});
-  int syncCallsRejected = 0;
-  Recorder recorder;
-  recorder.onResult = [&](size_t) {
-    auto expectThrow = [&](auto &&fn) {
-      try {
-        fn();
-      } catch (const std::runtime_error &) {
-        ++syncCallsRejected;
-      }
-    };
-    expectThrow([&] { port.write(data); });
-    expectThrow([&] { port.write(makeMsg({9})); });
-    expectThrow([&] { port.tryWrite(data); });
-    expectThrow([&] {
-      std::unique_ptr<SegmentedMessageData> msg = makeMsg({9});
-      port.tryWrite(msg);
-    });
-    expectThrow([&] { port.flush(); });
-  };
-  port.connect(recorder.callback());
-
-  // A callback invoked by writeAsync() itself.
-  port.writeAsync(makeMsg({1}));
-  EXPECT_EQ(syncCallsRejected, 5);
-
-  // Callbacks invoked by poll(). The first message's callback must not be able
-  // to sneak a message in ahead of the second.
-  port.rejectAll = true;
-  port.writeAsync(makeMsg({2}));
-  port.writeAsync(makeMsg({3}));
-  port.rejectAll = false;
-  port.poll();
-  EXPECT_EQ(syncCallsRejected, 15);
-  EXPECT_TRUE(recorder.allSucceeded(3));
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{1}, {2}, {3}}));
-}
-
-TEST(WriteAsyncTest, DisconnectFailsPendingWrites) {
-  UIntType ui8("ui8", 8);
-  RecordingWritePort port(&ui8);
-  Recorder recorder;
-  port.connect(recorder.callback());
-  port.rejectAll = true;
-
-  for (uint8_t i = 0; i < 3; ++i)
-    port.writeAsync(makeMsg({i}));
-  port.poll();
-
-  port.disconnect();
-  ASSERT_EQ(recorder.size(), 3u);
-  for (size_t i = 0; i < 3; ++i)
-    EXPECT_NE(
-        errorMessage<std::runtime_error>(recorder[i]).find("disconnected"),
-        std::string::npos);
-  EXPECT_TRUE(port.written().empty());
-
-  // The port can be reconnected with a new callback and used again.
-  port.rejectAll = false;
-  Recorder recorder2;
-  port.connect(recorder2.callback());
-  port.writeAsync(makeMsg({4}));
-  port.poll();
-  EXPECT_TRUE(recorder2.allSucceeded(1));
-  EXPECT_EQ(recorder.size(), 3u);
-  EXPECT_EQ(port.written().size(), 1u);
-}
-
-TEST(WriteAsyncTest, DestructorFailsPendingWrites) {
-  UIntType ui8("ui8", 8);
-  Recorder recorder;
-  {
-    RecordingWritePort port(&ui8);
-    port.connect(recorder.callback());
-    port.rejectAll = true;
-    port.writeAsync(makeMsg({1}));
-  }
-  ASSERT_EQ(recorder.size(), 1u);
-  EXPECT_NE(errorMessage<std::runtime_error>(recorder[0]).find("destroyed"),
-            std::string::npos);
-}
-
-TEST(WriteAsyncTest, DestructorCallbacksCannotStartWrites) {
-  UIntType ui8("ui8", 8);
-  WriteChannelPort *port = nullptr;
-  bool sawConnected = false;
-  int retriesRejected = 0, reconnectsRejected = 0;
-  Recorder recorder;
-  recorder.onResult = [&](size_t) {
-    // The derived port has already been destroyed, so neither a retry nor a
-    // reconnect may reach the backend.
-    sawConnected |= port->isConnected();
-    // Even after an explicit disconnect().
-    port->disconnect();
+/// Count how many of the sync write APIs throw when called on `port`.
+int countRejectedSyncWrites(WriteChannelPort &port) {
+  MessageData data(std::vector<uint8_t>{9, 9});
+  int rejected = 0;
+  auto expectThrow = [&](auto &&fn) {
     try {
-      port->connect([](std::exception_ptr) {});
+      fn();
     } catch (const std::runtime_error &) {
-      ++reconnectsRejected;
-    }
-    try {
-      port->writeAsync(makeMsg({2}));
-    } catch (const std::runtime_error &) {
-      ++retriesRejected;
+      ++rejected;
     }
   };
-  {
-    RecordingWritePort recordingPort(&ui8);
-    port = &recordingPort;
-    recordingPort.connect(recorder.callback());
-    recordingPort.rejectAll = true;
-    recordingPort.writeAsync(makeMsg({1}));
-  }
-  EXPECT_EQ(recorder.size(), 1u);
-  EXPECT_FALSE(sawConnected);
-  EXPECT_EQ(reconnectsRejected, 1);
-  EXPECT_EQ(retriesRejected, 1);
+  expectThrow([&] { port.write(data); });
+  expectThrow([&] { port.write(makeMsg({9, 9})); });
+  expectThrow([&] { port.tryWrite(data); });
+  expectThrow([&] {
+    std::unique_ptr<SegmentedMessageData> msg = makeMsg({9, 9});
+    port.tryWrite(msg);
+  });
+  expectThrow([&] { port.flush(); });
+  return rejected;
 }
 
-TEST(WriteAsyncTest, DisconnectFromCancellationCallbackReportsAll) {
-  UIntType ui8("ui8", 8);
-  for (bool viaDestructor : {false, true}) {
-    SCOPED_TRACE(viaDestructor ? "destructor" : "disconnect");
-    WriteChannelPort *port = nullptr;
+TEST(TryWriteAsyncTest, SyncWritesThrowInCallbacks) {
+  // A callback invoked by tryWriteAsync() itself.
+  {
+    UIntType ui16("ui16", 16);
+    RecordingWritePort port(&ui16);
+    int rejected = 0;
     Recorder recorder;
-    // Disconnecting from the first cancellation callback must not suppress
-    // the rest.
-    recorder.onResult = [&](size_t) { port->disconnect(); };
-    {
-      RecordingWritePort recordingPort(&ui8);
-      port = &recordingPort;
-      recordingPort.connect(recorder.callback());
-      recordingPort.rejectAll = true;
-      for (uint8_t i = 0; i < 3; ++i)
-        recordingPort.writeAsync(makeMsg({i}));
-      if (!viaDestructor)
-        recordingPort.disconnect();
-    }
-    ASSERT_EQ(recorder.size(), 3u);
-    for (size_t i = 0; i < 3; ++i)
-      EXPECT_TRUE(recorder[i]);
+    recorder.onResult = [&](size_t) {
+      rejected += countRejectedSyncWrites(port);
+    };
+    port.connect(recorder.callback());
+    EXPECT_TRUE(tryAsync(port, {1, 2}));
+    EXPECT_EQ(rejected, 5);
+    EXPECT_EQ(port.written(), (Frames{{1, 2}}));
+  }
+  // A callback invoked by poll(), once a windowed message's remaining frames
+  // are sent.
+  {
+    TwoFrameWindow types;
+    RecordingWritePort port(&types.window);
+    int rejected = 0;
+    Recorder recorder;
+    recorder.onResult = [&](size_t) {
+      rejected += countRejectedSyncWrites(port);
+    };
+    port.connect(recorder.callback(),
+                 ChannelPort::ConnectOptions(std::nullopt, true));
+    port.acceptBudget = 1;
+    EXPECT_TRUE(tryAsync(port, {1, 2, 3, 4}));
+    port.acceptBudget = -1;
+    port.poll();
+    EXPECT_EQ(rejected, 5);
+    EXPECT_TRUE(recorder.allSucceeded(1));
+    EXPECT_EQ(port.written(), (Frames{{1, 2}, {3, 4}}));
   }
 }
 
-TEST(WriteAsyncTest, CallbackMayWriteAndDisconnect) {
+TEST(TryWriteAsyncTest, CallbackChainDoesNotRecurse) {
   UIntType ui8("ui8", 8);
   RecordingWritePort port(&ui8);
+  constexpr size_t numMsgs = 100000;
+  size_t depth = 0, maxDepth = 0;
   Recorder recorder;
   recorder.onResult = [&](size_t idx) {
-    if (idx == 0)
-      port.writeAsync(makeMsg({2}));
-    // Disconnecting from a callback fails the remaining writes without
-    // deadlocking.
-    else if (idx == 1)
-      port.disconnect();
+    ++depth;
+    maxDepth = std::max(maxDepth, depth);
+    // Write the next message upon completion of the previous one.
+    if (idx + 1 < numMsgs)
+      EXPECT_TRUE(tryAsync(port, {static_cast<uint8_t>(idx + 1)}));
+    --depth;
   };
   port.connect(recorder.callback());
 
-  port.rejectAll = true;
-  port.writeAsync(makeMsg({1}));
-  port.writeAsync(makeMsg({3}));
-  port.writeAsync(makeMsg({4}));
-  port.rejectAll = false;
-  port.poll();
+  EXPECT_TRUE(tryAsync(port, {0}));
+  EXPECT_TRUE(recorder.allSucceeded(numMsgs));
+  EXPECT_EQ(port.written().size(), numMsgs);
+  EXPECT_EQ(maxDepth, 1u);
+}
 
+TEST(TryWriteAsyncTest, CallbackMayDisconnect) {
+  UIntType ui8("ui8", 8);
+  RecordingWritePort port(&ui8);
+  Recorder recorder;
+  recorder.onResult = [&](size_t) { port.disconnect(); };
+  port.connect(recorder.callback());
+
+  EXPECT_TRUE(tryAsync(port, {1}));
+  EXPECT_TRUE(recorder.allSucceeded(1));
   EXPECT_FALSE(port.isConnected());
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{1}, {3}}));
-  ASSERT_EQ(recorder.size(), 4u);
-  EXPECT_FALSE(recorder[0]);
-  EXPECT_FALSE(recorder[1]);
-  EXPECT_TRUE(recorder[2]);
-  EXPECT_TRUE(recorder[3]);
-  // pollWriteImpl() isn't called on a port which was disconnected.
+  EXPECT_THROW(tryAsync(port, {2}), std::runtime_error);
+  EXPECT_FALSE(port.poll());
   EXPECT_EQ(port.pollImplCount, 0);
 }
 
-TEST(WriteAsyncTest, ThrowingCallbackIsContained) {
+TEST(TryWriteAsyncTest, ThrowingCallbackIsContained) {
   UIntType ui8("ui8", 8);
   RecordingWritePort port(&ui8);
   Recorder recorder;
@@ -618,150 +476,90 @@ TEST(WriteAsyncTest, ThrowingCallbackIsContained) {
   };
   port.connect(recorder.callback());
 
-  port.writeAsync(makeMsg({1}));
-  port.writeAsync(makeMsg({2}));
-  EXPECT_NO_THROW(port.poll());
+  EXPECT_NO_THROW(tryAsync(port, {1}));
+  EXPECT_TRUE(tryAsync(port, {2}));
   EXPECT_TRUE(recorder.allSucceeded(2));
   EXPECT_EQ(port.written().size(), 2u);
 }
 
-TEST(WriteAsyncTest, VoidTypeIsPadded) {
+TEST(TryWriteAsyncTest, VoidTypeIsPadded) {
   VoidType voidType("void");
   RecordingWritePort port(&voidType);
   Recorder recorder;
   port.connect(recorder.callback());
 
-  port.writeAsync(std::make_unique<MessageData>());
-  port.poll();
+  std::unique_ptr<SegmentedMessageData> msg = std::make_unique<MessageData>();
+  EXPECT_TRUE(port.tryWriteAsync(msg));
   EXPECT_TRUE(recorder.allSucceeded(1));
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{0}}));
+  EXPECT_EQ(port.written(), (Frames{{0}}));
 }
 
-TEST(WriteAsyncTest, WindowedMessageCompletesAfterAllFrames) {
+//===----------------------------------------------------------------------===//
+// Windowed messages, whose frames may be sent across several calls.
+//===----------------------------------------------------------------------===//
+
+TEST(TryWriteAsyncTest, WindowedMessageCompletesAfterAllFrames) {
   TwoFrameWindow types;
   RecordingWritePort port(&types.window);
   Recorder recorder;
   port.connect(recorder.callback(),
                ChannelPort::ConnectOptions(std::nullopt, true));
 
-  // Accept the first frame, then backpressure.
+  // The first frame is accepted, so the message is, but the second isn't.
   port.acceptBudget = 1;
-  port.writeAsync(makeMsg({1, 2, 3, 4}));
+  std::unique_ptr<SegmentedMessageData> msg = makeMsg({1, 2, 3, 4});
+  EXPECT_TRUE(port.tryWriteAsync(msg));
+  EXPECT_FALSE(msg);
   EXPECT_EQ(recorder.size(), 0u);
   EXPECT_EQ(port.written().size(), 1u);
   EXPECT_FALSE(port.poll());
   EXPECT_EQ(recorder.size(), 0u);
 
-  // The callback fires only once the last frame is sent.
+  // The callback is invoked once poll() sends the last frame.
   port.acceptBudget = -1;
   EXPECT_TRUE(port.poll());
   EXPECT_TRUE(recorder.allSucceeded(1));
-  EXPECT_EQ(port.written(),
-            (std::vector<std::vector<uint8_t>>{{1, 2}, {3, 4}}));
-  EXPECT_EQ(receive(&types.window, port.written()),
-            (std::vector<std::vector<uint8_t>>{{1, 2, 3, 4}}));
+  EXPECT_EQ(receive(&types.window, port.written()), (Frames{{1, 2, 3, 4}}));
 }
 
-TEST(WriteAsyncTest, WindowedFailureBeforeAnyFrameIsRecoverable) {
+TEST(TryWriteAsyncTest, WindowedPendingFramesBlockNextMessage) {
   TwoFrameWindow types;
   RecordingWritePort port(&types.window);
+  std::vector<size_t> framesWrittenAtCompletion;
   Recorder recorder;
+  recorder.onResult = [&](size_t) {
+    framesWrittenAtCompletion.push_back(port.written().size());
+  };
   port.connect(recorder.callback(),
                ChannelPort::ConnectOptions(std::nullopt, true));
-  port.throwAfter = 0;
 
-  // The first frame fails, so nothing of the message reached the receiver and
-  // the next message can be sent.
-  port.writeAsync(makeMsg({1, 2, 3, 4}));
-  port.writeAsync(makeMsg({5, 6, 7, 8}));
-  ASSERT_EQ(recorder.size(), 2u);
-  EXPECT_EQ(errorMessage<std::out_of_range>(recorder[0]), "injected failure");
-  EXPECT_FALSE(recorder[1]);
+  port.acceptBudget = 1;
+  EXPECT_TRUE(tryAsync(port, {1, 2, 3, 4}));
+  // While the first message has frames left, the next isn't accepted.
+  std::unique_ptr<SegmentedMessageData> msg = makeMsg({5, 6, 7, 8});
+  EXPECT_FALSE(port.tryWriteAsync(msg));
+  EXPECT_TRUE(msg);
+  EXPECT_EQ(recorder.size(), 0u);
+
+  // Once the backend is ready, tryWriteAsync() finishes the first message
+  // (invoking its callback) before writing the second.
+  port.acceptBudget = -1;
+  EXPECT_TRUE(port.tryWriteAsync(msg));
+  EXPECT_TRUE(recorder.allSucceeded(2));
+  EXPECT_EQ(framesWrittenAtCompletion, (std::vector<size_t>{2, 4}));
   EXPECT_EQ(receive(&types.window, port.written()),
-            (std::vector<std::vector<uint8_t>>{{5, 6, 7, 8}}));
+            (Frames{{1, 2, 3, 4}, {5, 6, 7, 8}}));
 }
 
-TEST(WriteAsyncTest, WindowedFailureMidMessageFaultsStream) {
-  TwoFrameWindow types;
-  RecordingWritePort port(&types.window);
-  Recorder recorder;
-  ChannelPort::ConnectOptions opts(std::nullopt, true);
-  port.connect(recorder.callback(), opts);
-  // The first frame is sent, then the second fails.
-  port.throwAfter = 1;
-  port.rejectAll = true;
-  port.writeAsync(makeMsg({1, 2, 3, 4}));
-  port.writeAsync(makeMsg({5, 6, 7, 8}));
-  port.rejectAll = false;
-  port.poll();
-
-  ASSERT_EQ(recorder.size(), 2u);
-  EXPECT_EQ(errorMessage<std::out_of_range>(recorder[0]), "injected failure");
-  // Sending {5, 6, 7, 8} would complete the receiver's partial message with
-  // the wrong data, so it fails instead.
-  EXPECT_NE(
-      errorMessage<std::runtime_error>(recorder[1]).find("framing is corrupt"),
-      std::string::npos);
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{1, 2}}));
-  EXPECT_TRUE(receive(&types.window, port.written()).empty());
-
-  // Later writes fail too (promptly, via the fast path).
-  port.writeAsync(makeMsg({9, 10, 11, 12}));
-  ASSERT_EQ(recorder.size(), 3u);
-  EXPECT_TRUE(recorder[2]);
-  EXPECT_EQ(port.written().size(), 1u);
-
-  // Reconnecting clears the fault. (A real caller must first reset the
-  // receiver, which still holds the partial {1, 2}.)
-  port.disconnect();
-  port.connect(recorder.callback(), opts);
-  port.writeAsync(makeMsg({5, 6, 7, 8}));
-  ASSERT_EQ(recorder.size(), 4u);
-  EXPECT_FALSE(recorder[3]);
-  EXPECT_EQ(port.written(),
-            (std::vector<std::vector<uint8_t>>{{1, 2}, {5, 6}, {7, 8}}));
-}
-
-TEST(WriteAsyncTest, ReconnectFromCancellationCallback) {
-  UIntType ui8("ui8", 8);
-  RecordingWritePort port(&ui8);
-  Recorder oldRecorder, newRecorder;
-  // Recover from the first cancellation by reconnecting with a new callback.
-  oldRecorder.onResult = [&](size_t idx) {
-    if (idx != 0)
-      return;
-    port.disconnect();
-    port.connect(newRecorder.callback());
-  };
-  port.connect(oldRecorder.callback());
-  port.rejectAll = true;
-  for (uint8_t i = 0; i < 3; ++i)
-    port.writeAsync(makeMsg({i}));
-
-  port.disconnect();
-  // Every cancelled write is reported to the old callback...
-  ASSERT_EQ(oldRecorder.size(), 3u);
-  for (size_t i = 0; i < 3; ++i)
-    EXPECT_TRUE(oldRecorder[i]);
-  // ...and the new connection survives the outer disconnect().
-  EXPECT_TRUE(port.isConnected());
-  port.rejectAll = false;
-  port.writeAsync(makeMsg({9}));
-  EXPECT_TRUE(newRecorder.allSucceeded(1));
-  EXPECT_EQ(oldRecorder.size(), 3u);
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{9}}));
-}
-
-TEST(WriteAsyncTest, PollReportsProgressOnRemainingFrames) {
+TEST(TryWriteAsyncTest, PollReportsProgressOnRemainingFrames) {
   ThreeFrameWindow types;
   RecordingWritePort port(&types.window);
   Recorder recorder;
   port.connect(recorder.callback(),
                ChannelPort::ConnectOptions(std::nullopt, true));
 
-  // The first frame is sent immediately, then backpressure.
   port.acceptBudget = 1;
-  port.writeAsync(makeMsg({1, 2, 3, 4, 5, 6}));
+  EXPECT_TRUE(tryAsync(port, {1, 2, 3, 4, 5, 6}));
   EXPECT_EQ(port.written().size(), 1u);
 
   // Sending the second frame is progress, even though the third is stuck.
@@ -775,134 +573,218 @@ TEST(WriteAsyncTest, PollReportsProgressOnRemainingFrames) {
   EXPECT_TRUE(port.poll());
   EXPECT_TRUE(recorder.allSucceeded(1));
   EXPECT_EQ(receive(&types.window, port.written()),
-            (std::vector<std::vector<uint8_t>>{{1, 2, 3, 4, 5, 6}}));
+            (Frames{{1, 2, 3, 4, 5, 6}}));
 }
 
-TEST(WriteAsyncTest, UntranslatedMultiFrameFailureFaultsStream) {
+TEST(TryWriteAsyncTest, WindowedFrameFailureReportedViaCallback) {
   TwoFrameWindow types;
   RecordingWritePort port(&types.window);
-  port.splitFrames = true;
   Recorder recorder;
-  ChannelPort::ConnectOptions opts(std::nullopt, /*translateMessage=*/false);
+  port.connect(recorder.callback(),
+               ChannelPort::ConnectOptions(std::nullopt, true));
+
+  port.acceptBudget = 1;
+  EXPECT_TRUE(tryAsync(port, {1, 2, 3, 4}));
+  // Sending the accepted message's last frame fails.
+  port.acceptBudget = -1;
+  port.throwAfter = 0;
+  EXPECT_TRUE(port.poll());
+  ASSERT_EQ(recorder.size(), 1u);
+  EXPECT_EQ(errorMessage<std::out_of_range>(recorder[0]), "injected failure");
+
+  // The port remains usable.
+  EXPECT_TRUE(tryAsync(port, {5, 6, 7, 8}));
+  ASSERT_EQ(recorder.size(), 2u);
+  EXPECT_FALSE(recorder[1]);
+  EXPECT_EQ(port.written(), (Frames{{1, 2}, {5, 6}, {7, 8}}));
+}
+
+TEST(TryWriteAsyncTest, WindowedFailureInTryWriteAsyncThrows) {
+  TwoFrameWindow types;
+  RecordingWritePort port(&types.window);
+  Recorder recorder;
+  port.connect(recorder.callback(),
+               ChannelPort::ConnectOptions(std::nullopt, true));
+
+  // The first frame is sent, then the second fails. As with tryWrite(), the
+  // error is thrown and the caller keeps the message.
+  port.throwAfter = 1;
+  std::unique_ptr<SegmentedMessageData> msg = makeMsg({1, 2, 3, 4});
+  EXPECT_THROW(port.tryWriteAsync(msg), std::out_of_range);
+  EXPECT_TRUE(msg);
+  EXPECT_EQ(recorder.size(), 0u);
+  // Its remaining frame was dropped rather than left for poll() to send.
+  EXPECT_FALSE(port.poll());
+  EXPECT_EQ(recorder.size(), 0u);
+  EXPECT_EQ(port.written(), (Frames{{1, 2}}));
+
+  EXPECT_TRUE(tryAsync(port, {5, 6, 7, 8}));
+  EXPECT_TRUE(recorder.allSucceeded(1));
+  EXPECT_EQ(port.written(), (Frames{{1, 2}, {5, 6}, {7, 8}}));
+}
+
+TEST(TryWriteAsyncTest, DisconnectFailsPendingWrite) {
+  TwoFrameWindow types;
+  RecordingWritePort port(&types.window);
+  Recorder recorder;
+  ChannelPort::ConnectOptions opts(std::nullopt, true);
   port.connect(recorder.callback(), opts);
 
-  // Single-frame messages which fail don't fault the stream.
-  port.throwAfter = 0;
-  port.writeAsync(makeMsg({1, 2}));
-  port.writeAsync(makeMsg({3, 4}));
-  ASSERT_EQ(recorder.size(), 2u);
-  EXPECT_EQ(errorMessage<std::out_of_range>(recorder[0]), "injected failure");
-  EXPECT_FALSE(recorder[1]);
+  port.acceptBudget = 1;
+  EXPECT_TRUE(tryAsync(port, {1, 2, 3, 4}));
+  port.disconnect();
+  ASSERT_EQ(recorder.size(), 1u);
+  EXPECT_NE(errorMessage<std::runtime_error>(recorder[0]).find("disconnected"),
+            std::string::npos);
 
-  // The backend sends the first of two frames, then fails.
-  port.throwAfter = 1;
-  port.writeAsync(makeMsg({5, 6, 7, 8}));
-  port.writeAsync(makeMsg({9, 10, 11, 12}));
-  ASSERT_EQ(recorder.size(), 4u);
-  EXPECT_EQ(errorMessage<std::out_of_range>(recorder[2]), "injected failure");
-  EXPECT_NE(
-      errorMessage<std::runtime_error>(recorder[3]).find("framing is corrupt"),
-      std::string::npos);
-  EXPECT_EQ(port.written(),
-            (std::vector<std::vector<uint8_t>>{{3, 4}, {5, 6}}));
+  // The port can be reconnected with a new callback and used again.
+  port.acceptBudget = -1;
+  Recorder recorder2;
+  port.connect(recorder2.callback(), opts);
+  EXPECT_TRUE(tryAsync(port, {5, 6, 7, 8}));
+  EXPECT_TRUE(recorder2.allSucceeded(1));
+  EXPECT_EQ(recorder.size(), 1u);
+  EXPECT_EQ(port.written(), (Frames{{1, 2}, {5, 6}, {7, 8}}));
 }
 
-TEST(WriteAsyncTest, DrivenByServiceThread) {
-  UIntType ui8("ui8", 8);
-  RecordingWritePort port(&ui8);
-  constexpr size_t numMsgs = 100;
+TEST(TryWriteAsyncTest, ReconnectFromCompletionCallback) {
+  TwoFrameWindow types;
+  RecordingWritePort port(&types.window);
+  ChannelPort::ConnectOptions opts(std::nullopt, true);
+  Recorder oldRecorder, newRecorder;
+  // Recover from the cancellation by reconnecting with a new callback.
+  oldRecorder.onResult = [&](size_t) {
+    port.disconnect();
+    port.connect(newRecorder.callback(), opts);
+  };
+  port.connect(oldRecorder.callback(), opts);
+  port.acceptBudget = 1;
+  EXPECT_TRUE(tryAsync(port, {1, 2, 3, 4}));
+
+  port.disconnect();
+  // The cancellation is reported to the old callback, and the new connection
+  // survives the outer disconnect().
+  ASSERT_EQ(oldRecorder.size(), 1u);
+  EXPECT_TRUE(oldRecorder[0]);
+  EXPECT_TRUE(port.isConnected());
+  port.acceptBudget = -1;
+  EXPECT_TRUE(tryAsync(port, {5, 6, 7, 8}));
+  EXPECT_TRUE(newRecorder.allSucceeded(1));
+  EXPECT_EQ(oldRecorder.size(), 1u);
+}
+
+TEST(TryWriteAsyncTest, DestructorFailsPendingWrite) {
+  TwoFrameWindow types;
+  Recorder recorder;
+  {
+    RecordingWritePort port(&types.window);
+    port.connect(recorder.callback(),
+                 ChannelPort::ConnectOptions(std::nullopt, true));
+    port.acceptBudget = 1;
+    EXPECT_TRUE(tryAsync(port, {1, 2, 3, 4}));
+  }
+  ASSERT_EQ(recorder.size(), 1u);
+  EXPECT_NE(errorMessage<std::runtime_error>(recorder[0]).find("destroyed"),
+            std::string::npos);
+}
+
+TEST(TryWriteAsyncTest, DestructorCallbacksCannotUsePort) {
+  TwoFrameWindow types;
+  WriteChannelPort *port = nullptr;
+  bool sawConnected = false;
+  int rejected = 0;
+  Recorder recorder;
+  recorder.onResult = [&](size_t) {
+    // The derived port has already been destroyed, so nothing may reach the
+    // backend, even after an explicit disconnect().
+    sawConnected |= port->isConnected();
+    port->disconnect();
+    try {
+      port->connect([](std::exception_ptr) {});
+    } catch (const std::runtime_error &) {
+      ++rejected;
+    }
+    try {
+      tryAsync(*port, {5, 6, 7, 8});
+    } catch (const std::runtime_error &) {
+      ++rejected;
+    }
+    rejected += countRejectedSyncWrites(*port);
+  };
+  {
+    RecordingWritePort recordingPort(&types.window);
+    port = &recordingPort;
+    recordingPort.connect(recorder.callback(),
+                          ChannelPort::ConnectOptions(std::nullopt, true));
+    recordingPort.acceptBudget = 1;
+    EXPECT_TRUE(tryAsync(recordingPort, {1, 2, 3, 4}));
+  }
+  EXPECT_EQ(recorder.size(), 1u);
+  EXPECT_FALSE(sawConnected);
+  EXPECT_EQ(rejected, 7);
+}
+
+TEST(TryWriteAsyncTest, DrivenByServiceThread) {
+  TwoFrameWindow types;
+  RecordingWritePort port(&types.window);
+  constexpr size_t numMsgs = 1000;
   std::promise<void> allDone;
   std::atomic<size_t> completed = 0;
-  std::atomic<bool> onCallerThread = false;
-  auto callerThread = std::this_thread::get_id();
-  port.connect([&](std::exception_ptr e) {
-    EXPECT_FALSE(e);
-    if (std::this_thread::get_id() == callerThread)
-      onCallerThread = true;
-    if (++completed == numMsgs)
-      allDone.set_value();
-  });
-  // Backpressure while queueing so that all the writes are completed by the
-  // service thread.
-  port.rejectAll = true;
+  port.connect(
+      [&](std::exception_ptr e) {
+        EXPECT_FALSE(e);
+        if (++completed == numMsgs)
+          allDone.set_value();
+      },
+      ChannelPort::ConnectOptions(std::nullopt, true));
+  // Backpressure every other frame, so messages are completed both by
+  // tryWriteAsync() on this thread and by poll() on the service thread.
+  port.alternate = true;
 
   AcceleratorServiceThread serviceThread;
   serviceThread.addTask([&port]() { port.poll(); });
-  for (size_t i = 0; i < numMsgs; ++i)
-    port.writeAsync(makeMsg({static_cast<uint8_t>(i)}));
-  port.rejectCount = 50;
-  port.rejectAll = false;
-
-  auto future = allDone.get_future();
-  ASSERT_EQ(future.wait_for(std::chrono::seconds(10)),
-            std::future_status::ready);
-  serviceThread.stop();
-  // Callbacks run on the service thread.
-  EXPECT_FALSE(onCallerThread);
-
-  auto written = port.written();
-  ASSERT_EQ(written.size(), numMsgs);
-  for (size_t i = 0; i < numMsgs; ++i)
-    EXPECT_EQ(written[i], std::vector<uint8_t>{static_cast<uint8_t>(i)});
-}
-
-TEST(WriteAsyncTest, FastPathRacesWithServiceThread) {
-  UIntType ui16("ui16", 16);
-  RecordingWritePort port(&ui16);
-  constexpr size_t numMsgs = 5000;
-  std::promise<void> allDone;
-  std::atomic<size_t> completed = 0;
-  port.connect([&](std::exception_ptr e) {
-    EXPECT_FALSE(e);
-    if (++completed == numMsgs)
-      allDone.set_value();
-  });
-  // Intermittent backpressure so that writes alternate between the fast path
-  // and being completed by the service thread.
-  port.rejectCount = 1000;
-
-  AcceleratorServiceThread serviceThread;
-  serviceThread.addTask([&port]() { port.poll(); });
+  Frames expected;
   for (size_t i = 0; i < numMsgs; ++i) {
-    port.writeAsync(makeMsg(
-        {static_cast<uint8_t>(i & 0xFF), static_cast<uint8_t>(i >> 8)}));
-    if (i % 500 == 0)
-      port.rejectCount = 3;
+    std::vector<uint8_t> bytes = {static_cast<uint8_t>(i), 1,
+                                  static_cast<uint8_t>(i >> 8), 2};
+    expected.push_back(bytes);
+    std::unique_ptr<SegmentedMessageData> msg = makeMsg(bytes);
+    while (!port.tryWriteAsync(msg))
+      std::this_thread::yield();
   }
 
   auto future = allDone.get_future();
   ASSERT_EQ(future.wait_for(std::chrono::seconds(10)),
             std::future_status::ready);
   serviceThread.stop();
-
-  auto written = port.written();
-  ASSERT_EQ(written.size(), numMsgs);
-  for (size_t i = 0; i < numMsgs; ++i)
-    EXPECT_EQ(written[i], (std::vector<uint8_t>{static_cast<uint8_t>(i & 0xFF),
-                                                static_cast<uint8_t>(i >> 8)}));
+  EXPECT_EQ(receive(&types.window, port.written()), expected);
 }
 
 //===----------------------------------------------------------------------===//
-// TypedWritePort::writeAsync
+// TypedWritePort::tryWriteAsync
 //===----------------------------------------------------------------------===//
 
-TEST(WriteAsyncTest, TypedWritePortValue) {
+TEST(TryWriteAsyncTest, TypedWritePortValue) {
   UIntType ui24("ui24", 24);
   RecordingWritePort port(&ui24);
   TypedWritePort<uint32_t> typed(port);
   Recorder recorder;
   typed.connect(recorder.callback());
 
-  typed.writeAsync(0x030201u);
-  typed.writeAsync(std::make_unique<uint32_t>(0x060504u));
-  port.poll();
+  EXPECT_TRUE(typed.tryWriteAsync(0x030201u));
+  auto ptr = std::make_unique<uint32_t>(0x060504u);
+  port.rejectAll = true;
+  EXPECT_FALSE(typed.tryWriteAsync(ptr));
+  EXPECT_TRUE(ptr);
+  port.rejectAll = false;
+  EXPECT_TRUE(typed.tryWriteAsync(ptr));
+  EXPECT_FALSE(ptr);
   EXPECT_TRUE(recorder.allSucceeded(2));
   // Serialized to the 3-byte wire width.
-  EXPECT_EQ(port.written(),
-            (std::vector<std::vector<uint8_t>>{{1, 2, 3}, {4, 5, 6}}));
+  EXPECT_EQ(port.written(), (Frames{{1, 2, 3}, {4, 5, 6}}));
 }
 
-TEST(WriteAsyncTest, TypedWritePortTypeCheck) {
+TEST(TryWriteAsyncTest, TypedWritePortTypeCheck) {
   UIntType ui32("ui32", 32);
   RecordingWritePort port(&ui32);
   TypedWritePort<int32_t> typed(port); // int32_t expects SIntType
@@ -911,31 +793,38 @@ TEST(WriteAsyncTest, TypedWritePortTypeCheck) {
   EXPECT_FALSE(port.isConnected());
 }
 
-TEST(WriteAsyncTest, TypedWritePortSegmented) {
+TEST(TryWriteAsyncTest, TypedWritePortSegmented) {
   BitsType bits40("i40", 40);
   RecordingWritePort port(&bits40);
   TypedWritePort<TwoSegmentMessage, /*SkipTypeCheck=*/true> typed(port);
   Recorder recorder;
   typed.connect(recorder.callback());
 
-  typed.writeAsync(std::make_unique<TwoSegmentMessage>());
-  port.poll();
+  auto msg = std::make_unique<TwoSegmentMessage>();
+  TwoSegmentMessage *original = msg.get();
+  port.rejectAll = true;
+  EXPECT_FALSE(typed.tryWriteAsync(msg));
+  EXPECT_EQ(msg.get(), original);
+  port.throwAfter = 0;
+  port.rejectAll = false;
+  EXPECT_THROW(typed.tryWriteAsync(msg), std::out_of_range);
+  EXPECT_EQ(msg.get(), original);
+  EXPECT_TRUE(typed.tryWriteAsync(msg));
+  EXPECT_FALSE(msg);
   EXPECT_TRUE(recorder.allSucceeded(1));
-  EXPECT_EQ(port.written(),
-            (std::vector<std::vector<uint8_t>>{{1, 2, 3, 4, 5}}));
+  EXPECT_EQ(port.written(), (Frames{{1, 2, 3, 4, 5}}));
 }
 
-TEST(WriteAsyncTest, TypedWritePortVoid) {
+TEST(TryWriteAsyncTest, TypedWritePortVoid) {
   VoidType voidType("void");
   RecordingWritePort port(&voidType);
   TypedWritePort<void> typed(port);
   Recorder recorder;
   typed.connect(recorder.callback());
 
-  typed.writeAsync();
-  port.poll();
+  EXPECT_TRUE(typed.tryWriteAsync());
   EXPECT_TRUE(recorder.allSucceeded(1));
-  EXPECT_EQ(port.written(), (std::vector<std::vector<uint8_t>>{{0}}));
+  EXPECT_EQ(port.written(), (Frames{{0}}));
 }
 
 } // namespace

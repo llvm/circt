@@ -30,7 +30,6 @@
 #include <future>
 #include <mutex>
 #include <queue>
-#include <thread>
 
 namespace esi {
 
@@ -315,20 +314,21 @@ protected:
 class WriteChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
-  /// Fails any async writes which have not completed.
+  /// Fails an async write which has not completed.
   ~WriteChannelPort() override;
 
-  /// Callback mode completion callback. Invoked exactly once per writeAsync()
-  /// message, in the order the messages were written: with a null
-  /// exception_ptr once the whole message has been handed to the backend (the
-  /// same guarantee as a write() returning), or with the exception which caused
-  /// the write to fail.
+  /// Callback mode completion callback. Invoked exactly once for each message
+  /// tryWriteAsync() accepts (i.e. returns true for), in the order they were
+  /// accepted: with a null exception_ptr once the whole message has been handed
+  /// to the backend (the same guarantee as a write() returning), or with the
+  /// exception which prevented its remaining frames from being sent (including
+  /// the port being disconnected or destroyed first).
   using WriteCallback = std::function<void(std::exception_ptr)>;
 
-  /// Disconnect the port. In callback mode, fails any async writes which have
-  /// not completed. May block until a concurrent poll() (including the
-  /// callbacks it invokes) returns. Subclasses which override this must call
-  /// it.
+  /// Disconnect the port. In callback mode, fails an accepted message whose
+  /// remaining frames haven't been sent. May block until a concurrent poll() or
+  /// tryWriteAsync() (including the callbacks it invokes) returns. Subclasses
+  /// which override this must call it.
   virtual void disconnect() override;
   virtual bool isConnected() const override {
     Mode m = mode;
@@ -392,8 +392,8 @@ public:
     if (!msg)
       throw std::runtime_error(
           "WriteChannelPort::tryWrite: null SegmentedMessageData");
-    const MessageData *flat = dynamic_cast<const MessageData *>(msg.get());
-    if (!(flat ? tryWrite(*flat) : tryWrite(msg->toMessageData())))
+    MessageData scratch;
+    if (!tryWrite(msg->asMessageData(scratch)))
       return false;
     msg.reset();
     return true;
@@ -409,9 +409,9 @@ public:
   }
 
   //===--------------------------------------------------------------------===//
-  // Callback mode: connect with a callback to use writeAsync(). The callback
-  // reports the completion of each message. It must not throw and should
-  // return quickly. It may call writeAsync() and disconnect().
+  // Callback mode: connect with a callback to use tryWriteAsync(). The
+  // callback reports the completion of each accepted message. It must not throw
+  // and should return quickly. It may call tryWriteAsync() and disconnect().
   //===--------------------------------------------------------------------===//
 
   /// Connect in callback mode. Throws if already connected or if `callback` is
@@ -419,35 +419,29 @@ public:
   virtual void connect(WriteCallback callback,
                        const ConnectOptions &options = {});
 
-  /// Non-blocking write which takes ownership of the message. Completion is
-  /// reported via the callback passed to connect(). Throws if the port is not
-  /// connected in callback mode or if `msg` is null. If the port is
-  /// disconnected or destroyed before the message is written, the callback is
-  /// invoked with an error. If a multi-frame message fails after some of its
-  /// frames may have been sent, the receiver may be left partway through a
-  /// message, so all subsequent writes fail until the port is disconnected and
-  /// reconnected. Reconnecting clears the fault but does not reset the
-  /// receiver: the caller must first restore the receiver's framing (e.g. by
-  /// resetting the accelerator).
+  /// Non-blocking write with completion notification, with the same semantics
+  /// as the segmented tryWrite(): on success, takes ownership of `msg` (leaving
+  /// it null) and returns true; if the backend backpressures beyond the
+  /// allocated buffer, returns false and leaves `msg` untouched so the caller
+  /// can retry; on error, throws, leaving `msg` untouched and invoking no
+  /// callback. Throws if the port is not connected in callback mode or if `msg`
+  /// is null. At some point after a `true` return, the callback will be invoked
+  /// to report completion. Ideally this signals that the message has been
+  /// delivered but some backends might not support this guarantee. The callback
+  /// may be called from any thread.
   ///
-  /// Default implementation: messages are written with the segmented
-  /// tryWrite(), so backends which override it for scatter-gather support avoid
-  /// flattening. If no async writes are queued (and no other thread is writing
-  /// them), the message is written immediately on the calling thread, in which
-  /// case the callback may be invoked before writeAsync() returns. Otherwise --
-  /// or if the backend backpressures -- the message is queued and written in
-  /// FIFO order by poll(), so progress requires polling (typically by the
-  /// accelerator's service thread via `AcceleratorServiceThread::addPoll()`)
-  /// and the callback runs on the polling thread. So do not call writeAsync()
-  /// while holding a lock which the callback acquires. Backends may override
-  /// this. Overrides must uphold the WriteCallback contract, invoke it via
-  /// invokeWriteCallback(), and fail their outstanding writes upon disconnect.
-  virtual void writeAsync(std::unique_ptr<SegmentedMessageData> msg);
+  /// Default implementation: call tryWrite() and, if the message was
+  /// written, invoke the callback before returning.
+  ///
+  /// Backends may override this. Overrides must uphold the WriteCallback
+  /// contract and report completions (and failures upon disconnect) via
+  /// invokeWriteCallback().
+  virtual bool tryWriteAsync(std::unique_ptr<SegmentedMessageData> &msg);
 
 protected:
-  /// In callback mode, make progress on async writes. Then, if the port is
-  /// still connected (a writeAsync() callback may disconnect it), call
-  /// pollWriteImpl().
+  /// In callback mode, send the remaining frames of an accepted windowed
+  /// message, invoking its callback once done. Then, if the port is still
+  /// connected (a callback may disconnect it), call pollWriteImpl().
   bool pollImpl() final;
 
   /// Backend-specific polling. Write port backends override this rather than
@@ -455,13 +449,15 @@ protected:
   virtual bool pollWriteImpl() { return false; }
 
   /// Indicates the current mode of the channel. `Destroyed` is set while the
-  /// destructor fails outstanding async writes, preventing their callbacks
-  /// from reconnecting the partially destroyed port.
+  /// destructor fails a pending async write, preventing its callback from
+  /// using the partially destroyed port.
   enum Mode { Disconnected, Sync, Callback, Destroyed };
   std::atomic<Mode> mode = Mode::Disconnected;
 
-  /// Invoke the callback registered at connect() (if any) with the result of
-  /// an async write. Exceptions thrown by the callback are swallowed.
+  /// Report the completion (null `error`) or failure of a message accepted by
+  /// tryWriteAsync() to the callback registered at connect(). Callbacks are
+  /// invoked in order and never recursively. Exceptions they throw are
+  /// swallowed.
   void invokeWriteCallback(std::exception_ptr error);
 
   /// Pad an empty payload with a single zero byte if the port type has a
@@ -499,8 +495,8 @@ protected:
   void translateOutgoing(const MessageData &data);
 
 private:
-  /// Throw if the port is connected in callback mode (unless called by the
-  /// async write path's own tryWrite()).
+  /// Throw if the port is destroyed, or connected in callback mode (unless
+  /// called by tryWriteAsync()'s own tryWrite()).
   void requireNotCallbackMode(const char *method) const;
   /// Set up translation and call connectImpl(). Shared by both modes.
   void connectCommon(const ConnectOptions &options);
@@ -509,41 +505,40 @@ private:
   bool flushInternal();
 
   //===--------------------------------------------------------------------===//
-  // Callback mode state.
+  // Callback mode state. In callback mode, `translationBuffer` is non-empty
+  // only while an accepted windowed message has frames left to send.
   //===--------------------------------------------------------------------===//
 
-  /// If no other thread is writing async messages, write them on this one.
-  /// Returns true if progress was made.
-  bool tryDrainAsyncWrites();
-  /// Write queued async messages until the queue is empty or the backend
-  /// backpressures, then release `drainThread`. The caller must have set
-  /// `drainThread` to this thread.
-  bool drainAsyncWrites();
-  /// Fail all async writes which have not completed with `reason`.
-  void failAsyncWrites(const std::string &reason);
+  /// Send the remaining frames of an accepted windowed message, if any.
+  /// Returns true once none remain, having reported the message's completion
+  /// (or failure). Sets `progress` if any frames were sent. Requires
+  /// `writeMutex`.
+  bool finishPendingWrite(bool &progress);
+  /// Fail an accepted message whose remaining frames haven't been sent, if
+  /// any. Requires `writeMutex`.
+  void failPendingWrite(const std::string &reason);
+  /// Queue a completion for the registered callback and, unless completions
+  /// are already being delivered on this thread, deliver queued completions in
+  /// order. Requires `writeMutex`.
+  void complete(std::exception_ptr error);
   /// Invoke `callback` (if non-null), swallowing any exception it throws.
   static void
   callWriteCallback(const std::shared_ptr<const WriteCallback> &callback,
                     std::exception_ptr error);
 
-  /// Protects the members below.
-  std::mutex asyncMutex;
-  /// The callback registered at connect(). Shared so that it can be invoked
-  /// without holding `asyncMutex` while disconnect() clears it.
+  /// Serializes callback mode writes, polling, and completions. Recursive so
+  /// that callbacks, which run with it held, may use the port.
+  std::recursive_mutex writeMutex;
+  /// The callback registered at connect(). Shared so a completion is delivered
+  /// to the callback it was issued under, even if disconnect() clears it.
   std::shared_ptr<const WriteCallback> writeCallback;
-  /// Messages passed to writeAsync() which haven't completed, in order. The
-  /// front is the one being written. It becomes null once tryWrite() accepts
-  /// it, while any remaining frames of a windowed message are flushed. Only
-  /// `drainThread` modifies the front.
-  std::deque<std::unique_ptr<SegmentedMessageData>> asyncQueue;
-  /// Set when a multi-frame message fails after some of its frames may have
-  /// been sent, leaving the receiver mid-message. All subsequent async writes
-  /// fail with it until the port is reconnected.
-  std::exception_ptr asyncFault;
-  /// The thread currently writing async messages, if any.
-  std::atomic<std::thread::id> drainThread;
-  /// Notified when `drainThread` is released.
-  std::condition_variable drainDone;
+  /// Completions waiting to be delivered, with their callbacks. Only non-empty
+  /// while completions are being delivered.
+  std::deque<
+      std::pair<std::shared_ptr<const WriteCallback>, std::exception_ptr>>
+      completions;
+  /// True while complete() is delivering completions.
+  bool completing = false;
 };
 
 /// Instantiated when a backend does not know how to create a write channel.

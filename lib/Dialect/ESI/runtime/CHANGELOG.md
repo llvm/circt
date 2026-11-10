@@ -50,28 +50,30 @@
   default implementation flattens the message and calls the existing
   `tryWrite(const MessageData &)`; backends may override it for
   scatter-gather support.
-- **Callback mode for `WriteChannelPort`, with `writeAsync()`.** Mirroring
-  `ReadChannelPort`, connecting a write port with a callback
+- **Callback mode for `WriteChannelPort`, with `tryWriteAsync()`.**
+  Mirroring `ReadChannelPort`, connecting a write port with a callback
   (`connect(WriteCallback, options)`) puts it in callback mode, in which
-  `writeAsync()` performs non-blocking writes which take ownership of a
-  `SegmentedMessageData`. The callback is invoked exactly once per message, in
-  order, with a null `std::exception_ptr` on success or the exception which
-  caused the failure. `write()`/`tryWrite()`/`flush()` throw in callback mode,
-  and `writeAsync()` throws otherwise. `writeAsync()` is virtual so backends
-  may override it (e.g. for scatter-gather DMA). The default implementation
-  writes messages with the segmented `tryWrite()` (so backends which override
-  that for scatter-gather support avoid flattening), immediately on the
-  calling thread when nothing is queued; otherwise (or under backpressure) it
-  queues messages and writes them in FIFO order as the port is polled (e.g. by
-  the accelerator service thread via `addPoll()`). `disconnect()` and
-  destruction fail its outstanding writes. If a multi-frame message fails
-  after some of its frames may have been sent, all subsequent async writes
-  fail until the port is reconnected; the caller must reset the receiver
-  before reconnecting. `TypedWritePort`
-  gained matching `connect()` and `writeAsync()` overloads.
-  `WriteChannelPort::pollImpl()` is now `final`: write port backends override
-  the new `pollWriteImpl()` instead. The default segmented `tryWrite()` no
-  longer copies messages which are already a `MessageData`.
+  `tryWriteAsync(std::unique_ptr<SegmentedMessageData> &)` performs
+  non-blocking writes with completion notification. It has the same semantics
+  as the segmented `tryWrite()`: it takes ownership of the message only when it
+  returns true, returns false under backpressure, and throws on error. Messages
+  are never queued. The callback is invoked exactly once per accepted message,
+  in order, with a null `std::exception_ptr` once the message is completely
+  written or the exception which prevented that. `write()`/`tryWrite()`/
+  `flush()` throw in callback mode, and `tryWriteAsync()` throws otherwise. The
+  default implementation calls `tryWrite()` and invokes the callback if the
+  message was completely written. A windowed message may be accepted with
+  frames left to send; `poll()` (e.g. the accelerator service thread via
+  `addPoll()`) or the next `tryWriteAsync()` sends them and then invokes its
+  callback, and `disconnect()` or destruction fails it. `tryWriteAsync()` is
+  virtual so backends may override it (e.g. for scatter-gather DMA).
+  `TypedWritePort` gained matching `connect()` and `tryWriteAsync()`
+  overloads. `WriteChannelPort::pollImpl()` is now `final`: write port
+  backends override the new `pollWriteImpl()` instead. The default segmented
+  `tryWrite()` no longer copies messages which are already a `MessageData`.
+- **`SegmentedMessageData::asMessageData(scratch)`** returns the message
+  itself if it is already a `MessageData`, otherwise flattens it into
+  `scratch`. It replaces the internal `detail::getMessageDataRef()` helper.
 - **Multiple outstanding host memory reads per client.**
   `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
   (default `1`, which keeps the previous one-request-at-a-time behavior). With

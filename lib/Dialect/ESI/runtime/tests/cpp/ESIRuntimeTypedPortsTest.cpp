@@ -538,8 +538,7 @@ struct BufferedSequence {
   private:
     DecodedOutputs decode(std::unique_ptr<SegmentedMessageData> &msg) override {
       MessageData scratch;
-      const MessageData &flat =
-          detail::getMessageDataRef<BufferedSequence>(*msg, scratch);
+      const MessageData &flat = msg->asMessageData(scratch);
       if (flat.getSize() % sizeof(uint32_t) != 0)
         throw std::runtime_error(
             "BufferedSequence::TypeDeserializer: truncated word payload");
@@ -737,8 +736,7 @@ struct FragmentedCoordBatch {
   private:
     DecodedOutputs decode(std::unique_ptr<SegmentedMessageData> &msg) override {
       MessageData scratch;
-      const MessageData &flat =
-          detail::getMessageDataRef<FragmentedCoordBatch>(*msg, scratch);
+      const MessageData &flat = msg->asMessageData(scratch);
 
       DecodedOutputs decoded;
       const uint8_t *bytes = flat.getBytes();
@@ -1378,8 +1376,7 @@ struct OneWord {
       }
 
       MessageData scratch;
-      const MessageData &flat =
-          detail::getMessageDataRef<OneWord>(*msg, scratch);
+      const MessageData &flat = msg->asMessageData(scratch);
       if (flat.getSize() != sizeof(uint32_t))
         throw std::runtime_error("OneWord: bad size");
       pending = std::make_unique<OneWord>();
