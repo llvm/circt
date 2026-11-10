@@ -79,7 +79,7 @@ void NLATable::updateModuleInNLA(hw::HierPathOp nlaOp, StringAttr oldModule,
                                  StringAttr newModule) {
   nlaOp.updateModule(oldModule, newModule);
   auto &nlas = nodeMap[oldModule];
-  auto *iter = std::find(nlas.begin(), nlas.end(), nlaOp);
+  auto *iter = llvm::find(nlas, nlaOp);
   if (iter != nlas.end()) {
     nlas.erase(iter);
     if (nlas.empty())

@@ -4,25 +4,25 @@
 hw.module @Sender(out x: !esi.channel<i1, ValidReady>) {
   %0 = arith.constant 0 : i1
   // Don't transmit any data.
-  %ch, %rcvrRdy = esi.wrap.vr %0, %0 : i1
+  %ch, %rcvrRdy = esi.wrap.vr %0, %0 : !esi.channel<i1, ValidReady>
   hw.output %ch : !esi.channel<i1, ValidReady>
 }
 hw.module @Reciever(in %a: !esi.channel<i1, ValidReady>) {
   %rdy = arith.constant 1 : i1
   // Recieve bits.
-  %data, %valid = esi.unwrap.vr %a, %rdy : i1
+  %data, %valid = esi.unwrap.vr %a, %rdy : !esi.channel<i1, ValidReady>
 }
 !FooStruct = !hw.struct<a: si4, b: !hw.array<3 x ui4>>
 hw.module @StructRcvr(in %a: !esi.channel<!FooStruct, ValidReady>) {
   %rdy = arith.constant 1 : i1
   // Recieve bits.
-  %data, %valid = esi.unwrap.vr %a, %rdy : !FooStruct
+  %data, %valid = esi.unwrap.vr %a, %rdy : !esi.channel<!FooStruct, ValidReady>
 }
 
 // CHECK-LABEL: hw.module @Sender(out x : !esi.channel<i1, ValidReady>) {
-// CHECK:        %chanOutput, %ready = esi.wrap.vr %false, %false : i1
+// CHECK:        %chanOutput, %ready = esi.wrap.vr %false, %false : !esi.channel<i1, ValidReady>
 // CHECK-LABEL: hw.module @Reciever(in %a : !esi.channel<i1, ValidReady>) {
-// CHECK:        %rawOutput, %valid = esi.unwrap.vr %a, %true : i1
+// CHECK:        %rawOutput, %valid = esi.unwrap.vr %a, %true : !esi.channel<i1, ValidReady>
 // CHECK-LABEL: hw.module @StructRcvr(in %a : !esi.channel<!hw.struct<a: si4, b: !hw.array<3xui4>>, ValidReady>)
 
 hw.module @test(in %clk: !seq.clock, in %rst: i1) {
@@ -54,16 +54,16 @@ hw.module @test(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-LABEL: hw.module @i0Typed(in %a : !esi.channel<i0, ValidReady>, in %clk : !seq.clock, in %rst : i1, out x : !esi.channel<i0, ValidReady>) {
 // CHECK-NEXT:    %0 = esi.buffer %clk, %rst, %a  : !esi.channel<i0, ValidReady> -> !esi.channel<i0, ValidReady>
 // CHECK-NEXT:    %1 = esi.stage %clk, %rst, %0  : !esi.channel<i0, ValidReady>
-// CHECK-NEXT:    %rawOutput, %valid = esi.unwrap.vr %1, %ready : i0
-// CHECK-NEXT:    %chanOutput, %ready = esi.wrap.vr %rawOutput, %valid : i0
+// CHECK-NEXT:    %rawOutput, %valid = esi.unwrap.vr %1, %ready : !esi.channel<i0, ValidReady>
+// CHECK-NEXT:    %chanOutput, %ready = esi.wrap.vr %rawOutput, %valid : !esi.channel<i0, ValidReady>
 // CHECK-NEXT:    hw.output %chanOutput : !esi.channel<i0, ValidReady>
 // CHECK-NEXT:  }
 
 hw.module @i0Typed(in %a: !esi.channel<i0, ValidReady>, in %clk : !seq.clock, in %rst : i1, out x: !esi.channel<i0, ValidReady>) {
   %bufferedA = esi.buffer %clk, %rst, %a : !esi.channel<i0, ValidReady> -> !esi.channel<i0, ValidReady>
   %stagedA = esi.stage %clk, %rst, %bufferedA : !esi.channel<i0, ValidReady>
-  %rawOutput, %valid = esi.unwrap.vr %stagedA, %rcvrRdy : i0
-  %ch, %rcvrRdy = esi.wrap.vr %rawOutput, %valid : i0
+  %rawOutput, %valid = esi.unwrap.vr %stagedA, %rcvrRdy : !esi.channel<i0, ValidReady>
+  %ch, %rcvrRdy = esi.wrap.vr %rawOutput, %valid : !esi.channel<i0, ValidReady>
   hw.output %ch : !esi.channel<i0, ValidReady>
 }
 

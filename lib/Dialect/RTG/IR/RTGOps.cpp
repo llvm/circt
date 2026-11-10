@@ -17,6 +17,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallString.h"
 
 using namespace mlir;
@@ -26,6 +27,34 @@ using namespace rtg;
 //===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
+
+LogicalResult ConstantOp::verify() {
+  SmallVector<Attribute> worklist{getValueAttr()};
+  DenseSet<Attribute> visited;
+  while (!worklist.empty()) {
+    Attribute attr = worklist.pop_back_val();
+    // Attributes are uniqued DAG nodes, so shared children need only one visit.
+    if (!visited.insert(attr).second)
+      continue;
+
+    if (auto typedAttr = dyn_cast<TypedAttr>(attr))
+      if (isa<MutType, ContinuationType>(typedAttr.getType()))
+        return emitOpError("cannot encode value of type ")
+               << typedAttr.getType() << " in a constant attribute";
+
+    // Set and map contents are opaque to the generic sub-element walker.
+    if (auto set = dyn_cast<SetAttr>(attr))
+      llvm::append_range(worklist, *set.getElements());
+    else if (auto map = dyn_cast<MapAttr>(attr))
+      for (auto [key, value] : *map.getEntries()) {
+        worklist.push_back(key);
+        worklist.push_back(value);
+      }
+    attr.walkImmediateSubElements(
+        [&](Attribute subAttr) { worklist.push_back(subAttr); }, [](Type) {});
+  }
+  return success();
+}
 
 LogicalResult
 ConstantOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
@@ -1067,6 +1096,66 @@ LogicalResult StringToASCIIArrayOp::canonicalize(StringToASCIIArrayOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// MutCreateOp
+//===----------------------------------------------------------------------===//
+
+void MutCreateOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  effects.emplace_back(MemoryEffects::Allocate::get(), cast<OpResult>(getRef()),
+                       MutResource::get());
+}
+
+LogicalResult MutCreateOp::verify() {
+  auto mutTy = cast<MutType>(getRef().getType());
+  if (mutTy.getElementType() != getInitialValue().getType())
+    return emitOpError("initial value type ")
+           << getInitialValue().getType() << " does not match mut element type "
+           << mutTy.getElementType();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MutReadOp
+//===----------------------------------------------------------------------===//
+
+void MutReadOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  effects.emplace_back(MemoryEffects::Read::get(), &getRefMutable(),
+                       MutResource::get());
+}
+
+LogicalResult MutReadOp::verify() {
+  auto mutTy = cast<MutType>(getRef().getType());
+  if (mutTy.getElementType() != getValue().getType())
+    return emitOpError("result type ")
+           << getValue().getType() << " does not match mut element type "
+           << mutTy.getElementType();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MutWriteOp
+//===----------------------------------------------------------------------===//
+
+void MutWriteOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  effects.emplace_back(MemoryEffects::Write::get(), &getRefMutable(),
+                       MutResource::get());
+}
+
+LogicalResult MutWriteOp::verify() {
+  auto mutTy = cast<MutType>(getRef().getType());
+  if (mutTy.getElementType() != getNewValue().getType())
+    return emitOpError("new value type ")
+           << getNewValue().getType() << " does not match mut element type "
+           << mutTy.getElementType();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // WithHandlersOp (algebraic effects)
 //===----------------------------------------------------------------------===//
 
@@ -1299,12 +1388,6 @@ void PerformOp::print(OpAsmPrinter &printer) {
       (*this)->getDiscardableAttrDictionary().getValue());
 }
 
-void PerformOp::getEffects(
-    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
-        &effects) {
-  effects.emplace_back(MemoryEffects::Write::get(), MutResource::get());
-}
-
 LogicalResult PerformOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto moduleOp = (*this)->getParentOfType<ModuleOp>();
   if (!moduleOp)
@@ -1352,12 +1435,6 @@ LogicalResult PerformOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 //===----------------------------------------------------------------------===//
 // ResumeOp
 //===----------------------------------------------------------------------===//
-
-void ResumeOp::getEffects(
-    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
-        &effects) {
-  effects.emplace_back(MemoryEffects::Write::get(), MutResource::get());
-}
 
 LogicalResult ResumeOp::verify() {
   auto contTy = cast<ContinuationType>(getContinuation().getType());

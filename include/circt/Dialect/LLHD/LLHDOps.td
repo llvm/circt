@@ -156,6 +156,51 @@ def SignalOp : LLHDOp<"sig", [
   }];
 }
 
+def NetKindAttr : I32EnumAttr<"NetKind", "Net type kind", [
+    I32EnumAttrCase<"Supply0", 0, "supply0">,
+    I32EnumAttrCase<"Supply1", 1, "supply1">,
+    I32EnumAttrCase<"Tri", 2, "tri">,
+    I32EnumAttrCase<"TriAnd", 3, "triand">,
+    I32EnumAttrCase<"TriOr", 4, "trior">,
+    I32EnumAttrCase<"TriReg", 5, "trireg">,
+    I32EnumAttrCase<"Tri0", 6, "tri0">,
+    I32EnumAttrCase<"Tri1", 7, "tri1">,
+    I32EnumAttrCase<"UWire", 8, "uwire">,
+    I32EnumAttrCase<"Wire", 9, "wire">,
+    I32EnumAttrCase<"WAnd", 10, "wand">,
+    I32EnumAttrCase<"WOr", 11, "wor">,
+    I32EnumAttrCase<"Interconnect", 12, "interconnect">,
+    I32EnumAttrCase<"UserDefined", 13, "userdefined">,
+    I32EnumAttrCase<"Unknown", 14, "unknown">,
+  ]> {
+  let cppNamespace = "::circt::llhd";
+}
+
+def NetOp : LLHDOp<"net", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+]> {
+  let summary = "Create a net.";
+  let description = [{
+    Creates a new net with a specified net type, which determines how the value
+    resolves multiple drivers.
+
+    Example:
+
+    ```mlir
+    %foo = llhd.net wire : <i64>
+    ```
+  }];
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$name,
+    NetKindAttr:$kind
+  );
+  let results = (outs Res<NetType, "", [MemAlloc]>:$result);
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) $kind attr-dict
+    `:` type($result)
+  }];
+}
+
 def ProbeOp : LLHDOp<"prb", [
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
@@ -181,6 +226,33 @@ def ProbeOp : LLHDOp<"prb", [
   }];
 
   let arguments = (ins RefType:$signal);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "$signal attr-dict `:` type($result)";
+}
+
+def ProbeNetOp : LLHDOp<"prb_net", [
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+  TypeMatchesNetNestedType<"result", "signal">,
+  NetNestedTypeMatchesType<"signal", "result">,
+]> {
+  let summary = "Probe a net.";
+  let description = [{
+    This operation probes a net and returns the value it currently carries as a
+    new SSA operand. The result type is always the type carried by the signal.
+    In SSACFG regions, the operation has a read side effect on the signal
+    operand. In graph regions, the operation is memory-effect free.
+
+    Example:
+
+    ```mlir
+    %net_i1 = llhd.net wire : <i1>
+    %prbd = llhd.prb_net %net_i1 : i1
+    ```
+  }];
+
+  let arguments = (ins NetType:$signal);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "$signal attr-dict `:` type($result)";
@@ -223,6 +295,13 @@ def DriveOp : LLHDOp<"drv", [
 
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
+
+  let extraClassDeclaration = [{
+    ::mlir::Value getDriven() { return getSignal(); }
+    ::mlir::MutableOperandRange getDrivenMutable() {
+      return getSignalMutable();
+    }
+  }];
 }
 
 def AssignOp : LLHDOp<"assign", [
@@ -256,6 +335,53 @@ def AssignOp : LLHDOp<"assign", [
 
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
+
+  let extraClassDeclaration = [{
+    ::mlir::Value getDriven() { return getSignal(); }
+    ::mlir::MutableOperandRange getDrivenMutable() {
+      return getSignalMutable();
+    }
+  }];
+}
+
+def AssignNetOp : LLHDOp<"assign_net", [
+  DriveLikeOp,
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  TypeMatchesNetNestedType<"value", "net">,
+]> {
+  let summary = "Assign a value to a net without delay.";
+  let description = [{
+    The `llhd.assign_net` operation updates a net with a new value immediately,
+    without any delay. This corresponds to a blocking or continuous assignment
+    in SystemVerilog. An optional enable makes the assignment conditional.
+
+    Example:
+    ```mlir
+    llhd.assign_net %net, %value : i42
+    llhd.assign_net %net, %value if %enable : i9001
+    ```
+  }];
+
+  let arguments = (ins
+    Arg<NetType, "the net to assign to", [MemWrite]>:$net,
+    AnyType:$value,
+    Optional<I1>:$enable
+  );
+
+  let assemblyFormat = [{
+    $net `,` $value ( `if` $enable^ )? attr-dict `:` type($value)
+  }];
+
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+
+  let extraClassDeclaration = [{
+    ::mlir::Value getDriven() { return getNet(); }
+    ::mlir::MutableOperandRange getDrivenMutable() {
+      return getNetMutable();
+    }
+  }];
 }
 
 def OutputOp : LLHDOp<"output", [

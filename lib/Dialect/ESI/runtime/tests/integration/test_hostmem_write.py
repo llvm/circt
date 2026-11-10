@@ -46,9 +46,12 @@ def _run(conn: AcceleratorConnection, bus_width: int):
       expected.append((mem, data))
     writers.append((ack, gate, expected))
 
-  # Release completions after issuing all clients' writes.
-  for ack, gate, expected in writers:
+  # Release completions after issuing all clients' writes. Open every gate
+  # before waiting on any ack: the clients share one in-order response stream,
+  # so a response for a still-gated client would block those behind it.
+  for _, gate, _ in writers:
     gate.write(1)
+  for ack, _, expected in writers:
     for mem, data in expected:
       ack.read().result(timeout=30)
       assert ctypes.string_at(mem.ptr,

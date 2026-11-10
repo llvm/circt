@@ -39,7 +39,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
     # CHECK:      sv.verbatim.module @MyVerbatim
     # CHECK-SAME:   (in %clk : i1, out out : i1)
-    # CHECK-SAME    attributes {
+    # CHECK-SAME:   attributes {
     # CHECK-SAME:     source = @MyVerbatim.v,
     # CHECK-SAME:     verilogName = "MyVerbatim"
     # CHECK-SAME:   }
@@ -77,7 +77,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
     # CHECK:      sv.verbatim.module @ParametrizedVerbatim
     # CHECK-SAME:   <WIDTH: i32 = 8>
-    # CHECK-SAME    (in %data_in : i8, out data_out : i8)
+    # CHECK-SAME:   (in %data_in : i8, out data_out : i8)
     # CHECK-SAME:   attributes {
     # CHECK-SAME:     source = @ParametrizedVerbatim.v,
     # CHECK-SAME:     verilogName = "ParametrizedVerbatim"

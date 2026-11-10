@@ -261,3 +261,37 @@ func.func @ProceduralAssignToNet(%arg0: !moore.net<i42>, %arg1: !moore.i42) {
   "moore.blocking_assign"(%arg0, %arg1) : (!moore.net<i42>, !moore.i42) -> ()
   return
 }
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.net<i32>
+// expected-error @below {{failed to verify that all of {input, result} have same wrapper kind (ref or net)}}
+moore.extract_ref %0 from 0 : net<i32> -> ref<i1>
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.ref<i32>
+%1 = moore.constant 0 : i32
+// expected-error @below {{failed to verify that all of {input, result} have same wrapper kind (ref or net)}}
+moore.dyn_extract_ref %0 from %1 : ref<i32>, i32 -> net<i1>
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.ref<i32>
+%1 = unrealized_conversion_cast to !moore.net<i8>
+// expected-error @below {{operands must all be refs or all be nets}}
+// expected-error @below {{failed to infer returned types}}
+moore.concat_ref %0, %1 : (!moore.ref<i32>, !moore.net<i8>) -> ref<i40>
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.net<i32>
+// expected-error @below {{inferred type(s) '!moore.net<i32>' are incompatible with return type(s) of operation '!moore.ref<i32>'}}
+// expected-error @below {{failed to infer returned types}}
+moore.concat_ref %0 : (!moore.net<i32>) -> ref<i32>
+
+// -----
+
+// expected-error @below {{requires at least one operand}}
+// expected-error @below {{failed to infer returned types}}
+"moore.concat_ref"() : () -> !moore.ref<i0>

@@ -1,9 +1,9 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
 // CHECK:   hw.module @handshake_fork_in_none_out_none_none_1ins_2outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i0, ValidReady>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i0, ValidReady>, out out1 : !esi.channel<i0, ValidReady>) {
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i0
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : i0
-// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : i0
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : !esi.channel<i0, ValidReady>
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : !esi.channel<i0, ValidReady>
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : !esi.channel<i0, ValidReady>
 // CHECK:           %[[VAL_12:.*]] = hw.constant false
 // CHECK:           %[[VAL_13:.*]] = hw.constant true
 // CHECK:           %[[VAL_14:.*]] = comb.xor %[[VAL_5]], %[[VAL_13]] : i1
@@ -32,9 +32,9 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 // -----
 
 // CHECK:   hw.module @handshake_fork_in_ui64_out_ui64_ui64(in %[[VAL_0:.*]] : !esi.channel<i64, ValidReady>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i64, ValidReady>, out out1 : !esi.channel<i64, ValidReady>) {
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : i64
-// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : i64
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : !esi.channel<i64, ValidReady>
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : !esi.channel<i64, ValidReady>
 // CHECK:           %[[VAL_12:.*]] = hw.constant false
 // CHECK:           %[[VAL_13:.*]] = hw.constant true
 // CHECK:           %[[VAL_14:.*]] = comb.xor %[[VAL_5]], %[[VAL_13]] : i1

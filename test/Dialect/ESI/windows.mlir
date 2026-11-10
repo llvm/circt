@@ -192,14 +192,14 @@ hw.module @ListModule_four(in %windowed_in: !ListTypeWin_four, out windowed_out:
 // LOW-NEXT:     [[R1:%.+]] = hw.struct_create ([[R0]], %last) : !hw.struct<data: i32, last: i1>
 // LOW-NEXT:     hw.output %out_ready, [[R1]], %in_valid : i1, !hw.struct<data: i32, last: i1>, i1
 hw.module @ListChannelModule(in %in: !esi.channel<!ListTypeWin_one, ValidReady>, out out: !esi.channel<!ListTypeWin_one, ValidReady>) {
-  %windowed_in, %in_valid = esi.unwrap.vr %in, %ready : !ListTypeWin_one
+  %windowed_in, %in_valid = esi.unwrap.vr %in, %ready : !esi.channel<!ListTypeWin_one, ValidReady>
   %data_struct = esi.window.unwrap %windowed_in : !ListTypeWin_one
   %data, %last = hw.struct_explode %data_struct : !hw.struct<data: i32, last: i1>
   %c1 = hw.constant 1 : i32
   %data_inc = comb.add %data, %c1 : i32
   %out_struct = hw.struct_create (%data_inc, %last) : !hw.struct<data: i32, last: i1>
   %out = esi.window.wrap %out_struct : !ListTypeWin_one
-  %channel_out, %ready = esi.wrap.vr %out, %in_valid : !ListTypeWin_one
+  %channel_out, %ready = esi.wrap.vr %out, %in_valid : !esi.channel<!ListTypeWin_one, ValidReady>
   hw.output %channel_out : !esi.channel<!ListTypeWin_one, ValidReady>
 }
 

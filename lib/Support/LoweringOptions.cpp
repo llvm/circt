@@ -122,6 +122,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowExpressionInliningInPorts = true;
     } else if (option == "disallowMuxInlining") {
       disallowMuxInlining = true;
+    } else if (option == "disallowReplicate") {
+      disallowReplicate = true;
     } else if (option == "mitigateVivadoArrayIndexConstPropBug") {
       mitigateVivadoArrayIndexConstPropBug = true;
     } else if (option.consume_front("wireSpillingHeuristic=")) {
@@ -209,6 +211,8 @@ std::string LoweringOptions::toString() const {
     options += "disallowExpressionInliningInPorts,";
   if (disallowMuxInlining)
     options += "disallowMuxInlining,";
+  if (disallowReplicate)
+    options += "disallowReplicate,";
   if (mitigateVivadoArrayIndexConstPropBug)
     options += "mitigateVivadoArrayIndexConstPropBug,";
 

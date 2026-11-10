@@ -1,4 +1,4 @@
-; RUN: firtool %s -disable-all-randomization -split-input-file -lowering-options=emittedLineLength=1024 | FileCheck %s
+; RUN: firtool %s -disable-all-randomization -split-input-file -lowering-options=emittedLineLength=1024,svVarDeclStyle=reg | FileCheck %s
 
 ; This is an end-to-end example of a test-bench (Foo) enabling verification,
 ; probing into a device-under-test (Bar), and reading from hardware which is
@@ -57,7 +57,7 @@ circuit Foo: %[[
   ; CHECK:   VerificationHelper helper ();
   ; CHECK: endmodule
 
-  ; CHECK FILE "testbench{{[/\]}}layers-Bar-Verification.sv"
+  ; CHECK: FILE "testbench{{[/\]}}layers-Bar-Verification.sv"
   ; CHECK: `ifndef layers_Bar_Verification
   ; CHECK:   `define layers_Bar_Verification
   ; CHECK:   bind Bar Bar_Verification verification ();

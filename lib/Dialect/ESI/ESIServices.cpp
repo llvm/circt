@@ -176,7 +176,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   if (!cosimCycleCountExternModule) {
     auto ip = b.saveInsertionPoint();
     b.setInsertionPointToEnd(parentModule.getBody());
-    if (auto existingSym = parentModule.lookupSymbol(cosimCycleCountName)) {
+    if (auto *existingSym = parentModule.lookupSymbol(cosimCycleCountName)) {
       return implReq
                  .emitOpError(
                      "symbol 'Cosim_CycleCount' already exists but is not a "
@@ -273,7 +273,8 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
 
       // Construct the response channel.
       auto doneValid = bb.get(i1);
-      auto ackChannel = WrapValidReadyOp::create(b, none, doneValid);
+      auto ackChannel =
+          WrapValidReadyOp::create(b, none, doneValid, /*dataDelay=*/0);
 
       auto pack =
           PackBundleOp::create(b, implReq.getLoc(), req.getToClient().getType(),
@@ -306,7 +307,8 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
       // Construct the response channel.
       auto dataValid = bb.get(i1);
       auto data = bb.get(ramDecl.getInnerType());
-      auto dataChannel = WrapValidReadyOp::create(b, data, dataValid);
+      auto dataChannel =
+          WrapValidReadyOp::create(b, data, dataValid, /*dataDelay=*/0);
 
       auto pack =
           PackBundleOp::create(b, implReq.getLoc(), req.getToClient().getType(),

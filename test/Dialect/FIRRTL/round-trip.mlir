@@ -192,6 +192,15 @@ firrtl.module @PropertyPropEq() {
   %11 = firrtl.bool.xor %3, %4
 }
 
+firrtl.class @ObjectEqFoo() {}
+
+// CHECK-LABEL: firrtl.module @PropertyObjectEq
+firrtl.module @PropertyObjectEq(in %obj: !firrtl.class<@ObjectEqFoo()>,
+                               in %ref: !firrtl.anyref) {
+  // CHECK: firrtl.object.eq %obj, %ref : !firrtl.class<@ObjectEqFoo()>, !firrtl.anyref{{$}}
+  %eq = firrtl.object.eq %obj, %ref : !firrtl.class<@ObjectEqFoo()>, !firrtl.anyref
+}
+
 // CHECK-LABEL: firrtl.module @PropertyListOps
 firrtl.module @PropertyListOps() {
   %0 = firrtl.integer 0
@@ -235,6 +244,25 @@ firrtl.module @UnknownValueOp() {
   %1 = firrtl.unknown : !firrtl.string
   // CHECK-NEXT: %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
   %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
+}
+
+firrtl.extclass @ObjectCreateTarget(
+  in first: !firrtl.string,
+  in second: !firrtl.integer,
+  out result: !firrtl.string
+)
+
+// CHECK-LABEL: firrtl.module @ObjectCreate
+firrtl.module @ObjectCreate(
+  in %first: !firrtl.string,
+  in %second: !firrtl.integer,
+  out %output: !firrtl.string
+) {
+  // CHECK: %obj = firrtl.object.create(%first, %second) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  %obj = firrtl.object.create(%first, %second) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  // CHECK: %0 = firrtl.object.subfield %obj[result] : !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  %result = firrtl.object.subfield %obj[result] : !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  firrtl.propassign %output, %result : !firrtl.string
 }
 
 firrtl.formal @myFormalTestA, @Top {}
@@ -392,6 +420,12 @@ firrtl.module @DomainTypesWithFields(
 
   // CHECK: firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
   firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+}
+
+// CHECK-LABEL: firrtl.module @DomainAnyRefCast(
+firrtl.module @DomainAnyRefCast(in %domain: !firrtl.domain<@ClockDomain()>) {
+  // CHECK-NEXT: %{{.+}} = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>{{$}}
+  %0 = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>
 }
 
 // CHECK-LABEL: firrtl.module @DomainDefine

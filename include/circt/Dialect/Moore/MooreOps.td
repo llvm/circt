@@ -43,6 +43,10 @@ class TypeDomainsMatch<list<string> values> :
     cast<moore::UnpackedType>($_self.getType()).getDomain()
   }], "domain">;
 
+class SameWrapperKind<list<string> values> :
+  AllMatchSameOperatorTrait<values, "$_self.getType().getTypeID()",
+    "wrapper kind (ref or net)">;
+
 class TypeIsSimpleBitVectorOf<string sbvType, string packedType> :
   TypesMatchWith<
     sbvType # " type is simple bit vector equivalent of " # packedType,
@@ -735,10 +739,12 @@ def WaitLevelOp : MooreOp<"wait_level", [
     The `moore.wait_level` op suspends execution of the current process until
     its body signals that a given condition is true. Conceptually, the body of
     this op is executed once immediately, and again whenever any potentially
-    relevant signal has changed. If the contained `moore.detect_level` op determines
-    the condition is true, execution resumes after the `moore.wait_level` operation.
-    If the condition is false, the current process remains suspended until a signal
-    change causes the body to be run again.
+    relevant signal has changed. If any of the contained `moore.detect_level` ops
+    determines its condition is true, execution resumes after the
+    `moore.wait_level` operation. If all conditions are false, the current
+    process remains suspended until a signal change causes the body to be run
+    again. If the body contains no `moore.detect_level` ops, no condition can
+    ever become true and the process remains suspended forever.
 
     See IEEE 1800-2017 § 9.4.3 "Level-sensitive event control".
   }];
@@ -1760,9 +1766,9 @@ def ConcatOp : MooreOp<"concat", [
 def ConcatRefOp : MooreOp<"concat_ref", [
     Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>
 ]> {
-  let summary = "The copy of concat that explicitly works on the ref type.";
-  let arguments = (ins Variadic<RefType>:$values);
-  let results = (outs RefType:$result);
+  let summary = "The copy of concat that explicitly works on ref or net types.";
+  let arguments = (ins Variadic<WrapperType>:$values);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $values attr-dict `:` `(` type($values) `)` `->` type($result)
   }];
@@ -1953,23 +1959,27 @@ def DynExtractOp : MooreOp<"dyn_extract", [Pure]> {
   }];
 }
 
-def ExtractRefOp : MooreOp<"extract_ref", [Pure]> {
+def ExtractRefOp : MooreOp<"extract_ref", [
+    Pure, SameWrapperKind<["input", "result"]>
+]> {
   let description = [{
-  The copy of extract that explicitly works on the ref type.
+  The copy of extract that explicitly works on ref or net types.
   }];
-  let arguments = (ins RefType:$input, I32Attr:$lowBit);
-  let results = (outs RefType:$result);
+  let arguments = (ins WrapperType:$input, I32Attr:$lowBit);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
   }];
 }
 
-def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
+def DynExtractRefOp : MooreOp<"dyn_extract_ref", [
+    Pure, SameWrapperKind<["input", "result"]>
+]> {
   let description = [{
-  The copy of dyn_extract that explicitly works on the ref type.
+  The copy of dyn_extract that explicitly works on ref or net types.
   }];
-  let arguments = (ins RefType:$input, UnpackedType:$lowBit);
-  let results = (outs RefType:$result);
+  let arguments = (ins WrapperType:$input, UnpackedType:$lowBit);
+  let results = (outs WrapperType:$result);
   let assemblyFormat = [{
     $input `from` $lowBit attr-dict `:`
     type($input) `,` type($lowBit) `->` type($result)

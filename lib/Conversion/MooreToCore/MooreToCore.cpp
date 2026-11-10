@@ -459,6 +459,14 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
   }
 };
 
+/// Position the rewriter right after the point where `value` becomes available.
+static void setInsertionPointAfterDef(OpBuilder &rewriter, Value value) {
+  if (auto *defOp = value.getDefiningOp())
+    rewriter.setInsertionPointAfter(defOp);
+  if (isa<BlockArgument>(value))
+    rewriter.setInsertionPointToStart(value.getParentBlock());
+}
+
 static void getValuesToObserve(Region *region,
                                function_ref<void(Value)> setInsertionPoint,
                                const TypeConverter *typeConverter,
@@ -694,11 +702,12 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     auto *resumeBlock =
         rewriter.splitBlock(op->getBlock(), ++Block::iterator(op));
 
-    // If the 'wait_event' op is empty, we can lower it to a 'llhd.wait' op
-    // without any observed values, but since the process will never wake up
-    // from suspension anyway, we can also just terminate it using the
-    // 'llhd.halt' op.
-    if (op.getBody().front().empty()) {
+    // If the 'wait_event' op has no 'detect_event' ops, we can lower it to a
+    // 'llhd.wait' op without any observed values, but since the process will
+    // never wake up from suspension anyway, we can also just terminate it using
+    // the 'llhd.halt' op.
+    SmallVector<DetectEventOp> detectOps(op.getBody().getOps<DetectEventOp>());
+    if (detectOps.empty()) {
       // Let the cleanup iteration after the dialect conversion clean up all
       // remaining unreachable blocks.
       rewriter.replaceOpWithNewOp<llhd::HaltOp>(op, ValueRange{});
@@ -736,15 +745,10 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     // the `wait_event`'s body region. We want to wait for a change on these
     // signals before we check if any interesting event happened.
     SmallVector<Value> observeValues;
-    auto setInsertionPointAfterDef = [&](Value value) {
-      if (auto *op = value.getDefiningOp())
-        rewriter.setInsertionPointAfter(op);
-      if (auto arg = dyn_cast<BlockArgument>(value))
-        rewriter.setInsertionPointToStart(value.getParentBlock());
-    };
-
-    getValuesToObserve(&clonedOp.getBody(), setInsertionPointAfterDef,
-                       typeConverter, rewriter, observeValues);
+    getValuesToObserve(
+        &clonedOp.getBody(),
+        [&](Value value) { setInsertionPointAfterDef(rewriter, value); },
+        typeConverter, rewriter, observeValues);
 
     // Create the `llhd.wait` op that suspends the current process and waits for
     // a change in the interesting values listed in `observeValues`. When a
@@ -754,9 +758,7 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     rewriter.inlineBlockBefore(&clonedOp.getBody().front(), waitOp);
     rewriter.eraseOp(clonedOp);
 
-    // Collect a list of all detect ops and inline the `wait_event` body into
-    // the check block.
-    SmallVector<DetectEventOp> detectOps(op.getBody().getOps<DetectEventOp>());
+    // Inline the `wait_event` body into the check block.
     rewriter.inlineBlockBefore(&op.getBody().front(), checkBlock,
                                checkBlock->end());
     rewriter.eraseOp(op);
@@ -853,6 +855,98 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
                                waitBlock);
     }
 
+    return success();
+  }
+};
+
+struct WaitLevelOpConversion : public OpConversionPattern<WaitLevelOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WaitLevelOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // The body of a `wait_level` op is executed once immediately and again
+    // whenever any of the values it depends on changes, until any condition
+    // passed to a `detect_level` op is true. Block structure before
+    // conversion:
+    //
+    //     opA
+    //     moore.wait_level {
+    //       <body0>
+    //       moore.detect_level %cond0
+    //       <body1>
+    //       moore.detect_level %cond1
+    //     }
+    //     opB
+    //
+    // Block structure after conversion:
+    //
+    //     opA
+    //     cf.br ^check
+    // ^check:
+    //     <body0>
+    //     <body1>
+    //     %cond = comb.or %cond0, %cond1
+    //     cf.cond_br %cond, ^resume, ^wait
+    // ^wait:
+    //     llhd.wait (<observed values>), ^check
+    // ^resume:
+    //     opB
+    //
+    // All body fragments, including those between `detect_level` ops, are
+    // inlined into `^check` in order. The `detect_level` ops themselves are
+    // replaced by the single `cf.cond_br` at the end of the block.
+    auto loc = op.getLoc();
+    auto detectOps = llvm::to_vector(op.getBody().getOps<DetectLevelOp>());
+
+    // Without any `detect_level` ops the condition can never become true, so
+    // the process would never wake up. Just terminate it using `llhd.halt`.
+    auto *resumeBlock =
+        rewriter.splitBlock(op->getBlock(), ++Block::iterator(op));
+    if (detectOps.empty()) {
+      // Let the cleanup iteration after the dialect conversion clean up all
+      // remaining unreachable blocks.
+      rewriter.replaceOpWithNewOp<llhd::HaltOp>(op, ValueRange{});
+      return success();
+    }
+
+    // Determine the values to wait for before modifying the body.
+    SmallVector<Value> observeValues;
+    getValuesToObserve(
+        &op.getBody(),
+        [&](Value value) { setInsertionPointAfterDef(rewriter, value); },
+        typeConverter, rewriter, observeValues);
+
+    auto *waitBlock = rewriter.createBlock(resumeBlock);
+    auto *checkBlock = rewriter.createBlock(waitBlock);
+
+    rewriter.setInsertionPoint(op);
+    cf::BranchOp::create(rewriter, loc, checkBlock);
+
+    rewriter.setInsertionPointToEnd(waitBlock);
+    llhd::WaitOp::create(rewriter, loc, ValueRange{}, Value(), observeValues,
+                         ValueRange{}, checkBlock);
+
+    rewriter.inlineBlockBefore(&op.getBody().front(), checkBlock,
+                               checkBlock->end());
+    rewriter.eraseOp(op);
+
+    // Convert all `detect_level` ops into i1 conditions and resume if any of
+    // them is true.
+    SmallVector<Value> conditions;
+    for (auto detectOp : detectOps) {
+      rewriter.setInsertionPoint(detectOp);
+      auto condition = typeConverter->materializeTargetConversion(
+          rewriter, loc, rewriter.getI1Type(), detectOp.getCondition());
+      if (!condition)
+        return detectOp->emitError() << "cannot convert condition to i1";
+      conditions.push_back(condition);
+      rewriter.eraseOp(detectOp);
+    }
+
+    rewriter.setInsertionPointToEnd(checkBlock);
+    auto triggered = rewriter.createOrFold<comb::OrOp>(loc, conditions, true);
+    cf::CondBranchOp::create(rewriter, loc, triggered, resumeBlock, waitBlock);
     return success();
   }
 };
@@ -1453,8 +1547,11 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // TODO: properly handle out-of-bounds accesses
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    Type inputType =
-        cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
+    auto inputRefType = dyn_cast<llhd::RefType>(adaptor.getInput().getType());
+    if (!inputRefType)
+      return op.emitOpError(
+          "extracts from a net which is not currently supported");
+    auto inputType = inputRefType.getNestedType();
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
@@ -1542,8 +1639,11 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // TODO: properly handle out-of-bounds accesses
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    Type inputType =
-        cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
+    auto inputRefType = dyn_cast<llhd::RefType>(adaptor.getInput().getType());
+    if (!inputRefType)
+      return op.emitOpError(
+          "extracts from a net which is not currently supported");
+    auto inputType = inputRefType.getNestedType();
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
@@ -2524,7 +2624,10 @@ struct ReadOpConversion : public OpConversionPattern<ReadOp> {
   LogicalResult
   matchAndRewrite(ReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<llhd::ProbeOp>(op, adaptor.getInput());
+    if (isa<llhd::NetType>(adaptor.getInput().getType()))
+      rewriter.replaceOpWithNewOp<llhd::ProbeNetOp>(op, adaptor.getInput());
+    else
+      rewriter.replaceOpWithNewOp<llhd::ProbeOp>(op, adaptor.getInput());
     return success();
   }
 };
@@ -2553,8 +2656,12 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
     // Blocking and continuous assignments take effect immediately.
     if constexpr (std::is_same_v<OpTy, ContinuousAssignOp> ||
                   std::is_same_v<OpTy, BlockingAssignOp>) {
-      rewriter.replaceOpWithNewOp<llhd::AssignOp>(op, adaptor.getDst(),
-                                                  adaptor.getSrc(), Value{});
+      if (isa<llhd::NetType>(adaptor.getDst().getType()))
+        rewriter.replaceOpWithNewOp<llhd::AssignNetOp>(
+            op, adaptor.getDst(), adaptor.getSrc(), Value{});
+      else
+        rewriter.replaceOpWithNewOp<llhd::AssignOp>(op, adaptor.getDst(),
+                                                    adaptor.getSrc(), Value{});
       return success();
     } else {
       Value delay;
@@ -3965,6 +4072,12 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return {};
   });
 
+  typeConverter.addConversion([&](NetType type) -> std::optional<Type> {
+    if (auto innerType = typeConverter.convertType(type.getNestedType()))
+      return llhd::NetType::get(innerType);
+    return {};
+  });
+
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
   typeConverter.addConversion([](FloatType type) { return type; });
@@ -3979,6 +4092,12 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](llhd::RefType type) -> std::optional<Type> {
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
       return llhd::RefType::get(innerType);
+    return {};
+  });
+
+  typeConverter.addConversion([&](llhd::NetType type) -> std::optional<Type> {
+    if (auto innerType = typeConverter.convertType(type.getNestedType()))
+      return llhd::NetType::get(innerType);
     return {};
   });
 
@@ -4196,6 +4315,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     CoroutineOpConversion,
     CallCoroutineOpConversion,
     WaitEventOpConversion,
+    WaitLevelOpConversion,
 
     // Patterns of shifting operations.
     ShrOpConversion,

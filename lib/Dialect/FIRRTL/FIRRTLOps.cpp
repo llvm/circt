@@ -4118,48 +4118,62 @@ void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
         StringAttr::get(builder.getContext(), name));
 }
 
-LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
-  auto classType = getType();
-  auto className = classType.getNameAttr();
-
-  // verify that the class exists.
+static LogicalResult
+verifyObjectSymbolUses(FObjectLike object, SymbolTableCollection &symbolTable) {
+  auto circuit = object->getParentOfType<CircuitOp>();
   auto classOp = dyn_cast_or_null<ClassLike>(
-      symbolTable.lookupSymbolIn(circuitOp, className));
+      symbolTable.lookupSymbolIn(circuit, object.getClassSymbolAttr()));
   if (!classOp)
-    return emitOpError() << "references unknown class " << className;
-
-  // verify that the result type agrees with the class definition.
-  if (failed(classOp.verifyType(classType, [&]() { return emitOpError(); })))
-    return failure();
-
-  return success();
+    return object->emitOpError("references unknown class ")
+           << object.getClassSymbolAttr();
+  return classOp.verifyType(object.getClassType(),
+                            [&]() { return object->emitOpError(); });
 }
 
-StringAttr ObjectOp::getClassNameAttr() {
-  return getType().getNameAttr().getAttr();
-}
-
-StringRef ObjectOp::getClassName() { return getType().getName(); }
-
-ClassLike ObjectOp::getReferencedClass(const SymbolTable &symbolTable) {
-  auto symRef = getType().getNameAttr();
-  return symbolTable.lookup<ClassLike>(symRef.getLeafReference());
-}
-
-Operation *ObjectOp::getReferencedOperation(const SymbolTable &symtbl) {
-  return getReferencedClass(symtbl);
+LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyObjectSymbolUses(*this, symbolTable);
 }
 
 StringRef ObjectOp::getInstanceName() { return getName(); }
 
 StringAttr ObjectOp::getInstanceNameAttr() { return getNameAttr(); }
 
-StringAttr ObjectOp::getReferencedModuleNameAttr() {
-  return getClassNameAttr();
+void ObjectOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
 }
 
-void ObjectOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+//===----------------------------------------------------------------------===//
+// ObjectCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ObjectCreateOp::verify() {
+  unsigned inputIndex = 0;
+  for (const auto &element : getType().getInputElements()) {
+    if (inputIndex >= getInputs().size())
+      return emitOpError("missing operand for class input ") << element.name;
+    auto inputType = getInputs()[inputIndex].getType();
+    if (inputType != element.type)
+      return emitOpError("class input ")
+             << element.name << " expects " << element.type << ", but operand "
+             << inputIndex << " has type " << inputType;
+    ++inputIndex;
+  }
+  if (inputIndex != getInputs().size())
+    return emitOpError("expected ")
+           << inputIndex << " input operands, but got " << getInputs().size();
+  return success();
+}
+
+LogicalResult
+ObjectCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyObjectSymbolUses(*this, symbolTable);
+}
+
+StringRef ObjectCreateOp::getInstanceName() { return getName(); }
+
+StringAttr ObjectCreateOp::getInstanceNameAttr() { return getNameAttr(); }
+
+void ObjectCreateOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
 

@@ -1,4 +1,5 @@
 // RUN: circt-opt --cse --canonicalize %s | FileCheck %s
+// RUN: circt-opt --cse --canonicalize='top-down=false' %s | FileCheck %s
 
 om.class @Foo() {
   om.class.fields
@@ -196,6 +197,95 @@ om.class @PropEqFold(%str: !om.string, %b: i1, %n: !om.integer) -> (out1: i1, ou
   om.class.fields %0, %1, %2, %3, %4, %5, %6, %7, %8, %9 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
 
+// CHECK-LABEL: @AnyCastFold
+om.class @AnyCastFold(%ref: !om.class.type<@Foo>, %any: !om.any) -> (
+    concrete: !om.any, identity: !om.any, nested: !om.any) {
+  // CHECK-NEXT: [[CAST:%.+]] = om.any_cast %ref : (!om.class.type<@Foo>) -> !om.any
+  %cast = om.any_cast %ref : (!om.class.type<@Foo>) -> !om.any
+  %identity = om.any_cast %any : (!om.any) -> !om.any
+  %nested = om.any_cast %cast : (!om.any) -> !om.any
+  // CHECK-NEXT: om.class.fields [[CAST]], %any, [[CAST]] : !om.any, !om.any, !om.any
+  om.class.fields %cast, %identity, %nested : !om.any, !om.any, !om.any
+}
+
+// CHECK-LABEL: @ObjectEqFold
+om.class @ObjectEqFold(%ref: !om.class.type<@Foo>, %other: !om.class.type<@Foo>,
+                       %any: !om.any) -> (
+    equal: i1, not_equal: i1, class_any: i1, any_class: i1,
+    any_not_equal: i1, parameter: i1, may_alias: i1, opaque: i1,
+    unknown: i1, any_parameter: i1, unknown_alias: i1,
+    unknown_distinct: i1) {
+  %a = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %b = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %aAny = om.any_cast %a : (!om.class.type<@Foo>) -> !om.any
+  %bAny = om.any_cast %b : (!om.class.type<@Foo>) -> !om.any
+
+  // Compare identities, not fields, looking through any casts.
+  // CHECK-DAG: [[TRUE:%.+]] = om.constant true
+  // CHECK-DAG: [[FALSE:%.+]] = om.constant false
+  %equal = om.object.eq %a, %a : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %notEqual = om.object.eq %a, %b : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %classAny = om.object.eq %a, %aAny : !om.class.type<@Foo>, !om.any
+  %anyClass = om.object.eq %aAny, %a : !om.any, !om.class.type<@Foo>
+  %anyNotEqual = om.object.eq %aAny, %bAny : !om.any, !om.any
+
+  // Self-comparisons fold even when the parameter's identity is unknown.
+  %parameter = om.object.eq %ref, %ref : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %anyParameter = om.object.eq %any, %any : !om.any, !om.any
+
+  // Distinct parameters may alias other references, so do not fold them.
+  // CHECK: [[MAY_ALIAS:%.+]] = om.object.eq %ref, %other : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %mayAlias = om.object.eq %ref, %other : !om.class.type<@Foo>, !om.class.type<@Foo>
+  // CHECK: [[OPAQUE:%.+]] = om.object.eq %ref, %any : !om.class.type<@Foo>, !om.any
+  %opaque = om.object.eq %ref, %any : !om.class.type<@Foo>, !om.any
+
+  // Unknown references are equal to themselves, including through any casts.
+  // Distinct unknown SSA values may alias, so their comparison must not fold.
+  // CHECK: [[UNKNOWN_REF:%.+]] = om.unknown : !om.class.type<@Foo>
+  %unknown = om.unknown : !om.class.type<@Foo>
+  %unknownAny = om.any_cast %unknown : (!om.class.type<@Foo>) -> !om.any
+  %unknownEqual = om.object.eq %unknown, %unknown : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %unknownAlias = om.object.eq %unknown, %unknownAny : !om.class.type<@Foo>, !om.any
+  // CHECK: [[OTHER_UNKNOWN_REF:%.+]] = om.unknown : !om.class.type<@Foo>
+  %otherUnknown = om.unknown : !om.class.type<@Foo>
+  // CHECK: [[UNKNOWN_DISTINCT:%.+]] = om.object.eq [[UNKNOWN_REF]], [[OTHER_UNKNOWN_REF]] : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %unknownDistinct = om.object.eq %unknown, %otherUnknown : !om.class.type<@Foo>, !om.class.type<@Foo>
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[TRUE]], [[FALSE]], [[TRUE]], [[MAY_ALIAS]], [[OPAQUE]], [[TRUE]], [[TRUE]], [[TRUE]], [[UNKNOWN_DISTINCT]] : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+  om.class.fields %equal, %notEqual, %classAny, %anyClass, %anyNotEqual, %parameter, %mayAlias, %opaque, %unknownEqual, %anyParameter, %unknownAlias, %unknownDistinct : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+}
+
+// Strip casts from either operand even when equality cannot fold.
+// CHECK-LABEL: @ObjectEqAnyCast
+om.class @ObjectEqAnyCast(%ref: !om.class.type<@Foo>,
+                          %other: !om.class.type<@Foo>, %any: !om.any) -> (
+    lhs: i1, rhs: i1, both: i1) {
+  %cast = om.any_cast %ref : (!om.class.type<@Foo>) -> !om.any
+  %otherCast = om.any_cast %other : (!om.class.type<@Foo>) -> !om.any
+  // CHECK: [[LHS:%.+]] = om.object.eq %ref, %any : !om.class.type<@Foo>, !om.any
+  %lhs = om.object.eq %cast, %any : !om.any, !om.any
+  // CHECK: [[RHS:%.+]] = om.object.eq %any, %ref : !om.any, !om.class.type<@Foo>
+  %rhs = om.object.eq %any, %cast : !om.any, !om.any
+  // CHECK: [[BOTH:%.+]] = om.object.eq %ref, %other : !om.class.type<@Foo>, !om.class.type<@Foo>
+  %both = om.object.eq %cast, %otherCast : !om.any, !om.any
+  // CHECK: om.class.fields [[LHS]], [[RHS]], [[BOTH]] : i1, i1, i1
+  om.class.fields %lhs, %rhs, %both : i1, i1, i1
+}
+
+// Cyclic any casts canonicalize to the same SSA reference. Self-equality folds
+// to true, but stripping casts from an opaque comparison must not loop.
+// CHECK-LABEL: @ObjectEqCastCycle
+om.class @ObjectEqCastCycle(%any: !om.any) -> (equal: i1, opaque: i1) {
+  // CHECK-DAG: [[TRUE:%.+]] = om.constant true
+  // CHECK-DAG: [[CAST:%.+]] = om.any_cast %{{.+}} : (!om.any) -> !om.any
+  %a = om.any_cast %b : (!om.any) -> !om.any
+  %b = om.any_cast %a : (!om.any) -> !om.any
+  %equal = om.object.eq %a, %b : !om.any, !om.any
+  // CHECK: [[OPAQUE:%.+]] = om.object.eq [[CAST]], %any : !om.any, !om.any
+  %opaque = om.object.eq %a, %any : !om.any, !om.any
+  // CHECK: om.class.fields [[TRUE]], [[OPAQUE]] : i1, i1
+  om.class.fields %equal, %opaque : i1, i1
+}
+
 // CHECK-LABEL: @IntegerBitwiseFold
 om.class @IntegerBitwiseFold(%b: i8) -> (out1: i8, out2: i8, out3: i8,
                                           out4: i8, out5: i8, out6: i8,
@@ -323,4 +413,39 @@ om.class @ListConcatFold(
   om.class.fields %5, %8, %9, %10, %12, %13 :
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>
+}
+
+// CHECK-LABEL: @ListContainsFold
+om.class @ListContainsFold() -> (
+    string_found: i1, string_absent: i1, bool_found: i1, bool_absent: i1,
+    integer_found: i1, integer_absent: i1, empty: i1) {
+  %string_list = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string]> : !om.list<!om.string>
+  %string_found_value = om.constant "b" : !om.string
+  %string_absent_value = om.constant "absent" : !om.string
+  %string_found = om.list_contains %string_list, %string_found_value : !om.list<!om.string>
+  %string_absent = om.list_contains %string_list, %string_absent_value : !om.list<!om.string>
+
+  %bool_list = om.constant #om.list<i1, [true]> : !om.list<i1>
+  %true = om.constant true
+  %false = om.constant false
+  %bool_found = om.list_contains %bool_list, %true : !om.list<i1>
+  %bool_absent = om.list_contains %bool_list, %false : !om.list<i1>
+
+  %integer_list = om.constant #om.list<!om.integer, [#om.integer<42 : si64>]> : !om.list<!om.integer>
+  %integer_found_value = om.constant #om.integer<42 : si64> : !om.integer
+  %integer_absent_value = om.constant #om.integer<0 : si64> : !om.integer
+  %integer_found = om.list_contains %integer_list, %integer_found_value : !om.list<!om.integer>
+  %integer_absent = om.list_contains %integer_list, %integer_absent_value : !om.list<!om.integer>
+
+  %empty_list = om.constant #om.list<!om.string, []> : !om.list<!om.string>
+  %empty_search = om.constant "a" : !om.string
+  %empty = om.list_contains %empty_list, %empty_search : !om.list<!om.string>
+
+  // CHECK-NOT: om.list_contains
+  // CHECK-DAG: [[TRUE:%[0-9]+]] = om.constant true
+  // CHECK-DAG: [[FALSE:%[0-9]+]] = om.constant false
+  // CHECK-NOT: om.list_contains
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[FALSE]] : i1, i1, i1, i1, i1, i1, i1
+  om.class.fields %string_found, %string_absent, %bool_found, %bool_absent,
+      %integer_found, %integer_absent, %empty : i1, i1, i1, i1, i1, i1, i1
 }

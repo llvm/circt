@@ -2016,6 +2016,18 @@ private:
   ParseResult parseExpLeadingStmt(Value &result, const Twine &message) {
     return parseExpImpl(result, message, /*isLeadingStmt:*/ true);
   }
+  /// Insert an implicit object- or domain-to-AnyRef cast if required by the
+  /// expected type. Leave other values unchanged for the caller to type-check.
+  Value emitImplicitAnyRefCast(Value value, Type expectedType) {
+    if (!isa<AnyRefType>(expectedType))
+      return value;
+    if (isa<ClassType>(value.getType()))
+      return ObjectAnyRefCastOp::create(builder, value);
+    if (isa<DomainType>(value.getType()))
+      return DomainAnyRefCastOp::create(builder, value);
+    return value;
+  }
+
   ParseResult parseEnumExp(Value &result);
   ParseResult parsePathExp(Value &result);
   ParseResult parseDomainExp(Value &result);
@@ -2050,6 +2062,7 @@ private:
   ParseResult parseCatExp(Value &result);
   ParseResult parseStringConcatExp(Value &result);
   ParseResult parsePropEqExp(Value &result);
+  ParseResult parseObjectEqExp(Value &result);
   ParseResult parseListContainsExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
   ParseResult parseUnknownProperty(Value &result);
@@ -2459,6 +2472,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
 
+  case FIRToken::lp_object_eq:
+    if (requireFeature(nextFIRVersion, "object equality") ||
+        parseObjectEqExp(result))
+      return failure();
+    break;
+
   case FIRToken::lp_list_contains:
     if (requireFeature(missingSpecFIRVersion, "list contains") ||
         parseListContainsExp(result))
@@ -2814,14 +2833,11 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
         if (parseExp(operand, "expected expression in List expression"))
           return failure();
 
-        if (operand.getType() != elementType) {
-          if (!isa<AnyRefType>(elementType) ||
-              !isa<ClassType>(operand.getType()))
-            return emitError(loc, "unexpected expression of type ")
-                   << operand.getType() << " in List expression of type "
-                   << elementType;
-          operand = ObjectAnyRefCastOp::create(builder, operand);
-        }
+        operand = emitImplicitAnyRefCast(operand, elementType);
+        if (operand.getType() != elementType)
+          return emitError(loc, "unexpected expression of type ")
+                 << operand.getType() << " in List expression of type "
+                 << elementType;
 
         operands.push_back(operand);
         return success();
@@ -2970,6 +2986,29 @@ ParseResult FIRStmtParser::parsePropEqExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = PropEqOp::create(builder, lhs, rhs);
+  return success();
+}
+
+/// object_eq-exp ::= 'object_eq(' expr ',' expr ')'
+ParseResult FIRStmtParser::parseObjectEqExp(Value &result) {
+  consumeToken(FIRToken::lp_object_eq);
+
+  auto loc = getToken().getLoc();
+  Value lhs, rhs;
+  locationProcessor.setLoc(loc);
+  if (parseExp(lhs, "expected lhs expression in object_eq expression") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(rhs, "expected rhs expression in object_eq expression") ||
+      parseToken(FIRToken::r_paren, "expected ')'"))
+    return failure();
+
+  if (!isa<ClassType, AnyRefType>(lhs.getType()))
+    return emitError(loc, "lhs of object_eq must be Inst or AnyRef type");
+  if (!isa<ClassType, AnyRefType>(rhs.getType()))
+    return emitError(loc, "rhs of object_eq must be Inst or AnyRef type");
+
+  locationProcessor.setLoc(loc);
+  result = ObjectEqOp::create(builder, lhs, rhs);
   return success();
 }
 
@@ -4285,15 +4324,26 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
            << "unknown domain '" << domainKind.getValue() << "'";
 
   auto domainType = DomainType::getFromDomainOp(lookup->second);
+  auto fields = domainType.getFields();
 
   // Parse optional field values
   SmallVector<Value> fieldValues;
   if (consumeIf(FIRToken::l_paren)) {
     // Parse comma-separated list of expressions
     if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+          if (fieldValues.size() >= fields.size())
+            return emitError(getToken().getLoc())
+                   << "too many field values for domain '"
+                   << domainKind.getValue() << "': expected " << fields.size();
+
           Value value;
           if (parseExp(value, "expected field value expression"))
             return failure();
+
+          value = emitImplicitAnyRefCast(
+              value,
+              cast<DomainFieldAttr>(fields[fieldValues.size()]).getType());
+
           fieldValues.push_back(value);
           return success();
         }))
@@ -4302,6 +4352,11 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
 
   if (parseOptionalInfo())
     return failure();
+
+  if (fieldValues.size() < fields.size())
+    return emitError(startLoc)
+           << "not enough field values for domain '" << domainKind.getValue()
+           << "': expected " << fields.size() << ", got " << fieldValues.size();
 
   locationProcessor.setLoc(startLoc);
   auto result =
@@ -4739,18 +4794,16 @@ ParseResult FIRStmtParser::parsePropAssign() {
     return failure();
 
   auto lhsType = type_dyn_cast<PropertyType>(lhs.getType());
-  auto rhsType = type_dyn_cast<PropertyType>(rhs.getType());
-  if (!lhsType || !rhsType)
+  if (!lhsType)
     return emitError(loc, "can only propassign property types");
   locationProcessor.setLoc(loc);
-  if (lhsType != rhsType) {
-    // If the lhs is anyref, and the rhs is a ClassType, insert a cast.
-    if (isa<AnyRefType>(lhsType) && isa<ClassType>(rhsType))
-      rhs = ObjectAnyRefCastOp::create(builder, rhs);
-    else
-      return emitError(loc, "cannot propassign non-equivalent type ")
-             << rhsType << " to " << lhsType;
-  }
+  rhs = emitImplicitAnyRefCast(rhs, lhsType);
+  auto rhsType = type_dyn_cast<PropertyType>(rhs.getType());
+  if (!rhsType)
+    return emitError(loc, "can only propassign property types");
+  if (lhsType != rhsType)
+    return emitError(loc, "cannot propassign non-equivalent type ")
+           << rhsType << " to " << lhsType;
   PropAssignOp::create(builder, lhs, rhs);
   return success();
 }
@@ -6910,7 +6963,7 @@ DoneParsing:
 mlir::OwningOpRef<mlir::ModuleOp>
 circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                              mlir::TimingScope &ts, FIRParserOptions options) {
-  auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  const auto *sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
   unsigned fileID = 1;
   for (unsigned e = options.numAnnotationFiles + 1; fileID < e; ++fileID)

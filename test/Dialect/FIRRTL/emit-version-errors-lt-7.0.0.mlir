@@ -76,6 +76,17 @@ firrtl.circuit "ListContains" {
 
 // -----
 
+// object.eq expression requires >= 7.0.0.
+firrtl.circuit "ObjectEq" {
+  firrtl.module @ObjectEq(in %ref : !firrtl.anyref, out %out : !firrtl.bool) {
+    // expected-error @below {{'firrtl.object.eq' op object equality requires FIRRTL 7.0.0}}
+    %eq = firrtl.object.eq %ref, %ref : !firrtl.anyref, !firrtl.anyref
+    firrtl.propassign %out, %eq : !firrtl.bool
+  }
+}
+
+// -----
+
 firrtl.circuit "CompoundPropertyMessage" {
   firrtl.module @CompoundPropertyMessage() {
     %cond = firrtl.bool true

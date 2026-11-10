@@ -107,6 +107,11 @@ on:
         required: false
         type: string
         default: ""
+      build_pycde:
+        description: "Build PyCDE (and run its tests if tests are enabled)"
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       runner:
@@ -153,6 +158,13 @@ on:
         required: false
         type: string
         default: ""
+      build_pycde:
+        description: |
+          Build PyCDE and, if run_tests is set, run its tests. PyCDE is part of
+          the 'install' target, so this also adds it to any installed archive.
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-test-and-install:
@@ -329,12 +341,18 @@ jobs:
 
           PYTHON_EXECUTABLE=$(python -c "import sys; print(sys.executable.replace('\\\\', '/'))")
 
+          FRONTENDS="PyRTG"
+          if [[ "${{ inputs.build_pycde }}" == "true" ]]; then
+            FRONTENDS="$FRONTENDS;PyCDE"
+            python -m pip install -r frontends/PyCDE/python/requirements.txt
+          fi
+
           # A statically-linked libstdc++ conflicts with Python extension
           # modules that get dlopen'd into a live python3 process alongside
           # other dynamically-linked C++ code: the duplicated libstdc++
           # symbols get interposed process-wide and corrupt the heap. So
           # disable it whenever the Python bindings are enabled.
-          echo cmake="-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON -DCIRCT_ENABLE_FRONTENDS=PyRTG -DLLVM_STATIC_LINK_CXX_STDLIB=OFF -DMLIR_PYTHON_STUBGEN_ENABLED=OFF -DPython3_EXECUTABLE=\"$PYTHON_EXECUTABLE\" -DPython_EXECUTABLE=\"$PYTHON_EXECUTABLE\"" >> "$GITHUB_OUTPUT"
+          echo cmake="-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON -DCIRCT_ENABLE_FRONTENDS=\"$FRONTENDS\" -DLLVM_STATIC_LINK_CXX_STDLIB=OFF -DMLIR_PYTHON_STUBGEN_ENABLED=OFF -DPython3_EXECUTABLE=\"$PYTHON_EXECUTABLE\" -DPython_EXECUTABLE=\"$PYTHON_EXECUTABLE\"" >> "$GITHUB_OUTPUT"
       - name: Integration Test Setup (Generic)
         if: inputs.run_integration_tests
         run: |
@@ -429,6 +447,11 @@ jobs:
         run: |
           ${{ steps.setup-windows.outputs.setup }}
           ninja -C build check-pyrtg
+      - name: Test PyCDE
+        if: inputs.run_tests && inputs.build_pycde && (runner.os != 'macOS' || runner.arch != 'X64')
+        run: |
+          ${{ steps.setup-windows.outputs.setup }}
+          ninja -C build check-pycde
       - name: Check CIRCT Standalone Example
         if: inputs.run_tests
         run: |

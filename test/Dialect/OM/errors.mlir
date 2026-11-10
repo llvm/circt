@@ -1,5 +1,12 @@
 // RUN: circt-opt %s -verify-diagnostics -split-input-file
 
+// expected-error @+1 {{linkonce_odr requires public visibility}}
+om.class private @Private() attributes {linkonce_odr} {
+  om.class.fields
+}
+
+// -----
+
 om.class @Class() {
   // expected-error @+1 {{'om.object' op result type ("Bar") does not match referred to class ("Foo")}}
   %0 = om.object @Foo() : () -> !om.class.type<@Bar>
@@ -158,6 +165,57 @@ om.class @BadPath(%basepath: !om.basepath) {
 // expected-error @+1 {{custom op 'om.class' field "foo" is defined twice}}
 om.class @DupField(%0: i1) -> (foo: i1, foo: i1){
   om.class.fields %0, %0 : i1, i1
+}
+
+// -----
+
+om.class @ListContainsTypeMismatch(%list: !om.list<!om.string>, %element: !om.integer) {
+  // expected-error @+1 {{failed to verify that list element type should match search element type}}
+  %0 = "om.list_contains"(%list, %element) : (!om.list<!om.string>, !om.integer) -> i1
+  om.class.fields
+}
+
+// -----
+
+om.class @ListContainsInferredTypeMismatch(%list: !om.list<!om.string>) {
+  %0 = om.list_contains %list, %element : !om.list<!om.string>
+  // expected-note @-1 {{previously used here with type '!om.string'}}
+  // expected-error @+1 {{definition of SSA value '%element#0' has type '!om.integer'}}
+  %element = om.constant #om.integer<0> : !om.integer
+  om.class.fields
+}
+
+// -----
+
+om.class @ListContainsUnsupportedType(%list: !om.list<i32>, %element: i32) {
+  // expected-error @+1 {{operand #1 must be A type that represents a string. or A type that represents an arbitrary width integer. or 1-bit signless integer, but got 'i32'}}
+  %0 = om.list_contains %list, %element : !om.list<i32>
+  om.class.fields
+}
+
+// -----
+
+// Generic syntax exercises the ODS operand and result type constraints.
+om.class @ObjectEqInvalidLhs(%invalid: !om.string, %ref: !om.any) {
+  // expected-error @+1 {{'om.object.eq' op operand #0 must be A type that represents a reference to a Class. or A type that represents any valid OM type., but got '!om.string'}}
+  %0 = "om.object.eq"(%invalid, %ref) : (!om.string, !om.any) -> i1
+  om.class.fields
+}
+
+// -----
+
+om.class @ObjectEqInvalidRhs(%ref: !om.any, %invalid: !om.integer) {
+  // expected-error @+1 {{'om.object.eq' op operand #1 must be A type that represents a reference to a Class. or A type that represents any valid OM type., but got '!om.integer'}}
+  %0 = "om.object.eq"(%ref, %invalid) : (!om.any, !om.integer) -> i1
+  om.class.fields
+}
+
+// -----
+
+om.class @ObjectEqInvalidResult(%ref: !om.any) {
+  // expected-error @+1 {{'om.object.eq' op result #0 must be 1-bit signless integer, but got 'i8'}}
+  %0 = "om.object.eq"(%ref, %ref) : (!om.any, !om.any) -> i8
+  om.class.fields
 }
 
 // -----

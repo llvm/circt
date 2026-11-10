@@ -76,11 +76,11 @@ struct PathResolver {
     // Transform the instances into a list of FlatSymbolRefs.
     SmallVector<Attribute> insts;
     insts.reserve(target.instances.size());
-    std::transform(target.instances.begin(), target.instances.end(),
-                   std::back_inserter(insts), [&](InstanceOp instance) {
-                     return OpAnnoTarget(instance).getNLAReference(
-                         namespaces[instance->getParentOfType<FModuleLike>()]);
-                   });
+    llvm::transform(target.instances, std::back_inserter(insts),
+                    [&](InstanceOp instance) {
+                      return OpAnnoTarget(instance).getNLAReference(
+                          namespaces[instance->getParentOfType<FModuleLike>()]);
+                    });
 
     // Push a reference to the current module.
     insts.push_back(

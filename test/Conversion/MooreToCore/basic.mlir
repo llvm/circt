@@ -360,7 +360,7 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
 // CHECK-LABEL: ExtractRefArrayElement
 func.func @ExtractRefArrayElement(%j: !moore.ref<array<1 x array<1 x l3>>>) -> (!moore.ref<array<1 x l3>>) {
   // CHECK: llhd.sig.array_get
-  %0 = moore.extract_ref %j from 0 : <array<1 x array<1 x l3>>> -> <array<1 x l3>>
+  %0 = moore.extract_ref %j from 0 : ref<array<1 x array<1 x l3>>> -> ref<array<1 x l3>>
   return %0 : !moore.ref<array<1 x l3>>
 }
 
@@ -374,7 +374,7 @@ func.func @DynExtractArrayElement(%j: !moore.array<2 x array<1 x l3>>, %idx: !mo
 // CHECK-LABEL: DynExtractRefArrayElement
 func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %idx: !moore.l1) -> (!moore.ref<array<1 x l3>>) {
   // CHECK: llhd.sig.array_get
-  %0 = moore.dyn_extract_ref %j from %idx : <array<2 x array<1 x l3>>>, !moore.l1 -> <array<1 x l3>>
+  %0 = moore.dyn_extract_ref %j from %idx : ref<array<2 x array<1 x l3>>>, !moore.l1 -> ref<array<1 x l3>>
   return %0 : !moore.ref<array<1 x l3>>
 }
 
@@ -610,6 +610,25 @@ moore.module @Net() {
   %3 = moore.constant 10 : i32
   // CHECK: llhd.assign %a, [[TMP]] : i32
   moore.assign %a, %3 : ref<i32>
+}
+
+// FIXME: this can be merged with the above once moore.net ops emit moore.net
+// types
+// CHECK-LABEL: hw.module @NetType
+// CHECK-SAME: in [[I1NET:%.+]] : !llhd.net<i1>
+// CHECK-SAME: in [[STRUCTNET:%.+]] : !llhd.net<!hw.struct<a: i8, b: i8>>)
+moore.module @NetType(in %i1net : !moore.net<!moore.i1>, in %structnet : !moore.net<struct<{a: i8, b: i8}>>) {
+  %c0_i1 = moore.constant 0 : i1
+  %c0_i8 = moore.constant 0 : i8
+  // CHECK: llhd.prb_net [[I1NET]] : i1
+  %0 = moore.read %i1net : net<i1>
+  // CHECK: llhd.prb_net [[STRUCTNET]] : !hw.struct<a: i8, b: i8>
+  %1 = moore.read %structnet : net<struct<{a: i8, b: i8}>>
+  // CHECK: llhd.assign_net [[I1NET]], {{%.+}} : i1
+  moore.assign %i1net, %c0_i1 : net<i1>
+  // CHECK: llhd.assign_net [[STRUCTNET]], {{%.+}} : !hw.struct<a: i8, b: i8>
+  %2 = moore.struct_create %c0_i8, %c0_i8 : !moore.i8, !moore.i8 -> struct<{a: i8, b: i8}>
+  moore.assign %structnet, %2 : net<struct<{a: i8, b: i8}>>
 }
 
 // CHECK-LABEL: hw.module @UnpackedArray
@@ -941,7 +960,7 @@ func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42,
     moore.builtin.acos %arg2 : f64
     // CHECK: math.atan %arg2 : f64
     moore.builtin.atan %arg2 : f64
-    // CHECK math.atan2 %arg2, %arg3 : f64
+    // CHECK: math.atan2 %arg2, %arg3 : f64
     moore.builtin.atan2 %arg2, %arg3  : f64
     // CHECK-DAG: [[V6:%.+]] = arith.mulf %arg2, %arg2 : f64
     // CHECK-DAG: [[V7:%.+]] = arith.mulf %arg3, %arg3 : f64
@@ -1039,19 +1058,11 @@ moore.module @WaitEvent() {
   %c = moore.variable : <i1>
   %d = moore.variable : <i4>
 
+  // A `wait_event` without any `detect_event` ops never resumes, so the
+  // process halts.
   // CHECK: llhd.process {
   // CHECK:   func.call @dummyA()
-  // CHECK:   cf.br ^[[WAIT:.+]]
-  // CHECK: ^[[WAIT]]:
-  // CHECK:   func.call @dummyB()
-  // CHECK:   llhd.wait ^[[CHECK:.+]]
-  // CHECK: ^[[CHECK]]:
-  // CHECK:   func.call @dummyB()
-  // CHECK:   cf.br ^[[WAIT:.+]]
-  // CHECK: ^[[RESUME:.+]]:
-  // CHECK:   func.call @dummyC()
-  // CHECK:   llhd.prb %a
-  // CHECK:   llhd.halt
+  // CHECK-NEXT: llhd.halt
   // CHECK: }
   moore.procedure initial {
     func.call @dummyA() : () -> ()
@@ -1307,6 +1318,196 @@ moore.module @EmptyWaitEvent(out out : !moore.l32) {
   moore.output %1 : !moore.l32
 }
 
+// CHECK-LABEL: hw.module @WaitLevel(
+moore.module @WaitLevel() {
+  %a = moore.variable : <i1>
+  %b = moore.variable : <i8>
+
+  // A level wait on a single signal.
+  // CHECK: llhd.process {
+  // CHECK:   cf.br ^[[CHECK:[a-z0-9]+]]
+  // CHECK: ^[[CHECK]]:
+  // CHECK:   [[V:%.+]] = llhd.prb
+  // CHECK:   cf.cond_br [[V]], ^[[RESUME:[a-z0-9]+]], ^[[WAIT:[a-z0-9]+]]
+  // CHECK: ^[[WAIT]]:
+  // CHECK:   llhd.wait ({{.+}} : i1), ^[[CHECK]]
+  // CHECK: ^[[RESUME]]:
+  // CHECK:   func.call @dummyA()
+  // CHECK:   llhd.halt
+  moore.procedure initial {
+    moore.wait_level {
+      %0 = moore.read %a : ref<i1>
+      moore.detect_level %0 : i1
+    }
+    func.call @dummyA() : () -> ()
+    moore.return
+  }
+
+  // A level wait on a condition computed from multiple signals.
+  // CHECK: llhd.process {
+  // CHECK: ^[[CHECK2:[a-z0-9]+]]:
+  // CHECK:   comb.icmp
+  // CHECK:   comb.and
+  // CHECK:   cf.cond_br
+  // CHECK:   llhd.wait ({{.+}}, {{.+}} : i1, i8), ^[[CHECK2]]
+  moore.procedure initial {
+    moore.wait_level {
+      %0 = moore.read %a : ref<i1>
+      %1 = moore.read %b : ref<i8>
+      %2 = moore.bool_cast %1 : i8 -> i1
+      %3 = moore.and %0, %2 : i1
+      moore.detect_level %3 : i1
+    }
+    moore.return
+  }
+}
+
+// CHECK-LABEL: hw.module @WaitLevelConstant
+moore.module @WaitLevelConstant() {
+  // A constant condition has nothing to observe, and resumes immediately.
+  // CHECK: llhd.process {
+  // CHECK:   cf.br ^[[CHECK:[a-z0-9]+]]
+  // CHECK: ^[[CHECK]]:
+  // CHECK:   [[TRUE:%.+]] = hw.constant true
+  // CHECK:   cf.cond_br [[TRUE]], ^[[RESUME:[a-z0-9]+]], ^[[WAIT:[a-z0-9]+]]
+  // CHECK: ^[[WAIT]]:
+  // CHECK:   llhd.wait ^[[CHECK]]
+  // CHECK: ^[[RESUME]]:
+  // CHECK:   llhd.halt
+  moore.procedure initial {
+    moore.wait_level {
+      %c = moore.constant 1 : i1
+      moore.detect_level %c : i1
+    }
+    moore.return
+  }
+}
+
+// CHECK-LABEL: hw.module @WaitLevelFourState
+moore.module @WaitLevelFourState(in %in : !moore.l1) {
+  %x = moore.variable : <l1>
+  // 4-state variable condition, probed inside the body and observed outside.
+  // CHECK: [[OBS:%.+]] = llhd.prb %x : i1
+  // CHECK: llhd.process {
+  // CHECK:   cf.br ^[[CHECK:[a-z0-9]+]]
+  // CHECK: ^[[CHECK]]:
+  // CHECK:   [[V:%.+]] = llhd.prb %x : i1
+  // CHECK:   cf.cond_br [[V]], ^[[RESUME:[a-z0-9]+]], ^[[WAIT:[a-z0-9]+]]
+  // CHECK: ^[[WAIT]]:
+  // CHECK:   llhd.wait ([[OBS]] : i1), ^[[CHECK]]
+  moore.procedure initial {
+    moore.wait_level {
+      %0 = moore.read %x : ref<l1>
+      moore.detect_level %0 : l1
+    }
+    moore.return
+  }
+
+  // Condition defined outside the process (module port).
+  // CHECK: llhd.process {
+  // CHECK:   cf.br ^[[CHECK:[a-z0-9]+]]
+  // CHECK: ^[[CHECK]]:
+  // CHECK:   cf.cond_br %in, ^[[RESUME:[a-z0-9]+]], ^[[WAIT:[a-z0-9]+]]
+  // CHECK: ^[[WAIT]]:
+  // CHECK:   llhd.wait (%in : i1), ^[[CHECK]]
+  moore.procedure initial {
+    moore.wait_level {
+      moore.detect_level %in : l1
+    }
+    moore.return
+  }
+}
+
+// CHECK-LABEL: hw.module @WaitLevelMultiple
+moore.module @WaitLevelMultiple(in %a : !moore.i1, in %b : !moore.i1) {
+  // Several waits in one process, with code in between and after.
+  // CHECK: llhd.process {
+  // CHECK:   call @dummyA()
+  // CHECK:   cf.br ^[[A_CHECK:[a-z0-9]+]]
+  // CHECK: ^[[A_CHECK]]:
+  // CHECK:   call @dummyB()
+  // CHECK:   call @dummyC()
+  // CHECK:   cf.cond_br %a, ^[[A_RESUME:[a-z0-9]+]], ^[[A_WAIT:[a-z0-9]+]]
+  // CHECK: ^[[A_WAIT]]:
+  // CHECK:   llhd.wait (%a : i1), ^[[A_CHECK]]
+  // CHECK: ^[[A_RESUME]]:
+  // CHECK:   call @dummyA()
+  // CHECK:   cf.br ^[[B_CHECK:[a-z0-9]+]]
+  // CHECK: ^[[B_CHECK]]:
+  // CHECK:   call @dummyB()
+  // CHECK:   call @dummyC()
+  // CHECK:   cf.cond_br %b, ^[[B_RESUME:[a-z0-9]+]], ^[[B_WAIT:[a-z0-9]+]]
+  // CHECK: ^[[B_WAIT]]:
+  // CHECK:   llhd.wait (%b : i1), ^[[B_CHECK]]
+  // CHECK: ^[[B_RESUME]]:
+  // CHECK:   call @dummyA()
+  // CHECK:   llhd.halt
+  moore.procedure initial {
+    func.call @dummyA() : () -> ()
+    moore.wait_level {
+      func.call @dummyB() : () -> ()
+      moore.detect_level %a : i1
+      func.call @dummyC() : () -> ()
+    }
+    func.call @dummyA() : () -> ()
+    moore.wait_level {
+      func.call @dummyB() : () -> ()
+      moore.detect_level %b : i1
+      func.call @dummyC() : () -> ()
+    }
+    func.call @dummyA() : () -> ()
+    moore.return
+  }
+
+  // In a looping procedure the resume block branches back to the start.
+  // CHECK: llhd.process {
+  // CHECK:   cf.br ^[[LOOP:[a-z0-9]+]]
+  // CHECK: ^[[LOOP]]:
+  // CHECK:   cf.br ^[[CHECK:[a-z0-9]+]]
+  // CHECK: ^[[CHECK]]:
+  // CHECK:   cf.cond_br %a, ^[[RESUME:[a-z0-9]+]], ^[[WAIT:[a-z0-9]+]]
+  // CHECK: ^[[WAIT]]:
+  // CHECK:   llhd.wait (%a : i1), ^[[CHECK]]
+  // CHECK: ^[[RESUME]]:
+  // CHECK:   cf.br ^[[LOOP]]
+  moore.procedure always {
+    moore.wait_level {
+      moore.detect_level %a : i1
+    }
+    moore.return
+  }
+}
+
+// CHECK-LABEL: hw.module @WaitLevelNoDetect
+moore.module @WaitLevelNoDetect() {
+  // Without any `detect_level` op the process can never resume, and halts.
+  // CHECK: llhd.process {
+  // CHECK-NEXT: llhd.halt
+  moore.procedure initial {
+    moore.wait_level {
+    }
+    moore.return
+  }
+}
+
+// CHECK-LABEL: hw.module @WaitLevelMultipleDetects
+moore.module @WaitLevelMultipleDetects(in %a : !moore.i1, in %b : !moore.i1) {
+  // Multiple levels resume the process if any of them is true.
+  // CHECK: llhd.process {
+  // CHECK:   cf.br ^[[CHECK:[a-z0-9]+]]
+  // CHECK: ^[[CHECK]]:
+  // CHECK:   [[OR:%.+]] = comb.or bin %a, %b
+  // CHECK:   cf.cond_br [[OR]], ^[[RESUME:[a-z0-9]+]], ^[[WAIT:[a-z0-9]+]]
+  // CHECK: ^[[WAIT]]:
+  // CHECK:   llhd.wait (%a, %b : i1, i1), ^[[CHECK]]
+  moore.procedure initial {
+    moore.wait_level {
+      moore.detect_level %a : i1
+      moore.detect_level %b : i1
+    }
+    moore.return
+  }
+}
 
 // CHECK-LABEL: hw.module @WaitDelay
 moore.module @WaitDelay(in %d: !moore.time) {
@@ -1356,7 +1557,7 @@ moore.module @NoPredecessorBlockErasure(in %clk_i : !moore.l1, in %raddr_i : !mo
     %6 = moore.add %5, %1 : i32
     cf.br ^bb3(%6 : !moore.i32)
   ^bb7:  // no predecessors
-    %7 = moore.extract_ref %mem from 0 : <array<32 x l32>> -> <l32>
+    %7 = moore.extract_ref %mem from 0 : ref<array<32 x l32>> -> ref<l32>
     moore.nonblocking_assign %7, %0 : l32
     cf.br ^bb8
   ^bb8:  // 2 preds: ^bb3, ^bb7
@@ -1845,7 +2046,7 @@ func.func @StringSubstr(%arg0: !moore.string, %arg1: !moore.i32, %arg2: !moore.i
   return
 }
 
-// CHECK-LABEL func.func @QueueOperations
+// CHECK-LABEL: func.func @QueueOperations
 func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
   // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : <!sim.queue<i32, 10>>

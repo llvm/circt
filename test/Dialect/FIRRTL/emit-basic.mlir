@@ -638,7 +638,9 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module Properties :
-  firrtl.module @Properties(out %string : !firrtl.string,
+  firrtl.module @Properties(in %refA : !firrtl.anyref,
+                            in %refB : !firrtl.anyref,
+                            out %string : !firrtl.string,
                             out %integer : !firrtl.integer,
                             out %bool : !firrtl.bool,
                             out %double : !firrtl.double,
@@ -647,6 +649,7 @@ firrtl.circuit "Foo" {
                             out %unknownString : !firrtl.string,
                             out %stringcat : !firrtl.string,
                             out %stringeq : !firrtl.bool,
+                            out %objecteq : !firrtl.bool,
                             out %stringcontains : !firrtl.bool,
                             out %integercontains : !firrtl.bool,
                             out %boolcontains : !firrtl.bool,
@@ -711,6 +714,10 @@ firrtl.circuit "Foo" {
     // CHECK: propassign stringeq, prop_eq(String("hello"), String("world"))
     %streq = firrtl.prop.eq %str0, %str1 : !firrtl.string
     firrtl.propassign %stringeq, %streq : !firrtl.bool
+
+    // CHECK: propassign objecteq, object_eq(refA, refB)
+    %objeq = firrtl.object.eq %refA, %refB : !firrtl.anyref, !firrtl.anyref
+    firrtl.propassign %objecteq, %objeq : !firrtl.bool
 
     // CHECK: propassign stringcontains,
     // CHECK: list_contains(List<String>(String("hello"), String("world")),
@@ -1055,6 +1062,12 @@ firrtl.circuit "Foo" {
     #firrtl.domain.field<"alwaysOn", !firrtl.bool>
   ]
 
+  // CHECK-LABEL: domain DomainContainer :
+  // CHECK-NEXT:    source : AnyRef
+  firrtl.domain @DomainContainer [
+    #firrtl.domain.field<"source", !firrtl.anyref>
+  ]
+
   // CHECK-LABEL: domain RegistryDomain :
   // CHECK-NEXT:    clockGates : Registry<Path>
   firrtl.domain @RegistryDomain [
@@ -1158,6 +1171,23 @@ firrtl.circuit "Foo" {
     )
     // CHECK-NEXT: domain_define foo.A = my_clock
     firrtl.domain.define %foo_A, %my_clock : !firrtl.domain<@ClockDomain()>
+  }
+
+  // Domain-to-anyref casts have no FIRRTL syntax and are elided in domain
+  // creation and property assignments.
+  // CHECK-LABEL: module DomainAnyRef :
+  firrtl.module @DomainAnyRef(
+    // CHECK-NEXT: input A : Domain of ClockDomain
+    // CHECK-NEXT: output ref : AnyRef
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %ref: !firrtl.anyref
+  ) {
+    %0 = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    // CHECK-EMPTY:
+    // CHECK-NEXT: domain B of DomainContainer(A)
+    %B = firrtl.domain.create(%0) : !firrtl.domain<@DomainContainer(source: !firrtl.anyref)>
+    // CHECK-NEXT: propassign ref, A
+    firrtl.propassign %ref, %0 : !firrtl.anyref
   }
 
 }

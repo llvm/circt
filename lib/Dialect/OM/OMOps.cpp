@@ -345,7 +345,11 @@ void circt::om::ClassOp::print(OpAsmPrinter &printer) {
   printClassLike(*this, printer);
 }
 
-LogicalResult circt::om::ClassOp::verify() { return verifyClassLike(*this); }
+LogicalResult circt::om::ClassOp::verify() {
+  if (getLinkonceOdr() && !isPublic())
+    return emitOpError("linkonce_odr requires public visibility");
+  return verifyClassLike(*this);
+}
 
 LogicalResult circt::om::ClassOp::verifyRegions() {
   auto fieldsOp =
@@ -394,7 +398,7 @@ circt::om::ClassOp::getFieldType(mlir::StringAttr field) {
   return getClassLikeFieldType(*this, field);
 }
 
-void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer &replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
 }
 
@@ -526,7 +530,7 @@ circt::om::ClassExternOp::getFieldType(mlir::StringAttr field) {
   return getClassLikeFieldType(*this, field);
 }
 
-void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer &replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
 }
 
@@ -785,6 +789,16 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!hierPath)
     return emitOpError("invalid symbol reference");
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// AnyCastOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AnyCastOp::fold(FoldAdaptor adaptor) {
+  if (getInput().getType() == getType() && getInput() != getResult())
+    return getInput();
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -1121,6 +1135,65 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
     return {};
 
   return *result;
+}
+
+//===----------------------------------------------------------------------===//
+// ObjectEqOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ObjectEqOp::fold(FoldAdaptor adaptor) {
+  // object.eq(x, x) -> true, even for unknown x.
+  if (getLhs() == getRhs())
+    return mlir::IntegerAttr::get(getType(), 1);
+
+  // object.eq(a, b) -> false for distinct elaborated objects.
+  if (getLhs().getDefiningOp<ElaboratedObjectOp>() &&
+      getRhs().getDefiningOp<ElaboratedObjectOp>())
+    return mlir::IntegerAttr::get(getType(), 0);
+
+  // object.eq(any_cast(x), y) -> object.eq(x, y).
+  if (auto cast = getLhs().getDefiningOp<AnyCastOp>();
+      cast && isa<ClassType>(cast.getInput().getType())) {
+    getLhsMutable().assign(cast.getInput());
+    return getResult();
+  }
+
+  // object.eq(x, any_cast(y)) -> object.eq(x, y).
+  if (auto cast = getRhs().getDefiningOp<AnyCastOp>();
+      cast && isa<ClassType>(cast.getInput().getType())) {
+    getRhsMutable().assign(cast.getInput());
+    return getResult();
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// ListContainsOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ListContainsOp::fold(FoldAdaptor adaptor) {
+  // Fold membership based on SSA identity for a directly constructed list.
+  if (auto listCreate = getList().getDefiningOp<ListCreateOp>();
+      listCreate && llvm::is_contained(listCreate.getInputs(), getElement()))
+    return mlir::IntegerAttr::get(getResult().getType(), 1);
+
+  auto listAttr = dyn_cast_or_null<ListAttr>(adaptor.getList());
+  Attribute elementAttr = adaptor.getElement();
+  // Both the list and element must fold to constant attributes. Even an empty
+  // list requires a constant element.
+  if (!listAttr || !elementAttr)
+    return {};
+
+  bool found = false;
+  for (Attribute candidate : listAttr.getElements()) {
+    auto equality = evaluateBinaryEquality(candidate, elementAttr);
+    if (failed(equality))
+      return {};
+    found |= !cast<mlir::IntegerAttr>(*equality).getValue().isZero();
+  }
+
+  return mlir::IntegerAttr::get(getResult().getType(), found);
 }
 
 //===----------------------------------------------------------------------===//

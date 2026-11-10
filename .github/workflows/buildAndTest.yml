@@ -106,6 +106,17 @@ jobs:
           python3 utils/find_slang_tests_without_valgrind.py test
           python3 utils/find_slang_tests_without_valgrind.py integration_test
 
+      # Check FileCheck directives for typos, most of which FileCheck silently
+      # ignores. filecheck_lint.py lives in the llvm submodule, which is not
+      # checked out here, so fetch it at the commit the submodule points to.
+      - name: filecheck-lint
+        if: ${{ always() }}
+        run: |
+          LLVM_SHA=$(git rev-parse HEAD:llvm)
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/filecheck_lint.py" \
+            "https://raw.githubusercontent.com/llvm/llvm-project/$LLVM_SHA/llvm/utils/filecheck_lint/filecheck_lint.py"
+          FILECHECK_LINT="$RUNNER_TEMP/filecheck_lint.py" utils/run-filecheck-lint.sh
+
       # Upload the format patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.
       - name: Upload format patches
@@ -227,6 +238,7 @@ jobs:
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
       extra_cmake_args: ${{ matrix.generated.extra_cmake_args }}
+      build_pycde: false
 
   # --- end of build-circt job.
 

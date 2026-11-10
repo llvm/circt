@@ -1548,3 +1548,38 @@ hw.module private @CondStructExplode(in %sel : i1, in %i : !hw.struct<el : i1>, 
   %el = hw.struct_explode %2 : !hw.struct<el : i1>
   hw.output %el : i1
 }
+
+// CHECK-LABEL: module PortWithSVAttributes(
+// CHECK-NEXT:    (* port_role = "data", channel_name = "arg0" *)
+// CHECK-NEXT:    input  [31:0] arg0_0,
+// CHECK-NEXT:    (* port_role = "data", channel_name = "arg0" *)
+// CHECK-NEXT:    input  [31:0] arg0_1,
+// CHECK-NEXT:    input         clk,
+// CHECK-NEXT:    (* port_role = "valid", channel_name = "arg0" *)
+// CHECK-NEXT:    input         arg0_valid,
+// CHECK-NEXT:    input         rst,
+// CHECK-NEXT:    (* port_role = "ready", channel_name = "arg0" *)
+// CHECK-NEXT:    output        arg0_ready
+// CHECK-NEXT:  );
+hw.module @PortWithSVAttributes(
+    in %arg0_0 : i32 {sv.attributes = [#sv.attribute<"port_role" = "\"data\"">, #sv.attribute<"channel_name" = "\"arg0\"">]},
+    in %arg0_1 : i32 {sv.attributes = [#sv.attribute<"port_role" = "\"data\"">, #sv.attribute<"channel_name" = "\"arg0\"">]},
+    in %clk : i1,
+    in %arg0_valid : i1 {sv.attributes = [#sv.attribute<"port_role" = "\"valid\"">, #sv.attribute<"channel_name" = "\"arg0\"">]},
+    in %rst : i1,
+    out arg0_ready : i1 {sv.attributes = [#sv.attribute<"port_role" = "\"ready\"">, #sv.attribute<"channel_name" = "\"arg0\"">]}) {
+  hw.output %arg0_valid : i1
+}
+
+// CHECK-LABEL: module PortWithSVAttributesAndZeroWidth(
+// CHECK-NEXT:       (* port_role = "data" *)
+// CHECK-NEXT:       input                 a,
+// CHECK-NEXT:    // input  /*Zero Width*/ z,
+// CHECK-NEXT:       output                out
+// CHECK-NEXT:  );
+hw.module @PortWithSVAttributesAndZeroWidth(
+    in %a : i1 {sv.attributes = [#sv.attribute<"port_role" = "\"data\"">]},
+    in %z : i0,
+    out out : i1) {
+  hw.output %a : i1
+}

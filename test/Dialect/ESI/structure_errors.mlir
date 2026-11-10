@@ -19,10 +19,10 @@ esi.pure_module @top {
 
 esi.pure_module @top {
   %loopback = esi.null : !esi.channel<i1, ValidReady>
-  %data, %valid = esi.unwrap.vr %loopback, %ready : i1
+  %data, %valid = esi.unwrap.vr %loopback, %ready : !esi.channel<i1, ValidReady>
   // expected-error @+1 {{'comb.add' op operation not allowed in ESI pure modules}}
   %double = comb.add %data, %data : i1
-  %loopbackDouble, %ready = esi.wrap.vr %double, %valid : i1
+  %loopbackDouble, %ready = esi.wrap.vr %double, %valid : !esi.channel<i1, ValidReady>
 }
 
 // -----

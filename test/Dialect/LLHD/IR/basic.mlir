@@ -72,12 +72,27 @@ hw.module @checkSigInst() {
   %uninit = llhd.sig : <i8>
 }
 
+// CHECK-LABEL: @checkNetInst
+hw.module @checkNetInst() {
+  // CHECK-NEXT: %netI1 = llhd.net wire : <i1>
+  %netI1 = llhd.net wire : <i1>
+  // CHECK-NEXT: %netI64 = llhd.net supply0 : <i64>
+  %netI64 = llhd.net supply0 : <i64>
+
+  // CHECK-NEXT: llhd.net tri : <!hw.array<2xi1>>
+  %netTup = llhd.net tri : <!hw.array<2xi1>>
+}
+
 // CHECK-LABEL: @checkPrb
 hw.module @checkPrb(
   in %arg0 : !llhd.ref<i1>,
   in %arg1 : !llhd.ref<i64>,
   in %arg2 : !llhd.ref<!hw.array<3xi8>>,
-  in %arg3 : !llhd.ref<!hw.struct<foo: i1, bar: i2, baz: i4>>
+  in %arg3 : !llhd.ref<!hw.struct<foo: i1, bar: i2, baz: i4>>,
+  in %arg4 : !llhd.net<i1>,
+  in %arg5 : !llhd.net<i64>,
+  in %arg6 : !llhd.net<!hw.array<3xi8>>,
+  in %arg7 : !llhd.net<!hw.struct<foo: i1, bar: i2, baz: i4>>
 ) {
   // CHECK: %{{.*}} = llhd.prb %arg0 : i1
   %0 = llhd.prb %arg0 : i1
@@ -87,6 +102,14 @@ hw.module @checkPrb(
   %2 = llhd.prb %arg2 : !hw.array<3xi8>
   // CHECK-NEXT: %{{.*}} = llhd.prb %arg3 : !hw.struct<foo: i1, bar: i2, baz: i4>
   %3 = llhd.prb %arg3 : !hw.struct<foo: i1, bar: i2, baz: i4>
+  // CHECK: %{{.*}} = llhd.prb_net %arg4 : i1
+  %4 = llhd.prb_net %arg4 : i1
+  // CHECK-NEXT: %{{.*}} = llhd.prb_net %arg5 : i64
+  %5 = llhd.prb_net %arg5 : i64
+  // CHECK-NEXT: %{{.*}} = llhd.prb_net %arg6 : !hw.array<3xi8>
+  %6 = llhd.prb_net %arg6 : !hw.array<3xi8>
+  // CHECK-NEXT: %{{.*}} = llhd.prb_net %arg7 : !hw.struct<foo: i1, bar: i2, baz: i4>
+  %7 = llhd.prb_net %arg7 : !hw.struct<foo: i1, bar: i2, baz: i4>
 }
 
 // CHECK-LABEL: @checkOutput
@@ -107,7 +130,9 @@ hw.module @checkDrv(
   in %arg5 : !llhd.ref<!hw.array<3xi8>>,
   in %arg6 : !llhd.ref<!hw.struct<foo: i1, bar: i2, baz: i4>>,
   in %arg7 : !hw.array<3xi8>,
-  in %arg8 : !hw.struct<foo: i1, bar: i2, baz: i4>
+  in %arg8 : !hw.struct<foo: i1, bar: i2, baz: i4>,
+  in %arg9 : !llhd.net<i1>,
+  in %arg10 : !llhd.net<i64>
 ) {
   %t = llhd.constant_time <0ns, 1d>
   // CHECK: llhd.drv %arg0, %arg2 after %{{.*}} : i1
@@ -124,6 +149,10 @@ hw.module @checkDrv(
   llhd.drv %arg5, %arg7 after %t : !hw.array<3xi8>
   // CHECK-NEXT: llhd.drv %arg6, %arg8 after %{{.*}} : !hw.struct<foo: i1, bar: i2, baz: i4>
   llhd.drv %arg6, %arg8 after %t : !hw.struct<foo: i1, bar: i2, baz: i4>
+  // CHECK-NEXT: llhd.assign_net %arg9, %arg2 : i1
+  llhd.assign_net %arg9, %arg2 : i1
+  // CHECK-NEXT: llhd.assign_net %arg10, %arg3 if %arg2 : i64
+  llhd.assign_net %arg10, %arg3 if %arg2 : i64
 }
 
 // CHECK-LABEL: @check_wait_0

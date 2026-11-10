@@ -19,10 +19,10 @@ def DriveLikeOp : OpInterface<"DriveLikeOp"> {
   }];
 
   let methods = [
-    InterfaceMethod<"Get the signal being updated.",
-      "::mlir::Value", "getSignal">,
-    InterfaceMethod<"Get the operand holding the signal being updated.",
-      "::mlir::MutableOperandRange", "getSignalMutable">,
+    InterfaceMethod<"Get the value being updated.",
+      "::mlir::Value", "getDriven">,
+    InterfaceMethod<"Get the operand holding the value being updated.",
+      "::mlir::MutableOperandRange", "getDrivenMutable">,
     InterfaceMethod<"Get the value written to the signal.",
       "::mlir::Value", "getValue">,
     InterfaceMethod<"Get the operand holding the value written to the signal.",

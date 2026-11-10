@@ -144,11 +144,13 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
   auto typedZero = hw::BitcastOp::create(rewriter, loc, innerType, zero);
 
   if (chanType.getSignaling() == ChannelSignaling::ValidOnly) {
-    auto wrap = WrapValidOnlyOp::create(rewriter, loc, typedZero, valid);
+    auto wrap = WrapValidOnlyOp::create(rewriter, loc, typedZero, valid,
+                                        chanType.getDataDelay());
     wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
     rewriter.replaceOp(nullop, {wrap.getChanOutput()});
   } else {
-    auto wrap = WrapValidReadyOp::create(rewriter, loc, typedZero, valid);
+    auto wrap = WrapValidReadyOp::create(rewriter, loc, typedZero, valid,
+                                         chanType.getDataDelay());
     wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
     rewriter.replaceOp(nullop, {wrap.getChanOutput()});
   }
@@ -478,7 +480,7 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
         WrapWindow::create(rewriter, loc, windowType, castedRecvData);
   }
   WrapValidReadyOp wrapRecv = WrapValidReadyOp::create(
-      rewriter, loc, castedRecvData, recvValidFromCosim);
+      rewriter, loc, castedRecvData, recvValidFromCosim, type.getDataDelay());
   recvReady.setValue(wrapRecv.getReady());
 
   // Replace the CosimEndpointOp op.

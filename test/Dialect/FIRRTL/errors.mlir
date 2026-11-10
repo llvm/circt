@@ -1448,6 +1448,33 @@ firrtl.circuit "ListContainsUnsupportedType" {
 }
 
 // -----
+// Generic syntax exercises the ODS operand type constraints for each side.
+firrtl.circuit "ObjectEqInvalidLhs" {
+  firrtl.module @ObjectEqInvalidLhs(
+      in %invalid: !firrtl.string, in %ref: !firrtl.anyref) {
+    // expected-error @below {{'firrtl.object.eq' op operand #0 must be class type or any reference type, but got '!firrtl.string'}}
+    %eq = "firrtl.object.eq"(%invalid, %ref) : (!firrtl.string, !firrtl.anyref) -> !firrtl.bool
+  }
+}
+
+// -----
+firrtl.circuit "ObjectEqInvalidRhs" {
+  firrtl.module @ObjectEqInvalidRhs(
+      in %ref: !firrtl.anyref, in %invalid: !firrtl.integer) {
+    // expected-error @below {{'firrtl.object.eq' op operand #1 must be class type or any reference type, but got '!firrtl.integer'}}
+    %eq = "firrtl.object.eq"(%ref, %invalid) : (!firrtl.anyref, !firrtl.integer) -> !firrtl.bool
+  }
+}
+
+// -----
+firrtl.circuit "ObjectEqInvalidResult" {
+  firrtl.module @ObjectEqInvalidResult(in %ref: !firrtl.anyref) {
+    // expected-error @below {{'firrtl.object.eq' op result #0 must be boolean type, but got '!firrtl.integer'}}
+    %eq = "firrtl.object.eq"(%ref, %ref) : (!firrtl.anyref, !firrtl.anyref) -> !firrtl.integer
+  }
+}
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {
@@ -3659,5 +3686,57 @@ firrtl.circuit "IntegerNotWrongArity" {
       in %lhs: !firrtl.integer, in %rhs: !firrtl.integer) {
     // expected-error @+1 {{'firrtl.integer.not' op requires a single operand}}
     %0 = "firrtl.integer.not"(%lhs, %rhs) : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateMissingOperand" {
+  firrtl.extclass @Class(in str: !firrtl.string)
+  firrtl.module @ObjectCreateMissingOperand() {
+    // expected-error @below {{missing operand for class input "str"}}
+    %obj = firrtl.object.create() : () -> !firrtl.class<@Class(in str: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateWrongType" {
+  firrtl.extclass @Class(in str: !firrtl.string)
+  firrtl.module @ObjectCreateWrongType(in %int: !firrtl.integer) {
+    // expected-error @below {{class input "str" expects '!firrtl.string', but operand 0 has type '!firrtl.integer'}}
+    %obj = firrtl.object.create(%int) : (!firrtl.integer) -> !firrtl.class<@Class(in str: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateExtraOperand" {
+  firrtl.extclass @Class(out result: !firrtl.string)
+  firrtl.module @ObjectCreateExtraOperand(in %str: !firrtl.string) {
+    // expected-error @below {{expected 0 input operands, but got 1}}
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Class(out result: !firrtl.string)>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateUnknownClass" {
+  firrtl.module @ObjectCreateUnknownClass() {
+    // expected-error @below {{references unknown class @Missing}}
+    %obj = firrtl.object.create() : () -> !firrtl.class<@Missing()>
+  }
+}
+
+// -----
+
+firrtl.circuit "ObjectCreateInputFlow" {
+  firrtl.extclass @Class(in str: !firrtl.string)
+  firrtl.module @ObjectCreateInputFlow(in %str: !firrtl.string) {
+    // expected-note @below {{the destination was defined here}}
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Class(in str: !firrtl.string)>
+    %input = firrtl.object.subfield %obj[str] : !firrtl.class<@Class(in str: !firrtl.string)>
+    // expected-error @below {{has no flow}}
+    firrtl.propassign %input, %str : !firrtl.string
   }
 }

@@ -10,7 +10,7 @@
     %w = moore.variable : <l9002>
 
     // CHECK-NOT: moore.concat_ref %a, %b
-    %0 = moore.concat_ref %a, %b : (!moore.ref<i8960>, !moore.ref<i42>) -> <i9002>
+    %0 = moore.concat_ref %a, %b : (!moore.ref<i8960>, !moore.ref<i42>) -> ref<i9002>
     // CHECK: %[[C_READ:.+]] = moore.read %c : ref<i9002>
     %1 = moore.read %c : ref<i9002>
     // CHECK: %[[TMP1:.+]] = moore.extract %[[C_READ]] from 42 : i9002 -> i8960
@@ -20,7 +20,7 @@
     moore.assign %0, %1 : ref<i9002>
     moore.procedure always {
       // CHECK-NOT: moore.concat_ref %u, %v
-      %2 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> <l9002>
+      %2 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> ref<l9002>
       // CHECK: %[[W_READ:.+]] = moore.read %w : ref<l9002>
       // CHECK: %[[TMP1:.+]] = moore.extract %[[W_READ]] from 42 : l9002 -> l8960
       // CHECK: moore.blocking_assign %u, %[[TMP1]] : l8960
@@ -34,7 +34,7 @@
       %6 = moore.to_builtin_int %5 : !moore.i1
       scf.if %6 {
         // CHECK-NOT: moore.concat_ref %u, %v
-        %7 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> <l9002>
+        %7 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> ref<l9002>
         // CHECK: %[[W_READ:.+]] = moore.read %w : ref<l9002>
         %8 = moore.read %w : ref<l9002>
         // CHECK: %[[TMP1:.+]] = moore.extract %[[W_READ]] from 42 : l9002 -> l8960
@@ -60,10 +60,10 @@ moore.module @Nested() {
     %6 = moore.zext %4 : !moore.i32 -> !moore.i96
 
     // CHECK-NOT: moore.concat_ref %x, %x
-    %0 = moore.concat_ref %x, %x : (!moore.ref<i32>, !moore.ref<i32>) -> <i64>
-    %1 = moore.concat_ref %0 : (!moore.ref<i64>) -> <i64>
-    %2 = moore.concat_ref %y : (!moore.ref<i32>) -> <i32>
-    %3 = moore.concat_ref %1, %2 : (!moore.ref<i64>, !moore.ref<i32>) -> <i96>
+    %0 = moore.concat_ref %x, %x : (!moore.ref<i32>, !moore.ref<i32>) -> ref<i64>
+    %1 = moore.concat_ref %0 : (!moore.ref<i64>) -> ref<i64>
+    %2 = moore.concat_ref %y : (!moore.ref<i32>) -> ref<i32>
+    %3 = moore.concat_ref %1, %2 : (!moore.ref<i64>, !moore.ref<i32>) -> ref<i96>
 
     // CHECK: %[[TMP3:.+]] = moore.extract %[[TMP2]] from 64 : i96 -> i32
     // CHECK: moore.blocking_assign %x, %[[TMP3]] : i32
@@ -105,7 +105,7 @@ moore.module @QueueRefsWithConcat() {
 
     // CHECK: [[CCAT:%.+]] = moore.concat [[ONE]], [[TWO]] : (!moore.i32, !moore.i32) -> i64
     %ccat = moore.concat %one, %two : (!moore.i32, !moore.i32) -> i64
-    %bothEls = moore.concat_ref %el1, %el2 : (!moore.ref<i32>, !moore.ref<i32>) -> <i64>
+    %bothEls = moore.concat_ref %el1, %el2 : (!moore.ref<i32>, !moore.ref<i32>) -> ref<i64>
 
     // CHECK: [[EXTR1:%.+]] = moore.extract [[CCAT]] from 32 : i64 -> i32
     // CHECK: moore.queue.set %q[[[ONE]]] = [[EXTR1]] : <queue<i32, 5>>
@@ -134,7 +134,7 @@ moore.module @AssocArrayRefs() {
 func.func @InFunction(%arg0: !moore.i32) -> !moore.i32 {
   %imm = moore.variable : <i32>
   // CHECK-NOT: moore.concat_ref
-  %0 = moore.concat_ref %imm : (!moore.ref<i32>) -> <i32>
+  %0 = moore.concat_ref %imm : (!moore.ref<i32>) -> ref<i32>
   // CHECK: moore.blocking_assign %imm, %{{.+}} : i32
   moore.blocking_assign %0, %arg0 : i32
   %1 = moore.read %imm : ref<i32>
@@ -148,7 +148,7 @@ moore.module @DelayedAssigns() {
   %c = moore.variable : <i32>
   moore.procedure always {
     // CHECK-NOT: moore.concat_ref
-    %0 = moore.concat_ref %a, %b : (!moore.ref<i16>, !moore.ref<i16>) -> <i32>
+    %0 = moore.concat_ref %a, %b : (!moore.ref<i16>, !moore.ref<i16>) -> ref<i32>
     %1 = moore.read %c : ref<i32>
     %2 = moore.constant_time 3000000 fs
     // CHECK: [[EXTR1:%.+]] = moore.extract %{{.+}} from 16 : i32 -> i16
@@ -173,9 +173,9 @@ moore.module @PackedStructExtract() {
 
     // CHECK: [[TMP0:%.+]] = moore.struct_extract_ref %aa, "b" : <struct<{a: i32, b: i32}>> -> <i32>
     // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %aa, "a" : <struct<{a: i32, b: i32}>> -> <i32>
-    // CHECK: [[LHS:%.+]] = moore.extract_ref [[TMP0]] from 0 : <i32> -> <i1>
+    // CHECK: [[LHS:%.+]] = moore.extract_ref [[TMP0]] from 0 : ref<i32> -> ref<i1>
     // CHECK: moore.blocking_assign [[LHS]], %0 : i1
-    %el = moore.extract_ref %aa from 0 : <struct<{a: i32, b: i32}>> -> <i1>
+    %el = moore.extract_ref %aa from 0 : ref<struct<{a: i32, b: i32}>> -> ref<i1>
     moore.blocking_assign %el, %0 : i1
     moore.return
   }
@@ -199,14 +199,25 @@ moore.module @PackedStructExtractRange() {
     // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %aa, "inner" : <struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> <struct<{a: i32, b: i32}>>
     // CHECK: [[INNER_B:%.+]] = moore.struct_extract_ref [[TMP1]], "b" : <struct<{a: i32, b: i32}>> -> <i32>
     // CHECK: [[INNER_A:%.+]] = moore.struct_extract_ref [[TMP1]], "a" : <struct<{a: i32, b: i32}>> -> <i32>
-    // CHECK: [[LHS2:%.+]] = moore.extract_ref [[D]] from 30 : <i32> -> <i2>
-    // CHECK: [[LHS1:%.+]] = moore.extract_ref [[INNER_B]] from 0 : <i32> -> <i1>
+    // CHECK: [[LHS2:%.+]] = moore.extract_ref [[D]] from 30 : ref<i32> -> ref<i2>
+    // CHECK: [[LHS1:%.+]] = moore.extract_ref [[INNER_B]] from 0 : ref<i32> -> ref<i1>
     // CHECK: [[RHS1:%.+]] = moore.extract %0 from 2 : i3 -> i1
     // CHECK: moore.blocking_assign [[LHS1]], [[RHS1]] : i1
     // CHECK: [[RHS2:%.+]] = moore.extract %0 from 0 : i3 -> i2
     // CHECK: moore.blocking_assign [[LHS2]], [[RHS2]] : i2
-    %el = moore.extract_ref %aa from 30 : <struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> <i3>
+    %el = moore.extract_ref %aa from 30 : ref<struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> ref<i3>
     moore.blocking_assign %el, %0 : i3
     moore.return
   }
+}
+
+// CHECK-LABEL: moore.module @NetConcat
+moore.module @NetConcat(in %a: !moore.net<i8>, in %b: !moore.net<i4>, in %v: !moore.i12) {
+  // CHECK-NOT: moore.concat_ref
+  // CHECK: [[TMP1:%.+]] = moore.extract %v from 4 : i12 -> i8
+  // CHECK: moore.assign %a, [[TMP1]] : net<i8>
+  // CHECK: [[TMP2:%.+]] = moore.extract %v from 0 : i12 -> i4
+  // CHECK: moore.assign %b, [[TMP2]] : net<i4>
+  %0 = moore.concat_ref %a, %b : (!moore.net<i8>, !moore.net<i4>) -> net<i12>
+  moore.assign %0, %v : net<i12>
 }

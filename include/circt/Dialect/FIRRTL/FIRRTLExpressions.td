@@ -1241,6 +1241,27 @@ def ObjectAnyRefCastOp : FIRRTLOp<"object.anyref_cast", [Pure]> {
      "$input attr-dict `:` type($input)";
 }
 
+def DomainAnyRefCastOp : FIRRTLOp<"domain.anyref_cast", [Pure]> {
+  let summary = "Cast domain reference to anyref.";
+  let description = [{
+    Cast a domain reference to AnyRef type.  This is primarily used for allowing
+    domain fields to refer to other domains.
+
+    Example
+    ```
+      %0 = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>
+    ```
+
+    Note: this has no FIRRTL textual representation, like `object.anyref_cast`,
+    and is created as needed during parsing and elided during emission.
+  }];
+
+  let arguments = (ins DomainType:$input);
+  let results = (outs AnyRefType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
+
 def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let summary = "Produce a constant string value";
   let description = [{
@@ -1574,6 +1595,28 @@ def PropEqOp : FIRRTLOp<"prop.eq", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
   let hasFolder = 1;
 }
 
+def ObjectEqOp : FIRRTLOp<"object.eq", [Pure]> {
+  let summary = "Compare two object references for identity equality";
+  let description = [{
+    Returns true if the operands refer to the same object, and false otherwise.
+    This compares object identity, not the structural equality of object fields.
+    Each operand can be a class type or AnyRef, and the operands need not have
+    the same type. Property assignments and conversion to AnyRef preserve object
+    identity.
+
+    Example:
+    ```mlir
+    %result = firrtl.object.eq %lhs, %rhs : !firrtl.class<@Foo()>, !firrtl.anyref
+    ```
+  }];
+
+  let arguments = (ins AnyTypeOf<[ClassType, AnyRefType]>:$lhs,
+                       AnyTypeOf<[ClassType, AnyRefType]>:$rhs);
+  let results = (outs BoolType:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+}
+
 class BoolBinaryPrimOp<string mnemonic, list<Trait> traits = []> :
     BinaryPrimOp<mnemonic, BoolType, BoolType, BoolType,
                  [Pure, SameOperandsAndResultType] # traits> {
@@ -1900,6 +1943,17 @@ def LTLNotIntrinsicOp : UnaryLTLIntrinsicOp<"not">;
 def LTLImplicationIntrinsicOp : BinaryLTLIntrinsicOp<"implication">;
 def LTLUntilIntrinsicOp : BinaryLTLIntrinsicOp<"until">;
 def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
+def LTLAcceptOnIntrinsicOp : LTLIntrinsicOp<"accept_on"> {
+  let arguments = (ins
+    NonConstUInt1Type:$input,
+    NonConstUInt1Type:$condition,
+    UnitAttr:$sync
+  );
+  let assemblyFormat = [{
+    $input `,` $condition (`sync` $sync^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
 
 // Past
 def LTLPastIntrinsicOp : LTLIntrinsicOp<"past"> {

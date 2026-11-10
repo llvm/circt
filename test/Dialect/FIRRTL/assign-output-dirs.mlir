@@ -76,7 +76,7 @@ firrtl.circuit "AssignOutputDirs" {
 
   // Absolute output directory tests
 
-  // CHECK firrtl.module private @ByOutputA() {output_file = #hw.output_file<"A{{/|\\\\}}">} {}
+  // CHECK: firrtl.module private @ByOutputA() attributes {output_file = #hw.output_file<"A{{/|\\\\}}">} {
   firrtl.module private @ByOutputA() {}
 
   firrtl.module @InOutputA() attributes {output_file = #hw.output_file<"/path/to/output/A/foo">} {

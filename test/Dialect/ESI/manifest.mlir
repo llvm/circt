@@ -3,6 +3,7 @@
 // RUN: circt-opt %t1.mlir | FileCheck --check-prefix=HIER %s
 // RUN: FileCheck --input-file=esi_system_manifest.json %s
 // RUN: circt-opt %t1.mlir --esi-clean-metadata --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim | FileCheck --check-prefix=HW %s
+// RUN: circt-opt --esi-connect-services --canonicalize %s | circt-opt | FileCheck %s --check-prefix=CONN
 
 hw.type_scope @__hw_typedecls {
   hw.typedecl @foo, "Foo" : i1
@@ -27,7 +28,7 @@ hw.module @Loopback (in %clk: !seq.clock) {
 
   %c0_0 = hw.constant 0 : i0
   %c0_1 = hw.constant 0 : i1
-  %sendi0_channel, %ready = esi.wrap.vr %c0_0, %c0_1 : i0
+  %sendi0_channel, %ready = esi.wrap.vr %c0_0, %c0_1 : !esi.channel<i0, ValidReady>
   esi.bundle.unpack %sendi0_channel from %sendi0_bundle : !sendI0
   %sendi0_bundle = esi.service.req <@HostComms::@SendI0> (#esi.appid<"loopback_fromhw_i0">) : !sendI0
 }
@@ -38,7 +39,7 @@ esi.manifest.constants @Loopback {depth=5:ui32}
 esi.service.std.func @funcs
 
 // CONN-LABEL:   hw.module @CallableFunc1(in %func1 : !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>) {
-// CONN-NEXT:      esi.manifest.req #esi.appid<"func1">, <@funcs::@call> std "esi.service.std.func", toClient, !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
+// CONN-NEXT:      esi.manifest.req #esi.appid<"func1">, <@funcs::@call> std "esi.service.std.func", !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
 // CONN-NEXT:      %arg = esi.bundle.unpack %arg from %func1 : !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
 !func1Signature = !esi.bundle<[!esi.channel<i16, ValidReady> to "arg", !esi.channel<i16, ValidReady> from "result"]>
 hw.module @CallableFunc1() {

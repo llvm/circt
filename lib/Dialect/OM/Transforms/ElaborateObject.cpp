@@ -270,23 +270,17 @@ struct ElaborateObjectPass
     : public circt::om::impl::ElaborateObjectBase<ElaborateObjectPass> {
   using Base::Base;
 
-  static LogicalResult elaborateClass(ClassOp classOp, SymbolTable &symTable,
-                                      FieldIndex &fieldIndexes,
+  static LogicalResult elaborateClass(ClassOp classOp,
+                                      const FrozenRewritePatternSet &patterns,
                                       bool allowUnevaluated = false) {
     // Elaborate objects by inlining all ObjectOps and folding field accesses
     // using a greedy pattern rewriter. NOTE: The conversion framework is not
     // suitable here because inlining patterns need to be applied recursively to
     // fully evaluate nested object instantiations.
-    RewritePatternSet patterns(classOp.getContext());
-    patterns.add<ObjectOpInliningPattern>(classOp.getContext(), symTable,
-                                          !allowUnevaluated);
-    patterns.add<EvaluateObjectField>(classOp.getContext(), symTable,
-                                      fieldIndexes);
-    patterns.add<UnknownPropagationPattern>(classOp.getContext());
     GreedyRewriteConfig config;
     // Disable iteration limit to allow full recursive inlining.
     config.setMaxIterations(GreedyRewriteConfig::kNoLimit);
-    if (failed(applyPatternsGreedily(classOp, std::move(patterns), config)))
+    if (failed(applyPatternsGreedily(classOp, patterns, config)))
       return failure();
 
     // Check if elaboration succeeded after saturation.
@@ -317,13 +311,22 @@ struct ElaborateObjectPass
         fieldIndexes[{name, fieldName}] = idx;
     }
 
+    auto *context = &getContext();
+    RewritePatternSet patterns(context);
+    patterns.add<ObjectOpInliningPattern>(context, symTable, !allowUnevaluated);
+    patterns.add<EvaluateObjectField>(context, symTable, fieldIndexes);
+    patterns.add<UnknownPropagationPattern>(context);
+    for (auto op : context->getRegisteredOperations())
+      if (isa<OMDialect>(op.getDialect()))
+        op.getCanonicalizationPatterns(patterns, context);
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+
     // Elaborate all public classes.
     if (allPublicClasses) {
       for (auto classOp : module.getOps<ClassOp>()) {
         if (!classOp.isPublic())
           continue;
-        if (failed(elaborateClass(classOp, symTable, fieldIndexes,
-                                  allowUnevaluated)))
+        if (failed(elaborateClass(classOp, frozenPatterns, allowUnevaluated)))
           return signalPassFailure();
       }
       return;
@@ -337,8 +340,7 @@ struct ElaborateObjectPass
       return signalPassFailure();
     }
 
-    if (failed(
-            elaborateClass(classOp, symTable, fieldIndexes, allowUnevaluated)))
+    if (failed(elaborateClass(classOp, frozenPatterns, allowUnevaluated)))
       return signalPassFailure();
   }
 };
