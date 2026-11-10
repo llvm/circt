@@ -59,17 +59,19 @@
   caused the failure. `write()`/`tryWrite()`/`flush()` throw in callback mode,
   and `writeAsync()` throws otherwise. `writeAsync()` is virtual so backends
   may override it (e.g. for scatter-gather DMA). The default implementation
-  writes a message immediately via `tryWrite()` on the calling thread when
-  nothing is queued; otherwise (or under backpressure) it queues messages and
-  writes them via `tryWrite()` in FIFO order as the port is polled (e.g. by
+  writes messages with the segmented `tryWrite()` (so backends which override
+  that for scatter-gather support avoid flattening), immediately on the
+  calling thread when nothing is queued; otherwise (or under backpressure) it
+  queues messages and writes them in FIFO order as the port is polled (e.g. by
   the accelerator service thread via `addPoll()`). `disconnect()` and
   destruction fail its outstanding writes. If a multi-frame message fails
   after some of its frames may have been sent, all subsequent async writes
   fail until the port is reconnected; the caller must reset the receiver
   before reconnecting. `TypedWritePort`
-  gained matching `connect()` and `writeAsync()` overloads. Write port
-  backends which override `pollImpl()` must call `WriteChannelPort::pollImpl()`
-  for the default `writeAsync()` to make progress.
+  gained matching `connect()` and `writeAsync()` overloads.
+  `WriteChannelPort::pollImpl()` is now `final`: write port backends override
+  the new `pollWriteImpl()` instead. The default segmented `tryWrite()` no
+  longer copies messages which are already a `MessageData`.
 - **Multiple outstanding host memory reads per client.**
   `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
   (default `1`, which keeps the previous one-request-at-a-time behavior). With

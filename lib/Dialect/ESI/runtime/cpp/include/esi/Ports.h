@@ -30,6 +30,7 @@
 #include <future>
 #include <mutex>
 #include <queue>
+#include <thread>
 
 namespace esi {
 
@@ -330,7 +331,8 @@ public:
   /// it.
   virtual void disconnect() override;
   virtual bool isConnected() const override {
-    return mode != Mode::Disconnected;
+    Mode m = mode;
+    return m == Mode::Sync || m == Mode::Callback;
   }
 
   //===--------------------------------------------------------------------===//
@@ -390,7 +392,8 @@ public:
     if (!msg)
       throw std::runtime_error(
           "WriteChannelPort::tryWrite: null SegmentedMessageData");
-    if (!tryWrite(msg->toMessageData()))
+    const MessageData *flat = dynamic_cast<const MessageData *>(msg.get());
+    if (!(flat ? tryWrite(*flat) : tryWrite(msg->toMessageData())))
       return false;
     msg.reset();
     return true;
@@ -427,29 +430,34 @@ public:
   /// receiver: the caller must first restore the receiver's framing (e.g. by
   /// resetting the accelerator).
   ///
-  /// Default implementation: if no async writes are queued or in flight (and
-  /// no other thread is processing them), the message is written immediately
-  /// via tryWrite() on the calling thread, in which case the callback may be
-  /// invoked before writeAsync() returns. Otherwise -- or if the backend
-  /// backpressures -- the message is queued and written in FIFO order by
-  /// poll(), so progress requires polling (typically by the accelerator's
-  /// service thread via `AcceleratorServiceThread::addPoll()`) and the callback
-  /// runs on the polling thread. So do not call writeAsync() while holding a
-  /// lock which the callback acquires. Backends may override this (e.g. for
-  /// scatter-gather DMA). Overrides must uphold the WriteCallback contract,
-  /// invoke it via invokeWriteCallback(), and fail their outstanding writes
-  /// upon disconnect.
+  /// Default implementation: messages are written with the segmented
+  /// tryWrite(), so backends which override it for scatter-gather support avoid
+  /// flattening. If no async writes are queued (and no other thread is writing
+  /// them), the message is written immediately on the calling thread, in which
+  /// case the callback may be invoked before writeAsync() returns. Otherwise --
+  /// or if the backend backpressures -- the message is queued and written in
+  /// FIFO order by poll(), so progress requires polling (typically by the
+  /// accelerator's service thread via `AcceleratorServiceThread::addPoll()`)
+  /// and the callback runs on the polling thread. So do not call writeAsync()
+  /// while holding a lock which the callback acquires. Backends may override
+  /// this. Overrides must uphold the WriteCallback contract, invoke it via
+  /// invokeWriteCallback(), and fail their outstanding writes upon disconnect.
   virtual void writeAsync(std::unique_ptr<SegmentedMessageData> msg);
 
 protected:
-  /// In callback mode, make progress on async writes. Subclasses which override
-  /// this must call it (first, so that they can immediately send whatever it
-  /// hands them) and should then check isConnected(), since a writeAsync()
-  /// callback may disconnect the port.
-  bool pollImpl() override;
+  /// In callback mode, make progress on async writes. Then, if the port is
+  /// still connected (a writeAsync() callback may disconnect it), call
+  /// pollWriteImpl().
+  bool pollImpl() final;
 
-  /// Indicates the current mode of the channel.
-  enum Mode { Disconnected, Sync, Callback };
+  /// Backend-specific polling. Write port backends override this rather than
+  /// pollImpl(). Returns true if any progress was made.
+  virtual bool pollWriteImpl() { return false; }
+
+  /// Indicates the current mode of the channel. `Destroyed` is set while the
+  /// destructor fails outstanding async writes, preventing their callbacks
+  /// from reconnecting the partially destroyed port.
+  enum Mode { Disconnected, Sync, Callback, Destroyed };
   std::atomic<Mode> mode = Mode::Disconnected;
 
   /// Invoke the callback registered at connect() (if any) with the result of
@@ -491,10 +499,9 @@ protected:
   void translateOutgoing(const MessageData &data);
 
 private:
-  /// Throw if the port is connected in callback mode.
+  /// Throw if the port is connected in callback mode (unless called by the
+  /// thread writing async messages).
   void requireNotCallbackMode(const char *method) const;
-  /// Throw if the port's destructor is running.
-  void requireNotDestroying() const;
   /// Set up translation and call connectImpl(). Shared by both modes.
   void connectCommon(const ConnectOptions &options);
   /// tryWrite() and flush() without the mode check.
@@ -505,50 +512,38 @@ private:
   // Callback mode state.
   //===--------------------------------------------------------------------===//
 
-  struct PendingAsyncWrite {
-    std::unique_ptr<SegmentedMessageData> msg;
-    /// Flattened copy of `msg`, if it isn't already a MessageData.
-    std::optional<MessageData> flattened;
-    /// True once tryWrite() has accepted the message. Windowed messages may
-    /// still have frames left to flush().
-    bool accepted = false;
-  };
-
-  /// Try to complete queued async writes. Returns true if progress was made.
-  bool pollAsyncWrites();
+  /// If no other thread is writing async messages, write them on this one.
+  /// Returns true if progress was made.
+  bool tryDrainAsyncWrites();
+  /// Write queued async messages until the queue is empty or the backend
+  /// backpressures, then release `drainThread`. The caller must have set
+  /// `drainThread` to this thread.
+  bool drainAsyncWrites();
   /// Fail all async writes which have not completed with `reason`.
   void failAsyncWrites(const std::string &reason);
-  /// Get the callback registered at connect(), if any.
-  std::shared_ptr<const WriteCallback> snapshotWriteCallback();
   /// Invoke `callback` (if non-null), swallowing any exception it throws.
   static void
   callWriteCallback(const std::shared_ptr<const WriteCallback> &callback,
                     std::exception_ptr error);
 
+  /// Protects the members below.
+  std::mutex asyncMutex;
   /// The callback registered at connect(). Shared so that it can be invoked
-  /// without holding `callbackMutex` while disconnect() clears it.
+  /// without holding `asyncMutex` while disconnect() clears it.
   std::shared_ptr<const WriteCallback> writeCallback;
-  /// Protects `writeCallback`.
-  std::mutex callbackMutex;
-
-  /// Protects `asyncQueue` and synchronizes writeAsync() with mode changes.
-  std::mutex asyncQueueMutex;
-  std::deque<PendingAsyncWrite> asyncQueue;
-  /// Set when a windowed message fails after some of its frames were sent,
-  /// leaving the receiver mid-message. All subsequent async writes fail with
-  /// it until the port is reconnected. Protected by `asyncQueueMutex`.
+  /// Messages passed to writeAsync() which haven't completed, in order. The
+  /// front is the one being written. It becomes null once tryWrite() accepts
+  /// it, while any remaining frames of a windowed message are flushed. Only
+  /// `drainThread` modifies the front.
+  std::deque<std::unique_ptr<SegmentedMessageData>> asyncQueue;
+  /// Set when a multi-frame message fails after some of its frames may have
+  /// been sent, leaving the receiver mid-message. All subsequent async writes
+  /// fail with it until the port is reconnected.
   std::exception_ptr asyncFault;
-  /// Serializes processing of async writes (and owns `asyncInFlight`).
-  /// Recursive so that callbacks may call disconnect().
-  std::recursive_mutex asyncPollMutex;
-  /// The async write currently being processed, if any.
-  std::optional<PendingAsyncWrite> asyncInFlight;
-  /// Set by the destructor so that cancellation callbacks cannot reconnect the
-  /// partially destroyed port.
-  std::atomic<bool> destroying = false;
-  /// True while pollAsyncWrites() is invoking the callback. Only accessed by
-  /// the thread holding `asyncPollMutex`.
-  bool inAsyncCallback = false;
+  /// The thread currently writing async messages, if any.
+  std::atomic<std::thread::id> drainThread;
+  /// Notified when `drainThread` is released.
+  std::condition_variable drainDone;
 };
 
 /// Instantiated when a backend does not know how to create a write channel.

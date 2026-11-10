@@ -44,7 +44,7 @@ public:
   std::atomic<int> throwAfter = -1;
   /// If non-negative, accept this many more tryWriteImpl() calls, then reject.
   std::atomic<int> acceptBudget = -1;
-  /// Number of pollImpl() calls.
+  /// Number of pollWriteImpl() calls.
   std::atomic<int> pollImplCount = 0;
   /// Like the cosim backend, split each message into frames and send them one
   /// at a time; `throwAfter` then counts frames.
@@ -78,12 +78,9 @@ protected:
     std::lock_guard<std::mutex> lock(mutex);
     writtenMsgs.push_back(data.getData());
   }
-  bool pollImpl() override {
-    bool progress = WriteChannelPort::pollImpl();
-    if (!isConnected())
-      return progress;
+  bool pollWriteImpl() override {
     ++pollImplCount;
-    return progress;
+    return false;
   }
 
 private:
@@ -308,6 +305,40 @@ TEST(WriteAsyncTest, SegmentedMessageIsFlattened) {
             (std::vector<std::vector<uint8_t>>{{1, 2, 3, 4, 5}}));
 }
 
+TEST(WriteAsyncTest, UsesBackendSegmentedTryWrite) {
+  // A backend with scatter-gather support, which takes segmented messages
+  // as-is.
+  struct ScatterGatherPort : public RecordingWritePort {
+    using RecordingWritePort::RecordingWritePort;
+    using WriteChannelPort::tryWrite;
+    bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg) override {
+      if (rejectAll)
+        return false;
+      received.push_back(std::move(msg));
+      return true;
+    }
+    std::vector<std::unique_ptr<SegmentedMessageData>> received;
+  };
+
+  BitsType bits40("i40", 40);
+  ScatterGatherPort port(&bits40);
+  Recorder recorder;
+  port.connect(recorder.callback());
+
+  auto msg = std::make_unique<TwoSegmentMessage>();
+  SegmentedMessageData *original = msg.get();
+  port.rejectAll = true;
+  port.writeAsync(std::move(msg));
+  EXPECT_EQ(recorder.size(), 0u);
+  port.rejectAll = false;
+  port.poll();
+  EXPECT_TRUE(recorder.allSucceeded(1));
+  // The original message was handed over without being flattened.
+  ASSERT_EQ(port.received.size(), 1u);
+  EXPECT_EQ(port.received[0].get(), original);
+  EXPECT_TRUE(port.written().empty());
+}
+
 TEST(WriteAsyncTest, FifoOrderAndBackpressure) {
   UIntType ui8("ui8", 8);
   RecordingWritePort port(&ui8);
@@ -384,6 +415,9 @@ TEST(WriteAsyncTest, ModesAreExclusive) {
   EXPECT_THROW(port.write(data), std::runtime_error);
   EXPECT_THROW(port.write(makeMsg({1})), std::runtime_error);
   EXPECT_THROW(port.tryWrite(data), std::runtime_error);
+  std::unique_ptr<SegmentedMessageData> segmented = makeMsg({1});
+  EXPECT_THROW(port.tryWrite(segmented), std::runtime_error);
+  EXPECT_TRUE(segmented);
   EXPECT_THROW(port.flush(), std::runtime_error);
   EXPECT_THROW(port.connect(), std::runtime_error);
   EXPECT_THROW(port.connect(recorder.callback()), std::runtime_error);
@@ -450,6 +484,8 @@ TEST(WriteAsyncTest, DestructorCallbacksCannotStartWrites) {
     // The derived port has already been destroyed, so neither a retry nor a
     // reconnect may reach the backend.
     sawConnected |= port->isConnected();
+    // Even after an explicit disconnect().
+    port->disconnect();
     try {
       port->connect([](std::exception_ptr) {});
     } catch (const std::runtime_error &) {
@@ -527,7 +563,7 @@ TEST(WriteAsyncTest, CallbackMayWriteAndDisconnect) {
   EXPECT_FALSE(recorder[1]);
   EXPECT_TRUE(recorder[2]);
   EXPECT_TRUE(recorder[3]);
-  // pollImpl() isn't called on a port which was disconnected.
+  // pollWriteImpl() isn't called on a port which was disconnected.
   EXPECT_EQ(port.pollImplCount, 0);
 }
 
