@@ -198,6 +198,20 @@ jobs:
               "run_integration_tests": false,
               "runner": "windows-2022",
               "cmake_c_compiler": "cl"
+            },
+            {
+              "name": "Linux (Clang 23) w/ clang-tidy",
+              "install_target": "",
+              "package_name_prefix": "",
+              "cmake_build_type": "release",
+              "llvm_enable_assertions": "ON",
+              "build_shared_libs": "OFF",
+              "run_tests": true,
+              "run_integration_tests": false,
+              "runner": "ubuntu-24.04",
+              "cmake_c_compiler": "clang-23",
+              "run_clang_tidy": true,
+              "allow_failure": true
             }
           ]
           EOF
@@ -239,6 +253,8 @@ jobs:
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
       extra_cmake_args: ${{ matrix.generated.extra_cmake_args }}
       build_pycde: false
+      run_clang_tidy: ${{ matrix.generated.run_clang_tidy || false }}
+      allow_failure: ${{ matrix.generated.allow_failure || false }}
 
   # --- end of build-circt job.
 
