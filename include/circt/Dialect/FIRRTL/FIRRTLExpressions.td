@@ -1369,9 +1369,17 @@ def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
                    "type_cast<ListType>($_self).getElementType()">]> {
   let summary = "Test whether a list contains a property value";
   let description = [{
-    Returns true if the list contains an element equal to the specified value.
-    Elements can only be those that support equality via `prop.eq`: strings,
-    integers, or booleans.
+    Returns true if the list contains an element equal to the specified value,
+    using the equality semantics of `prop.eq`.
+
+    Strings, integers, and booleans are compared by value. Class and AnyRef
+    elements are compared by object identity, not by structural equality of
+    object fields.
+
+    The search element and list element must have the same type in the dialect.
+    This differs from what is allowed in FIRRTL syntax where domains or classes
+    can be used as the element. To bridge this syntactic difference,
+    `object.anyref_cast` and `domain.anyref_cast` are used.
 
     Example:
     ```mlir
@@ -1380,7 +1388,8 @@ def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
   }];
 
   let arguments = (ins ListType:$list,
-                       AnyTypeOf<[StringType, BoolType, FIntegerType]>:$element);
+                       AnyTypeOf<[StringType, BoolType, FIntegerType,
+                                  ClassType, AnyRefType]>:$element);
   let results = (outs BoolType:$result);
 
   let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";

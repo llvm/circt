@@ -690,6 +690,7 @@ firrtl.circuit "Foo" {
                             out %stringcontains : !firrtl.bool,
                             out %integercontains : !firrtl.bool,
                             out %boolcontains : !firrtl.bool,
+                            out %refcontains : !firrtl.bool,
                             out %booland : !firrtl.bool,
                             out %boolor : !firrtl.bool,
                             out %boolxor : !firrtl.bool,
@@ -773,6 +774,11 @@ firrtl.circuit "Foo" {
     %bool_list = firrtl.list.create %true : !firrtl.list<bool>
     %bool_contains = firrtl.list.contains %bool_list, %true : !firrtl.list<bool>
     firrtl.propassign %boolcontains, %bool_contains : !firrtl.bool
+
+    // CHECK: propassign refcontains, list_contains(List<AnyRef>(refA, refB), refA)
+    %ref_list = firrtl.list.create %refA, %refB : !firrtl.list<anyref>
+    %ref_contains = firrtl.list.contains %ref_list, %refA : !firrtl.list<anyref>
+    firrtl.propassign %refcontains, %ref_contains : !firrtl.bool
 
     // CHECK: propassign booland, bool_and(Bool(true), Bool(true))
     %booland_val = firrtl.bool.and %true, %true
@@ -1211,13 +1217,17 @@ firrtl.circuit "Foo" {
   }
 
   // Domain-to-anyref casts have no FIRRTL syntax and are elided in domain
-  // creation and property assignments.
+  // creation, property assignments, and list membership expressions.
   // CHECK-LABEL: module DomainAnyRef :
   firrtl.module @DomainAnyRef(
     // CHECK-NEXT: input A : Domain of ClockDomain
+    // CHECK-NEXT: input refs : List<AnyRef>
     // CHECK-NEXT: output ref : AnyRef
+    // CHECK-NEXT: output found : Bool
     in %A: !firrtl.domain<@ClockDomain()>,
-    out %ref: !firrtl.anyref
+    in %refs: !firrtl.list<anyref>,
+    out %ref: !firrtl.anyref,
+    out %found: !firrtl.bool
   ) {
     %0 = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
     // CHECK-EMPTY:
@@ -1225,6 +1235,9 @@ firrtl.circuit "Foo" {
     %B = firrtl.domain.create(%0) : !firrtl.domain<@DomainContainer(source: !firrtl.anyref)>
     // CHECK-NEXT: propassign ref, A
     firrtl.propassign %ref, %0 : !firrtl.anyref
+    // CHECK-NEXT: propassign found, list_contains(refs, A)
+    %found_value = firrtl.list.contains %refs, %0 : !firrtl.list<anyref>
+    firrtl.propassign %found, %found_value : !firrtl.bool
   }
 
 }

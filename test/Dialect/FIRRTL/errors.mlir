@@ -1425,6 +1425,28 @@ firrtl.circuit "ListContainsMismatchedTypes" {
 }
 
 // -----
+// Implicit Class-to-AnyRef casts are a FIRRTL text feature, not a dialect
+// feature. Generic syntax must still verify that the types match exactly.
+firrtl.circuit "ListContainsUncastClass" {
+  firrtl.class @Foo() {}
+  firrtl.module @ListContainsUncastClass(
+      in %refs: !firrtl.list<anyref>, in %obj: !firrtl.class<@Foo()>) {
+    // expected-error @below {{'firrtl.list.contains' op failed to verify that list element type should match search element type}}
+    %found = "firrtl.list.contains"(%refs, %obj) : (!firrtl.list<anyref>, !firrtl.class<@Foo()>) -> !firrtl.bool
+  }
+}
+
+// -----
+firrtl.circuit "ListContainsUncastAnyRef" {
+  firrtl.class @Foo() {}
+  firrtl.module @ListContainsUncastAnyRef(
+      in %objects: !firrtl.list<class<@Foo()>>, in %ref: !firrtl.anyref) {
+    // expected-error @below {{'firrtl.list.contains' op failed to verify that list element type should match search element type}}
+    %found = "firrtl.list.contains"(%objects, %ref) : (!firrtl.list<class<@Foo()>>, !firrtl.anyref) -> !firrtl.bool
+  }
+}
+
+// -----
 // Reject custom list.contains syntax when the search value does not match the
 // element type inferred from the list.
 firrtl.circuit "ListContainsCustomMismatchedTypes" {
@@ -1438,11 +1460,50 @@ firrtl.circuit "ListContainsCustomMismatchedTypes" {
 }
 
 // -----
+// Reference identity comparisons still require exactly matching element types.
+// Custom syntax infers the search element type from the list.
+firrtl.circuit "ListContainsCustomClassAnyRef" {
+  firrtl.class @Foo() {}
+  firrtl.module @ListContainsCustomClassAnyRef(
+      in %objects: !firrtl.list<class<@Foo()>>,
+      // expected-note @below {{prior use here}}
+      in %ref: !firrtl.anyref) {
+    // expected-error @below {{use of value '%ref' expects different type than prior uses: '!firrtl.class<@Foo()>' vs '!firrtl.anyref'}}
+    %found = firrtl.list.contains %objects, %ref : !firrtl.list<class<@Foo()>>
+  }
+}
+
+// -----
+firrtl.circuit "ListContainsCustomAnyRefClass" {
+  firrtl.class @Foo() {}
+  firrtl.module @ListContainsCustomAnyRefClass(
+      in %refs: !firrtl.list<anyref>,
+      // expected-note @below {{prior use here}}
+      in %obj: !firrtl.class<@Foo()>) {
+    // expected-error @below {{use of value '%obj' expects different type than prior uses: '!firrtl.anyref' vs '!firrtl.class<@Foo()>'}}
+    %found = firrtl.list.contains %refs, %obj : !firrtl.list<anyref>
+  }
+}
+
+// -----
+firrtl.circuit "ListContainsCustomDifferentClasses" {
+  firrtl.class @Foo() {}
+  firrtl.class @Bar() {}
+  firrtl.module @ListContainsCustomDifferentClasses(
+      in %objects: !firrtl.list<class<@Foo()>>,
+      // expected-note @below {{prior use here}}
+      in %obj: !firrtl.class<@Bar()>) {
+    // expected-error @below {{use of value '%obj' expects different type than prior uses: '!firrtl.class<@Foo()>' vs '!firrtl.class<@Bar()>'}}
+    %found = firrtl.list.contains %objects, %obj : !firrtl.list<class<@Foo()>>
+  }
+}
+
+// -----
 // Reject list.contains for property types without equality semantics.
 firrtl.circuit "ListContainsUnsupportedType" {
   firrtl.module @ListContainsUnsupportedType(
       in %doubles: !firrtl.list<double>, in %double: !firrtl.double) {
-    // expected-error @below {{'firrtl.list.contains' op operand #1 must be string type or boolean type or integer type, but got '!firrtl.double'}}
+    // expected-error @below {{'firrtl.list.contains' op operand #1 must be string type or boolean type or integer type or class type or any reference type, but got '!firrtl.double'}}
     %found = firrtl.list.contains %doubles, %double : !firrtl.list<double>
   }
 }
