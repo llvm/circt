@@ -1187,6 +1187,47 @@ circuit ListContainsMismatchedTypes:
 ;// -----
 FIRRTL version 7.0.0
 
+circuit ListContainsClassAnyRef:
+  class Foo:
+    skip
+
+  public module ListContainsClassAnyRef:
+    input values : List<Inst<Foo>>
+    input value : AnyRef
+    ; expected-error @below {{list_contains element type '!firrtl.anyref' does not match list element type '!firrtl.class<@Foo()>'}}
+    propassert list_contains(values, value), "type mismatch"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsAnyRefClass:
+  class Foo:
+    skip
+
+  public module ListContainsAnyRefClass:
+    input values : List<AnyRef>
+    input value : Inst<Foo>
+    ; expected-error @below {{list_contains element type '!firrtl.class<@Foo()>' does not match list element type '!firrtl.anyref'}}
+    propassert list_contains(values, value), "type mismatch"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListContainsDifferentClasses:
+  class Foo:
+    skip
+  class Bar:
+    skip
+
+  public module ListContainsDifferentClasses:
+    input values : List<Inst<Foo>>
+    input value : Inst<Bar>
+    ; expected-error @below {{list_contains element type '!firrtl.class<@Bar()>' does not match list element type '!firrtl.class<@Foo()>'}}
+    propassert list_contains(values, value), "type mismatch"
+
+;// -----
+FIRRTL version 7.0.0
+
 circuit ListContainsUnsupportedType:
   public module ListContainsUnsupportedType:
     input values : List<Double>

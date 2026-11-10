@@ -653,6 +653,7 @@ firrtl.circuit "Foo" {
                             out %stringcontains : !firrtl.bool,
                             out %integercontains : !firrtl.bool,
                             out %boolcontains : !firrtl.bool,
+                            out %refcontains : !firrtl.bool,
                             out %booland : !firrtl.bool,
                             out %boolor : !firrtl.bool,
                             out %boolxor : !firrtl.bool,
@@ -736,6 +737,11 @@ firrtl.circuit "Foo" {
     %bool_list = firrtl.list.create %true : !firrtl.list<bool>
     %bool_contains = firrtl.list.contains %bool_list, %true : !firrtl.list<bool>
     firrtl.propassign %boolcontains, %bool_contains : !firrtl.bool
+
+    // CHECK: propassign refcontains, list_contains(List<AnyRef>(refA, refB), refA)
+    %ref_list = firrtl.list.create %refA, %refB : !firrtl.list<anyref>
+    %ref_contains = firrtl.list.contains %ref_list, %refA : !firrtl.list<anyref>
+    firrtl.propassign %refcontains, %ref_contains : !firrtl.bool
 
     // CHECK: propassign booland, bool_and(Bool(true), Bool(true))
     %booland_val = firrtl.bool.and %true, %true
