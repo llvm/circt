@@ -488,3 +488,78 @@ hw.module @HoistSingleDynamicProjection(in %i : i1, in %x : i5) {
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !llhd.ref<i42>)
 func.func private @maybe_side_effecting()
+
+// CHECK-LABEL: @NetProbesInProcessOp
+hw.module @NetProbesInProcessOp() {
+  %a = llhd.net wire : <i42>
+  // CHECK: llhd.net
+  // CHECK-NEXT: [[A:%.+]] = llhd.prb_net %a
+  // CHECK-NEXT: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.prb_net
+    %0 = llhd.prb_net %a : i42
+    // CHECK-NEXT: call @use_i42([[A]])
+    func.call @use_i42(%0) : (i42) -> ()
+    llhd.wait ^bb1
+  ^bb1:
+    // CHECK: ^bb1:
+    // CHECK-NOT: llhd.prb_net
+    %1 = llhd.prb_net %a : i42
+    // CHECK-NEXT: call @use_i42([[A]])
+    func.call @use_i42(%1) : (i42) -> ()
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: @NetProbesInCombinationalOp
+hw.module @NetProbesInCombinationalOp() {
+  %a = llhd.net wire : <i42>
+  // CHECK: llhd.net
+  // CHECK-NEXT: [[A:%.+]] = llhd.prb_net %a
+  // CHECK-NEXT: llhd.combinational -> i42
+  llhd.combinational -> i42 {
+    // CHECK-NOT: llhd.prb_net
+    %0 = llhd.prb_net %a : i42
+    // CHECK-NEXT: call @use_i42([[A]])
+    func.call @use_i42(%0) : (i42) -> ()
+    // CHECK-NEXT: llhd.yield [[A]]
+    llhd.yield %0 : i42
+  }
+}
+
+// CHECK-LABEL: @ReuseExistingNetProbe
+hw.module @ReuseExistingNetProbe() {
+  %a = llhd.net wire : <i42>
+  // CHECK: [[A:%.+]] = llhd.prb_net %a
+  // CHECK-NEXT: llhd.process
+  %0 = llhd.prb_net %a : i42
+  llhd.process {
+    // CHECK-NOT: llhd.prb_net
+    %1 = llhd.prb_net %a : i42
+    // CHECK-NEXT: call @use_i42([[A]])
+    // CHECK-NEXT: call @use_i42([[A]])
+    func.call @use_i42(%0) : (i42) -> ()
+    func.call @use_i42(%1) : (i42) -> ()
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: @HoistSignalAndNetProbesTogether
+hw.module @HoistSignalAndNetProbesTogether() {
+  %c0_i42 = hw.constant 0 : i42
+  %a = llhd.net wire : <i42>
+  %b = llhd.sig %c0_i42 : <i42>
+  // CHECK: [[A:%.+]] = llhd.prb_net %a
+  // CHECK: [[B:%.+]] = llhd.prb %b
+  // CHECK-NEXT: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.prb
+    %0 = llhd.prb_net %a : i42
+    %1 = llhd.prb %b : i42
+    // CHECK-NEXT: call @use_i42([[A]])
+    // CHECK-NEXT: call @use_i42([[B]])
+    func.call @use_i42(%0) : (i42) -> ()
+    func.call @use_i42(%1) : (i42) -> ()
+    llhd.halt
+  }
+}
