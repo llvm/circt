@@ -605,9 +605,11 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
   if (auto reset = op.getReset()) {
     if (auto constOp = reset.getDefiningOp<hw::ConstantOp>()) {
       if (constOp.getValue().isZero()) {
-        rewriter.replaceOpWithNewOp<FirRegOp>(
-            op, op.getNext(), op.getClk(), op.getNameAttr(),
-            op.getInnerSymAttr(), op.getPresetAttr());
+        auto newOp = FirRegOp::create(rewriter, op.getLoc(), op.getNext(),
+                                      op.getClk(), op.getNameAttr(),
+                                      op.getInnerSymAttr(), op.getPresetAttr());
+        newOp->setDiscardableAttrs(op->getDiscardableAttrDictionary());
+        rewriter.replaceOp(op, newOp);
         return success();
       }
     }
@@ -730,15 +732,14 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
         if (changed) {
           auto newNextVal = hw::ArrayCreateOp::create(
               rewriter, arrayCreate.getLoc(), nextOperands);
-          if (arrayCreate->hasOneUse())
+          if (arrayCreate->hasOneUse()) {
             // If the original next value has a single use, we can replace the
             // value directly.
             rewriter.replaceOp(arrayCreate, newNextVal);
-          else {
-            // Otherwise, replace the entire firreg with a new one.
-            rewriter.replaceOpWithNewOp<FirRegOp>(op, newNextVal, op.getClk(),
-                                                  op.getNameAttr(),
-                                                  op.getInnerSymAttr());
+          } else {
+            // Otherwise, update the register's next operand in place.
+            rewriter.modifyOpInPlace(
+                op, [&] { op.getNextMutable().assign(newNextVal); });
           }
 
           return success();
