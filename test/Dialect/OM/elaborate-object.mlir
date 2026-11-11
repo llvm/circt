@@ -107,13 +107,13 @@ om.class @ContainsParameterTop() -> (found: i1) {
   om.class.fields %found : i1
 }
 
-// Unknown inputs use the existing pure-op propagation policy.
+// Empty lists return false even for unknown elements.
+// Unknown lists return unknown.
 // CHECK-LABEL: om.class @ContainsUnknown() -> (elementResult: i1, listResult: i1) {
-// CHECK:   %0 = om.unknown : !om.string
-// CHECK-NEXT:   %1 = om.unknown : i1
-// CHECK-NEXT:   %2 = om.unknown : !om.list<!om.string>
-// CHECK-NEXT:   %3 = om.unknown : i1
-// CHECK-NEXT:   om.class.fields %1, %3 : i1, i1
+// CHECK:   %[[FALSE:.+]] = om.constant false
+// CHECK:   %{{.+}} = om.unknown : !om.list<!om.string>
+// CHECK-NEXT:   %[[RESULT:.+]] = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %[[FALSE]], %[[RESULT]] : i1, i1
 // CHECK: }
 om.class @ContainsUnknown() -> (elementResult: i1, listResult: i1) {
   %unknownElement = om.unknown : !om.string

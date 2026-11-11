@@ -383,8 +383,8 @@ om.class @ListConcatFold(
       : !om.list<!om.string>
   %4 = om.constant #om.list<!om.string, ["c" : !om.string]>
       : !om.list<!om.string>
-  // CHECK: [[LIST_A:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string]> : !om.list<!om.string>{{$}}
-  // CHECK: [[JOINED:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string, "c" : !om.string]> : !om.list<!om.string>{{$}}
+  // CHECK-DAG: [[LIST_A:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string]> : !om.list<!om.string>{{$}}
+  // CHECK-DAG: [[JOINED:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string, "c" : !om.string]> : !om.list<!om.string>{{$}}
   %5 = om.list_concat %2, %3, %4 : !om.list<!om.string>
 
   // Concatenating two empty lists folds to an empty list.
@@ -413,8 +413,31 @@ om.class @ListConcatFold(
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>
 }
 
+// CHECK-LABEL: @ListConcatCanonicalization
+om.class @ListConcatCanonicalization(
+    %a: !om.class.type<@Foo>, %b: !om.class.type<@Foo>) -> (
+    joined: !om.list<!om.class.type<@Foo>>,
+    without_empty: !om.list<!om.class.type<@Foo>>) {
+  // Flatten constructed reference lists, preserving order and duplicates.
+  // CHECK-DAG: [[HEAD:%.+]] = om.list_create %a, %b : !om.class.type<@Foo>
+  // CHECK-DAG: [[JOINED:%.+]] = om.list_create %a, %b, %b : !om.class.type<@Foo>
+  %head = om.list_create %a, %b : !om.class.type<@Foo>
+  %tail = om.list_create %b : !om.class.type<@Foo>
+  %joined = om.list_concat %head, %tail : !om.list<!om.class.type<@Foo>>
+
+  // Drop an empty constant list alongside a constructed reference list.
+  // CHECK-NOT: om.list_concat
+  // CHECK-NOT: om.list_create
+  %empty = om.constant #om.list<!om.class.type<@Foo>, []> : !om.list<!om.class.type<@Foo>>
+  %withoutEmpty = om.list_concat %head, %empty : !om.list<!om.class.type<@Foo>>
+
+  // CHECK: om.class.fields [[JOINED]], [[HEAD]]
+  om.class.fields %joined, %withoutEmpty :
+      !om.list<!om.class.type<@Foo>>, !om.list<!om.class.type<@Foo>>
+}
+
 // CHECK-LABEL: @ListContainsFold
-om.class @ListContainsFold() -> (
+om.class @ListContainsFold(%empty_search: !om.string) -> (
     string_found: i1, string_absent: i1, bool_found: i1, bool_absent: i1,
     integer_found: i1, integer_absent: i1, empty: i1) {
   %string_list = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string]> : !om.list<!om.string>
@@ -435,15 +458,75 @@ om.class @ListContainsFold() -> (
   %integer_found = om.list_contains %integer_list, %integer_found_value : !om.list<!om.integer>
   %integer_absent = om.list_contains %integer_list, %integer_absent_value : !om.list<!om.integer>
 
+  // An empty list returns false for a nonconstant search value.
   %empty_list = om.constant #om.list<!om.string, []> : !om.list<!om.string>
-  %empty_search = om.constant "a" : !om.string
   %empty = om.list_contains %empty_list, %empty_search : !om.list<!om.string>
 
-  // CHECK-NOT: om.list_contains
-  // CHECK-DAG: [[TRUE:%[0-9]+]] = om.constant true
-  // CHECK-DAG: [[FALSE:%[0-9]+]] = om.constant false
-  // CHECK-NOT: om.list_contains
-  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[FALSE]] : i1, i1, i1, i1, i1, i1, i1
+  // CHECK-DAG: [[TRUE:%.+]] = om.constant true
+  // CHECK-DAG: [[FALSE:%.+]] = om.constant false
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[FALSE]]
   om.class.fields %string_found, %string_absent, %bool_found, %bool_absent,
       %integer_found, %integer_absent, %empty : i1, i1, i1, i1, i1, i1, i1
+}
+
+// CHECK-LABEL: @ListContainsIdentityFold
+om.class @ListContainsIdentityFold(
+    %value: !om.integer, %other: !om.class.type<@Foo>, %opaque: !om.any) -> (
+    ssa_found: i1, class_absent: i1, unknown_then_found: i1,
+    mismatch_then_found: i1, mixed_unknown: i1, any_absent: i1,
+    list_cast_unknown: i1, element_cast_unknown: i1, both_cast_unknown: i1) {
+  // Identical SSA values match without needing constant attributes.
+  // CHECK-DAG: [[TRUE:%.+]] = om.constant true
+  // CHECK-DAG: [[FALSE:%.+]] = om.constant false
+  %values = om.list_create %value : !om.integer
+  %ssa_found = om.list_contains %values, %value : !om.list<!om.integer>
+
+  // Distinct allocations do not match, regardless of their fields.
+  // CHECK: [[OBJECT_A:%.+]] = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  // CHECK: [[OBJECT_B:%.+]] = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %a = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %b = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %objects = om.list_create %a : !om.class.type<@Foo>
+  %class_absent = om.list_contains %objects, %b : !om.list<!om.class.type<@Foo>>
+
+  // Continue past unknown comparisons and known mismatches to find a match.
+  // CHECK: [[MIXED:%.+]] = om.list_create %other, [[OBJECT_A]] : !om.class.type<@Foo>
+  %mixed = om.list_create %other, %a : !om.class.type<@Foo>
+  %unknown_then_found = om.list_contains %mixed, %a : !om.list<!om.class.type<@Foo>>
+  %mismatches = om.list_create %b, %a : !om.class.type<@Foo>
+  %mismatch_then_found = om.list_contains %mismatches, %a : !om.list<!om.class.type<@Foo>>
+
+  // A known mismatch does not prove absence after an unknown comparison.
+  // CHECK: [[MIXED_UNKNOWN:%.+]] = om.list_contains [[MIXED]], [[OBJECT_B]] : <!om.class.type<@Foo>>
+  %mixed_unknown = om.list_contains %mixed, %b : !om.list<!om.class.type<@Foo>>
+
+  // Looking through casts still proves that distinct allocations do not match.
+  // CHECK: [[REF_A:%.+]] = om.any_cast [[OBJECT_A]] : (!om.class.type<@Foo>) -> !om.any
+  // CHECK: [[REF_B:%.+]] = om.any_cast [[OBJECT_B]] : (!om.class.type<@Foo>) -> !om.any
+  // CHECK: [[OTHER_REF:%.+]] = om.any_cast %other : (!om.class.type<@Foo>) -> !om.any
+  %a_ref = om.any_cast %a : (!om.class.type<@Foo>) -> !om.any
+  %b_ref = om.any_cast %b : (!om.class.type<@Foo>) -> !om.any
+  %other_ref = om.any_cast %other : (!om.class.type<@Foo>) -> !om.any
+  // CHECK: [[REFS:%.+]] = om.list_create [[REF_A]] : !om.any
+  %refs = om.list_create %a_ref : !om.any
+  %any_absent = om.list_contains %refs, %b_ref : !om.list<!om.any>
+
+  // Casts on the list element, search value, or both may still alias.
+  // CHECK: [[LIST_CAST_UNKNOWN:%.+]] = om.list_contains [[REFS]], %opaque : <!om.any>
+  %list_cast_unknown = om.list_contains %refs, %opaque : !om.list<!om.any>
+  // CHECK: [[OPAQUE_REFS:%.+]] = om.list_create %opaque : !om.any
+  %opaque_refs = om.list_create %opaque : !om.any
+  // CHECK: [[ELEMENT_CAST_UNKNOWN:%.+]] = om.list_contains [[OPAQUE_REFS]], [[REF_B]] : <!om.any>
+  %element_cast_unknown = om.list_contains %opaque_refs, %b_ref : !om.list<!om.any>
+  // CHECK: [[OTHER_REFS:%.+]] = om.list_create [[OTHER_REF]] : !om.any
+  %other_refs = om.list_create %other_ref : !om.any
+  // CHECK: [[BOTH_CAST_UNKNOWN:%.+]] = om.list_contains [[OTHER_REFS]], [[REF_B]] : <!om.any>
+  %both_cast_unknown = om.list_contains %other_refs, %b_ref : !om.list<!om.any>
+
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[TRUE]], [[MIXED_UNKNOWN]], [[FALSE]],
+  // CHECK-SAME: [[LIST_CAST_UNKNOWN]], [[ELEMENT_CAST_UNKNOWN]], [[BOTH_CAST_UNKNOWN]]
+  om.class.fields %ssa_found, %class_absent, %unknown_then_found,
+      %mismatch_then_found, %mixed_unknown, %any_absent, %list_cast_unknown,
+      %element_cast_unknown, %both_cast_unknown :
+      i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
