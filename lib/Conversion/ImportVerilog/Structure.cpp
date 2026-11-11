@@ -2872,6 +2872,8 @@ static Value buildProductiveTerm(OpBuilder &builder, Location loc,
   return term;
 }
 
+namespace {
+
 /// A level-sensitive truth table row (a latch transition, or an asynchronous
 /// clear/preset override in an edge-triggered UDP).
 struct AsyncRow {
@@ -2901,6 +2903,27 @@ struct SequentialTableInfo {
   /// Indices of input ports that act as asynchronous controls.
   llvm::SmallDenseSet<size_t, 4> asyncPortIndices;
 };
+
+/// Synthesized boolean conditions for level-sensitive (`AsyncRow`) transitions.
+///
+/// Because a sequential UDP output is 1-bit, every active level-sensitive row
+/// either drives `'0'` (`clearCond`) or `'1'` (`presetCond`). For a
+/// level-sensitive latch, `asyncCond` is the combined enable condition and
+/// `asyncVal` is the assigned value; for an edge-triggered flip-flop,
+/// `clearCond` and `presetCond` also provide the individual asynchronous
+/// clear/preset override conditions.
+struct AsyncConditions {
+  /// Sum-of-products condition of all level-sensitive rows driving `'0'`.
+  Value clearCond;
+  /// Sum-of-products condition of all level-sensitive rows driving `'1'`.
+  Value presetCond;
+  /// Combined level-sensitive enable condition (`clearCond | presetCond`).
+  Value asyncCond;
+  /// Value assigned to state `q` when `asyncCond` is active.
+  Value asyncVal;
+};
+
+} // namespace
 
 /// Classify sequential UDP truth table rows into synchronous (edge-sensitive)
 /// transitions and asynchronous (level-sensitive) transitions.
@@ -3055,15 +3078,15 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
     size_t clkIdx = *edgePortIdx;
     SmallVector<AsyncRow> mergedLevelRows;
     for (auto &arow : rawLevelRows) {
-      auto matchIt =
+      auto *matchIt =
           llvm::find_if(mergedLevelRows, [&](const AsyncRow &existing) {
             if (existing.output != arow.output)
               return false;
-            for (auto [k, aLevel] : llvm::enumerate(arow.levels)) {
-              if (k != clkIdx && existing.levels[k] != aLevel)
-                return false;
-            }
-            return true;
+            return llvm::all_of(
+                llvm::enumerate(arow.levels), [&](const auto &item) {
+                  return item.index() == clkIdx ||
+                         existing.levels[item.index()] == item.value();
+                });
           });
 
       if (matchIt == mergedLevelRows.end()) {
@@ -3172,25 +3195,6 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
   return success();
 }
 
-/// Synthesized boolean conditions for level-sensitive (`AsyncRow`) transitions.
-///
-/// Because a sequential UDP output is 1-bit, every active level-sensitive row
-/// either drives `'0'` (`clearCond`) or `'1'` (`presetCond`). For a
-/// level-sensitive latch, `asyncCond` is the combined enable condition and
-/// `asyncVal` is the assigned value; for an edge-triggered flip-flop,
-/// `clearCond` and `presetCond` also provide the individual asynchronous
-/// clear/preset override conditions.
-struct AsyncConditions {
-  /// Sum-of-products condition of all level-sensitive rows driving `'0'`.
-  Value clearCond;
-  /// Sum-of-products condition of all level-sensitive rows driving `'1'`.
-  Value presetCond;
-  /// Combined level-sensitive enable condition (`clearCond | presetCond`).
-  Value asyncCond;
-  /// Value assigned to state `q` when `asyncCond` is active.
-  Value asyncVal;
-};
-
 /// Construct boolean conditions from level-sensitive (`AsyncRow`) rows by
 /// partitioning them into rows driving `'0'` (`clearCond`) and rows driving
 /// `'1'` (`presetCond`).
@@ -3285,7 +3289,7 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
 
   // Instantiate the state variable.
   auto i1Ty = moore::IntType::getInt(getContext(), 1);
-  auto i1RefTy = moore::RefType::get(cast<moore::UnpackedType>(i1Ty));
+  auto i1RefTy = moore::RefType::get(i1Ty);
   Value initVal;
   if (primitive.initVal && primitive.initVal->isInteger()) {
     const auto &svInt = primitive.initVal->integer();
