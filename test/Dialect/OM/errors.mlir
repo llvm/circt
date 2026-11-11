@@ -187,8 +187,25 @@ om.class @ListContainsInferredTypeMismatch(%list: !om.list<!om.string>) {
 
 // -----
 
+// Reference element types must match exactly.
+om.class @ListContainsClassAny(%list: !om.list<!om.class.type<@Foo>>, %element: !om.any) {
+  // expected-error @+1 {{failed to verify that list element type should match search element type}}
+  %0 = "om.list_contains"(%list, %element) : (!om.list<!om.class.type<@Foo>>, !om.any) -> i1
+  om.class.fields
+}
+
+// -----
+
+om.class @ListContainsDifferentClasses(%list: !om.list<!om.class.type<@Foo>>, %element: !om.class.type<@Bar>) {
+  // expected-error @+1 {{failed to verify that list element type should match search element type}}
+  %0 = "om.list_contains"(%list, %element) : (!om.list<!om.class.type<@Foo>>, !om.class.type<@Bar>) -> i1
+  om.class.fields
+}
+
+// -----
+
 om.class @ListContainsUnsupportedType(%list: !om.list<i32>, %element: i32) {
-  // expected-error @+1 {{operand #1 must be A type that represents a string. or A type that represents an arbitrary width integer. or 1-bit signless integer, but got 'i32'}}
+  // expected-error @+1 {{operand #1 must be A type that represents a string. or A type that represents an arbitrary width integer. or 1-bit signless integer or A type that represents a reference to a Class. or A type that represents any valid OM type., but got 'i32'}}
   %0 = om.list_contains %list, %element : !om.list<i32>
   om.class.fields
 }

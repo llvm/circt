@@ -186,7 +186,7 @@ om.class @ListConcat() {
 }
 
 // CHECK-LABEL: @ListContains
-om.class @ListContains() {
+om.class @ListContains(%obj: !om.class.type<@Widget>, %ref: !om.any) {
   %0 = om.constant "member" : !om.string
   %1 = om.list_create %0 : !om.string
   // CHECK: %2 = om.list_contains %1, %0 : <!om.string> loc(
@@ -199,6 +199,12 @@ om.class @ListContains() {
   %7 = om.list_create %6 : i1
   // CHECK: %8 = om.list_contains %7, %6 : <i1> loc(
   %8 = om.list_contains %7, %6 : !om.list<i1>
+  %9 = om.list_create %obj : !om.class.type<@Widget>
+  // CHECK: %10 = om.list_contains %9, %obj : <!om.class.type<@Widget>> loc(
+  %10 = om.list_contains %9, %obj : !om.list<!om.class.type<@Widget>>
+  %11 = om.list_create %ref : !om.any
+  // CHECK: %12 = om.list_contains %11, %ref : <!om.any> loc(
+  %12 = om.list_contains %11, %ref : !om.list<!om.any>
   om.class.fields
 }
 
