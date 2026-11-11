@@ -556,8 +556,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
   // If we get here we cover the entire signal. If we already have a single
   // drive, simply mark that as this signal's single drive. Otherwise we have to
   // do some actual work.
-  if (slices.size() == 1 && slices[0].length != 0 && slices[0].op &&
-      !hw::type_isa<hw::UnionType>(type)) {
+  if (slices.size() == 1 && slices[0].length != 0 && slices[0].op) {
     signal.completeDrives.push_back(slices[0].op);
     return;
   }
