@@ -230,8 +230,7 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
 /// type. This handles both the known width and unknown width case.
 IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
   int32_t width = abs(type_cast<IntType>(type).getWidthOrSentinel());
-  return getIntAttr(
-      type, APInt(width, -1, /*isSigned=*/false, /*implicitTrunc=*/true));
+  return getIntAttr(type, APInt::getAllOnes(width));
 }
 
 /// Return true if replacing a register with `foldedValue` preserves the
