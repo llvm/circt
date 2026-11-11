@@ -842,3 +842,21 @@ module {
     hw.output %x : i1
   }
 }
+
+// -----
+
+// Blocks nested in operations with side effects, such as processes, are not
+// module bodies and must not be treated as such.
+module {
+  // LIVENESS-LABEL: hw.module public @NestedBlocks
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // ELIMINATE-LABEL: hw.module public @NestedBlocks
+  // ELIMINATE-NEXT:    llhd.process {
+  // ELIMINATE-NEXT:      llhd.halt
+  hw.module public @NestedBlocks() {
+    llhd.process {
+      llhd.halt
+    }
+    hw.output
+  }
+}

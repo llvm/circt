@@ -213,14 +213,16 @@ void HWIMDeadCodeElim::markBlockExecutable(Block *block) {
   if (!executableBlocks.insert(block).second)
     return; // Already executable.
 
-  auto moduleLike = dyn_cast<HWModuleLike>(block->getParentOp());
-  // The only case when we do not mark the module alive automatically,
-  // is if it is a private HW module
-  auto module = dyn_cast<HWModuleOp>(moduleLike.getOperation());
-  if (!module)
-    markAlive(moduleLike);
-  else if (module.isPublic())
-    markAlive(module);
+  // The only case when we do not mark the module alive automatically, is if
+  // it is a private HW module. Blocks nested within other operations of a
+  // module, such as processes, do not affect the liveness of the module.
+  if (auto moduleLike = dyn_cast<HWModuleLike>(block->getParentOp())) {
+    auto module = dyn_cast<HWModuleOp>(moduleLike.getOperation());
+    if (!module)
+      markAlive(moduleLike);
+    else if (module.isPublic())
+      markAlive(module);
+  }
 
   for (auto &op : *block) {
     if (auto instance = dyn_cast<HWInstanceLike>(op))
