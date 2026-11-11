@@ -765,6 +765,40 @@ OpFoldResult circt::om::ListConcatOp::fold(FoldAdaptor adaptor) {
                        ArrayAttr::get(getContext(), elements));
 }
 
+namespace {
+/// Concatenate constructed lists into a single list_create.
+struct ConcatListCreates : OpRewritePattern<ListConcatOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ListConcatOp concat,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<Value> inputs;
+    for (auto element : concat.getSubLists()) {
+      if (auto create = element.getDefiningOp<ListCreateOp>()) {
+        llvm::append_range(inputs, create.getInputs());
+        continue;
+      }
+
+      // Drop empty constant lists, since these may have been folded to
+      // constants.  Reject any other elements.
+      ListAttr attr;
+      if (auto constant = element.getDefiningOp<ConstantOp>())
+        attr = dyn_cast<ListAttr>(constant.getValue());
+      if (!attr || !attr.getElements().empty())
+        return failure();
+    }
+
+    rewriter.replaceOpWithNewOp<ListCreateOp>(concat, concat.getType(), inputs);
+    return success();
+  }
+};
+} // namespace
+
+void ListConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<ConcatListCreates>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // BasePathCreateOp
 //===----------------------------------------------------------------------===//
@@ -1141,27 +1175,46 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
 // ObjectEqOp
 //===----------------------------------------------------------------------===//
 
+/// Look through identity-preserving class-to-any casts.  Simplification of
+/// repeated AnyCastOp is removed elsewhere.
+static Value getObjectReference(Value value) {
+  if (auto cast = value.getDefiningOp<AnyCastOp>();
+      cast && isa<ClassType>(cast.getInput().getType()))
+    return cast.getInput();
+  return value;
+}
+
+/// Compare SSA identities, looking through class-to-any casts. Identical values
+/// prove equality for all types; distinct elaborated allocations prove
+/// inequality. Otherwise, return std::nullopt.
+static std::optional<bool> evaluateIdentityEquality(Value lhs, Value rhs) {
+  lhs = getObjectReference(lhs);
+  rhs = getObjectReference(rhs);
+  if (lhs == rhs)
+    return true;
+  if (lhs.getDefiningOp<ElaboratedObjectOp>() &&
+      rhs.getDefiningOp<ElaboratedObjectOp>())
+    return false;
+  return std::nullopt;
+}
+
 OpFoldResult ObjectEqOp::fold(FoldAdaptor adaptor) {
-  // object.eq(x, x) -> true, even for unknown x.
-  if (getLhs() == getRhs())
-    return mlir::IntegerAttr::get(getType(), 1);
+  // object.eq(x, x) -> true
+  // object.eq(any_cast(x), x) -> true
+  // object.eq(x, any_cast(x)) -> true
+  // object.eq(any_cast(x), any_cast(x)) -> true
+  if (auto equal = evaluateIdentityEquality(getLhs(), getRhs()))
+    return mlir::IntegerAttr::get(getType(), *equal);
 
-  // object.eq(a, b) -> false for distinct elaborated objects.
-  if (getLhs().getDefiningOp<ElaboratedObjectOp>() &&
-      getRhs().getDefiningOp<ElaboratedObjectOp>())
-    return mlir::IntegerAttr::get(getType(), 0);
-
-  // object.eq(any_cast(x), y) -> object.eq(x, y).
-  if (auto cast = getLhs().getDefiningOp<AnyCastOp>();
-      cast && isa<ClassType>(cast.getInput().getType())) {
-    getLhsMutable().assign(cast.getInput());
+  // object.eq(any_cast(x), y) -> object.eq(x, y)
+  if (auto lhs = getObjectReference(getLhs()); lhs != getLhs()) {
+    getLhsMutable().assign(lhs);
     return getResult();
   }
 
-  // object.eq(x, any_cast(y)) -> object.eq(x, y).
-  if (auto cast = getRhs().getDefiningOp<AnyCastOp>();
-      cast && isa<ClassType>(cast.getInput().getType())) {
-    getRhsMutable().assign(cast.getInput());
+  // object.eq(x, any_cast(y)) -> object.eq(x, y)
+  if (auto rhs = getObjectReference(getRhs()); rhs != getRhs()) {
+    getRhsMutable().assign(rhs);
     return getResult();
   }
 
@@ -1173,27 +1226,40 @@ OpFoldResult ObjectEqOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ListContainsOp::fold(FoldAdaptor adaptor) {
-  // Fold membership based on SSA identity for a directly constructed list.
-  if (auto listCreate = getList().getDefiningOp<ListCreateOp>();
-      listCreate && llvm::is_contained(listCreate.getInputs(), getElement()))
-    return mlir::IntegerAttr::get(getResult().getType(), 1);
+  if (auto listCreate = getList().getDefiningOp<ListCreateOp>()) {
+    bool allKnown = true;
+    for (auto candidate : listCreate.getInputs()) {
+      auto equal = evaluateIdentityEquality(candidate, getElement());
+      if (equal && *equal)
+        return mlir::IntegerAttr::get(getResult().getType(), 1);
+      // Continue past unknown comparisons.  A later candidate may still match.
+      allKnown &= equal.has_value();
+    }
+    // This also covers empty lists, even with an unknown search value.
+    if (allKnown)
+      return mlir::IntegerAttr::get(getResult().getType(), 0);
+  }
 
   auto listAttr = dyn_cast_or_null<ListAttr>(adaptor.getList());
+  if (!listAttr)
+    return {};
+  if (listAttr.getElements().empty())
+    return mlir::IntegerAttr::get(getResult().getType(), 0);
+
+  // Both the nonempty list and element must fold to constant attributes.
   Attribute elementAttr = adaptor.getElement();
-  // Both the list and element must fold to constant attributes. Even an empty
-  // list requires a constant element.
-  if (!listAttr || !elementAttr)
+  if (!elementAttr)
     return {};
 
-  bool found = false;
   for (Attribute candidate : listAttr.getElements()) {
     auto equality = evaluateBinaryEquality(candidate, elementAttr);
     if (failed(equality))
       return {};
-    found |= !cast<mlir::IntegerAttr>(*equality).getValue().isZero();
+    if (!cast<mlir::IntegerAttr>(*equality).getValue().isZero())
+      return mlir::IntegerAttr::get(getResult().getType(), 1);
   }
 
-  return mlir::IntegerAttr::get(getResult().getType(), found);
+  return mlir::IntegerAttr::get(getResult().getType(), 0);
 }
 
 //===----------------------------------------------------------------------===//

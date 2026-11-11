@@ -369,56 +369,97 @@ om.class @ListCreateFold(%0: !om.integer) -> (
       !om.list<!om.string>, !om.list<!om.integer>, !om.list<!om.integer>
 }
 
-// List concatenation folds constant operands and preserves identity for a
-// single operand. This test uses list attributes directly, independently of
-// the list_create folder.
 // CHECK-LABEL: @ListConcatFold
 om.class @ListConcatFold(
-    %0: !om.list<!om.string>, %1: !om.list<!om.string>) -> (
+    %0: !om.list<!om.string>, %1: !om.list<!om.string>,
+    %a: !om.class.type<@Foo>, %b: !om.class.type<@Foo>, %c: !om.class.type<@Foo>,
+    %x: !om.string, %y: !om.string) -> (
     joined: !om.list<!om.string>, empty: !om.list<!om.string>,
     single_constant: !om.list<!om.string>, single_dynamic: !om.list<!om.string>,
-    nested: !om.list<!om.string>, dynamic: !om.list<!om.string>) {
-  // Concatenating multiple constants folds to one list constant.
+    nested: !om.list<!om.string>, dynamic: !om.list<!om.string>,
+    class_joined: !om.list<!om.class.type<@Foo>>,
+    class_nested: !om.list<!om.class.type<@Foo>>,
+    original: !om.list<!om.class.type<@Foo>>,
+    string_joined: !om.list<!om.string>, mixed: !om.list<!om.string>) {
+  // Fold constant lists without relying on list_create.
   %2 = om.constant #om.list<!om.string, ["a" : !om.string]>
       : !om.list<!om.string>
   %3 = om.constant #om.list<!om.string, ["b" : !om.string]>
       : !om.list<!om.string>
   %4 = om.constant #om.list<!om.string, ["c" : !om.string]>
       : !om.list<!om.string>
-  // CHECK: [[LIST_A:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string]> : !om.list<!om.string>{{$}}
-  // CHECK: [[JOINED:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string, "c" : !om.string]> : !om.list<!om.string>{{$}}
+  // CHECK-DAG: [[LIST_A:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string]> : !om.list<!om.string>{{$}}
+  // CHECK-DAG: [[LIST_B:%[0-9]+]] = om.constant #om.list<!om.string, ["b" : !om.string]> : !om.list<!om.string>{{$}}
+  // CHECK-DAG: [[JOINED:%[0-9]+]] = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string, "c" : !om.string]> : !om.list<!om.string>{{$}}
   %5 = om.list_concat %2, %3, %4 : !om.list<!om.string>
 
-  // Concatenating two empty lists folds to an empty list.
+  // Empty lists concatenate to an empty list.
   %6 = om.constant #om.list<!om.string, []> : !om.list<!om.string>
   %7 = om.constant #om.list<!om.string, []> : !om.list<!om.string>
-  // CHECK: [[EMPTY:%[0-9]+]] = om.constant #om.list<!om.string, []> : !om.list<!om.string>{{$}}
+  // CHECK-DAG: [[EMPTY:%[0-9]+]] = om.constant #om.list<!om.string, []> : !om.list<!om.string>{{$}}
   %8 = om.list_concat %6, %7 : !om.list<!om.string>
 
-  // A single constant operand is an identity.
+  // A single constant list is unchanged.
   %9 = om.list_concat %2 : !om.list<!om.string>
 
-  // A single dynamic operand is an identity.
+  // A single list parameter is unchanged.
   %10 = om.list_concat %0 : !om.list<!om.string>
 
-  // Nested constant concatenations fold to the same list constant.
+  // Fold nested constant concatenations.
   %11 = om.list_concat %2, %3 : !om.list<!om.string>
   %12 = om.list_concat %11, %4 : !om.list<!om.string>
 
-  // Multiple dynamic operands remain unfurled.
+  // Keep concatenations of list parameters.
   // CHECK: [[DYNAMIC_CONCAT:%[0-9]+]] = om.list_concat [[ARG0:%_0]], [[ARG1:%_1]] : <!om.string>{{$}}
   %13 = om.list_concat %0, %1 : !om.list<!om.string>
 
-  // CHECK: om.class.fields [[JOINED]], [[EMPTY]], [[LIST_A]], [[ARG0]], [[JOINED]], [[DYNAMIC_CONCAT]]
-  om.class.fields %5, %8, %9, %10, %12, %13 :
+  // Flatten list_create operands without changing element order.
+  // CHECK-DAG: [[ORIGINAL:%.+]] = om.list_create %a : !om.class.type<@Foo>{{$}}
+  // CHECK-DAG: [[CLASS_JOINED:%.+]] = om.list_create %a, %b : !om.class.type<@Foo>{{$}}
+  // CHECK-DAG: [[CLASS_NESTED:%.+]] = om.list_create %a, %b, %c, %a, %b : !om.class.type<@Foo>{{$}}
+  %head = om.list_create %a : !om.class.type<@Foo>
+  %middle = om.list_create %b : !om.class.type<@Foo>
+  %tail = om.list_create %c : !om.class.type<@Foo>
+  // Ignore empty lists, whether constructed or constant.
+  %empty = om.list_create : !om.class.type<@Foo>
+  %emptyConstant = om.constant #om.list<!om.class.type<@Foo>, []> : !om.list<!om.class.type<@Foo>>
+  %joined = om.list_concat %empty, %head, %emptyConstant, %middle, %empty : !om.list<!om.class.type<@Foo>>
+  // Flatten a reused concat without dropping repeated elements.
+  %nested = om.list_concat %joined, %tail, %joined : !om.list<!om.class.type<@Foo>>
+
+  // Flatten lists of nonconstant strings.
+  // CHECK-DAG: [[STRING_HEAD:%.+]] = om.list_create %x : !om.string{{$}}
+  // CHECK-DAG: [[STRING_JOINED:%.+]] = om.list_create %x, %y : !om.string{{$}}
+  %stringHead = om.list_create %x : !om.string
+  %stringTail = om.list_create %y : !om.string
+  %stringJoined = om.list_concat %stringHead, %6, %stringTail : !om.list<!om.string>
+  // A nonempty constant prevents flattening.
+  // CHECK: [[MIXED:%.+]] = om.list_concat [[STRING_HEAD]], [[LIST_B]] : <!om.string>{{$}}
+  %mixed = om.list_concat %stringHead, %3 : !om.list<!om.string>
+
+  // CHECK: om.class.fields [[JOINED]], [[EMPTY]], [[LIST_A]], [[ARG0]], [[JOINED]], [[DYNAMIC_CONCAT]],
+  // CHECK-SAME: [[CLASS_JOINED]], [[CLASS_NESTED]], [[ORIGINAL]], [[STRING_JOINED]], [[MIXED]]
+  // CHECK-SAME: : !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
+  // CHECK-SAME: !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
+  // CHECK-SAME: !om.list<!om.class.type<@Foo>>, !om.list<!om.class.type<@Foo>>, !om.list<!om.class.type<@Foo>>,
+  // CHECK-SAME: !om.list<!om.string>, !om.list<!om.string>
+  om.class.fields %5, %8, %9, %10, %12, %13, %joined, %nested, %head,
+      %stringJoined, %mixed :
       !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
-      !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>
+      !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.string>,
+      !om.list<!om.class.type<@Foo>>, !om.list<!om.class.type<@Foo>>,
+      !om.list<!om.class.type<@Foo>>, !om.list<!om.string>, !om.list<!om.string>
 }
 
 // CHECK-LABEL: @ListContainsFold
-om.class @ListContainsFold() -> (
+om.class @ListContainsFold(%empty_search: !om.string,
+                           %other: !om.class.type<@Foo>, %opaque: !om.any,
+                           %x: !om.integer, %y: !om.integer, %z: !om.integer) -> (
     string_found: i1, string_absent: i1, bool_found: i1, bool_absent: i1,
-    integer_found: i1, integer_absent: i1, empty: i1) {
+    integer_found: i1, integer_absent: i1, empty: i1,
+    class_found: i1, class_absent: i1, class_unknown: i1,
+    any_found: i1, any_absent: i1, any_unknown: i1, any_empty: i1,
+    dynamic_found: i1, dynamic_unknown: i1) {
   %string_list = om.constant #om.list<!om.string, ["a" : !om.string, "b" : !om.string]> : !om.list<!om.string>
   %string_found_value = om.constant "b" : !om.string
   %string_absent_value = om.constant "absent" : !om.string
@@ -437,15 +478,54 @@ om.class @ListContainsFold() -> (
   %integer_found = om.list_contains %integer_list, %integer_found_value : !om.list<!om.integer>
   %integer_absent = om.list_contains %integer_list, %integer_absent_value : !om.list<!om.integer>
 
+  // An empty list returns false for a nonconstant search value.
   %empty_list = om.constant #om.list<!om.string, []> : !om.list<!om.string>
-  %empty_search = om.constant "a" : !om.string
   %empty = om.list_contains %empty_list, %empty_search : !om.list<!om.string>
 
-  // CHECK-NOT: om.list_contains
-  // CHECK-DAG: [[TRUE:%[0-9]+]] = om.constant true
-  // CHECK-DAG: [[FALSE:%[0-9]+]] = om.constant false
-  // CHECK-NOT: om.list_contains
-  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[FALSE]] : i1, i1, i1, i1, i1, i1, i1
+  // Compare object identities, not fields.
+  %a = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %b = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  %aRef = om.any_cast %a : (!om.class.type<@Foo>) -> !om.any
+  %bRef = om.any_cast %b : (!om.class.type<@Foo>) -> !om.any
+  %objects = om.list_create %other, %a : !om.class.type<@Foo>
+  %knownObjects = om.list_create %a : !om.class.type<@Foo>
+  %refs = om.list_create %opaque, %aRef : !om.any
+  %knownRefs = om.list_create %aRef : !om.any
+
+  // CHECK-DAG: [[TRUE:%.+]] = om.constant true
+  // CHECK-DAG: [[FALSE:%.+]] = om.constant false
+  // CHECK-DAG: [[OBJECTS:%.+]] = om.list_create %other, %{{.+}} : !om.class.type<@Foo>{{$}}
+  // CHECK-DAG: [[REFS:%.+]] = om.list_create %opaque, %{{.+}} : !om.any{{$}}
+  // A match after an unresolved comparison still returns true.
+  %classFound = om.list_contains %objects, %a : !om.list<!om.class.type<@Foo>>
+  %classAbsent = om.list_contains %knownObjects, %b : !om.list<!om.class.type<@Foo>>
+  // A parameter may alias the search object.
+  // CHECK: [[CLASS_UNKNOWN:%.+]] = om.list_contains [[OBJECTS]], %{{.+}} : <!om.class.type<@Foo>>{{$}}
+  %classUnknown = om.list_contains %objects, %b : !om.list<!om.class.type<@Foo>>
+  %anyFound = om.list_contains %refs, %aRef : !om.list<!om.any>
+  %anyAbsent = om.list_contains %knownRefs, %bRef : !om.list<!om.any>
+  // CHECK: [[ANY_UNKNOWN:%.+]] = om.list_contains [[REFS]], %{{.+}} : <!om.any>{{$}}
+  %anyUnknown = om.list_contains %refs, %bRef : !om.list<!om.any>
+
+  // Empty lists return false for opaque references.
+  %emptyRefs = om.list_create : !om.any
+  %anyEmpty = om.list_contains %emptyRefs, %opaque : !om.list<!om.any>
+
+  // An SSA-identical element matches even after an unresolved comparison.
+  // CHECK: [[DYNAMIC_LIST:%.+]] = om.list_create %y, %x : !om.integer{{$}}
+  %dynamic_list = om.list_create %y, %x : !om.integer
+  %dynamic_found = om.list_contains %dynamic_list, %x : !om.list<!om.integer>
+  // Distinct SSA values may be equal.
+  // CHECK: [[DYNAMIC_UNKNOWN:%.+]] = om.list_contains [[DYNAMIC_LIST]], %z : <!om.integer>{{$}}
+  %dynamic_unknown = om.list_contains %dynamic_list, %z : !om.list<!om.integer>
+
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[TRUE]], [[FALSE]], [[FALSE]],
+  // CHECK-SAME: [[TRUE]], [[FALSE]], [[CLASS_UNKNOWN]], [[TRUE]], [[FALSE]], [[ANY_UNKNOWN]], [[FALSE]],
+  // CHECK-SAME: [[TRUE]], [[DYNAMIC_UNKNOWN]]
+  // CHECK-SAME: : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
   om.class.fields %string_found, %string_absent, %bool_found, %bool_absent,
-      %integer_found, %integer_absent, %empty : i1, i1, i1, i1, i1, i1, i1
+      %integer_found, %integer_absent, %empty, %classFound, %classAbsent,
+      %classUnknown, %anyFound, %anyAbsent, %anyUnknown, %anyEmpty,
+      %dynamic_found, %dynamic_unknown :
+      i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
