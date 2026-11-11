@@ -15,8 +15,6 @@
 #include "slang/syntax/SyntaxVisitor.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/ScopeExit.h"
-#include "llvm/ADT/SmallSet.h"
-#include <cstddef>
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -2874,17 +2872,22 @@ static Value buildProductiveTerm(OpBuilder &builder, Location loc,
   return term;
 }
 
-/// An asynchronous (level-sensitive) truth table row.
+/// A level-sensitive truth table row (a latch transition, or an asynchronous
+/// clear/preset override in an edge-triggered UDP).
 struct AsyncRow {
-  /// Input and internal state conditions: [in0, in1, ..., inN-1, q].
+  /// Required logic levels ('0', '1', or '?' for don't-care) for each input
+  /// port, followed by the current state `q` as the last element.
+  /// e.g. [in0, in1, ..., inN-1, q].
   SmallVector<char> levels;
-  /// Forced output value: '0' or '1'.
-  char output;
+  /// Forced output value: false for '0' (clear), true for '1' (preset).
+  bool output;
 };
 
-/// A synchronous (edge-sensitive) truth table row.
+/// An edge-sensitive truth table row.
 struct SyncRow {
-  /// Input and internal state conditions: [in0, in1, ..., inN-1, q].
+  /// Required logic levels ('0', '1', or '?' for don't-care) for each input
+  /// port (with '?' at the edge-triggered port), followed by the current state
+  /// `q` as the last element. e.g. [in0, in1, ..., inN-1, q].
   SmallVector<char> levels;
 };
 
@@ -2897,34 +2900,43 @@ struct SequentialTableInfo {
   SmallVector<SyncRow> syncRows;
   /// Indices of input ports that act as asynchronous controls.
   llvm::SmallDenseSet<size_t, 4> asyncPortIndices;
-  /// Whether any active transition depends on the internal state `q`.
-  bool usesState = false;
 };
 
 /// Classify sequential UDP truth table rows into synchronous (edge-sensitive)
 /// transitions and asynchronous (level-sensitive) transitions.
 ///
 /// Sequential UDPs in hardware are modeled either as edge-triggered flip-flops
-/// with optional asynchronous clear/preset controls, or as level-sensitive
-/// latches.
+/// (where edge-sensitive rows `syncRows` describe clocked transitions on the
+/// edge-sensitive port and level-sensitive rows `asyncRows` describe
+/// asynchronous clear/preset overrides on asynchronous control ports) or as
+/// level-sensitive latches (where only `asyncRows` are present).
 ///
 /// Safe Filtering and Benign Hold Rules:
-/// Truth tables frequently include non-functional entries that are safely
-/// skipped before hardware mapping:
-/// - 4-state simulation artifacts: Rows containing 'x' in inputs, current
-///   state, or output represent simulation-only behavior (such as X-pessimism
-///   reduction or timing check notifiers) that cannot trigger in 2-state logic.
+/// Truth tables may include entries that do not produce active 2-state
+/// transitions and are skipped before lowering:
+/// - Unknown ('x') rows: Like the combinational UDP lowering above
+///   (`skipUnsupportedRow`), sequential UDP lowering synthesizes 2-state
+///   boolean conditions (matching `MooreToCore`'s 2-state `i1` lowering).
+///   In IEEE 1800-2017 Table 29-1, `'x'` only matches literal unknown `x`
+///   (unlike `'?'`, which matches `0`, `1`, or `x`), so rows with `'x'` in
+///   inputs, current state, or output are skipped.
 /// - Explicit hold rows: Rows specifying '-' as next-state explicitly indicate
-///   retaining the current state (e.g. on inactive clock edges `(10) : -`),
-///   which is the implicit default hardware behavior when not triggered.
+///   retaining the current state (e.g. on inactive clock edges `(10) : -`).
+///   Because the lowered `moore.procedure` only assigns to the state variable
+///   when an active transition condition holds, the state variable naturally
+///   retains its value when no active transition matches.
 /// - Idempotent hold rows: Rows where next-state matches current state
 ///   (`state == output`, e.g. steady-state hold rows `0 : 0 : 0` or
 ///   `1 : 1 : 1`) preserve state and do not create active transitions.
 ///
-/// Structural Hardware Requirements:
-/// To ensure valid hardware lowering, surviving active transitions must
-/// satisfy the following structural requirements:
-/// 1. Well-formed edge transitions:
+/// Structural Lowering Requirements:
+/// Pure level-sensitive UDPs (latches) have no structural restrictions beyond
+/// Slang's table validation. For edge-triggered UDPs, while IEEE 1800-2017
+/// Section 29.6 syntactically permits arbitrary combinations of level-sensitive
+/// and edge-sensitive rows, lowering to a structured flip-flop procedure (with
+/// outer asynchronous clear/preset priority branches and an inner clocked data
+/// branch) requires surviving active transitions to satisfy:
+/// 1. Well-formed edge transitions (guaranteed by Slang and asserted here):
 ///    a. At most one edge transition per table row.
 ///    b. Supported transition specifiers: each edge transition must specify a
 ///       recognized 2-state edge token.
@@ -2933,13 +2945,15 @@ struct SequentialTableInfo {
 /// 3. No mixed sensitivity on edge-sensitive port: an input cannot have both
 ///    edge and level sensitivity (in an edge-triggered model, all active level
 ///    rows must specify '?' on the edge-sensitive port).
-/// 4. Pure asynchronous control: asynchronous clear/preset rows must not depend
-///    on the current state q (all active level rows must specify '?' on state).
+/// 4. Pure asynchronous control: in an edge-triggered UDP, level-sensitive
+///    (asynchronous clear/preset) rows must not depend on the current state q
+///    (all active level rows must specify '?' on state).
 /// 5. Separation of asynchronous control and synchronous data:
-///    a. Asynchronous control pins cannot also act as varying synchronous data
-///       inputs.
-///    b. Synchronous transitions cannot be conditioned on active asynchronous
-///       control levels.
+///    a. Asynchronous control ports (input ports with a '0' or '1' level in
+///       `asyncRows`) cannot also act as varying synchronous data inputs across
+///       `syncRows`.
+///    b. Synchronous transitions (`syncRows`) cannot be conditioned on active
+///       asynchronous control levels.
 static LogicalResult
 classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
                             size_t numInputs, Location loc,
@@ -2951,8 +2965,9 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
   std::optional<size_t> edgePortIdx;
 
   for (const auto &row : primitiveType.table) {
-    // Safe filtering: skip 4-state simulation artifacts (X-pessimism reduction
-    // rows and timing check notifiers) that cannot occur in 2-state logic.
+    // Skip rows with 'x' in inputs, current state, or output (cannot match or
+    // drive a distinct value in 2-state UDP lowering, matching
+    // `skipUnsupportedRow` for combinational UDPs).
     if (row.output == 'x')
       continue;
     if (row.state == 'x')
@@ -2961,16 +2976,18 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
       continue;
 
     // Benign Hold Rule: skip explicit hold ('-') and idempotent hold
-    // (state == output) rows. In edge-triggered hardware, holding current
-    // state is the implicit default when no active transition triggers.
+    // (state == output) rows, since the state variable is only assigned when
+    // an active transition condition holds.
     if (row.output == '-' || row.state == row.output)
       continue;
 
-    // Remaining active transitions must specify binary output '0' or '1'.
-    if (row.output != '0' && row.output != '1')
-      continue;
+    assert((row.output == '0' || row.output == '1') &&
+           "active UDP transition must specify binary output '0' or '1'");
 
-    char stateChar = (row.state == '0' || row.state == '1') ? row.state : '?';
+    // In 2-state UDP lowering, 'b' (0 or 1) and '?' (0, 1, or x) are both
+    // wildcards over {0, 1}; canonicalize 'b' to '?' so downstream checks and
+    // `buildProductiveTerm` only test a single wildcard symbol.
+    char stateChar = (row.state == 'b') ? '?' : row.state;
 
     if (!row.isEdgeSensitive) {
       assert(row.inputs.size() == numInputs &&
@@ -2980,7 +2997,7 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
       for (char c : row.inputs)
         levels.push_back(c == 'b' ? '?' : c);
       levels.push_back(stateChar);
-      rawLevelRows.push_back({std::move(levels), row.output});
+      rawLevelRows.push_back({std::move(levels), row.output == '1'});
       continue;
     }
 
@@ -3003,7 +3020,9 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
       if (c == '0' || c == '1' || c == '?' || c == 'b') {
         levels[i] = (c == 'b') ? '?' : c;
       } else {
-        // Edge shorthand ('r', 'f', 'p', 'n', '*').
+        // Edge shorthand ('r', 'f', 'p', 'n', '*'), guaranteed by Slang.
+        assert((c == 'r' || c == 'f' || c == 'p' || c == 'n' || c == '*') &&
+               "unexpected UDP input symbol");
         assert(!edgeIdx.has_value() &&
                "at most one edge transition per table row");
         edgeIdx = i;
@@ -3025,7 +3044,7 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
     }
 
     levels[stateIdx] = stateChar;
-    info.syncRows.push_back(SyncRow{.levels = std::move(levels)});
+    info.syncRows.push_back({std::move(levels)});
   }
 
   // Merge level rows that differ only on the clock column (cell-library idiom
@@ -3061,9 +3080,8 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
       // Requirement 3 (No mixed sensitivity on edge-sensitive port):
       // An input cannot have both edge and level sensitivity. In an
       // edge-triggered primitive, active level-sensitive rows must specify a
-      // don't-care on the edge-sensitive port
-      // (arow.levels[*edgePortIdx] == '?') or enumerate both '0' and '1'
-      // clock levels (merged above). Any surviving row specifying a fixed
+      // don't-care ('?') on the edge-sensitive port or enumerate both '0' and
+      // '1' clock levels (merged above). Any surviving row specifying a fixed
       // level on this port means the input has both edge and level
       // sensitivity (e.g. transparent latch behavior or level override while
       // the edge signal is stationary), which cannot be modeled by an
@@ -3078,9 +3096,8 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
       }
 
       // Requirement 4 (Pure asynchronous control without state feedback):
-      // Asynchronous clear/preset rows must not depend on the current state q
-      // (arow.levels[stateIdx] == '?'); feedback loops in asynchronous
-      // control are not supported.
+      // Asynchronous clear/preset rows must not depend on the current state q;
+      // feedback loops in asynchronous control are not supported.
       if (arow.levels[stateIdx] != '?') {
         return mlir::emitError(loc)
                << "sequential UDP `" << primitiveType.name
@@ -3088,17 +3105,11 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
                   "feedback loops in asynchronous control are not supported";
       }
 
-      // Record ports specifying non-wildcard levels in valid async rows.
+      // Record which input ports act as asynchronous controls (i.e. specify a
+      // '0' or '1' level in an asynchronous row).
       for (auto [i, level] :
            llvm::enumerate(llvm::ArrayRef(arow.levels).take_front(numInputs))) {
         if (i != *edgePortIdx && level != '?')
-          info.asyncPortIndices.insert(i);
-      }
-    } else {
-      // For level-sensitive latches, all defined input levels are active.
-      for (auto [i, level] :
-           llvm::enumerate(llvm::ArrayRef(arow.levels).take_front(numInputs))) {
-        if (level != '?')
           info.asyncPortIndices.insert(i);
       }
     }
@@ -3108,9 +3119,11 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
   // Requirement 5 (Separation of asynchronous control and synchronous data):
   if (edgePortIdx.has_value()) {
     for (size_t aIdx : info.asyncPortIndices) {
-      // Requirement 5a: Verify that asynchronous control pins are not also
-      // used as varying synchronous data inputs (only dedicated clear/preset
-      // lines are supported).
+      // Requirement 5a: In `syncRows`, an asynchronous control port may only
+      // be wildcard ('?') or held at its single inactive level (e.g. `rst = 0`
+      // across all clocked rows). If it is specified as '0' in one `syncRow`
+      // and '1' in another (`variesInSync`), it is also acting as a
+      // synchronous data input, which is not supported.
       bool variesInSync = false;
       char firstSyncLevel = 0;
       for (const auto &srow : info.syncRows) {
@@ -3128,91 +3141,66 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
                << "` specifies asynchronous control on data input port; "
                   "only dedicated clear/preset lines are supported";
       }
+    }
 
-      // Requirement 5b: Verify that synchronous transitions are not
-      // conditioned on active asynchronous control levels.
-      llvm::SmallSet<char, 2> activeLevels;
-      for (const auto &arow : info.asyncRows) {
-        char l = arow.levels[aIdx];
-        if (l != '0' && l != '1')
-          continue;
-
-        // In a row where all other async control ports are wildcards ('?'),
-        // this port's specified level is unconditionally active.
-        bool othersAreWildcard = true;
-        for (size_t otherIdx : info.asyncPortIndices) {
-          if (otherIdx != aIdx && arow.levels[otherIdx] != '?') {
-            othersAreWildcard = false;
-            break;
-          }
+    // Requirement 5b: Verify that synchronous transitions are not conditioned
+    // on an active asynchronous clear/preset row (i.e. a `syncRow` cannot
+    // match an `asyncRow` on its specified control port levels without
+    // contradicting it on another control port).
+    for (const auto &arow : info.asyncRows) {
+      for (const auto &srow : info.syncRows) {
+        bool matchesAny = false;
+        bool contradicts = false;
+        for (size_t aIdx : info.asyncPortIndices) {
+          if (arow.levels[aIdx] == '?' || srow.levels[aIdx] == '?')
+            continue;
+          if (srow.levels[aIdx] == arow.levels[aIdx])
+            matchesAny = true;
+          else
+            contradicts = true;
         }
-        if (othersAreWildcard) {
-          activeLevels.insert(l);
-          continue;
-        }
-
-        // In multi-control rows (e.g. dual clear/preset where one control
-        // dominates another), the dominated control is active while the
-        // dominating control specifies its inactive level. If this port did
-        // not appear alone in another row, it is the dominated active
-        // control.
-        bool appearedAlone =
-            llvm::any_of(info.asyncRows, [&](const AsyncRow &r) {
-              return r.levels[aIdx] != '?' &&
-                     llvm::all_of(info.asyncPortIndices, [&](size_t oIdx) {
-                       return oIdx == aIdx || r.levels[oIdx] == '?';
-                     });
-            });
-        if (!appearedAlone)
-          activeLevels.insert(l);
-      }
-
-      for (char activeLevel : activeLevels) {
-        for (const auto &srow : info.syncRows) {
-          if (srow.levels[aIdx] == activeLevel) {
-            return mlir::emitError(loc)
-                   << "sequential UDP `" << primitiveType.name
-                   << "` defines synchronous transitions conditioned on "
-                      "active asynchronous clear/preset";
-          }
+        if (matchesAny && !contradicts) {
+          return mlir::emitError(loc)
+                 << "sequential UDP `" << primitiveType.name
+                 << "` defines synchronous transitions conditioned on "
+                    "active asynchronous clear/preset";
         }
       }
     }
   }
 
-  // Determine if any accepted transition depends on the internal state q.
-  info.usesState = llvm::any_of(info.syncRows,
-                                [stateIdx](const SyncRow &r) {
-                                  return r.levels[stateIdx] != '?';
-                                }) ||
-                   llvm::any_of(info.asyncRows, [stateIdx](const AsyncRow &r) {
-                     return r.levels[stateIdx] != '?';
-                   });
-
   return success();
 }
 
-/// Asynchronous control conditions and priority resolution for sequential
-/// UDPs.
+/// Synthesized boolean conditions for level-sensitive (`AsyncRow`) transitions.
+///
+/// Because a sequential UDP output is 1-bit, every active level-sensitive row
+/// either drives `'0'` (`clearCond`) or `'1'` (`presetCond`). For a
+/// level-sensitive latch, `asyncCond` is the combined enable condition and
+/// `asyncVal` is the assigned value; for an edge-triggered flip-flop,
+/// `clearCond` and `presetCond` also provide the individual asynchronous
+/// clear/preset override conditions.
 struct AsyncConditions {
-  /// Active condition for asynchronous clear ('0' output).
+  /// Sum-of-products condition of all level-sensitive rows driving `'0'`.
   Value clearCond;
-  /// Active condition for asynchronous preset ('1' output).
+  /// Sum-of-products condition of all level-sensitive rows driving `'1'`.
   Value presetCond;
-  /// Combined asynchronous assertion condition (e.g. for level-sensitive
-  /// procedure).
+  /// Combined level-sensitive enable condition (`clearCond | presetCond`).
   Value asyncCond;
-  /// Value assigned when `asyncCond` is active.
+  /// Value assigned to state `q` when `asyncCond` is active.
   Value asyncVal;
 };
 
-/// Construct boolean conditions for level-sensitive clear ('0') and preset
-/// ('1') transitions from level-sensitive rows.
+/// Construct boolean conditions from level-sensitive (`AsyncRow`) rows by
+/// partitioning them into rows driving `'0'` (`clearCond`) and rows driving
+/// `'1'` (`presetCond`).
 ///
-/// When both '0' and '1' transitions are present (e.g. D or SR latches), they
-/// are combined into a single enable condition (`asyncCond = clearCond |
-/// presetCond`) with dynamic value (`asyncVal = presetCond`). When only clear
-/// or only preset rows exist, `asyncVal` is a constant 0 or 1.
+/// Because Slang's table conflict check (`BitTrie`) guarantees that
+/// `'0'`-output and `'1'`-output rows are mutually exclusive for any 2-state
+/// input/state combination, when both `'0'` and `'1'` rows exist (e.g. D or SR
+/// latches), they combine into a single enable condition (`asyncCond =
+/// clearCond | presetCond`) with dynamic value (`asyncVal = presetCond`). When
+/// only `'0'` or only `'1'` rows exist, `asyncVal` is a constant 0 or 1.
 static AsyncConditions buildAsyncConditions(OpBuilder &builder, Location loc,
                                             ArrayRef<AsyncRow> asyncRows,
                                             ArrayRef<Value> vars,
@@ -3223,7 +3211,7 @@ static AsyncConditions buildAsyncConditions(OpBuilder &builder, Location loc,
     Value term = buildProductiveTerm(builder, loc, arow.levels, vars, notVars);
     if (!term)
       term = moore::ConstantOp::create(builder, loc, i1Ty, 1, false);
-    if (arow.output == '0') {
+    if (!arow.output) {
       result.clearCond =
           result.clearCond
               ? moore::OrOp::create(builder, loc, result.clearCond, term)
@@ -3284,8 +3272,7 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
   size_t numInputs = inputArgs.size();
 
   // Classify the truth table rows into edge-sensitive (sync) and
-  // level-sensitive (async), recording async ports and whether state q is
-  // referenced.
+  // level-sensitive (async), and record asynchronous control ports.
   SequentialTableInfo table;
   if (failed(classifySequentialTableRows(primitive, numInputs, loc, table)))
     return failure();
@@ -3320,11 +3307,15 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
   }
 
   // Map input values [0, numInputs) and internal state q at index numInputs.
-  // When !table.usesState, no row depends on the internal state, so the state
-  // slot is left null.
+  // If no row depends on the internal state, leave the state slot null.
   SmallVector<Value> vars(seqInputVals.begin(), seqInputVals.end());
+  bool usesState =
+      llvm::any_of(table.syncRows,
+                   [](const SyncRow &r) { return r.levels.back() != '?'; }) ||
+      llvm::any_of(table.asyncRows,
+                   [](const AsyncRow &r) { return r.levels.back() != '?'; });
   Value qVal;
-  if (table.usesState)
+  if (usesState)
     qVal = moore::ReadOp::create(builder, loc, qVar);
   vars.push_back(qVal);
 
