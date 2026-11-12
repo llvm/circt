@@ -286,6 +286,38 @@ def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
   ];
 }
 
+def NameModulesByContent
+    : Pass<"firrtl-name-modules-by-content", "firrtl::CircuitOp"> {
+  let summary = "Name modules by a hash of their contents";
+  let description = [{
+    Modules that share a name up to a numeric suffix (`Queue`, `Queue_1`,
+    `Queue_2`, ...) are numbered in the order they were created, so adding one
+    renumbers the others. This pass gives each of them a name made from a hash
+    of its own contents instead: `Queue_17` becomes `Queue_e80731b9`. A module
+    then keeps its name for as long as its contents do not change, and so does
+    the text of every module that instantiates it, so tools that cache work
+    per module (synthesis, place and route) find it again.
+
+    A module is hashed on its own, with the modules it instantiates as black
+    boxes: an instance counts by its ports and by its target's name without
+    the numeric suffix. The module's own name, its annotations and its port
+    locations are left out. Two modules that differ only in which modules they
+    instantiate are told apart by the new names of those modules.
+
+    A module whose name no other module shares up to a numeric suffix keeps
+    it, and so do public modules, external modules and modules annotated
+    `NoDedup`. Two modules that would get the same name, and a new name that
+    another module already has, are an error. Run after deduplication.
+  }];
+  let options = [
+    Option<"hashLength", "hash-length", "unsigned", "8",
+           "Number of hexadecimal digits of the hash in the new name">
+  ];
+  let statistics = [
+    Statistic<"numRenamed", "num-renamed", "Number of modules renamed">
+  ];
+}
+
 def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
   let summary = "Eliminate Unneeded Wires";
   let description = [{

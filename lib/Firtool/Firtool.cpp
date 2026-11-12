@@ -104,6 +104,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (opt.shouldDedup())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedup());
 
+  if (opt.shouldNameModulesByContent())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createNameModulesByContent());
+
   if (opt.shouldConvertVecOfBundle()) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypes(
         {/*preserveAggregate=*/firrtl::PreserveAggregate::All,
@@ -574,6 +577,13 @@ public:
       llvm::cl::desc("Disable deduplication of structurally identical modules"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> nameModulesByContent{
+      "name-modules-by-content",
+      llvm::cl::desc("Name private modules by a hash of their contents, so "
+                     "that a module keeps its name while its contents do not "
+                     "change"),
+      llvm::cl::init(false)};
+
   llvm::cl::opt<bool> dedupClasses{
       "dedup-classes",
       llvm::cl::desc("Deprecated; classes are never deduplicated"),
@@ -866,12 +876,13 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableLayerSink(false),
       disableOptimization(false), vbToBV(false), noDedup(false),
-      companionMode(firrtl::CompanionMode::Bind), noViews(false),
-      disableAggressiveMergeConnections(false), lowerMemories(false),
-      blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
-      ignoreReadEnableMem(false), disableRandom(RandomKind::None),
-      outputAnnotationFilename(""), enableAnnotationWarning(false),
-      warnOnTruncation(false), lowerToCore(false), addMuxPragmas(false),
+      nameModulesByContent(false), companionMode(firrtl::CompanionMode::Bind),
+      noViews(false), disableAggressiveMergeConnections(false),
+      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
+      replSeqMemFile(""), ignoreReadEnableMem(false),
+      disableRandom(RandomKind::None), outputAnnotationFilename(""),
+      enableAnnotationWarning(false), warnOnTruncation(false),
+      lowerToCore(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
@@ -900,6 +911,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableOptimization = clOptions->disableOptimization;
   vbToBV = clOptions->vbToBV;
   noDedup = clOptions->noDedup;
+  nameModulesByContent = clOptions->nameModulesByContent;
   companionMode = clOptions->companionMode;
   noViews = clOptions->noViews;
   disableAggressiveMergeConnections =

@@ -123,6 +123,10 @@ MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetNoDedup(CirctFirtoolFirtoolOptions options, bool value);
 
 MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetNameModulesByContent(CirctFirtoolFirtoolOptions options,
+                                           bool value);
+
+MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetCompanionMode(CirctFirtoolFirtoolOptions options,
                                     CirctFirtoolCompanionMode value);
 

@@ -140,6 +140,11 @@ void circtFirtoolOptionsSetNoDedup(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setNoDedup(value);
 }
 
+void circtFirtoolOptionsSetNameModulesByContent(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setNameModulesByContent(value);
+}
+
 void circtFirtoolOptionsSetCompanionMode(CirctFirtoolFirtoolOptions options,
                                          CirctFirtoolCompanionMode value) {
   firrtl::CompanionMode converted;

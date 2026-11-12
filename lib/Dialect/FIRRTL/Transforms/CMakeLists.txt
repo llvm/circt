@@ -50,6 +50,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   MergeConnections.cpp
   ModuleInliner.cpp
   ModuleSummary.cpp
+  NameModulesByContent.cpp
   PassiveWires.cpp
   PrintFIRRTLFieldSource.cpp
   PrintInstanceGraph.cpp
