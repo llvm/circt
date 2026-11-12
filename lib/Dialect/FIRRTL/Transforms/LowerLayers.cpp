@@ -9,6 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -447,7 +448,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     // If the operand has no XMR representation, then we need to
     // clone it.  Its operands are captured recursively.
-    if (type_isa<FStringType>(value.getType())) {
+    if (type_isa<FStringType>(value.getType()) ||
+        isa<debug::ScopeType>(value.getType())) {
       IRMapping mapping;
       auto *definingOp = value.getDefiningOp();
       for (auto operand : definingOp->getOperands())
