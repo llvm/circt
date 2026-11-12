@@ -12,7 +12,7 @@ from circt.passmanager import PassManager
 
 
 def serialize_integer_dpi(module):
-  """Example consumer for the current SV exporter's scalar integer mapping."""
+  """Example frontend serializer for signless scalar integer DPI signatures."""
   directions = {
       sim.DPIDirection.INPUT: "in",
       sim.DPIDirection.OUTPUT: "out",
@@ -29,10 +29,14 @@ def serialize_integer_dpi(module):
     arguments = []
     for name, type, direction in signature.arguments:
       if not isinstance(type, IntegerType) or direction not in directions:
-        raise ValueError("this example only handles integer DPI arguments")
-      width = IntegerType(type).width
-      # ExportVerilog emits native signed atoms at these widths, and unsigned
-      # bit vectors at other widths, regardless of the IR integer signedness.
+        raise ValueError("this example only handles signless integer arguments")
+      integer = IntegerType(type)
+      if not integer.is_signless:
+        raise ValueError("this example only handles signless integer arguments")
+      width = integer.width
+      # Match ExportVerilog's existing defaults for signless integers. The CAPI
+      # preserves the original type; a frontend defines its own JSON format and
+      # decides how to represent explicit signedness and other type families.
       signed = width in (8, 16, 32, 64)
       if direction == sim.DPIDirection.RETURN and width not in (1, 8, 16, 32,
                                                                 64):
@@ -60,7 +64,6 @@ with Context() as ctx, Location.unknown():
                          in %long_value: i64, in %extra: i65,
                          inout %state: i1024, return status: i64)
         attributes {verilogName = "step_c"}
-      sim.func.dpi @signedness(in %signed_arg: si32, in %unsigned_arg: ui32)
       sim.func.dpi @finish()
       hw.module @Testbench() { hw.output }
     }
@@ -69,16 +72,14 @@ with Context() as ctx, Location.unknown():
   schema = json.loads(serialize_integer_dpi(module))
   assert str(module) == original
   functions = schema["dpi_functions"]
-  assert [func["function"] for func in functions
-         ] == ["step_c", "signedness", "finish"]
-  assert functions[2]["arguments"] == []
+  assert [func["function"] for func in functions] == ["step_c", "finish"]
+  assert functions[1]["arguments"] == []
   assert [arg["direction"] for arg in functions[0]["arguments"]] == [
       "out", "in", "in", "in", "in", "in", "in", "in", "inout", "return"
   ]
   assert [(arg["width"], arg["signed"]) for arg in functions[0]["arguments"]
          ] == [(7, False), (1, False), (8, True), (16, True), (32, True),
                (63, False), (64, True), (65, False), (1024, False), (64, True)]
-  assert all(arg["signed"] for arg in functions[1]["arguments"])
 
   # CHECK: JSON state: width=1024 signed=False direction=inout
   state = functions[0]["arguments"][8]
@@ -111,7 +112,4 @@ with Context() as ctx, Location.unknown():
   # CHECK-NEXT: input longint long_value,
   # CHECK-NEXT: input bit [64:0] extra,
   # CHECK-NEXT: inout bit [1023:0] state
-  # CHECK: import "DPI-C" context function void signedness(
-  # CHECK-NEXT: input int signed_arg,
-  # CHECK-NEXT: input int unsigned_arg
   # CHECK: import "DPI-C" context function void finish();

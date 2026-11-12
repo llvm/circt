@@ -57,6 +57,43 @@ static void testEmptySignature(MlirContext ctx) {
           simTypeIsADPIFunction(mlirIntegerTypeGet(ctx, 32)));
 }
 
+static void testIntegerSignedness(MlirContext ctx) {
+  // CHECK-LABEL: Integer signedness preserved
+  fprintf(stderr, "Integer signedness preserved\n");
+  const unsigned widths[] = {1, 7, 8, 16, 32, 64, 65, 1024};
+  for (unsigned i = 0; i < sizeof(widths) / sizeof(widths[0]); ++i) {
+    MlirType types[] = {mlirIntegerTypeGet(ctx, widths[i]),
+                        mlirIntegerTypeSignedGet(ctx, widths[i]),
+                        mlirIntegerTypeUnsignedGet(ctx, widths[i])};
+    SimDPIArgument arguments[] = {{mlirStringRefCreateFromCString("signless"),
+                                   types[0], SIM_DPI_DIRECTION_INPUT},
+                                  {mlirStringRefCreateFromCString("signed"),
+                                   types[1], SIM_DPI_DIRECTION_INOUT},
+                                  {mlirStringRefCreateFromCString("writeData"),
+                                   types[2], SIM_DPI_DIRECTION_OUTPUT}};
+    MlirType signature = simDPIFunctionTypeGet(ctx, 3, arguments);
+    MlirType call = simDPIFunctionTypeGetFunctionType(signature);
+    for (intptr_t index = 0; index < 3; ++index) {
+      SimDPIArgument argument = simDPIFunctionTypeGetArgument(signature, index);
+      assert(mlirTypeEqual(argument.type, types[index]));
+      assert(mlirStringRefEqual(argument.name, arguments[index].name));
+      assert(argument.direction == arguments[index].direction);
+    }
+    assert(mlirIntegerTypeIsSignless(
+        simDPIFunctionTypeGetArgument(signature, 0).type));
+    assert(mlirIntegerTypeIsSigned(
+        simDPIFunctionTypeGetArgument(signature, 1).type));
+    assert(mlirIntegerTypeIsUnsigned(
+        simDPIFunctionTypeGetArgument(signature, 2).type));
+    assert(mlirTypeEqual(mlirFunctionTypeGetInput(call, 0), types[0]));
+    assert(mlirTypeEqual(mlirFunctionTypeGetInput(call, 1), types[1]));
+    assert(mlirTypeEqual(mlirFunctionTypeGetResult(call, 0), types[1]));
+    assert(mlirTypeEqual(mlirFunctionTypeGetResult(call, 1), types[2]));
+  }
+  // CHECK-NEXT: signless/signed/unsigned: 8 widths verified
+  fprintf(stderr, "signless/signed/unsigned: 8 widths verified\n");
+}
+
 static void testArgumentsAndCallSignature(MlirContext ctx) {
   // CHECK-LABEL: Arguments and call signature
   fprintf(stderr, "Arguments and call signature\n");
@@ -138,6 +175,7 @@ int main(void) {
   assert(!mlirDialectIsNull(llvm));
 
   testEmptySignature(ctx);
+  testIntegerSignedness(ctx);
   testArgumentsAndCallSignature(ctx);
 
   mlirContextDestroy(ctx);

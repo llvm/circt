@@ -42,6 +42,9 @@ typedef struct {
 MLIR_CAPI_EXPORTED bool simTypeIsADPIFunction(MlirType type);
 
 /// Create a DPI function type from arguments in declaration order.
+/// Argument types are preserved, including integer signedness. This API does
+/// not apply SystemVerilog type mapping or define a serialization format.
+/// All argument types must belong to ctx.
 MLIR_CAPI_EXPORTED MlirType simDPIFunctionTypeGet(
     MlirContext ctx, intptr_t numArguments, const SimDPIArgument *arguments);
 
