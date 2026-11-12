@@ -3036,7 +3036,8 @@ ParseResult FIRStmtParser::parseListContainsExp(Value &result) {
            << element.getType() << " does not match list element type "
            << elementType;
 
-  if (!isa<StringType, FIntegerType, BoolType>(elementType))
+  if (!isa<StringType, FIntegerType, BoolType, ClassType, AnyRefType>(
+          elementType))
     return emitError(loc, "list_contains does not support elements of type ")
            << elementType;
 

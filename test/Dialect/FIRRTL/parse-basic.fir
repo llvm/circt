@@ -1825,6 +1825,9 @@ FIRRTL version 7.0.0
 
 ; CHECK-LABEL: firrtl.circuit "ListContains"
 circuit ListContains :
+  class Foo:
+    skip
+
   public module ListContains :
     input strings : List<String>
     input string : String
@@ -1832,9 +1835,15 @@ circuit ListContains :
     input integer : Integer
     input booleans : List<Bool>
     input boolean : Bool
+    input objects : List<Inst<Foo>>
+    input obj : Inst<Foo>
+    input refs : List<AnyRef>
+    input ref : AnyRef
     output stringFound : Bool
     output integerFound : Bool
     output booleanFound : Bool
+    output objectFound : Bool
+    output refFound : Bool
 
     ; CHECK: [[STRING_FOUND:%.+]] = firrtl.list.contains %strings, %string : !firrtl.list<string>{{$}}
     ; CHECK: firrtl.propassign %stringFound, [[STRING_FOUND]]
@@ -1847,6 +1856,14 @@ circuit ListContains :
     ; CHECK: [[BOOLEAN_FOUND:%.+]] = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>{{$}}
     ; CHECK: firrtl.propassign %booleanFound, [[BOOLEAN_FOUND]]
     propassign booleanFound, list_contains(booleans, boolean)
+
+    ; CHECK: [[OBJECT_FOUND:%.+]] = firrtl.list.contains %objects, %obj : !firrtl.list<class<@Foo()>>{{$}}
+    ; CHECK: firrtl.propassign %objectFound, [[OBJECT_FOUND]]
+    propassign objectFound, list_contains(objects, obj)
+
+    ; CHECK: [[REF_FOUND:%.+]] = firrtl.list.contains %refs, %ref : !firrtl.list<anyref>{{$}}
+    ; CHECK: firrtl.propassign %refFound, [[REF_FOUND]]
+    propassign refFound, list_contains(refs, ref)
 
 ;// -----
 FIRRTL version 7.0.0

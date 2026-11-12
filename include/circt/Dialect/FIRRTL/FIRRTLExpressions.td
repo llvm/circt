@@ -1370,8 +1370,13 @@ def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
   let summary = "Test whether a list contains a property value";
   let description = [{
     Returns true if the list contains an element equal to the specified value.
-    Elements can only be those that support equality via `prop.eq`: strings,
-    integers, or booleans.
+
+    Strings, integers, and booleans are compared by value, as in `prop.eq`.
+    Class and AnyRef elements are compared by object identity, as in `object.eq`,
+    not by structural equality of object fields.
+
+    The search element and list element must have the same type.  I.e., it is
+    not allowable to search for an AnyRef in a list of Classes or vice versa.
 
     Example:
     ```mlir
@@ -1380,7 +1385,8 @@ def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
   }];
 
   let arguments = (ins ListType:$list,
-                       AnyTypeOf<[StringType, BoolType, FIntegerType]>:$element);
+                       AnyTypeOf<[StringType, BoolType, FIntegerType,
+                                  ClassType, AnyRefType]>:$element);
   let results = (outs BoolType:$result);
 
   let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
