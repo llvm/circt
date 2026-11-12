@@ -465,8 +465,11 @@ firrtl.circuit "StringCat" {
       in %strings: !firrtl.list<string>, in %string: !firrtl.string,
       in %integers: !firrtl.list<integer>, in %integer: !firrtl.integer,
       in %booleans: !firrtl.list<bool>, in %boolean: !firrtl.bool,
+      in %objects: !firrtl.list<class<@ListContainsValue()>>, in %obj: !firrtl.class<@ListContainsValue()>,
+      in %refs: !firrtl.list<anyref>, in %ref: !firrtl.anyref,
       out %stringFound: !firrtl.bool, out %integerFound: !firrtl.bool,
-      out %booleanFound: !firrtl.bool) {
+      out %booleanFound: !firrtl.bool, out %objectFound: !firrtl.bool,
+      out %refFound: !firrtl.bool) {
     // CHECK: %[[STRING_FOUND:.+]] = om.list_contains %strings, %string : <!om.string>{{$}}
     %string_found = firrtl.list.contains %strings, %string : !firrtl.list<string>
     firrtl.propassign %stringFound, %string_found : !firrtl.bool
@@ -479,8 +482,18 @@ firrtl.circuit "StringCat" {
     %boolean_found = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>
     firrtl.propassign %booleanFound, %boolean_found : !firrtl.bool
 
-    // CHECK: om.class.fields %[[STRING_FOUND]], %[[INTEGER_FOUND]], %[[BOOLEAN_FOUND]] : i1, i1, i1
+    // CHECK: %[[OBJECT_FOUND:.+]] = om.list_contains %objects, %obj : <!om.class.type<@ListContainsValue>>{{$}}
+    %object_found = firrtl.list.contains %objects, %obj : !firrtl.list<class<@ListContainsValue()>>
+    firrtl.propassign %objectFound, %object_found : !firrtl.bool
+
+    // CHECK: %[[REF_FOUND:.+]] = om.list_contains %refs, %ref : <!om.any>{{$}}
+    %ref_found = firrtl.list.contains %refs, %ref : !firrtl.list<anyref>
+    firrtl.propassign %refFound, %ref_found : !firrtl.bool
+
+    // CHECK: om.class.fields %[[STRING_FOUND]], %[[INTEGER_FOUND]], %[[BOOLEAN_FOUND]], %[[OBJECT_FOUND]], %[[REF_FOUND]] : i1, i1, i1, i1, i1
   }
+
+  firrtl.class private @ListContainsValue() {}
 
   // CHECK-LABEL: om.class @BoolAndClass
   firrtl.class @BoolAndClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %out: !firrtl.bool) {
