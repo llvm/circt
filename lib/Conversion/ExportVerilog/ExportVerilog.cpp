@@ -4806,6 +4806,20 @@ LogicalResult StmtEmitter::visitSV(IncludeOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(FuncDPIImportOp importOp) {
+  auto op =
+      cast<FuncOp>(state.symbolCache.getDefinition(importOp.getCalleeAttr()));
+  assert(op.isDeclaration() && "function must be a declaration");
+  // Non-native integer widths are emitted as packed bit vectors. DPI can
+  // pass these as parameters, but cannot return them as a C function result.
+  if (auto integer =
+          dyn_cast_or_null<IntegerType>(op.getExplicitlyReturnedType()))
+    if (integer.getWidth() != 1 &&
+        getTwoStateIntegerAtomType(integer.getWidth()).empty()) {
+      emitError(importOp, "DPI integer return must have width "
+                          "1, 8, 16, 32, or 64");
+      return success();
+    }
+
   startStatement();
 
   ps << "import" << PP::nbsp << "\"DPI-C\"" << PP::nbsp << "context"
@@ -4814,9 +4828,6 @@ LogicalResult StmtEmitter::visitSV(FuncDPIImportOp importOp) {
   // Emit a linkage name if provided.
   if (auto linkageName = importOp.getLinkageName())
     ps << *linkageName << PP::nbsp << "=" << PP::nbsp;
-  auto op =
-      cast<FuncOp>(state.symbolCache.getDefinition(importOp.getCalleeAttr()));
-  assert(op.isDeclaration() && "function must be a declaration");
   emitFunctionSignature(emitter, ps, op, /*isAutomatic=*/false,
                         /*emitAsTwoStateType=*/true);
   assert(state.pendingNewline);
