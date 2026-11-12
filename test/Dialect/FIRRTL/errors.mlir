@@ -1449,28 +1449,51 @@ firrtl.circuit "ListContainsUnsupportedType" {
 
 // -----
 // Generic syntax exercises the ODS operand type constraints for each side.
-firrtl.circuit "ObjectEqInvalidLhs" {
-  firrtl.module @ObjectEqInvalidLhs(
-      in %invalid: !firrtl.string, in %ref: !firrtl.anyref) {
-    // expected-error @below {{'firrtl.object.eq' op operand #0 must be class type or any reference type, but got '!firrtl.string'}}
-    %eq = "firrtl.object.eq"(%invalid, %ref) : (!firrtl.string, !firrtl.anyref) -> !firrtl.bool
+firrtl.circuit "PropEqInvalidLhs" {
+  firrtl.module @PropEqInvalidLhs(
+      in %invalid: !firrtl.double, in %string: !firrtl.string) {
+    // expected-error @below {{'firrtl.prop.eq' op operand #0 must be string type or boolean type or integer type or class type or any reference type, but got '!firrtl.double'}}
+    %eq = "firrtl.prop.eq"(%invalid, %string) : (!firrtl.double, !firrtl.string) -> !firrtl.bool
   }
 }
 
 // -----
-firrtl.circuit "ObjectEqInvalidRhs" {
-  firrtl.module @ObjectEqInvalidRhs(
-      in %ref: !firrtl.anyref, in %invalid: !firrtl.integer) {
-    // expected-error @below {{'firrtl.object.eq' op operand #1 must be class type or any reference type, but got '!firrtl.integer'}}
-    %eq = "firrtl.object.eq"(%ref, %invalid) : (!firrtl.anyref, !firrtl.integer) -> !firrtl.bool
+firrtl.circuit "PropEqInvalidRhs" {
+  firrtl.module @PropEqInvalidRhs(
+      in %ref: !firrtl.anyref, in %invalid: !firrtl.path) {
+    // expected-error @below {{'firrtl.prop.eq' op operand #1 must be string type or boolean type or integer type or class type or any reference type, but got '!firrtl.path'}}
+    %eq = "firrtl.prop.eq"(%ref, %invalid) : (!firrtl.anyref, !firrtl.path) -> !firrtl.bool
   }
 }
 
 // -----
-firrtl.circuit "ObjectEqInvalidResult" {
-  firrtl.module @ObjectEqInvalidResult(in %ref: !firrtl.anyref) {
-    // expected-error @below {{'firrtl.object.eq' op result #0 must be boolean type, but got '!firrtl.integer'}}
-    %eq = "firrtl.object.eq"(%ref, %ref) : (!firrtl.anyref, !firrtl.anyref) -> !firrtl.integer
+// Different property types cannot be compared even when both types are
+// supported by prop.eq.
+firrtl.circuit "PropEqMismatchedClassAnyRef" {
+  firrtl.class @Foo() {}
+  firrtl.module @PropEqMismatchedClassAnyRef(
+      in %object: !firrtl.class<@Foo()>, in %ref: !firrtl.anyref) {
+    // expected-error @below {{'firrtl.prop.eq' op failed to verify that all of {lhs, rhs} have same type}}
+    %eq = "firrtl.prop.eq"(%object, %ref) : (!firrtl.class<@Foo()>, !firrtl.anyref) -> !firrtl.bool
+  }
+}
+
+// -----
+firrtl.circuit "PropEqMismatchedDifferentClasses" {
+  firrtl.class @Foo() {}
+  firrtl.class @Bar() {}
+  firrtl.module @PropEqMismatchedDifferentClasses(
+      in %foo: !firrtl.class<@Foo()>, in %bar: !firrtl.class<@Bar()>) {
+    // expected-error @below {{'firrtl.prop.eq' op failed to verify that all of {lhs, rhs} have same type}}
+    %eq = "firrtl.prop.eq"(%foo, %bar) : (!firrtl.class<@Foo()>, !firrtl.class<@Bar()>) -> !firrtl.bool
+  }
+}
+
+// -----
+firrtl.circuit "PropEqInvalidResult" {
+  firrtl.module @PropEqInvalidResult(in %ref: !firrtl.anyref) {
+    // expected-error @below {{'firrtl.prop.eq' op result #0 must be boolean type, but got '!firrtl.integer'}}
+    %eq = "firrtl.prop.eq"(%ref, %ref) : (!firrtl.anyref, !firrtl.anyref) -> !firrtl.integer
   }
 }
 

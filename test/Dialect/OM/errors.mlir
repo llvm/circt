@@ -195,26 +195,12 @@ om.class @ListContainsUnsupportedType(%list: !om.list<i32>, %element: i32) {
 
 // -----
 
-// Generic syntax exercises the ODS operand and result type constraints.
-om.class @ObjectEqInvalidLhs(%invalid: !om.string, %ref: !om.any) {
-  // expected-error @+1 {{'om.object.eq' op operand #0 must be A type that represents a reference to a Class. or A type that represents any valid OM type., but got '!om.string'}}
-  %0 = "om.object.eq"(%invalid, %ref) : (!om.string, !om.any) -> i1
-  om.class.fields
-}
-
-// -----
-
-om.class @ObjectEqInvalidRhs(%ref: !om.any, %invalid: !om.integer) {
-  // expected-error @+1 {{'om.object.eq' op operand #1 must be A type that represents a reference to a Class. or A type that represents any valid OM type., but got '!om.integer'}}
-  %0 = "om.object.eq"(%ref, %invalid) : (!om.any, !om.integer) -> i1
-  om.class.fields
-}
-
-// -----
-
-om.class @ObjectEqInvalidResult(%ref: !om.any) {
-  // expected-error @+1 {{'om.object.eq' op result #0 must be 1-bit signless integer, but got 'i8'}}
-  %0 = "om.object.eq"(%ref, %ref) : (!om.any, !om.any) -> i8
+// The single type annotation infers the right operand type.
+om.class @PropEqInferredTypeMismatch(%lhs: !om.string) {
+  %0 = om.prop.eq %lhs, %rhs : !om.string
+  // expected-note @-1 {{previously used here with type '!om.string'}}
+  // expected-error @+1 {{definition of SSA value '%rhs#0' has type '!om.integer'}}
+  %rhs = om.constant #om.integer<0> : !om.integer
   om.class.fields
 }
 

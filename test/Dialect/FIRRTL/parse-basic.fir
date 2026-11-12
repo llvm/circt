@@ -1770,11 +1770,47 @@ circuit PropEq :
   public module PropEq :
     input a : String
     input b : String
+    input boolA : Bool
+    input boolB : Bool
+    input integerA : Integer
+    input integerB : Integer
     output eq : Bool
+    output boolEq : Bool
+    output integerEq : Bool
 
     ; CHECK: [[EQ:%.+]] = firrtl.prop.eq %a, %b : !firrtl.string
     ; CHECK: firrtl.propassign %eq, [[EQ]]
     propassign eq, prop_eq(a, b)
+
+    ; CHECK: [[BOOL_EQ:%.+]] = firrtl.prop.eq %boolA, %boolB : !firrtl.bool
+    ; CHECK: firrtl.propassign %boolEq, [[BOOL_EQ]]
+    propassign boolEq, prop_eq(boolA, boolB)
+
+    ; CHECK: [[INTEGER_EQ:%.+]] = firrtl.prop.eq %integerA, %integerB : !firrtl.integer
+    ; CHECK: firrtl.propassign %integerEq, [[INTEGER_EQ]]
+    propassign integerEq, prop_eq(integerA, integerB)
+
+;// -----
+FIRRTL version 7.0.0
+
+; CHECK-LABEL: firrtl.circuit "PropEqReferences"
+circuit PropEqReferences :
+  class Foo:
+    skip
+
+  public module PropEqReferences :
+    input obj : Inst<Foo>
+    input ref : AnyRef
+    output classEq : Bool
+    output anyRefEq : Bool
+
+    ; CHECK: [[CLASS_EQ:%.+]] = firrtl.prop.eq %obj, %obj : !firrtl.class<@Foo()>
+    ; CHECK: firrtl.propassign %classEq, [[CLASS_EQ]]
+    propassign classEq, prop_eq(obj, obj)
+
+    ; CHECK: [[ANYREF_EQ:%.+]] = firrtl.prop.eq %ref, %ref : !firrtl.anyref
+    ; CHECK: firrtl.propassign %anyRefEq, [[ANYREF_EQ]]
+    propassign anyRefEq, prop_eq(ref, ref)
 
 ;// -----
 FIRRTL version 5.0.0
@@ -1787,38 +1823,6 @@ circuit PropEqVersionError :
 
     ; expected-error @+1 {{property equality are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
     propassign c, prop_eq(a, b)
-
-;// -----
-FIRRTL version 7.0.0
-
-; CHECK-LABEL: firrtl.circuit "ObjectEq"
-circuit ObjectEq :
-  class Foo:
-    skip
-
-  public module ObjectEq :
-    input obj : Inst<Foo>
-    input ref : AnyRef
-    output classClass : Bool
-    output classAnyRef : Bool
-    output anyRefClass : Bool
-    output anyRefAnyRef : Bool
-
-    ; CHECK: [[CLASS_CLASS:%.+]] = firrtl.object.eq %obj, %obj : !firrtl.class<@Foo()>, !firrtl.class<@Foo()>{{$}}
-    ; CHECK-NEXT: firrtl.propassign %classClass, [[CLASS_CLASS]] : !firrtl.bool{{$}}
-    propassign classClass, object_eq(obj, obj)
-
-    ; CHECK: [[CLASS_ANYREF:%.+]] = firrtl.object.eq %obj, %ref : !firrtl.class<@Foo()>, !firrtl.anyref{{$}}
-    ; CHECK-NEXT: firrtl.propassign %classAnyRef, [[CLASS_ANYREF]] : !firrtl.bool{{$}}
-    propassign classAnyRef, object_eq(obj, ref)
-
-    ; CHECK: [[ANYREF_CLASS:%.+]] = firrtl.object.eq %ref, %obj : !firrtl.anyref, !firrtl.class<@Foo()>{{$}}
-    ; CHECK-NEXT: firrtl.propassign %anyRefClass, [[ANYREF_CLASS]] : !firrtl.bool{{$}}
-    propassign anyRefClass, object_eq(ref, obj)
-
-    ; CHECK: [[ANYREF_ANYREF:%.+]] = firrtl.object.eq %ref, %ref : !firrtl.anyref, !firrtl.anyref{{$}}
-    ; CHECK-NEXT: firrtl.propassign %anyRefAnyRef, [[ANYREF_ANYREF]] : !firrtl.bool{{$}}
-    propassign anyRefAnyRef, object_eq(ref, ref)
 
 ;// -----
 FIRRTL version 7.0.0

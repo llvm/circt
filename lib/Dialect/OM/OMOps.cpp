@@ -1124,7 +1124,41 @@ evaluateBinaryEquality(mlir::Attribute lhsAttr, mlir::Attribute rhsAttr) {
   return failure();
 }
 
+/// Look through identity-preserving class-to-any casts.
+static Value getObjectReference(Value value) {
+  if (auto cast = value.getDefiningOp<AnyCastOp>();
+      cast && isa<ClassType>(cast.getInput().getType()))
+    return cast.getInput();
+  return value;
+}
+
 OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
+  if (isa<ClassType, AnyType>(getLhs().getType())) {
+    auto lhs = getObjectReference(getLhs());
+    auto rhs = getObjectReference(getRhs());
+
+    // Reference self-comparisons fold even when the reference is unknown.
+    if (lhs == rhs)
+      return mlir::IntegerAttr::get(getType(), 1);
+
+    // Distinct allocations have different identities, regardless of fields.
+    if (lhs.getDefiningOp<ElaboratedObjectOp>() &&
+        rhs.getDefiningOp<ElaboratedObjectOp>())
+      return mlir::IntegerAttr::get(getType(), 0);
+
+    // Peel class-to-any casts only if both resulting operand types match.
+    // Peeling just one cast, or casts from different classes, is invalid.
+    if (lhs.getType() == rhs.getType() &&
+        (lhs != getLhs() || rhs != getRhs())) {
+      getLhsMutable().assign(lhs);
+      getRhsMutable().assign(rhs);
+      return getResult();
+    }
+    return {};
+  }
+
+  // Primitive equality is by value, not SSA identity. In particular, comparing
+  // an unknown primitive with itself must remain unknown.
   auto lhsAttr = adaptor.getLhs();
   auto rhsAttr = adaptor.getRhs();
   if (!lhsAttr || !rhsAttr)
@@ -1135,37 +1169,6 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
     return {};
 
   return *result;
-}
-
-//===----------------------------------------------------------------------===//
-// ObjectEqOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult ObjectEqOp::fold(FoldAdaptor adaptor) {
-  // object.eq(x, x) -> true, even for unknown x.
-  if (getLhs() == getRhs())
-    return mlir::IntegerAttr::get(getType(), 1);
-
-  // object.eq(a, b) -> false for distinct elaborated objects.
-  if (getLhs().getDefiningOp<ElaboratedObjectOp>() &&
-      getRhs().getDefiningOp<ElaboratedObjectOp>())
-    return mlir::IntegerAttr::get(getType(), 0);
-
-  // object.eq(any_cast(x), y) -> object.eq(x, y).
-  if (auto cast = getLhs().getDefiningOp<AnyCastOp>();
-      cast && isa<ClassType>(cast.getInput().getType())) {
-    getLhsMutable().assign(cast.getInput());
-    return getResult();
-  }
-
-  // object.eq(x, any_cast(y)) -> object.eq(x, y).
-  if (auto cast = getRhs().getDefiningOp<AnyCastOp>();
-      cast && isa<ClassType>(cast.getInput().getType())) {
-    getRhsMutable().assign(cast.getInput());
-    return getResult();
-  }
-
-  return {};
 }
 
 //===----------------------------------------------------------------------===//

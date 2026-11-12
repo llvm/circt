@@ -162,8 +162,11 @@ firrtl.module @PropertyStringOps() {
   %3 = firrtl.string.concat %0, %1, %2 : !firrtl.string
 }
 
+firrtl.class @ObjectEqFoo() {}
+
 // CHECK-LABEL: firrtl.module @PropertyPropEq
-firrtl.module @PropertyPropEq() {
+firrtl.module @PropertyPropEq(in %obj: !firrtl.class<@ObjectEqFoo()>,
+                             in %ref: !firrtl.anyref) {
   %0 = firrtl.string "hello"
   %1 = firrtl.string "world"
 
@@ -190,15 +193,12 @@ firrtl.module @PropertyPropEq() {
 
   // CHECK: firrtl.bool.xor %3, %4
   %11 = firrtl.bool.xor %3, %4
-}
 
-firrtl.class @ObjectEqFoo() {}
+  // CHECK: firrtl.prop.eq %obj, %obj : !firrtl.class<@ObjectEqFoo()>
+  %class_eq = firrtl.prop.eq %obj, %obj : !firrtl.class<@ObjectEqFoo()>
 
-// CHECK-LABEL: firrtl.module @PropertyObjectEq
-firrtl.module @PropertyObjectEq(in %obj: !firrtl.class<@ObjectEqFoo()>,
-                               in %ref: !firrtl.anyref) {
-  // CHECK: firrtl.object.eq %obj, %ref : !firrtl.class<@ObjectEqFoo()>, !firrtl.anyref{{$}}
-  %eq = firrtl.object.eq %obj, %ref : !firrtl.class<@ObjectEqFoo()>, !firrtl.anyref
+  // CHECK: firrtl.prop.eq %ref, %ref : !firrtl.anyref
+  %anyref_eq = firrtl.prop.eq %ref, %ref : !firrtl.anyref
 }
 
 // CHECK-LABEL: firrtl.module @PropertyListOps

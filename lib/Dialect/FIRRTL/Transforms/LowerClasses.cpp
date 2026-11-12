@@ -2407,7 +2407,6 @@ static void populateRewritePatterns(
   patterns.add<StringConcatOpConversion>(converter, patterns.getContext());
   patterns.add<ListContainsOpConversion>(converter, patterns.getContext());
   patterns.add<PropEqOpConversion>(converter, patterns.getContext());
-  patterns.add(binaryOpConversion<firrtl::ObjectEqOp, om::ObjectEqOp>);
   patterns.add(binaryOpConversion<firrtl::BoolAndOp, om::IntegerAndOp>);
   patterns.add(binaryOpConversion<firrtl::BoolOrOp, om::IntegerOrOp>);
   patterns.add(binaryOpConversion<firrtl::BoolXorOp, om::IntegerXorOp>);

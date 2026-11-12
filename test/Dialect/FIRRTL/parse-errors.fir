@@ -1255,64 +1255,108 @@ circuit ListContainsVersionError:
 ;// -----
 FIRRTL version 7.0.0
 
-circuit ObjectEqInvalidLhs:
-  public module ObjectEqInvalidLhs:
+circuit PropEqInvalidLhs:
+  public module PropEqInvalidLhs:
     input ref : AnyRef
-    ; expected-error @below {{lhs of object_eq must be Inst or AnyRef type}}
-    propassert object_eq(String(""), ref), ""
+    ; expected-error @below {{lhs of prop_eq must be String, Bool, Integer, Inst, or AnyRef type}}
+    propassert prop_eq(UInt<1>(0), ref), ""
 
 ;// -----
 FIRRTL version 7.0.0
 
-circuit ObjectEqInvalidRhs:
-  public module ObjectEqInvalidRhs:
+circuit PropEqInvalidRhs:
+  public module PropEqInvalidRhs:
     input ref : AnyRef
-    ; expected-error @below {{rhs of object_eq must be Inst or AnyRef type}}
-    propassert object_eq(ref, UInt<1>(0)), ""
+    ; expected-error @below {{rhs of prop_eq must be String, Bool, Integer, Inst, or AnyRef type}}
+    propassert prop_eq(ref, UInt<1>(0)), ""
 
 ;// -----
 FIRRTL version 7.0.0
 
-circuit ObjectEqNoOperands:
-  public module ObjectEqNoOperands:
-    ; expected-error @below {{expected lhs expression in object_eq expression}}
-    propassert object_eq(), ""
+circuit PropEqClassAnyRefMismatch:
+  class Foo:
+    skip
+
+  public module PropEqClassAnyRefMismatch:
+    input obj : Inst<Foo>
+    input ref : AnyRef
+    ; expected-error @below {{prop_eq operands must have the same type}}
+    propassert prop_eq(obj, ref), "type mismatch"
 
 ;// -----
 FIRRTL version 7.0.0
 
-circuit ObjectEqMissingRhs:
-  public module ObjectEqMissingRhs:
-    input ref : AnyRef
-    ; expected-error @below {{expected rhs expression in object_eq expression}}
-    propassert object_eq(ref, ), ""
+circuit PropEqDifferentClassesMismatch:
+  class Foo:
+    skip
+  class Bar:
+    skip
 
-;// -----
-FIRRTL version 7.0.0
-
-circuit ObjectEqExtraOperand:
-  public module ObjectEqExtraOperand:
-    input ref : AnyRef
-    ; expected-error @below {{expected ')'}}
-    propassert object_eq(ref, ref, ref), ""
-
-;// -----
-FIRRTL version 7.0.0
-
-circuit ObjectEqMissingComma:
-  public module ObjectEqMissingComma:
-    input ref : AnyRef
-    ; expected-error @below {{expected ','}}
-    propassert object_eq(ref ref), ""
+  public module PropEqDifferentClassesMismatch:
+    input foo : Inst<Foo>
+    input bar : Inst<Bar>
+    ; expected-error @below {{prop_eq operands must have the same type}}
+    propassert prop_eq(foo, bar), "type mismatch"
 
 ;// -----
 FIRRTL version 6.0.0
 
-circuit ObjectEqVersionError:
-  public module ObjectEqVersionError:
+circuit PropEqClassVersionError:
+  class Foo:
+    skip
+
+  public module PropEqClassVersionError:
+    input a : Inst<Foo>
+    input b : Inst<Foo>
+    output eq : Bool
+    ; expected-error @below {{property equality comparisons with AnyRef or Class types are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassign eq, prop_eq(a, b)
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit PropEqAnyRefVersionError:
+  public module PropEqAnyRefVersionError:
+    input a : AnyRef
+    input b : AnyRef
+    output eq : Bool
+    ; expected-error @below {{property equality comparisons with AnyRef or Class types are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassign eq, prop_eq(a, b)
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit PropEqNoOperands:
+  public module PropEqNoOperands:
+    ; expected-error @below {{expected lhs expression in prop_eq expression}}
+    propassert prop_eq(), ""
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit PropEqMissingRhs:
+  public module PropEqMissingRhs:
     input ref : AnyRef
-    ; expected-error @below {{object equality are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
-    propassert object_eq(ref, ref), ""
+    ; expected-error @below {{expected rhs expression in prop_eq expression}}
+    propassert prop_eq(ref, ), ""
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit PropEqExtraOperand:
+  public module PropEqExtraOperand:
+    input ref : AnyRef
+    ; expected-error @below {{expected ')'}}
+    propassert prop_eq(ref, ref, ref), ""
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit PropEqMissingComma:
+  public module PropEqMissingComma:
+    input ref : AnyRef
+    ; expected-error @below {{expected ','}}
+    propassert prop_eq(ref ref), ""
 
 ;// -----
 FIRRTL version 6.0.0
