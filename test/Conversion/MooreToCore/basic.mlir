@@ -378,6 +378,15 @@ func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %
   return %0 : !moore.ref<array<1 x l3>>
 }
 
+// CHECK-LABEL: DynExtractRefSingleFieldStruct
+func.func @DynExtractRefSingleFieldStruct(%j: !moore.ref<struct<{p: struct<{d: l16}>}>>, %idx: !moore.l4) -> (!moore.ref<l4>) {
+  // CHECK: [[P:%.+]] = llhd.sig.struct_extract %arg0["p"] : <!hw.struct<p: !hw.struct<d: i16>>>
+  // CHECK: [[D:%.+]] = llhd.sig.struct_extract [[P]]["d"] : <!hw.struct<d: i16>>
+  // CHECK: llhd.sig.extract [[D]] from %arg1 : <i16> -> <i4>
+  %0 = moore.dyn_extract_ref %j from %idx : ref<struct<{p: struct<{d: l16}>}>>, !moore.l4 -> ref<l4>
+  return %0 : !moore.ref<l4>
+}
+
 // CHECK-LABEL: func @AdvancedConversion
 func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
   // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
