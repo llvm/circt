@@ -246,12 +246,13 @@ static LogicalResult executeLEC(MLIRContext &context) {
   pm.addPass(createConvertDatapathToSMT());
   pm.addPass(createConvertCombToSMT());
   pm.addPass(createConvertVerifToSMT());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.nestAny().addPass(createSimpleCanonicalizerPass());
 
   if (outputFormat != OutputMLIR && outputFormat != OutputSMTLIB) {
     pm.addPass(createLowerSMTToZ3LLVM());
-    pm.addPass(createCSEPass());
-    pm.addPass(createSimpleCanonicalizerPass());
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(createCSEPass());
+    anyPM.addPass(createSimpleCanonicalizerPass());
     pm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
   }
 
