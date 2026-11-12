@@ -12,6 +12,11 @@ control), using the DUTs in `hw/backpressure.py`.
   * Simulation -> host: with `stream` connected with a small buffer and not
     read, the producer must stall (its `Cosim_Endpoint_ToHost` deasserts
     ready) instead of pushing everything into host memory.
+
+  * Void simulation -> host: a backed-up void stream must deliver every
+    message once drained, on both native cosim and the one-item DMA engines.
+    The DMA engine retains a rejected message and re-delivers it later, which
+    must not trip the zero-width placeholder check.
 """
 
 from __future__ import annotations
@@ -132,3 +137,42 @@ class TestBackpressure:
     for i in range(n):
       assert stream.read() == i
     assert sent_count() == n
+
+  def test_void_sim_to_host(self, conn: AcceleratorConnection) -> None:
+    _check_void_sim_to_host(conn)
+
+
+def _check_void_sim_to_host(conn: AcceleratorConnection) -> None:
+  """Back up a void stream so the transport has to retry delivering a message
+  the host rejected, then drain it and check nothing was lost."""
+  acc = conn.build_accelerator()
+  dut = acc.children[esiaccel.AppID("void_producer")]
+  produce = dut.ports[esiaccel.AppID("produce")]
+  query = dut.ports[esiaccel.AppID("query")]
+  sent = dut.ports[esiaccel.AppID("sent")]
+  for p in (produce, query, sent):
+    p.connect()
+  stream = dut.ports[esiaccel.AppID("stream")].read_port("data").connect(
+      buffer_size=1)
+
+  def sent_count() -> int:
+    query.write(0)
+    return sent.read().result()
+
+  n = 50
+  produce.write(n)
+  stalled = _wait_stable(sent_count)
+  assert stalled < n, stalled
+
+  for _ in range(n):
+    assert stream.read() is None
+  assert sent_count() == n
+
+
+@cosim_test(HW_DIR / "backpressure.py", args=("{tmp_dir}", "cosim_dma"))
+class TestBackpressureDMA:
+  """Backpressure through the one-item DMA engines, which retain a message the
+  host rejects and re-deliver it on a later poll."""
+
+  def test_void_sim_to_host(self, conn: AcceleratorConnection) -> None:
+    _check_void_sim_to_host(conn)

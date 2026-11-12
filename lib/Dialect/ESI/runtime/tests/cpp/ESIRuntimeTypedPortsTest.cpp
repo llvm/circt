@@ -628,6 +628,37 @@ TEST(TypedPortsTest, TypedReadPortPODRetriesSameOwnedObjectOnLaterPush) {
   EXPECT_EQ(callbackAttempts, 3u);
 }
 
+TEST(TypedPortsTest, ZeroWidthMessagePlaceholderAndEmpty) {
+  VoidType voidType("void");
+  CallbackDrivenMockReadPort mock(&voidType);
+
+  size_t attempts = 0;
+  mock.connect([&](std::unique_ptr<SegmentedMessageData> &msg) {
+    ++attempts;
+    EXPECT_EQ(msg->totalSize(), 0u);
+    return attempts > 1;
+  });
+
+  EXPECT_FALSE(
+      mock.deliver(std::make_unique<MessageData>(std::vector<uint8_t>{0})));
+  EXPECT_TRUE(mock.hasPending());
+  // The retained message has already had its placeholder stripped; the retry
+  // must accept it rather than reject it as malformed.
+  EXPECT_TRUE(mock.retryPending());
+  EXPECT_FALSE(mock.hasPending());
+  EXPECT_EQ(attempts, 2u);
+
+  // Transports may also send void messages without the placeholder.
+  EXPECT_TRUE(mock.deliver(std::make_unique<MessageData>()));
+  EXPECT_EQ(attempts, 3u);
+
+  EXPECT_THROW(
+      mock.deliver(std::make_unique<MessageData>(std::vector<uint8_t>{0, 0})),
+      std::runtime_error);
+  EXPECT_EQ(mock.numActiveCallbacks(), 0u);
+  mock.disconnect();
+}
+
 TEST(TypedPortsTest, TypedReadPortCustomDeserializerPokesBlockedOutput) {
   UIntType uint32("ui32", 32);
   CallbackDrivenMockReadPort mock(&uint32);

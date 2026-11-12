@@ -13,6 +13,11 @@
 #     returns, on `sent`, how many it has emitted so far. That lets the host
 #     observe that the producer was stalled by an unread `stream` (simulation ->
 #     host backpressure) rather than having buffered everything host-side.
+#
+#   * VoidProducer ("void_producer"): the same as Producer, but `stream` carries
+#     void (zero-width) messages.
+#
+# Takes the BSP name as an optional second argument (default: native cosim).
 
 import sys
 
@@ -72,6 +77,35 @@ class Producer(Module):
     esi.ChannelService.to_host(AppID("sent"), resp)
 
 
+class VoidProducer(Module):
+  """Like `Producer`, but `stream` carries void (zero-width) messages."""
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def build(ports):
+    produce = esi.ChannelService.from_host(AppID("produce"), UInt(32))
+    count, count_valid = produce.unwrap(Bits(1)(1))
+    target = count.reg(ports.clk, ports.rst, ce=count_valid, name="target")
+
+    xact = Wire(Bits(1))
+    sent = Counter(32)(clk=ports.clk,
+                       rst=ports.rst,
+                       clear=Bits(1)(0),
+                       increment=xact)
+    valid = sent.out < target
+    stream, stream_ready = Channel(Bits(0)).wrap(Bits(0)(0), valid)
+    xact.assign(valid & stream_ready)
+    esi.ChannelService.to_host(AppID("stream"), stream)
+
+    query = esi.ChannelService.from_host(AppID("query"), UInt(8))
+    query_ready = Wire(Bits(1))
+    _, query_valid = query.unwrap(query_ready)
+    resp, resp_ready = Channel(UInt(32)).wrap(sent.out, query_valid)
+    query_ready.assign(resp_ready)
+    esi.ChannelService.to_host(AppID("sent"), resp)
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
@@ -80,6 +114,7 @@ class Top(Module):
   def build(ports):
     GatedLoopback(clk=ports.clk, rst=ports.rst, appid=AppID("loopback"))
     Producer(clk=ports.clk, rst=ports.rst, appid=AppID("producer"))
+    VoidProducer(clk=ports.clk, rst=ports.rst, appid=AppID("void_producer"))
 
 
 if __name__ == "__main__":

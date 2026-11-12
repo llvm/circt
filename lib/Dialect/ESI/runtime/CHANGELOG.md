@@ -100,6 +100,11 @@
 - **Cosim no longer drops frames sent before the simulator connects.** Frames
   sent to a simulator port which isn't connected yet are held by the server
   and handed over, in order, once it connects.
+- **Void messages are no longer rejected when re-delivered.** A backed-up
+  zero-width (void) to-host channel on the one-item DMA engines could crash
+  with "zero-width message must use a single-byte placeholder payload".
+  Zero-width ports now accept empty messages as well as the single-byte
+  placeholder, so transports may also send void messages without the pad.
 
 ## 0.8.0
 
