@@ -460,6 +460,24 @@ firrtl.circuit "StringCat" {
     firrtl.propassign %eq, %0 : !firrtl.bool
   }
 
+  firrtl.class private @PropEqValue() {}
+
+  // CHECK-LABEL: om.class @PropEqClassClass
+  firrtl.class @PropEqClassClass(in %a: !firrtl.class<@PropEqValue()>, in %b: !firrtl.class<@PropEqValue()>, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.class.type<@PropEqValue>{{$}}
+    %0 = firrtl.prop.eq %a, %b : !firrtl.class<@PropEqValue()>
+    // CHECK: om.class.fields %[[EQ]] : i1
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @PropEqAnyRefClass
+  firrtl.class @PropEqAnyRefClass(in %a: !firrtl.anyref, in %b: !firrtl.anyref, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.any{{$}}
+    %0 = firrtl.prop.eq %a, %b : !firrtl.anyref
+    // CHECK: om.class.fields %[[EQ]] : i1
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
   // CHECK-LABEL: om.class @ListContainsClass
   firrtl.class @ListContainsClass(
       in %strings: !firrtl.list<string>, in %string: !firrtl.string,
@@ -504,20 +522,6 @@ firrtl.circuit "StringCat" {
     %0 = firrtl.bool.xor %a, %b
     // CHECK: om.class.fields %[[XOR]]
     firrtl.propassign %out, %0 : !firrtl.bool
-  }
-}
-
-// CHECK-LABEL: firrtl.circuit "ObjectEq"
-firrtl.circuit "ObjectEq" {
-  firrtl.module @ObjectEq() {}
-  firrtl.class private @Value() {}
-
-  // CHECK-LABEL: om.class @ObjectEqClass
-  firrtl.class @ObjectEqClass(in %a: !firrtl.class<@Value()>, in %b: !firrtl.anyref, out %eq: !firrtl.bool) {
-    // CHECK: %[[EQ:.+]] = om.object.eq %a, %b : !om.class.type<@Value>, !om.any{{$}}
-    %0 = firrtl.object.eq %a, %b : !firrtl.class<@Value()>, !firrtl.anyref
-    // CHECK: om.class.fields %[[EQ]] : i1
-    firrtl.propassign %eq, %0 : !firrtl.bool
   }
 }
 

@@ -206,13 +206,11 @@ struct Emitter {
   void emitExpression(PropEqOp op) {
     if (failed(requireVersion({6, 0, 0}, op, "property equality")))
       return;
-    emitPrimExpr("prop_eq", op);
-  }
-
-  void emitExpression(ObjectEqOp op) {
-    if (failed(requireVersion(nextFIRVersion, op, "object equality")))
+    if (type_isa<ClassType, AnyRefType>(op.getLhs().getType()) &&
+        failed(requireVersion(nextFIRVersion, op,
+                              "property equality with AnyRef or Class types")))
       return;
-    emitPrimExpr("object_eq", op);
+    emitPrimExpr("prop_eq", op);
   }
 
   void emitExpression(ListContainsOp op) {
@@ -1616,8 +1614,8 @@ void Emitter::emitExpression(Value value) {
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
           DomainAnyRefCastOp, UnknownValueOp, IntegerAndOp, IntegerOrOp,
-          IntegerNotOp, StringConcatOp, PropEqOp, ObjectEqOp, ListContainsOp,
-          BoolAndOp, BoolOrOp, BoolXorOp,
+          IntegerNotOp, StringConcatOp, PropEqOp, ListContainsOp, BoolAndOp,
+          BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions

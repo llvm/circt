@@ -2062,7 +2062,6 @@ private:
   ParseResult parseCatExp(Value &result);
   ParseResult parseStringConcatExp(Value &result);
   ParseResult parsePropEqExp(Value &result);
-  ParseResult parseObjectEqExp(Value &result);
   ParseResult parseListContainsExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
   ParseResult parseUnknownProperty(Value &result);
@@ -2469,12 +2468,6 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_prop_eq:
     if (requireFeature({6, 0, 0}, "property equality") ||
         parsePropEqExp(result))
-      return failure();
-    break;
-
-  case FIRToken::lp_object_eq:
-    if (requireFeature(nextFIRVersion, "object equality") ||
-        parseObjectEqExp(result))
       return failure();
     break;
 
@@ -2972,43 +2965,27 @@ ParseResult FIRStmtParser::parsePropEqExp(Value &result) {
     return failure();
 
   auto isValidType = [](Type t) {
-    return type_isa<StringType>(t) || type_isa<BoolType>(t) ||
-           type_isa<FIntegerType>(t);
+    return type_isa<StringType, BoolType, FIntegerType, ClassType, AnyRefType>(
+        t);
   };
   if (!isValidType(lhs.getType()))
-    return emitError(loc,
-                     "lhs of prop_eq must be String, Bool, or Integer type");
+    return emitError(
+        loc,
+        "lhs of prop_eq must be String, Bool, Integer, Inst, or AnyRef type");
   if (!isValidType(rhs.getType()))
-    return emitError(loc,
-                     "rhs of prop_eq must be String, Bool, or Integer type");
+    return emitError(
+        loc,
+        "rhs of prop_eq must be String, Bool, Integer, Inst, or AnyRef type");
   if (lhs.getType() != rhs.getType())
     return emitError(loc, "prop_eq operands must have the same type");
+  if (type_isa<ClassType, AnyRefType>(lhs.getType()) &&
+      requireFeature(nextFIRVersion,
+                     "property equality comparisons with AnyRef or Class types",
+                     loc))
+    return failure();
 
   locationProcessor.setLoc(loc);
   result = PropEqOp::create(builder, lhs, rhs);
-  return success();
-}
-
-/// object_eq-exp ::= 'object_eq(' expr ',' expr ')'
-ParseResult FIRStmtParser::parseObjectEqExp(Value &result) {
-  consumeToken(FIRToken::lp_object_eq);
-
-  auto loc = getToken().getLoc();
-  Value lhs, rhs;
-  locationProcessor.setLoc(loc);
-  if (parseExp(lhs, "expected lhs expression in object_eq expression") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseExp(rhs, "expected rhs expression in object_eq expression") ||
-      parseToken(FIRToken::r_paren, "expected ')'"))
-    return failure();
-
-  if (!isa<ClassType, AnyRefType>(lhs.getType()))
-    return emitError(loc, "lhs of object_eq must be Inst or AnyRef type");
-  if (!isa<ClassType, AnyRefType>(rhs.getType()))
-    return emitError(loc, "rhs of object_eq must be Inst or AnyRef type");
-
-  locationProcessor.setLoc(loc);
-  result = ObjectEqOp::create(builder, lhs, rhs);
   return success();
 }
 

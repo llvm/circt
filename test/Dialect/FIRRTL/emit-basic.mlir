@@ -715,8 +715,8 @@ firrtl.circuit "Foo" {
     %streq = firrtl.prop.eq %str0, %str1 : !firrtl.string
     firrtl.propassign %stringeq, %streq : !firrtl.bool
 
-    // CHECK: propassign objecteq, object_eq(refA, refB)
-    %objeq = firrtl.object.eq %refA, %refB : !firrtl.anyref, !firrtl.anyref
+    // CHECK: propassign objecteq, prop_eq(refA, refB)
+    %objeq = firrtl.prop.eq %refA, %refB : !firrtl.anyref
     firrtl.propassign %objecteq, %objeq : !firrtl.bool
 
     // CHECK: propassign stringcontains,

@@ -1589,40 +1589,56 @@ om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
 
 TEST_F(EvaluatorTests, PropEqTests) {
   StringRef mod = R"MLIR(
-om.class @PropEqString(%s: !om.string) -> (equal: i1, not_equal: i1, unknown: i1) {
+om.class @PropEqString(%s: !om.string) -> (equal: i1, not_equal: i1, unknown: i1, unknown_self: i1) {
   %a    = om.constant "hello" : !om.string
   %b    = om.constant "hello" : !om.string
   %c    = om.constant "world" : !om.string
   %eq   = om.prop.eq %a, %b : !om.string
   %neq  = om.prop.eq %a, %c : !om.string
   %unk  = om.prop.eq %a, %s : !om.string
-  om.class.fields %eq, %neq, %unk : i1, i1, i1
+  %self = om.prop.eq %s, %s : !om.string
+  om.class.fields %eq, %neq, %unk, %self : i1, i1, i1, i1
 }
 
-om.class @PropEqBool(%b: i1) -> (equal: i1, not_equal: i1, unknown: i1) {
+om.class @PropEqBool(%b: i1) -> (equal: i1, not_equal: i1, unknown: i1, unknown_self: i1) {
   %t    = om.constant true
   %f    = om.constant false
   %eq   = om.prop.eq %t, %t : i1
   %neq  = om.prop.eq %t, %f : i1
   %unk  = om.prop.eq %t, %b : i1
-  om.class.fields %eq, %neq, %unk : i1, i1, i1
+  %self = om.prop.eq %b, %b : i1
+  om.class.fields %eq, %neq, %unk, %self : i1, i1, i1, i1
 }
 
-om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: i1) {
+om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: i1, unknown_self: i1) {
   %a    = om.constant #om.integer<42 : si64> : !om.integer
   %b    = om.constant #om.integer<42 : si64> : !om.integer
   %c    = om.constant #om.integer<0 : si64> : !om.integer
   %eq   = om.prop.eq %a, %b : !om.integer
   %neq  = om.prop.eq %a, %c : !om.integer
   %unk  = om.prop.eq %a, %n : !om.integer
-  om.class.fields %eq, %neq, %unk : i1, i1, i1
+  %self = om.prop.eq %n, %n : !om.integer
+  om.class.fields %eq, %neq, %unk, %self : i1, i1, i1, i1
+}
+
+om.class @PropEqLeaf() {
+  om.class.fields
+}
+
+om.class @PropEqClassParams(%lhs: !om.class.type<@PropEqLeaf>,
+                            %rhs: !om.class.type<@PropEqLeaf>) -> (equal: i1, equal_any: i1) {
+  %equal = om.prop.eq %lhs, %rhs : !om.class.type<@PropEqLeaf>
+  %lhsAny = om.any_cast %lhs : (!om.class.type<@PropEqLeaf>) -> !om.any
+  %rhsAny = om.any_cast %rhs : (!om.class.type<@PropEqLeaf>) -> !om.any
+  %equalAny = om.prop.eq %lhsAny, %rhsAny : !om.any
+  om.class.fields %equal, %equalAny : i1, i1
 }
 )MLIR";
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
 
@@ -1644,54 +1660,42 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
     ASSERT_EQ(1ul, getInt(result.value(), "equal"));
     ASSERT_EQ(0ul, getInt(result.value(), "not_equal"));
     ASSERT_TRUE(getField(result.value(), "unknown")->isUnknown());
+    ASSERT_TRUE(getField(result.value(), "unknown_self")->isUnknown());
   }
-}
 
-TEST_F(EvaluatorTests, ObjectEqImportedIdentity) {
-  StringRef mod = R"MLIR(
-om.class @ObjectEqLeaf() {
-  om.class.fields
-}
-
-om.class @ObjectEqClassParams(%lhs: !om.class.type<@ObjectEqLeaf>,
-                             %rhs: !om.class.type<@ObjectEqLeaf>) -> (equal: i1) {
-  %equal = om.object.eq %lhs, %rhs : !om.class.type<@ObjectEqLeaf>, !om.class.type<@ObjectEqLeaf>
-  om.class.fields %equal : i1
-}
-)MLIR";
-
-  OwningOpRef<ModuleOp> owning = parseModule(mod);
-  ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
-  auto cls = owning->lookupSymbol<ClassLike>("ObjectEqLeaf");
+  auto cls = owning->lookupSymbol<ClassLike>("PropEqLeaf");
   ASSERT_TRUE(cls);
   auto loc = UnknownLoc::get(&context);
   auto first = std::make_shared<evaluator::ObjectValue>(
       cls, evaluator::ObjectFields{}, loc);
   auto second = std::make_shared<evaluator::ObjectValue>(
       cls, evaluator::ObjectFields{}, loc);
-  auto className = StringAttr::get(&context, "ObjectEqClassParams");
+  auto className = StringAttr::get(&context, "PropEqClassParams");
 
   // Importing the same runtime object twice must preserve aliasing.
   auto same = evaluator.instantiate(className, {first, first});
   ASSERT_TRUE(succeeded(same));
   EXPECT_EQ(1ul, getBuiltinInteger(getField(same.value(), "equal")));
+  EXPECT_EQ(1ul, getBuiltinInteger(getField(same.value(), "equal_any")));
 
   // Distinct runtime objects with identical fields must stay distinct.
   auto distinct = evaluator.instantiate(className, {first, second});
   ASSERT_TRUE(succeeded(distinct));
   EXPECT_EQ(0ul, getBuiltinInteger(getField(distinct.value(), "equal")));
+  EXPECT_EQ(0ul, getBuiltinInteger(getField(distinct.value(), "equal_any")));
 
   auto unknown = std::make_shared<evaluator::ObjectValue>(cls, loc);
   unknown->markUnknown();
   auto unknownResult = evaluator.instantiate(className, {unknown, first});
   ASSERT_TRUE(succeeded(unknownResult));
   EXPECT_TRUE(getField(unknownResult.value(), "equal")->isUnknown());
+  EXPECT_TRUE(getField(unknownResult.value(), "equal_any")->isUnknown());
 
   // Importing the same unknown runtime object preserves its SSA identity.
   auto sameUnknown = evaluator.instantiate(className, {unknown, unknown});
   ASSERT_TRUE(succeeded(sameUnknown));
   EXPECT_EQ(1ul, getBuiltinInteger(getField(sameUnknown.value(), "equal")));
+  EXPECT_EQ(1ul, getBuiltinInteger(getField(sameUnknown.value(), "equal_any")));
 
   // Distinct unknown references are not necessarily equal or unequal.
   auto otherUnknown = std::make_shared<evaluator::ObjectValue>(cls, loc);
@@ -1700,6 +1704,7 @@ om.class @ObjectEqClassParams(%lhs: !om.class.type<@ObjectEqLeaf>,
       evaluator.instantiate(className, {unknown, otherUnknown});
   ASSERT_TRUE(succeeded(distinctUnknown));
   EXPECT_TRUE(getField(distinctUnknown.value(), "equal")->isUnknown());
+  EXPECT_TRUE(getField(distinctUnknown.value(), "equal_any")->isUnknown());
 }
 
 TEST_F(EvaluatorTests, IntegerBitwiseTests) {
