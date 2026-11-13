@@ -148,15 +148,6 @@ struct has_type_deserializer<T, std::void_t<typename T::TypeDeserializer>>
 template <typename T>
 inline constexpr bool has_type_deserializer_v = has_type_deserializer<T>::value;
 
-template <typename T>
-const MessageData &getMessageDataRef(const SegmentedMessageData &msg,
-                                     MessageData &scratch) {
-  if (auto *flat = dynamic_cast<const MessageData *>(&msg))
-    return *flat;
-  scratch = msg.toMessageData();
-  return scratch;
-}
-
 /// Default deserializer for simple 1:1 typed reads.
 ///
 /// This path converts one raw message into one typed value and forwards it to
@@ -184,7 +175,7 @@ public:
     // Translate the raw message into a typed object. This always consumes the
     // raw message.
     MessageData scratch;
-    const MessageData &flat = getMessageDataRef<T>(*msg, scratch);
+    const MessageData &flat = msg->asMessageData(scratch);
     pendingOutput = std::make_unique<T>(fromMessageData<T>(flat, wireInfo));
     msg.reset();
     pokeLocked();
@@ -351,7 +342,7 @@ private:
   DecodedOutputs decode(std::unique_ptr<SegmentedMessageData> &msg) override {
     DecodedOutputs out;
     MessageData scratch;
-    const MessageData &flat = detail::getMessageDataRef<T>(*msg, scratch);
+    const MessageData &flat = msg->asMessageData(scratch);
     const uint8_t *bytes = flat.getBytes();
     size_t size = flat.getSize();
 
@@ -626,6 +617,46 @@ public:
     inner->connect(opts);
   }
 
+  /// Callback mode data source: returns the next value to write, or nullptr
+  /// if none is available yet. See WriteChannelPort::DataFetchCallback.
+  using DataFetchCallback = std::function<std::unique_ptr<T>()>;
+
+  /// Connect in callback mode. If T is a SegmentedMessageData, fetched
+  /// messages are handed to the port as-is; otherwise they are serialized.
+  /// See WriteChannelPort::connect(DataFetchCallback, WriteErrorCallback,
+  /// const ConnectOptions &).
+  void
+  connect(DataFetchCallback fetch, WriteChannelPort::WriteErrorCallback onError,
+          const ChannelPort::ConnectOptions &opts = {std::nullopt, false}) {
+    if (!inner)
+      throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+    if (!fetch)
+      throw std::invalid_argument(
+          "TypedWritePort::connect: null data fetch callback");
+    if (!SkipTypeCheck)
+      verifyTypeCompatibility<T>(inner);
+    wireInfo_ = getWireInfo(inner->getType());
+    WriteChannelPort::DataFetchCallback rawFetch;
+    if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
+      rawFetch = [fetch = std::move(fetch)]()
+          -> std::unique_ptr<SegmentedMessageData> { return fetch(); };
+    } else {
+      rawFetch = [fetch = std::move(fetch),
+                  wireInfo =
+                      wireInfo_]() -> std::unique_ptr<SegmentedMessageData> {
+        std::unique_ptr<T> value = fetch();
+        if (!value)
+          return nullptr;
+        return std::make_unique<MessageData>(
+            toMessageData(*value, wireInfo).takeData());
+      };
+    }
+    inner->connect(std::move(rawFetch), std::move(onError), opts);
+  }
+
+  /// See WriteChannelPort::notifyAsyncDataAvailable().
+  void notifyAsyncDataAvailable() { inner->notifyAsyncDataAvailable(); }
+
   void write(const T &data) { inner->write(toMessageData(data, wireInfo_)); }
 
   /// Write by taking ownership. If T is a SegmentedMessageData, this hands
@@ -694,6 +725,34 @@ public:
     verifyTypeCompatibility<void>(inner->getType());
     inner->connect(opts);
   }
+
+  /// Callback mode data source: returns true if a message should be written,
+  /// or false if none is available yet. See
+  /// WriteChannelPort::DataFetchCallback.
+  using DataFetchCallback = std::function<bool()>;
+
+  /// Connect in callback mode. See WriteChannelPort::connect(
+  /// DataFetchCallback, WriteErrorCallback, const ConnectOptions &).
+  void
+  connect(DataFetchCallback fetch, WriteChannelPort::WriteErrorCallback onError,
+          const ChannelPort::ConnectOptions &opts = {std::nullopt, false}) {
+    if (!inner)
+      throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+    if (!fetch)
+      throw std::invalid_argument(
+          "TypedWritePort::connect: null data fetch callback");
+    verifyTypeCompatibility<void>(inner->getType());
+    inner->connect(
+        [fetch = std::move(fetch)]() -> std::unique_ptr<SegmentedMessageData> {
+          if (!fetch())
+            return nullptr;
+          return std::make_unique<MessageData>(std::vector<uint8_t>{0});
+        },
+        std::move(onError), opts);
+  }
+
+  /// See WriteChannelPort::notifyAsyncDataAvailable().
+  void notifyAsyncDataAvailable() { inner->notifyAsyncDataAvailable(); }
 
   void write() {
     uint8_t zero = 0;

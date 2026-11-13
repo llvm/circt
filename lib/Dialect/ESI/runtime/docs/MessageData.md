@@ -189,21 +189,22 @@ move storage out of it, or leave it untouched for retry.
 
     /// Write a multi-segment message. Takes ownership so the backend can
     /// hold the message across partial writes / async completions.
-    /// Default flattens and calls writeImpl().
-    /// Backends override for scatter-gather / chunked-DMA support.
-    virtual void write(std::unique_ptr<SegmentedMessageData> msg) {
-      write(msg->toMessageData());
-    }
+    /// Checks the port's mode, then calls writeSegmentedImpl().
+    void write(std::unique_ptr<SegmentedMessageData> msg);
 
     /// Non-blocking write of a multi-segment message. Takes ownership (and
     /// nulls `msg`) only on success; on failure `msg` is left untouched so
-    /// the caller can retry. Default flattens and calls tryWrite().
-    virtual bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg) {
-      if (!tryWrite(msg->toMessageData()))
-        return false;
-      msg.reset();
-      return true;
-    }
+    /// the caller can retry. Checks the port's mode, then calls
+    /// tryWriteSegmentedImpl().
+    bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg);
+
+  protected:
+    /// Backends override these for scatter-gather / chunked-DMA support. The
+    /// defaults flatten the message (without copying if it is already a
+    /// MessageData) and write it like the flat write() / tryWrite().
+    virtual void writeSegmentedImpl(std::unique_ptr<SegmentedMessageData> msg);
+    virtual bool
+    tryWriteSegmentedImpl(std::unique_ptr<SegmentedMessageData> &msg);
   };
 
 ```
@@ -315,8 +316,8 @@ extra allocations beyond the single `unique_ptr`.
   port.write(std::make_unique<SampleBatch>(std::move(batch)));
 ```
 
-If the backend doesn't override `write(unique_ptr<SegmentedMessageData>)`,
-the default flattens via `toMessageData()` and frees the message. If the
+If the backend doesn't override `writeSegmentedImpl()`, the default flattens
+the message and frees it. If the
 backend supports scatter-gather, it stores the `unique_ptr` and sends each
 segment as a separate DMA descriptor. If a partial write occurs, the
 backend keeps the `unique_ptr` and uses the embedded cursor to resume.
@@ -723,7 +724,7 @@ delivery is retried even when no new raw input arrives.
   // TODO: add an API to get the accelerator address for a segment, so backends
   // can support truly general scatter-gather.
   class MyBackendWritePort : public WriteChannelPort {
-    void write(std::unique_ptr<SegmentedMessageData> msg) override {
+    void writeSegmentedImpl(std::unique_ptr<SegmentedMessageData> msg) override {
       // Scatter-gather: send each segment as a separate DMA descriptor.
       for (size_t i = 0; i < msg->numSegments(); ++i) {
         auto seg = msg->segment(i);
@@ -744,7 +745,7 @@ delivery is retried even when no new raw input arrives.
     std::unique_ptr<SegmentedMessageData> pending;
     std::optional<SegmentedMessageDataCursor> cursor;
 
-    void write(std::unique_ptr<SegmentedMessageData> msg) override {
+    void writeSegmentedImpl(std::unique_ptr<SegmentedMessageData> msg) override {
       pending = std::move(msg);
       cursor.emplace(*pending);
       drainPending();

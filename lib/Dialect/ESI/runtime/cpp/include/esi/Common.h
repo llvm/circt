@@ -188,6 +188,10 @@ public:
 
   /// Flatten all segments into a standard MessageData.
   virtual MessageData toMessageData() const;
+
+  /// Return this message as a MessageData without copying if it already is
+  /// one. Otherwise, flatten it into `scratch` and return that.
+  const MessageData &asMessageData(MessageData &scratch) const;
 };
 
 /// A concrete flat message backed by a single vector of bytes.

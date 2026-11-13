@@ -2338,8 +2338,7 @@ struct SerialCoordOutputBatch {
       DecodedOutputs decoded;
 
       MessageData scratch;
-      const MessageData &flat =
-          detail::getMessageDataRef<SerialCoordOutputBatch>(*msg, scratch);
+      const MessageData &flat = msg->asMessageData(scratch);
       const uint8_t *bytes = flat.getBytes();
       size_t size = flat.getSize();
       constexpr size_t frameSize = sizeof(SerialCoordOutputFrame);
