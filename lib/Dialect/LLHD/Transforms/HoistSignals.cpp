@@ -52,18 +52,9 @@ struct ProbeHoister {
   DenseSet<Value> liveAcrossWait;
 
   /// A lookup table of probes we have already hoisted, for deduplication.
-  DenseMap<Value, Operation *> hoistedProbes;
+  DenseMap<Value, ProbeOp> hoistedProbes;
 };
 } // namespace
-
-/// Return the signal or net probed by `op`, or null if `op` is not a probe.
-static Value getProbedValue(Operation *op) {
-  if (auto probeOp = dyn_cast<ProbeOp>(op))
-    return probeOp.getSignal();
-  if (auto probeOp = dyn_cast<ProbeNetOp>(op))
-    return probeOp.getSignal();
-  return {};
-}
 
 void ProbeHoister::hoist() {
   Liveness liveness(region.getParentOp());
@@ -129,12 +120,12 @@ void ProbeHoister::findValuesLiveAcrossWait(Liveness &liveness) {
 /// without any side-effecting op in between themselves and the beginning of the
 /// block can be hoisted.
 void ProbeHoister::hoistProbes() {
-  auto findExistingProbe = [&](Value signal) -> Operation * {
+  auto findExistingProbe = [&](Value signal) {
     for (auto *user : signal.getUsers())
-      if (isa<ProbeOp, ProbeNetOp>(user) &&
-          user->getParentRegion()->isProperAncestor(&region))
-        return user;
-    return nullptr;
+      if (auto probeOp = dyn_cast<ProbeOp>(user))
+        if (probeOp->getParentRegion()->isProperAncestor(&region))
+          return probeOp;
+    return ProbeOp{};
   };
 
   for (auto &block : region) {
@@ -146,12 +137,12 @@ void ProbeHoister::hoistProbes() {
       continue;
 
     for (auto &op : llvm::make_early_inc_range(block)) {
-      auto probed = getProbedValue(&op);
+      auto probeOp = dyn_cast<ProbeOp>(op);
 
       // We can only hoist probes that have no side-effecting ops between
       // themselves and the beginning of a block. If we see a side-effecting op,
       // give up on this block.
-      if (!probed) {
+      if (!probeOp) {
         if (isMemoryEffectFree(&op))
           continue;
         else
@@ -159,38 +150,39 @@ void ProbeHoister::hoistProbes() {
       }
 
       // Only hoist probes that don't leak across wait ops.
-      if (liveAcrossWait.contains(op.getResult(0))) {
+      if (liveAcrossWait.contains(probeOp)) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "- Skipping (live across wait) " << op << "\n");
+                   << "- Skipping (live across wait) " << probeOp << "\n");
         continue;
       }
 
       // We can only hoist probes of signals that are declared outside the
       // process.
-      if (!probed.getParentRegion()->isProperAncestor(&region)) {
-        LLVM_DEBUG(llvm::dbgs() << "- Skipping (local signal) " << op << "\n");
+      if (!probeOp.getSignal().getParentRegion()->isProperAncestor(&region)) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Skipping (local signal) " << probeOp << "\n");
         continue;
       }
 
       // Move the probe out of the process, trying to reuse any previous probe
       // that we've already hoisted.
-      auto &hoistedOp = hoistedProbes[probed];
+      auto &hoistedOp = hoistedProbes[probeOp.getSignal()];
       if (hoistedOp) {
-        LLVM_DEBUG(llvm::dbgs() << "- Replacing " << op << "\n");
-        op.replaceAllUsesWith(hoistedOp);
-        op.erase();
+        LLVM_DEBUG(llvm::dbgs() << "- Replacing " << probeOp << "\n");
+        probeOp.replaceAllUsesWith(hoistedOp.getResult());
+        probeOp.erase();
       } else {
-        LLVM_DEBUG(llvm::dbgs() << "- Hoisting " << op << "\n");
-        if (auto *existingOp = findExistingProbe(probed)) {
-          op.replaceAllUsesWith(existingOp);
-          op.erase();
+        LLVM_DEBUG(llvm::dbgs() << "- Hoisting " << probeOp << "\n");
+        if (auto existingOp = findExistingProbe(probeOp.getSignal())) {
+          probeOp.replaceAllUsesWith(existingOp.getResult());
+          probeOp.erase();
           hoistedOp = existingOp;
         } else {
-          if (auto *defOp = probed.getDefiningOp())
-            op.moveAfter(defOp);
+          if (auto *defOp = probeOp.getSignal().getDefiningOp())
+            probeOp->moveAfter(defOp);
           else
-            op.moveBefore(region.getParentOp());
-          hoistedOp = &op;
+            probeOp->moveBefore(region.getParentOp());
+          hoistedOp = probeOp;
         }
       }
     }
