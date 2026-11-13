@@ -482,6 +482,19 @@ firrtl.circuit "Foo" {
     in %list: !firrtl.list<class<@Class(in in: !firrtl.string, out out: !firrtl.string)>>
   ) {}
 
+  // CHECK-LABEL: module ObjectAnyRef :
+  firrtl.module @ObjectAnyRef(
+    // CHECK-NEXT: input object : Inst<Class>
+    // CHECK-NEXT: output ref : AnyRef
+    in %object: !firrtl.class<@Class(in in: !firrtl.string, out out: !firrtl.string)>,
+    out %ref: !firrtl.anyref
+  ) {
+    %0 = firrtl.object.anyref_cast %object : !firrtl.class<@Class(in in: !firrtl.string, out out: !firrtl.string)>
+    // CHECK-EMPTY:
+    // CHECK-NEXT: propassign ref, object
+    firrtl.propassign %ref, %0 : !firrtl.anyref
+  }
+
   // CHECK-LABEL: module ConstTypes :
   firrtl.module private @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock
