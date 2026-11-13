@@ -2040,6 +2040,10 @@ void Emitter::emitType(Type type, bool includeConst) {
         ps << BreakToken(0, -2) << ">";
         ps.end();
       })
+      .Case<ClassType>([&](ClassType type) {
+        ps << "Inst<" << PPExtString(legalize(type.getNameAttr().getAttr()))
+           << ">";
+      })
       .Case<AnyRefType>([&](AnyRefType type) { ps << "AnyRef"; })
       .Case<StringType>([&](StringType type) { ps << "String"; })
       .Case<FIntegerType>([&](FIntegerType type) { ps << "Integer"; })

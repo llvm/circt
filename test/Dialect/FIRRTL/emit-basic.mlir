@@ -472,6 +472,16 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    output out : String
   firrtl.extclass @ExtClass(in in: !firrtl.integer, out out: !firrtl.string)
 
+  // CHECK-LABEL: module ClassTypes :
+  firrtl.module @ClassTypes(
+    // CHECK-NEXT: input class : Inst<Class>
+    // CHECK-NEXT: output extclass : Inst<ExtClass>
+    // CHECK-NEXT: input list : List<Inst<Class>>
+    in %class: !firrtl.class<@Class(in in: !firrtl.string, out out: !firrtl.string)>,
+    out %extclass: !firrtl.class<@ExtClass(in in: !firrtl.integer, out out: !firrtl.string)>,
+    in %list: !firrtl.list<class<@Class(in in: !firrtl.string, out out: !firrtl.string)>>
+  ) {}
+
   // CHECK-LABEL: module ConstTypes :
   firrtl.module private @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock
