@@ -692,3 +692,104 @@ module udp_comb_delayed_prim;
     wire A, B, Q;
     udp_comb_and #5 u1 (Q, A, B);
 endmodule
+
+//===----------------------------------------------------------------------===//
+// Sequential UDP Primitives
+//===----------------------------------------------------------------------===//
+
+// Test level-sensitive D latch lowering to moore.procedure always_latch.
+// CHECK-LABEL: moore.module @udp_seq_latch(out q : !moore.l1, in %en : !moore.l1, in %d : !moore.l1)
+// CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[EN_CVT:%.+]] = moore.logic_to_int %en : l1
+// CHECK: [[D_CVT:%.+]] = moore.logic_to_int %d : l1
+// CHECK: moore.procedure always_latch {
+// CHECK:   [[COND:%.+]] = moore.to_builtin_int {{%.+}} : i1
+// CHECK:   cf.cond_br [[COND]], ^[[TRUE_BB:.+]], ^[[EXIT_BB:.+]]
+// CHECK: ^[[TRUE_BB]]:
+// CHECK:   moore.blocking_assign [[Q_VAR]], {{%.+}} : i1
+// CHECK:   cf.br ^[[EXIT_BB]]
+// CHECK: ^[[EXIT_BB]]:
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: [[Q_RD:%.+]] = moore.read [[Q_VAR]] : {{ref<i1>|<i1>}}
+// CHECK: [[Q_LOGIC:%.+]] = moore.int_to_logic [[Q_RD]] : i1
+// CHECK: moore.output [[Q_LOGIC]] : !moore.l1
+primitive udp_seq_latch(q, en, d);
+    output reg q; input en, d;
+    table
+        1 0 : ? : 0 ;
+        1 1 : ? : 1 ;
+        0 ? : ? : - ;
+    endtable
+endprimitive
+
+// Test level-sensitive SR latch lowering to moore.procedure always_latch.
+// CHECK-LABEL: moore.module @udp_seq_sr_latch(out q : !moore.l1, in %s : !moore.l1, in %r : !moore.l1)
+// CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: moore.procedure always_latch {
+// CHECK:   moore.blocking_assign [[Q_VAR]], {{%.+}} : i1
+// CHECK:   moore.return
+// CHECK: }
+primitive udp_seq_sr_latch(q, s, r);
+    output reg q; input s, r;
+    table
+        1 0 : ? : 1 ;
+        0 1 : ? : 0 ;
+        0 0 : ? : - ;
+    endtable
+endprimitive
+
+// Test level-sensitive toggle latch depending on internal state q.
+// CHECK-LABEL: moore.module @udp_seq_toggle_latch(out q : !moore.l1, in %en : !moore.l1)
+// CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[Q_RD:%.+]] = moore.read [[Q_VAR]] : ref<i1>
+// CHECK: moore.procedure always_latch {
+// CHECK:   moore.blocking_assign [[Q_VAR]], {{%.+}} : i1
+// CHECK:   moore.return
+// CHECK: }
+primitive udp_seq_toggle_latch(q, en);
+    output reg q; input en;
+    table
+        1 : 0 : 1 ;
+        1 : 1 : 0 ;
+        0 : ? : - ;
+    endtable
+endprimitive
+
+// Test initial state (initial q = 1), steady-state hold filtering, and 'x'/'b' handling.
+// CHECK-LABEL: moore.module @udp_seq_latch_init(out q : !moore.l1, in %en : !moore.l1, in %d : !moore.l1)
+// CHECK: [[INIT_VAL:%.+]] = moore.constant 1 : i1
+// CHECK: [[Q_VAR:%.+]] = moore.variable [[INIT_VAL]] : <i1>
+// CHECK: moore.procedure always_latch {
+// CHECK:   moore.blocking_assign [[Q_VAR]], {{%.+}} : i1
+// CHECK:   moore.return
+// CHECK: }
+primitive udp_seq_latch_init(q, en, d);
+    output reg q; input en, d;
+    initial q = 1;
+    table
+        1 0 : b : 0 ;
+        1 1 : ? : 1 ;
+        1 x : ? : - ;
+        0 ? : 0 : 0 ;
+        0 ? : 1 : 1 ;
+    endtable
+endprimitive
+
+//===----------------------------------------------------------------------===//
+// Sequential UDP Instantiations
+//===----------------------------------------------------------------------===//
+
+// Test module-level instantiation of sequential UDP via moore.instance.
+// CHECK-LABEL: moore.module @udp_seq_prim()
+// CHECK: [[EN:%.+]] = moore.net wire : <l1>
+// CHECK: [[D:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_EN:%.+]] = moore.read [[EN]] : {{ref<l1>|<l1>}}
+// CHECK: [[RD_D:%.+]] = moore.read [[D]] : {{ref<l1>|<l1>}}
+// CHECK: [[INST:%.+]] = moore.instance "u2" @udp_seq_latch(en: [[RD_EN]]: !moore.l1, d: [[RD_D]]: !moore.l1) -> (q: !moore.l1)
+// CHECK: moore.assign [[Q]], [[INST]] : {{ref<l1>|l1}}
+module udp_seq_prim;
+    wire EN, D, Q;
+    udp_seq_latch u2 (Q, EN, D);
+endmodule
