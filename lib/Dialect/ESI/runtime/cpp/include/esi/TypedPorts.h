@@ -617,18 +617,45 @@ public:
     inner->connect(opts);
   }
 
-  /// Connect in callback mode to use tryWriteAsync(). See
-  /// WriteChannelPort::connect(WriteCallback, const ConnectOptions &).
-  void connect(WriteChannelPort::WriteCallback callback,
-               const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  /// Callback mode data source: returns the next value to write, or nullptr
+  /// if none is available yet. See WriteChannelPort::DataFetchCallback.
+  using DataFetchCallback = std::function<std::unique_ptr<T>()>;
+
+  /// Connect in callback mode. If T is a SegmentedMessageData, fetched
+  /// messages are handed to the port as-is; otherwise they are serialized.
+  /// See WriteChannelPort::connect(DataFetchCallback, WriteErrorCallback,
+  /// const ConnectOptions &).
+  void
+  connect(DataFetchCallback fetch, WriteChannelPort::WriteErrorCallback onError,
+          const ChannelPort::ConnectOptions &opts = {std::nullopt, false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+    if (!fetch)
+      throw std::invalid_argument(
+          "TypedWritePort::connect: null data fetch callback");
     if (!SkipTypeCheck)
       verifyTypeCompatibility<T>(inner);
     wireInfo_ = getWireInfo(inner->getType());
-    inner->connect(std::move(callback), opts);
+    WriteChannelPort::DataFetchCallback rawFetch;
+    if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
+      rawFetch = [fetch = std::move(fetch)]()
+          -> std::unique_ptr<SegmentedMessageData> { return fetch(); };
+    } else {
+      rawFetch = [fetch = std::move(fetch),
+                  wireInfo =
+                      wireInfo_]() -> std::unique_ptr<SegmentedMessageData> {
+        std::unique_ptr<T> value = fetch();
+        if (!value)
+          return nullptr;
+        return std::make_unique<MessageData>(
+            toMessageData(*value, wireInfo).takeData());
+      };
+    }
+    inner->connect(std::move(rawFetch), std::move(onError), opts);
   }
+
+  /// See WriteChannelPort::notifyAsyncDataAvailable().
+  void notifyAsyncDataAvailable() { inner->notifyAsyncDataAvailable(); }
 
   void write(const T &data) { inner->write(toMessageData(data, wireInfo_)); }
 
@@ -671,45 +698,6 @@ public:
     }
   }
 
-  /// Non-blocking write with completion notification. Requires callback mode.
-  /// Returns false if the port backpressures. See
-  /// WriteChannelPort::tryWriteAsync().
-  bool tryWriteAsync(const T &data) {
-    std::unique_ptr<SegmentedMessageData> msg = std::make_unique<MessageData>(
-        toMessageData(data, wireInfo_).takeData());
-    return inner->tryWriteAsync(msg);
-  }
-
-  /// Non-blocking write with completion notification, by taking ownership. On
-  /// success, `data` is consumed (left null) and true is returned. On failure,
-  /// `data` is left untouched so the caller can retry. If T is a
-  /// SegmentedMessageData, this hands the message directly to the port.
-  /// Requires callback mode. See WriteChannelPort::tryWriteAsync().
-  bool tryWriteAsync(std::unique_ptr<T> &data) {
-    if (!data)
-      throw std::invalid_argument(
-          "TypedWritePort::tryWriteAsync: null unique_ptr");
-    if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
-      std::unique_ptr<SegmentedMessageData> msg(data.release());
-      bool written;
-      try {
-        written = inner->tryWriteAsync(msg);
-      } catch (...) {
-        data.reset(static_cast<T *>(msg.release()));
-        throw;
-      }
-      // On failure, the port did not take ownership; hand it back.
-      if (!written)
-        data.reset(static_cast<T *>(msg.release()));
-      return written;
-    } else {
-      if (!tryWriteAsync(*data))
-        return false;
-      data.reset();
-      return true;
-    }
-  }
-
   bool flush() { return inner->flush(); }
   void disconnect() { inner->disconnect(); }
   bool isConnected() const { return inner && inner->isConnected(); }
@@ -738,16 +726,33 @@ public:
     inner->connect(opts);
   }
 
-  /// Connect in callback mode to use tryWriteAsync(). See
-  /// WriteChannelPort::connect(WriteCallback, const ConnectOptions &).
-  void connect(WriteChannelPort::WriteCallback callback,
-               const ChannelPort::ConnectOptions &opts = {std::nullopt,
-                                                          false}) {
+  /// Callback mode data source: returns true if a message should be written,
+  /// or false if none is available yet. See
+  /// WriteChannelPort::DataFetchCallback.
+  using DataFetchCallback = std::function<bool()>;
+
+  /// Connect in callback mode. See WriteChannelPort::connect(
+  /// DataFetchCallback, WriteErrorCallback, const ConnectOptions &).
+  void
+  connect(DataFetchCallback fetch, WriteChannelPort::WriteErrorCallback onError,
+          const ChannelPort::ConnectOptions &opts = {std::nullopt, false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+    if (!fetch)
+      throw std::invalid_argument(
+          "TypedWritePort::connect: null data fetch callback");
     verifyTypeCompatibility<void>(inner->getType());
-    inner->connect(std::move(callback), opts);
+    inner->connect(
+        [fetch = std::move(fetch)]() -> std::unique_ptr<SegmentedMessageData> {
+          if (!fetch())
+            return nullptr;
+          return std::make_unique<MessageData>(std::vector<uint8_t>{0});
+        },
+        std::move(onError), opts);
   }
+
+  /// See WriteChannelPort::notifyAsyncDataAvailable().
+  void notifyAsyncDataAvailable() { inner->notifyAsyncDataAvailable(); }
 
   void write() {
     uint8_t zero = 0;
@@ -757,15 +762,6 @@ public:
   bool tryWrite() {
     uint8_t zero = 0;
     return inner->tryWrite(MessageData(&zero, 1));
-  }
-
-  /// Non-blocking write with completion notification. Requires callback mode.
-  /// Returns false if the port backpressures. See
-  /// WriteChannelPort::tryWriteAsync().
-  bool tryWriteAsync() {
-    std::unique_ptr<SegmentedMessageData> msg =
-        std::make_unique<MessageData>(std::vector<uint8_t>{0});
-    return inner->tryWriteAsync(msg);
   }
 
   bool flush() { return inner->flush(); }

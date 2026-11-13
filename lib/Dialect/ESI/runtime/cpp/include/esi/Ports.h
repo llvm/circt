@@ -30,6 +30,7 @@
 #include <future>
 #include <mutex>
 #include <queue>
+#include <thread>
 
 namespace esi {
 
@@ -314,21 +315,30 @@ protected:
 class WriteChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
-  /// Fails an async write which has not completed.
+  /// Reports a fetched message which hasn't been completely written to the
+  /// error callback.
   ~WriteChannelPort() override;
 
-  /// Callback mode completion callback. Invoked exactly once for each message
-  /// tryWriteAsync() accepts (i.e. returns true for), in the order they were
-  /// accepted: with a null exception_ptr once the whole message has been handed
-  /// to the backend (the same guarantee as a write() returning), or with the
-  /// exception which prevented its remaining frames from being sent (including
-  /// the port being disconnected or destroyed first).
-  using WriteCallback = std::function<void(std::exception_ptr)>;
+  /// Callback mode data source. Called whenever the port can accept a message:
+  /// returns the next message to write (ownership is transferred), or nullptr
+  /// if none is available yet. After returning nullptr (or throwing), it isn't
+  /// called again until notifyAsyncDataAvailable() is. Must return
+  /// immediately.
+  using DataFetchCallback =
+      std::function<std::unique_ptr<SegmentedMessageData>()>;
 
-  /// Disconnect the port. In callback mode, fails an accepted message whose
-  /// remaining frames haven't been sent. May block until a concurrent poll() or
-  /// tryWriteAsync() (including the callbacks it invokes) returns. Subclasses
-  /// which override this must call it.
+  /// Callback mode error handler. Called with the exception which prevented a
+  /// message returned by the DataFetchCallback from being written completely
+  /// (including the port being disconnected or destroyed first, or the
+  /// DataFetchCallback throwing). The message is dropped. Every fetched message
+  /// is either handed to the backend in full or reported here.
+  using WriteErrorCallback = std::function<void(std::exception_ptr)>;
+
+  /// Disconnect the port. In callback mode, reports a fetched message which
+  /// hasn't been completely written to the error callback. Unless called from
+  /// a callback, blocks until a concurrent poll() or notifyAsyncDataAvailable()
+  /// (including the callbacks it invokes) returns. Subclasses which override
+  /// this must call it.
   virtual void disconnect() override;
   virtual bool isConnected() const override {
     Mode m = mode;
@@ -409,39 +419,39 @@ public:
   }
 
   //===--------------------------------------------------------------------===//
-  // Callback mode: connect with a callback to use tryWriteAsync(). The
-  // callback reports the completion of each accepted message. It must not throw
-  // and should return quickly. It may call tryWriteAsync() and disconnect().
+  // Callback mode: connect with a data fetch callback, which the port calls to
+  // get messages to write whenever it can accept them. The port holds at most
+  // one fetched message which the backend hasn't accepted.
   //===--------------------------------------------------------------------===//
 
-  /// Connect in callback mode. Throws if already connected or if `callback` is
-  /// null.
-  virtual void connect(WriteCallback callback,
+  /// Connect in callback mode. Throws if already connected or if either
+  /// callback is null.
+  ///
+  /// Messages are written with the segmented tryWrite(), so backends which
+  /// override it for scatter-gather support receive them as-is. The port calls
+  /// `fetch` and writes what it returns until `fetch` returns nullptr or the
+  /// backend backpressures. It does so from poll() (typically called by the
+  /// accelerator's service thread via `AcceleratorServiceThread::addPoll()`),
+  /// which also retries a message the backend didn't accept, and from
+  /// notifyAsyncDataAvailable(). `fetch` is first called by the first of
+  /// either after connecting.
+  ///
+  /// Callbacks run on the thread which is writing, one at a time and never
+  /// recursively. They must not throw and must return quickly. They may call
+  /// notifyAsyncDataAvailable() and disconnect() (and then connect()), but
+  /// must not wait on another thread which uses the port.
+  virtual void connect(DataFetchCallback fetch, WriteErrorCallback onError,
                        const ConnectOptions &options = {});
 
-  /// Non-blocking write with completion notification, with the same semantics
-  /// as the segmented tryWrite(): on success, takes ownership of `msg` (leaving
-  /// it null) and returns true; if the backend backpressures beyond the
-  /// allocated buffer, returns false and leaves `msg` untouched so the caller
-  /// can retry; on error, throws, leaving `msg` untouched and invoking no
-  /// callback. Throws if the port is not connected in callback mode or if `msg`
-  /// is null. At some point after a `true` return, the callback will be invoked
-  /// to report completion. Ideally this signals that the message has been
-  /// delivered but some backends might not support this guarantee. The callback
-  /// may be called from any thread.
-  ///
-  /// Default implementation: call tryWrite() and, if the message was
-  /// written, invoke the callback before returning.
-  ///
-  /// Backends may override this. Overrides must uphold the WriteCallback
-  /// contract and report completions (and failures upon disconnect) via
-  /// invokeWriteCallback().
-  virtual bool tryWriteAsync(std::unique_ptr<SegmentedMessageData> &msg);
+  /// Notify the port that the DataFetchCallback has data again. Unless the
+  /// port is already writing on another thread (which then picks the data up),
+  /// writes it immediately on the calling thread, calling the callbacks. No-op
+  /// unless connected in callback mode.
+  void notifyAsyncDataAvailable();
 
 protected:
-  /// In callback mode, send the remaining frames of an accepted windowed
-  /// message, invoking its callback once done. Then, if the port is still
-  /// connected (a callback may disconnect it), call pollWriteImpl().
+  /// In callback mode, write fetched data (see connect()). Then, if the port is
+  /// still connected (a callback may disconnect it), call pollWriteImpl().
   bool pollImpl() final;
 
   /// Backend-specific polling. Write port backends override this rather than
@@ -449,16 +459,10 @@ protected:
   virtual bool pollWriteImpl() { return false; }
 
   /// Indicates the current mode of the channel. `Destroyed` is set while the
-  /// destructor fails a pending async write, preventing its callback from
-  /// using the partially destroyed port.
+  /// destructor reports a pending async write, preventing the error callback
+  /// from using the partially destroyed port.
   enum Mode { Disconnected, Sync, Callback, Destroyed };
   std::atomic<Mode> mode = Mode::Disconnected;
-
-  /// Report the completion (null `error`) or failure of a message accepted by
-  /// tryWriteAsync() to the callback registered at connect(). Callbacks are
-  /// invoked in order and never recursively. Exceptions they throw are
-  /// swallowed.
-  void invokeWriteCallback(std::exception_ptr error);
 
   /// Pad an empty payload with a single zero byte if the port type has a
   /// zero-width logical width (e.g. `VoidType`). Transports (DMA engines,
@@ -496,7 +500,7 @@ protected:
 
 private:
   /// Throw if the port is destroyed, or connected in callback mode (unless
-  /// called by tryWriteAsync()'s own tryWrite()).
+  /// called by the callback mode writer's own tryWrite()).
   void requireNotCallbackMode(const char *method) const;
   /// Set up translation and call connectImpl(). Shared by both modes.
   void connectCommon(const ConnectOptions &options);
@@ -505,40 +509,46 @@ private:
   bool flushInternal();
 
   //===--------------------------------------------------------------------===//
-  // Callback mode state. In callback mode, `translationBuffer` is non-empty
-  // only while an accepted windowed message has frames left to send.
+  // Callback mode state.
   //===--------------------------------------------------------------------===//
 
-  /// Send the remaining frames of an accepted windowed message, if any.
-  /// Returns true once none remain, having reported the message's completion
-  /// (or failure). Sets `progress` if any frames were sent. Requires
-  /// `writeMutex`.
-  bool finishPendingWrite(bool &progress);
-  /// Fail an accepted message whose remaining frames haven't been sent, if
-  /// any. Requires `writeMutex`.
-  void failPendingWrite(const std::string &reason);
-  /// Queue a completion for the registered callback and, unless completions
-  /// are already being delivered on this thread, deliver queued completions in
-  /// order. Requires `writeMutex`.
-  void complete(std::exception_ptr error);
-  /// Invoke `callback` (if non-null), swallowing any exception it throws.
+  /// Write fetched data until the DataFetchCallback has none, the backend
+  /// backpressures, or the port leaves callback mode, then release `draining`.
+  /// The caller must have claimed `draining`. Returns true if progress was
+  /// made.
+  bool drainAsyncWrites();
+  /// Wait (with `asyncMutex` held by `lock`) until no other thread is writing.
+  void waitForDrainer(std::unique_lock<std::mutex> &lock);
+  /// Drop the fetched message which hasn't been completely written, if any.
+  /// Returns true if there was one. Requires that no other thread is writing.
+  bool dropPendingWrite();
+  /// Invoke `onError` (if non-null) with `error`, swallowing any exception it
+  /// throws.
   static void
-  callWriteCallback(const std::shared_ptr<const WriteCallback> &callback,
+  callErrorCallback(const std::shared_ptr<const WriteErrorCallback> &onError,
                     std::exception_ptr error);
 
-  /// Serializes callback mode writes, polling, and completions. Recursive so
-  /// that callbacks, which run with it held, may use the port.
-  std::recursive_mutex writeMutex;
-  /// The callback registered at connect(). Shared so a completion is delivered
-  /// to the callback it was issued under, even if disconnect() clears it.
-  std::shared_ptr<const WriteCallback> writeCallback;
-  /// Completions waiting to be delivered, with their callbacks. Only non-empty
-  /// while completions are being delivered.
-  std::deque<
-      std::pair<std::shared_ptr<const WriteCallback>, std::exception_ptr>>
-      completions;
-  /// True while complete() is delivering completions.
-  bool completing = false;
+  /// Protects the members below, except `pendingMsg`, which only the writing
+  /// thread uses.
+  std::mutex asyncMutex;
+  /// Notified when `draining` is released.
+  std::condition_variable drainDone;
+  /// The callbacks registered at connect(). Shared so that they can be invoked
+  /// without holding `asyncMutex` while disconnect() clears them.
+  std::shared_ptr<const DataFetchCallback> fetchCallback;
+  std::shared_ptr<const WriteErrorCallback> errorCallback;
+  /// Incremented by each connect(), so the writer can tell that the port was
+  /// reconnected while it was calling a callback.
+  uint64_t connectionGeneration = 0;
+  /// False once the DataFetchCallback returns nullptr, until
+  /// notifyAsyncDataAvailable() is called.
+  bool dataAvailable = false;
+  /// True while a thread (`drainThread`) is writing fetched data.
+  bool draining = false;
+  std::thread::id drainThread;
+  /// A fetched message which tryWrite() hasn't accepted yet. Once it has, any
+  /// remaining frames of a windowed message are in `translationBuffer`.
+  std::unique_ptr<SegmentedMessageData> pendingMsg;
 };
 
 /// Instantiated when a backend does not know how to create a write channel.
@@ -550,7 +560,7 @@ public:
   void connect(const ConnectOptions &options = {}) override {
     throw std::runtime_error(errmsg);
   }
-  void connect(WriteCallback callback,
+  void connect(DataFetchCallback fetch, WriteErrorCallback onError,
                const ConnectOptions &options = {}) override {
     throw std::runtime_error(errmsg);
   }
