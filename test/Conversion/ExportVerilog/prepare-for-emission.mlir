@@ -391,3 +391,24 @@ hw.module @InstanceResultAssignInIfdef() {
     sv.assign %b, %o2 : !sv.net<i8>, i8
   }
 }
+
+// -----
+
+// A wire (with a user) whose input is defined by the last operation of a block
+// without a terminator is assigned at the end of that block.
+sv.macro.decl @L
+// CHECK-LABEL: hw.module @WireInputDefinedLast
+hw.module @WireInputDefinedLast(in %a : i8) {
+  // CHECK-NEXT: sv.ifdef @L {
+  // CHECK:        %v = sv.wire
+  // CHECK:        sv.assign %t,
+  // CHECK:        %[[ADD:.+]] = comb.add
+  // CHECK-NEXT:   sv.assign %v, %[[ADD]]
+  // CHECK-NEXT: }
+  sv.ifdef @L {
+    %t = sv.wire : !hw.inout<i8>
+    %v = hw.wire %x : i8
+    sv.assign %t, %v : i8
+    %x = comb.add %a, %a : i8
+  }
+}

@@ -839,7 +839,8 @@ static void buildWireLowerings(Block &block,
   for (auto hwWireOp : block.getOps<hw::WireOp>()) {
     // Find the earliest point in the block at which the input operand is
     // available. The assign operation will have to go after that to not create
-    // a use-before-def situation.
+    // a use-before-def situation. In a block without a terminator, this may be
+    // the end of the block.
     Block::iterator assignPoint = block.begin();
     if (auto *defOp = hwWireOp.getInput().getDefiningOp())
       if (defOp && defOp->getBlock() == &block)
@@ -852,7 +853,7 @@ static void buildWireLowerings(Block &block,
     for (auto *user : hwWireOp->getUsers()) {
       while (user->getBlock() != &block)
         user = user->getParentOp();
-      if (user->isBeforeInBlock(&*declarePoint))
+      if (declarePoint == block.end() || user->isBeforeInBlock(&*declarePoint))
         declarePoint = Block::iterator(user);
     }
 
