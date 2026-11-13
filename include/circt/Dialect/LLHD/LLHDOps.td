@@ -202,6 +202,7 @@ def NetOp : LLHDOp<"net", [
 }
 
 def ProbeOp : LLHDOp<"prb", [
+  ProbeLikeOp,
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
   DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
@@ -229,9 +230,14 @@ def ProbeOp : LLHDOp<"prb", [
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "$signal attr-dict `:` type($result)";
+
+  let extraClassDeclaration = [{
+    ::mlir::Value getProbed() { return getSignal(); }
+  }];
 }
 
 def ProbeNetOp : LLHDOp<"prb_net", [
+  ProbeLikeOp,
   DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
   DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
   TypeMatchesNetNestedType<"result", "net">,
@@ -256,6 +262,10 @@ def ProbeNetOp : LLHDOp<"prb_net", [
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "$net attr-dict `:` type($result)";
+
+  let extraClassDeclaration = [{
+    ::mlir::Value getProbed() { return getNet(); }
+  }];
 }
 
 def DriveOp : LLHDOp<"drv", [

@@ -38,4 +38,16 @@ def DriveLikeOp : OpInterface<"DriveLikeOp"> {
   ];
 }
 
+def ProbeLikeOp : OpInterface<"ProbeLikeOp"> {
+  let cppNamespace = "circt::llhd";
+  let description = [{
+    An operation that reads the current value of a signal or net.
+  }];
+
+  let methods = [
+    InterfaceMethod<"Get the value being probed.",
+      "::mlir::Value", "getProbed">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_LLHD_LLHDINTERFACES_TD
