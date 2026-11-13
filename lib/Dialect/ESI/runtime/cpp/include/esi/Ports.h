@@ -533,18 +533,14 @@ private:
   // Default callback mode implementation.
   //===--------------------------------------------------------------------===//
 
-  /// The state of one connection using the default implementation. Defined in
-  /// Ports.cpp.
+  /// One connection using the default implementation: its state and the logic
+  /// which writes fetched data. Defined in Ports.cpp.
   struct DefaultAsyncWriter;
   /// Return the default implementation's current connection, if any.
   std::shared_ptr<DefaultAsyncWriter> getAsyncWriter();
   /// Detach and stop the default implementation's current connection, if any.
   /// Returns true if there was one.
   bool stopAsyncWriter();
-  /// Write fetched data until the DataFetchCallback has none, the backend
-  /// backpressures, or the connection is stopped. The caller must have claimed
-  /// `writer` as its writing thread. Returns true if progress was made.
-  bool drainAsyncWrites(DefaultAsyncWriter &writer);
 
   /// Protects `asyncWriter`.
   std::mutex asyncWriterMutex;
