@@ -38,4 +38,23 @@ firrtl.circuit "SkipDomains" {
     %cast = firrtl.unsafe_domain_cast %w domains[%CK] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
     firrtl.matchingconnect %x, %cast : !firrtl.uint<8>
   }
+
+  // A cast with a skipped and a kept domain keeps the cast to the kept domain.
+  // CHECK-LABEL: firrtl.module @MixedCast
+  // CHECK-SAME: in %CA: !firrtl.domain<@ClockDomain()>
+  // CHECK-SAME: in %CB: !firrtl.domain<@ClockDomain()>
+  // CHECK-SAME: in %x: !firrtl.uint<1> domains [%CA]
+  // CHECK-SAME: out %y: !firrtl.uint<1> domains [%CB]
+  // CHECK: %[[CAST:.+]] = firrtl.unsafe_domain_cast %x domains[%CB] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+  // CHECK: firrtl.matchingconnect %y, %[[CAST]] : !firrtl.uint<1>
+  firrtl.module @MixedCast(
+      in %CA: !firrtl.domain<@ClockDomain()>,
+      in %CB: !firrtl.domain<@ClockDomain()>,
+      in %P1: !firrtl.domain<@PowerDomain()>,
+      in %P2: !firrtl.domain<@PowerDomain()>,
+      in %x: !firrtl.uint<1> domains [%CA, %P1],
+      out %y: !firrtl.uint<1> domains [%CB, %P2]) {
+    %cast = firrtl.unsafe_domain_cast %x domains[%CB, %P2] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain()>]
+    firrtl.matchingconnect %y, %cast : !firrtl.uint<1>
+  }
 }

@@ -90,11 +90,18 @@ stripModuleImpl(FModuleLike op,
               return WalkResult::advance();
             })
             .Case<UnsafeDomainCastOp>([&](UnsafeDomainCastOp op) {
-              // Strip cast if any of the domains being cast should be
-              // stripped.
-              if (llvm::any_of(op.getDomains(), [&](Value domain) {
-                    return shouldStripType(domain.getType());
-                  })) {
+              // Erase only the domain operands that should be stripped.
+              BitVector erasures(op->getNumOperands());
+              for (auto &domain :
+                   op.getDomainsMutable() /* for operand number */)
+                if (shouldStripType(domain.get().getType()))
+                  erasures.set(domain.getOperandNumber());
+              if (erasures.none())
+                return WalkResult::advance();
+              op->eraseOperands(erasures);
+
+              // A cast with no domains is the identity, so remove it.
+              if (op.getDomains().empty()) {
                 op.replaceAllUsesWith(op.getInput());
                 op.erase();
               }
