@@ -984,3 +984,69 @@ firrtl.circuit "Create" {
     firrtl.propassign %out, %result : !firrtl.string
   }
 }
+
+// A module that is not the alternative base path root, but whose name begins
+// with the root's name, must forward the base path it was handed rather than
+// substitute its own.
+//
+// CHECK-LABEL: firrtl.circuit "AltBasePathPrefix"
+firrtl.circuit "AltBasePathPrefix" {
+  // CHECK:      om.class private @Bar_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:        om.path_create reference %alt_basepath_0
+  firrtl.module private @Bar() {
+    %0 = firrtl.path reference distinct[0]<>
+  }
+
+  // CHECK:      om.class private @AltBasePathPrefixMid_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:        om.object @Bar_Class(%{{.+}}, %alt_basepath_0)
+  firrtl.module private @AltBasePathPrefixMid() {
+    firrtl.instance bar @Bar()
+  }
+
+  // CHECK:      om.class @AltBasePathPrefix_Class(%basepath: !om.basepath)
+  // CHECK:        om.object @AltBasePathPrefixMid_Class(%{{.+}}, %basepath)
+  firrtl.module @AltBasePathPrefix() {
+    %a = firrtl.wire {
+      annotations = [{class = "circt.tracker", id = distinct[0]<>}]
+    } : !firrtl.uint<1>
+    firrtl.instance mid @AltBasePathPrefixMid()
+  }
+}
+
+// The same collision on the class side: a class whose name begins with the
+// alternative base path root's name is never the root.
+//
+// CHECK-LABEL: firrtl.circuit "AltBasePathPrefixClass"
+firrtl.circuit "AltBasePathPrefixClass" {
+  // CHECK:      om.class private @Inner(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:        om.path_create reference %alt_basepath_0
+  firrtl.class private @Inner(out %path: !firrtl.path) {
+    %0 = firrtl.path reference distinct[0]<>
+    firrtl.propassign %path, %0 : !firrtl.path
+  }
+
+  // CHECK:      om.class private @AltBasePathPrefixClassOuter(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:        om.object @Inner(%basepath, %alt_basepath_0)
+  firrtl.class private @AltBasePathPrefixClassOuter(out %path: !firrtl.path) {
+    %inner = firrtl.object @Inner(out path: !firrtl.path)
+    %0 = firrtl.object.subfield %inner[path] : !firrtl.class<@Inner(out path: !firrtl.path)>
+    firrtl.propassign %path, %0 : !firrtl.path
+  }
+
+  // CHECK:      om.class private @Dut_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:        om.object @AltBasePathPrefixClassOuter(%basepath, %alt_basepath_0)
+  firrtl.module private @Dut(out %out: !firrtl.class<@AltBasePathPrefixClassOuter(out path: !firrtl.path)>) {
+    %outer = firrtl.object @AltBasePathPrefixClassOuter(out path: !firrtl.path)
+    firrtl.propassign %out, %outer : !firrtl.class<@AltBasePathPrefixClassOuter(out path: !firrtl.path)>
+  }
+
+  // CHECK:      om.class @AltBasePathPrefixClass_Class(%basepath: !om.basepath)
+  // CHECK:        om.object @Dut_Class(%{{.+}}, %basepath)
+  firrtl.module @AltBasePathPrefixClass(out %out: !firrtl.class<@AltBasePathPrefixClassOuter(out path: !firrtl.path)>) {
+    %a = firrtl.wire {
+      annotations = [{class = "circt.tracker", id = distinct[0]<>}]
+    } : !firrtl.uint<1>
+    %dut_out = firrtl.instance dut @Dut(out out: !firrtl.class<@AltBasePathPrefixClassOuter(out path: !firrtl.path)>)
+    firrtl.propassign %out, %dut_out : !firrtl.class<@AltBasePathPrefixClassOuter(out path: !firrtl.path)>
+  }
+}
