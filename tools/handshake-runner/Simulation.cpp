@@ -74,7 +74,7 @@ void debugArg(const std::string &head, mlir::Value op, const Any &value,
   if (auto *val = any_cast<APInt>(&value)) {
     debugArg(head, op, *val, time);
   } else if (auto *val = any_cast<APFloat>(&value)) {
-    debugArg(head, op, val, time);
+    debugArg(head, op, *val, time);
   } else if (auto *val = any_cast<unsigned>(&value)) {
     // Represents an allocated buffer.
     LLVM_DEBUG(dbgs() << "  " << head << ":  " << op << " = Buffer " << *val
