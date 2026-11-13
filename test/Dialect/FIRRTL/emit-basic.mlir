@@ -1227,4 +1227,18 @@ firrtl.circuit "Foo" {
     firrtl.propassign %ref, %0 : !firrtl.anyref
   }
 
+  // CHECK-LABEL: module NonBaseWires :
+  firrtl.module @NonBaseWires(in %x: !firrtl.uint<8>) {
+    // CHECK:      wire q : Probe<UInt<8>>
+    // CHECK-NEXT: define q = probe(x)
+    %q = firrtl.wire : !firrtl.probe<uint<8>>
+    %r = firrtl.ref.send %x : !firrtl.uint<8>
+    firrtl.ref.define %q, %r : !firrtl.probe<uint<8>>
+
+    // CHECK:      wire w : String
+    // CHECK-NEXT: propassign w, String("test")
+    %str = firrtl.string "test"
+    %w = firrtl.wire interesting_name : !firrtl.string
+    firrtl.propassign %w, %str : !firrtl.string
+  }
 }

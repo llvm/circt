@@ -446,7 +446,7 @@ private:
     valueNames.insert({value, it.first->getKey()});
   }
   void addForceable(Forceable op, StringAttr attr) {
-    addValueName(op.getData(), attr);
+    addValueName(op.getDataRaw() /* may not be base type */, attr);
     if (op.isForceable()) {
       SmallString<32> rwName;
       (Twine("rwprobe(") + attr.strref() + ")").toVector(rwName);
