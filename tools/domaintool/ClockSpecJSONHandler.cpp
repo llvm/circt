@@ -72,6 +72,64 @@ struct SynchronousData {
   std::optional<StringAttr> comment;
 };
 
+/// Return the value of the string field `fieldName` of a domain object.
+///
+/// Emit an error and return null if the field is missing or not a known string.
+static StringAttr getStringField(om::evaluator::ObjectValue *domain,
+                                 StringRef fieldName) {
+  auto cls = domain->getClassOp();
+  auto *context = cls.getContext();
+  auto fieldNameAttr = StringAttr::get(context, fieldName);
+  auto stringType = om::StringType::get(context);
+
+  auto fieldType = cls.getFieldType(fieldNameAttr);
+  if (!fieldType || *fieldType != stringType) {
+    auto diag = emitError(cls.getLoc())
+                << "domain class '" << cls.getSymName()
+                << "' does not match the schema expected by the Clock Spec "
+                   "JSON handler: ";
+    if (!fieldType)
+      diag << "missing field '" << fieldName << "'";
+    else
+      diag << "field '" << fieldName << "' has type " << *fieldType
+           << ", expected " << stringType;
+    return {};
+  }
+
+  // Extract string value, checking for unknown.
+  auto *value = dyn_cast_if_present<om::evaluator::AttributeValue>(
+      domain->getFields().lookup(fieldNameAttr).get());
+  StringAttr result;
+  if (value && !value->isUnknown())
+    result = dyn_cast_if_present<StringAttr>(value->getAttr());
+  if (!result)
+    emitError(domain->getLoc())
+        << "domain of class '" << cls.getSymName()
+        << "' has no known string value for field '" << fieldName << "'";
+  return result;
+}
+
+/// Return the name of the target that an association refers to.
+///
+/// Emit an error and return null if the association is invalid.
+static StringAttr
+getAssociationRef(om::evaluator::EvaluatorValue *association) {
+  auto *path = dyn_cast<om::evaluator::PathValue>(association);
+  if (!path) {
+    emitError(association->getLoc())
+        << "expected associations to be a path, but got "
+        << association->getType();
+    return {};
+  }
+  if (!path->getRef()) {
+    emitError(association->getLoc())
+        << "association is a path to a deleted or unknown target";
+    return {};
+  }
+  // TODO: Add checks that path is empty.
+  return path->getRef();
+}
+
 /// A handler that generates Clock Spec JSON output from Clock Domain
 /// information.  This is an internal format that is an input to further tooling
 /// that generates Synopsys Design Constraint (SDC) files.
@@ -91,23 +149,23 @@ public:
     // errors before finally exiting.
     bool failed = false;
     for (auto &[objectValue, associations] : objectMap) {
-      auto name = cast<StringAttr>(cast<om::evaluator::AttributeValue>(
-                                       objectValue->getField("name_out")->get())
-                                       ->getAttr());
+      // An unknown domain, e.g., an anonymous one, has no field values.
+      if (objectValue->isUnknown())
+        return emitError(objectValue->getLoc())
+               << "domain of class '" << objectValue->getClassOp().getSymName()
+               << "' is unknown";
+
+      // Grab the expected fields and exit on schema mismatch.
+      auto name = getStringField(objectValue, "name_out");
+      auto source = getStringField(objectValue, "source_out");
+      auto relationship = getStringField(objectValue, "relationship_out");
+      if (!name || !source || !relationship)
+        return failure();
 
       // Insert this domain into its own equivalence class.  Then, if this
       // domain specifies a "source" relationship (either synchronous or
       // rational), merge it into the same equivalence class as its source.
       syncEquivalenceClasses.insert(name);
-
-      auto source =
-          cast<StringAttr>(cast<om::evaluator::AttributeValue>(
-                               objectValue->getField("source_out")->get())
-                               ->getAttr());
-      auto relationship =
-          cast<StringAttr>(cast<om::evaluator::AttributeValue>(
-                               objectValue->getField("relationship_out")->get())
-                               ->getAttr());
 
       // Track the relationship kind for this domain.
       RelationshipKind kind = RelationshipKind::Inferred;
@@ -131,15 +189,10 @@ public:
           });
       if (isAsync) {
         for (auto &association : associations) {
-          if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
-            // TODO: Add checks that path is empty.
-            asyncPorts.push_back(p->getRef());
-            continue;
-          }
-          emitError(association->getLoc())
-              << "expected associations to be a path, but got "
-              << association->getType();
-          failed = true;
+          if (auto ref = getAssociationRef(association.get()))
+            asyncPorts.push_back(ref);
+          else
+            failed = true;
         }
         continue;
       }
@@ -151,15 +204,10 @@ public:
           });
       if (isStatic) {
         for (auto &association : associations) {
-          if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
-            // TODO: Add checks that path is empty.
-            staticPorts.push_back(p->getRef());
-            continue;
-          }
-          emitError(association->getLoc())
-              << "expected associations to be a path, but got "
-              << association->getType();
-          failed = true;
+          if (auto ref = getAssociationRef(association.get()))
+            staticPorts.push_back(ref);
+          else
+            failed = true;
         }
         continue;
       }
@@ -170,16 +218,11 @@ public:
                         /*relationships=*/{}});
 
       for (auto &association : associations) {
-        if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
-          // TODO: Add checks that path is empty.
+        if (auto ref = getAssociationRef(association.get()))
           syncPorts.try_emplace(name, SynchronousData{name, {}, {}})
-              .first->second.portPatterns.push_back(p->getRef());
-          continue;
-        }
-        emitError(association->getLoc())
-            << "expected associations to be a path, but got "
-            << association->getType();
-        failed = true;
+              .first->second.portPatterns.push_back(ref);
+        else
+          failed = true;
       }
     }
 
