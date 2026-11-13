@@ -19,6 +19,16 @@ class PEOAttr;
 class EnumType;
 enum class PEO : uint32_t;
 
+/// Attribute name used to record the pre-uniquified SystemVerilog module name
+/// on monomorphized modules.
+inline constexpr llvm::StringLiteral origModuleNameAttrName =
+    "hw.orig_module_name";
+
+/// Attribute name used to record elaborated parameter values on monomorphized
+/// modules.
+inline constexpr llvm::StringLiteral elaboratedParamsAttrName =
+    "hw.elaborated_params";
+
 /// Returns a resolved version of 'type' wherein any parameter reference
 /// has been evaluated based on the set of provided 'parameters'.
 mlir::FailureOr<mlir::Type> evaluateParametricType(mlir::Location loc,

@@ -7,11 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/FVInt.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
+#include "slang/ast/symbols/ParameterSymbols.h"
+#include "slang/ast/types/AllTypes.h"
 #include "slang/syntax/AllSyntax.h"
+#include "slang/syntax/SyntaxKind.h"
 #include "slang/syntax/SyntaxVisitor.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -20,6 +25,60 @@ using namespace circt;
 using namespace ImportVerilog;
 
 static constexpr StringLiteral dpiExportAttrName = "circt.dpi.export";
+
+/// Convert an elaborated Slang constant parameter value into a typed MLIR
+/// attribute suitable for `hw::ParamDeclAttr`.
+static TypedAttr
+convertParameterConstantValue(MLIRContext *ctx,
+                              const slang::ConstantValue &constant,
+                              const slang::ast::Type &astType) {
+  if (constant.isInteger()) {
+    const slang::SVInt &svint = constant.integer();
+    if (svint.hasUnknown())
+      return {};
+    unsigned numWords = svint.getNumWords();
+    APInt apInt(svint.getBitWidth(),
+                ArrayRef<uint64_t>(svint.getRawPtr(), numWords));
+    IntegerType intType = IntegerType::get(
+        ctx, svint.getBitWidth(),
+        astType.isSigned() ? IntegerType::Signed : IntegerType::Signless);
+    return IntegerAttr::get(intType, apInt);
+  }
+  if (constant.isReal())
+    return FloatAttr::get(mlir::Float64Type::get(ctx), constant.real().v);
+  if (constant.isShortReal())
+    return FloatAttr::get(mlir::Float32Type::get(ctx), constant.shortReal().v);
+  if (constant.isString())
+    return StringAttr::get(ctx, constant.str());
+  return {};
+}
+
+void Context::convertAttributes(const slang::ast::Symbol &symbol,
+                                Operation *op) {
+  SmallVector<sv::SVAttributeAttr> svAttrs;
+  for (const slang::ast::AttributeSymbol *attr :
+       compilation.getAttributes(symbol)) {
+    StringAttr exprAttr;
+    if (const slang::syntax::SyntaxNode *syntax = attr->getSyntax()) {
+      const auto &spec = syntax->as<slang::syntax::AttributeSpecSyntax>();
+      if (spec.value) {
+        if (spec.value->expr->kind ==
+            slang::syntax::SyntaxKind::StringLiteralExpression) {
+          exprAttr = builder.getStringAttr(
+              spec.value->expr->as<slang::syntax::LiteralExpressionSyntax>()
+                  .literal.rawText());
+        } else {
+          exprAttr = builder.getStringAttr(attr->getValue().toString());
+        }
+      }
+    }
+    svAttrs.push_back(sv::SVAttributeAttr::get(
+        getContext(), builder.getStringAttr(attr->name), exprAttr,
+        /*emitAsComment=*/false));
+  }
+  if (!svAttrs.empty())
+    sv::setSVAttributes(op, svAttrs);
+}
 
 //===----------------------------------------------------------------------===//
 // Utilities
@@ -762,6 +821,7 @@ struct ModuleVisitor : public BaseVisitor {
         builder.getStringAttr(instName),
         FlatSymbolRefAttr::get(module.getSymNameAttr()), inputValues,
         inputNames, outputNames);
+    context.convertAttributes(instNode, inst);
 
     // An alias belongs to this instance if the body containing its symbol is
     // nested anywhere under the instance in the elaborated tree.
@@ -1582,6 +1642,37 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   }
   auto moduleType = hw::ModuleType::get(getContext(), modulePorts);
 
+  // Record elaborated parameter values on the module so downstream passes can
+  // reconstruct `#(.PARAM(VAL))` instance bindings after Slang
+  // monomorphization.
+  SmallVector<Attribute> elaboratedParams;
+  for (const slang::ast::ParameterSymbolBase *paramBase :
+       module->getParameters()) {
+    if (paramBase->isLocalParam())
+      continue;
+    if (const auto *param =
+            paramBase->symbol.as_if<slang::ast::ParameterSymbol>()) {
+      TypedAttr valAttr = convertParameterConstantValue(
+          getContext(), param->getValue(), param->getType());
+      if (!valAttr) {
+        mlir::emitError(convertLocation(param->location))
+            << "unsupported elaborated parameter value for `" << param->name
+            << "`";
+        return {};
+      }
+      elaboratedParams.push_back(
+          hw::ParamDeclAttr::get(builder.getStringAttr(param->name), valAttr));
+    } else if (const auto *typeParam =
+                   paramBase->symbol.as_if<slang::ast::TypeParameterSymbol>()) {
+      if (typeParam->isOverridden()) {
+        mlir::emitError(convertLocation(typeParam->location))
+            << "unsupported overridden type parameter `" << typeParam->name
+            << "`";
+        return {};
+      }
+    }
+  }
+
   // Pick an insertion point for this module according to the source file
   // location.
   auto key = LocationKey::get(module->location, sourceManager);
@@ -1594,35 +1685,21 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // Create an empty module that corresponds to this module.
   auto moduleOp =
       moore::SVModuleOp::create(builder, loc, module->name, moduleType);
-  SmallVector<sv::SVAttributeAttr> svAttrs;
-  for (const auto *attr : compilation.getAttributes(module->getDefinition())) {
-    StringAttr exprAttr;
-    if (const auto *syntax = attr->getSyntax()) {
-      const auto &spec = syntax->as<slang::syntax::AttributeSpecSyntax>();
-      if (spec.value) {
-        if (spec.value->expr->kind ==
-            slang::syntax::SyntaxKind::StringLiteralExpression) {
-          exprAttr = builder.getStringAttr(
-              spec.value->expr->as<slang::syntax::LiteralExpressionSyntax>()
-                  .literal.rawText());
-        } else {
-          exprAttr = builder.getStringAttr(attr->getValue().toString());
-        }
-      }
-    }
-    svAttrs.push_back(sv::SVAttributeAttr::get(
-        getContext(), builder.getStringAttr(attr->name), exprAttr,
-        /*emitAsComment=*/false));
-  }
-  if (!svAttrs.empty())
-    sv::setSVAttributes(moduleOp, svAttrs);
+  convertAttributes(module->getDefinition(), moduleOp);
   orderedRootOps.insert(it, {key, moduleOp});
   moduleOp.getBodyRegion().push_back(block.release());
   lowering.op = moduleOp;
 
   // Add the module to the symbol table of the MLIR module, which uniquifies its
   // name as we'd expect.
+  StringRef origName = module->name;
   symbolTable.insert(moduleOp);
+  if (moduleOp.getSymName() != origName)
+    moduleOp->setAttr(hw::origModuleNameAttrName,
+                      builder.getStringAttr(origName));
+  if (!elaboratedParams.empty())
+    moduleOp->setAttr(hw::elaboratedParamsAttrName,
+                      builder.getArrayAttr(elaboratedParams));
 
   // Schedule the body to be lowered.
   moduleWorklist.push(module);
