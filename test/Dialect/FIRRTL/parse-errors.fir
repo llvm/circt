@@ -2046,6 +2046,16 @@ circuit Domains:
 ;// -----
 
 FIRRTL version 7.0.0
+circuit DomainDuplicateFieldName:
+  domain D:
+    f: Integer
+    ; expected-error @below {{duplicate field name in domain: f}}
+    f: String
+  public module DomainDuplicateFieldName:
+
+;// -----
+
+FIRRTL version 7.0.0
 circuit DomainTooManyFields:
   domain D:
     value: Integer

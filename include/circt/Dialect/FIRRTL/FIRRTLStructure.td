@@ -669,6 +669,7 @@ def DomainOp : FIRRTLOp<"domain", [
   let assemblyFormat = [{
     $sym_name ( $fields^ )? attr-dict-with-keyword
   }];
+  let hasVerifier = 1;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD

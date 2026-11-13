@@ -3372,6 +3372,18 @@ firrtl.circuit "NonPropertyTypeInDomainField" {
 
 // -----
 
+// The names of a domain's fields must be unique.
+firrtl.circuit "DuplicateDomainFieldName" {
+  // expected-error @below {{'firrtl.domain' op has duplicate field name "f"}}
+  firrtl.domain @D [
+    #firrtl.domain.field<"f", !firrtl.integer>,
+    #firrtl.domain.field<"f", !firrtl.string>
+  ]
+  firrtl.module @DuplicateDomainFieldName() {}
+}
+
+// -----
+
 firrtl.circuit "WrongInstanceDomainInfo" {
   firrtl.domain @ClockDomain
   // expected-note @below {{original module declared here}}

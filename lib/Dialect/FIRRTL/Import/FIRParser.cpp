@@ -6135,17 +6135,24 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
     return failure();
 
   SmallVector<Attribute> fields;
+  SmallPtrSet<StringAttr, 4> nameSet;
   while (true) {
     auto nextIndent = getIndentation();
     if (!nextIndent || *nextIndent <= indent)
       break;
 
+    auto loc = getToken().getLoc();
     StringAttr fieldName;
     PropertyType type;
     if (parseId(fieldName, "field name") ||
         parseToken(FIRToken::colon, "expected ':' after field name") ||
         parsePropertyType(type, "field type") || info.parseOptionalInfo())
       return failure();
+
+    // Verify that the names of each field are unique.
+    if (!nameSet.insert(fieldName).second)
+      return emitError(loc, "duplicate field name in domain: " +
+                                fieldName.getValue());
 
     fields.push_back(
         DomainFieldAttr::get(circuit.getContext(), fieldName, type));
