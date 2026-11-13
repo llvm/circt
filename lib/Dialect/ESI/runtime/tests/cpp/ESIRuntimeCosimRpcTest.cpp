@@ -380,6 +380,31 @@ TEST_F(CosimRpcTest, RefusedFramesDontSkewDisconnectCredits) {
       waitFor([&] { return client->tryWriteToServer("late", {msg(5)}); }));
 }
 
+TEST_F(CosimRpcTest, FrameRefusedDuringDisconnectIsDropped) {
+  connectClient();
+  client->setToServerMaxInFlight("late", 1);
+  // The consumer refuses a frame while a disconnect is in progress on another
+  // thread. It must still be dropped (returning its credit) rather than held
+  // for the next connection.
+  std::thread disconnector;
+  std::atomic<bool> refused{false};
+  lateToServer->connect([&](MessageData) -> bool {
+    disconnector = std::thread([&] { lateToServer->disconnect(); });
+    // Give the disconnect time to start and block waiting for this frame.
+    std::this_thread::sleep_for(100ms);
+    refused = true;
+    return false;
+  });
+  EXPECT_TRUE(client->tryWriteToServer("late", {msg(1)}));
+  ASSERT_TRUE(waitFor([&] { return refused.load(); }));
+  disconnector.join();
+
+  lateToServer->connect();
+  ASSERT_TRUE(
+      waitFor([&] { return client->tryWriteToServer("late", {msg(2)}); }));
+  EXPECT_EQ(consumeFrom(*lateToServer), 2u);
+}
+
 TEST_F(CosimRpcTest, DepartedClientsCreditsNotGivenToNext) {
   // A client leaves a frame parked on "late" and goes away.
   connectClient();
