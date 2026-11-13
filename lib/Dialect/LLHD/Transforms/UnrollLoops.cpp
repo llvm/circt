@@ -603,34 +603,39 @@ namespace {
 struct UnrollLoopsPass
     : public llhd::impl::UnrollLoopsPassBase<UnrollLoopsPass> {
   void runOnOperation() override;
-  void runOnOperation(CombinationalOp op);
-  bool unrollLoops(CombinationalOp op);
+  void runOnOperation(Operation *op, Region &body);
+  bool unrollLoops(Operation *op, Region &body);
 };
 } // namespace
 
 void UnrollLoopsPass::runOnOperation() {
-  for (auto op : getOperation().getOps<CombinationalOp>())
-    runOnOperation(op);
+  // Unroll loops in both `llhd.combinational` and `llhd.process` bodies.
+  for (auto &op : llvm::make_early_inc_range(getOperation().getOps())) {
+    if (auto combOp = dyn_cast<CombinationalOp>(op))
+      runOnOperation(combOp, combOp.getBody());
+    else if (auto processOp = dyn_cast<ProcessOp>(op))
+      runOnOperation(processOp, processOp.getBody());
+  }
 }
 
-void UnrollLoopsPass::runOnOperation(CombinationalOp op) {
+void UnrollLoopsPass::runOnOperation(Operation *op, Region &body) {
   // Unrolling a loop may open up opportunities to unroll its nested loops.
   // Iterate until all possible loops are unrolled or the limit is reached.
   for (unsigned i = 0; i < 16; ++i)
-    if (!unrollLoops(op))
+    if (!unrollLoops(op, body))
       break;
 }
 
-bool UnrollLoopsPass::unrollLoops(CombinationalOp op) {
+bool UnrollLoopsPass::unrollLoops(Operation *op, Region &body) {
   // There's nothing to do if we only have a single block. MLIR even refuses to
   // compute a dominator tree in that case.
-  if (op.getBody().hasOneBlock())
+  if (body.hasOneBlock())
     return false;
 
   // Find the loops.
-  LLVM_DEBUG(llvm::dbgs() << "Unrolling loops in " << op.getLoc() << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "Unrolling loops in " << op->getLoc() << "\n");
   DominanceInfo domInfo(op);
-  CFGLoopInfo cfgLoopInfo(domInfo.getDomTree(&op.getBody()));
+  CFGLoopInfo cfgLoopInfo(domInfo.getDomTree(&body));
 
   // We only support simple loops where there is a single back-edge to the
   // header, and the latch block has a back-edge to a single header. Create a
@@ -644,6 +649,14 @@ bool UnrollLoopsPass::unrollLoops(CombinationalOp op) {
     auto *header = cfgLoop->getHeader();
     auto *latch = cfgLoop->getLoopLatch();
     if (!latch)
+      continue;
+
+    // Skip the implicit loop a process forms around its `llhd.wait`. It is a
+    // suspension point rather than a data loop, has no static trip count, and
+    // replicating it would be meaningless.
+    if (llvm::any_of(cfgLoop->getBlocks(), [](Block *block) {
+          return isa<WaitOp>(block->getTerminator());
+        }))
       continue;
 
     LLVM_DEBUG({
