@@ -368,3 +368,26 @@ hw.module @VariadicSingleOperand(in %a : i1, out b: i1) {
 // CHECK:           hw.output %[[A]] : i1
   hw.output %0 : i1
 }
+
+// -----
+
+// Don't hoist assignments out of other blocks.
+// Destination may not be available lexically,
+// and of course the meaning of the assignment relies on its location.
+sv.macro.decl @L
+hw.module.extern @Source(out o: i8)
+// CHECK-LABEL: hw.module @InstanceResultAssignInIfdef
+hw.module @InstanceResultAssignInIfdef() {
+  %a = sv.wire : !sv.net<i8>
+  %o1 = hw.instance "c1" @Source() -> (o: i8)
+  %o2 = hw.instance "c2" @Source() -> (o: i8)
+  // CHECK:       sv.ifdef @L {
+  // CHECK:         sv.assign %a,
+  // CHECK:         sv.assign %b,
+  // CHECK-NEXT:  }
+  sv.ifdef @L {
+    sv.assign %a, %o1 : !sv.net<i8>, i8
+    %b = sv.wire : !sv.net<i8>
+    sv.assign %b, %o2 : !sv.net<i8>, i8
+  }
+}
