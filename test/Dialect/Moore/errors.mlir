@@ -301,3 +301,9 @@ moore.concat_ref %0 : (!moore.net<i32>) -> ref<i32>
 %0 = unrealized_conversion_cast to !moore.net<struct<{a: i32}>>
 // expected-error @below {{failed to verify that all of {input, result} have same wrapper kind (ref or net)}}
 moore.struct_extract_ref %0, "a" : net<struct<{a: i32}>> -> ref<i32>
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.net<union<{a: i32}>>
+// expected-error @below {{failed to verify that all of {input, result} have same wrapper kind (ref or net)}}
+moore.union_extract_ref %0, "a" : net<union<{a: i32}>> -> ref<i32>

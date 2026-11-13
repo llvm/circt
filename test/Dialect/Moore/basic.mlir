@@ -127,7 +127,8 @@ moore.module @ContinuousAssignments(
 func.func @RefOpsOnNets(
   %arg0: !moore.net<i32>,
   %arg1: !moore.i32,
-  %arg2: !moore.net<struct<{a: i32, b: i8}>>
+  %arg2: !moore.net<struct<{a: i32, b: i8}>>,
+  %arg3: !moore.net<union<{x: i32, y: i32}>>
 ) {
   // CHECK: moore.extract_ref %arg0 from 1 : net<i32> -> net<i2>
   moore.extract_ref %arg0 from 1 : net<i32> -> net<i2>
@@ -137,6 +138,8 @@ func.func @RefOpsOnNets(
   moore.concat_ref %arg0, %arg0 : (!moore.net<i32>, !moore.net<i32>) -> net<i64>
   // CHECK: moore.struct_extract_ref %arg2, "b" : net<struct<{a: i32, b: i8}>> -> net<i8>
   moore.struct_extract_ref %arg2, "b" : net<struct<{a: i32, b: i8}>> -> net<i8>
+  // CHECK: moore.union_extract_ref %arg3, "x" : net<union<{x: i32, y: i32}>> -> net<i32>
+  moore.union_extract_ref %arg3, "x" : net<union<{x: i32, y: i32}>> -> net<i32>
   return
 }
 
