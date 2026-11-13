@@ -234,8 +234,8 @@ def ProbeOp : LLHDOp<"prb", [
 def ProbeNetOp : LLHDOp<"prb_net", [
   DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
   DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-  TypeMatchesNetNestedType<"result", "signal">,
-  NetNestedTypeMatchesType<"signal", "result">,
+  TypeMatchesNetNestedType<"result", "net">,
+  NetNestedTypeMatchesType<"net", "result">,
 ]> {
   let summary = "Probe a net.";
   let description = [{
@@ -252,10 +252,10 @@ def ProbeNetOp : LLHDOp<"prb_net", [
     ```
   }];
 
-  let arguments = (ins NetType:$signal);
+  let arguments = (ins NetType:$net);
   let results = (outs AnyType:$result);
 
-  let assemblyFormat = "$signal attr-dict `:` type($result)";
+  let assemblyFormat = "$net attr-dict `:` type($result)";
 }
 
 def DriveOp : LLHDOp<"drv", [
