@@ -458,6 +458,20 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
   // CHECK-NEXT:    parameter WIDTH = 32
 
+  // CHECK-LABEL: class Class :
+  // CHECK-NEXT:    input in : String
+  // CHECK-NEXT:    output out : String
+  // CHECK-EMPTY:
+  // CHECK-NEXT:    propassign out, in
+  firrtl.class @Class(in %in: !firrtl.string, out %out: !firrtl.string) {
+    firrtl.propassign %out, %in : !firrtl.string
+  }
+
+  // CHECK-LABEL: extclass ExtClass :
+  // CHECK-NEXT:    input in : Integer
+  // CHECK-NEXT:    output out : String
+  firrtl.extclass @ExtClass(in in: !firrtl.integer, out out: !firrtl.string)
+
   // CHECK-LABEL: module ConstTypes :
   firrtl.module private @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock
