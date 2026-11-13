@@ -150,10 +150,10 @@ hw.module @assert_canonicalization(in %clock: i1) {
 
 // CHECK-LABEL: hw.module @svAttrPreventsCanonicalization(in %arg0 : i1) {
 hw.module @svAttrPreventsCanonicalization(in %arg0: i1) {
-  %0 = sv.wire : !hw.inout<i1>
-  // CHECK:      %0 = sv.wire : !hw.inout<i1>
-  // CHECK-NEXT: sv.assign %0, %arg0 {sv.attributes = [#sv.attribute<"attr">]} : i1
-  sv.assign %0, %arg0 {sv.attributes = [#sv.attribute<"attr">]} : i1
+  %0 = sv.wire : !sv.net<i1>
+  // CHECK:      %0 = sv.wire : !sv.net<i1>
+  // CHECK-NEXT: sv.assign %0, %arg0 {sv.attributes = [#sv.attribute<"attr">]} : !sv.net<i1>, i1
+  sv.assign %0, %arg0 {sv.attributes = [#sv.attribute<"attr">]} : !sv.net<i1>, i1
 }
 
 // CHECK-LABEL: hw.module @concat_str_single_operand
@@ -302,25 +302,25 @@ hw.module @MergeAssignments(in %a: !hw.array<4xi1>, in %clock: i1, out d: !hw.ar
   %v0 = hw.array_get %a[%c0_i2] : !hw.array<4xi1>, i2
   %v1 = hw.array_get %a[%c1_i2] : !hw.array<4xi1>, i2
   %v2 = hw.array_get %a[%c-2_i2] : !hw.array<4xi1>, i2
-  %r = sv.reg  : !hw.inout<array<4xi1>>
-  %i0 = sv.array_index_inout %r[%c0_i2] : !hw.inout<array<4xi1>>, i2
-  %i1 = sv.array_index_inout %r[%c1_i2] : !hw.inout<array<4xi1>>, i2
-  %i2 = sv.array_index_inout %r[%c-2_i2] : !hw.inout<array<4xi1>>, i2
-  %read = sv.read_inout %r : !hw.inout<array<4xi1>>
+  %r = sv.var  : !sv.var<!hw.array<4xi1>>
+  %i0 = sv.array_index_inout %r[%c0_i2] : !sv.var<!hw.array<4xi1>>, i2
+  %i1 = sv.array_index_inout %r[%c1_i2] : !sv.var<!hw.array<4xi1>>, i2
+  %i2 = sv.array_index_inout %r[%c-2_i2] : !sv.var<!hw.array<4xi1>>, i2
+  %read = sv.read_inout %r : !sv.var<!hw.array<4xi1>>
   sv.always posedge %clock {
     // CHECK: sv.always
-    // CHECK-NEXT:  %[[index:.+]] = sv.indexed_part_select_inout %r[%c0_i2 : 3] : !hw.inout<array<4xi1>>, i2
+    // CHECK-NEXT:  %[[index:.+]] = sv.indexed_part_select_inout %r[%c0_i2 : 3] : !sv.var<!hw.array<4xi1>>, i2
     // CHECK-NEXT:  %[[slice:.+]] = hw.array_slice %a[%c0_i2] : (!hw.array<4xi1>) -> !hw.array<3xi1>
     // CHECK-NEXT:  sv.passign %[[index]], %[[slice]]
-    // CHECK-NEXT:  %[[index:.+]] = sv.indexed_part_select_inout %r[%c0_i2 : 3] : !hw.inout<array<4xi1>>, i2
+    // CHECK-NEXT:  %[[index:.+]] = sv.indexed_part_select_inout %r[%c0_i2 : 3] : !sv.var<!hw.array<4xi1>>, i2
     // CHECK-NEXT:  %[[slice:.+]] = hw.array_slice %a[%c0_i2] : (!hw.array<4xi1>) -> !hw.array<3xi1>
     // CHECK-NEXT:  sv.bpassign %[[index]], %[[slice]]
-    sv.passign %i0, %v0 : i1
-    sv.passign %i1, %v1 : i1
-    sv.passign %i2, %v2 : i1
-    sv.bpassign %i0, %v0 : i1
-    sv.bpassign %i1, %v1 : i1
-    sv.bpassign %i2, %v2 : i1
+    sv.passign %i0, %v0 : !sv.var<i1>, i1
+    sv.passign %i1, %v1 : !sv.var<i1>, i1
+    sv.passign %i2, %v2 : !sv.var<i1>, i1
+    sv.bpassign %i0, %v0 : !sv.var<i1>, i1
+    sv.bpassign %i1, %v1 : !sv.var<i1>, i1
+    sv.bpassign %i2, %v2 : !sv.var<i1>, i1
   }
   hw.output %read : !hw.array<4xi1>
 }
@@ -333,9 +333,11 @@ hw.module @Sampled(in %in: i1) {
 }
 
 // CHECK-LABEL: @Issue7563
+// CHECK-NEXT: %r = sv.var : !sv.var<i8>
+// CHECK-NEXT: sv.var_assign %r, %in : i8
 // CHECK-NEXT: hw.output
 hw.module @Issue7563(in %in: i8) {
-  %r = sv.reg : !hw.inout<i8>
-  sv.assign %r, %in : i8
+  %r = sv.var : !sv.var<i8>
+  sv.var_assign %r, %in : i8
   hw.output
 }
