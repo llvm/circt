@@ -353,6 +353,7 @@ public:
     // Held across the base class's disconnect so no frame is handed over and
     // counted in `held` after its queue is torn down (see `handOver()`).
     std::lock_guard<std::recursive_mutex> lock(creditMutex);
+    accepting = false;
     ReadChannelPort::disconnect();
     // The base class discarded whatever it had queued for the simulation.
     // Return those frames' credits, like the server stops counting a client's
@@ -375,8 +376,14 @@ public:
         return true;
       }
     }
-    if (handOver(generation, data))
+    switch (handOver(generation, data)) {
+    case HandOverResult::Accepted:
       return true;
+    case HandOverResult::Refused:
+      return false;
+    case HandOverResult::NotConnected:
+      break;
+    }
     // Lost a race with `disconnect()`: park it at the front, since it arrived
     // before anything parked since.
     std::lock_guard<std::mutex> lock(connectMutex);
@@ -416,15 +423,25 @@ public:
   }
 
 private:
+  enum class HandOverResult {
+    Accepted,
+    /// Refused by the connected callback-mode consumer.
+    Refused,
+    /// The port is disconnected (or being disconnected).
+    NotConnected,
+  };
+
   /// Pass one frame from session `generation` to the base class's callback /
   /// polling queue, counting it in `held` if that worked.
-  bool handOver(uint64_t generation, const MessageData &data) {
+  HandOverResult handOver(uint64_t generation, const MessageData &data) {
     std::unique_ptr<SegmentedMessageData> msg =
         std::make_unique<MessageData>(data);
     // Held throughout, so `disconnect()` sees the frame either counted in
     // `held` or not handed over at all. Counted first, since a callback-mode
     // consumer may report it consumed from within the callback.
     std::lock_guard<std::recursive_mutex> lock(creditMutex);
+    if (!accepting)
+      return HandOverResult::NotConnected;
     if (!held.empty() && held.back().first == generation)
       ++held.back().second;
     else
@@ -436,9 +453,13 @@ private:
       unhold();
       throw;
     }
-    if (!ok)
-      unhold();
-    return ok;
+    if (ok)
+      return HandOverResult::Accepted;
+    unhold();
+    // `accepting` can only have changed if the consumer disconnected the port
+    // from within the callback. Otherwise, the consumer refused the frame,
+    // even if a `disconnect()` is waiting for `creditMutex`.
+    return accepting ? HandOverResult::Refused : HandOverResult::NotConnected;
   }
 
   /// Undo the count of the frame `handOver()` failed to hand over.
@@ -466,6 +487,10 @@ private:
   /// will be accepted). Flushes parked frames in order.
   void markConnected() {
     std::unique_lock<std::mutex> lock(connectMutex);
+    {
+      std::lock_guard<std::recursive_mutex> creditLock(creditMutex);
+      accepting = true;
+    }
     connected = true;
     // `deliver()` keeps appending to `parked` (rather than delivering
     // directly) until it's empty, which preserves ordering while we flush
@@ -473,10 +498,10 @@ private:
     while (!parked.empty()) {
       auto [generation, front] = parked.front();
       lock.unlock();
-      bool ok = handOver(generation, front);
+      HandOverResult result = handOver(generation, front);
       lock.lock();
-      if (!ok) {
-        if (!connected)
+      if (result != HandOverResult::Accepted) {
+        if (result == HandOverResult::NotConnected && !connected)
           break; // Disconnected again; leave it parked.
         // Refused by a callback-mode consumer: drop it, like a frame which
         // arrives while connected (see `deliver()`), rather than leave it
@@ -495,6 +520,9 @@ private:
   // (see `handOver()`), and recursive since a callback-mode consumer may
   // report a frame consumed from within the callback.
   std::recursive_mutex creditMutex;
+  // Whether frames may be handed to the base class: set once it has connected
+  // and cleared before it disconnects.
+  bool accepting = false;
   // Frames handed to the base class and not yet consumed, oldest first, as
   // runs of (client session generation, count).
   std::deque<std::pair<uint64_t, uint64_t>> held;
