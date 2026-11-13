@@ -2082,6 +2082,25 @@ firrtl.circuit "LayerBlockDrivesSinksOutside" {
 
 // -----
 
+// A layer block may not drive sinks outside the layer block through a
+// subaccess that sits inside it.
+firrtl.circuit "LayerBlockDrivesSinksOutsideSubaccess" {
+  firrtl.layer @A bind {}
+  firrtl.module @LayerBlockDrivesSinksOutsideSubaccess(in %a : !firrtl.uint<1>, in %i : !firrtl.uint<1>) {
+    // expected-note @below {{destination is defined here}}
+    %b = firrtl.wire : !firrtl.vector<uint<1>, 2>
+    // expected-note @below {{enclosing layer block is defined here}}
+    firrtl.layerblock @A {
+      %b_i = firrtl.subaccess %b[%i] : !firrtl.vector<uint<1>, 2>, !firrtl.uint<1>
+      // expected-error @below {{'firrtl.matchingconnect' op connects to a destination which is defined outside its enclosing layer block}}
+      firrtl.matchingconnect %b_i, %a : !firrtl.uint<1>
+    }
+  }
+}
+
+
+// -----
+
 firrtl.circuit "IllegalRefResolve_NotInLayerBlock" {
   firrtl.layer @A bind {
   }

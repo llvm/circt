@@ -7184,8 +7184,14 @@ LogicalResult LayerBlockOp::verify() {
           // Verify that connects only drive values declared in the layer block.
           // If we see a non-passive connect destination, then verify that the
           // source is in the same layer block so that the source is not driven.
+
+          // Find the underlying declaration containing the destination.
+          // Alternate chasing static and dynamic indexing operation kinds.
           auto dest =
               fieldRefCache.getFieldRefFromValue(connect.getDest()).getValue();
+          while (auto subaccess = dest.getDefiningOp<SubaccessOp>())
+            dest = fieldRefCache.getFieldRefFromValue(subaccess.getInput())
+                       .getValue();
           bool passive = true;
           if (auto type =
                   type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType()))
