@@ -1766,6 +1766,11 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           auto typeName = getTwoStateIntegerAtomType(integerType.getWidth());
           if (!typeName.empty()) {
             os << typeName;
+            // Native integer atoms are signed by default. Signless integers
+            // retain that convention, but explicit unsigned types must keep
+            // their unsigned C ABI as well as their SV value semantics.
+            if (integerType.isUnsigned())
+              os << " unsigned";
             return true;
           }
         }
@@ -1775,14 +1780,18 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
 
         StringRef typeName =
             (emitAsTwoStateType ? "bit" : (implicitIntType ? "" : "logic"));
-        if (!typeName.empty()) {
+        if (!typeName.empty())
           os << typeName;
-          if (!dims.empty())
-            os << ' ';
-        }
+        // Packed vectors (including those used in typedefs) are unsigned by
+        // default. Preserve explicit signedness without changing the defaults
+        // for signless integers or turning packed elements into native atoms.
+        if (integerType.isSigned())
+          os << (typeName.empty() ? "signed" : " signed");
+        if ((!typeName.empty() || integerType.isSigned()) && !dims.empty())
+          os << ' ';
 
         emitDims(dims, os, loc, emitter);
-        return !dims.empty() || !implicitIntType;
+        return !dims.empty() || !implicitIntType || integerType.isSigned();
       })
       .Case<IntType>([&](IntType intType) {
         if (!implicitIntType)
