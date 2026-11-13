@@ -3008,12 +3008,15 @@ ParseResult FIRStmtParser::parseListContainsExp(Value &result) {
     return emitError(loc, "first operand of list_contains must be a List");
 
   auto elementType = listType.getElementType();
+  locationProcessor.setLoc(loc);
+  element = emitImplicitAnyRefCast(element, elementType);
   if (element.getType() != elementType)
     return emitError(loc, "list_contains element type ")
            << element.getType() << " does not match list element type "
            << elementType;
 
-  if (!isa<StringType, FIntegerType, BoolType>(elementType))
+  if (!isa<StringType, FIntegerType, BoolType, ClassType, AnyRefType>(
+          elementType))
     return emitError(loc, "list_contains does not support elements of type ")
            << elementType;
 
