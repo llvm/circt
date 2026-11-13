@@ -1673,7 +1673,7 @@ module Expressions;
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
 
-    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %struct0, "a" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %struct0, "a" : ref<struct<{a: i32, b: i32}>> -> ref<i32>
     // CHECK: [[TMP2:%.+]] = moore.read %a
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]]
     struct0.a = a;

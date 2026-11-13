@@ -620,6 +620,15 @@ class SpecificRefType<Type type> : ConfinedType<RefType,
   Type nestedType = type;
 }
 
+/// A ref or net type with the specified constraints on the nested type.
+class SpecificWrapperType<Type type> : ConfinedType<WrapperType,
+  [SubstLeaves<"$_self", "llvm::cast<moore::WrapperType>($_self).getNestedType()",
+               type.predicate>],
+  "ref or net of " # type.summary, "moore::WrapperType"
+> {
+  Type nestedType = type;
+}
+
 /// String references.
 def StringRefType : SpecificRefType<StringType>;
 
@@ -627,6 +636,7 @@ def StringRefType : SpecificRefType<StringType>;
 def StructRefType : SpecificRefType<StructType>;
 def UnpackedStructRefType : SpecificRefType<UnpackedStructType>;
 def AnyStructRefType : SpecificRefType<AnyStructType>;
+def AnyStructWrapperType : SpecificWrapperType<AnyStructType>;
 
 /// Union references.
 def UnionRefType : SpecificRefType<UnionType>;
