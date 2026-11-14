@@ -61,6 +61,20 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     }
   }
 
+  // This generic implementation bridges each request it receives to the host
+  // through cosim endpoints. DRAM channels must be implemented by the BSP, so a
+  // DRAM request only gets here if the design does not implement that channel.
+  // Report that instead of bridging the request.
+  for (auto req : implReq.getOps<ServiceImplementConnReqOp>()) {
+    FlatSymbolRefAttr declSym = req.getServicePortAttr().getModuleRef();
+    if (isa_and_nonnull<DramServiceDeclOp>(
+            SymbolTable::lookupNearestSymbolFrom(implReq, declSym)))
+      return req.emitOpError("uses DRAM channel ")
+             << declSym
+             << ", which this design does not implement (the 'cosim' service "
+                "implementation cannot implement DRAM)";
+  }
+
   Block &connImplBlock = implRecord.getReqDetails().front();
   implRecord.setIsEngine(true);
   OpBuilder implRecords = OpBuilder::atBlockEnd(&connImplBlock);
