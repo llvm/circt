@@ -16,6 +16,7 @@
 #include "esi/Types.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <map>
@@ -707,123 +708,97 @@ struct WriteChannelPort::DefaultAsyncWriter {
       : port(port), fetch(std::move(fetch)), onError(std::move(onError)) {}
 
   /// Stop this connection: after this returns, it doesn't touch the port
-  /// again. Waits for another thread writing on it to stop. If this thread is
-  /// the writer (i.e. this is called from a callback), it stops once the
-  /// callback returns.
-  void stop();
+  /// again. Waits for another thread writing on it to stop.
+  void stop() {
+    // Set before waiting, so a writer on another thread drops what it fetches
+    // meanwhile.
+    stopped = true;
+    std::lock_guard<std::recursive_mutex> lock(mutex);
+    pendingMsg.reset();
+  }
 
-  /// Mark that the DataFetchCallback may have data, then write it unless
-  /// another thread is writing (in which case it will).
-  void notify();
+  /// Mark that the DataFetchCallback may have data, then poll().
+  void notify() {
+    dataAvailable = true;
+    poll();
+  }
 
-  /// Write fetched data unless another thread is writing. Returns true if
-  /// progress was made.
+  /// Write fetched data (fetching more as needed) until the DataFetchCallback
+  /// has none, the backend backpressures, or the connection is stopped. Does
+  /// nothing if another thread is doing so, or if called from a callback.
+  /// Returns true if progress was made.
   bool poll();
 
 private:
-  /// Claim the right to write for this thread, if no other thread has it and
-  /// the connection hasn't been stopped. Requires `mutex`.
-  bool claim();
-
-  /// Write fetched data until the DataFetchCallback has none, the backend
-  /// backpressures, or the connection is stopped, then release the claim. The
-  /// caller must have claimed this connection. Returns true if progress was
-  /// made.
-  bool drain();
+  enum class DrainResult { Idle, Blocked, Stopped };
+  /// The body of poll(). Requires `mutex`.
+  DrainResult drain(bool &progress);
 
   WriteChannelPort &port;
   const DataFetchCallback fetch;
   const WriteErrorCallback onError;
 
-  /// Protects the members below, except `pendingMsg`, which only the writing
-  /// thread uses.
-  std::mutex mutex;
-  /// Notified when the writing thread stops.
-  std::condition_variable writerDone;
+  /// Held while writing, including while calling the callbacks. Recursive so
+  /// that the callbacks can disconnect the port or call
+  /// notifyAsyncDataAvailable().
+  std::recursive_mutex mutex;
+  /// Set by the thread holding `mutex` while in drain(), so callbacks don't
+  /// start another one.
+  bool draining = false;
   /// Set when the port is disconnected (or reconnected) or destroyed. After
   /// that, this connection doesn't touch the port.
-  bool stopped = false;
+  std::atomic<bool> stopped = false;
   /// False once `fetch` returns nullptr (or throws), until notify() is called.
-  bool dataAvailable = true;
-  /// True while a thread (`writerThread`) is writing fetched data.
-  bool writing = false;
-  std::thread::id writerThread;
+  /// Atomic since notify() sets it without `mutex`.
+  std::atomic<bool> dataAvailable = true;
   /// A fetched message which the port hasn't accepted yet. Once it has, any
   /// remaining frames of a windowed message are in the port's
-  /// `translationBuffer`.
+  /// `translationBuffer`. Guarded by `mutex`.
   std::unique_ptr<SegmentedMessageData> pendingMsg;
 };
 
-void WriteChannelPort::DefaultAsyncWriter::stop() {
-  std::unique_lock<std::mutex> lock(mutex);
-  stopped = true;
-  auto self = std::this_thread::get_id();
-  writerDone.wait(lock, [&] { return !writing || writerThread == self; });
-  pendingMsg.reset();
-}
-
-void WriteChannelPort::DefaultAsyncWriter::notify() {
-  {
-    std::lock_guard<std::mutex> lock(mutex);
-    dataAvailable = true;
-    // The writing thread will see `dataAvailable` before it stops. That
-    // includes this thread, if this is called from a callback.
-    if (!claim())
-      return;
-  }
-  drain();
-}
-
 bool WriteChannelPort::DefaultAsyncWriter::poll() {
-  {
-    std::lock_guard<std::mutex> lock(mutex);
-    // If another thread is writing, let it.
-    if (!claim())
-      return false;
-  }
-  return drain();
-}
-
-bool WriteChannelPort::DefaultAsyncWriter::claim() {
-  if (stopped || writing)
-    return false;
-  writing = true;
-  writerThread = std::this_thread::get_id();
-  return true;
-}
-
-bool WriteChannelPort::DefaultAsyncWriter::drain() {
   bool progress = false;
-  std::unique_lock<std::mutex> lock(mutex);
-  while (!stopped) {
-    std::exception_ptr error;
+  while (true) {
+    {
+      std::unique_lock<std::recursive_mutex> lock(mutex, std::try_to_lock);
+      if (!lock.owns_lock() || draining)
+        return progress;
+      draining = true;
+      DrainResult result = drain(progress);
+      draining = false;
+      // When blocked, the next poll() retries.
+      if (result != DrainResult::Idle)
+        return progress;
+    }
+    // A notify() which arrived after drain() last checked `dataAvailable` but
+    // before the lock was released couldn't poll(), so do it on its behalf.
+    if (!dataAvailable)
+      return progress;
+  }
+}
 
+WriteChannelPort::DefaultAsyncWriter::DrainResult
+WriteChannelPort::DefaultAsyncWriter::drain(bool &progress) {
+  while (!stopped) {
     // Fetch a message if the previous one has been completely written.
     if (!pendingMsg && port.translationBuffer.empty()) {
-      if (!dataAvailable)
-        break;
-      // Clear the flag before fetching, so a notification which arrives while
+      // Cleared before fetching, so a notification which arrives while
       // fetching (and which would be missed if this returns nullptr) isn't
       // lost.
-      dataAvailable = false;
-      lock.unlock();
+      if (!dataAvailable.exchange(false))
+        return DrainResult::Idle;
       std::unique_ptr<SegmentedMessageData> msg;
       try {
         msg = fetch();
       } catch (...) {
-        error = std::current_exception();
+        progress = true;
+        callErrorCallback(onError, std::current_exception());
+        continue;
       }
-      lock.lock();
       // If the callback disconnected the port, drop the message.
       if (stopped)
         break;
-      if (error) {
-        progress = true;
-        lock.unlock();
-        callErrorCallback(onError, error);
-        lock.lock();
-        continue;
-      }
       if (!msg)
         continue;
       progress = true;
@@ -833,43 +808,27 @@ bool WriteChannelPort::DefaultAsyncWriter::drain() {
     }
 
     // Write the fetched message, or the remaining frames of a windowed one.
-    // Nothing else touches either until this thread stops writing.
-    lock.unlock();
-    bool blocked = false;
     try {
       if (pendingMsg) {
-        if (port.tryWriteSegmentedImpl(pendingMsg))
-          progress = true;
-        else
-          blocked = true;
+        if (!port.tryWriteSegmentedImpl(pendingMsg))
+          return DrainResult::Blocked;
+        progress = true;
       } else {
         size_t framesSentBefore = port.translationBufferIdx;
-        if (port.flushInternal()) {
-          progress = true;
-        } else {
-          progress |= port.translationBufferIdx != framesSentBefore;
-          blocked = true;
-        }
+        bool flushed = port.flushInternal();
+        progress |= flushed || port.translationBufferIdx != framesSentBefore;
+        if (!flushed)
+          return DrainResult::Blocked;
       }
     } catch (...) {
-      error = std::current_exception();
       pendingMsg.reset();
       port.translationBuffer.clear();
       port.translationBufferIdx = 0;
-    }
-    if (error) {
       progress = true;
-      callErrorCallback(onError, error);
+      callErrorCallback(onError, std::current_exception());
     }
-    lock.lock();
-    // Under backpressure, the message is retried by the next poll().
-    if (blocked)
-      break;
   }
-  writing = false;
-  writerThread = std::thread::id();
-  writerDone.notify_all();
-  return progress;
+  return DrainResult::Stopped;
 }
 
 WriteChannelPort::~WriteChannelPort() { stopAsyncWriter(); }
