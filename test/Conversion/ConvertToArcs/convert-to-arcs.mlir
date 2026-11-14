@@ -360,3 +360,86 @@ hw.module @ResetFromRegister(in %clock: !seq.clock, in %in: i1, in %rst: i1, out
   %data = seq.compreg %in, %clock reset %rst_d, %false : i1
   hw.output %data : i1
 }
+
+// A probe depends on the operands of an assign to the same signal: the logic
+// computing the assigned value ends up in a separate arc from the logic using
+// the probed value, and the probe stays between the two.
+// CHECK-LABEL: hw.module @ProbeDependsOnAssign
+hw.module @ProbeDependsOnAssign(in %a : i8, in %b : i8, out z : i8) {
+  // CHECK:      llhd.assign %s, [[SUM:%.+]] : i8
+  // CHECK-NEXT: [[P:%.+]] = llhd.prb %s
+  // CHECK-NEXT: [[SUM]] = arc.call @ProbeDependsOnAssign_arc(%a, %b)
+  // CHECK-NEXT: [[N:%.+]] = arc.call @ProbeDependsOnAssign_arc_0([[P]], %a)
+  // CHECK-NEXT: hw.output [[N]]
+  %c0 = hw.constant 0 : i8
+  %s = llhd.sig %c0 : <i8>
+  %sum = comb.add %a, %b : i8
+  llhd.assign %s, %sum : i8
+  %p = llhd.prb %s : i8
+  %n = comb.xor %p, %a : i8
+  hw.output %n : i8
+}
+
+// A conditional assign makes the probe additionally depend on the enable.
+// CHECK-LABEL: hw.module @ProbeDependsOnAssignEnable
+hw.module @ProbeDependsOnAssignEnable(in %a : i8, in %x : i1, in %y : i1, out z : i8) {
+  // CHECK:      llhd.assign %s, %a if [[EN:%.+]] : i8
+  // CHECK-NEXT: [[P:%.+]] = llhd.prb %s
+  // CHECK-NEXT: [[EN]] = arc.call @ProbeDependsOnAssignEnable_arc(%x, %y)
+  // CHECK-NEXT: [[N:%.+]] = arc.call @ProbeDependsOnAssignEnable_arc_0([[P]], %a)
+  // CHECK-NEXT: hw.output [[N]]
+  %c0 = hw.constant 0 : i8
+  %s = llhd.sig %c0 : <i8>
+  %en = comb.and %x, %y : i1
+  llhd.assign %s, %a if %en : i8
+  %p = llhd.prb %s : i8
+  %n = comb.xor %p, %a : i8
+  hw.output %n : i8
+}
+
+// Multiple probes and multiple assigns: logic using either probe is kept apart
+// from the logic feeding either assign, and probes may be merged into the same
+// downstream arc.
+// CHECK-LABEL: hw.module @ProbesDependOnAllAssigns
+hw.module @ProbesDependOnAllAssigns(in %a : i8, in %b : i8, out z : i8, out w : i8) {
+  // CHECK:      [[P0:%.+]] = llhd.prb %s
+  // CHECK:      [[P1:%.+]] = llhd.prb %s
+  // CHECK-DAG:  arc.call @ProbesDependOnAllAssigns_arc(
+  // CHECK-DAG:  arc.call @ProbesDependOnAllAssigns_arc_0(
+  // CHECK:      arc.call @ProbesDependOnAllAssigns_arc_1([[P1]], %b, [[P0]], %a)
+  %c0 = hw.constant 0 : i8
+  %s = llhd.sig %c0 : <i8>
+  %p0 = llhd.prb %s : i8
+  %v0 = comb.xor %a, %c0 : i8
+  llhd.assign %s, %v0 : i8
+  %v1 = comb.sub %c0, %b : i8
+  llhd.assign %s, %v1 : i8
+  %p1 = llhd.prb %s : i8
+  %r0 = comb.xor %p0, %a : i8
+  %r1 = comb.xor %p1, %b : i8
+  hw.output %r0, %r1 : i8, i8
+}
+
+// An assign hidden inside a region op (which gets outlined into an
+// `arc.execute`) is an unknown user of the signal and also acts as a
+// dependency of the probe.
+// CHECK-LABEL: hw.module @ProbeDependsOnUnknownUser
+hw.module @ProbeDependsOnUnknownUser(in %a : i8, in %b : i8, out z : i8) {
+  // CHECK:      arc.execute (%s, [[SUM:%.+]] : !llhd.ref<i8>, i8) {
+  // CHECK:        llhd.assign
+  // CHECK:      }
+  // CHECK-NEXT: [[P:%.+]] = llhd.prb %s
+  // CHECK-NEXT: [[SUM]] = arc.call @ProbeDependsOnUnknownUser_arc(%a, %b)
+  // CHECK-NEXT: [[N:%.+]] = arc.call @ProbeDependsOnUnknownUser_arc_0([[P]], %a)
+  // CHECK-NEXT: hw.output [[N]]
+  %c0 = hw.constant 0 : i8
+  %s = llhd.sig %c0 : <i8>
+  %sum = comb.add %a, %b : i8
+  llhd.combinational {
+    llhd.assign %s, %sum : i8
+    llhd.yield
+  }
+  %p = llhd.prb %s : i8
+  %n = comb.xor %p, %a : i8
+  hw.output %n : i8
+}

@@ -894,3 +894,98 @@ arc.coroutine.define @DummyCoroutine(%arg: i42) -> (i42, i1, i64) {
   %never = hw.constant -1 : i64
   arc.coroutine.halt %arg, %false, %never : i42, i1, i64
 }
+
+// CHECK-LABEL: arc.model @BasicSignals
+hw.module @BasicSignals(in %a : i8, in %en : i1, out o : i8, out p : i8) {
+  %c0 = hw.constant 0 : i8
+  %s = llhd.sig name "s" %c0 : <i8>
+  llhd.assign %s, %a : i8
+  %x = llhd.prb %s : i8
+  %t = llhd.sig : <i8>
+  llhd.assign %t, %x if %en : i8
+  %y = llhd.prb %t : i8
+  hw.output %x, %y : i8, i8
+  // CHECK:      [[S:%.+]] = arc.alloc_state %arg0 {name = "s"}
+  // CHECK:      [[T:%.+]] = arc.alloc_state %arg0
+  // CHECK:      arc.initial {
+  // CHECK-NEXT:   [[C0:%.+]] = hw.constant 0 : i8
+  // CHECK-NEXT:   arc.state_write [[S]] = [[C0]]
+  // CHECK:      [[A:%.+]] = arc.state_read %in_a
+  // CHECK-NEXT: arc.state_write [[S]] = [[A]]
+  // CHECK:      [[X:%.+]] = arc.state_read [[S]]
+  // CHECK:      scf.if
+  // CHECK-NEXT:   arc.state_write [[T]] = [[X]]
+  // CHECK:      [[X2:%.+]] = arc.state_read [[S]]
+  // CHECK:      [[Y:%.+]] = arc.state_read [[T]]
+  // CHECK:      arc.state_write %out_o = [[X2]]
+  // CHECK:      arc.state_write %out_p = [[Y]]
+}
+
+// A probe ordered before an assign in the source still reads the value after
+// the assign has been lowered.
+// CHECK-LABEL: arc.model @ProbeBeforeAssign
+hw.module @ProbeBeforeAssign(in %a : i8, out o : i8) {
+  %c0 = hw.constant 0 : i8
+  %s = llhd.sig %c0 : <i8>
+  %x = llhd.prb %s : i8
+  llhd.assign %s, %a : i8
+  hw.output %x : i8
+  // CHECK:      [[S:%.+]] = arc.alloc_state %arg0 {name = "s"}
+  // CHECK:      [[A:%.+]] = arc.state_read %in_a
+  // CHECK-NEXT: arc.state_write [[S]] = [[A]]
+  // CHECK-NEXT: [[X:%.+]] = arc.state_read [[S]]
+  // CHECK-NEXT: arc.state_write %out_o = [[X]]
+}
+
+// Every probe depends on all assigns, including conditional ones, but probes
+// don't depend on each other.
+// CHECK-LABEL: arc.model @TwoAssignsTwoProbes
+hw.module @TwoAssignsTwoProbes(in %a : i8, in %b : i8, in %en : i1, out o : i8, out p : i8) {
+  %c0 = hw.constant 0 : i8
+  %s = llhd.sig %c0 : <i8>
+  %x = llhd.prb %s : i8
+  llhd.assign %s, %a : i8
+  llhd.assign %s, %b if %en : i8
+  %y = llhd.prb %s : i8
+  hw.output %x, %y : i8, i8
+  // CHECK:      [[S:%.+]] = arc.alloc_state %arg0 {name = "s"}
+  // CHECK:      [[A:%.+]] = arc.state_read %in_a
+  // CHECK-NEXT: arc.state_write [[S]] = [[A]]
+  // CHECK:      scf.if
+  // CHECK-NEXT:   arc.state_write [[S]] =
+  // CHECK:      [[X:%.+]] = arc.state_read [[S]]
+  // CHECK-NEXT: [[Y:%.+]] = arc.state_read [[S]]
+  // CHECK-NEXT: arc.state_write %out_o = [[X]]
+  // CHECK-NEXT: arc.state_write %out_p = [[Y]]
+}
+
+// A signal that is only probed has no assigns to wait for.
+// CHECK-LABEL: arc.model @ProbeOnlyNoAssign
+hw.module @ProbeOnlyNoAssign(out o : i8) {
+  %c0 = hw.constant 0 : i8
+  %s = llhd.sig %c0 : <i8>
+  %x = llhd.prb %s : i8
+  hw.output %x : i8
+  // CHECK:      [[S:%.+]] = arc.alloc_state %arg0 {name = "s"}
+  // CHECK:      [[X:%.+]] = arc.state_read [[S]]
+  // CHECK-NEXT: arc.state_write %out_o = [[X]]
+}
+
+// The value computation feeding an assign is lowered before the assign, which
+// in turn is lowered before logic consuming the probe.
+// CHECK-LABEL: arc.model @AssignComputedValue
+hw.module @AssignComputedValue(in %a : i8, in %b : i8, out o : i8) {
+  %c0 = hw.constant 0 : i8
+  %s = llhd.sig %c0 : <i8>
+  %sum = comb.add %a, %b : i8
+  llhd.assign %s, %sum : i8
+  %x = llhd.prb %s : i8
+  %r = comb.xor %x, %a : i8
+  hw.output %r : i8
+  // CHECK:      [[S:%.+]] = arc.alloc_state %arg0 {name = "s"}
+  // CHECK:      [[SUM:%.+]] = comb.add
+  // CHECK-NEXT: arc.state_write [[S]] = [[SUM]]
+  // CHECK:      [[X:%.+]] = arc.state_read [[S]]
+  // CHECK:      [[R:%.+]] = comb.xor [[X]],
+  // CHECK-NEXT: arc.state_write %out_o = [[R]]
+}
