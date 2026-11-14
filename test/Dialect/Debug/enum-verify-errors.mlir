@@ -60,3 +60,23 @@ func.func @EnumUnsignedVariant() {
   %e = dbg.enum %c, "MyState", {A = 0 : ui64} : i2
   return
 }
+
+// -----
+// An ext key of dbg.value is a lowercase language name.
+
+func.func @ValueExtBadLanguage(%a: i1) {
+  // expected-error @+1 {{ext key 'Chisel' is not a lowercase language name}}
+  %v = dbg.value %a ext {Chisel = "{}"} : i1
+  dbg.variable "r", %v : !dbg.value
+  return
+}
+
+// -----
+// An ext value of dbg.enum is a string.
+
+func.func @EnumExtNotString() {
+  %c = arith.constant 0 : i2
+  // expected-error @+1 {{ext value of 'chisel' must be a string}}
+  %e = dbg.enum %c, "MyState", {A = 0 : i64} ext {chisel = 1 : i32} : i2
+  return
+}
