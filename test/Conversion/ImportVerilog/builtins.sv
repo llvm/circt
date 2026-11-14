@@ -940,6 +940,30 @@ module SampleValueBuiltinsDefaultClockingNoProcedure #() (
   wire [7:0] wire_past = $past(data_i);
 endmodule
 
+// CHECK-LABEL: moore.module @SampleValueBuiltinsPacked(
+module SampleValueBuiltinsPacked(input logic clk_i);
+  struct packed { logic a; logic [2:0] b; } s;
+
+  // CHECK: [[SBV:%.+]] = moore.packed_to_sbv {{%.+}} : struct<{a: l1, b: l3}>
+  // CHECK-NEXT: [[INT:%.+]] = moore.logic_to_int [[SBV]] : l4
+  // CHECK-NEXT: [[BUILTIN:%.+]] = moore.to_builtin_int [[INT]] : i4
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[BUILTIN]], 1 clk {{%.+}} : i4
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i4
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i4
+  // CHECK-NEXT: moore.sbv_to_packed [[PAST_LOGIC]] : struct<{a: l1, b: l3}>
+  // CHECK: verif.assert
+  past_packed: assert property (@(posedge clk_i) s == $past(s));
+
+  // CHECK: [[SBV:%.+]] = moore.packed_to_sbv {{%.+}} : struct<{a: l1, b: l3}>
+  // CHECK-NEXT: [[INT:%.+]] = moore.logic_to_int [[SBV]] : l4
+  // CHECK-NEXT: [[BUILTIN:%.+]] = moore.to_builtin_int [[INT]] : i4
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[BUILTIN]], 2 clk {{%.+}} : i4
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i4
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i4
+  // CHECK-NEXT: moore.sbv_to_packed [[PAST_LOGIC]] : struct<{a: l1, b: l3}>
+  past_packed_ticks: assert property (@(posedge clk_i) s == $past(s, 2));
+endmodule
+
 // CHECK-LABEL: func.func private @BitVectorPackedBuiltins(
 // CHECK-SAME: [[S:%[^ ,]+]]: !moore.struct<{a: l4, b: l4}>,
 // CHECK-SAME: [[A:%[^ ,]+]]: !moore.array<2 x l4>)
