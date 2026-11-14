@@ -1017,8 +1017,8 @@ hw.module @structExtractChain(in %cond: i1, in %a: !hw.struct<c: !hw.struct<d:i1
 hw.module @structExtractFromTemporary(in %cond: i1, in %a: !hw.struct<c: i1>, in %b: !hw.struct<c: i1>, out out: i1) {
     %0 = comb.mux %cond, %a, %b : !hw.struct<c: i1>
     %1 = hw.struct_extract %0["c"] : !hw.struct<c: i1>
-    // CHECK: wire struct packed {logic c; } _GEN = cond ? a : b;
-    // CHECK-NEXT: assign out = _GEN.c;
+    // CHECK: wire struct packed {logic c; } _mux_cond = cond ? a : b;
+    // CHECK-NEXT: assign out = _mux_cond.c;
     hw.output %1 : i1
 }
 
@@ -1054,8 +1054,8 @@ hw.module @unionCreateZeroWidthElement(in %in: i0, out out: !hw.union<a: i0, b: 
 hw.module @unionExtractFromTemporary(in %cond: i1, in %a: !hw.union<c: i1>, in %b: !hw.union<c: i1>, out out: i1) {
     %0 = comb.mux %cond, %a, %b : !hw.union<c: i1>
     %1 = hw.union_extract %0["c"] : !hw.union<c: i1>
-    // CHECK: wire union packed {logic c;} _GEN = cond ? a : b;
-    // CHECK-NEXT: assign out = _GEN.c;
+    // CHECK: wire union packed {logic c;} _mux_cond = cond ? a : b;
+    // CHECK-NEXT: assign out = _mux_cond.c;
     hw.output %1 : i1
 }
 
@@ -1309,7 +1309,7 @@ hw.module @moduleWithComment()
 // https://github.com/llvm/circt/issues/2363
 hw.module @Foo(in %a: i1, in %b: i1, out r1: i1, out r2: i1) {
   // Make sure the temporary wire is indented correctly.
-  // CHECK: {{^  wire _GEN = a == b;}}
+  // CHECK: {{^  wire _eq_a_b = a == b;}}
   %0 = comb.icmp eq %a, %b : i1
   hw.output %0, %0 : i1, i1
 }

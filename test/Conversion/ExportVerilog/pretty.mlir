@@ -249,10 +249,14 @@ hw.module @ForStatement(in %aaaaaaaaaaa: i5, in %xxxxxxxxxxxxxxx : i2, in %yyyyy
     %upperBound = comb.and %x_or_y, %x_and_y : i2
     %eq = comb.icmp eq %xxxxxxxxxxxxxxx, %yyyyyyyyyyyyyyy : i2
     %step = comb.mux %eq, %x_and_y, %x_or_y : i2
-    //      CHECK:    for (logic [1:0] iiiiiiiiiiiiiiiiiiiiiiiii = _GEN - _GEN_0;
-    // CHECK-NEXT:         iiiiiiiiiiiiiiiiiiiiiiiii < _GEN_0 & _GEN;
+    //      CHECK:    for (logic [1:0] iiiiiiiiiiiiiiiiiiiiiiiii =
+    // CHECK-NEXT:           _and_xxxxxxxxxxxxxxx_yyyyyyyyyyyyyyy - _or_xxxxxxxxxxxxxxx_yyyyyyyyyyyyyyy;
+    // CHECK-NEXT:         iiiiiiiiiiiiiiiiiiiiiiiii <
+    // CHECK-NEXT:           _or_xxxxxxxxxxxxxxx_yyyyyyyyyyyyyyy & _and_xxxxxxxxxxxxxxx_yyyyyyyyyyyyyyy;
     // CHECK-NEXT:         iiiiiiiiiiiiiiiiiiiiiiiii +=
-    // CHECK-NEXT:           xxxxxxxxxxxxxxx == yyyyyyyyyyyyyyy ? _GEN : _GEN_0) begin
+    // CHECK-NEXT:           xxxxxxxxxxxxxxx == yyyyyyyyyyyyyyy
+    // CHECK-NEXT:             ? _and_xxxxxxxxxxxxxxx_yyyyyyyyyyyyyyy
+    // CHECK-NEXT:             : _or_xxxxxxxxxxxxxxx_yyyyyyyyyyyyyyy) begin
     // CHECK-NEXT:      _RANDOM[iiiiiiiiiiiiiiiiiiiiiiiii] = `RANDOM;{{.*}}
     // CHECK-NEXT:    end{{.*}}
     sv.for %iiiiiiiiiiiiiiiiiiiiiiiii = %lowerBound to %upperBound step %step : i2 {

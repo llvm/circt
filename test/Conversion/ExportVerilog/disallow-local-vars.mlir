@@ -68,11 +68,11 @@ hw.module @hoist_expressions(in %clock: i1, in %x: i8, in %y: i8, in %z: i8) {
     %1 = comb.icmp eq %0, %z : i8
 
     // This shouldn't be touched.
-    // CHECK: if (_GEN == z) begin
-    // DISALLOW: if (_GEN == z) begin
+    // CHECK: if (_add_x_y == z) begin
+    // DISALLOW: if (_add_x_y == z) begin
     sv.if %1  {
-      // CHECK: $fwrite(32'h80000002, "Hi %x\n", _GEN * z);
-      // DISALLOW: $fwrite(32'h80000002, "Hi %x\n", _GEN * z);
+      // CHECK: $fwrite(32'h80000002, "Hi %x\n", _add_x_y * z);
+      // DISALLOW: $fwrite(32'h80000002, "Hi %x\n", _add_x_y * z);
       %2 = comb.mul %0, %z : i8
       sv.fwrite %fd, "Hi %x\0A"(%2) : i8
       sv.fatal.procedural 1

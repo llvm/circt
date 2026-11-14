@@ -52,12 +52,12 @@ module {
   hw.module @SpillTemporaryInProceduralRegion(in %a: i4, in %b: i4, in %fd: i32) {
     // CHECK-NEXT: %r = sv.reg
     // CHECK-NEXT: sv.initial {
-    // CHECK-NEXT:   %0 = sv.logic
-    // CHECK-NEXT:   %1 = comb.add %a, %b
-    // CHECK-NEXT:   sv.bpassign %0, %1
-    // CHECK-NEXT:   %2 = sv.read_inout %0
-    // CHECK-NEXT:   %3 = comb.extract %2 from 3
-    // CHECK-NEXT:   sv.passign %r, %3
+    // CHECK-NEXT:   %_add_a_b = sv.logic
+    // CHECK-NEXT:   %0 = comb.add %a, %b
+    // CHECK-NEXT:   sv.bpassign %_add_a_b, %0
+    // CHECK-NEXT:   %1 = sv.read_inout %_add_a_b
+    // CHECK-NEXT:   %2 = comb.extract %1 from 3
+    // CHECK-NEXT:   sv.passign %r, %2
     // CHECK-NEXT: }
     // CHECK-NEXT: hw.output
     %r = sv.reg : !hw.inout<i1>
@@ -87,11 +87,11 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
   // CHECK-LABEL:  hw.module @SpillTemporary
   hw.module @SpillTemporary(in %a: i4, in %b: i4, out c: i1) {
     // CHECK-NEXT:  %0 = comb.add %a, %b
-    // CHECK-NEXT:  %[[GEN:.+]] = sv.wire
-    // CHECK-NEXT:  sv.assign %1, %[[GEN:.+]]
-    // CHECK-NEXT:  %2 = sv.read_inout %1
-    // CHECK-NEXT:  %3 = comb.extract %2 from 3
-    // CHECK-NEXT:  hw.output %3
+    // CHECK-NEXT:  %_add_a_b = sv.wire
+    // CHECK-NEXT:  sv.assign %_add_a_b, %0
+    // CHECK-NEXT:  %1 = sv.read_inout %_add_a_b
+    // CHECK-NEXT:  %2 = comb.extract %1 from 3
+    // CHECK-NEXT:  hw.output %2
     %0 = comb.add %a, %b : i4
     %1 = comb.extract %0 from 3 : (i4) -> i1
     hw.output %1 : i1
@@ -103,10 +103,10 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     // CHECK-NEXT: %[[VAL:.+]] = comb.add %a, %b
     // CHECK-NEXT: %[[GEN:.+]] = sv.wire
     // CHECK-NEXT: sv.assign %[[GEN]], %[[VAL]]
-    // CHECK-NEXT: %2 = sv.read_inout %[[GEN]]
-    // CHECK-NEXT: %3 = comb.extract %2 from 3
+    // CHECK-NEXT: %1 = sv.read_inout %[[GEN]]
+    // CHECK-NEXT: %2 = comb.extract %1 from 3
     // CHECK-NEXT: sv.initial {
-    // CHECK-NEXT:   sv.passign %r, %3
+    // CHECK-NEXT:   sv.passign %r, %2
     // CHECK-NEXT: }
     // CHECK-NEXT: hw.output
     %r = sv.reg : !hw.inout<i1>
@@ -293,16 +293,16 @@ hw.module @Issue5613(in %a: i1, in %b: i1) {
 // CHECK-LABEL: hw.module @Issue5605
 hw.module @Issue5605(in %a: i1, in %b: i1, in %clock: i1, in %reset: i1) {
   %0 = comb.concat %a, %b : i1, i1
-  // CHECK:      %1 = sv.wire
-  // CHECK-NEXT: sv.assign %1, %0
+  // CHECK:      %_cat_a_b = sv.wire
+  // CHECK-NEXT: sv.assign %_cat_a_b, %0
   %1 = sv.system.sampled %0 : i2
-  // CHECK-NEXT: %2 = sv.read_inout %1
-  // CHECK-NEXT: %3 = sv.system.sampled %2
-  // CHECK-NEXT: sv.assert.concurrent {{.*}}(%3)
+  // CHECK-NEXT: %1 = sv.read_inout %_cat_a_b
+  // CHECK-NEXT: %2 = sv.system.sampled %1
+  // CHECK-NEXT: sv.assert.concurrent {{.*}}(%2)
   sv.assert.concurrent posedge %clock, %reset label "assert_0" message "foo"(%1) : i2
-  // CHECK-NEXT: %4 = sv.read_inout %1
-  // CHECK-NEXT: %5 = sv.system.sampled %4
-  // CHECK-NEXT: sv.assert.concurrent {{.*}}(%5)
+  // CHECK-NEXT: %3 = sv.read_inout %_cat_a_b
+  // CHECK-NEXT: %4 = sv.system.sampled %3
+  // CHECK-NEXT: sv.assert.concurrent {{.*}}(%4)
   sv.assert.concurrent posedge %clock, %reset label "assert_1" message "bar"(%1) : i2
   hw.output
 }
