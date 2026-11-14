@@ -419,3 +419,17 @@ om.class @PropertyAssert(%basepath: !om.basepath, %cond: i1) {
   om.property_assert %cond, %0 : i1
   om.class.fields
 }
+
+// CHECK-LABEL: @Registry
+om.class @Registry(%value: !om.integer) -> (empty: !om.registry<!om.integer>, items: !om.registry<!om.integer>, nested: !om.registry<!om.registry<!om.integer>>) {
+  // CHECK: %[[EMPTY:.+]] = om.registry_create : !om.registry<!om.integer>
+  %empty = om.registry_create : !om.registry<!om.integer>
+  // CHECK: %[[ITEMS:.+]] = om.registry_create %value, %value {test = "keep"} : !om.registry<!om.integer>
+  %items = om.registry_create %value, %value {test = "keep"} : !om.registry<!om.integer>
+  // CHECK: om.registry_insert %[[ITEMS]], %value : !om.registry<!om.integer>
+  om.registry_insert %items, %value : !om.registry<!om.integer>
+  // CHECK: %[[NESTED:.+]] = om.registry_create %[[ITEMS]] : !om.registry<!om.registry<!om.integer>>
+  %nested = om.registry_create %items : !om.registry<!om.registry<!om.integer>>
+  // CHECK: om.class.fields %[[EMPTY]], %[[ITEMS]], %[[NESTED]]
+  om.class.fields %empty, %items, %nested : !om.registry<!om.integer>, !om.registry<!om.integer>, !om.registry<!om.registry<!om.integer>>
+}
