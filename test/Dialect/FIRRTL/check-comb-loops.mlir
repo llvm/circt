@@ -115,7 +115,7 @@ firrtl.circuit "hasloops"   {
 // Multiple simple loops in one SCC
 // CHECK-NOT: firrtl.circuit "hasloops"
 firrtl.circuit "hasloops"   {
-  // expected-error @below {{hasloops.{b <- ... <- d <- ... <- e <- b}}}
+  // expected-error @below {{hasloops.{a <- ... <- c <- b <- ... <- a}}}
   firrtl.module @hasloops(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
     %a = firrtl.wire  : !firrtl.uint<1>
     %b = firrtl.wire  : !firrtl.uint<1>
@@ -1212,5 +1212,281 @@ firrtl.circuit "InstanceChoiceLoopAlt" {
     } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.matchingconnect %inst_in, %y : !firrtl.uint<8>
     firrtl.matchingconnect %y, %inst_out : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Port paths through two levels of instances, as unions that share parts, and
+// an output that no port reaches.
+// CHECK: firrtl.circuit "SharedSets"
+firrtl.circuit "SharedSets" {
+  firrtl.module private @Leaf(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<1>, out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %e: !firrtl.uint<1>) {
+    %ab = firrtl.xor %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %abc = firrtl.xor %ab, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %bc = firrtl.xor %b, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %x, %ab : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %abc : !firrtl.uint<1>
+    firrtl.matchingconnect %z, %bc : !firrtl.uint<1>
+    %r = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<1>
+    firrtl.matchingconnect %r, %abc : !firrtl.uint<1>
+    firrtl.matchingconnect %e, %r : !firrtl.uint<1>
+  }
+  firrtl.module private @Mid(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<1>, in %d: !firrtl.uint<1>, out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %e: !firrtl.uint<1>) {
+    %l_clk, %l_a, %l_b, %l_c, %l_x, %l_y, %l_z, %l_e = firrtl.instance l @Leaf(in clk: !firrtl.clock, in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, in c: !firrtl.uint<1>, out x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out z: !firrtl.uint<1>, out e: !firrtl.uint<1>)
+    firrtl.matchingconnect %l_clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %l_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %l_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %l_c, %c : !firrtl.uint<1>
+    %yd = firrtl.xor %l_y, %d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %x, %l_x : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %yd : !firrtl.uint<1>
+    firrtl.matchingconnect %z, %l_z : !firrtl.uint<1>
+    firrtl.matchingconnect %e, %l_e : !firrtl.uint<1>
+  }
+  firrtl.module @SharedSets(in %clk: !firrtl.clock, in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+    %m_clk, %m_a, %m_b, %m_c, %m_d, %m_x, %m_y, %m_z, %m_e = firrtl.instance m @Mid(in clk: !firrtl.clock, in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, in c: !firrtl.uint<1>, in d: !firrtl.uint<1>, out x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out z: !firrtl.uint<1>, out e: !firrtl.uint<1>)
+    %n_clk, %n_a, %n_b, %n_c, %n_d, %n_x, %n_y, %n_z, %n_e = firrtl.instance n @Mid(in clk: !firrtl.clock, in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, in c: !firrtl.uint<1>, in d: !firrtl.uint<1>, out x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out z: !firrtl.uint<1>, out e: !firrtl.uint<1>)
+    firrtl.matchingconnect %m_clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %n_clk, %clk : !firrtl.clock
+    // m: c <- e, the output no port reaches; a <- z = b ^ c; d <- x = a ^ b.
+    firrtl.matchingconnect %m_b, %i : !firrtl.uint<1>
+    firrtl.matchingconnect %m_c, %m_e : !firrtl.uint<1>
+    firrtl.matchingconnect %m_a, %m_z : !firrtl.uint<1>
+    firrtl.matchingconnect %m_d, %m_x : !firrtl.uint<1>
+    // n is fed by m's outputs only.
+    firrtl.matchingconnect %n_a, %m_y : !firrtl.uint<1>
+    firrtl.matchingconnect %n_b, %m_x : !firrtl.uint<1>
+    firrtl.matchingconnect %n_c, %n_e : !firrtl.uint<1>
+    firrtl.matchingconnect %n_d, %n_z : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %n_y : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A loop through two levels of instances that closes only through the unions
+// of their port paths: c <- x = a ^ b, and a <- z = b ^ c.
+firrtl.circuit "SharedSetsLoop" {
+  firrtl.module private @Leaf(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<1>, out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
+    %ab = firrtl.xor %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %abc = firrtl.xor %ab, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %bc = firrtl.xor %b, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %x, %ab : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %abc : !firrtl.uint<1>
+    firrtl.matchingconnect %z, %bc : !firrtl.uint<1>
+  }
+  firrtl.module private @Mid(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<1>, out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
+    %l_a, %l_b, %l_c, %l_x, %l_y, %l_z = firrtl.instance l @Leaf(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, in c: !firrtl.uint<1>, out x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out z: !firrtl.uint<1>)
+    firrtl.matchingconnect %l_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %l_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %l_c, %c : !firrtl.uint<1>
+    firrtl.matchingconnect %x, %l_x : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %l_y : !firrtl.uint<1>
+    firrtl.matchingconnect %z, %l_z : !firrtl.uint<1>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: SharedSetsLoop.{m.a <- m.z <- m.c <- m.x <- m.a}}}
+  firrtl.module @SharedSetsLoop(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+    %m_a, %m_b, %m_c, %m_x, %m_y, %m_z = firrtl.instance m @Mid(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, in c: !firrtl.uint<1>, out x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out z: !firrtl.uint<1>)
+    firrtl.matchingconnect %m_b, %i : !firrtl.uint<1>
+    firrtl.matchingconnect %m_c, %m_x : !firrtl.uint<1>
+    firrtl.matchingconnect %m_a, %m_z : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %m_y : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// An instance with a plain and a forceable output.
+// CHECK: firrtl.circuit "ForceableAndPlain"
+firrtl.circuit "ForceableAndPlain" {
+  firrtl.module private @Src(in %i: !firrtl.uint<1>, in %j: !firrtl.uint<1>, out %p: !firrtl.uint<1>, out %r: !firrtl.rwprobe<uint<1>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    firrtl.matchingconnect %w, %i : !firrtl.uint<1>
+    %wj = firrtl.and %w, %j : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %p, %wj : !firrtl.uint<1>
+    firrtl.ref.define %r, %w_ref : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @ForceableAndPlain(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %s_i, %s_j, %s_p, %s_r = firrtl.instance s @Src(in i: !firrtl.uint<1>, in j: !firrtl.uint<1>, out p: !firrtl.uint<1>, out r: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %s_i, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %s_j, %y : !firrtl.uint<1>
+    firrtl.ref.force_initial %c1_ui1, %s_r, %y : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+    firrtl.matchingconnect %o, %s_p : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// The plain output of an instance forces its forceable output.
+firrtl.circuit "ForceableAndPlainLoop" {
+  firrtl.module private @Src(in %i: !firrtl.uint<1>, in %j: !firrtl.uint<1>, out %p: !firrtl.uint<1>, out %r: !firrtl.rwprobe<uint<1>>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    firrtl.matchingconnect %w, %i : !firrtl.uint<1>
+    %wj = firrtl.and %w, %j : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %p, %wj : !firrtl.uint<1>
+    firrtl.ref.define %r, %w_ref : !firrtl.rwprobe<uint<1>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: ForceableAndPlainLoop.{s.p <- s.r <- s.p}}}
+  firrtl.module @ForceableAndPlainLoop(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %s_i, %s_j, %s_p, %s_r = firrtl.instance s @Src(in i: !firrtl.uint<1>, in j: !firrtl.uint<1>, out p: !firrtl.uint<1>, out r: !firrtl.rwprobe<uint<1>>)
+    firrtl.matchingconnect %s_i, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %s_j, %y : !firrtl.uint<1>
+    firrtl.ref.force_initial %c1_ui1, %s_r, %s_p : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
+    firrtl.matchingconnect %o, %s_p : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// A chain that adds a port it already holds, in instances chained at two
+// levels: each output is reached by both inputs and nothing else.
+// CHECK: firrtl.circuit "RedundantChain"
+firrtl.circuit "RedundantChain" {
+  firrtl.module private @Chain(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %x: !firrtl.uint<1>) {
+    %x1 = firrtl.xor %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %x2 = firrtl.xor %x1, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %x3 = firrtl.xor %x2, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %x, %x3 : !firrtl.uint<1>
+  }
+  firrtl.module private @Pair(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %x: !firrtl.uint<1>) {
+    %u_a, %u_b, %u_x = firrtl.instance u @Chain(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    %v_a, %v_b, %v_x = firrtl.instance v @Chain(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    firrtl.matchingconnect %u_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %u_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %v_a, %u_x : !firrtl.uint<1>
+    firrtl.matchingconnect %v_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %x, %v_x : !firrtl.uint<1>
+  }
+  firrtl.module private @Quad(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %x: !firrtl.uint<1>) {
+    %u_a, %u_b, %u_x = firrtl.instance u @Pair(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    %v_a, %v_b, %v_x = firrtl.instance v @Pair(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    firrtl.matchingconnect %u_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %u_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %v_a, %u_x : !firrtl.uint<1>
+    firrtl.matchingconnect %v_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %x, %v_x : !firrtl.uint<1>
+  }
+  firrtl.module @RedundantChain(in %i: !firrtl.uint<1>, in %j: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+    %q_a, %q_b, %q_x = firrtl.instance q @Quad(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    firrtl.matchingconnect %q_a, %i : !firrtl.uint<1>
+    firrtl.matchingconnect %q_b, %j : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %q_x : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// The same chain closed into a loop through the input it adds repeatedly.
+firrtl.circuit "RedundantChainLoop" {
+  firrtl.module private @Chain(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %x: !firrtl.uint<1>) {
+    %x1 = firrtl.xor %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %x2 = firrtl.xor %x1, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %x3 = firrtl.xor %x2, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %x, %x3 : !firrtl.uint<1>
+  }
+  firrtl.module private @Pair(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %x: !firrtl.uint<1>) {
+    %u_a, %u_b, %u_x = firrtl.instance u @Chain(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    %v_a, %v_b, %v_x = firrtl.instance v @Chain(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    firrtl.matchingconnect %u_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %u_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %v_a, %u_x : !firrtl.uint<1>
+    firrtl.matchingconnect %v_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %x, %v_x : !firrtl.uint<1>
+  }
+  firrtl.module private @Quad(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %x: !firrtl.uint<1>) {
+    %u_a, %u_b, %u_x = firrtl.instance u @Pair(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    %v_a, %v_b, %v_x = firrtl.instance v @Pair(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    firrtl.matchingconnect %u_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %u_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %v_a, %u_x : !firrtl.uint<1>
+    firrtl.matchingconnect %v_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %x, %v_x : !firrtl.uint<1>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RedundantChainLoop.{q.b <- q.x <- q.b}}}
+  firrtl.module @RedundantChainLoop(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+    %q_a, %q_b, %q_x = firrtl.instance q @Quad(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out x: !firrtl.uint<1>)
+    firrtl.matchingconnect %q_a, %i : !firrtl.uint<1>
+    firrtl.matchingconnect %q_b, %q_x : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %q_x : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Outputs that fold the same ports in different orders, under a wrapper, and a
+// port that reaches only its own output: w <- d <- x is not a loop.
+// CHECK: firrtl.circuit "RotatedFolds"
+firrtl.circuit "RotatedFolds" {
+  firrtl.module private @Fold(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<1>, in %d: !firrtl.uint<1>, out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %w: !firrtl.uint<1>) {
+    %ab = firrtl.xor %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %abc = firrtl.xor %ab, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %bc = firrtl.xor %b, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %bca = firrtl.xor %bc, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %ca = firrtl.xor %c, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %cab = firrtl.xor %ca, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %x, %abc : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %bca : !firrtl.uint<1>
+    firrtl.matchingconnect %z, %cab : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %d : !firrtl.uint<1>
+  }
+  firrtl.module private @Wrap(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<1>, in %d: !firrtl.uint<1>, out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %w: !firrtl.uint<1>) {
+    %f_a, %f_b, %f_c, %f_d, %f_x, %f_y, %f_z, %f_w = firrtl.instance f @Fold(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, in c: !firrtl.uint<1>, in d: !firrtl.uint<1>, out x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out z: !firrtl.uint<1>, out w: !firrtl.uint<1>)
+    firrtl.matchingconnect %f_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %f_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %f_c, %c : !firrtl.uint<1>
+    firrtl.matchingconnect %f_d, %d : !firrtl.uint<1>
+    firrtl.matchingconnect %x, %f_x : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %f_y : !firrtl.uint<1>
+    firrtl.matchingconnect %z, %f_z : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %f_w : !firrtl.uint<1>
+  }
+  firrtl.module @RotatedFolds(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+    %g_a, %g_b, %g_c, %g_d, %g_x, %g_y, %g_z, %g_w = firrtl.instance g @Wrap(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, in c: !firrtl.uint<1>, in d: !firrtl.uint<1>, out x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out z: !firrtl.uint<1>, out w: !firrtl.uint<1>)
+    firrtl.matchingconnect %g_a, %i : !firrtl.uint<1>
+    firrtl.matchingconnect %g_b, %i : !firrtl.uint<1>
+    firrtl.matchingconnect %g_c, %i : !firrtl.uint<1>
+    firrtl.matchingconnect %g_d, %g_x : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %g_w : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// The same folds closed into a loop through the separate port.
+firrtl.circuit "RotatedFoldsLoop" {
+  firrtl.module private @Fold(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<1>, in %d: !firrtl.uint<1>, out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %w: !firrtl.uint<1>) {
+    %ab = firrtl.xor %a, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %abc = firrtl.xor %ab, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %bc = firrtl.xor %b, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %bca = firrtl.xor %bc, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %ca = firrtl.xor %c, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %cab = firrtl.xor %ca, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %x, %abc : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %bca : !firrtl.uint<1>
+    firrtl.matchingconnect %z, %cab : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %d : !firrtl.uint<1>
+  }
+  firrtl.module private @Wrap(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, in %c: !firrtl.uint<1>, in %d: !firrtl.uint<1>, out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %w: !firrtl.uint<1>) {
+    %f_a, %f_b, %f_c, %f_d, %f_x, %f_y, %f_z, %f_w = firrtl.instance f @Fold(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, in c: !firrtl.uint<1>, in d: !firrtl.uint<1>, out x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out z: !firrtl.uint<1>, out w: !firrtl.uint<1>)
+    firrtl.matchingconnect %f_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %f_b, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %f_c, %c : !firrtl.uint<1>
+    firrtl.matchingconnect %f_d, %d : !firrtl.uint<1>
+    firrtl.matchingconnect %x, %f_x : !firrtl.uint<1>
+    firrtl.matchingconnect %y, %f_y : !firrtl.uint<1>
+    firrtl.matchingconnect %z, %f_z : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %f_w : !firrtl.uint<1>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RotatedFoldsLoop.{g.a <- g.w <- g.d <- g.z <- g.a}}}
+  firrtl.module @RotatedFoldsLoop(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+    %g_a, %g_b, %g_c, %g_d, %g_x, %g_y, %g_z, %g_w = firrtl.instance g @Wrap(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, in c: !firrtl.uint<1>, in d: !firrtl.uint<1>, out x: !firrtl.uint<1>, out y: !firrtl.uint<1>, out z: !firrtl.uint<1>, out w: !firrtl.uint<1>)
+    firrtl.matchingconnect %g_a, %g_w : !firrtl.uint<1>
+    firrtl.matchingconnect %g_b, %i : !firrtl.uint<1>
+    firrtl.matchingconnect %g_c, %i : !firrtl.uint<1>
+    firrtl.matchingconnect %g_d, %g_z : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %g_y : !firrtl.uint<1>
   }
 }
