@@ -36,80 +36,81 @@ pir.cell @test {} {
   //===----------------------------------------------------------------------===//
 
   // CHECK: pir.assert_property {{%.+}} : !pir.clocked_property
-  // CHECK: pir.assert_property {{%.+}} always : !pir.clocked_property
   // CHECK: pir.assert_property {{%.+}} initial : !pir.clocked_property
   // CHECK: pir.assert_property {{%.+}} disable iff {{%.+}} : !pir.clocked_property
-  // CHECK: pir.assert_property {{%.+}} always disable iff {{%.+}} : !pir.clocked_property
+  // CHECK: pir.assert_property {{%.+}} initial disable iff {{%.+}} : !pir.clocked_property
   // CHECK: pir.assert_property {{%.+}} on {{%.+}} : !pir.clocked_property
-  // CHECK: pir.assert_property {{%.+}} always on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.assert_property {{%.+}} initial on {{%.+}} : !pir.clocked_property
   // CHECK: pir.assert_property {{%.+}} disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
-  // CHECK: pir.assert_property {{%.+}} always disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.assert_property {{%.+}} initial disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.assert_property {{%.+}} strong initial disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
   pir.assert_property %clk_p : !pir.clocked_property
-  pir.assert_property %clk_p always : !pir.clocked_property
   pir.assert_property %clk_p initial : !pir.clocked_property
   pir.assert_property %clk_p disable iff %b : !pir.clocked_property
-  pir.assert_property %clk_p always disable iff %b : !pir.clocked_property
+  pir.assert_property %clk_p initial disable iff %b : !pir.clocked_property
   pir.assert_property %clk_p on %b : !pir.clocked_property
-  pir.assert_property %clk_p always on %b : !pir.clocked_property
+  pir.assert_property %clk_p initial on %b : !pir.clocked_property
   pir.assert_property %clk_p disable iff %b on %b : !pir.clocked_property
-  pir.assert_property %clk_p always disable iff %b on %b : !pir.clocked_property
+  pir.assert_property %clk_p initial disable iff %b on %b : !pir.clocked_property
+  pir.assert_property %clk_p strong initial disable iff %b on %b : !pir.clocked_property
+
 
   // CHECK: pir.assume_property {{%.+}} : !pir.clocked_property
-  // CHECK: pir.assume_property {{%.+}} always : !pir.clocked_property
   // CHECK: pir.assume_property {{%.+}} initial : !pir.clocked_property
   // CHECK: pir.assume_property {{%.+}} disable iff {{%.+}} : !pir.clocked_property
-  // CHECK: pir.assume_property {{%.+}} always disable iff {{%.+}} : !pir.clocked_property
+  // CHECK: pir.assume_property {{%.+}} initial disable iff {{%.+}} : !pir.clocked_property
   // CHECK: pir.assume_property {{%.+}} on {{%.+}} : !pir.clocked_property
-  // CHECK: pir.assume_property {{%.+}} always on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.assume_property {{%.+}} initial on {{%.+}} : !pir.clocked_property
   // CHECK: pir.assume_property {{%.+}} disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
-  // CHECK: pir.assume_property {{%.+}} always disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.assume_property {{%.+}} initial disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.assume_property {{%.+}} strong initial disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
   pir.assume_property %clk_p : !pir.clocked_property
-  pir.assume_property %clk_p always : !pir.clocked_property
   pir.assume_property %clk_p initial : !pir.clocked_property
   pir.assume_property %clk_p disable iff %b : !pir.clocked_property
-  pir.assume_property %clk_p always disable iff %b : !pir.clocked_property
+  pir.assume_property %clk_p initial disable iff %b : !pir.clocked_property
   pir.assume_property %clk_p on %b : !pir.clocked_property
-  pir.assume_property %clk_p always on %b : !pir.clocked_property
+  pir.assume_property %clk_p initial on %b : !pir.clocked_property
   pir.assume_property %clk_p disable iff %b on %b : !pir.clocked_property
-  pir.assume_property %clk_p always disable iff %b on %b : !pir.clocked_property
+  pir.assume_property %clk_p initial disable iff %b on %b : !pir.clocked_property
+  pir.assume_property %clk_p strong initial disable iff %b on %b : !pir.clocked_property
 
   // CHECK: pir.cover_property {{%.+}} : !pir.clocked_property
-  // CHECK: pir.cover_property {{%.+}} always : !pir.clocked_property
   // CHECK: pir.cover_property {{%.+}} initial : !pir.clocked_property
   // CHECK: pir.cover_property {{%.+}} disable iff {{%.+}} : !pir.clocked_property
-  // CHECK: pir.cover_property {{%.+}} always disable iff {{%.+}} : !pir.clocked_property
+  // CHECK: pir.cover_property {{%.+}} initial disable iff {{%.+}} : !pir.clocked_property
   // CHECK: pir.cover_property {{%.+}} on {{%.+}} : !pir.clocked_property
-  // CHECK: pir.cover_property {{%.+}} always on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.cover_property {{%.+}} initial on {{%.+}} : !pir.clocked_property
   // CHECK: pir.cover_property {{%.+}} disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
-  // CHECK: pir.cover_property {{%.+}} always disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.cover_property {{%.+}} initial disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.cover_property {{%.+}} weak initial disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
   pir.cover_property %clk_p : !pir.clocked_property
-  pir.cover_property %clk_p always : !pir.clocked_property
   pir.cover_property %clk_p initial : !pir.clocked_property
   pir.cover_property %clk_p disable iff %b : !pir.clocked_property
-  pir.cover_property %clk_p always disable iff %b : !pir.clocked_property
+  pir.cover_property %clk_p initial disable iff %b : !pir.clocked_property
   pir.cover_property %clk_p on %b : !pir.clocked_property
-  pir.cover_property %clk_p always on %b : !pir.clocked_property
+  pir.cover_property %clk_p initial on %b : !pir.clocked_property
   pir.cover_property %clk_p disable iff %b on %b : !pir.clocked_property
-  pir.cover_property %clk_p always disable iff %b on %b : !pir.clocked_property
+  pir.cover_property %clk_p initial disable iff %b on %b : !pir.clocked_property
+  pir.cover_property %clk_p weak initial disable iff %b on %b : !pir.clocked_property
 
   // CHECK: pir.restrict {{%.+}} : !pir.clocked_property
-  // CHECK: pir.restrict {{%.+}} always : !pir.clocked_property
   // CHECK: pir.restrict {{%.+}} initial : !pir.clocked_property
   // CHECK: pir.restrict {{%.+}} disable iff {{%.+}} : !pir.clocked_property
-  // CHECK: pir.restrict {{%.+}} always disable iff {{%.+}} : !pir.clocked_property
+  // CHECK: pir.restrict {{%.+}} initial disable iff {{%.+}} : !pir.clocked_property
   // CHECK: pir.restrict {{%.+}} on {{%.+}} : !pir.clocked_property
-  // CHECK: pir.restrict {{%.+}} always on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.restrict {{%.+}} initial on {{%.+}} : !pir.clocked_property
   // CHECK: pir.restrict {{%.+}} disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
-  // CHECK: pir.restrict {{%.+}} always disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.restrict {{%.+}} initial disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
+  // CHECK: pir.restrict {{%.+}} weak initial disable iff {{%.+}} on {{%.+}} : !pir.clocked_property
   pir.restrict %clk_p : !pir.clocked_property
-  pir.restrict %clk_p always : !pir.clocked_property
   pir.restrict %clk_p initial : !pir.clocked_property
   pir.restrict %clk_p disable iff %b : !pir.clocked_property
-  pir.restrict %clk_p always disable iff %b : !pir.clocked_property
+  pir.restrict %clk_p initial disable iff %b : !pir.clocked_property
   pir.restrict %clk_p on %b : !pir.clocked_property
-  pir.restrict %clk_p always on %b : !pir.clocked_property
+  pir.restrict %clk_p initial on %b : !pir.clocked_property
   pir.restrict %clk_p disable iff %b on %b : !pir.clocked_property
-  pir.restrict %clk_p always disable iff %b on %b : !pir.clocked_property
+  pir.restrict %clk_p initial disable iff %b on %b : !pir.clocked_property
+  pir.restrict %clk_p weak initial disable iff %b on %b : !pir.clocked_property
 
   //===---------------------------------------------------------------------===//
   // Clocking Ops

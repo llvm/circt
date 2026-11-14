@@ -100,12 +100,13 @@ class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = []> :
 
   let arguments = (ins 
     PIRClockedPropertyType:$property,
-    OptionalAttr<ScopeAttr>:$scope,
+    UnitAttr:$isStrong,
+    UnitAttr:$isInitial,
     Optional<I1>:$disable,
     Optional<I1>:$enable
   );
   let assemblyFormat = [{
-    $property ($scope^)? (`disable` `iff` $disable^)? (`on` $enable^)? attr-dict `:` type($property)
+    $property (`strong` $isStrong^)? (`initial` $isInitial^)? (`disable` `iff` $disable^)? (`on` $enable^)? attr-dict `:` type($property)
   }];
 
   let hasCanonicalizer = true;
@@ -117,7 +118,9 @@ def AssertPropertyOp : AssertPropertyLikeOp<"assert_property"> {
     Concurrent assertion that checks if the current property holds.
     This only accepts clocked properties, thus all other types must 
     be explicitly casted to a clocked property, using an appropriate type 
-    conversion operation, before they can be asserted.
+    conversion operation, before they can be asserted. By default these 
+    properties are considered weak, unless `strong` is specified, and are 
+    checked under an `always` scope, unless `initial` is specified.
   }];
 }
 
@@ -127,7 +130,9 @@ def AssumePropertyOp : AssertPropertyLikeOp<"assume_property"> {
     Concurrent assumption that checks if the current property holds.
     This only accepts clocked properties, thus all other types must 
     be explicitly casted to a clocked property, using an appropriate type 
-    conversion operation, before they can be assumed. 
+    conversion operation, before they can be assumed. By default these 
+    properties are considered weak, unless `strong` is specified, and are 
+    checked under an `always` scope, unless `initial` is specified.
     Concurrent assumptions are treated alongside assertions without directly 
     impacting their timing. As such if an assumption turns out to not hold, then 
     ongoing assertions that depend on it will be disabled as the assumed property 
@@ -135,21 +140,42 @@ def AssumePropertyOp : AssertPropertyLikeOp<"assume_property"> {
   }];
 }
 
-def RestrictOp : AssertPropertyLikeOp<"restrict"> {
+class CoverPropertyLikeOp<string mnemonic, list<Trait> traits = []> : 
+  PIRInnerOp<mnemonic, traits # [AttrSizedOperandSegments]> {
+
+  let arguments = (ins 
+    PIRClockedPropertyType:$property,
+    UnitAttr:$isWeak,
+    UnitAttr:$isInitial,
+    Optional<I1>:$disable,
+    Optional<I1>:$enable
+  );
+  let assemblyFormat = [{
+    $property (`weak` $isWeak^)? (`initial` $isInitial^)? (`disable` `iff` $disable^)? (`on` $enable^)? attr-dict `:` type($property)
+  }];
+
+  let hasCanonicalizer = true;
+}
+
+def RestrictOp : CoverPropertyLikeOp<"restrict"> {
   let summary = "Restricts the input space checked for a given property.";
   let description = [{
     Similarly to Assumptions, restrictions allow for a property's input space to be 
     constrained. They differ mainly in simulation semantics, where an assumption must 
     be checked before it is applied, a restriction is just applied regardless of its 
-    validity. Restrict is identical to assume in the context of formal verification.
+    validity. By default these properties are considered strong, unless `weak` is specified, 
+    and are checked under an `always` scope, unless `initial` is specified.
+    Restrict is identical to assume in the context of formal verification.
   }];
 }
 
-def CoverPropertyOp : AssertPropertyLikeOp<"cover_property"> {
+def CoverPropertyOp : CoverPropertyLikeOp<"cover_property"> {
   let summary = "Cover-point that tracks how often a property holds.";
   let description = [{
-    Tracks how often a concurrent property holds. Will yeald a coverage report 
-    in the end. Mostly makes sense in the context of finite traces, e.g. simulation.
+    Tracks how often a concurrent property holds. By default these properties are 
+    considered strong, unless `weak` is specified, and are checked under an `always` scope, 
+    unless `initial` is specified.. Will yield a coverage report in the end. 
+    Mostly makes sense in the context of finite traces, e.g. simulation.
   }];
 }
 
