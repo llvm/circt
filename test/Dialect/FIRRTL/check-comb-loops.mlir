@@ -115,7 +115,7 @@ firrtl.circuit "hasloops"   {
 // Multiple simple loops in one SCC
 // CHECK-NOT: firrtl.circuit "hasloops"
 firrtl.circuit "hasloops"   {
-  // expected-error @below {{hasloops.{b <- ... <- d <- ... <- e <- b}}}
+  // expected-error @below {{hasloops.{a <- ... <- c <- b <- ... <- a}}}
   firrtl.module @hasloops(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
     %a = firrtl.wire  : !firrtl.uint<1>
     %b = firrtl.wire  : !firrtl.uint<1>

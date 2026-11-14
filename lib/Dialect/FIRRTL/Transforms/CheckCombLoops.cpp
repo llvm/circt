@@ -24,10 +24,10 @@
 // operation, to record the values that can potentially drive another value.
 // Each node in the graph is a fieldRef. Each edge represents a dataflow from
 // the source to the sink.
-// 3. Perform a DFS traversal on the graph, to detect combinational loops and
-// paths between ports.
-// 4. Inline the combinational paths discovered in each module to its instance
-// and continue the analysis through the instance graph.
+// 3. Visit the nodes in topological order, to detect combinational loops and
+// record the sets of ports that reach each output port.
+// 4. Add those sets to the graph of each instance's parent and continue the
+// analysis through the instance graph.
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
@@ -40,6 +40,9 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/bit.h"
+#include <optional>
 
 #define DEBUG_TYPE "check-comb-loops"
 
@@ -55,6 +58,203 @@ using namespace firrtl;
 
 using DrivenBysMapType = DenseMap<FieldRef, DenseSet<FieldRef>>;
 
+namespace {
+/// Sets of port fields. Set i is field i alone for i below the number of
+/// fields, and the union of two lower sets above it.
+struct PortSets {
+  SmallVector<FieldRef> fields;
+  SmallVector<std::pair<unsigned, unsigned>> unions;
+
+  unsigned size() const { return fields.size() + unions.size(); }
+  bool isField(unsigned set) const { return set < fields.size(); }
+  /// The two lower sets a union joins.
+  std::pair<unsigned, unsigned> parts(unsigned set) const {
+    return unions[set - fields.size()];
+  }
+  /// Calls `fn` once on each field of a set.
+  void forEachField(unsigned set, llvm::function_ref<void(FieldRef)> fn) const {
+    SmallVector<unsigned> stack{set};
+    DenseSet<unsigned> seen;
+    while (!stack.empty()) {
+      auto part = stack.pop_back_val();
+      if (!seen.insert(part).second)
+        continue;
+      if (isField(part)) {
+        fn(fields[part]);
+        continue;
+      }
+      auto [lhs, rhs] = parts(part);
+      stack.append({lhs, rhs});
+    }
+  }
+};
+
+/// The combinational paths into a module's output ports, as the set of port
+/// fields that reaches each of them.
+struct PortPaths {
+  PortSets sets;
+  /// Each output port field reached by a port field, and its set.
+  SmallVector<std::pair<FieldRef, unsigned>> outputs;
+  /// The forceable output ports' paths, whose RWProbes are told apart from
+  /// loops by the ports they reach.
+  DrivenBysMapType forceable;
+};
+
+/// Port field sets as hash-consed big-endian Patricia tries (Okasaki and
+/// Gill, "Fast Mergeable Integer Maps", 1998), in `sets`: set i below the
+/// number of fields is field i, and each set above is a trie branch, the
+/// union of its two lower subtries. Equal sets are one set, so the union of a
+/// set with one it holds is that set. Fields are numbered in the order the
+/// connectivity graph meets them, so the fields a node reaches tend to share
+/// their high bits.
+class PortTries {
+public:
+  static constexpr unsigned none = ~0u;
+
+  explicit PortTries(SmallVector<FieldRef> fields) {
+    sets.fields = std::move(fields);
+  }
+
+  /// The fields and the unions made so far.
+  const PortSets &getSets() const { return sets; }
+
+  /// The union of two sets. Sets are canonical, so a pair of operands names
+  /// one result and is memoized. The merges run on an explicit stack of the
+  /// branches still waiting for their subtries.
+  unsigned unite(unsigned a, unsigned b) {
+    unsigned set = start(a, b);
+    while (!stack.empty()) {
+      Frame &frame = stack.back();
+      if (set != pending)
+        frame.subtries[frame.next++] = set;
+      if (frame.next < 2) {
+        auto [lhs, rhs] = frame.operands[frame.next];
+        set = start(lhs, rhs);
+        continue;
+      }
+      auto key = frame.key;
+      set =
+          branch(frame.prefix, frame.bit, frame.subtries[0], frame.subtries[1]);
+      stack.pop_back();
+      unions[key] = set;
+    }
+    return set;
+  }
+
+private:
+  /// A union whose frame is on the stack.
+  static constexpr unsigned pending = ~0u - 1;
+
+  /// The union of `a` and `b`, or `pending` with a frame for it on the
+  /// stack.
+  unsigned start(unsigned a, unsigned b) {
+    if (a == b || b == none)
+      return a;
+    if (a == none)
+      return b;
+    auto key = std::minmax(a, b);
+    if (auto it = unions.find(key); it != unions.end())
+      return it->second;
+    unsigned set = merge(key);
+    if (set != pending)
+      unions[key] = set;
+    return set;
+  }
+
+  unsigned numFields() const { return sets.fields.size(); }
+  bool isField(unsigned set) const { return sets.isField(set); }
+  /// The high bits shared by a set's fields, above its branching bit.
+  unsigned prefix(unsigned set) const {
+    return isField(set) ? set : branches[set - numFields()].prefix;
+  }
+  unsigned bit(unsigned set) const { return branches[set - numFields()].bit; }
+  unsigned zeros(unsigned set) const { return sets.parts(set).first; }
+  unsigned ones(unsigned set) const { return sets.parts(set).second; }
+  static unsigned mask(unsigned key, unsigned bit) {
+    return key & ~(bit | (bit - 1));
+  }
+  static bool matches(unsigned key, unsigned prefix, unsigned bit) {
+    return mask(key, bit) == prefix;
+  }
+
+  /// The trie branching on `bit` into `zeros` and `ones`, made once. It is
+  /// their union, so it is memoized with the unions. A branch is made after
+  /// its subtries, so its id is above theirs.
+  unsigned branch(unsigned prefix, unsigned bit, unsigned zeros,
+                  unsigned ones) {
+    auto [it, inserted] =
+        unions.try_emplace(std::minmax(zeros, ones), sets.size());
+    if (inserted) {
+      sets.unions.emplace_back(zeros, ones);
+      branches.push_back({prefix, bit});
+    }
+    return it->second;
+  }
+
+  /// Joins two disjoint tries by their highest differing prefix bit.
+  unsigned join(unsigned p, unsigned s, unsigned q, unsigned t) {
+    unsigned bit = llvm::bit_floor(p ^ q);
+    return (p & bit) ? branch(mask(p, bit), bit, t, s)
+                     : branch(mask(p, bit), bit, s, t);
+  }
+
+  /// Pushes the branch on `bit` whose subtries are the unions of the two
+  /// operand pairs.
+  unsigned push(std::pair<unsigned, unsigned> key, unsigned prefix,
+                unsigned bit, std::pair<unsigned, unsigned> zeros,
+                std::pair<unsigned, unsigned> ones) {
+    stack.push_back({key, prefix, bit, {zeros, ones}, {none, none}, 0});
+    return pending;
+  }
+
+  /// The union of two distinct sets, or `pending` if it waits on the
+  /// unions of their subtries.
+  unsigned merge(std::pair<unsigned, unsigned> key) {
+    auto [s, t] = key;
+    if (isField(s) && isField(t))
+      return join(s, s, t, t);
+    if (isField(t))
+      std::swap(s, t);
+    unsigned q = prefix(t), n = bit(t);
+    if (isField(s)) {
+      if (!matches(s, q, n))
+        return join(s, s, q, t);
+      unsigned t0 = zeros(t), t1 = ones(t);
+      return (s & n) ? push(key, q, n, {t0, none}, {s, t1})
+                     : push(key, q, n, {s, t0}, {t1, none});
+    }
+    unsigned p = prefix(s), m = bit(s);
+    unsigned s0 = zeros(s), s1 = ones(s), t0 = zeros(t), t1 = ones(t);
+    if (m == n && p == q)
+      return push(key, p, m, {s0, t0}, {s1, t1});
+    if (m > n && matches(q, p, m))
+      return (q & m) ? push(key, p, m, {s0, none}, {s1, t})
+                     : push(key, p, m, {s0, t}, {s1, none});
+    if (n > m && matches(p, q, n))
+      return (p & n) ? push(key, q, n, {t0, none}, {s, t1})
+                     : push(key, q, n, {s, t0}, {t1, none});
+    return join(p, s, q, t);
+  }
+
+  struct Branch {
+    unsigned prefix, bit;
+  };
+  /// A union waiting for the unions of its operand pairs, its subtries.
+  struct Frame {
+    std::pair<unsigned, unsigned> key;
+    unsigned prefix, bit;
+    std::pair<unsigned, unsigned> operands[2];
+    unsigned subtries[2];
+    unsigned next;
+  };
+  PortSets sets;
+  SmallVector<Branch> branches;
+  SmallVector<Frame> stack;
+  /// Each union and branch by its operands.
+  DenseMap<std::pair<unsigned, unsigned>, unsigned> unions;
+};
+} // namespace
+
 class DiscoverLoops {
 
   /// Adjacency list representation.
@@ -67,17 +267,140 @@ class DiscoverLoops {
       SmallVector<std::pair<FieldRef, SmallVector<unsigned>>, 64>;
 
 public:
-  DiscoverLoops(
-      FModuleOp module, InstanceGraph &instanceGraph,
-      const DenseMap<FModuleLike, DrivenBysMapType> &otherModulePortPaths,
-      DrivenBysMapType &thisModulePortPaths)
+  DiscoverLoops(FModuleOp module, InstanceGraph &instanceGraph,
+                const DenseMap<FModuleLike, PortPaths> &otherModulePortPaths,
+                PortPaths &thisModulePortPaths)
       : module(module), instanceGraph(instanceGraph),
         modulePortPaths(otherModulePortPaths), portPaths(thisModulePortPaths) {}
 
+  /// Records the module's port paths. Fails on a combinational cycle, which
+  /// is reported.
   LogicalResult processModule() {
     LLVM_DEBUG(llvm::dbgs() << "\n processing module :" << module.getName());
     constructConnectivityGraph(module);
-    return dfsTraverse(drivenBy);
+    return recordPortPaths();
+  }
+
+  /// Records the paths between ports in one pass over the nodes in
+  /// topological order, drivers first; reports a cycle and fails if the graph
+  /// has one. Each node gets the set of port fields that reach it.
+  LogicalResult recordPortPaths() {
+    SmallVector<unsigned> reach;
+    PortTries tries = seedPortSets(reach);
+    if (failed(propagatePortSets(tries, reach)))
+      return failure();
+    exportPortPaths(tries, reach);
+    return success();
+  }
+
+  /// Numbers the port fields the nodes hold, field i being set i, and sets
+  /// each node's `reach` to the fields it holds: itself if it is a port, and
+  /// the ports holding an RWProbe of it.
+  PortTries seedPortSets(SmallVectorImpl<unsigned> &reach) {
+    SmallVector<FieldRef> fields;
+    DenseMap<FieldRef, unsigned> fieldIds;
+    SmallVector<std::pair<unsigned, unsigned>> nodeFields;
+    for (unsigned node = 0, e = drivenBy.size(); node < e; ++node) {
+      auto ref = drivenBy[node].first;
+      if (!ref)
+        continue;
+      SmallSetVector<FieldRef, 4> held;
+      if (isa<BlockArgument>(ref.getValue()))
+        held.insert(ref);
+      addToPortPathsIfRWProbe(node, held);
+      for (auto field : held) {
+        auto [it, inserted] = fieldIds.try_emplace(field, fields.size());
+        if (inserted)
+          fields.push_back(field);
+        nodeFields.emplace_back(node, it->second);
+      }
+    }
+    PortTries tries(std::move(fields));
+    reach.assign(drivenBy.size(), PortTries::none);
+    for (auto [node, field] : nodeFields)
+      reach[node] = tries.unite(reach[node], field);
+    return tries;
+  }
+
+  /// Unites each node's set with its drivers', visiting the nodes in Kahn's
+  /// order. Reports a cycle and fails if the graph has one.
+  LogicalResult propagatePortSets(PortTries &tries,
+                                  MutableArrayRef<unsigned> reach) {
+    unsigned numNodes = drivenBy.size();
+    SmallVector<unsigned> pending(numNodes);
+    SmallVector<SmallVector<unsigned, 2>> sinks(numNodes);
+    for (unsigned node = 0; node < numNodes; ++node) {
+      pending[node] = drivenBy[node].second.size();
+      for (auto driver : drivenBy[node].second)
+        sinks[driver].push_back(node);
+    }
+    SmallVector<unsigned> order;
+    for (unsigned node = 0; node < numNodes; ++node)
+      if (!pending[node])
+        order.push_back(node);
+    for (size_t head = 0; head < order.size(); ++head) {
+      unsigned node = order[head];
+      for (auto driver : drivenBy[node].second)
+        reach[node] = tries.unite(reach[node], reach[driver]);
+      for (auto sink : sinks[node])
+        if (!--pending[sink])
+          order.push_back(sink);
+    }
+    if (order.size() == numNodes)
+      return success();
+    reportCycle(pending);
+    return failure();
+  }
+
+  /// Exports each output port's set into `portPaths`, with the sets it is
+  /// made of. A forceable port's set is exported flattened.
+  void exportPortPaths(PortTries &tries, ArrayRef<unsigned> reach) {
+    SmallVector<std::pair<FieldRef, unsigned>> outputs;
+    for (auto &[port, drivers] : drivenBy) {
+      auto arg = llvm::dyn_cast_if_present<BlockArgument>(port.getValue());
+      if (!arg || module.getPortDirection(arg.getArgNumber()) != Direction::Out)
+        continue;
+      unsigned set = PortTries::none;
+      for (auto driver : drivers)
+        set = tries.unite(set, reach[driver]);
+      if (set == PortTries::none)
+        continue;
+      auto ref = type_dyn_cast<RefType>(port.getValue().getType());
+      if (!ref || !ref.getForceable()) {
+        outputs.emplace_back(port, set);
+        continue;
+      }
+      auto &inputs = portPaths.forceable[port];
+      tries.getSets().forEachField(
+          set, [&](FieldRef field) { inputs.insert(field); });
+    }
+
+    // Keep the sets the outputs need, in order. A union's parts are lower
+    // sets, so one backward pass finds them.
+    const PortSets &sets = tries.getSets();
+    SmallVector<bool> needed(sets.size(), false);
+    for (auto [port, set] : outputs)
+      needed[set] = true;
+    for (unsigned set = sets.size(); set-- > sets.fields.size();)
+      if (needed[set]) {
+        auto [lhs, rhs] = sets.parts(set);
+        needed[lhs] = needed[rhs] = true;
+      }
+    PortSets &out = portPaths.sets;
+    SmallVector<unsigned> renumbered(sets.size());
+    for (unsigned set = 0; set < sets.size(); ++set) {
+      if (!needed[set])
+        continue;
+      renumbered[set] = out.size();
+      if (sets.isField(set)) {
+        out.fields.push_back(sets.fields[set]);
+        continue;
+      }
+      auto [lhs, rhs] = sets.parts(set);
+      out.unions.emplace_back(renumbered[lhs], renumbered[rhs]);
+    }
+    for (auto [port, set] : outputs)
+      portPaths.outputs.emplace_back(port, renumbered[set]);
   }
 
   void constructConnectivityGraph(FModuleOp module) {
@@ -336,6 +659,25 @@ public:
     auto modulePaths = modulePortPaths.find(refMod);
     if (modulePaths == modulePortPaths.end())
       return;
+    const PortPaths &paths = modulePaths->second;
+    auto instancePort = [&](FieldRef modPort) {
+      auto argNum = cast<BlockArgument>(modPort.getValue()).getArgNumber();
+      return FieldRef(instResults[argNum], modPort.getFieldID());
+    };
+
+    // Field i's node is its instance port, and each union's node is a hub
+    // driven by its parts' nodes.
+    SmallVector<unsigned> setNodes;
+    for (auto field : paths.sets.fields)
+      setNodes.push_back(getOrAddNode(instancePort(field)));
+    for (auto [lhs, rhs] : paths.sets.unions) {
+      drivenBy.push_back({FieldRef(), {setNodes[lhs], setNodes[rhs]}});
+      setNodes.push_back(drivenBy.size() - 1);
+    }
+    for (auto [port, set] : paths.outputs)
+      drivenBy[getOrAddNode(instancePort(port))].second.push_back(
+          setNodes[set]);
+
     // Note: Handling RWProbes.
     // 1. For RWProbes, output ports can be source of dataflow.
     // 2. All the RWProbes that refer to the same base value form a strongly
@@ -349,7 +691,7 @@ public:
     //    port in the set.
     // 4. This will ensure we can detect cycles involving different RWProbes to
     //    the same base value.
-    for (auto &path : modulePaths->second) {
+    for (auto &path : paths.forceable) {
       auto modSinkPortField = path.first;
       auto sinkArgNum =
           cast<BlockArgument>(modSinkPortField.getValue()).getArgNumber();
@@ -386,8 +728,8 @@ public:
                   rwProbeClasses.findLeader(srcNode))
             continue;
           // Check if sinkPort is a driver of sourcePort.
-          auto drivenBysToSrcPort = modulePaths->second.find(modSrcPortField);
-          if (drivenBysToSrcPort != modulePaths->second.end())
+          auto drivenBysToSrcPort = paths.forceable.find(modSrcPortField);
+          if (drivenBysToSrcPort != paths.forceable.end())
             if (llvm::find(drivenBysToSrcPort->second, modSinkPortField) !=
                 drivenBysToSrcPort->second.end()) {
               // This case can occur when there are multiple RWProbes on the
@@ -480,88 +822,27 @@ public:
     valToFieldRefs[result].emplace_back(base, fieldID);
   }
 
-  // Perform an iterative DFS traversal of the given graph. Record paths between
-  // the ports and detect and report any cycles in the graph.
-  LogicalResult dfsTraverse(const DrivenByGraphType &graph) {
-    auto numNodes = graph.size();
-    SmallVector<bool> onStack(numNodes, false);
-    SmallVector<unsigned> dfsStack;
-
-    auto hasCycle = [&](unsigned rootNode, DenseSet<unsigned> &visited,
-                        bool recordPortPaths = false) {
-      if (visited.contains(rootNode))
-        return success();
-      dfsStack.push_back(rootNode);
-
-      while (!dfsStack.empty()) {
-        auto currentNode = dfsStack.back();
-
-        if (!visited.contains(currentNode)) {
-          visited.insert(currentNode);
-          onStack[currentNode] = true;
-          LLVM_DEBUG(llvm::dbgs()
-                     << "\n visiting :"
-                     << drivenBy[currentNode].first.getValue().getType()
-                     << drivenBy[currentNode].first.getValue() << ","
-                     << drivenBy[currentNode].first.getFieldID() << "\n"
-                     << getName(drivenBy[currentNode].first));
-
-          FieldRef currentF = drivenBy[currentNode].first;
-          if (recordPortPaths && currentNode != rootNode) {
-            if (isa<mlir::BlockArgument>(currentF.getValue()))
-              portPaths[drivenBy[rootNode].first].insert(currentF);
-            // Even if the current node is not a port, there can be RWProbes of
-            // the current node at the port.
-            addToPortPathsIfRWProbe(currentNode,
-                                    portPaths[drivenBy[rootNode].first]);
-          }
-        } else {
-          onStack[currentNode] = false;
-          dfsStack.pop_back();
-        }
-
-        for (auto neighbor : graph[currentNode].second) {
-          if (!visited.contains(neighbor)) {
-            dfsStack.push_back(neighbor);
-          } else if (onStack[neighbor]) {
-            // Cycle found !!
-            SmallVector<FieldRef, 16> path;
-            auto loopNode = neighbor;
-            // Construct the cyclic path.
-            do {
-              SmallVector<unsigned>::iterator it =
-                  llvm::find_if(drivenBy[loopNode].second,
-                                [&](unsigned node) { return onStack[node]; });
-              if (it == drivenBy[loopNode].second.end())
-                break;
-
-              path.push_back(drivenBy[loopNode].first);
-              loopNode = *it;
-            } while (loopNode != neighbor);
-
-            reportLoopFound(path, drivenBy[neighbor].first.getLoc());
-            return failure();
-          }
-        }
-      }
-      return success();
-    };
-
-    DenseSet<unsigned> visited;
-    for (unsigned node = 0; node < graph.size(); ++node) {
-      bool isPort = false;
-      if (auto arg = dyn_cast<BlockArgument>(drivenBy[node].first.getValue()))
-        if (module.getPortDirection(arg.getArgNumber()) == Direction::Out) {
-          // For output ports, reset the visited. Required to revisit the entire
-          // graph, to discover all the paths that exist from any input port.
-          visited.clear();
-          isPort = true;
-        }
-
-      if (hasCycle(node, visited, isPort).failed())
-        return failure();
+  /// Reports a cycle among the nodes left with `pending` drivers, each of
+  /// which has a driver left: from the lowest such node, step to the lowest
+  /// driver left until a node repeats.
+  void reportCycle(ArrayRef<unsigned> pending) {
+    DenseMap<unsigned, unsigned> step;
+    SmallVector<unsigned> walk;
+    unsigned node =
+        llvm::find_if(pending, [](unsigned n) { return n; }) - pending.begin();
+    while (step.try_emplace(node, walk.size()).second) {
+      walk.push_back(node);
+      std::optional<unsigned> next;
+      for (auto driver : drivenBy[node].second)
+        if (pending[driver] && (!next || driver < *next))
+          next = driver;
+      node = *next;
     }
-    return success();
+    SmallVector<FieldRef, 16> path;
+    for (auto n : ArrayRef(walk).drop_front(step[node]))
+      if (drivenBy[n].first)
+        path.push_back(drivenBy[n].first);
+    reportLoopFound(path, path.front().getLoc());
   }
 
   void reportLoopFound(SmallVectorImpl<FieldRef> &path, Location loc) {
@@ -609,12 +890,13 @@ public:
 
   void dumpMap() {
     LLVM_DEBUG({
+      auto nodeName = [](FieldRef v) { return v ? getName(v) : "<hub>"; };
       llvm::dbgs() << "\n Connectivity Graph ==>";
       for (const auto &[index, i] : llvm::enumerate(drivenBy)) {
-        llvm::dbgs() << "\n ===>dst:" << getName(i.first)
+        llvm::dbgs() << "\n ===>dst:" << nodeName(i.first)
                      << "::" << i.first.getValue();
         for (auto s : i.second)
-          llvm::dbgs() << "<---" << getName(drivenBy[s].first)
+          llvm::dbgs() << "<---" << nodeName(drivenBy[s].first)
                        << "::" << drivenBy[s].first.getValue();
       }
 
@@ -625,7 +907,7 @@ public:
           llvm::dbgs() << ", FieldRef:" << getName(f) << "::" << f.getFieldID();
       }
       llvm::dbgs() << "\n Port paths:";
-      for (const auto &p : portPaths) {
+      for (const auto &p : portPaths.forceable) {
         llvm::dbgs() << "\n Output :" << getName(p.first);
         for (auto i : p.second)
           llvm::dbgs() << "\n Input  :" << getName(i);
@@ -663,7 +945,7 @@ public:
   }
 
   void addToPortPathsIfRWProbe(unsigned srcNode,
-                               DenseSet<FieldRef> &inputPortPaths) {
+                               SmallSetVector<FieldRef, 4> &inputPortPaths) {
     // Check if there exists any RWProbe for the srcNode.
     auto baseFieldRef = drivenBy[srcNode].first;
     if (auto defOp = dyn_cast_or_null<Forceable>(baseFieldRef.getDefiningOp()))
@@ -693,11 +975,11 @@ private:
   DenseMap<Value, SmallVector<FieldRef>> valToFieldRefs;
   /// Comb paths that exist between module ports. This is maintained across
   /// modules.
-  const DenseMap<FModuleLike, DrivenBysMapType> &modulePortPaths;
+  const DenseMap<FModuleLike, PortPaths> &modulePortPaths;
   /// The comb paths between the ports of this module. This is the final
   /// output of this intra-procedural analysis, that is used to construct the
   /// inter-procedural dataflow.
-  DrivenBysMapType &portPaths;
+  PortPaths &portPaths;
 
   /// This is an adjacency list representation of the connectivity graph. This
   /// can be indexed by the graph node id, and each entry is the list of graph
@@ -724,7 +1006,7 @@ class CheckCombLoopsPass
 public:
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    DenseMap<FModuleLike, DrivenBysMapType> modulePortPaths;
+    DenseMap<FModuleLike, PortPaths> modulePortPaths;
 
     // Traverse modules in a post order to make sure the combinational paths
     // between IOs of a module have been detected and recorded in
