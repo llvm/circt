@@ -553,7 +553,7 @@ TEST(WriteCallbackModeTest, SyncWritesThrowInCallbacks) {
 // Windowed messages, whose frames may be sent across several calls.
 //===----------------------------------------------------------------------===//
 
-TEST(WriteCallbackModeTest, WindowedFramesFinishedBeforeNextFetch) {
+TEST(WriteCallbackModeTest, WindowedFramesSentBeforeNextMessage) {
   TwoFrameWindow types;
   Source source;
   RecordingWritePort port(&types.window);
@@ -566,17 +566,17 @@ TEST(WriteCallbackModeTest, WindowedFramesFinishedBeforeNextFetch) {
   source.push({1, 2, 3, 4});
   source.push({5, 6, 7, 8});
 
-  // The first frame is accepted, the second isn't.
+  // The first frame is accepted, the second isn't. The next message is
+  // fetched and held, but not written until the first one's frames are.
   port.acceptBudget = 1;
   port.notifyAsyncDataAvailable();
   EXPECT_EQ(port.written().size(), 1u);
-  EXPECT_EQ(source.numFetches(), 1u);
+  EXPECT_EQ(source.numFetches(), 2u);
   EXPECT_FALSE(port.poll());
 
   port.acceptBudget = -1;
   EXPECT_TRUE(port.poll());
-  // Each message was fetched only once the previous one's frames were sent.
-  EXPECT_EQ(framesWrittenAtFetch, (std::vector<size_t>{0, 2, 4}));
+  EXPECT_EQ(framesWrittenAtFetch, (std::vector<size_t>{0, 1, 4}));
   EXPECT_EQ(receive(&types.window, port.written()),
             (Frames{{1, 2, 3, 4}, {5, 6, 7, 8}}));
 }

@@ -751,9 +751,8 @@ private:
   /// False once `fetch` returns nullptr (or throws), until notify() is called.
   /// Atomic since notify() sets it without `mutex`.
   std::atomic<bool> dataAvailable = true;
-  /// A fetched message which the port hasn't accepted yet. Once it has, any
-  /// remaining frames of a windowed message are in the port's
-  /// `translationBuffer`. Guarded by `mutex`.
+  /// A fetched message which the port hasn't accepted yet. Guarded by
+  /// `mutex`.
   std::unique_ptr<SegmentedMessageData> pendingMsg;
 };
 
@@ -777,49 +776,38 @@ bool WriteChannelPort::DefaultAsyncWriter::poll() {
 WriteChannelPort::DefaultAsyncWriter::DrainResult
 WriteChannelPort::DefaultAsyncWriter::drain(bool &progress) {
   while (!stopped) {
-    // Fetch a message if the previous one has been completely written.
-    if (!pendingMsg && port.translationBuffer.empty()) {
-      // Cleared before fetching, so a notification which arrives while
-      // fetching (and which would be missed if this returns nullptr) isn't
-      // lost.
-      if (!dataAvailable.exchange(false))
-        return DrainResult::Idle;
-      std::unique_ptr<SegmentedMessageData> msg;
-      try {
-        msg = fetch();
-      } catch (...) {
-        progress = true;
-        callErrorCallback(onError, std::current_exception());
-        continue;
-      }
-      // If the callback disconnected the port, drop the message.
-      if (stopped)
-        break;
-      if (!msg)
-        continue;
-      progress = true;
-      // The callback had data, so it may have more.
-      dataAvailable = true;
-      pendingMsg = std::move(msg);
-    }
-
-    // Write the fetched message, or the remaining frames of a windowed one.
     try {
-      if (pendingMsg) {
-        if (!port.tryWriteSegmentedImpl(pendingMsg))
-          return DrainResult::Blocked;
+      if (!pendingMsg) {
+        // Cleared before fetching, so a notification which arrives while
+        // fetching (and which would be missed if this returns nullptr) isn't
+        // lost.
+        if (!dataAvailable.exchange(false)) {
+          // tryWrite() only sends the rest of a windowed message's frames
+          // before the next message, so with none, send them here.
+          bool framesSent = false;
+          bool flushed = port.flushInternal(&framesSent);
+          progress |= framesSent;
+          return flushed ? DrainResult::Idle : DrainResult::Blocked;
+        }
+        pendingMsg = fetch();
+        // If the callback disconnected the port, drop the message.
+        if (stopped) {
+          pendingMsg.reset();
+          break;
+        }
+        if (!pendingMsg)
+          continue;
         progress = true;
-      } else {
-        size_t framesSentBefore = port.translationBufferIdx;
-        bool flushed = port.flushInternal();
-        progress |= flushed || port.translationBufferIdx != framesSentBefore;
-        if (!flushed)
-          return DrainResult::Blocked;
+        // The callback had data, so it may have more.
+        dataAvailable = true;
       }
+
+      if (!port.tryWriteSegmentedImpl(pendingMsg))
+        return DrainResult::Blocked;
+      progress = true;
     } catch (...) {
       pendingMsg.reset();
-      port.translationBuffer.clear();
-      port.translationBufferIdx = 0;
+      port.discardPendingFrames();
       progress = true;
       callErrorCallback(onError, std::current_exception());
     }
@@ -857,8 +845,7 @@ void WriteChannelPort::connect(const ConnectOptions &options) {
 void WriteChannelPort::connectCallbackMode(const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
-  translationBuffer.clear();
-  translationBufferIdx = 0;
+  discardPendingFrames();
   connectCommon(options);
   mode = Mode::Callback;
 }
@@ -882,10 +869,8 @@ void WriteChannelPort::connect(DataFetchCallback fetch,
 void WriteChannelPort::disconnect() {
   // Translated frames left over from a fetched message are dropped, unless
   // they belong to a sync mode write which should be flushed.
-  if (stopAsyncWriter()) {
-    translationBuffer.clear();
-    translationBufferIdx = 0;
-  }
+  if (stopAsyncWriter())
+    discardPendingFrames();
   mode = Mode::Disconnected;
 }
 
@@ -963,16 +948,22 @@ bool WriteChannelPort::tryWriteInternal(const MessageData &data) {
   return tryWriteImpl(maybePadEmptyMessage(data));
 }
 
-bool WriteChannelPort::flushInternal() {
+bool WriteChannelPort::flushInternal(bool *framesSent) {
   while (translationBufferIdx < translationBuffer.size()) {
     if (!tryWriteImpl(
             maybePadEmptyMessage(translationBuffer[translationBufferIdx])))
       return false;
     ++translationBufferIdx;
+    if (framesSent)
+      *framesSent = true;
   }
+  discardPendingFrames();
+  return true;
+}
+
+void WriteChannelPort::discardPendingFrames() {
   translationBuffer.clear();
   translationBufferIdx = 0;
-  return true;
 }
 
 void WriteChannelPort::callErrorCallback(const WriteErrorCallback &onError,

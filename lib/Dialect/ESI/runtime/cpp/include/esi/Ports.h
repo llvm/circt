@@ -527,7 +527,10 @@ private:
   /// write(), tryWrite() and flush() without the mode check.
   void writeInternal(const MessageData &data);
   bool tryWriteInternal(const MessageData &data);
-  bool flushInternal();
+  /// If `framesSent` is given, sets it to whether any frames were sent.
+  bool flushInternal(bool *framesSent = nullptr);
+  /// Drop the frames of a partially written (windowed) message.
+  void discardPendingFrames();
 
   //===--------------------------------------------------------------------===//
   // Default callback mode implementation.
