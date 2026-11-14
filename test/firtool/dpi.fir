@@ -31,7 +31,7 @@ circuit DPI:
 ; CHECK-NEXT: `endif
 
 ; CHECK-LABEL: module DPI(
-; CHECK:        logic [7:0] [[TMP:_.+]];
+; CHECK:        reg [7:0] [[TMP:_.+]];
 ; CHECK-NEXT:   reg   [7:0] [[RESULT1:_.+]];
 ; CHECK-NEXT:   wire [7:0] [[OPEN_ARRAY:_.+]][0:1];
 ; CHECK-NEXT:   assign [[OPEN_ARRAY]] = '{in_0, in_1};

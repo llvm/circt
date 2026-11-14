@@ -20,8 +20,8 @@ hw.module @Callstack(in %a: i1 loc("")) {
 hw.module @MergedLocations(in %clock: i1, in %flag1 : i1, in %flag2: i1, in %flag3: i1) {
   %true = hw.constant 1 : i1 loc("")
   %false = hw.constant 0 : i1
-  %r1 = sv.reg : !hw.inout<i1>
-  %r2 = sv.reg : !hw.inout<i1>
+  %r1 = sv.var : !sv.var<i1>
+  %r2 = sv.var : !sv.var<i1>
   sv.always posedge %clock {
     
     // Induce FileLineColLoc merging.
@@ -29,7 +29,7 @@ hw.module @MergedLocations(in %clock: i1, in %flag1 : i1, in %flag2: i1, in %fla
     %0 = comb.add %flag1, %flag2 : i1 loc("myFile.x":10:6)
     %1 = comb.add %true, %flag3 : i1 loc("myOtherFile.x":10:5)
     %mergedFLCLoc = comb.add %0, %1 : i1 loc("myOtherFile.x":9:4)
-    sv.passign %r1, %mergedFLCLoc : i1 loc("myFile.x":9:3)
+    sv.passign %r1, %mergedFLCLoc : !sv.var<i1>, i1 loc("myFile.x":9:3)
 
     // Now add in a callstack and named location.
     // Note: We duplicate the operations here to avoid wire spilling.
@@ -41,7 +41,7 @@ hw.module @MergedLocations(in %clock: i1, in %flag1 : i1, in %flag2: i1, in %fla
     "foo"("myFile.x":10:8)
     at callsite("bar"("myFile.x":20:8) 
     at "baz"("myFile.x":30:8))))
-    sv.passign %r2, %callstackLoc : i1 loc("MyNamedLocation")
+    sv.passign %r2, %callstackLoc : !sv.var<i1>, i1 loc("MyNamedLocation")
   }
 }
 }

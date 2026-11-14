@@ -101,7 +101,8 @@ static void spillWiresForInstanceInputs(HWInstanceLike op) {
     else
       nameTmp += std::to_string(opNum);
 
-    auto newWire = sv::WireOp::create(builder, src.getType(), nameTmp);
+    auto newWire =
+        sv::WireOp::create(builder, sv::NetType::get(src.getType()), nameTmp);
     auto newWireRead = ReadInOutOp::create(builder, newWire);
     auto connect = AssignOp::create(builder, newWire, src);
     newWireRead->moveBefore(op);
@@ -120,10 +121,11 @@ static void replacePortWithWire(ImplicitLocOpBuilder &builder, Operation *op,
 
   Value newTarget;
   if (isProcedural) {
-    newTarget = sv::LogicOp::create(builder, result.getType(),
-                                    builder.getStringAttr(name));
+    newTarget = sv::VarOp::create(builder, result.getType(),
+                                  builder.getStringAttr(name));
   } else {
-    newTarget = sv::WireOp::create(builder, result.getType(), name);
+    newTarget =
+        sv::WireOp::create(builder, sv::NetType::get(result.getType()), name);
   }
 
   while (!result.use_empty()) {
@@ -182,7 +184,8 @@ static void lowerInstanceResults(HWInstanceLike op) {
       nameTmp += n.getValue().str();
     else
       nameTmp += std::to_string(resNum);
-    Value newWire = sv::WireOp::create(builder, result.getType(), nameTmp);
+    Value newWire = sv::WireOp::create(
+        builder, sv::NetType::get(result.getType()), nameTmp);
 
     while (!result.use_empty()) {
       auto newWireRead = ReadInOutOp::create(builder, newWire);
@@ -252,9 +255,10 @@ static void lowerUsersToTemporaryWire(Operation &op,
 
     // If the op is in a procedural region, use logic op.
     if (isProceduralRegion)
-      newWire = LogicOp::create(builder, wireElementType, name);
+      newWire = sv::VarOp::create(builder, wireElementType, name);
     else
-      newWire = sv::WireOp::create(builder, wireElementType, name);
+      newWire =
+          sv::WireOp::create(builder, sv::NetType::get(wireElementType), name);
 
     // Replace all uses with newWire. Wrap in ReadInOutOp if required.
     while (!result.use_empty()) {
@@ -499,7 +503,7 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   // Scan to the top of the region tree to find out where to insert the reg.
   Operation *parentOp = findParentInNonProceduralRegion(op);
   OpBuilder builder(parentOp);
-  auto reg = RegOp::create(builder, op->getLoc(), opValue.getType());
+  auto reg = VarOp::create(builder, op->getLoc(), opValue.getType());
 
   // Everything using the expr now uses a read_inout of the reg.
   auto value = ReadInOutOp::create(builder, op->getLoc(), reg);
@@ -872,10 +876,10 @@ static void applyWireLowerings(Block &block,
     Value decl;
     if (isProceduralRegion) {
       decl =
-          LogicOp::create(builder, hwWireOp.getType(), hwWireOp.getNameAttr(),
-                          hwWireOp.getInnerSymAttr());
+          sv::VarOp::create(builder, hwWireOp.getType(), hwWireOp.getNameAttr(),
+                            hwWireOp.getInnerSymAttr());
     } else {
-      decl = sv::WireOp::create(builder, hwWireOp.getType(),
+      decl = sv::WireOp::create(builder, sv::NetType::get(hwWireOp.getType()),
                                 hwWireOp.getNameAttr(),
                                 hwWireOp.getInnerSymAttr());
     }
@@ -993,7 +997,7 @@ static LogicalResult legalizeHWModule(Block &block,
 
     // If a reg or logic is located in a procedural region, we have to move the
     // op declaration to a valid program point.
-    if (isProceduralRegion && isa<LogicOp, RegOp>(op)) {
+    if (isProceduralRegion && isa<LogicOp, RegOp, sv::VarOp>(op)) {
       if (options.disallowLocalVariables) {
         // When `disallowLocalVariables` is enabled, "automatic logic" is
         // prohibited so hoist the op to a non-procedural region.
@@ -1083,9 +1087,9 @@ static LogicalResult legalizeHWModule(Block &block,
           cast<hw::StructType>(structCreateOp.getResult().getType());
       bool procedural = op.getParentOp()->hasTrait<ProceduralRegion>();
       if (procedural)
-        wireOp = LogicOp::create(builder, structType);
+        wireOp = sv::VarOp::create(builder, structType);
       else
-        wireOp = sv::WireOp::create(builder, structType);
+        wireOp = sv::WireOp::create(builder, sv::NetType::get(structType));
 
       for (auto [input, field] :
            llvm::zip(structCreateOp.getInput(), structType.getElements())) {
@@ -1112,9 +1116,9 @@ static LogicalResult legalizeHWModule(Block &block,
       ImplicitLocOpBuilder builder(op.getLoc(), &op);
       Value decl;
       if (procedural)
-        decl = LogicOp::create(builder, arrayInjectOp.getType());
+        decl = sv::VarOp::create(builder, arrayInjectOp.getType());
       else
-        decl = sv::RegOp::create(builder, arrayInjectOp.getType());
+        decl = sv::VarOp::create(builder, arrayInjectOp.getType());
       for (auto &use : llvm::make_early_inc_range(arrayInjectOp->getUses()))
         use.set(ReadInOutOp::create(builder, decl));
 
@@ -1148,7 +1152,7 @@ static LogicalResult legalizeHWModule(Block &block,
       Value readOp;
       if (auto maybeReadOp =
               op.getOperand(1).getDefiningOp<sv::ReadInOutOp>()) {
-        if (isa_and_nonnull<sv::WireOp, LogicOp>(
+        if (isa_and_nonnull<sv::WireOp, LogicOp, sv::VarOp>(
                 maybeReadOp.getInput().getDefiningOp())) {
           wireOp = maybeReadOp.getInput();
           readOp = maybeReadOp;
@@ -1161,10 +1165,11 @@ static LogicalResult legalizeHWModule(Block &block,
         auto type = op.getOperand(1).getType();
         const auto *name = "_GEN_ARRAY_IDX";
         if (op.getParentOp()->hasTrait<ProceduralRegion>()) {
-          wireOp = LogicOp::create(builder, type, name);
+          wireOp =
+              sv::VarOp::create(builder, type, builder.getStringAttr(name));
           BPAssignOp::create(builder, wireOp, op.getOperand(1));
         } else {
-          wireOp = sv::WireOp::create(builder, type, name);
+          wireOp = sv::WireOp::create(builder, sv::NetType::get(type), name);
           AssignOp::create(builder, wireOp, op.getOperand(1));
         }
         readOp = ReadInOutOp::create(builder, wireOp);
@@ -1373,7 +1378,8 @@ static void fixUpEmptyModules(hw::HWEmittableModuleLike module) {
   builder.setInsertionPoint(outputOp);
   auto constant = hw::ConstantOp::create(builder, module.getLoc(),
                                          builder.getBoolAttr(true));
-  auto wire = sv::WireOp::create(builder, module.getLoc(), builder.getI1Type());
+  auto wire = sv::WireOp::create(builder, module.getLoc(),
+                                 sv::NetType::get(builder.getI1Type()));
   sv::setSVAttributes(wire,
                       sv::SVAttributeAttr::get(
                           builder.getContext(),
