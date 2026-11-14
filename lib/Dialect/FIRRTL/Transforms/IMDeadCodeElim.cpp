@@ -125,9 +125,6 @@ private:
   /// instance.
   DenseMap<InstanceOp, SmallVector<hw::HierPathOp>> instanceToHierPaths;
 
-  /// Hierpath to its users (=non-local annotation targets).
-  DenseMap<hw::HierPathOp, SetVector<ElementType>> hierPathToElements;
-
   /// A cache for a (inner)symbol lookp.
   circt::hw::InnerRefNamespace *innerRefNamespace;
   mlir::SymbolTable *symbolTable;
@@ -180,9 +177,6 @@ void IMDeadCodeElimPass::visitHierPathOp(hw::HierPathOp hierPathOp) {
       if (auto instance = dyn_cast_or_null<InstanceOp>(op))
         markAlive(instance);
     }
-
-  for (auto elem : hierPathToElements[hierPathOp])
-    markAlive(elem);
 }
 
 void IMDeadCodeElimPass::markDeclaration(Operation *op) {
@@ -535,7 +529,6 @@ void IMDeadCodeElimPass::runOnOperation() {
   executableBlocks.clear();
   liveElements.clear();
   instanceToHierPaths.clear();
-  hierPathToElements.clear();
 }
 
 void IMDeadCodeElimPass::visitValue(Value value) {
