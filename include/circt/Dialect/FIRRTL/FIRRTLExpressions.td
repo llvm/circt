@@ -1241,6 +1241,27 @@ def ObjectAnyRefCastOp : FIRRTLOp<"object.anyref_cast", [Pure]> {
      "$input attr-dict `:` type($input)";
 }
 
+def DomainAnyRefCastOp : FIRRTLOp<"domain.anyref_cast", [Pure]> {
+  let summary = "Cast domain reference to anyref.";
+  let description = [{
+    Cast a domain reference to AnyRef type.  This is primarily used for allowing
+    domain fields to refer to other domains.
+
+    Example
+    ```
+      %0 = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>
+    ```
+
+    Note: this has no FIRRTL textual representation, like `object.anyref_cast`,
+    and is created as needed during parsing and elided during emission.
+  }];
+
+  let arguments = (ins DomainType:$input);
+  let results = (outs AnyRefType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
+
 def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let summary = "Produce a constant string value";
   let description = [{
@@ -1340,6 +1361,29 @@ def ListConcatOp : FIRRTLOp<"list.concat", [Pure, SameOperandsAndResultType]> {
   let results = (outs ListType:$result);
 
   let assemblyFormat = "$subLists attr-dict `:` type($result)";
+}
+
+def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
+    TypesMatchWith<"list element type should match search element type",
+                   "list", "element",
+                   "type_cast<ListType>($_self).getElementType()">]> {
+  let summary = "Test whether a list contains a property value";
+  let description = [{
+    Returns true if the list contains an element equal to the specified value.
+    Elements can only be those that support equality via `prop.eq`: strings,
+    integers, or booleans.
+
+    Example:
+    ```mlir
+    %found = firrtl.list.contains %list, %element : !firrtl.list<string>
+    ```
+  }];
+
+  let arguments = (ins ListType:$list,
+                       AnyTypeOf<[StringType, BoolType, FIntegerType]>:$element);
+  let results = (outs BoolType:$result);
+
+  let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
 }
 
 def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
@@ -1533,8 +1577,11 @@ def StringConcatOp : FIRRTLOp<"string.concat", [Pure, SameOperandsAndResultType]
 def PropEqOp : FIRRTLOp<"prop.eq", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
   let summary = "Compare two property values for equality";
   let description = [{
-    Compares two property values (String, Bool, or Integer) of the same type
-    for equality, producing a boolean result.
+    Compares two property values (String, Bool, Integer, Class, or AnyRef) of the
+    same type for equality, producing a boolean result. Strings, booleans, and
+    integers are compared by value. Class and AnyRef values are compared by object
+    identity, not by structural equality of object fields. Property assignments
+    and conversion to AnyRef preserve object identity.
 
     Example:
     ```mlir
@@ -1542,8 +1589,10 @@ def PropEqOp : FIRRTLOp<"prop.eq", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
     ```
   }];
 
-  let arguments = (ins AnyTypeOf<[StringType, BoolType, FIntegerType]>:$lhs,
-                       AnyTypeOf<[StringType, BoolType, FIntegerType]>:$rhs);
+  let arguments = (ins AnyTypeOf<[StringType, BoolType, FIntegerType,
+                                 ClassType, AnyRefType]>:$lhs,
+                       AnyTypeOf<[StringType, BoolType, FIntegerType,
+                                 ClassType, AnyRefType]>:$rhs);
   let results = (outs BoolType:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
@@ -1877,6 +1926,17 @@ def LTLNotIntrinsicOp : UnaryLTLIntrinsicOp<"not">;
 def LTLImplicationIntrinsicOp : BinaryLTLIntrinsicOp<"implication">;
 def LTLUntilIntrinsicOp : BinaryLTLIntrinsicOp<"until">;
 def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
+def LTLAcceptOnIntrinsicOp : LTLIntrinsicOp<"accept_on"> {
+  let arguments = (ins
+    NonConstUInt1Type:$input,
+    NonConstUInt1Type:$condition,
+    UnitAttr:$sync
+  );
+  let assemblyFormat = [{
+    $input `,` $condition (`sync` $sync^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
 
 // Past
 def LTLPastIntrinsicOp : LTLIntrinsicOp<"past"> {

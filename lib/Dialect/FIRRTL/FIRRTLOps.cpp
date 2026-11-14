@@ -4118,48 +4118,62 @@ void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
         StringAttr::get(builder.getContext(), name));
 }
 
-LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
-  auto classType = getType();
-  auto className = classType.getNameAttr();
-
-  // verify that the class exists.
+static LogicalResult
+verifyObjectSymbolUses(FObjectLike object, SymbolTableCollection &symbolTable) {
+  auto circuit = object->getParentOfType<CircuitOp>();
   auto classOp = dyn_cast_or_null<ClassLike>(
-      symbolTable.lookupSymbolIn(circuitOp, className));
+      symbolTable.lookupSymbolIn(circuit, object.getClassSymbolAttr()));
   if (!classOp)
-    return emitOpError() << "references unknown class " << className;
-
-  // verify that the result type agrees with the class definition.
-  if (failed(classOp.verifyType(classType, [&]() { return emitOpError(); })))
-    return failure();
-
-  return success();
+    return object->emitOpError("references unknown class ")
+           << object.getClassSymbolAttr();
+  return classOp.verifyType(object.getClassType(),
+                            [&]() { return object->emitOpError(); });
 }
 
-StringAttr ObjectOp::getClassNameAttr() {
-  return getType().getNameAttr().getAttr();
-}
-
-StringRef ObjectOp::getClassName() { return getType().getName(); }
-
-ClassLike ObjectOp::getReferencedClass(const SymbolTable &symbolTable) {
-  auto symRef = getType().getNameAttr();
-  return symbolTable.lookup<ClassLike>(symRef.getLeafReference());
-}
-
-Operation *ObjectOp::getReferencedOperation(const SymbolTable &symtbl) {
-  return getReferencedClass(symtbl);
+LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyObjectSymbolUses(*this, symbolTable);
 }
 
 StringRef ObjectOp::getInstanceName() { return getName(); }
 
 StringAttr ObjectOp::getInstanceNameAttr() { return getNameAttr(); }
 
-StringAttr ObjectOp::getReferencedModuleNameAttr() {
-  return getClassNameAttr();
+void ObjectOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
 }
 
-void ObjectOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+//===----------------------------------------------------------------------===//
+// ObjectCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ObjectCreateOp::verify() {
+  unsigned inputIndex = 0;
+  for (const auto &element : getType().getInputElements()) {
+    if (inputIndex >= getInputs().size())
+      return emitOpError("missing operand for class input ") << element.name;
+    auto inputType = getInputs()[inputIndex].getType();
+    if (inputType != element.type)
+      return emitOpError("class input ")
+             << element.name << " expects " << element.type << ", but operand "
+             << inputIndex << " has type " << inputType;
+    ++inputIndex;
+  }
+  if (inputIndex != getInputs().size())
+    return emitOpError("expected ")
+           << inputIndex << " input operands, but got " << getInputs().size();
+  return success();
+}
+
+LogicalResult
+ObjectCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyObjectSymbolUses(*this, symbolTable);
+}
+
+StringRef ObjectCreateOp::getInstanceName() { return getName(); }
+
+StringAttr ObjectCreateOp::getInstanceNameAttr() { return getNameAttr(); }
+
+void ObjectCreateOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
 
@@ -7168,14 +7182,6 @@ LogicalResult LayerBlockOp::verify() {
             return WalkResult::advance();
 
           // Verify that connects only drive values declared in the layer block.
-          // If we see a non-passive connect destination, then verify that the
-          // source is in the same layer block so that the source is not driven.
-          auto dest =
-              fieldRefCache.getFieldRefFromValue(connect.getDest()).getValue();
-          bool passive = true;
-          if (auto type =
-                  type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType()))
-            passive = type.isPassive();
           // TODO: Improve this verifier.  This is intentionally _not_ verifying
           // a non-passive ConnectLike because it is hugely annoying to do
           // so---it requires a full understanding of if the connect is driving
@@ -7183,8 +7189,18 @@ LogicalResult LayerBlockOp::verify() {
           // which requires deep inspection of the type.  Eventually, the FIRRTL
           // pass pipeline will remove all flips (e.g., canonicalize connect to
           // matchingconnect) and this hole won't exist.
-          if (!passive)
-            return WalkResult::advance();
+          if (auto type =
+                  type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType()))
+            if (!type.isPassive())
+              return WalkResult::advance();
+
+          // Find the underlying declaration containing the destination.
+          // Alternate chasing static and dynamic indexing operation kinds.
+          auto dest =
+              fieldRefCache.getFieldRefFromValue(connect.getDest()).getValue();
+          while (auto subaccess = dest.getDefiningOp<SubaccessOp>())
+            dest = fieldRefCache.getFieldRefFromValue(subaccess.getInput())
+                       .getValue();
 
           if (isAncestorOfValueOwner(getOperation(), dest))
             return WalkResult::advance();

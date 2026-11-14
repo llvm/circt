@@ -55,6 +55,8 @@ struct Emitter {
   void emitModule(FModuleOp op);
   void emitModule(FExtModuleOp op);
   void emitModule(FIntModuleOp op);
+  void emitModule(ClassOp op);
+  void emitModule(ExtClassOp op);
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
@@ -131,6 +133,8 @@ struct Emitter {
   void emitExpression(OpenSubfieldOp op);
   void emitExpression(DomainSubfieldOp op);
   void emitExpression(OpenSubindexOp op);
+  void emitExpression(ObjectAnyRefCastOp op);
+  void emitExpression(DomainAnyRefCastOp op);
   void emitExpression(RefResolveOp op);
   void emitExpression(RefSendOp op);
   void emitExpression(RefSubOp op);
@@ -205,7 +209,17 @@ struct Emitter {
   void emitExpression(PropEqOp op) {
     if (failed(requireVersion({6, 0, 0}, op, "property equality")))
       return;
+    if (type_isa<ClassType, AnyRefType>(op.getLhs().getType()) &&
+        failed(requireVersion(nextFIRVersion, op,
+                              "property equality with AnyRef or Class types")))
+      return;
     emitPrimExpr("prop_eq", op);
+  }
+
+  void emitExpression(ListContainsOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "list contains")))
+      return;
+    emitPrimExpr("list_contains", op);
   }
 
   void emitExpression(BoolAndOp op) {
@@ -432,7 +446,7 @@ private:
     valueNames.insert({value, it.first->getKey()});
   }
   void addForceable(Forceable op, StringAttr attr) {
-    addValueName(op.getData(), attr);
+    addValueName(op.getDataRaw() /* may not be base type */, attr);
     if (op.isForceable()) {
       SmallString<32> rwName;
       (Twine("rwprobe(") + attr.strref() + ")").toVector(rwName);
@@ -479,10 +493,11 @@ void Emitter::emitCircuit(CircuitOp op) {
       if (encounteredError)
         break;
       TypeSwitch<Operation *>(&bodyOp)
-          .Case<FModuleOp, FExtModuleOp, FIntModuleOp>([&](auto op) {
-            emitModule(op);
-            ps << PP::newline;
-          })
+          .Case<FModuleOp, FExtModuleOp, FIntModuleOp, ClassOp, ExtClassOp>(
+              [&](auto op) {
+                emitModule(op);
+                ps << PP::newline;
+              })
           .Case<DomainOp, LayerOp, OptionOp, FormalOp, SimulationOp>(
               [&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
@@ -691,6 +706,43 @@ void Emitter::emitModule(FIntModuleOp op) {
 
     // Emit the parameters.
     emitModuleParameters(op, op.getParameters());
+  });
+}
+
+/// Emit a class.
+void Emitter::emitModule(ClassOp op) {
+  if (failed(requireVersion({6, 0, 0}, op, "classes")))
+    return;
+  startStatement();
+  ps << "class " << PPExtString(legalize(op.getNameAttr())) << " :";
+  emitLocation(op);
+  ps.scopedBox(PP::bbox2, [&]() {
+    setPendingNewline();
+    auto ports = op.getPorts();
+    emitModulePorts(ports, op.getArguments());
+    if (!ports.empty() && !op.getBodyBlock()->empty())
+      ps << PP::newline;
+    emitStatementsInBlock(*op.getBodyBlock());
+    if (ports.empty() && op.getBodyBlock()->empty()) {
+      startStatement();
+      ps << "skip";
+      setPendingNewline();
+    }
+  });
+  valueNames.clear();
+  valueNamesStorage.clear();
+}
+
+/// Emit an external class.
+void Emitter::emitModule(ExtClassOp op) {
+  if (failed(requireVersion({6, 0, 0}, op, "external classes")))
+    return;
+  startStatement();
+  ps << "extclass " << PPExtString(legalize(op.getNameAttr())) << " :";
+  emitLocation(op);
+  ps.scopedBox(PP::bbox2, [&]() {
+    setPendingNewline();
+    emitModulePorts(op.getPorts());
   });
 }
 
@@ -1582,7 +1634,7 @@ void Emitter::emitExpression(Value value) {
     return;
   }
 
-  auto op = value.getDefiningOp();
+  auto *op = value.getDefiningOp();
   assert(op && "value must either be a block arg or the result of an op");
   TypeSwitch<Operation *>(op)
       .Case<
@@ -1602,8 +1654,9 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp, IntegerAndOp, IntegerOrOp, IntegerNotOp,
-          StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp, BoolXorOp,
+          ObjectAnyRefCastOp, DomainAnyRefCastOp, UnknownValueOp, IntegerAndOp,
+          IntegerOrOp, IntegerNotOp, StringConcatOp, PropEqOp, ListContainsOp,
+          BoolAndOp, BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1687,6 +1740,14 @@ void Emitter::emitExpression(OpenSubindexOp op) {
   ps << "[";
   ps.addAsString(op.getIndex());
   ps << "]";
+}
+
+void Emitter::emitExpression(ObjectAnyRefCastOp op) {
+  emitExpression(op.getInput());
+}
+
+void Emitter::emitExpression(DomainAnyRefCastOp op) {
+  emitExpression(op.getInput());
 }
 
 void Emitter::emitExpression(RefSendOp op) {
@@ -1983,6 +2044,10 @@ void Emitter::emitType(Type type, bool includeConst) {
         }
         ps << BreakToken(0, -2) << ">";
         ps.end();
+      })
+      .Case<ClassType>([&](ClassType type) {
+        ps << "Inst<" << PPExtString(legalize(type.getNameAttr().getAttr()))
+           << ">";
       })
       .Case<AnyRefType>([&](AnyRefType type) { ps << "AnyRef"; })
       .Case<StringType>([&](StringType type) { ps << "String"; })

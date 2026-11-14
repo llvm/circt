@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstring>
 #include <deque>
+#include <vector>
 
 using namespace esi;
 
@@ -293,6 +294,51 @@ protected:
 private:
   bool connected = false;
 };
+
+// A write port whose `tryWriteImpl()` accepts `credits` more frames. Unlike
+// `MockWritePort`, it uses the base `connect()`, so window translation works.
+class CreditedWritePort : public WriteChannelPort {
+public:
+  using WriteChannelPort::WriteChannelPort;
+
+  size_t credits = 0;
+  std::vector<MessageData> written;
+
+protected:
+  void writeImpl(const MessageData &data) override { written.push_back(data); }
+  bool tryWriteImpl(const MessageData &data) override {
+    if (credits == 0)
+      return false;
+    --credits;
+    written.push_back(data);
+    return true;
+  }
+};
+
+TEST(TypedPortsTest, TranslatedTryWriteKeepsNothingWhenRefused) {
+  UIntType u8("ui8", 8);
+  StructType into("into", {{"a", &u8}, {"b", &u8}});
+  // Two frames per message.
+  WindowType window("win", "win", &into, &into,
+                    {{"f0", {{"a"}}}, {"f1", {{"b"}}}});
+  CreditedWritePort port(&window);
+  port.connect();
+  MessageData data(std::vector<uint8_t>{1, 2});
+
+  // The first frame is refused: nothing is sent or kept for a later flush.
+  EXPECT_FALSE(port.tryWrite(data));
+  EXPECT_TRUE(port.flush());
+  EXPECT_TRUE(port.written.empty());
+
+  // Only the first frame fits: the rest waits for `flush()`.
+  port.credits = 1;
+  EXPECT_TRUE(port.tryWrite(data));
+  EXPECT_EQ(port.written.size(), 1u);
+  EXPECT_FALSE(port.flush());
+  port.credits = 1;
+  EXPECT_TRUE(port.flush());
+  EXPECT_EQ(port.written.size(), 2u);
+}
 
 TEST(TypedPortsTest, TypedWritePortConnectThrowsOnMismatch) {
   UIntType uint32("ui32", 32);
@@ -580,6 +626,37 @@ TEST(TypedPortsTest, TypedReadPortPODRetriesSameOwnedObjectOnLaterPush) {
       mock.deliver(std::make_unique<MessageData>(packUint32Words({22}))));
   EXPECT_FALSE(mock.hasPending());
   EXPECT_EQ(callbackAttempts, 3u);
+}
+
+TEST(TypedPortsTest, ZeroWidthMessagePlaceholderAndEmpty) {
+  VoidType voidType("void");
+  CallbackDrivenMockReadPort mock(&voidType);
+
+  size_t attempts = 0;
+  mock.connect([&](std::unique_ptr<SegmentedMessageData> &msg) {
+    ++attempts;
+    EXPECT_EQ(msg->totalSize(), 0u);
+    return attempts > 1;
+  });
+
+  EXPECT_FALSE(
+      mock.deliver(std::make_unique<MessageData>(std::vector<uint8_t>{0})));
+  EXPECT_TRUE(mock.hasPending());
+  // The retained message has already had its placeholder stripped; the retry
+  // must accept it rather than reject it as malformed.
+  EXPECT_TRUE(mock.retryPending());
+  EXPECT_FALSE(mock.hasPending());
+  EXPECT_EQ(attempts, 2u);
+
+  // Transports may also send void messages without the placeholder.
+  EXPECT_TRUE(mock.deliver(std::make_unique<MessageData>()));
+  EXPECT_EQ(attempts, 3u);
+
+  EXPECT_THROW(
+      mock.deliver(std::make_unique<MessageData>(std::vector<uint8_t>{0, 0})),
+      std::runtime_error);
+  EXPECT_EQ(mock.numActiveCallbacks(), 0u);
+  mock.disconnect();
 }
 
 TEST(TypedPortsTest, TypedReadPortCustomDeserializerPokesBlockedOutput) {

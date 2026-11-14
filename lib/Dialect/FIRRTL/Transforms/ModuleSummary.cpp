@@ -139,9 +139,8 @@ void ModuleSummaryPass::runOnOperation() {
       llvm::errs() << (p.first.opcount * p.second.size() * p.second.size())
                    << "," << p.first.opcount << "," << p.first.portSizes.size()
                    << "," << p.second.size() << ","
-                   << std::accumulate(p.first.portSizes.begin(),
-                                      p.first.portSizes.end(), 0)
-                   << "," << p.second[0].getName() << "\n";
+                   << llvm::accumulate(p.first.portSizes, 0) << ","
+                   << p.second[0].getName() << "\n";
     }
   markAllAnalysesPreserved();
 }

@@ -57,7 +57,10 @@ class ESIHWBuilder : public circt::ImplicitLocOpBuilder {
 public:
   ESIHWBuilder(Operation *top);
 
-  ArrayAttr getStageParameterList(Attribute value);
+  /// Get the parameter list for the stage module. Values may be null for the
+  /// declaration.
+  ArrayAttr getStageParameterList(Attribute widthValue,
+                                  Attribute dataDelayValue);
 
   hw::HWModuleExternOp declareStage(Operation *symTable, PipelineStageOp);
   hw::HWModuleExternOp declareCosimEndpointToHostModule(Operation *symTable);
@@ -68,7 +71,7 @@ public:
   const StringAttr dataOutValid, dataOutReady, dataOut, dataInValid,
       dataInReady, dataIn;
   const StringAttr clk, rst;
-  const StringAttr width;
+  const StringAttr width, dataDelay;
 
 private:
   Type getClockType();

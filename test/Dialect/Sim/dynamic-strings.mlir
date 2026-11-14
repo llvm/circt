@@ -153,3 +153,14 @@ hw.module @string_substr_5(out res: !sim.dstring) {
   %sub = sim.string.substr %str[%i]
   hw.output %sub : !sim.dstring
 }
+
+// CHECK-LABEL: hw.module @string_substr_6
+hw.module @string_substr_6(in %end: i32, out res: !sim.dstring) {
+  // CHECK: [[STR:%.+]] = sim.string.literal "Hello World"
+  // CHECK: [[START:%.+]] = hw.constant 3 : i32
+  // CHECK: [[SUBSTR:%.+]] = sim.string.substr [[STR]][[[START]] : %end]
+  %str = sim.string.literal "Hello World"
+  %start = hw.constant 3 : i32
+  %sub = sim.string.substr %str[%start : %end]
+  hw.output %sub : !sim.dstring
+}

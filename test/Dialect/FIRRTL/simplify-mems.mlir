@@ -558,7 +558,7 @@ firrtl.circuit "Rewrite1ElementMemoryToRegisterUnderLayerblock" {
       in %in_rwen: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   
-    // CHECK firrtl.layerblock @A
+    // CHECK: firrtl.layerblock @A
     firrtl.layerblock @A {
       // CHECK: %result_read = firrtl.wire : !firrtl.uint<32>
       // CHECK: %result_rw = firrtl.wire : !firrtl.uint<32>

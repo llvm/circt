@@ -60,6 +60,12 @@ add_mlir_python_common_capi_library(PyCDE_CIRCTPythonCAPI
 add_mlir_python_modules(PyCDE_CIRCTPythonModules
   ROOT_PREFIX "${PYCDE_PYTHON_PACKAGE_DIR}/pycde/circt"
   INSTALL_PREFIX "python_packages/pycde/circt"
+  # Use our own nanobind domain so that PyCDE gets its own nanobind runtime
+  # library in its own _mlir_libs directory. Otherwise it shares one library
+  # target with the other CIRCT Python packages, which is only placed in one of
+  # their build directories, so the extensions fail to load in the build tree on
+  # Windows.
+  MLIR_BINDINGS_PYTHON_NB_DOMAIN pycde
   DECLARED_SOURCES
     MLIRPythonSources.Core
     CIRCTBindingsPythonExtension
@@ -71,6 +77,7 @@ add_mlir_python_modules(PyCDE_CIRCTPythonModules
 add_mlir_python_modules(PyCDE
   ROOT_PREFIX "${PYCDE_PYTHON_PACKAGE_DIR}/"
   INSTALL_PREFIX "python_packages/"
+  MLIR_BINDINGS_PYTHON_NB_DOMAIN pycde
   DECLARED_SOURCES
     PyCDESources
   COMMON_CAPI_LINK_LIBS

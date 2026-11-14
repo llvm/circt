@@ -561,8 +561,7 @@ extractConcatToConcatExtract(ExtractOp op, ConcatOp innerCat,
   size_t beginOfFirst;
   if (!prefixWidths.empty()) {
     // O(log N) binary search path.
-    auto it =
-        std::upper_bound(prefixWidths.begin(), prefixWidths.end(), lowBit);
+    const auto *it = llvm::upper_bound(prefixWidths, lowBit);
     assert(it != prefixWidths.end());
     firstIdx = it - prefixWidths.begin();
     beginOfFirst = (firstIdx > 0) ? prefixWidths[firstIdx - 1] : 0;
@@ -2386,7 +2385,11 @@ static Value extractOperandFromFullyAssociative(Operation *fullyAssoc,
     return fullyAssoc->getResult(0);
   }
 
-  // Form the new operation with the operands that remain.
+  // Form the new operation with the operands that remain at the original op's
+  // position so the replacement still dominates all existing users in SSACFG
+  // regions.
+  OpBuilder::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPoint(fullyAssoc);
   SmallVector<Value> operands;
   operands.append(fullyAssoc->getOperands().begin(),
                   fullyAssoc->getOperands().begin() + operandNo);

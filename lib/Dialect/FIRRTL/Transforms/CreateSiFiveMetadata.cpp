@@ -932,7 +932,7 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
     // Sort and remove duplicates.
     std::sort(names.begin(), names.end());
-    names.erase(std::unique(names.begin(), names.end()), names.end());
+    names.erase(llvm::unique(names), names.end());
 
     // The output is a json array with each element a module name. The
     // defname of a module can't change so we can output them verbatim.

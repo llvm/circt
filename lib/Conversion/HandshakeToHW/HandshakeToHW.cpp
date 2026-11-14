@@ -97,7 +97,7 @@ static std::string getBareSubModuleName(Operation *oldOp) {
   // valid in SystemVerilog module names. In case this name is used in
   // SystemVerilog output, replace '.' with '_'.
   std::string subModuleName = oldOp->getName().getStringRef().str();
-  std::replace(subModuleName.begin(), subModuleName.end(), '.', '_');
+  llvm::replace(subModuleName, '.', '_');
   return subModuleName;
 }
 

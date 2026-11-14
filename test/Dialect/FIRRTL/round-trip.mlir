@@ -162,8 +162,11 @@ firrtl.module @PropertyStringOps() {
   %3 = firrtl.string.concat %0, %1, %2 : !firrtl.string
 }
 
+firrtl.class @ObjectEqFoo() {}
+
 // CHECK-LABEL: firrtl.module @PropertyPropEq
-firrtl.module @PropertyPropEq() {
+firrtl.module @PropertyPropEq(in %obj: !firrtl.class<@ObjectEqFoo()>,
+                             in %ref: !firrtl.anyref) {
   %0 = firrtl.string "hello"
   %1 = firrtl.string "world"
 
@@ -190,6 +193,12 @@ firrtl.module @PropertyPropEq() {
 
   // CHECK: firrtl.bool.xor %3, %4
   %11 = firrtl.bool.xor %3, %4
+
+  // CHECK: firrtl.prop.eq %obj, %obj : !firrtl.class<@ObjectEqFoo()>
+  %class_eq = firrtl.prop.eq %obj, %obj : !firrtl.class<@ObjectEqFoo()>
+
+  // CHECK: firrtl.prop.eq %ref, %ref : !firrtl.anyref
+  %anyref_eq = firrtl.prop.eq %ref, %ref : !firrtl.anyref
 }
 
 // CHECK-LABEL: firrtl.module @PropertyListOps
@@ -208,6 +217,24 @@ firrtl.module @PropertyListOps() {
   %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
 }
 
+// CHECK-LABEL: firrtl.module @PropertyListContains
+firrtl.module @PropertyListContains() {
+  %string = firrtl.string "foo"
+  %strings = firrtl.list.create %string : !firrtl.list<string>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<string>{{$}}
+  %string_found = firrtl.list.contains %strings, %string : !firrtl.list<string>
+
+  %integer = firrtl.integer 42
+  %integers = firrtl.list.create %integer : !firrtl.list<integer>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<integer>{{$}}
+  %integer_found = firrtl.list.contains %integers, %integer : !firrtl.list<integer>
+
+  %boolean = firrtl.bool true
+  %booleans = firrtl.list.create %boolean : !firrtl.list<bool>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<bool>{{$}}
+  %boolean_found = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>
+}
+
 firrtl.class @UnknownValueChild() {}
 // CHECK-LABEL: firrtl.module @UnknownValueOp
 firrtl.module @UnknownValueOp() {
@@ -217,6 +244,25 @@ firrtl.module @UnknownValueOp() {
   %1 = firrtl.unknown : !firrtl.string
   // CHECK-NEXT: %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
   %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
+}
+
+firrtl.extclass @ObjectCreateTarget(
+  in first: !firrtl.string,
+  in second: !firrtl.integer,
+  out result: !firrtl.string
+)
+
+// CHECK-LABEL: firrtl.module @ObjectCreate
+firrtl.module @ObjectCreate(
+  in %first: !firrtl.string,
+  in %second: !firrtl.integer,
+  out %output: !firrtl.string
+) {
+  // CHECK: %obj = firrtl.object.create(%first, %second) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  %obj = firrtl.object.create(%first, %second) : (!firrtl.string, !firrtl.integer) -> !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  // CHECK: %0 = firrtl.object.subfield %obj[result] : !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  %result = firrtl.object.subfield %obj[result] : !firrtl.class<@ObjectCreateTarget(in first: !firrtl.string, in second: !firrtl.integer, out result: !firrtl.string)>
+  firrtl.propassign %output, %result : !firrtl.string
 }
 
 firrtl.formal @myFormalTestA, @Top {}
@@ -374,6 +420,12 @@ firrtl.module @DomainTypesWithFields(
 
   // CHECK: firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
   firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+}
+
+// CHECK-LABEL: firrtl.module @DomainAnyRefCast(
+firrtl.module @DomainAnyRefCast(in %domain: !firrtl.domain<@ClockDomain()>) {
+  // CHECK-NEXT: %{{.+}} = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>{{$}}
+  %0 = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>
 }
 
 // CHECK-LABEL: firrtl.module @DomainDefine

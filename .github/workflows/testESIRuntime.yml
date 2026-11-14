@@ -1,18 +1,34 @@
 # Test the ESI runtime separately from CIRCT and PyCDE. Runs a bunch faster
 # since it pulls down the PyCDE dependency from PyPI instead of building it from
-# source.
+# source. When called from another workflow, it can instead test against PyCDE
+# wheels built earlier in the same workflow run, with a given Python version.
 name: Test ESI runtime
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      python_version:
+        description: "Python version to test with (default: 3.12)"
+        required: false
+        type: string
+        default: ""
+      pycde_from_artifacts:
+        description: |
+          Install PyCDE from the wheel artifacts of the calling workflow run
+          (named 'pycde-*.whl') instead of from PyPI.
+        required: false
+        type: boolean
+        default: false
   pull_request:
     paths:
       - ".github/workflows/testESIRuntime.yml"
       - "lib/Dialect/ESI/runtime/**"
 
-# Cancel previous CI builds when a new push occurs to the same PR.
+# Cancel previous CI builds when a new push occurs to the same PR. The Python
+# version keeps parallel calls from another workflow in separate groups.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-${{ inputs.python_version }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -24,8 +40,13 @@ jobs:
   # ---------------------------------------------------------------------------
 
   build-linux:
-    name: Build and Test (Linux)
-    runs-on: Ubuntu-latest
+    name: Build and Test (Linux${{ inputs.python_version && format(', Python {0}', inputs.python_version) || '' }})
+    # When python_version is set, setup-python installs a Python built for the
+    # runner's OS into the container. A newer runner's builds need a newer
+    # OpenSSL than the container has, which breaks pip, so keep this in sync
+    # with the container's Ubuntu version. (Without python_version, the
+    # container's own Python is used and the runner version doesn't matter.)
+    runs-on: ubuntu-24.04
     container:
       image: ghcr.io/circt/images/pycde-esi-test:latest
       volumes:
@@ -39,17 +60,46 @@ jobs:
         with:
           submodules: false
 
+      # The container only provides Python 3.12.
+      - name: Setup Python
+        if: inputs.python_version != ''
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Download PyCDE wheels
+        if: inputs.pycde_from_artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: pycde-*manylinux*.whl
+          path: lib/Dialect/ESI/runtime/pycde-wheels
+          merge-multiple: true
+
       - name: Setup venv and install dependencies
         working-directory: lib/Dialect/ESI/runtime
+        env:
+          PYTHON_VERSION: ${{ inputs.python_version }}
+          PYCDE_FROM_ARTIFACTS: ${{ inputs.pycde_from_artifacts }}
         run: |
           set -o errexit
-          apt update
-          apt install -y python3-venv
-          python3 -m venv venv
+          if [ -n "$PYTHON_VERSION" ]; then
+            python -m venv venv
+          else
+            apt update
+            apt install -y python3-venv
+            python3 -m venv venv
+          fi
           . venv/bin/activate
           pip install --upgrade pip
           pip install pytest nanobind
-          pip install "pycde>=0.12.1" --pre
+          if [ "$PYCDE_FROM_ARTIFACTS" = "true" ]; then
+            # Install the wheel matching this Python from the downloaded
+            # wheels, then its dependencies from PyPI.
+            pip install --no-index --no-deps --find-links pycde-wheels pycde
+            pip install pycde
+          else
+            pip install "pycde>=0.12.1" --pre
+          fi
 
       # --------
       # Build and test CIRCT
@@ -61,10 +111,15 @@ jobs:
           set -o errexit
           . venv/bin/activate
 
+          # Point CMake at the venv's Python explicitly. Otherwise the
+          # Python3_ROOT_DIR that setup-python exports makes CMake pick the
+          # base interpreter, which doesn't have nanobind installed.
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_C_COMPILER=clang
+            -DCMAKE_C_COMPILER=clang \
+            -DPython_EXECUTABLE="$(command -v python3)" \
+            -DPython3_EXECUTABLE="$(command -v python3)"
           ninja -C build -j$(nproc)
 
           # Install the ESI C++ runtime into the esiaccel Python package tree
@@ -88,7 +143,7 @@ jobs:
   # ---------------------------------------------------------------------------
 
   build-windows:
-    name: Build and Test (Windows)
+    name: Build and Test (Windows${{ inputs.python_version && format(', Python {0}', inputs.python_version) || '' }})
     runs-on: windows-2022
 
     steps:
@@ -102,16 +157,35 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.12"
+          python-version: ${{ inputs.python_version || '3.12' }}
+
+      - name: Download PyCDE wheels
+        if: inputs.pycde_from_artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: pycde-*win_amd64*.whl
+          path: lib/Dialect/ESI/runtime/pycde-wheels
+          merge-multiple: true
 
       - name: Install dependencies
         working-directory: lib/Dialect/ESI/runtime
         shell: pwsh
+        env:
+          PYCDE_FROM_ARTIFACTS: ${{ inputs.pycde_from_artifacts }}
         run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
           python -m venv venv
           .\venv\Scripts\python.exe -m pip install --upgrade pip
           .\venv\Scripts\python.exe -m pip install pytest pytest-xdist nanobind
-          .\venv\Scripts\python.exe -m pip install "pycde>=0.12.1" --pre
+          if ($env:PYCDE_FROM_ARTIFACTS -eq "true") {
+            # Install the wheel matching this Python from the downloaded
+            # wheels, then its dependencies from PyPI.
+            .\venv\Scripts\python.exe -m pip install --no-index --no-deps --find-links pycde-wheels pycde
+            .\venv\Scripts\python.exe -m pip install pycde
+          } else {
+            .\venv\Scripts\python.exe -m pip install "pycde>=0.12.1" --pre
+          }
 
       - name: Install Verilator
         shell: pwsh

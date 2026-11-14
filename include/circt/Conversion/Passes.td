@@ -888,9 +888,10 @@ def LowerProbeToSV : Pass<"lower-probe-to-sv", "mlir::ModuleOp"> {
     or an ABI.
 
     As backend-specific restrictions, modules exporting Probe refs must be
-    private, and Probe payloads must satisfy `hw::isHWValueType`. Types such as
-    `!seq.clock`, including aggregates containing them, must be converted to HW
-    value types before running this pass.
+    private, and Probe payloads must satisfy `hw::isHWValueType` and be
+    compatible as element types of `sv.net`; that is, they must have a packed
+    type. Types such as `!seq.clock`, including aggregates containing them, must
+    be converted to HW value types before running this pass.
   }];
   let dependentDialects = [
     "circt::hw::HWDialect",

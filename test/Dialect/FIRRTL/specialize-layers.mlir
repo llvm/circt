@@ -323,6 +323,41 @@ firrtl.circuit "DisableLayerA" attributes {
   firrtl.extmodule @DisableLayerA()
 }
 
+// A simulation which targets a module that is removed by layer specialization
+// should be removed too.
+// CHECK-LABEL: firrtl.circuit "SimulationRemovedModule"
+firrtl.circuit "SimulationRemovedModule" attributes {
+    disable_layers = [@A]
+  } {
+  firrtl.layer @A bind { }
+  // CHECK-NOT: firrtl.simulation @removedTest
+  firrtl.simulation @removedTest, @RemovedSimTop {}
+  // CHECK-NOT: firrtl.extmodule @RemovedSimTop
+  firrtl.extmodule @RemovedSimTop(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  ) attributes {knownLayers = [@A], layers = [@A]}
+  // CHECK: firrtl.extmodule @SimulationRemovedModule()
+  firrtl.extmodule @SimulationRemovedModule()
+}
+
+// A formal test which targets a module that is removed by layer specialization
+// should be removed too.
+// CHECK-LABEL: firrtl.circuit "FormalRemovedModule"
+firrtl.circuit "FormalRemovedModule" attributes {
+    disable_layers = [@A]
+  } {
+  firrtl.layer @A bind { }
+  // CHECK-NOT: firrtl.formal @removedTest
+  firrtl.formal @removedTest, @RemovedFormalTop {}
+  // CHECK-NOT: firrtl.extmodule @RemovedFormalTop
+  firrtl.extmodule @RemovedFormalTop() attributes {knownLayers = [@A], layers = [@A]}
+  // CHECK: firrtl.extmodule @FormalRemovedModule()
+  firrtl.extmodule @FormalRemovedModule()
+}
+
 //===----------------------------------------------------------------------===//
 // Probe Types
 //===----------------------------------------------------------------------===//

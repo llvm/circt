@@ -345,7 +345,11 @@ void circt::om::ClassOp::print(OpAsmPrinter &printer) {
   printClassLike(*this, printer);
 }
 
-LogicalResult circt::om::ClassOp::verify() { return verifyClassLike(*this); }
+LogicalResult circt::om::ClassOp::verify() {
+  if (getLinkonceOdr() && !isPublic())
+    return emitOpError("linkonce_odr requires public visibility");
+  return verifyClassLike(*this);
+}
 
 LogicalResult circt::om::ClassOp::verifyRegions() {
   auto fieldsOp =
@@ -394,7 +398,7 @@ circt::om::ClassOp::getFieldType(mlir::StringAttr field) {
   return getClassLikeFieldType(*this, field);
 }
 
-void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+void circt::om::ClassOp::replaceFieldTypes(AttrTypeReplacer &replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
 }
 
@@ -526,7 +530,7 @@ circt::om::ClassExternOp::getFieldType(mlir::StringAttr field) {
   return getClassLikeFieldType(*this, field);
 }
 
-void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer replacer) {
+void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer &replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
 }
 
@@ -707,6 +711,15 @@ OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
 // ListCreateOp
 //===----------------------------------------------------------------------===//
 
+OpFoldResult circt::om::ListCreateOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInputs();
+  if (!llvm::all_of(inputs, [](Attribute attr) { return attr; }))
+    return {};
+
+  return ListAttr::get(getContext(), getType().getElementType(),
+                       ArrayAttr::get(getContext(), inputs));
+}
+
 void circt::om::ListCreateOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printOperands(getInputs());
@@ -729,6 +742,27 @@ ParseResult circt::om::ListCreateOp::parse(OpAsmParser &parser,
     if (parser.resolveOperand(operand, elemType, result.operands))
       return failure();
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ListConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult circt::om::ListConcatOp::fold(FoldAdaptor adaptor) {
+  auto subLists = adaptor.getSubLists();
+  if (subLists.size() == 1)
+    return getSubLists().front();
+
+  SmallVector<Attribute> elements;
+  for (Attribute attr : subLists) {
+    auto listAttr = dyn_cast_or_null<ListAttr>(attr);
+    if (!listAttr)
+      return {};
+    llvm::append_range(elements, listAttr.getElements());
+  }
+
+  return ListAttr::get(getContext(), getType().getElementType(),
+                       ArrayAttr::get(getContext(), elements));
 }
 
 //===----------------------------------------------------------------------===//
@@ -755,6 +789,16 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!hierPath)
     return emitOpError("invalid symbol reference");
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// AnyCastOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AnyCastOp::fold(FoldAdaptor adaptor) {
+  if (getInput().getType() == getType() && getInput() != getResult())
+    return getInput();
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -1080,7 +1124,41 @@ evaluateBinaryEquality(mlir::Attribute lhsAttr, mlir::Attribute rhsAttr) {
   return failure();
 }
 
+/// Look through identity-preserving class-to-any casts.
+static Value getObjectReference(Value value) {
+  if (auto cast = value.getDefiningOp<AnyCastOp>();
+      cast && isa<ClassType>(cast.getInput().getType()))
+    return cast.getInput();
+  return value;
+}
+
 OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
+  if (isa<ClassType, AnyType>(getLhs().getType())) {
+    auto lhs = getObjectReference(getLhs());
+    auto rhs = getObjectReference(getRhs());
+
+    // Reference self-comparisons fold even when the reference is unknown.
+    if (lhs == rhs)
+      return mlir::IntegerAttr::get(getType(), 1);
+
+    // Distinct allocations have different identities, regardless of fields.
+    if (lhs.getDefiningOp<ElaboratedObjectOp>() &&
+        rhs.getDefiningOp<ElaboratedObjectOp>())
+      return mlir::IntegerAttr::get(getType(), 0);
+
+    // Peel class-to-any casts only if both resulting operand types match.
+    // Peeling just one cast, or casts from different classes, is invalid.
+    if (lhs.getType() == rhs.getType() &&
+        (lhs != getLhs() || rhs != getRhs())) {
+      getLhsMutable().assign(lhs);
+      getRhsMutable().assign(rhs);
+      return getResult();
+    }
+    return {};
+  }
+
+  // Primitive equality is by value, not SSA identity. In particular, comparing
+  // an unknown primitive with itself must remain unknown.
   auto lhsAttr = adaptor.getLhs();
   auto rhsAttr = adaptor.getRhs();
   if (!lhsAttr || !rhsAttr)
@@ -1091,6 +1169,34 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
     return {};
 
   return *result;
+}
+
+//===----------------------------------------------------------------------===//
+// ListContainsOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ListContainsOp::fold(FoldAdaptor adaptor) {
+  // Fold membership based on SSA identity for a directly constructed list.
+  if (auto listCreate = getList().getDefiningOp<ListCreateOp>();
+      listCreate && llvm::is_contained(listCreate.getInputs(), getElement()))
+    return mlir::IntegerAttr::get(getResult().getType(), 1);
+
+  auto listAttr = dyn_cast_or_null<ListAttr>(adaptor.getList());
+  Attribute elementAttr = adaptor.getElement();
+  // Both the list and element must fold to constant attributes. Even an empty
+  // list requires a constant element.
+  if (!listAttr || !elementAttr)
+    return {};
+
+  bool found = false;
+  for (Attribute candidate : listAttr.getElements()) {
+    auto equality = evaluateBinaryEquality(candidate, elementAttr);
+    if (failed(equality))
+      return {};
+    found |= !cast<mlir::IntegerAttr>(*equality).getValue().isZero();
+  }
+
+  return mlir::IntegerAttr::get(getResult().getType(), found);
 }
 
 //===----------------------------------------------------------------------===//

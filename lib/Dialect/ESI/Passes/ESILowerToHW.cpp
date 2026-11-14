@@ -72,8 +72,9 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 
   size_t width = circt::hw::getBitWidth(chPort.getInner());
 
-  ArrayAttr stageParams =
-      builder.getStageParameterList(rewriter.getUI32IntegerAttr(width));
+  ArrayAttr stageParams = builder.getStageParameterList(
+      rewriter.getUI32IntegerAttr(width),
+      rewriter.getUI32IntegerAttr(chPort.getDataDelay()));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet,
   // so create a temp value and replace it later. Give this constant an
@@ -143,11 +144,13 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
   auto typedZero = hw::BitcastOp::create(rewriter, loc, innerType, zero);
 
   if (chanType.getSignaling() == ChannelSignaling::ValidOnly) {
-    auto wrap = WrapValidOnlyOp::create(rewriter, loc, typedZero, valid);
+    auto wrap = WrapValidOnlyOp::create(rewriter, loc, typedZero, valid,
+                                        chanType.getDataDelay());
     wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
     rewriter.replaceOp(nullop, {wrap.getChanOutput()});
   } else {
-    auto wrap = WrapValidReadyOp::create(rewriter, loc, typedZero, valid);
+    auto wrap = WrapValidReadyOp::create(rewriter, loc, typedZero, valid,
+                                         chanType.getDataDelay());
     wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
     rewriter.replaceOp(nullop, {wrap.getChanOutput()});
   }
@@ -477,7 +480,7 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
         WrapWindow::create(rewriter, loc, windowType, castedRecvData);
   }
   WrapValidReadyOp wrapRecv = WrapValidReadyOp::create(
-      rewriter, loc, castedRecvData, recvValidFromCosim);
+      rewriter, loc, castedRecvData, recvValidFromCosim, type.getDataDelay());
   recvReady.setValue(wrapRecv.getReady());
 
   // Replace the CosimEndpointOp op.
@@ -567,8 +570,8 @@ LogicalResult ManifestRomLowering::createRomModule(
       hw::UnpackedArrayType::get(rewriter.getI64Type(), words.size()),
       rewriter.getArrayAttr(wordAttrs));
   auto manifestReg =
-      sv::RegOp::create(rewriter, loc, manifestConstant.getType());
-  sv::AssignOp::create(rewriter, loc, manifestReg, manifestConstant);
+      sv::VarOp::create(rewriter, loc, manifestConstant.getType());
+  sv::VarAssignOp::create(rewriter, loc, manifestReg, manifestConstant);
 
   // Slim down the address, register it, do the lookup, and register the output.
   size_t addrBits = llvm::Log2_64_Ceil(words.size());
@@ -651,8 +654,8 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
             hw::ArrayType::get(rewriter.getI8Type(), bytes.size()),
             rewriter.getArrayAttr(bytes));
         auto manifestLogic =
-            sv::LogicOp::create(rewriter, loc, manifestConstant.getType());
-        sv::AssignOp::create(rewriter, loc, manifestLogic, manifestConstant);
+            sv::VarOp::create(rewriter, loc, manifestConstant.getType());
+        sv::VarAssignOp::create(rewriter, loc, manifestLogic, manifestConstant);
         auto manifest = sv::ReadInOutOp::create(rewriter, loc, manifestLogic);
 
         // Then instantiate the external module.

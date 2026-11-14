@@ -9,6 +9,7 @@ add_circt_dialect_library(CIRCTLLHD
   DEPENDS
   CIRCTLLHDEnumsIncGen
   CIRCTLLHDAttributesIncGen
+  CIRCTLLHDInterfacesIncGen
   MLIRLLHDIncGen
 
   LINK_LIBS PUBLIC

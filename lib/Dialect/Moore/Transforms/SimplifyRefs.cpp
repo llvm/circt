@@ -72,7 +72,7 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
     // Disassemble assignments with the LHS is concatRef. And create new
     // corresponding assignments using non-concatRef LHS.
     for (auto operand : operands) {
-      auto type = cast<RefType>(operand.getType()).getNestedType();
+      auto type = cast<WrapperType>(operand.getType()).getNestedType();
       auto width = type.getBitSize().value();
 
       rewriter.setInsertionPoint(op);
@@ -111,14 +111,14 @@ static LogicalResult collectFields(Value structRef,
                                    SmallVector<FieldInfo> &fields,
                                    ConversionPatternRewriter &rewriter,
                                    uint32_t initialOffset = 0) {
-  auto structType =
-      cast<StructType>(cast<RefType>(structRef.getType()).getNestedType());
+  auto structRefType = cast<WrapperType>(structRef.getType());
+  auto structType = cast<StructType>(structRefType.getNestedType());
   uint32_t offset = initialOffset;
   // Visit fields in reverse order (declaration order is MSB-first)
   for (auto &member : llvm::reverse(structType.getMembers())) {
-    auto fieldRef = StructExtractRefOp::create(rewriter, structRef.getLoc(),
-                                               RefType::get(member.type),
-                                               member.name, structRef);
+    auto fieldRef = StructExtractRefOp::create(
+        rewriter, structRef.getLoc(), structRefType.withNestedType(member.type),
+        member.name, structRef);
 
     auto fieldSize = member.type.getBitSize();
     if (!fieldSize)
@@ -154,14 +154,14 @@ struct StructExtractLowering : public OpConversionPattern<OpTy> {
     // an ExtractRef operation on a struct.
     auto extractRefOp = dyn_cast<ExtractRefOp>(dst.getDefiningOp());
     auto baseStructType = dyn_cast_if_present<StructType>(
-        cast<RefType>(extractRefOp.getInput().getType()).getNestedType());
+        extractRefOp.getInput().getType().getNestedType());
     if (!baseStructType)
       return success();
 
     // Get the boundaries of the ExtractOp.
     uint32_t extractedLow = extractRefOp.getLowBit();
     auto targetWidth =
-        cast<RefType>(dst.getType()).getNestedType().getBitSize();
+        cast<WrapperType>(dst.getType()).getNestedType().getBitSize();
     if (!targetWidth)
       return mlir::emitError(op.getLoc())
              << "unsupported: found field with unknown size in struct "
@@ -190,13 +190,14 @@ struct StructExtractLowering : public OpConversionPattern<OpTy> {
         uint32_t remainingInField = field.size - offsetInField;
         uint32_t sizeToExtract = std::min(remaining, remainingInField);
 
-        auto fieldType = cast<RefType>(field.field.getType()).getNestedType();
+        auto fieldRefType = cast<WrapperType>(field.field.getType());
+        auto fieldType = fieldRefType.getNestedType();
         auto extractType =
             IntType::get(rewriter.getContext(), sizeToExtract,
                          cast<PackedType>(fieldType).getDomain());
-        auto newLhs =
-            ExtractRefOp::create(rewriter, loc, RefType::get(extractType),
-                                 field.field, offsetInField);
+        auto newLhs = ExtractRefOp::create(
+            rewriter, loc, fieldRefType.withNestedType(extractType),
+            field.field, offsetInField);
         relevantFields.push_back(newLhs);
 
         offsetInStruct += sizeToExtract;
@@ -306,8 +307,7 @@ void SimplifyRefsPass::runOnOperation() {
         op->getOperand(0).template getDefiningOp<ExtractRefOp>();
     if (!extractRefOp)
       return true;
-    auto nestedType =
-        cast<RefType>(extractRefOp.getInput().getType()).getNestedType();
+    auto nestedType = extractRefOp.getInput().getType().getNestedType();
     return !isa<StructType>(nestedType);
   });
 

@@ -21,19 +21,20 @@ with ir.Context() as ctx, ir.Location.unknown() as loc:
   # CHECK: sv_attr: #sv.attribute<"no_merge"> no_merge None
 
   i1 = ir.IntegerType.get_signless(1)
-  i1_inout = hw.InOutType.get(i1)
+  i1_net = sv.NetType.get(i1)
+  i1_var = sv.VarType.get(i1)
 
   m = ir.Module.create()
   with ir.InsertionPoint(m.body):
-    wire_op = sv.WireOp(i1_inout, "wire1")
+    wire_op = sv.WireOp(i1_net, "wire1")
     wire_op.attributes["sv.attributes"] = ir.ArrayAttr.get([sv_attr])
     print(wire_op)
-    # CHECK: %wire1 = sv.wire {sv.attributes = [#sv.attribute<"no_merge">]} : !hw.inout<i1>
+    # CHECK: %wire1 = sv.wire {sv.attributes = [#sv.attribute<"no_merge">]} : !sv.net<i1>
 
-    reg_op = sv.RegOp(i1_inout, "reg1")
+    reg_op = sv.VarOp(i1_var, "reg1")
     reg_op.attributes["sv.attributes"] = ir.ArrayAttr.get([sv_attr])
     print(reg_op)
-    # CHECK: %reg1 = sv.reg  {sv.attributes = [#sv.attribute<"no_merge">]} : !hw.inout<i1>
+    # CHECK: %reg1 = sv.var  {sv.attributes = [#sv.attribute<"no_merge">]} : !sv.var<i1>
 
     package_op = sv.PackageExternOp("ExternalTypesSymbol",
                                     verilogName="ExternalTypes")

@@ -56,6 +56,12 @@ om.class @ElaboratedWidget() -> (widget: !om.class.type<@Widget>, blue: i8) {
   om.class.fields %2, %3 : !om.class.type<@Widget>, i8
 }
 
+// CHECK-LABEL: om.class @LinkOnce
+// CHECK-SAME: attributes {linkonce_odr}
+om.class @LinkOnce() attributes {linkonce_odr} {
+  om.class.fields
+}
+
 // CHECK-LABEL: om.class @DiscardableAttrs
 // CHECK-SAME: attributes {foo.bar = "baz"}
 om.class @DiscardableAttrs() attributes {foo.bar="baz"} {
@@ -179,6 +185,23 @@ om.class @ListConcat() {
   om.class.fields
 }
 
+// CHECK-LABEL: @ListContains
+om.class @ListContains() {
+  %0 = om.constant "member" : !om.string
+  %1 = om.list_create %0 : !om.string
+  // CHECK: %2 = om.list_contains %1, %0 : <!om.string> loc(
+  %2 = om.list_contains %1, %0 : !om.list<!om.string>
+  %3 = om.constant #om.integer<1 : si2> : !om.integer
+  %4 = om.list_create %3 : !om.integer
+  // CHECK: %5 = om.list_contains %4, %3 : <!om.integer> loc(
+  %5 = om.list_contains %4, %3 : !om.list<!om.integer>
+  %6 = om.constant true
+  %7 = om.list_create %6 : i1
+  // CHECK: %8 = om.list_contains %7, %6 : <i1> loc(
+  %8 = om.list_contains %7, %6 : !om.list<i1>
+  om.class.fields
+}
+
 // CHECK-LABEL: @Integer
 // CHECK-SAME: -> (int: !om.integer)
 om.class @IntegerConstant() -> (int: !om.integer) {
@@ -210,7 +233,7 @@ om.class @StringConcat() {
 }
 
 // CHECK-LABEL: @PropEq
-om.class @PropEq() {
+om.class @PropEq(%obj: !om.class.type<@Widget>, %ref: !om.any) {
   %0 = om.constant "hello" : !om.string
   %1 = om.constant "world" : !om.string
 
@@ -229,6 +252,11 @@ om.class @PropEq() {
   // CHECK: om.prop.eq %6, %7 : i1
   %8 = om.prop.eq %6, %7 : i1
 
+  // CHECK: om.prop.eq %obj, %obj : !om.class.type<@Widget>
+  %9 = om.prop.eq %obj, %obj : !om.class.type<@Widget>
+
+  // CHECK: om.prop.eq %ref, %ref : !om.any
+  %10 = om.prop.eq %ref, %ref : !om.any
   om.class.fields
 }
 

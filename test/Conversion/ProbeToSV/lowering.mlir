@@ -13,8 +13,8 @@ hw.module @Local(in %in: i8, out out: i8) {
 }
 // CHECK: %[[LOCAL_VALUE:.+]] = comb.add
 // CHECK: hw.wire %[[LOCAL_VALUE]] sym @[[LOCAL_WIRE]] : i8
-// CHECK: %[[LOCAL_XMR:.+]] = sv.xmr.ref @[[LOCAL_PATH]] : !hw.inout<i8>
-// CHECK: %[[LOCAL_READ:.+]] = sv.read_inout %[[LOCAL_XMR]] : !hw.inout<i8>
+// CHECK: %[[LOCAL_XMR:.+]] = sv.xmr.ref @[[LOCAL_PATH]] : !sv.net<i8>
+// CHECK: %[[LOCAL_READ:.+]] = sv.read_inout %[[LOCAL_XMR]] : !sv.net<i8>
 // CHECK: hw.output %[[LOCAL_READ]] : i8
 // CHECK-NOT: probe.
 
@@ -49,12 +49,12 @@ hw.module @Top(in %in: i8, out first: i8, out second: i8,
 }
 // CHECK: %[[PASS0:.+]] = hw.instance "producer0" sym @[[CHILD_INST]] @Producer(in: %in: i8) -> (passthrough: i8)
 // CHECK: %[[PASS1:.+]] = hw.instance "producer1" sym @[[CHILD_INST2]] @Producer(in: %in: i8) -> (passthrough: i8) {test.attribute = 42 : i64}
-// CHECK: %[[XMR0:.+]] = sv.xmr.ref @[[CHILD_PATH]] : !hw.inout<i8>
-// CHECK: sv.read_inout %[[XMR0]] : !hw.inout<i8>
-// CHECK: %[[XMR0_AGAIN:.+]] = sv.xmr.ref @[[CHILD_PATH]] : !hw.inout<i8>
-// CHECK: sv.read_inout %[[XMR0_AGAIN]] : !hw.inout<i8>
-// CHECK: %[[XMR1:.+]] = sv.xmr.ref @[[CHILD_PATH2]] : !hw.inout<i8>
-// CHECK: sv.read_inout %[[XMR1]] : !hw.inout<i8>
+// CHECK: %[[XMR0:.+]] = sv.xmr.ref @[[CHILD_PATH]] : !sv.net<i8>
+// CHECK: sv.read_inout %[[XMR0]] : !sv.net<i8>
+// CHECK: %[[XMR0_AGAIN:.+]] = sv.xmr.ref @[[CHILD_PATH]] : !sv.net<i8>
+// CHECK: sv.read_inout %[[XMR0_AGAIN]] : !sv.net<i8>
+// CHECK: %[[XMR1:.+]] = sv.xmr.ref @[[CHILD_PATH2]] : !sv.net<i8>
+// CHECK: sv.read_inout %[[XMR1]] : !sv.net<i8>
 // CHECK: hw.output {{.*}}, {{.*}}, %[[PASS1]] : i8, i8, i8
 // CHECK-NOT: probe.
 
@@ -83,6 +83,6 @@ hw.module @Aggregate(
   hw.output %read : !hw.struct<a: i8, b: !hw.array<2xi1>>
 }
 // CHECK: hw.wire %in sym @{{[A-Za-z0-9_]+}} : !hw.struct<a: i8, b: !hw.array<2xi1>>
-// CHECK: sv.xmr.ref @{{[A-Za-z0-9_]+}} : !hw.inout<struct<a: i8, b: !hw.array<2xi1>>>
-// CHECK: sv.read_inout {{.*}} : !hw.inout<struct<a: i8, b: !hw.array<2xi1>>>
+// CHECK: sv.xmr.ref @{{[A-Za-z0-9_]+}} : !sv.net<!hw.struct<a: i8, b: !hw.array<2xi1>>>
+// CHECK: sv.read_inout {{.*}} : !sv.net<!hw.struct<a: i8, b: !hw.array<2xi1>>>
 // CHECK-NOT: probe.

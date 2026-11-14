@@ -100,10 +100,12 @@ TEST(BMCTraceTest, SupportsZeroWidthSignals) {
 TEST(BMCTraceTest, RuntimeCallbackRegistersAndRecordsSignals) {
   BMCTrace trace("top");
 
-  auto data0 = reinterpret_cast<BMCTrace::Handle>(static_cast<uintptr_t>(0x12));
-  auto state0 =
+  const auto *data0 =
+      reinterpret_cast<BMCTrace::Handle>(static_cast<uintptr_t>(0x12));
+  const auto *state0 =
       reinterpret_cast<BMCTrace::Handle>(static_cast<uintptr_t>(0x34));
-  auto data1 = reinterpret_cast<BMCTrace::Handle>(static_cast<uintptr_t>(0x56));
+  const auto *data1 =
+      reinterpret_cast<BMCTrace::Handle>(static_cast<uintptr_t>(0x56));
   circt_bmc_record_trace(&trace, 0, "data_in", 8, data0);
   circt_bmc_record_trace(&trace, 0, "state_q", 8, state0);
   circt_bmc_record_trace(&trace, 1, "data_in", 8, data1);
