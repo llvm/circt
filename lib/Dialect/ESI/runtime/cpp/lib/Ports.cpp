@@ -759,23 +759,19 @@ private:
 
 bool WriteChannelPort::DefaultAsyncWriter::poll() {
   bool progress = false;
-  while (true) {
-    {
-      std::unique_lock<std::recursive_mutex> lock(mutex, std::try_to_lock);
-      if (!lock.owns_lock() || draining)
-        return progress;
-      draining = true;
-      DrainResult result = drain(progress);
-      draining = false;
-      // When blocked, the next poll() retries.
-      if (result != DrainResult::Idle)
-        return progress;
-    }
-    // A notify() which arrived after drain() last checked `dataAvailable` but
-    // before the lock was released couldn't poll(), so do it on its behalf.
-    if (!dataAvailable)
-      return progress;
-  }
+  DrainResult result = DrainResult::Idle;
+  do {
+    std::unique_lock<std::recursive_mutex> lock(mutex, std::try_to_lock);
+    if (!lock.owns_lock() || draining)
+      break;
+    draining = true;
+    result = drain(progress);
+    draining = false;
+    // Repeat for a notify() which arrived after drain() last checked
+    // `dataAvailable` but before the lock was released, since it couldn't
+    // poll() itself. When blocked, the next poll() retries.
+  } while (result == DrainResult::Idle && dataAvailable);
+  return progress;
 }
 
 WriteChannelPort::DefaultAsyncWriter::DrainResult
