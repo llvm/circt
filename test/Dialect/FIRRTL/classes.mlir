@@ -19,7 +19,7 @@ firrtl.circuit "Classes" {
   firrtl.module @ModuleWithObjectPort(in %in: !firrtl.class<@StringPassThru(in in_str: !firrtl.string, out out_str: !firrtl.string)>) {}
 
   // CHECK-LABEL: firrtl.class @EmptyClass()
-  firrtl.class @EmptyClass() {}
+  firrtl.class @EmptyClass() attributes {linkonce_odr} {}
 
   // CHECK-LABEL: firrtl.module @ModuleWithOutputObject(out %out: !firrtl.class<@EmptyClass()>)
   firrtl.module @ModuleWithOutputObject(out %out: !firrtl.class<@EmptyClass()>) {
