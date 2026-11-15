@@ -458,6 +458,9 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
   // CHECK-NEXT:    parameter WIDTH = 32
 
+  // CHECK-LABEL: class EmptyClass :
+  firrtl.class @EmptyClass() {}
+
   // CHECK-LABEL: class Class :
   // CHECK-NEXT:    input in : String
   // CHECK-NEXT:    output out : String
