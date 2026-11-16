@@ -1065,7 +1065,7 @@ hw.module @AsyncResetRegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %v
 // Test for registers with "preset".
 
 // A preset register buried under an `sv.ifdef` (and guarded only by ifdefs) is
-// emitted with an inline `sv.reg init` initializer inside that same ifdef,
+// emitted with an inline `sv.var init` initializer inside that same ifdef,
 // rather than via an XMR in the guarded `initial` block.
 // CHECK-LABEL: hw.module @PresetRegUnderIfdef
 hw.module @PresetRegUnderIfdef(in %clock : !seq.clock, in %value : i1) {

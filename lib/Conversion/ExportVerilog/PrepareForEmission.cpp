@@ -478,7 +478,7 @@ static Operation *findParentInNonProceduralRegion(Operation *op) {
 /// This function is invoked on side effecting Verilog expressions when we're in
 /// 'disallowLocalVariables' mode for old Verilog clients.  This ensures that
 /// any side effecting expressions are only used by a single BPAssign to a
-/// sv.reg or sv.logic operation.  This ensures that the verilog emitter doesn't
+/// sv.var or sv.logic operation.  This ensures that the verilog emitter doesn't
 /// have to worry about spilling them.
 ///
 /// This returns true if the op was rewritten, false otherwise.
@@ -1007,7 +1007,7 @@ static LogicalResult legalizeHWModule(Block &block,
     if (options.disallowLocalVariables && isVerilogExpression(&op) &&
         isProceduralRegion) {
 
-      // Force any side-effecting expressions in nested regions into a sv.reg
+      // Force any side-effecting expressions in nested regions into a sv.var
       // if we aren't allowing local variable declarations.  The Verilog emitter
       // doesn't want to have to have to know how to synthesize a reg in the
       // case they have to be spilled for whatever reason.

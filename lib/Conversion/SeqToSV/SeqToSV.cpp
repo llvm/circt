@@ -132,7 +132,7 @@ ModuleLoweringState::ImmutableValueLowering::lower(seq::InitialOp initialOp) {
   return success();
 }
 
-/// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
+/// Lower CompRegOp to `sv.var` and `sv.alwaysff`. Use a posedge clock and
 /// synchronous reset.
 template <typename OpTy>
 class CompRegLower : public OpConversionPattern<OpTy> {
@@ -249,7 +249,7 @@ void CompRegLower<CompRegClockEnabledOp>::createAssign(
   });
 }
 
-/// Lower FromImmutable to `sv.reg` and `sv.initial`.
+/// Lower FromImmutable to `sv.var` and `sv.initial`.
 class FromImmutableLowering : public OpConversionPattern<FromImmutableOp> {
 public:
   FromImmutableLowering(
