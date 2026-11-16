@@ -74,7 +74,7 @@ private:
   bool unvisited = true;
 };
 
-/// Lower FirRegOp to `sv.reg` and `sv.always`.
+/// Lower FirRegOp to `sv.var` and `sv.always`.
 class FirRegLowering {
 public:
   /// A map sending registers to their paths.

@@ -2,7 +2,7 @@
 
 // An end-to-end test of the `initial` time-zero simulation value attribute on
 // `firrtl.reg` and `firrtl.regreset`, lowered all the way to Verilog by
-// firtool. The value appears as an inline `sv.reg` initializer with no
+// firtool. The value appears as an inline `sv.var` initializer with no
 // `initial` block or ifdef guard.
 
 firrtl.circuit "RegInitial" {

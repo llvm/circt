@@ -83,7 +83,7 @@ hw.module @fragment_ref(in %clk : !seq.clock) attributes {emit.fragments = [@Som
 
 // reg init tests
 
-// A simple preset register is emitted as an inline `sv.reg` initializer with no
+// A simple preset register is emitted as an inline `sv.var` initializer with no
 // `initial` block and no ifdef guard. With the inline-init option disabled, the
 // preset falls back to the guarded `initial` block.
 // CHECK-LABEL: hw.module @Preset
@@ -111,7 +111,7 @@ hw.module @PresetReset(in %clock : !seq.clock, in %reset : i1, in %next : i8) {
 sv.macro.decl @MyMacro
 
 // A preset register buried under an `sv.ifdef` (guarded only by ifdefs) is
-// dominance-safe, so it is emitted as an inline `sv.reg init` inside that same
+// dominance-safe, so it is emitted as an inline `sv.var init` inside that same
 // ifdef with no `initial` block and no XMR. With inline-init disabled, the
 // buried preset falls back to the XMR-based guarded `initial` block.
 // OLD:       hw.hierpath @[[buried_path:.+]] [@PresetBuried::@{{.+}}]

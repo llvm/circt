@@ -1471,7 +1471,7 @@ LogicalResult BPAssignOp::verify() {
   if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
-        "to use a variable type, e.g., sv.reg?)");
+        "to use a variable type, e.g., sv.var?)");
   return success();
 }
 
@@ -1479,7 +1479,7 @@ LogicalResult PAssignOp::verify() {
   if (isa<sv::WireOp>(getDest().getDefiningOp()))
     return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
-        "to use a variable type, e.g., sv.reg?)");
+        "to use a variable type, e.g., sv.var?)");
   return success();
 }
 

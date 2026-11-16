@@ -701,7 +701,7 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   RegLowerInfo svReg{nullptr, path, reg.getPresetAttr(), nullptr, nullptr,
                      -1,      0};
 
-  // Decide whether the preset value should be emitted as an inline `sv.reg`
+  // Decide whether the preset value should be emitted as an inline `sv.var`
   // initializer rather than through the guarded `initial` block.
   bool inlinePreset = svReg.preset && emitPresetAsInlineInit;
 
@@ -778,7 +778,7 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   if (!conditions.empty())
     regConditionTable.emplace_or_assign(svReg.reg, conditions);
 
-  // For clock-typed registers the lowered sv.reg holds i1, but any remaining
+  // For clock-typed registers the lowered sv.var holds i1, but any remaining
   // users of the original !seq.clock result (e.g. seq.from_clock, hw.wire)
   // still expect that type.  Bridge the gap with a seq.to_clock so that those
   // users stay type-correct until applyPartialConversion resolves them via
