@@ -83,6 +83,15 @@ StructType::verifySymbolUses(Operation *op,
   return success();
 }
 
+LogicalResult
+VariantType::verifySymbolUses(Operation *op,
+                              SymbolTableCollection &symbolTable) const {
+  if (!symbolTable.lookupNearestSymbolFrom<VariantDeclOp>(op, getDeclaration()))
+    return op->emitOpError()
+           << "references unknown variant declaration " << getDeclaration();
+  return success();
+}
+
 void DictType::print(AsmPrinter &p) const {
   p << '<';
   llvm::interleaveComma(getEntries(), p, [&](auto entry) {

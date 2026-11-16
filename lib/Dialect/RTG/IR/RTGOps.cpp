@@ -20,6 +20,8 @@
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallString.h"
+#include <limits>
+#include <optional>
 
 using namespace mlir;
 using namespace circt;
@@ -32,6 +34,19 @@ static LogicalResult verifyStructType(Operation *op, StructType type,
   if (!declaration)
     return op->emitOpError()
            << "references unknown struct declaration " << type.getDeclaration();
+  if (declarationOut)
+    *declarationOut = declaration;
+  return success();
+}
+
+static LogicalResult
+verifyVariantType(Operation *op, VariantType type,
+                  VariantDeclOp *declarationOut = nullptr) {
+  auto declaration = SymbolTable::lookupNearestSymbolFrom<VariantDeclOp>(
+      op, type.getDeclaration());
+  if (!declaration)
+    return op->emitOpError() << "references unknown variant declaration "
+                             << type.getDeclaration();
   if (declarationOut)
     *declarationOut = declaration;
   return success();
@@ -55,14 +70,58 @@ static LogicalResult verifyStructFields(Operation *op, StructDeclOp declaration,
   return success();
 }
 
-static LogicalResult verifyStructTypeUses(Operation *op, Type type,
-                                          SymbolTableCollection &symbolTable) {
-  WalkResult walkResult = type.walk([&](StructType structType) {
-    if (failed(structType.verifySymbolUses(op, symbolTable)))
-      return WalkResult::interrupt();
+static LogicalResult
+verifyAggregateTypeUses(Operation *op, Type type,
+                        SymbolTableCollection &symbolTable) {
+  WalkResult walkResult = type.walk([&](Type nestedType) {
+    if (auto structType = dyn_cast<StructType>(nestedType)) {
+      if (failed(structType.verifySymbolUses(op, symbolTable)))
+        return WalkResult::interrupt();
+    } else if (auto variantType = dyn_cast<VariantType>(nestedType)) {
+      if (failed(variantType.verifySymbolUses(op, symbolTable)))
+        return WalkResult::interrupt();
+    }
     return WalkResult::advance();
   });
   return walkResult.wasInterrupted() ? failure() : success();
+}
+
+static FailureOr<std::pair<VariantDeclOp, unsigned>>
+lookupVariantConstructor(Operation *op, VariantType type, StringRef name) {
+  VariantDeclOp declaration;
+  if (failed(verifyVariantType(op, type, &declaration)))
+    return failure();
+  auto index = declaration.getConstructorIndex(name);
+  if (!index) {
+    op->emitOpError() << "constructor '" << name
+                      << "' is not declared by variant type " << type;
+    return failure();
+  }
+  return std::make_pair(declaration, *index);
+}
+
+static LogicalResult verifyVariantCreateTypes(Operation *op, VariantType type,
+                                              StringRef constructor,
+                                              TypeRange payloadTypes) {
+  auto info = lookupVariantConstructor(op, type, constructor);
+  if (failed(info))
+    return failure();
+  auto [declaration, index] = *info;
+  Type expectedType = declaration.getPayloadType(index);
+  if (payloadTypes.empty()) {
+    auto unitType = dyn_cast<circt::rtg::TupleType>(expectedType);
+    if (!unitType || !unitType.getFieldTypes().empty())
+      return op->emitOpError()
+             << "constructor '" << constructor
+             << "' requires a payload of type " << expectedType;
+    return success();
+  }
+  if (payloadTypes.size() != 1)
+    return op->emitOpError("constructor takes exactly one payload value");
+  if (payloadTypes.front() != expectedType)
+    return op->emitOpError() << "payload has type " << payloadTypes.front()
+                             << ", expected " << expectedType;
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -92,6 +151,22 @@ LogicalResult ConstantOp::verify() {
         fieldTypes.push_back(field.getType());
       if (failed(verifyStructFields(*this, declaration, fieldTypes)))
         return failure();
+    }
+
+    if (auto variantAttr = dyn_cast<VariantAttr>(attr)) {
+      auto info =
+          lookupVariantConstructor(*this, variantAttr.getType(),
+                                   variantAttr.getConstructor().getValue());
+      if (failed(info))
+        return failure();
+      auto [declaration, index] = *info;
+      if (variantAttr.getPayload().getType() !=
+          declaration.getPayloadType(index))
+        return emitOpError()
+               << "payload for constructor '"
+               << variantAttr.getConstructor().getValue() << "' has type "
+               << variantAttr.getPayload().getType() << ", expected "
+               << declaration.getPayloadType(index);
     }
 
     // Set and map contents are opaque to the generic sub-element walker.
@@ -155,16 +230,17 @@ ParseResult StructDeclOp::parse(OpAsmParser &parser, OperationState &result) {
 
   SmallVector<Attribute> fieldNames;
   SmallVector<Type> fieldTypes;
-  if (parser.parseCommaSeparatedList(AsmParser::Delimiter::Braces, [&]() {
-        std::string name;
-        Type type;
-        if (parser.parseKeywordOrString(&name) || parser.parseColon() ||
-            parser.parseType(type))
-          return failure();
-        fieldNames.push_back(parser.getBuilder().getStringAttr(name));
-        fieldTypes.push_back(type);
-        return success();
-      }))
+  if (parser.parseCommaSeparatedList(
+          AsmParser::Delimiter::Braces, [&]() -> ParseResult {
+            std::string name;
+            Type type;
+            if (parser.parseKeywordOrString(&name) || parser.parseColon() ||
+                parser.parseType(type))
+              return failure();
+            fieldNames.push_back(parser.getBuilder().getStringAttr(name));
+            fieldTypes.push_back(type);
+            return success();
+          }))
     return failure();
 
   auto &properties = result.getOrAddProperties<StructDeclOp::Properties>();
@@ -206,9 +282,119 @@ void StructDeclOp::print(OpAsmPrinter &p) {
 LogicalResult
 StructDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   for (TypeAttr fieldType : getFieldTypesAttr().getAsRange<TypeAttr>())
-    if (failed(verifyStructTypeUses(*this, fieldType.getValue(), symbolTable)))
+    if (failed(
+            verifyAggregateTypeUses(*this, fieldType.getValue(), symbolTable)))
       return failure();
   return success();
+}
+
+LogicalResult VariantDeclOp::verify() {
+  size_t count = getConstructorNamesAttr().size();
+  if (getPayloadTypesAttr().size() != count)
+    return emitOpError("constructor names and payload type counts must match");
+
+  DenseSet<StringRef> names;
+  auto constructorNames = getConstructorNamesAttr().getAsRange<StringAttr>();
+  auto payloadTypes = getPayloadTypesAttr().getAsRange<TypeAttr>();
+  for (auto [index, fields] :
+       llvm::enumerate(llvm::zip(constructorNames, payloadTypes))) {
+    auto [nameAttr, payloadAttr] = fields;
+    StringRef name = nameAttr.getValue();
+    if (name.empty())
+      return emitOpError("constructor labels must not be empty");
+    if (!names.insert(name).second)
+      return emitOpError() << "duplicate constructor label '" << name << "'";
+    if (!payloadAttr.getValue())
+      return emitOpError() << "constructor '" << name
+                           << "' must have a payload type";
+  }
+  return success();
+}
+
+std::optional<unsigned> VariantDeclOp::getConstructorIndex(StringRef name) {
+  for (auto [index, constructor] :
+       llvm::enumerate(getConstructorNamesAttr().getAsRange<StringAttr>()))
+    if (constructor.getValue() == name)
+      return index;
+  return std::nullopt;
+}
+
+Type VariantDeclOp::getPayloadType(unsigned index) {
+  return cast<TypeAttr>(getPayloadTypesAttr()[index]).getValue();
+}
+
+ParseResult VariantDeclOp::parse(OpAsmParser &parser, OperationState &result) {
+  StringAttr symName;
+  if (parser.parseSymbolName(symName))
+    return failure();
+
+  SmallVector<Attribute> names;
+  SmallVector<Type> payloadTypes;
+  if (parser.parseCommaSeparatedList(AsmParser::Delimiter::Braces, [&]() {
+        std::string name;
+        Type payloadType;
+        if (parser.parseKeywordOrString(&name) || parser.parseColon() ||
+            parser.parseType(payloadType))
+          return failure();
+        names.push_back(parser.getBuilder().getStringAttr(name));
+        payloadTypes.push_back(payloadType);
+        return success();
+      }))
+    return failure();
+
+  auto &properties = result.getOrAddProperties<VariantDeclOp::Properties>();
+  properties.sym_name = symName;
+  properties.constructor_names = parser.getBuilder().getArrayAttr(names);
+  properties.payload_types = parser.getBuilder().getTypeArrayAttr(payloadTypes);
+  return parser.parseOptionalAttrDict(result.attributes);
+}
+
+void VariantDeclOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printSymbolName(getSymNameAttr().getValue());
+  auto names = getConstructorNamesAttr().getAsRange<StringAttr>();
+  auto payloadTypes = getPayloadTypesAttr().getAsRange<TypeAttr>();
+  if (!names.empty()) {
+    p << " {";
+    p.increaseIndent();
+    for (auto [index, fields] :
+         llvm::enumerate(llvm::zip_equal(names, payloadTypes))) {
+      auto [name, payloadType] = fields;
+      p.printNewline();
+      p.printKeywordOrString(name.getValue());
+      p << ": ";
+      p.printType(payloadType.getValue());
+      if (index + 1 != getConstructorNamesAttr().size())
+        p << ',';
+    }
+    p.decreaseIndent();
+    p.printNewline();
+    p << '}';
+  } else {
+    p << " {}";
+  }
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          {getSymNameAttrName(), getConstructorNamesAttrName(),
+                           getPayloadTypesAttrName()});
+}
+
+LogicalResult
+VariantDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  for (TypeAttr payloadType : getPayloadTypesAttr().getAsRange<TypeAttr>())
+    if (failed(verifyAggregateTypeUses(*this, payloadType.getValue(),
+                                       symbolTable)))
+      return failure();
+  return success();
+}
+
+StringAttr VariantDeclOp::getNameAttr() { return getSymNameAttr(); }
+
+SymbolTable::Visibility VariantDeclOp::getVisibility() {
+  return SymbolTable::Visibility::Private;
+}
+
+void VariantDeclOp::setVisibility(SymbolTable::Visibility visibility) {
+  assert(false && "cannot change visibility of variant declarations");
 }
 
 StringAttr StructDeclOp::getNameAttr() { return getSymNameAttr(); }
@@ -709,6 +895,235 @@ LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
     return failure();
 
   rewriter.replaceOp(op, create.getFields()[*index]);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Variant operations
+//===----------------------------------------------------------------------===//
+
+ParseResult VariantCreateOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
+  std::string constructor;
+  SmallVector<OpAsmParser::UnresolvedOperand> payloads;
+  FunctionType signature;
+  if (parser.parseKeywordOrString(&constructor) || parser.parseLParen())
+    return failure();
+  if (succeeded(parser.parseOptionalRParen())) {
+    // Nullary constructors use an empty tuple as their unit payload.
+  } else if (parser.parseOperand(payloads.emplace_back()) ||
+             parser.parseRParen()) {
+    return failure();
+  }
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(signature))
+    return failure();
+  if (signature.getNumInputs() != payloads.size() ||
+      signature.getNumResults() != 1)
+    return parser.emitError(
+        parser.getNameLoc(),
+        "variant constructor requires matching payload and result types");
+  auto resultType = dyn_cast<VariantType>(signature.getResult(0));
+  if (!resultType)
+    return parser.emitError(parser.getNameLoc(),
+                            "variant result must have an !rtg.variant type");
+  if (parser.resolveOperands(payloads, signature.getInputs(),
+                             parser.getNameLoc(), result.operands))
+    return failure();
+  result.getOrAddProperties<VariantCreateOp::Properties>().constructor =
+      parser.getBuilder().getStringAttr(constructor);
+  result.addTypes(signature.getResult(0));
+  return success();
+}
+
+void VariantCreateOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printKeywordOrString(getConstructorAttr().getValue());
+  p << '(';
+  if (!getPayload().empty())
+    p.printOperand(getPayload().front());
+  p << ')';
+  p.printOptionalAttrDict((*this)->getAttrs(), {getConstructorAttrName()});
+  p << " : ";
+  SmallVector<Type> resultTypes{getResult().getType()};
+  p.printFunctionalType(getPayload().getTypes(), resultTypes);
+}
+
+LogicalResult VariantCreateOp::verify() {
+  return verifyVariantCreateTypes(*this, getResult().getType(),
+                                  getConstructorAttr().getValue(),
+                                  getPayload().getTypes());
+}
+
+OpFoldResult VariantCreateOp::fold(FoldAdaptor adaptor) {
+  TypedAttr payload;
+  if (adaptor.getPayload().empty())
+    payload = TupleAttr::get(getContext(), {});
+  else
+    payload = dyn_cast_or_null<TypedAttr>(adaptor.getPayload().front());
+  if (!payload)
+    return {};
+  auto info = lookupVariantConstructor(*this, getResult().getType(),
+                                       getConstructorAttr().getValue());
+  if (failed(info))
+    return {};
+  return VariantAttr::get(getContext(), getResult().getType(),
+                          getConstructorAttr(), payload);
+}
+
+ParseResult VariantMatchOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand value;
+  VariantType variantType;
+  SmallVector<Type> resultTypes;
+  if (parser.parseOperand(value) || parser.parseColonType(variantType) ||
+      parser.parseOptionalArrowTypeList(resultTypes) || parser.parseLBrace())
+    return failure();
+  if (parser.resolveOperand(value, variantType, result.operands))
+    return failure();
+  result.addTypes(resultTypes);
+
+  SmallVector<Attribute> constructors;
+  while (succeeded(parser.parseOptionalKeyword("case"))) {
+    std::string constructor;
+    SmallVector<OpAsmParser::Argument> arguments(1);
+    if (parser.parseKeywordOrString(&constructor) || parser.parseLParen() ||
+        parser.parseArgument(arguments.front(), /*allowType=*/true,
+                             /*allowAttrs=*/false) ||
+        parser.parseRParen())
+      return failure();
+    auto region = std::make_unique<Region>();
+    if (parser.parseRegion(*region, arguments))
+      return failure();
+    constructors.push_back(parser.getBuilder().getStringAttr(constructor));
+    result.addRegion(std::move(region));
+  }
+  if (parser.parseRBrace() || parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  result.getOrAddProperties<VariantMatchOp::Properties>().constructors =
+      parser.getBuilder().getArrayAttr(constructors);
+  return success();
+}
+
+void VariantMatchOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printOperand(getValue());
+  p << " : " << getValue().getType();
+  if (getNumResults())
+    p.printArrowTypeList(getResultTypes());
+  p << " {";
+  auto constructors = getConstructorsAttr().getAsRange<StringAttr>();
+  for (auto [constructor, region] : llvm::zip(constructors, getCaseRegions())) {
+    p.printNewline();
+    p << "case ";
+    p.printKeywordOrString(constructor.getValue());
+    p << '(';
+    p.printRegionArgument(region.front().getArgument(0));
+    p << ") ";
+    p.printRegion(region, /*printEntryBlockArgs=*/false);
+  }
+  p.printNewline();
+  p << '}';
+  p.printOptionalAttrDict((*this)->getAttrs(), {getConstructorsAttrName()});
+}
+
+std::optional<unsigned> VariantMatchOp::getCaseIndex(StringRef constructor) {
+  for (auto [index, name] :
+       llvm::enumerate(getConstructorsAttr().getAsRange<StringAttr>()))
+    if (name.getValue() == constructor)
+      return index;
+  return std::nullopt;
+}
+
+LogicalResult VariantMatchOp::verify() {
+  VariantDeclOp declaration;
+  if (failed(verifyVariantType(*this, getValue().getType(), &declaration)))
+    return failure();
+  auto constructors = getConstructorsAttr().getAsRange<StringAttr>();
+  if (getConstructorsAttr().size() != getCaseRegions().size())
+    return emitOpError() << "has " << getConstructorsAttr().size()
+                         << " constructor labels but "
+                         << getCaseRegions().size() << " case regions";
+  if (getConstructorsAttr().size() !=
+      declaration.getConstructorNamesAttr().size())
+    return emitOpError("must provide exactly one case for every constructor");
+
+  DenseSet<StringRef> seen;
+  for (auto [constructor, region] : llvm::zip(constructors, getCaseRegions())) {
+    StringRef label = constructor.getValue();
+    if (!seen.insert(label).second)
+      return emitOpError() << "duplicate constructor label '" << label << "'";
+    auto index = declaration.getConstructorIndex(label);
+    if (!index)
+      return emitOpError() << "constructor label '" << label
+                           << "' is not declared by " << getValue().getType();
+    Block &block = region.front();
+    if (block.getNumArguments() != 1)
+      return emitOpError() << "case '" << label
+                           << "' must have exactly one payload argument";
+    Type payloadType = declaration.getPayloadType(*index);
+    if (block.getArgument(0).getType() != payloadType)
+      return emitOpError() << "case '" << label
+                           << "' payload argument has type "
+                           << block.getArgument(0).getType() << ", expected "
+                           << payloadType;
+
+    YieldOp yield;
+    if (!block.empty())
+      yield = dyn_cast<YieldOp>(&block.back());
+    if (!yield)
+      return emitOpError() << "case '" << label
+                           << "' must terminate with rtg.yield";
+    if (yield.getNumOperands() != getNumResults())
+      return emitOpError() << "case '" << label << "' yields "
+                           << yield.getNumOperands() << " values, expected "
+                           << getNumResults();
+    for (auto [resultType, yielded] :
+         llvm::zip(getResultTypes(), yield.getOperandTypes()))
+      if (resultType != yielded)
+        return emitOpError() << "case '" << label << "' yields type " << yielded
+                             << ", expected " << resultType;
+  }
+  return success();
+}
+
+LogicalResult VariantMatchOp::canonicalize(VariantMatchOp op,
+                                           PatternRewriter &rewriter) {
+  auto create = op.getValue().getDefiningOp<VariantCreateOp>();
+  VariantAttr variant;
+  if (!create) {
+    Attribute valueAttr;
+    if (!matchPattern(op.getValue(), m_Constant(&valueAttr)))
+      return failure();
+    variant = dyn_cast<VariantAttr>(valueAttr);
+    if (!variant)
+      return failure();
+  }
+
+  StringRef constructor = create ? create.getConstructorAttr().getValue()
+                                 : variant.getConstructor().getValue();
+
+  auto selectedIndex = op.getCaseIndex(constructor);
+  if (!selectedIndex)
+    return failure();
+
+  rewriter.setInsertionPoint(op);
+  Value payload;
+  if (create) {
+    if (create.getPayload().empty())
+      payload = ConstantOp::create(rewriter, op.getLoc(),
+                                   TupleAttr::get(rewriter.getContext(), {}));
+    else
+      payload = create.getPayload().front();
+  } else {
+    payload = ConstantOp::create(rewriter, op.getLoc(), variant.getPayload());
+  }
+  Block &selectedBlock = op.getCaseRegions()[*selectedIndex].front();
+  auto yield = cast<YieldOp>(selectedBlock.getTerminator());
+  rewriter.inlineBlockBefore(&selectedBlock, op, ValueRange{payload});
+  SmallVector<Value> results(yield.getOperands().begin(),
+                             yield.getOperands().end());
+  rewriter.eraseOp(yield);
+  rewriter.replaceOp(op, results);
   return success();
 }
 

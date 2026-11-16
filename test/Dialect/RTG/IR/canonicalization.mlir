@@ -314,3 +314,52 @@ func.func @construct_project(%x: index, %y: i1) -> i1 {
   %field = rtg.struct_extract %value[y] : !rtg.struct<@Point> -> i1
   func.return %field : i1
 }
+
+rtg.variant.decl @Maybe {
+  None: !rtg.tuple,
+  Some: index
+}
+
+// CHECK-LABEL: func.func @variant_create_constant
+func.func @variant_create_constant() -> !rtg.variant<@Maybe> {
+  %nine = index.constant 9
+  // CHECK: %[[SOME:.*]] = rtg.constant #rtg.variant<Some, 9 : index> : !rtg.variant<@Maybe>
+  %some = rtg.variant_create Some(%nine) : (index) -> !rtg.variant<@Maybe>
+  // CHECK: return %[[SOME]] : !rtg.variant<@Maybe>
+  func.return %some : !rtg.variant<@Maybe>
+}
+
+// CHECK-LABEL: func.func @variant_match_constant
+func.func @variant_match_constant() -> index {
+  %some = rtg.constant #rtg.variant<Some, 9 : index> : !rtg.variant<@Maybe>
+  %matched = rtg.match %some : !rtg.variant<@Maybe> -> index {
+    case Some(%payload: index) {
+      rtg.yield %payload : index
+    }
+    case None(%unit: !rtg.tuple) {
+      %zero = index.constant 0
+      rtg.yield %zero : index
+    }
+  }
+  // CHECK: %[[MATCHED:.*]] = rtg.constant 9 : index
+  // CHECK: return %[[MATCHED]] : index
+  func.return %matched : index
+}
+
+// Matching a constructed variant selects its case even when the payload is
+// non-constant, which cannot be handled by folding to an attribute.
+// CHECK-LABEL: func.func @construct_and_match_variant
+func.func @construct_and_match_variant(%payload: index) -> index {
+  %some = rtg.variant_create Some(%payload) : (index) -> !rtg.variant<@Maybe>
+  %matched = rtg.match %some : !rtg.variant<@Maybe> -> index {
+    case Some(%value: index) {
+      rtg.yield %value : index
+    }
+    case None(%unit: !rtg.tuple) {
+      %zero = index.constant 0
+      rtg.yield %zero : index
+    }
+  }
+  // CHECK-NEXT: return %arg0 : index
+  func.return %matched : index
+}

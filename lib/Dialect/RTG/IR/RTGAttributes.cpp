@@ -246,6 +246,49 @@ void StructAttr::print(AsmPrinter &printer) const {
 }
 
 //===----------------------------------------------------------------------===//
+// VariantAttr
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+VariantAttr::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+                    VariantType type, StringAttr constructor,
+                    TypedAttr payload) {
+  if (!type)
+    return emitError() << "variant attribute requires a variant type";
+  if (!payload)
+    return emitError() << "variant attribute requires a typed payload";
+  if (!constructor || constructor.empty())
+    return emitError() << "variant attribute requires a constructor label";
+  return success();
+}
+
+Attribute VariantAttr::parse(AsmParser &parser, Type type) {
+  llvm::SMLoc loc = parser.getCurrentLocation();
+  std::string constructor;
+  TypedAttr payload;
+  if (parser.parseLess() || parser.parseKeywordOrString(&constructor) ||
+      parser.parseComma() || parser.parseAttribute(payload) ||
+      parser.parseGreater())
+    return {};
+
+  auto variantType = dyn_cast_or_null<VariantType>(type);
+  if (!variantType) {
+    parser.emitError(loc,
+                     "variant attribute requires a trailing !rtg.variant type");
+    return {};
+  }
+  return parser.getChecked<VariantAttr>(
+      loc, parser.getContext(), variantType,
+      StringAttr::get(parser.getContext(), constructor), payload);
+}
+
+void VariantAttr::print(AsmPrinter &printer) const {
+  printer << '<';
+  printer.printKeywordOrString(getConstructor().getValue());
+  printer << ", " << getPayload() << ">";
+}
+
+//===----------------------------------------------------------------------===//
 // VirtualRegisterConfigAttr
 //===----------------------------------------------------------------------===//
 

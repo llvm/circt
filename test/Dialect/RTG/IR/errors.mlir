@@ -410,3 +410,73 @@ rtg.test @stringToASCIIArrayWrongElementType(str = %str: !rtg.string) {
   // expected-error @below {{must be array of 8-bit signless integer values}}
   rtg.string_to_ascii_array %str : !rtg.array<i16>
 }
+
+// -----
+
+// expected-error @below {{duplicate constructor label 'Some'}}
+rtg.variant.decl @DuplicateLabel {
+  Some: !rtg.tuple,
+  Some: index
+}
+
+// -----
+
+// Generic assembly must still reject malformed parallel schema arrays.
+// expected-error @below {{constructor names and payload type counts must match}}
+"rtg.variant.decl"() <{
+  sym_name = "Malformed",
+  constructor_names = ["A"],
+  payload_types = []
+}> : () -> ()
+
+// -----
+
+rtg.variant.decl @Option { None: !rtg.tuple, Some: index }
+func.func @unknown_constructor(%payload: index) {
+  // expected-error @below {{constructor 'Missing' is not declared by variant type '!rtg.variant<@Option>'}}
+  %value = rtg.variant_create Missing(%payload) : (index) -> !rtg.variant<@Option>
+  func.return
+}
+
+// -----
+
+rtg.variant.decl @Option { Some: index }
+func.func @bad_variant_payload(%payload: i1) {
+  // expected-error @below {{payload has type 'i1', expected 'index'}}
+  %value = rtg.variant_create Some(%payload) : (i1) -> !rtg.variant<@Option>
+  func.return
+}
+
+// -----
+
+rtg.variant.decl @Option { Some: index }
+// expected-error @below {{constructor 'Missing' is not declared by variant type '!rtg.variant<@Option>'}}
+%value = rtg.constant #rtg.variant<Missing, 0 : index> : !rtg.variant<@Option>
+
+// -----
+
+rtg.variant.decl @Option { Some: index }
+// expected-error @below {{payload for constructor 'Some' has type 'i1', expected 'index'}}
+%value = rtg.constant #rtg.variant<Some, 0 : i1> : !rtg.variant<@Option>
+
+// -----
+
+rtg.variant.decl @Option { None: !rtg.tuple, Some: index }
+func.func @incomplete_match(%value: !rtg.variant<@Option>) {
+  // expected-error @below {{must provide exactly one case for every constructor}}
+  rtg.match %value : !rtg.variant<@Option> {
+    case Some(%payload: index) { rtg.yield }
+  }
+  func.return
+}
+
+// -----
+
+rtg.variant.decl @Option { Some: index }
+func.func @bad_match_payload(%value: !rtg.variant<@Option>) {
+  // expected-error @below {{case 'Some' payload argument has type 'i1', expected 'index'}}
+  rtg.match %value : !rtg.variant<@Option> {
+    case Some(%payload: i1) { rtg.yield }
+  }
+  func.return
+}

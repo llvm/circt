@@ -163,6 +163,23 @@ def StructType : RTGTypeDef<"Struct"> {
   }];
 }
 
+def VariantType : RTGTypeDef<"Variant"> {
+  let summary = "a nominal variant type";
+  let description = [{
+    A variant type refers to a module-level `rtg.variant.decl` symbol, which
+    defines its constructor names and types.
+  }];
+  let parameters = (ins
+    RTGFlatSymbolRefParameter<"variant declaration">:$declaration);
+  let mnemonic = "variant";
+  let assemblyFormat = "`<` $declaration `>`";
+  let extraClassDeclaration = [{
+    ::mlir::LogicalResult verifySymbolUses(
+        ::mlir::Operation *op,
+        ::mlir::SymbolTableCollection &symbolTable) const;
+  }];
+}
+
 def ArrayType : RTGTypeDef<"Array"> {
   let summary = "an array type with dynamic size";
   let description = [{

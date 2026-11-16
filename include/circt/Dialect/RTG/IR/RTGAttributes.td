@@ -153,6 +153,23 @@ def StructAttr : RTGAttrDef<"Struct", [
   let genVerifyDecl = true;
 }
 
+def VariantAttr : RTGAttrDef<"Variant", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "a variant constant";
+  let description = [{
+    A typed variant constant stores its nominal type, constructor label, and
+    its payload value.
+  }];
+  let mnemonic = "variant";
+  let parameters = (ins
+    AttributeSelfTypeParameter<"variant type", "rtg::VariantType">:$type,
+    "::mlir::StringAttr":$constructor,
+    "::mlir::TypedAttr":$payload);
+  let hasCustomAssemblyFormat = true;
+  let genVerifyDecl = true;
+}
+
 //===----------------------------------------------------------------------===//
 // Attributes for ISA targets
 //===----------------------------------------------------------------------===//

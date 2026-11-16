@@ -527,3 +527,90 @@ rtg.test @continuation_in_set() {
   // CHECK: rtg.set_create : !rtg.continuation<index>
   %set = rtg.set_create : !rtg.continuation<index>
 }
+
+// Variant declarations, values, and pattern matching.
+// CHECK: rtg.variant.decl @Option {
+// CHECK-NEXT:   None: !rtg.tuple,
+// CHECK-NEXT:   Some: index
+// CHECK-NEXT: }
+rtg.variant.decl @Option {
+  None: !rtg.tuple,
+  Some: index
+}
+
+// CHECK-LABEL: func.func @variant_operations
+func.func @variant_operations(%payload: index,
+                              %value: !rtg.variant<@Option>)
+    -> index {
+  // CHECK: %{{.*}} = rtg.variant_create Some(%arg0) : (index) -> !rtg.variant<@Option>
+  %some = rtg.variant_create Some(%payload) : (index) -> !rtg.variant<@Option>
+  // CHECK: %{{.*}} = rtg.match %arg1 : !rtg.variant<@Option> -> index {
+  %matched = rtg.match %value : !rtg.variant<@Option> -> index {
+    case None(%unit: !rtg.tuple) {
+      %zero = index.constant 0
+      rtg.yield %zero : index
+    }
+    case Some(%matched_payload: index) {
+      rtg.yield %matched_payload : index
+    }
+  }
+  func.return %matched : index
+}
+
+// CHECK-LABEL: func.func @variant_constant
+// CHECK-NEXT: %[[VALUE:.*]] = rtg.constant #rtg.variant<Some, 9 : index> : !rtg.variant<@Option>
+// CHECK-NEXT: return %[[VALUE]] : !rtg.variant<@Option>
+func.func @variant_constant() -> !rtg.variant<@Option> {
+  %value = rtg.constant #rtg.variant<Some, 9 : index> : !rtg.variant<@Option>
+  func.return %value : !rtg.variant<@Option>
+}
+
+// Nullary constructors use the empty RTG tuple. Empty declarations are valid.
+// CHECK: rtg.variant.decl @Tree {
+rtg.variant.decl @Tree {
+  Leaf: index,
+  Branch: !rtg.tuple<!rtg.variant<@Tree>, !rtg.variant<@Tree>>
+}
+// CHECK: rtg.variant.decl @Empty {}
+rtg.variant.decl @Empty {}
+
+// Forward and mutual references remain nominal and do not create cyclic types.
+rtg.variant.decl @VariantLeft { ToRight: !rtg.variant<@VariantRight> }
+rtg.variant.decl @VariantRight { ToLeft: !rtg.variant<@VariantLeft> }
+
+func.func @nullary() -> !rtg.variant<@Option> {
+  %none = rtg.variant_create None() : () -> !rtg.variant<@Option>
+  func.return %none : !rtg.variant<@Option>
+}
+
+rtg.struct.decl @Payload { value: index, valid: i1 }
+rtg.variant.decl @PayloadVariant { "payload-value": !rtg.struct<@Payload> }
+
+// Constructor labels are declaration-local strings, not symbol references.
+func.func @quoted_constructor_label(%payload: !rtg.struct<@Payload>)
+    -> !rtg.variant<@PayloadVariant> {
+  %value = rtg.variant_create "payload-value"(%payload) : (!rtg.struct<@Payload>) -> !rtg.variant<@PayloadVariant>
+  rtg.match %value : !rtg.variant<@PayloadVariant> {
+    case "payload-value"(%matched: !rtg.struct<@Payload>) {
+      rtg.yield
+    }
+  }
+  func.return %value : !rtg.variant<@PayloadVariant>
+}
+
+// Match arms use constructor labels directly, with the declared payload type.
+func.func @match_payload(%value: !rtg.variant<@Option>) -> index {
+  %result = rtg.match %value : !rtg.variant<@Option> -> index {
+    case None(%unit: !rtg.tuple) {
+      %zero = index.constant 0
+      rtg.yield %zero : index
+    }
+    case Some(%payload: index) {
+      rtg.yield %payload : index
+    }
+  }
+  func.return %result : index
+}
+
+// CHECK: rtg.variant.decl @PayloadVariant {
+// CHECK-NEXT:   "payload-value": !rtg.struct<@Payload>
