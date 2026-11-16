@@ -940,6 +940,39 @@ module SampleValueBuiltinsDefaultClockingNoProcedure #() (
   wire [7:0] wire_past = $past(data_i);
 endmodule
 
+// IEEE 1800-2023 § 16.9.3 "Sampled value functions": $past with an explicit
+// number of ticks.
+// CHECK-LABEL: moore.module @PastWithNumberOfTicks(
+module PastWithNumberOfTicks(input logic clk_i, input logic [7:0] data_i);
+  // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
+  // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
+  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : ref<l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D:%.+]] = moore.read [[DATAWIRE]] : ref<l8>
+  // CHECK-NEXT: [[D_INT:%.+]] = moore.logic_to_int [[D]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 3 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK: verif.assert
+  past_ticks: assert property (@(posedge clk_i) data_i == $past(data_i, 3));
+endmodule
+
+// CHECK-LABEL: moore.module @SampleValueBuiltinsPacked(
+module SampleValueBuiltinsPacked(input logic clk_i);
+  struct packed { logic a; logic [2:0] b; } s;
+  // CHECK: [[SBV:%.+]] = moore.packed_to_sbv {{%.+}} : struct<{a: l1, b: l3}>
+  // CHECK-NEXT: [[INT:%.+]] = moore.logic_to_int [[SBV]] : l4
+  // CHECK-NEXT: [[BUILTIN:%.+]] = moore.to_builtin_int [[INT]] : i4
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[BUILTIN]], 1 clk {{%.+}} : i4
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i4
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i4
+  // CHECK-NEXT: moore.sbv_to_packed [[PAST_LOGIC]] : struct<{a: l1, b: l3}>
+  // CHECK: verif.assert
+  past_packed: assert property (@(posedge clk_i) s == $past(s));
+endmodule
+
 // CHECK-LABEL: func.func private @BitVectorPackedBuiltins(
 // CHECK-SAME: [[S:%[^ ,]+]]: !moore.struct<{a: l4, b: l4}>,
 // CHECK-SAME: [[A:%[^ ,]+]]: !moore.array<2 x l4>)
