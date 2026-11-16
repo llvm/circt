@@ -176,6 +176,38 @@ endmodule
 // -----
 module Foo;
   logic a, clk;
+  // expected-error @below {{second argument for `$rose` is not yet supported}}
+  assert property (@(posedge clk) $rose(a, @(posedge clk)));
+endmodule
+
+// -----
+module Foo;
+  logic a, clk;
+  // expected-remark @below {{declared here}}
+  int n;
+  // NOTE: We expect Slang to error out on this condition
+  // expected-error @below {{reference to non-constant variable 'n' is not allowed in a constant expression}}
+  assert property (@(posedge clk) $past(a, n));
+endmodule
+
+// -----
+module Foo;
+  logic a, clk;
+  // NOTE: We expect Slang to error out on this condition
+  // expected-error @below {{'number_of_ticks' argument must be greater than or equal to 1}}
+  assert property (@(posedge clk) $past(a, 0));
+endmodule
+
+// -----
+module Foo;
+  logic a, en, clk;
+  // expected-error @below {{`$past` with 3 arguments is not yet supported}}
+  assert property (@(posedge clk) $past(a, 1, en));
+endmodule
+
+// -----
+module Foo;
+  logic a, clk;
   // expected-error @below {{sampled value functions are only supported with posedge clocks}}
   assert property (@(negedge clk) $rose(a));
 endmodule
