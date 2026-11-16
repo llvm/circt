@@ -92,8 +92,7 @@ stripModuleImpl(FModuleLike op,
             .Case<UnsafeDomainCastOp>([&](UnsafeDomainCastOp op) {
               // Erase only the domain operands that should be stripped.
               BitVector erasures(op->getNumOperands());
-              for (auto &domain :
-                   op.getDomainsMutable() /* for operand number */)
+              for (const auto &domain : op.getDomainsMutable())
                 if (shouldStripType(domain.get().getType()))
                   erasures.set(domain.getOperandNumber());
               if (erasures.none())
