@@ -1023,14 +1023,12 @@ TEST(WriteCallbackModeTest, ServiceThreadLogsErrorCallbackExceptions) {
 
   // The exception is logged, and the service thread carries on: it writes the
   // next message, and runs its other tasks.
-  Context ctxt(std::make_unique<RecordingLogger>());
   auto ownedLogger = std::make_unique<RecordingLogger>();
   RecordingLogger &logger = *ownedLogger;
+  Context ctxt(std::move(ownedLogger));
   std::atomic<int> otherTaskRuns = 0;
   {
     AcceleratorServiceThread serviceThread(&ctxt);
-    // The context's current logger is used, even if it was replaced.
-    ctxt.setLogger(std::move(ownedLogger));
     serviceThread.addTask([&port]() { port.poll(); });
     serviceThread.addTask([&]() { ++otherTaskRuns; });
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
