@@ -48,14 +48,42 @@
   The default segmented `WriteChannelPort::write()` and `tryWrite()` use it,
   so they no longer copy messages which are already a `MessageData`, and
   `MessageData` gained (noexcept) move operations.
-- **Non-blocking segmented writes.** `WriteChannelPort` gains a virtual
+- **Non-blocking segmented writes.** `WriteChannelPort` gains
   `bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg)` and
   `TypedWritePort<T>` gains `bool tryWrite(std::unique_ptr<T> &data)`. They
   take ownership of the message (leaving the pointer null) only when they
   return true; on false the caller keeps the message and can retry. The
-  default implementation flattens the message and calls the existing
-  `tryWrite(const MessageData &)`; backends may override it for
-  scatter-gather support.
+  default implementation flattens the message and writes it like
+  `tryWrite(const MessageData &)`.
+- **Segmented write backend hooks.** The segmented `WriteChannelPort::write()`
+  and `tryWrite()` are no longer virtual: backends override the new
+  `writeSegmentedImpl()` and `tryWriteSegmentedImpl()` hooks instead (e.g. for
+  scatter-gather support), so the public methods can enforce the port's mode.
+- **Callback mode for `WriteChannelPort`.** Mirroring `ReadChannelPort`,
+  connecting a write port with callbacks (`connect(DataFetchCallback,
+  WriteErrorCallback, options)`) puts it in callback mode, in which the port
+  pulls messages from the application: it calls the fetch callback whenever it
+  can accept a message, and the callback returns the next `SegmentedMessageData`
+  or nullptr if it has none. After nullptr, the port doesn't call it again until
+  `notifyAsyncDataAvailable()` (which throws unless the port is in callback
+  mode). `write()`/`tryWrite()`/`flush()` throw in callback mode. `connect()`
+  and `notifyAsyncDataAvailable()` are virtual, so backends may replace the
+  default implementation, which is only allocated while in use. The default
+  writes fetched messages with the segmented `tryWrite()` (so backends which
+  override that for scatter-gather support avoid flattening), immediately on the
+  notifying thread unless another thread is already writing. Under backpressure
+  it holds the one message the backend didn't accept and retries it from
+  `poll()` (e.g. the accelerator service thread via `addPoll()`), so messages
+  are never queued in the runtime. Each call writes at most
+  `kMaxAsyncWritesPerCall` messages, leaving the rest for `poll()`. Write errors
+  (and exceptions from the fetch callback) are reported to the error callback;
+  exceptions it throws propagate out of `notifyAsyncDataAvailable()` or
+  `poll()`. A fetched message which hasn't been written when the port is
+  disconnected or destroyed is dropped. Connecting in callback mode throws if a
+  windowed message written in sync mode still has unsent frames.
+  `TypedWritePort` gained matching `connect()` and `notifyAsyncDataAvailable()`
+  overloads. `WriteChannelPort::pollImpl()` is now `final`: write port backends
+  override the new `pollWriteImpl()` instead.
 - **Multiple outstanding host memory reads per client.**
   `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
   (default `1`, which keeps the previous one-request-at-a-time behavior). With
