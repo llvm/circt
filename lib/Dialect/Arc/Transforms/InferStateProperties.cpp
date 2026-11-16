@@ -11,6 +11,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 
 #define DEBUG_TYPE "arc-infer-state-properties"
@@ -396,25 +397,28 @@ struct InferStatePropertiesPass
 
   void runOnOperation() override;
   void runOnStateOp(arc::StateOp stateOp, arc::DefineOp arc,
-                    DenseMap<arc::DefineOp, unsigned> &resetConditionMap);
+                    DenseMap<arc::DefineOp, unsigned> &resetConditionMap,
+                    const mlir::SymbolUserMap &symbolUsers);
 };
 } // namespace
 
 void InferStatePropertiesPass::runOnOperation() {
   SymbolTableCollection symbolTable;
+  mlir::SymbolUserMap symbolUsers(symbolTable, getOperation());
 
   DenseMap<arc::DefineOp, unsigned> resetConditionMap;
   getOperation()->walk([&](arc::StateOp stateOp) {
     auto arc =
         cast<arc::DefineOp>(cast<mlir::CallOpInterface>(stateOp.getOperation())
                                 .resolveCallableInTable(&symbolTable));
-    runOnStateOp(stateOp, arc, resetConditionMap);
+    runOnStateOp(stateOp, arc, resetConditionMap, symbolUsers);
   });
 }
 
 void InferStatePropertiesPass::runOnStateOp(
     arc::StateOp stateOp, arc::DefineOp arc,
-    DenseMap<arc::DefineOp, unsigned> &resetConditionMap) {
+    DenseMap<arc::DefineOp, unsigned> &resetConditionMap,
+    const mlir::SymbolUserMap &symbolUsers) {
 
   auto outputOp = cast<arc::OutputOp>(arc.getBodyBlock().getTerminator());
   static constexpr unsigned visitedNoChange = -1;
@@ -422,7 +426,20 @@ void InferStatePropertiesPass::runOnStateOp(
   if (detectResets) {
     // Check for reset patterns, we only have to do this once per arc::DefineOp
     // and store the result for later arc::StateOps referring to the same arc.
-    if (!resetConditionMap.count(arc)) {
+    bool seen = resetConditionMap.count(arc);
+
+    // The reset is pulled out by rewriting the arc::DefineOp in place, and only
+    // the arc::StateOps are updated to compensate. Any other user (e.g., an
+    // arc::CallOp sharing the arc after deduplication) would silently compute a
+    // different function, so leave such arcs untouched.
+    if (!seen && !llvm::all_of(symbolUsers.getUsers(arc), [](Operation *user) {
+          return isa<arc::StateOp>(user);
+        })) {
+      resetConditionMap[arc] = visitedNoChange;
+      seen = true;
+    }
+
+    if (!seen) {
       SmallVector<ResetInfo> resetInfos;
       int numResets = 0;
       for (auto &output : outputOp->getOpOperands()) {
@@ -444,8 +461,7 @@ void InferStatePropertiesPass::runOnStateOp(
     }
 
     // Apply resets to the state operation.
-    if (resetConditionMap.count(arc) &&
-        resetConditionMap[arc] != visitedNoChange) {
+    if (resetConditionMap[arc] != visitedNoChange) {
       setResetOperandOfStateOp(stateOp, resetConditionMap[arc]);
       ++addedResets;
     }
