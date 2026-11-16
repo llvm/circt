@@ -764,7 +764,13 @@ void WriteChannelPort::DefaultAsyncWriter::poll() {
     if (!lock.owns_lock() || draining)
       break;
     draining = true;
-    result = drain();
+    try {
+      result = drain();
+    } catch (...) {
+      // Thrown by the error callback.
+      draining = false;
+      throw;
+    }
     draining = false;
     // Repeat for a notify() which arrived after drain() last checked
     // `dataAvailable` but before the lock was released, since it couldn't
@@ -803,7 +809,7 @@ WriteChannelPort::DefaultAsyncWriter::drain() {
     } catch (...) {
       pendingMsg.reset();
       port.discardPendingFrames();
-      callErrorCallback(onError, std::current_exception());
+      onError(std::current_exception());
     }
   }
   return DrainResult::Stopped;
@@ -955,14 +961,4 @@ bool WriteChannelPort::flushInternal() {
 void WriteChannelPort::discardPendingFrames() {
   translationBuffer.clear();
   translationBufferIdx = 0;
-}
-
-void WriteChannelPort::callErrorCallback(const WriteErrorCallback &onError,
-                                         std::exception_ptr error) {
-  try {
-    onError(std::move(error));
-  } catch (...) {
-    // Callbacks must not throw. Swallow the exception rather than letting it
-    // escape into the writing thread.
-  }
 }

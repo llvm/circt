@@ -12,11 +12,13 @@
 #include "gtest/gtest.h"
 
 #include <algorithm>
+#include <any>
 #include <atomic>
 #include <chrono>
 #include <deque>
 #include <functional>
 #include <future>
+#include <map>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
@@ -371,7 +373,7 @@ TEST(WriteCallbackModeTest, FetchErrorReported) {
   EXPECT_EQ(port.written(), (Frames{{1}}));
 }
 
-TEST(WriteCallbackModeTest, ThrowingErrorCallbackIsContained) {
+TEST(WriteCallbackModeTest, ThrowingErrorCallbackPropagates) {
   UIntType ui8("ui8", 8);
   Source source;
   RecordingWritePort port(&ui8);
@@ -380,8 +382,12 @@ TEST(WriteCallbackModeTest, ThrowingErrorCallbackIsContained) {
   source.push({1});
   source.push({2});
   port.throwAfter = 0;
-  EXPECT_NO_THROW(port.notifyAsyncDataAvailable());
+  EXPECT_THROW(port.notifyAsyncDataAvailable(), std::runtime_error);
   EXPECT_EQ(source.numErrors(), 1u);
+  EXPECT_TRUE(port.written().empty());
+
+  // The failed message was dropped, and the port keeps working.
+  port.poll();
   EXPECT_EQ(port.written(), (Frames{{2}}));
 }
 
@@ -872,6 +878,51 @@ TEST(WriteCallbackModeTest, ProducerThreadsWithServiceThread) {
     size_t p = msg[0], i = msg[1] | (msg[2] << 8);
     EXPECT_EQ(i, next[p]++);
   }
+}
+
+TEST(WriteCallbackModeTest, ServiceThreadLogsErrorCallbackExceptions) {
+  struct RecordingLogger : public Logger {
+    RecordingLogger() : Logger(false, false) {}
+    void log(Level level, const std::string &, const std::string &msg,
+             const std::map<std::string, std::any> *) override {
+      std::lock_guard<std::mutex> lock(mutex);
+      if (level == Level::Error)
+        errors.push_back(msg);
+    }
+    size_t numErrors() {
+      std::lock_guard<std::mutex> lock(mutex);
+      return errors.size();
+    }
+    std::mutex mutex;
+    std::vector<std::string> errors;
+  };
+
+  UIntType ui8("ui8", 8);
+  Source source;
+  source.onError = [](size_t) { throw std::runtime_error("callback failure"); };
+  RecordingWritePort port(&ui8);
+  port.connect(source.fetch(), source.error());
+  source.push({1});
+  source.push({2});
+  port.throwAfter = 0;
+
+  // The exception is logged, and the service thread carries on: it writes the
+  // next message, and runs its other tasks.
+  RecordingLogger logger;
+  std::atomic<int> otherTaskRuns = 0;
+  {
+    AcceleratorServiceThread serviceThread(&logger);
+    serviceThread.addTask([&port]() { port.poll(); });
+    serviceThread.addTask([&]() { ++otherTaskRuns; });
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while ((port.written().empty() || otherTaskRuns < 2) &&
+           std::chrono::steady_clock::now() < deadline)
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  EXPECT_EQ(port.written(), (Frames{{2}}));
+  EXPECT_GE(otherTaskRuns, 2);
+  ASSERT_EQ(logger.numErrors(), 1u);
+  EXPECT_NE(logger.errors[0].find("callback failure"), std::string::npos);
 }
 
 //===----------------------------------------------------------------------===//

@@ -410,8 +410,11 @@ public:
 
   /// Connect in callback mode. Throws if already connected or if either
   /// callback is null. Callbacks may be invoked from any thread, but never
-  /// concurrently with each other. They must not throw and must return
-  /// quickly. They may call notifyAsyncDataAvailable() and disconnect() (and
+  /// concurrently with each other, and must return quickly. Exceptions thrown
+  /// by `fetch` are reported to `onError`; those thrown by `onError`
+  /// propagate out of whichever call invoked it (e.g.
+  /// notifyAsyncDataAvailable() or poll(); the accelerator's service thread
+  /// logs them). They may call notifyAsyncDataAvailable() and disconnect() (and
   /// then connect()), but must not wait on another thread which uses the port.
   ///
   /// Default implementation: the port calls `fetch` and writes what it returns
@@ -456,10 +459,6 @@ protected:
   /// the port is disconnected, set up message translation, call connectImpl(),
   /// and enter callback mode, in which the sync write APIs throw.
   void connectCallbackMode(const ConnectOptions &options);
-
-  /// Invoke `onError` with `error`, swallowing any exception it throws.
-  static void callErrorCallback(const WriteErrorCallback &onError,
-                                std::exception_ptr error);
 
   /// Pad an empty payload with a single zero byte if the port type has a
   /// zero-width logical width (e.g. `VoidType`). Transports (DMA engines,
