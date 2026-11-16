@@ -339,13 +339,15 @@ public:
 
   /// Write a multi-segment message. Takes ownership so the backend can hold
   /// the message across partial writes / async completions. Default flattens
-  /// and calls the regular write(). Backends override for scatter-gather /
+  /// (without copying if it is already a MessageData) and calls the regular
+  /// write(). Backends override for scatter-gather /
   /// chunked-DMA support.
   virtual void write(std::unique_ptr<SegmentedMessageData> msg) {
     if (!msg)
       throw std::runtime_error(
           "WriteChannelPort::write: null SegmentedMessageData");
-    write(msg->toMessageData());
+    MessageData scratch;
+    write(msg->asMessageData(scratch));
   }
 
   /// A basic non-blocking write API. Returns true if any of the data was
@@ -382,13 +384,15 @@ public:
   /// ownership of `msg` (leaving it null) and returns true. On failure, returns
   /// false and leaves `msg` untouched so the caller can retry with the same
   /// message. Same completion semantics as `tryWrite(const MessageData &)`.
-  /// Default flattens and calls the regular tryWrite(). Backends override for
-  /// scatter-gather / chunked-DMA support.
+  /// Default flattens (without copying if it is already a MessageData) and
+  /// calls the regular tryWrite(). Backends override for scatter-gather /
+  /// chunked-DMA support.
   virtual bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg) {
     if (!msg)
       throw std::runtime_error(
           "WriteChannelPort::tryWrite: null SegmentedMessageData");
-    if (!tryWrite(msg->toMessageData()))
+    MessageData scratch;
+    if (!tryWrite(msg->asMessageData(scratch)))
       return false;
     msg.reset();
     return true;

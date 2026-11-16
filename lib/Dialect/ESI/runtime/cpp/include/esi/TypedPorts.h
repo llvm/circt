@@ -148,15 +148,6 @@ struct has_type_deserializer<T, std::void_t<typename T::TypeDeserializer>>
 template <typename T>
 inline constexpr bool has_type_deserializer_v = has_type_deserializer<T>::value;
 
-template <typename T>
-const MessageData &getMessageDataRef(const SegmentedMessageData &msg,
-                                     MessageData &scratch) {
-  if (auto *flat = dynamic_cast<const MessageData *>(&msg))
-    return *flat;
-  scratch = msg.toMessageData();
-  return scratch;
-}
-
 /// Default deserializer for simple 1:1 typed reads.
 ///
 /// This path converts one raw message into one typed value and forwards it to
@@ -184,7 +175,7 @@ public:
     // Translate the raw message into a typed object. This always consumes the
     // raw message.
     MessageData scratch;
-    const MessageData &flat = getMessageDataRef<T>(*msg, scratch);
+    const MessageData &flat = msg->asMessageData(scratch);
     pendingOutput = std::make_unique<T>(fromMessageData<T>(flat, wireInfo));
     msg.reset();
     pokeLocked();
@@ -351,7 +342,7 @@ private:
   DecodedOutputs decode(std::unique_ptr<SegmentedMessageData> &msg) override {
     DecodedOutputs out;
     MessageData scratch;
-    const MessageData &flat = detail::getMessageDataRef<T>(*msg, scratch);
+    const MessageData &flat = msg->asMessageData(scratch);
     const uint8_t *bytes = flat.getBytes();
     size_t size = flat.getSize();
 
