@@ -98,12 +98,6 @@ stripModuleImpl(FModuleLike op,
               if (erasures.none())
                 return WalkResult::advance();
               op->eraseOperands(erasures);
-
-              // A cast with no domains is the identity, so remove it.
-              if (op.getDomains().empty()) {
-                op.replaceAllUsesWith(op.getInput());
-                op.erase();
-              }
               return WalkResult::advance();
             })
             .Case<WireOp>([&](WireOp op) {
