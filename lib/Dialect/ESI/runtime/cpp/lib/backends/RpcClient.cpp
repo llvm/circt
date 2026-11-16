@@ -32,6 +32,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -69,11 +70,11 @@ public:
                         const std::vector<MessageData> &frames, bool force);
   void setToServerMaxInFlight(const std::string &channelName,
                               unsigned maxInFlight);
-  bool canWriteToServer(const std::string &channelName);
 
   std::unique_ptr<RpcClient::WriteChannelConnection>
   connectServerSender(const std::string &channelName,
-                      RpcClient::SendCallback onReady);
+                      RpcClient::SendFetchCallback fetch,
+                      RpcClient::SendErrorCallback onError);
 
   std::unique_ptr<RpcClient::ReadChannelConnection>
   connectClientReceiver(const std::string &channelName,
@@ -87,18 +88,31 @@ public:
   // `shared_ptr` so the transport thread can copy the entry under the lock and
   // call it while a concurrent `unregisterSender()` erases the map entry.
   struct WriteSenderEntry {
-    RpcClient::SendCallback onReady;
+    RpcClient::SendFetchCallback fetch;
+    RpcClient::SendErrorCallback onError;
     std::atomic<bool> canceled{false};
-    // Held while calling `onReady`, so `unregisterSender()` can wait for a call
-    // in progress. Recursive since `onReady` may unregister itself.
+    // False once `fetch` returns nullopt (or throws), until notified.
+    std::atomic<bool> dataAvailable{true};
+    // Held while calling the callbacks, so `unregisterSender()` can wait for a
+    // call in progress. Recursive since they may unregister the sender.
     std::recursive_mutex mutex;
   };
 
   // Helpers used by WriteChannelConnectionImpl.
-  void notifySender(uint64_t channelId) { readyIds.markReady(channelId); }
+  void notifySender(uint64_t channelId, WriteSenderEntry &entry) {
+    entry.dataAvailable.store(true);
+    readyIds.markReady(channelId);
+  }
   void unregisterSender(uint64_t channelId,
                         const std::shared_ptr<WriteSenderEntry> &entry);
 
+private:
+  /// Fetch and send messages for a sender while its channel has room and it
+  /// has data, for up to `MaxSendsPerTurn` messages. Returns true if it should
+  /// be called again. Called on the transport thread, holding `entry.mutex`.
+  bool runSender(uint64_t channelId, WriteSenderEntry &entry);
+
+public:
 private:
   struct ChannelMeta {
     uint64_t id;
@@ -290,7 +304,7 @@ public:
 
   void notify() override {
     if (!entry->canceled.load())
-      impl->notifySender(channelId);
+      impl->notifySender(channelId, *entry);
   }
   void disconnect() override { impl->unregisterSender(channelId, entry); }
 
@@ -797,27 +811,17 @@ void RpcClient::Impl::setToServerMaxInFlight(const std::string &channelName,
   markSenderReady(meta.id);
 }
 
-bool RpcClient::Impl::canWriteToServer(const std::string &channelName) {
-  faultStash.check();
-  const ChannelMeta &meta = getToServerChannel(channelName);
-  WriteCredit &cred = *writeCredits.at(meta.id);
-  std::lock_guard<std::mutex> lock(cred.mutex);
-  if (connectionLost.load())
-    throw std::runtime_error("Connection to cosim server lost while "
-                             "writing to channel '" +
-                             channelName + "'");
-  return cred.maxInFlight == 0 || cred.outstanding < cred.maxInFlight;
-}
-
 std::unique_ptr<RpcClient::WriteChannelConnection>
 RpcClient::Impl::connectServerSender(const std::string &channelName,
-                                     RpcClient::SendCallback onReady) {
+                                     RpcClient::SendFetchCallback fetch,
+                                     RpcClient::SendErrorCallback onError) {
   faultStash.check();
-  if (!onReady)
+  if (!fetch || !onError)
     throw std::invalid_argument("connectServerSender: null callback");
   uint64_t channelId = getToServerChannel(channelName).id;
   auto entry = std::make_shared<WriteSenderEntry>();
-  entry->onReady = std::move(onReady);
+  entry->fetch = std::move(fetch);
+  entry->onError = std::move(onError);
   {
     std::lock_guard<std::mutex> lock(writeSendersMutex);
     if (!writeSenders.emplace(channelId, entry).second)
@@ -826,6 +830,63 @@ RpcClient::Impl::connectServerSender(const std::string &channelName,
   }
   return std::make_unique<WriteChannelConnectionImpl>(this, channelId,
                                                       std::move(entry));
+}
+
+bool RpcClient::Impl::runSender(uint64_t channelId, WriteSenderEntry &entry) {
+  const ChannelMeta &meta = channelsById.at(channelId);
+  WriteCredit &cred = *writeCredits.at(channelId);
+  for (size_t i = 0; i < RpcClient::MaxSendsPerTurn; ++i) {
+    if (entry.canceled.load())
+      return false;
+    bool lost;
+    {
+      std::lock_guard<std::mutex> lock(cred.mutex);
+      lost = connectionLost.load();
+      if (!lost && cred.maxInFlight != 0 &&
+          cred.outstanding >= cred.maxInFlight)
+        return false;
+    }
+    if (lost) {
+      entry.onError(std::make_exception_ptr(std::runtime_error(
+          "Connection to cosim server lost while writing to channel '" +
+          meta.name + "'")));
+      return false;
+    }
+    // Cleared before fetching, so a notification which arrives while fetching
+    // (and which would be missed if this returns nullopt) isn't lost.
+    if (!entry.dataAvailable.exchange(false))
+      return false;
+    std::optional<std::vector<MessageData>> frames;
+    std::exception_ptr error;
+    try {
+      frames = entry.fetch();
+    } catch (...) {
+      error = std::current_exception();
+    }
+    // If the callback disconnected the sender, drop the message (or error).
+    if (entry.canceled.load())
+      return false;
+    if (error) {
+      entry.onError(error);
+      continue;
+    }
+    if (!frames)
+      continue;
+    // The callback had data, so it may have more.
+    entry.dataAvailable.store(true);
+    {
+      std::lock_guard<std::mutex> lock(cred.mutex);
+      cred.outstanding += frames->size();
+    }
+    try {
+      for (const MessageData &frame : *frames)
+        sendFrame(meta, frame);
+    } catch (...) {
+      entry.onError(std::current_exception());
+    }
+  }
+  // Out of turns, not data: continue after servicing other channels.
+  return !entry.canceled.load();
 }
 
 void RpcClient::Impl::unregisterSender(
@@ -985,13 +1046,14 @@ void RpcClient::Impl::transportLoop() {
         if (sender->canceled.load() || disconnecting)
           continue;
         try {
-          if (sender->onReady() && !sender->canceled.load())
+          if (runSender(id, *sender))
             readyIds.markReady(id);
         } catch (const std::exception &e) {
           logger.error("cosim",
-                       std::string("Write sender failed: ") + e.what());
+                       std::string("Write error callback threw: ") + e.what());
         } catch (...) {
-          logger.error("cosim", "Write sender failed: unknown exception");
+          logger.error("cosim",
+                       "Write error callback threw an unknown exception");
         }
         continue;
       }
@@ -1096,14 +1158,12 @@ void RpcClient::setToServerMaxInFlight(const std::string &channelName,
   impl->setToServerMaxInFlight(channelName, maxInFlight);
 }
 
-bool RpcClient::canWriteToServer(const std::string &channelName) {
-  return impl->canWriteToServer(channelName);
-}
-
 std::unique_ptr<RpcClient::WriteChannelConnection>
 RpcClient::connectServerSender(const std::string &channelName,
-                               SendCallback onReady) {
-  return impl->connectServerSender(channelName, std::move(onReady));
+                               SendFetchCallback fetch,
+                               SendErrorCallback onError) {
+  return impl->connectServerSender(channelName, std::move(fetch),
+                                   std::move(onError));
 }
 
 std::unique_ptr<RpcClient::ReadChannelConnection>

@@ -26,6 +26,7 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -585,64 +586,124 @@ TEST_F(CosimRpcTest, ToClientBlockedWriteThrowsOnDisconnect) {
   writer.join();
 }
 
+using Frames = std::optional<std::vector<MessageData>>;
+
 TEST_F(CosimRpcTest, ServerSenderDrivenByCredits) {
   connectClient();
   client->setToServerMaxInFlight("in", 2);
-  // Sends as much as the in-flight limit allows, then waits to be called
-  // again.
-  std::atomic<uint32_t> next = 0;
   constexpr uint32_t numMsgs = 10;
-  auto conn = client->connectServerSender("in", [&] {
-    while (next < numMsgs && client->canWriteToServer("in"))
-      EXPECT_TRUE(client->tryWriteToServer("in", {msg(next++)}));
-    return false;
-  });
+  std::atomic<uint32_t> fetches = 0, next = 0;
+  auto conn = client->connectServerSender(
+      "in",
+      [&]() -> Frames {
+        ++fetches;
+        if (next == numMsgs)
+          return std::nullopt;
+        return std::vector<MessageData>{msg(next++)};
+      },
+      [](std::exception_ptr) { ADD_FAILURE(); });
+  // Fetches as many messages as the in-flight limit allows.
   conn->notify();
   ASSERT_TRUE(waitFor([&] { return next == 2; }));
   std::this_thread::sleep_for(50ms);
-  EXPECT_EQ(next, 2u);
+  EXPECT_EQ(fetches, 2u);
 
-  // Each frame the simulation consumes returns a credit, which calls the
-  // sender again without a notification.
+  // Each frame the simulation consumes returns a credit, which fetches
+  // another message without a notification.
   for (uint32_t i = 0; i < numMsgs; ++i)
     EXPECT_EQ(consumeOne(), i);
-  EXPECT_EQ(next, numMsgs);
+  // Plus the fetch which found no more data.
+  ASSERT_TRUE(waitFor([&] { return fetches == numMsgs + 1; }));
 }
 
-TEST_F(CosimRpcTest, ServerSenderCalledAgainOnRequest) {
+TEST_F(CosimRpcTest, ServerSenderFetchesAgainOnlyWhenNotified) {
   connectClient();
-  std::atomic<int> calls = 0;
-  auto conn = client->connectServerSender("in", [&] { return ++calls < 5; });
-  // One sender per channel.
-  EXPECT_THROW(client->connectServerSender("in", [] { return false; }),
+  std::atomic<int> fetches = 0, errors = 0;
+  std::atomic<bool> fail = false;
+  auto conn = client->connectServerSender(
+      "in",
+      [&]() -> Frames {
+        ++fetches;
+        if (fail)
+          throw std::runtime_error("fetch failure");
+        return std::nullopt;
+      },
+      [&](std::exception_ptr) { ++errors; });
+  // One sender per channel, and only to-server channels.
+  auto noFetch = []() -> Frames { return std::nullopt; };
+  auto noError = [](std::exception_ptr) {};
+  EXPECT_THROW(client->connectServerSender("in", noFetch, noError),
                std::runtime_error);
-  // Only to-server channels.
-  EXPECT_THROW(client->connectServerSender("out", [] { return false; }),
+  EXPECT_THROW(client->connectServerSender("out", noFetch, noError),
                std::runtime_error);
 
+  // After returning nullopt, not called again until notified, even when
+  // credits change.
   conn->notify();
-  ASSERT_TRUE(waitFor([&] { return calls == 5; }));
+  ASSERT_TRUE(waitFor([&] { return fetches == 1; }));
+  client->setToServerMaxInFlight("in", 3);
   std::this_thread::sleep_for(50ms);
-  EXPECT_EQ(calls, 5);
+  EXPECT_EQ(fetches, 1);
+
+  // Likewise after throwing, which is reported.
+  fail = true;
+  conn->notify();
+  ASSERT_TRUE(waitFor([&] { return errors == 1; }));
+  std::this_thread::sleep_for(50ms);
+  EXPECT_EQ(fetches, 2);
 
   // Once disconnected, it isn't called, and the channel can have another.
   conn->disconnect();
   conn->notify();
-  client->setToServerMaxInFlight("in", 3);
   std::this_thread::sleep_for(50ms);
-  EXPECT_EQ(calls, 5);
-  auto conn2 = client->connectServerSender("in", [] { return false; });
+  EXPECT_EQ(fetches, 2);
+  auto conn2 = client->connectServerSender("in", noFetch, noError);
+}
+
+TEST_F(CosimRpcTest, ServerSenderTakesTurns) {
+  connectClient();
+  client->setToServerMaxInFlight("in", 0);
+  // A sender which always has data doesn't stop other channels being
+  // serviced.
+  std::atomic<bool> stop = false;
+  std::atomic<uint32_t> sent = 0;
+  auto conn = client->connectServerSender(
+      "in",
+      [&]() -> Frames {
+        if (stop)
+          return std::nullopt;
+        return std::vector<MessageData>{msg(sent++)};
+      },
+      [](std::exception_ptr) { ADD_FAILURE(); });
+  auto received = std::make_shared<std::promise<uint32_t>>();
+  auto reader = client->connectClientReceiver(
+      "out", [received](std::unique_ptr<SegmentedMessageData> &data) {
+        received->set_value(*data->toMessageData().as<uint32_t>());
+        return true;
+      });
+  conn->notify();
+  ASSERT_TRUE(waitFor([&] { return sent > 0; }));
+  toClient->write(msg(7));
+  std::future<uint32_t> f = received->get_future();
+  EXPECT_EQ(f.wait_for(10s), std::future_status::ready);
+  stop = true;
+  conn->disconnect();
+  EXPECT_EQ(f.get(), 7u);
+  EXPECT_GT(sent, RpcClient::MaxSendsPerTurn);
 }
 
 TEST_F(CosimRpcTest, ServerSenderDisconnectWaitsForCall) {
   connectClient();
   std::atomic<bool> inCall = false, release = false;
-  auto conn = client->connectServerSender("in", [&] {
-    inCall = true;
-    while (!release)
-      std::this_thread::yield();
-    return false;
-  });
+  auto conn = client->connectServerSender(
+      "in",
+      [&]() -> Frames {
+        inCall = true;
+        while (!release)
+          std::this_thread::yield();
+        return std::nullopt;
+      },
+      [](std::exception_ptr) {});
   conn->notify();
   ASSERT_TRUE(waitFor([&] { return inCall.load(); }));
 
@@ -662,34 +723,36 @@ TEST_F(CosimRpcTest, ServerSenderDisconnectWaitsForCall) {
 TEST_F(CosimRpcTest, ServerSenderCanDisconnectItself) {
   connectClient();
   std::unique_ptr<RpcClient::WriteChannelConnection> conn;
-  std::atomic<int> calls = 0;
+  std::atomic<int> fetches = 0, errors = 0;
   std::promise<void> done;
-  conn = client->connectServerSender("in", [&] {
-    ++calls;
-    conn->disconnect();
-    done.set_value();
-    // Not called again, even if it asks to be.
-    return true;
-  });
+  conn = client->connectServerSender(
+      "in",
+      [&]() -> Frames {
+        ++fetches;
+        conn->disconnect();
+        done.set_value();
+        // Dropped, since it's disconnected.
+        return std::vector<MessageData>{msg(1)};
+      },
+      [&](std::exception_ptr) { ++errors; });
   conn->notify();
   ASSERT_EQ(done.get_future().wait_for(10s), std::future_status::ready);
-  std::this_thread::sleep_for(50ms);
-  EXPECT_EQ(calls, 1);
+  std::future<MessageData> f = toServer->readAsync();
+  EXPECT_EQ(f.wait_for(100ms), std::future_status::timeout);
+  EXPECT_EQ(fetches, 1);
+  EXPECT_EQ(errors, 0);
 }
 
-TEST_F(CosimRpcTest, ServerSenderSeesConnectionLoss) {
+TEST_F(CosimRpcTest, ServerSenderReportsConnectionLoss) {
   connectClient();
   auto lost = std::make_shared<std::promise<void>>();
   std::atomic<bool> reported = false;
-  auto conn = client->connectServerSender("in", [this, lost, &reported] {
-    try {
-      client->canWriteToServer("in");
-    } catch (const std::runtime_error &) {
-      if (!reported.exchange(true))
-        lost->set_value();
-    }
-    return false;
-  });
+  auto conn = client->connectServerSender(
+      "in", []() -> Frames { return std::nullopt; },
+      [lost, &reported](std::exception_ptr) {
+        if (!reported.exchange(true))
+          lost->set_value();
+      });
   // Woken by the connection closing.
   server->stop();
   server.reset();

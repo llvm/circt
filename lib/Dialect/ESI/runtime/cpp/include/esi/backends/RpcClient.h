@@ -19,8 +19,10 @@
 
 #include "esi/Common.h"
 
+#include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -91,37 +93,41 @@ public:
   void setToServerMaxInFlight(const std::string &channelName,
                               unsigned maxInFlight);
 
-  /// Whether a server-bound channel is below its in-flight limit, i.e. whether
-  /// `tryWriteToServer()` would send a message now. Throws if the connection
-  /// is lost.
-  bool canWriteToServer(const std::string &channelName);
+  /// Data source for a server-bound channel (see `connectServerSender()`):
+  /// returns the frames of the next message to send, or nullopt if none is
+  /// available yet. After returning nullopt (or throwing), it isn't called
+  /// again until `WriteChannelConnection::notify()`.
+  using SendFetchCallback =
+      std::function<std::optional<std::vector<MessageData>>()>;
+  /// Called with an exception thrown by a `SendFetchCallback` or while
+  /// sending, e.g. since the connection was lost.
+  using SendErrorCallback = std::function<void(std::exception_ptr)>;
 
   /// Handle for a sender registered with `connectServerSender()`. Destructor
   /// disconnects.
   class WriteChannelConnection {
   public:
     virtual ~WriteChannelConnection() = default;
-    /// Schedule a call to the sender. Doesn't block.
+    /// Notify that the fetch callback has data again. Doesn't block.
     virtual void notify() = 0;
-    /// Stop calling the sender. Blocks while it is being called on another
-    /// thread.
+    /// Stop calling the callbacks. Blocks while one is being called on
+    /// another thread.
     virtual void disconnect() = 0;
   };
 
-  /// Callback which sends to a server-bound channel, e.g. with
-  /// `tryWriteToServer()` while `canWriteToServer()`. Returns true to be called
-  /// again (after other channels have been serviced), e.g. if it stopped
-  /// before running out of data to bound the time it takes.
-  using SendCallback = std::function<bool()>;
+  /// The most messages a sender sends before other channels are serviced.
+  static constexpr size_t MaxSendsPerTurn = 64;
 
-  /// Register `onReady` as the sender for a server-bound channel. It is called
-  /// on the client's transport thread, never concurrently with itself: after
-  /// `WriteChannelConnection::notify()`, and whenever the channel's in-flight
-  /// limit may admit more frames (the server reports frames consumed, or the
-  /// limit is changed) or the connection is lost. Exceptions it throws are
-  /// logged. A channel can have only one sender.
+  /// Send to a server-bound channel in callback (pull) mode, like
+  /// `WriteChannelPort`'s callback mode. Whenever the channel is below its
+  /// in-flight limit and `fetch` may have data, the client's transport thread
+  /// calls `fetch` and sends all of the message's frames. Errors are reported
+  /// to `onError`; exceptions it throws are logged. The callbacks are never
+  /// called concurrently with each other. A channel can have only one sender,
+  /// and nothing else should write to it meanwhile.
   std::unique_ptr<WriteChannelConnection>
-  connectServerSender(const std::string &channelName, SendCallback onReady);
+  connectServerSender(const std::string &channelName, SendFetchCallback fetch,
+                      SendErrorCallback onError);
 
   /// Callback type for receiving messages from a client-bound channel.
   /// Return true if the message was consumed, false to retry the same owning
