@@ -248,7 +248,7 @@ TEST(WriteCallbackModeTest, NotifyWritesImmediately) {
 
   // After returning nullptr, the source isn't called again until notified.
   source.push({7, 8, 9});
-  EXPECT_FALSE(port.poll());
+  port.poll();
   EXPECT_EQ(source.numFetches(), 3u);
   EXPECT_EQ(port.pollImplCount, 1);
   port.notifyAsyncDataAvailable();
@@ -264,7 +264,7 @@ TEST(WriteCallbackModeTest, FirstPollFetches) {
   port.connect(source.fetch(), source.error());
   // Connecting doesn't call the source; the first poll() does.
   EXPECT_EQ(source.numFetches(), 0u);
-  EXPECT_TRUE(port.poll());
+  port.poll();
   EXPECT_EQ(port.written(), (Frames{{1}}));
 }
 
@@ -280,15 +280,15 @@ TEST(WriteCallbackModeTest, BackpressureHoldsOneMessage) {
   port.rejectAll = true;
   port.notifyAsyncDataAvailable();
   port.notifyAsyncDataAvailable();
-  EXPECT_FALSE(port.poll());
-  EXPECT_FALSE(port.poll());
+  port.poll();
+  port.poll();
   EXPECT_EQ(source.numFetches(), 1u);
   EXPECT_EQ(source.queued(), 9u);
   EXPECT_TRUE(port.written().empty());
 
   // Once the backend accepts it, the rest are fetched and written in order.
   port.rejectAll = false;
-  EXPECT_TRUE(port.poll());
+  port.poll();
   Frames expected;
   for (uint8_t i = 0; i < 10; ++i)
     expected.push_back({i});
@@ -572,16 +572,16 @@ TEST(WriteCallbackModeTest, WindowedFramesSentBeforeNextMessage) {
   port.notifyAsyncDataAvailable();
   EXPECT_EQ(port.written().size(), 1u);
   EXPECT_EQ(source.numFetches(), 2u);
-  EXPECT_FALSE(port.poll());
+  port.poll();
 
   port.acceptBudget = -1;
-  EXPECT_TRUE(port.poll());
+  port.poll();
   EXPECT_EQ(framesWrittenAtFetch, (std::vector<size_t>{0, 1, 4}));
   EXPECT_EQ(receive(&types.window, port.written()),
             (Frames{{1, 2, 3, 4}, {5, 6, 7, 8}}));
 }
 
-TEST(WriteCallbackModeTest, PollReportsProgressOnRemainingFrames) {
+TEST(WriteCallbackModeTest, PollSendsRemainingFrames) {
   ThreeFrameWindow types;
   Source source;
   RecordingWritePort port(&types.window);
@@ -592,14 +592,14 @@ TEST(WriteCallbackModeTest, PollReportsProgressOnRemainingFrames) {
   port.notifyAsyncDataAvailable();
   EXPECT_EQ(port.written().size(), 1u);
 
-  // Sending the second frame is progress, even though the third is stuck.
+  // Each poll sends what frames it can.
   port.acceptBudget = 1;
-  EXPECT_TRUE(port.poll());
+  port.poll();
   EXPECT_EQ(port.written().size(), 2u);
-  EXPECT_FALSE(port.poll());
+  port.poll();
 
   port.acceptBudget = -1;
-  EXPECT_TRUE(port.poll());
+  port.poll();
   EXPECT_EQ(receive(&types.window, port.written()),
             (Frames{{1, 2, 3, 4, 5, 6}}));
 }

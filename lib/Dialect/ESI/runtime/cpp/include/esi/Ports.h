@@ -441,7 +441,7 @@ public:
 protected:
   /// If the default callback mode implementation is in use, write fetched data
   /// (see connect()). Then, if the port is still connected (a callback may
-  /// disconnect it), call pollWriteImpl().
+  /// disconnect it), call pollWriteImpl() and return its result.
   bool pollImpl() final;
 
   /// Backend-specific polling. Write port backends override this rather than
@@ -527,8 +527,7 @@ private:
   /// write(), tryWrite() and flush() without the mode check.
   void writeInternal(const MessageData &data);
   bool tryWriteInternal(const MessageData &data);
-  /// If `framesSent` is given, sets it to whether any frames were sent.
-  bool flushInternal(bool *framesSent = nullptr);
+  bool flushInternal();
   /// Drop the frames of a partially written (windowed) message.
   void discardPendingFrames();
 
