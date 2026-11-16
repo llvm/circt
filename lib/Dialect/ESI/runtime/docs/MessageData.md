@@ -123,6 +123,10 @@ move storage out of it, or leave it untouched for retry.
 
     /// Flatten all segments into a standard MessageData.
     virtual MessageData toMessageData() const;
+
+    /// Return this message as a MessageData without copying if it already is
+    /// one. Otherwise, flatten it into `scratch` and return that.
+    const MessageData &asMessageData(MessageData &scratch) const;
   };
 
   /// A concrete flat message backed by a single vector of bytes.
@@ -189,17 +193,21 @@ move storage out of it, or leave it untouched for retry.
 
     /// Write a multi-segment message. Takes ownership so the backend can
     /// hold the message across partial writes / async completions.
-    /// Default flattens and calls writeImpl().
+    /// Default flattens (without copying if it is already a MessageData)
+    /// and calls writeImpl().
     /// Backends override for scatter-gather / chunked-DMA support.
     virtual void write(std::unique_ptr<SegmentedMessageData> msg) {
-      write(msg->toMessageData());
+      MessageData scratch;
+      write(msg->asMessageData(scratch));
     }
 
     /// Non-blocking write of a multi-segment message. Takes ownership (and
     /// nulls `msg`) only on success; on failure `msg` is left untouched so
-    /// the caller can retry. Default flattens and calls tryWrite().
+    /// the caller can retry. Default flattens (without copying if it is
+    /// already a MessageData) and calls tryWrite().
     virtual bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg) {
-      if (!tryWrite(msg->toMessageData()))
+      MessageData scratch;
+      if (!tryWrite(msg->asMessageData(scratch)))
         return false;
       msg.reset();
       return true;
@@ -316,7 +324,8 @@ extra allocations beyond the single `unique_ptr`.
 ```
 
 If the backend doesn't override `write(unique_ptr<SegmentedMessageData>)`,
-the default flattens via `toMessageData()` and frees the message. If the
+the default flattens it with `asMessageData()` (which doesn't copy a message
+that is already a `MessageData`) and frees it. If the
 backend supports scatter-gather, it stores the `unique_ptr` and sends each
 segment as a separate DMA descriptor. If a partial write occurs, the
 backend keeps the `unique_ptr` and uses the embedded cursor to resume.
