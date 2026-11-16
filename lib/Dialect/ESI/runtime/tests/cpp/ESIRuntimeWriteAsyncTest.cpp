@@ -324,16 +324,26 @@ TEST(WriteCallbackModeTest, NotificationDuringFetchIsNotLost) {
   EXPECT_EQ(port.written(), (Frames{{1}}));
 }
 
-TEST(WriteCallbackModeTest, LongBurstDoesNotRecurse) {
+TEST(WriteCallbackModeTest, LongBurstIsWrittenInBoundedChunks) {
   UIntType ui8("ui8", 8);
   Source source;
   RecordingWritePort port(&ui8);
-  constexpr size_t numMsgs = 100000;
+  constexpr size_t perCall = WriteChannelPort::kMaxAsyncWritesPerCall;
+  constexpr size_t numMsgs = 10 * perCall + 5;
   for (size_t i = 0; i < numMsgs; ++i)
     source.push({static_cast<uint8_t>(i)});
   port.connect(source.fetch(), source.error());
+
+  // Each call returns after a bounded number of messages, even though the
+  // source always has more; poll() writes the rest.
   port.notifyAsyncDataAvailable();
+  EXPECT_EQ(port.written().size(), perCall);
+  port.poll();
+  EXPECT_EQ(port.written().size(), 2 * perCall);
+  for (size_t i = 2; i < 11; ++i)
+    port.poll();
   EXPECT_EQ(port.written().size(), numMsgs);
+  EXPECT_EQ(source.numErrors(), 0u);
 }
 
 TEST(WriteCallbackModeTest, WriteErrorReportedAndMessageDropped) {
@@ -587,6 +597,30 @@ TEST(WriteCallbackModeTest, WindowedFramesSentBeforeNextMessage) {
             (Frames{{1, 2, 3, 4}, {5, 6, 7, 8}}));
 }
 
+TEST(WriteCallbackModeTest, FetchErrorKeepsPreviousMessagesFrames) {
+  TwoFrameWindow types;
+  Source source;
+  RecordingWritePort port(&types.window);
+  source.onFetch = [](size_t idx) {
+    if (idx == 1)
+      throw std::runtime_error("fetch failure");
+  };
+  port.connect(source.fetch(), source.error(),
+               ChannelPort::ConnectOptions(std::nullopt, true));
+  source.push({1, 2, 3, 4});
+  source.push({5, 6, 7, 8});
+
+  // The first message's second frame is backpressured when the next fetch
+  // fails. Only the failed fetch is reported: the first message isn't lost.
+  port.acceptBudget = 1;
+  port.notifyAsyncDataAvailable();
+  EXPECT_EQ(source.numErrors(), 1u);
+  port.acceptBudget = -1;
+  port.notifyAsyncDataAvailable();
+  EXPECT_EQ(receive(&types.window, port.written()),
+            (Frames{{1, 2, 3, 4}, {5, 6, 7, 8}}));
+}
+
 TEST(WriteCallbackModeTest, PollSendsRemainingFrames) {
   ThreeFrameWindow types;
   Source source;
@@ -690,6 +724,87 @@ TEST(WriteCallbackModeTest, DisconnectFromFetchDropsFetchedMessage) {
   EXPECT_EQ(source.numErrors(), 0u);
   EXPECT_EQ(port.pollImplCount, 0);
 }
+TEST(WriteCallbackModeTest, FetchErrorAfterReconnectFromFetchIsDropped) {
+  UIntType ui8("ui8", 8);
+  Source source, source2;
+  RecordingWritePort port(&ui8);
+  source.onFetch = [&](size_t) {
+    port.disconnect();
+    port.connect(source2.fetch(), source2.error());
+    throw std::runtime_error("fetch failure");
+  };
+  port.connect(source.fetch(), source.error());
+  port.notifyAsyncDataAvailable();
+  // The old connection's error isn't reported, and the new one works.
+  EXPECT_EQ(source.numErrors(), 0u);
+  source2.push({1});
+  port.notifyAsyncDataAvailable();
+  EXPECT_EQ(port.written(), (Frames{{1}}));
+  EXPECT_EQ(source2.numErrors(), 0u);
+}
+
+TEST(WriteCallbackModeTest, SyncFramesBlockCallbackConnect) {
+  TwoFrameWindow types;
+  Source source;
+  RecordingWritePort port(&types.window);
+  ChannelPort::ConnectOptions translate(std::nullopt, true);
+  port.connect(translate);
+  // A sync write whose second frame is backpressured.
+  port.acceptBudget = 1;
+  std::unique_ptr<SegmentedMessageData> msg =
+      std::make_unique<MessageData>(std::vector<uint8_t>{1, 2, 3, 4});
+  EXPECT_TRUE(port.tryWrite(msg));
+  port.disconnect();
+
+  // Connecting in callback mode would drop it, so is refused.
+  EXPECT_THROW(port.connect(source.fetch(), source.error(), translate),
+               std::runtime_error);
+  EXPECT_FALSE(port.isConnected());
+  port.connect(translate);
+  port.acceptBudget = -1;
+  EXPECT_TRUE(port.flush());
+  port.disconnect();
+  port.connect(source.fetch(), source.error(), translate);
+  EXPECT_EQ(receive(&types.window, port.written()), (Frames{{1, 2, 3, 4}}));
+}
+
+TEST(WriteCallbackModeTest, OverridingBackendDisconnectDropsFrames) {
+  // A backend which overrides callback mode, but writes with the inherited
+  // segmented write hook.
+  struct OverridingPort : public RecordingWritePort {
+    using RecordingWritePort::connect;
+    using RecordingWritePort::RecordingWritePort;
+    void connect(DataFetchCallback fetch, WriteErrorCallback,
+                 const ConnectOptions &options = {}) override {
+      connectCallbackMode(options);
+      this->fetch = std::move(fetch);
+    }
+    void notifyAsyncDataAvailable() override {
+      std::unique_ptr<SegmentedMessageData> msg = fetch();
+      tryWriteSegmentedImpl(msg);
+    }
+    DataFetchCallback fetch;
+  };
+
+  TwoFrameWindow types;
+  Source source;
+  OverridingPort port(&types.window);
+  ChannelPort::ConnectOptions translate(std::nullopt, true);
+  port.connect(source.fetch(), source.error(), translate);
+  source.push({1, 2, 3, 4});
+  port.acceptBudget = 1;
+  port.notifyAsyncDataAvailable();
+  EXPECT_EQ(port.written().size(), 1u);
+
+  // The callback mode message's remaining frame isn't sent after reconnecting
+  // in sync mode.
+  port.disconnect();
+  port.connect(translate);
+  port.acceptBudget = -1;
+  EXPECT_TRUE(port.flush());
+  EXPECT_EQ(port.written().size(), 1u);
+}
+
 TEST(WriteCallbackModeTest, ReconnectFromCallback) {
   UIntType ui8("ui8", 8);
   Source oldSource, newSource;
@@ -908,10 +1023,14 @@ TEST(WriteCallbackModeTest, ServiceThreadLogsErrorCallbackExceptions) {
 
   // The exception is logged, and the service thread carries on: it writes the
   // next message, and runs its other tasks.
-  RecordingLogger logger;
+  Context ctxt(std::make_unique<RecordingLogger>());
+  auto ownedLogger = std::make_unique<RecordingLogger>();
+  RecordingLogger &logger = *ownedLogger;
   std::atomic<int> otherTaskRuns = 0;
   {
-    AcceleratorServiceThread serviceThread(&logger);
+    AcceleratorServiceThread serviceThread(&ctxt);
+    // The context's current logger is used, even if it was replaced.
+    ctxt.setLogger(std::move(ownedLogger));
     serviceThread.addTask([&port]() { port.poll(); });
     serviceThread.addTask([&]() { ++otherTaskRuns; });
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -974,6 +1093,19 @@ TEST(WriteCallbackModeTest, TypedWritePortSegmented) {
       [](std::exception_ptr) { ADD_FAILURE(); });
   typed.notifyAsyncDataAvailable();
   EXPECT_EQ(port.written(), (Frames{{1, 2, 3, 4, 5}}));
+}
+
+TEST(WriteCallbackModeTest, TypedWritePortTryWriteKeepsMessageOnThrow) {
+  BitsType bits40("i40", 40);
+  RecordingWritePort port(&bits40);
+  TypedWritePort<TwoSegmentMessage, /*SkipTypeCheck=*/true> typed(port);
+  typed.connect([]() -> std::unique_ptr<TwoSegmentMessage> { return nullptr; },
+                [](std::exception_ptr) {});
+  // tryWrite() throws in callback mode; the caller keeps the message.
+  auto msg = std::make_unique<TwoSegmentMessage>();
+  TwoSegmentMessage *original = msg.get();
+  EXPECT_THROW(typed.tryWrite(msg), std::runtime_error);
+  EXPECT_EQ(msg.get(), original);
 }
 
 TEST(WriteCallbackModeTest, TypedWritePortVoid) {

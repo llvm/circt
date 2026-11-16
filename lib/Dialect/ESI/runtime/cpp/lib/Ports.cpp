@@ -729,7 +729,16 @@ struct WriteChannelPort::DefaultAsyncWriter {
   void poll();
 
 private:
-  enum class DrainResult { Idle, Blocked, Stopped };
+  enum class DrainResult {
+    /// The DataFetchCallback has no data.
+    Idle,
+    /// The backend backpressured.
+    Blocked,
+    /// Wrote the maximum number of messages for one call.
+    Yielded,
+    /// The connection was stopped.
+    Stopped,
+  };
   /// The body of poll(). Requires `mutex`.
   DrainResult drain();
 
@@ -774,38 +783,58 @@ void WriteChannelPort::DefaultAsyncWriter::poll() {
     draining = false;
     // Repeat for a notify() which arrived after drain() last checked
     // `dataAvailable` but before the lock was released, since it couldn't
-    // poll() itself. When blocked, the next poll() retries.
+    // poll() itself. Otherwise, the next poll() continues.
   } while (result == DrainResult::Idle && dataAvailable);
 }
 
 WriteChannelPort::DefaultAsyncWriter::DrainResult
 WriteChannelPort::DefaultAsyncWriter::drain() {
+  size_t written = 0;
   while (!stopped) {
-    try {
-      if (!pendingMsg) {
-        // Cleared before fetching, so a notification which arrives while
-        // fetching (and which would be missed if this returns nullptr) isn't
-        // lost.
-        if (!dataAvailable.exchange(false)) {
-          // tryWrite() only sends the rest of a windowed message's frames
-          // before the next message, so with none, send them here.
+    if (!pendingMsg) {
+      // Leave the rest for the next call.
+      if (written == kMaxAsyncWritesPerCall)
+        return DrainResult::Yielded;
+      // Cleared before fetching, so a notification which arrives while
+      // fetching (and which would be missed if this returns nullptr) isn't
+      // lost.
+      if (!dataAvailable.exchange(false)) {
+        // tryWrite() only sends the rest of a windowed message's frames
+        // before the next message, so with none, send them here.
+        try {
           return port.flushInternal() ? DrainResult::Idle
                                       : DrainResult::Blocked;
-        }
-        pendingMsg = fetch();
-        // If the callback disconnected the port, drop the message.
-        if (stopped) {
-          pendingMsg.reset();
-          break;
-        }
-        if (!pendingMsg)
+        } catch (...) {
+          port.discardPendingFrames();
+          onError(std::current_exception());
           continue;
-        // The callback had data, so it may have more.
-        dataAvailable = true;
+        }
       }
+      std::exception_ptr fetchError;
+      try {
+        pendingMsg = fetch();
+      } catch (...) {
+        fetchError = std::current_exception();
+      }
+      // If the callback disconnected the port, drop the message (or error).
+      if (stopped) {
+        pendingMsg.reset();
+        break;
+      }
+      if (fetchError) {
+        onError(fetchError);
+        continue;
+      }
+      if (!pendingMsg)
+        continue;
+      // The callback had data, so it may have more.
+      dataAvailable = true;
+    }
 
+    try {
       if (!port.tryWriteSegmentedImpl(pendingMsg))
         return DrainResult::Blocked;
+      ++written;
     } catch (...) {
       pendingMsg.reset();
       port.discardPendingFrames();
@@ -845,7 +874,11 @@ void WriteChannelPort::connect(const ConnectOptions &options) {
 void WriteChannelPort::connectCallbackMode(const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
-  discardPendingFrames();
+  if (hasPendingFrames())
+    throw std::runtime_error(
+        "Cannot connect in callback mode while a windowed message written in "
+        "sync mode has unsent frames. Reconnect in sync mode and flush() "
+        "first.");
   connectCommon(options);
   mode = Mode::Callback;
 }
@@ -867,9 +900,11 @@ void WriteChannelPort::connect(DataFetchCallback fetch,
 }
 
 void WriteChannelPort::disconnect() {
-  // Translated frames left over from a fetched message are dropped, unless
-  // they belong to a sync mode write which should be flushed.
-  if (stopAsyncWriter())
+  // Translated frames left over from a callback mode write are dropped. Those
+  // from a sync mode write are kept, to be flushed after reconnecting.
+  bool wasCallbackMode = mode == Mode::Callback;
+  stopAsyncWriter();
+  if (wasCallbackMode)
     discardPendingFrames();
   mode = Mode::Disconnected;
 }
@@ -880,16 +915,14 @@ WriteChannelPort::getAsyncWriter() {
   return asyncWriter;
 }
 
-bool WriteChannelPort::stopAsyncWriter() {
+void WriteChannelPort::stopAsyncWriter() {
   std::shared_ptr<DefaultAsyncWriter> writer;
   {
     std::lock_guard<std::mutex> lock(asyncWriterMutex);
     writer = std::move(asyncWriter);
   }
-  if (!writer)
-    return false;
-  writer->stop();
-  return true;
+  if (writer)
+    writer->stop();
 }
 
 bool WriteChannelPort::pollImpl() {

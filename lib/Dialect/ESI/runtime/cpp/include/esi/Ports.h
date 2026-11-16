@@ -197,13 +197,14 @@ public:
   virtual bool isConnected() const = 0;
 
   /// Poll for incoming data. Returns true if data was read or written into a
-  /// buffer as a result of the poll. Calling the call back could (will) also
-  /// happen in that case. Some backends need this to be called periodically. In
-  /// the usual case, this will be called by a background thread, but the ESI
-  /// runtime does not want to assume that the host processes use standard
-  /// threads. If the user wants to provide their own threads, they need to call
-  /// this on each port occasionally. This is also called from the 'master' poll
-  /// method in the Accelerator class.
+  /// buffer as a result of the poll, though it may return false regardless
+  /// (e.g. a write port in callback mode doesn't report its writes). Calling
+  /// the call back could (will) also happen in that case. Some backends need
+  /// this to be called periodically. In the usual case, this will be called by
+  /// a background thread, but the ESI runtime does not want to assume that the
+  /// host processes use standard threads. If the user wants to provide their
+  /// own threads, they need to call this on each port occasionally. This is
+  /// also called from the 'master' poll method in the Accelerator class.
   bool poll() {
     if (isConnected())
       return pollImpl();
@@ -334,8 +335,9 @@ public:
   /// Disconnect the port. In callback mode, drops a fetched message which
   /// hasn't been completely written. With the default callback mode
   /// implementation, blocks until another thread writing fetched data
-  /// (including the callbacks it invokes) has stopped. Subclasses which
-  /// override this must call it.
+  /// (including the callbacks it invokes) has stopped. Must not be called
+  /// concurrently with connect() or disconnect() on another thread. Subclasses
+  /// which override this must call it.
   virtual void disconnect() override;
   virtual bool isConnected() const override {
     return mode != Mode::Disconnected;
@@ -408,8 +410,11 @@ public:
   // backends may override (e.g. to fetch messages as DMA buffers free up).
   //===--------------------------------------------------------------------===//
 
-  /// Connect in callback mode. Throws if already connected or if either
-  /// callback is null. Callbacks may be invoked from any thread, but never
+  /// Connect in callback mode. Throws if already connected, if either callback
+  /// is null, or if frames of a windowed message written in sync mode haven't
+  /// all been sent yet (reconnect in sync mode and flush() them first). Must
+  /// not be called concurrently with connect() or disconnect() on another
+  /// thread. Callbacks may be invoked from any thread, but never
   /// concurrently with each other, and must return quickly. Exceptions thrown
   /// by `fetch` are reported to `onError`; those thrown by `onError`
   /// propagate out of whichever call invoked it (e.g.
@@ -424,6 +429,8 @@ public:
   /// notifyAsyncDataAvailable() and from poll() (e.g. called by the
   /// accelerator's service thread via `AcceleratorServiceThread::addPoll()`),
   /// which also retries the one fetched message the backend didn't accept.
+  /// Each call writes at most `kMaxAsyncWritesPerCall` messages, so that it
+  /// returns even if `fetch` always has data; poll() writes the rest.
   /// `fetch` is first called by the first of either after connecting. Its
   /// state is only allocated while it is in use.
   ///
@@ -432,6 +439,10 @@ public:
   /// connectCallbackMode().
   virtual void connect(DataFetchCallback fetch, WriteErrorCallback onError,
                        const ConnectOptions &options = {});
+
+  /// The most messages the default callback mode implementation writes per
+  /// call to notifyAsyncDataAvailable() or poll().
+  static constexpr size_t kMaxAsyncWritesPerCall = 64;
 
   /// Notify the port that the DataFetchCallback has data again. Throws if the
   /// port isn't connected in callback mode.
@@ -527,6 +538,10 @@ private:
   void writeInternal(const MessageData &data);
   bool tryWriteInternal(const MessageData &data);
   bool flushInternal();
+  /// Whether a windowed message's frames are partially written.
+  bool hasPendingFrames() const {
+    return translationBufferIdx < translationBuffer.size();
+  }
   /// Drop the frames of a partially written (windowed) message.
   void discardPendingFrames();
 
@@ -540,8 +555,7 @@ private:
   /// Return the default implementation's current connection, if any.
   std::shared_ptr<DefaultAsyncWriter> getAsyncWriter();
   /// Detach and stop the default implementation's current connection, if any.
-  /// Returns true if there was one.
-  bool stopAsyncWriter();
+  void stopAsyncWriter();
 
   /// Protects `asyncWriter`.
   std::mutex asyncWriterMutex;

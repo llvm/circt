@@ -685,7 +685,13 @@ public:
       throw std::runtime_error("TypedWritePort::tryWrite: null unique_ptr");
     if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
       std::unique_ptr<SegmentedMessageData> msg(data.release());
-      bool written = inner->tryWrite(msg);
+      bool written;
+      try {
+        written = inner->tryWrite(msg);
+      } catch (...) {
+        data.reset(static_cast<T *>(msg.release()));
+        throw;
+      }
       // On failure, the port did not take ownership; hand it back.
       if (!written)
         data.reset(static_cast<T *>(msg.release()));
