@@ -82,17 +82,19 @@ def PIRAnySequenceType : AnyTypeOf<[PIRSequenceType, PIRClockedSequenceType]>;
 // Accept any property, simple or clocked
 def PIRAnyPropertyType : AnyTypeOf<[PIRPropertyType, PIRClockedPropertyType]>;
 
+// Accepts any type that is not simple sequence
+def PIRAnyPropOrClockedSeqType : AnyTypeOf<[PIRAnyPropertyType, PIRClockedSequenceType]>;
+
 // Accept any clocked type, this includes booleans
-def PIRAnyClockedType : AnyTypeOf<[PIRClockedPropertyType, PIRClockedSequenceType, I1]>;
+def PIRAnyClockedType : AnyTypeOf<[PIRClockedPropertyType, PIRClockedSequenceType]>;
 
 // Accept any simple type, this also includes booleans
-def PIRAnySimpleType : AnyTypeOf<[PIRPropertyType, PIRSequenceType, I1]>;
+def PIRAnySimpleType : AnyTypeOf<[PIRPropertyType, PIRSequenceType]>;
 
 // Accept anything that looks like a valid property
 def PIRAnyType : AnyTypeOf<[
   PIRPropertyType, PIRSequenceType, 
-  PIRClockedPropertyType, PIRClockedSequenceType,
-  I1
+  PIRClockedPropertyType, PIRClockedSequenceType
 ]>;
 
 #endif // CIRCT_DIALECT_PIR_PIRTYPES_TD

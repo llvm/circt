@@ -177,8 +177,12 @@ pir.cell @test {} {
 
   // CHECK: %s1, %s2, %s3 = pir.input : !pir.sequence, !pir.sequence, !pir.sequence
   // CHECK: %cs1, %cs2, %cs3 = pir.input : !pir.clocked_sequence, !pir.clocked_sequence, !pir.clocked_sequence
+  // CHECK: %p1, %p2, %p3 = pir.input : !pir.property, !pir.property, !pir.property
+  // CHECK: %cp1, %cp2, %cp3 = pir.input : !pir.clocked_property, !pir.clocked_property, !pir.clocked_property
   %s1, %s2, %s3 = pir.input : !pir.sequence, !pir.sequence, !pir.sequence
   %cs1, %cs2, %cs3 = pir.input : !pir.clocked_sequence, !pir.clocked_sequence, !pir.clocked_sequence
+  %p1, %p2, %p3 = pir.input : !pir.property, !pir.property, !pir.property
+  %cp1, %cp2, %cp3 = pir.input : !pir.clocked_property, !pir.clocked_property, !pir.clocked_property
 
   // CHECK: {{%.+}} = pir.concat %s1, %s2, %s3 : !pir.sequence
   // CHECK: {{%.+}} = pir.concat %cs1, %cs2, %cs3 : !pir.clocked_sequence
@@ -192,8 +196,12 @@ pir.cell @test {} {
 
   // CHECK: {{%.+}} = pir.or %s1, %s2, %s3 : !pir.sequence
   // CHECK: {{%.+}} = pir.or %cs1, %cs2, %cs3 : !pir.clocked_sequence
+  // CHECK: {{%.+}} = pir.or %p1, %p2, %p3 : !pir.property
+  // CHECK: {{%.+}} = pir.or %cp1, %cp2, %cp3 : !pir.clocked_property
   %or_s = pir.or %s1, %s2, %s3 : !pir.sequence
   %or_cs = pir.or %cs1, %cs2, %cs3 : !pir.clocked_sequence
+  %or_p = pir.or %p1, %p2, %p3 : !pir.property
+  %or_cp = pir.or %cp1, %cp2, %cp3 : !pir.clocked_property
 
   // CHECK: {{%.+}} = pir.intersect %s1, %s2, %s3 : !pir.sequence
   // CHECK: {{%.+}} = pir.intersect %cs1, %cs2, %cs3 : !pir.clocked_sequence
@@ -205,12 +213,43 @@ pir.cell @test {} {
   %fm_s = pir.first_match %s : !pir.sequence
   %fm_cs = pir.first_match %clk_s : !pir.clocked_sequence  
 
-  // CHECK: {{%.+}} = pir.and %cs1, %cs2, %cs3 
-  %and_cs = pir.and %cs1, %cs2, %cs3 
+  // CHECK: {{%.+}} = pir.and %cs1, %cs2, %cs3 : !pir.clocked_sequence
+  // CHECK: {{%.+}} = pir.and %cp1, %cp2, %cp3 : !pir.clocked_property
+  // CHECK: {{%.+}} = pir.and %p1, %p2, %p3 : !pir.property
+  %and_cs = pir.and %cs1, %cs2, %cs3 : !pir.clocked_sequence
+  %and_cp = pir.and %cp1, %cp2, %cp3 : !pir.clocked_property
+  %and_p = pir.and %p1, %p2, %p3 : !pir.property
 
   // CHECK: {{%.+}} = pir.throughout %i_0 in %cs1
   %cs_throughout_i0 = pir.throughout %i_0 in %cs1
 
   // CHECK: {{%.+}} = pir.within %cs1 in %cs2
   %cs1_within_cs2 = pir.within %cs1 in %cs2
+
+  // CHECK: {{%.+}} = pir.not %cp1 : !pir.clocked_property
+  // CHECK: {{%.+}} = pir.not %p1 : !pir.property
+  %n_cp = pir.not %cp1 : !pir.clocked_property
+  %n_p = pir.not %p1 : !pir.property
+
+  // CHECK: {{%.+}} = pir.nexttime[42] %cp1 : !pir.clocked_property
+  // CHECK: {{%.+}} = pir.nexttime[42] %p1 : !pir.property
+  // CHECK: {{%.+}} = pir.nexttime strong[42] %cp1 : !pir.clocked_property
+  // CHECK: {{%.+}} = pir.nexttime strong[42] %p1 : !pir.property
+  %next42cp1 = pir.nexttime [42] %cp1 : !pir.clocked_property
+  %next42p1 = pir.nexttime [42] %p1 : !pir.property
+  %nexts42cp1 = pir.nexttime strong [42] %cp1 : !pir.clocked_property
+  %nexts42p1 = pir.nexttime strong [42] %p1 : !pir.property
+
+  // CHECK: {{%.+}} = pir.clk_overlapped_implication %cs1, %cp1
+  // CHECK: {{%.+}} = pir.overlapped_implication %s1, %p1
+  %cs_clkoi_cp = pir.clk_overlapped_implication %cs1, %cp1
+  %s_oi_p = pir.overlapped_implication %s1, %p1
+
+  // CHECK: {{%.+}} = pir.until %cp1, %cp2 : !pir.clocked_property
+  // CHECK: {{%.+}} = pir.until %p1, %p2 : !pir.property
+  %cp1_until_cp2 = pir.until %cp1, %cp2 : !pir.clocked_property
+  %p1_until_p2 = pir.until %p1, %p2 : !pir.property
+
+  // CHECK: {{%.+}} = pir.s_until %cp1, %cp2
+  %cp1_suntil_cp2 = pir.s_until %cp1, %cp2 
 }

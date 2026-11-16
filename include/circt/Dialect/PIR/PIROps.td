@@ -244,7 +244,9 @@ def ClockedSeqToClockedPropOp : ConversionOp<"clocked_seq_to_clocked_prop"> {
   }];
 
   let arguments = (
-    ins PIRClockedSequenceType:$input
+    ins 
+    PIRClockedSequenceType:$input,
+    UnitAttr:$isStrong
   );
   let results = (
     outs PIRClockedPropertyType:$output
@@ -558,7 +560,11 @@ def FusionOp : ConcatLikeOp<"fusion"> {
   }];
 }
 
-def OrOp : ConcatLikeOp<"or"> {
+def OrOp : PIRInnerOp<"or", [
+    Pure,
+    SameTypeOperands, 
+    SameOperandsAndResultType
+]> {
   let summary = "Concurrent disjunction between a series of sequences.";
   let description = [{
     Concurrent disjunction between a series of sequences.
@@ -567,7 +573,19 @@ def OrOp : ConcatLikeOp<"or"> {
     union of the matches of argument sequences.
 
     All operands must be of the same type, i.e. all must either be clocked or 
-    all must be simple sequences, there can not be a mixture of both.
+    all must be simple sequences/properties, there can not be a mixture of both.
+  }];
+
+  let arguments = (ins
+    Variadic<PIRAnyType>:$inputs
+  );
+
+  let results = (outs
+    PIRAnyType:$result
+  );
+
+  let assemblyFormat = [{
+    $inputs attr-dict `:` qualified(type($result))
   }];
 }
 
@@ -641,27 +659,31 @@ def DelayOp : PIRInnerOp<"delay", [Pure]> {
   }];
 }
 
-def AndOp : PIRInnerOp<"and", [Pure]> {
-  let summary = "Concurrent conjunction between a series of sequences.";
+def AndOp : PIRInnerOp<"and", [
+    Pure,
+    SameTypeOperands, 
+    SameOperandsAndResultType
+]> {
+  let summary = "Concurrent conjunction between a series of sequences/properties.";
   let description = [{
-    Concurrent disjunction between a series of sequences.
-    All argument sequences need to match and have the same start point, 
+    Concurrent disjunction between a series of sequences/properties.
+    All argument sequences/properties need to match and have the same start point, 
     but they may have different end points. The end point of the match is 
     the latest end point of an argument sequence.
 
-    All operands must be of the clocked sequences.
+    All operands must be of the same type.
   }];
 
   let arguments = (ins
-    Variadic<PIRClockedSequenceType>:$inputs
+    Variadic<PIRAnyPropOrClockedSeqType>:$inputs
   );
 
   let results = (outs
-    PIRClockedSequenceType:$result
+    PIRAnyPropOrClockedSeqType:$result
   );
 
   let assemblyFormat = [{
-    $inputs attr-dict
+    $inputs attr-dict `:` qualified(type($result))
   }];
 }
 
@@ -712,8 +734,193 @@ def WithinOp: PIRInnerOp<"within", [Pure]> {
 
 
 //===----------------------------------------------------------------------===//
-// Properties
+// Simple Properties (and Clocked)
 //===----------------------------------------------------------------------===//
 
+def NotOp: PIRInnerOp<"not", [
+    Pure, 
+    SameTypeOperands, 
+    SameOperandsAndResultType
+]> {
+  let summary = "Negation of a given property.";
+  let description = [{
+    Negates a given property. In weak semantics, this means that the 
+    resulting property fails on any finite sequence ending in a time 
+    step in which the input holds. In strong semantics, the resulting 
+    property only fails if the offending input is witnessed.
+  }];
+
+  let arguments = (ins
+    PIRAnyPropertyType:$input
+  );
+
+  let results = (outs
+    PIRAnyPropertyType:$result
+  );
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($result)
+  }];
+}
+
+def NexttimeOp: PIRInnerOp<"nexttime", [
+    Pure,
+    SameTypeOperands, 
+    SameOperandsAndResultType
+]> {
+  let summary = "Checks if the input holds in a given number of cycles.";
+  let description = [{
+    Checks if the argument property holds <int> time steps in the future. 
+    In the weak variant, the property evaluates to true if the referenced 
+    time step does not exist. In the strong variant, the property evaluates 
+    to false if the referenced time step does not exist. If the evaluation 
+    attempt begins in between clock ticks, the evaluation is moved to the 
+    next clock tick. Therefore, the integer argument 0 can be used for 
+    alignment. In other words, the argument property has to hold on time 
+    step `delay` + 1, beginning to count at the current time step (which 
+    might have already started) for the property to evaluate to true. 
+  }];
+
+  let arguments = (ins
+    UnitAttr:$isStrong,
+    I64Attr:$delay,
+    PIRAnyPropertyType:$input
+  );
+
+  let results = (outs
+    PIRAnyPropertyType:$result
+  );
+
+  let assemblyFormat = [{
+    (`strong` $isStrong^)? `[` $delay `]` $input attr-dict `:` type($result)
+  }];
+}
+
+def OverlappedImplicationOp: PIRInnerOp<"overlapped_implication", [
+  Pure
+]> {
+  let summary = "Overlapped implication between a simple sequence and simple property.";
+  let description = [{
+    Overlapped implication between an antecedant simple sequence and a consequent
+    simple property. Witnessing the antecedant sequence triggers the evaluation of 
+    the consequent property, which has to hold either on the last time step of the 
+    sequence (overlapped).
+  }];
+
+  let arguments = (ins
+    PIRSequenceType:$antecedant,
+    PIRPropertyType:$consequent
+  );
+
+  let results = (outs
+    PIRPropertyType:$result
+  );
+
+  let assemblyFormat = [{
+    $antecedant `,` $consequent attr-dict
+  }];
+}
+
+def UntilOp: PIRInnerOp<"until", [
+    Pure,
+    SameTypeOperands, 
+    SameOperandsAndResultType
+]> {
+  let summary = "Checks that one property holds until another holds.";
+  let description = [{
+    Checks that the `lhs` property holds up until the point where 
+    `rhs` property holds for the first time. This variant uses weak 
+    semantics, i.e. if `rhs` is not witnessed, but `lhs` holds until 
+    the end of the trace, then the result will hold.
+
+    Both `lhs` and `rhs` must be the same type.
+  }];
+
+  let arguments = (ins
+    PIRAnyPropertyType:$lhs,
+    PIRAnyPropertyType:$rhs
+  );
+
+  let results = (outs
+    PIRAnyPropertyType:$result
+  );
+
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` qualified(type($result))
+  }];
+} 
+
+class SimpleAbortOp<string mnemonic, list<Trait> traits = []> : 
+  PIRInnerOp<mnemonic, traits # [
+    Pure,
+    SameTypeOperands, 
+    SameOperandsAndResultType
+]> {
+  let arguments = (ins
+    I1:$condition,
+    PIRAnyPropertyType:$input
+  );
+
+  let results = (outs
+    PIRAnyPropertyType:$result
+  );
+
+  let assemblyFormat = [{
+    $input `on` $condition `:` type($result)
+  }];
+}
+
+def AcceptOnOp: SimpleAbortOp<"accept">;
+def RejectOnOp: SimpleAbortOp<"accept">;
+
+//===----------------------------------------------------------------------===//
+// Clocked Properties Only
+//===----------------------------------------------------------------------===//
+
+def ClockedOverlappedImplicationOp: PIRInnerOp<"clk_overlapped_implication", [Pure]> {
+  let summary = "Overlapped implication between a clocked sequence and clocked property.";
+  let description = [{
+    Overlapped implication between an antecedant clocked sequence and a consequent
+    clocked property. Witnessing the antecedant sequence triggers the evaluation of 
+    the consequent property, which has to hold either on the last time step of the 
+    sequence (overlapped).
+  }];
+
+  let arguments = (ins
+    PIRClockedSequenceType:$antecedant,
+    PIRClockedPropertyType:$consequent
+  );
+
+  let results = (outs
+    PIRClockedPropertyType:$result
+  );
+
+  let assemblyFormat = [{
+    $antecedant `,` $consequent attr-dict
+  }];
+}
+
+def StrongUntilOp: PIRInnerOp<"s_until", [Pure]> {
+  let summary = "Checks, using strong semantics, that `lhs` holds until `rhs` holds.";
+  let description = [{
+    Checks that the `lhs` property holds up until the point where 
+    `rhs` property holds for the first time. This variant uses strong 
+    semantics, i.e. `rhs` must be witnessed in order for the resulting 
+    property to hold. 
+  }];
+
+  let arguments = (ins
+    PIRClockedPropertyType:$lhs,
+    PIRClockedPropertyType:$rhs
+  );
+
+  let results = (outs
+    PIRClockedPropertyType:$result
+  );
+
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict
+  }];
+} 
 
 #endif // CIRCT_DIALECT_PIR_PIROPS_TD
