@@ -91,7 +91,7 @@ public:
     RpcClient::SendFetchCallback fetch;
     RpcClient::SendErrorCallback onError;
     std::atomic<bool> canceled{false};
-    // False once `fetch` returns nullopt (or throws), until notified.
+    // False once `fetch` returns no frames (or throws), until notified.
     std::atomic<bool> dataAvailable{true};
     // Held while calling the callbacks, so `unregisterSender()` can wait for a
     // call in progress. Recursive since they may unregister the sender.
@@ -853,10 +853,10 @@ bool RpcClient::Impl::runSender(uint64_t channelId, WriteSenderEntry &entry) {
       return false;
     }
     // Cleared before fetching, so a notification which arrives while fetching
-    // (and which would be missed if this returns nullopt) isn't lost.
+    // (and which would be missed if this returns no frames) isn't lost.
     if (!entry.dataAvailable.exchange(false))
       return false;
-    std::optional<std::vector<MessageData>> frames;
+    std::vector<MessageData> frames;
     std::exception_ptr error;
     try {
       frames = entry.fetch();
@@ -870,16 +870,16 @@ bool RpcClient::Impl::runSender(uint64_t channelId, WriteSenderEntry &entry) {
       entry.onError(error);
       continue;
     }
-    if (!frames)
+    if (frames.empty())
       continue;
     // The callback had data, so it may have more.
     entry.dataAvailable.store(true);
     {
       std::lock_guard<std::mutex> lock(cred.mutex);
-      cred.outstanding += frames->size();
+      cred.outstanding += frames.size();
     }
     try {
-      for (const MessageData &frame : *frames)
+      for (const MessageData &frame : frames)
         sendFrame(meta, frame);
     } catch (...) {
       entry.onError(std::current_exception());

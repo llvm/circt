@@ -32,7 +32,6 @@
 #include <memory>
 #include <mutex>
 #include <new>
-#include <optional>
 #include <set>
 #include <string_view>
 #include <vector>
@@ -85,12 +84,15 @@ public:
     try {
       newSender = client.connectServerSender(
           name,
-          [this, fetch = std::move(
-                     fetch)]() -> std::optional<std::vector<MessageData>> {
-            std::unique_ptr<SegmentedMessageData> msg = fetch();
-            if (!msg)
-              return std::nullopt;
-            return toFrames(*msg);
+          [this, fetch = std::move(fetch)]() -> std::vector<MessageData> {
+            // Messages without frames (e.g. empty ones) send nothing, as in
+            // sync mode; skip them, since no frames means no data.
+            while (std::unique_ptr<SegmentedMessageData> msg = fetch()) {
+              std::vector<MessageData> frames = toFrames(*msg);
+              if (!frames.empty())
+                return frames;
+            }
+            return {};
           },
           std::move(onError));
     } catch (...) {

@@ -2748,11 +2748,16 @@ static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
   std::exception_ptr writeError;
   ChannelPort::ConnectOptions writeOpts;
   writeOpts.bufferSize = 2;
+  // Empty messages, which have no frames and so send nothing, are interleaved
+  // to check that they don't stop the rest being fetched.
+  bool sendEmpty = true;
   rawFromHost.connect(
       [&]() -> std::unique_ptr<SegmentedMessageData> {
         std::lock_guard<std::mutex> lock(fetchMutex);
         if (nextToSend == toSend.size())
           return nullptr;
+        if ((sendEmpty = !sendEmpty))
+          return std::make_unique<MessageData>();
         return std::make_unique<MessageData>(
             MessageData::from(toSend[nextToSend++]));
       },
