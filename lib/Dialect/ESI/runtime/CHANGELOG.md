@@ -42,6 +42,15 @@
 
 ### Added
 
+- **Cosim write ports implement callback mode natively.** In callback mode, a
+  cosim write port calls the data fetch callback on the cosim client's
+  transport thread whenever the channel is below its in-flight limit (e.g. as
+  the simulation consumes frames) and the application may have data, and sends
+  each message immediately. So it needs no `poll()`, never holds a fetched
+  message, and `notifyAsyncDataAvailable()` doesn't block. To support this,
+  `RpcClient` gained `connectServerSender()`, which registers a callback the
+  transport thread calls when a server-bound channel may accept more frames,
+  and `canWriteToServer()`.
 - **`SegmentedMessageData::asMessageData(scratch)`** returns the message
   itself if it is already a `MessageData`, otherwise flattens it into
   `scratch`. It replaces the internal `detail::getMessageDataRef()` helper.

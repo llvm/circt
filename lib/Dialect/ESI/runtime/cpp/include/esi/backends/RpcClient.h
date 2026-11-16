@@ -91,6 +91,38 @@ public:
   void setToServerMaxInFlight(const std::string &channelName,
                               unsigned maxInFlight);
 
+  /// Whether a server-bound channel is below its in-flight limit, i.e. whether
+  /// `tryWriteToServer()` would send a message now. Throws if the connection
+  /// is lost.
+  bool canWriteToServer(const std::string &channelName);
+
+  /// Handle for a sender registered with `connectServerSender()`. Destructor
+  /// disconnects.
+  class WriteChannelConnection {
+  public:
+    virtual ~WriteChannelConnection() = default;
+    /// Schedule a call to the sender. Doesn't block.
+    virtual void notify() = 0;
+    /// Stop calling the sender. Blocks while it is being called on another
+    /// thread.
+    virtual void disconnect() = 0;
+  };
+
+  /// Callback which sends to a server-bound channel, e.g. with
+  /// `tryWriteToServer()` while `canWriteToServer()`. Returns true to be called
+  /// again (after other channels have been serviced), e.g. if it stopped
+  /// before running out of data to bound the time it takes.
+  using SendCallback = std::function<bool()>;
+
+  /// Register `onReady` as the sender for a server-bound channel. It is called
+  /// on the client's transport thread, never concurrently with itself: after
+  /// `WriteChannelConnection::notify()`, and whenever the channel's in-flight
+  /// limit may admit more frames (the server reports frames consumed, or the
+  /// limit is changed) or the connection is lost. Exceptions it throws are
+  /// logged. A channel can have only one sender.
+  std::unique_ptr<WriteChannelConnection>
+  connectServerSender(const std::string &channelName, SendCallback onReady);
+
   /// Callback type for receiving messages from a client-bound channel.
   /// Return true if the message was consumed, false to retry the same owning
   /// message object.

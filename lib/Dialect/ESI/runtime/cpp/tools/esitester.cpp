@@ -34,6 +34,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <random>
 #include <span>
 #include <sstream>
@@ -2735,5 +2736,60 @@ static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
 
   logger.info("esitester", "Channel test: loopback passed (" +
                                std::to_string(iterations) + " iterations)");
+
+  // --- Test from_host in callback mode ---
+  // The port fetches each message once the channel can accept it. A small
+  // in-flight limit makes the writes wait on the hardware consuming them.
+  WriteChannelPort &rawFromHost = fromHostPort->getRawWrite("data");
+  rawFromHost.disconnect();
+  std::mutex fetchMutex;
+  std::vector<uint32_t> toSend;
+  size_t nextToSend = 0;
+  std::exception_ptr writeError;
+  ChannelPort::ConnectOptions writeOpts;
+  writeOpts.bufferSize = 2;
+  rawFromHost.connect(
+      [&]() -> std::unique_ptr<SegmentedMessageData> {
+        std::lock_guard<std::mutex> lock(fetchMutex);
+        if (nextToSend == toSend.size())
+          return nullptr;
+        return std::make_unique<MessageData>(
+            MessageData::from(toSend[nextToSend++]));
+      },
+      [&](std::exception_ptr e) {
+        std::lock_guard<std::mutex> lock(fetchMutex);
+        if (!writeError)
+          writeError = e;
+      },
+      writeOpts);
+  uint32_t callbackIters = 16 * iterations;
+  for (uint32_t i = 0; i < callbackIters; ++i) {
+    {
+      std::lock_guard<std::mutex> lock(fetchMutex);
+      toSend.push_back(dist(rng));
+    }
+    rawFromHost.notifyAsyncDataAvailable();
+  }
+  for (uint32_t i = 0; i < callbackIters; ++i) {
+    std::future<MessageData> recv = loopbackOutPort->read();
+    if (recv.wait_for(std::chrono::seconds(30)) != std::future_status::ready)
+      throw std::runtime_error("Channel callback loopback: timed out at i=" +
+                               std::to_string(i));
+    uint32_t recvVal = *recv.get().as<uint32_t>();
+    uint32_t sendVal;
+    {
+      std::lock_guard<std::mutex> lock(fetchMutex);
+      sendVal = toSend[i];
+    }
+    if (recvVal != sendVal)
+      throw std::runtime_error("Channel callback loopback mismatch at i=" +
+                               std::to_string(i));
+  }
+  rawFromHost.disconnect();
+  if (writeError)
+    std::rethrow_exception(writeError);
+  std::cout << "[channel] callback loopback passed (" << callbackIters
+            << " messages)" << std::endl;
+
   std::cout << "Channel test passed" << std::endl;
 }
