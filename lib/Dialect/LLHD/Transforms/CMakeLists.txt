@@ -2,6 +2,7 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   CombineDrives.cpp
   Deseq.cpp
   DeseqUtils.cpp
+  HoistProjections.cpp
   HoistSignals.cpp
   InlineCalls.cpp
   LowerProcesses.cpp
