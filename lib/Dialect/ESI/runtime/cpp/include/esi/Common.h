@@ -188,6 +188,10 @@ public:
 
   /// Flatten all segments into a standard MessageData.
   virtual MessageData toMessageData() const;
+
+  /// Return this message as a MessageData without copying if it already is
+  /// one. Otherwise, flatten it into `scratch` and return that.
+  const MessageData &asMessageData(MessageData &scratch) const;
 };
 
 /// A concrete flat message backed by a single vector of bytes.
@@ -203,6 +207,10 @@ public:
   MessageData(std::vector<uint8_t> &data) : data(std::move(data)) {}
   MessageData(std::vector<uint8_t> &&data) : data(std::move(data)) {}
   MessageData(const uint8_t *data, size_t size) : data(data, data + size) {}
+  MessageData(const MessageData &) = default;
+  MessageData(MessageData &&) noexcept = default;
+  MessageData &operator=(const MessageData &) = default;
+  MessageData &operator=(MessageData &&) noexcept = default;
   ~MessageData() = default;
 
   const uint8_t *getBytes() const { return data.data(); }
