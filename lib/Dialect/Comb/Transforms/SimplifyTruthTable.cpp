@@ -52,9 +52,6 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
     const auto table = op.getLookupTable();
     size_t numInputs = inputs.size();
 
-    if (numInputs <= 1)
-      return failure();
-
     // Check if all table entries are the same (constant output)
     bool allSame = llvm::all_equal(table);
     if (allSame) {
@@ -103,6 +100,10 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
     size_t bitPositionInTable = numInputs - 1 - dependentInput;
     size_t idxWhen1 = 1ull << bitPositionInTable;
     bool isIdentity = table[idxWhen1];
+
+    // A single-input negation is already in its simplest form
+    if (!isIdentity && numInputs == 1)
+      return failure();
 
     // Replace with the input or a simpler truth table for negation
     Value input = inputs[dependentInput];

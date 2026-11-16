@@ -349,7 +349,7 @@ hw.module @shl(in %a: i1, out b: i1) {
 // CHECK-NEXT: endmodule
 
 
-hw.module @inout_0(inout %a: i42, out out: i42) {
+hw.module @inout_0(in %a: !hw.inout<i42>, out out: i42) {
   %aget = sv.read_inout %a: !hw.inout<i42>
   hw.output %aget : i42
 }
@@ -1092,7 +1092,7 @@ hw.module @renameKeyword(in %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: !h
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3,
 // CHECK-NEXT:                                                            r4
 // CHECK-NEXT:  );
-hw.module @useRenamedStruct(inout %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: i1, out r2: i1, out r3: !hw.struct<repeat: i1, repeat_0: i1>, out r4: !hw.struct<repeat: i1, repeat_0: i1>) {
+hw.module @useRenamedStruct(in %a: !hw.inout<!hw.struct<repeat: i1, repeat_0: i1>>, out r1: i1, out r2: i1, out r3: !hw.struct<repeat: i1, repeat_0: i1>, out r4: !hw.struct<repeat: i1, repeat_0: i1>) {
   %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
@@ -1377,7 +1377,7 @@ hw.module @ParamsParensPrecedence<param: i32>(out a:i32, out b:i32, out c:i32) {
 }
 
 // CHECK-LABEL: module ArrayGetInline
-hw.module @ArrayGetInline(in %a: !hw.array<4xstruct<a: i32>>, in %b: !hw.array<4xi1>, in %idx: i2, inout %idx_port: i2,
+hw.module @ArrayGetInline(in %a: !hw.array<4xstruct<a: i32>>, in %b: !hw.array<4xi1>, in %idx: i2, in %idx_port: !hw.inout<i2>,
                           out out: i32, out out2: i1, out out3: i1, out out4: i1, out out5: i1) {
   %c0_i2 = hw.constant 0 : i2
   %x = hw.array_get %a[%c0_i2] : !hw.array<4xstruct<a: i32>>, i2
@@ -1547,4 +1547,39 @@ hw.module private @CondStructExplode(in %sel : i1, in %i : !hw.struct<el : i1>, 
   %2 = comb.mux %sel, %0, %1 : !hw.struct<el : i1>
   %el = hw.struct_explode %2 : !hw.struct<el : i1>
   hw.output %el : i1
+}
+
+// CHECK-LABEL: module PortWithSVAttributes(
+// CHECK-NEXT:    (* port_role = "data", channel_name = "arg0" *)
+// CHECK-NEXT:    input  [31:0] arg0_0,
+// CHECK-NEXT:    (* port_role = "data", channel_name = "arg0" *)
+// CHECK-NEXT:    input  [31:0] arg0_1,
+// CHECK-NEXT:    input         clk,
+// CHECK-NEXT:    (* port_role = "valid", channel_name = "arg0" *)
+// CHECK-NEXT:    input         arg0_valid,
+// CHECK-NEXT:    input         rst,
+// CHECK-NEXT:    (* port_role = "ready", channel_name = "arg0" *)
+// CHECK-NEXT:    output        arg0_ready
+// CHECK-NEXT:  );
+hw.module @PortWithSVAttributes(
+    in %arg0_0 : i32 {sv.attributes = [#sv.attribute<"port_role" = "\"data\"">, #sv.attribute<"channel_name" = "\"arg0\"">]},
+    in %arg0_1 : i32 {sv.attributes = [#sv.attribute<"port_role" = "\"data\"">, #sv.attribute<"channel_name" = "\"arg0\"">]},
+    in %clk : i1,
+    in %arg0_valid : i1 {sv.attributes = [#sv.attribute<"port_role" = "\"valid\"">, #sv.attribute<"channel_name" = "\"arg0\"">]},
+    in %rst : i1,
+    out arg0_ready : i1 {sv.attributes = [#sv.attribute<"port_role" = "\"ready\"">, #sv.attribute<"channel_name" = "\"arg0\"">]}) {
+  hw.output %arg0_valid : i1
+}
+
+// CHECK-LABEL: module PortWithSVAttributesAndZeroWidth(
+// CHECK-NEXT:       (* port_role = "data" *)
+// CHECK-NEXT:       input                 a,
+// CHECK-NEXT:    // input  /*Zero Width*/ z,
+// CHECK-NEXT:       output                out
+// CHECK-NEXT:  );
+hw.module @PortWithSVAttributesAndZeroWidth(
+    in %a : i1 {sv.attributes = [#sv.attribute<"port_role" = "\"data\"">]},
+    in %z : i0,
+    out out : i1) {
+  hw.output %a : i1
 }

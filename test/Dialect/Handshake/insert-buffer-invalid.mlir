@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -handshake-insert-buffer=strategies=foo -verify-diagnostics
+// RUN: circt-opt %s -handshake-insert-buffers=strategy=foo -verify-diagnostics
 
 module {
   // expected-error @+1 {{Unknown buffer strategy: foo}}

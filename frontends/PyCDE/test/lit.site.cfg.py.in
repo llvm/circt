@@ -45,6 +45,7 @@ config.quartus_path = "@QUARTUS_PATH@"
 config.vivado_path = "@VIVADO_PATH@"
 config.questa_path = "@QUESTA_PATH@"
 config.iverilog_path = "@IVERILOG_PATH@"
+config.zlib = "@LLVM_ENABLE_ZLIB@"
 config.bindings_python_enabled = @CIRCT_BINDINGS_PYTHON_ENABLED@
 
 # Support substitution of the tools_dir with user parameters. This is

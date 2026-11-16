@@ -154,7 +154,7 @@ def AggregateConstantOp : FIRRTLOp<"aggregateconstant", [Pure, ConstantLike]> {
   let hasVerifier = 1;
 }
 
-def BundleCreateOp : FIRRTLOp<"bundlecreate"> {
+def BundleCreateOp : FIRRTLOp<"bundlecreate", [Pure]> {
   let summary = "Produce a bundle value";
   let description = [{
     Create an bundle from component values.  This is equivalent in terms of
@@ -172,7 +172,7 @@ def BundleCreateOp : FIRRTLOp<"bundlecreate"> {
   let hasFolder = 1;
 }
 
-def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
+def VectorCreateOp : FIRRTLOp<"vectorcreate", [Pure]> {
   let summary = "Produce a vector value";
   let description = [{
     Create a vector from component values.  This is equivalent in terms of
@@ -1241,6 +1241,27 @@ def ObjectAnyRefCastOp : FIRRTLOp<"object.anyref_cast", [Pure]> {
      "$input attr-dict `:` type($input)";
 }
 
+def DomainAnyRefCastOp : FIRRTLOp<"domain.anyref_cast", [Pure]> {
+  let summary = "Cast domain reference to anyref.";
+  let description = [{
+    Cast a domain reference to AnyRef type.  This is primarily used for allowing
+    domain fields to refer to other domains.
+
+    Example
+    ```
+      %0 = firrtl.domain.anyref_cast %domain : !firrtl.domain<@ClockDomain()>
+    ```
+
+    Note: this has no FIRRTL textual representation, like `object.anyref_cast`,
+    and is created as needed during parsing and elided during emission.
+  }];
+
+  let arguments = (ins DomainType:$input);
+  let results = (outs AnyRefType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
+
 def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let summary = "Produce a constant string value";
   let description = [{
@@ -1340,6 +1361,38 @@ def ListConcatOp : FIRRTLOp<"list.concat", [Pure, SameOperandsAndResultType]> {
   let results = (outs ListType:$result);
 
   let assemblyFormat = "$subLists attr-dict `:` type($result)";
+}
+
+def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
+    TypesMatchWith<"list element type should match search element type",
+                   "list", "element",
+                   "type_cast<ListType>($_self).getElementType()">]> {
+  let summary = "Test whether a list contains a property value";
+  let description = [{
+    Returns true if the list contains an element equal to the specified value,
+    using the equality semantics of `prop.eq`.
+
+    Strings, integers, and booleans are compared by value. Class and AnyRef
+    elements are compared by object identity, not by structural equality of
+    object fields.
+
+    The search element and list element must have the same type. This differs
+    from what is allowed in FIRRTL syntax where domains or classes can be used
+    as the element. To bridge this syntactic difference, `object.anyref_cast`
+    and `domain.anyref_cast` are used.
+
+    Example:
+    ```mlir
+    %found = firrtl.list.contains %list, %element : !firrtl.list<string>
+    ```
+  }];
+
+  let arguments = (ins ListType:$list,
+                       AnyTypeOf<[StringType, BoolType, FIntegerType,
+                                  ClassType, AnyRefType]>:$element);
+  let results = (outs BoolType:$result);
+
+  let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
 }
 
 def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
@@ -1451,6 +1504,65 @@ def IntegerShlOp : IntegerBinaryPrimOp<"integer.shl"> {
   }];
 }
 
+def IntegerAndOp : IntegerBinaryPrimOp<"integer.and", [Commutative]> {
+  let summary = "Bitwise AND of two FIntegerType values";
+  let description = [{
+    Computes the bitwise AND of two arbitrary precision signed integer values.
+    If the operands have different widths, the narrower operand is sign-extended
+    to the width of the wider operand before the operation. The result is an
+    arbitrary precision signed integer with no truncation.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.and %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                         !firrtl.integer
+    ```
+  }];
+}
+
+def IntegerOrOp : IntegerBinaryPrimOp<"integer.or", [Commutative]> {
+  let summary = "Bitwise OR of two FIntegerType values";
+  let description = [{
+    Computes the bitwise OR of two arbitrary precision signed integer values.
+    If the operands have different widths, the narrower operand is sign-extended
+    to the width of the wider operand before the operation. The result is an
+    arbitrary precision signed integer with no truncation.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.or %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                        !firrtl.integer
+    ```
+  }];
+}
+
+class IntegerUnaryPrimOp<string mnemonic> :
+    UnaryPrimOp<mnemonic, FIntegerType, FIntegerType,
+                [Pure, SameOperandsAndResultType]> {
+  let inferReturnTypesDecl = "";
+  let inferType = "getFIntegerType";
+
+  let firrtlExtraClassDeclaration = [{
+    static FIntegerType getFIntegerType(FIRRTLType input,
+                                       std::optional<Location> loc) {
+      return FIntegerType::get(input.getContext());
+    }
+  }];
+}
+
+def IntegerNotOp : IntegerUnaryPrimOp<"integer.not"> {
+  let summary = "Bitwise complement of an FIntegerType value";
+  let description = [{
+    Computes the bitwise complement of an arbitrary precision signed integer
+    value using two's complement semantics.
+
+    Example:
+    ```mlir
+    %1 = firrtl.integer.not %0 : (!firrtl.integer) -> !firrtl.integer
+    ```
+  }];
+}
+
 def StringConcatOp : FIRRTLOp<"string.concat", [Pure, SameOperandsAndResultType]> {
   let summary = "Concatenate multiple string values";
   let description = [{
@@ -1474,8 +1586,11 @@ def StringConcatOp : FIRRTLOp<"string.concat", [Pure, SameOperandsAndResultType]
 def PropEqOp : FIRRTLOp<"prop.eq", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
   let summary = "Compare two property values for equality";
   let description = [{
-    Compares two property values (String, Bool, or Integer) of the same type
-    for equality, producing a boolean result.
+    Compares two property values (String, Bool, Integer, Class, or AnyRef) of the
+    same type for equality, producing a boolean result. Strings, booleans, and
+    integers are compared by value. Class and AnyRef values are compared by object
+    identity, not by structural equality of object fields. Property assignments
+    and conversion to AnyRef preserve object identity.
 
     Example:
     ```mlir
@@ -1483,8 +1598,10 @@ def PropEqOp : FIRRTLOp<"prop.eq", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
     ```
   }];
 
-  let arguments = (ins AnyTypeOf<[StringType, BoolType, FIntegerType]>:$lhs,
-                       AnyTypeOf<[StringType, BoolType, FIntegerType]>:$rhs);
+  let arguments = (ins AnyTypeOf<[StringType, BoolType, FIntegerType,
+                                 ClassType, AnyRefType]>:$lhs,
+                       AnyTypeOf<[StringType, BoolType, FIntegerType,
+                                 ClassType, AnyRefType]>:$rhs);
   let results = (outs BoolType:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
@@ -1818,6 +1935,17 @@ def LTLNotIntrinsicOp : UnaryLTLIntrinsicOp<"not">;
 def LTLImplicationIntrinsicOp : BinaryLTLIntrinsicOp<"implication">;
 def LTLUntilIntrinsicOp : BinaryLTLIntrinsicOp<"until">;
 def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
+def LTLAcceptOnIntrinsicOp : LTLIntrinsicOp<"accept_on"> {
+  let arguments = (ins
+    NonConstUInt1Type:$input,
+    NonConstUInt1Type:$condition,
+    UnitAttr:$sync
+  );
+  let assemblyFormat = [{
+    $input `,` $condition (`sync` $sync^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
 
 // Past
 def LTLPastIntrinsicOp : LTLIntrinsicOp<"past"> {

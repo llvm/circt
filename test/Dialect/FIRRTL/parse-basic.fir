@@ -51,7 +51,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   extmodule IntegerParamsModule :
     ; CHECK-SAME: a: ui32 = 1
     parameter a = 1
-    ; CHECK-SAME: b: ui40 = 4294967296
+    ; CHECK-SAME: b: ui64 = 4294967296
     parameter b = 4294967296
 
   ; Module to test type parsing.
@@ -1371,15 +1371,14 @@ circuit RadixEncodedIntegerLiterals:
     ; CHECK-NEXT: firrtl.connect %ou, %[[c_constCast]]
     ou <= UInt(0o052)
 
-    ; Note: this creates a second constant because the width of a parsed
-    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ; Decimal literals use a wider constant than the other radices.
     ;
     ; CHECK:      %[[c42_ui8:[-a-zA-Z_0-9]+]] = firrtl.constant 42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
     ; CHECK-NEXT: firrtl.connect %du0, %[[c_constCast]]
     du0 <= UInt(42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
     ; CHECK-NEXT: firrtl.connect %du1, %[[c_constCast]]
     du1 <= UInt(0d42)
 
@@ -1396,15 +1395,14 @@ circuit RadixEncodedIntegerLiterals:
     ; CHECK-NEXT: firrtl.connect %os, %[[c_constCast]]
     os <= SInt(-0o52)
 
-    ; Note: this creates a second constant because the width of a parsed
-    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ; Decimal literals use a wider constant than the other radices.
     ;
     ; CHECK:      %[[cn42_si8:[-a-zA-Z_0-9]+]] = firrtl.constant -42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
     ; CHECK-NEXT: firrtl.connect %dus0, %[[c_constCast]]
     dus0 <= SInt(-42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
     ; CHECK-NEXT: firrtl.connect %dus1, %[[c_constCast]]
     dus1 <= SInt(-0d42)
 
@@ -1610,7 +1608,7 @@ circuit BasicProps :
     ; CHECK-NEXT: firrtl.propassign %a, %b : !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>
     propassign a, b
 
-  ; CHECK-LABEL firrtl.class private @OtherClient(in %a: !firrtl.string, out %b: !firrtl.string)
+  ; CHECK-LABEL: firrtl.class private @OtherClient(in %a: !firrtl.string, out %b: !firrtl.string)
   class OtherClient:
     input a : String
     output b : String
@@ -1618,7 +1616,7 @@ circuit BasicProps :
     ; TODO: This test needs to be fixed up once flow-checking for objects is implemented correctly.
     propassign b, o.b
 
-  ; CHECK-LABEL firrtl.extclass private @ExtClass(in in: !firrtl.string, out out: !firrtl.string)
+  ; CHECK-LABEL: firrtl.extclass @ExtClass(in in: !firrtl.string, out out: !firrtl.string)
   extclass ExtClass:
     input in : String
     output out : String
@@ -1700,6 +1698,43 @@ circuit IntegerArithmetic :
     propassign f, integer_shl(a, b)
 
 ;// -----
+FIRRTL version 7.0.0
+
+; CHECK-LABEL: firrtl.circuit "IntegerBitwise"
+circuit IntegerBitwise :
+  public module IntegerBitwise :
+    input a : Integer
+    input b : Integer
+    input c : Integer
+    output andResult : Integer
+    output orResult : Integer
+    output notResult : Integer
+    output nestedResult : Integer
+    output literalResult : Integer
+
+    ; CHECK: [[AND:%.+]] = firrtl.integer.and %a, %b
+    ; CHECK: firrtl.propassign %andResult, [[AND]]
+    propassign andResult, integer_and(a, b)
+
+    ; CHECK: [[OR:%.+]] = firrtl.integer.or %a, %b
+    ; CHECK: firrtl.propassign %orResult, [[OR]]
+    propassign orResult, integer_or(a, b)
+
+    ; CHECK: [[NOT:%.+]] = firrtl.integer.not %c
+    ; CHECK: firrtl.propassign %notResult, [[NOT]]
+    propassign notResult, integer_not(c)
+
+    ; CHECK: [[NEST_OR:%.+]] = firrtl.integer.or %a, %b
+    ; CHECK: [[NEST_NOT:%.+]] = firrtl.integer.not %c
+    ; CHECK: [[NEST_AND:%.+]] = firrtl.integer.and [[NEST_OR]], [[NEST_NOT]]
+    ; CHECK: firrtl.propassign %nestedResult, [[NEST_AND]]
+    propassign nestedResult, integer_and(integer_or(a, b), integer_not(c))
+
+    ; CHECK: [[LITERAL:%.+]] = firrtl.integer.and %{{.+}}, %{{.+}}
+    ; CHECK: firrtl.propassign %literalResult, [[LITERAL]]
+    propassign literalResult, integer_and(Integer(5), Integer(-2))
+
+;// -----
 FIRRTL version 4.0.0
 
 ; CHECK-LABEL: firrtl.circuit "PropertyListOps"
@@ -1735,11 +1770,47 @@ circuit PropEq :
   public module PropEq :
     input a : String
     input b : String
+    input boolA : Bool
+    input boolB : Bool
+    input integerA : Integer
+    input integerB : Integer
     output eq : Bool
+    output boolEq : Bool
+    output integerEq : Bool
 
     ; CHECK: [[EQ:%.+]] = firrtl.prop.eq %a, %b : !firrtl.string
     ; CHECK: firrtl.propassign %eq, [[EQ]]
     propassign eq, prop_eq(a, b)
+
+    ; CHECK: [[BOOL_EQ:%.+]] = firrtl.prop.eq %boolA, %boolB : !firrtl.bool
+    ; CHECK: firrtl.propassign %boolEq, [[BOOL_EQ]]
+    propassign boolEq, prop_eq(boolA, boolB)
+
+    ; CHECK: [[INTEGER_EQ:%.+]] = firrtl.prop.eq %integerA, %integerB : !firrtl.integer
+    ; CHECK: firrtl.propassign %integerEq, [[INTEGER_EQ]]
+    propassign integerEq, prop_eq(integerA, integerB)
+
+;// -----
+FIRRTL version 7.0.0
+
+; CHECK-LABEL: firrtl.circuit "PropEqReferences"
+circuit PropEqReferences :
+  class Foo:
+    skip
+
+  public module PropEqReferences :
+    input obj : Inst<Foo>
+    input ref : AnyRef
+    output classEq : Bool
+    output anyRefEq : Bool
+
+    ; CHECK: [[CLASS_EQ:%.+]] = firrtl.prop.eq %obj, %obj : !firrtl.class<@Foo()>
+    ; CHECK: firrtl.propassign %classEq, [[CLASS_EQ]]
+    propassign classEq, prop_eq(obj, obj)
+
+    ; CHECK: [[ANYREF_EQ:%.+]] = firrtl.prop.eq %ref, %ref : !firrtl.anyref
+    ; CHECK: firrtl.propassign %anyRefEq, [[ANYREF_EQ]]
+    propassign anyRefEq, prop_eq(ref, ref)
 
 ;// -----
 FIRRTL version 5.0.0
@@ -1752,6 +1823,57 @@ circuit PropEqVersionError :
 
     ; expected-error @+1 {{property equality are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
     propassign c, prop_eq(a, b)
+
+;// -----
+FIRRTL version 7.0.0
+
+; CHECK-LABEL: firrtl.circuit "ListContains"
+circuit ListContains :
+  class Foo:
+    skip
+
+  public module ListContains :
+    input strings : List<String>
+    input string : String
+    input integers : List<Integer>
+    input integer : Integer
+    input booleans : List<Bool>
+    input boolean : Bool
+    input objects : List<Inst<Foo>>
+    input obj : Inst<Foo>
+    input refs : List<AnyRef>
+    input ref : AnyRef
+    output stringFound : Bool
+    output integerFound : Bool
+    output booleanFound : Bool
+    output objectFound : Bool
+    output refFound : Bool
+    output objectRefFound : Bool
+
+    ; CHECK: [[STRING_FOUND:%.+]] = firrtl.list.contains %strings, %string : !firrtl.list<string>{{$}}
+    ; CHECK: firrtl.propassign %stringFound, [[STRING_FOUND]]
+    propassign stringFound, list_contains(strings, string)
+
+    ; CHECK: [[INTEGER_FOUND:%.+]] = firrtl.list.contains %integers, %integer : !firrtl.list<integer>{{$}}
+    ; CHECK: firrtl.propassign %integerFound, [[INTEGER_FOUND]]
+    propassign integerFound, list_contains(integers, integer)
+
+    ; CHECK: [[BOOLEAN_FOUND:%.+]] = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>{{$}}
+    ; CHECK: firrtl.propassign %booleanFound, [[BOOLEAN_FOUND]]
+    propassign booleanFound, list_contains(booleans, boolean)
+
+    ; CHECK: [[OBJECT_FOUND:%.+]] = firrtl.list.contains %objects, %obj : !firrtl.list<class<@Foo()>>{{$}}
+    ; CHECK: firrtl.propassign %objectFound, [[OBJECT_FOUND]]
+    propassign objectFound, list_contains(objects, obj)
+
+    ; CHECK: [[REF_FOUND:%.+]] = firrtl.list.contains %refs, %ref : !firrtl.list<anyref>{{$}}
+    ; CHECK: firrtl.propassign %refFound, [[REF_FOUND]]
+    propassign refFound, list_contains(refs, ref)
+
+    ; CHECK: [[OBJECT_REF:%.+]] = firrtl.object.anyref_cast %obj : !firrtl.class<@Foo()>{{$}}
+    ; CHECK-NEXT: [[OBJECT_REF_FOUND:%.+]] = firrtl.list.contains %refs, [[OBJECT_REF]] : !firrtl.list<anyref>{{$}}
+    ; CHECK-NEXT: firrtl.propassign %objectRefFound, [[OBJECT_REF_FOUND]] : !firrtl.bool
+    propassign objectRefFound, list_contains(refs, obj)
 
 ;// -----
 FIRRTL version 7.0.0
@@ -2426,6 +2548,39 @@ circuit DomainCreateWithFields:
     ; CHECK: %[[VOLTAGE:.+]] = firrtl.integer 1000
     ; CHECK: %powerDomain = firrtl.domain.create(%[[NAME]], %[[VOLTAGE]], %alwaysOn) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
     domain powerDomain of PowerDomain(String("FastClock"), Integer(1000), alwaysOn)
+
+;// -----
+FIRRTL version 7.0.0
+circuit DomainAnyRef:
+  domain ClockDomain:
+  domain DomainContainer:
+    source: AnyRef
+
+  ; CHECK-LABEL: firrtl.module @DomainAnyRef
+  public module DomainAnyRef:
+    input A: Domain of ClockDomain
+    input values: List<AnyRef>
+    output ref: AnyRef
+    output refs: List<AnyRef>
+    output found: Bool
+
+    ; CHECK: %[[CAST:.+]] = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    ; CHECK-NEXT: %B = firrtl.domain.create(%[[CAST]]) : !firrtl.domain<@DomainContainer(source: !firrtl.anyref)>
+    domain B of DomainContainer(A)
+
+    ; CHECK: %[[CAST:.+]] = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    ; CHECK-NEXT: firrtl.propassign %ref, %[[CAST]] : !firrtl.anyref
+    propassign ref, A
+
+    ; CHECK: %[[CAST:.+]] = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    ; CHECK-NEXT: %[[LIST:.+]] = firrtl.list.create %[[CAST]] : !firrtl.list<anyref>
+    ; CHECK-NEXT: firrtl.propassign %refs, %[[LIST]] : !firrtl.list<anyref>
+    propassign refs, List<AnyRef>(A)
+
+    ; CHECK: %[[CAST:.+]] = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    ; CHECK-NEXT: %[[FOUND:.+]] = firrtl.list.contains %values, %[[CAST]] : !firrtl.list<anyref>
+    ; CHECK-NEXT: firrtl.propassign %found, %[[FOUND]] : !firrtl.bool
+    propassign found, list_contains(values, A)
 
 ;// -----
 FIRRTL version 7.0.0

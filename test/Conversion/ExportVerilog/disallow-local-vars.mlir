@@ -246,7 +246,7 @@ hw.module @hoist_reg(in %dummy : i32, out out : i17) {
   %res_reg = sv.reg : !hw.inout<i17>
   // CHECK: initial
   // CHECK: reg  [31:0] tmp;
-  // CHECK end // initial
+  // CHECK: end // initial
   // DISALLOW: reg  [31:0] tmp;
   // DISALLOW: initial
   sv.initial {

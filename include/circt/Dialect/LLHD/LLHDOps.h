@@ -12,6 +12,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/LLHDDialect.h"
 #include "circt/Dialect/LLHD/LLHDEnums.h.inc"
+#include "circt/Dialect/LLHD/LLHDInterfaces.h"
 #include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/ProceduralRegionTrait.h"

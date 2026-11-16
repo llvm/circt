@@ -145,3 +145,33 @@ firrtl.circuit "ViewWrongOperandCount" {
     firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\", \"defName\": \"MyView\", \"elements\": [{\"name\": \"foo\", \"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}}]}"> : () -> ()
   }
 }
+
+// -----
+
+firrtl.circuit "InvalidLTLAcceptOnInputs" {
+  firrtl.module @InvalidLTLAcceptOnInputs(in %in: !firrtl.uint<1>) {
+    // expected-error @below {{circt_ltl_accept_on has 1 inputs instead of 2}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_ltl_accept_on" %in : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidLTLSyncAcceptOnWidth" {
+  firrtl.module @InvalidLTLSyncAcceptOnWidth(in %in: !firrtl.uint<1>, in %c: !firrtl.uint<2>) {
+    // expected-error @below {{circt_ltl_sync_accept_on input 1 not size 1}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_ltl_sync_accept_on" %in, %c : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidLTLAcceptOnParam" {
+  firrtl.module @InvalidLTLAcceptOnParam(in %in: !firrtl.uint<1>) {
+    // expected-error @below {{circt_ltl_accept_on has 1 parameters instead of 0}}
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "circt_ltl_accept_on" <sync: i64 = 1> %in, %in : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  }
+}

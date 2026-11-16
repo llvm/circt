@@ -192,14 +192,12 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     connect out2, inp_2
 
 ; MLIRLOWER-LABEL: hw.module private @ImplicitTrunc(in %inp_1 : i1, in %inp_2 : i5, out out1 : i3, out out2 : i3) {
-; MLIRLOWER-NEXT:    %c0_i5 = hw.constant 0 : i5
-; MLIRLOWER-NEXT:    %0 = comb.extract %inp_2 from 4 : (i5) -> i1
-; MLIRLOWER-NEXT:    %1 = comb.concat %0, %inp_2 : i1, i5
-; MLIRLOWER-NEXT:    %2 = comb.concat %c0_i5, %inp_1 : i5, i1
-; MLIRLOWER-NEXT:    %3 = comb.shl bin %1, %2 : i6
-; MLIRLOWER-NEXT:    %4 = comb.extract %3 from 0 : (i6) -> i3
-; MLIRLOWER-NEXT:    %5 = comb.extract %inp_2 from 0 : (i5) -> i3
-; MLIRLOWER-NEXT:    hw.output %4, %5 : i3, i3
+; MLIRLOWER-NEXT:    %c0_i2 = hw.constant 0 : i2
+; MLIRLOWER-NEXT:    %0 = comb.extract %inp_2 from 0 : (i5) -> i3
+; MLIRLOWER-NEXT:    %1 = comb.concat %c0_i2, %inp_1 : i2, i1
+; MLIRLOWER-NEXT:    %2 = comb.shl bin %0, %1 : i3
+; MLIRLOWER-NEXT:    %3 = comb.extract %inp_2 from 0 : (i5) -> i3
+; MLIRLOWER-NEXT:    hw.output %2, %3 : i3, i3
 ; MLIRLOWER-NEXT:  }
 
 ; VERILOG-LABEL: module ImplicitTrunc(
@@ -209,8 +207,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:                out2
 ; VERILOG-NEXT:   );
 ; VERILOG-EMPTY:
-; VERILOG-NEXT:   wire [5:0] _GEN = {inp_2[4], inp_2} << inp_1;
-; VERILOG-NEXT:   assign out1 = _GEN[2:0];
+; VERILOG-NEXT:   assign out1 = inp_2[2:0] << inp_1;
 ; VERILOG-NEXT:   assign out2 = inp_2[2:0];
 ; VERILOG-NEXT: endmodule
 

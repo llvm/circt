@@ -36,7 +36,6 @@
 using namespace mlir;
 using namespace circt;
 using namespace firrtl;
-using llvm::MapVector;
 using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
 

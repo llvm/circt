@@ -12,6 +12,29 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Types.h"
 
+namespace circt {
+namespace llhd {
+
+class NetType;
+class RefType;
+
+/// Common base of types wrapping a nested type.
+class WrapperType : public mlir::Type {
+public:
+  static bool classof(mlir::Type type) {
+    return llvm::isa<RefType, NetType>(type);
+  }
+
+  /// Get the wrapped type.
+  mlir::Type getNestedType() const;
+
+protected:
+  using mlir::Type::Type;
+};
+
+} // namespace llhd
+} // namespace circt
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/LLHD/LLHDTypes.h.inc"
 

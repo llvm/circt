@@ -721,10 +721,9 @@ def ContractOp : FIRRTLOp<"contract", [
 
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
+    DeclareOpInterfaceMethods<FObjectLike>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
-      "getReferencedModuleSlow"
-    ]>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [
       "getAsmResultNames"
     ]>
@@ -744,21 +743,37 @@ def ObjectOp :  FIRRTLOp<"object", [
   let builders = [
     OpBuilder<(ins "ClassLike":$klass, "StringRef":$name)>
   ];
-  let extraClassDeclaration = [{
-    /// Lookup the module or extmodule for the symbol.  This returns null on
-    /// invalid IR.
-    ClassLike getReferencedClass(const SymbolTable &symbolTable);
-
-    StringAttr getClassNameAttr();
-    StringRef getClassName();
-
-    Operation *getReferencedOperation(const SymbolTable &symtbl);
-
-    // Required by InstanceGraphInstanceOpInterface default implementation
-    StringAttr getReferencedModuleNameAttr();
-  }];
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>(attr-dict) custom<ClassInterface>(type($result))
+  }];
+}
+
+def ObjectCreateOp : FIRRTLOp<"object.create", [
+    ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
+    DeclareOpInterfaceMethods<FObjectLike>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]> {
+  let summary = "Create an object from its input values";
+  let description = [{
+    Create an object by providing values for its class inputs as operands in
+    declaration order. Only output fields can be accessed through the result.
+
+    This operation must not have the `Pure` trait: object identity is significant,
+    so creating objects with identical inputs must not be combined by CSE.
+
+    Example:
+    ```mlir
+    %obj = firrtl.object.create(%str) : (!firrtl.string) -> !firrtl.class<@Foo(in str: !firrtl.string, out result: !firrtl.string)>
+    ```
+  }];
+  let arguments = (ins StrAttr:$name, Variadic<PropertyType>:$inputs);
+  let results = (outs ClassType:$result);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    `(` $inputs `)` `` custom<ImplicitSSAName>(attr-dict) `:`
+    functional-type($inputs, $result)
   }];
 }
 

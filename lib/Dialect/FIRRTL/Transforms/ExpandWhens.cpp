@@ -41,6 +41,18 @@ static void mergeBlock(Block &destination, Block::iterator insertPoint,
   destination.getOperations().splice(insertPoint, source.getOperations());
 }
 
+/// Return true if the value is an invalid value or a subelement of one.
+static bool isInvalidValue(Value value) {
+  while (auto *op = value.getDefiningOp()) {
+    if (isa<InvalidValueOp>(op))
+      return true;
+    if (!isa<SubindexOp, SubfieldOp>(op))
+      return false;
+    value = op->getOperand(0);
+  }
+  return false;
+}
+
 /// This is a stack of hashtables, if lookup fails in the top-most hashtable,
 /// it will attempt to lookup in lower hashtables.  This class is used instead
 /// of a ScopedHashTable so we can manually pop off a scope and keep it around.
@@ -160,7 +172,7 @@ public:
     }
     assert(isLastConnect(connection));
     if (!std::get<1>(itAndInserted)) {
-      auto iterator = std::get<0>(itAndInserted);
+      auto *iterator = std::get<0>(itAndInserted);
       auto changed = false;
       // Delete the old connection if it exists. Null connections are inserted
       // on declarations.
@@ -281,11 +293,9 @@ public:
     auto fusedLoc =
         b.getFusedLoc({loc, whenTrueConn->getLoc(), whenFalseConn->getLoc()});
     auto whenTrue = getConnectedValue(whenTrueConn);
-    auto trueIsInvalid =
-        isa_and_nonnull<InvalidValueOp>(whenTrue.getDefiningOp());
+    auto trueIsInvalid = isInvalidValue(whenTrue);
     auto whenFalse = getConnectedValue(whenFalseConn);
-    auto falseIsInvalid =
-        isa_and_nonnull<InvalidValueOp>(whenFalse.getDefiningOp());
+    auto falseIsInvalid = isInvalidValue(whenFalse);
     // If one of the branches of the mux is an invalid value, we optimize the
     // mux to be the non-invalid value.  This optimization can only be
     // performed while lowering when-ops into muxes, and would not be legal as
@@ -415,7 +425,7 @@ public:
     // Process all connects in the `then` block.
     for (auto &destAndConnect : thenScope) {
       auto dest = std::get<0>(destAndConnect);
-      auto thenConnect = std::get<1>(destAndConnect);
+      auto *thenConnect = std::get<1>(destAndConnect);
 
       auto outerIt = driverMap.find(dest);
       if (outerIt == driverMap.end()) {
@@ -425,7 +435,7 @@ public:
         continue;
       }
 
-      auto elseIt = elseScope.find(dest);
+      auto *elseIt = elseScope.find(dest);
       if (elseIt != elseScope.end()) {
         // `dest` is set in `then` and `else`. We need to combine them into and
         // delete any previous connect.
@@ -473,7 +483,7 @@ public:
     // Process all connects in the `else` block.
     for (auto &destAndConnect : elseScope) {
       auto dest = std::get<0>(destAndConnect);
-      auto elseConnect = std::get<1>(destAndConnect);
+      auto *elseConnect = std::get<1>(destAndConnect);
 
       // If this destination was driven in the 'then' scope, then we will have
       // already consumed the driver from the 'else' scope, and we must skip it.

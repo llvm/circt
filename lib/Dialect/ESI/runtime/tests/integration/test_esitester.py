@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 import subprocess
 
 import esiaccel
@@ -181,6 +183,18 @@ class TestCosimEsitesterDma:
   def setup_method(self) -> None:
     require_tool("esitester")
     require_tool("esiquery")
+
+  def test_channel_engine_manifest(self, sources_dir: Path) -> None:
+    """CosimBSP_DMA's caller-supplied channel service must emit DMA engines."""
+    manifest = json.loads(
+        (sources_dir / "esi_system_manifest.json").read_text())
+    engine_names = {"OneItemBuffersToHost", "OneItemBuffersFromHost"}
+    engines = [
+        engine for engine in manifest["design"]["engines"]
+        if engine["serviceImplName"] in engine_names
+    ]
+    assert {engine["serviceImplName"] for engine in engines} == engine_names
+    assert all(engine["clientDetails"] for engine in engines)
 
   def test_hostmem(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"

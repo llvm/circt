@@ -11,12 +11,12 @@ hw.module @TestDanglingFIFO() {
 // CHECK-NEXT:     hw.output
 hw.module @TestDanglingValidReady() {
   %c0 = hw.constant 0 : i1
-  %chanOutput, %ready = esi.wrap.vr %c0, %c0 : i1
+  %chanOutput, %ready = esi.wrap.vr %c0, %c0 : !esi.channel<i1, ValidReady>
 }
 
 // CHECK-LABEL:  hw.module @TestDanglingValidOnly() {
 // CHECK-NEXT:     hw.output
 hw.module @TestDanglingValidOnly() {
   %c0 = hw.constant 0 : i1
-  %chanOutput = esi.wrap.vo %c0, %c0 : i1
+  %chanOutput = esi.wrap.vo %c0, %c0 : !esi.channel<i1, ValidOnly>
 }

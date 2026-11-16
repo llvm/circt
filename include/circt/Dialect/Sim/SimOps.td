@@ -703,11 +703,11 @@ def StringConstantOp : SimOp<"string.literal", [Pure, ConstantLike]> {
 def StringLengthOp : SimOp<"string.length", [Pure]> {
   let summary = "Length of a string";
   let description = [{
-    Returns the length of a dynamic string as an `i64` value.
+    Returns the length of a dynamic string as an `i32` value.
   }];
 
   let arguments = (ins DynamicStringType:$input);
-  let results = (outs I64:$result);
+  let results = (outs I32:$result);
 
   let hasFolder = true;
 
@@ -898,6 +898,26 @@ def StringToUpperOp: SimOp<"string.toupper", [Pure]> {
 
   let assemblyFormat = "$input attr-dict";
 }
+
+def StringSubstrOp : SimOp<"string.substr", [Pure]> {
+  let summary = "Extract a substring";
+  let description = [{
+    Returns the characters in the range `[start,end)`, clamping to avoid OOB.
+    If `end` is omitted, returns the rest of the characters from `start`.
+  }];
+
+  let arguments = (ins
+    DynamicStringType:$str,
+    I32:$start,
+    Optional<I32>:$end
+  );
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$str `[` $start (`:` $end^)? `]` attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Queues
 //===----------------------------------------------------------------------===//

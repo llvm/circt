@@ -3227,7 +3227,9 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   // Convert from StringType to FormatStringType
   if (isa<moore::FormatStringType>(type) &&
       isa<moore::StringType>(value.getType())) {
-    return builder.createOrFold<moore::FormatStringOp>(loc, value);
+    return builder.createOrFold<moore::FormatStringOp>(
+        loc, value, IntegerAttr{}, moore::IntAlignAttr{},
+        moore::IntPaddingAttr{});
   }
 
   // If converting between two queue types of the same element type, then we

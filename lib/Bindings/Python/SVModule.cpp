@@ -68,4 +68,22 @@ void circt::python::populateDialectSVSubmodule(nb::module_ &m) {
       .def_property_readonly("emit_as_comment", [](MlirAttribute self) {
         return svSVAttributeAttrGetEmitAsComment(self);
       });
+
+  mlir_type_subclass(m, "NetType", svTypeIsANet)
+      .def_classmethod("get",
+                       [](nb::object cls, MlirType elementType) {
+                         return cls(svNetTypeGet(elementType));
+                       })
+      .def_property_readonly("element_type", [](MlirType self) {
+        return svNetTypeGetElementType(self);
+      });
+
+  mlir_type_subclass(m, "VarType", svTypeIsAVar)
+      .def_classmethod("get",
+                       [](nb::object cls, MlirType elementType) {
+                         return cls(svVarTypeGet(elementType));
+                       })
+      .def_property_readonly("element_type", [](MlirType self) {
+        return svVarTypeGetElementType(self);
+      });
 }

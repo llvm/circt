@@ -267,7 +267,6 @@ def ModuleTypeImpl : HWType<"Module"> {
   }];
   let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$ports);
   let hasCustomAssemblyFormat = 1;
-  let genVerifyDecl = 1;
   let mnemonic = "modty";
   let genStorageClass = 0;
 

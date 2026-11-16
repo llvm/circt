@@ -398,6 +398,18 @@ endmodule
 
 // -----
 
+// expected-error @below {{sequential user-defined primitives are not supported yet}}
+primitive udp_seq(q, clk, d);
+  output reg q;
+  input clk, d;
+  table
+    (01) 0 : ? : 0 ;
+    (01) 1 : ? : 1 ;
+  endtable
+endprimitive
+
+// -----
+
 module ReadMemAssoc;
   logic [7:0] amem[int];
   initial begin

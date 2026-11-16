@@ -30,7 +30,6 @@ namespace firrtl {
 } // namespace circt
 
 using namespace mlir;
-using namespace llvm;
 using namespace circt;
 using namespace circt::firrtl;
 
@@ -56,7 +55,8 @@ private:
   sim::DPIFuncOp getOrCreateDPIFuncDecl(DPICallIntrinsicOp op);
   LogicalResult lowerDPIIntrinsic(DPICallIntrinsicOp op);
 
-  MapVector<StringAttr, SmallVector<DPICallIntrinsicOp>> funcNameToCallSites;
+  llvm::MapVector<StringAttr, SmallVector<DPICallIntrinsicOp>>
+      funcNameToCallSites;
 
   // A map stores DPI func op for its function name and type.
   llvm::DenseMap<std::pair<StringAttr, Type>, sim::DPIFuncOp>

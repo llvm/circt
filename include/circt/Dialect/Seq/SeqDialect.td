@@ -16,6 +16,8 @@
 include "mlir/IR/DialectBase.td"
 
 def SeqDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "seq";
 
   let summary = "Types and operations for seq dialect";

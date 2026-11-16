@@ -26,6 +26,7 @@ add_circt_translation_library(CIRCTImportVerilog
   CIRCTMoore
   CIRCTMooreToCore
   CIRCTMooreTransforms
+  CIRCTSV
   CIRCTSeq
   CIRCTSeqTransforms
   CIRCTSupport

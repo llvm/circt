@@ -12,6 +12,20 @@ hw.module @constant(out out: i32) {
 
 // -----
 
+// CHECK-LABEL: hw.module @aggregate_constant(out agg : !hw.struct<a: i5, b: i4>, out field : i5)
+// CHECK-NEXT: %[[AGG:.*]] = hw.aggregate_constant [3 : i5, -2 : i4] : !hw.struct<a: i5, b: i4>
+// CHECK-NEXT: %[[FIELD:.*]] = hw.constant 3 : i5
+// CHECK-NEXT: %[[CAST:.*]] = hw.bitcast %[[FIELD]] : (i5) -> i5
+// CHECK-NEXT: hw.output %[[AGG]], %[[CAST]] : !hw.struct<a: i5, b: i4>, i5
+hw.module @aggregate_constant(out agg: !hw.struct<a: ui5, b: si4>, out field: i5) {
+  %0 = hw.aggregate_constant [3 : ui5, -2 : si4] : !hw.struct<a: ui5, b: si4>
+  %1 = hw.struct_extract %0["a"] : !hw.struct<a: ui5, b: si4>
+  %2 = hw.bitcast %1 : (ui5) -> i5
+  hw.output %0, %2 : !hw.struct<a: ui5, b: si4>, i5
+}
+
+// -----
+
 // CHECK: hw.module @add(in %op0 : i32, in %op1 : i32, out sisi : i32, out siui : i32, out uisi : i32, out uiui : i32) {
 hw.module @add(in %op0 : i32, in %op1 : i32, out sisi : i32, out siui : i32, out uisi : i32, out uiui : i32) {
   %op0Signed = hwarith.cast %op0 : (i32) -> si32
@@ -349,28 +363,28 @@ hw.module @backedges() {
 // -----
 
 // CHECK-LABEL:   hw.module @wires() {
-// CHECK:           %[[VAL_0:.*]] = sv.wire  : !hw.inout<i2>
-// CHECK:           %[[VAL_1:.*]] = sv.reg  : !hw.inout<i2>
-// CHECK:           %[[VAL_2:.*]] = sv.read_inout %[[VAL_0]] : !hw.inout<i2>
-// CHECK:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_1]] : !hw.inout<i2>
+// CHECK:           %[[VAL_0:.*]] = sv.wire  : !sv.net<i2>
+// CHECK:           %[[VAL_1:.*]] = sv.var  : !sv.var<i2>
+// CHECK:           %[[VAL_2:.*]] = sv.read_inout %[[VAL_0]] : !sv.net<i2>
+// CHECK:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_1]] : !sv.var<i2>
 // CHECK:           %[[VAL_4:.*]] = comb.icmp eq %[[VAL_3]], %[[VAL_2]] : i2
 // CHECK:           %[[VAL_5:.*]] = hw.constant -2 : i2
-// CHECK:           sv.assign %[[VAL_0]], %[[VAL_5]] : i2
-// CHECK:           sv.assign %[[VAL_1]], %[[VAL_5]] : i2
+// CHECK:           sv.assign %[[VAL_0]], %[[VAL_5]] : !sv.net<i2>, i2
+// CHECK:           sv.var_assign %[[VAL_1]], %[[VAL_5]] : i2
 // CHECK:           hw.output
 // CHECK:         }
 hw.module @wires () {
-  %r52 = sv.wire  : !hw.inout<ui2>
-  %r53 = sv.reg : !hw.inout<ui2>
-  %0 = sv.read_inout %r52 : !hw.inout<ui2>
-  %1 = sv.read_inout %r53 : !hw.inout<ui2>
+  %r52 = sv.wire  : !sv.net<ui2>
+  %r53 = sv.var : !sv.var<ui2>
+  %0 = sv.read_inout %r52 : !sv.net<ui2>
+  %1 = sv.read_inout %r53 : !sv.var<ui2>
   %33 = hwarith.cast %0 : (ui2) -> i2
   %34 = hwarith.cast %1 : (ui2) -> i2
   %35 = comb.icmp eq %34, %33 : i2
 
   %c0_ui2 = hwarith.constant 2 : ui2
-  sv.assign %r52, %c0_ui2 : ui2
-  sv.assign %r53, %c0_ui2 : ui2
+  sv.assign %r52, %c0_ui2 : !sv.net<ui2>, ui2
+  sv.var_assign %r53, %c0_ui2 : ui2
 }
 
 // -----
@@ -397,13 +411,35 @@ hw.module @MMIOAxiReadWriteMux(out cmd : !hw.typealias<@pycde::@MMIOIntermediate
 
 // -----
 // CHECK-LABEL:  hw.module @UnpackedArrayInout() {
-// CHECK-NEXT:     %vec_a = sv.reg : !hw.inout<uarray<16xi32>>
+// CHECK-NEXT:     %vec_a = sv.var : !sv.var<!hw.uarray<16xi32>>
 // CHECK-NEXT:     %c0_i4 = hw.constant 0 : i4
-// CHECK-NEXT:     [[R0:%.+]] = sv.array_index_inout %vec_a[%c0_i4] : !hw.inout<uarray<16xi32>>, i4
-// CHECK-NEXT:     sv.read_inout [[R0]] : !hw.inout<i32>
+// CHECK-NEXT:     [[R0:%.+]] = sv.array_index_inout %vec_a[%c0_i4] : !sv.var<!hw.uarray<16xi32>>, i4
+// CHECK-NEXT:     sv.read_inout [[R0]] : !sv.var<i32>
 hw.module @UnpackedArrayInout() {
-    %vec_a = sv.reg : !hw.inout<uarray<16xsi32>>
+    %vec_a = sv.var : !sv.var<!hw.uarray<16xsi32>>
     %1 = hw.constant 0 : i4
-    %2 = sv.array_index_inout %vec_a[%1] : !hw.inout<uarray<16xsi32>>, i4
-    %3 = sv.read_inout %2 : !hw.inout<si32>
+    %2 = sv.array_index_inout %vec_a[%1] : !sv.var<!hw.uarray<16xsi32>>, i4
+    %3 = sv.read_inout %2 : !sv.var<si32>
+}
+
+// -----
+
+// Type aliases of constants are retained with signless inner types.
+// CHECK-LABEL: hw.type_scope @ns {
+// CHECK-NEXT:    hw.typedecl @uint_t : i4
+// CHECK-NEXT:    hw.typedecl @sint_t : i4
+// CHECK-NEXT:  }
+// CHECK-LABEL: hw.module @aliasedConstant
+// CHECK-SAME:    out u : !hw.typealias<@ns::@uint_t, i4>, out s : !hw.typealias<@ns::@sint_t, i4>
+// CHECK:         %[[U:.+]] = hw.constant 5 : !hw.typealias<@ns::@uint_t, i4>
+// CHECK:         %[[S:.+]] = hw.constant -2 : !hw.typealias<@ns::@sint_t, i4>
+// CHECK:         hw.output %[[U]], %[[S]]
+hw.type_scope @ns {
+  hw.typedecl @uint_t : ui4
+  hw.typedecl @sint_t : si4
+}
+hw.module @aliasedConstant(out u: !hw.typealias<@ns::@uint_t, ui4>, out s: !hw.typealias<@ns::@sint_t, si4>) {
+  %0 = hwarith.constant 5 : !hw.typealias<@ns::@uint_t, ui4>
+  %1 = hwarith.constant -2 : !hw.typealias<@ns::@sint_t, si4>
+  hw.output %0, %1 : !hw.typealias<@ns::@uint_t, ui4>, !hw.typealias<@ns::@sint_t, si4>
 }

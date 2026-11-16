@@ -132,10 +132,10 @@ def TupleAttr : RTGAttrDef<"Tuple", [
   let summary = "a tuple";
 
   let parameters =
-      (ins ArrayRefParameter<"::mlir::TypedAttr", "elements">:$elements);
+      (ins OptionalArrayRefParameter<"::mlir::TypedAttr", "elements">:$elements);
 
   let mnemonic = "tuple";
-  let assemblyFormat = "`<` $elements `>`";
+  let assemblyFormat = "`<` (`>`) : ($elements^ `>`)?";
 }
 
 //===----------------------------------------------------------------------===//

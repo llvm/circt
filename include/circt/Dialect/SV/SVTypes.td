@@ -72,11 +72,12 @@ def NetType : SVType<"Net"> {
   ];
 
   let assemblyFormat = "`<` $elementType `>`";
+  let genVerifyDecl = 1;
 }
 
 // Type constraint that indicates that an operand or result may only be a valid
 // net element type.
-def NetElementType : Type<CPred<"hw::isHWValueType($_self)">,
+def NetElementType : Type<CPred<"sv::isValidNetElementType($_self)">,
                           "a valid net element">;
 
 // Constrains `netValue` to `!sv.net<T>`, inferring the net handle from element type `T`.
@@ -111,11 +112,12 @@ def VarType : SVType<"Var"> {
   ];
 
   let assemblyFormat = "`<` $elementType `>`";
+  let genVerifyDecl = 1;
 }
 
 // Type constraint that indicates that an operand/result may only be a valid
 // var element type.
-def VarElementType : Type<CPred<"hw::isHWValueType($_self)">,
+def VarElementType : Type<CPred<"sv::isValidVarElementType($_self)">,
                           "a valid var element">;
 
 // Constrains `varValue` to `!sv.var<T>`, inferring the var handle from element type `T`.
@@ -128,6 +130,22 @@ class VarTypeConstraint<string value, string varValue>
 class VarElementConstraint<string value, string varValue>
   : OptionalTypesMatchWith<"type should be var's element type",
                    varValue, value, "sv::getVarElementType($_self)">;
+
+//===----------------------------------------------------------------------===//
+// SV handle type and related helpers.
+//===----------------------------------------------------------------------===//
+
+/// A handle to either a SystemVerilog net or variable object kind.
+/// Note: InOutType to be removed. The summary stays "InOutType" so that
+/// diagnostics do not need changing.
+def SVHandleType : AnyTypeOf<[NetType, InOutType, VarType], "InOutType">;
+
+def SVHandleElementType : AnyTypeOf<[InOutElementType, NetElementType,
+                                     VarElementType]>;
+
+class SVHandleElementConstraint<string value, string handleElement>
+ : TypesMatchWith<"type should be element of SV handle type",
+                  handleElement, value, "sv::getHandleElementType($_self)">;
 
 //===----------------------------------------------------------------------===//
 // UnpackedOpenArrayType type 

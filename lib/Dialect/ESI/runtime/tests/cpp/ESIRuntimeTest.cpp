@@ -757,6 +757,99 @@ TEST(ESITypesTest, ArrayTypeSerialization) {
   EXPECT_EQ(elem2, 30) << "Third array element should have value 30";
 }
 
+TEST(ESITypesTest, UnionTypeSerialization) {
+  UIntType uint8("ui8", 8);
+  UIntType uint16("ui16", 16);
+  UnionType unionType("union", {{"small", &uint8}, {"wide", &uint16}});
+
+  auto narrow = unionType.serialize(
+      std::map<std::string, std::any>{{"small", uint64_t(0xA5)}});
+  EXPECT_EQ(narrow.width(), 16UL);
+  EXPECT_EQ(narrow.takeStorage(), (std::vector<uint8_t>{0xA5, 0}));
+
+  auto wide = unionType.serialize(
+      std::map<std::string, std::any>{{"wide", uint64_t(0x1234)}});
+  EXPECT_EQ(wide.width(), 16UL);
+  EXPECT_EQ(wide.takeStorage(), (std::vector<uint8_t>{0x34, 0x12}));
+
+  std::vector<uint8_t> storage{0x34, 0x12, 0xAB};
+  BitVector data(storage);
+  auto result = std::any_cast<std::map<std::string, std::any>>(
+      unionType.deserialize(data));
+  EXPECT_EQ(static_cast<uint8_t>(std::any_cast<UInt>(result.at("small"))),
+            0x34);
+  EXPECT_EQ(static_cast<uint16_t>(std::any_cast<UInt>(result.at("wide"))),
+            0x1234);
+  EXPECT_EQ(data.width(), 8UL);
+  EXPECT_EQ(data.getSpan()[0], 0xAB);
+
+  BitVector truncated(storage, 8);
+  EXPECT_THROW(unionType.deserialize(truncated), std::runtime_error);
+}
+
+TEST(ESITypesTest, UnionTypeSubByteSerialization) {
+  UIntType uint3("ui3", 3);
+  UIntType uint12("ui12", 12);
+  SIntType sint5("si5", 5);
+  UnionType unionType(
+      "union", {{"small", &uint3}, {"signed", &sint5}, {"wide", &uint12}});
+
+  auto narrow = unionType.serialize(
+      std::map<std::string, std::any>{{"small", uint64_t(5)}});
+  EXPECT_EQ(narrow.width(), 12UL);
+  EXPECT_EQ(narrow.takeStorage(), (std::vector<uint8_t>{5, 0}));
+
+  auto signedValue = unionType.serialize(
+      std::map<std::string, std::any>{{"signed", int64_t(-7)}});
+  EXPECT_EQ(signedValue.width(), 12UL);
+  EXPECT_EQ(signedValue.takeStorage(), (std::vector<uint8_t>{0x19, 0}));
+
+  StructType structType("struct", {{"tag", &uint3}, {"payload", &unionType}});
+  auto serialized = structType.serialize(std::map<std::string, std::any>{
+      {"tag", uint64_t(5)},
+      {"payload", std::map<std::string, std::any>{{"small", uint64_t(5)}}}});
+  EXPECT_EQ(serialized.width(), 15UL);
+  EXPECT_EQ(serialized.takeStorage(), (std::vector<uint8_t>{5, 0x50}));
+
+  std::vector<uint8_t> storage{0xBC, 0x5A};
+  BitVector data(storage, 15);
+  auto result = std::any_cast<std::map<std::string, std::any>>(
+      structType.deserialize(data));
+  EXPECT_EQ(static_cast<uint8_t>(std::any_cast<UInt>(result.at("tag"))), 5);
+  auto payload =
+      std::any_cast<std::map<std::string, std::any>>(result.at("payload"));
+  EXPECT_EQ(static_cast<uint8_t>(std::any_cast<UInt>(payload.at("small"))), 4);
+  EXPECT_EQ(static_cast<int8_t>(std::any_cast<Int>(payload.at("signed"))), -4);
+  EXPECT_EQ(static_cast<uint16_t>(std::any_cast<UInt>(payload.at("wide"))),
+            0xABC);
+  EXPECT_EQ(data.width(), 0UL);
+}
+
+TEST(ESITypesTest, UnionTypeAggregateSerialization) {
+  UIntType uint8("ui8", 8);
+  UIntType uint32("ui32", 32);
+  StructType structType("struct", {{"x", &uint8}, {"y", &uint8}});
+  UnionType unionType("union", {{"narrow", &structType}, {"wide", &uint32}});
+
+  auto serialized = unionType.serialize(std::map<std::string, std::any>{
+      {"narrow", std::map<std::string, std::any>{{"x", uint64_t(0xAA)},
+                                                 {"y", uint64_t(0xBB)}}}});
+  EXPECT_EQ(serialized.width(), 32UL);
+  EXPECT_EQ(serialized.takeStorage(), (std::vector<uint8_t>{0xBB, 0xAA, 0, 0}));
+
+  std::vector<uint8_t> storage{0x12, 0x34, 0x56, 0x78};
+  BitVector data(storage);
+  auto result = std::any_cast<std::map<std::string, std::any>>(
+      unionType.deserialize(data));
+  auto narrow =
+      std::any_cast<std::map<std::string, std::any>>(result.at("narrow"));
+  EXPECT_EQ(static_cast<uint8_t>(std::any_cast<UInt>(narrow.at("x"))), 0x34);
+  EXPECT_EQ(static_cast<uint8_t>(std::any_cast<UInt>(narrow.at("y"))), 0x12);
+  EXPECT_EQ(static_cast<uint32_t>(std::any_cast<UInt>(result.at("wide"))),
+            0x78563412UL);
+  EXPECT_EQ(data.width(), 0UL);
+}
+
 // Test bit width calculations
 TEST(ESITypesTest, BitWidthCalculations) {
   VoidType voidType("void");

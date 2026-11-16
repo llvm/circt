@@ -88,7 +88,7 @@ def type_to_pytype(t) -> ir.Type:
   if t.__class__ != ir.Type:
     return t
 
-  from .dialects import esi, hw, seq, rtg, rtgtest
+  from .dialects import esi, hw, seq, rtg, rtgtest, sv
   if isinstance(t, ir.IntegerType):
     return ir.IntegerType(t)
   if isinstance(t, ir.NoneType):
@@ -105,6 +105,10 @@ def type_to_pytype(t) -> ir.Type:
     return hw.TypeAliasType(t)
   if hw.InOutType.isinstance(t):
     return hw.InOutType(t)
+  if sv.NetType.isinstance(t):
+    return sv.NetType(t)
+  if sv.VarType.isinstance(t):
+    return sv.VarType(t)
   if seq.ClockType.isinstance(t):
     return seq.ClockType(t)
   if esi.ChannelType.isinstance(t):
@@ -200,6 +204,14 @@ def attribute_to_var(attr):
     return om.PathAttr(attr).value
 
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
+
+
+def get_canonical_type(mlir_type):
+  """Return `mlir_type` with all type aliases stripped."""
+  from .dialects import hw
+  if hw.TypeAliasType.isinstance(mlir_type):
+    return hw.TypeAliasType(mlir_type).canonical_type
+  return mlir_type
 
 
 def get_self_or_inner(mlir_type):

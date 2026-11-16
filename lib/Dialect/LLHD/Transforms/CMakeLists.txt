@@ -6,8 +6,9 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   InlineCalls.cpp
   LowerProcesses.cpp
   Mem2Reg.cpp
+  ProjectionUtils.cpp
   RemoveControlFlow.cpp
-  Sig2RegPass.cpp
+  Sig2Reg.cpp
   UnrollLoops.cpp
   WrapProceduralOps.cpp
 

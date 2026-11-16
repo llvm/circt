@@ -8,7 +8,6 @@
 
 #include "circt/Support/ProceduralRegionTrait.h"
 
-using namespace llvm;
 using namespace mlir;
 
 namespace circt {

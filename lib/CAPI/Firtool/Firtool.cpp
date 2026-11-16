@@ -238,8 +238,23 @@ void circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
 }
 
 void circtFirtoolOptionsSetVerificationFlavor(
-    CirctFirtoolFirtoolOptions options, firrtl::VerificationFlavor value) {
-  unwrap(options)->setVerificationFlavor(value);
+    CirctFirtoolFirtoolOptions options, CirctFirtoolVerificationFlavor value) {
+  firrtl::VerificationFlavor flavor;
+  switch (value) {
+  case CIRCT_FIRTOOL_VERIFICATION_FLAVOR_NONE:
+    flavor = firrtl::VerificationFlavor::None;
+    break;
+  case CIRCT_FIRTOOL_VERIFICATION_FLAVOR_IF_ELSE_FATAL:
+    flavor = firrtl::VerificationFlavor::IfElseFatal;
+    break;
+  case CIRCT_FIRTOOL_VERIFICATION_FLAVOR_IMMEDIATE:
+    flavor = firrtl::VerificationFlavor::Immediate;
+    break;
+  case CIRCT_FIRTOOL_VERIFICATION_FLAVOR_SVA:
+    flavor = firrtl::VerificationFlavor::SVA;
+    break;
+  }
+  unwrap(options)->setVerificationFlavor(flavor);
 }
 
 void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
@@ -321,6 +336,11 @@ void circtFirtoolOptionsSetDomainMode(CirctFirtoolFirtoolOptions options,
     break;
   }
   unwrap(options)->setDomainMode(converted);
+}
+
+void circtFirtoolOptionsSetStripDomain(CirctFirtoolFirtoolOptions options,
+                                       bool value) {
+  unwrap(options)->setStripDomain(value);
 }
 
 //===----------------------------------------------------------------------===//

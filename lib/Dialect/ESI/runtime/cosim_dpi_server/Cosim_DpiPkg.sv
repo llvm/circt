@@ -44,7 +44,8 @@ import "DPI-C" sv2cCosimserverEpRegister =
 // --------------------- Endpoint Accessors ------------------------------------
 
 // Attempt to send data to a client.
-// - return 0 on success, negative on failure (unregistered EP).
+// - return 0 on success, negative on failure (unregistered EP), positive if
+//   the endpoint is full and the data was not accepted (retry later).
 import "DPI-C" sv2cCosimserverEpTryPut =
   function int cosim_ep_tryput(
     // The ID of the endpoint to which the data should be sent.

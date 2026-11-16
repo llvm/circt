@@ -9,8 +9,8 @@
 // CHECK-NEXT:    %token, %output = dc.unpack %1 : !dc.value<i1>
 // CHECK-NEXT:    %8 = dc.to_esi %0 : !dc.token
 // CHECK-NEXT:    %9 = dc.to_esi %1 : !dc.value<i1>
-// CHECK-NEXT:    %10 = dc.from_esi %8 : <i0>
-// CHECK-NEXT:    %11 = dc.from_esi %9 : <i1>
+// CHECK-NEXT:    %10 = dc.from_esi %8 : <i0, ValidReady>
+// CHECK-NEXT:    %11 = dc.from_esi %9 : <i1, ValidReady>
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
 
@@ -23,6 +23,6 @@ hw.module @foo(in %0 : !dc.token, in %1 : !dc.value<i1>, in %2 : i32) {
   %unpack_token, %unpack_value = dc.unpack %1 : !dc.value<i1>
   %esi_token = dc.to_esi %0 : !dc.token
   %esi_value = dc.to_esi %1 : !dc.value<i1>
-  %from_esi_token = dc.from_esi %esi_token : !esi.channel<i0>
-  %from_esi_value = dc.from_esi %esi_value : !esi.channel<i1>
+  %from_esi_token = dc.from_esi %esi_token : !esi.channel<i0, ValidReady>
+  %from_esi_value = dc.from_esi %esi_value : !esi.channel<i1, ValidReady>
 }

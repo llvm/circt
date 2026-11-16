@@ -394,6 +394,45 @@ def CirctLTLUntil : FIRRTLIntrinsic {
   }];
 }
 
+def CirctLTLAcceptOn : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.accept_on";
+  let converter = "CirctLTLAcceptOnConverter<false>";
+  let description = [{
+    Evaluates a property, but aborts and accepts it (considers it to hold) as
+    soon as the condition is true. Corresponds to the SystemVerilog `accept_on`
+    operator, where the condition is evaluated asynchronously. The dual
+    `reject_on` is `not(accept_on(not(p), c))`.
+
+    | Argument | Type    | Description                     |
+    | -------- | ------- | ------------------------------- |
+    | in       | UInt<1> | property to evaluate            |
+    | cond     | UInt<1> | abort condition                 |
+
+    | Result | Type    | Description          |
+    | ------ | ------- | -------------------- |
+    | out    | UInt<1> | `accept_on` property |
+  }];
+}
+
+def CirctLTLSyncAcceptOn : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.sync_accept_on";
+  let converter = "CirctLTLAcceptOnConverter<true>";
+  let description = [{
+    Like `circt.ltl.accept_on`, but the condition is only evaluated at the ticks
+    of the enclosing clock, using sampled values. Corresponds to the
+    SystemVerilog `sync_accept_on` operator.
+
+    | Argument | Type    | Description          |
+    | -------- | ------- | -------------------- |
+    | in       | UInt<1> | property to evaluate |
+    | cond     | UInt<1> | abort condition      |
+
+    | Result | Type    | Description               |
+    | ------ | ------- | ------------------------- |
+    | out    | UInt<1> | `sync_accept_on` property |
+  }];
+}
+
 def CirctLTLNot : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.not";
   let converter = "CirctLTLUnaryConverter<LTLNotIntrinsicOp>";

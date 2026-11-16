@@ -134,7 +134,7 @@ LogicalResult InlineCallsPass::runOnRegion(Region &region,
 
       // Make sure we're calling a `func.func`.
       auto symbol = callOp.getCalleeAttr();
-      auto calledOp = symbolTable.lookup(symbol.getAttr());
+      auto *calledOp = symbolTable.lookup(symbol.getAttr());
       auto funcOp = dyn_cast<func::FuncOp>(calledOp);
       if (!funcOp) {
         auto d = callOp.emitError("function call cannot be inlined: call "

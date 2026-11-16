@@ -26,14 +26,14 @@ hw.module @wrongResultWidth() {
 // -----
 
 hw.module @signlessConst() {
-  // expected-error @+1 {{'hwarith.constant' op result #0 must be an arbitrary precision integer with signedness semantics, but got 'i1'}}
+  // expected-error @+1 {{'hwarith.constant' op result #0 must be an arbitrary precision integer with signedness semantics or a type alias of one, but got 'i1'}}
   %c1_1 = hwarith.constant 1 : i1
 }
 
 // -----
 
 hw.module @zeroSizeConst() {
-  // expected-error @+1 {{'hwarith.constant' op result #0 must be an arbitrary precision integer with signedness semantics, but got 'ui0'}}
+  // expected-error @+1 {{'hwarith.constant' op result #0 must be an arbitrary precision integer with signedness semantics or a type alias of one, but got 'ui0'}}
   %c1_1 = hwarith.constant 0 : ui0
 }
 

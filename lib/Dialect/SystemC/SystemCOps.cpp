@@ -101,7 +101,7 @@ static LogicalResult verifyUniqueNamesInRegion(
 
 static hw::ModulePort::Direction getDirection(Type type) {
   return TypeSwitch<Type, hw::ModulePort::Direction>(type)
-      .Case<InOutType>([](auto ty) { return hw::ModulePort::Direction::InOut; })
+      .Case<InOutType>([](auto ty) { return hw::ModulePort::Direction::Input; })
       .Case<InputType>([](auto ty) { return hw::ModulePort::Direction::Input; })
       .Case<OutputType>(
           [](auto ty) { return hw::ModulePort::Direction::Output; });
@@ -222,12 +222,12 @@ ArrayRef<Type> SCModuleOp::getResultTypes() {
 }
 
 static Type wrapPortType(Type type, hw::ModulePort::Direction direction) {
-  if (auto inoutTy = dyn_cast<hw::InOutType>(type))
-    type = inoutTy.getElementType();
-
+  if (auto inoutTy = dyn_cast<hw::InOutType>(type)) {
+    assert(direction == hw::ModulePort::Direction::Input &&
+           "inout ports must be inputs");
+    return InOutType::get(inoutTy.getElementType());
+  }
   switch (direction) {
-  case hw::ModulePort::Direction::InOut:
-    return InOutType::get(type);
   case hw::ModulePort::Direction::Input:
     return InputType::get(type);
   case hw::ModulePort::Direction::Output:

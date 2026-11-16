@@ -2,6 +2,24 @@
 // RUN: circt-translate --export-firrtl --firrtl-version=5.0.0 \
 // RUN:   --verify-diagnostics --split-input-file %s
 
+// Classes require >= 6.0.0.
+firrtl.circuit "Class" {
+  // expected-error @below {{'firrtl.class' op classes requires FIRRTL 6.0.0}}
+  firrtl.class private @Value() {}
+  firrtl.module @Class() {}
+}
+
+// -----
+
+// External classes require >= 6.0.0.
+firrtl.circuit "ExtClass" {
+  // expected-error @below {{'firrtl.extclass' op external classes requires FIRRTL 6.0.0}}
+  firrtl.extclass @Value(out label: !firrtl.string)
+  firrtl.module @ExtClass() {}
+}
+
+// -----
+
 // fflush statement requires >= 6.0.0
 firrtl.circuit "FFlush" {
   firrtl.module @FFlush(in %clk : !firrtl.clock, in %en : !firrtl.uint<1>) {

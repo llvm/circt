@@ -16,6 +16,8 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/SV/SVAttributes.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -391,6 +393,12 @@ struct Context {
 
   LogicalResult
   convertPullGatePrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
+
+  FailureOr<moore::SVModuleOp>
+  convertUserDefinedPrimitiveDef(const slang::ast::PrimitiveSymbol &primitive);
+
+  LogicalResult convertUserDefinedPrimitiveInstance(
+      const slang::ast::PrimitiveInstanceSymbol &prim);
 
   LogicalResult convertThreeStateGatePrimitive(
       const slang::ast::PrimitiveInstanceSymbol &prim);

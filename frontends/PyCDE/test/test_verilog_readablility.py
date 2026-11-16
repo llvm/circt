@@ -27,15 +27,15 @@ sys.generate()
 sys.run_passes()
 sys.print()
 # CHECK-LABEL:  hw.module @WireNames(in %clk : i1, in %data_in : !hw.array<3xi32>, in %sel : i2, out a : i32, out b : i32)
-# CHECK:    %foo__reg1 = sv.reg sym @foo__reg1 : !hw.inout<i32>
-# CHECK:    %foo__reg2 = sv.reg sym @foo__reg2 : !hw.inout<i32>
-# CHECK:    %{{.+}} = sv.read_inout %foo__reg2 : !hw.inout<i32>
+# CHECK:    %foo__reg1 = sv.var sym @foo__reg1 : !sv.var<i32>
+# CHECK:    %foo__reg2 = sv.var sym @foo__reg2 : !sv.var<i32>
+# CHECK:    %{{.+}} = sv.read_inout %foo__reg2 : !sv.var<i32>
 # CHECK:    sv.alwaysff(posedge %clk)  {
 # CHECK:      %c0_i2 = hw.constant 0 : i2
 # CHECK:      %{{.+}} = hw.array_get %data_in[%c0_i2] {sv.namehint = "foo"} : !hw.array<3xi32>
-# CHECK:      sv.passign %foo__reg1, %3 : i32
-# CHECK:      %{{.+}} = sv.read_inout %foo__reg1 : !hw.inout<i32>
-# CHECK:      sv.passign %foo__reg2, %4 : i32
+# CHECK:      sv.passign %foo__reg1, %3 : !sv.var<i32>, i32
+# CHECK:      %{{.+}} = sv.read_inout %foo__reg1 : !sv.var<i32>
+# CHECK:      sv.passign %foo__reg2, %4 : !sv.var<i32>, i32
 # CHECK:    }
 # CHECK:    %{{.+}} = hw.array_get %0[%sel] : !hw.array<4xi32>
 # CHECK:    hw.output %1, %2 : i32, i32

@@ -56,3 +56,10 @@ unrealized_conversion_cast to !moore.ustruct<{foo: string}>
 unrealized_conversion_cast to !moore.ustruct<{foo: i42, bar: string}>
 // CHECK: !moore.ustruct<{"a b": string}>
 unrealized_conversion_cast to !moore.ustruct<{"a b": string}>
+
+// CHECK: !moore.net<i42>
+unrealized_conversion_cast to !moore.net<!moore.i42>
+// CHECK: !moore.net<struct<{foo: i42}>>
+unrealized_conversion_cast to !moore.net<!moore.struct<{foo: i42}>>
+// CHECK: !moore.net<ustruct<{foo: string}>>
+unrealized_conversion_cast to !moore.net<!moore.ustruct<{foo: string}>>

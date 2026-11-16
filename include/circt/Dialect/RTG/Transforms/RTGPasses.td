@@ -21,7 +21,9 @@ def ElaborationPass : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
     This pass interprets most RTG operations to perform the represented
     randomization and in the process get rid of those operations. This means,
     after this pass the IR does not contain any random constructs within tests
-    anymore.
+    anymore. Calls to defined single-block functions are evaluated inline,
+    regardless of 'no_inline' attributes or recursion. Empty void calls are
+    removed. External, indirect, unresolved, and multi-block calls are errors.
   }];
 
   let options = [Option<"seed", "seed", "unsigned", /*default=*/"",
@@ -32,7 +34,8 @@ def ElaborationPass : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
                      "Delete tests that could not be matched with a target.">,
   ];
 
-  let dependentDialects = ["mlir::index::IndexDialect"];
+  let dependentDialects = ["mlir::func::FuncDialect",
+                           "mlir::index::IndexDialect"];
 }
 
 def EmitRTGISAAssemblyPass : Pass<"rtg-emit-isa-assembly", "emit::FileOp"> {

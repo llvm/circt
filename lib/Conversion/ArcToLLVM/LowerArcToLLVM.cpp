@@ -198,7 +198,7 @@ struct CurrentTimeOpLowering : public OpConversionPattern<arc::CurrentTimeOp> {
 };
 
 // Lower `llhd.constant_time` to an `i64` LLVM constant holding the time in
-// femtoseconds. Time attributes with non-zero delta or epsilon, units smaller
+// femtoseconds. Time attributes with non-zero delta, units smaller
 // than `fs`, or values that overflow `i64` femtoseconds are rejected.
 struct ConstantTimeOpLowering
     : public OpConversionPattern<llhd::ConstantTimeOp> {
@@ -207,9 +207,9 @@ struct ConstantTimeOpLowering
   matchAndRewrite(llhd::ConstantTimeOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     auto attr = op.getValue();
-    if (attr.getDelta() != 0 || attr.getEpsilon() != 0)
+    if (attr.getDelta() != 0)
       return rewriter.notifyMatchFailure(
-          op, "non-zero delta or epsilon time components are not supported");
+          op, "non-zero delta time component is not supported");
     uint64_t value = attr.getTime();
     StringRef unit = attr.getTimeUnit();
     uint64_t scale;

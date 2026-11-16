@@ -35,7 +35,6 @@
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 
 using namespace circt::lsp;
-using namespace llvm;
 using namespace llvm::lsp;
 
 VerilogTextFile::VerilogTextFile(
@@ -48,7 +47,7 @@ VerilogTextFile::VerilogTextFile(
   initialize(uri, version, diagnostics);
 }
 
-LogicalResult VerilogTextFile::update(
+llvm::LogicalResult VerilogTextFile::update(
     const llvm::lsp::URIForFile &uri, int64_t newVersion,
     ArrayRef<llvm::lsp::TextDocumentContentChangeEvent> changes,
     std::vector<llvm::lsp::Diagnostic> &diagnostics) {
@@ -58,11 +57,11 @@ LogicalResult VerilogTextFile::update(
                                                                 contents))) {
     circt::lsp::Logger::error(Twine("Failed to update contents of ") +
                               uri.file());
-    return failure();
+    return llvm::failure();
   }
   // If the file contents were properly changed, reinitialize the text file.
   initialize(uri, newVersion, diagnostics);
-  return success();
+  return llvm::success();
 }
 
 void VerilogTextFile::initializeProjectDriver() {

@@ -47,6 +47,9 @@ rtg.test @constants() {
   // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
   rtg.constant #rtg.tuple<0 : i32, 1 : index>
 
+  // CHECK-NEXT: rtg.constant #rtg.tuple<> : !rtg.tuple
+  rtg.constant #rtg.tuple<>
+
   // CHECK-NEXT: rtg.constant #rtg.map<> : !rtg.map<i32 -> i32>
   rtg.constant #rtg.map<> : !rtg.map<i32 -> i32>
 
@@ -430,4 +433,3 @@ rtg.test @continuation_in_set() {
   // CHECK: rtg.set_create : !rtg.continuation<index>
   %set = rtg.set_create : !rtg.continuation<index>
 }
-

@@ -657,6 +657,8 @@ static void hostmemTest(AcceleratorConnection *conn, Accelerator *acc,
   hostmem->start();
   auto scratchRegion = hostmem->allocate(/*size(bytes)=*/1024 * 1024,
                                          /*memOpts=*/{.writeable = true});
+  if (!scratchRegion)
+    throw std::runtime_error("hostmem test: failed to allocate host memory");
   uint64_t *dataPtr = static_cast<uint64_t *>(scratchRegion->getPtr());
   conn->getLogger().info("esitester",
                          "Running host memory test with region size " +
@@ -1338,6 +1340,9 @@ static void hostmemBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
   hostmemSvc->start();
   auto region = hostmemSvc->allocate(/*size(bytes)=*/1024 * 1024 * 1024,
                                      /*memOpts=*/{.writeable = true});
+  if (!region)
+    throw std::runtime_error(
+        "hostmem bandwidth test: failed to allocate host memory");
   for (uint32_t w : widths) {
     if (write)
       hostmemWriteBandwidthTest(conn, acc, *region, w, xferCount);
@@ -1587,6 +1592,9 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,
       u.isRead = doRead;
       u.isWrite = doWrite;
       u.region = hostmemSvc->allocate(regionBytes, {.writeable = true});
+      if (!u.region)
+        throw std::runtime_error(
+            "hostmem bandwidth test: failed to allocate host memory");
       // Init pattern.
       uint64_t *ptr = static_cast<uint64_t *>(u.region->getPtr());
       size_t words = u.region->getSize() / 8;
@@ -2205,10 +2213,10 @@ struct SerialCoordHeader {
 };
 static_assert(sizeof(SerialCoordHeader) == 10, "Size mismatch");
 struct SerialCoordData {
-  SerialCoordData(uint32_t x, uint32_t y) : _pad_head(0), y(y), x(x) {}
-  uint16_t _pad_head;
+  SerialCoordData(uint32_t x, uint32_t y) : y(y), x(x), _pad_tail(0) {}
   uint32_t y;
   uint32_t x;
+  uint16_t _pad_tail;
 };
 static_assert(sizeof(SerialCoordData) == sizeof(SerialCoordHeader),
               "Size mismatch");
@@ -2295,8 +2303,8 @@ public:
 
 #pragma pack(push, 1)
 struct SerialCoordOutputHeader {
-  uint8_t _pad[6];
   uint16_t coordsCount;
+  uint8_t _pad[6];
 };
 struct SerialCoordOutputData {
   uint32_t y;

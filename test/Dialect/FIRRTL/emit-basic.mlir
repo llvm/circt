@@ -458,6 +458,46 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
   // CHECK-NEXT:    parameter WIDTH = 32
 
+  // CHECK-LABEL: class EmptyClass :
+  firrtl.class @EmptyClass() {}
+
+  // CHECK-LABEL: class Class :
+  // CHECK-NEXT:    input in : String
+  // CHECK-NEXT:    output out : String
+  // CHECK-EMPTY:
+  // CHECK-NEXT:    propassign out, in
+  firrtl.class @Class(in %in: !firrtl.string, out %out: !firrtl.string) {
+    firrtl.propassign %out, %in : !firrtl.string
+  }
+
+  // CHECK-LABEL: extclass ExtClass :
+  // CHECK-NEXT:    input in : Integer
+  // CHECK-NEXT:    output out : String
+  firrtl.extclass @ExtClass(in in: !firrtl.integer, out out: !firrtl.string)
+
+  // CHECK-LABEL: module ClassTypes :
+  firrtl.module @ClassTypes(
+    // CHECK-NEXT: input class : Inst<Class>
+    // CHECK-NEXT: output extclass : Inst<ExtClass>
+    // CHECK-NEXT: input list : List<Inst<Class>>
+    in %class: !firrtl.class<@Class(in in: !firrtl.string, out out: !firrtl.string)>,
+    out %extclass: !firrtl.class<@ExtClass(in in: !firrtl.integer, out out: !firrtl.string)>,
+    in %list: !firrtl.list<class<@Class(in in: !firrtl.string, out out: !firrtl.string)>>
+  ) {}
+
+  // CHECK-LABEL: module ObjectAnyRef :
+  firrtl.module @ObjectAnyRef(
+    // CHECK-NEXT: input object : Inst<Class>
+    // CHECK-NEXT: output ref : AnyRef
+    in %object: !firrtl.class<@Class(in in: !firrtl.string, out out: !firrtl.string)>,
+    out %ref: !firrtl.anyref
+  ) {
+    %0 = firrtl.object.anyref_cast %object : !firrtl.class<@Class(in in: !firrtl.string, out out: !firrtl.string)>
+    // CHECK-EMPTY:
+    // CHECK-NEXT: propassign ref, object
+    firrtl.propassign %ref, %0 : !firrtl.anyref
+  }
+
   // CHECK-LABEL: module ConstTypes :
   firrtl.module private @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock
@@ -638,7 +678,9 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module Properties :
-  firrtl.module @Properties(out %string : !firrtl.string,
+  firrtl.module @Properties(in %refA : !firrtl.anyref,
+                            in %refB : !firrtl.anyref,
+                            out %string : !firrtl.string,
                             out %integer : !firrtl.integer,
                             out %bool : !firrtl.bool,
                             out %double : !firrtl.double,
@@ -647,9 +689,17 @@ firrtl.circuit "Foo" {
                             out %unknownString : !firrtl.string,
                             out %stringcat : !firrtl.string,
                             out %stringeq : !firrtl.bool,
+                            out %objecteq : !firrtl.bool,
+                            out %stringcontains : !firrtl.bool,
+                            out %integercontains : !firrtl.bool,
+                            out %boolcontains : !firrtl.bool,
+                            out %refcontains : !firrtl.bool,
                             out %booland : !firrtl.bool,
                             out %boolor : !firrtl.bool,
-                            out %boolxor : !firrtl.bool) {
+                            out %boolxor : !firrtl.bool,
+                            out %integerand : !firrtl.integer,
+                            out %integeror : !firrtl.integer,
+                            out %integernot : !firrtl.integer) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
@@ -657,6 +707,20 @@ firrtl.circuit "Foo" {
     // CHECK: propassign integer, Integer(99)
     %1 = firrtl.integer 99
     firrtl.propassign %integer, %1 : !firrtl.integer
+
+    %intA = firrtl.integer 5
+    %intB = firrtl.integer -2
+    // CHECK: propassign integerand, integer_and(Integer(5), Integer(-2))
+    %and = firrtl.integer.and %intA, %intB : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    firrtl.propassign %integerand, %and : !firrtl.integer
+
+    // CHECK: propassign integeror, integer_or(Integer(5), Integer(-2))
+    %or = firrtl.integer.or %intA, %intB : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    firrtl.propassign %integeror, %or : !firrtl.integer
+
+    // CHECK: propassign integernot, integer_not(Integer(-2))
+    %not = firrtl.integer.not %intB : (!firrtl.integer) -> !firrtl.integer
+    firrtl.propassign %integernot, %not : !firrtl.integer
 
     // CHECK: propassign bool, Bool(true)
     %true = firrtl.bool true
@@ -691,6 +755,33 @@ firrtl.circuit "Foo" {
     // CHECK: propassign stringeq, prop_eq(String("hello"), String("world"))
     %streq = firrtl.prop.eq %str0, %str1 : !firrtl.string
     firrtl.propassign %stringeq, %streq : !firrtl.bool
+
+    // CHECK: propassign objecteq, prop_eq(refA, refB)
+    %objeq = firrtl.prop.eq %refA, %refB : !firrtl.anyref
+    firrtl.propassign %objecteq, %objeq : !firrtl.bool
+
+    // CHECK: propassign stringcontains,
+    // CHECK: list_contains(List<String>(String("hello"), String("world")),
+    // CHECK: String("world"))
+    %string_list = firrtl.list.create %str0, %str1 : !firrtl.list<string>
+    %string_contains = firrtl.list.contains %string_list, %str1 : !firrtl.list<string>
+    firrtl.propassign %stringcontains, %string_contains : !firrtl.bool
+
+    // CHECK: propassign integercontains,
+    // CHECK: list_contains(List<Integer>(Integer(5), Integer(-2)), Integer(5))
+    %integer_list = firrtl.list.create %intA, %intB : !firrtl.list<integer>
+    %integer_contains = firrtl.list.contains %integer_list, %intA : !firrtl.list<integer>
+    firrtl.propassign %integercontains, %integer_contains : !firrtl.bool
+
+    // CHECK: propassign boolcontains, list_contains(List<Bool>(Bool(true)), Bool(true))
+    %bool_list = firrtl.list.create %true : !firrtl.list<bool>
+    %bool_contains = firrtl.list.contains %bool_list, %true : !firrtl.list<bool>
+    firrtl.propassign %boolcontains, %bool_contains : !firrtl.bool
+
+    // CHECK: propassign refcontains, list_contains(List<AnyRef>(refA, refB), refA)
+    %ref_list = firrtl.list.create %refA, %refB : !firrtl.list<anyref>
+    %ref_contains = firrtl.list.contains %ref_list, %refA : !firrtl.list<anyref>
+    firrtl.propassign %refcontains, %ref_contains : !firrtl.bool
 
     // CHECK: propassign booland, bool_and(Bool(true), Bool(true))
     %booland_val = firrtl.bool.and %true, %true
@@ -1017,6 +1108,12 @@ firrtl.circuit "Foo" {
     #firrtl.domain.field<"alwaysOn", !firrtl.bool>
   ]
 
+  // CHECK-LABEL: domain DomainContainer :
+  // CHECK-NEXT:    source : AnyRef
+  firrtl.domain @DomainContainer [
+    #firrtl.domain.field<"source", !firrtl.anyref>
+  ]
+
   // CHECK-LABEL: domain RegistryDomain :
   // CHECK-NEXT:    clockGates : Registry<Path>
   firrtl.domain @RegistryDomain [
@@ -1122,4 +1219,42 @@ firrtl.circuit "Foo" {
     firrtl.domain.define %foo_A, %my_clock : !firrtl.domain<@ClockDomain()>
   }
 
+  // Domain-to-anyref casts have no FIRRTL syntax and are elided in domain
+  // creation, property assignments, and list membership expressions.
+  // CHECK-LABEL: module DomainAnyRef :
+  firrtl.module @DomainAnyRef(
+    // CHECK-NEXT: input A : Domain of ClockDomain
+    // CHECK-NEXT: input refs : List<AnyRef>
+    // CHECK-NEXT: output ref : AnyRef
+    // CHECK-NEXT: output found : Bool
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %refs: !firrtl.list<anyref>,
+    out %ref: !firrtl.anyref,
+    out %found: !firrtl.bool
+  ) {
+    %0 = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    // CHECK-EMPTY:
+    // CHECK-NEXT: domain B of DomainContainer(A)
+    %B = firrtl.domain.create(%0) : !firrtl.domain<@DomainContainer(source: !firrtl.anyref)>
+    // CHECK-NEXT: propassign ref, A
+    firrtl.propassign %ref, %0 : !firrtl.anyref
+    // CHECK-NEXT: propassign found, list_contains(refs, A)
+    %found_value = firrtl.list.contains %refs, %0 : !firrtl.list<anyref>
+    firrtl.propassign %found, %found_value : !firrtl.bool
+  }
+
+  // CHECK-LABEL: module NonBaseWires :
+  firrtl.module @NonBaseWires(in %x: !firrtl.uint<8>) {
+    // CHECK:      wire q : Probe<UInt<8>>
+    // CHECK-NEXT: define q = probe(x)
+    %q = firrtl.wire : !firrtl.probe<uint<8>>
+    %r = firrtl.ref.send %x : !firrtl.uint<8>
+    firrtl.ref.define %q, %r : !firrtl.probe<uint<8>>
+
+    // CHECK:      wire w : String
+    // CHECK-NEXT: propassign w, String("test")
+    %str = firrtl.string "test"
+    %w = firrtl.wire interesting_name : !firrtl.string
+    firrtl.propassign %w, %str : !firrtl.string
+  }
 }

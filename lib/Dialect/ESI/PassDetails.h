@@ -57,37 +57,28 @@ class ESIHWBuilder : public circt::ImplicitLocOpBuilder {
 public:
   ESIHWBuilder(Operation *top);
 
-  ArrayAttr getStageParameterList(Attribute value);
+  /// Get the parameter list for the stage module. Values may be null for the
+  /// declaration.
+  ArrayAttr getStageParameterList(Attribute widthValue,
+                                  Attribute dataDelayValue);
 
   hw::HWModuleExternOp declareStage(Operation *symTable, PipelineStageOp);
   hw::HWModuleExternOp declareCosimEndpointToHostModule(Operation *symTable);
   hw::HWModuleExternOp declareCosimEndpointFromHostModule(Operation *symTable);
-  sv::InterfaceOp getOrConstructInterface(ChannelType);
-  sv::InterfaceOp constructInterface(ChannelType);
 
   // A bunch of constants for use in various places below.
   const StringAttr a, aValid, aReady, x, xValid, xReady;
   const StringAttr dataOutValid, dataOutReady, dataOut, dataInValid,
       dataInReady, dataIn;
   const StringAttr clk, rst;
-  const StringAttr width;
-
-  // Various identifier strings. Keep them all here in case we rename them.
-  static constexpr char dataStr[] = "data", validStr[] = "valid",
-                        readyStr[] = "ready", sourceStr[] = "source",
-                        sinkStr[] = "sink";
+  const StringAttr width, dataDelay;
 
 private:
-  /// Construct a type-appropriate name for the interface, making sure it's not
-  /// taken in the symbol table.
-  StringAttr constructInterfaceName(ChannelType);
-
   Type getClockType();
 
   std::optional<hw::HWModuleExternOp> declaredCosimEndpointToHostModule;
   std::optional<hw::HWModuleExternOp> declaredCosimEndpointFromHostModule;
   llvm::DenseMap<Type, hw::HWModuleExternOp> declaredStage;
-  llvm::DenseMap<Type, sv::InterfaceOp> portTypeLookup;
 };
 } // namespace detail
 } // namespace esi

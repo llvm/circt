@@ -134,7 +134,8 @@ private:
   static StringAttr
   getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
                               MLIRContext *context) {
-    auto mainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+    const auto *mainBuffer =
+        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
     StringRef bufferName = mainBuffer->getBufferIdentifier();
     if (bufferName.empty())
       bufferName = "<unknown>";

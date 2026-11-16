@@ -14,6 +14,7 @@
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Conversion/VerifToSV.h"
+#include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
@@ -154,6 +155,11 @@ struct Options {
 
   cl::opt<bool> emitIR{"ir", cl::desc("Emit IR after initial lowering"),
                        cl::init(false), cl::cat(cat)};
+
+  cl::opt<bool> verbosePassExecutions{
+      "verbose-pass-executions",
+      cl::desc("Log executions of toplevel module passes"), cl::init(false),
+      cl::cat(testCat)};
 
   cl::opt<bool> verifyPasses{
       "verify-each",
@@ -1214,7 +1220,15 @@ static LogicalResult executeWithHandler(MLIRContext *context,
                                         RunnerSuite &runnerSuite,
                                         SourceMgr &srcMgr) {
   std::string errorMessage;
+  auto parseStartTime = Clock::now();
+  if (opts.verbosePassExecutions)
+    llvm::errs() << "[circt-test] Running MLIR parser\n";
   auto module = parseSourceFile<ModuleOp>(srcMgr, context);
+  if (opts.verbosePassExecutions) {
+    auto elapsed =
+        std::chrono::duration<double>(Clock::now() - parseStartTime).count();
+    llvm::errs() << "[circt-test] -- Done in " << elapsed << " sec\n";
+  }
   if (!module)
     return failure();
 
@@ -1230,14 +1244,19 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   // Preprocess the input.
   {
     PassManager pm(context);
+    if (opts.verbosePassExecutions)
+      pm.addInstrumentation(
+          std::make_unique<VerbosePassInstrumentation<ModuleOp>>("circt-test"));
     pm.enableVerifier(opts.verifyPasses);
+    pm.addPass(om::createStripOMPass());
     if (opts.ignoreContracts)
       pm.addPass(verif::createStripContractsPass());
     else
       pm.addPass(verif::createLowerContractsPass());
     pm.addNestedPass<hw::HWModuleOp>(verif::createSimplifyAssumeEqPass());
-    pm.addPass(createCSEPass());
-    pm.addPass(createSimpleCanonicalizerPass());
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(createCSEPass());
+    anyPM.addPass(createSimpleCanonicalizerPass());
     if (failed(pm.run(*module)))
       return failure();
   }
@@ -1316,6 +1335,9 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   firtoolOptions.setOutputFilename(verilogPath);
 
   PassManager pm(context);
+  if (opts.verbosePassExecutions)
+    pm.addInstrumentation(
+        std::make_unique<VerbosePassInstrumentation<ModuleOp>>("circt-test"));
   pm.enableVerifier(opts.verifyPasses);
   if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
     return failure();

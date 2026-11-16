@@ -48,16 +48,16 @@ handshake.func @invalid_instance_op(%arg0 : i32) -> i32 {
 // CHECK:           return %[[VAL_0]] : i32
 // CHECK:         }
 
-// CHECK-LABEL:  hw.module @outer(in %clk : !seq.clock, in %rst : i1, in %ctrl : !esi.channel<i32>, out out : !esi.channel<i32>) {
-// CHECK-NEXT:       [[R0:%.+]] = handshake.esi_instance @foo "foo_inst" clk %clk rst %rst(%ctrl) : (!esi.channel<i32>) -> !esi.channel<i32>
-// CHECK-NEXT:       hw.output [[R0]] : !esi.channel<i32>
+// CHECK-LABEL:  hw.module @outer(in %clk : !seq.clock, in %rst : i1, in %ctrl : !esi.channel<i32, ValidReady>, out out : !esi.channel<i32, ValidReady>) {
+// CHECK-NEXT:       [[R0:%.+]] = handshake.esi_instance @foo "foo_inst" clk %clk rst %rst(%ctrl) : (!esi.channel<i32, ValidReady>) -> !esi.channel<i32, ValidReady>
+// CHECK-NEXT:       hw.output [[R0]] : !esi.channel<i32, ValidReady>
 
 
 handshake.func @foo(%ctrl : i32) -> i32 {
   return %ctrl : i32
 }
 
-hw.module @outer(in %clk: !seq.clock, in %rst: i1, in %ctrl: !esi.channel<i32>, out out: !esi.channel<i32>) {
-  %ret = handshake.esi_instance @foo "foo_inst" clk %clk rst %rst (%ctrl) : (!esi.channel<i32>) -> (!esi.channel<i32>)
-  hw.output %ret : !esi.channel<i32>
+hw.module @outer(in %clk: !seq.clock, in %rst: i1, in %ctrl: !esi.channel<i32, ValidReady>, out out: !esi.channel<i32, ValidReady>) {
+  %ret = handshake.esi_instance @foo "foo_inst" clk %clk rst %rst (%ctrl) : (!esi.channel<i32, ValidReady>) -> (!esi.channel<i32, ValidReady>)
+  hw.output %ret : !esi.channel<i32, ValidReady>
 }

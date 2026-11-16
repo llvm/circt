@@ -66,7 +66,7 @@ def LowerESIBundles: Pass<"lower-esi-bundles", "mlir::ModuleOp"> {
 def LowerESIPorts: Pass<"lower-esi-ports", "mlir::ModuleOp"> {
   let summary = "Lower ESI input and/or output ports.";
   let constructor = "circt::esi::createESIPortLoweringPass()";
-  let dependentDialects = ["circt::comb::CombDialect", "circt::sv::SVDialect"];
+  let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
 }
 
 def LowerESITypes: Pass<"lower-esi-types", "mlir::ModuleOp"> {

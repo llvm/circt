@@ -5,4 +5,4 @@
 from ..signals import wrap_opviews_with_values
 from ..circt.dialects import comb
 
-wrap_opviews_with_values(comb, __name__)
+wrap_opviews_with_values(comb, __name__, unwrap_type_aliases=True)

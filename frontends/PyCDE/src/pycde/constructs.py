@@ -11,7 +11,7 @@ from .seq import Counter
 from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
 from .signals import get_slice_bounds, _FromCirctValue
 from .support import get_user_loc
-from .types import dim, Array, Bit, Bits, InOut, Type, UInt
+from .types import dim, Array, Bit, Bits, Net, Type, UInt
 
 from .circt import ir
 from .circt.support import BackedgeBuilder
@@ -46,7 +46,7 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
       # inner_symbols purely for the purpose of disallowing the SV
       # canonicalizers to eliminate wires!
       uniq_name = _BlockContext.current().uniquify_symbol(name)
-      self.wire_op = sv.WireOp(InOut(type), name, sym_name=uniq_name)
+      self.wire_op = sv.WireOp(Net(type), name, sym_name=uniq_name)
       read_val = sv.ReadInOutOp(self.wire_op)
       super().__init__(read_val, type)
       self.name = name

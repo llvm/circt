@@ -527,7 +527,7 @@ TEST(NPNClassTest, MultiBitOutputMapping) {
 
   // Verify the mapping relationship.
   for (unsigned i = 0; i < 2; ++i) {
-    auto it = llvm::find(npn2.inputPermutation, i);
+    auto *it = llvm::find(npn2.inputPermutation, i);
     ASSERT_NE(it, npn2.inputPermutation.end());
     unsigned canonicalPos = it - npn2.inputPermutation.begin();
     EXPECT_EQ(permutation[i], npn1.inputPermutation[canonicalPos]);

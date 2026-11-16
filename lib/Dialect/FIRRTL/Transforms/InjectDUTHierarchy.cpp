@@ -141,6 +141,9 @@ void InjectDUTHierarchy::runOnOperation() {
   /// The name of the new module to create under the DUT.
   StringAttr wrapperName;
 
+  /// Optional name of the instance of the new module.
+  StringRef wrapperInstanceName;
+
   /// If true, then move the MarkDUTAnnotation to the newly created module.
   bool moveDut = false;
 
@@ -174,6 +177,8 @@ void InjectDUTHierarchy::runOnOperation() {
     }
 
     wrapperName = name;
+    if (auto instanceName = anno.getMember<StringAttr>("instanceName"))
+      wrapperInstanceName = instanceName.getValue();
     if (auto moveDutAnnoAttr = anno.getMember<BoolAttr>("moveDut"))
       moveDut = moveDutAnnoAttr.getValue();
   }
@@ -274,12 +279,12 @@ void InjectDUTHierarchy::runOnOperation() {
   // Instantiate the wrapper inside the DUT and wire it up.
   b.setInsertionPointToStart(dut.getBodyBlock());
   hw::InnerSymbolNamespace dutNS(dut);
-  auto wrapperInst =
-      InstanceOp::create(b, b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
-                         NameKindEnum::DroppableName, ArrayRef<Attribute>{},
-                         ArrayRef<Attribute>{}, false, false,
-                         hw::InnerSymAttr::get(b.getStringAttr(
-                             dutNS.newName(wrapper.getModuleName()))));
+  auto instanceName = wrapperInstanceName.empty() ? wrapper.getModuleName()
+                                                  : wrapperInstanceName;
+  auto wrapperInst = InstanceOp::create(
+      b, b.getUnknownLoc(), wrapper, instanceName, NameKindEnum::DroppableName,
+      ArrayRef<Attribute>{}, ArrayRef<Attribute>{}, false, false,
+      hw::InnerSymAttr::get(b.getStringAttr(dutNS.newName(instanceName))));
   for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();

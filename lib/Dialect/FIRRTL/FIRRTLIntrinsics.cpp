@@ -351,6 +351,26 @@ public:
   }
 };
 
+template <bool Sync>
+class CirctLTLAcceptOnConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedInput<UIntType>(1, 1) || gi.sizedOutput<UIntType>(1) ||
+           gi.hasNParam(0);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto operands = adaptor.getOperands();
+    rewriter.replaceOpWithNewOp<LTLAcceptOnIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0], operands[1],
+        Sync ? rewriter.getUnitAttr() : UnitAttr());
+  }
+};
+
 class CirctLTLDelayConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;

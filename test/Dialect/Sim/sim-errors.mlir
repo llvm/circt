@@ -164,3 +164,10 @@ func.func @ReadMemDimsMismatch(%arg0: !sim.dstring, %arg1: !hw.array<16xi8>) {
   %0 = sim.sv.readmem %arg0, %arg1 {dimDescending = array<i1: false, false>, dimLows = array<i64: 0>} : !hw.array<16xi8>
   return
 }
+
+// -----
+
+// expected-error @below {{duplicate alternative name 'a' in sim.variant type}}
+func.func @VariantDuplicateAlternative(%arg0: !sim.variant<a: i32, a: i8>) {
+  return
+}

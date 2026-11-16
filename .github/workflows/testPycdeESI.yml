@@ -1,11 +1,19 @@
 name: Test PyCDE and the ESI runtime
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/testPycdeESI.yml"
+      - "frontends/PyCDE/**"
+      - "**/ESI/**"
   workflow_dispatch:
   schedule:
     - cron: "0 13 * * *"
   pull_request:
     paths:
+      - ".github/workflows/testPycdeESI.yml"
       - "frontends/PyCDE/**"
       - "lib/Dialect/ESI/runtime/**"
 
@@ -21,13 +29,7 @@ jobs:
 
   build-linux:
     name: Build and Test
-    # Run on an internal MSFT subscription. Please DO NOT use this for any other
-    # workflows without talking to John Demme (john.demme@microsoft.com, GH
-    # teqdruid) first. We may lose funding for this if it ends up costing too
-    # much.
-    # If individual jobs fail due to timeouts or disconnects, please report to
-    # John and re-run the job.
-    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
+    runs-on: ubuntu-24.04
     container:
       image: ghcr.io/circt/images/pycde-esi-test:latest
       volumes:
@@ -63,11 +65,12 @@ jobs:
           pip install --upgrade pip
           pip install -r frontends/PyCDE/python/requirements.txt
 
-      - name: ccache
+      - name: sccache
         uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
         with:
           key: pycde-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
           max-size: 500M
+          variant: sccache
 
       # --------
       # Build and test CIRCT
@@ -82,15 +85,14 @@ jobs:
           BUILD_TYPE: ${{ matrix.build-type }}
         run: |
           . venv/bin/activate
-          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           mkdir build && cd build
-          # In order for ccache to be effective, these flags should be kept in sync with nighly.
           cmake -GNinja ../llvm/llvm \
             -DBUILD_SHARED_LIBS=$BUILD_SHARED \
             -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
             -DCMAKE_C_COMPILER=$CC \
             -DCMAKE_CXX_COMPILER=$CXX \
-            -DLLVM_CCACHE_BUILD=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
             -DLLVM_ENABLE_PROJECTS=mlir \
             -DLLVM_EXTERNAL_PROJECTS=circt \

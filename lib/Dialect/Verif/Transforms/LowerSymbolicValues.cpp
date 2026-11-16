@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "llvm/ADT/DenseSet.h"
@@ -109,7 +110,8 @@ void LowerSymbolicValuesPass::lowerToAnySeqWire() {
     // Create a replacement wire declaration with a `(* anyseq *)` Verilog
     // attribute.
     OpBuilder builder(op);
-    auto wireOp = sv::WireOp::create(builder, op.getLoc(), op.getType());
+    auto wireOp = sv::WireOp::create(builder, op.getLoc(),
+                                     sv::NetType::get(op.getType()));
     sv::addSVAttributes(wireOp,
                         sv::SVAttributeAttr::get(&getContext(), "anyseq"));
 

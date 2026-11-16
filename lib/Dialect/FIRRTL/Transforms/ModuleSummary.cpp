@@ -130,10 +130,8 @@ void ModuleSummaryPass::runOnOperation() {
   SmallVector<MapTy::value_type> sortedData(data.begin(), data.end());
   std::sort(sortedData.begin(), sortedData.end(),
             [](const MapTy::value_type &lhs, const MapTy::value_type &rhs) {
-              return std::get<0>(lhs).opcount * std::get<1>(lhs).size() *
-                         std::get<1>(lhs).size() >
-                     std::get<0>(rhs).opcount * std::get<1>(rhs).size() *
-                         std::get<1>(rhs).size();
+              return lhs.first.opcount * lhs.second.size() * lhs.second.size() >
+                     rhs.first.opcount * rhs.second.size() * rhs.second.size();
             });
   llvm::errs() << "cost, opcount, portcount, modcount, portBits, examplename\n";
   for (auto &p : sortedData)
@@ -141,9 +139,8 @@ void ModuleSummaryPass::runOnOperation() {
       llvm::errs() << (p.first.opcount * p.second.size() * p.second.size())
                    << "," << p.first.opcount << "," << p.first.portSizes.size()
                    << "," << p.second.size() << ","
-                   << std::accumulate(p.first.portSizes.begin(),
-                                      p.first.portSizes.end(), 0)
-                   << "," << p.second[0].getName() << "\n";
+                   << llvm::accumulate(p.first.portSizes, 0) << ","
+                   << p.second[0].getName() << "\n";
     }
   markAllAnalysesPreserved();
 }

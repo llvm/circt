@@ -17,11 +17,11 @@ using namespace comb;
 /// result of the computation.  For example, we know that "and with a constant"
 /// always returns zeros for the zero bits in a constant.
 ///
-/// Expression trees can be very large, so we need ot make sure to cap our
-/// recursion, this is controlled by `depth`.
-static KnownBits computeKnownBits(Value v, unsigned depth) {
+/// Expression trees can be very large, so we need to make sure to cap our
+/// recursion, this is controlled by `maxDepth`.
+KnownBits comb::computeKnownBits(Value v, unsigned maxDepth) {
   Operation *op = v.getDefiningOp();
-  if (!op || depth == 5)
+  if (!op || maxDepth == 0)
     return KnownBits(v.getType().getIntOrFloatBitWidth());
 
   // A constant has all bits known!
@@ -30,9 +30,9 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
 
   // `concat(x, y, z)` has whatever is known about the operands concat'd.
   if (auto concatOp = dyn_cast<ConcatOp>(op)) {
-    auto result = computeKnownBits(concatOp.getOperand(0), depth + 1);
+    auto result = computeKnownBits(concatOp.getOperand(0), maxDepth - 1);
     for (size_t i = 1, e = concatOp.getNumOperands(); i != e; ++i) {
-      auto otherBits = computeKnownBits(concatOp.getOperand(i), depth + 1);
+      auto otherBits = computeKnownBits(concatOp.getOperand(i), maxDepth - 1);
       unsigned width = otherBits.getBitWidth();
       unsigned newWidth = result.getBitWidth() + width;
       result.Zero =
@@ -49,7 +49,7 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
     unsigned lowBit = extractOp.getLowBit();
     unsigned width = extractOp.getType().getIntOrFloatBitWidth();
     // Compute known bits of the input
-    KnownBits inputBits = computeKnownBits(extractOp.getInput(), depth + 1);
+    KnownBits inputBits = computeKnownBits(extractOp.getInput(), maxDepth - 1);
     // Shift down to start at the extract position
     APInt inputZero = inputBits.Zero.lshr(lowBit);
     APInt inputOne = inputBits.One.lshr(lowBit);
@@ -66,61 +66,70 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
 
   // `and(x, y, z)` has whatever is known about the operands intersected.
   if (auto andOp = dyn_cast<AndOp>(op)) {
-    auto result = computeKnownBits(andOp.getOperand(0), depth + 1);
+    auto result = computeKnownBits(andOp.getOperand(0), maxDepth - 1);
     for (size_t i = 1, e = andOp.getNumOperands(); i != e; ++i)
-      result &= computeKnownBits(andOp.getOperand(i), depth + 1);
+      result &= computeKnownBits(andOp.getOperand(i), maxDepth - 1);
     return result;
   }
 
   // `or(x, y, z)` has whatever is known about the operands unioned.
   if (auto orOp = dyn_cast<OrOp>(op)) {
-    auto result = computeKnownBits(orOp.getOperand(0), depth + 1);
+    auto result = computeKnownBits(orOp.getOperand(0), maxDepth - 1);
     for (size_t i = 1, e = orOp.getNumOperands(); i != e; ++i)
-      result |= computeKnownBits(orOp.getOperand(i), depth + 1);
+      result |= computeKnownBits(orOp.getOperand(i), maxDepth - 1);
     return result;
   }
 
   // `xor(x, cst)` inverts known bits and passes through unmodified ones.
   if (auto xorOp = dyn_cast<XorOp>(op)) {
-    auto result = computeKnownBits(xorOp.getOperand(0), depth + 1);
+    auto result = computeKnownBits(xorOp.getOperand(0), maxDepth - 1);
     for (size_t i = 1, e = xorOp.getNumOperands(); i != e; ++i) {
       // If we don't know anything, we don't need to evaluate more subexprs.
       if (result.isUnknown())
         return result;
-      result ^= computeKnownBits(xorOp.getOperand(i), depth + 1);
+      result ^= computeKnownBits(xorOp.getOperand(i), maxDepth - 1);
     }
     return result;
   }
 
   // `mux(cond, x, y)` is the intersection of the known bits of `x` and `y`.
   if (auto muxOp = dyn_cast<MuxOp>(op)) {
-    auto lhs = computeKnownBits(muxOp.getTrueValue(), depth + 1);
-    auto rhs = computeKnownBits(muxOp.getFalseValue(), depth + 1);
+    auto lhs = computeKnownBits(muxOp.getTrueValue(), maxDepth - 1);
+    auto rhs = computeKnownBits(muxOp.getFalseValue(), maxDepth - 1);
     return lhs.intersectWith(rhs);
   }
 
   // `shl(x, y)` is the known bits of `x` << known bits of `y`.
   if (auto shlOp = dyn_cast<ShlOp>(op)) {
-    auto lhs = computeKnownBits(shlOp.getOperand(0), depth + 1);
-    auto rhs = computeKnownBits(shlOp.getOperand(1), depth + 1);
+    auto lhs = computeKnownBits(shlOp.getOperand(0), maxDepth - 1);
+    auto rhs = computeKnownBits(shlOp.getOperand(1), maxDepth - 1);
+    unsigned width = lhs.getBitWidth();
+    if (rhs.getMinValue().uge(width))
+      return KnownBits::makeConstant(APInt::getZero(width));
     auto res = KnownBits::shl(lhs, rhs);
+    // llvm::KnownBits::shl treats shifts >= bitWidth as UB/poison, whereas
+    // comb.shl produces zero on overshift. If the shift amount may be
+    // >= bitWidth, the result may be zero, so no bit can be known-one.
+    if (rhs.getMaxValue().uge(width))
+      res.One.clearAllBits();
     return res;
   }
 
   // `shr(x, y)` is the known bits of `x` >> known bits of `y`.
   if (auto shrOp = dyn_cast<ShrUOp>(op)) {
-    auto lhs = computeKnownBits(shrOp.getOperand(0), depth + 1);
-    auto rhs = computeKnownBits(shrOp.getOperand(1), depth + 1);
+    auto lhs = computeKnownBits(shrOp.getOperand(0), maxDepth - 1);
+    auto rhs = computeKnownBits(shrOp.getOperand(1), maxDepth - 1);
+    unsigned width = lhs.getBitWidth();
+    if (rhs.getMinValue().uge(width))
+      return KnownBits::makeConstant(APInt::getZero(width));
     auto res = KnownBits::lshr(lhs, rhs);
+    // llvm::KnownBits::lshr treats shifts >= bitWidth as UB/poison, whereas
+    // comb.shru produces zero on overshift. If the shift amount may be
+    // >= bitWidth, the result may be zero, so no bit can be known-one.
+    if (rhs.getMaxValue().uge(width))
+      res.One.clearAllBits();
     return res;
   }
 
   return KnownBits(v.getType().getIntOrFloatBitWidth());
-}
-
-/// Given an integer SSA value, check to see if we know anything about the
-/// result of the computation.  For example, we know that "and with a
-/// constant" always returns zeros for the zero bits in a constant.
-KnownBits comb::computeKnownBits(Value value) {
-  return ::computeKnownBits(value, 0);
 }

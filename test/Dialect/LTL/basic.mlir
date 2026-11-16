@@ -108,6 +108,13 @@ ltl.eventually %true : i1
 ltl.eventually %s : !ltl.sequence
 ltl.eventually %p : !ltl.property
 
+// CHECK: ltl.accept_on {{%.+}}, %true : !ltl.property
+ltl.accept_on %p, %true : !ltl.property
+// CHECK: ltl.accept_on {{%.+}}, %true sync : !ltl.property
+ltl.accept_on %p, %true sync : !ltl.property
+// CHECK: ltl.accept_on {{%.+}}, %true : !ltl.sequence
+ltl.accept_on %s, %true : !ltl.sequence
+
 // CHECK: ltl.past {{%.+}}, 5 clk {{%.+}} : i8
 ltl.past %c0_i8, 5 clk %true : i8
 

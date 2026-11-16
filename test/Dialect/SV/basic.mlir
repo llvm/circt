@@ -554,3 +554,14 @@ hw.module @test_var() {
   %v_sym = sv.var sym @v_sym : !sv.var<i32>
   %v_init_sym = sv.var init %init sym @v_init_sym : !sv.var<i32>
 }
+
+// CHECK-LABEL: hw.module @test_var_assign
+hw.module @test_var_assign(in %a: i32, in %b: i8) {
+  %v = sv.var : !sv.var<i32>
+  %w = sv.var : !sv.var<i8>
+  // CHECK: sv.var_assign %v, %a : i32
+  sv.var_assign %v, %a : i32
+  // CHECK: sv.var_assign %w, %b : i8
+  sv.var_assign %w, %b : i8
+}
+

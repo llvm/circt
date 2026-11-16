@@ -135,8 +135,8 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
           circuit.setAnnotationsAttr(
               ArrayAttr::get(circuit.getContext(), newAnnotations));
         })
-        .Case<ObjectOp>([&](ObjectOp obj) {
-          auto resultTypeName = obj.getResult().getType().getName();
+        .Case<FObjectLike>([&](auto obj) {
+          auto resultTypeName = obj.getClassName();
           if (auto *newOp = renameTable.lookup(resultTypeName))
             obj.getResult().setType(dyn_cast<ClassOp>(newOp).getInstanceType());
         })

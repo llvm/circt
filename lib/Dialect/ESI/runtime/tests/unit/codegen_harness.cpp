@@ -498,16 +498,31 @@ void testUnion() {
   UnionTwo u;
   u.big(0xCAFE);
   assert(u.big() == 0xCAFE);
-  // Narrow variant at MSB end: small = high byte of big (little-endian
-  // layout means high byte is at byte_offset = union_bytes - 1 = 1).
-  assert(u.small() == 0xCA);
+  assert(u.small() == 0xFE);
   expectBytes(u, std::array<uint8_t, 2>{0xFE, 0xCA}, "Union big");
 
   u.small(0xA5);
   assert(u.small() == 0xA5);
-  // Writing the narrow variant overwrites only its byte slot at the
-  // MSB end; the LSB byte retains its previous content.
-  expectBytes(u, std::array<uint8_t, 2>{0xFE, 0xA5}, "Union small");
+  // Setters preserve bits outside the selected member.
+  expectBytes(u, std::array<uint8_t, 2>{0xA5, 0xCA}, "Union small");
+
+  UnionTwo narrow;
+  narrow.small(0xA5);
+  expectBytes(narrow, std::array<uint8_t, 2>{0xA5, 0}, "Union padding");
+
+  UnionSubByte sub;
+  sub.big(0xABC);
+  assert(sub.tiny() == 4);
+  assert(sub.signed_small() == -4);
+  assert(sub.cell().hi() == 7);
+  assert(sub.cell().lo() == 0);
+  sub.tiny(5);
+  assert(sub.big() == 0xABD);
+  sub.signed_small(-7);
+  assert(sub.big() == 0xAB9);
+  sub.cell(SbCell(2, 1));
+  assert(sub.big() == 0xAA9);
+  expectBytes(sub, std::array<uint8_t, 2>{0xA9, 0x0A}, "Sub-byte union");
 }
 
 // ---------------------------------------------------------------------------
@@ -540,10 +555,7 @@ void testWindowList() {
   auto data_seg = win.segment(1);
   auto footer_seg = win.segment(2);
   assert(data_seg.size == elements.size() * sizeof(uint32_t));
-  // Content is MSB-aligned within the 32-bit frame: `tag` (ui16) occupies
-  // the top 16 bits (bytes 2..3) and the count (ui16) the low 16 bits
-  // (bytes 0..1). Here the content fills the frame exactly, so header bytes =
-  // [count_lo, count_hi, tag_lo, tag_hi].
+  // The header fills the frame: [count_lo, count_hi, tag_lo, tag_hi].
   assert(header_seg.size == 4);
   assert(header_seg.data[0] == (static_cast<uint8_t>(elements.size()) & 0xFF));
   assert(header_seg.data[1] == 0); // count high byte (size < 256)
@@ -587,34 +599,24 @@ void testWindowListMultiBurst() {
   assert(win.segment(5).size == 1 * sizeof(uint32_t)); // burst 2 data
   assert(win.segment(6).size == 4);                    // footer
 
-  // The header content is MSB-aligned within the 32-bit frame, exactly as
-  // CIRCT lowers the frame union: `tag` (ui16) sits at bits [31:16]
-  // (bytes 2..3) and the 2-bit count immediately below it at bits [15:14] --
-  // the top two bits of byte 1 -- with the remaining low bits zero. Only the
-  // first burst's header carries the static tag; later bursts and the footer
-  // leave it zero. (The old byte-granular codegen put the count in the low
-  // bits of byte 1, which the hardware would have read as zero.)
-  auto headerCount = [](const auto &s) -> unsigned {
-    return (s.data[1] >> 6) & 0x3;
-  };
+  // The 18-bit header shares the frame's LSB: count at [1:0], tag at [17:2],
+  // and zero padding at [31:18]. Only the first burst carries the tag.
+  auto headerCount = [](const auto &s) -> unsigned { return s.data[0] & 0x3; };
   assert(headerCount(win.segment(0)) == 3);
   assert(headerCount(win.segment(2)) == 3);
   assert(headerCount(win.segment(4)) == 1);
   assert(headerCount(win.segment(6)) == 0);
-  // Exact header-frame bytes. Burst 0 (count 3, tag 0xBEEF):
-  //   byte0 = 0x00 (pad), byte1 = 0xC0 (count 3 at bits [15:14]),
-  //   byte2 = 0xEF, byte3 = 0xBE (tag, little-endian, at bits [31:16]).
-  assert(win.segment(0).data[0] == 0x00);
-  assert(win.segment(0).data[1] == 0xC0);
-  assert(win.segment(0).data[2] == 0xEF);
-  assert(win.segment(0).data[3] == 0xBE);
-  // Later bursts repeat the count but not the tag (bytes 2..3 stay zero).
-  assert(win.segment(2).data[1] == 0xC0); // count 3
+  assert(win.segment(0).data[0] == 0xBF);
+  assert(win.segment(0).data[1] == 0xFB);
+  assert(win.segment(0).data[2] == 0x02);
+  assert(win.segment(0).data[3] == 0x00);
+  assert(win.segment(2).data[0] == 0x03);
+  assert(win.segment(2).data[1] == 0x00);
   assert(win.segment(2).data[2] == 0x00);
   assert(win.segment(2).data[3] == 0x00);
-  assert(win.segment(4).data[1] == 0x40); // count 1
+  assert(win.segment(4).data[0] == 0x01);
   // Footer: zero count, zero tag.
-  assert(win.segment(6).data[1] == 0x00);
+  assert(win.segment(6).data[0] == 0x00);
 
   // Round-trip: flatten the multi-burst stream and feed it back through the
   // generated serial-list deserializer. It must rebuild one window holding
@@ -635,6 +637,35 @@ void testWindowListMultiBurst() {
   assert(reassembled.size() == elements.size());
   for (std::size_t j = 0; j < elements.size(); ++j)
     assert(reassembled[j] == elements[j]);
+}
+
+void testWindowNarrowData() {
+  std::vector<uint8_t> elements{0x35, 0x6A};
+  NarrowDataWindow win(0xBEEF, elements);
+  assert(win.tag() == 0xBEEF);
+  assert(win.items_vector() == elements);
+
+  // The 18-bit header is wider than the 7-bit data, so each data frame has
+  // high padding both within its first byte and in the following bytes.
+  const std::vector<uint8_t> expected{0xBE, 0xFB, 0x02, 0x35, 0, 0,
+                                      0x6A, 0,    0,    0,    0, 0};
+  auto message = win.toMessageData();
+  assert(message.getSize() == expected.size());
+  for (std::size_t i = 0; i < expected.size(); ++i)
+    assert(message.getData()[i] == expected[i]);
+
+  std::unique_ptr<NarrowDataWindow> decoded;
+  NarrowDataWindow::TypeDeserializer deser(
+      [&](std::unique_ptr<NarrowDataWindow> &out) {
+        decoded = std::move(out);
+        return true;
+      });
+  std::unique_ptr<esi::SegmentedMessageData> msg =
+      std::make_unique<esi::MessageData>(message);
+  assert(deser.push(msg));
+  assert(decoded);
+  assert(decoded->tag() == 0xBEEF);
+  assert(decoded->items_vector() == elements);
 }
 
 // ---------------------------------------------------------------------------
@@ -954,6 +985,7 @@ int main() {
   testUnion();
   testWindowList();
   testWindowListMultiBurst();
+  testWindowNarrowData();
   testWideUnsigned();
   testWideSigned();
   testBitsField();

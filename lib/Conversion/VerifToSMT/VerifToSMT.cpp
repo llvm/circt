@@ -84,6 +84,18 @@ static void attachTraceRecords(
   }
 }
 
+/// An enabled assert-like op only constrains its property while the enable
+/// holds, so return `enable => cond` if there is an enable.
+static Value applyEnable(ConversionPatternRewriter &rewriter,
+                         const TypeConverter *typeConverter, Location loc,
+                         Value enable, Value cond) {
+  if (!enable)
+    return cond;
+  Value en = typeConverter->materializeTargetConversion(
+      rewriter, loc, smt::BoolType::get(rewriter.getContext()), enable);
+  return smt::ImpliesOp::create(rewriter, loc, en, cond);
+}
+
 /// Lower a verif::AssertOp operation with an i1 operand to a smt::AssertOp,
 /// negated to check for unsatisfiability.
 struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
@@ -95,6 +107,8 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
     Value cond = typeConverter->materializeTargetConversion(
         rewriter, op.getLoc(), smt::BoolType::get(getContext()),
         adaptor.getProperty());
+    cond = applyEnable(rewriter, typeConverter, op.getLoc(),
+                       adaptor.getEnable(), cond);
     Value notCond = smt::NotOp::create(rewriter, op.getLoc(), cond);
     rewriter.replaceOpWithNewOp<smt::AssertOp>(op, notCond);
     return success();
@@ -111,6 +125,8 @@ struct VerifAssumeOpConversion : OpConversionPattern<verif::AssumeOp> {
     Value cond = typeConverter->materializeTargetConversion(
         rewriter, op.getLoc(), smt::BoolType::get(getContext()),
         adaptor.getProperty());
+    cond = applyEnable(rewriter, typeConverter, op.getLoc(),
+                       adaptor.getEnable(), cond);
     rewriter.replaceOpWithNewOp<smt::AssertOp>(op, cond);
     return success();
   }
@@ -413,8 +429,7 @@ struct VerifBoundedModelCheckingOpConversion
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
 
-    if (std::find(propertylessBMCOps.begin(), propertylessBMCOps.end(), op) !=
-        propertylessBMCOps.end()) {
+    if (llvm::find(propertylessBMCOps, op) != propertylessBMCOps.end()) {
       // No properties to check, so we don't bother solving, we just return true
       // (without this we would incorrectly find violations, since the solver
       // will always return SAT)

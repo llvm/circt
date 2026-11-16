@@ -92,6 +92,10 @@ try:
 except ImportError:
   pass
 
+# The ESI manifest is only compressed and instantiated when zlib is available.
+if config.zlib == "1":
+  config.available_features.add('zlib')
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 # Tweak the PYTHONPATH to include the binary dir.

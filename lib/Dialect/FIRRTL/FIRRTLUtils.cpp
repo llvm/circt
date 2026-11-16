@@ -614,7 +614,7 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
 
     auto *op = value.getDefiningOp();
     TypeSwitch<Operation *>(op)
-        .Case<ObjectOp>([&](ObjectOp op) {
+        .Case<FObjectLike>([&](auto op) {
           string += op.getInstanceName();
           value = nullptr;
         })
@@ -1107,6 +1107,15 @@ Type circt::firrtl::lowerType(
     return seq::ClockType::get(firType.getContext());
 
   auto width = firType.getBitWidthOrSentinel();
+
+  if (width >= 0 && static_cast<unsigned>(width) > IntegerType::kMaxWidth) {
+    Location errLoc = loc.value_or(UnknownLoc::get(type.getContext()));
+    emitError(errLoc, "integer width ")
+        << width << " exceeds the maximum supported width of "
+        << IntegerType::kMaxWidth;
+    return {};
+  }
+
   if (width >= 0) // IntType, analog with known width, clock, etc.
     return IntegerType::get(type.getContext(), width);
 
@@ -1259,7 +1268,7 @@ circt::firrtl::InstanceChoiceMacroTable::InstanceChoiceMacroTable(
 FlatSymbolRefAttr
 circt::firrtl::InstanceChoiceMacroTable::getMacro(StringAttr optionName,
                                                   StringAttr caseName) const {
-  auto it = cache.find({optionName, caseName});
+  const auto *it = cache.find({optionName, caseName});
   if (it == cache.end())
     return {};
   return it->second;

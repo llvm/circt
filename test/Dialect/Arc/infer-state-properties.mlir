@@ -247,3 +247,52 @@ hw.module @testModule (in %arg0: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1, i
 
 // TODO: test that patterns handle the case where the output is used for another thing as well properly
 // TODO: test that reset and enable are only added when the latency is actually 1 or higher
+
+arc.define @arrayEnable(%enable: i1, %data: !hw.array<2xi8>, %self: !hw.array<2xi8>) -> !hw.array<2xi8> {
+  %next = comb.mux %enable, %data, %self : !hw.array<2xi8>
+  arc.output %next : !hw.array<2xi8>
+}
+
+arc.define @structDisable(%disable: i1, %data: !hw.struct<a: i3, b: i5>, %self: !hw.struct<a: i3, b: i5>) -> !hw.struct<a: i3, b: i5> {
+  %next = comb.mux %disable, %self, %data : !hw.struct<a: i3, b: i5>
+  arc.output %next : !hw.struct<a: i3, b: i5>
+}
+
+// CHECK-LABEL: hw.module @testArray
+hw.module @testArray(in %clock: !seq.clock, in %enable: i1, in %data: !hw.array<2xi8>, out result: !hw.array<2xi8>) {
+  // CHECK: %[[TRUE:.+]] = hw.constant true
+  // CHECK: %[[ZERO:.+]] = hw.constant 0 : i16
+  // CHECK: %[[FEEDBACK:.+]] = hw.bitcast %[[ZERO]] : (i16) -> !hw.array<2xi8>
+  // CHECK: %[[Q:.+]] = arc.state @arrayEnable(%[[TRUE]], %data, %[[FEEDBACK]]) clock %clock enable %enable latency 1 : (i1, !hw.array<2xi8>, !hw.array<2xi8>) -> !hw.array<2xi8>
+  // CHECK: hw.output %[[Q]] : !hw.array<2xi8>
+  %q = arc.state @arrayEnable(%enable, %data, %q) clock %clock latency 1 : (i1, !hw.array<2xi8>, !hw.array<2xi8>) -> !hw.array<2xi8>
+  hw.output %q : !hw.array<2xi8>
+}
+
+// CHECK-LABEL: hw.module @testStruct
+hw.module @testStruct(in %clock: !seq.clock, in %disable: i1, in %data: !hw.struct<a: i3, b: i5>, out result: !hw.struct<a: i3, b: i5>) {
+  // CHECK: %[[TRUE:.+]] = hw.constant true
+  // CHECK: %[[FALSE:.+]] = hw.constant false
+  // CHECK: %[[ENABLE:.+]] = comb.xor %disable, %[[TRUE]] : i1
+  // CHECK: %[[ZERO:.+]] = hw.constant 0 : i8
+  // CHECK: %[[FEEDBACK:.+]] = hw.bitcast %[[ZERO]] : (i8) -> !hw.struct<a: i3, b: i5>
+  // CHECK: %[[Q:.+]] = arc.state @structDisable(%[[FALSE]], %data, %[[FEEDBACK]]) clock %clock enable %[[ENABLE]] latency 1 : (i1, !hw.struct<a: i3, b: i5>, !hw.struct<a: i3, b: i5>) -> !hw.struct<a: i3, b: i5>
+  // CHECK: hw.output %[[Q]] : !hw.struct<a: i3, b: i5>
+  %q = arc.state @structDisable(%disable, %data, %q) clock %clock latency 1 : (i1, !hw.struct<a: i3, b: i5>, !hw.struct<a: i3, b: i5>) -> !hw.struct<a: i3, b: i5>
+  hw.output %q : !hw.struct<a: i3, b: i5>
+}
+
+// Float feedback has no known HW bit width. Leave the state unchanged instead
+// of partially applying enable inference or attempting to create an i-1 zero.
+arc.define @floatEnable(%enable: i1, %data: f32, %self: f32) -> f32 {
+  %next = comb.mux %enable, %data, %self : f32
+  arc.output %next : f32
+}
+
+// CHECK-LABEL: hw.module @testFloat
+hw.module @testFloat(in %clock: !seq.clock, in %enable: i1, in %data: f32, out result: f32) {
+  // CHECK-NEXT: %[[Q:.+]] = arc.state @floatEnable(%enable, %data, %[[Q]]) clock %clock latency 1 : (i1, f32, f32) -> f32
+  // CHECK-NEXT: hw.output %[[Q]] : f32
+  %q = arc.state @floatEnable(%enable, %data, %q) clock %clock latency 1 : (i1, f32, f32) -> f32
+  hw.output %q : f32
+}

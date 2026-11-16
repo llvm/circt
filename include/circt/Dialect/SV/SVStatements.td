@@ -365,7 +365,9 @@ def ValidationQualifierTypeEnum: I32EnumAttr<"ValidationQualifierTypeEnum", "val
   let cppNamespace = "::circt::sv";
 }
 
-def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier">;
+def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier"> {
+  let assemblyFormat = "$value";
+}
 
 def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
                            ProceduralRegion, ProceduralOp]> {
@@ -411,19 +413,32 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
 // Assignment Related Statements
 //===----------------------------------------------------------------------===//
 
-def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
+def AssignOp : SVOp<"assign", [SVHandleElementConstraint<"src", "dest">,
                                  NonProceduralOp]> {
   let summary = "Continuous assignment";
   let description = [{
     A SystemVerilog assignment statement 'x = y;'.
     These occur in module scope.  See SV Spec 10.3.2.
   }];
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins AnyTypeOf<[InOutType, NetType]>:$dest,
+                       AnyTypeOf<[InOutElementType, NetElementType]>:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src attr-dict `:` custom<SVHandleAssignmentTypes>(type($dest), type($src))";
+}
+
+def VarAssignOp : SVOp<"var_assign", [VarTypeConstraint<"src", "dest">,
+                                      NonProceduralOp]> {
+  let summary = "Continuous assignment for a single driver variable";
+  let description = [{
+    A SystemVerilog assignment statement 'assign x = y;' to a variable.
+    These occur in module scope.  See SV Spec 10.3.2.
+  }];
+  let arguments = (ins VarType:$dest, VarElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($src))";
 }
 
-def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
+def BPAssignOp : SVOp<"bpassign", [SVHandleElementConstraint<"src", "dest">,
                                    ProceduralOp]> {
   let summary = "Blocking procedural assignment";
   let description = [{
@@ -432,13 +447,14 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
     executed before any following statements are. See SV Spec 10.4.1.
   }];
   let hasCanonicalizeMethod = true;
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins AnyTypeOf<[InOutType, VarType]>:$dest,
+                       AnyTypeOf<[InOutElementType, VarElementType]>:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` custom<SVHandleAssignmentTypes>(type($dest), type($src))";
   let hasVerifier = 1;
 }
 
-def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
+def PAssignOp : SVOp<"passign", [SVHandleElementConstraint<"src", "dest">,
                                  ProceduralOp]> {
   let summary = "Nonblocking procedural assignment";
   let description = [{
@@ -447,9 +463,10 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
     can be scheduled without blocking procedural flow.  See SV Spec 10.4.2.
   }];
   let hasCanonicalizeMethod = true;
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins AnyTypeOf<[InOutType, VarType]>:$dest,
+                       AnyTypeOf<[InOutElementType, VarElementType]>:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` custom<SVHandleAssignmentTypes>(type($dest), type($src))";
   let hasVerifier = 1;
 }
 
@@ -459,7 +476,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
 // Other Statements
 //===----------------------------------------------------------------------===//
 
-def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
+def ForceOp : SVOp<"force", [SVHandleElementConstraint<"src", "dest">,
                                    ProceduralOp]> {
   let summary = "Force procedural statement";
   let description = [{
@@ -472,9 +489,9 @@ def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
     net or a concatenation. It cannot be a memory word or a bit-select
     or part-select of a vector variable. See SV Spec 10.6.2.
   }];
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins SVHandleType:$dest, SVHandleElementType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` custom<SVHandleAssignmentTypes>(type($dest), type($src))";
 }
 
 def ReleaseOp : SVOp<"release", [ProceduralOp]> {
@@ -489,7 +506,7 @@ def ReleaseOp : SVOp<"release", [ProceduralOp]> {
     active assign procedural continuous assignment shall immediately
     reestablish that assignment. See SV Spec 10.6.2.
   }];
-  let arguments = (ins InOutType:$dest);
+  let arguments = (ins SVHandleType:$dest);
   let results = (outs);
   let assemblyFormat = "$dest attr-dict `:` qualified(type($dest))";
 }
@@ -501,7 +518,8 @@ def AliasOp : SVOp<"alias"> {
     bits within a net.  Aliases always have at least two operands.
   }];
 
-  let arguments = (ins Variadic<InOutType>:$aliases);
+  let arguments =
+      (ins Variadic<AnyTypeOf<[InOutType, NetType]>>:$aliases);
   let results = (outs);
 
   let assemblyFormat = "$aliases attr-dict `:` qualified(type($aliases))";
@@ -824,15 +842,16 @@ foreach severity = ["Error", "Warning", "Info"] in {
 }
 
 def DepositOp : SVOp<"nonstandard.deposit",
-    [ProceduralOp, VendorExtension, InOutTypeConstraint<"src", "dest">]> {
+    [ProceduralOp, VendorExtension,
+     SVHandleElementConstraint<"src", "dest">]> {
   let summary = "`$deposit` system task";
   let description = [{
     This system task sets the value of a net or variable, but doesn't hold it.
     This is a common simulation vendor extension.
   }];
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins SVHandleType:$dest, SVHandleElementType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` custom<SVHandleAssignmentTypes>(type($dest), type($src))";
 }
 
 
@@ -855,7 +874,8 @@ def ReadMemOp : SVOp<"readmem", [ProceduralOp]> {
     See Section 21.4 of IEEE 1800-2017 for more information.
   }];
   let arguments =
-    (ins InOutType:$dest, StrAttr:$filename, MemBaseTypeAttr:$base);
+    (ins AnyTypeOf<[InOutType, VarType]>:$dest, StrAttr:$filename,
+         MemBaseTypeAttr:$base);
   let results = (outs);
   let assemblyFormat =
     "$dest `,` $filename `,` $base attr-dict `:` qualified(type($dest))";
@@ -1025,7 +1045,9 @@ def IncludeStyle
   let genSpecializedAttr = 0;
 }
 
-def IncludeStyleAttr : EnumAttr<SVDialect, IncludeStyle, "include_style">;
+def IncludeStyleAttr : EnumAttr<SVDialect, IncludeStyle, "include_style"> {
+  let assemblyFormat = "$value";
+}
 
 def IncludeOp : SVOp<"include"> {
   let summary = "preprocessor `include directive";

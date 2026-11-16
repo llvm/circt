@@ -34,8 +34,8 @@ hw.module @Foo(in %a: i32, out x: i32) {
   // CHECK: hw.output [[OUT]]
   %c1_i32 = hw.constant 1 : i32
   %c2_i32 = hw.constant 2 : i32
-  %0 = llhd.constant_time <42000000fs, 0d, 0e>
-  %1 = llhd.constant_time <11000000fs, 0d, 0e>
+  %0 = llhd.constant_time <42000000fs, 0d>
+  %1 = llhd.constant_time <11000000fs, 0d>
   %2 = llhd.process -> i32 {
     llhd.wait yield (%c1_i32 : i32), delay %0, ^bb1
   ^bb1:
@@ -60,7 +60,7 @@ hw.module @Foo(in %a: i32, out x: i32) {
 // CHECK-LABEL: hw.module @NoResults
 hw.module @NoResults() {
   // CHECK: arc.coroutine.instance @NoResults.llhd.process() sensitive [] : () -> ()
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   llhd.process {
     llhd.wait delay %t, ^bb1
   ^bb1:
@@ -79,7 +79,7 @@ hw.module @NoResults() {
 hw.module @NoCaptures(out o: i32) {
   // CHECK: arc.coroutine.instance @NoCaptures.llhd.process() sensitive [] : () -> i32
   %c7 = hw.constant 7 : i32
-  %t = llhd.constant_time <5ns, 0d, 0e>
+  %t = llhd.constant_time <5ns, 0d>
   %r = llhd.process -> i32 {
     llhd.wait yield (%c7 : i32), delay %t, ^bb1
   ^bb1:
@@ -101,7 +101,7 @@ hw.module @MultiResult(out a: i32, out b: i8) {
   // CHECK: arc.coroutine.instance @MultiResult.llhd.process() sensitive [] : () -> (i32, i8)
   %c32 = hw.constant 9 : i32
   %c8 = hw.constant 3 : i8
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   %x, %y = llhd.process -> i32, i8 {
     llhd.wait yield (%c32, %c8 : i32, i8), delay %t, ^bb1
   ^bb1:
@@ -121,7 +121,7 @@ hw.module @MultiResult(out a: i32, out b: i8) {
 hw.module @MultiCapture(in %a: i32, in %b: i8, out o: i32) {
   // CHECK: arc.coroutine.instance @MultiCapture.llhd.process(%a, %b) sensitive [false, false] : (i32, i8) -> i32
   %c1 = hw.constant 1 : i32
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   %res = llhd.process -> i32 {
     %sum = comb.concat %a, %b : i32, i8
     llhd.wait yield (%c1 : i32), delay %t, ^bb1
@@ -145,7 +145,7 @@ hw.module @MultiCapture(in %a: i32, in %b: i8, out o: i32) {
 // CHECK-LABEL: hw.module @WaitDestOperands
 hw.module @WaitDestOperands(in %a: i32, out o: i32) {
   %c0 = hw.constant 0 : i32
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   %r = llhd.process -> i32 {
     %carry = comb.add %a, %c0 : i32
     llhd.wait yield (%c0 : i32), delay %t, ^bb1(%carry : i32)
@@ -189,7 +189,7 @@ hw.module @WaitWithoutDelay(out o: i32) {
 
 // CHECK-LABEL: hw.module @SameDelayReused
 hw.module @SameDelayReused() {
-  %t = llhd.constant_time <2ns, 0d, 0e>
+  %t = llhd.constant_time <2ns, 0d>
   llhd.process {
     llhd.wait delay %t, ^bb1
   ^bb1:
@@ -219,7 +219,7 @@ hw.module @SameDelayReused() {
 
 // CHECK-LABEL: hw.module @DiamondMerge
 hw.module @DiamondMerge(in %a: i32) {
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   %c0 = hw.constant 0 : i32
   llhd.process {
     %cond = comb.icmp eq %a, %c0 : i32
@@ -257,7 +257,7 @@ hw.module @DiamondMerge(in %a: i32) {
 
 // CHECK-LABEL: hw.module @TwoYieldsJoin
 hw.module @TwoYieldsJoin(in %a: i32) {
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   %c0 = hw.constant 0 : i32
   llhd.process {
     %cond = comb.icmp eq %a, %c0 : i32
@@ -297,7 +297,7 @@ hw.module @TwoYieldsJoin(in %a: i32) {
 
 // CHECK-LABEL: hw.module @LongChain
 hw.module @LongChain(in %a: i32) {
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   llhd.process {
     llhd.wait delay %t, ^bb1
   ^bb1:
@@ -330,7 +330,7 @@ hw.module @LongChain(in %a: i32) {
 
 // CHECK-LABEL: hw.module @LoopHeaderResume
 hw.module @LoopHeaderResume(in %a: i32) {
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   llhd.process {
     cf.br ^header
   ^header:
@@ -375,7 +375,7 @@ hw.module @MultiProcess() {
 
 // CHECK-LABEL: hw.module @SharedResumeBlock
 hw.module @SharedResumeBlock(in %a: i32) {
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   %c0 = hw.constant 0 : i32
   llhd.process {
     %cond = comb.icmp eq %a, %c0 : i32
@@ -409,7 +409,7 @@ hw.module @SharedResumeBlock(in %a: i32) {
 
 // CHECK-LABEL: hw.module @ResumeAlsoMerges
 hw.module @ResumeAlsoMerges(in %a: i32) {
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   %c0 = hw.constant 0 : i32
   llhd.process {
     %cond = comb.icmp eq %a, %c0 : i32
@@ -440,7 +440,7 @@ hw.module @ResumeAlsoMerges(in %a: i32) {
 // CHECK-LABEL: hw.module @ConstInNestedRegion
 hw.module @ConstInNestedRegion(in %cond: i1) {
   %c5 = hw.constant 5 : i32
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   llhd.process {
     scf.if %cond {
       %sum = comb.add %c5, %c5 : i32
@@ -466,7 +466,7 @@ hw.module @ConstInNestedRegion(in %cond: i1) {
 
 // CHECK-LABEL: hw.module @ZeroDelay
 hw.module @ZeroDelay() {
-  %t = llhd.constant_time <0fs, 0d, 0e>
+  %t = llhd.constant_time <0fs, 0d>
   llhd.process {
     llhd.wait delay %t, ^bb1
   ^bb1:
@@ -515,7 +515,7 @@ hw.module @ObserveOnly(in %clk: i1) {
 // CHECK-LABEL: hw.module @ObserveAndDelay
 hw.module @ObserveAndDelay(in %clk: i1) {
   // CHECK: arc.coroutine.instance @ObserveAndDelay.llhd.process(%clk) sensitive [true] : (i1)
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   llhd.process {
     llhd.wait delay %t, (%clk : i1), ^bb1
   ^bb1:
@@ -536,7 +536,7 @@ hw.module @ObserveAndDelay(in %clk: i1) {
 // CHECK-LABEL: hw.module @ObserveMulti
 hw.module @ObserveMulti(in %a: i1, in %b: i1) {
   // CHECK: arc.coroutine.instance @ObserveMulti.llhd.process(%a, %b) sensitive [true, true]
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   llhd.process {
     llhd.wait delay %t, (%a, %b : i1, i1), ^bb1
   ^bb1:
@@ -556,7 +556,7 @@ hw.module @ObserveMulti(in %a: i1, in %b: i1) {
 // CHECK-LABEL: hw.module @ObserveSome
 hw.module @ObserveSome(in %a: i1, in %b: i1) {
   // CHECK: arc.coroutine.instance @ObserveSome.llhd.process(%a, %b) sensitive [false, true] : (i1, i1)
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   llhd.process -> i1 {
     llhd.wait yield (%a : i1), delay %t, (%b : i1), ^bb1
   ^bb1:
@@ -580,7 +580,7 @@ hw.module @ObserveSome(in %a: i1, in %b: i1) {
 
 // CHECK-LABEL: hw.module @ObserveInternal
 hw.module @ObserveInternal(in %a: i1) {
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   %true = hw.constant true
   llhd.process {
     %inv = comb.xor %a, %true : i1
@@ -605,7 +605,7 @@ hw.module @ObserveInternal(in %a: i1) {
 
 // CHECK-LABEL: hw.module @ObserveResumeArg
 hw.module @ObserveResumeArg(in %a: i8) {
-  %t = llhd.constant_time <1ns, 0d, 0e>
+  %t = llhd.constant_time <1ns, 0d>
   llhd.process {
     llhd.wait delay %t, ^bb1(%a : i8)
   ^bb1(%x: i8):

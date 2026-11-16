@@ -36,7 +36,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
     }];
 
   let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs InOutType:$result);
+  let results = (outs AnyTypeOf<[InOutType, NetType], "InOutType">:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -57,7 +57,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return llvm::cast<InOutType>(getResult().getType()).getElementType();
+      return getHandleElementType(getResult().getType());
     }
   }];
 }
@@ -154,7 +154,7 @@ def XMROp : SVOp<"xmr", []> {
     path has public visibility so paths are not invalidated.
   }];
   let arguments = (ins UnitAttr:$isRooted, StrArrayAttr:$path, StrAttr:$terminal);
-  let results = (outs InOutType:$result);
+  let results = (outs SVHandleType:$result);
   let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` qualified(type($result))";
 }
 
@@ -180,7 +180,7 @@ def XMRRefOp : SVOp<"xmr.ref", [
     ins FlatSymbolRefAttr:$ref,
     DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix
   );
-  let results = (outs InOutType:$result);
+  let results = (outs SVHandleType:$result);
   let assemblyFormat = [{
     $ref ( $verbatimSuffix^ )? attr-dict `:` qualified(type($result))
   }];
@@ -192,32 +192,32 @@ def XMRRefOp : SVOp<"xmr.ref", [
 
 def ReadInOutOp
  : SVOp<"read_inout",
-        [Pure, InOutElementConstraint<"result", "input">]> {
+        [Pure, SVHandleElementConstraint<"result", "input">]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
-  let arguments = (ins InOutType:$input);
-  let results = (outs HWValueType:$result);
+  let arguments = (ins SVHandleType:$input);
+  let results = (outs SVHandleElementType:$result);
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
-def InOutArrayType
-  : Type<CPred<"getAnyHWArrayElementType(getInOutElementType($_self)) "
+def SVHandleArrayType
+  : Type<CPred<"getAnyHWArrayElementType(getHandleElementType($_self)) "
                         "!= Type()">,
-         "an inout type with array element", "::circt::hw::InOutType">;
+         "an SV handle type with array element", "::mlir::Type">;
 
-class InOutIndexConstraint<string value, string inoutValue>
-  : TypesMatchWith<"type should be element of inout type",
-                   inoutValue, value,
-                   "InOutType::get(getAnyHWArrayElementType("
-                                            "getInOutElementType($_self)))">;
+class SVHandleIndexConstraint<string value, string handleValue>
+ : TypesMatchWith<"type should be element of SV handle type",
+                  handleValue, value,
+                  "sv::getHandleOfElementType($_self, getAnyHWArrayElementType("
+                                           "getHandleElementType($_self)))">;
 
 def ArrayIndexInOutOp
  : SVOp<"array_index_inout",
-        [Pure, InOutIndexConstraint<"result", "input">]> {
+        [Pure, SVHandleIndexConstraint<"result", "input">]> {
   let summary = "Index an inout memory to produce an inout element";
   let description = "See SV Spec 11.5.2.";
-  let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
-  let results = (outs InOutType:$result);
+  let arguments = (ins SVHandleArrayType:$input, HWIntegerType:$index);
+  let results = (outs SVHandleType:$result);
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 }
@@ -232,9 +232,9 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
                 " then part select decrements starting from $base."
                 "See SV Spec 11.5.1.";
 
-  let arguments = (ins InOutType:$input, HWIntegerType:$base, I32Attr:$width,
+  let arguments = (ins SVHandleType:$input, HWIntegerType:$base, I32Attr:$width,
                       UnitAttr:$decrement);
-  let results = (outs InOutType:$result);
+  let results = (outs SVHandleType:$result);
 
   let hasVerifier = 1;
 
@@ -254,17 +254,18 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
                         " attr-dict `:` qualified(type($input)) `,` qualified(type($base))";
 }
 
-def InOutStructType
-  : Type<CPred<"circt::hw::type_isa_and_nonnull<hw::StructType>(getInOutElementType($_self))">,
-         "an inout type with struct field", "::circt::hw::InOutType">;
+def SVHandleStructType
+ : Type<CPred<"circt::hw::type_isa_and_nonnull<hw::StructType>("
+              "sv::getHandleElementType($_self))">,
+        "an SV handle type with struct field">;
 
 def StructFieldInOutOp : SVOp<"struct_field_inout",
                               [Pure, InferTypeOpInterface]> {
   let summary = "Create an subfield inout memory to produce an inout element.";
   let description = "See SV Spec 7.2.";
 
-  let arguments = (ins InOutStructType:$input, StrAttr:$field);
-  let results = (outs InOutType:$result);
+  let arguments = (ins SVHandleStructType:$input, StrAttr:$field);
+  let results = (outs SVHandleType:$result);
 
   let assemblyFormat =
     "$input `[` $field `]` attr-dict `:` qualified(type($input))";

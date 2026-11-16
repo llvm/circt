@@ -431,7 +431,10 @@ class ConstantOp(ConstantOp):
 
   @staticmethod
   def create(data_type, value):
-    return hw.ConstantOp(IntegerAttr.get(data_type, value))
+    # `data_type` may be a type alias, in which case the value attribute has
+    # the aliased integer type.
+    attr = IntegerAttr.get(support.get_canonical_type(data_type), value)
+    return hw.ConstantOp(attr, results=[data_type])
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)

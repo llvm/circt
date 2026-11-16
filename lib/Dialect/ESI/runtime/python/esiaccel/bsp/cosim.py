@@ -14,7 +14,9 @@ from pycde.constructs import Wire
 from pycde import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
-                     DesignResetController, ResetCycles, TelemetryMMIO)
+                     DEFAULT_MAX_READ_REQUEST_BYTES,
+                     DEFAULT_MAX_WRITE_PAYLOAD_BYTES, DesignResetController,
+                     ResetCycles, TelemetryMMIO)
 from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
 from pycde.circt import ir
@@ -28,9 +30,44 @@ __root_dir__ = Path(__file__).parent.parent
 def CosimBSP(
     user_module: Type[Module],
     dma_engine_pair: Optional[Tuple[Callable, Callable]] = None,
+    channel_service: Optional[Type[esi.ServiceImplementation]] = None,
+    max_outstanding_reads: int = 4,
+    hostmem_width: int = 64,
 ) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
-  'user_module'"""
+  'user_module'.
+
+  By default, channels use the native cosim transport. 'dma_engine_pair' is a
+  (to_host_gen, from_host_gen) pair used by ChannelEngineService to create one
+  DMA engine per channel.
+
+  For custom implementations, including engines shared by multiple channels,
+  'channel_service' accepts an esi.ServiceImplementation subclass, not an
+  instance. It must have exactly the input ports 'clk = Clock()' and
+  'rst = Reset()'. The BSP instantiates it with decl=None for the builtin
+  ChannelService and appid=esi.AppID("__channel_engines"). Its generator may
+  issue esi.MMIO and esi.HostMem requests, which the BSP will satisfy.
+
+  Passing both 'dma_engine_pair' and 'channel_service' raises ValueError.
+
+  'max_outstanding_reads' is the per-client limit on logical HostMem read
+  requests in flight. The cosim host services each read request in order, so
+  more than one is safe; the default of 4 keeps the multi-outstanding read path
+  exercised in simulation.
+
+  'hostmem_width' is the upstream HostMem read and write width in bits. It must
+  be a power of two and at least 8. The host runtime discovers it automatically.
+  Wider beats reduce transport messages for wide transfers, without combining
+  separate narrow requests or changing completion semantics.
+  """
+  if (type(hostmem_width) is not int or hostmem_width < 8 or
+      hostmem_width & (hostmem_width - 1)):
+    raise ValueError("hostmem_width must be a power of two and at least 8")
+  if dma_engine_pair is not None and channel_service is not None:
+    raise ValueError(
+        "dma_engine_pair and channel_service are mutually exclusive")
+  if dma_engine_pair is not None:
+    channel_service = ChannelEngineService(*dma_engine_pair)
 
   class ESI_Cosim_UserTopWrapper(Module):
     """Wrap the user module along with 'standard' service generators so that
@@ -42,11 +79,17 @@ def CosimBSP(
 
     mmio = Input(esi.MMIO.read_write.type)
 
-    # If this gets changed, update 'Cosim.cpp' in the runtime.
-    HostMemWidth = 64
+    HostMemWidth = hostmem_width
 
-    ChannelHostMemModule = ChannelHostMem(read_width=HostMemWidth,
-                                          write_width=HostMemWidth)
+    ChannelHostMemModule = ChannelHostMem(
+        read_width=HostMemWidth,
+        write_width=HostMemWidth,
+        max_read_request_bytes=max(DEFAULT_MAX_READ_REQUEST_BYTES,
+                                   HostMemWidth // 8),
+        max_write_payload_bytes=max(DEFAULT_MAX_WRITE_PAYLOAD_BYTES,
+                                    HostMemWidth // 8),
+        max_outstanding_reads=max_outstanding_reads,
+        round_read_lengths=False)
 
     hostmem_read = ChannelHostMemModule.read
     hostmem_write = ChannelHostMemModule.write
@@ -66,12 +109,11 @@ def CosimBSP(
                     clk=ports.clk,
                     rst=ports.rst)
 
-      if dma_engine_pair is not None:
-        ChannelEngineService(dma_engine_pair[0], dma_engine_pair[1])(
-            None,
-            appid=esi.AppID("__channel_engines"),
-            clk=ports.clk,
-            rst=ports.rst)
+      if channel_service is not None:
+        channel_service(None,
+                        appid=esi.AppID("__channel_engines"),
+                        clk=ports.clk,
+                        rst=ports.rst)
 
       mmio = ChannelMMIO(esi.MMIO,
                          appid=esi.AppID("__cosim_mmio"),
@@ -187,7 +229,12 @@ def CosimBSP(
   return ESI_Cosim_Top
 
 
-def CosimBSP_DMA(user_module: Type[Module]) -> Module:
+def CosimBSP_DMA(user_module: Type[Module],
+                 max_outstanding_reads: int = 4,
+                 hostmem_width: int = 64) -> Module:
+  """CosimBSP with one-item DMA engines; accepts the same HostMem widths."""
   return CosimBSP(user_module,
-                  dma_engine_pair=(OneItemBuffersToHost,
-                                   OneItemBuffersFromHost))
+                  channel_service=ChannelEngineService(OneItemBuffersToHost,
+                                                       OneItemBuffersFromHost),
+                  max_outstanding_reads=max_outstanding_reads,
+                  hostmem_width=hostmem_width)

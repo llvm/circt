@@ -116,7 +116,7 @@ void HWToLLVMArraySpillCache::spillNonHWOps(OpBuilder &builder,
         if (isa_and_nonnull<hw::HWDialect>(op->getDialect()))
           return;
         auto hasSpillingUser = [](Value arrVal) -> bool {
-          for (auto user : arrVal.getUsers())
+          for (auto *user : arrVal.getUsers())
             if (isa<hw::ArrayGetOp, hw::ArraySliceOp>(user))
               return true;
           return false;

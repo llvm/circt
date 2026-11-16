@@ -1,8 +1,10 @@
 name: Dispatch circt-tests
 
 # Trigger a test run in circt/circt-tests once a "Build and Test" run has
-# finished. We use `workflow_run` rather than driving the dispatch directly
-# from `buildAndTest.yml` because `pull_request` events from forks run with a
+# finished (and if running on a PR, trigger iff the run-circt-tests label is
+# given, or if the label is added after CI has already succeeded). We use
+# `workflow_run` rather than driving the dispatch directly from
+# `buildAndTest.yml` because `pull_request` events from forks run with a
 # read-only token and no access to repository secrets. `workflow_run`, by
 # contrast, executes in the context of this repository and has access to the
 # `circt-bot` app credentials regardless of where the PR originated.
@@ -10,6 +12,8 @@ on:
   workflow_run:
     workflows: ["Build and Test"]
     types: [completed]
+  pull_request_target:
+    types: [labeled]
 
 permissions:
   actions: read
@@ -18,25 +22,18 @@ permissions:
 jobs:
   dispatch:
     name: Dispatch circt-tests
-    # Only dispatch when the upstream build matrix actually succeeded.
-    if: github.event.workflow_run.conclusion == 'success'
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'pull_request_target' &&
+       github.event.label.name == 'run-circt-tests')
     runs-on: ubuntu-latest
     steps:
-      # Generate a token for the circt-bot app, scoped to circt/circt-tests,
-      # to trigger the test run there.
-      - name: Generate circt-bot token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.CIRCT_BOT_APP_ID }}
-          private-key: ${{ secrets.CIRCT_BOT_PRIVATE_KEY }}
-          owner: circt
-          repositories: circt-tests
-
       # Pull the small metadata artifact uploaded by buildAndTest.yml. It
       # contains only the PR number (when applicable); everything else we
       # need is already on the `workflow_run` event payload.
       - name: Download dispatch metadata
+        if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dispatch-metadata
@@ -44,12 +41,62 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
 
+      # Decide whether to dispatch
+      - name: Check dispatch conditions
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          go=false
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            if [ "$RUN_EVENT" = "push" ]; then
+              # Push to main - always dispatch for baseline run
+              go=true
+            elif [ "$RUN_EVENT" = "pull_request" ]; then
+              # Check PR is labelled before dispatching
+              PR=$(cat dispatch-metadata/pr_number)
+              if gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels \
+                   --jq '.labels[].name' | grep -qx 'run-circt-tests'; then
+                go=true
+              fi
+            fi
+          else
+            # Dispatched by labelling event - only launch if CI is already green
+            RESULT=$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow "Build and Test" --event pull_request \
+              --commit "$HEAD_SHA" --limit 1 \
+              --json status,conclusion \
+              --jq '.[0] | "\(.status)/\(.conclusion)"')
+            echo "Latest Build and Test run: $RESULT"
+            if [ "$RESULT" = "completed/success" ]; then
+              go=true
+            fi
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+
+      # Generate a token for the circt-bot app, scoped to circt/circt-tests,
+      # to trigger the test run there.
+      - name: Generate circt-bot token
+        id: app-token
+        if: steps.gate.outputs.go == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.CIRCT_BOT_APP_ID }}
+          private-key: ${{ secrets.CIRCT_BOT_PRIVATE_KEY }}
+          owner: circt
+          repositories: circt-tests
+
       - name: Dispatch circt-tests
+        if: steps.gate.outputs.go == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          EVENT_NAME: ${{ github.event.workflow_run.event }}
-          HEAD_REF: ${{ github.event.workflow_run.head_branch }}
-          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          EVENT_NAME: ${{ github.event.workflow_run.event || 'pull_request' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.event.workflow_run.head_repository.full_name }}
+          PR_NUMBER_EVENT: ${{ github.event.pull_request.number }}
           BASE_REPO: ${{ github.repository }}
         run: |
           if [ "$EVENT_NAME" = "push" ]; then
@@ -59,9 +106,9 @@ jobs:
             PR_NUMBER=""
           elif [ "$EVENT_NAME" = "pull_request" ]; then
             KIND=pr
-            SHA="$HEAD_REF"
+            SHA="$HEAD_SHA"
             REPO="$HEAD_REPO"
-            PR_NUMBER=$(cat dispatch-metadata/pr_number)
+            PR_NUMBER=${PR_NUMBER_EVENT:-$(cat dispatch-metadata/pr_number)}
           else
             echo "Unhandled event type: $EVENT_NAME, skipping."
             exit 0

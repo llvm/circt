@@ -90,7 +90,7 @@ func.func @FormatStrings() {
 }
 
 // CHECK-LABEL: func.func @DynamicStrings
-func.func @DynamicStrings(%idx: i32) {
+func.func @DynamicStrings(%idx: i32, %jdx: i32) {
   // CHECK: sim.string.literal "Hello"
   %str = sim.string.literal "Hello"
   // CHECK: sim.string.length
@@ -101,6 +101,8 @@ func.func @DynamicStrings(%idx: i32) {
   %char = sim.string.get %str[%idx]
   // CHECK: sim.string.string_to_int
   %int = sim.string.string_to_int %str : i32
+  // CHECK: sim.string.substr
+  %substr = sim.string.substr %str[%idx:%jdx]
   return
 }
 
@@ -194,4 +196,23 @@ hw.module @FormatString(in %str: !sim.dstring) {
   %fmt0 = sim.fmt.string %str : !sim.dstring
   // CHECK: sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
   %fmt1 = sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
+}
+
+// Round-trip tests for !sim.variant type syntax.
+// CHECK-LABEL: func.func @variant_type_roundtrip
+func.func @variant_type_roundtrip(
+  // CHECK-SAME: %arg0: !sim.variant<a: i32, b: i8>
+  %arg0: !sim.variant<a: i32, b: i8>,
+  // CHECK-SAME: %arg1: !sim.variant<only: !sim.dstring>
+  %arg1: !sim.variant<only: !sim.dstring>,
+  // CHECK-SAME: %arg2: !sim.variant<>
+  %arg2: !sim.variant<>,
+  // CHECK-SAME: %arg3: !sim.variant<nested: !sim.variant<x: i1>, arr: !hw.array<2xi8>>
+  %arg3: !sim.variant<nested: !sim.variant<x: i1>, arr: !hw.array<2xi8>>,
+  // CHECK-SAME: %arg4: !sim.variant<a: i32, b: i32, c: i32>
+  %arg4: !sim.variant<a: i32, b: i32, c: i32>,
+  // CHECK-SAME: %arg5: !sim.variant<"123": i42, b: i8>
+  %arg5: !sim.variant<"123": i42, "b": i8>
+) {
+  return
 }

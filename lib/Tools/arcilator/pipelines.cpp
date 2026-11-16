@@ -139,7 +139,6 @@ void circt::populateArcStateAllocationPipeline(
     allocStateOpts.insertTraceTaps = options.insertTraceTaps;
     pm.nest<arc::ModelOp>().addPass(arc::createAllocateState(allocStateOpts));
   }
-  pm.nest<arc::ModelOp>().addPass(arc::createAllocateState());
   pm.addPass(arc::createLowerClocksToFuncs()); // no CSE between state alloc
                                                // and clock func lowering
   if (options.splitFuncsThreshold.getNumOccurrences()) {

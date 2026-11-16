@@ -1,4 +1,4 @@
-; RUN: firtool %s --format=fir  | FileCheck %s
+; RUN: firtool %s --format=fir --lowering-options=svVarDeclStyle=reg  | FileCheck %s
 
 FIRRTL version 4.0.0
 circuit DPI:

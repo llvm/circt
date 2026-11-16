@@ -49,7 +49,8 @@ public:
 
 /// Since as of now the only construct supported by the StageOp, we convert FIFO
 /// signaling to/from ValidReady signaling. This will be done opposite way when
-/// we implement FIFO-based buffers.
+/// we implement FIFO-based buffers. Changes in data delay are made after the
+/// stages.
 LogicalResult ChannelBufferLowering::matchAndRewrite(
     ChannelBufferOp buffer, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
@@ -57,6 +58,10 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 
   ChannelType inputType = buffer.getInput().getType();
   Value stageInput = buffer.getInput();
+  // The stages carry the input data delay.
+  auto stageType =
+      ChannelType::get(rewriter.getContext(), inputType.getInner(),
+                       ChannelSignaling::ValidReady, inputType.getDataDelay());
 
   // FIFO signaling must be converted to ValidReady.
   if (inputType.getSignaling() == ChannelSignaling::FIFO) {
@@ -66,7 +71,8 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 
     auto unwrap = UnwrapFIFOOp::create(rewriter, loc, stageInput, rdEn);
     auto wrap =
-        WrapValidReadyOp::create(rewriter, loc, unwrap.getData(), valid);
+        WrapValidReadyOp::create(rewriter, loc, stageType, rewriter.getI1Type(),
+                                 unwrap.getData(), valid);
     stageInput = wrap.getChanOutput();
 
     // rdEn = valid && ready
@@ -80,8 +86,9 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
   // ValidOnly signaling must be converted to ValidReady (always ready).
   if (inputType.getSignaling() == ChannelSignaling::ValidOnly) {
     auto unwrap = UnwrapValidOnlyOp::create(rewriter, loc, stageInput);
-    auto wrap = WrapValidReadyOp::create(rewriter, loc, unwrap.getRawOutput(),
-                                         unwrap.getValid());
+    auto wrap =
+        WrapValidReadyOp::create(rewriter, loc, stageType, rewriter.getI1Type(),
+                                 unwrap.getRawOutput(), unwrap.getValid());
     stageInput = wrap.getChanOutput();
   }
 
@@ -107,13 +114,65 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 
   ChannelType outputType = buffer.getOutput().getType();
   Value output = stageInput;
+  uint64_t inDelay = inputType.getDataDelay();
+  uint64_t outDelay = outputType.getDataDelay();
+  auto i1 = rewriter.getI1Type();
+  auto regName = [&](StringRef suffix, uint64_t i) -> std::string {
+    std::string name = (suffix + Twine(i)).str();
+    if (bufferName)
+      name = (bufferName.getValue() + "_" + name).str();
+    return name;
+  };
+
+  if (outDelay > inDelay) {
+    // Delay the data so that it arrives 'outDelay' cycles after the transfer.
+    BackedgeBuilder bb(rewriter, loc);
+    Backedge ready = bb.get(i1);
+    auto unwrap = UnwrapValidReadyOp::create(rewriter, loc, output, ready);
+    Value data = unwrap.getRawOutput();
+    // TODO: if outDelay >>> inDelay it might make sense to use a FIFO with
+    // rd_latency.
+    for (uint64_t i = 0; i < outDelay - inDelay; ++i)
+      data = seq::CompRegOp::create(rewriter, loc, data, buffer.getClk(),
+                                    regName("data_dly", i), InnerSymAttr());
+    auto wrap = WrapValidReadyOp::create(rewriter, loc, data, unwrap.getValid(),
+                                         outDelay);
+    ready.setValue(wrap.getReady());
+    output = wrap.getChanOutput();
+  } else if (outDelay < inDelay &&
+             outputType.getSignaling() == ChannelSignaling::ValidOnly) {
+    // With no backpressure, tokens never wait. Delay the valid so that the
+    // data arrives 'outDelay' cycles after it.
+    auto alwaysReady = hw::ConstantOp::create(rewriter, loc, i1, 1);
+    auto unwrap =
+        UnwrapValidReadyOp::create(rewriter, loc, output, alwaysReady);
+    Value valid = unwrap.getValid();
+    Value false_ = hw::ConstantOp::create(rewriter, loc, i1, 0);
+    for (uint64_t i = 0; i < inDelay - outDelay; ++i)
+      valid = seq::CompRegOp::create(rewriter, loc, valid, buffer.getClk(),
+                                     buffer.getRst(), false_,
+                                     regName("valid_dly", i), InnerSymAttr());
+    output = WrapValidOnlyOp::create(rewriter, loc, unwrap.getRawOutput(),
+                                     valid, outDelay)
+                 .getChanOutput();
+  } else if (outDelay < inDelay) {
+    // Tokens must wait until their data arrives, so hold them in a FIFO. Its
+    // input reserves room for 'inDelay' writes in flight, so it needs that many
+    // extra entries to sustain one transfer per cycle after an output stall.
+    uint64_t depth = 2 * inDelay + std::max<uint64_t>(outDelay, 1) + 1;
+    output = FIFOOp::create(rewriter, loc, outputType, buffer.getClk(),
+                            buffer.getRst(), output,
+                            rewriter.getI64IntegerAttr(depth));
+  }
+
   // If the output is FIFO, we need to wrap it back into a FIFO from ValidReady.
-  if (outputType.getSignaling() == ChannelSignaling::FIFO) {
+  if (output.getType() != outputType &&
+      outputType.getSignaling() == ChannelSignaling::FIFO) {
     BackedgeBuilder bb(rewriter, loc);
     Backedge ready = bb.get(rewriter.getI1Type());
     Backedge empty = bb.get(rewriter.getI1Type());
 
-    auto unwrap = UnwrapValidReadyOp::create(rewriter, loc, stageInput, ready);
+    auto unwrap = UnwrapValidReadyOp::create(rewriter, loc, output, ready);
     auto wrap = WrapFIFOOp::create(rewriter, loc,
                                    TypeRange{outputType, rewriter.getI1Type()},
                                    unwrap.getRawOutput(), empty);
@@ -126,14 +185,16 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
   }
 
   // If the output is ValidOnly, convert back from ValidReady.
-  if (outputType.getSignaling() == ChannelSignaling::ValidOnly) {
+  if (output.getType() != outputType &&
+      outputType.getSignaling() == ChannelSignaling::ValidOnly) {
     // Always ready since ValidOnly has no backpressure.
     auto alwaysReady =
         hw::ConstantOp::create(rewriter, loc, rewriter.getI1Type(), 1);
     auto unwrap =
         UnwrapValidReadyOp::create(rewriter, loc, output, alwaysReady);
-    auto wrap = WrapValidOnlyOp::create(rewriter, loc, unwrap.getRawOutput(),
-                                        unwrap.getValid());
+    auto wrap =
+        WrapValidOnlyOp::create(rewriter, loc, unwrap.getRawOutput(),
+                                unwrap.getValid(), outputType.getDataDelay());
     output = wrap.getChanOutput();
   }
 
@@ -166,9 +227,7 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
   auto c1 = hw::ConstantOp::create(rewriter, loc, rewriter.getI1Type(),
                                    rewriter.getBoolAttr(true));
   mlir::TypedValue<ChannelType> chanInput = op.getInput();
-  if (chanInput.getType().getDataDelay() != 0)
-    return op.emitOpError(
-        "currently only supports input channels with zero data delay");
+  uint64_t inputDelay = chanInput.getType().getDataDelay();
 
   Backedge inputEn = bb.get(i1);
   Value rawData;
@@ -199,23 +258,53 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
         op, "only supports ValidReady, FIFO, and ValidOnly signaling");
   }
 
+  // With an input data delay of N, the data for an accepted token arrives N
+  // cycles later, so delay the write to match. Since up to N writes may be in
+  // flight, only accept input while more than N slots are free. A ValidOnly
+  // sender can't be stalled though, so instead every token is written. If the
+  // FIFO is full, it overflows, which the `seq.fifo` assertions catch in
+  // simulation.
+  bool validOnlyInput =
+      chanInput.getType().getSignaling() == ChannelSignaling::ValidOnly;
+  bool reserveSlots = inputDelay > 0 && !validOnlyInput;
+  Backedge wrEn = bb.get(i1);
+  Type almostFullType;
+  IntegerAttr almostFullThreshold;
+  if (reserveSlots) {
+    almostFullType = i1;
+    almostFullThreshold =
+        rewriter.getI64IntegerAttr(op.getDepth() - inputDelay);
+  }
+
   Backedge outputRdEn = bb.get(i1);
   auto seqFifo = seq::FIFOOp::create(
-      rewriter, loc, outputType.getInner(), i1, i1, Type(), Type(), rawData,
-      outputRdEn, inputEn, op.getClk(), op.getRst(), op.getDepthAttr(),
-      rewriter.getI64IntegerAttr(outputType.getDataDelay()), IntegerAttr(),
-      IntegerAttr());
+      rewriter, loc, outputType.getInner(), i1, i1, almostFullType, Type(),
+      rawData, outputRdEn, wrEn, op.getClk(), op.getRst(), op.getDepthAttr(),
+      rewriter.getI64IntegerAttr(outputType.getDataDelay()),
+      almostFullThreshold, IntegerAttr());
   auto inputNotEmpty = comb::XorOp::create(rewriter, loc, dataNotAvailable, c1);
   inputNotEmpty->setAttr("sv.namehint",
                          rewriter.getStringAttr("inputNotEmpty"));
-  auto seqFifoNotFull =
-      comb::XorOp::create(rewriter, loc, seqFifo.getFull(), c1);
+  auto seqFifoNotFull = comb::XorOp::create(
+      rewriter, loc, reserveSlots ? seqFifo.getAlmostFull() : seqFifo.getFull(),
+      c1);
   seqFifoNotFull->setAttr("sv.namehint",
                           rewriter.getStringAttr("seqFifoNotFull"));
   inputEn.setValue(
       comb::AndOp::create(rewriter, loc, inputNotEmpty, seqFifoNotFull));
   static_cast<Value>(inputEn).getDefiningOp()->setAttr(
       "sv.namehint", rewriter.getStringAttr("inputEn"));
+
+  Value write = validOnlyInput ? Value(inputNotEmpty) : Value(inputEn);
+  if (inputDelay > 0) {
+    Value false_ = hw::ConstantOp::create(rewriter, loc, i1, 0);
+    for (uint64_t i = 0; i < inputDelay; ++i)
+      write = seq::CompRegOp::create(
+          rewriter, loc, write, op.getClk(), op.getRst(), false_,
+          (validOnlyInput ? "valid_dly" : "inputEn_dly") + Twine(i),
+          InnerSymAttr());
+  }
+  wrEn.setValue(write);
 
   Value output;
   if (outputType.getSignaling() == ChannelSignaling::ValidReady) {
@@ -240,8 +329,8 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
     // data is available (no backpressure).
     auto notEmpty = comb::createOrFoldNot(rewriter, loc, seqFifo.getEmpty(),
                                           /*twoState=*/true);
-    auto wrap =
-        WrapValidOnlyOp::create(rewriter, loc, seqFifo.getOutput(), notEmpty);
+    auto wrap = WrapValidOnlyOp::create(rewriter, loc, seqFifo.getOutput(),
+                                        notEmpty, outputType.getDataDelay());
     output = wrap.getChanOutput();
     // Always read when not empty since there's no backpressure.
     outputRdEn.setValue(notEmpty);

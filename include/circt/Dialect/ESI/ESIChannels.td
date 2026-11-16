@@ -60,6 +60,7 @@ def ChannelTypeImpl : ESI_Type<"Channel", [
 
     Parameters:
       signaling: the style of the control signals (valid/ready vs FIFO).
+      Always required in the assembly format.
       dataDelay: the number of cycles data takes to arrive after the control
       indicates a transaction has occured. For instance, on a FIFO without read
       ahead, this would be 1. Defaults to 0.
@@ -67,21 +68,19 @@ def ChannelTypeImpl : ESI_Type<"Channel", [
     Example:
 
     ```mlir
-    hw.module.extern @Sender() -> (%x: !esi.channel<i1>)
-    hw.module @Reciever(%a: !esi.channel<hw.array<5xi16>>) { }
+    hw.module.extern @Sender(out x: !esi.channel<i1, ValidReady>)
+    hw.module.extern @Reciever(in %a: !esi.channel<!hw.array<5xi16>, FIFO(1)>)
     ```
   }];
 
   let mnemonic = "channel";
   let parameters = (ins
       "Type":$inner,
-      DefaultValuedParameter<
-        "::circt::esi::ChannelSignaling",
-        "::circt::esi::ChannelSignaling::ValidReady">:$signaling,
+      "::circt::esi::ChannelSignaling":$signaling,
       DefaultValuedParameter<"uint64_t", "0">:$dataDelay);
 
   let assemblyFormat = [{
-    `<` $inner (`,` $signaling^ ( `(` $dataDelay^ `)` )? )? `>`
+    `<` $inner `,` $signaling ( `(` $dataDelay^ `)` )? `>`
   }];
 
   let builders = [
@@ -185,16 +184,26 @@ def WrapValidReadyOp : ESI_Op<"wrap.vr", [
 
   let arguments = (ins AnyType:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput, I1:$ready);
-  let hasCustomAssemblyFormat = 1;
   let hasCanonicalizeMethod = 1;
   let hasVerifier = 1;
+  let assemblyFormat = [{
+    $rawInput `,` $valid attr-dict `:`
+      custom<WrapChannelType>(type($rawInput), type($chanOutput))
+  }];
 
   let builders = [
-    OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid)>
+    OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid,
+                   CArg<"uint64_t", "0">:$dataDelay), [{
+      build($_builder, $_state,
+            ChannelType::get($_builder.getContext(), data.getType(),
+                             ChannelSignaling::ValidReady, dataDelay),
+            $_builder.getI1Type(), data, valid);
+    }]>
   ];
 }
 
 def UnwrapValidReadyOp : ESI_Op<"unwrap.vr", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface>,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Unwrap a value from an ESI port";
@@ -206,13 +215,11 @@ def UnwrapValidReadyOp : ESI_Op<"unwrap.vr", [
 
   let arguments = (ins ChannelType:$chanInput, I1:$ready);
   let results = (outs AnyType:$rawOutput, I1:$valid);
-  let hasCustomAssemblyFormat = 1;
   let hasCanonicalizeMethod = 1;
   let hasVerifier = 1;
-
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
-  ];
+  let assemblyFormat = [{
+    $chanInput `,` $ready attr-dict `:` qualified(type($chanInput))
+  }];
 
   let extraClassDeclaration = [{
     static LogicalResult mergeAndErase(UnwrapValidReadyOp, WrapValidReadyOp,
@@ -232,7 +239,7 @@ def WrapFIFOOp : ESI_Op<"wrap.fifo", [
 
   let assemblyFormat = [{
     $data `,` $empty attr-dict `:`
-      custom<WrapFIFOType>(type($data), type($chanOutput))
+      custom<WrapChannelType>(type($data), type($chanOutput))
   }];
 }
 
@@ -257,7 +264,6 @@ def UnwrapFIFOOp : ESI_Op<"unwrap.fifo", [
 }
 
 def WrapValidOnlyOp : ESI_Op<"wrap.vo", [
-    DeclareOpInterfaceMethods<InferTypeOpInterface>,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Wrap a value into an ESI port with valid-only signaling";
@@ -270,10 +276,22 @@ def WrapValidOnlyOp : ESI_Op<"wrap.vo", [
   let arguments = (ins AnyType:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput);
   let hasCanonicalizeMethod = 1;
+  let hasVerifier = 1;
 
   let assemblyFormat = [{
-    $rawInput `,` $valid attr-dict `:` type($rawInput)
+    $rawInput `,` $valid attr-dict `:`
+      custom<WrapChannelType>(type($rawInput), type($chanOutput))
   }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid,
+                   CArg<"uint64_t", "0">:$dataDelay), [{
+      build($_builder, $_state,
+            ChannelType::get($_builder.getContext(), data.getType(),
+                             ChannelSignaling::ValidOnly, dataDelay),
+            data, valid);
+    }]>
+  ];
 }
 
 def UnwrapValidOnlyOp : ESI_Op<"unwrap.vo", [
@@ -299,48 +317,6 @@ def UnwrapValidOnlyOp : ESI_Op<"unwrap.vo", [
     static LogicalResult mergeAndErase(UnwrapValidOnlyOp, WrapValidOnlyOp,
                                        PatternRewriter&);
   }];
-}
-
-def ModportType:
-  Type<CPred<"llvm::isa<::circt::sv::ModportType>($_self)">, "sv.interface">;
-
-def WrapSVInterfaceOp: ESI_Op<"wrap.iface", [
-    DeclareOpInterfaceMethods<ChannelOpInterface>
-  ]> {
-  let summary = "Wrap an SV interface into an ESI port";
-  let description = [{
-    Wrap a SystemVerilog interface into an ESI channel. Interface MUST look
-    like an interface produced by ESI meaning it MUST contain valid, ready,
-    and data signals. Any other signals will be discarded.
-  }];
-
-  let arguments = (ins ModportType:$interfaceSink);
-  let results = (outs ChannelType:$output);
-
-  let assemblyFormat = [{
-    $interfaceSink attr-dict `:` qualified(type($interfaceSink)) `->` qualified(type($output))
-  }];
-
-  let hasVerifier = 1;
-}
-
-def UnwrapSVInterfaceOp : ESI_Op<"unwrap.iface", [
-    DeclareOpInterfaceMethods<ChannelOpInterface>
-  ]> {
-  let summary = "Unwrap an SV interface from an ESI port";
-  let description = [{
-    Unwrap an ESI channel into a SystemVerilog interface containing valid,
-    ready, and data signals.
-  }];
-
-  let arguments = (ins ChannelType:$chanInput, ModportType:$interfaceSource);
-  let results = (outs);
-
-  let assemblyFormat = [{
-    $chanInput `into` $interfaceSource attr-dict `:` `(` qualified(type($chanInput)) `,` qualified(type($interfaceSource)) `)`
-  }];
-
-  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -624,13 +600,19 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     A `name` attribute may be provided to assigned a name to a buffered
     connection.
 
+    The input and output channels may use different signaling and different
+    data delays. If the output data delay is larger than the input's, the data
+    is delayed by a register chain. If it is smaller, tokens are held until
+    their data arrives: with ValidOnly output, by delaying the valid signal;
+    with ValidReady or FIFO output, by an `esi.fifo` after the stages.
+
     Example:
 
     ```mlir
-    %esiChan = hw.instance "sender" @Sender () : () -> (!esi.channel<i1>)
+    %esiChan = hw.instance "sender" @Sender () : () -> (!esi.channel<i1, ValidReady>)
     // Allow automatic selection of options.
     %bufferedChan = esi.buffer %esiChan : i1
-    hw.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1>) -> ()
+    hw.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1, ValidReady>) -> ()
 
     // Alternatively, specify the number of stages.
     %fourStageBufferedChan = esi.buffer %esiChan { stages = 4 } : i1
@@ -659,6 +641,9 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
     ChannelBuffer ('buffer'), though can be inserted anywhere to add an
     additional pipeline stage. Adding individually could be useful for
     late-pass latency balancing.
+
+    Only supports ValidReady signaling. The channel may have a non-zero data
+    delay, which applies to both the input and the output.
   }];
 
   let arguments = (ins ClockType:$clk, I1:$rst, ChannelType:$input);
@@ -667,6 +652,7 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
     $clk `,` $rst `,` $input attr-dict
       `:` qualified(type($input))
   }];
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -677,8 +663,15 @@ def FIFOOp : ESI_Physical_Op<"fifo", []> {
   let summary = "A FIFO with ESI channel connections";
   let description = [{
     A FIFO is a first-in-first-out buffer. This operation is a simple FIFO
-    which can be used to connect two ESI channels. The ESI channels MUST have
-    FIFO signaling semantics.
+    which can be used to connect two ESI channels of any signaling.
+
+    The input and output channels may have different data delays. The output
+    data delay sets the read latency of the FIFO. An input data delay of N
+    delays the write by N cycles; to make room for those in-flight writes,
+    input is only accepted while there are more than N free slots, so `depth`
+    must be greater than N. A ValidOnly input can't be stalled, so every token
+    is written; if the FIFO is full, it overflows, which is caught by an
+    assertion in simulation.
   }];
 
   let arguments = (ins

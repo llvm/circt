@@ -10,13 +10,9 @@ func.func @test_time_type() {
 
 func.func @test_time_attr() {
   "time_attr"() {
-    // CHECK: time0 = #llhd.time<1ns, 0d, 0e>
-    time0 = #llhd.time<1ns, 0d, 0e> : !llhd.time,
-    // CHECK-SAME: time1 = #llhd.time<1ns, 2d, 0e>
-    time1 = #llhd.time<1ns, 2d, 0e> : !llhd.time,
-    // CHECK-SAME: time2 = #llhd.time<1ns, 2d, 3e>
-    time2 = #llhd.time<1ns, 2d, 3e> : !llhd.time,
-    // CHECK-SAME: time3 = #llhd.time<1ns, 0d, 3e>
-    time3 = #llhd.time<1ns, 0d, 3e> : !llhd.time
+    // CHECK: time0 = #llhd.time<1ns, 0d>
+    time0 = #llhd.time<1ns, 0d> : !llhd.time,
+    // CHECK-SAME: time1 = #llhd.time<1ns, 2d>
+    time1 = #llhd.time<1ns, 2d> : !llhd.time
   } : () -> ()
 }

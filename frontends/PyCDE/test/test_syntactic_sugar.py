@@ -2,7 +2,7 @@
 
 from pycde import (Clock, Output, Input, generator, dim, Module)
 from pycde.testing import unittestmodule
-from pycde.types import Bits, StructType, TypeAlias
+from pycde.types import Bits, SInt, StructType, TypeAlias, UInt
 
 # CHECK-LABEL:  hw.module @Top()
 # CHECK:    %c7_i12 = hw.constant 7 : i12
@@ -46,6 +46,53 @@ class Top(Module):
     BarType({"foo": 7})
 
     Taps()
+
+
+# -----
+
+# Constants of aliased integer types are built with the alias as their type.
+
+# CHECK-LABEL:  hw.module @AliasedIntConsts(out b : !hw.typealias<@pycde::@bits_t, i4>, out u : !hw.typealias<@pycde::@uint_t, ui4>, out s : !hw.typealias<@pycde::@sint_t, si4>)
+# CHECK:    %c3_bits_t = hw.constant 3 : !hw.typealias<@pycde::@bits_t, i4>
+# CHECK:    [[U:%.+]] = hwarith.constant 5 : !hw.typealias<@pycde::@uint_t, ui4>
+# CHECK:    [[S:%.+]] = hwarith.constant -2 : !hw.typealias<@pycde::@sint_t, si4>
+# CHECK:    hw.output %c3_bits_t, [[U]], [[S]]
+
+# After lowering, the aliases are declared and retained with their signless
+# inner types.
+# CHECK-LABEL:  sv.package @pycde {
+# CHECK-DAG:      hw.typedecl @bits_t : i4
+# CHECK-DAG:      hw.typedecl @uint_t : i4
+# CHECK-DAG:      hw.typedecl @sint_t : i4
+# CHECK:        }
+# CHECK-LABEL:  hw.module @AliasedIntConsts(out b : !hw.typealias<@pycde::@bits_t, i4>, out u : !hw.typealias<@pycde::@uint_t, i4>, out s : !hw.typealias<@pycde::@sint_t, i4>)
+# CHECK-DAG:    %c3_bits_t = hw.constant 3 : !hw.typealias<@pycde::@bits_t, i4>
+# CHECK-DAG:    %c5_uint_t = hw.constant 5 : !hw.typealias<@pycde::@uint_t, i4>
+# CHECK-DAG:    %c-2_sint_t = hw.constant -2 : !hw.typealias<@pycde::@sint_t, i4>
+# CHECK:        hw.output %c3_bits_t, %c5_uint_t, %c-2_sint_t
+
+BitsAlias = TypeAlias(Bits(4), "bits_t")
+UIntAlias = TypeAlias(UInt(4), "uint_t")
+SIntAlias = TypeAlias(SInt(4), "sint_t")
+
+
+@unittestmodule(run_passes=True, print_after_passes=True)
+class AliasedIntConsts(Module):
+  b = Output(BitsAlias)
+  u = Output(UIntAlias)
+  s = Output(SIntAlias)
+
+  @generator
+  def build(ports):
+    b = BitsAlias(3)
+    assert b.type == BitsAlias
+    ports.b = b
+    u = UIntAlias(5)
+    assert u.type == UIntAlias
+    ports.u = u
+    s = SIntAlias(-2)
+    assert s.type == SIntAlias
+    ports.s = s
 
 
 # -----

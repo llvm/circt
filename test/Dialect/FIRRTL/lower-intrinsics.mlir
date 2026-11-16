@@ -76,6 +76,10 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_ltl_until"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.eventually %in0 :
     firrtl.int.generic "circt_ltl_eventually"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.accept_on %in0, %in1 :
+    firrtl.int.generic "circt_ltl_accept_on"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.accept_on %in0, %in1 sync :
+    firrtl.int.generic "circt_ltl_sync_accept_on"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.past %in0, 42, %clk :
     firrtl.int.generic "circt_ltl_past" <delay: i64 = 42> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>

@@ -61,7 +61,7 @@ class WireOp(WireOp):
 
   @staticmethod
   def create(data_type, name=None, sym_name=None):
-    if not isinstance(data_type, hw.InOutType):
+    if not isinstance(data_type, (hw.InOutType, sv.NetType)):
       data_type = hw.InOutType.get(data_type)
     return sv.WireOp(data_type, name, sym_name=sym_name)
 
@@ -94,11 +94,54 @@ class RegOp(RegOp):
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
+class VarOp(VarOp):
+
+  def __init__(self,
+               data_type,
+               name,
+               *,
+               sym_name=None,
+               svAttributes=None,
+               loc=None,
+               ip=None):
+    if name is None:
+      name = ""
+    attributes = {"name": StringAttr.get(name)}
+    if sym_name is not None:
+      attributes["inner_sym"] = hw.InnerSymAttr.get(StringAttr.get(sym_name))
+    if svAttributes is not None:
+      attributes["svAttributes"] = ArrayAttr.get(svAttributes)
+    OpView.__init__(
+        self,
+        self.build_generic(attributes=attributes,
+                           results=[data_type],
+                           operands=[],
+                           successors=None,
+                           regions=0,
+                           loc=loc,
+                           ip=ip))
+
+  @staticmethod
+  def create(data_type, name=None, sym_name=None):
+    if not isinstance(data_type, sv.VarType):
+      data_type = sv.VarType.get(data_type)
+    return sv.VarOp(data_type, name, sym_name=sym_name)
+
+
+@_ods_cext.register_operation(_Dialect, replace=True)
 class AssignOp(AssignOp):
 
   @staticmethod
   def create(dest, src):
     return sv.AssignOp(dest=dest, src=src)
+
+
+@_ods_cext.register_operation(_Dialect, replace=True)
+class VarAssignOp(VarAssignOp):
+
+  @staticmethod
+  def create(dest, src):
+    return sv.VarAssignOp(dest=dest, src=src)
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)

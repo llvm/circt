@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
 
@@ -29,6 +30,30 @@ using namespace circt::sv;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
+namespace {
+/// Reject NetType or VarType on output direction module ports. Handle types
+/// are only meaningful as an input direction block argument; a module result
+/// is always a pure SSA value.
+struct SVHandleModulePortTypeInterface : public hw::HWModulePortTypeInterface {
+  using HWModulePortTypeInterface::HWModulePortTypeInterface;
+
+  LogicalResult
+  verifyHWModulePortType(function_ref<InFlightDiagnostic()> emitError,
+                         hw::ModulePort::Direction direction,
+                         Type type) const override {
+    if (direction == hw::ModulePort::Output) {
+      if (isa<NetType>(type))
+        return emitError()
+               << "sv.net handles are not supported on output ports";
+      if (isa<VarType>(type))
+        return emitError()
+               << "sv.var handles are not supported on output ports";
+    }
+    return success();
+  }
+};
+} // namespace
+
 void SVDialect::initialize() {
   // Register types and attributes.
   registerTypes();
@@ -39,6 +64,9 @@ void SVDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/SV/SV.cpp.inc"
       >();
+
+  // Register interface implementations.
+  addInterfaces<SVHandleModulePortTypeInterface>();
 }
 
 #define GET_ATTRDEF_CLASSES

@@ -348,12 +348,13 @@ public:
     write(msg->toMessageData());
   }
 
-  /// A basic non-blocking write API. Returns true if any of the data was queued
-  /// and/or sent. If the data type is a window a 'true' return does not
-  /// indicate that the message has been completely written. The 'flush' method
-  /// can be used to check that the entire buffer has been written. It is
-  /// invalid for backends to always return false (i.e. backends must eventually
-  /// ensure that writes may succeed).
+  /// A basic non-blocking write API. Returns true if any of the data was
+  /// sent; false means none of it was, and the write should be retried. If
+  /// the data type is a window a 'true' return does not indicate that the
+  /// message has been completely written. The 'flush' method can be used to
+  /// check that the entire buffer has been written. It is invalid for
+  /// backends to always return false (i.e. backends must eventually ensure
+  /// that writes may succeed).
   bool tryWrite(const MessageData &data) {
     if (translateMessages) {
       // Do not accept a new message if there are pending messages to flush.
@@ -362,12 +363,37 @@ public:
       assert(translationBuffer.empty() &&
              "Translation buffer should be empty after successful flush");
       translateOutgoing(data);
+      // If the first frame isn't accepted, don't keep the message: nothing
+      // would flush it unless the caller writes again.
+      if (!translationBuffer.empty() &&
+          !tryWriteImpl(maybePadEmptyMessage(translationBuffer.front()))) {
+        translationBuffer.clear();
+        return false;
+      }
+      translationBufferIdx = 1;
       flush();
       return true;
     } else {
       return tryWriteImpl(maybePadEmptyMessage(data));
     }
   }
+
+  /// Non-blocking write of a multi-segment message. On success, takes
+  /// ownership of `msg` (leaving it null) and returns true. On failure, returns
+  /// false and leaves `msg` untouched so the caller can retry with the same
+  /// message. Same completion semantics as `tryWrite(const MessageData &)`.
+  /// Default flattens and calls the regular tryWrite(). Backends override for
+  /// scatter-gather / chunked-DMA support.
+  virtual bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg) {
+    if (!msg)
+      throw std::runtime_error(
+          "WriteChannelPort::tryWrite: null SegmentedMessageData");
+    if (!tryWrite(msg->toMessageData()))
+      return false;
+    msg.reset();
+    return true;
+  }
+
   /// Flush any buffered data. Returns true if all data was flushed.
   ///
   /// If `translateMessages` is false, calling `flush()` will immediately return

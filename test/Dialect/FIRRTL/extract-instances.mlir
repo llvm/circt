@@ -899,3 +899,28 @@ firrtl.circuit "MoveDutSet" attributes {
 // CHECK:       firrtl.module @Foo()
 // CHECK-NOT:   firrtl.module
 // CHECK:         firrtl.instance {{.*}} @Extracted
+
+//===----------------------------------------------------------------------===//
+// ExtractSeqMems wrapper instance name
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "ExtractSeqMemsWrapperInstanceName" attributes {
+  annotations = [{
+    class = "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation",
+    filename = "SeqMems.txt",
+    group = "Memories",
+    instanceName = "memories_inst"
+  }]
+  } {
+  firrtl.memmodule @mem_ext() attributes {dataWidth = 8 : ui32, depth = 8 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+  // CHECK: firrtl.module private @Memories()
+  // CHECK: firrtl.instance mem @mem_ext()
+  firrtl.module private @DUTModule() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    // CHECK-LABEL: firrtl.module private @DUTModule
+    // CHECK: firrtl.instance memories_inst {{.*}} @Memories
+    firrtl.instance mem @mem_ext()
+  }
+  firrtl.module @ExtractSeqMemsWrapperInstanceName() {
+    firrtl.instance dut @DUTModule()
+  }
+}

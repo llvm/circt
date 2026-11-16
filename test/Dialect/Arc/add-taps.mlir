@@ -21,13 +21,13 @@ hw.module @ObserveWires() {
   // CHECK-NEXT: arc.tap [[RD:%.+]] {names = ["x"]} : i4
   // CHECK-NEXT: %x = sv.wire
   // CHECK-NEXT: [[RD]] = sv.read_inout %x
-  %x = sv.wire : !hw.inout<i4>
-  %0 = sv.read_inout %x : !hw.inout<i4>
+  %x = sv.wire : !sv.net<i4>
+  %0 = sv.read_inout %x : !sv.net<i4>
 
   // CHECK-NEXT: [[RD:%.+]] = sv.read_inout %y
   // CHECK-NEXT: arc.tap [[RD]] {names = ["y"]} : i4
   // CHECK-NEXT: %y = sv.wire
-  %y = sv.wire : !hw.inout<i4>
+  %y = sv.wire : !sv.net<i4>
 
   // CHECK-NEXT: hw.constant
   // CHECK-NEXT: arc.tap %c0_i4 {names = ["z"]} : i4

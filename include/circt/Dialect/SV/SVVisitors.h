@@ -39,15 +39,15 @@ public:
             OrderedOutputOp, IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp,
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
             // Other Statements.
-            AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
-            WriteOp, FWriteOp, FFlushOp, FCloseOp, SystemFunctionOp, VerbatimOp,
-            MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
-            MacroErrorOp,
+            AssignOp, VarAssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp,
+            AliasOp, WriteOp, FWriteOp, FFlushOp, FCloseOp, SystemFunctionOp,
+            VerbatimOp, MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp,
+            IncludeOp, MacroErrorOp,
             // Type declarations.
-            PackageOp, InterfaceOp, SVVerbatimSourceOp, InterfaceSignalOp,
-            InterfaceModportOp, InterfaceInstanceOp, GetModportOp,
-            AssignInterfaceSignalOp, ReadInterfaceSignalOp, MacroDeclOp,
-            MacroDefOp, FuncOp, FuncDPIImportOp,
+            PackageOp, PackageExternOp, InterfaceOp, SVVerbatimSourceOp,
+            InterfaceSignalOp, InterfaceModportOp, InterfaceInstanceOp,
+            GetModportOp, AssignInterfaceSignalOp, ReadInterfaceSignalOp,
+            MacroDeclOp, MacroDefOp, FuncOp, FuncDPIImportOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp, AssertPropertyOp, AssumePropertyOp,
@@ -133,6 +133,7 @@ public:
 
   // Other Statements.
   HANDLE(AssignOp, Unhandled);
+  HANDLE(VarAssignOp, Unhandled);
   HANDLE(BPAssignOp, Unhandled);
   HANDLE(PAssignOp, Unhandled);
   HANDLE(ForceOp, Unhandled);
@@ -153,6 +154,7 @@ public:
 
   // Type declarations.
   HANDLE(PackageOp, Unhandled);
+  HANDLE(PackageExternOp, Unhandled);
   HANDLE(InterfaceOp, Unhandled);
   HANDLE(SVVerbatimSourceOp, Unhandled);
   HANDLE(InterfaceInstanceOp, Unhandled);

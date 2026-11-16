@@ -22,22 +22,22 @@ with Context() as ctx:
   channel_type = esi.ChannelType.get(IntegerType.get_signless(16))
   print(channel_type)
   print()
-  # CHECK: !esi.channel<i16>
+  # CHECK: !esi.channel<i16, ValidReady>
 
   bundle_type = esi.BundleType.get(
       [("i16chan", esi.ChannelDirection.TO, channel_type)], False)
   print(bundle_type)
-  # CHECK: !esi.bundle<[!esi.channel<i16> to "i16chan"]>
+  # CHECK: !esi.bundle<[!esi.channel<i16, ValidReady> to "i16chan"]>
   assert (not bundle_type.resettable)
   for bchan in bundle_type.channels:
     print(bchan)
-  # CHECK: ('i16chan', ChannelDirection.TO, Type(!esi.channel<i16>))
+  # CHECK: ('i16chan', ChannelDirection.TO, Type(!esi.channel<i16, ValidReady>))
   print()
 
   bundle_type = esi.BundleType.get(
       [("i16chan", esi.ChannelDirection.FROM, channel_type)], True)
   print(bundle_type)
-  # CHECK: !esi.bundle<[!esi.channel<i16> from "i16chan"] reset >
+  # CHECK: !esi.bundle<[!esi.channel<i16, ValidReady> from "i16chan"] reset >
   assert (bundle_type.resettable)
   print()
 
@@ -112,11 +112,11 @@ with Context() as ctx:
   print()
 
 # CHECK-LABEL: === testGen called with ops:
-# CHECK-NEXT:  [[R0:%.+]]:2 = esi.service.impl_req #esi.appid<"mstop"> svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.bundle<[!esi.channel<i8> to "recv"]>) {
-# CHECK-NEXT:    [[R2:%.+]] = esi.service.impl_req.req <@HostComms::@Recv>([#esi.appid<"loopback_tohw">]) : !esi.bundle<[!esi.channel<i8> to "recv"]>
+# CHECK-NEXT:  [[R0:%.+]]:2 = esi.service.impl_req #esi.appid<"mstop"> svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>) {
+# CHECK-NEXT:    [[R2:%.+]] = esi.service.impl_req.req <@HostComms::@Recv>([#esi.appid<"loopback_tohw">]) : !esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>
 # CHECK-NEXT:  }
 # CHECK-NEXT:  esi.service.decl @HostComms {
-# CHECK-NEXT:    esi.service.port @Recv : !esi.bundle<[!esi.channel<i8> to "recv"]>
+# CHECK-NEXT:    esi.service.port @Recv : !esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>
 # CHECK-NEXT:  }
 # CHECK-NEXT:  esi.manifest.service_impl #esi.appid<"mstop"> svc @HostComms by "test" with {}
 
@@ -137,7 +137,7 @@ esi.registerServiceGenerator("test", testGen)
 with Context() as ctx:
   circt.register_dialects(ctx)
   mod = Module.parse("""
-!recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
+!recvI8 = !esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>
 
 esi.service.decl @HostComms {
   esi.service.port @Recv : !recvI8

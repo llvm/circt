@@ -1,4 +1,4 @@
-; RUN: firtool --preserve-aggregate=1d-vec %s | FileCheck %s
+; RUN: firtool --preserve-aggregate=1d-vec %s -lowering-options=svVarDeclStyle=reg | FileCheck %s
 
 FIRRTL version 5.1.0
 

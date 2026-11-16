@@ -16,6 +16,13 @@ func.func @drv_folding(%sig: !llhd.ref<i32>, %val: i32, %time: !llhd.time, %cond
   llhd.drv %sig, %val after %time if %false : i32
   // CHECK-NEXT: llhd.drv %[[SIG]], %[[VAL]] after %[[TIME]] :
   llhd.drv %sig, %val after %time if %true : i32
+  // CHECK-NEXT: llhd.assign %[[SIG]], %[[VAL]] :
+  llhd.assign %sig, %val : i32
+  // CHECK-NEXT: llhd.assign %[[SIG]], %[[VAL]] if %[[COND]] :
+  llhd.assign %sig, %val if %cond : i32
+  llhd.assign %sig, %val if %false : i32
+  // CHECK-NEXT: llhd.assign %[[SIG]], %[[VAL]] :
+  llhd.assign %sig, %val if %true : i32
 
   // CHECK-NEXT: return
   return

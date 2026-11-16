@@ -28,6 +28,7 @@ LOOPBACK_PROBES = [
      ["odd_struct_func ok: a=2749 b=-20 p=10 q=-5 r0=4 r1=6"]),
     ("array_func", ["array_func ok: -3 -2"]),
     ("serial_coord_translate", ["serial_coord_translate ok"]),
+    ("serial_coord_translate_hostmem", ["serial_coord_translate_hostmem ok"]),
 ]
 
 LOOPBACK_TYPED_PROBES = [
@@ -129,6 +130,11 @@ def _build_loopback_codegen(tmp_path: Path, host: str, port: int) -> Path:
 class TestLoopback:
   """Tests for esiquery against the loopback design."""
 
+  def test_esi_version(self, conn) -> None:
+    assert conn.sysinfo().esi_version() == 1
+    assert conn.get_service_mmio().read(0x10) == 1
+    assert conn.manifest().api_version == 1
+
   def test_loopback_cpp_codegen(self, tmp_path: Path, host: str,
                                 port: int) -> None:
     """Build against live-connection codegen and run all probes."""
@@ -155,7 +161,7 @@ class TestLoopback:
         text=True,
     )
     check_lines(result.stdout, [
-        "API version: 0",
+        "API version: 1",
         "* Module information",
         "- LoopbackIP v0.0",
         "IP which simply echos bytes",

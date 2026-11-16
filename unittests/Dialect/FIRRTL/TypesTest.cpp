@@ -50,6 +50,32 @@ TEST(TypesTest, TypeAliasCast) {
   ASSERT_TRUE((type_isa<AnalogType, StringType>(alias2)));
 }
 
+TEST(TypesTest, ClassInputElements) {
+  MLIRContext context;
+  context.loadDialect<FIRRTLDialect>();
+  Builder builder(&context);
+  auto name = FlatSymbolRefAttr::get(&context, "Class");
+  auto stringType = StringType::get(&context);
+  auto integerType = FIntegerType::get(&context);
+  ClassElement first(builder.getStringAttr("first"), stringType, Direction::In);
+  ClassElement second(builder.getStringAttr("second"), integerType,
+                      Direction::In);
+  ClassElement output(builder.getStringAttr("output"), stringType,
+                      Direction::Out);
+  ClassElement otherOutput(builder.getStringAttr("otherOutput"), integerType,
+                           Direction::Out);
+  auto mixed = ClassType::get(name, {output, first, otherOutput, second});
+  auto inputs = llvm::to_vector(mixed.getInputElements());
+  ASSERT_EQ(inputs.size(), 2u);
+  EXPECT_EQ(inputs[0], first);
+  EXPECT_EQ(inputs[1], second);
+
+  EXPECT_TRUE(ClassType::get(name, {}).getInputElements().empty());
+  EXPECT_TRUE(ClassType::get(name, {output}).getInputElements().empty());
+  auto allInputs = ClassType::get(name, {first, second});
+  EXPECT_EQ(llvm::to_vector(allInputs.getInputElements()), inputs);
+}
+
 //===----------------------------------------------------------------------===//
 // Type Walking Tests
 //===----------------------------------------------------------------------===//

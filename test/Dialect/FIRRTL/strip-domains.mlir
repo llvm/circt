@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{mode=strip}))' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-strip-domains))' %s | FileCheck %s
 
 firrtl.circuit "StripDomains" {
   firrtl.module @StripDomains() {}
@@ -103,5 +103,17 @@ firrtl.circuit "StripDomains" {
   ) {
     %w = firrtl.wire domains[%D] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
     firrtl.matchingconnect %w, %a : !firrtl.uint<1>
+  }
+
+  // Strip both used and unused casts, creating an unknown only for the used one.
+  // CHECK-LABEL: firrtl.module @StripDomainAnyRef(out %ref: !firrtl.anyref) {
+  // CHECK-NEXT:    %[[UNKNOWN:.+]] = firrtl.unknown : !firrtl.anyref
+  // CHECK-NEXT:    firrtl.propassign %ref, %[[UNKNOWN]] : !firrtl.anyref
+  // CHECK-NEXT:  }
+  firrtl.module @StripDomainAnyRef(
+      in %D: !firrtl.domain<@ClockDomain()>, out %ref: !firrtl.anyref) {
+    %0 = firrtl.domain.anyref_cast %D : !firrtl.domain<@ClockDomain()>
+    %unused = firrtl.domain.anyref_cast %D : !firrtl.domain<@ClockDomain()>
+    firrtl.propassign %ref, %0 : !firrtl.anyref
   }
 }

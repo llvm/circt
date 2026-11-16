@@ -48,6 +48,7 @@ add_executable(ESIRuntimeCppTests
   ESIRuntimeTest.cpp
   ESIRuntimeValuesTest.cpp
   ESIRuntimeTypedPortsTest.cpp
+  ESIRuntimeSegmentTest.cpp
 )
 
 # Place the binary where the pytest wrapper expects it — under
@@ -63,6 +64,12 @@ target_link_libraries(ESIRuntimeCppTests PRIVATE
   ESICppRuntime
   GTest::gtest_main
 )
+
+# Exercise the cosim wire protocol in-process when it's built.
+if(TARGET CosimRpc)
+  target_sources(ESIRuntimeCppTests PRIVATE ESIRuntimeCosimRpcTest.cpp)
+  target_link_libraries(ESIRuntimeCppTests PRIVATE CosimRpc)
+endif()
 
 if(NOT MSVC)
   target_link_options(ESIRuntimeCppTests PRIVATE -pthread)

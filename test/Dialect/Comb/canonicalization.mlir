@@ -635,6 +635,172 @@ hw.module @narrowSubExtractFromNoneZero(in %x: i8, in %y: i8, out z0: i4) {
   hw.output %1 : i4
 }
 
+// Narrow trailing bits of comb.add when the unused low bits cannot carry into
+// the lowest demanded bit.
+// CHECK-LABEL: hw.module @narrowAddTrailingZerosConstant(
+// CHECK-DAG:     %[[FALSE:.+]] = hw.constant false
+// CHECK-DAG:     %[[C1:.+]] = hw.constant 1 : i25
+// CHECK-NEXT:    %[[X_HI:.+]] = comb.extract %x from 3 : (i27) -> i24
+// CHECK-NEXT:    %[[LHS:.+]] = comb.concat %[[FALSE]], %[[X_HI]] : i1, i24
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add %[[LHS]], %[[C1]] : i25
+// CHECK-NEXT:    hw.output %[[ADD]] : i25
+hw.module @narrowAddTrailingZerosConstant(in %x: i27, out o: i25) {
+  %false = hw.constant false
+  %c8_i28 = hw.constant 8 : i28
+  %lhs = comb.concat %false, %x : i1, i27
+  %add = comb.add %lhs, %c8_i28 : i28
+  %res = comb.extract %add from 3 : (i28) -> i25
+  hw.output %res : i25
+}
+
+// Narrow both upper and trailing bits of comb.add across multiple extract users
+// and preserve twoState (bin).
+// CHECK-LABEL: hw.module @narrowAddTrailingZerosMultiExtractTwoState(
+// CHECK-DAG:     %[[FALSE:.+]] = hw.constant false
+// CHECK-DAG:     %[[X_SLICE:.+]] = comb.extract %x from 3 : (i16) -> i9
+// CHECK-DAG:     %[[Y_SLICE:.+]] = comb.extract %y from 0 : (i12) -> i8
+// CHECK-DAG:     %[[RHS_SLICE:.+]] = comb.concat %[[Y_SLICE]], %[[FALSE]] : i8, i1
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add bin %[[X_SLICE]], %[[RHS_SLICE]] : i9
+// CHECK-NEXT:    %[[E0:.+]] = comb.extract %[[ADD]] from 0 : (i9) -> i4
+// CHECK-NEXT:    %[[E1:.+]] = comb.extract %[[ADD]] from 3 : (i9) -> i6
+// CHECK-NEXT:    hw.output %[[E0]], %[[E1]] : i4, i6
+hw.module @narrowAddTrailingZerosMultiExtractTwoState(in %x: i16, in %y: i12, out o0: i4, out o1: i6) {
+  %c0_i4 = hw.constant 0 : i4
+  %rhs = comb.concat %y, %c0_i4 : i12, i4
+  %add = comb.add bin %x, %rhs : i16
+  %e0 = comb.extract %add from 3 : (i16) -> i4
+  %e1 = comb.extract %add from 6 : (i16) -> i6
+  hw.output %e0, %e1 : i4, i6
+}
+
+// Narrow trailing bits of comb.add when multiple operands have non-zero low
+// bits whose maximum possible sum (2 + 1 = 3 < 8) still fits without carrying
+// into bit 3.
+// CHECK-LABEL: hw.module @narrowAddBoundedLowBitsSum(
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add %x, %y : i13
+// CHECK-NEXT:    hw.output %[[ADD]] : i13
+hw.module @narrowAddBoundedLowBitsSum(in %x: i13, in %y: i13, in %s: i1, in %t: i1, out o: i13) {
+  %false = hw.constant false
+  %c0_i2 = hw.constant 0 : i2
+  %lhs = comb.concat %x, %false, %s, %false : i13, i1, i1, i1
+  %rhs = comb.concat %y, %c0_i2, %t : i13, i2, i1
+  %add = comb.add %lhs, %rhs : i16
+  %res = comb.extract %add from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Negative test: when trailing zeros cover fewer bits than the lowest demanded
+// bit (3 < 4), bit 3 can still carry into bit 4 and must not be dropped.
+// CHECK-LABEL: hw.module @narrowAddPartialTrailingZerosNegative(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i3
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %y, %[[C0]] : i13, i3
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add %x, %[[RHS]] : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[ADD]] from 4 : (i16) -> i12
+// CHECK-NEXT:    hw.output %[[RES]] : i12
+hw.module @narrowAddPartialTrailingZerosNegative(in %x: i16, in %y: i13, out o: i12) {
+  %c0_i3 = hw.constant 0 : i3
+  %rhs = comb.concat %y, %c0_i3 : i13, i3
+  %add = comb.add %x, %rhs : i16
+  %res = comb.extract %add from 4 : (i16) -> i12
+  hw.output %res : i12
+}
+
+// Negative test: variadic 3-input add where two operands have unknown low bits
+// can still carry into bit 3 even if the third operand's low bits are zero.
+// CHECK-LABEL: hw.module @narrowAddVariadicOverflowLowBitsNegative(
+// CHECK-NEXT:    %[[C8:.+]] = hw.constant 8 : i16
+// CHECK-NEXT:    %[[ADD:.+]] = comb.add %x, %y, %[[C8]] : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[ADD]] from 3 : (i16) -> i13
+// CHECK-NEXT:    hw.output %[[RES]] : i13
+hw.module @narrowAddVariadicOverflowLowBitsNegative(in %x: i16, in %y: i16, out o: i13) {
+  %c8_i16 = hw.constant 8 : i16
+  %add = comb.add %x, %y, %c8_i16 : i16
+  %res = comb.extract %add from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Narrow trailing bits of comb.sub when rhs has known-zero low bits (cannot
+// borrow from bit 3).
+// CHECK-LABEL: hw.module @narrowSubRhsTrailingZeros(
+// CHECK-NEXT:    %[[X_HI:.+]] = comb.extract %x from 3 : (i16) -> i13
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub %[[X_HI]], %y : i13
+// CHECK-NEXT:    hw.output %[[SUB]] : i13
+hw.module @narrowSubRhsTrailingZeros(in %x: i16, in %y: i13, out o: i13) {
+  %c0_i3 = hw.constant 0 : i3
+  %rhs = comb.concat %y, %c0_i3 : i13, i3
+  %sub = comb.sub %x, %rhs : i16
+  %res = comb.extract %sub from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Narrow both upper and trailing bits of comb.sub when lhs has known-one low
+// bits (cannot borrow from bit 3) across multiple extract users and preserve
+// twoState (bin).
+// CHECK-LABEL: hw.module @narrowSubLhsTrailingOnesMultiExtractTwoState(
+// CHECK-DAG:     %[[TRUE:.+]] = hw.constant true
+// CHECK-DAG:     %[[X_SLICE:.+]] = comb.extract %x from 0 : (i12) -> i8
+// CHECK-DAG:     %[[LHS_SLICE:.+]] = comb.concat %[[X_SLICE]], %[[TRUE]] : i8, i1
+// CHECK-DAG:     %[[Y_SLICE:.+]] = comb.extract %y from 3 : (i16) -> i9
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub bin %[[LHS_SLICE]], %[[Y_SLICE]] : i9
+// CHECK-NEXT:    %[[E0:.+]] = comb.extract %[[SUB]] from 0 : (i9) -> i4
+// CHECK-NEXT:    %[[E1:.+]] = comb.extract %[[SUB]] from 3 : (i9) -> i6
+// CHECK-NEXT:    hw.output %[[E0]], %[[E1]] : i4, i6
+hw.module @narrowSubLhsTrailingOnesMultiExtractTwoState(in %x: i12, in %y: i16, out o0: i4, out o1: i6) {
+  %c-1_i4 = hw.constant -1 : i4
+  %lhs = comb.concat %x, %c-1_i4 : i12, i4
+  %sub = comb.sub bin %lhs, %y : i16
+  %e0 = comb.extract %sub from 3 : (i16) -> i4
+  %e1 = comb.extract %sub from 6 : (i16) -> i6
+  hw.output %e0, %e1 : i4, i6
+}
+
+// Narrow trailing bits of comb.sub when min(lhs[2:0]) = 4 >= max(rhs[2:0]) = 3
+// guarantees no borrow into bit 3.
+// CHECK-LABEL: hw.module @narrowSubBoundedLowBitsNoBorrow(
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub %x, %y : i13
+// CHECK-NEXT:    hw.output %[[SUB]] : i13
+hw.module @narrowSubBoundedLowBitsNoBorrow(in %x: i13, in %y: i13, in %s: i1, in %t: i2, out o: i13) {
+  %true = hw.constant true
+  %false = hw.constant false
+  %lhs = comb.concat %x, %true, %s, %false : i13, i1, i1, i1
+  %rhs = comb.concat %y, %false, %t : i13, i1, i2
+  %sub = comb.sub %lhs, %rhs : i16
+  %res = comb.extract %sub from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Negative test (asymmetry): trailing zeros on lhs (0 - y[2:0]) can borrow from
+// bit 3 when y[2:0] != 0 and must not be dropped.
+// CHECK-LABEL: hw.module @narrowSubLhsTrailingZerosNegative(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i3
+// CHECK-NEXT:    %[[LHS:.+]] = comb.concat %x, %[[C0]] : i13, i3
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub %[[LHS]], %y : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SUB]] from 3 : (i16) -> i13
+// CHECK-NEXT:    hw.output %[[RES]] : i13
+hw.module @narrowSubLhsTrailingZerosNegative(in %x: i13, in %y: i16, out o: i13) {
+  %c0_i3 = hw.constant 0 : i3
+  %lhs = comb.concat %x, %c0_i3 : i13, i3
+  %sub = comb.sub %lhs, %y : i16
+  %res = comb.extract %sub from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
+// Negative test (asymmetry): trailing ones on rhs (x[2:0] - 3'b111) can borrow
+// from bit 3 when x[2:0] != 3'b111 and must not be dropped.
+// CHECK-LABEL: hw.module @narrowSubRhsTrailingOnesNegative(
+// CHECK-NEXT:    %[[ONES:.+]] = hw.constant -1 : i3
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %y, %[[ONES]] : i13, i3
+// CHECK-NEXT:    %[[SUB:.+]] = comb.sub %x, %[[RHS]] : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SUB]] from 3 : (i16) -> i13
+// CHECK-NEXT:    hw.output %[[RES]] : i13
+hw.module @narrowSubRhsTrailingOnesNegative(in %x: i16, in %y: i13, out o: i13) {
+  %c-1_i3 = hw.constant -1 : i3
+  %rhs = comb.concat %y, %c-1_i3 : i13, i3
+  %sub = comb.sub %x, %rhs : i16
+  %res = comb.extract %sub from 3 : (i16) -> i13
+  hw.output %res : i13
+}
+
 // Validates that subtraction narrowing retains the lower bits when not extracting from
 // zero.
 // CHECK-LABEL: hw.module @narrowMulExtractFromNoneZero
@@ -1244,6 +1410,87 @@ hw.module @extractShift(in %arg0 : i4, out o1 : i1, out o2: i1, out o3: i1, out 
   hw.output %3, %4, %5, %6: i1, i1, i1, i1
 }
 
+// CHECK-LABEL: hw.module @extractAddCarryAllOnesTwoState
+hw.module @extractAddCarryAllOnesTwoState(in %x : i8, out o : i1) {
+  // CHECK-NEXT: %[[ZERO:.+]] = hw.constant 0 : i8
+  // CHECK-NEXT: %[[CMP:.+]] = comb.icmp bin ne %x, %[[ZERO]] {sv.namehint = "carry_out"} : i8
+  // CHECK-NEXT: hw.output %[[CMP]] : i1
+  %false = hw.constant false
+  %c255_i9 = hw.constant 255 : i9
+  %lhs = comb.concat %false, %x : i1, i8
+  %add = comb.add bin %lhs, %c255_i9 : i9
+  %res = comb.extract %add from 8 {sv.namehint = "carry_out"} : (i9) -> i1
+  hw.output %res : i1
+}
+
+// CHECK-LABEL: hw.module @extractAddCarryGeneralConstant
+hw.module @extractAddCarryGeneralConstant(in %x : i8, out o : i1) {
+  // CHECK-NEXT: %[[C117:.+]] = hw.constant 117 : i8
+  // CHECK-NEXT: %[[CMP:.+]] = comb.icmp ugt %x, %[[C117]] : i8
+  // CHECK-NEXT: hw.output %[[CMP]] : i1
+  %false = hw.constant false
+  %c138_i9 = hw.constant 138 : i9
+  %lhs = comb.concat %false, %x : i1, i8
+  %add = comb.add %lhs, %c138_i9 : i9
+  %res = comb.extract %add from 8 : (i9) -> i1
+  hw.output %res : i1
+}
+
+// CHECK-LABEL: hw.module @extractAddBorrowParityFlip
+hw.module @extractAddBorrowParityFlip(in %x : i8, out o1 : i1, out o2 : i1) {
+  // CHECK-DAG: %[[C5:.+]] = hw.constant 5 : i8
+  // CHECK-DAG: %[[C0:.+]] = hw.constant 0 : i8
+  // CHECK-NEXT: %[[CMP1:.+]] = comb.icmp ult %x, %[[C5]] : i8
+  // CHECK-NEXT: %[[CMP2:.+]] = comb.icmp eq %x, %[[C0]] : i8
+  // CHECK-NEXT: hw.output %[[CMP1]], %[[CMP2]] : i1, i1
+  %false = hw.constant false
+  %c5_i9 = hw.constant 5 : i9
+  %c_neg1_i9 = hw.constant -1 : i9
+  %lhs = comb.concat %false, %x : i1, i8
+  %sub = comb.sub %lhs, %c5_i9 : i9
+  %e1 = comb.extract %sub from 8 : (i9) -> i1
+  %add = comb.add %lhs, %c_neg1_i9 : i9
+  %e2 = comb.extract %add from 8 : (i9) -> i1
+  hw.output %e1, %e2 : i1, i1
+}
+
+// CHECK-LABEL: hw.module @extractAddCarryNegative
+hw.module @extractAddCarryNegative(in %x : i8, in %y : i8, in %a : i9, out o1 : i1, out o2 : i8, out o3 : i1, out o4 : i1, out o5 : i1) {
+  %false = hw.constant false
+  %c255_i9 = hw.constant 255 : i9
+  %zx = comb.concat %false, %x : i1, i8
+  %zy = comb.concat %false, %y : i1, i8
+
+  // Multi-use add (both carry bit [8] and low bits [7:0] are extracted).
+  // CHECK: %[[ADD1:.+]] = comb.add %{{.+}}, %c255_i9 : i9
+  // CHECK-NEXT: %[[E1:.+]] = comb.extract %[[ADD1]] from 8 : (i9) -> i1
+  // CHECK-NEXT: %[[E2:.+]] = comb.extract %[[ADD1]] from 0 : (i9) -> i8
+  %add1 = comb.add %zx, %c255_i9 : i9
+  %e1 = comb.extract %add1 from 8 : (i9) -> i1
+  %e2 = comb.extract %add1 from 0 : (i9) -> i8
+
+  // Bit 8 of %a is unknown.
+  // CHECK-NEXT: %[[ADD2:.+]] = comb.add %a, %c255_i9 : i9
+  // CHECK-NEXT: %[[E3:.+]] = comb.extract %[[ADD2]] from 8 : (i9) -> i1
+  %add2 = comb.add %a, %c255_i9 : i9
+  %e3 = comb.extract %add2 from 8 : (i9) -> i1
+
+  // Neither operand has constant low bits.
+  // CHECK-NEXT: %[[ADD3:.+]] = comb.add %{{.+}}, %{{.+}} : i9
+  // CHECK-NEXT: %[[E4:.+]] = comb.extract %[[ADD3]] from 8 : (i9) -> i1
+  %add3 = comb.add %zx, %zy : i9
+  %e4 = comb.extract %add3 from 8 : (i9) -> i1
+
+  // Variadic 3-operand add.
+  // CHECK-NEXT: %[[ADD4:.+]] = comb.add %{{.+}}, %{{.+}}, %c255_i9 : i9
+  // CHECK-NEXT: %[[E5:.+]] = comb.extract %[[ADD4]] from 8 : (i9) -> i1
+  %add4 = comb.add %zx, %zy, %c255_i9 : i9
+  %e5 = comb.extract %add4 from 8 : (i9) -> i1
+
+  // CHECK-NEXT: hw.output %[[E1]], %[[E2]], %[[E3]], %[[E4]], %[[E5]]
+  hw.output %e1, %e2, %e3, %e4, %e5 : i1, i8, i1, i1, i1
+}
+
 // CHECK-LABEL: hw.module @moduloZeroDividend
 hw.module @moduloZeroDividend(in %arg0 : i32, out o1: i32, out o2: i32) {
   // CHECK: [[ZERO:%.*]] = hw.constant 0 : i32
@@ -1395,9 +1642,9 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1, in %cond3: i1,
   %and = comb.and %arg0, %arg1, %arg2 : i32
   %o4 = comb.mux %cond, %arg0, %and : i32
 
-  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[OR1:%.*]] = comb.or %arg1, %arg2, %arg3 : i32
   // CHECK: [[ORRESULT:%.*]] = comb.or [[OR1]], %arg0 : i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[MASKED_OR:%.*]] = comb.and [[CONDEXT]], [[OR1]] : i32
   // CHECK: [[O5:%.*]] = comb.or [[MASKED_OR]], %arg0 : i32
   %orResult = comb.or %arg0, %arg1, %arg2, %arg3 : i32
@@ -1439,6 +1686,25 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1, in %cond3: i1,
   // CHECK: [[O6]], [[O7]], [[O8]], [[O9]], [[O10]]
   hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7, %o8, %o9, %o10, %o11, %o12, %o13
     : i32, i32, i32, i32, i32, i32, i32, i32, i1, i32, i32, i1, i32, i32
+}
+
+// Regression check for SSACFG dominance when splitting a multi-use variadic
+// associative op in foldCommonMuxValue.
+// CHECK-LABEL: func.func @muxCommonMultiUseDominance(
+// CHECK-NEXT:    %[[TRUE:.+]] = hw.constant true
+// CHECK-NEXT:    %[[SUB:.+]] = comb.and %arg0, %arg1 : i10
+// CHECK-NEXT:    %[[FULL:.+]] = comb.and %[[SUB]], %arg2 : i10
+// CHECK-NEXT:    call @use_i10(%[[FULL]]) : (i10) -> ()
+// CHECK-NEXT:    %[[NOT:.+]] = comb.xor %arg3, %[[TRUE]] : i1
+// CHECK-NEXT:    %[[REPL:.+]] = comb.replicate %[[NOT]] : (i1) -> i10
+// CHECK-NEXT:    %[[MASK:.+]] = comb.or %[[REPL]], %[[SUB]] : i10
+// CHECK-NEXT:    %[[RES:.+]] = comb.and %[[MASK]], %arg2 : i10
+// CHECK-NEXT:    return %[[RES]] : i10
+func.func @muxCommonMultiUseDominance(%arg0: i10, %arg1: i10, %arg2: i10, %arg3: i1) -> i10 {
+  %0 = comb.and %arg0, %arg1, %arg2 : i10
+  call @use_i10(%0) : (i10) -> ()
+  %1 = comb.mux %arg3, %0, %arg2 : i10
+  return %1 : i10
 }
 
 // CHECK-LABEL: @flatten_multi_use_and
@@ -2170,4 +2436,134 @@ hw.module @paritySingleBit(in %a: i1, out o: i1) {
   // CHECK-NEXT: hw.output %a : i1
   %0 = comb.parity %a : i1
   hw.output %0 : i1
+}
+
+// Ensure known-bits analysis on comb.shl and comb.shru accounts for shift
+// amounts >= bitWidth producing zero, rather than folding icmp against zero.
+// No IR change is the expected behavior here (https://github.com/llvm/circt/pull/11259).
+// CHECK-LABEL: hw.module @shlOvershiftKnownBits(
+// CHECK-DAG:     %[[C_NEG1:.+]] = hw.constant -1 : i4
+// CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i4
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %[[C_NEG1]], %s : i4
+// CHECK-NEXT:    %[[NE:.+]] = comb.icmp ne %[[SHL]], %[[C0]] : i4
+// CHECK-NEXT:    %[[EQ:.+]] = comb.icmp eq %[[SHL]], %[[C0]] : i4
+// CHECK-NEXT:    hw.output %[[NE]], %[[EQ]] : i1, i1
+hw.module @shlOvershiftKnownBits(in %s: i4, out ne_zero: i1, out eq_zero: i1) {
+  %c-1_i4 = hw.constant -1 : i4
+  %c0_i4 = hw.constant 0 : i4
+  %0 = comb.shl %c-1_i4, %s : i4
+  %1 = comb.icmp ne %0, %c0_i4 : i4
+  %2 = comb.icmp eq %0, %c0_i4 : i4
+  hw.output %1, %2 : i1, i1
+}
+
+// CHECK-LABEL: hw.module @shruOvershiftKnownBits(
+// CHECK-DAG:     %[[C_NEG1:.+]] = hw.constant -1 : i4
+// CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i4
+// CHECK-NEXT:    %[[SHRU:.+]] = comb.shru %[[C_NEG1]], %s : i4
+// CHECK-NEXT:    %[[NE:.+]] = comb.icmp ne %[[SHRU]], %[[C0]] : i4
+// CHECK-NEXT:    %[[EQ:.+]] = comb.icmp eq %[[SHRU]], %[[C0]] : i4
+// CHECK-NEXT:    hw.output %[[NE]], %[[EQ]] : i1, i1
+hw.module @shruOvershiftKnownBits(in %s: i4, out ne_zero: i1, out eq_zero: i1) {
+  %c-1_i4 = hw.constant -1 : i4
+  %c0_i4 = hw.constant 0 : i4
+  %0 = comb.shru %c-1_i4, %s : i4
+  %1 = comb.icmp ne %0, %c0_i4 : i4
+  %2 = comb.icmp eq %0, %c0_i4 : i4
+  hw.output %1, %2 : i1, i1
+}
+
+// Narrow comb.shl to the highest demanded bit when the dropped upper bits of
+// the shift amount are known zero.
+// CHECK-LABEL: hw.module @narrowShlZeroExtendedLhs(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i23
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %[[C0]], %s : i23, i5
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %x, %[[RHS]] : i28
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SHL]] from 1 : (i28) -> i27
+// CHECK-NEXT:    hw.output %[[RES]] : i27
+hw.module @narrowShlZeroExtendedLhs(in %x: i28, in %s: i5, out o: i27) {
+  %false = hw.constant false
+  %c0_i24 = hw.constant 0 : i24
+  %lhs = comb.concat %false, %x : i1, i28
+  %rhs = comb.concat %c0_i24, %s : i24, i5
+  %shl = comb.shl %lhs, %rhs : i29
+  %res = comb.extract %shl from 1 : (i29) -> i27
+  hw.output %res : i27
+}
+
+// Narrow comb.shl with a constant LHS and a non-zero lowBit extract (low bits
+// [10:0] must be kept because they can shift into [26:11]).
+// CHECK-LABEL: hw.module @narrowShlConstantLhs(
+// CHECK-DAG:     %[[MASK:.+]] = hw.constant -1 : i27
+// CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i22
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %[[C0]], %s : i22, i5
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %[[MASK]], %[[RHS]] : i27
+// CHECK-NEXT:    %[[EXT:.+]] = comb.extract %[[SHL]] from 11 : (i27) -> i16
+// CHECK-NEXT:    hw.output %[[EXT]] : i16
+hw.module @narrowShlConstantLhs(in %s: i5, out o: i16) {
+  %mask = hw.constant -1 : i28
+  %c0_i23 = hw.constant 0 : i23
+  %rhs = comb.concat %c0_i23, %s : i23, i5
+  %shl = comb.shl %mask, %rhs : i28
+  %ext = comb.extract %shl from 11 : (i28) -> i16
+  hw.output %ext : i16
+}
+
+// Narrow comb.shl across multiple extract users and preserve twoState (bin).
+// CHECK-LABEL: hw.module @narrowShlMultipleExtractsTwoState(
+// CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i8
+// CHECK-DAG:     %[[LHS:.+]] = comb.extract %x from 0 : (i16) -> i12
+// CHECK-DAG:     %[[RHS:.+]] = comb.concat %[[C0]], %s : i8, i4
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl bin %[[LHS]], %[[RHS]] : i12
+// CHECK-NEXT:    %[[HI:.+]] = comb.extract %[[SHL]] from 4 : (i12) -> i6
+// CHECK-NEXT:    hw.output %[[SHL]], %[[HI]] : i12, i6
+hw.module @narrowShlMultipleExtractsTwoState(in %x: i16, in %s: i4, out lo: i12, out hi: i6) {
+  %c0_i12 = hw.constant 0 : i12
+  %rhs = comb.concat %c0_i12, %s : i12, i4
+  %shl = comb.shl bin %x, %rhs : i16
+  %0 = comb.extract %shl from 0 : (i16) -> i12
+  %1 = comb.extract %shl from 4 : (i16) -> i6
+  hw.output %0, %1 : i12, i6
+}
+
+// Negative test: when the MSB of comb.shl is demanded, no narrowing occurs.
+// CHECK-LABEL: hw.module @narrowShlMsbDemandedNegative(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i12
+// CHECK-NEXT:    %[[RHS:.+]] = comb.concat %[[C0]], %s : i12, i4
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %x, %[[RHS]] : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SHL]] from 1 : (i16) -> i15
+// CHECK-NEXT:    hw.output %[[RES]] : i15
+hw.module @narrowShlMsbDemandedNegative(in %x: i16, in %s: i4, out o: i15) {
+  %c0_i12 = hw.constant 0 : i12
+  %rhs = comb.concat %c0_i12, %s : i12, i4
+  %shl = comb.shl %x, %rhs : i16
+  %res = comb.extract %shl from 1 : (i16) -> i15
+  hw.output %res : i15
+}
+
+// Negative test: when the dropped upper bits of rhs are not known zero,
+// truncating rhs could change out-of-range shift behavior and must not fire.
+// CHECK-LABEL: hw.module @narrowShlUnknownRhsUpperBitsNegative(
+// CHECK-NEXT:    %[[SHL:.+]] = comb.shl %x, %rhs : i16
+// CHECK-NEXT:    %[[RES:.+]] = comb.extract %[[SHL]] from 0 : (i16) -> i12
+// CHECK-NEXT:    hw.output %[[RES]] : i12
+hw.module @narrowShlUnknownRhsUpperBitsNegative(in %x: i16, in %rhs: i16, out o: i12) {
+  %shl = comb.shl %x, %rhs : i16
+  %res = comb.extract %shl from 0 : (i16) -> i12
+  hw.output %res : i12
+}
+
+// Ensure a single-bit extract from bit 0 of `shl(1, zext(s))` still folds to
+// an equality comparison rather than narrowing to a 1-bit `comb.shl`.
+// CHECK-LABEL: hw.module @narrowShlSingleBitExtractToICmp(
+// CHECK-NEXT:    %[[C0:.+]] = hw.constant 0 : i4
+// CHECK-NEXT:    %[[CMP:.+]] = comb.icmp eq %s, %[[C0]] : i4
+// CHECK-NEXT:    hw.output %[[CMP]] : i1
+hw.module @narrowShlSingleBitExtractToICmp(in %s: i4, out o: i1) {
+  %c1_i8 = hw.constant 1 : i8
+  %c0_i4 = hw.constant 0 : i4
+  %rhs = comb.concat %c0_i4, %s : i4, i4
+  %shl = comb.shl %c1_i8, %rhs : i8
+  %res = comb.extract %shl from 0 : (i8) -> i1
+  hw.output %res : i1
 }

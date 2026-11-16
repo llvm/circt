@@ -27,16 +27,11 @@
 namespace circt {
 namespace esi {
 
-/// Manifest format version number. Increment this whenever the manifest format
-/// changes.
-/// Version 0 is subject to massive, breaking changes.
-constexpr uint64_t esiApiVersion = 0;
+/// ESI ABI version. Increment for incompatible changes.
+/// Version 1 accounts for the union alignment bug fix in Verilog emission.
+constexpr uint64_t esiApiVersion = 1;
 
 void registerESIPasses();
-
-/// Name of dialect attribute which governs whether or not to bundle (i.e. use
-/// SystemVerilog interfaces) channel signal wires on external modules.
-constexpr StringRef extModBundleSignalsAttrName = "esi.bundle";
 
 /// Name of dialect attribute which governs whether or not to flatten struct
 /// ports into a bunch of individual 'data' wires.

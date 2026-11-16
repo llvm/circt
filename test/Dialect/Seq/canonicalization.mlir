@@ -438,3 +438,28 @@ hw.module @clock_div(in %clock : !seq.clock, out div_combined: !seq.clock) {
   // CHECK: hw.output %[[DIV3]]
   hw.output %div2 : !seq.clock
 }
+
+// CHECK-LABEL: @FirRegPreserveDialectAttrsOnConstFalseReset
+hw.module @FirRegPreserveDialectAttrsOnConstFalseReset(in %clk : !seq.clock, in %d : i32, out o0 : i32, out o1 : i32) {
+  %false = hw.constant false
+  %c0_i32 = hw.constant 0 : i32
+  // CHECK: %reg0 = seq.firreg %d clock %clk {sv.attributes = [#sv.attribute<"dont_touch">]} : i32
+  // CHECK: %reg1 = seq.firreg %d clock %clk {sv.attributes = [#sv.attribute<"keep">]} : i32
+  %reg0 = seq.firreg %d clock %clk reset sync %false, %c0_i32 {sv.attributes = [#sv.attribute<"dont_touch">]} : i32
+  %reg1 = seq.firreg %d clock %clk reset async %false, %c0_i32 {sv.attributes = [#sv.attribute<"keep">]} : i32
+  hw.output %reg0, %reg1 : i32, i32
+}
+
+// CHECK-LABEL: @FirRegPreserveDialectAttrsOnMultiUseArrayCreate
+hw.module @FirRegPreserveDialectAttrsOnMultiUseArrayCreate(in %a : i1, in %clock : !seq.clock, out b : !hw.array<2xi1>, out c : !hw.array<2xi1>) {
+  // CHECK: %[[NEW:.+]] = hw.array_create %false, %a : i1
+  // CHECK: %r = seq.firreg %[[NEW]] clock %clock {sv.attributes = [#sv.attribute<"dont_touch">]} : !hw.array<2xi1>
+  // CHECK: %[[ELEM:.+]] = hw.array_get %r[%true] : !hw.array<2xi1>, i1
+  // CHECK: %[[ORIG:.+]] = hw.array_create %[[ELEM]], %a : i1
+  // CHECK: hw.output %r, %[[ORIG]] : !hw.array<2xi1>, !hw.array<2xi1>
+  %true = hw.constant true
+  %r = seq.firreg %1 clock %clock {sv.attributes = [#sv.attribute<"dont_touch">]} : !hw.array<2xi1>
+  %0 = hw.array_get %r[%true] : !hw.array<2xi1>, i1
+  %1 = hw.array_create %0, %a : i1
+  hw.output %r, %1 : !hw.array<2xi1>, !hw.array<2xi1>
+}

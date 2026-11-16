@@ -12,6 +12,8 @@
 include "mlir/IR/DialectBase.td"
 
 def ArcDialect : Dialect {
+  // TODO: Migrate custom assembly formats to prop-dict.
+  let useStrictPropertiesInAssemblyFormat = 0;
   let name = "arc";
   let summary = "Canonical representation of state transfer in a circuit";
   let description = [{

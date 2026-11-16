@@ -117,7 +117,7 @@ void HierarchicalRunnerPass::runOnOperation() {
 
   // An atomic failure variable for the async executors.
   std::vector<std::atomic<bool>> activePMs(pipelines.size());
-  std::fill(activePMs.begin(), activePMs.end(), false);
+  llvm::fill(activePMs, false);
   auto result = mlir::failableParallelForEach(
       &getContext(), visited, [&](Operation *node) -> LogicalResult {
         // Find a pass manager for this operation.

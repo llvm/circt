@@ -64,6 +64,31 @@ firrtl.circuit "SimulationTest" {
 // -----
 
 // Non-literal expressions cause an error in FIRRTL < 7.0.0.
+firrtl.circuit "ListContains" {
+  firrtl.module @ListContains(in %list : !firrtl.list<string>,
+                               in %element : !firrtl.string,
+                               out %found : !firrtl.bool) {
+    // expected-error @below {{'firrtl.list.contains' op list contains requires FIRRTL 7.0.0}}
+    %contains = firrtl.list.contains %list, %element : !firrtl.list<string>
+    firrtl.propassign %found, %contains : !firrtl.bool
+  }
+}
+
+// -----
+
+// AnyRef property equality requires >= 7.0.0.
+firrtl.circuit "PropEqAnyRef" {
+  firrtl.module @PropEqAnyRef(in %a : !firrtl.anyref,
+                             in %b : !firrtl.anyref,
+                             out %eq : !firrtl.bool) {
+    // expected-error @below {{'firrtl.prop.eq' op property equality with AnyRef or Class types requires FIRRTL 7.0.0}}
+    %0 = firrtl.prop.eq %a, %b : !firrtl.anyref
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+}
+
+// -----
+
 firrtl.circuit "CompoundPropertyMessage" {
   firrtl.module @CompoundPropertyMessage() {
     %cond = firrtl.bool true

@@ -28,6 +28,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/ErrorHandling.h"
 
 using namespace circt;
 using namespace circt::hw;
@@ -336,65 +337,13 @@ void IntType::print(AsmPrinter &p) const {
 // Struct Type
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace hw {
-namespace detail {
-bool operator==(const FieldInfo &a, const FieldInfo &b) {
-  return a.name == b.name && a.type == b.type;
-}
-llvm::hash_code hash_value(const FieldInfo &fi) {
-  return llvm::hash_combine(fi.name, fi.type);
-}
-} // namespace detail
-} // namespace hw
-} // namespace circt
-
-/// Parse a list of unique field names and types within <>. E.g.:
-/// <foo: i7, bar: i8>
-static ParseResult parseFields(AsmParser &p,
-                               SmallVectorImpl<FieldInfo> &parameters) {
-  llvm::StringSet<> nameSet;
-  bool hasDuplicateName = false;
-  auto parseResult = p.parseCommaSeparatedList(
-      mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
-        std::string name;
-        Type type;
-
-        auto fieldLoc = p.getCurrentLocation();
-        if (p.parseKeywordOrString(&name) || p.parseColon() ||
-            p.parseType(type))
-          return failure();
-
-        if (!nameSet.insert(name).second) {
-          p.emitError(fieldLoc, "duplicate field name \'" + name + "\'");
-          // Continue parsing to print all duplicates, but make sure to error
-          // eventually
-          hasDuplicateName = true;
-        }
-
-        parameters.push_back(
-            FieldInfo{StringAttr::get(p.getContext(), name), type});
-        return success();
-      });
-
-  if (hasDuplicateName)
-    return failure();
-  return parseResult;
-}
-
-/// Print out a list of named fields surrounded by <>.
-static void printFields(AsmPrinter &p, ArrayRef<FieldInfo> fields) {
-  p << '<';
-  llvm::interleaveComma(fields, p, [&](const FieldInfo &field) {
-    p.printKeywordOrString(field.name.getValue());
-    p << ": " << field.type;
-  });
-  p << ">";
-}
-
 Type StructType::parse(AsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  if (parseFields(p, parameters))
+  SmallVector<std::pair<llvm::SMLoc, StringAttr>> duplicates;
+  auto parseResult = parseFieldList(p, parameters, duplicates);
+  for (auto [loc, name] : duplicates)
+    p.emitError(loc) << "duplicate field name '" << name.getValue() << "'";
+  if (failed(parseResult) || !duplicates.empty())
     return Type();
   return get(p.getContext(), parameters);
 }
@@ -413,7 +362,9 @@ LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
   return result;
 }
 
-void StructType::print(AsmPrinter &p) const { printFields(p, getElements()); }
+void StructType::print(AsmPrinter &p) const {
+  printFieldList(p, getElements());
+}
 
 Type StructType::getFieldType(mlir::StringRef fieldName) {
   for (const auto &field : getElements())
@@ -945,15 +896,6 @@ std::optional<int64_t> TypeAliasType::getBitWidth() const {
 // ModuleType
 //===----------------------------------------------------------------------===//
 
-LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                 ArrayRef<ModulePort> ports) {
-  if (llvm::any_of(ports, [](const ModulePort &port) {
-        return hasHWInOutType(port.type);
-      }))
-    return emitError() << "Ports cannot be inout types";
-  return success();
-}
-
 size_t ModuleType::getPortIdForInputId(size_t idx) {
   assert(idx < getImpl()->inputToAbs.size() && "input port out of range");
   return getImpl()->inputToAbs[idx];
@@ -987,9 +929,6 @@ SmallVector<Type> ModuleType::getInputTypes() {
   for (auto &p : getPorts()) {
     if (p.dir == ModulePort::Direction::Input)
       retval.push_back(p.type);
-    else if (p.dir == ModulePort::Direction::InOut) {
-      retval.push_back(hw::InOutType::get(p.type));
-    }
   }
   return retval;
 }
@@ -1010,10 +949,7 @@ SmallVector<Type> ModuleType::getPortTypes() {
 }
 
 Type ModuleType::getInputType(size_t idx) {
-  const auto &portInfo = getPorts()[getPortIdForInputId(idx)];
-  if (portInfo.dir != ModulePort::InOut)
-    return portInfo.type;
-  return InOutType::get(portInfo.type);
+  return getPorts()[getPortIdForInputId(idx)].type;
 }
 
 Type ModuleType::getOutputType(size_t idx) {
@@ -1079,8 +1015,6 @@ FunctionType ModuleType::getFuncType() {
   for (auto p : getPorts())
     if (p.dir == ModulePort::Input)
       inputs.push_back(p.type);
-    else if (p.dir == ModulePort::InOut)
-      inputs.push_back(InOutType::get(p.type));
     else
       outputs.push_back(p.type);
   return FunctionType::get(getContext(), inputs, outputs);
@@ -1111,9 +1045,8 @@ static StringRef dirToStr(ModulePort::Direction dir) {
     return "input";
   case ModulePort::Direction::Output:
     return "output";
-  case ModulePort::Direction::InOut:
-    return "inout";
   }
+  llvm_unreachable("invalid direction");
 }
 
 static ModulePort::Direction strToDir(StringRef str) {
@@ -1121,8 +1054,6 @@ static ModulePort::Direction strToDir(StringRef str) {
     return ModulePort::Direction::Input;
   if (str == "output")
     return ModulePort::Direction::Output;
-  if (str == "inout")
-    return ModulePort::Direction::InOut;
   llvm::report_fatal_error("invalid direction");
 }
 
@@ -1180,18 +1111,10 @@ ModuleType circt::hw::detail::fnToMod(FunctionType fnty,
   SmallVector<ModulePort> ports;
   if (!inputNames.empty()) {
     for (auto [t, n] : llvm::zip_equal(fnty.getInputs(), inputNames))
-      if (auto iot = dyn_cast<hw::InOutType>(t))
-        ports.push_back({cast<StringAttr>(n), iot.getElementType(),
-                         ModulePort::Direction::InOut});
-      else
-        ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Input});
+      ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Input});
   } else {
     for (auto t : fnty.getInputs())
-      if (auto iot = dyn_cast<hw::InOutType>(t))
-        ports.push_back(
-            {{}, iot.getElementType(), ModulePort::Direction::InOut});
-      else
-        ports.push_back({{}, t, ModulePort::Direction::Input});
+      ports.push_back({{}, t, ModulePort::Direction::Input});
   }
   if (!outputNames.empty()) {
     for (auto [t, n] : llvm::zip_equal(fnty.getResults(), outputNames))

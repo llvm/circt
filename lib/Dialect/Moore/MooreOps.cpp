@@ -50,12 +50,11 @@ void SVModuleOp::print(OpAsmPrinter &p) {
   p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
   hw::module_like_impl::printModuleSignatureNew(p, getBodyRegion(),
                                                 getModuleType(), {}, {});
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                     getAttributeNames());
   p << " ";
   p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/true);
-
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                     getAttributeNames());
 }
 
 ParseResult SVModuleOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -398,7 +397,7 @@ SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
 }
 
 Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
-  auto packedType = dyn_cast<PackedType>(slot.elemType);
+  auto packedType = dyn_cast<PackedType>(slot.valueType);
   if (!packedType)
     return {};
   auto bitWidth = packedType.getBitSize();
@@ -805,10 +804,15 @@ LogicalResult ConcatRefOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  if (operands.empty())
+    return emitOptionalError(loc, "requires at least one operand");
   Domain domain = Domain::TwoValued;
   unsigned width = 0;
   for (Value operand : operands) {
-    UnpackedType nestedType = cast<RefType>(operand.getType()).getNestedType();
+    if (operand.getType().getTypeID() != operands[0].getType().getTypeID())
+      return emitOptionalError(loc, "operands must all be refs or all be nets");
+    UnpackedType nestedType =
+        cast<WrapperType>(operand.getType()).getNestedType();
     PackedType packedType = dyn_cast<PackedType>(nestedType);
 
     if (!packedType) {
@@ -825,7 +829,8 @@ LogicalResult ConcatRefOp::inferReturnTypes(
     }
     width += *bitSize;
   }
-  results.push_back(RefType::get(IntType::get(context, width, domain)));
+  results.push_back(cast<WrapperType>(operands[0].getType())
+                        .withNestedType(IntType::get(context, width, domain)));
   return success();
 }
 
@@ -964,13 +969,13 @@ OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructExtractRefOp::verify() {
-  auto type = getStructFieldType(
-      cast<RefType>(getInput().getType()).getNestedType(), getFieldNameAttr());
+  auto type = getStructFieldType(getInput().getType().getNestedType(),
+                                 getFieldNameAttr());
   if (!type)
     return emitOpError() << "extracts field " << getFieldNameAttr()
                          << " which does not exist in " << getInput().getType();
   if (type != getType().getNestedType())
-    return emitOpError() << "result ref of type " << getType().getNestedType()
+    return emitOpError() << "result of type " << getType().getNestedType()
                          << " must match struct field type " << type;
   return success();
 }
@@ -1327,7 +1332,7 @@ bool BlockingAssignOp::canUsesBeRemoved(
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getDst() == slot.ptr &&
-         getSrc() != slot.ptr && getSrc().getType() == slot.elemType;
+         getSrc() != slot.ptr && getSrc().getType() == slot.valueType;
 }
 
 DeletionKind BlockingAssignOp::removeBlockingUses(
@@ -1361,7 +1366,7 @@ bool ReadOp::canUsesBeRemoved(const MemorySlot &slot,
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getOperand() == slot.ptr &&
-         getResult().getType() == slot.elemType;
+         getResult().getType() == slot.valueType;
 }
 
 DeletionKind
@@ -1913,7 +1918,7 @@ static StringRef stringifyDPIArgDir(DPIArgDirection dir) {
 
 ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   auto builder = parser.getBuilder();
-  auto ctx = builder.getContext();
+  auto *ctx = builder.getContext();
 
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
@@ -2113,7 +2118,7 @@ void DPIFuncOp::print(OpAsmPrinter &p) {
 
 LogicalResult
 FuncDPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto referencedOp =
+  auto *referencedOp =
       symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
   if (!referencedOp)
     return emitError("cannot find function declaration '")

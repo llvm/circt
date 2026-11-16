@@ -290,7 +290,7 @@ ArrayRef<InstancePath> InstancePathCache::getPaths(ModuleOpInterface op,
   ArrayRef<InstancePath> pathList;
   if (!extendedPaths.empty()) {
     auto *paths = allocator.Allocate<InstancePath>(extendedPaths.size());
-    std::copy(extendedPaths.begin(), extendedPaths.end(), paths);
+    llvm::copy(extendedPaths, paths);
     pathList = ArrayRef<InstancePath>(paths, extendedPaths.size());
   }
   cache.insert({op, pathList});
@@ -331,7 +331,7 @@ InstancePath InstancePathCache::appendInstance(InstancePath path,
                                                InstanceOpInterface inst) {
   size_t n = path.size() + 1;
   auto *newPath = allocator.Allocate<InstanceOpInterface>(n);
-  std::copy(path.begin(), path.end(), newPath);
+  llvm::copy(path, newPath);
   newPath[path.size()] = inst;
   return InstancePath(ArrayRef(newPath, n));
 }
@@ -340,7 +340,7 @@ InstancePath InstancePathCache::prependInstance(InstanceOpInterface inst,
                                                 InstancePath path) {
   size_t n = path.size() + 1;
   auto *newPath = allocator.Allocate<InstanceOpInterface>(n);
-  std::copy(path.begin(), path.end(), newPath + 1);
+  llvm::copy(path, newPath + 1);
   newPath[0] = inst;
   return InstancePath(ArrayRef(newPath, n));
 }
@@ -349,8 +349,8 @@ InstancePath InstancePathCache::concatPath(InstancePath path1,
                                            InstancePath path2) {
   size_t n = path1.size() + path2.size();
   auto *newPath = allocator.Allocate<InstanceOpInterface>(n);
-  std::copy(path1.begin(), path1.end(), newPath);
-  std::copy(path2.begin(), path2.end(), newPath + path1.size());
+  llvm::copy(path1, newPath);
+  llvm::copy(path2, newPath + path1.size());
   return InstancePath(ArrayRef(newPath, n));
 }
 

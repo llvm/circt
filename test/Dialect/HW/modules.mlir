@@ -23,17 +23,15 @@ hw.module.extern @D_ATTR(in %a: i1, out "": i1, out "": i1) attributes {filename
 // CHECK-LABEL: hw.module.extern @D_ATTR(in %a : i1, out "" : i1, out "" : i1) attributes {filename = "test.v", p = {DEFAULT = 0 : i64}}
 // CHECK-NOT: {
 
-hw.module @A(in %d: i1, inout %e: i1, out "": i1, out "": i1) {
+hw.module @A(in %d: i1, out "": i1, out "": i1) {
   // Instantiate @B as a HW module with result-as-output sementics
   %r1, %r2 = hw.instance "b1" @B(a: %d: i1) -> (nameOfPortInSV: i1, "": i1)
   // Instantiate @C with a public symbol on the instance
   %f, %g = hw.instance "c1" sym @E @C(nameOfPortInSV: %d: i1) -> ("": i1, "": i1)
-  // Connect the inout port with %f
-  sv.assign %e, %f : i1
   // Output values
   hw.output %g, %r1 : i1, i1
 }
-// CHECK-LABEL: hw.module @A(in %d : i1, inout %e : i1, out "" : i1, out "" : i1)
+// CHECK-LABEL: hw.module @A(in %d : i1, out "" : i1, out "" : i1)
 // CHECK-NEXT:  %b1.nameOfPortInSV, %b1.1 = hw.instance "b1" @B(a: %d: i1) -> (nameOfPortInSV: i1, "": i1)
 // CHECK-NEXT:  %c1.0, %c1.1 = hw.instance "c1" sym @E @C(nameOfPortInSV: %d: i1) -> ("": i1, "": i1)
 

@@ -278,3 +278,13 @@ firrtl.circuit "InstanceChoiceWithoutInstanceMacro" {
     firrtl.instance_choice inst @Foo alternatives @Opt { @FPGA -> @Foo } ()
   }
 }
+
+// -----
+
+firrtl.circuit "OversizedWire" {
+  firrtl.module @OversizedWire() {
+    // expected-error @+2 {{integer width 16777216 exceeds the maximum supported width of 16777215}}
+    // expected-error @+1 {{'firrtl.wire' op LowerToHW couldn't handle this operation}}
+    %w = firrtl.wire : !firrtl.uint<16777216>
+  }
+}

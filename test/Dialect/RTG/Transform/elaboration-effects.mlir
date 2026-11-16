@@ -5,7 +5,11 @@
 // Test: simple handler (auto-resume path) — choose effect
 
 rtg.effect @choose : (!rtg.set<index>) -> index
-func.func @use_index(%arg0: index) -> () { return }
+func.func @use_index(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -32,14 +36,20 @@ rtg.test @simple_choose() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: func.call @use_index
+// With seed=0, the selection from {2, 3} is 2.
+// CHECK: [[SELECTED_TEXT:%.+]] = rtg.constant "2" : !rtg.string
+// CHECK: rtg.comment [[SELECTED_TEXT]]
 
 // -----
 
 // Test: void handler — log effect
 
 rtg.effect @log : (index) -> ()
-func.func @log_sink(%arg0: index) -> () { return }
+func.func @log_sink(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -63,15 +73,14 @@ rtg.test @void_handler() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: func.call @log_sink
+// CHECK: [[LOG_TEXT:%.+]] = rtg.constant "42" : !rtg.string
+// CHECK: rtg.comment [[LOG_TEXT]]
 
 // -----
 
 // Test: multi-shot (void) — resume the same continuation twice; body runs both times.
 
 rtg.effect @signal : () -> ()
-func.func @on_signal() -> () { return }
-
 rtg.target @t : !rtg.dict<> {
   rtg.yield
 }
@@ -86,7 +95,8 @@ rtg.test @multi_shot_void() {
     }
     do {
       rtg.perform @signal() : () -> none
-      func.call @on_signal() : () -> ()
+      %text = rtg.constant "signal" : !rtg.string
+      rtg.comment %text
       rtg.yield
     }
   }
@@ -94,16 +104,21 @@ rtg.test @multi_shot_void() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// Body runs twice — two calls to @on_signal.
-// CHECK: func.call @on_signal
-// CHECK: func.call @on_signal
+// Body runs twice, leaving two observable comments.
+// CHECK: [[SIGNAL:%.+]] = rtg.constant "signal" : !rtg.string
+// CHECK: rtg.comment [[SIGNAL]]
+// CHECK: rtg.comment [[SIGNAL]]
 
 // -----
 
 // Test: multi-shot (valued) — each resume injects a distinct value into the continuation body.
 
 rtg.effect @choose_val : () -> index
-func.func @record(%arg0: index) -> () { return }
+func.func @record(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -130,19 +145,16 @@ rtg.test @multi_shot_values() {
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
 // First shot: record(7), second shot: record(13), in order.
-// CHECK: [[C7:%.+]] = rtg.constant 7 : index
-// CHECK: func.call @record([[C7]])
-// CHECK: [[C13:%.+]] = rtg.constant 13 : index
-// CHECK: func.call @record([[C13]])
+// CHECK: [[C7_TEXT:%.+]] = rtg.constant "7" : !rtg.string
+// CHECK: rtg.comment [[C7_TEXT]]
+// CHECK: [[C13_TEXT:%.+]] = rtg.constant "13" : !rtg.string
+// CHECK: rtg.comment [[C13_TEXT]]
 
 // -----
 
 // Test: code after rtg.resume executes after the continuation body returns.
 
 rtg.effect @step : () -> ()
-func.func @body_work() -> () { return }
-func.func @post_work() -> () { return }
-
 rtg.target @t : !rtg.dict<> {
   rtg.yield
 }
@@ -152,12 +164,14 @@ rtg.test @code_after_resume() {
   rtg.with_handlers {
     handle @step(%k: !rtg.continuation<none>) {
       rtg.resume %k : !rtg.continuation<none>
-      func.call @post_work() : () -> ()
+      %post = rtg.constant "post" : !rtg.string
+      rtg.comment %post
       rtg.yield
     }
     do {
       rtg.perform @step() : () -> none
-      func.call @body_work() : () -> ()
+      %body = rtg.constant "body" : !rtg.string
+      rtg.comment %body
       rtg.yield
     }
   }
@@ -165,9 +179,11 @@ rtg.test @code_after_resume() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// body_work (continuation) runs first, then post_work (after the resume call).
-// CHECK: func.call @body_work
-// CHECK: func.call @post_work
+// The continuation body comment runs before the handler's post-resume comment.
+// CHECK: [[BODY:%.+]] = rtg.constant "body" : !rtg.string
+// CHECK: rtg.comment [[BODY]]
+// CHECK: [[POST:%.+]] = rtg.constant "post" : !rtg.string
+// CHECK: rtg.comment [[POST]]
 
 // -----
 
@@ -175,7 +191,11 @@ rtg.test @code_after_resume() {
 // embed_sequence) work inside a handler region.
 
 rtg.effect @emit_item : (index) -> ()
-func.func @item_func(%arg0: index) -> () { return }
+func.func @item_func(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.sequence @item_seq(%v: index) {
   func.call @item_func(%v) : (index) -> ()
@@ -185,6 +205,9 @@ rtg.target @t : !rtg.dict<> {
   rtg.yield
 }
 
+// CHECK: rtg.sequence @item_seq_0() {
+// CHECK-NEXT: [[ITEM_TEXT:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK-NEXT: rtg.comment [[ITEM_TEXT]]
 // CHECK-LABEL: rtg.test @seq_in_handler
 rtg.test @seq_in_handler() {
   %c1 = index.constant 1
@@ -221,7 +244,11 @@ rtg.test @seq_in_handler() {
 // operand) combined with sequence embedding both work inside a handler region.
 
 rtg.effect @choose_and_emit : (!rtg.set<index>) -> ()
-func.func @work_func(%arg0: index) -> () { return }
+func.func @work_func(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.sequence @work_seq(%v: index) {
   func.call @work_func(%v) : (index) -> ()
@@ -231,6 +258,9 @@ rtg.target @t : !rtg.dict<> {
   rtg.yield
 }
 
+// CHECK: rtg.sequence @work_seq_0() {
+// CHECK-NEXT: [[WORK_TEXT:%.+]] = rtg.constant "10" : !rtg.string
+// CHECK-NEXT: rtg.comment [[WORK_TEXT]]
 // CHECK-LABEL: rtg.test @rand_and_seq_in_handler
 rtg.test @rand_and_seq_in_handler() {
   %c10 = index.constant 10
@@ -271,7 +301,11 @@ rtg.test @rand_and_seq_in_handler() {
 
 rtg.effect @outer : () -> index
 rtg.effect @inner : () -> ()
-func.func @sink(%arg0: index) -> () { return }
+func.func @sink(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -308,8 +342,8 @@ rtg.test @deep_handler_calls_outer_effect() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: [[C7:%.+]] = rtg.constant 7 : index
-// CHECK: func.call @sink([[C7]])
+// CHECK: [[C7_TEXT:%.+]] = rtg.constant "7" : !rtg.string
+// CHECK: rtg.comment [[C7_TEXT]]
 
 // -----
 
@@ -320,7 +354,11 @@ rtg.test @deep_handler_calls_outer_effect() {
 
 rtg.effect @outer2 : () -> index
 rtg.effect @inner2 : () -> ()
-func.func @sink2(%arg0: index) -> () { return }
+func.func @sink2(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -355,8 +393,8 @@ rtg.test @deep_outer_survives_inner_scope() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: [[C5:%.+]] = rtg.constant 5 : index
-// CHECK: func.call @sink2([[C5]])
+// CHECK: [[C5_TEXT:%.+]] = rtg.constant "5" : !rtg.string
+// CHECK: rtg.comment [[C5_TEXT]]
 
 // -----
 
@@ -371,7 +409,11 @@ rtg.test @deep_outer_survives_inner_scope() {
 // outer-shot record(a) calls) must materialize, six records total.
 
 rtg.effect @e_xshot : () -> index
-func.func @record(%arg0: index) -> () { return }
+func.func @record(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -402,14 +444,14 @@ rtg.test @multi_shot_reperform_same_effect() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: [[C1:%.+]] = rtg.constant 1 : index
-// CHECK: func.call @record([[C1]])
-// CHECK: func.call @record([[C1]])
-// CHECK: [[C2:%.+]] = rtg.constant 2 : index
-// CHECK: func.call @record([[C2]])
-// CHECK: func.call @record([[C2]])
-// CHECK: func.call @record([[C1]])
-// CHECK: func.call @record([[C2]])
+// CHECK: [[C1_TEXT:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[C1_TEXT]]
+// CHECK: rtg.comment [[C1_TEXT]]
+// CHECK: [[C2_TEXT:%.+]] = rtg.constant "2" : !rtg.string
+// CHECK: rtg.comment [[C2_TEXT]]
+// CHECK: rtg.comment [[C2_TEXT]]
+// CHECK: rtg.comment [[C1_TEXT]]
+// CHECK: rtg.comment [[C2_TEXT]]
 
 // -----
 
@@ -423,7 +465,11 @@ rtg.test @multi_shot_reperform_same_effect() {
 
 rtg.effect @outer3 : () -> ()
 rtg.effect @local : () -> index
-func.func @sink3(%arg0: index) -> () { return }
+func.func @sink3(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -460,8 +506,8 @@ rtg.test @handler_installs_inner_handler() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: [[C9:%.+]] = rtg.constant 9 : index
-// CHECK: func.call @sink3([[C9]])
+// CHECK: [[C9_TEXT:%.+]] = rtg.constant "9" : !rtg.string
+// CHECK: rtg.comment [[C9_TEXT]]
 
 // -----
 
@@ -471,10 +517,6 @@ rtg.test @handler_installs_inner_handler() {
 // the continuation is dropped rather than invoked.
 
 rtg.effect @abort_e : () -> ()
-func.func @before_perform() -> () { return }
-func.func @after_perform_skipped() -> () { return }
-func.func @after_with_handlers() -> () { return }
-
 rtg.target @t : !rtg.dict<> {
   rtg.yield
 }
@@ -487,22 +529,27 @@ rtg.test @handler_no_resume_aborts() {
       rtg.yield
     }
     do {
-      func.call @before_perform() : () -> ()
+      %before = rtg.constant "before" : !rtg.string
+      rtg.comment %before
       rtg.perform @abort_e() : () -> none
       // Unreachable: handler dropped %k.
-      func.call @after_perform_skipped() : () -> ()
+      %skipped = rtg.constant "skipped" : !rtg.string
+      rtg.comment %skipped
       rtg.yield
     }
   }
   // After abort, control returns to the enclosing scope.
-  func.call @after_with_handlers() : () -> ()
+  %after = rtg.constant "after" : !rtg.string
+  rtg.comment %after
 }
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK-NOT: func.call @after_perform_skipped
-// CHECK: func.call @before_perform
-// CHECK: func.call @after_with_handlers
+// CHECK-NOT: "skipped"
+// CHECK: [[BEFORE:%.+]] = rtg.constant "before" : !rtg.string
+// CHECK: rtg.comment [[BEFORE]]
+// CHECK: [[AFTER:%.+]] = rtg.constant "after" : !rtg.string
+// CHECK: rtg.comment [[AFTER]]
 
 // -----
 
@@ -567,7 +614,11 @@ rtg.test @multishot_distinct_labels() {
 // [0,3) and resumes the continuation once per iteration value.
 
 rtg.effect @pick_for : () -> index
-func.func @record_for(%v: index) -> () { return }
+func.func @record_for(%v: index) {
+  %text = rtg.int_format %v
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -595,12 +646,12 @@ rtg.test @multishot_via_scffor() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: [[C0:%.+]] = rtg.constant 0 : index
-// CHECK: func.call @record_for([[C0]])
-// CHECK: [[C1:%.+]] = rtg.constant 1 : index
-// CHECK: func.call @record_for([[C1]])
-// CHECK: [[C2:%.+]] = rtg.constant 2 : index
-// CHECK: func.call @record_for([[C2]])
+// CHECK: [[C0_TEXT:%.+]] = rtg.constant "0" : !rtg.string
+// CHECK: rtg.comment [[C0_TEXT]]
+// CHECK: [[C1_TEXT:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[C1_TEXT]]
+// CHECK: [[C2_TEXT:%.+]] = rtg.constant "2" : !rtg.string
+// CHECK: rtg.comment [[C2_TEXT]]
 
 // -----
 
@@ -611,7 +662,11 @@ rtg.test @multishot_via_scffor() {
 
 rtg.effect @outer_xh : () -> index
 rtg.effect @inner_xh : () -> ()
-func.func @record_xh(%v: index) -> () { return }
+func.func @record_xh(%v: index) {
+  %text = rtg.int_format %v
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -645,8 +700,8 @@ rtg.test @cross_handler_resume() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: [[C99:%.+]] = rtg.constant 99 : index
-// CHECK: func.call @record_xh([[C99]])
+// CHECK: [[C99_TEXT:%.+]] = rtg.constant "99" : !rtg.string
+// CHECK: rtg.comment [[C99_TEXT]]
 
 // -----
 
@@ -657,7 +712,11 @@ rtg.test @cross_handler_resume() {
 
 rtg.effect @deep_dr   : () -> index
 rtg.effect @shallow_dr : () -> ()
-func.func @record_dr(%v: index) -> () { return }
+func.func @record_dr(%v: index) {
+  %text = rtg.int_format %v
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -691,8 +750,8 @@ rtg.test @deep_capture_shallow_resume() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: [[C5:%.+]] = rtg.constant 5 : index
-// CHECK: func.call @record_dr([[C5]])
+// CHECK: [[C5_TEXT:%.+]] = rtg.constant "5" : !rtg.string
+// CHECK: rtg.comment [[C5_TEXT]]
 
 // -----
 
@@ -721,4 +780,3 @@ rtg.with_handlers {
     rtg.yield
   }
 }
-

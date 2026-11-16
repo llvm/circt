@@ -3,7 +3,7 @@
 from pycde import Clock, Input, System
 from pycde.module import AppID, generator, Module, modparams
 from pycde.testing import unittestmodule
-from pycde.types import Bits, SInt, StructType
+from pycde.types import Bits, SInt, StructType, TypeAlias, UInt
 
 I32 = Bits(32)
 S32 = SInt(32)
@@ -101,3 +101,8 @@ class OperatorError2(Module):
 
 # CHECK: Structs must have at least one field
 StructType([])
+
+# -----
+
+# CHECK: RuntimeError: Cannot create a signal of type 'HdrCode_t' outside of a generator or other insertion point
+TypeAlias(UInt(4), "HdrCode_t")(3)

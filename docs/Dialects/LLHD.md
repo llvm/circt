@@ -32,6 +32,10 @@ Instead, it applies the same transform from edge-sensitive to level-sensitive re
 
 [include "Dialects/LLHDAttributes.md"]
 
+## Interfaces
+
+[include "Dialects/LLHDInterfaces.md"]
+
 ## Operations
 
 [include "Dialects/LLHDOps.md"]
