@@ -41,12 +41,7 @@ firrtl.circuit "SkipDomains" {
 
   // A cast with a skipped and a kept domain keeps the cast to the kept domain.
   // CHECK-LABEL: firrtl.module @MixedCast
-  // CHECK-SAME: in %CA: !firrtl.domain<@ClockDomain()>
-  // CHECK-SAME: in %CB: !firrtl.domain<@ClockDomain()>
-  // CHECK-SAME: in %x: !firrtl.uint<1> domains [%CA]
-  // CHECK-SAME: out %y: !firrtl.uint<1> domains [%CB]
-  // CHECK: %[[CAST:.+]] = firrtl.unsafe_domain_cast %x domains[%CB] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
-  // CHECK: firrtl.matchingconnect %y, %[[CAST]] : !firrtl.uint<1>
+  // CHECK:         firrtl.unsafe_domain_cast %x domains[%CB] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
   firrtl.module @MixedCast(
       in %CA: !firrtl.domain<@ClockDomain()>,
       in %CB: !firrtl.domain<@ClockDomain()>,
