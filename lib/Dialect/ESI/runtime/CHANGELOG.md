@@ -83,11 +83,7 @@
   windowed message written in sync mode still has unsent frames.
   `TypedWritePort` gained matching `connect()` and `notifyAsyncDataAvailable()`
   overloads. `WriteChannelPort::pollImpl()` is now `final`: write port backends
-  override the new `pollWriteImpl()` instead. The default segmented `tryWrite()`
-  no longer copies messages which are already a `MessageData`.
-- **`SegmentedMessageData::asMessageData(scratch)`** returns the message
-  itself if it is already a `MessageData`, otherwise flattens it into
-  `scratch`. It replaces the internal `detail::getMessageDataRef()` helper.
+  override the new `pollWriteImpl()` instead.
 - **Multiple outstanding host memory reads per client.**
   `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
   (default `1`, which keeps the previous one-request-at-a-time behavior). With
