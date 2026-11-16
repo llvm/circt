@@ -384,7 +384,7 @@ def GlobalClockFutureOp : PIRInnerOp <"gclk_future", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
-// Primitive
+// Boolean Primitive
 //===----------------------------------------------------------------------===//
 
 def InitialOp : PIRInnerOp<"initial", [Pure]> {
@@ -400,6 +400,66 @@ def InitialOp : PIRInnerOp<"initial", [Pure]> {
   );
 
   let assemblyFormat = [{ attr-dict }];
+}
+
+class BoolRepeatLikeOp<string mnemonic, list<Trait> traits = []> :
+  PIRInnerOp<mnemonic, traits # [Pure]> {
+    let arguments = (ins
+    I1:$input,
+    I64Attr:$base, 
+    OptionalAttr<I64Attr>:$more
+  );
+
+  let results = (outs
+    PIRClockedSequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    `[` $base  (`:``+` $more^)? `]` $input attr-dict
+  }];
+}
+
+def GotoRepeatOp: BoolRepeatLikeOp<"goto_repeat"> {
+  let summary = "Repeats a given boolean input a number of times, where the last must hold.";
+  let description = [{
+    A boolean expression is repeated a given number of times defined by a, 
+    possibly unbouded, inclusive range [m:n]. For this to hold, the sequence 
+    must hold repeatidly between m and n times for m <= n, including the last 
+    cycle. This means that the matched sequence needs to end in a time step 
+    where the input expression holds, but allows for gaps in between holding timesteps. 
+    This is equivalent to SystemVerilog's `goto` repetition denoted by `s [->m:n]` 
+    and defined in the SystemVerilog 2023 specification §16.9.2. In order to avoid 
+    needing to verify that m <= n, the bounds given here follow the logic of `m = $base` and 
+    `n = $base + $more`, e.g.,
+
+    ```
+    %s = pir.input : i1
+
+    // Equivalent to s[->42:69] in SV.
+    %r0 = pir.goto_repeat[42 :+ 27] %s 
+    ```
+  }];
+}
+
+def NonConsecutiveRepeatOp: BoolRepeatLikeOp<"non_consecutive_repeat"> {
+  let summary = "Repeats a given boolean input a number of times, where the last must hold.";
+  let description = [{
+    A boolean expression is repeated a given number of times defined by a, 
+    possibly unbouded, inclusive range [m:n]. For this to hold, the sequence 
+    must hold repeatidly between m and n times for m <= n, including the last 
+    cycle. This means that the matched sequence allows for gaps in between holding timesteps,
+    and may end with a gap. This is equivalent to SystemVerilog's `goto` repetition 
+    denoted by `s [->m:n]` and defined in the SystemVerilog 2023 specification §16.9.2. 
+    In order to avoid needing to verify that m <= n, the bounds given here follow 
+    the logic of `m = $base` and `n = $base + $more`, e.g.,
+
+    ```
+    %s = pir.input : i1
+
+    // Equivalent to s[->42:69] in SV.
+    %r0 = pir.non_consecutive_repeat[42 :+ 27] %s 
+    ```
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -442,39 +502,6 @@ def RepeatOp : PIRAnyClockingOp<"repeat"> {
 
   let assemblyFormat = [{
     `[` $base  (`:``+` $more^)? `]` $input attr-dict `:` type($input)
-  }];
-}
-
-def DelayOp : PIRInnerOp<"delay", [Pure]> {
-  let summary = "A clocked sequence is delayed by a given number of timesteps";
-  let description = [{
-    A clocked sequence is delayed by a given number of timesteps
-    defined by a, possibly unbouded, inclusive range [m:n]. For this to hold, 
-    the sequence must have held repeatidly between m and n times before the 
-    current time step. If n is omitted, then the range is considered unbounded. 
-    This follows `##[*m:n] s` ranged delays from the SystemVerilog 2023 specification 
-    §16.7. In order to avoid needing to verify that m <= n, the bounds given here 
-    follow the logic of `m = $base` and `n = $base + $more`, e.g.,
-    ```
-    %s = pir.input : !pir.clocked_sequence
-
-    // Equivalent to ##[42:69]s in SV.
-    %d0 = pir.delay[42 :+ 27] %s : !pir.clocked_sequence
-    ```
-  }];
-
-  let arguments = (ins
-    PIRClockedSequenceType:$input,
-    I64Attr:$base, 
-    OptionalAttr<I64Attr>:$more
-  );
-
-  let results = (outs
-    PIRClockedSequenceType:$result
-  );
-
-  let assemblyFormat = [{
-    `[` $base  (`:``+` $more^)? `]` $input attr-dict
   }];
 }
 
@@ -545,7 +572,7 @@ def OrOp : ConcatLikeOp<"or"> {
 }
 
 def IntersectOp : ConcatLikeOp<"intersect"> {
-  let summary = "Concurrent conjunction between a series of sequences.";
+  let summary = "Concurrent intersection between a series of sequences.";
   let description = [{
     Concurrent conjunction between a series of sequences.
     All argument sequences need to match and have the same start point and end point.
@@ -580,6 +607,109 @@ def FirstMatchOp : PIRAnyClockingOp<"first_match"> {
 //===----------------------------------------------------------------------===//
 // Only Clocked Sequences
 //===----------------------------------------------------------------------===//
+
+def DelayOp : PIRInnerOp<"delay", [Pure]> {
+  let summary = "A clocked sequence is delayed by a given number of timesteps";
+  let description = [{
+    A clocked sequence is delayed by a given number of timesteps
+    defined by a, possibly unbouded, inclusive range [m:n]. For this to hold, 
+    the sequence must have held repeatidly between m and n times before the 
+    current time step. If n is omitted, then the range is considered unbounded. 
+    This follows `##[*m:n] s` ranged delays from the SystemVerilog 2023 specification 
+    §16.7. In order to avoid needing to verify that m <= n, the bounds given here 
+    follow the logic of `m = $base` and `n = $base + $more`, e.g.,
+    ```
+    %s = pir.input : !pir.clocked_sequence
+
+    // Equivalent to ##[42:69]s in SV.
+    %d0 = pir.delay[42 :+ 27] %s : !pir.clocked_sequence
+    ```
+  }];
+
+  let arguments = (ins
+    PIRClockedSequenceType:$input,
+    I64Attr:$base, 
+    OptionalAttr<I64Attr>:$more
+  );
+
+  let results = (outs
+    PIRClockedSequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    `[` $base  (`:``+` $more^)? `]` $input attr-dict
+  }];
+}
+
+def AndOp : PIRInnerOp<"and", [Pure]> {
+  let summary = "Concurrent conjunction between a series of sequences.";
+  let description = [{
+    Concurrent disjunction between a series of sequences.
+    All argument sequences need to match and have the same start point, 
+    but they may have different end points. The end point of the match is 
+    the latest end point of an argument sequence.
+
+    All operands must be of the clocked sequences.
+  }];
+
+  let arguments = (ins
+    Variadic<PIRClockedSequenceType>:$inputs
+  );
+
+  let results = (outs
+    PIRClockedSequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    $inputs attr-dict
+  }];
+}
+
+def ThroughoutOp: PIRInnerOp<"throughout", [Pure]> {
+  let summary = "Checks that a condition holds on each timestep of a clocked sequence.";
+  let description = [{
+    The given boolean expression must hold on on each timestep of the given
+    clocked sequence. This is equalivent to the SystemVerilog `throughout` operation 
+    specified in the 2023 specification §16.9.9.
+  }];
+
+  let arguments = (ins
+    I1:$condition,
+    PIRClockedSequenceType:$input
+  );
+
+  let results = (outs
+    PIRClockedSequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    $condition `in` $input attr-dict
+  }];
+}
+
+def WithinOp: PIRInnerOp<"within", [Pure]> {
+  let summary = "Checks that a condition sequence is a subset of an input sequence.";
+  let description = [{
+    The given clocked sequence must have a match in a subinterval of the given input
+    clocked sequence. It may span over the complete length of that sequence.
+    This is equalivent to the SystemVerilog `within` operation specified 
+    in the 2023 specification §16.9.9.
+  }];
+
+  let arguments = (ins
+    PIRClockedSequenceType:$condition,
+    PIRClockedSequenceType:$input
+  );
+
+  let results = (outs
+    PIRClockedSequenceType:$result
+  );
+
+  let assemblyFormat = [{
+    $condition `in` $input attr-dict
+  }];
+}
+
 
 //===----------------------------------------------------------------------===//
 // Properties

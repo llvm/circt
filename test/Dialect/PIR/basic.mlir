@@ -160,6 +160,16 @@ pir.cell @test {} {
   %r2 = pir.repeat [69] %clk_s : !pir.clocked_sequence
   %r3 = pir.repeat [69] %s : !pir.sequence
 
+  // CHECK: {{%.+}} = pir.goto_repeat[42 : + 27] %i_0
+  // CHECK: {{%.+}} = pir.goto_repeat[69] %i_0
+  %r4 = pir.goto_repeat [42 :+ 27] %i_0
+  %r5 = pir.goto_repeat [69] %i_0 
+
+  // CHECK: {{%.+}} = pir.non_consecutive_repeat[42 : + 27] %i_0
+  // CHECK: {{%.+}} = pir.non_consecutive_repeat[69] %i_0
+  %r6 = pir.non_consecutive_repeat [42 :+ 27] %i_0
+  %r7 = pir.non_consecutive_repeat [69] %i_0 
+
   // CHECK: {{%.+}} = pir.delay[42 : + 27] %clk_s
   // CHECK: {{%.+}} = pir.delay[69] %clk_s
   %d0 = pir.delay [42 :+ 27] %clk_s
@@ -194,4 +204,13 @@ pir.cell @test {} {
   // CHECK: {{%.+}} = pir.first_match %clk_s : !pir.clocked_sequence
   %fm_s = pir.first_match %s : !pir.sequence
   %fm_cs = pir.first_match %clk_s : !pir.clocked_sequence  
+
+  // CHECK: {{%.+}} = pir.and %cs1, %cs2, %cs3 
+  %and_cs = pir.and %cs1, %cs2, %cs3 
+
+  // CHECK: {{%.+}} = pir.throughout %i_0 in %cs1
+  %cs_throughout_i0 = pir.throughout %i_0 in %cs1
+
+  // CHECK: {{%.+}} = pir.within %cs1 in %cs2
+  %cs1_within_cs2 = pir.within %cs1 in %cs2
 }
