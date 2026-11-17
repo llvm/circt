@@ -311,6 +311,43 @@ def ConstantOp : OMOp<"constant",
   let hasFolder = true;
 }
 
+def RegistryCreateOp : OMOp<"registry_create", [HasParent<"ClassOp">,
+    SameTypeOperands,
+    TypesMatchWith<"element types must match the registry element type",
+      "result", "elements", "::llvm::cast<RegistryType>($_self).getElementType()",
+      [{
+        [](mlir::Type type, auto types) {
+          // SameTypeOperands checks the remaining operands.
+          return types.empty() || *types.begin() == type;
+        }
+      }]>]> {
+  let summary = "Create a registry with initial elements";
+  let description = [{
+    Creates a fresh registry for each object, initially containing the given
+    values. A registry is an unordered, append-only collection shared by
+    reference; it retains duplicate values.
+
+    ```
+    %items = om.registry_create %a, %b : !om.registry<!om.integer>
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs Res<RegistryType, "", [MemAlloc]>:$result);
+  let assemblyFormat = "($elements^)? attr-dict `:` qualified(type($result))";
+}
+
+def RegistryInsertOp : OMOp<"registry_insert", [MemoryEffects<[MemWrite]>,
+    HasParent<"ClassOp">,
+    TypesMatchWith<"element type must match the registry element type",
+      "registry", "element",
+      "::llvm::cast<RegistryType>($_self).getElementType()">]> {
+  let summary = "Add an element to a registry";
+  let arguments = (ins RegistryType:$registry, AnyType:$element);
+  let assemblyFormat = [{
+    $registry `,` $element attr-dict `:` qualified(type($registry))
+  }];
+}
+
 def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
   let summary = "Create a list of values";
   let description = [{

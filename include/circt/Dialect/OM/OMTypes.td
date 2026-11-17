@@ -52,6 +52,16 @@ def ListType : TypeDef<OMDialect, "List", []> {
   ];
 }
 
+def RegistryType : TypeDef<OMDialect, "Registry", []> {
+  let summary = "An unordered, append-only registry handle.";
+  let description = [{
+    A reference to an unordered, append-only collection of elements.
+  }];
+  let mnemonic = "registry";
+  let parameters = (ins "mlir::Type":$elementType);
+  let assemblyFormat = "`<` $elementType `>`";
+}
+
 def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
   let summary = "A type that represents a reference to a flat symbol reference.";
 
