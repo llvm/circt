@@ -169,8 +169,7 @@ struct UnknownPropagationPattern : RewritePattern {
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    // Registry creation allocates a fresh handle and is not pure, but its
-    // contents are unknown if any initial element is unknown.
+    // Only target pure OM operations and registry creation.
     // TODO: Consider a trait for operations that propagate unknown values.
     if (!isa_and_nonnull<OMDialect>(op->getDialect()) ||
         (!isPure(op) && !isa<RegistryCreateOp>(op)) || op->getNumResults() == 0)
