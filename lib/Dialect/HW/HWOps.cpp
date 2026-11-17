@@ -1599,6 +1599,98 @@ LogicalResult InstanceOp::verify() {
       getParameters(), moduleParameters, emitError);
 }
 
+/// Visit one direction's ports in their order after a modifyPorts-style edit.
+/// `onInsert` is called with the position in `inserts` of an inserted port.
+/// `onOld` is called with an old port's index and whether it is removed.
+static void walkEditedPortList(size_t numOld,
+                               ArrayRef<std::pair<unsigned, PortInfo>> inserts,
+                               ArrayRef<unsigned> erases,
+                               function_ref<void(size_t)> onInsert,
+                               function_ref<void(size_t, bool)> onOld) {
+  [[maybe_unused]] auto byIndex = [](const auto &a, const auto &b) {
+    return a.first < b.first;
+  };
+  assert(llvm::is_sorted(inserts, byIndex) &&
+         "insertions must be in ascending order");
+  assert(llvm::is_sorted(erases) && "erasures must be in ascending order");
+  size_t insertIdx = 0;
+  for (size_t oldIdx = 0; oldIdx <= numOld; ++oldIdx) {
+    for (; insertIdx < inserts.size() && inserts[insertIdx].first == oldIdx;
+         ++insertIdx)
+      onInsert(insertIdx);
+    if (oldIdx == numOld)
+      break;
+    bool erased = false;
+    for (; !erases.empty() && erases.front() == oldIdx;
+         erases = erases.drop_front())
+      erased = true;
+    onOld(oldIdx, erased);
+  }
+  assert(insertIdx == inserts.size() && "insertion index out of range");
+  assert(erases.empty() && "erasure index out of range");
+}
+
+InstanceOp InstanceOp::cloneWithModifiedPortsAndReplaceUses(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+    ValueRange insertInputValues,
+    ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
+  assert(insertInputs.size() == insertInputValues.size() &&
+         "each inserted input needs an operand");
+
+  // Compute edited list of inputs and their names.
+  SmallVector<Value> inputs;
+  SmallVector<Attribute> argNames;
+  auto oldInputs = getInputs();
+  auto oldArgNames = getArgNames();
+  walkEditedPortList(
+      oldInputs.size(), insertInputs, eraseInputs,
+      [&](size_t i) {
+        inputs.push_back(insertInputValues[i]);
+        argNames.push_back(insertInputs[i].second.name);
+      },
+      [&](size_t idx, bool erased) {
+        if (erased)
+          return;
+        inputs.push_back(oldInputs[idx]);
+        argNames.push_back(oldArgNames[idx]);
+      });
+
+  // Compute edited list of the outputs, their types, and their names.
+  // Determine the remaining results and index of their replacements.
+  SmallVector<std::pair<OpResult, unsigned>> replacements;
+  SmallVector<Type> resultTypes;
+  SmallVector<Attribute> resultNames;
+  auto oldResultNames = getResultNames();
+  walkEditedPortList(
+      getNumResults(), insertOutputs, eraseOutputs,
+      [&](size_t i) {
+        resultTypes.push_back(insertOutputs[i].second.type);
+        resultNames.push_back(insertOutputs[i].second.name);
+      },
+      [&](size_t idx, bool erased) {
+        auto result = getOperation()->getResult(idx);
+        if (erased) {
+          assert(result.use_empty() && "erased instance result has uses");
+          return;
+        }
+        replacements.emplace_back(result, resultTypes.size());
+        resultTypes.push_back(result.getType());
+        resultNames.push_back(oldResultNames[idx]);
+      });
+
+  OpBuilder builder(*this);
+  auto clone = InstanceOp::create(
+      builder, getLoc(), resultTypes, getInstanceNameAttr(),
+      getModuleNameAttr(), inputs, builder.getArrayAttr(argNames),
+      builder.getArrayAttr(resultNames), getParametersAttr(), getInnerSymAttr(),
+      getDoNotPrintAttr());
+  clone->setDialectAttrs(getOperation()->getDialectAttrs());
+  for (auto [result, idx] : replacements)
+    result.replaceAllUsesWith(clone.getResult(idx));
+  return clone;
+}
+
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr instanceNameAttr;
   InnerSymAttr innerSym;

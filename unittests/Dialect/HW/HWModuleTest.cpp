@@ -432,4 +432,74 @@ TEST_F(ModifyPortsTest, InsertInputs) {
   EXPECT_TRUE(succeeded(verify(*top)));
 }
 
+TEST_F(ModifyPortsTest, InstanceFollowsModuleEdit) {
+  // Mutate modules and their instances in same way, check everything aligns.
+
+  auto child = cast<HWModuleExternOp>(
+      build(Extern, {"in a", "out x", "in b", "out y", "in c"}).getOperation());
+  child.setParametersAttr(builder.getArrayAttr(
+      ParamDeclAttr::get("W", builder.getIntegerType(32))));
+  auto params = builder.getArrayAttr(
+      ParamDeclAttr::get("W", builder.getI32IntegerAttr(4)));
+
+  auto parent =
+      cast<HWModuleOp>(build(Module, {"in p", "in q", "out o", "out r"}));
+  Block *body = parent.getBodyBlock();
+  Value p = body->getArgument(0), q = body->getArgument(1);
+  auto output = cast<OutputOp>(body->getTerminator());
+  OpBuilder b(output);
+  auto sym = InnerSymAttr::get(b.getStringAttr("first_sym"));
+  auto first = InstanceOp::create(b, output.getLoc(), child, "first", {p, q, p},
+                                  params, sym);
+  first.setDoNotPrintAttr(b.getUnitAttr());
+  first->setAttr("test.tag", b.getStringAttr("first"));
+  auto second = InstanceOp::create(b, output.getLoc(), child, "second",
+                                   {q, p, q}, params);
+  output->setOperands({first.getResult(0), second.getResult(0)});
+
+  // Insert input n and output z, erase input a and the unused output y.
+  SmallVector<std::pair<unsigned, PortInfo>> insertInputs = {
+      {1, makePort("in n")}};
+  SmallVector<std::pair<unsigned, PortInfo>> insertOutputs = {
+      {2, makePort("out z")}};
+  SmallVector<unsigned> eraseInputs = {0}, eraseOutputs = {1};
+
+  // One instance is edited before the module and one after.
+  // The inserted operands come straight from block arguments and results.
+  auto newFirst = first.cloneWithModifiedPortsAndReplaceUses(
+      insertInputs, body->getArguments().drop_front(), insertOutputs,
+      eraseInputs, eraseOutputs);
+  first.erase();
+  child.modifyPorts(insertInputs, insertOutputs, eraseInputs, eraseOutputs);
+  auto newSecond = second.cloneWithModifiedPortsAndReplaceUses(
+      insertInputs, newFirst.getResults().take_front(), insertOutputs,
+      eraseInputs, eraseOutputs);
+  second.erase();
+  EXPECT_EQ(portsToString(child), "out x, in n, in b, out z, in c");
+  EXPECT_TRUE(succeeded(verify(*top)));
+
+  EXPECT_EQ(SmallVector<Value>(newFirst.getInputs()),
+            (SmallVector<Value>{q, q, p}));
+  EXPECT_EQ(SmallVector<Value>(newSecond.getInputs()),
+            (SmallVector<Value>{newFirst.getResult(0), p, q}));
+  for (auto inst : {newFirst, newSecond}) {
+    EXPECT_EQ(inst.getArgNames(), builder.getStrArrayAttr({"n", "b", "c"}));
+    EXPECT_EQ(inst.getResultNames(), builder.getStrArrayAttr({"x", "z"}));
+    EXPECT_EQ(inst.getModuleNameAttr().getAttr(), child.getSymNameAttr());
+    EXPECT_EQ(inst.getParametersAttr(), params);
+  }
+  EXPECT_EQ(
+      SmallVector<Value>(output->getOperands()),
+      (SmallVector<Value>{newFirst.getResult(0), newSecond.getResult(0)}));
+
+  EXPECT_EQ(newFirst.getInstanceName(), "first");
+  EXPECT_EQ(newFirst.getInnerSymAttr(), sym);
+  EXPECT_TRUE(newFirst.getDoNotPrint());
+  EXPECT_EQ(newFirst->getAttr("test.tag"), b.getStringAttr("first"));
+  EXPECT_EQ(newSecond.getInstanceName(), "second");
+  EXPECT_FALSE(newSecond.getInnerSymAttr());
+  EXPECT_FALSE(newSecond.getDoNotPrint());
+  EXPECT_FALSE(newSecond->getAttr("test.tag"));
+}
+
 } // namespace

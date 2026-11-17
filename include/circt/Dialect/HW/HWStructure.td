@@ -514,6 +514,21 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
     ::mlir::StringAttr getReferencedModuleNameAttr() {
       return getModuleNameAttr().getAttr();
     }
+
+    /// Clone this instance with ports inserted and removed, as in modifyPorts.
+    /// Indices follow modifyPorts: per-direction, ascending, before any edit.
+    /// `insertInputValues` gives the operand for each inserted input, in order.
+    /// Only the names and types of the inserted ports are used.
+    /// For input ports, type is taken from the value not the info.
+    /// Port attributes and locations are ignored (they live on the module).
+    /// Uses of remaining results are moved to the clone.
+    /// Removed results must be unused.
+    /// The original is left for the caller to erase (after updating graphs).
+    InstanceOp cloneWithModifiedPortsAndReplaceUses(
+        ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+        ValueRange insertInputValues,
+        ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+        ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs);
   }];
 }
 
