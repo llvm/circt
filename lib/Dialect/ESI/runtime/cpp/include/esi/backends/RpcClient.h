@@ -22,6 +22,7 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -93,10 +94,12 @@ public:
                               unsigned maxInFlight);
 
   /// Data source for a server-bound channel (see `connectServerSender()`):
-  /// returns the frames of the next message to send, or none if no message is
-  /// available yet. After returning none (or throwing), it isn't called again
-  /// until `WriteChannelConnection::notify()`.
-  using SendFetchCallback = std::function<std::vector<MessageData>()>;
+  /// returns the frames of the next message to send (which may be none, e.g.
+  /// for an empty message), or nullopt if no message is available yet. After
+  /// returning nullopt (or throwing), it isn't called again until
+  /// `WriteChannelConnection::notify()`.
+  using SendFetchCallback =
+      std::function<std::optional<std::vector<MessageData>>()>;
   /// Called with an exception thrown by a `SendFetchCallback` or while
   /// sending, e.g. since the connection was lost.
   using SendErrorCallback = std::function<void(std::exception_ptr)>;

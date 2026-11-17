@@ -2751,6 +2751,12 @@ static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
   // Empty messages, which have no frames and so send nothing, are interleaved
   // to check that they don't stop the rest being fetched.
   bool sendEmpty = true;
+  // The callbacks use the locals above, so disconnect before they're
+  // destroyed, however this scope exits.
+  struct DisconnectOnExit {
+    WriteChannelPort &port;
+    ~DisconnectOnExit() { port.disconnect(); }
+  } disconnectOnExit{rawFromHost};
   rawFromHost.connect(
       [&]() -> std::unique_ptr<SegmentedMessageData> {
         std::lock_guard<std::mutex> lock(fetchMutex);

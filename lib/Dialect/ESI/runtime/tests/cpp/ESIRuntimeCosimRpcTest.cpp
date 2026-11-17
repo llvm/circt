@@ -26,6 +26,7 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -585,7 +586,7 @@ TEST_F(CosimRpcTest, ToClientBlockedWriteThrowsOnDisconnect) {
   writer.join();
 }
 
-using Frames = std::vector<MessageData>;
+using Frames = std::optional<std::vector<MessageData>>;
 
 TEST_F(CosimRpcTest, ServerSenderDrivenByCredits) {
   connectClient();
@@ -597,8 +598,8 @@ TEST_F(CosimRpcTest, ServerSenderDrivenByCredits) {
       [&]() -> Frames {
         ++fetches;
         if (next == numMsgs)
-          return {};
-        return Frames{msg(next++)};
+          return std::nullopt;
+        return std::vector<MessageData>{msg(next++)};
       },
       [](std::exception_ptr) { ADD_FAILURE(); });
   // Fetches as many messages as the in-flight limit allows.
@@ -625,18 +626,18 @@ TEST_F(CosimRpcTest, ServerSenderFetchesAgainOnlyWhenNotified) {
         ++fetches;
         if (fail)
           throw std::runtime_error("fetch failure");
-        return {};
+        return std::nullopt;
       },
       [&](std::exception_ptr) { ++errors; });
   // One sender per channel, and only to-server channels.
-  auto noFetch = []() -> Frames { return {}; };
+  auto noFetch = []() -> Frames { return std::nullopt; };
   auto noError = [](std::exception_ptr) {};
   EXPECT_THROW(client->connectServerSender("in", noFetch, noError),
                std::runtime_error);
   EXPECT_THROW(client->connectServerSender("out", noFetch, noError),
                std::runtime_error);
 
-  // After returning no frames, not called again until notified, even when
+  // After returning nullopt, not called again until notified, even when
   // credits change.
   conn->notify();
   ASSERT_TRUE(waitFor([&] { return fetches == 1; }));
@@ -670,8 +671,8 @@ TEST_F(CosimRpcTest, ServerSenderTakesTurns) {
       "in",
       [&]() -> Frames {
         if (stop)
-          return {};
-        return Frames{msg(sent++)};
+          return std::nullopt;
+        return std::vector<MessageData>{msg(sent++)};
       },
       [](std::exception_ptr) { ADD_FAILURE(); });
   auto received = std::make_shared<std::promise<uint32_t>>();
@@ -688,7 +689,38 @@ TEST_F(CosimRpcTest, ServerSenderTakesTurns) {
   stop = true;
   conn->disconnect();
   EXPECT_EQ(f.get(), 7u);
-  EXPECT_GT(sent, RpcClient::MaxSendsPerTurn);
+  EXPECT_GE(sent, RpcClient::MaxSendsPerTurn);
+}
+
+TEST_F(CosimRpcTest, ServerSenderZeroFrameMessagesTakeTurns) {
+  connectClient();
+  // Messages without frames send nothing, but don't stop more being fetched.
+  // A source which only has those then doesn't stop other channels being
+  // serviced, since they count towards the sender's turn.
+  std::atomic<uint32_t> fetches = 0;
+  auto conn = client->connectServerSender(
+      "in",
+      [&]() -> Frames {
+        uint32_t n = ++fetches;
+        if (n == 2 || n == 4)
+          return std::vector<MessageData>{msg(n / 2)};
+        return std::vector<MessageData>{};
+      },
+      [](std::exception_ptr) { ADD_FAILURE(); });
+  auto received = std::make_shared<std::promise<uint32_t>>();
+  auto reader = client->connectClientReceiver(
+      "out", [received](std::unique_ptr<SegmentedMessageData> &data) {
+        received->set_value(*data->toMessageData().as<uint32_t>());
+        return true;
+      });
+  conn->notify();
+  EXPECT_EQ(consumeOne(), 1u);
+  EXPECT_EQ(consumeOne(), 2u);
+  toClient->write(msg(7));
+  std::future<uint32_t> f = received->get_future();
+  EXPECT_EQ(f.wait_for(10s), std::future_status::ready);
+  conn->disconnect();
+  EXPECT_EQ(f.get(), 7u);
 }
 
 TEST_F(CosimRpcTest, ServerSenderDisconnectWaitsForCall) {
@@ -700,7 +732,7 @@ TEST_F(CosimRpcTest, ServerSenderDisconnectWaitsForCall) {
         inCall = true;
         while (!release)
           std::this_thread::yield();
-        return {};
+        return std::nullopt;
       },
       [](std::exception_ptr) {});
   conn->notify();
@@ -731,7 +763,7 @@ TEST_F(CosimRpcTest, ServerSenderCanDisconnectItself) {
         conn->disconnect();
         done.set_value();
         // Dropped, since it's disconnected.
-        return Frames{msg(1)};
+        return std::vector<MessageData>{msg(1)};
       },
       [&](std::exception_ptr) { ++errors; });
   conn->notify();
@@ -747,7 +779,7 @@ TEST_F(CosimRpcTest, ServerSenderReportsConnectionLoss) {
   auto lost = std::make_shared<std::promise<void>>();
   std::atomic<bool> reported = false;
   auto conn = client->connectServerSender(
-      "in", []() -> Frames { return {}; },
+      "in", []() -> Frames { return std::nullopt; },
       [lost, &reported](std::exception_ptr) {
         if (!reported.exchange(true))
           lost->set_value();

@@ -32,6 +32,7 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <set>
 #include <string_view>
 #include <vector>
@@ -80,27 +81,24 @@ public:
       throw std::invalid_argument(
           "WriteChannelPort::connect: null error callback");
     connectCallbackMode(options);
-    std::unique_ptr<RpcClient::WriteChannelConnection> newSender;
+    // Held until `sender` is set, so a callback (which may run as soon as the
+    // sender is registered) can't see the port connected without it.
+    std::lock_guard<std::mutex> lock(callbackMutex);
     try {
-      newSender = client.connectServerSender(
+      sender = client.connectServerSender(
           name,
-          [this, fetch = std::move(fetch)]() -> std::vector<MessageData> {
-            // Messages without frames (e.g. empty ones) send nothing, as in
-            // sync mode; skip them, since no frames means no data.
-            while (std::unique_ptr<SegmentedMessageData> msg = fetch()) {
-              std::vector<MessageData> frames = toFrames(*msg);
-              if (!frames.empty())
-                return frames;
-            }
-            return {};
+          [this, fetch = std::move(
+                     fetch)]() -> std::optional<std::vector<MessageData>> {
+            std::unique_ptr<SegmentedMessageData> msg = fetch();
+            if (!msg)
+              return std::nullopt;
+            return toFrames(*msg);
           },
           std::move(onError));
     } catch (...) {
       WriteChannelPort::disconnect();
       throw;
     }
-    std::lock_guard<std::mutex> lock(callbackMutex);
-    sender = std::move(newSender);
     // Fetch the first message (if any) now.
     sender->notify();
   }
