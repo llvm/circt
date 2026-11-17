@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Promote LLHD signals to SSA values.
+// Promote LLHD signals and nets to SSA values.
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,36 +32,59 @@ using namespace llhd;
 namespace {
 struct Sig2RegPass : public llhd::impl::Sig2RegPassBase<Sig2RegPass> {
   void runOnOperation() override;
-  void promote(SignalOp op);
-  SmallVector<SignalOp> signalsToErase;
+  void promote(Operation *op);
+  SmallVector<Operation *> signalsToErase;
 };
 } // namespace
 
 void Sig2RegPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "Promoting signals to values in "
                           << getOperation().getModuleName() << "\n");
-  for (auto op : getOperation().getOps<SignalOp>())
-    promote(op);
-  for (auto op : signalsToErase)
-    op.erase();
+  for (auto &op : getOperation().getOps())
+    if (isa<SignalOp, NetOp>(op))
+      promote(&op);
+  for (auto *op : signalsToErase)
+    op->erase();
   signalsToErase.clear();
 }
 
-void Sig2RegPass::promote(SignalOp op) {
+void Sig2RegPass::promote(Operation *op) {
+  auto signalOp = dyn_cast<SignalOp>(op);
+  auto netOp = dyn_cast<NetOp>(op);
+
+  // Not all net kinds are safe to promote with a single driver
+  if (netOp) {
+    switch (netOp.getKind()) {
+    case NetKind::Tri:
+    case NetKind::TriAnd:
+    case NetKind::TriOr:
+    case NetKind::UWire:
+    case NetKind::Wire:
+    case NetKind::WAnd:
+    case NetKind::WOr:
+      break;
+    default:
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Skipping " << *op << " (unsupported net kind)\n");
+      ++numSkipped;
+      return;
+    }
+  }
+
   // Find the single drive, and check if there are any probes or multiple drives
   // of this signal. Bail on unknown users.
   DriveLikeOp drive;
   bool multipleDrives = false;
   bool anyProbe = false;
   for (auto *user : op->getUsers()) {
-    if (isa<ProbeOp>(user)) {
+    if (isa<ProbeLikeOp>(user)) {
       anyProbe = true;
       continue;
     }
 
     if (auto driveOp = dyn_cast<DriveLikeOp>(user)) {
       if (driveOp->getBlock() != op->getBlock()) {
-        LLVM_DEBUG(llvm::dbgs() << "- Skipping " << op
+        LLVM_DEBUG(llvm::dbgs() << "- Skipping " << *op
                                 << " (driven from different block)\n");
         ++numSkipped;
         return;
@@ -73,7 +96,7 @@ void Sig2RegPass::promote(SignalOp op) {
     }
 
     // Unknown user.
-    LLVM_DEBUG(llvm::dbgs() << "- Skipping " << op << " (unsupported user "
+    LLVM_DEBUG(llvm::dbgs() << "- Skipping " << *op << " (unsupported user "
                             << user->getName() << ")\n");
     ++numSkipped;
     return;
@@ -81,7 +104,7 @@ void Sig2RegPass::promote(SignalOp op) {
 
   // Remove unprobed signals.
   if (!anyProbe) {
-    LLVM_DEBUG(llvm::dbgs() << "- Removing unprobed " << op << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "- Removing unprobed " << *op << "\n");
     ++numUnused;
     SmallPtrSet<Operation *, 8> erased;
     for (auto *user : llvm::make_early_inc_range(op->getUsers()))
@@ -94,14 +117,15 @@ void Sig2RegPass::promote(SignalOp op) {
   // If there are multiple drives, we cannot come up with a clean replacement
   // value.
   if (multipleDrives) {
-    LLVM_DEBUG(llvm::dbgs() << "- Skipping " << op << " (multiple drives)\n");
+    LLVM_DEBUG(llvm::dbgs() << "- Skipping " << *op << " (multiple drives)\n");
     ++numSkipped;
     return;
   }
 
   // We can't promote conditional drives.
   if (drive && drive.getEnable()) {
-    LLVM_DEBUG(llvm::dbgs() << "- Skipping " << op << " (conditional drive)\n");
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Skipping " << *op << " (conditional drive)\n");
     ++numSkipped;
     return;
   }
@@ -111,9 +135,9 @@ void Sig2RegPass::promote(SignalOp op) {
   if (drive) {
     value = drive.getValue();
     if (drive.getTime()) {
-      if (op.getInit()) {
+      if (signalOp && signalOp.getInit()) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "- Skipping " << op
+                   << "- Skipping " << *op
                    << " (delayed drive to signal with initializer)\n");
         ++numSkipped;
         return;
@@ -121,7 +145,7 @@ void Sig2RegPass::promote(SignalOp op) {
       TimeAttr delay;
       if (!matchPattern(drive.getTime(), m_Constant(&delay))) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "- Skipping " << op << " (non-constant drive delay)\n");
+                   << "- Skipping " << *op << " (non-constant drive delay)\n");
         ++numSkipped;
         return;
       }
@@ -129,10 +153,11 @@ void Sig2RegPass::promote(SignalOp op) {
       value = DelayOp::create(builder, drive.getLoc(), value, delay);
     }
   } else {
-    value = op.getInit();
+    if (signalOp)
+      value = signalOp.getInit();
     if (!value) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "- Skipping " << op << " (undriven with no initializer)\n");
+      LLVM_DEBUG(llvm::dbgs() << "- Skipping " << *op
+                              << " (undriven with no initializer)\n");
       ++numSkipped;
       return;
     }
@@ -140,7 +165,7 @@ void Sig2RegPass::promote(SignalOp op) {
     // The signal captures its initial value once. Only a constant initializer
     // is guaranteed to equal the signal's value at all times.
     if (!matchPattern(value, m_Constant())) {
-      LLVM_DEBUG(llvm::dbgs() << "- Skipping " << op
+      LLVM_DEBUG(llvm::dbgs() << "- Skipping " << *op
                               << " (undriven with non-constant initializer)\n");
       ++numSkipped;
       return;
@@ -150,14 +175,14 @@ void Sig2RegPass::promote(SignalOp op) {
   // Replace all probes with this value, and remove all users, which are only
   // probes and drives at this point.
   LLVM_DEBUG({
-    llvm::dbgs() << "- Replacing " << op << " with ";
+    llvm::dbgs() << "- Replacing " << *op << " with ";
     value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
     llvm::dbgs() << "\n";
   });
   SmallPtrSet<Operation *, 8> erased;
   for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
-    if (auto probeOp = dyn_cast<ProbeOp>(user))
-      probeOp.replaceAllUsesWith(value);
+    if (isa<ProbeLikeOp>(user))
+      user->getResult(0).replaceAllUsesWith(value);
     if (erased.insert(user).second)
       user->erase();
   }

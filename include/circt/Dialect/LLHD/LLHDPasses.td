@@ -33,10 +33,10 @@ def InlineCallsPass : Pass<"llhd-inline-calls", "ModuleOp"> {
 }
 
 def Sig2RegPass : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
-  let summary = "Promote LLHD signals to SSA values.";
+  let summary = "Promote LLHD signals and nets to SSA values.";
   let description = [{
-    Replace probes of singly-driven signals with the driven value, and remove
-    unprobed signals.
+    Replace probes of singly-driven signals and nets (with appropriate net
+    kinds) with the driven value, and remove unprobed signals and nets.
 
     This pass assumes that CombineDrives has already done the heavy lifting of
     combining multiple partial drives into single whole-signal drives.
