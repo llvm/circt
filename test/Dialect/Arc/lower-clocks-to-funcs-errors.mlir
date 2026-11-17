@@ -1,15 +1,14 @@
 // RUN: circt-opt %s --arc-lower-clocks-to-funcs --split-input-file --verify-diagnostics
 
-arc.model @NonConstExternalValue io !hw.modty<> {
+arc.model @NonPureExternalValue io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
-  %c0_i9001 = hw.constant 0 : i9001
-  // expected-note @+1 {{external value defined here:}}
-  %0 = comb.add %c0_i9001, %c0_i9001 : i9001
-  // expected-note @+1 {{clock tree:}}
+  %0 = arc.as_context %arg0 : !arc.storage
+  // expected-note @below {{external value defined here:}}
+  %1 = arc.current_time %0
+  // expected-error @below {{clock tree uses external value}}
+  // expected-note @below {{clock trees can only use pure external values}}
   arc.initial {
-    // expected-error @+2 {{operation in clock tree uses external value}}
-    // expected-note @+1 {{clock trees can only use external constant values}}
-    %1 = comb.sub %0, %0 : i9001
+    %2 = comb.add %1, %1 : i64
   }
 }
 

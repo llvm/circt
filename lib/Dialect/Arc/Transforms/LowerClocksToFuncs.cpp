@@ -10,7 +10,9 @@
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -27,7 +29,6 @@ using namespace mlir;
 using namespace circt;
 using namespace arc;
 using namespace hw;
-using mlir::OpTrait::ConstantLike;
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
@@ -42,15 +43,10 @@ struct LowerClocksToFuncsPass
 
   void runOnOperation() override;
   LogicalResult lowerModel(ModelOp modelOp);
-  LogicalResult lowerClock(Operation *clockOp, Value modelStorageArg,
+  LogicalResult lowerClock(Operation *clockOp, ValueRange modelArgs,
                            OpBuilder &funcBuilder);
-  LogicalResult isolateClock(Operation *clockOp, Value modelStorageArg,
-                             Value clockStorageArg);
 
   SymbolTable *symbolTable;
-
-  Statistic numOpsCopied{this, "ops-copied", "Ops copied into clock trees"};
-  Statistic numOpsMoved{this, "ops-moved", "Ops moved into clock trees"};
 };
 } // namespace
 
@@ -62,24 +58,15 @@ void LowerClocksToFuncsPass::runOnOperation() {
 }
 
 LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
-  LLVM_DEBUG(llvm::dbgs() << "Lowering clocks in `" << modelOp.getName()
-                          << "`\n");
+  LLVM_DEBUG(llvm::dbgs() << "Extracting Initial/Final Functions in `"
+                          << modelOp.getName() << "`\n");
 
-  // Find the clocks to extract.
   SmallVector<InitialOp, 1> initialOps;
   SmallVector<FinalOp, 1> finalOps;
-  SmallVector<Operation *> clocks;
-  modelOp.walk([&](Operation *op) {
-    TypeSwitch<Operation *, void>(op)
-        .Case<InitialOp>([&](auto initOp) {
-          initialOps.push_back(initOp);
-          clocks.push_back(initOp);
-        })
-        .Case<FinalOp>([&](auto op) {
-          finalOps.push_back(op);
-          clocks.push_back(op);
-        });
-  });
+  for (auto &op : modelOp.getBody().getOps())
+    TypeSwitch<Operation *, void>(&op)
+        .Case<InitialOp>([&](auto initOp) { initialOps.push_back(initOp); })
+        .Case<FinalOp>([&](auto op) { finalOps.push_back(op); });
 
   // Sanity check
   if (initialOps.size() > 1) {
@@ -99,53 +86,70 @@ LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
 
   // Perform the actual extraction.
   OpBuilder funcBuilder(modelOp);
-  for (auto *op : clocks)
-    if (failed(lowerClock(op, modelOp.getBody().getArgument(0), funcBuilder)))
+  for (auto *op : llvm::concat<Operation *>(initialOps, finalOps))
+    if (failed(lowerClock(op, modelOp.getBody().getArguments(), funcBuilder)))
       return failure();
 
   return success();
 }
 
 LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
-                                                 Value modelStorageArg,
+                                                 ValueRange modelArgs,
                                                  OpBuilder &funcBuilder) {
   LLVM_DEBUG(llvm::dbgs() << "- Lowering clock " << clockOp->getName() << "\n");
   assert((isa<InitialOp, FinalOp>(clockOp)));
-
-  // Add a `StorageType` block argument to the clock's body block which we are
-  // going to use to pass the storage pointer to the clock once it has been
-  // pulled out into a separate function.
+  auto modelOp = clockOp->getParentOfType<ModelOp>();
   Region &clockRegion = clockOp->getRegion(0);
-  Value clockStorageArg = clockRegion.addArgument(modelStorageArg.getType(),
-                                                  modelStorageArg.getLoc());
 
-  // Ensure the clock tree does not use any values defined outside of it.
-  if (failed(isolateClock(clockOp, modelStorageArg, clockStorageArg)))
-    return failure();
-
-  // Add a return op to the end of the body.
-  auto builder = OpBuilder::atBlockEnd(&clockRegion.front());
-  func::ReturnOp::create(builder, clockOp->getLoc());
+  // Make the clock's body isolated from above. Pure operations defined outside
+  // the clock are cloned into it. The initializer and finalizer only run once,
+  // so duplicating these computations is cheap. All other values defined
+  // outside the clock become arguments of the clock's body, and must be
+  // arguments of the model.
+  IRRewriter rewriter(clockOp->getContext());
+  auto capturedValues =
+      makeRegionIsolatedFromAbove(rewriter, clockRegion, [](Operation *op) {
+        return op->getNumRegions() == 0 && isPure(op);
+      });
+  SmallVector<unsigned> argIndices;
+  for (auto value : capturedValues) {
+    auto it = llvm::find(modelArgs, value);
+    if (it == modelArgs.end()) {
+      auto d = clockOp->emitError("clock tree uses external value");
+      d.attachNote() << "clock trees can only use pure external values";
+      d.attachNote(value.getLoc()) << "external value defined here:";
+      return d;
+    }
+    argIndices.push_back(it - modelArgs.begin());
+  }
 
   // Pick a name for the clock function.
   SmallString<32> funcName;
-  auto modelOp = clockOp->getParentOfType<ModelOp>();
   funcName.append(modelOp.getName());
-
   if (isa<InitialOp>(clockOp))
     funcName.append("_initial");
   else if (isa<FinalOp>(clockOp))
     funcName.append("_final");
 
+  // Create the function, which takes the same arguments as the model.
   auto funcOp = func::FuncOp::create(
       funcBuilder, clockOp->getLoc(), funcName,
-      builder.getFunctionType({modelStorageArg.getType()}, {}));
+      funcBuilder.getFunctionType(modelArgs.getTypes(), {}));
   symbolTable->insert(funcOp); // uniquifies the name
   LLVM_DEBUG(llvm::dbgs() << "  - Created function `" << funcOp.getSymName()
                           << "`\n");
 
-  // Create a call to the function within the model.
-  builder.setInsertionPoint(clockOp);
+  // Move the clock's body into the function, mapping the captured values to
+  // the corresponding function arguments.
+  Block *entryBlock = funcOp.addEntryBlock();
+  SmallVector<Value> argReplacements;
+  for (auto index : argIndices)
+    argReplacements.push_back(entryBlock->getArgument(index));
+  rewriter.mergeBlocks(&clockRegion.front(), entryBlock, argReplacements);
+  rewriter.setInsertionPointToEnd(entryBlock);
+  func::ReturnOp::create(rewriter, clockOp->getLoc());
+
+  // Register the function with the model.
   TypeSwitch<Operation *, void>(clockOp)
       .Case<InitialOp>([&](auto) {
         if (modelOp.getInitialFn().has_value())
@@ -163,86 +167,6 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
         modelOp.setFinalFnAttr(FlatSymbolRefAttr::get(funcOp.getSymNameAttr()));
       });
 
-  // Move the clock's body block to the function and remove the old clock op.
-  funcOp.getBody().takeBody(clockRegion);
-
   clockOp->erase();
   return success();
-}
-
-/// Copy any external constants that the clock tree might be using into its
-/// body. Anything besides constants should no longer exist after a proper run
-/// of the pipeline.
-LogicalResult LowerClocksToFuncsPass::isolateClock(Operation *clockOp,
-                                                   Value modelStorageArg,
-                                                   Value clockStorageArg) {
-  auto *clockRegion = &clockOp->getRegion(0);
-  auto builder = OpBuilder::atBlockBegin(&clockRegion->front());
-  DenseMap<Value, Value> copiedValues;
-  auto result = clockRegion->walk([&](Operation *op) {
-    for (auto &operand : op->getOpOperands()) {
-      // Block arguments are okay, since there's nothing we can move.
-      if (operand.get() == modelStorageArg) {
-        operand.set(clockStorageArg);
-        continue;
-      }
-      if (isa<BlockArgument>(operand.get())) {
-        auto d = op->emitError(
-            "operation in clock tree uses external block argument");
-        d.attachNote() << "clock trees can only use external constant values";
-        d.attachNote() << "see operand #" << operand.getOperandNumber();
-        d.attachNote(clockOp->getLoc()) << "clock tree:";
-        return WalkResult::interrupt();
-      }
-
-      // Check if the value is defined outside of the clock op.
-      auto *definingOp = operand.get().getDefiningOp();
-      assert(definingOp && "block arguments ruled out above");
-      Region *definingRegion = definingOp->getParentRegion();
-      if (clockRegion->isAncestor(definingRegion))
-        continue;
-
-      // The op is defined outside the clock, so we need to create a copy of the
-      // defining inside the clock tree.
-      if (auto copiedValue = copiedValues.lookup(operand.get())) {
-        operand.set(copiedValue);
-        continue;
-      }
-
-      // Check that we can actually copy this definition inside.
-      if (!definingOp->hasTrait<ConstantLike>()) {
-        auto d = op->emitError("operation in clock tree uses external value");
-        d.attachNote() << "clock trees can only use external constant values";
-        d.attachNote(definingOp->getLoc()) << "external value defined here:";
-        d.attachNote(clockOp->getLoc()) << "clock tree:";
-        return WalkResult::interrupt();
-      }
-
-      // Copy the op inside the clock tree (or move it if all uses are within
-      // the clock tree).
-      bool canMove = llvm::all_of(definingOp->getUsers(), [&](Operation *user) {
-        return clockRegion->isAncestor(user->getParentRegion());
-      });
-      Operation *clonedOp;
-      if (canMove) {
-        definingOp->remove();
-        clonedOp = definingOp;
-        ++numOpsMoved;
-      } else {
-        clonedOp = definingOp->cloneWithoutRegions();
-        ++numOpsCopied;
-      }
-      builder.insert(clonedOp);
-      if (!canMove) {
-        for (auto [outerResult, innerResult] :
-             llvm::zip(definingOp->getResults(), clonedOp->getResults())) {
-          copiedValues.insert({outerResult, innerResult});
-          if (operand.get() == outerResult)
-            operand.set(innerResult);
-        }
-      }
-    }
-    return WalkResult::advance();
-  });
-  return success(!result.wasInterrupted());
 }
