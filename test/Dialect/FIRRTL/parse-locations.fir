@@ -1,6 +1,6 @@
 ; RUN: circt-translate -import-firrtl --mlir-print-debuginfo -verify-diagnostics -mlir-print-local-scope %s | FileCheck %s
 
-FIRRTL version 4.0.0
+FIRRTL version 7.0.0
 circuit MyModule :  @[CIRCUIT.scala 127]
 
   ; CHECK-LABEL: firrtl.module @MyModule(
@@ -68,6 +68,17 @@ circuit MyModule :  @[CIRCUIT.scala 127]
     ; CHECK:  %0 = firrtl.eq %mask_bit_2, %c0_ui1 : (!firrtl.uint<1>, !firrtl.const.uint<1>) -> !firrtl.uint<1> loc("Misc.scala":210:20)
     ; CHECK:  %mask_nbit_2 = firrtl.node interesting_name %0  : !firrtl.uint<1> loc("Misc.scala":210:20)
 
+  ; A field's info locator does not change the location of its domain.
+  ; CHECK-LABEL: firrtl.domain @DomainWithInfo
+  ; CHECK-SAME:    loc("Domain.scala":1:1)
+  domain DomainWithInfo : @[Domain.scala 1:1]
+    name : String @[Field.scala 2:2]
+    rate : Integer @[Field.scala 3:3]
+
+  ; CHECK-LABEL: firrtl.domain @DomainNoInfo
+  ; CHECK-SAME:    loc({{.*}}parse-locations.fir":[[@LINE+1]]:{{[0-9]+}})
+  domain DomainNoInfo :
+    name : String @[Field.scala 4:4]
 
 
 ; CHECK: } loc("CIRCUIT.scala":127:0)

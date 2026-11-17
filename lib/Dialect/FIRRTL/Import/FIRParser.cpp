@@ -6147,9 +6147,11 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
     auto loc = getToken().getLoc();
     StringAttr fieldName;
     PropertyType type;
+    LocationAttr fieldLoc; // ignore field locators
     if (parseId(fieldName, "field name") ||
         parseToken(FIRToken::colon, "expected ':' after field name") ||
-        parsePropertyType(type, "field type") || info.parseOptionalInfo())
+        parsePropertyType(type, "field type") ||
+        parseOptionalInfoLocator(fieldLoc))
       return failure();
 
     // Verify that the names of each field are unique.
