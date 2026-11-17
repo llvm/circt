@@ -196,6 +196,18 @@ def HWModuleOp : HWModuleOpBase<"module",
       return insertInput(index, nameAttr, ty);
     }
 
+    /// Insert the given inputs, in list order, at input index `index`.
+    /// Names that collide with existing ports or each other are made unique.
+    /// Returns the new block arguments, in list order.
+    SmallVector<BlockArgument>
+    insertInputs(unsigned index, ArrayRef<std::pair<StringAttr, Type>> inputs);
+
+    /// Append inputs as `insertInputs` does.
+    SmallVector<BlockArgument>
+    appendInputs(ArrayRef<std::pair<StringAttr, Type>> inputs) {
+      return insertInputs(getNumInputPorts(), inputs);
+    }
+
     /// Append an output with a given name and type to the port list.
     /// If the name is not unique, a unique name is created.
     void appendOutput(StringAttr name, Value value) {

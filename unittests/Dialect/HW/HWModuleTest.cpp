@@ -400,4 +400,36 @@ TEST_F(ModifyPortsTest, InsertInputAndOutputsUpdateBody) {
   EXPECT_TRUE(succeeded(verify(*top)));
 }
 
+TEST_F(ModifyPortsTest, InsertInputs) {
+  auto mod =
+      cast<HWModuleOp>(build(Module, {"in a", "out x", "in b", "out y"}));
+  Block *body = mod.getBodyBlock();
+  Value a = body->getArgument(0), b = body->getArgument(1);
+  auto i1 = builder.getI1Type(), i2 = builder.getI2Type(),
+       i8 = builder.getI8Type();
+
+  auto args = mod.insertInputs(1, {{builder.getStringAttr("p"), i8},
+                                   {builder.getStringAttr("a"), i2},
+                                   {builder.getStringAttr("p"), i1}});
+  EXPECT_EQ(portsToString(mod),
+            "in a, out x, in p, in a_0, in p_0, in b, out y");
+  ASSERT_EQ(args.size(), 3u);
+  EXPECT_EQ(SmallVector<Value>(body->getArguments()),
+            (SmallVector<Value>{a, args[0], args[1], args[2], b}));
+  EXPECT_EQ(args[0].getType(), i8);
+  EXPECT_EQ(args[1].getType(), i2);
+  EXPECT_EQ(args[2].getType(), i1);
+
+  auto appended = mod.appendInputs({{builder.getStringAttr("q"), i8}});
+  EXPECT_EQ(portsToString(mod),
+            "in a, out x, in p, in a_0, in p_0, in b, in q, out y");
+  ASSERT_EQ(appended.size(), 1u);
+  EXPECT_EQ(appended[0], body->getArgument(5));
+  EXPECT_EQ(appended[0].getType(), i8);
+
+  EXPECT_TRUE(mod.insertInputs(0, {}).empty());
+  EXPECT_EQ(body->getNumArguments(), 6u);
+  EXPECT_TRUE(succeeded(verify(*top)));
+}
+
 } // namespace

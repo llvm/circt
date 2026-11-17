@@ -1221,24 +1221,32 @@ LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon(*this); }
 
 std::pair<StringAttr, BlockArgument>
 HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
-  // Find a unique name for the wire.
+  auto arg = insertInputs(index, {{name, ty}}).front();
+  return {getInputNameAttr(index), arg};
+}
+
+SmallVector<BlockArgument>
+HWModuleOp::insertInputs(unsigned index,
+                         ArrayRef<std::pair<StringAttr, Type>> inputs) {
+  // Find unique names for the new ports.
   Namespace ns;
-  auto ports = getPortList();
-  for (auto port : ports)
+  for (auto port : getHWModuleType().getPorts())
     ns.newName(port.name.getValue());
-  auto nameAttr = StringAttr::get(getContext(), ns.newName(name.getValue()));
+
+  SmallVector<std::pair<unsigned, PortInfo>> ports;
+  ports.reserve(inputs.size());
+  for (auto [name, type] : inputs) {
+    PortInfo port;
+    port.name = StringAttr::get(getContext(), ns.newName(name.getValue()));
+    port.dir = ModulePort::Direction::Input;
+    port.type = type;
+    ports.emplace_back(index, port);
+  }
 
   Block *body = getBodyBlock();
-
-  // Create a new port for the host clock.
-  PortInfo port;
-  port.name = nameAttr;
-  port.dir = ModulePort::Direction::Input;
-  port.type = ty;
-  modifyModulePorts(*this, {std::make_pair(index, port)}, {}, {}, {}, body);
-
-  // Add a new argument.
-  return {nameAttr, body->getArgument(index)};
+  modifyModulePorts(*this, ports, {}, {}, {}, body);
+  return SmallVector<BlockArgument>(
+      body->getArguments().slice(index, inputs.size()));
 }
 
 void HWModuleOp::insertOutputs(unsigned index,
