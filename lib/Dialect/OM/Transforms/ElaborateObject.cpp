@@ -161,7 +161,7 @@ struct EraseUnknownRegistryInsertion : OpRewritePattern<RegistryInsertOp> {
   }
 };
 
-/// Pattern to propagate UnknownValueOp through pure OM operations.
+/// Propagate UnknownValueOp through pure OM operations and registry creation.
 /// If any operand is unknown, all results become unknown.
 struct UnknownPropagationPattern : RewritePattern {
   UnknownPropagationPattern(MLIRContext *context)
@@ -169,11 +169,11 @@ struct UnknownPropagationPattern : RewritePattern {
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    // Only target pure OM operations.
-    // TODO: Consider add a trait for this if we want to have more explict
-    // behavior.
-    if (!isa_and_nonnull<OMDialect>(op->getDialect()) || !isPure(op) ||
-        op->getNumResults() == 0)
+    // Registry creation allocates a fresh handle and is not pure, but its
+    // contents are unknown if any initial element is unknown.
+    // TODO: Consider a trait for operations that propagate unknown values.
+    if (!isa_and_nonnull<OMDialect>(op->getDialect()) ||
+        (!isPure(op) && !isa<RegistryCreateOp>(op)) || op->getNumResults() == 0)
       return failure();
 
     // Check if any operand is an UnknownValueOp.

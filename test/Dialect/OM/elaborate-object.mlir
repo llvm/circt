@@ -401,22 +401,28 @@ om.class @RegistryTop() -> (items: !items, independent: !items) {
   om.class.fields %items, %independent : !items, !items
 }
 
-// Keep unknown elements, but drop insertions into unknown registries.
+// An unknown initial or inserted element makes the registry unknown.
+// Insertions into unknown registries are dropped.
 // CHECK-LABEL: om.class @RegistryUnknowns
-// CHECK: %[[UNKNOWN:.+]] = om.unknown : !om.integer
-// CHECK: %[[ITEMS:.+]] = om.registry_create %value, %[[UNKNOWN]]
-// CHECK: %[[MISSING:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-NOT: om.registry_create
 // CHECK-NOT: om.registry_insert
-// CHECK: om.class.fields %[[ITEMS]], %[[MISSING]]
+// CHECK-DAG: %[[ITEMS:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-DAG: %[[INITIAL:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-DAG: %[[MISSING:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-NOT: om.registry_insert
+// CHECK-NOT: om.registry_create
+// CHECK: om.class.fields %[[ITEMS]], %[[MISSING]], %[[INITIAL]]
 om.class @RegistryUnknowns(%value: !om.integer) -> (
-  items: !om.registry<!om.integer>, missing: !om.registry<!om.integer>
+  items: !om.registry<!om.integer>, missing: !om.registry<!om.integer>, initial: !om.registry<!om.integer>
 ) {
   %unknown = om.unknown : !om.integer
   %items = om.registry_create %value : !om.registry<!om.integer>
+  %initial = om.registry_create %value, %unknown : !om.registry<!om.integer>
   %missing = om.unknown : !om.registry<!om.integer>
   om.registry_insert %items, %unknown : !om.registry<!om.integer>
   om.registry_insert %missing, %value : !om.registry<!om.integer>
-  om.class.fields %items, %missing : !om.registry<!om.integer>, !om.registry<!om.integer>
+  om.registry_insert %initial, %value : !om.registry<!om.integer>
+  om.class.fields %items, %missing, %initial : !om.registry<!om.integer>, !om.registry<!om.integer>, !om.registry<!om.integer>
 }
 
 // CHECK-LABEL: om.class @RegistryParameter
