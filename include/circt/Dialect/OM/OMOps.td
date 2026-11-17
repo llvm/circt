@@ -312,13 +312,13 @@ def ConstantOp : OMOp<"constant",
 }
 
 def RegistryCreateOp : OMOp<"registry_create", [HasParent<"ClassOp">,
+    SameTypeOperands,
     TypesMatchWith<"element types must match the registry element type",
       "result", "elements", "::llvm::cast<RegistryType>($_self).getElementType()",
       [{
         [](mlir::Type type, auto types) {
-          return llvm::all_of(types, [type](mlir::Type elementType) {
-            return type == elementType;
-          });
+          // SameTypeOperands checks the remaining operands.
+          return types.empty() || *types.begin() == type;
         }
       }]>]> {
   let summary = "Create a registry with initial elements";
