@@ -47,6 +47,28 @@ hw.module @sigUnionExtract(in %arg0 : !llhd.ref<!hw.union<foo: i1, bar: i2, baz:
   %1 = llhd.sig.struct_extract %arg0["baz"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
 }
 
+// CHECK-LABEL: @netExtract
+hw.module @netExtract(in %arg0 : !llhd.net<i32>, in %arg1 : i5) {
+  // CHECK: llhd.net.extract %arg0 from %arg1 : <i32> -> <i5>
+  %0 = llhd.net.extract %arg0 from %arg1 : <i32> -> <i5>
+}
+
+// CHECK-LABEL: @netArray
+hw.module @netArray(in %arg0 : !llhd.net<!hw.array<5xi1>>, in %arg1 : i3) {
+  // CHECK: llhd.net.array_slice %arg0 at %arg1 : <!hw.array<5xi1>> -> <!hw.array<3xi1>>
+  %0 = llhd.net.array_slice %arg0 at %arg1 : <!hw.array<5xi1>> -> <!hw.array<3xi1>>
+  // CHECK: llhd.net.array_get %arg0[%arg1] : <!hw.array<5xi1>>
+  %1 = llhd.net.array_get %arg0[%arg1] : <!hw.array<5xi1>>
+}
+
+// CHECK-LABEL: @netStructExtract
+hw.module @netStructExtract(in %arg0 : !llhd.net<!hw.struct<foo: i1, bar: i2, baz: i3>>, in %arg1 : !llhd.net<!hw.union<foo: i1, bar: i2>>) {
+  // CHECK: llhd.net.struct_extract %arg0["foo"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>
+  %0 = llhd.net.struct_extract %arg0["foo"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>
+  // CHECK: llhd.net.struct_extract %arg1["bar"] : <!hw.union<foo: i1, bar: i2>>
+  %1 = llhd.net.struct_extract %arg1["bar"] : <!hw.union<foo: i1, bar: i2>>
+}
+
 // CHECK-LABEL: @checkSigInst
 hw.module @checkSigInst() {
   // CHECK: %[[CI1:.*]] = hw.constant

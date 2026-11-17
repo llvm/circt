@@ -30,6 +30,8 @@ using namespace llhd;
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
   if (auto sig = dyn_cast<RefType>(type))
     type = sig.getNestedType();
+  else if (auto net = dyn_cast<NetType>(type))
+    type = net.getNestedType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getNumElements();
   if (auto tup = hw::type_dyn_cast<hw::StructType>(type))
@@ -40,6 +42,8 @@ unsigned circt::llhd::getLLHDTypeWidth(Type type) {
 Type circt::llhd::getLLHDElementType(Type type) {
   if (auto sig = dyn_cast<RefType>(type))
     type = sig.getNestedType();
+  else if (auto net = dyn_cast<NetType>(type))
+    type = net.getNestedType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getElementType();
   return type;
@@ -486,20 +490,15 @@ LogicalResult SigArrayGetOp::ensureOnlySafeAccesses(
 // SigStructExtractOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::PropertyRef properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  typename SigStructExtractOp::Adaptor adaptor(operands, attrs, properties,
-                                               regions);
-  auto nestedType = cast<RefType>(adaptor.getInput().getType()).getNestedType();
+// Gets the type of `field` in a struct or union type.
+static FailureOr<Type> inferStructFieldType(MLIRContext *context,
+                                            std::optional<Location> loc,
+                                            Type type, StringRef field) {
   Type fieldType;
-
-  // Support both StructType and UnionType
-  if (auto structType = hw::type_dyn_cast<hw::StructType>(nestedType)) {
-    fieldType = structType.getFieldType(adaptor.getField());
-  } else if (auto unionType = dyn_cast<hw::UnionType>(nestedType)) {
-    fieldType = unionType.getFieldType(adaptor.getField());
+  if (auto structType = hw::type_dyn_cast<hw::StructType>(type)) {
+    fieldType = structType.getFieldType(field);
+  } else if (auto unionType = dyn_cast<hw::UnionType>(type)) {
+    fieldType = unionType.getFieldType(field);
   } else {
     context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
@@ -513,7 +512,21 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
         << "invalid field name specified";
     return failure();
   }
-  results.push_back(RefType::get(fieldType));
+  return fieldType;
+}
+
+LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  typename SigStructExtractOp::Adaptor adaptor(operands, attrs, properties,
+                                               regions);
+  auto nestedType = cast<RefType>(adaptor.getInput().getType()).getNestedType();
+  auto fieldType =
+      inferStructFieldType(context, loc, nestedType, adaptor.getField());
+  if (failed(fieldType))
+    return failure();
+  results.push_back(RefType::get(*fieldType));
   return success();
 }
 
@@ -1151,3 +1164,42 @@ CallCoroutineOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 #include "circt/Dialect/LLHD/LLHD.cpp.inc"
 #include "circt/Dialect/LLHD/LLHDEnums.cpp.inc"
 #include "circt/Dialect/LLHD/LLHDInterfaces.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// Net Projections
+//===----------------------------------------------------------------------===//
+
+OpFoldResult llhd::NetExtractOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrExtractOp(*this, adaptor.getOperands());
+}
+
+OpFoldResult llhd::NetArraySliceOp::fold(FoldAdaptor adaptor) {
+  auto lowIndex = dyn_cast_or_null<IntegerAttr>(adaptor.getLowIndex());
+  if (!lowIndex)
+    return {};
+
+  if (getResultWidth() == getInputWidth() && lowIndex.getValue().isZero())
+    return getInput();
+
+  return {};
+}
+
+LogicalResult llhd::NetArraySliceOp::canonicalize(llhd::NetArraySliceOp op,
+                                                  PatternRewriter &rewriter) {
+  return canonicalizeSigPtrArraySliceOp(op, rewriter);
+}
+
+LogicalResult llhd::NetStructExtractOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  typename NetStructExtractOp::Adaptor adaptor(operands, attrs, properties,
+                                               regions);
+  auto nestedType = cast<NetType>(adaptor.getInput().getType()).getNestedType();
+  auto fieldType =
+      inferStructFieldType(context, loc, nestedType, adaptor.getField());
+  if (failed(fieldType))
+    return failure();
+  results.push_back(NetType::get(*fieldType));
+  return success();
+}

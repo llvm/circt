@@ -35,3 +35,28 @@ func.func @sigArraySliceOp(%arg0: !llhd.ref<!hw.array<30xi32>>, %arg1: i5) -> (!
   // CHECK-NEXT: return %[[EXT]], %arg0, %[[RES1]], %[[RES2]] : !llhd.ref<!hw.array<30xi32>>, !llhd.ref<!hw.array<30xi32>>, !llhd.ref<!hw.array<20xi32>>, !llhd.ref<!hw.array<3xi32>>
   return %ext, %identity, %1, %2 : !llhd.ref<!hw.array<30xi32>>, !llhd.ref<!hw.array<30xi32>>, !llhd.ref<!hw.array<20xi32>>, !llhd.ref<!hw.array<3xi32>>
 }
+
+// CHECK-LABEL: @netExtractOp
+func.func @netExtractOp(%arg0 : !llhd.net<i32>) -> !llhd.net<i32> {
+  %zero = hw.constant 0 : i5
+  %0 = llhd.net.extract %arg0 from %zero : <i32> -> <i32>
+
+  // CHECK: return %arg0 : !llhd.net<i32>
+  return %0 : !llhd.net<i32>
+}
+
+// CHECK-LABEL: @netArraySliceOp
+func.func @netArraySliceOp(%arg0: !llhd.net<!hw.array<30xi32>>) -> (!llhd.net<!hw.array<3xi32>>, !llhd.net<!hw.array<30xi32>>) {
+  %zero = hw.constant 0 : i5
+  %a = hw.constant 3 : i5
+  %b = hw.constant 16 : i5
+
+  %identity = llhd.net.array_slice %arg0 at %zero : <!hw.array<30xi32>> -> <!hw.array<30xi32>>
+  %1 = llhd.net.array_slice %arg0 at %a : <!hw.array<30xi32>> -> <!hw.array<20xi32>>
+  %2 = llhd.net.array_slice %1 at %b : <!hw.array<20xi32>> -> <!hw.array<3xi32>>
+
+  // CHECK: %[[IDX:.+]] = hw.constant -13 : i5
+  // CHECK: %[[RES:.+]] = llhd.net.array_slice %arg0 at %[[IDX]] : <!hw.array<30xi32>> -> <!hw.array<3xi32>>
+  // CHECK: return %[[RES]], %arg0
+  return %2, %identity : !llhd.net<!hw.array<3xi32>>, !llhd.net<!hw.array<30xi32>>
+}
