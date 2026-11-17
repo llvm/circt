@@ -277,6 +277,15 @@ om.class @RegistryInsertMismatch(%items: !om.registry<!om.integer>, %value: !om.
 
 // -----
 
+// Even uniformly typed operands must match the registry element type.
+om.class @RegistryInitialWrongType(%string: !om.string) {
+  // expected-error @+1 {{element types must match the registry element type}}
+  %items = "om.registry_create"(%string, %string) : (!om.string, !om.string) -> !om.registry<!om.integer>
+  om.class.fields
+}
+
+// -----
+
 // Check every initial element, not just the first one's type.
 om.class @RegistryInitialMismatch(%integer: !om.integer, %string: !om.string) {
   // expected-error @+1 {{element types must match the registry element type}}

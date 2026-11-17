@@ -323,9 +323,9 @@ def RegistryCreateOp : OMOp<"registry_create", [HasParent<"ClassOp">,
       }]>]> {
   let summary = "Create a registry with initial elements";
   let description = [{
-    Creates a registry containing the given values for each object. The values
-    must match the registry's element type. Use `om.registry_insert` to add
-    more values.
+    Creates a fresh registry for each object, initially containing the given
+    values. A registry is an unordered, append-only collection shared by
+    reference; it retains duplicate values.
 
     ```
     %items = om.registry_create %a, %b : !om.registry<!om.integer>
@@ -333,11 +333,6 @@ def RegistryCreateOp : OMOp<"registry_create", [HasParent<"ClassOp">,
   }];
   let arguments = (ins Variadic<AnyType>:$elements);
   let results = (outs Res<RegistryType, "", [MemAlloc]>:$result);
-  let builders = [
-    OpBuilder<(ins "RegistryType":$type), [{
-      build($_builder, $_state, type, ::mlir::ValueRange());
-    }]>
-  ];
   let assemblyFormat = "($elements^)? attr-dict `:` qualified(type($result))";
 }
 

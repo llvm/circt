@@ -55,16 +55,11 @@ def ListType : TypeDef<OMDialect, "List", []> {
 def RegistryType : TypeDef<OMDialect, "Registry", []> {
   let summary = "An unordered, append-only registry handle.";
   let description = [{
-    An unordered, mutable container of elements, shared by reference.
+    A reference to an unordered, append-only collection of elements.
   }];
   let mnemonic = "registry";
   let parameters = (ins "mlir::Type":$elementType);
   let assemblyFormat = "`<` $elementType `>`";
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::Type":$elementType), [{
-      return $_get(elementType.getContext(), elementType);
-    }]>
-  ];
 }
 
 def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
