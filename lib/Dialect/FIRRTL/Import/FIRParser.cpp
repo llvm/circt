@@ -6128,10 +6128,10 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
 
 /// domain ::= 'domain' id ':' info?
 ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
+  LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_domain);
 
   StringAttr name;
-  LocWithInfo info(getToken().getLoc(), this);
   if (parseId(name, "domain name") ||
       parseToken(FIRToken::colon, "expected ':' after domain definition") ||
       info.parseOptionalInfo())
@@ -6522,10 +6522,10 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
 // Parse an option group declaration.
 ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
   StringRef id;
+  LocWithInfo info(getToken().getLoc(), this);
   consumeToken();
   auto loc = getToken().getLoc();
 
-  LocWithInfo info(getToken().getLoc(), this);
   if (parseId(id, "expected an option group name") ||
       parseToken(FIRToken::colon,
                  "expected ':' after option group definition") ||
