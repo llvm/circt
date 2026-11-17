@@ -346,6 +346,7 @@ def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
 
   let assemblyFormat = "$subLists attr-dict `:` type($result)";
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def ListContainsOp : OMOp<"list_contains", [Pure,
@@ -353,8 +354,21 @@ def ListContainsOp : OMOp<"list_contains", [Pure,
                    "list", "element",
                    "cast<ListType>($_self).getElementType()">]> {
   let summary = "Check if a list contains a value";
+  let description = [{
+    Returns 1 if the list contains an element equal to the search value, and 0
+    otherwise, using the equality semantics of `om.prop.eq`.
+
+    The search value and list element must have exactly the same type.
+
+    Example:
+    ```mlir
+    %found = om.list_contains %objects, %obj : !om.list<!om.class.type<@Foo>>
+    %refFound = om.list_contains %refs, %ref : !om.list<!om.any>
+    ```
+  }];
   let arguments = (ins ListType:$list,
-                       AnyTypeOf<[StringType, OMIntegerType, I1]>:$element);
+                       AnyTypeOf<[StringType, OMIntegerType, I1,
+                                  ClassType, OMAnyType]>:$element);
   let results = (outs I1:$result);
   let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
   let hasFolder = 1;
