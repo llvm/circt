@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.0
+
 ### Breaking changes
 
 - **Cosim protocol v4: backpressure.** Cosim channels now apply credit-based
