@@ -477,7 +477,7 @@ bool Deseq::analyzeProcess() {
        llvm::zip(wait.getDestOperands(), wait.getDest()->getArguments())) {
     // Check if this dest operand is directly a trigger (projected clock case).
     auto operandVF = getValueField(operand);
-    auto it = llvm::find(triggers, operandVF);
+    const auto *it = llvm::find(triggers, operandVF);
     if (it != triggers.end()) {
       unsigned index = std::distance(triggers.begin(), it);
       pastValues.push_back(it->getProjected());
@@ -527,7 +527,7 @@ Value Deseq::tracePastValue(Value pastValue) {
 
     // If this is one of the observed values, we're done. Otherwise trace
     // block arguments backwards to their predecessors.
-    if (auto it = llvm::find(triggers, getValueField(value));
+    if (const auto *it = llvm::find(triggers, getValueField(value));
         it != triggers.end()) {
       distinctValues.insert(it->getProjected());
       continue;
@@ -1166,17 +1166,17 @@ bool Deseq::matchDriveClockAndReset(
     auto clockWithEnable = DNFTerm{clockEdge | resetOff | 0b01};
 
     // Find the entries corresponding to the above conditions.
-    auto resetIt = llvm::find_if(
+    const auto *resetIt = llvm::find_if(
         valueTable, [&](auto &pair) { return pair.first == reset; });
     if (resetIt == valueTable.end())
       continue;
 
-    auto clockWhileResetIt = llvm::find_if(
+    const auto *clockWhileResetIt = llvm::find_if(
         valueTable, [&](auto &pair) { return pair.first == clockWhileReset; });
     if (clockWhileResetIt == valueTable.end())
       continue;
 
-    auto clockIt = llvm::find_if(valueTable, [&](auto &pair) {
+    const auto *clockIt = llvm::find_if(valueTable, [&](auto &pair) {
       return pair.first == clockWithoutEnable || pair.first == clockWithEnable;
     });
     bool clockHolds = clockIt == valueTable.end();
@@ -1335,7 +1335,7 @@ Value Deseq::materializeProjection(OpBuilder &builder, Location loc,
 /// a non-constant value would be inferred from a signal initializer.
 static LogicalResult inferRegisterPreset(seq::FirRegOp regOp,
                                          DriveInfo &drive) {
-  auto sigOp = drive.op.getSignal().getDefiningOp<SignalOp>();
+  auto sigOp = drive.op.getDriven().getDefiningOp<SignalOp>();
   SmallVector<std::pair<DriveLikeOp, IntegerAttr>> constantDrives;
 
   // Check if a drive happens at the same time as the register drive. Immediate
@@ -1354,10 +1354,10 @@ static LogicalResult inferRegisterPreset(seq::FirRegOp regOp,
   };
 
   // Find other unconditional concurrent constant drivers on the signal.
-  for (auto &use : drive.op.getSignal().getUses()) {
+  for (auto &use : drive.op.getDriven().getUses()) {
     auto driveUser = dyn_cast<DriveLikeOp>(use.getOwner());
     if (!driveUser || driveUser == drive.op ||
-        use != driveUser.getSignalMutable()[0])
+        use != driveUser.getDrivenMutable()[0])
       continue;
 
     bool isSameBlock = driveUser->getBlock() == drive.op->getBlock();
@@ -1509,7 +1509,7 @@ LogicalResult Deseq::implementRegister(DriveInfo &drive) {
 
   // Try to guess a name for the register.
   StringAttr name;
-  if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>())
+  if (auto sigOp = drive.op.getDriven().getDefiningOp<llhd::SignalOp>())
     name = sigOp.getNameAttr();
   else
     name = builder.getStringAttr("");
@@ -1542,7 +1542,7 @@ LogicalResult Deseq::implementRegister(DriveInfo &drive) {
       matchPattern(drive.op.getTime(), m_Constant(&attr)) &&
       attr.getTime() == 0 && attr.getDelta() == 1) {
     auto assignOp =
-        AssignOp::create(builder, drive.op.getLoc(), drive.op.getSignal(),
+        AssignOp::create(builder, drive.op.getLoc(), drive.op.getDriven(),
                          drive.op.getValue(), Value{});
     drive.op.erase();
     drive.op = assignOp;

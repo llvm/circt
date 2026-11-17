@@ -313,7 +313,7 @@ protected:
   void enqueueFrames(const MessageData &data);
 
   /// Poll for ability to send more data and send if able.
-  bool pollImpl() override;
+  bool pollWriteImpl() override;
 
   // Owning engine.
   OneItemBuffersFromHost *engine;
@@ -452,7 +452,7 @@ bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
   return true;
 }
 
-bool OneItemBuffersFromHostWritePort::pollImpl() {
+bool OneItemBuffersFromHostWritePort::pollWriteImpl() {
   Logger &logger = engine->conn.getLogger();
 
   // Check to see if the device is ready.

@@ -162,8 +162,11 @@ firrtl.module @PropertyStringOps() {
   %3 = firrtl.string.concat %0, %1, %2 : !firrtl.string
 }
 
+firrtl.class @ObjectEqFoo() {}
+
 // CHECK-LABEL: firrtl.module @PropertyPropEq
-firrtl.module @PropertyPropEq() {
+firrtl.module @PropertyPropEq(in %obj: !firrtl.class<@ObjectEqFoo()>,
+                             in %ref: !firrtl.anyref) {
   %0 = firrtl.string "hello"
   %1 = firrtl.string "world"
 
@@ -190,15 +193,12 @@ firrtl.module @PropertyPropEq() {
 
   // CHECK: firrtl.bool.xor %3, %4
   %11 = firrtl.bool.xor %3, %4
-}
 
-firrtl.class @ObjectEqFoo() {}
+  // CHECK: firrtl.prop.eq %obj, %obj : !firrtl.class<@ObjectEqFoo()>
+  %class_eq = firrtl.prop.eq %obj, %obj : !firrtl.class<@ObjectEqFoo()>
 
-// CHECK-LABEL: firrtl.module @PropertyObjectEq
-firrtl.module @PropertyObjectEq(in %obj: !firrtl.class<@ObjectEqFoo()>,
-                               in %ref: !firrtl.anyref) {
-  // CHECK: firrtl.object.eq %obj, %ref : !firrtl.class<@ObjectEqFoo()>, !firrtl.anyref{{$}}
-  %eq = firrtl.object.eq %obj, %ref : !firrtl.class<@ObjectEqFoo()>, !firrtl.anyref
+  // CHECK: firrtl.prop.eq %ref, %ref : !firrtl.anyref
+  %anyref_eq = firrtl.prop.eq %ref, %ref : !firrtl.anyref
 }
 
 // CHECK-LABEL: firrtl.module @PropertyListOps
@@ -218,7 +218,8 @@ firrtl.module @PropertyListOps() {
 }
 
 // CHECK-LABEL: firrtl.module @PropertyListContains
-firrtl.module @PropertyListContains() {
+firrtl.module @PropertyListContains(in %obj: !firrtl.class<@ObjectEqFoo()>,
+                                   in %ref: !firrtl.anyref) {
   %string = firrtl.string "foo"
   %strings = firrtl.list.create %string : !firrtl.list<string>
   // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<string>{{$}}
@@ -233,6 +234,18 @@ firrtl.module @PropertyListContains() {
   %booleans = firrtl.list.create %boolean : !firrtl.list<bool>
   // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<bool>{{$}}
   %boolean_found = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>
+
+  %objects = firrtl.list.create %obj : !firrtl.list<class<@ObjectEqFoo()>>
+  // CHECK: firrtl.list.contains %{{.+}}, %obj : !firrtl.list<class<@ObjectEqFoo()>>{{$}}
+  %object_found = firrtl.list.contains %objects, %obj : !firrtl.list<class<@ObjectEqFoo()>>
+
+  %refs = firrtl.list.create %ref : !firrtl.list<anyref>
+  // CHECK: firrtl.list.contains %{{.+}}, %ref : !firrtl.list<anyref>{{$}}
+  %ref_found = firrtl.list.contains %refs, %ref : !firrtl.list<anyref>
+
+  %obj_ref = firrtl.object.anyref_cast %obj : !firrtl.class<@ObjectEqFoo()>
+  // CHECK: firrtl.list.contains %{{.+}}, %{{.+}} : !firrtl.list<anyref>{{$}}
+  %obj_ref_found = firrtl.list.contains %refs, %obj_ref : !firrtl.list<anyref>
 }
 
 firrtl.class @UnknownValueChild() {}

@@ -45,6 +45,12 @@ module Cosim_Endpoint_ToHost
   /// **********************
   /// Data in management.
   ///
+  /// The host side applies backpressure: `cosim_ep_tryput` returns a positive
+  /// value when the endpoint is at its flow-control in-flight limit and the
+  /// message was not accepted. Since DataInReady must be known before the DPI
+  /// call, a message which gets refused is parked in `Held` and DataInReady is
+  /// deasserted until it is accepted. When the host is keeping up, this
+  /// sustains one message per cycle.
 
   localparam int TO_HOST_SIZE_BYTES = int'((TO_HOST_SIZE_BITS+7)/8);
   // The number of bits over a byte.
@@ -53,18 +59,36 @@ module Cosim_Endpoint_ToHost
   localparam int TO_HOST_SIZE_BYTES_FLOOR_IN_BITS
       = TO_HOST_SIZE_BYTES_FLOOR * 8;
 
-  assign DataInReady = 1'b1;
+  // A message refused by the host, waiting to be retried.
+  logic HeldValid;
+  logic [TO_HOST_SIZE_BITS-1:0] Held;
+  // The message offered to the host this cycle: the held one if any, else the
+  // incoming one.
+  wire [TO_HOST_SIZE_BITS-1:0] PutData = HeldValid ? Held : DataIn;
+
+  assign DataInReady = ~HeldValid;
   byte unsigned DataInBuffer[TO_HOST_SIZE_BYTES-1:0];
 
   always@(posedge clk) begin
     if (~rst) begin
-      if (DataInValid) begin
+      if (HeldValid || DataInValid) begin
         int rc;
         rc = cosim_ep_tryput(ENDPOINT_ID, DataInBuffer, TO_HOST_SIZE_BYTES);
-        if (rc != 0)
-          $error("cosim_ep_tryput(%s, *, %d) = %d Error! (Data lost)",
-            ENDPOINT_ID, TO_HOST_SIZE_BYTES, rc);
+        if (rc > 0) begin
+          // Host is full. Park a newly accepted message; a held one stays.
+          if (!HeldValid) begin
+            Held <= DataIn;
+            HeldValid <= 1'b1;
+          end
+        end else begin
+          if (rc < 0)
+            $error("cosim_ep_tryput(%s, *, %d) = %d Error! (Data lost)",
+              ENDPOINT_ID, TO_HOST_SIZE_BYTES, rc);
+          HeldValid <= 1'b0;
+        end
       end
+    end else begin
+      HeldValid <= 1'b0;
     end
   end
 
@@ -72,14 +96,14 @@ module Cosim_Endpoint_ToHost
   genvar iIn;
   generate
     for (iIn=0; iIn<TO_HOST_SIZE_BYTES_FLOOR; iIn++)
-      assign DataInBuffer[iIn] = DataIn[((iIn+1)*8)-1:iIn*8];
+      assign DataInBuffer[iIn] = PutData[((iIn+1)*8)-1:iIn*8];
     if (TO_HOST_SIZE_BITS_DIFF != 0)
       // If the type is not a multiple of 8, we've got to copy the extra bits.
       assign DataInBuffer[TO_HOST_SIZE_BYTES - 1]
                          [TO_HOST_SIZE_BITS_DIFF - 1:0] =
-             DataIn[(TO_HOST_SIZE_BYTES_FLOOR_IN_BITS +
-                     TO_HOST_SIZE_BITS_DIFF - 1) :
-                       TO_HOST_SIZE_BYTES_FLOOR_IN_BITS];
+             PutData[(TO_HOST_SIZE_BYTES_FLOOR_IN_BITS +
+                      TO_HOST_SIZE_BITS_DIFF - 1) :
+                        TO_HOST_SIZE_BYTES_FLOOR_IN_BITS];
   endgenerate
 
 endmodule

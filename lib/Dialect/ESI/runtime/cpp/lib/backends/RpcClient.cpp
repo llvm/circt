@@ -65,10 +65,14 @@ public:
   std::vector<RpcClient::ChannelDesc> listChannels() const;
 
   void writeToServer(const std::string &channelName, const MessageData &data);
+  bool tryWriteToServer(const std::string &channelName,
+                        const std::vector<MessageData> &frames, bool force);
+  void setToServerMaxInFlight(const std::string &channelName,
+                              unsigned maxInFlight);
 
   std::unique_ptr<RpcClient::ReadChannelConnection>
   connectClientReceiver(const std::string &channelName,
-                        RpcClient::ReadCallback callback);
+                        RpcClient::ReadCallback callback, unsigned maxInFlight);
 
   // Helpers used by ReadChannelConnectionImpl.
   void unsubscribe(uint64_t channelId);
@@ -85,8 +89,12 @@ private:
   // ---- websocket lifecycle ----
   void onMessage(const ix::WebSocketMessagePtr &msg);
   void handleControlFrame(const std::string &text);
+  void handleEvent(const json &frame);
   void handleBinaryFrame(const std::string &data);
   void failAllPending(const std::string &reason);
+  /// Wake every writer blocked on credits so it can observe the lost
+  /// connection and throw.
+  void markConnectionLost();
 
   // ---- request/response plumbing ----
 
@@ -94,15 +102,37 @@ private:
   /// Throws on error (transport or server-reported).
   json call(const std::string &method, json params);
 
+  /// Look up a to-server channel by name, throwing if it isn't one.
+  const ChannelMeta &getToServerChannel(const std::string &channelName) const;
+  /// Send one data frame. Throws on a transport failure.
+  void sendFrame(const ChannelMeta &meta, const MessageData &data);
+
   std::string host;
   Logger &logger;
-  ix::WebSocket ws;
 
   // Manifest + channel table cached from the `hello` response.
   uint32_t esiVersion = 0;
   std::vector<uint8_t> manifest;
   std::unordered_map<std::string, ChannelMeta> channelsByName;
   std::unordered_map<uint64_t, ChannelMeta> channelsById;
+
+  // Per to-server channel credit state. `outstanding` counts frames sent but
+  // not yet reported consumed by the server. Writers block on `cv` while
+  // `outstanding >= maxInFlight` (unless it is 0, i.e. unbounded). The map
+  // is populated once in the constructor and never mutated afterwards, so
+  // lookups need no lock.
+  struct WriteCredit {
+    std::mutex mutex;
+    std::condition_variable cv;
+    uint64_t outstanding = 0;
+    uint64_t maxInFlight = RpcClient::DefaultToServerMaxInFlight;
+  };
+  std::unordered_map<uint64_t, std::unique_ptr<WriteCredit>> writeCredits;
+  std::atomic<bool> connectionLost{false};
+  // Set once the constructor has populated the channel tables. Events from
+  // the server which arrive earlier (e.g. stale credits for a previous
+  // client's frames) are ignored.
+  std::atomic<bool> channelTablesReady{false};
 
   // Pending control-plane requests, keyed by id.
   std::mutex pendingMutex;
@@ -141,6 +171,12 @@ private:
   std::mutex readCallbacksMutex;
   std::unordered_map<uint64_t, std::shared_ptr<ReadCallbackEntry>>
       readCallbacks;
+  // Orders sending acknowledgements against canceling a subscription:
+  // `consumed` events are sent under it and leave out canceled entries, and
+  // entries are canceled under it before `unsubscribe` is sent. So an
+  // acknowledgement never follows its subscription's `unsubscribe` (and
+  // perhaps a new `subscribe`) and gets counted against the next one.
+  std::mutex ackMutex;
 
   // Dirty-set doorbell for the transport thread. Each entry's TSQueue
   // notifier inserts the channel id into `readyIds` and wakes the consumer.
@@ -148,6 +184,11 @@ private:
   std::thread transportThread;
 
   void transportLoop();
+  /// Report `acks` (subscription -> count) of client-bound frames as
+  /// consumed, leaving out canceled subscriptions.
+  void sendConsumedEvent(
+      const std::unordered_map<std::shared_ptr<ReadCallbackEntry>, uint64_t>
+          &acks);
 
   // Connection-open synchronization. The WS callback fires on IX's background
   // thread, so the constructor blocks here until either Open or Error fires.
@@ -168,6 +209,11 @@ private:
   // Cross-thread fault propagation out of the IX network thread. See
   // FaultStash docs in RpcWire.h.
   ::esi::cosim::FaultStash faultStash;
+
+  // Declared last so it's destroyed first: its destructor stops IX's threads,
+  // whose callbacks use the members above. That matters when the constructor
+  // throws after starting it, since then `~Impl()` doesn't run.
+  ix::WebSocket ws;
 };
 
 //===----------------------------------------------------------------------===//
@@ -222,7 +268,8 @@ RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
     throw std::runtime_error(
         "RpcClient: ix::initNetSystem() failed (WSAStartup)");
 
-  ws.setUrl("ws://" + host + ":" + std::to_string(port) + "/esi/cosim/v3");
+  ws.setUrl("ws://" + host + ":" + std::to_string(port) + "/esi/cosim/v" +
+            std::to_string(::esi::cosim::kProtocolVersion));
   ws.disablePerMessageDeflate();
   ws.disableAutomaticReconnection();
 
@@ -241,7 +288,15 @@ RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
   }
 
   // Send `hello`; the server blocks the response until its manifest is ready.
-  json result = call("hello", {{"client_protocol_version", 3}});
+  json result = call(
+      "hello", {{"client_protocol_version", ::esi::cosim::kProtocolVersion}});
+  auto verIt = result.find("protocol_version");
+  if (verIt == result.end() || !verIt->is_number_unsigned() ||
+      verIt->get<uint64_t>() != ::esi::cosim::kProtocolVersion)
+    throw std::runtime_error(
+        "RpcClient: server speaks an unsupported cosim protocol version (" +
+        (verIt == result.end() ? std::string("none") : verIt->dump()) +
+        "); expected " + std::to_string(::esi::cosim::kProtocolVersion));
 
   // Cache manifest blob.
   if (auto it = result.find("esi_version"); it != result.end())
@@ -269,9 +324,13 @@ RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
     std::string dir = c.at("direction").get<std::string>();
     meta.direction = dir == "to_server" ? RpcClient::ChannelDirection::ToServer
                                         : RpcClient::ChannelDirection::ToClient;
+    if (meta.direction == RpcClient::ChannelDirection::ToServer)
+      writeCredits.emplace(meta.id, std::make_unique<WriteCredit>());
     channelsByName.emplace(meta.name, meta);
     channelsById.emplace(meta.id, std::move(meta));
   }
+  // Publish the channel tables to the IX network thread (see handleEvent).
+  channelTablesReady.store(true, std::memory_order_release);
 
   // Start the transport thread now that initialisation is complete. It
   // sleeps on `readyIds`'s internal CV until a per-channel TSQueue push
@@ -282,6 +341,7 @@ RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
 RpcClient::Impl::~Impl() {
   disconnecting = true;
   failAllPending("client shutdown");
+  markConnectionLost();
   // Mark every per-channel entry canceled so the transport loop drops any
   // remaining queued frames promptly instead of spinning on the user
   // callback.
@@ -329,6 +389,7 @@ void RpcClient::Impl::onMessage(const ix::WebSocketMessagePtr &msg) {
       }
     }
     failAllPending("websocket error: " + reason);
+    markConnectionLost();
     return;
   }
   case ix::WebSocketMessageType::Close: {
@@ -350,6 +411,7 @@ void RpcClient::Impl::onMessage(const ix::WebSocketMessagePtr &msg) {
       }
     }
     failAllPending("websocket closed: " + reason);
+    markConnectionLost();
     return;
   }
   case ix::WebSocketMessageType::Message:
@@ -394,6 +456,11 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
       std::lock_guard<std::mutex> lock(lastServerErrorMutex);
       lastServerError = "server error [" + code + "]: " + message;
     }
+    return;
+  }
+
+  if (type == "event") {
+    handleEvent(resp);
     return;
   }
 
@@ -447,6 +514,54 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
     logger.debug("cosim",
                  std::string("failed to fulfill promise for request_id=") +
                      std::to_string(requestId) + ": " + e.what());
+  }
+}
+
+void RpcClient::Impl::handleEvent(const json &frame) {
+  std::string event = frame.value("event", std::string());
+  if (event != "consumed") {
+    logger.debug("cosim", "Ignoring unknown server event \"" + event + "\"");
+    return;
+  }
+  if (!channelTablesReady.load(std::memory_order_acquire))
+    return;
+  auto paramsIt = frame.find("params");
+  if (paramsIt == frame.end() || !paramsIt->is_object())
+    return;
+  auto chIt = paramsIt->find("channels");
+  if (chIt == paramsIt->end() || !chIt->is_array())
+    return;
+  for (const json &c : *chIt) {
+    auto idIt = c.find("channel_id");
+    auto countIt = c.find("count");
+    if (idIt == c.end() || !idIt->is_number_unsigned() || countIt == c.end() ||
+        !countIt->is_number_unsigned()) {
+      logger.warning("cosim", "Malformed consumed event entry: " + c.dump());
+      continue;
+    }
+    auto credIt = writeCredits.find(idIt->get<uint64_t>());
+    if (credIt == writeCredits.end())
+      continue;
+    WriteCredit &cred = *credIt->second;
+    uint64_t count = countIt->get<uint64_t>();
+    {
+      std::lock_guard<std::mutex> lock(cred.mutex);
+      // Clamp: credits for frames sent by a previous client are possible.
+      cred.outstanding -= (std::min)(cred.outstanding, count);
+    }
+    cred.cv.notify_all();
+  }
+}
+
+void RpcClient::Impl::markConnectionLost() {
+  connectionLost.store(true);
+  if (!channelTablesReady.load(std::memory_order_acquire))
+    return;
+  for (auto &[id, cred] : writeCredits) {
+    // Take the lock so a writer can't miss the wakeup between checking its
+    // predicate and blocking.
+    { std::lock_guard<std::mutex> lock(cred->mutex); }
+    cred->cv.notify_all();
   }
 }
 
@@ -546,23 +661,78 @@ json RpcClient::Impl::call(const std::string &method, json params) {
   return future.get();
 }
 
-void RpcClient::Impl::writeToServer(const std::string &channelName,
-                                    const MessageData &data) {
-  faultStash.check();
+const RpcClient::Impl::ChannelMeta &
+RpcClient::Impl::getToServerChannel(const std::string &channelName) const {
   auto it = channelsByName.find(channelName);
   if (it == channelsByName.end())
     throw std::runtime_error("Unknown channel '" + channelName + "'");
   if (it->second.direction != RpcClient::ChannelDirection::ToServer)
     throw std::runtime_error("Channel '" + channelName +
                              "' is not a to-server channel");
+  return it->second;
+}
 
-  std::string frame = esi::cosim::buildDataFrame(it->second.id, data.getBytes(),
-                                                 data.getSize());
+void RpcClient::Impl::sendFrame(const ChannelMeta &meta,
+                                const MessageData &data) {
+  std::string frame =
+      esi::cosim::buildDataFrame(meta.id, data.getBytes(), data.getSize());
   // IXWebSocket serializes sends internally; no extra mutex needed.
   auto info = ws.sendBinary(frame);
   if (!info.success)
-    throw std::runtime_error("Failed to send data on channel '" + channelName +
+    throw std::runtime_error("Failed to send data on channel '" + meta.name +
                              "'");
+}
+
+void RpcClient::Impl::writeToServer(const std::string &channelName,
+                                    const MessageData &data) {
+  faultStash.check();
+  const ChannelMeta &meta = getToServerChannel(channelName);
+  WriteCredit &cred = *writeCredits.at(meta.id);
+  {
+    std::unique_lock<std::mutex> lock(cred.mutex);
+    cred.cv.wait(lock, [&] {
+      return connectionLost.load() || cred.maxInFlight == 0 ||
+             cred.outstanding < cred.maxInFlight;
+    });
+    if (connectionLost.load())
+      throw std::runtime_error("Connection to cosim server lost while "
+                               "writing to channel '" +
+                               channelName + "'");
+    ++cred.outstanding;
+  }
+  sendFrame(meta, data);
+}
+
+bool RpcClient::Impl::tryWriteToServer(const std::string &channelName,
+                                       const std::vector<MessageData> &frames,
+                                       bool force) {
+  faultStash.check();
+  const ChannelMeta &meta = getToServerChannel(channelName);
+  WriteCredit &cred = *writeCredits.at(meta.id);
+  {
+    std::lock_guard<std::mutex> lock(cred.mutex);
+    if (connectionLost.load())
+      throw std::runtime_error("Connection to cosim server lost while "
+                               "writing to channel '" +
+                               channelName + "'");
+    if (!force && cred.maxInFlight != 0 && cred.outstanding >= cred.maxInFlight)
+      return false;
+    cred.outstanding += frames.size();
+  }
+  for (const MessageData &frame : frames)
+    sendFrame(meta, frame);
+  return true;
+}
+
+void RpcClient::Impl::setToServerMaxInFlight(const std::string &channelName,
+                                             unsigned maxInFlight) {
+  const ChannelMeta &meta = getToServerChannel(channelName);
+  WriteCredit &cred = *writeCredits.at(meta.id);
+  {
+    std::lock_guard<std::mutex> lock(cred.mutex);
+    cred.maxInFlight = maxInFlight;
+  }
+  cred.cv.notify_all();
 }
 
 //===----------------------------------------------------------------------===//
@@ -599,7 +769,8 @@ std::vector<RpcClient::ChannelDesc> RpcClient::Impl::listChannels() const {
 
 std::unique_ptr<RpcClient::ReadChannelConnection>
 RpcClient::Impl::connectClientReceiver(const std::string &channelName,
-                                       RpcClient::ReadCallback callback) {
+                                       RpcClient::ReadCallback callback,
+                                       unsigned maxInFlight) {
   faultStash.check();
   auto it = channelsByName.find(channelName);
   if (it == channelsByName.end())
@@ -623,7 +794,8 @@ RpcClient::Impl::connectClientReceiver(const std::string &channelName,
   }
 
   try {
-    call("subscribe", {{"channel_id", channelId}});
+    call("subscribe",
+         {{"channel_id", channelId}, {"max_in_flight", maxInFlight}});
   } catch (...) {
     std::lock_guard<std::mutex> lock(readCallbacksMutex);
     auto it = readCallbacks.find(channelId);
@@ -659,8 +831,11 @@ void RpcClient::Impl::unregisterCallback(uint64_t channelId) {
   }
   // Flip the cancel flag on the entry that any in-flight transport-loop
   // iteration already copied out, so it bails out promptly and drops any
-  // remaining queued frames.
-  entry->canceled.store(true);
+  // remaining queued frames (and their acknowledgements; see `ackMutex`).
+  {
+    std::lock_guard<std::mutex> lock(ackMutex);
+    entry->canceled.store(true);
+  }
   // Nudge the transport thread so it observes the cancelation promptly and
   // drains+drops whatever's still queued.
   readyIds.markReady(channelId);
@@ -686,6 +861,9 @@ void RpcClient::Impl::transportLoop() {
     ids.insert(retry.begin(), retry.end());
     retry.clear();
 
+    // Frames consumed this pass, per subscription. Reported to the server in
+    // one batched event at the end of the pass to return their credits.
+    std::unordered_map<std::shared_ptr<ReadCallbackEntry>, uint64_t> acks;
     for (uint64_t id : ids) {
       std::shared_ptr<ReadCallbackEntry> entry;
       {
@@ -709,8 +887,10 @@ void RpcClient::Impl::transportLoop() {
           gotOne = true;
           std::unique_ptr<SegmentedMessageData> msg =
               std::make_unique<MessageData>(data);
-          if (entry->callback(msg))
+          if (entry->callback(msg)) {
+            ++acks[entry];
             return true;
+          }
           stuck = true;
           return false;
         });
@@ -720,7 +900,29 @@ void RpcClient::Impl::transportLoop() {
           retry.insert(id);
       }
     }
+    if (!acks.empty())
+      sendConsumedEvent(acks);
   }
+}
+
+void RpcClient::Impl::sendConsumedEvent(
+    const std::unordered_map<std::shared_ptr<ReadCallbackEntry>, uint64_t>
+        &acks) {
+  // Held while sending; see `ackMutex`.
+  std::lock_guard<std::mutex> lock(ackMutex);
+  json channels = json::array();
+  for (const auto &[entry, count] : acks)
+    if (!entry->canceled.load())
+      channels.push_back({{"channel_id", entry->channelId}, {"count", count}});
+  if (channels.empty())
+    return;
+  json event;
+  event["type"] = "event";
+  event["event"] = "consumed";
+  event["params"] = {{"channels", std::move(channels)}};
+  // A failed send means the connection is going away, and with it the
+  // server's flow-control state; nothing to recover.
+  ws.sendUtf8Text(event.dump());
 }
 
 //===----------------------------------------------------------------------===//
@@ -752,8 +954,20 @@ void RpcClient::writeToServer(const std::string &channelName,
   impl->writeToServer(channelName, data);
 }
 
+bool RpcClient::tryWriteToServer(const std::string &channelName,
+                                 const std::vector<MessageData> &frames,
+                                 bool force) {
+  return impl->tryWriteToServer(channelName, frames, force);
+}
+
+void RpcClient::setToServerMaxInFlight(const std::string &channelName,
+                                       unsigned maxInFlight) {
+  impl->setToServerMaxInFlight(channelName, maxInFlight);
+}
+
 std::unique_ptr<RpcClient::ReadChannelConnection>
 RpcClient::connectClientReceiver(const std::string &channelName,
-                                 ReadCallback callback) {
-  return impl->connectClientReceiver(channelName, std::move(callback));
+                                 ReadCallback callback, unsigned maxInFlight) {
+  return impl->connectClientReceiver(channelName, std::move(callback),
+                                     maxInFlight);
 }

@@ -761,7 +761,11 @@ def LowerLayers : Pass<"firrtl-lower-layers", "firrtl::CircuitOp"> {
     This pass lowers FIRRTL layers as defined by their convention.  After this
     pass, all layer blocks and layers are removed.
   }];
-  let dependentDialects = ["sv::SVDialect", "emit::EmitDialect"];
+  let dependentDialects = [
+    "debug::DebugDialect",
+    "emit::EmitDialect",
+    "sv::SVDialect"
+  ];
   let options = [
     Option<"emitAllBindFiles", "emit-all-bind-files", "bool", "false",
       "Emit bind files for private modules.">

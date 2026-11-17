@@ -288,15 +288,16 @@ static LogicalResult executeBMC(MLIRContext &context) {
   ConvertVerifToSMTOptions convertVerifToSMTOptions;
   convertVerifToSMTOptions.risingClocksOnly = risingClocksOnly;
   pm.addPass(createConvertVerifToSMT(convertVerifToSMTOptions));
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.nestAny().addPass(createSimpleCanonicalizerPass());
 
   if (outputFormat != OutputMLIR && outputFormat != OutputSMTLIB) {
     LowerSMTToZ3LLVMOptions options;
     options.debug = printSolverOutput;
     options.printOnlyFirstCounterexample = printOnlyFirstCounterexample;
     pm.addPass(createLowerSMTToZ3LLVM(options));
-    pm.addPass(createCSEPass());
-    pm.addPass(createSimpleCanonicalizerPass());
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(createCSEPass());
+    anyPM.addPass(createSimpleCanonicalizerPass());
     pm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
   }
 

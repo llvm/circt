@@ -52,7 +52,7 @@ using namespace ExportVerilog;
 bool ExportVerilog::isSimpleReadOrPort(Value v) {
   if (isa<BlockArgument>(v))
     return true;
-  auto vOp = v.getDefiningOp();
+  auto *vOp = v.getDefiningOp();
   if (!vOp)
     return false;
   if (sv::getHandleElementType(v.getType()))
@@ -60,7 +60,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
     return false;
-  auto readSrc = read.getInput().getDefiningOp();
+  auto *readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
   return isa<sv::WireOp, RegOp, LogicOp, VarOp, XMROp, XMRRefOp>(readSrc);
@@ -478,7 +478,7 @@ static Operation *findParentInNonProceduralRegion(Operation *op) {
 /// This function is invoked on side effecting Verilog expressions when we're in
 /// 'disallowLocalVariables' mode for old Verilog clients.  This ensures that
 /// any side effecting expressions are only used by a single BPAssign to a
-/// sv.reg or sv.logic operation.  This ensures that the verilog emitter doesn't
+/// sv.var or sv.logic operation.  This ensures that the verilog emitter doesn't
 /// have to worry about spilling them.
 ///
 /// This returns true if the op was rewritten, false otherwise.
@@ -1007,7 +1007,7 @@ static LogicalResult legalizeHWModule(Block &block,
     if (options.disallowLocalVariables && isVerilogExpression(&op) &&
         isProceduralRegion) {
 
-      // Force any side-effecting expressions in nested regions into a sv.reg
+      // Force any side-effecting expressions in nested regions into a sv.var
       // if we aren't allowing local variable declarations.  The Verilog emitter
       // doesn't want to have to have to know how to synthesize a reg in the
       // case they have to be spilled for whatever reason.
@@ -1284,16 +1284,16 @@ static LogicalResult legalizeHWModule(Block &block,
     std::pair<Block *, Block::iterator> logicOpInsertionPoint =
         findLogicOpInsertionPoint(&block.front());
     for (auto &op : llvm::make_early_inc_range(block)) {
-      if (auto logic = dyn_cast<LogicOp>(&op)) {
+      if (isa<LogicOp, VarOp>(op)) {
         // If the logic op is already located at the given point, increment the
         // iterator to keep the order of logic operations in the block.
-        if (logicOpInsertionPoint.second == logic->getIterator()) {
+        if (logicOpInsertionPoint.second == op.getIterator()) {
           ++logicOpInsertionPoint.second;
           continue;
         }
         // Otherwise, move the op to the insertion point.
-        logic->moveBefore(logicOpInsertionPoint.first,
-                          logicOpInsertionPoint.second);
+        op.moveBefore(logicOpInsertionPoint.first,
+                      logicOpInsertionPoint.second);
       }
     }
     return success();

@@ -21,8 +21,12 @@
 #include "esi/Utils.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <condition_variable>
+#include <deque>
+#include <exception>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <queue>
@@ -193,13 +197,14 @@ public:
   virtual bool isConnected() const = 0;
 
   /// Poll for incoming data. Returns true if data was read or written into a
-  /// buffer as a result of the poll. Calling the call back could (will) also
-  /// happen in that case. Some backends need this to be called periodically. In
-  /// the usual case, this will be called by a background thread, but the ESI
-  /// runtime does not want to assume that the host processes use standard
-  /// threads. If the user wants to provide their own threads, they need to call
-  /// this on each port occasionally. This is also called from the 'master' poll
-  /// method in the Accelerator class.
+  /// buffer as a result of the poll, though it may return false regardless
+  /// (e.g. a write port in callback mode doesn't report its writes). Calling
+  /// the call back could (will) also happen in that case. Some backends need
+  /// this to be called periodically. In the usual case, this will be called by
+  /// a background thread, but the ESI runtime does not want to assume that the
+  /// host processes use standard threads. If the user wants to provide their
+  /// own threads, they need to call this on each port occasionally. This is
+  /// also called from the 'master' poll method in the Accelerator class.
   bool poll() {
     if (isConnected())
       return pollImpl();
@@ -304,85 +309,89 @@ protected:
   virtual void connectImpl(const ConnectOptions &options) {}
 };
 
-/// A ChannelPort which sends data to the accelerator.
+/// A ChannelPort which sends data to the accelerator. It has two modes: Sync
+/// and Callback, which cannot be used at the same time. The mode is set at
+/// connect() time. To change the mode, disconnect() and then connect() again.
 class WriteChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
+  /// Stops the default callback mode implementation, if in use, dropping a
+  /// fetched message which hasn't been completely written.
+  ~WriteChannelPort() override;
 
-  virtual void connect(const ConnectOptions &options = {}) override {
-    translateMessages = options.translateMessage && translationInfo;
-    if (translationInfo) {
-      translationInfo->precomputeFrameInfo();
-      if (translateMessages)
-        translationInfo->requireTranslationSupported();
-    }
-    connectImpl(options);
-    connected = true;
+  /// Callback mode data source. Called whenever the port can accept a message:
+  /// returns the next message to write (ownership is transferred), or nullptr
+  /// if none is available yet. After returning nullptr (or throwing), it isn't
+  /// called again until notifyAsyncDataAvailable() is. Must return
+  /// immediately.
+  using DataFetchCallback =
+      std::function<std::unique_ptr<SegmentedMessageData>()>;
+
+  /// Callback mode error handler. Called with the exception thrown while
+  /// writing a message returned by the DataFetchCallback (which is then
+  /// dropped), or by the DataFetchCallback itself.
+  using WriteErrorCallback = std::function<void(std::exception_ptr)>;
+
+  /// Disconnect the port. In callback mode, drops a fetched message which
+  /// hasn't been completely written. With the default callback mode
+  /// implementation, blocks until another thread writing fetched data
+  /// (including the callbacks it invokes) has stopped. Must not be called
+  /// concurrently with connect() or disconnect() on another thread. Subclasses
+  /// which override this must call it.
+  virtual void disconnect() override;
+  virtual bool isConnected() const override {
+    return mode != Mode::Disconnected;
   }
-  virtual void disconnect() override { connected = false; }
-  virtual bool isConnected() const override { return connected; }
+
+  //===--------------------------------------------------------------------===//
+  // Sync mode: connect without a callback to use write(), tryWrite(), and
+  // flush(). These throw in callback mode.
+  //===--------------------------------------------------------------------===//
+
+  /// Connect in sync mode. Throws if connected in callback mode.
+  virtual void connect(const ConnectOptions &options = {}) override;
 
   /// A very basic blocking write API. Will likely change for performance
   /// reasons.
   void write(const MessageData &data) {
-    if (translateMessages) {
-      assert(translationBuffer.empty() &&
-             "Cannot call write() with pending translated messages");
-      translateOutgoing(data);
-      for (auto &msg : translationBuffer)
-        writeImpl(maybePadEmptyMessage(msg));
-      translationBuffer.clear();
-    } else {
-      writeImpl(maybePadEmptyMessage(data));
-    }
+    requireNotCallbackMode("write");
+    writeInternal(data);
   }
 
   /// Write a multi-segment message. Takes ownership so the backend can hold
-  /// the message across partial writes / async completions. Default flattens
-  /// and calls the regular write(). Backends override for scatter-gather /
-  /// chunked-DMA support.
-  virtual void write(std::unique_ptr<SegmentedMessageData> msg) {
+  /// the message across partial writes / async completions. See
+  /// writeSegmentedImpl().
+  void write(std::unique_ptr<SegmentedMessageData> msg) {
+    requireNotCallbackMode("write");
     if (!msg)
       throw std::runtime_error(
           "WriteChannelPort::write: null SegmentedMessageData");
-    write(msg->toMessageData());
+    writeSegmentedImpl(std::move(msg));
   }
 
-  /// A basic non-blocking write API. Returns true if any of the data was queued
-  /// and/or sent. If the data type is a window a 'true' return does not
-  /// indicate that the message has been completely written. The 'flush' method
-  /// can be used to check that the entire buffer has been written. It is
-  /// invalid for backends to always return false (i.e. backends must eventually
-  /// ensure that writes may succeed).
+  /// A basic non-blocking write API. Returns true if any of the data was
+  /// sent; false means none of it was, and the write should be retried. If
+  /// the data type is a window a 'true' return does not indicate that the
+  /// message has been completely written. The 'flush' method can be used to
+  /// check that the entire buffer has been written. It is invalid for
+  /// backends to always return false (i.e. backends must eventually ensure
+  /// that writes may succeed).
   bool tryWrite(const MessageData &data) {
-    if (translateMessages) {
-      // Do not accept a new message if there are pending messages to flush.
-      if (!flush())
-        return false;
-      assert(translationBuffer.empty() &&
-             "Translation buffer should be empty after successful flush");
-      translateOutgoing(data);
-      flush();
-      return true;
-    } else {
-      return tryWriteImpl(maybePadEmptyMessage(data));
-    }
+    requireNotCallbackMode("tryWrite");
+    return tryWriteInternal(data);
   }
 
   /// Non-blocking write of a multi-segment message. On success, takes
   /// ownership of `msg` (leaving it null) and returns true. On failure, returns
   /// false and leaves `msg` untouched so the caller can retry with the same
   /// message. Same completion semantics as `tryWrite(const MessageData &)`.
-  /// Default flattens and calls the regular tryWrite(). Backends override for
-  /// scatter-gather / chunked-DMA support.
-  virtual bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg) {
+  /// See tryWriteSegmentedImpl().
+  bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg) {
+    requireNotCallbackMode("tryWrite");
     if (!msg)
       throw std::runtime_error(
           "WriteChannelPort::tryWrite: null SegmentedMessageData");
-    if (!tryWrite(msg->toMessageData()))
-      return false;
-    msg.reset();
-    return true;
+    return tryWriteSegmentedImpl(msg);
   }
 
   /// Flush any buffered data. Returns true if all data was flushed.
@@ -390,18 +399,78 @@ public:
   /// If `translateMessages` is false, calling `flush()` will immediately return
   /// true and perform no action, as there is no buffered data to flush.
   bool flush() {
-    while (translationBufferIdx < translationBuffer.size()) {
-      if (!tryWriteImpl(
-              maybePadEmptyMessage(translationBuffer[translationBufferIdx])))
-        return false;
-      ++translationBufferIdx;
-    }
-    translationBuffer.clear();
-    translationBufferIdx = 0;
-    return true;
+    requireNotCallbackMode("flush");
+    return flushInternal();
   }
 
+  //===--------------------------------------------------------------------===//
+  // Callback mode: connect with a data fetch callback, which the port calls to
+  // get messages to write whenever it can accept them. connect() and
+  // notifyAsyncDataAvailable() provide a default implementation, which
+  // backends may override (e.g. to fetch messages as DMA buffers free up).
+  //===--------------------------------------------------------------------===//
+
+  /// Connect in callback mode. Throws if already connected, if either callback
+  /// is null, or if frames of a windowed message written in sync mode haven't
+  /// all been sent yet (reconnect in sync mode and flush() them first). Must
+  /// not be called concurrently with connect() or disconnect() on another
+  /// thread. Callbacks may be invoked from any thread, but never
+  /// concurrently with each other, and must return quickly. Exceptions thrown
+  /// by `fetch` are reported to `onError`; those thrown by `onError`
+  /// propagate out of whichever call invoked it (e.g.
+  /// notifyAsyncDataAvailable() or poll(); the accelerator's service thread
+  /// logs them). They may call notifyAsyncDataAvailable() and disconnect() (and
+  /// then connect()), but must not wait on another thread which uses the port.
+  ///
+  /// Default implementation: the port calls `fetch` and writes what it returns
+  /// with tryWriteSegmentedImpl() (so backends which override that for
+  /// scatter-gather support receive messages as-is), until `fetch` returns
+  /// nullptr or the backend backpressures. It does so from
+  /// notifyAsyncDataAvailable() and from poll() (e.g. called by the
+  /// accelerator's service thread via `AcceleratorServiceThread::addPoll()`),
+  /// which also retries the one fetched message the backend didn't accept.
+  /// Each call writes at most `kMaxAsyncWritesPerCall` messages, so that it
+  /// returns even if `fetch` always has data; poll() writes the rest.
+  /// `fetch` is first called by the first of either after connecting. Its
+  /// state is only allocated while it is in use.
+  ///
+  /// Backends which override this must also override
+  /// notifyAsyncDataAvailable(), uphold the callback contracts, and call
+  /// connectCallbackMode().
+  virtual void connect(DataFetchCallback fetch, WriteErrorCallback onError,
+                       const ConnectOptions &options = {});
+
+  /// The most messages the default callback mode implementation writes per
+  /// call to notifyAsyncDataAvailable() or poll().
+  static constexpr size_t kMaxAsyncWritesPerCall = 64;
+
+  /// Notify the port that the DataFetchCallback has data again. Throws if the
+  /// port isn't connected in callback mode.
+  ///
+  /// Default implementation: unless another thread is already writing fetched
+  /// data (which then picks the new data up), writes it immediately on the
+  /// calling thread.
+  virtual void notifyAsyncDataAvailable();
+
 protected:
+  /// If the default callback mode implementation is in use, write fetched data
+  /// (see connect()). Then, if the port is still connected (a callback may
+  /// disconnect it), call pollWriteImpl() and return its result.
+  bool pollImpl() final;
+
+  /// Backend-specific polling. Write port backends override this rather than
+  /// pollImpl(). Returns true if any progress was made.
+  virtual bool pollWriteImpl() { return false; }
+
+  /// Indicates the current mode of the channel.
+  enum Mode { Disconnected, Sync, Callback };
+  std::atomic<Mode> mode = Mode::Disconnected;
+
+  /// For backends which override connect(DataFetchCallback, ...): check that
+  /// the port is disconnected, set up message translation, call connectImpl(),
+  /// and enter callback mode, in which the sync write APIs throw.
+  void connectCallbackMode(const ConnectOptions &options);
+
   /// Pad an empty payload with a single zero byte if the port type has a
   /// zero-width logical width (e.g. `VoidType`). Transports (DMA engines,
   /// cosim, etc.) require every message to carry at least one byte.
@@ -415,13 +484,35 @@ protected:
   /// reference outlives the call.
   inline static const MessageData transportPad0Bytes = MessageData({0});
 
-public:
-protected:
   /// Implementation for write(). Subclasses must implement this.
   virtual void writeImpl(const MessageData &) = 0;
 
   /// Implementation for tryWrite(). Subclasses must implement this.
   virtual bool tryWriteImpl(const MessageData &data) = 0;
+
+  /// Implementation for the segmented write(). `msg` is non-null. The default
+  /// flattens the message (without copying if it is already a MessageData)
+  /// and writes it like write(const MessageData &). Backends override for
+  /// scatter-gather / chunked-DMA support.
+  virtual void writeSegmentedImpl(std::unique_ptr<SegmentedMessageData> msg) {
+    MessageData scratch;
+    writeInternal(msg->asMessageData(scratch));
+  }
+
+  /// Implementation for the segmented tryWrite(), also used by the default
+  /// callback mode implementation. `msg` is non-null. On success, takes
+  /// ownership of it (leaving it null) and returns true; otherwise leaves it
+  /// untouched. The default flattens the message (without copying if it is
+  /// already a MessageData) and writes it like tryWrite(const MessageData &).
+  /// Backends override for scatter-gather / chunked-DMA support.
+  virtual bool
+  tryWriteSegmentedImpl(std::unique_ptr<SegmentedMessageData> &msg) {
+    MessageData scratch;
+    if (!tryWriteInternal(msg->asMessageData(scratch)))
+      return false;
+    msg.reset();
+    return true;
+  }
 
   /// Break a message into its frames.
   std::vector<MessageData> getMessageFrames(const MessageData &data);
@@ -439,7 +530,37 @@ protected:
   void translateOutgoing(const MessageData &data);
 
 private:
-  volatile bool connected = false;
+  /// Throw if the port is connected in callback mode.
+  void requireNotCallbackMode(const char *method) const;
+  /// Set up translation and call connectImpl(). Shared by both modes.
+  void connectCommon(const ConnectOptions &options);
+  /// write(), tryWrite() and flush() without the mode check.
+  void writeInternal(const MessageData &data);
+  bool tryWriteInternal(const MessageData &data);
+  bool flushInternal();
+  /// Whether a windowed message's frames are partially written.
+  bool hasPendingFrames() const {
+    return translationBufferIdx < translationBuffer.size();
+  }
+  /// Drop the frames of a partially written (windowed) message.
+  void discardPendingFrames();
+
+  //===--------------------------------------------------------------------===//
+  // Default callback mode implementation.
+  //===--------------------------------------------------------------------===//
+
+  /// One connection using the default implementation: its state and the logic
+  /// which writes fetched data. Defined in Ports.cpp.
+  struct DefaultAsyncWriter;
+  /// Return the default implementation's current connection, if any.
+  std::shared_ptr<DefaultAsyncWriter> getAsyncWriter();
+  /// Detach and stop the default implementation's current connection, if any.
+  void stopAsyncWriter();
+
+  /// Protects `asyncWriter`.
+  std::mutex asyncWriterMutex;
+  /// The default implementation's current connection, if in use.
+  std::shared_ptr<DefaultAsyncWriter> asyncWriter;
 };
 
 /// Instantiated when a backend does not know how to create a write channel.
@@ -449,6 +570,10 @@ public:
       : WriteChannelPort(type), errmsg(errmsg) {}
 
   void connect(const ConnectOptions &options = {}) override {
+    throw std::runtime_error(errmsg);
+  }
+  void connect(DataFetchCallback fetch, WriteErrorCallback onError,
+               const ConnectOptions &options = {}) override {
     throw std::runtime_error(errmsg);
   }
 

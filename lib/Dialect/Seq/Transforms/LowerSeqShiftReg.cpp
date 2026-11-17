@@ -38,7 +38,7 @@ public:
     auto baseName = op.getName();
     Value init = {};
     if (auto powerOn = adaptor.getPowerOnValue()) {
-      if (auto op = powerOn.getDefiningOp()) {
+      if (auto *op = powerOn.getDefiningOp()) {
         if (op->hasTrait<mlir::OpTrait::ConstantLike>())
           init = createConstantInitialValue(rewriter, op);
       }

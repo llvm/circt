@@ -42,7 +42,8 @@ firrtl.circuit "StripDomains" {
   // CHECK-LABEL: firrtl.module @StripUnsafeDomainCast(
   // CHECK-SAME:    in  %i:  !firrtl.uint<1>,
   // CHECK-SAME:    out %o:  !firrtl.uint<1>) {
-  // CHECK-NEXT:    firrtl.matchingconnect %o, %i : !firrtl.uint<1>
+  // CHECK-NEXT:    %0 = firrtl.unsafe_domain_cast %i : !firrtl.uint<1>
+  // CHECK-NEXT:    firrtl.matchingconnect %o, %0 : !firrtl.uint<1>
   // CHECK-NEXT:  }
   firrtl.module @StripUnsafeDomainCast(
       in  %D1: !firrtl.domain<@ClockDomain()>,

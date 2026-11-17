@@ -226,6 +226,12 @@ struct EmittedType {
 
   operator bool() const { return !name.empty(); }
 
+  bool operator==(const EmittedType &other) const {
+    return name == other.name && packedDims == other.packedDims &&
+           unpackedDims == other.unpackedDims;
+  }
+  bool operator!=(const EmittedType &other) const { return !(*this == other); }
+
   static JArray emitDims(ArrayRef<int64_t> dims, bool skipFirstLen1Dim) {
     JArray json;
     if (skipFirstLen1Dim && !dims.empty() && dims[0] == 1)

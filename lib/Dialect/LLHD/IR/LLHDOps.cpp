@@ -641,7 +641,7 @@ void ProbeNetOp::getEffects(
     SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
         &effects) {
   if (mayHaveSSADominance(*getOperation()->getParentRegion()))
-    effects.emplace_back(MemoryEffects::Read::get(), &getSignalMutable());
+    effects.emplace_back(MemoryEffects::Read::get(), &getNetMutable());
 }
 
 //===----------------------------------------------------------------------===//

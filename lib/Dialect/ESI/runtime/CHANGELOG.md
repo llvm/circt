@@ -4,6 +4,29 @@
 
 ### Breaking changes
 
+- **Cosim protocol v4: backpressure.** Cosim channels now apply credit-based
+  flow control in both directions. The cosim wire protocol is bumped to v4
+  and the version is checked exactly in `hello`, so the runtime and the
+  simulator's DPI library must be rebuilt together. See `cosim-protocol.md`.
+  - Host→simulation: `WriteChannelPort::tryWrite()` now returns `false` while
+    16 frames (or `ConnectOptions::bufferSize`; `0` = unbounded) are
+    unconsumed by the simulation, and `write()` blocks until there's room.
+    Frames held for a simulator port which isn't connected count too.
+  - Simulation→host: `Cosim_Endpoint_ToHost` now deasserts `DataInReady` while
+    32 frames (or the read port's `ConnectOptions::bufferSize`; `0` =
+    unbounded) are queued or unconsumed by the host. Software which writes a
+    long burst before reading any results may now deadlock, as it would on
+    hardware. Connect such read ports with `bufferSize = 0`.
+  - The `cosim_ep_tryput` DPI call returns a positive value when the channel
+    is full and the message was not accepted.
+  - For windowed (translated) ports, `WriteChannelPort::tryWrite()` now
+    returns `false`, keeping nothing for a later `flush()`, when the backend
+    doesn't accept the message's first frame. Previously it returned `true`
+    and left the whole message buffered.
+  - `RpcClient::connectClientReceiver()` takes a `maxInFlight` argument;
+    `RpcClient` gains `tryWriteToServer()` and `setToServerMaxInFlight()`, and
+    `RpcServer` gains `messageConsumed()`. `RpcServer` write ports'
+    `tryWrite()` fails, and `write()` blocks, at the in-flight limit.
 - **`HostMemRegion` is now defined at namespace scope** as
   `esi::services::HostMemRegion`. `services::HostMem::HostMemRegion` remains
   as an alias, so existing source compiles unchanged, but code linking against
@@ -19,14 +42,48 @@
 
 ### Added
 
-- **Non-blocking segmented writes.** `WriteChannelPort` gains a virtual
+- **`SegmentedMessageData::asMessageData(scratch)`** returns the message
+  itself if it is already a `MessageData`, otherwise flattens it into
+  `scratch`. It replaces the internal `detail::getMessageDataRef()` helper.
+  The default segmented `WriteChannelPort::write()` and `tryWrite()` use it,
+  so they no longer copy messages which are already a `MessageData`, and
+  `MessageData` gained (noexcept) move operations.
+- **Non-blocking segmented writes.** `WriteChannelPort` gains
   `bool tryWrite(std::unique_ptr<SegmentedMessageData> &msg)` and
   `TypedWritePort<T>` gains `bool tryWrite(std::unique_ptr<T> &data)`. They
   take ownership of the message (leaving the pointer null) only when they
   return true; on false the caller keeps the message and can retry. The
-  default implementation flattens the message and calls the existing
-  `tryWrite(const MessageData &)`; backends may override it for
-  scatter-gather support.
+  default implementation flattens the message and writes it like
+  `tryWrite(const MessageData &)`.
+- **Segmented write backend hooks.** The segmented `WriteChannelPort::write()`
+  and `tryWrite()` are no longer virtual: backends override the new
+  `writeSegmentedImpl()` and `tryWriteSegmentedImpl()` hooks instead (e.g. for
+  scatter-gather support), so the public methods can enforce the port's mode.
+- **Callback mode for `WriteChannelPort`.** Mirroring `ReadChannelPort`,
+  connecting a write port with callbacks (`connect(DataFetchCallback,
+  WriteErrorCallback, options)`) puts it in callback mode, in which the port
+  pulls messages from the application: it calls the fetch callback whenever it
+  can accept a message, and the callback returns the next `SegmentedMessageData`
+  or nullptr if it has none. After nullptr, the port doesn't call it again until
+  `notifyAsyncDataAvailable()` (which throws unless the port is in callback
+  mode). `write()`/`tryWrite()`/`flush()` throw in callback mode. `connect()`
+  and `notifyAsyncDataAvailable()` are virtual, so backends may replace the
+  default implementation, which is only allocated while in use. The default
+  writes fetched messages with the segmented `tryWrite()` (so backends which
+  override that for scatter-gather support avoid flattening), immediately on the
+  notifying thread unless another thread is already writing. Under backpressure
+  it holds the one message the backend didn't accept and retries it from
+  `poll()` (e.g. the accelerator service thread via `addPoll()`), so messages
+  are never queued in the runtime. Each call writes at most
+  `kMaxAsyncWritesPerCall` messages, leaving the rest for `poll()`. Write errors
+  (and exceptions from the fetch callback) are reported to the error callback;
+  exceptions it throws propagate out of `notifyAsyncDataAvailable()` or
+  `poll()`. A fetched message which hasn't been written when the port is
+  disconnected or destroyed is dropped. Connecting in callback mode throws if a
+  windowed message written in sync mode still has unsent frames.
+  `TypedWritePort` gained matching `connect()` and `notifyAsyncDataAvailable()`
+  overloads. `WriteChannelPort::pollImpl()` is now `final`: write port backends
+  override the new `pollWriteImpl()` instead.
 - **Multiple outstanding host memory reads per client.**
   `HostMemReadReqSplitter` takes a new optional `max_outstanding` parameter
   (default `1`, which keeps the previous one-request-at-a-time behavior). With
@@ -74,9 +131,19 @@
 
 ### Fixed
 
+- **The accelerator service thread no longer dies on an exception** thrown by a
+  listener callback or task (including a module's `poll()`). It logs the
+  exception to the connection's logger (or, if constructed without a context,
+  to stderr) and carries on. `AcceleratorServiceThread`'s constructors take an
+  optional `Context *`.
 - **Cosim no longer drops frames sent before the simulator connects.** Frames
   sent to a simulator port which isn't connected yet are held by the server
   and handed over, in order, once it connects.
+- **Void messages are no longer rejected when re-delivered.** A backed-up
+  zero-width (void) to-host channel on the one-item DMA engines could crash
+  with "zero-width message must use a single-byte placeholder payload".
+  Zero-width ports now accept empty messages as well as the single-byte
+  placeholder, so transports may also send void messages without the pad.
 
 ## 0.8.0
 

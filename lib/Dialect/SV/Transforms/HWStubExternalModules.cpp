@@ -37,7 +37,7 @@ struct HWStubExternalModulesPass
 } // end anonymous namespace
 
 void HWStubExternalModulesPass::runOnOperation() {
-  auto topModule = getOperation().getBody();
+  auto *topModule = getOperation().getBody();
   OpBuilder builder(topModule->getParentOp()->getContext());
   builder.setInsertionPointToEnd(topModule);
 
@@ -47,7 +47,7 @@ void HWStubExternalModulesPass::runOnOperation() {
       auto nameAttr = module.getNameAttr();
       auto newModule = hw::HWModuleOp::create(
           builder, module.getLoc(), nameAttr, ports, module.getParameters());
-      auto outputOp = newModule.getBodyBlock()->getTerminator();
+      auto *outputOp = newModule.getBodyBlock()->getTerminator();
       OpBuilder innerBuilder(outputOp);
       SmallVector<Value, 8> outputs;
       // All output ports need values, use x

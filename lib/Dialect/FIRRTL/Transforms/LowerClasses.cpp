@@ -1941,7 +1941,7 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto *context = op->getContext();
     auto pathType = om::PathType::get(context);
-    auto pathInfoIt = pathInfoTable.table.find(op.getTarget());
+    const auto *pathInfoIt = pathInfoTable.table.find(op.getTarget());
 
     // The 0'th argument is the base path by default.
     auto basePath = op->getBlock()->getArgument(0);

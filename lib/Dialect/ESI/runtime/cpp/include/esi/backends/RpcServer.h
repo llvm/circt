@@ -40,14 +40,27 @@ public:
 
   /// Register a read or write port which communicates over RPC. Frames which
   /// arrive for a read port before it's connected are held until it is.
+  ///
+  /// Write ports apply backpressure: `tryWrite()` returns false, and
+  /// `write()` blocks, while the channel's in-flight limit (messages queued
+  /// here plus messages sent but not yet consumed by the client) is reached.
+  /// `write()` throws if the port is disconnected meanwhile. The simulation
+  /// should use `tryWrite()`: blocking it can deadlock, since the client may
+  /// need it to make progress before consuming anything.
   ReadChannelPort &registerReadPort(const std::string &name,
                                     const std::string &type);
   WriteChannelPort &registerWritePort(const std::string &name,
                                       const std::string &type);
 
+  /// Report that the simulation has consumed one message read from `port`
+  /// (which must have been returned by `registerReadPort`), in the order they
+  /// were read. This returns a credit to the client which sent it (if it's
+  /// still connected) so it may send another message. Non-blocking.
+  void messageConsumed(ReadChannelPort &port);
+
   // Stop the RPC server.
   // The optional millisecond timeout is advisory; the WebSocket transport
-  // closes connections promptly, so the value is unused in v3 of the
+  // closes connections promptly, so the value is unused in v4 of the
   // protocol.
   void stop(uint32_t timeoutMS = 0);
 

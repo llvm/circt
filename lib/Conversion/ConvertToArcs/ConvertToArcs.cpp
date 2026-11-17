@@ -90,8 +90,13 @@ public:
   SmallVector<SmallVector<Operation *>> run(const FixedPointGraph &graph);
 
 private:
-  void findComponentsFrom(Operation *op, const FixedPointGraph &graph);
-  void updateLowLinkFromSuccessors(Operation *op, const FixedPointGraph &graph);
+  struct Frame {
+    Operation *op;
+    ArrayRef<Operation *> remainingSuccessors;
+  };
+
+  void findComponentsFrom(Operation *root, const FixedPointGraph &graph);
+  void discoverNode(Operation *op);
   void extractCyclicComponent(Operation *root, const FixedPointGraph &graph);
 
   DenseMap<Operation *, size_t> indices;
@@ -151,12 +156,12 @@ void FixedPointGraph::addDriveProbeEdges(Operation *op) {
   auto drive = dyn_cast<llhd::DriveLikeOp>(op);
   if (!drive)
     return;
-  auto signal = drive.getSignal().getDefiningOp<llhd::SignalOp>();
+  auto signal = drive.getDriven().getDefiningOp<llhd::SignalOp>();
   if (!signal)
     return;
   for (auto *user : signal->getUsers())
     if (auto probe = dyn_cast<llhd::ProbeOp>(user);
-        probe && probe.getSignal() == drive.getSignal())
+        probe && probe.getSignal() == drive.getDriven())
       addEdge(op, probe);
 }
 
@@ -188,32 +193,46 @@ CyclicComponentFinder::run(const FixedPointGraph &graph) {
   return std::move(cyclicComponents);
 }
 
-/// Discover a node and collect its component if it is an SCC root.
-void CyclicComponentFinder::findComponentsFrom(Operation *op,
+/// Explore nodes with an explicit DFS stack and collect completed components.
+void CyclicComponentFinder::findComponentsFrom(Operation *root,
                                                const FixedPointGraph &graph) {
+  SmallVector<Frame> worklist;
+  discoverNode(root);
+  worklist.push_back({root, graph.getSuccessors(root)});
+
+  while (!worklist.empty()) {
+    auto &frame = worklist.back();
+    auto *op = frame.op;
+    if (!frame.remainingSuccessors.empty()) {
+      auto *successor = frame.remainingSuccessors.front();
+      frame.remainingSuccessors = frame.remainingSuccessors.drop_front();
+      auto successorIndex = indices.find(successor);
+      if (successorIndex == indices.end()) {
+        discoverNode(successor);
+        worklist.push_back({successor, graph.getSuccessors(successor)});
+      } else if (onStack.contains(successor)) {
+        lowLinks[op] = std::min(lowLinks[op], successorIndex->second);
+      }
+      continue;
+    }
+
+    if (lowLinks[op] == indices[op])
+      extractCyclicComponent(op, graph);
+    worklist.pop_back();
+    if (!worklist.empty()) {
+      auto *parent = worklist.back().op;
+      lowLinks[parent] = std::min(lowLinks[parent], lowLinks[op]);
+    }
+  }
+}
+
+/// Assign a discovery index and add the node to the component stack.
+void CyclicComponentFinder::discoverNode(Operation *op) {
   auto index = nextIndex++;
   indices[op] = index;
   lowLinks[op] = index;
   stack.push_back(op);
   onStack.insert(op);
-
-  updateLowLinkFromSuccessors(op, graph);
-  if (lowLinks[op] == index)
-    extractCyclicComponent(op, graph);
-}
-
-/// Explore outgoing edges and update the node's lowest reachable index.
-void CyclicComponentFinder::updateLowLinkFromSuccessors(
-    Operation *op, const FixedPointGraph &graph) {
-  for (auto *successor : graph.getSuccessors(op)) {
-    auto successorIndex = indices.find(successor);
-    if (successorIndex == indices.end()) {
-      findComponentsFrom(successor, graph);
-      lowLinks[op] = std::min(lowLinks[op], lowLinks[successor]);
-    } else if (onStack.contains(successor)) {
-      lowLinks[op] = std::min(lowLinks[op], successorIndex->second);
-    }
-  }
 }
 
 /// Pop one completed SCC and retain it only if it contains a cycle.
@@ -440,7 +459,7 @@ LogicalResult SignalFixedPointBuilder::collectSignals() {
     auto drive = dyn_cast<llhd::DriveLikeOp>(op);
     if (!drive)
       continue;
-    auto signalDefOp = drive.getSignal().getDefiningOp<llhd::SignalOp>();
+    auto signalDefOp = drive.getDriven().getDefiningOp<llhd::SignalOp>();
     if (!signalDefOp)
       return drive.emitOpError(
           "fixed-point drives require a locally defined signal");
@@ -472,7 +491,7 @@ LogicalResult SignalFixedPointBuilder::checkExternalDrives() {
   for (auto signal : signalDrives.keys()) {
     for (auto *user : signal->getUsers()) {
       auto drive = dyn_cast<llhd::DriveLikeOp>(user);
-      if (drive && drive.getSignal() == signal.getResult() &&
+      if (drive && drive.getDriven() == signal.getResult() &&
           !component.contains(user))
         return drive.emitOpError(
             "signals in fixed-point regions cannot have external drives");
@@ -482,7 +501,7 @@ LogicalResult SignalFixedPointBuilder::checkExternalDrives() {
 }
 
 void SignalFixedPointBuilder::addCaptureIfExternal(Value value) {
-  auto defOp = value.getDefiningOp();
+  auto *defOp = value.getDefiningOp();
   if (defOp && component.contains(defOp))
     return;
   captures.insert(value);
@@ -560,7 +579,7 @@ LogicalResult SignalFixedPointBuilder::mapSignalAccesses() {
       continue;
     if (auto probe = dyn_cast<llhd::ProbeOp>(op)) {
       auto signal = probe.getSignal().getDefiningOp<llhd::SignalOp>();
-      auto signalIt = signalDrives.find(signal);
+      auto *signalIt = signalDrives.find(signal);
       if (signalIt == signalDrives.end())
         return probe.emitOpError(
             "probe in fixed-point region has no corresponding drive");
@@ -704,7 +723,7 @@ LogicalResult Converter::analyzeFanIn() {
     for (auto *user : op->getUsers()) {
       while (user->getParentOp() != op->getParentOp())
         user = user->getParentOp();
-      auto it = faninMasks.find(user);
+      auto *it = faninMasks.find(user);
       if (it != faninMasks.end())
         mask |= it->second;
     }

@@ -252,9 +252,8 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
       auto col = columns[i];
 
       // Sort the column by arrival time - fastest at the end
-      std::stable_sort(
-          col.begin(), col.end(),
-          [](const auto &a, const auto &b) { return a.delay > b.delay; });
+      llvm::stable_sort(
+          col, [](const auto &a, const auto &b) { return a.delay > b.delay; });
       // Only compress to reach the target stage height - Dadda's Algorithm
       while (col.size() + newColumns[i].size() > targetStageHeight) {
         if (col.size() < 2) {
@@ -278,10 +277,9 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
 
           // Find the third bit of the full-adder that satisfies the delay
           // constraint
-          auto it = std::find_if(col.begin(), col.end(),
-                                 [targetDelay](const auto &pair) {
-                                   return pair.delay <= targetDelay;
-                                 });
+          auto *it = llvm::find_if(col, [targetDelay](const auto &pair) {
+            return pair.delay <= targetDelay;
+          });
 
           if (it != col.end()) {
             bit2 = *it;

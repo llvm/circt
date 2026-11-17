@@ -394,7 +394,7 @@ void MachineOpConverter::buildStateCaseMux(
       if (assignmentInState == assignment.assignmentInState.end())
         continue;
       b.setInsertionPointToEnd(caseInfo.block);
-      if (auto v = std::get_if<Value>(&assignmentInState->second); v) {
+      if (auto *v = std::get_if<Value>(&assignmentInState->second); v) {
         sv::BPAssignOp::create(b, machineOp.getLoc(), assignment.wire, *v);
       } else {
         // Nested case statement.
@@ -671,7 +671,7 @@ MachineOpConverter::convertState(StateOp state) {
     } else {
       // Clone operations which are inside `transitions` region but outside
       // `guard` region.
-      auto opClone = b.clone(op);
+      auto *opClone = b.clone(op);
       for (auto [i, res] : llvm::enumerate(op.getResults()))
         res.replaceAllUsesWith(opClone->getResult(i));
     }

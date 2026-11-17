@@ -58,6 +58,14 @@ size_t SegmentedMessageData::totalSize() const {
 
 bool SegmentedMessageData::empty() const { return totalSize() == 0; }
 
+const MessageData &
+SegmentedMessageData::asMessageData(MessageData &scratch) const {
+  if (auto *flat = dynamic_cast<const MessageData *>(this))
+    return *flat;
+  scratch = toMessageData();
+  return scratch;
+}
+
 MessageData SegmentedMessageData::toMessageData() const {
   size_t total = totalSize();
   if (total == 0)

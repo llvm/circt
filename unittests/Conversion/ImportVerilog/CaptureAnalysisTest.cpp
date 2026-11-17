@@ -51,7 +51,7 @@ protected:
       for (auto *var : caps)
         names.emplace_back(var->name);
       std::sort(names.begin(), names.end());
-      names.erase(std::unique(names.begin(), names.end()), names.end());
+      names.erase(llvm::unique(names), names.end());
     }
     return result;
   }

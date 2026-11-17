@@ -112,6 +112,16 @@ on:
         required: false
         type: boolean
         default: false
+      run_clang_tidy:
+        description: "Run clang-tidy over the changed lines (Linux only). Requires run_tests (for the build) and a clang cmake_c_compiler; the matching clang-tidy is installed with it."
+        required: false
+        type: boolean
+        default: false
+      allow_failure:
+        description: "Report failures of this build without failing the workflow run."
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       runner:
@@ -165,10 +175,21 @@ on:
         required: false
         type: boolean
         default: false
+      run_clang_tidy:
+        description: "Run clang-tidy over the changed lines (Linux only). Requires run_tests (for the build) and a clang cmake_c_compiler; the matching clang-tidy is installed with it."
+        required: false
+        type: boolean
+        default: false
+      allow_failure:
+        description: "Report failures of this build without failing the calling workflow run."
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-test-and-install:
     runs-on: ${{ inputs.runner }}
+    continue-on-error: ${{ inputs.allow_failure }}
     permissions:
       contents: write # Upload assets to release.
     steps:
@@ -231,14 +252,28 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           COMPILER="${{ steps.canonicalize.outputs.cmake_c_compiler }}"
+          # clang-tidy comes from the same source as the compiler, so the two
+          # always match.
+          CLANG_TIDY=
           if [[ "$COMPILER" =~ ^clang-([0-9]+)$ ]]; then
             wget https://apt.llvm.org/llvm.sh
             chmod +x llvm.sh
             sudo ./llvm.sh "${BASH_REMATCH[1]}"
+            CLANG_TIDY="clang-tidy-${BASH_REMATCH[1]}"
+          elif [[ "$COMPILER" == clang ]]; then
+            CLANG_TIDY=clang-tidy
           fi
 
           sudo apt-get update
           sudo apt-get install "$COMPILER" iverilog libsystemc-dev ninja-build valgrind z3 lld
+          if [[ "${{ inputs.run_clang_tidy }}" == "true" ]]; then
+            if [[ -z "$CLANG_TIDY" ]]; then
+              echo "run_clang_tidy requires a clang cmake_c_compiler, got '$COMPILER'"
+              exit 1
+            fi
+            sudo apt-get install "$CLANG_TIDY"
+          fi
+          echo clang_tidy="$CLANG_TIDY" >> "$GITHUB_OUTPUT"
           echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON -DLLVM_ENABLE_LLD=ON" >> "$GITHUB_OUTPUT"
       - name: Restore Verilator Cache (Linux)
         if: inputs.run_integration_tests && runner.os == 'Linux'
@@ -437,6 +472,47 @@ jobs:
         run: |
           ${{ steps.setup-windows.outputs.setup }}
           ninja -C build check-circt check-circt-unit circt-doc
+      # Run clang-tidy when enabled and Linux.
+      # Needs the build for generated headers; still runs if tests failed.
+      - name: clang-tidy (changed lines)
+        if: ${{ !cancelled() && inputs.run_clang_tidy && runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          # (Same base selection as the sanity-check job)
+          if [ -n "${{ github.base_ref }}" ]; then
+            git fetch --no-recurse-submodules origin "${{ github.base_ref }}"
+            DIFF_COMMIT="origin/${{ github.base_ref }}"
+          else
+            DIFF_COMMIT="HEAD^"
+          fi
+          # Skip code this build never compiles: clang-tidy won't know the right flags.
+          # ESI runtime and circt-standalone are separate CMake projects.
+          # Verilator compiles the integration test and circt-rtl-sim drivers.
+          # The rest need an option or dependency this build doesn't enable.
+          TIDY_EXCLUDE=(
+            ':(exclude)lib/Dialect/ESI/runtime'
+            ':(exclude)examples/circt-standalone'
+            ':(exclude)integration_test'
+            ':(exclude)tools/circt-rtl-sim/driver.cpp'
+            ':(exclude)lib/Bindings/Tcl'                            # CIRCT_BINDINGS_TCL_ENABLED
+            ':(exclude)lib/Dialect/Arc/Runtime/FSTTraceEncoder.cpp' # CIRCT_LIBFST_ENABLED
+            ':(exclude)lib/Scheduling/CPSATSchedulers.cpp'          # OR-Tools
+            ':(exclude)lib/Scheduling/LPSchedulers.cpp'             # OR-Tools
+          )
+          # On tidy failure, print here and to step summary.
+          if ! git diff -U0 "$DIFF_COMMIT...HEAD" -- . "${TIDY_EXCLUDE[@]}" | \
+              python3 llvm/clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py \
+                -clang-tidy-binary ${{ steps.setup-linux.outputs.clang_tidy }} -path build -p1 -j"$(nproc)" -quiet \
+                -warnings-as-errors='*' > clang-tidy.log 2>&1; then
+            {
+              echo "## clang-tidy (changed lines)"
+              echo '```'
+              cat clang-tidy.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            cat clang-tidy.log
+            exit 1
+          fi
       - name: Integration Test CIRCT
         if: inputs.run_integration_tests
         run: |

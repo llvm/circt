@@ -8,8 +8,8 @@ func.func @SplitStructs(%arg0: !moore.i42, %arg1: !moore.i1337) {
   // CHECK-DAG: %x.b = moore.variable : <i1337>
   // CHECK-NOT: moore.struct_extract_ref
   %x = moore.variable : <struct<{a: i42, b: i1337}>>
-  %0 = moore.struct_extract_ref %x, "a" : <struct<{a: i42, b: i1337}>> -> <i42>
-  %1 = moore.struct_extract_ref %x, "b" : <struct<{a: i42, b: i1337}>> -> <i1337>
+  %0 = moore.struct_extract_ref %x, "a" : ref<struct<{a: i42, b: i1337}>> -> ref<i42>
+  %1 = moore.struct_extract_ref %x, "b" : ref<struct<{a: i42, b: i1337}>> -> ref<i1337>
   // CHECK: moore.blocking_assign %x.a, %arg0
   // CHECK: moore.blocking_assign %x.b, %arg1
   moore.blocking_assign %0, %arg0 : !moore.i42
@@ -21,8 +21,8 @@ func.func @SplitStructs(%arg0: !moore.i42, %arg1: !moore.i1337) {
   // CHECK-DAG: [[B:%.+]] = moore.variable : <i1337>
   // CHECK-NOT: moore.struct_extract_ref
   %2 = moore.variable : <struct<{a: i42, b: i1337}>>
-  %3 = moore.struct_extract_ref %2, "a" : <struct<{a: i42, b: i1337}>> -> <i42>
-  %4 = moore.struct_extract_ref %2, "b" : <struct<{a: i42, b: i1337}>> -> <i1337>
+  %3 = moore.struct_extract_ref %2, "a" : ref<struct<{a: i42, b: i1337}>> -> ref<i42>
+  %4 = moore.struct_extract_ref %2, "b" : ref<struct<{a: i42, b: i1337}>> -> ref<i1337>
   // CHECK: moore.blocking_assign [[A]], %arg0
   // CHECK: moore.blocking_assign [[B]], %arg1
   moore.blocking_assign %3, %arg0 : !moore.i42
@@ -38,12 +38,12 @@ func.func @SplitNestedStructs(%arg0: !moore.i42, %arg1: !moore.i1337, %arg2: !mo
   // CHECK-DAG: %k.b.u = moore.variable : <i1337>
   // CHECK-DAG: %k.b.v = moore.variable : <i9001>
   %k = moore.variable : <struct<{a: struct<{x: i42, y: i1337}>, b: struct<{u: i1337, v: i9001}>}>>
-  %0 = moore.struct_extract_ref %k, "a" : <struct<{a: struct<{x: i42, y: i1337}>, b: struct<{u: i1337, v: i9001}>}>> -> <struct<{x: i42, y: i1337}>>
-  %1 = moore.struct_extract_ref %k, "b" : <struct<{a: struct<{x: i42, y: i1337}>, b: struct<{u: i1337, v: i9001}>}>> -> <struct<{u: i1337, v: i9001}>>
-  %2 = moore.struct_extract_ref %0, "x" : <struct<{x: i42, y: i1337}>> -> <i42>
-  %3 = moore.struct_extract_ref %0, "y" : <struct<{x: i42, y: i1337}>> -> <i1337>
-  %4 = moore.struct_extract_ref %1, "u" : <struct<{u: i1337, v: i9001}>> -> <i1337>
-  %5 = moore.struct_extract_ref %1, "v" : <struct<{u: i1337, v: i9001}>> -> <i9001>
+  %0 = moore.struct_extract_ref %k, "a" : ref<struct<{a: struct<{x: i42, y: i1337}>, b: struct<{u: i1337, v: i9001}>}>> -> ref<struct<{x: i42, y: i1337}>>
+  %1 = moore.struct_extract_ref %k, "b" : ref<struct<{a: struct<{x: i42, y: i1337}>, b: struct<{u: i1337, v: i9001}>}>> -> ref<struct<{u: i1337, v: i9001}>>
+  %2 = moore.struct_extract_ref %0, "x" : ref<struct<{x: i42, y: i1337}>> -> ref<i42>
+  %3 = moore.struct_extract_ref %0, "y" : ref<struct<{x: i42, y: i1337}>> -> ref<i1337>
+  %4 = moore.struct_extract_ref %1, "u" : ref<struct<{u: i1337, v: i9001}>> -> ref<i1337>
+  %5 = moore.struct_extract_ref %1, "v" : ref<struct<{u: i1337, v: i9001}>> -> ref<i9001>
   // CHECK: moore.blocking_assign %k.a.x, %arg0
   // CHECK: moore.blocking_assign %k.a.y, %arg1
   // CHECK: moore.blocking_assign %k.b.u, %arg1

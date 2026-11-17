@@ -14,6 +14,17 @@ om.class @StringOps() -> (str: !om.string, concat: !om.string) {
   om.class.fields %hello, %concat : !om.string, !om.string
 }
 
+// CHECK-LABEL: om.class @StringCanonicalization
+// CHECK: %[[SUFFIX:.+]] = om.constant "bc" : !om.string
+// CHECK: %[[RESULT:.+]] = om.string.concat %arg, %[[SUFFIX]] : !om.string
+// CHECK: om.class.fields %[[RESULT]]
+om.class @StringCanonicalization(%arg: !om.string) -> (result: !om.string) {
+  %b = om.constant "b" : !om.string
+  %c = om.constant "c" : !om.string
+  %result = om.string.concat %arg, %b, %c : !om.string
+  om.class.fields %result : !om.string
+}
+
 // Constant primitive lists are folded to attributes; lists of objects cannot
 // be represented as attributes and therefore remain list_create operations.
 // CHECK-LABEL: om.class @SimpleList() -> (result: !om.list<!om.integer>) {
@@ -136,6 +147,64 @@ om.class @ContainsUnknownMembers() -> (foo: i1, bar: i1, baz: i1) {
   %6 = om.list_create %1, %0 : i1
   %7 = om.list_contains %6, %1 : !om.list<i1>
   om.class.fields %4, %5, %7 : i1, i1, i1
+}
+
+om.class private @PropEqValue() {
+  om.class.fields
+}
+
+// Compare identities after inlining, including a field-projected alias.
+// Distinct objects with identical fields are not equal.
+// CHECK-LABEL: om.class @PropEqTests
+// CHECK-DAG:   %[[TRUE:.+]] = om.constant true
+// CHECK-DAG:   %[[FALSE:.+]] = om.constant false
+// CHECK:   om.class.fields %[[FALSE]], %[[FALSE]], %[[TRUE]], %[[FALSE]] : i1, i1, i1, i1
+// CHECK-NEXT: }
+om.class @PropEqTests() -> (not_equal: i1, different_class: i1, field: i1,
+                           unknown_fields: i1) {
+  %a = om.object @PropEqValue() : () -> !om.class.type<@PropEqValue>
+  %b = om.object @PropEqValue() : () -> !om.class.type<@PropEqValue>
+  %box = om.object @PropEqBox(%a) : (!om.class.type<@PropEqValue>) -> !om.class.type<@PropEqBox>
+  %field = om.object.field %box["value"] : (!om.class.type<@PropEqBox>) -> !om.class.type<@PropEqValue>
+  %notEqual = om.prop.eq %a, %b : !om.class.type<@PropEqValue>
+  %aAny = om.any_cast %a : (!om.class.type<@PropEqValue>) -> !om.any
+  %boxAny = om.any_cast %box : (!om.class.type<@PropEqBox>) -> !om.any
+  %differentClass = om.prop.eq %aAny, %boxAny : !om.any
+  %fieldEqual = om.prop.eq %a, %field : !om.class.type<@PropEqValue>
+
+  // Unknown fields do not make an allocated object's identity unknown.
+  %unknown = om.unknown : !om.class.type<@PropEqValue>
+  %unknownBoxA = om.object @PropEqBox(%unknown) : (!om.class.type<@PropEqValue>) -> !om.class.type<@PropEqBox>
+  %unknownBoxB = om.object @PropEqBox(%unknown) : (!om.class.type<@PropEqValue>) -> !om.class.type<@PropEqBox>
+  %unknownFields = om.prop.eq %unknownBoxA, %unknownBoxB : !om.class.type<@PropEqBox>
+  om.class.fields %notEqual, %differentClass, %fieldEqual, %unknownFields : i1, i1, i1, i1
+}
+
+om.class private @PropEqBox(%value: !om.class.type<@PropEqValue>) -> (value: !om.class.type<@PropEqValue>) {
+  om.class.fields %value : !om.class.type<@PropEqValue>
+}
+
+// Unknown references propagate on either side of a comparison with another
+// reference, but are equal to themselves, including when cast to any.
+// CHECK-LABEL: om.class @PropEqUnknown
+// CHECK-DAG:   %[[LHS:.+]] = om.unknown : i1
+// CHECK-DAG:   %[[RHS:.+]] = om.unknown : i1
+// CHECK-DAG:   %[[TRUE:.+]] = om.constant true
+// CHECK-DAG:   %[[DISTINCT:.+]] = om.unknown : i1
+// CHECK-NEXT:   om.class.fields %[[LHS]], %[[RHS]], %[[TRUE]], %[[TRUE]], %[[DISTINCT]] : i1, i1, i1, i1, i1
+// CHECK-NEXT: }
+om.class @PropEqUnknown() -> (lhs: i1, rhs: i1, same: i1, any: i1,
+                             distinct: i1) {
+  %known = om.object @PropEqValue() : () -> !om.class.type<@PropEqValue>
+  %unknown = om.unknown : !om.class.type<@PropEqValue>
+  %unknownAny = om.any_cast %unknown : (!om.class.type<@PropEqValue>) -> !om.any
+  %lhs = om.prop.eq %unknown, %known : !om.class.type<@PropEqValue>
+  %rhs = om.prop.eq %known, %unknown : !om.class.type<@PropEqValue>
+  %same = om.prop.eq %unknown, %unknown : !om.class.type<@PropEqValue>
+  %any = om.prop.eq %unknownAny, %unknownAny : !om.any
+  %otherUnknown = om.unknown : !om.class.type<@PropEqValue>
+  %distinct = om.prop.eq %unknown, %otherUnknown : !om.class.type<@PropEqValue>
+  om.class.fields %lhs, %rhs, %same, %any, %distinct : i1, i1, i1, i1, i1
 }
 
 // Test integer operations (add, mul, shr, shl)

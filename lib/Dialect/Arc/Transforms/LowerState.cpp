@@ -483,6 +483,7 @@ LogicalResult OpLowering::lower() {
             CoroutineInstanceOp, hw::TriggeredOp, hw::OutputOp, seq::InitialOp,
             llhd::FinalOp, llhd::CurrentTimeOp, llhd::SignalOp, llhd::ProbeOp,
             llhd::DriveLikeOp, FixedPointOp, sim::ClockedTerminateOp>(
+          // NOLINTNEXTLINE(misc-no-recursion)
           [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
@@ -614,7 +615,7 @@ LogicalResult OpLowering::lower(llhd::DriveLikeOp op) {
   if (!value || (op.getEnable() && !enable))
     return failure();
 
-  auto signal = op.getSignal().getDefiningOp<llhd::SignalOp>();
+  auto signal = op.getDriven().getDefiningOp<llhd::SignalOp>();
   if (!signal)
     return op.emitOpError(
         "only drives of locally defined signals are supported");
@@ -651,6 +652,8 @@ LogicalResult OpLowering::lower(llhd::DriveLikeOp op) {
 
 /// Lower one iteration at the current insertion point and collect its outputs.
 /// The body's block arguments must already have lowered-value mappings.
+// Lowering the body's operations intentionally re-enters ModuleLowering.
+// NOLINTBEGIN(misc-no-recursion)
 FailureOr<SmallVector<Value>>
 FixedPointLowering::lowerBody(ModuleLowering &module) {
   auto &body = op.getBody().front();
@@ -680,6 +683,8 @@ FixedPointLowering::lowerBody(ModuleLowering &module) {
   }
   return yieldedValues;
 }
+
+// NOLINTEND(misc-no-recursion)
 
 /// Generate a condition that is true if any feedback value changed.
 Value FixedPointLowering::createFeedbackChanged(OpBuilder &builder,
@@ -733,6 +738,8 @@ void FixedPointLowering::createAfterBlock(ModuleLowering &module) {
 }
 
 /// Generate the complete runtime loop and restore the outer insertion point.
+// The loop body uses the same operation lowering as the enclosing module.
+// NOLINTNEXTLINE(misc-no-recursion)
 FailureOr<scf::WhileOp> FixedPointLowering::run(ModuleLowering &module,
                                                 ValueRange loweredInitials,
                                                 ValueRange loweredInputs) {
@@ -790,6 +797,8 @@ SmallVector<Value> OpLowering::collectLoweredValues(ValueRange values,
 /// Lower an explicit fixed-point region to a runtime loop. The body describes
 /// one acyclic iteration. Its leading outputs are fed back as the leading block
 /// arguments until none of them change.
+// Lowering the region body intentionally re-enters the operation dispatcher.
+// NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult OpLowering::lower(FixedPointOp op) {
   assert(phase == Phase::Old || phase == Phase::New);
 
@@ -1795,7 +1804,7 @@ Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
     if (phase == Phase::New)
       for (auto *user : signal->getUsers()) {
         auto drive = dyn_cast<llhd::DriveLikeOp>(user);
-        if (drive && drive.getSignal() == op.getSignal())
+        if (drive && drive.getDriven() == op.getSignal())
           addPending(drive, Phase::New);
       }
     return {};
@@ -1804,7 +1813,7 @@ Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
   if (phase == Phase::Old) {
     for (auto *user : signal->getUsers()) {
       auto drive = dyn_cast<llhd::DriveLikeOp>(user);
-      if (!drive || drive.getSignal() != op.getSignal())
+      if (!drive || drive.getDriven() != op.getSignal())
         continue;
       assert(!module.loweredOps.contains({drive, Phase::New}) &&
              "need old signal value but new value already written");

@@ -18,14 +18,14 @@ namespace {
 
 class OMOpsTest : public ::testing::Test {
 protected:
-  OMOpsTest() : builder(&context) { context.getOrLoadDialect<om::OMDialect>(); }
+  OMOpsTest() : builder(&context) { context.getOrLoadDialect<OMDialect>(); }
 
   OwningOpRef<ModuleOp> createModule() {
     auto module = ModuleOp::create(UnknownLoc::get(&context));
     builder.setInsertionPointToStart(module.getBody());
-    om::ClassOp::buildSimpleClassOp(
-        builder, UnknownLoc::get(&context), "Test", {}, {"first", "second"},
-        {builder.getI32Type(), builder.getI32Type()});
+    ClassOp::buildSimpleClassOp(builder, UnknownLoc::get(&context), "Test", {},
+                                {"first", "second"},
+                                {builder.getI32Type(), builder.getI32Type()});
     return OwningOpRef<ModuleOp>(module);
   }
 
@@ -35,7 +35,7 @@ protected:
 
 TEST_F(OMOpsTest, UpdateFieldsUsesExplicitLocationsWithoutFusedMetadata) {
   auto module = createModule();
-  auto classOp = cast<om::ClassOp>(module->getBody()->front());
+  auto classOp = cast<ClassOp>(module->getBody()->front());
   auto fieldsOp = classOp.getFieldsOp();
 
   Location firstLoc = NameLoc::get(builder.getStringAttr("first"));
@@ -64,7 +64,7 @@ TEST_F(OMOpsTest, UpdateFieldsUsesExplicitLocationsWithoutFusedMetadata) {
 
 TEST_F(OMOpsTest, UpdateFieldsFallsBackToFieldsOpLocation) {
   auto module = createModule();
-  auto classOp = cast<om::ClassOp>(module->getBody()->front());
+  auto classOp = cast<ClassOp>(module->getBody()->front());
   auto fieldsOp = classOp.getFieldsOp();
 
   SmallVector<Location> oldLocs{NameLoc::get(builder.getStringAttr("first")),

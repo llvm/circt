@@ -49,6 +49,8 @@ add_executable(ESIRuntimeCppTests
   ESIRuntimeValuesTest.cpp
   ESIRuntimeTypedPortsTest.cpp
   ESIRuntimeSegmentTest.cpp
+  ESIRuntimeServiceThreadTest.cpp
+  ESIRuntimeWriteAsyncTest.cpp
 )
 
 # Place the binary where the pytest wrapper expects it — under

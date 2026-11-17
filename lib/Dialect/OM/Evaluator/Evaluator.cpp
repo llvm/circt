@@ -693,7 +693,7 @@ circt::om::Evaluator::evaluateElaboratedObject(ElaboratedObjectOp op,
   auto objectValue = getOrCreateValue(op, actualParams, loc);
   if (failed(objectValue))
     return failure();
-  auto object = cast<evaluator::ObjectValue>(objectValue.value().get());
+  auto *object = cast<evaluator::ObjectValue>(objectValue.value().get());
   if (object->isFullyEvaluated())
     return objectValue;
 

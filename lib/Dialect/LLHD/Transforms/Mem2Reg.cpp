@@ -1315,9 +1315,14 @@ void Promoter::populateSlotOps() {
   for (auto &block : region) {
     for (auto &op : block.without_terminator()) {
       Value slot = TypeSwitch<Operation *, Value>(&op)
-                       .Case<ProbeOp, DriveLikeOp>([&](auto op) {
+                       .Case([&](ProbeOp op) {
                          if (promotable.contains(op.getSignal()))
                            return resolveSlot(op.getSignal());
+                         return Value();
+                       })
+                       .Case([&](DriveLikeOp op) {
+                         if (promotable.contains(op.getDriven()))
+                           return resolveSlot(op.getDriven());
                          return Value();
                        })
                        .Case<SigExtractOp, SigArrayGetOp, SigStructExtractOp>(
@@ -1380,7 +1385,7 @@ void Promoter::constructLattice() {
       if (auto driveOp = dyn_cast<DriveLikeOp>(op)) {
         if (!isBlockingDrive(driveOp) && !isDeltaDrive(driveOp))
           continue;
-        auto signal = driveOp.getSignal();
+        auto signal = driveOp.getDriven();
         if (!promotable.contains(signal))
           continue;
         if (resolveSlot(signal) != currentSlot)
@@ -2056,7 +2061,7 @@ void Promoter::resolveDefinitionValue(DriveNode *node) {
   LLVM_DEBUG(llvm::dbgs() << "- Injecting value for " << driveOp << "\n");
 
   // Gather any projections between the drive and the underlying slot.
-  auto projections = getProjections(driveOp.getSignal(), getSlot(node->slot));
+  auto projections = getProjections(driveOp.getDriven(), getSlot(node->slot));
 
   // Extract the current value from the aggregate.
   auto builder = OpBuilder(driveOp);

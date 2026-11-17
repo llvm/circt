@@ -76,12 +76,14 @@ firrtl.circuit "ListContains" {
 
 // -----
 
-// object.eq expression requires >= 7.0.0.
-firrtl.circuit "ObjectEq" {
-  firrtl.module @ObjectEq(in %ref : !firrtl.anyref, out %out : !firrtl.bool) {
-    // expected-error @below {{'firrtl.object.eq' op object equality requires FIRRTL 7.0.0}}
-    %eq = firrtl.object.eq %ref, %ref : !firrtl.anyref, !firrtl.anyref
-    firrtl.propassign %out, %eq : !firrtl.bool
+// AnyRef property equality requires >= 7.0.0.
+firrtl.circuit "PropEqAnyRef" {
+  firrtl.module @PropEqAnyRef(in %a : !firrtl.anyref,
+                             in %b : !firrtl.anyref,
+                             out %eq : !firrtl.bool) {
+    // expected-error @below {{'firrtl.prop.eq' op property equality with AnyRef or Class types requires FIRRTL 7.0.0}}
+    %0 = firrtl.prop.eq %a, %b : !firrtl.anyref
+    firrtl.propassign %eq, %0 : !firrtl.bool
   }
 }
 

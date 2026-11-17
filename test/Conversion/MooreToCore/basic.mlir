@@ -378,6 +378,15 @@ func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %
   return %0 : !moore.ref<array<1 x l3>>
 }
 
+// CHECK-LABEL: DynExtractRefSingleFieldStruct
+func.func @DynExtractRefSingleFieldStruct(%j: !moore.ref<struct<{p: struct<{d: l16}>}>>, %idx: !moore.l4) -> (!moore.ref<l4>) {
+  // CHECK: [[P:%.+]] = llhd.sig.struct_extract %arg0["p"] : <!hw.struct<p: !hw.struct<d: i16>>>
+  // CHECK: [[D:%.+]] = llhd.sig.struct_extract [[P]]["d"] : <!hw.struct<d: i16>>
+  // CHECK: llhd.sig.extract [[D]] from %arg1 : <i16> -> <i4>
+  %0 = moore.dyn_extract_ref %j from %idx : ref<struct<{p: struct<{d: l16}>}>>, !moore.l4 -> ref<l4>
+  return %0 : !moore.ref<l4>
+}
+
 // CHECK-LABEL: func @AdvancedConversion
 func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
   // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
@@ -696,7 +705,7 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   %0 = moore.struct_extract %arg0, "exp_bits" : !moore.struct<{exp_bits: i32, man_bits: i32}> -> i32
 
   // CHECK: llhd.sig.struct_extract %arg1["exp_bits"] : <!hw.struct<exp_bits: i32, man_bits: i32>>
-  %ref = moore.struct_extract_ref %arg1, "exp_bits" : <!moore.struct<{exp_bits: i32, man_bits: i32}>> -> <i32>
+  %ref = moore.struct_extract_ref %arg1, "exp_bits" : ref<!moore.struct<{exp_bits: i32, man_bits: i32}>> -> ref<i32>
   moore.assign %ref, %0 : ref<i32>
 
   // CHECK: [[INIT:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.struct<exp_bits: i32, man_bits: i32>
@@ -720,7 +729,7 @@ moore.module @Union(in %a : !moore.i32, in %arg0 : !moore.union<{x: i32, y: i32}
   %0 = moore.union_extract %arg0, "x" : !moore.union<{x: i32, y: i32}> -> !moore.i32
 
   // CHECK: llhd.sig.struct_extract %arg1["x"] : <!hw.union<x: i32, y: i32>>
-  %ref = moore.union_extract_ref %arg1, "x" : <union<{x: i32, y: i32}>> -> <i32>
+  %ref = moore.union_extract_ref %arg1, "x" : ref<union<{x: i32, y: i32}>> -> ref<i32>
   moore.assign %ref, %0 : ref<i32>
 
   // CHECK: hw.union_create "x", %a : !hw.union<x: i32, y: i32>

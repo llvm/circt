@@ -13,11 +13,14 @@ def switch(from_ctxt, to_ctxt, seq):
   pass
 
 
-# MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<cpu: !rtgtest.cpu>
-# MLIR-NEXT: [[V0:%.+]] = rtg.constant #rtgtest.cpu<0> : !rtgtest.cpu
-# MLIR-NEXT: [[V1:%.+]] = rtg.get_sequence @switch : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
-# MLIR-NEXT: rtg.context_switch #rtg.any_context : !rtgtest.cpu -> #rtgtest.cpu<0> : !rtgtest.cpu, [[V1]] : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
-# MLIR-NEXT: rtg.yield [[V0]] : !rtgtest.cpu
+# CHECK-LABEL: rtg.target @Tgt0 : !rtg.dict<a: index, b: index, cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu>
+# CHECK-NEXT: [[CPU1:%.+]] = rtg.constant #rtgtest.cpu<1> : !rtgtest.cpu
+# CHECK-NEXT: [[CPU0:%.+]] = rtg.constant #rtgtest.cpu<0> : !rtgtest.cpu
+# CHECK-NEXT: [[B:%.+]] = index.constant 1
+# CHECK-NEXT: [[A:%.+]] = index.constant 0
+# CHECK-NEXT: [[SWITCH:%.+]] = rtg.get_sequence @switch : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+# CHECK-NEXT: rtg.context_switch #rtg.any_context : !rtgtest.cpu -> #rtgtest.cpu<0> : !rtgtest.cpu, [[SWITCH]] : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+# CHECK-NEXT: rtg.yield [[A]], [[B]], [[CPU0]], [[CPU1]] : index, index, !rtgtest.cpu, !rtgtest.cpu
 
 
 @config

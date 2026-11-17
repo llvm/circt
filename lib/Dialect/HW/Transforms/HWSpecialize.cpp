@@ -96,7 +96,7 @@ struct ParameterSpecializationRegistry {
       uniqueModuleParameters;
 
   bool isRegistered(hw::HWModuleOp moduleOp, ArrayAttr parameters) const {
-    auto it = uniqueModuleParameters.find(moduleOp);
+    const auto *it = uniqueModuleParameters.find(moduleOp);
     return it != uniqueModuleParameters.end() &&
            it->second.contains(parameters);
   }

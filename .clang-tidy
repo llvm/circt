@@ -1,15 +1,21 @@
 # Tracks llvm-project/mlir/.clang-tidy, including parent config.
+# Local additions:
+# * google-global-names-in-headers
+# * misc-no-recursion
+# * identifier-naming exemptions for names required by LLVM/upstream.
+HeaderFilterRegex: ''
 Checks: >
         -*,
         clang-diagnostic-*,
         llvm-*,
         misc-*,
         -misc-const-correctness,
-        -misc-unused-parameters,
-        -misc-non-private-member-variables-in-classes,
-        -misc-use-anonymous-namespace,
         -misc-include-cleaner,
+        -misc-non-private-member-variables-in-classes,
+        -misc-unused-parameters,
+        -misc-use-anonymous-namespace,
         readability-identifier-naming,
+        google-global-names-in-headers,
         bugprone-argument-comment,
         bugprone-assert-side-effect,
         bugprone-branch-clone,
@@ -26,7 +32,9 @@ Checks: >
         bugprone-terminating-continue,
         bugprone-unused-raii,
         bugprone-unused-return-value,
-        google-global-names-in-headers,
+        misc-redundant-expression,
+        misc-static-assert,
+        misc-unused-using-decls,
         modernize-use-bool-literals,
         modernize-loop-convert,
         modernize-make-unique,
@@ -57,7 +65,6 @@ Checks: >
         readability-simplify-subscript-expr,
         readability-use-anyofallof
 
-
 CheckOptions:
   - key:             readability-identifier-naming.ClassCase
     value:           CamelCase
@@ -65,6 +72,8 @@ CheckOptions:
     value:           CamelCase
   - key:             readability-identifier-naming.FunctionCase
     value:           camelBack
+  - key:             readability-identifier-naming.FunctionIgnoredRegexp
+    value:           "^(LLVMFuzzerTestOneInput|hash_value|child_begin|child_end|nodes_begin|nodes_end|Profile)$"
   - key:             readability-identifier-naming.MemberCase
     value:           camelBack
   - key:             readability-identifier-naming.ParameterCase
@@ -79,3 +88,5 @@ CheckOptions:
     value:           1
   - key:             modernize-use-default-member-init.UseAssignment
     value:           1
+  - key:             modernize-use-using.IgnoreExternC
+    value:           true

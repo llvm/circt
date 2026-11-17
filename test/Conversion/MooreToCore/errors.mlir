@@ -52,3 +52,29 @@ func.func @DynExtractRefOnNet(%arg0: !moore.net<i32>, %arg1: !moore.i32) {
   %0 = moore.dyn_extract_ref %arg0 from %arg1 : net<i32>, i32 -> net<i1>
   return
 }
+
+// -----
+
+func.func @DynExtractRefStructNonIntegerField(%j: !moore.ref<struct<{d: array<4 x l4>}>>, %idx: !moore.l4) -> (!moore.ref<l4>) {
+  // expected-error @below {{failed to legalize operation 'moore.dyn_extract_ref'}}
+  %0 = moore.dyn_extract_ref %j from %idx : ref<struct<{d: array<4 x l4>}>>, !moore.l4 -> ref<l4>
+  return %0 : !moore.ref<l4>
+}
+
+// -----
+
+func.func @StructExtractRefOnNet(%arg0: !moore.net<struct<{a: i32}>>) {
+  // expected-error @below {{op extracts from a net which is not currently supported}}
+  // expected-error @below {{failed to legalize}}
+  %0 = moore.struct_extract_ref %arg0, "a" : net<struct<{a: i32}>> -> net<i32>
+  return
+}
+
+// -----
+
+func.func @UnionExtractRefOnNet(%arg0: !moore.net<union<{a: i32}>>) {
+  // expected-error @below {{op extracts from a net which is not currently supported}}
+  // expected-error @below {{failed to legalize}}
+  %0 = moore.union_extract_ref %arg0, "a" : net<union<{a: i32}>> -> net<i32>
+  return
+}

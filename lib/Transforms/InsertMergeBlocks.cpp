@@ -32,7 +32,7 @@ static LogicalResult changeBranchTarget(Block *block, Block *oldDest,
                                         Block *newDest,
                                         ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointToEnd(block);
-  auto term = block->getTerminator();
+  auto *term = block->getTerminator();
   return llvm::TypeSwitch<Operation *, LogicalResult>(term)
       .Case<cf::BranchOp>([&](auto branchOp) {
         rewriter.replaceOpWithNewOp<cf::BranchOp>(branchOp, newDest,

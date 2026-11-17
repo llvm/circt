@@ -59,7 +59,7 @@ bool AcceleratorConnection::reset() {
 
 AcceleratorServiceThread *AcceleratorConnection::getServiceThread() {
   if (!serviceThread)
-    serviceThread = std::make_unique<AcceleratorServiceThread>();
+    serviceThread = std::make_unique<AcceleratorServiceThread>(&ctxt);
   return serviceThread.get();
 }
 void AcceleratorConnection::createEngine(const std::string &engineTypeName,
@@ -376,8 +376,11 @@ AcceleratorConnection *Context::connect(std::string backend,
   return connPtr;
 }
 
-AcceleratorServiceThread::AcceleratorServiceThread() { start(); }
-AcceleratorServiceThread::AcceleratorServiceThread(DeferStart) {}
+AcceleratorServiceThread::AcceleratorServiceThread(Context *ctxt) : ctxt(ctxt) {
+  start();
+}
+AcceleratorServiceThread::AcceleratorServiceThread(DeferStart, Context *ctxt)
+    : ctxt(ctxt) {}
 AcceleratorServiceThread::~AcceleratorServiceThread() { stop(); }
 
 void AcceleratorServiceThread::start() {
@@ -422,7 +425,7 @@ void AcceleratorServiceThread::poll() {
 
   // Call the callbacks outside the lock.
   for (auto &[channel, cb, data] : portUnlockWorkList)
-    cb(channel, std::move(data));
+    runReportingErrors([&] { cb(channel, std::move(data)); });
 
   // Call any tasks that have been added. Copy it first so we can release the
   // lock ASAP.
@@ -432,7 +435,25 @@ void AcceleratorServiceThread::poll() {
     taskListCopy = taskList;
   }
   for (auto &task : taskListCopy)
-    task();
+    runReportingErrors(task);
+}
+
+void AcceleratorServiceThread::runReportingErrors(
+    const std::function<void()> &f) {
+  std::string msg;
+  try {
+    f();
+    return;
+  } catch (const std::exception &e) {
+    msg = e.what();
+  } catch (...) {
+    msg = "unknown exception";
+  }
+  msg = "uncaught exception in service thread: " + msg;
+  if (ctxt)
+    ctxt->getLogger().error("service thread", msg);
+  else
+    std::cerr << msg << std::endl;
 }
 
 // When there's data on any of the listenPorts, call the callback. This is

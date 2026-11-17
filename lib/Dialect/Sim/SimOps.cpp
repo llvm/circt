@@ -79,7 +79,7 @@ void DPIFuncOp::setFunctionTypeAttr(::mlir::TypeAttr type) {
 
 ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   auto builder = parser.getBuilder();
-  auto ctx = builder.getContext();
+  auto *ctx = builder.getContext();
 
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
@@ -211,7 +211,7 @@ LogicalResult DPIFuncOp::verify() {
 
 LogicalResult
 sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto referencedOp =
+  auto *referencedOp =
       symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
   if (!referencedOp)
     return emitError("cannot find function declaration '")

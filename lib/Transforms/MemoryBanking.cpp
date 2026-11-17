@@ -870,12 +870,10 @@ void MemoryBankingPass::runOnOperation() {
 
   if (getOperation().isExternal() ||
       (bankingFactors.empty() ||
-       std::all_of(bankingFactors.begin(), bankingFactors.end(),
-                   [](unsigned f) { return f == 1; })))
+       llvm::all_of(bankingFactors, [](unsigned f) { return f == 1; })))
     return;
 
-  if (std::any_of(bankingFactors.begin(), bankingFactors.end(),
-                  [](int f) { return f == 0; })) {
+  if (llvm::any_of(bankingFactors, [](int f) { return f == 0; })) {
     getOperation().emitError("banking factor must be greater than 1");
     signalPassFailure();
     return;

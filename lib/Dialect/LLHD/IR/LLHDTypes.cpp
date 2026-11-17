@@ -71,8 +71,7 @@ LogicalResult TimeAttr::verify(function_ref<InFlightDiagnostic()> emitError,
   // Check the time unit is a legal SI unit
   std::vector<std::string> legalUnits{"ys", "zs", "as", "fs", "ps",
                                       "ns", "us", "ms", "s"};
-  if (std::find(legalUnits.begin(), legalUnits.end(), timeUnit) ==
-      legalUnits.end())
+  if (llvm::find(legalUnits, timeUnit) == legalUnits.end())
     return emitError() << "Illegal time unit.";
 
   return success();

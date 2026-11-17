@@ -65,7 +65,7 @@ with Context() as ctx, Location.unknown():
     }
 
     hw.module @Root(in %clock: i1) {
-      %0 = sv.wire sym @x : !hw.inout<i1>
+      %0 = sv.wire sym @x : !sv.net<i1>
     }
 
     om.class @Paths(%basepath: !om.frozenbasepath) -> (path: !om.frozenpath, deleted: !om.frozenpath) {

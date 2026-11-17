@@ -176,7 +176,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   if (!cosimCycleCountExternModule) {
     auto ip = b.saveInsertionPoint();
     b.setInsertionPointToEnd(parentModule.getBody());
-    if (auto existingSym = parentModule.lookupSymbol(cosimCycleCountName)) {
+    if (auto *existingSym = parentModule.lookupSymbol(cosimCycleCountName)) {
       return implReq
                  .emitOpError(
                      "symbol 'Cosim_CycleCount' already exists but is not a "

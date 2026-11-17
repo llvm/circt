@@ -188,4 +188,26 @@ TEST(SegmentTest, MessageDataHasNoRegions) {
   EXPECT_EQ(md.segment(0).data, md.getBytes());
 }
 
+TEST(SegmentTest, AsMessageData) {
+  // A flat message is returned as-is, without copying.
+  MessageData md(std::vector<uint8_t>{1, 2, 3});
+  MessageData scratch;
+  EXPECT_EQ(&md.asMessageData(scratch), &md);
+  EXPECT_TRUE(scratch.empty());
+
+  // Anything else is flattened into the scratch message.
+  uint8_t header[] = {4, 5};
+  uint8_t body[] = {6};
+  struct TwoSegments : public SegmentedMessageData {
+    Segment segs[2];
+    size_t numSegments() const override { return 2; }
+    Segment segment(size_t idx) const override { return segs[idx]; }
+  } msg;
+  msg.segs[0] = {header, sizeof(header)};
+  msg.segs[1] = {body, sizeof(body)};
+  const MessageData &flat = msg.asMessageData(scratch);
+  EXPECT_EQ(&flat, &scratch);
+  EXPECT_EQ(flat.getData(), (std::vector<uint8_t>{4, 5, 6}));
+}
+
 } // namespace

@@ -2246,10 +2246,10 @@ private:
 
     for (auto &group : compBlockScheduleables) {
       rewriter.setInsertionPointToEnd(parentCtrlBlock);
-      if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
+      if (auto *groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
         calyx::EnableOp::create(rewriter, groupPtr->getLoc(),
                                 groupPtr->getSymName());
-      } else if (auto whileSchedPtr = std::get_if<WhileScheduleable>(&group);
+      } else if (auto *whileSchedPtr = std::get_if<WhileScheduleable>(&group);
                  whileSchedPtr) {
         auto &whileOp = whileSchedPtr->whileOp;
 
@@ -2942,11 +2942,9 @@ private:
     /// function from the new one if the original top-level has `memref` in its
     /// argument
     auto funcOps = moduleOp.getOps<FuncOp>();
-    bool hasMemrefArgsInTopLevel =
-        std::any_of(funcOps.begin(), funcOps.end(), [&](auto funcOp) {
-          return funcOp.getName() == topLevelFunction &&
-                 hasMemrefArguments(funcOp);
-        });
+    bool hasMemrefArgsInTopLevel = llvm::any_of(funcOps, [&](auto funcOp) {
+      return funcOp.getName() == topLevelFunction && hasMemrefArguments(funcOp);
+    });
 
     if (hasMemrefArgsInTopLevel) {
       auto newTopLevelFunc = createNewTopLevelFn(moduleOp, topLevelFunction);

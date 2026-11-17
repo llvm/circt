@@ -49,7 +49,7 @@ hw.module @equiv_sub(in %a : i8, in %b : i8, out y : i8) {
 // Yosys mux.cc: data_taint = (a_t & (~s|s_t)) | (b_t & (s|s_t))
 //               ctrl_taint = s_t & (a ^ b)
 //               y_t = data_taint | ctrl_taint
-// CIRCT: y_t = mux(sel, t_t, f_t) | replicate(sel_t) & (t^f | t_t | f_t)
+// CIRCT CellIFT.cpp: y_t = mux(sel, t_t, f_t) | replicate(sel_t) & (t^f | t_t | f_t)
 // These are algebraically equivalent (verified).
 // CHECK-LABEL: hw.module @equiv_mux
 hw.module @equiv_mux(in %sel : i1, in %a : i8, in %b : i8, out y : i8) {

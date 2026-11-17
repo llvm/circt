@@ -922,11 +922,10 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
   // process.
   //
   // TODO: Implement more sophisticated priority function.
-  std::stable_sort(limitedOps.begin(), limitedOps.end(),
-                   [&](Operation *a, Operation *b) {
-                     return getStartTime(startTimeVariables[a]) <
-                            getStartTime(startTimeVariables[b]);
-                   });
+  llvm::stable_sort(limitedOps, [&](Operation *a, Operation *b) {
+    return getStartTime(startTimeVariables[a]) <
+           getStartTime(startTimeVariables[b]);
+  });
 
   // Store the number of operations using a resource type in a particular time
   // step.
@@ -1242,14 +1241,13 @@ LogicalResult ModuloSimplexScheduler::schedule() {
     // Heuristically (here: least amount of slack) pick the next operation to
     // schedule.
     auto *opIt =
-        std::min_element(unscheduled.begin(), unscheduled.end(),
-                         [&](Operation *opA, Operation *opB) {
-                           auto stvA = startTimeVariables[opA];
-                           auto stvB = startTimeVariables[opB];
-                           auto slackA = alapTimes[stvA] - asapTimes[stvA];
-                           auto slackB = alapTimes[stvB] - asapTimes[stvB];
-                           return slackA < slackB;
-                         });
+        llvm::min_element(unscheduled, [&](Operation *opA, Operation *opB) {
+          auto stvA = startTimeVariables[opA];
+          auto stvB = startTimeVariables[opB];
+          auto slackA = alapTimes[stvA] - asapTimes[stvA];
+          auto slackB = alapTimes[stvB] - asapTimes[stvB];
+          return slackA < slackB;
+        });
     Operation *op = *opIt;
     unscheduled.erase(opIt);
 

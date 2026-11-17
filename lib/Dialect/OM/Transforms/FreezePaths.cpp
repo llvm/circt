@@ -324,6 +324,9 @@ LogicalResult PathVisitor::run(ModuleOp module) {
       } else if (auto objectField = dyn_cast<ObjectFieldOp>(op)) {
         if (failed(process(objectField)))
           return WalkResult::interrupt();
+      } else if (auto unknown = dyn_cast<UnknownValueOp>(op)) {
+        // An unknown value has no target to resolve, only a type to freeze.
+        updatePathType(unknown.getResult());
       } else if (isa<ConstantOp>(op)) {
         replacer.replaceElementsIn(op, /*replaceAttrs=*/true,
                                    /*replaceLocs=*/false,

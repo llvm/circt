@@ -131,13 +131,13 @@ moore.struct_extract %0, "a" : struct<{a: i32}> -> i9001
 
 %0 = unrealized_conversion_cast to !moore.ref<struct<{a: i32}>>
 // expected-error @below {{op extracts field "b" which does not exist}}
-moore.struct_extract_ref %0, "b" : <struct<{a: i32}>> -> <i9001>
+moore.struct_extract_ref %0, "b" : ref<struct<{a: i32}>> -> ref<i9001>
 
 // -----
 
 %0 = unrealized_conversion_cast to !moore.ref<struct<{a: i32}>>
-// expected-error @below {{op result ref of type '!moore.i9001' must match struct field type '!moore.i32'}}
-moore.struct_extract_ref %0, "a" : <struct<{a: i32}>> -> <i9001>
+// expected-error @below {{op result of type '!moore.i9001' must match struct field type '!moore.i32'}}
+moore.struct_extract_ref %0, "a" : ref<struct<{a: i32}>> -> ref<i9001>
 
 // -----
 
@@ -295,3 +295,15 @@ moore.concat_ref %0 : (!moore.net<i32>) -> ref<i32>
 // expected-error @below {{requires at least one operand}}
 // expected-error @below {{failed to infer returned types}}
 "moore.concat_ref"() : () -> !moore.ref<i0>
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.net<struct<{a: i32}>>
+// expected-error @below {{failed to verify that all of {input, result} have same wrapper kind (ref or net)}}
+moore.struct_extract_ref %0, "a" : net<struct<{a: i32}>> -> ref<i32>
+
+// -----
+
+%0 = unrealized_conversion_cast to !moore.net<union<{a: i32}>>
+// expected-error @below {{failed to verify that all of {input, result} have same wrapper kind (ref or net)}}
+moore.union_extract_ref %0, "a" : net<union<{a: i32}>> -> ref<i32>

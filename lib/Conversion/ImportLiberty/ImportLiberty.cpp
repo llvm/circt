@@ -438,8 +438,8 @@ struct LibertyGroup {
 
   void eraseSubGroup(llvm::function_ref<bool(const LibertyGroup &)> pred) {
     subGroups.erase(
-        std::remove_if(subGroups.begin(), subGroups.end(),
-                       [pred](const auto &group) { return pred(*group); }),
+        llvm::remove_if(subGroups,
+                        [pred](const auto &group) { return pred(*group); }),
         subGroups.end());
   }
 

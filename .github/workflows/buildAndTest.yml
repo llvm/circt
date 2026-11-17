@@ -106,6 +106,17 @@ jobs:
           python3 utils/find_slang_tests_without_valgrind.py test
           python3 utils/find_slang_tests_without_valgrind.py integration_test
 
+      # Check FileCheck directives for typos, most of which FileCheck silently
+      # ignores. filecheck_lint.py lives in the llvm submodule, which is not
+      # checked out here, so fetch it at the commit the submodule points to.
+      - name: filecheck-lint
+        if: ${{ always() }}
+        run: |
+          LLVM_SHA=$(git rev-parse HEAD:llvm)
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/filecheck_lint.py" \
+            "https://raw.githubusercontent.com/llvm/llvm-project/$LLVM_SHA/llvm/utils/filecheck_lint/filecheck_lint.py"
+          FILECHECK_LINT="$RUNNER_TEMP/filecheck_lint.py" utils/run-filecheck-lint.sh
+
       # Upload the format patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.
       - name: Upload format patches
@@ -187,6 +198,20 @@ jobs:
               "run_integration_tests": false,
               "runner": "windows-2022",
               "cmake_c_compiler": "cl"
+            },
+            {
+              "name": "Linux (Clang 23) w/ clang-tidy",
+              "install_target": "",
+              "package_name_prefix": "",
+              "cmake_build_type": "release",
+              "llvm_enable_assertions": "ON",
+              "build_shared_libs": "OFF",
+              "run_tests": true,
+              "run_integration_tests": false,
+              "runner": "ubuntu-24.04",
+              "cmake_c_compiler": "clang-23",
+              "run_clang_tidy": true,
+              "allow_failure": true
             }
           ]
           EOF
@@ -228,6 +253,8 @@ jobs:
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
       extra_cmake_args: ${{ matrix.generated.extra_cmake_args }}
       build_pycde: false
+      run_clang_tidy: ${{ matrix.generated.run_clang_tidy || false }}
+      allow_failure: ${{ matrix.generated.allow_failure || false }}
 
   # --- end of build-circt job.
 

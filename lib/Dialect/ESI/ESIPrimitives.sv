@@ -111,7 +111,9 @@ module ESI_PipelineStage # (
       end else if (~xmit && a_rcv) begin
         // Make sure the lookaside has space (since if it's full, we shouldn't
         // have gotten a token).
+`ifndef SYNTHESIS
         assert (~l_valid);
+`endif
         // If the output reg is occupied, place it in the lookaside reg.
         if (x_valid_reg) begin
           l_valid <= 1'b1;
@@ -138,13 +140,17 @@ module ESI_PipelineStage # (
     if (DATA_DELAY == 0) begin : gen_no_delay
       assign {p_x_load, p_x_from_l, p_l_load} = {x_load, x_from_l, l_load};
     end else begin : gen_delay
-      logic [2:0] moves_dly [DATA_DELAY];
+      // Clamp the array dimension and read index to >= 1 because some
+      // commercial synthesis tools bounds-check inactive generate branches
+      // before pruning and error on [0:-1] / [-1] when DATA_DELAY == 0.
+      localparam int unsigned EffDelay = (DATA_DELAY > 0) ? DATA_DELAY : 1;
+      logic [2:0] moves_dly[EffDelay];
       always_ff @(posedge clk) begin
         moves_dly[0] <= rst ? 3'b0 : {x_load, x_from_l, l_load};
         for (int i = 1; i < DATA_DELAY; i++)
           moves_dly[i] <= rst ? 3'b0 : moves_dly[i-1];
       end
-      assign {p_x_load, p_x_from_l, p_l_load} = moves_dly[DATA_DELAY-1];
+      assign {p_x_load, p_x_from_l, p_l_load} = moves_dly[EffDelay-1];
     end
   endgenerate
 

@@ -240,7 +240,10 @@ struct RegisterAccelerator {
 /// from starting the thread, then call `start()` themselves.
 class AcceleratorServiceThread {
 public:
-  AcceleratorServiceThread();
+  /// Exceptions thrown by listener callbacks and tasks are reported to
+  /// `ctxt`'s logger if given (otherwise to stderr) rather than stopping the
+  /// thread.
+  AcceleratorServiceThread(Context *ctxt = nullptr);
   virtual ~AcceleratorServiceThread();
 
   /// When there's data on any of the listenPorts, call the callback. Callable
@@ -264,7 +267,7 @@ protected:
   /// thread. Intended for subclasses that need to run their own loop from the
   /// start.
   struct DeferStart {};
-  explicit AcceleratorServiceThread(DeferStart);
+  explicit AcceleratorServiceThread(DeferStart, Context *ctxt = nullptr);
 
   /// Start the service thread. Called by the default constructor. Spawns a
   /// std::thread which invokes `loop()` via virtual dispatch.
@@ -296,6 +299,13 @@ protected:
 
   /// Tasks which should be called on every loop iteration.
   std::vector<std::function<void(void)>> taskList;
+
+private:
+  /// Run `f`, reporting any exception it throws.
+  void runReportingErrors(const std::function<void()> &f);
+
+  /// Looked up through the context each time, since it may be replaced.
+  Context *ctxt;
 };
 } // namespace esi
 

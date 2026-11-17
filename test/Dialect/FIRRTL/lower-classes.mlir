@@ -460,6 +460,24 @@ firrtl.circuit "StringCat" {
     firrtl.propassign %eq, %0 : !firrtl.bool
   }
 
+  firrtl.class private @PropEqValue() {}
+
+  // CHECK-LABEL: om.class @PropEqClassClass
+  firrtl.class @PropEqClassClass(in %a: !firrtl.class<@PropEqValue()>, in %b: !firrtl.class<@PropEqValue()>, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.class.type<@PropEqValue>{{$}}
+    %0 = firrtl.prop.eq %a, %b : !firrtl.class<@PropEqValue()>
+    // CHECK: om.class.fields %[[EQ]] : i1
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @PropEqAnyRefClass
+  firrtl.class @PropEqAnyRefClass(in %a: !firrtl.anyref, in %b: !firrtl.anyref, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.any{{$}}
+    %0 = firrtl.prop.eq %a, %b : !firrtl.anyref
+    // CHECK: om.class.fields %[[EQ]] : i1
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
   // CHECK-LABEL: om.class @ListContainsClass
   firrtl.class @ListContainsClass(
       in %strings: !firrtl.list<string>, in %string: !firrtl.string,

@@ -1770,11 +1770,47 @@ circuit PropEq :
   public module PropEq :
     input a : String
     input b : String
+    input boolA : Bool
+    input boolB : Bool
+    input integerA : Integer
+    input integerB : Integer
     output eq : Bool
+    output boolEq : Bool
+    output integerEq : Bool
 
     ; CHECK: [[EQ:%.+]] = firrtl.prop.eq %a, %b : !firrtl.string
     ; CHECK: firrtl.propassign %eq, [[EQ]]
     propassign eq, prop_eq(a, b)
+
+    ; CHECK: [[BOOL_EQ:%.+]] = firrtl.prop.eq %boolA, %boolB : !firrtl.bool
+    ; CHECK: firrtl.propassign %boolEq, [[BOOL_EQ]]
+    propassign boolEq, prop_eq(boolA, boolB)
+
+    ; CHECK: [[INTEGER_EQ:%.+]] = firrtl.prop.eq %integerA, %integerB : !firrtl.integer
+    ; CHECK: firrtl.propassign %integerEq, [[INTEGER_EQ]]
+    propassign integerEq, prop_eq(integerA, integerB)
+
+;// -----
+FIRRTL version 7.0.0
+
+; CHECK-LABEL: firrtl.circuit "PropEqReferences"
+circuit PropEqReferences :
+  class Foo:
+    skip
+
+  public module PropEqReferences :
+    input obj : Inst<Foo>
+    input ref : AnyRef
+    output classEq : Bool
+    output anyRefEq : Bool
+
+    ; CHECK: [[CLASS_EQ:%.+]] = firrtl.prop.eq %obj, %obj : !firrtl.class<@Foo()>
+    ; CHECK: firrtl.propassign %classEq, [[CLASS_EQ]]
+    propassign classEq, prop_eq(obj, obj)
+
+    ; CHECK: [[ANYREF_EQ:%.+]] = firrtl.prop.eq %ref, %ref : !firrtl.anyref
+    ; CHECK: firrtl.propassign %anyRefEq, [[ANYREF_EQ]]
+    propassign anyRefEq, prop_eq(ref, ref)
 
 ;// -----
 FIRRTL version 5.0.0
@@ -1791,40 +1827,11 @@ circuit PropEqVersionError :
 ;// -----
 FIRRTL version 7.0.0
 
-; CHECK-LABEL: firrtl.circuit "ObjectEq"
-circuit ObjectEq :
+; CHECK-LABEL: firrtl.circuit "ListContains"
+circuit ListContains :
   class Foo:
     skip
 
-  public module ObjectEq :
-    input obj : Inst<Foo>
-    input ref : AnyRef
-    output classClass : Bool
-    output classAnyRef : Bool
-    output anyRefClass : Bool
-    output anyRefAnyRef : Bool
-
-    ; CHECK: [[CLASS_CLASS:%.+]] = firrtl.object.eq %obj, %obj : !firrtl.class<@Foo()>, !firrtl.class<@Foo()>{{$}}
-    ; CHECK-NEXT: firrtl.propassign %classClass, [[CLASS_CLASS]] : !firrtl.bool{{$}}
-    propassign classClass, object_eq(obj, obj)
-
-    ; CHECK: [[CLASS_ANYREF:%.+]] = firrtl.object.eq %obj, %ref : !firrtl.class<@Foo()>, !firrtl.anyref{{$}}
-    ; CHECK-NEXT: firrtl.propassign %classAnyRef, [[CLASS_ANYREF]] : !firrtl.bool{{$}}
-    propassign classAnyRef, object_eq(obj, ref)
-
-    ; CHECK: [[ANYREF_CLASS:%.+]] = firrtl.object.eq %ref, %obj : !firrtl.anyref, !firrtl.class<@Foo()>{{$}}
-    ; CHECK-NEXT: firrtl.propassign %anyRefClass, [[ANYREF_CLASS]] : !firrtl.bool{{$}}
-    propassign anyRefClass, object_eq(ref, obj)
-
-    ; CHECK: [[ANYREF_ANYREF:%.+]] = firrtl.object.eq %ref, %ref : !firrtl.anyref, !firrtl.anyref{{$}}
-    ; CHECK-NEXT: firrtl.propassign %anyRefAnyRef, [[ANYREF_ANYREF]] : !firrtl.bool{{$}}
-    propassign anyRefAnyRef, object_eq(ref, ref)
-
-;// -----
-FIRRTL version 7.0.0
-
-; CHECK-LABEL: firrtl.circuit "ListContains"
-circuit ListContains :
   public module ListContains :
     input strings : List<String>
     input string : String
@@ -1832,9 +1839,16 @@ circuit ListContains :
     input integer : Integer
     input booleans : List<Bool>
     input boolean : Bool
+    input objects : List<Inst<Foo>>
+    input obj : Inst<Foo>
+    input refs : List<AnyRef>
+    input ref : AnyRef
     output stringFound : Bool
     output integerFound : Bool
     output booleanFound : Bool
+    output objectFound : Bool
+    output refFound : Bool
+    output objectRefFound : Bool
 
     ; CHECK: [[STRING_FOUND:%.+]] = firrtl.list.contains %strings, %string : !firrtl.list<string>{{$}}
     ; CHECK: firrtl.propassign %stringFound, [[STRING_FOUND]]
@@ -1847,6 +1861,19 @@ circuit ListContains :
     ; CHECK: [[BOOLEAN_FOUND:%.+]] = firrtl.list.contains %booleans, %boolean : !firrtl.list<bool>{{$}}
     ; CHECK: firrtl.propassign %booleanFound, [[BOOLEAN_FOUND]]
     propassign booleanFound, list_contains(booleans, boolean)
+
+    ; CHECK: [[OBJECT_FOUND:%.+]] = firrtl.list.contains %objects, %obj : !firrtl.list<class<@Foo()>>{{$}}
+    ; CHECK: firrtl.propassign %objectFound, [[OBJECT_FOUND]]
+    propassign objectFound, list_contains(objects, obj)
+
+    ; CHECK: [[REF_FOUND:%.+]] = firrtl.list.contains %refs, %ref : !firrtl.list<anyref>{{$}}
+    ; CHECK: firrtl.propassign %refFound, [[REF_FOUND]]
+    propassign refFound, list_contains(refs, ref)
+
+    ; CHECK: [[OBJECT_REF:%.+]] = firrtl.object.anyref_cast %obj : !firrtl.class<@Foo()>{{$}}
+    ; CHECK-NEXT: [[OBJECT_REF_FOUND:%.+]] = firrtl.list.contains %refs, [[OBJECT_REF]] : !firrtl.list<anyref>{{$}}
+    ; CHECK-NEXT: firrtl.propassign %objectRefFound, [[OBJECT_REF_FOUND]] : !firrtl.bool
+    propassign objectRefFound, list_contains(refs, obj)
 
 ;// -----
 FIRRTL version 7.0.0
@@ -2532,8 +2559,10 @@ circuit DomainAnyRef:
   ; CHECK-LABEL: firrtl.module @DomainAnyRef
   public module DomainAnyRef:
     input A: Domain of ClockDomain
+    input values: List<AnyRef>
     output ref: AnyRef
     output refs: List<AnyRef>
+    output found: Bool
 
     ; CHECK: %[[CAST:.+]] = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
     ; CHECK-NEXT: %B = firrtl.domain.create(%[[CAST]]) : !firrtl.domain<@DomainContainer(source: !firrtl.anyref)>
@@ -2547,6 +2576,11 @@ circuit DomainAnyRef:
     ; CHECK-NEXT: %[[LIST:.+]] = firrtl.list.create %[[CAST]] : !firrtl.list<anyref>
     ; CHECK-NEXT: firrtl.propassign %refs, %[[LIST]] : !firrtl.list<anyref>
     propassign refs, List<AnyRef>(A)
+
+    ; CHECK: %[[CAST:.+]] = firrtl.domain.anyref_cast %A : !firrtl.domain<@ClockDomain()>
+    ; CHECK-NEXT: %[[FOUND:.+]] = firrtl.list.contains %values, %[[CAST]] : !firrtl.list<anyref>
+    ; CHECK-NEXT: firrtl.propassign %found, %[[FOUND]] : !firrtl.bool
+    propassign found, list_contains(values, A)
 
 ;// -----
 FIRRTL version 7.0.0

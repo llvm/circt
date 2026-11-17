@@ -1644,6 +1644,26 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
       return op.emitOpError(
           "extracts from a net which is not currently supported");
     auto inputType = inputRefType.getNestedType();
+    Value input = adaptor.getInput();
+    if (isa<hw::StructType>(inputType)) {
+      SmallVector<StringAttr> path;
+      Type leafType = inputType;
+      while (auto structTy = dyn_cast<hw::StructType>(leafType)) {
+        auto el = structTy.getElements();
+        if (el.size() != 1)
+          return rewriter.notifyMatchFailure(
+              op, "dynamic extract from multi-field struct");
+        path.push_back(el.front().name);
+        leafType = el.front().type;
+      }
+      if (!isa<IntegerType>(leafType))
+        return rewriter.notifyMatchFailure(
+            op, "dynamic extract from struct with non-integer field");
+      for (StringAttr name : path)
+        input = llhd::SigStructExtractOp::create(rewriter, op.getLoc(), input,
+                                                 name);
+      inputType = leafType;
+    }
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
@@ -1653,8 +1673,8 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
       Value amount =
           adjustIntegerWidth(rewriter, adaptor.getLowBit(),
                              llvm::Log2_64_Ceil(width), op->getLoc());
-      rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(
-          op, resultType, adaptor.getInput(), amount);
+      rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(op, resultType, input,
+                                                      amount);
       return success();
     }
 
@@ -1668,11 +1688,10 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
           arrType.getElementType() == resultNestedType;
 
       if (isSingleElementExtract)
-        rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
-                                                         idx);
+        rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, input, idx);
       else
-        rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
-            op, resultType, adaptor.getInput(), idx);
+        rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(op, resultType,
+                                                           input, idx);
 
       return success();
     }
@@ -1726,6 +1745,9 @@ struct StructExtractRefOpConversion
   LogicalResult
   matchAndRewrite(StructExtractRefOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (!isa<llhd::RefType>(adaptor.getInput().getType()))
+      return op.emitOpError(
+          "extracts from a net which is not currently supported");
     rewriter.replaceOpWithNewOp<llhd::SigStructExtractOp>(
         op, adaptor.getInput(), adaptor.getFieldNameAttr());
     return success();
@@ -1764,6 +1786,9 @@ struct UnionExtractRefOpConversion
   LogicalResult
   matchAndRewrite(UnionExtractRefOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (!isa<llhd::RefType>(adaptor.getInput().getType()))
+      return op.emitOpError(
+          "extracts from a net which is not currently supported");
     rewriter.replaceOpWithNewOp<llhd::SigStructExtractOp>(
         op, adaptor.getInput(), adaptor.getFieldNameAttr());
     return success();

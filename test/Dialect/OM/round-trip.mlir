@@ -233,7 +233,7 @@ om.class @StringConcat() {
 }
 
 // CHECK-LABEL: @PropEq
-om.class @PropEq() {
+om.class @PropEq(%obj: !om.class.type<@Widget>, %ref: !om.any) {
   %0 = om.constant "hello" : !om.string
   %1 = om.constant "world" : !om.string
 
@@ -252,6 +252,11 @@ om.class @PropEq() {
   // CHECK: om.prop.eq %6, %7 : i1
   %8 = om.prop.eq %6, %7 : i1
 
+  // CHECK: om.prop.eq %obj, %obj : !om.class.type<@Widget>
+  %9 = om.prop.eq %obj, %obj : !om.class.type<@Widget>
+
+  // CHECK: om.prop.eq %ref, %ref : !om.any
+  %10 = om.prop.eq %ref, %ref : !om.any
   om.class.fields
 }
 

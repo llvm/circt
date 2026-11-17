@@ -1673,7 +1673,7 @@ module Expressions;
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
 
-    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %struct0, "a" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %struct0, "a" : ref<struct<{a: i32, b: i32}>> -> ref<i32>
     // CHECK: [[TMP2:%.+]] = moore.read %a
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]]
     struct0.a = a;
@@ -3043,8 +3043,8 @@ module ConcurrentAssert(input clk);
   // CHECK: [[READ_B_INT:%.+]] = moore.logic_to_int [[READ_B]] : l1
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[CONST_T:%.+]] = hw.constant true
-  // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
-  // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
+  // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONST_T]], 1, 0 : i1
+  // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[CONV_A]], [[DELAY_OP]] : i1, !ltl.sequence
   // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[CONV_B]] : !ltl.sequence, i1
   // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : ref<l1>
   // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
@@ -3077,8 +3077,8 @@ module ConcurrentAssert(input clk);
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[CONST_T:%.+]] = hw.constant true
   // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_B]] : i1
-  // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
-  // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
+  // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONST_T]], 1, 0 : i1
+  // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[CONV_A]], [[DELAY_OP]] : i1, !ltl.sequence
   // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[NOT_OP]] : !ltl.sequence, !ltl.property
   // CHECK: [[NOT_IMPLI_OP:%.+]] = ltl.not [[IMPLICATION_OP]] : !ltl.property
   // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : ref<l1>
@@ -3197,8 +3197,8 @@ module ConcurrentAssert(input clk);
   // CHECK: [[B3:%.+]] = moore.to_builtin_int [[TMP_INT]] : i1
   // CHECK: [[OP12:%.+]] = ltl.implication [[OP11]], [[B3]] : !ltl.sequence, i1
   // CHECK: [[TRUE2:%.+]] = hw.constant true
-  // CHECK: [[OP13:%.+]] = ltl.delay [[OP10]], 1, 0 : !ltl.sequence
-  // CHECK: [[OP14:%.+]] = ltl.concat [[OP13]], [[TRUE2]] : !ltl.sequence, i1
+  // CHECK: [[OP13:%.+]] = ltl.delay [[TRUE2]], 1, 0 : i1
+  // CHECK: [[OP14:%.+]] = ltl.concat [[OP10]], [[OP13]] : !ltl.sequence, !ltl.sequence
   // CHECK: [[RES:%.+]] = ltl.implication [[OP14]], [[OP12]] : !ltl.sequence, !ltl.property
   // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : ref<l1>
   // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1

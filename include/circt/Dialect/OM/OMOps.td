@@ -527,6 +527,7 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
 
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
+  let hasFolder = 1;
 }
 
 class IntegerBinaryOp<string mnemonic, list<Trait> traits = []> :
@@ -666,23 +667,34 @@ class BinaryEqualityOpBase<string mnemonic, list<Trait> traits = []> :
       Pure,
       AllTypesMatch<["lhs", "rhs"]>
     ] # traits> {
-  let arguments = (ins AnyTypeOf<[StringType, OMIntegerType, I1]>:$lhs,
-                       AnyTypeOf<[StringType, OMIntegerType, I1]>:$rhs);
+  let arguments = (ins AnyTypeOf<[StringType, OMIntegerType, I1,
+                                  ClassType, OMAnyType]>:$lhs,
+                       AnyTypeOf<[StringType, OMIntegerType, I1,
+                                  ClassType, OMAnyType]>:$rhs);
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 
 def PropEqOp : BinaryEqualityOpBase<"prop.eq"> {
   let summary = "Compare two OM property values for equality";
   let description = [{
-    Compare two OM property values (String, Integer, or Bool) for equality,
-    returning a 1-bit integer (i1) result. Returns 1 if the values are equal,
-    0 otherwise. Both operands must have the same type.
+    Compare two OM property values (String, Integer, Bool, Class, or Any) for
+    equality, returning a 1-bit integer (i1) result. Returns 1 if the values
+    are equal, 0 otherwise. Both operands must have exactly the same type.
+
+    Strings, integers, and booleans are compared by value. Class and any values
+    are compared by object identity, not by structural equality of object
+    fields. Operands of type `!om.any` must contain object references. The
+    `om.any_cast` operation preserves object identity. Comparing the same
+    reference SSA value with itself returns 1, even if the value is unknown.
+    Otherwise, comparisons involving unknown values remain unknown.
 
     Example:
     ```mlir
     %2 = om.prop.eq %0, %1 : !om.string
     %3 = om.prop.eq %4, %5 : !om.integer
     %6 = om.prop.eq %7, %8 : i1
+    %9 = om.prop.eq %lhs, %rhs : !om.class.type<@Foo>
+    %10 = om.prop.eq %lhsAny, %rhsAny : !om.any
     ```
   }];
 

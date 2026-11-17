@@ -42,8 +42,7 @@ public:
   matchAndRewrite(affine::AffineParallelOp affineParallelOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto affineParallelSteps = affineParallelOp.getSteps();
-    if (std::any_of(affineParallelSteps.begin(), affineParallelSteps.end(),
-                    [](int step) { return step > 1; }) ||
+    if (llvm::any_of(affineParallelSteps, [](int step) { return step > 1; }) ||
         !affineParallelOp->getAttr("calyx.unroll"))
       return rewriter.notifyMatchFailure(
           affineParallelOp,

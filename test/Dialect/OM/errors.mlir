@@ -195,6 +195,17 @@ om.class @ListContainsUnsupportedType(%list: !om.list<i32>, %element: i32) {
 
 // -----
 
+// The single type annotation infers the right operand type.
+om.class @PropEqInferredTypeMismatch(%lhs: !om.string) {
+  %0 = om.prop.eq %lhs, %rhs : !om.string
+  // expected-note @-1 {{previously used here with type '!om.string'}}
+  // expected-error @+1 {{definition of SSA value '%rhs#0' has type '!om.integer'}}
+  %rhs = om.constant #om.integer<0> : !om.integer
+  om.class.fields
+}
+
+// -----
+
 om.class @UnknownClass(%arg: !om.class.type<@Unknwon>) {
   // expected-error @+1 {{class "Unknwon" was not found}}
   om.object.field %arg["unknown"]: (!om.class.type<@Unknwon>) -> i1

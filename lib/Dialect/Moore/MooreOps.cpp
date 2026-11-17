@@ -969,13 +969,13 @@ OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructExtractRefOp::verify() {
-  auto type = getStructFieldType(
-      cast<RefType>(getInput().getType()).getNestedType(), getFieldNameAttr());
+  auto type = getStructFieldType(getInput().getType().getNestedType(),
+                                 getFieldNameAttr());
   if (!type)
     return emitOpError() << "extracts field " << getFieldNameAttr()
                          << " which does not exist in " << getInput().getType();
   if (type != getType().getNestedType())
-    return emitOpError() << "result ref of type " << getType().getNestedType()
+    return emitOpError() << "result of type " << getType().getNestedType()
                          << " must match struct field type " << type;
   return success();
 }
@@ -1918,7 +1918,7 @@ static StringRef stringifyDPIArgDir(DPIArgDirection dir) {
 
 ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   auto builder = parser.getBuilder();
-  auto ctx = builder.getContext();
+  auto *ctx = builder.getContext();
 
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
@@ -2118,7 +2118,7 @@ void DPIFuncOp::print(OpAsmPrinter &p) {
 
 LogicalResult
 FuncDPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto referencedOp =
+  auto *referencedOp =
       symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
   if (!referencedOp)
     return emitError("cannot find function declaration '")

@@ -673,8 +673,7 @@ bool Cut::dominates(ArrayRef<uint32_t> otherInputs, uint64_t otherSig) const {
   if ((signature & otherSig) != signature)
     return false;
 
-  return std::includes(otherInputs.begin(), otherInputs.end(), inputs.begin(),
-                       inputs.end());
+  return llvm::includes(otherInputs, inputs);
 }
 
 Cut Cut::getTrivialCut(uint32_t index) {
@@ -737,7 +736,7 @@ static void removeDuplicateAndNonMinimalCuts(SmallVectorImpl<Cut *> &cuts) {
   };
   // Sort by size, then lexicographically by inputs. This enables cheap exact
   // duplicate elimination and tighter candidate filtering for subset checks.
-  std::stable_sort(cuts.begin(), cuts.end(), [](const Cut *a, const Cut *b) {
+  llvm::stable_sort(cuts, [](const Cut *a, const Cut *b) {
     if (a->getInputSize() != b->getInputSize())
       return a->getInputSize() < b->getInputSize();
     return std::lexicographical_compare(a->inputs.begin(), a->inputs.end(),

@@ -172,7 +172,7 @@ public:
     }
     assert(isLastConnect(connection));
     if (!std::get<1>(itAndInserted)) {
-      auto iterator = std::get<0>(itAndInserted);
+      auto *iterator = std::get<0>(itAndInserted);
       auto changed = false;
       // Delete the old connection if it exists. Null connections are inserted
       // on declarations.
@@ -425,7 +425,7 @@ public:
     // Process all connects in the `then` block.
     for (auto &destAndConnect : thenScope) {
       auto dest = std::get<0>(destAndConnect);
-      auto thenConnect = std::get<1>(destAndConnect);
+      auto *thenConnect = std::get<1>(destAndConnect);
 
       auto outerIt = driverMap.find(dest);
       if (outerIt == driverMap.end()) {
@@ -435,7 +435,7 @@ public:
         continue;
       }
 
-      auto elseIt = elseScope.find(dest);
+      auto *elseIt = elseScope.find(dest);
       if (elseIt != elseScope.end()) {
         // `dest` is set in `then` and `else`. We need to combine them into and
         // delete any previous connect.
@@ -483,7 +483,7 @@ public:
     // Process all connects in the `else` block.
     for (auto &destAndConnect : elseScope) {
       auto dest = std::get<0>(destAndConnect);
-      auto elseConnect = std::get<1>(destAndConnect);
+      auto *elseConnect = std::get<1>(destAndConnect);
 
       // If this destination was driven in the 'then' scope, then we will have
       // already consumed the driver from the 'else' scope, and we must skip it.

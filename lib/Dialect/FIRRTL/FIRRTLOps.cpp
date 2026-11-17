@@ -7182,14 +7182,6 @@ LogicalResult LayerBlockOp::verify() {
             return WalkResult::advance();
 
           // Verify that connects only drive values declared in the layer block.
-          // If we see a non-passive connect destination, then verify that the
-          // source is in the same layer block so that the source is not driven.
-          auto dest =
-              fieldRefCache.getFieldRefFromValue(connect.getDest()).getValue();
-          bool passive = true;
-          if (auto type =
-                  type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType()))
-            passive = type.isPassive();
           // TODO: Improve this verifier.  This is intentionally _not_ verifying
           // a non-passive ConnectLike because it is hugely annoying to do
           // so---it requires a full understanding of if the connect is driving
@@ -7197,8 +7189,18 @@ LogicalResult LayerBlockOp::verify() {
           // which requires deep inspection of the type.  Eventually, the FIRRTL
           // pass pipeline will remove all flips (e.g., canonicalize connect to
           // matchingconnect) and this hole won't exist.
-          if (!passive)
-            return WalkResult::advance();
+          if (auto type =
+                  type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType()))
+            if (!type.isPassive())
+              return WalkResult::advance();
+
+          // Find the underlying declaration containing the destination.
+          // Alternate chasing static and dynamic indexing operation kinds.
+          auto dest =
+              fieldRefCache.getFieldRefFromValue(connect.getDest()).getValue();
+          while (auto subaccess = dest.getDefiningOp<SubaccessOp>())
+            dest = fieldRefCache.getFieldRefFromValue(subaccess.getInput())
+                       .getValue();
 
           if (isAncestorOfValueOwner(getOperation(), dest))
             return WalkResult::advance();

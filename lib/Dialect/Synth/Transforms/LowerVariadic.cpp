@@ -170,7 +170,7 @@ static void simplifyWithExistingOperations(
   mlir::SmallVector<Value> newValues;
   mlir::SmallVector<bool> newInversions;
 
-  for (auto it = allOperands.begin(); it != allOperands.end(); ++it) {
+  for (auto *it = allOperands.begin(); it != allOperands.end(); ++it) {
     // Look at the remaining operands from 'it' to the end
     OperandKey remaining(it, allOperands.end());
 

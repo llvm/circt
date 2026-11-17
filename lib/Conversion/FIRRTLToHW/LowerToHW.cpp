@@ -29,6 +29,7 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
@@ -1004,7 +1005,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     } else {
       // If the port is an inout bundle or contains an analog type, then it is
       // implicitly inout.
-      hwPort.type = hw::InOutType::get(hwPort.type);
+      hwPort.type = sv::NetType::get(hwPort.type);
       hwPort.dir = hw::ModulePort::Direction::Input;
       hwPort.argNum = numArgs++;
     }
@@ -1454,7 +1455,7 @@ static Value tryEliminatingAttachesToAnalogValue(Value value,
   attach.erase();
 
   ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
-  return castFromFIRRTLType(attachedValue, hw::InOutType::get(loweredType),
+  return castFromFIRRTLType(attachedValue, sv::NetType::get(loweredType),
                             builder);
 }
 
@@ -2513,7 +2514,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 
   // If we got an inout value, implicitly read it.  FIRRTL allows direct use
   // of wires and other things that lower to inout type.
-  if (isa<hw::InOutType>(result.getType()))
+  if (sv::getHandleElementType(result.getType()))
     return getReadValue(result);
 
   return result;
@@ -3192,7 +3193,7 @@ Backedge FIRRTLLowering::createBackedge(Value orig, Type type) {
 /// If the `from` value is in fact a backedge, record that the backedge will
 /// be replaced by the value.  Return true if the destination is a backedge.
 bool FIRRTLLowering::updateIfBackedge(Value dest, Value src) {
-  auto backedgeIt = backedges.find(dest);
+  auto *backedgeIt = backedges.find(dest);
   if (backedgeIt == backedges.end())
     return false;
   backedgeIt->second = src;
@@ -3482,7 +3483,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
   // otherwise hw::ArrayGetOp.
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (sv::getHandleElementType(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, iIdx);
   else
     result = builder.createOrFold<hw::ArrayGetOp>(input, iIdx);
@@ -3506,7 +3507,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
   // otherwise, lower the op to array indexing.
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (sv::getHandleElementType(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, valueIdx);
   else
     result = createArrayIndexing(input, valueIdx);
@@ -3527,7 +3528,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
   auto field = firrtl::type_cast<BundleType>(op.getInput().getType())
                    .getElementName(op.getFieldIndex());
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (sv::getHandleElementType(input.getType()))
     result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
   else
     result = builder.createOrFold<hw::StructExtractOp>(input, field);
@@ -3758,7 +3759,7 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
   auto resultTy = lowerType(op.getType());
   if (!resultTy)
     return failure();
-  resultTy = sv::InOutType::get(op.getContext(), resultTy);
+  resultTy = sv::NetType::get(op.getContext(), resultTy);
 
   SmallVector<Value, 4> operands;
   operands.reserve(op.getSubstitutions().size());
@@ -4079,7 +4080,7 @@ FIRRTLLowering::prepareInstanceOperands(ArrayRef<PortInfo> portInfo,
 
     // Create a wire for each inout operand, so there is something to connect
     // to. The instance becomes the sole driver of this wire.
-    auto wire = sv::WireOp::create(builder, portType,
+    auto wire = sv::WireOp::create(builder, sv::NetType::get(portType),
                                    "." + port.getName().str() + ".wire");
 
     // Know that the argument FIRRTL value is equal to this wire, allowing
@@ -4217,8 +4218,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
     auto portType = lowerType(port.type);
     if (!portType || portType.isInteger(0))
       continue;
-    auto wire = sv::WireOp::create(
-        builder, portType, wirePrefix.str() + "." + port.getName().str());
+    auto wire =
+        sv::WireOp::create(builder, sv::NetType::get(portType),
+                           wirePrefix.str() + "." + port.getName().str());
     outputWires.push_back(wire);
     if (failed(setLowering(oldInstanceChoice.getResult(portIndex), wire)))
       return failure();
@@ -4943,7 +4945,8 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   if (type_isa<AnalogType>(op.getType()))
     // This is a locally visible, private wire created by the compiler, so do
     // not attach a symbol name.
-    return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
+    return setLoweringTo<sv::WireOp>(op, sv::NetType::get(resultTy),
+                                     ".invalid_analog");
 
   // We don't allow aggregate values which contain values of analog types.
   if (type_cast<FIRRTLBaseType>(op.getType()).containsAnalog())
@@ -5090,7 +5093,7 @@ LogicalResult FIRRTLLowering::visitExpr(Mux4CellIntrinsicOp op) {
 Value FIRRTLLowering::createValueWithMuxAnnotation(Operation *op, bool isMux2) {
   assert(op->getNumResults() == 1 && "only expect a single result");
   auto val = op->getResult(0);
-  auto valWire = sv::WireOp::create(builder, val.getType());
+  auto valWire = sv::WireOp::create(builder, sv::NetType::get(val.getType()));
   // Use SV attributes to annotate pragmas.
   circt::sv::setSVAttributes(
       op, sv::SVAttributeAttr::get(builder.getContext(), "cadence map_to_mux",
@@ -5198,8 +5201,8 @@ LogicalResult FIRRTLLowering::visitExpr(XMRRefOp op) {
   else
     xmrType = lowerType(baseType);
 
-  return setLoweringTo<sv::XMRRefOp>(op, sv::InOutType::get(xmrType),
-                                     op.getRef(), op.getVerbatimSuffixAttr());
+  return setLoweringTo<sv::XMRRefOp>(op, sv::NetType::get(xmrType), op.getRef(),
+                                     op.getVerbatimSuffixAttr());
 }
 
 LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
@@ -5211,7 +5214,7 @@ LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
   else
     xmrType = lowerType(op.getType());
 
-  auto xmr = sv::XMRRefOp::create(builder, sv::InOutType::get(xmrType),
+  auto xmr = sv::XMRRefOp::create(builder, sv::NetType::get(xmrType),
                                   op.getRef(), op.getVerbatimSuffixAttr());
   auto readXmr = getReadValue(xmr);
   if (!isa<ClockType>(op.getType()))
@@ -5292,8 +5295,8 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!isa<hw::InOutType>(destVal.getType()))
-    return op.emitError("destination isn't an inout type");
+  if (!isa<sv::NetType>(destVal.getType()))
+    return op.emitError("destination isn't a net handle type");
 
   sv::AssignOp::create(builder, destVal, srcVal);
   return success();
@@ -5320,8 +5323,8 @@ LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!isa<hw::InOutType>(destVal.getType()))
-    return op.emitError("destination isn't an inout type");
+  if (!isa<sv::NetType>(destVal.getType()))
+    return op.emitError("destination isn't a net handle type");
 
   sv::AssignOp::create(builder, destVal, srcVal);
   return success();
@@ -5339,8 +5342,8 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
   if (!destVal)
     return failure();
 
-  if (!isa<hw::InOutType>(destVal.getType()))
-    return op.emitError("destination isn't an inout type");
+  if (!sv::getHandleElementType(destVal.getType()))
+    return op.emitError("destination isn't a net or variable handle type");
 
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
@@ -6038,8 +6041,8 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       continue;
     }
 
-    if (!isa<hw::InOutType>(inoutValues.back().getType()))
-      return op.emitError("operand isn't an inout type");
+    if (!isa<sv::NetType>(inoutValues.back().getType()))
+      return op.emitError("operand isn't a net handle type");
   }
 
   if (inoutValues.size() < 2)
