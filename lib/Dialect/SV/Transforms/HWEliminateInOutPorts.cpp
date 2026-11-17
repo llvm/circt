@@ -183,6 +183,11 @@ public:
     if (auto net = type_dyn_cast<sv::NetType>(port.type))
       return {std::make_unique<HWInOutPortConversion>(
           converter, port, net.getElementType(), readSuffix, writeSuffix)};
+    if (type_isa<hw::InOutType>(port.type))
+      return mlir::emitError(port.loc)
+             << "`hw.inout` port '" << port.getName()
+             << "' is deprecated; please use a port with type `!sv.net<...>` "
+                "instead";
     return PortConversionBuilder::build(port);
   }
 

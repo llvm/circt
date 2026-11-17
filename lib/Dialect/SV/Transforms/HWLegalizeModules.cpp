@@ -230,8 +230,7 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         // Remove original assignment.
         return true;
       })
-      .Case<sv::VarOp>([&](sv::VarOp varOp) { return lowerArrayVar(varOp); })
-      .Case<sv::RegOp>([&](sv::RegOp regOp) { return lowerArrayVar(regOp); })
+      .Case<sv::VarOp, sv::RegOp>([&](auto op) { return lowerArrayVar(op); })
       .Case<comb::MuxOp>([&](comb::MuxOp muxOp) {
         // Transform array mux into individual element muxes.
         auto ty = hw::type_dyn_cast<hw::ArrayType>(muxOp.getType());
