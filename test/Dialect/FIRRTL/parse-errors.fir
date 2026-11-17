@@ -1777,9 +1777,9 @@ circuit Foo:
 
 FIRRTL version 7.0.0
 circuit Foo:
-  ; expected-error @below {{duplicate option case definition 'FPGA'}}
   option Platform:
     FPGA
+    ; expected-error @below {{duplicate option case definition 'FPGA'}}
     FPGA
 
 ;// -----
