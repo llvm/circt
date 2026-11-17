@@ -3979,6 +3979,19 @@ SimulationOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// DomainOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DomainOp::verify() {
+  // Field names must be unique.
+  SmallPtrSet<StringAttr, 4> names;
+  for (auto field : getFields().getAsRange<DomainFieldAttr>())
+    if (!names.insert(field.getName()).second)
+      return emitOpError() << "has duplicate field name " << field.getName();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//
 
