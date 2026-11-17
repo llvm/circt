@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+// NOLINTNEXTLINE(llvm-header-guard)
 #ifndef CIRCT_DIALECT_LLHD_TRANSFORMS_CAPTUREUTILS_H
 #define CIRCT_DIALECT_LLHD_TRANSFORMS_CAPTUREUTILS_H
 

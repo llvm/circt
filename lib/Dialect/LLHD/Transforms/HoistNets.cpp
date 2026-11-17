@@ -30,7 +30,10 @@ using namespace llhd;
 
 namespace {
 struct HoistNetsPass : public llhd::impl::HoistNetsPassBase<HoistNetsPass> {
+protected:
   void runOnOperation() override;
+
+private:
   void hoistProbes(Region *region);
 };
 } // namespace
