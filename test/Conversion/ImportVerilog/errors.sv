@@ -517,7 +517,7 @@ endmodule
 
 // -----
 
-// expected-error @below {{sequential UDP `udp_multi_clock` with multiple distinct edge-sensitive signals is not supported}}
+// expected-error @below {{unsupported sequential UDP `udp_multi_clock` with multiple distinct edge-sensitive signals}}
 primitive udp_multi_clock(q, clk1, clk2, d);
   output reg q;
   input clk1, clk2, d;

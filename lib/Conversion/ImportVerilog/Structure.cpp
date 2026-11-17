@@ -2820,54 +2820,111 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
                                    prim.getDelay(), loc);
 }
 
-// Auxiliary functions for UDP sum-of-products conversion.
+// Auxiliary functions for UDP truth-table lowering.
 
-// Parse the input row into normalized level characters. Will be expanded to
-// support sequential UDPs.
-static void parseInputRow(StringRef inputs, SmallVectorImpl<char> &levels) {
-  levels.clear();
-  levels.reserve(inputs.size());
-  for (char c : inputs)
-    levels.push_back(llvm::toLower(c));
+namespace {
+
+/// Logic level for an input or current-state entry in a UDP truth table.
+enum class UdpLevel {
+  Zero,
+  One,
+  Unknown,
+  DontCare,
+};
+
+} // namespace
+
+/// Decode a single UDP level character (`0`, `1`, `x`, `?`, or `b`,
+/// case-insensitive). Returns `std::nullopt` for non-level characters such as
+/// edge specifiers (`r`, `f`, `p`, `n`, `*`, `(`, `)`).
+static std::optional<UdpLevel> decodeUdpLevel(char c) {
+  switch (llvm::toLower(c)) {
+  case '0':
+    return UdpLevel::Zero;
+  case '1':
+    return UdpLevel::One;
+  case 'x':
+    return UdpLevel::Unknown;
+  case '?':
+  case 'b':
+    // In 2-state UDP lowering, 'b' (0 or 1) and '?' (0, 1, or x) are both
+    // wildcards over {0, 1}; canonicalize both to `DontCare`.
+    return UdpLevel::DontCare;
+  default:
+    return std::nullopt;
+  }
 }
 
-// Skip unsupported or non-productive table rows. Currently, only combinational
-// UDPs with 0/1/?/b inputs are supported.
+/// Parse a level-only UDP input row string into `UdpLevel` entries.
+/// Returns false if any character is not a recognized UDP level symbol.
+static bool parseInputRow(StringRef inputs, SmallVectorImpl<UdpLevel> &levels) {
+  levels.clear();
+  levels.reserve(inputs.size());
+  for (char c : inputs) {
+    auto level = decodeUdpLevel(c);
+    if (!level)
+      return false;
+    levels.push_back(*level);
+  }
+  return true;
+}
+
+/// Skip unsupported or non-productive combinational table rows and populate
+/// `levels` for supported rows. Currently, only combinational UDPs with
+/// 0/1/?/b inputs are supported.
 static bool
 skipUnsupportedRow(const slang::ast::PrimitiveSymbol::TableEntry &entry,
-                   ArrayRef<char> levels, size_t numInputs) {
+                   size_t numInputs, SmallVectorImpl<UdpLevel> &levels) {
   // In the sum-of-products (SOP) representation below, only rows producing '1'
   // generate product terms in the disjunction; other outputs (e.g., '0' or 'x')
   // do not contribute. Also skip edge-sensitive entries and rows with
-  // mismatched input counts.
-  if (entry.isEdgeSensitive || entry.output != '1' ||
-      levels.size() != numInputs)
+  // unrecognized tokens or mismatched input counts.
+  if (entry.isEdgeSensitive || entry.output != '1')
     return true;
-  return llvm::any_of(levels, [](char c) {
-    return c != '0' && c != '1' && c != '?' && c != 'b';
+  if (!parseInputRow(entry.inputs, levels) || levels.size() != numInputs)
+    return true;
+  return llvm::any_of(levels, [](UdpLevel level) {
+    switch (level) {
+    case UdpLevel::Zero:
+    case UdpLevel::One:
+    case UdpLevel::DontCare:
+      return false;
+    case UdpLevel::Unknown:
+      return true;
+    }
   });
+}
+
+/// Materialize a 2-state literal (`val` for `One`, `~val` for `Zero`) or null
+/// for `DontCare`, caching the negation in `notVal`.
+static Value buildLevelLiteral(OpBuilder &builder, Location loc, UdpLevel level,
+                               Value val, Value &notVal) {
+  switch (level) {
+  case UdpLevel::One:
+    return val;
+  case UdpLevel::Zero:
+    if (!notVal)
+      notVal = moore::NotOp::create(builder, loc, val);
+    return notVal;
+  case UdpLevel::DontCare:
+    return {};
+  case UdpLevel::Unknown:
+    llvm_unreachable("unknown level should be filtered before building term");
+  }
 }
 
 /// Build the productive AND-term for this row. Returns nullptr if the row is
 /// unproductive (all don't cares).
 static Value buildProductiveTerm(OpBuilder &builder, Location loc,
-                                 ArrayRef<char> levels, ValueRange inputVals,
+                                 ArrayRef<UdpLevel> inputs,
+                                 ValueRange inputVals,
                                  SmallVectorImpl<Value> &notVars) {
   Value term;
   for (size_t i = 0, e = inputVals.size(); i < e; ++i) {
-    char c = levels[i];
-    Value lit;
-    if (c == '1') {
-      lit = inputVals[i];
-    } else if (c == '0') {
-      if (!notVars[i])
-        notVars[i] = moore::NotOp::create(builder, loc, inputVals[i]);
-      lit = notVars[i];
-    } else {
-      continue; // '?' or 'b' don't care
-    }
-
-    term = term ? moore::AndOp::create(builder, loc, term, lit) : lit;
+    Value lit =
+        buildLevelLiteral(builder, loc, inputs[i], inputVals[i], notVars[i]);
+    if (lit)
+      term = term ? moore::AndOp::create(builder, loc, term, lit) : lit;
   }
   return term;
 }
@@ -2877,20 +2934,21 @@ namespace {
 /// A level-sensitive truth table row (a latch transition, or an asynchronous
 /// clear/preset override in an edge-triggered UDP).
 struct AsyncRow {
-  /// Required logic levels ('0', '1', or '?' for don't-care) for each input
-  /// port, followed by the current state `q` as the last element.
-  /// e.g. [in0, in1, ..., inN-1, q].
-  SmallVector<char> levels;
+  /// Required logic levels (`Zero`, `One`, or `DontCare`) for each input port.
+  SmallVector<UdpLevel> inputs;
+  /// Required current state `q` (`Zero`, `One`, or `DontCare`).
+  UdpLevel state;
   /// Forced output value: false for '0' (clear), true for '1' (preset).
   bool output;
 };
 
 /// An edge-sensitive truth table row.
 struct SyncRow {
-  /// Required logic levels ('0', '1', or '?' for don't-care) for each input
-  /// port (with '?' at the edge-triggered port), followed by the current state
-  /// `q` as the last element. e.g. [in0, in1, ..., inN-1, q].
-  SmallVector<char> levels;
+  /// Required logic levels (`Zero`, `One`, or `DontCare`, with `DontCare` at
+  /// the edge-triggered port) for each input port.
+  SmallVector<UdpLevel> inputs;
+  /// Required current state `q` (`Zero`, `One`, or `DontCare`).
+  UdpLevel state;
 };
 
 /// Classified truth table entries and structural information for a sequential
@@ -2937,12 +2995,14 @@ struct AsyncConditions {
 /// Safe Filtering and Benign Hold Rules:
 /// Truth tables may include entries that do not produce active 2-state
 /// transitions and are skipped before lowering:
-/// - Unknown ('x') rows: Like the combinational UDP lowering above
-///   (`skipUnsupportedRow`), sequential UDP lowering synthesizes 2-state
-///   boolean conditions (matching `MooreToCore`'s 2-state `i1` lowering).
-///   In IEEE 1800-2017 Table 29-1, `'x'` only matches literal unknown `x`
-///   (unlike `'?'`, which matches `0`, `1`, or `x`), so rows with `'x'` in
-///   inputs, current state, or output are skipped.
+/// - Unknown ('x') rows: Like combinational UDP lowering
+///   (`skipUnsupportedRow`), sequential UDP lowering models transitions in
+///   2-state `i1` logic (matching `MooreToCore`'s 2-state lowering rather than
+///   4-state `X` propagation). In IEEE 1800-2017 Table 29-1, `'x'` in inputs
+///   or state only matches literal unknown `x` (unlike `'?'`, which matches
+///   `0`, `1`, or `x`) so it cannot trigger in 2-state logic, and `'x'`
+///   next-state outputs have no 2-state value, so rows containing `'x'` are
+///   skipped.
 /// - Explicit hold rows: Rows specifying '-' as next-state explicitly indicate
 ///   retaining the current state (e.g. on inactive clock edges `(10) : -`).
 ///   Because the lowered `moore.procedure` only assigns to the state variable
@@ -2981,16 +3041,14 @@ static LogicalResult
 classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
                             size_t numInputs, Location loc,
                             SequentialTableInfo &info) {
-  // In sequential UDP table rows, inputs occupy indices [0, numInputs) and the
-  // internal state occupies index numInputs.
-  const size_t stateIdx = numInputs;
   SmallVector<AsyncRow> rawLevelRows;
   std::optional<size_t> edgePortIdx;
 
   for (const auto &row : primitiveType.table) {
-    // Skip rows with 'x' in inputs, current state, or output (cannot match or
-    // drive a distinct value in 2-state UDP lowering, matching
-    // `skipUnsupportedRow` for combinational UDPs).
+    // Skip rows containing 'x': UDP lowering here models transitions in 2-state
+    // (`i1`) logic rather than 4-state `X` propagation (matching
+    // `skipUnsupportedRow`), so literal-'x' matchers cannot trigger and 'x'
+    // outputs cannot be represented.
     if (row.output == 'x')
       continue;
     if (row.state == 'x')
@@ -3007,24 +3065,23 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
     assert((row.output == '0' || row.output == '1') &&
            "active UDP transition must specify binary output '0' or '1'");
 
-    // In 2-state UDP lowering, 'b' (0 or 1) and '?' (0, 1, or x) are both
-    // wildcards over {0, 1}; canonicalize 'b' to '?' so downstream checks and
-    // `buildProductiveTerm` only test a single wildcard symbol.
-    char stateChar = (row.state == 'b') ? '?' : row.state;
+    auto stateLevel = decodeUdpLevel(row.state);
+    assert(stateLevel && "unexpected sequential UDP state symbol");
+    if (*stateLevel == UdpLevel::Unknown)
+      continue;
 
     if (!row.isEdgeSensitive) {
-      assert(row.inputs.size() == numInputs &&
+      SmallVector<UdpLevel> inputs;
+      if (!parseInputRow(row.inputs, inputs))
+        llvm_unreachable("unexpected token in level-sensitive UDP row");
+      assert(inputs.size() == numInputs &&
              "level-sensitive UDP row input count must match numInputs");
-      SmallVector<char> levels;
-      levels.reserve(stateIdx + 1);
-      for (char c : row.inputs)
-        levels.push_back(c == 'b' ? '?' : c);
-      levels.push_back(stateChar);
-      rawLevelRows.push_back({std::move(levels), row.output == '1'});
+      rawLevelRows.push_back(
+          {std::move(inputs), *stateLevel, row.output == '1'});
       continue;
     }
 
-    SmallVector<char> levels(stateIdx + 1, '?');
+    SmallVector<UdpLevel> inputLevels(numInputs, UdpLevel::DontCare);
     std::optional<size_t> edgeIdx;
     StringRef inputs = row.inputs;
     for (size_t i = 0; i < numInputs; ++i) {
@@ -3040,8 +3097,10 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
       }
       char c = inputs.front();
       inputs = inputs.drop_front(1);
-      if (c == '0' || c == '1' || c == '?' || c == 'b') {
-        levels[i] = (c == 'b') ? '?' : c;
+      if (auto level = decodeUdpLevel(c)) {
+        assert(*level != UdpLevel::Unknown &&
+               "rows with 'x' inputs should already be skipped");
+        inputLevels[i] = *level;
       } else {
         // Edge shorthand ('r', 'f', 'p', 'n', '*'), guaranteed by Slang.
         assert((c == 'r' || c == 'f' || c == 'p' || c == 'n' || c == '*') &&
@@ -3061,55 +3120,56 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
       edgePortIdx = edgeIdx;
     } else if (*edgePortIdx != *edgeIdx) {
       return mlir::emitError(loc)
-             << "sequential UDP `" << primitiveType.name
-             << "` with multiple distinct edge-sensitive signals is not "
-                "supported";
+             << "unsupported sequential UDP `" << primitiveType.name
+             << "` with multiple distinct edge-sensitive signals";
     }
 
-    levels[stateIdx] = stateChar;
-    info.syncRows.push_back({std::move(levels)});
+    info.syncRows.push_back({std::move(inputLevels), *stateLevel});
   }
 
-  // Merge level rows that differ only on the clock column (cell-library idiom
-  // where an asynchronous clear or preset is enumerated for both clock levels:
-  // e.g. '0 0 ? ? : ? : 0' and '1 0 ? ? : ? : 0'). In 2-state logic, matching
-  // '0' and '1' clock levels combine into a single unconditional '?' level row.
+  // Merge level rows that differ only on the edge-sensitive column
+  // (cell-library idiom where an asynchronous clear or preset is enumerated for
+  // both clock levels: e.g. '0 0 ? ? : ? : 0' and '1 0 ? ? : ? : 0'). In
+  // 2-state logic, matching '0' and '1' clock levels combine into a single
+  // unconditional `DontCare` level row.
   if (edgePortIdx.has_value()) {
     size_t clkIdx = *edgePortIdx;
     SmallVector<AsyncRow> mergedLevelRows;
-    for (auto &arow : rawLevelRows) {
+    for (auto &asyncRow : rawLevelRows) {
       auto *matchIt =
           llvm::find_if(mergedLevelRows, [&](const AsyncRow &existing) {
-            if (existing.output != arow.output)
+            if (existing.output != asyncRow.output ||
+                existing.state != asyncRow.state)
               return false;
             return llvm::all_of(
-                llvm::enumerate(arow.levels), [&](const auto &item) {
+                llvm::enumerate(asyncRow.inputs), [&](const auto &item) {
                   return item.index() == clkIdx ||
-                         existing.levels[item.index()] == item.value();
+                         existing.inputs[item.index()] == item.value();
                 });
           });
 
       if (matchIt == mergedLevelRows.end()) {
-        mergedLevelRows.push_back(std::move(arow));
-      } else if (matchIt->levels[clkIdx] != arow.levels[clkIdx]) {
-        matchIt->levels[clkIdx] = '?';
+        mergedLevelRows.push_back(std::move(asyncRow));
+      } else if (matchIt->inputs[clkIdx] != asyncRow.inputs[clkIdx]) {
+        matchIt->inputs[clkIdx] = UdpLevel::DontCare;
       }
     }
     rawLevelRows = std::move(mergedLevelRows);
   }
 
-  for (auto &arow : rawLevelRows) {
+  for (auto &asyncRow : rawLevelRows) {
     if (edgePortIdx.has_value()) {
       // Requirement 3 (No mixed sensitivity on edge-sensitive port):
       // An input cannot have both edge and level sensitivity. In an
-      // edge-triggered primitive, active level-sensitive rows must specify a
-      // don't-care ('?') on the edge-sensitive port or enumerate both '0' and
+      // edge-triggered primitive, active level-sensitive rows must specify
+      // `DontCare` ('?') on the edge-sensitive port or enumerate both '0' and
       // '1' clock levels (merged above). Any surviving row specifying a fixed
       // level on this port means the input has both edge and level
       // sensitivity (e.g. transparent latch behavior or level override while
-      // the edge signal is stationary), which cannot be modeled by an
-      // edge-triggered flip-flop.
-      if (arow.levels[*edgePortIdx] != '?') {
+      // the edge signal is stationary), which cannot be lowered to an
+      // `always_ff`-style clocked/async-reset procedure for register
+      // extraction (`llhd-deseq`) and simulation in `arcilator`.
+      if (asyncRow.inputs[*edgePortIdx] != UdpLevel::DontCare) {
         return mlir::emitError(loc)
                << "sequential UDP `" << primitiveType.name
                << "` specifies input `"
@@ -3121,7 +3181,7 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
       // Requirement 4 (Pure asynchronous control without state feedback):
       // Asynchronous clear/preset rows must not depend on the current state q;
       // feedback loops in asynchronous control are not supported.
-      if (arow.levels[stateIdx] != '?') {
+      if (asyncRow.state != UdpLevel::DontCare) {
         return mlir::emitError(loc)
                << "sequential UDP `" << primitiveType.name
                << "` specifies asynchronous row depending on internal state; "
@@ -3129,32 +3189,31 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
       }
 
       // Record which input ports act as asynchronous controls (i.e. specify a
-      // '0' or '1' level in an asynchronous row).
-      for (auto [i, level] :
-           llvm::enumerate(llvm::ArrayRef(arow.levels).take_front(numInputs))) {
-        if (i != *edgePortIdx && level != '?')
+      // `Zero` or `One` level in an asynchronous row).
+      for (auto [i, level] : llvm::enumerate(asyncRow.inputs)) {
+        if (i != *edgePortIdx && level != UdpLevel::DontCare)
           info.asyncPortIndices.insert(i);
       }
     }
-    info.asyncRows.push_back(std::move(arow));
+    info.asyncRows.push_back(std::move(asyncRow));
   }
 
   // Requirement 5 (Separation of asynchronous control and synchronous data):
   if (edgePortIdx.has_value()) {
+    // Requirement 5a: In `syncRows`, an asynchronous control port may only
+    // be `DontCare` or held at its single inactive level (e.g. `rst = 0`
+    // across all clocked rows). If it is specified as `Zero` in one `syncRow`
+    // and `One` in another (`variesInSync`), it is also acting as a synchronous
+    // data input, which is not supported.
     for (size_t aIdx : info.asyncPortIndices) {
-      // Requirement 5a: In `syncRows`, an asynchronous control port may only
-      // be wildcard ('?') or held at its single inactive level (e.g. `rst = 0`
-      // across all clocked rows). If it is specified as '0' in one `syncRow`
-      // and '1' in another (`variesInSync`), it is also acting as a
-      // synchronous data input, which is not supported.
       bool variesInSync = false;
-      char firstSyncLevel = 0;
+      std::optional<UdpLevel> firstSyncLevel;
       for (const auto &srow : info.syncRows) {
-        char l = srow.levels[aIdx];
-        if (l == '0' || l == '1') {
-          if (firstSyncLevel == 0)
+        UdpLevel l = srow.inputs[aIdx];
+        if (l == UdpLevel::Zero || l == UdpLevel::One) {
+          if (!firstSyncLevel)
             firstSyncLevel = l;
-          else if (firstSyncLevel != l)
+          else if (*firstSyncLevel != l)
             variesInSync = true;
         }
       }
@@ -3170,14 +3229,15 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
     // on an active asynchronous clear/preset row (i.e. a `syncRow` cannot
     // match an `asyncRow` on its specified control port levels without
     // contradicting it on another control port).
-    for (const auto &arow : info.asyncRows) {
+    for (const auto &asyncRow : info.asyncRows) {
       for (const auto &srow : info.syncRows) {
         bool matchesAny = false;
         bool contradicts = false;
         for (size_t aIdx : info.asyncPortIndices) {
-          if (arow.levels[aIdx] == '?' || srow.levels[aIdx] == '?')
+          if (asyncRow.inputs[aIdx] == UdpLevel::DontCare ||
+              srow.inputs[aIdx] == UdpLevel::DontCare)
             continue;
-          if (srow.levels[aIdx] == arow.levels[aIdx])
+          if (srow.inputs[aIdx] == asyncRow.inputs[aIdx])
             matchesAny = true;
           else
             contradicts = true;
@@ -3207,15 +3267,21 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
 /// only `'0'` or only `'1'` rows exist, `asyncVal` is a constant 0 or 1.
 static AsyncConditions buildAsyncConditions(OpBuilder &builder, Location loc,
                                             ArrayRef<AsyncRow> asyncRows,
-                                            ArrayRef<Value> vars,
-                                            moore::IntType i1Ty) {
+                                            ArrayRef<Value> inputVals,
+                                            Value qVal, moore::IntType i1Ty) {
   AsyncConditions result;
-  SmallVector<Value> notVars(vars.size(), Value{});
-  for (const auto &arow : asyncRows) {
-    Value term = buildProductiveTerm(builder, loc, arow.levels, vars, notVars);
+  SmallVector<Value> notVars(inputVals.size(), Value{});
+  Value notQ;
+  for (const auto &asyncRow : asyncRows) {
+    Value term =
+        buildProductiveTerm(builder, loc, asyncRow.inputs, inputVals, notVars);
+    if (Value stateLit =
+            buildLevelLiteral(builder, loc, asyncRow.state, qVal, notQ))
+      term =
+          term ? moore::AndOp::create(builder, loc, term, stateLit) : stateLit;
     if (!term)
       term = moore::ConstantOp::create(builder, loc, i1Ty, 1, false);
-    if (!arow.output) {
+    if (!asyncRow.output) {
       result.clearCond =
           result.clearCond
               ? moore::OrOp::create(builder, loc, result.clearCond, term)
@@ -3310,22 +3376,21 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
     seqInputVals.push_back(boolVal);
   }
 
-  // Map input values [0, numInputs) and internal state q at index numInputs.
-  // If no row depends on the internal state, leave the state slot null.
-  SmallVector<Value> vars(seqInputVals.begin(), seqInputVals.end());
-  bool usesState =
-      llvm::any_of(table.syncRows,
-                   [](const SyncRow &r) { return r.levels.back() != '?'; }) ||
-      llvm::any_of(table.asyncRows,
-                   [](const AsyncRow &r) { return r.levels.back() != '?'; });
+  // Read internal state q only if any active row depends on it.
+  bool usesState = llvm::any_of(table.syncRows,
+                                [](const SyncRow &r) {
+                                  return r.state != UdpLevel::DontCare;
+                                }) ||
+                   llvm::any_of(table.asyncRows, [](const AsyncRow &r) {
+                     return r.state != UdpLevel::DontCare;
+                   });
   Value qVal;
   if (usesState)
     qVal = moore::ReadOp::create(builder, loc, qVar);
-  vars.push_back(qVal);
 
   // Build level-sensitive clear/preset conditions from table.asyncRows.
-  AsyncConditions asyncConditions =
-      buildAsyncConditions(builder, loc, table.asyncRows, vars, i1Ty);
+  AsyncConditions asyncConditions = buildAsyncConditions(
+      builder, loc, table.asyncRows, seqInputVals, qVal, i1Ty);
 
   Value qOut;
   if (asyncConditions.asyncCond) {
@@ -3401,10 +3466,9 @@ FailureOr<moore::SVModuleOp> Context::convertUserDefinedPrimitiveDef(
   // Construct Disjunctive Normal Form (sum-of-products) boolean logic from
   // the UDP truth table.
   Value sum;
-  SmallVector<char> levels;
+  SmallVector<UdpLevel> levels;
   for (const auto &entry : primitive.table) {
-    parseInputRow(entry.inputs, levels);
-    if (skipUnsupportedRow(entry, levels, numInputs))
+    if (skipUnsupportedRow(entry, numInputs, levels))
       continue;
     Value term = buildProductiveTerm(builder, loc, levels, inputVals, notVars);
     if (!term) {
