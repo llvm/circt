@@ -113,7 +113,7 @@ on:
         type: boolean
         default: false
       run_clang_tidy:
-        description: "Run clang-tidy over the changed lines (Linux only). Requires run_tests (for the build) and a clang cmake_c_compiler; the matching clang-tidy is installed with it."
+        description: "Run clang-tidy over the changed lines (Linux only). Requires run_tests (for the build) and an exact-release cmake_c_compiler (clang-X.Y.Z), which provides the matching clang-tidy."
         required: false
         type: boolean
         default: false
@@ -176,7 +176,7 @@ on:
         type: boolean
         default: false
       run_clang_tidy:
-        description: "Run clang-tidy over the changed lines (Linux only). Requires run_tests (for the build) and a clang cmake_c_compiler; the matching clang-tidy is installed with it."
+        description: "Run clang-tidy over the changed lines (Linux only). Requires run_tests (for the build) and an exact-release cmake_c_compiler (clang-X.Y.Z), which provides the matching clang-tidy."
         required: false
         type: boolean
         default: false
@@ -252,26 +252,50 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           COMPILER="${{ steps.canonicalize.outputs.cmake_c_compiler }}"
-          # clang-tidy comes from the same source as the compiler, so the two
-          # always match.
+          # The apt packages providing the compiler.
+          COMPILER_PACKAGES=("$COMPILER")
+          # Only an exact release comes with a matching clang-tidy.
           CLANG_TIDY=
-          if [[ "$COMPILER" =~ ^clang-([0-9]+)$ ]]; then
+          if [[ "$COMPILER" =~ ^clang-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            # clang-X.Y.Z is that LLVM release, from its release tarball.
+            # Extract just the needed tools.
+            VERSION="${BASH_REMATCH[1]}"
+            MAJOR="${VERSION%%.*}"
+            # The sha256 of LLVM-<version>-Linux-X64.tar.zst, per known release.
+            case "$VERSION" in
+              23.1.5) SHA256=c3107384835f788768f614db610e87fba7077f125ca950eb02a78bab0a308065 ;;
+              *) echo "no known sha256 for LLVM $VERSION, add it here"; exit 1 ;;
+            esac
+            NAME="LLVM-$VERSION-Linux-X64"
+            LLVM_DIR="/opt/llvm-$VERSION"
+            # Download and check the hash.
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/$NAME.tar.zst" \
+              "https://github.com/llvm/llvm-project/releases/download/llvmorg-$VERSION/$NAME.tar.zst"
+            echo "$SHA256  $RUNNER_TEMP/$NAME.tar.zst" | sha256sum -c -
+            sudo mkdir -p "$LLVM_DIR"
+            # Manually invoke zstd to set options needed.
+            zstd -dc --long=31 "$RUNNER_TEMP/$NAME.tar.zst" | \
+              sudo tar -x -C "$LLVM_DIR" --strip-components=1 \
+                "$NAME/bin/clang-$MAJOR" "$NAME/bin/clang" "$NAME/bin/clang++" \
+                "$NAME/bin/clang-tidy" "$NAME/bin/clang-scan-deps" \
+                "$NAME/bin/lld" "$NAME/bin/ld.lld" \
+                "$NAME/lib/clang/$MAJOR/include"
+            rm "$RUNNER_TEMP/$NAME.tar.zst"
+            sudo ln -s "$LLVM_DIR/bin/clang" "/usr/local/bin/clang-$VERSION"
+            sudo ln -s "$LLVM_DIR/bin/clang++" "/usr/local/bin/clang++-$VERSION"
+            CLANG_TIDY="$LLVM_DIR/bin/clang-tidy"
+            COMPILER_PACKAGES=()
+          elif [[ "$COMPILER" =~ ^clang-([0-9]+)$ ]]; then
             wget https://apt.llvm.org/llvm.sh
             chmod +x llvm.sh
             sudo ./llvm.sh "${BASH_REMATCH[1]}"
-            CLANG_TIDY="clang-tidy-${BASH_REMATCH[1]}"
-          elif [[ "$COMPILER" == clang ]]; then
-            CLANG_TIDY=clang-tidy
           fi
 
           sudo apt-get update
-          sudo apt-get install "$COMPILER" iverilog libsystemc-dev ninja-build valgrind z3 lld
-          if [[ "${{ inputs.run_clang_tidy }}" == "true" ]]; then
-            if [[ -z "$CLANG_TIDY" ]]; then
-              echo "run_clang_tidy requires a clang cmake_c_compiler, got '$COMPILER'"
-              exit 1
-            fi
-            sudo apt-get install "$CLANG_TIDY"
+          sudo apt-get install "${COMPILER_PACKAGES[@]}" iverilog libsystemc-dev ninja-build valgrind z3 lld
+          if [[ "${{ inputs.run_clang_tidy }}" == "true" && -z "$CLANG_TIDY" ]]; then
+            echo "run_clang_tidy requires an exact-release cmake_c_compiler (clang-X.Y.Z), got '$COMPILER'"
+            exit 1
           fi
           echo clang_tidy="$CLANG_TIDY" >> "$GITHUB_OUTPUT"
           echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON -DLLVM_ENABLE_LLD=ON" >> "$GITHUB_OUTPUT"
