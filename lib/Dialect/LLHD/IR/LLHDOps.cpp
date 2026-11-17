@@ -517,16 +517,16 @@ static FailureOr<Type> inferStructFieldType(MLIRContext *context,
 
 LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::PropertyRef properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  typename SigStructExtractOp::Adaptor adaptor(operands, attrs, properties,
+    DictionaryAttr attributes, mlir::PropertyRef properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &inferredReturnTypes) {
+  typename SigStructExtractOp::Adaptor adaptor(operands, attributes, properties,
                                                regions);
   auto nestedType = cast<RefType>(adaptor.getInput().getType()).getNestedType();
   auto fieldType =
       inferStructFieldType(context, loc, nestedType, adaptor.getField());
   if (failed(fieldType))
     return failure();
-  results.push_back(RefType::get(*fieldType));
+  inferredReturnTypes.push_back(RefType::get(*fieldType));
   return success();
 }
 
@@ -1191,15 +1191,15 @@ LogicalResult llhd::NetArraySliceOp::canonicalize(llhd::NetArraySliceOp op,
 
 LogicalResult llhd::NetStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::PropertyRef properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  typename NetStructExtractOp::Adaptor adaptor(operands, attrs, properties,
+    DictionaryAttr attributes, mlir::PropertyRef properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &inferredReturnTypes) {
+  typename NetStructExtractOp::Adaptor adaptor(operands, attributes, properties,
                                                regions);
   auto nestedType = cast<NetType>(adaptor.getInput().getType()).getNestedType();
   auto fieldType =
       inferStructFieldType(context, loc, nestedType, adaptor.getField());
   if (failed(fieldType))
     return failure();
-  results.push_back(NetType::get(*fieldType));
+  inferredReturnTypes.push_back(NetType::get(*fieldType));
   return success();
 }
