@@ -30,7 +30,9 @@
 #include <initializer_list>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <new>
+#include <optional>
 #include <set>
 #include <string_view>
 #include <vector>
@@ -52,6 +54,13 @@ namespace {
 /// end are held by the server, and count as in flight. The limit is
 /// `ConnectOptions::bufferSize` (0 = unbounded) if specified, else
 /// `defaultMaxInFlight`.
+///
+/// Implements callback mode with the RpcClient's equivalent
+/// (`connectServerSender()`): the data fetch callback is called on the
+/// RpcClient's transport thread whenever the channel is below its in-flight
+/// limit (e.g. as the simulation consumes frames) and the application may have
+/// data, and each message it returns is sent immediately. So, unlike the
+/// default implementation, this needs no polling and never holds a message.
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
   WriteCosimChannelPort(
@@ -60,7 +69,61 @@ public:
       unsigned defaultMaxInFlight = RpcClient::DefaultToServerMaxInFlight)
       : WriteChannelPort(type), conn(conn), client(client), desc(desc),
         name(std::move(name)), defaultMaxInFlight(defaultMaxInFlight) {}
-  ~WriteCosimChannelPort() = default;
+  ~WriteCosimChannelPort() { disconnect(); }
+
+  using WriteChannelPort::connect;
+  void connect(DataFetchCallback fetch, WriteErrorCallback onError,
+               const ConnectOptions &options = {}) override {
+    if (!fetch)
+      throw std::invalid_argument(
+          "WriteChannelPort::connect: null data fetch callback");
+    if (!onError)
+      throw std::invalid_argument(
+          "WriteChannelPort::connect: null error callback");
+    connectCallbackMode(options);
+    // Held until `sender` is set, so a callback (which may run as soon as the
+    // sender is registered) can't see the port connected without it.
+    std::lock_guard<std::mutex> lock(callbackMutex);
+    try {
+      sender = client.connectServerSender(
+          name,
+          [this, fetch = std::move(
+                     fetch)]() -> std::optional<std::vector<MessageData>> {
+            std::unique_ptr<SegmentedMessageData> msg = fetch();
+            if (!msg)
+              return std::nullopt;
+            return toFrames(*msg);
+          },
+          std::move(onError));
+    } catch (...) {
+      WriteChannelPort::disconnect();
+      throw;
+    }
+    // Fetch the first message (if any) now.
+    sender->notify();
+  }
+
+  void notifyAsyncDataAvailable() override {
+    std::lock_guard<std::mutex> lock(callbackMutex);
+    if (!sender)
+      throw std::runtime_error(
+          "Cannot call `notifyAsyncDataAvailable()` on a write channel which "
+          "is not connected in callback mode.");
+    sender->notify();
+  }
+
+  void disconnect() override {
+    std::unique_ptr<RpcClient::WriteChannelConnection> oldSender;
+    {
+      std::lock_guard<std::mutex> lock(callbackMutex);
+      oldSender = std::move(sender);
+    }
+    // Waits for a callback in progress on the transport thread to return,
+    // unless it's calling this.
+    if (oldSender)
+      oldSender->disconnect();
+    WriteChannelPort::disconnect();
+  }
 
   void connectImpl(const ChannelPort::ConnectOptions &options) override {
     if (desc.dir != RpcClient::ChannelDirection::ToServer)
@@ -106,11 +169,42 @@ protected:
   }
 
 private:
+  /// Translate a message into the frames to send.
+  std::vector<MessageData> toFrames(const SegmentedMessageData &msg) {
+    MessageData scratch;
+    const MessageData &data = msg.asMessageData(scratch);
+    std::vector<MessageData> frames;
+    if (translateMessages) {
+      try {
+        translateOutgoing(data);
+      } catch (...) {
+        translationBuffer.clear();
+        throw;
+      }
+      std::vector<MessageData> translated;
+      translated.swap(translationBuffer);
+      for (const MessageData &frame : translated)
+        for (MessageData &wireFrame :
+             getMessageFrames(maybePadEmptyMessage(frame)))
+          frames.push_back(std::move(wireFrame));
+    } else {
+      frames = getMessageFrames(maybePadEmptyMessage(data));
+    }
+    for (size_t i = 0; i < frames.size(); ++i)
+      traceWrite(data);
+    return frames;
+  }
+
   AcceleratorConnection &conn;
   RpcClient &client;
   RpcClient::ChannelDesc desc;
   std::string name;
   unsigned defaultMaxInFlight;
+
+  /// Protects `sender`.
+  std::mutex callbackMutex;
+  /// The callback mode connection, if any.
+  std::unique_ptr<RpcClient::WriteChannelConnection> sender;
 };
 
 //===----------------------------------------------------------------------===//

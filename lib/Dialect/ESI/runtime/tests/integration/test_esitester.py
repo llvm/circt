@@ -99,6 +99,7 @@ class TestCosimEsitester:
         "[channel] loopback i=0",
         "[channel] loopback i=1",
         "[channel] loopback i=2",
+        "[channel] callback loopback passed (48 messages)",
         "Channel test passed",
     ])
 
@@ -308,6 +309,7 @@ class TestCosimEsitesterDma:
         "[channel] loopback i=0",
         "[channel] loopback i=1",
         "[channel] loopback i=2",
+        "[channel] callback loopback passed (48 messages)",
         "Channel test passed",
     ])
 
