@@ -871,6 +871,37 @@ LogicalResult CoroutineHaltOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// FixedPointOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult FixedPointOp::verifyRegions() {
+  if (getInitials().empty())
+    return emitOpError("requires at least one initial feedback value");
+  if (getInitials().size() > getNumResults())
+    return emitOpError("must return at least one value per initial value");
+
+  if (failed(verifyTypeListEquivalence(
+          *this, getInitials().getTypes(),
+          getResults().take_front(getInitials().size()).getTypes(),
+          "feedback")))
+    return failure();
+
+  SmallVector<Type> expectedArgumentTypes(getInitials().getTypes());
+  llvm::append_range(expectedArgumentTypes, getInputs().getTypes());
+  if (failed(verifyTypeListEquivalence(*this, expectedArgumentTypes,
+                                       getBody().getArgumentTypes(),
+                                       "body argument")))
+    return failure();
+
+  for (auto type : getInitials().getTypes())
+    if (!type.isSignlessInteger())
+      return emitOpError(
+          "currently supports only signless-integer feedback values");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ExecuteOp
 //===----------------------------------------------------------------------===//
 

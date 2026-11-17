@@ -723,6 +723,101 @@ arc.coroutine.define @Foo(%arg0: i42) {
 
 // -----
 
+func.func @FixedPointOutsideHWModule(%initial: i8) {
+  // expected-error @below {{'arc.fixed_point' op expects parent op 'hw.module'}}
+  %result = arc.fixed_point iter_args(%initial) : (i8) -> i8 {
+  ^bb0(%previous: i8):
+    arc.output %previous : i8
+  }
+  return
+}
+
+// -----
+
+hw.module @FixedPointWithoutFeedback() {
+  // expected-error @below {{requires at least one initial feedback value}}
+  arc.fixed_point iter_args() : () -> () {
+    arc.output
+  }
+  hw.output
+}
+
+// -----
+
+hw.module @FixedPointTooFewResults(in %first: i8, in %second: i8) {
+  // expected-error @below {{must return at least one value per initial value}}
+  %result = arc.fixed_point iter_args(%first, %second) : (i8, i8) -> i8 {
+  ^bb0(%previous_first: i8, %previous_second: i8):
+    arc.output %previous_first : i8
+  }
+  hw.output
+}
+
+// -----
+
+hw.module @FixedPointFeedbackTypeMismatch(in %initial: i8) {
+  // expected-error @+3 {{feedback type mismatch: feedback #0}}
+  // expected-note @+2 {{expected type: 'i8'}}
+  // expected-note @+1 {{actual type: 'i16'}}
+  %result = arc.fixed_point iter_args(%initial) : (i8) -> i16 {
+  ^bb0(%previous: i8):
+    %zero = hw.constant 0 : i16
+    arc.output %zero : i16
+  }
+  hw.output
+}
+
+// -----
+
+hw.module @FixedPointMissingInputArgument(in %initial: i8, in %input: i1) {
+  // expected-error @below {{incorrect number of body arguments: expected 2, but got 1}}
+  %result = arc.fixed_point iter_args(%initial) inputs(%input) : (i8, i1) -> i8 {
+  ^bb0(%previous: i8):
+    arc.output %previous : i8
+  }
+  hw.output
+}
+
+// -----
+
+hw.module @FixedPointFeedbackArgumentTypeMismatch(in %initial: i8) {
+  // expected-error @+3 {{body argument type mismatch: body argument #0}}
+  // expected-note @+2 {{expected type: 'i8'}}
+  // expected-note @+1 {{actual type: 'i16'}}
+  %result = arc.fixed_point iter_args(%initial) : (i8) -> i8 {
+  ^bb0(%previous: i16):
+    %zero = hw.constant 0 : i8
+    arc.output %zero : i8
+  }
+  hw.output
+}
+
+// -----
+
+hw.module @FixedPointInputArgumentTypeMismatch(in %initial: i8, in %input: i1) {
+  // expected-error @+3 {{body argument type mismatch: body argument #1}}
+  // expected-note @+2 {{expected type: 'i1'}}
+  // expected-note @+1 {{actual type: 'i16'}}
+  %result = arc.fixed_point iter_args(%initial) inputs(%input) : (i8, i1) -> i8 {
+  ^bb0(%previous: i8, %captured: i16):
+    arc.output %previous : i8
+  }
+  hw.output
+}
+
+// -----
+
+hw.module @FixedPointNonIntegerFeedback(in %clock: !seq.clock) {
+  // expected-error @below {{currently supports only signless-integer feedback values}}
+  %result = arc.fixed_point iter_args(%clock) : (!seq.clock) -> (!seq.clock) {
+  ^bb0(%previous: !seq.clock):
+    arc.output %previous : !seq.clock
+  }
+  hw.output
+}
+
+// -----
+
 arc.coroutine.define @Foo(%arg0: i42) {
   %c0_i42 = hw.constant 0 : i42
   // expected-error @below {{branch has 2 operands for successor #0, but target block has 1}}

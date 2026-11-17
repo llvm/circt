@@ -106,6 +106,10 @@ struct OpLowering {
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
   LogicalResult lower(llhd::CurrentTimeOp op);
+  LogicalResult lower(llhd::SignalOp op);
+  LogicalResult lower(llhd::ProbeOp op);
+  LogicalResult lower(llhd::DriveLikeOp op);
+  LogicalResult lower(FixedPointOp op);
   LogicalResult lower(sim::ClockedTerminateOp op);
 
   scf::IfOp createIfClockOp(Value clock);
@@ -121,10 +125,13 @@ struct OpLowering {
   Value lowerValue(sim::DPICallOp op, OpResult result, Phase phase);
   Value lowerValue(MemoryReadPortOp op, OpResult result, Phase phase);
   Value lowerValue(seq::InitialOp op, OpResult result, Phase phase);
+  Value lowerValue(llhd::ProbeOp op, OpResult result, Phase phase);
+  Value lowerValue(FixedPointOp op, OpResult result, Phase phase);
   Value lowerValue(seq::FromImmutableOp op, OpResult result, Phase phase);
 
   void addPending(Value value, Phase phase);
   void addPending(Operation *op, Phase phase);
+  SmallVector<Value> collectLoweredValues(ValueRange values, Phase valuePhase);
 };
 
 /// All state associated with lowering a single module.
@@ -148,10 +155,6 @@ struct ModuleLowering {
   /// coroutine callees without walking the entire IR.
   SymbolTable &symbolTable;
 
-  /// A worklist of pending op lowerings.
-  SmallVector<OpLowering> opsWorklist;
-  /// The set of ops currently in the worklist. Used to detect cycles.
-  SmallDenseSet<std::pair<Operation *, Phase>> opsSeen;
   /// The ops that have already been lowered.
   DenseSet<std::pair<Operation *, Phase>> loweredOps;
   /// The values that have already been lowered.
@@ -168,6 +171,8 @@ struct ModuleLowering {
   DenseMap<Value, Value> allocatedInitials;
   /// The allocated storage for taps.
   DenseMap<Operation *, Value> allocatedTaps;
+  /// Persistent storage allocated for local LLHD signals.
+  DenseMap<Operation *, Value> allocatedSignals;
 
   /// A mapping from unlowered clocks to a value indicating a posedge. This is
   /// used to not create an excessive number of posedge detectors.
@@ -186,9 +191,30 @@ struct ModuleLowering {
   LogicalResult run();
   LogicalResult lowerOp(Operation *op);
   Value getAllocatedState(OpResult result);
+  Value getAllocatedSignal(llhd::SignalOp op);
   Value detectPosedge(Value clock);
   OpBuilder &getBuilder(Phase phase);
   Value requireLoweredValue(Value value, Phase phase, Location useLoc);
+};
+
+/// Generate the runtime loop for a fixed-point operation.
+class FixedPointLowering {
+public:
+  explicit FixedPointLowering(FixedPointOp op) : op(op) {}
+  FailureOr<scf::WhileOp> run(ModuleLowering &module,
+                              ValueRange loweredInitials,
+                              ValueRange loweredInputs);
+
+private:
+  Block *createBeforeBlock(ModuleLowering &module, ValueRange loweredInitials,
+                           ValueRange loweredInputs);
+  void createAfterBlock(ModuleLowering &module);
+  FailureOr<SmallVector<Value>> lowerBody(ModuleLowering &module);
+  Value createFeedbackChanged(OpBuilder &builder, ValueRange previousFeedback,
+                              ValueRange nextFeedback);
+
+  FixedPointOp op;
+  scf::WhileOp whileOp;
 };
 } // namespace
 
@@ -272,10 +298,14 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
     phases = {Phase::Final};
   if (isa<StateOp>(op))
     phases = {Phase::Initial, Phase::New};
+  if (isa<llhd::SignalOp>(op))
+    phases = {Phase::Initial};
 
+  SmallVector<OpLowering> opsWorklist;
+  SmallDenseSet<std::pair<const Operation *, Phase>> opsSeen;
   for (auto phase : phases) {
     if (loweredOps.contains({op, phase}))
-      return success();
+      continue;
     opsWorklist.push_back(OpLowering(op, phase, *this));
     opsSeen.insert({op, phase});
   }
@@ -370,6 +400,19 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
   return alloc;
 }
 
+Value ModuleLowering::getAllocatedSignal(llhd::SignalOp op) {
+  if (auto alloc = allocatedSignals.lookup(op))
+    return alloc;
+
+  auto alloc =
+      AllocStateOp::create(allocBuilder, op.getLoc(),
+                           StateType::get(op.getInit().getType()), storageArg);
+  if (auto name = op.getNameAttr())
+    alloc->setAttr("name", name);
+  allocatedSignals.insert({op, alloc});
+  return alloc;
+}
+
 /// Allocate the necessary storage, reads, writes, and comparisons to detect a
 /// rising edge on a clock value.
 Value ModuleLowering::detectPosedge(Value clock) {
@@ -438,7 +481,8 @@ LogicalResult OpLowering::lower() {
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
             CoroutineInstanceOp, hw::TriggeredOp, hw::OutputOp, seq::InitialOp,
-            llhd::FinalOp, llhd::CurrentTimeOp, sim::ClockedTerminateOp>(
+            llhd::FinalOp, llhd::CurrentTimeOp, llhd::SignalOp, llhd::ProbeOp,
+            llhd::DriveLikeOp, FixedPointOp, sim::ClockedTerminateOp>(
           [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
@@ -530,6 +574,263 @@ LogicalResult OpLowering::lower(StateOp op) {
                                                inputs)
                              .getResults();
                        });
+}
+
+/// Lower an LLHD signal to persistent model state. The signal initializer runs
+/// in arc.initial, which is executed once when the model instance is created.
+LogicalResult OpLowering::lower(llhd::SignalOp op) {
+  if (phase != Phase::Initial)
+    return op.emitOpError("signals inside triggered regions are not supported");
+
+  auto initialValue = lowerValue(op.getInit(), Phase::Initial);
+  if (initial)
+    return success();
+  if (!initialValue)
+    return failure();
+
+  auto state = module.getAllocatedSignal(op);
+  StateWriteOp::create(module.initialBuilder, op.getLoc(), state, initialValue);
+  return success();
+}
+
+LogicalResult OpLowering::lower(llhd::ProbeOp op) {
+  auto value = lowerValue(op.getResult(), phase);
+  if (initial)
+    return success();
+
+  if (!value)
+    return failure();
+  module.loweredValues[{op.getResult(), phase}] = value;
+  return success();
+}
+
+LogicalResult OpLowering::lower(llhd::DriveLikeOp op) {
+  auto value = lowerValue(op.getValue(), phase);
+  Value enable;
+  if (op.getEnable())
+    enable = lowerValue(op.getEnable(), phase);
+  if (initial)
+    return success();
+  if (!value || (op.getEnable() && !enable))
+    return failure();
+
+  auto signal = op.getSignal().getDefiningOp<llhd::SignalOp>();
+  if (!signal)
+    return op.emitOpError(
+        "only drives of locally defined signals are supported");
+
+  if (auto time = op.getTime()) {
+    auto delay = time.getDefiningOp<llhd::ConstantTimeOp>();
+    if (!delay || delay.getValue().getTime() != 0 ||
+        delay.getValue().getDelta() != 0)
+      return op.emitOpError("only zero-time, zero-delta drives are supported");
+  }
+
+  auto state = module.getAllocatedSignal(signal);
+  OpBuilder &builder = module.getBuilder(phase);
+  for (auto *user : signal->getUsers()) {
+    auto probe = dyn_cast<llhd::ProbeOp>(user);
+    if (!probe)
+      continue;
+    auto loweredValueKey = std::pair{probe.getResult(), Phase::Old};
+    if (module.loweredValues.contains(loweredValueKey))
+      continue;
+    auto oldValue = StateReadOp::create(builder, probe.getLoc(), state);
+    module.loweredValues[loweredValueKey] = oldValue;
+  }
+  if (enable) {
+    OpBuilder::InsertionGuard guard(builder);
+    auto ifOp = createOrReuseIf(builder, enable, false);
+    builder.setInsertionPoint(ifOp.thenYield());
+    StateWriteOp::create(builder, op.getLoc(), state, value);
+    return success();
+  }
+  StateWriteOp::create(builder, op.getLoc(), state, value);
+  return success();
+}
+
+/// Lower one iteration at the current insertion point and collect its outputs.
+/// The body's block arguments must already have lowered-value mappings.
+FailureOr<SmallVector<Value>>
+FixedPointLowering::lowerBody(ModuleLowering &module) {
+  auto &body = op.getBody().front();
+  // Preserve effectful operations even when their results are unused. Pure
+  // dependencies are lowered on demand by these operations or the outputs.
+  for (auto &bodyOp : body.without_terminator()) {
+    if (mlir::isMemoryEffectFree(&bodyOp))
+      continue;
+    if (failed(module.lowerOp(&bodyOp)))
+      return failure();
+  }
+
+  // Ensure every yielded value is available, including results of pure
+  // operations not needed by the effectful operations above.
+  auto output = cast<arc::OutputOp>(body.getTerminator());
+  SmallVector<Value> yieldedValues;
+  for (auto value : output.getOutputs()) {
+    if (auto result = dyn_cast<OpResult>(value))
+      if (!module.loweredValues.contains({value, Phase::New}) &&
+          failed(module.lowerOp(result.getOwner())))
+        return failure();
+    auto lowered =
+        module.requireLoweredValue(value, Phase::New, output.getLoc());
+    if (!lowered)
+      return failure();
+    yieldedValues.push_back(lowered);
+  }
+  return yieldedValues;
+}
+
+/// Generate a condition that is true if any feedback value changed.
+Value FixedPointLowering::createFeedbackChanged(OpBuilder &builder,
+                                                ValueRange previousFeedback,
+                                                ValueRange nextFeedback) {
+  auto loc = op.getLoc();
+  assert(previousFeedback.size() == nextFeedback.size());
+  Value changed = hw::ConstantOp::create(builder, loc, builder.getI1Type(), 0);
+  for (auto [previous, next] : llvm::zip(previousFeedback, nextFeedback)) {
+    auto valueChanged = comb::ICmpOp::create(
+        builder, loc, comb::ICmpPredicate::ne, previous, next);
+    changed = comb::OrOp::create(builder, loc, changed, valueChanged);
+  }
+  return changed;
+}
+
+/// Create the "before" block and connect the original body's arguments to
+/// feedback arguments or invariant inputs. Leave the insertion point in it.
+Block *FixedPointLowering::createBeforeBlock(ModuleLowering &module,
+                                             ValueRange loweredInitials,
+                                             ValueRange loweredInputs) {
+  auto *beforeBlock = module.builder.createBlock(&whileOp.getBefore());
+  for (auto [initial, loweredInitial] :
+       llvm::zip(op.getInitials(), loweredInitials))
+    beforeBlock->addArgument(loweredInitial.getType(), initial.getLoc());
+
+  // Either phase sees the same block-argument value in an iteration.
+  auto numFeedbacks = op.getInitials().size();
+  for (auto [index, argument] :
+       llvm::enumerate(op.getBody().front().getArguments())) {
+    Value lowered;
+    if (index < numFeedbacks)
+      lowered = beforeBlock->getArgument(index);
+    else
+      lowered = loweredInputs[index - numFeedbacks];
+    module.loweredValues[{argument, Phase::Old}] = lowered;
+    module.loweredValues[{argument, Phase::New}] = lowered;
+  }
+  return beforeBlock;
+}
+
+/// Create the "after" block to forward only feedback to the next iteration.
+/// Leave the insertion point at the end of the block.
+void FixedPointLowering::createAfterBlock(ModuleLowering &module) {
+  auto *afterBlock = module.builder.createBlock(&whileOp.getAfter());
+  for (auto result : op.getResults())
+    afterBlock->addArgument(result.getType(), result.getLoc());
+  scf::YieldOp::create(
+      module.builder, op.getLoc(),
+      afterBlock->getArguments().take_front(op.getInitials().size()));
+}
+
+/// Generate the complete runtime loop and restore the outer insertion point.
+FailureOr<scf::WhileOp> FixedPointLowering::run(ModuleLowering &module,
+                                                ValueRange loweredInitials,
+                                                ValueRange loweredInputs) {
+  auto loc = op.getLoc();
+  auto &builder = module.builder;
+  auto numFeedbacks = op.getInitials().size();
+  // Only feedback values are loop-carried, but the loop also returns any extra
+  // outputs from the final iteration.
+  whileOp =
+      scf::WhileOp::create(builder, loc, op.getResultTypes(), loweredInitials);
+
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    // Put the computation in the "before" region so it runs at least once,
+    // before testing whether the feedback has stabilized.
+    auto *beforeBlock =
+        createBeforeBlock(module, loweredInitials, loweredInputs);
+
+    // Do not reuse cached enable/reset lowerings across the loop boundary.
+    module.prevEnable = {};
+    module.prevReset = {};
+    auto yieldedValues = lowerBody(module);
+    if (failed(yieldedValues))
+      return failure();
+
+    // Continue if any feedback value changed.
+    auto changed = createFeedbackChanged(
+        builder, beforeBlock->getArguments(),
+        ArrayRef(*yieldedValues).take_front(numFeedbacks));
+    // Forward all outputs to "after" when continuing, or return them as the
+    // loop results when the feedback is stable.
+    scf::ConditionOp::create(builder, loc, changed, *yieldedValues);
+
+    createAfterBlock(module);
+  }
+
+  // Discard cached enable/reset values from inside the loop.
+  module.prevEnable = {};
+  module.prevReset = {};
+  return whileOp;
+}
+
+/// Collect lowered values after dependency discovery; callers check
+/// availability.
+SmallVector<Value> OpLowering::collectLoweredValues(ValueRange values,
+                                                    Phase valuePhase) {
+  SmallVector<Value> loweredValues;
+  loweredValues.reserve(values.size());
+  for (Value value : values) {
+    loweredValues.push_back(lowerValue(value, valuePhase));
+  }
+  return loweredValues;
+}
+
+/// Lower an explicit fixed-point region to a runtime loop. The body describes
+/// one acyclic iteration. Its leading outputs are fed back as the leading block
+/// arguments until none of them change.
+LogicalResult OpLowering::lower(FixedPointOp op) {
+  assert(phase == Phase::Old || phase == Phase::New);
+
+  if (initial) {
+    for (Value value : op.getInitials())
+      lowerValue(value, Phase::Old);
+    if (phase == Phase::New)
+      for (Value value : op.getInputs())
+        lowerValue(value, Phase::New);
+
+    return success();
+  }
+
+  // Seed feedback from old values. Invariant inputs use their new-phase values
+  // and remain outside the generated loop.
+  auto loweredInitials = collectLoweredValues(op.getInitials(), Phase::Old);
+  if (llvm::is_contained(loweredInitials, Value{}))
+    return failure();
+
+  // Preserve the pre-update feedback for register inputs, including reads
+  // requested after the new fixed-point result has been computed.
+  for (auto [result, value] : llvm::zip(
+           op.getResults().take_front(loweredInitials.size()), loweredInitials))
+    module.loweredValues.try_emplace({result, Phase::Old}, value);
+  if (phase == Phase::Old)
+    return success();
+
+  auto loweredInputs = collectLoweredValues(op.getInputs(), Phase::New);
+  if (llvm::is_contained(loweredInputs, Value{}))
+    return failure();
+
+  auto whileOp =
+      FixedPointLowering(op).run(module, loweredInitials, loweredInputs);
+  if (failed(whileOp))
+    return failure();
+
+  // Expose the final loop results to later consumers.
+  for (auto [result, lowered] :
+       llvm::zip(op.getResults(), whileOp->getResults()))
+    module.loweredValues[{result, Phase::New}] = lowered;
+  return success();
 }
 
 /// Lower a DPI call to a corresponding storage allocation and write of the
@@ -1343,6 +1644,10 @@ Value OpLowering::lowerValue(Value value, Phase phase) {
     return lowerValue(dpiOp, result, phase);
   if (auto readOp = dyn_cast<MemoryReadPortOp>(op))
     return lowerValue(readOp, result, phase);
+  if (auto probeOp = dyn_cast<llhd::ProbeOp>(op))
+    return lowerValue(probeOp, result, phase);
+  if (auto fixedPointOp = dyn_cast<FixedPointOp>(op))
+    return lowerValue(fixedPointOp, result, phase);
   if (auto initialOp = dyn_cast<seq::InitialOp>(op))
     return lowerValue(initialOp, result, phase);
   if (auto castOp = dyn_cast<seq::FromImmutableOp>(op))
@@ -1468,6 +1773,65 @@ Value OpLowering::lowerValue(MemoryReadPortOp op, OpResult result,
   auto state = module.getAllocatedState(memOp->getResult(0));
   return MemoryReadOp::create(module.getBuilder(phase), result.getLoc(), state,
                               address);
+}
+
+/// Handle uses of an LLHD signal probe. This creates an `arc.state_read` from
+/// the signal's storage. Reading the new value requires all drives to the
+/// signal to be lowered first, including the coroutines producing their values.
+/// This schedules chains of blocking assignments independently of source order.
+/// Cycles through signal assignments are rejected by the lowering worklist,
+/// since evaluating these would require iteration to a fixed point. Reading the
+/// old value requires that no drives have been lowered in the new phase yet.
+Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
+  auto signal = op.getSignal().getDefiningOp<llhd::SignalOp>();
+  if (!signal) {
+    if (!initial)
+      op.emitOpError("only probes of locally defined signals are supported");
+    return {};
+  }
+
+  if (initial) {
+    addPending(signal.getResult(), Phase::Initial);
+    if (phase == Phase::New)
+      for (auto *user : signal->getUsers()) {
+        auto drive = dyn_cast<llhd::DriveLikeOp>(user);
+        if (drive && drive.getSignal() == op.getSignal())
+          addPending(drive, Phase::New);
+      }
+    return {};
+  }
+
+  if (phase == Phase::Old) {
+    for (auto *user : signal->getUsers()) {
+      auto drive = dyn_cast<llhd::DriveLikeOp>(user);
+      if (!drive || drive.getSignal() != op.getSignal())
+        continue;
+      assert(!module.loweredOps.contains({drive, Phase::New}) &&
+             "need old signal value but new value already written");
+    }
+  }
+
+  auto state = module.getAllocatedSignal(signal);
+  return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
+}
+
+/// Old-phase reads of feedback results use the corresponding initial values,
+/// without depending on the new computation or its invariant inputs. New-phase
+/// reads require the stabilized loop results.
+Value OpLowering::lowerValue(FixedPointOp op, OpResult result, Phase phase) {
+  if (phase == Phase::Old &&
+      result.getResultNumber() >= op.getInitials().size()) {
+    if (!initial)
+      op.emitOpError(
+          "old-phase reads of non-feedback results are not supported");
+    return {};
+  }
+  auto valuePhase = phase == Phase::Old ? Phase::Old : Phase::New;
+  if (initial) {
+    addPending(op, valuePhase);
+    return {};
+  }
+  return module.requireLoweredValue(result, valuePhase, result.getLoc());
 }
 
 /// Handle uses of `seq.initial` values computed during the initial phase. This
