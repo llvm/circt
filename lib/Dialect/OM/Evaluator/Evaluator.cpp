@@ -29,17 +29,16 @@
 using namespace mlir;
 using namespace circt::om;
 
-namespace {
-
 /// The evaluator represents registry values as lists.
-Type getRuntimeType(Type type) {
+static Type getRuntimeType(Type type) {
   if (auto registry = dyn_cast<RegistryType>(type))
     return ListType::get(registry.getElementType());
   return type;
 }
 
-LogicalResult verifyActualParameters(ClassLike classLike,
-                                     ArrayRef<EvaluatorValuePtr> actualParams) {
+static LogicalResult
+verifyActualParameters(ClassLike classLike,
+                       ArrayRef<EvaluatorValuePtr> actualParams) {
   auto formalParamNames =
       classLike.getFormalParamNames().getAsRange<StringAttr>();
   auto formalParamTypes = classLike.getBodyBlock()->getArgumentTypes();
@@ -86,6 +85,8 @@ LogicalResult verifyActualParameters(ClassLike classLike,
   }
   return success();
 }
+
+namespace circt::om::evaluator_detail {
 
 /// A helper class that builds the scratch IR for evaluating an object. This is
 /// used to convert from the evaluator's API (which uses opaque pointers to
@@ -212,6 +213,8 @@ ClassOp ScratchIRBuilder::createWrapperClass(ClassLike rootClass) {
 }
 
 FailureOr<Value>
+// Materializing nested lists and objects requires recursion.
+// NOLINTNEXTLINE(misc-no-recursion)
 ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
                                    Type expectedType) {
   if (!value)
@@ -237,36 +240,30 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
     return result.getResult();
   }
 
-  auto result =
-      llvm::TypeSwitch<evaluator::EvaluatorValue *, FailureOr<Value>>(
-          value.get())
-          .Case([&](evaluator::AttributeValue *attrValue) -> FailureOr<Value> {
-            auto attr = attrValue->getAttr();
-            if (!attr)
-              return emitError(loc,
-                               "cannot import OM attribute value without an "
-                               "attribute");
-
-            OpBuilder builder(wrapperClass.getFieldsOp());
-            auto result =
-                ConstantOp::create(builder, loc, cast<TypedAttr>(attr));
-            return result.getResult();
-          })
-          .Case([&](evaluator::ListValue *listValue) {
-            return materializeContainerInput(listValue, loc, expectedType);
-          })
-          .Case([&](evaluator::ObjectValue *objectValue) {
-            return materializeObjectInput(objectValue, loc);
-          })
-          .Default([&](evaluator::EvaluatorValue *) -> FailureOr<Value> {
-            return createWrapperArgument(value, loc, expectedType);
-          });
+  FailureOr<Value> result = failure();
+  if (auto *attrValue = dyn_cast<evaluator::AttributeValue>(value.get())) {
+    auto attr = attrValue->getAttr();
+    if (!attr)
+      return emitError(loc, "cannot import OM attribute value without an "
+                            "attribute");
+    OpBuilder builder(wrapperClass.getFieldsOp());
+    result =
+        ConstantOp::create(builder, loc, cast<TypedAttr>(attr)).getResult();
+  } else if (auto *listValue = dyn_cast<evaluator::ListValue>(value.get())) {
+    result = materializeContainerInput(listValue, loc, expectedType);
+  } else if (auto *objectValue =
+                 dyn_cast<evaluator::ObjectValue>(value.get())) {
+    result = materializeObjectInput(objectValue, loc);
+  } else {
+    result = createWrapperArgument(value, loc, expectedType);
+  }
   if (succeeded(result))
     importedValues[key] = *result;
   return result;
 }
 
 FailureOr<Value>
+// NOLINTNEXTLINE(misc-no-recursion)
 ScratchIRBuilder::materializeContainerInput(evaluator::ListValue *listValue,
                                             Location loc, Type type) {
   if (!listValue->isFullyEvaluated())
@@ -293,6 +290,7 @@ ScratchIRBuilder::materializeContainerInput(evaluator::ListValue *listValue,
 }
 
 FailureOr<Value>
+// NOLINTNEXTLINE(misc-no-recursion)
 ScratchIRBuilder::materializeObjectInput(evaluator::ObjectValue *objectValue,
                                          Location loc) {
   // TODO: Currently we only support importing object values that don't have
@@ -337,7 +335,9 @@ ScratchIRBuilder::createWrapperArgument(EvaluatorValuePtr value, Location loc,
   return wrapperClass.getBodyBlock()->addArgument(argType, loc);
 }
 
-} // namespace
+} // namespace circt::om::evaluator_detail
+
+using evaluator_detail::ScratchIRBuilder;
 
 /// Construct an Evaluator with an IR module.
 circt::om::Evaluator::Evaluator(ModuleOp mod) : symbolTable(mod) {}
@@ -827,8 +827,6 @@ circt::om::Evaluator::evaluateRegistryCreate(RegistryCreateOp op,
   auto registry = getOrCreateValue(op, actualParams, loc);
   if (failed(registry))
     return failure();
-  if (registry.value()->isFullyEvaluated())
-    return registry;
 
   // Do not evaluate elements yet; they may refer back to this registry.
   SmallVector<evaluator::EvaluatorValuePtr> elements;
