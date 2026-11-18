@@ -1301,6 +1301,96 @@ OpFoldResult ListContainsOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ListIntersectOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ListIntersectOp::fold(FoldAdaptor adaptor) {
+  auto lhs = dyn_cast_or_null<ListAttr>(adaptor.getLhs());
+  auto rhs = dyn_cast_or_null<ListAttr>(adaptor.getRhs());
+  if (!lhs || !rhs)
+    return {};
+
+  // TODO: If O(n*m) becomes a bottleneck, consider a frequency map keyed by
+  // property equality.
+  SmallVector<Attribute> remaining;
+  llvm::append_range(remaining, rhs.getElements());
+  SmallVector<Attribute> result;
+  for (Attribute candidate : lhs.getElements()) {
+    auto match = remaining.end();
+    for (auto it = remaining.begin(), e = remaining.end(); it != e; ++it) {
+      auto equal = evaluateBinaryEquality(candidate, *it);
+      if (failed(equal))
+        return {};
+      if (!cast<mlir::IntegerAttr>(*equal).getValue().isZero()) {
+        match = it;
+        break;
+      }
+    }
+    if (match == remaining.end())
+      continue;
+    result.push_back(candidate);
+    remaining.erase(match);
+  }
+
+  return ListAttr::get(getContext(), getType().getElementType(),
+                       ArrayAttr::get(getContext(), result));
+}
+
+LogicalResult ListIntersectOp::canonicalize(ListIntersectOp op,
+                                            PatternRewriter &rewriter) {
+  auto elementType = cast<ListType>(op.getLhs().getType()).getElementType();
+  if (!isa<ClassType, AnyType>(elementType))
+    return failure();
+
+  auto getElements = [](Value list,
+                        SmallVectorImpl<Value> &elements) -> LogicalResult {
+    if (auto create = list.getDefiningOp<ListCreateOp>()) {
+      llvm::append_range(elements, create.getInputs());
+      return success();
+    }
+    if (auto constant = list.getDefiningOp<ConstantOp>())
+      if (auto attr = dyn_cast<ListAttr>(constant.getValue());
+          attr && attr.getElements().empty())
+        return success();
+    return failure();
+  };
+
+  SmallVector<Value> lhsElements, remaining;
+  if (failed(getElements(op.getLhs(), lhsElements)) ||
+      failed(getElements(op.getRhs(), remaining)))
+    return failure();
+
+  // TODO: If O(n*m) becomes a bottleneck, consider a frequency map keyed by
+  // object identity, preserving unknown comparisons.
+  SmallVector<Value> result;
+  for (Value candidate : lhsElements) {
+    auto match = remaining.end();
+    bool hasUnknownComparison = false;
+    for (auto it = remaining.begin(), e = remaining.end(); it != e; ++it) {
+      auto equal = evaluateIdentityEquality(candidate, *it);
+      if (!equal) {
+        hasUnknownComparison = true;
+        continue;
+      }
+      if (*equal) {
+        match = it;
+        break;
+      }
+    }
+    if (match == remaining.end()) {
+      if (hasUnknownComparison)
+        return failure();
+      continue;
+    }
+    result.push_back(candidate);
+    remaining.erase(match);
+  }
+
+  rewriter.replaceOpWithNewOp<ListCreateOp>(op, op.getType(), result);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // IntegerAndOp / IntegerOrOp / IntegerXorOp
 //===----------------------------------------------------------------------===//
 

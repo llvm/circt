@@ -1,5 +1,6 @@
 // RUN: circt-opt -om-elaborate-object='target-class=Top' %s | FileCheck %s --check-prefix=TOP
 // RUN: circt-opt -om-elaborate-object='target-class=UseExtern' %s | FileCheck %s --check-prefix=STRICT-EXTERN
+// RUN: circt-opt -om-elaborate-object='target-class=ListIntersectTop' %s | FileCheck %s --check-prefix=INTERSECT
 // RUN: circt-opt -om-elaborate-object='all-public-classes=true allow-unevaluated=true' %s | FileCheck %s --check-prefixes=CHECK,PUBLIC
 
 // CHECK-LABEL: om.class @StringOps() -> (str: !om.string, concat: !om.string) {
@@ -481,4 +482,24 @@ om.class @InsertIntoUnknown() -> (items: !items) {
 om.class @RegistryParameter(%items: !items, %value: !om.integer) {
   om.registry_insert %items, %value : !items
   om.class.fields
+}
+
+om.class private @ListIntersectChild(
+    %lhs: !om.list<!om.string>, %rhs: !om.list<!om.string>) ->
+    (result: !om.list<!om.string>) {
+  %result = om.list_intersect %lhs, %rhs : !om.list<!om.string>, !om.list<!om.string>
+  om.class.fields %result : !om.list<!om.string>
+}
+
+// Strict elaboration resolves intersections after class parameters are inlined.
+// INTERSECT-LABEL: om.class @ListIntersectTop
+// INTERSECT: %[[RESULT:.+]] = om.constant #om.list<!om.string, ["a" : !om.string]>
+// INTERSECT-NOT: om.list_intersect
+// INTERSECT: om.class.fields %[[RESULT]] : !om.list<!om.string>
+om.class @ListIntersectTop() -> (result: !om.list<!om.string>) {
+  %lhs = om.constant #om.list<!om.string, ["a" : !om.string]> : !om.list<!om.string>
+  %rhs = om.constant #om.list<!om.string, ["a" : !om.string]> : !om.list<!om.string>
+  %child = om.object @ListIntersectChild(%lhs, %rhs) : (!om.list<!om.string>, !om.list<!om.string>) -> !om.class.type<@ListIntersectChild>
+  %result = om.object.field %child["result"] : (!om.class.type<@ListIntersectChild>) -> !om.list<!om.string>
+  om.class.fields %result : !om.list<!om.string>
 }

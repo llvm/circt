@@ -576,3 +576,43 @@ om.class @RegistryMultipleUses(%a: !om.integer, %b: !om.integer, %c: !om.integer
   om.registry_insert %items, %c : !om.registry<!om.integer>
   om.class.fields %items, %items : !om.registry<!om.integer>, !om.registry<!om.integer>
 }
+
+// Multiset intersection consumes matching RHS occurrences while preserving the
+// order and attributes of the LHS.
+// CHECK-LABEL: om.class @ListIntersectPrimitiveFold
+// CHECK:         %[[RESULT:.+]] = om.constant #om.list<!om.integer, [#om.integer<2 : si3> : !om.integer, #om.integer<1 : si2> : !om.integer, #om.integer<2 : si8> : !om.integer]>
+// CHECK-NOT:     om.list_intersect
+// CHECK:         om.class.fields %[[RESULT]] : !om.list<!om.integer>
+om.class @ListIntersectPrimitiveFold() -> (result: !om.list<!om.integer>) {
+  %lhs = om.constant #om.list<!om.integer, [#om.integer<2 : si3>, #om.integer<1 : si2>, #om.integer<2 : si8>, #om.integer<2 : si16>, #om.integer<3 : si3>]> : !om.list<!om.integer>
+  %rhs = om.constant #om.list<!om.integer, [#om.integer<2 : si128>, #om.integer<2 : si4>, #om.integer<1 : si8>]> : !om.list<!om.integer>
+  %result = om.list_intersect %lhs, %rhs : !om.list<!om.integer>, !om.list<!om.integer>
+  om.class.fields %result : !om.list<!om.integer>
+}
+
+om.class private @ListIntersectValue() {
+  om.class.fields
+}
+
+// Reference intersection compares object identity, consumes duplicates, and
+// selects values from the LHS even when the RHS element type differs.
+// CHECK-LABEL: om.class @ListIntersectReferenceFold
+// CHECK:         %[[A:.+]] = om.elaborated_object @ListIntersectValue
+// CHECK:         %[[A_REF:.+]] = om.any_cast %[[A]]
+// CHECK:         %[[CLASS_RESULT:.+]] = om.list_create %[[A]], %[[A]] : !om.class.type<@ListIntersectValue>
+// CHECK:         %[[ANY_RESULT:.+]] = om.list_create %[[A_REF]], %[[A_REF]] : !om.any
+// CHECK-NOT:     om.list_intersect
+// CHECK:         om.class.fields %[[CLASS_RESULT]], %[[ANY_RESULT]]
+om.class @ListIntersectReferenceFold() -> (
+    classes: !om.list<!om.class.type<@ListIntersectValue>>,
+    anys: !om.list<!om.any>
+  ) {
+  %a = om.elaborated_object @ListIntersectValue() : () -> !om.class.type<@ListIntersectValue>
+  %b = om.elaborated_object @ListIntersectValue() : () -> !om.class.type<@ListIntersectValue>
+  %aRef = om.any_cast %a : (!om.class.type<@ListIntersectValue>) -> !om.any
+  %lhs = om.list_create %a, %b, %a, %a : !om.class.type<@ListIntersectValue>
+  %rhs = om.list_create %aRef, %aRef : !om.any
+  %classes = om.list_intersect %lhs, %rhs : !om.list<!om.class.type<@ListIntersectValue>>, !om.list<!om.any>
+  %anys = om.list_intersect %rhs, %lhs : !om.list<!om.any>, !om.list<!om.class.type<@ListIntersectValue>>
+  om.class.fields %classes, %anys : !om.list<!om.class.type<@ListIntersectValue>>, !om.list<!om.any>
+}

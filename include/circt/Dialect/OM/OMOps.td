@@ -461,6 +461,8 @@ def ListIntersectOp : OMOp<"list_intersect", [Pure,
   let arguments = (ins OM_EqualityListType:$lhs, OM_EqualityListType:$rhs);
   let results = (outs ListType:$result);
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+  let hasCanonicalizeMethod = 1;
+  let hasFolder = 1;
 }
 
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,
