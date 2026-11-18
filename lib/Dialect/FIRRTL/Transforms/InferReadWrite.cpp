@@ -511,10 +511,12 @@ private:
   }
 
   void inferUnmasked(MemOp &memOp, SmallVector<Operation *> &opsToErase) {
-    bool isMasked = true;
+    // The memory is unmasked only if the mask of every write port is driven
+    // uniformly; one port with a per-lane mask keeps the mask for all ports.
+    bool hasMultiBitMask = false;
 
-    // Iterate over all results, and check if the mask field of the result is
-    // connected to a multi-bit constant 1.
+    // Iterate over all results, and check if every bit of each mask field is
+    // driven by the same source.
     for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
       // Read ports donot have the mask field.
       if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Read ||
@@ -532,17 +534,17 @@ private:
             // Already 1 bit, nothing to do.
             if (sf.getResult().getType().getBitWidthOrSentinel() == 1)
               continue;
-            // Check what is the mask field directly connected to.
-            // If we can infer that all the bits of the mask are always assigned
-            // the same value, then the memory is unmasked.
-            if (auto maskVal = getConnectSrc(sf))
-              if (areBitsDrivenBySameSource(maskVal))
-                isMasked = false;
+            // Check what is the mask field directly connected to. If any bit
+            // of the mask may differ from the others, the memory stays masked.
+            hasMultiBitMask = true;
+            auto maskVal = getConnectSrc(sf);
+            if (!maskVal || !areBitsDrivenBySameSource(maskVal))
+              return;
           }
         }
     }
 
-    if (!isMasked) {
+    if (hasMultiBitMask) {
       // Replace with a new memory of 1 bit mask.
       ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
       // Copy the result type, except the mask bits.
@@ -579,16 +581,33 @@ private:
               SubfieldOp::create(builder, newPortVal, oldRes.getFieldIndex());
           auto fName =
               sf.getInput().getType().base().getElementName(sf.getFieldIndex());
-          // Replace all mask fields with a one bit constant 1.
-          // Replace all other fields with the new port.
+          // Drive each one bit mask field with bit 0 of the old mask, which
+          // every bit of the old mask equals. Replace all other fields with
+          // the new port.
           if (fName.contains("mask")) {
             WireOp dummy = WireOp::create(builder, oldRes.getType());
+            FConnectLike maskConnect;
+            for (auto *c : oldRes->getUsers())
+              if (auto connect = dyn_cast<FConnectLike>(c))
+                if (connect.getDest() == oldRes.getResult())
+                  maskConnect = connect;
             oldRes->replaceAllUsesWith(dummy);
-            MatchingConnectOp::create(
-                builder, sf,
-                ConstantOp::create(builder,
-                                   UIntType::get(builder.getContext(), 1),
-                                   APInt(1, 1)));
+            Value maskSrc = maskConnect ? maskConnect.getSrc() : Value();
+            auto maskConst =
+                maskSrc ? maskSrc.getDefiningOp<ConstantOp>() : ConstantOp();
+            if (!maskSrc || maskConst) {
+              APInt bit0 =
+                  maskConst ? maskConst.getValue().trunc(1) : APInt(1, 1);
+              MatchingConnectOp::create(
+                  builder, sf,
+                  ConstantOp::create(
+                      builder, UIntType::get(builder.getContext(), 1), bit0));
+            } else {
+              ImplicitLocOpBuilder maskBuilder(maskConnect.getLoc(),
+                                               maskConnect);
+              auto bit0 = BitsPrimOp::create(maskBuilder, maskSrc, 0, 0);
+              MatchingConnectOp::create(maskBuilder, sf, bit0);
+            }
           } else
             oldRes->replaceAllUsesWith(sf);
 
