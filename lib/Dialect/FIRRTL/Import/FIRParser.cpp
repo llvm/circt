@@ -6126,7 +6126,8 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   return skipToModuleEnd(indent);
 }
 
-/// domain ::= 'domain' id ':' info?
+/// domain ::= 'domain' id ':' info? (INDENT domain-field+ DEDENT)?
+/// domain-field ::= id ':' property-type info? NEWLINE
 ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_domain);
