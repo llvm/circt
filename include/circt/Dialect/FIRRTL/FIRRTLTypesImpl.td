@@ -588,13 +588,12 @@ def ListImpl : PropImplType<"List"> {
 }
 
 def RegistryImpl : PropImplType<"Registry"> {
-  let summary = [{
-    An unordered mutable collection of property values for domain asset tracking.
-
-    Registry types may only appear as fields of domain definitions. Values are
-    accumulated with `firrtl.domain.insert` rather than normal property
-    assignment. Downstream consumers must treat registry contents as
-    order-independent.
+  let summary = "An unordered, append-only registry of property values.";
+  let description = [{
+    Registry values are shared handles. `firrtl.prop.registry` creates an empty
+    registry, and `firrtl.prop.insert` adds an element. Property programs can
+    pass handles but cannot read their contents. Duplicates are kept, and the
+    order is unspecified.
   }];
   let parameters = (ins TypeParameter<"circt::firrtl::PropertyType",
                                       "element type">:$elementType);
