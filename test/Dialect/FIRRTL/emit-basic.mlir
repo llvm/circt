@@ -1262,4 +1262,22 @@ firrtl.circuit "Foo" {
     %w = firrtl.wire interesting_name : !firrtl.string
     firrtl.propassign %w, %str : !firrtl.string
   }
+
+  // Shared allocation identity requires a binding instead of literal duplication.
+  // CHECK-LABEL: module Registries :
+  // CHECK-NEXT:    input items : Registry<Integer>
+  // CHECK-NEXT:    output result : Registry<Integer>
+  firrtl.module @Registries(in %items: !firrtl.registry<integer>, out %result: !firrtl.registry<integer>) {
+    // CHECK: wire [[LOCAL:_registry[0-9_]*]] : Registry<Integer>
+    // CHECK-NEXT: propassign [[LOCAL]], Registry<Integer>()
+    %local = firrtl.prop.registry : !firrtl.registry<integer>
+    %one = firrtl.integer 1
+    // CHECK: registry_insert items, Integer(1)
+    firrtl.prop.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
+    // CHECK: registry_insert [[LOCAL]], Integer(1)
+    firrtl.prop.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
+    // CHECK: propassign result, [[LOCAL]]
+    firrtl.propassign %result, %local : !firrtl.registry<integer>
+  }
+
 }

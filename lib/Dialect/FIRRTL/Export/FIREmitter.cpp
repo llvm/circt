@@ -97,6 +97,8 @@ struct Emitter {
   void emitStatement(MatchingConnectOp op);
   void emitStatement(PropertyAssertOp op);
   void emitStatement(PropAssignOp op);
+  void emitStatement(RegistryInsertOp op);
+  void emitStatement(RegistryCreateOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(InstanceChoiceOp op);
   void emitStatement(AttachOp op);
@@ -148,6 +150,7 @@ struct Emitter {
   void emitExpression(BoolConstantOp op);
   void emitExpression(DoubleConstantOp op);
   void emitExpression(ListCreateOp op);
+  void emitExpression(RegistryCreateOp op);
   void emitExpression(UnresolvedPathOp op);
   void emitExpression(GenericIntrinsicOp op);
   void emitExpression(CatPrimOp op);
@@ -874,13 +877,10 @@ void Emitter::emitFormalLike(Operation *op, StringRef keyword,
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
 static bool isEmittedInline(Operation *op) {
-  // FIRRTL expressions are statically classified as always inlineable.
-  // InvalidValueOp never is inlined, and is handled specially.
-  // GenericIntrinsicOp is inlined if has exactly one use (only emit once)
-  // that is not emitted inline.  This is to ensure it is emitted inline
-  // in common cases, but only inspect one level deep.
-  return (isExpression(op) && !isa<InvalidValueOp>(op)) ||
-         (isa<GenericIntrinsicOp>(op) && op->hasOneUse() &&
+  // Most expressions are always inlined. Handle InvalidValueOp separately.
+  // Inline allocations and intrinsics only if they have one non-inline user.
+  return (isExpression(op) && !isa<InvalidValueOp, RegistryCreateOp>(op)) ||
+         (isa<GenericIntrinsicOp, RegistryCreateOp>(op) && op->hasOneUse() &&
           !isEmittedInline(*op->getUsers().begin()));
 }
 
@@ -894,12 +894,13 @@ void Emitter::emitStatementsInBlock(Block &block) {
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, FPrintFOp, FFlushOp, AssertOp, AssumeOp, CoverOp,
               ConnectOp, MatchingConnectOp, PropertyAssertOp, PropAssignOp,
-              InstanceOp, InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp,
-              SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
-              MemoryPortAccessOp, DomainDefineOp, RefDefineOp, RefForceOp,
-              RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-              LayerBlockOp, GenericIntrinsicOp, DomainCreateAnonOp,
-              DomainCreateOp>([&](auto op) { emitStatement(op); })
+              RegistryInsertOp, RegistryCreateOp, InstanceOp, InstanceChoiceOp,
+              AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
+              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
+              DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
+              RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
+              GenericIntrinsicOp, DomainCreateAnonOp, DomainCreateOp>(
+            [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -1292,6 +1293,35 @@ void Emitter::emitStatement(PropertyAssertOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitStatement(RegistryCreateOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Registries")))
+    return;
+  // Bind the allocation so multiple uses refer to the same registry.
+  auto name = circuitNamespace.newName("_registry");
+  addValueName(op.getResult(), name);
+  startStatement();
+  ps << "wire " << PPExtString(name) << " : ";
+  emitType(op.getType());
+  emitLocationAndNewLine(op);
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "propassign " << PPExtString(name) << "," << PP::space;
+    emitLiteralExpression(op.getType(), ValueRange{});
+  });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RegistryInsertOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Registries")))
+    return;
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "registry_insert" << PP::space;
+    interleaveComma(op.getOperands());
+  });
+  emitLocationAndNewLine(op);
+}
+
 void Emitter::emitStatement(PropAssignOp op) {
   if (failed(requireVersion(FIRVersion(3, 1, 0), op, "properties")))
     return;
@@ -1649,10 +1679,11 @@ void Emitter::emitExpression(Value value) {
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
-          UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          ObjectAnyRefCastOp, DomainAnyRefCastOp, UnknownValueOp, IntegerAndOp,
-          IntegerOrOp, IntegerNotOp, StringConcatOp, PropEqOp, ListLengthOp,
-          ListContainsOp, BoolAndOp, BoolOrOp, BoolXorOp,
+          RegistryCreateOp, UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp,
+          UnsafeDomainCastOp, ObjectAnyRefCastOp, DomainAnyRefCastOp,
+          UnknownValueOp, IntegerAndOp, IntegerOrOp, IntegerNotOp,
+          StringConcatOp, PropEqOp, ListLengthOp, ListContainsOp, BoolAndOp,
+          BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1851,6 +1882,12 @@ void Emitter::emitExpression(StringConstantOp op) {
   ps << "String(";
   ps.writeQuotedEscaped(op.getValue());
   ps << ")";
+}
+
+void Emitter::emitExpression(RegistryCreateOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Registries")))
+    return;
+  emitLiteralExpression(op.getType(), ValueRange{});
 }
 
 void Emitter::emitExpression(ListCreateOp op) {
