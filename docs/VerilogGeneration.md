@@ -113,7 +113,8 @@ The current set of "style" Lowering Options is:
  * `maximumStructuralNameLength` (default=`40`).  This is the longest name, in
    characters and including its leading underscore, given to a temporary wire
    that is named after its operation and the names of its operands (e.g.
-   `_and_a_b`).  A longer name is truncated.  The names of temporaries appear
+   `_and_a_b`).  A temporary whose name would be longer is named after its
+   operation alone (e.g. `_and`).  The names of temporaries appear
    in declarations and expressions, so this is best chosen together with
    `emittedLineLength`.
  * `locationInfoStyle` (default=`plain`).  This option controls emitted location

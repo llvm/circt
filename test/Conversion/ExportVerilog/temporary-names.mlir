@@ -50,9 +50,10 @@ hw.module @Operations(in %a: i4, in %b: i4, in %c: i4, in %s: i1, out o1: i8, ou
   hw.output %r, %sum : i8, i8
 }
 
-// An array element is named after the array and the index.
+// An array element is named after the array and the index, or "_at" if that
+// name is too long.
 // CHECK-LABEL: module ArrayGet(
-hw.module @ArrayGet(in %v: !hw.array<4xi1>, in %i: i2, in %d: i1) {
+hw.module @ArrayGet(in %v: !hw.array<4xi1>, in %i: i2, in %d: i1, in %a_long_array_name: !hw.array<4xi1>) {
   %c1_i2 = hw.constant 1 : i2
   %r = sv.reg : !hw.inout<i1>
   // CHECK: wire _v_at_i = v[i];
@@ -65,6 +66,12 @@ hw.module @ArrayGet(in %v: !hw.array<4xi1>, in %i: i2, in %d: i1) {
   // CHECK-NEXT: always @(posedge _v_at_1)
   %get1 = hw.array_get %v[%c1_i2] : !hw.array<4xi1>, i2
   sv.always posedge %get1 {
+    sv.passign %r, %d : i1
+  }
+  // DEFAULT: wire _a_long_array_name_at_i = a_long_array_name[i];
+  // SHORT: wire _at = a_long_array_name[i];
+  %get2 = hw.array_get %a_long_array_name[%i] : !hw.array<4xi1>, i2
+  sv.always posedge %get2 {
     sv.passign %r, %d : i1
   }
 }
@@ -91,20 +98,24 @@ hw.module @UserNamesWin(in %a: i4, in %b: i4, out o1: i4, out o2: i4, out o3: i4
   hw.output %0, %wRead, %1 : i4, i4, i4
 }
 
-// Names are uniqued with a numeric suffix, and a name longer than the
-// maximumStructuralNameLength lowering option is truncated.
+// Names are uniqued with a numeric suffix. An expression whose name would be
+// longer than the maximumStructuralNameLength lowering option is named after
+// its operation alone.
 // CHECK-LABEL: module Collisions(
-hw.module @Collisions(in %a: i4, in %b: i4, in %a_very_long_port_name: i4, in %another_long_port_name: i4, out o1: i4, out o2: i4) {
+hw.module @Collisions(in %a: i4, in %b: i4, in %a_very_long_port_name: i4, in %another_long_port_name: i4, out o1: i4, out o2: i4, out o3: i4) {
   // CHECK: wire [3:0] _and_a_b = a & b;
   // CHECK-NEXT: wire [3:0] _and_a_b_0 = a & b;
   %0 = comb.and %a, %b : i4
   %1 = comb.and %a, %b : i4
-  // DEFAULT-NEXT: wire [3:0] _and_a_very_long_port_name_another_long =
-  // SHORT-NEXT: wire [3:0] _and_a_very_long_por =
+  // CHECK-NEXT: wire [3:0] _and = a_very_long_port_name & another_long_port_name;
   %2 = comb.and %a_very_long_port_name, %another_long_port_name : i4
+  // DEFAULT-NEXT: wire [3:0] _and_a_very_long_port_name_b = a_very_long_port_name & b;
+  // SHORT-NEXT: wire [3:0] _and_0 = a_very_long_port_name & b;
+  %5 = comb.and %a_very_long_port_name, %b : i4
   %3 = comb.add %0, %0, %2 : i4
   %4 = comb.add %1, %1, %2 : i4
-  hw.output %3, %4 : i4, i4
+  %6 = comb.add %5, %5 : i4
+  hw.output %3, %4, %6 : i4, i4, i4
 }
 
 // Inputs are named by their port also when outputs come between them.

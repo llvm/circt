@@ -1387,12 +1387,15 @@ void EmitterBase::emitComment(StringAttr comment) {
   }
 }
 
-/// Truncate a name derived from the names of an expression's operands to the
-/// `maximumStructuralNameLength` lowering option.
-static StringAttr getTruncatedName(MLIRContext *context, StringRef name,
-                                   const LoweringOptions &options) {
-  return StringAttr::get(
-      context, name.take_front(options.maximumStructuralNameLength).rtrim('_'));
+/// Return `name`, a name derived from the names of an expression's operands,
+/// or the name of the operation alone, "_<mnemonic>", if `name` is longer than
+/// the `maximumStructuralNameLength` lowering option.
+static StringAttr getLengthLimitedName(MLIRContext *context, StringRef name,
+                                       StringRef mnemonic,
+                                       const LoweringOptions &options) {
+  if (name.size() <= options.maximumStructuralNameLength)
+    return StringAttr::get(context, name);
+  return StringAttr::get(context, "_" + mnemonic);
 }
 
 // NOLINTBEGIN(misc-no-recursion)
@@ -1432,7 +1435,7 @@ static StringAttr nameFromOperands(MLIRContext *context, StringRef mnemonic,
     result += '_';
     result += name;
   }
-  return getTruncatedName(context, result, options);
+  return getLengthLimitedName(context, result, mnemonic, options);
 }
 
 static StringRef getICmpMnemonic(ICmpPredicate predicate) {
@@ -1540,8 +1543,8 @@ static StringAttr nameFromOperation(Operation *op,
           index = getOperandName(get.getIndex());
         if (index.empty())
           return {};
-        return getTruncatedName(context, ("_" + array + "_at_" + index).str(),
-                                options);
+        return getLengthLimitedName(
+            context, ("_" + array + "_at_" + index).str(), "at", options);
       })
       .Default([](Operation *) { return StringAttr(); });
 }

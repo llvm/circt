@@ -152,7 +152,8 @@ struct LoweringOptions {
 
   /// This is the maximum length, including the leading underscore, of the name
   /// of a temporary that is named after its operation and the names of its
-  /// operands.
+  /// operands. A temporary whose name would be longer is named after its
+  /// operation alone.
   enum { DEFAULT_STRUCTURAL_NAME_LENGTH = 40 };
   unsigned maximumStructuralNameLength = DEFAULT_STRUCTURAL_NAME_LENGTH;
 
