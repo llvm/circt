@@ -75,10 +75,17 @@ circuit MyModule :  @[CIRCUIT.scala 127]
     name : String @[Field.scala 2:2]
     rate : Integer @[Field.scala 3:3]
 
+  ; Without an info locator, a domain is located at its keyword.
   ; CHECK-LABEL: firrtl.domain @DomainNoInfo
-  ; CHECK-SAME:    loc({{.*}}parse-locations.fir":[[@LINE+1]]:{{[0-9]+}})
+  ; CHECK-SAME:    loc({{.*}}parse-locations.fir":[[@LINE+1]]:3)
   domain DomainNoInfo :
     name : String @[Field.scala 4:4]
+
+  ; Without an info locator, an option group is located at its keyword.
+  ; CHECK-LABEL: firrtl.option @OptionNoInfo
+  ; CHECK:       } loc({{.*}}parse-locations.fir":[[@LINE+1]]:3)
+  option OptionNoInfo :
+    A
 
 
 ; CHECK: } loc("CIRCUIT.scala":127:0)
