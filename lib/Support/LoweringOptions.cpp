@@ -144,6 +144,11 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
             "expected integer for number of namehint heurstic term limit");
         wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
       }
+    } else if (option.consume_front("maximumStructuralNameLength=")) {
+      if (option.getAsInteger(10, maximumStructuralNameLength)) {
+        errorHandler("expected integer for maximum structural name length");
+        maximumStructuralNameLength = DEFAULT_STRUCTURAL_NAME_LENGTH;
+      }
     } else if (option.consume_front("svPortDeclStyle=")) {
       if (auto style = parseEmitPortType(option)) {
         emitPortType = *style;
@@ -221,6 +226,9 @@ std::string LoweringOptions::toString() const {
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
+  if (maximumStructuralNameLength != DEFAULT_STRUCTURAL_NAME_LENGTH)
+    options += "maximumStructuralNameLength=" +
+               std::to_string(maximumStructuralNameLength) + ',';
   if (emitPortType == EmitPortType::emitWire)
     options += "svPortDeclStyle=wire,";
   else if (emitPortType == EmitPortType::emitVarLogic)

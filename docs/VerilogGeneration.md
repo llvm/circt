@@ -110,6 +110,12 @@ The current set of "style" Lowering Options is:
  * `emittedLineLength` (default=`90`).  This is the target width of lines in an
    emitted Verilog source file in columns.  Zero indicates no wrapping.
    Lengths greater than or equal to 16384 (2^14) are not supported.
+ * `maximumStructuralNameLength` (default=`40`).  This is the longest name, in
+   characters and including its leading underscore, given to a temporary wire
+   that is named after its operation and the names of its operands (e.g.
+   `_and_a_b`).  A longer name is truncated.  The names of temporaries appear
+   in declarations and expressions, so this is best chosen together with
+   `emittedLineLength`.
  * `locationInfoStyle` (default=`plain`).  This option controls emitted location
    information style.  The available styles are:
    * `plain`: `// perf/regress/AndNot.fir:3:10, :7:{10,17}`

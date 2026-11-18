@@ -1387,23 +1387,23 @@ void EmitterBase::emitComment(StringAttr comment) {
   }
 }
 
-/// The longest name, including its leading underscore, that is derived from
-/// the names of an expression's operands. A longer one is truncated.
-static constexpr size_t maxOperandDerivedNameLength = 40;
-
-static StringAttr getTruncatedName(MLIRContext *context, StringRef name) {
+/// Truncate a name derived from the names of an expression's operands to the
+/// `maximumStructuralNameLength` lowering option.
+static StringAttr getTruncatedName(MLIRContext *context, StringRef name,
+                                   const LoweringOptions &options) {
   return StringAttr::get(
-      context, name.take_front(maxOperandDerivedNameLength).rtrim('_'));
+      context, name.take_front(options.maximumStructuralNameLength).rtrim('_'));
 }
 
 // NOLINTBEGIN(misc-no-recursion)
-static StringAttr inferStructuralName(Value expr, bool fromOperandNames);
+static StringAttr inferStructuralName(Value expr,
+                                      const LoweringOptions *options);
 
 /// Return the name of an already-named operand without leading underscores,
 /// or an empty string. The operand's own operands are not looked at, so a name
 /// derived from operand names looks one level deep.
 static StringRef getOperandName(Value operand) {
-  auto name = inferStructuralName(operand, /*fromOperandNames=*/false);
+  auto name = inferStructuralName(operand, /*options=*/nullptr);
   if (!name)
     return {};
   return name.strref().ltrim('_');
@@ -1413,7 +1413,8 @@ static StringRef getOperandName(Value operand) {
 /// or return an empty attribute if an operand is unnamed. The operands of a
 /// commutative operation are sorted by name.
 static StringAttr nameFromOperands(MLIRContext *context, StringRef mnemonic,
-                                   ValueRange operands, bool commutative) {
+                                   ValueRange operands, bool commutative,
+                                   const LoweringOptions &options) {
   if (operands.empty() || operands.size() > 3)
     return {};
   SmallVector<StringRef, 3> names;
@@ -1431,7 +1432,7 @@ static StringAttr nameFromOperands(MLIRContext *context, StringRef mnemonic,
     result += '_';
     result += name;
   }
-  return getTruncatedName(context, result);
+  return getTruncatedName(context, result, options);
 }
 
 static StringRef getICmpMnemonic(ICmpPredicate predicate) {
@@ -1462,29 +1463,30 @@ static StringRef getICmpMnemonic(ICmpPredicate predicate) {
 
 /// Name a concatenation: a zero or sign extension by the value it extends,
 /// any other concatenation by its first and last operands.
-static StringAttr nameConcat(ConcatOp concat) {
+static StringAttr nameConcat(ConcatOp concat, const LoweringOptions &options) {
   auto *context = concat.getContext();
   auto inputs = concat.getInputs();
   if (inputs.size() == 2) {
     Value value = inputs[1];
     if (auto cst = inputs[0].getDefiningOp<hw::ConstantOp>())
       if (cst.getValue().isZero())
-        return nameFromOperands(context, "zext", value, false);
+        return nameFromOperands(context, "zext", value, false, options);
     if (auto rep = inputs[0].getDefiningOp<ReplicateOp>())
       if (auto sign = rep.getInput().getDefiningOp<ExtractOp>())
         if (sign.getInput() == value && hw::getBitWidth(sign.getType()) == 1 &&
             static_cast<int64_t>(sign.getLowBit()) + 1 ==
                 hw::getBitWidth(value.getType()))
-          return nameFromOperands(context, "sext", value, false);
+          return nameFromOperands(context, "sext", value, false, options);
   }
   if (inputs.size() < 2)
     return {};
   Value ends[] = {inputs.front(), inputs.back()};
-  return nameFromOperands(context, "cat", ends, false);
+  return nameFromOperands(context, "cat", ends, false, options);
 }
 
 /// Name an expression by its operation and the names of its operands.
-static StringAttr nameFromOperation(Operation *op) {
+static StringAttr nameFromOperation(Operation *op,
+                                    const LoweringOptions &options) {
   auto *context = op->getContext();
   return TypeSwitch<Operation *, StringAttr>(op)
       .Case([&](ICmpOp icmp) {
@@ -1495,32 +1497,38 @@ static StringAttr nameFromOperation(Operation *op) {
             predicate == ICmpPredicate::cne ||
             predicate == ICmpPredicate::weq || predicate == ICmpPredicate::wne;
         return nameFromOperands(context, getICmpMnemonic(predicate),
-                                icmp.getOperands(), commutative);
+                                icmp.getOperands(), commutative, options);
       })
       .Case([&](XorOp xorOp) {
         if (xorOp.isBinaryNot())
-          return nameFromOperands(context, "not", xorOp.getOperand(0), false);
-        return nameFromOperands(context, "xor", xorOp.getOperands(), true);
+          return nameFromOperands(context, "not", xorOp.getOperand(0), false,
+                                  options);
+        return nameFromOperands(context, "xor", xorOp.getOperands(), true,
+                                options);
       })
       .Case([&](AndOp andOp) {
-        return nameFromOperands(context, "and", andOp.getOperands(), true);
+        return nameFromOperands(context, "and", andOp.getOperands(), true,
+                                options);
       })
       .Case([&](OrOp orOp) {
-        return nameFromOperands(context, "or", orOp.getOperands(), true);
+        return nameFromOperands(context, "or", orOp.getOperands(), true,
+                                options);
       })
       .Case([&](AddOp addOp) {
-        return nameFromOperands(context, "add", addOp.getOperands(), true);
+        return nameFromOperands(context, "add", addOp.getOperands(), true,
+                                options);
       })
       .Case([&](SubOp subOp) {
-        return nameFromOperands(context, "sub", subOp.getOperands(), false);
+        return nameFromOperands(context, "sub", subOp.getOperands(), false,
+                                options);
       })
       .Case([&](MuxOp mux) {
-        return nameFromOperands(context, "mux", mux.getCond(), false);
+        return nameFromOperands(context, "mux", mux.getCond(), false, options);
       })
       .Case([&](ReplicateOp rep) {
-        return nameFromOperands(context, "rep", rep.getInput(), false);
+        return nameFromOperands(context, "rep", rep.getInput(), false, options);
       })
-      .Case([&](ConcatOp concat) { return nameConcat(concat); })
+      .Case([&](ConcatOp concat) { return nameConcat(concat, options); })
       .Case([&](ArrayGetOp get) -> StringAttr {
         auto array = getOperandName(get.getInput());
         if (array.empty())
@@ -1532,27 +1540,31 @@ static StringAttr nameFromOperation(Operation *op) {
           index = getOperandName(get.getIndex());
         if (index.empty())
           return {};
-        return getTruncatedName(context, ("_" + array + "_at_" + index).str());
+        return getTruncatedName(context, ("_" + array + "_at_" + index).str(),
+                                options);
       })
       .Default([](Operation *) { return StringAttr(); });
 }
 
 /// Given an expression that is spilled into a temporary wire, try to synthesize
 /// a better name than "_T_42" based on the structure of the expression.
-StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
-  return inferStructuralName(expr, /*fromOperandNames=*/true);
+StringAttr
+ExportVerilog::inferStructuralNameForTemporary(Value expr,
+                                               const LoweringOptions &options) {
+  return inferStructuralName(expr, &options);
 }
 
-/// Infer a name for `expr` from its structure. When `fromOperandNames` is set,
-/// an expression without a name of its own is named after its operation and
-/// the names of its operands.
-static StringAttr inferStructuralName(Value expr, bool fromOperandNames) {
+/// Infer a name for `expr` from its structure. When `options` is given, an
+/// expression without a name of its own is named after its operation and the
+/// names of its operands.
+static StringAttr inferStructuralName(Value expr,
+                                      const LoweringOptions *options) {
   StringAttr result;
   bool addPrefixUnderScore = true;
 
   // Look through read_inout.
   if (auto read = expr.getDefiningOp<ReadInOutOp>())
-    return inferStructuralName(read.getInput(), fromOperandNames);
+    return inferStructuralName(read.getInput(), options);
 
   // Module ports carry names!
   if (auto blockArg = dyn_cast<BlockArgument>(expr)) {
@@ -1591,8 +1603,8 @@ static StringAttr inferStructuralName(Value expr, bool fromOperandNames) {
 
           // If this is an extract from a namable object, derive a name from it.
           .Case([&result](ExtractOp extract) {
-            if (auto operandName = inferStructuralName(
-                    extract.getInput(), /*fromOperandNames=*/false)) {
+            if (auto operandName = inferStructuralName(extract.getInput(),
+                                                       /*options=*/nullptr)) {
               unsigned numBits =
                   cast<IntegerType>(extract.getType()).getWidth();
               if (numBits == 1)
@@ -1607,8 +1619,8 @@ static StringAttr inferStructuralName(Value expr, bool fromOperandNames) {
                         Twine(extract.getLowBit()));
             }
           });
-      if (!result && fromOperandNames)
-        result = nameFromOperation(op);
+      if (!result && options)
+        result = nameFromOperation(op, *options);
     }
   }
 

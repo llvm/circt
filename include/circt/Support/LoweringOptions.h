@@ -150,6 +150,12 @@ struct LoweringOptions {
   enum { DEFAULT_NAMEHINT_TERM_LIMIT = 3 };
   unsigned wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
 
+  /// This is the maximum length, including the leading underscore, of the name
+  /// of a temporary that is named after its operation and the names of its
+  /// operands.
+  enum { DEFAULT_STRUCTURAL_NAME_LENGTH = 40 };
+  unsigned maximumStructuralNameLength = DEFAULT_STRUCTURAL_NAME_LENGTH;
+
   /// If true, every expression passed to an instance port is driven by a wire.
   /// Some lint tools dislike expressions being inlined into input ports so this
   /// option avoids such warnings.

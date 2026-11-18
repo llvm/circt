@@ -1,4 +1,5 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics -o /dev/null | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o /dev/null | FileCheck %s --strict-whitespace --check-prefixes=CHECK,DEFAULT
+// RUN: circt-opt %s --test-apply-lowering-options='options=maximumStructuralNameLength=20' -export-verilog -verify-diagnostics -o /dev/null | FileCheck %s --strict-whitespace --check-prefixes=CHECK,SHORT
 
 // Spilled expressions are named after their operation and their operands.
 // CHECK-LABEL: module Operations(
@@ -90,14 +91,16 @@ hw.module @UserNamesWin(in %a: i4, in %b: i4, out o1: i4, out o2: i4, out o3: i4
   hw.output %0, %wRead, %1 : i4, i4, i4
 }
 
-// Names are uniqued with a numeric suffix, and a long name is truncated.
+// Names are uniqued with a numeric suffix, and a name longer than the
+// maximumStructuralNameLength lowering option is truncated.
 // CHECK-LABEL: module Collisions(
 hw.module @Collisions(in %a: i4, in %b: i4, in %a_very_long_port_name: i4, in %another_long_port_name: i4, out o1: i4, out o2: i4) {
   // CHECK: wire [3:0] _and_a_b = a & b;
   // CHECK-NEXT: wire [3:0] _and_a_b_0 = a & b;
   %0 = comb.and %a, %b : i4
   %1 = comb.and %a, %b : i4
-  // CHECK-NEXT: wire [3:0] _and_a_very_long_port_name_another_long =
+  // DEFAULT-NEXT: wire [3:0] _and_a_very_long_port_name_another_long =
+  // SHORT-NEXT: wire [3:0] _and_a_very_long_por =
   %2 = comb.and %a_very_long_port_name, %another_long_port_name : i4
   %3 = comb.add %0, %0, %2 : i4
   %4 = comb.add %1, %1, %2 : i4

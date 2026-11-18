@@ -51,6 +51,7 @@ struct LoweringOptionsOption
                 "disallowPortDeclSharing, printDebugInfo, "
                 "wireSpillingHeuristic=<spillLargeTermsWithNamehints>, "
                 "wireSpillingNamehintTermLimit=<n>, "
+                "maximumStructuralNameLength=<n>, "
                 "disallowExpressionInliningInPorts, disallowMuxInlining, "
                 "disallowReplicate, "
                 "mitigateVivadoArrayIndexConstPropBug, "
