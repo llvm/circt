@@ -436,6 +436,39 @@ om.class @ListConcatCanonicalization(
       !om.list<!om.class.type<@Foo>>, !om.list<!om.class.type<@Foo>>
 }
 
+// CHECK-LABEL: @ListLengthFold
+om.class @ListLengthFold(
+  %value: !om.string
+) -> (
+  constructed: !om.integer,
+  constant: !om.integer,
+  empty: !om.integer,
+  nested: !om.integer
+) {
+  // List of values: length == 3
+  %values = om.list_create %value, %value, %value : !om.string
+  %valuesLength = om.list_length %values : !om.list<!om.string>
+
+  // List of attributes: length == 1
+  %attrs = om.constant #om.list<!om.string, ["a" : !om.string]> : !om.list<!om.string>
+  %attrLength = om.list_length %attrs : !om.list<!om.string>
+
+  // Empty list: length == 0
+  %emptyList = om.list_create : !om.string
+  %emptyLength = om.list_length %emptyList : !om.list<!om.string>
+
+  // List of lists: length == 2
+  %nested = om.list_create %values, %emptyList : !om.list<!om.string>
+  %nestedLength = om.list_length %nested : !om.list<!om.list<!om.string>>
+
+  // CHECK-DAG:  %[[C_3:.+]] = om.constant #om.integer<3 : si64>
+  // CHECK-DAG:  %[[C_1:.+]] = om.constant #om.integer<1 : si64>
+  // CHECK-DAG:  %[[C_0:.+]] = om.constant #om.integer<0 : si64>
+  // CHECK-DAG:  %[[C_2:.+]] = om.constant #om.integer<2 : si64>
+  // CHECK-NEXT: om.class.fields %[[C_3]], %[[C_1]], %[[C_0]], %[[C_2]]
+  om.class.fields %valuesLength, %attrLength, %emptyLength, %nestedLength : !om.integer, !om.integer, !om.integer, !om.integer
+}
+
 // CHECK-LABEL: @ListContainsFold
 om.class @ListContainsFold(%empty_search: !om.string) -> (
     string_found: i1, string_absent: i1, bool_found: i1, bool_absent: i1,

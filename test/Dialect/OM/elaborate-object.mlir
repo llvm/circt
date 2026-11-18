@@ -38,6 +38,42 @@ om.class @SimpleList() -> (result: !om.list<!om.integer>) {
   om.class.fields %list : !om.list<!om.integer>
 }
 
+om.class private @LengthParameter(%values: !om.list<!om.integer>) -> (length: !om.integer) {
+  %length = om.list_length %values : !om.list<!om.integer>
+  om.class.fields %length : !om.integer
+}
+
+// CHECK-LABEL: om.class @LengthTests
+// CHECK-DAG:     %[[ONE:.+]] = om.constant #om.integer<1 : si64>
+// CHECK-DAG:     %[[TWO:.+]] = om.constant #om.integer<2 : si64>
+// CHECK-DAG:     %[[UNKNOWN:.+]] = om.unknown : !om.integer
+// CHECK:         om.class.fields %[[TWO]], %[[ONE]], %[[UNKNOWN]]
+om.class @LengthTests(
+  %a: !om.integer,
+  %b: !om.integer
+) -> (
+  concatenated: !om.integer,
+  unknownElement: !om.integer,
+  unknownList: !om.integer
+) {
+  %head = om.list_create %a : !om.integer
+  %tail = om.list_create %b : !om.integer
+  %empty = om.constant #om.list<!om.integer, []> : !om.list<!om.integer>
+
+  %joined = om.list_concat %head, %empty, %tail : !om.list<!om.integer>
+  %child = om.object @LengthParameter(%joined) : (!om.list<!om.integer>) -> !om.class.type<@LengthParameter>
+  %length = om.object.field %child["length"] : (!om.class.type<@LengthParameter>) -> !om.integer
+
+  %unknownString = om.unknown : !om.string
+  %constructed = om.list_create %unknownString : !om.string
+  %knownLength = om.list_length %constructed : !om.list<!om.string>
+
+  %unknownList = om.unknown : !om.list<!om.integer>
+  %unknownLength = om.list_length %unknownList : !om.list<!om.integer>
+
+  om.class.fields %length, %knownLength, %unknownLength : !om.integer, !om.integer, !om.integer
+}
+
 // Test direct list membership folding across list construction, concatenation,
 // and constant list attributes.
 // CHECK-LABEL: om.class @ContainsTests
