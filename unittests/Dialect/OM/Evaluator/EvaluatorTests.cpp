@@ -968,26 +968,37 @@ TEST_F(EvaluatorTests, RegistryObjectBackReference) {
   EXPECT_EQ(getField(elements.front(), "items").get(), items.get());
 }
 
-TEST_F(EvaluatorTests, RegistryUnknowns) {
+TEST_F(EvaluatorTests, RegistryFieldInObjectInput) {
   auto mod = parseModule(R"MLIR(
     !items = !om.registry<!om.integer>
-    om.class @Top() -> (items: !items, missing: !items) {
-      %items = om.registry_create : !items
-      %missing = om.unknown : !items
+    om.class @Holder(%items: !items) -> (items: !items) {
+      om.class.fields %items : !items
+    }
+    om.class @Create() -> (holder: !om.class.type<@Holder>) {
       %one = om.constant #om.integer<1 : si8> : !om.integer
-      %unknown = om.unknown : !om.integer
-      om.registry_insert %items, %one : !items
-      om.registry_insert %items, %unknown : !items
-      om.registry_insert %missing, %one : !items
-      om.class.fields %items, %missing : !items, !items
+      %items = om.registry_create %one : !items
+      %holder = om.object @Holder(%items) : (!items) -> !om.class.type<@Holder>
+      om.class.fields %holder : !om.class.type<@Holder>
+    }
+    om.class @Use(%holder: !om.class.type<@Holder>) -> (items: !items) {
+      %items = om.object.field %holder["items"] : (!om.class.type<@Holder>) -> !items
+      %two = om.constant #om.integer<2 : si8> : !om.integer
+      om.registry_insert %items, %two : !items
+      om.class.fields %items : !items
     }
   )MLIR");
   ASSERT_TRUE(mod);
   Evaluator evaluator(*mod);
-  auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
+  auto created = evaluator.instantiate(StringAttr::get(&context, "Create"), {});
+  ASSERT_TRUE(succeeded(created));
+  auto holder = getField(*created, "holder");
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {holder});
   ASSERT_TRUE(succeeded(result));
-  EXPECT_TRUE(getField(*result, "items")->isUnknown());
-  EXPECT_TRUE(getField(*result, "missing")->isUnknown());
+  EXPECT_EQ(getRegistryIntegers(getField(*result, "items")),
+            (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getRegistryIntegers(getField(holder, "items")),
+            (SmallVector<int64_t>{1}));
 }
 
 TEST_F(EvaluatorTests, RegistryInputs) {
