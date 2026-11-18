@@ -21,12 +21,14 @@ module Cosim_Manifest
   input logic [COMPRESSED_MANIFEST_SIZE-1:0][7:0] compressed_manifest
 );
 
+  // Copy and register in the same process so the DPI call is guaranteed to see
+  // the populated array. Splitting these into separate processes races at
+  // time 0 since the scheduling order between them is undefined.
   byte unsigned compressed_manifest_bytes[COMPRESSED_MANIFEST_SIZE-1:0];
-  always_comb
+  always@(compressed_manifest) begin
     for (int i=0; i<COMPRESSED_MANIFEST_SIZE; i++)
       compressed_manifest_bytes[i] = compressed_manifest[i];
-
-  always@(compressed_manifest)
     cosim_set_manifest(ESI_VERSION, compressed_manifest_bytes);
+  end
 
 endmodule
