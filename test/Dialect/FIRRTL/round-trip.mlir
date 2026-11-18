@@ -256,6 +256,19 @@ firrtl.module @PropertyListContains(in %obj: !firrtl.class<@ObjectEqFoo()>,
   %obj_ref_found = firrtl.list.contains %refs, %obj_ref : !firrtl.list<anyref>
 }
 
+// CHECK-LABEL: firrtl.module @PropertyListIntersect
+firrtl.module @PropertyListIntersect(
+    in %foos: !firrtl.list<class<@ObjectEqFoo()>>,
+    in %refs: !firrtl.list<anyref>,
+    out %result: !firrtl.list<class<@ObjectEqFoo()>>) {
+  // Both operand types are required, but the result type is inferred from the
+  // first operand.
+  // CHECK: [[RESULT:%.+]] = firrtl.list.intersect %foos, %refs : !firrtl.list<class<@ObjectEqFoo()>>, !firrtl.list<anyref>{{$}}
+  %intersection = firrtl.list.intersect %foos, %refs : !firrtl.list<class<@ObjectEqFoo()>>, !firrtl.list<anyref>
+  // CHECK-NEXT: firrtl.propassign %result, [[RESULT]] : !firrtl.list<class<@ObjectEqFoo()>>
+  firrtl.propassign %result, %intersection : !firrtl.list<class<@ObjectEqFoo()>>
+}
+
 firrtl.class @UnknownValueChild() {}
 // CHECK-LABEL: firrtl.module @UnknownValueOp
 firrtl.module @UnknownValueOp() {
