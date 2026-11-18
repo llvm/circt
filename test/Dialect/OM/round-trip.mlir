@@ -185,6 +185,13 @@ om.class @ListConcat() {
   om.class.fields
 }
 
+// CHECK-LABEL: @ListLength
+om.class @ListLength(%list: !om.list<!om.list<!om.ref>>) -> (length: !om.integer) {
+  // CHECK: %0 = om.list_length %list : <!om.list<!om.ref>> loc(
+  %0 = om.list_length %list : !om.list<!om.list<!om.ref>>
+  om.class.fields %0 : !om.integer
+}
+
 // CHECK-LABEL: @ListContains
 om.class @ListContains(%obj: !om.class.type<@Widget>) {
   %0 = om.constant "member" : !om.string
