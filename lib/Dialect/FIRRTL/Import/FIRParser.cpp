@@ -6523,7 +6523,6 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
 ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
   StringRef id;
   consumeToken();
-  auto loc = getToken().getLoc();
 
   LocWithInfo info(getToken().getLoc(), this);
   if (parseId(id, "expected an option group name") ||
@@ -6549,7 +6548,7 @@ ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
       return failure();
 
     if (!cases.insert(id).second)
-      return emitError(loc)
+      return emitError(caseInfo.getFIRLoc())
              << "duplicate option case definition '" << id << "'";
 
     OptionCaseOp::create(builder, caseInfo.getLoc(), id);
