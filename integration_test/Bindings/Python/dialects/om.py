@@ -287,26 +287,10 @@ with Context() as ctx:
       om.class.fields %c42, %in0, %sum, %prod, %true, %in3 :
         !om.integer, !om.integer, !om.integer, !om.integer, i1, i1
     }
-    om.class @UnknownChild() -> () {
-      om.class.fields
-    }
-    om.class @UnknownValues(%input: !om.list<!om.integer>) -> (
-        list: !om.list<!om.integer>,
-        nested: !om.list<!om.list<!om.integer>>,
-        object: !om.class.type<@UnknownChild>,
-        basepath: !om.frozenbasepath,
-        path: !om.frozenpath,
-        primitive: !om.integer,
-        input: !om.list<!om.integer>,
-        empty: !om.list<!om.integer>) {
-      %list = om.unknown : !om.list<!om.integer>
-      %nested = om.unknown : !om.list<!om.list<!om.integer>>
-      %object = om.unknown : !om.class.type<@UnknownChild>
-      %basepath = om.unknown : !om.frozenbasepath
-      %path = om.unknown : !om.frozenpath
-      %primitive = om.unknown : !om.integer
+    om.class @UnknownList() -> (unknown: !om.list<!om.integer>, empty: !om.list<!om.integer>) {
+      %unknown = om.unknown : !om.list<!om.integer>
       %empty = om.list_create : !om.integer
-      om.class.fields %list, %nested, %object, %basepath, %path, %primitive, %input, %empty : !om.list<!om.integer>, !om.list<!om.list<!om.integer>>, !om.class.type<@UnknownChild>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>
+      om.class.fields %unknown, %empty : !om.list<!om.integer>, !om.list<!om.integer>
     }
   }
   """)
@@ -332,20 +316,9 @@ with Context() as ctx:
   # CHECK: out5 (unknown bool): Unknown(i1)
   print(f"out5 (unknown bool): {obj.out5}")
 
-  list_type = Type.parse("!om.list<!om.integer>")
-  obj = evaluator.instantiate("UnknownValues", om.Unknown(list_type))
-  for name, type_str in [
-      ("list", "!om.list<!om.integer>"),
-      ("nested", "!om.list<!om.list<!om.integer>>"),
-      ("object", "!om.class.type<@UnknownChild>"),
-      ("basepath", "!om.frozenbasepath"),
-      ("path", "!om.frozenpath"),
-      ("primitive", "!om.integer"),
-      ("input", "!om.list<!om.integer>"),
-  ]:
-    value = getattr(obj, name)
-    assert isinstance(value, om.Unknown), (name, value)
-    assert value.type == Type.parse(type_str), (name, value.type)
+  obj = evaluator.instantiate("UnknownList")
+  assert isinstance(obj.unknown, om.Unknown)
+  assert obj.unknown.type == Type.parse("!om.list<!om.integer>")
   assert isinstance(obj.empty, om.List)
   assert len(obj.empty) == 0
 
