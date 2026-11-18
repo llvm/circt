@@ -530,3 +530,16 @@ om.class @ListContainsIdentityFold(
       %element_cast_unknown, %both_cast_unknown :
       i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
+
+// Check distinct and repeated insertions and non-insertion uses of the registry.
+// CHECK-LABEL: om.class @RegistryMultipleUses
+// CHECK: %[[ITEMS:.+]] = om.registry_create %a, %c, %b, %a : !om.registry<!om.integer>
+// CHECK-NOT: om.registry_insert
+// CHECK: om.class.fields %[[ITEMS]], %[[ITEMS]]
+om.class @RegistryMultipleUses(%a: !om.integer, %b: !om.integer, %c: !om.integer) -> (first: !om.registry<!om.integer>, second: !om.registry<!om.integer>) {
+  %items = om.registry_create %a : !om.registry<!om.integer>
+  om.registry_insert %items, %a : !om.registry<!om.integer>
+  om.registry_insert %items, %b : !om.registry<!om.integer>
+  om.registry_insert %items, %c : !om.registry<!om.integer>
+  om.class.fields %items, %items : !om.registry<!om.integer>, !om.registry<!om.integer>
+}

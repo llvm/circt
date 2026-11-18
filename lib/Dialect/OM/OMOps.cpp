@@ -708,6 +708,33 @@ OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// RegistryInsertOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult RegistryInsertOp::canonicalize(RegistryInsertOp op,
+                                             PatternRewriter &rewriter) {
+  auto allocation = op.getRegistry().getDefiningOp<RegistryCreateOp>();
+  if (!allocation)
+    return failure();
+  // Collect all known insertions at once. Rewriting them individually would
+  // repeatedly put the growing allocation on the greedy driver's worklist.
+  SmallVector<RegistryInsertOp> insertions;
+  SmallVector<Value> elements;
+  for (auto &use : allocation.getResult().getUses()) {
+    auto insertion = dyn_cast<RegistryInsertOp>(use.getOwner());
+    if (!insertion || insertion.getRegistry() != allocation.getResult())
+      continue;
+    insertions.push_back(insertion);
+    elements.push_back(insertion.getElement());
+  }
+  rewriter.modifyOpInPlace(
+      allocation, [&] { allocation.getElementsMutable().append(elements); });
+  for (auto insertion : insertions)
+    rewriter.eraseOp(insertion);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ListCreateOp
 //===----------------------------------------------------------------------===//
 

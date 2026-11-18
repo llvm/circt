@@ -366,3 +366,83 @@ om.class private @PrivateModeTop() -> (value: !om.integer) {
   %value = om.object.field %helper["value"] : (!om.class.type<@PublicModeHelper>) -> !om.integer
   om.class.fields %value : !om.integer
 }
+
+!items = !om.registry<!om.integer>
+
+om.class private @RegistryOwner() -> (items: !items) {
+  %items = om.registry_create : !items
+  om.class.fields %items : !items
+}
+
+// Keep the insertion even when the writer's result is unused.
+om.class private @RegistryWriter(%items: !items, %value: !om.integer) {
+  om.registry_insert %items, %value : !items
+  om.class.fields
+}
+
+// CHECK-LABEL: om.class @RegistryTop()
+// CHECK: %[[TWO:.+]] = om.constant #om.integer<2 : si8>
+// CHECK-NEXT: %[[ONE:.+]] = om.constant #om.integer<1 : si8>
+// CHECK-NEXT: %[[ITEMS:.+]] = om.registry_create %[[TWO]], %[[ONE]], %[[TWO]] : !om.registry<!om.integer>
+// CHECK-NEXT: %[[OTHER:.+]] = om.registry_create : !om.registry<!om.integer>
+// CHECK-NOT: om.registry_insert
+// CHECK-NOT: om.object @RegistryWriter
+// CHECK: om.class.fields %[[ITEMS]], %[[OTHER]]
+om.class @RegistryTop() -> (first: !items, second: !items) {
+  // Insert into the first registry through both objects and a direct insertion.
+  %firstObj = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
+  %first = om.object.field %firstObj["items"] : (!om.class.type<@RegistryOwner>) -> !items
+  %one = om.constant #om.integer<1 : si8> : !om.integer
+  %two = om.constant #om.integer<2 : si8> : !om.integer
+  %a = om.object @RegistryWriter(%first, %two) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
+  %b = om.object @RegistryWriter(%first, %one) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
+  om.registry_insert %first, %two : !items
+
+  // A separate empty registry remains distinct.
+  %secondObj = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
+  %second = om.object.field %secondObj["items"] : (!om.class.type<@RegistryOwner>) -> !items
+  om.class.fields %first, %second : !items, !items
+}
+
+// An unknown initial or inserted element makes the registry unknown.
+// Insertions into unknown registries are dropped.
+// CHECK-LABEL: om.class @RegistryUnknowns
+// CHECK-NOT: om.registry_create
+// CHECK-NOT: om.registry_insert
+// CHECK-DAG: %[[ITEMS:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-DAG: %[[INITIAL:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-DAG: %[[MISSING:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-NOT: om.registry_insert
+// CHECK-NOT: om.registry_create
+// CHECK: om.class.fields %[[ITEMS]], %[[MISSING]], %[[INITIAL]]
+om.class @RegistryUnknowns(%value: !om.integer) -> (
+  items: !om.registry<!om.integer>, missing: !om.registry<!om.integer>, initial: !om.registry<!om.integer>
+) {
+  %unknown = om.unknown : !om.integer
+  %items = om.registry_create %value : !om.registry<!om.integer>
+  %initial = om.registry_create %value, %unknown : !om.registry<!om.integer>
+  %missing = om.unknown : !om.registry<!om.integer>
+  om.registry_insert %items, %unknown : !om.registry<!om.integer>
+  om.registry_insert %missing, %value : !om.registry<!om.integer>
+  om.registry_insert %initial, %value : !om.registry<!om.integer>
+  om.class.fields %items, %missing, %initial : !om.registry<!om.integer>, !om.registry<!om.integer>, !om.registry<!om.integer>
+}
+
+// An insertion into an unknown registry is erased during elaboration.
+// CHECK-LABEL: om.class @InsertIntoUnknown()
+// CHECK-NEXT: %[[UNKNOWN:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-NEXT: om.class.fields %[[UNKNOWN]]
+// CHECK-NEXT: }
+om.class @InsertIntoUnknown() -> (items: !items) {
+  %items = om.unknown : !items
+  %value = om.constant #om.integer<1 : si8> : !om.integer
+  om.registry_insert %items, %value : !items
+  om.class.fields %items : !items
+}
+
+// CHECK-LABEL: om.class @RegistryParameter
+// CHECK: om.registry_insert %items, %value : !om.registry<!om.integer>
+om.class @RegistryParameter(%items: !items, %value: !om.integer) {
+  om.registry_insert %items, %value : !items
+  om.class.fields
+}
