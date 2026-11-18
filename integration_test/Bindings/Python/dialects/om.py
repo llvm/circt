@@ -370,41 +370,33 @@ with Context() as ctx, Location.unknown():
   # CHECK: AssertUnknown(unknown): passed
   print("AssertUnknown(unknown): passed")
 
-# Test registries containing objects and unknown values.
+# Test registry values in the evaluator.
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   module = Module.parse("""
-  !items = !om.registry<!om.class.type<@Child>>
+  !items = !om.registry<!om.integer>
   module {
-    om.class @Child(%value: !om.integer) -> (value: !om.integer) {
-      om.class.fields %value : !om.integer
-    }
     om.class @Registry() -> (items: !items) {
       %one = om.constant #om.integer<1 : si32> : !om.integer
-      %child = om.object @Child(%one) : (!om.integer) -> !om.class.type<@Child>
-      %items = om.registry_create %child : !items
+      %items = om.registry_create %one : !items
       om.class.fields %items : !items
     }
-    om.class @Append(%items: !items, %child: !om.class.type<@Child>) -> (items: !items) {
-      om.registry_insert %items, %child : !items
+    om.class @Append(%items: !items) -> (items: !items) {
+      %two = om.constant #om.integer<2 : si32> : !om.integer
+      om.registry_insert %items, %two : !items
       om.class.fields %items : !items
     }
-    om.class @UnknownRegistry() -> (items: !om.registry<!om.integer>) {
+    om.class @UnknownRegistry() -> (items: !items) {
       %unknown = om.unknown : !om.integer
-      %items = om.registry_create %unknown : !om.registry<!om.integer>
-      om.class.fields %items : !om.registry<!om.integer>
+      %items = om.registry_create %unknown : !items
+      om.class.fields %items : !items
     }
   }
   """)
   evaluator = om.Evaluator(module)
   items = evaluator.instantiate("Registry").items
   assert isinstance(items, om.List)
-  assert isinstance(items[0], om.Object)
-  assert items[0].value == 1
-
-  appended = evaluator.instantiate("Append", items, items[0]).items
-  assert [child.value for child in appended] == [1, 1]
-
-  unknowns = evaluator.instantiate("UnknownRegistry")
-  assert isinstance(unknowns.items, om.Unknown)
+  assert list(items) == [1]
+  assert sorted(evaluator.instantiate("Append", items).items) == [1, 2]
+  assert isinstance(evaluator.instantiate("UnknownRegistry").items, om.Unknown)

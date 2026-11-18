@@ -100,22 +100,17 @@ getListElements(const evaluator::EvaluatorValuePtr &value) {
   return llvm::cast<evaluator::ListValue>(value.get())->getElements();
 }
 
-} // namespace
-
-/// Return registry integers in sorted order.
-static SmallVector<int64_t>
-getRegistryIntegers(const EvaluatorValuePtr &value) {
-  SmallVector<int64_t> values;
-  for (const auto &element : getListElements(value))
-    values.push_back(getInteger(element));
-  llvm::sort(values);
-  return values;
-}
-
-namespace {
-
 class EvaluatorTests : public ::testing::Test {
 protected:
+  static SmallVector<int64_t>
+  getRegistryIntegers(const EvaluatorValuePtr &value) {
+    SmallVector<int64_t> values;
+    for (const auto &element : getListElements(value))
+      values.push_back(getInteger(element));
+    llvm::sort(values);
+    return values;
+  }
+
   OwningOpRef<ModuleOp> parseModule(StringRef moduleText) {
     return test.parseModule(moduleText);
   }
