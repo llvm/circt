@@ -2832,105 +2832,6 @@ enum class UdpLevel {
   DontCare,
 };
 
-} // namespace
-
-/// Decode a single UDP level character (`0`, `1`, `x`, `?`, or `b`,
-/// case-insensitive). Returns `std::nullopt` for non-level characters such as
-/// edge specifiers (`r`, `f`, `p`, `n`, `*`, `(`, `)`).
-static std::optional<UdpLevel> decodeUdpLevel(char c) {
-  switch (llvm::toLower(c)) {
-  case '0':
-    return UdpLevel::Zero;
-  case '1':
-    return UdpLevel::One;
-  case 'x':
-    return UdpLevel::Unknown;
-  case '?':
-  case 'b':
-    // In 2-state UDP lowering, 'b' (0 or 1) and '?' (0, 1, or x) are both
-    // wildcards over {0, 1}; canonicalize both to `DontCare`.
-    return UdpLevel::DontCare;
-  default:
-    return std::nullopt;
-  }
-}
-
-/// Parse a level-only UDP input row string into `UdpLevel` entries.
-/// Returns false if any character is not a recognized UDP level symbol.
-static bool parseInputRow(StringRef inputs, SmallVectorImpl<UdpLevel> &levels) {
-  levels.clear();
-  levels.reserve(inputs.size());
-  for (char c : inputs) {
-    auto level = decodeUdpLevel(c);
-    if (!level)
-      return false;
-    levels.push_back(*level);
-  }
-  return true;
-}
-
-/// Skip unsupported or non-productive combinational table rows and populate
-/// `levels` for supported rows. Currently, only combinational UDPs with
-/// 0/1/?/b inputs are supported.
-static bool
-skipUnsupportedRow(const slang::ast::PrimitiveSymbol::TableEntry &entry,
-                   size_t numInputs, SmallVectorImpl<UdpLevel> &levels) {
-  // In the sum-of-products (SOP) representation below, only rows producing '1'
-  // generate product terms in the disjunction; other outputs (e.g., '0' or 'x')
-  // do not contribute. Also skip edge-sensitive entries and rows with
-  // unrecognized tokens or mismatched input counts.
-  if (entry.isEdgeSensitive || entry.output != '1')
-    return true;
-  if (!parseInputRow(entry.inputs, levels) || levels.size() != numInputs)
-    return true;
-  return llvm::any_of(levels, [](UdpLevel level) {
-    switch (level) {
-    case UdpLevel::Zero:
-    case UdpLevel::One:
-    case UdpLevel::DontCare:
-      return false;
-    case UdpLevel::Unknown:
-      return true;
-    }
-  });
-}
-
-/// Materialize a 2-state literal (`val` for `One`, `~val` for `Zero`) or null
-/// for `DontCare`, caching the negation in `notVal`.
-static Value buildLevelLiteral(OpBuilder &builder, Location loc, UdpLevel level,
-                               Value val, Value &notVal) {
-  switch (level) {
-  case UdpLevel::One:
-    return val;
-  case UdpLevel::Zero:
-    if (!notVal)
-      notVal = moore::NotOp::create(builder, loc, val);
-    return notVal;
-  case UdpLevel::DontCare:
-    return {};
-  case UdpLevel::Unknown:
-    llvm_unreachable("unknown level should be filtered before building term");
-  }
-}
-
-/// Build the productive AND-term for this row. Returns nullptr if the row is
-/// unproductive (all don't cares).
-static Value buildProductiveTerm(OpBuilder &builder, Location loc,
-                                 ArrayRef<UdpLevel> inputs,
-                                 ValueRange inputVals,
-                                 SmallVectorImpl<Value> &notVars) {
-  Value term;
-  for (size_t i = 0, e = inputVals.size(); i < e; ++i) {
-    Value lit =
-        buildLevelLiteral(builder, loc, inputs[i], inputVals[i], notVars[i]);
-    if (lit)
-      term = term ? moore::AndOp::create(builder, loc, term, lit) : lit;
-  }
-  return term;
-}
-
-namespace {
-
 /// A level-sensitive truth table row (a latch transition, or an asynchronous
 /// clear/preset override in an edge-triggered UDP).
 struct AsyncRow {
@@ -2983,6 +2884,99 @@ struct AsyncConditions {
 
 } // namespace
 
+/// Decode a single UDP level character (`0`, `1`, `x`, `?`, or `b`,
+/// case-insensitive). Returns `std::nullopt` for non-level characters such as
+/// edge specifiers (`r`, `f`, `p`, `n`, `*`, `(`, `)`).
+static std::optional<UdpLevel> decodeUdpLevel(char c) {
+  switch (llvm::toLower(c)) {
+  case '0':
+    return UdpLevel::Zero;
+  case '1':
+    return UdpLevel::One;
+  case 'x':
+    return UdpLevel::Unknown;
+  case '?':
+  case 'b':
+    // In 2-state UDP lowering, 'b' (0 or 1) and '?' (0, 1, or x) are both
+    // wildcards over {0, 1}; canonicalize both to `DontCare`.
+    return UdpLevel::DontCare;
+  default:
+    return std::nullopt;
+  }
+}
+
+/// Parse a level-only UDP input row string into `UdpLevel` entries.
+/// Returns false if any character is not a recognized UDP level symbol.
+static bool parseInputRow(StringRef inputs, SmallVectorImpl<UdpLevel> &levels) {
+  levels.clear();
+  levels.reserve(inputs.size());
+  for (char c : inputs) {
+    auto level = decodeUdpLevel(c);
+    if (!level)
+      return false;
+    levels.push_back(*level);
+  }
+  return true;
+}
+
+/// Skip unsupported or non-productive combinational table rows. Currently,
+/// only combinational UDPs with 0/1/?/b inputs are supported.
+static bool skipUnsupportedCombinationalRow(
+    const slang::ast::PrimitiveSymbol::TableEntry &entry,
+    ArrayRef<UdpLevel> levels, size_t numInputs) {
+  // In the sum-of-products (SOP) representation below, only rows producing '1'
+  // generate product terms in the disjunction; other outputs (e.g., '0' or 'x')
+  // do not contribute. Also skip edge-sensitive entries and rows with
+  // mismatched input counts.
+  if (entry.output != '1' || levels.size() != numInputs ||
+      entry.isEdgeSensitive)
+    return true;
+  return llvm::any_of(levels, [](UdpLevel level) {
+    switch (level) {
+    case UdpLevel::Zero:
+    case UdpLevel::One:
+    case UdpLevel::DontCare:
+      return false;
+    case UdpLevel::Unknown:
+      return true;
+    }
+  });
+}
+
+/// Materialize a 2-state literal (`val` for `One`, `~val` for `Zero`) or null
+/// for `DontCare`, caching the negation in `notVal`.
+static Value buildLevelLiteral(OpBuilder &builder, Location loc, UdpLevel level,
+                               Value val, Value &notVal) {
+  switch (level) {
+  case UdpLevel::One:
+    return val;
+  case UdpLevel::Zero:
+    if (!notVal)
+      notVal = moore::NotOp::create(builder, loc, val);
+    return notVal;
+  case UdpLevel::DontCare:
+    return {};
+  case UdpLevel::Unknown:
+    llvm_unreachable("unknown level should be filtered before building term");
+  }
+}
+
+/// Build the productive AND-term for this row. Returns nullptr if the row is
+/// unproductive (all don't cares).
+static Value buildProductiveTerm(OpBuilder &builder, Location loc,
+                                 ArrayRef<UdpLevel> inputs,
+                                 ValueRange inputVals,
+                                 SmallVectorImpl<Value> &notVars) {
+  Value term;
+  for (size_t i = 0, e = inputVals.size(); i < e; ++i) {
+    Value lit =
+        buildLevelLiteral(builder, loc, inputs[i], inputVals[i], notVars[i]);
+    if (lit)
+      term = term ? moore::AndOp::create(builder, loc, term, lit) : lit;
+  }
+  return term;
+}
+
 /// Classify sequential UDP truth table rows into synchronous (edge-sensitive)
 /// transitions and asynchronous (level-sensitive) transitions.
 ///
@@ -2996,13 +2990,13 @@ struct AsyncConditions {
 /// Truth tables may include entries that do not produce active 2-state
 /// transitions and are skipped before lowering:
 /// - Unknown ('x') rows: Like combinational UDP lowering
-///   (`skipUnsupportedRow`), sequential UDP lowering models transitions in
-///   2-state `i1` logic (matching `MooreToCore`'s 2-state lowering rather than
-///   4-state `X` propagation). In IEEE 1800-2017 Table 29-1, `'x'` in inputs
-///   or state only matches literal unknown `x` (unlike `'?'`, which matches
-///   `0`, `1`, or `x`) so it cannot trigger in 2-state logic, and `'x'`
-///   next-state outputs have no 2-state value, so rows containing `'x'` are
-///   skipped.
+///   (`skipUnsupportedCombinationalRow`), sequential UDP lowering models
+///   transitions in 2-state `i1` logic (matching `MooreToCore`'s 2-state
+///   lowering rather than 4-state `X` propagation). In IEEE 1800-2017 Table
+///   29-1, `'x'` in inputs or state only matches literal unknown `x` (unlike
+///   `'?'`, which matches `0`, `1`, or `x`) so it cannot trigger in 2-state
+///   logic, and `'x'` next-state outputs have no 2-state value, so rows
+///   containing `'x'` are skipped.
 /// - Explicit hold rows: Rows specifying '-' as next-state explicitly indicate
 ///   retaining the current state (e.g. on inactive clock edges `(10) : -`).
 ///   Because the lowered `moore.procedure` only assigns to the state variable
@@ -3047,8 +3041,8 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
   for (const auto &row : primitiveType.table) {
     // Skip rows containing 'x': UDP lowering here models transitions in 2-state
     // (`i1`) logic rather than 4-state `X` propagation (matching
-    // `skipUnsupportedRow`), so literal-'x' matchers cannot trigger and 'x'
-    // outputs cannot be represented.
+    // `skipUnsupportedCombinationalRow`), so literal-'x' matchers cannot
+    // trigger and 'x' outputs cannot be represented.
     if (row.output == 'x')
       continue;
     if (row.state == 'x')
@@ -3363,10 +3357,10 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
       initVal = moore::ConstantOp::create(builder, loc, i1Ty,
                                           svInt == 1 ? 1 : 0, false);
   }
-
   StringAttr qName = builder.getStringAttr(primitive.ports[0]->name);
   auto qVar = moore::VariableOp::create(builder, loc, i1RefTy, qName, initVal);
 
+  // Convert all input arguments to 2-state boolean values.
   SmallVector<Value> seqInputVals;
   seqInputVals.reserve(numInputs);
   for (Value arg : inputArgs) {
@@ -3399,8 +3393,9 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
                                           asyncConditions.asyncVal, qVar);
     qOut = moore::ReadOp::create(builder, loc, qVar);
   } else {
-    return mlir::emitError(loc) << "sequential UDP `" << primitive.name
-                                << "` without clock edge is not supported";
+    return mlir::emitError(loc)
+           << "unsupported sequential UDP `" << primitive.name
+           << "` without active transitions";
   }
 
   auto l1Ty = moore::IntType::getLogic(getContext(), 1);
@@ -3468,7 +3463,8 @@ FailureOr<moore::SVModuleOp> Context::convertUserDefinedPrimitiveDef(
   Value sum;
   SmallVector<UdpLevel> levels;
   for (const auto &entry : primitive.table) {
-    if (skipUnsupportedRow(entry, numInputs, levels))
+    if (!parseInputRow(entry.inputs, levels) ||
+        skipUnsupportedCombinationalRow(entry, levels, numInputs))
       continue;
     Value term = buildProductiveTerm(builder, loc, levels, inputVals, notVars);
     if (!term) {

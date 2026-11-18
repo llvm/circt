@@ -726,8 +726,20 @@ endprimitive
 // Test level-sensitive SR latch lowering to moore.procedure always_latch.
 // CHECK-LABEL: moore.module @udp_seq_sr_latch(out q : !moore.l1, in %s : !moore.l1, in %r : !moore.l1)
 // CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[S_CVT:%.+]] = moore.logic_to_int %s : l1
+// CHECK: [[R_CVT:%.+]] = moore.logic_to_int %r : l1
+// CHECK: [[NOT_R:%.+]] = moore.not [[R_CVT]] : i1
+// CHECK: [[PRESET:%.+]] = moore.and [[S_CVT]], [[NOT_R]] : i1
+// CHECK: [[NOT_S:%.+]] = moore.not [[S_CVT]] : i1
+// CHECK: [[CLEAR:%.+]] = moore.and [[NOT_S]], [[R_CVT]] : i1
+// CHECK: [[COND:%.+]] = moore.or [[CLEAR]], [[PRESET]] : i1
 // CHECK: moore.procedure always_latch {
-// CHECK:   moore.blocking_assign [[Q_VAR]], {{%.+}} : i1
+// CHECK:   [[COND_I1:%.+]] = moore.to_builtin_int [[COND]] : i1
+// CHECK:   cf.cond_br [[COND_I1]], ^[[TRUE_BB:.+]], ^[[EXIT_BB:.+]]
+// CHECK: ^[[TRUE_BB]]:
+// CHECK:   moore.blocking_assign [[Q_VAR]], [[PRESET]] : i1
+// CHECK:   cf.br ^[[EXIT_BB]]
+// CHECK: ^[[EXIT_BB]]:
 // CHECK:   moore.return
 // CHECK: }
 primitive udp_seq_sr_latch(q, s, r);
@@ -742,9 +754,19 @@ endprimitive
 // Test level-sensitive toggle latch depending on internal state q.
 // CHECK-LABEL: moore.module @udp_seq_toggle_latch(out q : !moore.l1, in %en : !moore.l1)
 // CHECK: [[Q_VAR:%.+]] = moore.variable : <i1>
+// CHECK: [[EN_CVT:%.+]] = moore.logic_to_int %en : l1
 // CHECK: [[Q_RD:%.+]] = moore.read [[Q_VAR]] : ref<i1>
+// CHECK: [[NOT_Q:%.+]] = moore.not [[Q_RD]] : i1
+// CHECK: [[PRESET:%.+]] = moore.and [[EN_CVT]], [[NOT_Q]] : i1
+// CHECK: [[CLEAR:%.+]] = moore.and [[EN_CVT]], [[Q_RD]] : i1
+// CHECK: [[COND:%.+]] = moore.or [[CLEAR]], [[PRESET]] : i1
 // CHECK: moore.procedure always_latch {
-// CHECK:   moore.blocking_assign [[Q_VAR]], {{%.+}} : i1
+// CHECK:   [[COND_I1:%.+]] = moore.to_builtin_int [[COND]] : i1
+// CHECK:   cf.cond_br [[COND_I1]], ^[[TRUE_BB:.+]], ^[[EXIT_BB:.+]]
+// CHECK: ^[[TRUE_BB]]:
+// CHECK:   moore.blocking_assign [[Q_VAR]], [[PRESET]] : i1
+// CHECK:   cf.br ^[[EXIT_BB]]
+// CHECK: ^[[EXIT_BB]]:
 // CHECK:   moore.return
 // CHECK: }
 primitive udp_seq_toggle_latch(q, en);
@@ -760,10 +782,25 @@ endprimitive
 // CHECK-LABEL: moore.module @udp_seq_latch_init(out q : !moore.l1, in %en : !moore.l1, in %d : !moore.l1)
 // CHECK: [[INIT_VAL:%.+]] = moore.constant 1 : i1
 // CHECK: [[Q_VAR:%.+]] = moore.variable [[INIT_VAL]] : <i1>
+// CHECK: [[EN_CVT:%.+]] = moore.logic_to_int %en : l1
+// CHECK: [[D_CVT:%.+]] = moore.logic_to_int %d : l1
+// CHECK-NOT: moore.read [[Q_VAR]]
+// CHECK: [[NOT_D:%.+]] = moore.not [[D_CVT]] : i1
+// CHECK: [[CLEAR:%.+]] = moore.and [[EN_CVT]], [[NOT_D]] : i1
+// CHECK: [[PRESET:%.+]] = moore.and [[EN_CVT]], [[D_CVT]] : i1
+// CHECK: [[COND:%.+]] = moore.or [[CLEAR]], [[PRESET]] : i1
 // CHECK: moore.procedure always_latch {
-// CHECK:   moore.blocking_assign [[Q_VAR]], {{%.+}} : i1
+// CHECK:   [[COND_I1:%.+]] = moore.to_builtin_int [[COND]] : i1
+// CHECK:   cf.cond_br [[COND_I1]], ^[[TRUE_BB:.+]], ^[[EXIT_BB:.+]]
+// CHECK: ^[[TRUE_BB]]:
+// CHECK:   moore.blocking_assign [[Q_VAR]], [[PRESET]] : i1
+// CHECK:   cf.br ^[[EXIT_BB]]
+// CHECK: ^[[EXIT_BB]]:
 // CHECK:   moore.return
 // CHECK: }
+// CHECK: [[Q_RD:%.+]] = moore.read [[Q_VAR]] : ref<i1>
+// CHECK: [[Q_LOGIC:%.+]] = moore.int_to_logic [[Q_RD]] : i1
+// CHECK: moore.output [[Q_LOGIC]] : !moore.l1
 primitive udp_seq_latch_init(q, en, d);
     output reg q; input en, d;
     initial q = 1;

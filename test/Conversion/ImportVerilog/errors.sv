@@ -584,8 +584,8 @@ endmodule
 
 // -----
 
-// expected-error @below {{sequential UDP `udp_without_clock` without clock edge is not supported}}
-primitive udp_without_clock(q, d);
+// expected-error @below {{unsupported sequential UDP `udp_no_active_transitions` without active transitions}}
+primitive udp_no_active_transitions(q, d);
   output reg q;
   input d;
   table
@@ -593,6 +593,6 @@ primitive udp_without_clock(q, d);
   endtable
 endprimitive
 
-module TestWithoutClock(input logic d, output logic q);
-  udp_without_clock u_wc (q, d);
+module TestNoActiveTransitions(input logic d, output logic q);
+  udp_no_active_transitions u_nat (q, d);
 endmodule
