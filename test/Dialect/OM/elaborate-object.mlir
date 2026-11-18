@@ -388,17 +388,20 @@ om.class private @RegistryWriter(%items: !items, %value: !om.integer) {
 // CHECK-NOT: om.registry_insert
 // CHECK-NOT: om.object @RegistryWriter
 // CHECK: om.class.fields %[[ITEMS]], %[[OTHER]]
-om.class @RegistryTop() -> (items: !items, independent: !items) {
-  %owner = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
-  %items = om.object.field %owner["items"] : (!om.class.type<@RegistryOwner>) -> !items
-  %other = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
-  %independent = om.object.field %other["items"] : (!om.class.type<@RegistryOwner>) -> !items
+om.class @RegistryTop() -> (first: !items, second: !items) {
+  // Insert into the first registry through both objects and a direct insertion.
+  %firstObj = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
+  %first = om.object.field %firstObj["items"] : (!om.class.type<@RegistryOwner>) -> !items
   %one = om.constant #om.integer<1 : si8> : !om.integer
   %two = om.constant #om.integer<2 : si8> : !om.integer
-  %a = om.object @RegistryWriter(%items, %two) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
-  %b = om.object @RegistryWriter(%items, %one) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
-  om.registry_insert %items, %two : !items
-  om.class.fields %items, %independent : !items, !items
+  %a = om.object @RegistryWriter(%first, %two) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
+  %b = om.object @RegistryWriter(%first, %one) : (!items, !om.integer) -> !om.class.type<@RegistryWriter>
+  om.registry_insert %first, %two : !items
+
+  // A separate empty registry remains distinct.
+  %secondObj = om.object @RegistryOwner() : () -> !om.class.type<@RegistryOwner>
+  %second = om.object.field %secondObj["items"] : (!om.class.type<@RegistryOwner>) -> !items
+  om.class.fields %first, %second : !items, !items
 }
 
 // An unknown initial or inserted element makes the registry unknown.
@@ -423,6 +426,18 @@ om.class @RegistryUnknowns(%value: !om.integer) -> (
   om.registry_insert %missing, %value : !om.registry<!om.integer>
   om.registry_insert %initial, %value : !om.registry<!om.integer>
   om.class.fields %items, %missing, %initial : !om.registry<!om.integer>, !om.registry<!om.integer>, !om.registry<!om.integer>
+}
+
+// An insertion into an unknown registry is erased during elaboration.
+// CHECK-LABEL: om.class @InsertIntoUnknown()
+// CHECK-NEXT: %[[UNKNOWN:.+]] = om.unknown : !om.registry<!om.integer>
+// CHECK-NEXT: om.class.fields %[[UNKNOWN]]
+// CHECK-NEXT: }
+om.class @InsertIntoUnknown() -> (items: !items) {
+  %items = om.unknown : !items
+  %value = om.constant #om.integer<1 : si8> : !om.integer
+  om.registry_insert %items, %value : !items
+  om.class.fields %items : !items
 }
 
 // CHECK-LABEL: om.class @RegistryParameter

@@ -531,17 +531,7 @@ om.class @ListContainsIdentityFold(
       i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
 
-// CHECK-LABEL: om.class @RegistryEffects
-// CHECK: %[[ITEMS:.+]] = om.registry_create %initial, %value, %value : !om.registry<!om.integer>
-// CHECK-NEXT: om.class.fields %[[ITEMS]]
-om.class @RegistryEffects(%initial: !om.integer, %value: !om.integer) -> (items: !om.registry<!om.integer>) {
-  %items = om.registry_create %initial : !om.registry<!om.integer>
-  om.registry_insert %items, %value : !om.registry<!om.integer>
-  om.registry_insert %items, %value : !om.registry<!om.integer>
-  om.class.fields %items : !om.registry<!om.integer>
-}
-
-// Check multiple distinct insertions and non-insertion uses of the registry.
+// Check distinct and repeated insertions and non-insertion uses of the registry.
 // CHECK-LABEL: om.class @RegistryMultipleUses
 // CHECK: %[[ITEMS:.+]] = om.registry_create %a, %c, %b, %a : !om.registry<!om.integer>
 // CHECK-NOT: om.registry_insert
