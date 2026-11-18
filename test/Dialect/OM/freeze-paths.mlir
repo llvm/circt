@@ -163,3 +163,18 @@ om.class @UnknownTest(%basepath: !om.basepath) -> (obj: !om.class.type<@UnknownC
   // CHECK: om.class.fields [[OBJ]], [[PATH]], [[NOT_PATH]] : !om.class.type<@UnknownClass>, !om.frozenpath, !om.string
   om.class.fields %1, %2, %3 : !om.class.type<@UnknownClass>, !om.path, !om.string
 }
+
+// Freeze paths in registries.
+// CHECK-LABEL: om.class @RegistryPaths(%input: !om.registry<!om.frozenpath>)
+// CHECK-SAME: -> (items: !om.registry<!om.frozenpath>)
+om.class @RegistryPaths(%input: !om.registry<!om.path>) -> (items: !om.registry<!om.path>) {
+  // CHECK: %[[PATH:.*]] = om.frozenpath_empty
+  %path = om.path_empty
+  // CHECK: %[[ITEMS:.*]] = om.registry_create %[[PATH]] {test = "keep"} : !om.registry<!om.frozenpath>
+  %items = om.registry_create %path {test = "keep"} : !om.registry<!om.path>
+  // CHECK: om.registry_insert %input, %[[PATH]] : !om.registry<!om.frozenpath>
+  om.registry_insert %input, %path : !om.registry<!om.path>
+  // CHECK: om.registry_insert %[[ITEMS]], %[[PATH]] : !om.registry<!om.frozenpath>
+  om.registry_insert %items, %path : !om.registry<!om.path>
+  om.class.fields %items : !om.registry<!om.path>
+}
