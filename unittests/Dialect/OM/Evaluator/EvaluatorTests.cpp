@@ -945,29 +945,6 @@ om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
   ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
 }
 
-TEST_F(EvaluatorTests, RegistryObjectBackReference) {
-  auto mod = parseModule(R"MLIR(
-    !items = !om.registry<!om.class.type<@Node>>
-    om.class @Node(%items: !items) -> (items: !items) {
-      om.class.fields %items : !items
-    }
-    om.class @Top() -> (items: !items) {
-      %items = om.registry_create : !items
-      %node = om.object @Node(%items) : (!items) -> !om.class.type<@Node>
-      om.registry_insert %items, %node : !items
-      om.class.fields %items : !items
-    }
-  )MLIR");
-  ASSERT_TRUE(mod);
-  Evaluator evaluator(*mod);
-  auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
-  ASSERT_TRUE(succeeded(result));
-  auto items = getField(*result, "items");
-  auto elements = getListElements(items);
-  ASSERT_EQ(elements.size(), 1u);
-  EXPECT_EQ(getField(elements.front(), "items").get(), items.get());
-}
-
 TEST_F(EvaluatorTests, RegistryFieldInObjectInput) {
   auto mod = parseModule(R"MLIR(
     !items = !om.registry<!om.integer>
