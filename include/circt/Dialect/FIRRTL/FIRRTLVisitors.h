@@ -68,10 +68,11 @@ public:
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
-            DoubleConstantOp, ListCreateOp, ListConcatOp, ListContainsOp,
-            UnresolvedPathOp, PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp,
-            IntegerAndOp, IntegerOrOp, IntegerNotOp, StringConcatOp, PropEqOp,
-            BoolAndOp, BoolOrOp, BoolXorOp, UnknownValueOp,
+            DoubleConstantOp, ListCreateOp, ListConcatOp, ListLengthOp,
+            ListContainsOp, UnresolvedPathOp, PathOp, IntegerAddOp,
+            IntegerMulOp, IntegerShrOp, IntegerAndOp, IntegerOrOp, IntegerNotOp,
+            StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp, BoolXorOp,
+            UnknownValueOp,
             // Format String expressions
             TimeOp, HierarchicalModuleNameOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
@@ -232,6 +233,7 @@ public:
   HANDLE(DoubleConstantOp, Unhandled);
   HANDLE(ListCreateOp, Unhandled);
   HANDLE(ListConcatOp, Unhandled);
+  HANDLE(ListLengthOp, Unhandled);
   HANDLE(ListContainsOp, Unhandled);
   HANDLE(PathOp, Unhandled);
   HANDLE(UnresolvedPathOp, Unhandled);

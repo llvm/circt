@@ -63,6 +63,18 @@ firrtl.circuit "SimulationTest" {
 
 // -----
 
+// list_length requires >= 7.0.0.
+firrtl.circuit "ListLength" {
+  firrtl.module @ListLength(in %list : !firrtl.list<string>,
+                           out %length : !firrtl.integer) {
+    // expected-error @below {{'firrtl.list.length' op list length requires FIRRTL 7.0.0}}
+    %0 = firrtl.list.length %list : !firrtl.list<string>
+    firrtl.propassign %length, %0 : !firrtl.integer
+  }
+}
+
+// -----
+
 // Non-literal expressions cause an error in FIRRTL < 7.0.0.
 firrtl.circuit "ListContains" {
   firrtl.module @ListContains(in %list : !firrtl.list<string>,
