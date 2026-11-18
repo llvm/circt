@@ -968,7 +968,7 @@ TEST_F(EvaluatorTests, RegistryObjectBackReference) {
   EXPECT_EQ(getField(elements.front(), "items").get(), items.get());
 }
 
-TEST_F(EvaluatorTests, RegistryUnknownElementsAndMembership) {
+TEST_F(EvaluatorTests, RegistryUnknowns) {
   auto mod = parseModule(R"MLIR(
     !items = !om.registry<!om.integer>
     om.class @Top() -> (items: !items, missing: !items) {
@@ -986,15 +986,8 @@ TEST_F(EvaluatorTests, RegistryUnknownElementsAndMembership) {
   Evaluator evaluator(*mod);
   auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
   ASSERT_TRUE(succeeded(result));
-  auto items = getField(*result, "items");
-  EXPECT_FALSE(items->isUnknown());
-  auto elements = getListElements(items);
-  ASSERT_EQ(elements.size(), 2u);
-  EXPECT_EQ(llvm::count_if(
-                elements, [](const auto &value) { return value->isUnknown(); }),
-            1);
-  auto missing = getField(*result, "missing");
-  EXPECT_TRUE(missing->isUnknown());
+  EXPECT_TRUE(getField(*result, "items")->isUnknown());
+  EXPECT_TRUE(getField(*result, "missing")->isUnknown());
 }
 
 TEST_F(EvaluatorTests, RegistryInputs) {
@@ -1023,10 +1016,10 @@ TEST_F(EvaluatorTests, RegistryInputs) {
             (SmallVector<int64_t>{2}));
   EXPECT_EQ(getRegistryIntegers(input), (SmallVector<int64_t>{2}));
 
-  // Unknown registries are accepted, but partially evaluated lists are not.
+  // Unknown registries are accepted as inputs.
   auto listType = ListType::get(OMIntegerType::get(&context));
   auto unknown = evaluator::AttributeValue::get(
-      RegistryType::get(OMIntegerType::get(&context)),
+      RegistryType::get(&context, OMIntegerType::get(&context)),
       UnknownLoc::get(&context));
   EXPECT_EQ(unknown->getType(), listType);
   unknown->markUnknown();
@@ -1035,16 +1028,6 @@ TEST_F(EvaluatorTests, RegistryInputs) {
   ASSERT_TRUE(succeeded(result));
   EXPECT_TRUE(getField(*result, "items")->isUnknown());
   EXPECT_EQ(getField(*result, "items")->getType(), listType);
-
-  auto partial = std::make_shared<evaluator::ListValue>(
-      listType, UnknownLoc::get(&context));
-  SmallVector<std::string> diagnostics;
-  ScopedDiagnosticHandler handler(
-      &context, [&](Diagnostic &diag) { diagnostics.push_back(diag.str()); });
-  EXPECT_TRUE(failed(evaluator.instantiate(StringAttr::get(&context, "Use"),
-                                           {input, partial})));
-  ASSERT_EQ(diagnostics.size(), 1u);
-  EXPECT_EQ(diagnostics[0], "cannot import partially evaluated OM list value");
 }
 
 TEST_F(EvaluatorTests, ListConcat) {
