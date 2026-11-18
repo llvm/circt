@@ -115,9 +115,6 @@ void circt::populateArcStateLoweringPipeline(
     OpPassManager &pm, const ArcStateLoweringOptions &options) {
   pm.addPass(arc::createLowerStatePass());
 
-  // TODO: LowerClocksToFuncsPass might not properly consider scf.if operations
-  // (or nested regions in general) and thus errors out when muxes are also
-  // converted in the hw.module or arc.model
   // TODO: InlineArcs seems to not properly handle scf.if operations, thus the
   // following is commented out
   // pm.addPass(arc::createMuxToControlFlow());
@@ -139,8 +136,7 @@ void circt::populateArcStateAllocationPipeline(
     allocStateOpts.insertTraceTaps = options.insertTraceTaps;
     pm.nest<arc::ModelOp>().addPass(arc::createAllocateState(allocStateOpts));
   }
-  pm.addPass(arc::createLowerClocksToFuncs()); // no CSE between state alloc
-                                               // and clock func lowering
+  pm.addPass(arc::createExtractInitialAndFinalFunctions());
   if (options.splitFuncsThreshold.getNumOccurrences()) {
     pm.addPass(arc::createSplitFuncs({options.splitFuncsThreshold}));
   }

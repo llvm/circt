@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --arc-lower-clocks-to-funcs --verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --arc-extract-initial-and-final-functions --verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: func.func @Trivial_initial(%arg0: !arc.storage) {
 // CHECK-NEXT:    [[TMP:%.+]] = hw.constant 9002

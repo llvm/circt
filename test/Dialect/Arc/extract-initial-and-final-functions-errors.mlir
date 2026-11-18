@@ -1,12 +1,12 @@
-// RUN: circt-opt %s --arc-lower-clocks-to-funcs --split-input-file --verify-diagnostics
+// RUN: circt-opt %s --arc-extract-initial-and-final-functions --split-input-file --verify-diagnostics
 
 arc.model @NonPureExternalValue io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   %0 = arc.as_context %arg0 : !arc.storage
   // expected-note @below {{external value defined here:}}
   %1 = arc.current_time %0
-  // expected-error @below {{clock tree uses external value}}
-  // expected-note @below {{clock trees can only use pure external values}}
+  // expected-error @below {{region uses external value}}
+  // expected-note @below {{only pure external values can be used}}
   arc.initial {
     %2 = comb.add %1, %1 : i64
   }

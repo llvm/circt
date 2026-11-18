@@ -1,4 +1,4 @@
-//===- LowerClocksToFuncs.cpp ---------------------------------------------===//
+//===- ExtractInitialAndFinalFunctions.cpp --------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,11 +16,11 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "arc-lower-clocks-to-funcs"
+#define DEBUG_TYPE "arc-extract-initial-and-final-functions"
 
 namespace circt {
 namespace arc {
-#define GEN_PASS_DEF_LOWERCLOCKSTOFUNCS
+#define GEN_PASS_DEF_EXTRACTINITIALANDFINALFUNCTIONS
 #include "circt/Dialect/Arc/ArcPasses.h.inc"
 } // namespace arc
 } // namespace circt
@@ -35,29 +35,32 @@ using namespace hw;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerClocksToFuncsPass
-    : public arc::impl::LowerClocksToFuncsBase<LowerClocksToFuncsPass> {
-  LowerClocksToFuncsPass() = default;
-  LowerClocksToFuncsPass(const LowerClocksToFuncsPass &pass)
-      : LowerClocksToFuncsPass() {}
+struct ExtractInitialAndFinalFunctionsPass
+    : public arc::impl::ExtractInitialAndFinalFunctionsBase<
+          ExtractInitialAndFinalFunctionsPass> {
+  ExtractInitialAndFinalFunctionsPass() = default;
+  ExtractInitialAndFinalFunctionsPass(
+      const ExtractInitialAndFinalFunctionsPass &pass)
+      : ExtractInitialAndFinalFunctionsPass() {}
 
   void runOnOperation() override;
-  LogicalResult lowerModel(ModelOp modelOp);
-  LogicalResult lowerClock(Operation *clockOp, ValueRange modelArgs,
-                           OpBuilder &funcBuilder);
+  LogicalResult extractFromModel(ModelOp modelOp);
+  LogicalResult extractFunction(Operation *regionOp, ValueRange modelArgs,
+                                OpBuilder &funcBuilder);
 
   SymbolTable *symbolTable;
 };
 } // namespace
 
-void LowerClocksToFuncsPass::runOnOperation() {
+void ExtractInitialAndFinalFunctionsPass::runOnOperation() {
   symbolTable = &getAnalysis<SymbolTable>();
   for (auto op : getOperation().getOps<ModelOp>())
-    if (failed(lowerModel(op)))
+    if (failed(extractFromModel(op)))
       return signalPassFailure();
 }
 
-LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
+LogicalResult
+ExtractInitialAndFinalFunctionsPass::extractFromModel(ModelOp modelOp) {
   LLVM_DEBUG(llvm::dbgs() << "Extracting Initial/Final Functions in `"
                           << modelOp.getName() << "`\n");
 
@@ -87,70 +90,70 @@ LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
   // Perform the actual extraction.
   OpBuilder funcBuilder(modelOp);
   for (auto *op : llvm::concat<Operation *>(initialOps, finalOps))
-    if (failed(lowerClock(op, modelOp.getBody().getArguments(), funcBuilder)))
+    if (failed(
+            extractFunction(op, modelOp.getBody().getArguments(), funcBuilder)))
       return failure();
 
   return success();
 }
 
-LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
-                                                 ValueRange modelArgs,
-                                                 OpBuilder &funcBuilder) {
-  LLVM_DEBUG(llvm::dbgs() << "- Lowering clock " << clockOp->getName() << "\n");
-  assert((isa<InitialOp, FinalOp>(clockOp)));
-  auto modelOp = clockOp->getParentOfType<ModelOp>();
-  Region &clockRegion = clockOp->getRegion(0);
+LogicalResult ExtractInitialAndFinalFunctionsPass::extractFunction(
+    Operation *regionOp, ValueRange modelArgs, OpBuilder &funcBuilder) {
+  LLVM_DEBUG(llvm::dbgs() << "- Extracting " << regionOp->getName() << "\n");
+  assert((isa<InitialOp, FinalOp>(regionOp)));
+  auto modelOp = regionOp->getParentOfType<ModelOp>();
+  Region &region = regionOp->getRegion(0);
 
-  // Make the clock's body isolated from above. Pure operations defined outside
-  // the clock are cloned into it. The initializer and finalizer only run once,
+  // Make the region isolated from above. Pure operations defined outside the
+  // region are cloned into it. The initializer and finalizer only run once,
   // so duplicating these computations is cheap. All other values defined
-  // outside the clock become arguments of the clock's body, and must be
+  // outside the region become arguments of the region's body, and must be
   // arguments of the model.
-  IRRewriter rewriter(clockOp->getContext());
+  IRRewriter rewriter(regionOp->getContext());
   auto capturedValues =
-      makeRegionIsolatedFromAbove(rewriter, clockRegion, [](Operation *op) {
+      makeRegionIsolatedFromAbove(rewriter, region, [](Operation *op) {
         return op->getNumRegions() == 0 && isPure(op);
       });
   SmallVector<unsigned> argIndices;
   for (auto value : capturedValues) {
     auto it = llvm::find(modelArgs, value);
     if (it == modelArgs.end()) {
-      auto d = clockOp->emitError("clock tree uses external value");
-      d.attachNote() << "clock trees can only use pure external values";
+      auto d = regionOp->emitError("region uses external value");
+      d.attachNote() << "only pure external values can be used";
       d.attachNote(value.getLoc()) << "external value defined here:";
       return d;
     }
     argIndices.push_back(it - modelArgs.begin());
   }
 
-  // Pick a name for the clock function.
+  // Pick a name for the function.
   SmallString<32> funcName;
   funcName.append(modelOp.getName());
-  if (isa<InitialOp>(clockOp))
+  if (isa<InitialOp>(regionOp))
     funcName.append("_initial");
-  else if (isa<FinalOp>(clockOp))
+  else if (isa<FinalOp>(regionOp))
     funcName.append("_final");
 
   // Create the function, which takes the same arguments as the model.
   auto funcOp = func::FuncOp::create(
-      funcBuilder, clockOp->getLoc(), funcName,
+      funcBuilder, regionOp->getLoc(), funcName,
       funcBuilder.getFunctionType(modelArgs.getTypes(), {}));
   symbolTable->insert(funcOp); // uniquifies the name
   LLVM_DEBUG(llvm::dbgs() << "  - Created function `" << funcOp.getSymName()
                           << "`\n");
 
-  // Move the clock's body into the function, mapping the captured values to
+  // Move the region's body into the function, mapping the captured values to
   // the corresponding function arguments.
   Block *entryBlock = funcOp.addEntryBlock();
   SmallVector<Value> argReplacements;
   for (auto index : argIndices)
     argReplacements.push_back(entryBlock->getArgument(index));
-  rewriter.mergeBlocks(&clockRegion.front(), entryBlock, argReplacements);
+  rewriter.mergeBlocks(&region.front(), entryBlock, argReplacements);
   rewriter.setInsertionPointToEnd(entryBlock);
-  func::ReturnOp::create(rewriter, clockOp->getLoc());
+  func::ReturnOp::create(rewriter, regionOp->getLoc());
 
   // Register the function with the model.
-  TypeSwitch<Operation *, void>(clockOp)
+  TypeSwitch<Operation *, void>(regionOp)
       .Case<InitialOp>([&](auto) {
         if (modelOp.getInitialFn().has_value())
           modelOp.emitWarning() << "Existing model initializer '"
@@ -167,6 +170,6 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
         modelOp.setFinalFnAttr(FlatSymbolRefAttr::get(funcOp.getSymNameAttr()));
       });
 
-  clockOp->erase();
+  regionOp->erase();
   return success();
 }

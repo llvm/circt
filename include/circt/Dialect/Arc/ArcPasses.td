@@ -181,8 +181,16 @@ def LowerArcsToFuncs : Pass<"arc-lower-arcs-to-funcs", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::LLVM::LLVMDialect"];
 }
 
-def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "mlir::ModuleOp"> {
-  let summary = "Lower clock trees into functions";
+def ExtractInitialAndFinalFunctions
+    : Pass<"arc-extract-initial-and-final-functions", "mlir::ModuleOp"> {
+  let summary = "Extract the initial and final regions of models into functions";
+  let description = [{
+    Move the bodies of the `arc.initial` and `arc.final` ops of each model into
+    separate functions and register them as the model's initializer and
+    finalizer. The functions take the same arguments as the model. Pure
+    operations outside of the regions are cloned into the functions; all other
+    values used by the regions must be arguments of the model.
+  }];
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::scf::SCFDialect"];
 }
 

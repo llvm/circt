@@ -435,27 +435,23 @@ def MemoryWriteOp : ArcOp<"memory_write", [
   }];
 }
 
-//===----------------------------------------------------------------------===//
-// (Pseudo) Clock Trees
-//===----------------------------------------------------------------------===//
-
-class ClockTreeLikeOp<string mnemonic, list<Trait> traits = []>:
-  ArcOp<mnemonic, !listconcat(traits, [
+def InitialOp : ArcOp<"initial", [
     RecursiveMemoryEffects, NoTerminator, NoRegionArguments, SingleBlock,
     HasParent<"ModelOp">
-])> {
-  let regions = (region SizedRegion<1>:$body);
-}
-
-def InitialOp : ClockTreeLikeOp<"initial"> {
+]> {
   let summary = "Region to be executed at the start of simulation";
+  let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
     attr-dict-with-keyword $body
   }];
 }
 
-def FinalOp : ClockTreeLikeOp<"final"> {
+def FinalOp : ArcOp<"final", [
+    RecursiveMemoryEffects, NoTerminator, NoRegionArguments, SingleBlock,
+    HasParent<"ModelOp">
+]> {
   let summary = "Region to be executed at the end of simulation";
+  let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
     attr-dict-with-keyword $body
   }];
