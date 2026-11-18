@@ -478,6 +478,14 @@ firrtl.circuit "StringCat" {
     firrtl.propassign %eq, %0 : !firrtl.bool
   }
 
+  // CHECK-LABEL: om.class @ListLengthClass
+  firrtl.class @ListLengthClass(in %list: !firrtl.list<list<integer>>, out %length: !firrtl.integer) {
+    // CHECK: %[[LENGTH:.+]] = om.list_length %list : <!om.list<!om.integer>>{{$}}
+    %0 = firrtl.list.length %list : !firrtl.list<list<integer>>
+    // CHECK: om.class.fields %[[LENGTH]] : !om.integer
+    firrtl.propassign %length, %0 : !firrtl.integer
+  }
+
   // CHECK-LABEL: om.class @ListContainsClass
   firrtl.class @ListContainsClass(
       in %strings: !firrtl.list<string>, in %string: !firrtl.string,
