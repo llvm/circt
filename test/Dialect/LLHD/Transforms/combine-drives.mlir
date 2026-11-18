@@ -337,4 +337,42 @@ hw.module @UnionConflict(in %u : i42, in %v : i1337) {
   llhd.assign %3, %v : i1337
 }
 
+// A single whole-signal drive to a union (with a field projection so
+// `CombineDrives` traces the signal) needs no `hw.union_create` wrapping and
+// must be preserved as-is.
+// CHECK-LABEL: @UnionSingleWholeDrive
+hw.module @UnionSingleWholeDrive(in %u : !hw.union<x: i42, y: i1337>, out o : i42) {
+  %c0_i1337 = hw.constant 0 : i1337
+  %0 = hw.bitcast %c0_i1337 : (i1337) -> !hw.union<x: i42, y: i1337>
+  // CHECK: %a = llhd.sig
+  // CHECK-NEXT: llhd.assign %a, %u : !hw.union<x: i42, y: i1337>
+  // CHECK-NEXT: %[[X_REF:.+]] = llhd.sig.struct_extract %a["x"]
+  // CHECK-NEXT: %[[X_VAL:.+]] = llhd.prb %[[X_REF]] : i42
+  // CHECK-NEXT: hw.output %[[X_VAL]] : i42
+  %a = llhd.sig %0 : <!hw.union<x: i42, y: i1337>>
+  llhd.assign %a, %u : !hw.union<x: i42, y: i1337>
+  %1 = llhd.sig.struct_extract %a["x"] : <!hw.union<x: i42, y: i1337>>
+  %2 = llhd.prb %1 : i42
+  hw.output %2 : i42
+}
+
+// Whole-union drives to array elements must populate `completeDrives` on each
+// union subsignal so the enclosing array signal can combine them.
+// CHECK-LABEL: @UnionArrayElementWholeDrives
+hw.module @UnionArrayElementWholeDrives(in %u0 : !hw.union<x: i42, y: i1337>, in %u1 : !hw.union<x: i42, y: i1337>) {
+  %false = hw.constant false
+  %true = hw.constant true
+  %c0_i1337 = hw.constant 0 : i1337
+  %u_zero = hw.bitcast %c0_i1337 : (i1337) -> !hw.union<x: i42, y: i1337>
+  %arr_zero = hw.array_create %u_zero, %u_zero : !hw.union<x: i42, y: i1337>
+  // CHECK: %arr = llhd.sig
+  // CHECK-NEXT: %[[AGG:.+]] = hw.array_create %u1, %u0 : !hw.union<x: i42, y: i1337>
+  // CHECK-NEXT: llhd.assign %arr, %[[AGG]] : !hw.array<2xunion<x: i42, y: i1337>>
+  %arr = llhd.sig %arr_zero : <!hw.array<2x!hw.union<x: i42, y: i1337>>>
+  %e0 = llhd.sig.array_get %arr[%false] : <!hw.array<2x!hw.union<x: i42, y: i1337>>>
+  %e1 = llhd.sig.array_get %arr[%true] : <!hw.array<2x!hw.union<x: i42, y: i1337>>>
+  llhd.assign %e0, %u0 : !hw.union<x: i42, y: i1337>
+  llhd.assign %e1, %u1 : !hw.union<x: i42, y: i1337>
+}
+
 func.func private @useSigI42(%arg0: !llhd.ref<i42>)
