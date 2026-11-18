@@ -369,3 +369,34 @@ with Context() as ctx, Location.unknown():
   obj = evaluator.instantiate("AssertUnknown", om.Unknown(i1_type))
   # CHECK: AssertUnknown(unknown): passed
   print("AssertUnknown(unknown): passed")
+
+# Test registry values in the evaluator.
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+  module = Module.parse("""
+  !items = !om.registry<!om.integer>
+  module {
+    om.class @Registry() -> (items: !items) {
+      %one = om.constant #om.integer<1 : si32> : !om.integer
+      %items = om.registry_create %one : !items
+      om.class.fields %items : !items
+    }
+    om.class @Append(%items: !items) -> (items: !items) {
+      %two = om.constant #om.integer<2 : si32> : !om.integer
+      om.registry_insert %items, %two : !items
+      om.class.fields %items : !items
+    }
+    om.class @UnknownRegistry() -> (items: !items) {
+      %unknown = om.unknown : !om.integer
+      %items = om.registry_create %unknown : !items
+      om.class.fields %items : !items
+    }
+  }
+  """)
+  evaluator = om.Evaluator(module)
+  items = evaluator.instantiate("Registry").items
+  assert isinstance(items, om.List)
+  assert list(items) == [1]
+  assert sorted(evaluator.instantiate("Append", items).items) == [1, 2]
+  assert isinstance(evaluator.instantiate("UnknownRegistry").items, om.Unknown)
