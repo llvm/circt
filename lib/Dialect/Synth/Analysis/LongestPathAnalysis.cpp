@@ -927,7 +927,7 @@ LogicalResult LocalVisitor::markStartPoint(Value value, size_t bitPos,
 
 LogicalResult LocalVisitor::visit(hw::WireOp op, size_t bitPos,
                                   SmallVectorImpl<OpenPath> &results) {
-  return markEquivalent(op, bitPos, op.getInput(), bitPos, results);
+  return markEquivalent(op.getResult(), bitPos, op.getInput(), bitPos, results);
 }
 
 LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
