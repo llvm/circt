@@ -2250,15 +2250,24 @@ void GrandCentralPass::runOnOperation() {
     return signalPassFailure();
 
   if (companionMode == CompanionMode::Drop) {
-    for (auto *mod : modulesToDelete) {
+    // Erase instantiating modules before the modules they instantiate.
+    SmallVector<Operation *> eraseOrder;
+    instancePaths->instanceGraph.walkInversePostOrder(
+        [&](igraph::InstanceGraphNode &node) {
+          if (modulesToDelete.contains(node.getModule()))
+            eraseOrder.push_back(node.getModule());
+        });
+    for (auto *mod : eraseOrder) {
       auto name = cast<FModuleLike>(mod).getModuleNameAttr();
 
       DenseSet<hw::HierPathOp> nlas;
       nlaTable->getNLAsInModule(name, nlas);
       nlaTable->removeNLAsfromModule(nlas, name);
       for (auto nla : nlas) {
-        if (nla.root() == name)
+        if (nla.root() == name) {
+          nlaTable->erase(nla);
           nla.erase();
+        }
       }
       auto *node = instancePaths->instanceGraph.lookup(
           cast<igraph::ModuleOpInterface>(*mod));
