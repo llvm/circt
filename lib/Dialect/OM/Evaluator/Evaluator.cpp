@@ -36,9 +36,10 @@ static Type getRuntimeType(Type type) {
   return type;
 }
 
-static LogicalResult
-verifyActualParameters(ClassLike classLike,
-                       ArrayRef<EvaluatorValuePtr> actualParams) {
+namespace {
+
+LogicalResult verifyActualParameters(ClassLike classLike,
+                                     ArrayRef<EvaluatorValuePtr> actualParams) {
   auto formalParamNames =
       classLike.getFormalParamNames().getAsRange<StringAttr>();
   auto formalParamTypes = classLike.getBodyBlock()->getArgumentTypes();
@@ -85,8 +86,6 @@ verifyActualParameters(ClassLike classLike,
   }
   return success();
 }
-
-namespace circt::om::evaluator_detail {
 
 /// A helper class that builds the scratch IR for evaluating an object. This is
 /// used to convert from the evaluator's API (which uses opaque pointers to
@@ -240,30 +239,42 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
     return result.getResult();
   }
 
-  FailureOr<Value> result = failure();
-  if (auto *attrValue = dyn_cast<evaluator::AttributeValue>(value.get())) {
-    auto attr = attrValue->getAttr();
-    if (!attr)
-      return emitError(loc, "cannot import OM attribute value without an "
-                            "attribute");
-    OpBuilder builder(wrapperClass.getFieldsOp());
-    result =
-        ConstantOp::create(builder, loc, cast<TypedAttr>(attr)).getResult();
-  } else if (auto *listValue = dyn_cast<evaluator::ListValue>(value.get())) {
-    result = materializeContainerInput(listValue, loc, expectedType);
-  } else if (auto *objectValue =
-                 dyn_cast<evaluator::ObjectValue>(value.get())) {
-    result = materializeObjectInput(objectValue, loc);
-  } else {
-    result = createWrapperArgument(value, loc, expectedType);
-  }
-  if (succeeded(result))
-    importedValues[key] = *result;
-  return result;
+  return llvm::TypeSwitch<evaluator::EvaluatorValue *, FailureOr<Value>>(
+             value.get())
+      .Case([&](evaluator::AttributeValue *attrValue) -> FailureOr<Value> {
+        auto attr = attrValue->getAttr();
+        if (!attr)
+          return emitError(loc, "cannot import OM attribute value without an "
+                                "attribute");
+        OpBuilder builder(wrapperClass.getFieldsOp());
+        auto result = ConstantOp::create(builder, loc, cast<TypedAttr>(attr));
+        importedValues[key] = result.getResult();
+        return result.getResult();
+      })
+      // NOLINTNEXTLINE(misc-no-recursion)
+      .Case([&](evaluator::ListValue *listValue) -> FailureOr<Value> {
+        auto result = materializeContainerInput(listValue, loc, expectedType);
+        if (succeeded(result))
+          importedValues[key] = *result;
+        return result;
+      })
+      // NOLINTNEXTLINE(misc-no-recursion)
+      .Case([&](evaluator::ObjectValue *objectValue) -> FailureOr<Value> {
+        auto result = materializeObjectInput(objectValue, loc);
+        if (succeeded(result))
+          importedValues[key] = *result;
+        return result;
+      })
+      .Default([&](evaluator::EvaluatorValue *) -> FailureOr<Value> {
+        auto result = createWrapperArgument(value, loc, expectedType);
+        if (succeeded(result))
+          importedValues[key] = *result;
+        return result;
+      });
 }
 
 FailureOr<Value>
-// NOLINTNEXTLINE(misc-no-recursion)
+// NOLINTNEXTLINE(misc-no-recursion,llvm-prefer-static-over-anonymous-namespace)
 ScratchIRBuilder::materializeContainerInput(evaluator::ListValue *listValue,
                                             Location loc, Type type) {
   if (!listValue->isFullyEvaluated())
@@ -335,9 +346,7 @@ ScratchIRBuilder::createWrapperArgument(EvaluatorValuePtr value, Location loc,
   return wrapperClass.getBodyBlock()->addArgument(argType, loc);
 }
 
-} // namespace circt::om::evaluator_detail
-
-using evaluator_detail::ScratchIRBuilder;
+} // namespace
 
 /// Construct an Evaluator with an IR module.
 circt::om::Evaluator::Evaluator(ModuleOp mod) : symbolTable(mod) {}
@@ -1097,7 +1106,8 @@ circt::om::evaluator::AttributeValue::get(Type type, LocationAttr loc) {
   if (!loc)
     loc = UnknownLoc::get(context);
 
-  // Lists and completed registries share the same runtime representation.
+  // Special handling for ListType and RegistryType to create proper ListValue
+  // objects instead of AttributeValue objects.
   if (auto listType = dyn_cast<ListType>(getRuntimeType(type)))
     return std::make_shared<evaluator::ListValue>(listType, loc);
   // Create the AttributeValue with the private tag
