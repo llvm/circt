@@ -655,14 +655,13 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](ElaboratedObjectOp op) {
               return evaluateElaboratedObject(op, actualParams, loc);
             })
-            .Case([&](ListCreateOp op) {
-              return evaluateListCreate(op, actualParams, loc);
+            // Evaluating nested collections recursively dispatches here.
+            // NOLINTNEXTLINE(misc-no-recursion)
+            .Case<ListCreateOp, RegistryCreateOp>([&](auto op) {
+              return evaluateCollectionCreate(op, actualParams, loc);
             })
             .Case([&](ListConcatOp op) {
               return evaluateListConcat(op, actualParams, loc);
-            })
-            .Case([&](RegistryCreateOp op) {
-              return evaluateRegistryCreate(op, actualParams, loc);
             })
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams, loc);
@@ -745,16 +744,20 @@ circt::om::Evaluator::evaluateElaboratedObject(ElaboratedObjectOp op,
   return objectValue;
 }
 
-/// Evaluator dispatch function for List creation.
+/// Evaluator dispatch function for list and registry creation.
 FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateListCreate(ListCreateOp op,
-                                         ActualParameters actualParams,
-                                         Location loc) {
+// Evaluating nested collections requires recursion.
+// NOLINTNEXTLINE(misc-no-recursion)
+circt::om::Evaluator::evaluateCollectionCreate(Operation *op,
+                                               ActualParameters actualParams,
+                                               Location loc) {
   // Evaluate the Object itself, in case it hasn't been evaluated yet.
   SmallVector<evaluator::EvaluatorValuePtr> values;
-  auto list = getOrCreateValue(op, actualParams, loc);
+  auto list = getOrCreateValue(op->getResult(0), actualParams, loc);
+  if (failed(list))
+    return failure();
   bool hasUnknown = false;
-  for (auto operand : op.getOperands()) {
+  for (auto operand : op->getOperands()) {
     auto result = evaluateValue(operand, actualParams, loc);
     if (failed(result))
       return result;
@@ -817,30 +820,6 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
     list.value()->markUnknown();
 
   return list;
-}
-
-/// Evaluator dispatch function for registry allocation.
-FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateRegistryCreate(RegistryCreateOp op,
-                                             ActualParameters actualParams,
-                                             Location loc) {
-  auto registry = getOrCreateValue(op, actualParams, loc);
-  if (failed(registry))
-    return failure();
-
-  // Do not evaluate elements yet; they may refer back to this registry.
-  SmallVector<evaluator::EvaluatorValuePtr> elements;
-  elements.reserve(op.getElements().size());
-  for (auto element : op.getElements()) {
-    auto result = getOrCreateValue(element, actualParams, loc);
-    if (failed(result))
-      return failure();
-    elements.push_back(result.value());
-  }
-  // An unknown element does not make the whole registry unknown.
-  cast<evaluator::ListValue>(registry.value().get())
-      ->setElements(std::move(elements));
-  return registry;
 }
 
 FailureOr<evaluator::EvaluatorValuePtr>
