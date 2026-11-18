@@ -287,6 +287,11 @@ with Context() as ctx:
       om.class.fields %c42, %in0, %sum, %prod, %true, %in3 :
         !om.integer, !om.integer, !om.integer, !om.integer, i1, i1
     }
+    om.class @UnknownList() -> (unknown: !om.list<!om.integer>, empty: !om.list<!om.integer>) {
+      %unknown = om.unknown : !om.list<!om.integer>
+      %empty = om.list_create : !om.integer
+      om.class.fields %unknown, %empty : !om.list<!om.integer>, !om.list<!om.integer>
+    }
   }
   """)
 
@@ -310,6 +315,12 @@ with Context() as ctx:
   print(f"out4 (constant bool): {obj.out4}")
   # CHECK: out5 (unknown bool): Unknown(i1)
   print(f"out5 (unknown bool): {obj.out5}")
+
+  obj = evaluator.instantiate("UnknownList")
+  assert isinstance(obj.unknown, om.Unknown)
+  assert obj.unknown.type == Type.parse("!om.list<!om.integer>")
+  assert isinstance(obj.empty, om.List)
+  assert len(obj.empty) == 0
 
 # Test om.property_assert evaluation.
 
