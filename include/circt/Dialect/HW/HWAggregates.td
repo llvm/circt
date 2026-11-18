@@ -15,6 +15,7 @@
 #define CIRCT_DIALECT_HW_HWAGGREGATES_TD
 
 include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -173,6 +174,7 @@ def ArrayGetOp : HWOp<"array_get", [
   ArrayElementTypeConstraint<"result", "input">,
   IndexBitWidthConstraint<"index", "input">,
   Pure,
+  DeclareOpInterfaceMethods<StructuralNameOpInterface>,
 ]> {
   let summary = "Extract an element from an array";
   let description = [{

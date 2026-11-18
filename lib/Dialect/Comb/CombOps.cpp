@@ -673,6 +673,133 @@ LogicalResult TruthTableOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// StructuralNameOpInterface
+//===----------------------------------------------------------------------===//
+
+std::optional<hw::StructuralName>
+AddOp::inferStructuralName(function_ref<StringRef(Value)> getOperandName) {
+  return hw::inferStructuralNameFromOperands("add", getInputs(),
+                                             /*commutative=*/true,
+                                             getOperandName);
+}
+
+std::optional<hw::StructuralName>
+SubOp::inferStructuralName(function_ref<StringRef(Value)> getOperandName) {
+  return hw::inferStructuralNameFromOperands("sub", getOperands(),
+                                             /*commutative=*/false,
+                                             getOperandName);
+}
+
+std::optional<hw::StructuralName>
+AndOp::inferStructuralName(function_ref<StringRef(Value)> getOperandName) {
+  return hw::inferStructuralNameFromOperands("and", getInputs(),
+                                             /*commutative=*/true,
+                                             getOperandName);
+}
+
+std::optional<hw::StructuralName>
+OrOp::inferStructuralName(function_ref<StringRef(Value)> getOperandName) {
+  return hw::inferStructuralNameFromOperands("or", getInputs(),
+                                             /*commutative=*/true,
+                                             getOperandName);
+}
+
+/// Name a binary not "not_<operand>", any other xor "xor_<operands>".
+std::optional<hw::StructuralName>
+XorOp::inferStructuralName(function_ref<StringRef(Value)> getOperandName) {
+  if (isBinaryNot())
+    return hw::inferStructuralNameFromOperands("not", getInputs()[0],
+                                               /*commutative=*/false,
+                                               getOperandName);
+  return hw::inferStructuralNameFromOperands("xor", getInputs(),
+                                             /*commutative=*/true,
+                                             getOperandName);
+}
+
+/// Return the mnemonic of a comparison in a structural name. Signed and
+/// unsigned, case and wildcard comparisons share a mnemonic.
+static StringRef getStructuralNameMnemonic(ICmpPredicate predicate) {
+  switch (predicate) {
+  case ICmpPredicate::eq:
+  case ICmpPredicate::ceq:
+  case ICmpPredicate::weq:
+    return "eq";
+  case ICmpPredicate::ne:
+  case ICmpPredicate::cne:
+  case ICmpPredicate::wne:
+    return "ne";
+  case ICmpPredicate::slt:
+  case ICmpPredicate::ult:
+    return "lt";
+  case ICmpPredicate::sle:
+  case ICmpPredicate::ule:
+    return "le";
+  case ICmpPredicate::sgt:
+  case ICmpPredicate::ugt:
+    return "gt";
+  case ICmpPredicate::sge:
+  case ICmpPredicate::uge:
+    return "ge";
+  }
+  llvm_unreachable("unknown comparison predicate");
+}
+
+std::optional<hw::StructuralName>
+ICmpOp::inferStructuralName(function_ref<StringRef(Value)> getOperandName) {
+  auto predicate = getPredicate();
+  bool commutative =
+      predicate == ICmpPredicate::eq || predicate == ICmpPredicate::ne ||
+      predicate == ICmpPredicate::ceq || predicate == ICmpPredicate::cne ||
+      predicate == ICmpPredicate::weq || predicate == ICmpPredicate::wne;
+  return hw::inferStructuralNameFromOperands(
+      getStructuralNameMnemonic(predicate), getOperands(), commutative,
+      getOperandName);
+}
+
+/// Name a mux after its condition.
+std::optional<hw::StructuralName>
+MuxOp::inferStructuralName(function_ref<StringRef(Value)> getOperandName) {
+  return hw::inferStructuralNameFromOperands("mux", getCond(),
+                                             /*commutative=*/false,
+                                             getOperandName);
+}
+
+std::optional<hw::StructuralName> ReplicateOp::inferStructuralName(
+    function_ref<StringRef(Value)> getOperandName) {
+  return hw::inferStructuralNameFromOperands("rep", getInput(),
+                                             /*commutative=*/false,
+                                             getOperandName);
+}
+
+/// Name a zero or sign extension "zext_<value>" or "sext_<value>" after the
+/// value it extends, any other concatenation "cat_<first>_<last>" after its
+/// first and last operands.
+std::optional<hw::StructuralName>
+ConcatOp::inferStructuralName(function_ref<StringRef(Value)> getOperandName) {
+  auto inputs = getInputs();
+  if (inputs.size() == 2) {
+    Value value = inputs[1];
+    if (auto cst = inputs[0].getDefiningOp<hw::ConstantOp>())
+      if (cst.getValue().isZero())
+        return hw::inferStructuralNameFromOperands(
+            "zext", value, /*commutative=*/false, getOperandName);
+    if (auto rep = inputs[0].getDefiningOp<ReplicateOp>())
+      if (auto sign = rep.getInput().getDefiningOp<ExtractOp>())
+        if (sign.getInput() == value && hw::getBitWidth(sign.getType()) == 1 &&
+            static_cast<int64_t>(sign.getLowBit()) + 1 ==
+                hw::getBitWidth(value.getType()))
+          return hw::inferStructuralNameFromOperands(
+              "sext", value, /*commutative=*/false, getOperandName);
+  }
+  if (inputs.size() < 2)
+    return std::nullopt;
+  Value ends[] = {inputs.front(), inputs.back()};
+  return hw::inferStructuralNameFromOperands("cat", ends,
+                                             /*commutative=*/false,
+                                             getOperandName);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
