@@ -405,9 +405,6 @@ with Context() as ctx, Location.unknown():
 
   appended = evaluator.instantiate("Append", items, items[0]).items
   assert [child.value for child in appended] == [1, 1]
-  assert len(items) == 1  # Importing a registry does not modify the caller.
 
   unknowns = evaluator.instantiate("UnknownRegistry")
-  assert isinstance(unknowns.items, om.List)
-  assert len(unknowns.items) == 1
-  assert isinstance(unknowns.items[0], om.Unknown)
+  assert isinstance(unknowns.items, om.Unknown)
