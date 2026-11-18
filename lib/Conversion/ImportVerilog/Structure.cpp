@@ -389,7 +389,7 @@ struct ModuleVisitor : public BaseVisitor {
                  << net->netType.name << "`";
         auto netOp = moore::NetOp::create(
             builder, loc,
-            moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+            moore::NetType::get(cast<moore::UnpackedType>(loweredType)),
             builder.getStringAttr(Twine(prefix) + StringRef(net->name)),
             netKind, Value());
         recordMember(*net, netOp);
@@ -408,6 +408,42 @@ struct ModuleVisitor : public BaseVisitor {
         continue;
       if (!expr) {
         // Leave unconnected interface ports unresolved for now.
+        continue;
+      }
+
+      // Input and output ports keep their own storage, connected to the
+      // actual through a continuous assignment.
+      Value storage;
+      if (port->internalSymbol &&
+          (port->direction == slang::ast::ArgumentDirection::In ||
+           port->direction == slang::ast::ArgumentDirection::Out))
+        storage = lowering->expandedMembers.lookup(port->internalSymbol);
+      if (storage) {
+        auto portLoc = context.convertLocation(port->location);
+        if (port->direction == slang::ast::ArgumentDirection::In) {
+          auto nestedType =
+              cast<moore::WrapperType>(storage.getType()).getNestedType();
+          Value value = context.convertRvalueExpression(*expr, nestedType);
+          if (!value)
+            return failure();
+          moore::ContinuousAssignOp::create(builder, portLoc, storage, value);
+        } else {
+          if (const auto *assign =
+                  expr->as_if<slang::ast::AssignmentExpression>())
+            expr = &assign->left();
+          Value lvalue = context.convertLvalueExpression(*expr);
+          if (!lvalue)
+            return failure();
+          Value value = moore::ReadOp::create(builder, portLoc, storage);
+          auto dstType =
+              cast<moore::WrapperType>(lvalue.getType()).getNestedType();
+          // TODO: This should honor signedness in the conversion.
+          value = context.materializeConversion(dstType, value, false, portLoc);
+          if (!value)
+            return failure();
+          moore::ContinuousAssignOp::create(builder, portLoc, lvalue, value);
+        }
+        recordMember(*port, storage);
         continue;
       }
 
@@ -504,13 +540,12 @@ struct ModuleVisitor : public BaseVisitor {
 
         switch (port->direction) {
         case ArgumentDirection::In: {
-          auto refType = moore::RefType::get(
-              cast<moore::UnpackedType>(context.convertType(port->getType())));
-
           if (const auto *net =
                   port->internalSymbol->as_if<slang::ast::NetSymbol>()) {
+            auto netType = moore::NetType::get(cast<moore::UnpackedType>(
+                context.convertType(port->getType())));
             auto netOp = moore::NetOp::create(
-                builder, loc, refType,
+                builder, loc, netType,
                 StringAttr::get(builder.getContext(), net->name),
                 convertNetKind(net->netType.netKind), nullptr);
             auto readOp = moore::ReadOp::create(builder, loc, netOp);
@@ -518,6 +553,8 @@ struct ModuleVisitor : public BaseVisitor {
           } else if (const auto *var =
                          port->internalSymbol
                              ->as_if<slang::ast::VariableSymbol>()) {
+            auto refType = moore::RefType::get(cast<moore::UnpackedType>(
+                context.convertType(port->getType())));
             auto varOp = moore::VariableOp::create(
                 builder, loc, refType,
                 StringAttr::get(builder.getContext(), var->name), nullptr);
@@ -538,19 +575,21 @@ struct ModuleVisitor : public BaseVisitor {
 
         case ArgumentDirection::InOut:
         case ArgumentDirection::Ref: {
-          auto refType = moore::RefType::get(
-              cast<moore::UnpackedType>(context.convertType(port->getType())));
 
           if (const auto *net =
                   port->internalSymbol->as_if<slang::ast::NetSymbol>()) {
+            auto netType = moore::NetType::get(cast<moore::UnpackedType>(
+                context.convertType(port->getType())));
             auto netOp = moore::NetOp::create(
-                builder, loc, refType,
+                builder, loc, netType,
                 StringAttr::get(builder.getContext(), net->name),
                 convertNetKind(net->netType.netKind), nullptr);
             portValues.insert({port, netOp});
           } else if (const auto *var =
                          port->internalSymbol
                              ->as_if<slang::ast::VariableSymbol>()) {
+            auto refType = moore::RefType::get(cast<moore::UnpackedType>(
+                context.convertType(port->getType())));
             auto varOp = moore::VariableOp::create(
                 builder, loc, refType,
                 StringAttr::get(builder.getContext(), var->name), nullptr);
@@ -587,7 +626,7 @@ struct ModuleVisitor : public BaseVisitor {
         // IEEE 1800-2017 §23.3.3 requires `inout` port connections to be direct
         // connections, which does not allow for type conversion.
         if (port->direction == ArgumentDirection::InOut) {
-          auto portType = moore::RefType::get(
+          auto portType = moore::NetType::get(
               cast<moore::UnpackedType>(context.convertType(port->getType())));
           if (value.getType() != portType)
             return mlir::emitError(loc)
@@ -618,8 +657,9 @@ struct ModuleVisitor : public BaseVisitor {
             return failure();
           Value slice = moore::ExtractRefOp::create(
               builder, loc,
-              moore::RefType::get(cast<moore::UnpackedType>(sliceType)), value,
-              offset);
+              cast<moore::WrapperType>(value.getType())
+                  .withNestedType(cast<moore::UnpackedType>(sliceType)),
+              value, offset);
           // Create the "ReadOp" for input ports.
           if (port->direction == ArgumentDirection::In)
             slice = moore::ReadOp::create(builder, loc, slice);
@@ -695,7 +735,8 @@ struct ModuleVisitor : public BaseVisitor {
       } else {
         // For input ports, if the value is a ref (from VariableOp/NetOp),
         // read it to get the rvalue, unless the port itself expects a ref.
-        if (isa<moore::RefType>(val.getType()) && !isa<moore::RefType>(fp.type))
+        if (isa<moore::WrapperType>(val.getType()) &&
+            !isa<moore::WrapperType>(fp.type))
           val = moore::ReadOp::create(builder, loc, val);
         inputValues[*fp.inputIdx] = val;
       }
@@ -793,7 +834,7 @@ struct ModuleVisitor : public BaseVisitor {
       if (!lvalue)
         continue;
       Value rvalue = output;
-      auto dstType = cast<moore::RefType>(lvalue.getType()).getNestedType();
+      auto dstType = cast<moore::WrapperType>(lvalue.getType()).getNestedType();
       // TODO: This should honor signedness in the conversion.
       rvalue = context.materializeConversion(dstType, rvalue, false, loc);
       if (!rvalue)
@@ -842,7 +883,8 @@ struct ModuleVisitor : public BaseVisitor {
                                   << netNode.name << "` is not a moore.net";
 
     if (const auto *init = netNode.getInitializer()) {
-      auto loweredType = cast<moore::RefType>(ref.getType()).getNestedType();
+      auto loweredType =
+          cast<moore::WrapperType>(ref.getType()).getNestedType();
       auto assignment = context.convertRvalueExpression(*init, loweredType);
       if (!assignment)
         return failure();
@@ -860,7 +902,7 @@ struct ModuleVisitor : public BaseVisitor {
       return failure();
 
     auto rhs = context.convertRvalueExpression(
-        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+        expr.right(), cast<moore::WrapperType>(lhs.getType()).getNestedType());
     if (!rhs)
       return failure();
 
@@ -1075,7 +1117,7 @@ struct ModulePredeclaration {
 
     auto netOp = moore::NetOp::create(
         builder, loc,
-        moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+        moore::NetType::get(cast<moore::UnpackedType>(loweredType)),
         builder.getStringAttr(Twine(blockNamePrefix) + netNode.name), netkind,
         Value{});
     context.valueSymbols.insert(&netNode, netOp);
@@ -1442,9 +1484,9 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
         modulePorts.push_back({portName, type, hw::ModulePort::Output});
         portOutputIdx = outputIdx++;
       } else {
-        // Only the ref type wrapper exists for the time being, the net type
-        // wrapper for inout may be introduced later if necessary.
-        if (port.direction != ArgumentDirection::In)
+        if (port.direction == ArgumentDirection::InOut)
+          type = moore::NetType::get(cast<moore::UnpackedType>(type));
+        else if (port.direction != ArgumentDirection::In)
           type = moore::RefType::get(cast<moore::UnpackedType>(type));
         modulePorts.push_back({portName, type, hw::ModulePort::Input});
         arg = block->addArgument(type, portLoc);
@@ -1488,7 +1530,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           } else {
             dir = hw::ModulePort::Input;
             if (mpp->direction != ArgumentDirection::In)
-              type = moore::RefType::get(cast<moore::UnpackedType>(type));
+              type = getStorageType(mpp->internalSymbol,
+                                    cast<moore::UnpackedType>(type));
             modulePorts.push_back({name, type, dir});
             arg = block->addArgument(type, portLoc);
             ifaceInputIdx = inputIdx++;
@@ -1499,7 +1542,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
         }
       } else {
         // No modport: iterate interface body for all variables and nets.
-        // Treat them all as inout (input with ref type).
+        // Treat them all as inout (input with ref or net type).
         const auto *instSym = connSym->as_if<slang::ast::InstanceSymbol>();
         if (!instSym) {
           mlir::emitError(portLoc)
@@ -1524,12 +1567,14 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
             return failure();
           auto name = builder.getStringAttr(Twine(portPrefix) +
                                             StringRef(bodySym->name));
-          auto refType = moore::RefType::get(cast<moore::UnpackedType>(type));
-          modulePorts.push_back({name, refType, hw::ModulePort::Input});
-          auto arg = block->addArgument(refType, portLoc);
-          lowering.ifacePorts.push_back(
-              {name, hw::ModulePort::Input, refType, portLoc, arg, &ifacePort,
-               bodySym, instSym, nullptr, std::nullopt, inputIdx++});
+          auto storageType =
+              getStorageType(bodySym, cast<moore::UnpackedType>(type));
+          modulePorts.push_back({name, storageType, hw::ModulePort::Input});
+          auto arg = block->addArgument(storageType, portLoc);
+          lowering.ifacePorts.push_back({name, hw::ModulePort::Input,
+                                         storageType, portLoc, arg, &ifacePort,
+                                         bodySym, instSym, nullptr,
+                                         std::nullopt, inputIdx++});
         }
       }
       return success();
@@ -1779,7 +1824,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
 
     // Collect output port values to be returned in the terminator.
     if (port.ast.direction == slang::ast::ArgumentDirection::Out) {
-      if (isa<moore::RefType>(value.getType()))
+      if (isa<moore::WrapperType>(value.getType()))
         value = moore::ReadOp::create(builder, value.getLoc(), value);
       outputs[*port.outputIdx] = value;
       continue;
@@ -2402,7 +2447,7 @@ LogicalResult Context::convertNInputPrimitive(
   if (!result)
     return failure();
 
-  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  auto dstType = cast<moore::WrapperType>(outputVal.getType()).getNestedType();
   result = materializeConversion(dstType, result, false, loc);
   if (!result)
     return failure();
@@ -2451,7 +2496,8 @@ LogicalResult Context::convertNOutputPrimitive(
     return failure();
 
   for (auto outputVal : outputVals) {
-    auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+    auto dstType =
+        cast<moore::WrapperType>(outputVal.getType()).getNestedType();
     Value converted = materializeConversion(dstType, result, false, loc);
     if (!converted)
       return failure();
@@ -2509,7 +2555,7 @@ LogicalResult Context::convertPullGatePrimitive(
   Value portVal = this->convertLvalueExpression(
       portConns.front()->as<slang::ast::AssignmentExpression>().left());
 
-  auto dstType = cast<moore::RefType>(portVal.getType()).getNestedType();
+  auto dstType = cast<moore::WrapperType>(portVal.getType()).getNestedType();
   auto dstTypeWidth = dstType.getBitSize();
   // This should be caught elsewhere
   assert(dstTypeWidth &&
@@ -2580,7 +2626,7 @@ LogicalResult Context::convertThreeStateGatePrimitive(
   assert(enWidth && *enWidth == 1 &&
          "enable signal of a three-state gate primitive must be 1 bit");
 
-  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  auto dstType = cast<moore::WrapperType>(outputVal.getType()).getNestedType();
   auto dstWidth = dstType.getBitSize();
   if (!dstWidth || *dstWidth != 1)
     return mlir::emitError(loc)
@@ -2667,7 +2713,7 @@ LogicalResult Context::convertMOSSwitchPrimitive(
       builder, loc, controlType, FVInt(1, static_cast<uint64_t>(offLevel)));
 
   controlIsOff = moore::CaseEqOp::create(builder, loc, control, offValue);
-  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  auto dstType = cast<moore::WrapperType>(outputVal.getType()).getNestedType();
 
   auto dstIntType = dyn_cast<moore::IntType>(dstType);
   if (!dstIntType || dstIntType.getBitSize() != 1)
@@ -2732,7 +2778,7 @@ LogicalResult Context::convertCMOSSwitchPrimitive(
   assert(cast<moore::IntType>(pcontrolVal.getType()).getBitSize() == 1 &&
          "CMOS switch pcontrol must be 1 bit");
 
-  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  auto dstType = cast<moore::WrapperType>(outputVal.getType()).getNestedType();
   auto dstIntType = dyn_cast<moore::IntType>(dstType);
   if (!dstIntType || dstIntType.getBitSize() != 1)
     return mlir::emitError(loc) << "CMOS switch output must be 1 bit";
@@ -2993,7 +3039,7 @@ LogicalResult Context::convertUserDefinedPrimitiveInstance(
       outputNames);
 
   // Connect output port and emit moore.assign or moore.delayed_assign.
-  auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+  auto dstType = cast<moore::WrapperType>(outputVal.getType()).getNestedType();
   Value converted =
       materializeConversion(dstType, inst.getResult(0), false, loc);
   if (!converted)

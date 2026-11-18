@@ -13,7 +13,7 @@ endinterface
 // CHECK-LABEL: moore.class.classdecl @consumer
 // CHECK: moore.class.propertydecl @vif : !moore.ustruct<
 // CHECK-SAME: clk:
-// CHECK-SAME: ref<l1>
+// CHECK-SAME: net<l1>
 // CHECK-SAME: data:
 // CHECK-SAME: ref<l8>
 // CHECK: }

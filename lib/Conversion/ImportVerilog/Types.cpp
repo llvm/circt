@@ -235,6 +235,14 @@ Type Context::convertType(const slang::ast::DeclaredType &type) {
 }
 // NOLINTEND(misc-no-recursion)
 
+moore::WrapperType
+ImportVerilog::getStorageType(const slang::ast::Symbol *storage,
+                              moore::UnpackedType type) {
+  if (storage && storage->kind == slang::ast::SymbolKind::Net)
+    return moore::NetType::get(type);
+  return moore::RefType::get(type);
+}
+
 FailureOr<moore::UnpackedStructType> Context::convertVirtualInterfaceType(
     const slang::ast::VirtualInterfaceType &type, Location loc) {
   const slang::ast::InstanceBodySymbol &ifaceBody = type.iface.body;
@@ -249,7 +257,9 @@ FailureOr<moore::UnpackedStructType> Context::convertVirtualInterfaceType(
   SmallVector<StringAttr, 8> fieldNames;
   DenseMap<StringAttr, Type> fieldTypes;
 
+  // `storage` is the symbol backing the field.
   auto addField = [&](StringRef name, const slang::ast::Type &fieldAstType,
+                      const slang::ast::Symbol *storage,
                       Location fieldLoc) -> LogicalResult {
     auto nameAttr = builder.getStringAttr(name);
 
@@ -264,20 +274,20 @@ FailureOr<moore::UnpackedStructType> Context::convertVirtualInterfaceType(
       return failure();
     }
 
-    auto refTy = moore::RefType::get(unpacked);
+    auto fieldTy = getStorageType(storage, unpacked);
 
     if (auto it = fieldTypes.find(nameAttr); it != fieldTypes.end()) {
-      if (it->second != refTy) {
+      if (it->second != fieldTy) {
         mlir::emitError(fieldLoc) << "virtual interface member `" << name
                                   << "` has conflicting types (" << it->second
-                                  << " vs " << refTy << ")";
+                                  << " vs " << fieldTy << ")";
         return failure();
       }
       return success();
     }
 
-    fieldTypes.try_emplace(nameAttr, refTy);
-    members.push_back({nameAttr, refTy});
+    fieldTypes.try_emplace(nameAttr, fieldTy);
+    members.push_back({nameAttr, fieldTy});
     fieldNames.push_back(nameAttr);
     return success();
   };
@@ -293,7 +303,11 @@ FailureOr<moore::UnpackedStructType> Context::convertVirtualInterfaceType(
           d << " `" << member.name << "`";
         return failure();
       }
-      if (failed(addField(mpp->name, mpp->getType(),
+      const slang::ast::Symbol *storage = mpp->internalSymbol;
+      if (!storage)
+        if (const auto *connExpr = mpp->getConnectionExpr())
+          storage = connExpr->getSymbolReference();
+      if (failed(addField(mpp->name, mpp->getType(), storage,
                           convertLocation(mpp->location))))
         return failure();
     }
@@ -310,20 +324,20 @@ FailureOr<moore::UnpackedStructType> Context::convertVirtualInterfaceType(
           d << " `" << symbol->name << "`";
         return failure();
       }
-      if (failed(addField(port->name, port->getType(),
+      if (failed(addField(port->name, port->getType(), port->internalSymbol,
                           convertLocation(port->location))))
         return failure();
     }
 
     for (auto &member : ifaceBody.members()) {
       if (const auto *var = member.as_if<slang::ast::VariableSymbol>()) {
-        if (failed(addField(var->name, var->getType(),
+        if (failed(addField(var->name, var->getType(), var,
                             convertLocation(var->location))))
           return failure();
         continue;
       }
       if (const auto *net = member.as_if<slang::ast::NetSymbol>()) {
-        if (failed(addField(net->name, net->getType(),
+        if (failed(addField(net->name, net->getType(), net,
                             convertLocation(net->location))))
           return failure();
         continue;

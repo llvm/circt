@@ -446,7 +446,7 @@ endmodule
 
 module Bar;
   wire [41:0] y;
-  // expected-error @below {{inout port `x` expects '!moore.ref<l9001>' but is connected to '!moore.ref<l42>'}}
+  // expected-error @below {{inout port `x` expects '!moore.net<l9001>' but is connected to '!moore.net<l42>'}}
   Foo foo(y);
 endmodule
 
@@ -459,7 +459,7 @@ endmodule
 
 module Bar;
   wire [1:0] y;
-  // expected-error @below {{inout port `p` expects '!moore.ref<struct<{x: l1, y: l1}>>' but is connected to '!moore.ref<l2>'}}
+  // expected-error @below {{inout port `p` expects '!moore.net<struct<{x: l1, y: l1}>>' but is connected to '!moore.net<l2>'}}
   Foo foo(y);
 endmodule
 

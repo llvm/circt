@@ -482,6 +482,11 @@ static void getValuesToObserve(Region *region,
         return {};
       return llhd::ProbeOp::create(rewriter, loc, value);
     }
+    if (auto netType = dyn_cast<llhd::NetType>(type)) {
+      if (!hw::isHWValueType(netType.getNestedType()))
+        return {};
+      return llhd::ProbeNetOp::create(rewriter, loc, value);
+    }
     if (!hw::isHWValueType(type))
       return {};
     return value;
@@ -1269,42 +1274,14 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
     if (!resultType)
       return rewriter.notifyMatchFailure(loc, "invalid net type");
 
-    auto elementType = cast<llhd::RefType>(resultType).getNestedType();
-    int64_t width = hw::getBitWidth(elementType);
-    if (width == -1)
-      return failure();
+    auto kind = llhd::symbolizeNetKind(stringifyNetKind(op.getKind()));
+    auto net = rewriter.replaceOpWithNewOp<llhd::NetOp>(
+        op, resultType, op.getNameAttr(), *kind);
 
-    auto init =
-        createInitialValue(op.getKind(), rewriter, loc, width, elementType);
-    auto signal = rewriter.replaceOpWithNewOp<llhd::SignalOp>(
-        op, resultType, op.getNameAttr(), init);
-
-    if (auto assignedValue = adaptor.getAssignment()) {
-      llhd::AssignOp::create(rewriter, loc, signal, assignedValue, Value{});
-    }
+    if (auto assignedValue = adaptor.getAssignment())
+      llhd::AssignNetOp::create(rewriter, loc, net, assignedValue, Value{});
 
     return success();
-  }
-
-  static mlir::Value createInitialValue(NetKind kind,
-                                        ConversionPatternRewriter &rewriter,
-                                        Location loc, int64_t width,
-                                        Type elementType) {
-    // TODO: Once the core dialects support four-valued integers, this code
-    // will additionally need to generate an all-X value for four-valued nets.
-    //
-    // If no driver is connected to a net, its value shall be high-impedance (z)
-    // unless the net is a trireg, in which case it shall hold the previously
-    // driven value.
-    //
-    // See IEEE 1800-2017 § 6.6 "Net types".
-    auto theInt = [&] {
-      if (kind == NetKind::Supply1 || kind == NetKind::Tri1)
-        return APInt::getAllOnes(width);
-      return APInt::getZero(width);
-    }();
-    auto theConst = hw::ConstantOp::create(rewriter, loc, theInt);
-    return rewriter.createOrFold<hw::BitcastOp>(loc, elementType, theConst);
   }
 };
 

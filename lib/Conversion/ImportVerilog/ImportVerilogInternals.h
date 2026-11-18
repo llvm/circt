@@ -710,6 +710,11 @@ private:
 Value getSelectIndex(Context &context, Location loc, Value index,
                      const slang::ConstantRange &range);
 
+/// Return a net type around `type` if `storage` is a net, and a ref type
+/// otherwise.
+moore::WrapperType getStorageType(const slang::ast::Symbol *storage,
+                                  moore::UnpackedType type);
+
 } // namespace ImportVerilog
 } // namespace circt
 #endif // CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H
