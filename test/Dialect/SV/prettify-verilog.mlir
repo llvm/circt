@@ -98,17 +98,17 @@ hw.module @sink_constants(in %clock :i1, out out : i1){
 // CHECK-LABEL: @sinkReadInOut
 // VERILOG-LABEL: sinkReadInOut
 hw.module @sinkReadInOut(in %clk: i1) {
-  %myreg = sv.reg  : !hw.inout<array<1xstruct<a: i48, b: i48>>>
+  %myreg = sv.var  : !sv.var<!hw.array<1xstruct<a: i48, b: i48>>>
   %false = hw.constant false
-  %0 = sv.array_index_inout %myreg[%false]: !hw.inout<array<1xstruct<a: i48, b: i48>>>, i1
-  %a = sv.struct_field_inout %0["a"]: !hw.inout<struct<a: i48, b: i48>>
-  %b = sv.struct_field_inout %0["b"]: !hw.inout<struct<a: i48, b: i48>>
-  %2 = sv.read_inout %b : !hw.inout<i48>
+  %0 = sv.array_index_inout %myreg[%false]: !sv.var<!hw.array<1xstruct<a: i48, b: i48>>>, i1
+  %a = sv.struct_field_inout %0["a"]: !sv.var<!hw.struct<a: i48, b: i48>>
+  %b = sv.struct_field_inout %0["b"]: !sv.var<!hw.struct<a: i48, b: i48>>
+  %2 = sv.read_inout %b : !sv.var<i48>
   sv.alwaysff(posedge %clk)  {
-    sv.passign %a, %2 : i48
+    sv.passign %a, %2 : !sv.var<i48>, i48
   }
 }
-// CHECK:  %myreg = sv.reg
+// CHECK:  %myreg = sv.var
 // CHECK:  sv.alwaysff(posedge %clk)
 // CHECK:    sv.array_index_inout
 // CHECK:    sv.struct_field_inout
@@ -248,17 +248,17 @@ hw.module @unary_sink_no_duplicate(in %arg0: i4, out result: i4) {
 
 // CHECK-LABEL: hw.module private @ConnectToAllFields
 hw.module private @ConnectToAllFields(in %clock: i1, in %reset: i1, in %value: i2, in %base: !hw.inout<!hw.struct<a: i2>>) {
-  %r = sv.reg : !hw.inout<!hw.struct<a: i2>>
-  %val = sv.read_inout %r : !hw.inout<!hw.struct<a: i2>>
+  %r = sv.var : !sv.var<!hw.struct<a: i2>>
+  %val = sv.read_inout %r : !sv.var<!hw.struct<a: i2>>
   sv.always posedge %clock {
-    sv.passign %r, %1 : !hw.struct<a: i2>
+    sv.passign %r, %1 : !sv.var<!hw.struct<a: i2>>, !hw.struct<a: i2>
   }
 
   %0 = sv.read_inout %base : !hw.inout<!hw.struct<a: i2>>
   %1 = hw.struct_inject %0["a"], %value : !hw.struct<a: i2>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[FIELD_A:%.+]] = sv.struct_field_inout %r["a"] : !hw.inout<struct<a: i2>>
-  // CHECK:   sv.passign [[FIELD_A]], %value : i2
+  // CHECK:   [[FIELD_A:%.+]] = sv.struct_field_inout %r["a"] : !sv.var<!hw.struct<a: i2>>
+  // CHECK:   sv.passign [[FIELD_A]], %value : !sv.var<i2>, i2
   // CHECK: }
 
   // VERILOG:       always @(posedge clock)
@@ -267,16 +267,16 @@ hw.module private @ConnectToAllFields(in %clock: i1, in %reset: i1, in %value: i
 
 // CHECK-LABEL: hw.module private @ConnectSubfield
 hw.module private @ConnectSubfield(in %clock: i1, in %reset: i1, in %value: i2) {
-  %r = sv.reg : !hw.inout<!hw.struct<a: i2>>
-  %val = sv.read_inout %r : !hw.inout<!hw.struct<a: i2>>
+  %r = sv.var : !sv.var<!hw.struct<a: i2>>
+  %val = sv.read_inout %r : !sv.var<!hw.struct<a: i2>>
   sv.always posedge %clock {
-    sv.passign %r, %0 : !hw.struct<a: i2>
+    sv.passign %r, %0 : !sv.var<!hw.struct<a: i2>>, !hw.struct<a: i2>
   }
 
   %0 = hw.struct_inject %val["a"], %value : !hw.struct<a: i2>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[FIELD_A:%.+]] = sv.struct_field_inout %r["a"] : !hw.inout<struct<a: i2>>
-  // CHECK:   sv.passign [[FIELD_A]], %value : i2
+  // CHECK:   [[FIELD_A:%.+]] = sv.struct_field_inout %r["a"] : !sv.var<!hw.struct<a: i2>>
+  // CHECK:   sv.passign [[FIELD_A]], %value : !sv.var<i2>, i2
   // CHECK: }
 
   //VERILOG:      always @(posedge clock)
@@ -285,19 +285,19 @@ hw.module private @ConnectSubfield(in %clock: i1, in %reset: i1, in %value: i2) 
 
 // CHECK-LABEL: hw.module private @ConnectSubfields
 hw.module private @ConnectSubfields(in %clock: i1, in %reset: i1, in %value2: i2, in %value3: i3) {
-  %r = sv.reg : !hw.inout<!hw.struct<a: i2, b: i3>>
-  %val = sv.read_inout %r : !hw.inout<!hw.struct<a: i2, b: i3>>
+  %r = sv.var : !sv.var<!hw.struct<a: i2, b: i3>>
+  %val = sv.read_inout %r : !sv.var<!hw.struct<a: i2, b: i3>>
   sv.always posedge %clock {
-    sv.passign %r, %1 : !hw.struct<a: i2, b: i3>
+    sv.passign %r, %1 : !sv.var<!hw.struct<a: i2, b: i3>>, !hw.struct<a: i2, b: i3>
   }
 
   %0 = hw.struct_inject %val["a"], %value2 : !hw.struct<a: i2, b: i3>
   %1 = hw.struct_inject %0["b"], %value3 : !hw.struct<a: i2, b: i3>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[FIELD_A:%.+]] = sv.struct_field_inout %r["a"] : !hw.inout<struct<a: i2, b: i3>>
-  // CHECK:   sv.passign [[FIELD_A]], %value2 : i2
-  // CHECK:   [[FIELD_B:%.+]] = sv.struct_field_inout %r["b"] : !hw.inout<struct<a: i2, b: i3>>
-  // CHECK:   sv.passign [[FIELD_B]], %value3 : i3
+  // CHECK:   [[FIELD_A:%.+]] = sv.struct_field_inout %r["a"] : !sv.var<!hw.struct<a: i2, b: i3>>
+  // CHECK:   sv.passign [[FIELD_A]], %value2 : !sv.var<i2>, i2
+  // CHECK:   [[FIELD_B:%.+]] = sv.struct_field_inout %r["b"] : !sv.var<!hw.struct<a: i2, b: i3>>
+  // CHECK:   sv.passign [[FIELD_B]], %value3 : !sv.var<i3>, i3
   // CHECK: }
 
   // VERILOG:      always @(posedge clock) begin
@@ -308,17 +308,17 @@ hw.module private @ConnectSubfields(in %clock: i1, in %reset: i1, in %value2: i2
 
 // CHECK-LABEL: hw.module private @ConnectSubfieldOverwrite
 hw.module private @ConnectSubfieldOverwrite(in %clock: i1, in %reset: i1, in %value2: i2, in %value3: i2) {
-  %r = sv.reg : !hw.inout<!hw.struct<a: i2, b: i3>>
-  %val = sv.read_inout %r : !hw.inout<!hw.struct<a: i2, b: i3>>
+  %r = sv.var : !sv.var<!hw.struct<a: i2, b: i3>>
+  %val = sv.read_inout %r : !sv.var<!hw.struct<a: i2, b: i3>>
   sv.always posedge %clock {
-    sv.passign %r, %1 : !hw.struct<a: i2, b: i3>
+    sv.passign %r, %1 : !sv.var<!hw.struct<a: i2, b: i3>>, !hw.struct<a: i2, b: i3>
   }
 
   %0 = hw.struct_inject %val["a"], %value2 : !hw.struct<a: i2, b: i3>
   %1 = hw.struct_inject %0["a"], %value3 : !hw.struct<a: i2, b: i3>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[FIELD:%.+]] = sv.struct_field_inout %r["a"] : !hw.inout<struct<a: i2, b: i3>>
-  // CHECK:   sv.passign [[FIELD]], %value3 : i2
+  // CHECK:   [[FIELD:%.+]] = sv.struct_field_inout %r["a"] : !sv.var<!hw.struct<a: i2, b: i3>>
+  // CHECK:   sv.passign [[FIELD]], %value3 : !sv.var<i2>, i2
   // CHECK: }
 
   // VERILOG:      always @(posedge clock)
@@ -327,19 +327,19 @@ hw.module private @ConnectSubfieldOverwrite(in %clock: i1, in %reset: i1, in %va
 
 // CHECK-LABEL: hw.module private @ConnectNestedSubfield
 hw.module private @ConnectNestedSubfield(in %clock: i1, in %reset: i1, in %value: i2) {
-  %r = sv.reg : !hw.inout<!hw.struct<a: !hw.struct<b: i2>>>
-  %val = sv.read_inout %r : !hw.inout<!hw.struct<a: !hw.struct<b: i2>>>
+  %r = sv.var : !sv.var<!hw.struct<a: !hw.struct<b: i2>>>
+  %val = sv.read_inout %r : !sv.var<!hw.struct<a: !hw.struct<b: i2>>>
   sv.always posedge %clock {
-    sv.passign %r, %2 : !hw.struct<a: !hw.struct<b: i2>>
+    sv.passign %r, %2 : !sv.var<!hw.struct<a: !hw.struct<b: i2>>>, !hw.struct<a: !hw.struct<b: i2>>
   }
   %0 = hw.struct_extract %val["a"] : !hw.struct<a: !hw.struct<b: i2>>
   %1 = hw.struct_inject %0["b"], %value : !hw.struct<b: i2>
   %2 = hw.struct_inject %val["a"], %1 : !hw.struct<a: !hw.struct<b: i2>>
 
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[FIELD_A:%.+]] = sv.struct_field_inout %r["a"] : !hw.inout<struct<a: !hw.struct<b: i2>>>
-  // CHECK:   [[FIELD_B:%.+]] = sv.struct_field_inout [[FIELD_A]]["b"] : !hw.inout<struct<b: i2>>
-  // CHECK:   sv.passign [[FIELD_B]], %value : i2
+  // CHECK:   [[FIELD_A:%.+]] = sv.struct_field_inout %r["a"] : !sv.var<!hw.struct<a: !hw.struct<b: i2>>>
+  // CHECK:   [[FIELD_B:%.+]] = sv.struct_field_inout [[FIELD_A]]["b"] : !sv.var<!hw.struct<b: i2>>
+  // CHECK:   sv.passign [[FIELD_B]], %value : !sv.var<i2>, i2
   // CHECK: }
 
   // VERILOG:      always @(posedge clock)
@@ -351,10 +351,10 @@ hw.module private @ConnectNestedSubfield(in %clock: i1, in %reset: i1, in %value
 hw.module private @ConnectSubindexMid(in %clock: i1, in %reset: i1, in %value: i2) {
   %c0_i2 = hw.constant 0 : i2
   %c-2_i2 = hw.constant -2 : i2
-  %r = sv.reg : !hw.inout<!hw.array<3xi2>>
-  %val = sv.read_inout %r : !hw.inout<!hw.array<3xi2>>
+  %r = sv.var : !sv.var<!hw.array<3xi2>>
+  %val = sv.read_inout %r : !sv.var<!hw.array<3xi2>>
   sv.always posedge %clock {
-    sv.passign %r, %3 : !hw.array<3xi2>
+    sv.passign %r, %3 : !sv.var<!hw.array<3xi2>>, !hw.array<3xi2>
   }
 
   %0 = hw.array_slice %val[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
@@ -362,8 +362,8 @@ hw.module private @ConnectSubindexMid(in %clock: i1, in %reset: i1, in %value: i
   %2 = hw.array_slice %val[%c-2_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
   %3 = hw.array_concat %2, %1, %0 : !hw.array<1xi2>, !hw.array<1xi2>, !hw.array<1xi2>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[FIELD:%.+]] = sv.array_index_inout %r[%c1_i2] : !hw.inout<array<3xi2>>, i2
-  // CHECK:   sv.passign [[FIELD]], %value : i2
+  // CHECK:   [[FIELD:%.+]] = sv.array_index_inout %r[%c1_i2] : !sv.var<!hw.array<3xi2>>, i2
+  // CHECK:   sv.passign [[FIELD]], %value : !sv.var<i2>, i2
   // CHECK: }
 
   // VERILOG:      always @(posedge clock)
@@ -373,10 +373,10 @@ hw.module private @ConnectSubindexMid(in %clock: i1, in %reset: i1, in %value: i
 // CHECK-LABEL: hw.module private @ConnectSubindexSingleton
 hw.module private @ConnectSubindexSingleton(in %clock: i1, in %reset: i1, in %value: i2) {
   %none = hw.constant 0 : i0
-  %r = sv.reg : !hw.inout<!hw.array<1xi2>>
-  %val = sv.read_inout %r : !hw.inout<!hw.array<1xi2>>
+  %r = sv.var : !sv.var<!hw.array<1xi2>>
+  %val = sv.read_inout %r : !sv.var<!hw.array<1xi2>>
   sv.always posedge %clock {
-    sv.passign %r, %1 : !hw.array<1xi2>
+    sv.passign %r, %1 : !sv.var<!hw.array<1xi2>>, !hw.array<1xi2>
   }
   %0 = hw.array_get %val[%none] : !hw.array<1xi2>, i0
   %1 = hw.array_create %value : i2
@@ -389,18 +389,18 @@ hw.module private @ConnectSubindexSingleton(in %clock: i1, in %reset: i1, in %va
 hw.module private @ConnectSubindexLeft(in %clock: i1, in %reset: i1, in %value: i2) {
   %c0_i2 = hw.constant 0 : i2
 
-  %r = sv.reg : !hw.inout<!hw.array<3xi2>>
-  %val = sv.read_inout %r : !hw.inout<!hw.array<3xi2>>
+  %r = sv.var : !sv.var<!hw.array<3xi2>>
+  %val = sv.read_inout %r : !sv.var<!hw.array<3xi2>>
   sv.always posedge %clock {
-    sv.passign %r, %2 : !hw.array<3xi2>
+    sv.passign %r, %2 : !sv.var<!hw.array<3xi2>>, !hw.array<3xi2>
   }
 
   %0 = hw.array_slice %val[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<2xi2>
   %1 = hw.array_create %value : i2
   %2 = hw.array_concat %1, %0 : !hw.array<1xi2>, !hw.array<2xi2>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[FIELD_1:%.+]] = sv.array_index_inout %r[%c-2_i2] : !hw.inout<array<3xi2>>, i2
-  // CHECK:   sv.passign [[FIELD_1]], %value : i2
+  // CHECK:   [[FIELD_1:%.+]] = sv.array_index_inout %r[%c-2_i2] : !sv.var<!hw.array<3xi2>>, i2
+  // CHECK:   sv.passign [[FIELD_1]], %value : !sv.var<i2>, i2
   // CHECK: }
 
   // VERILOG:      always @(posedge clock)
@@ -410,18 +410,18 @@ hw.module private @ConnectSubindexLeft(in %clock: i1, in %reset: i1, in %value: 
 // CHECK-LABEL: hw.module private @ConnectSubindexRight
 hw.module private @ConnectSubindexRight(in %clock: i1, in %reset: i1, in %value: i2) {
   %c1_i2 = hw.constant 1 : i2
-  %r = sv.reg : !hw.inout<!hw.array<3xi2>>
-  %val = sv.read_inout %r : !hw.inout<!hw.array<3xi2>>
+  %r = sv.var : !sv.var<!hw.array<3xi2>>
+  %val = sv.read_inout %r : !sv.var<!hw.array<3xi2>>
   sv.always posedge %clock {
-    sv.passign %r, %2 : !hw.array<3xi2>
+    sv.passign %r, %2 : !sv.var<!hw.array<3xi2>>, !hw.array<3xi2>
   }
 
   %0 = hw.array_create %value : i2
   %1 = hw.array_slice %val[%c1_i2] : (!hw.array<3xi2>) -> !hw.array<2xi2>
   %2 = hw.array_concat %1, %0 : !hw.array<2xi2>, !hw.array<1xi2>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[FIELD_0:%.+]] = sv.array_index_inout %r[%c0_i2] : !hw.inout<array<3xi2>>, i2
-  // CHECK:   sv.passign [[FIELD_0]], %value : i2
+  // CHECK:   [[FIELD_0:%.+]] = sv.array_index_inout %r[%c0_i2] : !sv.var<!hw.array<3xi2>>, i2
+  // CHECK:   sv.passign [[FIELD_0]], %value : !sv.var<i2>, i2
   // CHECK: }
 
   // VERILOG:      always @(posedge clock)
@@ -434,10 +434,10 @@ hw.module private @ConnectSubindices(in %clock: i1, in %reset: i1, in %value: i2
   %c2_i3 = hw.constant 2 : i3
   %c3_i3 = hw.constant 3 : i3
 
-  %r = sv.reg : !hw.inout<!hw.array<5xi2>>
-  %val = sv.read_inout %r : !hw.inout<!hw.array<5xi2>>
+  %r = sv.var : !sv.var<!hw.array<5xi2>>
+  %val = sv.read_inout %r : !sv.var<!hw.array<5xi2>>
   sv.always posedge %clock {
-    sv.passign %r, %8 : !hw.array<5xi2>
+    sv.passign %r, %8 : !sv.var<!hw.array<5xi2>>, !hw.array<5xi2>
   }
 
   %0 = hw.array_slice %val[%c0_i3] : (!hw.array<5xi2>) -> !hw.array<1xi2>
@@ -450,12 +450,12 @@ hw.module private @ConnectSubindices(in %clock: i1, in %reset: i1, in %value: i2
   %7 = hw.array_slice %6[%c0_i3] : (!hw.array<5xi2>) -> !hw.array<4xi2>
   %8 = hw.array_concat %1, %7 : !hw.array<1xi2>, !hw.array<4xi2>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[IDX_1:%.+]] = sv.array_index_inout %r[%c1_i3] : !hw.inout<array<5xi2>>, i3
-  // CHECK:   sv.passign [[IDX_1]], %value : i2
-  // CHECK:   [[IDX_2:%.+]] = sv.array_index_inout %r[%c2_i3] : !hw.inout<array<5xi2>>, i3
-  // CHECK:   sv.passign [[IDX_2:%.+]], %value : i2
-  // CHECK:   [[IDX_4:%.+]] = sv.array_index_inout %r[%c-4_i3] : !hw.inout<array<5xi2>>, i3
-  // CHECK:   sv.passign [[IDX_4]], %value : i2
+  // CHECK:   [[IDX_1:%.+]] = sv.array_index_inout %r[%c1_i3] : !sv.var<!hw.array<5xi2>>, i3
+  // CHECK:   sv.passign [[IDX_1]], %value : !sv.var<i2>, i2
+  // CHECK:   [[IDX_2:%.+]] = sv.array_index_inout %r[%c2_i3] : !sv.var<!hw.array<5xi2>>, i3
+  // CHECK:   sv.passign [[IDX_2:%.+]], %value : !sv.var<i2>, i2
+  // CHECK:   [[IDX_4:%.+]] = sv.array_index_inout %r[%c-4_i3] : !sv.var<!hw.array<5xi2>>, i3
+  // CHECK:   sv.passign [[IDX_4]], %value : !sv.var<i2>, i2
   // CHECK: }
 
   // VERILOG:      always @(posedge clock) begin
@@ -469,10 +469,10 @@ hw.module private @ConnectSubindices(in %clock: i1, in %reset: i1, in %value: i2
 hw.module private @ConnectSubindicesOverwrite(in %clock: i1, in %reset: i1, in %value: i2, in %value2: i2) {
   %c0_i3 = hw.constant 0 : i3
   %c2_i3 = hw.constant 2 : i3
-  %r = sv.reg : !hw.inout<!hw.array<5xi2>>
-  %val = sv.read_inout %r : !hw.inout<!hw.array<5xi2>>
+  %r = sv.var : !sv.var<!hw.array<5xi2>>
+  %val = sv.read_inout %r : !sv.var<!hw.array<5xi2>>
   sv.always posedge %clock {
-    sv.passign %r,  %10 : !hw.array<5xi2>
+    sv.passign %r,  %10 : !sv.var<!hw.array<5xi2>>, !hw.array<5xi2>
   }
 
   %0 = hw.array_slice %val[%c0_i3] : (!hw.array<5xi2>) -> !hw.array<1xi2>
@@ -487,8 +487,8 @@ hw.module private @ConnectSubindicesOverwrite(in %clock: i1, in %reset: i1, in %
   %9 = hw.array_slice %6[%c2_i3] : (!hw.array<5xi2>) -> !hw.array<3xi2>
   %10 = hw.array_concat %9, %8, %7 : !hw.array<3xi2>, !hw.array<1xi2>, !hw.array<1xi2>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[IDX:%.+]] = sv.array_index_inout %r[%c1_i3] : !hw.inout<array<5xi2>>, i3
-  // CHECK:   sv.passign [[IDX]], %value2 : i2
+  // CHECK:   [[IDX:%.+]] = sv.array_index_inout %r[%c1_i3] : !sv.var<!hw.array<5xi2>>, i3
+  // CHECK:   sv.passign [[IDX]], %value2 : !sv.var<i2>, i2
   // CHECK: }
 
 
@@ -502,10 +502,10 @@ hw.module private @ConnectNestedSubindex(in %clock: i1, in %reset: i1, in %value
   %c0_i2 = hw.constant 0 : i2
   %c-2_i2 = hw.constant -2 : i2
 
-  %r = sv.reg : !hw.inout<!hw.array<3xarray<3xi2>>>
-  %val = sv.read_inout %r : !hw.inout<!hw.array<3xarray<3xi2>>>
+  %r = sv.var : !sv.var<!hw.array<3xarray<3xi2>>>
+  %val = sv.read_inout %r : !sv.var<!hw.array<3xarray<3xi2>>>
   sv.always posedge %clock {
-    sv.passign %r, %8 : !hw.array<3xarray<3xi2>>
+    sv.passign %r, %8 : !sv.var<!hw.array<3xarray<3xi2>>>, !hw.array<3xarray<3xi2>>
   }
   %0 = hw.array_get %val[%c1_i2] : !hw.array<3xarray<3xi2>>, i2
   %1 = hw.array_slice %val[%c0_i2] : (!hw.array<3xarray<3xi2>>) -> !hw.array<1xarray<3xi2>>
@@ -517,9 +517,9 @@ hw.module private @ConnectNestedSubindex(in %clock: i1, in %reset: i1, in %value
   %7 = hw.array_slice %val[%c-2_i2] : (!hw.array<3xarray<3xi2>>) -> !hw.array<1xarray<3xi2>>
   %8 = hw.array_concat %7, %6, %1 : !hw.array<1xarray<3xi2>>, !hw.array<1xarray<3xi2>>, !hw.array<1xarray<3xi2>>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[FIELD_INNER:%.+]] = sv.array_index_inout %r[%c1_i2] : !hw.inout<array<3xarray<3xi2>>>, i2
-  // CHECK:   [[FIELD_OUTER:%.+]] = sv.array_index_inout [[FIELD_INNER]][%c1_i2_0] : !hw.inout<array<3xi2>>, i2
-  // CHECK:   sv.passign [[FIELD_OUTER:%.+]], %value : i2
+  // CHECK:   [[FIELD_INNER:%.+]] = sv.array_index_inout %r[%c1_i2] : !sv.var<!hw.array<3xarray<3xi2>>>, i2
+  // CHECK:   [[FIELD_OUTER:%.+]] = sv.array_index_inout [[FIELD_INNER]][%c1_i2_0] : !sv.var<!hw.array<3xi2>>, i2
+  // CHECK:   sv.passign [[FIELD_OUTER:%.+]], %value : !sv.var<i2>, i2
   // CHECK: }
 
   // VERILOG:      always @(posedge clock)
@@ -535,10 +535,10 @@ hw.module private @ConnectNestedFieldsAndIndices(in %clock: i1, in %reset: i1, i
   %c1_i2 = hw.constant 1 : i2
   %c1_i3 = hw.constant 1 : i3
 
-  %r = sv.reg : !hw.inout<!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>>
-  %val = sv.read_inout %r : !hw.inout<!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>>
+  %r = sv.var : !sv.var<!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>>
+  %val = sv.read_inout %r : !sv.var<!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>>
   sv.always posedge %clock {
-    sv.passign %r,  %17 : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    sv.passign %r,  %17 : !sv.var<!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>>, !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
   }
 
   %c1_i3_0 = hw.constant 1 : i3
@@ -558,11 +558,11 @@ hw.module private @ConnectNestedFieldsAndIndices(in %clock: i1, in %reset: i1, i
   %17 = hw.array_concat %16, %15, %14 : !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
 
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[ARR_1:%.+]] = sv.array_index_inout %r[%c1_i3] : !hw.inout<array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>>, i3
-  // CHECK:   [[STRUCT_A:%.+]] = sv.struct_field_inout [[ARR_1]]["a"] : !hw.inout<struct<a: !hw.array<3xstruct<b: i2>>>>
-  // CHECK:   [[ARR_1:%.+]] = sv.array_index_inout [[STRUCT_A]][%c1_i2] : !hw.inout<array<3xstruct<b: i2>>>, i2
-  // CHECK:   [[STRUCT_B:%.+]] = sv.struct_field_inout [[ARR_1]]["b"] : !hw.inout<struct<b: i2>>
-  // CHECK:   sv.passign [[STRUCT_B]], %value : i2
+  // CHECK:   [[ARR_1:%.+]] = sv.array_index_inout %r[%c1_i3] : !sv.var<!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>>, i3
+  // CHECK:   [[STRUCT_A:%.+]] = sv.struct_field_inout [[ARR_1]]["a"] : !sv.var<!hw.struct<a: !hw.array<3xstruct<b: i2>>>>
+  // CHECK:   [[ARR_1:%.+]] = sv.array_index_inout [[STRUCT_A]][%c1_i2] : !sv.var<!hw.array<3xstruct<b: i2>>>, i2
+  // CHECK:   [[STRUCT_B:%.+]] = sv.struct_field_inout [[ARR_1]]["b"] : !sv.var<!hw.struct<b: i2>>
+  // CHECK:   sv.passign [[STRUCT_B]], %value : !sv.var<i2>, i2
   // CHECK: }
 
   // VERILOG:      always @(posedge clock)
@@ -572,19 +572,19 @@ hw.module private @ConnectNestedFieldsAndIndices(in %clock: i1, in %reset: i1, i
 
 // CHECK-LABEL: hw.module private @SelfConnect
 hw.module private @SelfConnect(in %clock: i1, in %reset: i1) {
-  %r = sv.reg : !hw.inout<i2>
-  %val = sv.read_inout %r : !hw.inout<i2>
+  %r = sv.var : !sv.var<i2>
+  %val = sv.read_inout %r : !sv.var<i2>
   sv.always posedge %clock {
-    sv.passign %r, %val : i2
+    sv.passign %r, %val : !sv.var<i2>, i2
   }
 
-  // CHECK: %r = sv.reg  : !hw.inout<i2>
+  // CHECK: %r = sv.var  : !sv.var<i2>
   // CHECK: sv.always posedge %clock {
-  // CHECK:   [[READ:%.+]] = sv.read_inout %r : !hw.inout<i2>
-  // CHECK:   sv.passign %r, [[READ]] : i2
+  // CHECK:   [[READ:%.+]] = sv.read_inout %r : !sv.var<i2>
+  // CHECK:   sv.passign %r, [[READ]] : !sv.var<i2>, i2
   // CHECK: }
 
-  //VERILOG: reg [1:0] r;
+  //VERILOG: var logic [1:0] r;
   //VERILOG: always @(posedge clock)
   //VERILOG:   r <= r;
 }
@@ -625,11 +625,11 @@ hw.module @Issue4030(in %a: i1, in %clock: i1, in %in1: !hw.array<2xi1>, out b: 
   %c0_i3 = hw.constant 0 : i3
   %false = hw.constant false
   %0 = hw.array_get %in1[%false] : !hw.array<2xi1>, i1
-  %r = sv.reg  : !hw.inout<array<5xi1>>
-  %1 = sv.array_index_inout %r[%c0_i3] : !hw.inout<array<5xi1>>, i3
-  %2 = sv.read_inout %r : !hw.inout<array<5xi1>>
+  %r = sv.var  : !sv.var<!hw.array<5xi1>>
+  %1 = sv.array_index_inout %r[%c0_i3] : !sv.var<!hw.array<5xi1>>, i3
+  %2 = sv.read_inout %r : !sv.var<!hw.array<5xi1>>
   sv.always posedge %clock {
-    sv.passign %1, %0 : i1
+    sv.passign %1, %0 : !sv.var<i1>, i1
   }
   hw.output %2 : !hw.array<5xi1>
 }
