@@ -401,6 +401,7 @@ def ListLengthOp : OMOp<"list_length", [Pure]> {
   let arguments = (ins ListType:$list);
   let results = (outs OMIntegerType:$result);
   let assemblyFormat = "$list attr-dict `:` type($list)";
+  let hasFolder = 1;
 }
 
 def ListContainsOp : OMOp<"list_contains", [Pure,

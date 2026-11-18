@@ -827,6 +827,25 @@ void ListConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 //===----------------------------------------------------------------------===//
+// ListLengthOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ListLengthOp::fold(FoldAdaptor adaptor) {
+  uint64_t length;
+  if (auto listCreate = getList().getDefiningOp<ListCreateOp>())
+    length = listCreate.getInputs().size();
+  else if (auto listAttr = dyn_cast_or_null<ListAttr>(adaptor.getList()))
+    length = listAttr.getElements().size();
+  else
+    return {};
+
+  return circt::om::IntegerAttr::get(
+      getContext(),
+      mlir::IntegerAttr::get(getContext(),
+                             APSInt(APInt(64, length), /*isUnsigned=*/false)));
+}
+
+//===----------------------------------------------------------------------===//
 // BasePathCreateOp
 //===----------------------------------------------------------------------===//
 
