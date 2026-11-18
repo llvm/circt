@@ -692,6 +692,7 @@ firrtl.circuit "Foo" {
                             out %objecteq : !firrtl.bool,
                             out %stringcontains : !firrtl.bool,
                             out %integercontains : !firrtl.bool,
+                            out %listLength : !firrtl.integer,
                             out %boolcontains : !firrtl.bool,
                             out %refcontains : !firrtl.bool,
                             out %booland : !firrtl.bool,
@@ -772,6 +773,10 @@ firrtl.circuit "Foo" {
     %integer_list = firrtl.list.create %intA, %intB : !firrtl.list<integer>
     %integer_contains = firrtl.list.contains %integer_list, %intA : !firrtl.list<integer>
     firrtl.propassign %integercontains, %integer_contains : !firrtl.bool
+
+    // CHECK: propassign listLength, list_length(List<Integer>(Integer(5), Integer(-2)))
+    %length = firrtl.list.length %integer_list : !firrtl.list<integer>
+    firrtl.propassign %listLength, %length : !firrtl.integer
 
     // CHECK: propassign boolcontains, list_contains(List<Bool>(Bool(true)), Bool(true))
     %bool_list = firrtl.list.create %true : !firrtl.list<bool>

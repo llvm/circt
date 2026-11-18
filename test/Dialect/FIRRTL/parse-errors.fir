@@ -1169,6 +1169,45 @@ circuit Top :
 ;// -----
 FIRRTL version 7.0.0
 
+circuit ListLengthNotList:
+  public module ListLengthNotList:
+    input value : Integer
+    output length : Integer
+    ; expected-error @below {{operand of list_length must be a List}}
+    propassign length, list_length(value)
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListLengthNoOperand:
+  public module ListLengthNoOperand:
+    output length : Integer
+    ; expected-error @below {{expected list expression in list_length expression}}
+    propassign length, list_length()
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListLengthExtraOperand:
+  public module ListLengthExtraOperand:
+    input values : List<Integer>
+    output length : Integer
+    ; expected-error @below {{expected ')'}}
+    propassign length, list_length(values, values)
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit ListLengthVersionError:
+  public module ListLengthVersionError:
+    input values : List<Integer>
+    output length : Integer
+    ; expected-error @below {{list length are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassign length, list_length(values)
+
+;// -----
+FIRRTL version 7.0.0
+
 circuit ListContainsNotList:
   public module ListContainsNotList:
     input value : Integer

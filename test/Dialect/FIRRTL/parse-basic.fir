@@ -1827,6 +1827,18 @@ circuit PropEqVersionError :
 ;// -----
 FIRRTL version 7.0.0
 
+; CHECK-LABEL: firrtl.circuit "ListLength"
+circuit ListLength :
+  public module ListLength :
+    input strings : List<String>
+    output length : Integer
+
+    ; CHECK: firrtl.list.length %strings : !firrtl.list<string>
+    propassign length, list_length(strings)
+
+;// -----
+FIRRTL version 7.0.0
+
 ; CHECK-LABEL: firrtl.circuit "ListContains"
 circuit ListContains :
   class Foo:

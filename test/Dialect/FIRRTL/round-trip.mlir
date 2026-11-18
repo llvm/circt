@@ -217,6 +217,14 @@ firrtl.module @PropertyListOps() {
   %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
 }
 
+// CHECK-LABEL: firrtl.module @PropertyListLength
+firrtl.module @PropertyListLength(in %list: !firrtl.list<list<double>>,
+                                 out %length: !firrtl.integer) {
+  // CHECK: firrtl.list.length %list : !firrtl.list<list<double>>
+  %0 = firrtl.list.length %list : !firrtl.list<list<double>>
+  firrtl.propassign %length, %0 : !firrtl.integer
+}
+
 // CHECK-LABEL: firrtl.module @PropertyListContains
 firrtl.module @PropertyListContains(in %obj: !firrtl.class<@ObjectEqFoo()>,
                                    in %ref: !firrtl.anyref) {
