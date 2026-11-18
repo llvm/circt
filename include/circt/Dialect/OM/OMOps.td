@@ -427,6 +427,42 @@ def ListContainsOp : OMOp<"list_contains", [Pure,
   let hasFolder = 1;
 }
 
+def OM_EqualityListType : ContainerType<
+    PropEqualityType,
+    ListType.predicate, "cast<ListType>($_self).getElementType()",
+    "list", ListType.cppType> {
+  let summary = "list of property-equality-compatible elements";
+}
+
+def ListIntersectOp : OMOp<"list_intersect", [Pure,
+    PredOpTrait<"list element types must match or both be reference types",
+      CPred<"([](Type lhs, Type rhs) { return lhs == rhs || "
+            "(isa<ClassType, AnyType>(lhs) && "
+            "isa<ClassType, AnyType>(rhs)); })("
+            "cast<ListType>($lhs.getType()).getElementType(), "
+            "cast<ListType>($rhs.getType()).getElementType())">>,
+    AllTypesMatch<["lhs", "result"]>]> {
+  let summary = "Return the multiset intersection of two lists";
+  let description = [{
+    Returns the multiset intersection of two lists using the equality semantics
+    of `om.prop.eq`. Each value appears the minimum number of times it occurs in
+    either input. The result preserves the order and earliest occurrences from
+    the first list and has the same type as that list.
+
+    Supported element types are String, Integer, Bool (`i1`), Class, and Any.
+    Element types must match unless both are Class or Any. Any elements must
+    contain object references.
+
+    Example:
+    ```mlir
+    %result = om.list_intersect %lhs, %rhs : !om.list<!om.class.type<@Foo>>, !om.list<!om.any>
+    ```
+  }];
+  let arguments = (ins OM_EqualityListType:$lhs, OM_EqualityListType:$rhs);
+  let results = (outs ListType:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+}
+
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,
       DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
