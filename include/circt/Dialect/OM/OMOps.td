@@ -387,6 +387,22 @@ def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
   let hasCanonicalizer = 1;
 }
 
+def ListLengthOp : OMOp<"list_length", [Pure]> {
+  let summary = "Get the length of a list";
+  let description = [{
+    Returns the number of elements in the list as an `!om.integer`. The list
+    element type is unrestricted.
+
+    Example:
+    ```mlir
+    %length = om.list_length %list : !om.list<!om.string>
+    ```
+  }];
+  let arguments = (ins ListType:$list);
+  let results = (outs OMIntegerType:$result);
+  let assemblyFormat = "$list attr-dict `:` type($list)";
+}
+
 def ListContainsOp : OMOp<"list_contains", [Pure,
     TypesMatchWith<"list element type should match search element type",
                    "list", "element",
