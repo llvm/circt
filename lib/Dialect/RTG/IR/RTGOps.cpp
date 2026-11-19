@@ -17,12 +17,53 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallString.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace rtg;
+
+static LogicalResult verifyStructType(Operation *op, StructType type,
+                                      StructDeclOp *declarationOut = nullptr) {
+  auto declaration = SymbolTable::lookupNearestSymbolFrom<StructDeclOp>(
+      op, type.getDeclaration());
+  if (!declaration)
+    return op->emitOpError()
+           << "references unknown struct declaration " << type.getDeclaration();
+  if (declarationOut)
+    *declarationOut = declaration;
+  return success();
+}
+
+static LogicalResult verifyStructFields(Operation *op, StructDeclOp declaration,
+                                        TypeRange fieldTypes) {
+  if (fieldTypes.size() != declaration.getFieldTypesAttr().size())
+    return op->emitOpError()
+           << "struct expects " << declaration.getFieldTypesAttr().size()
+           << " fields, got " << fieldTypes.size();
+
+  auto expectedTypes = declaration.getFieldTypesAttr().getAsRange<TypeAttr>();
+  for (auto [index, types] :
+       llvm::enumerate(llvm::zip(fieldTypes, expectedTypes))) {
+    auto [fieldType, expectedType] = types;
+    if (fieldType != expectedType.getValue())
+      return op->emitOpError() << "field " << index << " has type " << fieldType
+                               << ", expected " << expectedType.getValue();
+  }
+  return success();
+}
+
+static LogicalResult verifyStructTypeUses(Operation *op, Type type,
+                                          SymbolTableCollection &symbolTable) {
+  WalkResult walkResult = type.walk([&](StructType structType) {
+    if (failed(structType.verifySymbolUses(op, symbolTable)))
+      return WalkResult::interrupt();
+    return WalkResult::advance();
+  });
+  return walkResult.wasInterrupted() ? failure() : success();
+}
 
 //===----------------------------------------------------------------------===//
 // ConstantOp
@@ -41,6 +82,17 @@ LogicalResult ConstantOp::verify() {
       if (isa<MutType, ContinuationType>(typedAttr.getType()))
         return emitOpError("cannot encode value of type ")
                << typedAttr.getType() << " in a constant attribute";
+
+    if (auto structAttr = dyn_cast<StructAttr>(attr)) {
+      StructDeclOp declaration;
+      if (failed(verifyStructType(*this, structAttr.getType(), &declaration)))
+        return failure();
+      SmallVector<Type> fieldTypes;
+      for (TypedAttr field : structAttr.getFields())
+        fieldTypes.push_back(field.getType());
+      if (failed(verifyStructFields(*this, declaration, fieldTypes)))
+        return failure();
+    }
 
     // Set and map contents are opaque to the generic sub-element walker.
     if (auto set = dyn_cast<SetAttr>(attr))
@@ -73,6 +125,100 @@ void ConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), reg.getRegisterAssembly());
     return;
   }
+}
+
+LogicalResult StructDeclOp::verify() {
+  if (getFieldNamesAttr().size() != getFieldTypesAttr().size())
+    return emitOpError("field name and type counts must match");
+
+  DenseSet<StringRef> names;
+  for (StringAttr nameAttr : getFieldNamesAttr().getAsRange<StringAttr>()) {
+    StringRef name = nameAttr.getValue();
+    if (!names.insert(name).second)
+      return emitOpError() << "duplicate field label '" << name << "'";
+  }
+  return success();
+}
+
+std::optional<unsigned> StructDeclOp::getFieldIndex(StringRef name) {
+  for (auto [index, fieldName] :
+       llvm::enumerate(getFieldNamesAttr().getAsRange<StringAttr>()))
+    if (fieldName.getValue() == name)
+      return index;
+  return std::nullopt;
+}
+
+ParseResult StructDeclOp::parse(OpAsmParser &parser, OperationState &result) {
+  StringAttr symName;
+  if (parser.parseSymbolName(symName))
+    return failure();
+
+  SmallVector<Attribute> fieldNames;
+  SmallVector<Type> fieldTypes;
+  if (parser.parseCommaSeparatedList(AsmParser::Delimiter::Braces, [&]() {
+        std::string name;
+        Type type;
+        if (parser.parseKeywordOrString(&name) || parser.parseColon() ||
+            parser.parseType(type))
+          return failure();
+        fieldNames.push_back(parser.getBuilder().getStringAttr(name));
+        fieldTypes.push_back(type);
+        return success();
+      }))
+    return failure();
+
+  auto &properties = result.getOrAddProperties<StructDeclOp::Properties>();
+  properties.sym_name = symName;
+  properties.field_names = parser.getBuilder().getArrayAttr(fieldNames);
+  properties.field_types = parser.getBuilder().getTypeArrayAttr(fieldTypes);
+  return parser.parseOptionalAttrDict(result.attributes);
+}
+
+void StructDeclOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printSymbolName(getSymNameAttr().getValue());
+  auto fieldNames = getFieldNamesAttr().getAsRange<StringAttr>();
+  auto fieldTypes = getFieldTypesAttr().getAsRange<TypeAttr>();
+  if (!fieldNames.empty()) {
+    p << " {";
+    p.increaseIndent();
+    for (auto [index, fields] :
+         llvm::enumerate(llvm::zip_equal(fieldNames, fieldTypes))) {
+      auto [fieldName, fieldType] = fields;
+      p.printNewline();
+      p.printKeywordOrString(fieldName.getValue());
+      p << ": ";
+      p.printType(fieldType.getValue());
+      if (index + 1 != getFieldNamesAttr().size())
+        p << ',';
+    }
+    p.decreaseIndent();
+    p.printNewline();
+    p << '}';
+  } else {
+    p << " {}";
+  }
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      {getSymNameAttrName(), getFieldNamesAttrName(), getFieldTypesAttrName()});
+}
+
+LogicalResult
+StructDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  for (TypeAttr fieldType : getFieldTypesAttr().getAsRange<TypeAttr>())
+    if (failed(verifyStructTypeUses(*this, fieldType.getValue(), symbolTable)))
+      return failure();
+  return success();
+}
+
+StringAttr StructDeclOp::getNameAttr() { return getSymNameAttr(); }
+
+SymbolTable::Visibility StructDeclOp::getVisibility() {
+  return SymbolTable::Visibility::Private;
+}
+
+void StructDeclOp::setVisibility(SymbolTable::Visibility visibility) {
+  assert(false && "cannot change visibility of struct declarations");
 }
 
 //===----------------------------------------------------------------------===//
@@ -454,6 +600,115 @@ LogicalResult TupleExtractOp::inferReturnTypes(
   }
 
   inferredReturnTypes.push_back(tupleTy.getFieldTypes()[idx]);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// StructCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructCreateOp::verify() {
+  StructDeclOp declaration;
+  if (failed(verifyStructType(*this, getResult().getType(), &declaration)))
+    return failure();
+  return verifyStructFields(*this, declaration, getFields().getTypes());
+}
+
+OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
+  SmallVector<TypedAttr> fields;
+  fields.reserve(adaptor.getFields().size());
+  for (auto [field, operand] : llvm::zip(adaptor.getFields(), getFields())) {
+    auto typed = dyn_cast_or_null<TypedAttr>(field);
+    if (!typed || typed.getType() != operand.getType())
+      return {};
+    fields.push_back(typed);
+  }
+  return StructAttr::get(getContext(), getResult().getType(), fields);
+}
+
+//===----------------------------------------------------------------------===//
+// StructExtractOp
+//===----------------------------------------------------------------------===//
+
+ParseResult StructExtractOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
+  OpAsmParser::UnresolvedOperand value;
+  std::string fieldName;
+  Type structType, resultType;
+  if (parser.parseOperand(value) || parser.parseLSquare() ||
+      parser.parseKeywordOrString(&fieldName) || parser.parseRSquare() ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(structType) || parser.parseArrow() ||
+      parser.parseType(resultType))
+    return failure();
+  if (!isa<StructType>(structType))
+    return parser.emitError(parser.getNameLoc(),
+                            "expected a nominal struct type");
+  if (parser.resolveOperand(value, structType, result.operands))
+    return failure();
+  result.getOrAddProperties<StructExtractOp::Properties>().fieldName =
+      parser.getBuilder().getStringAttr(fieldName);
+  result.addTypes(resultType);
+  return success();
+}
+
+void StructExtractOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printOperand(getValue());
+  p << '[';
+  p.printKeywordOrString(getFieldNameAttr().getValue());
+  p << ']';
+  p.printOptionalAttrDict((*this)->getAttrs(), {getFieldNameAttrName()});
+  p << " : " << getValue().getType() << " -> " << getResult().getType();
+}
+
+LogicalResult StructExtractOp::verify() {
+  StructDeclOp declaration;
+  if (failed(verifyStructType(*this, getValue().getType(), &declaration)))
+    return failure();
+  auto index = declaration.getFieldIndex(getFieldNameAttr().getValue());
+  if (!index)
+    return emitOpError() << "field '" << getFieldNameAttr().getValue()
+                         << "' is not declared by " << getValue().getType();
+  Type expectedType =
+      cast<TypeAttr>(declaration.getFieldTypesAttr()[*index]).getValue();
+  if (getResult().getType() != expectedType)
+    return emitOpError() << "result type " << getResult().getType()
+                         << " does not match field '"
+                         << getFieldNameAttr().getValue() << "' type "
+                         << expectedType;
+  return success();
+}
+
+OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
+  auto constant = dyn_cast_or_null<StructAttr>(adaptor.getValue());
+  if (!constant)
+    return {};
+  auto declaration = SymbolTable::lookupNearestSymbolFrom<StructDeclOp>(
+      *this, getValue().getType().getDeclaration());
+  if (!declaration)
+    return {};
+  auto index = declaration.getFieldIndex(getFieldNameAttr().getValue());
+  if (!index)
+    return {};
+  return constant.getFields()[*index];
+}
+
+LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
+                                            PatternRewriter &rewriter) {
+  auto create = op.getValue().getDefiningOp<StructCreateOp>();
+  if (!create)
+    return failure();
+
+  auto declaration = SymbolTable::lookupNearestSymbolFrom<StructDeclOp>(
+      op, op.getValue().getType().getDeclaration());
+  if (!declaration)
+    return failure();
+  auto index = declaration.getFieldIndex(op.getFieldNameAttr().getValue());
+  if (!index || *index >= create.getFields().size())
+    return failure();
+
+  rewriter.replaceOp(op, create.getFields()[*index]);
   return success();
 }
 

@@ -34,6 +34,35 @@ rtg.test @mut_ops() {
 
 // -----
 
+rtg.struct.decl @MutEnv { cell: !rtg.mut<index> }
+
+func.func @consume_struct_mut(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
+
+rtg.target @t : !rtg.dict<> {
+  rtg.yield
+}
+
+// CHECK-LABEL: rtg.test @mutable_cell_in_struct_t() template "mutable_cell_in_struct" target @t {
+// CHECK-NEXT:     %0 = rtg.constant "1" : !rtg.string
+// CHECK-NEXT:     rtg.comment %0
+// CHECK-NEXT:   }
+rtg.test @mutable_cell_in_struct() {
+  %zero = index.constant 0
+  %cell = rtg.mut_create %zero : index
+  %env = rtg.struct_create %cell : (!rtg.mut<index>) -> !rtg.struct<@MutEnv>
+  %alias = rtg.struct_extract %env[cell] : !rtg.struct<@MutEnv> -> !rtg.mut<index>
+  %one = index.constant 1
+  rtg.mut_write %alias, %one : !rtg.mut<index>
+  %value = rtg.mut_read %cell : !rtg.mut<index>
+  func.call @consume_struct_mut(%value) : (index) -> ()
+}
+
+// -----
+
 // Test: multi-shot with mutable state — the handler mutates shared state between
 // resumes; each shot of the continuation observes the accumulated value.
 

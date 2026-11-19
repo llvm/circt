@@ -11,6 +11,7 @@
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {

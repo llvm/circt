@@ -138,6 +138,21 @@ def TupleAttr : RTGAttrDef<"Tuple", [
   let assemblyFormat = "`<` (`>`) : ($elements^ `>`)?";
 }
 
+def StructAttr : RTGAttrDef<"Struct", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "a struct constant";
+  let description = [{
+    A typed struct constant.
+  }];
+  let mnemonic = "struct";
+  let parameters = (ins
+    AttributeSelfTypeParameter<"struct type", "rtg::StructType">:$type,
+    ArrayRefParameter<"::mlir::TypedAttr", "field values">:$fields);
+  let hasCustomAssemblyFormat = true;
+  let genVerifyDecl = true;
+}
+
 //===----------------------------------------------------------------------===//
 // Attributes for ISA targets
 //===----------------------------------------------------------------------===//

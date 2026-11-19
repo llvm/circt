@@ -44,6 +44,14 @@
 
 // -----
 
+rtg.struct.decl @CellHolder { cell: !rtg.mut<index> }
+// Struct attributes must not hide elaboration-only identity values.
+// expected-error @below {{cannot encode value of type '!rtg.mut<index>' in a constant attribute}}
+%holder = rtg.constant #rtg.struct<"not-a-cell" : !rtg.mut<index>>
+    : !rtg.struct<@CellHolder>
+
+// -----
+
 // Identity types in aggregate type parameters are legal when no such value is
 // encoded. In particular, empty sets can be used to stash continuations.
 rtg.test @empty_identity_containers() {

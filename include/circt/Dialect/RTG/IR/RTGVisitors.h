@@ -29,7 +29,7 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
             // Constants
-            ConstantOp,
+            ConstantOp, StructDeclOp,
             // Bags
             BagCreateOp, BagSelectRandomOp, BagDifferenceOp, BagUnionOp,
             BagUniqueSizeOp, BagConvertToSetOp,
@@ -54,6 +54,8 @@ public:
             ArrayAppendOp,
             // Tuples
             TupleCreateOp, TupleExtractOp,
+            // Structs
+            StructCreateOp, StructExtractOp,
             // Immediates
             IntToImmediateOp, ConcatImmediateOp, SliceImmediateOp,
             // Memories
@@ -104,6 +106,7 @@ public:
   }
 
   HANDLE(ConstantOp, Unhandled);
+  HANDLE(StructDeclOp, Unhandled);
   HANDLE(SequenceOp, Unhandled);
   HANDLE(GetSequenceOp, Unhandled);
   HANDLE(SubstituteSequenceOp, Unhandled);
@@ -133,6 +136,8 @@ public:
   HANDLE(ArrayAppendOp, Unhandled);
   HANDLE(TupleCreateOp, Unhandled);
   HANDLE(TupleExtractOp, Unhandled);
+  HANDLE(StructCreateOp, Unhandled);
+  HANDLE(StructExtractOp, Unhandled);
   HANDLE(CommentOp, Unhandled);
   HANDLE(ConstraintOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);

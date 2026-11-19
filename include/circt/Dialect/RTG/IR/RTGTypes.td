@@ -19,6 +19,22 @@ include "mlir/IR/AttrTypeBase.td"
 class RTGTypeDef<string name, list<Trait> traits = []>
   : TypeDef<RTGDialect, name, traits>;
 
+class RTGFlatSymbolRefParameter<string desc> :
+    AttrOrTypeParameter<"::mlir::FlatSymbolRefAttr", desc> {
+  let parser = [{
+    [&]() -> ::mlir::FailureOr<::mlir::FlatSymbolRefAttr> {
+      ::mlir::SymbolRefAttr reference;
+      if ($_parser.parseAttribute(reference))
+        return ::mlir::failure();
+      auto flatReference =
+          ::llvm::dyn_cast<::mlir::FlatSymbolRefAttr>(reference);
+      if (!flatReference)
+        return ::mlir::failure();
+      return flatReference;
+    }()
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Sequence Types
 //===----------------------------------------------------------------------===//
@@ -128,6 +144,23 @@ def DictType : RTGTypeDef<"Dict"> {
 
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
+}
+
+def StructType : RTGTypeDef<"Struct"> {
+  let summary = "a nominal struct type";
+  let description = [{
+    A struct type refers to a module-level `rtg.struct.decl` symbol, which
+    defines its field names and types.
+  }];
+  let parameters = (ins
+    RTGFlatSymbolRefParameter<"struct declaration">:$declaration);
+  let mnemonic = "struct";
+  let assemblyFormat = "`<` $declaration `>`";
+  let extraClassDeclaration = [{
+    ::mlir::LogicalResult verifySymbolUses(
+        ::mlir::Operation *op,
+        ::mlir::SymbolTableCollection &symbolTable) const;
+  }];
 }
 
 def ArrayType : RTGTypeDef<"Array"> {
