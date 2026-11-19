@@ -1065,3 +1065,23 @@ firrtl.circuit "InstanceChoiceMixedOutput" {
     firrtl.matchingconnect %out, %inst_out : !firrtl.uint<1>
   } 
 }
+
+// -----
+
+firrtl.circuit "EnumPorts" {
+  firrtl.module private @Child(in %i: !firrtl.enum<A, B: uint<8>>, out %o: !firrtl.enum<A, B: uint<8>>) {
+    firrtl.matchingconnect %o, %i : !firrtl.enum<A, B: uint<8>>
+  }
+
+  // CHECK-LABEL: firrtl.module @EnumPorts
+  firrtl.module @EnumPorts(in %i: !firrtl.enum<A, B: uint<8>>, out %o: !firrtl.enum<A, B: uint<8>>) {
+    // CHECK: %c_i, %c_o = firrtl.instance c @Child
+    %c_i, %c_o = firrtl.instance c @Child(in i: !firrtl.enum<A, B: uint<8>>, out o: !firrtl.enum<A, B: uint<8>>)
+
+    // CHECK: firrtl.matchingconnect %c_i, %i
+    firrtl.matchingconnect %c_i, %i : !firrtl.enum<A, B: uint<8>>
+    
+    // CHECK: firrtl.matchingconnect %o, %c_o
+    firrtl.matchingconnect %o, %c_o : !firrtl.enum<A, B: uint<8>>
+  }
+}
