@@ -52,6 +52,24 @@ def ListType : TypeDef<OMDialect, "List", []> {
   ];
 }
 
+def OptionType : TypeDef<OMDialect, "Option", []> {
+  let summary = "A type that represents an optional value.";
+  let description = [{
+    An option is either empty or contains one value. The element type is
+    unrestricted.
+  }];
+
+  let mnemonic = "option";
+  let parameters = (ins "mlir::Type":$elementType);
+  let assemblyFormat = "`<` $elementType `>`";
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::Type":$elementType), [{
+      return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
+}
+
 def RegistryType : TypeDef<OMDialect, "Registry", []> {
   let summary = "An unordered, append-only registry handle.";
   let description = [{
