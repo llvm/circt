@@ -229,3 +229,26 @@ hw.module @gamble_test(in %x : i1, in %y : i1, in %z : i1, out result : i1) {
     %0 = synth.gamble not %z, %x, not %y : i1
     hw.output %0 : i1
 }
+
+// The cut inputs are a, b, c, slow, early, with arrival times 0, 0, 0, 2, 1.
+// The selected permutation binds slow to pin e (delay 1) and early to pin d
+// (delay 2), so the output arrives at max(2 + 1, 1 + 2) = 3. Applying the
+// library delays in cut-input order instead of pattern-pin order would give 4.
+// CHECK-LABEL: hw.module @permuted_arrival_test(
+hw.module @permuted_arrival_test(in %a: i1, in %b: i1, in %c: i1,
+                                in %p: i1, in %q: i1, in %s: i1, in %t: i1,
+                                in %u: i1, in %v: i1, out result: i1) {
+  // CHECK-NEXT: %[[ARRIVAL_AND:.+]] = hw.instance "{{.+}}" @and_inv(a: %p: i1, b: %q: i1) -> (result: i1) {test.arrival_times = [1]}
+  // CHECK-NEXT: %[[ARRIVAL_SLOW:.+]] = hw.instance "{{.+}}" @mux_inv_lib(c: %s: i1, a: %[[ARRIVAL_AND]]: i1, b: %t: i1) -> (result: i1) {test.arrival_times = [2]}
+  // CHECK-NEXT: %[[ARRIVAL_EARLY:.+]] = hw.instance "{{.+}}" @and_inv(a: %u: i1, b: %v: i1) -> (result: i1) {test.arrival_times = [1]}
+  // CHECK-NEXT: %[[ARRIVAL_RESULT:.+]] = hw.instance "{{.+}}" @and_inv_5(a: %a: i1, b: %c: i1, c: %b: i1, d: %[[ARRIVAL_EARLY]]: i1, e: %[[ARRIVAL_SLOW]]: i1) -> (result: i1) {test.arrival_times = [3]}
+  // CHECK-NEXT: hw.output %[[ARRIVAL_RESULT]] : i1
+  %slow0 = synth.aig.and_inv %p, %q : i1
+  %slow = synth.mux_inv %s, %slow0, %t : i1
+  %early = synth.aig.and_inv %u, %v : i1
+  %pair0 = synth.aig.and_inv not %a, %c : i1
+  %pair1 = synth.aig.and_inv not %b, %early : i1
+  %join = synth.aig.and_inv %pair0, %pair1 : i1
+  %result = synth.aig.and_inv %join, not %slow : i1
+  hw.output %result : i1
+}
