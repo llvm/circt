@@ -1,101 +1,75 @@
-//===- FSMRemoveUnreachableStates.cpp - Print the instance graph *- C++ -*-===//
+//===- RemoveUnreachableStates.cpp - Remove unreachable FSM states --------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
 //===----------------------------------------------------------------------===//
 //
-// Removes unreachable states in the FSM.
+// Removes the states of a machine that cannot be reached from its initial
+// state.
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/FSM/FSMPasses.h"
-#include "mlir/IR/PatternMatch.h"
-#include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "llvm/Support/GraphWriter.h"
-#include "llvm/Support/raw_ostream.h"
+#include "mlir/Pass/Pass.h"
+#include "llvm/ADT/SetVector.h"
+
+namespace circt {
+namespace fsm {
+#define GEN_PASS_DEF_REMOVEUNREACHABLESTATES
+#include "circt/Dialect/FSM/Passes.h.inc"
+} // namespace fsm
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
 using namespace fsm;
 
 namespace {
+/// Erases the states of `machine` that cannot be reached from its initial
+/// state. Returns true if any state was erased.
+bool removeUnreachableStates(MachineOp machine) {
+  StateOp initialState = machine.getInitialStateOp();
+  // The verifier reports a missing initial state.
+  if (!initialState)
+    return false;
 
-// Returns all states that are unreachable from the initial state.
-static SmallVector<StateOp> unreachableStates(MachineOp machine) {
-  llvm::SetVector<StateOp> reachableStates;
-  SmallVector<StateOp, 4> queue;
-  queue.push_back(machine.getInitialStateOp());
-  while (!queue.empty()) {
-    auto *stateIt = queue.begin();
-    StateOp state = *stateIt;
-    queue.erase(stateIt);
-    if (reachableStates.contains(state))
+  llvm::SetVector<StateOp> reachable;
+  SmallVector<StateOp> worklist = {initialState};
+  while (!worklist.empty()) {
+    StateOp state = worklist.pop_back_val();
+    if (!reachable.insert(state))
       continue;
-    reachableStates.insert(state);
-    llvm::copy(state.getNextStates(), std::back_inserter(queue));
+    llvm::append_range(worklist, state.getNextStates());
   }
 
-  // Get the difference between reachable states and all states in the machine.
-  auto allStates = machine.getOps<StateOp>();
-  SmallVector<StateOp> unreachableStates;
-  std::set_difference(allStates.begin(), allStates.end(),
-                      reachableStates.begin(), reachableStates.end(),
-                      std::back_inserter(unreachableStates));
-  return unreachableStates;
-}
+  // Collect in IR order before erasing. A reachable state never transitions to
+  // an unreachable one, so the transitions that name an unreachable state sit
+  // inside unreachable states and are erased with them.
+  SmallVector<StateOp> unreachable;
+  for (StateOp state : machine.getOps<StateOp>())
+    if (!reachable.contains(state))
+      unreachable.push_back(state);
 
-// Removes any transition to the provided 'unreachableState' within the
-// 'machine'. It is expected that any transition with references the
-// 'unreachableState' is similarly unreachable.
-static LogicalResult
-removeTransitionsToState(MachineOp machine, ArrayRef<StateOp> unreachableStates,
-                         StateOp unreachableState) {
-  auto stateUses = SymbolTable::getSymbolUses(unreachableState, machine);
-  if (stateUses.has_value()) {
-    for (auto use : *stateUses) {
-      Operation *user = use.getUser();
-      auto transition = dyn_cast<TransitionOp>(user);
-      if (!transition)
-        return user->emitOpError()
-               << "unreachable state '" << unreachableState.getName()
-               << "' referenced by something else than a "
-                  "transition op. "
-               << "This is unhandled behaviour - erroring out";
-
-      assert(llvm::find(unreachableStates,
-                        transition->getParentOfType<StateOp>()) !=
-                 unreachableStates.end() &&
-             "unreachable state referenced by some state which is reachable?");
-      transition.erase();
-    }
-  }
-  return success();
+  for (StateOp state : unreachable)
+    state.erase();
+  return !unreachable.empty();
 }
 
 struct RemoveUnreachableStatesPass
-    : public RemoveUnreachableStatesBase<RemoveUnreachableStatesPass> {
+    : public circt::fsm::impl::RemoveUnreachableStatesBase<
+          RemoveUnreachableStatesPass> {
   void runOnOperation() override {
-    auto machine = getOperation();
-    // Erase any unreachable state ops.
-    auto unreachables = unreachableStates(machine);
-    for (auto unreachable : unreachables) {
-      // To safely delete the unreachable states, we first need to delete any
-      // transitions which reference them. This occurs when there is some
-      // strongly connected set of states which are all unreachable from the
-      // entry state.
-      if (failed(
-              removeTransitionsToState(machine, unreachables, unreachable))) {
-        signalPassFailure();
-        return;
-      }
-      unreachable.erase();
-    }
+    bool changed = false;
+    getOperation().walk(
+        [&](MachineOp machine) { changed |= removeUnreachableStates(machine); });
+    if (!changed)
+      markAllAnalysesPreserved();
   }
 };
-} // end anonymous namespace
+} // namespace
 
 std::unique_ptr<mlir::Pass> circt::fsm::createRemoveUnreachableStatesPass() {
   return std::make_unique<RemoveUnreachableStatesPass>();
