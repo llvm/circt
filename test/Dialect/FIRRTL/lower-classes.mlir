@@ -546,6 +546,32 @@ firrtl.circuit "StringCat" {
   }
 }
 
+// CHECK-LABEL: firrtl.circuit "OptionLoweringTest"
+firrtl.circuit "OptionLoweringTest" {
+  firrtl.module @OptionLoweringTest() {}
+
+  // CHECK-LABEL: om.class @OptionLowering(
+  // CHECK-SAME: %value: !om.integer, %option: !om.option<!om.integer>
+  firrtl.class @OptionLowering(
+      in %value: !firrtl.integer, in %option: !firrtl.option<integer>,
+      out %none: !firrtl.option<integer>, out %some: !firrtl.option<integer>,
+      out %result: !firrtl.integer) {
+    // CHECK-NEXT: %[[NONE:.+]] = om.option_create : <!om.integer>
+    %empty = firrtl.option.create : !firrtl.option<integer>
+    firrtl.propassign %none, %empty : !firrtl.option<integer>
+
+    // CHECK-NEXT: %[[SOME:.+]] = om.option_create %value : <!om.integer>
+    %present = firrtl.option.create %value : !firrtl.option<integer>
+    firrtl.propassign %some, %present : !firrtl.option<integer>
+
+    // CHECK-NEXT: %[[RESULT:.+]] = om.option_get_or_else %option, %value : <!om.integer>
+    %selected = firrtl.option.get_or_else %option, %value : !firrtl.option<integer>
+    firrtl.propassign %result, %selected : !firrtl.integer
+
+    // CHECK-NEXT: om.class.fields %[[NONE]], %[[SOME]], %[[RESULT]] : !om.option<!om.integer>, !om.option<!om.integer>, !om.integer
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "AltBasePath"
 firrtl.circuit "AltBasePath" {
   // CHECK: hw.hierpath private [[FOO_NLA:@.+]] [@AltBasePath::[[FOO_SYM:@.+]]]
