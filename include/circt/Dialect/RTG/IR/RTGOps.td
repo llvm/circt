@@ -85,6 +85,29 @@ def StructDeclOp : RTGOp<"struct.decl", [
   }];
 }
 
+def VariantDeclOp : RTGOp<"variant.decl", [
+  DeclareOpInterfaceMethods<Symbol, ["getVisibility", "setVisibility"]>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  SymbolName,
+  HasParent<"mlir::ModuleOp">
+]> {
+  let summary = "declare a nominal variant schema";
+  let description = [{
+    Declares a variant with an ordered list of named constructors. Each
+    constructor has a unique name and a payload type. A `!rtg.variant<@Name>`
+    type refers to this declaration.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                        StrArrayAttr:$constructor_names,
+                        TypeArrayAttr:$payload_types);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let extraClassDeclaration = [{
+    std::optional<unsigned> getConstructorIndex(::llvm::StringRef name);
+    ::mlir::Type getPayloadType(unsigned index);
+  }];
+}
+
 //===- Sequence Handling Operations ---------------------------------------===//
 
 def SequenceOp : RTGOp<"sequence", [
@@ -786,6 +809,43 @@ def StructExtractOp : RTGOp<"struct_extract", [Pure]> {
   let hasVerifier = 1;
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
+}
+
+def VariantCreateOp : RTGOp<"variant_create", [Pure]> {
+  let summary = "construct a nominal variant value";
+  let arguments = (ins Variadic<AnyType>:$payload, StrAttr:$constructor);
+  let results = (outs VariantType:$result);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let hasFolder = 1;
+  let builders = [
+    OpBuilder<(ins "VariantType":$resultType, "ValueRange":$payload,
+                   "StringRef":$constructor), [{
+      build($_builder, $_state, ::mlir::Type(resultType), payload,
+            $_builder.getStringAttr(constructor));
+    }]>
+  ];
+}
+
+def VariantMatchOp : RTGOp<"match", [
+  RecursiveMemoryEffects,
+  SingleBlockImplicitTerminator<"rtg::YieldOp">
+]> {
+  let summary = "match a variant value by constructor label";
+  let description = [{
+    Each declared constructor label appears exactly once. Its region receives
+    the constructor's payload as a single block argument and yields the match
+    results. Constructor labels are local strings, not symbols.
+  }];
+  let arguments = (ins VariantType:$value, StrArrayAttr:$constructors);
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
+  let extraClassDeclaration = [{
+    std::optional<unsigned> getCaseIndex(::llvm::StringRef constructor);
+  }];
 }
 
 //===- Integer Operations -------------------------------------------------===//

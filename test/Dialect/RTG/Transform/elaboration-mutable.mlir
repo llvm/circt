@@ -63,6 +63,39 @@ rtg.test @mutable_cell_in_struct() {
 
 // -----
 
+rtg.variant.decl @MutableCell { Cell: !rtg.mut<index> }
+
+func.func @consume_variant_mut(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
+
+rtg.target @t : !rtg.dict<> {
+  rtg.yield
+}
+
+// CHECK-LABEL: rtg.test @mutable_cell_in_variant_t() template "mutable_cell_in_variant" target @t {
+// CHECK-NEXT:     %0 = rtg.constant "1" : !rtg.string
+// CHECK-NEXT:     rtg.comment %0
+// CHECK-NEXT:   }
+rtg.test @mutable_cell_in_variant() {
+  %zero = index.constant 0
+  %cell = rtg.mut_create %zero : index
+  %variant = rtg.variant_create Cell(%cell) : (!rtg.mut<index>) -> !rtg.variant<@MutableCell>
+  %alias = rtg.match %variant : !rtg.variant<@MutableCell> -> !rtg.mut<index> {
+    case Cell(%payload: !rtg.mut<index>) {
+      rtg.yield %payload : !rtg.mut<index>
+    }
+  }
+  %one = index.constant 1
+  rtg.mut_write %alias, %one : !rtg.mut<index>
+  %value = rtg.mut_read %cell : !rtg.mut<index>
+  func.call @consume_variant_mut(%value) : (index) -> ()
+}
+
+// -----
+
 // Test: multi-shot with mutable state — the handler mutates shared state between
 // resumes; each shot of the continuation observes the accumulated value.
 
