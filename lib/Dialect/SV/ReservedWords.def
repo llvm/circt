@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-"alias", "always", "always_comb", "always_ff", "always_latch", "and", "assert",
-    "assign", "assume", "attribute", "automatic",
+"accept_on", "alias", "always", "always_comb", "always_ff", "always_latch",
+    "and", "assert", "assign", "assume", "attribute", "automatic",
 
     "before", "begin", "bind", "bins", "binsof", "bit", "break", "buf",
     "bufif0", "bufif1", "byte",
@@ -23,25 +23,26 @@
 
     "deassign", "default", "defparam", "design", "disable", "dist", "do",
 
-    "edge", "else", "end", "endattribute", "endcase", "endclass", "endclocking",
-    "endconfig", "endfunction", "endgenerate", "endgroup", "endinterface",
-    "endmodule", "endpackage", "endprimitive", "endprogram", "endproperty",
-    "endspecify", "endsequence", "endtable", "endtask", "enum", "event",
-    "expect", "export", "extends", "extern",
+    "edge", "else", "end", "endattribute", "endcase", "endchecker", "endclass",
+    "endclocking", "endconfig", "endfunction", "endgenerate", "endgroup",
+    "endinterface", "endmodule", "endpackage", "endprimitive", "endprogram",
+    "endproperty", "endspecify", "endsequence", "endtable", "endtask", "enum",
+    "event", "eventually", "expect", "export", "extends", "extern",
 
     "final", "first_match", "for", "force", "foreach", "forever", "fork",
-    "forkjoin", "function", "generate", "genvar", "highz0", "highz1", "if",
-    "iff", "ifnone", "ignore_bins", "illegal_bins", "import", "incdir",
-    "include", "initial", "initvar", "inout", "input", "inside", "instance",
-    "int", "integer", "interconnect", "interface", "intersect",
+    "forkjoin", "function", "generate", "genvar", "global", "highz0", "highz1",
+    "if", "iff", "ifnone", "ignore_bins", "illegal_bins", "implements",
+    "implies", "import", "incdir", "include", "initial", "initvar", "inout",
+    "input", "inside", "instance", "int", "integer", "interconnect",
+    "interface", "intersect",
 
-    "join", "join_any", "join_none", "large", "liblist", "library", "local",
-    "localparam", "logic", "longint",
+    "join", "join_any", "join_none", "large", "let", "liblist", "library",
+    "local", "localparam", "logic", "longint",
 
     "macromodule", "matches", "medium", "modport", "module",
 
-    "nand", "negedge", "new", "nmos", "nor", "noshowcancelled", "not", "notif0",
-    "notif1", "null",
+    "nand", "negedge", "nettype", "new", "nexttime", "nmos", "nor",
+    "noshowcancelled", "not", "notif0", "notif1", "null",
 
     "or", "output",
 
@@ -50,23 +51,26 @@
     "pulldown", "pullup", "pulsestyle_onevent", "pulsestyle_ondetect", "pure",
 
     "rand", "randc", "randcase", "randsequence", "rcmos", "real", "realtime",
-    "ref", "reg", "release", "repeat", "return", "rnmos", "rpmos", "rtran",
-    "rtranif0", "rtranif1",
+    "ref", "reg", "reject_on", "release", "repeat", "restrict", "return",
+    "rnmos", "rpmos", "rtran", "rtranif0", "rtranif1",
 
+    "s_always", "s_eventually", "s_nexttime", "s_until", "s_until_with",
     "scalared", "sequence", "shortint", "shortreal", "showcancelled", "signed",
-    "small", "solve", "specify", "specparam", "static", "strength", "string",
-    "strong0", "strong1", "struct", "super", "supply0", "supply1",
+    "small", "soft", "solve", "specify", "specparam", "static", "strength",
+    "string", "strong", "strong0", "strong1", "struct", "super", "supply0",
+    "supply1", "sync_accept_on", "sync_reject_on",
 
     "table", "tagged", "task", "this", "throughout", "time", "timeprecision",
     "timeunit", "tran", "tranif0", "tranif1", "tri", "tri0", "tri1", "triand",
     "trior", "trireg", "type", "typedef",
 
-    "union", "unique", "unsigned", "use",
+    "union", "unique", "unique0", "unsigned", "until", "until_with", "untyped",
+    "use", "uwire",
 
     "var", "vectored", "virtual", "void",
 
-    "wait", "wait_order", "wand", "weak0", "weak1", "while", "wildcard", "wire",
-    "with", "within", "wor",
+    "wait", "wait_order", "wand", "weak", "weak0", "weak1", "while", "wildcard",
+    "wire", "with", "within", "wor",
 
     "xnor", "xor",
 
