@@ -546,6 +546,19 @@ firrtl.circuit "StringCat" {
   }
 }
 
+// CHECK-LABEL: firrtl.circuit "OptionLoweringTest"
+firrtl.circuit "OptionLoweringTest" {
+  firrtl.module @OptionLoweringTest() {}
+
+  // CHECK-LABEL: om.class @OptionLowering(
+  firrtl.class @OptionLowering(out %none: !firrtl.option<integer>) {
+    // CHECK-NEXT: %[[NONE:.+]] = om.option_create : <!om.integer>
+    // CHECK-NEXT: om.class.fields %[[NONE]]
+    %empty = firrtl.option.create : !firrtl.option<integer>
+    firrtl.propassign %none, %empty : !firrtl.option<integer>
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "AltBasePath"
 firrtl.circuit "AltBasePath" {
   // CHECK: hw.hierpath private [[FOO_NLA:@.+]] [@AltBasePath::[[FOO_SYM:@.+]]]
