@@ -160,3 +160,24 @@ hw.module @BareDelay(in %b: i1, in %clk: i1) {
   hw.output
 }
 
+// Boolean implications are lowered when nested in other implications or used
+// by assumptions.
+// CHECK-LABEL: hw.module @BooleanImplications
+hw.module @BooleanImplications(in %a: i1, in %b: i1, in %c: i1, in %clk: i1) {
+  // CHECK-NOT: unrealized_conversion_cast
+  // CHECK: [[NOTB:%.+]] = comb.xor %b, %{{.+}} : i1
+  // CHECK: [[INNER:%.+]] = comb.or [[NOTB]], %c : i1
+  // CHECK: [[NOTA:%.+]] = comb.xor %a, %{{.+}} : i1
+  // CHECK: [[OUTER:%.+]] = comb.or [[NOTA]], [[INNER]] : i1
+  // CHECK: verif.clocked_assert [[OUTER]], posedge %clk : i1
+  // CHECK: verif.clocked_assume %{{.+}}, posedge %clk : i1
+  // CHECK: verif.assume %{{.+}} : i1
+  %0 = ltl.implication %b, %c : i1, i1
+  %1 = ltl.implication %a, %0 : i1, !ltl.property
+  verif.clocked_assert %1, posedge %clk : !ltl.property
+  %2 = ltl.implication %a, %b : i1, i1
+  verif.clocked_assume %2, posedge %clk : !ltl.property
+  %3 = ltl.implication %a, %c : i1, i1
+  verif.assume %3 : !ltl.property
+  hw.output
+}
