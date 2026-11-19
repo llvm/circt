@@ -25,3 +25,33 @@ firrtl.circuit "Issue4456"  {
     firrtl.matchingconnect %o, %0 : !firrtl.uint<4>
   }
 }
+
+// -----
+
+// https://github.com/llvm/circt/issues/11635
+// This shouldn't crash.
+firrtl.circuit "Issue11635" {
+  firrtl.module private @Child(in %i: !firrtl.enum<A, B: uint<8>>, out %o: !firrtl.enum<A, B: uint<8>>) {
+    firrtl.matchingconnect %o, %i : !firrtl.enum<A, B: uint<8>>
+  }
+
+  firrtl.module @Issue11635(in %i: !firrtl.enum<A, B: uint<8>>, out %o: !firrtl.enum<A, B: uint<8>>) {
+    %c_i, %c_o = firrtl.instance c @Child(in i: !firrtl.enum<A, B: uint<8>>, out o: !firrtl.enum<A, B: uint<8>>)
+    firrtl.matchingconnect %c_i, %i : !firrtl.enum<A, B: uint<8>>
+    firrtl.matchingconnect %o, %c_o : !firrtl.enum<A, B: uint<8>>
+  }
+}
+
+// -----
+
+// https://github.com/llvm/circt/issues/11635
+// This shouldn't crash.
+firrtl.circuit "Issue11635" {
+  firrtl.module @Issue11635(out %o: !firrtl.enum<A, B: uint<8>>) {
+    %c3_ui8 = firrtl.constant 3 : !firrtl.uint<8>
+    %e = firrtl.enumcreate B(%c3_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<A, B: uint<8>>
+    %w = firrtl.wire : !firrtl.enum<A, B: uint<8>>
+    firrtl.matchingconnect %w, %e : !firrtl.enum<A, B: uint<8>>
+    firrtl.matchingconnect %o, %w : !firrtl.enum<A, B: uint<8>>
+  }
+}
