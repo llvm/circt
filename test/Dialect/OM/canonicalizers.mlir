@@ -469,6 +469,27 @@ om.class @ListLengthFold(
   om.class.fields %valuesLength, %attrLength, %emptyLength, %nestedLength : !om.integer, !om.integer, !om.integer, !om.integer
 }
 
+// CHECK-LABEL: @OptionFold
+om.class @OptionFold(%value: i32, %default: i32, %option: !om.option<i32>) -> (
+    some: i32, none: i32, unresolved: i32, unknown: !om.option<i32>) {
+  // Fold get_or_else with nonconstant values.
+  %some = om.option_create %value : !om.option<i32>
+  %someResult = om.option_get_or_else %some, %default : !om.option<i32>
+  %none = om.option_create : !om.option<i32>
+  %noneResult = om.option_get_or_else %none, %default : !om.option<i32>
+
+  // CHECK: [[UNRESOLVED:%.+]] = om.option_get_or_else %option, %default : <i32>
+  %unresolved = om.option_get_or_else %option, %default : !om.option<i32>
+
+  // option_create(unknown) -> unknown
+  %unknownValue = om.unknown : i32
+  // CHECK: [[UNKNOWN:%.+]] = om.unknown : !om.option<i32>
+  %unknown = om.option_create %unknownValue : !om.option<i32>
+
+  // CHECK-NEXT: om.class.fields %value, %default, [[UNRESOLVED]], [[UNKNOWN]] : i32, i32, i32, !om.option<i32>
+  om.class.fields %someResult, %noneResult, %unresolved, %unknown : i32, i32, i32, !om.option<i32>
+}
+
 // CHECK-LABEL: @ListContainsFold
 om.class @ListContainsFold(%empty_search: !om.string) -> (
     string_found: i1, string_absent: i1, bool_found: i1, bool_absent: i1,

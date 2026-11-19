@@ -846,6 +846,32 @@ OpFoldResult ListLengthOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// OptionCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult OptionCreateOp::canonicalize(OptionCreateOp op,
+                                           PatternRewriter &rewriter) {
+  auto value = op.getValue();
+  // option_create(unknown) -> unknown
+  if (value && value.getDefiningOp<UnknownValueOp>()) {
+    rewriter.replaceOpWithNewOp<UnknownValueOp>(op, op.getType());
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// OptionGetOrElseOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult OptionGetOrElseOp::fold(FoldAdaptor adaptor) {
+  auto option = getOption().getDefiningOp<OptionCreateOp>();
+  if (!option)
+    return {};
+  return option.getValue() ? option.getValue() : getDefaultValue();
+}
+
+//===----------------------------------------------------------------------===//
 // BasePathCreateOp
 //===----------------------------------------------------------------------===//
 
