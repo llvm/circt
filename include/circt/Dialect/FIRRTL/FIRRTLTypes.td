@@ -238,6 +238,9 @@ def DoubleType : FIRRTLDialectTypeHelper<"DoubleType", "double type">,
 def PathType : FIRRTLDialectTypeHelper<"PathType", "path type">,
   BuildableType<"::circt::firrtl::PathType::get($_builder.getContext())">;
 
+def PropEqualityType : AnyTypeOf<
+    [StringType, BoolType, FIntegerType, ClassType, AnyRefType]>;
+
 //===----------------------------------------------------------------------===//
 // Format String Types
 //===----------------------------------------------------------------------===//

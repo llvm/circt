@@ -1405,9 +1405,7 @@ def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
     ```
   }];
 
-  let arguments = (ins ListType:$list,
-                       AnyTypeOf<[StringType, BoolType, FIntegerType,
-                                  ClassType, AnyRefType]>:$element);
+  let arguments = (ins ListType:$list, PropEqualityType:$element);
   let results = (outs BoolType:$result);
 
   let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
@@ -1616,10 +1614,7 @@ def PropEqOp : FIRRTLOp<"prop.eq", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
     ```
   }];
 
-  let arguments = (ins AnyTypeOf<[StringType, BoolType, FIntegerType,
-                                 ClassType, AnyRefType]>:$lhs,
-                       AnyTypeOf<[StringType, BoolType, FIntegerType,
-                                 ClassType, AnyRefType]>:$rhs);
+  let arguments = (ins PropEqualityType:$lhs, PropEqualityType:$rhs);
   let results = (outs BoolType:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
