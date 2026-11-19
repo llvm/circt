@@ -587,6 +587,23 @@ def ListImpl : PropImplType<"List"> {
   let typeName = "firrtl.propList";
 }
 
+def OptionImpl : PropImplType<"Option"> {
+  let summary = "An optional property value. Not representable in hardware.";
+  let description = [{
+    An option is either empty or contains one value of its element type, which
+    may be any legal property type, including lists, classes, and other options.
+
+    Example:
+    ```mlir
+    !firrtl.option<integer>
+    ```
+  }];
+  let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "element type">:$elementType);
+  let genStorageClass = true;
+  let genAccessors = true;
+  let typeName = "firrtl.propOption";
+}
+
 def RegistryImpl : PropImplType<"Registry"> {
   let summary = [{
     An unordered mutable collection of property values for domain asset tracking.

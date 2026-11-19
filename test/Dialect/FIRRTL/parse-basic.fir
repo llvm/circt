@@ -1839,6 +1839,35 @@ circuit ListLength :
 ;// -----
 FIRRTL version 7.0.0
 
+; CHECK-LABEL: firrtl.circuit "OptionOps"
+circuit OptionOps :
+  class Foo:
+    skip
+
+  public module OptionOps :
+    input integer : Integer
+    input obj : Inst<Foo>
+    output empty : Option<Integer>
+    output present : Option<Integer>
+    output value : Integer
+    output ref : AnyRef
+
+    ; CHECK: firrtl.option.create : !firrtl.option<integer>
+    propassign empty, Option<Integer>()
+    ; CHECK: firrtl.option.create %integer : !firrtl.option<integer>
+    propassign present, Option <Integer>(integer)
+    ; CHECK: [[NONE:%.+]] = firrtl.option.create : !firrtl.option<integer>
+    ; CHECK: firrtl.option.get_or_else [[NONE]], %integer : !firrtl.option<integer>
+    propassign value, option_get_or_else(Option<Integer>(), integer)
+    ; CHECK: [[REF:%.+]] = firrtl.object.anyref_cast %obj
+    ; CHECK: [[SOME:%.+]] = firrtl.option.create [[REF]] : !firrtl.option<anyref>
+    ; CHECK: [[DEFAULT:%.+]] = firrtl.object.anyref_cast %obj
+    ; CHECK: firrtl.option.get_or_else [[SOME]], [[DEFAULT]] : !firrtl.option<anyref>
+    propassign ref, option_get_or_else(Option<AnyRef>(obj), obj)
+
+;// -----
+FIRRTL version 7.0.0
+
 ; CHECK-LABEL: firrtl.circuit "ListContains"
 circuit ListContains :
   class Foo:

@@ -1169,6 +1169,76 @@ circuit Top :
 ;// -----
 FIRRTL version 7.0.0
 
+circuit OptionOfHW:
+  public module OptionOfHW:
+    ; expected-error @below {{expected property type}}
+    input option : Option<UInt<1>>
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit OptionWrongValue:
+  public module OptionWrongValue:
+    output option : Option<Integer>
+    ; expected-error @below {{unexpected expression of type '!firrtl.string' in Option expression of type '!firrtl.integer'}}
+    propassign option, Option<Integer>(String("wrong"))
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit OptionExtraValue:
+  public module OptionExtraValue:
+    output option : Option<Integer>
+    ; expected-error @below {{expected ')' in Option expression}}
+    propassign option, Option<Integer>(Integer(1), Integer(2))
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit OptionGetOrElseNotOption:
+  public module OptionGetOrElseNotOption:
+    output value : Integer
+    ; expected-error @below {{first operand of option_get_or_else must be an Option}}
+    propassign value, option_get_or_else(Integer(1), Integer(2))
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit OptionGetOrElseWrongDefault:
+  public module OptionGetOrElseWrongDefault:
+    output value : Integer
+    ; expected-error @below {{option_get_or_else default type '!firrtl.string' does not match option element type '!firrtl.integer'}}
+    propassign value, option_get_or_else(Option<Integer>(), String("wrong"))
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit OptionTypeVersionError:
+  public module OptionTypeVersionError:
+    ; expected-error @below {{Options are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    input option : Option<Integer>
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit OptionCreateVersionError:
+  public module OptionCreateVersionError:
+    output value : Integer
+    ; expected-error @below {{Options are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    node option = Option<Integer>()
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit OptionGetOrElseVersionError:
+  public module OptionGetOrElseVersionError:
+    output value : Integer
+    ; expected-error @below {{option get or else are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassign value, option_get_or_else(Option<Integer>(), Integer(0))
+
+;// -----
+FIRRTL version 7.0.0
+
 circuit ListLengthNotList:
   public module ListLengthNotList:
     input value : Integer
