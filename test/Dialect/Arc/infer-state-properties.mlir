@@ -296,3 +296,28 @@ hw.module @testFloat(in %clock: !seq.clock, in %enable: i1, in %data: f32, out r
   %q = arc.state @floatEnable(%enable, %data, %q) clock %clock latency 1 : (i1, f32, f32) -> f32
   hw.output %q : f32
 }
+
+// Pulling out a reset rewrites the arc.define in place, which is only sound if
+// every user is an arc.state that receives the reset operand. An arc that is
+// also used by an arc.call (e.g., after arc-dedup) must be left untouched.
+// CHECK-LABEL: arc.define @ANDBasedResetSharedWithCall
+arc.define @ANDBasedResetSharedWithCall(%arg0: i1, %arg1: i1) -> i1 {
+  %true = hw.constant true
+  %0 = comb.xor %arg0, %true : i1
+  %1 = comb.and %arg1, %0 : i1
+  arc.output %1 : i1
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: [[V0:%.+]] = comb.xor %arg0, %true : i1
+  // CHECK-NEXT: [[V1:%.+]] = comb.and %arg1, [[V0]] : i1
+  // CHECK-NEXT: arc.output [[V1]] : i1
+}
+
+// CHECK-LABEL: hw.module @testResetSharedWithCall
+hw.module @testResetSharedWithCall(in %clock: !seq.clock, in %rst: i1, in %a: i1, in %b: i1, in %c: i1, out x: i1, out y: i1) {
+  // CHECK-NEXT: [[X:%.+]] = arc.state @ANDBasedResetSharedWithCall(%rst, %a) clock %clock latency 1 : (i1, i1) -> i1
+  // CHECK-NEXT: [[Y:%.+]] = arc.call @ANDBasedResetSharedWithCall(%b, %c) : (i1, i1) -> i1
+  // CHECK-NEXT: hw.output [[X]], [[Y]] : i1, i1
+  %x = arc.state @ANDBasedResetSharedWithCall(%rst, %a) clock %clock latency 1 : (i1, i1) -> i1
+  %y = arc.call @ANDBasedResetSharedWithCall(%b, %c) : (i1, i1) -> i1
+  hw.output %x, %y : i1, i1
+}
