@@ -5,7 +5,7 @@
 // CHECK: [[NOT_A:%.+]] = comb.xor [[A]], [[TRUE]] : i1
 // CHECK: [[OR:%.+]] = comb.or [[NOT_A]], [[B]] : i1
 // CHECK: verif.assert [[OR]] : i1
-// CHECK: verif.clocked_assert [[OR]], posedge [[CLK:%.+]] : i1
+// CHECK: verif.clocked_assert [[OR]], posedge [[CLK]] : i1
 // CHECK: [[IMP2:%.+]] = ltl.implication [[A]], [[B]] : i1, i1
 // CHECK: [[NOT_IMP2:%.+]] = ltl.not [[IMP2]] : !ltl.property
 // CHECK: [[IMP3:%.+]] = ltl.implication [[B]], [[C]] : i1, !ltl.property
@@ -180,3 +180,17 @@ hw.module @BothEdgeClock(in %clock : !seq.clock, in %a : i1) {
   verif.assert %1 : !ltl.sequence
   hw.output
 }
+
+// CHECK-LABEL: hw.module @BareDelay
+hw.module @BareDelay(in %b: i1, in %clk: i1) {
+  // CHECK: [[TRUE:%.+]] = hw.constant true
+  // CHECK: [[REG0:%.+]] = seq.compreg [[TRUE]], %{{.+}} initial %{{.+}} : i1
+  // CHECK: [[REG1:%.+]] = seq.compreg [[REG0]], %{{.+}} initial %{{.+}} : i1
+  // CHECK: [[NOT:%.+]] = comb.xor [[REG1]], %{{.+}} : i1
+  // CHECK: [[OR:%.+]] = comb.or [[NOT]], %b : i1
+  // CHECK: verif.clocked_assert [[OR]], posedge %clk : i1
+  %0 = ltl.delay %b, 2, 0 : i1
+  verif.clocked_assert %0, posedge %clk : !ltl.sequence
+  hw.output
+}
+
