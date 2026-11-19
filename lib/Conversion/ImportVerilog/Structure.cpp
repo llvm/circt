@@ -2859,7 +2859,10 @@ struct SequentialTableInfo {
   SmallVector<AsyncRow> asyncRows;
   /// Active synchronous (edge-sensitive) transition rows.
   SmallVector<SyncRow> syncRows;
-  /// Indices of input ports that act as asynchronous controls.
+  /// Indices of non-edge input ports used as asynchronous controls (clear or
+  /// preset) in an edge-triggered UDP—i.e., ports other than the edge-sensitive
+  /// clock port that specify a concrete `Zero` or `One` level in at least one
+  /// level-sensitive (`asyncRows`) entry.
   llvm::SmallDenseSet<size_t, 4> asyncPortIndices;
 };
 
@@ -3025,12 +3028,17 @@ static Value buildProductiveTerm(OpBuilder &builder, Location loc,
 /// 4. Pure asynchronous control: in an edge-triggered UDP, level-sensitive
 ///    (asynchronous clear/preset) rows must not depend on the current state q
 ///    (all active level rows must specify '?' on state).
-/// 5. Separation of asynchronous control and synchronous data:
-///    a. Asynchronous control ports (input ports with a '0' or '1' level in
-///       `asyncRows`) cannot also act as varying synchronous data inputs across
-///       `syncRows`.
-///    b. Synchronous transitions (`syncRows`) cannot be conditioned on active
-///       asynchronous control levels.
+/// 5. Separation of asynchronous control and synchronous data (lowering terms
+///    for port roles within an edge-triggered UDP: an "asynchronous control
+///    port" is a non-edge input specifying '0' or '1' in a level-sensitive
+///    `asyncRows` override, such as `rst`/`pre`, whereas "synchronous data"
+///    inputs only take concrete '0'/'1' levels in clocked `syncRows`):
+///    a. Asynchronous control ports (`info.asyncPortIndices`) may appear as '?'
+///       or at a single inactive level in `syncRows`, but cannot take both '0'
+///       and '1' across `syncRows` (which would make them act as synchronous
+///       data inputs).
+///    b. Synchronous transitions (`syncRows`) cannot be conditioned on an
+///       active asynchronous control level from `asyncRows`.
 static LogicalResult
 classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
                             size_t numInputs, Location loc,
@@ -3193,13 +3201,19 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
   }
 
   // Requirement 5 (Separation of asynchronous control and synchronous data):
+  // Here `*edgePortIdx` is the edge-sensitive clock port, while
+  // `info.asyncPortIndices` holds non-edge ports that specify `Zero` or `One`
+  // in `asyncRows` (asynchronous clear/preset pins such as `rst`, e.g.,
+  // `? 1 ? : ? : 0` for `input clk, rst, d`).
   if (edgePortIdx.has_value()) {
-    // Requirement 5a: In `syncRows`, an asynchronous control port may only
-    // be `DontCare` or held at its single inactive level (e.g. `rst = 0`
-    // across all clocked rows). If it is specified as `Zero` in one `syncRow`
-    // and `One` in another (`variesInSync`), it is also acting as a synchronous
-    // data input, which is not supported.
+    // Requirement 5a: In `syncRows` (e.g., `(01) 0 0 : ? : 0`), an asynchronous
+    // control port `aIdx` may only be `DontCare` or held at its single inactive
+    // level (such as `rst = 0`). If `aIdx` takes both `Zero` and `One` across
+    // `syncRows` (`variesInSync`), it is also acting as a synchronous data
+    // input, which is not supported.
     for (size_t aIdx : info.asyncPortIndices) {
+      // Tracks whether port `aIdx` takes both `Zero` and `One` across
+      // `syncRows` (acting as synchronous data rather than held inactive).
       bool variesInSync = false;
       std::optional<UdpLevel> firstSyncLevel;
       for (const auto &srow : info.syncRows) {
