@@ -170,7 +170,8 @@ static void lowerInstanceResults(HWInstanceLike op) {
       OpOperand &use = *result.getUses().begin();
       if (dyn_cast_or_null<OutputOp>(use.getOwner()))
         continue;
-      if (auto assign = dyn_cast_or_null<AssignOp>(use.getOwner())) {
+      if (auto assign = dyn_cast_or_null<AssignOp>(use.getOwner());
+          assign && assign->getBlock() == op->getBlock()) {
         // Move assign op after instance to resolve cyclic dependencies.
         assign->moveAfter(op);
         continue;
