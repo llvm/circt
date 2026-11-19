@@ -465,6 +465,7 @@ def OptionGetOrElseOp : OMOp<"option_get_or_else", [Pure,
   let arguments = (ins OptionType:$option, AnyType:$defaultValue);
   let results = (outs AnyType:$result);
   let assemblyFormat = "$option `,` $defaultValue attr-dict `:` type($option)";
+  let hasFolder = 1;
 }
 
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,

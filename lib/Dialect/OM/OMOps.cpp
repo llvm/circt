@@ -846,6 +846,17 @@ OpFoldResult ListLengthOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// OptionGetOrElseOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult OptionGetOrElseOp::fold(FoldAdaptor adaptor) {
+  auto option = getOption().getDefiningOp<OptionCreateOp>();
+  if (!option)
+    return {};
+  return option.getValue() ? option.getValue() : getDefaultValue();
+}
+
+//===----------------------------------------------------------------------===//
 // BasePathCreateOp
 //===----------------------------------------------------------------------===//
 
