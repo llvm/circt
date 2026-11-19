@@ -1316,7 +1316,7 @@ OpFoldResult ListIntersectOp::fold(FoldAdaptor adaptor) {
   llvm::append_range(remaining, rhs.getElements());
   SmallVector<Attribute> result;
   for (Attribute candidate : lhs.getElements()) {
-    auto match = remaining.end();
+    auto *match = remaining.end();
     for (auto it = remaining.begin(), e = remaining.end(); it != e; ++it) {
       auto equal = evaluateBinaryEquality(candidate, *it);
       if (failed(equal))
@@ -1338,7 +1338,7 @@ OpFoldResult ListIntersectOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult ListIntersectOp::canonicalize(ListIntersectOp op,
                                             PatternRewriter &rewriter) {
-  auto elementType = cast<ListType>(op.getLhs().getType()).getElementType();
+  auto elementType = op.getLhs().getType().getElementType();
   if (!isa<ClassType, AnyType>(elementType))
     return failure();
 
@@ -1364,7 +1364,7 @@ LogicalResult ListIntersectOp::canonicalize(ListIntersectOp op,
   // object identity, preserving unknown comparisons.
   SmallVector<Value> result;
   for (Value candidate : lhsElements) {
-    auto match = remaining.end();
+    auto *match = remaining.end();
     bool hasUnknownComparison = false;
     for (auto it = remaining.begin(), e = remaining.end(); it != e; ++it) {
       auto equal = evaluateIdentityEquality(candidate, *it);
