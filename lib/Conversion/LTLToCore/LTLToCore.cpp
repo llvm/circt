@@ -259,8 +259,230 @@ static void lowerTemporalLTLToCore(hw::HWModuleOp module) {
     op->setOperand(0, guardedProperty);
   }
 }
-
 } // namespace
+
+// Converts a `verif` clock edge into the equivalent `ltl` clock edge.
+static ltl::ClockEdge verifToLTLClockEdge(verif::ClockEdge edge) {
+  switch (edge) {
+  case verif::ClockEdge::Pos:
+    return ltl::ClockEdge::Pos;
+  case verif::ClockEdge::Neg:
+    return ltl::ClockEdge::Neg;
+  case verif::ClockEdge::Both:
+    return ltl::ClockEdge::Both;
+  }
+  llvm_unreachable("unknown clock edge");
+}
+
+// Matches the antecedent of a non-overlapping implication, `a[##N] |=> b` in
+// SVA, and returns the boolean `a` together with the number of delay cycles N.
+// We match 3 specific forms of antecedent:
+//
+// - simple boolean `a` (N is implicitly 0)
+// - `concat(delay(a, N, 0), true)`, as emitted by ImportVerilog
+// - `concat(a, delay(true, N, 0))`, as recognized by ExportVerilog
+static std::optional<std::pair<Value, uint64_t>>
+matchAntecedent(Value antecedent) {
+  // match a simple bool antecedent
+  if (antecedent.getType().isInteger(1))
+    return std::make_pair(antecedent, uint64_t(0));
+
+  // only other supported antecedents are in the form of a concat()
+  auto concatOp = antecedent.getDefiningOp<ltl::ConcatOp>();
+  if (!concatOp || concatOp.getInputs().size() != 2)
+    return std::nullopt;
+  Value lhs = concatOp.getInputs()[0];
+  Value rhs = concatOp.getInputs()[1];
+
+  // helper to match delays of at least one cycle
+  auto getExactDelay = [](Value value) -> ltl::DelayOp {
+    auto delayOp = value.getDefiningOp<ltl::DelayOp>();
+    if (!delayOp || delayOp.getLength() != 0 || delayOp.getDelay() < 1)
+      return {};
+    return delayOp;
+  };
+  // helper to match constant true boolean.
+  auto isConstantTrue = [](Value value) -> bool {
+    auto constOp = value.getDefiningOp<hw::ConstantOp>();
+    return constOp && constOp.getValue().isOne();
+  };
+
+  // match `concat(delay(a, N, 0), true)`
+  if (auto delayOp = getExactDelay(lhs))
+    if (isConstantTrue(rhs) && delayOp.getInput().getType().isInteger(1))
+      return std::make_pair(delayOp.getInput(), delayOp.getDelay());
+  // match `concat(a, delay(true, N, 0))`
+  if (auto delayOp = getExactDelay(rhs))
+    if (isConstantTrue(delayOp.getInput()) && lhs.getType().isInteger(1))
+      return std::make_pair(lhs, delayOp.getDelay());
+
+  return std::nullopt;
+}
+
+namespace {
+// A consequent that is satisfied if `now` holds in the cycle it starts, or if
+// `later` holds in any of the cycles `[lo, lo + len]` after that. `now` may be
+// null.
+struct BoundedConsequent {
+  Value now;
+  Value later;
+  uint64_t lo = 0;
+  uint64_t len = 0;
+};
+} // namespace
+
+// Matches a consequent made of booleans and bounded delays:
+//
+// - `b`
+// - `delay(b, lo, len)`, `##[lo:lo+len] b` in SVA
+// - `or(x, delay(b, lo, len))` or `or(delay(b, lo, len), x)`
+static std::optional<BoundedConsequent> matchConsequent(Value consequent) {
+  // match `b`
+  if (consequent.getType().isInteger(1))
+    return BoundedConsequent{{}, consequent, 0, 0};
+
+  auto matchBoundedDelay = [](Value value) -> std::optional<BoundedConsequent> {
+    auto delayOp = value.getDefiningOp<ltl::DelayOp>();
+    if (!delayOp || !delayOp.getLength() ||
+        !delayOp.getInput().getType().isInteger(1))
+      return std::nullopt;
+    return BoundedConsequent{
+        {}, delayOp.getInput(), delayOp.getDelay(), *delayOp.getLength()};
+  };
+
+  // match `delay(b, lo, len)`, `##[lo:lo+len] b`
+  if (auto result = matchBoundedDelay(consequent))
+    return result;
+
+  auto orOp = consequent.getDefiningOp<ltl::OrOp>();
+  if (!orOp || orOp.getInputs().size() != 2)
+    return std::nullopt;
+  Value first = orOp.getInputs()[0];
+  Value second = orOp.getInputs()[1];
+
+  auto matchOrWithDelayed =
+      [&](Value now, Value delayed) -> std::optional<BoundedConsequent> {
+    if (!now.getType().isInteger(1))
+      return std::nullopt;
+    if (auto result = matchBoundedDelay(delayed)) {
+      result->now = now;
+      return result;
+    }
+    return std::nullopt;
+  };
+  // match `or(x, delay(b, lo, len))`
+  if (auto result = matchOrWithDelayed(first, second))
+    return result;
+  // match `or(delay(b, lo, len), x)`
+  if (auto result = matchOrWithDelayed(second, first))
+    return result;
+
+  return std::nullopt;
+}
+
+// Lowers clocked assertions and assumptions whose property is an implication
+// with a bounded temporal extent into a register chain and comb logic. The
+// antecedent is a boolean `a`, optionally delayed by `d` cycles as in
+// `a[##d] |=> b`, and the consequent is a boolean `b`, optionally delayed
+// as in `or(now, ##[lo:lo+len] b)`.
+// Simple bounded delays are treated as an implication with a true antecedent.
+//
+// The lowering tracks pending obligations through a chain of registers. An
+// obligation is created when `a` holds, becomes due `d` cycles later, and is
+// discharged by `now` in that cycle or by `b` (later) in any of the
+// `[lo, lo+len]` cycles after it:
+//
+// If the op has an enable, which is how `disable iff` is represented, every
+// register samples its input only while the enable holds. This cancels an
+// obligation if the enable drops in any cycle between its creation and its
+// check.
+static void lowerDelayedImplications(hw::HWModuleOp module) {
+  SmallVector<Operation *> clockedOps;
+  module->walk([&](Operation *op) {
+    if (isa<verif::ClockedAssertOp, verif::ClockedAssumeOp>(op))
+      clockedOps.push_back(op);
+  });
+
+  for (auto *op : clockedOps) {
+    verif::ClockEdge edge;
+    Value clock, enable;
+    llvm::TypeSwitch<Operation *, void>(op)
+        .Case<verif::ClockedAssertOp, verif::ClockedAssumeOp>(
+            [&](auto clockedOp) {
+              edge = clockedOp.getEdge();
+              clock = clockedOp.getClock();
+              enable = clockedOp.getEnable();
+            })
+        .Default([](Operation *) {
+          llvm_unreachable("Only clocked assert and assume supported.");
+        });
+    if (edge == verif::ClockEdge::Both)
+      continue;
+
+    // Split the property into an antecedent and a consequent.
+    Value property = op->getOperand(0);
+    Value trigger;
+    uint64_t delay = 0;
+    std::optional<BoundedConsequent> consequent;
+    if (auto implicationOp = property.getDefiningOp<ltl::ImplicationOp>()) {
+      auto antecedent = matchAntecedent(implicationOp.getAntecedent());
+      if (!antecedent)
+        continue;
+      std::tie(trigger, delay) = *antecedent;
+      consequent = matchConsequent(implicationOp.getConsequent());
+    } else if (property.getDefiningOp<ltl::DelayOp>()) {
+      consequent = matchConsequent(property);
+    } else {
+      continue;
+    }
+    if (!consequent)
+      continue;
+
+    // Boolean implications without any delay are lowered to comb ops by the
+    // conversion patterns.
+    if (delay == 0 && consequent->lo == 0 && consequent->len == 0 &&
+        !consequent->now)
+      continue;
+
+    OpBuilder builder(op);
+    auto loc = op->getLoc();
+    if (!trigger)
+      trigger = hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
+
+    // Delay a value by one cycle, cancelling it if the enable drops.
+    auto delayByOne = [&](Value value) {
+      if (enable)
+        value = comb::AndOp::create(builder, loc, value, enable, false);
+      return createRegister(value, clock, verifToLTLClockEdge(edge),
+                            /*initialValue=*/false, builder, op);
+    };
+    auto andNot = [&](Value value, Value discharge) {
+      return comb::AndOp::create(builder, loc, value,
+                                 comb::createOrFoldNot(builder, loc, discharge),
+                                 false);
+    };
+
+    // Create the obligation and move it to the cycle where it becomes due.
+    Value pending = trigger;
+    for (uint64_t i = 0; i < delay; ++i)
+      pending = delayByOne(pending);
+    if (consequent->now)
+      pending = andNot(pending, consequent->now);
+    for (uint64_t i = 0; i < consequent->lo; ++i)
+      pending = delayByOne(pending);
+
+    // Keep the obligation pending for each cycle of the window in which
+    // `later` does not hold.
+    for (uint64_t i = 0; i < consequent->len; ++i)
+      pending = delayByOne(andNot(pending, consequent->later));
+
+    // The obligation must be discharged by the last cycle of the window.
+    Value notPending = comb::createOrFoldNot(builder, loc, pending);
+    Value lowered = comb::OrOp::create(builder, loc, notPending,
+                                       consequent->later, /*twoState=*/false);
+    op->setOperand(0, lowered);
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Lower LTL To Core pass
@@ -277,6 +499,7 @@ struct LowerLTLToCorePass
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
   lowerTemporalLTLToCore(getOperation());
+  lowerDelayedImplications(getOperation());
 
   // Preserve operations that require an LTL-aware downstream backend.
   ConversionTarget target(getContext());
@@ -359,7 +582,8 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Clean up remaining unrealized casts by changing assert argument types
   getOperation().walk([&](Operation *op) {
-    if (!isa<verif::AssertOp, verif::ClockedAssertOp>(op))
+    if (!isa<verif::AssertOp, verif::ClockedAssertOp, verif::AssumeOp,
+             verif::ClockedAssumeOp>(op))
       return;
     Value prop = op->getOperand(0);
     if (auto cast = prop.getDefiningOp<UnrealizedConversionCastOp>()) {
