@@ -284,6 +284,7 @@ struct FIRParser {
                               const Twine &message);
   ParseResult parseEnumType(FIRRTLType &result);
   ParseResult parseListType(FIRRTLType &result);
+  ParseResult parseOptionType(FIRRTLType &result);
   ParseResult parseRegistryType(FIRRTLType &result);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
   // Parse a property type specifically.
@@ -925,6 +926,23 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
   return success();
 }
 
+/// option-type ::= 'Option' '<' type-property '>'
+// NOLINTNEXTLINE(misc-no-recursion)
+ParseResult FIRParser::parseOptionType(FIRRTLType &result) {
+  bool hasLAngle = getToken().is(FIRToken::langle_Option);
+  consumeToken();
+
+  PropertyType elementType;
+  if ((!hasLAngle &&
+       parseToken(FIRToken::less, "expected '<' in Option type")) ||
+      parsePropertyType(elementType, "expected Option element type") ||
+      parseToken(FIRToken::greater, "expected '>' in Option type"))
+    return failure();
+
+  result = OptionType::get(getContext(), elementType);
+  return success();
+}
+
 /// registry-type ::= 'Registry' '<' type '>'
 ParseResult FIRParser::parseRegistryType(FIRRTLType &result) {
   consumeToken(FIRToken::kw_Registry);
@@ -1275,6 +1293,12 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = ListType::get(getContext(), elementType);
     break;
   }
+
+  case FIRToken::kw_Option:
+  case FIRToken::langle_Option:
+    if (requireFeature(nextFIRVersion, "Options") || parseOptionType(result))
+      return failure();
+    break;
 
   case FIRToken::kw_Registry:
     if (requireFeature(missingSpecFIRVersion, "Registries") ||
@@ -2059,6 +2083,8 @@ private:
                          std::optional<int32_t> allocatedWidth = {});
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
+  ParseResult parseOptionExp(Value &result);
+  ParseResult parseOptionGetOrElseExp(Value &result);
   ParseResult parseCatExp(Value &result);
   ParseResult parseStringConcatExp(Value &result);
   ParseResult parsePropEqExp(Value &result);
@@ -2434,6 +2460,22 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   }
+
+  case FIRToken::kw_Option:
+  case FIRToken::langle_Option:
+    if (requireFeature(nextFIRVersion, "Options"))
+      return failure();
+    if (isLeadingStmt)
+      return emitError("unexpected Option<>() as start of statement");
+    if (parseOptionExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_option_get_or_else:
+    if (requireFeature(nextFIRVersion, "option get or else") ||
+        parseOptionGetOrElseExp(result))
+      return failure();
+    break;
 
   case FIRToken::lp_list_concat: {
     if (isLeadingStmt)
@@ -2846,6 +2888,67 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = ListCreateOp::create(builder, listType, operands);
+  return success();
+}
+
+/// option-exp ::= option-type '(' exp? ')'
+// NOLINTNEXTLINE(misc-no-recursion)
+ParseResult FIRStmtParser::parseOptionExp(Value &result) {
+  auto loc = getToken().getLoc();
+  FIRRTLType type;
+  if (parseOptionType(type) ||
+      parseToken(FIRToken::l_paren, "expected '(' in Option expression"))
+    return failure();
+
+  Value value;
+  if (!getToken().is(FIRToken::r_paren)) {
+    if (parseExp(value, "expected expression in Option expression"))
+      return failure();
+    auto elementType = cast<OptionType>(type).getElementType();
+    locationProcessor.setLoc(loc);
+    value = emitImplicitAnyRefCast(value, elementType);
+    if (value.getType() != elementType)
+      return emitError(loc, "unexpected expression of type ")
+             << value.getType() << " in Option expression of type "
+             << elementType;
+  }
+  if (parseToken(FIRToken::r_paren, "expected ')' in Option expression"))
+    return failure();
+
+  locationProcessor.setLoc(loc);
+  result = OptionCreateOp::create(builder, type, value);
+  return success();
+}
+
+/// option-get-or-else-exp ::= 'option_get_or_else' '(' exp ',' exp ')'
+// NOLINTNEXTLINE(misc-no-recursion)
+ParseResult FIRStmtParser::parseOptionGetOrElseExp(Value &result) {
+  consumeToken(FIRToken::lp_option_get_or_else);
+  auto loc = getToken().getLoc();
+  Value option, defaultValue;
+  locationProcessor.setLoc(loc);
+  if (parseExp(option, "expected option expression in option_get_or_else") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(defaultValue,
+               "expected default expression in option_get_or_else") ||
+      parseToken(FIRToken::r_paren, "expected ')'"))
+    return failure();
+
+  auto optionType = dyn_cast<OptionType>(option.getType());
+  if (!optionType)
+    return emitError(loc,
+                     "first operand of option_get_or_else must be an Option");
+
+  auto elementType = optionType.getElementType();
+  locationProcessor.setLoc(loc);
+  defaultValue = emitImplicitAnyRefCast(defaultValue, elementType);
+  if (defaultValue.getType() != elementType)
+    return emitError(loc, "option_get_or_else default type ")
+           << defaultValue.getType() << " does not match option element type "
+           << elementType;
+
+  locationProcessor.setLoc(loc);
+  result = OptionGetOrElseOp::create(builder, option, defaultValue);
   return success();
 }
 

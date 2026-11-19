@@ -217,6 +217,18 @@ firrtl.module @PropertyListOps() {
   %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
 }
 
+// CHECK-LABEL: firrtl.module @PropertyOptionOps
+firrtl.module @PropertyOptionOps(in %value: !firrtl.integer) {
+  // CHECK: firrtl.option.create : !firrtl.option<integer>
+  %none = firrtl.option.create : !firrtl.option<integer>
+
+  // CHECK: [[SOME:%.+]] = firrtl.option.create %value : !firrtl.option<integer>
+  %some = firrtl.option.create %value : !firrtl.option<integer>
+
+  // CHECK: firrtl.option.get_or_else [[SOME]], %value : !firrtl.option<integer>
+  %result = firrtl.option.get_or_else %some, %value : !firrtl.option<integer>
+}
+
 // CHECK-LABEL: firrtl.module @PropertyListLength
 firrtl.module @PropertyListLength(in %list: !firrtl.list<list<double>>,
                                  out %length: !firrtl.integer) {

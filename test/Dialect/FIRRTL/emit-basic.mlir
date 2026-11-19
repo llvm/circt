@@ -686,6 +686,9 @@ firrtl.circuit "Foo" {
                             out %double : !firrtl.double,
                             out %path : !firrtl.path,
                             out %list : !firrtl.list<list<string>>,
+                            out %emptyOption : !firrtl.option<integer>,
+                            out %nestedOption : !firrtl.option<list<integer>>,
+                            out %optionValue : !firrtl.integer,
                             out %unknownString : !firrtl.string,
                             out %stringcat : !firrtl.string,
                             out %stringeq : !firrtl.bool,
@@ -742,6 +745,19 @@ firrtl.circuit "Foo" {
     %empty = firrtl.list.create : !firrtl.list<string>
     %strings_and_empty = firrtl.list.create %strings, %empty : !firrtl.list<list<string>>
     firrtl.propassign %list, %strings_and_empty : !firrtl.list<list<string>>
+
+    // CHECK: propassign emptyOption, Option<Integer>()
+    %none = firrtl.option.create : !firrtl.option<integer>
+    firrtl.propassign %emptyOption, %none : !firrtl.option<integer>
+
+    // CHECK: propassign nestedOption, Option<List<Integer>>(List<Integer>())
+    %emptyIntegers = firrtl.list.create : !firrtl.list<integer>
+    %nested = firrtl.option.create %emptyIntegers : !firrtl.option<list<integer>>
+    firrtl.propassign %nestedOption, %nested : !firrtl.option<list<integer>>
+
+    // CHECK: propassign optionValue, option_get_or_else(Option<Integer>(), Integer(5))
+    %optionResult = firrtl.option.get_or_else %none, %intA : !firrtl.option<integer>
+    firrtl.propassign %optionValue, %optionResult : !firrtl.integer
 
     // CHECK: propassign unknownString, Unknown(String)
     %2 = firrtl.unknown : !firrtl.string
