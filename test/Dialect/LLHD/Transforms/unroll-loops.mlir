@@ -850,3 +850,66 @@ hw.module @LoopWithNegativeBound() {
     llhd.yield
   }
 }
+
+// Loops inside processes are unrolled as well.
+// CHECK-LABEL: @LoopInProcess
+hw.module @LoopInProcess(in %a : i42, out x : i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %c1_i42 = hw.constant 1 : i42
+  %c3_i42 = hw.constant 3 : i42
+  %c42_i42 = hw.constant 42 : i42
+  // CHECK: llhd.process
+  %0 = llhd.process -> i42 {
+    // CHECK-NEXT:   cf.br [[START:\^.+]]
+    cf.br ^start
+  ^start:
+    // CHECK-NEXT: [[START]]:
+    // CHECK-NEXT:   cf.br [[ENTRY:\^.+]](%a : i42)
+    cf.br ^header(%c0_i42, %a : i42, i42)
+  ^header(%i: i42, %x: i42):
+    %1 = comb.icmp slt %i, %c3_i42 : i42
+    cf.cond_br %1, ^body, ^exit
+  ^body:
+    // CHECK-NEXT: [[ENTRY]]([[X0:%.+]]: i42):
+    // CHECK-NEXT:   [[X1:%.+]] = comb.add [[X0]], %c42_i42
+    // CHECK-NEXT:   [[X2:%.+]] = comb.add [[X1]], %c42_i42
+    // CHECK-NEXT:   [[X3:%.+]] = comb.add [[X2]], %c42_i42
+    // CHECK-NEXT:   cf.br [[EXIT:\^.+]]
+    %2 = comb.add %x, %c42_i42 : i42
+    %ip = comb.add %i, %c1_i42 : i42
+    cf.br ^header(%ip, %2 : i42, i42)
+  ^exit:
+    // CHECK-NEXT: [[EXIT]]:
+    // CHECK-NEXT:   llhd.wait yield ([[X3]] : i42), (%a : i42), [[START]]
+    llhd.wait yield (%x : i42), (%a : i42), ^start
+  }
+  hw.output %0 : i42
+}
+
+// Loops that suspend the process through an `llhd.wait` are left untouched.
+// CHECK-LABEL: @SkipLoopWithWait
+hw.module @SkipLoopWithWait() {
+  %c0_i42 = hw.constant 0 : i42
+  %c1_i42 = hw.constant 1 : i42
+  %c3_i42 = hw.constant 3 : i42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK: comb.icmp slt
+    // CHECK: llhd.wait
+    // CHECK: func.call @marker() : () -> ()
+    // CHECK-NOT: func.call @marker() : () -> ()
+    // CHECK: llhd.halt
+    cf.br ^header(%c0_i42 : i42)
+  ^header(%i: i42):
+    %1 = comb.icmp slt %i, %c3_i42 : i42
+    cf.cond_br %1, ^body, ^exit
+  ^body:
+    llhd.wait ^latch
+  ^latch:
+    func.call @marker() : () -> ()
+    %ip = comb.add %i, %c1_i42 : i42
+    cf.br ^header(%ip : i42)
+  ^exit:
+    llhd.halt
+  }
+}
