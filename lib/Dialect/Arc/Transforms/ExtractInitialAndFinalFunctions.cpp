@@ -43,7 +43,10 @@ struct ExtractInitialAndFinalFunctionsPass
       const ExtractInitialAndFinalFunctionsPass &pass)
       : ExtractInitialAndFinalFunctionsPass() {}
 
+protected:
   void runOnOperation() override;
+
+private:
   LogicalResult extractFromModel(ModelOp modelOp);
   LogicalResult extractFunction(Operation *regionOp, ValueRange modelArgs,
                                 OpBuilder &funcBuilder);
@@ -68,8 +71,8 @@ ExtractInitialAndFinalFunctionsPass::extractFromModel(ModelOp modelOp) {
   SmallVector<FinalOp, 1> finalOps;
   for (auto &op : modelOp.getBody().getOps())
     TypeSwitch<Operation *, void>(&op)
-        .Case<InitialOp>([&](auto initOp) { initialOps.push_back(initOp); })
-        .Case<FinalOp>([&](auto op) { finalOps.push_back(op); });
+        .Case([&](InitialOp initOp) { initialOps.push_back(initOp); })
+        .Case([&](FinalOp op) { finalOps.push_back(op); });
 
   // Sanity check
   if (initialOps.size() > 1) {
@@ -154,7 +157,7 @@ LogicalResult ExtractInitialAndFinalFunctionsPass::extractFunction(
 
   // Register the function with the model.
   TypeSwitch<Operation *, void>(regionOp)
-      .Case<InitialOp>([&](auto) {
+      .Case([&](InitialOp) {
         if (modelOp.getInitialFn().has_value())
           modelOp.emitWarning() << "Existing model initializer '"
                                 << modelOp.getInitialFnAttr().getValue()
@@ -162,7 +165,7 @@ LogicalResult ExtractInitialAndFinalFunctionsPass::extractFunction(
         modelOp.setInitialFnAttr(
             FlatSymbolRefAttr::get(funcOp.getSymNameAttr()));
       })
-      .Case<FinalOp>([&](auto) {
+      .Case([&](FinalOp) {
         if (modelOp.getFinalFn().has_value())
           modelOp.emitWarning()
               << "Existing model finalizer '"
