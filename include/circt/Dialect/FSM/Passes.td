@@ -20,7 +20,7 @@ def PrintFSMGraph : Pass<"fsm-print-graph", "mlir::ModuleOp"> {
   let constructor =  "circt::fsm::createPrintFSMGraphPass()";
 }
 
-def RemoveUnreachableStates : Pass<"fsm-remove-unreachable-states", "circt::fsm::MachineOp"> {
+def RemoveUnreachableStates : Pass<"fsm-remove-unreachable-states", "mlir::ModuleOp"> {
   let summary = "Removes unreachable states in the FSM.";
   let constructor =  "circt::fsm::createRemoveUnreachableStatesPass()";
 }

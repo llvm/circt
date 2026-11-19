@@ -1,67 +1,116 @@
 // RUN: circt-opt --split-input-file --fsm-remove-unreachable-states %s | FileCheck %s
 
-// Canonicalize unreachable states.
+// A state with no incoming transition is removed.
 
-fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType = i1} {
-  %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
-
-  fsm.state @IDLE output  {
+// CHECK-LABEL: fsm.machine @unreferenced
+// CHECK:         fsm.state @IDLE
+// CHECK:         fsm.state @B
+// CHECK-NOT:     fsm.state
+fsm.machine @unreferenced(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
+  fsm.state @IDLE output {
     fsm.output %arg0 : i1
-  } transitions  {
-    fsm.transition @B guard  {
-      %c0_i16 = arith.constant 0 : i16
-      %0 = arith.cmpi eq, %cnt, %c0_i16 : i16
-      fsm.return %0
-    } action  {
-    }
+  } transitions {
+    fsm.transition @B
   }
 
-  // CHECK-NOT: fsm.state @A
-  fsm.state @A output  {
+  fsm.state @A output {
     fsm.output %arg0 : i1
-  } transitions  {}
+  } transitions {}
 
-  // CHECK: fsm.state @B
-  fsm.state @B output  {
+  fsm.state @B output {
     fsm.output %arg0 : i1
-  } transitions  {}
+  } transitions {}
 
-  // CHECK-NOT: fsm.state @C
-  fsm.state @C output  {
+  fsm.state @C output {
     fsm.output %arg0 : i1
-  } transitions  {}
+  } transitions {}
 }
 
 // -----
 
-// Canonicalize SCC of unreachable states.
+// A cycle of states that cannot be reached is removed, and so are its
+// transitions.
 
-fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType = i1} {
-  %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
-
-  fsm.state @IDLE output  {
+// CHECK-LABEL: fsm.machine @cycle
+// CHECK:         fsm.state @IDLE
+// CHECK:         fsm.state @A
+// CHECK-NOT:     fsm.state
+fsm.machine @cycle(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
+  fsm.state @IDLE output {
     fsm.output %arg0 : i1
-  } transitions  {
-    fsm.transition @A guard  {
-      %c0_i16 = arith.constant 0 : i16
-      %0 = arith.cmpi eq, %cnt, %c0_i16 : i16
-      fsm.return %0
-    } action  {
-    }
+  } transitions {
+    fsm.transition @A
   }
 
-  // CHECK: fsm.state @A
-  fsm.state @A output  {
+  fsm.state @A output {
     fsm.output %arg0 : i1
-  } transitions  {}
+  } transitions {}
 
-  // CHECK-NOT: fsm.state @B
-  fsm.state @A output  {
+  fsm.state @B output {
     fsm.output %arg0 : i1
-  } transitions  { fsm.transition @C }
+  } transitions {
+    fsm.transition @C
+  }
 
-  // CHECK-NOT: fsm.state @C
-  fsm.state @C output  {
+  fsm.state @C output {
     fsm.output %arg0 : i1
-  } transitions  { fsm.transition @B }
+  } transitions {
+    fsm.transition @B
+  }
+}
+
+// -----
+
+// The result does not depend on the order the states are declared in. Here
+// the states are reached in a different order than they appear in the IR.
+
+// CHECK-LABEL: fsm.machine @order
+// CHECK:         fsm.state @IDLE
+// CHECK:         fsm.state @Y
+// CHECK:         fsm.state @Z
+// CHECK-NOT:     fsm.state
+fsm.machine @order(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
+  fsm.state @IDLE output {
+    fsm.output %arg0 : i1
+  } transitions {
+    fsm.transition @Z
+  }
+
+  fsm.state @X output {
+    fsm.output %arg0 : i1
+  } transitions {
+    fsm.transition @Y
+  }
+
+  fsm.state @Y output {
+    fsm.output %arg0 : i1
+  } transitions {}
+
+  fsm.state @Z output {
+    fsm.output %arg0 : i1
+  } transitions {
+    fsm.transition @Y
+  }
+}
+
+// -----
+
+// A machine where every state is reachable is left alone.
+
+// CHECK-LABEL: fsm.machine @all_reachable
+// CHECK:         fsm.state @IDLE
+// CHECK:         fsm.state @A
+// CHECK-NOT:     fsm.state
+fsm.machine @all_reachable(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
+  fsm.state @IDLE output {
+    fsm.output %arg0 : i1
+  } transitions {
+    fsm.transition @A
+  }
+
+  fsm.state @A output {
+    fsm.output %arg0 : i1
+  } transitions {
+    fsm.transition @IDLE
+  }
 }
