@@ -1411,6 +1411,49 @@ def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
   let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
 }
 
+def OptionCreateOp : FIRRTLOp<"option.create", [Pure,
+    OptionalTypesMatchWith<"option element type should match value type",
+                           "result", "value",
+                           "cast<OptionType>($_self).getElementType()">]> {
+  let summary = "Produce an optional property value";
+  let description = [{
+    Produces an empty option when no value is provided, or an option containing
+    the provided value. The value must have the option's element type.
+
+    Example:
+    ```mlir
+    %none = firrtl.option.create : !firrtl.option<integer>
+    %some = firrtl.option.create %value : !firrtl.option<integer>
+    ```
+  }];
+  let arguments = (ins Optional<PropertyType>:$value);
+  let results = (outs OptionType:$result);
+  let assemblyFormat = "($value^)? attr-dict `:` type($result)";
+}
+
+def OptionGetOrElseOp : FIRRTLOp<"option.get_or_else", [Pure,
+    TypesMatchWith<"option element type should match default value type",
+                   "option", "defaultValue",
+                   "cast<OptionType>($_self).getElementType()">,
+    TypesMatchWith<"option element type should match result type",
+                   "option", "result",
+                   "cast<OptionType>($_self).getElementType()">]> {
+  let summary = "Return an option's value or a default";
+  let description = [{
+    Returns the value contained in the option if it is not empty, and the
+    default value otherwise. The default and result have the option's element
+    type.
+
+    Example:
+    ```mlir
+    %value = firrtl.option.get_or_else %option, %default : !firrtl.option<integer>
+    ```
+  }];
+  let arguments = (ins OptionType:$option, PropertyType:$defaultValue);
+  let results = (outs PropertyType:$result);
+  let assemblyFormat = "$option `,` $defaultValue attr-dict `:` type($option)";
+}
+
 def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
   let summary = "Produce a constant boolean value";
   let description = [{

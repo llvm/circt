@@ -153,6 +153,11 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(listType.getElementType(), os);
         os << '>';
       })
+      .Case([&](OptionType optionType) {
+        os << "option<";
+        printNestedType(optionType.getElementType(), os);
+        os << '>';
+      })
       .Case<RegistryType>([&](auto registryType) {
         os << "registry<";
         printNestedType(registryType.getElementType(), os);
@@ -530,6 +535,16 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = parser.getChecked<ListType>(context, elementType);
     if (!result)
       return failure();
+    return success();
+  }
+  if (name == "option") {
+    if (isConst)
+      return parser.emitError(parser.getNameLoc(), "options cannot be const");
+    PropertyType elementType;
+    if (parser.parseLess() || parseNestedPropertyType(elementType, parser) ||
+        parser.parseGreater())
+      return failure();
+    result = OptionType::get(context, elementType);
     return success();
   }
   if (name == "registry") {

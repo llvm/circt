@@ -1379,6 +1379,17 @@ firrtl.circuit "ListOfHW" {
 
 // -----
 
+// Options can only contain properties.
+// expected-error @below {{expected property type, found '!firrtl.uint<1>'}}
+firrtl.module @OptionOfHW(in %in: !firrtl.option<uint<1>>) {}
+
+// -----
+
+// expected-error @below {{options cannot be const}}
+firrtl.module @ConstOption(in %in: !firrtl.const.option<integer>) {}
+
+// -----
+
 // Reject list.create with mixed element types.
 firrtl.circuit "MixedList" {
   firrtl.module @MixedList(
