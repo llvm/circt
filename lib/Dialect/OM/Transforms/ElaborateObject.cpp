@@ -162,7 +162,7 @@ struct EraseUnknownRegistryInsertion : OpRewritePattern<RegistryInsertOp> {
 };
 
 /// Propagate UnknownValueOp through pure OM operations and registry creation.
-/// If any operand is unknown, all results become unknown.
+/// When this pattern matches, all results are replaced with UnknownValueOp.
 struct UnknownPropagationPattern : RewritePattern {
   UnknownPropagationPattern(MLIRContext *context)
       : RewritePattern(MatchAnyOpTypeTag(), /*benefit=*/1, context) {}
@@ -207,6 +207,8 @@ bool isFullyEvaluated(Operation *op) {
       FrozenBasePathCreateOp, FrozenPathCreateOp, FrozenEmptyPathOp,
       // List.
       ListCreateOp, ListConcatOp,
+      // Option.
+      OptionCreateOp,
       // Registry.
       RegistryCreateOp>(op);
 }

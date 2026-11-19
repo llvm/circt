@@ -445,6 +445,7 @@ def OptionCreateOp : OMOp<"option_create", [Pure,
   let arguments = (ins Optional<AnyType>:$value);
   let results = (outs OptionType:$result);
   let assemblyFormat = "($value^)? attr-dict `:` type($result)";
+  let hasCanonicalizeMethod = 1;
 }
 
 def OptionGetOrElseOp : OMOp<"option_get_or_else", [Pure,
@@ -466,6 +467,7 @@ def OptionGetOrElseOp : OMOp<"option_get_or_else", [Pure,
   let arguments = (ins OptionType:$option, AnyType:$defaultValue);
   let results = (outs AnyType:$result);
   let assemblyFormat = "$option `,` $defaultValue attr-dict `:` type($option)";
+  let hasFolder = 1;
 }
 
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,

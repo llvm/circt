@@ -74,6 +74,46 @@ om.class @LengthTests(
   om.class.fields %length, %knownLength, %unknownLength : !om.integer, !om.integer, !om.integer
 }
 
+om.class private @OptionParameter(%option: !om.option<!om.string>) -> (option: !om.option<!om.string>) {
+  om.class.fields %option : !om.option<!om.string>
+}
+
+// Options survive object inlining.
+// CHECK-LABEL: om.class @OptionTests
+// CHECK-DAG:     %[[VALUE:.+]] = om.constant "value" : !om.string
+// CHECK-DAG:     %[[DEFAULT:.+]] = om.constant "default" : !om.string
+// CHECK-DAG:     %[[SOME:.+]] = om.option_create %[[VALUE]] : <!om.string>
+// CHECK-DAG:     %[[NONE:.+]] = om.option_create : <!om.string>
+// CHECK:         %[[UNKNOWN_OPTION_RESULT:.+]] = om.unknown : !om.string
+// CHECK-NEXT:    %[[UNKNOWN_DEFAULT_RESULT:.+]] = om.unknown : !om.string
+// CHECK-NEXT:    om.class.fields %[[SOME]], %[[NONE]], %[[VALUE]], %[[DEFAULT]], %[[UNKNOWN_OPTION_RESULT]], %[[UNKNOWN_DEFAULT_RESULT]]
+om.class @OptionTests(%option: !om.option<!om.string>) -> (
+  some: !om.option<!om.string>,
+  none: !om.option<!om.string>,
+  present: !om.string,
+  empty: !om.string,
+  unknownOption: !om.string,
+  unknownDefault: !om.string
+) {
+  %value = om.constant "value" : !om.string
+  %default = om.constant "default" : !om.string
+  %some = om.option_create %value : !om.option<!om.string>
+  %none = om.option_create : !om.option<!om.string>
+  %someChild = om.object @OptionParameter(%some) : (!om.option<!om.string>) -> !om.class.type<@OptionParameter>
+  %noneChild = om.object @OptionParameter(%none) : (!om.option<!om.string>) -> !om.class.type<@OptionParameter>
+  %someField = om.object.field %someChild["option"] : (!om.class.type<@OptionParameter>) -> !om.option<!om.string>
+  %noneField = om.object.field %noneChild["option"] : (!om.class.type<@OptionParameter>) -> !om.option<!om.string>
+  %present = om.option_get_or_else %someField, %default : !om.option<!om.string>
+  %empty = om.option_get_or_else %noneField, %default : !om.option<!om.string>
+  %unknownOption = om.unknown : !om.option<!om.string>
+  %unknownOptionResult = om.option_get_or_else %unknownOption, %default : !om.option<!om.string>
+
+  // Use an unresolved option so get_or_else cannot fold before propagation.
+  %unknownDefaultResult = om.option_get_or_else %option, %unknownOptionResult : !om.option<!om.string>
+
+  om.class.fields %someField, %noneField, %present, %empty, %unknownOptionResult, %unknownDefaultResult : !om.option<!om.string>, !om.option<!om.string>, !om.string, !om.string, !om.string, !om.string
+}
+
 // Test direct list membership folding across list construction, concatenation,
 // and constant list attributes.
 // CHECK-LABEL: om.class @ContainsTests
