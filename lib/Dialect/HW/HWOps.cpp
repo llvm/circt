@@ -2823,6 +2823,23 @@ LogicalResult UnionExtractOp::canonicalize(UnionExtractOp extractOp,
 // ArrayGetOp
 //===----------------------------------------------------------------------===//
 
+/// Name an array element "<array>_at_<index>" after the array and the index,
+/// which is a name or a constant.
+std::optional<StructuralName>
+ArrayGetOp::inferStructuralName(function_ref<StringRef(Value)> getOperandName) {
+  auto array = getOperandName(getInput());
+  if (array.empty())
+    return std::nullopt;
+  SmallString<32> index;
+  if (auto cst = getIndex().getDefiningOp<ConstantOp>())
+    cst.getValue().toStringUnsigned(index);
+  else
+    index = getOperandName(getIndex());
+  if (index.empty())
+    return std::nullopt;
+  return StructuralName{"at", (array + "_at_" + index).str()};
+}
+
 // An array_get of an array_create with a constant index can just be the
 // array_create operand at the constant index. If the array_create has a
 // single uniform value for each element, just return that value regardless of

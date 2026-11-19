@@ -177,4 +177,26 @@ raw_ostream &circt::hw::operator<<(raw_ostream &printer, PortInfo port) {
   return printer;
 }
 
+std::optional<hw::StructuralName> hw::inferStructuralNameFromOperands(
+    StringRef mnemonic, ValueRange operands, bool commutative,
+    function_ref<StringRef(Value)> getOperandName) {
+  if (operands.empty() || operands.size() > 3)
+    return std::nullopt;
+  SmallVector<StringRef, 3> names;
+  for (auto operand : operands) {
+    auto name = getOperandName(operand);
+    if (name.empty())
+      return std::nullopt;
+    names.push_back(name);
+  }
+  if (commutative)
+    llvm::sort(names);
+  StructuralName result{mnemonic, mnemonic.str()};
+  for (auto name : names) {
+    result.name += '_';
+    result.name += name;
+  }
+  return result;
+}
+
 #include "circt/Dialect/HW/HWOpInterfaces.cpp.inc"

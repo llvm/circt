@@ -230,6 +230,7 @@ static void lowerFunctionCallResults(Operation *op) {
 /// a wire is created just after op's position so that we can inline the
 /// assignment into its wire declaration.
 static void lowerUsersToTemporaryWire(Operation &op,
+                                      const LoweringOptions &options,
                                       bool emitWireAtBlockBegin = false) {
   Block *block = op.getBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
@@ -300,7 +301,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
   // If the op has a single result, infer a meaningful name from the
   // value.
   if (op.getNumResults() == 1) {
-    auto namehint = inferStructuralNameForTemporary(op.getResult(0));
+    auto namehint = inferStructuralNameForTemporary(op.getResult(0), options);
     op.removeAttr("sv.namehint");
     createWireForResult(op.getResult(0), namehint);
     return;
@@ -328,7 +329,7 @@ static void lowerAlwaysInlineOperation(Operation *op,
         if (isExpressionAlwaysInline(operandOp))
           lowerAlwaysInlineOperation(operandOp, options);
         else if (shouldSpillWire(*operandOp, options))
-          lowerUsersToTemporaryWire(*operandOp);
+          lowerUsersToTemporaryWire(*operandOp, options);
       }
     }
   };
@@ -799,7 +800,7 @@ static void prettifyAfterLegalization(
     if (!isVerilogExpression(&op))
       continue;
     if (expressionStateManager.shouldSpillWireBasedOnState(op)) {
-      lowerUsersToTemporaryWire(op);
+      lowerUsersToTemporaryWire(op, options);
       continue;
     }
   }
@@ -1192,7 +1193,7 @@ static LogicalResult legalizeHWModule(Block &block,
             // If op is moved to a non-procedural region, create a temporary
             // wire.
             if (!op.getParentOp()->hasTrait<ProceduralRegion>())
-              lowerUsersToTemporaryWire(op);
+              lowerUsersToTemporaryWire(op, options);
 
             // If we're in a procedural region, we move on to the next op in the
             // block. The expression splitting and canonicalization below will
@@ -1205,7 +1206,7 @@ static LogicalResult legalizeHWModule(Block &block,
           // If `disallowLocalVariables` is not enabled, we can spill the
           // expression to automatic logic declarations even when the op is in a
           // procedural region.
-          lowerUsersToTemporaryWire(op);
+          lowerUsersToTemporaryWire(op, options);
         }
       }
     }
@@ -1359,7 +1360,7 @@ static LogicalResult legalizeHWModule(Block &block,
     }
 
     // Otherwise, we need to lower this to a wire to resolve this.
-    lowerUsersToTemporaryWire(op,
+    lowerUsersToTemporaryWire(op, options,
                               /*emitWireAtBlockBegin=*/true);
   }
   return success();

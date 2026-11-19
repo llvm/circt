@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_COMB_COMBINATIONAL_TD
 
 include "circt/Dialect/Comb/CombDialect.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/InferIntRangeInterface.td"
@@ -71,7 +72,8 @@ class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
 }
 
 // Arithmetic and Logical Operations.
-def AddOp : UTVariadicOp<"add", [Commutative]>;
+def AddOp : UTVariadicOp<"add", [Commutative,
+  DeclareOpInterfaceMethods<StructuralNameOpInterface>]>;
 def MulOp : UTVariadicOp<"mul", [Commutative]>;
 let hasFolder = true in {
   def DivSOp : UTBinOp<"divs">;
@@ -82,13 +84,17 @@ let hasFolder = true in {
     def ShlOp : UTBinOp<"shl">;
     def ShrUOp : UTBinOp<"shru">;
     def ShrSOp : UTBinOp<"shrs">;
-    def SubOp : UTBinOp<"sub">;
+    def SubOp : UTBinOp<"sub",
+      [DeclareOpInterfaceMethods<StructuralNameOpInterface>]>;
   }
 }
 
-def AndOp : UTVariadicOp<"and", [Commutative]>;
-def OrOp  : UTVariadicOp<"or",  [Commutative]>;
-def XorOp : UTVariadicOp<"xor", [Commutative]> {
+def AndOp : UTVariadicOp<"and", [Commutative,
+  DeclareOpInterfaceMethods<StructuralNameOpInterface>]>;
+def OrOp  : UTVariadicOp<"or",  [Commutative,
+  DeclareOpInterfaceMethods<StructuralNameOpInterface>]>;
+def XorOp : UTVariadicOp<"xor", [Commutative,
+  DeclareOpInterfaceMethods<StructuralNameOpInterface>]> {
   let extraClassDeclaration = [{
     /// Return true if this is a two operand xor with an all ones constant as
     /// its RHS operand.
@@ -128,6 +134,7 @@ def ICmpPredicate : I64EnumAttr<
 def ICmpOp : CombOp<"icmp", 
   [Pure, 
    SameTypeOperands, 
+   DeclareOpInterfaceMethods<StructuralNameOpInterface>,
    DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Compare two integer values";
   let description = [{
@@ -218,6 +225,7 @@ def ExtractOp : CombOp<"extract",
 //===----------------------------------------------------------------------===//
 def ConcatOp : CombOp<"concat", 
   [InferTypeOpInterface, Pure, 
+   DeclareOpInterfaceMethods<StructuralNameOpInterface>,
    DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
@@ -253,6 +261,7 @@ def ConcatOp : CombOp<"concat",
 
 def ReplicateOp : CombOp<"replicate", 
   [Pure, 
+   DeclareOpInterfaceMethods<StructuralNameOpInterface>,
    DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Concatenate the operand a constant number of times";
 
@@ -285,6 +294,7 @@ def ReplicateOp : CombOp<"replicate",
 // Select one of two values based on a condition.
 def MuxOp : CombOp<"mux", 
   [Pure,   AllTypesMatch<["trueValue", "falseValue", "result"]>,
+   DeclareOpInterfaceMethods<StructuralNameOpInterface>,
    DeclareOpInterfaceMethods<InferIntRangeInterface, 
                             ["inferResultRangesFromOptional"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";

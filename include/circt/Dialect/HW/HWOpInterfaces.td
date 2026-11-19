@@ -659,6 +659,32 @@ def InnerRefUserOpInterface : OpInterface<"InnerRefUserOpInterface"> {
   ];
 }
 
+def StructuralNameOpInterface : OpInterface<"StructuralNameOpInterface"> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+    An operation whose result can be named after the operation and the names of
+    its operands, for example `and_a_b` for `comb.and %a, %b`. An emitter uses
+    this to name a value that has no name of its own: ExportVerilog names a
+    temporary wire after it.
+
+    The name does not depend on how the operands are named: the caller passes
+    a function that returns an operand's name, and decides how deep it looks,
+    the prefix it adds and how long a name may be.
+  }];
+  let methods = [
+    InterfaceMethod<[{
+      Infer a name for the result from the operation and the names of its
+      operands. `getOperandName` returns the name of an operand, or an empty
+      string if it has none. Return the name and the mnemonic of the operation
+      alone, or `std::nullopt` if the result cannot be named, for example
+      because an operand that the name needs has no name.
+    }],
+    "std::optional<::circt::hw::StructuralName>", "inferStructuralName",
+    (ins "::llvm::function_ref<::llvm::StringRef(::mlir::Value)>":
+         $getOperandName)>,
+  ];
+}
+
 def CombDataflow : OpInterface<"CombDataFlow"> {
   let cppNamespace = "circt::hw";
   let description = [{

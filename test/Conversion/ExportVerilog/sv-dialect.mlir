@@ -655,10 +655,10 @@ hw.module @AggregateVerbatim(out res1: !hw.struct<a: i1>, out res2: !hw.array<1x
 // CHECK-LABEL: issue508
 // https://github.com/llvm/circt/issues/508
 hw.module @issue508(in %in1: i1, in %in2: i1) {
-  // CHECK: wire _GEN = in1 | in2;
+  // CHECK: wire _or_in1_in2 = in1 | in2;
   %clock = comb.or %in1, %in2 : i1
 
-  // CHECK-NEXT: always @(posedge _GEN) begin
+  // CHECK-NEXT: always @(posedge _or_in1_in2) begin
   // CHECK-NEXT: end
   sv.always posedge %clock {
   }
@@ -825,7 +825,7 @@ hw.module @issue720(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
 
   // CHECK: always @(posedge clock) begin
   sv.always posedge %clock  {
-    // CHECK:   automatic logic _GEN = arg1 & arg2;
+    // CHECK:   automatic logic _and_arg1_arg2 = arg1 & arg2;
 
     // CHECK:   if (arg1)
     // CHECK:     $fatal;
@@ -833,7 +833,7 @@ hw.module @issue720(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
       sv.fatal.procedural 1
     }
 
-    // CHECK:   if (_GEN)
+    // CHECK:   if (_and_arg1_arg2)
     // CHECK:     $fatal;
 
     //this forces a common subexpression to be output out-of-line
@@ -843,7 +843,7 @@ hw.module @issue720(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
       sv.fatal.procedural 1
     }
 
-    // CHECK:   if (arg3 & _GEN)
+    // CHECK:   if (arg3 & _and_arg1_arg2)
     // CHECK:     $fatal;
     sv.if %611  {
       sv.fatal.procedural 1
@@ -862,7 +862,7 @@ hw.module @issue720ifdef(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1
     // The variable for the ifdef block needs to be emitted at the top of the
     // always block since the ifdef is transparent to verilog.
 
-    // CHECK:    automatic logic _GEN;
+    // CHECK:    automatic logic _and_arg1_arg2;
     // CHECK:    if (arg1)
     // CHECK:      $fatal;
     sv.if %arg1  {
@@ -872,14 +872,14 @@ hw.module @issue720ifdef(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1
     // CHECK:    `ifdef FUN_AND_GAMES
      sv.ifdef.procedural @FUN_AND_GAMES {
       // This forces a common subexpression to be output out-of-line
-      // CHECK:      _GEN = arg1 & arg2;
-      // CHECK:      if (_GEN)
+      // CHECK:      _and_arg1_arg2 = arg1 & arg2;
+      // CHECK:      if (_and_arg1_arg2)
       // CHECK:        $fatal;
       %610 = comb.and %arg1, %arg2 : i1
       sv.if %610  {
         sv.fatal.procedural 1
       }
-      // CHECK:      if (arg3 & _GEN)
+      // CHECK:      if (arg3 & _and_arg1_arg2)
       // CHECK:        $fatal;
       %611 = comb.and %arg3, %610 : i1
      sv.if %611  {
@@ -1545,8 +1545,8 @@ hw.module @DoNotChainElseIf(in %clock: i1, in %flag1 : i1, in %flag2: i1) {
 // CHECK-LABEL: NestedElseIfHoist
 // CHECK: if (flag1)
 // CHECK: else begin
-// CHECK: automatic logic _GEN;
-// CHECK: _GEN = flag2 & flag4;
+// CHECK: automatic logic _and_flag2_flag4;
+// CHECK: _and_flag2_flag4 = flag2 & flag4;
 hw.module @NestedElseIfHoist(in %clock: i1, in %flag1 : i1, in %flag2: i1, in %flag3: i1, in %flag4 : i1, in %arg0: i32, in %arg1: i32, in %arg2: i32) {
   %fd = hw.constant 0x80000002 : i32
 
@@ -1697,9 +1697,10 @@ hw.module @prohiditInline(in %a:i4, in %b:i1, in %c:i1, in %d: i4) {
 
 // CHECK-LABEL: module CollectNamesOrder
 hw.module @CollectNamesOrder(in %in: i1, out out: i1) {
-  // CHECK: wire _GEN_0 = in | in;
+  // CHECK: wire _GEN_0 = in | 1'h1;
   // CHECK: wire _GEN;
-  %0 = comb.or %in, %in : i1
+  %true = hw.constant true
+  %0 = comb.or %in, %true : i1
   %1 = comb.or %0, %0 : i1
   %foo = sv.wire {hw.verilogName = "_GEN" } : !hw.inout<i1>
   hw.output %1 : i1
@@ -1795,9 +1796,9 @@ hw.module @func_call(in %in_0 : i2, in %in_1 : i2, in %in_2: i1, out out: i1) {
 // CHECK-NEXT:    input  bit [1:0] in_1
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
-// CHECK-NEXT:    logic [1:0] _GEN = 2'(in_0 + in_1);
-// CHECK-NEXT:    out_0 = _GEN[0];
-// CHECK-NEXT:    func_def = _GEN[1];
+// CHECK-NEXT:    logic [1:0] _add_in_0_in_1 = 2'(in_0 + in_1);
+// CHECK-NEXT:    out_0 = _add_in_0_in_1[0];
+// CHECK-NEXT:    func_def = _add_in_0_in_1[1];
 // CHECK-NEXT:  endfunction
 sv.func @func_def(in %in_0 : i2, out out_0: i1, in %in_1: i2, out out_1 : i1 {sv.func.explicitly_returned}) {
   %add = comb.add %in_0, %in_1: i2

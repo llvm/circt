@@ -13,8 +13,9 @@ FIRRTL version 5.1.0
 ; CHECK:     if (Foo.reset)
 ; CHECK:       hasBeenResetReg <= 1'h1;
 ; CHECK:   end // always @(posedge)
-; CHECK:   wire _GEN = ~(hasBeenResetReg === 1'h1 & Foo.reset === 1'h0);
-; CHECK:   assert property (@(posedge Foo.clock) disable iff (_GEN) Foo.in[Foo.addr] == 4'h0);
+; CHECK:   wire _not_hasBeenReset = ~(hasBeenResetReg === 1'h1 & Foo.reset === 1'h0);
+; CHECK:   assert property (@(posedge Foo.clock) disable iff (_not_hasBeenReset)
+; CHECK-NEXT:                Foo.in[Foo.addr] == 4'h0);
 ; CHECK: endmodule
 
 circuit Foo :

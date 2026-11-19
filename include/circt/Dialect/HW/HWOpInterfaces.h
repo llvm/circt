@@ -30,6 +30,24 @@ void populateHWModuleLikeTypeConversionPattern(StringRef moduleLikeOpName,
                                                RewritePatternSet &patterns,
                                                TypeConverter &converter);
 
+/// A name for the result of an operation, inferred from the operation and the
+/// names of its operands by the StructuralNameOpInterface.
+struct StructuralName {
+  /// The operation alone, for example "and"; used when `name` is too long.
+  StringRef mnemonic;
+  /// The name, for example "and_a_b".
+  std::string name;
+};
+
+/// Name an operation "<mnemonic>_<operand>_<operand>..." after the names of
+/// one to three operands, which `getOperandName` returns. The operands of a
+/// commutative operation are sorted by name. Return `std::nullopt` if there
+/// are no or more than three operands, or if an operand has no name.
+std::optional<StructuralName>
+inferStructuralNameFromOperands(StringRef mnemonic, ValueRange operands,
+                                bool commutative,
+                                function_ref<StringRef(Value)> getOperandName);
+
 class InnerSymbolOpInterface;
 /// Verification hook for verifying InnerSymbol-defining operations.
 LogicalResult verifyInnerSymOp(InnerSymbolOpInterface op);

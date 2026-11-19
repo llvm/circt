@@ -1387,22 +1387,70 @@ void EmitterBase::emitComment(StringAttr comment) {
   }
 }
 
+/// Return `name`, a name derived from the names of an expression's operands,
+/// or the name of the operation alone, "_<mnemonic>", if `name` is longer than
+/// the `maximumStructuralNameLength` lowering option.
+static StringAttr getLengthLimitedName(MLIRContext *context, StringRef name,
+                                       StringRef mnemonic,
+                                       const LoweringOptions &options) {
+  if (name.size() <= options.maximumStructuralNameLength)
+    return StringAttr::get(context, name);
+  return StringAttr::get(context, "_" + mnemonic);
+}
+
+// NOLINTBEGIN(misc-no-recursion)
+static StringAttr inferStructuralName(Value expr,
+                                      const LoweringOptions *options);
+
+/// Return the name of an already-named operand without leading underscores,
+/// or an empty string. The operand's own operands are not looked at, so a name
+/// derived from operand names looks one level deep.
+static StringRef getOperandName(Value operand) {
+  auto name = inferStructuralName(operand, /*options=*/nullptr);
+  if (!name)
+    return {};
+  return name.strref().ltrim('_');
+}
+
+/// Name an expression after its operation and the names of its operands, or
+/// return an empty attribute if its operation does not name it.
+static StringAttr nameFromOperation(Operation *op,
+                                    const LoweringOptions &options) {
+  auto namable = dyn_cast<hw::StructuralNameOpInterface>(op);
+  if (!namable)
+    return {};
+  auto name = namable.inferStructuralName(getOperandName);
+  if (!name)
+    return {};
+  return getLengthLimitedName(op->getContext(), "_" + name->name,
+                              name->mnemonic, options);
+}
+
 /// Given an expression that is spilled into a temporary wire, try to synthesize
 /// a better name than "_T_42" based on the structure of the expression.
-// NOLINTBEGIN(misc-no-recursion)
-StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
+StringAttr
+ExportVerilog::inferStructuralNameForTemporary(Value expr,
+                                               const LoweringOptions &options) {
+  return inferStructuralName(expr, &options);
+}
+
+/// Infer a name for `expr` from its structure. When `options` is given, an
+/// expression without a name of its own is named after its operation and the
+/// names of its operands.
+static StringAttr inferStructuralName(Value expr,
+                                      const LoweringOptions *options) {
   StringAttr result;
   bool addPrefixUnderScore = true;
 
   // Look through read_inout.
   if (auto read = expr.getDefiningOp<ReadInOutOp>())
-    return inferStructuralNameForTemporary(read.getInput());
+    return inferStructuralName(read.getInput(), options);
 
   // Module ports carry names!
   if (auto blockArg = dyn_cast<BlockArgument>(expr)) {
     auto moduleOp =
         cast<HWEmittableModuleLike>(blockArg.getOwner()->getParentOp());
-    StringRef name = getPortVerilogName(moduleOp, blockArg.getArgNumber());
+    StringRef name = getInputPortVerilogName(moduleOp, blockArg.getArgNumber());
     result = StringAttr::get(expr.getContext(), name);
 
   } else if (auto *op = expr.getDefiningOp()) {
@@ -1435,8 +1483,8 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
 
           // If this is an extract from a namable object, derive a name from it.
           .Case([&result](ExtractOp extract) {
-            if (auto operandName =
-                    inferStructuralNameForTemporary(extract.getInput())) {
+            if (auto operandName = inferStructuralName(extract.getInput(),
+                                                       /*options=*/nullptr)) {
               unsigned numBits =
                   cast<IntegerType>(extract.getType()).getWidth();
               if (numBits == 1)
@@ -1451,7 +1499,8 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
                         Twine(extract.getLowBit()));
             }
           });
-      // TODO: handle other common patterns.
+      if (!result && options)
+        result = nameFromOperation(op, *options);
     }
   }
 
