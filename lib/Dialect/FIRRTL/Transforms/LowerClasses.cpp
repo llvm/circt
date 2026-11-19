@@ -1831,6 +1831,36 @@ struct ListConcatOpConversion
   }
 };
 
+struct OptionCreateOpConversion
+    : public OpConversionPattern<firrtl::OptionCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::OptionCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto optionType =
+        getTypeConverter()->convertType<om::OptionType>(op.getType());
+    if (!optionType)
+      return failure();
+    rewriter.replaceOpWithNewOp<om::OptionCreateOp>(op, optionType,
+                                                    adaptor.getValue());
+    return success();
+  }
+};
+
+struct OptionGetOrElseOpConversion
+    : public OpConversionPattern<firrtl::OptionGetOrElseOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::OptionGetOrElseOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::OptionGetOrElseOp>(
+        op, adaptor.getOption(), adaptor.getDefaultValue());
+    return success();
+  }
+};
+
 struct IntegerAddOpConversion
     : public OpConversionPattern<firrtl::IntegerAddOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -2362,6 +2392,22 @@ static void populateTypeConverter(TypeConverter &converter) {
         return convertListType(type);
       });
 
+  // Convert FIRRTL and OM Option types to OM Option types.
+  auto convertOptionType =
+      [&converter](auto type) -> std::optional<mlir::Type> {
+    auto elementType = converter.convertType(type.getElementType());
+    if (!elementType)
+      return {};
+    return om::OptionType::get(elementType);
+  };
+  converter.addConversion(
+      [convertOptionType](om::OptionType type) -> std::optional<mlir::Type> {
+        return convertOptionType(type);
+      });
+  converter.addConversion(
+      [convertOptionType](firrtl::OptionType type)
+          -> std::optional<mlir::Type> { return convertOptionType(type); });
+
   // Convert FIRRTL Bool type to OM
   converter.addConversion(
       [](BoolType type) { return IntegerType::get(type.getContext(), 1); });
@@ -2409,6 +2455,8 @@ static void populateRewritePatterns(
   patterns.add<ObjectFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
   patterns.add<ListConcatOpConversion>(converter, patterns.getContext());
+  patterns.add<OptionCreateOpConversion>(converter, patterns.getContext());
+  patterns.add<OptionGetOrElseOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
   patterns.add<PropertyAssertOpConversion>(converter, patterns.getContext());
   patterns.add<DoubleConstantOpConversion>(converter, patterns.getContext());
