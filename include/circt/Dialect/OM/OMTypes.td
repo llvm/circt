@@ -106,4 +106,7 @@ def OMAnyType : TypeDef<OMDialect, "Any", []> {
   let mnemonic = "any";
 }
 
+def PropEqualityType : AnyTypeOf<
+    [StringType, OMIntegerType, I1, ClassType, OMAnyType]>;
+
 #endif // CIRCT_DIALECT_OM_OMTYPES_TD

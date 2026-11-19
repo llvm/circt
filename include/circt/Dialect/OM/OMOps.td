@@ -421,9 +421,7 @@ def ListContainsOp : OMOp<"list_contains", [Pure,
     %refFound = om.list_contains %refs, %ref : !om.list<!om.any>
     ```
   }];
-  let arguments = (ins ListType:$list,
-                       AnyTypeOf<[StringType, OMIntegerType, I1,
-                                  ClassType, OMAnyType]>:$element);
+  let arguments = (ins ListType:$list, PropEqualityType:$element);
   let results = (outs I1:$result);
   let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
   let hasFolder = 1;
@@ -736,10 +734,7 @@ class BinaryEqualityOpBase<string mnemonic, list<Trait> traits = []> :
       Pure,
       AllTypesMatch<["lhs", "rhs"]>
     ] # traits> {
-  let arguments = (ins AnyTypeOf<[StringType, OMIntegerType, I1,
-                                  ClassType, OMAnyType]>:$lhs,
-                       AnyTypeOf<[StringType, OMIntegerType, I1,
-                                  ClassType, OMAnyType]>:$rhs);
+  let arguments = (ins PropEqualityType:$lhs, PropEqualityType:$rhs);
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 
