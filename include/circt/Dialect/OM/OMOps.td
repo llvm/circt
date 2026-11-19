@@ -427,6 +427,47 @@ def ListContainsOp : OMOp<"list_contains", [Pure,
   let hasFolder = 1;
 }
 
+def OptionCreateOp : OMOp<"option_create", [Pure,
+    OptionalTypesMatchWith<"value type must match the option element type",
+      "result", "value", "cast<OptionType>($_self).getElementType()">]> {
+  let summary = "Create an optional value";
+  let description = [{
+    Creates an empty option or an option containing the given value. The option
+    type is explicit, and the value type is inferred from its element type.  An
+    unknown value makes the entire option unknown.
+
+    Example:
+    ```mlir
+    %none = om.option_create : !om.option<!om.integer>
+    %some = om.option_create %value : !om.option<!om.integer>
+    ```
+  }];
+  let arguments = (ins Optional<AnyType>:$value);
+  let results = (outs OptionType:$result);
+  let assemblyFormat = "($value^)? attr-dict `:` type($result)";
+}
+
+def OptionGetOrElseOp : OMOp<"option_get_or_else", [Pure,
+    TypesMatchWith<"default value type must match the option element type",
+      "option", "defaultValue", "cast<OptionType>($_self).getElementType()">,
+    TypesMatchWith<"result type must match the option element type",
+      "option", "result", "cast<OptionType>($_self).getElementType()">]> {
+  let summary = "Get an optional value or a default";
+  let description = [{
+    Returns the value contained in the option if it is not empty, and the default
+    value otherwise. The default value and result types are inferred from the
+    option's element type.
+
+    Example:
+    ```mlir
+    %value = om.option_get_or_else %option, %default : !om.option<!om.integer>
+    ```
+  }];
+  let arguments = (ins OptionType:$option, AnyType:$defaultValue);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$option `,` $defaultValue attr-dict `:` type($option)";
+}
+
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,
       DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
