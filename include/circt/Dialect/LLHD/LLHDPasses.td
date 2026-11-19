@@ -66,6 +66,24 @@ def HoistSignalsPass : Pass<"llhd-hoist-signals"> {
   let dependentDialects = ["mlir::arith::ArithDialect"];
 }
 
+def HoistProjectionsPass : Pass<"llhd-hoist-projections"> {
+  let summary = "Hoist signal projections out of procedural regions";
+  let description = [{
+    Move signal projection ops such as `llhd.sig.extract`,
+    `llhd.sig.array_slice`, `llhd.sig.array_get`, and
+    `llhd.sig.struct_extract` out of a procedural region,
+    unless they have non-const operands defined inside that region.
+    Constant are cloned alongside the projection..
+
+    Note that projections are side-effect free, so
+    hoisting them does not change their semantics.
+  }];
+  let statistics = [
+    Statistic<"numProjectionsHoisted", "projections-hoisted",
+              "Number of projections hoisted out of procedural regions">
+  ];
+}
+
 def LowerProcessesPass : Pass<"llhd-lower-processes", "hw::HWModuleOp"> {
   let summary = "Convert process ops to combinational ops where possible";
 }
