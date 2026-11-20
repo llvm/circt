@@ -66,6 +66,10 @@ def HoistSignalsPass : Pass<"llhd-hoist-signals"> {
   let dependentDialects = ["mlir::arith::ArithDialect"];
 }
 
+def HoistNetsPass : Pass<"llhd-hoist-nets", "hw::HWModuleOp"> {
+  let summary = "Hoist probes of nets";
+}
+
 def LowerProcessesPass : Pass<"llhd-lower-processes", "hw::HWModuleOp"> {
   let summary = "Convert process ops to combinational ops where possible";
 }
