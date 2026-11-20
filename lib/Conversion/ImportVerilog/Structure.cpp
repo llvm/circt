@@ -1919,6 +1919,14 @@ Context::convertPackage(const slang::ast::PackageSymbol &package) {
   return success();
 }
 
+// Captured nets keep their net type; all other captures are passed by ref.
+static Type getCaptureType(Type type, const slang::ast::ValueSymbol &sym) {
+  auto unpacked = cast<moore::UnpackedType>(type);
+  if (sym.kind == slang::ast::SymbolKind::Net)
+    return moore::NetType::get(unpacked);
+  return moore::RefType::get(unpacked);
+}
+
 /// Convert a function and its arguments to a function declaration in the IR.
 /// This does not convert the function body.
 FunctionLowering *
@@ -2079,8 +2087,7 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
       auto type = convertType(sym->getType());
       if (!type)
         return nullptr;
-      captureTypes.push_back(
-          moore::RefType::get(cast<moore::UnpackedType>(type)));
+      captureTypes.push_back(getCaptureType(type, *sym));
     }
   }
 
@@ -2265,9 +2272,8 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
     auto type = convertType(sym->getType());
     if (!type)
       return failure();
-    auto refType = moore::RefType::get(cast<moore::UnpackedType>(type));
     auto loc = convertLocation(sym->location);
-    auto blockArg = block.addArgument(refType, loc);
+    auto blockArg = block.addArgument(getCaptureType(type, *sym), loc);
     valueSymbols.insert(sym, blockArg);
   }
 

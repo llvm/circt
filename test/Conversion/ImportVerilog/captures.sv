@@ -137,3 +137,32 @@ module ClassParamNotCaptured;
     $display("%0d", c.get());
   end
 endmodule
+
+//===----------------------------------------------------------------------===//
+// Function and task capturing a net
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: moore.module @CaptureNet
+module CaptureNet(input logic a, b);
+  // CHECK: %w = moore.net wire {{.*}} : <l2>
+  wire [1:0] w = {a, b};
+  // CHECK: %r = moore.variable : <l1>
+  logic r;
+
+  // CHECK: func.call @netFunc(%w) : (!moore.net<l2>) -> !moore.l1
+  always_comb r = netFunc();
+  // CHECK: moore.call_coroutine @netTask(%r, %w) : (!moore.ref<l1>, !moore.net<l2>) -> ()
+  initial netTask();
+
+  // CHECK: func.func private @netFunc(%arg0: !moore.net<l2>) -> !moore.l1 {
+  function automatic logic netFunc();
+    // CHECK: moore.read %arg0 : net<l2>
+    return w[0] ^ w[1];
+  endfunction
+
+  // CHECK: moore.coroutine private @netTask(%arg0: !moore.ref<l1>, %arg1: !moore.net<l2>) {
+  task automatic netTask();
+    // CHECK: moore.read %arg1 : net<l2>
+    r = w[0];
+  endtask
+endmodule
