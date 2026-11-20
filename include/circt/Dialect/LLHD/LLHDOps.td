@@ -45,6 +45,11 @@ class SigArrayElementTypeConstraint<string result, string input>
                    input, result,
                    "RefType::get(llhd::getLLHDElementType($_self))">;
 
+class NetArrayElementTypeConstraint<string result, string input>
+  : TypesMatchWith<"result must be a net of the array element type",
+                   input, result,
+                   "NetType::get(llhd::getLLHDElementType($_self))">;
+
 class SameSigPtrArrayElementTypeConstraint<string result, string input>
   : PredOpTrait<"arrays element type must match",
                 CPred<"llhd::getLLHDElementType($" # result # ".getType()) == "
@@ -661,6 +666,165 @@ def SigStructExtractOp : LLHDOp<"sig.struct_extract", [
     hw::StructType getStructType() {
       return hw::type_dyn_cast<hw::StructType>(
         cast<RefType>(getInput().getType()).getNestedType()
+      );
+    }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Net Projections
+//===----------------------------------------------------------------------===//
+
+def NetExtractOp : LLHDOp<"net.extract", [
+  Pure,
+  SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
+  SigPtrIndexBitWidthConstraint<"lowBit", "input">,
+]> {
+  let summary = "Extract a range of bits from an integer net";
+  let description = [{
+    The `llhd.net.extract` operation allows to access a range of bits
+    of the `$input` operand, starting at the index given by the `$lowBit`
+    operand. The result length is defined by the result type.
+  }];
+
+  let arguments = (ins NetTypeOf<HWIntegerType>:$input,
+                       HWIntegerType:$lowBit);
+  let results = (outs NetTypeOf<HWIntegerType>:$result);
+
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
+  }];
+
+  let extraClassDeclaration = [{
+    unsigned getResultWidth() { return getLLHDTypeWidth(getResult().getType()); }
+    unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
+  }];
+  let hasFolder = true;
+}
+
+def NetArraySliceOp : LLHDOp<"net.array_slice", [
+  Pure,
+  SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
+  SameSigPtrArrayElementTypeConstraint<"result", "input">,
+  SigPtrIndexBitWidthConstraint<"lowIndex", "input">,
+]> {
+  let summary = "Get a range of consecutive values from a net of an array";
+  let description = [{
+    The `llhd.net.array_slice` operation allows to access a sub-range of the
+    `$input` operand, starting at the index given by the `$lowIndex`
+    operand. The resulting slice length is defined by the result type.
+    Returns a net aliasing the elements of the slice.
+
+    Width of 'lowIndex' is defined to be the precise number of bits required to
+    index the 'input' array. More precisely: for an input array of size M,
+    the width of 'lowIndex' is ceil(log2(M)). Lower and upper bound indexes
+    which are larger than the size of the 'input' array results in undefined
+    behavior.
+
+    Example:
+
+    ```mlir
+    %3 = llhd.net.array_slice %input at %lowIndex :
+      (!llhd.net<!hw.array<4xi8>>) -> !llhd.net<!hw.array<2xi8>>
+    ```
+  }];
+
+  let arguments = (ins NetTypeOf<ArrayType>:$input,
+                       HWIntegerType:$lowIndex);
+  let results = (outs NetTypeOf<ArrayType>:$result);
+
+  let assemblyFormat = [{
+    $input `at` $lowIndex attr-dict `:` type($input) `->` type($result)
+  }];
+
+  let extraClassDeclaration = [{
+    unsigned getResultWidth() {
+      return getLLHDTypeWidth(getResult().getType());
+    }
+    unsigned getInputWidth() {
+      return getLLHDTypeWidth(getInput().getType());
+    }
+    hw::ArrayType getInputArrayType() {
+      return cast<hw::ArrayType>(
+        cast<NetType>(getInput().getType()).getNestedType()
+      );
+    }
+    hw::ArrayType getResultArrayType() {
+      return cast<hw::ArrayType>(
+        cast<NetType>(getResult().getType()).getNestedType()
+      );
+    }
+  }];
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+}
+
+def NetArrayGetOp : LLHDOp<"net.array_get", [
+  Pure,
+  SigPtrIndexBitWidthConstraint<"index", "input">,
+  NetArrayElementTypeConstraint<"result", "input">,
+]> {
+  let summary = "Extract an element from a net of an array.";
+  let description = [{
+    The `llhd.net.array_get` operation allows to access the element of the
+    `$input` operand at position `$index`. A new net aliasing the element
+    will be returned.
+
+    Example:
+
+    ```mlir
+    // Returns a !llhd.net<i8>
+    %0 = llhd.net.array_get %arr[%index] : !llhd.net<!hw.array<4xi8>>
+    ```
+  }];
+
+  let arguments = (ins NetTypeOf<ArrayType>:$input, HWIntegerType:$index);
+  let results = (outs NetType:$result);
+
+  let assemblyFormat = [{
+    $input `[` $index `]` attr-dict `:` type($input)
+  }];
+
+  let extraClassDeclaration = [{
+    hw::ArrayType getArrayType() {
+      return cast<hw::ArrayType>(
+        cast<NetType>(getInput().getType()).getNestedType()
+      );
+    }
+  }];
+}
+
+def NetStructExtractOp : LLHDOp<"net.struct_extract", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "Extract a field from a net of a struct.";
+  let description = [{
+    The `llhd.net.struct_extract` operation allows access to the field of the
+    `$input` operand given by its name via the `$field` attribute.
+    A new net aliasing the field will be returned.
+
+    Example:
+
+    ```mlir
+    // Returns a !llhd.net<i8>
+    %0 = llhd.net.struct_extract %struct["foo"]
+      : !llhd.net<!hw.struct<foo: i8, bar: i16>>
+    ```
+  }];
+
+  let arguments = (ins NetTypeOf<AnyTypeOf<[StructType, UnionType]>>:$input,
+                       StrAttr:$field);
+  let results = (outs NetTypeOf<AnyType>:$result);
+
+  let assemblyFormat = [{
+    $input `[` $field `]` attr-dict `:` type($input)
+  }];
+
+  let extraClassDeclaration = [{
+    hw::StructType getStructType() {
+      return hw::type_dyn_cast<hw::StructType>(
+        cast<NetType>(getInput().getType()).getNestedType()
       );
     }
   }];
