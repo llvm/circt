@@ -14,6 +14,7 @@
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/NanobindAdaptors.h"
 #include "mlir/Bindings/Python/NanobindUtils.h"
+#include "llvm/ADT/StringRef.h"
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/variant.h>
 #include <nanobind/stl/vector.h>
@@ -40,27 +41,39 @@ private:
   MlirType type;
 };
 
+/// A present option. Convert evaluator payloads lazily to handle cycles.
+struct Some {
+  explicit Some(nb::object value) : value(std::move(value)) {}
+  explicit Some(OMEvaluatorValue option) : option(option) {}
+  nb::object getValue() const;
+
+private:
+  nb::object value;
+  OMEvaluatorValue option = {};
+};
+
 /// These are the Python types that are represented by the different primitive
 /// OMEvaluatorValues as Attributes.
 using PythonPrimitive = std::variant<nb::int_, nb::float_, nb::str, nb::bool_,
                                      nb::tuple, nb::list, nb::dict>;
 
-/// None is used to by nanobind when default initializing a PythonValue. The
-/// order of types in the variant matters here, and we want nanobind to try
-/// casting to the Python classes defined in this file first, before
-/// MlirAttribute and the upstream MLIR type casters.  If the MlirAttribute
-/// is tried first, then we can hit an assert inside the MLIR codebase.
-struct None {};
-using PythonValue =
-    std::variant<None, Object, List, BasePath, Path, Unknown, PythonPrimitive>;
+/// Try wrapper classes before primitive type casters. std::monostate maps to
+/// Python None.
+using PythonValue = std::variant<std::monostate, Some, Object, List, BasePath,
+                                 Path, Unknown, PythonPrimitive>;
+
+} // namespace
 
 /// Map an opaque OMEvaluatorValue into a python value.
-PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
-OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
-                                               MlirContext ctx);
+static PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
+static OMEvaluatorValue pythonValueToOMEvaluatorValue(const PythonValue &result,
+                                                      MlirContext ctx,
+                                                      MlirType expectedType);
 static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr);
 static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
                                               MlirContext ctx);
+
+namespace {
 
 /// Provides a List class by simply wrapping the OMObject CAPI.
 struct List {
@@ -192,23 +205,37 @@ struct Evaluator {
   // Instantiate an Object.
   Object instantiate(MlirAttribute className,
                      std::vector<PythonValue> actualParams) {
-    std::vector<OMEvaluatorValue> values;
-    for (auto &param : actualParams)
-      values.push_back(pythonValueToOMEvaluatorValue(
-          param, mlirModuleGetContext(getModule())));
+    // Look up the argument types to convert None and nested options.
+    auto module = getModule();
+    auto symbolTable = mlirSymbolTableCreate(mlirModuleGetOperation(module));
+    auto cls =
+        mlirSymbolTableLookup(symbolTable, mlirStringAttrGetValue(className));
+    mlirSymbolTableDestroy(symbolTable);
+    MlirBlock body = {};
+    if (!mlirOperationIsNull(cls)) {
+      auto name = mlirIdentifierStr(mlirOperationGetName(cls));
+      llvm::StringRef opName(name.data, name.length);
+      if ((opName == "om.class" || opName == "om.class.extern") &&
+          mlirOperationGetNumRegions(cls) == 1)
+        body = mlirRegionGetFirstBlock(mlirOperationGetRegion(cls, 0));
+    }
 
-    // Instantiate the Object via the CAPI.
+    // Pass null arguments for invalid calls; the evaluator checks the class and
+    // argument count before inspecting argument values.
+    std::vector<OMEvaluatorValue> values(actualParams.size());
+    if (!mlirBlockIsNull(body) &&
+        size_t(mlirBlockGetNumArguments(body)) == actualParams.size()) {
+      for (size_t i = 0; i < actualParams.size(); ++i)
+        values[i] = pythonValueToOMEvaluatorValue(
+            actualParams[i], mlirModuleGetContext(module),
+            mlirValueGetType(mlirBlockGetArgument(body, i)));
+    }
+
     OMEvaluatorValue result = omEvaluatorInstantiate(
         evaluator, className, values.size(), values.data());
-
-    // If the Object is null, something failed. Diagnostic handling is
-    // implemented in pure Python, so nothing to do here besides throwing an
-    // error to halt execution.
     if (omEvaluatorObjectIsNull(result))
       throw nb::value_error(
           "unable to instantiate object, see previous error(s)");
-
-    // Return a new Object.
     return Object(result);
   }
 
@@ -242,6 +269,8 @@ private:
   MlirAttribute attr;
   intptr_t nextIndex = 0;
 };
+
+} // namespace
 
 PythonValue List::getElement(intptr_t i) {
   return omEvaluatorValueToPythonValue(omEvaluatorListGetElement(value, i));
@@ -350,7 +379,7 @@ static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
   throw nb::type_error("Unexpected OM primitive value");
 }
 
-PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
+static PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // If the result is null, something failed. Diagnostic handling is
   // implemented in pure Python, so nothing to do here besides throwing an
   // error to halt execution.
@@ -360,6 +389,12 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // Unknown values can have any concrete evaluator value kind.
   if (omEvaluatorValueIsUnknown(result))
     return Unknown(omEvaluatorValueGetType(result));
+
+  if (omEvaluatorValueIsAOption(result)) {
+    if (!omEvaluatorOptionHasValue(result))
+      return std::monostate();
+    return Some(result);
+  }
 
   // If the field was an Object, return a new Object.
   if (omEvaluatorValueIsAObject(result))
@@ -382,8 +417,47 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   return omPrimitiveToPythonValue(omEvaluatorValueGetPrimitive(result));
 }
 
-OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
-                                               MlirContext ctx) {
+nb::object Some::getValue() const {
+  if (option.ptr)
+    return nb::cast(
+        omEvaluatorValueToPythonValue(omEvaluatorOptionGetValue(option)));
+  return value;
+}
+
+/// Lists containing options need evaluator values rather than ListAttr.
+static bool containsOptionType(MlirType type) {
+  while (omTypeIsAListType(type))
+    type = omListTypeGetElementType(type);
+  return omTypeIsAOptionType(type);
+}
+
+// Recursively convert nested option and list payloads.
+// NOLINTNEXTLINE(misc-no-recursion)
+static OMEvaluatorValue pythonValueToOMEvaluatorValue(const PythonValue &result,
+                                                      MlirContext ctx,
+                                                      MlirType expectedType) {
+  // Unknown options don't need a Some wrapper.
+  if (auto *unknown = std::get_if<Unknown>(&result))
+    return omEvaluatorUnknownGet(ctx, unknown->getType());
+
+  auto *some = std::get_if<Some>(&result);
+  bool isNone = std::holds_alternative<std::monostate>(result);
+  if (omTypeIsAOptionType(expectedType)) {
+    if (isNone)
+      return omEvaluatorOptionGetEmpty(expectedType);
+    if (!some)
+      throw nb::type_error("Present option arguments must use om.Some(value)");
+    auto payload = pythonValueToOMEvaluatorValue(
+        nb::cast<PythonValue>(some->getValue()), ctx,
+        omOptionTypeGetElementType(expectedType));
+    auto value = omEvaluatorOptionGet(expectedType, payload);
+    if (omEvaluatorValueIsNull(value))
+      throw nb::type_error("Invalid OM option payload, see previous error(s)");
+    return value;
+  }
+  if (some || isNone)
+    throw nb::type_error("None and om.Some require an expected OptionType");
+
   if (auto *list = std::get_if<List>(&result))
     return list->getValue();
 
@@ -396,15 +470,23 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
   if (auto *object = std::get_if<Object>(&result))
     return object->getValue();
 
-  if (auto *unknown = std::get_if<Unknown>(&result))
-    return omEvaluatorUnknownGet(ctx, unknown->getType());
-
-  auto primitive = std::get<PythonPrimitive>(result);
+  const auto &primitive = std::get<PythonPrimitive>(result);
+  if (auto *list = std::get_if<nb::list>(&primitive);
+      list && containsOptionType(expectedType)) {
+    auto elementType = omListTypeGetElementType(expectedType);
+    std::vector<OMEvaluatorValue> elements;
+    for (auto element : *list)
+      elements.push_back(pythonValueToOMEvaluatorValue(
+          nb::cast<PythonValue>(element), ctx, elementType));
+    auto value =
+        omEvaluatorListGet(expectedType, elements.size(), elements.data());
+    if (omEvaluatorValueIsNull(value))
+      throw nb::type_error("Invalid OM list element, see previous error(s)");
+    return value;
+  }
   return omEvaluatorValueFromPrimitive(
       omPythonValueToPrimitive(primitive, ctx));
 }
-
-} // namespace
 
 /// Populate the OM Python module.
 void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
@@ -417,6 +499,11 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
            nb::arg("class_name"), nb::arg("actual_params"))
       .def_prop_ro("module", &Evaluator::getModule,
                    "The Module the Evaluator is built from");
+
+  // Add the Some class definition.
+  nb::class_<Some>(m, "Some")
+      .def(nb::init<nb::object>(), nb::arg("value").none())
+      .def_prop_ro("value", &Some::getValue);
 
   // Add the List class definition.
   nb::class_<List>(m, "List")
@@ -512,7 +599,7 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
   mlir_type_subclass(m, "OptionType", omTypeIsAOptionType,
                      omOptionTypeGetTypeID)
       .def_classmethod("get",
-                       [](nb::object cls, MlirType elementType) {
+                       [](const nb::object &cls, MlirType elementType) {
                          return cls(omOptionTypeGet(elementType));
                        })
       .def_property_readonly("element_type", omOptionTypeGetElementType);

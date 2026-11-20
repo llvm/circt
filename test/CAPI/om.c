@@ -243,6 +243,61 @@ void testEvaluator(MlirContext ctx) {
       omEvaluatorValueGetPrimitive(omEvaluatorListGetElement(bar, 1)));
 }
 
+static void testOptions(MlirContext ctx) {
+  MlirType optionType = omOptionTypeGet(omStringTypeGet(ctx));
+  OMEvaluatorValue payload =
+      omEvaluatorValueFromPrimitive(mlirStringAttrTypedGet(
+          omStringTypeGet(ctx), mlirStringRefCreateFromCString("payload")));
+  OMEvaluatorValue params[] = {omEvaluatorOptionGetEmpty(optionType),
+                               omEvaluatorOptionGet(optionType, payload)};
+
+  const char *testIR =
+      "module {"
+      "  om.class @Options(%empty: !om.option<!om.string>,"
+      "                    %present: !om.option<!om.string>) ->"
+      "      (empty: !om.option<!om.string>, present: !om.option<!om.string>) {"
+      "    om.class.fields %empty, %present :"
+      "        !om.option<!om.string>, !om.option<!om.string>"
+      "  }"
+      "}";
+  MlirModule module =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testIR));
+  OMEvaluator evaluator = omEvaluatorNew(module);
+  MlirAttribute className =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("Options"));
+  OMEvaluatorValue object =
+      omEvaluatorInstantiate(evaluator, className, 2, params);
+  OMEvaluatorValue options[] = {
+      params[0], params[1],
+      omEvaluatorObjectGetField(
+          object,
+          mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("empty"))),
+      omEvaluatorObjectGetField(
+          object,
+          mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("present")))};
+
+  // Check both the constructed options and the returned fields.
+  // CHECK: option: 1, present: 0, type: 1, context: 1
+  // CHECK-NEXT: option: 1, present: 1, type: 1, context: 1
+  // CHECK-NEXT: "payload" : !om.string
+  // CHECK-NEXT: option: 1, present: 0, type: 1, context: 1
+  // CHECK-NEXT: option: 1, present: 1, type: 1, context: 1
+  // CHECK-NEXT: "payload" : !om.string
+  for (unsigned i = 0; i < sizeof(options) / sizeof(options[0]); ++i) {
+    OMEvaluatorValue option = options[i];
+    bool hasValue = omEvaluatorOptionHasValue(option);
+    fprintf(
+        stderr, "option: %d, present: %d, type: %d, context: %d\n",
+        !omEvaluatorValueIsNull(option) && omEvaluatorValueIsAOption(option),
+        hasValue, mlirTypeEqual(optionType, omEvaluatorValueGetType(option)),
+        mlirContextEqual(ctx, omEvaluatorValueGetContext(option)));
+    if (hasValue)
+      mlirAttributeDump(
+          omEvaluatorValueGetPrimitive(omEvaluatorOptionGetValue(option)));
+  }
+  mlirModuleDestroy(module);
+}
+
 void testPropertyAssert(MlirContext ctx) {
   // Test om.property_assert evaluation via the C API.
   const char *testIR =
@@ -300,6 +355,7 @@ int main(void) {
   testTypes(ctx);
   testListAttr(ctx);
   testEvaluator(ctx);
+  testOptions(ctx);
   testPropertyAssert(ctx);
   return 0;
 }

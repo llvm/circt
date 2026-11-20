@@ -528,6 +528,29 @@ module {
   ASSERT_EQ(42u, getBuiltinInteger(getField(fieldValue, "field")));
 }
 
+// A cyclic option must reuse its placeholder.
+TEST_F(EvaluatorTests, OptionPayloadCycle) {
+  StringRef mod = R"MLIR(
+om.class @OptionCycle() -> (value: !om.option<!om.any>) {
+  %option = om.option_create %payload : !om.option<!om.any>
+  %payload = om.any_cast %option : (!om.option<!om.any>) -> !om.any
+  om.class.fields %option : !om.option<!om.any>
+}
+)MLIR";
+  auto owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "OptionCycle"), {});
+  ASSERT_TRUE(succeeded(result));
+  auto value = getField(*result, "value");
+  auto *option = cast<evaluator::OptionValue>(value.get());
+  ASSERT_TRUE(option->isFullyEvaluated());
+  ASSERT_FALSE(option->isUnknown());
+  ASSERT_TRUE(option->hasValue());
+  EXPECT_EQ(option->getValue().get(), option);
+}
+
 TEST_F(EvaluatorTests, InstantiateGraphRegion) {
   StringRef mod = R"MLIR(
 !ty = !om.class.type<@LinkedList>

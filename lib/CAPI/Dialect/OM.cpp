@@ -155,7 +155,8 @@ OMEvaluatorValue omEvaluatorInstantiate(OMEvaluator evaluator,
   // Unwrap the actual parameters.
   SmallVector<std::shared_ptr<evaluator::EvaluatorValue>> cppActualParams;
   for (unsigned i = 0; i < nActualParams; i++)
-    cppActualParams.push_back(unwrap(actualParams[i]));
+    cppActualParams.push_back(actualParams[i].ptr ? unwrap(actualParams[i])
+                                                  : nullptr);
 
   // Invoke the Evaluator to instantiate the Object.
   auto result = cppEvaluator->instantiate(cppClassName, cppActualParams);
@@ -295,6 +296,61 @@ OMEvaluatorValue omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue,
                                            intptr_t pos) {
   return wrap(cast<evaluator::ListValue>(unwrap(evaluatorValue).get())
                   ->getElements()[pos]);
+}
+
+static LogicalResult verifyContainerElement(Type elementType,
+                                            OMEvaluatorValue value) {
+  auto loc = UnknownLoc::get(elementType.getContext());
+  if (!value.ptr)
+    return emitError(loc, "OM container element is null");
+  auto element = unwrap(value);
+  if (element->getContext() != elementType.getContext())
+    return emitError(loc, "OM container element has a different context");
+  if (!isa<AnyType>(elementType) && element->getType() != elementType)
+    return emitError(loc, "OM container element has type ")
+           << element->getType() << ", expected " << elementType;
+  return success();
+}
+
+OMEvaluatorValue omEvaluatorListGet(MlirType listType, intptr_t numElements,
+                                    const OMEvaluatorValue *elements) {
+  auto type = cast<ListType>(unwrap(listType));
+  SmallVector<EvaluatorValuePtr> values;
+  for (intptr_t i = 0; i < numElements; ++i) {
+    if (failed(verifyContainerElement(type.getElementType(), elements[i])))
+      return OMEvaluatorValue();
+    values.push_back(unwrap(elements[i]));
+  }
+  return wrap(std::make_shared<evaluator::ListValue>(
+      type, std::move(values), UnknownLoc::get(type.getContext())));
+}
+
+bool omEvaluatorValueIsAOption(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::OptionValue>(unwrap(evaluatorValue).get());
+}
+
+OMEvaluatorValue omEvaluatorOptionGetEmpty(MlirType optionType) {
+  auto type = cast<OptionType>(unwrap(optionType));
+  return wrap(std::make_shared<evaluator::OptionValue>(
+      type, nullptr, UnknownLoc::get(type.getContext())));
+}
+
+OMEvaluatorValue omEvaluatorOptionGet(MlirType optionType,
+                                      OMEvaluatorValue payload) {
+  auto type = cast<OptionType>(unwrap(optionType));
+  if (failed(verifyContainerElement(type.getElementType(), payload)))
+    return OMEvaluatorValue();
+  return wrap(std::make_shared<evaluator::OptionValue>(
+      type, unwrap(payload), UnknownLoc::get(type.getContext())));
+}
+
+bool omEvaluatorOptionHasValue(OMEvaluatorValue evaluatorValue) {
+  return cast<evaluator::OptionValue>(unwrap(evaluatorValue).get())->hasValue();
+}
+
+OMEvaluatorValue omEvaluatorOptionGetValue(OMEvaluatorValue evaluatorValue) {
+  return wrap(
+      cast<evaluator::OptionValue>(unwrap(evaluatorValue).get())->getValue());
 }
 
 bool omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue) {

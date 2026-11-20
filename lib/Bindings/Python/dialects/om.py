@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, OptionType, OMIntegerAttr, Unknown
+from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, OptionType, OMIntegerAttr, Unknown, Some as BaseSome
 
 from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType
 from ..support import attribute_to_var, var_to_attribute
@@ -21,6 +21,12 @@ if TYPE_CHECKING:
 
 # Wrap a base mlir object with high-level object.
 def wrap_mlir_object(value):
+  if value is None:
+    return None
+
+  if isinstance(value, BaseSome):
+    return Some(value.value)
+
   # For primitives, return the Python value directly.
   if isinstance(value, (int, float, str, bool, tuple, list, dict)):
     return value
@@ -49,6 +55,12 @@ def om_var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attrbute:
 
 
 def unwrap_python_object(value):
+  if isinstance(value, BaseSome):
+    return value
+
+  if isinstance(value, list):
+    return [unwrap_python_object(element) for element in value]
+
   # Check if the value is any of our container or custom types.
   if isinstance(value, List):
     return BaseList(value)
@@ -64,6 +76,14 @@ def unwrap_python_object(value):
 
   # Otherwise, it must be a primitive, so just return it.
   return value
+
+
+class Some(BaseSome):
+  """A present option. Use None for an empty option."""
+
+  @property
+  def value(self):
+    return wrap_mlir_object(super().value)
 
 
 class List(BaseList):
