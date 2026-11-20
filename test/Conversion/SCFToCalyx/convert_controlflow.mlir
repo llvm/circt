@@ -775,7 +775,7 @@ module {
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = calyx.std_slice @std_slice_0 : i32, i1
 // CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]], %[[VAL_14:.*]] = calyx.std_add @std_add_0 : i32, i32, i32
 // CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]] = calyx.std_slt @std_slt_0 : i32, i32, i1
-// CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]], %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]] = calyx.seq_mem @arg_mem_0 <[1] x 32> [1] : i1, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]], %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]] = calyx.seq_mem @arg_mem_0 <[1] x 32> [1] {is_ref} : i1, i1, i1, i1, i1, i32, i32, i1
 // CHECK:           calyx.wires {
 // CHECK:             calyx.comb_group @bb0_0 {
 // CHECK:               calyx.assign %[[VAL_15]] = %[[VAL_0]] : i32
@@ -846,8 +846,8 @@ module {
 // CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]] = calyx.std_eq @std_eq_0 : i32, i32, i1
 // CHECK:           %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]], %[[VAL_26:.*]] = calyx.register @remui_0_reg : i32, i1, i1, i1, i32, i1
 // CHECK:           %[[VAL_27:.*]], %[[VAL_28:.*]], %[[VAL_29:.*]], %[[VAL_30:.*]], %[[VAL_31:.*]], %[[VAL_32:.*]], %[[VAL_33:.*]] = calyx.std_remu_pipe @std_remu_pipe_0 : i1, i1, i1, i32, i32, i32, i1
-// CHECK:           %[[VAL_34:.*]], %[[VAL_35:.*]], %[[VAL_36:.*]], %[[VAL_37:.*]], %[[VAL_38:.*]], %[[VAL_39:.*]], %[[VAL_40:.*]], %[[VAL_41:.*]] = calyx.seq_mem @arg_mem_1 <[120] x 32> [7] : i7, i1, i1, i1, i1, i32, i32, i1
-// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]], %[[VAL_44:.*]], %[[VAL_45:.*]], %[[VAL_46:.*]], %[[VAL_47:.*]], %[[VAL_48:.*]], %[[VAL_49:.*]] = calyx.seq_mem @arg_mem_0 <[120] x 32> [7] : i7, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           %[[VAL_34:.*]], %[[VAL_35:.*]], %[[VAL_36:.*]], %[[VAL_37:.*]], %[[VAL_38:.*]], %[[VAL_39:.*]], %[[VAL_40:.*]], %[[VAL_41:.*]] = calyx.seq_mem @arg_mem_1 <[120] x 32> [7] {is_ref} : i7, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]], %[[VAL_44:.*]], %[[VAL_45:.*]], %[[VAL_46:.*]], %[[VAL_47:.*]], %[[VAL_48:.*]], %[[VAL_49:.*]] = calyx.seq_mem @arg_mem_0 <[120] x 32> [7] {is_ref} : i7, i1, i1, i1, i1, i32, i32, i1
 // CHECK:           calyx.wires {
 // CHECK:             calyx.group @bb0_0 {
 // CHECK:               calyx.assign %[[VAL_30]] = %[[VAL_0]] : i32
