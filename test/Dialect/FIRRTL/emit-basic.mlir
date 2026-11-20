@@ -686,6 +686,7 @@ firrtl.circuit "Foo" {
                             out %double : !firrtl.double,
                             out %path : !firrtl.path,
                             out %list : !firrtl.list<list<string>>,
+                            out %listIntersect : !firrtl.list<string>,
                             out %unknownString : !firrtl.string,
                             out %stringcat : !firrtl.string,
                             out %stringeq : !firrtl.bool,
@@ -742,6 +743,12 @@ firrtl.circuit "Foo" {
     %empty = firrtl.list.create : !firrtl.list<string>
     %strings_and_empty = firrtl.list.create %strings, %empty : !firrtl.list<list<string>>
     firrtl.propassign %list, %strings_and_empty : !firrtl.list<list<string>>
+
+    // CHECK: propassign listIntersect,
+    // CHECK-NEXT: list_intersect(List<String>(String("hello"), String("hello")),
+    // CHECK-NEXT: List<String>())
+    %intersection = firrtl.list.intersect %strings, %empty : !firrtl.list<string>, !firrtl.list<string>
+    firrtl.propassign %listIntersect, %intersection : !firrtl.list<string>
 
     // CHECK: propassign unknownString, Unknown(String)
     %2 = firrtl.unknown : !firrtl.string

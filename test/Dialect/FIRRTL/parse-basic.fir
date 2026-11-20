@@ -1890,6 +1890,28 @@ circuit ListContains :
 ;// -----
 FIRRTL version 7.0.0
 
+; CHECK-LABEL: firrtl.circuit "ListIntersect"
+circuit ListIntersect :
+  class Foo:
+    skip
+
+  ; CHECK-LABEL: firrtl.module @ListIntersect
+  public module ListIntersect :
+    input strings : List<String>
+    input foos : List<Inst<Foo>>
+    input refs : List<AnyRef>
+    output stringResult : List<String>
+    output classAnyRef : List<Inst<Foo>>
+
+    ; CHECK: firrtl.list.intersect %strings, %strings : !firrtl.list<string>, !firrtl.list<string>
+    propassign stringResult, list_intersect(strings, strings)
+
+    ; CHECK: firrtl.list.intersect %foos, %refs : !firrtl.list<class<@Foo()>>, !firrtl.list<anyref>
+    propassign classAnyRef, list_intersect(foos, refs)
+
+;// -----
+FIRRTL version 7.0.0
+
 ; CHECK-LABEL: firrtl.circuit "BoolBinaryOps"
 circuit BoolBinaryOps :
   public module BoolBinaryOps :

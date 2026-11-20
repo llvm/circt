@@ -241,6 +241,13 @@ def PathType : FIRRTLDialectTypeHelper<"PathType", "path type">,
 def PropEqualityType : AnyTypeOf<
     [StringType, BoolType, FIntegerType, ClassType, AnyRefType]>;
 
+def EqualityListType : ContainerType<
+    PropEqualityType,
+    ListType.predicate, "type_cast<ListType>($_self).getElementType()",
+    "list", ListType.cppType> {
+  let summary = "list of property-equality-compatible elements";
+}
+
 //===----------------------------------------------------------------------===//
 // Format String Types
 //===----------------------------------------------------------------------===//

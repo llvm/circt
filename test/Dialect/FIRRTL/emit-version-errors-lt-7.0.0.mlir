@@ -75,6 +75,19 @@ firrtl.circuit "ListLength" {
 
 // -----
 
+// list_intersect requires >= 7.0.0.
+firrtl.circuit "ListIntersect" {
+  firrtl.module @ListIntersect(in %lhs : !firrtl.list<string>,
+                               in %rhs : !firrtl.list<string>,
+                               out %result : !firrtl.list<string>) {
+    // expected-error @below {{'firrtl.list.intersect' op list intersect requires FIRRTL 7.0.0}}
+    %0 = firrtl.list.intersect %lhs, %rhs : !firrtl.list<string>, !firrtl.list<string>
+    firrtl.propassign %result, %0 : !firrtl.list<string>
+  }
+}
+
+// -----
+
 // Non-literal expressions cause an error in FIRRTL < 7.0.0.
 firrtl.circuit "ListContains" {
   firrtl.module @ListContains(in %list : !firrtl.list<string>,
