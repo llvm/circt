@@ -170,6 +170,8 @@ private:
 
 LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   auto moduleOp = parseSourceFile<ModuleOp>(sourceMgr, &context);
+  if (!moduleOp)
+    return failure();
 
   auto evaluator = om::Evaluator(moduleOp.get());
 
