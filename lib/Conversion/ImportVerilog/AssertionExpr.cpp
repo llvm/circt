@@ -301,21 +301,22 @@ struct AssertionExprVisitor {
 };
 } // namespace
 
+/// Helper to cast a builtin integer result back to Moore integer types.
+static inline Value castToMoore(OpBuilder &builder, Location loc,
+                                Type originalType, Value v) {
+  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+    v = moore::FromBuiltinIntOp::create(builder, loc, v);
+    if (ty.getDomain() == Domain::FourValued)
+      v = moore::IntToLogicOp::create(builder, loc, v);
+  }
+  return v;
+}
+
 FailureOr<Value> Context::convertSampledValueCallArity1(
     const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
     Type originalType, Value clockVal) {
   using ksn = slang::parsing::KnownSystemName;
   auto nameId = subroutine.knownNameId;
-
-  // Helper to cast a builtin integer result back to Moore integer types.
-  auto castToMoore = [&](Value v) -> Value {
-    if (auto ty = dyn_cast<moore::IntType>(originalType)) {
-      v = moore::FromBuiltinIntOp::create(builder, loc, v);
-      if (ty.getDomain() == Domain::FourValued)
-        v = moore::IntToLogicOp::create(builder, loc, v);
-    }
-    return v;
-  };
 
   // Helper to cast a builtin integer result to a two-valued Moore integer type.
   auto castToTwoValued = [&](Value v) -> Value {
@@ -324,7 +325,8 @@ FailureOr<Value> Context::convertSampledValueCallArity1(
 
   switch (nameId) {
   case ksn::Sampled:
-    return castToMoore(ltl::SampledOp::create(builder, loc, value));
+    return castToMoore(builder, loc, originalType,
+                       ltl::SampledOp::create(builder, loc, value));
 
   // Translate $fell to ¬x[0] ∧ x[-1]
   case ksn::Fell: {
@@ -359,10 +361,42 @@ FailureOr<Value> Context::convertSampledValueCallArity1(
   }
 
   case ksn::Past:
-    return castToMoore(ltl::PastOp::create(builder, loc, value, 1, clockVal));
+    return castToMoore(builder, loc, originalType,
+                       ltl::PastOp::create(builder, loc, value, 1, clockVal));
 
   default:
     return Value{};
+  }
+}
+
+FailureOr<Value> Context::convertSampledValueCallArity2(
+    const slang::ast::SystemSubroutine &subroutine, Location loc,
+    Value firstArgVal, Type originalType, Value clockVal,
+    const slang::ast::Expression &secondArgExpr) {
+  using ksn = slang::parsing::KnownSystemName;
+  auto nameId = subroutine.knownNameId;
+
+  switch (nameId) {
+  case ksn::Past: {
+    auto ticks = evaluateConstant(secondArgExpr).integer().as<int64_t>();
+    if (!ticks) {
+      mlir::emitError(loc)
+          << "`$past` number of ticks must be a constant expression";
+      return failure();
+    }
+    if (*ticks < 1) {
+      mlir::emitError(loc) << "`$past` number of ticks must be >= 1";
+      return failure();
+    }
+
+    return castToMoore(
+        builder, loc, originalType,
+        ltl::PastOp::create(builder, loc, firstArgVal, *ticks, clockVal));
+  }
+
+  default:
+    return mlir::emitError(loc) << "second argument for `" << subroutine.name
+                                << "` is not yet supported";
   }
 }
 
@@ -415,47 +449,53 @@ Value Context::convertSampledValueCallExpression(
   auto args = expr.arguments();
 
   FailureOr<Value> result;
-  Value value;
-  Value intVal;
+  Value firstArgVal;
+  Value firstArgIntVal;
   Type originalType;
-  moore::IntType valTy;
+  moore::IntType firstArgTy;
 
-  switch (args.size()) {
-  case (1):
-    value = this->convertRvalueExpression(*args[0]);
-    originalType = value.getType();
-    valTy = dyn_cast<moore::IntType>(value.getType());
-    if (!valTy) {
-      if (!isa<moore::PackedType>(value.getType())) {
-        mlir::emitError(loc)
-            << "expected integer argument for `" << subroutine.name << "`";
-        return {};
-      }
-      value = materializePackedToSBVConversion(value, loc, /*fallible=*/false);
-      if (!value)
-        return {};
-      valTy = dyn_cast<moore::IntType>(value.getType());
-      if (!valTy) {
-        mlir::emitError(loc)
-            << "expected integer argument for `" << subroutine.name << "`";
-        return {};
-      }
-    }
+  // Slang rejects sampled value calls with no arguments during elaboration.
+  assert(!args.empty() && "sampled value call must have at least 1 argument");
 
-    // If the value is four-valued, we need to map it to two-valued before we
-    // cast it to a builtin int
-    if (valTy.getDomain() == Domain::FourValued) {
-      value = builder.createOrFold<moore::LogicToIntOp>(loc, value);
-    }
-    intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
-    if (!intVal)
+  // Convert the first argument to int type.
+  firstArgVal = this->convertRvalueExpression(*args[0]);
+  if (isa<moore::PackedType>(firstArgVal.getType())) {
+    firstArgVal = materializePackedToSBVConversion(firstArgVal, loc,
+                                                   /*fallible=*/false);
+    if (!firstArgVal)
       return {};
-    result = this->convertSampledValueCallArity1(subroutine, loc, intVal,
-                                                 originalType, clockVal);
-    break;
+  }
+  firstArgTy = dyn_cast<moore::IntType>(firstArgVal.getType());
+  if (!firstArgTy) {
+    mlir::emitError(loc) << "expected integer argument for `" << subroutine.name
+                         << "`";
+    return {};
+  }
+  // Use the simple bit vector type for converting the result back from a
+  // builtin integer. Packed aggregates are converted back to their original
+  // type at the end, together with all other results.
+  originalType = firstArgTy;
+  // If the value is four-valued, we need to map it to two-valued before we
+  // cast it to a builtin int
+  if (firstArgTy.getDomain() == Domain::FourValued) {
+    firstArgVal = builder.createOrFold<moore::LogicToIntOp>(loc, firstArgVal);
+  }
+  firstArgIntVal =
+      builder.createOrFold<moore::ToBuiltinIntOp>(loc, firstArgVal);
+  if (!firstArgIntVal)
+    return {};
 
-  default:
-    break;
+  // Handle sampled value call depending on number of arguments.
+  if (args.size() == 1) {
+    result = this->convertSampledValueCallArity1(
+        subroutine, loc, firstArgIntVal, originalType, clockVal);
+  } else if (args.size() == 2) {
+    result = this->convertSampledValueCallArity2(
+        subroutine, loc, firstArgIntVal, originalType, clockVal, *args[1]);
+  } else {
+    mlir::emitError(loc) << "`" << subroutine.name << "` with " << args.size()
+                         << " arguments is not yet supported";
+    return {};
   }
 
   if (failed(result))

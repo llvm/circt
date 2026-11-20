@@ -176,6 +176,20 @@ endmodule
 // -----
 module Foo;
   logic a, clk;
+  // expected-error @below {{second argument for `$rose` is not yet supported}}
+  assert property (@(posedge clk) $rose(a, @(posedge clk)));
+endmodule
+
+// -----
+module Foo;
+  logic a, en, clk;
+  // expected-error @below {{`$past` with 3 arguments is not yet supported}}
+  assert property (@(posedge clk) $past(a, 1, en));
+endmodule
+
+// -----
+module Foo;
+  logic a, clk;
   // expected-error @below {{sampled value functions are only supported with posedge clocks}}
   assert property (@(negedge clk) $rose(a));
 endmodule
