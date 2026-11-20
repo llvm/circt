@@ -3,6 +3,7 @@
 // RUN: circt-verilog --ir-hw --record-specialization %s | FileCheck %s --check-prefix=HW
 // RUN: circt-verilog --ir-hw --record-specialization %s | circt-opt --emit-bytecode | circt-opt | FileCheck %s --check-prefix=HW
 // REQUIRES: slang
+// UNSUPPORTED: valgrind
 
 // Without `--record-specialization`, no `hw.specialization` attribute is
 // emitted and modules with 4-state / aggregate / overridden type parameters
