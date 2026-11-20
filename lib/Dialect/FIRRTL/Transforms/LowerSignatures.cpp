@@ -458,11 +458,23 @@ static void lowerModuleBody(FModuleOp mod,
                                       p.fieldID),
                     newOp.getResult(p.resultID));
     }
-    // Zero Width ports may have dangling connects since they are not preserved
-    // and do not have bounce wires.
-    for (auto *use : llvm::make_early_inc_range(inst->getUsers())) {
-      assert(isa<MatchingConnectOp>(use) || isa<ConnectOp>(use));
-      use->erase();
+    // Results remapped above have no uses left.  Zero width ports are dropped
+    // entirely and have no bounce wire: their dangling connects are dead, but
+    // any other user (e.g. a sizeof intrinsic) still needs a value of the
+    // original type, so bounce it through a wire, the same way
+    // lowerModuleSignature handles dropped module ports.
+    for (auto result : inst.getResults()) {
+      for (auto *use : llvm::make_early_inc_range(result.getUsers()))
+        if (isa<MatchingConnectOp, ConnectOp>(use))
+          use->erase();
+      if (result.use_empty())
+        continue;
+      auto wire = WireOp::create(
+          theBuilder, result.getType(),
+          theBuilder.getStringAttr(
+              inst.getName() + "." +
+              cast<StringAttr>(oldNames[result.getResultNumber()]).getValue()));
+      result.replaceAllUsesWith(wire.getResult());
     }
     inst->erase();
     return;
