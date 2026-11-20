@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTSVTransforms
   SVMaskNonSynthesizable.cpp
   SVTraceIVerilog.cpp
   HWEliminateInOutPorts.cpp
+  CheckVarDrivers.cpp
 
   DEPENDS
   CIRCTSVTransformsIncGen
