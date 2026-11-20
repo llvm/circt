@@ -172,3 +172,47 @@ hw.module @comp_predicates(in %a : i3, in %b : i3) {
   %9 = comb.icmp ne %a, %b  : i3
   hw.output
 }
+
+// CHECK-LABEL: @extract_ranges
+hw.module @extract_ranges(in %a : i8, in %b : i8, in %sel : i1) {
+  // CHECK-NEXT: %c0_i8 = hw.constant 0 : i8 {smax = 0 : i8, smin = 0 : i8, umax = 0 : ui8, umin = 0 : ui8}
+  // CHECK-NEXT: %[[A16:.+]] = comb.concat %c0_i8, %a {smax = 255 : i16, smin = 0 : i16, umax = 255 : ui16, umin = 0 : ui16} : i8, i8
+  // CHECK-NEXT: %[[B16:.+]] = comb.concat %c0_i8, %b {smax = 255 : i16, smin = 0 : i16, umax = 255 : ui16, umin = 0 : ui16} : i8, i8
+  // CHECK-NEXT: %[[PROD:.+]] = comb.mul %[[A16]], %[[B16]] {smax = 32767 : i16, smin = -32768 : i16, umax = 65025 : ui16, umin = 0 : ui16} : i16
+  // The dropped bit 15 differs between umin (0) and umax (0xFE01), so bits [14:8] span the full i7 range.
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[PROD]] from 8 {smax = 63 : i7, smin = -64 : i7, umax = 127 : ui7, umin = 0 : ui7} : (i16) -> i7
+  // The slice stays exact when the dropped high bits match (0x0102..0x0105 yields [2, 5]).
+  // CHECK-NEXT: %c258_i16 = hw.constant 258 : i16
+  // CHECK-NEXT: %c261_i16 = hw.constant 261 : i16
+  // CHECK-NEXT: %[[SAME_HI:.+]] = comb.mux %sel, %c258_i16, %c261_i16
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[SAME_HI]] from 0 {smax = 5 : i8, smin = 2 : i8, umax = 5 : ui8, umin = 2 : ui8} : (i16) -> i8
+  // The signed range [-4, 3] crosses zero (unsigned [0, 255]), so arithmetic right-shifting and truncating preserves the signed bounds.
+  // CHECK-NEXT: %c-4_i8 = hw.constant -4 : i8
+  // CHECK-NEXT: %c3_i8 = hw.constant 3 : i8
+  // CHECK-NEXT: %[[SIGNED:.+]] = comb.mux %sel, %c-4_i8, %c3_i8
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[SIGNED]] from 0 {smax = 3 : i4, smin = -4 : i4, umax = 15 : ui4, umin = 0 : ui4} : (i8) -> i4
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[SIGNED]] from 2 {smax = 0 : i6, smin = -1 : i6, umax = 63 : ui6, umin = 0 : ui6} : (i8) -> i6
+  // Zero-width and full-width extracts return a constant zero range and the original input range, respectively.
+  // CHECK-NEXT: %{{.+}} = comb.extract %a from 8 {smax = 0 : i0, smin = 0 : i0, umax = 0 : ui0, umin = 0 : ui0} : (i8) -> i0
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[SAME_HI]] from 0 {smax = 261 : i16, smin = 258 : i16, umax = 261 : ui16, umin = 258 : ui16} : (i16) -> i16
+  %c0_i8 = hw.constant 0 : i8
+  %a16 = comb.concat %c0_i8, %a : i8, i8
+  %b16 = comb.concat %c0_i8, %b : i8, i8
+  %prod = comb.mul %a16, %b16 : i16
+  %m_pre = comb.extract %prod from 8 : (i16) -> i7
+
+  %c258_i16 = hw.constant 258 : i16
+  %c261_i16 = hw.constant 261 : i16
+  %same_hi = comb.mux %sel, %c258_i16, %c261_i16 : i16
+  %exact_lo = comb.extract %same_hi from 0 : (i16) -> i8
+
+  %cm4_i8 = hw.constant -4 : i8
+  %c3_i8 = hw.constant 3 : i8
+  %signed_range = comb.mux %sel, %cm4_i8, %c3_i8 : i8
+  %signed_lo = comb.extract %signed_range from 0 : (i8) -> i4
+  %signed_hi = comb.extract %signed_range from 2 : (i8) -> i6
+
+  %zero_w = comb.extract %a from 8 : (i8) -> i0
+  %full_w = comb.extract %same_hi from 0 : (i16) -> i16
+  hw.output
+}
