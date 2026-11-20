@@ -40,12 +40,18 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
   code extraModuleClassDeclaration = ?;
 
   let extraClassDeclaration = extraModuleClassDeclaration # [{
-    /// Insert and remove input and output ports of this module. Does not modify
-    /// the block arguments of the module body. The insertion and removal
-    /// indices must be in ascending order. The indices refer to the port
-    /// positions before any insertion or removal occurs. Ports inserted at the
-    /// same index will appear in the module in the same order as they were
-    /// listed in the insertion arrays.
+    /// Insert and remove ports.  Does not modify block arguments.
+    /// Indices are per-direction: the k-th input, the k-th output.
+    /// Indices refer to the ports before any insertion or removal.
+    /// Each list must be in ascending order.
+    /// Ports inserted at the same index keep their listed order.
+    ///
+    /// Remaining ports keep their relative order.
+    /// An inserted input goes right before the old input at that index.
+    /// Past the last input, it goes right after the last old input.
+    /// Outputs work the same way.
+    /// If there are no old inputs, new inputs go first.
+    /// If there are no old outputs, new outputs go last.
     void modifyPorts(
       ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
       ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
@@ -188,6 +194,18 @@ def HWModuleOp : HWModuleOpBase<"module",
     insertInput(unsigned index, const Twine &name, Type ty) {
       ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
       return insertInput(index, nameAttr, ty);
+    }
+
+    /// Insert the given inputs, in list order, at input index `index`.
+    /// Names that collide with existing ports or each other are made unique.
+    /// Returns the new block arguments, in list order.
+    SmallVector<BlockArgument>
+    insertInputs(unsigned index, ArrayRef<std::pair<StringAttr, Type>> inputs);
+
+    /// Append inputs as `insertInputs` does.
+    SmallVector<BlockArgument>
+    appendInputs(ArrayRef<std::pair<StringAttr, Type>> inputs) {
+      return insertInputs(getNumInputPorts(), inputs);
     }
 
     /// Append an output with a given name and type to the port list.
