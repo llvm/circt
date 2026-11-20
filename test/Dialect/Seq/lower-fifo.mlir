@@ -1,14 +1,16 @@
 // RUN: circt-opt --lower-seq-fifo --cse %s | FileCheck %s --implicit-check-not=seq.fifo
 
-// Every status output is a register, stepped from compares of the count against
+// Every status output is a register, stepped from compares of registers against
 // constants, and the enables only select between values computed from
-// registers. Reading while empty and writing while full are protocol
-// violations: they are not guarded against, but asserted on outside of reset.
+// registers. The count register lags a cycle behind, stepped by registered
+// copies of the enables, so the enables do not reach it. Reading while empty and
+// writing while full are protocol violations: they are not guarded against, but
+// asserted on outside of reset.
 
 // A depth which is not a power of two: the pointers wrap on a compare of the
 // current pointer.
 // CHECK-LABEL: hw.module @fifo1(
-// CHECK:         %fifo_count = seq.compreg sym @fifo_count [[COUNT_NEXT:%.+]], %clk reset %rst, %c0_i2 : i2
+// CHECK:         %fifo_count_lag = seq.compreg sym @fifo_count_lag [[COUNT:%.+]], %clk reset %rst, %c0_i2 : i2
 // CHECK-NEXT:    %fifo_mem = seq.hlmem @fifo_mem %clk, %rst : <3xi32>
 // CHECK-NEXT:    %fifo_rd_addr = seq.compreg sym @fifo_rd_addr [[RD_NEXT:%.+]], %clk reset %rst, %c0_i2 : i2
 // CHECK-NEXT:    %fifo_wr_addr = seq.compreg sym @fifo_wr_addr [[WR_NEXT:%.+]], %clk reset %rst, %c0_i2 : i2
@@ -18,16 +20,30 @@
 // CHECK-NEXT:    [[UP:%.+]] = comb.and %wrEn, [[NOT_RD]]
 // CHECK-NEXT:    [[NOT_WR:%.+]] = comb.xor %wrEn, %true
 // CHECK-NEXT:    [[DOWN:%.+]] = comb.and %rdEn, [[NOT_WR]]
-// CHECK:         [[INC:%.+]] = comb.add %fifo_count, %c1_i2
-// CHECK-NEXT:    [[DEC:%.+]] = comb.sub %fifo_count, %c1_i2
-// CHECK-NEXT:    [[COUNT_DOWN:%.+]] = comb.mux [[DOWN]], [[DEC]], %fifo_count
-// CHECK-NEXT:    [[COUNT_NEXT]] = comb.mux [[UP]], [[INC]], [[COUNT_DOWN]] {sv.namehint = "fifo_count_next"}
+// The count register is stepped only by registers.
+// CHECK:         %fifo_count_up = seq.compreg sym @fifo_count_up [[UP]], %clk reset %rst, %false : i1
+// CHECK-NEXT:    %fifo_count_down = seq.compreg sym @fifo_count_down [[DOWN]], %clk reset %rst, %false : i1
+// CHECK:         [[INC:%.+]] = comb.add %fifo_count_lag, %c1_i2
+// CHECK-NEXT:    [[DEC:%.+]] = comb.sub %fifo_count_lag, %c1_i2
+// CHECK-NEXT:    [[COUNT_DOWN:%.+]] = comb.mux %fifo_count_down, [[DEC]], %fifo_count_lag
+// CHECK-NEXT:    [[COUNT]] = comb.mux %fifo_count_up, [[INC]], [[COUNT_DOWN]] {sv.namehint = "fifo_count"}
+// Full is set going up from a count of 2: the register is compared against 1, 3
+// or 2, depending on the registered step.
 // CHECK-NEXT:    %fifo_full = seq.compreg sym @fifo_full [[FULL_NEXT:%.+]], %clk reset %rst, %false : i1
-// CHECK:         [[AT_DEPTH_M1:%.+]] = comb.icmp eq %fifo_count, %c-2_i2
+// CHECK-NEXT:    [[LAG_1:%.+]] = comb.icmp eq %fifo_count_lag, %c1_i2
+// CHECK-NEXT:    %c-1_i2 = hw.constant -1 : i2
+// CHECK-NEXT:    [[LAG_3:%.+]] = comb.icmp eq %fifo_count_lag, %c-1_i2
+// CHECK-NEXT:    %c-2_i2 = hw.constant -2 : i2
+// CHECK-NEXT:    [[LAG_2:%.+]] = comb.icmp eq %fifo_count_lag, %c-2_i2
+// CHECK-NEXT:    [[AT_2_DOWN:%.+]] = comb.mux %fifo_count_down, [[LAG_3]], [[LAG_2]]
+// CHECK-NEXT:    [[AT_2:%.+]] = comb.mux %fifo_count_up, [[LAG_1]], [[AT_2_DOWN]]
 // CHECK-NEXT:    [[FULL_DOWN:%.+]] = comb.mux [[DOWN]], %false, %fifo_full
-// CHECK-NEXT:    [[FULL_NEXT]] = comb.mux [[UP]], [[AT_DEPTH_M1]], [[FULL_DOWN]]
+// CHECK-NEXT:    [[FULL_NEXT]] = comb.mux [[UP]], [[AT_2]], [[FULL_DOWN]]
+// Empty is set going down from a count of 1.
 // CHECK-NEXT:    %fifo_empty = seq.compreg sym @fifo_empty [[EMPTY_NEXT:%.+]], %clk reset %rst, %true : i1
-// CHECK-NEXT:    [[AT_1:%.+]] = comb.icmp eq %fifo_count, %c1_i2
+// CHECK-NEXT:    [[LAG_0:%.+]] = comb.icmp eq %fifo_count_lag, %c0_i2
+// CHECK-NEXT:    [[AT_1_DOWN:%.+]] = comb.mux %fifo_count_down, [[LAG_2]], [[LAG_1]]
+// CHECK-NEXT:    [[AT_1:%.+]] = comb.mux %fifo_count_up, [[LAG_0]], [[AT_1_DOWN]]
 // CHECK-NEXT:    [[EMPTY_DOWN:%.+]] = comb.mux [[DOWN]], [[AT_1]], %fifo_empty
 // CHECK-NEXT:    [[EMPTY_NEXT]] = comb.mux [[UP]], %false, [[EMPTY_DOWN]]
 // CHECK-NEXT:    [[WR_INC:%.+]] = comb.add %fifo_wr_addr, %c1_i2
@@ -59,23 +75,31 @@ hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1
 // CHECK:         [[UP:%.+]] = comb.and %wrEn,
 // CHECK:         [[DOWN:%.+]] = comb.and %rdEn,
 // CHECK:         %fifo_full = seq.compreg sym @fifo_full {{%.+}}, %clk reset %rst, %false : i1
-// CHECK:         [[AT_3:%.+]] = comb.icmp eq %fifo_count, %c3_i3
+// CHECK-NEXT:    %c2_i3 = hw.constant 2 : i3
+// CHECK-NEXT:    [[LAG_2:%.+]] = comb.icmp eq %fifo_count_lag, %c2_i3
+// CHECK-NEXT:    %c-4_i3 = hw.constant -4 : i3
+// CHECK-NEXT:    {{%.+}} = comb.icmp eq %fifo_count_lag, %c-4_i3
+// CHECK-NEXT:    %c3_i3 = hw.constant 3 : i3
+// CHECK-NEXT:    [[LAG_3:%.+]] = comb.icmp eq %fifo_count_lag, %c3_i3
 // CHECK:         %fifo_empty = seq.compreg sym @fifo_empty {{%.+}}, %clk reset %rst, %true : i1
-// CHECK-NEXT:    [[AT_1:%.+]] = comb.icmp eq %fifo_count, %c1_i3
+// CHECK-NEXT:    [[LAG_0:%.+]] = comb.icmp eq %fifo_count_lag, %c0_i3
+// CHECK-NEXT:    [[LAG_1:%.+]] = comb.icmp eq %fifo_count_lag, %c1_i3
+// CHECK-NEXT:    [[AT_1_DOWN:%.+]] = comb.mux %fifo_count_down, [[LAG_2]], [[LAG_1]]
+// CHECK-NEXT:    [[AT_1:%.+]] = comb.mux %fifo_count_up, [[LAG_0]], [[AT_1_DOWN]]
 // CHECK:         [[WR_INC:%.+]] = comb.add %fifo_wr_addr, %c1_i2
 // CHECK-NEXT:    {{%.+}} = comb.mux %wrEn, [[WR_INC]], %fifo_wr_addr {sv.namehint = "fifo_wr_addr_next"}
 // CHECK-NEXT:    [[RD_INC:%.+]] = comb.add %fifo_rd_addr, %c1_i2
 // CHECK-NEXT:    {{%.+}} = comb.mux %rdEn, [[RD_INC]], %fifo_rd_addr {sv.namehint = "fifo_rd_addr_next"}
-// Almost full (count >= 2): set on reaching 2 from 1, cleared on leaving 2 down.
+// Almost full (count >= 2): set going up from 1, cleared going down from 2.
 // CHECK-NEXT:    %fifo_almost_full = seq.compreg sym @fifo_almost_full [[AF_NEXT:%.+]], %clk reset %rst, %false : i1
-// CHECK-NEXT:    %c2_i3 = hw.constant 2 : i3
-// CHECK-NEXT:    [[AT_2:%.+]] = comb.icmp eq %fifo_count, %c2_i3
+// CHECK-NEXT:    [[AT_2_DOWN:%.+]] = comb.mux %fifo_count_down, [[LAG_3]], [[LAG_2]]
+// CHECK-NEXT:    [[AT_2:%.+]] = comb.mux %fifo_count_up, [[LAG_1]], [[AT_2_DOWN]]
 // CHECK-NEXT:    [[NOT_AT_2:%.+]] = comb.xor [[AT_2]], %true
 // CHECK-NEXT:    [[AF_UP:%.+]] = comb.or %fifo_almost_full, [[AT_1]]
 // CHECK-NEXT:    [[AF_DOWN:%.+]] = comb.and %fifo_almost_full, [[NOT_AT_2]]
 // CHECK-NEXT:    [[AF_MUX:%.+]] = comb.mux [[DOWN]], [[AF_DOWN]], %fifo_almost_full
 // CHECK-NEXT:    [[AF_NEXT]] = comb.mux [[UP]], [[AF_UP]], [[AF_MUX]]
-// Almost empty (count <= 1): cleared on leaving 1 up, set on reaching 1 from 2.
+// Almost empty (count <= 1): cleared going up from 1, set going down from 2.
 // CHECK-NEXT:    %fifo_almost_empty = seq.compreg sym @fifo_almost_empty [[AE_NEXT:%.+]], %clk reset %rst, %true : i1
 // CHECK-NEXT:    [[NOT_AT_1:%.+]] = comb.xor [[AT_1]], %true
 // CHECK-NEXT:    [[AE_UP:%.+]] = comb.and %fifo_almost_empty, [[NOT_AT_1]]
