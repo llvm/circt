@@ -406,9 +406,9 @@ hw.module @WireInputDefinedLast(in %a : i8) {
   // CHECK-NEXT:   sv.assign %v, %[[ADD]]
   // CHECK-NEXT: }
   sv.ifdef @L {
-    %t = sv.wire : !hw.inout<i8>
+    %t = sv.wire : !sv.net<i8>
     %v = hw.wire %x : i8
-    sv.assign %t, %v : i8
+    sv.assign %t, %v : !sv.net<i8>, i8
     %x = comb.add %a, %a : i8
   }
 }
