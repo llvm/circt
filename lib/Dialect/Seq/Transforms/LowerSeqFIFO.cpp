@@ -32,6 +32,11 @@ struct FIFOLowering : public OpConversionPattern<seq::FIFOOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
 
+  // Every status output is a register, and every comparison is of a register
+  // against a constant. The caller's enables, which usually arrive late, only
+  // select between values computed from registers. Reading while empty and
+  // writing while full are protocol violations, checked by assertions rather
+  // than guarded against, so the enables are used as they are.
   LogicalResult
   matchAndRewrite(seq::FIFOOp mem, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
@@ -39,35 +44,44 @@ public:
     Type eltType = adaptor.getInput().getType();
     Value clk = adaptor.getClk();
     Value rst = adaptor.getRst();
+    Value rdEn = adaptor.getRdEn();
+    Value wrEn = adaptor.getWrEn();
     BackedgeBuilder bb(rewriter, loc);
-    size_t depth = mem.getDepth();
+    uint64_t depth = mem.getDepth();
+    Type i1Type = rewriter.getI1Type();
     Type countType = rewriter.getIntegerType(llvm::Log2_64_Ceil(depth + 1));
-    Type ptrType = rewriter.getIntegerType(llvm::Log2_64_Ceil(depth));
-    Backedge rdAddrNext = bb.get(ptrType);
-    Backedge wrAddrNext = bb.get(ptrType);
-    Backedge nextCount = bb.get(countType);
+    unsigned ptrWidth = llvm::Log2_64_Ceil(depth);
+    Type ptrType = rewriter.getIntegerType(ptrWidth);
 
-    // ====== Some constants ======
-    Value countTcFull = hw::ConstantOp::create(rewriter, loc, countType, depth);
-    Value countTc1 = hw::ConstantOp::create(rewriter, loc, countType, 1);
-    Value countTc0 = hw::ConstantOp::create(rewriter, loc, countType, 0);
-    Value ptrTc0 = hw::ConstantOp::create(rewriter, loc, ptrType, 0);
-    Value ptrTc1 = hw::ConstantOp::create(rewriter, loc, ptrType, 1);
-    Value ptrTcFull = hw::ConstantOp::create(rewriter, loc, ptrType, depth);
+    // Operands that create ops are built into locals before they are combined:
+    // the order in which C++ evaluates arguments is unspecified, and the order
+    // of the ops must not depend on the compiler.
+    auto constant = [&](Type type, uint64_t value) -> Value {
+      return hw::ConstantOp::create(rewriter, loc, type, value);
+    };
+    auto mux = [&](Value cond, Value trueValue, Value falseValue) -> Value {
+      return comb::MuxOp::create(rewriter, loc, cond, trueValue, falseValue);
+    };
+    auto setName = [&](Value value, StringRef name) {
+      value.getDefiningOp()->setAttr("sv.namehint",
+                                     rewriter.getStringAttr(name));
+    };
+    auto makeReg = [&](Backedge next, Type type, uint64_t resetValue,
+                       StringRef name) -> Value {
+      return seq::CompRegOp::create(rewriter, loc, next, clk, rst,
+                                    constant(type, resetValue), name);
+    };
 
     // ====== Hardware units ======
-    Value count = seq::CompRegOp::create(
-        rewriter, loc, nextCount, clk, rst,
-        hw::ConstantOp::create(rewriter, loc, countType, 0), "fifo_count");
+    Backedge countNext = bb.get(countType);
+    Backedge rdAddrNext = bb.get(ptrType);
+    Backedge wrAddrNext = bb.get(ptrType);
+    Value count = makeReg(countNext, countType, 0, "fifo_count");
     seq::HLMemOp hlmem = seq::HLMemOp::create(
         rewriter, loc, clk, rst, "fifo_mem",
         llvm::SmallVector<int64_t>{static_cast<int64_t>(depth)}, eltType);
-    Value rdAddr = seq::CompRegOp::create(
-        rewriter, loc, rdAddrNext, clk, rst,
-        hw::ConstantOp::create(rewriter, loc, ptrType, 0), "fifo_rd_addr");
-    Value wrAddr = seq::CompRegOp::create(
-        rewriter, loc, wrAddrNext, clk, rst,
-        hw::ConstantOp::create(rewriter, loc, ptrType, 0), "fifo_wr_addr");
+    Value rdAddr = makeReg(rdAddrNext, ptrType, 0, "fifo_rd_addr");
+    Value wrAddr = makeReg(wrAddrNext, ptrType, 0, "fifo_wr_addr");
 
     // The memory is read in the cycle an entry is popped, with latency 1 at
     // most; any further latency is registers on the read data. So a popped
@@ -76,90 +90,71 @@ public:
     // block's output register empty.
     uint64_t rdLatency = mem.getRdLatency();
     Value readData = seq::ReadPortOp::create(
-        rewriter, loc, hlmem, llvm::SmallVector<Value>{rdAddr},
-        adaptor.getRdEn(), std::min<uint64_t>(rdLatency, 1));
+        rewriter, loc, hlmem, llvm::SmallVector<Value>{rdAddr}, rdEn,
+        std::min<uint64_t>(rdLatency, 1));
     for (uint64_t i = 1; i < rdLatency; ++i)
       readData = seq::CompRegOp::create(
           rewriter, loc, readData, clk,
           rewriter.getStringAttr("fifo_mem_rd_dly" + std::to_string(i)));
     seq::WritePortOp::create(rewriter, loc, hlmem,
                              llvm::SmallVector<Value>{wrAddr},
-                             adaptor.getInput(), adaptor.getWrEn(),
+                             adaptor.getInput(), wrEn,
                              /*latency*/ 1);
 
-    // ====== some more constants =====
-    comb::ICmpOp fifoFull = comb::ICmpOp::create(
-        rewriter, loc, comb::ICmpPredicate::eq, count, countTcFull);
-    fifoFull->setAttr("sv.namehint", rewriter.getStringAttr("fifo_full"));
-    comb::ICmpOp fifoEmpty = comb::ICmpOp::create(
-        rewriter, loc, comb::ICmpPredicate::eq, count, countTc0);
-    fifoEmpty->setAttr("sv.namehint", rewriter.getStringAttr("fifo_empty"));
+    // ====== Occupancy ======
+    Value countUp = comb::AndOp::create(
+        rewriter, loc, wrEn, comb::createOrFoldNot(rewriter, loc, rdEn));
+    Value countDown = comb::AndOp::create(
+        rewriter, loc, rdEn, comb::createOrFoldNot(rewriter, loc, wrEn));
+    // The next value of `current`, a function of the count, given its values
+    // after the count goes up or down by one.
+    auto step = [&](Value current, Value afterUp, Value afterDown) -> Value {
+      return mux(countUp, afterUp, mux(countDown, afterDown, current));
+    };
+    auto countEq = [&](uint64_t value) -> Value {
+      return comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq, count,
+                                  constant(countType, value));
+    };
+    Value trueValue = constant(i1Type, 1);
+    Value falseValue = constant(i1Type, 0);
 
-    // ====== Next-state count ======
-    auto notRdEn = comb::createOrFoldNot(rewriter, loc, adaptor.getRdEn());
-    auto notWrEn = comb::createOrFoldNot(rewriter, loc, adaptor.getWrEn());
-    Value rdEnNandWrEn = comb::AndOp::create(rewriter, loc, notRdEn, notWrEn);
-    Value rdEnAndNotWrEn =
-        comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), notWrEn);
-    Value wrEnAndNotRdEn =
-        comb::AndOp::create(rewriter, loc, adaptor.getWrEn(), notRdEn);
+    Value countPlus1 =
+        comb::AddOp::create(rewriter, loc, count, constant(countType, 1));
+    Value countMinus1 =
+        comb::SubOp::create(rewriter, loc, count, constant(countType, 1));
+    countNext.setValue(step(count, countPlus1, countMinus1));
+    setName(countNext, "fifo_count_next");
 
-    auto addCountTc1 = comb::AddOp::create(rewriter, loc, count, countTc1);
-    Value wrEnNext = comb::MuxOp::create(rewriter, loc, fifoFull,
-                                         // keep value
-                                         count,
-                                         // increment
-                                         addCountTc1);
-    auto countEqTc0 = comb::ICmpOp::create(
-        rewriter, loc, comb::ICmpPredicate::eq, count, countTc0);
-    auto subCountTc1 = comb::SubOp::create(rewriter, loc, count, countTc1);
+    Backedge fullNext = bb.get(i1Type);
+    Value full = makeReg(fullNext, i1Type, 0, "fifo_full");
+    fullNext.setValue(step(full, countEq(depth - 1), falseValue));
 
-    Value rdEnNext = comb::MuxOp::create(rewriter, loc, countEqTc0,
-                                         // keep value
-                                         count,
-                                         // decrement
-                                         subCountTc1);
-
-    auto nextInnerMux =
-        comb::MuxOp::create(rewriter, loc, rdEnAndNotWrEn, rdEnNext, count);
-    auto nextMux = comb::MuxOp::create(rewriter, loc, wrEnAndNotRdEn, wrEnNext,
-                                       nextInnerMux);
-    nextCount.setValue(comb::MuxOp::create(rewriter, loc, rdEnNandWrEn,
-                                           /*keep value*/ count, nextMux));
-    static_cast<Value>(nextCount).getDefiningOp()->setAttr(
-        "sv.namehint", rewriter.getStringAttr("fifo_count_next"));
+    Backedge emptyNext = bb.get(i1Type);
+    Value empty = makeReg(emptyNext, i1Type, 1, "fifo_empty");
+    emptyNext.setValue(step(empty, falseValue, countEq(1)));
 
     // ====== Read/write pointers ======
-    Value wrAndNotFull =
-        comb::AndOp::create(rewriter, loc, adaptor.getWrEn(),
-                            comb::createOrFoldNot(rewriter, loc, fifoFull));
-    auto addWrAddrPtrTc1 = comb::AddOp::create(rewriter, loc, wrAddr, ptrTc1);
-
-    auto wrAddrNextNoRollover = comb::MuxOp::create(rewriter, loc, wrAndNotFull,
-                                                    addWrAddrPtrTc1, wrAddr);
-    auto isMaxAddrWr =
-        comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq,
-                             wrAddrNextNoRollover, ptrTcFull);
-    wrAddrNext.setValue(comb::MuxOp::create(rewriter, loc, isMaxAddrWr, ptrTc0,
-                                            wrAddrNextNoRollover));
-    static_cast<Value>(wrAddrNext)
-        .getDefiningOp()
-        ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_wr_addr_next"));
-
-    auto notFifoEmpty = comb::createOrFoldNot(rewriter, loc, fifoEmpty);
-    Value rdAndNotEmpty =
-        comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), notFifoEmpty);
-    auto addRdAddrPtrTc1 = comb::AddOp::create(rewriter, loc, rdAddr, ptrTc1);
-    auto rdAddrNextNoRollover = comb::MuxOp::create(
-        rewriter, loc, rdAndNotEmpty, addRdAddrPtrTc1, rdAddr);
-    auto isMaxAddrRd =
-        comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq,
-                             rdAddrNextNoRollover, ptrTcFull);
-    rdAddrNext.setValue(comb::MuxOp::create(rewriter, loc, isMaxAddrRd, ptrTc0,
-                                            rdAddrNextNoRollover));
-    static_cast<Value>(rdAddrNext)
-        .getDefiningOp()
-        ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_rd_addr_next"));
+    // The wrap test looks at the current pointer, in parallel with the
+    // increment. With a power-of-two depth the increment wraps on its own.
+    auto advance = [&](Backedge ptrNext, Value ptr, Value enable,
+                       StringRef name) {
+      if (ptrWidth == 0) {
+        ptrNext.setValue(ptr);
+        return;
+      }
+      Value next =
+          comb::AddOp::create(rewriter, loc, ptr, constant(ptrType, 1));
+      if (!llvm::isPowerOf2_64(depth)) {
+        Value wrap =
+            comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq, ptr,
+                                 constant(ptrType, depth - 1));
+        next = mux(wrap, constant(ptrType, 0), next);
+      }
+      ptrNext.setValue(mux(enable, next, ptr));
+      setName(ptrNext, name);
+    };
+    advance(wrAddrNext, wrAddr, wrEn, "fifo_wr_addr_next");
+    advance(rdAddrNext, rdAddr, rdEn, "fifo_rd_addr_next");
 
     // ====== Result values ======
     llvm::SmallVector<Value> results;
@@ -167,45 +162,67 @@ public:
     // Data
     results.push_back(readData);
     // Full
-    results.push_back(fifoFull);
+    results.push_back(full);
     // Empty
-    results.push_back(fifoEmpty);
+    results.push_back(empty);
 
-    if (auto almostFull = mem.getAlmostFullThreshold()) {
-      results.push_back(
-          comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::uge, count,
-                               hw::ConstantOp::create(rewriter, loc, countType,
-                                                      almostFull.value())));
-      static_cast<Value>(results.back())
-          .getDefiningOp()
-          ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_almost_full"));
+    // Almost full is `count >= threshold`. A threshold of `depth` makes it
+    // `full`, and one of 0 makes it constant.
+    if (auto threshold = mem.getAlmostFullThreshold()) {
+      uint64_t af = *threshold;
+      if (af == 0) {
+        results.push_back(trueValue);
+      } else if (af == depth || mem.getAlmostFull().use_empty()) {
+        results.push_back(full);
+      } else {
+        Backedge next = bb.get(i1Type);
+        Value almostFull = makeReg(next, i1Type, 0, "fifo_almost_full");
+        Value notAtThreshold =
+            comb::createOrFoldNot(rewriter, loc, countEq(af));
+        Value afterUp =
+            comb::OrOp::create(rewriter, loc, almostFull, countEq(af - 1));
+        Value afterDown =
+            comb::AndOp::create(rewriter, loc, almostFull, notAtThreshold);
+        next.setValue(step(almostFull, afterUp, afterDown));
+        results.push_back(almostFull);
+      }
     }
 
-    if (auto almostEmpty = mem.getAlmostEmptyThreshold()) {
-      results.push_back(
-          comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::ule, count,
-                               hw::ConstantOp::create(rewriter, loc, countType,
-                                                      almostEmpty.value())));
-      static_cast<Value>(results.back())
-          .getDefiningOp()
-          ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_almost_empty"));
+    // Almost empty is `count <= threshold`. A threshold of 0 makes it `empty`,
+    // and one of `depth` makes it constant.
+    if (auto threshold = mem.getAlmostEmptyThreshold()) {
+      uint64_t ae = *threshold;
+      if (ae == depth) {
+        results.push_back(trueValue);
+      } else if (ae == 0 || mem.getAlmostEmpty().use_empty()) {
+        results.push_back(empty);
+      } else {
+        Backedge next = bb.get(i1Type);
+        Value almostEmpty = makeReg(next, i1Type, 1, "fifo_almost_empty");
+        Value notAtThreshold =
+            comb::createOrFoldNot(rewriter, loc, countEq(ae));
+        Value afterUp =
+            comb::AndOp::create(rewriter, loc, almostEmpty, notAtThreshold);
+        Value afterDown =
+            comb::OrOp::create(rewriter, loc, almostEmpty, countEq(ae + 1));
+        next.setValue(step(almostEmpty, afterUp, afterDown));
+        results.push_back(almostEmpty);
+      }
     }
 
     // ====== Protocol checks =====
+    // Not checked in reset, before the enables need to mean anything.
     Value clkI1 = seq::FromClockOp::create(rewriter, loc, clk);
+    Value notInReset = comb::createOrFoldNot(rewriter, loc, rst);
     Value notEmptyAndRden = comb::createOrFoldNot(
-        rewriter, loc,
-        comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), fifoEmpty));
+        rewriter, loc, comb::AndOp::create(rewriter, loc, rdEn, empty));
     verif::ClockedAssertOp::create(
         rewriter, loc, notEmptyAndRden, verif::ClockEdge::Pos, clkI1,
-        /*enable=*/Value(),
-        rewriter.getStringAttr("FIFO empty when read enabled"));
+        notInReset, rewriter.getStringAttr("FIFO empty when read enabled"));
     Value notFullAndWren = comb::createOrFoldNot(
-        rewriter, loc,
-        comb::AndOp::create(rewriter, loc, adaptor.getWrEn(), fifoFull));
+        rewriter, loc, comb::AndOp::create(rewriter, loc, wrEn, full));
     verif::ClockedAssertOp::create(
-        rewriter, loc, notFullAndWren, verif::ClockEdge::Pos, clkI1,
-        /*enable=*/Value(),
+        rewriter, loc, notFullAndWren, verif::ClockEdge::Pos, clkI1, notInReset,
         rewriter.getStringAttr("FIFO full when write enabled"));
 
     rewriter.replaceOp(mem, results);

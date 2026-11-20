@@ -4,6 +4,18 @@
 
 ### Changes
 
+- **`seq.FIFO` status flags are registers.** The `seq.fifo` lowering now keeps
+  `full`, `empty` and the almost-full/almost-empty flags in registers, and no
+  longer compares the occupancy count in front of the pointer and count
+  updates. This shortens the logic in and around every FIFO
+  ([#11321](https://github.com/llvm/circt/issues/11321)).
+
+  Reading an empty FIFO or writing a full one was, and remains, a protocol
+  violation, caught by simulation assertions. The lowering used to partly guard
+  against such accesses; it no longer does, so they now corrupt the FIFO.
+  Designs that never make them behave exactly as before, cycle for cycle. The
+  assertions no longer fire while the FIFO is in reset.
+
 - **`seq.FIFO` read latency is on the read data.** With `rd_latency` 2 or
   more, the memory is read in the cycle the entry is popped and the rest of the
   latency is registers on the read data, rather than on the read address. On

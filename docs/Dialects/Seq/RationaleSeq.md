@@ -330,6 +330,13 @@ Like `seq.hlmem` there are no guarantees that all possible fifo configuration
 are able to be lowered. Available lowering passes will pattern match on the
 requested fifo configuration and attempt to provide a legal lowering.
 
+Reading an empty FIFO or writing a full one is a protocol violation, and its
+result is undefined. The default lowering (`--lower-seq-fifo`) does not guard
+against it; it emits assertions which check for it outside of reset. In return,
+every status flag is a register, and the pointer and count updates depend on
+the read and write enables only through their final multiplexers, so a FIFO
+adds little logic to the paths around it.
+
 With a read latency above one, the default lowering (`--lower-seq-fifo`) reads
 the memory in the cycle the entry is popped, and the rest of the latency is
 registers on the read data. So a popped slot can be reused at once, and on an
