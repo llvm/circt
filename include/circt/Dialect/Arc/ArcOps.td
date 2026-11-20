@@ -116,7 +116,7 @@ def DefineOp : ArcOp<"define", [
 
 def OutputOp : ArcOp<"output", [
   Terminator,
-  ParentOneOf<["DefineOp", "LutOp", "ExecuteOp"]>,
+  ParentOneOf<["DefineOp", "LutOp", "ExecuteOp", "FixedPointOp"]>,
   Pure,
   ReturnLike
 ]> {
@@ -841,7 +841,7 @@ def CoroutineCallOp : ArcOp<"coroutine.call", [
 def CoroutineInstanceOp : ArcOp<"coroutine.instance", [
   CallOpInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-  HasParent<"hw::HWModuleOp">,
+  ParentOneOf<["hw::HWModuleOp", "FixedPointOp"]>,
   PredOpTrait<"`sensitivityMask` has one bit per argument",
     CPred<"$sensitivityMask.size() == $args.size()">>,
 ]> {
@@ -1011,6 +1011,44 @@ def CoroutineStartPCOp : ArcOp<"coroutine.start_pc", [Pure]> {
 //===----------------------------------------------------------------------===//
 // Procedural Ops
 //===----------------------------------------------------------------------===//
+
+def FixedPointOp : ArcOp<"fixed_point", [
+  HasParent<"hw::HWModuleOp">,
+  IsolatedFromAbove,
+  RecursiveMemoryEffects,
+  AttrSizedOperandSegments,
+  SingleBlockImplicitTerminator<"arc::OutputOp">
+]> {
+  let summary = "Iterate a region until its feedback values stop changing";
+  let description = [{
+    The `arc.fixed_point` operation represents a cyclic computation as an
+    acyclic body that is evaluated repeatedly. The `initials` operands provide
+    the leading feedback arguments of the body block on the first iteration.
+    On subsequent iterations, the leading values yielded by `arc.output` are
+    passed back as those arguments. Evaluation stops once all feedback values
+    are unchanged.
+
+    The remaining `inputs` are invariant captures and correspond to the
+    trailing body block arguments. The operation results consist of the stable
+    feedback values followed by any additional values yielded from the final
+    iteration.
+
+    The operation must appear directly within an `hw.module`.
+  }];
+  let arguments = (ins
+    Variadic<AnyType>:$initials,
+    Variadic<AnyType>:$inputs
+  );
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    `iter_args` `(` $initials `)`
+    (`inputs` `(` $inputs^ `)`)?
+    attr-dict `:` functional-type(operands, results)
+    $body
+  }];
+  let hasRegionVerifier = 1;
+}
 
 def ExecuteOp : ArcOp<"execute", [
   IsolatedFromAbove,

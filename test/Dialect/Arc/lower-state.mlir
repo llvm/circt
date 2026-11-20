@@ -11,6 +11,10 @@ arc.define @Not(%arg0: !seq.clock) -> !seq.clock {
   arc.output %0 : !seq.clock
 }
 
+arc.define @IdI8(%arg: i8) -> i8 {
+  arc.output %arg : i8
+}
+
 arc.define @IdI42Arc(%arg0: i42) -> i42 {
   arc.output %arg0 : i42
 }
@@ -893,4 +897,254 @@ arc.coroutine.define @DummyCoroutine(%arg: i42) -> (i42, i1, i64) {
   %false = hw.constant 0 : i1
   %never = hw.constant -1 : i64
   arc.coroutine.halt %arg, %false, %never : i42, i1, i64
+}
+
+// A fixed-point body is lowered once into the condition of an scf.while. Its
+// yielded feedback values are compared against the current iteration arguments
+// and passed through the loop until both are stable.
+// CHECK-LABEL: arc.model @FixedPoint
+// CHECK: %[[INPUT:.+]] = arc.state_read %in_input : <i8>
+// CHECK: %[[LOOP:.+]]:3 = scf.while (%[[ARG0:.+]] = %{{.+}}, %[[ARG1:.+]] = %{{.+}}) : (i8, i8) -> (i8, i8, i8) {
+// CHECK:   %[[NEXT0:.+]] = comb.add %[[ARG1]], %[[INPUT]] : i8
+// CHECK:   %[[NEXT1:.+]] = comb.xor %[[ARG0]], %[[INPUT]] : i8
+// CHECK:   %[[CHANGED0:.+]] = comb.icmp ne %[[ARG0]], %[[NEXT0]] : i8
+// CHECK:   %[[CHANGED1:.+]] = comb.icmp ne %[[ARG1]], %[[NEXT1]] : i8
+// CHECK:   scf.condition(%{{.+}}) %[[NEXT0]], %[[NEXT1]], %[[INPUT]] : i8, i8, i8
+// CHECK: } do {
+// CHECK: ^bb0(%[[AFTER0:.+]]: i8, %[[AFTER1:.+]]: i8, %{{.+}}: i8):
+// CHECK:   scf.yield %[[AFTER0]], %[[AFTER1]] : i8, i8
+// CHECK: }
+// CHECK: arc.state_write %out_first = %[[LOOP]]#0 : <i8>
+// CHECK: arc.state_write %out_second = %[[LOOP]]#1 : <i8>
+// CHECK: arc.state_write %out_captured = %[[LOOP]]#2 : <i8>
+hw.module @FixedPoint(in %input: i8, out first: i8, out second: i8, out captured: i8) {
+  %zero = hw.constant 0 : i8
+  %first, %second, %captured = arc.fixed_point iter_args(%zero, %zero) inputs(%input) : (i8, i8, i8) -> (i8, i8, i8) {
+  ^bb0(%previous_first: i8, %previous_second: i8, %captured_input: i8):
+    %next_first = comb.add %previous_second, %captured_input : i8
+    %next_second = comb.xor %previous_first, %captured_input : i8
+    arc.output %next_first, %next_second, %captured_input : i8, i8, i8
+  }
+  hw.output %first, %second, %captured : i8, i8, i8
+}
+
+// A register samples the signal's old value, even when the fixed-point region
+// captures another register's new value. Read the feedback before evaluating
+// the region, and use that snapshot as the destination register's input.
+// CHECK-LABEL: arc.model @RegisterToFixedPointToRegister
+// CHECK: %[[SIGNAL:.+]] = arc.alloc_state %arg0 {name = "signal"}
+// CHECK: %[[A:.+]] = arc.alloc_state %arg0 {name = "a"}
+// CHECK: %[[B:.+]] = arc.alloc_state %arg0 {name = "b"}
+// CHECK: %[[OLD:.+]] = arc.state_read %[[SIGNAL]] : <i8>
+// CHECK-NOT: scf.while
+// CHECK: %[[SAMPLED:.+]] = arc.call @IdI8(%[[OLD]]) : (i8) -> i8
+// CHECK-NEXT: arc.state_write %[[B]] = %[[SAMPLED]] : <i8>
+// CHECK: %[[NEW_A:.+]] = arc.state_read %[[A]] : <i8>
+// CHECK: %[[LOOP:.+]] = scf.while
+// CHECK: scf.condition(%{{.+}}) %[[NEW_A]] : i8
+// CHECK: arc.state_write %[[SIGNAL]] = %[[LOOP]] : <i8>
+hw.module @RegisterToFixedPointToRegister(in %clock: !seq.clock, in %input: i8, out a: i8, out b: i8, out settled: i8) {
+  %zero = hw.constant 0 : i8
+  %delay = llhd.constant_time <0ns, 0d>
+  %signal = llhd.sig %zero : <i8>
+  %a = arc.state @IdI8(%input) clock %clock latency 1 {names = ["a"]} : (i8) -> i8
+  %old = llhd.prb %signal : i8
+  %settled = arc.fixed_point iter_args(%old) inputs(%a) : (i8, i8) -> i8 {
+  ^bb0(%previous: i8, %new_a: i8):
+    arc.output %new_a : i8
+  }
+  %b = arc.state @IdI8(%settled) clock %clock latency 1 {names = ["b"]} : (i8) -> i8
+  llhd.drv %signal, %settled after %delay : i8
+  hw.output %a, %b, %settled : i8, i8, i8
+}
+
+// Old-phase reads must also work after the new result has been computed and
+// committed to signal storage.
+// CHECK-LABEL: arc.model @FixedPointBeforeRegister
+// CHECK: %[[SIGNAL:.+]] = arc.alloc_state %arg0 {name = "signal"}
+// CHECK: %[[OLD:.+]] = arc.state_read %[[SIGNAL]] : <i8>
+// CHECK: %[[LOOP:.+]] = scf.while
+// CHECK: arc.state_write %[[SIGNAL]] = %[[LOOP]] : <i8>
+// CHECK: arc.call @IdI8(%[[OLD]]) : (i8) -> i8
+hw.module @FixedPointBeforeRegister(in %clock: !seq.clock, in %input: i8, out b: i8) {
+  %zero = hw.constant 0 : i8
+  %delay = llhd.constant_time <0ns, 0d>
+  %signal = llhd.sig %zero : <i8>
+  %old = llhd.prb %signal : i8
+  %settled = arc.fixed_point iter_args(%old) inputs(%input) : (i8, i8) -> i8 {
+  ^bb0(%previous: i8, %input_arg: i8):
+    arc.output %input_arg : i8
+  }
+  llhd.drv %signal, %settled after %delay : i8
+  %b = arc.state @IdI8(%settled) clock %clock latency 1 {names = ["b"]} : (i8) -> i8
+  hw.output %b : i8
+}
+
+// The register breaks the dependency between the old feedback value and the
+// region's new capture. This is a sequential loop, not a combinational loop.
+// CHECK-LABEL: arc.model @RegisterFixedPointSelfFeedback
+// CHECK: %[[SIGNAL:.+]] = arc.alloc_state %arg0 {name = "signal"}
+// CHECK: %[[A:.+]] = arc.alloc_state %arg0 {name = "a"}
+// CHECK: %[[OLD:.+]] = arc.state_read %[[SIGNAL]] : <i8>
+// CHECK-NOT: scf.while
+// CHECK: %[[SAMPLED:.+]] = arc.call @IdI8(%[[OLD]]) : (i8) -> i8
+// CHECK-NEXT: arc.state_write %[[A]] = %[[SAMPLED]] : <i8>
+// CHECK: %[[NEW_A:.+]] = arc.state_read %[[A]] : <i8>
+// CHECK: scf.while
+// CHECK: comb.add %[[NEW_A]], %{{.+}} : i8
+hw.module @RegisterFixedPointSelfFeedback(in %clock: !seq.clock, out a: i8, out settled: i8) {
+  %zero = hw.constant 0 : i8
+  %delay = llhd.constant_time <0ns, 0d>
+  %signal = llhd.sig %zero : <i8>
+  %old = llhd.prb %signal : i8
+  %settled = arc.fixed_point iter_args(%old) inputs(%a) : (i8, i8) -> i8 {
+  ^bb0(%previous: i8, %new_a: i8):
+    %one = hw.constant 1 : i8
+    %next = comb.add %new_a, %one : i8
+    arc.output %next : i8
+  }
+  llhd.drv %signal, %settled after %delay : i8
+  %a = arc.state @IdI8(%settled) clock %clock latency 1 {names = ["a"]} : (i8) -> i8
+  hw.output %a, %settled : i8, i8
+}
+
+// An old-only use must neither evaluate the body nor request its new captures.
+// Sample the second feedback result to check that initials are matched by index.
+// CHECK-LABEL: arc.model @FixedPointOldOnly
+// CHECK-NOT: scf.while
+// CHECK: %[[SEVEN:.+]] = hw.constant 7 : i8
+// CHECK-NOT: scf.while
+// CHECK: arc.call @IdI8(%[[SEVEN]]) : (i8) -> i8
+// CHECK-NOT: scf.while
+hw.module @FixedPointOldOnly(in %clock: !seq.clock, out q: i8) {
+  %two = hw.constant 2 : i8
+  %seven = hw.constant 7 : i8
+  %first, %second = arc.fixed_point iter_args(%two, %seven) inputs(%q) : (i8, i8, i8) -> (i8, i8) {
+  ^bb0(%previous_first: i8, %previous_second: i8, %new_q: i8):
+    arc.output %previous_second, %previous_first : i8, i8
+  }
+  %q = arc.state @IdI8(%second) clock %clock latency 1 : (i8) -> i8
+  hw.output %q : i8
+}
+
+// CHECK-LABEL: arc.model @LLHDSignalInitial
+hw.module @LLHDSignalInitial() {
+  // CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i15>
+  // CHECK: arc.initial {
+  // CHECK: %[[INIT:.*]] = hw.constant 42 : i15
+  // CHECK: arc.state_write %[[SIGNAL]] = %[[INIT]] : <i15>
+  %init = hw.constant 42 : i15
+  %signal = llhd.sig %init : <i15>
+}
+
+// CHECK-LABEL: arc.model @LLHDSignalReadWrite
+hw.module @LLHDSignalReadWrite(out before: i1, out after: i1) {
+  // CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i1>
+  // CHECK: arc.initial {
+  // CHECK: %[[FALSE:.*]] = hw.constant false
+  // CHECK: arc.state_write %[[SIGNAL]] = %[[FALSE]] : <i1>
+  // CHECK: %[[TRUE:.*]] = hw.constant true
+  // CHECK: arc.state_write %[[SIGNAL]] = %[[TRUE]] : <i1>
+  // CHECK: %[[BEFORE:.*]] = arc.state_read %[[SIGNAL]] : <i1>
+  // CHECK: %[[AFTER:.*]] = arc.state_read %[[SIGNAL]] : <i1>
+  // CHECK: arc.state_write %out_before = %[[BEFORE]] : <i1>
+  // CHECK: arc.state_write %out_after = %[[AFTER]] : <i1>
+  %false = hw.constant false
+  %true = hw.constant true
+  %signal = llhd.sig %false : <i1>
+  %before = llhd.prb %signal : i1
+  llhd.assign %signal, %true : i1
+  %after = llhd.prb %signal : i1
+  hw.output %before, %after : i1, i1
+}
+
+// CHECK-LABEL: arc.model @LLHDSignalEnabledDrive
+// CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i1>
+// CHECK: %[[ENABLE:.*]] = arc.state_read %in_en : <i1>
+// CHECK: scf.if %[[ENABLE]] {
+// CHECK:   arc.state_write %[[SIGNAL]] = %{{.*}} : <i1>
+// CHECK: }
+hw.module @LLHDSignalEnabledDrive(in %en: i1) {
+  %false = hw.constant false
+  %true = hw.constant true
+  %zero = llhd.constant_time <0fs, 0d>
+  %signal = llhd.sig %false : <i1>
+  llhd.drv %signal, %true after %zero if %en : i1
+}
+
+// CHECK-LABEL: arc.model @LLHDSignalProbeOldValue
+// CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i42>
+// CHECK: %[[Q:.*]] = arc.alloc_state %arg0 {name = "q"} : (!arc.storage) -> !arc.state<i42>
+// CHECK: %[[OLD:.*]] = arc.state_read %[[SIGNAL]] : <i42>
+// CHECK-NEXT: arc.state_write %[[SIGNAL]] = %{{.*}} : <i42>
+// CHECK: scf.if {{.*}} {
+// CHECK:   %{{.*}} = arc.call @IdI42Arc(%[[OLD]]) : (i42) -> i42
+// CHECK:   arc.state_write %[[Q]] = %{{.*}} : <i42>
+hw.module @LLHDSignalProbeOldValue(in %clock: !seq.clock) {
+  %old = hw.constant 0 : i42
+  %new = hw.constant 42 : i42
+  %signal = llhd.sig %old : <i42>
+  llhd.assign %signal, %new : i42
+  %probe = llhd.prb %signal : i42
+  %q = arc.state @IdI42Arc(%probe) clock %clock latency 1 {names = ["q"]} : (i42) -> i42
+}
+
+// A reader appearing before both writers must see the entire assignment chain.
+// CHECK-LABEL: arc.model @LLHDSignalDependencyChain
+// CHECK: %[[A:.*]] = arc.alloc_state %arg0 {name = "a"} : (!arc.storage) -> !arc.state<i8>
+// CHECK: %[[B:.*]] = arc.alloc_state %arg0 {name = "b"} : (!arc.storage) -> !arc.state<i8>
+// CHECK: arc.state_write %[[A]] = %{{.*}} : <i8>
+// CHECK: arc.state_write %[[B]] = %{{.*}} : <i8>
+// CHECK: %[[VALUE:.*]] = arc.state_read %in_value : <i8>
+// CHECK: arc.state_write %[[A]] = %[[VALUE]] : <i8>
+// CHECK: %[[READ_A:.*]] = arc.state_read %[[A]] : <i8>
+// CHECK: arc.state_write %[[B]] = %[[READ_A]] : <i8>
+// CHECK: %[[READ_B:.*]] = arc.state_read %[[B]] : <i8>
+// CHECK: arc.state_write %out_out = %[[READ_B]] : <i8>
+hw.module @LLHDSignalDependencyChain(in %value: i8, out out: i8) {
+  %init = hw.constant 0 : i8
+  %zero = llhd.constant_time <0fs, 0d>
+  %a = llhd.sig %init : <i8>
+  %b = llhd.sig %init : <i8>
+  %read_b = llhd.prb %b : i8
+  %read_a = llhd.prb %a : i8
+  llhd.drv %b, %read_a after %zero : i8
+  llhd.assign %a, %value : i8
+  hw.output %read_b : i8
+}
+
+// Dependencies also include conditional writers, even if their enable is false
+// during a particular evaluation.
+// CHECK-LABEL: arc.model @LLHDSignalConditionalDependency
+// CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i8>
+// CHECK: %[[ENABLE:.*]] = arc.state_read %in_en : <i1>
+// CHECK: scf.if %[[ENABLE]] {
+// CHECK:   arc.state_write %[[SIGNAL]] = %{{.*}} : <i8>
+// CHECK: }
+// CHECK: %[[READ:.*]] = arc.state_read %[[SIGNAL]] : <i8>
+// CHECK: func.call @ConsumeI8(%[[READ]]) : (i8) -> ()
+hw.module @LLHDSignalConditionalDependency(in %value: i8, in %en: i1) {
+  %init = hw.constant 0 : i8
+  %signal = llhd.sig %init : <i8>
+  %read = llhd.prb %signal : i8
+  func.call @ConsumeI8(%read) : (i8) -> ()
+  llhd.assign %signal, %value if %en : i8
+}
+
+func.func private @ConsumeI8(i8)
+
+// Scheduling a probe must also schedule the coroutine supplying the drive.
+// CHECK-LABEL: arc.model @LLHDSignalCoroutineDependency
+// CHECK: %[[SIGNAL:.*]] = arc.alloc_state %arg0{{.*}} : (!arc.storage) -> !arc.state<i42>
+// CHECK: arc.coroutine.call @DummyCoroutine
+// CHECK: arc.state_write %[[SIGNAL]] = %{{.*}} : <i42>
+// CHECK: %[[READ:.*]] = arc.state_read %[[SIGNAL]] : <i42>
+// CHECK: arc.coroutine.call @DummyCoroutine(%{{.*}}, %{{.*}}, %[[READ]])
+hw.module @LLHDSignalCoroutineDependency(in %value: i42) {
+  %init = hw.constant 0 : i42
+  %signal = llhd.sig %init : <i42>
+  %read = llhd.prb %signal : i42
+  %consumer = arc.coroutine.instance @DummyCoroutine(%read) sensitive [true] : (i42) -> i42
+  %producer = arc.coroutine.instance @DummyCoroutine(%value) sensitive [true] : (i42) -> i42
+  llhd.assign %signal, %producer : i42
 }
