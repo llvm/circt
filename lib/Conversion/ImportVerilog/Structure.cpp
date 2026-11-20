@@ -2891,6 +2891,16 @@ struct AsyncConditions {
   Value asyncVal;
 };
 
+/// Per-primitive lowering state and structural information for a sequential
+/// UDP.
+struct SequentialLoweringState {
+  ArrayRef<Value> seqInputVals;
+  const llvm::SmallDenseSet<size_t, 4> &asyncPortIndices;
+  SmallVector<size_t, 4> dataInputIndices;
+  moore::IntType i1Ty;
+  Value qVal;
+};
+
 } // namespace
 
 /// Decode a single UDP level character (`0`, `1`, `x`, `?`, or `b`,
@@ -3389,16 +3399,6 @@ static AsyncConditions buildAsyncConditions(OpBuilder &builder, Location loc,
   }
   return result;
 }
-
-/// Per-primitive lowering state and structural information for a sequential
-/// UDP.
-struct SequentialLoweringState {
-  ArrayRef<Value> seqInputVals;
-  const llvm::SmallDenseSet<size_t, 4> &asyncPortIndices;
-  SmallVector<size_t, 4> dataInputIndices;
-  moore::IntType i1Ty;
-  Value qVal;
-};
 
 /// Detect inputs that are held constant across all synchronous rows (e.g.,
 /// clock enable lines) and build a combined enable term (`syncEn`).
