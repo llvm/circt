@@ -508,6 +508,22 @@ static unsigned findInstanceInNLA(InstanceOp inst, hw::HierPathOp nla) {
   return nlaLen;
 }
 
+/// Return the domain associations of the ports of `inst`, with every domain
+/// port index offset by `offset`.
+static SmallVector<ArrayAttr> getOffsetDomainInfo(InstanceOp inst,
+                                                  unsigned offset) {
+  auto *context = inst.getContext();
+  auto indexType = IntegerType::get(context, 32, IntegerType::Unsigned);
+  SmallVector<ArrayAttr> result;
+  for (auto portDomains : inst.getDomainInfo().getAsRange<ArrayAttr>()) {
+    SmallVector<Attribute> domains;
+    for (auto index : portDomains.getAsRange<IntegerAttr>())
+      domains.push_back(IntegerAttr::get(indexType, index.getUInt() + offset));
+    result.push_back(ArrayAttr::get(context, domains));
+  }
+  return result;
+}
+
 /// Move instances in the extraction worklist upwards in the hierarchy. This
 /// iteratively pushes instances up one level of hierarchy until they have
 /// arrived in the desired container module.
@@ -602,6 +618,21 @@ void ExtractInstancesPass::extractInstances() {
     parent.insertPorts(newPorts);
     anythingChanged = true;
 
+    // The added ports mirror the instance's ports.
+    // They carry the instance's domain associations, offset to the added ports.
+    // The parent's instances must carry the same domain info as the parent.
+    ArrayAttr parentDomainInfo;
+    auto addedDomainInfo = getOffsetDomainInfo(inst, numParentPorts);
+    if (llvm::any_of(addedDomainInfo,
+                     [](ArrayAttr domains) { return !domains.empty(); })) {
+      SmallVector<Attribute> domainInfo;
+      for (unsigned portIdx = 0; portIdx < numParentPorts; ++portIdx)
+        domainInfo.push_back(parent.getDomainInfoAttrForPort(portIdx));
+      llvm::append_range(domainInfo, addedDomainInfo);
+      parentDomainInfo = ArrayAttr::get(&getContext(), domainInfo);
+      parent.setDomainInfoAttr(parentDomainInfo);
+    }
+
     // Replace all uses of the existing instance ports with the newly-created
     // module ports.
     for (unsigned portIdx = 0; portIdx < numInstPorts; ++portIdx) {
@@ -653,6 +684,8 @@ void ExtractInstancesPass::extractInstances() {
       LLVM_DEBUG(llvm::dbgs() << "- Updating " << oldParentInst << "\n");
       auto newParentInst = cast<InstanceOp>(
           oldParentInst.cloneWithInsertedPortsAndReplaceUses(newPorts));
+      if (parentDomainInfo)
+        newParentInst.setDomainInfoAttr(parentDomainInfo);
       if (newParentInst.getInnerSymAttr())
         innerRefToInstances[getInnerRefTo(newParentInst)] = newParentInst;
 
@@ -679,7 +712,7 @@ void ExtractInstancesPass::extractInstances() {
         auto src = newParentInst.getResult(numParentPorts + portIdx);
         if (newPorts[portIdx].second.direction == Direction::In)
           std::swap(src, dst);
-        MatchingConnectOp::create(builder, dst, src);
+        emitConnect(builder, dst, src);
       }
 
       // Move the wiring prefix bookkeeping from the old to the new instance.
@@ -943,6 +976,7 @@ void ExtractInstancesPass::groupInstances() {
       // Determine the ports for the wrapper.
       StringRef prefix(instPrefixNamesPair[inst].first);
       unsigned portNum = inst.getNumResults();
+      auto domainInfo = getOffsetDomainInfo(inst, ports.size());
       for (unsigned portIdx = 0; portIdx < portNum; ++portIdx) {
         auto name = inst.getPortName(portIdx);
         auto nameAttr = builder.getStringAttr(
@@ -951,6 +985,7 @@ void ExtractInstancesPass::groupInstances() {
                       type_cast<FIRRTLType>(inst.getResult(portIdx).getType()),
                       inst.getPortDirection(portIdx)};
         port.loc = inst.getResult(portIdx).getLoc();
+        port.domains = domainInfo[portIdx];
         ports.push_back(port);
       }
 
@@ -1035,7 +1070,7 @@ void ExtractInstancesPass::groupInstances() {
         Value src = wrapper.getArgument(portIdx);
         if (ports[portIdx].direction == Direction::Out)
           std::swap(dst, src);
-        MatchingConnectOp::create(builder, result.getLoc(), dst, src);
+        emitConnect(builder, result.getLoc(), dst, src);
         ++portIdx;
       }
     }
