@@ -208,6 +208,7 @@ private:
   EmptyArray emptyArray;
   ClassOut classOut;
 };
+} // namespace
 
 /// Replace the value with a temporary 0-1 unrealized conversion.  Return the
 /// single conversion operation.  This is used to "stub out" the users of a
@@ -258,6 +259,40 @@ static UnrealizedConversionCastOp splice(UnrealizedConversionCastOp temp,
   return splice;
 }
 
+/// Route reads that cannot be lowered as-is through wires and read that.
+///
+///   domain.define %sink, %src         %w = wire
+///   %x = domain.subfield %sink   ->   domain.define %w, %src
+///                                     %x = domain.subfield %w
+///                                     domain.define %sink, %w
+///
+/// Associations are not reads and stay on the sink.
+static void routeReadsThroughWire(Value sink, const Twine &name) {
+  auto isAssociation = [](OpOperand &use) {
+    return isa<UnsafeDomainCastOp, WireOp>(use.getOwner());
+  };
+  auto isDriver = [](OpOperand &use) {
+    auto defineOp = dyn_cast<DomainDefineOp>(use.getOwner());
+    return defineOp && use == defineOp.getDestMutable();
+  };
+  auto isRead = [&](OpOperand &use) {
+    return !isAssociation(use) && !isDriver(use);
+  };
+  // Nothing to do if all uses are its driver and associations.
+  if (llvm::none_of(sink.getUses(), isRead))
+    return;
+
+  // Domain has reads! Route all non-association uses through a wire.
+  ImplicitLocOpBuilder builder(sink.getLoc(), sink.getContext());
+  builder.setInsertionPointAfterValue(sink);
+  auto wire = WireOp::create(builder, sink.getType(), name.str());
+  sink.replaceUsesWithIf(wire.getResult(),
+                         [&](OpOperand &use) { return !isAssociation(use); });
+  builder.setInsertionPointToEnd(sink.getParentBlock());
+  DomainDefineOp::create(builder, sink, wire.getResult());
+}
+
+namespace {
 /// Class that is used to lower a module that may contain domain ports.  This is
 /// intended to be used by calling `lowerModule()` to lower the module.  This
 /// builds up state in the class which is then used when calling
@@ -376,6 +411,8 @@ LogicalResult LowerModule::lowerModule() {
         instanceGraph.lookup(op)->addInstance(object,
                                               instanceGraph.lookup(classOut));
         indexToDomain[i].op = object;
+        if (port.direction == Direction::Out)
+          routeReadsThroughWire(body->getArgument(i), port.getName());
         indexToDomain[i].temp = stubOut(body->getArgument(i));
 
         // Save the insertion point for the next go-around.  This allows the
@@ -773,8 +810,14 @@ LogicalResult LowerModule::lowerInstances() {
     LLVM_DEBUG(llvm::dbgs()
                << "      - " << instanceOp.getInstanceName() << "\n");
 
-    for (auto i : eraseVector.set_bits())
-      indexToDomain[i].temp = stubOut(instanceOp.getResult(i));
+    for (auto i : eraseVector.set_bits()) {
+      auto &info = indexToDomain[i];
+      if (info.inputPort)
+        routeReadsThroughWire(instanceOp.getResult(i),
+                              instanceOp.getInstanceName() + "_" +
+                                  instanceOp.getPortName(i));
+      info.temp = stubOut(instanceOp.getResult(i));
+    }
 
     auto erased = instanceOp.cloneWithErasedPortsAndReplaceUses(eraseVector);
     auto inserted = erased.cloneWithInsertedPortsAndReplaceUses(newPorts);
