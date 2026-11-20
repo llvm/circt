@@ -13,7 +13,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LatencyRetiming.cpp
   LowerArcsToFuncs.cpp
   LowerArrays.cpp
-  LowerClocksToFuncs.cpp
+  ExtractInitialAndFinalFunctions.cpp
   LowerCoroutines.cpp
   LowerLUT.cpp
   LowerProcesses.cpp
