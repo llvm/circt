@@ -342,9 +342,9 @@ private:
   FailureOr<EvaluatorValuePtr>
   evaluateElaboratedObject(ElaboratedObjectOp op, ActualParameters actualParams,
                            Location loc);
-  FailureOr<EvaluatorValuePtr> evaluateListCreate(ListCreateOp op,
-                                                  ActualParameters actualParams,
-                                                  Location loc);
+  FailureOr<EvaluatorValuePtr>
+  evaluateCollectionCreate(Operation *op, ActualParameters actualParams,
+                           Location loc);
   FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);

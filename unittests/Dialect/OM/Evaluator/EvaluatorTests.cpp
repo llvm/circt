@@ -102,6 +102,15 @@ getListElements(const evaluator::EvaluatorValuePtr &value) {
 
 class EvaluatorTests : public ::testing::Test {
 protected:
+  static SmallVector<int64_t>
+  getRegistryIntegers(const EvaluatorValuePtr &value) {
+    SmallVector<int64_t> values;
+    for (const auto &element : getListElements(value))
+      values.push_back(getInteger(element));
+    llvm::sort(values);
+    return values;
+  }
+
   OwningOpRef<ModuleOp> parseModule(StringRef moduleText) {
     return test.parseModule(moduleText);
   }
@@ -934,6 +943,79 @@ om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
 
   ASSERT_TRUE(succeeded(result));
   ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
+}
+
+TEST_F(EvaluatorTests, RegistryFieldInObjectInput) {
+  auto mod = parseModule(R"MLIR(
+    !items = !om.registry<!om.integer>
+    om.class @Holder(%items: !items) -> (items: !items) {
+      om.class.fields %items : !items
+    }
+    om.class @Create() -> (holder: !om.class.type<@Holder>) {
+      %one = om.constant #om.integer<1 : si8> : !om.integer
+      %items = om.registry_create %one : !items
+      %holder = om.object @Holder(%items) : (!items) -> !om.class.type<@Holder>
+      om.class.fields %holder : !om.class.type<@Holder>
+    }
+    om.class @Use(%holder: !om.class.type<@Holder>) -> (items: !items) {
+      %items = om.object.field %holder["items"] : (!om.class.type<@Holder>) -> !items
+      %two = om.constant #om.integer<2 : si8> : !om.integer
+      om.registry_insert %items, %two : !items
+      om.class.fields %items : !items
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  auto created = evaluator.instantiate(StringAttr::get(&context, "Create"), {});
+  ASSERT_TRUE(succeeded(created));
+  auto holder = getField(*created, "holder");
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {holder});
+  ASSERT_TRUE(succeeded(result));
+  EXPECT_EQ(getRegistryIntegers(getField(*result, "items")),
+            (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getRegistryIntegers(getField(holder, "items")),
+            (SmallVector<int64_t>{1}));
+}
+
+TEST_F(EvaluatorTests, RegistryInputs) {
+  auto mod = parseModule(R"MLIR(
+    !items = !om.registry<!om.integer>
+    !list = !om.list<!om.integer>
+    om.class @Use(%list: !list, %items: !items) -> (items: !items, list: !list) {
+      %one = om.constant #om.integer<1 : si8> : !om.integer
+      om.registry_insert %items, %one : !items
+      om.class.fields %items, %list : !items, !list
+    }
+  )MLIR");
+  ASSERT_TRUE(mod);
+  Evaluator evaluator(*mod);
+  // The same list may be passed both as a registry and as a list.
+  auto input = std::make_shared<evaluator::ListValue>(
+      ListType::get(OMIntegerType::get(&context)),
+      SmallVector<EvaluatorValuePtr>{makeIntegerValue(&context, 2)},
+      UnknownLoc::get(&context));
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {input, input});
+  ASSERT_TRUE(succeeded(result));
+  EXPECT_EQ(getRegistryIntegers(getField(*result, "items")),
+            (SmallVector<int64_t>{1, 2}));
+  EXPECT_EQ(getRegistryIntegers(getField(*result, "list")),
+            (SmallVector<int64_t>{2}));
+  EXPECT_EQ(getRegistryIntegers(input), (SmallVector<int64_t>{2}));
+
+  // Unknown registries are accepted as inputs.
+  auto listType = ListType::get(OMIntegerType::get(&context));
+  auto unknown = evaluator::AttributeValue::get(
+      RegistryType::get(&context, OMIntegerType::get(&context)),
+      UnknownLoc::get(&context));
+  EXPECT_EQ(unknown->getType(), listType);
+  unknown->markUnknown();
+  result =
+      evaluator.instantiate(StringAttr::get(&context, "Use"), {input, unknown});
+  ASSERT_TRUE(succeeded(result));
+  EXPECT_TRUE(getField(*result, "items")->isUnknown());
+  EXPECT_EQ(getField(*result, "items")->getType(), listType);
 }
 
 TEST_F(EvaluatorTests, ListConcat) {
