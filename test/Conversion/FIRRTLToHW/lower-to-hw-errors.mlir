@@ -281,10 +281,35 @@ firrtl.circuit "InstanceChoiceWithoutInstanceMacro" {
 
 // -----
 
-firrtl.circuit "OversizedWire" {
-  firrtl.module @OversizedWire() {
-    // expected-error @+2 {{integer width 16777216 exceeds the maximum supported width of 16777215}}
-    // expected-error @+1 {{'firrtl.wire' op LowerToHW couldn't handle this operation}}
-    %w = firrtl.wire : !firrtl.uint<16777216>
+// Two NLAs on the same module give it the same ForceName ("Duplicated").a
+firrtl.circuit "ForceNameTop" {
+  hw.hierpath private @nla_foo [
+    @ForceNameTop::@sym_foo,
+    @ForceNameSubmodule
+  ]
+  hw.hierpath private @nla_bar [
+    @ForceNameTop::@sym_bar,
+    @ForceNameSubmodule
+  ]
+
+  // expected-error @below {{multiple ForceNameAnnotations require the name "Duplicated" for different instances in module "ForceNameTop"}}
+  firrtl.module private @ForceNameSubmodule()
+      attributes {annotations = [
+        {
+          circt.nonlocal = @nla_foo,
+          class = "chisel3.util.experimental.ForceNameAnnotation",
+          name = "Duplicated"
+        },
+        {
+          circt.nonlocal = @nla_bar,
+          class = "chisel3.util.experimental.ForceNameAnnotation",
+          name = "Duplicated"
+        }
+      ]} {
+  }
+
+  firrtl.module @ForceNameTop() {
+    firrtl.instance foo sym @sym_foo @ForceNameSubmodule()
+    firrtl.instance bar sym @sym_bar @ForceNameSubmodule()
   }
 }

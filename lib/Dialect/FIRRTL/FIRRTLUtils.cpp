@@ -19,7 +19,9 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Debug.h"
 
+#define DEBUG_TYPE "bug-tracking"
 using namespace circt;
 using namespace firrtl;
 
