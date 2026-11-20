@@ -127,3 +127,36 @@ hw.module @logical_ops(in %a : i8, in %b : i9, in %c : i10, in %d : i16, out res
   %7 = comb.add %5, %6 : i18
   hw.output %7 : i18
 }
+
+// Extracting bits [14:8] from an unsigned 8x8 -> 16 product (umax = 0xFE01)
+// drops bit 15, which differs between umin (0) and umax (1). The extracted
+// 7-bit slice can therefore take the all-ones value (for example,
+// 0x80 * 0xFF = 0x7F80 gives 0x7F), so the i8 rounding adder must not be
+// narrowed to i7.
+// CHECK-LABEL: @extract_high_bit_rollover
+hw.module @extract_high_bit_rollover(in %a : i8, in %b : i8, in %round_up : i1, out carry : i1) {
+  // CHECK-NEXT: %c0_i8 = hw.constant 0 : i8
+  // CHECK-NEXT: %false = hw.constant false
+  // CHECK-NEXT: %c0_i7 = hw.constant 0 : i7
+  // CHECK-NEXT: %[[A_EXT:.+]] = comb.concat %c0_i8, %a : i8, i8
+  // CHECK-NEXT: %[[B_EXT:.+]] = comb.concat %c0_i8, %b : i8, i8
+  // CHECK-NEXT: %[[PROD:.+]] = comb.mul %[[A_EXT]], %[[B_EXT]] : i16
+  // CHECK-NEXT: %[[M_PRE:.+]] = comb.extract %[[PROD]] from 8 : (i16) -> i7
+  // CHECK-NEXT: %[[M_EXT:.+]] = comb.concat %false, %[[M_PRE]] : i1, i7
+  // CHECK-NEXT: %[[RU_EXT:.+]] = comb.concat %c0_i7, %round_up : i7, i1
+  // CHECK-NEXT: %[[SUM:.+]] = comb.add %[[M_EXT]], %[[RU_EXT]] : i8
+  // CHECK-NEXT: %[[CARRY:.+]] = comb.extract %[[SUM]] from 7 : (i8) -> i1
+  // CHECK-NEXT: hw.output %[[CARRY]] : i1
+  %c0_i8 = hw.constant 0 : i8
+  %false = hw.constant false
+  %c0_i7 = hw.constant 0 : i7
+  %a16 = comb.concat %c0_i8, %a : i8, i8
+  %b16 = comb.concat %c0_i8, %b : i8, i8
+  %prod = comb.mul %a16, %b16 : i16
+  %m_pre = comb.extract %prod from 8 : (i16) -> i7
+  %m_ext = comb.concat %false, %m_pre : i1, i7
+  %ru_ext = comb.concat %c0_i7, %round_up : i7, i1
+  %m_rounded = comb.add %m_ext, %ru_ext : i8
+  %carry = comb.extract %m_rounded from 7 : (i8) -> i1
+  hw.output %carry : i1
+}
