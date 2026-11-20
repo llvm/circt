@@ -330,6 +330,11 @@ Like `seq.hlmem` there are no guarantees that all possible fifo configuration
 are able to be lowered. Available lowering passes will pattern match on the
 requested fifo configuration and attempt to provide a legal lowering.
 
+With a read latency above one, the default lowering (`--lower-seq-fifo`) reads
+the memory in the cycle the entry is popped, and the rest of the latency is
+registers on the read data. So a popped slot can be reused at once, and on an
+FPGA the second register can be the RAM block's output register.
+
 ## State Initialization
 
 While ASICs might not have explicit initial values, they are crucial for simulation
