@@ -40,8 +40,8 @@ hw.module @Consumer(
     in %otherWord: !hw.typealias<@other::@word, i16>,
     out result: !hw.typealias<@types::@word, i8>) {
   // CHECK: types_0::stateAlias state;
-  %state = sv.reg : !hw.inout<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>
-  %value = sv.read_inout %state : !hw.inout<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>
+  %state = sv.var : !sv.var<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>
+  %value = sv.read_inout %state : !sv.var<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>
   %idle = hw.enum.constant Idle : !hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>
   %busy = hw.enum.constant Busy : !hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>
   // CHECK: case (state)
@@ -51,8 +51,8 @@ hw.module @Consumer(
   // CHECK-NEXT: state <= types_0::State_Idle_0;
   sv.always posedge %clock {
     sv.case case %value : !hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>
-      case Idle: { sv.passign %state, %busy : !hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>> }
-      default: { sv.passign %state, %idle : !hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>> }
+      case Idle: { sv.passign %state, %busy : !sv.var<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>, !hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>> }
+      default: { sv.passign %state, %idle : !sv.var<!hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>>>, !hw.typealias<@types::@stateAlias, !hw.typealias<@types::@state, !hw.enum<Idle, Busy>>> }
   }
   hw.output %word : !hw.typealias<@types::@word, i8>
 }

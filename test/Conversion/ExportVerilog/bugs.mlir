@@ -3,11 +3,11 @@
 // Test bug in function type conversion
 // CHECK-LABEL: InOutWire
 module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
-  hw.module.extern @Bar(in %a: !hw.inout<i1>, out b: i1)
+  hw.module.extern @Bar(in %a: !sv.net<i1>, out b: i1)
   hw.module private @InOutWire() {
 // CHECK: wire a;
-    %a = sv.wire : !hw.inout<i1>
+    %a = sv.wire : !sv.net<i1>
 // CHECK: .a (a),
-    %bar.b = hw.instance "bar" @Bar(a: %a: !hw.inout<i1>) -> (b: i1)
+    %bar.b = hw.instance "bar" @Bar(a: %a: !sv.net<i1>) -> (b: i1)
   }
 }

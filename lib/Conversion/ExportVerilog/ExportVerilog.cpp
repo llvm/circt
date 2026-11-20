@@ -178,7 +178,7 @@ static bool isDuplicatableExpression(Operation *op) {
     if (auto read = dyn_cast<ReadInOutOp>(indexOp)) {
       auto *readSrc = read.getInput().getDefiningOp();
       // A port or wire is ok to duplicate reads.
-      return !readSrc || isa<sv::WireOp, LogicOp>(readSrc);
+      return !readSrc || isa<sv::WireOp, LogicOp, sv::VarOp>(readSrc);
     }
 
     return false;
@@ -376,7 +376,7 @@ static bool hasLeadingUnpackedType(Type type) {
 /// (struct, union, enum or typedef), so that no "logic" prefix is allowed.
 static bool hasStructType(Type type) {
   return TypeSwitch<Type, bool>(type)
-      .Case<InOutType, VarType, UnpackedArrayType, ArrayType>(
+      .Case<InOutType, NetType, VarType, UnpackedArrayType, ArrayType>(
           [](auto parentType) {
             return hasStructType(parentType.getElementType());
           })
@@ -834,7 +834,8 @@ static bool isExpressionUnableToInline(Operation *op,
       auto read = dyn_cast<ReadInOutOp>(op);
       if (!read)
         return true;
-      if (!isa_and_nonnull<sv::WireOp, RegOp>(read.getInput().getDefiningOp()))
+      if (!isa_and_nonnull<sv::WireOp, RegOp, sv::VarOp>(
+              read.getInput().getDefiningOp()))
         return true;
     }
   }
@@ -1407,7 +1408,7 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
 
   } else if (auto *op = expr.getDefiningOp()) {
     // Uses of a wire, register or logic can be done inline.
-    if (isa<sv::WireOp, RegOp, LogicOp>(op)) {
+    if (isa<sv::WireOp, RegOp, LogicOp, sv::VarOp>(op)) {
       StringRef name = getSymOpName(op);
       result = StringAttr::get(expr.getContext(), name);
 
@@ -6216,13 +6217,13 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
 
       // Reject struct_field_inout/array_index_inout for now because it's
       // necessary to consider aliasing inout operations.
-      if (!isa<RegOp, LogicOp>(defOp))
+      if (!isa<RegOp, LogicOp, sv::VarOp>(defOp))
         return false;
 
       // It's safe to inline if all users are read op, passign or assign.
       // If the op is a logic op whose single assignment is inlined into
       // declaration, we can inline the read.
-      if (isa<LogicOp>(defOp) &&
+      if (isa<LogicOp, sv::VarOp>(defOp) &&
           stmtEmitter.emitter.expressionsEmittedIntoDecl.count(defOp))
         continue;
 
@@ -6424,7 +6425,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining a blocking assignment to logic op declaration.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (!state.options.disallowDeclAssignments && isa<LogicOp>(op) &&
+    if (!state.options.disallowDeclAssignments && isa<LogicOp, sv::VarOp>(op) &&
         op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignment which might be possible to inline.

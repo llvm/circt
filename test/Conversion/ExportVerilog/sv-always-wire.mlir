@@ -5,12 +5,12 @@
 hw.module @AlwaysSpill(in %port: i1) {
   %false = hw.constant false
   %true = hw.constant true
-  %awire = sv.wire : !hw.inout<i1>
+  %awire = sv.wire : !sv.net<i1>
 
   // CHECK: wire [[TMP1:.+]] = 1'h0;
   // CHECK: wire [[TMP2:.+]] = 1'h1;
   // CHECK: wire{{ *}}awire;
-  %awire2 = sv.read_inout %awire : !hw.inout<i1>
+  %awire2 = sv.read_inout %awire : !sv.net<i1>
 
   // Existing simple names should not cause additional spill.
   // CHECK: always @(posedge port)
