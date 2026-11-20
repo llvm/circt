@@ -80,9 +80,23 @@ void registerHGLDDTranslation() {
       registerDialects);
 }
 
+void registerUHDITranslation() {
+  static llvm::cl::opt<unsigned> indent(
+      "uhdi-indent", llvm::cl::desc("JSON indent of UHDI; 0 writes one line"),
+      llvm::cl::init(2));
+
+  static TranslateFromMLIRRegistration reg(
+      "emit-uhdi", "emit UHDI debug information",
+      [](ModuleOp op, raw_ostream &output) {
+        return emitUHDI(op, output, indent);
+      },
+      registerDialects);
+}
+
 void registerTranslations() {
   registerDumpTranslation();
   registerHGLDDTranslation();
+  registerUHDITranslation();
 }
 
 } // namespace debug

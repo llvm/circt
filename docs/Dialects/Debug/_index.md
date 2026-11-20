@@ -3,6 +3,8 @@
 This dialect provides operations and types to interleave debug information (DI)
 with other parts of the IR.
 
+The [UHDI rationale](RationaleUHDI.md) covers how the debug info is written out.
+
 [TOC]
 
 
@@ -197,6 +199,11 @@ changed easily, either by collapsing them into one aggregate type, or by more
 precisely listing field/element types and array dimensions if the need arises.
 
 [include "Dialects/DebugTypes.md"]
+
+
+## Attributes
+
+[include "Dialects/DebugAttributes.md"]
 
 
 ## Operations

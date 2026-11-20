@@ -15,7 +15,11 @@ using namespace debug;
 void DebugDialect::initialize() {
   registerOps();
   registerTypes();
+  registerAttributes();
 }
 
 // Dialect implementation generated from `DebugDialect.td`
 #include "circt/Dialect/Debug/DebugDialect.cpp.inc"
+
+// Enum definitions generated from `DebugOps.td`
+#include "circt/Dialect/Debug/DebugEnums.cpp.inc"
