@@ -332,3 +332,23 @@ hw.module @OptsClient(in %clk: !seq.clock) {
   %b = esi.service.req <@HostCommsOpts::@Recv> (#esi.appid<"opt_client">) opts {engine = "myMod.MyEngine", flag = true, priority = 5 : i32} : !optsBundle
   esi.bundle.unpack from %b : !optsBundle
 }
+
+// New inputs are added after the last input and the other ports are left in place.
+// The module retains its original interleaved ordering.
+
+// CONN-LABEL: hw.module @InterleavedTop(in %clk : !seq.clock, in %en : i1, out o : i8) {
+// CONN:         [[REQ:%.+]] = esi.service.impl_req #esi.appid<"ilv"> svc @HostComms impl as "interleavedImpl"(%clk)
+// CONN:         hw.instance "leaf" @InterleavedLeaf(clk: %clk: !seq.clock, en: %en: i1, leaf_recv: [[REQ]]: !esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>) -> (o: i8)
+hw.module @InterleavedTop(in %clk: !seq.clock, in %en: i1, out o: i8) {
+  esi.service.instance #esi.appid<"ilv"> svc @HostComms impl as "interleavedImpl" (%clk) : (!seq.clock) -> ()
+  %o = hw.instance "leaf" @InterleavedLeaf(clk: %clk: !seq.clock, en: %en: i1) -> (o: i8)
+  hw.output %o : i8
+}
+
+// CONN-LABEL: hw.module @InterleavedLeaf(in %clk : !seq.clock, out o : i8, in %en : i1, in %leaf_recv : !esi.bundle<[!esi.channel<i8, ValidReady> to "recv"]>) {
+hw.module @InterleavedLeaf(in %clk: !seq.clock, out o: i8, in %en: i1) {
+  %b = esi.service.req <@HostComms::@Recv> (#esi.appid<"leaf_recv">) : !recvI8
+  %chan = esi.bundle.unpack from %b : !recvI8
+  %data, %valid = esi.unwrap.vr %chan, %en : !esi.channel<i8, ValidReady>
+  hw.output %data : i8
+}
