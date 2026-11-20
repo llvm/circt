@@ -252,6 +252,12 @@ with Context() as ctx:
   assert isinstance(list_type, om.ListType)
   assert isinstance(list_type.element_type, om.AnyType)
 
+  # Test OptionType construction and parsing.
+  option_type = Type.parse("!om.option<!om.any>")
+  assert isinstance(option_type, om.OptionType)
+  assert isinstance(option_type.element_type, om.AnyType)
+  assert option_type == om.OptionType.get(any_type)
+
   # Test partial evaluation with multiple inputs and outputs
   module = Module.parse("""
   module {

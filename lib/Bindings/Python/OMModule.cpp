@@ -508,6 +508,15 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
   mlir_type_subclass(m, "ListType", omTypeIsAListType, omListTypeGetTypeID)
       .def_property_readonly("element_type", omListTypeGetElementType);
 
+  // Add the OptionType class definition.
+  mlir_type_subclass(m, "OptionType", omTypeIsAOptionType,
+                     omOptionTypeGetTypeID)
+      .def_classmethod("get",
+                       [](nb::object cls, MlirType elementType) {
+                         return cls(omOptionTypeGet(elementType));
+                       })
+      .def_property_readonly("element_type", omOptionTypeGetElementType);
+
   // Add the PathType class definition.
   mlir_type_subclass(m, "PathType", omTypeIsAFrozenPathType,
                      omFrozenPathTypeGetTypeID);

@@ -61,6 +61,18 @@ MLIR_CAPI_EXPORTED MlirTypeID omListTypeGetTypeID(void);
 // Return a element type of a ListType.
 MLIR_CAPI_EXPORTED MlirType omListTypeGetElementType(MlirType type);
 
+/// Is the Type an OptionType.
+MLIR_CAPI_EXPORTED bool omTypeIsAOptionType(MlirType type);
+
+/// Get the TypeID for an OptionType.
+MLIR_CAPI_EXPORTED MlirTypeID omOptionTypeGetTypeID(void);
+
+/// Get the element type of an OptionType.
+MLIR_CAPI_EXPORTED MlirType omOptionTypeGetElementType(MlirType type);
+
+/// Get an OptionType.
+MLIR_CAPI_EXPORTED MlirType omOptionTypeGet(MlirType elementType);
+
 /// Is the Type a StringType.
 MLIR_CAPI_EXPORTED bool omTypeIsAStringType(MlirType type);
 

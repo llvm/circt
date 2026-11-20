@@ -77,6 +77,24 @@ MlirType omListTypeGetElementType(MlirType type) {
   return wrap(cast<ListType>(unwrap(type)).getElementType());
 }
 
+/// Is the Type an OptionType.
+bool omTypeIsAOptionType(MlirType type) {
+  return isa<OptionType>(unwrap(type));
+}
+
+/// Get the TypeID for an OptionType.
+MlirTypeID omOptionTypeGetTypeID(void) { return wrap(OptionType::getTypeID()); }
+
+/// Get the element type of an OptionType.
+MlirType omOptionTypeGetElementType(MlirType type) {
+  return wrap(cast<OptionType>(unwrap(type)).getElementType());
+}
+
+/// Get an OptionType.
+MlirType omOptionTypeGet(MlirType elementType) {
+  return wrap(OptionType::get(unwrap(elementType)));
+}
+
 /// Is the Type a StringType.
 bool omTypeIsAStringType(MlirType type) {
   return isa<StringType>(unwrap(type));

@@ -34,6 +34,27 @@ void testTypes(MlirContext ctx) {
   // CHECK: StringType TypeID matches: 1
   fprintf(stderr, "StringType TypeID matches: %d\n",
           mlirTypeIDEqual(stringTypeID, actualStringTypeID));
+
+  // Test OptionType creation and type checking.
+  MlirType optionType = omOptionTypeGet(stringType);
+
+  // CHECK: option type is OptionType: 1
+  fprintf(stderr, "option type is OptionType: %d\n",
+          omTypeIsAOptionType(optionType));
+
+  // CHECK: !om.option<!om.string>
+  mlirTypeDump(optionType);
+
+  MlirTypeID optionTypeID = omOptionTypeGetTypeID();
+  MlirTypeID actualOptionTypeID = mlirTypeGetTypeID(optionType);
+
+  // CHECK: OptionType TypeID matches: 1
+  fprintf(stderr, "OptionType TypeID matches: %d\n",
+          mlirTypeIDEqual(optionTypeID, actualOptionTypeID));
+
+  // CHECK: OptionType element type matches: 1
+  fprintf(stderr, "OptionType element type matches: %d\n",
+          mlirTypeEqual(omOptionTypeGetElementType(optionType), stringType));
 }
 
 void testListAttr(MlirContext ctx) {
