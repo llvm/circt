@@ -182,8 +182,8 @@ void computeSOPDelays(const SOPForm &sop, ArrayRef<DelayType> inputArrivalTimes,
 struct SOPBalancingPattern : public CutRewritePattern {
   SOPBalancingPattern(MLIRContext *context) : CutRewritePattern(context) {}
 
-  std::optional<MatchResult> match(CutEnumerator &enumerator,
-                                   const Cut &cut) const override {
+  std::optional<MatchResult> match(CutEnumerator &enumerator, const Cut &cut,
+                                   const MatchBinding &binding) const override {
     const auto &network = enumerator.getLogicNetwork();
     if (cut.isTrivialCut() || cut.getOutputSize(network) != 1)
       return std::nullopt;
@@ -215,7 +215,8 @@ struct SOPBalancingPattern : public CutRewritePattern {
   }
 
   FailureOr<Operation *> rewrite(OpBuilder &builder, CutEnumerator &enumerator,
-                                 const Cut &cut) const override {
+                                 const Cut &cut,
+                                 const MatchedPattern &matched) const override {
     const auto &network = enumerator.getLogicNetwork();
     const auto &tt = *cut.getTruthTable();
     const SOPForm &sop = sopCache.getOrCompute(tt.table, tt.numInputs);
