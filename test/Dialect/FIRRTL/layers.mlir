@@ -67,6 +67,40 @@ firrtl.circuit "Test" {
   }
 
   //===--------------------------------------------------------------------===//
+  // Attach Tests
+  //===--------------------------------------------------------------------===//
+
+  firrtl.extmodule @AnalogPort(in a: !firrtl.analog<1>)
+
+  firrtl.module @AttachTests(in %a: !firrtl.analog<1>, in %c: !firrtl.uint<1>, in %i: !firrtl.uint<1>) {
+    %b_a = firrtl.instance b @AnalogPort(in a: !firrtl.analog<1>)
+    firrtl.attach %a, %b_a : !firrtl.analog<1>, !firrtl.analog<1>
+    firrtl.layerblock @A {
+      %c_a = firrtl.instance c @AnalogPort(in a: !firrtl.analog<1>)
+      %w = firrtl.wire : !firrtl.analog<1>
+      %v = firrtl.wire : !firrtl.vector<analog<1>, 2>
+      %x = firrtl.wire : !firrtl.bundle<x: analog<1>>
+      %v_0 = firrtl.subindex %v[0] : !firrtl.vector<analog<1>, 2>
+      %v_i = firrtl.subaccess %v[%i] : !firrtl.vector<analog<1>, 2>, !firrtl.uint<1>
+      %x_x = firrtl.subfield %x[x] : !firrtl.bundle<x: analog<1>>
+      firrtl.attach %c_a, %w, %v_0, %x_x : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
+      firrtl.when %c : !firrtl.uint<1> {
+        firrtl.attach %w, %v_i : !firrtl.analog<1>, !firrtl.analog<1>
+      }
+      firrtl.layerblock @A::@B {
+        %d_a = firrtl.instance d @AnalogPort(in a: !firrtl.analog<1>)
+        %y = firrtl.wire : !firrtl.analog<1>
+        firrtl.attach %d_a, %y : !firrtl.analog<1>, !firrtl.analog<1>
+      }
+    }
+  }
+
+  firrtl.module @AttachUnderEnabledLayer(in %a: !firrtl.analog<1>) attributes {layers = [@A]} {
+    %b_a = firrtl.instance b @AnalogPort(in a: !firrtl.analog<1>)
+    firrtl.attach %a, %b_a : !firrtl.analog<1>, !firrtl.analog<1>
+  }
+
+  //===--------------------------------------------------------------------===//
   // Basic Casting Tests
   //===--------------------------------------------------------------------===//
 

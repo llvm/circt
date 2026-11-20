@@ -7163,6 +7163,16 @@ LogicalResult LayerBlockOp::verify() {
 
   // Verify the body of the region.
   FieldRefCache fieldRefCache;
+
+  // Find the underlying declaration containing a value.
+  auto getDeclaration = [&](Value value) {
+    // Alternate chasing static and dynamic indexing operation kinds.
+    auto ref = fieldRefCache.getFieldRefFromValue(value);
+    while (auto subaccess = ref.getValue().getDefiningOp<SubaccessOp>())
+      ref = fieldRefCache.getFieldRefFromValue(subaccess.getInput());
+    return ref;
+  };
+
   auto result = getBody(0)->walk<mlir::WalkOrder::PreOrder>(
       [&](Operation *op) -> WalkResult {
         // Skip nested layer blocks.  Those will be verified separately.
@@ -7207,14 +7217,7 @@ LogicalResult LayerBlockOp::verify() {
             if (!type.isPassive())
               return WalkResult::advance();
 
-          // Find the underlying declaration containing the destination.
-          // Alternate chasing static and dynamic indexing operation kinds.
-          auto dest =
-              fieldRefCache.getFieldRefFromValue(connect.getDest()).getValue();
-          while (auto subaccess = dest.getDefiningOp<SubaccessOp>())
-            dest = fieldRefCache.getFieldRefFromValue(subaccess.getInput())
-                       .getValue();
-
+          auto dest = getDeclaration(connect.getDest()).getValue();
           if (isAncestorOfValueOwner(getOperation(), dest))
             return WalkResult::advance();
 
@@ -7225,6 +7228,28 @@ LogicalResult LayerBlockOp::verify() {
           diag.attachNote(getLoc()) << "enclosing layer block is defined here";
           diag.attachNote(dest.getLoc()) << "destination is defined here";
           return WalkResult::interrupt();
+        }
+
+        // An attach drives each operand, so each must be declared within.
+        if (auto attach = dyn_cast<AttachOp>(op)) {
+          for (auto operand : attach.getAttached()) {
+            auto decl = getDeclaration(operand);
+            if (isAncestorOfValueOwner(getOperation(), decl.getValue()))
+              continue;
+
+            auto diag = attach.emitOpError() << "attaches to ";
+            auto [name, rootKnown] = getFieldName(decl);
+            if (rootKnown)
+              diag << "\"" << name << "\"";
+            else
+              diag << "an operand";
+            diag << " which is defined outside its enclosing layer block"
+                 << " for layer " << getLayerName();
+            diag.attachNote(getLoc())
+                << "enclosing layer block is defined here";
+            diag.attachNote(decl.getLoc()) << "operand is defined here";
+            return WalkResult::interrupt();
+          }
         }
 
         return WalkResult::advance();

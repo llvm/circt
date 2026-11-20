@@ -2137,6 +2137,101 @@ firrtl.circuit "LayerBlockDrivesSinksOutsideSubaccess" {
   }
 }
 
+// -----
+
+// A layer block may not attach to an analog declared outside the layer block.
+firrtl.circuit "LayerBlockAttachesOutside" {
+  firrtl.layer @A bind {}
+  firrtl.extmodule @Bar(in a: !firrtl.analog<1>)
+  // expected-note @below {{operand is defined here}}
+  firrtl.module @LayerBlockAttachesOutside(in %a: !firrtl.analog<1>) {
+    // expected-note @below {{enclosing layer block is defined here}}
+    firrtl.layerblock @A {
+      %b_a = firrtl.instance b @Bar(in a: !firrtl.analog<1>)
+      // expected-error @below {{'firrtl.attach' op attaches to "a" which is defined outside its enclosing layer block for layer @A}}
+      firrtl.attach %b_a, %a : !firrtl.analog<1>, !firrtl.analog<1>
+    }
+  }
+}
+
+// -----
+
+// A nested layer block may not attach to an analog declared in its parent.
+firrtl.circuit "LayerBlockAttachesOutsideNested" {
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {}
+  }
+  firrtl.module @LayerBlockAttachesOutsideNested() {
+    firrtl.layerblock @A {
+      // expected-note @below {{operand is defined here}}
+      %w = firrtl.wire : !firrtl.analog<1>
+      // expected-note @below {{enclosing layer block is defined here}}
+      firrtl.layerblock @A::@B {
+        %x = firrtl.wire : !firrtl.analog<1>
+        // expected-error @below {{'firrtl.attach' op attaches to "w" which is defined outside its enclosing layer block for layer @A::@B}}
+        firrtl.attach %x, %w : !firrtl.analog<1>, !firrtl.analog<1>
+      }
+    }
+  }
+}
+
+// -----
+
+// A layer block may not attach to a field of an instance declared outside it.
+firrtl.circuit "LayerBlockAttachesOutsideInstance" {
+  firrtl.layer @A inline {}
+  firrtl.extmodule @Bar(in a: !firrtl.bundle<x: analog<1>>)
+  firrtl.module @LayerBlockAttachesOutsideInstance(in %c: !firrtl.uint<1>) {
+    // expected-note @below {{operand is defined here}}
+    %b_a = firrtl.instance b @Bar(in a: !firrtl.bundle<x: analog<1>>)
+    // expected-note @below {{enclosing layer block is defined here}}
+    firrtl.layerblock @A {
+      %w = firrtl.wire : !firrtl.analog<1>
+      firrtl.when %c : !firrtl.uint<1> {
+        %b_a_x = firrtl.subfield %b_a[x] : !firrtl.bundle<x: analog<1>>
+        // expected-error @below {{'firrtl.attach' op attaches to "b.a.x" which is defined outside its enclosing layer block for layer @A}}
+        firrtl.attach %w, %b_a_x : !firrtl.analog<1>, !firrtl.analog<1>
+      }
+    }
+  }
+}
+
+// -----
+
+// A layer block may not attach to an analog declared outside it through a
+// subaccess that sits inside it.
+firrtl.circuit "LayerBlockAttachesOutsideSubaccess" {
+  firrtl.layer @A bind {}
+  firrtl.module @LayerBlockAttachesOutsideSubaccess(in %i: !firrtl.uint<1>) {
+    // expected-note @below {{operand is defined here}}
+    %v = firrtl.wire : !firrtl.vector<analog<1>, 2>
+    // expected-note @below {{enclosing layer block is defined here}}
+    firrtl.layerblock @A {
+      %w = firrtl.wire : !firrtl.analog<1>
+      %v_i = firrtl.subaccess %v[%i] : !firrtl.vector<analog<1>, 2>, !firrtl.uint<1>
+      // expected-error @below {{'firrtl.attach' op attaches to "v" which is defined outside its enclosing layer block for layer @A}}
+      firrtl.attach %w, %v_i : !firrtl.analog<1>, !firrtl.analog<1>
+    }
+  }
+}
+
+// -----
+
+// An enabled layer on the module does not let a layer block of that layer
+// attach to an analog declared outside the layer block.
+firrtl.circuit "LayerBlockAttachesOutsideEnabledLayer" {
+  firrtl.layer @A bind {}
+  // expected-note @below {{operand is defined here}}
+  firrtl.module @LayerBlockAttachesOutsideEnabledLayer(in %a: !firrtl.analog<1>) attributes {layers = [@A]} {
+    // expected-note @below {{enclosing layer block is defined here}}
+    firrtl.layerblock @A {
+      %w = firrtl.wire : !firrtl.analog<1>
+      // expected-error @below {{'firrtl.attach' op attaches to "a" which is defined outside its enclosing layer block for layer @A}}
+      firrtl.attach %w, %a : !firrtl.analog<1>, !firrtl.analog<1>
+    }
+  }
+}
+
 
 // -----
 
