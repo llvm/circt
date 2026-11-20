@@ -307,6 +307,23 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
   firrtl.matchingconnect %out, %10 : !firrtl.uint<4>
 }
 
+// All-ones constants wider than 64 bits must have every bit set.
+// CHECK-LABEL: firrtl.module @OrAllOnesWide
+firrtl.module @OrAllOnesWide(in %sin: !firrtl.sint<66>,
+                             out %out0: !firrtl.uint<66>,
+                             out %out1: !firrtl.uint<66>) {
+  // CHECK: %[[ONES:.+]] = firrtl.constant 73786976294838206463 : !firrtl.uint<66>
+  // CHECK: firrtl.matchingconnect %out0, %[[ONES]]
+  %c-1_si66 = firrtl.constant -1 : !firrtl.sint<66>
+  %0 = firrtl.or %sin, %c-1_si66 : (!firrtl.sint<66>, !firrtl.sint<66>) -> !firrtl.uint<66>
+  firrtl.connect %out0, %0 : !firrtl.uint<66>, !firrtl.uint<66>
+
+  // CHECK: firrtl.matchingconnect %out1, %[[ONES]]
+  %c-1_si3 = firrtl.constant -1 : !firrtl.sint<3>
+  %1 = firrtl.or %sin, %c-1_si3 : (!firrtl.sint<66>, !firrtl.sint<3>) -> !firrtl.uint<66>
+  firrtl.connect %out1, %1 : !firrtl.uint<66>, !firrtl.uint<66>
+}
+
 // CHECK-LABEL: firrtl.module @Xor
 firrtl.module @Xor(in %in: !firrtl.uint<4>,
                    in %in6: !firrtl.uint<6>,
