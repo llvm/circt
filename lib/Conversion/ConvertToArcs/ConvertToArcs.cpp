@@ -144,6 +144,10 @@ LogicalResult Converter::analyzeFanIn() {
     for (auto operand : op->getOperands())
       seenOperands.insert(operand);
     mlir::getUsedValuesDefinedAbove(op->getRegions(), seenOperands);
+    if (auto probe = dyn_cast<llhd::ProbeOp>(op))
+      for (auto *user : probe.getSignal().getUsers())
+        if (!isa<llhd::ProbeOp>(user))
+          seenOperands.insert(user->operand_begin(), user->operand_end());
     worklist.emplace_back(op, seenOperands.getArrayRef());
   };
 

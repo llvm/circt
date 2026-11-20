@@ -106,6 +106,8 @@ struct OpLowering {
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
   LogicalResult lower(llhd::CurrentTimeOp op);
+  LogicalResult lower(llhd::SignalOp op);
+  LogicalResult lower(llhd::AssignOp op);
   LogicalResult lower(sim::ClockedTerminateOp op);
 
   scf::IfOp createIfClockOp(Value clock);
@@ -122,6 +124,7 @@ struct OpLowering {
   Value lowerValue(MemoryReadPortOp op, OpResult result, Phase phase);
   Value lowerValue(seq::InitialOp op, OpResult result, Phase phase);
   Value lowerValue(seq::FromImmutableOp op, OpResult result, Phase phase);
+  Value lowerValue(llhd::ProbeOp op, OpResult result, Phase phase);
 
   void addPending(Value value, Phase phase);
   void addPending(Operation *op, Phase phase);
@@ -247,6 +250,8 @@ LogicalResult ModuleLowering::run() {
       continue;
     if (isa<MemoryReadPortOp, MemoryWritePortOp>(op))
       continue; // handled as part of `MemoryOp`
+    if (isa<llhd::ProbeOp>(op))
+      continue; // lowered on demand through `lowerValue`
     if (failed(lowerOp(&op)))
       return failure();
   }
@@ -266,7 +271,7 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
 
   // Pick in which phases the given operation has to perform some work.
   SmallVector<Phase, 2> phases = {Phase::New};
-  if (isa<seq::InitialOp>(op))
+  if (isa<seq::InitialOp, llhd::SignalOp>(op))
     phases = {Phase::Initial};
   if (isa<llhd::FinalOp>(op))
     phases = {Phase::Final};
@@ -345,10 +350,19 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
   }
 
   // Create the allocation op.
-  auto alloc =
-      AllocStateOp::create(allocBuilder, result.getLoc(),
-                           StateType::get(result.getType()), storageArg);
+  auto stateType = result.getType();
+  if (auto refType = dyn_cast<llhd::RefType>(stateType))
+    stateType = refType.getNestedType();
+  auto alloc = AllocStateOp::create(allocBuilder, result.getLoc(),
+                                    StateType::get(stateType), storageArg);
   allocatedStates.insert({result, alloc});
+
+  // HACK: If the result comes from an LLHD signal, add its name as an attribute
+  // to the allocation. This should no longer be necessary once we properly
+  // support the Debug dialect.
+  if (auto sigOp = dyn_cast<llhd::SignalOp>(result.getOwner()))
+    if (auto name = sigOp.getNameAttr())
+      alloc->setAttr("name", name);
 
   // HACK: If the result comes from an instance op, add the instance and port
   // name as an attribute to the allocation. This will make it show up in the C
@@ -438,8 +452,8 @@ LogicalResult OpLowering::lower() {
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
             CoroutineInstanceOp, hw::TriggeredOp, hw::OutputOp, seq::InitialOp,
-            llhd::FinalOp, llhd::CurrentTimeOp, sim::ClockedTerminateOp>(
-          [&](auto op) { return lower(op); })
+            llhd::FinalOp, llhd::CurrentTimeOp, llhd::SignalOp, llhd::AssignOp,
+            sim::ClockedTerminateOp>([&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -1077,6 +1091,45 @@ LogicalResult OpLowering::lower(hw::OutputOp op) {
   return success();
 }
 
+/// Lower a signal to a storage allocation and a write of its initial value.
+LogicalResult OpLowering::lower(llhd::SignalOp op) {
+  if (phase != Phase::Initial)
+    return op.emitOpError("must be lowered in initial phase");
+  Value init;
+  if (op.getInit())
+    init = lowerValue(op.getInit(), Phase::Initial);
+  if (initial)
+    return success();
+  auto state = module.getAllocatedState(op->getResult(0));
+  module.loweredValues[{op.getResult(), Phase::Initial}] = state;
+  if (op.getInit()) {
+    if (!init)
+      return failure();
+    StateWriteOp::create(module.initialBuilder, op.getLoc(), state, init);
+  }
+  return success();
+}
+
+/// Lower an assign to a (conditional) write to the signal's storage.
+LogicalResult OpLowering::lower(llhd::AssignOp op) {
+  Value state = lowerValue(op.getSignal(), Phase::Initial);
+  Value value = lowerValue(op.getValue(), Phase::New);
+  Value enable;
+  if (op.getEnable())
+    enable = lowerValue(op.getEnable(), Phase::New);
+  if (initial)
+    return success();
+  if (!state || !value || (op.getEnable() && !enable))
+    return failure();
+  OpBuilder::InsertionGuard guard(module.builder);
+  if (enable) {
+    auto ifOp = createOrReuseIf(module.builder, enable, false);
+    module.builder.setInsertionPoint(ifOp.thenYield());
+  }
+  StateWriteOp::create(module.builder, op.getLoc(), state, value);
+  return success();
+}
+
 /// Lower `seq.initial` ops by inlining them into the `arc.initial` op.
 LogicalResult OpLowering::lower(seq::InitialOp op) {
   assert(phase == Phase::Initial);
@@ -1347,6 +1400,8 @@ Value OpLowering::lowerValue(Value value, Phase phase) {
     return lowerValue(initialOp, result, phase);
   if (auto castOp = dyn_cast<seq::FromImmutableOp>(op))
     return lowerValue(castOp, result, phase);
+  if (auto probeOp = dyn_cast<llhd::ProbeOp>(op))
+    return lowerValue(probeOp, result, phase);
 
   // Otherwise we mark the defining operation as to be lowered first. This will
   // cause the lookup in `loweredValues` above to return a value the next time
@@ -1510,6 +1565,35 @@ Value OpLowering::lowerValue(seq::InitialOp op, OpResult result, Phase phase) {
 Value OpLowering::lowerValue(seq::FromImmutableOp op, OpResult result,
                              Phase phase) {
   return lowerValue(op.getInput(), phase);
+}
+
+/// Handle probes of a signal as reads of its storage. All non-probe users of
+/// the signal are marked as to be lowered first.
+Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
+  auto ref = op.getSignal();
+  auto state = lowerValue(ref, Phase::Initial);
+  if (initial) {
+    // Mark the non-probe users in the same context as the probe (initial,
+    // final, or neither) as pending.
+    auto *block = ref.getParentBlock();
+    auto *probeAncestor = block->findAncestorOpInBlock(*op);
+    auto isSameContext = [&](Operation *ancestor) {
+      return isa<seq::InitialOp>(ancestor) ==
+                 isa<seq::InitialOp>(probeAncestor) &&
+             isa<llhd::FinalOp>(ancestor) == isa<llhd::FinalOp>(probeAncestor);
+    };
+    for (auto *user : ref.getUsers()) {
+      auto *ancestor = block->findAncestorOpInBlock(*user);
+      if (isa<llhd::ProbeOp>(user) || !ancestor || ancestor == probeAncestor ||
+          !isSameContext(ancestor))
+        continue;
+      addPending(ancestor, phase);
+    }
+    return {};
+  }
+  if (!state)
+    return {};
+  return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
 }
 
 /// Mark a value as to be lowered before the current op.
