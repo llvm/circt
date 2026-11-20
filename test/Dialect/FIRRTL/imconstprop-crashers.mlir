@@ -31,14 +31,8 @@ firrtl.circuit "Issue4456"  {
 // https://github.com/llvm/circt/issues/11635
 // This shouldn't crash.
 firrtl.circuit "Issue11635" {
-  firrtl.module private @Child(in %i: !firrtl.enum<A, B: uint<8>>, out %o: !firrtl.enum<A, B: uint<8>>) {
-    firrtl.matchingconnect %o, %i : !firrtl.enum<A, B: uint<8>>
-  }
-
   firrtl.module @Issue11635(in %i: !firrtl.enum<A, B: uint<8>>, out %o: !firrtl.enum<A, B: uint<8>>) {
-    %c_i, %c_o = firrtl.instance c @Child(in i: !firrtl.enum<A, B: uint<8>>, out o: !firrtl.enum<A, B: uint<8>>)
-    firrtl.matchingconnect %c_i, %i : !firrtl.enum<A, B: uint<8>>
-    firrtl.matchingconnect %o, %c_o : !firrtl.enum<A, B: uint<8>>
+    firrtl.matchingconnect %o, %i : !firrtl.enum<A, B: uint<8>>
   }
 }
 
@@ -53,5 +47,15 @@ firrtl.circuit "Issue11635" {
     %w = firrtl.wire : !firrtl.enum<A, B: uint<8>>
     firrtl.matchingconnect %w, %e : !firrtl.enum<A, B: uint<8>>
     firrtl.matchingconnect %o, %w : !firrtl.enum<A, B: uint<8>>
+  }
+}
+
+// -----
+
+// https://github.com/llvm/circt/issues/11635
+// This shouldn't crash.
+firrtl.circuit "Issue11635" {
+  firrtl.module @Issue11635(in %i: !firrtl.bundle<x: enum<A, B: uint<8>>, y: uint<8>>, out %o: !firrtl.bundle<x: enum<A, B: uint<8>>, y: uint<8>>) {
+    firrtl.matchingconnect %o, %i : !firrtl.bundle<x: enum<A, B: uint<8>>, y: uint<8>>
   }
 }

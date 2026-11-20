@@ -743,9 +743,18 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
 
   auto propagateElementLattice = [&](uint64_t fieldID, FIRRTLType destType) {
     auto fieldRefDestConnected = fieldRefDest.getSubField(fieldID);
+
+    // Enums are not ground types, and it is unresolved whether they are
+    // aggregates or not (see the TODO in `walkGroundTypes`). Don't track
+    // them: conservatively mark them overdefined for now.
+    if (firrtl::type_isa<FEnumType>(destType)) {
+      markOverdefined(fieldRefSrc.getSubField(fieldID));
+      markOverdefined(fieldRefDestConnected);
+      return;
+    }
+
     assert(!firrtl::type_isa<FIRRTLBaseType>(destType) ||
-           firrtl::type_cast<FIRRTLBaseType>(destType).isGround() ||
-           firrtl::type_isa<FEnumType>(destType));
+           firrtl::type_cast<FIRRTLBaseType>(destType).isGround());
 
     // Handle implicit extensions.
     auto srcValue =
