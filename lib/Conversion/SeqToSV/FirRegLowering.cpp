@@ -107,12 +107,20 @@ void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
                                   const std::function<void()> &trueSide,
                                   const std::function<void()> &falseSide) {
   auto op = ifCache.lookup({builder.getBlock(), cond});
+  // The cache can hold keys whose value has since been erased: each register
+  // is erased once lowered, after its uses (including the conditions of cached
+  // ifs) are replaced. A value created later can be allocated at the address of
+  // an erased one and hit that stale entry, which would put this register's
+  // update under another register's condition. Only reuse an if whose
+  // condition is still `cond`.
+  if (op && op.getCond() != cond)
+    op = {};
   // Always build both sides of the if, in case we want to use an empty else
   // later. This way we don't have to build a new if and replace it.
   if (!op) {
     auto newIfOp =
         sv::IfOp::create(builder, cond.getLoc(), cond, trueSide, falseSide);
-    ifCache.insert({{builder.getBlock(), cond}, newIfOp});
+    ifCache[{builder.getBlock(), cond}] = newIfOp;
   } else {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(op.getThenBlock());
