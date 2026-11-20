@@ -4,7 +4,7 @@
 
 module {
 
-// CHECK:   hw.module @addToFirst_N_4_X_8(in %[[VAL_0:.*]] : !hw.array<4xi8>, in %[[VAL_1:.*]] : i8, out out : i8) {
+// CHECK:   hw.module @addToFirst_N_4_X_8(in %[[VAL_0:.*]] : !hw.array<4xi8>, in %[[VAL_1:.*]] : i8, out out : i8) attributes {hw.specialization = #hw.specialization<"addToFirst", [#hw.param.decl<"N": i32 = 4> : i32, #hw.param.decl<"X": i32 = 8> : i32]>} {
 // CHECK:           %[[VAL_2:.*]] = arith.constant 0 : i64
 // CHECK:           %[[VAL_3:.*]] = comb.extract %[[VAL_2]] from 0 : (i64) -> i2
 // CHECK:           %[[VAL_4:.*]] = hw.array_get %[[VAL_0]]{{\[}}%[[VAL_3]]] : !hw.array<4xi8>
@@ -12,7 +12,7 @@ module {
 // CHECK:           hw.output %[[VAL_5]] : i8
 // CHECK:         }
 
-// CHECK:   hw.module @addToFirst_N_5_X_9(in %[[VAL_0:.*]] : !hw.array<5xi9>, in %[[VAL_1:.*]] : i9, out out : i9) {
+// CHECK:   hw.module @addToFirst_N_5_X_9(in %[[VAL_0:.*]] : !hw.array<5xi9>, in %[[VAL_1:.*]] : i9, out out : i9) attributes {hw.specialization = #hw.specialization<"addToFirst", [#hw.param.decl<"N": i32 = 5> : i32, #hw.param.decl<"X": i32 = 9> : i32]>} {
 // CHECK:           %[[VAL_2:.*]] = arith.constant 0 : i64
 // CHECK:           %[[VAL_3:.*]] = comb.extract %[[VAL_2]] from 0 : (i64) -> i3
 // CHECK:           %[[VAL_4:.*]] = hw.array_get %[[VAL_0]]{{\[}}%[[VAL_3]]] : !hw.array<5xi9>
@@ -29,7 +29,7 @@ module {
     hw.output %0 : !hw.int<#hw.param.decl.ref<"X">>
   }
 
-// CHECK:   hw.module @uArrayUser_N_5_X_9(in %[[VAL_0:.*]] : !hw.uarray<5xi9>) {
+// CHECK:   hw.module @uArrayUser_N_5_X_9(in %[[VAL_0:.*]] : !hw.uarray<5xi9>) attributes {hw.specialization = #hw.specialization<"uArrayUser", [#hw.param.decl<"N": i32 = 5> : i32, #hw.param.decl<"X": i32 = 9> : i32]>} {
 // CHECK:           hw.output
 // CHECK:         }
   hw.module @uArrayUser<N: i32, X: i32>(
@@ -66,12 +66,12 @@ module {
 
 module {
 
-// CHECK-LABEL:   hw.module @constantGen_V_8(out out : i64) {
+// CHECK-LABEL:   hw.module @constantGen_V_8(out out : i64) attributes {hw.specialization = #hw.specialization<"constantGen", [#hw.param.decl<"V": i64 = 8> : i64]>} {
 // CHECK:           %[[VAL_0:.*]] = hw.constant 8 : i64
 // CHECK:           hw.output %[[VAL_0]] : i64
 // CHECK:         }
 
-// CHECK-LABEL:   hw.module @constantGen_V_9(out out : i64) {
+// CHECK-LABEL:   hw.module @constantGen_V_9(out out : i64) attributes {hw.specialization = #hw.specialization<"constantGen", [#hw.param.decl<"V": i64 = 9> : i64]>} {
 // CHECK:           %[[VAL_0:.*]] = hw.constant 9 : i64
 // CHECK:           hw.output %[[VAL_0]] : i64
 // CHECK:         }
@@ -121,7 +121,7 @@ module {
 
 module {
 
-// CHECK-LABEL:   hw.module @constantGen_V_5_1(out out : i64) {
+// CHECK-LABEL:   hw.module @constantGen_V_5_1(out out : i64) attributes {hw.specialization = #hw.specialization<"constantGen", [#hw.param.decl<"V": i64 = 5> : i64]>} {
   hw.module @constantGen<V: i64>(out out: i64) {
     %0 = hw.param.value i64 = #hw.param.decl.ref<"V">
     hw.output %0 :i64
@@ -157,24 +157,59 @@ module {
     hw.output %0 : i32
   }
 
-  // CHECK-LABEL: hw.module @usesConstantGen_V_8(in %in : i8, out out : i32) {
+  // CHECK-LABEL: hw.module @usesConstantGen_V_8(in %in : i8, out out : i32) attributes {hw.specialization = #hw.specialization<"usesConstantGen", [#hw.param.decl<"V": i32 = 8> : i32]>} {
   // CHECK:         %[[VAL_0:.*]] = hw.instance "inst1" @constantGen_V_8() -> (out: i32)
   // CHECK:         hw.instance "inst2" @takesParametericWidth_width_8(in: %in: i8) -> ()
   // CHECK:         hw.output %[[VAL_0]] : i32
   // CHECK:       }
 
-  // CHECK-LABEL: hw.module @constantGen_V_8(out out : i32) {
+  // CHECK-LABEL: hw.module @constantGen_V_8(out out : i32) attributes {hw.specialization = #hw.specialization<"constantGen", [#hw.param.decl<"V": i32 = 8> : i32]>} {
   // CHECK:         %[[VAL_0:.*]] = hw.constant 8 : i32
   // CHECK:         hw.output %[[VAL_0]] : i32
   // CHECK:       }
 
-  // CHECK-LABEL: hw.module @takesParametericWidth_width_8(in %in : i8) {
+  // CHECK-LABEL: hw.module @takesParametericWidth_width_8(in %in : i8) attributes {hw.specialization = #hw.specialization<"takesParametericWidth", [#hw.param.decl<"width": i32 = 8> : i32]>} {
   // CHECK:          hw.output
   // CHECK:       }
 
   hw.module @top(out out: i32) {
     %in = hw.constant 1 : i8
     %0 = hw.instance "inst" @usesConstantGen<V: i32 = 8> (in: %in: i8) -> (out: i32)
+    hw.output %0 : i32
+  }
+}
+
+// -----
+
+// Test specialization preserves existing `hw.specialization` provenance.
+
+module {
+  // CHECK-LABEL: hw.module @alreadySpecialized_B_4(out out : i32) attributes {hw.specialization = #hw.specialization<"origBase", [#hw.param.decl<"A": i32 = 1> : i32, #hw.param.decl<"B": i32 = 4> : i32], boundaryAltered>} {
+  hw.module @alreadySpecialized<B: i32>(out out: i32) attributes {hw.specialization = #hw.specialization<"origBase", [#hw.param.decl<"A": i32 = 1> : i32], boundaryAltered>} {
+    %0 = hw.param.value i32 = #hw.param.decl.ref<"B">
+    hw.output %0 : i32
+  }
+
+  hw.module @top(out out: i32) {
+    %0 = hw.instance "inst" @alreadySpecialized<B: i32 = 4>() -> (out: i32)
+    hw.output %0 : i32
+  }
+}
+
+// -----
+
+// Test specialization updates an existing parameter entry in place without
+// producing duplicate parameter names in `hw.specialization`.
+
+module {
+  // CHECK-LABEL: hw.module @overwriteParam_A_9(out out : i32) attributes {hw.specialization = #hw.specialization<"origBase", [#hw.param.decl<"A": i32 = 9> : i32, #hw.param.decl<"C": i32 = 2> : i32]>} {
+  hw.module @overwriteParam<A: i32>(out out: i32) attributes {hw.specialization = #hw.specialization<"origBase", [#hw.param.decl<"A": i32 = 1> : i32, #hw.param.decl<"C": i32 = 2> : i32]>} {
+    %0 = hw.param.value i32 = #hw.param.decl.ref<"A">
+    hw.output %0 : i32
+  }
+
+  hw.module @top(out out: i32) {
+    %0 = hw.instance "inst" @overwriteParam<A: i32 = 9>() -> (out: i32)
     hw.output %0 : i32
   }
 }

@@ -13,6 +13,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -1085,4 +1086,104 @@ bool hw::isParametricType(mlir::Type t) {
                isParamAttrWithParamRef(arrayType.getSizeAttr());
       })
       .Default([](auto) { return false; });
+}
+
+//===----------------------------------------------------------------------===//
+// SpecializationAttr
+//===----------------------------------------------------------------------===//
+
+LogicalResult SpecializationAttr::verify(
+    function_ref<InFlightDiagnostic()> emitError, StringAttr origName,
+    ArrayRef<ParamDeclAttr> parameters, bool boundaryAltered) {
+  if (!origName || origName.getValue().empty())
+    return emitError()
+           << "specialization original module name must not be empty";
+
+  llvm::SmallDenseSet<StringAttr, 8> seenNames;
+  for (ParamDeclAttr param : parameters) {
+    if (!param)
+      return emitError() << "specialization parameter entry must not be null";
+    if (!param.getName() || param.getName().getValue().empty())
+      return emitError() << "specialization parameter name must not be empty";
+    if (!seenNames.insert(param.getName()).second)
+      return emitError() << "duplicate specialization parameter "
+                         << param.getName();
+    if (Attribute value = param.getValue()) {
+      auto typedValue = dyn_cast<TypedAttr>(value);
+      if (!typedValue)
+        return emitError() << "specialization parameter " << param.getName()
+                           << " must have a typed value, got " << value;
+      if (typedValue.getType() != param.getType())
+        return emitError() << "specialization parameter " << param.getName()
+                           << " must have type " << param.getType() << ", got "
+                           << typedValue.getType();
+    }
+  }
+  return success();
+}
+
+Attribute SpecializationAttr::parse(AsmParser &p, Type type) {
+  llvm::SMLoc loc = p.getCurrentLocation();
+  StringAttr origName;
+  if (p.parseLess() || p.parseAttribute(origName))
+    return {};
+
+  SmallVector<ParamDeclAttr> parameters;
+  bool boundaryAltered = false;
+  if (succeeded(p.parseOptionalComma())) {
+    if (succeeded(p.parseOptionalKeyword("boundaryAltered"))) {
+      boundaryAltered = true;
+    } else {
+      if (p.parseCommaSeparatedList(AsmParser::Delimiter::Square,
+                                    [&]() -> ParseResult {
+                                      ParamDeclAttr param;
+                                      if (p.parseAttribute(param))
+                                        return failure();
+                                      parameters.push_back(param);
+                                      return success();
+                                    }))
+        return {};
+      if (succeeded(p.parseOptionalComma())) {
+        if (p.parseKeyword("boundaryAltered"))
+          return {};
+        boundaryAltered = true;
+      }
+    }
+  }
+
+  if (p.parseGreater())
+    return {};
+
+  return getChecked([&]() { return p.emitError(loc); }, p.getContext(),
+                    origName, parameters, boundaryAltered);
+}
+
+void SpecializationAttr::print(AsmPrinter &p) const {
+  p << "<" << getOrigName();
+  ArrayRef<ParamDeclAttr> params = getParameters();
+  if (!params.empty()) {
+    p << ", [";
+    llvm::interleaveComma(
+        params, p, [&](ParamDeclAttr param) { p.printAttribute(param); });
+    p << "]";
+  }
+  if (getBoundaryAltered())
+    p << ", boundaryAltered";
+  p << ">";
+}
+
+SpecializationAttr hw::getSpecialization(Operation *op) {
+  if (!op)
+    return {};
+  return op->getAttrOfType<SpecializationAttr>(
+      SpecializationAttr::getAttrName());
+}
+
+void hw::setSpecialization(Operation *op, SpecializationAttr attr) {
+  if (!op)
+    return;
+  if (attr)
+    op->setAttr(SpecializationAttr::getAttrName(), attr);
+  else
+    op->removeAttr(SpecializationAttr::getAttrName());
 }

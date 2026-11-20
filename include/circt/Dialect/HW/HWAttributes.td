@@ -244,4 +244,75 @@ def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
   }];
 }
 
+def SpecializationAttr : AttrDef<HWDialect, "Specialization"> {
+  let summary = "Provenance of a monomorphized or specialized module";
+  let description = [{
+    Records the pre-uniquified source module name and elaborated parameter
+    values on a monomorphized module definition (for example after Slang
+    elaboration in `ImportVerilog` or after `--hw-specialize`).
+
+    Parameter bindings are represented as `ParamDeclAttr` entries. Values that
+    cannot be expressed as plain typed literals (such as 4-state bit vectors
+    with X/Z bits, unpacked aggregates, or overridden type parameters) may use
+    `#hw.param.verbatim`, or omit the value (`<name: none>`) when the value is
+    unrepresentable (for example, an error type or a module-local typedef that
+    cannot be named via legal SystemVerilog outside its defining instance).
+
+    The optional `boundaryAltered` flag marks modules whose lowered port list
+    differs from the source module declaration (e.g., because an interface port
+    was flattened, a multi-port was split, or a hierarchical reference port was
+    lifted). Downstream passes reconstructing a parameterized external module
+    must inspect this flag before reusing the original module boundary.
+
+    This attribute is intended to be attached under the `hw.specialization`
+    attribute name on `hw.module` and `moore.module` definitions and is
+    verified by `HWDialect::verifyOperationAttribute`.
+
+    Examples:
+
+    ```mlir
+      #hw.specialization<"DedupB">
+      #hw.specialization<"DedupB", boundaryAltered>
+      #hw.specialization<"DedupB", [#hw.param.decl<"W": si32 = 16> : si32]>
+      #hw.specialization<"DedupB", [#hw.param.decl<"W": si32 = 16> : si32],
+                         boundaryAltered>
+    ```
+  }];
+  let mnemonic = "specialization";
+  let parameters = (ins
+    "::mlir::StringAttr":$origName,
+    ArrayRefParameter<"::circt::hw::ParamDeclAttr">:$parameters,
+    DefaultValuedParameter<"bool", "false">:$boundaryAltered
+  );
+
+  let genVerifyDecl = 1;
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    // Requires a non-null `origName`.
+    AttrBuilderWithInferredContext<(ins
+        "::mlir::StringAttr":$origName,
+        CArg<"::llvm::ArrayRef<::circt::hw::ParamDeclAttr>", "{}">:$parameters,
+        CArg<"bool", "false">:$boundaryAltered), [{
+      return $_get(origName.getContext(), origName, parameters,
+                   boundaryAltered);
+    }]>,
+    AttrBuilder<(ins
+        "::llvm::StringRef":$origName,
+        CArg<"::llvm::ArrayRef<::circt::hw::ParamDeclAttr>", "{}">:$parameters,
+        CArg<"bool", "false">:$boundaryAltered), [{
+      return $_get($_ctxt, ::mlir::StringAttr::get($_ctxt, origName),
+                   parameters, boundaryAltered);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Operation attribute name used to attach `SpecializationAttr` to a
+    /// module definition.
+    static constexpr ::llvm::StringLiteral getAttrName() {
+      return "hw.specialization";
+    }
+  }];
+}
+
 #endif // CIRCT_DIALECT_HW_HWATTRIBUTES_TD
