@@ -61,6 +61,18 @@ MLIR_CAPI_EXPORTED MlirTypeID omListTypeGetTypeID(void);
 // Return a element type of a ListType.
 MLIR_CAPI_EXPORTED MlirType omListTypeGetElementType(MlirType type);
 
+/// Is the Type an OptionType.
+MLIR_CAPI_EXPORTED bool omTypeIsAOptionType(MlirType type);
+
+/// Get the TypeID for an OptionType.
+MLIR_CAPI_EXPORTED MlirTypeID omOptionTypeGetTypeID(void);
+
+/// Get the element type of an OptionType.
+MLIR_CAPI_EXPORTED MlirType omOptionTypeGetElementType(MlirType type);
+
+/// Get an OptionType.
+MLIR_CAPI_EXPORTED MlirType omOptionTypeGet(MlirType elementType);
+
 /// Is the Type a StringType.
 MLIR_CAPI_EXPORTED bool omTypeIsAStringType(MlirType type);
 
@@ -180,6 +192,34 @@ omEvaluatorListGetNumElements(OMEvaluatorValue evaluatorValue);
 /// Get an element of the list.
 MLIR_CAPI_EXPORTED OMEvaluatorValue
 omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
+
+/// Create a List of the given ListType. Elements must match its context and
+/// element type; AnyType accepts any element type. Returns null for invalid
+/// elements.
+MLIR_CAPI_EXPORTED OMEvaluatorValue omEvaluatorListGet(
+    MlirType listType, intptr_t numElements, const OMEvaluatorValue *elements);
+
+/// Query if the EvaluatorValue is an Option.
+MLIR_CAPI_EXPORTED bool
+omEvaluatorValueIsAOption(OMEvaluatorValue evaluatorValue);
+
+/// Create an empty Option. The type must be an OptionType.
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorOptionGetEmpty(MlirType optionType);
+
+/// Create a present Option of the given OptionType. The payload must be
+/// non-null and match its context and element type; AnyType accepts any payload
+/// type. Returns null for an invalid payload.
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorOptionGet(MlirType optionType, OMEvaluatorValue payload);
+
+/// Query whether a fully evaluated, non-unknown Option is present.
+MLIR_CAPI_EXPORTED bool
+omEvaluatorOptionHasValue(OMEvaluatorValue evaluatorValue);
+
+/// Get the payload of a fully evaluated, non-unknown, present Option.
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorOptionGetValue(OMEvaluatorValue evaluatorValue);
 
 /// Query if the EvaluatorValue is a BasePath.
 MLIR_CAPI_EXPORTED bool

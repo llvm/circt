@@ -252,6 +252,12 @@ with Context() as ctx:
   assert isinstance(list_type, om.ListType)
   assert isinstance(list_type.element_type, om.AnyType)
 
+  # Test OptionType construction and parsing.
+  option_type = Type.parse("!om.option<!om.any>")
+  assert isinstance(option_type, om.OptionType)
+  assert isinstance(option_type.element_type, om.AnyType)
+  assert option_type == om.OptionType.get(any_type)
+
   # Test partial evaluation with multiple inputs and outputs
   module = Module.parse("""
   module {
@@ -369,3 +375,98 @@ with Context() as ctx, Location.unknown():
   obj = evaluator.instantiate("AssertUnknown", om.Unknown(i1_type))
   # CHECK: AssertUnknown(unknown): passed
   print("AssertUnknown(unknown): passed")
+
+# Test option round trips.
+with Context() as ctx:
+  circt.register_dialects(ctx)
+  module = Module.parse("""
+  module {
+    om.class @Nested(%value: !om.option<!om.option<!om.integer>>) ->
+        (value: !om.option<!om.option<!om.integer>>) {
+      om.class.fields %value : !om.option<!om.option<!om.integer>>
+    }
+    om.class @OptionList(%value: !om.list<!om.option<!om.integer>>) ->
+        (value: !om.list<!om.option<!om.integer>>) {
+      om.class.fields %value : !om.list<!om.option<!om.integer>>
+    }
+    om.class @Child(%value: !om.integer) -> (value: !om.integer) {
+      om.class.fields %value : !om.integer
+    }
+    om.class @ObjectOption(%value: !om.option<!om.class.type<@Child>>) ->
+        (value: !om.option<!om.class.type<@Child>>) {
+      om.class.fields %value : !om.option<!om.class.type<@Child>>
+    }
+    om.class @OptionCycle() -> (value: !om.option<!om.any>) {
+      %option = om.option_create %payload : !om.option<!om.any>
+      %payload = om.any_cast %option : (!om.option<!om.any>) -> !om.any
+      om.class.fields %option : !om.option<!om.any>
+    }
+  }
+  """)
+  evaluator = om.Evaluator(module)
+
+  def check_option(value, expected):
+    if isinstance(expected, om.Some):
+      assert isinstance(value, om.Some)
+      check_option(value.value, expected.value)
+    elif isinstance(expected, om.Unknown):
+      assert isinstance(value, om.Unknown)
+      assert value.type == expected.type
+    else:
+      assert value == expected
+
+  option_type = om.OptionType.get(Type.parse("!om.integer"))
+  nested_type = om.OptionType.get(option_type)
+  for value in (None, om.Some(None), om.Some(om.Some(42)),
+                om.Unknown(nested_type), om.Some(om.Unknown(option_type))):
+    output = evaluator.instantiate("Nested", value).value
+    check_option(output, value)
+    check_option(evaluator.instantiate("Nested", output).value, value)
+
+  output = evaluator.instantiate("OptionList", [None, om.Some(42)]).value
+  assert isinstance(output, om.List)
+  assert output[0] is None
+  assert isinstance(output[1], om.Some)
+  assert output[1].value == 42
+  assert evaluator.instantiate("OptionList", output).value[1].value == 42
+
+  child = evaluator.instantiate("Child", 42)
+  output = evaluator.instantiate("ObjectOption", om.Some(child)).value
+  assert isinstance(output, om.Some)
+  assert isinstance(output.value, om.Object)
+  assert output.value.value == 42
+  assert evaluator.instantiate("ObjectOption", output).value.value.value == 42
+  # CHECK: Option round trips: passed
+  print("Option round trips: passed")
+
+  # Don't recurse into cyclic payloads.
+  cycle = evaluator.instantiate("OptionCycle").value
+  assert isinstance(cycle, om.Some)
+  assert isinstance(cycle.value, om.Some)
+
+  # Don't infer option types or wrap bare payloads in Some.
+  for value, message in ((42, "must use om.Some"), (om.Some(42),
+                                                    "must use om.Some"),
+                         (om.Some(om.Some(om.Some(42))),
+                          "require an expected OptionType")):
+    try:
+      evaluator.instantiate("Nested", value)
+      assert False, "invalid option payload was accepted"
+    except TypeError as e:
+      assert message in str(e)
+
+  # Check argument counts and class names before converting inputs.
+  try:
+    evaluator.instantiate("Nested", None, None)
+    assert False, "wrong argument count was accepted"
+  except ValueError as e:
+    # CHECK: actual parameter list length (2) does not match formal parameter list length (1)
+    # CHECK: unable to instantiate object, see previous error(s)
+    print(e)
+  try:
+    evaluator.instantiate("MissingOptionClass", None)
+    assert False, "missing class was accepted"
+  except ValueError as e:
+    # CHECK: unknown class name "MissingOptionClass"
+    # CHECK: unable to instantiate object, see previous error(s)
+    print(e)
