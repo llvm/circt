@@ -130,6 +130,13 @@ private:
       // Add new ops after the assumption
       builder.setInsertionPoint(ops.front());
 
+      // An enabled assumption only constrains its condition when the enable
+      // holds, so fold `!enable | condition`
+      if (Value assumeEnable = assumeOp.getEnable())
+        cond = comb::OrOp::create(
+            builder, loc, comb::createOrFoldNot(builder, loc, assumeEnable),
+            cond);
+
       // Look for a matching assertion, make that list is non-empty
       if (auto it = asserts.find(blk);
           it != asserts.end() && it->getSecond().size() > 0) {
