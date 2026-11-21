@@ -162,7 +162,7 @@ struct EraseUnknownRegistryInsertion : OpRewritePattern<RegistryInsertOp> {
 };
 
 /// Propagate UnknownValueOp through pure OM operations and registry creation.
-/// If any operand is unknown, all results become unknown.
+/// Unknown operands generally make all results unknown.
 struct UnknownPropagationPattern : RewritePattern {
   UnknownPropagationPattern(MLIRContext *context)
       : RewritePattern(MatchAnyOpTypeTag(), /*benefit=*/1, context) {}
@@ -174,6 +174,16 @@ struct UnknownPropagationPattern : RewritePattern {
     if (!isa_and_nonnull<OMDialect>(op->getDialect()) ||
         (!isPure(op) && !isa<RegistryCreateOp>(op)) || op->getNumResults() == 0)
       return failure();
+
+    // An option remains present even when its payload is unknown.
+    if (isa<OptionCreateOp>(op))
+      return failure();
+
+    // The default may be unused. Only an unknown option propagates here;
+    // the folder selects the payload or default once its shape is known.
+    if (auto getOrElse = dyn_cast<OptionGetOrElseOp>(op))
+      if (!getOrElse.getOption().getDefiningOp<UnknownValueOp>())
+        return failure();
 
     // Check if any operand is an UnknownValueOp.
     // TODO: This directly ports the existing Evaluator semantics, but it
@@ -207,6 +217,8 @@ bool isFullyEvaluated(Operation *op) {
       FrozenBasePathCreateOp, FrozenPathCreateOp, FrozenEmptyPathOp,
       // List.
       ListCreateOp, ListConcatOp,
+      // Option.
+      OptionCreateOp,
       // Registry.
       RegistryCreateOp>(op);
 }

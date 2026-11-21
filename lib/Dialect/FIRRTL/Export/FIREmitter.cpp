@@ -148,6 +148,7 @@ struct Emitter {
   void emitExpression(BoolConstantOp op);
   void emitExpression(DoubleConstantOp op);
   void emitExpression(ListCreateOp op);
+  void emitExpression(OptionCreateOp op);
   void emitExpression(UnresolvedPathOp op);
   void emitExpression(GenericIntrinsicOp op);
   void emitExpression(CatPrimOp op);
@@ -221,6 +222,12 @@ struct Emitter {
     if (failed(requireVersion(nextFIRVersion, op, "list length")))
       return;
     emitPrimExpr("list_length", op);
+  }
+
+  void emitExpression(OptionGetOrElseOp op) {
+    if (failed(requireVersion(nextFIRVersion, op, "option get or else")))
+      return;
+    emitPrimExpr("option_get_or_else", op);
   }
 
   void emitExpression(ListContainsOp op) {
@@ -1652,7 +1659,8 @@ void Emitter::emitExpression(Value value) {
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
           ObjectAnyRefCastOp, DomainAnyRefCastOp, UnknownValueOp, IntegerAndOp,
           IntegerOrOp, IntegerNotOp, StringConcatOp, PropEqOp, ListLengthOp,
-          ListContainsOp, BoolAndOp, BoolOrOp, BoolXorOp,
+          ListContainsOp, OptionCreateOp, OptionGetOrElseOp, BoolAndOp,
+          BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1859,6 +1867,12 @@ void Emitter::emitExpression(ListCreateOp op) {
   return emitLiteralExpression(op.getType(), op.getElements());
 }
 
+void Emitter::emitExpression(OptionCreateOp op) {
+  if (failed(requireVersion(nextFIRVersion, op, "Options")))
+    return;
+  emitLiteralExpression(op.getType(), op->getOperands());
+}
+
 void Emitter::emitExpression(UnresolvedPathOp op) {
   if (failed(requireVersion({6, 0, 0}, op, "Paths")))
     return;
@@ -2053,6 +2067,11 @@ void Emitter::emitType(Type type, bool includeConst) {
       .Case<PathType>([&](PathType type) { ps << "Path"; })
       .Case<ListType>([&](ListType type) {
         ps << "List<";
+        emitType(type.getElementType());
+        ps << ">";
+      })
+      .Case<OptionType>([&](OptionType type) {
+        ps << "Option<";
         emitType(type.getElementType());
         ps << ">";
       })

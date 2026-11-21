@@ -469,6 +469,24 @@ om.class @ListLengthFold(
   om.class.fields %valuesLength, %attrLength, %emptyLength, %nestedLength : !om.integer, !om.integer, !om.integer, !om.integer
 }
 
+// CHECK-LABEL: @OptionGetOrElseFold
+om.class @OptionGetOrElseFold(%value: i32, %default: i32) -> (
+    some: i32, none: i32, unknown: i32) {
+  // A present option selects even a nonconstant payload.
+  %some = om.option_create %value : !om.option<i32>
+  %someResult = om.option_get_or_else %some, %default : !om.option<i32>
+  %none = om.option_create : !om.option<i32>
+  %noneResult = om.option_get_or_else %none, %default : !om.option<i32>
+
+  // An unknown option has no known shape and does not fold.
+  // CHECK: [[UNKNOWN:%.+]] = om.unknown : !om.option<i32>
+  %unknown = om.unknown : !om.option<i32>
+  // CHECK-NEXT: [[RESULT:%.+]] = om.option_get_or_else [[UNKNOWN]], %default : <i32>
+  %unknownResult = om.option_get_or_else %unknown, %default : !om.option<i32>
+  // CHECK-NEXT: om.class.fields %value, %default, [[RESULT]] : i32, i32, i32
+  om.class.fields %someResult, %noneResult, %unknownResult : i32, i32, i32
+}
+
 // CHECK-LABEL: @ListContainsFold
 om.class @ListContainsFold(%empty_search: !om.string) -> (
     string_found: i1, string_absent: i1, bool_found: i1, bool_absent: i1,

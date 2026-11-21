@@ -75,6 +75,18 @@ firrtl.circuit "ListLength" {
 
 // -----
 
+firrtl.circuit "OptionGetOrElse" {
+  firrtl.module @OptionGetOrElse(out %value : !firrtl.integer) {
+    %0 = firrtl.option.create : !firrtl.option<integer>
+    %1 = firrtl.integer 0
+    // expected-error @below {{'firrtl.option.get_or_else' op option get or else requires FIRRTL 7.0.0}}
+    %2 = firrtl.option.get_or_else %0, %1 : !firrtl.option<integer>
+    firrtl.propassign %value, %2 : !firrtl.integer
+  }
+}
+
+// -----
+
 // Non-literal expressions cause an error in FIRRTL < 7.0.0.
 firrtl.circuit "ListContains" {
   firrtl.module @ListContains(in %list : !firrtl.list<string>,

@@ -227,6 +227,8 @@ def FIntegerType : FIRRTLDialectTypeHelper<"FIntegerType", "integer type">,
 
 def ListType : FIRRTLDialectTypeHelper<"ListType", "list type">;
 
+def OptionType : FIRRTLDialectTypeHelper<"OptionType", "option type">;
+
 def RegistryType : FIRRTLDialectTypeHelper<"RegistryType", "registry type">;
 
 def BoolType : FIRRTLDialectTypeHelper<"BoolType", "boolean type">,

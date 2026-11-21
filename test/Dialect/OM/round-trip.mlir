@@ -212,6 +212,17 @@ om.class @ListContains(%obj: !om.class.type<@Widget>) {
   om.class.fields
 }
 
+// CHECK-LABEL: @Option
+om.class @Option(%value: i32) -> (value: i32) {
+  // CHECK: %0 = om.option_create : <i32> loc(
+  %0 = om.option_create : !om.option<i32>
+  // CHECK: %1 = om.option_create %value : <i32> loc(
+  %1 = om.option_create %value : !om.option<i32>
+  // CHECK: %2 = om.option_get_or_else %1, %value : <i32> loc(
+  %2 = om.option_get_or_else %1, %value : !om.option<i32>
+  om.class.fields %2 : i32
+}
+
 // CHECK-LABEL: @Integer
 // CHECK-SAME: -> (int: !om.integer)
 om.class @IntegerConstant() -> (int: !om.integer) {
