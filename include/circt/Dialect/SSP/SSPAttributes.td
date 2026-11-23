@@ -140,9 +140,9 @@ in {
   }
 }
 
-// SharedOperatorsProblem
+// SharedResourcesProblem
 def LimitProp : ResourceTypeProperty<SSPDialect,
-  "Limit", "unsigned", "::circt::scheduling::SharedOperatorsProblem"> {
+  "Limit", "unsigned", "::circt::scheduling::SharedResourcesProblem"> {
   let mnemonic = "limit";
 }
 #endif // CIRCT_DIALECT_SSP_SSPATTRIBUTES_TD
