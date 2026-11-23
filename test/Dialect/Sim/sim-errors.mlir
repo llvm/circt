@@ -171,3 +171,43 @@ func.func @ReadMemDimsMismatch(%arg0: !sim.dstring, %arg1: !hw.array<16xi8>) {
 func.func @VariantDuplicateAlternative(%arg0: !sim.variant<a: i32, a: i8>) {
   return
 }
+
+// -----
+
+func.func @VariantCreateUnknownAlternative(%arg0: i32) {
+  // expected-error @below {{cannot find variant alternative 'c'}}
+  %0 = sim.variant_create "c", %arg0 : !sim.variant<a: i32, b: i8>
+  return
+}
+
+// -----
+
+func.func @VariantExtractUnknownAlternative(%arg0: !sim.variant<a: i32, b: i8>) {
+  // expected-error @below {{cannot find variant alternative 'c'}}
+  %0 = sim.variant_extract %arg0["c"] : !sim.variant<a: i32, b: i8>
+  return
+}
+
+// -----
+
+func.func @VariantContainsUnknownAlternative(%arg0: !sim.variant<a: i32, b: i8>) {
+  // expected-error @below {{cannot find variant alternative 'c'}}
+  %0 = sim.variant_contains "c", %arg0 : !sim.variant<a: i32, b: i8>
+  return
+}
+
+// -----
+
+func.func @VariantExtractIndexOutOfRange(%arg0: !sim.variant<a: i32, b: i8>) {
+  // expected-error @below {{alternative index 5 exceeds alternative count of variant type}}
+  %0 = "sim.variant_extract"(%arg0) {alternativeIndex = 5 : i32} : (!sim.variant<a: i32, b: i8>) -> i32
+  return
+}
+
+// -----
+
+func.func @VariantCreateTypeMismatch(%arg0: i8) {
+  // expected-error @below {{type 'i32' of accessed alternative at index 0 does not match expected type 'i8'}}
+  %0 = "sim.variant_create"(%arg0) {alternativeIndex = 0 : i32} : (i8) -> !sim.variant<a: i32, b: i8>
+  return
+}
