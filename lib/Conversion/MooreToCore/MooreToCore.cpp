@@ -3048,6 +3048,24 @@ static void probeRefAndAssignResult(OpBuilder &builder, Location loc, Value ref,
   llhd::AssignOp::create(builder, loc, ref, func(v), Value{});
 }
 
+struct StringPutOpConversion : public OpConversionPattern<StringPutOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringPutOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op->getLoc(), adaptor.getStr(), [&](Value string) {
+          auto putOp = sim::StringPutOp::create(rewriter, op.getLoc(), string,
+                                                adaptor.getIndex(),
+                                                adaptor.getCharacter());
+          return putOp.getOutStr();
+        });
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct QueuePushBackOpConversion : public OpConversionPattern<QueuePushBackOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -4396,6 +4414,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     StringLenOpConversion,
     StringConcatOpConversion,
     StringGetOpConversion,
+    StringPutOpConversion,
     StringCmpOpConversion,
     StringCompareOpConversion,
     StringICompareOpConversion,
