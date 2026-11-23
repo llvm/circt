@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Utils.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Iterators.h"
@@ -67,6 +68,10 @@ private:
   InstanceGraph *instanceGraph;
   DenseSet<Block *> executableBlocks;
 
+  /// Modules with side effects that are observable outside of the module, such
+  /// as printing a message. Instances of these modules must be kept.
+  DenseSet<Operation *> modulesWithObservableEffects;
+
   void markBlockExecutable(Block *block);
 
   void visitInstanceLike(HWInstanceLike instanceLike);
@@ -78,6 +83,8 @@ private:
 
   void markUnknownSideEffectOp(Operation *op);
   void markInstanceLike(HWInstanceLike instanceLike);
+  void markObservableEffects(HWModuleLike module);
+  void markObservableInstance(HWInstanceLike instance);
 
   void markBlockUndeletable(Operation *op) {
 
@@ -98,6 +105,79 @@ static bool hasUnknownSideEffect(Operation *op) {
   }
 
   return false;
+}
+
+/// Check whether \p ref may refer to storage passed in through a port of the
+/// module, rather than storage declared within the module, such as a signal or
+/// wire. References derived from other references, such as array elements, are
+/// traced back through all operands of the same kind of type, such that a
+/// reference that may be derived from a port is considered port storage.
+static bool isPortStorage(Value ref) {
+  SmallVector<Value> worklist({ref});
+  DenseSet<Value> visited;
+  while (!worklist.empty()) {
+    auto value = worklist.pop_back_val();
+    if (!visited.insert(value).second)
+      continue;
+    if (isa<BlockArgument>(value))
+      return true;
+    for (auto operand : value.getDefiningOp()->getOperands())
+      if (operand.getType().getTypeID() == value.getType().getTypeID())
+        worklist.push_back(operand);
+  }
+  return false;
+}
+
+/// Check whether \p op has side effects that may be observed outside of the
+/// module containing it, such as printing a message or terminating the
+/// simulation. Operations that describe their memory effects, such as
+/// registers, memories, and drives of signals, only have observable effects if
+/// they write to storage passed in through a port, or to unspecified storage.
+/// Writes to storage declared within the module, as well as to the state of
+/// registers and memories, only matter through the values the module produces.
+/// Operations without known effects are assumed to be observable, unless they
+/// only declare or assign storage within the module, such as wires, or
+/// transfer control within their parent operation, such as terminators of
+/// processes.
+static bool hasObservableSideEffect(Operation *op) {
+  // The operations nested within the op are checked individually.
+  if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
+    return false;
+
+  // Terminators only transfer control within their parent operation.
+  if (op->hasTrait<OpTrait::IsTerminator>())
+    return false;
+
+  if (auto effectOp = dyn_cast<mlir::MemoryEffectOpInterface>(op)) {
+    SmallVector<mlir::MemoryEffects::EffectInstance> effects;
+    effectOp.getEffects(effects);
+    return llvm::any_of(effects, [&](auto &effect) {
+      if (!isa<mlir::MemoryEffects::Write>(effect.getEffect()))
+        return false;
+      if (auto value = effect.getValue())
+        return isPortStorage(value);
+      // Writes to unspecified storage are assumed to be observable, except for
+      // registers and memories, whose state is only observable through the
+      // values they produce.
+      return !isa<seq::FirRegOp, seq::FirMemWriteOp, seq::FirMemReadWriteOp>(
+          op);
+    });
+  }
+
+  // Declarations of storage, such as wires.
+  if (llvm::any_of(op->getResultTypes(),
+                   [](Type type) { return isa<InOutType>(type); }))
+    return false;
+
+  // Assignments to storage, which are only observable for ports.
+  SmallVector<Value> storageRefs;
+  for (auto operand : op->getOperands())
+    if (isa<InOutType>(operand.getType()))
+      storageRefs.push_back(operand);
+  if (!storageRefs.empty())
+    return llvm::any_of(storageRefs, isPortStorage);
+
+  return true;
 }
 
 /// Clone \p instance, but with ports deleted according to
@@ -178,6 +258,45 @@ void HWIMDeadCodeElim::markUnknownSideEffectOp(Operation *op) {
   for (auto operand : op->getOperands())
     markAlive(operand);
   markBlockUndeletable(op);
+  if (hasObservableSideEffect(op))
+    if (auto module = op->getParentOfType<HWModuleLike>())
+      markObservableEffects(module);
+}
+
+/// Mark a module as having observable side effects. All instances of the
+/// module in executable modules are kept, and the modules containing them in
+/// turn have observable side effects. Instances in modules that become
+/// executable later are kept by `markInstanceLike`.
+void HWIMDeadCodeElim::markObservableEffects(HWModuleLike module) {
+  SmallVector<HWModuleLike> worklist;
+  worklist.push_back(module);
+  while (!worklist.empty()) {
+    auto current = worklist.pop_back_val();
+    if (!modulesWithObservableEffects.insert(current).second)
+      continue;
+    auto *node = instanceGraph->lookup(current);
+    if (!node)
+      continue;
+    for (auto *use : node->uses()) {
+      auto instance =
+          dyn_cast_or_null<HWInstanceLike>(use->getInstance().getOperation());
+      if (!instance)
+        continue;
+      auto parent = instance->getParentOfType<HWModuleLike>();
+      if (!parent || !isBlockExecutable(parent.getBodyBlock()))
+        continue;
+      markAlive(instance);
+      worklist.push_back(parent);
+    }
+  }
+}
+
+/// Keep an instance of a module with observable side effects. The module
+/// containing the instance in turn has observable side effects.
+void HWIMDeadCodeElim::markObservableInstance(HWInstanceLike instance) {
+  markAlive(instance);
+  if (auto parent = instance->getParentOfType<HWModuleLike>())
+    markObservableEffects(parent);
 }
 
 void HWIMDeadCodeElim::markInstanceLike(HWInstanceLike instanceLike) {
@@ -201,8 +320,11 @@ void HWIMDeadCodeElim::markInstanceLike(HWInstanceLike instanceLike) {
       markAlive(instanceLike);
     }
 
-    if (auto moduleLike = dyn_cast<HWModuleLike>(op.getOperation()))
+    if (auto moduleLike = dyn_cast<HWModuleLike>(op.getOperation())) {
       markBlockExecutable(moduleLike.getBodyBlock());
+      if (modulesWithObservableEffects.contains(moduleLike))
+        markObservableInstance(instanceLike);
+    }
   }
 }
 

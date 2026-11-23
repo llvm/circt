@@ -863,17 +863,164 @@ module {
     hw.output
   }
 
-  // FIXME: The instance is removed since none of its results are used, although
-  // the instantiated module has side effects. It should be kept.
   // LIVENESS-LABEL: hw.module public @NestedBlocksTop
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // ELIMINATE-LABEL: hw.module public @NestedBlocksTop
-  // ELIMINATE-NOT:     hw.instance
-  // ELIMINATE:         hw.output
+  // ELIMINATE-NEXT:    hw.instance "nested" @NestedBlocks
   hw.module public @NestedBlocksTop() {
     hw.instance "nested" @NestedBlocks() -> ()
     hw.output
   }
 
   func.func private @unknownFunc()
+}
+
+// -----
+
+// Instances of modules with side effects that are observable outside of the
+// module, such as printing a message, are kept even if none of their results
+// are used. This applies transitively through the instance hierarchy. Side
+// effects that only affect the module's own state, such as registers, memories,
+// drives of local signals and wires, and the control flow of processes, do not
+// keep an instance alive. Drives of signals and wires passed in through ports
+// do, as do operations with effects on unspecified state.
+module {
+  // ELIMINATE-LABEL: hw.module private @PrintLeaf
+  // ELIMINATE:         sim.proc.print
+  hw.module private @PrintLeaf(in %a : i1, out b : i1) {
+    llhd.process {
+      %0 = sim.fmt.literal "hello"
+      sim.proc.print %0
+      llhd.halt
+    }
+    hw.output %a : i1
+  }
+
+  // ELIMINATE-LABEL: hw.module private @PrintMid
+  // ELIMINATE-NEXT:    hw.instance "leaf" @PrintLeaf()
+  hw.module private @PrintMid(in %a : i1, out b : i1) {
+    %0 = hw.instance "leaf" @PrintLeaf(a: %a: i1) -> (b: i1)
+    hw.output %0 : i1
+  }
+
+  // ELIMINATE-LABEL: hw.module private @LocalState
+  hw.module private @LocalState(in %a : i1, in %clock : !seq.clock, out b : i1) {
+    %t = llhd.constant_time <0ns, 1d>
+    %sig = llhd.sig %a : <i1>
+    llhd.drv %sig, %a after %t : i1
+    %w = sv.wire : !hw.inout<i1>
+    sv.assign %w, %a : i1
+    %r = seq.firreg %a clock %clock : i1
+    hw.output %r : i1
+  }
+
+  // ELIMINATE-LABEL: hw.module private @LocalProcesses
+  hw.module private @LocalProcesses(in %a : i1, in %clock : !seq.clock) {
+    %t = llhd.constant_time <0ns, 1d>
+    %sig = llhd.sig %a : <i1>
+    llhd.process {
+      llhd.drv %sig, %a after %t : i1
+      llhd.halt
+    }
+    llhd.process {
+      cf.br ^bb1
+    ^bb1:
+      llhd.drv %sig, %a after %t : i1
+      llhd.wait (%a : i1), ^bb1
+    }
+    %c0_i2 = hw.constant 0 : i2
+    %mem = seq.firmem 0, 1, undefined, undefined : <4 x 1>
+    seq.firmem.write_port %mem[%c0_i2] = %a, clock %clock : <4 x 1>
+  }
+
+  // ELIMINATE-LABEL: hw.module private @Terminate
+  // ELIMINATE:         arc.terminate
+  hw.module private @Terminate(in %ctx : !arc.context) {
+    arc.terminate %ctx, true
+  }
+
+  // ELIMINATE-LABEL: hw.module private @DriveRefPort
+  // ELIMINATE:         llhd.drv
+  hw.module private @DriveRefPort(in %a : i1, in %s : !llhd.ref<i2>) {
+    %t = llhd.constant_time <0ns, 1d>
+    %c0_i1 = hw.constant 0 : i1
+    %0 = llhd.sig.extract %s from %c0_i1 : <i2> -> <i1>
+    llhd.drv %0, %a after %t : i1
+  }
+
+  // ELIMINATE-LABEL: hw.module private @AssignInOutPort
+  // ELIMINATE:         sv.assign
+  hw.module private @AssignInOutPort(in %a : i1, in %w : !hw.inout<i1>) {
+    sv.assign %w, %a : i1
+  }
+
+  // ELIMINATE-LABEL: hw.module private @AssignMuxedInOutPort
+  // ELIMINATE:         sv.assign
+  hw.module private @AssignMuxedInOutPort(in %a : i1, in %c : i1, in %w : !hw.inout<i1>) {
+    %local = sv.wire : !hw.inout<i1>
+    %0 = comb.mux %c, %local, %w : !hw.inout<i1>
+    sv.assign %0, %a : i1
+  }
+
+  // ELIMINATE-LABEL: hw.module public @ObservableTop
+  // ELIMINATE:         %s = llhd.sig
+  // ELIMINATE-NEXT:    %w = sv.wire
+  // ELIMINATE-NEXT:    hw.instance "mid" @PrintMid()
+  // ELIMINATE-NOT:     hw.instance "state"
+  // ELIMINATE-NOT:     hw.instance "processes"
+  // ELIMINATE-NEXT:    hw.instance "terminate" @Terminate(ctx: %ctx: !arc.context)
+  // ELIMINATE-NEXT:    hw.instance "drive" @DriveRefPort(a: %a: i1, s: %s: !llhd.ref<i2>)
+  // ELIMINATE-NEXT:    hw.instance "assign" @AssignInOutPort(a: %a: i1, w: %w: !hw.inout<i1>)
+  // ELIMINATE-NEXT:    hw.instance "muxed" @AssignMuxedInOutPort(a: %a: i1, c: %c: i1, w: %w: !hw.inout<i1>)
+  // ELIMINATE-NEXT:    hw.output
+  hw.module public @ObservableTop(in %a : i1, in %c : i1, in %clock : !seq.clock, in %ctx : !arc.context) {
+    %c0_i2 = hw.constant 0 : i2
+    %s = llhd.sig %c0_i2 : <i2>
+    %w = sv.wire : !hw.inout<i1>
+    %0 = hw.instance "mid" @PrintMid(a: %a: i1) -> (b: i1)
+    %1 = hw.instance "state" @LocalState(a: %a: i1, clock: %clock: !seq.clock) -> (b: i1)
+    hw.instance "processes" @LocalProcesses(a: %a: i1, clock: %clock: !seq.clock) -> ()
+    hw.instance "terminate" @Terminate(ctx: %ctx: !arc.context) -> ()
+    hw.instance "drive" @DriveRefPort(a: %a: i1, s: %s: !llhd.ref<i2>) -> ()
+    hw.instance "assign" @AssignInOutPort(a: %a: i1, w: %w: !hw.inout<i1>) -> ()
+    hw.instance "muxed" @AssignMuxedInOutPort(a: %a: i1, c: %c: i1, w: %w: !hw.inout<i1>) -> ()
+    hw.output
+  }
+}
+
+// -----
+
+// Instances in modules that are never instantiated are not kept due to the side
+// effects of the instantiated module. Instances in modules that become
+// executable after the side effects have been found are kept.
+module {
+  hw.module private @OrphanLeaf() {
+    llhd.process {
+      %0 = sim.fmt.literal "hello"
+      sim.proc.print %0
+      llhd.halt
+    }
+  }
+
+  // ELIMINATE-LABEL: hw.module private @OrphanMid
+  // ELIMINATE-NEXT:    hw.instance "leaf" @OrphanLeaf
+  hw.module private @OrphanMid() {
+    hw.instance "leaf" @OrphanLeaf() -> ()
+  }
+
+  // ELIMINATE-LABEL: hw.module private @Orphan
+  // ELIMINATE-NOT:     hw.instance
+  // ELIMINATE:         hw.output
+  hw.module private @Orphan() {
+    hw.instance "leaf" @OrphanLeaf() -> ()
+    hw.instance "mid" @OrphanMid() -> ()
+  }
+
+  // ELIMINATE-LABEL: hw.module public @OrphanTop
+  // ELIMINATE-NEXT:    hw.instance "leaf" @OrphanLeaf
+  // ELIMINATE-NEXT:    hw.instance "mid" @OrphanMid
+  hw.module public @OrphanTop() {
+    hw.instance "leaf" @OrphanLeaf() -> ()
+    hw.instance "mid" @OrphanMid() -> ()
+  }
 }
