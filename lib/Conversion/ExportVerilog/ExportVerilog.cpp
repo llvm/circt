@@ -2501,8 +2501,9 @@ private:
     return emitBinary(op, Shift, ">>", EB_RHS_UnsignedWithSelfDeterminedWidth);
   }
   SubExprInfo visitComb(ShrSOp op) {
-    // >>> is only an arithmetic shift right when both operands are signed.
-    // Otherwise it does a logical shift.
+    // >>> is an arithmetic shift right when the LHS operand is signed; the RHS
+    // shift amount is self-determined unsigned. Force a signed barrier when
+    // nested inside context-propagating unsigned operators (e.g. +, ^).
     return emitBinary(op, Shift, ">>>",
                       EB_RequireSignedOperands | EB_ForceResultSigned |
                           EB_RHS_UnsignedWithSelfDeterminedWidth);
@@ -2551,7 +2552,9 @@ private:
   /// This is set (before a visit method is called) if emitSubExpr would
   /// prefer to get an output of a specific sign.  This is a hint to cause the
   /// visitor to change its emission strategy, but the visit method can ignore
-  /// it without a correctness problem.
+  /// it without a correctness problem; if `signPreference == RequireUnsigned`
+  /// and the visitor still returns `IsSigned`, `emitSubExpr` wraps the emitted
+  /// expression in `$unsigned(...)`.
   SubExprSignRequirement signPreference = NoRequirement;
 
   /// Keep track of all operations emitted within this subexpression for
@@ -2592,7 +2595,14 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   // TODO: Build tree capturing precedence/fixity at same level, group those!
   // Maybe like: https://www.tweag.io/blog/2022-02-10-ormolu-and-operators/ .
   // For now, only group within punctuation, such as parens + braces.
-  if (emitBinaryFlags & EB_ForceResultSigned)
+  // When the caller already requires an unsigned result, `emitSubExpr` will
+  // wrap this expression in `$unsigned(...)`, which itself creates a
+  // self-determined context. Omit the inner `$signed(...)` wrapper in that
+  // case to avoid redundant nested `$unsigned($signed(...))` casts that
+  // trigger lint errors (e.g. SIGN_CAST_CONTEXT).
+  bool wrapResultInSigned = (emitBinaryFlags & EB_ForceResultSigned) &&
+                            signPreference != RequireUnsigned;
+  if (wrapResultInSigned)
     ps << "$signed(" << PP::ibox0;
   auto operandSignReq =
       SubExprSignRequirement(emitBinaryFlags & EB_OperandSignRequirementMask);
@@ -2628,15 +2638,21 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                              rhsIsUnsignedValueWithSelfDeterminedWidth);
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
-  // only if both operands are signed.
+  // only if both operands are signed, except for shift operators where the RHS
+  // is always treated as unsigned and has no effect on result signedness.
   SubExprSignResult signedness = IsUnsigned;
-  if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
+  if (emitBinaryFlags & EB_RHS_UnsignedWithSelfDeterminedWidth) {
+    signedness = lhsInfo.signedness;
+  } else if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned) {
     signedness = IsSigned;
+  }
 
   if (emitBinaryFlags & EB_ForceResultSigned) {
-    ps << PP::end << ")";
+    if (wrapResultInSigned) {
+      ps << PP::end << ")";
+      prec = Selection;
+    }
     signedness = IsSigned;
-    prec = Selection;
   }
 
   return {prec, signedness};

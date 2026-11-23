@@ -171,12 +171,12 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
 // CHECK-NEXT:      assign r2 = a - b;
 // CHECK-NEXT:      assign r4 = a * b;
 // CHECK-NEXT:      assign r6 = a / b;
-// CHECK-NEXT:      assign r7 = $unsigned($signed($signed(a) / $signed(b)));
+// CHECK-NEXT:      assign r7 = $unsigned($signed(a) / $signed(b));
 // CHECK-NEXT:      assign r8 = a % b;
-// CHECK-NEXT:      assign r9 = $unsigned($signed($signed(a) % $signed(b)));
+// CHECK-NEXT:      assign r9 = $unsigned($signed(a) % $signed(b));
 // CHECK-NEXT:      assign r10 = a << b;
 // CHECK-NEXT:      assign r11 = a >> b;
-// CHECK-NEXT:      assign r12 = $unsigned($signed($signed(a) >>> b));
+// CHECK-NEXT:      assign r12 = $unsigned($signed(a) >>> b);
 // CHECK-NEXT:      assign r13 = a | b;
 // CHECK-NEXT:      assign r14 = a & b;
 // CHECK-NEXT:      assign r15 = a ^ b;
@@ -437,9 +437,7 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   %awire = sv.wire : !sv.net<i4>
   // CHECK: wire [3:0] awire;
 
-  // CHECK:      assign awire =
-  // CHECK-NEXT:   $unsigned($signed($signed(in1) / $signed(in2)))
-  // CHECK-NEXT:   / $unsigned($signed($signed(in3) / $signed(in4)));
+  // CHECK:      assign awire = $unsigned($signed(in1) / $signed(in2)) / $unsigned($signed(in3) / $signed(in4));
   %a1 = comb.divs %in1, %in2: i4
   %a2 = comb.divs %in3, %in4: i4
   %a3 = comb.divu %a1, %a2: i4
@@ -458,7 +456,7 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   sv.assign %awire, %b4 : !sv.net<i4>, i4
 
   // https://github.com/llvm/circt/issues/369
-  // CHECK: assign awire = $unsigned($signed(4'sh5 / -4'sh3));
+  // CHECK: assign awire = $unsigned(4'sh5 / -4'sh3);
   %c5_i4 = hw.constant 5 : i4
   %c-3_i4 = hw.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
@@ -972,7 +970,7 @@ hw.module @ShiftAmountZext(in %a: i8, in %b1: i4, in %b2: i4, in %b3: i4,
   // CHECK: assign o2 = a >> b2;
   %r2 = comb.shru %a, %B2 : i8
 
-  // CHECK: assign o3 = $unsigned($signed($signed(a) >>> b3));
+  // CHECK: assign o3 = $unsigned($signed(a) >>> b3);
   %r3 = comb.shrs %a, %B3 : i8
   hw.output %r1, %r2, %r3 : i8, i8, i8
 }
@@ -997,7 +995,7 @@ hw.module @SignedshiftResultSign(in %a: i18, out b: i18) {
 }
 // CHECK-LABEL: module SignedShiftRightPrecendence
 hw.module @SignedShiftRightPrecendence(in %p: i1, in %x: i45, out o: i45) {
-  // CHECK: assign o = $unsigned($signed($signed(x) >>> (p ? 45'h5 : 45'h8)))
+  // CHECK: assign o = $unsigned($signed(x) >>> (p ? 45'h5 : 45'h8))
   %c5_i45 = hw.constant 5 : i45
   %c8_i45 = hw.constant 8 : i45
   %0 = comb.mux %p, %c5_i45, %c8_i45 : i45
@@ -1582,4 +1580,36 @@ hw.module @PortWithSVAttributesAndZeroWidth(
     in %z : i0,
     out out : i1) {
   hw.output %a : i1
+}
+
+// Verify that comb.shrs / comb.divs / comb.mods do not emit a redundant outer
+// $signed(...) inside self-determined $unsigned(...) (avoiding
+// SIGN_CAST_CONTEXT), while preserving $signed(...) barriers in non-unsigned
+// contexts and propagating LHS signedness across shift operators (SV 11.8.1).
+// CHECK-LABEL: module ShrSSignednessPropagation(
+// CHECK-NOT:   $unsigned($signed($signed(
+// CHECK:       assign out_shrs = $unsigned($signed(a) >>> b);
+// CHECK-NEXT:  assign out_shl_of_shrs = $unsigned($signed($signed(a) >>> b) << c);
+// CHECK-NEXT:  assign out_shru_of_shrs = $unsigned($signed($signed(a) >>> b) >> c);
+// CHECK-NEXT:  assign out_slt = $signed($signed(a) >>> b) < $signed(d);
+// CHECK-NEXT:  assign out_slt_of_shru = $signed($signed(a) >>> b) >> c < $signed(d);
+// CHECK-NEXT:  assign out_ult = $unsigned($signed(a) >>> b) < $unsigned($signed(d) >>> c);
+hw.module @ShrSSignednessPropagation(
+    in %a : i8, in %b : i8, in %c : i8, in %d : i8,
+    out out_shrs : i8, out out_shl_of_shrs : i8, out out_shru_of_shrs : i8,
+    out out_slt : i1, out out_slt_of_shru : i1, out out_ult : i1) {
+  %s1 = comb.shrs %a, %b : i8
+  %s2 = comb.shrs %a, %b : i8
+  %s3 = comb.shrs %a, %b : i8
+  %s4 = comb.shrs %a, %b : i8
+  %s5 = comb.shrs %d, %c : i8
+  %s6 = comb.shrs %a, %b : i8
+  %s7 = comb.shrs %a, %b : i8
+  %shl = comb.shl %s6, %c : i8
+  %shru = comb.shru %s2, %c : i8
+  %shru_for_slt = comb.shru %s7, %c : i8
+  %slt = comb.icmp slt %s3, %d : i8
+  %slt_of_shru = comb.icmp slt %shru_for_slt, %d : i8
+  %ult = comb.icmp ult %s4, %s5 : i8
+  hw.output %s1, %shl, %shru, %slt, %slt_of_shru, %ult : i8, i8, i8, i1, i1, i1
 }
