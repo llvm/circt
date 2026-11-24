@@ -21,6 +21,22 @@ static StringAttr append(StringAttr base, const Twine &suffix) {
   return StringAttr::get(context, base.getValue() + suffix);
 }
 
+/// Return the per-direction index at which a new port of direction `dir`,
+/// created for `origPort` of `mod`, is inserted.
+/// This is the number of original ports of direction `dir` before `origPort`,
+/// so the new ports of the module keep the order of their original ports.
+static unsigned getInsertionIndex(HWMutableModuleLike mod, PortInfo origPort,
+                                  ModulePort::Direction dir) {
+  if (origPort.dir == dir)
+    return origPort.argNum;
+  auto type = mod.getHWModuleType();
+  size_t portId = origPort.isOutput()
+                      ? type.getPortIdForOutputId(origPort.argNum)
+                      : type.getPortIdForInputId(origPort.argNum);
+  // The ports before `origPort` not of its direction are of direction `dir`.
+  return portId - origPort.argNum;
+}
+
 namespace {
 
 /// We consider non-caught ports to be ad-hoc signaling or 'untouched'. (Which
@@ -95,7 +111,8 @@ Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
       newInputs.size(),
       attrs,
       origPort.loc};
-  newInputs.emplace_back(0, newPort);
+  newInputs.emplace_back(
+      getInsertionIndex(mod, origPort, ModulePort::Direction::Input), newPort);
 
   if (!body)
     return {};
@@ -114,7 +131,8 @@ void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
       newOutputs.size(),
       attrs,
       origPort.loc};
-  newOutputs.emplace_back(0, newPort);
+  newOutputs.emplace_back(
+      getInsertionIndex(mod, origPort, ModulePort::Direction::Output), newPort);
 
   if (!body)
     return;
@@ -161,16 +179,20 @@ LogicalResult PortConverterImpl::run() {
   }
 
   // Lower the ports -- this mutates the body directly and builds the port
-  // lists.
-  for (auto &lowering : loweredInputs)
-    lowering->lowerPort();
-  for (auto &lowering : loweredOutputs)
-    lowering->lowerPort();
+  // lists.  Lowering in port order keeps the lists in ascending index order.
+  for (PortInfo port : ports)
+    (port.isOutput() ? loweredOutputs : loweredInputs)[port.argNum]
+        ->lowerPort();
+  [[maybe_unused]] auto byIndex = [](const auto &a, const auto &b) {
+    return a.first < b.first;
+  };
+  assert(llvm::is_sorted(newInputs, byIndex) &&
+         llvm::is_sorted(newOutputs, byIndex) &&
+         "new ports must be created in the order of their original ports");
 
-  // Set up vectors to erase _all_ the ports. It's easier to rebuild everything
-  // than reason about interleaving the newly lowered ports with the non lowered
-  // ports. Also, the 'modifyPorts' method ends up rebuilding the port lists
-  // anyway, so this isn't nearly as expensive as it may seem.
+  // Set up vectors to erase _all_ the ports. Each new port is inserted at the
+  // position of its original port, so the rebuilt port list keeps the order
+  // of the original one.
   SmallVector<unsigned> inputsToErase(mod.getNumInputPorts());
   std::iota(inputsToErase.begin(), inputsToErase.end(), 0);
   SmallVector<unsigned> outputsToErase(mod.getNumOutputPorts());

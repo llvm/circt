@@ -842,3 +842,28 @@ module {
     hw.output %x : i1
   }
 }
+
+// -----
+
+// ===== Interleaved ports keep their order =====
+// - Erasing a dead input leaves the other ports of an interleaved module in
+//   place
+
+module {
+
+  // ELIMINATE-LABEL:   hw.module private @interleaved(in %a : i1, out x : i1, in %b : i1, out y : i1) {
+  // ELIMINATE:           hw.output %a, %b : i1, i1
+  // ELIMINATE:         }
+  hw.module private @interleaved(in %a : i1, out x : i1, in %b : i1, out y : i1, in %dead : i1) {
+    hw.output %a, %b : i1, i1
+  }
+
+  // ELIMINATE-LABEL:   hw.module public @interleaved_user(in %a : i1, in %b : i1, in %c : i1, out x : i1, out y : i1) {
+  // ELIMINATE:           %[[X:.*]], %[[Y:.*]] = hw.instance "inst" @interleaved(a: %a: i1, b: %b: i1) -> (x: i1, y: i1)
+  // ELIMINATE:           hw.output %[[X]], %[[Y]] : i1, i1
+  // ELIMINATE:         }
+  hw.module public @interleaved_user(in %a : i1, in %b : i1, in %c : i1, out x : i1, out y : i1) {
+    %x, %y = hw.instance "inst" @interleaved(a: %a: i1, b: %b: i1, dead: %c: i1) -> (x: i1, y: i1)
+    hw.output %x, %y : i1, i1
+  }
+}

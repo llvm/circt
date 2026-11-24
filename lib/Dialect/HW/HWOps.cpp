@@ -637,140 +637,157 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   result.addRegion();
 }
 
-/// Internal implementation of argument/result insertion and removal on modules.
-static void modifyModuleArgs(
-    MLIRContext *context, ArrayRef<std::pair<unsigned, PortInfo>> insertArgs,
-    ArrayRef<unsigned> removeArgs, ArrayRef<Attribute> oldArgNames,
-    ArrayRef<Type> oldArgTypes, ArrayRef<Attribute> oldArgAttrs,
-    ArrayRef<Location> oldArgLocs, SmallVector<Attribute> &newArgNames,
-    SmallVector<Type> &newArgTypes, SmallVector<Attribute> &newArgAttrs,
-    SmallVector<Location> &newArgLocs, Block *body = nullptr) {
-
-#ifndef NDEBUG
-  // Check that the `insertArgs` and `removeArgs` indices are in ascending
-  // order.
-  assert(llvm::is_sorted(insertArgs,
-                         [](auto &a, auto &b) { return a.first < b.first; }) &&
-         "insertArgs must be in ascending order");
-  assert(llvm::is_sorted(removeArgs, [](auto &a, auto &b) { return a < b; }) &&
-         "removeArgs must be in ascending order");
-#endif
-
-  auto oldArgCount = oldArgTypes.size();
-  auto newArgCount = oldArgCount + insertArgs.size() - removeArgs.size();
-  assert((int)newArgCount >= 0);
-
-  newArgNames.reserve(newArgCount);
-  newArgTypes.reserve(newArgCount);
-  newArgAttrs.reserve(newArgCount);
-  newArgLocs.reserve(newArgCount);
-
-  auto emptyDictAttr = DictionaryAttr::get(context, {});
-  auto unknownLoc = UnknownLoc::get(context);
-
-  BitVector erasedIndices;
-  if (body)
-    erasedIndices.resize(oldArgCount + insertArgs.size());
-
-  for (unsigned argIdx = 0, idx = 0; argIdx <= oldArgCount; ++argIdx, ++idx) {
-    // Insert new ports at this position.
-    while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
-      auto port = insertArgs[0].second;
-      newArgNames.push_back(port.name);
-      newArgTypes.push_back(port.type);
-      newArgAttrs.push_back(port.attrs ? port.attrs : emptyDictAttr);
-      insertArgs = insertArgs.drop_front();
-      LocationAttr loc = port.loc ? port.loc : unknownLoc;
-      newArgLocs.push_back(loc);
-      if (body)
-        body->insertArgument(idx++, port.type, loc);
-    }
-    if (argIdx == oldArgCount)
-      break;
-
-    // Migrate the old port at this position.
-    bool removed = false;
-    while (!removeArgs.empty() && removeArgs[0] == argIdx) {
-      removeArgs = removeArgs.drop_front();
-      removed = true;
-    }
-
-    if (removed) {
-      if (body)
-        erasedIndices.set(idx);
-    } else {
-      newArgNames.push_back(oldArgNames[argIdx]);
-      newArgTypes.push_back(oldArgTypes[argIdx]);
-      newArgAttrs.push_back(oldArgAttrs.empty() ? emptyDictAttr
-                                                : oldArgAttrs[argIdx]);
-      newArgLocs.push_back(oldArgLocs[argIdx]);
-    }
-  }
-
-  if (body)
-    body->eraseArguments(erasedIndices);
-
-  assert(newArgNames.size() == newArgCount);
-  assert(newArgTypes.size() == newArgCount);
-  assert(newArgAttrs.size() == newArgCount);
-  assert(newArgLocs.size() == newArgCount);
-}
-
-/// Insert and remove ports of a module. The insertion and removal indices must
-/// be in ascending order. The indices refer to the port positions before any
-/// insertion or removal occurs. Ports inserted at the same index will appear in
-/// the module in the same order as they were listed in the `insert*` array.
+/// Insert and remove ports of a module.
+/// Indices are per-direction: the k-th input, the k-th output.
+/// Indices refer to the ports before any insertion or removal.
+/// Each list must be in ascending order.
+/// Ports inserted at the same index keep their listed order.
+/// An inserted port takes its direction from the list it is in.
 ///
-/// The operation must be any of the module-like operations.
+/// Remaining ports keep their relative order.
+/// An inserted port of direction D at index k is placed:
+///   1. immediately before the old k-th port of direction D, if there is one;
+///   2. otherwise, immediately after the last old port of direction D;
+///   3. otherwise, at the front for an input and at the end for an output.
+/// Removed ports still anchor these placements.
+/// Ports placed after an old port precede those placed before the next one.
+/// A module whose inputs all precede its outputs keeps that shape.
 ///
-/// This is marked deprecated as it's only used from HandshakeToHW and
-/// PortConverter and is likely broken and not currently tested.  Users of this
-/// are still written dealing with input and output ports separately, which is
-/// an old and broken style.
-[[deprecated]] static void
-modifyModulePorts(Operation *op,
+/// When `body` is given, its block arguments are edited to match.
+/// Otherwise the caller owns them, including the input locations on them.
+template <typename ModTy>
+static void
+modifyModulePorts(ModTy mod,
                   ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
                   ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-                  ArrayRef<unsigned> removeInputs,
-                  ArrayRef<unsigned> removeOutputs, Block *body = nullptr) {
-  auto moduleOp = cast<HWModuleLike>(op);
-  auto *context = moduleOp.getContext();
+                  ArrayRef<unsigned> eraseInputs,
+                  ArrayRef<unsigned> eraseOutputs, Block *body = nullptr) {
+  using Direction = ModulePort::Direction;
+  [[maybe_unused]] auto byIndex = [](const auto &a, const auto &b) {
+    return a.first < b.first;
+  };
+  assert(llvm::is_sorted(insertInputs, byIndex) &&
+         "insertInputs must be in ascending order");
+  assert(llvm::is_sorted(insertOutputs, byIndex) &&
+         "insertOutputs must be in ascending order");
+  assert(llvm::is_sorted(eraseInputs) &&
+         "eraseInputs must be in ascending order");
+  assert(llvm::is_sorted(eraseOutputs) &&
+         "eraseOutputs must be in ascending order");
 
-  // Dig up the old argument and result data.
-  auto oldArgNames = moduleOp.getInputNames();
-  auto oldArgTypes = moduleOp.getInputTypes();
-  auto oldArgAttrs = moduleOp.getAllInputAttrs();
-  auto oldArgLocs = moduleOp.getInputLocs();
+  auto *context = mod.getContext();
+  auto oldType = mod.getHWModuleType();
+  auto oldPorts = oldType.getPorts();
+  auto oldAttrs = mod.getAllPortAttrs();
+  size_t numOldInputs = oldType.getNumInputs();
+  size_t numOldOutputs = oldType.getNumOutputs();
 
-  auto oldResultNames = moduleOp.getOutputNames();
-  auto oldResultTypes = moduleOp.getOutputTypes();
-  auto oldResultAttrs = moduleOp.getAllOutputAttrs();
-  auto oldResultLocs = moduleOp.getOutputLocs();
+  // Location storage mechanism:
+  // hw.module keeps input locations on its block arguments and output locations
+  // in an attribute.  Other modules keep all of them in one.
+  constexpr bool inputLocsOnBody = std::is_same_v<ModTy, HWModuleOp>;
+  assert((!body || inputLocsOnBody) && "only hw.module has a body to edit");
+  assert((!body || body->getNumArguments() == numOldInputs) &&
+         "block arguments must match the inputs before the edit");
+  StringAttr locsAttrName;
+  if constexpr (inputLocsOnBody)
+    locsAttrName = mod.getResultLocsAttrName();
+  else
+    locsAttrName = mod.getPortLocsAttrName();
+  ArrayRef<Attribute> oldLocs;
+  if (auto locs = mod->template getAttrOfType<ArrayAttr>(locsAttrName))
+    oldLocs = locs.getValue();
+  assert(
+      (oldLocs.empty() ||
+       oldLocs.size() == (inputLocsOnBody ? numOldOutputs : oldPorts.size())) &&
+      "port locations must be absent or complete");
+  auto hasLocInAttr = [&](Direction dir) {
+    return !inputLocsOnBody || dir == Direction::Output;
+  };
 
-  // Modify the ports.
-  SmallVector<Attribute> newArgNames, newResultNames;
-  SmallVector<Type> newArgTypes, newResultTypes;
-  SmallVector<Attribute> newArgAttrs, newResultAttrs;
-  SmallVector<Location> newArgLocs, newResultLocs;
+  size_t maxNumPorts =
+      oldPorts.size() + insertInputs.size() + insertOutputs.size();
+  SmallVector<ModulePort> newPorts;
+  SmallVector<Attribute> newAttrs, newLocs;
+  newPorts.reserve(maxNumPorts);
+  newAttrs.reserve(maxNumPorts);
+  newLocs.reserve(maxNumPorts);
+  auto emptyDict = DictionaryAttr::get(context);
+  auto unknownLoc = UnknownLoc::get(context);
 
-  modifyModuleArgs(context, insertInputs, removeInputs, oldArgNames,
-                   oldArgTypes, oldArgAttrs, oldArgLocs, newArgNames,
-                   newArgTypes, newArgAttrs, newArgLocs, body);
+  // Position in `body` of the next input (including arguments pending erasure).
+  unsigned argIdx = 0;
+  BitVector erasedArgs(body ? numOldInputs + insertInputs.size() : 0);
 
-  modifyModuleArgs(context, insertOutputs, removeOutputs, oldResultNames,
-                   oldResultTypes, oldResultAttrs, oldResultLocs,
-                   newResultNames, newResultTypes, newResultAttrs,
-                   newResultLocs);
+  // Emit the ports of direction `dir` inserted at per-direction index `idx`.
+  auto emitInserts = [&](Direction dir, size_t idx) {
+    for (auto &inserts = (dir == Direction::Input) ? insertInputs
+                                                   : insertOutputs;
+         !inserts.empty() && inserts.front().first == idx;
+         inserts = inserts.drop_front()) {
+      const PortInfo &port = inserts.front().second;
+      LocationAttr loc = port.loc ? port.loc : unknownLoc;
+      newPorts.push_back({port.name, port.type, dir});
+      newAttrs.push_back(port.attrs ? port.attrs : emptyDict);
+      if (hasLocInAttr(dir))
+        newLocs.push_back(loc);
+      if (body && dir == Direction::Input)
+        body->insertArgument(argIdx++, port.type, loc);
+    }
+  };
 
-  // Update the module operation types and attributes.
-  auto fnty = FunctionType::get(context, newArgTypes, newResultTypes);
-  auto modty = detail::fnToMod(fnty, newArgNames, newResultNames);
-  moduleOp.setHWModuleType(modty);
-  moduleOp.setAllInputAttrs(newArgAttrs);
-  moduleOp.setAllOutputAttrs(newResultAttrs);
+  // Consume `idx` from the erase list of `dir`, reporting whether it was there.
+  auto takeErase = [&](Direction dir, size_t idx) {
+    bool erased = false;
+    for (auto &erases = (dir == Direction::Input) ? eraseInputs : eraseOutputs;
+         !erases.empty() && erases.front() == idx; erases = erases.drop_front())
+      erased = true;
+    return erased;
+  };
 
-  newArgLocs.append(newResultLocs.begin(), newResultLocs.end());
-  moduleOp.setAllPortLocs(newArgLocs);
+  // If there are no old inputs, new inputs go first.
+  if (numOldInputs == 0)
+    emitInserts(Direction::Input, 0);
+
+  size_t inputIdx = 0, outputIdx = 0;
+  for (auto [portIdx, port] : llvm::enumerate(oldPorts)) {
+    bool isInput = port.dir == Direction::Input;
+    size_t idx = isInput ? inputIdx++ : outputIdx++;
+    emitInserts(port.dir, idx);
+    if (takeErase(port.dir, idx)) {
+      if (body && isInput)
+        erasedArgs.set(argIdx++);
+    } else {
+      newPorts.push_back(port);
+      newAttrs.push_back(oldAttrs.empty() ? emptyDict : oldAttrs[portIdx]);
+      if (hasLocInAttr(port.dir))
+        newLocs.push_back(oldLocs.empty()
+                              ? unknownLoc
+                              : oldLocs[inputLocsOnBody ? idx : portIdx]);
+      if (body && isInput)
+        ++argIdx;
+    }
+    // Inputs inserted past the last input go after the last old input,
+    // and similarly for outputs.
+    size_t numOfDir = isInput ? numOldInputs : numOldOutputs;
+    if (idx + 1 == numOfDir)
+      emitInserts(port.dir, numOfDir);
+  }
+
+  // If there are no old outputs, new outputs go last.
+  if (numOldOutputs == 0)
+    emitInserts(Direction::Output, 0);
+
+  assert(insertInputs.empty() && insertOutputs.empty() &&
+         "insertion index out of range");
+  assert(eraseInputs.empty() && eraseOutputs.empty() &&
+         "erasure index out of range");
+
+  if (body)
+    body->eraseArguments(erasedArgs);
+  mod.setModuleType(ModuleType::get(context, newPorts));
+  mod.setAllPortAttrs(newAttrs);
+  mod->setAttr(locsAttrName, ArrayAttr::get(context, newLocs));
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1204,25 +1221,32 @@ LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon(*this); }
 
 std::pair<StringAttr, BlockArgument>
 HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
-  // Find a unique name for the wire.
+  auto arg = insertInputs(index, {{name, ty}}).front();
+  return {getInputNameAttr(index), arg};
+}
+
+SmallVector<BlockArgument>
+HWModuleOp::insertInputs(unsigned index,
+                         ArrayRef<std::pair<StringAttr, Type>> inputs) {
+  // Find unique names for the new ports.
   Namespace ns;
-  auto ports = getPortList();
-  for (auto port : ports)
+  for (auto port : getHWModuleType().getPorts())
     ns.newName(port.name.getValue());
-  auto nameAttr = StringAttr::get(getContext(), ns.newName(name.getValue()));
+
+  SmallVector<std::pair<unsigned, PortInfo>> ports;
+  ports.reserve(inputs.size());
+  for (auto [name, type] : inputs) {
+    PortInfo port;
+    port.name = StringAttr::get(getContext(), ns.newName(name.getValue()));
+    port.dir = ModulePort::Direction::Input;
+    port.type = type;
+    ports.emplace_back(index, port);
+  }
 
   Block *body = getBodyBlock();
-
-  // Create a new port for the host clock.
-  PortInfo port;
-  port.name = nameAttr;
-  port.dir = ModulePort::Direction::Input;
-  port.type = ty;
-  modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {}, {},
-                    body);
-
-  // Add a new argument.
-  return {nameAttr, body->getArgument(index)};
+  modifyModulePorts(*this, ports, {}, {}, {}, body);
+  return SmallVector<BlockArgument>(
+      body->getArguments().slice(index, inputs.size()));
 }
 
 void HWModuleOp::insertOutputs(unsigned index,
@@ -1240,8 +1264,7 @@ void HWModuleOp::insertOutputs(unsigned index,
     port.type = value.getType();
     indexedNewPorts.emplace_back(index, port);
   }
-  modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
-                    getBodyBlock());
+  modifyModulePorts(*this, {}, indexedNewPorts, {}, {}, getBodyBlock());
 
   // Rewrite the output op.
   for (auto &[name, value] : outputs)
@@ -1574,6 +1597,98 @@ LogicalResult InstanceOp::verify() {
       };
   return instance_like_impl::verifyParameterStructure(
       getParameters(), moduleParameters, emitError);
+}
+
+/// Visit one direction's ports in their order after a modifyPorts-style edit.
+/// `onInsert` is called with the position in `inserts` of an inserted port.
+/// `onOld` is called with an old port's index and whether it is removed.
+static void walkEditedPortList(size_t numOld,
+                               ArrayRef<std::pair<unsigned, PortInfo>> inserts,
+                               ArrayRef<unsigned> erases,
+                               function_ref<void(size_t)> onInsert,
+                               function_ref<void(size_t, bool)> onOld) {
+  [[maybe_unused]] auto byIndex = [](const auto &a, const auto &b) {
+    return a.first < b.first;
+  };
+  assert(llvm::is_sorted(inserts, byIndex) &&
+         "insertions must be in ascending order");
+  assert(llvm::is_sorted(erases) && "erasures must be in ascending order");
+  size_t insertIdx = 0;
+  for (size_t oldIdx = 0; oldIdx <= numOld; ++oldIdx) {
+    for (; insertIdx < inserts.size() && inserts[insertIdx].first == oldIdx;
+         ++insertIdx)
+      onInsert(insertIdx);
+    if (oldIdx == numOld)
+      break;
+    bool erased = false;
+    for (; !erases.empty() && erases.front() == oldIdx;
+         erases = erases.drop_front())
+      erased = true;
+    onOld(oldIdx, erased);
+  }
+  assert(insertIdx == inserts.size() && "insertion index out of range");
+  assert(erases.empty() && "erasure index out of range");
+}
+
+InstanceOp InstanceOp::cloneWithModifiedPortsAndReplaceUses(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+    ValueRange insertInputValues,
+    ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
+  assert(insertInputs.size() == insertInputValues.size() &&
+         "each inserted input needs an operand");
+
+  // Compute edited list of inputs and their names.
+  SmallVector<Value> inputs;
+  SmallVector<Attribute> argNames;
+  auto oldInputs = getInputs();
+  auto oldArgNames = getArgNames();
+  walkEditedPortList(
+      oldInputs.size(), insertInputs, eraseInputs,
+      [&](size_t i) {
+        inputs.push_back(insertInputValues[i]);
+        argNames.push_back(insertInputs[i].second.name);
+      },
+      [&](size_t idx, bool erased) {
+        if (erased)
+          return;
+        inputs.push_back(oldInputs[idx]);
+        argNames.push_back(oldArgNames[idx]);
+      });
+
+  // Compute edited list of the outputs, their types, and their names.
+  // Determine the remaining results and index of their replacements.
+  SmallVector<std::pair<OpResult, unsigned>> replacements;
+  SmallVector<Type> resultTypes;
+  SmallVector<Attribute> resultNames;
+  auto oldResultNames = getResultNames();
+  walkEditedPortList(
+      getNumResults(), insertOutputs, eraseOutputs,
+      [&](size_t i) {
+        resultTypes.push_back(insertOutputs[i].second.type);
+        resultNames.push_back(insertOutputs[i].second.name);
+      },
+      [&](size_t idx, bool erased) {
+        auto result = getOperation()->getResult(idx);
+        if (erased) {
+          assert(result.use_empty() && "erased instance result has uses");
+          return;
+        }
+        replacements.emplace_back(result, resultTypes.size());
+        resultTypes.push_back(result.getType());
+        resultNames.push_back(oldResultNames[idx]);
+      });
+
+  OpBuilder builder(*this);
+  auto clone = InstanceOp::create(
+      builder, getLoc(), resultTypes, getInstanceNameAttr(),
+      getModuleNameAttr(), inputs, builder.getArrayAttr(argNames),
+      builder.getArrayAttr(resultNames), getParametersAttr(), getInnerSymAttr(),
+      getDoNotPrintAttr());
+  clone->setDialectAttrs(getOperation()->getDialectAttrs());
+  for (auto [result, idx] : replacements)
+    result.replaceAllUsesWith(clone.getResult(idx));
+  return clone;
 }
 
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {

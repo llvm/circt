@@ -79,3 +79,27 @@ hw.module @passthroughTwoLevels() {
 hw.module @writeInput(in %a: !sv.net<i42>, in %in : i42) {
   sv.assign %a, %in : !sv.net<i42>, i42
 }
+
+// Preserve interleaved port orders: read/write ports take place of the inout port.
+
+// CHECK-LABEL:   hw.module @interleaved(out x : i42, in %a_rd : i42, out a_wr : i42, out y : i42) {
+// CHECK:           hw.output %a_rd, %a_rd, %a_rd : i42, i42, i42
+// CHECK:         }
+hw.module @interleaved(out x : i42, in %a : !hw.inout<i42>, out y : i42) {
+  %aget = sv.read_inout %a : !hw.inout<i42>
+  sv.assign %a, %aget : i42
+  hw.output %aget, %aget : i42, i42
+}
+
+// CHECK-LABEL:   hw.module @interleavedUser(out x : i42, out y : i42) {
+// CHECK:           %[[VAL_0:.*]] = sv.wire : !hw.inout<i42>
+// CHECK:           %[[VAL_1:.*]] = sv.read_inout %[[VAL_0]] : !hw.inout<i42>
+// CHECK:           sv.assign %[[VAL_0]], %[[WR:.*]] : i42
+// CHECK:           %[[X:.*]], %[[WR]], %[[Y:.*]] = hw.instance "inst" @interleaved(a_rd: %[[VAL_1]]: i42) -> (x: i42, a_wr: i42, y: i42)
+// CHECK:           hw.output %[[X]], %[[Y]] : i42, i42
+// CHECK:         }
+hw.module @interleavedUser(out x : i42, out y : i42) {
+  %0 = sv.wire : !hw.inout<i42>
+  %x, %y = hw.instance "inst" @interleaved(a : %0 : !hw.inout<i42>) -> (x : i42, y : i42)
+  hw.output %x, %y : i42, i42
+}
