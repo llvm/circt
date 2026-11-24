@@ -2728,8 +2728,15 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
         delay = adaptor.getDelay();
       }
 
-      rewriter.replaceOpWithNewOp<llhd::DriveOp>(
-          op, adaptor.getDst(), adaptor.getSrc(), delay, Value{});
+      if (isa<llhd::NetType>(adaptor.getDst().getType())) {
+        auto delayed = llhd::DelayOp::create(rewriter, op->getLoc(),
+                                             adaptor.getSrc(), delay);
+        rewriter.replaceOpWithNewOp<llhd::AssignNetOp>(op, adaptor.getDst(),
+                                                       delayed, Value{});
+      } else {
+        rewriter.replaceOpWithNewOp<llhd::DriveOp>(
+            op, adaptor.getDst(), adaptor.getSrc(), delay, Value{});
+      }
       return success();
     }
   }

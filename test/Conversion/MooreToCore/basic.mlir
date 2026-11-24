@@ -684,8 +684,10 @@ moore.module @Net() {
 // types
 // CHECK-LABEL: hw.module @NetType
 // CHECK-SAME: in [[I1NET:%.+]] : !llhd.net<i1>
-// CHECK-SAME: in [[STRUCTNET:%.+]] : !llhd.net<!hw.struct<a: i8, b: i8>>)
-moore.module @NetType(in %i1net : !moore.net<!moore.i1>, in %structnet : !moore.net<struct<{a: i8, b: i8}>>) {
+// CHECK-SAME: in [[STRUCTNET:%.+]] : !llhd.net<!hw.struct<a: i8, b: i8>>
+// CHECK-SAME: in [[TIME:%.+]] : !llhd.time
+moore.module @NetType(in %i1net : !moore.net<!moore.i1>, in %structnet : !moore.net<struct<{a: i8, b: i8}>>, in %time : !moore.time) {
+  // CHECK: [[C0_I1:%.+]] = hw.constant false
   %c0_i1 = moore.constant 0 : i1
   %c0_i8 = moore.constant 0 : i8
   // CHECK: llhd.prb_net [[I1NET]] : i1
@@ -697,6 +699,9 @@ moore.module @NetType(in %i1net : !moore.net<!moore.i1>, in %structnet : !moore.
   // CHECK: llhd.assign_net [[STRUCTNET]], {{%.+}} : !hw.struct<a: i8, b: i8>
   %2 = moore.struct_create %c0_i8, %c0_i8 : !moore.i8, !moore.i8 -> struct<{a: i8, b: i8}>
   moore.assign %structnet, %2 : net<struct<{a: i8, b: i8}>>
+  // CHECK: [[DELAYED:%.+]] = llhd.delay [[C0_I1]] by [[TIME]]
+  // CHECK: llhd.assign_net [[I1NET]], [[DELAYED]] : i1
+  moore.delayed_assign %i1net, %c0_i1, %time : net<i1>
 }
 
 // CHECK-LABEL: hw.module @UnpackedArray
