@@ -1005,3 +1005,18 @@ firrtl.circuit "Create" {
     firrtl.propassign %out, %result : !firrtl.string
   }
 }
+
+firrtl.circuit "Registries" {
+  // CHECK-LABEL: om.class @Registries_Class(%basepath: !om.basepath, %items: !om.registry<!om.integer>)
+  // CHECK-SAME: -> (result: !om.registry<!om.integer>)
+  // CHECK: %[[LOCAL:.*]] = om.registry_create : !om.registry<!om.integer>
+  // CHECK-COUNT-2: om.registry_insert
+  // CHECK: om.class.fields %items : !om.registry<!om.integer>
+  firrtl.module @Registries(in %items: !firrtl.registry<integer>, out %result: !firrtl.registry<integer>) {
+    %local = firrtl.registry.create : !firrtl.registry<integer>
+    %one = firrtl.integer 1
+    firrtl.registry.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.registry.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.propassign %result, %items : !firrtl.registry<integer>
+  }
+}
