@@ -93,16 +93,15 @@ hw.module @SkipDelayedDriveWithInit(in %a : i42, in %b : i42, out o : i42) {
   hw.output %p : i42
 }
 
-// CHECK-LABEL: hw.module @SkipNonConstantDriveDelay
-hw.module @SkipNonConstantDriveDelay(in %b : i42, out o : i42) {
-  // CHECK: [[SIG:%.+]] = llhd.sig :
+// CHECK-LABEL: hw.module @PromoteNonConstantDriveDelay
+hw.module @PromoteNonConstantDriveDelay(in %b : i42, out o : i42) {
   %x = llhd.sig : <i42>
+  // CHECK: [[T:%.+]] = func.call @unknown_time()
   %t = func.call @unknown_time() : () -> !llhd.time
-  // CHECK: llhd.drv [[SIG]], %b
   llhd.drv %x, %b after %t : i42
-  // CHECK: [[PRB:%.+]] = llhd.prb [[SIG]]
   %p = llhd.prb %x : i42
-  // CHECK: hw.output [[PRB]]
+  // CHECK: [[DLY:%.+]] = llhd.delay %b by [[T]] : i42
+  // CHECK: hw.output [[DLY]]
   hw.output %p : i42
 }
 
@@ -156,7 +155,8 @@ hw.module @PromoteDelayedDrive(in %b : i42, out o : i42) {
   %t = llhd.constant_time <1ns, 0d>
   llhd.drv %x, %b after %t : i42
   %p = llhd.prb %x : i42
-  // CHECK: [[DLY:%.+]] = llhd.delay %b by <1ns, 0d> : i42
+  // CHECK: [[T:%.+]] = llhd.constant_time <1ns, 0d>
+  // CHECK: [[DLY:%.+]] = llhd.delay %b by [[T]] : i42
   // CHECK: hw.output [[DLY]]
   hw.output %p : i42
 }
