@@ -449,8 +449,10 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
     auto instOp = hw::InstanceOp::create(
         rewriter, op.getLoc(), op.getResultTypes(), instName, moduleName,
         op.getInputs(), op.getInputNamesAttr(), op.getOutputNamesAttr(),
-        /*Parameter*/ rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr,
-        /*doNotPrint*/ nullptr);
+        /*parameters=*/rewriter.getArrayAttr({}), /*inner_sym=*/nullptr,
+        /*doNotPrint=*/nullptr);
+    if (ArrayAttr svAttrs = sv::getSVAttributes(op))
+      sv::setSVAttributes(instOp, svAttrs);
 
     // Replace uses chain and erase the original op.
     op.replaceAllUsesWith(instOp.getResults());
@@ -2390,11 +2392,13 @@ struct HWInstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
 
-    rewriter.replaceOpWithNewOp<hw::InstanceOp>(
-        op, convResTypes, op.getInstanceName(), op.getModuleName(),
-        adaptor.getOperands(), op.getArgNames(),
-        op.getResultNames(), /*Parameter*/
-        rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr);
+    ArrayAttr svAttrs = sv::getSVAttributes(op);
+    auto newInst = rewriter.replaceOpWithNewOp<hw::InstanceOp>(
+        op, convResTypes, op.getInstanceNameAttr(), op.getModuleNameAttr(),
+        adaptor.getOperands(), op.getArgNamesAttr(), op.getResultNamesAttr(),
+        op.getParametersAttr(), op.getInnerSymAttr(), op.getDoNotPrintAttr());
+    if (svAttrs)
+      sv::setSVAttributes(newInst, svAttrs);
 
     return success();
   }
