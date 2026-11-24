@@ -84,5 +84,13 @@ with ir.Context() as ctx, ir.Location.unknown():
     # CHECK-SAME:   }
     print(param_verbatim_module)
 
+  # Test is_external on sv.verbatim.module (no region — always external)
+  # CHECK: verbatim_module.is_external = True
+  print(f"verbatim_module.is_external = {verbatim_module.is_external}")
+  # CHECK: param_verbatim_module.is_external = True
+  print(
+      f"param_verbatim_module.is_external = {param_verbatim_module.is_external}"
+  )
+
   print("=== SV Verbatim Operations Test Completed ===")
   # CHECK: === SV Verbatim Operations Test Completed ===
