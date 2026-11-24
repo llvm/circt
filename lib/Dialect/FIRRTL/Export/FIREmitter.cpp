@@ -877,16 +877,12 @@ void Emitter::emitFormalLike(Operation *op, StringRef keyword,
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
 static bool isEmittedInline(Operation *op) {
-  // Registry allocations can only be inlined if they have one non-inline user.
-  if (isa<RegistryCreateOp>(op))
-    return op->hasOneUse() && !isEmittedInline(*op->getUsers().begin());
-
   // FIRRTL expressions are statically classified as always inlineable.
-  // InvalidValueOp never is inlined, and is handled specially.
+  // InvalidValueOp and RegistryCreateOp are handled specially.
   // GenericIntrinsicOp is inlined if has exactly one use (only emit once)
   // that is not emitted inline.  This is to ensure it is emitted inline
   // in common cases, but only inspect one level deep.
-  return (isExpression(op) && !isa<InvalidValueOp>(op)) ||
+  return (isExpression(op) && !isa<InvalidValueOp, RegistryCreateOp>(op)) ||
          (isa<GenericIntrinsicOp>(op) && op->hasOneUse() &&
           !isEmittedInline(*op->getUsers().begin()));
 }
@@ -1303,6 +1299,13 @@ void Emitter::emitStatement(PropertyAssertOp op) {
 void Emitter::emitStatement(RegistryCreateOp op) {
   if (failed(requireVersion(missingSpecFIRVersion, op, "Registries")))
     return;
+  // A single property assignment can emit the allocation directly.
+  if (op->hasOneUse()) {
+    if (auto assign = dyn_cast<PropAssignOp>(*op->getUsers().begin());
+        assign && assign.getSrc() == op.getResult())
+      return;
+  }
+
   // Bind the allocation so multiple uses refer to the same registry.
   auto name = circuitNamespace.newName("_registry");
   addValueName(op.getResult(), name);
@@ -1335,7 +1338,14 @@ void Emitter::emitStatement(PropAssignOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "propassign" << PP::space;
-    interleaveComma(op.getOperands());
+    if (auto create = op.getSrc().getDefiningOp<RegistryCreateOp>();
+        create && create->hasOneUse()) {
+      emitExpression(op.getDest());
+      ps << "," << PP::space;
+      emitExpression(create);
+    } else {
+      interleaveComma(op.getOperands());
+    }
   });
   emitLocationAndNewLine(op);
 }
