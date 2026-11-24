@@ -1,6 +1,8 @@
 add_circt_dialect_library(CIRCTSeqTransforms
   ExternalizeClockGate.cpp
   HWMemSimImpl.cpp
+  CheckMultipleClockSources.cpp
+  PropagateClockDomains.cpp
   RegOfVecToMem.cpp
   LowerSeqCompRegCE.cpp
   LowerSeqHLMem.cpp
