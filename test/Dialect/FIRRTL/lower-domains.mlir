@@ -9,11 +9,13 @@ firrtl.circuit "Foo" {
   //   2. A second that returns this user-provided information and includes the
   //      domain information.
   // CHECK-LABEL: firrtl.class @ClockDomain
+  // CHECK-SAME: attributes {linkonce_odr}
   // CHECK-LABEL: firrtl.class @ClockDomain_out
   // CHECK-SAME:    in %domainInfo_in: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out %domainInfo_out: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    in %associations_in: !firrtl.list<path>
   // CHECK-SAME:    out %associations_out: !firrtl.list<path>
+  // CHECK-SAME: attributes {linkonce_odr}
   // CHECK-NEXT:    firrtl.propassign %domainInfo_out, %domainInfo_in
   // CHECK-NEXT:    firrtl.propassign %associations_out, %associations_in
   firrtl.domain @ClockDomain

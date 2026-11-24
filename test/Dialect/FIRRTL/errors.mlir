@@ -1,5 +1,21 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics -allow-unregistered-dialect
 
+firrtl.circuit "Top" {
+  firrtl.module @Top() {}
+  // expected-error @+1 {{linkonce_odr requires public visibility}}
+  firrtl.class private @Private() attributes {linkonce_odr} {}
+}
+
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.module @Top() {}
+  // expected-error @+1 {{linkonce_odr requires public visibility}}
+  firrtl.class nested @Nested() attributes {linkonce_odr} {}
+}
+
+// -----
+
 firrtl.circuit "X" {
 
 firrtl.module @X(in %b : !firrtl.unknowntype) {
