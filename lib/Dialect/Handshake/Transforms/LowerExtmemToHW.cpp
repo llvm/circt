@@ -427,12 +427,20 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
     auto oldReturnOp =
         cast<handshake::ReturnOp>(func.getBody().front().getTerminator());
     llvm::SmallVector<Value> newReturnOperands = oldReturnOp.getOperands();
-    unsigned addedInPorts = 0;
-    auto memName = func.getArgName(i);
+    // The memref block argument moves as ports get inserted before it, and
+    // every memory lowered so far has already shifted the argument list by
+    // (numPorts - 1). So index the mutating argument list by the block
+    // argument's *current* position -- the original index `i` is only correct
+    // while every preceding memory contributes exactly one port, i.e. is either
+    // read-only or write-only. A memory that is both read and written
+    // contributes two, and every memref argument after it was then erased at
+    // the wrong index (hitting a value that still had uses).
+    auto memrefArg = cast<BlockArgument>(arg);
+    auto memName = func.getArgName(memrefArg.getArgNumber());
     auto addArgRes = [&](unsigned id, NamedType &argType,
                          NamedType &resType) -> FailureOr<Value> {
       // Function argument
-      unsigned newArgIdx = i + addedInPorts;
+      unsigned newArgIdx = memrefArg.getArgNumber();
       if (failed(
               func.insertArgument(newArgIdx, argType.second, {}, arg.getLoc())))
         return failure();
@@ -440,7 +448,6 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
                               memName.str() + "_" + argType.first.str(),
                               newArgIdx);
       auto newInPort = func.getArgument(newArgIdx);
-      ++addedInPorts;
 
       // Function result.
       if (failed(func.insertResult(func.getNumResults(), resType.second, {})))
@@ -487,9 +494,10 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
 
     // Erase the original memref argument of the top-level i/o now that it's
     // use has been removed.
-    if (failed(func.eraseArgument(i + addedInPorts)))
+    unsigned memrefArgIdx = memrefArg.getArgNumber();
+    if (failed(func.eraseArgument(memrefArgIdx)))
       return failure();
-    eraseFromArrayAttr(func, "argNames", i + addedInPorts);
+    eraseFromArrayAttr(func, "argNames", memrefArgIdx);
 
     argReplacements[i] = memIOTypes;
   }
