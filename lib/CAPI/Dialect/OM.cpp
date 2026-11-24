@@ -77,6 +77,24 @@ MlirType omListTypeGetElementType(MlirType type) {
   return wrap(cast<ListType>(unwrap(type)).getElementType());
 }
 
+/// Is the Type an OptionType.
+bool omTypeIsAOptionType(MlirType type) {
+  return isa<OptionType>(unwrap(type));
+}
+
+/// Get the TypeID for an OptionType.
+MlirTypeID omOptionTypeGetTypeID(void) { return wrap(OptionType::getTypeID()); }
+
+/// Get the element type of an OptionType.
+MlirType omOptionTypeGetElementType(MlirType type) {
+  return wrap(cast<OptionType>(unwrap(type)).getElementType());
+}
+
+/// Get an OptionType.
+MlirType omOptionTypeGet(MlirType elementType) {
+  return wrap(OptionType::get(unwrap(elementType)));
+}
+
 /// Is the Type a StringType.
 bool omTypeIsAStringType(MlirType type) {
   return isa<StringType>(unwrap(type));
@@ -277,6 +295,32 @@ OMEvaluatorValue omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue,
                                            intptr_t pos) {
   return wrap(cast<evaluator::ListValue>(unwrap(evaluatorValue).get())
                   ->getElements()[pos]);
+}
+
+bool omEvaluatorValueIsAOption(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::OptionValue>(unwrap(evaluatorValue).get());
+}
+
+OMEvaluatorValue omEvaluatorOptionGetEmpty(MlirType optionType) {
+  auto type = cast<OptionType>(unwrap(optionType));
+  return wrap(std::make_shared<evaluator::OptionValue>(
+      type, nullptr, UnknownLoc::get(type.getContext())));
+}
+
+OMEvaluatorValue omEvaluatorOptionGet(MlirType optionType,
+                                      OMEvaluatorValue payload) {
+  auto type = cast<OptionType>(unwrap(optionType));
+  return wrap(std::make_shared<evaluator::OptionValue>(
+      type, unwrap(payload), UnknownLoc::get(type.getContext())));
+}
+
+bool omEvaluatorOptionHasValue(OMEvaluatorValue evaluatorValue) {
+  return cast<evaluator::OptionValue>(unwrap(evaluatorValue).get())->hasValue();
+}
+
+OMEvaluatorValue omEvaluatorOptionGetValue(OMEvaluatorValue evaluatorValue) {
+  return wrap(
+      cast<evaluator::OptionValue>(unwrap(evaluatorValue).get())->getValue());
 }
 
 bool omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue) {
