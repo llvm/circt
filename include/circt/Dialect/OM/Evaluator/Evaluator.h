@@ -47,7 +47,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 class EvaluatorValue : public std::enable_shared_from_this<EvaluatorValue> {
 public:
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, BasePath, Path };
+  enum class Kind { Attr, Object, List, Option, BasePath, Path };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
       : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
@@ -61,9 +61,8 @@ public:
     fullyEvaluated = true;
   }
 
-  /// Return true if the value is unknown (has unknown in its fan-in).
-  /// A value is unknown if it depends on an UnknownValueOp or if any of its
-  /// inputs are unknown. Unknown values propagate through operations.
+  /// Return true if the value itself is unknown. This does not recursively
+  /// inspect object fields or container payloads.
   bool isUnknown() const { return unknown; }
 
   /// Mark this value as unknown.
@@ -177,6 +176,50 @@ public:
 private:
   om::ListType type;
   SmallVector<EvaluatorValuePtr> elements;
+};
+
+/// An option whose payload may be unevaluated to support forward references
+/// and cycles. Options imported into scratch IR with unknown payloads are
+/// canonicalized to unknown options during elaboration.
+class OptionValue : public EvaluatorValue {
+public:
+  // Placeholder until we know whether the option is empty or has a value.
+  OptionValue(om::OptionType type, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Option, loc), type(type) {}
+
+  // A null payload means an empty option.
+  OptionValue(om::OptionType type, EvaluatorValuePtr value, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Option, loc), type(type),
+        value(std::move(value)) {
+    markFullyEvaluated();
+  }
+
+  void setValue(EvaluatorValuePtr newValue) {
+    assert(!isFullyEvaluated() && "option is already evaluated");
+    value = std::move(newValue);
+    markFullyEvaluated();
+  }
+
+  om::OptionType getOptionType() const { return type; }
+
+  bool hasValue() const {
+    assert(isFullyEvaluated() && !isUnknown() &&
+           "cannot query an unevaluated or unknown option");
+    return bool(value);
+  }
+
+  const EvaluatorValuePtr &getValue() const {
+    assert(hasValue() && "option is empty");
+    return value;
+  }
+
+  static bool classof(const EvaluatorValue *e) {
+    return e->getKind() == Kind::Option;
+  }
+
+private:
+  om::OptionType type;
+  EvaluatorValuePtr value;
 };
 
 /// A composite Object, which has a type and fields.
@@ -348,6 +391,9 @@ private:
   FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
+  FailureOr<EvaluatorValuePtr>
+  evaluateOptionCreate(OptionCreateOp op, ActualParameters actualParams,
+                       Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateBasePathCreate(FrozenBasePathCreateOp op,
                          ActualParameters actualParams, Location loc);
@@ -402,6 +448,9 @@ operator<<(mlir::Diagnostic &diag,
     diag << "Object(" << object->getType() << ")";
   else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
     diag << "List(" << list->getType() << ")";
+  else if (auto *option =
+               llvm::dyn_cast<evaluator::OptionValue>(&evaluatorValue))
+    diag << "Option(" << option->getType() << ")";
   else if (llvm::isa<evaluator::BasePathValue>(&evaluatorValue))
     diag << "BasePath()";
   else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))
@@ -418,6 +467,8 @@ operator<<(mlir::Diagnostic &diag,
 /// Helper to enable printing objects in Diagnostics.
 static inline mlir::Diagnostic &
 operator<<(mlir::Diagnostic &diag, const EvaluatorValuePtr &evaluatorValue) {
+  if (!evaluatorValue)
+    return diag << "<null>";
   return diag << *evaluatorValue.get();
 }
 

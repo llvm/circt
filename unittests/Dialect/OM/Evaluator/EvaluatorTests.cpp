@@ -537,6 +537,56 @@ module {
   ASSERT_EQ(42u, getBuiltinInteger(getField(fieldValue, "field")));
 }
 
+TEST_F(EvaluatorTests, Option) {
+  StringRef mod = R"MLIR(
+!option = !om.option<!om.integer>
+om.class @Option() -> (
+  empty: !option,
+  present: !option,
+  unknown: !option,
+  cycle: !om.option<!om.any>
+) {
+  %empty = om.option_create : !option
+  %value = om.constant #om.integer<42 : i32> : !om.integer
+  %present = om.option_create %value : !option
+  %unknown = om.unknown : !option
+  %cycle = om.option_create %payload : !om.option<!om.any>
+  %payload = om.any_cast %cycle : (!om.option<!om.any>) -> !om.any
+  om.class.fields %empty, %present, %unknown, %cycle : !option, !option, !option, !om.option<!om.any>
+}
+)MLIR";
+  auto owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Option"), {});
+  ASSERT_TRUE(succeeded(result));
+
+  auto *empty = cast<evaluator::OptionValue>(getField(*result, "empty").get());
+  auto *present =
+      cast<evaluator::OptionValue>(getField(*result, "present").get());
+  auto *unknown =
+      cast<evaluator::OptionValue>(getField(*result, "unknown").get());
+  auto optionType = OptionType::get(OMIntegerType::get(&context));
+  for (auto *option : {empty, present, unknown}) {
+    ASSERT_TRUE(option->isFullyEvaluated());
+    EXPECT_EQ(option->getType(), optionType);
+  }
+
+  ASSERT_FALSE(empty->isUnknown());
+  EXPECT_FALSE(empty->hasValue());
+  ASSERT_FALSE(present->isUnknown());
+  ASSERT_TRUE(present->hasValue());
+  EXPECT_EQ(getInteger(present->getValue()), 42);
+  EXPECT_TRUE(unknown->isUnknown());
+
+  // A cyclic option must reuse its placeholder.
+  auto *cycle = cast<evaluator::OptionValue>(getField(*result, "cycle").get());
+  ASSERT_TRUE(cycle->isFullyEvaluated());
+  ASSERT_FALSE(cycle->isUnknown());
+  ASSERT_TRUE(cycle->hasValue());
+  EXPECT_EQ(cycle->getValue().get(), cycle);
+}
+
 TEST_F(EvaluatorTests, InstantiateGraphRegion) {
   StringRef mod = R"MLIR(
 !ty = !om.class.type<@LinkedList>
