@@ -1328,6 +1328,17 @@ def PathOp : FIRRTLOp<"path", [Pure]> {
   let assemblyFormat = "$targetKind $target attr-dict";
 }
 
+def RegistryCreateOp : FIRRTLOp<"registry.create", [
+    ParentOneOf<["FModuleOp", "ClassOp"]>]> {
+  let summary = "Create an empty registry";
+  let description = [{
+    Creates a fresh, empty registry. A registry is an unordered, append-only
+    collection shared by reference; it retains duplicate values.
+  }];
+  let results = (outs Res<RegistryType, "", [MemAlloc]>:$result);
+  let assemblyFormat = "attr-dict `:` qualified(type($result))";
+}
+
 def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {
   let summary = "Produce a list value";
   let description = [{

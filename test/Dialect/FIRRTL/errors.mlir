@@ -3889,6 +3889,15 @@ firrtl.circuit "ObjectCreateMissingOperand" {
 
 // -----
 
+firrtl.circuit "RegistryMismatch" {
+  firrtl.module @RegistryMismatch(in %items: !firrtl.registry<integer>, in %value: !firrtl.string) {
+    // expected-error @+1 {{element type must match the registry element type}}
+    firrtl.registry.insert %items, %value : !firrtl.registry<integer>, !firrtl.string
+  }
+}
+
+// -----
+
 firrtl.circuit "ObjectCreateWrongType" {
   firrtl.extclass @Class(in str: !firrtl.string)
   firrtl.module @ObjectCreateWrongType(in %int: !firrtl.integer) {
@@ -3927,4 +3936,11 @@ firrtl.circuit "ObjectCreateInputFlow" {
     // expected-error @below {{has no flow}}
     firrtl.propassign %input, %str : !firrtl.string
   }
+}
+
+// -----
+
+firrtl.circuit "RegistryConstant" {
+  // expected-error @+1 {{registries cannot be const}}
+  firrtl.module @RegistryConstant(in %items: !firrtl.const.registry<integer>) {}
 }

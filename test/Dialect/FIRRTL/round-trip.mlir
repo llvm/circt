@@ -568,4 +568,15 @@ firrtl.module @RegInitial(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
   firrtl.matchingconnect %q, %r : !firrtl.uint<8>
 }
 
+// CHECK-LABEL: firrtl.module @Registries
+firrtl.module @Registries(in %items: !firrtl.registry<integer>) {
+  // CHECK: %[[LOCAL:.*]] = firrtl.registry.create {test = "keep"} : !firrtl.registry<integer>
+  %0 = firrtl.registry.create {test = "keep"} : !firrtl.registry<integer>
+  %one = firrtl.integer 1
+  // CHECK: firrtl.registry.insert %items,
+  firrtl.registry.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
+  // CHECK: firrtl.registry.insert %[[LOCAL]],
+  firrtl.registry.insert %0, %one : !firrtl.registry<integer>, !firrtl.integer
+}
+
 }
