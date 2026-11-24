@@ -28,7 +28,8 @@ endmodule
 
 // CHECK-LABEL: hw.module @TestCombUdpDelay(
 module TestCombUdpDelay(input logic sel, input logic a, input logic b, output logic out);
-  // CHECK-DAG: [[DELAYED:%.+]] = llhd.delay [[U_MUX_DELAY:%.+]] by <5000000fs, 0d> : i1
+  // CHECK-DAG: [[TIME:%.+]] = llhd.constant_time <5000000fs, 0d>
+  // CHECK-DAG: [[DELAYED:%.+]] = llhd.delay [[U_MUX_DELAY:%.+]] by [[TIME]] : i1
   // CHECK-DAG: [[U_MUX_DELAY]] = hw.instance "u_mux_delay" @udp_mux(sel: %sel: i1, a: %a: i1, b: %b: i1) -> (out: i1)
   // CHECK: hw.output [[DELAYED]]
   udp_mux #5 u_mux_delay (out, sel, a, b);

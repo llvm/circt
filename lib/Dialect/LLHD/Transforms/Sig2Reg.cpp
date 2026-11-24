@@ -142,15 +142,8 @@ void Sig2RegPass::promote(Operation *op) {
         ++numSkipped;
         return;
       }
-      TimeAttr delay;
-      if (!matchPattern(drive.getTime(), m_Constant(&delay))) {
-        LLVM_DEBUG(llvm::dbgs()
-                   << "- Skipping " << *op << " (non-constant drive delay)\n");
-        ++numSkipped;
-        return;
-      }
       OpBuilder builder(drive);
-      value = DelayOp::create(builder, drive.getLoc(), value, delay);
+      value = DelayOp::create(builder, drive.getLoc(), value, drive.getTime());
     }
   } else {
     if (signalOp)
