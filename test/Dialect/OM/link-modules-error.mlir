@@ -104,3 +104,33 @@ module {
     }
   }
 }
+
+// -----
+
+// Deduplicated definitions must still match external declarations.
+module {
+  module {
+    // expected-error @+1 {{failed to link class "C" since declaration doesn't match the definition: 0-th argument type is not equal, 'i1' vs 'i2'}}
+    om.class.extern @C(%x: i2) -> (x: i2) {}
+  }
+  module {
+    // expected-note @+1 {{definition is here}}
+    om.class @C(%x: i1) -> (x: i1) attributes {linkonce_odr} { om.class.fields %x : i1 }
+  }
+  module {
+    om.class @C(%x: i1) -> (x: i1) attributes {linkonce_odr} { om.class.fields %x : i1 }
+  }
+}
+
+// -----
+
+module {
+  module {
+    // expected-note @+1 {{previous definition is here}}
+    om.class @Mixed() attributes {linkonce_odr} { om.class.fields }
+  }
+  module {
+    // expected-error @+1 {{cannot link class "Mixed" with inconsistent linkonce_odr attributes}}
+    om.class @Mixed() { om.class.fields }
+  }
+}
