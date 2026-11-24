@@ -169,4 +169,25 @@ hw.module @ManyBlocks(in %clk: i1, in %a: i42, in %en_assume: i1, in %en_assert:
   hw.output %0 : i42
 }
 
+// -----
 
+// An enabled assumption only constrains the assertion when its enable holds.
+// CHECK-LABEL: hw.module @enabledAssume
+// CHECK-NEXT:   %c0_i42 = hw.constant 0 : i42
+// CHECK-NEXT:   [[TMP0:%.+]] = comb.icmp bin ugt %a, %c0_i42 : i42
+// CHECK-NEXT:   [[TMP1:%.+]] = comb.icmp bin ugt %b, %c0_i42 : i42
+// CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
+// CHECK-NEXT:   [[NOTAE:%.+]] = comb.xor %ae, [[TRUE]] : i1
+// CHECK-NEXT:   [[IMP:%.+]] = comb.or [[NOTAE]], [[TMP0]] : i1
+// CHECK-NEXT:   [[EN:%.+]] = comb.and %se, [[IMP]] : i1
+// CHECK-NEXT:   verif.assert [[TMP1]] if [[EN]] : i1
+// CHECK-NEXT:   hw.output
+// CHECK-NEXT: }
+
+hw.module @enabledAssume(in %a: i42, in %b: i42, in %ae: i1, in %se: i1) {
+  %c0_i42 = hw.constant 0 : i42
+  %0 = comb.icmp bin ugt %a, %c0_i42 : i42
+  %1 = comb.icmp bin ugt %b, %c0_i42 : i42
+  verif.assume %0 if %ae : i1
+  verif.assert %1 if %se : i1
+}
