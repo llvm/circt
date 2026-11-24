@@ -5512,8 +5512,15 @@ module ArrayGateTop(input [3:0] a, input [3:0] b, output [3:0] y);
 endmodule
 
 // CHECK-LABEL: moore.module @ModuleWithAttrs() attributes {sv.attributes = [#sv.attribute<"flag_attr">, #sv.attribute<"str_attr" = "\22hello \\\22world\\\22\22">, #sv.attribute<"int_attr" = "42">]} {
+// CHECK-NEXT:    moore.instance "u0" @Dummy() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">, #sv.attribute<"mark" = "\22val\22">, #sv.attribute<"weight" = "7">]}
+// CHECK-NEXT:    moore.instance "arr_0" @Dummy() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">]}
+// CHECK-NEXT:    moore.instance "arr_1" @Dummy() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">]}
 // CHECK-NEXT:    moore.output
 // CHECK-NEXT:  }
 (* flag_attr, str_attr = "hello \"world\"", int_attr = 42 *)
 module ModuleWithAttrs();
+  (* keep_hierarchy, mark = "val", weight = 7 *)
+  Dummy u0();
+  (* keep_hierarchy *)
+  Dummy arr [1:0] ();
 endmodule

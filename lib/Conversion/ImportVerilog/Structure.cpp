@@ -7,11 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/FVInt.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
 #include "slang/syntax/AllSyntax.h"
+#include "slang/syntax/SyntaxKind.h"
 #include "slang/syntax/SyntaxVisitor.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -762,6 +764,7 @@ struct ModuleVisitor : public BaseVisitor {
         builder.getStringAttr(instName),
         FlatSymbolRefAttr::get(module.getSymNameAttr()), inputValues,
         inputNames, outputNames);
+    context.convertAttributes(instNode, inst);
 
     // An alias belongs to this instance if the body containing its symbol is
     // nested anywhere under the instance in the elaborated tree.
@@ -1386,6 +1389,34 @@ LogicalResult Context::convertCompilation() {
   return success();
 }
 
+void Context::convertAttributes(const slang::ast::Symbol &symbol,
+                                Operation *op) {
+  SmallVector<sv::SVAttributeAttr> svAttrs;
+  for (const slang::ast::AttributeSymbol *attr :
+       compilation.getAttributes(symbol)) {
+    StringAttr exprAttr;
+    if (const slang::syntax::SyntaxNode *syntax = attr->getSyntax()) {
+      const auto &spec = syntax->as<slang::syntax::AttributeSpecSyntax>();
+      if (spec.value) {
+        if (spec.value->expr->kind ==
+            slang::syntax::SyntaxKind::StringLiteralExpression) {
+          exprAttr = builder.getStringAttr(
+              spec.value->expr->as<slang::syntax::LiteralExpressionSyntax>()
+                  .literal.rawText());
+        } else {
+          exprAttr = builder.getStringAttr(attr->getValue().toString(
+              /*abbreviateThresholdBits=*/slang::SVInt::MAX_BITS));
+        }
+      }
+    }
+    svAttrs.push_back(sv::SVAttributeAttr::get(
+        getContext(), builder.getStringAttr(attr->name), exprAttr,
+        /*emitAsComment=*/false));
+  }
+  if (!svAttrs.empty())
+    sv::setSVAttributes(op, svAttrs);
+}
+
 ModuleLowering *
 Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::ArgumentDirection;
@@ -1594,28 +1625,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // Create an empty module that corresponds to this module.
   auto moduleOp =
       moore::SVModuleOp::create(builder, loc, module->name, moduleType);
-  SmallVector<sv::SVAttributeAttr> svAttrs;
-  for (const auto *attr : compilation.getAttributes(module->getDefinition())) {
-    StringAttr exprAttr;
-    if (const auto *syntax = attr->getSyntax()) {
-      const auto &spec = syntax->as<slang::syntax::AttributeSpecSyntax>();
-      if (spec.value) {
-        if (spec.value->expr->kind ==
-            slang::syntax::SyntaxKind::StringLiteralExpression) {
-          exprAttr = builder.getStringAttr(
-              spec.value->expr->as<slang::syntax::LiteralExpressionSyntax>()
-                  .literal.rawText());
-        } else {
-          exprAttr = builder.getStringAttr(attr->getValue().toString());
-        }
-      }
-    }
-    svAttrs.push_back(sv::SVAttributeAttr::get(
-        getContext(), builder.getStringAttr(attr->name), exprAttr,
-        /*emitAsComment=*/false));
-  }
-  if (!svAttrs.empty())
-    sv::setSVAttributes(moduleOp, svAttrs);
+  convertAttributes(module->getDefinition(), moduleOp);
   orderedRootOps.insert(it, {key, moduleOp});
   moduleOp.getBodyRegion().push_back(block.release());
   lowering.op = moduleOp;
