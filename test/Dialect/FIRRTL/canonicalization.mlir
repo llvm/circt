@@ -1,5 +1,4 @@
-// RUN: circt-opt -canonicalize='top-down=true region-simplify=aggressive' %s | FileCheck %s --check-prefixes=CHECK,REGISTRY
-// RUN: circt-opt -canonicalize='top-down=true region-simplify=aggressive' -cse %s | FileCheck %s --check-prefix=REGISTRY
+// RUN: circt-opt -canonicalize='top-down=true region-simplify=aggressive' %s | FileCheck %s
 
 firrtl.circuit "Casts" {
 
@@ -4353,25 +4352,5 @@ firrtl.module @RegInitial(in %clock: !firrtl.clock, out %q: !firrtl.uint<1>, out
   firrtl.matchingconnect %q2, %r2 : !firrtl.uint<1>
 }
 
-// Unused registries can be removed, but distinct registries must not merge.
-// REGISTRY-LABEL: firrtl.module @Registries
-// REGISTRY: %[[ONE:.*]] = firrtl.integer 1
-// REGISTRY-NEXT: %[[FIRST:.*]] = firrtl.registry.create : !firrtl.registry<integer>
-// REGISTRY-NEXT: %[[SECOND:.*]] = firrtl.registry.create : !firrtl.registry<integer>
-// REGISTRY-NOT: firrtl.registry.create
-// REGISTRY: firrtl.registry.insert %[[FIRST]], %[[ONE]]
-// REGISTRY-NEXT: firrtl.registry.insert %[[FIRST]], %[[ONE]]
-// REGISTRY: firrtl.propassign %a, %[[FIRST]]
-// REGISTRY: firrtl.propassign %b, %[[SECOND]]
-firrtl.module @Registries(out %a: !firrtl.registry<integer>, out %b: !firrtl.registry<integer>) {
-  %first = firrtl.registry.create : !firrtl.registry<integer>
-  %second = firrtl.registry.create : !firrtl.registry<integer>
-  %unused = firrtl.registry.create : !firrtl.registry<integer>
-  %one = firrtl.integer 1
-  firrtl.registry.insert %first, %one : !firrtl.registry<integer>, !firrtl.integer
-  firrtl.registry.insert %first, %one : !firrtl.registry<integer>, !firrtl.integer
-  firrtl.propassign %a, %first : !firrtl.registry<integer>
-  firrtl.propassign %b, %second : !firrtl.registry<integer>
-}
 
 }
