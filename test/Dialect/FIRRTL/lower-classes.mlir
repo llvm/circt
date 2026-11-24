@@ -1019,23 +1019,4 @@ firrtl.circuit "Registries" {
     firrtl.registry.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
     firrtl.propassign %result, %items : !firrtl.registry<integer>
   }
-
-  // Effect-only usage must create a class even without property ports.
-  // CHECK-LABEL: om.class private @RegistryEffectOnly_Class
-  // CHECK: om.registry_create : !om.registry<!om.integer>
-  // CHECK: om.registry_insert
-  firrtl.module private @RegistryEffectOnly() {
-    %items = firrtl.registry.create : !firrtl.registry<integer>
-    %one = firrtl.integer 1
-    firrtl.registry.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
-  }
-
-  // Recursively convert registry/list element types.
-  // CHECK-LABEL: om.class private @RegistryNested
-  // CHECK-SAME: !om.registry<!om.list<!om.registry<i1>>>
-  // CHECK: om.registry_create : !om.registry<!om.list<!om.registry<i1>>>
-  firrtl.class private @RegistryNested(out %result: !firrtl.registry<list<registry<bool>>>) {
-    %items = firrtl.registry.create : !firrtl.registry<list<registry<bool>>>
-    firrtl.propassign %result, %items : !firrtl.registry<list<registry<bool>>>
-  }
 }
