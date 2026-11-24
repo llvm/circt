@@ -2208,8 +2208,8 @@ circuit Domains:
 
 ;// -----
 FIRRTL version 6.0.0
-circuit Registries:
-  public module Registries:
+circuit RegistryType:
+  public module RegistryType:
     ; expected-error @below {{Registries are a FIRRTL 7.0.0+ feature}}
     input clockGates: Registry<Path>
 
@@ -2389,10 +2389,14 @@ circuit RegistryMissingComma:
 
 FIRRTL version 7.0.0
 circuit RegistryWrongElement:
+  class RegistryItem:
+    output value: Integer
+    propassign value, Integer(1)
   public module RegistryWrongElement:
-    input items: Registry<Integer>
+    input items: Registry<AnyRef>
+    object item of RegistryItem
     ; expected-error @+1 {{registry_insert element type does not match registry element type}}
-    registry_insert items, String("wrong")
+    registry_insert items, item
 
 ;// -----
 

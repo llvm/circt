@@ -1283,7 +1283,8 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
 
   case FIRToken::langle_Registry: {
-    // The '<' has already been consumed by the lexer.
+    // The '<' has already been consumed by the lexer, so we need to parse
+    // the element type and the trailing '>'.
     if (requireFeature(missingSpecFIRVersion, "Registries"))
       return failure();
     consumeToken();
@@ -4836,15 +4837,10 @@ ParseResult FIRStmtParser::parseRegistryInsert() {
     return emitError(startTok.getLoc(),
                      "registry_insert requires a Registry handle");
   locationProcessor.setLoc(startTok.getLoc());
-  if (element.getType() != type.getElementType()) {
-    if (!isa<AnyRefType>(type.getElementType()) ||
-        !isa<ClassType>(element.getType()))
-      return emitError(
-          startTok.getLoc(),
-          "registry_insert element type does not match registry element "
-          "type");
-    element = ObjectAnyRefCastOp::create(builder, element);
-  }
+  if (element.getType() != type.getElementType())
+    return emitError(startTok.getLoc(),
+                     "registry_insert element type does not match registry "
+                     "element type");
   RegistryInsertOp::create(builder, registry, element);
   return success();
 }

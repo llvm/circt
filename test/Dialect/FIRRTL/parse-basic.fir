@@ -2672,24 +2672,21 @@ circuit WireDomains:
 
 ;// -----
 FIRRTL version 7.0.0
-circuit Registries:
+circuit RegistryType:
   ; CHECK-LABEL: firrtl.domain @RegistryDomain
-  ; CHECK-SAME: #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
+  ; CHECK-SAME:    #firrtl.domain.field<"clockGates", !firrtl.registry<path>>
   domain RegistryDomain:
     clockGates: Registry<Path>
 
-  class RegistryItem:
-    output value: Integer
-    propassign value, Integer(1)
-
-  ; CHECK-LABEL: firrtl.module @Registries
+  ; CHECK-LABEL: firrtl.module @RegistryType
   ; CHECK-SAME: in %items: !firrtl.registry<integer>
   ; CHECK-SAME: out %result: !firrtl.registry<integer>
   ; CHECK-SAME: in %nested: !firrtl.registry<list<registry<bool>>>
-  public module Registries:
+  public module RegistryType:
     input items: Registry<Integer>
     output result: Registry<Integer>
     input nested: Registry <List<Registry<Bool>>>
+    input ref: AnyRef
     output objects: Registry<AnyRef>
     wire local: Registry<Integer>
     ; CHECK: firrtl.registry.create : !firrtl.registry<integer>
@@ -2703,7 +2700,5 @@ circuit Registries:
     ; CHECK: firrtl.registry.create : !firrtl.registry<anyref>
     propassign refs, Registry<AnyRef>()
     propassign objects, refs
-    object item of RegistryItem
-    ; CHECK: %[[ANY:.*]] = firrtl.object.anyref_cast
-    ; CHECK: firrtl.registry.insert %refs, %[[ANY]]
-    registry_insert refs, item
+    ; CHECK: firrtl.registry.insert %refs, %ref
+    registry_insert refs, ref

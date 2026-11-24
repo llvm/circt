@@ -877,10 +877,17 @@ void Emitter::emitFormalLike(Operation *op, StringRef keyword,
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
 static bool isEmittedInline(Operation *op) {
-  // Most expressions are always inlined. Handle InvalidValueOp separately.
-  // Inline allocations and intrinsics only if they have one non-inline user.
-  return (isExpression(op) && !isa<InvalidValueOp, RegistryCreateOp>(op)) ||
-         (isa<GenericIntrinsicOp, RegistryCreateOp>(op) && op->hasOneUse() &&
+  // Registry allocations can only be inlined if they have one non-inline user.
+  if (isa<RegistryCreateOp>(op))
+    return op->hasOneUse() && !isEmittedInline(*op->getUsers().begin());
+
+  // FIRRTL expressions are statically classified as always inlineable.
+  // InvalidValueOp never is inlined, and is handled specially.
+  // GenericIntrinsicOp is inlined if has exactly one use (only emit once)
+  // that is not emitted inline.  This is to ensure it is emitted inline
+  // in common cases, but only inspect one level deep.
+  return (isExpression(op) && !isa<InvalidValueOp>(op)) ||
+         (isa<GenericIntrinsicOp>(op) && op->hasOneUse() &&
           !isEmittedInline(*op->getUsers().begin()));
 }
 
