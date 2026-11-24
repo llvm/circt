@@ -1013,10 +1013,10 @@ firrtl.circuit "Registries" {
   // CHECK-COUNT-2: om.registry_insert
   // CHECK: om.class.fields %items : !om.registry<!om.integer>
   firrtl.module @Registries(in %items: !firrtl.registry<integer>, out %result: !firrtl.registry<integer>) {
-    %local = firrtl.prop.registry : !firrtl.registry<integer>
+    %local = firrtl.registry.create : !firrtl.registry<integer>
     %one = firrtl.integer 1
-    firrtl.prop.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
-    firrtl.prop.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.registry.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.registry.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
     firrtl.propassign %result, %items : !firrtl.registry<integer>
   }
 
@@ -1025,9 +1025,9 @@ firrtl.circuit "Registries" {
   // CHECK: om.registry_create : !om.registry<!om.integer>
   // CHECK: om.registry_insert
   firrtl.module private @RegistryEffectOnly() {
-    %items = firrtl.prop.registry : !firrtl.registry<integer>
+    %items = firrtl.registry.create : !firrtl.registry<integer>
     %one = firrtl.integer 1
-    firrtl.prop.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.registry.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
   }
 
   // Recursively convert registry/list element types.
@@ -1035,7 +1035,7 @@ firrtl.circuit "Registries" {
   // CHECK-SAME: !om.registry<!om.list<!om.registry<i1>>>
   // CHECK: om.registry_create : !om.registry<!om.list<!om.registry<i1>>>
   firrtl.class private @RegistryNested(out %result: !firrtl.registry<list<registry<bool>>>) {
-    %items = firrtl.prop.registry : !firrtl.registry<list<registry<bool>>>
+    %items = firrtl.registry.create : !firrtl.registry<list<registry<bool>>>
     firrtl.propassign %result, %items : !firrtl.registry<list<registry<bool>>>
   }
 }
