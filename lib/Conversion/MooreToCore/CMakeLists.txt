@@ -21,6 +21,7 @@ add_circt_conversion_library(CIRCTMooreToCore
   MLIRControlFlowDialect
   MLIRControlFlowTransforms
   MLIRFuncDialect
+  MLIRMathDialect
   MLIRSCFDialect
   MLIRSCFToControlFlow
   MLIRSideEffectInterfaces

@@ -4,7 +4,7 @@ set(LLVM_TARGET_DEFINITIONS RTGTest.td)
 
 add_circt_dialect_doc(RTGTest rtgtest)
 
-tablegen(CIRCT RTGTestInstructionMethods.cpp.inc -gen-rtg-instruction-methods)
+tablegen_internal(CIRCT RTGTestInstructionMethods.cpp.inc -gen-rtg-instruction-methods)
 add_public_tablegen_target(CIRCTRTGTestInstructionMethodsIncGen)
 
 set(LLVM_TARGET_DEFINITIONS RTGTestAttributes.td)

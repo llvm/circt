@@ -162,8 +162,7 @@ struct PrefixingInliner : public InlinerInterface {
     replacer->replaceElementsIn(op);
   }
 
-  bool allowSingleBlockOptimization(
-      iterator_range<Region::iterator> inlinedBlocks) const final {
+  bool allowSingleBlockOptimization(Block *inlinedBlock) const final {
     return true;
   }
 };
