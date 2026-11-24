@@ -428,7 +428,9 @@ void Annotation::removeMember(StringRef name) {
   setDict(DictionaryAttr::getWithSorted(dict.getContext(), attributes));
 }
 
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 void Annotation::dump() { attr.dump(); }
+#endif
 
 //===----------------------------------------------------------------------===//
 // AnnotationSetIterator
