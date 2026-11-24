@@ -1270,12 +1270,12 @@ firrtl.circuit "Foo" {
   firrtl.module @Registries(in %items: !firrtl.registry<integer>, out %result: !firrtl.registry<integer>) {
     // CHECK: wire [[LOCAL:_registry[0-9_]*]] : Registry<Integer>
     // CHECK-NEXT: propassign [[LOCAL]], Registry<Integer>()
-    %local = firrtl.prop.registry : !firrtl.registry<integer>
+    %local = firrtl.registry.create : !firrtl.registry<integer>
     %one = firrtl.integer 1
     // CHECK: registry_insert items, Integer(1)
-    firrtl.prop.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.registry.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
     // CHECK: registry_insert [[LOCAL]], Integer(1)
-    firrtl.prop.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
+    firrtl.registry.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
     // CHECK: propassign result, [[LOCAL]]
     firrtl.propassign %result, %local : !firrtl.registry<integer>
   }

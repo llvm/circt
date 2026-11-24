@@ -2692,18 +2692,18 @@ circuit Registries:
     input nested: Registry <List<Registry<Bool>>>
     output objects: Registry<AnyRef>
     wire local: Registry<Integer>
-    ; CHECK: firrtl.prop.registry : !firrtl.registry<integer>
+    ; CHECK: firrtl.registry.create : !firrtl.registry<integer>
     propassign local, Registry<Integer>()
-    ; CHECK: firrtl.prop.insert %items,
+    ; CHECK: firrtl.registry.insert %items,
     registry_insert items, Integer(1)
-    ; CHECK: firrtl.prop.insert %local,
+    ; CHECK: firrtl.registry.insert %local,
     registry_insert local, Integer(1)
     propassign result, local
     wire refs: Registry<AnyRef>
-    ; CHECK: firrtl.prop.registry : !firrtl.registry<anyref>
+    ; CHECK: firrtl.registry.create : !firrtl.registry<anyref>
     propassign refs, Registry<AnyRef>()
     propassign objects, refs
     object item of RegistryItem
     ; CHECK: %[[ANY:.*]] = firrtl.object.anyref_cast
-    ; CHECK: firrtl.prop.insert %refs, %[[ANY]]
+    ; CHECK: firrtl.registry.insert %refs, %[[ANY]]
     registry_insert refs, item
