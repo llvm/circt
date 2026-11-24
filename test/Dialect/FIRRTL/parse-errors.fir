@@ -1332,6 +1332,104 @@ circuit ListContainsVersionError:
 ;// -----
 FIRRTL version 7.0.0
 
+circuit ListIntersectNotListLhs:
+  public module ListIntersectNotListLhs:
+    ; expected-error @below {{first operand of list_intersect must be a List}}
+    propassert list_intersect(Integer(1), List<Integer>()), "not a list"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectNotListRhs:
+  public module ListIntersectNotListRhs:
+    ; expected-error @below {{second operand of list_intersect must be a List}}
+    propassert list_intersect(List<Integer>(), Integer(1)), "not a list"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectMismatchedPrimitives:
+  public module ListIntersectMismatchedPrimitives:
+    ; expected-error @below {{list_intersect element types must match or both be reference types, but got '!firrtl.integer' and '!firrtl.string'}}
+    propassert list_intersect(List<Integer>(), List<String>()), "type mismatch"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectReferencePrimitive:
+  public module ListIntersectReferencePrimitive:
+    ; expected-error @below {{list_intersect element types must match or both be reference types, but got '!firrtl.anyref' and '!firrtl.bool'}}
+    propassert list_intersect(List<AnyRef>(), List<Bool>()), "type mismatch"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectPrimitiveReference:
+  public module ListIntersectPrimitiveReference:
+    ; expected-error @below {{list_intersect element types must match or both be reference types, but got '!firrtl.bool' and '!firrtl.anyref'}}
+    propassert list_intersect(List<Bool>(), List<AnyRef>()), "type mismatch"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectUnsupportedDoubleLhs:
+  public module ListIntersectUnsupportedDoubleLhs:
+    ; Empty lists must still have supported element types.
+    ; expected-error @below {{list_intersect does not support elements of type '!firrtl.double'}}
+    propassert list_intersect(List<Double>(), List<Integer>()), "unsupported type"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectUnsupportedDoubleRhs:
+  public module ListIntersectUnsupportedDoubleRhs:
+    ; expected-error @below {{list_intersect does not support elements of type '!firrtl.double'}}
+    propassert list_intersect(List<Integer>(), List<Double>()), "unsupported type"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectMissingFirst:
+  public module ListIntersectMissingFirst:
+    ; expected-error @below {{expected lhs list expression in list_intersect expression}}
+    propassert list_intersect(, List<Integer>()), "missing first"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectMissingSecond:
+  public module ListIntersectMissingSecond:
+    ; expected-error @below {{expected rhs list expression in list_intersect expression}}
+    propassert list_intersect(List<Integer>(), ), "missing second"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectExtraOperand:
+  public module ListIntersectExtraOperand:
+    ; expected-error @below {{expected ')'}}
+    propassert list_intersect(List<Integer>(), List<Integer>(), List<Integer>()), "extra operand"
+
+;// -----
+FIRRTL version 7.0.0
+
+circuit ListIntersectMissingComma:
+  public module ListIntersectMissingComma:
+    ; expected-error @below {{expected ','}}
+    propassert list_intersect(List<Integer>() List<Integer>()), "missing comma"
+
+;// -----
+FIRRTL version 6.0.0
+
+circuit ListIntersectVersionError:
+  public module ListIntersectVersionError:
+    input values : List<Integer>
+    ; expected-error @below {{list intersect are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 6.0.0}}
+    propassert list_intersect(values, values), "version gate"
+
+;// -----
+FIRRTL version 7.0.0
+
 circuit PropEqInvalidLhs:
   public module PropEqInvalidLhs:
     input ref : AnyRef

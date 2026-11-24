@@ -2064,6 +2064,7 @@ private:
   ParseResult parsePropEqExp(Value &result);
   ParseResult parseListLengthExp(Value &result);
   ParseResult parseListContainsExp(Value &result);
+  ParseResult parseListIntersectExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
   ParseResult parseUnknownProperty(Value &result);
 
@@ -2481,6 +2482,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_list_contains:
     if (requireFeature(missingSpecFIRVersion, "list contains") ||
         parseListContainsExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_list_intersect:
+    if (requireFeature(nextFIRVersion, "list intersect") ||
+        parseListIntersectExp(result))
       return failure();
     break;
 
@@ -3049,6 +3056,52 @@ ParseResult FIRStmtParser::parseListContainsExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = ListContainsOp::create(builder, list, element);
+  return success();
+}
+
+/// list-intersect-exp ::= 'list_intersect' '(' exp ',' exp ')'
+// NOLINTNEXTLINE(misc-no-recursion)
+ParseResult FIRStmtParser::parseListIntersectExp(Value &result) {
+  consumeToken(FIRToken::lp_list_intersect);
+
+  auto loc = getToken().getLoc();
+  Value lhs, rhs;
+  locationProcessor.setLoc(loc);
+  if (parseExp(lhs,
+               "expected lhs list expression in list_intersect expression") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(rhs,
+               "expected rhs list expression in list_intersect expression") ||
+      parseToken(FIRToken::r_paren, "expected ')'"))
+    return failure();
+
+  auto lhsType = dyn_cast<ListType>(lhs.getType());
+  auto rhsType = dyn_cast<ListType>(rhs.getType());
+  if (!lhsType)
+    return emitError(loc, "first operand of list_intersect must be a List");
+  if (!rhsType)
+    return emitError(loc, "second operand of list_intersect must be a List");
+
+  auto lhsElementType = lhsType.getElementType();
+  auto rhsElementType = rhsType.getElementType();
+  auto isValidType = [](Type type) {
+    return isa<StringType, BoolType, FIntegerType, ClassType, AnyRefType>(type);
+  };
+  if (!isValidType(lhsElementType))
+    return emitError(loc, "list_intersect does not support elements of type ")
+           << lhsElementType;
+  if (!isValidType(rhsElementType))
+    return emitError(loc, "list_intersect does not support elements of type ")
+           << rhsElementType;
+  if (lhsElementType != rhsElementType &&
+      !(isa<ClassType, AnyRefType>(lhsElementType) &&
+        isa<ClassType, AnyRefType>(rhsElementType)))
+    return emitError(loc, "list_intersect element types must match or both be "
+                          "reference types, but got ")
+           << lhsElementType << " and " << rhsElementType;
+
+  locationProcessor.setLoc(loc);
+  result = ListIntersectOp::create(builder, lhs, rhs);
   return success();
 }
 

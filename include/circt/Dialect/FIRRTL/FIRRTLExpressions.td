@@ -1411,6 +1411,39 @@ def ListContainsOp : FIRRTLOp<"list.contains", [Pure,
   let assemblyFormat = "$list `,` $element attr-dict `:` type($list)";
 }
 
+def ListIntersectOp : FIRRTLOp<"list.intersect", [Pure,
+    PredOpTrait<"list element types must match or both be reference types",
+      CPred<"([](Type lhs, Type rhs) { return lhs == rhs || "
+            "(isa<ClassType, AnyRefType>(lhs) && "
+            "isa<ClassType, AnyRefType>(rhs)); })("
+            "type_cast<ListType>($lhs.getType()).getElementType(), "
+            "type_cast<ListType>($rhs.getType()).getElementType())">>,
+    AllTypesMatch<["lhs", "result"]>]> {
+  let summary = "Return the multiset intersection of two lists";
+  let description = [{
+    Returns the multiset intersection of two lists using the equality semantics
+    of `prop.eq`. The result is a subsequence of the first list that retains the
+    earliest occurrences of each value.
+
+    Strings, integers, and booleans are compared by value and must have matching
+    element types. Class and AnyRef elements are compared by object identity,
+    not by structural equality of object fields. Reference element types may
+    differ: lists of different classes, or a class and AnyRef, are compatible in
+    either order. The result has the type of the first operand, so reversing the
+    operands may change both the order and type of the result.
+
+    Example:
+    ```mlir
+    %result = firrtl.list.intersect %lhs, %rhs : !firrtl.list<class<@Foo()>>, !firrtl.list<anyref>
+    ```
+  }];
+
+  let arguments = (ins EqualityListType:$lhs, EqualityListType:$rhs);
+  let results = (outs ListType:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+}
+
 def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
   let summary = "Produce a constant boolean value";
   let description = [{

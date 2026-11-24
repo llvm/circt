@@ -108,7 +108,8 @@ firrtl.circuit "Component" {
   // CHECK-SAME:   out_strings: !om.list<!om.string>,
   // CHECK-SAME:   out_empty: !om.list<!om.string>,
   // CHECK-SAME:   out_nested: !om.list<!om.list<!om.string>>,
-  // CHECK-SAME:   out_objs: !om.list<!om.class.type<@ClassTest>>
+  // CHECK-SAME:   out_objs: !om.list<!om.class.type<@ClassTest>>,
+  // CHECK-SAME:   out_intersection: !om.list<!om.string>
   // CHECK-SAME: ) {
   firrtl.class @ListTest(in %s1: !firrtl.string,
                          in %s2: !firrtl.string,
@@ -117,7 +118,8 @@ firrtl.circuit "Component" {
                          out %out_strings: !firrtl.list<string>,
                          out %out_empty: !firrtl.list<string>,
                          out %out_nested: !firrtl.list<list<string>>,
-                         out %out_objs: !firrtl.list<class<@ClassTest()>>) {
+                         out %out_objs: !firrtl.list<class<@ClassTest()>>,
+                         out %out_intersection: !firrtl.list<string>) {
     // List of basic property types (strings)
     // CHECK-NEXT: %[[STRINGS:.+]] = om.list_create %s1, %s2 : !om.string
     %strings = firrtl.list.create %s1, %s2 : !firrtl.list<string>
@@ -138,7 +140,12 @@ firrtl.circuit "Component" {
     %objs = firrtl.list.create %c1, %c2 : !firrtl.list<class<@ClassTest()>>
     firrtl.propassign %out_objs, %objs : !firrtl.list<class<@ClassTest()>>
 
-    // CHECK-NEXT: om.class.fields %[[STRINGS]], %[[EMPTY]], %[[NESTED]], %[[OBJS]] : !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.list<!om.string>>, !om.list<!om.class.type<@ClassTest>>
+    // List intersection
+    // CHECK-NEXT: %[[INTERSECTION:.+]] = om.list_intersect %[[STRINGS]], %[[EMPTY]] : <!om.string>, <!om.string>{{$}}
+    %intersection = firrtl.list.intersect %strings, %empty : !firrtl.list<string>, !firrtl.list<string>
+    firrtl.propassign %out_intersection, %intersection : !firrtl.list<string>
+
+    // CHECK-NEXT: om.class.fields %[[STRINGS]], %[[EMPTY]], %[[NESTED]], %[[OBJS]], %[[INTERSECTION]] : !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.list<!om.string>>, !om.list<!om.class.type<@ClassTest>>, !om.list<!om.string>{{ *$}}
   }
 
   // CHECK-LABEL: om.class @BoolTest

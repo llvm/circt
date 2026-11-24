@@ -229,6 +229,12 @@ struct Emitter {
     emitPrimExpr("list_contains", op);
   }
 
+  void emitExpression(ListIntersectOp op) {
+    if (failed(requireVersion(nextFIRVersion, op, "list intersect")))
+      return;
+    emitPrimExpr("list_intersect", op);
+  }
+
   void emitExpression(BoolAndOp op) {
     if (failed(requireVersion({6, 0, 0}, op, "boolean and")))
       return;
@@ -1652,7 +1658,7 @@ void Emitter::emitExpression(Value value) {
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
           ObjectAnyRefCastOp, DomainAnyRefCastOp, UnknownValueOp, IntegerAndOp,
           IntegerOrOp, IntegerNotOp, StringConcatOp, PropEqOp, ListLengthOp,
-          ListContainsOp, BoolAndOp, BoolOrOp, BoolXorOp,
+          ListContainsOp, ListIntersectOp, BoolAndOp, BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions

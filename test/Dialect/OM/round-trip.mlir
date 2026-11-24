@@ -212,6 +212,17 @@ om.class @ListContains(%obj: !om.class.type<@Widget>) {
   om.class.fields
 }
 
+// CHECK-LABEL: @ListIntersect
+om.class @ListIntersect(
+  %widgets: !om.list<!om.class.type<@Widget>>,
+  %refs: !om.list<!om.any>
+) -> (result: !om.list<!om.class.type<@Widget>>) {
+  // CHECK: [[RESULT:%.+]] = om.list_intersect %widgets, %refs : <!om.class.type<@Widget>>, <!om.any>
+  %result = om.list_intersect %widgets, %refs : !om.list<!om.class.type<@Widget>>, !om.list<!om.any>
+  // CHECK-NEXT: om.class.fields [[RESULT]] : !om.list<!om.class.type<@Widget>>
+  om.class.fields %result : !om.list<!om.class.type<@Widget>>
+}
+
 // CHECK-LABEL: @Integer
 // CHECK-SAME: -> (int: !om.integer)
 om.class @IntegerConstant() -> (int: !om.integer) {
