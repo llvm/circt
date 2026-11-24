@@ -311,7 +311,7 @@ ScratchIRBuilder::materializeContainerInput(evaluator::ListValue *listValue,
 }
 
 FailureOr<Value>
-// NOLINTNEXTLINE(misc-no-recursion)
+// NOLINTNEXTLINE(misc-no-recursion,llvm-prefer-static-over-anonymous-namespace)
 ScratchIRBuilder::materializeOptionInput(evaluator::OptionValue *optionValue,
                                          Location loc) {
   if (!optionValue->isFullyEvaluated())
