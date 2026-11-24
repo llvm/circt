@@ -252,6 +252,12 @@ with Context() as ctx:
   assert isinstance(list_type, om.ListType)
   assert isinstance(list_type.element_type, om.AnyType)
 
+  # Test OptionType construction and parsing.
+  option_type = Type.parse("!om.option<!om.any>")
+  assert isinstance(option_type, om.OptionType)
+  assert isinstance(option_type.element_type, om.AnyType)
+  assert option_type == om.OptionType.get(any_type)
+
   # Test partial evaluation with multiple inputs and outputs
   module = Module.parse("""
   module {
@@ -400,3 +406,73 @@ with Context() as ctx, Location.unknown():
   assert list(items) == [1]
   assert sorted(evaluator.instantiate("Append", items).items) == [1, 2]
   assert isinstance(evaluator.instantiate("UnknownRegistry").items, om.Unknown)
+
+# Test option values in the evaluator.
+
+with Context() as ctx:
+  circt.register_dialects(ctx)
+  module = Module.parse("""
+  !option = !om.option<!om.integer>
+  module {
+    om.class @Options() -> (
+        empty: !option, present: !option, unknown: !option,
+        cycle: !om.option<!om.any>) {
+      %empty = om.option_create : !option
+      %integer = om.constant #om.integer<42 : si64> : !om.integer
+      %present = om.option_create %integer : !option
+      %unknown = om.unknown : !option
+      %cycle = om.option_create %payload : !om.option<!om.any>
+      %payload = om.any_cast %cycle : (!om.option<!om.any>) -> !om.any
+      om.class.fields %empty, %present, %unknown, %cycle :
+        !option, !option, !option, !om.option<!om.any>
+    }
+    om.class @EchoOption(%option: !option) -> (option: !option) {
+      om.class.fields %option : !option
+    }
+  }
+  """)
+  evaluator = om.Evaluator(module)
+  option_type = om.OptionType.get(Type.parse("!om.integer"))
+  obj = evaluator.instantiate("Options")
+  assert isinstance(obj.empty, om.Option)
+  assert obj.empty.type == option_type
+  assert not obj.empty.has_value
+  assert isinstance(obj.present, om.Option)
+  assert obj.present.type == option_type
+  assert obj.present.has_value
+  assert obj.present.value == 42
+  assert isinstance(obj.unknown, om.Unknown)
+  assert obj.unknown.type == option_type
+
+  # Payload conversion is lazy, even for a self-referential option.
+  assert isinstance(obj.cycle.value, om.Option)
+
+  # Test option construction and evaluator arguments, including returned values.
+  empty = om.Option.empty(option_type)
+  present = om.Option.some(option_type, 42)
+  assert isinstance(empty, om.Option)
+  assert isinstance(present, om.Option)
+  assert not evaluator.instantiate("EchoOption", empty).option.has_value
+  assert evaluator.instantiate("EchoOption", present).option.value == 42
+  assert evaluator.instantiate("EchoOption", obj.present).option.value == 42
+
+  try:
+    obj.empty.value
+    assert False, "empty option payload was accessible"
+  except ValueError as e:
+    # CHECK: Cannot get the value of an empty OM option
+    print(e)
+
+  try:
+    om.Option.some(option_type, "wrong")
+    assert False, "mismatched option payload was accepted"
+  except TypeError as e:
+    # CHECK: OM option payload type does not match the option's element type
+    print(e)
+
+  try:
+    evaluator.instantiate("EchoOption", None)
+    assert False, "None was accepted as an option"
+  except TypeError as e:
+    # CHECK: None is not an OM value; use om.Option.empty(option_type)
+    print(e)

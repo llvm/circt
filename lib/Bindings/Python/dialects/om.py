@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, OMIntegerAttr, Unknown
+from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, OptionType, OMIntegerAttr, Unknown, Option as BaseOption
 
 from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType
 from ..support import attribute_to_var, var_to_attribute
@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 
 # Wrap a base mlir object with high-level object.
 def wrap_mlir_object(value):
+  if isinstance(value, BaseOption):
+    return Option(value)
+
   # For primitives, return the Python value directly.
   if isinstance(value, (int, float, str, bool, tuple, list, dict)):
     return value
@@ -49,6 +52,9 @@ def om_var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attrbute:
 
 
 def unwrap_python_object(value):
+  if isinstance(value, Option):
+    return BaseOption(value)
+
   # Check if the value is any of our container or custom types.
   if isinstance(value, List):
     return BaseList(value)
@@ -64,6 +70,30 @@ def unwrap_python_object(value):
 
   # Otherwise, it must be a primitive, so just return it.
   return value
+
+
+class Option(BaseOption):
+  """An OM value that may be empty.
+
+  Use ``Option.empty(option_type)`` to create an empty option or
+  ``Option.some(option_type, value)`` to create one with a value. Both take
+  an ``OptionType``.
+
+  Check ``has_value`` before reading ``value``. Reading an empty option's
+  value raises ``ValueError``. Use ``Unknown(option_type)`` for an unknown option.
+  """
+
+  @staticmethod
+  def empty(option_type: OptionType) -> "Option":
+    return Option(BaseOption.empty(option_type))
+
+  @staticmethod
+  def some(option_type: OptionType, value: Any) -> "Option":
+    return Option(BaseOption.some(option_type, unwrap_python_object(value)))
+
+  @property
+  def value(self):
+    return wrap_mlir_object(super().value)
 
 
 class List(BaseList):
