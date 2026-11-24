@@ -378,8 +378,6 @@ def RegistryInsertOp : FIRRTLOp<"registry.insert", [MemoryEffects<[MemWrite]>,
   let summary = "Add an element to a registry";
   let description = [{
     Adds a value to an unordered, append-only registry shared by reference.
-    The element type must match the registry's element type. Duplicate values
-    are retained.
   }];
   let arguments = (ins RegistryType:$registry, PropertyType:$element);
   let assemblyFormat = [{

@@ -1333,8 +1333,7 @@ def RegistryCreateOp : FIRRTLOp<"registry.create", [
   let summary = "Create an empty registry";
   let description = [{
     Creates a fresh, empty registry. A registry is an unordered, append-only
-    collection shared by reference; it retains duplicate values. Property
-    programs cannot read the registry's contents.
+    collection shared by reference; it retains duplicate values.
   }];
   let results = (outs Res<RegistryType, "", [MemAlloc]>:$result);
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
