@@ -2678,4 +2678,27 @@ circuit RegistryType:
   domain RegistryDomain:
     clockGates: Registry<Path>
 
+  ; CHECK-LABEL: firrtl.module @RegistryType
+  ; CHECK-SAME: in %items: !firrtl.registry<integer>
+  ; CHECK-SAME: out %result: !firrtl.registry<integer>
+  ; CHECK-SAME: in %nested: !firrtl.registry<list<registry<bool>>>
   public module RegistryType:
+    input items: Registry<Integer>
+    output result: Registry<Integer>
+    input nested: Registry <List<Registry<Bool>>>
+    input ref: AnyRef
+    output objects: Registry<AnyRef>
+    wire local: Registry<Integer>
+    ; CHECK: firrtl.registry.create : !firrtl.registry<integer>
+    propassign local, Registry<Integer>()
+    ; CHECK: firrtl.registry.insert %items,
+    registry_insert items, Integer(1)
+    ; CHECK: firrtl.registry.insert %local,
+    registry_insert local, Integer(1)
+    propassign result, local
+    wire refs: Registry<AnyRef>
+    ; CHECK: firrtl.registry.create : !firrtl.registry<anyref>
+    propassign refs, Registry<AnyRef>()
+    propassign objects, refs
+    ; CHECK: firrtl.registry.insert %refs, %ref
+    registry_insert refs, ref

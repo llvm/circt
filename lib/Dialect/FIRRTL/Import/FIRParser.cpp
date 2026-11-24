@@ -2057,6 +2057,7 @@ private:
   ParseResult
   parseIntegerLiteralExp(Value &result, bool isSigned,
                          std::optional<int32_t> allocatedWidth = {});
+  ParseResult parseRegistryExp(Value &result);
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
   ParseResult parseCatExp(Value &result);
@@ -2160,6 +2161,7 @@ private:
   ParseResult parseProbe(Value &result);
   ParseResult parsePropAssert();
   ParseResult parsePropAssign();
+  ParseResult parseRegistryInsert();
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
@@ -2434,6 +2436,15 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   }
+
+  case FIRToken::langle_Registry:
+    if (requireFeature(missingSpecFIRVersion, "Registries"))
+      return failure();
+    if (isLeadingStmt)
+      return emitError("unexpected Registry<>() as start of statement");
+    if (parseRegistryExp(result))
+      return failure();
+    break;
 
   case FIRToken::lp_list_concat: {
     if (isLeadingStmt)
@@ -2800,6 +2811,23 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result, bool isSigned,
 
   locationProcessor.setLoc(loc);
   result = moduleContext.getCachedConstant(builder, attr, type, attr);
+  return success();
+}
+
+/// registry-exp ::= 'Registry<' property-type '>' '(' ')'
+ParseResult FIRStmtParser::parseRegistryExp(Value &result) {
+  auto loc = getToken().getLoc();
+  consumeToken(FIRToken::langle_Registry);
+  PropertyType elementType;
+  if (parsePropertyType(elementType, "expected Registry element type") ||
+      parseToken(FIRToken::greater, "expected '>' in Registry type") ||
+      parseToken(FIRToken::l_paren, "expected '(' in Registry expression") ||
+      parseToken(FIRToken::r_paren,
+                 "expected ')' in empty Registry expression"))
+    return failure();
+  locationProcessor.setLoc(loc);
+  result = RegistryCreateOp::create(
+      builder, RegistryType::get(getContext(), elementType));
   return success();
 }
 
@@ -3240,6 +3268,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     if (requireFeature({3, 1, 0}, "properties"))
       return failure();
     return parsePropAssign();
+  case FIRToken::kw_registry_insert:
+    if (requireFeature(missingSpecFIRVersion, "Registries"))
+      return failure();
+    return parseRegistryInsert();
   case FIRToken::kw_invalidate:
     return parseInvalidate();
   case FIRToken::lp_printf:
@@ -4786,6 +4818,30 @@ ParseResult FIRStmtParser::parsePropAssert() {
 
   locationProcessor.setLoc(loc);
   PropertyAssertOp::create(builder, condition, message);
+  return success();
+}
+
+/// registry-insert ::= 'registry_insert' expr ',' expr info?
+ParseResult FIRStmtParser::parseRegistryInsert() {
+  auto startTok = consumeToken(FIRToken::kw_registry_insert);
+  if (auto isExpr = parseExpWithLeadingKeyword(startTok))
+    return *isExpr;
+  Value registry, element;
+  if (parseExp(registry, "expected registry in 'registry_insert'") ||
+      parseToken(FIRToken::comma, "expected ',' in 'registry_insert'") ||
+      parseExp(element, "expected element in 'registry_insert'") ||
+      parseOptionalInfo())
+    return failure();
+  auto type = dyn_cast<RegistryType>(registry.getType());
+  if (!type)
+    return emitError(startTok.getLoc(),
+                     "registry_insert requires a Registry handle");
+  locationProcessor.setLoc(startTok.getLoc());
+  if (element.getType() != type.getElementType())
+    return emitError(startTok.getLoc(),
+                     "registry_insert element type does not match registry "
+                     "element type");
+  RegistryInsertOp::create(builder, registry, element);
   return success();
 }
 
