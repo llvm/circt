@@ -25,8 +25,8 @@ func.func @test_func_call(%a: !hw.array<2xi32>) -> !hw.array<2xi32> {
 
 // CHECK-LABEL: func.func @test_aggregate_constant
 // CHECK-SAME: (%[[ARG0:.*]]: !arc.arrayref<2xi32>) -> !arc.arrayref<2xi32>
-// CHECK-NEXT: %[[ALLOC:.*]] = arc.arrayref.alloc init([0 : i32, 1 : i32]) : <2xi32>
-// CHECK-NEXT: %[[COPY:.*]] = arc.arrayref.copy %[[ARG0]] = %[[ALLOC]] : <2xi32>
+// CHECK-NEXT: %[[CST:.*]] = arc.arrayref.constant [0 : i32, 1 : i32] : <2xi32>
+// CHECK-NEXT: %[[COPY:.*]] = arc.arrayref.copy %[[ARG0]] = %[[CST]] : <2xi32>
 // CHECK-NEXT: return %[[COPY]] : !arc.arrayref<2xi32>
 func.func @test_aggregate_constant() -> !hw.array<2xi32> {
   %0 = hw.aggregate_constant [0 : i32, 1 : i32] : !hw.array<2xi32>

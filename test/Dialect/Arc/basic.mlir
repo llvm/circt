@@ -466,6 +466,20 @@ func.func @ArrayRefAllocStruct() -> !arc.arrayref<2x!hw.struct<foo: i1>> {
   return %0 : !arc.arrayref<2x!hw.struct<foo: i1>>
 }
 
+// CHECK-LABEL: func.func @ArrayRefConstant
+// CHECK: arc.arrayref.constant [123 : i32, 456 : i32] : <2xi32>
+func.func @ArrayRefConstant() -> !arc.arrayref<2xi32> {
+  %0 = arc.arrayref.constant [123 : i32, 456 : i32] : !arc.arrayref<2xi32>
+  return %0 : !arc.arrayref<2xi32>
+}
+
+// CHECK-LABEL: func.func @ArrayRefConstantStruct
+// CHECK: arc.arrayref.constant {{\[\[}}false], [true{{\]\]}} : <2x!hw.struct<foo: i1>>
+func.func @ArrayRefConstantStruct() -> !arc.arrayref<2x!hw.struct<foo: i1>> {
+  %0 = arc.arrayref.constant [[false], [true]] : !arc.arrayref<2x!hw.struct<foo: i1>>
+  return %0 : !arc.arrayref<2x!hw.struct<foo: i1>>
+}
+
 // CHECK-LABEL: func.func @StorageAsContext
 func.func @StorageAsContext(%storage: !arc.storage) -> (!arc.context) {
   // CHECK: arc.as_context %{{.+}} : !arc.storage

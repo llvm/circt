@@ -751,3 +751,28 @@ arc.coroutine.define @Foo(%arg0: i42) {
 ^bb1(%arg1: i42, %arg2: i9001):
   arc.coroutine.halt
 }
+
+// -----
+
+// expected-error @below {{value size does not match array size; value had size 1 but array has size 2}}
+%0 = arc.arrayref.constant [1 : i32] : !arc.arrayref<2xi32>
+
+// -----
+
+// expected-error @below {{expected element to be of type 'i64'}}
+%0 = arc.arrayref.constant [0 : index] : !arc.arrayref<1xi64>
+
+// -----
+
+// expected-error @below {{expected array attribute for struct element of type '!hw.struct<foo: i1>'}}
+%0 = arc.arrayref.constant [false, true] : !arc.arrayref<2x!hw.struct<foo: i1>>
+
+// -----
+
+// expected-error @below {{struct attribute (0) has wrong size for struct element (1)}}
+%0 = arc.arrayref.constant [[], []] : !arc.arrayref<2x!hw.struct<foo: i32>>
+
+// -----
+
+// expected-error @below {{array attribute (2) has wrong size for array element (1)}}
+%0 = arc.arrayref.constant [[1 : i32, 2 : i32]] : !arc.arrayref<1x!hw.array<1xi32>>

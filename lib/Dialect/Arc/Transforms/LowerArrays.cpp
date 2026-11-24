@@ -181,9 +181,8 @@ struct ConvertAggregateConstant
                   ConversionPatternRewriter &rewriter) const override {
     auto newType =
         cast<ArrayRefType>(getTypeConverter()->convertType(op.getType()));
-    Value newOp = ArrayRefAllocOp::create(rewriter, op.getLoc(), newType,
-                                          op.getFieldsAttr());
-    rewriter.replaceOp(op, newOp);
+    rewriter.replaceOpWithNewOp<ArrayRefConstantOp>(op, newType,
+                                                    op.getFieldsAttr());
     return success();
   }
 };
