@@ -590,10 +590,10 @@ def ListImpl : PropImplType<"List"> {
 def RegistryImpl : PropImplType<"Registry"> {
   let summary = "An unordered, append-only registry of property values.";
   let description = [{
-    Registry values are shared handles. `firrtl.prop.registry` creates an empty
-    registry, and `firrtl.prop.insert` adds an element. Property programs can
-    pass handles but cannot read their contents. Duplicates are kept, and the
-    order is unspecified.
+    Registry values are shared handles. `firrtl.registry.create` creates an
+    empty registry, and `firrtl.registry.insert` adds an element. Property
+    programs can pass handles but cannot read their contents. Duplicates are
+    kept, and the order is unspecified.
   }];
   let parameters = (ins TypeParameter<"circt::firrtl::PropertyType",
                                       "element type">:$elementType);

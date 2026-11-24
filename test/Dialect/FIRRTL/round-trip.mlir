@@ -570,13 +570,13 @@ firrtl.module @RegInitial(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
 
 // CHECK-LABEL: firrtl.module @Registries
 firrtl.module @Registries(in %items: !firrtl.registry<integer>) {
-  // CHECK: %[[LOCAL:.*]] = firrtl.prop.registry {test = "keep"} : !firrtl.registry<integer>
-  %local = firrtl.prop.registry {test = "keep"} : !firrtl.registry<integer>
+  // CHECK: %[[LOCAL:.*]] = firrtl.registry.create {test = "keep"} : !firrtl.registry<integer>
+  %local = firrtl.registry.create {test = "keep"} : !firrtl.registry<integer>
   %one = firrtl.integer 1
-  // CHECK: firrtl.prop.insert %items,
-  firrtl.prop.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
-  // CHECK: firrtl.prop.insert %[[LOCAL]],
-  firrtl.prop.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
+  // CHECK: firrtl.registry.insert %items,
+  firrtl.registry.insert %items, %one : !firrtl.registry<integer>, !firrtl.integer
+  // CHECK: firrtl.registry.insert %[[LOCAL]],
+  firrtl.registry.insert %local, %one : !firrtl.registry<integer>, !firrtl.integer
 }
 
 }

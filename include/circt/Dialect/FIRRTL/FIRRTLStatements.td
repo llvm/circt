@@ -370,23 +370,22 @@ def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
   }];
 }
 
-def RegistryInsertOp : FIRRTLOp<"prop.insert", [MemoryEffects<[MemWrite]>,
+def RegistryInsertOp : FIRRTLOp<"registry.insert", [MemoryEffects<[MemWrite]>,
     ParentOneOf<["FModuleOp", "ClassOp"]>,
     TypesMatchWith<"element type must match the registry element type",
       "registry", "element",
       "::llvm::cast<RegistryType>($_self).getElementType()">]> {
-  let summary = "Add an element to a mutable registry";
+  let summary = "Add an element to a registry";
   let description = [{
-    Adds a value to the registry. Its type must match the registry's
-    element type. Values have no defined order, and duplicates are kept.
-    The registry handle must be readable (have source or duplex flow).
+    Adds a value to an unordered, append-only registry shared by reference.
+    The element type must match the registry's element type. Duplicate values
+    are retained.
   }];
   let arguments = (ins RegistryType:$registry, PropertyType:$element);
   let assemblyFormat = [{
     $registry `,` $element attr-dict `:` qualified(type($registry)) `,`
       qualified(type($element))
   }];
-  let hasVerifier = 1;
 }
 
 def PropertyAssertOp : FIRRTLOp<"property_assert",
