@@ -842,3 +842,38 @@ module {
     hw.output %x : i1
   }
 }
+
+// -----
+
+// Blocks nested in operations with side effects, such as processes, are not
+// module bodies and must not be treated as such. Side effects within them
+// still keep the module alive.
+module {
+  // LIVENESS-LABEL: hw.module private @NestedBlocks
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // ELIMINATE-LABEL: hw.module private @NestedBlocks
+  // ELIMINATE-NEXT:    llhd.process {
+  // ELIMINATE-NEXT:      func.call @unknownFunc()
+  // ELIMINATE-NEXT:      llhd.halt
+  hw.module private @NestedBlocks() {
+    llhd.process {
+      func.call @unknownFunc() : () -> ()
+      llhd.halt
+    }
+    hw.output
+  }
+
+  // FIXME: The instance is removed since none of its results are used, although
+  // the instantiated module has side effects. It should be kept.
+  // LIVENESS-LABEL: hw.module public @NestedBlocksTop
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // ELIMINATE-LABEL: hw.module public @NestedBlocksTop
+  // ELIMINATE-NOT:     hw.instance
+  // ELIMINATE:         hw.output
+  hw.module public @NestedBlocksTop() {
+    hw.instance "nested" @NestedBlocks() -> ()
+    hw.output
+  }
+
+  func.func private @unknownFunc()
+}
