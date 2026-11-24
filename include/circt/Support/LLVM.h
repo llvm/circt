@@ -197,9 +197,6 @@ namespace OpTrait {}
 namespace circt {
 // clang-tidy removes following using directives incorrectly. So force
 // clang-tidy to ignore them.
-// TODO: It is better to use `NOLINTBEGIN/END` comments to disable clang-tidy
-// than adding `NOLINT` to every line. `NOLINTBEGIN/END` will supported from
-// clang-tidy-14.
 using mlir::ArrayAttr;                 // NOLINT(misc-unused-using-decls)
 using mlir::AsmParser;                 // NOLINT(misc-unused-using-decls)
 using mlir::AsmPrinter;                // NOLINT(misc-unused-using-decls)
